@@ -16,8 +16,9 @@ export async function exportMapPdf(activities: ActivityMeta[]): Promise<void> {
   txt(doc, `${activities.length} escursioni`, M, 14, { size: 8, color: [180, 240, 180] as [number,number,number] })
   txt(doc, format(new Date(),'dd/MM/yyyy'), 297-M, 14, { size: 8, color: [180, 240, 180] as [number,number,number], align: 'right' })
 
-  // All routes canvas
-  const mapImg = chartAllRoutes(activities, 1800, 700)
+  // All routes canvas — stesso rapporto d'aspetto del riquadro d'incasso (W × 160mm ≈ 1,68:1).
+  // Prima era 1800×700 (2,57:1) dentro un riquadro 269×160mm: -35% verticale (B22).
+  const mapImg = chartAllRoutes(activities, 1800, 1071)
   if (mapImg) {
     doc.addImage(mapImg, 'PNG', M, 22, W, 160)
   } else {

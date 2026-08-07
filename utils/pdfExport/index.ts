@@ -6,8 +6,6 @@
  */
 
 export { mapBoxAspect, fetchSatMap, fetchAllRoutesSatMap, chartAllRoutes } from './mapTiles'
-export { exportActivityPdf } from './activity'
-export { exportPlannedPdf } from './planned'
 export { exportStatsPdf } from './stats'
 export { exportMapPdf } from './map'
 

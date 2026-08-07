@@ -1,5 +1,6 @@
-import { Compass, Route, MapPin, Leaf, UtensilsCrossed, ShieldCheck } from 'lucide-react'
+import { Compass, Route, MapPin, Leaf, UtensilsCrossed, ShieldCheck, Radar, BarChart2, Heart } from 'lucide-react'
 import type { GuideData } from './GuideTemplate'
+import GuideAssessment from './GuideAssessment'
 
 const DIFFICULTY_LABEL: Record<string, string> = {
   facile: 'Facile', moderata: 'Moderata', impegnativa: 'Impegnativa', estrema: 'Estrema',
@@ -11,6 +12,9 @@ const DIFFICULTY_LABEL: Record<string, string> = {
 const TOC_ITEMS: { key: keyof GuideData['sections']; label: string; icon: typeof Compass; color: string }[] = [
   { key: 'primadiPartire', label: 'Prima di partire',        icon: Compass,          color: '#c05a17' },
   { key: 'ilPercorso',     label: 'Il percorso',              icon: Route,            color: '#277134' },
+  { key: 'verificato',     label: 'Verificato online',        icon: Radar,            color: '#0f6e94' },
+  { key: 'datiSicurezza',  label: 'Dati e sicurezza',         icon: BarChart2,        color: '#73695c' },
+  { key: 'suMisura',       label: 'Su misura per te',         icon: Heart,            color: '#9f4315' },
   { key: 'iLuoghi',        label: 'I luoghi da non perdere',  icon: MapPin,           color: '#813619' },
   { key: 'laNatura',       label: 'La natura intorno a te',   icon: Leaf,             color: '#378d44' },
   { key: 'sapori',         label: 'Sapori e tradizioni',      icon: UtensilsCrossed,  color: '#d97220' },
@@ -51,6 +55,12 @@ export default function GuideOverview({ data }: { data: GuideData }) {
         </div>
       )}
 
+      {/* Badge difficoltà + adattamento personalizzato + rischi/consigli — prima solo nel PDF
+          jsPDF a sé ("Valutazione Personalizzata", ritirato con questa fase), assente qui. La
+          sezione narrativa "Dati e sicurezza" (GuideTemplate.tsx) dichiara esplicitamente "i
+          punteggi già mostrati sopra": prima di questa riga quella frase non era vera. */}
+      {data.assessment && <GuideAssessment assessment={data.assessment} />}
+
       <div className="guide-overview-toc pdf-block">
         {TOC_ITEMS.filter(t => data.sections[t.key]).map(t => {
           const Icon = t.icon
@@ -67,7 +77,12 @@ export default function GuideOverview({ data }: { data: GuideData }) {
         <div className="guide-overview-highlights pdf-block">
           {highlights.map((poi, i) => (
             <div key={i} className="guide-overview-hlchip">
-              <span className="guide-overview-hlchip-icon" style={{ background: poi.typeColor }}>{poi.emoji ?? '📍'}</span>
+              {/* poi.emoji è già l'icona per-tipo di POI_META, disegnata a schermo allo stesso
+                  modo: qui resta. Solo il ripiego 📍 è stato sostituito — html2canvas rende gli
+                  emoji con il font di sistema, non deterministico tra macchine (vedi GuideSection). */}
+              <span className="guide-overview-hlchip-icon" style={{ background: poi.typeColor }}>
+                {poi.emoji ?? <MapPin size={11} color="white" strokeWidth={2.5} />}
+              </span>
               <span>{poi.name}</span>
             </div>
           ))}

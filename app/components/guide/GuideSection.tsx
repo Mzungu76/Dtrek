@@ -1,13 +1,26 @@
+import type { GuideNotice } from '@/lib/guideNotices'
+import { parseNoticeSource } from '@/lib/guideNotices'
+import { buildElevationSvgPath } from '@/lib/elevationSvgPath'
+import { parseMarkupBlocks } from '@/lib/guideMarkup'
+
+export interface GuideSectionPhoto { url: string; credit: string }
+
 interface Props {
   title: string
+  /** Riga statica sotto il titolo — vedi lib/guideSections.ts, GuideSectionDef.subtitle. */
+  subtitle?: string
   /** Raw text — may contain [curiosita]...[/curiosita] blocks and ### subsections */
   text: string
-  photo?: string
+  photo?: GuideSectionPhoto
   layout?: 'photo-left' | 'photo-right' | 'photo-top' | 'full-width'
   accentColor?: string
   /** Serie altimetrica campionata — mostrata come fascia decorativa quando manca una foto
    *  (vedi GuideTemplate.tsx, sezione "Il percorso"). */
   elevationProfile?: number[]
+  /** Solo per "Verificato online": avvisi con gravità + fonti consultate — vedi lib/guideNotices.ts.
+   *  Assenti dal PDF prima di questa sezione (B14): erano mostrati solo a schermo. */
+  notices?: GuideNotice[]
+  sources?: { title: string }[]
 }
 
 // [epoca poi="X" periodo="Y"]...[/epoca] (vedi app/api/guide/route.ts) è pensato per essere
@@ -19,80 +32,56 @@ function stripUnrenderedTags(raw: string): string {
   return raw.replace(/\[epoca[^\]]*\][\s\S]*?\[\/epoca\]/g, '')
 }
 
-function parseTextBlocks(raw: string): { type: 'paragraph' | 'curiosita' | 'avviso' | 'subsection'; text: string }[] {
-  const blocks: { type: 'paragraph' | 'curiosita' | 'avviso' | 'subsection'; text: string }[] = []
-  // Stessa convenzione [curiosita]/[avviso] di components/guida/MagazineBody.tsx (on-screen) —
-  // prima qui veniva riconosciuto solo [curiosita], quindi un [avviso] (stato del percorso,
-  // vedi app/api/guide/route.ts) finiva stampato come testo grezzo con le parentesi quadre.
-  const blockRe = /\[(curiosita|avviso)\]([\s\S]*?)\[\/\1\]/g
-  let last = 0
-  let m: RegExpExecArray | null
-  const cleaned = stripUnrenderedTags(raw)
-
-  const flushText = (chunk: string) => {
-    let buf: string[] = []
-    const flush = () => {
-      const p = buf.join(' ').trim()
-      if (p) { blocks.push({ type: 'paragraph', text: p }); buf = [] }
-    }
-    for (const line of chunk.split('\n')) {
-      const t = line.trim()
-      if (t.startsWith('### ')) { flush(); blocks.push({ type: 'subsection', text: t.slice(4).trim() }) }
-      else if (!t) flush()
-      else buf.push(t)
-    }
-    flush()
-  }
-
-  while ((m = blockRe.exec(cleaned)) !== null) {
-    flushText(cleaned.slice(last, m.index))
-    blocks.push({ type: m[1] as 'curiosita' | 'avviso', text: m[2].trim().replace(/\n/g, ' ') })
-    last = m.index + m[0].length
-  }
-  flushText(cleaned.slice(last))
-  return blocks
-}
-
-/** Traccia SVG dell'andamento altimetrico, in tono terra, per la fascia decorativa
- *  ".guide-terrainband" — sostituisce lo spazio foto quando una sezione (tipicamente "Il
- *  percorso") non ne ha una disponibile. */
-function buildTerrainPath(profile: number[], width = 680, height = 100): { line: string; area: string } {
-  const min = Math.min(...profile)
-  const max = Math.max(...profile)
-  const range = max - min || 1
-  const pts = profile.map((v, i) => {
-    const x = (i / (profile.length - 1 || 1)) * width
-    const y = height - ((v - min) / range) * (height - 12) - 6
-    return [x, y]
-  })
-  const line = pts.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ')
-  const area = `${line} L${width},${height} L0,${height} Z`
-  return { line, area }
-}
-
 export default function GuideSection({
   title,
+  subtitle,
   text,
   photo,
   layout = 'full-width',
   accentColor = '#c05a17',
   elevationProfile,
+  notices,
+  sources,
 }: Props) {
   const hasTerrainBand = !photo && (elevationProfile?.length ?? 0) > 1
   const effectiveLayout = photo ? layout : (hasTerrainBand ? 'photo-top' : 'full-width')
-  const blocks = parseTextBlocks(text)
+  const blocks = parseMarkupBlocks(stripUnrenderedTags(text))
 
-  let paraIndex = 0
+  const noticesBlock = notices && notices.length > 0 ? (
+    <div className="pdf-block">
+      {notices.map((n, i) => {
+        const { text: noticeText, url } = parseNoticeSource(n.text)
+        return (
+          <div key={i} className={`guide-notice guide-notice-${n.severity}`}>
+            <span className="guide-notice-dot" />
+            <div>
+              <p className="guide-notice-text">{noticeText}</p>
+              {url && <p className="guide-notice-source">{url}</p>}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  ) : null
+
+  const sourcesBlock = sources && sources.length > 0 ? (
+    <div className="guide-sources-row pdf-block">
+      {sources.map((s, i) => <span key={i} className="guide-source-chip">{s.title}</span>)}
+    </div>
+  ) : null
+
   const bodyContent = (
     <>
+      {noticesBlock}
+      {sourcesBlock}
       {blocks.map((b, i) => {
         if (b.type === 'curiosita') {
           return (
             <div key={i} className="guide-curiosita-inline pdf-block">
               <div className="guide-curiosita-inline-accent" style={{ background: accentColor }} />
               <div className="guide-curiosita-inline-inner">
-                <p className="guide-curiosita-inline-label" style={{ color: accentColor }}>
-                  ◆ LO SAPEVI?
+                <p className="guide-curiosita-inline-label" style={{ color: accentColor, display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <span className="guide-icon-diamond" style={{ background: accentColor }} /> LO SAPEVI?
                 </p>
                 <p className="guide-curiosita-inline-text">{b.text}</p>
               </div>
@@ -104,7 +93,7 @@ export default function GuideSection({
             <div key={i} className="guide-avviso-inline pdf-block">
               <div className="guide-avviso-inline-accent" />
               <div className="guide-avviso-inline-inner">
-                <p className="guide-avviso-inline-label">⚠ STATO DEL PERCORSO</p>
+                <p className="guide-avviso-inline-label">STATO DEL PERCORSO</p>
                 <p className="guide-avviso-inline-text">{b.text}</p>
               </div>
             </div>
@@ -121,12 +110,11 @@ export default function GuideSection({
             </h3>
           )
         }
-        const isLead = paraIndex++ === 0
         return (
           <p
             key={i}
-            className={`pdf-block${isLead ? ' guide-section-lead' : ''}`}
-            style={isLead ? { borderLeftColor: accentColor } : undefined}
+            className={`pdf-block${b.isFirstText ? ' guide-section-lead' : ''}`}
+            style={b.isFirstText ? { borderLeftColor: accentColor } : undefined}
           >
             {b.text}
           </p>
@@ -136,10 +124,14 @@ export default function GuideSection({
   )
 
   const terrainBand = hasTerrainBand && elevationProfile ? (() => {
-    const { line, area } = buildTerrainPath(elevationProfile)
+    const { line, area } = buildElevationSvgPath(elevationProfile)
     return (
       <div className="guide-terrainband pdf-block">
-        <svg viewBox="0 0 680 100" preserveAspectRatio="none" className="guide-terrainband-svg">
+        {/* preserveAspectRatio era "none": il riquadro reso (larghezza piena colonna, altezza
+            fissa CSS) non ha lo stesso rapporto del viewBox 680×100, quindi il profilo veniva
+            stirato verticalmente e lo spessore del tratto non risultava uniforme. Il default
+            (xMidYMid meet) scala in proporzione, al più con un piccolo margine ai lati. */}
+        <svg viewBox="0 0 680 100" className="guide-terrainband-svg">
           <path d={area} fill={`${accentColor}1a`} />
           <path d={line} fill="none" stroke={accentColor} strokeWidth={2} />
         </svg>
@@ -151,11 +143,11 @@ export default function GuideSection({
   return (
     <div className="guide-section">
       {/* Stesso stile editoriale della guida on-screen (components/guida/SectionCard.tsx):
-          eyebrow colorata + titolo in serif + riga d'accento sottile — non più una fascia
-          piena a tutto colore. */}
+          eyebrow colorata + titolo in serif + riga esplicativa + riga d'accento sottile. */}
       <div className="guide-section-header pdf-block">
         <p className="guide-section-kicker" style={{ color: accentColor }}>{title}</p>
         <h2 className="guide-section-title">{title}</h2>
+        {subtitle && <p className="guide-section-subtitle">{subtitle}</p>}
         <div className="guide-section-accent-line" style={{ background: accentColor }} />
       </div>
 
@@ -163,31 +155,29 @@ export default function GuideSection({
         <div className="guide-section-body-full">{bodyContent}</div>
       )}
 
-      {effectiveLayout === 'photo-left' && (
+      {effectiveLayout === 'photo-left' && photo && (
         <div className="guide-section-body-2col">
           <div className="guide-section-photo-col pdf-block">
-            <img src={photo} alt={title} className="guide-section-photo" crossOrigin="anonymous" />
-            <span className="guide-section-photo-credit">© Wikimedia Commons</span>
+            <img src={photo.url} alt={title} className="guide-section-photo" crossOrigin="anonymous" />
+            <span className="guide-section-photo-credit">{photo.credit}</span>
           </div>
           <div className="guide-section-text-col">{bodyContent}</div>
         </div>
       )}
 
-      {effectiveLayout === 'photo-right' && (
+      {effectiveLayout === 'photo-right' && photo && (
         <div className="guide-section-body-2col">
           <div className="guide-section-text-col">{bodyContent}</div>
           <div className="guide-section-photo-col pdf-block">
-            <img src={photo} alt={title} className="guide-section-photo" crossOrigin="anonymous" />
-            <span className="guide-section-photo-credit">© Wikimedia Commons</span>
+            <img src={photo.url} alt={title} className="guide-section-photo" crossOrigin="anonymous" />
+            <span className="guide-section-photo-credit">{photo.credit}</span>
           </div>
         </div>
       )}
 
       {effectiveLayout === 'photo-top' && (
         <div>
-          {photo
-            ? <img src={photo} alt={title} className="guide-section-photo-top" crossOrigin="anonymous" />
-            : terrainBand}
+          {terrainBand}
           <div className="guide-section-text-3col">{bodyContent}</div>
         </div>
       )}

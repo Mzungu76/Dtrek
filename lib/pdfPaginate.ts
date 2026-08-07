@@ -57,13 +57,14 @@ export interface PaginateOptions {
  * jsPDF con i font di base codifica il testo in WinAnsi (CP1252). I caratteri fuori da quel
  * repertorio non vengono resi.
  *
- * Diversamente da `safeText` in utils/pdfExport/docHelpers.ts — che taglia tutto ciò che sta fuori
- * da Latin-1 e quindi cancella in silenzio trattini lunghi, virgolette curve e puntini di
- * sospensione — qui si conserva anche la fascia alta di CP1252, dove quei segni stanno. Cadono solo
- * emoji e alfabeti non latini, che davvero non sono rappresentabili.
+ * Esportata perché è la stessa usata da `utils/pdfExport/docHelpers.ts` (i template jsPDF
+ * superstiti di Statistiche e Mappa): prima quel file aveva una propria `safeText` che tagliava
+ * tutto ciò che sta fuori da Latin-1, cancellando in silenzio trattini lunghi, virgolette curve e
+ * puntini di sospensione. Qui si conserva anche la fascia alta di CP1252, dove quei segni stanno.
+ * Cadono solo emoji e alfabeti non latini, che davvero non sono rappresentabili.
  */
 const CP1252_HIGH = '€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ'
-function pdfSafe(s: string): string {
+export function pdfSafe(s: string): string {
   // eslint-disable-next-line no-control-regex
   return s.replace(/[^\x20-\xFF]/g, c => (CP1252_HIGH.includes(c) ? c : '')).trim()
 }

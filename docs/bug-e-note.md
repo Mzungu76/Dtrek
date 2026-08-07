@@ -14,54 +14,16 @@ di condivisione (Fasi 0-4). Va ripassato alla fine di tutte le fasi.
 
 ## 1. Bug aperti
 
-### 1.1 Bloccanti
-
-| ID | Dove | Difetto | Stato | Fase |
-|---|---|---|---|---|
-| B01 | `app/resoconto/[id]/HiddenPdfRoot.tsx:48` | Rampa colori delle intestazioni di sezione: `#b7e4c7` e `#d8f3dc` con testo bianco sopra, contrasto ≈1,3:1 e ≈1,2:1. Le sezioni 4 e 5 sono **illeggibili**. Esiste già `NARRATIVE_COLORS` in `components/resoconto/sectionStyle.ts:35`, verificato WCAG ≥5:1 e usato a schermo: nel PDF c'è una terza scala, diversa da entrambe | Verificato | 4.2 |
-
-### 1.2 Gravi
-
-| ID | Dove | Difetto | Stato | Fase |
-|---|---|---|---|---|
-| B04 | `utils/pdfExport/docHelpers.ts:56-64` + `utils/pdfExport/map.ts:10` | Il piè di pagina è cablato a Y=291mm e X=196mm, coordinate valide per A4 **verticale**. `exportMapPdf` crea il documento in **orizzontale** (297×210): 291 > 210, quindi **il piè di pagina non compare mai**. Anche l'ancoraggio a destra è sbagliato (196 invece di 283) | Verificato | 4.3 |
-| B05 | `utils/pdfExport/docHelpers.ts:138-153` | Griglia dei POI senza descrizione: `cy = y + row * 7` mentre `y` avanza di 8 a riga completata. Ogni riga scivola in basso di 7mm cumulativi. La guardia di fine pagina controlla `y`, non `cy`, quindi le ultime righe possono finire **fuori pagina** | Verificato | 4.3 |
-| B06 | `utils/pdfExport/docHelpers.ts:19` | `safeText` elimina tutto ciò che sta fuori da Latin-1, quindi cancella in silenzio trattini lunghi (`—`), virgolette curve, puntini di sospensione (`…`) e la stella `★` di `map.ts:59`. In `lib/pdfPaginate.ts` è già stato sostituito da `pdfSafe`, che conserva la fascia alta di CP1252 | Verificato | 4.3 |
-| B07 | `utils/pdfExport/planned.ts:22-25`, `activity.ts:20-23` | Il troncamento del titolo aggiunge `…` **dopo** `safeText` e chiama `doc.text` direttamente, scavalcando `txt()`. Il carattere arriva a jsPDF senza sanificazione | Verificato | 4.3 |
-| B08 | `utils/pdfExport/docHelpers.ts:45-54` | `statBox` non misura né tronca il testo: nessun `splitTextToSize`. Con box da 34,8mm (`planned.ts:53`) un valore lungo **esce dal riquadro e si sovrappone** a quello adiacente | Verificato | 4.3 |
-| B14 | `app/components/guide/buildGuideContent.ts:118-131` | Il PDF della guida mappa **6 sezioni su 9**: mancano del tutto *Verificato online*, *Dati e sicurezza*, *Su misura per te*. Gli avvisi di chiusura sentiero, in rosso a schermo, non compaiono in nessuna forma nel PDF | Verificato | 4.1 |
-| B15 | `app/components/guide/GuideSection.tsx:156-159` | Il titolo di sezione è stampato **due volte**: occhiello maiuscolo e `h2` ricevono entrambi `title`. `lib/guideSections.ts:31-48` definisce già un `subtitle` che il PDF scarta | Verificato | 4.1 |
-| B16 | `app/components/guide/GuideSection.tsx:170,181` | Credito fotografico `© Wikimedia Commons` cablato, mentre `fetchRoutePhotos.ts:66` produce già il credito corretto con l'autore, che `buildGuideContent.ts:99` butta via. Per foto CC-BY è una violazione di licenza | Verificato | 4.1 |
-| B17 | `app/resoconto/[id]/HiddenPdfRoot.tsx:54` | `float: right` in un contenitore senza `overflow:hidden` né `display:flow-root`. La foto sfonda il bordo della card e, non contribuendo all'altezza del genitore, il punto di interruzione calcolato cade sopra di essa e **la taglia tra due pagine** | Verificato | 4.2 |
-| B18 | `app/components/guide/guide-print.css:513` + `GuideSection.tsx:191` | `column-count: 3` è incompatibile con l'impaginazione: i `bottom` dei blocchi nelle tre colonne sono interlacciati, quindi i tagli cadono in mezzo al testo | Verificato | 4.1 |
-| B19 | `app/components/guide/guide-print.css:94-104` | Titolo di copertina a 52px fissi senza `clamp` in un contenitore con `overflow: hidden`: un titolo lungo esce dal riquadro e **viene tagliato senza traccia** | Verificato | 4.1 |
-
-### 1.3 Medi
+Tutti i bug bloccanti/gravi/minori individuati per la condivisione sono stati risolti nelle Fasi
+0-4 (vedi §5). Restano aperte solo le voci fuori ambito o deliberatamente rimandate:
 
 | ID | Dove | Difetto | Stato | Fase |
 |---|---|---|---|---|
 | B21 | `components/RouteMap3D.tsx:1728` | **Fuori ambito, ma è un bug reale.** In maplibre-gl 5 `preserveDrawingBuffer` vive dentro `canvasContextAttributes`; qui è passato al livello superiore con un cast a `any`, quindi **ignorato in silenzio** (verificato: nel bundle di maplibre 5.24 compare solo `preserveDrawingBuffer:!1`, nessuna gestione dell'opzione legacy). La registrazione video non ne risente perché legge dentro l'evento `render` — e il commento a `:3175-3180` documenta i fotogrammi neri comparsi quando fu aggiunto un `requestAnimationFrame` di ritardo, che è esattamente la firma del buffer non preservato. Ma `handleCapture` (`:2011`, il pulsante screenshot della vista 3D) legge **fuori** da un evento render: dovrebbe produrre un PNG nero o vuoto | Verificato | fuori ambito — decidere a parte |
-| B22 | `utils/pdfExport/canvasCharts.ts` + chiamanti | Rapporti d'aspetto sbagliati su tutti i grafici e le mappe del motore jsPDF: canvas 540×150 dentro riquadri 182×38mm significa **+33% in orizzontale**; `map.ts` è −35% in verticale | Verificato | 4.3 |
-| B23 | `utils/pdfExport/canvasCharts.ts:11-42` | `chartLine` non ha assi, griglia né etichette, e l'asse X è **l'indice del punto**, non la distanza percorsa: un tratto pianeggiante campionato fitto e una salita breve campionata rada occupano lo stesso spazio. Il profilo altimetrico è geometricamente falso | Verificato | 4.3 |
-| B24 | `utils/pdfExport/canvasCharts.ts:89-126` | `chartRouteFallback` usa una proiezione **lineare** lat/lon, non Mercatore: alle latitudini italiane il percorso risulta allungato di circa il 37% in orizzontale | Verificato | 4.3 |
-| B25 | `utils/pdfExport/planned.ts:62-71` | Il blocco mappa non ha guardia di fine pagina (il profilo altimetrico sì, `:76`) e `mapImg` non è controllato prima di `addImage`: se `fetchSatMap` restituisce stringa vuota, jsPDF solleva un'eccezione che `PdfExportButton.tsx:43` inghiotte, e **il clic non produce nulla senza alcun riscontro** | Verificato | 4.3 |
-| B27 | `app/api/resoconto/route.ts:326-331` | `?all=true` scarica il **markdown integrale di ogni resoconto** senza limite né paginazione, a ogni apertura del Diario. Non affrontato in Fase 3: risolverlo per bene richiede virtualizzare il libro (montare le pagine lazy), non solo l'endpoint — rimane un intervento a sé, più grosso della sola persistenza della configurazione | Verificato | non pianificata — da riprendere come intervento di performance a sé |
-| B30 | `components/diario/types.ts:40-43` | `GREEN`/`AMBER`/`BLUE`/`VIOLET` usano colori Tailwind standard (`#f0fdf4`, `#166534`, `#eff6ff`…), estranei alla palette DTrek. Le `StatCard` del diario sono verdi-Tailwind, non forest. Non toccato in Fase 3: sono temi di accento per widget dati, non l'identità tipografica/cromatica principale della pagina — cambiarli ora avrebbe allargato il diff senza risolvere un difetto segnalato dall'utente | Verificato | da valutare, cosmetico |
-| B32 | `app/leggi/r/[activityId]/page.tsx` | Il resoconto pubblico usa l'`activityId` in chiaro nell'URL invece di un token opaco, a differenza di `/s/[token]`. **Deliberatamente deferred a Fase 4**: la colonna `hike_reports.share_token` esiste già in produzione (indice unico verificato via MCP), ma migrare richiede toccare anche `app/api/share-report/route.ts` e il pannello "Pubblica PDF" di `ReportReader.tsx` — stesso file (`HiddenPdfRoot.tsx`) che la Fase 4.2 riscrive comunque da zero | Verificato | 4.2 |
-| B36 | `lib/blobStore.ts:120` | `ActivityMeta.routePolyline` è ridotta a **60 punti** da `downsamplePolyline`. **Parzialmente risolto in Fase 2**: la condivisione di una singola escursione (`ResocontoHub.tsx`) ora ricostruisce la polilinea piena da `activity.trackPoints` invece di leggere il campo ridotto — vedi §5. Resta aperto per la mappa multi-percorso «Le mie escursioni» (`generateMapImage`, invocata da `TabPanoramica.tsx`) e per statistiche/confronto, che continuano a lavorare sulle `ActivityMeta` così come arrivano da `blobStore` | Verificato | 2.1 (parziale) |
-| B37 | `utils/pdfExport/planned.ts:59-60`, `activity.ts:69-70`, `usePDFExport.ts:36-37` | Campionamento della traccia **a indice fisso**, non geometrico, riscritto tre volte. `lib/downsamplePolyline.ts` esiste e non è usata da nessuno dei tre. Su 12.000 punti se ne tiene 1 ogni 40: i tornanti vengono tagliati in linea retta | Verificato | 4.3 |
-
-### 1.4 Minori
-
-| ID | Dove | Difetto | Stato | Fase |
-|---|---|---|---|---|
-| B38 | `utils/pdfExport/stats.ts:21` | `setFillColor(22, 78, 50)` è un **terzo verde** cablato, diverso dal `FOREST` usato tre righe sotto | Verificato | 4.3 |
-| B39 | `utils/pdfExport/stats.ts:64`, `activity.ts:85` | Accenti rimossi **a mano** dalle stringhe sorgente (`'Piu calorie'`, `'Attivita:'`) per aggirare `safeText`: nel PDF si legge italiano scorretto | Verificato | 4.3 |
-| B40 | `utils/pdfExport/*` | Soglie di fine pagina incoerenti (270 / 278 / 280) contro un piè di pagina a 291mm | Verificato | 4.3 |
-| B41 | `utils/pdfExport/docHelpers.ts:110-115` | Descrizioni dei POI troncate due volte alla cieca (340 caratteri, poi 2 righe), **a metà parola e senza ellissi** | Verificato | 4.3 |
-| B42 | `utils/pdfExport/planned.ts:164` | Il piè di pagina non è troncato: con un titolo lungo si **sovrappone** al numero di pagina ancorato a destra | Verificato | 4.3 |
-| B43 | `app/components/guide/GuideSection.tsx:142` | `preserveAspectRatio="none"` sulla fascia altimetrica: il profilo è deformato verticalmente e lo spessore del tratto non è uniforme | Verificato | 4.1 |
-| B44 | `app/components/guide/` vari | Emoji nel PDF (`📍`, `◆`, `⚠`): html2canvas le rende con il font di sistema, quindi in modo non deterministico tra macchine | Verificato | 4.1 |
+| B27 | `app/api/resoconto/route.ts:326-331` | `?all=true` scarica il **markdown integrale di ogni resoconto** senza limite né paginazione, a ogni apertura del Diario. Non affrontato: risolverlo per bene richiede virtualizzare il libro (montare le pagine lazy), non solo l'endpoint — rimane un intervento a sé, di performance, indipendente dalla revisione dell'export PDF | Verificato | non pianificata — intervento di performance a sé |
+| B30 | `components/diario/types.ts:40-43` | `GREEN`/`AMBER`/`BLUE`/`VIOLET` usano colori Tailwind standard (`#f0fdf4`, `#166534`, `#eff6ff`…), estranei alla palette DTrek. Le `StatCard` del diario sono verdi-Tailwind, non forest. Non toccato: sono temi di accento per widget dati, non l'identità tipografica/cromatica principale della pagina — cambiarli ora avrebbe allargato il diff senza risolvere un difetto segnalato dall'utente | Verificato | da valutare, cosmetico |
+| B32 | `app/leggi/r/[activityId]/page.tsx` | Il resoconto pubblico usa l'`activityId` in chiaro nell'URL invece di un token opaco, a differenza di `/s/[token]`. **Ancora aperto dopo la Fase 4**: `HiddenPdfRoot.tsx` è stato riscritto (vedi §5) ma il motore di pubblicazione/URL non è stato toccato — non è uno stile o un'impaginazione, è uno schema di link, fuori dall'ambito letterale "verificare le esportazioni PDF". La colonna `hike_reports.share_token` esiste già in produzione (indice unico verificato via MCP): resta un buon prossimo passo piccolo e isolato | Verificato | non pianificata |
+| B36 | `lib/blobStore.ts:120` | `ActivityMeta.routePolyline` è ridotta a **60 punti** da `downsamplePolyline`. La condivisione di una singola escursione (`ResocontoHub.tsx`, Fase 2) e ora anche il PDF del resoconto (`renderReportPdf.ts`, Fase 4.2 — ricostruisce da `activity.trackPoints`) usano la traccia piena. Resta aperto solo per la mappa multi-percorso «Le mie escursioni» (`generateMapImage`) e per statistiche/confronto | Verificato | 2.1/4.2 (parziale) |
 | B45 | `app/globals.css:107` | `@media print { @page { margin: 1.5cm } }` è in conflitto con le pagine `.diario-page` da 794px, che assumono margine zero: la stampa nativa rimpicciolisce o taglia. Non toccato: riguarda solo Ctrl+P, un percorso secondario rispetto a export/link pubblico | Verificato | da valutare, minore |
 
 ---
@@ -81,6 +43,8 @@ di condivisione (Fasi 0-4). Va ripassato alla fine di tutte le fasi.
 | V09 | `app/diario/page.tsx`, funzione `migrateLegacyConfigIfNeeded` | La migrazione da `localStorage` al `diary_config` server-side scatta solo se il config server è **esattamente** ai valori di default (`isConfigDefault`). È corretto per il rollout (nessun utente ha mai avuto un `diary_config` non-default prima di questa Fase), ma dopo il rollout una race a bassissimo rischio resta possibile: un dispositivo mai aperto da mesi, con `localStorage` legacy, potrebbe sovrascrivere una configurazione ormai genuinamente personalizzata da un altro dispositivo, SE quel dispositivo non ha mai completato la migrazione (flag `dtrek_diary_migrated_v1` mai scritto) — improbabile ma non impossibile. Nessuna azione richiesta, solo da tenere presente |
 | V10 | `app/diario/page.tsx`, `handleCoverUpload` | La vecchia copertina in data-URL (`localStorage['dtrek_diary_cover']`) **non viene migrata automaticamente**: richiederebbe riconvertirla in Blob e ricaricarla silenziosamente, e molte di quelle copertine potrebbero essere già state troncate/perse dal `QuotaExceededError` che B03 descriveva. Un utente con la vecchia copertina locale la perde silenziosamente al primo caricamento con la nuova versione e deve ricaricarla una volta — accettabile, ma da segnalare se emergono lamentele |
 | V11 | `components/diario/DiarioMappa.tsx`, `components/diario/DiarioStatistiche.tsx` | La mappa d'insieme e le statistiche aggregate del diario continuano a mostrare **tutte** le `activities`, non filtrate da `excludedActivityIds`: l'esclusione vale per le pagine del libro (e quindi per l'indice e per il PDF), non per questi due riepiloghi. Scelta deliberata per restare nell'ambito richiesto (escludere una narrazione dal libro, non falsare le proprie statistiche complessive), ma è una decisione di design implicita — da confermare con l'utente se si aspettava il contrario |
+| V12 | `components/editorial/MagazineBody.tsx:108` | Stesso difetto di B16 (credito fotografico `© Wikimedia Commons` cablato) ma **a schermo**, non nel PDF: `photoCaption ?? '© Wikimedia Commons'`. La Fase 4 ha corretto solo la catena verso il PDF (`fetchRoutePhotos→usePDFExport→buildGuideContent→GuideSection`, ora tutta con `{url,credit}`); qui `GuideReader.tsx:1111` passa `sectionPhoto={routePhotos[i]}` come stringa nuda (solo URL), quindi il credito reale non arriva nemmeno a monte. Fuori dall'ambito "esportazioni PDF" di questa fase, ma root cause identica — un buon prossimo passo piccolo |
+| V13 | `app/resoconto/[id]/HiddenPdfRoot.tsx` | Il nuovo profilo altimetrico e la mappa nel PDF del resoconto non sono mai stati provati su un'escursione con GPS molto rumoroso (pochi punti, altimetria a scalini). `buildElevationSvgPath`/`downsampleSeries` non hanno smoothing: un tracciato del genere potrebbe rendere un profilo a dente di sega poco leggibile. Nessun problema noto, solo da provare su un caso reale prima di considerarlo definitivamente a posto |
 
 ---
 
@@ -102,7 +66,8 @@ non lo è.
 **Aggiornamento Fase 3:** risolto. `user_settings.diary_config JSONB` è stata aggiunta sia in
 produzione (`apply_migration` via MCP) sia nel file (`supabase/migrations/add_diary_config.sql` +
 `supabase-schema.sql`), insieme alle tre colonne di `hike_reports` sopra, ora documentate nel file
-anche se non ancora usate dal codice (`share_token` resta per la Fase 4, vedi B32).
+anche se `share_token` resta non usata dal codice (vedi B32, non affrontato in Fase 4: è uno schema
+di link, non uno stile o un'impaginazione del PDF).
 
 ---
 
@@ -110,15 +75,15 @@ anche se non ancora usate dal codice (`share_token` resta per la Fase 4, vedi B3
 
 | Cosa | Dove | Nota |
 |---|---|---|
-| Due cucitori di tile completi | `utils/pdfExport/mapTiles.ts` e `utils/shareImage/tileHelpers.ts` | Stessa matematica scritta due volte con costanti divergenti. **Fase 2**: `utils/shareImage/{activityImage,mapImage}.ts` non chiamano più `drawTiledMap`/`drawRouteOnTiles` direttamente — passano da `lib/mapSnapshot.ts`, che tiene `tileHelpers.ts` come unico ripiego interno. Resta da assorbire `utils/pdfExport/mapTiles.ts`, lato PDF (Fase 4) |
-| Palette tracciati triplicata | `mapTiles.ts` ×2, `app/diario/page.tsx:237` | Ora c'è `ROUTE_COLORS` in `lib/designTokens.ts` |
-| Campionamento traccia ×3 | vedi B37 | `lib/downsamplePolyline.ts` esiste già |
-| Ricampionamento grafici a 250 punti ×3 | `planned.ts:78`, `activity.ts:94,113` | Più una quarta variante a 40 punti in `buildGuideContent.ts:41` |
-| Blocco «Profilo Altimetrico» | `planned.ts:74-90` vs `activity.ts:89-106` | 17 righe identiche a meno di due colori |
-| Blocco «Note Personali» e intestazione | `planned.ts` vs `activity.ts` | Compreso il difetto dell'ellissi (B07) |
-| `parseTextBlocks` duplicata e **già divergente** | `GuideSection.tsx:22-54` vs `components/editorial/MagazineBody.tsx:10-40` | Da estrarre in `lib/guideMarkup.ts` |
-| Griglia fotografica duplicata | `app/resoconto/[id]/PrintPhotoGrid.tsx` vs `HiddenPdfRoot.tsx:70-85` | Valori diversi tra le due copie |
-| Mappa icona/colore delle sezioni | `GuideOverview.tsx:11-18` vs `components/guida/sectionStyle.tsx:12-22` | Il commento ammette la duplicazione; già divergente (9 chiavi contro 6) |
+| Due cucitori di tile completi | `utils/pdfExport/mapTiles.ts` e `utils/shareImage/tileHelpers.ts` | Stessa matematica scritta due volte con costanti divergenti. **Fase 2**: `utils/shareImage/{activityImage,mapImage}.ts` non chiamano più `drawTiledMap`/`drawRouteOnTiles` direttamente — passano da `lib/mapSnapshot.ts`, che tiene `tileHelpers.ts` come unico ripiego interno. **Non assorbito in Fase 4**: `utils/pdfExport/mapTiles.ts` resta, ma serve solo alla copertina/mini-mappa della Guida (`usePDFExport.ts`) e al fallback vettoriale di Statistiche/Mappa — spostarlo su MapLibre richiederebbe portare anche quei due jsPDF (voluti "a breve termine" su jsPDF dal piano) sopra una resa asincrona, fuori dall'ambito di questa fase |
+| Palette tracciati triplicata | `mapTiles.ts` ×2, `app/diario/page.tsx:237` | Risolto dalla Fase 3: `ROUTE_COLORS` di `lib/designTokens.ts` è la sorgente unica |
+| Campionamento traccia ×3 (era B37) | `utils/pdfExport/{planned,activity}.ts` (ritirati in Fase 4) + `usePDFExport.ts:36-37` | **Risolto**: i primi due file sono stati rimossi con i rispettivi documenti jsPDF; il terzo ora chiama `lib/downsamplePolyline.ts` invece di un campionamento a modulo scritto a mano |
+| Ricampionamento grafici a 250 punti ×3 + una quarta variante a 40 punti | `planned.ts`/`activity.ts` (ritirati) + `buildGuideContent.ts:41` | **Risolto**: le prime due copie sono sparite con i file; `buildGuideContent.ts` e il nuovo profilo altimetrico di `HiddenPdfRoot.tsx` condividono ora `downsampleSeries` in `lib/elevationSvgPath.ts` |
+| Blocco «Profilo Altimetrico» duplicato | `planned.ts` vs `activity.ts` | **Risolto per rimozione**: entrambi i file jsPDF sono stati ritirati in Fase 4.3, sostituiti dal profilo SVG unico di `lib/elevationSvgPath.ts` (Guida e Resoconto) |
+| Blocco «Note Personali» e intestazione, incluso il difetto dell'ellissi (B07) | `planned.ts` vs `activity.ts` | **Risolto per rimozione** insieme ai due file |
+| `parseTextBlocks` duplicata e già divergente | `GuideSection.tsx` vs `components/editorial/MagazineBody.tsx` | **Risolto**: estratta in `lib/guideMarkup.ts` (`parseMarkupBlocks`), usata da entrambi. Il primo paragrafo "lead"/pull-quote e il pre-trattamento del testo (il PDF riceve il markdown grezzo, lo schermo lo riceve già ripulito dei tag `[epoca]` a monte) restano scelte del chiamante, non della funzione condivisa |
+| Griglia fotografica duplicata | `app/resoconto/[id]/PrintPhotoGrid.tsx` vs `HiddenPdfRoot.tsx` | **Non unificata**: sono due percorsi di resa genuinamente diversi — stampa nativa del browser (classi Tailwind `print:*`) contro cattura html2canvas di un albero fuori schermo (stili tutti inline, niente CSS media query) — stessa distinzione già presente in B45. Unificarli vorrebbe dire scegliere un solo meccanismo, una decisione più grande di una correzione di stile. Allineati solo i colori (`#f59e0b`→`#c05a17`, `#78716c`→`#a9a18e`) sulla palette DTrek |
+| Mappa icona/colore delle sezioni | `GuideOverview.tsx` (TOC) vs `components/guida/sectionStyle.tsx` | **Non unificata, ma non più divergente**: prima la guida in breve elencava 6 sezioni su 9 (le stesse tre mancanti da B14); ora `TOC_ITEMS` ha le stesse 9 chiavi e gli stessi colori di `SECTION_STYLE`. Restano due dichiarazioni separate (chiavi diverse: quelle di `GuideData['sections']` contro `GuideSectionKey`), commento già presente a spiegare perché |
 
 ---
 
@@ -366,3 +331,177 @@ il carosello non era costruibile.
 **Non affrontato in questa fase** (motivato singolarmente in §1/§2): B36 resta aperto per
 `generateMapImage`/`stats`/`comparison` (non ricevono la traccia piena); V07 (foto senza miniatura)
 si applica ora anche al download delle schede del carosello, non solo alla galleria.
+
+### Fase 4 — Export PDF di guide e resoconti
+
+Prima esistevano **quattro** documenti per due oggetti: `exportPlannedPdf` + `exportGuidePdfHtml`
+per la guida, `exportActivityPdf` + `publishPdf` per il resoconto — ognuna delle due coppie con
+stile, colori e persino contenuto diversi per lo stesso oggetto. Ora sono **due**: un solo motore
+DOM-based per ciascuno, `exportGuidePdf` (guida) e `renderReportPdf.ts` (resoconto). `stats.ts`/
+`map.ts` restano su jsPDF, come previsto dal piano — sono schede dati, non documenti editoriali —
+ma sono stati corretti.
+
+**4.1 — Guida (chiude B14, B15, B16, B18, B19, B43, B44; V04, V05)**
+
+`buildGuideContent.ts` mappava solo 6 sezioni su 9: *Verificato online*, *Dati e sicurezza* e *Su
+misura per te* non arrivavano mai al PDF, con esse gli avvisi di chiusura sentiero (in rosso a
+schermo) che non comparivano in nessuna forma. Aggiunte tutte e tre in `GuideTemplate.tsx`
+(`sections.verificato/datiSicurezza/suMisura`), nello stesso ordine canonico di
+`lib/guideSections.ts`. "Verificato online" porta con sé gli avvisi (`GuideNotice[]`, banner
+colorati per gravità — nuove classi `.guide-notice-{danger,warning,info}` in `guide-print.css`) e le
+fonti consultate (`GuideSource[]`, come pillole), gli stessi dati già mostrati a schermo
+(`hike.cachedGuideNotices`/`cachedGuideSources`), letti direttamente da `hike` dentro
+`buildGuideContent.ts` — non serviva passarli a parte.
+
+Il piano segnalava anche un secondo buco: `PdfExportButton.tsx` (pannello "strumenti" di
+`GuidaHub.tsx`) chiamava ancora il vecchio `exportPlannedPdf` (jsPDF), un documento diverso da
+quello che il pulsante "Scarica PDF" dentro la guida stessa produceva (`exportGuidePdf`, DOM). Il
+contenuto esclusivo del primo — badge di difficoltà, punteggio "adatta a te", rischi/consigli
+(`hike.assessment`) — non esisteva nel secondo: perderlo senza sostituto sarebbe stata una
+regressione, non solo un ritiro di codice morto. Nuovo `GuideAssessment.tsx`, sulla pagina "a colpo
+d'occhio" (`GuideOverview.tsx`), con gli stessi dati e gli stessi token di colore del resto del
+documento. Il bottone in `GuidaHub.tsx` ora chiama lo stesso `exportGuidePdf(hike, hike.cachedGuide)`
+del lettore, disabilitato con un titolo esplicativo se la guida non è ancora stata generata (`hike.
+cachedGuide` vuoto) invece di produrre un PDF con le sezioni narrative vuote.
+
+Il titolo di sezione appariva due volte senza motivo apparente (occhiello maiuscolo + `h2`, stesso
+testo): mancava la riga esplicativa (`subtitle`, già definita in `lib/guideSections.ts` e scartata).
+Aggiunta a `GuideSection.tsx` e passata da ogni chiamata in `GuideTemplate.tsx` — completa lo stesso
+schema a tre livelli già usato a schermo (`SectionCard.tsx`) invece di lasciare occhiello e titolo
+senza nulla in mezzo a spiegare la ripetizione.
+
+Credito fotografico `© Wikimedia Commons` cablato in `GuideSection.tsx`, mentre
+`fetchRoutePhotos.ts` produce già `© {autore} / Wikimedia Commons` — per foto CC-BY l'attribuzione
+nominale non è opzionale. La catena `fetchCoverPhotos` (`usePDFExport.ts`) → `buildGuideContent.ts`
+→ `GuideSection` ora porta `{url, credit}` invece di una stringa nuda (nuovo tipo
+`GuideSectionPhoto`, esportato da `GuideSection.tsx`).
+
+`column-count: 3` sulla sezione "Il percorso" (quando priva di foto) era incompatibile con
+l'impaginatore: i `bottom` dei blocchi in colonne diverse sono interlacciati sull'asse verticale, e
+il punto di taglio calcolato cadeva in mezzo al testo di una colonna. Tornata a colonna singola —
+risolve anche la giustificazione troppo stretta segnalata a parte (V05).
+
+Titolo di copertina a 52px fissi, senza adattamento alla lunghezza, in un riquadro con
+`overflow:hidden`: un titolo lungo usciva dal riquadro e veniva tagliato senza traccia visibile
+dell'errore. `GuideCover.tsx` ora sceglie la dimensione (52/42/34/28px) in base al numero di
+caratteri del titolo.
+
+`preserveAspectRatio="none"` sulla fascia altimetrica decorativa deformava il profilo verticalmente.
+Rimosso (il default `xMidYMid meet` scala in proporzione). La funzione che costruisce il tracciato
+SVG è stata estratta in `lib/elevationSvgPath.ts`, condivisa con il nuovo profilo altimetrico del
+Resoconto (vedi 4.2) — prima sarebbe stata una quarta copia della stessa idea.
+
+`◆`/`⚠` (etichette "Lo sapevi?"/"Stato del percorso") e il ripiego `📍` per i POI senza emoji
+propria: caratteri Unicode "a forma di simbolo" che html2canvas rende con il font di sistema, quindi
+in modo non deterministico tra macchine. Sostituiti con forme CSS (`.guide-icon-diamond`, un rombo)
+o icone `lucide-react` (`MapPin`) già usate altrove nello stesso documento — l'emoji per-tipo di POI
+(`POI_META`), quella vera e voluta, non è stata toccata.
+
+Grigi ad hoc unificati sui token di `lib/designTokens.ts` (V04): `#1C1C1C`→INK, `#2D2D2D`/`#44403c`
+→STONE[800], `#3D3D3D`→STONE[700], `#e8e4de`→HAIRLINE, `#fafaf8`/`#f8f7f4`→STONE[50] (erano due
+quasi-bianchi quasi identici, ora uno solo), `#888`→STONE[500], `#AAA`/`#a8a29e`→STONE[400]. I
+colori di marca (`#d97220`, `#c05a17`, `#813619`, `#378d44`) erano già gli esadecimali corretti di
+TERRA/FOREST — CSS statico non ha un modo di referenziare `lib/designTokens.ts` direttamente, quindi
+restano scritti a mano, ma già allineati.
+
+**4.2 — Resoconto: riscrittura di `HiddenPdfRoot.tsx` (chiude B01, B17; aggiunge mappa/profilo/
+statistiche/POI come richiesto dal piano)**
+
+Rampa colori delle intestazioni di sezione: `#b7e4c7`/`#d8f3dc` con testo bianco sopra, contrasto
+≈1,3:1 e ≈1,2:1 — le ultime due sezioni di un racconto lungo erano illeggibili. Sostituita con
+`narrativeStyleFor()` di `components/resoconto/sectionStyle.ts`, la stessa già verificata WCAG ≥5:1
+e usata a schermo (invece di una terza scala scritta solo per questo file).
+
+`float: right` sulla foto di sezione, in un contenitore senza `overflow:hidden` né
+`display:flow-root`: la foto sfondava il bordo della card e, non contribuendo all'altezza del
+genitore, il punto di taglio calcolato dal paginatore cadeva sopra di essa e la tagliava fra due
+pagine. Sostituito con una riga flessibile (`display:flex`) — un figlio flex contribuisce sempre
+all'altezza reale del genitore, il problema non si pone per costruzione, non serviva nessun
+`overflow`/`flow-root` di ripiego.
+
+**Aggiunto ciò che mancava del tutto** (il PDF era un racconto con foto in cui la parte
+escursionistica spariva): statistiche (distanza, dislivello, durata, quota massima, passo medio,
+calorie — griglia in testa), mappa del percorso (MapLibre via `lib/mapSnapshot.ts`, resa una sola
+volta da `renderReportPdf.ts` prima del mount, passata come prop già pronta — nessuna mappa
+interattiva montata solo per essere sostituita da un raster, a differenza del Diario: qui la radice
+è comunque sempre e solo fuori schermo), profilo altimetrico (stesso SVG condiviso della Guida,
+`lib/elevationSvgPath.ts`), punti di interesse (`poiWikiEntries`, già raccolti da `ReportReader.tsx`
+per il widget a schermo, ora anche nel PDF — nome, tipo, distanza, miniatura Wikipedia).
+
+`.pdf-block` granulari: ogni paragrafo del racconto ha ora il proprio blocco (prima l'intera sezione,
+fino a diverse migliaia di pixel, era un blocco solo — lo stesso difetto già risolto per il Diario
+in Fase 3, qui applicato al Resoconto).
+
+**`HiddenPdfRoot` non è più montato permanentemente** nel DOM di `ReportReader.tsx`: prima c'era
+sempre, anche quando nessuno stava esportando nulla, e ogni foto veniva scaricata due volte (una per
+la vista a schermo, una per questa radice nascosta sempre presente). Nuovo `renderReportPdf.ts`
+(stesso pattern di `usePDFExport.ts` per la Guida): monta il componente fuori schermo solo al
+momento della cattura, con `createRoot`/`flushSync`, e lo smonta subito dopo.
+
+**4.3 — Ritiro dei template jsPDF (chiude B04, B06, B08, B22, B24, B37, B38, B39, B40; B05, B07,
+B23, B25, B41, B42 risolti per rimozione del codice che li conteneva)**
+
+`utils/pdfExport/activity.ts` (`exportActivityPdf`) e `utils/pdfExport/planned.ts`
+(`exportPlannedPdf`) sono stati **rimossi**: producevano un secondo PDF, jsPDF, fuori stile, per
+oggetti che hanno già un documento DOM-based corretto. I bottoni che li richiamavano
+(`ResocontoHub.tsx` "strumenti", `GuidaHub.tsx` "strumenti") sono stati rimossi o ripuntati al
+motore unico (vedi 4.1/4.2) — non è rimasta nessuna funzionalità in meno, solo un secondo documento
+di qualità inferiore in meno.
+
+Con quei due file spariscono anche una manciata di difetti che vivevano solo lì, senza bisogno di
+correggerli riga per riga: griglia POI che derivava (`renderPois`, B05 — la funzione stessa è stata
+rimossa da `docHelpers.ts`, era usata solo da `planned.ts`), ellissi aggiunta dopo `safeText`
+scavalcando `txt()` (B07), guardia di pagina mancante sulla mappa (B25), descrizioni POI troncate
+due volte alla cieca (B41), piè di pagina non troncato che si sovrapponeva al numero (B42).
+
+`docHelpers.ts` riscritto:
+- **Palette derivata da `lib/designTokens.ts`** invece di valori scelti a mano — `FOREST` era
+  `[22,101,52]`, esattamente il verde-800 di Tailwind, non un colore DTrek; ora `rgb(FOREST_SCALE
+  [600])`. `SKY` (mai più usato dopo il ritiro di `planned.ts`) è stato rimosso.
+- **`safeText` sostituita da `pdfSafe`** (`lib/pdfPaginate.ts`, ora esportata): la vecchia versione
+  eliminava tutto ciò che sta fuori da Latin-1, quindi cancellava in silenzio trattini lunghi,
+  virgolette curve e puntini di sospensione; `pdfSafe` conserva anche la fascia alta di CP1252, dove
+  quei segni stanno (B06). Una sola implementazione invece di due che rischiavano di divergere.
+- **`statBox` ora tronca** (nuovo `fitOneLine`, con ellissi): prima un'etichetta o un valore lunghi
+  uscivano dal riquadro e si sovrapponevano a quello adiacente (B08).
+- **`footer()` legge le dimensioni reali della pagina** (`doc.internal.pageSize`) invece di
+  coordinate cablate per A4 verticale (Y=291, X=196): `exportMapPdf` crea il documento in
+  orizzontale (297×210mm), quindi il piè di pagina non compariva mai, essendo sotto il bordo
+  inferiore della pagina (B04).
+
+`stats.ts`/`map.ts`: intestazione con un terzo verde cablato (`setFillColor(22,78,50)`, diverso dal
+`FOREST` usato tre righe sotto) sostituita con il token (B38); accenti tolti a mano per aggirare la
+vecchia `safeText` ("Piu calorie", "Attivita Mensili" — non necessario, gli accenti italiani sono
+già dentro Latin-1) ripristinati (B39); soglie di fine pagina incoerenti (270 in tutte le guardie
+tranne una a 280) uniformate a 270 (B40); rapporti d'aspetto dei canvas allineati ai riquadri
+d'incasso — prima 540×160 (3,375:1) dentro un riquadro 182×38mm (4,79:1, +33% di stiramento
+orizzontale) e 1800×700 (2,57:1) dentro 269×160mm (1,68:1, −35% verticale) (B22).
+
+`canvasCharts.ts`: `chartLine`, rimasta senza chiamanti dopo il ritiro di `activity.ts`/`planned.ts`
+(gli unici due che la usavano), è stata rimossa — con essa il difetto che portava (asse X per indice
+del punto, non per distanza, B23) è sparito insieme al codice morto che lo conteneva.
+`chartRouteFallback` (il ripiego vettoriale quando le tile satellite non arrivano, ancora in uso da
+`mapTiles.ts`) proiettava la latitudine **linearmente**: alle latitudini italiane un percorso
+risultava allungato di circa il 37% in orizzontale. Sostituita con una proiezione di Mercatore
+(`mercatorY`, la stessa matematica di ogni mappa web) sull'asse verticale (B24). Colore di default
+allineato a FOREST[600] (era `#166534`, verde-800 Tailwind).
+
+`PdfExportButton.tsx`: tipo `Variant` ridotto a `'stats' | 'map'` (`'activity'`/`'planned'` non
+esistono più).
+
+**4.4 — Deduplicazione**: vedi §4 per il dettaglio di ogni voce. In sintesi: il campionamento
+polilinea triplicato e il ricampionamento grafici a 250 punti sono spariti insieme ai due file
+jsPDF ritirati; `usePDFExport.ts` usa ora `lib/downsamplePolyline.ts` invece di un campionamento a
+modulo scritto a mano; `parseTextBlocks` (Guida PDF) e `parseBlocks` (schermo, Guida e Resoconto)
+sono stati unificati in `lib/guideMarkup.ts`; il profilo altimetrico SVG è condiviso tra Guida e
+Resoconto (`lib/elevationSvgPath.ts`); la mappa icona/colore delle sezioni della Guida in breve ora
+elenca le stesse 9 sezioni (prima 6) con gli stessi colori dell'equivalente a schermo. Non unificati
+(motivati singolarmente in §4): i due cucitori di tile lato PDF/condivisione, la griglia fotografica
+di stampa nativa contro quella catturata via html2canvas.
+
+**Non affrontato in questa fase** (motivato in §1): B21 (buffer WebGL non preservato nello
+screenshot 3D, fuori ambito), B27 (paginazione `?all=true`, intervento di performance a sé), B30
+(palette Tailwind nei temi StatCard del diario, cosmetico), B32 (token opaco per il resoconto
+pubblico — uno schema di link, non uno stile del PDF), B45 (margine di stampa nativa, minore). Nuovi
+V12 (stesso difetto di B16 ma a schermo, in `MagazineBody.tsx`) e V13 (profilo altimetrico non
+ancora provato su un tracciato GPS molto rumoroso) in §2.

@@ -8,39 +8,6 @@ export function mkCanvas(w: number, h: number, scale = 2) {
   return { c, ctx }
 }
 
-export function chartLine(
-  data: number[], w: number, h: number,
-  line: string, fill: string,
-  opts?: { min?: number; max?: number },
-): string {
-  const { c, ctx } = mkCanvas(w, h)
-  const minV = opts?.min ?? Math.min(...data)
-  const maxV = opts?.max ?? Math.max(...data)
-  const range = maxV - minV || 1
-  const pad = 4
-
-  ctx.fillStyle = '#f8fafc'; ctx.fillRect(0, 0, w, h)
-
-  const pts = data.map((v, i): [number, number] => [
-    pad + (i / (data.length - 1)) * (w - 2 * pad),
-    h - pad - ((v - minV) / range) * (h - 2 * pad),
-  ])
-
-  ctx.beginPath()
-  ctx.moveTo(pts[0][0], h - pad)
-  pts.forEach(([x, y]) => ctx.lineTo(x, y))
-  ctx.lineTo(pts[pts.length - 1][0], h - pad)
-  ctx.closePath()
-  ctx.fillStyle = fill; ctx.fill()
-
-  ctx.beginPath()
-  pts.forEach(([x, y], i) => i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y))
-  ctx.strokeStyle = line; ctx.lineWidth = 1.5
-  ctx.lineJoin = 'round'; ctx.stroke()
-
-  return c.toDataURL('image/png')
-}
-
 export function chartBar(
   data: { label: string; value: number }[],
   w: number, h: number,
@@ -85,24 +52,35 @@ export function chartBar(
   return c.toDataURL('image/png')
 }
 
+/** y di Web Mercator per una latitudine in gradi — non lineare in lat, cresce più in fretta
+ *  avvicinandosi ai poli. Prima questo file proiettava la latitudine linearmente: alle latitudini
+ *  italiane (~42-46°N) il percorso risultava allungato di circa il 37% in orizzontale rispetto al
+ *  verticale (B24) — la stessa distorsione che una mappa "equirettangolare" mostra sempre, tranne
+ *  che qui non c'era nessuna base cartografica a fare da riferimento visivo per notarla. */
+function mercatorY(latDeg: number): number {
+  const lat = latDeg * Math.PI / 180
+  return Math.log(Math.tan(Math.PI / 4 + lat / 2))
+}
+
 /** Fallback vector route (white background) */
 export function chartRouteFallback(
   pts: [number, number][],
   w: number, h: number,
-  lineColor = '#166534',
+  lineColor = '#277134', // FOREST[600], lib/designTokens.ts — prima #166534 (verde-800 Tailwind)
 ): string {
   if (pts.length < 2) return ''
   const { c, ctx } = mkCanvas(w, h)
   const pad = 14
   const lats = pts.map(p => p[0]), lons = pts.map(p => p[1])
-  const minLat = Math.min(...lats), maxLat = Math.max(...lats)
+  const mercYs = lats.map(mercatorY)
   const minLon = Math.min(...lons), maxLon = Math.max(...lons)
-  const latR = maxLat - minLat || 0.001, lonR = maxLon - minLon || 0.001
-  const sc = Math.min((w - 2 * pad) / lonR, (h - 2 * pad) / latR)
+  const minMY = Math.min(...mercYs), maxMY = Math.max(...mercYs)
+  const lonR = maxLon - minLon || 0.001, myR = maxMY - minMY || 0.001
+  const sc = Math.min((w - 2 * pad) / lonR, (h - 2 * pad) / myR)
   const xOff = pad + ((w - 2 * pad) - lonR * sc) / 2
-  const yOff = pad + ((h - 2 * pad) - latR * sc) / 2
+  const yOff = pad + ((h - 2 * pad) - myR * sc) / 2
   const px = (lon: number) => xOff + (lon - minLon) * sc
-  const py = (lat: number) => yOff + (maxLat - lat) * sc
+  const py = (lat: number) => yOff + (maxMY - mercatorY(lat)) * sc
 
   ctx.fillStyle = '#f0f9ff'
   if (typeof ctx.roundRect === 'function') { ctx.beginPath(); ctx.roundRect(0, 0, w, h, 6); ctx.fill() }
