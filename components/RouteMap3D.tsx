@@ -5,8 +5,8 @@ import { useEffect, useRef, useState, useCallback, useMemo, type PointerEvent as
 import type { TrackPoint } from '@/lib/tcxParser'
 import {
   X, Play, Pause, RotateCcw, Mountain, Camera, Images, Film,
-  Download, Share2, ChevronLeft, ChevronRight, ImagePlus,
-  Loader2, GripVertical, Check, Navigation, Layers, Sparkles, Copy, MapPin, Compass, ChevronUp,
+  Download, Share2, ImagePlus,
+  Loader2, Check, Navigation, Layers, Sparkles, Copy, MapPin, Compass, ChevronUp,
   Zap, Minus, Leaf, SlidersHorizontal, Lock, LockOpen,
 } from 'lucide-react'
 import StreetViewPanel from '@/components/StreetViewPanel'
@@ -49,7 +49,7 @@ import type { WikiPage } from '@/lib/wikipedia'
 import { normalizeGuideNotices, type GuideNotice } from '@/lib/guideNotices'
 import { classifyTrackShape } from '@/lib/geoUtils'
 import { declutterItems, selectPhotosAvoidingCrowding, MIN_ITEM_GAP_SEC, type TimelineItem } from '@/lib/videoTimeline'
-import RouteLeafletEditor, { INTERLUDE_GLYPH, type TimelineEditorItem } from '@/components/video/RouteLeafletEditor'
+import RouteLeafletEditor, { type TimelineEditorItem } from '@/components/video/RouteLeafletEditor'
 import VideoStudio from '@/components/video/VideoStudio'
 import VideoPresetPicker, { type PresetPickerEntry } from '@/components/video/VideoPresetPicker'
 import type { StudioControl, StudioGroup } from '@/lib/videoStudio'
@@ -130,7 +130,7 @@ interface FullPresetConfig {
 const VIDEO_PRESETS: Record<'veloce' | 'epico' | 'guida' | 'minimo' | 'natura' | 'manuale', FullPresetConfig> = {
   veloce: {
     label: 'Racconto veloce', desc: '9:16 · ritmo social · il tuo ricordo',
-    long: 'Il tuo ricordo raccontato per i social: verticale, ritmo veloce, il pin con cuore e battito se hai la fascia cardio. Foto in carosello brevi, traguardi e stelline all’arrivo. Nessuno stacco — non c’è tempo per fermarsi a leggere. Pensato per Reels e Storie: si guarda in pochi secondi, non si studia.',
+    long: 'Formato verticale e ritmo veloce, per Reels e Storie. Mostra il pin con la tua foto, e con la fascia cardio anche cuore e battito. Le foto passano in carosello con soste brevi; ci sono i traguardi in percentuale e le stelline all’arrivo. Nessuno stacco: a questa velocità un pannello da leggere non farebbe in tempo.',
     orientation: '9:16', styleIdx: 1, zoomIntro: 11.5, zoomFollow: 14.5, zoomOutro: 8.5,
     speedKmS: 0.55, fastIntro: true,
     grading: 'contrast(1.12) saturate(1.32) brightness(1.04)',
@@ -144,7 +144,7 @@ const VIDEO_PRESETS: Record<'veloce' | 'epico' | 'guida' | 'minimo' | 'natura' |
   },
   epico: {
     label: 'Racconto epico', desc: '9:16 · disteso · il tuo ricordo',
-    long: 'Il tuo ricordo, disteso: il percorso scorre lento, quasi senza dati a schermo — solo il titolo — con luce coerente con l’ora e alone del tracciato in evidenza. Le foto restano ferme più a lungo, il pin porta solo scia e ombra, senza cuore né numeri. Non è pensato per scorrere veloce: è un video da rivedere con calma.',
+    long: 'Il percorso scorre lento e a schermo resta solo il titolo. Il rilievo è illuminato secondo l’ora dell’escursione e il tracciato porta l’alone. Le foto restano ferme a lungo; del pin restano scia e ombra in salita, senza cuore né dati della fascia. Dura più degli altri preset a parità di percorso.',
     orientation: '9:16', styleIdx: 1, zoomIntro: 8.5, zoomFollow: 12.5, zoomOutro: 6.5,
     speedKmS: 0.10, fastIntro: false,
     grading: 'contrast(1.04) saturate(1.15) brightness(1.01)',
@@ -158,7 +158,7 @@ const VIDEO_PRESETS: Record<'veloce' | 'epico' | 'guida' | 'minimo' | 'natura' |
   },
   guida: {
     label: 'Guida del percorso', desc: '4:5 · spiega il sentiero',
-    long: 'Descrive il sentiero a chi non l’ha ancora fatto: apre con uno sguardo d’insieme sul percorso, spiega i numeri e il profilo altimetrico, mostra i luoghi principali con una loro foto. Nessun dato personale — niente pin, niente cuore, niente fatica. Pensato per far conoscere un percorso, non per raccontare la tua uscita: usa la modalità Descrizione del percorso.',
+    long: 'Apre con uno sguardo d’insieme sul percorso, poi si ferma sui numeri, sul profilo altimetrico e sui luoghi principali, mostrati con una loro foto. In formato 4:5, con il contachilometri a schermo. Nessun dato personale: niente pin, niente battito, niente fatica.',
     orientation: '4:5', styleIdx: 1, zoomIntro: 10, zoomFollow: 13.5, zoomOutro: 7.5,
     speedKmS: 0.30, fastIntro: true,
     grading: 'contrast(1.06) saturate(1.15) brightness(1.02)',
@@ -172,7 +172,7 @@ const VIDEO_PRESETS: Record<'veloce' | 'epico' | 'guida' | 'minimo' | 'natura' |
   },
   minimo: {
     label: 'Minimo', desc: '1:1 · solo percorso e foto',
-    long: 'Solo il percorso e le tue foto: nessuno stacco, nessun dato a schermo, nessun tocco scenico, niente pin. La versione più pulita che un preset sa fare, con un formato quadrato pensato per restare neutro ovunque lo pubblichi. Se vuoi togliere ancora qualcosa parti da qui, non da un preset più ricco a cui spegnere tutto a mano.',
+    long: 'Solo il percorso e le tue foto. Nessuno stacco, niente dati a schermo, nessun effetto, nessun pin, e la mappa Outdoor invece del satellitare. Formato quadrato. È il preset con meno elementi accesi: conviene partire da qui se vuoi un video essenziale, invece di spegnere a mano quelli di un preset più ricco.',
     orientation: '1:1', styleIdx: 0, zoomIntro: 10.5, zoomFollow: 13.8, zoomOutro: 7.5,
     speedKmS: 0.28, fastIntro: true,
     grading: 'contrast(1) saturate(1) brightness(1)',
@@ -186,7 +186,7 @@ const VIDEO_PRESETS: Record<'veloce' | 'epico' | 'guida' | 'minimo' | 'natura' |
   },
   natura: {
     label: 'Natura e luoghi', desc: '1:1 · disteso · l’ambiente intorno',
-    long: 'Racconta l’ambiente attraversato più che la prestazione: stacchi su vegetazione e luoghi, ritmo lento per lasciare respirare il paesaggio, luce reale sul terreno e nessun alone artificiale sul tracciato. Include anche i luoghi meno noti, non solo quelli con una foto già pronta. Pensato per un percorso dove il paesaggio è il motivo per cui l’hai fatto.',
+    long: 'Ritmo lento, con stacchi sulla fascia vegetazionale e sui luoghi attraversati. Il terreno è illuminato secondo l’ora dell’escursione e il tracciato non ha alone, per lasciare in primo piano il satellitare. Include anche i luoghi sensibili, che gli altri preset tengono senza nome.',
     orientation: '1:1', styleIdx: 1, zoomIntro: 9.5, zoomFollow: 13, zoomOutro: 7,
     speedKmS: 0.15, fastIntro: false,
     grading: 'contrast(1.05) saturate(1.22) brightness(1.02)',
@@ -200,7 +200,7 @@ const VIDEO_PRESETS: Record<'veloce' | 'epico' | 'guida' | 'minimo' | 'natura' |
   },
   manuale: {
     label: 'Manuale', desc: '9:16 · nessuna scelta imposta',
-    long: 'Nessuna scelta imposta: si apre lo studio con il percorso e le tue foto, se le hai già posizionate — tutto il resto (stacchi, dati a schermo, pin, effetti) parte spento. Da qui componi il video comando per comando, nei due gruppi di controlli. È il punto di partenza giusto se nessuno dei preset sopra ti convince davvero, o se vuoi costruire qualcosa che nessuno dei cinque prevede.',
+    long: 'Apre lo studio con il percorso e le tue foto, se le hai già posizionate. Stacchi, dati a schermo, pin ed effetti partono tutti spenti: si accende quello che serve, uno alla volta, dai comandi dei due gruppi.',
     orientation: '9:16', styleIdx: 0, zoomIntro: 10.5, zoomFollow: 13.8, zoomOutro: 7.5,
     speedKmS: 0.35, fastIntro: true,
     grading: 'contrast(1) saturate(1) brightness(1)',
@@ -745,6 +745,18 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   // Se l'ultimo render completato era un'anteprima veloce (solo una finestra di fotogrammi centrale
   // al percorso) invece del video intero — cambia il testo della schermata "pronto" di conseguenza.
   const [lastRenderWasPreview, setLastRenderWasPreview] = useState(false)
+  // URL del file appena scaricato, mostrato in un <video> nella schermata finale — vedi
+  // handleVideoDownload per perché serve.
+  const [videoPreviewUrl, setVideoPreviewUrl] = useState<string|null>(null)
+  // La condivisione di FILE non esiste su desktop né su alcuni browser mobili: senza questo
+  // controllo il pulsante "Condividi" ricadeva sul download, diventando un doppione di "Scarica".
+  const canShareVideo = useMemo(() => {
+    if (typeof navigator === 'undefined' || !videoRecordedBlob) return false
+    const ext = videoRecordedBlob.type.includes('mp4') ? 'mp4' : 'webm'
+    try {
+      return !!(navigator as any).canShare?.({ files: [new File([], `v.${ext}`, { type: videoRecordedBlob.type })] })
+    } catch { return false }
+  }, [videoRecordedBlob])
   const [lastRenderSeconds, setLastRenderSeconds] = useState(0)
   const [renderProgress,    setRenderProgress]   = useState(0)
   const [renderFrame,       setRenderFrame]      = useState(0)
@@ -1005,7 +1017,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const [captionCopied,  setCaptionCopied]  = useState(false)
 
   // Post-production
-  const [shotPlan,        setShotPlan]       = useState<ShotSegment[]>([])
   const [routePhotos,     setRoutePhotos]    = useState<RoutePhoto[]>([])
   /**
    * Dove far comparire una foto nel VIDEO, quando l'utente la sposta nell'editor del percorso.
@@ -1255,6 +1266,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       return {
         id: `photo:${t.id}`, kind: 'photo' as const, atP: t.progress,
         label: src?.caption?.trim() || 'Foto', seconds: photoDurationSec,
+        // La miniatura vera dentro il pin: sulla mappa si riconosce QUALE foto si sta spostando,
+        // invece di un'icona uguale per tutte — vedi photoPinHtml in RouteLeafletEditor.tsx.
+        thumbUrl: src?.url,
         // Bloccata finché non la si sblocca esplicitamente — dall'elenco foto o dal lucchetto
         // sulla mappa stessa, vedi unlockedPhotoIds. Gli stacchi non hanno questo campo: restano
         // sempre trascinabili.
@@ -1932,17 +1946,10 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   }
 
   /** Applica il preset scelto (o Manuale, che è un preset come gli altri — vedi VIDEO_PRESETS) e
-   *  apre lo studio. Le inquadrature si calcolano qui, non dentro applyFullPreset: dipendono dallo
-   *  zoom del preset, che React non ha ancora messo in stato nel momento in cui applyFullPreset
-   *  ritorna (stesso motivo per cui applyFullPreset ricalcola da sé il tempo di volo — vedi il suo
-   *  commento). Da qui in poi l'utente può comunque cambiare inquadrature a mano: il calcolo è un
-   *  punto di partenza, non si ripete più finché non si sceglie un altro preset.
-   */
+   *  apre lo studio. */
   function choosePreset(pr: keyof typeof VIDEO_PRESETS) {
-    const cfg = VIDEO_PRESETS[pr]
     setVideoPreset(pr)
     applyFullPreset(pr)
-    setShotPlan(planShots(gpsRef.current, cfg.zoomIntro, cfg.zoomFollow))
     setVideoStep(0)
     setVideoState('config')
   }
@@ -1960,15 +1967,6 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       setVideoTrailEnabled(false)
       setVideoSlopeShadowEnabled(false)
     }
-  }
-
-  function moveShot(id: string, dir: -1|1) {
-    setShotPlan(prev=>{
-      const idx=prev.findIndex(s=>s.id===id); if(idx<0) return prev
-      const next=[...prev], si=idx+dir; if(si<0||si>=next.length) return prev
-      ;[next[idx],next[si]]=[next[si],next[idx]]
-      let p=0; return next.map((s,i)=>{const dur=s.endP-s.startP,sP=p,eP=Math.min(1,p+dur);p=eP;return{...s,startP:sP,endP:i===next.length-1?1:eP}})
-    })
   }
 
   // ── Cinematic rendering ───────────────────────────────────────────────────────
@@ -4033,19 +4031,39 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     const url=URL.createObjectURL(videoRecordedBlob)
     videoObjUrlRef.current=url
     const a=document.createElement('a');a.href=url;a.download=`dtrek-3d-${Date.now()}.${ext}`;a.click()
-    setTimeout(()=>{ if(videoObjUrlRef.current===url){ URL.revokeObjectURL(url); videoObjUrlRef.current=null } },60_000)
-    setShareToast('Video salvato!');setTimeout(()=>setShareToast(''),2500)
+    // L'anteprima del file appena salvato, che prima mancava: dopo il clic restava solo un
+    // messaggio "Video salvato!", e su telefono — dove il download finisce in una cartella che
+    // l'utente non vede — non c'era modo di sapere se il file fosse davvero quello giusto senza
+    // uscire dall'app. L'URL è già creato per il download: mostrarlo in un <video> non costa
+    // nulla in più.
+    setVideoPreviewUrl(url)
+    setTimeout(()=>{ if(videoObjUrlRef.current===url){ URL.revokeObjectURL(url); videoObjUrlRef.current=null; setVideoPreviewUrl(p=>p===url?null:p) } },60_000)
+    setShareToast('Video salvato');setTimeout(()=>setShareToast(''),2500)
   },[videoRecordedBlob])
 
   const handleVideoShare=useCallback(async()=>{
     if(!videoRecordedBlob) return
     const ext=videoRecordedBlob.type.includes('mp4')?'mp4':'webm'
     const file=new File([videoRecordedBlob],`dtrek-3d-${Date.now()}.${ext}`,{type:videoRecordedBlob.type})
+    // canShare({files}) va interrogato PRIMA di costruire il resto: su desktop e su alcuni browser
+    // mobili la condivisione di file non esiste, e in quel caso "Condividi" diventava di fatto un
+    // secondo pulsante "Scarica" — due comandi identici con due nomi diversi. Ora il pulsante non
+    // viene proprio mostrato quando non c'è nulla da condividere (vedi canShareVideo), quindi qui
+    // il ripiego serve solo al caso raro in cui la condivisione fallisce a metà.
     if(typeof navigator!=='undefined'&&(navigator as any).canShare?.({files:[file]})){
-      try{await navigator.share({title:title??'Percorso DTrek',text:'DTrek — Video 3D',files:[file]});setVideoState('idle');setVideoRecordedBlob(null);return}catch{}
+      try{
+        // Nessun testo precotto: il video parla da sé, e "DTrek — Video 3D" finiva incollato nel
+        // messaggio di chi condivideva. La didascalia, se la vuole, se la copia da qui sotto.
+        await navigator.share({files:[file]})
+        return
+      }catch(err){
+        // AbortError = l'utente ha chiuso il foglio di condivisione: non è un errore e non deve
+        // far partire un download che nessuno ha chiesto.
+        if((err as {name?:string})?.name==='AbortError') return
+      }
     }
     handleVideoDownload()
-  },[videoRecordedBlob,title,handleVideoDownload])
+  },[videoRecordedBlob,handleVideoDownload])
 
   const totalKm=+(totalDistRef.current/1000).toFixed(1)
 
@@ -4374,7 +4392,10 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               setVideoInterludes(prev => prev.map(x => x.kind===iv.kind ? {...x,...change} : x))
             controls.push({
               kind:'toggle', id:`beat-${iv.kind}`,
-              label:`${INTERLUDE_GLYPH[iv.kind]}  ${INTERLUDE_LABEL[iv.kind]}`,
+              // Solo il nome: il glifo unicode davanti all'etichetta era un doppione sbiadito
+              // dell'icona vera che ora il pallino porta sulla mappa, e su Android cadeva spesso
+              // su un ripiego generico del font.
+              label: INTERLUDE_LABEL[iv.kind],
               value: iv.enabled && !unavailable,
               disabled: unavailable,
               disabledReason: 'dati non disponibili su questo percorso',
@@ -4597,10 +4618,10 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               ...(videoShowPois ? [
                 { kind:'toggle' as const, id:'poi-img', label:'Solo luoghi con una foto',
                   value: videoPoiRequireImage, onToggle:setVideoPoiRequireImage,
-                  hint:'Un nome e un’icona non raccontano niente che il segnaposto non dica già.' },
+                  hint:'Senza foto la scheda mostra solo il nome e l’icona, che il segnaposto sulla mappa già dà.' },
                 { kind:'toggle' as const, id:'poi-sens', label:'Includi luoghi sensibili',
                   value: videoPoiIncludeSensitive, onToggle:setVideoPoiIncludeSensitive,
-                  hint:'Spento, restano puntini senza nome. Un video fatto per girare porta gente: è così che certi posti si rovinano.' },
+                  hint:'Sorgenti, bivacchi e grotte restano puntini senza nome. Un video pubblico può portare gente in posti che reggono poca affluenza.' },
               ] : []),
               { kind:'custom', id:'captions', label:'Didascalie', render:()=>(
               <div>
@@ -4654,8 +4675,8 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           { id:'video', label:'Video', glyph:'video', controls:[
             { kind:'cards', id:'mode', label:'A cosa serve', value: videoMode,
               options:[
-                {value:'ricordo',      label:'Il mio ricordo', sub:'La tua uscita: il pin con la tua foto, la fatica, le tue immagini.'},
-                {value:'illustrativo', label:'Far conoscere il percorso', sub:'Il sentiero che si presenta: i luoghi col loro nome e i punteggi. Senza dati personali.'},
+                {value:'ricordo',      label:'Il mio ricordo', sub:'La tua uscita: pin con la tua foto, dati della fascia cardio, le tue immagini.'},
+                {value:'illustrativo', label:'Far conoscere il percorso', sub:'Luoghi con il loro nome, numeri e punteggi. Nessun dato personale.'},
               ],
               onPick:v=>{
                 setVideoMode(v as 'ricordo'|'illustrativo')
@@ -4665,7 +4686,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               } },
             ...(isIllustrativoUi && (pois?.length??0)===0
               ? [{ kind:'note' as const, id:'no-pois', tone:'warn' as const,
-                   text:'Su questo percorso non risultano punti di interesse: il video resterà una descrizione di numeri e punteggi.' }]
+                   text:'Su questo percorso non risultano punti di interesse: restano numeri e punteggi.' }]
               : []),
             // Il preset si sceglie prima di entrare qui (vedi la pagina dei preset): questo è
             // solo il richiamo a quale carattere è attivo ora, con la via per cambiarlo senza
@@ -4712,37 +4733,17 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               text:`Il percorso scorre in ~${Math.round(est.routeSec)}s${est.stillSec>0?`, più ${Math.round(est.stillSec)}s a telecamera ferma fra foto e pannelli`:''}.` },
             { kind:'toggle', id:'fast-intro', label:'Intro aerea più rapida',
               value: videoHookFastIntro, onToggle:setVideoHookFastIntro,
-              hint:`Un’apertura lunga è il motivo principale per cui si scorre via: attiva, il volo iniziale dura ${INTRO_FAST_SEC}s invece di ${INTRO_SEC}s.` },
+              hint:`Il volo iniziale dura ${INTRO_FAST_SEC}s invece di ${INTRO_SEC}s. Sui social le aperture lunghe vengono spesso saltate.` },
             ...(est.stillPct>45 ? [{ kind:'note' as const, id:'too-still', tone:'warn' as const,
-              text:`${Math.round(est.stillSec)}s su ${est.total}s (${est.stillPct}%) sono a telecamera ferma: il video rischia di sembrare più una presentazione che un viaggio.` }] : []),
+              text:`${Math.round(est.stillSec)}s su ${est.total}s (${est.stillPct}%) sono a telecamera ferma, fra soste sulle foto e stacchi.` }] : []),
             ...(est.photos>est.stops ? [{ kind:'note' as const, id:'grouped',
               text:`${est.photos} foto raggruppate in ${est.stops} soste: quelle vicine si aprono insieme.` }] : []),
-            { kind:'custom', id:'shots', label:'Sequenza inquadrature', render:()=>(
-              <div className="space-y-1.5">
-                {shotPlan.map((shot,idx)=>(
-                  <div key={shot.id} className="flex items-center gap-2 bg-stone-100 rounded-lg px-2 py-1.5">
-                    <GripVertical className="w-3.5 h-3.5 text-stone-400 shrink-0"/>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-stone-900 text-[11px] font-semibold truncate">{shot.label}</p>
-                      <p className="text-stone-500 text-[9px]">
-                        {Math.round(shot.startP*100)}%→{Math.round(shot.endP*100)}% ·{' '}
-                        {{'follow':'Seguimento','orbit-cw':'Orbita ↻','orbit-ccw':'Orbita ↺','side-left':'Lat. sx','side-right':'Lat. dx','overhead':'Zenitale'}[shot.bearingMode]}
-                      </p>
-                    </div>
-                    <div className="flex gap-1">
-                      <button disabled={idx===0} onClick={()=>moveShot(shot.id,-1)}
-                        className="w-6 h-6 rounded bg-stone-100 flex items-center justify-center text-stone-600 hover:bg-stone-200 disabled:opacity-20">
-                        <ChevronLeft className="w-3 h-3"/>
-                      </button>
-                      <button disabled={idx===shotPlan.length-1} onClick={()=>moveShot(shot.id,1)}
-                        className="w-6 h-6 rounded bg-stone-100 flex items-center justify-center text-stone-600 hover:bg-stone-200 disabled:opacity-20">
-                        <ChevronRight className="w-3 h-3"/>
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )},
+            // RIMOSSO il controllo "Sequenza" con le frecce per riordinare le inquadrature: non
+            // faceva niente. Il rendering (vedi `currentShots` in startRendering) ricalcola sempre
+            // le inquadrature da planShots con gli zoom correnti, ignorando `shotPlan`, e poi le
+            // cerca PER ID (`find(s => s.id === 'intro')`), quindi nemmeno l'ordine dell'array
+            // avrebbe potuto cambiare qualcosa. Erano due righe con frecce che riscrivevano
+            // startP/endP nello stato e non toccavano il video: peggio di un comando assente.
           ]},
 
           { id:'mappa', label:'Mappa e tracciato', glyph:'mappa', controls:[
@@ -4755,7 +4756,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               onPick:v=>setRouteColorKey(v as RouteColorKey) },
             { kind:'toggle', id:'glow', label:'Alone attorno al tracciato',
               value: routeGlowEnabled, onToggle:setRouteGlowEnabled,
-              hint:'Stacca il percorso dal terreno anche dove ci passa sopra qualcosa di simile per tinta — un sentiero già disegnato, una radura chiara, la neve.' },
+              hint:'Rende il tracciato leggibile anche su fondi della stessa tinta: un sentiero già disegnato, una radura chiara, la neve.' },
             { kind:'toggle', id:'sun', label:'Ombre coerenti con l’ora',
               value: videoSunLightEnabled, onToggle:setVideoSunLightEnabled,
               hint: hikeTimeWindow.real
@@ -4782,7 +4783,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             ...(!isIllustrativoUi ? [
               { kind:'toggle' as const, id:'pin-show', label:'Mostra il pin con la tua foto',
                 value: videoShowUserPin, onToggle:setShowUserPin,
-                hint: videoShowUserPin ? undefined : 'Senza pin il video racconta il percorso invece di te. Gli effetti qui sotto sono legati al pin e restano spenti.' },
+                hint: videoShowUserPin ? undefined : 'Gli effetti qui sotto sono ancorati al pin: senza, restano spenti.' },
               { kind:'chips' as const, id:'pin-fx', label:'Effetti del pin', options:[
                 { id:'heart',  label:'Cuore + BPM',        value:videoHeartEffectEnabled,    onToggle:setVideoHeartEffectEnabled,    disabled:!hasBodyData||!videoShowUserPin },
                 { id:'effort', label:'Pin dalla fatica',   value:videoPinEffortColorEnabled, onToggle:setVideoPinEffortColorEnabled, disabled:!hasBodyData||!videoShowUserPin },
@@ -4797,9 +4798,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             ]},
             { kind:'toggle', id:'loop', label:'Chiusura ad anello',
               value: videoLoopEnding, onToggle:setVideoLoopEnding,
-              hint:'L’ultimo fotogramma è uguale al primo: Reels e TikTok riavvolgono da soli, e il video riparte senza stacco.' },
+              hint:'L’ultimo fotogramma torna uguale al primo, così il riavvolgimento automatico di Reels e TikTok non produce uno scatto.' },
             { kind:'note', id:'always-on',
-              text:'Sempre attivi, senza toccare nulla: movimento lento sulle foto · titolo e dato forte sull’apertura · percorso che si colora avanzando · schermata finale con le statistiche · camera fluida.' },
+              text:'Attivi di serie: movimento lento sulle foto · titolo e dato principale in apertura · percorso che si colora avanzando · schermata finale con le statistiche.' },
           ]},
         ]
 
@@ -4855,7 +4856,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             <div>
               <p className="text-stone-500 text-[11px] font-semibold mb-2 tracking-wider">EFFETTI ATTIVI ({effects.length})</p>
               {effects.length===0?(
-                <p className="text-stone-500 text-xs">Nessuno — il video sarà pulito e sobrio.</p>
+                <p className="text-stone-500 text-xs">Nessuno: restano percorso, foto e schermata finale.</p>
               ):(
                 <div className="flex flex-wrap gap-1.5">
                   {effects.map(e=>(
@@ -4868,7 +4869,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             {est.total>60&&(
               <div className="rounded-xl px-3.5 py-2.5 bg-terra-50 border border-terra-300">
                 <p className="text-terra-700 text-xs font-semibold">~{est.total}s: oltre il limite dei 60s di Instagram.</p>
-                <p className="text-stone-500 text-[11px] mt-1 leading-relaxed">Puoi generarlo lo stesso — su YouTube non è un problema, e su Reels resta pubblicabile ma con meno distribuzione.</p>
+                <p className="text-stone-500 text-[11px] mt-1 leading-relaxed">Si può generare lo stesso: su YouTube non ci sono limiti, su Reels resta pubblicabile.</p>
               </div>
             )}
 
@@ -4883,7 +4884,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 <Sparkles className="w-3.5 h-3.5"/> Anteprima veloce
               </button>
               <p className="text-stone-500 text-[11px] text-center leading-relaxed">
-                L&apos;anteprima genera solo pochi secondi centrali: serve a controllare l&apos;effetto prima di aspettare il video intero.
+                L&apos;anteprima genera i secondi centrali del percorso, per controllare la resa senza attendere il video intero.
               </p>
             </div>
 
@@ -5046,15 +5047,27 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               <div className="w-14 h-14 rounded-full bg-green-500/15 flex items-center justify-center mx-auto mb-3">
                 <Film className="w-7 h-7 text-green-400"/>
               </div>
-              <h2 className="text-white font-bold text-lg">{lastRenderWasPreview ? 'Anteprima pronta!' : 'Video pronto!'}</h2>
+              <h2 className="text-white font-bold text-lg">{lastRenderWasPreview ? 'Anteprima pronta' : 'Video pronto'}</h2>
               <p className="text-white/50 text-sm mt-1">1080p · {Math.round(lastRenderSeconds)}s · {videoOrientation} · {videoFps}fps</p>
-              {lastRenderWasPreview && <p className="text-white/35 text-xs mt-1">Solo pochi secondi centrali al percorso, con tutti gli effetti selezionati — non il video intero.</p>}
+              {lastRenderWasPreview && <p className="text-white/35 text-xs mt-1">Sono i secondi centrali del percorso con gli effetti scelti, non il video intero.</p>}
             </div>
+
+            {/* Il file appena salvato, riprodubile qui: su telefono il download finisce in una
+                cartella che l'utente non vede, e senza questo riquadro non c'era modo di
+                controllare il risultato senza uscire dall'app. */}
+            {videoPreviewUrl && (
+              <video src={videoPreviewUrl} controls playsInline
+                className="w-full rounded-2xl bg-black max-h-64 object-contain"/>
+            )}
+
             <div className="flex flex-col gap-2.5">
-              <button onClick={handleVideoShare} className="w-full py-3.5 rounded-2xl bg-forest-500 hover:bg-forest-600 text-white font-bold flex items-center justify-center gap-2">
-                <Share2 className="w-4 h-4"/>Condividi
-              </button>
-              <button onClick={handleVideoDownload} className="w-full py-3.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-semibold flex items-center justify-center gap-2">
+              {canShareVideo && (
+                <button onClick={handleVideoShare} className="w-full py-3.5 rounded-2xl bg-forest-500 hover:bg-forest-600 text-white font-bold flex items-center justify-center gap-2">
+                  <Share2 className="w-4 h-4"/>Condividi
+                </button>
+              )}
+              <button onClick={handleVideoDownload}
+                className={`w-full py-3.5 rounded-2xl font-bold flex items-center justify-center gap-2 ${canShareVideo?'bg-white/10 hover:bg-white/20 text-white':'bg-forest-500 hover:bg-forest-600 text-white'}`}>
                 <Download className="w-4 h-4"/>Scarica
               </button>
             </div>
@@ -5077,22 +5090,25 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                     <Download className="w-3.5 h-3.5"/>Scarica copertina .jpg
                   </button>
                 ):(
-                  <p className="text-white/30 text-[11px] text-center">Tocca una foto per usarla come copertina su Instagram</p>
+                  <p className="text-white/30 text-[11px] text-center">Tocca una foto per scaricarla nel formato del video, da usare come copertina.</p>
                 )}
               </div>
             )}
 
-            {/* ── Caption Instagram ─────────────────────────────────────── */}
+            {/* ── Didascalia per i social ───────────────────────────────── */}
             <div className="border-t border-white/10 pt-4 space-y-2.5">
-              <p className="text-white/45 text-[11px] font-semibold tracking-wider">CAPTION INSTAGRAM</p>
+              <p className="text-white/45 text-[11px] font-semibold tracking-wider">DIDASCALIA</p>
               {!captionData ? (
-                <button onClick={generateCaption} disabled={captionLoading}
-                  className="w-full py-3 rounded-2xl bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-500 hover:to-pink-400 text-white font-semibold flex items-center justify-center gap-2 disabled:opacity-60 transition-all">
-                  {captionLoading
-                    ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/>Generazione…</>
-                    : <><Sparkles className="w-4 h-4"/>Genera Caption con AI</>
-                  }
-                </button>
+                <>
+                  <button onClick={generateCaption} disabled={captionLoading}
+                    className="w-full py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-semibold flex items-center justify-center gap-2 disabled:opacity-60 transition-colors">
+                    {captionLoading
+                      ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/>Scrivo…</>
+                      : <><Sparkles className="w-4 h-4"/>Proponi una didascalia</>
+                    }
+                  </button>
+                  <p className="text-white/30 text-[11px] leading-relaxed">Una bozza da cui partire, scritta dall&apos;AI sui dati del percorso. Rileggila e cambiala prima di pubblicare.</p>
+                </>
               ) : (
                 <div className="space-y-2">
                   <div className="bg-white/8 rounded-xl px-3.5 py-3 text-white/85 text-sm leading-relaxed whitespace-pre-wrap max-h-36 overflow-y-auto">
@@ -5110,22 +5126,23 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                         : captionData.caption
                       navigator.clipboard.writeText(full)
                       setCaptionCopied(true); setTimeout(()=>setCaptionCopied(false), 2000)
-                    }} className="flex-1 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-sm font-semibold flex items-center justify-center gap-1.5 transition-all">
-                      {captionCopied ? <><Check className="w-3.5 h-3.5 text-green-400"/>Copiata!</> : <><Copy className="w-3.5 h-3.5"/>Copia tutto</>}
+                    }} className="flex-1 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors">
+                      {captionCopied ? <><Check className="w-3.5 h-3.5 text-green-400"/>Copiata</> : <><Copy className="w-3.5 h-3.5"/>Copia tutto</>}
                     </button>
                     <button onClick={()=>{ setCaptionData(null); setCaptionCopied(false) }}
-                      className="px-4 py-2.5 rounded-xl bg-white/8 hover:bg-white/15 text-white/55 text-sm font-semibold transition-all" title="Rigenera">
+                      className="px-4 py-2.5 rounded-xl bg-white/8 hover:bg-white/15 text-white/55 text-sm font-semibold transition-colors" title="Riscrivi">
                       ↺
                     </button>
                   </div>
+                  <p className="text-white/30 text-[11px] leading-relaxed">Rileggila prima di pubblicare: l&apos;ha scritta l&apos;AI sui dati del percorso, non sa com&apos;è andata davvero.</p>
                 </div>
               )}
             </div>
 
             <div className="flex gap-2.5">
-              <button onClick={()=>{setVideoState('config');setVideoStep(WIZARD_STEPS.length-1);setVideoRecordedBlob(null);setRenderProgress(0);setCaptionData(null);setCoverPhotoId(null)}}
+              <button onClick={()=>{setVideoState('config');setVideoStep(WIZARD_STEPS.length-1);setVideoRecordedBlob(null);setRenderProgress(0);setCaptionData(null);setCoverPhotoId(null);setVideoPreviewUrl(null)}}
                 className="flex-1 py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-sm font-semibold">← Impostazioni</button>
-              <button onClick={()=>{setVideoState('idle');setVideoRecordedBlob(null);setRenderProgress(0);setCaptionData(null);setCoverPhotoId(null)}}
+              <button onClick={()=>{setVideoState('idle');setVideoRecordedBlob(null);setRenderProgress(0);setCaptionData(null);setCoverPhotoId(null);setVideoPreviewUrl(null)}}
                 className="flex-1 py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-sm font-semibold">Chiudi</button>
             </div>
           </div>

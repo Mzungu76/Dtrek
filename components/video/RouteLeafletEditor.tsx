@@ -30,10 +30,12 @@ import 'leaflet/dist/leaflet.css'
 import type * as L from 'leaflet'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  progressFromLatLng, findCrowding, MIN_ITEM_GAP_SEC,
+  buildRouteProjector, progressFromLatLngOn, findCrowding, MIN_ITEM_GAP_SEC,
   type TimelineItem,
 } from '@/lib/videoTimeline'
+import { Image as ImageIcon } from 'lucide-react'
 import { computeDirectionArrows } from '@/lib/geoUtils'
+import { interludeIconMarkup, photoIconMarkup, INTERLUDE_ICON } from '@/components/video/interludeIcons'
 import type { TrackPoint } from '@/lib/tcxParser'
 import type { InterludeKind } from '@/lib/videoInterludes'
 import type { TrackShape } from '@/lib/geoUtils'
@@ -42,9 +44,8 @@ const ARROW_SPACING_M = 250
 const ARROW_ICON_PX = 13
 const ARROW_SVG_PX = 10
 
-export const INTERLUDE_GLYPH: Record<InterludeKind, string> = {
-  visione: '◎', numeri: '#', profilo: '△', natura: '❦', tei: '★', avvisi: '!', luoghi: '◆',
-}
+// I glifi unicode di prima (◎ # △ ❦ ★ ! ◆) sono stati sostituiti dalle icone lucide di
+// components/video/interludeIcons.tsx — vedi il commento in testa a quel file.
 const INTERLUDE_TINT: Record<InterludeKind, string> = {
   visione: '#38bdf8', numeri: '#a3e635', profilo: '#f59e0b', natura: '#34d399',
   tei: '#c084fc', avvisi: '#fb7185', luoghi: '#f472b6',
@@ -82,26 +83,48 @@ interface Props {
 const LOCK_BADGE_CLASS = 'rle-lock-badge'
 const RESET_BADGE_CLASS = 'rle-reset-badge'
 
+/** Foto: pin bianco a goccia con la miniatura incorniciata dentro — la stessa forma che il video
+ *  disegna sul percorso (drawPhotoPin in lib/videoOverlays.ts) e che compare sulla mappa 3D.
+ *  Ritrovare qui la stessa sagoma che si vedrà nel filmato è tutto il punto di un editor: si
+ *  dispone la cosa vera, non un suo simbolo. */
+const PHOTO_PIN_W = 38, PHOTO_PIN_H = 38, PHOTO_PIN_TIP = 8
+
+function photoPinHtml(thumbUrl: string | undefined, crowded: boolean, locked: boolean): string {
+  const border = crowded ? '#d97220' : '#ffffff'
+  const inner = thumbUrl
+    ? `<img src="${thumbUrl}" alt="" style="width:100%;height:100%;object-fit:cover;display:block">`
+    : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#3f3a33">${photoIconMarkup(15)}</div>`
+  return `
+    <div style="position:relative;width:${PHOTO_PIN_W}px;height:${PHOTO_PIN_H + PHOTO_PIN_TIP}px;cursor:${locked ? 'default' : 'grab'};filter:drop-shadow(0 2px 4px rgba(0,0,0,0.35))">
+      <div style="width:${PHOTO_PIN_W}px;height:${PHOTO_PIN_H}px;border-radius:9px;background:${border};padding:3px;box-sizing:border-box">
+        <div style="width:100%;height:100%;border-radius:6px;overflow:hidden;background:#eeece5">${inner}</div>
+      </div>
+      <div style="position:absolute;left:50%;top:${PHOTO_PIN_H - 1}px;transform:translateX(-50%);width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:${PHOTO_PIN_TIP + 1}px solid ${border}"></div>
+    </div>`
+}
+
+/** Stacco: pastiglia tonda nel colore della categoria con l'icona a tratto dentro, stesso alfabeto
+ *  visivo dei segnaposto dei luoghi (poiBadgeMarkup). */
+function interludeBadgeHtml(kind: InterludeKind, crowded: boolean): string {
+  const size = 30
+  const tint = INTERLUDE_TINT[kind] ?? '#3f3a33'
+  const ring = crowded
+    ? 'box-shadow:0 0 0 3px rgba(217,114,32,0.9), 0 1px 4px rgba(0,0,0,0.25);'
+    : 'box-shadow:0 1px 4px rgba(0,0,0,0.25);'
+  return `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${tint};border:2px solid #ffffff;display:flex;align-items:center;justify-content:center;${ring}cursor:grab">${interludeIconMarkup(kind, 15, 'rgba(20,18,15,0.92)')}</div>`
+}
+
 function markerIcon(Lmod: typeof L, it: TimelineEditorItem, crowded: boolean): L.DivIcon {
   const isPhoto = it.kind === 'photo'
   const locked = isPhoto && !!it.locked
   const moved = isPhoto && !!it.moved
-  const tint = isPhoto ? '#3f3a33' : (INTERLUDE_TINT[it.interludeKind ?? 'numeri'] ?? '#3f3a33')
-  const glyph = isPhoto ? '▣' : INTERLUDE_GLYPH[it.interludeKind ?? 'numeri']
-  const size = isPhoto ? 30 : 28
-  // Su fondo chiaro l'ombra nera pesante di prima sporcava la mappa: basta un bordo bianco a
-  // staccare il pallino, come i segnaposto delle schede.
-  const ring = crowded
-    ? `box-shadow:0 0 0 3px rgba(217,114,32,0.9), 0 1px 4px rgba(0,0,0,0.25);`
-    : `box-shadow:0 1px 4px rgba(0,0,0,0.25);`
-  const bg = isPhoto ? '#3f3a33' : tint
-  const fg = isPhoto ? '#ffffff' : 'rgba(20,18,15,0.9)'
-  // Il lucchetto sul pallino è SEMPRE presente per una foto (chiuso o aperto) e si tocca
+
+  // Il lucchetto sul pin è SEMPRE presente per una foto (chiuso o aperto) e si tocca
   // direttamente: è il modo di bloccare/sbloccare senza passare dall'elenco. Zona di tocco più
-  // larga dell'icona vera (24px invece di 14) per non far fallire il tocco su schermi piccoli —
+  // larga dell'icona vera (24px invece di 16) per non far fallire il tocco su schermi piccoli —
   // vedi bindBadgeHandlers per come diventa cliccabile.
   const lockBadge = isPhoto
-    ? `<div class="${LOCK_BADGE_CLASS}" style="position:absolute;right:-9px;bottom:-9px;width:24px;height:24px;display:flex;align-items:center;justify-content:center;cursor:pointer">
+    ? `<div class="${LOCK_BADGE_CLASS}" style="position:absolute;right:-9px;bottom:-1px;width:24px;height:24px;display:flex;align-items:center;justify-content:center;cursor:pointer">
          <span style="width:16px;height:16px;border-radius:50%;background:${locked ? '#c05a17' : '#277134'};border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:9px;line-height:1;color:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.35)">${locked ? '🔒' : '🔓'}</span>
        </div>`
     : ''
@@ -113,17 +136,26 @@ function markerIcon(Lmod: typeof L, it: TimelineEditorItem, crowded: boolean): L
          <span style="width:16px;height:16px;border-radius:50%;background:#38bdf8;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:10px;line-height:1;color:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.35)">↺</span>
        </div>`
     : ''
+
+  const body = isPhoto
+    ? photoPinHtml(it.thumbUrl, crowded, locked)
+    : interludeBadgeHtml(it.interludeKind ?? 'numeri', crowded)
+
+  // Il pin della foto è alto (corpo + punta) e va ancorato sulla PUNTA, non al centro: è la punta
+  // che indica il punto del percorso, come per qualunque segnaposto. Lo stacco resta un disco
+  // ancorato al proprio centro.
+  const w = isPhoto ? PHOTO_PIN_W : 30
+  const h = isPhoto ? PHOTO_PIN_H + PHOTO_PIN_TIP : 30
+  // iconSize è il riquadro cliccabile dell'INTERO marker: allargato per includere i pallini che
+  // sporgono dai bordi, altrimenti un tocco sul lucchetto cadrebbe fuori e sembrerebbe morto.
+  const padX = isPhoto ? 18 : 0, padY = isPhoto ? 18 : 0
+
   return Lmod.divIcon({
-    html: `<div style="position:relative;width:${size}px;height:${size}px">
-             <div style="width:100%;height:100%;border-radius:50%;background:${bg};border:2px solid #ffffff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:${fg};${ring};cursor:${locked ? 'default' : 'grab'}">${glyph}</div>
-             ${lockBadge}${resetBadge}
+    html: `<div style="position:relative;width:${w}px;height:${h}px;margin:${padY / 2}px ${padX / 2}px">
+             ${body}${lockBadge}${resetBadge}
            </div>`,
-    // L'icona vera resta 30px, ma iconSize è quella che Leaflet usa per il riquadro cliccabile
-    // dell'INTERO marker: allargata di 18px (9 per lato) per includere i due pallini che ora
-    // sporgono dagli angoli, altrimenti un tocco sul lucchetto — fuori dal riquadro originale —
-    // non arriverebbe a nessun elemento e il badge sembrerebbe morto.
-    iconSize: isPhoto ? [size + 18, size + 18] : [size, size],
-    iconAnchor: isPhoto ? [(size + 18) / 2, (size + 18) / 2] : [size / 2, size / 2],
+    iconSize: [w + padX, h + padY],
+    iconAnchor: isPhoto ? [(w + padX) / 2, h + padY / 2] : [(w + padX) / 2, (h + padY) / 2],
     className: '',
   })
 }
@@ -212,6 +244,13 @@ export default function RouteLeafletEditor({
 
   const gpsPoints = trackPoints.filter(p => p.lat != null && p.lon != null) as { lat: number; lon: number }[]
   const coords: [number, number][] = gpsPoints.map(p => [p.lat, p.lon])
+
+  // Costruito UNA VOLTA per tracciato, non ad ogni movimento del dito: vedi il commento su
+  // buildRouteProjector in lib/videoTimeline.ts per perché è la differenza fra un pallino che
+  // segue il dito e uno che sembra opporre resistenza.
+  const projector = useMemo(() => buildRouteProjector(trackPoints), [trackPoints])
+  const projectorRef = useRef(projector)
+  projectorRef.current = projector
 
   const liveItems = dragPreview
     ? items.map(it => (dragPreview[it.id] !== undefined ? { ...it, atP: dragPreview[it.id] } : it))
@@ -316,12 +355,12 @@ export default function RouteLeafletEditor({
           .addTo(map)
         m.on('drag', () => {
           const ll = m!.getLatLng()
-          const p = progressFromLatLng(trackPoints, ll.lat, ll.lng)
+          const p = progressFromLatLngOn(projectorRef.current, ll.lat, ll.lng)
           setDragPreview(prev => ({ ...(prev ?? {}), [it.id]: p }))
         })
         m.on('dragend', () => {
           const ll = m!.getLatLng()
-          const p = progressFromLatLng(trackPoints, ll.lat, ll.lng)
+          const p = progressFromLatLngOn(projectorRef.current, ll.lat, ll.lng)
           setDragPreview(prev => { if (!prev) return prev; const { [it.id]: _drop, ...rest } = prev; return rest })
           onMoveRef.current(it.id, p)
         })
@@ -369,6 +408,13 @@ export default function RouteLeafletEditor({
       if (was === is) continue
       const m = markersRef.current.get(it.id)
       if (!m) continue
+      // MAI setIcon sul marker che si sta trascinando in questo istante: divIcon ricostruisce da
+      // zero il nodo DOM, e Leaflet.Draggable resta agganciato a quello VECCHIO, ormai staccato
+      // dalla pagina. Il trascinamento si interrompe a metà gesto — ed è proprio la condizione in
+      // cui accadeva sempre, perché avvicinarsi a un altro elemento (cioè cambiare stato di
+      // affollamento) è esattamente quello che si fa mentre si trascina. L'anello arancio su quel
+      // marker arriva al rilascio, un istante dopo; su tutti gli altri resta immediato.
+      if (dragPreview && dragPreview[it.id] !== undefined) continue
       m.setIcon(markerIcon(Lmod, it, is))
       if (it.kind === 'photo') {
         bindBadgeHandlers(Lmod, m, {
@@ -378,6 +424,10 @@ export default function RouteLeafletEditor({
       }
     }
     lastCrowdedRef.current = next
+    // dragPreview è letto qui dentro ma volutamente fuori dalle dipendenze: cambia ad ogni tick di
+    // trascinamento e `crowding` cambia già insieme a lui, quindi aggiungerlo raddoppierebbe le
+    // esecuzioni senza cambiare l'esito.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [crowding, mapReady, items])
 
   if (gpsPoints.length < 2) {
@@ -427,8 +477,8 @@ export default function RouteLeafletEditor({
               {crowding.pairs.length === 1
                 ? `Due elementi cadono a ${crowding.pairs[0].apartSec.toFixed(1)}s l'uno dall'altro`
                 : `${crowding.pairs.length} coppie cadono a meno di ${MIN_ITEM_GAP_SEC}s l'una dall'altra`}
-              {' '}(cerchiati in arancio): il video si fermerebbe due volte di fila senza percorso in mezzo.
-              Allontanali per dare respiro al montaggio.
+              {' '}(cerchiati in arancio). Il video si fermerebbe due volte con poco percorso in mezzo: allontanali
+              trascinandoli sulla mappa.
             </p>
           </div>
         )}
@@ -436,26 +486,31 @@ export default function RouteLeafletEditor({
         {showHelp && (
           <div className="rounded-xl bg-white/97 border border-stone-200 shadow-lg px-3 py-2.5 space-y-2">
             <p className="text-stone-700 text-[11px] leading-relaxed">
-              Trascina i pallini per decidere dove cade ogni foto e ogni stacco: si agganciano da soli al punto
-              del percorso più vicino. Il lucchetto su una foto la blocca o la sblocca — toccalo per cambiare;
-              il pallino ↺, quando compare, riporta la foto dov&apos;è stata scattata.
-              {roundTrip && ' Il percorso è un andata e ritorno: il video mostra la sola andata, quindi tutto va posizionato su quella.'}
+              Trascina i pallini per scegliere dove cadono foto e stacchi: si agganciano al punto del percorso
+              più vicino. Il lucchetto su una foto la blocca o la sblocca. Il pallino ↺ compare quando la foto
+              non è più dove è stata scattata e la riporta al punto originale.
+              {roundTrip && ' Questo percorso è un andata e ritorno e il video mostra solo l’andata: posiziona tutto su quella.'}
             </p>
             {interludeItems.length > 0 && (
               <div className="flex flex-wrap gap-x-3 gap-y-1 pt-0.5 border-t border-stone-200">
                 <span className="flex items-center gap-1.5 text-[10px] text-stone-500 mt-1.5">
-                  <span className="w-3.5 h-3.5 rounded-full bg-[#3f3a33] text-white flex items-center justify-center text-[9px] font-extrabold">▣</span>
+                  <span className="w-4 h-4 rounded-[4px] bg-white border border-stone-300 flex items-center justify-center shrink-0">
+                    <ImageIcon className="w-2.5 h-2.5 text-stone-600" />
+                  </span>
                   Foto
                 </span>
-                {interludeItems.map(i => (
-                  <span key={i.id} className="flex items-center gap-1.5 text-[10px] text-stone-500 mt-1.5">
-                    <span className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] font-extrabold text-stone-900"
-                      style={{ background: INTERLUDE_TINT[i.interludeKind ?? 'numeri'] }}>
-                      {INTERLUDE_GLYPH[i.interludeKind ?? 'numeri']}
+                {interludeItems.map(i => {
+                  const Icon = INTERLUDE_ICON[i.interludeKind ?? 'numeri']
+                  return (
+                    <span key={i.id} className="flex items-center gap-1.5 text-[10px] text-stone-500 mt-1.5">
+                      <span className="w-4 h-4 rounded-full flex items-center justify-center shrink-0"
+                        style={{ background: INTERLUDE_TINT[i.interludeKind ?? 'numeri'] }}>
+                        <Icon className="w-2.5 h-2.5" style={{ color: 'rgba(20,18,15,0.92)' }} strokeWidth={2.5} />
+                      </span>
+                      {i.label}
                     </span>
-                    {i.label}
-                  </span>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>

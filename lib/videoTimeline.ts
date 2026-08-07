@@ -35,34 +35,86 @@ function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): num
  * basta a posizionarcisi sopra: il dito non deve mai seguire la linea con precisione.
  */
 export function progressFromLatLng(track: TimelineTrackPoint[], lat: number, lon: number): number {
+  return progressFromLatLngOn(buildRouteProjector(track), lat, lon)
+}
+
+/**
+ * Tutto ciò che serve per proiettare un punto sul tracciato, calcolato UNA VOLTA SOLA.
+ *
+ * Il motivo è di prestazioni, ed era il difetto che rendeva il trascinamento dei pallini
+ * "resistente" e impreciso: `progressFromLatLng` ricostruiva ad ogni chiamata l'array filtrato dei
+ * punti E l'intera tabella delle distanze cumulate — cioè una haversine (sei chiamate
+ * trigonometriche) per ciascun punto del tracciato. Leaflet emette l'evento 'drag' a ogni
+ * movimento del dito, decine di volte al secondo: su una traccia registrata a un punto al secondo
+ * (facilmente 10-20 000 punti per un'escursione) significava centinaia di migliaia di chiamate
+ * trigonometriche al secondo, sul thread che deve anche ridisegnare. Il dito si muoveva e il
+ * pallino arrivava dopo — esattamente la sensazione di un marker che "oppone resistenza".
+ *
+ * Le coordinate piane sono precalcolate in un sistema locale ancorato al PRIMO punto del tracciato
+ * invece che al punto toccato: la scala x cambia con la latitudine, ma su un'escursione l'escursione
+ * in latitudine è di pochi centesimi di grado e l'errore introdotto è ben sotto il metro — cioè
+ * molto meno della precisione del gesto che stiamo interpretando.
+ */
+export interface RouteProjector {
+  /** Coordinate piane locali, interlacciate [x0,y0, x1,y1, …] — un solo Float64Array invece di N
+   *  oggetti: è la differenza fra scorrere memoria contigua e inseguire puntatori, e qui si scorre
+   *  l'intero tracciato ad ogni movimento del dito. */
+  xy: Float64Array
+  /** Distanza reale cumulata fino al punto i-esimo, in metri. */
+  cum: Float64Array
+  totalM: number
+  count: number
+  /** Origine geografica del sistema locale (il primo punto del tracciato) e fattore di scala in
+   *  longitudine: servono a convertire il punto toccato nelle stesse unità di `xy`. */
+  originLat: number
+  originLon: number
+  kx: number
+}
+
+export function buildRouteProjector(track: TimelineTrackPoint[]): RouteProjector {
   const pts = track.filter(p => p.lat != null && p.lon != null) as { lat: number; lon: number }[]
-  if (pts.length < 2) return 0
+  const n = pts.length
+  const xy = new Float64Array(Math.max(0, n) * 2)
+  const cum = new Float64Array(Math.max(0, n))
+  if (n < 2) return { xy, cum, totalM: 0, count: n, originLat: 0, originLon: 0, kx: 1 }
 
-  const cum: number[] = [0]
-  for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + haversineM(pts[i - 1].lat, pts[i - 1].lon, pts[i].lat, pts[i].lon))
-  const total = cum[cum.length - 1]
-  if (total <= 0) return 0
+  const originLat = pts[0].lat, originLon = pts[0].lon
+  const kx = Math.cos(originLat * Math.PI / 180)
+  for (let i = 0; i < n; i++) {
+    xy[i * 2]     = (pts[i].lon - originLon) * kx
+    xy[i * 2 + 1] = pts[i].lat - originLat
+    if (i > 0) cum[i] = cum[i - 1] + haversineM(pts[i - 1].lat, pts[i - 1].lon, pts[i].lat, pts[i].lon)
+  }
+  return { xy, cum, totalM: cum[n - 1], count: n, originLat, originLon, kx }
+}
 
-  const kx = Math.cos(lat * Math.PI / 180)
-  const toXY = (la: number, lo: number): [number, number] => [(lo - lon) * kx, la - lat]
-  const [px, py] = [0, 0]   // il punto toccato è l'origine del sistema locale
+/** La progressione 0-1 del punto del tracciato più vicino a (lat, lon), usando un proiettore già
+ *  costruito. Nessuna allocazione: solo un passaggio sull'array. */
+export function progressFromLatLngOn(proj: RouteProjector, lat: number, lon: number): number {
+  const { xy, cum, totalM, count } = proj
+  if (count < 2 || totalM <= 0) return 0
+
+  const px = (lon - proj.originLon) * proj.kx
+  const py = lat - proj.originLat
 
   let bestDist = 0, bestD2 = Infinity
-  for (let i = 1; i < pts.length; i++) {
-    const [ax, ay] = toXY(pts[i - 1].lat, pts[i - 1].lon)
-    const [bx, by] = toXY(pts[i].lat, pts[i].lon)
+  for (let i = 1; i < count; i++) {
+    const ax = xy[(i - 1) * 2], ay = xy[(i - 1) * 2 + 1]
+    const bx = xy[i * 2],       by = xy[i * 2 + 1]
     const dx = bx - ax, dy = by - ay
     const lenSq = dx * dx + dy * dy
     let t = lenSq > 0 ? ((px - ax) * dx + (py - ay) * dy) / lenSq : 0
-    t = Math.max(0, Math.min(1, t))
+    t = t < 0 ? 0 : t > 1 ? 1 : t
     const cx = ax + t * dx, cy = ay + t * dy
-    const d2 = (px - cx) ** 2 + (py - cy) ** 2
+    const ex = px - cx, ey = py - cy
+    const d2 = ex * ex + ey * ey
     if (d2 < bestD2) {
       bestD2 = d2
       bestDist = cum[i - 1] + t * (cum[i] - cum[i - 1])
     }
   }
-  return Math.max(0, Math.min(1, bestDist / total))
+  const p = bestDist / totalM
+  return p < 0 ? 0 : p > 1 ? 1 : p
 }
 
 // ── Chi si pesta i piedi ──────────────────────────────────────────────────────
