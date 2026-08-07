@@ -1,5 +1,6 @@
 import type { ActivityMeta } from '@/lib/blobStore'
 import { mkCanvas, chartRouteFallback } from './canvasCharts'
+import { ROUTE_COLORS } from '@/lib/designTokens'
 
 // ── Satellite map with route overlay ───────────────────────────────────────────
 
@@ -271,7 +272,7 @@ export async function fetchAllRoutesSatMap(activities: ActivityMeta[], outW: num
       return { x: (xy.x - minTX) * TILE_SIZE, y: (xy.y - minTY) * TILE_SIZE }
     }
 
-    const PALETTE = ['#166534','#0369a1','#9333ea','#c2410c','#0f766e','#b45309','#be123c','#1d4ed8']
+    const PALETTE = ROUTE_COLORS // vedi lib/designTokens.ts — prima una quarta copia della stessa lista
     const lineW = Math.max(6, Math.min(12, full.width / 160))
     fctx.lineCap = 'round'; fctx.lineJoin = 'round'
 
@@ -328,7 +329,7 @@ export function chartAllRoutes(activities: ActivityMeta[], w: number, h: number)
 
   ctx.fillStyle = '#f0f9ff'; ctx.fillRect(0, 0, w, h)
 
-  const PALETTE = ['#166534','#0369a1','#9333ea','#c2410c','#0f766e','#b45309','#be123c','#1d4ed8']
+  const PALETTE = ROUTE_COLORS // vedi lib/designTokens.ts — prima una quarta copia della stessa lista
   polylines.forEach((pl, idx) => {
     ctx.strokeStyle = PALETTE[idx % PALETTE.length]
     ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round'

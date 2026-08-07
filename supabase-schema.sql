@@ -215,10 +215,24 @@ CREATE INDEX IF NOT EXISTS idx_hike_reports_activity_id ON hike_reports (activit
 -- Condivisione pubblica dei resoconti tramite PDF (Supabase Storage)
 ALTER TABLE hike_reports ADD COLUMN IF NOT EXISTS share_pdf_url TEXT;
 
+-- Link pubblico del singolo resoconto (pagina /leggi/r/[token], in arrivo — vedi docs/bug-e-note.md
+-- B32): oggi la colonna esiste già ma il codice usa ancora l'activity_id in chiaro nell'URL.
+ALTER TABLE hike_reports ADD COLUMN IF NOT EXISTS share_token  UUID UNIQUE;
+CREATE INDEX IF NOT EXISTS idx_hike_reports_share_token ON hike_reports (share_token);
+
+-- Layout strutturato del resoconto, usato dall'editor manuale (vedi lib/reportStore.ts) e da chi
+-- ha generato il racconto con un modello che assiste anche l'impaginazione, non solo il testo.
+ALTER TABLE hike_reports ADD COLUMN IF NOT EXISTS sections     JSONB;
+ALTER TABLE hike_reports ADD COLUMN IF NOT EXISTS authored_by  TEXT;
+
 -- Diario pubblico tramite PDF + token opaco per il link del viewer
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS diary_pdf_url TEXT;
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS diary_token   UUID UNIQUE;
 CREATE INDEX IF NOT EXISTS idx_user_settings_diary_token ON user_settings (diary_token);
+
+-- Configurazione del Diario (titolo, sottotitolo, autore, copertina, toggle, escursioni escluse —
+-- vedi lib/diaryConfig.ts): prima viveva solo in localStorage del dispositivo.
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS diary_config  JSONB;
 
 -- Sesso dell'utente, usato dalla AI per l'accordo grammaticale di genere nella guida
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS user_gender TEXT CHECK (user_gender IN ('maschio','femmina','altro','non_specificato'));

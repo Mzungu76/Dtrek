@@ -14,20 +14,10 @@ export interface DiaryReport {
   } | null
 }
 
-export interface StatsToggles {
-  totali: boolean
-  record:  boolean
-  medie:   boolean
-  andamento: boolean
-}
-
-export interface ReportExtras {
-  mappa:       boolean
-  statistiche: boolean
-  grafico:     boolean
-  cuore:       boolean
-  velocita:    boolean
-}
+// Riesportati da lib/diaryConfig.ts, non ridefiniti qui: prima erano due interfacce identiche di
+// struttura ma dichiarate in due file diversi — un candidato naturale a divergere silenziosamente
+// (aggiungere un campo in una senza ricordarsi dell'altra).
+export type { DiaryStatsToggles as StatsToggles, DiaryReportExtras as ReportExtras } from '@/lib/diaryConfig'
 
 export type BookPage =
   | { kind: 'report'; startTime: string; report: DiaryReport }

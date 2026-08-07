@@ -1,17 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Playfair_Display, DM_Sans, JetBrains_Mono, Barlow_Condensed, Lora } from 'next/font/google'
 import './globals.css'
-import ServiceWorkerRegister from '@/components/ServiceWorkerRegister'
-import InstallPWA from '@/components/InstallPWA'
-import OfflineBanner from '@/components/OfflineBanner'
-import OfflineSync from '@/components/OfflineSync'
-import SyncEngineProvider from '@/components/SyncEngineProvider'
-import GlobalBackInterceptor from '@/app/components/GlobalBackInterceptor'
-import SplashScreen from '@/components/SplashScreen'
-import SessionKeepAlive from '@/components/SessionKeepAlive'
-import OnboardingGate from '@/components/onboarding/OnboardingGate'
-import SyncDebugPanel from '@/components/SyncDebugPanel'
-import GlobalSearchStatusPill from '@/components/GlobalSearchStatusPill'
+import AppChrome from '@/components/AppChrome'
 
 // Self-hosted via next/font (build-time download + inline @font-face), replacing the old
 // render-blocking `@import url(fonts.googleapis.com/...)` in globals.css — that import forced
@@ -77,18 +67,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="it" className={`${playfairDisplay.variable} ${dmSans.variable} ${jetBrainsMono.variable} ${barlowCondensed.variable} ${lora.variable}`}>
       <body className="antialiased">
-        <SplashScreen />
-        <SessionKeepAlive />
-        <GlobalBackInterceptor />
-        {children}
-        <OfflineBanner />
-        <ServiceWorkerRegister />
-        <InstallPWA />
-        <OfflineSync />
-        <SyncEngineProvider />
-        <OnboardingGate />
-        <SyncDebugPanel />
-        <GlobalSearchStatusPill />
+        <AppChrome>{children}</AppChrome>
       </body>
     </html>
   )

@@ -1,4 +1,4 @@
-import { FONT } from '@/lib/designTokens'
+import { FONT, ROUTE_COLORS } from '@/lib/designTokens'
 import dynamic from 'next/dynamic'
 import type { ActivityMeta } from '@/lib/blobStore'
 import { PageHeader } from './PageHeader'
@@ -14,7 +14,10 @@ export function DiarioMappa({ activities, mapsInteractive }: { activities: Activ
     .filter(a => (a.routePolyline?.length ?? 0) > 1)
     .map(a => ({ id: a.id, title: a.title, startTime: a.startTime, polyline: a.routePolyline! }))
 
-  const PALETTE = ['#166534','#0369a1','#9333ea','#c2410c','#0f766e','#b45309','#be123c','#1d4ed8']
+  // Stessa palette di AllRoutesMap e del raster generato per il PDF (lib/designTokens.ts): prima
+  // erano tre elenchi di colori scritti a mano separatamente, e lo stesso percorso poteva
+  // risultare di un colore sulla mappa e di un altro nella legenda qui sotto.
+  const PALETTE = ROUTE_COLORS
 
   return (
     <div className="diario-page" style={{

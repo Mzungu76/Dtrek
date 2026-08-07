@@ -1,17 +1,38 @@
 import { FONT } from '@/lib/designTokens'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
+import { EyeOff } from 'lucide-react'
 import type { ActivityMeta } from '@/lib/blobStore'
 import { formatDuration } from '@/lib/tcxParser'
 import RouteThumb from '@/components/RouteThumb'
+import { DiarioYearBand, type DiarioYearBandInfo } from './DiarioYearDivider'
 
-export function DiarioStubPage({ activity }: { activity: ActivityMeta }) {
+export function DiarioStubPage({ activity, yearBand, onExclude }: {
+  activity: ActivityMeta
+  yearBand?: DiarioYearBandInfo
+  onExclude?: () => void
+}) {
   const dateStr = format(new Date(activity.startTime), 'd MMMM yyyy', { locale: it })
   return (
     <div className="diario-page diario-stub-page" style={{
       width: 794, minHeight: 1123, background: '#fafaf9', margin: '24px auto',
       boxShadow: '0 4px 32px rgba(0,0,0,0.14)', border: '2px dashed #d6d3d1', position: 'relative', overflow: 'hidden',
     }}>
+      {yearBand && <DiarioYearBand {...yearBand} />}
+
+      {onExclude && (
+        <button onClick={onExclude} className="diario-editor-control print:hidden"
+          title="Escludi questa escursione dal diario"
+          style={{
+            position: 'absolute', top: 16, right: 16, zIndex: 5,
+            display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 999,
+            background: 'rgba(0,0,0,0.08)', border: 'none', cursor: 'pointer',
+            fontFamily: FONT.barlow, fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#73695c',
+          }}>
+          <EyeOff style={{ width: 13, height: 13 }} /> Escludi
+        </button>
+      )}
+
       <span style={{
         position: 'absolute', top: 40, right: -50, transform: 'rotate(35deg)',
         fontSize: 13, fontFamily: FONT.barlow, fontWeight: 700, letterSpacing: 4,

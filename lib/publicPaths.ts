@@ -13,3 +13,15 @@ export function isPublicPath(pathname: string): boolean {
     AUTH_PATHS.some((p) => pathname.startsWith(p))
   )
 }
+
+/**
+ * Sottoinsieme più stretto di `isPublicPath`: solo le pagine di contenuto condiviso che un
+ * visitatore anonimo apre da un link (`/s/…`, `/leggi/…`), non anche `/login`, `/api/…` o gli
+ * asset statici. Usato da AppChrome (components/AppChrome.tsx) per decidere quali pezzi
+ * dell'infrastruttura dell'app — splash screen, service worker, motore di sincronizzazione,
+ * gate di onboarding… — non hanno senso su una pagina pubblica e andrebbero solo a intralciare
+ * o confondere un visitatore che magari l'app non l'ha nemmeno mai aperta.
+ */
+export function isSharedContentPath(pathname: string): boolean {
+  return pathname.startsWith('/s/') || pathname.startsWith('/leggi/')
+}

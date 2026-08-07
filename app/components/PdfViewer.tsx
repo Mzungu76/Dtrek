@@ -1,7 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
-import { BookOpen, ChevronLeft, ChevronRight, Download, Loader2 } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { BookOpen, ChevronLeft, ChevronRight, Download, Loader2, ZoomIn, ZoomOut } from 'lucide-react'
+import { FONT } from '@/lib/designTokens'
 
 interface Props {
   pdfUrl: string
@@ -14,15 +15,32 @@ interface Props {
 // rendered on demand (current ± a small window) and evicted once far away.
 const KEEP_WINDOW = 2
 
+// Scala di rendering pdfjs: più alta di prima (era 1.8) per compensare la modalità "dimensione
+// reale" introdotta più sotto, dove il testo si legge esattamente a questa risoluzione.
+const RENDER_SCALE = 2.2
+
 export default function PdfViewer({ pdfUrl, title }: Props) {
   const [pdfDoc, setPdfDoc] = useState<any>(null)
   const [pages, setPages] = useState<Record<number, string>>({})
-  const [rendering, setRendering] = useState<Set<number>>(new Set())
+  const [pageNativeWidth, setPageNativeWidth] = useState<number | null>(null)
   const [totalPages, setTotalPages] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [pageIdx, setPageIdx] = useState(0)
   const [phase, setPhase] = useState<'idle' | 'out' | 'in'>('idle')
   const [flipDir, setFlipDir] = useState<'fwd' | 'bck'>('fwd')
+  // Su schermi stretti l'intera pagina A4 rimpicciolita rende il testo fisicamente troppo
+  // piccolo per essere letto, e non c'era alcun modo di ingrandire — solo sfogliare pagine già
+  // minuscole. In questa modalità la pagina si mostra alla sua risoluzione di rendering reale
+  // dentro un riquadro che scorre in entrambe le direzioni, invece di essere sempre compressa
+  // per intero nello schermo.
+  const [actualSize, setActualSize] = useState(false)
+
+  // `rendering` deve essere letto e scritto in modo sincrono all'interno dello stesso effetto,
+  // non tramite useState: due esecuzioni ravvicinate dell'effetto (pageIdx che cambia in rapida
+  // successione) leggerebbero entrambe lo stesso valore di stato non ancora aggiornato dalla
+  // prima chiamata a setRendering, e partirebbero entrambe a renderizzare la stessa pagina. Un
+  // ref è mutato immediatamente, quindi la seconda esecuzione vede sempre l'effetto della prima.
+  const renderingRef = useRef<Set<number>>(new Set())
 
   useEffect(() => {
     let cancelled = false
@@ -60,22 +78,30 @@ export default function PdfViewer({ pdfUrl, title }: Props) {
     })
 
     want.forEach(async (i) => {
-      if (pages[i] || rendering.has(i)) return
-      setRendering(prev => new Set(prev).add(i))
+      // `pages` è letto dalla closure di questa esecuzione dell'effetto (non è tra le
+      // dipendenze, di proposito: vedi il commento sopra `[pdfDoc, totalPages, pageIdx]` più
+      // sotto), `renderingRef` è mutato subito, in modo sincrono, prima di qualunque `await` —
+      // così una seconda esecuzione dell'effetto innescata da un `pageIdx` che cambia rapidissimo
+      // vede già la pagina come "in corso" e non parte una seconda volta.
+      if (pages[i] || renderingRef.current.has(i)) return
+      renderingRef.current.add(i)
       try {
         const page = await pdfDoc.getPage(i)
-        const vp = page.getViewport({ scale: 1.8 })
+        const vp = page.getViewport({ scale: RENDER_SCALE })
         const canvas = document.createElement('canvas')
         canvas.width = vp.width
         canvas.height = vp.height
         await page.render({ canvas, canvasContext: canvas.getContext('2d')!, viewport: vp }).promise
         const dataUrl = canvas.toDataURL('image/jpeg', 0.88)
         canvas.width = 0; canvas.height = 0 // release backing buffer
-        if (!cancelled) setPages(prev => ({ ...prev, [i]: dataUrl }))
+        if (!cancelled) {
+          setPages(prev => ({ ...prev, [i]: dataUrl }))
+          if (i === pageIdx + 1) setPageNativeWidth(vp.width)
+        }
       } catch (e) {
         if (!cancelled) setError(String(e))
       } finally {
-        if (!cancelled) setRendering(prev => { const n = new Set(prev); n.delete(i); return n })
+        renderingRef.current.delete(i)
       }
     })
 
@@ -109,22 +135,22 @@ export default function PdfViewer({ pdfUrl, title }: Props) {
     ? { animation: flipDir === 'fwd' ? 'flipInFwd 0.3s ease-out forwards' : 'flipInBck 0.3s ease-out forwards' }
     : {}
 
-  const pageW = 'min(720px, 90vw)'
+  const fitWidth = 'min(720px, 92vw)'
 
   return (
     <div style={{
       minHeight: '100vh',
-      background: 'linear-gradient(160deg, #0b1120 0%, #0f172a 50%, #0b1120 100%)',
+      background: 'linear-gradient(160deg, #193b20 0%, #1c2620 55%, #12190f 100%)',
       display: 'flex', flexDirection: 'column', alignItems: 'center',
       justifyContent: 'flex-start', paddingTop: 32, paddingBottom: 40, gap: 20,
     }}>
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-        <BookOpen style={{ color: '#475569', width: 18, height: 18 }} />
+        <BookOpen style={{ color: 'rgba(255,255,255,0.55)', width: 18, height: 18 }} />
         <span style={{
-          color: '#94a3b8', fontSize: 13,
-          fontFamily: 'Georgia, "Times New Roman", serif',
+          color: 'rgba(255,255,255,0.6)', fontSize: 13,
+          fontFamily: FONT.lora,
           letterSpacing: 1.5, textTransform: 'uppercase',
         }}>
           {title}
@@ -134,8 +160,8 @@ export default function PdfViewer({ pdfUrl, title }: Props) {
       {/* Loading progress */}
       {isLoading && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, padding: '60px 20px' }}>
-          <Loader2 style={{ color: '#40916c', width: 36, height: 36, animation: 'spin 1s linear infinite' }} />
-          <p style={{ color: '#64748b', fontSize: 13, fontFamily: 'Georgia, serif', margin: 0 }}>
+          <Loader2 style={{ color: '#58aa63', width: 36, height: 36, animation: 'spin 1s linear infinite' }} />
+          <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, fontFamily: FONT.lora, margin: 0 }}>
             {totalPages > 0
               ? `Preparazione pagina ${pageIdx + 1} di ${totalPages}…`
               : 'Apertura documento…'}
@@ -145,10 +171,10 @@ export default function PdfViewer({ pdfUrl, title }: Props) {
 
       {/* Error */}
       {error && !isLoading && (
-        <div style={{ color: '#f87171', fontFamily: 'Georgia, serif', fontSize: 14, padding: 32, textAlign: 'center' }}>
+        <div style={{ color: '#fca5a5', fontFamily: FONT.lora, fontSize: 14, padding: 32, textAlign: 'center' }}>
           <p style={{ margin: '0 0 12px' }}>Impossibile caricare il PDF.</p>
           <a href={pdfUrl} target="_blank" rel="noopener noreferrer"
-            style={{ color: '#60a5fa', fontSize: 12, textDecoration: 'underline' }}>
+            style={{ color: '#8cc894', fontSize: 12, textDecoration: 'underline' }}>
             Apri direttamente il file →
           </a>
         </div>
@@ -158,17 +184,22 @@ export default function PdfViewer({ pdfUrl, title }: Props) {
       {!isLoading && !error && currentPageImg && (
         <>
           <div style={{
-            width: pageW,
+            width: fitWidth,
+            maxWidth: '96vw',
+            maxHeight: actualSize ? '72vh' : undefined,
+            overflow: actualSize ? 'auto' : 'visible',
+            borderRadius: actualSize ? 8 : 0,
             boxShadow: phase !== 'idle'
-              ? '0 40px 100px rgba(0,0,0,0.95), 0 10px 30px rgba(0,0,0,0.7)'
-              : '0 30px 80px rgba(0,0,0,0.9), 0 8px 24px rgba(0,0,0,0.6)',
-            ...animStyle,
+              ? '0 40px 100px rgba(0,0,0,0.6), 0 10px 30px rgba(0,0,0,0.5)'
+              : '0 30px 80px rgba(0,0,0,0.55), 0 8px 24px rgba(0,0,0,0.4)',
           }}>
-            <img
-              src={currentPageImg}
-              alt={`Pagina ${pageIdx + 1}`}
-              style={{ width: '100%', display: 'block' }}
-            />
+            <div style={actualSize ? { width: pageNativeWidth ?? undefined, ...animStyle } : animStyle}>
+              <img
+                src={currentPageImg}
+                alt={`Pagina ${pageIdx + 1}`}
+                style={{ width: '100%', display: 'block' }}
+              />
+            </div>
           </div>
 
           {/* Controls */}
@@ -179,15 +210,15 @@ export default function PdfViewer({ pdfUrl, title }: Props) {
               style={{
                 padding: '9px 18px', borderRadius: 8, border: 'none',
                 cursor: pageIdx <= 0 || phase !== 'idle' ? 'not-allowed' : 'pointer',
-                background: pageIdx <= 0 ? '#1e293b' : '#334155',
-                color: pageIdx <= 0 ? '#475569' : '#cbd5e1',
+                background: pageIdx <= 0 ? '#2a3327' : '#3a4a37',
+                color: pageIdx <= 0 ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.85)',
                 display: 'flex', alignItems: 'center', gap: 4,
-                fontSize: 13, fontFamily: 'Georgia, serif', transition: 'background 0.15s',
+                fontSize: 13, fontFamily: FONT.body, transition: 'background 0.15s',
               }}>
               <ChevronLeft style={{ width: 16, height: 16 }} /> Indietro
             </button>
 
-            <span style={{ color: '#64748b', fontSize: 11, fontFamily: 'Arial, sans-serif', letterSpacing: 1, minWidth: 80, textAlign: 'center' }}>
+            <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 11, fontFamily: FONT.body, letterSpacing: 1, minWidth: 80, textAlign: 'center' }}>
               {pageIdx + 1} di {totalPages}
             </span>
 
@@ -197,25 +228,45 @@ export default function PdfViewer({ pdfUrl, title }: Props) {
               style={{
                 padding: '9px 18px', borderRadius: 8, border: 'none',
                 cursor: pageIdx >= totalPages - 1 || phase !== 'idle' ? 'not-allowed' : 'pointer',
-                background: pageIdx >= totalPages - 1 ? '#1e293b' : '#334155',
-                color: pageIdx >= totalPages - 1 ? '#475569' : '#cbd5e1',
+                background: pageIdx >= totalPages - 1 ? '#2a3327' : '#3a4a37',
+                color: pageIdx >= totalPages - 1 ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.85)',
                 display: 'flex', alignItems: 'center', gap: 4,
-                fontSize: 13, fontFamily: 'Georgia, serif', transition: 'background 0.15s',
+                fontSize: 13, fontFamily: FONT.body, transition: 'background 0.15s',
               }}>
               Avanti <ChevronRight style={{ width: 16, height: 16 }} />
+            </button>
+
+            <button
+              onClick={() => setActualSize(v => !v)}
+              title={actualSize ? 'Adatta la pagina allo schermo' : 'Dimensione reale (scorri per leggere)'}
+              style={{
+                padding: '9px 16px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                background: actualSize ? '#e08d3c' : '#3a4a37',
+                color: actualSize ? '#1c1204' : 'rgba(255,255,255,0.85)',
+                display: 'flex', alignItems: 'center', gap: 5,
+                fontSize: 12, fontFamily: FONT.body, letterSpacing: 0.3,
+              }}>
+              {actualSize ? <ZoomOut style={{ width: 14, height: 14 }} /> : <ZoomIn style={{ width: 14, height: 14 }} />}
+              {actualSize ? 'Adatta' : 'Ingrandisci'}
             </button>
 
             <a href={pdfUrl} download target="_blank" rel="noopener noreferrer"
               style={{
                 padding: '9px 16px', borderRadius: 8,
-                background: '#1a3a5c', color: '#7dd3fc',
+                background: '#c05a17', color: 'white',
                 display: 'flex', alignItems: 'center', gap: 5,
-                fontSize: 12, fontFamily: 'Arial, sans-serif',
+                fontSize: 12, fontFamily: FONT.body,
                 textDecoration: 'none', letterSpacing: 0.5,
               }}>
               <Download style={{ width: 13, height: 13 }} /> Scarica PDF
             </a>
           </div>
+
+          {actualSize && (
+            <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, fontFamily: FONT.lora, fontStyle: 'italic', margin: 0 }}>
+              Scorri la pagina per leggerla tutta
+            </p>
+          )}
 
           {/* Dot indicators (max 20 pages) */}
           {totalPages <= 20 && (
@@ -224,7 +275,7 @@ export default function PdfViewer({ pdfUrl, title }: Props) {
                 <button key={i} onClick={() => navigate(i)}
                   style={{
                     width: i === pageIdx ? 20 : 6, height: 6, borderRadius: 3, border: 'none',
-                    background: i === pageIdx ? '#40916c' : '#1e293b',
+                    background: i === pageIdx ? '#58aa63' : '#2a3327',
                     cursor: 'pointer', padding: 0, transition: 'width 0.2s, background 0.2s',
                   }} />
               ))}
