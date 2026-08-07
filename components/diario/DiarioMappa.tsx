@@ -5,7 +5,11 @@ import { PageHeader } from './PageHeader'
 
 const AllRoutesMap = dynamic(() => import('@/components/AllRoutesMap'), { ssr: false })
 
-export function DiarioMappa({ activities, mapImgUrl, mapsInteractive }: { activities: ActivityMeta[]; mapImgUrl: string | null; mapsInteractive: boolean }) {
+// Nota: non riceve più `mapImgUrl`. Conteneva un <img> destinato alla stampa nativa (Ctrl+P) con
+// `className="print:block"` ma anche `style={{ display: 'none' }}` inline: lo stile in linea vince
+// sempre sulla classe, quindi quell'immagine non è mai comparsa, nemmeno stampando. Il raster
+// pre-generato resta però utile come cache per il PDF (vedi `mapForPdf` in app/diario/page.tsx).
+export function DiarioMappa({ activities, mapsInteractive }: { activities: ActivityMeta[]; mapsInteractive: boolean }) {
   const routes = activities
     .filter(a => (a.routePolyline?.length ?? 0) > 1)
     .map(a => ({ id: a.id, title: a.title, startTime: a.startTime, polyline: a.routePolyline! }))
@@ -24,13 +28,6 @@ export function DiarioMappa({ activities, mapImgUrl, mapsInteractive }: { activi
         <div className="print:hidden diario-global-map" style={{ height: 400, borderRadius: 12, overflow: 'hidden', marginBottom: 16 }}>
           <AllRoutesMap routes={routes} height="400px" interactive={mapsInteractive} />
         </div>
-      )}
-
-      {/* PDF map (canvas raster) */}
-      {mapImgUrl && (
-        <img src={mapImgUrl} alt="Mappa percorsi"
-          className="hidden print:block"
-          style={{ width: '100%', borderRadius: 12, display: 'none' }} />
       )}
 
       {/* Legend */}

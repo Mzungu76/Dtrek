@@ -78,7 +78,6 @@ export async function generateActivityImage(
     // 5. Title
     const PAD  = isTall(fmt) ? 56 : 44
     const titleSz = fmt === '9:16' ? 74 : fmt === '1:1' ? 62 : 48
-    const badgeScale = fmt === '9:16' ? 1.2 : fmt === '1:1' ? 1.0 : 0.8
     const titleMaxW  = w - 2 * PAD
     ctx.font = `bold ${titleSz}px ${FONT}`
     ctx.fillStyle = '#ffffff'
@@ -155,7 +154,6 @@ export async function generateActivityImage(
   if (opts.showHR)        pillData.push({ label: 'FC Media',   value: `${activity.avgHeartRate} bpm` })
   if (opts.showCalories)  pillData.push({ label: 'Calorie',    value: `${activity.calories} kcal` })
 
-  const dBadgeScale = 0.95
   let y = PAD + 44
   ctx.font = `bold 50px ${FONT}`; ctx.fillStyle = DARK.white; ctx.textAlign = 'left'
   ctx.fillText(fitText(ctx, activity.title ?? 'Escursione', w - 2 * PAD), PAD, y)

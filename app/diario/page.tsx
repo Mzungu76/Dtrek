@@ -156,8 +156,13 @@ export default function DiarioPage() {
         setTrackPointsByAct(tpByAct)
       })
 
-      // Pre-generate a tiled raster map for native browser printing (Ctrl+P) —
-      // our own PDF export path fetches a fresh one instead, ignoring this.
+      // Raster della mappa d'insieme generato in anticipo, usato come cache dall'esportazione PDF
+      // (vedi `mapForPdf` in generateAndUploadPdf): averlo già pronto evita di far attendere
+      // l'utente al momento della pubblicazione.
+      //
+      // Il commento precedente diceva che serviva alla stampa nativa del browser (Ctrl+P). Non era
+      // così: l'unico consumatore era un <img> in DiarioMappa che, per via di un `display:none` in
+      // linea, non è mai comparso — né a schermo né in stampa. Quell'immagine è stata rimossa.
       import('@/utils/pdfExport').then(({ fetchAllRoutesSatMap, mapBoxAspect }) => {
         const allPts = sortedActs.filter(a => (a.routePolyline?.length ?? 0) > 1).flatMap(a => a.routePolyline!)
         return fetchAllRoutesSatMap(sortedActs, 660, mapOutH(mapBoxAspect(allPts, 0.12)))
@@ -256,9 +261,14 @@ export default function DiarioPage() {
         const clone = p.cloneNode(true) as HTMLElement
         clone.style.margin = '0'
         clone.style.boxShadow = 'none'
-        // Remove OSM tile canvases (cross-origin tainted by live Leaflet tiles);
-        // both the global and per-report maps get replaced with fresh rasterized
-        // tile images fetched directly (no canvas, no CORS taint).
+        // Le mappe Leaflet vive vengono sostituite più sotto con un raster generato apposta, a
+        // risoluzione controllata.
+        //
+        // Questa riga è difensiva, non risolutiva: il commento precedente sosteneva che servisse a
+        // togliere canvas "sporcati" dalle tile cross-origin, ma Leaflet disegna le tile con <img>
+        // e le polilinee in SVG, e le tile passano comunque dal proxy same-origin /api/tile. Oggi
+        // nelle pagine del diario non c'è alcun <canvas> (i grafici sono SVG), quindi la riga non
+        // rimuove nulla; resta a protezione di eventuali canvas introdotti in futuro.
         clone.querySelectorAll('canvas').forEach(c => c.remove())
         const globalMapWrapper = clone.querySelector<HTMLElement>('.diario-global-map')
         if (globalMapWrapper) {
@@ -552,7 +562,7 @@ export default function DiarioPage() {
               <AnniversaryBanner activities={activities} />
               <DiarioNatura activities={activities} />
               {visibleBookPages.length > 0 && <DiarioIndice pages={visibleBookPages} />}
-              {activities.length > 0 && <DiarioMappa activities={activities} mapImgUrl={mapImgUrl} mapsInteractive={mapsInteractive} />}
+              {activities.length > 0 && <DiarioMappa activities={activities} mapsInteractive={mapsInteractive} />}
               {activities.length > 0 && showStats && (
                 <DiarioStatistiche activities={activities} toggles={statsToggles} />
               )}
