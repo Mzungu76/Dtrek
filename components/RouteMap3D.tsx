@@ -1231,7 +1231,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
   const videoEstimate = useMemo(() => {
     const stops = groupPhotoTimings(carouselPhotoTimings, PHOTO_GROUP_GAP_M)
     const interludeSec = videoInterludes
-      .filter(i => i.enabled && (videoMode === 'illustrativo' || i.kind === 'visione'))
+      .filter(i => i.enabled)
       .filter(i => interludeFitPreview.has(i.kind))
       .reduce((a, i) => a + i.seconds, 0)
     const budget = computeVideoBudget({
@@ -1250,7 +1250,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       beatSec: interludeSec,
     }
   }, [carouselPhotoTimings, totalDistanceM, photoDurationSec, videoSpeedKmS,
-      videoHookFastIntro, videoMode, videoInterludes, interludeFitPreview])
+      videoHookFastIntro, videoInterludes, interludeFitPreview])
 
   /** Forma della traccia: serve all'editor per sapere se disegnare un arrivo distinto dalla
    *  partenza, e se il percorso è un andata-ritorno già contenuto nella traccia. */
@@ -1279,14 +1279,14 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       }
     })
     const beats = videoInterludes
-      .filter(i => i.enabled && (videoMode === 'illustrativo' || i.kind === 'visione'))
+      .filter(i => i.enabled)
       .filter(i => interludeFitPreview.has(i.kind))
       .map(i => ({
         id: `beat:${i.kind}`, kind: 'interlude' as const, atP: i.atP,
         label: INTERLUDE_LABEL[i.kind], seconds: i.seconds, interludeKind: i.kind,
       }))
     return [...photos, ...beats]
-  }, [carouselPhotoTimings, routePhotos, photoDurationSec, videoInterludes, videoMode, interludeFitPreview, unlockedPhotoIds, videoPhotoAtP])
+  }, [carouselPhotoTimings, routePhotos, photoDurationSec, videoInterludes, interludeFitPreview, unlockedPhotoIds, videoPhotoAtP])
 
   // Velocità iniziale tarata sul percorso: un valore fisso darebbe un video di dieci secondi su un
   // giro da 2 km e di quattro minuti su uno da 25. Si imposta una sola volta per percorso — dopo
@@ -2459,7 +2459,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     // l'esportazione INTERA, non solo quel fotogramma. Chi non carica (rete, 404, CORS negato)
     // semplicemente non entra nella mappa qui sotto, e il suo luogo torna a essere un segnaposto.
     const poiImages = new Map<number, HTMLImageElement>()
-    if (videoMode === 'illustrativo' && poiWiki?.length) {
+    if (videoShowPois && poiWiki?.length) {
       prep('Immagini dei luoghi…', 0.82)
       await Promise.all(poiWiki.map(({ poi, wiki }) => new Promise<void>(resolve => {
         if (!wiki.thumbnail) { resolve(); return }
@@ -2635,9 +2635,10 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     // lunghezza del video. Vedi lib/videoBudget.ts.
     const INTRO_FRAMES = Math.round(TARGET_FPS * (videoHookFastIntro ? INTRO_FAST_SEC : INTRO_SEC))
     const isCarousel = videoPhotoStyle === 'carousel'
-    // In modalità Illustrativo il soggetto è il percorso: niente pin utente, niente dati corporei,
-    // e i POI diventano protagonisti invece che decorazione.
-    const isIllustrativo = videoMode === 'illustrativo'
+    // Le schede dei luoghi decidono da sole quando entra il set "da guida" (identikit, TEI, piano
+    // POI): non più legato a un preset "Illustrativo" che escludeva tutto il resto, ma al singolo
+    // interruttore "Schede dei luoghi", sempre visibile e sempre acceso/spento indipendentemente.
+    const isIllustrativo = videoShowPois
     // La mappa resta sempre a schermo intero (mai ritagliata) — titolo/statistiche/grafici in alto
     // (drawTopBand) e la foto in sosta (drawStopPhotoZoom) le si sovrappongono, non la restringono.
     const topBandH = isCarousel ? Math.round(outH * TOP_BAND_FRACTION) : 0
@@ -2812,13 +2813,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       : photoTriggerRouteFrames.map(at => ({ start: at, end: at }))
 
     prep('Montaggio della scaletta…', 0.94)
-    // Gli stacchi "commento" (numeri, profilo, TEI…) restano una cosa della modalità Illustrativo.
-    // La Visione no: non commenta l'escursione, spiega il percorso — e serve tanto a chi racconta
-    // la propria uscita quanto a chi presenta l'itinerario. Nelle altre modalità è l'unico ammesso.
-    const interludeSettingsForMode = isIllustrativo
-      ? videoInterludes
-      : videoInterludes.filter(i => i.kind === 'visione')
-    const plannedInterludes = planInterludes(interludeSettingsForMode, {
+    // Tutti gli stacchi accesi contano, sempre: non sono più limitati da una modalità-preset — chi
+    // li ha attivati nel pannello "Momenti" li vuole nel video, qualunque sia il resto delle scelte.
+    const plannedInterludes = planInterludes(videoInterludes, {
       fps: TARGET_FPS,
       routeFrames: ROUTE_FRAMES,
       photoFrames: photoBusyFrames,
@@ -4055,11 +4052,15 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         // Nessun testo precotto: il video parla da sé, e "DTrek — Video 3D" finiva incollato nel
         // messaggio di chi condivideva. La didascalia, se la vuole, se la copia da qui sotto.
         await navigator.share({files:[file]})
+        setShareToast('Condiviso');setTimeout(()=>setShareToast(''),2500)
         return
       }catch(err){
         // AbortError = l'utente ha chiuso il foglio di condivisione: non è un errore e non deve
         // far partire un download che nessuno ha chiesto.
         if((err as {name?:string})?.name==='AbortError') return
+        // Qualunque altro errore (permessi negati in un contesto embedded, condivisione bloccata a
+        // metà…): il pulsante "Condividi" non deve restare muto — si ripiega sul download qui
+        // sotto, che ha già il suo feedback (anteprima + "Video salvato").
       }
     }
     handleVideoDownload()
@@ -4067,7 +4068,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
 
   const totalKm=+(totalDistRef.current/1000).toFixed(1)
 
-  const generateCaption = useCallback(async () => {
+  const generateCaption = useCallback(async (style: 'ricordo'|'percorso') => {
     setCaptionLoading(true)
     setCaptionData(null)
     try {
@@ -4085,6 +4086,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           maxAlt:        alt,
           date:          plannedDate,
           videoFormat:   videoOrientation,
+          style,
         }),
       })
       const json = await res.json()
@@ -4310,7 +4312,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       )}
 
       {shareToast&&(
-        <div className="absolute bottom-32 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-md text-stone-800 text-sm font-semibold px-4 py-2 rounded-full shadow-xl pointer-events-none">
+        <div className="absolute bottom-32 left-1/2 -translate-x-1/2 z-30 bg-white/90 backdrop-blur-md text-stone-800 text-sm font-semibold px-4 py-2 rounded-full shadow-xl pointer-events-none">
           ✓ {shareToast}
         </div>
       )}
@@ -4364,7 +4366,10 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           { key:'fine',  label:'finale',  sec: est.outroSec,     color:'#64748b' },
         ].filter(p=>p.sec>0.05)
 
-        const isIllustrativoUi = videoMode==='illustrativo'
+        // Non più legato al "preset" dei due tasti in alto (che ora scelgono solo come appaiono le
+        // foto): il set di contenuti "da guida" — schede dei luoghi, identikit, TEI — segue il
+        // singolo interruttore "Schede dei luoghi" qui sotto, sempre visibile e sempre disponibile.
+        const isIllustrativoUi = videoShowPois
         const speedBand = speedBandFor(videoSpeedKmS)
 
         // ── Binario di sinistra: i CONTENUTI — ciò che si posa in un punto del percorso ─────
@@ -4376,12 +4381,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         {
           const controls: StudioControl[] = [{
             kind:'note', id:'beats-intro',
-            text: isIllustrativoUi
-              ? 'Il volo si ferma e un pannello resta a schermo il tempo di essere letto. Trascina il pallino sulla mappa per scegliere dove.'
-              : 'Gli stacchi che commentano i dati appartengono alla modalità Illustrativo. La Visione no: non commenta l’escursione, spiega il percorso.',
+            text: 'Il volo si ferma e un pannello resta a schermo il tempo di essere letto. Trascina il pallino sulla mappa per scegliere dove.',
           }]
           for (const iv of videoInterludes) {
-            if (!isIllustrativoUi && iv.kind!=='visione') continue
             const unavailable =
               (iv.kind==='tei'    && !beautyScore?.categories?.length) ||
               (iv.kind==='avvisi' && normalizeGuideNotices(guide?.notices).length===0) ||
@@ -4442,14 +4444,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         }
 
         {
+          // Lo stile ("Foto a tutto schermo" / "Foto stile polaroid") si sceglie più sopra, nel
+          // gruppo Video: qui resta solo la durata, che dipende da quale stile è attivo.
           const controls: StudioControl[] = [
-            { kind:'cards', id:'photo-style', label:'Come appaiono',
-              value: videoPhotoStyle,
-              options:[
-                {value:'classic',  label:'Classico',  sub:'Schermo intero, telecamera ferma'},
-                {value:'carousel', label:'Carosello', sub:'Il pin della foto si apre in primo piano'},
-              ],
-              onPick:v=>setVideoPhotoStyle(v as 'classic'|'carousel') },
             { kind:'slider', id:'photo-dur',
               label: videoPhotoStyle==='classic' ? 'polaroid' : 'sosta',
               value: photoDurationSec, min:3, max:10, step:0.5, display:`${photoDurationSec.toFixed(1)}s`,
@@ -4603,10 +4600,12 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           positionalGroups.push({ id:'foto', label:'Foto', glyph:'foto', controls })
         }
 
-        if (isIllustrativoUi) {
+        {
           // Luoghi (quali POI mostrare) + Didascalie (quale frase, dove): due decisioni diverse
           // ma stesso posto — cose scritte SUL percorso invece che sul video intero — quindi un
           // solo gruppo, con le didascalie in coda ed etichettate a parte per restare leggibili.
+          // Sempre visibile: non è più riservato a una "modalità", chi vuole schede o didascalie
+          // le accende da qui a prescindere da come appaiono le foto.
           positionalGroups.push({
             id:'contenuti', label:'Contenuti', glyph:'contenuti',
             controls: [
@@ -4673,20 +4672,20 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         // schermo), infine i tocchi facoltativi (pin ed effetti). Erano 8 gruppi possibili, ora 5.
         const globalGroups: StudioGroup[] = [
           { id:'video', label:'Video', glyph:'video', controls:[
-            { kind:'cards', id:'mode', label:'A cosa serve', value: videoMode,
+            // Solo come appaiono le foto in video — non più un preset che accende o spegne altro:
+            // pin, schede dei luoghi, didascalie ed effetti restano scelte a parte, sempre
+            // disponibili qui sotto qualunque sia lo stile di foto scelto. Guida lo stesso stato
+            // (videoPhotoStyle) del controllo "Come appaiono" più sotto — è lo stesso interruttore,
+            // richiamato qui perché è la prima cosa da decidere in un preset (Sezione 4).
+            { kind:'cards', id:'mode', label:'Come appaiono le foto', value: videoPhotoStyle,
               options:[
-                {value:'ricordo',      label:'Il mio ricordo', sub:'La tua uscita: pin con la tua foto, dati della fascia cardio, le tue immagini.'},
-                {value:'illustrativo', label:'Far conoscere il percorso', sub:'Luoghi con il loro nome, numeri e punteggi. Nessun dato personale.'},
+                {value:'carousel', label:'Foto a tutto schermo', sub:'Il volo si ferma e la foto copre lo schermo intero.'},
+                {value:'classic',  label:'Foto stile polaroid',  sub:'Una polaroid si posa sul percorso, senza fermare il volo.'},
               ],
-              onPick:v=>{
-                setVideoMode(v as 'ricordo'|'illustrativo')
-                // Il pin è il soggetto di un ricordo e un intruso in una descrizione.
-                setShowUserPin(v==='ricordo')
-                if (v==='illustrativo') setVideoShowPois(true)
-              } },
+              onPick:v=>setVideoPhotoStyle(v as 'classic'|'carousel') },
             ...(isIllustrativoUi && (pois?.length??0)===0
               ? [{ kind:'note' as const, id:'no-pois', tone:'warn' as const,
-                   text:'Su questo percorso non risultano punti di interesse: restano numeri e punteggi.' }]
+                   text:'Su questo percorso non risultano punti di interesse: le schede dei luoghi resteranno vuote.' }]
               : []),
             // Il preset si sceglie prima di entrare qui (vedi la pagina dei preset): questo è
             // solo il richiamo a quale carattere è attivo ora, con la via per cambiarlo senza
@@ -4776,22 +4775,19 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             ]},
           ]},
 
-          // Il pin (con i suoi effetti) esiste solo in modalità Ricordo: nascosto per intero in
-          // Illustrativo sarebbe un gruppo vuoto, quindi qui è la lista dei suoi controlli a
-          // essere condizionale, non il gruppo — i tocchi scenici restano comunque disponibili.
+          // Il pin (con i suoi effetti) è una scelta a sé, sempre disponibile: non più nascosto
+          // quando le schede dei luoghi sono accese — le due cose ora convivono benissimo.
           { id:'effetti', label:'Effetti', glyph:'effetti', controls:[
-            ...(!isIllustrativoUi ? [
-              { kind:'toggle' as const, id:'pin-show', label:'Mostra il pin con la tua foto',
-                value: videoShowUserPin, onToggle:setShowUserPin,
-                hint: videoShowUserPin ? undefined : 'Gli effetti qui sotto sono ancorati al pin: senza, restano spenti.' },
-              { kind:'chips' as const, id:'pin-fx', label:'Effetti del pin', options:[
-                { id:'heart',  label:'Cuore + BPM',        value:videoHeartEffectEnabled,    onToggle:setVideoHeartEffectEnabled,    disabled:!hasBodyData||!videoShowUserPin },
-                { id:'effort', label:'Pin dalla fatica',   value:videoPinEffortColorEnabled, onToggle:setVideoPinEffortColorEnabled, disabled:!hasBodyData||!videoShowUserPin },
-                { id:'trail',  label:'Scia',               value:videoTrailEnabled,          onToggle:setVideoTrailEnabled,          disabled:!videoShowUserPin },
-                { id:'shadow', label:'Ombra in salita',    value:videoSlopeShadowEnabled,    onToggle:setVideoSlopeShadowEnabled,    disabled:!videoShowUserPin },
-              ], hint: hasBodyData ? undefined : 'Cuore e colore dalla fatica hanno bisogno dei dati della fascia cardio, che questa traccia non ha.' },
-            ] : []),
-            { kind:'chips', id:'fx', label: isIllustrativoUi ? undefined : 'Tocchi scenici', options:[
+            { kind:'toggle', id:'pin-show', label:'Mostra il pin con la tua foto',
+              value: videoShowUserPin, onToggle:setShowUserPin,
+              hint: videoShowUserPin ? undefined : 'Gli effetti qui sotto sono ancorati al pin: senza, restano spenti.' },
+            { kind:'chips', id:'pin-fx', label:'Effetti del pin', options:[
+              { id:'heart',  label:'Cuore + BPM',        value:videoHeartEffectEnabled,    onToggle:setVideoHeartEffectEnabled,    disabled:!hasBodyData||!videoShowUserPin },
+              { id:'effort', label:'Pin dalla fatica',   value:videoPinEffortColorEnabled, onToggle:setVideoPinEffortColorEnabled, disabled:!hasBodyData||!videoShowUserPin },
+              { id:'trail',  label:'Scia',               value:videoTrailEnabled,          onToggle:setVideoTrailEnabled,          disabled:!videoShowUserPin },
+              { id:'shadow', label:'Ombra in salita',    value:videoSlopeShadowEnabled,    onToggle:setVideoSlopeShadowEnabled,    disabled:!videoShowUserPin },
+            ], hint: hasBodyData ? undefined : 'Cuore e colore dalla fatica hanno bisogno dei dati della fascia cardio, che questa traccia non ha.' },
+            { kind:'chips', id:'fx', label:'Tocchi scenici', options:[
               { id:'miles', label:'Traguardi %',    value:videoMilestonesEnabled,   onToggle:setVideoMilestonesEnabled },
               { id:'peak',  label:'Quota massima',  value:videoPeakMomentEnabled,   onToggle:setVideoPeakMomentEnabled },
               { id:'stars', label:'Stelline arrivo',value:videoArrivalStarsEnabled, onToggle:setVideoArrivalStarsEnabled },
@@ -4826,13 +4822,11 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           videoHyperlapseEnabled&&videoPhotoStyle==='carousel'&&'Hyperlapse',
         ].filter(Boolean) as string[]
 
-        const beatsForMode = isIllustrativoUi ? videoInterludes : videoInterludes.filter(i=>i.kind==='visione')
-        const onBeats = beatsForMode.filter(i=>i.enabled && interludeFitPreview.has(i.kind))
+        const onBeats = videoInterludes.filter(i=>i.enabled && interludeFitPreview.has(i.kind))
         const rows: [string,string][] = [
-          ['Modalità', isIllustrativoUi?'Descrizione del percorso':'Il mio ricordo'],
           ['Formato', `${videoOrientation} · ${videoFps} fps`],
           ['Ritmo', `${speedBand.label.toLowerCase()} · ${formatSpeed(videoSpeedKmS)}`],
-          ['Stile foto', videoPhotoStyle==='classic'?'Classico':'Carosello'],
+          ['Stile foto', videoPhotoStyle==='classic'?'Polaroid':'A tutto schermo'],
           ['Foto incluse', est.photos===0?'nessuna':`${est.photos}${est.stops<est.photos?` in ${est.stops} soste`:''}`],
           ['Stacchi', onBeats.length ? `${onBeats.length} · ${onBeats.reduce((a,i)=>a+i.seconds,0)}s` : 'nessuno'],
           ['Durata reale', `~${est.total}s${est.stillPct>0?` · ${est.stillPct}% fermo`:''}`],
@@ -5056,8 +5050,13 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 cartella che l'utente non vede, e senza questo riquadro non c'era modo di
                 controllare il risultato senza uscire dall'app. */}
             {videoPreviewUrl && (
-              <video src={videoPreviewUrl} controls playsInline
-                className="w-full rounded-2xl bg-black max-h-64 object-contain"/>
+              // Cornice con lo stesso rapporto del formato scelto: senza, un video verticale (9:16)
+              // veniva ridotto solo in altezza (max-h-64) e restava largo quanto la card, uscendo
+              // dalla cornice invece di starci dentro con le barre nere ai lati.
+              <div className="w-full max-h-64 mx-auto rounded-2xl bg-black overflow-hidden flex items-center justify-center"
+                style={{aspectRatio:VIDEO_DIMS[videoOrientation][0]/VIDEO_DIMS[videoOrientation][1]}}>
+                <video src={videoPreviewUrl} controls playsInline className="w-full h-full object-contain"/>
+              </div>
             )}
 
             <div className="flex flex-col gap-2.5">
@@ -5100,13 +5099,24 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               <p className="text-white/45 text-[11px] font-semibold tracking-wider">DIDASCALIA</p>
               {!captionData ? (
                 <>
-                  <button onClick={generateCaption} disabled={captionLoading}
-                    className="w-full py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-semibold flex items-center justify-center gap-2 disabled:opacity-60 transition-colors">
-                    {captionLoading
-                      ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/>Scrivo…</>
-                      : <><Sparkles className="w-4 h-4"/>Proponi una didascalia</>
-                    }
-                  </button>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button onClick={()=>generateCaption('ricordo')} disabled={captionLoading}
+                      className="py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-semibold flex flex-col items-center justify-center gap-1 disabled:opacity-60 transition-colors">
+                      {captionLoading
+                        ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/>
+                        : <Sparkles className="w-4 h-4"/>}
+                      <span className="text-sm">Il mio ricordo</span>
+                      <span className="text-white/40 text-[10px] font-normal">personale, in prima persona</span>
+                    </button>
+                    <button onClick={()=>generateCaption('percorso')} disabled={captionLoading}
+                      className="py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-semibold flex flex-col items-center justify-center gap-1 disabled:opacity-60 transition-colors">
+                      {captionLoading
+                        ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/>
+                        : <Sparkles className="w-4 h-4"/>}
+                      <span className="text-sm">Il percorso</span>
+                      <span className="text-white/40 text-[10px] font-normal">impersonale, da guida</span>
+                    </button>
+                  </div>
                   <p className="text-white/30 text-[11px] leading-relaxed">Una bozza da cui partire, scritta dall&apos;AI sui dati del percorso. Rileggila e cambiala prima di pubblicare.</p>
                 </>
               ) : (
