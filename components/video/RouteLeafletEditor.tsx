@@ -30,7 +30,7 @@ import 'leaflet/dist/leaflet.css'
 import type * as L from 'leaflet'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  buildRouteProjector, progressFromLatLngOn, findCrowding, MIN_ITEM_GAP_SEC,
+  buildRouteProjector, progressFromLatLngOn, findCrowding, declutterItems, MIN_ITEM_GAP_SEC,
   type TimelineItem,
 } from '@/lib/videoTimeline'
 import { Image as ImageIcon } from 'lucide-react'
@@ -148,7 +148,10 @@ function markerIcon(Lmod: typeof L, it: TimelineEditorItem, crowded: boolean): L
   const h = isPhoto ? PHOTO_PIN_H + PHOTO_PIN_TIP : 30
   // iconSize è il riquadro cliccabile dell'INTERO marker: allargato per includere i pallini che
   // sporgono dai bordi, altrimenti un tocco sul lucchetto cadrebbe fuori e sembrerebbe morto.
-  const padX = isPhoto ? 18 : 0, padY = isPhoto ? 18 : 0
+  // Anche gli stacchi (senza pallini) hanno bisogno di un margine: senza, la loro area di tocco
+  // coincide esattamente col disco da 30px, e su schermi touch un dito qualche pixel fuori dal
+  // centro perde l'aggancio — sembra che l'icona "non faccia resistenza" e scivoli via dal drag.
+  const padX = isPhoto ? 18 : 14, padY = isPhoto ? 18 : 14
 
   return Lmod.divIcon({
     html: `<div style="position:relative;width:${w}px;height:${h}px;margin:${padY / 2}px ${padX / 2}px">
@@ -441,6 +444,20 @@ export default function RouteLeafletEditor({
   const interludeItems = items.filter(i => i.kind === 'interlude')
   const crowdedCount = crowding.ids.size
 
+  // Sistema in un colpo solo ciò che il badge "troppo vicini" si limita a segnalare: stessa
+  // funzione usata quando si applica un preset (vedi declutterItems), qui richiamata a mano.
+  // Le foto bloccate non si spostano — il lucchetto vale anche qui, non solo per il trascinamento.
+  const handleOptimize = () => {
+    const movable = items.filter(it => !(it.kind === 'photo' && it.locked))
+    if (movable.length < 2) return
+    const next = declutterItems(movable, routeSeconds, MIN_ITEM_GAP_SEC)
+    for (const it of movable) {
+      const p = next.get(it.id)
+      if (p !== undefined && Math.abs(p - it.atP) > 1e-4) onMove(it.id, p)
+    }
+    setShowCrowdDetail(false)
+  }
+
   return (
     <div className={`relative ${fill ? 'h-full w-full' : 'rounded-2xl overflow-hidden border border-stone-200'}`}
       style={fill ? undefined : { height: 340 }}>
@@ -469,6 +486,14 @@ export default function RouteLeafletEditor({
               </span>
             </button>
           )}
+
+          {items.length > 1 && (
+            <button onClick={handleOptimize}
+              title="Allontana automaticamente gli elementi troppo vicini fra loro"
+              className="flex items-center gap-1.5 h-8 pl-2.5 pr-3 rounded-full bg-white/95 border border-stone-200 text-stone-600 shadow-sm hover:bg-white text-[11px] font-bold whitespace-nowrap">
+              ↔ Ottimizza distanze
+            </button>
+          )}
         </div>
 
         {showCrowdDetail && (
@@ -477,8 +502,8 @@ export default function RouteLeafletEditor({
               {crowding.pairs.length === 1
                 ? `Due elementi cadono a ${crowding.pairs[0].apartSec.toFixed(1)}s l'uno dall'altro`
                 : `${crowding.pairs.length} coppie cadono a meno di ${MIN_ITEM_GAP_SEC}s l'una dall'altra`}
-              {' '}(cerchiati in arancio). Il video si fermerebbe due volte con poco percorso in mezzo: allontanali
-              trascinandoli sulla mappa.
+              {' '}(cerchiati in arancio). Allontanali trascinandoli sulla mappa, oppure tocca
+              «Ottimizza distanze» qui sopra per farlo in automatico.
             </p>
           </div>
         )}

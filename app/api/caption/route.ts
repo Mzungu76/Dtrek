@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic'
 // riconosce come scritto da una macchina — la frase a effetto staccata in cima, la domanda finta
 // in fondo, gli aggettivi che non descrivono niente. Qui si chiede l'opposto: la voce di chi è
 // tornato dal sentiero e scrive due righe sotto la propria foto.
-const SYSTEM = `Scrivi la didascalia che metterebbe sotto al proprio video una persona che ha appena fatto questa escursione. Parla in prima persona, di quello che ha fatto lei.
+const SYSTEM_RICORDO = `Scrivi la didascalia che metterebbe sotto al proprio video una persona che ha appena fatto questa escursione. Parla in prima persona, di quello che ha fatto lei.
 
 Come deve suonare:
 - Concreta: il posto, cosa si vede, come è andata. Un dettaglio vero vale più di tre aggettivi.
@@ -26,6 +26,30 @@ Cosa NON fare, mai:
 - Niente parole da brochure: mozzafiato, incredibile, magico, indimenticabile, avventura, esperienza unica, panorama da cartolina.
 - Niente trattini lunghi, niente frasi a tre membri ("non solo X, ma Y, e soprattutto Z"), niente maiuscole enfatiche.
 - Al massimo una emoji, e solo se cade naturale. Anche zero va benissimo — di norma è la scelta giusta.
+
+Per gli hashtag:
+- Da 8 a 12, non di più: un muro di hashtag si riconosce a colpo d'occhio come gonfiato.
+- Prima quelli del posto vero (zona, monte, parco, sentiero), poi due o tre generici di escursionismo.
+- In italiano, salvo un paio in inglese se il posto è noto anche fuori.
+- Niente hashtag di ingaggio (#reelsitalia, #videooftheday, #followme) e niente hashtag inventati lunghi come una frase.`
+
+// Stessa voce sobria del prompt "ricordo" sopra, ma spersonalizzata: chi legge questa non ha
+// camminato, sta valutando se andarci. Niente "io", niente vissuto — solo il percorso descritto
+// da chi lo conosce, come farebbe una guida.
+const SYSTEM_PERCORSO = `Scrivi la didascalia che accompagna un video di presentazione di questo percorso escursionistico, come la scriverebbe chi cura una guida di sentieri. Descrivi il percorso, non l'esperienza di chi l'ha camminato.
+
+Come deve suonare:
+- Concreta: dove si trova, cosa si incontra, cosa lo caratterizza. Un dettaglio vero vale più di tre aggettivi.
+- Asciutta: 2-4 frasi in tutto, 30-60 parole. Una scheda, non un racconto.
+- Impersonale: terza persona o forma neutra ("il sentiero sale…", "si cammina tra…"), mai in prima persona ("sono salito"), mai rivolta al lettore ("scopri", "immagina", "vieni con me").
+- I numeri del percorso (distanza, dislivello, difficoltà) entrano naturalmente, come li darebbe una scheda tecnica ma scritta bene, non come un elenco puntato.
+
+Cosa NON fare, mai:
+- Nessuna frase a effetto isolata in apertura.
+- Nessuna domanda finale al lettore, nessun invito, nessuna morale.
+- Niente parole da brochure: mozzafiato, incredibile, magico, indimenticabile, avventura, esperienza unica, panorama da cartolina.
+- Niente trattini lunghi, niente frasi a tre membri ("non solo X, ma Y, e soprattutto Z"), niente maiuscole enfatiche.
+- Nessuna emoji: è una scheda informativa, non un post personale.
 
 Per gli hashtag:
 - Da 8 a 12, non di più: un muro di hashtag si riconosce a colpo d'occhio come gonfiato.
@@ -80,7 +104,7 @@ export async function POST(req: NextRequest) {
   // videoFormat non entra più nel prompt: il formato del file non cambia cosa una persona scrive
   // sotto la propria foto, e chiederlo al modello serviva solo a fargli dire "Reel".
   let title: string, distanceKm: number, elevationGain: number, maxAlt: number,
-      date: string | undefined
+      date: string | undefined, style: 'ricordo' | 'percorso'
 
   try {
     const body = await req.json()
@@ -89,6 +113,7 @@ export async function POST(req: NextRequest) {
     elevationGain= Number(body.elevationGain) || 0
     maxAlt       = Number(body.maxAlt)        || 0
     date         = body.date
+    style        = body.style === 'percorso' ? 'percorso' : 'ricordo'
   } catch {
     return new Response(JSON.stringify({ error: 'Body non valido' }), {
       status: 400, headers: { 'Content-Type': 'application/json' },
@@ -121,7 +146,7 @@ citare tutti i numeri — prendine al massimo uno o due, quelli che dicono davve
       msg = await client.messages.parse({
         model:         claudeModel,
         max_tokens:    700,
-        system:        SYSTEM,
+        system:        style === 'percorso' ? SYSTEM_PERCORSO : SYSTEM_RICORDO,
         messages:      [{ role: 'user', content: userPrompt }],
         output_config: { format: jsonSchemaFormat<CaptionOutput>(CAPTION_SCHEMA) },
       })
