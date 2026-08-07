@@ -1,31 +1,42 @@
+import type { Metadata } from 'next'
+import { cache } from 'react'
 import { notFound } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
-import PdfViewer from '@/app/components/PdfViewer'
+import { fetchPublicDiary } from '@/lib/sharePublicDiary'
+import { DiaryPublicView } from './DiaryPublicView'
 
+export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+// Dedup della lettura DB tra generateMetadata e il render della pagina — stesso accorgimento di
+// app/s/[token]/page.tsx.
+const getDiary = cache(fetchPublicDiary)
 
-export default async function DiarioViewerPage({
-  params,
-}: {
-  params: { token: string }
-}) {
-  const { token } = params
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL ||
+  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined)
 
-  if (!UUID_RE.test(token)) return notFound()
+export async function generateMetadata({ params }: { params: { token: string } }): Promise<Metadata> {
+  const diary = await getDiary(params.token)
+  if (!diary) return { title: 'Diario non trovato · DTrek' }
 
-  const { data } = await supabase
-    .from('user_settings')
-    .select('diary_pdf_url, display_name')
-    .eq('diary_token', token)
-    .not('diary_pdf_url', 'is', null)
-    .maybeSingle()
+  const title = `${diary.config.title} · DTrek`
+  const desc = diary.entries.length > 0
+    ? `${diary.entries.length} escursioni · ${diary.totalKm.toFixed(0)} km · di ${diary.ownerName}`
+    : `Diario di viaggio di ${diary.ownerName}`
 
-  if (!data?.diary_pdf_url) return notFound()
+  return {
+    metadataBase: SITE_URL ? new URL(SITE_URL) : undefined,
+    title,
+    description: desc,
+    openGraph: { title: diary.config.title, description: desc, type: 'article' },
+    twitter:    { card: 'summary_large_image', title: diary.config.title, description: desc },
+  }
+}
 
-  const ownerName = (data.display_name as string | null) ?? ''
-  const title = ownerName ? `Diario di ${ownerName}` : 'Diario di viaggio'
+export default async function DiarioPublicPage({ params }: { params: { token: string } }) {
+  const diary = await getDiary(params.token)
+  if (!diary) notFound()
 
-  return <PdfViewer pdfUrl={data.diary_pdf_url as string} title={title} />
+  const title = `${diary.config.title} — di ${diary.ownerName}`
+  return <DiaryPublicView diary={diary} title={title} />
 }

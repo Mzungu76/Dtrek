@@ -5,6 +5,11 @@ import type { AccentTheme } from './types'
 /**
  * Distance-aligned SVG chart (progress 0–1 on x-axis) so photo markers — placed by
  * RoutePhoto.progress — line up exactly with the metric series, unlike a time-based axis.
+ *
+ * Le etichette restano su un font di sistema (Arial) di proposito, non sui token del brand:
+ * html2canvas serializza l'SVG inline in un data URL e lo carica come <img>, e dentro un SVG
+ * caricato così i webfont non si caricano affatto. Referenziare qui var(--font-*) darebbe una
+ * custom property non definita, quindi una dichiarazione non valida e un font peggiore di questo.
  */
 export function ProgressChart({ series, photoMarkers, accent, unit, decimals = 0 }: {
   series: { progress: number; value: number }[]

@@ -1,23 +1,39 @@
-export function DiarioYearDivider({ year, count, totalKm }: { year: string; count: number; totalKm: number }) {
+import { FONT } from '@/lib/designTokens'
+
+export interface DiarioYearBandInfo { year: string; count: number; totalKm: number }
+
+/**
+ * Fascia di transizione tra un anno e il successivo, incorporata in cima alla prima pagina
+ * dell'anno (vedi `yearBand` in DiarioReportPage e DiarioStubPage) invece di occupare una pagina
+ * A4 intera a sé stante.
+ *
+ * Prima questo componente ERA una pagina intera (`className="diario-page"`, `minHeight: 1123`,
+ * contenuto centrato verticalmente): con sei anni di attività il diario aveva sei pagine quasi
+ * vuote — solo il numero dell'anno e due righe di conteggio, il resto sfondo verde. Nel PDF
+ * ciascuna costava comunque una pagina fisica intera, dato che ogni elemento di primo livello ne
+ * apre sempre una nuova: uno spreco di carta (e di scroll) sproporzionato al contenuto.
+ */
+export function DiarioYearBand({ year, count, totalKm }: DiarioYearBandInfo) {
   return (
-    <div className="diario-page" style={{
-      width: 794, minHeight: 1123, background: 'linear-gradient(158deg,#193b20 0%,#1c4724 45%,#20592b 100%)', margin: '24px auto',
-      boxShadow: '0 8px 56px rgba(0,0,0,0.28)', display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center', position: 'relative',
+    <div className="pdf-block" style={{
+      background: 'linear-gradient(100deg,#193b20 0%,#1c4724 55%,#20592b 100%)',
+      padding: '20px 48px',
+      display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8,
     }}>
-      <p style={{ fontSize: 11, color: '#e08d3c', fontFamily: 'Barlow Condensed, sans-serif', fontWeight: 700, letterSpacing: 6, textTransform: 'uppercase', margin: '0 0 16px' }}>
-        Anno
-      </p>
-      <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 96, fontWeight: 700, color: 'white', margin: 0, letterSpacing: -2 }}>
-        {year}
-      </h2>
-      <div style={{ width: 80, height: 2, background: '#e08d3c', margin: '24px 0' }} />
-      <div style={{ display: 'flex', gap: 24 }}>
-        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', fontFamily: 'DM Sans, sans-serif' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 16 }}>
+        <span style={{ fontFamily: FONT.barlow, fontSize: 10, fontWeight: 700, letterSpacing: 4, color: '#e08d3c', textTransform: 'uppercase' }}>
+          Anno
+        </span>
+        <h2 style={{ fontFamily: FONT.display, fontSize: 30, fontWeight: 700, color: 'white', margin: 0, letterSpacing: -0.5 }}>
+          {year}
+        </h2>
+      </div>
+      <div style={{ display: 'flex', gap: 16 }}>
+        <span style={{ fontFamily: FONT.body, fontSize: 11, color: 'rgba(255,255,255,0.75)' }}>
           {count} {count === 1 ? 'escursione' : 'escursioni'}
         </span>
         {totalKm > 0 && (
-          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', fontFamily: 'DM Sans, sans-serif' }}>
+          <span style={{ fontFamily: FONT.body, fontSize: 11, color: 'rgba(255,255,255,0.75)' }}>
             {totalKm.toFixed(0)} km
           </span>
         )}

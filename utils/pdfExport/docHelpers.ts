@@ -141,8 +141,6 @@ export function renderPois(
       const row = Math.floor(i / 3)
       const cx = M + col * (colW + 2)
       const cy = y + row * 7
-      if (col === 0 && i > 0) { /* row started, already advanced */ }
-
       const label2 = POI_LABELS[p.type] ?? p.type
       const name2 = p.name ? safeText(p.name) : label2
       doc.setFillColor(...STONE50); doc.roundedRect(cx, cy - 2, colW, 6, 1.5, 1.5, 'F')

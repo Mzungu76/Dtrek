@@ -1,3 +1,4 @@
+import { FONT } from '@/lib/designTokens'
 export function DiarioCover({
   coverUrl, diaryTitle, diarySubtitle, diaryAuthor, dateRange, totalActivities, totalKm, totalElevationGain,
 }: {
@@ -10,7 +11,7 @@ export function DiarioCover({
   if (totalElevationGain)   stats.push({ value: Math.round(totalElevationGain).toLocaleString('it'), label: 'M dislivello' })
 
   return (
-    <div className="diario-page" style={{
+    <div className="diario-page pdf-bleed" style={{
       width: 794, height: 1123,
       position: 'relative', overflow: 'hidden', margin: '24px auto',
       boxShadow: '0 8px 56px rgba(0,0,0,0.28)',
@@ -35,7 +36,7 @@ export function DiarioCover({
           <svg style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', opacity: 0.08 }} viewBox="0 0 794 320" preserveAspectRatio="none">
             <path d="M0,320 L70,215 L130,255 L225,125 L305,178 L385,58 L450,125 L520,72 L595,128 L660,82 L730,118 L794,88 L794,320 Z" fill="white" />
           </svg>
-          <div style={{ position: 'absolute', top: 100, right: 40, fontFamily: 'Playfair Display, serif', fontSize: 220, fontWeight: 900, color: 'rgba(255,255,255,0.025)', lineHeight: 1, userSelect: 'none', pointerEvents: 'none' }}>II</div>
+          <div style={{ position: 'absolute', top: 100, right: 40, fontFamily: FONT.display, fontSize: 220, fontWeight: 700, color: 'rgba(255,255,255,0.025)', lineHeight: 1, userSelect: 'none', pointerEvents: 'none' }}>II</div>
         </>
       )}
 
@@ -49,19 +50,19 @@ export function DiarioCover({
 
       {/* Brand header */}
       <div style={{ position: 'absolute', top: 38, left: 64, right: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: 15, fontWeight: 900, letterSpacing: 7, color: '#e08d3c', textTransform: 'uppercase' }}>DTrek</span>
-        <span style={{ fontFamily: 'DM Sans, sans-serif', fontSize: 9, letterSpacing: 3, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase' }}>Diario di Escursioni</span>
+        <span style={{ fontFamily: FONT.barlow, fontSize: 15, fontWeight: 900, letterSpacing: 7, color: '#e08d3c', textTransform: 'uppercase' }}>DTrek</span>
+        <span style={{ fontFamily: FONT.body, fontSize: 9, letterSpacing: 3, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase' }}>Diario di Escursioni</span>
       </div>
 
       {/* Title block */}
       <div style={{ position: 'absolute', top: 270, left: 64, right: 100 }}>
         {dateRange && (
-          <p style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: 11, fontWeight: 700, letterSpacing: 6, color: '#e08d3c', textTransform: 'uppercase', margin: '0 0 22px' }}>
+          <p style={{ fontFamily: FONT.barlow, fontSize: 11, fontWeight: 700, letterSpacing: 6, color: '#e08d3c', textTransform: 'uppercase', margin: '0 0 22px' }}>
             {dateRange}
           </p>
         )}
         <h1 style={{
-          fontFamily: 'Playfair Display, serif',
+          fontFamily: FONT.display,
           fontSize: 64,
           fontWeight: 700,
           color: 'white',
@@ -73,7 +74,7 @@ export function DiarioCover({
         </h1>
         <div style={{ width: 80, height: 2, background: '#e08d3c', margin: '0 0 30px' }} />
         {diarySubtitle && (
-          <p style={{ fontFamily: 'Lora, serif', fontSize: 16, fontStyle: 'italic', color: 'rgba(255,255,255,0.58)', letterSpacing: 0.5, margin: '0 0 42px' }}>
+          <p style={{ fontFamily: FONT.lora, fontSize: 16, fontStyle: 'italic', color: 'rgba(255,255,255,0.58)', letterSpacing: 0.5, margin: '0 0 42px' }}>
             {diarySubtitle}
           </p>
         )}
@@ -87,8 +88,8 @@ export function DiarioCover({
                 padding: i === 0 ? '0 28px 0 0' : i === stats.length - 1 ? '0 0 0 28px' : '0 28px',
                 borderRight: i < stats.length - 1 ? '1px solid rgba(255,255,255,0.08)' : undefined,
               }}>
-                <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 30, fontWeight: 500, color: 'white', margin: 0, lineHeight: 1 }}>{s.value}</p>
-                <p style={{ fontFamily: 'DM Sans, sans-serif', fontSize: 9, letterSpacing: 3, color: 'rgba(255,255,255,0.38)', textTransform: 'uppercase', margin: '7px 0 0' }}>{s.label}</p>
+                <p style={{ fontFamily: FONT.mono, fontSize: 30, fontWeight: 500, color: 'white', margin: 0, lineHeight: 1 }}>{s.value}</p>
+                <p style={{ fontFamily: FONT.body, fontSize: 9, letterSpacing: 3, color: 'rgba(255,255,255,0.38)', textTransform: 'uppercase', margin: '7px 0 0' }}>{s.label}</p>
               </div>
             ))}
           </div>
@@ -98,11 +99,11 @@ export function DiarioCover({
       {/* Author */}
       <div style={{ position: 'absolute', bottom: 52, left: 64, right: 64, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
         {diaryAuthor && (
-          <p style={{ fontFamily: 'DM Sans, sans-serif', fontSize: 10, letterSpacing: 5, color: 'rgba(255,255,255,0.38)', textTransform: 'uppercase', margin: 0 }}>
+          <p style={{ fontFamily: FONT.body, fontSize: 10, letterSpacing: 5, color: 'rgba(255,255,255,0.38)', textTransform: 'uppercase', margin: 0 }}>
             {diaryAuthor}
           </p>
         )}
-        <p style={{ fontFamily: 'Lora, serif', fontSize: 10, fontStyle: 'italic', color: 'rgba(255,255,255,0.2)', margin: 0 }}>
+        <p style={{ fontFamily: FONT.lora, fontSize: 10, fontStyle: 'italic', color: 'rgba(255,255,255,0.2)', margin: 0 }}>
           Stampato con DTrek
         </p>
       </div>

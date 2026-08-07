@@ -1,17 +1,20 @@
 'use client'
-import { useMemo } from 'react'
+import { FONT } from '@/lib/designTokens'
+import { useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
-import { Route, Mountain, Clock, Flame } from 'lucide-react'
+import { Route, Mountain, Clock, Flame, EyeOff, SlidersHorizontal, X } from 'lucide-react'
 import type { ActivityMeta } from '@/lib/blobStore'
 import type { RoutePhoto } from '@/lib/activityPhotos'
 import { formatDuration, type TrackPoint } from '@/lib/tcxParser'
 import { wmoInfo } from '@/lib/openmeteo'
 import { parseSections } from '@/lib/reportStore'
+import { LazyMount } from '@/components/LazyMount'
 import { trackPointsProgress, extractCuriosita } from './chartUtils'
 import { ProgressChart } from './ProgressChart'
 import { StatCard } from './StatCard'
+import { DiarioYearBand, type DiarioYearBandInfo } from './DiarioYearDivider'
 import { GREEN, BLUE, type DiaryReport, type ReportExtras } from './types'
 
 const AllRoutesMap = dynamic(() => import('@/components/AllRoutesMap'), { ssr: false })
@@ -20,17 +23,70 @@ function SchedaField({ label, value }: { label: string; value: string }) {
   return (
     <>
       <div>
-        <p style={{ fontFamily: 'DM Sans, sans-serif', fontSize: 7.5, fontWeight: 600, letterSpacing: 2, color: '#a9a18e', textTransform: 'uppercase', margin: '0 0 3px' }}>{label}</p>
-        <p style={{ fontFamily: 'Lora, serif', fontSize: 13, color: '#2c2520', margin: 0 }}>{value}</p>
+        <p style={{ fontFamily: FONT.body, fontSize: 7.5, fontWeight: 600, letterSpacing: 2, color: '#a9a18e', textTransform: 'uppercase', margin: '0 0 3px' }}>{label}</p>
+        <p style={{ fontFamily: FONT.lora, fontSize: 13, color: '#2c2520', margin: 0 }}>{value}</p>
       </div>
       <div style={{ height: 1, background: '#eeece5' }} />
     </>
   )
 }
 
-export function DiarioReportPage({ report, photos, meta, extras, trackPoints, mapsInteractive, escNumber }: {
+const EXTRAS_LABELS: [keyof ReportExtras, string][] = [
+  ['mappa', 'Mappa percorso'],
+  ['statistiche', 'Statistiche'],
+  ['grafico', 'Profilo altimetrico'],
+  ['cuore', 'Frequenza cardiaca'],
+  ['velocita', 'Velocità'],
+]
+
+/** Popover "Personalizza questa pagina", per uno scostamento dalle impostazioni globali "per ogni
+ *  percorso" (definite nel rail Statistiche) valido solo su questa escursione — es. si vuole il
+ *  grafico della frequenza cardiaca ovunque tranne che su una salita dove il cardiofrequenzimetro
+ *  ha perso il segnale. */
+function CustomizeExtras({ extras, onChange }: { extras: ReportExtras; onChange: (patch: Partial<ReportExtras>) => void }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="diario-editor-control print:hidden" style={{ position: 'absolute', top: 16, right: 96, zIndex: 5 }}>
+      <button onClick={() => setOpen(o => !o)}
+        title="Personalizza questa pagina"
+        style={{
+          display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 999,
+          background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)', border: 'none', cursor: 'pointer',
+          fontFamily: FONT.barlow, fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'white',
+        }}>
+        <SlidersHorizontal style={{ width: 13, height: 13 }} /> Personalizza
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute', top: '100%', right: 0, marginTop: 6, width: 200,
+          background: 'white', borderRadius: 10, border: '1px solid #dcd8cc', boxShadow: '0 8px 24px rgba(0,0,0,0.18)', padding: 10,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+            <span style={{ fontFamily: FONT.barlow, fontSize: 9, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: '#a9a18e' }}>Solo qui</span>
+            <button onClick={() => setOpen(false)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#a9a18e' }}>
+              <X style={{ width: 12, height: 12 }} />
+            </button>
+          </div>
+          {EXTRAS_LABELS.map(([key, label]) => (
+            <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', fontFamily: FONT.body, fontSize: 12, color: '#4d4740', cursor: 'pointer' }}>
+              <input type="checkbox" checked={extras[key]} onChange={e => onChange({ [key]: e.target.checked })} />
+              {label}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function DiarioReportPage({ report, photos, meta, extras, trackPoints, mapsInteractive, escNumber, yearBand, onExclude, onExtrasChange }: {
   report: DiaryReport; photos: RoutePhoto[]; meta?: ActivityMeta; extras: ReportExtras
   trackPoints?: TrackPoint[]; mapsInteractive: boolean; escNumber: number
+  /** Presente solo sulla prima pagina di un nuovo anno — vedi DiarioYearDivider.tsx. */
+  yearBand?: DiarioYearBandInfo
+  /** Assenti = l'editing non è disponibile in questo contesto (es. cattura per il PDF). */
+  onExclude?: () => void
+  onExtrasChange?: (patch: Partial<ReportExtras>) => void
 }) {
   const act = report.activity
   const sections = useMemo(() => parseSections(report.content).map(s => {
@@ -39,7 +95,9 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
   }), [report.content])
   const allQuotes  = useMemo(() => sections.flatMap(s => s.quotes), [sections])
   const pullQuote  = allQuotes[0]
-  const storyBoxes = allQuotes.slice(1, 3)
+  // Prima limitato a due (`.slice(1, 3)`): un resoconto con più di tre curiosità in tutto ne
+  // perdeva il resto dal Diario, senza alcun avviso.
+  const storyBoxes = allQuotes.slice(1)
 
   const escLabel = String(escNumber).padStart(2, '0')
   const dateStr  = act?.start_time
@@ -83,8 +141,25 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
   return (
     <div className="diario-page" style={{
       width: 794, minHeight: 1123, background: 'white', margin: '24px auto',
-      boxShadow: '0 8px 56px rgba(0,0,0,0.28)', overflow: 'hidden',
+      boxShadow: '0 8px 56px rgba(0,0,0,0.28)', overflow: 'hidden', position: 'relative',
     }}>
+      {yearBand && <DiarioYearBand {...yearBand} />}
+
+      {onExtrasChange && <CustomizeExtras extras={extras} onChange={onExtrasChange} />}
+
+      {onExclude && (
+        <button onClick={onExclude} className="diario-editor-control print:hidden"
+          title="Escludi questa escursione dal diario"
+          style={{
+            position: 'absolute', top: 16, right: 16, zIndex: 5,
+            display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 999,
+            background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)', border: 'none', cursor: 'pointer',
+            fontFamily: FONT.barlow, fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'white',
+          }}>
+          <EyeOff style={{ width: 13, height: 13 }} /> Escludi
+        </button>
+      )}
+
       {/* Full-bleed hero */}
       <div style={{ height: 420, position: 'relative', overflow: 'hidden', background: heroPhoto ? undefined : 'linear-gradient(170deg,#0f2e1a 0%,#1b4332 30%,#193b20 62%,#0d1f12 100%)' }}>
         {heroPhoto && (
@@ -99,13 +174,13 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
         <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(0,0,0,0.12) 0%, transparent 35%, rgba(0,0,0,0.72) 100%)' }} />
 
         <div style={{ position: 'absolute', top: 32, left: 48, right: 48 }}>
-          <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: 11, fontWeight: 700, letterSpacing: 5, color: '#e08d3c', textTransform: 'uppercase' }}>
+          <span style={{ fontFamily: FONT.barlow, fontSize: 11, fontWeight: 700, letterSpacing: 5, color: '#e08d3c', textTransform: 'uppercase' }}>
             Escursione #{escLabel}{monthYear ? ` · ${monthYear}` : ''}
           </span>
         </div>
 
         <div style={{ position: 'absolute', bottom: 32, left: 48, right: 48 }}>
-          <h1 style={{ fontFamily: 'Playfair Display, serif', fontSize: 48, fontWeight: 700, color: 'white', lineHeight: 1.02, letterSpacing: -1, margin: '0 0 18px' }}>
+          <h1 style={{ fontFamily: FONT.display, fontSize: 48, fontWeight: 700, color: 'white', lineHeight: 1.02, letterSpacing: -1, margin: '0 0 18px' }}>
             {report.title || act?.title || 'Escursione'}
           </h1>
           <div style={{ width: 56, height: 2, background: '#e08d3c' }} />
@@ -124,9 +199,9 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
               : { label: '◆ Calorie', value: meta?.calories ? `${meta.calories}` : '—', sub: 'kcal' },
           ].map((s, i) => (
             <div key={s.label} style={{ padding: '22px 28px', borderRight: i < 3 ? '1px solid rgba(255,255,255,0.07)' : undefined }}>
-              <p style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, fontWeight: 700, letterSpacing: 3, color: '#e08d3c', textTransform: 'uppercase', margin: '0 0 7px' }}>{s.label}</p>
-              <p style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 26, fontWeight: 500, color: 'white', margin: 0, lineHeight: 1 }}>{s.value}</p>
-              <p style={{ fontFamily: 'DM Sans, sans-serif', fontSize: 10, color: 'rgba(255,255,255,0.38)', margin: '5px 0 0' }}>{s.sub}</p>
+              <p style={{ fontFamily: FONT.barlow, fontSize: 10, fontWeight: 700, letterSpacing: 3, color: '#e08d3c', textTransform: 'uppercase', margin: '0 0 7px' }}>{s.label}</p>
+              <p style={{ fontFamily: FONT.mono, fontSize: 26, fontWeight: 500, color: 'white', margin: 0, lineHeight: 1 }}>{s.value}</p>
+              <p style={{ fontFamily: FONT.body, fontSize: 10, color: 'rgba(255,255,255,0.38)', margin: '5px 0 0' }}>{s.sub}</p>
             </div>
           ))}
         </div>
@@ -135,21 +210,27 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
       {/* Date bar */}
       {dateStr && (
         <div style={{ background: '#f8f7f4', padding: '12px 48px', borderTop: '1px solid #dcd8cc' }}>
-          <p style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, fontWeight: 700, letterSpacing: 3, color: '#8a7f6e', textTransform: 'uppercase', margin: 0 }}>
+          <p style={{ fontFamily: FONT.barlow, fontSize: 10, fontWeight: 700, letterSpacing: 3, color: '#8a7f6e', textTransform: 'uppercase', margin: 0 }}>
             {dateStr}
           </p>
         </div>
       )}
 
       <div style={{ padding: '48px 48px 40px' }}>
-        <p style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: 9, fontWeight: 700, letterSpacing: 4, color: '#e08d3c', textTransform: 'uppercase', margin: '0 0 36px' }}>
+        <p style={{ fontFamily: FONT.barlow, fontSize: 9, fontWeight: 700, letterSpacing: 4, color: '#e08d3c', textTransform: 'uppercase', margin: '0 0 36px' }}>
           Cronaca · Escursione #{escLabel}
         </p>
 
-        {/* Scheda editoriale + intro */}
-        <div className="pdf-block" style={{ display: 'grid', gridTemplateColumns: '170px 1fr', gap: 36, marginBottom: 40 }}>
-          <div>
-            <p style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: 8, fontWeight: 900, letterSpacing: 3, color: '#a9a18e', textTransform: 'uppercase', margin: '0 0 14px', paddingBottom: 9, borderBottom: '1.5px solid #e08d3c' }}>
+        {/* Scheda editoriale + intro.
+            I paragrafi non sono più troncati a 3 (vedi la nota sotto storyBoxes): un resoconto
+            "lungo" ne ha facilmente il doppio, e prima sparivano dal Diario senza alcun avviso —
+            pur essendo presenti per intero nel PDF del singolo resoconto. Il blocco non è più UN
+            SOLO `.pdf-block`: ora lo sono titolo+primo paragrafo insieme (evita un titolo isolato
+            in fondo a una pagina) e ogni paragrafo successivo per conto proprio, così un'intro
+            lunga può proseguire su più pagine senza mai tagliare un paragrafo a metà. */}
+        <div style={{ display: 'grid', gridTemplateColumns: '170px 1fr', gap: 36, marginBottom: 40 }}>
+          <div className="pdf-block">
+            <p style={{ fontFamily: FONT.barlow, fontSize: 8, fontWeight: 900, letterSpacing: 3, color: '#a9a18e', textTransform: 'uppercase', margin: '0 0 14px', paddingBottom: 9, borderBottom: '1.5px solid #e08d3c' }}>
               Scheda
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
@@ -161,17 +242,14 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
           </div>
 
           <div>
-            <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 32, fontWeight: 700, color: '#193b20', lineHeight: 1.12, margin: '0 0 24px', letterSpacing: -0.5 }}>
-              {report.title || act?.title || 'Escursione'}
-            </h2>
-            {introSection && introSection.body.split(/\n\n+/).slice(0, 3).map((p, j) => {
+            {introSection && introSection.body.split(/\n\n+/).map((p, j) => {
               const text = p.trim()
               const dropCap = j === 0 && text.length > 0
-              return (
-                <p key={j} style={{ fontFamily: 'Lora, serif', fontSize: 13.5, lineHeight: 1.85, color: '#4d4740', margin: '0 0 16px' }}>
+              const paragraph = (
+                <p style={{ fontFamily: FONT.lora, fontSize: 13.5, lineHeight: 1.85, color: '#4d4740', margin: '0 0 16px' }}>
                   {dropCap ? (
                     <>
-                      <span style={{ float: 'left', fontSize: 52, lineHeight: 0.8, fontWeight: 700, color: '#e08d3c', padding: '4px 7px 0 0', fontFamily: 'Playfair Display, serif' }}>
+                      <span style={{ float: 'left', fontSize: 52, lineHeight: 0.8, fontWeight: 700, color: '#e08d3c', padding: '4px 7px 0 0', fontFamily: FONT.display }}>
                         {text[0]}
                       </span>
                       {text.slice(1)}
@@ -179,6 +257,16 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
                   ) : text}
                 </p>
               )
+              // Il titolo viaggia col primo paragrafo nello stesso pdf-block, per non ritrovarsi
+              // mai isolato in fondo a una pagina con tutto il testo rimandato alla successiva.
+              return j === 0 ? (
+                <div key={j} className="pdf-block">
+                  <h2 style={{ fontFamily: FONT.display, fontSize: 32, fontWeight: 700, color: '#193b20', lineHeight: 1.12, margin: '0 0 24px', letterSpacing: -0.5 }}>
+                    {report.title || act?.title || 'Escursione'}
+                  </h2>
+                  {paragraph}
+                </div>
+              ) : <div key={j} className="pdf-block">{paragraph}</div>
             })}
           </div>
         </div>
@@ -186,34 +274,42 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
         {/* Pull quote */}
         {pullQuote && (
           <div className="pdf-block" style={{ margin: '0 -8px 40px', padding: '32px 40px', borderTop: '2px solid #193b20', borderBottom: '2px solid #193b20', position: 'relative' }}>
-            <span style={{ position: 'absolute', top: -26, left: 36, fontFamily: 'Playfair Display, serif', fontSize: 70, lineHeight: 1, color: '#193b20', opacity: 0.12, userSelect: 'none' }}>&ldquo;</span>
-            <p style={{ fontFamily: 'Playfair Display, serif', fontSize: 19, fontStyle: 'italic', lineHeight: 1.55, color: '#193b20', margin: 0 }}>
+            <span style={{ position: 'absolute', top: -26, left: 36, fontFamily: FONT.display, fontSize: 70, lineHeight: 1, color: '#193b20', opacity: 0.12, userSelect: 'none' }}>&ldquo;</span>
+            <p style={{ fontFamily: FONT.display, fontSize: 19, fontStyle: 'italic', lineHeight: 1.55, color: '#193b20', margin: 0 }}>
               {pullQuote}
             </p>
           </div>
         )}
 
-        {/* Detail photo alongside remaining sections */}
-        <div className="pdf-block" style={{ display: 'grid', gridTemplateColumns: detailPhoto ? '1fr 164px' : '1fr', gap: 32, marginBottom: 32 }}>
+        {/* Detail photo alongside remaining sections — stesso principio di sopra: titolo +
+            primo paragrafo insieme, poi un pdf-block per ogni paragrafo successivo. */}
+        <div style={{ display: 'grid', gridTemplateColumns: detailPhoto ? '1fr 164px' : '1fr', gap: 32, marginBottom: 32 }}>
           <div>
             {restSections.map((section, i) => (
               <div key={i} style={{ marginBottom: 22 }}>
-                <p style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, fontWeight: 900, letterSpacing: 3, color: '#e08d3c', textTransform: 'uppercase', margin: '0 0 8px' }}>
-                  {section.title}
-                </p>
-                {section.body.split(/\n\n+/).slice(0, 3).map((p, j) => (
-                  <p key={j} style={{ fontFamily: 'Lora, serif', fontSize: 13.5, lineHeight: 1.85, color: '#4d4740', margin: '0 0 14px' }}>{p.trim()}</p>
-                ))}
+                {section.body.split(/\n\n+/).map((p, j) => {
+                  const paragraph = (
+                    <p style={{ fontFamily: FONT.lora, fontSize: 13.5, lineHeight: 1.85, color: '#4d4740', margin: '0 0 14px' }}>{p.trim()}</p>
+                  )
+                  return j === 0 ? (
+                    <div key={j} className="pdf-block">
+                      <p style={{ fontFamily: FONT.barlow, fontSize: 10, fontWeight: 900, letterSpacing: 3, color: '#e08d3c', textTransform: 'uppercase', margin: '0 0 8px' }}>
+                        {section.title}
+                      </p>
+                      {paragraph}
+                    </div>
+                  ) : <div key={j} className="pdf-block">{paragraph}</div>
+                })}
               </div>
             ))}
           </div>
           {detailPhoto && (
-            <div>
+            <div className="pdf-block">
               <div style={{ width: 164, borderRadius: 4, overflow: 'hidden', position: 'relative' }}>
                 <img src={detailPhoto.url} alt={detailPhoto.caption} style={{ width: '100%', aspectRatio: '2/3', objectFit: 'cover', display: 'block' }} />
                 <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top,rgba(0,0,0,0.5) 0%,transparent 55%)' }} />
                 {detailPhoto.caption && (
-                  <p style={{ position: 'absolute', bottom: 10, left: 10, right: 10, fontFamily: 'Lora, serif', fontSize: 9, fontStyle: 'italic', color: 'rgba(255,255,255,0.88)', margin: 0, lineHeight: 1.4 }}>
+                  <p style={{ position: 'absolute', bottom: 10, left: 10, right: 10, fontFamily: FONT.lora, fontSize: 9, fontStyle: 'italic', color: 'rgba(255,255,255,0.88)', margin: 0, lineHeight: 1.4 }}>
                     {detailPhoto.caption}
                   </p>
                 )}
@@ -222,14 +318,19 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
           )}
         </div>
 
-        {/* Storytelling boxes */}
+        {/* Storytelling boxes.
+            Prima "storyBoxes" era limitato a 2 (`allQuotes.slice(1,3)`, la prima riservata al pull
+            quote sopra): un resoconto con più di 3 curiosità ne perdeva il resto senza avviso.
+            Qui restano tutte, e ognuna è il proprio pdf-block — non più un unico blocco con
+            l'intera lista dentro, che con molte curiosità avrebbe rischiato il taglio forzato a
+            metà box. */}
         {storyBoxes.length > 0 && (
-          <div className="pdf-block" style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 36 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 36 }}>
             {storyBoxes.map((q, i) => {
               const acc = STORY_ACCENTS[i % STORY_ACCENTS.length]
               return (
-                <div key={i} style={{ background: acc.bg, borderLeft: `3px solid ${acc.border}`, borderRadius: '0 6px 6px 0', padding: '18px 22px' }}>
-                  <p style={{ fontFamily: 'Lora, serif', fontSize: 13, fontStyle: 'italic', lineHeight: 1.75, color: acc.text, margin: 0 }}>{q}</p>
+                <div key={i} className="pdf-block" style={{ background: acc.bg, borderLeft: `3px solid ${acc.border}`, borderRadius: '0 6px 6px 0', padding: '18px 22px' }}>
+                  <p style={{ fontFamily: FONT.lora, fontSize: 13, fontStyle: 'italic', lineHeight: 1.75, color: acc.text, margin: 0 }}>{q}</p>
                 </div>
               )
             })}
@@ -249,7 +350,7 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
             )}
             {showGrafico && (
               <div style={{ marginBottom: (showCuore || showVelocita) ? 16 : 0 }}>
-                <p style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: 9, color: '#a9a18e', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', margin: '0 0 6px' }}>
+                <p style={{ fontFamily: FONT.barlow, fontSize: 9, color: '#a9a18e', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', margin: '0 0 6px' }}>
                   Profilo altimetrico {photoMarkers.length > 0 && '· con posizione foto'}
                 </p>
                 <div style={{ background: GREEN.bg, borderRadius: 8, padding: '10px 12px', border: `1px solid ${GREEN.border}` }}>
@@ -261,7 +362,7 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
               <div style={{ display: 'flex', gap: 16, marginBottom: showMappa ? 24 : 0 }}>
                 {showCuore && (
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: 9, color: '#a9a18e', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', margin: '0 0 6px' }}>
+                    <p style={{ fontFamily: FONT.barlow, fontSize: 9, color: '#a9a18e', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', margin: '0 0 6px' }}>
                       Frequenza cardiaca
                     </p>
                     <div style={{ background: '#fef2f2', borderRadius: 8, padding: '10px 12px', border: '1px solid #fecaca' }}>
@@ -271,7 +372,7 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
                 )}
                 {showVelocita && (
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: 9, color: '#a9a18e', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', margin: '0 0 6px' }}>
+                    <p style={{ fontFamily: FONT.barlow, fontSize: 9, color: '#a9a18e', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', margin: '0 0 6px' }}>
                       Velocità
                     </p>
                     <div style={{ background: BLUE.bg, borderRadius: 8, padding: '10px 12px', border: `1px solid ${BLUE.border}` }}>
@@ -283,13 +384,15 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
             )}
             {showMappa && (
               <>
-                <p style={{ fontFamily: 'Playfair Display, serif', fontSize: 18, fontWeight: 700, color: '#193b20', margin: '0 0 12px' }}>Il percorso</p>
+                <p style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: '#193b20', margin: '0 0 12px' }}>Il percorso</p>
                 <div className="print:hidden diario-report-map" data-activity-id={meta!.id} style={{ height: 260, borderRadius: 10, overflow: 'hidden', border: '1px solid #dcd8cc' }}>
-                  <AllRoutesMap
-                    routes={[{ id: meta!.id, title: meta!.title ?? 'Percorso', startTime: meta!.startTime, polyline: meta!.routePolyline! }]}
-                    height="260px"
-                    interactive={mapsInteractive}
-                  />
+                  <LazyMount height={260} placeholder={<div style={{ height: '100%', background: '#f3f4f2' }} />}>
+                    <AllRoutesMap
+                      routes={[{ id: meta!.id, title: meta!.title ?? 'Percorso', startTime: meta!.startTime, polyline: meta!.routePolyline! }]}
+                      height="260px"
+                      interactive={mapsInteractive}
+                    />
+                  </LazyMount>
                 </div>
               </>
             )}
@@ -302,8 +405,8 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
             {photos.map((ph, i) => (
               <div key={ph.id} style={{ position: 'relative' }}>
                 <img src={ph.url} alt={ph.caption} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 8, boxShadow: '0 4px 14px rgba(0,0,0,0.12)' }} />
-                <span style={{ position: 'absolute', top: 6, left: 6, width: 20, height: 20, background: '#e08d3c', color: 'white', borderRadius: '50%', textAlign: 'center', lineHeight: '20px', fontSize: 10, fontWeight: 'bold', fontFamily: 'DM Sans, sans-serif', display: 'block', boxSizing: 'border-box', border: '1px solid white' }}>{i+1}</span>
-                {ph.caption && <p style={{ fontSize: 9, color: '#73695c', textAlign: 'center', marginTop: 5, fontStyle: 'italic', fontFamily: 'Lora, serif' }}>{ph.caption}</p>}
+                <span style={{ position: 'absolute', top: 6, left: 6, width: 20, height: 20, background: '#e08d3c', color: 'white', borderRadius: '50%', textAlign: 'center', lineHeight: '20px', fontSize: 10, fontWeight: 'bold', fontFamily: FONT.body, display: 'block', boxSizing: 'border-box', border: '1px solid white' }}>{i+1}</span>
+                {ph.caption && <p style={{ fontSize: 9, color: '#73695c', textAlign: 'center', marginTop: 5, fontStyle: 'italic', fontFamily: FONT.lora }}>{ph.caption}</p>}
               </div>
             ))}
           </div>
@@ -311,8 +414,8 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
 
         {/* Page footer */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid #eeece5', paddingTop: 14 }}>
-          <span style={{ fontFamily: 'DM Sans, sans-serif', fontSize: 9, letterSpacing: 3, color: '#c4bead', textTransform: 'uppercase' }}>{report.title || act?.title || 'Escursione'}</span>
-          <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: '#c4bead' }}>{escLabel}</span>
+          <span style={{ fontFamily: FONT.body, fontSize: 9, letterSpacing: 3, color: '#c4bead', textTransform: 'uppercase' }}>{report.title || act?.title || 'Escursione'}</span>
+          <span style={{ fontFamily: FONT.mono, fontSize: 9, color: '#c4bead' }}>{escLabel}</span>
         </div>
       </div>
     </div>

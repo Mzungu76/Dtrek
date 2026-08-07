@@ -18,6 +18,10 @@ export async function GET(req: Request) {
   const xRaw  = searchParams.get('x')
   const yRaw  = searchParams.get('y')
   const style = searchParams.get('style') ?? 'voyager'
+  // Le tile @2x servono a chi compone immagini grandi (condivisione, PDF): senza, una griglia di
+  // tile da 256px va ingrandita e i toponimi diventano illeggibili. Solo CARTO le offre; OSM
+  // standard no, quindi per 'light' la richiesta viene ignorata invece di produrre un 404.
+  const retina = searchParams.get('retina') === '1' && style !== 'light'
 
   if (!zRaw || !xRaw || !yRaw) return new Response('Missing z/x/y', { status: 400 })
   const zoom = Number(zRaw), x = Number(xRaw), y = Number(yRaw)
@@ -32,7 +36,7 @@ export async function GET(req: Request) {
   if (!Number.isInteger(y) || y < 0 || y > maxTileIndex) return new Response('Invalid y', { status: 400 })
 
   const base = PROVIDERS[style] ?? PROVIDERS.voyager
-  const url  = `${base}/${zoom}/${x}/${y}.png`
+  const url  = `${base}/${zoom}/${x}/${y}${retina ? '@2x' : ''}.png`
 
   try {
     const res = await fetch(url, {

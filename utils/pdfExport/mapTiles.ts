@@ -1,9 +1,17 @@
 import type { ActivityMeta } from '@/lib/blobStore'
 import { mkCanvas, chartRouteFallback } from './canvasCharts'
+import { ROUTE_COLORS } from '@/lib/designTokens'
 
 // ── Satellite map with route overlay ───────────────────────────────────────────
 
-const TILE_SIZE = 256
+// 512 e non 256 perché le tile sono richieste in versione @2x (`retina=1` sul proxy): stesso
+// riquadro geografico, doppia densità di pixel. Tutta la geometria qui sotto — dimensione del
+// canvas cucito, posizione di disegno, proiezione lat/lon → pixel — è espressa in multipli di
+// questa costante, quindi cambiarla è sufficiente e coerente.
+//
+// Serviva: la mappa veniva composta a 660px e poi html2canvas la ricampionava a 2×, cioè un
+// ingrandimento su un raster già ridotto, con i toponimi OSM resi illeggibili.
+const TILE_SIZE = 512
 
 function latLonToXY(lat: number, lon: number, z: number) {
   const n = Math.pow(2, z)
@@ -77,7 +85,11 @@ function drawFitted(
 function loadTileImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image()
-    img.crossOrigin = 'anonymous'
+    // Niente crossOrigin: le tile ora passano dal proxy same-origin /api/tile, e chiederlo su una
+    // risorsa same-origin può far fallire il caricamento quando in cache c'è già una risposta
+    // senza header CORS. Prima le tile arrivavano direttamente da tile.openstreetmap.org, che non
+    // manda gli header CORS: ogni caricamento falliva e il .catch() qui sotto riempiva il riquadro
+    // di grigio, ed è il motivo per cui le mappe nei PDF uscivano a scacchi grigi.
     img.onload  = () => resolve(img)
     img.onerror = reject
     img.src = url
@@ -136,7 +148,7 @@ export async function fetchSatMap(
       Array.from({ length: tilesW * tilesH }, (_, idx) => {
         const tx = minTX + (idx % tilesW)
         const ty = minTY + Math.floor(idx / tilesW)
-        const url = `https://tile.openstreetmap.org/${zoom}/${tx}/${ty}.png`
+        const url = `/api/tile?z=${zoom}&x=${tx}&y=${ty}&style=voyager&retina=1`
         return loadTileImage(url)
           .then(img => fctx.drawImage(img, (tx - minTX) * TILE_SIZE, (ty - minTY) * TILE_SIZE))
           .catch(() => {
@@ -153,7 +165,7 @@ export async function fetchSatMap(
     }
 
     // Draw route shadow then line
-    const lineW = Math.max(4, Math.min(8, full.width / 120))
+    const lineW = Math.max(8, Math.min(16, full.width / 120))
     fctx.lineCap = 'round'; fctx.lineJoin = 'round'
 
     fctx.strokeStyle = 'rgba(0,0,0,0.55)'; fctx.lineWidth = lineW + 3
@@ -245,7 +257,7 @@ export async function fetchAllRoutesSatMap(activities: ActivityMeta[], outW: num
       Array.from({ length: tilesW * tilesH }, (_, idx) => {
         const tx = minTX + (idx % tilesW)
         const ty = minTY + Math.floor(idx / tilesW)
-        const url = `https://tile.openstreetmap.org/${zoom}/${tx}/${ty}.png`
+        const url = `/api/tile?z=${zoom}&x=${tx}&y=${ty}&style=voyager&retina=1`
         return loadTileImage(url)
           .then(img => fctx.drawImage(img, (tx - minTX) * TILE_SIZE, (ty - minTY) * TILE_SIZE))
           .catch(() => {
@@ -260,8 +272,8 @@ export async function fetchAllRoutesSatMap(activities: ActivityMeta[], outW: num
       return { x: (xy.x - minTX) * TILE_SIZE, y: (xy.y - minTY) * TILE_SIZE }
     }
 
-    const PALETTE = ['#166534','#0369a1','#9333ea','#c2410c','#0f766e','#b45309','#be123c','#1d4ed8']
-    const lineW = Math.max(3, Math.min(6, full.width / 160))
+    const PALETTE = ROUTE_COLORS // vedi lib/designTokens.ts — prima una quarta copia della stessa lista
+    const lineW = Math.max(6, Math.min(12, full.width / 160))
     fctx.lineCap = 'round'; fctx.lineJoin = 'round'
 
     polylines.forEach(pl => {
@@ -317,7 +329,7 @@ export function chartAllRoutes(activities: ActivityMeta[], w: number, h: number)
 
   ctx.fillStyle = '#f0f9ff'; ctx.fillRect(0, 0, w, h)
 
-  const PALETTE = ['#166534','#0369a1','#9333ea','#c2410c','#0f766e','#b45309','#be123c','#1d4ed8']
+  const PALETTE = ROUTE_COLORS // vedi lib/designTokens.ts — prima una quarta copia della stessa lista
   polylines.forEach((pl, idx) => {
     ctx.strokeStyle = PALETTE[idx % PALETTE.length]
     ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round'

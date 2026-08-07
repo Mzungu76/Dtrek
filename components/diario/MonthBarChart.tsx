@@ -1,5 +1,10 @@
 import type { ActivityMeta } from '@/lib/blobStore'
 
+/**
+ * Le etichette restano su un font di sistema (Arial) di proposito: html2canvas serializza l'SVG
+ * inline in un data URL e lo carica come <img>, dove i webfont non si caricano. Vedi la nota più
+ * estesa in ProgressChart.tsx.
+ */
 export function MonthBarChart({ activities }: { activities: ActivityMeta[] }) {
   const counts = Array(12).fill(0)
   activities.forEach(a => {

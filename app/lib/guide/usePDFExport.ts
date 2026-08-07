@@ -103,15 +103,10 @@ export async function exportGuidePdfHtml(hike: PlannedHike, guideText: string): 
     React.createElement(GuideTemplate, { data, forPrint: true }),
   ))
 
-  // Safety net: wait for any <img> that isn't a data URL to finish loading
-  const imgs = Array.from(container.querySelectorAll<HTMLImageElement>('img'))
-  await Promise.all(imgs.map(img =>
-    new Promise<void>(resolve => {
-      if (img.complete) { resolve(); return }
-      img.onload  = () => resolve()
-      img.onerror = () => resolve()
-    }),
-  ))
+  // Attesa del caricamento immagini, ora nell'helper condiviso lib/pdfImages.ts: era l'unico dei
+  // tre percorsi PDF a farlo, e Diario e Resoconto ne avevano bisogno quanto questo.
+  const { waitForImages } = await import('@/lib/pdfImages')
+  await waitForImages(container)
 
   try {
     // lib/pdfPaginate.ts (already used by Diario) instead of html2pdf.js: it measures each

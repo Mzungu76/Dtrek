@@ -65,7 +65,9 @@ export default function GuideTemplate({ data, forPrint = false }: Props) {
       data-for-print={forPrint}
       style={{ width: forPrint ? '794px' : '100%' }}
     >
-      <div className="guide-print-page" style={{ padding: 0 }}>
+      {/* pdf-bleed: copertina a pagina piena, senza testatina né numero di pagina. Prima il piede
+          veniva disegnato sopra la fascia arancione delle statistiche, grigio su arancione. */}
+      <div className="guide-print-page pdf-bleed" style={{ padding: 0 }}>
         <GuideCover data={data} />
       </div>
 

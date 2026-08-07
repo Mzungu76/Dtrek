@@ -513,7 +513,9 @@ export default function ReportReader({
       const host = document.createElement('div')
       host.style.cssText = 'position:absolute;left:-10000px;top:0;width:794px;background:#fff;z-index:-1'
       const clone = printRoot.cloneNode(true) as HTMLElement
-      clone.style.cssText = 'width:794px;background:#fff;font-family:Georgia,serif'
+      // Nessun font-family qui: lo imposta HiddenPdfRoot con i token del brand. Prima questa riga
+      // forzava Georgia su tutto il documento, sovrascrivendo la tipografia dell'app.
+      clone.style.cssText = 'width:794px;background:#fff'
       host.appendChild(clone)
       document.body.appendChild(host)
       await nextLayout()

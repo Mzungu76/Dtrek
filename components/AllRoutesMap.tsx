@@ -2,6 +2,7 @@
 import 'leaflet/dist/leaflet.css'
 import type * as L from 'leaflet'
 import { useEffect, useRef } from 'react'
+import { ROUTE_COLORS } from '@/lib/designTokens'
 
 interface RouteEntry {
   id: string
@@ -16,20 +17,16 @@ interface Props {
   interactive?: boolean
 }
 
-const PALETTE = [
-  '#378d44',
-  '#c05a17',
-  '#2563eb',
-  '#9333ea',
-  '#dc2626',
-  '#0891b2',
-  '#d97706',
-  '#059669',
-]
+// Palette condivisa (lib/designTokens.ts), non più una copia locale: prima questo file, la
+// legenda del diario e i raster generati per il PDF avevano ciascuno la propria lista di colori,
+// quindi lo stesso percorso poteva risultare di un colore sulla mappa a schermo e di un altro
+// nella legenda o nel PDF.
+const PALETTE = ROUTE_COLORS
 
 export default function AllRoutesMap({ routes, height = '500px', interactive = true }: Props) {
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstance = useRef<L.Map | null>(null)
+  const resizeObserverRef = useRef<ResizeObserver | null>(null)
   const interactiveRef = useRef(interactive)
   interactiveRef.current = interactive
 
@@ -101,9 +98,21 @@ export default function AllRoutesMap({ routes, height = '500px', interactive = t
         const combined = allBounds.reduce((acc, b) => acc.extend(b), allBounds[0])
         map.fitBounds(combined, { padding: [24, 24] })
       }
+
+      // Leaflet misura il contenitore una volta, alla creazione, e non si accorge da solo se le
+      // sue dimensioni cambiano dopo — cosa che qui succede spesso: il Diario ricalcola il layout
+      // del libro (scala e altezza) man mano che foto e trackpoint arrivano in background dopo il
+      // render iniziale (vedi app/diario/page.tsx), e ogni volta le mappe già montate restavano
+      // con tile mancanti ai bordi o il tracciato non centrato, finché non si toccava manualmente
+      // la mappa. Senza questo osservatore Leaflet non lo saprebbe mai.
+      const ro = new ResizeObserver(() => map.invalidateSize())
+      ro.observe(mapRef.current!)
+      resizeObserverRef.current = ro
     })
 
     return () => {
+      resizeObserverRef.current?.disconnect()
+      resizeObserverRef.current = null
       if (mapInstance.current) {
         mapInstance.current.remove()
         mapInstance.current = null
