@@ -35,7 +35,6 @@ di condivisione (Fasi 0-4). Va ripassato alla fine di tutte le fasi.
 | B17 | `app/resoconto/[id]/HiddenPdfRoot.tsx:54` | `float: right` in un contenitore senza `overflow:hidden` né `display:flow-root`. La foto sfonda il bordo della card e, non contribuendo all'altezza del genitore, il punto di interruzione calcolato cade sopra di essa e **la taglia tra due pagine** | Verificato | 4.2 |
 | B18 | `app/components/guide/guide-print.css:513` + `GuideSection.tsx:191` | `column-count: 3` è incompatibile con l'impaginazione: i `bottom` dei blocchi nelle tre colonne sono interlacciati, quindi i tagli cadono in mezzo al testo | Verificato | 4.1 |
 | B19 | `app/components/guide/guide-print.css:94-104` | Titolo di copertina a 52px fissi senza `clamp` in un contenitore con `overflow: hidden`: un titolo lungo esce dal riquadro e **viene tagliato senza traccia** | Verificato | 4.1 |
-| B20 | `components/ShareModal.tsx:189-205` | `handleFacebook` e il ripiego di `handleCopy` condividono `window.location.href`, che dal resoconto è un URL **privato e autenticato**: chi apre il link dal feed vede la pagina di accesso. Il link pubblico corretto (`/s/{share_token}`) esiste ma non viene usato | Verificato | 2.1 |
 
 ### 1.3 Medi
 
@@ -49,8 +48,7 @@ di condivisione (Fasi 0-4). Va ripassato alla fine di tutte le fasi.
 | B27 | `app/api/resoconto/route.ts:326-331` | `?all=true` scarica il **markdown integrale di ogni resoconto** senza limite né paginazione, a ogni apertura del Diario. Non affrontato in Fase 3: risolverlo per bene richiede virtualizzare il libro (montare le pagine lazy), non solo l'endpoint — rimane un intervento a sé, più grosso della sola persistenza della configurazione | Verificato | non pianificata — da riprendere come intervento di performance a sé |
 | B30 | `components/diario/types.ts:40-43` | `GREEN`/`AMBER`/`BLUE`/`VIOLET` usano colori Tailwind standard (`#f0fdf4`, `#166534`, `#eff6ff`…), estranei alla palette DTrek. Le `StatCard` del diario sono verdi-Tailwind, non forest. Non toccato in Fase 3: sono temi di accento per widget dati, non l'identità tipografica/cromatica principale della pagina — cambiarli ora avrebbe allargato il diff senza risolvere un difetto segnalato dall'utente | Verificato | da valutare, cosmetico |
 | B32 | `app/leggi/r/[activityId]/page.tsx` | Il resoconto pubblico usa l'`activityId` in chiaro nell'URL invece di un token opaco, a differenza di `/s/[token]`. **Deliberatamente deferred a Fase 4**: la colonna `hike_reports.share_token` esiste già in produzione (indice unico verificato via MCP), ma migrare richiede toccare anche `app/api/share-report/route.ts` e il pannello "Pubblica PDF" di `ReportReader.tsx` — stesso file (`HiddenPdfRoot.tsx`) che la Fase 4.2 riscrive comunque da zero | Verificato | 4.2 |
-| B35 | `utils/shareImage/canvasHelpers.ts:18` vs `components/ShareModal.tsx:282` | Il formato «16:9» produce in realtà 1200×630 (rapporto 1,90), mentre l'anteprima dichiara `aspectRatio: '16/9'`: anteprima e file esportato non coincidono | Verificato | 2.1 |
-| B36 | `lib/blobStore.ts:120` | `ActivityMeta.routePolyline` è ridotta a **60 punti** da `downsamplePolyline`. Le immagini condivise di statistiche e mappa lavorano su quella, quindi con tracciati molto spezzati il percorso risulta spigoloso | Verificato | 2.1 |
+| B36 | `lib/blobStore.ts:120` | `ActivityMeta.routePolyline` è ridotta a **60 punti** da `downsamplePolyline`. **Parzialmente risolto in Fase 2**: la condivisione di una singola escursione (`ResocontoHub.tsx`) ora ricostruisce la polilinea piena da `activity.trackPoints` invece di leggere il campo ridotto — vedi §5. Resta aperto per la mappa multi-percorso «Le mie escursioni» (`generateMapImage`, invocata da `TabPanoramica.tsx`) e per statistiche/confronto, che continuano a lavorare sulle `ActivityMeta` così come arrivano da `blobStore` | Verificato | 2.1 (parziale) |
 | B37 | `utils/pdfExport/planned.ts:59-60`, `activity.ts:69-70`, `usePDFExport.ts:36-37` | Campionamento della traccia **a indice fisso**, non geometrico, riscritto tre volte. `lib/downsamplePolyline.ts` esiste e non è usata da nessuno dei tre. Su 12.000 punti se ne tiene 1 ogni 40: i tornanti vengono tagliati in linea retta | Verificato | 4.3 |
 
 ### 1.4 Minori
@@ -78,7 +76,7 @@ di condivisione (Fasi 0-4). Va ripassato alla fine di tutte le fasi.
 | V04 | `app/components/guide/guide-print.css` | Quattro grigi ad hoc (`#1C1C1C`, `#2D2D2D`, `#3D3D3D`, `#44403c`), bordo `#e8e4de` inventato, e `#fafaf8` e `#f8f7f4` usati entrambi come fondo tenue. Da uniformare su `lib/designTokens.ts` in Fase 4.1 |
 | V05 | `app/components/guide/guide-print.css:449` e altre | `text-align: justify` a 10,5px su tre colonne produce fiumi bianchi vistosi. Valutare la bandiera a sinistra |
 | V06 | Tutti i PDF | I font del brand **non sono incorporati** nei documenti jsPDF: testatine e numeri di pagina usano Helvetica. Incorporare Barlow Condensed in base64 è possibile ma pesa; da decidere in Fase 4 |
-| V07 | `lib/activityPhotos.ts` | Le foto **non hanno miniatura**: un carosello di 10 foto scarica 10 file a piena risoluzione. Valutare una colonna `thumb_url` o il ridimensionamento lato client in Fase 2.2 |
+| V07 | `lib/activityPhotos.ts` | Le foto **non hanno miniatura**: un carosello di 10 foto scarica 10 file a piena risoluzione. **Ancora aperto dopo la Fase 2.2**: il carosello (`utils/shareImage/carousel.ts`) disegna ogni foto ritagliata a scheda polaroid (`aspectFitCrop`), ma il *download e il decode* restano a piena risoluzione — il ritaglio avviene dopo, sul canvas. Non risolto in questa fase: richiede o una colonna `thumb_url` popolata all'upload, o un ridimensionamento lato client prima del `drawImage` (rifare `loadRemoteImageEl` passando per un canvas intermedio) — entrambe vanno oltre l'ambito "condivisione" e toccano `lib/activityPhotos.ts`, condiviso anche da tutto il resto dell'app che mostra le foto |
 | V08 | `lib/mapSnapshot.ts` | La cattura MapLibre va provata su un dispositivo reale a bassa memoria: il contesto WebGL può andare perso e far scattare il ripiego. Verificare che il ripiego produca comunque una mappa accettabile |
 | V09 | `app/diario/page.tsx`, funzione `migrateLegacyConfigIfNeeded` | La migrazione da `localStorage` al `diary_config` server-side scatta solo se il config server è **esattamente** ai valori di default (`isConfigDefault`). È corretto per il rollout (nessun utente ha mai avuto un `diary_config` non-default prima di questa Fase), ma dopo il rollout una race a bassissimo rischio resta possibile: un dispositivo mai aperto da mesi, con `localStorage` legacy, potrebbe sovrascrivere una configurazione ormai genuinamente personalizzata da un altro dispositivo, SE quel dispositivo non ha mai completato la migrazione (flag `dtrek_diary_migrated_v1` mai scritto) — improbabile ma non impossibile. Nessuna azione richiesta, solo da tenere presente |
 | V10 | `app/diario/page.tsx`, `handleCoverUpload` | La vecchia copertina in data-URL (`localStorage['dtrek_diary_cover']`) **non viene migrata automaticamente**: richiederebbe riconvertirla in Blob e ricaricarla silenziosamente, e molte di quelle copertine potrebbero essere già state troncate/perse dal `QuotaExceededError` che B03 descriveva. Un utente con la vecchia copertina locale la perde silenziosamente al primo caricamento con la nuova versione e deve ricaricarla una volta — accettabile, ma da segnalare se emergono lamentele |
@@ -112,7 +110,7 @@ anche se non ancora usate dal codice (`share_token` resta per la Fase 4, vedi B3
 
 | Cosa | Dove | Nota |
 |---|---|---|
-| Due cucitori di tile completi | `utils/pdfExport/mapTiles.ts` e `utils/shareImage/tileHelpers.ts` | Stessa matematica scritta due volte con costanti divergenti. Con `lib/mapSnapshot.ts` ne resta uno solo, come ripiego |
+| Due cucitori di tile completi | `utils/pdfExport/mapTiles.ts` e `utils/shareImage/tileHelpers.ts` | Stessa matematica scritta due volte con costanti divergenti. **Fase 2**: `utils/shareImage/{activityImage,mapImage}.ts` non chiamano più `drawTiledMap`/`drawRouteOnTiles` direttamente — passano da `lib/mapSnapshot.ts`, che tiene `tileHelpers.ts` come unico ripiego interno. Resta da assorbire `utils/pdfExport/mapTiles.ts`, lato PDF (Fase 4) |
 | Palette tracciati triplicata | `mapTiles.ts` ×2, `app/diario/page.tsx:237` | Ora c'è `ROUTE_COLORS` in `lib/designTokens.ts` |
 | Campionamento traccia ×3 | vedi B37 | `lib/downsamplePolyline.ts` esiste già |
 | Ricampionamento grafici a 250 punti ×3 | `planned.ts:78`, `activity.ts:94,113` | Più una quarta variante a 40 punti in `buildGuideContent.ts:41` |
@@ -271,3 +269,100 @@ B45 (margine di stampa nativa, minore).
 creata in Fase 0) è ora la sorgente unica per `AllRoutesMap.tsx`, `DiarioMappa.tsx` e le due copie in
 `utils/pdfExport/mapTiles.ts` — prima quattro liste di colori scritte a mano, con la legenda del
 diario che poteva mostrare un colore diverso da quello del tracciato che stava descrivendo.
+
+### Fase 2 — Condivisione dai resoconti
+
+**Mappa su MapLibre (chiude parte di B36, apre la base per il carosello)**
+
+`utils/shareImage/activityImage.ts` e `mapImage.ts` non passano più da `drawTiledMap`/
+`drawRouteOnTiles` (tile raster CartoDB Voyager) ma da `renderRouteMap` (`lib/mapSnapshot.ts`, già
+pronto dalla Fase 0): basemap "outdoor" con rilievo e sentieri, nitidezza reale a `pixelRatio: 2`,
+attribuzione incisa nel PNG. `mapImage.ts` aveva una `ROUTE_COLORS` locale duplicata: rimossa a
+favore di quella condivisa in `lib/designTokens.ts`.
+
+La scheda "mappa a tutto campo" di `activityImage.ts` (gradiente, titolo, statistiche, profilo)
+è stata estratta nella funzione esportata `drawActivityMapCard`, con un parametro opzionale per
+passare una mappa già resa: il carosello la riusa per la copertina *senza* pagare una seconda volta
+il costo di MapLibre, e riusa di nuovo la stessa immagine come sfondo della scheda di chiusura —
+un solo `captureRouteMap` per l'intera sequenza, indipendentemente da quante schede produce.
+
+`ResocontoHub.tsx` non ricampiona più la traccia a 250 punti prima di passarla al modale di
+condivisione: la mappa vettoriale non ha nulla da guadagnare da una traccia più povera (a
+differenza delle tile raster, dove serviva a contenere il numero di segmenti disegnati), quindi ora
+riceve `activity.trackPoints` per intero. Chiude B36 solo per questo percorso — vedi la nota
+aggiornata su B36 in §1.3 per cosa resta fuori.
+
+**Formato 4:5 (Instagram Feed)**
+
+Aggiunto a `ShareFormat` con dimensioni 1080×1350, le stesse di `VIDEO_DIMS['4:5']` in
+`RouteMap3D.tsx:269` (coerenza con quanto il video già usa). Le dimensioni di ogni formato sono
+state estratte in `FORMAT_DIMS` (`canvasHelpers.ts`), unica fonte condivisa da `makeCanvas` e
+dall'anteprima del modale — **chiude B35 alla radice**: prima l'anteprima dichiarava
+`aspectRatio: '16/9'` mentre `makeCanvas` produceva 1200×630 (rapporto 1,905, non 1,778); con
+`FORMAT_DIMS` i due punti non possono più andare fuori sincrono, perché leggono lo stesso valore.
+
+**Link pubblico invece della pagina privata (chiude B20)**
+
+`handleFacebook` e il ripiego di `handleCopy` in `ShareModal.tsx` condividevano
+`window.location.href` — per il resoconto, un URL privato e autenticato: chi apriva il link dal feed
+vedeva la schermata di accesso. Nuovo `getShareUrl()`: per `kind === 'activity'` crea il link
+pubblico `/s/{token}` al volo se non esiste ancora (prima l'utente doveva averlo già creato a mano
+nel pannello "Link pubblico" perché Facebook/Copia funzionassero in modo sensato), altrimenti
+riusa quello esistente. Per `stats`/`comparison`/`map` non esiste un concetto di link pubblico:
+il pulsante Facebook per questi tre tipi è ora disattivato invece di condividere silenziosamente
+una pagina privata — non era nell'ambito di questa fase costruire link pubblici anche per quelle
+viste, ma lasciarli attivi e rotti sarebbe stata una regressione mascherata da correzione parziale.
+
+**Nuova modalità carosello**
+
+`utils/shareImage/carousel.ts` (nuovo): `generateCarousel(activity, photos, opts, fmt)` produce
+copertina → una scheda per gruppo di foto vicine → scheda dati opzionale → chiusura, come sequenza
+di PNG. Riuso diretto, senza riscriverlo, del codice canvas 2D dello Studio Video:
+
+| Cosa | Da | Uso nel carosello |
+|---|---|---|
+| `drawStopPhotoZoom` + `StopPhoto` | `lib/videoOverlays.ts:826,764` | Scheda foto (polaroid, fino a 4 per scheda, con didascalia se ≤2) — chiamato con `zoomT=1, stopT=0` per un fotogramma fermo già completamente aperto |
+| `drawMiniMap` + `buildMiniRoute` | `:660,642` | Mini-mappa d'insieme nell'angolo di ogni scheda foto, con il punto sulla posizione del gruppo |
+| `groupPhotoTimings` + `buildCumulativeDistances`/`progressToDistanceM` | `lib/videoPhotoCarousel.ts:26,54,73` | Raggruppa foto scattate entro 50m di percorso in un'unica scheda, invece di una scheda per foto |
+| `drawNumbersBeat` / `drawElevationBeat` | `lib/videoOverlays.ts:1380,1395` | Scheda dati opzionale — altimetria se il profilo è disponibile, altrimenti i tre numeri principali. Chiamati con `t=0.85`: oltre la soglia (`k>0.55` per l'altimetria, `k>0.64` per l'ultima riga della griglia numeri) a cui l'animazione di ingresso è già completa |
+| `drawEndCard` | `:1849` | Chiusura, con `fade=1` (a regime) sopra la stessa mappa già resa per la copertina |
+| `safeInsetsFor` | `:81` | Margine della mini-mappa, per restare fuori dalle zone coperte dall'interfaccia di Instagram Stories |
+| `loadRemoteImageEl` (nuovo, `canvasHelpers.ts`) | — | `crossOrigin='anonymous'` prima di `.src` per ogni foto Supabase disegnata su un canvas destinato a `toDataURL()` — senza, `SecurityError` anche su bucket pubblico (stesso vincolo già documentato in `RouteMap3D.tsx:1194`) |
+
+**Non riusati, con motivazione** (valutati durante la Fase 2, scartati deliberatamente):
+- `selectPhotosAvoidingCrowding` (`lib/videoTimeline.ts:231`) — richiede `routeSeconds`, un
+  concetto legato al montaggio video (durata in secondi), non pertinente a una sequenza statica;
+- `suggestCaptions` (`lib/videoCaptions.ts:61`) — estrae didascalie dal testo della **guida**; le
+  foto del resoconto hanno già una didascalia propria scritta dall'utente, fonte diversa e già
+  presente;
+- `StudioControl`/`StudioGroup` (`lib/videoStudio.ts`) — modello a dati per il pannello a due
+  colonne dello Studio Video; il modale di condivisione resta sul pattern `Toggle` già in uso,
+  coerente con `stats`/`comparison`/`map` nello stesso file.
+
+**Copertina con pin numerati**: la mappa della copertina (e della chiusura) riceve un marker
+`kind: 'photo'` per ogni foto inclusa con coordinate GPS note, numerato nello stesso ordine delle
+schede del carosello — usa il sistema di marker già presente in `lib/mapSnapshot.ts`
+(`captureRouteMap`'s `markers`), non `drawPhotoPin` di `videoOverlays.ts` (quest'ultimo richiede le
+coordinate proiettate `map.project()` di un'istanza mappa viva, non disponibili dopo che
+`captureRouteMap` ha già chiuso la mappa e restituito un PNG piatto).
+
+**Numerazione delle schede**: ogni immagine del carosello riceve un pallino "N / totale" in alto a
+sinistra, ridisegnato in un secondo passaggio sul PNG già prodotto (funzione `withSlideIndex`) — un
+solo punto che sa quante schede ci sono in totale, invece di doverlo passare a ognuno dei quattro
+rami che generano una scheda.
+
+**Esportazione**: `navigator.share` con più file quando il dispositivo lo supporta (verificato con
+`navigator.canShare({ files })` sull'array intero, non su un file alla volta), altrimenti ZIP via
+`fflate` (`zipSync`, già una dipendenza del progetto — vedi `lib/kmzExtract.ts` per l'uso gemello in
+lettura). Il download della singola scheda resta disponibile anche in modalità carosello (scarica
+solo quella a fuoco nell'anteprima).
+
+**UI**: selettore di modalità (Scheda singola ⇄ Carosello) in `ShareModal.tsx`, visibile solo per
+`kind === 'activity'` quando `photos.length > 0`. Elenco foto con miniatura, inclusione a
+toggle e campo didascalia modificabile per quel carosello (non tocca la didascalia salvata
+sull'attività). `ResocontoHub.tsx` ora passa `photos` al modale — prima non veniva passata affatto,
+il carosello non era costruibile.
+
+**Non affrontato in questa fase** (motivato singolarmente in §1/§2): B36 resta aperto per
+`generateMapImage`/`stats`/`comparison` (non ricevono la traccia piena); V07 (foto senza miniatura)
+si applica ora anche al download delle schede del carosello, non solo alla galleria.

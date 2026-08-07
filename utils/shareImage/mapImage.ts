@@ -1,14 +1,13 @@
 import type { ActivityMeta } from '@/lib/blobStore'
-import { FONT, makeCanvas, drawDarkBg, drawLogo, DARK, type ShareFormat } from './canvasHelpers'
-import { drawTiledMap, drawRouteOnTiles } from './tileHelpers'
+import { FONT, makeCanvas, drawDarkBg, drawLogo, loadImageEl, DARK, type ShareFormat } from './canvasHelpers'
+import { renderRouteMap } from '@/lib/mapSnapshot'
+import { ROUTE_COLORS } from '@/lib/designTokens'
 
 export interface MapShareOpts {
   showCount: boolean
 }
 
-// ─── MAP IMAGE — all routes on full-bleed dark tiles ──────────────────────────
-
-const ROUTE_COLORS = ['#3b82f6', '#ef4444', '#22c55e', '#a855f7', '#f97316', '#06b6d4', '#eab308', '#ec4899']
+// ─── MAP IMAGE — all routes on full-bleed map ──────────────────────────────────
 
 export async function generateMapImage(
   activities: ActivityMeta[],
@@ -29,13 +28,12 @@ export async function generateMapImage(
     return canvas.toDataURL('image/png')
   }
 
-  // Full-bleed map
-  const tileCtx = await drawTiledMap(ctx, polylines, 0, 0, w, h, { fillCanvas: true, style: 'voyager' })
-
-  // Draw all routes
-  polylines.forEach((poly, i) => {
-    drawRouteOnTiles(ctx, poly, tileCtx.pixelOf, ROUTE_COLORS[i % ROUTE_COLORS.length], 3)
+  // Full-bleed map — tutti i percorsi, ognuno con il proprio colore dalla palette DTrek condivisa
+  const mapDataUrl = await renderRouteMap({
+    polylines, width: w, height: h, pixelRatio: 2, colors: ROUTE_COLORS,
   })
+  const mapImg = await loadImageEl(mapDataUrl)
+  ctx.drawImage(mapImg, 0, 0, w, h)
 
   // Top header gradient + text
   const headerH = 140

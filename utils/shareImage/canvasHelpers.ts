@@ -1,4 +1,7 @@
-export type ShareFormat = '1:1' | '16:9' | '9:16'
+// '4:5' aggiunto (era assente: il video ce l'ha già in VIDEO_DIMS, RouteMap3D.tsx:267): è il
+// formato più efficiente per il feed di Instagram, che mostra le immagini più alte del quadrato
+// senza tagliarle come farebbe con una Storia messa nel feed.
+export type ShareFormat = '1:1' | '4:5' | '16:9' | '9:16'
 
 // ─── Canvas utils ─────────────────────────────────────────────────────────────
 
@@ -15,11 +18,19 @@ export const DARK = {
   cardBorder: 'rgba(255,255,255,0.13)',
 }
 
+// Dimensioni fisiche in px di ogni formato — unica fonte, così l'anteprima del modale (che deve
+// dichiarare lo stesso rapporto d'aspetto del PNG reale) non può più andare fuori sincrono da
+// `makeCanvas` come accadeva per il 16:9, dichiarato 16/9 nel modale ma renderizzato a 1200×630
+// (rapporto 1,905, non 1,778).
+export const FORMAT_DIMS: Record<ShareFormat, [number, number]> = {
+  '1:1':  [1080, 1080],
+  '4:5':  [1080, 1350],
+  '9:16': [1080, 1920],
+  '16:9': [1200, 630],
+}
+
 export function makeCanvas(fmt: ShareFormat): [HTMLCanvasElement, CanvasRenderingContext2D, number, number] {
-  const [w, h] =
-    fmt === '1:1'  ? [1080, 1080] :
-    fmt === '9:16' ? [1080, 1920] :
-                     [1200, 630]
+  const [w, h] = FORMAT_DIMS[fmt]
   const canvas = document.createElement('canvas')
   canvas.width = w; canvas.height = h
   return [canvas, canvas.getContext('2d')!, w, h]
@@ -135,6 +146,26 @@ export function drawElevationProfile(
   ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 4 * scale
   ctx.fillText(`${Math.round(max)} m`, pkx + (ctx.textAlign === 'right' ? -8 : 8) * scale, pky - 6 * scale)
   ctx.restore()
+}
+
+/** Carica una `src` (data URL o URL remoto) come `<img>` pronta per `ctx.drawImage`. */
+export function loadImageEl(src: string): Promise<HTMLImageElement> {
+  return new Promise((res, rej) => {
+    const img = new Image()
+    img.onload = () => res(img); img.onerror = rej; img.src = src
+  })
+}
+
+/** Come `loadImageEl`, ma per immagini remote (es. foto su Supabase Storage) che finiranno
+ *  disegnate su un canvas destinato a `toDataURL()`: senza `crossOrigin`, quella chiamata lancia
+ *  `SecurityError` anche se il bucket è pubblico — stesso accorgimento già in uso per lo Studio
+ *  Video (`RouteMap3D.tsx:1194`). */
+export function loadRemoteImageEl(src: string): Promise<HTMLImageElement> {
+  return new Promise((res, rej) => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => res(img); img.onerror = rej; img.src = src
+  })
 }
 
 export function fitText(ctx: CanvasRenderingContext2D, text: string, maxW: number): string {
