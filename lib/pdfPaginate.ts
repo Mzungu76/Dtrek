@@ -30,12 +30,14 @@
 
 import { waitForImages, flattenObjectFit } from './pdfImages'
 
-const PAGE_W = 794   // A4 @ 96dpi (px)
-const PAGE_H = 1123
+import {
+  PDF_PAGE_W as PAGE_W, PDF_PAGE_H as PAGE_H,
+  PDF_HEADER_H as HEADER_H, PDF_FOOTER_H as FOOTER_H, PDF_CONTENT_H as CONTENT_H,
+} from './pdfPageGeometry'
 
-const HEADER_H = 30
-const FOOTER_H = 26
-const CONTENT_H = PAGE_H - HEADER_H - FOOTER_H
+// Ri-esportate per i chiamanti che già impaginano da qui; i *template* devono importarle da
+// `lib/pdfPageGeometry.ts`, che non trascina html2canvas/jsPDF nel loro bundle.
+export { PDF_PAGE_W, PDF_PAGE_H, PDF_CONTENT_H } from './pdfPageGeometry'
 
 /** Tetto all'area di un singolo canvas, con margine sotto il limite iOS (~16,7 Mpx). */
 const MAX_CANVAS_PX = 12_000_000
@@ -54,6 +56,20 @@ export interface PaginateOptions {
 }
 
 /**
+ * Sottoalberi che html2canvas deve saltare quando clona il documento.
+ *
+ * Serve per una ragione di costo, non di aspetto: html2canvas clona l'INTERO documento a ogni
+ * chiamata, e questo modulo lo chiama una volta per blocco di pagine. Il Diario tiene a schermo
+ * il libro completo (decine di pagine A4) mentre l'host fuori schermo ne contiene altrettanti
+ * cloni: senza potatura ogni cattura ricopia entrambi, e il costo cresce col quadrato del numero
+ * di pagine — il motivo per cui pubblicare un diario lungo diventava lentissimo.
+ *
+ * Chi impagina marca ciò che è già stato clonato altrove (o che comunque non deve finire nel PDF)
+ * con `data-pdf-ignore`, e la cattura non lo attraversa nemmeno.
+ */
+const IGNORE_ATTR = 'data-pdf-ignore'
+
+/**
  * jsPDF con i font di base codifica il testo in WinAnsi (CP1252). I caratteri fuori da quel
  * repertorio non vengono resi.
  *
@@ -69,15 +85,54 @@ export function pdfSafe(s: string): string {
   return s.replace(/[^\x20-\xFF]/g, c => (CP1252_HIGH.includes(c) ? c : '')).trim()
 }
 
+/**
+ * Blocchi che non devono restare ultimi in pagina: tagliare subito sotto li lascerebbe orfani,
+ * separati da ciò che introducono. Tipicamente le intestazioni di sezione — nel PDF del resoconto
+ * si vedeva «02 CRONACA» da solo in fondo a una pagina, col testo che ricominciava sulla
+ * successiva.
+ */
+const KEEP_NEXT_SELECTOR = '.pdf-keep-next'
+
 /** Punti di taglio sicuri dentro `el`, in px CSS relativi al suo bordo superiore. */
 function safeBreaks(el: HTMLElement, softBreakSelector: string, totalH: number): number[] {
   const elTop = el.getBoundingClientRect().top
   const breaks = new Set<number>([0, totalH])
   el.querySelectorAll<HTMLElement>(softBreakSelector).forEach(b => {
-    const bottom = Math.round(b.getBoundingClientRect().bottom - elTop)
+    if (b.matches(KEEP_NEXT_SELECTOR)) return
+    // Il margine inferiore non fa parte del rect, ma è spazio bianco a tutti gli effetti: tagliare
+    // dentro di esso invece che a filo dell'ultima riga tiene il taglio lontano dai glifi, che con
+    // certi font sporgono di un paio di px sotto il bordo della loro riga.
+    const marginBottom = parseFloat(getComputedStyle(b).marginBottom) || 0
+    const bottom = Math.round(b.getBoundingClientRect().bottom - elTop + marginBottom / 2)
     if (bottom > 0 && bottom < totalH) breaks.add(bottom)
   })
   return Array.from(breaks).sort((a, b) => a - b)
+}
+
+/**
+ * Fondo di ogni riga di testo dentro `el`. Sono punti di ripiego, usati solo quando nessun
+ * `.pdf-block` entra nella pagina rimasta.
+ *
+ * Senza di essi il paginatore, non trovando un confine sicuro, tagliava all'altezza esatta della
+ * pagina — cioè in mezzo a una riga, lasciando la metà superiore dei caratteri su una pagina e la
+ * metà inferiore su quella dopo. Con i riquadri di riga il taglio peggiore possibile cade *fra*
+ * due righe dello stesso paragrafo, che è la normale interruzione tipografica.
+ */
+function lineBreaks(el: HTMLElement, totalH: number): number[] {
+  const elTop = el.getBoundingClientRect().top
+  const out = new Set<number>()
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+  const range = document.createRange()
+  let node: Node | null
+  while ((node = walker.nextNode())) {
+    if (!node.nodeValue?.trim()) continue
+    range.selectNodeContents(node)
+    for (const r of Array.from(range.getClientRects())) {
+      const bottom = Math.round(r.bottom - elTop)
+      if (bottom > 0 && bottom < totalH) out.add(bottom)
+    }
+  }
+  return Array.from(out).sort((a, b) => a - b)
 }
 
 /**
@@ -86,8 +141,17 @@ function safeBreaks(el: HTMLElement, softBreakSelector: string, totalH: number):
  * intera non c'è alternativa al taglio forzato: è il segnale che quel blocco va spezzato in
  * `.pdf-block` più piccoli nel template.
  */
-function sliceHeights(breaks: number[], totalH: number, availH: number): { top: number; height: number }[] {
+function sliceHeights(
+  breaks: number[],
+  totalH: number,
+  availH: number,
+  fallbackBreaks: number[] = [],
+): { top: number; height: number }[] {
   const slices: { top: number; height: number }[] = []
+  const lastFitting = (list: number[], start: number, ideal: number) => {
+    const fitting = list.filter(y => y > start && y <= ideal)
+    return fitting.length ? fitting[fitting.length - 1] : null
+  }
   let start = 0
   while (start < totalH - 1) {
     const ideal = start + availH
@@ -95,8 +159,12 @@ function sliceHeights(breaks: number[], totalH: number, availH: number): { top: 
     if (ideal >= totalH) {
       end = totalH
     } else {
-      const fitting = breaks.filter(y => y > start && y <= ideal)
-      end = fitting.length ? fitting[fitting.length - 1] : ideal
+      // Preferenza: confine di blocco. Ripiego: fine di una riga di testo. Ultima spiaggia: il
+      // bordo pagina — succede solo se un singolo blocco è più alto di una pagina intera e non
+      // contiene testo (per esempio un'immagine fuori misura).
+      end = lastFitting(breaks, start, ideal)
+        ?? lastFitting(fallbackBreaks, start, ideal)
+        ?? ideal
     }
     slices.push({ top: start, height: end - start })
     start = end
@@ -153,7 +221,12 @@ export async function paginateToPdf(
     const bleed = el.matches(bleedSelector)
     const availH = bleed ? PAGE_H : CONTENT_H
     const breaks = safeBreaks(el, softBreakSelector, totalH)
-    for (const s of sliceHeights(breaks, totalH, availH)) {
+    // I riquadri di riga si calcolano solo se servono davvero, cioè se esiste almeno un tratto
+    // fra due confini di blocco più lungo di una pagina: su un documento già ben spezzato in
+    // `.pdf-block` è un costo inutile.
+    const needsFallback = [...breaks, totalH].some((y, k, arr) => k > 0 && y - arr[k - 1] > availH)
+    const fallback = needsFallback ? lineBreaks(el, totalH) : []
+    for (const s of sliceHeights(breaks, totalH, availH, fallback)) {
       plan.push({ el, top: s.top, height: s.height, bleed })
     }
   }
@@ -166,11 +239,23 @@ export async function paginateToPdf(
   // più pagine invece di pagarla una volta per pagina.
   const maxChunkH = Math.floor(MAX_CANVAS_PX / (PAGE_W * scale * scale))
 
+  // Gli elementi da impaginare stanno tutti nello stesso contenitore fuori schermo, quindi ogni
+  // cattura clonerebbe anche tutti gli altri. Marcandoli si cattura solo quello di turno: con N
+  // pagine il costo passa da N cloni di N pagine (quadratico) a N cloni di una pagina.
+  const isolate = (keep: HTMLElement) => {
+    for (const other of elements) {
+      if (other === keep) other.removeAttribute(IGNORE_ATTR)
+      else other.setAttribute(IGNORE_ATTR, '')
+    }
+  }
+
   let pageNo = 0
   let i = 0
+  try {
   while (i < plan.length) {
     const el = plan[i].el
     const chunkTop = plan[i].top
+    isolate(el)
     let j = i
     let chunkH = 0
     while (
@@ -188,6 +273,10 @@ export async function paginateToPdf(
       useCORS: true,
       allowTaint: false,
       logging: false,
+      // Pota i sottoalberi marcati prima ancora di clonarli — vedi IGNORE_ATTR. `el` non è mai
+      // fra questi: è l'elemento che stiamo catturando, e html2canvas non applica il filtro alla
+      // radice.
+      ignoreElements: (node: Element) => node.hasAttribute?.(IGNORE_ATTR) ?? false,
       // x/y sono offset relativi all'elemento (html2canvas li somma ai suoi bounds), quindi questa
       // è esattamente la banda voluta e il canvas prodotto ha la dimensione del solo ritaglio.
       x: 0,
@@ -225,6 +314,11 @@ export async function paginateToPdf(
 
     chunk.width = 0; chunk.height = 0
     i = j
+  }
+  } finally {
+    // Gli elementi possono essere cloni usa e getta o DOM vivo (il Diario passa cloni, ma nulla lo
+    // impone): la marcatura va tolta comunque, anche se la cattura è fallita a metà.
+    for (const el of elements) el.removeAttribute(IGNORE_ATTR)
   }
 
   // ── Passo 4: testatina e piede su ogni pagina FISICA ─────────────────────────────────────────

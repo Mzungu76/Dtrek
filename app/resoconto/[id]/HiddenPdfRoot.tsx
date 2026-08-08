@@ -7,6 +7,7 @@ import { POI_META } from '@/lib/overpass'
 import type { WikiPage } from '@/lib/wikipedia'
 import { formatDuration } from '@/lib/tcxParser'
 import { buildElevationSvgPath, downsampleSeries } from '@/lib/elevationSvgPath'
+import { parseInlineEmphasis } from '@/lib/guideMarkup'
 import { narrativeStyleFor } from '@/components/resoconto/sectionStyle'
 import { slotFor } from './sectionPhotoSlot'
 
@@ -109,7 +110,10 @@ export function HiddenPdfRoot({ activity, heroPhoto, dateStr, sections, photos, 
           const paragraphs = section.body.split(/\n\n+/).map(p => p.replace(/\[curiosita\]|\[\/curiosita\]/g, '').trim()).filter(Boolean)
           return (
             <div key={i} style={{ marginBottom: 24 }}>
-              <div className="pdf-block" style={{ background: color, padding: '6px 16px', borderRadius: '6px 6px 0 0', display: 'flex', alignItems: 'center', gap: 8 }}>
+              {/* `pdf-keep-next`: l'intestazione non può essere l'ultima cosa in pagina. Senza,
+                  il taglio cadeva volentieri subito sotto di essa e la lasciava orfana in fondo,
+                  col testo della sezione che ricominciava sulla pagina dopo. */}
+              <div className="pdf-block pdf-keep-next" style={{ background: color, padding: '6px 16px', borderRadius: '6px 6px 0 0', display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.7)', fontFamily: FONT.barlow, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase' }}>{String(i + 1).padStart(2, '0')}</span>
                 <span style={{ fontSize: 14, fontFamily: FONT.display, fontWeight: 700, color: 'white', textTransform: 'uppercase', letterSpacing: 1 }}>{section.title}</span>
               </div>
@@ -126,7 +130,7 @@ export function HiddenPdfRoot({ activity, heroPhoto, dateStr, sections, photos, 
                         <img src={sectionPhoto.url} alt={sectionPhoto.caption} crossOrigin="anonymous" style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 6 }} />
                         <span style={{ position: 'absolute', top: 4, left: 4, width: 16, height: 16, background: '#c05a17', color: 'white', borderRadius: '50%', fontSize: 8, fontWeight: 'bold', fontFamily: FONT.barlow, textAlign: 'center', lineHeight: '16px', display: 'block', boxSizing: 'border-box' }}>{slot + 1}</span>
                       </div>
-                      {sectionPhoto.caption && <p style={{ fontFamily: FONT.lora, fontSize: 8, color: STONE[400], textAlign: 'center', marginTop: 3, fontStyle: 'italic' }}>{sectionPhoto.caption}</p>}
+                      {sectionPhoto.caption && <p style={{ fontFamily: FONT.lora, fontSize: 8, lineHeight: 1.5, color: STONE[400], textAlign: 'center', marginTop: 3, fontStyle: 'italic' }}>{sectionPhoto.caption}</p>}
                     </div>
                   )}
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -138,7 +142,15 @@ export function HiddenPdfRoot({ activity, heroPhoto, dateStr, sections, photos, 
                       // paragrafo ha il proprio blocco, così un racconto lungo scorre su più
                       // pagine senza mai tagliare un paragrafo in due (prima l'intera sezione,
                       // fino a 3000px, era un blocco solo).
-                      <p key={j} className="pdf-block" style={{ fontFamily: FONT.lora, fontSize: 11, lineHeight: 1.7, color: STONE[700], margin: '0 0 8px' }}>{p}</p>
+                      <p key={j} className="pdf-block" style={{ fontFamily: FONT.lora, fontSize: 11, lineHeight: 1.7, color: STONE[700], margin: '0 0 8px' }}>
+                        {/* Il corpo è markdown: gli asterischi dell'enfasi vanno resi, non
+                            stampati (nel PDF si leggeva `****9 chilometri****`). */}
+                        {parseInlineEmphasis(p).map((seg, k) =>
+                          seg.bold
+                            ? <strong key={k} style={{ fontWeight: 700 }}>{seg.text}</strong>
+                            : <span key={k}>{seg.text}</span>,
+                        )}
+                      </p>
                     ))}
                   </div>
                 </div>
@@ -159,7 +171,10 @@ export function HiddenPdfRoot({ activity, heroPhoto, dateStr, sections, photos, 
                     : <div style={{ width: 44, height: 44, borderRadius: 4, flexShrink: 0, background: POI_META[poi.type]?.color ?? STONE[300] }} />
                   }
                   <div style={{ minWidth: 0 }}>
-                    <p style={{ fontFamily: FONT.display, fontSize: 11, fontWeight: 700, color: INK, margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{wiki.title}</p>
+                    {/* `lineHeight` esplicito: con `overflow:hidden` html2canvas ritaglia al box
+                        del contenuto, e un serif senza interlinea dichiarata sporge sotto — nel
+                        PDF i nomi dei luoghi uscivano tagliati a metà altezza. */}
+                    <p style={{ fontFamily: FONT.display, fontSize: 11, lineHeight: 1.45, fontWeight: 700, color: INK, margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{wiki.title}</p>
                     <p style={{ fontFamily: FONT.body, fontSize: 8.5, color: STONE[500], margin: '2px 0 0' }}>{POI_META[poi.type]?.label ?? poi.type} · {distLabel(poi.distFromTrack)}</p>
                   </div>
                 </div>
@@ -179,7 +194,7 @@ export function HiddenPdfRoot({ activity, heroPhoto, dateStr, sections, photos, 
                     <img src={ph.url} alt={ph.caption} crossOrigin="anonymous" style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 6 }} />
                     <span style={{ position: 'absolute', top: 4, left: 4, width: 16, height: 16, background: '#c05a17', color: 'white', borderRadius: '50%', fontSize: 7, fontWeight: 'bold', fontFamily: FONT.barlow, textAlign: 'center', lineHeight: '16px', display: 'block', boxSizing: 'border-box', border: '1px solid white' }}>{i + 1}</span>
                   </div>
-                  {ph.caption && <p style={{ fontFamily: FONT.lora, fontSize: 8, color: STONE[400], textAlign: 'center', marginTop: 3, fontStyle: 'italic' }}>{i + 1}. {ph.caption}</p>}
+                  {ph.caption && <p style={{ fontFamily: FONT.lora, fontSize: 8, lineHeight: 1.5, color: STONE[400], textAlign: 'center', marginTop: 3, fontStyle: 'italic' }}>{i + 1}. {ph.caption}</p>}
                 </div>
               ))}
             </div>

@@ -6,6 +6,33 @@
 // il pre-trattamento del testo (il PDF riceve il testo grezzo, lo schermo lo riceve già ripulito a
 // monte) restano scelte del chiamante.
 
+/**
+ * Spezza una riga nei suoi tratti in grassetto e non, riconoscendo `**testo**` (e la variante a
+ * quattro asterischi che i modelli producono ogni tanto quando enfatizzano un testo già in
+ * grassetto).
+ *
+ * Serve perché il testo delle sezioni è markdown, ma finora veniva stampato alla lettera: nel PDF
+ * del resoconto si leggeva `****9 chilometri****` invece di **9 chilometri**. Restituisce segmenti
+ * invece di HTML per restare indipendente dal framework — chi rende decide se usare `<strong>`,
+ * un `font-weight` su canvas o altro.
+ */
+export interface InlineSegment { text: string; bold: boolean }
+
+export function parseInlineEmphasis(raw: string): InlineSegment[] {
+  const out: InlineSegment[] = []
+  const re = /\*{2,4}([^*]+?)\*{2,4}/g
+  let last = 0
+  let m: RegExpExecArray | null
+  while ((m = re.exec(raw)) !== null) {
+    if (m.index > last) out.push({ text: raw.slice(last, m.index), bold: false })
+    out.push({ text: m[1], bold: true })
+    last = m.index + m[0].length
+  }
+  if (last < raw.length) out.push({ text: raw.slice(last), bold: false })
+  // Asterischi spaiati rimasti (enfasi aperta e mai chiusa): meglio toglierli che stamparli.
+  return out.filter(s => s.text.length > 0).map(s => ({ ...s, text: s.text.replace(/\*/g, '') }))
+}
+
 export interface MarkupBlock {
   type: 'text' | 'curiosita' | 'avviso' | 'subsection'
   text: string

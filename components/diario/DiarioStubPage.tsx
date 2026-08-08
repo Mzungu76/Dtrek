@@ -1,4 +1,5 @@
 import { FONT } from '@/lib/designTokens'
+import { PDF_PAGE_W, PDF_CONTENT_H } from '@/lib/pdfPageGeometry'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { EyeOff } from 'lucide-react'
@@ -15,7 +16,7 @@ export function DiarioStubPage({ activity, yearBand, onExclude }: {
   const dateStr = format(new Date(activity.startTime), 'd MMMM yyyy', { locale: it })
   return (
     <div className="diario-page diario-stub-page" style={{
-      width: 794, minHeight: 1123, background: '#fafaf9', margin: '24px auto',
+      width: PDF_PAGE_W, minHeight: PDF_CONTENT_H, background: '#fafaf9', margin: '24px auto',
       boxShadow: '0 4px 32px rgba(0,0,0,0.14)', border: '2px dashed #d6d3d1', position: 'relative', overflow: 'hidden',
     }}>
       {yearBand && <DiarioYearBand {...yearBand} />}
