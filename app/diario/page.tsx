@@ -433,7 +433,12 @@ export default function DiarioPage() {
       const MAP_CONCURRENCY = 5
       for (let i = 0; i < mapTasks.length; i += MAP_CONCURRENCY) {
         const batch = mapTasks.slice(i, i + MAP_CONCURRENCY)
-        const imgs = await Promise.all(batch.map(t => fetchSatMap(t.pts, 660, mapOutH(mapBoxAspect(t.pts, 0.18)), t.color)))
+        // Mappa del singolo resoconto contenuta: a 660 px di larghezza `mapOutH` può restituire
+        // fino a 733 px di altezza, e con statistiche e grafici davanti la coda non entrava in una
+        // pagina sola — ne serviva una seconda per la sola mappa, lasciando ~380 px bianchi sulla
+        // prima e ~380 sulla seconda. A 560x320 la coda di un resoconto sta tutta su una pagina.
+        const imgs = await Promise.all(batch.map(t => fetchSatMap(
+          t.pts, 560, Math.min(320, mapOutH(mapBoxAspect(t.pts, 0.18), 560)), t.color)))
         batch.forEach((t, j) => {
           const mapImg = imgs[j]
           if (mapImg) {
