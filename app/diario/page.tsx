@@ -112,6 +112,9 @@ export default function DiarioPage() {
   const [diaryToken,   setDiaryToken]   = useState<string | null>(null)
   const [downloading,  setDownloading]  = useState(false)
   const [publishing,   setPublishing]   = useState(false)
+  /** Pubblicazione del solo link: una PATCH da poche centinaia di byte, non ha nulla a che vedere
+   *  con la generazione del PDF e non deve condividerne né lo stato né gli errori. */
+  const [linkPublishing, setLinkPublishing] = useState(false)
   const [publishError, setPublishError] = useState<string | null>(null)
   const [publishProgress, setPublishProgress] = useState<{ done: number; total: number } | null>(null)
   const [copyOk,       setCopyOk]       = useState(false)
@@ -521,6 +524,35 @@ export default function DiarioPage() {
     }
   }
 
+  /**
+   * Pubblica il link pubblico, e basta.
+   *
+   * È l'operazione che prima non esisteva: condividere il Diario obbligava a generare e caricare
+   * il PDF (decine di MB da un telefono), e finché quell'upload non riusciva non c'era alcun link.
+   * Ora la pagina pubblica legge il contenuto dal database, quindi per condividere basta far
+   * esistere il token — una richiesta piccola, immediata e che non può impantanarsi.
+   */
+  async function publishLink() {
+    setLinkPublishing(true); setPublishError(null)
+    try {
+      const res = await fetch('/api/diary-token', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        // Corpo vuoto di proposito: assicura il token senza toccare `diary_pdf_url`, così
+        // pubblicare il link non cancella un PDF già allegato.
+        body: '{}',
+      })
+      if (!res.ok) throw new Error(`Pubblicazione non riuscita (${res.status})`)
+      const data = await res.json() as { diary_token?: string }
+      if (data.diary_token) setDiaryToken(data.diary_token)
+      else throw new Error('Il server non ha restituito il token del diario')
+    } catch (e) {
+      setPublishError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLinkPublishing(false)
+    }
+  }
+
   async function handleRevokeLink() {
     await fetch('/api/diary-token', { method: 'DELETE' })
     setDiaryPdfUrl(null)
@@ -720,7 +752,7 @@ export default function DiarioPage() {
         </RailButton>
 
         <div className="relative">
-          <RailButton onClick={() => setShowShareMenu(s => !s)} title="Condividi / pubblica" variant={diaryPdfUrl ? 'terra' : 'amber'}>
+          <RailButton onClick={() => setShowShareMenu(s => !s)} title="Condividi / pubblica" variant={diaryToken ? 'terra' : 'amber'}>
             <Share2 className="w-5 h-5 text-white" />
           </RailButton>
           {showShareMenu && (
@@ -744,36 +776,45 @@ export default function DiarioPage() {
                 </div>
               )}
 
-              {publishDisabledReason && !diaryPdfUrl && (
-                <p className="flex items-start gap-1.5 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
-                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-px" /> {publishDisabledReason}
-                </p>
-              )}
+              {publishError && <p className="text-xs text-red-500">{publishError}</p>}
 
-              {diaryPdfUrl ? (
+              {/* Il link è ora indipendente dal PDF: la pagina pubblica legge il contenuto dal
+                  database, quindi condividere costa una richiesta da poche centinaia di byte
+                  invece di un upload da decine di MB che su rete mobile si pianta. */}
+              {diaryToken ? (
                 <div className="space-y-1.5">
-                  {diaryToken && (
-                    <a href={`/leggi/d/${diaryToken}`} target="_blank" rel="noopener noreferrer"
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 text-xs font-barlow font-bold uppercase tracking-wide transition-colors">
-                      <ExternalLink className="w-3.5 h-3.5" /> Apri lettore
-                    </a>
-                  )}
+                  <a href={`/leggi/d/${diaryToken}`} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 text-xs font-barlow font-bold uppercase tracking-wide transition-colors">
+                    <ExternalLink className="w-3.5 h-3.5" /> Apri il diario
+                  </a>
                   <button onClick={async () => {
-                    const url = diaryToken
-                      ? `${window.location.origin}/leggi/d/${diaryToken}`
-                      : diaryPdfUrl
-                    await navigator.clipboard.writeText(url)
+                    await navigator.clipboard.writeText(`${window.location.origin}/leggi/d/${diaryToken}`)
                     setCopyOk(true); setTimeout(() => setCopyOk(false), 2000)
                   }}
                     className="w-full flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forest-600 text-white text-xs font-barlow font-bold uppercase tracking-wide hover:bg-forest-700 transition-colors">
                     <Copy className="w-3.5 h-3.5" /> {copyOk ? 'Copiato!' : 'Copia link'}
                   </button>
-                  <button onClick={() => generateAndUploadPdf(false)} disabled={publishing || !chartsAndPhotosReady}
-                    title={publishDisabledReason}
-                    className="w-full flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-stone-600 text-xs font-barlow font-bold uppercase tracking-wide hover:bg-stone-50 disabled:opacity-50 transition-colors">
-                    {publishing ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Aggiornamento…</> : <><RefreshCw className="w-3.5 h-3.5" /> Ripubblica</>}
-                  </button>
-                  {publishError && <p className="text-xs text-red-500">{publishError}</p>}
+
+                  <div className="pt-1.5 border-t border-stone-100 space-y-1.5">
+                    <p className="text-[10px] text-stone-400 leading-snug">
+                      {diaryPdfUrl
+                        ? 'Il PDF è allegato al link. Riaggiornalo se hai cambiato qualcosa.'
+                        : 'Facoltativo: allega un PDF scaricabile dalla pagina pubblica.'}
+                    </p>
+                    <button onClick={() => generateAndUploadPdf(false)} disabled={publishing || !chartsAndPhotosReady}
+                      title={publishDisabledReason}
+                      className="w-full flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-stone-600 text-xs font-barlow font-bold uppercase tracking-wide hover:bg-stone-50 disabled:opacity-50 transition-colors">
+                      {publishing
+                        ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Aggiornamento…</>
+                        : <><RefreshCw className="w-3.5 h-3.5" /> {diaryPdfUrl ? 'Aggiorna PDF allegato' : 'Allega il PDF'}</>}
+                    </button>
+                    {publishDisabledReason && (
+                      <p className="flex items-start gap-1.5 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-px" /> {publishDisabledReason}
+                      </p>
+                    )}
+                  </div>
+
                   <button onClick={handleRevokeLink}
                     className="w-full flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 text-red-400 text-xs hover:bg-red-50 transition-colors">
                     <Link2Off className="w-3.5 h-3.5" /> Rimuovi link
@@ -781,11 +822,12 @@ export default function DiarioPage() {
                 </div>
               ) : (
                 <>
-                  {publishError && <p className="text-xs text-red-500">{publishError}</p>}
-                  <button onClick={() => generateAndUploadPdf(false)} disabled={publishing || loading || !chartsAndPhotosReady}
-                    title={publishDisabledReason}
+                  <p className="text-[10px] text-stone-400 leading-snug">
+                    Crea una pagina pubblica del diario, leggibile da telefono senza scaricare nulla.
+                  </p>
+                  <button onClick={publishLink} disabled={linkPublishing || loading}
                     className="w-full flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forest-600 text-white text-xs font-barlow font-bold uppercase tracking-wide hover:bg-forest-700 disabled:opacity-50 transition-colors">
-                    {publishing ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Pubblicazione…</> : <><Share2 className="w-3.5 h-3.5" /> Pubblica online</>}
+                    {linkPublishing ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Pubblicazione…</> : <><Share2 className="w-3.5 h-3.5" /> Pubblica online</>}
                   </button>
                 </>
               )}

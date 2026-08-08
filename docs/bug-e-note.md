@@ -657,3 +657,106 @@ della pubblicazione, via Blob URL locale in `app/diario/page.tsx`) non ne aveva 
 il progetto non ne ha di reali in questo ambiente) senza errori, `/diario` invariato a 215 kB,
 `/resoconto` a 655 kB — nessuna regressione di bundle dai nuovi import (`parseInlineEmphasis` e
 `withForcedDownload` sono entrambi funzioni pure senza dipendenze pesanti).
+
+---
+
+## Fase 5 — Il Diario non regge la scala (condivisione, peso, impaginazione)
+
+L'utente ha caricato un terzo export (56 pagine) e uno screenshot del pannello «CONDIVIDI DIARIO»
+bloccato su «AGGIORNAMENTO…» con la barra piena a «Pagina 56 di 56», segnalando che la condivisione
+e il download del PDF non funzionano, che l'impaginazione è pessima, e chiedendo un impianto che
+regga anni di escursioni.
+
+### Le misure, non le impressioni
+
+`pdfimages -list` sull'export reale:
+
+| Dato | Valore |
+|---|---|
+| Peso | **21,7 MB** per 56 pagine (media 387 KB/pagina) |
+| Risoluzione pagina | 1588×2134 px, 108 ppi |
+| Testo selezionabile | **nessuno** — ogni pagina è un unico JPEG a piena pagina |
+| Pagina 5 | immagine alta **492 px** su 2134 → 77% bianco |
+| Pagina 10 | immagine alta **170 px** su 2134 → **92% bianco** |
+| Densità | 56 pagine per 11 escursioni = **5 pagine ciascuna** |
+
+Lunghezza reale dei resoconti (query su `hike_reports`): massimo **9.345 caratteri**, ma **tre
+resoconti su dieci sono vuoti** (69–73 caratteri = le sole intestazioni `## `). Sono loro a produrre
+le pagine fantasma: l'«Eremo di San Girolamo» occupava due pagine intere per non dire nulla.
+
+Ricompressione misurata sulle due pagine più pesanti: a 0,75× q72 si scende al **37%** del peso,
+a 0,62× q72 al **28%**.
+
+**Proiezione del muro**: 30 escursioni/anno → ~150 pagine → ~58 MB; cinque anni → ~750 pagine →
+~290 MB. Il punto di rottura era già stato superato con 11 escursioni.
+
+### La causa vera del blocco in condivisione
+
+Non era l'autenticazione (le correzioni B53/B54 del giro precedente erano reali ma curavano un
+sintomo diverso). Erano due vincoli sommati:
+
+1. `fetchPublicDiary` filtrava `.not('diary_pdf_url','is',null)`: **senza un PDF caricato non
+   esisteva alcun link condivisibile**. E la PATCH di `/api/diary-token` scriveva sempre la colonna,
+   quindi chiamarla senza URL azzerava il PDF — non c'era modo di ottenere un token da solo.
+2. La pagina pubblica era dichiaratamente un guscio («niente contenuto narrativo dei resoconti — il
+   racconto completo resta nel PDF»), quindi chi riceveva il link doveva scaricare 21 MB per leggere
+   una riga.
+
+Insieme rendevano la condivisione ostaggio di un upload da 21 MB da telefono, che si pianta senza
+timeout né avanzamento. In più jsPDF tiene tutte le pagine in memoria come stringhe **base64**
+(+33% ≈ 29 MB) prima di produrre il blob: su un browser mobile è già di per sé al limite.
+
+### Decisioni prese con l'utente
+
+| Ambito | Scelta |
+|---|---|
+| Densità | **2 pagine per escursione** in stile magazine (3 colonne, Lora 10,5 px), **testo integrale**; terza pagina solo se sfora |
+| Resoconti vuoti | **Scheda compatta da mezza pagina** — restano nel diario, senza fingere un racconto |
+| Budget visivo | **Adattivo**: fascia 4-6 foto + mappa piccola + profilo altimetrico; pagina galleria in più solo se le foto sono molte |
+| Ambito temporale | **Diario annuale** con selettore d'annata |
+| Esportazione | Azione separata con **intervallo a scelta** (mese/anno/tutto), non fusione manuale di PDF |
+| Condivisione | **Pagina HTML con il contenuto vero**, PDF come allegato facoltativo |
+| Qualità PDF | **Scelta dell'utente**: «Condividi» (0,62× q72) e «Stampa» (1,0× q80) |
+
+**Sulla fusione dei PDF** (proposta dall'utente): scartata come funzione visibile. Unire due export
+prodotti in momenti diversi darebbe due copertine, due indici e la numerazione che riparte da 1. Un
+selettore d'intervallo che genera direttamente il documento voluto è più semplice e dà un risultato
+coerente. La concatenazione resta come **dettaglio interno**: sopra le ~20 pagine si genera a
+blocchi e si concatena prima di consegnare il file, per non esaurire la memoria su mobile.
+
+### 5.1 — Condivisione svincolata dall'upload (fatto)
+
+- `lib/sharePublicDiary.ts`: rimosso il vincolo su `diary_pdf_url`; il payload pubblico ora porta
+  `content`, foto (ordinate per progressione lungo la traccia) e polilinea. `pdfUrl` diventa
+  `string | null`. Nuova `hasNarrative()`, che distingue un resoconto scritto da uno con le sole
+  intestazioni.
+- `app/api/diary-token/route.ts`: la PATCH tocca `diary_pdf_url` **solo se la chiave è presente nel
+  corpo**. «Pubblica link» chiama con corpo vuoto e ottiene il token senza cancellare un PDF già
+  allegato.
+- `app/diario/page.tsx`: nuova `publishLink()` — una PATCH da poche centinaia di byte, con stato ed
+  errori propri, separata dalla generazione del PDF. Il pannello di condivisione ora mostra il link
+  come azione primaria e il PDF come allegato facoltativo.
+- `lib/storageDownloadUrl.ts` (nuovo): `withForcedDownload` spostata fuori da `lib/pdfUpload.ts`,
+  che è un modulo `'use client'` — da lì la funzione arrivava come riferimento client e non era
+  chiamabile durante il render sul server della nuova pagina pubblica.
+
+### 5.2 — Pagina pubblica come rivista web (fatto)
+
+`DiaryPublicView.tsx` riscritta come **componente server puro**: copertina, numeri, indice ad
+ancore, e per ogni escursione l'articolo completo (markdown reso, curiosità e avvisi come richiami,
+griglia foto con `loading="lazy"`) oppure la scheda compatta se il racconto non c'è.
+
+Nuovo `RouteSketch.tsx`: schizzo SVG inline della traccia con partenza, arrivo e i punti in cui sono
+state scattate le foto. **Non è una mappa**: montare Leaflet/MapLibre per escursione su una pagina
+pubblica significherebbe decine di istanze e centinaia di richieste a `/api/tile` per una pagina che
+si scorre e basta.
+
+**Effetto misurato sul bundle**: `/leggi/d/[token]` passa da **170 kB a 88,8 kB** di First Load JS,
+e il bundle proprio della rotta da **4,8 kB a 159 byte** — la pagina non spedisce più `pdfjs-dist`
+né alcun runtime client. Contenuto selezionabile e indicizzabile, che un PDF rasterizzato non è.
+
+**Verifica della geometria dello schizzo**: la proiezione è stata riprodotta in Node ed eseguita su
+tre polilinee reali del database (una orizzontale, una verticale, una diagonale). Tutti i punti
+cadono dentro il riquadro, il padding è rispettato sull'asse vincolante, e la **deformazione del
+rapporto d'aspetto è 0,000%** — la correzione per `cos(lat)` con un unico fattore di scala su
+entrambi gli assi mantiene le proporzioni reali del percorso.

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { BookOpen, ChevronLeft, ChevronRight, Download, Home, Loader2, ZoomIn, ZoomOut } from 'lucide-react'
 import { FONT } from '@/lib/designTokens'
-import { withForcedDownload } from '@/lib/pdfUpload'
+import { withForcedDownload } from '@/lib/storageDownloadUrl'
 
 interface Props {
   pdfUrl: string
