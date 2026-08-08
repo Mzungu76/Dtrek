@@ -112,8 +112,12 @@ export function composeReportPages(source: HTMLElement, options: MagazineOptions
   const colW = Math.floor((innerW - o.gutter * (o.columns - 1)) / o.columns)
 
   const openingSrc = source.querySelector<HTMLElement>(MAG.opening)
-  const blockSrcs = Array.from(source.querySelectorAll<HTMLElement>(MAG.block))
   const tailSrcs = Array.from(source.querySelectorAll<HTMLElement>(MAG.tail))
+  // Un elemento non può stare in due posti: se porta entrambi i marcatori vince la coda, e non
+  // finisce duplicato anche nelle colonne. Non è teoria — marcando il template è successo davvero
+  // su tutti e cinque i blocchi di coda, che avevano già `.pdf-block`.
+  const blockSrcs = Array.from(source.querySelectorAll<HTMLElement>(MAG.block))
+    .filter(el => !el.matches(MAG.tail) && !el.closest(MAG.tail))
 
   // ── Tutte le misure PRIMA di costruire le pagine, ognuna alla propria larghezza ──────────────
   // L'apertura è a piena pagina (fascia al vivo), i blocchi a larghezza di colonna, la coda

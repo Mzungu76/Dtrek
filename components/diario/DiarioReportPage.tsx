@@ -142,6 +142,10 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
   const showCuore    = extras.cuore    && hrSeries.length > 1
   const showVelocita = extras.velocita && speedSeries.length > 1
 
+  // Un resoconto le cui sezioni esistono ma sono tutte vuote (`## Titolo` senza testo sotto) non
+  // ha una storia: nel PDF occupava due pagine intere con la fascia foto vuota e lo spazio del
+  // racconto bianco. Per l'esportazione ne viene preparata una scheda compatta alternativa.
+  const hasStory = sections.some(s => s.body.trim())
   const introSection = sections[0]
   // Un'intestazione senza corpo (sezione lasciata vuota nel resoconto sorgente) non va comunque
   // stampata: restava a schermo come un titolo isolato seguito da uno spazio bianco vuoto — nel
@@ -174,8 +178,13 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
         </button>
       )}
 
-      {/* Full-bleed hero */}
-      <div style={{ height: 420, position: 'relative', overflow: 'hidden', background: heroPhoto ? undefined : 'linear-gradient(170deg,#0f2e1a 0%,#1b4332 30%,#193b20 62%,#0d1f12 100%)' }}>
+      {/* Apertura dell'articolo — l'unico pezzo che sta solo sulla prima pagina del pezzo.
+          `data-mag="opening"` lo dichiara al compositore (lib/diaryMagazine.ts), che ne sottrae
+          l'altezza a quella utile delle colonne della prima pagina.
+          Il hero è sceso da 420 a 320 px: a 420 l'apertura completa mangiava 560 px su 1067, cioè
+          più di metà pagina per una fotografia, e il testo scivolava su una terza pagina. */}
+      <div data-mag="opening">
+      <div style={{ height: 320, position: 'relative', overflow: 'hidden', background: heroPhoto ? undefined : 'linear-gradient(170deg,#0f2e1a 0%,#1b4332 30%,#193b20 62%,#0d1f12 100%)' }}>
         {heroPhoto && (
           <img src={heroPhoto.url} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
         )}
@@ -229,6 +238,37 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
           </p>
         </div>
       )}
+      </div>
+
+      {/* Scheda compatta per le escursioni senza racconto — vedi `hasStory` sopra.
+          `display:none` perché il libro a schermo continua a mostrare la pagina intera: la scheda
+          esiste solo per l'esportazione, dove il compositore (lib/diaryMagazine.ts) la scopre, la
+          rende visibile e ne impila tre o quattro per pagina. */}
+      {!hasStory && (
+        <div data-mag="card" style={{ display: 'none', marginBottom: 22, border: '1px solid #dcd8cc', borderRadius: 10, overflow: 'hidden' }}>
+          <div style={{ display: 'flex', alignItems: 'stretch', minHeight: 128 }}>
+            {heroPhoto
+              ? <img src={heroPhoto.url} alt="" style={{ width: 176, height: 128, objectFit: 'cover', flexShrink: 0, display: 'block' }} />
+              : <div style={{ width: 176, height: 128, flexShrink: 0, background: 'linear-gradient(170deg,#1b4332,#0d1f12)' }} />}
+            <div style={{ padding: '16px 20px', flex: 1, minWidth: 0 }}>
+              <p style={{ fontFamily: FONT.barlow, fontSize: 9, fontWeight: 700, letterSpacing: 3, color: '#e08d3c', textTransform: 'uppercase', margin: '0 0 5px' }}>
+                Escursione #{escLabel}{monthYear ? ` \u00b7 ${monthYear}` : ''}
+              </p>
+              <p style={{ fontFamily: FONT.display, fontSize: 20, fontWeight: 700, color: '#193b20', margin: '0 0 4px', lineHeight: 1.15 }}>
+                {report.title || act?.title || 'Escursione'}
+              </p>
+              {dateStr && <p style={{ fontFamily: FONT.lora, fontSize: 11, color: '#a9a18e', margin: '0 0 10px' }}>{dateStr}</p>}
+              {act && (
+                <p style={{ fontFamily: FONT.mono, fontSize: 12, color: '#4d4740', margin: 0 }}>
+                  {act.distance_meters > 0 ? `${(act.distance_meters / 1000).toFixed(1)} km` : '\u2014'}
+                  {act.elevation_gain > 0 ? ` \u00b7 ${Math.round(act.elevation_gain)} m D+` : ''}
+                  {act.total_time_seconds > 0 ? ` \u00b7 ${formatDuration(act.total_time_seconds)}` : ''}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div style={{ padding: '48px 48px 40px' }}>
         <p style={{ fontFamily: FONT.barlow, fontSize: 9, fontWeight: 700, letterSpacing: 4, color: '#e08d3c', textTransform: 'uppercase', margin: '0 0 36px' }}>
@@ -243,7 +283,7 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
             in fondo a una pagina) e ogni paragrafo successivo per conto proprio, così un'intro
             lunga può proseguire su più pagine senza mai tagliare un paragrafo a metà. */}
         <div style={{ display: 'grid', gridTemplateColumns: '170px 1fr', gap: 36, marginBottom: 40 }}>
-          <div className="pdf-block">
+          <div className="pdf-block" data-mag-block="">
             <p style={{ fontFamily: FONT.barlow, fontSize: 8, fontWeight: 900, letterSpacing: 3, color: '#a9a18e', textTransform: 'uppercase', margin: '0 0 14px', paddingBottom: 9, borderBottom: '1.5px solid #e08d3c' }}>
               Scheda
             </p>
@@ -260,7 +300,7 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
                 resoconto con la prima sezione vuota perdeva anche il proprio titolo (viaggiava
                 nello stesso .pdf-block del primo paragrafo, che qui non esiste). */}
             {(!introSection || !introSection.body.trim()) && (
-              <div className="pdf-block">
+              <div className="pdf-block" data-mag-block="">
                 <h2 style={{ fontFamily: FONT.display, fontSize: 32, fontWeight: 700, color: '#193b20', lineHeight: 1.12, margin: 0, letterSpacing: -0.5 }}>
                   {report.title || act?.title || 'Escursione'}
                 </h2>
@@ -291,20 +331,20 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
               // Il titolo viaggia col primo paragrafo nello stesso pdf-block, per non ritrovarsi
               // mai isolato in fondo a una pagina con tutto il testo rimandato alla successiva.
               return j === 0 ? (
-                <div key={j} className="pdf-block">
+                <div key={j} className="pdf-block" data-mag-block="">
                   <h2 style={{ fontFamily: FONT.display, fontSize: 32, fontWeight: 700, color: '#193b20', lineHeight: 1.12, margin: '0 0 24px', letterSpacing: -0.5 }}>
                     {report.title || act?.title || 'Escursione'}
                   </h2>
                   {paragraph}
                 </div>
-              ) : <div key={j} className="pdf-block">{paragraph}</div>
+              ) : <div key={j} className="pdf-block" data-mag-block="">{paragraph}</div>
             })}
           </div>
         </div>
 
         {/* Pull quote */}
         {pullQuote && (
-          <div className="pdf-block" style={{ margin: '0 -8px 40px', padding: '32px 40px', borderTop: '2px solid #193b20', borderBottom: '2px solid #193b20', position: 'relative' }}>
+          <div className="pdf-block" data-mag-block="" style={{ margin: '0 -8px 40px', padding: '32px 40px', borderTop: '2px solid #193b20', borderBottom: '2px solid #193b20', position: 'relative' }}>
             <span style={{ position: 'absolute', top: -26, left: 36, fontFamily: FONT.display, fontSize: 70, lineHeight: 1, color: '#193b20', opacity: 0.12, userSelect: 'none' }}>&ldquo;</span>
             <p style={{ fontFamily: FONT.display, fontSize: 19, fontStyle: 'italic', lineHeight: 1.55, color: '#193b20', margin: 0 }}>
               {renderInline(pullQuote)}
@@ -323,19 +363,19 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
                     <p style={{ fontFamily: FONT.lora, fontSize: 13.5, lineHeight: 1.85, color: '#4d4740', margin: '0 0 14px' }}>{renderInline(p.trim())}</p>
                   )
                   return j === 0 ? (
-                    <div key={j} className="pdf-block">
+                    <div key={j} className="pdf-block" data-mag-block="">
                       <p style={{ fontFamily: FONT.barlow, fontSize: 10, fontWeight: 900, letterSpacing: 3, color: '#e08d3c', textTransform: 'uppercase', margin: '0 0 8px' }}>
                         {section.title}
                       </p>
                       {paragraph}
                     </div>
-                  ) : <div key={j} className="pdf-block">{paragraph}</div>
+                  ) : <div key={j} className="pdf-block" data-mag-block="">{paragraph}</div>
                 })}
               </div>
             ))}
           </div>
           {detailPhoto && (
-            <div className="pdf-block">
+            <div className="pdf-block" data-mag-block="">
               <div style={{ width: 164, borderRadius: 4, overflow: 'hidden', position: 'relative' }}>
                 <img src={detailPhoto.url} alt={detailPhoto.caption} style={{ width: '100%', aspectRatio: '2/3', objectFit: 'cover', display: 'block' }} />
                 <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top,rgba(0,0,0,0.5) 0%,transparent 55%)' }} />
@@ -360,7 +400,7 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
             {storyBoxes.map((q, i) => {
               const acc = STORY_ACCENTS[i % STORY_ACCENTS.length]
               return (
-                <div key={i} className="pdf-block" style={{ background: acc.bg, borderLeft: `3px solid ${acc.border}`, borderRadius: '0 6px 6px 0', padding: '18px 22px' }}>
+                <div key={i} className="pdf-block" data-mag-block="" style={{ background: acc.bg, borderLeft: `3px solid ${acc.border}`, borderRadius: '0 6px 6px 0', padding: '18px 22px' }}>
                   <p style={{ fontFamily: FONT.lora, fontSize: 13, fontStyle: 'italic', lineHeight: 1.75, color: acc.text, margin: 0 }}>{renderInline(q)}</p>
                 </div>
               )
@@ -378,7 +418,7 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
             pagina dopo invece di spezzarla; `pdf-keep-next` sul titolo mantiene "Il percorso"
             comunque agganciato alla mappa che lo segue. */}
         {showStatistiche && (
-          <div className="pdf-block" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 16 }}>
+          <div className="pdf-block" data-mag="tail" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 16 }}>
             <StatCard value={`${(meta!.distanceMeters / 1000).toFixed(1)} km`} label="Distanza" icon={<Route style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
             <StatCard value={`${Math.round(meta!.elevationGain)} m`} label="Dislivello D+" icon={<Mountain style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
             <StatCard value={formatDuration(meta!.totalTimeSeconds)} label="Durata" icon={<Clock style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
@@ -386,7 +426,7 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
           </div>
         )}
         {showGrafico && (
-          <div className="pdf-block" style={{ marginBottom: 16 }}>
+          <div className="pdf-block" data-mag="tail" style={{ marginBottom: 16 }}>
             <p style={{ fontFamily: FONT.barlow, fontSize: 9, color: '#a9a18e', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', margin: '0 0 6px' }}>
               Profilo altimetrico {photoMarkers.length > 0 && '· con posizione foto'}
             </p>
@@ -396,7 +436,7 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
           </div>
         )}
         {(showCuore || showVelocita) && (
-          <div className="pdf-block" style={{ display: 'flex', gap: 16, marginBottom: 24 }}>
+          <div className="pdf-block" data-mag="tail" style={{ display: 'flex', gap: 16, marginBottom: 24 }}>
             {showCuore && (
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontFamily: FONT.barlow, fontSize: 9, color: '#a9a18e', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', margin: '0 0 6px' }}>
@@ -420,7 +460,7 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
           </div>
         )}
         {showMappa && (
-          <div className="pdf-block" style={{ marginBottom: 32 }}>
+          <div className="pdf-block" data-mag="tail" style={{ marginBottom: 32 }}>
             <p className="pdf-keep-next" style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: '#193b20', margin: '0 0 12px' }}>Il percorso</p>
             <div className="print:hidden diario-report-map" data-activity-id={meta!.id} style={{ height: 260, borderRadius: 10, overflow: 'hidden', border: '1px solid #dcd8cc' }}>
               <LazyMount height={260} placeholder={<div style={{ height: '100%', background: '#f3f4f2' }} />}>
@@ -436,7 +476,7 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
 
         {/* Photo row */}
         {photos.length > 0 && (
-          <div className="pdf-block" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14, marginBottom: 32 }}>
+          <div className="pdf-block" data-mag="tail" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14, marginBottom: 32 }}>
             {photos.map((ph, i) => (
               <div key={ph.id} style={{ position: 'relative' }}>
                 <img src={ph.url} alt={ph.caption} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 8, boxShadow: '0 4px 14px rgba(0,0,0,0.12)' }} />

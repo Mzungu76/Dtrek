@@ -857,3 +857,46 @@ La regola è scritta in testa al modulo perché è il tipo di errore che si ripr
 | 14.000 (ipotetico) | 3 | 0 | 0 |
 
 Prima della correzione lo stesso banco riportava colonne traboccate su 7 casi su 8.
+
+### 5.5 — Cablaggio del compositore nell'esportazione
+
+Scelta concordata con l'utente: **comporre solo in esportazione**. Il libro a schermo resta a
+colonna singola; il PDF diventa la rivista. L'alternativa (comporre anche a schermo, per una
+anteprima fedele) raddoppierebbe il DOM vivo di `/diario`, che è già la rotta più pesante dopo
+`/resoconto`. Si potrà valutare quando il PDF convince.
+
+**Contratto dei marcatori** dichiarato da `DiarioReportPage`:
+
+| Marcatore | Cosa | Dove finisce |
+|---|---|---|
+| `data-mag="opening"` | fascia foto + striscia dati + barra data | solo la prima pagina del pezzo |
+| `data-mag-block` | paragrafi, intestazioni, citazioni, riquadri | flusso a due colonne |
+| `data-mag-keep` | intestazioni di sezione | mai ultime in colonna |
+| `data-mag="tail"` | statistiche, grafici, mappa, galleria | pagine proprie dopo il racconto |
+| `data-mag="card"` | scheda compatta (solo senza racconto) | impilata con le altre |
+
+Il hero è sceso **da 420 a 320 px**: a 420 l'apertura completa occupava 560 px su 1067, più di
+metà pagina per una fotografia, e il testo scivolava su una terza pagina.
+
+**B63 — marcatori sovrapposti.** Marcando il template, i cinque blocchi di coda hanno preso *anche*
+`data-mag-block`, perché portavano già `.pdf-block` e la marcatura è avvenuta con una sostituzione
+di massa: sarebbero finiti duplicati, una volta nelle colonne e una in coda. Corretto nel template,
+ma soprattutto nel compositore, che ora esclude dal flusso qualunque elemento che sia (o stia
+dentro) un blocco di coda: la duplicazione non può ripresentarsi anche se il template sbaglia.
+
+**Verifica in Chromium** della struttura marcata reale (apertura, 9 blocchi di flusso di cui 4
+`keep`, 5 blocchi di coda che portano anche `.pdf-block`):
+
+- apertura presente **una sola volta**, sulla prima pagina;
+- 5 blocchi di coda tutti presenti, e nelle colonne **esattamente 9** blocchi — nessuna duplicazione;
+- nessuna colonna traboccata;
+- 7 schede compatte collocate su **2 pagine** invece di 14.
+
+**Conteggio pagine atteso** sul diario dell'utente: 7 resoconti narrati × 3 pagine (2 di testo +
+1 di coda) + 1 pagina di schede + 5 di apparato = **~27 pagine contro 56**. A 0,62× q72 sono ~3 MB
+contro 21,7.
+
+**Scostamento dichiarato**: la scelta «adattivo» prevedeva mappa e profilo *dentro* le due pagine,
+con la galleria in più solo per le escursioni ricche di foto. Oggi tutta la coda va su pagine
+proprie, quindi un resoconto narrato costa 3 pagine invece di 2. Rientra nel prossimo giro,
+facendo proseguire la coda sulla pagina di testo quando c'è spazio, invece di aprirne sempre una.
