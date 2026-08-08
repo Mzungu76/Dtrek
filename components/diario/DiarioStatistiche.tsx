@@ -1,4 +1,5 @@
 import { FONT } from '@/lib/designTokens'
+import { PDF_PAGE_W, PDF_CONTENT_H } from '@/lib/pdfPageGeometry'
 import { Route, Mountain, Clock, Flame, Trophy, TrendingUp } from 'lucide-react'
 import { computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
 import { formatDuration } from '@/lib/tcxParser'
@@ -45,7 +46,7 @@ export function DiarioStatistiche({ activities, toggles }: { activities: Activit
 
   return (
     <div className="diario-page" style={{
-      width: 794, minHeight: 1123, background: 'white', margin: '24px auto',
+      width: PDF_PAGE_W, minHeight: PDF_CONTENT_H, background: 'white', margin: '24px auto',
       padding: '72px 64px', boxShadow: '0 8px 56px rgba(0,0,0,0.28)',
     }}>
       <PageHeader label="Statistiche" title="I tuoi numeri" />

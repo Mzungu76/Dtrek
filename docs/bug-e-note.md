@@ -25,6 +25,7 @@ Tutti i bug bloccanti/gravi/minori individuati per la condivisione sono stati ri
 | B32 | `app/leggi/r/[activityId]/page.tsx` | Il resoconto pubblico usa l'`activityId` in chiaro nell'URL invece di un token opaco, a differenza di `/s/[token]`. **Ancora aperto dopo la Fase 4**: `HiddenPdfRoot.tsx` è stato riscritto (vedi §5) ma il motore di pubblicazione/URL non è stato toccato — non è uno stile o un'impaginazione, è uno schema di link, fuori dall'ambito letterale "verificare le esportazioni PDF". La colonna `hike_reports.share_token` esiste già in produzione (indice unico verificato via MCP): resta un buon prossimo passo piccolo e isolato | Verificato | non pianificata |
 | B36 | `lib/blobStore.ts:120` | `ActivityMeta.routePolyline` è ridotta a **60 punti** da `downsamplePolyline`. La condivisione di una singola escursione (`ResocontoHub.tsx`, Fase 2) e ora anche il PDF del resoconto (`renderReportPdf.ts`, Fase 4.2 — ricostruisce da `activity.trackPoints`) usano la traccia piena. Resta aperto solo per la mappa multi-percorso «Le mie escursioni» (`generateMapImage`) e per statistiche/confronto | Verificato | 2.1/4.2 (parziale) |
 | B45 | `app/globals.css:107` | `@media print { @page { margin: 1.5cm } }` è in conflitto con le pagine `.diario-page` da 794px, che assumono margine zero: la stampa nativa rimpicciolisce o taglia. Non toccato: riguarda solo Ctrl+P, un percorso secondario rispetto a export/link pubblico | Verificato | da valutare, minore |
+| B52 | `app/diario/page.tsx:425` | Le mappe dei singoli resoconti nel PDF del diario passano ancora dal cucitore di tile raster (`fetchSatMap`, ~25 tile HTTP per resoconto attraverso `/api/tile`): con 50 resoconti sono oltre mille richieste. La Fase 0 aveva costruito `lib/mapSnapshot.ts` (MapLibre, nessun flood di tile) proprio per questo, ma il Diario non è mai stato migrato. **Non affrontato nel giro di correzioni post-Fase 4**: le due cause dominanti della lentezza erano altre (vedi §5, "Correzioni dopo la revisione") e sono state risolte; questa richiede di riusare una sola istanza MapLibre per N tracce, un intervento a sé | Verificato | non pianificata — perf |
 
 ---
 
@@ -505,3 +506,58 @@ screenshot 3D, fuori ambito), B27 (paginazione `?all=true`, intervento di perfor
 pubblico — uno schema di link, non uno stile del PDF), B45 (margine di stampa nativa, minore). Nuovi
 V12 (stesso difetto di B16 ma a schermo, in `MagazineBody.tsx`) e V13 (profilo altimetrico non
 ancora provato su un tracciato GPS molto rumoroso) in §2.
+
+### Correzioni dopo la revisione del PDF reale (post-Fase 4)
+
+L'utente ha fornito un PDF di resoconto realmente esportato e ha segnalato quattro cose: PDF del
+resoconto non ancora perfetto, Diario lentissimo e mal impaginato senza margini, app in generale
+rallentata, export PDF delle guide inattivo. Qui sotto cosa è risultato vero, come è stato
+verificato e cosa è stato corretto.
+
+**Metodo**: il paginatore è stato messo alla prova in Chromium headless riproducendone il DOM e
+girando la logica reale (`safeBreaks`/`sliceHeights` + `html2canvas`), invece di dedurre le cause
+dal solo aspetto del PDF. Due ipotesi plausibili sono state così **escluse**: l'altezza misurata
+(`scrollHeight` 2582 contro rect 2582,25) e l'offset di cattura di html2canvas (un ritaglio chiesto
+al confine di un blocco inizia esattamente su quel confine, verificato su una pagina a righe
+numerate). Il paginatore era corretto: i difetti stavano altrove.
+
+| Segnalazione | Esito | Causa |
+|---|---|---|
+| Diario mal impaginato, «pagine senza margini» | **Confermato, grave** | Le pagine del diario erano alte `1123px` (A4 pieno) ma l'area utile del PDF è `1067px`, perché la Fase 0 ha riservato 30px di testatina e 26px di piede. **Ogni pagina del libro ne produceva due**: una piena e una striscia da 56px quasi vuota |
+| Diario lentissimo | **Confermato** | Due cause sommate: (a) il raddoppio di pagine qui sopra, che raddoppiava anche le catture; (b) `html2canvas` clona l'**intero documento** a ogni chiamata, e il modulo la chiama una volta per pagina — col libro a schermo *più* i cloni fuori schermo nel DOM, ogni cattura ricopiava decine di pagine A4. Costo quadratico nel numero di pagine |
+| Export PDF guide inattivo | **Confermato, regressione della Fase 4** | Il pulsante "Esporta PDF" degli strumenti era stato ripuntato da `exportPlannedPdf` a `exportGuidePdf` e disabilitato senza `cachedGuide`. Ma i due documenti non erano la stessa cosa: il primo era una **scheda dati del percorso**, che funzionava anche senza guida AI. Su ogni itinerario privo di guida generata l'export è quindi sparito del tutto |
+| PDF resoconto imperfetto | **Confermato, 4 difetti distinti** | Vedi sotto |
+| App in generale rallentata | **Parzialmente confermato** | Nessuna regressione trovata nei bundle (`/resoconto` 665→657 kB fra Fase 2 e 4). Trovato però un peso evitabile: `renderReportPdf.ts` — che si porta dietro il template PDF, `react-dom/client`, jsPDF e html2canvas — era importato **staticamente** in `ReportReader.tsx`, quindi finiva nel bundle della rotta più pesante dell'app anche per chi non esporta nulla. Reso dinamico. Il resto della lentezza percepita non è riconducibile a una causa misurata: va riverificato dopo queste correzioni |
+
+**I quattro difetti del PDF del resoconto**
+
+1. **Markdown dell'enfasi stampato alla lettera**: si leggeva `****9 chilometri****`. Il corpo delle
+   sezioni è markdown, ma veniva reso come testo grezzo. Nuova `parseInlineEmphasis`
+   (`lib/guideMarkup.ts`) che restituisce segmenti `{text, bold}` — segmenti e non HTML per restare
+   indipendente dal framework — resi come `<strong>` dal template. Riconosce anche la variante a
+   quattro asterischi che i modelli producono ogni tanto, e ripulisce gli asterischi spaiati.
+2. **Intestazione di sezione orfana**: «02 CRONACA» restava da sola in fondo a pagina 1. Il fondo
+   di quel blocco era un punto di taglio legittimo, e il paginatore non aveva modo di sapere che
+   un'intestazione non deve restare ultima. Nuova classe `.pdf-keep-next`: i blocchi marcati non
+   generano un punto di taglio, quindi l'interruzione cade *sopra* di essi e l'intestazione parte
+   con il suo testo.
+3. **Taglio in mezzo a una riga di testo** fra pagina 2 e 3 (metà superiore dei caratteri su una
+   pagina, metà inferiore sull'altra). Succede quando nessun confine di blocco entra nella pagina
+   rimasta: il paginatore ripiegava sul bordo pagina esatto. Ora i **riquadri di riga** (via
+   `Range.getClientRects()` sui nodi di testo) fanno da punti di taglio di ripiego, calcolati solo
+   quando servono davvero. Il taglio peggiore possibile cade così *fra* due righe, che è la normale
+   interruzione tipografica. In più i confini di blocco includono ora metà del margine inferiore,
+   per non tagliare a filo dei glifi.
+4. **Testo ritagliato a metà altezza** nei nomi dei luoghi e nelle didascalie: `overflow:hidden` su
+   un serif senza interlinea dichiarata, che html2canvas ritaglia al box del contenuto. Aggiunta
+   un'interlinea esplicita.
+
+**Verifica delle correzioni** (stesso banco di prova in Chromium): con un'intestazione `pdf-keep-next`
+che cadrebbe a fine pagina, il taglio si sposta sopra di essa; con un blocco unico più alto della
+pagina, i tagli forzati passano da 1 a **0** e l'interruzione cade su un confine di riga.
+
+**Nota sull'area utile**: `lib/pdfPaginate.ts` esporta ora `PDF_PAGE_W`/`PDF_PAGE_H`/`PDF_CONTENT_H`.
+Un template che si disegna alto quanto l'A4 pieno sfora e viene spezzato in due: è l'errore che il
+Diario faceva. Solo le pagine `.pdf-bleed` (le copertine, su cui testatina e piede non vengono
+disegnati) possono usare `PDF_PAGE_H`. Le pagine del diario usano ora `PDF_CONTENT_H`, così una
+pagina del libro corrisponde a una pagina del PDF.

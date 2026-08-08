@@ -42,7 +42,9 @@ import ActivityPhotoManager from '@/app/components/ActivityPhotoManager'
 import { PhotoGallery } from '@/app/resoconto/[id]/PhotoGallery'
 import { PhotoLightbox } from '@/app/resoconto/[id]/PhotoLightbox'
 import { PrintPhotoGrid } from '@/app/resoconto/[id]/PrintPhotoGrid'
-import { renderReportPdfBlob, downloadReportPdf } from '@/app/resoconto/[id]/renderReportPdf'
+// Import dinamico: il modulo si porta dietro il template del PDF, `react-dom/client` e jsPDF/
+// html2canvas per via delle sue dipendenze. Statico finiva nel bundle di /resoconto — la rotta più
+// pesante dell'app — anche per chi apre un resoconto senza mai esportarlo.
 import ReportHero from './ReportHero'
 import ReportStatsStrip from './ReportStatsStrip'
 import PhotoShowcase from './PhotoShowcase'
@@ -516,6 +518,7 @@ export default function ReportReader({
       const { data: { user } } = await sb.auth.getUser()
       if (!user) throw new Error('Non autenticato')
 
+      const { renderReportPdfBlob } = await import('@/app/resoconto/[id]/renderReportPdf')
       const blob = await renderReportPdfBlob(reportPdfParams())
 
       const { uploadReportPdf } = await import('@/lib/pdfUpload')
@@ -537,6 +540,7 @@ export default function ReportReader({
   const downloadPdf = async () => {
     setDownloadingPdf(true); setPublishError(null)
     try {
+      const { downloadReportPdf } = await import('@/app/resoconto/[id]/renderReportPdf')
       await downloadReportPdf(reportPdfParams())
     } catch (e) {
       setPublishError(String(e))

@@ -1,5 +1,6 @@
 'use client'
 import { FONT } from '@/lib/designTokens'
+import { PDF_PAGE_W, PDF_CONTENT_H } from '@/lib/pdfPageGeometry'
 import { useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { format } from 'date-fns'
@@ -140,7 +141,7 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
 
   return (
     <div className="diario-page" style={{
-      width: 794, minHeight: 1123, background: 'white', margin: '24px auto',
+      width: PDF_PAGE_W, minHeight: PDF_CONTENT_H, background: 'white', margin: '24px auto',
       boxShadow: '0 8px 56px rgba(0,0,0,0.28)', overflow: 'hidden', position: 'relative',
     }}>
       {yearBand && <DiarioYearBand {...yearBand} />}

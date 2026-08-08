@@ -1,4 +1,5 @@
 import { FONT } from '@/lib/designTokens'
+import { PDF_PAGE_W, PDF_PAGE_H } from '@/lib/pdfPageGeometry'
 export function DiarioCover({
   coverUrl, diaryTitle, diarySubtitle, diaryAuthor, dateRange, totalActivities, totalKm, totalElevationGain,
 }: {
@@ -11,8 +12,11 @@ export function DiarioCover({
   if (totalElevationGain)   stats.push({ value: Math.round(totalElevationGain).toLocaleString('it'), label: 'M dislivello' })
 
   return (
+    // `pdf-bleed`: unica pagina che può essere alta quanto l'A4 pieno, perché testatina e piede
+    // non vengono disegnati sopra le copertine. Tutte le altre pagine del diario usano invece
+    // PDF_CONTENT_H — vedi lib/pdfPaginate.ts.
     <div className="diario-page pdf-bleed" style={{
-      width: 794, height: 1123,
+      width: PDF_PAGE_W, height: PDF_PAGE_H,
       position: 'relative', overflow: 'hidden', margin: '24px auto',
       boxShadow: '0 8px 56px rgba(0,0,0,0.28)',
       background: coverUrl ? undefined : 'linear-gradient(158deg,#193b20 0%,#1c4724 45%,#20592b 100%)',

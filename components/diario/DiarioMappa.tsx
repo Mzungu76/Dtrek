@@ -1,4 +1,5 @@
 import { FONT, ROUTE_COLORS } from '@/lib/designTokens'
+import { PDF_PAGE_W, PDF_CONTENT_H } from '@/lib/pdfPageGeometry'
 import dynamic from 'next/dynamic'
 import type { ActivityMeta } from '@/lib/blobStore'
 import { PageHeader } from './PageHeader'
@@ -21,7 +22,7 @@ export function DiarioMappa({ activities, mapsInteractive }: { activities: Activ
 
   return (
     <div className="diario-page" style={{
-      width: 794, minHeight: 1123, background: 'white', margin: '24px auto',
+      width: PDF_PAGE_W, minHeight: PDF_CONTENT_H, background: 'white', margin: '24px auto',
       padding: '72px 64px', boxShadow: '0 8px 56px rgba(0,0,0,0.28)',
     }}>
       <PageHeader label="Mappa" title="Tutti i percorsi" />

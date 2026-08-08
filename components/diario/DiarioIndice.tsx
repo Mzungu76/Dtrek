@@ -1,4 +1,5 @@
 import { FONT } from '@/lib/designTokens'
+import { PDF_PAGE_W, PDF_CONTENT_H } from '@/lib/pdfPageGeometry'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { PageHeader } from './PageHeader'
@@ -7,7 +8,7 @@ import type { BookPage } from './types'
 export function DiarioIndice({ pages }: { pages: BookPage[] }) {
   return (
     <div className="diario-page" style={{
-      width: 794, minHeight: 1123, background: 'white', margin: '24px auto',
+      width: PDF_PAGE_W, minHeight: PDF_CONTENT_H, background: 'white', margin: '24px auto',
       padding: '72px 64px', boxShadow: '0 8px 56px rgba(0,0,0,0.28)',
     }}>
       <PageHeader label="Indice" title="Le escursioni" />

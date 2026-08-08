@@ -74,6 +74,14 @@ export default function GuideTemplate({ data, forPrint = false }: Props) {
   const spotlight = wikiPois.find(p => p.photo)
   const gallery   = pois.filter(p => p !== spotlight)
 
+  // Una sezione senza testo AI non va stampata: produrrebbe una pagina con la sola intestazione.
+  // Prima "Prima di partire", "Il percorso" e "Consigli finali" erano incondizionate, perché si
+  // dava per scontato che il PDF si esportasse solo a guida generata. Non è così: il documento
+  // vale anche come scheda dati del percorso (copertina, mappa, statistiche, valutazione, indice
+  // dei luoghi) su un itinerario di cui non è ancora stata scritta la guida — è esattamente ciò
+  // che produceva il PDF jsPDF ritirato in Fase 4.
+  const has = (s?: { text: string }): s is { text: string } => !!s?.text?.trim()
+
   return (
     <div
       className="guide-root"
@@ -90,30 +98,34 @@ export default function GuideTemplate({ data, forPrint = false }: Props) {
         <GuideOverview data={data} />
       </div>
 
-      <div className="guide-print-page">
-        <GuideSection
-          title="PRIMA DI PARTIRE"
-          subtitle="Equipaggiamento, stagione ideale e orario di partenza consigliati per questo percorso."
-          text={sections.primadiPartire.text}
-          photo={sections.primadiPartire.photo}
-          layout="photo-left"
-          accentColor="#c05a17"
-        />
-      </div>
+      {has(sections.primadiPartire) && (
+        <div className="guide-print-page">
+          <GuideSection
+            title="PRIMA DI PARTIRE"
+            subtitle="Equipaggiamento, stagione ideale e orario di partenza consigliati per questo percorso."
+            text={sections.primadiPartire.text}
+            photo={sections.primadiPartire.photo}
+            layout="photo-left"
+            accentColor="#c05a17"
+          />
+        </div>
+      )}
 
-      <div className="guide-print-page">
-        <GuideSection
-          title="IL PERCORSO"
-          subtitle="Il racconto del tracciato: atmosfera, panorami, cosa si prova a camminarci."
-          text={sections.ilPercorso.text}
-          photo={sections.ilPercorso.photo}
-          layout="photo-right"
-          accentColor="#277134"
-          elevationProfile={data.elevationProfile}
-        />
-      </div>
+      {has(sections.ilPercorso) && (
+        <div className="guide-print-page">
+          <GuideSection
+            title="IL PERCORSO"
+            subtitle="Il racconto del tracciato: atmosfera, panorami, cosa si prova a camminarci."
+            text={sections.ilPercorso.text}
+            photo={sections.ilPercorso.photo}
+            layout="photo-right"
+            accentColor="#277134"
+            elevationProfile={data.elevationProfile}
+          />
+        </div>
+      )}
 
-      {sections.verificato && (
+      {has(sections.verificato) && (
         <div className="guide-print-page">
           <GuideSection
             title="VERIFICATO ONLINE"
@@ -127,7 +139,7 @@ export default function GuideTemplate({ data, forPrint = false }: Props) {
         </div>
       )}
 
-      {sections.datiSicurezza && (
+      {has(sections.datiSicurezza) && (
         <div className="guide-print-page">
           <GuideSection
             title="DATI E SICUREZZA"
@@ -139,7 +151,7 @@ export default function GuideTemplate({ data, forPrint = false }: Props) {
         </div>
       )}
 
-      {sections.suMisura && (
+      {has(sections.suMisura) && (
         <div className="guide-print-page">
           <GuideSection
             title="SU MISURA PER TE"
@@ -151,7 +163,7 @@ export default function GuideTemplate({ data, forPrint = false }: Props) {
         </div>
       )}
 
-      {sections.iLuoghi && (
+      {has(sections.iLuoghi) && (
         <div className="guide-print-page">
           <GuideSection
             title="I LUOGHI DA NON PERDERE"
@@ -171,14 +183,16 @@ export default function GuideTemplate({ data, forPrint = false }: Props) {
 
       {gallery.length > 0 && (
         <div className="guide-print-page">
-          <p className="guide-continuation-label" style={{ color: '#813619' }}>I luoghi da non perdere — continua</p>
+          <p className="guide-continuation-label" style={{ color: '#813619' }}>
+            {has(sections.iLuoghi) ? 'I luoghi da non perdere — continua' : 'I luoghi da non perdere'}
+          </p>
           <div className="guide-poi-grid2">
             {gallery.slice(0, 6).map((poi, i) => <GuidePOICard key={i} poi={poi} />)}
           </div>
         </div>
       )}
 
-      {sections.laNatura && (
+      {has(sections.laNatura) && (
         <div className="guide-print-page">
           <GuideSection
             title="LA NATURA INTORNO A TE"
@@ -191,7 +205,7 @@ export default function GuideTemplate({ data, forPrint = false }: Props) {
         </div>
       )}
 
-      {sections.sapori && (
+      {has(sections.sapori) && (
         <div className="guide-print-page">
           <GuideSection
             title="SAPORI E TRADIZIONI"
@@ -204,15 +218,17 @@ export default function GuideTemplate({ data, forPrint = false }: Props) {
         </div>
       )}
 
-      <div className="guide-print-page">
-        <GuideSection
-          title="CONSIGLI FINALI"
-          subtitle="Sicurezza, segnaletica, varianti e contatti utili per l'escursione."
-          text={sections.consigliFinali.text}
-          layout="full-width"
-          accentColor="#5e564c"
-        />
-      </div>
+      {has(sections.consigliFinali) && (
+        <div className="guide-print-page">
+          <GuideSection
+            title="CONSIGLI FINALI"
+            subtitle="Sicurezza, segnaletica, varianti e contatti utili per l'escursione."
+            text={sections.consigliFinali.text}
+            layout="full-width"
+            accentColor="#5e564c"
+          />
+        </div>
+      )}
 
       {pois.length > 0 && (
         <div className="guide-print-page">

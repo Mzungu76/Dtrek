@@ -129,6 +129,7 @@ export default function GuidaHub({ id }: { id?: string }) {
   const [showAnimalGallery, setShowAnimalGallery] = useState(false)
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [exportingGuidePdf, setExportingGuidePdf] = useState(false)
+  const [guidePdfError, setGuidePdfError] = useState<string | null>(null)
   const [showPendingActions, setShowPendingActions] = useState(false)
   const [favoritesFilter, setFavoritesFilter] = useState(false)
   // "Prossima uscita": sottosezione dei preferiti, non un filtro a sé — vedi RouteHub.tsx per il
@@ -588,11 +589,15 @@ export default function GuidaHub({ id }: { id?: string }) {
   const handleExportGuidePdf = async () => {
     if (!hike || exportingGuidePdf) return
     setExportingGuidePdf(true)
+    setGuidePdfError(null)
     try {
       const { exportGuidePdf } = await import('@/utils/pdfExport')
       await exportGuidePdf(hike, hike.cachedGuide ?? '')
     } catch (err) {
+      // Prima l'errore restava solo in console: da fuori il pulsante sembrava semplicemente non
+      // fare nulla, indistinguibile da un pulsante inattivo.
       console.error('Export PDF guida fallito:', err)
+      setGuidePdfError('Generazione del PDF non riuscita. Riprova.')
     } finally {
       setExportingGuidePdf(false)
     }
@@ -885,18 +890,21 @@ export default function GuidaHub({ id }: { id?: string }) {
     }
 
     // strumenti
-    const hasGuideText = (hike.cachedGuide ?? '').trim().length > 50
     return (
       <div className="px-4 py-4 space-y-1">
+        {/* Nessuna condizione sul testo della guida: il documento vale anche come scheda dati del
+            percorso (copertina, mappa, statistiche, valutazione personalizzata, indice dei luoghi),
+            che è ciò che il PDF jsPDF ritirato in Fase 4 produceva senza chiedere nulla all'AI.
+            Le sezioni narrative mancanti vengono semplicemente saltate (GuideTemplate.tsx). */}
         <button
           onClick={handleExportGuidePdf}
-          disabled={!hasGuideText || exportingGuidePdf}
-          title={hasGuideText ? undefined : 'Apri prima la guida per generarla'}
+          disabled={exportingGuidePdf}
           className={`w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left text-sm font-medium disabled:opacity-40 disabled:hover:bg-transparent ${textPrimary}`}
         >
           {exportingGuidePdf ? <Loader2 className="w-4 h-4 text-stone-400/60 animate-spin" /> : <Download className="w-4 h-4 text-stone-400/60" />}
           {exportingGuidePdf ? 'Genero PDF…' : 'Esporta PDF'}
         </button>
+        {guidePdfError && <p className="px-2 pb-1 text-xs text-red-500">{guidePdfError}</p>}
         <button
           onClick={() => exportPlannedHikeToGpx(hike)}
           disabled={!hike.trackPoints?.length && !hike.routePolyline?.length}

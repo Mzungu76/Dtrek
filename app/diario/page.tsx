@@ -435,6 +435,14 @@ export default function DiarioPage() {
       }
 
       document.body.appendChild(host)
+
+      // Il libro a schermo è già stato clonato dentro `host`: da qui in poi è solo peso morto per
+      // la cattura, che clona l'intero documento a ogni blocco di pagine. Marcarlo lo tiene fuori
+      // da tutti quei cloni (vedi data-pdf-ignore in lib/pdfPaginate.ts) — su un diario lungo è la
+      // differenza fra clonare due libri per pagina e clonarne nessuno.
+      const liveBook = document.getElementById('diario-book')
+      liveBook?.setAttribute('data-pdf-ignore', '')
+
       await nextLayout()
 
       let blob: Blob
@@ -445,6 +453,7 @@ export default function DiarioPage() {
         })
       } finally {
         document.body.removeChild(host)
+        liveBook?.removeAttribute('data-pdf-ignore')
       }
 
       if (download) {

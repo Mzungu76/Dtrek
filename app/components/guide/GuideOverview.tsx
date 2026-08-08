@@ -61,8 +61,11 @@ export default function GuideOverview({ data }: { data: GuideData }) {
           punteggi già mostrati sopra": prima di questa riga quella frase non era vera. */}
       {data.assessment && <GuideAssessment assessment={data.assessment} />}
 
+      {/* Stesso criterio di GuideTemplate: una sezione senza testo AI non viene stampata, quindi
+          non deve nemmeno comparire nel sommario — su un percorso di cui non è ancora stata
+          generata la guida l'indice elencava sezioni inesistenti. */}
       <div className="guide-overview-toc pdf-block">
-        {TOC_ITEMS.filter(t => data.sections[t.key]).map(t => {
+        {TOC_ITEMS.filter(t => data.sections[t.key]?.text?.trim()).map(t => {
           const Icon = t.icon
           return (
             <div key={t.key} className="guide-overview-toc-row">
