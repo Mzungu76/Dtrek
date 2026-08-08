@@ -815,3 +815,45 @@ di Roma, e falliva. Il difetto era nel test, non nel codice — le coordinate in
 sbagliate. Da lì la scelta di verificare per **identità algebrica e round-trip** invece che contro
 costanti ricordate: un riferimento inventato è peggio di nessun riferimento, perché sposta il
 sospetto sul codice giusto.
+
+### 5.4 — Compositore a colonne (`lib/diaryMagazine.ts`)
+
+L'utente ha chiesto due pagine per escursione con **tutto** il testo, «suddividendo il resto in più
+colonne, come una rivista professionale». Misurato prima di promettere: il resoconto più lungo del
+database è di **9.345 caratteri**, e la capacità di due pagine a due colonne (Lora 10,5 px,
+interlinea 1,5, colonne da 341 px ≈ 65 caratteri per riga) è di ~9.700. Ci sta, con margine sottile.
+
+**`column-count` non è utilizzabile** e il piano lo aveva già segnalato per la Guida (§4.1): le
+colonne CSS si riempiono una alla volta, quindi i fondi dei `.pdf-block` delle due colonne sono
+interlacciati lungo l'asse verticale. L'impaginatore, cercando il taglio più basso che entra nella
+pagina, ne troverebbe uno a metà della prima colonna con la seconda ancora piena.
+
+Nuovo `lib/diaryMagazine.ts`: misura l'altezza reale di ogni blocco alla larghezza di colonna e
+compone pagine A4 già impaginate, che `paginateToPdf` riprende una a una senza dover tagliare
+nulla. Due colonne perché a 706 px utili danno righe da ~65 caratteri: tre scenderebbero a ~42, da
+quotidiano. `composeCardPages` impila le schede compatte delle escursioni senza racconto, tre o
+quattro per pagina invece di due pagine a testa.
+
+**B62 — misura su nodo staccato dal documento.** Trovato dalla verifica automatica, non a occhio.
+La prima versione costruiva le pagine con `document.createElement` e leggeva lì l'altezza
+dell'apertura (fascia foto + titolo + striscia dati): **`offsetHeight` su un elemento staccato dal
+documento torna 0**, senza errori né avvisi. L'area utile della prima pagina risultava quindi piena
+invece che ridotta di ~390 px, e le colonne traboccavano **fino a 376 px** — testo che finiva
+semplicemente fuori pagina, invisibile. Corretto imponendo che ogni misura avvenga su un banco
+attaccato al documento (`withRuler`), con tutte le misure prese *prima* di costruire le pagine.
+La regola è scritta in testa al modulo perché è il tipo di errore che si ripresenta.
+
+**Verifica in Chromium** su otto lunghezze, incluse tutte quelle reali dei resoconti dell'utente:
+
+| Caratteri | Pagine | Blocchi persi | Colonne traboccate |
+|---|---|---|---|
+| 1.032 | 1 | 0 | 0 |
+| 2.991 | 1 | 0 | 0 |
+| 4.158 | 1 | 0 | 0 |
+| 4.689 | 2 | 0 | 0 |
+| 7.488 | 2 | 0 | 0 |
+| 7.920 | 2 | 0 | 0 |
+| **9.345** (il più lungo reale) | **2** | 0 | 0 |
+| 14.000 (ipotetico) | 3 | 0 | 0 |
+
+Prima della correzione lo stesso banco riportava colonne traboccate su 7 casi su 8.
