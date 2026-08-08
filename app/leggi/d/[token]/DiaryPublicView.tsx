@@ -17,8 +17,10 @@ import { withForcedDownload } from '@/lib/storageDownloadUrl'
 import { parseSections } from '@/lib/reportStore'
 import { parseMarkupBlocks, parseInlineEmphasis } from '@/lib/guideMarkup'
 import { formatDuration } from '@/lib/tcxParser'
-import { hasNarrative, type PublicDiary, type PublicDiaryEntry } from '@/lib/sharePublicDiary'
+import { bucketPhotosByChapter } from '@/lib/photoBuckets'
+import { hasNarrative, type PublicDiary, type PublicDiaryEntry, type PublicDiaryPhoto } from '@/lib/sharePublicDiary'
 import { RouteSketch } from './RouteSketch'
+import { RouteMap } from './RouteMap'
 
 /** Il corpo dei resoconti è markdown: gli asterischi dell'enfasi vanno resi, non stampati. */
 function Inline({ text }: { text: string }) {
@@ -58,11 +60,11 @@ function EntryStats({ entry }: { entry: PublicDiaryEntry }) {
   )
 }
 
-function PhotoGrid({ entry }: { entry: PublicDiaryEntry }) {
-  if (entry.photos.length === 0) return null
+function PhotoGrid({ photos }: { photos: PublicDiaryPhoto[] }) {
+  if (photos.length === 0) return null
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mt-6">
-      {entry.photos.map((p, i) => (
+      {photos.map((p, i) => (
         <figure key={i} className="min-w-0">
           {/* `loading="lazy"` non è un dettaglio: un diario con dieci escursioni può avere un
               centinaio di foto a piena risoluzione, e chi apre il link spesso è in mobilità. */}
@@ -80,9 +82,108 @@ function PhotoGrid({ entry }: { entry: PublicDiaryEntry }) {
   )
 }
 
+/**
+ * Foto incastonata nel testo, con il paragrafo che le scorre accanto.
+ *
+ * Il float parte solo da `sm:` in su: sotto i 640 px la colonna è troppo stretta perché testo e
+ * immagine convivano affiancati, e una foto al 46% lascerebbe righe da quattro parole. Su mobile
+ * resta quindi un blocco a piena larghezza — spezza comunque il muro di testo, che è lo scopo.
+ * La `<section>` che le contiene ha `flow-root`, così il float è contenuto dalla sezione e non
+ * sborda in quella successiva.
+ */
+function InlineFigure({ photo, side }: { photo: PublicDiaryPhoto; side: 'left' | 'right' }) {
+  return (
+    <figure className={`my-4 sm:w-[46%] sm:mb-3 ${side === 'right' ? 'sm:float-right sm:ml-5' : 'sm:float-left sm:mr-5'}`}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={photo.url} alt={photo.caption ?? ''} loading="lazy" decoding="async"
+        className="w-full aspect-[4/3] object-cover rounded-xl bg-stone-100" />
+      {photo.caption && (
+        <figcaption className="text-[11px] font-lora italic text-stone-400 mt-1.5 leading-snug">
+          {photo.caption}
+        </figcaption>
+      )}
+    </figure>
+  )
+}
+
+/** Ogni quanti paragrafi si incastona una foto. Due è il passo che spezza il testo senza che la
+ *  pagina diventi un collage: con paragrafi da 5-8 righe cade una foto ogni schermata scarsa. */
+const PARAGRAPHS_PER_PHOTO = 2
+
 /** Escursione con un racconto: articolo completo. */
 function EntryArticle({ entry, n }: { entry: PublicDiaryEntry; n: number }) {
   const sections = parseSections(entry.content).filter(s => s.body.trim())
+
+  // La prima foto fa da apertura in cima all'articolo: nel corpo si riparte dalla seconda, per non
+  // ritrovarsi la stessa immagine due volte a poche righe di distanza.
+  const bodyPhotos = entry.photos.slice(1)
+  // Le foto seguono il racconto: ogni capitolo riceve quelle scattate durante la sua fetta di
+  // cammino, invece di essere impilate tutte in fondo (lib/photoBuckets.ts).
+  const buckets = bucketPhotosByChapter(bodyPhotos, Math.max(1, sections.length))
+
+  // Quel che avanza da un capitolo — perché aveva più foto che paragrafi — confluisce nella
+  // galleria di chiusura, così nessuna foto sparisce.
+  const leftovers: PublicDiaryPhoto[] = []
+  let figureCount = 0
+
+  const renderedSections = sections.map((section, si) => {
+    const queue = [...(buckets[si] ?? [])]
+    const nodes: React.ReactNode[] = []
+    let paragraphs = 0
+
+    parseMarkupBlocks(section.body).forEach((block, bi) => {
+      if (block.type === 'curiosita') {
+        nodes.push(
+          <aside key={`b${bi}`} className="my-4 rounded-r-xl border-l-[3px] border-terra-500 bg-terra-50/60 px-4 py-3">
+            <p className="font-lora italic text-[15px] leading-relaxed text-stone-600">
+              <Inline text={block.text} />
+            </p>
+          </aside>,
+        )
+        return
+      }
+      if (block.type === 'avviso') {
+        nodes.push(
+          <aside key={`b${bi}`} className="my-4 rounded-r-xl border-l-[3px] border-amber-500 bg-amber-50 px-4 py-3">
+            <p className="text-sm leading-relaxed text-amber-900"><Inline text={block.text} /></p>
+          </aside>,
+        )
+        return
+      }
+      if (block.type === 'subsection') {
+        nodes.push(
+          <h4 key={`b${bi}`} className="font-display font-bold text-base text-forest-800 mt-5 mb-1.5">
+            {block.text}
+          </h4>,
+        )
+        return
+      }
+      nodes.push(
+        <p key={`b${bi}`} className="font-lora text-[15px] leading-[1.75] text-stone-600 mb-3.5">
+          <Inline text={block.text} />
+        </p>,
+      )
+      paragraphs++
+      if (paragraphs % PARAGRAPHS_PER_PHOTO === 0 && queue.length > 0) {
+        const photo = queue.shift()!
+        // Lati alternati lungo tutto l'articolo, non per capitolo: due capitoli brevi di fila non
+        // producono due foto affiancate dallo stesso lato.
+        nodes.push(<InlineFigure key={`f${bi}`} photo={photo} side={figureCount++ % 2 === 0 ? 'right' : 'left'} />)
+      }
+    })
+
+    leftovers.push(...queue)
+
+    return (
+      // `flow-root` contiene i float delle foto dentro la sezione che le ospita.
+      <section key={si} className="mt-6 first:mt-0 flow-root">
+        <h3 className="font-barlow font-bold text-[11px] tracking-[0.2em] uppercase text-terra-500 mb-2">
+          {section.title}
+        </h3>
+        {nodes}
+      </section>
+    )
+  })
 
   return (
     <article id={`esc-${n}`} className="bg-white rounded-3xl border border-stone-200 shadow-sm overflow-hidden scroll-mt-16">
@@ -106,8 +207,8 @@ function EntryArticle({ entry, n }: { entry: PublicDiaryEntry; n: number }) {
         <EntryStats entry={entry} />
 
         {entry.polyline && (
-          <div className="max-w-xs mx-auto sm:float-right sm:ml-6 sm:mb-3 sm:max-w-[280px] sm:w-[280px] mb-5">
-            <RouteSketch
+          <div className="mb-6">
+            <RouteMap
               polyline={entry.polyline}
               photoProgress={entry.photos.map(p => p.progress).filter((p): p is number => p != null)}
             />
@@ -117,48 +218,10 @@ function EntryArticle({ entry, n }: { entry: PublicDiaryEntry; n: number }) {
           </div>
         )}
 
-        {sections.map((section, si) => (
-          <section key={si} className="mt-6 first:mt-0">
-            <h3 className="font-barlow font-bold text-[11px] tracking-[0.2em] uppercase text-terra-500 mb-2">
-              {section.title}
-            </h3>
-            {parseMarkupBlocks(section.body).map((block, bi) => {
-              if (block.type === 'curiosita') {
-                return (
-                  <aside key={bi} className="my-4 rounded-r-xl border-l-[3px] border-terra-500 bg-terra-50/60 px-4 py-3">
-                    <p className="font-lora italic text-[15px] leading-relaxed text-stone-600">
-                      <Inline text={block.text} />
-                    </p>
-                  </aside>
-                )
-              }
-              if (block.type === 'avviso') {
-                return (
-                  <aside key={bi} className="my-4 rounded-r-xl border-l-[3px] border-amber-500 bg-amber-50 px-4 py-3">
-                    <p className="text-sm leading-relaxed text-amber-900">
-                      <Inline text={block.text} />
-                    </p>
-                  </aside>
-                )
-              }
-              if (block.type === 'subsection') {
-                return (
-                  <h4 key={bi} className="font-display font-bold text-base text-forest-800 mt-5 mb-1.5">
-                    {block.text}
-                  </h4>
-                )
-              }
-              return (
-                <p key={bi} className="font-lora text-[15px] leading-[1.75] text-stone-600 mb-3.5">
-                  <Inline text={block.text} />
-                </p>
-              )
-            })}
-          </section>
-        ))}
+        {renderedSections}
 
         <div className="clear-both" />
-        <PhotoGrid entry={entry} />
+        <PhotoGrid photos={leftovers} />
       </div>
     </article>
   )

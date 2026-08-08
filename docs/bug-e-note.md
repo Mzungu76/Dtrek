@@ -760,3 +760,58 @@ tre polilinee reali del database (una orizzontale, una verticale, una diagonale)
 cadono dentro il riquadro, il padding è rispettato sull'asse vincolante, e la **deformazione del
 rapporto d'aspetto è 0,000%** — la correzione per `cos(lat)` con un unico fattore di scala su
 entrambi gli assi mantiene le proporzioni reali del percorso.
+
+### 5.3 — Mappa OSM e foto nel testo (riscontro dell'utente sulla pagina pubblica)
+
+Dopo il primo deploy della rivista web l'utente ha segnalato due cose, entrambe fondate.
+
+**B60 — «la mappa non Leaflet e OSM non viene visualizzata».** `RouteSketch` disegnava la sola
+traccia su fondo grigio: geometricamente corretta ma senza alcun contesto geografico — un percorso
+sospeso nel vuoto non dice dove sei. Nuovo `RouteMap.tsx`: **mosaico di tile OSM** (via il proxy
+`/api/tile` già esistente, same-origin e con cache 24h) con la traccia disegnata sopra in SVG.
+
+Resta un componente server: le tile sono `<img loading="lazy">` posizionate in percentuale, la
+traccia è un `<path>` sovrapposto. Nessuna istanza Leaflet/MapLibre, nessun runtime spedito al
+browser, e le tile si scaricano solo quando l'escursione entra nel viewport. Il riquadro si adatta
+alla forma del percorso (altezza 240–420 px in base al rapporto d'aspetto in spazio Mercator), lo
+zoom è il più stretto in cui la traccia entra con il suo margine, e l'inquadratura è centrata sul
+percorso invece che allineata alla griglia delle tile. Attribuzione OSM/CARTO incisa nell'angolo —
+è un requisito ODbL su un documento pubblicato.
+
+`RouteSketch` resta in uso per le miniature delle schede compatte, dove caricare 6-9 tile per un
+riquadro da 80 px sarebbe uno spreco.
+
+*Costo da tenere d'occhio*: un diario da 10 escursioni può arrivare a ~60-90 richieste a
+`/api/tile`, tutte pigre e con `Cache-Control: public, max-age=86400`. Accettabile oggi; se il
+numero di escursioni per pagina crescesse molto varrebbe la pena una mappa d'insieme unica.
+
+**B61 — foto tutte ammassate in fondo.** Il racconto era un muro di testo con la galleria in coda.
+Ora le foto sono **intercalate nel racconto**: assegnate ai capitoli in base alla loro progressione
+lungo il percorso (`lib/photoBuckets.ts`) e inserite una ogni due paragrafi, con i lati alternati
+lungo tutto l'articolo. Da `sm:` in su scorrono affiancate al testo (float al 46%, contenuto dalla
+`<section>` con `flow-root`); sotto i 640 px restano blocchi a piena larghezza, perché in una
+colonna stretta un'immagine al 46% lascerebbe righe da quattro parole. Le foto che avanzano da un
+capitolo confluiscono nella galleria di chiusura, così nessuna sparisce.
+
+**Deduplicazione**: `bucketPhotosByChapter` era una funzione privata dentro `ReportReader.tsx`. È
+stata estratta in `lib/photoBuckets.ts` e resa generica sul tipo di foto (`RoutePhoto` porta
+`progress: number`, la lettura pubblica `number | null`), invece di riscriverla una seconda volta —
+è esattamente il tipo di duplicazione elencato in §4.4 del piano.
+
+**Verifica della proiezione Web Mercator** (riprodotta in Node, non controllata a occhio):
+
+- coincide con la forma canonica `asinh(tan(φ))` entro **1,46 × 10⁻¹⁰ tile** su 6800 campioni
+  distribuiti su tutti gli zoom 1–17;
+- il round-trip attraverso l'inversa canonica torna entro **1,3 × 10⁻¹³ gradi**;
+- ancore derivabili esattamente (equatore/Greenwich a z=1 e z=4, antimeridiano a z=3, lon=+90 a
+  z=2) tutte esatte.
+
+Sulle tre polilinee reali del database: traccia sempre dentro il riquadro con il margine
+rispettato, copertura delle tile piena senza buchi, indici di tile validi, riempimento del riquadro
+fra il 47% e l'81%.
+
+*Nota di metodo*: il primo giro di controllo usava valori «attesi» scritti a memoria per una tile
+di Roma, e falliva. Il difetto era nel test, non nel codice — le coordinate inventate erano
+sbagliate. Da lì la scelta di verificare per **identità algebrica e round-trip** invece che contro
+costanti ricordate: un riferimento inventato è peggio di nessun riferimento, perché sposta il
+sospetto sul codice giusto.
