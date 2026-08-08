@@ -325,6 +325,14 @@ export default function DiarioPage() {
     setCoverUploading(true); setCoverError(null)
     try {
       const supabase = getBrowserSupabase()
+      // getSession() (a differenza di getUser()) rinfresca proattivamente un token vicino alla
+      // scadenza. Senza, una scheda tenuta aperta a lungo (il timer di autoRefreshToken viene
+      // rallentato/sospeso dal browser quando l'app va in background, comune su mobile) può
+      // superare comunque il controllo di getUser() qui sotto con un token ormai scaduto — per
+      // poi farsi rifiutare dallo Storage nella chiamata di rete separata subito dopo, con un
+      // errore RLS generico invece che di autenticazione (stesso difetto già corretto in
+      // lib/activityPhotos.ts, non applicato qui).
+      await supabase.auth.getSession()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Non autenticato')
       const url = await uploadDiaryCover(user.id, file)
@@ -463,18 +471,41 @@ export default function DiarioPage() {
       } else {
         const { getBrowserSupabase } = await import('@/lib/supabaseBrowser')
         const sb = getBrowserSupabase()
+        // Vedi il commento gemello in handleCoverUpload sopra.
+        await sb.auth.getSession()
         const { data: { user } } = await sb.auth.getUser()
         if (!user) throw new Error('Non autenticato')
         const { uploadDiaryPdf } = await import('@/lib/pdfUpload')
         const pdfUrl = await uploadDiaryPdf(user.id, blob)
-        const patchRes = await fetch('/api/diary-token', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ diaryPdfUrl: pdfUrl }),
-        })
-        const patchData = await patchRes.json() as { diary_token?: string }
+        // A questo punto la parte costosa (rendere e caricare il PDF, anche minuti su un diario
+        // lungo) è già fatta: perdere tutto per un singolo blip di rete su questa PATCH — piccola
+        // e idempotente — su un giro di correzioni segnalato proprio come "Failed to fetch"
+        // durante la ripubblicazione, sarebbe uno spreco evitabile. Due tentativi in più prima di
+        // arrendersi, non un retry infinito.
+        let patchData: { diary_token?: string } = {}
+        let lastErr: unknown
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            const patchRes = await fetch('/api/diary-token', {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ diaryPdfUrl: pdfUrl }),
+            })
+            if (!patchRes.ok) throw new Error(`PATCH /api/diary-token → ${patchRes.status}`)
+            patchData = await patchRes.json() as { diary_token?: string }
+            lastErr = undefined
+            break
+          } catch (e) {
+            lastErr = e
+            if (attempt < 2) await new Promise(r => setTimeout(r, 800 * (attempt + 1)))
+          }
+        }
         setDiaryPdfUrl(pdfUrl)
         if (patchData.diary_token) setDiaryToken(patchData.diary_token)
+        // Il PDF è comunque caricato e raggiungibile dal vecchio token/URL diretto: un fallimento
+        // qui non è la stessa cosa di un fallimento della generazione, e viene segnalato come tale
+        // invece di far ripartire l'utente da capo.
+        if (lastErr) throw new Error('PDF caricato, ma l’aggiornamento del link pubblico non è riuscito. Riprova a ripubblicare.')
       }
     } catch (e) {
       // Prima gli errori del solo download venivano inghiottiti (`if (!download) setPublishError`)

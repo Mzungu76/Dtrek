@@ -22,6 +22,7 @@ import { useCtsUpdated } from '@/lib/sync/useCtsUpdated'
 import { streamFetchText, StreamFetchError } from '@/lib/streamFetchText'
 import { getQuestionnaire } from '@/lib/questionnaireStore'
 import { extractLeadSubtitle } from '@/lib/extractLeadSubtitle'
+import { withForcedDownload } from '@/lib/pdfUpload'
 import { computeMaterialScore } from '@/lib/materialScore'
 import SectionNav from '@/components/editorial/SectionNav'
 import SectionCard from '@/components/editorial/SectionCard'
@@ -521,6 +522,12 @@ export default function ReportReader({
       const { renderReportPdfBlob } = await import('@/app/resoconto/[id]/renderReportPdf')
       const blob = await renderReportPdfBlob(reportPdfParams())
 
+      // getSession() (a differenza di getUser()) rinfresca proattivamente un token vicino alla
+      // scadenza. La generazione appena finita può richiedere diversi secondi su un resoconto
+      // lungo: se nel frattempo il token è scaduto, la chiamata di rete dello Storage qui sotto lo
+      // userebbe comunque e verrebbe rifiutata dall'RLS con un errore generico invece che di
+      // autenticazione (stesso difetto già corretto in lib/activityPhotos.ts).
+      await sb.auth.getSession()
       const { uploadReportPdf } = await import('@/lib/pdfUpload')
       const url = await uploadReportPdf(user.id, id, blob)
 
@@ -964,7 +971,7 @@ export default function ReportReader({
                               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forest-600 text-white text-xs font-display font-bold uppercase tracking-wide hover:bg-forest-700 transition-colors">
                               <Copy className="w-3.5 h-3.5" /> {copyOk ? 'Copiato!' : 'Copia link'}
                             </button>
-                            <a href={sharePdfUrl} target="_blank" rel="noopener noreferrer" download
+                            <a href={withForcedDownload(sharePdfUrl)} target="_blank" rel="noopener noreferrer" download
                               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-stone-500 text-xs font-display font-bold uppercase tracking-wide hover:bg-stone-50 transition-colors">
                               <ExternalLink className="w-3.5 h-3.5" /> PDF diretto
                             </a>
