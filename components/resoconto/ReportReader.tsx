@@ -23,6 +23,9 @@ import { streamFetchText, StreamFetchError } from '@/lib/streamFetchText'
 import { getQuestionnaire } from '@/lib/questionnaireStore'
 import { extractLeadSubtitle } from '@/lib/extractLeadSubtitle'
 import { withForcedDownload } from '@/lib/storageDownloadUrl'
+// Estratta in lib/photoBuckets.ts quando è servita anche alla pagina pubblica del Diario:
+// la stessa logica in due copie è ciò che in questo progetto ha già prodotto divergenze silenziose.
+import { bucketPhotosByChapter } from '@/lib/photoBuckets'
 import { computeMaterialScore } from '@/lib/materialScore'
 import SectionNav from '@/components/editorial/SectionNav'
 import SectionCard from '@/components/editorial/SectionCard'
@@ -57,22 +60,6 @@ import {
   Pencil, Loader2, BookOpen, Share2, Copy, Link2Off, ExternalLink,
   Layers, RefreshCw, Heart, Zap, Flame, Download,
 } from 'lucide-react'
-
-/** Distribuisce le foto tra i capitoli narrativi in base alla loro progressione lungo il
- *  percorso (0..1) — ogni capitolo riceve le foto scattate durante la sua "fetta" di cammino,
- *  invece del vecchio abbinamento a un solo titolo fisso ('Il percorso'/'Cronaca'/…, vedi
- *  app/resoconto/[id]/sectionPhotoSlot.ts, ancora usato dal solo export PDF che non passa da
- *  qui) — funziona con qualunque numero/titolo di capitoli scriva Giulia. */
-function bucketPhotosByChapter(photos: RoutePhoto[], chapterCount: number): RoutePhoto[][] {
-  if (chapterCount === 0) return []
-  const buckets: RoutePhoto[][] = Array.from({ length: chapterCount }, () => [])
-  const sorted = [...photos].sort((a, b) => a.progress - b.progress)
-  for (const p of sorted) {
-    const idx = Math.min(chapterCount - 1, Math.floor(p.progress * chapterCount))
-    buckets[idx].push(p)
-  }
-  return buckets
-}
 
 /** Frase a effetto da mostrare in grande, stile rivista, a metà lettura — preferisce un
  *  [curiosita] già scritto da Giulia (già pensato per stupire), altrimenti la frase più lunga
