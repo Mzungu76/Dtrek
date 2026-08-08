@@ -456,14 +456,67 @@ export default function DiarioPage() {
 
       await nextLayout()
 
+      // ── Composizione a colonne ────────────────────────────────────────────────────────────────
+      // Le pagine del libro a schermo sono a colonna singola: qui vengono ricomposte in pagine
+      // magazine a due colonne, già impaginate. Il libro a schermo resta com'è — è una scelta:
+      // comporre anche lì raddoppierebbe il DOM vivo della rotta più pesante dopo /resoconto.
+      //
+      // Le immagini devono essere decodificate PRIMA di misurare: un'immagine senza dimensioni
+      // intrinseche falsa l'altezza dei blocchi e con essa tutta la composizione. `paginateToPdf`
+      // le attende già, ma lo fa dopo — troppo tardi per noi.
+      const { composeReportPages, composeCardPages, MAG } = await import('@/lib/diaryMagazine')
+      const { waitForImages } = await import('@/lib/pdfImages')
+      await waitForImages(host)
+
+      const composed: HTMLElement[] = []
+      const cards: HTMLElement[] = []
+      for (const clone of clones) {
+        const card = clone.querySelector<HTMLElement>('[data-mag="card"]')
+        if (card) {
+          // Escursione senza racconto: al posto della pagina intera va la scheda compatta, che
+          // viene impilata con le altre più sotto invece di occupare due pagine da sola.
+          card.style.display = ''
+          cards.push(card)
+          continue
+        }
+        if (clone.querySelector(MAG.opening)) {
+          composed.push(...composeReportPages(clone))
+          continue
+        }
+        // Copertina, indice, mappa d'insieme, statistiche: restano pagine a sé.
+        composed.push(clone)
+      }
+
+      if (cards.length > 0) {
+        const heading = document.createElement('p')
+        heading.style.cssText =
+          'font-family:var(--font-barlow),Arial Narrow,sans-serif;font-size:9px;font-weight:900;' +
+          'letter-spacing:3px;text-transform:uppercase;color:#a9a18e;margin:0 0 16px;' +
+          'padding-bottom:9px;border-bottom:1.5px solid #e08d3c'
+        heading.textContent = 'Le altre uscite'
+        cards.unshift(heading)
+        composed.push(...composeCardPages(cards))
+      }
+
+      // Le pagine composte devono stare nel documento per essere catturate. `appendChild` sposta i
+      // nodi già esistenti (copertina, indice…) invece di duplicarli, quindi il vecchio host resta
+      // con dentro solo i cloni dei resoconti ormai ricomposti.
+      const pdfHost = document.createElement('div')
+      pdfHost.style.cssText = 'position:absolute;left:-10000px;top:0;width:794px;background:#fff;z-index:-1'
+      for (const p of composed) pdfHost.appendChild(p)
+      document.body.appendChild(pdfHost)
+      host.remove()
+
+      await nextLayout()
+
       let blob: Blob
       try {
-        blob = await paginateToPdf(clones, '.pdf-block', {
+        blob = await paginateToPdf(composed, '.pdf-block', {
           documentTitle: config.title, authorName: config.author,
           onProgress: (done, total) => setPublishProgress({ done, total }),
         })
       } finally {
-        document.body.removeChild(host)
+        pdfHost.remove()
         liveBook?.removeAttribute('data-pdf-ignore')
       }
 

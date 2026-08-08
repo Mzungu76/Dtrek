@@ -815,3 +815,88 @@ di Roma, e falliva. Il difetto era nel test, non nel codice — le coordinate in
 sbagliate. Da lì la scelta di verificare per **identità algebrica e round-trip** invece che contro
 costanti ricordate: un riferimento inventato è peggio di nessun riferimento, perché sposta il
 sospetto sul codice giusto.
+
+### 5.4 — Compositore a colonne (`lib/diaryMagazine.ts`)
+
+L'utente ha chiesto due pagine per escursione con **tutto** il testo, «suddividendo il resto in più
+colonne, come una rivista professionale». Misurato prima di promettere: il resoconto più lungo del
+database è di **9.345 caratteri**, e la capacità di due pagine a due colonne (Lora 10,5 px,
+interlinea 1,5, colonne da 341 px ≈ 65 caratteri per riga) è di ~9.700. Ci sta, con margine sottile.
+
+**`column-count` non è utilizzabile** e il piano lo aveva già segnalato per la Guida (§4.1): le
+colonne CSS si riempiono una alla volta, quindi i fondi dei `.pdf-block` delle due colonne sono
+interlacciati lungo l'asse verticale. L'impaginatore, cercando il taglio più basso che entra nella
+pagina, ne troverebbe uno a metà della prima colonna con la seconda ancora piena.
+
+Nuovo `lib/diaryMagazine.ts`: misura l'altezza reale di ogni blocco alla larghezza di colonna e
+compone pagine A4 già impaginate, che `paginateToPdf` riprende una a una senza dover tagliare
+nulla. Due colonne perché a 706 px utili danno righe da ~65 caratteri: tre scenderebbero a ~42, da
+quotidiano. `composeCardPages` impila le schede compatte delle escursioni senza racconto, tre o
+quattro per pagina invece di due pagine a testa.
+
+**B62 — misura su nodo staccato dal documento.** Trovato dalla verifica automatica, non a occhio.
+La prima versione costruiva le pagine con `document.createElement` e leggeva lì l'altezza
+dell'apertura (fascia foto + titolo + striscia dati): **`offsetHeight` su un elemento staccato dal
+documento torna 0**, senza errori né avvisi. L'area utile della prima pagina risultava quindi piena
+invece che ridotta di ~390 px, e le colonne traboccavano **fino a 376 px** — testo che finiva
+semplicemente fuori pagina, invisibile. Corretto imponendo che ogni misura avvenga su un banco
+attaccato al documento (`withRuler`), con tutte le misure prese *prima* di costruire le pagine.
+La regola è scritta in testa al modulo perché è il tipo di errore che si ripresenta.
+
+**Verifica in Chromium** su otto lunghezze, incluse tutte quelle reali dei resoconti dell'utente:
+
+| Caratteri | Pagine | Blocchi persi | Colonne traboccate |
+|---|---|---|---|
+| 1.032 | 1 | 0 | 0 |
+| 2.991 | 1 | 0 | 0 |
+| 4.158 | 1 | 0 | 0 |
+| 4.689 | 2 | 0 | 0 |
+| 7.488 | 2 | 0 | 0 |
+| 7.920 | 2 | 0 | 0 |
+| **9.345** (il più lungo reale) | **2** | 0 | 0 |
+| 14.000 (ipotetico) | 3 | 0 | 0 |
+
+Prima della correzione lo stesso banco riportava colonne traboccate su 7 casi su 8.
+
+### 5.5 — Cablaggio del compositore nell'esportazione
+
+Scelta concordata con l'utente: **comporre solo in esportazione**. Il libro a schermo resta a
+colonna singola; il PDF diventa la rivista. L'alternativa (comporre anche a schermo, per una
+anteprima fedele) raddoppierebbe il DOM vivo di `/diario`, che è già la rotta più pesante dopo
+`/resoconto`. Si potrà valutare quando il PDF convince.
+
+**Contratto dei marcatori** dichiarato da `DiarioReportPage`:
+
+| Marcatore | Cosa | Dove finisce |
+|---|---|---|
+| `data-mag="opening"` | fascia foto + striscia dati + barra data | solo la prima pagina del pezzo |
+| `data-mag-block` | paragrafi, intestazioni, citazioni, riquadri | flusso a due colonne |
+| `data-mag-keep` | intestazioni di sezione | mai ultime in colonna |
+| `data-mag="tail"` | statistiche, grafici, mappa, galleria | pagine proprie dopo il racconto |
+| `data-mag="card"` | scheda compatta (solo senza racconto) | impilata con le altre |
+
+Il hero è sceso **da 420 a 320 px**: a 420 l'apertura completa occupava 560 px su 1067, più di
+metà pagina per una fotografia, e il testo scivolava su una terza pagina.
+
+**B63 — marcatori sovrapposti.** Marcando il template, i cinque blocchi di coda hanno preso *anche*
+`data-mag-block`, perché portavano già `.pdf-block` e la marcatura è avvenuta con una sostituzione
+di massa: sarebbero finiti duplicati, una volta nelle colonne e una in coda. Corretto nel template,
+ma soprattutto nel compositore, che ora esclude dal flusso qualunque elemento che sia (o stia
+dentro) un blocco di coda: la duplicazione non può ripresentarsi anche se il template sbaglia.
+
+**Verifica in Chromium** della struttura marcata reale (apertura, 9 blocchi di flusso di cui 4
+`keep`, 5 blocchi di coda che portano anche `.pdf-block`):
+
+- apertura presente **una sola volta**, sulla prima pagina;
+- 5 blocchi di coda tutti presenti, e nelle colonne **esattamente 9** blocchi — nessuna duplicazione;
+- nessuna colonna traboccata;
+- 7 schede compatte collocate su **2 pagine** invece di 14.
+
+**Conteggio pagine atteso** sul diario dell'utente: 7 resoconti narrati × 3 pagine (2 di testo +
+1 di coda) + 1 pagina di schede + 5 di apparato = **~27 pagine contro 56**. A 0,62× q72 sono ~3 MB
+contro 21,7.
+
+**Scostamento dichiarato**: la scelta «adattivo» prevedeva mappa e profilo *dentro* le due pagine,
+con la galleria in più solo per le escursioni ricche di foto. Oggi tutta la coda va su pagine
+proprie, quindi un resoconto narrato costa 3 pagine invece di 2. Rientra nel prossimo giro,
+facendo proseguire la coda sulla pagina di testo quando c'è spazio, invece di aprirne sempre una.
