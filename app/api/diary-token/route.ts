@@ -25,35 +25,51 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// PATCH /api/diary-token { diaryPdfUrl } → save diary public PDF URL, generate diary_token if needed
+// PATCH /api/diary-token { diaryPdfUrl? } → assicura un diary_token, e SOLO se il corpo contiene
+// `diaryPdfUrl` aggiorna anche l'URL del PDF.
+//
+// La distinzione è il motivo per cui la condivisione ora funziona. Prima la chiave era sempre
+// scritta: chiamare la PATCH senza URL azzerava `diary_pdf_url`, quindi l'unico modo di ottenere
+// un link era passare da un upload riuscito — e `fetchPublicDiary` a sua volta pretendeva quel
+// campo non nullo. Le due cose insieme rendevano la condivisione impossibile finché un file da
+// decine di MB non arrivava a destinazione da un telefono.
+//
+// Ora «Pubblica link» chiama questa PATCH con corpo vuoto: ottiene il token, la pagina pubblica è
+// subito viva, e un eventuale PDF pubblicato in seguito si aggiunge senza toccare il link.
 export async function PATCH(req: NextRequest) {
   try {
     const user = await getUserFromRequest(req)
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    const { diaryPdfUrl } = (await req.json()) as { diaryPdfUrl?: string | null }
+
+    // Corpo assente o non-JSON: trattato come «assicura solo il token», non come «azzera il PDF».
+    const body = await req.json().catch(() => ({})) as { diaryPdfUrl?: string | null }
+    const touchesPdf = Object.prototype.hasOwnProperty.call(body, 'diaryPdfUrl')
 
     const { data: existing } = await supabase
       .from('user_settings')
-      .select('user_id, diary_token')
+      .select('user_id, diary_token, diary_pdf_url')
       .eq('user_id', user.id)
-      .single()
+      .maybeSingle()
 
     // Keep existing diary_token or generate a new UUID
     const token = (existing?.diary_token as string | null) ?? crypto.randomUUID()
+    const pdfUrl = touchesPdf
+      ? (body.diaryPdfUrl ?? null)
+      : ((existing?.diary_pdf_url as string | null) ?? null)
 
     if (existing) {
       const { error } = await supabase
         .from('user_settings')
-        .update({ diary_pdf_url: diaryPdfUrl ?? null, diary_token: token })
+        .update(touchesPdf ? { diary_pdf_url: pdfUrl, diary_token: token } : { diary_token: token })
         .eq('user_id', user.id)
       if (error) throw error
     } else {
       const { error } = await supabase
         .from('user_settings')
-        .insert({ user_id: user.id, diary_pdf_url: diaryPdfUrl ?? null, diary_token: token })
+        .insert({ user_id: user.id, diary_pdf_url: pdfUrl, diary_token: token })
       if (error) throw error
     }
-    return NextResponse.json({ ok: true, diary_pdf_url: diaryPdfUrl ?? null, diary_token: token })
+    return NextResponse.json({ ok: true, diary_pdf_url: pdfUrl, diary_token: token })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
