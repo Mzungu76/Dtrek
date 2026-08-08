@@ -900,3 +900,36 @@ contro 21,7.
 con la galleria in più solo per le escursioni ricche di foto. Oggi tutta la coda va su pagine
 proprie, quindi un resoconto narrato costa 3 pagine invece di 2. Rientra nel prossimo giro,
 facendo proseguire la coda sulla pagina di testo quando c'è spazio, invece di aprirne sempre una.
+
+### 5.6 — La vera causa dell'errore RLS (e una diagnosi precedente sbagliata)
+
+L'errore «new row violates row-level security policy» è ricomparso alla pubblicazione del PDF
+nonostante la correzione B53. **B53 era una diagnosi sbagliata**: il token non c'entrava, e i
+`getSession()` aggiunti allora sono innocui ma non curavano nulla.
+
+La causa vera si legge nel confronto fra i due bucket:
+
+| Bucket | INSERT | UPDATE | **SELECT** |
+|---|---|---|---|
+| `dtrek-photos` | ✓ | ✓ | **✓** (`users_read_own_photos`) |
+| `dtrek-reports` | ✓ | ✓ | **assente** |
+
+`upsert: true` deve poter **leggere** l'oggetto esistente prima di sostituirlo. Senza policy SELECT
+la riga è invisibile all'utente, quindi lo Storage tratta la richiesta come un inserimento su una
+chiave che esiste già e la RLS la respinge — con un messaggio che sembra di autenticazione e non lo
+è. È esattamente il motivo per cui le **foto** si caricavano (bucket con SELECT) e i **PDF** no.
+
+Migrazione `add_select_policy_dtrek_reports`: aggiunta `users_read_own_reports`. Il bucket è
+`public: true`, quindi chiunque abbia l'URL legge già i file: la policy concede al proprietario meno
+di quanto è pubblicamente esposto.
+
+*Lezione di metodo*: la prima diagnosi era partita da un sintomo simile già visto altrove
+(`lib/activityPhotos.ts`) e si era fermata alla somiglianza. Il confronto sistematico fra il bucket
+che funziona e quello che non funziona avrebbe chiuso la questione subito.
+
+### 5.7 — Coda del resoconto: due pagine mezze vuote
+
+Dall'export reale dell'utente: pagina 12 con statistiche e grafici e poi ~530 px bianchi, pagina 13
+con la sola mappa e ~380 px bianchi. Causa: `mapOutH` a 660 px di larghezza può restituire fino a
+**733 px di altezza**, e con statistiche e grafici davanti la coda non entrava in una pagina sola.
+La mappa del singolo resoconto è ora contenuta in **560×320**, così l'intera coda sta su una pagina.
