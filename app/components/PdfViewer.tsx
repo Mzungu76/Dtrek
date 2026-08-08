@@ -1,8 +1,9 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { BookOpen, ChevronLeft, ChevronRight, Download, Loader2, ZoomIn, ZoomOut } from 'lucide-react'
+import { BookOpen, ChevronLeft, ChevronRight, Download, Home, Loader2, ZoomIn, ZoomOut } from 'lucide-react'
 import { FONT } from '@/lib/designTokens'
+import { withForcedDownload } from '@/lib/pdfUpload'
 
 interface Props {
   pdfUrl: string
@@ -145,6 +146,22 @@ export default function PdfViewer({ pdfUrl, title }: Props) {
       justifyContent: 'flex-start', paddingTop: 32, paddingBottom: 40, gap: 20,
     }}>
 
+      {/* Chi apre questo lettore da un link pubblico (condiviso via WhatsApp, PWA in modalità
+          standalone, o come pagina isolata senza cronologia del browser) non aveva alcun modo di
+          tornare all'app: solo Indietro/Avanti fra le pagine del PDF, ingrandisci e download. Un
+          link fisso, non un pulsante "indietro" del browser (che potrebbe non esserci), riporta
+          sempre alla home dell'app. */}
+      <a href="/" title="Torna a DTrek"
+        style={{
+          position: 'fixed', top: 16, left: 16, zIndex: 20,
+          display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 999,
+          background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(4px)',
+          color: 'rgba(255,255,255,0.85)', textDecoration: 'none',
+          fontSize: 12, fontFamily: FONT.body, fontWeight: 600, letterSpacing: 0.3,
+        }}>
+        <Home style={{ width: 14, height: 14 }} /> DTrek
+      </a>
+
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
         <BookOpen style={{ color: 'rgba(255,255,255,0.55)', width: 18, height: 18 }} />
@@ -250,7 +267,11 @@ export default function PdfViewer({ pdfUrl, title }: Props) {
               {actualSize ? 'Adatta' : 'Ingrandisci'}
             </button>
 
-            <a href={pdfUrl} download target="_blank" rel="noopener noreferrer"
+            {/* `download` da solo non basta su un URL cross-origin (*.supabase.co): i browser
+                recenti lo ignorano e il link si limitava ad aprire il PDF in una nuova scheda
+                invece di scaricarlo. `withForcedDownload` aggiunge il parametro che fa impostare
+                a Supabase Storage `Content-Disposition: attachment` lato server. */}
+            <a href={withForcedDownload(pdfUrl)} download target="_blank" rel="noopener noreferrer"
               style={{
                 padding: '9px 16px', borderRadius: 8,
                 background: '#c05a17', color: 'white',

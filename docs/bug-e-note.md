@@ -561,3 +561,99 @@ Un template che si disegna alto quanto l'A4 pieno sfora e viene spezzato in due:
 Diario faceva. Solo le pagine `.pdf-bleed` (le copertine, su cui testatina e piede non vengono
 disegnati) possono usare `PDF_PAGE_H`. Le pagine del diario usano ora `PDF_CONTENT_H`, così una
 pagina del libro corrisponde a una pagina del PDF.
+
+### Seconda revisione: link di pubblicazione, impaginazione del Diario, UX del lettore
+
+L'utente ha caricato un secondo giro di export reali (un Diario di 58 pagine, un resoconto
+ripubblicato) e cinque screenshot da telefono, segnalando: pubblicazione del PDF del resoconto
+fallita, aggiornamento del link del Diario fallito ("Failed to fetch"), impaginazione del Diario
+ancora imperfetta, impossibilità di tornare all'app dopo aver aperto il lettore, problemi nello
+scaricamento del PDF.
+
+**B53 — `StorageApiError: new row violates row-level security policy` alla pubblicazione del PDF
+(resoconto e Diario)**. Confermato via screenshot. Le policy RLS su `storage.objects` sono state
+verificate via SQL (progetto `sdxlcpxgbkagbxhukehd`) e sono corrette: il difetto non è lì. Causa
+reale — lo stesso schema già corretto in `lib/activityPhotos.ts` ma non applicato altrove:
+`supabase.auth.getUser()` può accettare un token ormai vicino alla scadenza (la sessione resta
+aperta a lungo, il refresh automatico va in pausa quando l'app è in background su mobile), ma la
+chiamata di rete SEPARATA verso Storage che segue viene rifiutata con quello stesso token —
+emergendo come un errore RLS generico invece che di autenticazione. Trovati e corretti tre punti
+dove mancava `await supabase.auth.getSession()` (che rinfresca proattivamente un token vicino alla
+scadenza) prima dell'operazione: `ReportReader.tsx` (`publishPdf`, posizionato dopo il rendering
+del PDF apposta, per coprire anche lo scadimento accumulato durante un render lento), e due punti
+in `app/diario/page.tsx` (`handleCoverUpload`, `generateAndUploadPdf`).
+
+**B54 — "Failed to fetch" su "Ripubblica" del Diario**. Stessa classe di difetto di B53 (probabile
+causa primaria, ora corretta) più un rischio distinto: la PATCH verso `/api/diary-token` che
+aggiorna il link avviene DOPO l'upload (già riuscito) del PDF, quindi un fallimento di rete su
+quella singola chiamata scartava tutto il lavoro già fatto. Aggiunto un retry a 3 tentativi con
+backoff sulla PATCH, e l'errore ora non scarta più `diaryPdfUrl`/`diaryToken` se l'upload era
+comunque andato a buon fine — solo la PATCH viene segnalata come fallita, con un messaggio che lo
+distingue da un fallimento dell'intera pubblicazione.
+
+**B55 — Markdown dell'enfasi non reso nel Diario**: lo stesso difetto già corretto per il resoconto
+(`HiddenPdfRoot.tsx`, vedi sopra) ma non applicato al Diario. **Riprodotto nel PDF reale**: pagina
+53, "si sviluppano per \*\*\*\*9 chilometri\*\*\*\*". `DiarioReportPage.tsx` renderizzava il corpo
+delle sezioni come testo grezzo. Applicata la stessa `parseInlineEmphasis` (con un nuovo helper
+`renderInline` locale) al paragrafo introduttivo (capolettera compreso), ai paragrafi delle sezioni
+successive, alla citazione in evidenza e ai box "curiosità".
+
+**B56 — Intestazioni di sezione orfane con corpo vuoto**: **riprodotto nel PDF reale**, pagina 9 —
+tre intestazioni consecutive ("CRONACA", "NATURA E STORIA", "IN SINTESI") stampate una sotto
+l'altra senza una sola riga di testo, con lo spazio bianco riservato al paragrafo (ora vuoto) che
+le separava innaturalmente; il testo dell'ultima proseguiva addirittura oltre il margine di testa
+della pagina successiva. Causa: `parseSections` produce sezioni con corpo vuoto quando la sezione
+esiste come intestazione nel Markdown ma non ha testo sotto (report generato/compilato solo in
+parte); `DiarioReportPage.tsx` le renderizzava comunque, a differenza di `HiddenPdfRoot.tsx` che
+già filtrava i paragrafi vuoti. Corretto: le sezioni senza corpo vengono escluse a monte
+(`restSections.filter(s => s.body.trim())`), i paragrafi vuoti dopo lo split vengono scartati, e se
+anche la sezione introduttiva risultasse vuota il titolo dell'escursione non scompare più (prima
+viaggiava nello stesso blocco del primo paragrafo, che senza testo non esisteva).
+
+**B57 — Blocco "Dati & percorso" troppo alto per una pagina**: **riprodotto nel PDF reale**, pagina
+15→16 — il titolo "Il percorso" resta da solo in fondo a una pagina e la mappa (che lo segue)
+riparte da sola sull'altra. Causa: statistiche + profilo altimetrico + FC/velocità + titolo + mappa
+erano un unico `.pdf-block`; sommati superano l'altezza di una pagina, e l'unico testo del gruppo è
+proprio quel titolo — quindi il ripiego sui confini di riga tagliava subito sotto di esso, con la
+mappa (un'immagine, senza righe di testo proprie) spinta da sola alla pagina dopo. Corretto
+scomponendo il gruppo in blocchi più piccoli (statistiche, profilo, FC/velocità, titolo+mappa
+insieme) con `.pdf-keep-next` sul titolo, sullo stesso principio già usato in `HiddenPdfRoot.tsx`
+per le intestazioni di sezione.
+
+Le altre osservazioni sul PDF di 58 pagine (grande spazio bianco sotto il grafico mensile a pagina
+5, area scura vuota sopra il titolo di alcune escursioni senza foto) sono risultate **non bug**: la
+prima è la normale conseguenza del fatto che ogni elemento di primo livello comincia sempre su una
+pagina nuova (un blocco che non ci sta per intero si sposta alla pagina dopo, lasciando vuoto il
+resto di quella corrente); la seconda è lo sfondo verde intenzionale per le escursioni senza foto in
+copertina (`DiarioReportPage.tsx`, stile "no-photo"). I numeri "68"/"69" letti nei piè di pagina
+delle escursioni #08/#09 sono risultati un errore di lettura del rendering a bassa risoluzione
+(cifre "0" lette come "6"): il calcolo di `escNumber` in `app/diario/page.tsx` è un contatore
+sequenziale 1-based sulle sole pagine visibili, verificato in codice — non produce mai numeri a due
+cifre diversi dal semplice progressivo.
+
+**B58 — Nessun modo di tornare all'app dal lettore PDF**. `app/components/PdfViewer.tsx` (il
+lettore a pagine usato sia dal link pubblico del resoconto sia da quello del Diario) espone solo
+Indietro/Avanti, Ingrandisci e Scarica PDF: nessun link alla home. Per il Diario un wrapper esterno
+(`DiaryPublicView.tsx`) aggiunge una X che torna alla pagina di riepilogo (che a sua volta ha un
+CTA "Apri l'app"), ma per il resoconto (`app/leggi/r/[activityId]/page.tsx`) il lettore era montato
+nudo, senza alcun wrapper: **nessuna via d'uscita**, un problema reale per chi apre il link da una
+PWA in modalità standalone (senza barra degli indirizzi né pulsante indietro del browser) o da un
+link condiviso su WhatsApp/Telegram. Corretto aggiungendo un link fisso "DTrek" verso `/` dentro
+`PdfViewer.tsx` stesso (non nei singoli wrapper), così ogni punto di montaggio lo eredita.
+
+**B59 — "Scarica PDF" non scarica, apre solo una nuova scheda**. I tre link di download verso i PDF
+ospitati su Supabase Storage (`PdfViewer.tsx`, `DiaryPublicView.tsx`, il pulsante "PDF diretto" di
+`ReportReader.tsx`) usano l'attributo HTML `download` su un URL cross-origin (`*.supabase.co`): i
+browser recenti (Chrome in testa) lo ignorano per motivi di sicurezza sulle risorse di un'altra
+origine, quindi il link si limita ad aprire il PDF invece di salvarlo — esattamente il sintomo
+segnalato. Il parametro `download` supportato nativamente da `getPublicUrl()` di Supabase Storage
+imposta `Content-Disposition: attachment` lato server, che i browser rispettano sempre perché
+arriva con la risposta e non dal markup del link. Nuovo helper `withForcedDownload()` in
+`lib/pdfUpload.ts`, applicato ai tre link. Il download diretto del Diario appena generato (prima
+della pubblicazione, via Blob URL locale in `app/diario/page.tsx`) non ne aveva bisogno: un Blob URL
+è same-origin per definizione.
+
+**Verifica**: `npx tsc --noEmit` pulito; `npm run build` completo (con variabili Supabase fittizie,
+il progetto non ne ha di reali in questo ambiente) senza errori, `/diario` invariato a 215 kB,
+`/resoconto` a 655 kB — nessuna regressione di bundle dai nuovi import (`parseInlineEmphasis` e
+`withForcedDownload` sono entrambi funzioni pure senza dipendenze pesanti).

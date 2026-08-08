@@ -5,6 +5,7 @@ import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { BookOpen, Download, Route as RouteIcon } from 'lucide-react'
 import PdfViewer from '@/app/components/PdfViewer'
+import { withForcedDownload } from '@/lib/pdfUpload'
 import type { PublicDiary } from '@/lib/sharePublicDiary'
 
 // Il lettore a pagine (PdfViewer) rasterizza ogni pagina via pdfjs-dist appena montato: costa
@@ -79,7 +80,11 @@ export function DiaryPublicView({ diary, title }: { diary: PublicDiary; title: s
           >
             <BookOpen className="w-4 h-4" /> Sfoglia il diario
           </button>
-          <a href={diary.pdfUrl} target="_blank" rel="noopener noreferrer" download
+          {/* `download` da solo è ignorato dai browser recenti su un URL cross-origin come
+              questo (*.supabase.co): senza il parametro `download` di Supabase Storage, che
+              forza `Content-Disposition: attachment` lato server, il link apriva solo il PDF
+              in una nuova scheda. */}
+          <a href={withForcedDownload(diary.pdfUrl)} target="_blank" rel="noopener noreferrer" download
             className="w-full flex items-center justify-center gap-2 border border-stone-200 hover:bg-stone-50 transition text-stone-600 font-display font-bold text-sm rounded-2xl py-3"
           >
             <Download className="w-4 h-4" /> Scarica il PDF

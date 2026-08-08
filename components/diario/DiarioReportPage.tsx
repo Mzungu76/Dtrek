@@ -11,6 +11,7 @@ import type { RoutePhoto } from '@/lib/activityPhotos'
 import { formatDuration, type TrackPoint } from '@/lib/tcxParser'
 import { wmoInfo } from '@/lib/openmeteo'
 import { parseSections } from '@/lib/reportStore'
+import { parseInlineEmphasis } from '@/lib/guideMarkup'
 import { LazyMount } from '@/components/LazyMount'
 import { trackPointsProgress, extractCuriosita } from './chartUtils'
 import { ProgressChart } from './ProgressChart'
@@ -19,6 +20,15 @@ import { DiarioYearBand, type DiarioYearBandInfo } from './DiarioYearDivider'
 import { GREEN, BLUE, type DiaryReport, type ReportExtras } from './types'
 
 const AllRoutesMap = dynamic(() => import('@/components/AllRoutesMap'), { ssr: false })
+
+/** Il corpo dei resoconti è markdown: senza questo, gli asterischi dell'enfasi finivano stampati
+ *  alla lettera nel PDF del Diario (`**9 chilometri**`) — lo stesso bug già corretto in
+ *  HiddenPdfRoot.tsx per il PDF del singolo resoconto, qui mancante. */
+function renderInline(text: string) {
+  return parseInlineEmphasis(text).map((seg, k) =>
+    seg.bold ? <strong key={k} style={{ fontWeight: 700 }}>{seg.text}</strong> : <span key={k}>{seg.text}</span>,
+  )
+}
 
 function SchedaField({ label, value }: { label: string; value: string }) {
   return (
@@ -133,7 +143,10 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
   const showVelocita = extras.velocita && speedSeries.length > 1
 
   const introSection = sections[0]
-  const restSections = sections.slice(1)
+  // Un'intestazione senza corpo (sezione lasciata vuota nel resoconto sorgente) non va comunque
+  // stampata: restava a schermo come un titolo isolato seguito da uno spazio bianco vuoto — nel
+  // caso peggiore osservato, tre intestazioni consecutive senza una sola riga di testo sotto.
+  const restSections = sections.slice(1).filter(s => s.body.trim())
   const STORY_ACCENTS = [
     { bg: '#fdf6ee', border: '#e08d3c', label: '#c05a17', text: '#6a2e18' },
     { bg: '#f1f8f2', border: '#378d44', label: '#277134', text: '#193b20' },
@@ -243,19 +256,36 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
           </div>
 
           <div>
-            {introSection && introSection.body.split(/\n\n+/).map((p, j) => {
+            {/* Titolo sempre presente anche senza testo introduttivo: senza questo ramo, un
+                resoconto con la prima sezione vuota perdeva anche il proprio titolo (viaggiava
+                nello stesso .pdf-block del primo paragrafo, che qui non esiste). */}
+            {(!introSection || !introSection.body.trim()) && (
+              <div className="pdf-block">
+                <h2 style={{ fontFamily: FONT.display, fontSize: 32, fontWeight: 700, color: '#193b20', lineHeight: 1.12, margin: 0, letterSpacing: -0.5 }}>
+                  {report.title || act?.title || 'Escursione'}
+                </h2>
+              </div>
+            )}
+            {introSection && introSection.body.split(/\n\n+/).filter(p => p.trim()).map((p, j) => {
               const text = p.trim()
               const dropCap = j === 0 && text.length > 0
+              const segments = parseInlineEmphasis(text)
+              const first = segments[0]
               const paragraph = (
                 <p style={{ fontFamily: FONT.lora, fontSize: 13.5, lineHeight: 1.85, color: '#4d4740', margin: '0 0 16px' }}>
                   {dropCap ? (
                     <>
                       <span style={{ float: 'left', fontSize: 52, lineHeight: 0.8, fontWeight: 700, color: '#e08d3c', padding: '4px 7px 0 0', fontFamily: FONT.display }}>
-                        {text[0]}
+                        {first?.text[0] ?? ''}
                       </span>
-                      {text.slice(1)}
+                      {first?.bold
+                        ? <strong style={{ fontWeight: 700 }}>{first.text.slice(1)}</strong>
+                        : first?.text.slice(1)}
+                      {segments.slice(1).map((seg, k) =>
+                        seg.bold ? <strong key={k} style={{ fontWeight: 700 }}>{seg.text}</strong> : <span key={k}>{seg.text}</span>,
+                      )}
                     </>
-                  ) : text}
+                  ) : renderInline(text)}
                 </p>
               )
               // Il titolo viaggia col primo paragrafo nello stesso pdf-block, per non ritrovarsi
@@ -277,7 +307,7 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
           <div className="pdf-block" style={{ margin: '0 -8px 40px', padding: '32px 40px', borderTop: '2px solid #193b20', borderBottom: '2px solid #193b20', position: 'relative' }}>
             <span style={{ position: 'absolute', top: -26, left: 36, fontFamily: FONT.display, fontSize: 70, lineHeight: 1, color: '#193b20', opacity: 0.12, userSelect: 'none' }}>&ldquo;</span>
             <p style={{ fontFamily: FONT.display, fontSize: 19, fontStyle: 'italic', lineHeight: 1.55, color: '#193b20', margin: 0 }}>
-              {pullQuote}
+              {renderInline(pullQuote)}
             </p>
           </div>
         )}
@@ -288,9 +318,9 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
           <div>
             {restSections.map((section, i) => (
               <div key={i} style={{ marginBottom: 22 }}>
-                {section.body.split(/\n\n+/).map((p, j) => {
+                {section.body.split(/\n\n+/).filter(p => p.trim()).map((p, j) => {
                   const paragraph = (
-                    <p style={{ fontFamily: FONT.lora, fontSize: 13.5, lineHeight: 1.85, color: '#4d4740', margin: '0 0 14px' }}>{p.trim()}</p>
+                    <p style={{ fontFamily: FONT.lora, fontSize: 13.5, lineHeight: 1.85, color: '#4d4740', margin: '0 0 14px' }}>{renderInline(p.trim())}</p>
                   )
                   return j === 0 ? (
                     <div key={j} className="pdf-block">
@@ -331,72 +361,76 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
               const acc = STORY_ACCENTS[i % STORY_ACCENTS.length]
               return (
                 <div key={i} className="pdf-block" style={{ background: acc.bg, borderLeft: `3px solid ${acc.border}`, borderRadius: '0 6px 6px 0', padding: '18px 22px' }}>
-                  <p style={{ fontFamily: FONT.lora, fontSize: 13, fontStyle: 'italic', lineHeight: 1.75, color: acc.text, margin: 0 }}>{q}</p>
+                  <p style={{ fontFamily: FONT.lora, fontSize: 13, fontStyle: 'italic', lineHeight: 1.75, color: acc.text, margin: 0 }}>{renderInline(q)}</p>
                 </div>
               )
             })}
           </div>
         )}
 
-        {/* Dati & percorso */}
-        {(showMappa || showStatistiche || showGrafico || showCuore || showVelocita) && (
-          <div className="pdf-block" style={{ marginBottom: 32 }}>
-            {showStatistiche && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 16 }}>
-                <StatCard value={`${(meta!.distanceMeters / 1000).toFixed(1)} km`} label="Distanza" icon={<Route style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
-                <StatCard value={`${Math.round(meta!.elevationGain)} m`} label="Dislivello D+" icon={<Mountain style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
-                <StatCard value={formatDuration(meta!.totalTimeSeconds)} label="Durata" icon={<Clock style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
-                <StatCard value={meta!.calories ? `${meta!.calories}` : '—'} label="Calorie (kcal)" icon={<Flame style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
-              </div>
-            )}
-            {showGrafico && (
-              <div style={{ marginBottom: (showCuore || showVelocita) ? 16 : 0 }}>
+        {/* Dati & percorso.
+            Prima un unico `.pdf-block` per statistiche+grafici+mappa insieme: sommati superano
+            facilmente l'altezza di una pagina, e senza un confine di blocco che entri nello spazio
+            rimasto il paginatore ripiegava sui riquadri di riga — l'unico testo di questo gruppo è
+            il titolo "Il percorso", quindi il taglio cadeva subito sotto di esso, con la mappa
+            (un'immagine, senza righe di testo proprie) spinta da sola sulla pagina successiva.
+            Ora ogni scheda è il proprio blocco, così il paginatore può spostarne una intera alla
+            pagina dopo invece di spezzarla; `pdf-keep-next` sul titolo mantiene "Il percorso"
+            comunque agganciato alla mappa che lo segue. */}
+        {showStatistiche && (
+          <div className="pdf-block" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 16 }}>
+            <StatCard value={`${(meta!.distanceMeters / 1000).toFixed(1)} km`} label="Distanza" icon={<Route style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
+            <StatCard value={`${Math.round(meta!.elevationGain)} m`} label="Dislivello D+" icon={<Mountain style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
+            <StatCard value={formatDuration(meta!.totalTimeSeconds)} label="Durata" icon={<Clock style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
+            <StatCard value={meta!.calories ? `${meta!.calories}` : '—'} label="Calorie (kcal)" icon={<Flame style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
+          </div>
+        )}
+        {showGrafico && (
+          <div className="pdf-block" style={{ marginBottom: 16 }}>
+            <p style={{ fontFamily: FONT.barlow, fontSize: 9, color: '#a9a18e', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', margin: '0 0 6px' }}>
+              Profilo altimetrico {photoMarkers.length > 0 && '· con posizione foto'}
+            </p>
+            <div style={{ background: GREEN.bg, borderRadius: 8, padding: '10px 12px', border: `1px solid ${GREEN.border}` }}>
+              <ProgressChart series={altitudeSeries} photoMarkers={photoMarkers} accent={GREEN} unit=" m" />
+            </div>
+          </div>
+        )}
+        {(showCuore || showVelocita) && (
+          <div className="pdf-block" style={{ display: 'flex', gap: 16, marginBottom: 24 }}>
+            {showCuore && (
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontFamily: FONT.barlow, fontSize: 9, color: '#a9a18e', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', margin: '0 0 6px' }}>
-                  Profilo altimetrico {photoMarkers.length > 0 && '· con posizione foto'}
+                  Frequenza cardiaca
                 </p>
-                <div style={{ background: GREEN.bg, borderRadius: 8, padding: '10px 12px', border: `1px solid ${GREEN.border}` }}>
-                  <ProgressChart series={altitudeSeries} photoMarkers={photoMarkers} accent={GREEN} unit=" m" />
+                <div style={{ background: '#fef2f2', borderRadius: 8, padding: '10px 12px', border: '1px solid #fecaca' }}>
+                  <ProgressChart series={hrSeries} accent={{ bg: '#fef2f2', border: '#fecaca', text: '#991b1b', iconBg: '#fee2e2', iconColor: '#dc2626' }} unit=" bpm" />
                 </div>
               </div>
             )}
-            {(showCuore || showVelocita) && (
-              <div style={{ display: 'flex', gap: 16, marginBottom: showMappa ? 24 : 0 }}>
-                {showCuore && (
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontFamily: FONT.barlow, fontSize: 9, color: '#a9a18e', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', margin: '0 0 6px' }}>
-                      Frequenza cardiaca
-                    </p>
-                    <div style={{ background: '#fef2f2', borderRadius: 8, padding: '10px 12px', border: '1px solid #fecaca' }}>
-                      <ProgressChart series={hrSeries} accent={{ bg: '#fef2f2', border: '#fecaca', text: '#991b1b', iconBg: '#fee2e2', iconColor: '#dc2626' }} unit=" bpm" />
-                    </div>
-                  </div>
-                )}
-                {showVelocita && (
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontFamily: FONT.barlow, fontSize: 9, color: '#a9a18e', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', margin: '0 0 6px' }}>
-                      Velocità
-                    </p>
-                    <div style={{ background: BLUE.bg, borderRadius: 8, padding: '10px 12px', border: `1px solid ${BLUE.border}` }}>
-                      <ProgressChart series={speedSeries} accent={BLUE} unit=" km/h" decimals={1} />
-                    </div>
-                  </div>
-                )}
+            {showVelocita && (
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontFamily: FONT.barlow, fontSize: 9, color: '#a9a18e', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', margin: '0 0 6px' }}>
+                  Velocità
+                </p>
+                <div style={{ background: BLUE.bg, borderRadius: 8, padding: '10px 12px', border: `1px solid ${BLUE.border}` }}>
+                  <ProgressChart series={speedSeries} accent={BLUE} unit=" km/h" decimals={1} />
+                </div>
               </div>
             )}
-            {showMappa && (
-              <>
-                <p style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: '#193b20', margin: '0 0 12px' }}>Il percorso</p>
-                <div className="print:hidden diario-report-map" data-activity-id={meta!.id} style={{ height: 260, borderRadius: 10, overflow: 'hidden', border: '1px solid #dcd8cc' }}>
-                  <LazyMount height={260} placeholder={<div style={{ height: '100%', background: '#f3f4f2' }} />}>
-                    <AllRoutesMap
-                      routes={[{ id: meta!.id, title: meta!.title ?? 'Percorso', startTime: meta!.startTime, polyline: meta!.routePolyline! }]}
-                      height="260px"
-                      interactive={mapsInteractive}
-                    />
-                  </LazyMount>
-                </div>
-              </>
-            )}
+          </div>
+        )}
+        {showMappa && (
+          <div className="pdf-block" style={{ marginBottom: 32 }}>
+            <p className="pdf-keep-next" style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: '#193b20', margin: '0 0 12px' }}>Il percorso</p>
+            <div className="print:hidden diario-report-map" data-activity-id={meta!.id} style={{ height: 260, borderRadius: 10, overflow: 'hidden', border: '1px solid #dcd8cc' }}>
+              <LazyMount height={260} placeholder={<div style={{ height: '100%', background: '#f3f4f2' }} />}>
+                <AllRoutesMap
+                  routes={[{ id: meta!.id, title: meta!.title ?? 'Percorso', startTime: meta!.startTime, polyline: meta!.routePolyline! }]}
+                  height="260px"
+                  interactive={mapsInteractive}
+                />
+              </LazyMount>
+            </div>
           </div>
         )}
 
