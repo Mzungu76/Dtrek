@@ -47,6 +47,9 @@ export const MAG = {
   block: '[data-mag-block]',
   /** Non deve restare ultimo in colonna (intestazioni di sezione). */
   keepAttr: 'data-mag-keep',
+  /** Blocco da intercalare nel racconto invece di lasciarlo dove sta nel DOM: grafici, mappa,
+   *  foto. Il template li scrive in fondo perché è lì che è comodo; il compositore li distribuisce. */
+  insertAttr: 'data-mag-insert',
   /** Coda a piena larghezza (mappa, grafici, galleria): dopo il testo, fuori dalle colonne. */
   tail: '[data-mag="tail"]',
 }
@@ -120,8 +123,33 @@ export function composeReportPages(source: HTMLElement, options: MagazineOptions
   // Un elemento non può stare in due posti: se porta entrambi i marcatori vince la coda, e non
   // finisce duplicato anche nelle colonne. Non è teoria — marcando il template è successo davvero
   // su tutti e cinque i blocchi di coda, che avevano già `.pdf-block`.
-  const blockSrcs = Array.from(source.querySelectorAll<HTMLElement>(MAG.block))
+  const allBlocks = Array.from(source.querySelectorAll<HTMLElement>(MAG.block))
     .filter(el => !el.matches(MAG.tail) && !el.closest(MAG.tail))
+
+  // ── Distribuzione dei blocchi «da intercalare» ───────────────────────────────────────────────
+  // Grafici, mappa e foto stanno in fondo al template, perché è lì che è comodo scriverli. Presi
+  // in ordine di DOM finivano tutti in coda al racconto: nell'export reale producevano una pagina
+  // con la colonna sinistra piena di grafici e la destra vuota, e le foto in una griglia unica più
+  // alta di una pagina. Qui vengono estratti dalla loro posizione e ridistribuiti a intervalli
+  // regolari fra i blocchi di testo, così testo, dati e immagini si impaginano insieme.
+  const inserts = allBlocks.filter(el => el.hasAttribute(MAG.insertAttr))
+  const narrative = allBlocks.filter(el => !el.hasAttribute(MAG.insertAttr))
+
+  const blockSrcs: HTMLElement[] = []
+  if (inserts.length === 0 || narrative.length === 0) {
+    blockSrcs.push(...narrative, ...inserts)
+  } else {
+    // Passo scelto per spalmare gli inserti sull'intero racconto invece di addensarli all'inizio.
+    const step = Math.max(1, Math.round(narrative.length / (inserts.length + 1)))
+    let next = 0
+    narrative.forEach((n, i) => {
+      blockSrcs.push(n)
+      // Mai subito dopo un blocco «keep» (un'intestazione): staccherebbe il titolo dal suo testo.
+      const isHeading = n.hasAttribute(MAG.keepAttr)
+      if (!isHeading && (i + 1) % step === 0 && next < inserts.length) blockSrcs.push(inserts[next++])
+    })
+    while (next < inserts.length) blockSrcs.push(inserts[next++])
+  }
 
   // ── Tutte le misure PRIMA di costruire le pagine, ognuna alla propria larghezza ──────────────
   // L'apertura è a piena pagina (fascia al vivo), i blocchi a larghezza di colonna, la coda
