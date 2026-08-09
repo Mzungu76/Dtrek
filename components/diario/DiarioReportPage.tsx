@@ -418,7 +418,7 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
             pagina dopo invece di spezzarla; `pdf-keep-next` sul titolo mantiene "Il percorso"
             comunque agganciato alla mappa che lo segue. */}
         {showStatistiche && (
-          <div className="pdf-block" data-mag="tail" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 16 }}>
+          <div className="pdf-block" data-mag-block="" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginBottom: 14 }}>
             <StatCard value={`${(meta!.distanceMeters / 1000).toFixed(1)} km`} label="Distanza" icon={<Route style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
             <StatCard value={`${Math.round(meta!.elevationGain)} m`} label="Dislivello D+" icon={<Mountain style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
             <StatCard value={formatDuration(meta!.totalTimeSeconds)} label="Durata" icon={<Clock style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
@@ -426,7 +426,7 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
           </div>
         )}
         {showGrafico && (
-          <div className="pdf-block" data-mag="tail" style={{ marginBottom: 16 }}>
+          <div className="pdf-block" data-mag-block="" style={{ marginBottom: 14 }}>
             <p style={{ fontFamily: FONT.barlow, fontSize: 9, color: '#a9a18e', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', margin: '0 0 6px' }}>
               Profilo altimetrico {photoMarkers.length > 0 && '· con posizione foto'}
             </p>
@@ -436,7 +436,7 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
           </div>
         )}
         {(showCuore || showVelocita) && (
-          <div className="pdf-block" data-mag="tail" style={{ display: 'flex', gap: 16, marginBottom: 24 }}>
+          <div className="pdf-block" data-mag-block="" style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 14 }}>
             {showCuore && (
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontFamily: FONT.barlow, fontSize: 9, color: '#a9a18e', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', margin: '0 0 6px' }}>
@@ -460,7 +460,7 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
           </div>
         )}
         {showMappa && (
-          <div className="pdf-block" data-mag="tail" style={{ marginBottom: 32 }}>
+          <div className="pdf-block" data-mag-block="" style={{ marginBottom: 18 }}>
             <p className="pdf-keep-next" style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: '#193b20', margin: '0 0 12px' }}>Il percorso</p>
             <div className="print:hidden diario-report-map" data-activity-id={meta!.id} style={{ height: 260, borderRadius: 10, overflow: 'hidden', border: '1px solid #dcd8cc' }}>
               <LazyMount height={260} placeholder={<div style={{ height: '100%', background: '#f3f4f2' }} />}>

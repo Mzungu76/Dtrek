@@ -107,7 +107,11 @@ function makeColumn(colW: number): HTMLElement {
  *          a testa senza dover calcolare alcun taglio.
  */
 export function composeReportPages(source: HTMLElement, options: MagazineOptions = {}): HTMLElement[] {
-  const o = { ...DEFAULTS, ...options }
+  // Il template può imporre il numero di colonne: la pagina delle statistiche è fatta di griglie
+  // di schede a quattro colonne, che dentro una colonna da 341 px diventerebbero illeggibili —
+  // lì serve una colonna sola a piena larghezza, con i blocchi impilati fitti.
+  const declared = Number(source.getAttribute('data-mag-columns'))
+  const o = { ...DEFAULTS, ...options, ...(declared > 0 ? { columns: declared } : {}) }
   const innerW = o.pageW - 2 * o.padding
   const colW = Math.floor((innerW - o.gutter * (o.columns - 1)) / o.columns)
 

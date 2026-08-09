@@ -484,11 +484,11 @@ export default function DiarioPage() {
           cards.push(card)
           continue
         }
-        if (clone.querySelector(MAG.opening)) {
+        if (clone.querySelector(MAG.block)) {
           composed.push(...composeReportPages(clone))
           continue
         }
-        // Copertina, indice, mappa d'insieme, statistiche: restano pagine a sé.
+        // Copertina, indice, mappa d'insieme: restano pagine a sé (nessun blocco marcato).
         composed.push(clone)
       }
 
