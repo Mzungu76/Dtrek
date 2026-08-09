@@ -961,3 +961,33 @@ opzioni. 0,92 era una scelta da stampa tipografica su un documento che si legge 
 condivide in chat. Misurato sulle pagine reali dell'export: ~44% del peso per pagina.
 
 **Attesa complessiva**: da 56 pagine / 21,7 MB a **~23 pagine / ~4 MB**.
+
+### 5.9 — Grafici, mappa e foto dentro il racconto
+
+Dall'export reale (55 pagine, 9,2 MB: il peso era sceso, le pagine no). Richiesta dell'utente:
+«Inserisci percorso e grafici sempre all'interno del testo, non dedicare loro una pagina apposita.
+Tutto il testo e tutti i grafici e il percorso si devono integrare l'uno con l'altro.»
+
+Due difetti, stessa radice: **i blocchi non testuali stavano in fondo al flusso**, perché è lì che
+il template li scrive e il compositore rispettava l'ordine del DOM.
+
+**B64 — colonna destra vuota.** Pagina 11: schede, profilo, frequenza, velocità e mappa impilati
+tutti nella colonna sinistra, la destra bianca. Erano gli ultimi blocchi del flusso: riempita la
+prima colonna, non restava nulla per la seconda.
+
+**B65 — griglia foto più alta di una pagina.** La galleria era **un solo blocco** contenente tutte
+le foto. Il compositore lo piazzava comunque (è la regola per un blocco più alto della colonna),
+ma la pagina composta riportava `scrollHeight` maggiore dell'altezza utile — e `paginateToPdf`
+misura proprio `scrollHeight`, quindi la spezzava in due pagine PDF: una con sei foto, la
+successiva con due e l'85% di bianco.
+
+**Correzione.** Nuovo marcatore `data-mag-insert`: il compositore estrae questi blocchi dalla loro
+posizione nel DOM e li **ridistribuisce a intervalli regolari** fra i blocchi di testo, con il
+passo calcolato per spalmarli sull'intero racconto. Mai subito dopo un blocco `keep`, che
+staccherebbe un'intestazione dal suo testo. Ogni foto è ora un blocco a sé, non più una griglia
+unica. La coda a piena larghezza non è più usata da questo template: testo, dati e immagini stanno
+nello stesso flusso a due colonne.
+
+Verificato in Chromium con 14 blocchi di racconto e 8 inserti scritti in fondo: la sequenza
+risultante è `ttIttIttIttIttIttIttII` — distribuiti, non ammassati. Nessuna colonna vuota, nessun
+traboccamento, tutti i 22 blocchi collocati.

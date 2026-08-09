@@ -418,7 +418,7 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
             pagina dopo invece di spezzarla; `pdf-keep-next` sul titolo mantiene "Il percorso"
             comunque agganciato alla mappa che lo segue. */}
         {showStatistiche && (
-          <div className="pdf-block" data-mag-block="" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginBottom: 14 }}>
+          <div className="pdf-block" data-mag-block="" data-mag-insert="" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginBottom: 14 }}>
             <StatCard value={`${(meta!.distanceMeters / 1000).toFixed(1)} km`} label="Distanza" icon={<Route style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
             <StatCard value={`${Math.round(meta!.elevationGain)} m`} label="Dislivello D+" icon={<Mountain style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
             <StatCard value={formatDuration(meta!.totalTimeSeconds)} label="Durata" icon={<Clock style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
@@ -426,7 +426,7 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
           </div>
         )}
         {showGrafico && (
-          <div className="pdf-block" data-mag-block="" style={{ marginBottom: 14 }}>
+          <div className="pdf-block" data-mag-block="" data-mag-insert="" style={{ marginBottom: 14 }}>
             <p style={{ fontFamily: FONT.barlow, fontSize: 9, color: '#a9a18e', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', margin: '0 0 6px' }}>
               Profilo altimetrico {photoMarkers.length > 0 && '· con posizione foto'}
             </p>
@@ -436,7 +436,7 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
           </div>
         )}
         {(showCuore || showVelocita) && (
-          <div className="pdf-block" data-mag-block="" style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 14 }}>
+          <div className="pdf-block" data-mag-block="" data-mag-insert="" style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 14 }}>
             {showCuore && (
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontFamily: FONT.barlow, fontSize: 9, color: '#a9a18e', fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', margin: '0 0 6px' }}>
@@ -460,7 +460,7 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
           </div>
         )}
         {showMappa && (
-          <div className="pdf-block" data-mag-block="" style={{ marginBottom: 18 }}>
+          <div className="pdf-block" data-mag-block="" data-mag-insert="" style={{ marginBottom: 18 }}>
             <p className="pdf-keep-next" style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: '#193b20', margin: '0 0 12px' }}>Il percorso</p>
             <div className="print:hidden diario-report-map" data-activity-id={meta!.id} style={{ height: 260, borderRadius: 10, overflow: 'hidden', border: '1px solid #dcd8cc' }}>
               <LazyMount height={260} placeholder={<div style={{ height: '100%', background: '#f3f4f2' }} />}>
@@ -474,17 +474,22 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
           </div>
         )}
 
-        {/* Photo row */}
+        {/* Foto — ognuna un blocco a sé, non più un'unica griglia.
+            La griglia era un solo blocco alto quanto tutte le foto insieme: più alto di una
+            pagina, quindi il compositore lo piazzava comunque e l'impaginatore lo spezzava in due,
+            lasciando una pagina con due foto e l'85% di bianco. Come blocchi singoli si
+            distribuiscono nel racconto e riempiono le colonne. */}
         {photos.length > 0 && (
-          <div className="pdf-block" data-mag="tail" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14, marginBottom: 32 }}>
+          <>
             {photos.map((ph, i) => (
-              <div key={ph.id} style={{ position: 'relative' }}>
+              <div key={ph.id} className="pdf-block" data-mag-block="" data-mag-insert=""
+                style={{ position: 'relative', marginBottom: 14 }}>
                 <img src={ph.url} alt={ph.caption} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 8, boxShadow: '0 4px 14px rgba(0,0,0,0.12)' }} />
                 <span style={{ position: 'absolute', top: 6, left: 6, width: 20, height: 20, background: '#e08d3c', color: 'white', borderRadius: '50%', textAlign: 'center', lineHeight: '20px', fontSize: 10, fontWeight: 'bold', fontFamily: FONT.body, display: 'block', boxSizing: 'border-box', border: '1px solid white' }}>{i+1}</span>
                 {ph.caption && <p style={{ fontSize: 9, color: '#73695c', textAlign: 'center', marginTop: 5, fontStyle: 'italic', fontFamily: FONT.lora }}>{ph.caption}</p>}
               </div>
             ))}
-          </div>
+          </>
         )}
 
         {/* Page footer */}
