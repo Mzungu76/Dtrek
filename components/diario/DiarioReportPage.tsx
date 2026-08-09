@@ -5,7 +5,7 @@ import { useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
-import { Route, Mountain, Clock, Flame, EyeOff, SlidersHorizontal, X } from 'lucide-react'
+import { Route, Mountain, Clock, Flame, EyeOff, SlidersHorizontal, X, Image as ImageIcon } from 'lucide-react'
 import type { ActivityMeta } from '@/lib/blobStore'
 import type { RoutePhoto } from '@/lib/activityPhotos'
 import { formatDuration, type TrackPoint } from '@/lib/tcxParser'
@@ -43,6 +43,82 @@ function renderInline(text: string) {
  * Le foto non stampate non si perdono: restano tutte nel resoconto e sulla pagina pubblica.
  */
 export const DIARY_MAX_PHOTOS_DEFAULT = 6
+
+/** Scelta manuale delle foto da stampare, sul modello di CustomizeExtras: vive sulla pagina del
+ *  libro, dove si vede il risultato. La selezione automatica distribuita fa da proposta di
+ *  partenza; qui si corregge quando la foto migliore cade accanto a un'altra e resterebbe fuori. */
+function PhotoPicker({ photos, selected, max, onChange }: {
+  photos: RoutePhoto[]; selected: string[]; max: number; onChange: (ids: string[]) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const isAuto = selected.length === 0
+  const active = new Set(isAuto ? selectSpreadPhotos(photos, max).map(p => p.id) : selected)
+
+  const toggle = (id: string) => {
+    const next = new Set(active)
+    if (next.has(id)) next.delete(id)
+    else if (next.size < max) next.add(id)
+    else return
+    onChange(Array.from(next))
+  }
+
+  return (
+    <div className="diario-editor-control print:hidden" style={{ position: 'absolute', top: 16, right: 232, zIndex: 5 }}>
+      <button onClick={() => setOpen(o => !o)} title="Scegli le foto da stampare"
+        style={{
+          display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 999,
+          background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)', border: 'none', cursor: 'pointer',
+          fontFamily: FONT.barlow, fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'white',
+        }}>
+        <ImageIcon style={{ width: 13, height: 13 }} /> Foto {active.size}/{max}
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute', top: '100%', right: 0, marginTop: 6, width: 300,
+          background: 'white', borderRadius: 10, border: '1px solid #dcd8cc',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.18)', padding: 10, maxHeight: 360, overflowY: 'auto',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <span style={{ fontFamily: FONT.barlow, fontSize: 9, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: '#a9a18e' }}>
+              {isAuto ? 'Scelta automatica' : `${active.size} di ${max}`}
+            </span>
+            <button onClick={() => setOpen(false)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#a9a18e' }}>
+              <X style={{ width: 12, height: 12 }} />
+            </button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+            {photos.map(ph => {
+              const on = active.has(ph.id)
+              return (
+                <button key={ph.id} onClick={() => toggle(ph.id)} title={ph.caption || 'Foto'}
+                  style={{ position: 'relative', padding: 0, border: 'none', background: 'none', cursor: 'pointer', lineHeight: 0 }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={ph.url} alt="" style={{
+                    width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: 6,
+                    outline: on ? '2px solid #e08d3c' : '1px solid #dcd8cc',
+                    opacity: on ? 1 : 0.45,
+                  }} />
+                </button>
+              )
+            })}
+          </div>
+          {!isAuto && (
+            <button onClick={() => onChange([])}
+              style={{
+                width: '100%', marginTop: 8, padding: '5px 0', borderRadius: 8, cursor: 'pointer',
+                border: '1px solid #dcd8cc', background: 'white', color: '#73695c',
+                fontFamily: FONT.body, fontSize: 11,
+              }}>
+              Torna alla scelta automatica
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+
 
 function SchedaField({ label, value }: { label: string; value: string }) {
   return (
@@ -104,11 +180,14 @@ function CustomizeExtras({ extras, onChange }: { extras: ReportExtras; onChange:
   )
 }
 
-export function DiarioReportPage({ report, photos, meta, extras, trackPoints, mapsInteractive, escNumber, maxPhotos = DIARY_MAX_PHOTOS_DEFAULT, yearBand, onExclude, onExtrasChange }: {
+export function DiarioReportPage({ report, photos, meta, extras, trackPoints, mapsInteractive, escNumber, maxPhotos = DIARY_MAX_PHOTOS_DEFAULT, selectedPhotoIds, onSelectedPhotosChange, yearBand, onExclude, onExtrasChange }: {
   report: DiaryReport; photos: RoutePhoto[]; meta?: ActivityMeta; extras: ReportExtras
   trackPoints?: TrackPoint[]; mapsInteractive: boolean; escNumber: number
   /** Tetto alle foto stampate nel Diario. Vedi DIARY_MAX_PHOTOS_DEFAULT. */
   maxPhotos?: number
+  /** Foto scelte a mano; vuoto = selezione automatica distribuita. */
+  selectedPhotoIds?: string[]
+  onSelectedPhotosChange?: (ids: string[]) => void
   /** Presente solo sulla prima pagina di un nuovo anno — vedi DiarioYearDivider.tsx. */
   yearBand?: DiarioYearBandInfo
   /** Assenti = l'editing non è disponibile in questo contesto (es. cattura per il PDF). */
@@ -133,7 +212,12 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
   const monthYear = act?.start_time ? format(new Date(act.start_time), 'MMMM yyyy', { locale: it }) : ''
   // Selezione distribuita lungo il percorso, non le prime N: prendere le prime racconterebbe solo
   // l'inizio del cammino.
-  const diaryPhotos = useMemo(() => selectSpreadPhotos(photos, maxPhotos), [photos, maxPhotos])
+  const diaryPhotos = useMemo(() => {
+    const manual = selectedPhotoIds && selectedPhotoIds.length > 0
+      ? photos.filter(p => selectedPhotoIds.includes(p.id))
+      : null
+    return manual && manual.length > 0 ? manual.slice(0, maxPhotos) : selectSpreadPhotos(photos, maxPhotos)
+  }, [photos, maxPhotos, selectedPhotoIds])
   const heroPhoto = photos[0] ?? null
   const detailPhoto = photos[1] ?? null
   const weather = act?.weather_at_hike
@@ -183,6 +267,10 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
       {yearBand && <DiarioYearBand {...yearBand} />}
 
       {onExtrasChange && <CustomizeExtras extras={extras} onChange={onExtrasChange} />}
+
+      {onSelectedPhotosChange && photos.length > 0 && (
+        <PhotoPicker photos={photos} selected={selectedPhotoIds ?? []} max={maxPhotos} onChange={onSelectedPhotosChange} />
+      )}
 
       {onExclude && (
         <button onClick={onExclude} className="diario-editor-control print:hidden"

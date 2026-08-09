@@ -41,6 +41,12 @@ export interface DiaryConfig {
    *  resoconto narrato sia per un'escursione non ancora narrata (stub). */
   excludedActivityIds: string[]
 
+  /** Foto scelte a mano per il Diario, per activity_id. Assente o vuoto = selezione automatica
+   *  distribuita lungo la traccia (vedi selectSpreadPhotos in lib/photoBuckets.ts). Serve perché
+   *  l'automatismo sceglie *dove*, non *quanto è bella*: la foto migliore può cadere accanto a
+   *  un'altra e restare fuori. */
+  photoIdsByActivity: Record<string, string[]>
+
   /** Mostra le escursioni non ancora narrate come pagine segnaposto. */
   showStubs: boolean
 }
@@ -62,6 +68,7 @@ export const DEFAULT_DIARY_CONFIG: DiaryConfig = {
   reportExtrasDefault: DEFAULT_DIARY_REPORT_EXTRAS,
   reportExtrasByActivity: {},
   excludedActivityIds: [],
+  photoIdsByActivity: {},
   showStubs: true,
 }
 
@@ -82,6 +89,13 @@ export function normalizeDiaryConfig(raw: unknown): DiaryConfig {
     ? { ...DEFAULT_DIARY_REPORT_EXTRAS, ...r.reportExtrasDefault }
     : DEFAULT_DIARY_REPORT_EXTRAS
 
+  const photoIdsByActivity: Record<string, string[]> = {}
+  if (r.photoIdsByActivity && typeof r.photoIdsByActivity === 'object') {
+    for (const [activityId, ids] of Object.entries(r.photoIdsByActivity as Record<string, unknown>)) {
+      if (Array.isArray(ids)) photoIdsByActivity[activityId] = ids.filter((x): x is string => typeof x === 'string')
+    }
+  }
+
   const reportExtrasByActivity: Record<string, Partial<DiaryReportExtras>> = {}
   if (r.reportExtrasByActivity && typeof r.reportExtrasByActivity === 'object') {
     for (const [activityId, patch] of Object.entries(r.reportExtrasByActivity)) {
@@ -101,6 +115,7 @@ export function normalizeDiaryConfig(raw: unknown): DiaryConfig {
       ? r.excludedActivityIds.filter((x): x is string => typeof x === 'string')
       : [],
     showStubs: typeof r.showStubs === 'boolean' ? r.showStubs : true,
+    photoIdsByActivity,
   }
 }
 

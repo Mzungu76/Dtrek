@@ -1027,3 +1027,33 @@ resoconto e sulla pagina pubblica.
 
 Da cui: due pagine per resoconto reggono ~2-3 foto; tre pagine ne reggono ~8-9. Sei è il punto in
 cui il ritmo resta di una foto ogni due paragrafi senza aprire una quarta pagina.
+
+### 5.11 — Scelta delle foto e limite di caricamento
+
+**Correzione di un dato che avevo dato per buono.** Avevo detto all'utente che una foto pesa 2-4 MB
+e che 15 foto per escursione avrebbero riempito il piano gratuito in una ventina di uscite. È
+falso: `ActivityPhotoManager` ritaglia già a 800×800 prima di caricare. I pesi reali in storage:
+
+| Bucket | Oggetti | Totale | Media | Massimo |
+|---|---|---|---|---|
+| `dtrek-photos` | 77 | 23 MB | **312 kB** | **7,3 MB** |
+| `dtrek-reports` (PDF) | 4 | **25 MB** | 6,3 MB | 18 MB |
+
+A 312 kB per foto e 15 foto per uscita si superano le 200 escursioni prima del primo gigabyte. Lo
+spazio non se lo mangiano le foto: **se lo mangiano i PDF**. Il massimo da 7,3 MB però rivela un
+secondo percorso di caricamento che non ritaglia (`RouteMap3D.tsx`), da cui `shrinkForUpload` in
+`lib/activityPhotos.ts`: sta nel punto di passaggio comune (`addActivityPhoto`), ridimensiona a
+1600 px di lato lungo e lascia passare intatto ciò che è già più piccolo.
+
+**Tetto di caricamento: 15, uguale per tutte le uscite.** Legarlo ai chilometri sembrava sensato,
+ma nei dati reali la correlazione è **inversa** — 7,4 km e 17 foto contro 17,5 km e 1 foto: le
+passeggiate brevi sono quelle fotografiche. Un limite proporzionale alla distanza avrebbe
+penalizzato proprio loro. Quando la selezione eccede si accetta quel che ci sta e si dice quante
+ne sono state scartate, invece di rifiutare tutto.
+
+**Scelta manuale nel Diario.** Nuovo `photoIdsByActivity` in `diary_config` e un `PhotoPicker`
+sulla pagina del libro, accanto a «Escludi» e «Personalizza» — dove si vede il risultato. La
+selezione automatica distribuita fa da proposta di partenza; il pannello serve perché
+l'automatismo sceglie *dove*, non *quanto è bella*: la foto migliore può cadere accanto a un'altra
+e restare fuori. Elenco vuoto = ritorno all'automatico, e la chiave viene rimossa invece di salvare
+un array vuoto.
