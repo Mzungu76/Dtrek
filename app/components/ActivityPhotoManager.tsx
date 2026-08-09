@@ -4,7 +4,7 @@ import { useState, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { haversineM } from '@/lib/geoUtils'
 import type { TrackPoint } from '@/lib/tcxParser'
-import { fetchActivityPhotos, addActivityPhoto, updateActivityPhoto, removeActivityPhoto, type RoutePhoto } from '@/lib/activityPhotos'
+import { MAX_PHOTOS_PER_ACTIVITY, fetchActivityPhotos, addActivityPhoto, updateActivityPhoto, removeActivityPhoto, type RoutePhoto } from '@/lib/activityPhotos'
 import { readExifMetadata, placePhotoOnTrack, type PhotoPlacementSource } from '@/lib/exifGps'
 import { Upload, Pencil, Check, Camera, MapPin, ImageOff, Map, AlertTriangle, Trash2, Loader2 } from 'lucide-react'
 
@@ -79,6 +79,19 @@ export default function ActivityPhotoManager({
   async function processFiles(files: File[]) {
     const imgs = files.filter(f => f.type.startsWith('image/'))
     if (!imgs.length) return
+
+    // Tetto per escursione, uguale per tutte: nei dati reali le passeggiate brevi hanno più foto al
+    // km delle lunghe, quindi un limite proporzionale alla distanza penalizzerebbe proprio le uscite
+    // fotografiche. Si accetta quel che ci sta e si dice chiaramente quante ne sono state scartate,
+    // invece di rifiutare l'intera selezione.
+    const room = MAX_PHOTOS_PER_ACTIVITY - photos.length
+    if (room <= 0) {
+      setError(`Hai raggiunto il limite di ${MAX_PHOTOS_PER_ACTIVITY} foto per escursione. Rimuovine qualcuna per aggiungerne altre.`)
+      return
+    }
+    const accepted = imgs.slice(0, room)
+    const rejected = imgs.length - accepted.length
+
     setUploading(true)
     setError(null)
     setPlacementNotice(null)
@@ -86,7 +99,7 @@ export default function ActivityPhotoManager({
     const placements: PhotoPlacementSource[] = []
 
     try {
-      for (const file of imgs) {
+      for (const file of accepted) {
         // Load original
         const dataUrl = await new Promise<string>(res => {
           const r = new FileReader()
@@ -132,6 +145,9 @@ export default function ActivityPhotoManager({
 
       onPhotosChange([...photos, ...added].sort((a, b) => a.progress - b.progress))
       setPlacementNotice(describePlacements(placements))
+      if (rejected > 0) {
+        setError(`Caricate ${accepted.length} foto: le altre ${rejected} superano il limite di ${MAX_PHOTOS_PER_ACTIVITY} per escursione.`)
+      }
 
       // Single upload → open its caption editor right away so the user writes
       // their own caption instead of keeping the filename-derived default.

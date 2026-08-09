@@ -991,3 +991,69 @@ nello stesso flusso a due colonne.
 Verificato in Chromium con 14 blocchi di racconto e 8 inserti scritti in fondo: la sequenza
 risultante è `ttIttIttIttIttIttIttII` — distribuiti, non ammassati. Nessuna colonna vuota, nessun
 traboccamento, tutti i 22 blocchi collocati.
+
+### 5.10 — Pagine bianche: schegge e resti
+
+Diagnosi economica sull'export reale (53 pagine): `pdfimages -list` dà l'altezza dell'immagine di
+ogni pagina, e una pagina quasi vuota si riconosce senza aprirla. Otto pagine sotto il 55%, di due
+tipi distinti.
+
+**B66 — schegge da 20-30 px** (pagine 15, 24, 50). Una pagina già composta è per costruzione alta
+esattamente l'area utile, ma `paginateToPdf` ne misurava lo `scrollHeight`: arrotondamenti
+sub-pixel su altezze di riga e margini la facevano risultare più alta di pochi pixel, e da quei
+pochi pixel l'impaginatore ricavava una seconda pagina fisica alta 20-30 px. Bianca. Corretto: un
+elemento che porta `data-mag-page` dichiara di essere già una pagina e non viene rimisurato.
+
+**B67 — resti da 158-404 px** (pagine 6, 10, 26, 31, 47). Sono la coda dei resoconti più ricchi di
+foto. Causa dimensionale, non di algoritmo: nel layout a due colonne una foto occupa **~284 px**,
+cioè quanto **diciassette righe di testo**. Le escursioni dell'utente hanno da 6 a 17 foto
+(mediana ~1 foto/km): a 17 foto sono ~4.800 px di sole immagini, più di due pagine intere.
+
+Nuova `selectSpreadPhotos` (`lib/photoBuckets.ts`) e tetto `DIARY_MAX_PHOTOS_DEFAULT = 6`. La
+selezione è **per posizione lungo la traccia**, non per ordine di caricamento: il percorso è diviso
+in fasce uguali e da ognuna si prende la foto più vicina al centro — prendere le prime sei
+racconterebbe solo l'inizio del cammino. Le foto non stampate non si perdono: restano tutte nel
+resoconto e sulla pagina pubblica.
+
+**Il conto dello spazio**, che è quello che determina il numero:
+
+| Voce | Spazio in colonna |
+|---|---|
+| Pagina composta | 2 colonne × 1067 px = 2.134 px |
+| Apertura (solo 1ª pagina) | −460 px × 2 colonne |
+| Racconto da 7.500 caratteri | ~1.875 px |
+| Schede, profilo, frequenza, velocità, mappa | ~900 px |
+| **Una foto** | **~284 px** (immagine 4:3 a 341 px + didascalia + margine) |
+
+Da cui: due pagine per resoconto reggono ~2-3 foto; tre pagine ne reggono ~8-9. Sei è il punto in
+cui il ritmo resta di una foto ogni due paragrafi senza aprire una quarta pagina.
+
+### 5.11 — Scelta delle foto e limite di caricamento
+
+**Correzione di un dato che avevo dato per buono.** Avevo detto all'utente che una foto pesa 2-4 MB
+e che 15 foto per escursione avrebbero riempito il piano gratuito in una ventina di uscite. È
+falso: `ActivityPhotoManager` ritaglia già a 800×800 prima di caricare. I pesi reali in storage:
+
+| Bucket | Oggetti | Totale | Media | Massimo |
+|---|---|---|---|---|
+| `dtrek-photos` | 77 | 23 MB | **312 kB** | **7,3 MB** |
+| `dtrek-reports` (PDF) | 4 | **25 MB** | 6,3 MB | 18 MB |
+
+A 312 kB per foto e 15 foto per uscita si superano le 200 escursioni prima del primo gigabyte. Lo
+spazio non se lo mangiano le foto: **se lo mangiano i PDF**. Il massimo da 7,3 MB però rivela un
+secondo percorso di caricamento che non ritaglia (`RouteMap3D.tsx`), da cui `shrinkForUpload` in
+`lib/activityPhotos.ts`: sta nel punto di passaggio comune (`addActivityPhoto`), ridimensiona a
+1600 px di lato lungo e lascia passare intatto ciò che è già più piccolo.
+
+**Tetto di caricamento: 15, uguale per tutte le uscite.** Legarlo ai chilometri sembrava sensato,
+ma nei dati reali la correlazione è **inversa** — 7,4 km e 17 foto contro 17,5 km e 1 foto: le
+passeggiate brevi sono quelle fotografiche. Un limite proporzionale alla distanza avrebbe
+penalizzato proprio loro. Quando la selezione eccede si accetta quel che ci sta e si dice quante
+ne sono state scartate, invece di rifiutare tutto.
+
+**Scelta manuale nel Diario.** Nuovo `photoIdsByActivity` in `diary_config` e un `PhotoPicker`
+sulla pagina del libro, accanto a «Escludi» e «Personalizza» — dove si vede il risultato. La
+selezione automatica distribuita fa da proposta di partenza; il pannello serve perché
+l'automatismo sceglie *dove*, non *quanto è bella*: la foto migliore può cadere accanto a un'altra
+e restare fuori. Elenco vuoto = ritorno all'automatico, e la chiave viene rimossa invece di salvare
+un array vuoto.

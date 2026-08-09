@@ -57,6 +57,53 @@ async function getUserId(): Promise<string> {
   return data.user.id
 }
 
+/**
+ * Tetto alle foto per escursione.
+ *
+ * Uguale per tutte le uscite, non proporzionale ai chilometri: nei dati reali la correlazione è
+ * **inversa** — le passeggiate brevi hanno più foto al km (7,4 km e 17 foto) e le lunghe molte meno
+ * (17,5 km e 1 foto). Un limite legato alla distanza penalizzerebbe proprio le uscite fotografiche.
+ */
+export const MAX_PHOTOS_PER_ACTIVITY = 15
+
+/** Lato lungo massimo di una foto archiviata. */
+const MAX_PHOTO_SIDE = 1600
+const PHOTO_JPEG_QUALITY = 0.82
+
+/**
+ * Ridimensiona la foto prima di caricarla.
+ *
+ * È la leva che conta davvero sullo spazio, molto più del numero di foto: uno scatto da telefono
+ * pesa 2-4 MB, a 1600 px di lato lungo scende a ~300 KB. Con 15 foto per escursione si passa da
+ * ~45 MB a ~4,5 MB per uscita — la differenza fra riempire il primo gigabyte in una ventina di
+ * escursioni e in un paio di centinaia.
+ *
+ * 1600 px non è una perdita visibile: la foto più grande stampata nel PDF è larga 341 px, e sulla
+ * pagina pubblica arriva al massimo alla larghezza dello schermo.
+ */
+async function shrinkForUpload(dataUrl: string): Promise<Blob> {
+  const img = new Image()
+  img.src = dataUrl
+  await img.decode()
+
+  const longSide = Math.max(img.naturalWidth, img.naturalHeight)
+  if (longSide <= MAX_PHOTO_SIDE) return dataUrlToBlob(dataUrl)
+
+  const k = MAX_PHOTO_SIDE / longSide
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.round(img.naturalWidth * k)
+  canvas.height = Math.round(img.naturalHeight * k)
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return dataUrlToBlob(dataUrl)
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+
+  const blob = await new Promise<Blob | null>(res => canvas.toBlob(res, 'image/jpeg', PHOTO_JPEG_QUALITY))
+  canvas.width = 0; canvas.height = 0
+  // Se il browser non produce il blob (quota di memoria, canvas contaminato) si carica l'originale:
+  // meglio una foto pesante che una foto persa.
+  return blob ?? dataUrlToBlob(dataUrl)
+}
+
 function dataUrlToBlob(dataUrl: string): Blob {
   const [header, b64] = dataUrl.split(',')
   const mime = header.match(/data:(.*?);base64/)?.[1] ?? 'image/jpeg'
@@ -228,7 +275,7 @@ export async function addActivityPhoto(activityId: string, photo: {
   lon?: number
 }): Promise<RoutePhoto> {
   const userId = await getUserId()
-  const blob = dataUrlToBlob(photo.dataUrl)
+  const blob = await shrinkForUpload(photo.dataUrl)
   const { url, storagePath } = await uploadPhotoBlob(userId, activityId, photo.id, blob)
   await saveMetadata({
     id: photo.id,

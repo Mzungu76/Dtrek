@@ -946,6 +946,16 @@ export default function DiarioPage() {
                         mapsInteractive={mapsInteractive}
                         escNumber={reportNumbers.get(page.report.id) ?? 1}
                         yearBand={yearBand}
+                        selectedPhotoIds={config.photoIdsByActivity[page.report.activity_id]}
+                        onSelectedPhotosChange={ids => setConfig(c => {
+                          const next = { ...c.photoIdsByActivity }
+                          // Elenco vuoto = torna alla scelta automatica: si toglie la chiave invece
+                          // di salvare un array vuoto, così la configurazione non accumula voci
+                          // che dicono «niente di particolare».
+                          if (ids.length === 0) delete next[page.report.activity_id]
+                          else next[page.report.activity_id] = ids
+                          return { ...c, photoIdsByActivity: next }
+                        })}
                         onExclude={() => toggleExcludeActivity(activityId)}
                         onExtrasChange={patch => patchReportExtrasForActivity(activityId, patch)}
                       />
