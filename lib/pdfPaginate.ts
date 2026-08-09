@@ -222,10 +222,15 @@ export async function paginateToPdf(
   const plan: PlannedPage[] = []
 
   for (const el of elements) {
-    const totalH = el.scrollHeight
-    if (totalH < 1) continue
     const bleed = el.matches(bleedSelector)
     const availH = bleed ? PAGE_H : CONTENT_H
+    // Le pagine già composte (lib/diaryMagazine.ts) sono per costruzione alte esattamente l'area
+    // utile. Misurarne lo `scrollHeight` le fa risultare più alte di pochi pixel — arrotondamenti
+    // sub-pixel su altezze di riga e margini — e da quei pochi pixel l'impaginatore ricavava una
+    // SECONDA pagina alta 20-30 px: bianca. Nell'export reale erano tre (pagine 15, 24, 50).
+    // Per un elemento che dichiara di essere già una pagina non c'è nulla da misurare.
+    const totalH = el.hasAttribute('data-mag-page') ? availH : el.scrollHeight
+    if (totalH < 1) continue
     const breaks = safeBreaks(el, softBreakSelector, totalH)
     // I riquadri di riga si calcolano solo se servono davvero, cioè se esiste almeno un tratto
     // fra due confini di blocco più lungo di una pagina: su un documento già ben spezzato in

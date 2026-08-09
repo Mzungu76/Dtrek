@@ -12,6 +12,7 @@ import { formatDuration, type TrackPoint } from '@/lib/tcxParser'
 import { wmoInfo } from '@/lib/openmeteo'
 import { parseSections } from '@/lib/reportStore'
 import { parseInlineEmphasis } from '@/lib/guideMarkup'
+import { selectSpreadPhotos } from '@/lib/photoBuckets'
 import { LazyMount } from '@/components/LazyMount'
 import { trackPointsProgress, extractCuriosita } from './chartUtils'
 import { ProgressChart } from './ProgressChart'
@@ -29,6 +30,19 @@ function renderInline(text: string) {
     seg.bold ? <strong key={k} style={{ fontWeight: 700 }}>{seg.text}</strong> : <span key={k}>{seg.text}</span>,
   )
 }
+
+/**
+ * Foto stampate nel Diario per escursione.
+ *
+ * Non è un numero arbitrario: nel layout a due colonne una foto occupa ~284 px di colonna, cioè
+ * quanto diciassette righe di testo. Con lo spazio di due pagine e mezzo per resoconto — tolti
+ * racconto, schede, profilo e mappa — sei foto sono quante ne entrano mantenendo il ritmo di una
+ * ogni due paragrafi. Le escursioni dell'utente ne hanno da 6 a 17: oltre le sei, il resoconto
+ * sforava di una o due pagine quasi vuote.
+ *
+ * Le foto non stampate non si perdono: restano tutte nel resoconto e sulla pagina pubblica.
+ */
+export const DIARY_MAX_PHOTOS_DEFAULT = 6
 
 function SchedaField({ label, value }: { label: string; value: string }) {
   return (
@@ -90,9 +104,11 @@ function CustomizeExtras({ extras, onChange }: { extras: ReportExtras; onChange:
   )
 }
 
-export function DiarioReportPage({ report, photos, meta, extras, trackPoints, mapsInteractive, escNumber, yearBand, onExclude, onExtrasChange }: {
+export function DiarioReportPage({ report, photos, meta, extras, trackPoints, mapsInteractive, escNumber, maxPhotos = DIARY_MAX_PHOTOS_DEFAULT, yearBand, onExclude, onExtrasChange }: {
   report: DiaryReport; photos: RoutePhoto[]; meta?: ActivityMeta; extras: ReportExtras
   trackPoints?: TrackPoint[]; mapsInteractive: boolean; escNumber: number
+  /** Tetto alle foto stampate nel Diario. Vedi DIARY_MAX_PHOTOS_DEFAULT. */
+  maxPhotos?: number
   /** Presente solo sulla prima pagina di un nuovo anno — vedi DiarioYearDivider.tsx. */
   yearBand?: DiarioYearBandInfo
   /** Assenti = l'editing non è disponibile in questo contesto (es. cattura per il PDF). */
@@ -115,6 +131,9 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
     ? format(new Date(act.start_time), 'd MMMM yyyy', { locale: it })
     : report.created_at ? format(new Date(report.created_at), 'd MMMM yyyy', { locale: it }) : ''
   const monthYear = act?.start_time ? format(new Date(act.start_time), 'MMMM yyyy', { locale: it }) : ''
+  // Selezione distribuita lungo il percorso, non le prime N: prendere le prime racconterebbe solo
+  // l'inizio del cammino.
+  const diaryPhotos = useMemo(() => selectSpreadPhotos(photos, maxPhotos), [photos, maxPhotos])
   const heroPhoto = photos[0] ?? null
   const detailPhoto = photos[1] ?? null
   const weather = act?.weather_at_hike
@@ -479,9 +498,9 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
             pagina, quindi il compositore lo piazzava comunque e l'impaginatore lo spezzava in due,
             lasciando una pagina con due foto e l'85% di bianco. Come blocchi singoli si
             distribuiscono nel racconto e riempiono le colonne. */}
-        {photos.length > 0 && (
+        {diaryPhotos.length > 0 && (
           <>
-            {photos.map((ph, i) => (
+            {diaryPhotos.map((ph, i) => (
               <div key={ph.id} className="pdf-block" data-mag-block="" data-mag-insert=""
                 style={{ position: 'relative', marginBottom: 14 }}>
                 <img src={ph.url} alt={ph.caption} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 8, boxShadow: '0 4px 14px rgba(0,0,0,0.12)' }} />

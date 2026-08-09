@@ -26,3 +26,38 @@ export function bucketPhotosByChapter<T extends { progress?: number | null }>(
   }
   return buckets
 }
+
+/**
+ * Sceglie al massimo `max` foto distribuite lungo il percorso.
+ *
+ * Una escursione può avere venti foto; nel Diario ognuna occupa ~284 px di colonna, cioè quanto
+ * diciassette righe di testo. Venti foto sono più di due pagine intere di sole immagini, e sono la
+ * ragione per cui i resoconti sforavano. Qui se ne tengono poche, ma **distribuite**: prendere le
+ * prime N racconterebbe solo l'inizio del cammino.
+ *
+ * La selezione è per posizione lungo la traccia, non per ordine di caricamento: si divide il
+ * percorso in `max` fasce uguali e da ognuna si prende la foto più vicina al centro della fascia.
+ * Prima e ultima sono sempre incluse quando possibile — sono la partenza e l'arrivo.
+ */
+export function selectSpreadPhotos<T extends { progress?: number | null }>(photos: T[], max: number): T[] {
+  if (max <= 0) return []
+  if (photos.length <= max) return photos
+
+  const sorted = [...photos].sort((a, b) => (a.progress ?? 1) - (b.progress ?? 1))
+  const picked: T[] = []
+  const used = new Set<number>()
+
+  for (let slot = 0; slot < max; slot++) {
+    // Centro della fascia, in progressione 0–1.
+    const target = (slot + 0.5) / max
+    let bestIdx = -1
+    let bestDist = Infinity
+    sorted.forEach((p, i) => {
+      if (used.has(i)) return
+      const d = Math.abs((p.progress ?? i / sorted.length) - target)
+      if (d < bestDist) { bestDist = d; bestIdx = i }
+    })
+    if (bestIdx >= 0) { used.add(bestIdx); picked.push(sorted[bestIdx]) }
+  }
+  return picked.sort((a, b) => (a.progress ?? 1) - (b.progress ?? 1))
+}

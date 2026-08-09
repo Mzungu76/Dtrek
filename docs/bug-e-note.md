@@ -991,3 +991,39 @@ nello stesso flusso a due colonne.
 Verificato in Chromium con 14 blocchi di racconto e 8 inserti scritti in fondo: la sequenza
 risultante è `ttIttIttIttIttIttIttII` — distribuiti, non ammassati. Nessuna colonna vuota, nessun
 traboccamento, tutti i 22 blocchi collocati.
+
+### 5.10 — Pagine bianche: schegge e resti
+
+Diagnosi economica sull'export reale (53 pagine): `pdfimages -list` dà l'altezza dell'immagine di
+ogni pagina, e una pagina quasi vuota si riconosce senza aprirla. Otto pagine sotto il 55%, di due
+tipi distinti.
+
+**B66 — schegge da 20-30 px** (pagine 15, 24, 50). Una pagina già composta è per costruzione alta
+esattamente l'area utile, ma `paginateToPdf` ne misurava lo `scrollHeight`: arrotondamenti
+sub-pixel su altezze di riga e margini la facevano risultare più alta di pochi pixel, e da quei
+pochi pixel l'impaginatore ricavava una seconda pagina fisica alta 20-30 px. Bianca. Corretto: un
+elemento che porta `data-mag-page` dichiara di essere già una pagina e non viene rimisurato.
+
+**B67 — resti da 158-404 px** (pagine 6, 10, 26, 31, 47). Sono la coda dei resoconti più ricchi di
+foto. Causa dimensionale, non di algoritmo: nel layout a due colonne una foto occupa **~284 px**,
+cioè quanto **diciassette righe di testo**. Le escursioni dell'utente hanno da 6 a 17 foto
+(mediana ~1 foto/km): a 17 foto sono ~4.800 px di sole immagini, più di due pagine intere.
+
+Nuova `selectSpreadPhotos` (`lib/photoBuckets.ts`) e tetto `DIARY_MAX_PHOTOS_DEFAULT = 6`. La
+selezione è **per posizione lungo la traccia**, non per ordine di caricamento: il percorso è diviso
+in fasce uguali e da ognuna si prende la foto più vicina al centro — prendere le prime sei
+racconterebbe solo l'inizio del cammino. Le foto non stampate non si perdono: restano tutte nel
+resoconto e sulla pagina pubblica.
+
+**Il conto dello spazio**, che è quello che determina il numero:
+
+| Voce | Spazio in colonna |
+|---|---|
+| Pagina composta | 2 colonne × 1067 px = 2.134 px |
+| Apertura (solo 1ª pagina) | −460 px × 2 colonne |
+| Racconto da 7.500 caratteri | ~1.875 px |
+| Schede, profilo, frequenza, velocità, mappa | ~900 px |
+| **Una foto** | **~284 px** (immagine 4:3 a 341 px + didascalia + margine) |
+
+Da cui: due pagine per resoconto reggono ~2-3 foto; tre pagine ne reggono ~8-9. Sei è il punto in
+cui il ritmo resta di una foto ogni due paragrafi senza aprire una quarta pagina.
