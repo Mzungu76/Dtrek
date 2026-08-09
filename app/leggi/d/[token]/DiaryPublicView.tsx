@@ -1,294 +1,38 @@
-// Pagina pubblica del Diario — una rivista web, non più un guscio attorno a un PDF.
+// Home del sito pubblico del Diario.
 //
-// Prima questa pagina mostrava copertina, tre numeri e un indice, e per leggere una sola riga di
-// racconto bisognava scaricare un PDF da decine di MB o sfogliarlo con un visualizzatore che su
-// un telefono rendeva una pagina A4 in 351 px — corpo del testo a ~4,7 px, illeggibile. Il
-// contenuto ora arriva dal database insieme alla pagina (vedi lib/sharePublicDiary.ts) e viene
-// impaginato per la lettura, in colonna singola.
+// Prima era una pagina sola che conteneva tutto e si scorreva all'infinito: con dieci escursioni
+// e cento foto diventava lunghissima e senza punti di riferimento. Ora è la home di un piccolo
+// sito — copertina, numeri, indice — e ogni escursione ha una pagina propria
+// (`/leggi/d/[token]/e/[n]`), raggiungibile dall'indice e con la sua navigazione.
 //
-// Componente SERVER di proposito: nessuno stato, nessun `use client`, nessun JavaScript spedito
-// al browser. Chi apre il link da una chat scarica del testo e delle immagini pigre, non un
-// runtime. In più il contenuto è indicizzabile e selezionabile, che un PDF rasterizzato non è.
+// Resta un componente SERVER: nessuno stato, nessun JavaScript spedito al browser. Chi apre il
+// link da una chat scarica del testo e delle immagini pigre, non un runtime.
 
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
-import { Download, Route as RouteIcon, Mountain, Clock } from 'lucide-react'
+import { Download, Route as RouteIcon, ChevronRight } from 'lucide-react'
 import { withForcedDownload } from '@/lib/storageDownloadUrl'
-import { parseSections } from '@/lib/reportStore'
-import { parseMarkupBlocks, parseInlineEmphasis } from '@/lib/guideMarkup'
 import { formatDuration } from '@/lib/tcxParser'
-import { bucketPhotosByChapter } from '@/lib/photoBuckets'
-import { hasNarrative, type PublicDiary, type PublicDiaryEntry, type PublicDiaryPhoto } from '@/lib/sharePublicDiary'
-import { RouteSketch } from './RouteSketch'
-import { RouteMap } from './RouteMap'
+import { hasNarrative, type PublicDiary } from '@/lib/sharePublicDiary'
+import { SiteHeader, DtrekCallout, SiteFooter } from './SiteChrome'
 
-/** Il corpo dei resoconti è markdown: gli asterischi dell'enfasi vanno resi, non stampati. */
-function Inline({ text }: { text: string }) {
-  return (
-    <>
-      {parseInlineEmphasis(text).map((seg, i) =>
-        seg.bold ? <strong key={i} className="font-semibold text-stone-800">{seg.text}</strong> : <span key={i}>{seg.text}</span>,
-      )}
-    </>
-  )
-}
+export function DiaryPublicView({ diary, token }: { diary: PublicDiary; token: string }) {
+  const show = diary.config.publicSections
 
-function StatCell({ icon, value, label }: { icon?: React.ReactNode; value: string; label: string }) {
-  return (
-    <div className="flex-1 min-w-0 px-3 py-3 text-center">
-      <div className="flex items-center justify-center gap-1 text-forest-700">
-        {icon}
-        <span className="font-mono text-base font-bold leading-none">{value}</span>
-      </div>
-      <div className="text-[9px] font-semibold text-stone-400 uppercase tracking-wider mt-1">{label}</div>
-    </div>
-  )
-}
-
-function EntryStats({ entry }: { entry: PublicDiaryEntry }) {
-  return (
-    <div className="flex items-stretch divide-x divide-stone-100 border-y border-stone-100 my-5">
-      <StatCell icon={<RouteIcon className="w-3.5 h-3.5 text-stone-300" />} value={`${(entry.distanceMeters / 1000).toFixed(1)}`} label="km" />
-      <StatCell icon={<Mountain className="w-3.5 h-3.5 text-stone-300" />} value={`${Math.round(entry.elevationGain)}`} label="m D+" />
-      {entry.totalTimeSeconds > 0 && (
-        <StatCell icon={<Clock className="w-3.5 h-3.5 text-stone-300" />} value={formatDuration(entry.totalTimeSeconds)} label="in cammino" />
-      )}
-      {entry.altitudeMax != null && (
-        <StatCell value={`${Math.round(entry.altitudeMax)}`} label="quota max" />
-      )}
-    </div>
-  )
-}
-
-function PhotoGrid({ photos }: { photos: PublicDiaryPhoto[] }) {
-  if (photos.length === 0) return null
-  return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mt-6">
-      {photos.map((p, i) => (
-        <figure key={i} className="min-w-0">
-          {/* `loading="lazy"` non è un dettaglio: un diario con dieci escursioni può avere un
-              centinaio di foto a piena risoluzione, e chi apre il link spesso è in mobilità. */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={p.url} alt={p.caption ?? ''} loading="lazy" decoding="async"
-            className="w-full aspect-[4/3] object-cover rounded-xl bg-stone-100" />
-          {p.caption && (
-            <figcaption className="text-[11px] font-lora italic text-stone-400 text-center mt-1.5 leading-snug">
-              {p.caption}
-            </figcaption>
-          )}
-        </figure>
-      ))}
-    </div>
-  )
-}
-
-/**
- * Foto incastonata nel testo, con il paragrafo che le scorre accanto.
- *
- * Il float parte solo da `sm:` in su: sotto i 640 px la colonna è troppo stretta perché testo e
- * immagine convivano affiancati, e una foto al 46% lascerebbe righe da quattro parole. Su mobile
- * resta quindi un blocco a piena larghezza — spezza comunque il muro di testo, che è lo scopo.
- * La `<section>` che le contiene ha `flow-root`, così il float è contenuto dalla sezione e non
- * sborda in quella successiva.
- */
-function InlineFigure({ photo, side }: { photo: PublicDiaryPhoto; side: 'left' | 'right' }) {
-  return (
-    <figure className={`my-4 sm:w-[46%] sm:mb-3 ${side === 'right' ? 'sm:float-right sm:ml-5' : 'sm:float-left sm:mr-5'}`}>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={photo.url} alt={photo.caption ?? ''} loading="lazy" decoding="async"
-        className="w-full aspect-[4/3] object-cover rounded-xl bg-stone-100" />
-      {photo.caption && (
-        <figcaption className="text-[11px] font-lora italic text-stone-400 mt-1.5 leading-snug">
-          {photo.caption}
-        </figcaption>
-      )}
-    </figure>
-  )
-}
-
-/** Ogni quanti paragrafi si incastona una foto. Due è il passo che spezza il testo senza che la
- *  pagina diventi un collage: con paragrafi da 5-8 righe cade una foto ogni schermata scarsa. */
-const PARAGRAPHS_PER_PHOTO = 2
-
-/** Escursione con un racconto: articolo completo. */
-function EntryArticle({ entry, n }: { entry: PublicDiaryEntry; n: number }) {
-  const sections = parseSections(entry.content).filter(s => s.body.trim())
-
-  // La prima foto fa da apertura in cima all'articolo: nel corpo si riparte dalla seconda, per non
-  // ritrovarsi la stessa immagine due volte a poche righe di distanza.
-  const bodyPhotos = entry.photos.slice(1)
-  // Le foto seguono il racconto: ogni capitolo riceve quelle scattate durante la sua fetta di
-  // cammino, invece di essere impilate tutte in fondo (lib/photoBuckets.ts).
-  const buckets = bucketPhotosByChapter(bodyPhotos, Math.max(1, sections.length))
-
-  // Quel che avanza da un capitolo — perché aveva più foto che paragrafi — confluisce nella
-  // galleria di chiusura, così nessuna foto sparisce.
-  const leftovers: PublicDiaryPhoto[] = []
-  let figureCount = 0
-
-  const renderedSections = sections.map((section, si) => {
-    const queue = [...(buckets[si] ?? [])]
-    const nodes: React.ReactNode[] = []
-    let paragraphs = 0
-
-    parseMarkupBlocks(section.body).forEach((block, bi) => {
-      if (block.type === 'curiosita') {
-        nodes.push(
-          <aside key={`b${bi}`} className="my-4 rounded-r-xl border-l-[3px] border-terra-500 bg-terra-50/60 px-4 py-3">
-            <p className="font-lora italic text-[15px] leading-relaxed text-stone-600">
-              <Inline text={block.text} />
-            </p>
-          </aside>,
-        )
-        return
-      }
-      if (block.type === 'avviso') {
-        nodes.push(
-          <aside key={`b${bi}`} className="my-4 rounded-r-xl border-l-[3px] border-amber-500 bg-amber-50 px-4 py-3">
-            <p className="text-sm leading-relaxed text-amber-900"><Inline text={block.text} /></p>
-          </aside>,
-        )
-        return
-      }
-      if (block.type === 'subsection') {
-        nodes.push(
-          <h4 key={`b${bi}`} className="font-display font-bold text-base text-forest-800 mt-5 mb-1.5">
-            {block.text}
-          </h4>,
-        )
-        return
-      }
-      nodes.push(
-        <p key={`b${bi}`} className="font-lora text-[15px] leading-[1.75] text-stone-600 mb-3.5">
-          <Inline text={block.text} />
-        </p>,
-      )
-      paragraphs++
-      if (paragraphs % PARAGRAPHS_PER_PHOTO === 0 && queue.length > 0) {
-        const photo = queue.shift()!
-        // Lati alternati lungo tutto l'articolo, non per capitolo: due capitoli brevi di fila non
-        // producono due foto affiancate dallo stesso lato.
-        nodes.push(<InlineFigure key={`f${bi}`} photo={photo} side={figureCount++ % 2 === 0 ? 'right' : 'left'} />)
-      }
-    })
-
-    leftovers.push(...queue)
-
-    return (
-      // `flow-root` contiene i float delle foto dentro la sezione che le ospita.
-      <section key={si} className="mt-6 first:mt-0 flow-root">
-        <h3 className="font-barlow font-bold text-[11px] tracking-[0.2em] uppercase text-terra-500 mb-2">
-          {section.title}
-        </h3>
-        {nodes}
-      </section>
-    )
-  })
-
-  return (
-    <article id={`esc-${n}`} className="bg-white rounded-3xl border border-stone-200 shadow-sm overflow-hidden scroll-mt-16">
-      {entry.photos[0] && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={entry.photos[0].url} alt="" loading="lazy" decoding="async"
-          className="w-full aspect-[16/9] object-cover bg-stone-100" />
-      )}
-
-      <div className="p-5 sm:p-7">
-        <p className="font-barlow font-bold text-[10px] tracking-[0.2em] uppercase text-terra-500">
-          Escursione #{String(n).padStart(2, '0')} · {format(new Date(entry.startTime), 'MMMM yyyy', { locale: it })}
-        </p>
-        <h2 className="font-display text-2xl sm:text-3xl font-bold text-forest-900 leading-tight mt-1.5">
-          {entry.title}
-        </h2>
-        <p className="text-xs text-stone-400 mt-1.5">
-          {format(new Date(entry.startTime), 'd MMMM yyyy', { locale: it })}
-        </p>
-
-        <EntryStats entry={entry} />
-
-        {entry.polyline && (
-          <div className="mb-6">
-            <RouteMap
-              polyline={entry.polyline}
-              photoProgress={entry.photos.map(p => p.progress).filter((p): p is number => p != null)}
-            />
-            <p className="text-[10px] text-stone-400 text-center mt-1.5">
-              Partenza, arrivo e punti in cui sono state scattate le foto
-            </p>
-          </div>
-        )}
-
-        {renderedSections}
-
-        <div className="clear-both" />
-        <PhotoGrid photos={leftovers} />
-      </div>
-    </article>
-  )
-}
-
-/**
- * Escursione senza racconto: scheda compatta.
- *
- * Un resoconto le cui sezioni esistono ma sono vuote (`## Titolo` e nient'altro) non ha una
- * storia da raccontare — nel PDF queste occupavano due pagine intere a testa, con una fascia
- * fotografica scura vuota e uno spazio narrativo bianco. Qui l'escursione resta nel diario, perché
- * è successa davvero, ma senza fingere un contenuto che non c'è.
- */
-function EntryCard({ entry, n }: { entry: PublicDiaryEntry; n: number }) {
-  return (
-    <article id={`esc-${n}`} className="bg-white rounded-3xl border border-stone-200 shadow-sm p-5 flex gap-4 items-center scroll-mt-16">
-      {entry.photos[0]
-        // eslint-disable-next-line @next/next/no-img-element
-        ? <img src={entry.photos[0].url} alt="" loading="lazy" decoding="async"
-            className="w-20 h-20 sm:w-24 sm:h-24 object-cover rounded-2xl shrink-0 bg-stone-100" />
-        : entry.polyline
-          ? <div className="w-20 sm:w-24 shrink-0"><RouteSketch polyline={entry.polyline} /></div>
-          : <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl shrink-0 bg-stone-100" />
-      }
-      <div className="min-w-0 flex-1">
-        <p className="font-barlow font-bold text-[9px] tracking-[0.2em] uppercase text-terra-500">
-          Escursione #{String(n).padStart(2, '0')}
-        </p>
-        <h2 className="font-display text-lg font-bold text-forest-900 leading-tight mt-0.5 truncate">
-          {entry.title}
-        </h2>
-        <p className="text-xs text-stone-400 mt-0.5">
-          {format(new Date(entry.startTime), 'd MMMM yyyy', { locale: it })}
-        </p>
-        <p className="font-mono text-xs text-stone-500 mt-1.5">
-          {(entry.distanceMeters / 1000).toFixed(1)} km · {Math.round(entry.elevationGain)} m D+
-          {entry.totalTimeSeconds > 0 && ` · ${formatDuration(entry.totalTimeSeconds)}`}
-        </p>
-      </div>
-    </article>
-  )
-}
-
-export function DiaryPublicView({ diary }: { diary: PublicDiary; title: string }) {
   return (
     <div className="min-h-screen bg-stone-50">
-      <header className="bg-forest-900 text-white sticky top-0 z-20">
-        <div className="max-w-3xl mx-auto px-5 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2 font-display font-bold text-lg">
-            <span className="text-forest-300">▲</span> DTrek
-          </div>
-          <a href="/" className="text-xs font-semibold bg-white/15 hover:bg-white/25 transition rounded-full px-4 py-1.5">
-            Apri l&apos;app
-          </a>
-        </div>
-      </header>
+      <SiteHeader token={token} diaryTitle={diary.config.title} current="home" />
 
-      <main className="max-w-3xl mx-auto px-4 sm:px-5 py-6 sm:py-8 space-y-5">
+      <main className="max-w-4xl mx-auto px-4 sm:px-5 py-6 sm:py-8 space-y-5">
         {/* Copertina */}
         <section className="relative rounded-3xl overflow-hidden shadow-sm border border-stone-200">
-          <div className="relative p-8 sm:p-10 text-white"
+          <div className="relative p-8 sm:p-12 text-white"
             style={{ background: diary.config.coverUrl ? undefined : 'linear-gradient(158deg,#193b20 0%,#1c4724 45%,#20592b 100%)' }}>
             {diary.config.coverUrl && (
               <>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={diary.config.coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
-                <div className="absolute inset-0" style={{ background: 'linear-gradient(160deg, rgba(8,24,14,0.72) 0%, rgba(8,24,14,0.5) 60%, rgba(8,24,14,0.6) 100%)' }} />
+                <div className="absolute inset-0" style={{ background: 'linear-gradient(160deg, rgba(8,24,14,0.74) 0%, rgba(8,24,14,0.5) 60%, rgba(8,24,14,0.62) 100%)' }} />
               </>
             )}
             <div className="relative">
@@ -297,59 +41,71 @@ export function DiaryPublicView({ diary }: { diary: PublicDiary; title: string }
                   {diary.dateRangeLabel}
                 </p>
               )}
-              <h1 className="font-display text-3xl sm:text-4xl font-bold leading-tight">{diary.config.title}</h1>
-              {diary.config.subtitle && <p className="mt-2 font-lora italic text-white/70">{diary.config.subtitle}</p>}
-              <p className="mt-4 text-sm text-white/60">di {diary.ownerName}</p>
+              <h1 className="font-display text-3xl sm:text-5xl font-bold leading-tight">{diary.config.title}</h1>
+              {diary.config.subtitle && <p className="mt-2 font-lora italic text-white/70 text-lg">{diary.config.subtitle}</p>}
+              <p className="mt-5 text-sm text-white/60">di {diary.ownerName}</p>
             </div>
           </div>
         </section>
 
         {/* Numeri */}
-        <section className="grid grid-cols-3 gap-3">
-          {[
-            { value: String(diary.entries.length), label: diary.entries.length === 1 ? 'Escursione' : 'Escursioni' },
-            { value: `${diary.totalKm.toFixed(0)} km`, label: 'Percorsi' },
-            { value: `${Math.round(diary.totalElevationGain).toLocaleString('it')} m`, label: 'Dislivello +' },
-          ].map(s => (
-            <div key={s.label} className="bg-white rounded-2xl border border-stone-200 px-3 py-3.5 text-center shadow-sm">
-              <div className="font-mono text-xl font-bold text-stone-800 leading-tight">{s.value}</div>
-              <div className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider mt-0.5">{s.label}</div>
-            </div>
-          ))}
+        {show.statistiche && (
+          <section className="grid grid-cols-3 gap-3">
+            {[
+              { value: String(diary.entries.length), label: diary.entries.length === 1 ? 'Escursione' : 'Escursioni' },
+              { value: `${diary.totalKm.toFixed(0)} km`, label: 'Percorsi' },
+              { value: `${Math.round(diary.totalElevationGain).toLocaleString('it')} m`, label: 'Dislivello +' },
+            ].map(s => (
+              <div key={s.label} className="bg-white rounded-2xl border border-stone-200 px-3 py-4 text-center shadow-sm">
+                <div className="font-mono text-xl sm:text-2xl font-bold text-forest-800 leading-tight">{s.value}</div>
+                <div className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider mt-1">{s.label}</div>
+              </div>
+            ))}
+          </section>
+        )}
+
+        {/* Indice — schede che portano alla pagina dell'escursione */}
+        <section className="space-y-3">
+          <h2 className="font-barlow font-bold text-[11px] tracking-[0.22em] uppercase text-stone-400 px-1">
+            Le escursioni
+          </h2>
+          <div className="grid sm:grid-cols-2 gap-3">
+            {diary.entries.map((e, i) => {
+              const cover = show.foto ? e.photos[0] : undefined
+              return (
+                <a key={e.id} href={`/leggi/d/${token}/e/${i + 1}`}
+                  className="group bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden hover:shadow-md hover:border-stone-300 transition flex flex-col">
+                  {cover
+                    // eslint-disable-next-line @next/next/no-img-element
+                    ? <img src={cover.url} alt="" loading="lazy" decoding="async"
+                        className="w-full aspect-[16/9] object-cover bg-stone-100" />
+                    : <div className="w-full aspect-[16/9] bg-gradient-to-br from-forest-800 to-forest-950" />}
+                  <div className="p-4 flex-1 flex flex-col">
+                    <p className="font-barlow font-bold text-[9px] tracking-[0.2em] uppercase text-terra-500">
+                      #{String(i + 1).padStart(2, '0')} · {format(new Date(e.startTime), 'MMMM yyyy', { locale: it })}
+                    </p>
+                    <h3 className="font-display text-lg font-bold text-forest-900 leading-tight mt-1 group-hover:text-forest-700 transition">
+                      {e.title}
+                    </h3>
+                    <p className="font-mono text-xs text-stone-500 mt-2">
+                      {(e.distanceMeters / 1000).toFixed(1)} km · {Math.round(e.elevationGain)} m D+
+                      {e.totalTimeSeconds > 0 && ` · ${formatDuration(e.totalTimeSeconds)}`}
+                    </p>
+                    <p className="mt-auto pt-3 flex items-center gap-1 text-xs font-semibold text-forest-700">
+                      {hasNarrative(e.content) && show.racconto ? 'Leggi il racconto' : 'Vedi l’escursione'}
+                      <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                    </p>
+                  </div>
+                </a>
+              )
+            })}
+          </div>
+          {diary.entries.length === 0 && (
+            <p className="text-sm text-stone-400 text-center py-8">Nessuna escursione pubblicata.</p>
+          )}
         </section>
 
-        {/* Indice — ancore verso gli articoli più sotto, non più un elenco fine a sé stesso */}
-        {diary.entries.length > 1 && (
-          <nav className="bg-white rounded-3xl border border-stone-200 shadow-sm p-5 sm:p-6">
-            <h2 className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-3">Le escursioni</h2>
-            <ul className="divide-y divide-stone-100">
-              {diary.entries.map((e, i) => (
-                <li key={e.id}>
-                  <a href={`#esc-${i + 1}`} className="flex items-center gap-3 py-2.5 group">
-                    <span className="font-mono text-xs text-stone-300 w-6 shrink-0">{String(i + 1).padStart(2, '0')}</span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-stone-700 truncate group-hover:text-forest-700 transition">{e.title}</p>
-                      <p className="text-xs text-stone-400">{format(new Date(e.startTime), 'd MMMM yyyy', { locale: it })}</p>
-                    </div>
-                    <div className="shrink-0 flex items-center gap-1 text-xs text-stone-500">
-                      <RouteIcon className="w-3 h-3 text-stone-300" />
-                      {(e.distanceMeters / 1000).toFixed(1)} km
-                    </div>
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </nav>
-        )}
-
-        {/* Gli articoli */}
-        {diary.entries.map((entry, i) =>
-          hasNarrative(entry.content)
-            ? <EntryArticle key={entry.id} entry={entry} n={i + 1} />
-            : <EntryCard    key={entry.id} entry={entry} n={i + 1} />,
-        )}
-
-        {/* Il PDF è ora un allegato facoltativo: la pagina si legge per intero senza scaricarlo. */}
+        {/* Il PDF è un allegato: il sito si legge per intero senza scaricarlo */}
         {diary.pdfUrl && (
           <a href={withForcedDownload(diary.pdfUrl, 'diario-dtrek.pdf')} download
             className="flex items-center justify-center gap-2 bg-white border border-stone-200 hover:bg-stone-50 transition text-stone-600 font-display font-bold text-sm rounded-2xl py-3.5 shadow-sm">
@@ -357,20 +113,19 @@ export function DiaryPublicView({ diary }: { diary: PublicDiary; title: string }
           </a>
         )}
 
-        <section className="bg-gradient-to-br from-forest-700 to-forest-900 rounded-3xl p-7 text-center text-white">
-          <p className="font-display text-lg font-bold">Tieni il tuo diario di escursioni con DTrek</p>
-          <p className="text-sm text-white/70 mt-1.5 max-w-md mx-auto">
-            Mappe 3D, profili altimetrici, TrailScore e un diario che ricorda ogni percorso.
-          </p>
-          <a href="/" className="inline-block mt-4 bg-white text-forest-800 font-display font-semibold text-sm rounded-full px-6 py-2.5 hover:bg-stone-50 transition">
-            Scopri DTrek
-          </a>
-        </section>
-
-        <p className="text-center text-[11px] text-stone-400 pb-4">
-          Condiviso tramite DTrek · Mappe © OpenStreetMap contributors
-        </p>
+        <DtrekCallout />
+        <SiteFooter />
       </main>
     </div>
+  )
+}
+
+/** Riepilogo compatto usato in testa alla pagina di una escursione. */
+export function EntryQuickStats({ km, dplus, seconds }: { km: number; dplus: number; seconds: number }) {
+  return (
+    <p className="font-mono text-xs text-stone-500 flex items-center gap-1.5">
+      <RouteIcon className="w-3.5 h-3.5 text-stone-300" />
+      {km.toFixed(1)} km · {Math.round(dplus)} m D+{seconds > 0 && ` · ${formatDuration(seconds)}`}
+    </p>
   )
 }

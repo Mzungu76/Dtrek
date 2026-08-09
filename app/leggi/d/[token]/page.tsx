@@ -37,6 +37,5 @@ export default async function DiarioPublicPage({ params }: { params: { token: st
   const diary = await getDiary(params.token)
   if (!diary) notFound()
 
-  const title = `${diary.config.title} — di ${diary.ownerName}`
-  return <DiaryPublicView diary={diary} title={title} />
+  return <DiaryPublicView diary={diary} token={params.token} />
 }
