@@ -933,3 +933,31 @@ Dall'export reale dell'utente: pagina 12 con statistiche e grafici e poi ~530 px
 con la sola mappa e ~380 px bianchi. Causa: `mapOutH` a 660 px di larghezza può restituire fino a
 **733 px di altezza**, e con statistiche e grafici davanti la coda non entrava in una pagina sola.
 La mappa del singolo resoconto è ora contenuta in **560×320**, così l'intera coda sta su una pagina.
+
+### 5.8 — Chiusura del PDF: coda nelle colonne, statistiche su una pagina, peso
+
+Tre interventi che chiudono i difetti rimasti visibili nell'export reale.
+
+**Coda dentro le colonne.** Statistiche, profilo altimetrico, frequenza/velocità e mappa erano
+marcati `data-mag="tail"` e finivano su pagine proprie a piena larghezza: nell'export dell'utente
+producevano una pagina con ~530 px bianchi e una con la sola mappa e ~380 px bianchi. Ora sono
+blocchi di colonna (`data-mag-block`), quindi si impaginano insieme al racconto — la «mappa piccola
+affiancata» che era la scelta originale. Le griglie sono state adattate alla larghezza di colonna
+(schede da 4 a 2 per riga, frequenza e velocità impilate invece che affiancate). In coda resta la
+sola galleria fotografica, che diventa la pagina galleria adattiva.
+
+**Pagina statistiche su una pagina sola.** Traboccava, e il grafico mensile finiva da solo sulla
+successiva con il 90% di bianco. I suoi blocchi sono griglie di schede a tre o quattro colonne, che
+dentro una colonna da 341 px sarebbero illeggibili: il compositore accetta ora
+`data-mag-columns="1"` dal template, e impila i blocchi fitti a piena larghezza (706 px). Verificato:
+6 blocchi su 1 pagina, nessun traboccamento.
+
+**Rilevamento generalizzato.** L'esportazione componeva solo ciò che aveva un'apertura
+(`data-mag="opening"`); ora compone qualunque elemento con blocchi marcati, così la pagina
+statistiche — che un'apertura non ce l'ha — rientra senza casi speciali.
+
+**Peso.** `scale` da 2 a **1,5** (≈144 dpi) e qualità JPEG da **0,92 a 0,8**, entrambi esposti come
+opzioni. 0,92 era una scelta da stampa tipografica su un documento che si legge a schermo e si
+condivide in chat. Misurato sulle pagine reali dell'export: ~44% del peso per pagina.
+
+**Attesa complessiva**: da 56 pagine / 21,7 MB a **~23 pagine / ~4 MB**.

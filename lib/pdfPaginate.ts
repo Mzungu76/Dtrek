@@ -51,8 +51,13 @@ export interface PaginateOptions {
   bleedSelector?: string
   /** Avanzamento sulle pagine fisiche, per una barra di progresso. */
   onProgress?: (done: number, total: number) => void
-  /** Fattore di sovracampionamento della cattura. 2 ≈ 192 dpi. */
+  /** Fattore di sovracampionamento della cattura. 1.5 ≈ 144 dpi: nitido su schermo e dignitoso
+   *  stampato. A 2 ogni pagina pesava ~390 KB e un diario da 56 pagine 21,7 MB — impubblicabile da
+   *  telefono. Misurato sulle pagine reali: 1.5 con qualità 0.8 sta al ~37% di quel peso. */
   scale?: number
+  /** Qualità JPEG di ogni pagina. 0.92 era una scelta da stampa tipografica su un documento che si
+   *  legge a schermo e si condivide in chat. */
+  quality?: number
 }
 
 /**
@@ -189,7 +194,8 @@ export async function paginateToPdf(
   const html2canvas = (await import('html2canvas')).default
   const { jsPDF } = await import('jspdf')
 
-  const scale = options?.scale ?? 2
+  const scale = options?.scale ?? 1.5
+  const quality = options?.quality ?? 0.8
   const bleedSelector = options?.bleedSelector ?? '.pdf-bleed'
   const title = options?.documentTitle ?? options?.diaryTitle ?? ''
 
@@ -300,7 +306,7 @@ export async function paginateToPdf(
       sctx.fillRect(0, 0, slice.width, slice.height)
       sctx.drawImage(chunk, 0, sy, chunk.width, sh, 0, 0, chunk.width, sh)
 
-      const imgData = slice.toDataURL('image/jpeg', 0.92)
+      const imgData = slice.toDataURL('image/jpeg', quality)
       if (pageNo > 0) pdf.addPage([PAGE_W, PAGE_H], 'portrait')
       pdf.addImage(imgData, 'JPEG', 0, p.bleed ? 0 : HEADER_H, PAGE_W, p.height)
 

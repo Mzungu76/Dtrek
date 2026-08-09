@@ -45,14 +45,18 @@ export function DiarioStatistiche({ activities, toggles }: { activities: Activit
     : ''
 
   return (
-    <div className="diario-page" style={{
+    // `data-mag-columns="1"`: qui i blocchi sono griglie di schede a tre o quattro colonne, che
+    // dentro una colonna da 341 px diventerebbero illeggibili. Una colonna piena, con i blocchi
+    // impilati fitti dal compositore: prima questa pagina traboccava e il grafico mensile finiva
+    // da solo sulla successiva, con il 90% di bianco.
+    <div className="diario-page" data-mag-columns="1" style={{
       width: PDF_PAGE_W, minHeight: PDF_CONTENT_H, background: 'white', margin: '24px auto',
       padding: '72px 64px', boxShadow: '0 8px 56px rgba(0,0,0,0.28)',
     }}>
-      <PageHeader label="Statistiche" title="I tuoi numeri" />
+      <div data-mag-block=""><PageHeader label="Statistiche" title="I tuoi numeri" /></div>
 
       {narrative && (
-        <p className="pdf-block" style={{
+        <p className="pdf-block" data-mag-block="" style={{
           fontFamily: FONT.lora, fontSize: 13, lineHeight: 1.8, color: '#4d4740',
           margin: '-20px 0 32px', fontStyle: 'italic',
         }}>
@@ -61,7 +65,7 @@ export function DiarioStatistiche({ activities, toggles }: { activities: Activit
       )}
 
       {years.length > 1 && (
-        <div className="pdf-block" style={{ marginBottom: 32 }}>
+        <div className="pdf-block" data-mag-block="" style={{ marginBottom: 32 }}>
           <PillHeader label="Anno per anno" accent={GREEN} />
           <table style={{ width: '100%', fontSize: 11, fontFamily: FONT.body, borderCollapse: 'collapse' }}>
             <thead>
@@ -87,7 +91,7 @@ export function DiarioStatistiche({ activities, toggles }: { activities: Activit
       )}
 
       {toggles.totali && (
-        <div className="pdf-block" style={{ marginBottom: 32 }}>
+        <div className="pdf-block" data-mag-block="" style={{ marginBottom: 32 }}>
           <PillHeader label="Totali" accent={GREEN} />
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
             <StatCard value={`${gs.totalDistanceKm.toFixed(0)} km`} label="Percorsi" icon={<Route style={{ color: GREEN.iconColor, width: 13, height: 13 }} />} accent={GREEN} />
@@ -102,7 +106,7 @@ export function DiarioStatistiche({ activities, toggles }: { activities: Activit
       )}
 
       {toggles.record && (
-        <div className="pdf-block" style={{ marginBottom: 32 }}>
+        <div className="pdf-block" data-mag-block="" style={{ marginBottom: 32 }}>
           <PillHeader label="Record personali" accent={AMBER} />
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
             <StatCard value={`${gs.longestKm.toFixed(1)} km`} label="Escursione più lunga" sub={longestAct?.title} icon={<Trophy style={{ color: AMBER.iconColor, width: 13, height: 13 }} />} accent={AMBER} />
@@ -113,7 +117,7 @@ export function DiarioStatistiche({ activities, toggles }: { activities: Activit
       )}
 
       {toggles.medie && activities.length > 0 && (
-        <div className="pdf-block" style={{ marginBottom: 32 }}>
+        <div className="pdf-block" data-mag-block="" style={{ marginBottom: 32 }}>
           <PillHeader label="Medie per uscita" accent={BLUE} />
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
             <StatCard value={`${(gs.totalDistanceKm / activities.length).toFixed(1)} km`} label="Distanza media" icon={<Route style={{ color: BLUE.iconColor, width: 13, height: 13 }} />} accent={BLUE} />
@@ -124,7 +128,7 @@ export function DiarioStatistiche({ activities, toggles }: { activities: Activit
       )}
 
       {toggles.andamento && (
-        <div className="pdf-block">
+        <div className="pdf-block" data-mag-block="">
           <PillHeader label="Andamento mensile" accent={VIOLET} />
           <div style={{ background: VIOLET.bg, borderRadius: 10, padding: '16px 20px', border: `1px solid ${VIOLET.border}` }}>
             <MonthBarChart activities={activities} />
