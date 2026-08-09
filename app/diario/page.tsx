@@ -529,6 +529,29 @@ export default function DiarioPage() {
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a'); a.href = url; a.download = 'diario-dtrek.pdf'
         a.click(); URL.revokeObjectURL(url)
+        // Un solo PDF, un solo posto dove si genera: se il link pubblico esiste, la stessa copia
+        // appena scaricata diventa anche quella allegata al sito. Prima erano due azioni separate
+        // — «Scarica» e «Allega» — che potevano produrre due documenti diversi.
+        if (diaryToken) {
+          try {
+            const { getBrowserSupabase } = await import('@/lib/supabaseBrowser')
+            const sb = getBrowserSupabase()
+            await sb.auth.getSession()
+            const { data: { user } } = await sb.auth.getUser()
+            if (user) {
+              const { uploadDiaryPdf } = await import('@/lib/pdfUpload')
+              const pdfUrl = await uploadDiaryPdf(user.id, blob)
+              await fetch('/api/diary-token', {
+                method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ diaryPdfUrl: pdfUrl }),
+              })
+              setDiaryPdfUrl(pdfUrl)
+            }
+          } catch (e) {
+            // Il download è già riuscito: un allegato non aggiornato non deve farlo sembrare fallito.
+            console.warn('[diario] PDF scaricato ma allegato non aggiornato:', e)
+          }
+        }
       } else {
         const { getBrowserSupabase } = await import('@/lib/supabaseBrowser')
         const sb = getBrowserSupabase()
@@ -853,22 +876,29 @@ export default function DiarioPage() {
                     <Copy className="w-3.5 h-3.5" /> {copyOk ? 'Copiato!' : 'Copia link'}
                   </button>
 
-                  <div className="pt-1.5 border-t border-stone-100 space-y-1.5">
-                    <p className="text-[10px] text-stone-400 leading-snug">
-                      {diaryPdfUrl
-                        ? 'Il PDF è allegato al link. Riaggiornalo se hai cambiato qualcosa.'
-                        : 'Facoltativo: allega un PDF scaricabile dalla pagina pubblica.'}
+                  {/* Cosa mostrare sul sito. Il PDF non è più un'azione a sé: lo aggiorna
+                      l'esportazione del Diario, che è l'unico posto dove il documento si genera. */}
+                  <div className="pt-1.5 border-t border-stone-100 space-y-1">
+                    <p className="text-[10px] font-barlow font-bold uppercase tracking-widest text-stone-400 mb-1">
+                      Mostra sul sito
                     </p>
-                    <button onClick={() => generateAndUploadPdf(false)} disabled={publishing || !chartsAndPhotosReady}
-                      title={publishDisabledReason}
-                      className="w-full flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-stone-600 text-xs font-barlow font-bold uppercase tracking-wide hover:bg-stone-50 disabled:opacity-50 transition-colors">
-                      {publishing
-                        ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Aggiornamento…</>
-                        : <><RefreshCw className="w-3.5 h-3.5" /> {diaryPdfUrl ? 'Aggiorna PDF allegato' : 'Allega il PDF'}</>}
-                    </button>
-                    {publishDisabledReason && (
-                      <p className="flex items-start gap-1.5 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
-                        <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-px" /> {publishDisabledReason}
+                    {([
+                      ['racconto',    'Racconti'],
+                      ['foto',        'Fotografie'],
+                      ['percorso',    'Mappe dei percorsi'],
+                      ['statistiche', 'Numeri complessivi'],
+                    ] as const).map(([key, label]) => (
+                      <label key={key} className="flex items-center gap-2 py-0.5 text-xs text-stone-600 cursor-pointer">
+                        <input type="checkbox" checked={config.publicSections[key]}
+                          onChange={e => setConfig(c => ({
+                            ...c, publicSections: { ...c.publicSections, [key]: e.target.checked },
+                          }))} />
+                        {label}
+                      </label>
+                    ))}
+                    {diaryPdfUrl && (
+                      <p className="text-[10px] text-stone-400 leading-snug pt-1">
+                        Il PDF allegato si aggiorna quando esporti il Diario.
                       </p>
                     )}
                   </div>

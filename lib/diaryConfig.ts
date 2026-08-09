@@ -7,6 +7,16 @@
 // `app/api/diary-config/route.ts`. Questo file è condiviso da client e server: solo tipi e
 // funzioni pure, nessun accesso a `localStorage` o a Supabase.
 
+export interface DiaryPublicSections {
+  /** Il racconto integrale di ogni escursione. Spento, il sito resta un indice illustrato. */
+  racconto:    boolean
+  foto:        boolean
+  /** Mappa del percorso su ogni escursione. */
+  percorso:    boolean
+  /** Pagina con i numeri complessivi. */
+  statistiche: boolean
+}
+
 export interface DiaryStatsToggles {
   totali:    boolean
   record:    boolean
@@ -49,6 +59,10 @@ export interface DiaryConfig {
 
   /** Mostra le escursioni non ancora narrate come pagine segnaposto. */
   showStubs: boolean
+
+  /** Cosa mostrare sul sito pubblico. Il PDF è un documento chiuso, il sito no: chi condivide il
+   *  diario può volerne pubblicare il racconto senza le foto, o i numeri senza le tracce. */
+  publicSections: DiaryPublicSections
 }
 
 export const DEFAULT_DIARY_STATS_TOGGLES: DiaryStatsToggles = {
@@ -70,6 +84,7 @@ export const DEFAULT_DIARY_CONFIG: DiaryConfig = {
   excludedActivityIds: [],
   photoIdsByActivity: {},
   showStubs: true,
+  publicSections: { racconto: true, foto: true, percorso: true, statistiche: true },
 }
 
 /**
@@ -116,6 +131,10 @@ export function normalizeDiaryConfig(raw: unknown): DiaryConfig {
       : [],
     showStubs: typeof r.showStubs === 'boolean' ? r.showStubs : true,
     photoIdsByActivity,
+    publicSections: {
+      ...DEFAULT_DIARY_CONFIG.publicSections,
+      ...(r.publicSections && typeof r.publicSections === 'object' ? r.publicSections as Partial<DiaryPublicSections> : {}),
+    },
   }
 }
 

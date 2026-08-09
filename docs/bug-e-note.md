@@ -1057,3 +1057,36 @@ selezione automatica distribuita fa da proposta di partenza; il pannello serve p
 l'automatismo sceglie *dove*, non *quanto è bella*: la foto migliore può cadere accanto a un'altra
 e restare fuori. Elenco vuoto = ritorno all'automatico, e la chiave viene rimossa invece di salvare
 un array vuoto.
+
+### 5.12 — Il link pubblico diventa un sito
+
+**Verifica dell'impaginazione**: l'export dopo il tetto foto è di **40 pagine, 8,9 MB** e
+`pdfimages -list` non trova **nessuna** pagina sotto il 55% di riempimento. Da 56 pagine e 21,7 MB
+con otto pagine quasi vuote.
+
+**Un solo PDF, un solo posto dove si genera.** Il popup di condivisione aveva un pulsante «Allega
+il PDF» separato dall'esportazione del Diario: due azioni che producevano due documenti che
+potevano divergere. Il pulsante è stato tolto; ora è l'esportazione a caricare la stessa copia
+appena scaricata, quando il link è pubblicato. Un fallimento dell'allegato non fa più sembrare
+fallito il download: viene registrato e basta.
+
+**Da pagina unica a sito.** Con dieci escursioni e cento foto la pagina sola era lunghissima e
+senza punti di riferimento. Ora:
+
+- `/leggi/d/[token]` — home: copertina, numeri, indice a schede;
+- `/leggi/d/[token]/e/[n]` — una pagina per escursione, con navigazione precedente/successiva.
+
+Ogni escursione ha quindi un indirizzo proprio: si può condividere la singola uscita, la pagina si
+apre in fretta a prescindere da quanto è grande l'archivio, e i metadati OpenGraph sono quelli
+dell'escursione e non del diario intero. Restano tutti componenti server: `/leggi/d/[token]` e
+`/leggi/d/[token]/e/[n]` pesano **161 byte** ciascuno, 88,8 kB di First Load JS condiviso.
+
+**Scelte di pubblicazione.** Nuovo `publicSections` in `diary_config` — racconti, fotografie, mappe
+dei percorsi, numeri complessivi — con i toggle nel popup di condivisione, al posto del pulsante
+del PDF. Il PDF è un documento chiuso, il sito no: si può pubblicare il racconto senza le foto, o i
+numeri senza le tracce.
+
+**Richiami a DTrek** (`lib/publicSite.ts`, `SiteChrome.tsx`): tre, di intensità crescente e mai
+invadenti — un pulsante in testata, una scheda in fondo alla home, una riga nel piede. Puntano a
+`NEXT_PUBLIC_SITE_URL`, con l'URL Vercel come ripiego. Chi legge il diario di un amico è il
+pubblico più naturale per l'app, ma lo resta finché il diario è il protagonista.
