@@ -7,6 +7,14 @@ export interface GeoFix {
   accuracyM?: number | null
   speedMs?: number | null
   ts: number // epoch ms
+  /** Device-reported heading of travel, when the source provides one (native GNSS fixes; the browser Geolocation API rarely does). Distinct from the device compass (see orientation.ts). */
+  bearingDeg?: number | null
+  verticalAccuracyM?: number | null
+  speedAccuracyMs?: number | null
+  /** Which Location Engine produced this fix — surfaced for diagnostics (Navigation Health screen, spec §16), never used to change trust decisions by itself. */
+  source?: 'native' | 'web'
+  /** True when the OS flagged this fix as coming from a mock/spoofed provider (native only) — the Position Engine's quality gate should reject these outright. */
+  mock?: boolean
 }
 
 export type NavState =
