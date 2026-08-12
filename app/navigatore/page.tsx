@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import RouteThumb from '@/components/RouteThumb'
+import MapRouteThumb from '@/components/MapRouteThumb'
 import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import { lsClearAll } from '@/lib/localStore'
@@ -108,9 +108,7 @@ export default function NavigatorePage() {
                 className="block bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-md transition-shadow border border-stone-200"
               >
                 <div className="relative h-[140px] bg-gradient-to-b from-sky-50 to-stone-50 bg-topography">
-                  <div className="absolute inset-3">
-                    <RouteThumb polyline={hike.routePolyline!} color="#0284c7" strokeWidth={3} />
-                  </div>
+                  <MapRouteThumb polyline={hike.routePolyline!} color="#0284c7" strokeWidth={3} />
                 </div>
                 <div className="px-[18px] pt-4 pb-[18px]">
                   <p className="text-[16px] font-bold text-sky-900 mb-2 truncate">{hike.title}</p>

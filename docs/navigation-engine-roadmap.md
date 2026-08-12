@@ -455,6 +455,54 @@ mancava solo la logica che *decide* quando cambiare modalità.
   pezzo della Fase 8 (e dell'intera roadmap) che richiede davvero un
   device fisico all'aperto, non solo una build CI verificata.
 
+## Post-collaudo — mappa reale nell'app Navigator — ✅ landed
+
+Non una delle 8 fasi della issue, ma un problema segnalato dall'utente dopo
+il primo collaudo reale su device: le tile OSM/Leaflet vere (quelle
+visibili durante la navigazione, `NavigationMap.tsx`) non comparivano né
+nell'elenco dei percorsi pianificati (`app/navigatore/page.tsx`) né nella
+registrazione di un percorso senza pianificazione
+(`app/navigatore/traccia/page.tsx`) — entrambe le schermate usavano solo
+`RouteThumb.tsx`, una linea SVG auto-adattata senza nessun dato di mappa
+sotto.
+
+- **Che mappa usa il navigatore vero** (`NavigationMap.tsx`): tile raster
+  stile CartoDB "Voyager" (dati OSM, nessuna chiave richiesta), proxati
+  server-side da `app/api/tile/route.ts` — lo stesso endpoint supporta già
+  anche `dark`/`positron`/OSM standard (`light`), solo non collegati a un
+  selettore in Navigation. `NavigationMapLibre.tsx` (mappa "online",
+  soddisfatta solo con connessione) offre in più stili vettoriali/3D/
+  satellite via MapTiler, ma non fa parte del pacchetto offline.
+- `lib/webMercator.ts` (nuovo): la stessa matematica Web Mercator a tile
+  256px che una libreria come Leaflet farebbe internamente, scritta a
+  mano — necessaria per allineare esattamente tile reali e polyline
+  disegnata senza montare una mappa interattiva completa per ogni card di
+  un elenco (potenzialmente lungo).
+- `components/MapRouteThumb.tsx` (nuovo): sostituisce `RouteThumb` nelle
+  card dell'elenco pianificate — mosaico delle sole tile necessarie
+  (poche immagini `<img>` posizionate via `lib/webMercator.ts`, non una
+  mappa Leaflet viva) più il tracciato disegnato sopra nello stesso spazio
+  pixel, quindi perfettamente allineato alla mappa reale sotto. Usa lo
+  stesso `/api/tile?...&style=voyager` del navigatore vero.
+- `components/navigation/FreeTrackMap.tsx` (nuovo): mappa Leaflet vera e
+  interattiva per la registrazione senza pianificazione — stesso tile
+  layer, stesso stile di marker/cerchio di accuratezza/pulsante ricentra
+  di `NavigationMap.tsx`, disegna il tracciato percorso finora (che cresce
+  man mano) al posto di un percorso pianificato fisso. `app/navigatore/
+  traccia/page.tsx` ora è a schermo intero durante la registrazione
+  (prima era un riquadro fisso di 220px dentro una pagina con scroll),
+  stessa struttura di `ActiveNavigationView.tsx`.
+
+**Non ancora fatto / prossimi passi concreti:**
+- Nessun selettore di stile mappa (`dark`/`positron`/OSM standard) esposto
+  in nessuna delle due schermate — usano sempre `voyager`, come
+  `NavigationMap.tsx`.
+- `MapRouteThumb` non è stato provato con un numero molto grande di card
+  contemporaneamente a schermo (molte richieste `/api/tile` in parallelo)
+  — il proxy le cache-a per 24h (`Cache-Control` in `app/api/tile/
+  route.ts`), ma non è stato misurato l'impatto su una lista con decine di
+  percorsi.
+
 ## Ordine consigliato per le prossime PR
 
 1. ✅ Swap `GpsSmoother` → `PositionEngine` dentro `NavigationEngine` (Fase 2,
