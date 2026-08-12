@@ -15,7 +15,7 @@ const META_COLS = [
   'file_name', 'user_notes', 'tags', 'user_rating', 'user_rating_note',
   'route_polyline', 'soddisfazione',
   'linked_beauty_score', 'trail_score', 'trail_score_confidence', 'trail_score_computed_at',
-  'updated_at', 'favorite',
+  'updated_at', 'favorite', 'source_app',
 ].join(', ')
 
 // Same list without updated_at — fallback for an environment that hasn't run
@@ -60,6 +60,7 @@ function rowToMeta(row: Record<string, unknown>): ActivityMeta {
     trailScoreComputedAt: row.trail_score_computed_at as string | undefined,
     depKm:           computeDEP(row.distance_meters as number, row.elevation_gain as number),
     favorite:        row.favorite as boolean | undefined,
+    sourceApp:       row.source_app as ActivityMeta['sourceApp'],
   }
 }
 

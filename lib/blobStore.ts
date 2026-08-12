@@ -62,6 +62,9 @@ export interface StoredActivity extends TcxActivity {
   // scheda chiusa) e app/resoconto/ResocontoHub.tsx (filtro "Preferiti"), stesso concetto già
   // esistente per planned_hikes (vedi lib/plannedStore.ts).
   favorite?: boolean
+  /** Set only when this activity was recorded through the standalone Navigator app's free-track
+   *  flow (lib/navigatorSlot.ts) — same convention/purpose as PlannedHike.sourceApp. */
+  sourceApp?: 'navigator'
 }
 
 export interface ActivityMeta {
@@ -94,6 +97,7 @@ export interface ActivityMeta {
   depKm?: number
   iev?: number
   favorite?: boolean
+  sourceApp?: 'navigator'
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -101,6 +105,7 @@ export interface ActivityMeta {
 function toMeta(a: StoredActivity): ActivityMeta {
   return {
     id:              a.id,
+    sourceApp:       a.sourceApp,
     title:           a.title ?? a.notes ?? 'Escursione',
     startTime:       a.startTime,
     updatedAt:       a.updatedAt,

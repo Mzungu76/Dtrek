@@ -6,10 +6,12 @@ import { Locate } from 'lucide-react'
 import type { NavState } from '@/lib/navigation/types'
 import { computeDirectionArrows } from '@/lib/geoUtils'
 import { labelNearbyTrail, formatTrailDistance } from '@/lib/navigation/nearbyTrailLabels'
+import { poiBadgeMarkup } from '@/components/poiIcons'
+import { POI_META, type PoiType } from '@/lib/overpass'
 
 interface Props {
   routePolyline: [number, number][]
-  pois: { id: string | number; lat: number; lon: number; name?: string }[]
+  pois: { id: string | number; lat: number; lon: number; name?: string; type?: string }[]
   position: { lat: number; lon: number } | null
   bearingDeg: number | null
   state: NavState
@@ -21,6 +23,8 @@ interface Props {
    *  un pin fisso, distinto da quelli dei POI, così a fine giro è visibile sulla mappa e non solo
    *  come distanza in un pannellino. Null ⇒ nessun pin. */
   parkingSpot?: { lat: number; lon: number } | null
+  /** Called when a POI marker is tapped directly on the map — the caller decides how to show info (ActiveNavigationView.tsx reuses the same callout sheet the proximity-triggered enteredPoi event already opens, so tapping and walking up to a POI show the same info in the same place). */
+  onPoiTap?: (poiId: string | number) => void
 }
 
 const FOLLOW_ZOOM = 17
@@ -59,7 +63,7 @@ const NEARBY_TRAIL_MIN_LABEL_LENGTH_M = 60
  * hiker manually pans/zooms the map, follow mode turns off so their gesture
  * isn't fought, and a "recenter" button brings it back.
  */
-export default function NavigationMap({ routePolyline, pois, position, bearingDeg, state, nearbyTrails, accuracyM, parkingSpot }: Props) {
+export default function NavigationMap({ routePolyline, pois, position, bearingDeg, state, nearbyTrails, accuracyM, parkingSpot, onPoiTap }: Props) {
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstance = useRef<L.Map | null>(null)
   const userMarker = useRef<L.Marker | null>(null)
@@ -104,14 +108,21 @@ export default function NavigationMap({ routePolyline, pois, position, bearingDe
       // injected via a plain <link> (see above) instead of bundled — every
       // L.marker() without an explicit icon 404s on marker-icon.png. A
       // small divIcon sidesteps that entirely instead of patching L.Icon.Default's path.
-      const poiIcon = L.divIcon({
-        className: '',
-        html: '<div style="width:22px;height:22px;border-radius:50%;background:#d97220;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>',
-        iconSize: [22, 22],
-        iconAnchor: [11, 11],
-      })
+      // Same per-type icon/color (poiBadgeMarkup + POI_META) as the route-detail page's map
+      // (components/MapView.tsx) — this used to be a single hardcoded orange dot for every POI
+      // regardless of type, the one visible inconsistency between the two maps that wasn't a
+      // deliberate tradeoff (unlike the tile style, see NavigationMap.tsx's TILE_URL comment).
+      const defaultPoiColor = '#d97220'
       for (const poi of pois) {
-        L.marker([poi.lat, poi.lon], { title: poi.name, icon: poiIcon }).addTo(map)
+        const meta = poi.type ? POI_META[poi.type as PoiType] : undefined
+        const icon = L.divIcon({
+          className: '',
+          html: poiBadgeMarkup((poi.type as PoiType) ?? 'peak', meta?.color ?? defaultPoiColor, 26),
+          iconSize: [26, 26],
+          iconAnchor: [13, 13],
+        })
+        const marker = L.marker([poi.lat, poi.lon], { title: poi.name, icon }).addTo(map)
+        if (onPoiTap) marker.on('click', () => onPoiTap(poi.id))
       }
 
       // A manual pan/zoom means the hiker wants to look around — stop fighting them with auto-recenter.

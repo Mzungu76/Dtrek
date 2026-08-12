@@ -12,8 +12,10 @@ sola, senza dover aspettare le fasi successive.
 questo progetto Capacitor è **DTrek Navigator**, un'app separata dall'app
 principale DTrek (che resta web/PWA senza wrapper nativo), installabile a
 parte da chi vuole la navigazione GPS attiva. AppId `com.dtrek.navigator`,
-entry point `app/navigatore/page.tsx` (lista percorsi pianificati → avvia
-navigazione), non il sito intero.
+entry point `app/navigatore/page.tsx` (home a mappa live, pronta a
+navigare — l'elenco dei percorsi pianificati è dietro il menu, vedi
+"Post-collaudo — Navigator gancio verso l'app madre" più sotto), non il
+sito intero.
 
 - `capacitor.config.ts` + `android/` (progetto Capacitor scaffolded via
   `npx cap add android`). Pattern scelto: **`server.url`**, non un bundle
@@ -548,6 +550,98 @@ silenzioso, mai un errore in console.
 - Soglia di lunghezza minima per l'etichetta (`NEARBY_TRAIL_MIN_LABEL_LENGTH_M
   = 60`) e stile non calibrati su un caso reale con molti sentieri
   ravvicinati (stesso caveat delle altre costanti "a stima" in questo file).
+
+## Post-collaudo — icone POI e tap per info nella mappa di navigazione — ✅ landed
+
+Altra segnalazione dallo stesso giro di test: nella mappa di navigazione
+live tutti i POI avevano la stessa icona (un pallino arancione, o —
+peggio, in `NavigationMapLibre.tsx` — il pin generico di default di
+MapLibre), a differenza della mappa della pagina di dettaglio percorso
+(`components/MapView.tsx`), dove ogni tipo di POI ha icona e colore
+propri (`components/poiIcons.tsx` + `POI_META` in `lib/overpass.ts`); e
+toccare un POI sulla mappa di navigazione non mostrava nessuna
+informazione.
+
+- `NavigationMap.tsx` e `NavigationMapLibre.tsx`: stessa icona/colore per
+  tipo di `MapView.tsx` (`poiBadgeMarkup`/`POI_META`), riusata così com'è
+  — nessuna logica duplicata.
+- Nuova prop `onPoiTap` su entrambi i componenti mappa: `
+  ActiveNavigationView.tsx` la collega allo stesso pannello (`callout`/
+  `PoiCalloutSheet`) già usato quando ci si avvicina a piedi a un POI
+  (evento `enteredPoi` del motore) — toccare il marker sulla mappa mostra
+  ora la stessa scheda con nome/estratto Wikipedia/immagine, non un
+  popup diverso o nessuna reazione.
+
+**Perché lo stile della mappa stessa (tile) resta diverso dall'app
+principale — non un bug, non toccato qui**: la pagina di dettaglio
+percorso usa tile OSM standard live (`style=light` in `app/api/tile/
+route.ts`, che proxa `tile.openstreetmap.org`) — uso in tempo reale,
+volume basso, compatibile con la policy di utilizzo di OpenStreetMap. La
+mappa di navigazione di Navigator usa invece CartoDB Voyager
+(`style=voyager`) **perché è la stessa mappa scaricata in blocco per
+l'uso offline** (`lib/offline/packageManager.ts`) — la policy di OSM
+vieta esplicitamente il download in blocco/il mirroring offline delle
+loro tile, mentre CartoDB lo permette nel proprio piano gratuito. Se le
+tile "live" di Navigator venissero cambiate a `style=light` senza
+cambiare anche cosa viene scaricato per l'offline, la mappa offline
+smetterebbe di funzionare (le tile in cache sotto la vecchia URL
+`style=voyager` non corrisponderebbero più a quelle richieste): un
+cambiamento del genere richiede prima verificare se esiste uno stile con
+lo stesso aspetto ricco ma compatibile col download in blocco — non
+fatto qui, segnalato come possibile lavoro futuro se lo stile "più
+semplice" di Navigator continua a essere percepito come un downgrade.
+
+## Post-collaudo — Navigator "gancio" verso l'app madre: home a mappa, menu, limite di 1 percorso — ✅ landed (parte 1 di 2)
+
+Discussione strategica con l'utente dopo il secondo giro di test: Navigator deve restare uno
+strumento leggero "sul sentiero", non una seconda copia dell'app di pianificazione — un gancio
+verso l'app principale, non un sostituto. Decisioni prese insieme (vedi anche
+`docs/piano-ottimizzazione-ai.md`, sezione "Contesto di business: verso freemium/premium", per il
+contesto di business più ampio in cui questa scelta si inserisce):
+1. Il limite "massimo 1" riguarda **solo** ciò che Navigator stesso lascia creare (import/
+   registrazione) — un percorso pianificato nell'app principale resta **sempre** visibile/
+   navigabile in Navigator, nessun limite, nessuna sorpresa per chi ne ha già diversi sincronizzati.
+2. Le registrazioni senza pianificazione **contano** nello stesso slot (non sono separate).
+3. L'import in Navigator (fase 2, non ancora fatta) si limiterà a file (GPX/KML/KMZ/GeoJSON) e
+   import da link — non la ricerca/costruzione AI, che resta solo nell'app principale.
+
+**Implementato in questo giro:**
+- `supabase/migrations/add_source_app_column.sql`: nuova colonna `source_app` su
+  `planned_hikes` e `activities` — `NULL` (comportamento di sempre, nessuna riga esistente
+  cambia stato) o `'navigator'`, impostata solo dalle azioni di import/registrazione DI Navigator.
+  `PlannedHike.sourceApp`/`StoredActivity.sourceApp` nei tipi TS, letta/scritta dalle rispettive
+  API route.
+- `lib/navigatorSlot.ts` (nuovo): `getNavigatorSlotStatus()` — vero unico punto che decide se lo
+  slot di Navigator è occupato, guardando sia `planned_hikes` che `activities` con
+  `sourceApp === 'navigator'`.
+- **Home a mappa**: `app/navigatore/page.tsx` non è più l'elenco — ora mostra una mappa live
+  (riusa `FreeTrackMap.tsx`, posizione grezza via `LocationSource` senza il livello di
+  registrazione/PositionEngine, inutile per una schermata che non accumula una traccia) con un
+  pulsante "Naviga" per il percorso più recente pronto, se c'è. L'elenco completo si è spostato in
+  `app/navigatore/percorsi/page.tsx`, raggiungibile dal menu.
+- **Menu**: `components/navigation/NavigatorMenu.tsx` (nuovo, foglio a comparsa) — Percorsi
+  pianificati, Registra senza pianificazione, Apri DTrek, Esci. Aperto dall'icona hamburger sulla
+  home.
+- **Applicazione del limite**: `app/navigatore/traccia/page.tsx` controlla lo slot all'apertura —
+  se già occupato, blocca "Avvia registrazione" con un messaggio che nomina cosa lo occupa e offre
+  di rimuoverlo (`deletePlanned`/`deleteActivity` a seconda del tipo) o di aprire l'app principale.
+  Il salvataggio di una traccia registrata imposta `sourceApp: 'navigator'`
+  (`saveActivityWithEnrichment`'s nuova opzione).
+- **Bonus scoperto durante il lavoro**: l'elenco pianificate (ora `percorsi/page.tsx`) non aveva
+  alcun modo di scaricare la mappa offline se non aprendo prima la navigazione vera e propria —
+  aggiunto un badge compatto di download direttamente su ogni card (`OfflinePackageDownloader`'s
+  nuova prop `compact`).
+
+**Non ancora fatto / prossimi passi concreti (parte 2):**
+- Import file (GPX/KML/KMZ/GeoJSON) e da link direttamente in Navigator, con lo stesso controllo
+  slot già costruito — riuso della logica di parsing già esistente in
+  `components/upload/GpxUploader.tsx`/`UrlImportUploader.tsx`, non duplicata.
+- Nessuna UI ancora per "hai un percorso pianificato nell'app madre ma vuoi sostituirlo con uno
+  importato in Navigator" — oggi l'unico modo di liberare lo slot da Navigator stesso è rimuovere
+  quello già lì.
+- La domanda più ampia (rapporto strategico app madre/Navigator, leva di fidelizzazione, dove si
+  inserisce rispetto al freemium/premium) resta una conversazione di prodotto aperta, non una
+  decisione tecnica presa qui.
 
 ## Ordine consigliato per le prossime PR
 

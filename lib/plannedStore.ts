@@ -127,6 +127,11 @@ export interface PlannedHike {
   comfortNote?:                  string
   zone?:                         string
   difficulty?:                   string
+  /** Set only when this row was created through an import/registration action *inside* the
+   *  standalone Navigator app (lib/navigatorSlot.ts) — undefined for anything planned in the main
+   *  app, which is the vast majority of rows and always stays unlimited/fully visible in Navigator
+   *  regardless of this field. Never set client-side outside that one Navigator flow. */
+  sourceApp?:                    'navigator'
 }
 
 // Index entry — no trackPoints (kept lightweight for the list)
