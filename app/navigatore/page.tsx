@@ -1,153 +1,111 @@
 'use client'
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import MapRouteThumb from '@/components/MapRouteThumb'
-import OfflinePackageDownloader from '@/components/navigation/OfflinePackageDownloader'
+import { Menu, Compass, Navigation2, ExternalLink, TriangleAlert } from 'lucide-react'
+import FreeTrackMap from '@/components/navigation/FreeTrackMap'
+import NavigatorMenu from '@/components/navigation/NavigatorMenu'
+import { LocationSource, type LocationSourceError } from '@/lib/native/locationSource'
 import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
-import { getBrowserSupabase } from '@/lib/supabaseBrowser'
-import { lsClearAll } from '@/lib/localStore'
-import { formatDuration } from '@/lib/tcxParser'
 import { openMainApp } from '@/lib/native/mainAppLinks'
-import { Compass, LogOut, Loader2, Mountain, MapPinned, ExternalLink } from 'lucide-react'
 
 /**
- * Entry screen of the standalone DTrek Navigator app (separate Android/iOS
- * install from the main DTrek app — see docs/navigation-engine-analysis.md
- * "Architettura a due app"). Deliberately minimal: this app's only job is
- * to start GPS navigation on a route already planned in the main app, not
- * to plan/search/browse guides — that full experience stays in the main
- * app's `/guida` tab. Both apps read the same `planned_hike` rows (via the
- * shared Supabase project + per-app login), so a route planned on the main
- * app just shows up here once the user is signed in.
- *
- * A user can perfectly well install this app before ever opening the main
- * one, though — no planned routes to show yet. Rather than being a dead
- * end, that state (and the list state too) always offers two ways forward:
- * record a track with no plan at all (app/navigatore/traccia), or open the
- * main app to actually plan one.
+ * Entry screen of the standalone DTrek Navigator app (separate Android/iOS install from the main
+ * DTrek app — see docs/navigation-engine-analysis.md "Architettura a due app"). Map-first: shows
+ * live position immediately, ready to navigate, instead of a list to scroll through first (that
+ * moved to app/navigatore/percorsi — one option among several behind the menu button here). No
+ * recording/stats here, just "where am I, what's ready to navigate" — position tracking is a
+ * lightweight raw GeoFix feed (LocationSource), not the full PositionEngine/FreeTrackSession
+ * pipeline that's overkill for a screen that isn't accumulating a track.
  */
 export default function NavigatorePage() {
-  const router = useRouter()
-  const [planned, setPlanned] = useState<PlannedHikeMeta[] | null>(null)
-  const [signingOut, setSigningOut] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [position, setPosition] = useState<{ lat: number; lon: number } | null>(null)
+  const [bearing, setBearing] = useState<number | null>(null)
+  const [accuracyM, setAccuracyM] = useState<number | null>(null)
+  const [gpsWarning, setGpsWarning] = useState<string | null>(null)
+  const [readyHike, setReadyHike] = useState<PlannedHikeMeta | null | undefined>(undefined) // undefined = still loading
+
+  const sourceRef = useRef<LocationSource | null>(null)
 
   useEffect(() => {
-    getAllPlanned(setPlanned).then(setPlanned).catch(() => setPlanned([]))
+    const source = new LocationSource(
+      (fix) => {
+        setPosition({ lat: fix.lat, lon: fix.lon })
+        setBearing(fix.bearingDeg ?? null)
+        setAccuracyM(fix.accuracyM ?? null)
+        setGpsWarning(null)
+      },
+      (err: LocationSourceError) => {
+        setGpsWarning(err.code === 1 ? 'Permesso di localizzazione negato — attivalo nelle impostazioni del telefono.' : 'Segnale GPS assente.')
+      },
+    )
+    sourceRef.current = source
+    source.start('trekking').catch(() => setGpsWarning('Impossibile avviare il GPS.'))
+    return () => { source.stop() }
   }, [])
 
-  const routes = (planned ?? [])
-    .filter((h) => !h.archivedAt && h.routePolyline && h.routePolyline.length > 1)
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-
-  async function handleSignOut() {
-    setSigningOut(true)
-    await getBrowserSupabase().auth.signOut()
-    await lsClearAll()
-    router.push('/login')
-    router.refresh()
-  }
+  useEffect(() => {
+    getAllPlanned().then((list) => {
+      const active = list
+        .filter((h) => !h.archivedAt && h.routePolyline && h.routePolyline.length > 1)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      setReadyHike(active[0] ?? null)
+    }).catch(() => setReadyHike(null))
+  }, [])
 
   return (
-    <div className="min-h-screen bg-stone-50 flex flex-col">
-      <div className="bg-gradient-to-br from-sky-800 to-sky-900 px-5 pt-[calc(env(safe-area-inset-top)+20px)] pb-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <Compass className="w-6 h-6 text-white" />
-            <h1 className="font-display text-xl font-bold text-white">DTrek Navigator</h1>
-          </div>
-          <button
-            onClick={handleSignOut}
-            disabled={signingOut}
-            title="Esci"
-            className="flex items-center justify-center w-10 h-10 rounded-xl bg-white/15 text-white hover:bg-white/25 transition-colors disabled:opacity-50"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
+    <div className="fixed inset-0 bg-stone-900">
+      <FreeTrackMap path={[]} position={position} bearingDeg={bearing} accuracyM={accuracyM} />
+
+      <div className="absolute top-0 inset-x-0 z-20 bg-gradient-to-b from-black/55 to-transparent px-5 pt-[calc(env(safe-area-inset-top)+16px)] pb-8 flex items-center justify-between pointer-events-none">
+        <button
+          onClick={() => setMenuOpen(true)}
+          className="pointer-events-auto w-10 h-10 flex items-center justify-center rounded-xl bg-white/20 text-white hover:bg-white/30 backdrop-blur-sm"
+          aria-label="Menu"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+        <div className="pointer-events-none flex items-center gap-2 text-white drop-shadow">
+          <Compass className="w-5 h-5" />
+          <span className="font-display text-base font-bold">DTrek Navigator</span>
         </div>
-        <p className="text-sky-200 text-[13px] mt-2">Scegli un percorso pianificato per avviare la navigazione GPS.</p>
+        <div className="w-10" /> {/* balances the menu button so the title stays centered */}
       </div>
 
-      <main className="flex-1 max-w-[900px] w-full mx-auto px-4 py-6">
-        <Link
-          href="/navigatore/traccia"
-          className="flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-forest-500 text-white shadow-sm hover:bg-forest-600 transition-colors mb-6"
-        >
-          <MapPinned className="w-5 h-5 shrink-0" />
-          <div className="flex-1">
-            <p className="font-semibold text-sm">Registra un percorso senza pianificazione</p>
-            <p className="text-[12px] text-white/80">Traccia solo la tua posizione — la salvi alla fine come nuova escursione.</p>
-          </div>
-        </Link>
+      {gpsWarning && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-4 py-2.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-sm shadow-lg max-w-[calc(100%-2rem)]">
+          <TriangleAlert className="w-4 h-4 shrink-0" /> {gpsWarning}
+        </div>
+      )}
 
-        {planned === null ? (
-          <div className="flex items-center justify-center py-24 text-stone-400 gap-3">
-            <Loader2 className="w-6 h-6 animate-spin" /><span>Caricamento…</span>
-          </div>
-        ) : routes.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="w-20 h-20 rounded-full bg-sky-50 border border-sky-200 flex items-center justify-center mb-6">
-              <Mountain className="w-10 h-10 text-sky-400" />
+      <div className="absolute bottom-0 inset-x-0 z-20 bg-white rounded-t-3xl shadow-[0_-4px_20px_rgba(0,0,0,0.15)] px-5 pt-5 pb-[calc(env(safe-area-inset-bottom)+20px)]">
+        {readyHike === undefined ? (
+          <div className="h-[76px]" /> // avoids a layout jump while the planned list loads
+        ) : readyHike ? (
+          <Link
+            href={`/guida/${encodeURIComponent(readyHike.id)}/naviga`}
+            className="flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-forest-500 text-white shadow-sm hover:bg-forest-600 transition-colors"
+          >
+            <Navigation2 className="w-5 h-5 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] text-white/80 uppercase tracking-wide font-semibold">Pronto per la navigazione</p>
+              <p className="font-semibold text-sm truncate">{readyHike.title}</p>
             </div>
-            <h2 className="font-display text-xl font-semibold text-stone-700 mb-2">Nessun percorso pianificato</h2>
-            <p className="text-stone-400 text-sm max-w-sm mb-6">
-              Pianifica o importa un percorso dall&apos;app DTrek principale — comparirà qui, pronto per la navigazione.
-            </p>
+          </Link>
+        ) : (
+          <div className="flex flex-col items-center text-center gap-2 py-1">
+            <p className="text-stone-500 text-sm">Nessun percorso pronto per la navigazione.</p>
             <button
               onClick={() => openMainApp('/guida')}
-              className="flex items-center gap-2 px-6 py-3 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-medium transition-colors"
+              className="flex items-center gap-2 px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-medium text-sm transition-colors"
             >
               <ExternalLink className="w-4 h-4" /> Apri DTrek per pianificare
             </button>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {routes.map((hike) => (
-              <Link
-                key={hike.id}
-                href={`/guida/${encodeURIComponent(hike.id)}/naviga`}
-                className="block bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-md transition-shadow border border-stone-200"
-              >
-                <div className="relative h-[140px] bg-gradient-to-b from-sky-50 to-stone-50 bg-topography">
-                  <MapRouteThumb polyline={hike.routePolyline!} color="#0284c7" strokeWidth={3} />
-                  {/* Download-for-offline directly from the list — previously only reachable after
-                      already starting live navigation on a route (ActiveNavigationView.tsx's own
-                      sheet), which meant there was effectively nowhere to see or manage this before
-                      committing to a hike offline. stopPropagation/preventDefault: this whole card
-                      is a Link to the navigation screen, and a nested button/anchor click would
-                      otherwise also trigger that navigation. */}
-                  <div
-                    className="absolute top-2 right-2 z-10"
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation() }}
-                  >
-                    <OfflinePackageDownloader
-                      hikeId={hike.id}
-                      routePolyline={hike.routePolyline!}
-                      hikeData={{ cachedPois: hike.cachedPois }}
-                      compact
-                    />
-                  </div>
-                </div>
-                <div className="px-[18px] pt-4 pb-[18px]">
-                  <p className="text-[16px] font-bold text-sky-900 mb-2 truncate">{hike.title}</p>
-                  <div className="flex items-center gap-4 text-[13px] text-stone-500 flex-wrap">
-                    <span>{(hike.distanceMeters / 1000).toFixed(1)} km</span>
-                    <span>{Math.round(hike.elevationGain)} m D+</span>
-                    <span>{formatDuration(hike.estimatedTimeSeconds)} stim.</span>
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
         )}
-      </main>
+      </div>
 
-      <button
-        onClick={() => openMainApp()}
-        className="flex items-center justify-center gap-2 py-3.5 text-sky-800 text-sm font-medium bg-white border-t border-stone-200"
-      >
-        <ExternalLink className="w-4 h-4" /> Diario, statistiche e nuovi percorsi: apri DTrek
-      </button>
+      <NavigatorMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
     </div>
   )
 }

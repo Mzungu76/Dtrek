@@ -20,6 +20,8 @@ export interface SaveActivityOptions {
   hikeNotes?: HikeNote[]
   /** Deletes the planned_hikes row at linkedPlannedId after a successful save — the plan is "consumed" into the completed activity, same behavior as linking an imported GPX to a plan. */
   deleteLinkedPlanned?: boolean
+  /** Set only by the standalone Navigator app's free-track recording flow (app/navigatore/traccia) — see lib/navigatorSlot.ts. Never set by the main app's own upload/save flows. */
+  sourceApp?: 'navigator'
 }
 
 /**
@@ -156,6 +158,7 @@ export async function saveActivityWithEnrichment(
     trailScoreConfidence,
     trailScoreComputedAt,
     weatherAtHike,
+    sourceApp: opts.sourceApp,
     ...guideCarry,
   }
   await saveActivity(stored)

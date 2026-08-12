@@ -9,7 +9,10 @@ import { saveActivityWithEnrichment } from '@/lib/activitySave'
 import { openMainApp } from '@/lib/native/mainAppLinks'
 import { haptics } from '@/lib/navigation/haptics'
 import type { TcxActivity } from '@/lib/tcxParser'
-import { ArrowLeft, Pause, Play, Square, TriangleAlert } from 'lucide-react'
+import { getNavigatorSlotStatus, type NavigatorSlotStatus } from '@/lib/navigatorSlot'
+import { deletePlanned } from '@/lib/plannedStore'
+import { deleteActivity } from '@/lib/blobStore'
+import { ArrowLeft, Pause, Play, Square, TriangleAlert, Trash2 } from 'lucide-react'
 
 function formatClock(seconds: number): string {
   const h = Math.floor(seconds / 3600)
@@ -41,10 +44,31 @@ export default function TracciaPage() {
   const [pendingActivity, setPendingActivity] = useState<TcxActivity | null>(null)
   const [savedActivityId, setSavedActivityId] = useState<string | null>(null)
   const [starting, setStarting] = useState(false)
+  // undefined = still checking; Navigator's own import/record actions are capped at one at a time
+  // (lib/navigatorSlot.ts) — a route planned in the main app doesn't count against this.
+  const [slotStatus, setSlotStatus] = useState<NavigatorSlotStatus | undefined>(undefined)
+  const [removingSlot, setRemovingSlot] = useState(false)
 
   useEffect(() => () => { sessionRef.current?.stop() }, [])
 
+  useEffect(() => {
+    getNavigatorSlotStatus().then(setSlotStatus).catch(() => setSlotStatus({ used: false, kind: null, id: null, title: null }))
+  }, [])
+
+  const handleRemoveSlotItem = async () => {
+    if (!slotStatus?.id) return
+    setRemovingSlot(true)
+    try {
+      if (slotStatus.kind === 'planned') await deletePlanned(slotStatus.id)
+      else if (slotStatus.kind === 'activity') await deleteActivity(slotStatus.id)
+      setSlotStatus({ used: false, kind: null, id: null, title: null })
+    } finally {
+      setRemovingSlot(false)
+    }
+  }
+
   const handleStart = async () => {
+    if (slotStatus?.used) return // UI already hides the button in this case — defensive guard only
     setStarting(true)
     setGpsWarning(null)
     const session = new FreeTrackSession()
@@ -96,7 +120,7 @@ export default function TracciaPage() {
 
   const handleSave = async (title: string) => {
     if (!pendingActivity) return
-    const saved = await saveActivityWithEnrichment(pendingActivity, { title })
+    const saved = await saveActivityWithEnrichment(pendingActivity, { title, sourceApp: 'navigator' })
     setSavedActivityId(saved.id)
     setPendingActivity(null)
     setPhase('saved')
@@ -207,6 +231,32 @@ export default function TracciaPage() {
             </button>
           </div>
         </div>
+      ) : slotStatus?.used ? (
+        // Navigator's own import/record slot (lib/navigatorSlot.ts) is occupied — a route planned
+        // in the main app never triggers this, only something Navigator itself already let the
+        // user add. Full-power planning (unlimited routes/recordings) stays in the main app.
+        <div className="flex-1 flex flex-col items-center justify-center text-center px-6 py-12 gap-4">
+          <p className="font-display text-xl font-semibold text-stone-800">Hai già un percorso in Navigator</p>
+          <p className="text-stone-500 text-sm max-w-xs">
+            Navigator tiene un solo percorso/traccia alla volta: <strong>{slotStatus.title}</strong>.
+            Rimuovilo per registrarne un altro, oppure usa l&apos;app DTrek principale per pianificarne quanti vuoi.
+          </p>
+          <div className="flex flex-col gap-2 w-full max-w-xs mt-2">
+            <button
+              onClick={handleRemoveSlotItem}
+              disabled={removingSlot}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-red-50 border border-red-200 text-red-700 font-semibold text-sm hover:bg-red-100 disabled:opacity-60"
+            >
+              <Trash2 className="w-4 h-4" /> {removingSlot ? 'Rimozione…' : `Rimuovi "${slotStatus.title}"`}
+            </button>
+            <button
+              onClick={() => openMainApp('/guida')}
+              className="w-full py-2.5 rounded-xl bg-sky-600 text-white font-semibold text-sm hover:bg-sky-700"
+            >
+              Apri DTrek per pianificare
+            </button>
+          </div>
+        </div>
       ) : (
         <div className="flex-1 flex flex-col items-center justify-center text-center px-6 py-12 gap-4">
           <p className="font-display text-xl font-semibold text-stone-800">Nessun percorso pianificato a disposizione?</p>
@@ -215,7 +265,7 @@ export default function TracciaPage() {
           </p>
           <button
             onClick={handleStart}
-            disabled={starting}
+            disabled={starting || slotStatus === undefined}
             className="mt-2 px-8 py-3.5 rounded-full bg-forest-500 text-white font-bold text-base shadow-lg hover:bg-forest-600 disabled:opacity-60"
           >
             {starting ? 'Attivazione GPS…' : 'Avvia registrazione'}

@@ -80,6 +80,7 @@ function rowToHike(row: Record<string, unknown>, includeTracks = true): PlannedH
     comfortNote:                   row.comfort_note                    as string | undefined,
     zone:                          row.zone                            as string | undefined,
     difficulty:                    row.difficulty                      as string | undefined,
+    sourceApp:                     row.source_app                      as PlannedHike['sourceApp'],
   }
 }
 
@@ -132,6 +133,7 @@ function hikeToRow(h: PlannedHike) {
     comfort_note:                     h.comfortNote ?? null,
     zone:                             h.zone ?? null,
     difficulty:                       h.difficulty ?? null,
+    source_app:                       h.sourceApp ?? null,
   }
 }
 
@@ -146,7 +148,7 @@ const META_COLS = [
   'cached_driving_distance_m', 'cached_driving_duration_s',
   'cached_driving_origin_lat', 'cached_driving_origin_lon',
   'pending_expires_at', 'archived_at', 'favorite', 'route_mode', 'updated_at',
-  'source_url', 'comfort_verdict', 'comfort_note', 'zone', 'difficulty',
+  'source_url', 'comfort_verdict', 'comfort_note', 'zone', 'difficulty', 'source_app',
 ].join(', ')
 
 // Guaranteed-to-exist columns (base schema, no ALTER TABLE additions — updated_at
