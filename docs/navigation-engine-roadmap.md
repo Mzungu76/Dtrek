@@ -549,6 +549,46 @@ silenzioso, mai un errore in console.
   = 60`) e stile non calibrati su un caso reale con molti sentieri
   ravvicinati (stesso caveat delle altre costanti "a stima" in questo file).
 
+## Post-collaudo — icone POI e tap per info nella mappa di navigazione — ✅ landed
+
+Altra segnalazione dallo stesso giro di test: nella mappa di navigazione
+live tutti i POI avevano la stessa icona (un pallino arancione, o —
+peggio, in `NavigationMapLibre.tsx` — il pin generico di default di
+MapLibre), a differenza della mappa della pagina di dettaglio percorso
+(`components/MapView.tsx`), dove ogni tipo di POI ha icona e colore
+propri (`components/poiIcons.tsx` + `POI_META` in `lib/overpass.ts`); e
+toccare un POI sulla mappa di navigazione non mostrava nessuna
+informazione.
+
+- `NavigationMap.tsx` e `NavigationMapLibre.tsx`: stessa icona/colore per
+  tipo di `MapView.tsx` (`poiBadgeMarkup`/`POI_META`), riusata così com'è
+  — nessuna logica duplicata.
+- Nuova prop `onPoiTap` su entrambi i componenti mappa: `
+  ActiveNavigationView.tsx` la collega allo stesso pannello (`callout`/
+  `PoiCalloutSheet`) già usato quando ci si avvicina a piedi a un POI
+  (evento `enteredPoi` del motore) — toccare il marker sulla mappa mostra
+  ora la stessa scheda con nome/estratto Wikipedia/immagine, non un
+  popup diverso o nessuna reazione.
+
+**Perché lo stile della mappa stessa (tile) resta diverso dall'app
+principale — non un bug, non toccato qui**: la pagina di dettaglio
+percorso usa tile OSM standard live (`style=light` in `app/api/tile/
+route.ts`, che proxa `tile.openstreetmap.org`) — uso in tempo reale,
+volume basso, compatibile con la policy di utilizzo di OpenStreetMap. La
+mappa di navigazione di Navigator usa invece CartoDB Voyager
+(`style=voyager`) **perché è la stessa mappa scaricata in blocco per
+l'uso offline** (`lib/offline/packageManager.ts`) — la policy di OSM
+vieta esplicitamente il download in blocco/il mirroring offline delle
+loro tile, mentre CartoDB lo permette nel proprio piano gratuito. Se le
+tile "live" di Navigator venissero cambiate a `style=light` senza
+cambiare anche cosa viene scaricato per l'offline, la mappa offline
+smetterebbe di funzionare (le tile in cache sotto la vecchia URL
+`style=voyager` non corrisponderebbero più a quelle richieste): un
+cambiamento del genere richiede prima verificare se esiste uno stile con
+lo stesso aspetto ricco ma compatibile col download in blocco — non
+fatto qui, segnalato come possibile lavoro futuro se lo stile "più
+semplice" di Navigator continua a essere percepito come un downgrade.
+
 ## Ordine consigliato per le prossime PR
 
 1. ✅ Swap `GpsSmoother` → `PositionEngine` dentro `NavigationEngine` (Fase 2,

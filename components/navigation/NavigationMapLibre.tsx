@@ -8,10 +8,12 @@ import { circlePolygonLonLat } from '@/lib/geoUtils'
 import type { NavState } from '@/lib/navigation/types'
 import type { Natura2000Feature } from '@/lib/natura2000/natura2000Client'
 import { labelNearbyTrail, formatTrailDistance } from '@/lib/navigation/nearbyTrailLabels'
+import { poiBadgeMarkup } from '@/components/poiIcons'
+import { POI_META, type PoiType } from '@/lib/overpass'
 
 interface Props {
   routePolyline: [number, number][]
-  pois: { id: string | number; lat: number; lon: number; name?: string }[]
+  pois: { id: string | number; lat: number; lon: number; name?: string; type?: string }[]
   position: { lat: number; lon: number } | null
   bearingDeg: number | null
   state: NavState
@@ -29,6 +31,8 @@ interface Props {
   showNatura2000?: boolean
   /** Nearby hiking paths/tracks (from OSM), drawn as thin dashed context lines with a CalTopo-style distance label per segment — same data/purpose as NavigationMap.tsx's Leaflet version. */
   nearbyTrails?: [number, number][][]
+  /** Called when a POI marker is tapped directly on the map — same purpose as NavigationMap.tsx's prop of the same name. */
+  onPoiTap?: (poiId: string | number) => void
 }
 
 // Not a fixed deadline from the start — reset on every 'data' event (tile/
@@ -118,7 +122,7 @@ function followZoomFor(is3D: boolean): number { return is3D ? 14.5 : 16 }
  * offline Leaflet map and to avoid disorienting the hiker with a spinning
  * view while walking.
  */
-export default function NavigationMapLibre({ routePolyline, pois, position, bearingDeg, state, styleId, is3D, onStyleFailed, accuracyM, natura2000Features, showNatura2000, parkingSpot, nearbyTrails }: Props) {
+export default function NavigationMapLibre({ routePolyline, pois, position, bearingDeg, state, styleId, is3D, onStyleFailed, accuracyM, natura2000Features, showNatura2000, parkingSpot, nearbyTrails, onPoiTap }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const markersRef = useRef<maplibregl.Marker[]>([])
@@ -397,8 +401,18 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
         updateAccuracyCircle(map)
         setupNatura2000Layer(map)
         setupNearbyTrailsLayer(map)
+        // Same per-type icon/color (poiBadgeMarkup + POI_META) as NavigationMap.tsx's Leaflet
+        // version and the route-detail page's map (components/MapView.tsx) — this used to be
+        // MapLibre's plain default teardrop pin for every POI, not even matching the Leaflet map's
+        // own (then-uniform) orange dot.
+        const defaultPoiColor = '#d97220'
         for (const poi of pois) {
-          const marker = new maplibregl.Marker().setLngLat([poi.lon, poi.lat]).addTo(map)
+          const meta = poi.type ? POI_META[poi.type as PoiType] : undefined
+          const el = document.createElement('div')
+          el.innerHTML = poiBadgeMarkup((poi.type as PoiType) ?? 'peak', meta?.color ?? defaultPoiColor, 26)
+          el.style.cursor = 'pointer'
+          if (onPoiTap) el.addEventListener('click', (e) => { e.stopPropagation(); onPoiTap(poi.id) })
+          const marker = new maplibregl.Marker({ element: el }).setLngLat([poi.lon, poi.lat]).addTo(map)
           markersRef.current.push(marker)
         }
       })

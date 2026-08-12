@@ -227,6 +227,17 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
     clearParkingSpot(hike.id).catch(() => {})
   }
 
+  /** Tapping a POI marker directly on the map — same info, same sheet, as walking up to it and
+   *  triggering the engine's own 'enteredPoi' event (see that handler below): a hiker shouldn't
+   *  have to wait to get close just to find out what something is. No haptics/speech here, unlike
+   *  the proximity trigger — this is a deliberate look-up, not an alert. */
+  const handlePoiTap = (poiId: string | number) => {
+    const poi = pois.find((p) => p.id === poiId)
+    if (!poi) return
+    const wiki = poiWikiById.get(poiId)
+    setCallout({ title: poi.name ?? 'Punto di interesse', extract: wiki?.extract, imageUrl: wiki?.thumbnail })
+  }
+
   const parkingDistanceM = parkingSpot && position
     ? haversineM(position.lat, position.lon, parkingSpot.lat, parkingSpot.lon)
     : null
@@ -713,13 +724,13 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   return (
     <div className="fixed inset-0 z-[2000] bg-stone-900 font-body">
       {mapMode === 'offline' ? (
-        <NavigationMap routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} state={state} nearbyTrails={nearbyTrails} accuracyM={accuracyM} parkingSpot={parkingSpot} />
+        <NavigationMap routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} state={state} nearbyTrails={nearbyTrails} accuracyM={accuracyM} parkingSpot={parkingSpot} onPoiTap={handlePoiTap} />
       ) : (
         <NavigationMapLibre
           routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} state={state}
           styleId={mapMode} is3D={is3D} onStyleFailed={handleMapStyleFailed} accuracyM={accuracyM}
           natura2000Features={natura2000Features} showNatura2000={showNatura2000}
-          parkingSpot={parkingSpot} nearbyTrails={nearbyTrails}
+          parkingSpot={parkingSpot} nearbyTrails={nearbyTrails} onPoiTap={handlePoiTap}
         />
       )}
 
