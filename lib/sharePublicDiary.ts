@@ -23,6 +23,8 @@ import { normalizeDiaryConfig, type DiaryConfig } from './diaryConfig'
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export interface PublicDiaryPhoto {
+  /** Serve a rispettare la selezione dell'autore (`photoIdsByActivity`). */
+  id:       string
   url:      string
   caption:  string | null
   /** Posizione lungo il percorso (0–1), per collocare il pin sullo schizzo della traccia. */
@@ -96,7 +98,7 @@ export async function fetchPublicDiary(token: string): Promise<PublicDiary | nul
           .in('id', activityIds),
         supabase
           .from('activity_photos')
-          .select('activity_id, url, caption, progress')
+          .select('id, activity_id, url, caption, progress')
           .in('activity_id', activityIds),
       ])
     : [{ data: [] }, { data: [] }]
@@ -108,6 +110,7 @@ export async function fetchPublicDiary(token: string): Promise<PublicDiary | nul
     const key = p.activity_id as string
     const list = photosByActivity.get(key) ?? []
     list.push({
+      id:       p.id as string,
       url:      p.url as string,
       caption:  (p.caption as string) || null,
       progress: typeof p.progress === 'number' ? p.progress : null,
@@ -137,7 +140,14 @@ export async function fetchPublicDiary(token: string): Promise<PublicDiary | nul
         altitudeMax:      (act?.altitude_max as number) ?? null,
         calories:         (act?.calories as number) ?? null,
         content:          (r.content as string) ?? '',
-        photos:           photosByActivity.get(r.activity_id as string) ?? [],
+        // La scelta fatta nel Diario vale anche qui: `photoIdsByActivity` dice quali foto l'autore
+        // vuole pubblicare. Il PDF ne stampa comunque un sottoinsieme distribuito; il sito, che non
+        // ha vincoli di impaginazione, le mostra tutte quelle scelte.
+        photos:           (() => {
+          const all = photosByActivity.get(r.activity_id as string) ?? []
+          const chosen = config.photoIdsByActivity[r.activity_id as string]
+          return chosen && chosen.length > 0 ? all.filter(p => chosen.includes(p.id)) : all
+        })(),
         polyline,
       }
     })

@@ -13,6 +13,7 @@ import type { PublicDiaryEntry, PublicDiaryPhoto } from '@/lib/sharePublicDiary'
 import type { DiaryPublicSections } from '@/lib/diaryConfig'
 import { RouteSketch } from './RouteSketch'
 import { RouteMap } from './RouteMap'
+import { LocatorMap } from '@/components/LocatorMap'
 
 /** Il corpo dei resoconti è markdown: gli asterischi dell'enfasi vanno resi, non stampati. */
 function Inline({ text }: { text: string }) {
@@ -199,14 +200,22 @@ export function EntryArticle({ entry, n, show }: { entry: PublicDiaryEntry; n: n
         <EntryStats entry={entry} />
 
         {show.percorso && entry.polyline && (
-          <div className="mb-6">
-            <RouteMap
+          // Percorso e inquadramento affiancati: la mappa del percorso dice com'è fatto il giro,
+          // quella dell'Italia dice dove si trova. Da sola, la prima lascia chi legge senza
+          // riferimenti — una traccia fra due boschi può stare ovunque.
+          <div className="mb-6 flex gap-3 items-start">
+            <div className="flex-1 min-w-0">
+              <RouteMap
               polyline={entry.polyline}
-              photoProgress={entry.photos.map(p => p.progress).filter((p): p is number => p != null)}
-            />
-            <p className="text-[10px] text-stone-400 text-center mt-1.5">
-              Partenza, arrivo e punti in cui sono state scattate le foto
-            </p>
+                photoProgress={entry.photos.map(p => p.progress).filter((p): p is number => p != null)}
+              />
+              <p className="text-[10px] text-stone-400 text-center mt-1.5">
+                Partenza, arrivo e punti in cui sono state scattate le foto
+              </p>
+            </div>
+            <div className="w-[104px] sm:w-[132px] shrink-0">
+              <LocatorMap lat={entry.polyline[0][0]} lon={entry.polyline[0][1]} label={entry.title} />
+            </div>
           </div>
         )}
 

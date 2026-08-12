@@ -127,6 +127,13 @@ export default function DiarioPage() {
   const [showExcludedMenu, setShowExcludedMenu] = useState(false)
   const [mapsInteractive,  setMapsInteractive]  = useState(false)
 
+  /** Intervallo dell'esportazione PDF. Il Diario a schermo resta completo — è il *documento* a
+   *  essere ritagliato, perché è lui a diventare ingestibile: cinque anni di escursioni sono
+   *  centinaia di pagine e decine di MB, impossibili da generare su un telefono e da mandare a
+   *  qualcuno. `null` = tutto. */
+  const [exportYear, setExportYear] = useState<number | null>(null)
+  const [showExportMenu, setShowExportMenu] = useState(false)
+
   // Configurazione del diario — titolo, sottotitolo, autore, copertina, toggle, escursioni
   // escluse. Caricata da /api/diary-config (Supabase), non più da localStorage: segue l'utente
   // tra dispositivi, e il PDF pubblicato riflette sempre la stessa configurazione ovunque lo si
@@ -369,6 +376,13 @@ export default function DiarioPage() {
       const reportPages = Array.from(
         document.querySelectorAll<HTMLElement>('#diario-book .diario-page')
       ).filter(p => !p.classList.contains('diario-stub-page'))
+        // Ritaglio per annata: una pagina di escursione dichiara il proprio anno, l'apparato
+        // (copertina, indice, mappa, statistiche) no e resta sempre.
+        .filter(p => {
+          if (exportYear === null) return true
+          const y = p.getAttribute('data-year')
+          return y === null || Number(y) === exportYear
+        })
 
       // Clone all pages first (cheap, synchronous) and collect the per-report
       // map fetches needed, without awaiting them yet — they're fired off
@@ -649,6 +663,11 @@ export default function DiarioPage() {
     return first === last ? first : `${first} – ${last}`
   }, [activities])
 
+  /** Anni presenti nel libro, dal più recente. */
+  const availableYears = useMemo(() => Array.from(
+    new Set(visibleBookPages.map(p => new Date(p.startTime).getFullYear())),
+  ).sort((a, b) => b - a), [visibleBookPages])
+
   const excludedCount = config.excludedActivityIds.length
   const publishDisabledReason = !chartsAndPhotosReady
     ? 'In attesa di foto e grafici delle escursioni…'
@@ -826,11 +845,42 @@ export default function DiarioPage() {
           )}
         </div>
 
-        <RailButton onClick={() => { if (!downloading && !loading && chartsAndPhotosReady) generateAndUploadPdf(true) }}
-          title={publishDisabledReason ?? 'Scarica PDF'}
-        >
-          {downloading ? <Loader2 className="w-5 h-5 text-white animate-spin" /> : <FileDown className="w-5 h-5 text-white" />}
-        </RailButton>
+        <div className="relative">
+          <RailButton onClick={() => { if (!downloading && !loading && chartsAndPhotosReady) setShowExportMenu(m => !m) }}
+            title={publishDisabledReason ?? 'Esporta PDF'}
+          >
+            {downloading ? <Loader2 className="w-5 h-5 text-white animate-spin" /> : <FileDown className="w-5 h-5 text-white" />}
+          </RailButton>
+          {showExportMenu && !downloading && (
+            <div className="absolute right-full mr-3 top-0 w-56 bg-white rounded-xl border border-stone-200 shadow-lg z-50 p-3 space-y-2">
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-[10px] font-barlow font-bold uppercase tracking-widest text-stone-400">Esporta PDF</p>
+                <button onClick={() => setShowExportMenu(false)} className="text-stone-400 hover:text-stone-600">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              {/* Un diario che copre anni diventa un documento da centinaia di pagine: qui si
+                  sceglie cosa metterci dentro. Il libro a schermo resta comunque completo. */}
+              <p className="text-[10px] text-stone-400 leading-snug">Quali escursioni includere</p>
+              <div className="space-y-1">
+                <button onClick={() => { setExportYear(null); setShowExportMenu(false); generateAndUploadPdf(true) }}
+                  className="w-full text-left px-3 py-1.5 rounded-lg text-xs font-barlow font-bold uppercase tracking-wide bg-forest-600 text-white hover:bg-forest-700 transition-colors">
+                  Tutto il diario
+                </button>
+                {availableYears.map(y => {
+                  const n = visibleBookPages.filter(p => new Date(p.startTime).getFullYear() === y).length
+                  return (
+                    <button key={y} onClick={() => { setExportYear(y); setShowExportMenu(false); generateAndUploadPdf(true) }}
+                      className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs border border-stone-200 text-stone-600 hover:bg-stone-50 transition-colors">
+                      <span className="font-barlow font-bold uppercase tracking-wide">Anno {y}</span>
+                      <span className="text-stone-400">{n}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
 
         <div className="relative">
           <RailButton onClick={() => setShowShareMenu(s => !s)} title="Condividi / pubblica" variant={diaryToken ? 'terra' : 'amber'}>
