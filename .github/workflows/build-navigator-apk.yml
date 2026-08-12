@@ -56,11 +56,21 @@ jobs:
       - name: Sync Capacitor (bakes the server URL into the Android project)
         run: npx cap sync android
 
+      # A cold Gradle cache on a fresh runner can trip Maven Central's rate
+      # limiting (HTTP 429) while resolving AGP's large dependency graph —
+      # transient, not a real build problem (android/gradle.properties tunes
+      # Gradle's own retry/backoff for this too). Retrying the whole step is
+      # the reliable fallback when a burst of 429s exceeds even that budget.
       - name: Build debug APK
-        working-directory: android
-        run: |
-          chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 20
+          max_attempts: 3
+          retry_wait_seconds: 30
+          command: |
+            cd android
+            chmod +x gradlew
+            ./gradlew assembleDebug --no-daemon
 
       - uses: actions/upload-artifact@v4
         with:
