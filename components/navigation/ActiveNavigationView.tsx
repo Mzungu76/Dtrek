@@ -719,7 +719,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
           routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} state={state}
           styleId={mapMode} is3D={is3D} onStyleFailed={handleMapStyleFailed} accuracyM={accuracyM}
           natura2000Features={natura2000Features} showNatura2000={showNatura2000}
-          parkingSpot={parkingSpot}
+          parkingSpot={parkingSpot} nearbyTrails={nearbyTrails}
         />
       )}
 
