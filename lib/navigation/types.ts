@@ -11,8 +11,8 @@ export interface GeoFix {
   bearingDeg?: number | null
   verticalAccuracyM?: number | null
   speedAccuracyMs?: number | null
-  /** Which Location Engine produced this fix — surfaced for diagnostics (Navigation Health screen, spec §16), never used to change trust decisions by itself. */
-  source?: 'native' | 'web'
+  /** Which Location Engine produced this fix — surfaced for diagnostics (Navigation Health screen, spec §16), never used to change trust decisions by itself. 'simulated' = lib/navigation/simulation (GPX replay/scenario injection), never a real fix. */
+  source?: 'native' | 'web' | 'simulated'
   /** True when the OS flagged this fix as coming from a mock/spoofed provider (native only) — the Position Engine's quality gate should reject these outright. */
   mock?: boolean
 }

@@ -298,6 +298,54 @@ qualcosa di critico.
   costanti (`MAX_SEARCH_RADIUS_M=2000`, `MAX_VISITED_NODES=600`) sono stime
   ragionevoli, non calibrate su un caso reale.
 
+## Prerequisito trasversale — Simulazione (GPS Replay/Scenario Injection) — ✅ landed
+
+Non è una delle 8 fasi della issue originale, ma un requisito trasversale
+chiesto a parte: ogni componente del Navigation Engine deve essere
+testabile senza GPS reale, e nessuna logica di navigazione deve dipendere
+direttamente dalle API Android/browser. Il secondo punto era già vero
+(`NavigationEngine` parla solo con `LocationSource`, mai con Capacitor o
+`navigator.geolocation` direttamente — commento "pure, mockable,
+replayable" presente fin dalla Fase 1); questo lavoro lo rende sfruttabile:
+
+- `lib/native/locationSource.ts`: estratta l'interfaccia `LocationProvider`
+  (`start`/`stop`/`setMode`/`catchUp`) che `LocationSource` implementa —
+  prima era solo implicita. `NavigationEngineOptions.locationProviderFactory`
+  (nuovo, opzionale) permette di iniettare un provider diverso al posto
+  del vero `LocationSource`; di default resta quello reale, quindi nessun
+  cambiamento di comportamento quando non lo si usa.
+- `lib/navigation/simulation/simulationLocationProvider.ts`: un
+  `LocationProvider` che riproduce una sequenza di `GeoFix` su un timer
+  invece di leggere il GPS — **rispetta i timestamp dei fix** (non li
+  consegna tutti insieme), perché la logica dell'Off-Route Engine e del
+  watchdog GPS-lost è basata sul tempo reale, non su un elenco statico.
+- `lib/navigation/simulation/gpxReplay.ts`: riusa
+  `lib/gpxActivityParser.ts` (già usato dall'import `/upload`) per
+  trasformare una traccia GPX registrata in una sequenza di fix — cammini
+  reali già fatti, da poter rigiocare.
+- `lib/navigation/simulation/scenarioBuilder.ts`: primitive componibili —
+  `walkAlongRoute` (cammino pulito lungo un percorso pianificato, la
+  base), `injectDeviation`, `injectPoorAccuracy`, `injectGpsLoss`,
+  `injectSpike` — per costruire scenari sintetici senza bisogno di una
+  traccia reale per ogni caso limite.
+- `lib/navigation/simulation/presetScenarios.ts`: scenari pronti
+  (`clean`, `off_route`, `wrong_direction`, `uncertain`, `gps_lost`,
+  `spike`) costruiti sulle primitive sopra, usabili senza scrivere codice.
+- **Uso**: `app/guida/[id]/naviga?simulate=off_route` (o un altro nome da
+  `SCENARIO_NAMES`) fa partire la navigazione con quello scenario al
+  posto del GPS vero — l'intera UI (mappa, banner off-route, Escape
+  Engine, pace assistant) reagisce dal vivo. Un banner viola fisso
+  "SIMULAZIONE" resta visibile per tutta la sessione simulata, così non è
+  mai confondibile con una posizione reale (stesso principio di "non
+  falsificare la posizione" della spec, esteso a "non far sembrare reale
+  una posizione finta").
+
+**Deliberatamente fuori scope qui** (chiesto esplicitamente all'utente
+prima di partire, per non introdurre una dipendenza non richiesta): nessun
+test runner automatico (Vitest/Jest) e nessuna suite di test aggiunta — la
+libreria di simulazione è pronta per diventarne la base quando/se si deciderà
+di aggiungerne uno, ma oggi è uno strumento interattivo, non automatizzato.
+
 ## Fase 8 — Battery-aware + test reali outdoor — parzialmente pronto lato native
 
 `LocationMode` (nativo) già definisce le 4 modalità con cadenza/priorità

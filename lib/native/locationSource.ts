@@ -11,6 +11,30 @@ export interface LocationSourceError {
   message: string
 }
 
+/**
+ * The contract NavigationEngine actually depends on — never the Android/
+ * Capacitor plugin or `navigator.geolocation` directly. `LocationSource`
+ * below is the real (native/web) implementation; lib/navigation/simulation/
+ * simulationLocationProvider.ts is a second implementation (GPX replay,
+ * scripted scenarios) that NavigationEngine can't tell apart from the real
+ * one — same reasoning as the pure/mockable/replayable design already
+ * documented on NavigationEngine itself, just formalized as a type so a
+ * caller can swap the source in without reaching into the engine's
+ * internals.
+ */
+export interface LocationProvider {
+  start(mode?: LocationMode): Promise<void>
+  stop(): void
+  setMode(mode: LocationMode): Promise<void>
+  catchUp(): Promise<void>
+}
+
+/** Constructs a LocationProvider already wired to the given callbacks — NavigationEngine calls this once, at construction, instead of hard-coding `new LocationSource(...)` itself. */
+export type LocationProviderFactory = (
+  onFix: (fix: GeoFix) => void,
+  onError: (err: LocationSourceError) => void,
+) => LocationProvider
+
 function nativeFixToGeoFix(fix: NativeFix): GeoFix {
   return {
     lat: fix.latitude,
@@ -38,7 +62,7 @@ function nativeFixToGeoFix(fix: NativeFix): GeoFix {
  * Navigation/Position Engines above this needs to branch on. This is the
  * "Capacitor Bridge → Native Location Service" boundary from spec §14.
  */
-export class LocationSource {
+export class LocationSource implements LocationProvider {
   private webTracker: AdaptiveGpsTracker | null = null
   private nativeListenerHandles: Array<{ remove: () => void }> = []
   private readonly isNative: boolean

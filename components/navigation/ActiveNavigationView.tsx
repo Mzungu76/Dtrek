@@ -56,11 +56,20 @@ import { useSunTimes } from './useSunTimes'
 
 interface Props {
   hike: PlannedHike
+  /**
+   * Dev/testing hook (lib/navigation/simulation/): when set, the engine's
+   * GPS source is a scripted replay instead of the real device — see
+   * app/guida/[id]/naviga/page.tsx's `?simulate=` query param. Never set
+   * in normal use, so this stays entirely inert in production.
+   */
+  locationProviderFactory?: import('@/lib/native/locationSource').LocationProviderFactory
+  /** Label shown in a persistent "SIMULAZIONE" banner whenever locationProviderFactory is set — the position on screen is never allowed to look like a real fix when it isn't one. */
+  simulationLabel?: string
 }
 
 const FIX_STALE_MS = 20000 // if no fix arrives for this long, "moving time" stops accruing
 
-export default function ActiveNavigationView({ hike }: Props) {
+export default function ActiveNavigationView({ hike, locationProviderFactory, simulationLabel }: Props) {
   const router = useRouter()
   const engineRef = useRef<NavigationEngine | null>(null)
   const sessionRef = useRef<NavigationSessionSnapshot | null>(null)
@@ -279,7 +288,7 @@ export default function ActiveNavigationView({ hike }: Props) {
       // silently ignored — today's navigation already works with just the planned route.
       if (routePolyline.length > 1) ensureTrailGraph(hike.id, routePolyline).catch(() => {})
 
-      const engine = new NavigationEngine({ routePolyline, pois, moments, elevationProfile, terrainMultiplier })
+      const engine = new NavigationEngine({ routePolyline, pois, moments, elevationProfile, terrainMultiplier, locationProviderFactory })
       engineRef.current = engine
 
       engine.on('stateChanged', ({ to }) => { if (!cancelled) setState(to) })
@@ -643,6 +652,12 @@ export default function ActiveNavigationView({ hike }: Props) {
           natura2000Features={natura2000Features} showNatura2000={showNatura2000}
           parkingSpot={parkingSpot}
         />
+      )}
+
+      {locationProviderFactory && (
+        <div className="absolute top-0 inset-x-0 z-20 bg-purple-700 text-white text-xs font-bold text-center py-1.5" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 6px)' }}>
+          SIMULAZIONE{simulationLabel ? ` — ${simulationLabel}` : ''} — nessun GPS reale in uso
+        </div>
       )}
 
       {availableEpochs.length > 0 && (

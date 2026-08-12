@@ -1,5 +1,5 @@
 import { haversineM } from '@/lib/geoUtils'
-import { LocationSource, type LocationMode, type LocationSourceError } from '@/lib/native/locationSource'
+import { LocationSource, type LocationMode, type LocationSourceError, type LocationProvider, type LocationProviderFactory } from '@/lib/native/locationSource'
 import { PositionEngine } from './positionEngine'
 import { RouteTracker } from './routeDeviation'
 import { OffRouteEngine } from './offRouteEngine'
@@ -30,6 +30,17 @@ export interface NavigationEngineOptions {
   fitnessMult?: number
   /** Initial battery-aware tracking profile (spec §12) passed to the native Location Engine; ignored on web. Defaults to 'trekking'. */
   locationMode?: LocationMode
+  /**
+   * Constructs the GPS source this engine drives itself with — defaults to
+   * the real native/web LocationSource. Tests/dev tooling pass a factory
+   * that builds a SimulationLocationProvider instead (GPX replay or a
+   * scripted scenario, lib/navigation/simulation/), so the whole engine —
+   * Position Engine, Off-Route Engine, Escape Engine, pace, POIs — can be
+   * exercised without a real GPS fix ever happening. NavigationEngine
+   * itself never imports anything Android/browser-geolocation-specific;
+   * this factory indirection is what keeps that true.
+   */
+  locationProviderFactory?: LocationProviderFactory
 }
 
 /**
@@ -51,7 +62,7 @@ export class NavigationEngine {
   private readonly position = new PositionEngine()
   private readonly offRoute = new OffRouteEngine()
   private readonly stateMachine = new NavStateMachine()
-  private readonly gps: LocationSource
+  private readonly gps: LocationProvider
   private readonly locationMode: LocationMode
   private readonly listeners = new Map<NavEventName, Set<Listener<any>>>()
   private readonly activePoiIds = new Set<string | number>()
@@ -77,7 +88,8 @@ export class NavigationEngine {
       fitnessMult: opts.fitnessMult,
     })
     this.locationMode = opts.locationMode ?? 'trekking'
-    this.gps = new LocationSource(
+    const buildProvider = opts.locationProviderFactory ?? ((onFix, onError) => new LocationSource(onFix, onError))
+    this.gps = buildProvider(
       (fix) => this.handleFix(fix),
       (err) => this.handleGpsError(err),
     )
