@@ -1,5 +1,5 @@
 import { haversineM } from '@/lib/geoUtils'
-import { AdaptiveGpsTracker } from './gpsTracker'
+import { LocationSource, type LocationMode, type LocationSourceError } from '@/lib/native/locationSource'
 import { GpsSmoother } from './gpsSmoothing'
 import { RouteTracker, offRouteThresholdM } from './routeDeviation'
 import { PoiSpatialIndex } from './poiProximity'
@@ -28,6 +28,8 @@ export interface NavigationEngineOptions {
   terrainMultiplier?: number
   /** Simplified Tranter-style fitness scalar — see paceAssistant.ts. Defaults to 1 (neutral). */
   fitnessMult?: number
+  /** Initial battery-aware tracking profile (spec §12) passed to the native Location Engine; ignored on web. Defaults to 'trekking'. */
+  locationMode?: LocationMode
 }
 
 /**
@@ -48,12 +50,14 @@ export class NavigationEngine {
   private lastInstructionIndex = -1
   private readonly smoother = new GpsSmoother()
   private readonly stateMachine = new NavStateMachine()
-  private readonly gps: AdaptiveGpsTracker
+  private readonly gps: LocationSource
+  private readonly locationMode: LocationMode
   private readonly listeners = new Map<NavEventName, Set<Listener<any>>>()
   private readonly activePoiIds = new Set<string | number>()
   private readonly reachedMomentIds = new Set<string>()
 
   private stopCompass: (() => void) | null = null
+  private stopVisibilityWatch: (() => void) | null = null
   private lastCompassAt = 0
   private lastFixAt = 0
   private gpsLostTimer: ReturnType<typeof setTimeout> | null = null
@@ -74,10 +78,16 @@ export class NavigationEngine {
       terrainMultiplier: opts.terrainMultiplier,
       fitnessMult: opts.fitnessMult,
     })
-    this.gps = new AdaptiveGpsTracker(
+    this.locationMode = opts.locationMode ?? 'trekking'
+    this.gps = new LocationSource(
       (fix) => this.handleFix(fix),
       (err) => this.handleGpsError(err),
     )
+  }
+
+  /** Battery-aware mode switch (spec §12) — a no-op on web, forwarded to the native foreground service otherwise. */
+  setLocationMode(mode: LocationMode): void {
+    void this.gps.setMode(mode)
   }
 
   /** Pushed in by the caller (e.g. from an Open-Meteo fetch), not fetched by the engine itself — keeps this class free of network calls, same "pure, mockable, replayable" property the rest of it already has. */
@@ -97,19 +107,40 @@ export class NavigationEngine {
 
   start(): void {
     this.setState('navigating')
-    this.gps.start()
+    void this.gps.start(this.locationMode)
     this.stopCompass = watchDeviceCompass((deg) => {
       this.lastCompassAt = Date.now()
       this.emit('bearingUpdated', { bearingDeg: deg, source: 'sensor' })
     })
     this.armGpsLostWatchdog()
+    this.stopVisibilityWatch = this.watchVisibilityForCatchUp()
   }
 
   stop(): void {
     this.gps.stop()
     this.stopCompass?.()
+    this.stopVisibilityWatch?.()
+    this.stopVisibilityWatch = null
     if (this.gpsLostTimer) clearTimeout(this.gpsLostTimer)
     this.setState('finished')
+  }
+
+  /**
+   * When the WebView regains visibility after being backgrounded/suspended
+   * (screen back on, app switched back to), replays whatever fixes the
+   * native foreground service buffered in the meantime — otherwise a hiker
+   * who locked their phone for twenty minutes would come back to a
+   * position/track that silently jumped straight to "now" (spec §13).
+   * No-op on web, where `document` visibility already tracks the tab that's
+   * running the engine itself.
+   */
+  private watchVisibilityForCatchUp(): (() => void) | null {
+    if (typeof document === 'undefined') return null
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') void this.gps.catchUp()
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => document.removeEventListener('visibilitychange', onVisibility)
   }
 
   private setState(to: import('./types').NavState): void {
@@ -128,8 +159,8 @@ export class NavigationEngine {
     }, GPS_LOST_MS)
   }
 
-  /** err.code === 1 (PERMISSION_DENIED) means the browser/OS location permission was denied — unrecoverable until the user changes it in settings, unlike a plain signal loss (code 2/3), so the UI needs to tell the two apart. */
-  private handleGpsError(err?: GeolocationPositionError): void {
+  /** err.code === 1 (PERMISSION_DENIED) means the browser/OS location permission was denied — unrecoverable until the user changes it in settings, unlike a plain signal loss (code 2/3), so the UI needs to tell the two apart. Same shape whether the fix source was native or web (see LocationSourceError). */
+  private handleGpsError(err?: LocationSourceError): void {
     this.setState('gps_lost')
     this.emit('gpsLost', { permissionDenied: err?.code === 1 })
   }

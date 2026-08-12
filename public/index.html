@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<!--
+  Placeholder richiesto dal build system di Capacitor (che si aspetta un
+  entry point statico in webDir). Non è la vera UI: in ogni build reale
+  `capacitor.config.ts` imposta `server.url` sul dominio Next.js di Dtrek,
+  quindi la WebView carica sempre l'app remota e questo file non viene mai
+  mostrato all'utente. Resta solo come fallback minimo se l'app venisse
+  avviata senza `CAPACITOR_SERVER_URL` configurato.
+-->
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>DTrek</title>
+  </head>
+  <body>
+    <p>DTrek — configurazione server mancante (CAPACITOR_SERVER_URL).</p>
+  </body>
+</html>
