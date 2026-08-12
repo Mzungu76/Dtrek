@@ -28,7 +28,9 @@ import {
 } from '@/lib/navigation/navigationStore'
 import { loadManifest, isManifestValid } from '@/lib/offline/packageManifest'
 import { ensureTrailGraph, loadTrailGraph } from '@/lib/navigation/trailGraphStore'
+import type { WalkNetwork } from '@/lib/routeBuilder/osmGraph'
 import { computeEscapeOptions, type EscapeOption } from '@/lib/navigation/escapeEngine'
+import { matchToTrailGraph, type MapMatchResult } from '@/lib/navigation/mapMatcher'
 import EscapeOptionsSheet from './EscapeOptionsSheet'
 import OfflinePackageDownloader from './OfflinePackageDownloader'
 import { watchBattery } from '@/lib/navigation/battery'
@@ -87,6 +89,13 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   // ref rather than state because it's only needed on-demand (Escape Engine snapshot), not for
   // rendering; `progress` state below stays the reduced shape the rest of the UI actually uses.
   const fullProgressRef = useRef<RouteProgress | null>(null)
+  // Persisted trail graph for this hike (lib/navigation/trailGraphStore.ts), kept in memory once
+  // loaded so Map Matching (below) and the Escape Engine sheet don't each re-read IndexedDB.
+  const trailNetworkRef = useRef<WalkNetwork | null>(null)
+  // Mirrors `state` for the positionUpdated closure below, which is only ever (re)created once
+  // per hike.id — see the effect's dependency array — so it can't read the state variable itself
+  // without capturing its value at mount time. Same pattern as timerRunningRef/speechEnabledRef.
+  const stateRef = useRef<NavState>('idle')
 
   const [state, setState] = useState<NavState>('idle')
   const [position, setPosition] = useState<{ lat: number; lon: number } | null>(null)
@@ -112,6 +121,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   const [pendingActivity, setPendingActivity] = useState<TcxActivity | null>(null)
   const [gpsLostPermissionDenied, setGpsLostPermissionDenied] = useState(false)
   const [offRouteBearingDeg, setOffRouteBearingDeg] = useState<number | null>(null)
+  const [mapMatch, setMapMatch] = useState<MapMatchResult | null>(null)
   const [lowBatteryNotice, setLowBatteryNotice] = useState(false)
   const [offlinePackageWarning, setOfflinePackageWarning] = useState(false)
   const [offlineReady, setOfflineReady] = useState(false)
@@ -286,12 +296,16 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       // hiker never explicitly downloaded an offline package. No-ops if already cached from a
       // previous navigation start or from that offline download; failure (Overpass slow/down) is
       // silently ignored — today's navigation already works with just the planned route.
-      if (routePolyline.length > 1) ensureTrailGraph(hike.id, routePolyline).catch(() => {})
+      if (routePolyline.length > 1) {
+        ensureTrailGraph(hike.id, routePolyline)
+          .then((result) => { if (!cancelled && result) trailNetworkRef.current = result.network })
+          .catch(() => {})
+      }
 
       const engine = new NavigationEngine({ routePolyline, pois, moments, elevationProfile, terrainMultiplier, locationProviderFactory })
       engineRef.current = engine
 
-      engine.on('stateChanged', ({ to }) => { if (!cancelled) setState(to) })
+      engine.on('stateChanged', ({ to }) => { if (!cancelled) { setState(to); stateRef.current = to } })
       engine.on('paceUpdated', (result) => { if (!cancelled) setPace(result) })
       engine.on('positionUpdated', ({ raw, smoothed, progress, traveledDistanceM, instantSpeedMs }) => {
         if (cancelled) return
@@ -299,6 +313,22 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         setPosition({ lat: smoothed.lat, lon: smoothed.lon })
         setAccuracyM(raw.accuracyM ?? null)
         fullProgressRef.current = progress
+        // Map Matching (Fase 4, lib/navigation/mapMatcher.ts) only has anything to add once
+        // already recognized as off the planned route — while on-route this would just scan the
+        // graph to confirm what's already known, so it's skipped entirely the rest of the time,
+        // same economy principle as the Escape Engine's on-demand-only search.
+        if (stateRef.current === 'off_route' || stateRef.current === 'wrong_direction') {
+          setMapMatch(matchToTrailGraph({
+            network: trailNetworkRef.current,
+            lat: smoothed.lat,
+            lon: smoothed.lon,
+            distanceToRouteM: progress.distanceToRouteM,
+          }))
+        } else {
+          // React bails out of the re-render when the value is unchanged (Object.is), so this is
+          // a no-op most of the time — only clears the banner detail right after coming back on-route.
+          setMapMatch(null)
+        }
         // Position keeps updating even while the stats timer is paused (the
         // hiker still wants to see themselves on the map) — only the
         // recorded distance/speed stats freeze.
@@ -356,6 +386,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         if (cancelled) return
         logEvent('on_route_again')
         setOffRouteBearingDeg(null)
+        setMapMatch(null)
       })
       engine.on('gpsLost', ({ permissionDenied }) => {
         if (cancelled) return
@@ -813,20 +844,32 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
           alerts.push({
             id: 'offroute',
             node: (
-              <div className={`px-4 py-2 rounded-xl text-white text-sm font-semibold font-body shadow-lg flex items-center gap-2 ${isWrongDirection ? 'bg-orange-700' : 'bg-terra-500'}`}>
-                {offRouteBearingDeg != null && (
-                  <ArrowUp size={16} className="shrink-0" style={{ transform: `rotate(${offRouteBearingDeg}deg)` }} />
+              <div className={`px-4 py-2 rounded-xl text-white text-sm font-semibold font-body shadow-lg flex flex-col gap-1 ${isWrongDirection ? 'bg-orange-700' : 'bg-terra-500'}`}>
+                <div className="flex items-center gap-2">
+                  {offRouteBearingDeg != null && (
+                    <ArrowUp size={16} className="shrink-0" style={{ transform: `rotate(${offRouteBearingDeg}deg)` }} />
+                  )}
+                  <AlertTriangle size={16} className="shrink-0" />
+                  {isWrongDirection
+                    ? 'Direzione sbagliata — segui la freccia'
+                    : `Sei fuori dal percorso${offRouteBearingDeg != null ? ' — torna verso la freccia' : ' pianificato'}`}
+                  <button
+                    onClick={handleEscapeOptions}
+                    className="ml-1 shrink-0 text-xs font-bold underline decoration-white/60 underline-offset-2"
+                  >
+                    Vie d&apos;uscita
+                  </button>
+                </div>
+                {/* Map Matching (Fase 4, lib/navigation/mapMatcher.ts): distinguishes "off the plan
+                    but on a real, mapped trail" (likely deliberate) from being off any known trail —
+                    informational only, never changes the off-route verdict itself above. */}
+                {mapMatch?.alternativeDetected && mapMatch.distanceToMatchM != null && (
+                  <p className="text-xs font-normal text-white/85 pl-6">
+                    {mapMatch.confidence === 'high'
+                      ? `C'è un sentiero conosciuto proprio qui (${Math.round(mapMatch.distanceToMatchM)} m) — forse lo stai seguendo di proposito`
+                      : `Sentiero noto nelle vicinanze (~${Math.round(mapMatch.distanceToMatchM)} m)`}
+                  </p>
                 )}
-                <AlertTriangle size={16} className="shrink-0" />
-                {isWrongDirection
-                  ? 'Direzione sbagliata — segui la freccia'
-                  : `Sei fuori dal percorso${offRouteBearingDeg != null ? ' — torna verso la freccia' : ' pianificato'}`}
-                <button
-                  onClick={handleEscapeOptions}
-                  className="ml-1 shrink-0 text-xs font-bold underline decoration-white/60 underline-offset-2"
-                >
-                  Vie d&apos;uscita
-                </button>
               </div>
             ),
           })

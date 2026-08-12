@@ -200,19 +200,50 @@ usa è Fase 4/7.
   sono stati usati per calibrare i default a mano, non verificati da una
   suite automatica.
 
-## Fase 4 — Map Matching non invasivo — base solida, da estendere
+## Fase 4 — Map Matching non invasivo — ✅ landed (v1)
 
-`RouteTracker.update()` già rispetta il principio cardine (mai spostare il
-fix). Manca:
-- Usare il trail graph reale (ora persistito e disponibile via
-  `lib/navigation/trailGraphStore.ts` — vedi prerequisito sopra) invece di
-  una singola polyline pianificata, per poter riconoscere "quale segmento
-  probabilmente sto seguendo" quando esistono alternative vicine (spec §4)
-  — oggi `RouteTracker` conosce solo il percorso pianificato, il grafo è
-  scaricato/salvato ma nessun codice lo legge ancora per questo scopo.
-- Persistere il grafo scaricato per l'hike corrente (oggi `fetchWalkNetwork`
-  gira solo in fase di pianificazione, via rete, non salvato) — prerequisito
-  anche per l'Escape Engine (fase 7) e per l'offline (fase 6).
+`RouteTracker.update()` continua a rispettare il principio cardine (mai
+spostare il fix) — Map Matching aggiunge solo un'interpretazione sopra,
+non tocca né il fix mostrato né il verdetto on/off-route dell'Off-Route
+Engine.
+
+- `lib/navigation/mapMatcher.ts` (nuovo): `matchToTrailGraph()`, funzione
+  pura — dato il trail graph persistito (`lib/navigation/trailGraphStore.ts`)
+  e la posizione corrente, trova l'arco del grafo più vicino (proiezione
+  punto-segmento, non solo nodo più vicino) e classifica quanto
+  quell'informazione è affidabile (`high`/`medium`/`low` in base alla
+  distanza). Restituisce `onPlannedRoute: true` senza nemmeno scandire il
+  grafo quando la distanza dal percorso è già sotto la soglia usata da
+  `offRouteEngine.ts` (20m) — a quel punto non c'è nulla da aggiungere.
+- **Deliberatamente eseguito solo quando serve**, non a ogni fix: come
+  l'Escape Engine, la scansione (anche con pre-filtro bbox) non è gratis da
+  ripetere continuamente. `ActiveNavigationView.tsx` la richiama solo
+  quando lo stato è già `off_route`/`wrong_direction` — mentre si è sul
+  percorso pianificato non aggiungerebbe informazione.
+- Il grafo viene caricato una volta sola in memoria (`trailNetworkRef`)
+  quando `ensureTrailGraph()` risolve all'avvio della navigazione, invece
+  di rileggerlo da IndexedDB a ogni match.
+- UI: quando viene rilevato un sentiero reale mappato vicino alla posizione
+  (`alternativeDetected`), il banner off-route/wrong-direction mostra una
+  riga informativa in più ("C'è un sentiero conosciuto proprio qui…" /
+  "Sentiero noto nelle vicinanze") — distingue "fuori dal piano ma su un
+  sentiero vero, probabilmente di proposito" da "fuori dal piano e da
+  qualunque sentiero noto", senza mai cambiare il verdetto off-route stesso
+  né spostare il marker.
+
+**Non ancora fatto / prossimi passi concreti:**
+- Nessuna compatibilità di direzione (bearing) nel matching — l'arco più
+  vicino è scelto solo per distanza, non per coerenza con la direzione di
+  marcia; su una rete fitta di sentieri paralleli/incrociati potrebbe
+  scegliere un arco che in realtà non è quello seguito. `expectedBearingDeg`
+  (già calcolato da `RouteTracker` per il percorso pianificato) non esiste
+  ancora per un arco qualunque del grafo — richiederebbe calcolare la
+  tangente locale dell'arco, non fatto qui.
+- Non testato su un grafo reale scaricato in un'area con molte alternative
+  ravvicinate (stesso caveat di Fase 7: costanti `MATCH_SEARCH_RADIUS_M=60`
+  ragionevoli ma non calibrate su un caso reale outdoor).
+- Non esiste un test runner nel repo — nessuna suite automatica per
+  `matchToTrailGraph()`.
 
 ## Fase 5 — Navigation Events + audio/haptic — embrione esistente
 
@@ -381,6 +412,8 @@ diverse, e `NavigationEngine.setLocationMode()` le espone lato JS. Manca:
 5. ✅ Escape Engine (Fase 7) — la feature distintiva citata esplicitamente
    nella issue — vedi sezione dedicata sopra (v1 senza dislivello, per il
    costo/rate-limit della pipeline DTM).
-6. Offline Navigation Package esteso (POI, profilo altimetrico, nav data,
+6. ✅ Map Matching non invasivo contro il trail graph reale (Fase 4) — vedi
+   sezione dedicata sopra (v1 senza compatibilità di bearing).
+7. Offline Navigation Package esteso (POI, profilo altimetrico, nav data,
    escape data) + Readiness Check (Fase 6).
-7. Decisore battery-aware automatico (Fase 8) + test reali su device.
+8. Decisore battery-aware automatico (Fase 8) + test reali su device.
