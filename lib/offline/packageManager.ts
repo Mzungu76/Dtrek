@@ -1,5 +1,6 @@
 import { runWithConcurrency } from '@/lib/promisePool'
 import { lsGet, lsSet } from '@/lib/localStore'
+import { fetchAndSaveTrailGraph, deleteTrailGraph } from '@/lib/navigation/trailGraphStore'
 import {
   loadManifest, saveManifest, computeChecksum, deleteManifest,
   type OfflinePackageManifest, type OfflinePackageStatus,
@@ -122,6 +123,21 @@ export async function downloadOfflinePackage(
   const complete = alreadyDone.size === allTiles.length
   manifest.status = complete ? 'ready' : 'paused'
   manifest.checksum = complete ? computeChecksum(tileSizes) : manifest.checksum
+
+  // Best-effort: the trail graph (prerequisite for Map Matching/Escape Engine, see
+  // lib/navigation/trailGraphStore.ts) is fetched from Overpass, a shared public service that can
+  // be slow or unavailable — its failure must never fail an otherwise-complete tile package, so
+  // this is deliberately not inside the tile download's own error path above.
+  if (complete && !manifest.hasTrailGraph) {
+    try {
+      const { nodeCount } = await fetchAndSaveTrailGraph(hikeId, routePolyline)
+      manifest.hasTrailGraph = true
+      manifest.trailGraphNodeCount = nodeCount
+    } catch {
+      manifest.hasTrailGraph = false
+    }
+  }
+
   await saveManifest(manifest)
   onProgress?.({ status: manifest.status, downloadedCount: manifest.downloadedCount, tileCount: manifest.tileCount })
 }
@@ -138,4 +154,5 @@ export async function deleteOfflinePackage(hikeId: string): Promise<void> {
   if ('caches' in window) await caches.delete(tileCacheName(hikeId))
   await lsSet(`offline-done-tiles:${hikeId}`, [])
   await deleteManifest(hikeId)
+  await deleteTrailGraph(hikeId)
 }

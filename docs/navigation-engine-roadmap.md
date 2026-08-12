@@ -117,6 +117,44 @@ navigazione), non il sito intero.
   strumento — non è stato aggiunto qui per non introdurre una dipendenza di
   infrastruttura non richiesta esplicitamente.
 
+## Prerequisito trasversale — Persistenza del trail graph — ✅ landed
+
+Comune a Fase 4 (Map Matching), Fase 6 (Offline Package) e Fase 7 (Escape
+Engine): prima di questo lavoro `fetchWalkNetwork` (`lib/routeBuilder/
+osmGraph.ts`) girava solo in fase di pianificazione, via rete, e il
+risultato non veniva mai conservato — inutilizzabile offline e già perso
+nel momento in cui si arrivava davvero a navigare.
+
+- `lib/navigation/trailGraphStore.ts` (nuovo): serializza/persiste in
+  IndexedDB il `WalkNetwork` per hikeId (`saveTrailGraph`/`loadTrailGraph`/
+  `deleteTrailGraph`), e `fetchAndSaveTrailGraph`/`ensureTrailGraph` per
+  scaricarlo da Overpass (stessa fonte della pianificazione) e salvarlo
+  — bbox più ampia (~1.1km, `computeBbox` di default) di quella dei tile
+  (~300m), perché un'alternativa vicina o una via di fuga sono spesso
+  fuori dal tile visibile ma non fuori dal corridoio utile.
+- **Sempre best-effort**: sia nel pacchetto offline sia al via della
+  navigazione, un fallimento nel recupero del grafo (Overpass lento/giù)
+  non blocca né il download dei tile né l'avvio della navigazione — il
+  comportamento di oggi (solo il percorso pianificato) resta il fallback
+  naturale, non una regressione.
+- `lib/offline/packageManager.ts`: `downloadOfflinePackage()` scarica e
+  salva anche il trail graph dopo i tile (nuovi campi manifest
+  `hasTrailGraph`/`trailGraphNodeCount`, `lib/offline/packageManifest.ts`
+  — deliberatamente **non** dentro `isManifestValid()`, che resta legata
+  solo ai tile: se il grafo debba diventare un requisito per considerare
+  il pacchetto "pronto" è una decisione dell'Offline Readiness Check della
+  Fase 6, non presa qui). `deleteOfflinePackage()` elimina anche il grafo.
+- `ActiveNavigationView.tsx`: all'avvio di una navigazione (anche senza
+  aver scaricato un pacchetto offline) chiama `ensureTrailGraph()` in
+  fire-and-forget, così anche una navigazione solo online accumula questo
+  dato per le fasi successive.
+
+**Cosa questo NON fa (ancora)**: nessun consumatore usa davvero il grafo
+persistito — `RouteTracker`/Map Matching continuano a lavorare solo sulla
+polyline pianificata, e non esiste ancora un Escape Engine che lo
+interroghi. Questo lavoro è solo l'infrastruttura dati; la logica che la
+usa è Fase 4/7.
+
 ## Fase 3 — Navigation Engine (distanza/direzione/off-route) — parzialmente esistente
 
 Già presente: `RouteTracker` (nearest-segment + distance-along-route),
@@ -137,11 +175,12 @@ alla spec:
 
 `RouteTracker.update()` già rispetta il principio cardine (mai spostare il
 fix). Manca:
-- Usare il trail graph reale (`lib/routeBuilder/osmGraph.ts`,
-  `fetchWalkNetwork`) invece di una singola polyline pianificata, per poter
-  riconoscere "quale segmento probabilmente sto seguendo" quando esistono
-  alternative vicine (spec §4) — oggi `RouteTracker` conosce solo il
-  percorso pianificato, non la rete circostante.
+- Usare il trail graph reale (ora persistito e disponibile via
+  `lib/navigation/trailGraphStore.ts` — vedi prerequisito sopra) invece di
+  una singola polyline pianificata, per poter riconoscere "quale segmento
+  probabilmente sto seguendo" quando esistono alternative vicine (spec §4)
+  — oggi `RouteTracker` conosce solo il percorso pianificato, il grafo è
+  scaricato/salvato ma nessun codice lo legge ancora per questo scopo.
 - Persistere il grafo scaricato per l'hike corrente (oggi `fetchWalkNetwork`
   gira solo in fase di pianificazione, via rete, non salvato) — prerequisito
   anche per l'Escape Engine (fase 7) e per l'offline (fase 6).
@@ -159,21 +198,27 @@ Da fare:
   (`haptics.ts`/`speech.ts` esistono ma non ho trovato un motore anti-
   ridondanza esplicito che copra tutti i tipi di evento).
 
-## Fase 6 — Offline Navigation Package — solo tile oggi
+## Fase 6 — Offline Navigation Package — tile + trail graph oggi
 
-`lib/offline/packageManager.ts` scarica solo tile raster. Serve estendere
-manifest + download a: trail graph (fase 4), POI, profilo altimetrico
-(`lib/navigation/elevationProfile.ts` già lo calcola per un hike, va solo
-persistito nel pacchetto), nav data (istruzioni/moments/eventi), escape
-data (fase 7). Poi un vero **Offline Readiness Check** che verifichi
-tutti questi pezzi (non solo `tileCount === downloadedCount` come oggi) e
+`lib/offline/packageManager.ts` scarica tile raster **e ora anche il
+trail graph** (vedi prerequisito sopra — `hasTrailGraph`/
+`trailGraphNodeCount` nel manifest). Serve ancora estendere manifest +
+download a: POI, profilo altimetrico (`lib/navigation/elevationProfile.ts`
+già lo calcola per un hike, va solo persistito nel pacchetto), nav data
+(istruzioni/moments/eventi), escape data (fase 7). Poi un vero **Offline
+Readiness Check** che verifichi tutti questi pezzi (non solo
+`tileCount === downloadedCount` come oggi — e decida se il trail graph,
+oggi best-effort/opzionale, debba diventare un requisito) e
 un banner esplicito "⚠ Offline navigation incomplete" quando manca
 qualcosa di critico.
 
 ## Fase 7 — Escape Engine — da costruire
 
-Non esiste ancora. Si appoggia direttamente sul trail graph persistito
-della fase 4/6: dato un punto fuori percorso, cercare nel grafo percorsi
+Non esiste ancora. Si appoggia direttamente sul trail graph già persistito
+(prerequisito sopra, `lib/navigation/trailGraphStore.ts` — inclusi
+`nearestGraphNode` in `osmGraph.ts`, già pronto per trovare il nodo del
+grafo più vicino a una posizione fuori percorso): dato un punto fuori
+percorso, cercare nel grafo percorsi
 verso (a) il punto più vicino sull'ultimo segmento noto, (b) trail
 alternativi vicini con `trailConfidence` alta, (c) strade, (d) POI sicuri —
 e restituire `ESCAPE OPTIONS` ordinate con distanza/dislivello/sicurezza
@@ -199,7 +244,10 @@ diverse, e `NavigationEngine.setLocationMode()` le espone lato JS. Manca:
 1. ✅ Swap `GpsSmoother` → `PositionEngine` dentro `NavigationEngine` (Fase 2,
    chiusura). Resta da fare solo l'aggancio di `sample()` al rendering
    mappa a 60fps (vedi Fase 2 sopra).
-2. Build Android reale, per verificare che il plugin nativo compili
+2. ✅ Persistenza del trail graph per l'hike attivo (prerequisito comune a
+   Fase 4, 6, 7) — vedi sezione dedicata sopra. Resta da fare: usarlo
+   davvero in Map Matching/Escape Engine (punti 4-5 sotto).
+3. Build Android reale, per verificare che il plugin nativo compili
    davvero — **non eseguibile dentro questa sessione**: l'ambiente in cui
    gira questo agente blocca l'accesso a `dl.google.com`/Google Maven per
    policy di rete (confermato tentando la build qui), quindi la prima
@@ -207,11 +255,12 @@ diverse, e `NavigationEngine.setLocationMode()` le espone lato JS. Manca:
    `.github/workflows/build-navigator-apk.yml` (rete libera sui runner
    GitHub) o su un computer con Android Studio — vedi
    `docs/guida-pubblicazione-dtrek-navigator.md`.
-3. Persistenza del trail graph per l'hike attivo (prerequisito comune a
-   Fase 4, 6, 7).
 4. `UNCERTAIN`/`WRONG_DIRECTION` + Off-Route Engine multi-fattore (Fase 3/5
-   della issue originale).
+   della issue originale) — può già appoggiarsi al trail graph persistito
+   per riconoscere alternative vicine invece di trattare "fuori dal
+   percorso pianificato" come l'unico segnale disponibile.
 5. Escape Engine (Fase 7) — la feature distintiva citata esplicitamente
-   nella issue, ma ha senso solo dopo che il trail graph è persistito.
-6. Offline Navigation Package esteso + Readiness Check (Fase 6).
+   nella issue, ora sbloccata dal trail graph persistito.
+6. Offline Navigation Package esteso (POI, profilo altimetrico, nav data,
+   escape data) + Readiness Check (Fase 6).
 7. Decisore battery-aware automatico (Fase 8) + test reali su device.

@@ -27,6 +27,7 @@ import {
   loadParkingSpot, saveParkingSpot, clearParkingSpot, type ParkingSpot,
 } from '@/lib/navigation/navigationStore'
 import { loadManifest, isManifestValid } from '@/lib/offline/packageManifest'
+import { ensureTrailGraph } from '@/lib/navigation/trailGraphStore'
 import OfflinePackageDownloader from './OfflinePackageDownloader'
 import { watchBattery } from '@/lib/navigation/battery'
 import { haptics } from '@/lib/navigation/haptics'
@@ -261,6 +262,13 @@ export default function ActiveNavigationView({ hike }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ plannedHikeId: hike.id }),
       }).then((r) => r.ok ? r.json() : null).then((data) => { if (data?.sessionId) remoteSessionId.current = data.sessionId }).catch(() => {})
+
+      // Fire-and-forget: makes the walkable trail graph around this route available for later
+      // Map Matching/Escape Engine work (see lib/navigation/trailGraphStore.ts) even when the
+      // hiker never explicitly downloaded an offline package. No-ops if already cached from a
+      // previous navigation start or from that offline download; failure (Overpass slow/down) is
+      // silently ignored — today's navigation already works with just the planned route.
+      if (routePolyline.length > 1) ensureTrailGraph(hike.id, routePolyline).catch(() => {})
 
       const engine = new NavigationEngine({ routePolyline, pois, moments, elevationProfile, terrainMultiplier })
       engineRef.current = engine
