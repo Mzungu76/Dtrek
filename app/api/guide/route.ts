@@ -33,6 +33,8 @@ import { extractCoverSubtitle } from '@/lib/coverSubtitle'
 import { extractGuideNotices, type GuideNotice } from '@/lib/guideNotices'
 import { extractGuideSources, type GuideSource } from '@/lib/guideSources'
 import { extractEpochPois } from '@/lib/epochPois'
+import { logAiUsage } from '@/lib/aiUsageLog'
+import { extractPoiNotes } from '@/lib/poiNotes'
 import { effectiveHikeMetrics } from '@/lib/routeMode'
 import { readOrBackfillHistoryStats, formatHistoryStatsBlock } from '@/lib/hikerHistory'
 import { findAllSourceImages } from '@/lib/sourceImageFetch'
@@ -595,6 +597,7 @@ const VERIFICATO_MAX_TOKENS = 3000
  */
 async function generateVerificatoText(
   hikeTitle: string, zona: string | null, claudeModel: string, apiKey: string,
+  usageCtx: { userId: string | null; hikeId: string | null },
 ): Promise<string | null> {
   try {
     const client = new Anthropic({ apiKey })
@@ -609,6 +612,10 @@ async function generateVerificatoText(
         content: `Percorso: ${hikeTitle}\n${zonaLine}\nData odierna: ${todayStr}\n\nVerifica online lo stato di questo percorso e scrivi la sezione "## Verificato online" come da istruzioni.`,
       }],
       tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 2 }],
+    })
+    void logAiUsage({
+      userId: usageCtx.userId, hikeId: usageCtx.hikeId, feature: 'guide_verificato', model: claudeModel,
+      inputTokens: msg.usage.input_tokens, outputTokens: msg.usage.output_tokens,
     })
     const text = msg.content
       .filter((b): b is Anthropic.TextBlock => b.type === 'text')
@@ -910,7 +917,7 @@ async function generateGuide(req: NextRequest): Promise<Response> {
   const verificatoPromise = needsVerificato
     ? (async () => {
         const comune = startPoint ? await resolveComuneFromLatLon(startPoint.lat!, startPoint.lon!) : null
-        return generateVerificatoText(hike.title, comune, claudeModel, apiKey)
+        return generateVerificatoText(hike.title, comune, claudeModel, apiKey, { userId: user?.id ?? null, hikeId })
       })()
     : Promise.resolve(null)
 
@@ -1017,6 +1024,12 @@ async function generateGuide(req: NextRequest): Promise<Response> {
         if (finalMessage?.stop_reason === 'max_tokens') {
           console.error(`[guide] generazione troncata per max_tokens (hikeId=${hikeId}, sections=${narrativeSectionKeys.join(',')})`)
         }
+        if (finalMessage?.usage) {
+          void logAiUsage({
+            userId: user?.id ?? null, hikeId, feature: 'guide', model: claudeModel,
+            inputTokens: finalMessage.usage.input_tokens, outputTokens: finalMessage.usage.output_tokens,
+          })
+        }
 
         // Il risultato della ricerca (kickata in parallelo, prima di questo stream) è quasi sempre
         // già pronto a questo punto — l'attesa qui è solo per il caso raro in cui sia più lenta
@@ -1083,6 +1096,21 @@ async function generateGuide(req: NextRequest): Promise<Response> {
             for (const sec of parsedNew) {
               if (!sec.key) continue
               mergedText = mergeGuideSection(mergedText, sec.key, sec.title, sec.body)
+            }
+
+            // Cache poi_notes per POI (decisione 2, artifact "La Guida IA") — solo quando "luoghi"
+            // fa parte di QUESTA generazione: nessuna chiamata IA in più, si persiste testo già
+            // prodotto sopra. Best-effort, non deve mai far fallire il salvataggio della guida.
+            const luoghiSection = parsedNew.find(s => s.key === 'luoghi')
+            if (luoghiSection) {
+              const notes = extractPoiNotes(luoghiSection.body, cachedPoisArr, cachedPoiWikiArr)
+              if (notes.length > 0) {
+                const { error: poiNotesError } = await supabase.from('poi_notes').upsert(
+                  notes.map(n => ({ poi_id: n.poiId, lang: 'it', name: n.name, text: n.text, source_hike_id: hikeId, updated_at: new Date().toISOString() })),
+                  { onConflict: 'poi_id,lang' },
+                )
+                if (poiNotesError) console.error('[guide] poi_notes upsert failed:', poiNotesError.message)
+              }
             }
 
             // Le epoche sono legate solo alla sezione "luoghi": rigenerandola le vecchie sono da
