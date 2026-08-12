@@ -408,19 +408,52 @@ test runner automatico (Vitest/Jest) e nessuna suite di test aggiunta — la
 libreria di simulazione è pronta per diventarne la base quando/se si deciderà
 di aggiungerne uno, ma oggi è uno strumento interattivo, non automatizzato.
 
-## Fase 8 — Battery-aware + test reali outdoor — parzialmente pronto lato native
+## Fase 8 — Battery-aware — ✅ landed (v1, decisore); test reali outdoor ancora da fare
 
-`LocationMode` (nativo) già definisce le 4 modalità con cadenza/priorità
-diverse, e `NavigationEngine.setLocationMode()` le espone lato JS. Manca:
-- La logica che *decide* quando cambiare modalità (velocità, qualità GPS,
-  prossimità a un bivio, deviazione, livello batteria, criticità del
-  tratto) — oggi il chiamante deve impostarla esplicitamente, non c'è
-  ancora un decisore automatico.
-- `lib/navigation/battery.ts` va esteso da "solo avviso soglia bassa" a
-  input reale per quel decisore.
+`LocationMode` (nativo) già definiva le 4 modalità con cadenza/priorità
+diverse, e `NavigationEngine.setLocationMode()` già le esponeva lato JS —
+mancava solo la logica che *decide* quando cambiare modalità.
+
+- `lib/navigation/locationModeDecider.ts` (nuovo): `decideLocationMode()`,
+  funzione pura — dato stato di navigazione, velocità istantanea, accuracy
+  GPS, distanza dalla prossima istruzione e livello batteria, sceglie la
+  modalità che serve, in ordine di priorità: `off_route`/`wrong_direction`
+  → `emergency` (fix più affidabili per risolvere la situazione, subito,
+  senza isteresi — spec: "durante Navigation/Emergency privilegiare
+  affidabilità"); vicino a un bivio (<100m) o velocità sopra il passo da
+  escursione (>2.5 m/s, corsa/bici) o accuracy scarsa (>30m) → `navigation`;
+  batteria sotto il 30% e non in carica, nient'altro di urgente →
+  `battery_save`; altrimenti `trekking`. `LocationModeDecider` (classe)
+  aggiunge isteresi a tempo (8s, stesso pattern di
+  `offRouteEngine.ts`) così un segnale al limite della soglia non fa
+  accendere/spegnere continuamente la richiesta GPS nativa.
+- `lib/navigation/battery.ts`: nuovo `watchBatteryLevel()`, feed continuo
+  di livello/carica (non solo l'avviso soglia-bassa one-shot di
+  `watchBattery`, che ora è riscritto sopra di esso senza duplicare la
+  logica di connessione alla Battery Status API) — la soglia proattiva del
+  decisore (30%) è deliberatamente più conservativa di quella reattiva
+  dell'avviso esistente (15%, "già critico").
+- `ActiveNavigationView.tsx`: il decisore viene aggiornato a ogni fix
+  (stato, velocità, accuracy, distanza dalla prossima istruzione, livello
+  batteria) e `engine.setLocationMode()` viene chiamato solo quando
+  `LocationModeDecider.update()` restituisce davvero una nuova modalità.
+
+**Non ancora fatto / prossimi passi concreti:**
+- Nessun input "criticità del tratto" (es. tratto esposto/pericoloso da
+  `lib/pois`/`safetyScore.ts`) nel decisore — i segnali usati sono solo
+  quelli osservabili in tempo reale (velocità, GPS, batteria, prossimità
+  bivio), non una caratteristica statica del percorso.
+- Le soglie (`FAST_SPEED_MS=2.5`, `NEAR_INSTRUCTION_M=100`,
+  `POOR_ACCURACY_M=30`, `LOW_BATTERY_FOR_DOWNSHIFT=0.30`,
+  `MODE_CHANGE_DWELL_MS=8000`) sono stime ragionevoli, non calibrate su un
+  caso reale — stesso caveat delle costanti dell'Off-Route Engine e
+  dell'Escape Engine.
 - Test su device reale outdoor (copertura GPS scarsa, sottobosco, schermo
-  spento per ore) — non eseguibile in questo ambiente (nessun Android SDK/
-  emulatore disponibile: `ANDROID_HOME` non impostato).
+  spento per ore, consumo batteria reale su un'intera giornata di
+  escursione) — non eseguibile in questo ambiente (nessun Android SDK/
+  emulatore disponibile: `ANDROID_HOME` non impostato). Resta l'unico
+  pezzo della Fase 8 (e dell'intera roadmap) che richiede davvero un
+  device fisico all'aperto, non solo una build CI verificata.
 
 ## Ordine consigliato per le prossime PR
 
@@ -447,4 +480,6 @@ diverse, e `NavigationEngine.setLocationMode()` le espone lato JS. Manca:
    sezione dedicata sopra (v1 senza compatibilità di bearing).
 7. ✅ Offline Navigation Package esteso + Readiness Check (Fase 6) — vedi
    sezione dedicata sopra.
-8. Decisore battery-aware automatico (Fase 8) + test reali su device.
+8. ✅ Decisore battery-aware automatico (Fase 8) — vedi sezione dedicata
+   sopra. Resta da fare solo il test reale su device outdoor, non
+   eseguibile in questo ambiente.

@@ -34,7 +34,8 @@ import { computeEscapeOptions, type EscapeOption } from '@/lib/navigation/escape
 import { matchToTrailGraph, type MapMatchResult } from '@/lib/navigation/mapMatcher'
 import EscapeOptionsSheet from './EscapeOptionsSheet'
 import OfflinePackageDownloader from './OfflinePackageDownloader'
-import { watchBattery } from '@/lib/navigation/battery'
+import { watchBattery, watchBatteryLevel } from '@/lib/navigation/battery'
+import { LocationModeDecider } from '@/lib/navigation/locationModeDecider'
 import { haptics } from '@/lib/navigation/haptics'
 import type { NavInstruction, NavPoi, NavState, RouteMoment, RouteProgress } from '@/lib/navigation/types'
 import type { WildlifeRisk } from '@/lib/safetyScore'
@@ -97,6 +98,12 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   // per hike.id — see the effect's dependency array — so it can't read the state variable itself
   // without capturing its value at mount time. Same pattern as timerRunningRef/speechEnabledRef.
   const stateRef = useRef<NavState>('idle')
+  // Battery-aware automatic mode switching (Fase 8, lib/navigation/locationModeDecider.ts) — all
+  // three refs feed decideLocationMode() on every fix without forcing a re-render for values the
+  // UI itself doesn't display.
+  const modeDeciderRef = useRef<LocationModeDecider | null>(null)
+  const batteryStateRef = useRef<{ level: number | null; charging: boolean }>({ level: null, charging: true })
+  const nextInstructionDistanceRef = useRef<number | null>(null)
 
   const [state, setState] = useState<NavState>('idle')
   const [position, setPosition] = useState<{ lat: number; lon: number } | null>(null)
@@ -306,6 +313,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
 
       const engine = new NavigationEngine({ routePolyline, pois, moments, elevationProfile, terrainMultiplier, locationProviderFactory })
       engineRef.current = engine
+      modeDeciderRef.current = new LocationModeDecider('trekking')
 
       engine.on('stateChanged', ({ to }) => { if (!cancelled) { setState(to); stateRef.current = to } })
       engine.on('paceUpdated', (result) => { if (!cancelled) setPace(result) })
@@ -349,9 +357,25 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
           appendRecordedTrackPoint(hike.id, point).catch(() => {})
         }
         queueTrackFix(snapshot.sessionId, { ts: raw.ts, lat: raw.lat, lon: raw.lon, altitudeM: raw.altitudeM, speedMs: raw.speedMs, accuracyM: raw.accuracyM })
+
+        // Battery-aware automatic mode switching (Fase 8) — re-evaluated on every fix, but
+        // LocationModeDecider itself only actually returns a new mode once it should really
+        // change (dwell-time hysteresis), so this rarely results in an actual setMode() call.
+        const decidedMode = modeDeciderRef.current?.update({
+          state: stateRef.current,
+          instantSpeedMs,
+          accuracyM: raw.accuracyM ?? null,
+          distanceToNextInstructionM: nextInstructionDistanceRef.current,
+          batteryLevel: batteryStateRef.current.level,
+          batteryCharging: batteryStateRef.current.charging,
+        }, Date.now())
+        if (decidedMode) engineRef.current?.setLocationMode(decidedMode)
       })
       engine.on('bearingUpdated', ({ bearingDeg }) => { if (!cancelled) setBearing(bearingDeg) })
-      engine.on('instructionUpdated', (payload) => { if (!cancelled) setInstruction(payload) })
+      engine.on('instructionUpdated', (payload) => {
+        nextInstructionDistanceRef.current = payload.distanceToNextM
+        if (!cancelled) setInstruction(payload)
+      })
       engine.on('enteredPoi', ({ poi }) => {
         if (cancelled) return
         logEvent('poi_reached', { poiId: poi.id })
@@ -426,6 +450,12 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       speakIfEnabled('Batteria del telefono scarica')
       haptics.alert()
     })
+    // Continuous feed (not just the one-shot low-battery warning above) for the automatic
+    // mode decider (Fase 8, lib/navigation/locationModeDecider.ts) — kept in a ref rather than
+    // state since nothing here needs to re-render on every percent of battery drain.
+    const stopBatteryLevelWatch = watchBatteryLevel(({ level, charging }) => {
+      batteryStateRef.current = { level, charging }
+    })
 
     // If we're starting offline (or go offline before this resolves) with no fully-downloaded
     // offline package for this hike, some areas of the route may not be covered by cached tiles
@@ -458,6 +488,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       window.removeEventListener('online', onlineListener)
       window.removeEventListener('offline', onlineListener)
       stopBatteryWatch()
+      stopBatteryLevelWatch()
       clearInterval(flushInterval)
       clearInterval(movingTimeInterval)
       if (sessionRef.current) saveNavigationSession(sessionRef.current).catch(() => {})
