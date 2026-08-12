@@ -1,7 +1,7 @@
-package com.dtrek.app;
+package com.dtrek.navigator;
 
 import android.os.Bundle;
-import com.dtrek.app.nativelocation.NativeLocationPlugin;
+import com.dtrek.navigator.nativelocation.NativeLocationPlugin;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {

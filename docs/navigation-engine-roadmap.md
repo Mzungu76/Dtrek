@@ -8,14 +8,23 @@ sola, senza dover aspettare le fasi successive.
 
 ## Fase 1 — Native Location Engine — ✅ landed in questa PR
 
+**Architettura a due app** (vedi `docs/navigation-engine-analysis.md` §5):
+questo progetto Capacitor è **DTrek Navigator**, un'app separata dall'app
+principale DTrek (che resta web/PWA senza wrapper nativo), installabile a
+parte da chi vuole la navigazione GPS attiva. AppId `com.dtrek.navigator`,
+entry point `app/navigatore/page.tsx` (lista percorsi pianificati → avvia
+navigazione), non il sito intero.
+
 - `capacitor.config.ts` + `android/` (progetto Capacitor scaffolded via
   `npx cap add android`). Pattern scelto: **`server.url`**, non un bundle
   statico — Dtrek è Next.js server-rendered (API routes, middleware auth),
   quindi la WebView nativa carica l'app remota via HTTPS invece di
   impacchettare `public/` come sito statico. `public/index.html` esiste solo
   come fallback richiesto dal tool di build Capacitor, non è la UI reale.
+  `resolveServerUrl()` in `capacitor.config.ts` punta di default a
+  `/navigatore` se l'URL passato non ha già un path esplicito.
 - Plugin nativo `NativeLocation`
-  (`android/app/src/main/java/com/dtrek/app/nativelocation/`):
+  (`android/app/src/main/java/com/dtrek/navigator/nativelocation/`):
   - `LocationForegroundService.kt` — Foreground Service
     (`foregroundServiceType="location"`) con `FusedLocationProviderClient`,
     notifica persistente onesta ("DTrek sta seguendo la tua posizione"),
@@ -50,6 +59,16 @@ sola, senza dover aspettare le fasi successive.
   (`requestBackgroundLocationPermission()` sul plugin), manca la schermata.
 - Icone/branding reali per l'app Android (`android/app/src/main/res/mipmap-*`
   sono ancora i placeholder generati da Capacitor).
+- **Pubblicazione come app separata**: scheda Play Store dedicata a "DTrek
+  Navigator" (nome, descrizione, screenshot, policy sulla posizione in
+  background — obbligatoria per Google Review quando si richiede
+  `ACCESS_BACKGROUND_LOCATION`), keystore di firma per la build di release,
+  e in futuro la stessa cosa su App Store Connect quando si aggiunge iOS.
+  Tutti passi manuali, non automatizzabili da qui.
+- Verificare che chi non ha ancora nessun percorso pianificato (primo avvio
+  di Navigator prima di aver mai usato l'app principale) trovi lo stato
+  vuoto di `app/navigatore/page.tsx` chiaro a sufficienza, o se serve un
+  link/CTA più esplicito verso l'app principale (store listing/deep link).
 
 ## Fase 2 — Position Engine — ✅ modulo pronto, non ancora agganciato alla UI
 

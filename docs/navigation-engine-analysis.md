@@ -125,7 +125,37 @@ gira nella WebView tramite `navigator.geolocation` / Web API standard.
 | Escape Engine | Da costruire ex novo, sopra il trail graph OSM già esistente. |
 | `trailConfidence` / Navigation Confidence separata da GPS accuracy | Da costruire ex novo (oggi non esiste alcuna distinzione). |
 
-## 5. Rischi/vincoli notati
+## 5. Architettura a due app (DTrek + DTrek Navigator)
+
+Decisione presa dopo l'implementazione iniziale della Fase 1: **la navigazione
+nativa non entra nell'app principale**, ma vive in una seconda app installabile
+separatamente ("DTrek Navigator") — motivazione dell'utente: la navigazione con
+GPS in background/foreground-service è una feature opzionale, con permessi
+pesanti (posizione sempre attiva) che la maggior parte degli utenti Dtrek non
+userà mai; non ha senso obbligare tutti a installarla e concederle quei
+permessi solo per usare diario/statistiche/guide.
+
+- **DTrek (app principale)**: resta web/PWA, nessun wrapper Capacitor. Nessun
+  cambiamento rispetto a oggi.
+- **DTrek Navigator**: il progetto Capacitor Android di questa PR
+  (`android/`, appId `com.dtrek.navigator`). Superficie volutamente minima —
+  solo avvio della navigazione su un percorso **già pianificato** nell'app
+  principale, non pianificazione/ricerca. `server.url` punta a una route
+  dedicata e leggera, `app/navigatore/page.tsx`
+  (lista dei percorsi pianificati → `/guida/[id]/naviga`, esistente e
+  riusato as-is), non al sito intero.
+- **Dati condivisi**: le due app **non comunicano direttamente tra loro** —
+  condividono lo stesso progetto Supabase e lo stesso deployment Next.js.
+  Un login indipendente in ciascuna app (stesso account) è sufficiente perché
+  entrambe leggano/scrivano le stesse righe (`user_id` in comune); non serve
+  alcun livello di sync/handoff custom. Il middleware esistente
+  (`middleware.ts`, redirect a `/login?next=...` per chi non ha il cookie di
+  sessione Supabase) gestisce già questo flusso senza modifiche.
+- **Pubblicazione**: due schede separate su Play Store/App Store, da creare
+  manualmente (vedi "Non ancora fatto" della Fase 1 in
+  `docs/navigation-engine-roadmap.md`) — non è automatizzabile da codice.
+
+## 6. Rischi/vincoli notati
 
 - Il progetto è un'app Next.js **server-rendered** (`output: 'standalone'`,
   API routes, middleware auth Supabase) — non un sito statico esportabile.

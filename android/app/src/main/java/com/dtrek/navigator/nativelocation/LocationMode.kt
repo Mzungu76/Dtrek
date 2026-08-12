@@ -1,4 +1,4 @@
-package com.dtrek.app.nativelocation
+package com.dtrek.navigator.nativelocation
 
 import com.google.android.gms.location.Priority
 

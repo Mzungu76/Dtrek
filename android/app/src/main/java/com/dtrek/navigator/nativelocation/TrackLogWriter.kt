@@ -1,4 +1,4 @@
-package com.dtrek.app.nativelocation
+package com.dtrek.navigator.nativelocation
 
 import android.content.Context
 import java.io.File

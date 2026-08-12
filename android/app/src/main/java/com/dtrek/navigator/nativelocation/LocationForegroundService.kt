@@ -1,4 +1,4 @@
-package com.dtrek.app.nativelocation
+package com.dtrek.navigator.nativelocation
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -12,8 +12,8 @@ import android.os.Build
 import android.os.IBinder
 import android.os.Looper
 import androidx.core.app.NotificationCompat
-import com.dtrek.app.MainActivity
-import com.dtrek.app.R
+import com.dtrek.navigator.MainActivity
+import com.dtrek.navigator.R
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
@@ -45,9 +45,9 @@ class LocationForegroundService : Service() {
     }
 
     companion object {
-        const val ACTION_START = "com.dtrek.app.nativelocation.action.START"
-        const val ACTION_STOP = "com.dtrek.app.nativelocation.action.STOP"
-        const val ACTION_SET_MODE = "com.dtrek.app.nativelocation.action.SET_MODE"
+        const val ACTION_START = "com.dtrek.navigator.nativelocation.action.START"
+        const val ACTION_STOP = "com.dtrek.navigator.nativelocation.action.STOP"
+        const val ACTION_SET_MODE = "com.dtrek.navigator.nativelocation.action.SET_MODE"
         const val EXTRA_MODE = "mode"
         const val EXTRA_SESSION_ID = "sessionId"
 

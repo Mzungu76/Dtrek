@@ -1,9 +1,9 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">DTrek</string>
-    <string name="title_activity_main">DTrek</string>
-    <string name="package_name">com.dtrek.app</string>
-    <string name="custom_url_scheme">com.dtrek.app</string>
+    <string name="app_name">DTrek Navigator</string>
+    <string name="title_activity_main">DTrek Navigator</string>
+    <string name="package_name">com.dtrek.navigator</string>
+    <string name="custom_url_scheme">com.dtrek.navigator</string>
 
     <!-- NativeLocation foreground service notification -->
     <string name="nav_notification_channel_name">Navigazione DTrek</string>
