@@ -155,21 +155,50 @@ polyline pianificata, e non esiste ancora un Escape Engine che lo
 interroghi. Questo lavoro è solo l'infrastruttura dati; la logica che la
 usa è Fase 4/7.
 
-## Fase 3 — Navigation Engine (distanza/direzione/off-route) — parzialmente esistente
+## Fase 3/5 — Off-Route Engine multi-fattore + stati — ✅ landed
 
-Già presente: `RouteTracker` (nearest-segment + distance-along-route),
-soglia off-route singola con isteresi a conteggio-fix, stati
-`navigating/off_route/gps_lost/poi_near/finished`. Da fare per allinearsi
-alla spec:
-- Aggiungere stati `UNCERTAIN` e `WRONG_DIRECTION` a `NavState`/
-  `stateMachine.ts`.
-- Calcolare "direzione corretta da seguire" vs. direzione effettiva
-  (confronto tra `bearingDeg` della posizione e la tangente del trail nel
-  punto più vicino) — oggi si emette solo `bearingToRouteDeg` (dove sta il
-  trail), non se il verso di marcia è quello giusto.
+- `NavState` ha ora anche `uncertain` e `wrong_direction` (`types.ts`,
+  `stateMachine.ts` — transizioni aggiornate per entrambi).
+- `RouteProgress.expectedBearingDeg` (nuovo campo, `routeDeviation.ts`):
+  direzione della tangente del segmento più vicino del percorso — la
+  "direzione corretta da seguire" richiesta dalla spec, calcolata dalla
+  polyline stessa senza dipendere dal trail graph.
+- `lib/navigation/offRouteEngine.ts` (nuovo): sostituisce la vecchia soglia
+  singola + isteresi a conteggio-fix con un vero motore multi-fattore —
+  distanza scontata dall'accuracy GPS, trend della divergenza (crescente vs.
+  in rientro) su una finestra di campioni recenti, **isteresi temporale**
+  (millisecondi, non conteggio fix — la cadenza dei fix varia con la
+  modalità batteria) sia per entrare che per uscire da OFF_ROUTE, e verifica
+  di compatibilità direzionale (bearing effettivo vs. `expectedBearingDeg`)
+  per `wrong_direction` — valutata solo quando l'aderenza è `on_route`,
+  perché "direzione giusta/sbagliata" non ha senso se si è già lontani dal
+  percorso. I default (`baseThresholdM=20`, `accuracySlackFactor=1`,
+  `uncertainAccuracyThresholdM=30`) riproducono esattamente gli esempi della
+  spec (accuracy 5m + distanza 25m + trend crescente + 20s → OFF ROUTE;
+  accuracy 35m + distanza 20m → UNCERTAIN).
+- `navigationEngine.ts`: `updateRouteDeviation()` ora traduce il verdetto
+  del motore in transizioni di stato + eventi (`uncertain`/`certain`,
+  `wrongDirection`/`rightDirection`, oltre ai già esistenti
+  `offRoute`/`backOnRoute`, riusati anche per `wrong_direction` così la UI
+  di navigazione già esistente (banner/haptics/voce) non ha dovuto essere
+  riscritta, solo estesa).
+- UI: `NavigationMap.tsx`/`NavigationMapLibre.tsx` (nuovi colori marker per
+  i due stati), `ActiveNavigationView.tsx` (banner dedicato per
+  `wrong_direction`, copy distinto da `off_route`). Lo stato `uncertain`
+  resta senza banner dedicato in questa fase — deliberato, per non introdurre
+  un avviso allarmante per "non so", solo lo stato è tracciato/disponibile
+  per una futura schermata Navigation Health (spec §16).
+
+**Non ancora fatto / prossimi passi concreti:**
 - "Prossimo waypoint/bivio" con distanza: `routeInstructions.ts` ha già le
   svolte geometriche, manca l'esposizione esplicita di "prossimo bivio" come
   concetto separato da un'istruzione turn-by-turn generica.
+- Il fattore "presenza di percorsi alternativi vicini" della spec è
+  deliberatamente fuori scope qui — richiede il trail graph (già persistito,
+  vedi sopra) ed è lavoro di Map Matching, Fase 4.
+- Non esiste un test runner nel repo — gli esempi numerici della spec sopra
+  sono stati usati per calibrare i default a mano, non verificati da una
+  suite automatica.
 
 ## Fase 4 — Map Matching non invasivo — base solida, da estendere
 
@@ -247,18 +276,16 @@ diverse, e `NavigationEngine.setLocationMode()` le espone lato JS. Manca:
 2. ✅ Persistenza del trail graph per l'hike attivo (prerequisito comune a
    Fase 4, 6, 7) — vedi sezione dedicata sopra. Resta da fare: usarlo
    davvero in Map Matching/Escape Engine (punti 4-5 sotto).
-3. Build Android reale, per verificare che il plugin nativo compili
-   davvero — **non eseguibile dentro questa sessione**: l'ambiente in cui
-   gira questo agente blocca l'accesso a `dl.google.com`/Google Maven per
-   policy di rete (confermato tentando la build qui), quindi la prima
-   verifica reale può avvenire solo tramite il workflow
-   `.github/workflows/build-navigator-apk.yml` (rete libera sui runner
-   GitHub) o su un computer con Android Studio — vedi
-   `docs/guida-pubblicazione-dtrek-navigator.md`.
-4. `UNCERTAIN`/`WRONG_DIRECTION` + Off-Route Engine multi-fattore (Fase 3/5
-   della issue originale) — può già appoggiarsi al trail graph persistito
-   per riconoscere alternative vicine invece di trattare "fuori dal
-   percorso pianificato" come l'unico segnale disponibile.
+3. ✅ Build Android reale, verificata tramite
+   `.github/workflows/build-navigator-apk.yml` — non eseguibile dentro
+   questa sessione (rete bloccata verso `dl.google.com`/Google Maven), ma
+   confermata funzionante sul workflow GitHub dopo 4 round di fix reali
+   (Node 22, retry sul rate-limit di Maven Central, allineamento JVM-target
+   Java/Kotlin, `override` mancante su due metodi del plugin). L'app
+   compila, si installa e la navigazione con Native Location Engine +
+   Position Engine funziona su device reale (rilevamento off-route incluso).
+4. ✅ `UNCERTAIN`/`WRONG_DIRECTION` + Off-Route Engine multi-fattore (Fase
+   3/5 della issue originale) — vedi sezione dedicata sopra.
 5. Escape Engine (Fase 7) — la feature distintiva citata esplicitamente
    nella issue, ora sbloccata dal trail graph persistito.
 6. Offline Navigation Package esteso (POI, profilo altimetrico, nav data,

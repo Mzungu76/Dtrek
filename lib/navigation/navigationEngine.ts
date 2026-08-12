@@ -1,7 +1,8 @@
 import { haversineM } from '@/lib/geoUtils'
 import { LocationSource, type LocationMode, type LocationSourceError } from '@/lib/native/locationSource'
 import { PositionEngine } from './positionEngine'
-import { RouteTracker, offRouteThresholdM } from './routeDeviation'
+import { RouteTracker } from './routeDeviation'
+import { OffRouteEngine } from './offRouteEngine'
 import { PoiSpatialIndex } from './poiProximity'
 import { watchDeviceCompass, bearingDeg } from './orientation'
 import { NavStateMachine } from './stateMachine'
@@ -11,7 +12,6 @@ import type { ElevationProfilePoint } from './elevationProfile'
 import type { GeoFix, NavEventMap, NavEventName, NavInstruction, NavPoi, RouteMoment } from './types'
 
 const GPS_LOST_MS = 15000
-const OFF_ROUTE_HYSTERESIS_FIXES = 3
 const COMPASS_STALE_MS = 3000 // fall back to GPS-derived bearing if no sensor event this recently
 const MOMENT_TRIGGER_RADIUS_M = 60
 const MAX_PLAUSIBLE_HIKING_SPEED_MS = 8 // ~29 km/h — generous even for trail running; beyond this a fix jump is treated as GPS noise, not real movement
@@ -49,6 +49,7 @@ export class NavigationEngine {
   private readonly instructions: NavInstruction[]
   private lastInstructionIndex = -1
   private readonly position = new PositionEngine()
+  private readonly offRoute = new OffRouteEngine()
   private readonly stateMachine = new NavStateMachine()
   private readonly gps: LocationSource
   private readonly locationMode: LocationMode
@@ -61,8 +62,6 @@ export class NavigationEngine {
   private lastCompassAt = 0
   private lastFixAt = 0
   private gpsLostTimer: ReturnType<typeof setTimeout> | null = null
-  private offRouteStreak = 0
-  private onRouteStreak = 0
   private traveledDistanceM = 0
   private lastAcceptedFix: GeoFix | null = null
 
@@ -200,7 +199,7 @@ export class NavigationEngine {
     this.emit('paceUpdated', this.pace.update(progress.distanceAlongRouteM, this.traveledDistanceM, instantSpeedMs, raw.ts))
 
     this.updateBearingFallback(smoothed)
-    this.updateRouteDeviation(smoothed, progress, raw.accuracyM)
+    this.updateRouteDeviation(smoothed, progress)
     this.updatePois(smoothed)
     this.updateMoments(progress.distanceAlongRouteM, smoothed)
     this.updateInstructions(progress.distanceAlongRouteM)
@@ -263,28 +262,51 @@ export class NavigationEngine {
     this.emit('bearingUpdated', { bearingDeg: fix.bearingDeg, source: 'gps' })
   }
 
-  private updateRouteDeviation(fix: GeoFix, progress: import('./types').RouteProgress, accuracyM: number | null | undefined): void {
-    const distanceToRouteM = progress.distanceToRouteM
-    // A very poor fix (weak/multipath signal) can't be trusted to judge deviation — skip this check for it.
-    if (accuracyM != null && accuracyM > 100) return
+  /**
+   * Multi-factor Off-Route Engine (spec §5) instead of a single distance
+   * threshold: lib/navigation/offRouteEngine.ts weighs GPS-accuracy-adjusted
+   * distance, its trend, wall-clock dwell time (not a fix count — fix rate
+   * varies with battery mode), and direction-vs-route-tangent, and reports
+   * a stable on_route/uncertain/off_route verdict plus an independent
+   * wrong_direction flag. This method only translates that verdict into
+   * NavState transitions + events; all the actual judgment lives there.
+   */
+  private updateRouteDeviation(fix: GeoFix, progress: import('./types').RouteProgress): void {
+    const result = this.offRoute.update({
+      ts: fix.ts,
+      distanceToRouteM: progress.distanceToRouteM,
+      accuracyM: fix.accuracyM ?? null,
+      headingDeg: fix.bearingDeg ?? null,
+      expectedHeadingDeg: progress.expectedBearingDeg,
+      speedMs: fix.speedMs ?? null,
+    })
+    if (!result.changed) return
 
-    const threshold = offRouteThresholdM(accuracyM)
-    if (distanceToRouteM > threshold) {
-      this.offRouteStreak++
-      this.onRouteStreak = 0
-      if (this.offRouteStreak >= OFF_ROUTE_HYSTERESIS_FIXES && this.stateMachine.state !== 'off_route') {
-        this.setState('off_route')
-        const bearingToRouteDeg = bearingDeg(fix.lat, fix.lon, progress.nearestPointLat, progress.nearestPointLon)
-        this.emit('offRoute', { distanceToRouteM, bearingToRouteDeg })
-      }
-    } else {
-      this.onRouteStreak++
-      this.offRouteStreak = 0
-      if (this.onRouteStreak >= OFF_ROUTE_HYSTERESIS_FIXES && this.stateMachine.state === 'off_route') {
-        this.setState('navigating')
-        this.emit('backOnRoute', {})
-      }
+    const current = this.stateMachine.state
+
+    if (result.adherence === 'off_route') {
+      if (current === 'off_route') return
+      this.setState('off_route')
+      this.emit('offRoute', { distanceToRouteM: progress.distanceToRouteM, bearingToRouteDeg: this.bearingToRoute(fix, progress) })
+    } else if (result.adherence === 'uncertain') {
+      if (current === 'uncertain' || current === 'off_route' || current === 'wrong_direction') return
+      this.setState('uncertain')
+      this.emit('uncertain', { distanceToRouteM: progress.distanceToRouteM, accuracyM: fix.accuracyM ?? null })
+    } else if (result.wrongDirection) {
+      if (current === 'wrong_direction') return
+      this.setState('wrong_direction')
+      this.emit('wrongDirection', { headingDeg: fix.bearingDeg ?? null, expectedHeadingDeg: progress.expectedBearingDeg })
+    } else if (current === 'off_route' || current === 'wrong_direction') {
+      this.setState('navigating')
+      this.emit('backOnRoute', {})
+    } else if (current === 'uncertain') {
+      this.setState('navigating')
+      this.emit('certain', {})
     }
+  }
+
+  private bearingToRoute(fix: GeoFix, progress: import('./types').RouteProgress): number {
+    return bearingDeg(fix.lat, fix.lon, progress.nearestPointLat, progress.nearestPointLon)
   }
 
   private updatePois(fix: GeoFix): void {

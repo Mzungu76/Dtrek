@@ -323,6 +323,16 @@ export default function ActiveNavigationView({ hike }: Props) {
         speakIfEnabled('Sei fuori dal percorso pianificato')
         haptics.alert()
       })
+      engine.on('wrongDirection', ({ expectedHeadingDeg }) => {
+        if (cancelled) return
+        logEvent('wrong_direction')
+        // Reuses the off-route arrow indicator, pointed at the route's own forward direction
+        // here rather than "back toward the nearest point" — same UI, the correct meaning for
+        // this case (on the trail, just headed the wrong way along it).
+        setOffRouteBearingDeg(expectedHeadingDeg)
+        speakIfEnabled('Stai andando nella direzione sbagliata')
+        haptics.alert()
+      })
       engine.on('backOnRoute', () => {
         if (cancelled) return
         logEvent('on_route_again')
@@ -745,15 +755,19 @@ export default function ActiveNavigationView({ hike }: Props) {
               </div>
             ),
           })
-        } else if (state === 'off_route') {
+        } else if (state === 'off_route' || state === 'wrong_direction') {
+          const isWrongDirection = state === 'wrong_direction'
           alerts.push({
             id: 'offroute',
             node: (
-              <div className="px-4 py-2 rounded-xl bg-terra-500 text-white text-sm font-semibold font-body shadow-lg flex items-center gap-2">
+              <div className={`px-4 py-2 rounded-xl text-white text-sm font-semibold font-body shadow-lg flex items-center gap-2 ${isWrongDirection ? 'bg-orange-700' : 'bg-terra-500'}`}>
                 {offRouteBearingDeg != null && (
                   <ArrowUp size={16} className="shrink-0" style={{ transform: `rotate(${offRouteBearingDeg}deg)` }} />
                 )}
-                <AlertTriangle size={16} className="shrink-0" /> Sei fuori dal percorso{offRouteBearingDeg != null ? ' — torna verso la freccia' : ' pianificato'}
+                <AlertTriangle size={16} className="shrink-0" />
+                {isWrongDirection
+                  ? 'Direzione sbagliata — segui la freccia'
+                  : `Sei fuori dal percorso${offRouteBearingDeg != null ? ' — torna verso la freccia' : ' pianificato'}`}
               </div>
             ),
           })

@@ -1,4 +1,4 @@
-import { haversineM } from '@/lib/geoUtils'
+import { haversineM, bearingDeg } from '@/lib/geoUtils'
 import type { RouteProgress } from './types'
 
 /** Local equirectangular projection, accurate enough at trail-segment scale. */
@@ -56,7 +56,7 @@ export class RouteTracker {
 
   update(lat: number, lon: number): RouteProgress {
     if (this.track.length < 2) {
-      return { nearestSegmentIndex: 0, distanceToRouteM: Infinity, distanceAlongRouteM: 0, totalRouteM: 0, nearestPointLat: lat, nearestPointLon: lon }
+      return { nearestSegmentIndex: 0, distanceToRouteM: Infinity, distanceAlongRouteM: 0, totalRouteM: 0, nearestPointLat: lat, nearestPointLon: lon, expectedBearingDeg: null }
     }
     const lo = Math.max(1, this.lastSegmentIndex - this.searchWindow)
     const hi = Math.min(this.track.length - 1, this.lastSegmentIndex + this.searchWindow)
@@ -77,6 +77,9 @@ export class RouteTracker {
     const [a, b] = [this.track[bestIdx - 1], this.track[bestIdx]]
     const nearestPointLat = a[0] + bestHit.t * (b[0] - a[0])
     const nearestPointLon = a[1] + bestHit.t * (b[1] - a[1])
+    // Zero-length segment (duplicate consecutive points in the source track) has no meaningful
+    // direction — matches distToSegment's own fallback for the same degenerate case.
+    const expectedBearingDeg = (a[0] === b[0] && a[1] === b[1]) ? null : bearingDeg(a[0], a[1], b[0], b[1])
 
     return {
       nearestSegmentIndex: bestIdx,
@@ -85,13 +88,7 @@ export class RouteTracker {
       totalRouteM: this.totalRouteM,
       nearestPointLat,
       nearestPointLon,
+      expectedBearingDeg,
     }
   }
-}
-
-/** Off-route threshold scales with GPS accuracy so a noisy fix in a canyon doesn't trigger a false alarm. */
-export function offRouteThresholdM(accuracyM: number | null | undefined): number {
-  const base = 50
-  if (accuracyM == null || !Number.isFinite(accuracyM)) return base
-  return Math.max(base, accuracyM * 1.5)
 }
