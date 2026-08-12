@@ -26,6 +26,14 @@ function findPoiIdByName(name: string, cachedPois: PoiItem[], cachedPoiWiki: { p
 
 const MAX_NOTE_CHARS = 1200 // margine ampio sopra i ~200 parole/luogo del tier più lungo (guideSections.ts)
 
+/** [curiosita] (lib/guideText.ts) è un tag globale, non legato a un POI per nome — se il modello
+ *  ne piazza uno dentro un blocco "### Nome luogo" (capita: è "l'aneddoto più memorabile" e i
+ *  luoghi ne sono la fonte più comune), il testo va tenuto ma senza il markup a parentesi visibile,
+ *  altrimenti finirebbe letto ad alta voce parola per parola in Navigator. */
+function stripCuriositaMarkup(text: string): string {
+  return text.replace(/\[curiosita\]([\s\S]*?)\[\/curiosita\]/g, '$1').replace(/\s{2,}/g, ' ').trim()
+}
+
 /**
  * `luoghiBody` è il testo della sezione "luoghi" già ripulito dai tag [epoca] (extractEpochPois
  * gira prima di questo, vedi app/api/guide/route.ts) — resta solo markdown con un `### Nome luogo`
@@ -42,7 +50,9 @@ export function extractPoiNotes(luoghiBody: string, cachedPois: PoiItem[], cache
     if (!name || !text) continue
     const poi = findPoiIdByName(name, cachedPois, cachedPoiWiki)
     if (!poi) continue
-    notes.push({ poiId: poi.id, name, text: text.slice(0, MAX_NOTE_CHARS) })
+    const sanitized = stripCuriositaMarkup(text)
+    if (!sanitized) continue
+    notes.push({ poiId: poi.id, name, text: sanitized.slice(0, MAX_NOTE_CHARS) })
   }
   return notes
 }

@@ -26,6 +26,7 @@ import {
   appendRecordedTrackPoint, loadRecordedTrack, clearRecordedTrack,
   loadParkingSpot, saveParkingSpot, clearParkingSpot, type ParkingSpot,
 } from '@/lib/navigation/navigationStore'
+import { usePoiNotes } from './usePoiNotes'
 import { loadManifest, isManifestValid } from '@/lib/offline/packageManifest'
 import { checkOfflineReadiness } from '@/lib/offline/offlineReadiness'
 import { ensureTrailGraph, loadTrailGraph } from '@/lib/navigation/trailGraphStore'
@@ -178,6 +179,14 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
     return map
   }, [hike.cachedPoiWiki])
 
+  // Prerequisito di attivazione della Guida IA (decisione 2, artifact "La Guida IA"): la narrazione
+  // arricchita esiste per QUESTO percorso solo se la sua guida ha già generato la sezione "I luoghi
+  // da non perdere" — un interruttore unico per percorso, non selettivo per singolo POI. Un utente
+  // che non ha mai generato quella sezione non vede/sente nulla di diverso da oggi (solo l'estratto
+  // Wikipedia già esistente), anche se lo stesso POI ha già una nota cachata da un altro sentiero.
+  const hasLuoghiGuide = (hike.cachedGuide ?? '').includes('I luoghi da non perdere')
+  const poiNotesById = usePoiNotes(pois.map((p) => p.id), hasLuoghiGuide)
+
   const moments = useMemo<RouteMoment[]>(() => detectRouteMoments(hike.trackPoints ?? []), [hike.trackPoints])
   const elevationProfile = useMemo(() => buildElevationProfile(hike.trackPoints ?? []), [hike.trackPoints])
   // sacScale/surfaces/avgSlopeDeg aren't available on PlannedHike at navigation time (only
@@ -235,7 +244,8 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
     const poi = pois.find((p) => p.id === poiId)
     if (!poi) return
     const wiki = poiWikiById.get(poiId)
-    setCallout({ title: poi.name ?? 'Punto di interesse', extract: wiki?.extract, imageUrl: wiki?.thumbnail })
+    const note = poiNotesById.get(Number(poiId))
+    setCallout({ title: poi.name ?? 'Punto di interesse', extract: note ?? wiki?.extract, imageUrl: wiki?.thumbnail })
   }
 
   const parkingDistanceM = parkingSpot && position
@@ -247,6 +257,13 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
 
   const positionRef = useRef(position)
   positionRef.current = position
+
+  // engine.on('enteredPoi', ...) below is registered once inside the big setup effect (deps:
+  // [hike.id] only) — closing over poiNotesById directly would freeze it at whatever it was
+  // (typically still empty, the fetch in usePoiNotes hasn't resolved yet) for the rest of the
+  // session. A ref sidesteps that the same way positionRef/speechEnabledRef already do here.
+  const poiNotesByIdRef = useRef(poiNotesById)
+  poiNotesByIdRef.current = poiNotesById
 
   useWeatherRefresh(hike.id, routePolyline, positionRef, engineRef)
   const sunTimes = useSunTimes(hike.id, routePolyline, positionRef)
@@ -391,8 +408,10 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         if (cancelled) return
         logEvent('poi_reached', { poiId: poi.id })
         const wiki = poiWikiById.get(poi.id)
-        setCallout({ title: poi.name ?? 'Punto di interesse', extract: wiki?.extract, imageUrl: wiki?.thumbnail })
-        speakIfEnabled(`${poi.name ?? 'Sei vicino a un punto di interesse'}. ${wiki?.extract ?? ''}`.trim())
+        const note = poiNotesByIdRef.current.get(Number(poi.id))
+        const extract = note ?? wiki?.extract
+        setCallout({ title: poi.name ?? 'Punto di interesse', extract, imageUrl: wiki?.thumbnail })
+        speakIfEnabled(`${poi.name ?? 'Sei vicino a un punto di interesse'}. ${extract ?? ''}`.trim())
         haptics.notify()
       })
       engine.on('momentReached', ({ moment }) => {
