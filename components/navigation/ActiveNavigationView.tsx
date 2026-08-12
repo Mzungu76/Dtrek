@@ -27,11 +27,15 @@ import {
   loadParkingSpot, saveParkingSpot, clearParkingSpot, type ParkingSpot,
 } from '@/lib/navigation/navigationStore'
 import { loadManifest, isManifestValid } from '@/lib/offline/packageManifest'
+import { checkOfflineReadiness } from '@/lib/offline/offlineReadiness'
 import { ensureTrailGraph, loadTrailGraph } from '@/lib/navigation/trailGraphStore'
+import type { WalkNetwork } from '@/lib/routeBuilder/osmGraph'
 import { computeEscapeOptions, type EscapeOption } from '@/lib/navigation/escapeEngine'
+import { matchToTrailGraph, type MapMatchResult } from '@/lib/navigation/mapMatcher'
 import EscapeOptionsSheet from './EscapeOptionsSheet'
 import OfflinePackageDownloader from './OfflinePackageDownloader'
-import { watchBattery } from '@/lib/navigation/battery'
+import { watchBattery, watchBatteryLevel } from '@/lib/navigation/battery'
+import { LocationModeDecider } from '@/lib/navigation/locationModeDecider'
 import { haptics } from '@/lib/navigation/haptics'
 import type { NavInstruction, NavPoi, NavState, RouteMoment, RouteProgress } from '@/lib/navigation/types'
 import type { WildlifeRisk } from '@/lib/safetyScore'
@@ -87,6 +91,19 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   // ref rather than state because it's only needed on-demand (Escape Engine snapshot), not for
   // rendering; `progress` state below stays the reduced shape the rest of the UI actually uses.
   const fullProgressRef = useRef<RouteProgress | null>(null)
+  // Persisted trail graph for this hike (lib/navigation/trailGraphStore.ts), kept in memory once
+  // loaded so Map Matching (below) and the Escape Engine sheet don't each re-read IndexedDB.
+  const trailNetworkRef = useRef<WalkNetwork | null>(null)
+  // Mirrors `state` for the positionUpdated closure below, which is only ever (re)created once
+  // per hike.id — see the effect's dependency array — so it can't read the state variable itself
+  // without capturing its value at mount time. Same pattern as timerRunningRef/speechEnabledRef.
+  const stateRef = useRef<NavState>('idle')
+  // Battery-aware automatic mode switching (Fase 8, lib/navigation/locationModeDecider.ts) — all
+  // three refs feed decideLocationMode() on every fix without forcing a re-render for values the
+  // UI itself doesn't display.
+  const modeDeciderRef = useRef<LocationModeDecider | null>(null)
+  const batteryStateRef = useRef<{ level: number | null; charging: boolean }>({ level: null, charging: true })
+  const nextInstructionDistanceRef = useRef<number | null>(null)
 
   const [state, setState] = useState<NavState>('idle')
   const [position, setPosition] = useState<{ lat: number; lon: number } | null>(null)
@@ -112,8 +129,10 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   const [pendingActivity, setPendingActivity] = useState<TcxActivity | null>(null)
   const [gpsLostPermissionDenied, setGpsLostPermissionDenied] = useState(false)
   const [offRouteBearingDeg, setOffRouteBearingDeg] = useState<number | null>(null)
+  const [mapMatch, setMapMatch] = useState<MapMatchResult | null>(null)
   const [lowBatteryNotice, setLowBatteryNotice] = useState(false)
   const [offlinePackageWarning, setOfflinePackageWarning] = useState(false)
+  const [offlineDegradedMissing, setOfflineDegradedMissing] = useState<string[]>([])
   const [offlineReady, setOfflineReady] = useState(false)
   const [showOfflineSheet, setShowOfflineSheet] = useState(false)
   const [showNatura2000, setShowNatura2000] = useState(false)
@@ -286,12 +305,17 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       // hiker never explicitly downloaded an offline package. No-ops if already cached from a
       // previous navigation start or from that offline download; failure (Overpass slow/down) is
       // silently ignored — today's navigation already works with just the planned route.
-      if (routePolyline.length > 1) ensureTrailGraph(hike.id, routePolyline).catch(() => {})
+      if (routePolyline.length > 1) {
+        ensureTrailGraph(hike.id, routePolyline)
+          .then((result) => { if (!cancelled && result) trailNetworkRef.current = result.network })
+          .catch(() => {})
+      }
 
       const engine = new NavigationEngine({ routePolyline, pois, moments, elevationProfile, terrainMultiplier, locationProviderFactory })
       engineRef.current = engine
+      modeDeciderRef.current = new LocationModeDecider('trekking')
 
-      engine.on('stateChanged', ({ to }) => { if (!cancelled) setState(to) })
+      engine.on('stateChanged', ({ to }) => { if (!cancelled) { setState(to); stateRef.current = to } })
       engine.on('paceUpdated', (result) => { if (!cancelled) setPace(result) })
       engine.on('positionUpdated', ({ raw, smoothed, progress, traveledDistanceM, instantSpeedMs }) => {
         if (cancelled) return
@@ -299,6 +323,22 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         setPosition({ lat: smoothed.lat, lon: smoothed.lon })
         setAccuracyM(raw.accuracyM ?? null)
         fullProgressRef.current = progress
+        // Map Matching (Fase 4, lib/navigation/mapMatcher.ts) only has anything to add once
+        // already recognized as off the planned route — while on-route this would just scan the
+        // graph to confirm what's already known, so it's skipped entirely the rest of the time,
+        // same economy principle as the Escape Engine's on-demand-only search.
+        if (stateRef.current === 'off_route' || stateRef.current === 'wrong_direction') {
+          setMapMatch(matchToTrailGraph({
+            network: trailNetworkRef.current,
+            lat: smoothed.lat,
+            lon: smoothed.lon,
+            distanceToRouteM: progress.distanceToRouteM,
+          }))
+        } else {
+          // React bails out of the re-render when the value is unchanged (Object.is), so this is
+          // a no-op most of the time — only clears the banner detail right after coming back on-route.
+          setMapMatch(null)
+        }
         // Position keeps updating even while the stats timer is paused (the
         // hiker still wants to see themselves on the map) — only the
         // recorded distance/speed stats freeze.
@@ -317,9 +357,25 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
           appendRecordedTrackPoint(hike.id, point).catch(() => {})
         }
         queueTrackFix(snapshot.sessionId, { ts: raw.ts, lat: raw.lat, lon: raw.lon, altitudeM: raw.altitudeM, speedMs: raw.speedMs, accuracyM: raw.accuracyM })
+
+        // Battery-aware automatic mode switching (Fase 8) — re-evaluated on every fix, but
+        // LocationModeDecider itself only actually returns a new mode once it should really
+        // change (dwell-time hysteresis), so this rarely results in an actual setMode() call.
+        const decidedMode = modeDeciderRef.current?.update({
+          state: stateRef.current,
+          instantSpeedMs,
+          accuracyM: raw.accuracyM ?? null,
+          distanceToNextInstructionM: nextInstructionDistanceRef.current,
+          batteryLevel: batteryStateRef.current.level,
+          batteryCharging: batteryStateRef.current.charging,
+        }, Date.now())
+        if (decidedMode) engineRef.current?.setLocationMode(decidedMode)
       })
       engine.on('bearingUpdated', ({ bearingDeg }) => { if (!cancelled) setBearing(bearingDeg) })
-      engine.on('instructionUpdated', (payload) => { if (!cancelled) setInstruction(payload) })
+      engine.on('instructionUpdated', (payload) => {
+        nextInstructionDistanceRef.current = payload.distanceToNextM
+        if (!cancelled) setInstruction(payload)
+      })
       engine.on('enteredPoi', ({ poi }) => {
         if (cancelled) return
         logEvent('poi_reached', { poiId: poi.id })
@@ -356,6 +412,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         if (cancelled) return
         logEvent('on_route_again')
         setOffRouteBearingDeg(null)
+        setMapMatch(null)
       })
       engine.on('gpsLost', ({ permissionDenied }) => {
         if (cancelled) return
@@ -393,15 +450,26 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       speakIfEnabled('Batteria del telefono scarica')
       haptics.alert()
     })
+    // Continuous feed (not just the one-shot low-battery warning above) for the automatic
+    // mode decider (Fase 8, lib/navigation/locationModeDecider.ts) — kept in a ref rather than
+    // state since nothing here needs to re-render on every percent of battery drain.
+    const stopBatteryLevelWatch = watchBatteryLevel(({ level, charging }) => {
+      batteryStateRef.current = { level, charging }
+    })
 
-    // If we're starting offline (or go offline before this resolves) with no
-    // fully-downloaded offline map package for this hike, some areas of the
-    // route may not be covered by cached tiles — worth a one-time heads-up
-    // instead of the hiker discovering blank map tiles mid-trail.
+    // If we're starting offline (or go offline before this resolves) with no fully-downloaded
+    // offline package for this hike, some areas of the route may not be covered by cached tiles
+    // (the one hard requirement, see lib/offline/offlineReadiness.ts) — worth a one-time heads-up
+    // instead of the hiker discovering blank map tiles mid-trail. Pieces that only degrade the
+    // experience (trail graph, elevation, POIs, nav instructions) get their own, separate notice.
     loadManifest(hike.id).then((manifest) => {
       if (cancelled) return
-      if (!navigator.onLine && manifest?.status !== 'ready') setOfflinePackageWarning(true)
-      setOfflineReady(isManifestValid(manifest))
+      const readiness = checkOfflineReadiness(manifest)
+      if (!navigator.onLine) {
+        if (!readiness.tilesReady) setOfflinePackageWarning(true)
+        if (readiness.degradedMissing.length > 0) setOfflineDegradedMissing(readiness.degradedMissing)
+      }
+      setOfflineReady(readiness.tilesReady)
     }).catch(() => {})
 
     const flushInterval = setInterval(() => { if (navigator.onLine) flushToServer() }, 30000)
@@ -420,6 +488,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       window.removeEventListener('online', onlineListener)
       window.removeEventListener('offline', onlineListener)
       stopBatteryWatch()
+      stopBatteryLevelWatch()
       clearInterval(flushInterval)
       clearInterval(movingTimeInterval)
       if (sessionRef.current) saveNavigationSession(sessionRef.current).catch(() => {})
@@ -679,7 +748,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       {/* Le tre notice qui sotto puntavano tutte allo stesso top-[210px] senza
           alcuna logica di stacking: se più di una era attiva si sovrapponevano
           letteralmente. Un contenitore colonna le impila invece in ordine. */}
-      {(mapFallbackNotice || offlinePackageWarning || (state !== 'idle' && relevantWildlifeRisks.length > 0 && !wildlifeAlertDismissed)) && (
+      {(mapFallbackNotice || offlinePackageWarning || offlineDegradedMissing.length > 0 || (state !== 'idle' && relevantWildlifeRisks.length > 0 && !wildlifeAlertDismissed)) && (
         <div className="absolute top-[210px] left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-2 w-[calc(100%-2rem)] max-w-sm">
           {mapFallbackNotice && (
             <div className="px-4 py-2 rounded-full bg-stone-800 text-white text-xs font-semibold shadow-lg font-body">
@@ -692,6 +761,20 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
               <AlertTriangle size={14} className="text-amber-400 shrink-0" />
               Mappa offline incompleta per questo percorso
               <button onClick={() => setOfflinePackageWarning(false)} className="text-stone-400 hover:text-white ml-1" aria-label="Chiudi avviso">✕</button>
+            </div>
+          )}
+
+          {/* Offline Readiness Check (roadmap Fase 6) — tiles missing is the hard-blocker notice
+              above; this one is for pieces that only degrade the experience (no escape
+              suggestions, no elevation chart, no POI callouts...), never block navigation. */}
+          {offlineDegradedMissing.length > 0 && (
+            <div className="px-4 py-2 rounded-xl bg-stone-800 text-white text-xs shadow-lg font-body flex items-start gap-2 w-full">
+              <AlertTriangle size={14} className="text-amber-400 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold">Dati offline incompleti per questo percorso</p>
+                <p className="text-stone-300 leading-snug">Non disponibili: {offlineDegradedMissing.join(', ')}</p>
+              </div>
+              <button onClick={() => setOfflineDegradedMissing([])} className="text-stone-400 hover:text-white shrink-0" aria-label="Chiudi avviso">✕</button>
             </div>
           )}
 
@@ -745,11 +828,18 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         open={showOfflineSheet}
         onClose={() => {
           setShowOfflineSheet(false)
-          loadManifest(hike.id).then((m) => setOfflineReady(isManifestValid(m))).catch(() => {})
+          loadManifest(hike.id).then((m) => {
+            setOfflineReady(isManifestValid(m))
+            setOfflineDegradedMissing(checkOfflineReadiness(m).degradedMissing)
+          }).catch(() => {})
         }}
         title="Mappa offline"
       >
-        <OfflinePackageDownloader hikeId={hike.id} routePolyline={routePolyline} />
+        <OfflinePackageDownloader
+          hikeId={hike.id}
+          routePolyline={routePolyline}
+          hikeData={{ trackPoints: hike.trackPoints, cachedPois: hike.cachedPois }}
+        />
       </Sheet>
 
       {showFieldNote && (
@@ -813,20 +903,32 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
           alerts.push({
             id: 'offroute',
             node: (
-              <div className={`px-4 py-2 rounded-xl text-white text-sm font-semibold font-body shadow-lg flex items-center gap-2 ${isWrongDirection ? 'bg-orange-700' : 'bg-terra-500'}`}>
-                {offRouteBearingDeg != null && (
-                  <ArrowUp size={16} className="shrink-0" style={{ transform: `rotate(${offRouteBearingDeg}deg)` }} />
+              <div className={`px-4 py-2 rounded-xl text-white text-sm font-semibold font-body shadow-lg flex flex-col gap-1 ${isWrongDirection ? 'bg-orange-700' : 'bg-terra-500'}`}>
+                <div className="flex items-center gap-2">
+                  {offRouteBearingDeg != null && (
+                    <ArrowUp size={16} className="shrink-0" style={{ transform: `rotate(${offRouteBearingDeg}deg)` }} />
+                  )}
+                  <AlertTriangle size={16} className="shrink-0" />
+                  {isWrongDirection
+                    ? 'Direzione sbagliata — segui la freccia'
+                    : `Sei fuori dal percorso${offRouteBearingDeg != null ? ' — torna verso la freccia' : ' pianificato'}`}
+                  <button
+                    onClick={handleEscapeOptions}
+                    className="ml-1 shrink-0 text-xs font-bold underline decoration-white/60 underline-offset-2"
+                  >
+                    Vie d&apos;uscita
+                  </button>
+                </div>
+                {/* Map Matching (Fase 4, lib/navigation/mapMatcher.ts): distinguishes "off the plan
+                    but on a real, mapped trail" (likely deliberate) from being off any known trail —
+                    informational only, never changes the off-route verdict itself above. */}
+                {mapMatch?.alternativeDetected && mapMatch.distanceToMatchM != null && (
+                  <p className="text-xs font-normal text-white/85 pl-6">
+                    {mapMatch.confidence === 'high'
+                      ? `C'è un sentiero conosciuto proprio qui (${Math.round(mapMatch.distanceToMatchM)} m) — forse lo stai seguendo di proposito`
+                      : `Sentiero noto nelle vicinanze (~${Math.round(mapMatch.distanceToMatchM)} m)`}
+                  </p>
                 )}
-                <AlertTriangle size={16} className="shrink-0" />
-                {isWrongDirection
-                  ? 'Direzione sbagliata — segui la freccia'
-                  : `Sei fuori dal percorso${offRouteBearingDeg != null ? ' — torna verso la freccia' : ' pianificato'}`}
-                <button
-                  onClick={handleEscapeOptions}
-                  className="ml-1 shrink-0 text-xs font-bold underline decoration-white/60 underline-offset-2"
-                >
-                  Vie d&apos;uscita
-                </button>
               </div>
             ),
           })

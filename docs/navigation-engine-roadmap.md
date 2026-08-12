@@ -200,19 +200,50 @@ usa è Fase 4/7.
   sono stati usati per calibrare i default a mano, non verificati da una
   suite automatica.
 
-## Fase 4 — Map Matching non invasivo — base solida, da estendere
+## Fase 4 — Map Matching non invasivo — ✅ landed (v1)
 
-`RouteTracker.update()` già rispetta il principio cardine (mai spostare il
-fix). Manca:
-- Usare il trail graph reale (ora persistito e disponibile via
-  `lib/navigation/trailGraphStore.ts` — vedi prerequisito sopra) invece di
-  una singola polyline pianificata, per poter riconoscere "quale segmento
-  probabilmente sto seguendo" quando esistono alternative vicine (spec §4)
-  — oggi `RouteTracker` conosce solo il percorso pianificato, il grafo è
-  scaricato/salvato ma nessun codice lo legge ancora per questo scopo.
-- Persistere il grafo scaricato per l'hike corrente (oggi `fetchWalkNetwork`
-  gira solo in fase di pianificazione, via rete, non salvato) — prerequisito
-  anche per l'Escape Engine (fase 7) e per l'offline (fase 6).
+`RouteTracker.update()` continua a rispettare il principio cardine (mai
+spostare il fix) — Map Matching aggiunge solo un'interpretazione sopra,
+non tocca né il fix mostrato né il verdetto on/off-route dell'Off-Route
+Engine.
+
+- `lib/navigation/mapMatcher.ts` (nuovo): `matchToTrailGraph()`, funzione
+  pura — dato il trail graph persistito (`lib/navigation/trailGraphStore.ts`)
+  e la posizione corrente, trova l'arco del grafo più vicino (proiezione
+  punto-segmento, non solo nodo più vicino) e classifica quanto
+  quell'informazione è affidabile (`high`/`medium`/`low` in base alla
+  distanza). Restituisce `onPlannedRoute: true` senza nemmeno scandire il
+  grafo quando la distanza dal percorso è già sotto la soglia usata da
+  `offRouteEngine.ts` (20m) — a quel punto non c'è nulla da aggiungere.
+- **Deliberatamente eseguito solo quando serve**, non a ogni fix: come
+  l'Escape Engine, la scansione (anche con pre-filtro bbox) non è gratis da
+  ripetere continuamente. `ActiveNavigationView.tsx` la richiama solo
+  quando lo stato è già `off_route`/`wrong_direction` — mentre si è sul
+  percorso pianificato non aggiungerebbe informazione.
+- Il grafo viene caricato una volta sola in memoria (`trailNetworkRef`)
+  quando `ensureTrailGraph()` risolve all'avvio della navigazione, invece
+  di rileggerlo da IndexedDB a ogni match.
+- UI: quando viene rilevato un sentiero reale mappato vicino alla posizione
+  (`alternativeDetected`), il banner off-route/wrong-direction mostra una
+  riga informativa in più ("C'è un sentiero conosciuto proprio qui…" /
+  "Sentiero noto nelle vicinanze") — distingue "fuori dal piano ma su un
+  sentiero vero, probabilmente di proposito" da "fuori dal piano e da
+  qualunque sentiero noto", senza mai cambiare il verdetto off-route stesso
+  né spostare il marker.
+
+**Non ancora fatto / prossimi passi concreti:**
+- Nessuna compatibilità di direzione (bearing) nel matching — l'arco più
+  vicino è scelto solo per distanza, non per coerenza con la direzione di
+  marcia; su una rete fitta di sentieri paralleli/incrociati potrebbe
+  scegliere un arco che in realtà non è quello seguito. `expectedBearingDeg`
+  (già calcolato da `RouteTracker` per il percorso pianificato) non esiste
+  ancora per un arco qualunque del grafo — richiederebbe calcolare la
+  tangente locale dell'arco, non fatto qui.
+- Non testato su un grafo reale scaricato in un'area con molte alternative
+  ravvicinate (stesso caveat di Fase 7: costanti `MATCH_SEARCH_RADIUS_M=60`
+  ragionevoli ma non calibrate su un caso reale outdoor).
+- Non esiste un test runner nel repo — nessuna suite automatica per
+  `matchToTrailGraph()`.
 
 ## Fase 5 — Navigation Events + audio/haptic — embrione esistente
 
@@ -227,19 +258,50 @@ Da fare:
   (`haptics.ts`/`speech.ts` esistono ma non ho trovato un motore anti-
   ridondanza esplicito che copra tutti i tipi di evento).
 
-## Fase 6 — Offline Navigation Package — tile + trail graph oggi
+## Fase 6 — Offline Navigation Package — ✅ landed (v1)
 
-`lib/offline/packageManager.ts` scarica tile raster **e ora anche il
-trail graph** (vedi prerequisito sopra — `hasTrailGraph`/
-`trailGraphNodeCount` nel manifest). Serve ancora estendere manifest +
-download a: POI, profilo altimetrico (`lib/navigation/elevationProfile.ts`
-già lo calcola per un hike, va solo persistito nel pacchetto), nav data
-(istruzioni/moments/eventi), escape data (fase 7). Poi un vero **Offline
-Readiness Check** che verifichi tutti questi pezzi (non solo
-`tileCount === downloadedCount` come oggi — e decida se il trail graph,
-oggi best-effort/opzionale, debba diventare un requisito) e
-un banner esplicito "⚠ Offline navigation incomplete" quando manca
-qualcosa di critico.
+`lib/offline/packageManager.ts` scarica tile raster e il trail graph
+(`hasTrailGraph`/`trailGraphNodeCount` nel manifest, vedi prerequisito
+sopra). Elevazione, POI e istruzioni di navigazione sono funzioni pure di
+dati già presenti sul `PlannedHike` cache-ato (nessuna nuova chiamata di
+rete) — quello che mancava non era andarli a scaricare, ma **verificare e
+registrare che i dati sorgente ci siano davvero** prima di perdere
+connessione, invece di scoprirlo a metà escursione.
+
+- `packageManifest.ts`: nuovi campi `hasElevationProfile`/
+  `elevationProfilePointCount`, `hasPois`/`poiCount`,
+  `hasNavInstructions`/`navInstructionCount`/`navMomentCount` — calcolati
+  e salvati da `downloadOfflinePackage()` (ora accetta anche
+  `trackPoints`/`cachedPois` dell'hike) solo a pacchetto completo, stesso
+  punto in cui oggi si prova a recuperare il trail graph. Tutti opzionali
+  e `undefined` su un manifest salvato prima di questo campo — letti come
+  "sconosciuto", mai come "corrotto".
+- `lib/offline/offlineReadiness.ts` (nuovo): il vero **Offline Readiness
+  Check**. Distingue esplicitamente un unico requisito rigido — le tile
+  (`tilesReady`, ancora `isManifestValid()` di `packageManifest.ts`: senza
+  mappa non c'è nulla da disegnare offline) — da una lista di pezzi che
+  *degradano* l'esperienza ma non bloccano la navigazione (trail graph,
+  profilo altimetrico, POI, istruzioni): `ready` resta legato solo alle
+  tile, `degradedMissing: string[]` elenca il resto. La decisione "il
+  trail graph deve diventare un requisito rigido?" (lasciata aperta nelle
+  fasi precedenti) è quindi presa qui, esplicitamente: no, resta
+  degradabile, come gli altri pezzi non critici.
+- UI: `ActiveNavigationView.tsx` mostra ora un banner distinto ("Dati
+  offline incompleti per questo percorso — Non disponibili: …") quando si
+  è offline e mancano pezzi non critici, separato dall'avviso esistente
+  per le tile mancanti (quello resta un caso più severo, non sostituito).
+
+**Non ancora fatto / prossimi passi concreti:**
+- "Escape data" (fase 7) non ha un campo di readiness dedicato — la sua
+  unica dipendenza dati è il trail graph già tracciato
+  (`hasTrailGraph`/`trailGraphNodeCount`); i POI sicuri usati
+  dall'Escape Engine sono già coperti da `hasPois`/`poiCount`.
+- Nessun controllo sulla *qualità* dei dati, solo sulla presenza (es. un
+  profilo altimetrico con 2 soli punti risulta "presente" anche se poco
+  utile) — soglie più severe sono possibili ma non aggiunte qui per non
+  inventare limiti arbitrari senza un caso reale che li richieda.
+- Non testato su un pacchetto scaricato con dati realmente incompleti (es.
+  guida generata senza POI) — solo verificato a livello di tipi/logica.
 
 ## Fase 7 — Escape Engine — ✅ landed (v1, senza dislivello)
 
@@ -346,19 +408,52 @@ test runner automatico (Vitest/Jest) e nessuna suite di test aggiunta — la
 libreria di simulazione è pronta per diventarne la base quando/se si deciderà
 di aggiungerne uno, ma oggi è uno strumento interattivo, non automatizzato.
 
-## Fase 8 — Battery-aware + test reali outdoor — parzialmente pronto lato native
+## Fase 8 — Battery-aware — ✅ landed (v1, decisore); test reali outdoor ancora da fare
 
-`LocationMode` (nativo) già definisce le 4 modalità con cadenza/priorità
-diverse, e `NavigationEngine.setLocationMode()` le espone lato JS. Manca:
-- La logica che *decide* quando cambiare modalità (velocità, qualità GPS,
-  prossimità a un bivio, deviazione, livello batteria, criticità del
-  tratto) — oggi il chiamante deve impostarla esplicitamente, non c'è
-  ancora un decisore automatico.
-- `lib/navigation/battery.ts` va esteso da "solo avviso soglia bassa" a
-  input reale per quel decisore.
+`LocationMode` (nativo) già definiva le 4 modalità con cadenza/priorità
+diverse, e `NavigationEngine.setLocationMode()` già le esponeva lato JS —
+mancava solo la logica che *decide* quando cambiare modalità.
+
+- `lib/navigation/locationModeDecider.ts` (nuovo): `decideLocationMode()`,
+  funzione pura — dato stato di navigazione, velocità istantanea, accuracy
+  GPS, distanza dalla prossima istruzione e livello batteria, sceglie la
+  modalità che serve, in ordine di priorità: `off_route`/`wrong_direction`
+  → `emergency` (fix più affidabili per risolvere la situazione, subito,
+  senza isteresi — spec: "durante Navigation/Emergency privilegiare
+  affidabilità"); vicino a un bivio (<100m) o velocità sopra il passo da
+  escursione (>2.5 m/s, corsa/bici) o accuracy scarsa (>30m) → `navigation`;
+  batteria sotto il 30% e non in carica, nient'altro di urgente →
+  `battery_save`; altrimenti `trekking`. `LocationModeDecider` (classe)
+  aggiunge isteresi a tempo (8s, stesso pattern di
+  `offRouteEngine.ts`) così un segnale al limite della soglia non fa
+  accendere/spegnere continuamente la richiesta GPS nativa.
+- `lib/navigation/battery.ts`: nuovo `watchBatteryLevel()`, feed continuo
+  di livello/carica (non solo l'avviso soglia-bassa one-shot di
+  `watchBattery`, che ora è riscritto sopra di esso senza duplicare la
+  logica di connessione alla Battery Status API) — la soglia proattiva del
+  decisore (30%) è deliberatamente più conservativa di quella reattiva
+  dell'avviso esistente (15%, "già critico").
+- `ActiveNavigationView.tsx`: il decisore viene aggiornato a ogni fix
+  (stato, velocità, accuracy, distanza dalla prossima istruzione, livello
+  batteria) e `engine.setLocationMode()` viene chiamato solo quando
+  `LocationModeDecider.update()` restituisce davvero una nuova modalità.
+
+**Non ancora fatto / prossimi passi concreti:**
+- Nessun input "criticità del tratto" (es. tratto esposto/pericoloso da
+  `lib/pois`/`safetyScore.ts`) nel decisore — i segnali usati sono solo
+  quelli osservabili in tempo reale (velocità, GPS, batteria, prossimità
+  bivio), non una caratteristica statica del percorso.
+- Le soglie (`FAST_SPEED_MS=2.5`, `NEAR_INSTRUCTION_M=100`,
+  `POOR_ACCURACY_M=30`, `LOW_BATTERY_FOR_DOWNSHIFT=0.30`,
+  `MODE_CHANGE_DWELL_MS=8000`) sono stime ragionevoli, non calibrate su un
+  caso reale — stesso caveat delle costanti dell'Off-Route Engine e
+  dell'Escape Engine.
 - Test su device reale outdoor (copertura GPS scarsa, sottobosco, schermo
-  spento per ore) — non eseguibile in questo ambiente (nessun Android SDK/
-  emulatore disponibile: `ANDROID_HOME` non impostato).
+  spento per ore, consumo batteria reale su un'intera giornata di
+  escursione) — non eseguibile in questo ambiente (nessun Android SDK/
+  emulatore disponibile: `ANDROID_HOME` non impostato). Resta l'unico
+  pezzo della Fase 8 (e dell'intera roadmap) che richiede davvero un
+  device fisico all'aperto, non solo una build CI verificata.
 
 ## Ordine consigliato per le prossime PR
 
@@ -381,6 +476,10 @@ diverse, e `NavigationEngine.setLocationMode()` le espone lato JS. Manca:
 5. ✅ Escape Engine (Fase 7) — la feature distintiva citata esplicitamente
    nella issue — vedi sezione dedicata sopra (v1 senza dislivello, per il
    costo/rate-limit della pipeline DTM).
-6. Offline Navigation Package esteso (POI, profilo altimetrico, nav data,
-   escape data) + Readiness Check (Fase 6).
-7. Decisore battery-aware automatico (Fase 8) + test reali su device.
+6. ✅ Map Matching non invasivo contro il trail graph reale (Fase 4) — vedi
+   sezione dedicata sopra (v1 senza compatibilità di bearing).
+7. ✅ Offline Navigation Package esteso + Readiness Check (Fase 6) — vedi
+   sezione dedicata sopra.
+8. ✅ Decisore battery-aware automatico (Fase 8) — vedi sezione dedicata
+   sopra. Resta da fare solo il test reale su device outdoor, non
+   eseguibile in questo ambiente.

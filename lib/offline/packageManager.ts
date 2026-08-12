@@ -1,6 +1,10 @@
 import { runWithConcurrency } from '@/lib/promisePool'
 import { lsGet, lsSet } from '@/lib/localStore'
 import { fetchAndSaveTrailGraph, deleteTrailGraph } from '@/lib/navigation/trailGraphStore'
+import { buildElevationProfile } from '@/lib/navigation/elevationProfile'
+import { buildRouteInstructions } from '@/lib/navigation/routeInstructions'
+import { detectRouteMoments } from '@/lib/navigation/routeMoments'
+import type { TrackPoint } from '@/lib/tcxParser'
 import {
   loadManifest, saveManifest, computeChecksum, deleteManifest,
   type OfflinePackageManifest, type OfflinePackageStatus,
@@ -61,6 +65,11 @@ export interface DownloadProgress {
   tileCount: number
 }
 
+export interface OfflinePackageHikeData {
+  trackPoints?: TrackPoint[]
+  cachedPois?: unknown[]
+}
+
 /**
  * Downloads a tile package for offline navigation, in a resumable
  * queued→downloading→(paused)→ready lifecycle: progress is persisted in the
@@ -70,6 +79,7 @@ export interface DownloadProgress {
 export async function downloadOfflinePackage(
   hikeId: string,
   routePolyline: [number, number][],
+  hikeData?: OfflinePackageHikeData,
   onProgress?: (p: DownloadProgress) => void,
 ): Promise<void> {
   const bbox = computeBboxFromTrack(routePolyline)
@@ -136,6 +146,28 @@ export async function downloadOfflinePackage(
     } catch {
       manifest.hasTrailGraph = false
     }
+  }
+
+  // Readiness signals for the rest of the package (roadmap Fase 6) — all pure functions of data
+  // already on the cached PlannedHike record, nothing to fetch, just recorded here so a hiker can
+  // be warned before losing signal if the *source* data (trackPoint altitude, cachedPois) turns
+  // out to be thin or missing, instead of discovering it mid-hike. See packageManifest.ts's doc
+  // comment on these fields for why this doesn't belong inside isManifestValid().
+  if (complete) {
+    const trackPoints = hikeData?.trackPoints ?? []
+    const elevationProfile = buildElevationProfile(trackPoints)
+    manifest.hasElevationProfile = elevationProfile.length > 1
+    manifest.elevationProfilePointCount = elevationProfile.length
+
+    const pois = hikeData?.cachedPois ?? []
+    manifest.hasPois = pois.length > 0
+    manifest.poiCount = pois.length
+
+    const instructions = routePolyline.length > 1 ? buildRouteInstructions(routePolyline) : []
+    const moments = detectRouteMoments(trackPoints)
+    manifest.hasNavInstructions = instructions.length > 0
+    manifest.navInstructionCount = instructions.length
+    manifest.navMomentCount = moments.length
   }
 
   await saveManifest(manifest)

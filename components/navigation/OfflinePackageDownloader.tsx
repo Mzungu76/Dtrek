@@ -3,19 +3,21 @@ import { useEffect, useState } from 'react'
 import { Download, CheckCircle2, Pause, Trash2, AlertTriangle } from 'lucide-react'
 import {
   downloadOfflinePackage, pauseOfflinePackage, deleteOfflinePackage, estimatePackageSizeBytes, computeBboxFromTrack,
+  type OfflinePackageHikeData,
 } from '@/lib/offline/packageManager'
 import { loadManifest, isManifestValid, type OfflinePackageManifest } from '@/lib/offline/packageManifest'
 
 interface Props {
   hikeId: string
   routePolyline: [number, number][]
+  hikeData?: OfflinePackageHikeData
 }
 
 function formatMB(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-export default function OfflinePackageDownloader({ hikeId, routePolyline }: Props) {
+export default function OfflinePackageDownloader({ hikeId, routePolyline, hikeData }: Props) {
   const [manifest, setManifest] = useState<OfflinePackageManifest | null>(null)
   const [downloading, setDownloading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -33,7 +35,7 @@ export default function OfflinePackageDownloader({ hikeId, routePolyline }: Prop
     setDownloading(true)
     setError(null)
     try {
-      await downloadOfflinePackage(hikeId, routePolyline, (p) => {
+      await downloadOfflinePackage(hikeId, routePolyline, hikeData, (p) => {
         setManifest((prev) => prev ? { ...prev, status: p.status, downloadedCount: p.downloadedCount, tileCount: p.tileCount } : prev)
       })
       setManifest(await loadManifest(hikeId))

@@ -36,6 +36,24 @@ export interface OfflinePackageManifest {
    */
   hasTrailGraph?: boolean
   trailGraphNodeCount?: number
+  /**
+   * Readiness signals for the rest of the "Offline Navigation Package" (roadmap Fase 6): elevation
+   * profile, POIs and turn-by-turn/moments data are all pure functions of data already present on
+   * the cached PlannedHike record (lib/plannedStore.ts) — nothing new to fetch over the network —
+   * but that doesn't guarantee the *source* data (trackPoints altitude, cachedPois, the route
+   * geometry itself) is actually there. These are recorded at download time so a hiker can be
+   * warned *before* losing signal if, say, the guide was generated without POI enrichment, instead
+   * of just discovering a blank "punti di interesse" list mid-hike. All optional/undefined on a
+   * manifest saved before this field existed — treated as "unknown", not "missing", by
+   * lib/offline/offlineReadiness.ts.
+   */
+  hasElevationProfile?: boolean
+  elevationProfilePointCount?: number
+  hasPois?: boolean
+  poiCount?: number
+  hasNavInstructions?: boolean
+  navInstructionCount?: number
+  navMomentCount?: number
 }
 
 const MANIFEST_KEY = (hikeId: string) => `offline-manifest:${hikeId}`

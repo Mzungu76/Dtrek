@@ -148,7 +148,24 @@ const ENTITY_TYPE = 'planned_hike'
 /** Returns the local list if present; only hits Supabase when there's no local copy yet. */
 export async function getAllPlanned(onRefresh?: (data: PlannedHikeMeta[]) => void): Promise<PlannedHikeMeta[]> {
   const local = await lsGet<PlannedHikeMeta[]>(LS_KEYS.plannedList)
-  if (local) return local
+  if (local) {
+    // Same self-heal as getPlannedById's `needsRepair` above, applied to the list cache: a
+    // plannedList written by an older build (e.g. from before this field existed, or captured
+    // mid-development on a Navigator test device — that app's IndexedDB survives reinstalls
+    // across the many APK rebuilds this project goes through) can be missing routePolyline on
+    // entries that do have it server-side. getAllPlanned had no repair path at all here — unlike
+    // getPlannedById, a stale list cache like that stuck around forever (registerListReconciler
+    // only re-fetches when the server's updatedAt is newer, which a missing-field cache doesn't
+    // trigger). The list is still fully usable for display in the meantime, so this repairs in the
+    // background instead of blocking the return.
+    const needsRepair = local.some((h) => !h.archivedAt && !h.routePolyline?.length && h.osmId == null)
+    if (needsRepair) {
+      apiFetch<PlannedHikeMeta[]>('/api/planned')
+        .then(async (data) => { await lsSet(LS_KEYS.plannedList, data); onRefresh?.(data) })
+        .catch(() => {})
+    }
+    return local
+  }
   try {
     const data = await apiFetch<PlannedHikeMeta[]>('/api/planned')
     await lsSet(LS_KEYS.plannedList, data)
