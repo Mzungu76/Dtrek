@@ -13,7 +13,9 @@ import { wmoInfo } from '@/lib/openmeteo'
 import { parseSections } from '@/lib/reportStore'
 import { parseInlineEmphasis } from '@/lib/guideMarkup'
 import { selectSpreadPhotos } from '@/lib/photoBuckets'
+import { MAX_PHOTOS_PER_ACTIVITY } from '@/lib/activityPhotos'
 import { LazyMount } from '@/components/LazyMount'
+import { LocatorMap } from '@/components/LocatorMap'
 import { trackPointsProgress, extractCuriosita } from './chartUtils'
 import { ProgressChart } from './ProgressChart'
 import { StatCard } from './StatCard'
@@ -47,12 +49,15 @@ export const DIARY_MAX_PHOTOS_DEFAULT = 6
 /** Scelta manuale delle foto da stampare, sul modello di CustomizeExtras: vive sulla pagina del
  *  libro, dove si vede il risultato. La selezione automatica distribuita fa da proposta di
  *  partenza; qui si corregge quando la foto migliore cade accanto a un'altra e resterebbe fuori. */
-function PhotoPicker({ photos, selected, max, onChange }: {
-  photos: RoutePhoto[]; selected: string[]; max: number; onChange: (ids: string[]) => void
+function PhotoPicker({ photos, selected, onChange }: {
+  photos: RoutePhoto[]; selected: string[]; onChange: (ids: string[]) => void
 }) {
+  // Il tetto qui è quello di CARICAMENTO, non quello del PDF: si sceglie cosa pubblicare, e il
+  // documento impaginato ne prenderà comunque sei distribuite lungo il percorso.
+  const max = MAX_PHOTOS_PER_ACTIVITY
   const [open, setOpen] = useState(false)
   const isAuto = selected.length === 0
-  const active = new Set(isAuto ? selectSpreadPhotos(photos, max).map(p => p.id) : selected)
+  const active = new Set(isAuto ? photos.map(p => p.id) : selected)
 
   const toggle = (id: string) => {
     const next = new Set(active)
@@ -70,7 +75,7 @@ function PhotoPicker({ photos, selected, max, onChange }: {
           background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)', border: 'none', cursor: 'pointer',
           fontFamily: FONT.barlow, fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'white',
         }}>
-        <ImageIcon style={{ width: 13, height: 13 }} /> Foto {active.size}/{max}
+        <ImageIcon style={{ width: 13, height: 13 }} /> Foto {active.size}/{MAX_PHOTOS_PER_ACTIVITY}
       </button>
       {open && (
         <div style={{
@@ -80,7 +85,7 @@ function PhotoPicker({ photos, selected, max, onChange }: {
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
             <span style={{ fontFamily: FONT.barlow, fontSize: 9, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: '#a9a18e' }}>
-              {isAuto ? 'Scelta automatica' : `${active.size} di ${max}`}
+              {isAuto ? 'Tutte pubblicate' : `${active.size} di ${photos.length}`}
             </span>
             <button onClick={() => setOpen(false)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#a9a18e' }}>
               <X style={{ width: 12, height: 12 }} />
@@ -109,7 +114,7 @@ function PhotoPicker({ photos, selected, max, onChange }: {
                 border: '1px solid #dcd8cc', background: 'white', color: '#73695c',
                 fontFamily: FONT.body, fontSize: 11,
               }}>
-              Torna alla scelta automatica
+              Pubblicale tutte
             </button>
           )}
         </div>
@@ -216,7 +221,10 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
     const manual = selectedPhotoIds && selectedPhotoIds.length > 0
       ? photos.filter(p => selectedPhotoIds.includes(p.id))
       : null
-    return manual && manual.length > 0 ? manual.slice(0, maxPhotos) : selectSpreadPhotos(photos, maxPhotos)
+    // La selezione manuale dice *quali foto pubblicare* — vale per il sito, che le mostra tutte.
+    // Il PDF ne prende comunque al massimo `maxPhotos`, distribuite lungo il percorso: è un
+    // documento impaginato, non una galleria.
+    return selectSpreadPhotos(manual ?? photos, maxPhotos)
   }, [photos, maxPhotos, selectedPhotoIds])
   const heroPhoto = photos[0] ?? null
   const detailPhoto = photos[1] ?? null
@@ -260,7 +268,10 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
   ]
 
   return (
-    <div className="diario-page" style={{
+    <div className="diario-page"
+      // Dichiarato per il ritaglio dell'esportazione per annata (vedi exportYear in app/diario).
+      data-year={act?.start_time ? new Date(act.start_time).getFullYear() : undefined}
+      style={{
       width: PDF_PAGE_W, minHeight: PDF_CONTENT_H, background: 'white', margin: '24px auto',
       boxShadow: '0 8px 56px rgba(0,0,0,0.28)', overflow: 'hidden', position: 'relative',
     }}>
@@ -269,7 +280,7 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
       {onExtrasChange && <CustomizeExtras extras={extras} onChange={onExtrasChange} />}
 
       {onSelectedPhotosChange && photos.length > 0 && (
-        <PhotoPicker photos={photos} selected={selectedPhotoIds ?? []} max={maxPhotos} onChange={onSelectedPhotosChange} />
+        <PhotoPicker photos={photos} selected={selectedPhotoIds ?? []} onChange={onSelectedPhotosChange} />
       )}
 
       {onExclude && (
@@ -569,6 +580,13 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
         {showMappa && (
           <div className="pdf-block" data-mag-block="" data-mag-insert="" style={{ marginBottom: 18 }}>
             <p className="pdf-keep-next" style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: '#193b20', margin: '0 0 12px' }}>Il percorso</p>
+            {/* Inquadramento: la mappa del percorso dice com'è fatto il giro, questa dice dove sta.
+                Senza, una traccia fra due boschi non dice a chi legge se è in Piemonte o in Puglia. */}
+            {meta!.routePolyline!.length > 0 && (
+              <div style={{ float: 'right', width: 84, marginLeft: 10, marginBottom: 6 }}>
+                <LocatorMap eager lat={meta!.routePolyline![0][0]} lon={meta!.routePolyline![0][1]} label={meta!.title ?? undefined} />
+              </div>
+            )}
             <div className="print:hidden diario-report-map" data-activity-id={meta!.id} style={{ height: 260, borderRadius: 10, overflow: 'hidden', border: '1px solid #dcd8cc' }}>
               <LazyMount height={260} placeholder={<div style={{ height: '100%', background: '#f3f4f2' }} />}>
                 <AllRoutesMap

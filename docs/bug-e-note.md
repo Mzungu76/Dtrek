@@ -1090,3 +1090,34 @@ numeri senza le tracce.
 invadenti — un pulsante in testata, una scheda in fondo alla home, una riga nel piede. Puntano a
 `NEXT_PUBLIC_SITE_URL`, con l'URL Vercel come ripiego. Chi legge il diario di un amico è il
 pubblico più naturale per l'app, ma lo resta finché il diario è il protagonista.
+
+### 5.13 — Annate, mappa d'insieme, scelta foto sul sito
+
+**Mappa d'inquadramento** (`components/LocatorMap.tsx`). La mappa del percorso è zoomata al punto
+che il contesto sparisce: chi legge vede una traccia fra due boschi e non sa se è in Piemonte o in
+Puglia. Accanto compare ora un riquadro dell'Italia intera con un segno dove si è camminato — stessa
+tecnica di `RouteMap` (mosaico di tile dal proxy, segno in SVG), stile `positron` perché a quella
+scala servono solo coste e confini. Lo zoom è **fisso per costruzione**, calcolato sui confini
+dell'Italia e non sul percorso: due escursioni diverse devono dare due riquadri confrontabili, ed è
+proprio il confronto la ragione per cui questa mappa esiste. Un punto fuori riquadro (escursione
+all'estero) non viene disegnato: meglio nulla che il posto sbagliato.
+
+Nel Diario le tile sono caricate `eager`: la cattura per il PDF avviene fuori schermo, e
+un'immagine `lazy` che non entra mai nel viewport non comincia nemmeno a caricarsi.
+
+**Scelta delle foto, una sola per due usi.** Il selettore nel Diario ora governa *quali foto
+pubblicare* (fino al tetto di caricamento, 15), non più solo quali stampare. Il PDF ne prende
+comunque sei distribuite lungo il percorso — è un documento impaginato, non una galleria — mentre
+il sito, che non ha vincoli di impaginazione, mostra tutte quelle scelte. `fetchPublicDiary`
+filtra le foto su `photoIdsByActivity`.
+
+**Suddivisione per annata.**
+
+- *Sito*: l'indice è raggruppato per anno, dal più recente, con il totale di escursioni e
+  chilometri per annata. Il numero dell'escursione resta quello globale, così coincide con il PDF.
+- *PDF*: il pulsante di esportazione apre un menu — «Tutto il diario» oppure una singola annata,
+  con il conteggio delle escursioni. Il libro a schermo resta sempre completo: è il *documento* a
+  essere ritagliato, perché è lui a diventare ingestibile (cinque anni sono centinaia di pagine e
+  decine di MB, impossibili da generare su un telefono). Il ritaglio funziona su un `data-year`
+  dichiarato dalla pagina del resoconto; l'apparato — copertina, indice, mappa, statistiche — non
+  lo dichiara e resta sempre incluso.

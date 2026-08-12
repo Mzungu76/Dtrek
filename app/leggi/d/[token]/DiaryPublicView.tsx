@@ -64,13 +64,27 @@ export function DiaryPublicView({ diary, token }: { diary: PublicDiary; token: s
           </section>
         )}
 
-        {/* Indice — schede che portano alla pagina dell'escursione */}
-        <section className="space-y-3">
-          <h2 className="font-barlow font-bold text-[11px] tracking-[0.22em] uppercase text-stone-400 px-1">
-            Le escursioni
+        {/* Indice raggruppato per anno: con più annate un elenco unico diventa un muro senza
+            riferimenti temporali, ed è la prima cosa che si cerca in un diario. Il numero
+            dell'escursione resta quello globale, così coincide con il PDF. */}
+        {Array.from(
+          diary.entries.reduce((m, e, i) => {
+            const y = new Date(e.startTime).getFullYear()
+            const list = m.get(y) ?? []
+            list.push({ e, i })
+            return m.set(y, list)
+          }, new Map<number, { e: typeof diary.entries[number]; i: number }[]>()),
+        ).sort((a, b) => b[0] - a[0]).map(([year, items]) => (
+        <section key={year} className="space-y-3">
+          <h2 className="flex items-baseline gap-3 px-1">
+            <span className="font-display text-2xl font-bold text-forest-900">{year}</span>
+            <span className="font-barlow font-bold text-[10px] tracking-[0.2em] uppercase text-stone-400">
+              {items.length} {items.length === 1 ? 'escursione' : 'escursioni'} ·{' '}
+              {(items.reduce((s, x) => s + x.e.distanceMeters, 0) / 1000).toFixed(0)} km
+            </span>
           </h2>
           <div className="grid sm:grid-cols-2 gap-3">
-            {diary.entries.map((e, i) => {
+            {items.map(({ e, i }) => {
               const cover = show.foto ? e.photos[0] : undefined
               return (
                 <a key={e.id} href={`/leggi/d/${token}/e/${i + 1}`}
@@ -100,10 +114,11 @@ export function DiaryPublicView({ diary, token }: { diary: PublicDiary; token: s
               )
             })}
           </div>
-          {diary.entries.length === 0 && (
-            <p className="text-sm text-stone-400 text-center py-8">Nessuna escursione pubblicata.</p>
-          )}
         </section>
+        ))}
+        {diary.entries.length === 0 && (
+          <p className="text-sm text-stone-400 text-center py-8">Nessuna escursione pubblicata.</p>
+        )}
 
         {/* Il PDF è un allegato: il sito si legge per intero senza scaricarlo */}
         {diary.pdfUrl && (
