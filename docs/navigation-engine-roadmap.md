@@ -65,10 +65,21 @@ navigazione), non il sito intero.
   `ACCESS_BACKGROUND_LOCATION`), keystore di firma per la build di release,
   e in futuro la stessa cosa su App Store Connect quando si aggiunge iOS.
   Tutti passi manuali, non automatizzabili da qui.
-- Verificare che chi non ha ancora nessun percorso pianificato (primo avvio
-  di Navigator prima di aver mai usato l'app principale) trovi lo stato
-  vuoto di `app/navigatore/page.tsx` chiaro a sufficienza, o se serve un
-  link/CTA più esplicito verso l'app principale (store listing/deep link).
+- ✅ Gestito il caso "Navigator installato prima dell'app principale":
+  `app/navigatore/page.tsx` mostra sempre un pulsante per aprire l'app
+  principale (`lib/native/mainAppLinks.ts`, apre il sito nel browser di
+  sistema, non nella WebView di Navigator stesso — le due app restano
+  separate), e chi non ha ancora nessun percorso pianificato può comunque
+  usare `app/navigatore/traccia` per registrare una traccia GPS libera
+  (`lib/navigation/freeTrackSession.ts`), salvata a fine giro come
+  attività nel Diario tramite `buildActivityFromTrack` +
+  `saveActivityWithEnrichment` — la stessa pipeline già usata per il
+  salvataggio a fine navigazione pianificata.
+- Per la pubblicazione pratica (account Play Console, build firmata,
+  disclosure sulla posizione in background, ecc.) vedi la guida passo-passo
+  non tecnica in `docs/guida-pubblicazione-dtrek-navigator.md`, e il
+  workflow `.github/workflows/build-navigator-apk.yml` che costruisce
+  l'APK di test senza bisogno di Android Studio in locale.
 
 ## Fase 2 — Position Engine — ✅ modulo pronto, non ancora agganciato alla UI
 

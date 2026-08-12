@@ -1,0 +1,65 @@
+name: Build DTrek Navigator APK
+
+# Builds the Android app for testing WITHOUT installing anything on your own
+# computer — no Android Studio, no SDK. Everything runs on GitHub's servers;
+# you just download the finished .apk file at the end. See
+# docs/guida-pubblicazione-dtrek-navigator.md for the full walkthrough.
+on:
+  workflow_dispatch:
+    inputs:
+      server_url:
+        description: >
+          Indirizzo del sito DTrek che l'app deve caricare (es.
+          https://il-tuo-dominio.vercel.app). Lascia vuoto per usare il
+          valore salvato in Settings → Secrets and variables → Actions →
+          Variables → CAPACITOR_SERVER_URL.
+        required: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Resolve server URL
+        run: |
+          URL="${{ inputs.server_url }}"
+          if [ -z "$URL" ]; then
+            URL="${{ vars.CAPACITOR_SERVER_URL }}"
+          fi
+          if [ -z "$URL" ]; then
+            echo "::error::Nessun indirizzo impostato. Aggiungilo come input di questa esecuzione oppure come Settings -> Secrets and variables -> Actions -> Variables -> CAPACITOR_SERVER_URL."
+            exit 1
+          fi
+          echo "CAPACITOR_SERVER_URL=$URL" >> "$GITHUB_ENV"
+
+      - name: Sync Capacitor (bakes the server URL into the Android project)
+        run: npx cap sync android
+
+      - name: Build debug APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dtrek-navigator-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
