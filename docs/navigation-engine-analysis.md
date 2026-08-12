@@ -118,7 +118,7 @@ gira nella WebView tramite `navigator.geolocation` / Web API standard.
 | Componente | Motivo |
 |---|---|
 | Sorgente GPS (`AdaptiveGpsTracker`) | Basata su `navigator.geolocation`, si ferma con schermo spento/app in background. Va affiancata (non necessariamente rimossa: resta il fallback web/desktop) da un **Native Location Engine** Capacitor/Android con Foreground Service. |
-| `GpsSmoother` | Media mobile ingenua su lat/lon: non fa quality gate, non rigetta spike, non stima velocità/bearing, non interpola a 60fps. Da sostituire con un vero **Position Engine** (fase 2). |
+| `GpsSmoother` | Media mobile ingenua su lat/lon: non fa quality gate, non rigetta spike, non stima velocità/bearing, non interpola a 60fps. **Sostituito** dal `PositionEngine` (fase 2) e rimosso — vedi stato aggiornato in `docs/navigation-engine-roadmap.md`. |
 | Soglia off-route singola | Da sostituire con un vero **Off-Route Engine** multi-fattore con isteresi temporale (non a conteggio fix) — §5 della spec. |
 | Offline package (solo tile) | Da estendere a un vero **Offline Navigation Package** (trail graph, POI, elevazione, nav data, escape data) + readiness check esplicito. |
 | Battery-aware | Da costruire: profili BATTERY_SAVE/TREKKING/NAVIGATION/EMERGENCY che modulano davvero il Location Engine nativo. |
