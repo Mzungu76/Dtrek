@@ -102,7 +102,12 @@ export class FreeTrackSession {
     this.position.ingest(raw)
     if (raw.speedMs != null) this.lastSpeedMs = raw.speedMs
 
-    const estimate = this.position.sample(Date.now())
+    // raw.ts, not Date.now(): PositionEngine.sample() marks anything sampled after the fix's own
+    // timestamp as `interpolated` (extrapolated forward), and any real-world gap at all between
+    // when the fix was taken and when this line runs makes Date.now() > raw.ts — so sampling "now"
+    // right after ingesting this very fix would mark every single fix as interpolated and skip
+    // recording it below. Sampling at raw.ts instead matches what was just ingested exactly.
+    const estimate = this.position.sample(raw.ts)
     if (estimate) this.emit('position', estimate)
 
     if (!wasRecording || !estimate || estimate.interpolated) return
