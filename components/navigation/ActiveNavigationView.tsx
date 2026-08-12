@@ -27,6 +27,7 @@ import {
   loadParkingSpot, saveParkingSpot, clearParkingSpot, type ParkingSpot,
 } from '@/lib/navigation/navigationStore'
 import { loadManifest, isManifestValid } from '@/lib/offline/packageManifest'
+import { checkOfflineReadiness } from '@/lib/offline/offlineReadiness'
 import { ensureTrailGraph, loadTrailGraph } from '@/lib/navigation/trailGraphStore'
 import type { WalkNetwork } from '@/lib/routeBuilder/osmGraph'
 import { computeEscapeOptions, type EscapeOption } from '@/lib/navigation/escapeEngine'
@@ -124,6 +125,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   const [mapMatch, setMapMatch] = useState<MapMatchResult | null>(null)
   const [lowBatteryNotice, setLowBatteryNotice] = useState(false)
   const [offlinePackageWarning, setOfflinePackageWarning] = useState(false)
+  const [offlineDegradedMissing, setOfflineDegradedMissing] = useState<string[]>([])
   const [offlineReady, setOfflineReady] = useState(false)
   const [showOfflineSheet, setShowOfflineSheet] = useState(false)
   const [showNatura2000, setShowNatura2000] = useState(false)
@@ -425,14 +427,19 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       haptics.alert()
     })
 
-    // If we're starting offline (or go offline before this resolves) with no
-    // fully-downloaded offline map package for this hike, some areas of the
-    // route may not be covered by cached tiles — worth a one-time heads-up
-    // instead of the hiker discovering blank map tiles mid-trail.
+    // If we're starting offline (or go offline before this resolves) with no fully-downloaded
+    // offline package for this hike, some areas of the route may not be covered by cached tiles
+    // (the one hard requirement, see lib/offline/offlineReadiness.ts) — worth a one-time heads-up
+    // instead of the hiker discovering blank map tiles mid-trail. Pieces that only degrade the
+    // experience (trail graph, elevation, POIs, nav instructions) get their own, separate notice.
     loadManifest(hike.id).then((manifest) => {
       if (cancelled) return
-      if (!navigator.onLine && manifest?.status !== 'ready') setOfflinePackageWarning(true)
-      setOfflineReady(isManifestValid(manifest))
+      const readiness = checkOfflineReadiness(manifest)
+      if (!navigator.onLine) {
+        if (!readiness.tilesReady) setOfflinePackageWarning(true)
+        if (readiness.degradedMissing.length > 0) setOfflineDegradedMissing(readiness.degradedMissing)
+      }
+      setOfflineReady(readiness.tilesReady)
     }).catch(() => {})
 
     const flushInterval = setInterval(() => { if (navigator.onLine) flushToServer() }, 30000)
@@ -710,7 +717,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       {/* Le tre notice qui sotto puntavano tutte allo stesso top-[210px] senza
           alcuna logica di stacking: se più di una era attiva si sovrapponevano
           letteralmente. Un contenitore colonna le impila invece in ordine. */}
-      {(mapFallbackNotice || offlinePackageWarning || (state !== 'idle' && relevantWildlifeRisks.length > 0 && !wildlifeAlertDismissed)) && (
+      {(mapFallbackNotice || offlinePackageWarning || offlineDegradedMissing.length > 0 || (state !== 'idle' && relevantWildlifeRisks.length > 0 && !wildlifeAlertDismissed)) && (
         <div className="absolute top-[210px] left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-2 w-[calc(100%-2rem)] max-w-sm">
           {mapFallbackNotice && (
             <div className="px-4 py-2 rounded-full bg-stone-800 text-white text-xs font-semibold shadow-lg font-body">
@@ -723,6 +730,20 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
               <AlertTriangle size={14} className="text-amber-400 shrink-0" />
               Mappa offline incompleta per questo percorso
               <button onClick={() => setOfflinePackageWarning(false)} className="text-stone-400 hover:text-white ml-1" aria-label="Chiudi avviso">✕</button>
+            </div>
+          )}
+
+          {/* Offline Readiness Check (roadmap Fase 6) — tiles missing is the hard-blocker notice
+              above; this one is for pieces that only degrade the experience (no escape
+              suggestions, no elevation chart, no POI callouts...), never block navigation. */}
+          {offlineDegradedMissing.length > 0 && (
+            <div className="px-4 py-2 rounded-xl bg-stone-800 text-white text-xs shadow-lg font-body flex items-start gap-2 w-full">
+              <AlertTriangle size={14} className="text-amber-400 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold">Dati offline incompleti per questo percorso</p>
+                <p className="text-stone-300 leading-snug">Non disponibili: {offlineDegradedMissing.join(', ')}</p>
+              </div>
+              <button onClick={() => setOfflineDegradedMissing([])} className="text-stone-400 hover:text-white shrink-0" aria-label="Chiudi avviso">✕</button>
             </div>
           )}
 
@@ -776,11 +797,18 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         open={showOfflineSheet}
         onClose={() => {
           setShowOfflineSheet(false)
-          loadManifest(hike.id).then((m) => setOfflineReady(isManifestValid(m))).catch(() => {})
+          loadManifest(hike.id).then((m) => {
+            setOfflineReady(isManifestValid(m))
+            setOfflineDegradedMissing(checkOfflineReadiness(m).degradedMissing)
+          }).catch(() => {})
         }}
         title="Mappa offline"
       >
-        <OfflinePackageDownloader hikeId={hike.id} routePolyline={routePolyline} />
+        <OfflinePackageDownloader
+          hikeId={hike.id}
+          routePolyline={routePolyline}
+          hikeData={{ trackPoints: hike.trackPoints, cachedPois: hike.cachedPois }}
+        />
       </Sheet>
 
       {showFieldNote && (

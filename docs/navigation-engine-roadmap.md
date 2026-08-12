@@ -258,19 +258,50 @@ Da fare:
   (`haptics.ts`/`speech.ts` esistono ma non ho trovato un motore anti-
   ridondanza esplicito che copra tutti i tipi di evento).
 
-## Fase 6 — Offline Navigation Package — tile + trail graph oggi
+## Fase 6 — Offline Navigation Package — ✅ landed (v1)
 
-`lib/offline/packageManager.ts` scarica tile raster **e ora anche il
-trail graph** (vedi prerequisito sopra — `hasTrailGraph`/
-`trailGraphNodeCount` nel manifest). Serve ancora estendere manifest +
-download a: POI, profilo altimetrico (`lib/navigation/elevationProfile.ts`
-già lo calcola per un hike, va solo persistito nel pacchetto), nav data
-(istruzioni/moments/eventi), escape data (fase 7). Poi un vero **Offline
-Readiness Check** che verifichi tutti questi pezzi (non solo
-`tileCount === downloadedCount` come oggi — e decida se il trail graph,
-oggi best-effort/opzionale, debba diventare un requisito) e
-un banner esplicito "⚠ Offline navigation incomplete" quando manca
-qualcosa di critico.
+`lib/offline/packageManager.ts` scarica tile raster e il trail graph
+(`hasTrailGraph`/`trailGraphNodeCount` nel manifest, vedi prerequisito
+sopra). Elevazione, POI e istruzioni di navigazione sono funzioni pure di
+dati già presenti sul `PlannedHike` cache-ato (nessuna nuova chiamata di
+rete) — quello che mancava non era andarli a scaricare, ma **verificare e
+registrare che i dati sorgente ci siano davvero** prima di perdere
+connessione, invece di scoprirlo a metà escursione.
+
+- `packageManifest.ts`: nuovi campi `hasElevationProfile`/
+  `elevationProfilePointCount`, `hasPois`/`poiCount`,
+  `hasNavInstructions`/`navInstructionCount`/`navMomentCount` — calcolati
+  e salvati da `downloadOfflinePackage()` (ora accetta anche
+  `trackPoints`/`cachedPois` dell'hike) solo a pacchetto completo, stesso
+  punto in cui oggi si prova a recuperare il trail graph. Tutti opzionali
+  e `undefined` su un manifest salvato prima di questo campo — letti come
+  "sconosciuto", mai come "corrotto".
+- `lib/offline/offlineReadiness.ts` (nuovo): il vero **Offline Readiness
+  Check**. Distingue esplicitamente un unico requisito rigido — le tile
+  (`tilesReady`, ancora `isManifestValid()` di `packageManifest.ts`: senza
+  mappa non c'è nulla da disegnare offline) — da una lista di pezzi che
+  *degradano* l'esperienza ma non bloccano la navigazione (trail graph,
+  profilo altimetrico, POI, istruzioni): `ready` resta legato solo alle
+  tile, `degradedMissing: string[]` elenca il resto. La decisione "il
+  trail graph deve diventare un requisito rigido?" (lasciata aperta nelle
+  fasi precedenti) è quindi presa qui, esplicitamente: no, resta
+  degradabile, come gli altri pezzi non critici.
+- UI: `ActiveNavigationView.tsx` mostra ora un banner distinto ("Dati
+  offline incompleti per questo percorso — Non disponibili: …") quando si
+  è offline e mancano pezzi non critici, separato dall'avviso esistente
+  per le tile mancanti (quello resta un caso più severo, non sostituito).
+
+**Non ancora fatto / prossimi passi concreti:**
+- "Escape data" (fase 7) non ha un campo di readiness dedicato — la sua
+  unica dipendenza dati è il trail graph già tracciato
+  (`hasTrailGraph`/`trailGraphNodeCount`); i POI sicuri usati
+  dall'Escape Engine sono già coperti da `hasPois`/`poiCount`.
+- Nessun controllo sulla *qualità* dei dati, solo sulla presenza (es. un
+  profilo altimetrico con 2 soli punti risulta "presente" anche se poco
+  utile) — soglie più severe sono possibili ma non aggiunte qui per non
+  inventare limiti arbitrari senza un caso reale che li richieda.
+- Non testato su un pacchetto scaricato con dati realmente incompleti (es.
+  guida generata senza POI) — solo verificato a livello di tipi/logica.
 
 ## Fase 7 — Escape Engine — ✅ landed (v1, senza dislivello)
 
@@ -414,6 +445,6 @@ diverse, e `NavigationEngine.setLocationMode()` le espone lato JS. Manca:
    costo/rate-limit della pipeline DTM).
 6. ✅ Map Matching non invasivo contro il trail graph reale (Fase 4) — vedi
    sezione dedicata sopra (v1 senza compatibilità di bearing).
-7. Offline Navigation Package esteso (POI, profilo altimetrico, nav data,
-   escape data) + Readiness Check (Fase 6).
+7. ✅ Offline Navigation Package esteso + Readiness Check (Fase 6) — vedi
+   sezione dedicata sopra.
 8. Decisore battery-aware automatico (Fase 8) + test reali su device.
