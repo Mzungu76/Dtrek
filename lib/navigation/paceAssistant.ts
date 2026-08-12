@@ -36,7 +36,7 @@ interface PaceAssistantOptions {
   fitnessMult?: number
 }
 
-const MOVING_SPEED_THRESHOLD_MS = 0.3   // below this, a GPS fix doesn't count as "moving" (matches the kind of noise floor gpsSmoothing.ts already filters)
+const MOVING_SPEED_THRESHOLD_MS = 0.3   // below this, a GPS fix doesn't count as "moving" (matches the noise floor positionEngine.ts already filters)
 const MAX_FIX_GAP_MS = 30000            // a longer gap than this (backgrounded tab, tunnel) isn't attributed to moving time
 const BLEND_FULL_TRUST_DISTANCE_M = 1500
 const BLEND_MAX_WEIGHT = 0.85

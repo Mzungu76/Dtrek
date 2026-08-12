@@ -81,30 +81,35 @@ navigazione), non il sito intero.
   workflow `.github/workflows/build-navigator-apk.yml` che costruisce
   l'APK di test senza bisogno di Android Studio in locale.
 
-## Fase 2 — Position Engine — ✅ modulo pronto, non ancora agganciato alla UI
+## Fase 2 — Position Engine — ✅ landed e agganciato a NavigationEngine
 
 - `lib/navigation/positionEngine.ts`: quality check (`checkFixQuality`,
   esportata e testabile da sola), rigetto spike basato su velocità implicita
   al netto dell'accuracy combinata dei due fix, un vero filtro di Kalman a
-  velocità costante per asse (sostituisce la media mobile ingenua di
-  `gpsSmoothing.ts`), e `sample(atMs)` per ottenere una posizione
-  interpolata/estrapolata a qualunque timestamp — la base per un rendering
-  a 60fps indipendente dal tasso dei fix GPS (~1 Hz).
+  velocità costante per asse (sostituisce la media mobile ingenua che aveva
+  `gpsSmoothing.ts`, rimosso — non più referenziato da nessuna parte), e
+  `sample(atMs)` per ottenere una posizione interpolata/estrapolata a
+  qualunque timestamp.
 - Nessuna dipendenza da moduli legati al trail (nessun import da
   `routeDeviation.ts`/`navigationEngine.ts`) — rispetta il principio "il
   Position Engine non sa nulla del percorso".
+- `navigationEngine.ts`'s `handleFix()` ora chiama `this.position.ingest(raw)`
+  seguito da `this.position.sample(raw.ts)` a ogni fix: `ingest()` fa passare
+  il fix da quality gate/spike rejection/filtro, ma può rigettarlo (torna
+  `null`); `sample()` restituisce comunque la miglior stima corrente — se il
+  fix è stato rigettato, estrapolata dall'ultimo stato buono — così un
+  singolo fix rumoroso degrada a "la posizione non si è mossa molto" invece
+  di bloccare l'interfaccia o, peggio, mostrare per un attimo lo spike. Il
+  bearing GPS-fallback ora arriva direttamente dalla velocità filtrata del
+  Kalman (niente più media circolare separata su una cronologia di bearing
+  grezzi).
 
 **Non ancora fatto / prossimi passi concreti:**
-- Sostituire `GpsSmoother` con `PositionEngine` dentro
-  `navigationEngine.ts` (oggi convivono: `GpsSmoother` resta quello
-  realmente usato in produzione, per non toccare in questa stessa PR il
-  comportamento della UI di navigazione già in uso). È uno swap contenuto:
-  `this.smoother.push(raw)` → `this.positionEngine.ingest(raw)`, con
-  gestione esplicita del caso "fix rigettato" (oggi `GpsSmoother` non
-  rigetta mai nulla).
 - Agganciare `sample()` a un loop `requestAnimationFrame` nel renderer
-  mappa (`NavigationMap.tsx`/`NavigationMapLibre.tsx`) per il marker a
-  60fps — questo è più naturale da fare insieme alla fase 4 (Map Matching),
+  mappa (`NavigationMap.tsx`/`NavigationMapLibre.tsx`) per un marker che si
+  muove a 60fps anche tra un fix GPS e l'altro, non solo ogni volta che
+  arriva un nuovo evento `positionUpdated` (che resta al ritmo dei fix, non
+  del rendering) — più naturale da fare insieme alla fase 4 (Map Matching),
   perché è lì che si decide anche cosa disegnare rispetto al trail.
 - Non esiste un test runner nel repo (`package.json` non ha `test`/
   `jest`/`vitest`): se si vuole una suite automatica per
@@ -191,10 +196,17 @@ diverse, e `NavigationEngine.setLocationMode()` le espone lato JS. Manca:
 
 ## Ordine consigliato per le prossime PR
 
-1. Build Android reale (Fase 1, chiusura) su un ambiente con SDK — prima di
-   tutto il resto, per non accumulare altro codice nativo non verificato.
-2. Swap `GpsSmoother` → `PositionEngine` dentro `NavigationEngine` (Fase 2,
-   chiusura) + aggancio `sample()` al rendering mappa.
+1. ✅ Swap `GpsSmoother` → `PositionEngine` dentro `NavigationEngine` (Fase 2,
+   chiusura). Resta da fare solo l'aggancio di `sample()` al rendering
+   mappa a 60fps (vedi Fase 2 sopra).
+2. Build Android reale, per verificare che il plugin nativo compili
+   davvero — **non eseguibile dentro questa sessione**: l'ambiente in cui
+   gira questo agente blocca l'accesso a `dl.google.com`/Google Maven per
+   policy di rete (confermato tentando la build qui), quindi la prima
+   verifica reale può avvenire solo tramite il workflow
+   `.github/workflows/build-navigator-apk.yml` (rete libera sui runner
+   GitHub) o su un computer con Android Studio — vedi
+   `docs/guida-pubblicazione-dtrek-navigator.md`.
 3. Persistenza del trail graph per l'hike attivo (prerequisito comune a
    Fase 4, 6, 7).
 4. `UNCERTAIN`/`WRONG_DIRECTION` + Off-Route Engine multi-fattore (Fase 3/5

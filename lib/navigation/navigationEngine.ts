@@ -1,9 +1,9 @@
 import { haversineM } from '@/lib/geoUtils'
 import { LocationSource, type LocationMode, type LocationSourceError } from '@/lib/native/locationSource'
-import { GpsSmoother } from './gpsSmoothing'
+import { PositionEngine } from './positionEngine'
 import { RouteTracker, offRouteThresholdM } from './routeDeviation'
 import { PoiSpatialIndex } from './poiProximity'
-import { watchDeviceCompass, bearingDeg, circularMeanBearings } from './orientation'
+import { watchDeviceCompass, bearingDeg } from './orientation'
 import { NavStateMachine } from './stateMachine'
 import { buildRouteInstructions } from './routeInstructions'
 import { PaceAssistant, type WeatherConditions } from './paceAssistant'
@@ -48,7 +48,7 @@ export class NavigationEngine {
   private readonly pace: PaceAssistant
   private readonly instructions: NavInstruction[]
   private lastInstructionIndex = -1
-  private readonly smoother = new GpsSmoother()
+  private readonly position = new PositionEngine()
   private readonly stateMachine = new NavStateMachine()
   private readonly gps: LocationSource
   private readonly locationMode: LocationMode
@@ -63,7 +63,6 @@ export class NavigationEngine {
   private gpsLostTimer: ReturnType<typeof setTimeout> | null = null
   private offRouteStreak = 0
   private onRouteStreak = 0
-  private recentBearings: number[] = []
   private traveledDistanceM = 0
   private lastAcceptedFix: GeoFix | null = null
 
@@ -174,7 +173,27 @@ export class NavigationEngine {
       this.setState('navigating')
     }
 
-    const smoothed = this.smoother.push(raw)
+    // ingest() runs the fix through the quality gate/spike rejection/Kalman filter but can reject
+    // it outright (returns null); sample() always returns the engine's current best estimate
+    // regardless — extrapolated from the last accepted fix if this one was rejected — so a single
+    // noisy fix degrades to "position hasn't moved much" instead of freezing the UI or, worse,
+    // briefly showing the spike itself. Guard only covers the very first fix ever, before the
+    // filter has anything to extrapolate from.
+    this.position.ingest(raw)
+    const estimate = this.position.sample(raw.ts)
+    if (!estimate) return
+
+    const smoothed: GeoFix = {
+      lat: estimate.lat,
+      lon: estimate.lon,
+      altitudeM: estimate.altitudeM,
+      accuracyM: estimate.accuracyM,
+      speedMs: estimate.speedMs,
+      bearingDeg: estimate.bearingDeg,
+      ts: estimate.ts,
+      source: raw.source,
+    }
+
     const progress = this.tracker.update(smoothed.lat, smoothed.lon)
     const instantSpeedMs = this.updateTraveledDistance(smoothed)
     this.emit('positionUpdated', { raw, smoothed, progress, traveledDistanceM: this.traveledDistanceM, instantSpeedMs })
@@ -230,16 +249,18 @@ export class NavigationEngine {
     return speedMs
   }
 
-  /** GPS-derived bearing, used only when no fresh compass sensor reading has arrived. */
+  /**
+   * GPS-derived bearing, used only when no fresh compass sensor reading has
+   * arrived. The Position Engine already derives and smooths this itself —
+   * its Kalman filter's own velocity vector (vx, vy) is a heading-of-travel
+   * estimate that only updates once the fix is above its noise-floor speed
+   * threshold (see positionEngine.ts) — so there's no separate bearing
+   * history/circular-mean to maintain here anymore.
+   */
   private updateBearingFallback(fix: GeoFix): void {
     if (Date.now() - this.lastCompassAt < COMPASS_STALE_MS) return
-    const prev = this.smoother.previous()
-    if (!prev) return
-    const raw = bearingDeg(prev.lat, prev.lon, fix.lat, fix.lon)
-    this.recentBearings.push(raw)
-    if (this.recentBearings.length > 8) this.recentBearings.shift()
-    const smoothed = circularMeanBearings(this.recentBearings, 3)
-    this.emit('bearingUpdated', { bearingDeg: smoothed[smoothed.length - 1], source: 'gps' })
+    if (fix.bearingDeg == null) return
+    this.emit('bearingUpdated', { bearingDeg: fix.bearingDeg, source: 'gps' })
   }
 
   private updateRouteDeviation(fix: GeoFix, progress: import('./types').RouteProgress, accuracyM: number | null | undefined): void {
