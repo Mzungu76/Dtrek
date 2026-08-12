@@ -241,18 +241,62 @@ oggi best-effort/opzionale, debba diventare un requisito) e
 un banner esplicito "⚠ Offline navigation incomplete" quando manca
 qualcosa di critico.
 
-## Fase 7 — Escape Engine — da costruire
+## Fase 7 — Escape Engine — ✅ landed (v1, senza dislivello)
 
-Non esiste ancora. Si appoggia direttamente sul trail graph già persistito
-(prerequisito sopra, `lib/navigation/trailGraphStore.ts` — inclusi
-`nearestGraphNode` in `osmGraph.ts`, già pronto per trovare il nodo del
-grafo più vicino a una posizione fuori percorso): dato un punto fuori
-percorso, cercare nel grafo percorsi
-verso (a) il punto più vicino sull'ultimo segmento noto, (b) trail
-alternativi vicini con `trailConfidence` alta, (c) strade, (d) POI sicuri —
-e restituire `ESCAPE OPTIONS` ordinate con distanza/dislivello/sicurezza
-motivati. `lib/trailScore.ts` è il punto di partenza naturale per il
-concetto di `trailConfidence`/sicurezza per segmento.
+- `lib/navigation/escapeEngine.ts` (nuovo): `computeEscapeOptions()`,
+  funzione pura chiamata **on-demand** (non a ogni fix — è una ricerca nel
+  grafo, non gratis da ripetere ogni secondo), che restituisce fino a 4
+  `EscapeOption` nell'ordine dell'esempio della issue:
+  1. **Torna sul percorso** — non serve il trail graph, usa direttamente
+     `RouteProgress.nearestPointLat/Lon`/`distanceToRouteM` già calcolati da
+     `RouteTracker`.
+  2. **Raggiungi trail alternativo** — Dijkstra semplice (O(n²), accettabile:
+     gira una volta per tap utente su un grafo di poche centinaia/migliaia
+     di nodi, non per fix) da `nearestGraphNode` sulla posizione corrente,
+     filtrando i nodi raggiunti troppo vicini al percorso pianificato
+     (`minDistToTrack`, non sono "alternative" vere) e preferendo tag
+     `highway` di qualità migliore (`track`/`footway` > `path`/`bridleway`/
+     `steps`).
+  3. **Raggiungi strada** — stessa ricerca, filtrando per `highway`
+     `unclassified`/`residential`.
+  4. **POI sicuro** — il rifugio/bivacco/riparo (`PoiType` da
+     `lib/overpass.ts`) più vicino tra quelli già noti all'hike, in linea
+     d'aria (nessuna ricerca nel grafo per i POI). Richiede che `NavPoi`
+     porti il campo `type` (aggiunto — `types.ts` + il mapping in
+     `ActiveNavigationView.tsx` che prima lo scartava).
+  Ogni opzione ha sempre un campo `reason` esplicito (spec: "l'utente deve
+  sempre sapere perché viene proposta") e una `safety` (`alta`/`media`/
+  `bassa`) stimata da distanza + qualità del tag OSM — **non** da un vero
+  calcolo di dislivello.
+- **Perché niente dislivello** (il fattore "dislivello" della spec):
+  `GraphNode`/`GraphEdge` non portano quota, e l'unica pipeline di
+  elevazione esistente (`lib/dtm/`) richiede una chiamata di rete verso un
+  servizio esterno **rate-limited a 50 chiamate/24h** — inaccettabile da
+  spendere per una decisione live in navigazione. La sicurezza qui è quindi
+  un proxy più grezzo (lunghezza + tipo di superficie), non un vero
+  trailConfidence/sicurezza per segmento come originariamente ipotizzato.
+  Se in futuro serve, l'opzione più realistica è cache-are l'elevazione dei
+  nodi del grafo *una volta* al momento del download del pacchetto offline
+  (Fase 6), non calcolarla al volo.
+- UI: `components/navigation/EscapeOptionsSheet.tsx` (nuovo) — lista
+  ordinata con distanza, badge di sicurezza, motivazione testuale e freccia
+  di direzione; instradato da un pulsante "Vie d'uscita" dentro il banner
+  off_route/wrong_direction già esistente in `ActiveNavigationView.tsx`
+  (nessuna nuova UI persistente, solo quando il percorso è già segnalato
+  come perso/sbagliato).
+
+**Non ancora fatto / prossimi passi concreti:**
+- Nessun vero `trailConfidence` per segmento (§6 della spec) — oggi la
+  qualità di un'alternativa è solo il tag `highway`. Costruire un vero
+  trailConfidence (da `lib/trailScore.ts` + dati di connettività) è lavoro
+  a parte, non fatto qui.
+- Il pulsante "Vie d'uscita" compare solo per `off_route`/`wrong_direction`,
+  non per `uncertain` — coerente con la scelta di non allarmare per una
+  semplice incertezza GPS, ma da rivedere se in pratica risulta troppo
+  restrittivo.
+- Non testato su un grafo reale scaricato in un'area montana ampia — le
+  costanti (`MAX_SEARCH_RADIUS_M=2000`, `MAX_VISITED_NODES=600`) sono stime
+  ragionevoli, non calibrate su un caso reale.
 
 ## Fase 8 — Battery-aware + test reali outdoor — parzialmente pronto lato native
 
@@ -286,8 +330,9 @@ diverse, e `NavigationEngine.setLocationMode()` le espone lato JS. Manca:
    Position Engine funziona su device reale (rilevamento off-route incluso).
 4. ✅ `UNCERTAIN`/`WRONG_DIRECTION` + Off-Route Engine multi-fattore (Fase
    3/5 della issue originale) — vedi sezione dedicata sopra.
-5. Escape Engine (Fase 7) — la feature distintiva citata esplicitamente
-   nella issue, ora sbloccata dal trail graph persistito.
+5. ✅ Escape Engine (Fase 7) — la feature distintiva citata esplicitamente
+   nella issue — vedi sezione dedicata sopra (v1 senza dislivello, per il
+   costo/rate-limit della pipeline DTM).
 6. Offline Navigation Package esteso (POI, profilo altimetrico, nav data,
    escape data) + Readiness Check (Fase 6).
 7. Decisore battery-aware automatico (Fase 8) + test reali su device.

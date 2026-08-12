@@ -27,11 +27,13 @@ import {
   loadParkingSpot, saveParkingSpot, clearParkingSpot, type ParkingSpot,
 } from '@/lib/navigation/navigationStore'
 import { loadManifest, isManifestValid } from '@/lib/offline/packageManifest'
-import { ensureTrailGraph } from '@/lib/navigation/trailGraphStore'
+import { ensureTrailGraph, loadTrailGraph } from '@/lib/navigation/trailGraphStore'
+import { computeEscapeOptions, type EscapeOption } from '@/lib/navigation/escapeEngine'
+import EscapeOptionsSheet from './EscapeOptionsSheet'
 import OfflinePackageDownloader from './OfflinePackageDownloader'
 import { watchBattery } from '@/lib/navigation/battery'
 import { haptics } from '@/lib/navigation/haptics'
-import type { NavInstruction, NavPoi, NavState, RouteMoment } from '@/lib/navigation/types'
+import type { NavInstruction, NavPoi, NavState, RouteMoment, RouteProgress } from '@/lib/navigation/types'
 import type { WildlifeRisk } from '@/lib/safetyScore'
 import NavigationMap from './NavigationMap'
 import NavigationMapLibre from './NavigationMapLibre'
@@ -72,12 +74,19 @@ export default function ActiveNavigationView({ hike }: Props) {
   // excluded, same gate as the displayed distance/time stats) — the source
   // for the optional "save as a completed activity" step when navigation ends.
   const recordedTrackRef = useRef<TrackPoint[]>([])
+  // Full RouteProgress (nearest point, distance, expected bearing) from the latest fix — kept in a
+  // ref rather than state because it's only needed on-demand (Escape Engine snapshot), not for
+  // rendering; `progress` state below stays the reduced shape the rest of the UI actually uses.
+  const fullProgressRef = useRef<RouteProgress | null>(null)
 
   const [state, setState] = useState<NavState>('idle')
   const [position, setPosition] = useState<{ lat: number; lon: number } | null>(null)
   const [accuracyM, setAccuracyM] = useState<number | null>(null)
   const [bearing, setBearing] = useState<number | null>(null)
   const [progress, setProgress] = useState<{ distanceAlongRouteM: number; totalRouteM: number } | null>(null)
+  const [escapeSheetOpen, setEscapeSheetOpen] = useState(false)
+  const [escapeLoading, setEscapeLoading] = useState(false)
+  const [escapeOptions, setEscapeOptions] = useState<EscapeOption[] | null>(null)
   const [traveledDistanceM, setTraveledDistanceM] = useState(0)
   const [currentSpeedMs, setCurrentSpeedMs] = useState<number | null>(null)
   const [movingTimeMs, setMovingTimeMs] = useState(0)
@@ -131,7 +140,7 @@ export default function ActiveNavigationView({ hike }: Props) {
 
   const pois = useMemo<NavPoi[]>(() => {
     const raw = (hike.cachedPois ?? []) as PoiItem[]
-    return raw.filter((p) => p.lat != null && p.lon != null).map((p) => ({ id: p.id, lat: p.lat, lon: p.lon, name: p.name }))
+    return raw.filter((p) => p.lat != null && p.lon != null).map((p) => ({ id: p.id, lat: p.lat, lon: p.lon, name: p.name, type: p.type }))
   }, [hike.cachedPois])
 
   const poiWikiById = useMemo(() => {
@@ -280,6 +289,7 @@ export default function ActiveNavigationView({ hike }: Props) {
         lastFixAtRef.current = Date.now()
         setPosition({ lat: smoothed.lat, lon: smoothed.lon })
         setAccuracyM(raw.accuracyM ?? null)
+        fullProgressRef.current = progress
         // Position keeps updating even while the stats timer is paused (the
         // hiker still wants to see themselves on the map) — only the
         // recorded distance/speed stats freeze.
@@ -517,6 +527,34 @@ export default function ActiveNavigationView({ hike }: Props) {
     const updated = [...hikeNotes, note]
     setHikeNotes(updated)
     updatePlannedMeta(hike.id, { hikeNotes: updated }).catch(() => {})
+  }
+
+  /**
+   * Snapshot, not live: the Escape Engine's graph search (lib/navigation/escapeEngine.ts) is cheap
+   * once but not something to re-run on every GPS fix, so options are computed when the hiker
+   * actually opens the sheet, with an explicit refresh rather than continuous recomputation.
+   */
+  const handleEscapeOptions = async () => {
+    setEscapeSheetOpen(true)
+    setEscapeLoading(true)
+    try {
+      const network = await loadTrailGraph(hike.id)
+      const progressSnapshot = fullProgressRef.current
+      if (!position || !progressSnapshot) {
+        setEscapeOptions([])
+        return
+      }
+      setEscapeOptions(computeEscapeOptions({
+        network,
+        routePolyline,
+        currentLat: position.lat,
+        currentLon: position.lon,
+        progress: progressSnapshot,
+        pois,
+      }))
+    } finally {
+      setEscapeLoading(false)
+    }
   }
 
   const handleSaveRecordedActivity = async (title: string, mode: 'overwrite' | 'new') => {
@@ -768,6 +806,12 @@ export default function ActiveNavigationView({ hike }: Props) {
                 {isWrongDirection
                   ? 'Direzione sbagliata — segui la freccia'
                   : `Sei fuori dal percorso${offRouteBearingDeg != null ? ' — torna verso la freccia' : ' pianificato'}`}
+                <button
+                  onClick={handleEscapeOptions}
+                  className="ml-1 shrink-0 text-xs font-bold underline decoration-white/60 underline-offset-2"
+                >
+                  Vie d&apos;uscita
+                </button>
               </div>
             ),
           })
@@ -848,6 +892,14 @@ export default function ActiveNavigationView({ hike }: Props) {
           onDiscard={handleDiscardRecordedActivity}
         />
       )}
+
+      <EscapeOptionsSheet
+        open={escapeSheetOpen}
+        onClose={() => setEscapeSheetOpen(false)}
+        loading={escapeLoading}
+        options={escapeOptions}
+        onRefresh={handleEscapeOptions}
+      />
     </div>
   )
 }

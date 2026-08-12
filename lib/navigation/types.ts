@@ -35,6 +35,8 @@ export interface NavPoi {
   lon: number
   name?: string
   notifyRadiusM?: number
+  /** OSM POI category (lib/overpass.ts's PoiType), when known — lets the Escape Engine (lib/navigation/escapeEngine.ts) tell a hut/bivouac/shelter apart from a viewpoint or a bench when ranking "safe POI" escape destinations. Optional/untyped here (not importing PoiType) to keep this file free of a dependency on the POI-fetching layer; callers narrow it themselves. */
+  type?: string
 }
 
 /** A non-POI narrative beat along the route (climb start, viewpoint, exposed section...). */
