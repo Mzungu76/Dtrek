@@ -503,6 +503,52 @@ sotto.
   route.ts`), ma non è stato misurato l'impatto su una lista con decine di
   percorsi.
 
+## Post-collaudo — sentieri vicini stile CalTopo — ✅ landed (fix + estensione)
+
+L'utente ha segnalato di apprezzare, in CalTopo, i sentieri vicini sempre
+visibili con etichetta di distanza (rassicurante, e utile come possibile
+via di fuga/alternativa). Verificando il codice, la feature esisteva già
+(`useNearbyTrails` + il layer tratteggiato in `NavigationMap.tsx`) ma
+**non è mai comparsa davvero**: era disegnata dentro l'effetto React che
+crea la mappa una volta sola al mount (`useEffect(..., [])`), che quindi
+chiudeva su `nearbyTrails` così com'era in quel momento — sempre `[]`,
+perché il fetch Overpass di `useNearbyTrails` risolve dopo, in modo
+asincrono, quando quell'effetto non gira più una seconda volta. Bug
+silenzioso, mai un errore in console.
+
+- `NavigationMap.tsx`: il disegno dei sentieri vicini è ora un effetto
+  React a sé (`useEffect(..., [nearbyTrails, mapReady])`), che ridisegna
+  ogni volta che la prop cambia — corregge il bug sopra.
+- `lib/navigation/nearbyTrailLabels.ts` (nuovo): calcola lunghezza ed
+  etichetta di ogni segmento — un'etichetta per way OSM distinta (stesso
+  livello di dettaglio delle etichette di CalTopo nello screenshot
+  condiviso), non una ogni tot metri.
+- Stile aggiornato: linea più marcata (colore marrone caldo, distinto dal
+  verde del percorso pianificato e dagli arancioni degli avvisi
+  fuori-percorso) più etichetta di distanza per segmento, testo con alone
+  bianco per restare leggibile sopra qualunque sfondo della mappa.
+- `NavigationMapLibre.tsx` (mappa online): la feature non esisteva
+  affatto qui — aggiunta con lo stesso stile/soglie (linea tratteggiata +
+  layer `symbol` per le etichette), così passare da mappa offline a
+  online durante la navigazione non fa sparire questo contesto.
+- `ActiveNavigationView.tsx`: `nearbyTrails` (già calcolato da
+  `useNearbyTrails`) ora passato anche a `NavigationMapLibre`, non solo a
+  `NavigationMap`.
+
+**Non ancora fatto / prossimi passi concreti:**
+- Nessuna distinzione visiva tra "sentiero qualunque nelle vicinanze" e
+  "sentiero che l'Escape Engine (Fase 7) proporrebbe davvero come via
+  d'uscita" — sono la stessa fonte dati (OSM) ma non la stessa query
+  (`fetchNearbyTrailPaths` per il layer di contesto, il trail graph
+  persistito per l'Escape Engine); unificarle o quantomeno evidenziare le
+  une dentro le altre è lavoro futuro, non fatto qui.
+- Non aggiunto a `FreeTrackMap.tsx` (registrazione senza pianificazione) —
+  richiederebbe usare il percorso percorso finora come riferimento per il
+  bbox invece di un percorso pianificato fisso, fuori scope di questo giro.
+- Soglia di lunghezza minima per l'etichetta (`NEARBY_TRAIL_MIN_LABEL_LENGTH_M
+  = 60`) e stile non calibrati su un caso reale con molti sentieri
+  ravvicinati (stesso caveat delle altre costanti "a stima" in questo file).
+
 ## Ordine consigliato per le prossime PR
 
 1. ✅ Swap `GpsSmoother` → `PositionEngine` dentro `NavigationEngine` (Fase 2,

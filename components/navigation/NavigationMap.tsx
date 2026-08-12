@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Locate } from 'lucide-react'
 import type { NavState } from '@/lib/navigation/types'
 import { computeDirectionArrows } from '@/lib/geoUtils'
+import { labelNearbyTrail, formatTrailDistance } from '@/lib/navigation/nearbyTrailLabels'
 
 interface Props {
   routePolyline: [number, number][]
@@ -45,6 +46,13 @@ const STATE_COLOR: Record<NavState, string> = {
 // the downloaded offline package.
 const TILE_URL = '/api/tile?z={z}&x={x}&y={y}&style=voyager'
 
+// Warm brown, distinct from the planned route's green and the off-route amber/orange markers —
+// a CalTopo-style "here's what else is nearby" reference, not a warning or the route itself.
+const NEARBY_TRAIL_COLOR = '#92552a'
+// Skip labeling fragments this short — Overpass returns every way in the bbox, including short
+// connector stubs a distance label would only clutter, not help with.
+const NEARBY_TRAIL_MIN_LABEL_LENGTH_M = 60
+
 /**
  * Leaflet-based full-screen navigation map with a live rotating arrow for
  * position/bearing. Auto-follows the hiker by default (Komoot-style); if the
@@ -57,6 +65,7 @@ export default function NavigationMap({ routePolyline, pois, position, bearingDe
   const userMarker = useRef<L.Marker | null>(null)
   const parkingMarker = useRef<L.Marker | null>(null)
   const accuracyCircle = useRef<L.Circle | null>(null)
+  const nearbyTrailLayers = useRef<L.Layer[]>([])
   const hasCentered = useRef(false)
   const [followMode, setFollowMode] = useState(true)
   // La mappa nasce dentro un import() dinamico: gli effetti che ci disegnano sopra devono poter
@@ -73,13 +82,6 @@ export default function NavigationMap({ routePolyline, pois, position, bearingDe
         16,
       )
       L.tileLayer(TILE_URL, { maxZoom: 18 }).addTo(map)
-
-      // Context layer, drawn under the main route: other nearby paths give a
-      // hiker something to orient by (a fork, a shortcut, a parallel trail)
-      // instead of just a blank basemap with one highlighted line on it.
-      for (const line of nearbyTrails ?? []) {
-        L.polyline(line, { color: '#8a7f6e', weight: 2, opacity: 0.55, dashArray: '1 6' }).addTo(map)
-      }
 
       if (routePolyline.length > 1) {
         L.polyline(routePolyline, { color: '#277134', weight: 4, opacity: 0.8 }).addTo(map)
@@ -123,6 +125,40 @@ export default function NavigationMap({ routePolyline, pois, position, bearingDe
     return () => { cancelled = true; mapInstance.current?.remove(); mapInstance.current = null; parkingMarker.current = null; setMapReady(false) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Context layer, drawn under the main route: other nearby paths (CalTopo-style, with a distance
+  // label per segment) give a hiker something to orient by — a fork, a shortcut, a possible escape
+  // route — instead of just a blank basemap with one highlighted line on it. A dedicated effect,
+  // not part of the mount effect above: nearbyTrails arrives asynchronously from useNearbyTrails'
+  // Overpass fetch, well after the map first mounts, so drawing it only at mount time (closing over
+  // whatever the prop happened to be then — always empty) silently never showed anything.
+  useEffect(() => {
+    if (!mapReady || !mapInstance.current) return
+    const map = mapInstance.current
+    let cancelled = false
+    import('leaflet').then((L) => {
+      if (cancelled) return
+      nearbyTrailLayers.current.forEach((layer) => layer.remove())
+      nearbyTrailLayers.current = []
+      for (const line of nearbyTrails ?? []) {
+        if (line.length < 2) continue
+        const polyline = L.polyline(line, { color: NEARBY_TRAIL_COLOR, weight: 2.5, opacity: 0.8, dashArray: '6 6' }).addTo(map)
+        nearbyTrailLayers.current.push(polyline)
+
+        const { lengthM, midLat, midLon } = labelNearbyTrail(line)
+        if (lengthM >= NEARBY_TRAIL_MIN_LABEL_LENGTH_M) {
+          const labelIcon = L.divIcon({
+            className: '',
+            html: `<span style="font-size:11px;font-weight:700;color:${NEARBY_TRAIL_COLOR};text-shadow:0 0 3px white,0 0 3px white,0 0 3px white;white-space:nowrap">${formatTrailDistance(lengthM)}</span>`,
+            iconSize: [0, 0],
+          })
+          const label = L.marker([midLat, midLon], { icon: labelIcon, interactive: false, keyboard: false }).addTo(map)
+          nearbyTrailLayers.current.push(label)
+        }
+      }
+    })
+    return () => { cancelled = true }
+  }, [nearbyTrails, mapReady])
 
   useEffect(() => {
     if (!position || !mapInstance.current) return

@@ -7,6 +7,7 @@ import { maptilerStyleUrl, MAPTILER_KEY, type MapTilerStyleId } from '@/lib/mapS
 import { circlePolygonLonLat } from '@/lib/geoUtils'
 import type { NavState } from '@/lib/navigation/types'
 import type { Natura2000Feature } from '@/lib/natura2000/natura2000Client'
+import { labelNearbyTrail, formatTrailDistance } from '@/lib/navigation/nearbyTrailLabels'
 
 interface Props {
   routePolyline: [number, number][]
@@ -26,6 +27,8 @@ interface Props {
   /** Natura 2000 protected-area polygons for the route's bbox (fetched once by the caller), drawn as a translucent overlay when showNatura2000 is on. */
   natura2000Features?: Natura2000Feature[] | null
   showNatura2000?: boolean
+  /** Nearby hiking paths/tracks (from OSM), drawn as thin dashed context lines with a CalTopo-style distance label per segment — same data/purpose as NavigationMap.tsx's Leaflet version. */
+  nearbyTrails?: [number, number][][]
 }
 
 // Not a fixed deadline from the start — reset on every 'data' event (tile/
@@ -86,6 +89,13 @@ const TERRAIN_EXAGGERATION = 1.4 // matches RouteMap3D's flythrough for a consis
 const NATURA2000_SOURCE_ID = 'nav-natura2000'
 const NATURA2000_FILL_LAYER_ID = 'nav-natura2000-fill'
 const NATURA2000_LINE_LAYER_ID = 'nav-natura2000-line'
+const NEARBY_TRAILS_SOURCE_ID = 'nav-nearby-trails'
+const NEARBY_TRAILS_LINE_LAYER_ID = 'nav-nearby-trails-line'
+const NEARBY_TRAILS_LABEL_LAYER_ID = 'nav-nearby-trails-label'
+// Same color/threshold as NavigationMap.tsx's Leaflet version — warm brown, distinct from the
+// planned route's green and the off-route amber/orange markers.
+const NEARBY_TRAIL_COLOR = '#92552a'
+const NEARBY_TRAIL_MIN_LABEL_LENGTH_M = 60
 
 // At a steep pitch, the same zoom level shows much less ground in the
 // foreground than a flat view (perspective foreshortening), and combined
@@ -108,7 +118,7 @@ function followZoomFor(is3D: boolean): number { return is3D ? 14.5 : 16 }
  * offline Leaflet map and to avoid disorienting the hiker with a spinning
  * view while walking.
  */
-export default function NavigationMapLibre({ routePolyline, pois, position, bearingDeg, state, styleId, is3D, onStyleFailed, accuracyM, natura2000Features, showNatura2000, parkingSpot }: Props) {
+export default function NavigationMapLibre({ routePolyline, pois, position, bearingDeg, state, styleId, is3D, onStyleFailed, accuracyM, natura2000Features, showNatura2000, parkingSpot, nearbyTrails }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const markersRef = useRef<maplibregl.Marker[]>([])
@@ -134,6 +144,8 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
   natura2000FeaturesRef.current = natura2000Features
   const showNatura2000Ref = useRef(showNatura2000)
   showNatura2000Ref.current = showNatura2000
+  const nearbyTrailsRef = useRef(nearbyTrails)
+  nearbyTrailsRef.current = nearbyTrails
   const dataListener = useRef<(() => void) | null>(null)
   const [followMode, setFollowMode] = useState(true)
   const [styleLoading, setStyleLoading] = useState(true)
@@ -273,6 +285,50 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
     }
   }
 
+  /**
+   * Context layer, CalTopo-style: other nearby OSM paths with a distance label per segment — same
+   * data/purpose as NavigationMap.tsx's Leaflet version (see its own comment for why this needs
+   * its own effect below, not just a one-time setup at map creation: nearbyTrails arrives
+   * asynchronously from useNearbyTrails' Overpass fetch, after the map has already loaded).
+   */
+  const setupNearbyTrailsLayer = (map: any) => {
+    const lines = nearbyTrailsRef.current ?? []
+    const lineFeatures = lines
+      .filter((line) => line.length >= 2)
+      .map((line) => ({
+        type: 'Feature' as const,
+        geometry: { type: 'LineString' as const, coordinates: line.map(([lat, lon]) => [lon, lat]) },
+        properties: {},
+      }))
+    const labelFeatures = lines
+      .filter((line) => line.length >= 2)
+      .map((line) => labelNearbyTrail(line))
+      .filter((l) => l.lengthM >= NEARBY_TRAIL_MIN_LABEL_LENGTH_M)
+      .map((l) => ({
+        type: 'Feature' as const,
+        geometry: { type: 'Point' as const, coordinates: [l.midLon, l.midLat] },
+        properties: { label: formatTrailDistance(l.lengthM) },
+      }))
+    const geojson = { type: 'FeatureCollection' as const, features: [...lineFeatures, ...labelFeatures] }
+
+    if (map.getSource(NEARBY_TRAILS_SOURCE_ID)) {
+      map.getSource(NEARBY_TRAILS_SOURCE_ID).setData(geojson)
+      return
+    }
+    map.addSource(NEARBY_TRAILS_SOURCE_ID, { type: 'geojson', data: geojson })
+    map.addLayer({
+      id: NEARBY_TRAILS_LINE_LAYER_ID, type: 'line', source: NEARBY_TRAILS_SOURCE_ID,
+      filter: ['==', ['geometry-type'], 'LineString'],
+      paint: { 'line-color': NEARBY_TRAIL_COLOR, 'line-width': 2, 'line-opacity': 0.8, 'line-dasharray': [2, 2] },
+    })
+    map.addLayer({
+      id: NEARBY_TRAILS_LABEL_LAYER_ID, type: 'symbol', source: NEARBY_TRAILS_SOURCE_ID,
+      filter: ['==', ['geometry-type'], 'Point'],
+      layout: { 'text-field': ['get', 'label'], 'text-size': 11, 'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'], 'text-allow-overlap': false },
+      paint: { 'text-color': NEARBY_TRAIL_COLOR, 'text-halo-color': '#ffffff', 'text-halo-width': 1.5 },
+    })
+  }
+
   // "3D" was just a pitch on a flat map — real relief needs an elevation
   // source too. Same terrain-rgb-v2 dataset and setTerrain() call as
   // RouteMap3D's flythrough. Independent of whichever base style is active
@@ -340,13 +396,14 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
         setupTerrain(map)
         updateAccuracyCircle(map)
         setupNatura2000Layer(map)
+        setupNearbyTrailsLayer(map)
         for (const poi of pois) {
           const marker = new maplibregl.Marker().setLngLat([poi.lon, poi.lat]).addTo(map)
           markersRef.current.push(marker)
         }
       })
       // setStyle() wipes custom sources/layers — re-add the route, terrain, accuracy circle and overlay layers after every style switch.
-      map.on('style.load', () => { setupRouteLayer(maplibregl); setupTerrain(map); updateAccuracyCircle(map); setupNatura2000Layer(map) })
+      map.on('style.load', () => { setupRouteLayer(maplibregl); setupTerrain(map); updateAccuracyCircle(map); setupNatura2000Layer(map); setupNearbyTrailsLayer(map) })
       // MapLibre GL, unlike Leaflet, does NOT support space-separated event
       // names in on() — `map.on('dragstart zoomstart', ...)` silently
       // registers a listener for a nonexistent event and never fires, so
@@ -472,6 +529,16 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
     else map.once('idle', () => setupNatura2000Layer(map))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [natura2000Features, showNatura2000])
+
+  // Same "retry once idle" idiom as the effect above — nearbyTrails resolves asynchronously
+  // (useNearbyTrails' Overpass fetch), well after the initial 'load'/'style.load' setup.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    if (map.isStyleLoaded()) setupNearbyTrailsLayer(map)
+    else map.once('idle', () => setupNearbyTrailsLayer(map))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nearbyTrails])
 
   const handleRecenter = () => {
     setFollowMode(true)
