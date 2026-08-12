@@ -22,6 +22,20 @@ export interface OfflinePackageManifest {
   createdAt: number
   updatedAt: number
   checksum?: string
+  /**
+   * Whether the walkable trail graph around the route (lib/navigation/
+   * trailGraphStore.ts — prerequisite for Map Matching against real
+   * alternatives and for the Escape Engine, both still to be built) was
+   * fetched successfully alongside the tiles. Deliberately NOT part of
+   * isManifestValid() below: fetching it is best-effort against a shared
+   * public service (Overpass) that can be slow/unavailable, and today's
+   * "ready to navigate offline" contract is about map tiles — whether the
+   * graph should become a hard requirement is an Offline Readiness Check
+   * decision for a later phase (see docs/navigation-engine-roadmap.md
+   * Fase 6), not something to silently fold in here.
+   */
+  hasTrailGraph?: boolean
+  trailGraphNodeCount?: number
 }
 
 const MANIFEST_KEY = (hikeId: string) => `offline-manifest:${hikeId}`
