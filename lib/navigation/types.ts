@@ -11,8 +11,8 @@ export interface GeoFix {
   bearingDeg?: number | null
   verticalAccuracyM?: number | null
   speedAccuracyMs?: number | null
-  /** Which Location Engine produced this fix — surfaced for diagnostics (Navigation Health screen, spec §16), never used to change trust decisions by itself. */
-  source?: 'native' | 'web'
+  /** Which Location Engine produced this fix — surfaced for diagnostics (Navigation Health screen, spec §16), never used to change trust decisions by itself. 'simulated' = lib/navigation/simulation (GPX replay/scenario injection), never a real fix. */
+  source?: 'native' | 'web' | 'simulated'
   /** True when the OS flagged this fix as coming from a mock/spoofed provider (native only) — the Position Engine's quality gate should reject these outright. */
   mock?: boolean
 }
@@ -21,7 +21,11 @@ export type NavState =
   | 'idle'
   | 'navigating'
   | 'poi_near'
+  /** Distance-to-route reading can't be trusted enough to call it either way (poor GPS accuracy) — spec §15.6: say so instead of guessing. Distinct from off_route, which is a confirmed deviation. */
+  | 'uncertain'
   | 'off_route'
+  /** Distance-to-route is small (still "on" the trail) but heading of travel is incompatible with the route's forward direction at that point — e.g. doubled back, or on a look-alike parallel path at a junction. See lib/navigation/offRouteEngine.ts. */
+  | 'wrong_direction'
   | 'gps_lost'
   | 'finished'
 
@@ -31,6 +35,8 @@ export interface NavPoi {
   lon: number
   name?: string
   notifyRadiusM?: number
+  /** OSM POI category (lib/overpass.ts's PoiType), when known — lets the Escape Engine (lib/navigation/escapeEngine.ts) tell a hut/bivouac/shelter apart from a viewpoint or a bench when ranking "safe POI" escape destinations. Optional/untyped here (not importing PoiType) to keep this file free of a dependency on the POI-fetching layer; callers narrow it themselves. */
+  type?: string
 }
 
 /** A non-POI narrative beat along the route (climb start, viewpoint, exposed section...). */
@@ -51,6 +57,8 @@ export interface RouteProgress {
   /** Closest point on the route polyline to the fix that produced this progress — used to derive a "head this way" bearing when off-route. */
   nearestPointLat: number
   nearestPointLon: number
+  /** Compass bearing (0-360) of the route polyline's own forward direction at the nearest segment — the "correct heading" to compare a hiker's actual bearing against for wrong_direction detection. Null only when the route has fewer than 2 points. */
+  expectedBearingDeg: number | null
 }
 
 export type TurnType = 'start' | 'straight' | 'slight-left' | 'left' | 'sharp-left' | 'slight-right' | 'right' | 'sharp-right' | 'arrive'
@@ -78,9 +86,15 @@ export type NavEventMap = {
   leftPoi: { poi: NavPoi }
   momentReached: { moment: RouteMoment }
   instructionUpdated: { current: NavInstruction; next: NavInstruction | null; distanceToNextM: number | null }
-  /** bearingToRouteDeg is the absolute compass bearing (0-360, north-up) from the current fix to the nearest point on the planned route, for a "head this way to get back on track" indicator. */
+  /** bearingToRouteDeg is the absolute compass bearing (0-360, north-up) from the current fix to the nearest point on the planned route, for a "head this way to get back on track" indicator. Fired for both off_route and wrong_direction (both mean "not following the intended path") — existing UI (haptics/speech/banner) treats them the same; wrongDirection below carries the extra detail for anything that wants to distinguish them. */
   offRoute: { distanceToRouteM: number; bearingToRouteDeg: number | null }
   backOnRoute: {}
+  /** GPS accuracy currently too poor to trust the distance-to-route reading either way — communicated explicitly per spec §15.6, rather than silently guessing on/off. */
+  uncertain: { distanceToRouteM: number; accuracyM: number | null }
+  certain: {}
+  /** On the route (small distanceToRouteM) but heading of travel doesn't match the route's own forward direction there — see NavState.wrong_direction. */
+  wrongDirection: { headingDeg: number | null; expectedHeadingDeg: number | null }
+  rightDirection: {}
   /** permissionDenied distinguishes "the user denied the location permission" (unrecoverable without a settings change) from an ordinary temporary signal loss (weak signal, tunnel, timeout). */
   gpsLost: { permissionDenied: boolean }
   gpsRecovered: {}

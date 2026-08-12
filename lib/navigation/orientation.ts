@@ -12,6 +12,12 @@ export function bearingDeg(la1: number, lo1: number, la2: number, lo2: number): 
   return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360
 }
 
+/** Minimal absolute angular difference between two compass bearings (0-180) — handles the 350°/10° wraparound correctly, unlike a plain subtraction. */
+export function angleDiffDeg(a: number, b: number): number {
+  const diff = Math.abs(a - b) % 360
+  return diff > 180 ? 360 - diff : diff
+}
+
 /** Circular mean for bearings — avoids the 350°/10° → 180° bug at north crossings. */
 export function circularMeanBearings(bearings: number[], half: number): number[] {
   return bearings.map((_, i) => {

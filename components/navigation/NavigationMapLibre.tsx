@@ -40,7 +40,9 @@ const STATE_COLOR: Record<NavState, string> = {
   idle: '#64748b',
   navigating: '#277134',
   poi_near: '#d97220',
+  uncertain: '#94a3b8',
   off_route: '#f59e0b',
+  wrong_direction: '#c2410c',
   gps_lost: '#ef4444',
   finished: '#22c55e',
 }
