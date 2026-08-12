@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import MapRouteThumb from '@/components/MapRouteThumb'
+import OfflinePackageDownloader from '@/components/navigation/OfflinePackageDownloader'
 import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import { lsClearAll } from '@/lib/localStore'
@@ -109,6 +110,23 @@ export default function NavigatorePage() {
               >
                 <div className="relative h-[140px] bg-gradient-to-b from-sky-50 to-stone-50 bg-topography">
                   <MapRouteThumb polyline={hike.routePolyline!} color="#0284c7" strokeWidth={3} />
+                  {/* Download-for-offline directly from the list — previously only reachable after
+                      already starting live navigation on a route (ActiveNavigationView.tsx's own
+                      sheet), which meant there was effectively nowhere to see or manage this before
+                      committing to a hike offline. stopPropagation/preventDefault: this whole card
+                      is a Link to the navigation screen, and a nested button/anchor click would
+                      otherwise also trigger that navigation. */}
+                  <div
+                    className="absolute top-2 right-2 z-10"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation() }}
+                  >
+                    <OfflinePackageDownloader
+                      hikeId={hike.id}
+                      routePolyline={hike.routePolyline!}
+                      hikeData={{ cachedPois: hike.cachedPois }}
+                      compact
+                    />
+                  </div>
                 </div>
                 <div className="px-[18px] pt-4 pb-[18px]">
                   <p className="text-[16px] font-bold text-sky-900 mb-2 truncate">{hike.title}</p>
