@@ -59,12 +59,12 @@ class NativeLocationPlugin : Plugin(), LocationForegroundService.FixListener {
     }
 
     @PluginMethod
-    fun checkPermissions(call: PluginCall) {
+    override fun checkPermissions(call: PluginCall) {
         super.checkPermissions(call)
     }
 
     @PluginMethod
-    fun requestPermissions(call: PluginCall) {
+    override fun requestPermissions(call: PluginCall) {
         // Requesting fine+background together is rejected outright on API 30+
         // (the OS forces a separate follow-up request for "Allow all the
         // time"), so this only ever asks for foreground `location` up front;
