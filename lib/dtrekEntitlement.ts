@@ -54,7 +54,7 @@ function unlockedEntitlement(isOwner: boolean): DtrekEntitlement {
 export async function resolveDtrekEntitlement(userId: string): Promise<DtrekEntitlement> {
   const { data: settings, error } = await supabase
     .from('user_settings')
-    .select('is_owner, subscription_tier, claude_api_key, trial_started_at')
+    .select('is_owner, subscription_tier, claude_api_key, trial_started_at, premium_expires_at')
     .eq('user_id', userId)
     .maybeSingle()
 
@@ -65,7 +65,14 @@ export async function resolveDtrekEntitlement(userId: string): Promise<DtrekEnti
   if (error) return unlockedEntitlement(false)
 
   const isOwner = (settings?.is_owner as boolean | null) ?? false
+  // premium_expires_at NULL con subscription_tier='premium' ⇒ sblocco a vita (una tantum), nessuna
+  // scadenza. Valorizzato ⇒ abbonamento ricorrente, valido solo finché non supera quella data —
+  // aggiornata ad ogni rinnovo dal webhook Paddle (app/api/webhooks/paddle/route.ts); se il rinnovo
+  // fallisce o l'utente cancella, questa data smette di avanzare e l'accesso scade da solo, nessun
+  // downgrade esplicito necessario.
+  const premiumExpiresAt = settings?.premium_expires_at ? new Date(settings.premium_expires_at as string) : null
   const isPremium = (settings?.subscription_tier as string | null) === 'premium'
+    && (premiumExpiresAt === null || premiumExpiresAt > new Date())
   const hasByok = !!(settings?.claude_api_key as string | null)
   const unlocked = isOwner || isPremium || hasByok
   if (unlocked) return unlockedEntitlement(isOwner)
