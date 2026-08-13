@@ -10,9 +10,9 @@ import HubNavBar from './HubNavBar'
 export default function HubSkeleton() {
   return (
     <div className="fixed inset-0 bg-gradient-to-br from-[#123448] to-[#071824] overflow-hidden">
-      <div className="absolute inset-x-0 top-0 z-20 px-3 sm:px-4 pt-[calc(env(safe-area-inset-top,0px)+10px)]">
+      <div className="absolute inset-x-0 top-0 z-20">
         <HubNavBar />
-        <div className="mt-3 flex items-center gap-1.5">
+        <div className="px-3 sm:px-4 pt-4 flex items-center gap-1.5">
           {[64, 56, 60, 48].map((w, i) => (
             <div key={i} className="h-7 rounded-full bg-white/15 animate-pulse" style={{ width: w }} />
           ))}
