@@ -11,6 +11,7 @@ import { fetchNatureContext, type NatureContext } from '@/lib/aiNatureContext'
 import { resolveDefaultModel, isValidClaudeModelId } from '@/lib/claudeModels'
 import { jsonSchemaFormat, parseWithRetry } from '@/lib/aiJsonOutput'
 import { readProfile, isProfileReady, formatStyleProfileBlock, updateProfileWithAnswer, type WritingStyleProfile } from '@/lib/writingStyleProfile'
+import { resolveDtrekEntitlement } from '@/lib/dtrekEntitlement'
 
 export const dynamic = 'force-dynamic'
 
@@ -336,15 +337,20 @@ export async function POST(req: NextRequest) {
     })
   }
 
+  // Gate/trial (docs/navigator-dtrek-boundary.md) — la chiave condivisa va a chi è sbloccato
+  // (owner/premium/BYOK) o ancora nel periodo di prova attivo: il piano "free" ha accesso pieno
+  // alla generazione AI, limitato per volume/tempo, non azzerato.
+  const entitlement = await resolveDtrekEntitlement(user.id)
+
   const { data: settings } = await supabase
     .from('user_settings')
-    .select('claude_api_key, subscription_tier, claude_model, ai_use_biometric_data')
+    .select('claude_api_key, claude_model, ai_use_biometric_data')
     .eq('user_id', user.id)
     .maybeSingle()
 
   const userKey = settings?.claude_api_key as string | null | undefined
-  const hasSub  = (settings?.subscription_tier as string) === 'premium'
-  const apiKey  = userKey ?? (hasSub ? process.env.ANTHROPIC_API_KEY : null)
+  const hasSharedAccess = entitlement.unlocked || entitlement.trialActive
+  const apiKey  = userKey ?? (hasSharedAccess ? process.env.ANTHROPIC_API_KEY : null)
   const claudeModel = isValidClaudeModelId(settings?.claude_model) ? settings.claude_model : resolveDefaultModel('questionnaire')
   // Consenso all'uso dei dati biometrici (FC, calorie) nei prompt AI — vedi
   // components/profilo/SectionAiPrivacy.tsx. Default true finché l'utente non lo disattiva.
@@ -354,7 +360,9 @@ export async function POST(req: NextRequest) {
     return new Response(
       JSON.stringify({
         error:   'no_ai_access',
-        message: 'Aggiungi la tua chiave API Claude nelle impostazioni per generare il questionario.',
+        message: entitlement.trialExpired
+          ? 'Il periodo di prova gratuito è terminato — sblocca Dtrek per continuare a generare il questionario.'
+          : 'Al momento non hai accesso alla generazione AI — sblocca Dtrek nelle impostazioni del profilo.',
       }),
       { status: 402, headers: { 'Content-Type': 'application/json' } },
     )

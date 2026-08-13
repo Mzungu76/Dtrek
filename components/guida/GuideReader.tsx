@@ -134,6 +134,10 @@ interface Props {
    *  account genuinely has no key — shows a "riprova più tardi" message instead of "aggiungi la
    *  tua chiave" (which would be misleading for someone who already saved one). */
   aiUnavailable: boolean
+  /** Periodo di prova scaduto (docs/navigator-dtrek-boundary.md) — quando hasAiAccess è false,
+   *  distingue "la prova gratuita è finita" (il caso tipico ora che l'accesso condiviso copre
+   *  tutto il periodo di prova, non solo premium/BYOK) da un generico "nessun accesso". */
+  trialExpired: boolean
   /** Set by the caller (e.g. tapping the Trail Score badge) to scroll to a specific section once. */
   scrollToSectionKey?: GuideSectionKey | null
   onScrollToSectionConsumed?: () => void
@@ -221,7 +225,7 @@ const RATES = [0.8, 1, 1.2, 1.5]
  * generation and scroll/nav all stay here and get threaded down as props.
  */
 export default function GuideReader({
-  hike, onHikeUpdate, enrichmentReady, hasAiAccess, aiUnavailable,
+  hike, onHikeUpdate, enrichmentReady, hasAiAccess, aiUnavailable, trialExpired,
   scrollToSectionKey, onScrollToSectionConsumed, highlightedPoiId, onPoiTap,
   weather, onOpenMap3D, showGradient, showAspect, dtmProfile, scores, safetyDetails, poiList, natura, driving,
   onRouteModeChange,
@@ -1060,11 +1064,13 @@ export default function GuideReader({
                 </div>
                 <div className="max-w-sm">
                   <h2 className="font-display text-lg font-bold text-stone-800 mb-2">
-                    Racconto di Giulia non disponibile
+                    {trialExpired ? 'Il periodo di prova gratuito è terminato' : 'Racconto di Giulia non disponibile'}
                   </h2>
                   <p className="text-stone-500 text-sm leading-relaxed">
-                    Aggiungi la tua chiave API Claude nelle impostazioni del profilo per generare la guida narrata —
-                    intanto qui sotto trovi comunque mappa, profilo, punteggi e punti di interesse del percorso.
+                    {trialExpired
+                      ? <>Giulia può ancora scrivere la guida narrata di questo percorso — <a href="/profilo/ai" className="text-terra-600 font-medium underline underline-offset-2">sblocca Dtrek</a> per continuare a generarla. Intanto qui sotto trovi comunque mappa, profilo, punteggi e punti di interesse del percorso.</>
+                      : <>Al momento non hai accesso alla generazione AI — <a href="/profilo/ai" className="text-terra-600 font-medium underline underline-offset-2">sblocca Dtrek</a> nelle impostazioni del profilo. Intanto qui sotto trovi comunque mappa, profilo, punteggi e punti di interesse del percorso.</>
+                    }
                   </p>
                 </div>
               </div>

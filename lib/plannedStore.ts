@@ -132,6 +132,12 @@ export interface PlannedHike {
    *  app, which is the vast majority of rows and always stays unlimited/fully visible in Navigator
    *  regardless of this field. Never set client-side outside that one Navigator flow. */
   sourceApp?:                    'navigator'
+  /** Percorso di Default (docs/navigator-dtrek-boundary.md) — clonato automaticamente al primo
+   *  accesso di un nuovo utente nella propria regione, con dati calcolati (distanza, dislivello,
+   *  POI, punteggi) ma senza testo generato da Claude. sampleRegion è lo slug della regione
+   *  (lib/italianRegions.ts) solo quando isSample è true. */
+  isSample?:                     boolean
+  sampleRegion?:                 string
 }
 
 // Index entry — no trackPoints (kept lightweight for the list)

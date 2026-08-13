@@ -216,6 +216,18 @@ Non generabile da questa sessione — nessun accesso a Overpass/Wikipedia/Anthro
 2. Apri ciascun percorso, usa il pulsante "Percorso omaggio" in basso a destra (visibile solo a te), scegli la regione, "Imposta come omaggio".
 3. Verifica end-to-end con un account di test: registrati, completa/salta il wizard, concedi o nega la geolocalizzazione, controlla che il percorso compaia in `/guida/elenco` con i dati giusti e senza consumare il tetto di prova.
 
+## Bug grave: il trial non dava mai accesso AI (2026-08-13, ottava parte sessione)
+
+Segnalato dall'utente vedendo "Racconto di Giulia non disponibile — aggiungi la tua chiave API" su un percorso in un account senza premium/BYOK. **Non era un problema di testo**: `resolveApiKeyAndSettings.ts` e diversi endpoint AI concedevano la chiave condivisa solo a premium/BYOK, mai durante il periodo di prova attivo — contraddicendo il piano deciso ("free con accesso pieno, limitato per volume/tempo"). Di fatto nessun utente in trial poteva mai generare nulla con l'AI. Risolto:
+
+1. **`resolveApiKeyAndSettings.ts`**: la chiave condivisa ora va a chi è `entitlement.unlocked` (owner/premium/BYOK) **o** `entitlement.trialActive` — resa disponibile anche `entitlement` nel valore di ritorno, così i chiamanti non devono richiamare `resolveDtrekEntitlement` una seconda volta.
+2. Stesso bug, stesso fix, trovato e corretto anche in **`app/api/questionnaire/route.ts`** e **`app/api/caption/route.ts`** (avevano una copia locale della vecchia logica invece di passare dal punto centrale) — `app/api/resoconto/route.ts` è stato solo riordinato per riusare l'entitlement già risolta. `route-search`, `route-compare`, `resoconto-assist`, `guide/qa` erano già a posto perché passano tutti da `resolveApiKeyAndSettings`.
+3. **Messaggi aggiornati** (`GuideReader.tsx`, e i messaggi d'errore server dei quattro endpoint sopra): tolto "aggiungi la tua chiave API Claude" come messaggio di default — ora distinguono "prova scaduta" (con link a sblocca Dtrek) da un generico "nessun accesso al momento", senza mai implicare che serva per forza una chiave propria.
+4. **`TrialStatusBanner`** montato anche in `app/guida/[id]/page.tsx`, non solo nelle tre hub — così quanto resta del periodo di prova è visibile anche aprendo un percorso.
+5. **Terminologia**: l'interruttore owner-only ora dice "Percorso di Default" invece di "omaggio"/"regalo" (nomi interni — tabelle, `lib/giftRoute.ts`, endpoint — non toccati, solo il testo visibile). Aggiunto anche un **badge visibile a tutti gli utenti** (`components/guida/SampleRouteBadge.tsx`, non solo owner) sulla pagina di un percorso di Default, con la regione e la precisazione "dati reali, nessun testo generato da AI".
+
+Type-check (0 errori sull'intero progetto) e lint puliti.
+
 ## Prossimi passi noti
 
 - Decidere gli importi esatti (mensile e lifetime) prima di configurare i prodotti su Paddle.

@@ -26,7 +26,6 @@ import type { SafetyScore } from '@/lib/safetyScore'
 import type { BeautyScore } from '@/lib/beautyScore'
 import type { ClassifiedDifficultyMarker } from '@/lib/difficultyMarkers'
 import { resolveApiKeyAndSettings, resolveEmergencySharedKey } from '@/app/lib/guide/resolveApiKeyAndSettings'
-import { resolveDtrekEntitlement } from '@/lib/dtrekEntitlement'
 import { isCreditBalanceError } from '@/lib/anthropicErrors'
 import { tryAcquireCooldown } from '@/lib/aiCooldown'
 import { stripGuideStatus } from '@/lib/guideStatus'
@@ -654,10 +653,18 @@ export async function GET(req: NextRequest) {
     )
   }
 
-  const { apiKey, lookupFailed } = user
+  const { apiKey, entitlement, lookupFailed } = user
     ? await resolveApiKeyAndSettings(user.id, 'guide')
     : await resolveEmergencySharedKey('guide')
-  return new Response(JSON.stringify({ hasAccess: !!apiKey, unavailable: lookupFailed }), {
+  return new Response(JSON.stringify({
+    hasAccess:   !!apiKey,
+    unavailable: lookupFailed,
+    // Per differenziare, lato client, "prova scaduta" da un generico "nessun accesso" nel
+    // messaggio mostrato — vedi app/guida/useHasAiAccess.ts e components/guida/GuideReader.tsx.
+    trialActive:    entitlement?.trialActive ?? false,
+    trialExpired:   entitlement?.trialExpired ?? false,
+    trialDaysLeft:  entitlement?.trialDaysLeft ?? 0,
+  }), {
     status: 200, headers: { 'Content-Type': 'application/json' },
   })
 }
@@ -696,7 +703,7 @@ async function generateGuide(req: NextRequest): Promise<Response> {
     )
   }
 
-  const { apiKey, userGender, breveSections, claudeModel, aiUseBiometricData, aiUseHistoryData, aiUseWebSearch, sectionLengths, lookupFailed } = user
+  const { apiKey, userGender, breveSections, claudeModel, aiUseBiometricData, aiUseHistoryData, aiUseWebSearch, sectionLengths, entitlement, lookupFailed } = user
     ? await resolveApiKeyAndSettings(user.id, 'guide')
     : await resolveEmergencySharedKey('guide')
 
@@ -709,8 +716,14 @@ async function generateGuide(req: NextRequest): Promise<Response> {
               message: 'Non riesco a verificare la tua chiave AI in questo momento (Supabase non raggiungibile) — riprova tra poco.',
             }
           : {
+              // Con l'accesso condiviso ora esteso a tutto il periodo di prova (vedi
+              // resolveApiKeyAndSettings.ts), questo ramo scatta quasi solo a prova scaduta —
+              // "aggiungi la tua chiave" non è più il messaggio giusto per la maggior parte di chi
+              // lo vede: Giulia sa scrivere la guida, è l'accesso gratuito ad essere esaurito.
               error:   'no_ai_access',
-              message: 'Aggiungi la tua chiave API Claude nelle impostazioni del profilo per generare guide turistiche.',
+              message: entitlement?.trialExpired
+                ? 'Il periodo di prova gratuito è terminato — sblocca Dtrek per continuare a generare guide con Giulia.'
+                : 'Al momento non hai accesso alla generazione AI — sblocca Dtrek nelle impostazioni del profilo.',
             },
       ),
       { status: lookupFailed ? 503 : 402, headers: { 'Content-Type': 'application/json' } },
@@ -748,10 +761,9 @@ async function generateGuide(req: NextRequest): Promise<Response> {
   // Gate/trial (docs/navigator-dtrek-boundary.md) — generare/aggiornare la guida è una scrittura sul
   // percorso, quindi bloccata a prova scaduta; durante la prova ogni sezione è forzata a 'essenziale'
   // a prescindere dalle preferenze salvate o dagli override richiesti per questa generazione.
-  // Nessun controllo per il percorso di emergenza (user assente, degraded: true, vedi sopra) — lì
-  // non c'è un'identità verificabile da cui leggere trial/owner, stesso principio già applicato a
-  // resolveEmergencySharedKey.
-  const entitlement = user ? await resolveDtrekEntitlement(user.id) : null
+  // `entitlement` viene da resolveApiKeyAndSettings sopra (stessa risoluzione, non richiamata due
+  // volte) — null per il percorso di emergenza (user assente, degraded: true), dove non c'è
+  // un'identità verificabile da cui leggere trial/owner, stesso principio già applicato lì.
   if (entitlement?.trialExpired) {
     return new Response(
       JSON.stringify({ error: 'trial_expired', message: 'Periodo di prova terminato — questo percorso è in sola lettura finché non sblocchi Dtrek.' }),
