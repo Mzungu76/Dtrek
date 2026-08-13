@@ -1099,6 +1099,11 @@ ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS sample_region TEXT;
 ALTER TABLE hike_reports  ADD COLUMN IF NOT EXISTS is_sample     BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE hike_reports  ADD COLUMN IF NOT EXISTS sample_region TEXT;
 
+-- Pagamenti Paddle — vedi supabase/migrations/add_paddle_columns.sql per i commenti completi.
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS premium_expires_at     TIMESTAMPTZ;
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS paddle_customer_id     TEXT;
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS paddle_subscription_id TEXT;
+
 -- Flag indipendente da onboarding_completed_at — vedi add_gift_route_offered_at.sql per il perché.
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS gift_route_offered_at TIMESTAMPTZ;
 

@@ -2,6 +2,10 @@
 // middleware.ts (server-side redirect gate) and components/SessionKeepAlive.tsx (client-side
 // redirect gate) so the two never disagree about what's public.
 const AUTH_PATHS = ['/login', '/signup', '/auth/']
+// /prezzi è una pagina di marketing pubblica (docs/navigator-dtrek-boundary.md) — un visitatore
+// non loggato deve poter vedere i prezzi; il checkout stesso richiede comunque una sessione
+// (CheckoutButton.tsx rimanda al login solo al click, non prima).
+const PUBLIC_PAGES = ['/prezzi']
 
 export function isPublicPath(pathname: string): boolean {
   return (
@@ -10,7 +14,8 @@ export function isPublicPath(pathname: string): boolean {
     pathname.startsWith('/s/') ||
     pathname.startsWith('/leggi/') ||
     /\.(ico|png|jpg|jpeg|svg|webp|json|js|css|woff2?|mjs)$/.test(pathname) ||
-    AUTH_PATHS.some((p) => pathname.startsWith(p))
+    AUTH_PATHS.some((p) => pathname.startsWith(p)) ||
+    PUBLIC_PAGES.some((p) => pathname === p || pathname.startsWith(`${p}/`))
   )
 }
 

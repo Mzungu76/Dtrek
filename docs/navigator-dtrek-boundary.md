@@ -228,6 +228,36 @@ Segnalato dall'utente vedendo "Racconto di Giulia non disponibile — aggiungi l
 
 Type-check (0 errori sull'intero progetto) e lint puliti.
 
+## Pagamenti Paddle — implementati (2026-08-13, nona parte sessione)
+
+Prodotto "Dtrek Premium" creato in Paddle con due prezzi (mensile 4,99€, lifetime — in Sandbox e poi anche in Live per errore, non un problema: nessun addebito finché non c'è un checkout reale). Costruito tutto il resto:
+
+1. **DB**: `premium_expires_at`, `paddle_customer_id`, `paddle_subscription_id` su `user_settings` (migrazione applicata anche in produzione). `lib/dtrekEntitlement.ts` ora controlla la scadenza: `premium_expires_at` NULL = lifetime, valorizzato = ricorrente valido solo fino a quella data.
+2. **`lib/paddle.ts`**: base URL sandbox/production da `NEXT_PUBLIC_PADDLE_ENVIRONMENT`, lettura del prezzo live da Paddle (mai scritto a mano nel codice — niente rischio di disallineamento), verifica della firma webhook (HMAC-SHA256, confronto a tempo costante).
+3. **`/prezzi`**: pagina pubblica (aggiunta a `lib/publicPaths.ts`), due card con `CheckoutButton.tsx` (Paddle.js, `@paddle/paddle-js` aggiunto alle dipendenze) — passa `dtrek_user_id` come `customData`, l'unico modo con cui il webhook sa quale account sbloccare. Rimanda al login solo al click se non loggato, non blocca la pagina a un visitatore anonimo.
+4. **`app/api/webhooks/paddle`**: gestisce `subscription.created`/`subscription.updated` (estende `premium_expires_at` alla fine del periodo corrente, con fallback per `paddle_subscription_id` se un rinnovo non ripete `custom_data`) e `transaction.completed` senza `subscription_id` (acquisto lifetime, `premium_expires_at = null`). Cancellazione non gestita esplicitamente per scelta: senza rinnovi la data smette di avanzare e l'accesso scade da solo.
+5. **`app/api/paddle/portal`** + **`SectionAbbonamento.tsx`** riscritta (era un teaser statico "Prossimamente", ora stato reale): chi è sbloccato vede "Gestisci abbonamento" (Customer Portal Paddle), chi non lo è vede la vera card con link a `/prezzi`.
+
+Type-check (0 errori sull'intero progetto) e lint puliti. **Non testato end-to-end** — nessun accesso a Paddle da questa sandbox, stesso limite di sempre.
+
+### Cosa manca prima che un pagamento vero funzioni
+
+Tutto lato tuo, in ordine:
+1. **Su Vercel** (Settings → Environment Variables), aggiungi:
+
+   | Nome | Valore |
+   |---|---|
+   | `PADDLE_API_KEY` | La tua API key Sandbox (mai condivisa qui) |
+   | `NEXT_PUBLIC_PADDLE_CLIENT_TOKEN` | `test_3bdc37ef3e61964fd8664e2a261` |
+   | `NEXT_PUBLIC_PADDLE_ENVIRONMENT` | `sandbox` |
+   | `PADDLE_PRICE_ID_MONTHLY` | `pri_01kzy09bka1qfcw8wfyqk0tn6p` |
+   | `PADDLE_PRICE_ID_LIFETIME` | `pri_01kzy0ccfgks1jaceq3p6pyrgx` |
+
+2. **Redeploy** (le variabili d'ambiente su Vercel richiedono un nuovo deploy per essere lette).
+3. **Crea il webhook** in Paddle (Developer Tools → Notifications → nuovo destinatario) puntato a `https://<il-tuo-dominio>/api/webhooks/paddle`, eventi `subscription.created`, `subscription.updated`, `transaction.completed` — Paddle ti mostra un segreto in quel momento, va aggiunto su Vercel come `PADDLE_WEBHOOK_SECRET`.
+4. **Prova**: apri `/prezzi` da loggato, fai un acquisto con una carta di test Sandbox, controlla che `user_settings` si aggiorni (posso verificarlo io via SQL) e che `/profilo/ai` mostri "Dtrek sbloccato".
+5. Solo dopo che tutto funziona in Sandbox: ripeti i passi 1-3 con le credenziali **Live** (Price ID già pronti, servono ancora API key/client token/webhook secret Live) prima di accettare pagamenti reali.
+
 ## Prossimi passi noti
 
 - Decidere gli importi esatti (mensile e lifetime) prima di configurare i prodotti su Paddle.
