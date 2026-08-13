@@ -37,8 +37,12 @@ BEGIN
     RAISE EXCEPTION 'clone_row_for_user: riga sorgente non trovata in % (id=%)', p_table, p_source_id;
   END IF;
 
+  -- jsonb_populate_record con base null::TABELLA lascia NULL ogni chiave assente dal jsonb (non il
+  -- DEFAULT della colonna) — created_at/updated_at vanno quindi rimpiazzati con un valore esplicito,
+  -- non solo rimossi, altrimenti l'INSERT fallisce sul vincolo NOT NULL di updated_at (visto dal
+  -- vivo sul primo tentativo di clonazione: 23502 null value in column "updated_at").
   v_row := (v_row - 'id' - 'user_id' - 'created_at' - 'updated_at')
-           || jsonb_build_object('id', p_new_id, 'user_id', p_new_user_id)
+           || jsonb_build_object('id', p_new_id, 'user_id', p_new_user_id, 'created_at', now(), 'updated_at', now())
            || p_extra;
 
   EXECUTE format('INSERT INTO %I SELECT * FROM jsonb_populate_record(null::%I, $1)', p_table, p_table)

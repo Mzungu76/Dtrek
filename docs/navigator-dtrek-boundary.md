@@ -206,6 +206,7 @@ Type-check e lint puliti su tutti i file.
 ### Bug scoperti testando il pilota — risolti
 
 - **Titolo GPX concatenato**: `lib/gpxParser.ts` prendeva `.textContent` di `<name>` senza gestire i GPX (es. esportazioni CAI) che usano un figlio per lingua (`<name><it>SI Z17</it><en>SI Z17</en>...</name>`) — risultato tipo "SI Z17SI Z17SI Z17...". Ora prende solo l'italiano (o il primo figlio disponibile).
+- **Clonazione silenziosamente fallita**: il primo test end-to-end (nuovo account, Sardegna selezionata a mano) non mostrava nessun percorso — `gift_route_offered_at` risultava impostato (il claim era stato tentato) ma zero righe clonate. Causa: `clone_row_for_user` rimuoveva `created_at`/`updated_at` dal jsonb senza rimpiazzarli — `jsonb_populate_record` con base `null::TABELLA` lascia NULL ogni chiave assente (non il DEFAULT della colonna), quindi l'INSERT falliva sul vincolo NOT NULL di `updated_at` (errore Postgres 23502, riprodotto dal vivo). Fix: la funzione ora imposta esplicitamente `created_at`/`updated_at` a `now()`. Verificato di persona per l'account di test già creato (clonazione manuale via SQL, stesso path che userà l'app).
 - **Beauty Score non neutro**: il percorso omaggio della Sardegna, verificato via SQL, aveva POI/Wikipedia/Safety Score correttamente calcolati e nessun testo AI — ma il Beauty Score era stato calcolato con i pesi TEI **personali** dell'owner (cultura 100 vs default 20, geodiversità 80 vs default 10, sensibilità antropica disattivata), non quelli di default che ha chiunque non abbia mai toccato quei cursori in Impostazioni. Un regalo deve restare neutro per chiunque lo riceva, non riflettere il gusto di chi l'ha creato — la Safety Score invece è oggettiva (pendenza/fauna) e non aveva questo problema. Fix in `components/guida/GiftRouteAdminToggle.tsx`: "Imposta come omaggio" ora ricalcola sempre il Beauty Score forzando i pesi di default (`DEFAULT_TEI_WEIGHTS`, sensibilità 'normale', sforzo/durata di default) prima di salvare; aggiunto anche un pulsante "Ricalcola Beauty Score neutro" per i master già marcati prima di questa fix (serve per la Sardegna, già impostata).
 
 ### Cosa manca prima che il pilota sia visibile a un utente vero
@@ -214,6 +215,18 @@ Non generabile da questa sessione — nessun accesso a Overpass/Wikipedia/Anthro
 1. Importa `SIZ17.gpx` (Sardegna) e `SIR08.gpx` (Puglia) da `/upload` → tab "Per la Guida" — l'arricchimento POI (Overpass + Wikipedia) parte automaticamente all'import, nessun'altra azione richiesta. Non serve (e per Sardegna/Puglia non ha effetto sul regalo, che lo azzera comunque) generare la guida AI.
 2. Apri ciascun percorso, usa il pulsante "Percorso omaggio" in basso a destra (visibile solo a te), scegli la regione, "Imposta come omaggio".
 3. Verifica end-to-end con un account di test: registrati, completa/salta il wizard, concedi o nega la geolocalizzazione, controlla che il percorso compaia in `/guida/elenco` con i dati giusti e senza consumare il tetto di prova.
+
+## Bug grave: il trial non dava mai accesso AI (2026-08-13, ottava parte sessione)
+
+Segnalato dall'utente vedendo "Racconto di Giulia non disponibile — aggiungi la tua chiave API" su un percorso in un account senza premium/BYOK. **Non era un problema di testo**: `resolveApiKeyAndSettings.ts` e diversi endpoint AI concedevano la chiave condivisa solo a premium/BYOK, mai durante il periodo di prova attivo — contraddicendo il piano deciso ("free con accesso pieno, limitato per volume/tempo"). Di fatto nessun utente in trial poteva mai generare nulla con l'AI. Risolto:
+
+1. **`resolveApiKeyAndSettings.ts`**: la chiave condivisa ora va a chi è `entitlement.unlocked` (owner/premium/BYOK) **o** `entitlement.trialActive` — resa disponibile anche `entitlement` nel valore di ritorno, così i chiamanti non devono richiamare `resolveDtrekEntitlement` una seconda volta.
+2. Stesso bug, stesso fix, trovato e corretto anche in **`app/api/questionnaire/route.ts`** e **`app/api/caption/route.ts`** (avevano una copia locale della vecchia logica invece di passare dal punto centrale) — `app/api/resoconto/route.ts` è stato solo riordinato per riusare l'entitlement già risolta. `route-search`, `route-compare`, `resoconto-assist`, `guide/qa` erano già a posto perché passano tutti da `resolveApiKeyAndSettings`.
+3. **Messaggi aggiornati** (`GuideReader.tsx`, e i messaggi d'errore server dei quattro endpoint sopra): tolto "aggiungi la tua chiave API Claude" come messaggio di default — ora distinguono "prova scaduta" (con link a sblocca Dtrek) da un generico "nessun accesso al momento", senza mai implicare che serva per forza una chiave propria.
+4. **`TrialStatusBanner`** montato anche in `app/guida/[id]/page.tsx`, non solo nelle tre hub — così quanto resta del periodo di prova è visibile anche aprendo un percorso.
+5. **Terminologia**: l'interruttore owner-only ora dice "Percorso di Default" invece di "omaggio"/"regalo" (nomi interni — tabelle, `lib/giftRoute.ts`, endpoint — non toccati, solo il testo visibile). Aggiunto anche un **badge visibile a tutti gli utenti** (`components/guida/SampleRouteBadge.tsx`, non solo owner) sulla pagina di un percorso di Default, con la regione e la precisazione "dati reali, nessun testo generato da AI".
+
+Type-check (0 errori sull'intero progetto) e lint puliti.
 
 ## Prossimi passi noti
 

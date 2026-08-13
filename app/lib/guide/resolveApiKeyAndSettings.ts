@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase'
 import { sanitizeBreveSections, sanitizeSectionLengths, type GuideSectionKey, type SectionLengthMap } from '@/lib/guideSections'
 import { readCachedAiSettings, writeCachedAiSettings, deleteCachedAiSettings, isEmergencySharedKeyEnabled } from '@/lib/aiKeyCache'
 import { resolveDefaultModel, isValidClaudeModelId, type AiFeature } from '@/lib/claudeModels'
+import { resolveDtrekEntitlement, type DtrekEntitlement } from '@/lib/dtrekEntitlement'
 
 /** Chiave API Claude + preferenze utente rilevanti per la Guida — condiviso tra la generazione
  *  della guida (app/api/guide/route.ts), le domande e risposte sul percorso
@@ -33,6 +34,10 @@ export async function resolveApiKeyAndSettings(userId: string, feature: AiFeatur
    *  sovrascrivibile per singola generazione — vedi requestedSectionLengths in
    *  app/api/guide/route.ts). Sempre completa: ogni GuideSectionKey ha un valore. */
   sectionLengths: SectionLengthMap
+  /** Stato del gate/trial (lib/dtrekEntitlement.ts) — null quando non risolvibile (Supabase
+   *  irraggiungibile, vedi lookupFailed). I chiamanti lo usano per differenziare i messaggi "nessun
+   *  accesso" (prova scaduta) da quelli di puro errore di rete. */
+  entitlement: DtrekEntitlement | null
   /** true quando NÉ Supabase NÉ la copia di riserva (lib/aiKeyCache.ts, Upstash Redis) sono
    *  riuscite a rispondere — a differenza di una lettura riuscita che conferma semplicemente
    *  l'assenza di una chiave. I chiamanti devono mostrare "temporaneamente non disponibile", non
@@ -47,8 +52,14 @@ export async function resolveApiKeyAndSettings(userId: string, feature: AiFeatur
 
   if (!error) {
     const userKey = settings?.claude_api_key as string | null | undefined
-    const hasSub  = (settings?.subscription_tier as string) === 'premium'
-    const apiKey  = userKey ?? (hasSub ? process.env.ANTHROPIC_API_KEY : null) ?? null
+    // La chiave condivisa (pagata dal gestore dell'app) va a chi è sbloccato (owner/premium/BYOK —
+    // BYOK qui è già coperto da userKey sopra, ridondante ma innocuo) E a chi è ancora nel periodo
+    // di prova attivo: il piano "free" ha accesso pieno alla generazione AI, solo limitato per
+    // volume (2+2 percorsi) e tempo (30 giorni) — vedi docs/navigator-dtrek-boundary.md. Prima di
+    // questo la prova non dava mai accesso, contraddicendo il piano stesso.
+    const entitlement = await resolveDtrekEntitlement(userId)
+    const hasSharedAccess = entitlement.unlocked || entitlement.trialActive
+    const apiKey  = userKey ?? (hasSharedAccess ? process.env.ANTHROPIC_API_KEY : null) ?? null
     const userGender = (settings?.user_gender as string | null) ?? 'non_specificato'
     const breveSections = sanitizeBreveSections(settings?.guide_breve_sections)
     // rawClaudeModel è la scelta esplicita dell'utente (o null) — non ancora risolta contro il
@@ -68,10 +79,13 @@ export async function resolveApiKeyAndSettings(userId: string, feature: AiFeatur
     if (userKey) void writeCachedAiSettings(userId, { apiKey: userKey, userGender, breveSections, claudeModel: rawClaudeModel, aiUseBiometricData, aiUseHistoryData, aiUseWebSearch, sectionLengths })
     else void deleteCachedAiSettings(userId)
 
-    return { apiKey, userGender, breveSections, claudeModel, aiUseBiometricData, aiUseHistoryData, aiUseWebSearch, sectionLengths, lookupFailed: false }
+    return { apiKey, userGender, breveSections, claudeModel, aiUseBiometricData, aiUseHistoryData, aiUseWebSearch, sectionLengths, entitlement, lookupFailed: false }
   }
 
-  // Supabase irraggiungibile — prova la copia di riserva, infrastruttura indipendente.
+  // Supabase irraggiungibile — prova la copia di riserva, infrastruttura indipendente. Nessun
+  // entitlement risolvibile qui (richiede letture Supabase che per definizione stanno fallendo in
+  // questo ramo) — i chiamanti mostrano comunque "temporaneamente non disponibile", non "nessun
+  // accesso", grazie a lookupFailed: false qui sotto e lookupFailed: true nell'ultimo ramo.
   const cached = await readCachedAiSettings(userId)
   if (cached) {
     const rawClaudeModel = isValidClaudeModelId(cached.claudeModel) ? cached.claudeModel : null
@@ -84,6 +98,7 @@ export async function resolveApiKeyAndSettings(userId: string, feature: AiFeatur
       aiUseHistoryData:   cached.aiUseHistoryData ?? true,
       aiUseWebSearch:     cached.aiUseWebSearch ?? true,
       sectionLengths:     sanitizeSectionLengths(cached.sectionLengths),
+      entitlement:   null,
       lookupFailed:  false,
     }
   }
@@ -91,6 +106,7 @@ export async function resolveApiKeyAndSettings(userId: string, feature: AiFeatur
   return {
     apiKey: null, userGender: 'non_specificato', breveSections: sanitizeBreveSections(undefined),
     claudeModel: resolveDefaultModel(feature), aiUseBiometricData: true, aiUseHistoryData: true,
+    entitlement: null,
     aiUseWebSearch: true, sectionLengths: sanitizeSectionLengths(undefined), lookupFailed: true,
   }
 }
@@ -113,6 +129,7 @@ export async function resolveEmergencySharedKey(feature: AiFeature): Promise<{
   aiUseHistoryData: boolean
   aiUseWebSearch: boolean
   sectionLengths: SectionLengthMap
+  entitlement: DtrekEntitlement | null
   lookupFailed: boolean
 }> {
   const sharedKey = process.env.ANTHROPIC_API_KEY ?? null
@@ -126,6 +143,7 @@ export async function resolveEmergencySharedKey(feature: AiFeature): Promise<{
     // — non c'è una preferenza da leggere, si presuppone il default opt-out come ovunque altrove.
     aiUseBiometricData: true,
     aiUseHistoryData:   true,
+    entitlement: null,
     aiUseWebSearch:     true,
     sectionLengths:     sanitizeSectionLengths(undefined),
     lookupFailed:  !enabled,

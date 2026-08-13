@@ -380,15 +380,21 @@ export async function POST(req: NextRequest) {
     })
   }
 
+  // Gate/trial (docs/navigator-dtrek-boundary.md) — risolto una sola volta, riusato sia per
+  // l'accesso AI (chiave condivisa anche durante il periodo di prova, non solo premium/BYOK — il
+  // piano "free" ha accesso pieno alla generazione, limitato per volume/tempo, non azzerato) sia
+  // più sotto per il tetto di creazione di nuovi resoconti.
+  const entitlement = await resolveDtrekEntitlement(user.id)
+
   const { data: settings } = await supabase
     .from('user_settings')
-    .select('claude_api_key, subscription_tier, claude_model, ai_use_biometric_data')
+    .select('claude_api_key, claude_model, ai_use_biometric_data')
     .eq('user_id', user.id)
     .maybeSingle()
 
   const userKey = settings?.claude_api_key as string | null | undefined
-  const hasSub  = (settings?.subscription_tier as string) === 'premium'
-  const apiKey  = userKey ?? (hasSub ? process.env.ANTHROPIC_API_KEY : null)
+  const hasSharedAccess = entitlement.unlocked || entitlement.trialActive
+  const apiKey  = userKey ?? (hasSharedAccess ? process.env.ANTHROPIC_API_KEY : null)
   const claudeModel = isValidClaudeModelId(settings?.claude_model) ? settings.claude_model : resolveDefaultModel('resoconto')
   // Consenso all'uso dei dati biometrici (FC, calorie) nei prompt AI — vedi
   // components/profilo/SectionAiPrivacy.tsx. Default true finché l'utente non lo disattiva.
@@ -398,7 +404,11 @@ export async function POST(req: NextRequest) {
     return new Response(
       JSON.stringify({
         error:   'no_ai_access',
-        message: 'Aggiungi la tua chiave API Claude nelle impostazioni per generare il resoconto.',
+        // Con l'accesso condiviso esteso a tutto il periodo di prova, questo ramo scatta quasi
+        // solo a prova scaduta — non è più il caso tipico "non hai mai aggiunto una chiave".
+        message: entitlement.trialExpired
+          ? 'Il periodo di prova gratuito è terminato — sblocca Dtrek per continuare a generare resoconti.'
+          : 'Al momento non hai accesso alla generazione AI — sblocca Dtrek nelle impostazioni del profilo.',
       }),
       { status: 402, headers: { 'Content-Type': 'application/json' } },
     )
@@ -422,11 +432,9 @@ export async function POST(req: NextRequest) {
     })
   }
 
-  // Gate/trial (docs/navigator-dtrek-boundary.md) — un resoconto nuovo (nessuna riga esistente per
-  // questa attività) conta contro il tetto del periodo di prova; durante la prova la lunghezza è
-  // forzata a 'breve' a prescindere da cosa ha chiesto il client. Owner/Premium/BYOK sono sempre
-  // unlocked, vedi lib/dtrekEntitlement.ts.
-  const entitlement = await resolveDtrekEntitlement(user.id)
+  // Un resoconto nuovo (nessuna riga esistente per questa attività) conta contro il tetto del
+  // periodo di prova; durante la prova la lunghezza è forzata a 'breve' a prescindere da cosa ha
+  // chiesto il client. `entitlement` è già stato risolto sopra, per l'accesso AI.
   const { data: existingReport } = await supabase
     .from('hike_reports')
     .select('id')

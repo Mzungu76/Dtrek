@@ -95,7 +95,7 @@ export default function GiftRouteAdminToggle({ hikeId }: Props) {
           className="w-full flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-amber-800 hover:bg-amber-50 transition-colors"
         >
           <Gift className="w-4 h-4" />
-          {isSample ? `Omaggio · ${ITALIAN_REGIONS.find(r => r.slug === region)?.name ?? region}` : 'Percorso omaggio'}
+          {isSample ? `Default · ${ITALIAN_REGIONS.find(r => r.slug === region)?.name ?? region}` : 'Percorso di Default'}
           {open ? <ChevronDown className="w-3.5 h-3.5 ml-auto" /> : <ChevronUp className="w-3.5 h-3.5 ml-auto" />}
         </button>
 
@@ -129,7 +129,7 @@ export default function GiftRouteAdminToggle({ hikeId }: Props) {
                   disabled={saving}
                   className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-stone-100 hover:bg-stone-200 disabled:opacity-50 text-stone-700 text-sm font-medium transition-colors"
                 >
-                  {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null} Rimuovi come omaggio
+                  {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null} Rimuovi come Default
                 </button>
               </>
             ) : (
@@ -138,7 +138,7 @@ export default function GiftRouteAdminToggle({ hikeId }: Props) {
                 disabled={saving || !region}
                 className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-sm font-medium transition-colors"
               >
-                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Imposta come omaggio
+                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Imposta come Default
               </button>
             )}
           </div>

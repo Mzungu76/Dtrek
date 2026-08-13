@@ -171,7 +171,7 @@ export default function GuidaHub({ id }: { id?: string }) {
     hike ? { plannedId: hike.id, data: hike.floraResult, trackHash: hike.floraTrackHash } : undefined,
   )
 
-  const { hasAiAccess, aiUnavailable } = useHasAiAccess()
+  const { hasAiAccess, aiUnavailable, trialExpired } = useHasAiAccess()
   const enrichmentTimedOut = useEnrichmentTimeout(hike?.id)
   const dtmProfile = useDtmProfile(hike)
   const terrainProfile = useTerrainProfile(hike)
@@ -862,6 +862,7 @@ export default function GuidaHub({ id }: { id?: string }) {
           enrichmentReady={enrichmentReady}
           hasAiAccess={hasAiAccess}
           aiUnavailable={aiUnavailable}
+          trialExpired={trialExpired}
           scrollToSectionKey={pendingScrollSection}
           onScrollToSectionConsumed={() => setPendingScrollSection(null)}
           highlightedPoiId={highlightedPoiId}

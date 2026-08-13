@@ -8,13 +8,19 @@ interface AiAccessState {
    *  — va distinto da "hasAiAccess: false", che invece significa che l'account non ha una chiave
    *  salvata: i due stati richiedono un messaggio diverso a schermo (vedi GuideReader.tsx). */
   aiUnavailable: boolean
+  /** Periodo di prova scaduto (docs/navigator-dtrek-boundary.md) — quando hasAiAccess è false,
+   *  distingue "la prova è finita" (il caso tipico ora che l'accesso condiviso copre tutta la
+   *  prova, non solo premium/BYOK) da un generico "nessun accesso". */
+  trialExpired: boolean
+  trialDaysLeft: number
 }
 
-// Whether this account has AI access (own Claude key or premium) — fetched once per session
-// (fetchOnce, lib/sessionCache.ts) rather than on every GuidaHub mount, since it's account-level
-// and can't change from one hike-open to the next within the same session.
+// Whether this account has AI access (own Claude key, premium, o periodo di prova ancora attivo —
+// vedi resolveApiKeyAndSettings.ts) — fetched once per session (fetchOnce, lib/sessionCache.ts)
+// rather than on every GuidaHub mount, since it's account-level and can't change from one
+// hike-open to the next within the same session.
 export function useHasAiAccess(): AiAccessState {
-  const [state, setState] = useState<AiAccessState>({ hasAiAccess: null, aiUnavailable: false })
+  const [state, setState] = useState<AiAccessState>({ hasAiAccess: null, aiUnavailable: false, trialExpired: false, trialDaysLeft: 0 })
 
   useEffect(() => {
     let cancelled = false
@@ -23,9 +29,10 @@ export function useHasAiAccess(): AiAccessState {
     // solo silenzio (guida mai generata, Chiedi a Giulia/fonti mai comparse, nessun avviso).
     fetchOnce('ai-access', () => fetch('/api/guide', { signal: AbortSignal.timeout(10000) }).then(r => r.json().then(d => ({
       hasAiAccess: !!d.hasAccess, aiUnavailable: !!d.unavailable || (!r.ok && r.status !== 401),
+      trialExpired: !!d.trialExpired, trialDaysLeft: d.trialDaysLeft ?? 0,
     }))))
       .then(v => { if (!cancelled) setState(v) })
-      .catch(() => { if (!cancelled) setState({ hasAiAccess: false, aiUnavailable: true }) })
+      .catch(() => { if (!cancelled) setState({ hasAiAccess: false, aiUnavailable: true, trialExpired: false, trialDaysLeft: 0 }) })
     return () => { cancelled = true }
   }, [])
 
