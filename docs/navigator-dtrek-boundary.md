@@ -61,8 +61,40 @@ Le due app sono percepite come "fuse" e confusionarie lato utente/business.
 5. **Account owner** (solo l'utente stesso, mzulpt@gmail.com): nuovo flag `is_owner boolean` in `user_settings`, protetto dalla RLS già esistente sulla tabella (`user_settings_owner` policy, `supabase-schema.sql:107-111` — ogni utente legge solo la propria riga, quindi il flag non è mai visibile ad altri account). Quando `is_owner = true`, bypassa paywall e limiti di trial ovunque nel codice.
 6. **Utenti esistenti**: non rilevante in pratica — l'unico account reale è quello owner (accesso pieno via flag). Non serve una migrazione di grandfathering per altri utenti.
 
+## Schema tecnico del gate (progettato, non ancora implementato)
+
+Verificato prima di disegnare: `middleware.ts` evita deliberatamente ogni chiamata a Supabase (per non trasformare un outage Supabase in 504 su tutta l'app, vedi commento in cima al file) — stesso principio già applicato all'autenticazione, che infatti middleware.ts gestisce solo come redirect UX "nessun cookie" e lascia la verifica vera a `getUserFromRequest` nelle singole API route. Il gate trial/paywall segue lo stesso schema: **mai nel middleware**, sempre negli endpoint/layout che già parlano con Supabase.
+
+1. **Migrazione DB** (`supabase/migrations/add_trial_and_owner_columns.sql`, stesso pattern di `add_guide_section_lengths_column.sql`):
+   ```sql
+   ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS is_owner BOOLEAN NOT NULL DEFAULT false;
+   ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS trial_started_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+   ```
+   Nessuna colonna contatore per percorsi/resoconti: si contano live con `COUNT(*)` su `planned_hikes`/`hike_reports` filtrati per `user_id` (tabelle già esistenti con quella colonna) — niente da tenere sincronizzato, niente rischio di drift. Dopo la migrazione, `UPDATE user_settings SET is_owner = true WHERE user_id = '<tuo uuid>'` va eseguito una tantum a mano su Supabase (non nel codice).
+
+2. **Risolutore centrale** — nuovo `lib/dtrekEntitlement.ts`, stile analogo a `resolveApiKeyAndSettings.ts` (`app/lib/guide/`):
+   ```ts
+   interface DtrekEntitlement {
+     unlocked: boolean       // is_owner || subscription_tier === 'premium' || claude_api_key propria (BYOK)
+     isOwner: boolean
+     trialExpired: boolean   // solo se !unlocked
+     trialDaysLeft: number
+     routesUsed: number; routesLimit: 2; canCreateRoute: boolean
+     reportsUsed: number; reportsLimit: 2; canCreateReport: boolean
+     forcedTextLength: 'essenziale' | null   // non-null quando in trial attivo (!unlocked && !trialExpired)
+   }
+   ```
+   **Tetti indipendenti (confermato)**: `canCreateRoute = routesUsed < 2`, `canCreateReport = reportsUsed < 2`, valutati separatamente — esaurire i percorsi non blocca i resoconti e viceversa. `trialExpired` (sola lettura su tutto) scatta solo quando **entrambi** i tetti sono esauriti (`routesUsed >= 2 && reportsUsed >= 2`) oppure sono passati i 30 giorni da `trial_started_at`, qualunque condizione arrivi prima.
+
+3. **Punti di enforcement** (lato server, negli endpoint che scrivono):
+   - Creazione percorso → `app/api/planned`, `app/api/route-build`, salvataggio da `GpxUploader.tsx`: check `canCreateRoute`.
+   - Creazione resoconto → `app/api/resoconto` (POST): check `canCreateReport`.
+   - Generazione guida/resoconto AI → forza lunghezza `essenziale` quando `forcedTextLength` è impostato (riuso di `sanitizeSectionLengths`/pattern di `clampMoltoApprofondita` già in `lib/guideSections.ts`).
+   - Modifica di contenuti esistenti dopo `trialExpired` → bloccata (sola lettura); le GET restano sempre permesse, in ogni stato.
+   - UI: CTA di upgrade nelle hub (`/guida/elenco`, `/resoconto/elenco`, `/upload`) con percorsi/resoconti rimasti — mirror visivo del pattern già usato per lo slot Navigator (`lib/navigatorSlot.ts`).
+
 ## Prossimi passi noti
 
-- Progettare il meccanismo tecnico: nuove colonne/contatori per il trial (es. data inizio prova, conteggio percorsi/resoconti creati), punto di enforcement del gate (probabilmente `layout.tsx` per le sezioni di Dtrek, dato che esistono link diretti che bypassano l'hub), forzatura `sectionLengths` a `essenziale` durante il trial, e il bypass owner.
+- Implementare lo schema sopra: migrazione DB, `lib/dtrekEntitlement.ts`, gli enforcement point nelle API route, e le CTA UI nelle hub.
 - Modifiche UX al layout/menu del Navigator (rimandate finché non si chiudeva la questione architetturale — ora sbloccate).
 - Rivedere le stime di costo AI con dati reali (`ai_usage_log`) una volta che ci sarà traffico.
