@@ -179,6 +179,16 @@ Segnalati testando la registrazione da zero, sia su Dtrek che su Navigator. Quat
 
 Type-check e lint puliti su tutti i file toccati. Non verificato in un browser reale (nessun ambiente per farlo in questa sessione) — soprattutto il punto 1 andrebbe riprovato end-to-end dopo aver aggiornato i template email su Supabase.
 
+## Eliminazione account (2026-08-13, sesta parte sessione)
+
+Richiesta per due motivi: un utente può voler cancellare tutti i propri dati, e serve anche in fase di test per riusare la stessa email invece di doverne inventare una nuova ogni volta. Implementata e pushata.
+
+- **`lib/accountDeletion.ts`** — `deleteAccountAndData(userId)`: ripulisce prima lo Storage (bucket `dtrek-photos`/`dtrek-reports`, path `${userId}/...`, con discesa ricorsiva perché `.list()` di Supabase Storage non è ricorsivo), poi anonimizza `ai_usage_log` (unica tabella con `user_id` senza FK/CASCADE verso `auth.users` — colonna di telemetria aggregata, impostata a `NULL` invece di cancellare la riga), infine chiama `supabase.auth.admin.deleteUser(userId)` (hard delete, non soft — l'email torna subito libera). Verificate tutte le altre tabelle in `supabase-schema.sql` e nelle migrazioni: hanno già `user_id ... REFERENCES auth.users(id) ON DELETE CASCADE` (activities, planned_hikes, user_settings, hike_reports, hike_questionnaires, guide_questions, route_recommendations, activity_photos, route_search_history, route_build_logs, video_custom_presets, hike_navigation_sessions e a cascata i suoi eventi/track), quindi si svuotano da sole. Le cache condivise (poi_notes, dtm_cache, start_point_cache, ...) non hanno mai `user_id` — restano intatte, esattamente il comportamento "i dati comuni restano" richiesto.
+- **`app/api/account/delete/route.ts`** (DELETE) — autentica via sessione (mai un id passato dal client), poi blocca esplicitamente l'account owner (`is_owner`, via `resolveDtrekEntitlement`) con 403: questa funzione serve a liberare email di test, non a poter distruggere per errore l'unico account reale del prodotto.
+- **UI**: `components/profilo/SectionEliminaAccount.tsx`, danger zone in fondo a `/profilo/impostazioni` — conferma per digitazione esatta dell'email (stesso pattern GitHub/Vercel), poi sign-out + pulizia locale (`lsClearAll`, `clearProfile`) + redirect a `/login`.
+
+Type-check e lint puliti. Non testato in un browser reale in questa sessione.
+
 ## Prossimi passi noti
 
 - Decidere gli importi esatti (mensile e lifetime) prima di configurare i prodotti su Paddle.
