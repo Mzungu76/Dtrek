@@ -185,7 +185,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   // che non ha mai generato quella sezione non vede/sente nulla di diverso da oggi (solo l'estratto
   // Wikipedia già esistente), anche se lo stesso POI ha già una nota cachata da un altro sentiero.
   const hasLuoghiGuide = (hike.cachedGuide ?? '').includes('I luoghi da non perdere')
-  const poiNotesById = usePoiNotes(pois.map((p) => p.id), hasLuoghiGuide)
+  const poiNotesById = usePoiNotes(hike.id, pois.map((p) => p.id), hasLuoghiGuide)
 
   const moments = useMemo<RouteMoment[]>(() => detectRouteMoments(hike.trackPoints ?? []), [hike.trackPoints])
   const elevationProfile = useMemo(() => buildElevationProfile(hike.trackPoints ?? []), [hike.trackPoints])

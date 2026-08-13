@@ -1,6 +1,7 @@
 import { runWithConcurrency } from '@/lib/promisePool'
 import { lsGet, lsSet } from '@/lib/localStore'
 import { fetchAndSaveTrailGraph, deleteTrailGraph } from '@/lib/navigation/trailGraphStore'
+import { fetchAndSavePoiNotes, deletePoiNotes } from '@/lib/offline/poiNotesStore'
 import { buildElevationProfile } from '@/lib/navigation/elevationProfile'
 import { buildRouteInstructions } from '@/lib/navigation/routeInstructions'
 import { detectRouteMoments } from '@/lib/navigation/routeMoments'
@@ -148,6 +149,18 @@ export async function downloadOfflinePackage(
     }
   }
 
+  // Same best-effort treatment as the trail graph above — a live Supabase read (lib/poiNotes.ts's
+  // shared per-POI cache, Guida IA), never allowed to fail an otherwise-complete tile package.
+  if (complete && !manifest.hasPoiNotes) {
+    try {
+      const poiIds = ((hikeData?.cachedPois ?? []) as { id: number }[]).map((p) => p.id)
+      manifest.poiNotesCount = await fetchAndSavePoiNotes(hikeId, poiIds)
+      manifest.hasPoiNotes = true
+    } catch {
+      manifest.hasPoiNotes = false
+    }
+  }
+
   // Readiness signals for the rest of the package (roadmap Fase 6) — all pure functions of data
   // already on the cached PlannedHike record, nothing to fetch, just recorded here so a hiker can
   // be warned before losing signal if the *source* data (trackPoint altitude, cachedPois) turns
@@ -187,4 +200,5 @@ export async function deleteOfflinePackage(hikeId: string): Promise<void> {
   await lsSet(`offline-done-tiles:${hikeId}`, [])
   await deleteManifest(hikeId)
   await deleteTrailGraph(hikeId)
+  await deletePoiNotes(hikeId)
 }
