@@ -203,6 +203,11 @@ Implementata l'infrastruttura completa. **Decisione importante presa durante la 
 
 Type-check e lint puliti su tutti i file.
 
+### Bug scoperti testando il pilota — risolti
+
+- **Titolo GPX concatenato**: `lib/gpxParser.ts` prendeva `.textContent` di `<name>` senza gestire i GPX (es. esportazioni CAI) che usano un figlio per lingua (`<name><it>SI Z17</it><en>SI Z17</en>...</name>`) — risultato tipo "SI Z17SI Z17SI Z17...". Ora prende solo l'italiano (o il primo figlio disponibile).
+- **Beauty Score non neutro**: il percorso omaggio della Sardegna, verificato via SQL, aveva POI/Wikipedia/Safety Score correttamente calcolati e nessun testo AI — ma il Beauty Score era stato calcolato con i pesi TEI **personali** dell'owner (cultura 100 vs default 20, geodiversità 80 vs default 10, sensibilità antropica disattivata), non quelli di default che ha chiunque non abbia mai toccato quei cursori in Impostazioni. Un regalo deve restare neutro per chiunque lo riceva, non riflettere il gusto di chi l'ha creato — la Safety Score invece è oggettiva (pendenza/fauna) e non aveva questo problema. Fix in `components/guida/GiftRouteAdminToggle.tsx`: "Imposta come omaggio" ora ricalcola sempre il Beauty Score forzando i pesi di default (`DEFAULT_TEI_WEIGHTS`, sensibilità 'normale', sforzo/durata di default) prima di salvare; aggiunto anche un pulsante "Ricalcola Beauty Score neutro" per i master già marcati prima di questa fix (serve per la Sardegna, già impostata).
+
 ### Cosa manca prima che il pilota sia visibile a un utente vero
 
 Non generabile da questa sessione — nessun accesso a Overpass/Wikipedia/Anthropic da questa sandbox (rete bloccata, vedi sopra). **Azione tua**:
