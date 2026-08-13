@@ -30,7 +30,7 @@ export default function TrialStatusBanner() {
           <span className="flex-1">
             Periodo di prova terminato — i tuoi percorsi e resoconti restano consultabili in sola lettura.
           </span>
-          <Link href="/profilo/ai" className="font-semibold underline underline-offset-2 shrink-0">
+          <Link href="/prezzi" className="font-semibold underline underline-offset-2 shrink-0">
             Sblocca Dtrek
           </Link>
         </div>
@@ -47,7 +47,7 @@ export default function TrialStatusBanner() {
           {Math.max(0, entitlement.reportsLimit - entitlement.reportsUsed)} resoconti rimasti,
           ancora {entitlement.trialDaysLeft} {entitlement.trialDaysLeft === 1 ? 'giorno' : 'giorni'}.
         </span>
-        <Link href="/profilo/ai" className="font-semibold underline underline-offset-2 shrink-0">
+        <Link href="/prezzi" className="font-semibold underline underline-offset-2 shrink-0">
           Sblocca Dtrek
         </Link>
       </div>

@@ -1068,8 +1068,8 @@ export default function GuideReader({
                   </h2>
                   <p className="text-stone-500 text-sm leading-relaxed">
                     {trialExpired
-                      ? <>Giulia può ancora scrivere la guida narrata di questo percorso — <a href="/profilo/ai" className="text-terra-600 font-medium underline underline-offset-2">sblocca Dtrek</a> per continuare a generarla. Intanto qui sotto trovi comunque mappa, profilo, punteggi e punti di interesse del percorso.</>
-                      : <>Al momento non hai accesso alla generazione AI — <a href="/profilo/ai" className="text-terra-600 font-medium underline underline-offset-2">sblocca Dtrek</a> nelle impostazioni del profilo. Intanto qui sotto trovi comunque mappa, profilo, punteggi e punti di interesse del percorso.</>
+                      ? <>Giulia può ancora scrivere la guida narrata di questo percorso — <a href="/prezzi" className="text-terra-600 font-medium underline underline-offset-2">sblocca Dtrek</a> per continuare a generarla. Intanto qui sotto trovi comunque mappa, profilo, punteggi e punti di interesse del percorso.</>
+                      : <>Al momento non hai accesso alla generazione AI — <a href="/prezzi" className="text-terra-600 font-medium underline underline-offset-2">sblocca Dtrek</a>. Intanto qui sotto trovi comunque mappa, profilo, punteggi e punti di interesse del percorso.</>
                     }
                   </p>
                 </div>
