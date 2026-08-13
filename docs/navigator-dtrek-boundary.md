@@ -93,8 +93,63 @@ Verificato prima di disegnare: `middleware.ts` evita deliberatamente ogni chiama
    - Modifica di contenuti esistenti dopo `trialExpired` → bloccata (sola lettura); le GET restano sempre permesse, in ogni stato.
    - UI: CTA di upgrade nelle hub (`/guida/elenco`, `/resoconto/elenco`, `/upload`) con percorsi/resoconti rimasti — mirror visivo del pattern già usato per lo slot Navigator (`lib/navigatorSlot.ts`).
 
+## Forme di pagamento — decisioni prese (2026-08-13, terza parte sessione)
+
+### Vincolo store: perché il pagamento vive solo su Dtrek web, mai dentro Navigator
+
+Google Play e Apple App Store vietano di vendere contenuti/abbonamenti digitali **dentro l'app nativa** con un processore terzo — per farlo lì servirebbe Google Play Billing / Apple In-App Purchase (che trattengono 15–30%). Bypassare questa regola con un checkout esterno richiamato da dentro l'app rischia rifiuto/rimozione dallo store.
+
+Il codice attuale è già nel pattern sicuro: `lib/native/mainAppLinks.ts` apre Dtrek nel **browser di sistema**, non in una webview interna — lo stesso schema "reader app" di Kindle/Netflix/Spotify (l'app nativa non vende nulla al suo interno, resta genuinamente gratuita, e rimanda a un sito esterno dove il pagamento avviene sotto la responsabilità del sito, non dell'app in store).
+
+**Confermato**: si resta su questo pattern.
+- Navigator (app store) **non deve mai** mostrare linguaggio di vendita/upgrade al suo interno — niente bottone "Sblocca Premium" con link diretto al checkout. Resta il link generico "Apri app principale" già esistente, verso il browser di sistema.
+- Il checkout Paddle vive **esclusivamente** sul sito web Dtrek (pagina `/prezzi`), mai in una webview dentro l'app nativa.
+- **Non implementato ora, ma annotato come opzione futura**: se un domani si volesse vendere Premium anche *dentro* l'app Navigator sullo store, servirebbe integrare separatamente Google Play Billing / Apple IAP — lavoro e commissioni distinti da Paddle, non necessario oggi perché il Premium sblocca Dtrek (prodotto web), non Navigator.
+
+### Processore: Paddle
+
+Scelto **Paddle** (Merchant of Record) invece di Stripe: Paddle è il venditore legale, calcola e versa lui l'IVA verso qualsiasi paese ed emette le fatture — zero burocrazia fiscale per un developer singolo. Commissioni più alte (~5%) di Stripe (~1,5–2,9%+fisso), accettate come compromesso per non dover gestire da soli la registrazione IVA OSS. Rivalutabile verso Stripe in futuro se il volume giustifica il risparmio.
+
+### Struttura prezzi
+
+- **Ricorrente mensile** (rinnovo automatico via Paddle).
+- **Una tantum lifetime** (sblocco permanente, nessun rinnovo).
+- **Importi esatti**: ancora da definire — nessun numero deciso finché non si crea il prodotto su Paddle.
+
+### Checkout: self-serve dal lancio
+
+Nessuna gestione manuale intermedia: pagina `/prezzi` pubblica con Paddle Checkout integrato, sblocco automatico via webhook, disponibile da subito.
+
+### Schema DB aggiuntivo per il pagamento (estende lo schema del gate sopra)
+
+```sql
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS premium_expires_at    TIMESTAMPTZ;
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS paddle_customer_id     TEXT;
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS paddle_subscription_id TEXT;
+```
+- `subscription_tier = 'premium'` **e** `premium_expires_at IS NULL` → lifetime (una tantum), nessuna scadenza.
+- `subscription_tier = 'premium'` **e** `premium_expires_at` valorizzato → abbonamento ricorrente attivo fino a quella data (aggiornata a ogni rinnovo dal webhook; se il rinnovo/pagamento fallisce o l'utente cancella, un webhook successivo o un controllo lato `resolveDtrekEntitlement` sulla data scaduta riporta l'utente a `'free'`).
+- `paddle_customer_id`/`paddle_subscription_id`: necessari per il link al Customer Portal ospitato da Paddle (gestione/cancellazione autonoma da parte dell'utente, linkato da `/profilo/impostazioni`) e per riconciliare gli eventi webhook.
+
+`unlocked` in `lib/dtrekEntitlement.ts` (già disegnato sopra) va quindi precisato:
+```
+unlocked = is_owner
+  || (subscription_tier === 'premium' && (premium_expires_at === null || premium_expires_at > now()))
+  || claude_api_key propria (BYOK)
+```
+
+### Nuovi pezzi da costruire (in aggiunta a quanto già elencato per il gate)
+
+- Pagina pubblica `/prezzi` con i due Paddle Checkout (mensile, lifetime).
+- Endpoint webhook `app/api/webhooks/paddle/route.ts`: gestisce eventi di sottoscrizione creata/rinnovata/cancellata e acquisto una tantum completato, aggiorna `user_settings`.
+- Link al Customer Portal Paddle in `/profilo/impostazioni` per chi ha un abbonamento ricorrente.
+- Prerequisito **non tecnico**: creare l'account Paddle, configurare i due prodotti/prezzi (importi ancora da decidere) e recuperare le chiavi API prima di poter scrivere il codice del webhook/checkout.
+
 ## Prossimi passi noti
 
-- Implementare lo schema sopra: migrazione DB, `lib/dtrekEntitlement.ts`, gli enforcement point nelle API route, e le CTA UI nelle hub.
-- Modifiche UX al layout/menu del Navigator (rimandate finché non si chiudeva la questione architetturale — ora sbloccate).
+- Decidere gli importi esatti (mensile e lifetime) prima di configurare i prodotti su Paddle.
+- Creare l'account Paddle e i prodotti/prezzi.
+- Implementare lo schema del gate: migrazione DB, `lib/dtrekEntitlement.ts`, gli enforcement point nelle API route, e le CTA UI nelle hub.
+- Implementare lo schema di pagamento: colonne Paddle, pagina `/prezzi`, webhook, Customer Portal.
+- Modifiche UX al layout/menu del Navigator (rimandate finché non si chiudeva la questione architetturale — ora sbloccate; **vincolo**: nessun linguaggio di vendita dentro Navigator, vedi sopra).
 - Rivedere le stime di costo AI con dati reali (`ai_usage_log`) una volta che ci sarà traffico.
