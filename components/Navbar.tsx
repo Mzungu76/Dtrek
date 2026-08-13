@@ -7,7 +7,7 @@ import { Compass, BookMarked, BookOpen, User, Home } from 'lucide-react'
 import { getProfile } from '@/lib/userProfile'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
-import PremiumBadge from '@/components/premium/PremiumBadge'
+import { useEntitlement } from '@/lib/useEntitlement'
 import type { User as SupabaseUser, Session, AuthChangeEvent } from '@supabase/supabase-js'
 
 // 4 tab principali del nuovo posizionamento: Bacheca (centro di controllo:
@@ -58,27 +58,54 @@ function useAvatar() {
   return { user, faceUrl }
 }
 
+// Stato Premium/prova (docs/navigator-dtrek-boundary.md) come un piccolo indicatore sull'avatar
+// stesso invece di un'icona a sé: verde se sbloccato (owner/Premium/BYOK — resta visibile anche
+// dopo l'acquisto), ambra durante la prova, rosso a prova scaduta. Un tap sull'avatar porta a
+// /profilo, che mostra lo stato per esteso in cima (SectionAbbonamento).
+function entitlementDotClass(e: ReturnType<typeof useEntitlement>): string | null {
+  if (e.unlocked === null) return null
+  if (e.unlocked) return 'bg-forest-500'
+  if (e.trialExpired) return 'bg-red-500'
+  if (e.trialActive) return 'bg-amber-400'
+  return null
+}
+
+function entitlementLabel(e: ReturnType<typeof useEntitlement>): string | null {
+  if (e.unlocked) return 'Dtrek sbloccato'
+  if (e.trialExpired) return 'Prova gratuita terminata'
+  if (e.trialActive) return `Prova gratuita — ${e.trialDaysLeft} ${e.trialDaysLeft === 1 ? 'giorno' : 'giorni'} rimasti`
+  return null
+}
+
 export function ProfileAvatar({ size = 32, iconSize = 16 }: { size?: number; iconSize?: number }) {
   const path = usePathname()
   const { user, faceUrl } = useAvatar()
+  const entitlement = useEntitlement()
   const initials = (user?.user_metadata?.display_name as string | undefined ?? user?.email ?? '?')[0].toUpperCase()
   const active = isActive('/profilo', path)
+  const dotClass = entitlementDotClass(entitlement)
+  const label = entitlementLabel(entitlement)
 
   return (
     <Link
       href="/profilo"
-      className={`flex items-center justify-center rounded-full border-2 overflow-hidden shrink-0 transition-all ${
-        active ? 'border-forest-500' : 'border-stone-200 hover:border-forest-400'
-      }`}
+      className="relative flex items-center justify-center shrink-0"
       style={{ width: size, height: size }}
-      title="Profilo"
+      title={label ? `Profilo — ${label}` : 'Profilo'}
     >
-      {faceUrl
-        ? <img src={faceUrl} alt="Profilo" className="w-full h-full object-cover" />
-        : user
-          ? <span className="w-full h-full flex items-center justify-center bg-forest-600 text-white text-xs font-bold">{initials}</span>
-          : <User style={{ width: iconSize, height: iconSize }} className="text-stone-400" />
-      }
+      <span
+        className={`flex items-center justify-center w-full h-full rounded-full border-2 overflow-hidden transition-all ${
+          active ? 'border-forest-500' : 'border-stone-200 hover:border-forest-400'
+        }`}
+      >
+        {faceUrl
+          ? <img src={faceUrl} alt="Profilo" className="w-full h-full object-cover" />
+          : user
+            ? <span className="w-full h-full flex items-center justify-center bg-forest-600 text-white text-xs font-bold">{initials}</span>
+            : <User style={{ width: iconSize, height: iconSize }} className="text-stone-400" />
+        }
+      </span>
+      {dotClass && <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full ${dotClass}`} />}
     </Link>
   )
 }
@@ -86,7 +113,9 @@ export function ProfileAvatar({ size = 32, iconSize = 16 }: { size?: number; ico
 // Altezza riservata dalla MobileTopBar fissa in alto — le pagine "normali" (non a schermo
 // intero) applicano questa classe al loro contenitore per non finire sotto la barra.
 // Un'unica costante per restare "uniformi" (punto 4): cambiarla qui la cambia ovunque.
-export const MOBILE_TOPBAR_SPACER = 'pt-[calc(env(safe-area-inset-top,0px)+60px)] md:pt-0'
+// 56px di contenuto (h-14) sotto la status bar, che la barra ora copre a sua volta con lo
+// stesso sfondo (niente più padding/gap separato, vedi MobileTopBar).
+export const MOBILE_TOPBAR_SPACER = 'pt-[calc(env(safe-area-inset-top,0px)+56px)] md:pt-0'
 
 // ── Desktop top bar ──────────────────────────────────────────────────────────
 
@@ -119,7 +148,6 @@ function DesktopNav() {
               </Link>
             )
           })}
-          <PremiumBadge variant="desktop" />
           <div className="w-px h-5 bg-stone-200 mx-1" />
           <ProfileAvatar />
         </div>
@@ -128,37 +156,37 @@ function DesktopNav() {
   )
 }
 
-// ── Mobile: barra unica in alto, discreta, coerente con HubNavBar ───────────────
-// Sostituisce la vecchia tab bar flottante in basso (punto 4): stessa forma a pillola +
-// avatar di HubNavBar (Bacheca/Guida/Resoconto/Diario), ma fissa in cima e più compatta,
-// così ogni sezione dell'app condivide la stessa barra invece di due stili diversi.
-
+// ── Mobile: barra unica in alto, fusa con la status bar del telefono ────────────
+// Un'unica fascia edge-to-edge (niente pillola flottante separata dalla status bar, niente
+// gap tra le due) — lo sfondo sale a coprire anche safe-area-inset-top, così la barra di
+// sistema e quella dell'app appaiono come un'unica superficie continua invece di due elementi
+// scollegati. forest-600 = manifest.json theme_color (#277134), non forest-900 come il resto
+// della UI: qui deve combaciare esattamente con lo sfondo che Android/iOS danno alla status bar.
 function MobileTopBar() {
   const path = usePathname()
   return (
     <nav
-      className="md:hidden fixed z-40 inset-x-0 top-0 flex items-center gap-2 px-3"
-      style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 8px)', paddingBottom: 8 }}
+      className="md:hidden fixed z-40 inset-x-0 top-0 bg-forest-600/95 backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.18)]"
+      style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
     >
-      <div className="flex-1 flex items-center justify-around bg-forest-900/95 backdrop-blur-md rounded-full px-1.5 py-1 shadow-[0_4px_16px_rgba(0,0,0,0.2)]">
-        {NAV_LINKS.map(({ href, label, icon: Icon }) => {
-          const active = isActive(href, path)
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={`flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-2xl transition-colors ${
-                active ? 'text-white' : 'text-forest-300'
-              }`}
-            >
-              <Icon className="w-4 h-4" strokeWidth={2} />
-              <span className="text-[9px] font-bold leading-none">{label}</span>
-            </Link>
-          )
-        })}
-      </div>
-      <PremiumBadge variant="mobile" />
-      <div className="shrink-0 bg-forest-900/95 backdrop-blur-md rounded-full p-1 shadow-[0_4px_16px_rgba(0,0,0,0.2)]">
+      <div className="flex items-center gap-1 px-3 h-14">
+        <div className="flex-1 flex items-center justify-around">
+          {NAV_LINKS.map(({ href, label, icon: Icon }) => {
+            const active = isActive(href, path)
+            return (
+              <Link
+                key={href}
+                href={href}
+                className={`flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-2xl transition-colors ${
+                  active ? 'text-white' : 'text-forest-300'
+                }`}
+              >
+                <Icon className="w-4 h-4" strokeWidth={2} />
+                <span className="text-[9px] font-bold leading-none">{label}</span>
+              </Link>
+            )
+          })}
+        </div>
         <ProfileAvatar size={32} iconSize={14} />
       </div>
     </nav>

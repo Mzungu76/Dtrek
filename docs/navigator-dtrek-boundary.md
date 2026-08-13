@@ -272,6 +272,17 @@ Tutto lato tuo, in ordine:
 4. **Prova**: apri `/prezzi` (o il badge Premium in Navbar) da loggato, fai un acquisto con una carta di test Sandbox, controlla che `user_settings` si aggiorni (posso verificarlo io via SQL) e che il badge mostri "Premium"/"Dtrek sbloccato".
 5. Solo dopo che tutto funziona in Sandbox: ripeti i passi 1-3 con le credenziali **Live** (Price ID già pronti, servono ancora API key/client token/webhook secret Live) prima di accettare pagamenti reali.
 
+## Redesign navbar mobile + stato Premium sull'avatar (2026-08-13, undicesima parte sessione)
+
+Feedback dopo un primo giro di test: l'icona a stella (Sparkles) del badge Premium richiamava troppo esplicitamente l'AI, compariva solo affiancata all'avatar e la navbar mobile appariva "scollegata" dalla status bar del telefono (due fasce separate da un gap, di colore diverso). Deciso con l'utente (via domande mirate, tutte le opzioni consigliate scelte):
+
+1. **Nessuna icona separata**: rimosso `components/premium/PremiumBadge.tsx`. Lo stato Premium/prova ora è un piccolo pallino sull'avatar stesso (`ProfileAvatar` in `components/Navbar.tsx`): verde se sbloccato (owner/Premium/BYOK — resta visibile anche dopo l'acquisto, come richiesto fin dall'inizio), ambra durante la prova, rosso a prova scaduta, nessun pallino per anonimo/caricamento. Un tap sull'avatar (icona persistente su ogni pagina, desktop e mobile) porta a `/profilo`.
+2. **`SectionAbbonamento` ora in cima a `/profilo`** (non solo dentro `/profilo/ai`): così il tap sull'avatar mostra davvero lo stato per esteso e il pulsante di sblocco/gestione in un solo passaggio, non due. La riga "Intelligenza artificiale" nel menu resta, ma ora descritta solo come "Chiave Claude personale (BYOK)" per non duplicare il messaggio sull'abbonamento.
+3. **`lib/useEntitlement.ts`** (nuovo): la fetch di `/api/dtrek-entitlement` con cache di sessione (`fetchOnce`), estratta da `PremiumBadge.tsx` prima di eliminarlo, così `ProfileAvatar` la riusa senza duplicare la chiamata.
+4. **`MobileTopBar` edge-to-edge**: sfondo `forest-600/95` (stesso hex `#277134` del `theme_color` in `public/manifest.json`, non `forest-900` come il resto della UI) esteso fino a coprire anche `env(safe-area-inset-top)` col padding, invece della vecchia "pillola" flottante con un gap verso la status bar. Un'unica fascia continua invece di due elementi scollegati; verificato con un mock statico (stessa palette, stesse misure) fuori dall'app, dato che questa sandbox non ha credenziali Supabase per avviare l'app vera. Aggiornata di conseguenza `MOBILE_TOPBAR_SPACER` (56px di contenuto sotto la status bar, non più 60).
+
+Type-check (0 errori) e lint puliti (solo i due warning preesistenti e non correlati su `<img>`).
+
 ## Prossimi passi noti
 
 - Attivare Paddle Sandbox in produzione: variabili d'ambiente su Vercel, redeploy, webhook + segreto, un acquisto di prova (vedi "Cosa manca prima che un pagamento vero funzioni" sopra) — passo attualmente in carico all'utente.
