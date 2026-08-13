@@ -189,6 +189,27 @@ Richiesta per due motivi: un utente può voler cancellare tutti i propri dati, e
 
 Type-check e lint puliti. Non testato in un browser reale in questa sessione.
 
+## Percorso omaggio — pilota Sardegna/Puglia (2026-08-13, settima parte sessione)
+
+Implementata l'infrastruttura completa. **Decisione importante presa durante la costruzione**: niente testo generato da Claude nel percorso omaggio (solo dati calcolati: distanza, dislivello, tempo, POI reali da Overpass/Wikipedia, punteggi sicurezza/bellezza) e **nessun resoconto collegato** — un resoconto in Dtrek è quasi solo testo AI, e nessuno ha davvero percorso il sentiero. Riconsiderabile in futuro (schema e funzione di clonazione già pronti a coprirlo).
+
+1. **Schema DB**: `is_sample`/`sample_region` su `planned_hikes` (e, per un eventuale futuro, anche su `hike_reports`) — righe "master" candidate per regione. `user_settings.gift_route_offered_at`, **indipendente** da `onboarding_completed_at`: il wizard di onboarding imposta il proprio flag prima ancora di offrire il regalo, quindi un flag unico avrebbe perso l'occasione per sempre se il browser si fosse chiuso a metà tra i due passi.
+2. **`clone_row_for_user`**: funzione SQL generica (`to_jsonb`/`jsonb_populate_record`, non un elenco di colonne scritto a mano) per copiare una riga con nuovo id/user_id — resta corretta anche quando in futuro si aggiungono colonne a `planned_hikes` (già successo molte volte).
+3. **`lib/italianRegions.ts`**: le 20 regioni con centroide, per il match "regione più vicina" da geolocalizzazione e per il picker manuale.
+4. **`lib/giftRoute.ts`** + **`app/api/gift-route/claim`**: un solo regalo per account per sempre; clona il master della regione azzerando esplicitamente ogni campo AI (`cached_guide` e affini) e la valutazione personalizzata (calcolata sullo storico di chi ha creato il master, non dell'utente nuovo).
+5. **`lib/dtrekEntitlement.ts`**: `is_sample=true` escluso dal conteggio dei 2 percorsi di prova.
+6. **`components/onboarding/GiftRouteStep.tsx`**, incatenato dopo il wizard in `OnboardingGate.tsx`: richiede la geolocalizzazione (timeout di sicurezza a 10s se il browser non risponde al prompt), calcola la regione più vicina; se negata o assente mostra il picker manuale delle 20 regioni. Sempre saltabile.
+7. **`components/guida/GiftRouteAdminToggle.tsx`** + **`app/api/gift-route/mark`**: pulsante fluttuante visibile solo all'account owner (`is_owner`) nella pagina di un percorso, per taggarlo come master di una regione — un solo master per regione (rimuove automaticamente il flag da un eventuale altro). Self-service per le prossime 18 regioni, senza passare da SQL manuale.
+
+Type-check e lint puliti su tutti i file.
+
+### Cosa manca prima che il pilota sia visibile a un utente vero
+
+Non generabile da questa sessione — nessun accesso a Overpass/Wikipedia/Anthropic da questa sandbox (rete bloccata, vedi sopra). **Azione tua**:
+1. Importa `SIZ17.gpx` (Sardegna) e `SIR08.gpx` (Puglia) da `/upload` → tab "Per la Guida" — l'arricchimento POI (Overpass + Wikipedia) parte automaticamente all'import, nessun'altra azione richiesta. Non serve (e per Sardegna/Puglia non ha effetto sul regalo, che lo azzera comunque) generare la guida AI.
+2. Apri ciascun percorso, usa il pulsante "Percorso omaggio" in basso a destra (visibile solo a te), scegli la regione, "Imposta come omaggio".
+3. Verifica end-to-end con un account di test: registrati, completa/salta il wizard, concedi o nega la geolocalizzazione, controlla che il percorso compaia in `/guida/elenco` con i dati giusti e senza consumare il tetto di prova.
+
 ## Prossimi passi noti
 
 - Decidere gli importi esatti (mensile e lifetime) prima di configurare i prodotti su Paddle.
