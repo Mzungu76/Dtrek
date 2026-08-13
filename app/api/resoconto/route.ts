@@ -13,6 +13,7 @@ import { resolveDefaultModel, isValidClaudeModelId } from '@/lib/claudeModels'
 import { tryAcquireCooldown } from '@/lib/aiCooldown'
 import { wmoInfo, type WeatherAtHike } from '@/lib/openmeteo'
 import { readProfile, isProfileReady, formatStyleProfileBlock, type WritingStyleProfile } from '@/lib/writingStyleProfile'
+import { resolveDtrekEntitlement } from '@/lib/dtrekEntitlement'
 
 export const maxDuration = 120
 export const dynamic = 'force-dynamic'
@@ -421,6 +422,36 @@ export async function POST(req: NextRequest) {
     })
   }
 
+  // Gate/trial (docs/navigator-dtrek-boundary.md) — un resoconto nuovo (nessuna riga esistente per
+  // questa attività) conta contro il tetto del periodo di prova; durante la prova la lunghezza è
+  // forzata a 'breve' a prescindere da cosa ha chiesto il client. Owner/Premium/BYOK sono sempre
+  // unlocked, vedi lib/dtrekEntitlement.ts.
+  const entitlement = await resolveDtrekEntitlement(user.id)
+  const { data: existingReport } = await supabase
+    .from('hike_reports')
+    .select('id')
+    .eq('id', `report-${activityId}`)
+    .eq('user_id', user.id)
+    .maybeSingle()
+  if (!existingReport && !entitlement.canCreateReport) {
+    return new Response(
+      JSON.stringify({
+        error:   'trial_limit_reached',
+        message: entitlement.trialExpired
+          ? 'Periodo di prova terminato — sblocca Dtrek per generare nuovi resoconti.'
+          : `Hai raggiunto il limite di ${entitlement.reportsLimit} resoconti del periodo di prova — sblocca Dtrek per continuare.`,
+      }),
+      { status: 403, headers: { 'Content-Type': 'application/json' } },
+    )
+  }
+  if (existingReport && entitlement.trialExpired) {
+    return new Response(
+      JSON.stringify({ error: 'trial_expired', message: 'Periodo di prova terminato — questo resoconto è in sola lettura finché non sblocchi Dtrek.' }),
+      { status: 403, headers: { 'Content-Type': 'application/json' } },
+    )
+  }
+  if (entitlement.trialActive) length = 'breve'
+
   // Rete di sicurezza economica contro click ripetuti in sequenza sulla generazione del resoconto —
   // vedi lib/aiCooldown.ts. Per attività, non per utente: ogni riga activities appartiene già a un
   // solo utente, quindi coincide con lo stesso effetto.
@@ -561,6 +592,14 @@ export async function PATCH(req: NextRequest) {
     return new Response(JSON.stringify({ error: 'Non autenticato' }), {
       status: 401, headers: { 'Content-Type': 'application/json' },
     })
+  }
+
+  const entitlement = await resolveDtrekEntitlement(user.id)
+  if (entitlement.trialExpired) {
+    return new Response(
+      JSON.stringify({ error: 'trial_expired', message: 'Periodo di prova terminato — questo resoconto è in sola lettura finché non sblocchi Dtrek.' }),
+      { status: 403, headers: { 'Content-Type': 'application/json' } },
+    )
   }
 
   let activityId: string, content: string

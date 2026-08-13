@@ -26,6 +26,7 @@ import type { SafetyScore } from '@/lib/safetyScore'
 import type { BeautyScore } from '@/lib/beautyScore'
 import type { ClassifiedDifficultyMarker } from '@/lib/difficultyMarkers'
 import { resolveApiKeyAndSettings, resolveEmergencySharedKey } from '@/app/lib/guide/resolveApiKeyAndSettings'
+import { resolveDtrekEntitlement } from '@/lib/dtrekEntitlement'
 import { isCreditBalanceError } from '@/lib/anthropicErrors'
 import { tryAcquireCooldown } from '@/lib/aiCooldown'
 import { stripGuideStatus } from '@/lib/guideStatus'
@@ -744,10 +745,26 @@ async function generateGuide(req: NextRequest): Promise<Response> {
     })
   }
 
+  // Gate/trial (docs/navigator-dtrek-boundary.md) — generare/aggiornare la guida è una scrittura sul
+  // percorso, quindi bloccata a prova scaduta; durante la prova ogni sezione è forzata a 'essenziale'
+  // a prescindere dalle preferenze salvate o dagli override richiesti per questa generazione.
+  // Nessun controllo per il percorso di emergenza (user assente, degraded: true, vedi sopra) — lì
+  // non c'è un'identità verificabile da cui leggere trial/owner, stesso principio già applicato a
+  // resolveEmergencySharedKey.
+  const entitlement = user ? await resolveDtrekEntitlement(user.id) : null
+  if (entitlement?.trialExpired) {
+    return new Response(
+      JSON.stringify({ error: 'trial_expired', message: 'Periodo di prova terminato — questo percorso è in sola lettura finché non sblocchi Dtrek.' }),
+      { status: 403, headers: { 'Content-Type': 'application/json' } },
+    )
+  }
+
   // clampMoltoApprofondita è una difesa lato server, non il meccanismo primario — l'UI (Impostazioni
   // e override per singola guida) impedisce già di superare MAX_MOLTO_APPROFONDITA_SECTIONS, ma una
   // richiesta diretta all'API (o un client non aggiornato) potrebbe comunque bypassarla.
-  const effectiveSectionLengths: SectionLengthMap = clampMoltoApprofondita({ ...sectionLengths, ...sectionLengthOverrides })
+  const effectiveSectionLengths: SectionLengthMap = entitlement?.trialActive
+    ? (Object.fromEntries(GUIDE_SECTIONS.map(s => [s.key, 'essenziale'])) as SectionLengthMap)
+    : clampMoltoApprofondita({ ...sectionLengths, ...sectionLengthOverrides })
 
   const sectionKeys = requestedSections.length > 0 ? requestedSections : breveSections
   if (sectionKeys.length === 0) {
