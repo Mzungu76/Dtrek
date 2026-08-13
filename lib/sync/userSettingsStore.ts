@@ -60,6 +60,8 @@ export interface UserSettingsData {
   hikerConcerns: string[]
   hikerEnvironmentPrefs: string[]
   onboardingCompletedAt: string | null
+  /** Indipendente da onboardingCompletedAt — vedi supabase/migrations/add_gift_route_offered_at.sql. */
+  giftRouteOfferedAt: string | null
   /** Server-side last-modified timestamp — see lib/sync/pullEngine.ts. */
   updatedAt: string | null
   aiUseBiometricData: boolean

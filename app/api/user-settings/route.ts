@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
 
   const { data: d1, error: e1 } = await supabase
     .from('user_settings')
-    .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, user_gender, beauty_natura_weight, beauty_paesaggio_weight, beauty_archeologia_weight, beauty_architettura_weight, beauty_interesse_weight, beauty_natura_cultura, beauty_natura_type, beauty_cultura_type, pref_sforzo, pref_durata, tei_peso_cultura, tei_peso_topografia, tei_peso_idrografia, tei_peso_fondo, tei_peso_geodiversita, tei_f_antr_sensitivity, hiker_face_data_url, display_name, personal_delta, hr_hike_count, hr_rest, hr_max, starting_address, starting_lat, starting_lon, guide_pending_days, guide_breve_sections, hiker_experience_level, hiker_concerns, hiker_environment_prefs, onboarding_completed_at, claude_model, updated_at, ai_use_biometric_data, ai_use_history_data, ai_web_search, route_build_ai_place_search, guide_section_lengths, writing_style_profile')
+    .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, user_gender, beauty_natura_weight, beauty_paesaggio_weight, beauty_archeologia_weight, beauty_architettura_weight, beauty_interesse_weight, beauty_natura_cultura, beauty_natura_type, beauty_cultura_type, pref_sforzo, pref_durata, tei_peso_cultura, tei_peso_topografia, tei_peso_idrografia, tei_peso_fondo, tei_peso_geodiversita, tei_f_antr_sensitivity, hiker_face_data_url, display_name, personal_delta, hr_hike_count, hr_rest, hr_max, starting_address, starting_lat, starting_lon, guide_pending_days, guide_breve_sections, hiker_experience_level, hiker_concerns, hiker_environment_prefs, onboarding_completed_at, gift_route_offered_at, claude_model, updated_at, ai_use_biometric_data, ai_use_history_data, ai_web_search, route_build_ai_place_search, guide_section_lengths, writing_style_profile')
     .eq('user_id', user.id)
     .single()
 
@@ -101,6 +101,7 @@ export async function GET(req: NextRequest) {
     hikerConcerns:            sanitizeHikerConcerns(data?.hiker_concerns),
     hikerEnvironmentPrefs:    sanitizeHikerEnvironmentPrefs(data?.hiker_environment_prefs),
     onboardingCompletedAt:    (data?.onboarding_completed_at    as string) ?? null,
+    giftRouteOfferedAt:       (data?.gift_route_offered_at      as string) ?? null,
     // null = "Automatico" (nessuna scelta esplicita, vedi components/profilo/SectionClaudeKey.tsx)
     // — non risolto qui a un default fisso perché il default vero dipende dalla funzionalità
     // (guida/resoconto/... vs caption/questionario/...), calcolato solo in
@@ -168,6 +169,7 @@ export async function POST(req: NextRequest) {
     hikerConcerns?: string[]
     hikerEnvironmentPrefs?: string[]
     onboardingCompletedAt?: string | null
+    giftRouteOfferedAt?: string | null
     claudeModel?: string | null
     aiUseBiometricData?: boolean
     aiUseHistoryData?: boolean
@@ -352,6 +354,9 @@ export async function POST(req: NextRequest) {
   }
   if (body.onboardingCompletedAt !== undefined) {
     upsertData.onboarding_completed_at = body.onboardingCompletedAt
+  }
+  if (body.giftRouteOfferedAt !== undefined) {
+    upsertData.gift_route_offered_at = body.giftRouteOfferedAt
   }
 
   // Consenso all'uso di dati personali nei prompt AI — vedi resolveApiKeyAndSettings.ts.

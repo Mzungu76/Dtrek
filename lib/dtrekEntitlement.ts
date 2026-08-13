@@ -75,9 +75,11 @@ export async function resolveDtrekEntitlement(userId: string): Promise<DtrekEnti
   const timeExpired = daysSinceStart >= DTREK_TRIAL_DAYS
   const trialDaysLeft = timeExpired ? 0 : Math.ceil(DTREK_TRIAL_DAYS - daysSinceStart)
 
+  // is_sample=true (percorso/resoconto omaggio clonato al primo accesso, vedi lib/giftRoute.ts)
+  // non conta contro il tetto di prova — non l'ha creato l'utente, non deve consumarne metà da solo.
   const [routesRes, reportsRes] = await Promise.all([
-    supabase.from('planned_hikes').select('id', { count: 'exact', head: true }).eq('user_id', userId),
-    supabase.from('hike_reports').select('id', { count: 'exact', head: true }).eq('user_id', userId),
+    supabase.from('planned_hikes').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('is_sample', false),
+    supabase.from('hike_reports').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('is_sample', false),
   ])
   const routesUsed  = routesRes.count  ?? 0
   const reportsUsed = reportsRes.count ?? 0

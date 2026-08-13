@@ -1090,6 +1090,60 @@ ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS is_owner         BOOLEAN NOT 
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS trial_started_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 
 
+-- Percorso omaggio per nuovo utente (docs/navigator-dtrek-boundary.md,
+-- supabase/migrations/add_gift_route_sample_columns.sql) — righe "master" per regione, taggate
+-- is_sample, clonate nell'account di ogni nuovo utente al primo accesso (lib/giftRoute.ts).
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS is_sample     BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS sample_region TEXT;
+
+ALTER TABLE hike_reports  ADD COLUMN IF NOT EXISTS is_sample     BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE hike_reports  ADD COLUMN IF NOT EXISTS sample_region TEXT;
+
+-- Flag indipendente da onboarding_completed_at — vedi add_gift_route_offered_at.sql per il perché.
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS gift_route_offered_at TIMESTAMPTZ;
+
+-- Per ora il regalo è solo la pianificazione (dati calcolati, niente testo AI, niente resoconto
+-- collegato — decisione esplicita, vedi add_gift_route_activities_and_clone_fn.sql). 'activities' e
+-- 'hike_reports' restano comunque nell'allowlist della funzione sotto per un eventuale futuro.
+--
+-- Clona una riga (planned_hikes/activities/hike_reports) per un nuovo utente con nuovo id — vedi
+-- supabase/migrations/add_gift_route_activities_and_clone_fn.sql per i commenti completi.
+CREATE OR REPLACE FUNCTION clone_row_for_user(
+  p_table       text,
+  p_source_id   text,
+  p_new_id      text,
+  p_new_user_id uuid,
+  p_extra       jsonb DEFAULT '{}'::jsonb
+) RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_row jsonb;
+BEGIN
+  IF p_table NOT IN ('planned_hikes', 'activities', 'hike_reports') THEN
+    RAISE EXCEPTION 'clone_row_for_user: tabella non consentita: %', p_table;
+  END IF;
+
+  EXECUTE format('SELECT to_jsonb(t) FROM %I t WHERE id = $1', p_table)
+    INTO v_row
+    USING p_source_id;
+
+  IF v_row IS NULL THEN
+    RAISE EXCEPTION 'clone_row_for_user: riga sorgente non trovata in % (id=%)', p_table, p_source_id;
+  END IF;
+
+  v_row := (v_row - 'id' - 'user_id' - 'created_at' - 'updated_at')
+           || jsonb_build_object('id', p_new_id, 'user_id', p_new_user_id)
+           || p_extra;
+
+  EXECUTE format('INSERT INTO %I SELECT * FROM jsonb_populate_record(null::%I, $1)', p_table, p_table)
+    USING v_row;
+END;
+$$;
+
+
 -- ═══════════════════════════════════════════════════════════
 -- PostgREST tiene una cache dello schema (nomi di tabelle/colonne) e non la
 -- ricarica da sola quando una ALTER TABLE aggiunge una colonna — il client
