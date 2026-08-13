@@ -47,9 +47,9 @@ export default function TopOverlay({ itemKey, title, statPills, weatherIcon, onO
     <div className="pointer-events-none absolute inset-x-0 top-0 z-20">
       <div className="absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-black/70 to-transparent" />
 
-      <div className="relative px-3 sm:px-4 pt-[calc(env(safe-area-inset-top,0px)+10px)]">
-        <HubNavBar />
+      <HubNavBar />
 
+      <div className="relative px-3 sm:px-4 pt-4">
         <div
           className="transition-opacity ease-out"
           style={{ opacity: visible ? 1 : 0, transitionDuration: `${visible ? FADE_IN_MS : FADE_OUT_MS}ms` }}

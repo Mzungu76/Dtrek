@@ -283,6 +283,16 @@ Feedback dopo un primo giro di test: l'icona a stella (Sparkles) del badge Premi
 
 Type-check (0 errori) e lint puliti (solo i due warning preesistenti e non correlati su `<img>`).
 
+## Feedback dal test dal vivo: navbar disomogenea + icona da rifinire (2026-08-13, dodicesima parte sessione)
+
+Tre segnalazioni dopo un giro di test su device reale (screenshot):
+
+1. **Titolo di pagina tagliato sotto la navbar** (visto su `/prezzi`) — `MOBILE_TOPBAR_SPACER` riservava esattamente l'altezza della barra (56px), senza margine. Impossibile riprodurre la causa esatta in questa sandbox (nessun device reale), quindi soluzione difensiva: portato a 72px (+16px di respiro) invece di inseguire il pixel esatto.
+2. **La navbar non era la stessa in tutta l'app** — il redesign edge-to-edge (parte undicesima sopra) aveva toccato solo `components/Navbar.tsx`, usata dalle pagine "normali" (`/prezzi`, `/profilo`, `/statistiche`, elenchi…). Bacheca, Diario e le pagine "magazine" a schermo intero di Guide/Resoconto (`components/routehub/`) usavano invece `HubNavBar.tsx`, mai toccata: la vecchia pillola fluttuante `bg-forest-900/90` con solo 10px di gap dalla status bar (su Diario nemmeno quello: nessun padding di sicurezza). Risolto rendendo `MobileNavBar` (l'implementazione reale, ora esportata da `components/Navbar.tsx`) l'unica sorgente della barra: `HubNavBar.tsx` è diventato un wrapper di una riga che la re-espone, così le due non possono più divergere. Aggiornati i 5 punti di montaggio (`TopOverlay.tsx`, `HubSkeleton.tsx`, le 3 varianti di `app/bacheca/page.tsx`, `app/diario/page.tsx`) togliendo il padding/gap ridondante che avevano attorno alla vecchia pillola — ora Bacheca (sezione di apertura dell'app), Diario, Guide e Resoconto mostrano tutte la stessa fascia edge-to-edge.
+3. **L'icona del gioiello era troppo semplice** — sostituito il `Gem` piatto di lucide-react con un SVG custom (`components/premium/GemIcon.tsx`): un taglio brillante stilizzato a 6 faccette, ciascuna con una sfumatura diversa dello stesso colore di stato per dare volume, più un piccolo scintillio bianco — verificato a 120px (dettaglio) e a 16px (dimensione reale sull'avatar) con un mock fuori dall'app, resta riconoscibile anche in piccolo.
+
+Type-check (0 errori) e lint puliti (solo i tre warning preesistenti e non correlati su `<img>`).
+
 ## Prossimi passi noti
 
 - Attivare Paddle Sandbox in produzione: variabili d'ambiente su Vercel, redeploy, webhook + segreto, un acquisto di prova (vedi "Cosa manca prima che un pagamento vero funzioni" sopra) — passo attualmente in carico all'utente.

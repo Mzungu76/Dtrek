@@ -675,12 +675,10 @@ export default function DiarioPage() {
 
   return (
     <div className="min-h-screen bg-stone-100">
-      {/* Top nav — same pill + profile avatar as Guida/Resoconto, always at the top (no bottom
-          mobile tab bar here), sticky over the book like the rest of the app's hub sections. */}
-      <div className="sticky top-0 z-40 px-3 py-2 print:hidden">
-        <div className="max-w-sm mx-auto">
-          <HubNavBar />
-        </div>
+      {/* Top nav — stessa barra di Bacheca/Guida/Resoconto (components/Navbar.tsx), sticky sopra
+          il libro come le altre sezioni "hub" dell'app (niente tab bar in basso qui). */}
+      <div className="sticky top-0 z-40 print:hidden">
+        <HubNavBar />
       </div>
 
       {/* Left icon rail — cover customization */}

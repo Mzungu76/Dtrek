@@ -550,7 +550,7 @@ export default function BachecaPage() {
   if (loading) {
     return (
       <div className="fixed inset-0 bg-[#0b1a24] overflow-hidden">
-        <div className="absolute inset-x-0 top-0 z-20 px-3 sm:px-4 pt-[calc(env(safe-area-inset-top,0px)+10px)]">
+        <div className="absolute inset-x-0 top-0 z-20">
           <HubNavBar />
         </div>
         <div className="absolute inset-0 flex items-center justify-center text-stone-400 gap-3">
@@ -566,7 +566,7 @@ export default function BachecaPage() {
         <img src={FALLBACK_HERO} alt="" className="absolute inset-0 w-full h-full object-cover" style={{ filter: HERO_IMAGE_FILTER }} />
         <div className="absolute inset-0 pointer-events-none mix-blend-multiply" style={{ background: HERO_TINT_GRADIENT }} />
         <div className="absolute inset-0 bg-black/35 pointer-events-none" />
-        <div className="absolute inset-x-0 top-0 z-20 px-3 sm:px-4 pt-[calc(env(safe-area-inset-top,0px)+10px)]">
+        <div className="absolute inset-x-0 top-0 z-20">
           <HubNavBar />
         </div>
         <div className="absolute inset-0 z-10 flex flex-col items-center justify-center text-center px-6">
@@ -606,9 +606,9 @@ export default function BachecaPage() {
       <div className="absolute inset-x-0 bottom-0 h-56 bg-gradient-to-t from-black/80 to-transparent pointer-events-none z-10" />
 
       {/* ── Top overlay: nav + pillole + carosello ── */}
-      <div className="absolute inset-x-0 top-0 z-20 px-3 sm:px-4 pt-[calc(env(safe-area-inset-top,0px)+10px)]">
+      <div className="absolute inset-x-0 top-0 z-20">
         <HubNavBar />
-        <div className="mt-3 flex items-center justify-between gap-2">
+        <div className="px-3 sm:px-4 pt-4 flex items-center justify-between gap-2">
           <div data-hscroll className="flex items-center gap-1.5 overflow-x-auto">
             {statPills.map(({ icon: Icon, label }) => (
               <span key={label} className="shrink-0 flex items-center gap-1.5 bg-white text-stone-700 text-[11px] font-semibold whitespace-nowrap px-2.5 py-1.5 rounded-full shadow-sm">

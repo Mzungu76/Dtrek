@@ -3,11 +3,12 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { Compass, BookMarked, BookOpen, User, Home, Gem } from 'lucide-react'
+import { Compass, BookMarked, BookOpen, User, Home } from 'lucide-react'
 import { getProfile } from '@/lib/userProfile'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import { useEntitlement } from '@/lib/useEntitlement'
+import GemIcon from '@/components/premium/GemIcon'
 import type { User as SupabaseUser, Session, AuthChangeEvent } from '@supabase/supabase-js'
 
 // 4 tab principali del nuovo posizionamento: Bacheca (centro di controllo:
@@ -63,11 +64,10 @@ function useAvatar() {
 // sbloccato (owner/Premium/BYOK — resta visibile anche dopo l'acquisto), ambra durante la prova,
 // rosso a prova scaduta. Un tap sull'avatar porta a /profilo, che mostra lo stato per esteso in
 // cima (SectionAbbonamento).
-function entitlementColor(e: ReturnType<typeof useEntitlement>): string | null {
-  if (e.unlocked === null) return null
-  if (e.unlocked) return '#378d44' // forest-500
-  if (e.trialExpired) return '#ef4444' // red-500
-  if (e.trialActive) return '#fbbf24' // amber-400
+function entitlementTone(e: ReturnType<typeof useEntitlement>): 'unlocked' | 'trial' | 'expired' | null {
+  if (e.unlocked) return 'unlocked'
+  if (e.trialExpired) return 'expired'
+  if (e.trialActive) return 'trial'
   return null
 }
 
@@ -84,7 +84,7 @@ export function ProfileAvatar({ size = 32, iconSize = 16 }: { size?: number; ico
   const entitlement = useEntitlement()
   const initials = (user?.user_metadata?.display_name as string | undefined ?? user?.email ?? '?')[0].toUpperCase()
   const active = isActive('/profilo', path)
-  const gemColor = entitlementColor(entitlement)
+  const gemTone = entitlementTone(entitlement)
   const label = entitlementLabel(entitlement)
 
   return (
@@ -106,9 +106,9 @@ export function ProfileAvatar({ size = 32, iconSize = 16 }: { size?: number; ico
             : <User style={{ width: iconSize, height: iconSize }} className="text-stone-400" />
         }
       </span>
-      {gemColor && (
-        <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-white shadow-sm flex items-center justify-center">
-          <Gem className="w-2.5 h-2.5" style={{ color: gemColor }} fill={gemColor} strokeWidth={1.5} />
+      {gemTone && (
+        <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.3)] flex items-center justify-center overflow-hidden">
+          <GemIcon tone={gemTone} size={11} />
         </span>
       )}
     </Link>
@@ -118,9 +118,10 @@ export function ProfileAvatar({ size = 32, iconSize = 16 }: { size?: number; ico
 // Altezza riservata dalla MobileTopBar fissa in alto — le pagine "normali" (non a schermo
 // intero) applicano questa classe al loro contenitore per non finire sotto la barra.
 // Un'unica costante per restare "uniformi" (punto 4): cambiarla qui la cambia ovunque.
-// 56px di contenuto (h-14) sotto la status bar, che la barra ora copre a sua volta con lo
-// stesso sfondo (niente più padding/gap separato, vedi MobileTopBar).
-export const MOBILE_TOPBAR_SPACER = 'pt-[calc(env(safe-area-inset-top,0px)+56px)] md:pt-0'
+// 56px di contenuto (h-14) sotto la status bar, +16px di margine di sicurezza: un test dal vivo
+// ha mostrato il titolo di pagina toccare/nascondersi parzialmente sotto la barra con lo stretto
+// necessario (56px) — un po' di respiro in più costa poco ed evita che torni a succedere.
+export const MOBILE_TOPBAR_SPACER = 'pt-[calc(env(safe-area-inset-top,0px)+72px)] md:pt-0'
 
 // ── Desktop top bar ──────────────────────────────────────────────────────────
 
@@ -167,11 +168,19 @@ function DesktopNav() {
 // sistema e quella dell'app appaiono come un'unica superficie continua invece di due elementi
 // scollegati. forest-600 = manifest.json theme_color (#277134), non forest-900 come il resto
 // della UI: qui deve combaciare esattamente con lo sfondo che Android/iOS danno alla status bar.
-function MobileTopBar() {
+//
+// Esportata (non solo uso interno) perché è la STESSA barra usata dalle pagine "magazine" a
+// schermo intero (Bacheca, Diario, Guide/Resoconto — components/routehub/HubNavBar.tsx): prima
+// del redesign quelle pagine avevano una loro pillola fluttuante indipendente che è finita fuori
+// sincrono con questa. Un solo componente, mai due implementazioni che possono divergere di nuovo.
+// `pointer-events-auto` è sempre presente perché HubNavBar la monta dentro un antenato
+// `pointer-events-none` (l'overlay trasparente sopra la foto/mappa) — innocuo qui, dove
+// l'antenato è già interattivo di suo.
+export function MobileNavBar({ className = '' }: { className?: string }) {
   const path = usePathname()
   return (
     <nav
-      className="md:hidden fixed z-40 inset-x-0 top-0 bg-forest-600/95 backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.18)]"
+      className={`pointer-events-auto bg-forest-600/95 backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.18)] ${className}`}
       style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
     >
       <div className="flex items-center gap-1 px-3 h-14">
@@ -196,6 +205,10 @@ function MobileTopBar() {
       </div>
     </nav>
   )
+}
+
+function MobileTopBar() {
+  return <MobileNavBar className="md:hidden fixed z-40 inset-x-0 top-0" />
 }
 
 // ── Navbar ─────────────────────────────────────────────────────────────────────
