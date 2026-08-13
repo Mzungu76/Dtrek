@@ -34,3 +34,22 @@ export function useEntitlement(): EntitlementState {
 
   return state
 }
+
+export type GemTone = 'unlocked' | 'trial' | 'expired'
+
+/** Stessa mappatura stato→colore usata dal gioiello sull'avatar (components/premium/GemIcon.tsx)
+ *  e ovunque compaia lo stesso segnale — un'unica funzione perché il significato dei tre colori
+ *  (verde=sbloccato, ambra=prova, rosso=scaduta) deve restare identico in ogni punto dell'app. */
+export function entitlementGemTone(e: EntitlementState): GemTone | null {
+  if (e.unlocked) return 'unlocked'
+  if (e.trialExpired) return 'expired'
+  if (e.trialActive) return 'trial'
+  return null
+}
+
+export function entitlementLabel(e: EntitlementState): string | null {
+  if (e.unlocked) return 'Dtrek sbloccato'
+  if (e.trialExpired) return 'Prova gratuita terminata'
+  if (e.trialActive) return `Prova gratuita — ${e.trialDaysLeft} ${e.trialDaysLeft === 1 ? 'giorno' : 'giorni'} rimasti`
+  return null
+}

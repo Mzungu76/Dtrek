@@ -293,6 +293,18 @@ Tre segnalazioni dopo un giro di test su device reale (screenshot):
 
 Type-check (0 errori) e lint puliti (solo i tre warning preesistenti e non correlati su `<img>`).
 
+## Il gioiello come linguaggio visivo unico per il Premium (2026-08-13, tredicesima parte sessione)
+
+Ultima rifinitura richiesta: il gioiello non doveva restare solo sull'avatar piccolo di Navbar, ma comparire ovunque nell'app si parli del pacchetto Premium, con un significato di colore coerente.
+
+1. **`lib/useEntitlement.ts`** ora esporta anche `entitlementGemTone()` ed `entitlementLabel()` (spostate da `Navbar.tsx`) — un'unica fonte per "quale colore ha questo stato", non più duplicata.
+2. **`components/premium/GemStatusBadge.tsx`** (nuovo): il cerchietto bianco + gioiello già usato sull'avatar di Navbar, ora un componente a sé che legge da solo `/api/dtrek-entitlement` — riusabile su qualunque foto profilo, di qualunque dimensione.
+3. **Sull'avatar grande, non solo quello piccolo di Navbar**: `GemStatusBadge` montato anche sull'header di `/profilo` (84px) e sulla foto del volto in Impostazioni → Identità (96px, angolo libero dato che fotocamera e badge traguardi occupano gli altri due).
+4. **Le card dei pacchetti** (`UpgradeChoicePanel.tsx`) hanno ora lo stesso gioiello sfaccettato accanto al nome: **ambra per il Mensile** (accesso legato al rinnovo, come la prova), **verde per A vita** (accesso permanente, come lo stato "sbloccato") — lo stesso significato di colore usato ovunque altrove, non una palette nuova.
+5. **Tutte le stelle (Sparkles) rimaste nei punti legati al pacchetto sostituite col gioiello**: `UnlockedStatusPanel.tsx`, `SectionAbbonamento.tsx` (teaser "Dtrek Premium"), `TrialStatusBanner.tsx` (sia la prova attiva sia quella scaduta), il menu Navigator ("DTrek AI"). Lasciate invece invariate le Sparkles che non parlano del pacchetto ma della generazione AI in sé (es. `GuideReader.tsx` "manca ancora una sezione", la riga "Intelligenza artificiale" in `/profilo` ora dedicata solo al BYOK).
+
+Type-check (0 errori) e lint puliti (solo i tre warning preesistenti e non correlati su `<img>`).
+
 ## Prossimi passi noti
 
 - Attivare Paddle Sandbox in produzione: variabili d'ambiente su Vercel, redeploy, webhook + segreto, un acquisto di prova (vedi "Cosa manca prima che un pagamento vero funzioni" sopra) — passo attualmente in carico all'utente.

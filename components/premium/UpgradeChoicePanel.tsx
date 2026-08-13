@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Loader2 } from 'lucide-react'
 import CheckoutButton from '@/components/prezzi/CheckoutButton'
+import GemIcon from '@/components/premium/GemIcon'
 
 interface PriceInfo {
   amount: number
@@ -27,7 +28,10 @@ function formatPrice(info: PriceInfo | null): string | null {
 /**
  * Le due opzioni di sblocco (mensile/lifetime), auto-alimentate da /api/paddle/prices — condiviso
  * tra /prezzi (pagina intera) e il pannello del badge Premium in Navbar (docs/navigator-dtrek-
- * boundary.md), così i due punti d'accesso mostrano sempre esattamente la stessa cosa.
+ * boundary.md), così i due punti d'accesso mostrano sempre esattamente la stessa cosa. Ogni card
+ * ha lo stesso gioiello sfaccettato (components/premium/GemIcon.tsx) dell'indicatore di stato
+ * sull'avatar, con lo stesso significato dei colori: ambra per il Mensile (come la prova, è un
+ * accesso legato al tempo/rinnovo), verde per A vita (come lo stato "sbloccato", è permanente).
  */
 export default function UpgradeChoicePanel({ compact = false }: { compact?: boolean }) {
   const [prices, setPrices] = useState<PricesResponse | null>(null)
@@ -51,7 +55,9 @@ export default function UpgradeChoicePanel({ compact = false }: { compact?: bool
     <div className={compact ? 'space-y-3' : 'grid sm:grid-cols-2 gap-5'}>
       <div className={compact ? 'bg-stone-50 rounded-2xl border border-stone-200 p-4 flex items-center justify-between gap-3' : 'bg-white rounded-2xl border border-stone-200 shadow-sm p-6 flex flex-col'}>
         <div className={compact ? '' : 'flex-1'}>
-          <h3 className={compact ? 'text-sm font-semibold text-stone-800' : 'font-display text-xl font-semibold text-stone-800 mb-1'}>Mensile</h3>
+          <h3 className={`flex items-center gap-1.5 ${compact ? 'text-sm font-semibold text-stone-800' : 'font-display text-xl font-semibold text-stone-800 mb-1'}`}>
+            <GemIcon tone="trial" size={compact ? 14 : 18} /> Mensile
+          </h3>
           <p className={compact ? 'text-xs text-stone-500' : 'text-3xl font-bold text-forest-700 mb-1'}>
             {formatPrice(prices.monthly) ?? '—'}
             <span className={compact ? '' : 'text-sm font-normal text-stone-400'}> /mese</span>
@@ -70,7 +76,9 @@ export default function UpgradeChoicePanel({ compact = false }: { compact?: bool
           </span>
         )}
         <div className={compact ? '' : 'flex-1'}>
-          <h3 className={compact ? 'text-sm font-semibold text-stone-800' : 'font-display text-xl font-semibold text-stone-800 mb-1'}>A vita</h3>
+          <h3 className={`flex items-center gap-1.5 ${compact ? 'text-sm font-semibold text-stone-800' : 'font-display text-xl font-semibold text-stone-800 mb-1'}`}>
+            <GemIcon tone="unlocked" size={compact ? 14 : 18} /> A vita
+          </h3>
           <p className={compact ? 'text-xs text-stone-500' : 'text-3xl font-bold text-forest-700 mb-1'}>
             {formatPrice(prices.lifetime) ?? '—'}
             <span className={compact ? '' : 'text-sm font-normal text-stone-400'}> una tantum</span>

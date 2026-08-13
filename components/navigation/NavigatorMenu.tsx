@@ -1,8 +1,9 @@
 'use client'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { List, MapPinned, Upload, ExternalLink, LogOut, Sparkles } from 'lucide-react'
+import { List, MapPinned, Upload, ExternalLink, LogOut } from 'lucide-react'
 import Sheet from '@/components/ui/Sheet'
+import GemIcon from '@/components/premium/GemIcon'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import { lsClearAll } from '@/lib/localStore'
 import { clearProfile } from '@/lib/userProfile'
@@ -74,16 +75,16 @@ export default function NavigatorMenu({ open, onClose }: Props) {
           <span className="font-semibold text-sm text-stone-800">Apri DTrek — Diario, statistiche, nuovi percorsi</span>
         </button>
 
-        {/* Stessa icona/badge ambra usato per lo stato Premium nell'app principale (components/
-            profilo/SectionAbbonamento.tsx) così Navigator non introduce un messaggio diverso sullo
-            stesso argomento. Un'unica voce nel menu, non ripetuta altrove: un punto di scoperta a
-            bassa pressione, non un funnel. */}
+        {/* Stesso gioiello usato per lo stato Premium nell'app principale (components/premium/
+            GemIcon.tsx) così Navigator non introduce un segnale diverso sullo stesso argomento.
+            Un'unica voce nel menu, non ripetuta altrove: un punto di scoperta a bassa pressione,
+            non un funnel. */}
         <button
           onClick={() => openMainApp('/prezzi')}
           className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-stone-50 hover:bg-stone-100 transition-colors text-left"
         >
           <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
-            <Sparkles className="w-4.5 h-4.5" />
+            <GemIcon tone="trial" size={20} />
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">

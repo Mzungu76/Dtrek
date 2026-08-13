@@ -1,8 +1,9 @@
 'use client'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Sparkles, Check } from 'lucide-react'
+import { Check } from 'lucide-react'
 import UnlockedStatusPanel from '@/components/premium/UnlockedStatusPanel'
+import GemIcon from '@/components/premium/GemIcon'
 
 /**
  * Stato reale dell'abbonamento Premium (docs/navigator-dtrek-boundary.md) — sostituisce il vecchio
@@ -32,7 +33,7 @@ export default function SectionAbbonamento() {
 
       <div className="flex items-start gap-3 mb-3">
         <div className="shrink-0 w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center">
-          <Sparkles className="w-5 h-5 text-amber-300" />
+          <GemIcon tone="trial" size={20} />
         </div>
         <div>
           <h2 className="text-sm font-bold text-white">Dtrek Premium</h2>

@@ -7,6 +7,7 @@ import { useCtsUpdated } from '@/lib/sync/useCtsUpdated'
 import { computeStreaks } from '@/lib/stats'
 import { computeBadges, computeCurrentBadges, type ComputedBadge } from '@/lib/badges'
 import { User, Camera, Check, Trash2, Loader2, Trophy } from 'lucide-react'
+import GemStatusBadge from '@/components/premium/GemStatusBadge'
 
 /** Identità: avatar, nome visualizzato, riepilogo traguardi. Piano di ristrutturazione, Parte 2.4. */
 export default function SectionIdentita() {
@@ -124,6 +125,7 @@ export default function SectionIdentita() {
                 <Trophy className="w-3.5 h-3.5" />{badgeCount}
               </a>
             )}
+            <GemStatusBadge size={24} className="absolute -top-2 -right-2 z-10" />
             <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
           </div>
           <div className="flex-1">
