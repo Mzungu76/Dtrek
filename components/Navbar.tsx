@@ -7,6 +7,7 @@ import { Compass, BookMarked, BookOpen, User, Home } from 'lucide-react'
 import { getProfile } from '@/lib/userProfile'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
+import PremiumBadge from '@/components/premium/PremiumBadge'
 import type { User as SupabaseUser, Session, AuthChangeEvent } from '@supabase/supabase-js'
 
 // 4 tab principali del nuovo posizionamento: Bacheca (centro di controllo:
@@ -118,6 +119,7 @@ function DesktopNav() {
               </Link>
             )
           })}
+          <PremiumBadge variant="desktop" />
           <div className="w-px h-5 bg-stone-200 mx-1" />
           <ProfileAvatar />
         </div>
@@ -155,6 +157,7 @@ function MobileTopBar() {
           )
         })}
       </div>
+      <PremiumBadge variant="mobile" />
       <div className="shrink-0 bg-forest-900/95 backdrop-blur-md rounded-full p-1 shadow-[0_4px_16px_rgba(0,0,0,0.2)]">
         <ProfileAvatar size={32} iconSize={14} />
       </div>

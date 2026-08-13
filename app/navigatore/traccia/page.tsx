@@ -258,7 +258,7 @@ export default function TracciaPage() {
               Apri DTrek per pianificare
             </button>
             <button
-              onClick={() => openMainApp('/profilo/ai')}
+              onClick={() => openMainApp('/prezzi')}
               className="w-full py-2.5 rounded-xl border border-amber-300 bg-amber-50 text-amber-800 font-semibold text-sm hover:bg-amber-100"
             >
               Scopri DTrek AI — più percorsi, senza rimuovere nulla

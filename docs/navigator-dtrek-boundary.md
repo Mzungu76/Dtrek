@@ -240,6 +240,20 @@ Prodotto "Dtrek Premium" creato in Paddle con due prezzi (mensile 4,99€, lifet
 
 Type-check (0 errori sull'intero progetto) e lint puliti. **Non testato end-to-end** — nessun accesso a Paddle da questa sandbox, stesso limite di sempre.
 
+## UX acquisti — badge Premium in Navbar (2026-08-13, decima parte sessione)
+
+Richiesta: l'accesso all'acquisto era scomodo, nascosto dentro Impostazioni → AI. Deciso con l'utente (via domande mirate): icona/badge persistente in Navbar (stesso trattamento riservato a `ProfileAvatar`), visibile anche a chi ha già sbloccato Dtrek (mostra lo stato, utile per raggiungere il Customer Portal), un tap apre una scheda breve con la scelta mensile/lifetime affiancata prima del checkout vero e proprio.
+
+1. **`GET /api/paddle/prices`**: endpoint pubblico (nessuna auth) che legge i due prezzi live da Paddle via `lib/paddle.ts` e li espone insieme al loro `priceId` — così il frontend non ha mai bisogno di conoscere gli ID a mano.
+2. **`components/premium/UpgradeChoicePanel.tsx`**: le due card mensile/lifetime estratte da `/prezzi` in un componente condiviso con prop `compact`, usato sia dalla pagina piena sia dentro il pannello del badge.
+3. **`components/premium/UnlockedStatusPanel.tsx`**: stessa estrazione per il pulsante "Gestisci abbonamento" (Customer Portal) + card di stato, condiviso tra `SectionAbbonamento.tsx` e il badge.
+4. **`components/premium/PremiumBadge.tsx`**: pillola nel `DesktopNav` (icona + testo "Premium"/"Sblocca"), cerchio ambra/verde nel `MobileTopBar`. Legge `/api/dtrek-entitlement` via `fetchOnce` (cache di sessione, non ricarica ad ogni navigazione), resta nascosto finché non risponde e per utenti anonimi. Un tap apre uno `Sheet` con `UnlockedStatusPanel` (sbloccato) o testo di stato prova + `UpgradeChoicePanel` (non sbloccato) — mai una navigazione a pagina intera.
+5. **Montato in `components/Navbar.tsx`**: prima del divider/avatar nel desktop, prima dell'avatar nella barra mobile.
+6. **CTA sparsi aggiornati da `/profilo/ai` a `/prezzi`**: `TrialStatusBanner.tsx`, `GuideReader.tsx` (messaggio prova scaduta/nessun accesso), `NavigatorMenu.tsx` (voce "DTrek AI", badge cambiato da "Prossimamente" a "Premium" perché il checkout ora esiste davvero) e `app/navigatore/traccia/page.tsx` (bottone "Scopri DTrek AI" quando si raggiunge il limite di percorsi in Navigator). Nessuna di queste è dentro l'app nativa Navigator in senso stretto tranne le due appena citate, che restano nel vincolo esistente: aprono il browser di sistema su `/prezzi`, non un checkout in webview.
+7. **`SectionAbbonamento.tsx`** rimane come percorso secondario in Impostazioni, ora semplicemente `<UnlockedStatusPanel />` quando sbloccato — il punto di accesso primario è il badge in Navbar, raggiungibile da qualunque pagina.
+
+Type-check (0 errori sull'intero progetto) e lint puliti (solo un warning preesistente e non correlato su `<img>` in `Navbar.tsx`).
+
 ### Cosa manca prima che un pagamento vero funzioni
 
 Tutto lato tuo, in ordine:
@@ -255,14 +269,12 @@ Tutto lato tuo, in ordine:
 
 2. **Redeploy** (le variabili d'ambiente su Vercel richiedono un nuovo deploy per essere lette).
 3. **Crea il webhook** in Paddle (Developer Tools → Notifications → nuovo destinatario) puntato a `https://<il-tuo-dominio>/api/webhooks/paddle`, eventi `subscription.created`, `subscription.updated`, `transaction.completed` — Paddle ti mostra un segreto in quel momento, va aggiunto su Vercel come `PADDLE_WEBHOOK_SECRET`.
-4. **Prova**: apri `/prezzi` da loggato, fai un acquisto con una carta di test Sandbox, controlla che `user_settings` si aggiorni (posso verificarlo io via SQL) e che `/profilo/ai` mostri "Dtrek sbloccato".
+4. **Prova**: apri `/prezzi` (o il badge Premium in Navbar) da loggato, fai un acquisto con una carta di test Sandbox, controlla che `user_settings` si aggiorni (posso verificarlo io via SQL) e che il badge mostri "Premium"/"Dtrek sbloccato".
 5. Solo dopo che tutto funziona in Sandbox: ripeti i passi 1-3 con le credenziali **Live** (Price ID già pronti, servono ancora API key/client token/webhook secret Live) prima di accettare pagamenti reali.
 
 ## Prossimi passi noti
 
-- Decidere gli importi esatti (mensile e lifetime) prima di configurare i prodotti su Paddle.
-- Creare l'account Paddle e i prodotti/prezzi.
-- Implementare lo schema di pagamento: colonne Paddle, pagina `/prezzi`, webhook, Customer Portal — quando pronto, `lib/dtrekEntitlement.ts` va esteso con `premium_expires_at` (vedi sezione pagamenti sopra) e il CTA del banner puntato lì invece che a `/profilo/ai`.
-- Modifiche UX al layout/menu del Navigator (rimandate finché non si chiudeva la questione architetturale — ora sbloccate; **vincolo**: nessun linguaggio di vendita dentro Navigator, vedi sopra).
+- Attivare Paddle Sandbox in produzione: variabili d'ambiente su Vercel, redeploy, webhook + segreto, un acquisto di prova (vedi "Cosa manca prima che un pagamento vero funzioni" sopra) — passo attualmente in carico all'utente.
+- Ripetere con le credenziali Live solo dopo che tutto funziona in Sandbox.
 - Rivedere le stime di costo AI con dati reali (`ai_usage_log`) una volta che ci sarà traffico.
 - Provare il gate end-to-end con un account di test (non owner) una volta disponibile un ambiente per farlo, dato che questa sessione non ha un browser per verificarlo manualmente.
