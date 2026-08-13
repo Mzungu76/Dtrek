@@ -91,14 +91,32 @@ async function prefetchThumbs(hike: PlannedHike): Promise<Map<number, string>> {
   return thumbs
 }
 
+/** Legge la cache condivisa per-POI (lib/poiNotes.ts, /api/poi-notes) — quando presente, un
+ *  racconto più ricco della sola frase Wikipedia per lo stesso luogo (decisione 1/2, artifact "La
+ *  Guida IA"). Best-effort come prefetchThumbs: un fallimento qui lascia semplicemente la mappa
+ *  vuota, buildGuideContent ricade sull'estratto Wikipedia di sempre. */
+async function prefetchPoiNotes(hike: PlannedHike): Promise<Map<number, string>> {
+  const ids = Array.from(new Set(((hike.cachedPois ?? []) as PoiItem[]).map(p => p.id)))
+  if (ids.length === 0) return new Map()
+  try {
+    const res = await fetch(`/api/poi-notes?ids=${ids.join(',')}`, { signal: AbortSignal.timeout(10000) })
+    if (!res.ok) return new Map()
+    const data = await res.json() as Record<string, { text: string }>
+    return new Map(Object.entries(data).map(([id, v]) => [Number(id), v.text]))
+  } catch {
+    return new Map()
+  }
+}
+
 export async function exportGuidePdfHtml(hike: PlannedHike, guideText: string): Promise<void> {
-  const [{ cover, mini }, thumbs, coverPhotos] = await Promise.all([
+  const [{ cover, mini }, thumbs, coverPhotos, poiNotes] = await Promise.all([
     buildMapImages(hike),
     prefetchThumbs(hike),
     fetchCoverPhotos(hike),
+    prefetchPoiNotes(hike),
   ])
 
-  const data = buildGuideContent(hike, guideText, cover, thumbs, coverPhotos, mini || undefined)
+  const data = buildGuideContent(hike, guideText, cover, thumbs, coverPhotos, mini || undefined, poiNotes)
 
   // Create a hidden off-screen container
   const container = document.createElement('div')

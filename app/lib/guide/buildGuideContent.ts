@@ -55,23 +55,38 @@ export function buildGuideContent(
   thumbs: Map<number, string>,
   coverPhotos: GuideSectionPhoto[] = [],
   miniMapImage?: string,
+  /** Cache condivisa per-POI (lib/poiNotes.ts) — quando presente per un POI, sostituisce il
+   *  semplice estratto Wikipedia con il racconto più ricco già scritto dalla sezione "I luoghi da
+   *  non perdere" (decisione 1/2, artifact "La Guida IA"). Facoltativo e vuoto di default: i
+   *  chiamanti che non prefetchano nulla (nessuno oggi, a parte usePDFExport.ts) si comportano
+   *  esattamente come prima. */
+  poiNotes: Map<number, string> = new Map(),
 ): GuideData {
   const sections = parseSections(guideText)
 
   const wikiEntries = (hike.cachedPoiWiki ?? []) as { poi: PoiItem; wiki: WikiPage }[]
   const rawPois     = (hike.cachedPois   ?? []) as PoiItem[]
 
+  // Testo più lungo di un estratto Wikipedia (fino a ~200 parole/luogo vs 300 caratteri): margine
+  // più ampio solo quando la fonte è la nota IA per-POI, non quella Wikipedia troncata sotto.
+  const MAX_NOTE_DESC_CHARS = 500
+
   // Build POI card data
   const pois: POICardData[] = [
-    ...wikiEntries.map(({ poi, wiki }): POICardData => ({
-      name:              wiki.title,
-      type:              POI_META[poi.type]?.label ?? poi.type,
-      typeColor:         POI_META[poi.type]?.color ?? '#978e7a',
-      emoji:             POI_META[poi.type]?.emoji,
-      distanceFromTrail: distLabel(poi.distFromTrack),
-      photo:             thumbs.get(wiki.pageid),
-      description:       (wiki.extract ?? '').slice(0, 300).replace(/\n/g, ' '),
-    })),
+    ...wikiEntries.map(({ poi, wiki }): POICardData => {
+      const note = poiNotes.get(poi.id)
+      return {
+        name:              wiki.title,
+        type:              POI_META[poi.type]?.label ?? poi.type,
+        typeColor:         POI_META[poi.type]?.color ?? '#978e7a',
+        emoji:             POI_META[poi.type]?.emoji,
+        distanceFromTrail: distLabel(poi.distFromTrack),
+        photo:             thumbs.get(wiki.pageid),
+        description:       note
+          ? note.slice(0, MAX_NOTE_DESC_CHARS)
+          : (wiki.extract ?? '').slice(0, 300).replace(/\n/g, ' '),
+      }
+    }),
     ...rawPois
       .filter(p => !wikiEntries.some(e => e.poi.id === p.id) && p.name)
       .map((p): POICardData => ({
@@ -80,7 +95,7 @@ export function buildGuideContent(
         typeColor:         POI_META[p.type]?.color ?? '#978e7a',
         emoji:             POI_META[p.type]?.emoji,
         distanceFromTrail: distLabel(p.distFromTrack),
-        description:       '',
+        description:       (poiNotes.get(p.id) ?? '').slice(0, MAX_NOTE_DESC_CHARS),
       })),
   ]
 
