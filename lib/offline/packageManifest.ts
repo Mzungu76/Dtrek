@@ -54,6 +54,15 @@ export interface OfflinePackageManifest {
   hasNavInstructions?: boolean
   navInstructionCount?: number
   navMomentCount?: number
+  /**
+   * Whether the per-POI AI narrative cache (lib/offline/poiNotesStore.ts, Guida IA) was fetched
+   * and bundled alongside the tiles. Same best-effort status as hasTrailGraph above and for the
+   * same reason: a live Supabase read, not something to let block an otherwise-complete tile
+   * package. poiNotesCount can legitimately be 0 (no POI on this route has a cached note yet) —
+   * that's not a failure, only hasPoiNotes being false/undefined means the fetch itself didn't run.
+   */
+  hasPoiNotes?: boolean
+  poiNotesCount?: number
 }
 
 const MANIFEST_KEY = (hikeId: string) => `offline-manifest:${hikeId}`
