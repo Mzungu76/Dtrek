@@ -8,7 +8,7 @@ import OfflinePackageDownloader from '@/components/navigation/OfflinePackageDown
 import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { formatDuration } from '@/lib/tcxParser'
 import { openMainApp } from '@/lib/native/mainAppLinks'
-import { Loader2, Mountain, ExternalLink } from 'lucide-react'
+import { Loader2, Mountain, ExternalLink, Upload } from 'lucide-react'
 
 /**
  * Full list of planned routes — moved here from app/navigatore/page.tsx (now a map-first home,
@@ -53,14 +53,22 @@ export default function PercorsiPage() {
             </div>
             <h2 className="font-display text-xl font-semibold text-stone-700 mb-2">Nessun percorso pianificato</h2>
             <p className="text-stone-400 text-sm max-w-sm mb-6">
-              Pianifica o importa un percorso dall&apos;app DTrek principale — comparirà qui, pronto per la navigazione.
+              Importa un GPX direttamente qui, oppure pianifica dall&apos;app DTrek principale — comparirà qui, pronto per la navigazione.
             </p>
-            <button
-              onClick={() => openMainApp('/guida')}
-              className="flex items-center gap-2 px-6 py-3 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-medium transition-colors"
-            >
-              <ExternalLink className="w-4 h-4" /> Apri DTrek per pianificare
-            </button>
+            <div className="flex flex-col gap-2 w-full max-w-xs">
+              <button
+                onClick={() => router.push('/navigatore/importa')}
+                className="flex items-center justify-center gap-2 px-6 py-3 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-medium transition-colors"
+              >
+                <Upload className="w-4 h-4" /> Importa un percorso
+              </button>
+              <button
+                onClick={() => openMainApp('/guida')}
+                className="flex items-center justify-center gap-2 px-6 py-3 bg-white border border-stone-200 hover:border-stone-300 text-stone-600 rounded-xl font-medium transition-colors"
+              >
+                <ExternalLink className="w-4 h-4" /> Apri DTrek per pianificare
+              </button>
+            </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

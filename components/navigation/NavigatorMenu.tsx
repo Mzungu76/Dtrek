@@ -1,10 +1,11 @@
 'use client'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { List, MapPinned, ExternalLink, LogOut, Sparkles } from 'lucide-react'
+import { List, MapPinned, Upload, ExternalLink, LogOut, Sparkles } from 'lucide-react'
 import Sheet from '@/components/ui/Sheet'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import { lsClearAll } from '@/lib/localStore'
+import { clearProfile } from '@/lib/userProfile'
 import { openMainApp } from '@/lib/native/mainAppLinks'
 
 interface Props {
@@ -25,6 +26,7 @@ export default function NavigatorMenu({ open, onClose }: Props) {
     setSigningOut(true)
     await getBrowserSupabase().auth.signOut()
     await lsClearAll()
+    clearProfile()
     router.push('/login')
     router.refresh()
   }
@@ -40,6 +42,16 @@ export default function NavigatorMenu({ open, onClose }: Props) {
             <List className="w-4.5 h-4.5" />
           </div>
           <span className="font-semibold text-sm text-stone-800">Percorsi pianificati</span>
+        </button>
+
+        <button
+          onClick={() => { onClose(); router.push('/navigatore/importa') }}
+          className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-stone-50 hover:bg-stone-100 transition-colors text-left"
+        >
+          <div className="w-9 h-9 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
+            <Upload className="w-4.5 h-4.5" />
+          </div>
+          <span className="font-semibold text-sm text-stone-800">Importa un percorso</span>
         </button>
 
         <button

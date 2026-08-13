@@ -126,7 +126,7 @@ function LoginForm() {
 
           <p className="mt-5 text-center text-sm text-stone-500">
             Non hai un account?{' '}
-            <Link href="/signup" className="font-medium text-forest-600 hover:text-forest-700">
+            <Link href={`/signup?next=${encodeURIComponent(next)}`} className="font-medium text-forest-600 hover:text-forest-700">
               Registrati
             </Link>
           </p>

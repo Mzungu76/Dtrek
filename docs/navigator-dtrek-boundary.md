@@ -161,6 +161,34 @@ Pushato su `claude/navigator-dtrek-boundary-planning-lb60ge`. Pagamenti esclusi 
 5. **UI minima**: `GET /api/dtrek-entitlement` espone lo stato al client; `components/dtrek/TrialStatusBanner.tsx` (banner invisibile se sbloccato, promemoria durante la prova con conteggio percorsi/resoconti/giorni rimasti, avviso di sola lettura a prova scaduta) montato in `/upload`, `/guida/elenco`, `/resoconto/elenco`. Il CTA porta a `/profilo/ai` — non c'è ancora una pagina prezzi/checkout, ma aggiungere lì una chiave Claude propria (BYOK) sblocca già oggi l'intero Dtrek.
 6. Type-check (`tsc --noEmit`) e lint (`eslint`) puliti su tutti i file toccati.
 
+## Bug di onboarding riscontrati testando come nuovo utente (2026-08-13, quinta parte sessione)
+
+Segnalati testando la registrazione da zero, sia su Dtrek che su Navigator. Quattro bug di codice risolti e pushati (stesso branch); due punti restano fuori perché non sono bug di codice.
+
+1. **"Errore di autenticazione" dopo il link di conferma email — risolto.** `app/auth/callback/route.ts` gestiva solo il flusso PKCE (`?code=...` + `exchangeCodeForSession`), che richiede il `code_verifier` salvato nel **browser che ha avviato la registrazione** — se il link si apre altrove (app di posta, altro dispositivo) la verifica fallisce sempre. La route ora gestisce anche `token_hash`+`type` via `verifyOtp`, che non dipende da nessun segreto locale al browser.
+   **Azione manuale richiesta (non modificabile da codice/SQL)** — nel dashboard Supabase del progetto `sdxlcpxgbkagbxhukehd`, Authentication → Email Templates, aggiornare il link in due template così:
+   - **Confirm signup**: `{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=signup`
+   - **Reset Password**: `{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=recovery`
+
+   (`{{ .RedirectTo }}` risolve già a `.../auth/callback?next=...` — l'app lo imposta lei stessa in `app/signup/page.tsx` e `app/reset-password/page.tsx` — quindi non serve altro nel template).
+2. **Email di conferma inviata "da Supabase"** — non è un bug di codice: è l'infrastruttura di invio condivisa di default. Per un mittente/dominio Dtrek serve configurare un provider SMTP proprio in Authentication → Email → SMTP Settings (azione manuale, dashboard Supabase).
+3. **Foto profilo di un altro account ereditata dal nuovo utente — risolto.** `lib/userProfile.ts` teneva avatar/nome in `localStorage` sotto una chiave fissa e globale (`dtrek_user_profile`), non legata all'utente — su un dispositivo dove era già stato loggato un altro account, restava visibile finché non veniva sovrascritta. Aggiunta `clearProfile()`, chiamata ad ogni sign-out (`app/profilo/page.tsx`, `components/navigation/NavigatorMenu.tsx`) accanto a `lsClearAll()`.
+4. **Registrazione da Navigator finiva sulla home di Dtrek — risolto.** `/login` rispettava già `?next=`, `app/signup/page.tsx` no: redirect fisso a `/`, e anche il link "Torna al login" della schermata "controlla la tua email" perdeva il parametro. Ora `next` è letto e propagato ovunque nel signup (link da/verso login, redirect post-conferma, `emailRedirectTo`), mirror di come già funzionava login.
+5. **Schermate iniziali spoglie per un utente nuovo** — non è un bug, resta una decisione di prodotto aperta (percorso omaggio precaricato come pianificazione+resoconto, o altro onboarding). Non affrontato in questa sessione.
+6. **Nessun modo di importare un GPX restando dentro Navigator — risolto.** `GpxUploader` era montato solo in `app/upload` (Dtrek); il menu di Navigator non offriva altro che uscire verso l'app principale. Aggiunta `app/navigatore/importa/page.tsx` (stesso pattern di stato/limite di `app/navigatore/traccia/page.tsx`: rispetta `NAVIGATOR_SLOT_LIMIT`, `lib/navigatorSlot.ts`), raggiungibile dal menu di Navigator e dallo stato vuoto di "Percorsi pianificati". `GpxUploader` ora accetta `sourceApp`/`afterSaveHref` opzionali (default invariato per `/upload`) per marcare il percorso come `sourceApp: 'navigator'` e restare dentro le schermate di Navigator (`/guida/{id}/naviga`) invece di aprire una pagina di Dtrek nella webview.
+
+Type-check e lint puliti su tutti i file toccati. Non verificato in un browser reale (nessun ambiente per farlo in questa sessione) — soprattutto il punto 1 andrebbe riprovato end-to-end dopo aver aggiornato i template email su Supabase.
+
+## Eliminazione account (2026-08-13, sesta parte sessione)
+
+Richiesta per due motivi: un utente può voler cancellare tutti i propri dati, e serve anche in fase di test per riusare la stessa email invece di doverne inventare una nuova ogni volta. Implementata e pushata.
+
+- **`lib/accountDeletion.ts`** — `deleteAccountAndData(userId)`: ripulisce prima lo Storage (bucket `dtrek-photos`/`dtrek-reports`, path `${userId}/...`, con discesa ricorsiva perché `.list()` di Supabase Storage non è ricorsivo), poi anonimizza `ai_usage_log` (unica tabella con `user_id` senza FK/CASCADE verso `auth.users` — colonna di telemetria aggregata, impostata a `NULL` invece di cancellare la riga), infine chiama `supabase.auth.admin.deleteUser(userId)` (hard delete, non soft — l'email torna subito libera). Verificate tutte le altre tabelle in `supabase-schema.sql` e nelle migrazioni: hanno già `user_id ... REFERENCES auth.users(id) ON DELETE CASCADE` (activities, planned_hikes, user_settings, hike_reports, hike_questionnaires, guide_questions, route_recommendations, activity_photos, route_search_history, route_build_logs, video_custom_presets, hike_navigation_sessions e a cascata i suoi eventi/track), quindi si svuotano da sole. Le cache condivise (poi_notes, dtm_cache, start_point_cache, ...) non hanno mai `user_id` — restano intatte, esattamente il comportamento "i dati comuni restano" richiesto.
+- **`app/api/account/delete/route.ts`** (DELETE) — autentica via sessione (mai un id passato dal client), poi blocca esplicitamente l'account owner (`is_owner`, via `resolveDtrekEntitlement`) con 403: questa funzione serve a liberare email di test, non a poter distruggere per errore l'unico account reale del prodotto.
+- **UI**: `components/profilo/SectionEliminaAccount.tsx`, danger zone in fondo a `/profilo/impostazioni` — conferma per digitazione esatta dell'email (stesso pattern GitHub/Vercel), poi sign-out + pulizia locale (`lsClearAll`, `clearProfile`) + redirect a `/login`.
+
+Type-check e lint puliti. Non testato in un browser reale in questa sessione.
+
 ## Prossimi passi noti
 
 - Decidere gli importi esatti (mensile e lifetime) prima di configurare i prodotti su Paddle.

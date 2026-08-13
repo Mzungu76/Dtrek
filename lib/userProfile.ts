@@ -17,3 +17,12 @@ export function saveProfile(patch: Partial<UserProfile>): void {
     window.dispatchEvent(new CustomEvent('dtrek:profile-updated', { detail: patch }))
   }
 }
+
+/** Da chiamare al sign-out (accanto a lsClearAll()): questa cache non è legata all'id utente, solo
+ *  al dispositivo — senza questa pulizia un nuovo account che accede sullo stesso dispositivo
+ *  vedrebbe per un istante foto/nome dell'account precedente finché la lettura da user_settings
+ *  non la sovrascrive. */
+export function clearProfile(): void {
+  if (typeof window === 'undefined') return
+  localStorage.removeItem(KEY)
+}

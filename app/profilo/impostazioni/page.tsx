@@ -10,6 +10,7 @@ import SectionTei from '@/components/profilo/SectionTei'
 import SectionProfiloEscursionista from '@/components/profilo/SectionProfiloEscursionista'
 import SectionGuida from '@/components/profilo/SectionGuida'
 import SectionAvanzate from '@/components/profilo/SectionAvanzate'
+import SectionEliminaAccount from '@/components/profilo/SectionEliminaAccount'
 
 export default function ImpostazioniPage() {
   return (
@@ -56,6 +57,10 @@ export default function ImpostazioniPage() {
 
         <div className="pt-2">
           <SectionAvanzate />
+        </div>
+
+        <div className="pt-2">
+          <SectionEliminaAccount />
         </div>
       </div>
     </div>
