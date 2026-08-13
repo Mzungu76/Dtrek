@@ -11,6 +11,7 @@ import { useCtsUpdated } from '@/lib/sync/useCtsUpdated'
 import { flush, hasPendingChanges } from '@/lib/sync/syncEngine'
 import { computeStreaks } from '@/lib/stats'
 import { computeCurrentBadges } from '@/lib/badges'
+import SectionAbbonamento from '@/components/profilo/SectionAbbonamento'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 import {
   BarChart2, Trophy, Mountain, Compass, Settings, Sparkles, ArrowDownToLine,
@@ -113,7 +114,7 @@ export default function ProfiloPage() {
     { href: '/vette', icon: <Mountain className="w-[18px] h-[18px]" />, iconBg: '#f1f8f2', label: 'Vette raggiunte', sub: 'Le cime toccate nelle tue escursioni' },
     { href: '/profilo/cronologia-navigazione', icon: <Compass className="w-[18px] h-[18px]" />, iconBg: '#f1f8f2', label: 'Cronologia navigazione', sub: 'Le tue uscite guidate dal navigatore' },
     { href: '/profilo/impostazioni', icon: <Settings className="w-[18px] h-[18px]" />, iconBg: '#f1f8f2', label: 'Impostazioni', sub: 'Identità, indirizzo, dati biometrici, comfort score' },
-    { href: '/profilo/ai', icon: <Sparkles className="w-[18px] h-[18px]" />, iconBg: '#f1f8f2', label: 'Intelligenza artificiale', sub: 'Chiave Claude, abbonamento' },
+    { href: '/profilo/ai', icon: <Sparkles className="w-[18px] h-[18px]" />, iconBg: '#f1f8f2', label: 'Intelligenza artificiale', sub: 'Chiave Claude personale (BYOK)' },
     ...(installed ? [] : [{ onClick: handleInstall, icon: <ArrowDownToLine className="w-[18px] h-[18px]" />, iconBg: '#f1f8f2', label: "Installa l'app", sub: 'Aggiungi alla schermata Home' }]),
     { href: '/fonti-e-crediti', icon: <Info className="w-[18px] h-[18px]" />, iconBg: '#f1f8f2', label: 'Fonti e crediti', sub: '' },
     { onClick: handleLogout, icon: <LogOut className="w-[18px] h-[18px]" />, iconBg: '#fef2f2', label: 'Esci', sub: '', danger: true },
@@ -143,6 +144,9 @@ export default function ProfiloPage() {
       </div>
 
       <div className="max-w-lg mx-auto px-4 py-4">
+        <div className="mb-4">
+          <SectionAbbonamento />
+        </div>
         {rows.map((r, i) => {
           const content = (
             <>

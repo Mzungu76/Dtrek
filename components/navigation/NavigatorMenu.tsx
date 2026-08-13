@@ -74,9 +74,10 @@ export default function NavigatorMenu({ open, onClose }: Props) {
           <span className="font-semibold text-sm text-stone-800">Apri DTrek — Diario, statistiche, nuovi percorsi</span>
         </button>
 
-        {/* Stessa icona/badge ambra del badge Premium in Navbar (components/premium/PremiumBadge.tsx)
-            così Navigator non introduce un messaggio diverso sullo stesso argomento. Un'unica voce nel
-            menu, non ripetuta altrove: un punto di scoperta a bassa pressione, non un funnel. */}
+        {/* Stessa icona/badge ambra usato per lo stato Premium nell'app principale (components/
+            profilo/SectionAbbonamento.tsx) così Navigator non introduce un messaggio diverso sullo
+            stesso argomento. Un'unica voce nel menu, non ripetuta altrove: un punto di scoperta a
+            bassa pressione, non un funnel. */}
         <button
           onClick={() => openMainApp('/prezzi')}
           className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-stone-50 hover:bg-stone-100 transition-colors text-left"

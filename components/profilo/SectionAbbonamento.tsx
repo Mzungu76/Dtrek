@@ -6,9 +6,9 @@ import UnlockedStatusPanel from '@/components/premium/UnlockedStatusPanel'
 
 /**
  * Stato reale dell'abbonamento Premium (docs/navigator-dtrek-boundary.md) — sostituisce il vecchio
- * teaser statico "Prossimamente" ora che il checkout Paddle (app/prezzi) esiste davvero. Il punto
- * di accesso principale resta il badge Premium in Navbar (components/premium/PremiumBadge.tsx,
- * raggiungibile da ovunque); questa sezione in Impostazioni resta come percorso secondario.
+ * teaser statico "Prossimamente" ora che il checkout Paddle (app/prezzi) esiste davvero. Montata
+ * in cima a /profilo (raggiungibile in un tap dall'avatar, sempre visibile in Navbar, che porta
+ * anche un piccolo indicatore di stato) e di nuovo dentro /profilo/ai per chi arriva da lì.
  */
 export default function SectionAbbonamento() {
   const [unlocked, setUnlocked] = useState<boolean | null>(null)
