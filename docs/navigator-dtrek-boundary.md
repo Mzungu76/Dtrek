@@ -49,15 +49,20 @@ Le due app sono percepite come "fuse" e confusionarie lato utente/business.
 - Dtrek diventa **prodotto a pagamento**: premium ricorrente + una tantum + BYOK come *metodo di sblocco alternativo* di Dtrek (non più un tier gratuito parallelo dentro Dtrek).
 - Tecnicamente: spostare il gate da "bottone genera" a "ingresso nelle sezioni Dtrek" — probabilmente a livello di `layout.tsx` per `/guida/*` e `/resoconto/*`, dato che esistono link diretti che bypassano l'hub (es. redirect a `/guida/${id}` subito dopo un import GPX in `GpxUploader.tsx`).
 
-### Due domande aperte — da chiudere prima di scrivere qualunque codice di paywall
+### Decisioni prese (2026-08-13, seconda parte sessione) — chiuse, pronte per l'implementazione
 
-1. **Perimetro del paywall**: copre *tutto* Dtrek (pianificazione percorsi inclusa) o *solo* le funzioni che costano AI (guida, resoconto, ricerca percorsi AI), lasciando pianificazione/import di base gratis anche dentro Dtrek?
-2. **Utenti esistenti** con contenuti già creati in Dtrek ma senza `premium` né chiave BYOK in `user_settings`: grandfathering pieno (accesso invariato a ciò che hanno già), sola lettura, o nessuna eccezione (gate applicato subito a tutti)?
-
-Nessuna delle due ha ancora una risposta dell'utente — necessarie prima di procedere.
+1. **Perimetro del paywall**: **tutto Dtrek** (pianificazione percorsi inclusa), non solo le funzioni AI. Navigator resta sempre gratuito e separato.
+2. **BYOK**: sblocca **tutto Dtrek**, non solo il costo AI — è un metodo di sblocco alternativo al premium ricorrente/una tantum, come da proposta iniziale.
+3. **Periodo di prova** (nuovo utente senza premium né BYOK): attivo finché **non scade per primo** uno dei due limiti:
+   - **Tempo**: 30 giorni dalla registrazione.
+   - **Consumo**: 2 percorsi creati in totale in Dtrek (pianificazione — AI o manuale, ogni percorso conta) + 2 resoconti.
+   - Durante il trial, le generazioni AI (guida e resoconto) sono forzate al taglio **"Essenziale"** (`GuideTextLength = 'essenziale'`, già esistente in `lib/guideSections.ts`) — niente "Approfondita"/"Molto approfondita".
+4. **Al termine del trial** (tempo o consumo esaurito) senza upgrade: i percorsi/resoconti già creati restano **leggibili in sola lettura** (consultabili/esportabili), ma non se ne possono creare/generare di nuovi né modificare quelli esistenti finché l'utente non sblocca (premium o BYOK).
+5. **Account owner** (solo l'utente stesso, mzulpt@gmail.com): nuovo flag `is_owner boolean` in `user_settings`, protetto dalla RLS già esistente sulla tabella (`user_settings_owner` policy, `supabase-schema.sql:107-111` — ogni utente legge solo la propria riga, quindi il flag non è mai visibile ad altri account). Quando `is_owner = true`, bypassa paywall e limiti di trial ovunque nel codice.
+6. **Utenti esistenti**: non rilevante in pratica — l'unico account reale è quello owner (accesso pieno via flag). Non serve una migrazione di grandfathering per altri utenti.
 
 ## Prossimi passi noti
 
-- Chiudere le due domande sopra.
-- Modifiche UX al layout/menu del Navigator, rimandate per affrontare prima questa questione architetturale.
+- Progettare il meccanismo tecnico: nuove colonne/contatori per il trial (es. data inizio prova, conteggio percorsi/resoconti creati), punto di enforcement del gate (probabilmente `layout.tsx` per le sezioni di Dtrek, dato che esistono link diretti che bypassano l'hub), forzatura `sectionLengths` a `essenziale` durante il trial, e il bypass owner.
+- Modifiche UX al layout/menu del Navigator (rimandate finché non si chiudeva la questione architetturale — ora sbloccate).
 - Rivedere le stime di costo AI con dati reali (`ai_usage_log`) una volta che ci sarà traffico.
