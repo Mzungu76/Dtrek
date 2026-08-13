@@ -1,8 +1,8 @@
 'use client'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Sparkles, Lock } from 'lucide-react'
 import type { DtrekEntitlement } from '@/lib/dtrekEntitlement'
+import GemIcon from '@/components/premium/GemIcon'
 
 /**
  * Banner di stato del gate/trial (docs/navigator-dtrek-boundary.md) per le hub di Dtrek — invisibile
@@ -26,7 +26,7 @@ export default function TrialStatusBanner() {
     return (
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 mt-4">
         <div className="flex items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          <Lock className="w-4 h-4 shrink-0" />
+          <GemIcon tone="expired" size={16} className="shrink-0" />
           <span className="flex-1">
             Periodo di prova terminato — i tuoi percorsi e resoconti restano consultabili in sola lettura.
           </span>
@@ -41,7 +41,7 @@ export default function TrialStatusBanner() {
   return (
     <div className="max-w-[1400px] mx-auto px-4 sm:px-6 mt-4">
       <div className="flex items-center gap-3 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
-        <Sparkles className="w-4 h-4 shrink-0" />
+        <GemIcon tone="trial" size={16} className="shrink-0" />
         <span className="flex-1">
           Prova gratuita — {Math.max(0, entitlement.routesLimit - entitlement.routesUsed)} percorsi e{' '}
           {Math.max(0, entitlement.reportsLimit - entitlement.reportsUsed)} resoconti rimasti,

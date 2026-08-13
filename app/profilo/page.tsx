@@ -12,6 +12,7 @@ import { flush, hasPendingChanges } from '@/lib/sync/syncEngine'
 import { computeStreaks } from '@/lib/stats'
 import { computeCurrentBadges } from '@/lib/badges'
 import SectionAbbonamento from '@/components/profilo/SectionAbbonamento'
+import GemStatusBadge from '@/components/premium/GemStatusBadge'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 import {
   BarChart2, Trophy, Mountain, Compass, Settings, Sparkles, ArrowDownToLine,
@@ -130,11 +131,14 @@ export default function ProfiloPage() {
         >
           <X className="w-5 h-5" />
         </button>
-        <div className="w-[84px] h-[84px] mx-auto mb-3.5 rounded-full overflow-hidden bg-forest-800 border-2 border-white/20 flex items-center justify-center">
-          {faceUrl
-            ? <img src={faceUrl} alt="" className="w-full h-full object-cover" />
-            : <UserIcon className="w-9 h-9 text-forest-300" />
-          }
+        <div className="relative w-[84px] h-[84px] mx-auto mb-3.5">
+          <div className="w-full h-full rounded-full overflow-hidden bg-forest-800 border-2 border-white/20 flex items-center justify-center">
+            {faceUrl
+              ? <img src={faceUrl} alt="" className="w-full h-full object-cover" />
+              : <UserIcon className="w-9 h-9 text-forest-300" />
+            }
+          </div>
+          <GemStatusBadge size={24} className="absolute bottom-0 right-0" />
         </div>
         <h1 className="font-display text-[21px] font-bold text-white mb-1">{displayName}</h1>
         <p className="text-forest-300 text-[13px]">

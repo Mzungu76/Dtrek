@@ -7,8 +7,7 @@ import { Compass, BookMarked, BookOpen, User, Home } from 'lucide-react'
 import { getProfile } from '@/lib/userProfile'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
-import { useEntitlement } from '@/lib/useEntitlement'
-import GemIcon from '@/components/premium/GemIcon'
+import GemStatusBadge from '@/components/premium/GemStatusBadge'
 import type { User as SupabaseUser, Session, AuthChangeEvent } from '@supabase/supabase-js'
 
 // 4 tab principali del nuovo posizionamento: Bacheca (centro di controllo:
@@ -59,40 +58,22 @@ function useAvatar() {
   return { user, faceUrl }
 }
 
-// Stato Premium/prova (docs/navigator-dtrek-boundary.md) come un piccolo indicatore sull'avatar
-// stesso invece di un'icona a sé: un gioiello (non una stella, per non richiamare l'AI) verde se
-// sbloccato (owner/Premium/BYOK — resta visibile anche dopo l'acquisto), ambra durante la prova,
-// rosso a prova scaduta. Un tap sull'avatar porta a /profilo, che mostra lo stato per esteso in
-// cima (SectionAbbonamento).
-function entitlementTone(e: ReturnType<typeof useEntitlement>): 'unlocked' | 'trial' | 'expired' | null {
-  if (e.unlocked) return 'unlocked'
-  if (e.trialExpired) return 'expired'
-  if (e.trialActive) return 'trial'
-  return null
-}
-
-function entitlementLabel(e: ReturnType<typeof useEntitlement>): string | null {
-  if (e.unlocked) return 'Dtrek sbloccato'
-  if (e.trialExpired) return 'Prova gratuita terminata'
-  if (e.trialActive) return `Prova gratuita — ${e.trialDaysLeft} ${e.trialDaysLeft === 1 ? 'giorno' : 'giorni'} rimasti`
-  return null
-}
-
+// Stato Premium/prova (docs/navigator-dtrek-boundary.md) come un piccolo gioiello sull'avatar
+// stesso invece di un'icona a sé (non una stella, per non richiamare l'AI) — GemStatusBadge
+// legge da solo /api/dtrek-entitlement e sceglie il colore giusto. Un tap sull'avatar porta a
+// /profilo, che mostra lo stato per esteso in cima (SectionAbbonamento).
 export function ProfileAvatar({ size = 32, iconSize = 16 }: { size?: number; iconSize?: number }) {
   const path = usePathname()
   const { user, faceUrl } = useAvatar()
-  const entitlement = useEntitlement()
   const initials = (user?.user_metadata?.display_name as string | undefined ?? user?.email ?? '?')[0].toUpperCase()
   const active = isActive('/profilo', path)
-  const gemTone = entitlementTone(entitlement)
-  const label = entitlementLabel(entitlement)
 
   return (
     <Link
       href="/profilo"
       className="relative flex items-center justify-center shrink-0"
       style={{ width: size, height: size }}
-      title={label ? `Profilo — ${label}` : 'Profilo'}
+      title="Profilo"
     >
       <span
         className={`flex items-center justify-center w-full h-full rounded-full border-2 overflow-hidden transition-all ${
@@ -106,11 +87,7 @@ export function ProfileAvatar({ size = 32, iconSize = 16 }: { size?: number; ico
             : <User style={{ width: iconSize, height: iconSize }} className="text-stone-400" />
         }
       </span>
-      {gemTone && (
-        <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.3)] flex items-center justify-center overflow-hidden">
-          <GemIcon tone={gemTone} size={11} />
-        </span>
-      )}
+      <GemStatusBadge size={16} className="absolute -bottom-1 -right-1" />
     </Link>
   )
 }

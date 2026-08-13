@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
-import { Sparkles, ExternalLink, Loader2 } from 'lucide-react'
+import { ExternalLink, Loader2 } from 'lucide-react'
+import GemIcon from './GemIcon'
 
 /**
  * Stato di un account già sbloccato (docs/navigator-dtrek-boundary.md) — condiviso tra
@@ -31,7 +32,7 @@ export default function UnlockedStatusPanel({ compact = false }: { compact?: boo
     <div className={compact ? '' : 'bg-white rounded-2xl border border-stone-200 shadow-sm p-6'}>
       <div className="flex items-center gap-2.5 mb-1">
         <div className="w-9 h-9 rounded-xl bg-forest-50 border border-forest-200 flex items-center justify-center shrink-0">
-          <Sparkles className="w-4.5 h-4.5 text-forest-600" />
+          <GemIcon tone="unlocked" size={18} />
         </div>
         <h2 className="text-sm font-semibold text-stone-800">Dtrek sbloccato</h2>
       </div>
