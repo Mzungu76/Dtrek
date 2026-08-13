@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { getProfile } from '@/lib/userProfile'
+import { getProfile, clearProfile } from '@/lib/userProfile'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import { lsClearAll } from '@/lib/localStore'
 import { getAllActivities } from '@/lib/blobStore'
@@ -100,6 +100,7 @@ export default function ProfiloPage() {
     }
     await getBrowserSupabase().auth.signOut()
     await lsClearAll()
+    clearProfile()
     router.push('/login')
     router.refresh()
   }

@@ -161,6 +161,24 @@ Pushato su `claude/navigator-dtrek-boundary-planning-lb60ge`. Pagamenti esclusi 
 5. **UI minima**: `GET /api/dtrek-entitlement` espone lo stato al client; `components/dtrek/TrialStatusBanner.tsx` (banner invisibile se sbloccato, promemoria durante la prova con conteggio percorsi/resoconti/giorni rimasti, avviso di sola lettura a prova scaduta) montato in `/upload`, `/guida/elenco`, `/resoconto/elenco`. Il CTA porta a `/profilo/ai` — non c'è ancora una pagina prezzi/checkout, ma aggiungere lì una chiave Claude propria (BYOK) sblocca già oggi l'intero Dtrek.
 6. Type-check (`tsc --noEmit`) e lint (`eslint`) puliti su tutti i file toccati.
 
+## Bug di onboarding riscontrati testando come nuovo utente (2026-08-13, quinta parte sessione)
+
+Segnalati testando la registrazione da zero, sia su Dtrek che su Navigator. Quattro bug di codice risolti e pushati (stesso branch); due punti restano fuori perché non sono bug di codice.
+
+1. **"Errore di autenticazione" dopo il link di conferma email — risolto.** `app/auth/callback/route.ts` gestiva solo il flusso PKCE (`?code=...` + `exchangeCodeForSession`), che richiede il `code_verifier` salvato nel **browser che ha avviato la registrazione** — se il link si apre altrove (app di posta, altro dispositivo) la verifica fallisce sempre. La route ora gestisce anche `token_hash`+`type` via `verifyOtp`, che non dipende da nessun segreto locale al browser.
+   **Azione manuale richiesta (non modificabile da codice/SQL)** — nel dashboard Supabase del progetto `sdxlcpxgbkagbxhukehd`, Authentication → Email Templates, aggiornare il link in due template così:
+   - **Confirm signup**: `{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=signup`
+   - **Reset Password**: `{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=recovery`
+
+   (`{{ .RedirectTo }}` risolve già a `.../auth/callback?next=...` — l'app lo imposta lei stessa in `app/signup/page.tsx` e `app/reset-password/page.tsx` — quindi non serve altro nel template).
+2. **Email di conferma inviata "da Supabase"** — non è un bug di codice: è l'infrastruttura di invio condivisa di default. Per un mittente/dominio Dtrek serve configurare un provider SMTP proprio in Authentication → Email → SMTP Settings (azione manuale, dashboard Supabase).
+3. **Foto profilo di un altro account ereditata dal nuovo utente — risolto.** `lib/userProfile.ts` teneva avatar/nome in `localStorage` sotto una chiave fissa e globale (`dtrek_user_profile`), non legata all'utente — su un dispositivo dove era già stato loggato un altro account, restava visibile finché non veniva sovrascritta. Aggiunta `clearProfile()`, chiamata ad ogni sign-out (`app/profilo/page.tsx`, `components/navigation/NavigatorMenu.tsx`) accanto a `lsClearAll()`.
+4. **Registrazione da Navigator finiva sulla home di Dtrek — risolto.** `/login` rispettava già `?next=`, `app/signup/page.tsx` no: redirect fisso a `/`, e anche il link "Torna al login" della schermata "controlla la tua email" perdeva il parametro. Ora `next` è letto e propagato ovunque nel signup (link da/verso login, redirect post-conferma, `emailRedirectTo`), mirror di come già funzionava login.
+5. **Schermate iniziali spoglie per un utente nuovo** — non è un bug, resta una decisione di prodotto aperta (percorso omaggio precaricato come pianificazione+resoconto, o altro onboarding). Non affrontato in questa sessione.
+6. **Nessun modo di importare un GPX restando dentro Navigator — risolto.** `GpxUploader` era montato solo in `app/upload` (Dtrek); il menu di Navigator non offriva altro che uscire verso l'app principale. Aggiunta `app/navigatore/importa/page.tsx` (stesso pattern di stato/limite di `app/navigatore/traccia/page.tsx`: rispetta `NAVIGATOR_SLOT_LIMIT`, `lib/navigatorSlot.ts`), raggiungibile dal menu di Navigator e dallo stato vuoto di "Percorsi pianificati". `GpxUploader` ora accetta `sourceApp`/`afterSaveHref` opzionali (default invariato per `/upload`) per marcare il percorso come `sourceApp: 'navigator'` e restare dentro le schermate di Navigator (`/guida/{id}/naviga`) invece di aprire una pagina di Dtrek nella webview.
+
+Type-check e lint puliti su tutti i file toccati. Non verificato in un browser reale (nessun ambiente per farlo in questa sessione) — soprattutto il punto 1 andrebbe riprovato end-to-end dopo aver aggiornato i template email su Supabase.
+
 ## Prossimi passi noti
 
 - Decidere gli importi esatti (mensile e lifetime) prima di configurare i prodotti su Paddle.

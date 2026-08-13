@@ -33,7 +33,18 @@ interface ParsedGpxData {
 
 // ── GPX tab ───────────────────────────────────────────────────────────────────
 
-export default function GpxUploader() {
+interface GpxUploaderProps {
+  /** 'navigator' quando questo import avviene dentro l'app Navigator (app/navigatore/importa) —
+   *  fa contare il percorso salvato contro NAVIGATOR_SLOT_LIMIT (lib/navigatorSlot.ts), come i
+   *  percorsi registrati lì. undefined (default) per l'import dall'app principale, invariato. */
+  sourceApp?: PlannedHike['sourceApp']
+  /** Dove atterrare dopo il salvataggio riuscito — default la pagina di valutazione della guida
+   *  (comportamento storico). Navigator passa invece la schermata di navigazione diretta, dato che
+   *  /guida/{id} è una pagina di Dtrek che non ha senso aprire dentro la webview di Navigator. */
+  afterSaveHref?: (id: string) => string
+}
+
+export default function GpxUploader({ sourceApp, afterSaveHref }: GpxUploaderProps = {}) {
   const router   = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
   const [dragging,  setDragging]  = useState(false)
@@ -105,6 +116,7 @@ export default function GpxUploader() {
         // this field, never trackPoints) has something to render immediately — otherwise it stays
         // blank until /api/planned succeeds, which can be delayed indefinitely during an outage.
         routePolyline: parsed.trackPoints?.length ? downsamplePolyline(parsed.trackPoints) : undefined,
+        sourceApp,
       }
 
       // Prefetch POIs during save so the detail page shows them immediately.
@@ -134,7 +146,8 @@ export default function GpxUploader() {
       computeSafetyForHike(hike).catch(() => {})
 
       setStatus('success')
-      setTimeout(() => router.push(`/guida/${encodeURIComponent(parsed.id)}`), 1200)
+      const href = afterSaveHref ? afterSaveHref(parsed.id) : `/guida/${encodeURIComponent(parsed.id)}`
+      setTimeout(() => router.push(href), 1200)
     } catch (e) {
       console.error(e); setStatus('error')
       setErrorMsg(`Errore nel salvataggio: ${e instanceof Error ? e.message : String(e)}`)

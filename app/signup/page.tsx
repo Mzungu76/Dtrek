@@ -1,6 +1,6 @@
 'use client'
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { Eye, EyeOff, Loader2, CheckCircle2 } from 'lucide-react'
@@ -16,8 +16,13 @@ function mapError(msg: string) {
   return ERRORS[msg] ?? `Registrazione non riuscita: ${msg}`
 }
 
-export default function SignupPage() {
-  const router = useRouter()
+function SignupForm() {
+  const router       = useRouter()
+  const searchParams = useSearchParams()
+  // Dove tornare dopo la conferma — stesso meccanismo già in app/login/page.tsx. Senza questo, chi
+  // si registra da Navigator (arrivato qui via /login?next=/navigatore) finiva sulla home di Dtrek
+  // invece che dentro Navigator, perché questa pagina ignorava del tutto il parametro.
+  const next = searchParams.get('next') ?? '/'
 
   const [name,     setName]     = useState('')
   const [email,    setEmail]    = useState('')
@@ -38,7 +43,7 @@ export default function SignupPage() {
       password,
       options: {
         data: { display_name: name.trim() || null },
-        emailRedirectTo: `${location.origin}/auth/callback`,
+        emailRedirectTo: `${location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
       },
     })
 
@@ -50,7 +55,7 @@ export default function SignupPage() {
     // or send a confirmation email. Either way, redirect works.
     const { data: { session } } = await getBrowserSupabase().auth.getSession()
     if (session) {
-      router.push('/')
+      router.push(next)
       router.refresh()
     } else {
       setDone(true)  // waiting for email confirmation
@@ -67,7 +72,7 @@ export default function SignupPage() {
             Abbiamo inviato un link di conferma a <strong>{email}</strong>.
             Clicca il link per attivare il tuo account.
           </p>
-          <Link href="/login" className="mt-6 inline-block text-sm font-medium text-forest-600 hover:text-forest-700">
+          <Link href={`/login?next=${encodeURIComponent(next)}`} className="mt-6 inline-block text-sm font-medium text-forest-600 hover:text-forest-700">
             Torna al login
           </Link>
         </div>
@@ -158,12 +163,20 @@ export default function SignupPage() {
 
           <p className="mt-5 text-center text-sm text-stone-500">
             Hai già un account?{' '}
-            <Link href="/login" className="font-medium text-forest-600 hover:text-forest-700">
+            <Link href={`/login?next=${encodeURIComponent(next)}`} className="font-medium text-forest-600 hover:text-forest-700">
               Accedi
             </Link>
           </p>
         </div>
       </div>
     </div>
+  )
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense>
+      <SignupForm />
+    </Suspense>
   )
 }
