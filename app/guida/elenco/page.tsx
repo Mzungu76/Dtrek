@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
+import TrialStatusBanner from '@/components/dtrek/TrialStatusBanner'
 import RouteThumb from '@/components/RouteThumb'
 import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { useCtsUpdated } from '@/lib/sync/useCtsUpdated'
@@ -51,6 +52,7 @@ export default function GuidaIndexPage() {
   return (
     <div className={`min-h-screen bg-stone-50 md:pb-0 ${MOBILE_TOPBAR_SPACER}`}>
       <Navbar />
+      <TrialStatusBanner />
 
       <div className="relative h-[200px] sm:h-[240px] overflow-hidden bg-gradient-to-br from-sky-800 to-sky-900 bg-topography">
         <div className="absolute inset-0 bg-gradient-to-b from-sky-900/15 to-sky-900/85" />

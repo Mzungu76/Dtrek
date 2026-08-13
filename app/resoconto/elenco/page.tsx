@@ -2,6 +2,7 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
+import TrialStatusBanner from '@/components/dtrek/TrialStatusBanner'
 import RouteThumb from '@/components/RouteThumb'
 import Sheet from '@/components/ui/Sheet'
 import { getAllActivities, type ActivityMeta } from '@/lib/blobStore'
@@ -284,6 +285,7 @@ export default function ResocontoIndexPage() {
   return (
     <div className={`min-h-screen bg-stone-50 md:pb-0 ${MOBILE_TOPBAR_SPACER}`}>
       <Navbar />
+      <TrialStatusBanner />
 
       {/* ── Hero ── */}
       <div className="relative h-[240px] sm:h-[300px] overflow-hidden bg-gradient-to-br from-forest-800 to-forest-900 bg-topography">

@@ -1080,6 +1080,16 @@ ALTER TABLE user_settings REPLICA IDENTITY FULL;
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS writing_style_profile JSONB;
 
 
+-- Gate/trial Dtrek (docs/navigator-dtrek-boundary.md, supabase/migrations/add_trial_and_owner_columns.sql)
+-- is_owner: bypass totale di paywall/trial (lib/dtrekEntitlement.ts) — non impostabile via API,
+-- solo con un UPDATE manuale una tantum sulla riga dell'account owner. Protetto dalla RLS già
+-- esistente sulla tabella, quindi mai visibile ad altri account.
+-- trial_started_at: inizio del periodo di prova (30 giorni) — DEFAULT NOW() così ogni nuova riga
+-- parte automaticamente da lì.
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS is_owner         BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS trial_started_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+
 -- ═══════════════════════════════════════════════════════════
 -- PostgREST tiene una cache dello schema (nomi di tabelle/colonne) e non la
 -- ricarica da sola quando una ALTER TABLE aggiunge una colonna — il client

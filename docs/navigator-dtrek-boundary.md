@@ -145,11 +145,27 @@ unlocked = is_owner
 - Link al Customer Portal Paddle in `/profilo/impostazioni` per chi ha un abbonamento ricorrente.
 - Prerequisito **non tecnico**: creare l'account Paddle, configurare i due prodotti/prezzi (importi ancora da decidere) e recuperare le chiavi API prima di poter scrivere il codice del webhook/checkout.
 
+## Gate/trial — implementato (2026-08-13, quarta parte sessione)
+
+Pushato su `claude/navigator-dtrek-boundary-planning-lb60ge`. Pagamenti esclusi per ora, come da indicazione — il gate funziona già da solo perché owner e BYOK bastano a sbloccare.
+
+1. **Migrazione applicata** in produzione (Supabase `sdxlcpxgbkagbxhukehd`, non solo nel repo): `supabase/migrations/add_trial_and_owner_columns.sql` + specchiata in `supabase-schema.sql`. `user_settings.is_owner` e `.trial_started_at` esistono già sul DB live.
+2. **Flag owner impostato**: `is_owner = true` sulla riga di mzulpt@gmail.com (`user_id fa57488b-1b0c-4cce-b79a-2f1fbf634bdd`) — accesso pieno confermato, nessun limite di trial si applica a questo account.
+3. **`lib/dtrekEntitlement.ts`**: risolutore centrale, esattamente come progettato — `unlocked` (owner/premium/BYOK), tetti indipendenti `canCreateRoute`/`canCreateReport` (2+2), `trialExpired` solo quando scadono ENTRAMBI i tetti o i 30 giorni. Su blackout Supabase degrada a sbloccato temporaneamente (stesso principio di degrado morbido usato altrove nel codice, es. `lib/supabaseAuth.ts`) invece di bloccare in scrittura chi normalmente avrebbe accesso.
+4. **Enforcement lato server**:
+   - `app/api/planned` POST — blocca la creazione di una riga *nuova* se `!canCreateRoute`; blocca ogni update (nuovo o esistente) se `trialExpired`.
+   - `app/api/resoconto` POST — blocca un resoconto *nuovo* (nessuna riga `report-{activityId}` esistente) se `!canCreateReport`; forza `length = 'breve'` quando la prova è attiva, a prescindere da cosa chiede il client.
+   - `app/api/resoconto` PATCH — blocca ogni modifica se `trialExpired`.
+   - `app/api/guide` POST (`generateGuide`) — blocca la generazione/aggiornamento se `trialExpired`; forza tutte le sezioni a `'essenziale'` quando la prova è attiva (sovrascrive sia le preferenze salvate sia gli override per singola generazione). Il percorso di emergenza (Supabase JWKS irraggiungibile, nessuna identità verificabile) resta fuori da questo controllo, stesso principio già applicato a `resolveEmergencySharedKey`.
+   - Le GET restano sempre permesse ovunque — mai toccate.
+5. **UI minima**: `GET /api/dtrek-entitlement` espone lo stato al client; `components/dtrek/TrialStatusBanner.tsx` (banner invisibile se sbloccato, promemoria durante la prova con conteggio percorsi/resoconti/giorni rimasti, avviso di sola lettura a prova scaduta) montato in `/upload`, `/guida/elenco`, `/resoconto/elenco`. Il CTA porta a `/profilo/ai` — non c'è ancora una pagina prezzi/checkout, ma aggiungere lì una chiave Claude propria (BYOK) sblocca già oggi l'intero Dtrek.
+6. Type-check (`tsc --noEmit`) e lint (`eslint`) puliti su tutti i file toccati.
+
 ## Prossimi passi noti
 
 - Decidere gli importi esatti (mensile e lifetime) prima di configurare i prodotti su Paddle.
 - Creare l'account Paddle e i prodotti/prezzi.
-- Implementare lo schema del gate: migrazione DB, `lib/dtrekEntitlement.ts`, gli enforcement point nelle API route, e le CTA UI nelle hub.
-- Implementare lo schema di pagamento: colonne Paddle, pagina `/prezzi`, webhook, Customer Portal.
+- Implementare lo schema di pagamento: colonne Paddle, pagina `/prezzi`, webhook, Customer Portal — quando pronto, `lib/dtrekEntitlement.ts` va esteso con `premium_expires_at` (vedi sezione pagamenti sopra) e il CTA del banner puntato lì invece che a `/profilo/ai`.
 - Modifiche UX al layout/menu del Navigator (rimandate finché non si chiudeva la questione architetturale — ora sbloccate; **vincolo**: nessun linguaggio di vendita dentro Navigator, vedi sopra).
 - Rivedere le stime di costo AI con dati reali (`ai_usage_log`) una volta che ci sarà traffico.
+- Provare il gate end-to-end con un account di test (non owner) una volta disponibile un ambiente per farlo, dato che questa sessione non ha un browser per verificarlo manualmente.

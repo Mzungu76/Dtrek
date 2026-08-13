@@ -6,6 +6,7 @@ import ActivityUploader from '@/components/upload/ActivityUploader'
 import GpxUploader from '@/components/upload/GpxUploader'
 import ManualImportChoice from '@/components/upload/ManualImportChoice'
 import FromActivityUploader from '@/components/upload/FromActivityUploader'
+import TrialStatusBanner from '@/components/dtrek/TrialStatusBanner'
 import { Upload, Mountain, MapPin, PencilLine, History } from 'lucide-react'
 
 // ── Main page ─────────────────────────────────────────────────────────────────
@@ -28,6 +29,7 @@ function UploadPageInner() {
   return (
     <div className={`min-h-screen bg-stone-50 md:pb-0 ${MOBILE_TOPBAR_SPACER}`}>
       <Navbar />
+      <TrialStatusBanner />
       <main className="max-w-2xl mx-auto px-4 py-8 sm:py-12 fade-up">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-forest-50 border border-forest-200 mb-4">

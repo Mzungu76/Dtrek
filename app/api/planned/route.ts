@@ -7,6 +7,7 @@ import { readIndex } from '@/lib/blobIndex'
 import { assessHike } from '@/lib/hikeAssessment'
 import type { SafetyScore } from '@/lib/safetyScore'
 import { downsamplePolyline } from '@/lib/downsamplePolyline'
+import { resolveDtrekEntitlement } from '@/lib/dtrekEntitlement'
 
 export const dynamic = 'force-dynamic'
 
@@ -252,6 +253,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
+    // Gate/trial (docs/navigator-dtrek-boundary.md) — un nuovo percorso (nessuna riga esistente con
+    // questo id) conta contro il tetto del periodo di prova, chi c'è già resta in sola lettura una
+    // volta scaduta la prova. Owner/Premium/BYOK sono sempre unlocked, vedi lib/dtrekEntitlement.ts.
+    const entitlement = await resolveDtrekEntitlement(user.id)
+    if (!existingHike && !entitlement.canCreateRoute) {
+      return NextResponse.json({
+        error:   'trial_limit_reached',
+        message: entitlement.trialExpired
+          ? 'Periodo di prova terminato — sblocca Dtrek per pianificare nuovi percorsi.'
+          : `Hai raggiunto il limite di ${entitlement.routesLimit} percorsi del periodo di prova — sblocca Dtrek per continuare.`,
+      }, { status: 403 })
+    }
+    if (existingHike && entitlement.trialExpired) {
+      return NextResponse.json({
+        error:   'trial_expired',
+        message: 'Periodo di prova terminato — questo percorso è in sola lettura finché non sblocchi Dtrek.',
+      }, { status: 403 })
+    }
+
     if (!hike.routePolyline && hike.trackPoints) {
       hike.routePolyline = downsamplePolyline(hike.trackPoints)
     }
@@ -334,6 +354,14 @@ export async function PATCH(req: NextRequest) {
   try {
     const user = await getUserFromRequest(req)
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const entitlement = await resolveDtrekEntitlement(user.id)
+    if (entitlement.trialExpired) {
+      return NextResponse.json({
+        error:   'trial_expired',
+        message: 'Periodo di prova terminato — questo percorso è in sola lettura finché non sblocchi Dtrek.',
+      }, { status: 403 })
+    }
 
     const body = (await req.json()) as Record<string, unknown>
     const { id, ...patch } = body as {
