@@ -68,6 +68,21 @@ function downsampleTracks(pts: TrackPoint[], max = 400): TrackPoint[] {
   )
 }
 
+/**
+ * Alcuni GPX (es. le esportazioni "togpx" del Sentiero Italia CAI) usano <name> con un figlio per
+ * lingua invece di un testo diretto — <name><it>SI Z17</it><en>SI Z17</en>...</name>. .textContent
+ * su quel nodo concatenerebbe TUTTE le lingue senza separatore ("SI Z17SI Z17SI Z17..."), quindi se
+ * <name> ha elementi figli si prende solo l'italiano (o il primo disponibile), mai la concatenazione.
+ */
+function extractGpxTitle(nameEl: Element | null): string {
+  if (!nameEl) return ''
+  if (nameEl.children.length > 0) {
+    const itChild = nameEl.querySelector('it')
+    return (itChild ?? nameEl.children[0]).textContent?.trim() ?? ''
+  }
+  return nameEl.textContent?.trim() ?? ''
+}
+
 export function parseGpx(xmlText: string): GpxActivity {
   const doc = new DOMParser().parseFromString(xmlText, 'application/xml')
 
@@ -75,7 +90,7 @@ export function parseGpx(xmlText: string): GpxActivity {
   if (parseErr) throw new Error('File GPX non valido')
 
   const nameEl = doc.querySelector('trk > name') ?? doc.querySelector('name')
-  const title = nameEl?.textContent?.trim() || 'Escursione pianificata'
+  const title = extractGpxTitle(nameEl) || 'Escursione pianificata'
 
   const trkptEls = Array.from(doc.querySelectorAll('trkpt'))
   if (trkptEls.length === 0) throw new Error('Nessun punto GPS trovato nel file GPX')
