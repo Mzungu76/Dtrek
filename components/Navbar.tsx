@@ -3,7 +3,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { Compass, BookMarked, BookOpen, User, Home } from 'lucide-react'
+import { Compass, BookMarked, BookOpen, User, Home, Gem } from 'lucide-react'
 import { getProfile } from '@/lib/userProfile'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
@@ -59,14 +59,15 @@ function useAvatar() {
 }
 
 // Stato Premium/prova (docs/navigator-dtrek-boundary.md) come un piccolo indicatore sull'avatar
-// stesso invece di un'icona a sé: verde se sbloccato (owner/Premium/BYOK — resta visibile anche
-// dopo l'acquisto), ambra durante la prova, rosso a prova scaduta. Un tap sull'avatar porta a
-// /profilo, che mostra lo stato per esteso in cima (SectionAbbonamento).
-function entitlementDotClass(e: ReturnType<typeof useEntitlement>): string | null {
+// stesso invece di un'icona a sé: un gioiello (non una stella, per non richiamare l'AI) verde se
+// sbloccato (owner/Premium/BYOK — resta visibile anche dopo l'acquisto), ambra durante la prova,
+// rosso a prova scaduta. Un tap sull'avatar porta a /profilo, che mostra lo stato per esteso in
+// cima (SectionAbbonamento).
+function entitlementColor(e: ReturnType<typeof useEntitlement>): string | null {
   if (e.unlocked === null) return null
-  if (e.unlocked) return 'bg-forest-500'
-  if (e.trialExpired) return 'bg-red-500'
-  if (e.trialActive) return 'bg-amber-400'
+  if (e.unlocked) return '#378d44' // forest-500
+  if (e.trialExpired) return '#ef4444' // red-500
+  if (e.trialActive) return '#fbbf24' // amber-400
   return null
 }
 
@@ -83,7 +84,7 @@ export function ProfileAvatar({ size = 32, iconSize = 16 }: { size?: number; ico
   const entitlement = useEntitlement()
   const initials = (user?.user_metadata?.display_name as string | undefined ?? user?.email ?? '?')[0].toUpperCase()
   const active = isActive('/profilo', path)
-  const dotClass = entitlementDotClass(entitlement)
+  const gemColor = entitlementColor(entitlement)
   const label = entitlementLabel(entitlement)
 
   return (
@@ -105,7 +106,11 @@ export function ProfileAvatar({ size = 32, iconSize = 16 }: { size?: number; ico
             : <User style={{ width: iconSize, height: iconSize }} className="text-stone-400" />
         }
       </span>
-      {dotClass && <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full ${dotClass}`} />}
+      {gemColor && (
+        <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-white shadow-sm flex items-center justify-center">
+          <Gem className="w-2.5 h-2.5" style={{ color: gemColor }} fill={gemColor} strokeWidth={1.5} />
+        </span>
+      )}
     </Link>
   )
 }
