@@ -10,6 +10,11 @@ const PRECACHE_URLS = [
   '/programma',
   '/upload',
   '/profilo',
+  // DTrek Navigator's own entry screen (app/navigatore/page.tsx) — this same sw.js also
+  // controls the Capacitor WebView origin (see components/AppChrome.tsx, mounted for every
+  // route including /navigatore). Without it precached, Navigator's very first screen had no
+  // safety net until a first successful visit had already cached it opportunistically.
+  '/navigatore',
   '/manifest.json',
   '/favicon.ico',
   '/icon-192.png',
@@ -51,6 +56,37 @@ self.addEventListener('activate', (event) => {
 // rejection or interfere with the actual response already being served.
 function safePut(cacheName, request, response) {
   caches.open(cacheName).then((cache) => cache.put(request, response)).catch(() => {});
+}
+
+// Plain "network-first" has no timeout at all: on a slow/flaky connection (weak trail signal,
+// congested wifi) the browser can sit on a pending fetch for many seconds — sometimes the OS's
+// own multi-minute TCP timeout — before falling back to a last-known-good copy that was one
+// cache lookup away the whole time. Racing the live fetch against this timer turns "poor
+// connection" into "instant cached copy, refreshed silently once the network call finally lands"
+// instead of "long wait, then that same cached copy anyway". The network call is never aborted —
+// it keeps running in the background so a response that arrives late still updates the cache for
+// next time — this only changes how long the user waits before seeing SOMETHING.
+const NETWORK_TIMEOUT_MS = 3000;
+const TIMEOUT_TOKEN = Symbol('sw-network-timeout');
+
+function networkFirstRaced(request, cacheName, matchOptions, offlineFallback) {
+  const networkPromise = fetch(request).then((response) => {
+    if (response.ok) safePut(cacheName, request, response.clone());
+    return response;
+  });
+  // Silenced copy so losing the race below never produces an unhandled rejection for a network
+  // call nothing ends up awaiting.
+  const backgroundNetwork = networkPromise.catch(() => null);
+  const timeout = new Promise((resolve) => setTimeout(resolve, NETWORK_TIMEOUT_MS, TIMEOUT_TOKEN));
+
+  return Promise.race([networkPromise, timeout]).then(async (winner) => {
+    if (winner !== TIMEOUT_TOKEN) return winner;
+    const cached = await caches.match(request, matchOptions).catch(() => null);
+    if (cached) return cached;
+    // Nothing cached to fall back to — this race WAS the only thing standing between the user
+    // and a response, so it's worth actually waiting for the network call to finish now.
+    return (await backgroundNetwork) ?? offlineFallback();
+  });
 }
 
 // ── Fetch: strategy by request type ─────────────────────────────────────────
@@ -109,25 +145,22 @@ self.addEventListener('fetch', (event) => {
   // This enables full offline reading: if the network is unavailable, the SW
   // serves the last known response from the API cache.
   if (url.pathname.startsWith('/api/')) {
+    // The cached Response this can fall back to keeps the origin's original `Date` header from
+    // when it was first fetched — lib/sync/pullEngine.ts's reconciler reads that timestamp to
+    // tell a stale fallback (this only happens when the live fetch above is slow/failed) apart
+    // from a genuinely fresh response, instead of trusting whatever it gets as authoritative.
+    // Without that check, a record missing from a stale cached digest looks identical to
+    // "deleted on another device" and gets pruned from IndexedDB — silently reverting this
+    // device to an older state instead of just failing closed.
     respondSafely(
-      fetch(request).then((response) => {
-        if (response.ok) safePut(API_CACHE, request, response.clone());
-        return response;
+      networkFirstRaced(request, API_CACHE, { cacheName: API_CACHE }, () => new Response(
+        JSON.stringify({ error: 'offline' }),
+        { status: 503, headers: { 'Content-Type': 'application/json' } },
+      )),
+      () => new Response(JSON.stringify({ error: 'offline' }), {
+        status: 503,
+        headers: { 'Content-Type': 'application/json' },
       }),
-      async () => {
-        const cached = await caches.match(request, { cacheName: API_CACHE }).catch(() => null);
-        // The cached Response keeps the origin's original `Date` header from when it was first
-        // fetched — lib/sync/pullEngine.ts's reconciler reads that timestamp to tell a stale
-        // fallback (this branch only runs when the live fetch above failed/timed out) apart
-        // from a genuinely fresh response, instead of trusting whatever it gets as
-        // authoritative. Without that check, a record missing from a stale cached digest looks
-        // identical to "deleted on another device" and gets pruned from IndexedDB — silently
-        // reverting this device to an older state instead of just failing closed.
-        return cached ?? new Response(JSON.stringify({ error: 'offline' }), {
-          status: 503,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      },
     );
     return;
   }
@@ -176,10 +209,7 @@ self.addEventListener('fetch', (event) => {
     { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
   );
   respondSafely(
-    fetch(request).then((response) => {
-      if (response.ok) safePut(STATIC_CACHE, request, response.clone());
-      return response;
-    }),
+    networkFirstRaced(request, STATIC_CACHE, undefined, offlinePage),
     async () => (await caches.match(request).catch(() => null)) ?? offlinePage(),
   );
 });
