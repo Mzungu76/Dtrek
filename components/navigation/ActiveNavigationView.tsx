@@ -28,6 +28,7 @@ import {
 } from '@/lib/navigation/navigationStore'
 import { usePoiNotes } from './usePoiNotes'
 import { loadManifest, isManifestValid } from '@/lib/offline/packageManifest'
+import { retryFieldNotePhotos } from '@/lib/offline/retryFieldNotePhotos'
 import { checkOfflineReadiness } from '@/lib/offline/offlineReadiness'
 import { ensureTrailGraph, loadTrailGraph } from '@/lib/navigation/trailGraphStore'
 import type { WalkNetwork } from '@/lib/routeBuilder/osmGraph'
@@ -128,6 +129,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   const [mapMode, setMapMode] = useState<MapMode>('offline')
   const [is3D, setIs3D] = useState(false)
   const [pendingActivity, setPendingActivity] = useState<TcxActivity | null>(null)
+  const [saveOfflineNotice, setSaveOfflineNotice] = useState(false)
   const [gpsLostPermissionDenied, setGpsLostPermissionDenied] = useState(false)
   const [offRouteBearingDeg, setOffRouteBearingDeg] = useState<number | null>(null)
   const [mapMatch, setMapMatch] = useState<MapMatchResult | null>(null)
@@ -156,6 +158,8 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   // navigation, persisted immediately (updatePlannedMeta) so nothing is lost if the app closes,
   // and read from here (not the stale hike.hikeNotes prop) when the recorded activity is saved.
   const [hikeNotes, setHikeNotes] = useState<HikeNote[]>(hike.hikeNotes ?? [])
+  const hikeNotesRef = useRef(hikeNotes)
+  useEffect(() => { hikeNotesRef.current = hikeNotes }, [hikeNotes])
   const [showSpeciesIdentify, setShowSpeciesIdentify] = useState(false)
   const [fieldNoteAutoCamera, setFieldNoteAutoCamera] = useState(false)
 
@@ -400,6 +404,14 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         if (decidedMode) engineRef.current?.setLocationMode(decidedMode)
       })
       engine.on('bearingUpdated', ({ bearingDeg }) => { if (!cancelled) setBearing(bearingDeg) })
+      // Smooth, high-frequency position for the map marker only (see renderTick's doc comment in
+      // lib/navigation/types.ts) — 'positionUpdated' above stays the source of truth for stats/
+      // route-deviation/recording, tied to real GPS fixes; this just keeps the dot gliding between them.
+      engine.on('renderTick', ({ lat, lon, accuracyM }) => {
+        if (cancelled) return
+        setPosition({ lat, lon })
+        setAccuracyM(accuracyM)
+      })
       engine.on('instructionUpdated', (payload) => {
         nextInstructionDistanceRef.current = payload.distanceToNextM
         if (!cancelled) setInstruction(payload)
@@ -465,7 +477,22 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       engine.start()
     })()
 
-    const onlineListener = () => { setIsOnline(navigator.onLine); if (navigator.onLine) flushToServer() }
+    const onlineListener = () => {
+      setIsOnline(navigator.onLine)
+      if (!navigator.onLine) return
+      flushToServer()
+      // Any field-note photo that couldn't upload at capture time (offline, see FieldNoteSheet.tsx)
+      // gets a best-effort retry now that we're back online — never blocks/loses anything if it
+      // fails again, see retryFieldNotePhotos.ts.
+      retryFieldNotePhotos(hike.id, hikeNotesRef.current).then((changed) => {
+        if (changed.length === 0 || cancelled) return
+        setHikeNotes((prev) => {
+          const merged = prev.map((n) => changed.find((c) => c.id === n.id) ?? n)
+          updatePlannedMeta(hike.id, { hikeNotes: merged }).catch(() => {})
+          return merged
+        })
+      }).catch(() => {})
+    }
     window.addEventListener('online', onlineListener)
     window.addEventListener('offline', onlineListener)
     setIsOnline(navigator.onLine)
@@ -667,6 +694,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
 
   const handleSaveRecordedActivity = async (title: string, mode: 'overwrite' | 'new') => {
     if (!pendingActivity) return
+    let offline = false
     const saved = await saveActivityWithEnrichment(pendingActivity, {
       title,
       linkedPlannedId: hike.id,
@@ -676,8 +704,17 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       // for reference (comparison chart, "generato da") but leaves the planned hike untouched
       // so it can be hiked again later instead of being deleted.
       deleteLinkedPlanned: mode === 'overwrite',
+      onSyncResult: (ok) => { offline = !ok },
     })
     clearRecordedTrack(hike.id).catch(() => {})
+    if (offline) {
+      // The record is already safe (written to IndexedDB before any network attempt — see
+      // lib/activitySave.ts), but the dialog is about to be replaced by a page navigation with no
+      // chance to say so otherwise. A brief pause with the reassurance visible beats silently
+      // landing on the report page with no indication the save didn't reach the server yet.
+      setSaveOfflineNotice(true)
+      await new Promise((r) => setTimeout(r, 1800))
+    }
     router.push(`/resoconto/${encodeURIComponent(saved.id)}`)
   }
 
@@ -1038,6 +1075,14 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
           onSave={handleSaveRecordedActivity}
           onDiscard={handleDiscardRecordedActivity}
         />
+      )}
+
+      {saveOfflineNotice && (
+        <div className="fixed inset-x-4 bottom-[calc(env(safe-area-inset-bottom)+1rem)] z-[3100] flex justify-center">
+          <p className="max-w-sm text-center text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 shadow-lg">
+            Sei offline: l&apos;escursione è salvata sul telefono e si sincronizzerà da sola non appena torni online.
+          </p>
+        </div>
       )}
 
       <EscapeOptionsSheet

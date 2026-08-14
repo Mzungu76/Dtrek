@@ -11,8 +11,12 @@ import { haptics } from '@/lib/navigation/haptics'
 import type { TcxActivity } from '@/lib/tcxParser'
 import { getNavigatorSlotStatus, NAVIGATOR_SLOT_LIMIT, type NavigatorSlotStatus } from '@/lib/navigatorSlot'
 import { deletePlanned } from '@/lib/plannedStore'
-import { deleteActivity } from '@/lib/blobStore'
-import { ArrowLeft, Pause, Play, Square, TriangleAlert, Trash2 } from 'lucide-react'
+import { deleteActivity, type HikeNote } from '@/lib/blobStore'
+import { requestOrientationPermission, isOrientationSupported, needsOrientationPermissionGesture } from '@/lib/navigation/orientation'
+import { prefetchTilesAroundPoint } from '@/lib/offline/packageManager'
+import { retryFieldNotePhotos } from '@/lib/offline/retryFieldNotePhotos'
+import FieldNoteSheet from '@/components/navigation/FieldNoteSheet'
+import { ArrowLeft, Pause, Play, Square, TriangleAlert, Trash2, NotebookPen } from 'lucide-react'
 
 function formatClock(seconds: number): string {
   const h = Math.floor(seconds / 3600)
@@ -33,6 +37,11 @@ function formatClock(seconds: number): string {
 export default function TracciaPage() {
   const router = useRouter()
   const sessionRef = useRef<FreeTrackSession | null>(null)
+  // Stable id for this recording, purely local — used to namespace field-note photo uploads
+  // (lib/fieldNotePhotos.ts) the same way a real hike id would; there is no planned/saved hike id
+  // yet while recording is in progress, so this stands in for one.
+  const trackSessionIdRef = useRef<string>('')
+  const tilesPrefetchedRef = useRef(false)
 
   const [phase, setPhase] = useState<'idle' | 'recording' | 'paused' | 'saved'>('idle')
   const [stats, setStats] = useState<FreeTrackStats>({ distanceMeters: 0, durationSeconds: 0, elevationGain: 0, currentSpeedMs: null, pointCount: 0 })
@@ -43,17 +52,44 @@ export default function TracciaPage() {
   const [gpsWarning, setGpsWarning] = useState<string | null>(null)
   const [pendingActivity, setPendingActivity] = useState<TcxActivity | null>(null)
   const [savedActivityId, setSavedActivityId] = useState<string | null>(null)
+  const [savedOffline, setSavedOffline] = useState(false)
   const [starting, setStarting] = useState(false)
   // undefined = still checking; Navigator's own import/record actions are capped at
   // NAVIGATOR_SLOT_LIMIT at a time (lib/navigatorSlot.ts) — a route planned in the main app
   // doesn't count against this.
   const [slotStatus, setSlotStatus] = useState<NavigatorSlotStatus | undefined>(undefined)
   const [removingSlotId, setRemovingSlotId] = useState<string | null>(null)
+  const [hikeNotes, setHikeNotes] = useState<HikeNote[]>([])
+  const hikeNotesRef = useRef(hikeNotes)
+  useEffect(() => { hikeNotesRef.current = hikeNotes }, [hikeNotes])
+  const [showFieldNote, setShowFieldNote] = useState(false)
 
   useEffect(() => () => { sessionRef.current?.stop() }, [])
 
   useEffect(() => {
     getNavigatorSlotStatus().then(setSlotStatus).catch(() => setSlotStatus({ items: [], atLimit: false }))
+  }, [])
+
+  // Best-effort retry for any field-note photo that couldn't upload at capture time (offline —
+  // see FieldNoteSheet.tsx's fallback) once the connection comes back, same as
+  // ActiveNavigationView.tsx's planned-route navigator.
+  useEffect(() => {
+    const onOnline = () => {
+      retryFieldNotePhotos(trackSessionIdRef.current, hikeNotesRef.current).then((changed) => {
+        if (changed.length === 0) return
+        setHikeNotes((prev) => prev.map((n) => changed.find((c) => c.id === n.id) ?? n))
+      }).catch(() => {})
+    }
+    window.addEventListener('online', onOnline)
+    return () => window.removeEventListener('online', onOnline)
+  }, [])
+
+  // Same "only iOS Safari needs an explicit tap" contract as ActiveNavigationView.tsx — everywhere
+  // else this silently enables the compass with no visible prompt.
+  useEffect(() => {
+    if (isOrientationSupported() && !needsOrientationPermissionGesture()) {
+      requestOrientationPermission()
+    }
   }, [])
 
   const handleRemoveSlotItem = async (item: { kind: 'planned' | 'activity'; id: string }) => {
@@ -71,6 +107,9 @@ export default function TracciaPage() {
     if (slotStatus?.atLimit) return // UI already hides the button in this case — defensive guard only
     setStarting(true)
     setGpsWarning(null)
+    trackSessionIdRef.current = crypto.randomUUID()
+    tilesPrefetchedRef.current = false
+    setHikeNotes([])
     const session = new FreeTrackSession()
     session.on('stats', setStats)
     session.on('point', (p) => { if (p.lat != null && p.lon != null) setPath((prev) => [...prev, [p.lat!, p.lon!]]) })
@@ -78,9 +117,19 @@ export default function TracciaPage() {
     // same behavior as ActiveNavigationView.tsx's planned-route navigator.
     session.on('position', (p) => {
       setPosition({ lat: p.lat, lon: p.lon })
-      setBearing(p.bearingDeg)
       setAccuracyM(p.accuracyM)
+      // Best-effort, fire-once: cache the tiles around the starting point (while there's still
+      // likely signal at the trailhead) so the map doesn't go blank later if the hiker loses
+      // connectivity mid-recording — see FreeTrackMap.tsx, which otherwise has no offline tiles at
+      // all for a route that (by definition here) wasn't planned/downloaded ahead of time.
+      if (!tilesPrefetchedRef.current) {
+        tilesPrefetchedRef.current = true
+        prefetchTilesAroundPoint(p.lat, p.lon).catch(() => {})
+      }
     })
+    // Bearing now comes from the device compass when available (falls back to GPS-derived heading
+    // only once the sensor has gone quiet) — see FreeTrackSession.start()'s doc comment.
+    session.on('bearing', ({ bearingDeg }) => setBearing(bearingDeg))
     session.on('gpsLost', ({ permissionDenied }) => {
       setGpsWarning(permissionDenied ? 'Permesso di localizzazione negato — attivalo nelle impostazioni del telefono.' : 'Segnale GPS assente.')
       haptics.alert()
@@ -91,6 +140,8 @@ export default function TracciaPage() {
     setStarting(false)
     setPhase('recording')
   }
+
+  const handleSaveFieldNote = (note: HikeNote) => setHikeNotes((prev) => [...prev, note])
 
   const handlePauseResume = () => {
     if (!sessionRef.current) return
@@ -120,7 +171,10 @@ export default function TracciaPage() {
 
   const handleSave = async (title: string) => {
     if (!pendingActivity) return
-    const saved = await saveActivityWithEnrichment(pendingActivity, { title, sourceApp: 'navigator' })
+    const saved = await saveActivityWithEnrichment(pendingActivity, {
+      title, sourceApp: 'navigator', hikeNotes,
+      onSyncResult: (ok) => setSavedOffline(!ok),
+    })
     setSavedActivityId(saved.id)
     setPendingActivity(null)
     setPhase('saved')
@@ -145,8 +199,28 @@ export default function TracciaPage() {
           <button onClick={() => router.push('/navigatore')} className="pointer-events-auto w-9 h-9 flex items-center justify-center rounded-xl bg-white/20 text-white hover:bg-white/30 backdrop-blur-sm">
             <ArrowLeft className="w-4 h-4" />
           </button>
-          <h1 className="font-display text-base font-bold text-white drop-shadow">Registra un percorso</h1>
+          <h1 className="font-display text-base font-bold text-white drop-shadow flex-1">Registra un percorso</h1>
+          <button
+            onClick={() => setShowFieldNote(true)}
+            className="pointer-events-auto relative w-9 h-9 flex items-center justify-center rounded-xl bg-white/20 text-white hover:bg-white/30 backdrop-blur-sm"
+            aria-label="Aggiungi una nota o una foto"
+            title="Nota o foto sul campo"
+          >
+            <NotebookPen className="w-4 h-4" />
+            {hikeNotes.length > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-terra-500 text-[10px] font-bold flex items-center justify-center">{hikeNotes.length}</span>
+            )}
+          </button>
         </div>
+
+        {showFieldNote && (
+          <FieldNoteSheet
+            hikeId={trackSessionIdRef.current}
+            position={position}
+            onSave={handleSaveFieldNote}
+            onClose={() => setShowFieldNote(false)}
+          />
+        )}
 
         {gpsWarning && (
           <div className="absolute top-20 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-4 py-2.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-sm shadow-lg max-w-[calc(100%-2rem)]">
@@ -215,8 +289,13 @@ export default function TracciaPage() {
         <div className="flex-1 flex flex-col items-center justify-center text-center px-6 py-12 gap-4">
           <p className="font-display text-xl font-semibold text-stone-800">Traccia salvata nel Diario</p>
           <p className="text-stone-500 text-sm max-w-xs">
-            La trovi nell&apos;app DTrek principale — apri il Diario da lì per vederla, aggiungere foto o note.
+            La trovi nell&apos;app DTrek principale — apri il Diario da lì per vederla, aggiungere altre foto o note.
           </p>
+          {savedOffline && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 max-w-xs">
+              Sei offline: la traccia è salvata sul telefono e si sincronizzerà da sola non appena torni online — non serve rifare nulla.
+            </p>
+          )}
           <div className="flex flex-col gap-2 w-full max-w-xs mt-2">
             {savedActivityId && (
               <button

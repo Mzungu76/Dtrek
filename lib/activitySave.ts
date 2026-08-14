@@ -22,6 +22,25 @@ export interface SaveActivityOptions {
   deleteLinkedPlanned?: boolean
   /** Set only by the standalone Navigator app's free-track recording flow (app/navigatore/traccia) — see lib/navigatorSlot.ts. Never set by the main app's own upload/save flows. */
   sourceApp?: 'navigator'
+  /**
+   * Fired once the underlying saveActivity() call resolves: `ok: true` means it reached Supabase
+   * just now, `false` means it couldn't (offline/network failure) and fell back to the local
+   * outbox for later sync (lib/sync/syncEngine.ts) — the record itself is never lost either way
+   * (it's written to IndexedDB first, before any network attempt), but callers with an end-of-hike
+   * confirmation screen (ActiveNavigationView, app/navigatore/traccia) use this to tell the hiker
+   * "salvato in locale, verrà sincronizzato" instead of implying it's already on the server.
+   */
+  onSyncResult?: (ok: boolean) => void
+}
+
+/** navigator.onLine can false-negative on mobile (see lib/sync/syncEngine.ts's flush() comment for
+ *  the same caveat) — never used to skip a *retry*, only here to avoid firing off a string of
+ *  doomed 18s-timeout fetches when there's clearly no connection at all, which otherwise stacked up
+ *  to roughly a minute of stall between "Termina" and the hike actually being saved (safely) to the
+ *  local cache/outbox below. A false negative just means enrichment is skipped when it might have
+ *  worked — no data is lost either way, since it's already best-effort/non-blocking. */
+function isDefinitelyOffline(): boolean {
+  return typeof navigator !== 'undefined' && navigator.onLine === false
 }
 
 /**
@@ -36,7 +55,7 @@ export async function saveActivityWithEnrichment(
   activity: TcxActivity,
   opts: SaveActivityOptions = {},
 ): Promise<StoredActivity> {
-  // ── CTS analysis (best-effort, 18s deadline) ───────────────────
+  // ── CTS analysis (best-effort, 18s deadline per fetch) ───────────────────
   let linkedBeautyScore: StoredActivity['linkedBeautyScore']
   let trailScore: number | undefined
   let trailScoreConfidence: StoredActivity['trailScoreConfidence']
@@ -45,8 +64,9 @@ export async function saveActivityWithEnrichment(
     const gps = (activity.trackPoints ?? [])
       .filter((p) => p.lat && p.lon)
       .map((p) => [p.lat!, p.lon!] as [number, number])
-    if (gps.length >= 2) {
+    if (gps.length >= 2 && !isDefinitelyOffline()) {
       const deadline = new Promise<null>((r) => setTimeout(() => r(null), 18000))
+      const bbox = computeBbox(gps)
       const dtmPromise = Promise.race([
         fetch(`/api/tei-dtm?track=${encodeURIComponent(JSON.stringify(gps))}`).then((r) => r.json()) as Promise<TrailDtmProfile>,
         deadline,
@@ -59,16 +79,19 @@ export async function saveActivityWithEnrichment(
         checkProtectedArea(gps).then((r) => r.inProtectedArea),
         deadline,
       ]).then((r) => r ?? undefined).catch(() => undefined)
-      const rawPois = await Promise.race([fetchPoisNearTrack(gps, 300), deadline]).then((r) => r ?? [])
-      const pois = rawPois as PoiItem[]
-      const bbox = computeBbox(gps)
-      const elevProfile = (activity.trackPoints ?? [])
-        .filter((p) => p.lat && p.lon)
-        .map((p) => p.altitudeMeters ?? 0)
-      const osmData = await Promise.race([
+      // Independent of one another (and of the three above) — fired together instead of two
+      // sequential awaits, which used to be able to stack up to ~36s of pure waiting (18s each,
+      // back to back) on top of the deadlines above, on a flaky/slow connection.
+      const poisPromise = Promise.race([fetchPoisNearTrack(gps, 300), deadline]).then((r) => r ?? [])
+      const osmDataPromise = Promise.race([
         fetch(`/api/tei-overpass?bbox=${bbox}`).then((r) => r.json()) as Promise<OsmTeiData>,
         deadline,
       ]).then((r) => r ?? undefined).catch(() => undefined)
+      const pois = (await poisPromise) as PoiItem[]
+      const elevProfile = (activity.trackPoints ?? [])
+        .filter((p) => p.lat && p.lon)
+        .map((p) => p.altitudeMeters ?? 0)
+      const osmData = await osmDataPromise
       const dtmProfile = await dtmPromise
       const terrainProfile = await terrainPromise
       const inProtectedArea = await protectedAreaPromise
@@ -161,7 +184,8 @@ export async function saveActivityWithEnrichment(
     sourceApp: opts.sourceApp,
     ...guideCarry,
   }
-  await saveActivity(stored)
+  const { ok } = await saveActivity(stored)
+  opts.onSyncResult?.(ok)
 
   if (opts.deleteLinkedPlanned && opts.linkedPlannedId) {
     await deletePlanned(opts.linkedPlannedId).catch(() => {})

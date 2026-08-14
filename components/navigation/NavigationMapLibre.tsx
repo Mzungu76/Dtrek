@@ -10,6 +10,7 @@ import type { Natura2000Feature } from '@/lib/natura2000/natura2000Client'
 import { labelNearbyTrail, formatTrailDistance } from '@/lib/navigation/nearbyTrailLabels'
 import { poiBadgeMarkup } from '@/components/poiIcons'
 import { POI_META, type PoiType } from '@/lib/overpass'
+import { shortestRotation } from '@/lib/navigation/orientation'
 
 interface Props {
   routePolyline: [number, number][]
@@ -128,6 +129,9 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
   const markersRef = useRef<maplibregl.Marker[]>([])
   const userMarker = useRef<maplibregl.Marker | null>(null)
   const userMarkerArrow = useRef<HTMLDivElement | null>(null)
+  // Continuous (can exceed 0-360) rotation value driving the arrow — see shortestRotation()'s doc
+  // comment for why a plain `rotate(${bearingDeg}deg)` spins the wrong way on every north crossing.
+  const arrowRotation = useRef(0)
   const parkingMarker = useRef<maplibregl.Marker | null>(null)
   const hasCentered = useRef(false)
   const styleWatchdog = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -504,7 +508,8 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
       const map = mapRef.current
       if (!map) return
       const color = STATE_COLOR[state]
-      const rotation = bearingDeg ?? 0
+      arrowRotation.current = shortestRotation(arrowRotation.current, bearingDeg ?? 0)
+      const rotation = arrowRotation.current
 
       if (userMarker.current && userMarkerArrow.current) {
         userMarker.current.setLngLat([position.lon, position.lat])
@@ -514,7 +519,9 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
         const el = document.createElement('div')
         el.style.cssText = 'width:32px;height:32px;'
         const arrow = document.createElement('div')
-        arrow.style.cssText = `transform:rotate(${rotation}deg);width:32px;height:32px;display:flex;align-items:center;justify-content:center;`
+        // transition only on the rotation, and short — smooths out the remaining gap between
+        // real bearing updates without visibly lagging behind them (Komoot-style glide, not a snap).
+        arrow.style.cssText = `transform:rotate(${rotation}deg);transition:transform 150ms linear;width:32px;height:32px;display:flex;align-items:center;justify-content:center;`
         arrow.innerHTML = `<svg width="28" height="28" viewBox="0 0 24 24" fill="${color}" stroke="white" stroke-width="1.5"><path d="M12 2 L20 20 L12 16 L4 20 Z"/></svg>`
         el.appendChild(arrow)
         userMarkerArrow.current = arrow

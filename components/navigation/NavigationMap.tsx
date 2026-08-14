@@ -8,6 +8,7 @@ import { computeDirectionArrows } from '@/lib/geoUtils'
 import { labelNearbyTrail, formatTrailDistance } from '@/lib/navigation/nearbyTrailLabels'
 import { poiBadgeMarkup } from '@/components/poiIcons'
 import { POI_META, type PoiType } from '@/lib/overpass'
+import { shortestRotation } from '@/lib/navigation/orientation'
 
 interface Props {
   routePolyline: [number, number][]
@@ -71,6 +72,10 @@ export default function NavigationMap({ routePolyline, pois, position, bearingDe
   const accuracyCircle = useRef<L.Circle | null>(null)
   const nearbyTrailLayers = useRef<L.Layer[]>([])
   const hasCentered = useRef(false)
+  // Continuous rotation state for the arrow — see NavigationMapLibre.tsx / shortestRotation()'s doc
+  // comment for why a raw bearingDeg can't be fed straight into rotate() when animating.
+  const arrowRotation = useRef(0)
+  const lastArrowColor = useRef<string | null>(null)
   const [followMode, setFollowMode] = useState(true)
   // La mappa nasce dentro un import() dinamico: gli effetti che ci disegnano sopra devono poter
   // ripartire quando è pronta, non solo quando cambiano i loro dati.
@@ -177,10 +182,11 @@ export default function NavigationMap({ routePolyline, pois, position, bearingDe
       const map = mapInstance.current
       if (!map) return
       const color = STATE_COLOR[state]
-      const rotation = bearingDeg ?? 0
-      const icon = L.divIcon({
+      arrowRotation.current = shortestRotation(arrowRotation.current, bearingDeg ?? 0)
+      const rotation = arrowRotation.current
+      const buildIcon = () => L.divIcon({
         className: '',
-        html: `<div style="transform:rotate(${rotation}deg);width:32px;height:32px;display:flex;align-items:center;justify-content:center;">
+        html: `<div class="nav-arrow-rotator" style="transform:rotate(${rotation}deg);transition:transform 150ms linear;width:32px;height:32px;display:flex;align-items:center;justify-content:center;">
           <svg width="28" height="28" viewBox="0 0 24 24" fill="${color}" stroke="white" stroke-width="1.5"><path d="M12 2 L20 20 L12 16 L4 20 Z"/></svg>
         </div>`,
         iconSize: [32, 32],
@@ -188,9 +194,20 @@ export default function NavigationMap({ routePolyline, pois, position, bearingDe
       })
       if (userMarker.current) {
         userMarker.current.setLatLng([position.lat, position.lon])
-        userMarker.current.setIcon(icon)
+        // Leaflet's setIcon() replaces the whole icon DOM node, so a CSS transition on it never has
+        // an "old" element to animate from — mutating the existing rotator div in place instead is
+        // what actually makes the rotation glide (setIcon() is still used, but only when the state
+        // color changes, since that needs new SVG markup anyway).
+        const rotator = userMarker.current.getElement()?.querySelector<HTMLElement>('.nav-arrow-rotator')
+        if (rotator && lastArrowColor.current === color) {
+          rotator.style.transform = `rotate(${rotation}deg)`
+        } else {
+          userMarker.current.setIcon(buildIcon())
+          lastArrowColor.current = color
+        }
       } else {
-        userMarker.current = L.marker([position.lat, position.lon], { icon, zIndexOffset: 1000 }).addTo(map)
+        userMarker.current = L.marker([position.lat, position.lon], { icon: buildIcon(), zIndexOffset: 1000 }).addTo(map)
+        lastArrowColor.current = color
       }
 
       // Leaflet's L.circle takes its radius directly in meters (unlike

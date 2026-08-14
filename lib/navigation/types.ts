@@ -100,6 +100,16 @@ export type NavEventMap = {
   gpsRecovered: {}
   stateChanged: { from: NavState; to: NavState }
   paceUpdated: import('./paceAssistant').PaceUpdateResult
+  /**
+   * High-frequency (~10Hz), render-only position sample — extrapolated by the Position Engine's
+   * own velocity estimate between real GPS fixes (positionEngine.ts's `sample()`), not a new fix
+   * itself. Exists purely so the map marker glides continuously (Komoot-style) instead of jumping
+   * once per GPS fix (every 1-6s depending on AdaptiveGpsTracker's speed-based polling interval —
+   * a real, reported "laggy compared to Komoot" complaint). Deliberately NOT fed into route
+   * deviation/instructions/POI logic, which stays tied to real fixes only — see positionEngine.ts's
+   * module doc for why sample() is split from ingest() in the first place.
+   */
+  renderTick: { lat: number; lon: number; accuracyM: number; interpolated: boolean }
 }
 
 export type NavEventName = keyof NavEventMap

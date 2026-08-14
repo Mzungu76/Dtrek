@@ -45,6 +45,13 @@ export function computeBboxFromTrack(track: [number, number][], bufferDeg = BBOX
   }
 }
 
+/** Same bbox shape as computeBboxFromTrack, but centered on a single point with a radius in km — for prefetchTilesAroundPoint below, where there's no route/track yet to derive a bbox from. */
+function computeBboxFromPoint(lat: number, lon: number, radiusKm: number) {
+  const latDeg = radiusKm / 111 // ~111km per degree of latitude, everywhere
+  const lonDeg = radiusKm / (111 * Math.max(0.1, Math.cos(lat * Math.PI / 180))) // degrees of longitude shrink with latitude
+  return { minLat: lat - latDeg, maxLat: lat + latDeg, minLon: lon - lonDeg, maxLon: lon + lonDeg }
+}
+
 function enumerateTiles(bbox: ReturnType<typeof computeBboxFromTrack>, minZoom = MIN_ZOOM, maxZoom = MAX_ZOOM): TileCoord[] {
   const tiles: TileCoord[] = []
   for (let z = minZoom; z <= maxZoom; z++) {
@@ -201,4 +208,38 @@ export async function deleteOfflinePackage(hikeId: string): Promise<void> {
   await deleteManifest(hikeId)
   await deleteTrailGraph(hikeId)
   await deletePoiNotes(hikeId)
+}
+
+const PREFETCH_RADIUS_KM = 3
+const PREFETCH_MIN_ZOOM = 13
+const PREFETCH_MAX_ZOOM = 15 // one level short of a full download package (MAX_ZOOM=16) — this is a
+                              // best-effort safety net around a starting point with no known route,
+                              // not a full offline package, so it stays cheaper by design.
+
+/**
+ * Best-effort "cache the area around here" prefetch for a hike with no planned route to build an
+ * offline package from — the free-track/"Registra un percorso" flow (app/navigatore/traccia), which
+ * previously had zero offline tile support: FreeTrackMap.tsx always hit the live /api/tile proxy
+ * with nothing cached, so losing signal mid-recording in an area never visited before left the map
+ * blank (see docs discussion on this — "in assenza di internet, la mappa non si visualizza").
+ *
+ * Deliberately does NOT write into a per-hike Cache Storage bucket the way downloadOfflinePackage()
+ * does (there is no hikeId yet worth keying a package to at recording start): each fetch() below
+ * goes through the app's own Service Worker (public/sw.js), whose fetch handler already caches any
+ * successful /api/tile response into the shared 'dtrek-tiles-shared-v1' bucket and serves cache-first
+ * from ANY tile bucket (shared or per-hike) afterwards — so this only needs to warm that shared cache
+ * while there's still connectivity, typically at the trailhead before a hiker heads into a dead zone.
+ * A no-op with no error surfaced if it fails (offline already, SW not yet controlling the page, etc.)
+ * — this is a nice-to-have, never allowed to block or interrupt starting a recording.
+ */
+export async function prefetchTilesAroundPoint(lat: number, lon: number, radiusKm = PREFETCH_RADIUS_KM): Promise<void> {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return
+  if (navigator.onLine === false) return
+  const bbox = computeBboxFromPoint(lat, lon, radiusKm)
+  const tiles = enumerateTiles(bbox, PREFETCH_MIN_ZOOM, PREFETCH_MAX_ZOOM)
+  await runWithConcurrency(
+    tiles, DOWNLOAD_CONCURRENCY,
+    (tile) => fetch(`/api/tile?z=${tile.z}&x=${tile.x}&y=${tile.y}&style=voyager`),
+    () => {},
+  )
 }
