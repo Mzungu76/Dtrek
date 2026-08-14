@@ -9,7 +9,7 @@ export default function PrezziPage() {
       <Navbar />
       <main className="max-w-3xl mx-auto px-4 py-10">
         <div className="text-center mb-10">
-          <h1 className="font-display text-3xl font-bold text-forest-900 mb-2">Sblocca Dtrek</h1>
+          <h1 className="font-display text-2xl sm:text-3xl font-bold text-forest-900 mb-2">Sblocca Dtrek</h1>
           <p className="text-stone-500">
             Percorsi, guide e resoconti generati dall&apos;AI senza limiti di volume né periodo di prova.
           </p>
