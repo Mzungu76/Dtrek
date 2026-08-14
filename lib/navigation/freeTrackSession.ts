@@ -1,8 +1,12 @@
 import { haversineM } from '@/lib/geoUtils'
 import { LocationSource, type LocationMode, type LocationSourceError } from '@/lib/native/locationSource'
 import { PositionEngine, type PositionEstimate } from './positionEngine'
+import { watchDeviceCompass } from './orientation'
 import type { GeoFix } from './types'
 import type { TrackPoint } from '@/lib/tcxParser'
+
+const COMPASS_STALE_MS = 3000 // fall back to GPS-derived bearing if no sensor event this recently — mirrors navigationEngine.ts
+const RENDER_TICK_MS = 100 // ~10Hz render-only interpolation cadence, same reasoning as navigationEngine.ts's renderTick
 
 export interface FreeTrackStats {
   distanceMeters: number
@@ -43,6 +47,10 @@ export class FreeTrackSession {
   private recordedMs = 0
   private lastResumeAt = 0
   private lastSpeedMs: number | null = null
+  private stopCompass: (() => void) | null = null
+  private lastCompassAt = 0
+  private renderLoopHandle: number | null = null
+  private lastRenderTickAt = 0
 
   constructor() {
     this.gps = new LocationSource(
@@ -54,6 +62,7 @@ export class FreeTrackSession {
   on<T>(event: 'point', cb: Listener<TrackPoint>): () => void
   on<T>(event: 'stats', cb: Listener<FreeTrackStats>): () => void
   on<T>(event: 'position', cb: Listener<PositionEstimate>): () => void
+  on<T>(event: 'bearing', cb: Listener<{ bearingDeg: number; source: 'sensor' | 'gps' }>): () => void
   on<T>(event: 'gpsLost', cb: Listener<{ permissionDenied: boolean }>): () => void
   on<T>(event: 'gpsRecovered', cb: Listener<Record<string, never>>): () => void
   on(event: string, cb: Listener<any>): () => void {
@@ -66,9 +75,21 @@ export class FreeTrackSession {
     this.listeners.get(event)?.forEach((cb) => cb(payload))
   }
 
+  /**
+   * Live device compass, same wiring as NavigationEngine.start() — this session used to derive
+   * bearing purely from consecutive GPS fixes (PositionEngine's own velocity-based estimate), which
+   * only updates while actually walking above the noise floor and never reacts to just turning the
+   * phone in your hand while standing still. Real fixes still win as a fallback (updateBearingFallback
+   * below) whenever the sensor hasn't reported anything recently.
+   */
   async start(mode: LocationMode = 'trekking'): Promise<void> {
     this.recording = true
     this.lastResumeAt = Date.now()
+    this.stopCompass = watchDeviceCompass((deg) => {
+      this.lastCompassAt = Date.now()
+      this.emit('bearing', { bearingDeg: deg, source: 'sensor' })
+    })
+    this.armRenderLoop()
     await this.gps.start(mode)
   }
 
@@ -90,11 +111,34 @@ export class FreeTrackSession {
     if (this.recording) this.recordedMs += Date.now() - this.lastResumeAt
     this.recording = false
     this.gps.stop()
+    this.stopCompass?.()
+    this.stopCompass = null
+    if (this.renderLoopHandle != null) cancelAnimationFrame(this.renderLoopHandle)
+    this.renderLoopHandle = null
     return this.points
   }
 
   getPoints(): TrackPoint[] {
     return this.points
+  }
+
+  /**
+   * Drives PositionEngine.sample() on every animation frame (throttled), same purpose and
+   * reasoning as NavigationEngine's armRenderLoop() — the live marker glides between real fixes
+   * instead of jumping once per fix. Distance/elevation/point-recording logic in handleFix() below
+   * is untouched: this only re-emits 'position' with the filter's current extrapolated estimate.
+   */
+  private armRenderLoop(): void {
+    if (typeof window === 'undefined') return
+    const tick = () => {
+      this.renderLoopHandle = requestAnimationFrame(tick)
+      const now = Date.now()
+      if (now - this.lastRenderTickAt < RENDER_TICK_MS) return
+      this.lastRenderTickAt = now
+      const estimate = this.position.sample(now)
+      if (estimate) this.emit('position', estimate)
+    }
+    this.renderLoopHandle = requestAnimationFrame(tick)
   }
 
   private handleFix(raw: GeoFix): void {
@@ -109,6 +153,7 @@ export class FreeTrackSession {
     // recording it below. Sampling at raw.ts instead matches what was just ingested exactly.
     const estimate = this.position.sample(raw.ts)
     if (estimate) this.emit('position', estimate)
+    this.updateBearingFallback(estimate)
 
     if (!wasRecording || !estimate || estimate.interpolated) return
 
@@ -131,6 +176,13 @@ export class FreeTrackSession {
     this.points.push(point)
     this.emit('point', point)
     this.emit('stats', this.currentStats())
+  }
+
+  /** GPS-derived bearing, used only when no fresh compass sensor reading has arrived — mirrors navigationEngine.ts's updateBearingFallback(). */
+  private updateBearingFallback(estimate: PositionEstimate | null): void {
+    if (Date.now() - this.lastCompassAt < COMPASS_STALE_MS) return
+    if (estimate?.bearingDeg == null) return
+    this.emit('bearing', { bearingDeg: estimate.bearingDeg, source: 'gps' })
   }
 
   private handleError(err: LocationSourceError): void {

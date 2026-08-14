@@ -3,6 +3,7 @@ import 'leaflet/dist/leaflet.css'
 import type * as L from 'leaflet'
 import { useEffect, useRef, useState } from 'react'
 import { Locate } from 'lucide-react'
+import { shortestRotation } from '@/lib/navigation/orientation'
 
 interface Props {
   /** The traveled path so far — grows as fixes arrive, unlike NavigationMap.tsx's fixed planned route. */
@@ -33,6 +34,9 @@ export default function FreeTrackMap({ path, position, bearingDeg, accuracyM }: 
   const userMarker = useRef<L.Marker | null>(null)
   const accuracyCircle = useRef<L.Circle | null>(null)
   const hasCentered = useRef(false)
+  // Continuous rotation state for the arrow — see NavigationMapLibre.tsx / shortestRotation()'s doc
+  // comment for why a raw bearingDeg can't be fed straight into rotate() when animating.
+  const arrowRotation = useRef(0)
   const [followMode, setFollowMode] = useState(true)
 
   useEffect(() => {
@@ -70,19 +74,24 @@ export default function FreeTrackMap({ path, position, bearingDeg, accuracyM }: 
     import('leaflet').then((L) => {
       const map = mapInstance.current
       if (!map) return
-      const rotation = bearingDeg ?? 0
-      const icon = L.divIcon({
-        className: '',
-        html: `<div style="transform:rotate(${rotation}deg);width:32px;height:32px;display:flex;align-items:center;justify-content:center;">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="${MARKER_COLOR}" stroke="white" stroke-width="1.5"><path d="M12 2 L20 20 L12 16 L4 20 Z"/></svg>
-        </div>`,
-        iconSize: [32, 32],
-        iconAnchor: [16, 16],
-      })
+      arrowRotation.current = shortestRotation(arrowRotation.current, bearingDeg ?? 0)
+      const rotation = arrowRotation.current
       if (userMarker.current) {
         userMarker.current.setLatLng([position.lat, position.lon])
-        userMarker.current.setIcon(icon)
+        // Mutate the existing rotator div in place rather than setIcon() (which replaces the whole
+        // DOM node and would give the CSS transition nothing to animate from) — see
+        // NavigationMap.tsx's identical comment. No color/state to swap here, so no rebuild branch needed.
+        const rotator = userMarker.current.getElement()?.querySelector<HTMLElement>('.nav-arrow-rotator')
+        if (rotator) rotator.style.transform = `rotate(${rotation}deg)`
       } else {
+        const icon = L.divIcon({
+          className: '',
+          html: `<div class="nav-arrow-rotator" style="transform:rotate(${rotation}deg);transition:transform 150ms linear;width:32px;height:32px;display:flex;align-items:center;justify-content:center;">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="${MARKER_COLOR}" stroke="white" stroke-width="1.5"><path d="M12 2 L20 20 L12 16 L4 20 Z"/></svg>
+          </div>`,
+          iconSize: [32, 32],
+          iconAnchor: [16, 16],
+        })
         userMarker.current = L.marker([position.lat, position.lon], { icon, zIndexOffset: 1000 }).addTo(map)
       }
 

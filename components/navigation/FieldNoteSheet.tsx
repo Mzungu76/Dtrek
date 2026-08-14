@@ -24,7 +24,6 @@ export default function FieldNoteSheet({ hikeId, position, onSave, onClose, auto
   const [dataUrl, setDataUrl] = useState<string | null>(null)
   const [text, setText] = useState('')
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const { recording, supported: speechSupported, toggleRecording } = useSpeechDictation(setText)
 
@@ -44,26 +43,35 @@ export default function FieldNoteSheet({ hikeId, position, onSave, onClose, auto
   async function handleSave() {
     if (!canSave) return
     setSaving(true)
-    setError(null)
     const id = crypto.randomUUID()
-    try {
-      let photo: { url: string; storagePath: string } | null = null
-      if (dataUrl) photo = await uploadFieldNotePhoto(hikeId, id, dataUrl)
-      onSave({
-        id,
-        text: text.trim(),
-        timestamp: new Date().toISOString(),
-        lat: position?.lat,
-        lon: position?.lon,
-        photoUrl: photo?.url,
-        photoStoragePath: photo?.storagePath,
-      })
-      onClose()
-    } catch {
-      setError('Salvataggio non riuscito. Riprova.')
-    } finally {
-      setSaving(false)
+    let photoUrl: string | undefined
+    let photoStoragePath: string | undefined
+    let photoPending = false
+    if (dataUrl) {
+      try {
+        const photo = await uploadFieldNotePhoto(hikeId, id, dataUrl)
+        photoUrl = photo.url
+        photoStoragePath = photo.storagePath
+      } catch {
+        // Offline, or the upload otherwise failed: keep the photo as a local data URL instead of
+        // losing the whole note (text included) — it still displays fine, and a background retry
+        // (lib/offline/retryFieldNotePhotos.ts) tries to swap it for a real Storage URL later.
+        photoUrl = dataUrl
+        photoPending = true
+      }
     }
+    onSave({
+      id,
+      text: text.trim(),
+      timestamp: new Date().toISOString(),
+      lat: position?.lat,
+      lon: position?.lon,
+      photoUrl,
+      photoStoragePath,
+      photoPending: photoPending || undefined,
+    })
+    setSaving(false)
+    onClose()
   }
 
   return (
@@ -128,7 +136,6 @@ export default function FieldNoteSheet({ hikeId, position, onSave, onClose, auto
         </div>
 
         {!position && <p className="text-xs text-amber-600 mb-2">Posizione GPS non disponibile al momento — la nota verrà salvata senza coordinate.</p>}
-        {error && <p className="text-xs text-red-500 mb-2">{error}</p>}
 
         <button
           onClick={handleSave}

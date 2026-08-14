@@ -14,6 +14,7 @@ import type { GeoFix, NavEventMap, NavEventName, NavInstruction, NavPoi, RouteMo
 const GPS_LOST_MS = 15000
 const COMPASS_STALE_MS = 3000 // fall back to GPS-derived bearing if no sensor event this recently
 const MOMENT_TRIGGER_RADIUS_M = 60
+const RENDER_TICK_MS = 100 // ~10Hz render-only interpolation cadence — see renderTick in types.ts
 const MAX_PLAUSIBLE_HIKING_SPEED_MS = 8 // ~29 km/h — generous even for trail running; beyond this a fix jump is treated as GPS noise, not real movement
 
 type Listener<K extends NavEventName> = (payload: NavEventMap[K]) => void
@@ -75,6 +76,8 @@ export class NavigationEngine {
   private gpsLostTimer: ReturnType<typeof setTimeout> | null = null
   private traveledDistanceM = 0
   private lastAcceptedFix: GeoFix | null = null
+  private renderLoopHandle: number | null = null
+  private lastRenderTickAt = 0
 
   constructor(opts: NavigationEngineOptions) {
     this.tracker = new RouteTracker(opts.routePolyline)
@@ -124,6 +127,7 @@ export class NavigationEngine {
     })
     this.armGpsLostWatchdog()
     this.stopVisibilityWatch = this.watchVisibilityForCatchUp()
+    this.armRenderLoop()
   }
 
   stop(): void {
@@ -132,7 +136,33 @@ export class NavigationEngine {
     this.stopVisibilityWatch?.()
     this.stopVisibilityWatch = null
     if (this.gpsLostTimer) clearTimeout(this.gpsLostTimer)
+    if (this.renderLoopHandle != null) cancelAnimationFrame(this.renderLoopHandle)
+    this.renderLoopHandle = null
     this.setState('finished')
+  }
+
+  /**
+   * Drives PositionEngine.sample() on every animation frame (throttled to RENDER_TICK_MS) so the
+   * map marker glides smoothly between real GPS fixes instead of jumping once per fix — the "60 FPS
+   * interpolation/rendering" stage positionEngine.ts's own doc comment describes, which nothing
+   * previously actually called on a timer. Deliberately separate from handleFix()'s pipeline: this
+   * only reads the filter's current extrapolated estimate, it never re-runs route deviation/
+   * instructions/POI logic, so a stationary hiker (no real fixes) can't accidentally flicker those
+   * off synthetic data. requestAnimationFrame also means this auto-pauses when the screen/app is
+   * backgrounded, at no extra battery cost.
+   */
+  private armRenderLoop(): void {
+    if (typeof window === 'undefined') return
+    const tick = () => {
+      this.renderLoopHandle = requestAnimationFrame(tick)
+      const now = Date.now()
+      if (now - this.lastRenderTickAt < RENDER_TICK_MS) return
+      this.lastRenderTickAt = now
+      const estimate = this.position.sample(now)
+      if (!estimate) return
+      this.emit('renderTick', { lat: estimate.lat, lon: estimate.lon, accuracyM: estimate.accuracyM, interpolated: estimate.interpolated })
+    }
+    this.renderLoopHandle = requestAnimationFrame(tick)
   }
 
   /**

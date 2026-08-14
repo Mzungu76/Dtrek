@@ -18,6 +18,24 @@ export function angleDiffDeg(a: number, b: number): number {
   return diff > 180 ? 360 - diff : diff
 }
 
+/**
+ * Moves `prevRotation` towards `targetBearingDeg` by the shortest angular path (never more than
+ * 180° either way). `transform: rotate()` has no notion of compass wraparound on its own — animating
+ * straight to a raw 0-360 bearing spins the marker the long way around every time it crosses north
+ * (e.g. 350° → 10° would rotate -340° instead of +20°), which reads as a stutter/lag on top of
+ * whatever the real update rate is. Feed the return value back in as `prevRotation` on the next call
+ * (keep it in a ref, not React state that resets) — it can grow past 360°/below 0° by design, since
+ * an ever-increasing angle is exactly what keeps a CSS `transition: transform` short and correct.
+ */
+export function shortestRotation(prevRotation: number, targetBearingDeg: number): number {
+  const target = ((targetBearingDeg % 360) + 360) % 360
+  const prevMod = ((prevRotation % 360) + 360) % 360
+  let delta = target - prevMod
+  if (delta > 180) delta -= 360
+  if (delta < -180) delta += 360
+  return prevRotation + delta
+}
+
 /** Circular mean for bearings — avoids the 350°/10° → 180° bug at north crossings. */
 export function circularMeanBearings(bearings: number[], half: number): number[] {
   return bearings.map((_, i) => {

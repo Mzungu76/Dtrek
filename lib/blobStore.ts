@@ -20,9 +20,16 @@ export interface HikeNote {
   timestamp: string
   lat?:      number
   lon?:      number
-  /** Optional photo attached to the note (Supabase Storage public URL) — a note can be text-only, voice-dictated text, a photo, or both. */
+  /** Optional photo attached to the note — normally a Supabase Storage public URL, but see photoPending below for the offline case. A note can be text-only, voice-dictated text, a photo, or both. */
   photoUrl?: string
   photoStoragePath?: string
+  /** True when photoUrl is a local data: URL rather than a Storage URL — the upload couldn't reach
+   *  Supabase Storage when the note was taken (offline, or a flaky connection on the trail) and was
+   *  kept locally instead of losing the note entirely (see FieldNoteSheet.tsx). Still fully usable
+   *  (the photo displays fine from the data URL); a best-effort background retry
+   *  (lib/offline/retryFieldNotePhotos.ts) tries to swap it for a real Storage URL once online, but
+   *  nothing depends on that succeeding. */
+  photoPending?: boolean
 }
 
 export interface StoredActivity extends TcxActivity {
