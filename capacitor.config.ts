@@ -38,10 +38,20 @@ function resolveServerUrl(): string | undefined {
 
 const serverUrl = resolveServerUrl()
 
+// Same dark shell color as the native launch theme (android/app/src/main/res/values/styles.xml,
+// AppTheme.NoActionBarLaunch → @drawable/splash) and the in-page splash overlay
+// (components/SplashScreen.tsx, bg-[#0b1a24]) — this is the WebView's OWN background, painted
+// the instant it's created, well before the remote `/navigatore` page (server.url above) has
+// actually arrived over the network. Without it the WebView defaults to plain white, so on a slow
+// connection the native splash gets replaced by a white screen for however long the page takes to
+// load instead of a continuous dark screen until real content paints over it.
+const SHELL_BACKGROUND_COLOR = '#0b1a24'
+
 const config: CapacitorConfig = {
   appId: 'com.dtrek.navigator',
   appName: 'DTrek Navigator',
   webDir: 'public',
+  backgroundColor: SHELL_BACKGROUND_COLOR,
   server: {
     androidScheme: 'https',
     ...(serverUrl ? { url: serverUrl, cleartext: serverUrl.startsWith('http://') } : {}),
@@ -50,6 +60,7 @@ const config: CapacitorConfig = {
     // Le richieste HTTPS verso il backend Dtrek stesso passano già per
     // `server.url`; nient'altro deve essere raggiungibile in cleartext.
     allowMixedContent: false,
+    backgroundColor: SHELL_BACKGROUND_COLOR,
   },
 }
 
