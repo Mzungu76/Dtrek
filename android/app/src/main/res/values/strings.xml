@@ -13,4 +13,12 @@
     <string name="nav_mode_trekking">Modalità trekking</string>
     <string name="nav_mode_navigation">Navigazione attiva</string>
     <string name="nav_mode_emergency">Modalità emergenza — massima precisione</string>
+
+    <!-- Offline gate shown by MainActivity on the very first launch with no validated internet
+         connection — the app has nothing cached yet at that point, so it can't show anything
+         meaningful without network. -->
+    <string name="offline_gate_title">Nessuna connessione</string>
+    <string name="offline_gate_message">Al primo avvio DTrek Navigator ha bisogno di rete per caricare l\'app. Riprova quando hai segnale o Wi-Fi.</string>
+    <string name="offline_gate_retry">Riprova</string>
+    <string name="offline_gate_still_offline">Ancora nessuna connessione</string>
 </resources>
