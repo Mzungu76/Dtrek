@@ -1,11 +1,12 @@
 'use client'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { List, MapPinned, Upload, ArrowRight, LogOut } from 'lucide-react'
+import { List, MapPinned, Upload, ExternalLink, LogOut } from 'lucide-react'
 import Sheet from '@/components/ui/Sheet'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import { lsClearAll } from '@/lib/localStore'
 import { clearProfile } from '@/lib/userProfile'
+import { openMainApp } from '@/lib/native/mainAppLinks'
 import { useEntitlement, activateDtrek } from '@/lib/useEntitlement'
 
 interface Props {
@@ -13,22 +14,19 @@ interface Props {
   onClose: () => void
 }
 
-// Dove atterra chi entra in Dtrek da Navigator — sia al primo "Passa a Dtrek" sia da lì in poi:
-// la sezione di apertura dell'app (vedi commento in app/bacheca/page.tsx), non una pagina di
-// dettaglio. Da qui la navbar di Dtrek stessa porta a Diario/Guida/Profilo — Navigator non
-// duplica quella navigazione nel proprio menu.
-const DTREK_HOME_PATH = '/bacheca'
-
 /**
  * The standalone Navigator app's menu — everything that isn't "navigate right now" lives behind
  * this, reached from the map-first home (app/navigatore/page.tsx). Kept as one small, shared
  * component rather than duplicating this list per screen.
  *
- * Confine Navigator/Dtrek, modello "un'icona sola" (docs/navigator-dtrek-boundary.md): finché
- * l'utente non ha mai toccato "Passa a Dtrek", l'ultima voce resta un invito discreto (mai un
- * funnel di vendita — Navigator non deve mostrare linguaggio di acquisto). Una volta attivato,
- * quella stessa voce naviga la STESSA WebView dentro Dtrek — mai il browser di sistema (quello
- * resta riservato solo al checkout, vedi /prezzi, per vincolo store).
+ * Confine Navigator/Dtrek (docs/navigator-dtrek-boundary.md): due icone distinte e complementari,
+ * non una che "diventa" l'altra — Navigator non naviga mai la propria WebView dentro una pagina
+ * Dtrek, prima o dopo l'attivazione. "Passa a Dtrek" apre sempre il browser di sistema
+ * (`openMainApp`), dove chi non l'ha ancora fatto può aggiungere la PWA di Dtrek alla schermata
+ * Home (prompt già gestito da web, components/InstallPWA.tsx) — Navigator si limita a segnare
+ * che l'account ha compiuto quel passaggio (user_settings.dtrek_activated_at), da cui dipendono
+ * il tetto di 1 percorso di Navigator (lib/navigatorSlot.ts) e l'icona "Apri Dtrek" nella barra in
+ * alto di app/navigatore/page.tsx.
  */
 export default function NavigatorMenu({ open, onClose }: Props) {
   const router = useRouter()
@@ -53,7 +51,7 @@ export default function NavigatorMenu({ open, onClose }: Props) {
     if (!ok) return // resta nella conferma — l'utente può ritentare
     setConfirmingActivation(false)
     onClose()
-    router.push(DTREK_HOME_PATH)
+    openMainApp()
   }
 
   return (
@@ -91,18 +89,18 @@ export default function NavigatorMenu({ open, onClose }: Props) {
 
         {entitlement.dtrekActivated ? (
           <button
-            onClick={() => { onClose(); router.push(DTREK_HOME_PATH) }}
+            onClick={() => { onClose(); openMainApp() }}
             className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-stone-50 hover:bg-stone-100 transition-colors text-left"
           >
             <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
-              <ArrowRight className="w-4.5 h-4.5" />
+              <ExternalLink className="w-4.5 h-4.5" />
             </div>
             <span className="font-semibold text-sm text-stone-800">Apri Dtrek — Diario, statistiche, pianificazione</span>
           </button>
         ) : confirmingActivation ? (
           <div className="rounded-2xl bg-amber-50 border border-amber-200 p-4 space-y-3">
             <p className="text-sm text-stone-700">
-              Passerai a Dtrek: diario, statistiche e pianificazione si apriranno direttamente da qui, dentro Navigator. Non si torna indietro.
+              Passerai a Dtrek nel browser, dove potrai aggiungerlo alla schermata Home se vuoi. Non si torna indietro.
             </p>
             <div className="flex gap-2">
               <button
@@ -127,7 +125,7 @@ export default function NavigatorMenu({ open, onClose }: Props) {
             className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-stone-50 hover:bg-stone-100 transition-colors text-left"
           >
             <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
-              <ArrowRight className="w-4.5 h-4.5" />
+              <ExternalLink className="w-4.5 h-4.5" />
             </div>
             <span className="font-semibold text-sm text-stone-800">Passa a Dtrek — sblocca guide, diario, statistiche</span>
           </button>

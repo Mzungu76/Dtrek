@@ -1,15 +1,13 @@
 'use client'
 import { useState, Suspense } from 'react'
-import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import { Capacitor } from '@capacitor/core'
 import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import ActivityUploader from '@/components/upload/ActivityUploader'
 import GpxUploader from '@/components/upload/GpxUploader'
 import ManualImportChoice from '@/components/upload/ManualImportChoice'
 import FromActivityUploader from '@/components/upload/FromActivityUploader'
 import TrialStatusBanner from '@/components/dtrek/TrialStatusBanner'
-import { Mountain, MapPin, PencilLine, History, Compass } from 'lucide-react'
+import { Mountain, MapPin, PencilLine, History } from 'lucide-react'
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
@@ -49,21 +47,6 @@ function UploadPageInner() {
             }
           </p>
         </div>
-
-        {tab === 'activity' && Capacitor.isNativePlatform() && (
-          <Link
-            href="/navigatore/traccia"
-            className="mb-6 flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-sky-50 border border-sky-200 hover:bg-sky-100 transition-colors"
-          >
-            <div className="w-9 h-9 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
-              <Compass className="w-4.5 h-4.5" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-semibold text-sm text-stone-800">Registra ora con Navigator</p>
-              <p className="text-xs text-stone-500">Traccia GPS live, senza pianificazione — invece di caricare un file già pronto</p>
-            </div>
-          </Link>
-        )}
 
         {tab === 'gpx' && (
           <div className="flex bg-stone-100 rounded-xl p-1 mb-6 text-xs">
