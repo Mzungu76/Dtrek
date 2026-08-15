@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Capacitor } from '@capacitor/core'
-import { AlertTriangle, BatteryWarning, ArrowUp, Download, CheckCircle2 } from 'lucide-react'
+import { AlertTriangle, BatteryWarning, ArrowUp, Download, CheckCircle2, Radio } from 'lucide-react'
 import Sheet from '@/components/ui/Sheet'
 import type { PlannedHike } from '@/lib/plannedStore'
 import { updatePlannedMeta } from '@/lib/plannedStore'
@@ -37,6 +37,8 @@ import { computeEscapeOptions, type EscapeOption } from '@/lib/navigation/escape
 import { matchToTrailGraph, type MapMatchResult } from '@/lib/navigation/mapMatcher'
 import EscapeOptionsSheet from './EscapeOptionsSheet'
 import OfflinePackageDownloader from './OfflinePackageDownloader'
+import LiveShareToggle from './LiveShareToggle'
+import { publishLivePosition } from '@/lib/navigation/liveLocationPublish'
 import { watchBattery, watchBatteryLevel } from '@/lib/navigation/battery'
 import { LocationModeDecider } from '@/lib/navigation/locationModeDecider'
 import { haptics } from '@/lib/navigation/haptics'
@@ -90,6 +92,10 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   const engineRef = useRef<NavigationEngine | null>(null)
   const sessionRef = useRef<NavigationSessionSnapshot | null>(null)
   const remoteSessionId = useRef<string | null>(null)
+  // Mirror in state di remoteSessionId.current — il ref da solo non fa ri-renderizzare
+  // LiveShareToggle quando la sessione remota diventa disponibile (fetch fire-and-forget più
+  // sotto), il toggle deve poterlo riflettere se l'utente apre il foglio prima che risolva.
+  const [remoteSessionIdState, setRemoteSessionIdState] = useState<string | null>(null)
   const pendingEvents = useRef<{ type: string; payload?: Record<string, unknown>; createdAt: string }[]>([])
   const speechEnabledRef = useRef(true)
   const timerRunningRef = useRef(false)
@@ -148,6 +154,8 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   const [offlineDegradedMissing, setOfflineDegradedMissing] = useState<string[]>([])
   const [offlineReady, setOfflineReady] = useState(false)
   const [showOfflineSheet, setShowOfflineSheet] = useState(false)
+  const [showLiveShareSheet, setShowLiveShareSheet] = useState(false)
+  const [liveSharingEnabled, setLiveSharingEnabled] = useState(false)
   const [showNatura2000, setShowNatura2000] = useState(false)
   const [wildlifeAlertDismissed, setWildlifeAlertDismissed] = useState(false)
   const [pace, setPace] = useState<PaceUpdateResult | null>(null)
@@ -271,6 +279,13 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
 
   const positionRef = useRef(position)
   positionRef.current = position
+  const accuracyMRef = useRef(accuracyM)
+  accuracyMRef.current = accuracyM
+  // Stessa ragione di positionRef: il loop di pubblicazione posizione live vive dentro
+  // l'effect di setup a mount unico più sotto (insieme a flushInterval/movingTimeInterval), una
+  // chiusura diretta su liveSharingEnabled resterebbe congelata al valore di al momento del mount.
+  const liveSharingEnabledRef = useRef(liveSharingEnabled)
+  liveSharingEnabledRef.current = liveSharingEnabled
 
   // engine.on('enteredPoi', ...) below is registered once inside the big setup effect (deps:
   // [hike.id] only) — closing over poiNotesById directly would freeze it at whatever it was
@@ -340,7 +355,9 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ plannedHikeId: hike.id }),
-      }).then((r) => r.ok ? r.json() : null).then((data) => { if (data?.sessionId) remoteSessionId.current = data.sessionId }).catch(() => {})
+      }).then((r) => r.ok ? r.json() : null).then((data) => {
+        if (data?.sessionId) { remoteSessionId.current = data.sessionId; setRemoteSessionIdState(data.sessionId) }
+      }).catch(() => {})
 
       // Fire-and-forget: makes the walkable trail graph around this route available for later
       // Map Matching/Escape Engine work (see lib/navigation/trailGraphStore.ts) even when the
@@ -548,6 +565,18 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         setMovingTimeMs((prev) => prev + 1000)
       }
     }, 1000)
+    // Fase 1 di docs/navigator-orizzonti-roadmap.md — ~15-20s, distinta dalla frequenza di
+    // lettura del viewer pubblico (~10-15s, in LiveShareViewer.tsx). Best-effort puro, nessuna
+    // coda: publishLivePosition() ignora silenziosamente un fallimento (offline), si riprova al
+    // prossimo tick — stesso principio della creazione sessione poco sopra.
+    const liveShareInterval = setInterval(() => {
+      if (!liveSharingEnabledRef.current || !remoteSessionId.current) return
+      if (!timerRunningRef.current || !positionRef.current) return
+      publishLivePosition(remoteSessionId.current, {
+        lat: positionRef.current.lat, lon: positionRef.current.lon,
+        ts: Date.now(), accuracyM: accuracyMRef.current,
+      })
+    }, 18000)
 
     return () => {
       cancelled = true
@@ -558,6 +587,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       stopBatteryLevelWatch()
       clearInterval(flushInterval)
       clearInterval(movingTimeInterval)
+      clearInterval(liveShareInterval)
       if (sessionRef.current) saveNavigationSession(sessionRef.current).catch(() => {})
       flushToServer()
     }
@@ -877,8 +907,9 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         />
       </div>
 
-      {/* Colonna sinistra dei controlli mappa: scarico offline (quando ha senso) e punto auto.
-          Impilati verticalmente invece di contendersi lo stesso `top`, come fa la colonna destra. */}
+      {/* Colonna sinistra dei controlli mappa: scarico offline (quando ha senso), condivisione
+          posizione live e punto auto. Impilati verticalmente invece di contendersi lo stesso
+          `top`, come fa la colonna destra. */}
       <div className="absolute left-3 z-10 flex flex-col gap-2" style={{ top: 'calc(50% + 60px)' }}>
         {routePolyline.length >= 2 && (
           <button
@@ -891,6 +922,15 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
             {offlineReady ? <CheckCircle2 className="w-5 h-5 text-white" /> : <Download className="w-5 h-5 text-stone-700" />}
           </button>
         )}
+        <button
+          onClick={() => setShowLiveShareSheet(true)}
+          title={liveSharingEnabled ? 'Condivisione posizione live attiva' : 'Condividi la tua posizione live'}
+          className={`w-11 h-11 rounded-full flex items-center justify-center shadow-lg border ${
+            liveSharingEnabled ? 'bg-sky-600 border-sky-400/40' : 'bg-white/95 border-stone-200'
+          }`}
+        >
+          <Radio className={`w-5 h-5 ${liveSharingEnabled ? 'text-white' : 'text-stone-700'}`} />
+        </button>
         <ParkingSpotControl
           spot={parkingSpot}
           position={position}
@@ -916,6 +956,17 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
           hikeId={hike.id}
           routePolyline={routePolyline}
           hikeData={{ trackPoints: hike.trackPoints, cachedPois: hike.cachedPois }}
+        />
+      </Sheet>
+
+      <Sheet
+        open={showLiveShareSheet}
+        onClose={() => setShowLiveShareSheet(false)}
+        title="Condividi posizione"
+      >
+        <LiveShareToggle
+          sessionId={remoteSessionIdState}
+          onSharingChange={setLiveSharingEnabled}
         />
       </Sheet>
 
