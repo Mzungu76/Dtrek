@@ -41,6 +41,7 @@ sync esistente.
 ALTER TABLE hike_navigation_sessions
   ADD COLUMN share_token UUID UNIQUE,
   ADD COLUMN share_enabled_at TIMESTAMPTZ,
+  ADD COLUMN share_token_expires_at TIMESTAMPTZ,
   ADD COLUMN last_live_lat DOUBLE PRECISION,
   ADD COLUMN last_live_lon DOUBLE PRECISION,
   ADD COLUMN last_live_ts TIMESTAMPTZ,
@@ -50,6 +51,15 @@ CREATE INDEX idx_nav_sessions_share_token ON hike_navigation_sessions (share_tok
 ```
 Una singola riga aggiornata in-place (non uno storico di fix) — tiene il costo di scrittura
 basso ed è tutto ciò che serve a un viewer che vuole solo "dov'è adesso".
+
+**Scadenza/revoca — non lasciata come "decisione aperta", è parte del design v1**: un link
+pubblico di posizione non deve poter restare valido a tempo indeterminato. Default proposto:
+`share_token_expires_at` impostato a `share_enabled_at + 12h` alla creazione (copre una
+giornata di escursione lunga con margine), rinnovabile con un altro tap se la navigazione
+prosegue oltre; `app/api/navigation/share/[token]/route.ts` (GET pubblico) verifica sempre
+`share_token_expires_at > now()` prima di restituire la posizione, non solo la presenza del
+token. Il revoke manuale (`DELETE`) resta sempre disponibile e immediato, indipendentemente
+dalla scadenza.
 
 **File nuovi**:
 - `app/api/navigation/share/route.ts` — stesso shape di `app/api/share/route.ts`: `POST
@@ -76,9 +86,6 @@ basso ed è tutto ciò che serve a un viewer che vuole solo "dov'è adesso".
   "pubblico" richiederebbe una policy `SELECT USING (true)` che esporrebbe l'intera riga a
   chiunque si sottoscriva, non solo a chi ha il token. Da rivalutare se la latenza del polling
   risulta inadeguata in pratica.
-- **Scadenza del link a sessione conclusa**: resta valido in sola lettura (ultima posizione
-  nota) o si disattiva da solo? Non deciso — il revoke manuale resta comunque sempre
-  disponibile.
 - **Frequenza di scrittura**: 15-20s è un compromesso esplicito su "quanto è live il live", da
   confermare con l'uso reale.
 - Verificare che il testo UI del toggle non assomigli a un upsell — vincolo esistente di
@@ -87,18 +94,44 @@ basso ed è tutto ciò che serve a un viewer che vuole solo "dov'è adesso".
 ### Fase 2 — SOS / azione di emergenza — non ancora fatto
 
 Nessun pattern `tel:`/`sms:`/112 esiste oggi nel codice — lavoro nuovo, che riusa solo la
-posizione già disponibile in `ActiveNavigationView.tsx`.
+posizione già disponibile in `ActiveNavigationView.tsx`. **Da non progettare come "un bottone,
+due deep-link"**: è una UI a livelli, dove solo il primo livello è garantito.
+
+**Quattro livelli, in ordine di affidabilità decrescente — non equivalenti**:
+1. **Chiamata 112** (`tel:112`) — l'unico canale universalmente affidabile in UE, primo tasto
+   dello sheet.
+2. **SMS/testo di emergenza dove supportato** (`sms:112?body=...`) — esplicitamente
+   **best-effort**, non un fallback garantito: in molti paesi UE l'SMS al 112 richiede
+   registrazione preventiva o è riservato a categorie specifiche di utenti, non funziona per
+   il pubblico generico ovunque. Va etichettato in UI come "prova a inviare", non presentato
+   con la stessa sicurezza della chiamata.
+3. **Visualizzazione immediata delle coordinate a schermo** — non un'azione, uno stato sempre
+   visibile appena lo sheet SOS si apre: lat/lon in chiaro + quota, leggibili e dettabili a
+   voce anche se nessuna delle due azioni sopra funziona (rete assente, nessun segnale
+   telefonico).
+4. **Link alla posizione condivisa** (Fase 1), se già attiva — mostrato come opzione in più,
+   mai come sostituto dei livelli 1-3.
+
+**Fail-safe UI — vincolo esplicito**: il pulsante SOS e il livello 3 (coordinate a schermo)
+non devono dipendere dalla salute del resto della UI di navigazione né dalla rete. Leggono
+direttamente l'ultimo `GeoFix`/campione di `PositionEngine` già in memoria (lo stesso stato
+usato da `ActiveNavigationView.tsx`), non da una chiamata API né da un evento che presuppone
+che `NavigationEngine` sia in uno stato "sano" — deve funzionare anche in `gps_lost` o con la
+UI di navigazione parzialmente degradata.
 
 **File nuovi**:
-- `lib/navigation/sos.ts` — funzione pura `buildEmergencyLinks(lastFix)`: genera `tel:112` e
-  `sms:112?body=...` con coordinate leggibili + link Google Maps (apre nativamente sia su
-  Android che iOS, nessuna dipendenza nuova).
+- `lib/navigation/sos.ts` — funzioni pure separate per livello: `buildEmergencyCallLink()`,
+  `buildEmergencySmsLink(lastFix)` (best-effort, non usata come unico canale), e
+  `formatCoordinatesForDisplay(lastFix)` per il livello 3 (nessun link necessario, puro
+  rendering).
 - `components/navigation/SosButton.tsx` — sempre raggiungibile in 1 tap durante navigazione
-  attiva (non dentro un menu nascosto), apre uno sheet con "Chiama 112" / "Invia SMS con
-  posizione".
+  attiva, montato in modo da restare accessibile anche in stato `gps_lost`/degradato; lo sheet
+  mostra i 4 livelli sopra, non solo due bottoni.
 
 **Log opzionale**: nessuna nuova tabella — un evento `type: 'sos_triggered'` sulla tabella
-`hike_navigation_events` già esistente, tramite la stessa coda già usata per gli altri eventi.
+`hike_navigation_events` già esistente, tramite la stessa coda già usata per gli altri eventi
+(best-effort: se la rete manca, il log resta in coda locale come già avviene per gli altri
+eventi, non blocca né ritarda i livelli 1-3).
 
 **Decisioni aperte**:
 - **Deep-link (`tel:112`, un tap in più per confermare) vs chiamata diretta** (richiederebbe
@@ -109,7 +142,14 @@ posizione già disponibile in `ActiveNavigationView.tsx`.
 - Se il testo dell'SMS debba includere anche il link di condivisione live (Fase 1) quando
   attivo — piccola sinergia tra le due fasi, da valutare insieme.
 
-### Fase 3 — Suite di test automatici (vitest) — non ancora fatto
+### Fase 3 — Prima infrastruttura di test automatizzato del repository (vitest) — non ancora fatto
+
+**Nota**: questa fase, a differenza delle altre due dell'Orizzonte 1, non è "solo aggiungere
+file" — introduce la prima vera modifica infrastrutturale del repository: una nuova
+devDependency (`vitest`), un nuovo file di configurazione (`vitest.config.ts`), un nuovo
+script in `package.json`. Nessun repository che non ha mai avuto un test runner acquisisce
+zero-footprint la propria prima suite — va trattata e pianificata come tale, non come
+un'aggiunta puramente documentale ai moduli esistenti.
 
 Il repo non ha mai avuto un test runner (`package.json` senza `jest`/`vitest`), ma possiede
 già un framework di simulazione GPS completo costruito apposta per questo scopo
@@ -154,7 +194,17 @@ precedente più vicino, `trail_difficulty_markers` (marker di pericolo puntuale,
 era pensato per alimentare un `lib/si/signals/communitySignals.ts` che però **non è mai stato
 scritto** — solo referenziato nei commenti/migrazioni. Questa fase lo implementa davvero.
 
-**Schema**:
+**Architettura rivista — niente `VIEW` pubblica**: una `VIEW` interrogabile via PostgREST che
+deve *al tempo stesso* essere pubblica e portare contenuto che richiede moderazione a runtime
+è una contraddizione architetturale, non solo un dettaglio di implementazione — o l'oggetto è
+raggiungibile direttamente (e allora la moderazione in lettura non ha un punto in cui
+agganciarsi) o non lo è. Si scarta quindi la `VIEW` pubblica anche solo per i conteggi, e si
+adotta lo **stesso identico pattern già usato ovunque nel repo per le letture pubbliche**
+(`sharePublic.ts`/`liveSharePublic.ts` della Fase 1): nessun oggetto pubblico in Postgres,
+un'unica API server-side col client service-role fa sia l'aggregazione dei conteggi sia la
+moderazione delle note, ogni volta che viene letta — non solo alla scrittura.
+
+**Schema** (solo la tabella privata, nessuna vista):
 ```sql
 CREATE TABLE trail_completions (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -172,18 +222,9 @@ CREATE INDEX idx_trail_completions_user ON trail_completions (user_id);
 ALTER TABLE trail_completions ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "trail_completions_owner" ON trail_completions FOR ALL
   USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
-
--- Consumo pubblico SOLO aggregato — mai righe individuali (esporrebbero identità/comportamento):
-CREATE VIEW trail_completions_public AS
-SELECT osm_relation_id,
-       COUNT(*) FILTER (WHERE completed_at > NOW() - INTERVAL '30 days') AS completions_30d,
-       COUNT(*) AS completions_total
-FROM trail_completions WHERE osm_relation_id IS NOT NULL
-GROUP BY osm_relation_id;
+-- Nessuna policy "public read": la lettura pubblica non passa mai da PostgREST/RLS su questa
+-- tabella, solo dal client service-role dentro la route GET qui sotto.
 ```
-Le note testuali restano lette solo tramite una funzione server-side dedicata (come
-`weatherSignals.ts`), mai tramite PostgREST diretto — permette di applicare moderazione anche
-in lettura, non solo alla scrittura.
 
 **File nuovi**:
 - `supabase/migrations/add_trail_completions.sql`
@@ -193,9 +234,16 @@ in lettura, non solo alla scrittura.
   `moderateNote(text): {ok, reason?}`.
 - `app/api/trails/completions/route.ts` — `POST {activityId, note?}` (autenticato, verifica
   ownership, risolve `osm_relation_id` riusando `findTrailForPolyline` già esistente in
-  `lib/trailConditions/matchTrail.ts`), `GET ?osm_relation_id=` pubblico.
-- `lib/si/signals/communitySignals.ts` — implementazione reale, alimentata sia da
-  `trail_difficulty_markers` (già esistente) sia da `trail_completions_public` (nuovo).
+  `lib/trailConditions/matchTrail.ts`, applica `moderateNote` prima di scrivere). `GET
+  ?osm_relation_id=` **pubblico, col client service-role**: esegue direttamente la query di
+  aggregazione (`COUNT(*) FILTER (WHERE completed_at > now() - interval '30 days')`) e ripassa
+  ogni nota restituita da `moderateNote` una seconda volta in lettura — stessa funzione di
+  scrittura, difesa in profondità contro contenuto scritto prima di un aggiornamento della
+  lista di parole bandite.
+- `lib/si/signals/communitySignals.ts` — implementazione reale (oggi solo referenziata nei
+  commenti/migrazioni, mai scritta), alimentata sia da `trail_difficulty_markers` (già
+  esistente) sia dai conteggi/note letti tramite la route sopra — mai da un accesso diretto
+  alla tabella.
 - `app/api/trails/conditions/route.ts` — **esteso**, non riscritto: aggiunge una sezione
   `community` alla risposta JSON esistente, mantenendo l'invariante "mai scrive" della route
   attuale.
@@ -212,29 +260,44 @@ in lettura, non solo alla scrittura.
 
 ### Fase 5 — Target iOS (Capacitor) — non ancora fatto
 
-Nessuna cartella `ios/` esiste oggi. Due sotto-fasi distinte, non un blocco unico:
+Nessuna cartella `ios/` esiste oggi. **Il traguardo "supporto iOS" non è raggiunto quando
+esiste `ios/`** — il repo ha già una separazione pulita tra sorgente di posizione e motore
+(`lib/native/locationSource.ts` astrae `LocationProvider` come interfaccia comune a
+web/nativo), e il vero criterio di completamento è quando quell'interfaccia riceve da iOS
+dati equivalenti a quelli che riceve oggi da Android — non prima. Tre sotto-fasi distinte,
+non un blocco unico:
 
-1. **Scaffold Capacitor** (`npx cap add ios`, comando manuale non eseguibile da questa
-   sessione) — equivalente Xcode project di `android/`. `capacitor.config.ts` probabilmente
-   non richiede modifiche strutturali (`server.url` è già cross-platform), da verificare se
-   serve un blocco `ios: { ... }` analogo a quello Android esistente.
-2. **Riscrittura Swift del plugin `NativeLocation`** (oggi solo Kotlin in
-   `android/app/src/main/java/com/dtrek/navigator/nativelocation/`) — il vero lavoro nativo:
-   `CLLocationManager` al posto di `FusedLocationProviderClient`, background location
-   capability + `Info.plist` (`NSLocationAlwaysAndWhenInUseUsageDescription`,
-   `UIBackgroundModes: [location]`) al posto del foreground service Android. `lib/native/
-   nativeLocationPlugin.ts` (contratto TS) dovrebbe restare invariato se l'implementazione
-   Swift rispetta la stessa interfaccia (`start`/`stop`/`setMode`/`getPendingFixes`).
+1. **Fase 5A — Scaffold Capacitor + progetto iOS** (`npx cap add ios`, comando manuale non
+   eseguibile da questa sessione) — equivalente Xcode project di `android/`.
+   `capacitor.config.ts` probabilmente non richiede modifiche strutturali (`server.url` è già
+   cross-platform), da verificare se serve un blocco `ios: { ... }` analogo a quello Android
+   esistente. **Completa solo l'installabilità della shell, non la navigazione reale** — a
+   questo punto l'app gira in WebView iOS ma senza posizione in background.
+2. **Fase 5B — Implementazione iOS del provider nativo di localizzazione** — riscrittura
+   Swift del plugin `NativeLocation` (oggi solo Kotlin in
+   `android/app/src/main/java/com/dtrek/navigator/nativelocation/`): `CLLocationManager` al
+   posto di `FusedLocationProviderClient`, background location capability + `Info.plist`
+   (`NSLocationAlwaysAndWhenInUseUsageDescription`, `UIBackgroundModes: [location]`) al posto
+   del foreground service Android. `lib/native/nativeLocationPlugin.ts` (contratto TS) dovrebbe
+   restare invariato se l'implementazione Swift rispetta la stessa interfaccia
+   (`start`/`stop`/`setMode`/`getPendingFixes`) — **questo è il criterio di completamento reale
+   della Fase 5**: `locationSource.ts` che funziona in modo equivalente su entrambe le
+   piattaforme, non solo un'app che si apre su iPhone.
+3. **Fase 5C — Background location, permessi, comportamento batteria, test su dispositivo
+   reale** — verifica pratica (non assumibile da codice) che il Foreground/background
+   location su iOS si comporti in modo utile quanto il Foreground Service Android con schermo
+   spento per ore; disclosure App Review per `NSLocationAlwaysAndWhenInUseUsageDescription`
+   (equivalente iOS della schermata di disclosure Android già segnalata come mancante nella
+   roadmap esistente); verifica concreta se la Battery Status API
+   (`lib/navigation/battery.ts`) si comporta allo stesso modo in WKWebView iOS — storicamente
+   meno supportata che su Chrome/Android, da non dare per scontata.
 
 **Decisioni aperte**:
-- Ordine di lavoro: lo scaffold è rapido, la riscrittura Swift è il costo reale — vanno
-  pianificati come due milestone separate.
 - Pubblicazione su App Store Connect richiede un account developer Apple a pagamento, distinto
   da Play Console — passo manuale, come già annotato per Android in
   `docs/guida-pubblicazione-dtrek-navigator.md`.
-- Se la Battery Status API (`lib/navigation/battery.ts`) si comporta allo stesso modo in WKWebView
-  iOS — storicamente meno supportata di Chrome/Android, da verificare concretamente, non
-  assumere parità.
+- Se 5A/5B possono procedere in parallelo con capacità diverse (uno scaffolding, uno Swift) o
+  vanno strettamente sequenziali — 5C dipende comunque da entrambe.
 
 ### Fase 6 — Qualità voce: coda invece di cancel — non ancora fatto
 
@@ -296,13 +359,30 @@ Orizzonti 1/2 saranno chiusi, non lavoro pronto per essere costruito subito.
 
 ### Fase 8 — Trail Confidence live overlay — non ancora fatto (vision)
 
-Combina `lib/trailScore.ts` (già esistente) + connettività del trail graph persistito
-(`trailGraphStore.ts`) + il nuovo segnale community (Fase 4) in un punteggio 0-1 per
-segmento/nodo, mostrato come layer colorato su `NavigationMap.tsx`/`NavigationMapLibre.tsx`
-(stesso spirito del layer "sentieri vicini" già esistente). Nuovo modulo puro
-`lib/navigation/trailConfidence.ts`. Decisione aperta: se il blend gira offline (solo dati già
-nel pacchetto) o richiede online per il pezzo community — probabilmente degradabile come il
-resto del pacchetto offline.
+Probabilmente la feature più distintiva dell'intero piano — merita una definizione più
+precisa di "trailScore + connettività + community". Non è la somma di segnali alla pari, è
+uno **stato dinamico di affidabilità del percorso**, che combina segnali di natura molto
+diversa tra loro:
+- qualità geometrica del tracciato (densità di vertici, coerenza della polyline);
+- qualità/copertura della rete durante la navigazione (rilevante per quanto ci si può fidare
+  degli aggiornamenti live);
+- affidabilità del dato OSM sottostante (tag `highway`, completezza del grafo in quell'area);
+- Trail Score già calcolato in pianificazione (`lib/trailScore.ts`);
+- segnale community (Fase 4) — **attenuato, non sommato alla pari**: è per natura rumoroso e
+  volatile nel tempo (una nota di 6 mesi fa pesa meno di una di ieri, un solo completamento
+  recente pesa meno di dieci), quindi entra nel blend con un peso ridotto e un decadimento
+  temporale esplicito, non come un quinto segnale equivalente agli altri quattro;
+- stato recente del tratto (segnali meteo/suolo già calcolati da `lib/trailConditions/`);
+- coerenza GPS effettivamente osservata durante la navigazione stessa (quanto la posizione
+  reale si è discostata/riallineata rispetto al previsto lungo quel tratto specifico).
+
+Nuovo modulo puro `lib/navigation/trailConfidence.ts` — combina questi segnali (formula di
+blend esatta da definire quando la fase viene specificata in dettaglio, non ora) in un
+punteggio 0-1 per segmento/nodo, mostrato come layer colorato su
+`NavigationMap.tsx`/`NavigationMapLibre.tsx` (stesso spirito del layer "sentieri vicini" già
+esistente). Decisione aperta: se il blend gira offline (solo dati già nel pacchetto) o
+richiede online per il pezzo community — probabilmente degradabile come il resto del
+pacchetto offline.
 
 ### Fase 9 — Modalità gruppo — non ancora fatto (vision)
 
@@ -322,10 +402,21 @@ vicino (già caricato come `NavPoi[]` in `ActiveNavigationView.tsx`) e distanza 
 `RouteProgress`) invece della guida statica. Gating riusa `resolveApiKeyAndSettings.ts`/
 `lib/dtrekEntitlement.ts` as-is (basta un nuovo `AiFeature` in `lib/claudeModels.ts`). Loop
 push-to-talk: STT già esistente (`lib/useSpeechDictation.ts`, oggi usato per note di campo) →
-nuovo endpoint → TTS in coda (Fase 6). **Decisione aperta**: il riconoscimento vocale via Web
-Speech API richiede probabilmente connessione dati — questa feature è verosimilmente
-solo-online, da dichiarare esplicitamente vista la natura "in cammino, spesso senza rete" del
-contesto.
+nuovo endpoint → TTS in coda (Fase 6).
+
+**Vincolo di sicurezza esplicito, non negoziabile**: Giulia non entra nel loop di navigazione
+safety-critical. Può descrivere, contestualizzare, avvisare in linguaggio naturale ("tra circa
+800 metri il sentiero sembra peggiorare, secondo le segnalazioni recenti") — non può mai
+emettere né influenzare un'istruzione di navigazione ("gira qui", "sei fuori percorso"), che
+resta un'uscita esclusiva di `NavigationEngine`/`stateMachine.ts`. In pratica: la route
+`app/api/guide/live-qa/route.ts` è **read-only** rispetto allo stato di navigazione — riceve
+contesto (posizione, POI vicino, distanza residua) ma non ha alcun canale di scrittura verso
+`NavigationEngine`, `offRouteEngine.ts` o `escapeEngine.ts`. Il motore decide, Giulia
+interpreta e assiste — mai il contrario.
+
+**Decisione aperta**: il riconoscimento vocale via Web Speech API richiede probabilmente
+connessione dati — questa feature è verosimilmente solo-online, da dichiarare esplicitamente
+vista la natura "in cammino, spesso senza rete" del contesto.
 
 ### Fase 11 — Weather look-ahead — non ancora fatto (vision)
 
@@ -336,16 +427,51 @@ il bucket orario corrispondente, avvisando se le condizioni attese peggiorano ri
 Decisione aperta: ogni quanto ri-triggerare la proiezione durante la navigazione (non ad ogni
 fix) per non consumare quota Open-Meteo inutilmente.
 
+## Validazione trasversale — Field Testing
+
+Non è una dodicesima fase, è il filo rosso che accompagna tutte le 11: una suite automatica
+(Fase 3) dimostra che il codice non è regredito, non che il comportamento sia quello giusto
+quando qualcuno è davvero nei guai sul terreno. Il report comparativo che ha originato questa
+roadmap segnala già come rischio concreto che le soglie di sicurezza (off-route, Escape
+Engine, decisore batteria) restino "stime ragionevoli, mai verificate" — questa sezione rende
+esplicito come si chiude quel rischio, in tre livelli crescenti, per ogni fase che tocca
+posizionamento/sicurezza (in particolare Fasi 1, 2, 3, 5, 7):
+
+1. **Unit/simulazione** — asserzioni automatiche (Fase 3) su moduli puri, scenari sintetici
+   già pronti in `lib/navigation/simulation/presetScenarios.ts` (GPS rumoroso, perdita GPS,
+   spike, deviazione, incertezza).
+2. **Replay GPS** — tracce reali già registrate (`lib/navigation/simulation/gpxReplay.ts`,
+   già esistente) rigiocate contro scenari non ancora coperti dai preset: sentiero parallelo
+   ravvicinato, tornante stretto, attraversamento di un altro sentiero, tratto senza
+   segnatura, posizione grossolanamente errata (accuracy pessima ma non abbastanza da essere
+   scartata). Non richiede uscire sul campo, ma richiede tracce/scenari che oggi non esistono
+   ancora nei preset.
+3. **Test outdoor reale** — l'unico livello che nessun ambiente di sviluppo può sostituire
+   (già annotato come mancante nella roadmap esistente per la Fase 8 originale): copertura GPS
+   scarsa nel bosco, schermo spento per ore, batteria su un'intera giornata, e — specifico di
+   questa nuova roadmap — verifica pratica che il link di condivisione live (Fase 1) e il
+   pulsante SOS (Fase 2) restino utilizzabili con connessione dati scarsa/assente, non solo in
+   condizioni di laboratorio con rete perfetta.
+
+Ogni fase di Orizzonte 1/2 che tocca posizionamento o sicurezza dovrebbe attraversare tutti e
+tre i livelli prima di essere considerata "fatta", non solo il primo.
+
 ## Decisioni aperte trasversali (consolidate)
 
-- Live sharing: polling (10-15s) vs Realtime pubblico; scadenza del link a sessione conclusa;
-  frequenza di scrittura posizione.
-- SOS: deep-link vs chiamata diretta; numero fisso 112 vs internazionalizzato.
+- Live sharing: polling (10-15s) vs Realtime pubblico; durata esatta della finestra di
+  scadenza (12h proposte come default, non ancora validata sull'uso reale); frequenza di
+  scrittura posizione.
+- SOS: deep-link vs chiamata diretta; numero fisso 112 vs internazionalizzato; se includere il
+  link di condivisione live nel testo SMS quando attiva.
 - Community: granularità del dedup completamenti; fallback senza `osm_relation_id`; valore
   esatto del rate-limit.
-- iOS: sequenziamento scaffold vs riscrittura Swift; parità Battery Status API.
-- Voce: classificazione critical/normal per tipo di evento esistente.
+- iOS: se 5A/5B possono procedere in parallelo; parità Battery Status API da verificare, non
+  assumere.
+- Voce: classificazione critical/normal per tipo di evento esistente; se introdurre varietà di
+  formulazione oltre al semplice accodamento.
 - Escape Engine: cache DTM cross-utente vs per-download; densità di campionamento nodi.
+- Trail Confidence: formula esatta di blend/attenuazione temporale del segnale community — da
+  definire quando la fase viene specificata in dettaglio.
 - Modalità gruppo: link broadcast vs membership autenticata — la più grossa, va chiusa prima
   di scrivere schema/RLS.
 - Giulia in cammino: solo-online da dichiarare esplicitamente.
@@ -355,16 +481,24 @@ durante l'implementazione della fase specifica, non prerequisiti.
 
 ## Ordine consigliato per le prossime PR
 
-1. Fase 1 — Live location sharing via link pubblico (il gap di sicurezza più grave, il più
-   economico da costruire vista l'infrastruttura di token già esistente).
-2. Fase 2 — SOS/emergenza (piccola, indipendente, alto valore percepito a costo quasi nullo).
-3. Fase 3 — Bootstrap suite di test automatici (protegge tutto il lavoro già fatto e quello
-   futuro sulle soglie di sicurezza — va chiusa presto, non alla fine).
+1. Fase 1 — Live location sharing via link pubblico, scadenza inclusa (il gap di sicurezza più
+   grave, il più economico da costruire vista l'infrastruttura di token già esistente).
+2. Fase 2 — SOS/emergenza a 4 livelli, UI fail-safe (piccola, indipendente, alto valore
+   percepito a costo quasi nullo).
+3. Fase 3 — Prima infrastruttura di test automatizzato (protegge tutto il lavoro già fatto e
+   quello futuro sulle soglie di sicurezza — va chiusa presto, non alla fine; livello 1 di
+   Field Testing).
 4. Fase 6 — Qualità voce (piccola, indipendente, migliora subito l'esperienza quotidiana).
 5. Fase 7 — Escape Engine elevation-aware (chiude un limite già documentato e atteso).
-6. Fase 4 — Community layer leggero (il pezzo di maggior investimento di prodotto
-   dell'Orizzonte 2, richiede decisioni di moderazione/dedup prima di partire).
-7. Fase 5 — Target iOS (il più costoso in tempo/lavoro nativo, sequenziato per ultimo
-   nell'Orizzonte 2 ma non bloccato da nulla — può partire in parallelo se c'è capacità).
+6. Fase 4 — Community layer leggero, architettura senza view pubblica (il pezzo di maggior
+   investimento di prodotto dell'Orizzonte 2, richiede decisioni di moderazione/dedup prima di
+   partire).
+7. Fase 5A/5B — Target iOS, scaffold + provider nativo (il più costoso in tempo/lavoro nativo;
+   5C — collaudo reale — segue solo a valle, non è bloccante per iniziare 5A/5B in parallelo se
+   c'è capacità).
 8. Fasi 8-11 (Orizzonte 3) — da specificare meglio una volta chiusi gli Orizzonti 1/2, non da
    iniziare prima.
+
+In parallelo a ogni fase di Orizzonte 1/2 che tocca posizionamento o sicurezza: applicare i
+tre livelli della sezione "Validazione trasversale — Field Testing" sopra, non solo scrivere
+la fase e passare alla successiva.
