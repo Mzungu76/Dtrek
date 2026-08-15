@@ -21,7 +21,7 @@ interface Props {
  *
  * Confine Navigator/Dtrek (docs/navigator-dtrek-boundary.md): due icone distinte e complementari,
  * non una che "diventa" l'altra — Navigator non naviga mai la propria WebView dentro una pagina
- * Dtrek, prima o dopo l'attivazione. "Passa a Dtrek" apre sempre il browser di sistema
+ * Dtrek, prima o dopo l'attivazione. "Upgrade a Dtrek" apre sempre il browser di sistema
  * (`openMainApp`), dove chi non l'ha ancora fatto può aggiungere la PWA di Dtrek alla schermata
  * Home (prompt già gestito da web, components/InstallPWA.tsx) — Navigator si limita a segnare
  * che l'account ha compiuto quel passaggio (user_settings.dtrek_activated_at), da cui dipendono
@@ -100,7 +100,7 @@ export default function NavigatorMenu({ open, onClose }: Props) {
         ) : confirmingActivation ? (
           <div className="rounded-2xl bg-amber-50 border border-amber-200 p-4 space-y-3">
             <p className="text-sm text-stone-700">
-              Passerai a Dtrek nel browser, dove potrai aggiungerlo alla schermata Home se vuoi. Non si torna indietro.
+              Farai l&apos;upgrade a Dtrek nel browser, dove potrai aggiungerlo alla schermata Home se vuoi. Non si torna indietro.
             </p>
             <div className="flex gap-2">
               <button
@@ -127,7 +127,7 @@ export default function NavigatorMenu({ open, onClose }: Props) {
             <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
               <ExternalLink className="w-4.5 h-4.5" />
             </div>
-            <span className="font-semibold text-sm text-stone-800">Passa a Dtrek — sblocca guide, diario, statistiche</span>
+            <span className="font-semibold text-sm text-stone-800">Upgrade a Dtrek — sblocca guide, diario, statistiche</span>
           </button>
         )}
 
