@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Trash2 } from 'lucide-react'
 import GpxUploader from '@/components/upload/GpxUploader'
-import { openMainApp } from '@/lib/native/mainAppLinks'
+import { navigatorHomePath, openMainAppOrNavigate } from '@/lib/native/mainAppLinks'
 import { getNavigatorSlotStatus, type NavigatorSlotStatus } from '@/lib/navigatorSlot'
 import { deletePlanned } from '@/lib/plannedStore'
 import { deleteActivity } from '@/lib/blobStore'
@@ -42,7 +42,7 @@ export default function ImportaPage() {
   return (
     <div className="min-h-screen bg-stone-50 flex flex-col">
       <div className="bg-gradient-to-br from-sky-800 to-sky-900 px-5 pt-[calc(env(safe-area-inset-top)+20px)] pb-5 flex items-center gap-3">
-        <button onClick={() => router.push('/navigatore')} className="w-9 h-9 flex items-center justify-center rounded-xl bg-white/15 text-white hover:bg-white/25">
+        <button onClick={() => router.push(navigatorHomePath('/upload?tab=gpx'))} className="w-9 h-9 flex items-center justify-center rounded-xl bg-white/15 text-white hover:bg-white/25">
           <ArrowLeft className="w-4 h-4" />
         </button>
         <h1 className="font-display text-lg font-bold text-white">Importa un percorso</h1>
@@ -66,7 +66,7 @@ export default function ImportaPage() {
               </button>
             ))}
             <button
-              onClick={() => openMainApp('/guida')}
+              onClick={() => openMainAppOrNavigate(router, '/guida')}
               className="w-full py-2.5 rounded-xl bg-sky-600 text-white font-semibold text-sm hover:bg-sky-700"
             >
               Apri DTrek per pianificare

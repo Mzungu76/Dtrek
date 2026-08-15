@@ -7,7 +7,7 @@ import MapRouteThumb from '@/components/MapRouteThumb'
 import OfflinePackageDownloader from '@/components/navigation/OfflinePackageDownloader'
 import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { formatDuration } from '@/lib/tcxParser'
-import { openMainApp } from '@/lib/native/mainAppLinks'
+import { navigatorHomePath, openMainAppOrNavigate } from '@/lib/native/mainAppLinks'
 import { Loader2, Mountain, ExternalLink, Upload } from 'lucide-react'
 
 /**
@@ -32,7 +32,7 @@ export default function PercorsiPage() {
   return (
     <div className="min-h-screen bg-stone-50 flex flex-col">
       <div className="bg-gradient-to-br from-sky-800 to-sky-900 px-5 pt-[calc(env(safe-area-inset-top)+20px)] pb-6 flex items-center gap-3">
-        <button onClick={() => router.push('/navigatore')} className="w-9 h-9 flex items-center justify-center rounded-xl bg-white/15 text-white hover:bg-white/25">
+        <button onClick={() => router.push(navigatorHomePath('/guida'))} className="w-9 h-9 flex items-center justify-center rounded-xl bg-white/15 text-white hover:bg-white/25">
           <ArrowLeft className="w-4 h-4" />
         </button>
         <div>
@@ -63,7 +63,7 @@ export default function PercorsiPage() {
                 <Upload className="w-4 h-4" /> Importa un percorso
               </button>
               <button
-                onClick={() => openMainApp('/guida')}
+                onClick={() => openMainAppOrNavigate(router, '/guida')}
                 className="flex items-center justify-center gap-2 px-6 py-3 bg-white border border-stone-200 hover:border-stone-300 text-stone-600 rounded-xl font-medium transition-colors"
               >
                 <ExternalLink className="w-4 h-4" /> Apri DTrek per pianificare

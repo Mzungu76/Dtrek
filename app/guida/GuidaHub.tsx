@@ -969,7 +969,7 @@ export default function GuidaHub({ id }: { id?: string }) {
     icon: Navigation,
     // Prova prima l'app nativa Navigator (se il device può averla), altrimenti ricade sulla
     // stessa pagina di navigazione via web che serviva già da sola (lib/navigatorHandoff.ts).
-    onClick: () => tryOpenNavigatorApp(() => router.push(`/guida/${encodeURIComponent(routeItem.id)}/naviga`)),
+    onClick: () => tryOpenNavigatorApp(router, `/guida/${encodeURIComponent(routeItem.id)}/naviga`),
     variant: 'terra',
   })
 

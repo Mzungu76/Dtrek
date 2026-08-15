@@ -71,3 +71,26 @@ export async function openMainApp(path = '/'): Promise<void> {
   }
   await Browser.open({ url })
 }
+
+/**
+ * Where "back"/"cancel"/"nothing to show" should land on one of Navigator's own leaf screens
+ * (app/navigatore/traccia, /importa, /percorsi). Those routes are public — reachable both inside
+ * Navigator's native shell AND, since lib/navigatorHandoff.ts hands off there as a web fallback,
+ * from a plain Dtrek browser tab. Only the native case means "back" should return to Navigator's
+ * own home (`/navigatore`); on web that would strand the user on a screen that reads as a
+ * different app, so it falls back to wherever the Dtrek entry point for that flow actually is.
+ */
+export function navigatorHomePath(webFallback: string): string {
+  return Capacitor.isNativePlatform() ? '/navigatore' : webFallback
+}
+
+/**
+ * openMainApp() hops out to an external browser tab — the right move from inside Navigator's
+ * native shell, pointless (and confusing: it opens a redundant second tab) when the code calling
+ * it is already running in that same Dtrek browser tab. Same isNativePlatform() split as
+ * navigatorHomePath() above, just for an action instead of a destination.
+ */
+export function openMainAppOrNavigate(router: { push: (path: string) => void }, path = '/'): void {
+  if (Capacitor.isNativePlatform()) { openMainApp(path); return }
+  router.push(path)
+}

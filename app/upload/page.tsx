@@ -33,7 +33,7 @@ function UploadPageInner() {
   // "Naviga adesso" prova prima l'app nativa (se il device può averla), altrimenti ricade sul
   // navigatore libero via web già esistente (app/navigatore/traccia) — vedi lib/navigatorHandoff.ts.
   const handleStartUnplannedNavigation = () => {
-    tryOpenNavigatorApp(() => router.push('/navigatore/traccia'))
+    tryOpenNavigatorApp(router, '/navigatore/traccia')
   }
 
   return (

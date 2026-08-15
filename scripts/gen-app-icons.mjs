@@ -49,6 +49,12 @@ for (const { dir, legacy, foreground } of DENSITIES) {
 
 // ── Main DTrek PWA ───────────────────────────────────────────────────────────
 const PUBLIC = path.join(ROOT, 'public')
+
+// Web-servable copy of Navigator's own icon (same 192px/background spec as its Android launcher
+// icon above) — components/SplashScreen.tsx uses this for Navigator's in-app splash, since that
+// screen is served over the same Next.js deployment as the main PWA's icon-192.png and needs its
+// own asset to show Navigator's branding instead of DTrek's.
+await writeIcon(192, NAVIGATOR_GREEN, path.join(PUBLIC, 'icon-navigator-192.png'))
 await writeIcon(512, DTREK_GREEN, path.join(PUBLIC, 'icon-512-maskable.png'))
 await writeIcon(512, DTREK_GREEN, path.join(PUBLIC, 'icon-512.png'))
 await writeIcon(192, DTREK_GREEN, path.join(PUBLIC, 'icon-192.png'))
