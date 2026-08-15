@@ -571,7 +571,12 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
     // prossimo tick — stesso principio della creazione sessione poco sopra.
     const liveShareInterval = setInterval(() => {
       if (!liveSharingEnabledRef.current || !remoteSessionId.current) return
-      if (!timerRunningRef.current || !positionRef.current) return
+      // Deliberatamente NON legato a timerRunningRef: quel flag è solo il cronometro "tempo in
+      // movimento" (avviato con "Avvia" in NavBottomSheet), un controllo separato dal motore GPS
+      // — il fix di posizione arriva comunque, in pausa o no. Condizionare la condivisione live a
+      // quel bottone avrebbe lasciato la posizione mai pubblicata finché l'utente non lo preme
+      // esplicitamente, un requisito che chi attiva "Posizione live" non ha motivo di aspettarsi.
+      if (!positionRef.current) return
       publishLivePosition(remoteSessionId.current, {
         lat: positionRef.current.lat, lon: positionRef.current.lon,
         ts: Date.now(), accuracyM: accuracyMRef.current,
