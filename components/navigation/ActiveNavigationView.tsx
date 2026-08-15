@@ -1,7 +1,9 @@
 'use client'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Capacitor } from '@capacitor/core'
 import { AlertTriangle, BatteryWarning, ArrowUp, Download, CheckCircle2 } from 'lucide-react'
+import { useEntitlement } from '@/lib/useEntitlement'
 import Sheet from '@/components/ui/Sheet'
 import type { PlannedHike } from '@/lib/plannedStore'
 import { updatePlannedMeta } from '@/lib/plannedStore'
@@ -77,6 +79,15 @@ const FIX_STALE_MS = 20000 // if no fix arrives for this long, "moving time" sto
 
 export default function ActiveNavigationView({ hike, locationProviderFactory, simulationLabel }: Props) {
   const router = useRouter()
+  // Questo componente serve sia Dtrek (web) sia la navigazione GPS nativa di Navigator, stessa
+  // route condivisa /guida/[id]/naviga (lib/navigatorAllowedPaths.ts). A fine escursione, senza
+  // questo controllo, andrebbe sempre verso /guida/{id} o /resoconto/{id} — schermate Dtrek non
+  // ammesse dentro Navigator prima dell'attivazione: NavigatorRouteGuard.tsx le blocca comunque,
+  // ma solo DOPO che sono state renderizzate per un frame (il lampo "si apre e si richiude subito"
+  // segnalato dall'utente). Meglio scegliere la destinazione giusta qui, alla fonte, che affidarsi
+  // al guardiano per correggere una navigazione che non doveva partire.
+  const { dtrekActivated } = useEntitlement()
+  const isNativeUnactivated = Capacitor.isNativePlatform() && !dtrekActivated
   const engineRef = useRef<NavigationEngine | null>(null)
   const sessionRef = useRef<NavigationSessionSnapshot | null>(null)
   const remoteSessionId = useRef<string | null>(null)
@@ -626,7 +637,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
 
   const requestEnd = () => setShowConfirmEnd(true)
 
-  const goToPlannedHike = () => router.push(`/guida/${hike.id}`)
+  const goToPlannedHike = () => router.push(isNativeUnactivated ? '/navigatore' : `/guida/${hike.id}`)
 
   const confirmEnd = async () => {
     endConfirmedRef.current = true
@@ -715,7 +726,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       setSaveOfflineNotice(true)
       await new Promise((r) => setTimeout(r, 1800))
     }
-    router.push(`/resoconto/${encodeURIComponent(saved.id)}`)
+    router.push(isNativeUnactivated ? '/navigatore' : `/resoconto/${encodeURIComponent(saved.id)}`)
   }
 
   const handleDiscardRecordedActivity = () => {
