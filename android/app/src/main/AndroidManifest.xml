@@ -22,6 +22,20 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- Schema personalizzato usato da Dtrek (web) per rilevare/aprire Navigator se
+                 installato (lib/navigatorHandoff.ts) — un tentativo di redirect a
+                 dtreknavigator://open che, se nessuna app lo gestisce, il browser lascia
+                 semplicemente fallire in silenzio (nessuna finestra di errore su Android),
+                 permettendo il fallback al navigatore via web. Sempre riapre semplicemente la
+                 Home di Navigator (server.url in capacitor.config.ts) — non instrada verso una
+                 schermata specifica, vedi commento in lib/navigatorHandoff.ts. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="dtreknavigator" />
+            </intent-filter>
+
         </activity>
 
         <provider
