@@ -80,14 +80,24 @@ dalla scadenza.
 - `components/navigation/LiveShareToggle.tsx` — dentro `ActiveNavigationView.tsx`/
   `NavBottomSheet.tsx`: attiva/disattiva + copia link.
 
+**Due frequenze distinte, non un unico "polling" generico** — da tenere separate in ogni
+riferimento successivo nel documento:
+- **Scrittura (GPS → server)**: ~15-20s, lato client in `liveLocationPublish.ts`.
+- **Lettura (viewer → server)**: ~10-15s, lato pagina pubblica in `app/s/live/[token]`.
+Entrambe pensate come **configurabili** (costanti, non valori hard-coded sparsi), e nessuna
+delle due promette una precisione temporale superiore al fix GPS realmente disponibile in
+quel momento — un viewer che "legge" ogni 10s non vede una posizione più fresca di quella che
+il telefono del camminatore ha effettivamente scritto l'ultima volta, che dipende a sua volta
+dalla modalità batteria (`locationModeDecider.ts`) attiva in quel momento.
+
 **Decisioni aperte** (default v1 proposto, non bloccante):
-- **Polling vs Realtime pubblico**: v1 = polling. Supabase Realtime con RLS-gated
-  `postgres_changes` non è adatto a un viewer anonimo senza `auth.uid()` — un canale
-  "pubblico" richiederebbe una policy `SELECT USING (true)` che esporrebbe l'intera riga a
-  chiunque si sottoscriva, non solo a chi ha il token. Da rivalutare se la latenza del polling
-  risulta inadeguata in pratica.
-- **Frequenza di scrittura**: 15-20s è un compromesso esplicito su "quanto è live il live", da
-  confermare con l'uso reale.
+- **Polling vs Realtime pubblico**: v1 = polling per entrambe le direzioni. Supabase Realtime
+  con RLS-gated `postgres_changes` non è adatto a un viewer anonimo senza `auth.uid()` — un
+  canale "pubblico" richiederebbe una policy `SELECT USING (true)` che esporrebbe l'intera riga
+  a chiunque si sottoscriva, non solo a chi ha il token. Da rivalutare se la latenza del
+  polling risulta inadeguata in pratica.
+- **Valori esatti delle due frequenze** (15-20s scrittura, 10-15s lettura) sono stime di
+  partenza, da confermare con l'uso reale — non calibrate su un caso concreto.
 - Verificare che il testo UI del toggle non assomigli a un upsell — vincolo esistente di
   `docs/navigator-dtrek-boundary.md` (Navigator non vende nulla al suo interno).
 
@@ -228,18 +238,21 @@ CREATE POLICY "trail_completions_owner" ON trail_completions FOR ALL
 
 **File nuovi**:
 - `supabase/migrations/add_trail_completions.sql`
-- `lib/community/moderation.ts` — v1 volutamente minimale: rate-limit per `user_id` (Upstash,
-  già una dipendenza del progetto), cap di lunghezza (280 caratteri, client+server), lista
-  statica di parole bandite (italiano, case-insensitive) — niente ML. Funzione pura
-  `moderateNote(text): {ok, reason?}`.
+- `lib/community/moderation.ts` — **filtraggio deterministico, non moderazione**: v1
+  volutamente minimale — rate-limit per `user_id` (Upstash, già una dipendenza del progetto),
+  cap di lunghezza (280 caratteri, client+server), lista statica di parole bandite (italiano,
+  case-insensitive). Nessun intervento umano, nessun ML, nessuna valutazione di contesto o
+  intento: `moderateNote(text): {ok, reason?}` è un filtro sì/no su corrispondenza di stringa,
+  non una moderazione nel senso pieno del termine. Va trattato e comunicato come tale — un
+  primo argine contro lo spam/abuso più ovvio, non una garanzia di contenuto appropriato.
 - `app/api/trails/completions/route.ts` — `POST {activityId, note?}` (autenticato, verifica
   ownership, risolve `osm_relation_id` riusando `findTrailForPolyline` già esistente in
   `lib/trailConditions/matchTrail.ts`, applica `moderateNote` prima di scrivere). `GET
   ?osm_relation_id=` **pubblico, col client service-role**: esegue direttamente la query di
   aggregazione (`COUNT(*) FILTER (WHERE completed_at > now() - interval '30 days')`) e ripassa
-  ogni nota restituita da `moderateNote` una seconda volta in lettura — stessa funzione di
-  scrittura, difesa in profondità contro contenuto scritto prima di un aggiornamento della
-  lista di parole bandite.
+  ogni nota restituita dallo stesso filtro deterministico una seconda volta in lettura — difesa
+  in profondità contro contenuto scritto prima di un aggiornamento della lista di parole
+  bandite, non un secondo livello di moderazione più sofisticato del primo.
 - `lib/si/signals/communitySignals.ts` — implementazione reale (oggi solo referenziata nei
   commenti/migrazioni, mai scritta), alimentata sia da `trail_difficulty_markers` (già
   esistente) sia dai conteggi/note letti tramite la route sopra — mai da un accesso diretto
@@ -458,9 +471,9 @@ tre i livelli prima di essere considerata "fatta", non solo il primo.
 
 ## Decisioni aperte trasversali (consolidate)
 
-- Live sharing: polling (10-15s) vs Realtime pubblico; durata esatta della finestra di
-  scadenza (12h proposte come default, non ancora validata sull'uso reale); frequenza di
-  scrittura posizione.
+- Live sharing: polling (scrittura GPS ~15-20s, lettura viewer ~10-15s — due frequenze
+  distinte e configurabili, non un unico numero) vs Realtime pubblico; durata esatta della
+  finestra di scadenza (12h proposte come default, non ancora validata sull'uso reale).
 - SOS: deep-link vs chiamata diretta; numero fisso 112 vs internazionalizzato; se includere il
   link di condivisione live nel testo SMS quando attiva.
 - Community: granularità del dedup completamenti; fallback senza `osm_relation_id`; valore
