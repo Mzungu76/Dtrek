@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Capacitor } from '@capacitor/core'
 import FreeTrackMap from '@/components/navigation/FreeTrackMap'
 import FreeTrackSaveDialog from '@/components/navigation/FreeTrackSaveDialog'
 import { FreeTrackSession, type FreeTrackStats } from '@/lib/navigation/freeTrackSession'
@@ -37,6 +38,17 @@ function formatClock(seconds: number): string {
  */
 export default function TracciaPage() {
   const router = useRouter()
+  // This screen is reachable both from inside Navigator's native shell and, since the same
+  // route is public, from a plain Dtrek web tab (lib/navigatorHandoff.ts's fallback) — same
+  // isNativeApp/non-native split ActiveNavigationView.tsx already makes for the planned-hike
+  // navigator. Only the native case should land back on Navigator's own screens or hop out to
+  // an external browser tab; the web case should stay exactly where the user already was.
+  const isNativeApp = Capacitor.isNativePlatform()
+  const homePath = isNativeApp ? '/navigatore' : '/upload?tab=activity'
+  const openInMainApp = (path: string) => {
+    if (isNativeApp) { openMainApp(path); return }
+    router.push(path)
+  }
   const sessionRef = useRef<FreeTrackSession | null>(null)
   // Stable id for this recording, purely local — used to namespace field-note photo uploads
   // (lib/fieldNotePhotos.ts) the same way a real hike id would; there is no planned/saved hike id
@@ -167,7 +179,7 @@ export default function TracciaPage() {
         // too little usable data (e.g. all points missing lat/lon) — fall through and just leave the screen
       }
     }
-    router.push('/navigatore')
+    router.push(homePath)
   }
 
   const handleSave = async (title: string) => {
@@ -183,7 +195,7 @@ export default function TracciaPage() {
 
   const handleDiscard = () => {
     setPendingActivity(null)
-    router.push('/navigatore')
+    router.push(homePath)
   }
 
   // Full-screen live map while recording/paused — same tile source, marker and follow behavior as
@@ -198,7 +210,7 @@ export default function TracciaPage() {
         <FreeTrackMap path={path} position={position} bearingDeg={bearing} accuracyM={accuracyM} />
 
         <div className="absolute top-0 inset-x-0 z-20 bg-gradient-to-b from-black/55 to-transparent px-5 pt-[calc(env(safe-area-inset-top)+16px)] pb-8 flex items-center gap-3 pointer-events-none">
-          <button onClick={() => router.push('/navigatore')} className="pointer-events-auto w-9 h-9 flex items-center justify-center rounded-xl bg-white/20 text-white hover:bg-white/30 backdrop-blur-sm">
+          <button onClick={() => router.push(homePath)} className="pointer-events-auto w-9 h-9 flex items-center justify-center rounded-xl bg-white/20 text-white hover:bg-white/30 backdrop-blur-sm">
             <ArrowLeft className="w-4 h-4" />
           </button>
           <h1 className="font-display text-base font-bold text-white drop-shadow flex-1">Registra un percorso</h1>
@@ -282,7 +294,7 @@ export default function TracciaPage() {
     <div className="min-h-screen bg-stone-50 flex flex-col">
       <NavigatorAppPromo />
       <div className="bg-gradient-to-br from-sky-800 to-sky-900 px-5 pt-[calc(env(safe-area-inset-top)+20px)] pb-5 flex items-center gap-3">
-        <button onClick={() => router.push('/navigatore')} className="w-9 h-9 flex items-center justify-center rounded-xl bg-white/15 text-white hover:bg-white/25">
+        <button onClick={() => router.push(homePath)} className="w-9 h-9 flex items-center justify-center rounded-xl bg-white/15 text-white hover:bg-white/25">
           <ArrowLeft className="w-4 h-4" />
         </button>
         <h1 className="font-display text-lg font-bold text-white">Registra un percorso</h1>
@@ -302,13 +314,13 @@ export default function TracciaPage() {
           <div className="flex flex-col gap-2 w-full max-w-xs mt-2">
             {savedActivityId && (
               <button
-                onClick={() => openMainApp(`/resoconto/${encodeURIComponent(savedActivityId)}`)}
+                onClick={() => openInMainApp(`/resoconto/${encodeURIComponent(savedActivityId)}`)}
                 className="w-full py-2.5 rounded-xl bg-sky-600 text-white font-semibold text-sm hover:bg-sky-700"
               >
                 Apri nel Diario
               </button>
             )}
-            <button onClick={() => router.push('/navigatore')} className="w-full py-2.5 rounded-xl border border-stone-300 text-stone-700 font-semibold text-sm hover:bg-stone-100">
+            <button onClick={() => router.push(homePath)} className="w-full py-2.5 rounded-xl border border-stone-300 text-stone-700 font-semibold text-sm hover:bg-stone-100">
               Torna ai percorsi
             </button>
           </div>
@@ -334,7 +346,7 @@ export default function TracciaPage() {
               </button>
             ))}
             <button
-              onClick={() => openMainApp('/guida')}
+              onClick={() => openInMainApp('/guida')}
               className="w-full py-2.5 rounded-xl bg-sky-600 text-white font-semibold text-sm hover:bg-sky-700"
             >
               Apri DTrek per pianificare
