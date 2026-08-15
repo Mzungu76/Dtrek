@@ -33,16 +33,23 @@ const FADE_MS = 220
  * which on a cold connection is the slow part users actually notice. Hiding the native splash
  * only here, once this component has truly mounted, means that entire wait stays covered by
  * real branding instead of dropping to a flat, unbranded background partway through.
+ *
+ * The main DTrek app has no native shell of its own (mainAppLinks.ts) — isNativePlatform() is
+ * only ever true inside Navigator, so that's the one branch that needs Navigator's own
+ * icon/name instead of DTrek's, otherwise this screen (Navigator's actual first paint, the
+ * direct continuation of its native splash) shows the wrong app's branding.
  */
 export default function SplashScreen() {
   const [visible, setVisible] = useState(true)
   const [fading, setFading] = useState(false)
+  const isNavigator = Capacitor.isNativePlatform()
 
   useEffect(() => {
-    if (Capacitor.isNativePlatform()) NativeSplashScreen.hide().catch(() => {})
+    if (isNavigator) NativeSplashScreen.hide().catch(() => {})
     const fadeTimer   = setTimeout(() => setFading(true), MIN_VISIBLE_MS)
     const removeTimer = setTimeout(() => setVisible(false), MIN_VISIBLE_MS + FADE_MS)
     return () => { clearTimeout(fadeTimer); clearTimeout(removeTimer) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   if (!visible) return null
@@ -54,11 +61,11 @@ export default function SplashScreen() {
       aria-hidden="true"
     >
       <div className="relative w-20 h-20 rounded-3xl overflow-hidden shadow-lg shadow-black/40">
-        <Image src="/icon-192.png" alt="" fill sizes="80px" priority />
+        <Image src={isNavigator ? '/icon-navigator-192.png' : '/icon-192.png'} alt="" fill sizes="80px" priority />
       </div>
       <div className="text-center">
-        <p className="font-display text-lg font-bold text-white tracking-wide">DTrek</p>
-        <p className="text-[11px] text-stone-400 mt-0.5">Il tuo diario di trekking</p>
+        <p className="font-display text-lg font-bold text-white tracking-wide">{isNavigator ? 'DTrek Navigator' : 'DTrek'}</p>
+        <p className="text-[11px] text-stone-400 mt-0.5">{isNavigator ? 'Naviga il tuo percorso' : 'Il tuo diario di trekking'}</p>
       </div>
       <div className="mt-2 w-8 h-8 rounded-full border-2 border-white/15 border-t-forest-400 animate-spin" />
     </div>

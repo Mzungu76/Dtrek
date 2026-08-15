@@ -1,13 +1,12 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Capacitor } from '@capacitor/core'
 import FreeTrackMap from '@/components/navigation/FreeTrackMap'
 import FreeTrackSaveDialog from '@/components/navigation/FreeTrackSaveDialog'
 import { FreeTrackSession, type FreeTrackStats } from '@/lib/navigation/freeTrackSession'
 import { buildActivityFromTrack } from '@/lib/navigation/trackToActivity'
 import { saveActivityWithEnrichment } from '@/lib/activitySave'
-import { openMainApp } from '@/lib/native/mainAppLinks'
+import { navigatorHomePath, openMainAppOrNavigate } from '@/lib/native/mainAppLinks'
 import { haptics } from '@/lib/navigation/haptics'
 import type { TcxActivity } from '@/lib/tcxParser'
 import { getNavigatorSlotStatus, type NavigatorSlotStatus } from '@/lib/navigatorSlot'
@@ -38,17 +37,8 @@ function formatClock(seconds: number): string {
  */
 export default function TracciaPage() {
   const router = useRouter()
-  // This screen is reachable both from inside Navigator's native shell and, since the same
-  // route is public, from a plain Dtrek web tab (lib/navigatorHandoff.ts's fallback) — same
-  // isNativeApp/non-native split ActiveNavigationView.tsx already makes for the planned-hike
-  // navigator. Only the native case should land back on Navigator's own screens or hop out to
-  // an external browser tab; the web case should stay exactly where the user already was.
-  const isNativeApp = Capacitor.isNativePlatform()
-  const homePath = isNativeApp ? '/navigatore' : '/upload?tab=activity'
-  const openInMainApp = (path: string) => {
-    if (isNativeApp) { openMainApp(path); return }
-    router.push(path)
-  }
+  const homePath = navigatorHomePath('/upload?tab=activity')
+  const openInMainApp = (path: string) => openMainAppOrNavigate(router, path)
   const sessionRef = useRef<FreeTrackSession | null>(null)
   // Stable id for this recording, purely local — used to namespace field-note photo uploads
   // (lib/fieldNotePhotos.ts) the same way a real hike id would; there is no planned/saved hike id

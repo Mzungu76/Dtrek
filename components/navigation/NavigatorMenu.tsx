@@ -1,7 +1,9 @@
 'use client'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { List, MapPinned, Upload, ExternalLink, LogOut } from 'lucide-react'
+import { Capacitor } from '@capacitor/core'
+import { App } from '@capacitor/app'
+import { List, MapPinned, Upload, ExternalLink, LogOut, X } from 'lucide-react'
 import Sheet from '@/components/ui/Sheet'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import { lsClearAll } from '@/lib/localStore'
@@ -141,6 +143,22 @@ export default function NavigatorMenu({ open, onClose }: Props) {
           </div>
           <span className="font-semibold text-sm text-stone-800">Esci</span>
         </button>
+
+        {/* Android has no visible "close" affordance of its own once a Capacitor WebView app is
+            open (no browser chrome, no back-to-launcher hint) — reported as "non si sa come
+            chiuderla". App.exitApp() only exists on native (no-op/unavailable on plain web, and
+            this whole screen is Navigator's own, never rendered outside its shell anyway). */}
+        {Capacitor.isNativePlatform() && (
+          <button
+            onClick={() => App.exitApp()}
+            className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-stone-50 hover:bg-stone-100 transition-colors text-left"
+          >
+            <div className="w-9 h-9 rounded-xl bg-stone-200 text-stone-600 flex items-center justify-center shrink-0">
+              <X className="w-4.5 h-4.5" />
+            </div>
+            <span className="font-semibold text-sm text-stone-800">Chiudi Navigator</span>
+          </button>
+        )}
       </div>
     </Sheet>
   )
