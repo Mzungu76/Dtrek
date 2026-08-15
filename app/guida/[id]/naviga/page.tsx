@@ -3,6 +3,7 @@ import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { getPlannedById, type PlannedHike } from '@/lib/plannedStore'
 import ActiveNavigationView from '@/components/navigation/ActiveNavigationView'
+import NavigatorAppPromo from '@/components/navigation/NavigatorAppPromo'
 import type { LocationProviderFactory } from '@/lib/native/locationSource'
 import { SimulationLocationProvider } from '@/lib/navigation/simulation/simulationLocationProvider'
 import { buildScenario, SCENARIO_NAMES, SCENARIO_LABELS, type ScenarioName } from '@/lib/navigation/simulation/presetScenarios'
@@ -68,6 +69,7 @@ export default function NavigaPage() {
   return (
     <Suspense fallback={<div className="fixed inset-0 flex items-center justify-center bg-slate-900 text-white">Caricamento…</div>}>
       <NavigaPageInner />
+      <NavigatorAppPromo />
     </Suspense>
   )
 }

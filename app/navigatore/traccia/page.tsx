@@ -16,6 +16,7 @@ import { requestOrientationPermission, isOrientationSupported, needsOrientationP
 import { prefetchTilesAroundPoint } from '@/lib/offline/packageManager'
 import { retryFieldNotePhotos } from '@/lib/offline/retryFieldNotePhotos'
 import FieldNoteSheet from '@/components/navigation/FieldNoteSheet'
+import NavigatorAppPromo from '@/components/navigation/NavigatorAppPromo'
 import { ArrowLeft, Pause, Play, Square, TriangleAlert, Trash2, NotebookPen } from 'lucide-react'
 
 function formatClock(seconds: number): string {
@@ -193,6 +194,7 @@ export default function TracciaPage() {
   if (phase === 'recording' || phase === 'paused') {
     return (
       <div className="fixed inset-0 z-[2000] bg-stone-900">
+        <NavigatorAppPromo />
         <FreeTrackMap path={path} position={position} bearingDeg={bearing} accuracyM={accuracyM} />
 
         <div className="absolute top-0 inset-x-0 z-20 bg-gradient-to-b from-black/55 to-transparent px-5 pt-[calc(env(safe-area-inset-top)+16px)] pb-8 flex items-center gap-3 pointer-events-none">
@@ -278,6 +280,7 @@ export default function TracciaPage() {
 
   return (
     <div className="min-h-screen bg-stone-50 flex flex-col">
+      <NavigatorAppPromo />
       <div className="bg-gradient-to-br from-sky-800 to-sky-900 px-5 pt-[calc(env(safe-area-inset-top)+20px)] pb-5 flex items-center gap-3">
         <button onClick={() => router.push('/navigatore')} className="w-9 h-9 flex items-center justify-center rounded-xl bg-white/15 text-white hover:bg-white/25">
           <ArrowLeft className="w-4 h-4" />

@@ -51,6 +51,7 @@ import { useProtectedAreaCheck } from './useProtectedAreaCheck'
 import { useDrivingDistance } from './useDrivingDistance'
 import { useSafetyScore } from './useSafetyScore'
 import { useCtsRecompute } from '@/lib/useCtsRecompute'
+import { tryOpenNavigatorApp } from '@/lib/navigatorHandoff'
 
 const StreetViewPanel = dynamic(() => import('@/components/StreetViewPanel'), { ssr: false })
 const RouteMap3D       = dynamic(() => import('@/components/RouteMap3D'),      { ssr: false })
@@ -966,7 +967,9 @@ export default function GuidaHub({ id }: { id?: string }) {
   const primaryAction = (routeItem: RouteHubItem): PrimaryAction => ({
     label: 'Naviga',
     icon: Navigation,
-    onClick: () => router.push(`/guida/${encodeURIComponent(routeItem.id)}/naviga`),
+    // Prova prima l'app nativa Navigator (se il device può averla), altrimenti ricade sulla
+    // stessa pagina di navigazione via web che serviva già da sola (lib/navigatorHandoff.ts).
+    onClick: () => tryOpenNavigatorApp(() => router.push(`/guida/${encodeURIComponent(routeItem.id)}/naviga`)),
     variant: 'terra',
   })
 

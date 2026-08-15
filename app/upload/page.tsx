@@ -1,13 +1,14 @@
 'use client'
 import { useState, Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import ActivityUploader from '@/components/upload/ActivityUploader'
 import GpxUploader from '@/components/upload/GpxUploader'
 import ManualImportChoice from '@/components/upload/ManualImportChoice'
 import FromActivityUploader from '@/components/upload/FromActivityUploader'
 import TrialStatusBanner from '@/components/dtrek/TrialStatusBanner'
-import { Mountain, MapPin, PencilLine, History } from 'lucide-react'
+import { tryOpenNavigatorApp } from '@/lib/navigatorHandoff'
+import { Mountain, MapPin, PencilLine, History, Compass } from 'lucide-react'
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
@@ -24,9 +25,16 @@ export default function UploadPage() {
 // switcher dentro la pagina: chi arriva da Resoconti non ha motivo di vedere l'opzione "per la
 // Guida" e viceversa, erano due percorsi mentali diversi mascherati da un'unica pagina.
 function UploadPageInner() {
+  const router = useRouter()
   const searchParams = useSearchParams()
   const tab: 'activity' | 'gpx' = searchParams.get('tab') === 'gpx' ? 'gpx' : 'activity'
   const [gpxSource, setGpxSource] = useState<'file' | 'manual' | 'from-activity'>('file')
+
+  // "Naviga adesso" prova prima l'app nativa (se il device può averla), altrimenti ricade sul
+  // navigatore libero via web già esistente (app/navigatore/traccia) — vedi lib/navigatorHandoff.ts.
+  const handleStartUnplannedNavigation = () => {
+    tryOpenNavigatorApp(() => router.push('/navigatore/traccia'))
+  }
 
   return (
     <div className={`min-h-screen bg-stone-50 md:pb-0 ${MOBILE_TOPBAR_SPACER}`}>
@@ -38,7 +46,7 @@ function UploadPageInner() {
             <Mountain className="w-8 h-8 text-forest-600" />
           </div>
           <h1 className="font-display text-3xl font-semibold text-stone-800 mb-2">
-            {tab === 'activity' ? 'Carica un resoconto' : 'Crea una guida'}
+            {tab === 'activity' ? 'Crea un Resoconto' : 'Crea una guida'}
           </h1>
           <p className="text-stone-500 text-sm">
             {tab === 'activity'
@@ -47,6 +55,21 @@ function UploadPageInner() {
             }
           </p>
         </div>
+
+        {tab === 'activity' && (
+          <button
+            onClick={handleStartUnplannedNavigation}
+            className="mb-6 w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-sky-50 border border-sky-200 hover:bg-sky-100 transition-colors text-left"
+          >
+            <div className="w-9 h-9 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
+              <Compass className="w-4.5 h-4.5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-sm text-stone-800">Avvia navigazione ora</p>
+              <p className="text-xs text-stone-500">Traccia GPS libera, senza pianificazione — invece di caricare un file già pronto</p>
+            </div>
+          </button>
+        )}
 
         {tab === 'gpx' && (
           <div className="flex bg-stone-100 rounded-xl p-1 mb-6 text-xs">
