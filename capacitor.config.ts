@@ -62,6 +62,21 @@ const config: CapacitorConfig = {
     allowMixedContent: false,
     backgroundColor: SHELL_BACKGROUND_COLOR,
   },
+  plugins: {
+    // launchAutoHide: false — senza questo il plugin nasconde lo splash nativo (drawable/splash.png,
+    // vedi styles.xml) non appena la WebView è creata, cioè PRIMA che la pagina remota `/navigatore`
+    // sia effettivamente arrivata (vedi il commento su SHELL_BACKGROUND_COLOR sopra: è esattamente il
+    // buco che lascia vedere solo un rettangolo scuro senza branding per tutta l'attesa di rete).
+    // Con l'auto-hide disattivato lo splash nativo resta a schermo intero finché non è components/
+    // SplashScreen.tsx (il suo effect di mount, cioè hydration avvenuta) a chiamare hide() — un solo
+    // splash percepito, mai un buco vuoto in mezzo.
+    SplashScreen: {
+      launchAutoHide: false,
+      backgroundColor: SHELL_BACKGROUND_COLOR,
+      androidScaleType: 'CENTER_CROP',
+      showSpinner: false,
+    },
+  },
 }
 
 export default config

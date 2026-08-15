@@ -3,22 +3,23 @@
  * main app, Navigator can only ever have up to NAVIGATOR_SLOT_LIMIT routes/tracks that it itself
  * let the user create — an imported file/URL, or a free-track recording — at a time. Full planning
  * power (unlimited routes, AI search/build, multiple recordings) stays in the main app; Navigator
- * is meant as an on-the-trail companion, not a second copy of the planning tool. Raised from 1 to 3
- * (product decision, ago 2026): enough room that a user who's gotten used to Navigator doesn't hit
- * the wall on their very next hike, while the gap to "unlimited in the main app" stays the premium
- * pitch.
+ * is meant as an on-the-trail companion, not a second copy of the planning tool. Back down to 1
+ * (product decision, ago 2026, reverting the earlier raise to 3): Navigator holds exactly the one
+ * route currently in play. Trying to add a second one always resolves to a choice — overwrite the
+ * one already there, or go plan in the main app (`app/navigatore/importa/page.tsx`,
+ * `app/navigatore/traccia/page.tsx`) — never a silent "pick which of several to delete" list.
  *
  * This is deliberately narrower than "does the user have any planned hikes at all": a route
  * planned in the *main* app and merely synced into Navigator's list is NOT limited by this — only
  * `sourceApp: 'navigator'` rows (set exclusively by Navigator's own import/record flows, see
  * PlannedHike.sourceApp / StoredActivity.sourceApp) count against the slot. A user who already had
  * several routes planned before this limit existed sees no change; the limit only ever stops a NEW
- * Navigator-originated import/recording once the slots already in place reach the cap.
+ * Navigator-originated import/recording once the slot already in place is taken.
  */
 import { getAllPlanned } from '@/lib/plannedStore'
 import { getAllActivities } from '@/lib/blobStore'
 
-export const NAVIGATOR_SLOT_LIMIT = 3
+export const NAVIGATOR_SLOT_LIMIT = 1
 
 export interface NavigatorSlotItem {
   kind: 'planned' | 'activity'

@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeft, Trash2 } from 'lucide-react'
 import GpxUploader from '@/components/upload/GpxUploader'
 import { openMainApp } from '@/lib/native/mainAppLinks'
-import { getNavigatorSlotStatus, NAVIGATOR_SLOT_LIMIT, type NavigatorSlotStatus } from '@/lib/navigatorSlot'
+import { getNavigatorSlotStatus, type NavigatorSlotStatus } from '@/lib/navigatorSlot'
 import { deletePlanned } from '@/lib/plannedStore'
 import { deleteActivity } from '@/lib/blobStore'
 
@@ -50,9 +50,9 @@ export default function ImportaPage() {
 
       {slotStatus?.atLimit ? (
         <div className="flex-1 flex flex-col items-center justify-center text-center px-6 py-12 gap-4">
-          <p className="font-display text-xl font-semibold text-stone-800">Hai già {NAVIGATOR_SLOT_LIMIT} percorsi in Navigator</p>
+          <p className="font-display text-xl font-semibold text-stone-800">Hai già un percorso in Navigator</p>
           <p className="text-stone-500 text-sm max-w-xs">
-            Navigator tiene fino a {NAVIGATOR_SLOT_LIMIT} percorsi/tracce alla volta. Rimuovine uno per importarne un altro, oppure usa l&apos;app DTrek principale per pianificarne quanti vuoi.
+            Navigator tiene un solo percorso alla volta. Sovrascrivilo per importarne uno nuovo, oppure usa l&apos;app DTrek principale per pianificarne quanti vuoi.
           </p>
           <div className="flex flex-col gap-2 w-full max-w-xs mt-2">
             {slotStatus.items.map((item) => (
@@ -62,7 +62,7 @@ export default function ImportaPage() {
                 disabled={removingSlotId === item.id}
                 className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-red-50 border border-red-200 text-red-700 font-semibold text-sm hover:bg-red-100 disabled:opacity-60"
               >
-                <Trash2 className="w-4 h-4" /> {removingSlotId === item.id ? 'Rimozione…' : `Rimuovi "${item.title}"`}
+                <Trash2 className="w-4 h-4" /> {removingSlotId === item.id ? 'Sovrascrittura…' : `Sovrascrivi "${item.title}"`}
               </button>
             ))}
             <button

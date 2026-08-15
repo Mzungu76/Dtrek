@@ -3,12 +3,11 @@
 // source artwork (scripts/assets/navigator-icon-source.png). Not part of the app runtime — run
 // manually (`node scripts/gen-app-icons.mjs`) whenever the source icon changes.
 //
-// The source artwork already carries its own white frame around the outer edge, with the
-// footprint bleeding out to touch it (cropped look baked into the art itself) — so it's used
-// full-bleed, unscaled, with no extra border drawn on top. Only the negative space between tread
-// blocks is transparent, so it's flattened onto a brand-green background. DTrek Navigator gets a
-// darker green than the main DTrek PWA so the two apps read as distinct on a home screen while
-// staying in the same brand family.
+// The source artwork is used full-bleed and unscaled — the footprint touches the canvas edge on
+// every side, as if the art itself had been cropped to the icon. Only the negative space between
+// tread blocks is transparent, so it's flattened onto a brand-green background. DTrek Navigator
+// gets a darker green than the main DTrek PWA so the two apps read as distinct on a home screen
+// while staying in the same brand family.
 import sharp from 'sharp'
 import pngToIco from 'png-to-ico'
 import path from 'node:path'

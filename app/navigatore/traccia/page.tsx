@@ -9,7 +9,7 @@ import { saveActivityWithEnrichment } from '@/lib/activitySave'
 import { openMainApp } from '@/lib/native/mainAppLinks'
 import { haptics } from '@/lib/navigation/haptics'
 import type { TcxActivity } from '@/lib/tcxParser'
-import { getNavigatorSlotStatus, NAVIGATOR_SLOT_LIMIT, type NavigatorSlotStatus } from '@/lib/navigatorSlot'
+import { getNavigatorSlotStatus, type NavigatorSlotStatus } from '@/lib/navigatorSlot'
 import { deletePlanned } from '@/lib/plannedStore'
 import { deleteActivity, type HikeNote } from '@/lib/blobStore'
 import { requestOrientationPermission, isOrientationSupported, needsOrientationPermissionGesture } from '@/lib/navigation/orientation'
@@ -315,9 +315,9 @@ export default function TracciaPage() {
         // the main app never triggers this, only something Navigator itself already let the user
         // add. Full-power planning (unlimited routes/recordings) stays in the main app.
         <div className="flex-1 flex flex-col items-center justify-center text-center px-6 py-12 gap-4">
-          <p className="font-display text-xl font-semibold text-stone-800">Hai già {NAVIGATOR_SLOT_LIMIT} percorsi in Navigator</p>
+          <p className="font-display text-xl font-semibold text-stone-800">Hai già un percorso in Navigator</p>
           <p className="text-stone-500 text-sm max-w-xs">
-            Navigator tiene fino a {NAVIGATOR_SLOT_LIMIT} percorsi/tracce alla volta. Rimuovine uno per registrarne un altro, oppure usa l&apos;app DTrek principale per pianificarne quanti vuoi.
+            Navigator tiene un solo percorso alla volta. Sovrascrivilo per registrarne uno nuovo, oppure usa l&apos;app DTrek principale per pianificarne quanti vuoi.
           </p>
           <div className="flex flex-col gap-2 w-full max-w-xs mt-2">
             {slotStatus.items.map((item) => (
@@ -327,7 +327,7 @@ export default function TracciaPage() {
                 disabled={removingSlotId === item.id}
                 className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-red-50 border border-red-200 text-red-700 font-semibold text-sm hover:bg-red-100 disabled:opacity-60"
               >
-                <Trash2 className="w-4 h-4" /> {removingSlotId === item.id ? 'Rimozione…' : `Rimuovi "${item.title}"`}
+                <Trash2 className="w-4 h-4" /> {removingSlotId === item.id ? 'Sovrascrittura…' : `Sovrascrivi "${item.title}"`}
               </button>
             ))}
             <button
@@ -335,12 +335,6 @@ export default function TracciaPage() {
               className="w-full py-2.5 rounded-xl bg-sky-600 text-white font-semibold text-sm hover:bg-sky-700"
             >
               Apri DTrek per pianificare
-            </button>
-            <button
-              onClick={() => openMainApp('/prezzi')}
-              className="w-full py-2.5 rounded-xl border border-amber-300 bg-amber-50 text-amber-800 font-semibold text-sm hover:bg-amber-100"
-            >
-              Scopri DTrek AI — più percorsi, senza rimuovere nulla
             </button>
           </div>
         </div>

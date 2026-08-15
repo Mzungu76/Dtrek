@@ -165,7 +165,15 @@ export default function GpxUploader({ sourceApp, afterSaveHref }: GpxUploaderPro
         onDrop={e => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) processFile(f) }}
         onClick={() => inputRef.current?.click()}
       >
-        <input ref={inputRef} type="file" accept=".gpx,.kml,.kmz,.geojson" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) processFile(f) }} />
+        {/* accept deliberately includes the any-file wildcard: Android resolves each dotted
+            extension here via MimeTypeMap before handing the list to the system file picker (see
+            Capacitor's BridgeWebChromeClient.getValidTypes) — .gpx/.kml/.kmz/.geojson aren't
+            registered MIME extensions on stock Android, so without a fallback that list resolves
+            to zero valid types and the native picker shows nothing selectable (reported as
+            "import doesn't work" from inside Navigator's WebView). The real validation already
+            happens after selection in processFile() below, so accept here is just a UI hint,
+            safe to broaden. */}
+        <input ref={inputRef} type="file" accept=".gpx,.kml,.kmz,.geojson,*/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) processFile(f) }} />
 
         {status === 'idle' && (<>
           <MapPin className="w-12 h-12 text-stone-300 mx-auto mb-4" />
