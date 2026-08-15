@@ -10,6 +10,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.Toast;
+import com.dtrek.navigator.externalopen.ExternalOpenPlugin;
 import com.dtrek.navigator.nativelocation.NativeLocationPlugin;
 import com.getcapacitor.BridgeActivity;
 
@@ -19,9 +20,10 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
-        // Local (non-npm) plugin — must be registered before super.onCreate()
-        // so the bridge picks it up during its own init.
+        // Local (non-npm) plugins — must be registered before super.onCreate()
+        // so the bridge picks them up during its own init.
         registerPlugin(NativeLocationPlugin.class);
+        registerPlugin(ExternalOpenPlugin.class);
         super.onCreate(savedInstanceState);
 
         // super.onCreate() already started the WebView loading capacitor.config.ts's
