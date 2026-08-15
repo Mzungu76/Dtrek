@@ -1,6 +1,8 @@
 'use client'
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
+import { Capacitor } from '@capacitor/core'
+import { SplashScreen as NativeSplashScreen } from '@capacitor/splash-screen'
 
 // Minimum time the splash stays fully visible before it's allowed to fade — long enough that a
 // genuinely instant load doesn't flash the logo for one frame and vanish (which reads as a glitch,
@@ -23,12 +25,21 @@ const FADE_MS = 220
  * fades out and unmounts once the app has actually started rendering underneath it (the /guida
  * hub shows its own "Caricamento…" state in the same #0b1a24 shell color, so the handoff reads as
  * one continuous screen instead of splash → flash → different spinner).
+ *
+ * Inside DTrek Navigator (the Capacitor shell), this same #0b1a24 screen is also the hand-off
+ * point from the NATIVE splash (drawable/splash.png, kept on screen the whole time via
+ * `SplashScreen: { launchAutoHide: false }` in capacitor.config.ts) — the WebView has to fetch
+ * the whole `/navigatore` page over the network before this component's own effect can even run,
+ * which on a cold connection is the slow part users actually notice. Hiding the native splash
+ * only here, once this component has truly mounted, means that entire wait stays covered by
+ * real branding instead of dropping to a flat, unbranded background partway through.
  */
 export default function SplashScreen() {
   const [visible, setVisible] = useState(true)
   const [fading, setFading] = useState(false)
 
   useEffect(() => {
+    if (Capacitor.isNativePlatform()) NativeSplashScreen.hide().catch(() => {})
     const fadeTimer   = setTimeout(() => setFading(true), MIN_VISIBLE_MS)
     const removeTimer = setTimeout(() => setVisible(false), MIN_VISIBLE_MS + FADE_MS)
     return () => { clearTimeout(fadeTimer); clearTimeout(removeTimer) }
