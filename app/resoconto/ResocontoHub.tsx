@@ -337,7 +337,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
       <div className="fixed inset-0 bg-forest-950 flex flex-col items-center justify-center gap-4 text-center px-6">
         <p className="text-stone-300 text-sm">Nessuna escursione conclusa.</p>
         <button onClick={() => router.push('/upload?tab=activity')} className="px-5 py-2.5 bg-forest-600 hover:bg-forest-700 text-white rounded-xl text-sm font-semibold transition-colors">
-          Carica un&apos;escursione
+          Importa o Naviga
         </button>
       </div>
     )

@@ -1,13 +1,15 @@
 'use client'
 import { useState, Suspense } from 'react'
+import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
+import { Capacitor } from '@capacitor/core'
 import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import ActivityUploader from '@/components/upload/ActivityUploader'
 import GpxUploader from '@/components/upload/GpxUploader'
 import ManualImportChoice from '@/components/upload/ManualImportChoice'
 import FromActivityUploader from '@/components/upload/FromActivityUploader'
 import TrialStatusBanner from '@/components/dtrek/TrialStatusBanner'
-import { Upload, Mountain, MapPin, PencilLine, History } from 'lucide-react'
+import { Mountain, MapPin, PencilLine, History, Compass } from 'lucide-react'
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
@@ -19,11 +21,13 @@ export default function UploadPage() {
   )
 }
 
+// Due punti d'ingresso distinti (bottoni "Crea una guida" in Guide, "Importa o Naviga" in
+// Resoconti — GuidaHub.tsx/ResocontoHub.tsx e i rispettivi elenco/page.tsx), non più uno
+// switcher dentro la pagina: chi arriva da Resoconti non ha motivo di vedere l'opzione "per la
+// Guida" e viceversa, erano due percorsi mentali diversi mascherati da un'unica pagina.
 function UploadPageInner() {
   const searchParams = useSearchParams()
-  const [tab, setTab] = useState<'activity' | 'gpx'>(
-    searchParams.get('tab') === 'gpx' ? 'gpx' : 'activity',
-  )
+  const tab: 'activity' | 'gpx' = searchParams.get('tab') === 'gpx' ? 'gpx' : 'activity'
   const [gpxSource, setGpxSource] = useState<'file' | 'manual' | 'from-activity'>('file')
 
   return (
@@ -36,7 +40,7 @@ function UploadPageInner() {
             <Mountain className="w-8 h-8 text-forest-600" />
           </div>
           <h1 className="font-display text-3xl font-semibold text-stone-800 mb-2">
-            {tab === 'activity' ? 'Carica un resoconto' : 'Importa un percorso per la Guida'}
+            {tab === 'activity' ? 'Carica un resoconto' : 'Crea una guida'}
           </h1>
           <p className="text-stone-500 text-sm">
             {tab === 'activity'
@@ -46,23 +50,20 @@ function UploadPageInner() {
           </p>
         </div>
 
-        {/* Tab switcher */}
-        <div className="flex bg-stone-100 rounded-xl p-1 mb-6">
-          <button
-            onClick={() => setTab('gpx')}
-            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all
-              ${tab === 'gpx' ? 'bg-white text-sky-700 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
+        {tab === 'activity' && Capacitor.isNativePlatform() && (
+          <Link
+            href="/navigatore/traccia"
+            className="mb-6 flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-sky-50 border border-sky-200 hover:bg-sky-100 transition-colors"
           >
-            <MapPin className="w-4 h-4" /> Per la Guida
-          </button>
-          <button
-            onClick={() => setTab('activity')}
-            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all
-              ${tab === 'activity' ? 'bg-white text-forest-700 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
-          >
-            <Upload className="w-4 h-4" /> Per il Resoconto
-          </button>
-        </div>
+            <div className="w-9 h-9 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
+              <Compass className="w-4.5 h-4.5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-sm text-stone-800">Registra ora con Navigator</p>
+              <p className="text-xs text-stone-500">Traccia GPS live, senza pianificazione — invece di caricare un file già pronto</p>
+            </div>
+          </Link>
+        )}
 
         {tab === 'gpx' && (
           <div className="flex bg-stone-100 rounded-xl p-1 mb-6 text-xs">

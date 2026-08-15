@@ -1,12 +1,21 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { Menu, Compass, Navigation2, ExternalLink, TriangleAlert } from 'lucide-react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Capacitor } from '@capacitor/core'
+import { Menu, Compass, Navigation2, Upload, TriangleAlert } from 'lucide-react'
 import FreeTrackMap from '@/components/navigation/FreeTrackMap'
 import NavigatorMenu from '@/components/navigation/NavigatorMenu'
 import { LocationSource, type LocationSourceError } from '@/lib/native/locationSource'
 import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
-import { openMainApp } from '@/lib/native/mainAppLinks'
+import { useEntitlement } from '@/lib/useEntitlement'
+
+// Dove atterra il tap sull'icona dell'app quando la si riapre — vedi il redirect in
+// NavigatorePage sotto: DTREK_HOME_PATH è definito anche in NavigatorMenu.tsx, tenuto separato
+// perché sono due punti d'ingresso distinti (avvio a freddo qui, tap esplicito nel menu là) che
+// non hanno bisogno di condividere la costante per restare coerenti — puntano comunque alla
+// stessa sezione di apertura di Dtrek per scelta, non per forza di codice condiviso.
+const DTREK_HOME_PATH = '/bacheca'
 
 /**
  * Entry screen of the standalone DTrek Navigator app (separate Android/iOS install from the main
@@ -16,16 +25,40 @@ import { openMainApp } from '@/lib/native/mainAppLinks'
  * recording/stats here, just "where am I, what's ready to navigate" — position tracking is a
  * lightweight raw GeoFix feed (LocationSource), not the full PositionEngine/FreeTrackSession
  * pipeline that's overkill for a screen that isn't accumulating a track.
+ *
+ * Confine Navigator/Dtrek (docs/navigator-dtrek-boundary.md): questa è anche la rotta che
+ * `capacitor.config.ts` carica ad ogni avvio a freddo dell'app. Una volta che l'account ha
+ * attivato Dtrek ("Passa a Dtrek", NavigatorMenu.tsx), riaprire l'app deve portare direttamente
+ * in Dtrek — non ha più senso mostrare la mappa di Navigator come schermata di apertura a chi è
+ * già "passato". `?stay=1` è l'unica eccezione: lo imposta solo NavigatorReturnButton.tsx (il
+ * pulsante fluttuante "torna al Navigatore" mostrato dentro Dtrek), così un ritorno esplicito
+ * all'app nativa non viene rimbalzato indietro all'istante da questo stesso redirect.
  */
 export default function NavigatorePage() {
+  return (
+    <Suspense fallback={<div className="fixed inset-0 bg-stone-900" />}>
+      <NavigatorePageInner />
+    </Suspense>
+  )
+}
+
+function NavigatorePageInner() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const { dtrekActivated } = useEntitlement()
   const [menuOpen, setMenuOpen] = useState(false)
   const [position, setPosition] = useState<{ lat: number; lon: number } | null>(null)
   const [bearing, setBearing] = useState<number | null>(null)
   const [accuracyM, setAccuracyM] = useState<number | null>(null)
   const [gpsWarning, setGpsWarning] = useState<string | null>(null)
   const [readyHike, setReadyHike] = useState<PlannedHikeMeta | null | undefined>(undefined) // undefined = still loading
-
   const sourceRef = useRef<LocationSource | null>(null)
+
+  const redirectingToDtrek = Capacitor.isNativePlatform() && dtrekActivated && searchParams.get('stay') !== '1'
+
+  useEffect(() => {
+    if (redirectingToDtrek) router.replace(DTREK_HOME_PATH)
+  }, [redirectingToDtrek, router])
 
   useEffect(() => {
     const source = new LocationSource(
@@ -52,6 +85,11 @@ export default function NavigatorePage() {
       setReadyHike(active[0] ?? null)
     }).catch(() => setReadyHike(null))
   }, [])
+
+  // Niente da disegnare mentre il redirect verso Dtrek è in corso — altrimenti la mappa
+  // lampeggerebbe per un frame ad ogni avvio a freddo di un account già attivato, lo stesso
+  // difetto già corretto altrove per la fine di un'escursione (ActiveNavigationView.tsx).
+  if (redirectingToDtrek) return null
 
   return (
     <div className="fixed inset-0 bg-stone-900">
@@ -95,12 +133,12 @@ export default function NavigatorePage() {
         ) : (
           <div className="flex flex-col items-center text-center gap-2 py-1">
             <p className="text-stone-500 text-sm">Nessun percorso pronto per la navigazione.</p>
-            <button
-              onClick={() => openMainApp('/guida')}
+            <Link
+              href="/navigatore/importa"
               className="flex items-center gap-2 px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-medium text-sm transition-colors"
             >
-              <ExternalLink className="w-4 h-4" /> Apri DTrek per pianificare
-            </button>
+              <Upload className="w-4 h-4" /> Importa un percorso
+            </Link>
           </div>
         )}
       </div>

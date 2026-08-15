@@ -75,7 +75,7 @@ export default function GuidaIndexPage() {
               href="/upload?tab=gpx"
               className="flex items-center gap-2 px-4 py-2.5 bg-white text-sky-900 rounded-xl font-semibold text-sm shadow-lg hover:bg-sky-50 transition-colors"
             >
-              <Upload className="w-4 h-4" /> Importa
+              <Upload className="w-4 h-4" /> Crea una guida
             </Link>
           </div>
         </div>
@@ -125,7 +125,7 @@ export default function GuidaIndexPage() {
               href="/upload?tab=gpx"
               className="flex items-center gap-2 px-6 py-3 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-medium transition-colors"
             >
-              <Upload className="w-5 h-5" /> Importa un percorso
+              <Upload className="w-5 h-5" /> Crea una guida
             </Link>
           </div>
         ) : (

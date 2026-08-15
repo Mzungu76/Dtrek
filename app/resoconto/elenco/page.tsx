@@ -350,7 +350,7 @@ export default function ResocontoIndexPage() {
               href="/upload?tab=activity"
               className="flex items-center gap-2 px-6 py-3 bg-forest-600 hover:bg-forest-700 text-white rounded-xl font-medium transition-colors"
             >
-              <Upload className="w-5 h-5" /> Carica un&apos;escursione
+              <Upload className="w-5 h-5" /> Importa o Naviga
             </Link>
           </div>
 
