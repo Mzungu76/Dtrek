@@ -14,3 +14,11 @@ export function fetchOnce<T>(key: string, fetcher: () => Promise<T>): Promise<T>
   }
   return entry
 }
+
+/** Evicts a cached entry so the next fetchOnce() call re-fetches — for the rare case where the
+ *  underlying value just changed because of an action this tab itself took (e.g. activating
+ *  Dtrek from inside Navigator, lib/useEntitlement.ts), not because of the usual staleness that
+ *  fetchOnce is designed to ignore for the rest of the session. */
+export function invalidate(key: string): void {
+  cache.delete(key)
+}

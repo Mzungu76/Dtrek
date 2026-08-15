@@ -1107,6 +1107,12 @@ ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS paddle_subscription_id TEXT;
 -- Flag indipendente da onboarding_completed_at — vedi add_gift_route_offered_at.sql per il perché.
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS gift_route_offered_at TIMESTAMPTZ;
 
+-- Confine Navigator/Dtrek, modello "un'icona sola" — vedi
+-- supabase/migrations/add_dtrek_activated_at.sql per i commenti completi. NULL finché l'utente
+-- non ha mai toccato "Passa a Dtrek" dentro Navigator; nessun default a NOW() perché l'assenza
+-- del valore è essa stessa lo stato "non ancora passato a Dtrek".
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS dtrek_activated_at TIMESTAMPTZ;
+
 -- Per ora il regalo è solo la pianificazione (dati calcolati, niente testo AI, niente resoconto
 -- collegato — decisione esplicita, vedi add_gift_route_activities_and_clone_fn.sql). 'activities' e
 -- 'hike_reports' restano comunque nell'allowlist della funzione sotto per un eventuale futuro.

@@ -41,20 +41,27 @@ export interface DtrekEntitlement {
   reportsUsed: number
   reportsLimit: number
   canCreateReport: boolean
+  /** True dal momento in cui l'utente ha toccato "Passa a Dtrek" dentro Navigator (o l'ha già
+   *  raggiunto autonomamente prima ancora di scaricare Navigator — stesso account, stesso flag) —
+   *  indipendente da unlocked/trial: un utente in prova può già essere "passato a Dtrek" e vedersi
+   *  le sue schermate, semplicemente con i limiti di prova invece che sbloccati. Confine
+   *  Navigator/Dtrek (docs/navigator-dtrek-boundary.md), non gate di pagamento. */
+  dtrekActivated: boolean
 }
 
-function unlockedEntitlement(isOwner: boolean): DtrekEntitlement {
+function unlockedEntitlement(isOwner: boolean, dtrekActivated: boolean): DtrekEntitlement {
   return {
     unlocked: true, isOwner, trialActive: false, trialExpired: false, trialDaysLeft: 0,
     routesUsed: 0, routesLimit: DTREK_TRIAL_ROUTES_LIMIT, canCreateRoute: true,
     reportsUsed: 0, reportsLimit: DTREK_TRIAL_REPORTS_LIMIT, canCreateReport: true,
+    dtrekActivated,
   }
 }
 
 export async function resolveDtrekEntitlement(userId: string): Promise<DtrekEntitlement> {
   const { data: settings, error } = await supabase
     .from('user_settings')
-    .select('is_owner, subscription_tier, claude_api_key, trial_started_at, premium_expires_at')
+    .select('is_owner, subscription_tier, claude_api_key, trial_started_at, premium_expires_at, dtrek_activated_at')
     .eq('user_id', userId)
     .maybeSingle()
 
@@ -62,7 +69,11 @@ export async function resolveDtrekEntitlement(userId: string): Promise<DtrekEnti
   // codice (vedi lib/supabaseAuth.ts, app/lib/guide/resolveApiKeyAndSettings.ts): un blackout non
   // deve trasformarsi in un blocco totale della scrittura per chi normalmente avrebbe accesso.
   // Sbloccato temporaneamente finché la verifica non torna disponibile, non è un bypass permanente.
-  if (error) return unlockedEntitlement(false)
+  // dtrekActivated=true nel degrado: un blackout Supabase non deve far ripiombare in Navigator-only
+  // un utente che ha già attivato Dtrek — mai vero il contrario (attivare qualcuno per errore).
+  if (error) return unlockedEntitlement(false, true)
+
+  const dtrekActivated = !!settings?.dtrek_activated_at
 
   const isOwner = (settings?.is_owner as boolean | null) ?? false
   // premium_expires_at NULL con subscription_tier='premium' ⇒ sblocco a vita (una tantum), nessuna
@@ -75,7 +86,7 @@ export async function resolveDtrekEntitlement(userId: string): Promise<DtrekEnti
     && (premiumExpiresAt === null || premiumExpiresAt > new Date())
   const hasByok = !!(settings?.claude_api_key as string | null)
   const unlocked = isOwner || isPremium || hasByok
-  if (unlocked) return unlockedEntitlement(isOwner)
+  if (unlocked) return unlockedEntitlement(isOwner, dtrekActivated)
 
   const trialStartedAt = settings?.trial_started_at ? new Date(settings.trial_started_at as string) : new Date()
   const daysSinceStart = (Date.now() - trialStartedAt.getTime()) / (1000 * 60 * 60 * 24)
@@ -100,5 +111,6 @@ export async function resolveDtrekEntitlement(userId: string): Promise<DtrekEnti
     unlocked: false, isOwner: false, trialActive: !trialExpired, trialExpired, trialDaysLeft,
     routesUsed, routesLimit: DTREK_TRIAL_ROUTES_LIMIT, canCreateRoute,
     reportsUsed, reportsLimit: DTREK_TRIAL_REPORTS_LIMIT, canCreateReport,
+    dtrekActivated,
   }
 }

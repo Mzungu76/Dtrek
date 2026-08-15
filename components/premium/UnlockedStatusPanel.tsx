@@ -1,6 +1,8 @@
 'use client'
 import { useState } from 'react'
 import { ExternalLink, Loader2 } from 'lucide-react'
+import { Capacitor } from '@capacitor/core'
+import { Browser } from '@capacitor/browser'
 import GemIcon from './GemIcon'
 
 /**
@@ -8,6 +10,10 @@ import GemIcon from './GemIcon'
  * SectionAbbonamento.tsx (Impostazioni) e il pannello del badge Premium in Navbar. Il pulsante
  * porta al Customer Portal Paddle solo se esiste un paddle_customer_id (chi ha pagato); per
  * owner/BYOK non c'è nulla da gestire lì, e il messaggio lo spiega invece di fallire in silenzio.
+ *
+ * Dentro l'app nativa Navigator, il Customer Portal Paddle apre sempre il browser di sistema
+ * (`Browser.open`) invece di navigare la WebView sullo stesso dominio del pagamento — stesso
+ * vincolo store spiegato in components/prezzi/CheckoutButton.tsx.
  */
 export default function UnlockedStatusPanel({ compact = false }: { compact?: boolean }) {
   const [portalLoading, setPortalLoading] = useState(false)
@@ -19,8 +25,12 @@ export default function UnlockedStatusPanel({ compact = false }: { compact?: boo
     try {
       const res = await fetch('/api/paddle/portal')
       const data = await res.json().catch(() => null)
-      if (res.ok && data?.url) window.location.href = data.url
-      else setPortalError(true)
+      if (res.ok && data?.url) {
+        if (Capacitor.isNativePlatform()) await Browser.open({ url: data.url })
+        else window.location.href = data.url
+      } else {
+        setPortalError(true)
+      }
     } catch {
       setPortalError(true)
     } finally {
