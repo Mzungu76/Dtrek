@@ -20,7 +20,7 @@ Il divario più grave rispetto a Komoot e AllTrails, e quello col miglior rappor
 valore/costo: l'app ha già un'architettura di condivisione a link pubblico riusabile quasi
 as-is.
 
-### Fase 1 — Live location sharing via link pubblico — non ancora fatto
+### Fase 1 — Live location sharing via link pubblico — ✅ landed (v1)
 
 **Riuso**: il pattern esiste già, usato due volte nel repo — `activities.share_token UUID
 UNIQUE` (`app/api/share/route.ts`, POST crea via `crypto.randomUUID()`, GET/DELETE
@@ -90,16 +90,43 @@ quel momento — un viewer che "legge" ogni 10s non vede una posizione più fres
 il telefono del camminatore ha effettivamente scritto l'ultima volta, che dipende a sua volta
 dalla modalità batteria (`locationModeDecider.ts`) attiva in quel momento.
 
-**Decisioni aperte** (default v1 proposto, non bloccante):
-- **Polling vs Realtime pubblico**: v1 = polling per entrambe le direzioni. Supabase Realtime
-  con RLS-gated `postgres_changes` non è adatto a un viewer anonimo senza `auth.uid()` — un
-  canale "pubblico" richiederebbe una policy `SELECT USING (true)` che esporrebbe l'intera riga
-  a chiunque si sottoscriva, non solo a chi ha il token. Da rivalutare se la latenza del
-  polling risulta inadeguata in pratica.
-- **Valori esatti delle due frequenze** (15-20s scrittura, 10-15s lettura) sono stime di
-  partenza, da confermare con l'uso reale — non calibrate su un caso concreto.
+**Implementato** (branch `claude/dtrek-navigator-analysis-dld340`): esattamente lo schema sopra
+(`supabase/migrations/add_navigation_live_share.sql`, non ancora mirrorata in
+`supabase-schema.sql` — `hike_navigation_sessions` non lo è mai stata nemmeno prima di questa
+fase, resta solo nella propria migration dedicata). Due dettagli emersi verificando il codice,
+non nella formulazione originale sopra:
+- **Scrittura via client browser diretto** (`getBrowserSupabase()`, `lib/supabaseBrowser.ts`),
+  non tramite una API route dedicata — è il pattern già in uso in `lib/sync/realtimeSync.ts`/
+  `syncEngine.ts` per scritture autenticate frequenti, non quello a coda di
+  `navigationStore.ts` (pensato per la traccia storica). La lettura pubblica resta invece via
+  API route col client service-role (`lib/liveSharePublic.ts` +
+  `app/api/navigation/share/[token]/route.ts`), come da progetto.
+- **Pagina pubblica non indicizzabile e senza anteprima social** (`robots: {index: false,
+  follow: false}`, nessuna `opengraph-image.tsx`) — scelta non prevista nella formulazione
+  originale, presa verificando `app/s/[token]/opengraph-image.tsx` come precedente da **non**
+  replicare qui: un crawler di prefetch (WhatsApp/Telegram/iMessage) non deve generare
+  traffico su un link pensato per un singolo contatto di fiducia.
+- Costanti scelte per v1: scrittura ogni 18s (`ActiveNavigationView.tsx`), lettura/poll ogni
+  12s (`LiveShareViewer.tsx`) — dentro gli intervalli 15-20s/10-15s sopra, non ancora
+  calibrate sull'uso reale.
+- `LiveShareToggle.tsx` mostra esplicitamente uno stato "non disponibile senza connessione"
+  quando la sessione remota non esiste ancora (avvio offline) — non fallisce in silenzio.
+
+**Non ancora fatto / prossimi passi concreti**:
+- **Migrazione da applicare a mano** sul progetto Supabase live + `NOTIFY pgrst, 'reload
+  schema';` — non eseguibile da questa sessione senza credenziali dirette.
+- **Nessun test end-to-end reale**: `tsc --noEmit` e lint sono puliti, ma il flusso
+  scrittura→lettura→scadenza→revoca non è stato verificato su un ambiente con Supabase vero né
+  su un dispositivo Android reale con GPS.
+- **Polling vs Realtime pubblico**: resta polling per entrambe le direzioni, come deciso — da
+  rivalutare solo se la latenza risulta inadeguata in pratica.
 - Verificare che il testo UI del toggle non assomigli a un upsell — vincolo esistente di
-  `docs/navigator-dtrek-boundary.md` (Navigator non vende nulla al suo interno).
+  `docs/navigator-dtrek-boundary.md` (Navigator non vende nulla al suo interno); una prima
+  lettura del testo scritto sembra rispettarlo (parla solo di sicurezza/contatto di fiducia),
+  ma non è stato rivisto da nessun altro occhio.
+- **Livello 1 di "Validazione — Field Testing"** (sezione trasversale più sotto) non ancora
+  eseguito per questa fase: nessuno scenario di `lib/navigation/simulation/presetScenarios.ts`
+  è stato rigiocato contro il nuovo flusso di condivisione.
 
 ### Fase 2 — SOS / azione di emergenza — non ancora fatto
 
@@ -494,8 +521,10 @@ durante l'implementazione della fase specifica, non prerequisiti.
 
 ## Ordine consigliato per le prossime PR
 
-1. Fase 1 — Live location sharing via link pubblico, scadenza inclusa (il gap di sicurezza più
-   grave, il più economico da costruire vista l'infrastruttura di token già esistente).
+1. ✅ Fase 1 — Live location sharing via link pubblico, scadenza inclusa (il gap di sicurezza
+   più grave, il più economico da costruire vista l'infrastruttura di token già esistente).
+   Resta da fare solo l'applicazione della migrazione al progetto Supabase live e un test
+   end-to-end reale (vedi "Non ancora fatto" della Fase 1 sopra).
 2. Fase 2 — SOS/emergenza a 4 livelli, UI fail-safe (piccola, indipendente, alto valore
    percepito a costo quasi nullo).
 3. Fase 3 — Prima infrastruttura di test automatizzato (protegge tutto il lavoro già fatto e
