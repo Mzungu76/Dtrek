@@ -1,0 +1,13 @@
+-- Confine Navigator/Dtrek, modello "un'icona sola" (docs/navigator-dtrek-boundary.md) — Navigator
+-- resta l'unica app installata (Play Store); una volta che l'utente sceglie esplicitamente "Passa
+-- a Dtrek" dal suo menu, la STESSA WebView può navigare anche nelle altre pagine di Dtrek
+-- (Diario, Guida, Bacheca, Profilo — mai il checkout, che resta sempre nel browser di sistema per
+-- vincolo store), i punteggi Dtrek-specifici (CTS, Safety) iniziano a calcolarsi, e lo slot limit
+-- di Navigator (lib/navigatorSlot.ts) smette di applicarsi.
+--
+-- dtrek_activated_at: NULL finché l'utente non ha mai toccato quel bottone — nessun default a
+-- NOW(), a differenza di trial_started_at, perché qui l'assenza del valore È lo stato "non ancora
+-- passato a Dtrek", non solo un punto di partenza per un conteggio. Impostato una sola volta,
+-- lato server (POST /api/dtrek-entitlement/activate), mai sovrascritto: una volta attivato resta
+-- attivato per sempre, non è pensato per tornare indietro.
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS dtrek_activated_at TIMESTAMPTZ;

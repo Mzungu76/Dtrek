@@ -14,6 +14,7 @@ import { fetchWikiForNamedPois } from '@/lib/wikipedia'
 import { computeCtsForHike } from '@/lib/computeCtsForHike'
 import { computeSafetyForHike } from '@/lib/computeSafetyForHike'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
+import { useEntitlement } from '@/lib/useEntitlement'
 import { MapPin, FileText, CheckCircle, AlertCircle, Mountain, Clock, TrendingUp, Route } from 'lucide-react'
 
 type GpxStatus = 'idle' | 'parsed' | 'saving' | 'success' | 'error'
@@ -47,6 +48,9 @@ interface GpxUploaderProps {
 export default function GpxUploader({ sourceApp, afterSaveHref }: GpxUploaderProps = {}) {
   const router   = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
+  // Solo per gli import da Navigator (sourceApp === 'navigator') prima che l'account abbia
+  // attivato Dtrek — per ogni altro caso (import da Dtrek stesso) resta irrilevante, vedi handleSave.
+  const { dtrekActivated } = useEntitlement()
   const [dragging,  setDragging]  = useState(false)
   const [status,    setStatus]    = useState<GpxStatus>('idle')
   const [fileName,  setFileName]  = useState('')
@@ -142,8 +146,17 @@ export default function GpxUploader({ sourceApp, afterSaveHref }: GpxUploaderPro
       // POIs being found (computeCtsForHike degrades gracefully with an empty POI list) and not
       // deferred to whenever/if the user happens to open the hike. Fire-and-forget: the user is
       // already being routed to the detail page below, these just land in the background.
-      computeCtsForHike(hike).catch(() => {})
-      computeSafetyForHike(hike).catch(() => {})
+      //
+      // Skipped entirely for a Navigator import before the account has activated Dtrek — CTS and
+      // Safety are Dtrek-specific scores, computing them for a Navigator-only user writes
+      // Dtrek-shaped data into the database for someone who has never touched Dtrek and may never
+      // do so (docs/navigator-dtrek-boundary.md). They aren't lost: app/guida/GuidaHub.tsx and
+      // app/guida/useSafetyScore.ts already auto-compute a missing score the first time this same
+      // hike is genuinely opened in Dtrek (lazily, no backfill job needed here).
+      if (sourceApp !== 'navigator' || dtrekActivated) {
+        computeCtsForHike(hike).catch(() => {})
+        computeSafetyForHike(hike).catch(() => {})
+      }
 
       setStatus('success')
       const href = afterSaveHref ? afterSaveHref(parsed.id) : `/guida/${encodeURIComponent(parsed.id)}`

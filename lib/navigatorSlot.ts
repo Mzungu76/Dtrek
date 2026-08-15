@@ -15,9 +15,16 @@
  * PlannedHike.sourceApp / StoredActivity.sourceApp) count against the slot. A user who already had
  * several routes planned before this limit existed sees no change; the limit only ever stops a NEW
  * Navigator-originated import/recording once the slot already in place is taken.
+ *
+ * The limit stops applying entirely once the account has activated Dtrek (user_settings.
+ * dtrek_activated_at, "Passa a Dtrek" in NavigatorMenu.tsx) — it existed only to nudge an
+ * unconverted user, and would otherwise get in the way of someone who deliberately kept Navigator
+ * installed as their native GPS companion after already choosing Dtrek (docs/navigator-dtrek-
+ * boundary.md — the "arrivato da Dtrek" path, not just "arrivato da Navigator").
  */
 import { getAllPlanned } from '@/lib/plannedStore'
 import { getAllActivities } from '@/lib/blobStore'
+import { isDtrekActivated } from '@/lib/useEntitlement'
 
 export const NAVIGATOR_SLOT_LIMIT = 1
 
@@ -44,5 +51,6 @@ export async function getNavigatorSlotStatus(): Promise<NavigatorSlotStatus> {
     .map((a) => ({ kind: 'activity' as const, id: a.id, title: a.title }))
 
   const items = [...plannedItems, ...activityItems]
-  return { items, atLimit: items.length >= NAVIGATOR_SLOT_LIMIT }
+  const activated = await isDtrekActivated()
+  return { items, atLimit: !activated && items.length >= NAVIGATOR_SLOT_LIMIT }
 }
