@@ -37,6 +37,15 @@ export interface OfflinePackageManifest {
   hasTrailGraph?: boolean
   trailGraphNodeCount?: number
   /**
+   * Fase 7 di docs/navigator-orizzonti-roadmap.md — se ai nodi del trail graph è stata
+   * applicata una quota reale (lib/dtm/graphElevation.ts), usata dall'Escape Engine per
+   * raffinare la sicurezza di una via di fuga oltre al proxy di lunghezza+tipo OSM. Stesso
+   * status best-effort di hasTrailGraph: dipende da un servizio DTM esterno rate-limited, mai
+   * un requisito per considerare il pacchetto pronto (vedi isManifestValid() sotto e
+   * offlineReadiness.ts). Non tentata affatto se il grafo stesso manca (hasTrailGraph falsy).
+   */
+  hasElevationGraph?: boolean
+  /**
    * Readiness signals for the rest of the "Offline Navigation Package" (roadmap Fase 6): elevation
    * profile, POIs and turn-by-turn/moments data are all pure functions of data already present on
    * the cached PlannedHike record (lib/plannedStore.ts) — nothing new to fetch over the network —

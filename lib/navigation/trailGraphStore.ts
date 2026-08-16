@@ -90,3 +90,24 @@ export async function ensureTrailGraph(hikeId: string, routePolyline: [number, n
     return null
   }
 }
+
+/**
+ * Fase 7 di docs/navigator-orizzonti-roadmap.md — applica le quote ricevute da
+ * lib/dtm/graphElevation.ts (via app/api/navigation/trail-graph-elevation) al grafo già
+ * persistito, poi lo risalva. Best-effort by design come fetchAndSaveTrailGraph sopra: un no-op
+ * silenzioso se il grafo non esiste più (cancellato tra il fetch e questa chiamata) o se non
+ * c'è nulla da applicare — non solleva mai un errore che possa far fallire un pacchetto offline
+ * altrimenti completo.
+ */
+export async function applyElevationsToTrailGraph(hikeId: string, elevations: Map<number, number>): Promise<void> {
+  if (elevations.size === 0) return
+  const network = await loadTrailGraph(hikeId)
+  if (!network) return
+  // Array.from(...) invece di for...of diretto su Map — stesso downlevelIteration già aggirato
+  // altrove nel repo (es. escapeEngine.ts's dijkstra()).
+  for (const [nodeId, elevM] of Array.from(elevations)) {
+    const node = network.nodes.get(nodeId)
+    if (node) node.elevM = elevM
+  }
+  await saveTrailGraph(hikeId, network)
+}
