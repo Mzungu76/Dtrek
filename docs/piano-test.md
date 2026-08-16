@@ -17,6 +17,9 @@ In CI: `.github/workflows/ci.yml` esegue `npm test` (insieme a lint e typecheck)
 `main` e a ogni pull request — risultato visibile come segno di spunta sul commit/PR e nella
 scheda **Actions** del repository, senza bisogno di un terminale locale.
 
+Risultati di un'esecuzione reale, test per test: `docs/risultati-test.md` (snapshot, non un
+dashboard live — vedi quel file per come riprodurlo).
+
 ## 1. Test esistenti — motore di navigazione (`lib/navigation/__tests__/`)
 
 Framework: **vitest**. 45 test in 6 file, tutti su moduli puri o eseguibili headless (nessuna
@@ -31,7 +34,7 @@ priorità.
 | `locationModeDecider.test.ts` | `decideLocationMode()`: tabella di priorità dichiarata (off_route/wrong_direction vince su tutto, incluso batteria scarica; bivio vicino, velocità sostenuta o accuracy scarsa scelgono `navigation`; batteria bassa e non in carica sceglie `battery_save` solo se nient'altro è urgente; batteria sconosciuta non è mai trattata come scarica). `LocationModeDecider`: passaggio immediato a `emergency` senza dwell; isteresi temporale di 8s per gli altri cambi; un blip che rientra prima del dwell non scatta nulla; un cambio di segnale desiderato durante l'attesa fa ripartire il conteggio; nessuna ripetizione dello stesso cambio una volta applicato. |
 | `weatherLookahead.test.ts` | `projectWeatherAtEta()` (Fase 11): nessun avviso quando l'ETA cade nella stessa fascia oraria di "adesso" o senza dati; avviso solo quando le condizioni all'ETA peggiorano oltre le soglie di pioggia/vento. |
 | `trailConfidence.test.ts` | `computeTrailConfidence()` (Fase 8): pesi dichiarati fra Trail Score e meteo/clima; bonus community limitato al tetto massimo; `factors` mai vuoto; soglie di etichetta (alta/media/bassa). |
-| `realRouteSimulation.test.ts` | Vedi §3 sotto — l'unica suite che guida `NavigationEngine` per intero (non un singolo motore isolato), con fix GPS realmente registrati su un'escursione vera. |
+| `realRouteSimulation.test.ts` | Vedi §3 sotto — l'unica suite che guida `NavigationEngine` per intero (non un singolo motore isolato), con dati reali da un'escursione vera: percorso pulito (mai off_route), deviazione+rientro (transita davvero `navigating → uncertain → off_route → navigating`), GPS perso e ripristinato (`gpsLost`/`gpsRecovered`, distanza non corrotta), vie di fuga (`computeEscapeOptions()` su un grafo sintetico ancorato al percorso reale — vedi §3 per perché non un vero dump OSM), batteria in calo sull'intera escursione reale (`LocationModeDecider`, una sola transizione a `battery_save`, senza sfarfallare). |
 
 **Non coperto** (segnalato anche nella roadmap): `mapMatcher.ts` e `positionEngine.ts` (il
 filtro di Kalman) restano senza test diretti/isolati — `positionEngine.ts` è ora almeno
@@ -154,8 +157,8 @@ considerata plausibile dal motore) — appartiene a una fascia di test lenta/man
 alla suite veloce che gira a ogni push in CI. Resta un passo successivo naturale, non fatto qui
 per restare dentro tempi di CI ragionevoli.
 
-Scenari proposti, in ordine di valore (una versione ridotta del primo è ora implementata — vedi
-sopra — gli altri restano proposta):
+Scenari proposti, in ordine di valore — tutti e cinque ora implementati (il primo solo in
+versione ridotta, vedi sotto per il perché):
 
 1. **Percorso pulito, dall'inizio alla fine** — **parzialmente implementato**:
    `realRouteSimulation.test.ts` copre "lo stato non è mai passato per
@@ -166,19 +169,53 @@ sopra — gli altri restano proposta):
    produce un'attività con dislivello/durata plausibili rispetto alla traccia sorgente — tutti
    e tre richiedono la riproduzione completa (minuti reali di esecuzione), non solo la finestra
    breve già coperta.
-2. **Deviazione e rientro** — `injectDeviation` a metà percorso, verifica che lo stato transiti
-   `on_route → uncertain/off_route → on_route` nell'ordine giusto e nei tempi coerenti con le
-   soglie di `offRouteEngine.ts` (già verificate isolatamente in §1, qui si verifica
-   l'integrazione end-to-end).
-3. **GPS perso e ripristinato** — `injectGpsLoss`, verifica che lo stato passi a `gps_lost` e
-   che il ripristino generi l'evento corretto senza corrompere la distanza già accumulata.
-4. **Vie di fuga durante un percorso reale** — nel punto di massima deviazione dello scenario
-   #2, invoca `computeEscapeOptions()` con il trail graph realmente scaricato per quell'area e
-   verifica che almeno "torna sul percorso" sia sempre proposta.
-5. **Batteria in calo durante un'intera uscita** — alimenta `LocationModeDecider` con la stessa
-   sequenza temporale di uno scenario lungo (`clean`, alcune ore) e un livello di batteria che
-   scende gradualmente, verificando che le transizioni di modalità avvengano nell'ordine e nei
-   tempi attesi senza mai "sfarfallare".
+2. **Deviazione e rientro** — **implementato**: `realRouteSimulation.test.ts` inietta una
+   deviazione (`injectDeviation`) su una finestra di fix GPS realmente registrati e verifica che
+   lo stato transiti `navigating → uncertain → off_route → navigating` nell'ordine giusto,
+   rispettando i tempi di dwell reali di `offRouteEngine.ts` (già verificati isolatamente in §1,
+   qui si conferma l'integrazione end-to-end su dati veri). Nota tecnica: su un sentiero reale
+   che curva, una deviazione con crescita troppo lenta produce un `distanceToRouteM` che oscilla
+   invece di crescere in modo sostenuto, e l'Off-Route Engine (a ragione) non dichiara mai
+   `off_route` — serve una crescita per passo abbastanza marcata da dominare la curvatura
+   naturale del sentiero, restando comunque sotto la soglia di velocità plausibile del Position
+   Engine (vedi il commento sul test).
+3. **GPS perso e ripristinato** — **implementato**: `realRouteSimulation.test.ts` rimuove 7 fix
+   reali consecutivi (`injectGpsLoss`) e verifica che `gpsLost` scatti, `gpsRecovered` segua, e
+   che la distanza percorsa non si azzeri né esploda al ripristino. Nota tecnica: a differenza
+   dell'Off-Route Engine, il timer GPS-perso (`GPS_LOST_MS`, 15s) è sull'orologio di sistema
+   reale, riarmato a ogni fix — non sui timestamp (compressi) dei fix — quindi il vuoto iniettato
+   deve tradursi in un vero ritardo di consegna oltre 15s reali, non solo in un salto nei
+   timestamp compressi (vedi il commento sul test per come si è calcolato quanti fix rimuovere).
+   Effetto collaterale osservato, non cercato: sui fix realmente registrati, il salto di
+   posizione al rientro genera talvolta anche un `wrong_direction` transitorio (rumore GPS reale
+   a bassa velocità vicino alla partenza) — legittimo comportamento del motore su dati rumorosi
+   veri, non asserito da questo test perché fuori dal suo scopo.
+4. **Vie di fuga durante un percorso reale** — **implementato, con uno scostamento dichiarato
+   dal piano originale**: nel punto di massima deviazione dello scenario #2, invoca
+   `computeEscapeOptions()` e verifica che "torna sul percorso" sia sempre proposta (più, come
+   bonus, che le altre tre tipologie vengano trovate correttamente quando disponibili). Il piano
+   prevedeva "il trail graph realmente scaricato per quell'area" via `fetchWalkNetwork()`
+   (Overpass API) — verificato in questa sessione che **non è praticabile da questo ambiente**:
+   il proxy di rete rifiuta con 403 esplicito (non un timeout) tutti gli endpoint Overpass/
+   Nominatim configurati, e il grafo sentieri, quando l'app lo scarica davvero, resta solo in
+   IndexedDB sul dispositivo (`lib/navigation/trailGraphStore.ts`), mai su Supabase — non esiste
+   da nessuna parte un grafo già scaricato per quest'area recuperabile da qui. Scelta fatta con
+   l'utente: un `WalkNetwork` sintetico ancorato alla geometria reale del percorso (route_polyline
+   come dorsale, due diramazioni sintetiche - sentiero e strada - più un rifugio sintetico vicino
+   al punto deviato) invece di un vero dump OSM. Esercita comunque la logica reale di
+   `computeEscapeOptions()` (Dijkstra, classificazione per qualità highway, dislivello) — solo la
+   rete sentieri sottostante non è OSM autentico. Un test con un grafo OSM davvero scaricato
+   resta possibile fuori da questo ambiente (es. in locale, o passando un dump del grafo).
+5. **Batteria in calo durante un'intera uscita** — **implementato**: `realRouteSimulation.test.ts`
+   alimenta `LocationModeDecider` con la sequenza temporale reale dell'**intera** escursione (i
+   400 fix, 4h07m — non solo una finestra) e un livello di batteria che scende linearmente dal
+   95% al 5%, verificando esattamente una transizione a `battery_save`, non prima dell'isteresi
+   dichiarata (`MODE_CHANGE_DWELL_MS`, 8s) dal primo campione sotto soglia. A differenza degli
+   altri test in questo file, `LocationModeDecider` non passa da `NavigationEngine`/
+   `PositionEngine` — prende `nowMs` come parametro esplicito invece di leggere l'orologio di
+   sistema — quindi non serve né riprodurre in tempo reale né comprimere nulla: è l'unico dei
+   cinque scenari che copre davvero il percorso per intero, non solo una finestra breve (vedi il
+   punto 1 sopra per il perché gli altri non possono, senza spendere minuti reali di CI).
 
 Schema indicativo (non implementazione pronta all'uso — da verificare/adattare quando si scrive
 davvero il primo di questi test):
