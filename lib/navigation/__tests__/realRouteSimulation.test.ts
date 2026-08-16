@@ -31,24 +31,33 @@
  *
  * Il fattore di compressione usato qui (15x) resta sopra entrambe le soglie per i segmenti
  * "veloci" osservati nelle finestre usate sotto — non è stato scelto a caso, vedi il commento
- * su rebaseFixesToNowCompressed(). Il secondo test sotto ("deviazione e rientro") inietta una
- * deviazione sintetica su questi stessi fix reali per esercitare anche il caso off_route/rientro
- * (scenario §3.2 del piano) — vedi il suo commento per i dettagli di quella parte.
+ * su rebaseFixesToNowCompressed(). Gli altri due test sotto ("deviazione e rientro", "GPS perso
+ * e ripristinato") iniettano scenari sintetici su questi stessi fix reali per esercitare anche i
+ * casi off_route/rientro e gps_lost/gpsRecovered (scenari §3.2 e §3.3 del piano) — vedi i loro
+ * commenti per i dettagli di ciascuno.
  */
 import { describe, it, expect } from 'vitest'
 import { NavigationEngine } from '@/lib/navigation/navigationEngine'
 import { SimulationLocationProvider } from '@/lib/navigation/simulation/simulationLocationProvider'
-import { injectDeviation } from '@/lib/navigation/simulation/scenarioBuilder'
+import { injectDeviation, injectGpsLoss } from '@/lib/navigation/simulation/scenarioBuilder'
 import fixture from './fixtures/faggeta-cimino.json'
 import { rebaseFixesToNowCompressed, type RealTrackFixture } from './helpers/realTrackFixture'
 import type { GeoFix } from '../types'
 
 const track = fixture as RealTrackFixture
 
-/** Rigioca `fixes` fino in fondo dentro un NavigationEngine vero, restituendo la sequenza di stati attraversati. */
-function runToCompletion(fixes: GeoFix[]): Promise<string[]> {
+interface RunResult {
+  states: string[]
+  events: string[]
+  traveledHistory: number[]
+}
+
+/** Rigioca `fixes` fino in fondo dentro un NavigationEngine vero, registrando stati, eventi ("gpsLost"/"gpsRecovered") e la distanza percorsa a ogni fix. */
+function runToCompletion(fixes: GeoFix[]): Promise<RunResult> {
   return new Promise((resolve) => {
     const states: string[] = []
+    const events: string[] = []
+    const traveledHistory: number[] = []
     const engine = new NavigationEngine({
       routePolyline: track.routePolyline,
       pois: [],
@@ -56,13 +65,16 @@ function runToCompletion(fixes: GeoFix[]): Promise<string[]> {
         new SimulationLocationProvider({ fixes, speed: 1 }, onFix, onError),
     })
     engine.on('stateChanged', (s) => states.push(s.to))
+    engine.on('gpsLost', () => events.push('gpsLost'))
+    engine.on('gpsRecovered', () => events.push('gpsRecovered'))
 
     let delivered = 0
-    engine.on('positionUpdated', () => {
+    engine.on('positionUpdated', (p) => {
       delivered++
+      traveledHistory.push(p.traveledDistanceM)
       if (delivered >= fixes.length) {
         engine.stop()
-        resolve(states)
+        resolve({ states, events, traveledHistory })
       }
     })
     engine.start()
@@ -74,7 +86,7 @@ describe('percorso reale end-to-end (Monte Cimino, fix GPS realmente registrati)
     const speedFactor = 15
     const realFixes = rebaseFixesToNowCompressed(track.trackPoints.slice(0, 13), speedFactor)
 
-    const states = await runToCompletion(realFixes)
+    const { states } = await runToCompletion(realFixes)
 
     expect(states).not.toContain('off_route')
     expect(states).not.toContain('wrong_direction')
@@ -94,7 +106,7 @@ describe('percorso reale end-to-end (Monte Cimino, fix GPS realmente registrati)
     const fixIntervalS = (base[1].ts - base[0].ts) / 1000
     const deviatedFixes = injectDeviation(base, 5, 360, 90, 12 * fixIntervalS, fixIntervalS)
 
-    const states = await runToCompletion(deviatedFixes)
+    const { states } = await runToCompletion(deviatedFixes)
 
     expect(states).toContain('off_route')
 
@@ -102,4 +114,29 @@ describe('percorso reale end-to-end (Monte Cimino, fix GPS realmente registrati)
     const recoveredAfter = states.slice(lastOffRouteIdx + 1).indexOf('navigating')
     expect(recoveredAfter).toBeGreaterThanOrEqual(0)
   }, 90_000)
+
+  it('GPS perso e ripristinato: emette gpsLost/gpsRecovered senza corrompere la distanza percorsa (scenario §3.3 del piano)', async () => {
+    // GPS_LOST_MS (15s, lib/navigation/navigationEngine.ts) è un timer sul vero orologio di
+    // sistema — armato/riarmato a ogni fix ricevuto — non sui timestamp (compressi) dei fix, a
+    // differenza dell'Off-Route Engine. Perché scatti davvero serve quindi un vuoto REALE di
+    // oltre 15s fra due consegne: qui si rimuovono 7 fix reali consecutivi (indici 4-10), che a
+    // un fattore di compressione 15x lasciano un vuoto di consegna di ~19.5s — sopra soglia con
+    // margine, senza dover allungare la finestra complessiva del test.
+    const speedFactor = 15
+    const base = rebaseFixesToNowCompressed(track.trackPoints.slice(0, 16), speedFactor)
+    const fixIntervalS = (base[1].ts - base[0].ts) / 1000
+    const fixesWithGap = injectGpsLoss(base, 4, 7 * fixIntervalS, fixIntervalS)
+
+    const { events, traveledHistory } = await runToCompletion(fixesWithGap)
+
+    expect(events.indexOf('gpsLost')).toBeGreaterThanOrEqual(0)
+    expect(events.indexOf('gpsRecovered')).toBeGreaterThan(events.indexOf('gpsLost'))
+
+    // "Senza corrompere la distanza già accumulata": la distanza continua a crescere in modo
+    // plausibile una volta ripristinato il segnale, non si azzera né esplode per il vuoto.
+    const beforeGap = traveledHistory[3] // ultimo fix prima del vuoto (indici 0-3)
+    const afterRecovery = traveledHistory[traveledHistory.length - 1]
+    expect(afterRecovery).toBeGreaterThanOrEqual(beforeGap)
+    expect(afterRecovery - beforeGap).toBeLessThan(500) // niente salti implausibili sul vuoto
+  }, 60_000)
 })
