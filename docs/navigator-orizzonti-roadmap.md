@@ -251,7 +251,7 @@ mostra un segno rosso su GitHub, senza bisogno di un terminale locale.
 
 ## Orizzonte 2 — Colmare il gap di mercato — non ancora fatto
 
-### Fase 4 — Community layer leggero — non ancora fatto
+### Fase 4 — Community layer leggero — ✅ landed (v1)
 
 Oggi `lib/trailConditions/` è **100% calcolato** da dati esterni (meteo/suolo), esplicitamente
 documentato come "mai scrive su Supabase" — zero segnale inserito da un utente reale. Il
@@ -319,12 +319,37 @@ CREATE POLICY "trail_completions_owner" ON trail_completions FOR ALL
 **UI**: prompt opt-in post-navigazione (mai automatico) — estensione di
 `EndHikeReviewDialog.tsx` o simile.
 
-**Decisioni aperte**:
-- Dedup dei completamenti (stesso utente/stesso sentiero/stesso weekend conta una volta o
-  N?) — impatta la query aggregata.
-- Fallback quando `osm_relation_id` non risolve — se `polyline_hash` va usato per un
-  fuzzy-match nell'aggregato pubblico.
-- Valore numerico del rate-limit (es. 3 note/giorno/utente) — scelta di prodotto, non tecnica.
+**Implementato** (branch `claude/dtrek-navigator-analysis-dld340`): esattamente lo schema e
+l'architettura sopra, con due dettagli emersi scrivendola:
+- **`lib/si/signals/communitySignals.ts` non esiste più come percorso valido** — verificato che
+  `lib/si/` non è mai stato creato in questo repo: il sistema "SI"/"CL" più ampio a cui quel
+  percorso apparteneva è stato rimosso prima di questa fase (vedi il commento in cima a
+  `lib/trailConditions/types.ts`, "dopo la rimozione di Affidabilità/CL"). Il nuovo collector
+  vive quindi in `lib/trailConditions/communitySignals.ts`, accanto agli unici altri collector
+  ancora vivi (`weatherSignals.ts`/`climateSignals.ts`), non al percorso aspirazionale citato
+  nei commenti da anni.
+- **`fetchCompletionsSummary`** (`lib/community/completionsSummary.ts`, nuovo) fattorizza
+  l'aggregazione condivisa tra la route pubblica e il nuovo collector — non prevista come file
+  a sé nella formulazione originale, emersa per non duplicare la stessa query in due posti.
+- `confidenceWeight` (0..1, mai oltre 0.5) è il primo pezzo reale dell'attenuazione richiesta
+  per un futuro blend in Trail Confidence (Fase 8) — cresce con `completions30d` fino a saturare
+  a 5 completamenti recenti, oltre non aggiunge fiducia.
+- Il testo UI del checkbox in `EndHikeReviewDialog.tsx` è stato scritto badando a non
+  assomigliare a un upsell (vincolo di `docs/navigator-dtrek-boundary.md`) — una prima lettura
+  sembra rispettarlo, non rivista da nessun altro occhio.
+
+**Non ancora fatto / decisioni ancora aperte**:
+- **Nessun dedup dei completamenti**: ogni salvataggio con la checkbox attiva conta come un
+  completamento a sé, anche se lo stesso utente ripete lo stesso sentiero più volte nello stesso
+  weekend — impatta la query aggregata (`completions30d` può essere gonfiato da un singolo
+  utente molto attivo). Non risolto, resta la decisione di prodotto aperta segnalata sopra.
+- **`polyline_hash` non è mai popolato né usato**: il fallback fuzzy-match per un sentiero non
+  matchato a un `osm_relation_id` resta solo una colonna riservata nello schema, nessuna logica
+  la scrive o la legge — un completamento senza match resta semplicemente "non aggregabile"
+  pubblicamente (la riga esiste comunque, privata, nella tabella dell'utente).
+- Valore del rate-limit (3 note/giorno) e la lista di parole bandite restano stime di partenza,
+  non validate con uso reale.
+- Nessun test end-to-end reale (checkbox → salvataggio → conteggio pubblico visibile).
 
 ### Fase 5 — Target iOS (Capacitor) — non ancora fatto
 
@@ -572,9 +597,8 @@ durante l'implementazione della fase specifica, non prerequisiti.
 4. ✅ Fase 6 — Qualità voce, coda con priorità critical/normal.
 5. ✅ Fase 7 — Escape Engine elevation-aware, dislivello reale nelle vie di fuga cache-ato al
    download offline.
-6. Fase 4 — Community layer leggero, architettura senza view pubblica (il pezzo di maggior
-   investimento di prodotto dell'Orizzonte 2, richiede decisioni di moderazione/dedup prima di
-   partire).
+6. ✅ Fase 4 — Community layer leggero, architettura senza view pubblica. Il dedup dei
+   completamenti resta una decisione di prodotto ancora aperta (vedi sopra).
 7. Fase 5A/5B — Target iOS, scaffold + provider nativo (il più costoso in tempo/lavoro nativo;
    5C — collaudo reale — segue solo a valle, non è bloccante per iniziare 5A/5B in parallelo se
    c'è capacità).
