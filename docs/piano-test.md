@@ -31,7 +31,7 @@ priorità.
 | `locationModeDecider.test.ts` | `decideLocationMode()`: tabella di priorità dichiarata (off_route/wrong_direction vince su tutto, incluso batteria scarica; bivio vicino, velocità sostenuta o accuracy scarsa scelgono `navigation`; batteria bassa e non in carica sceglie `battery_save` solo se nient'altro è urgente; batteria sconosciuta non è mai trattata come scarica). `LocationModeDecider`: passaggio immediato a `emergency` senza dwell; isteresi temporale di 8s per gli altri cambi; un blip che rientra prima del dwell non scatta nulla; un cambio di segnale desiderato durante l'attesa fa ripartire il conteggio; nessuna ripetizione dello stesso cambio una volta applicato. |
 | `weatherLookahead.test.ts` | `projectWeatherAtEta()` (Fase 11): nessun avviso quando l'ETA cade nella stessa fascia oraria di "adesso" o senza dati; avviso solo quando le condizioni all'ETA peggiorano oltre le soglie di pioggia/vento. |
 | `trailConfidence.test.ts` | `computeTrailConfidence()` (Fase 8): pesi dichiarati fra Trail Score e meteo/clima; bonus community limitato al tetto massimo; `factors` mai vuoto; soglie di etichetta (alta/media/bassa). |
-| `realRouteSimulation.test.ts` | Vedi §3 sotto — l'unica suite che guida `NavigationEngine` per intero (non un singolo motore isolato), con fix GPS realmente registrati su un'escursione vera. |
+| `realRouteSimulation.test.ts` | Vedi §3 sotto — l'unica suite che guida `NavigationEngine` per intero (non un singolo motore isolato), con fix GPS realmente registrati su un'escursione vera: percorso pulito (mai off_route) e deviazione+rientro (transita davvero `navigating → uncertain → off_route → navigating`). |
 
 **Non coperto** (segnalato anche nella roadmap): `mapMatcher.ts` e `positionEngine.ts` (il
 filtro di Kalman) restano senza test diretti/isolati — `positionEngine.ts` è ora almeno
@@ -154,8 +154,8 @@ considerata plausibile dal motore) — appartiene a una fascia di test lenta/man
 alla suite veloce che gira a ogni push in CI. Resta un passo successivo naturale, non fatto qui
 per restare dentro tempi di CI ragionevoli.
 
-Scenari proposti, in ordine di valore (una versione ridotta del primo è ora implementata — vedi
-sopra — gli altri restano proposta):
+Scenari proposti, in ordine di valore (i primi due sono ora implementati, almeno in versione
+ridotta — vedi sopra — gli altri restano proposta):
 
 1. **Percorso pulito, dall'inizio alla fine** — **parzialmente implementato**:
    `realRouteSimulation.test.ts` copre "lo stato non è mai passato per
@@ -166,10 +166,16 @@ sopra — gli altri restano proposta):
    produce un'attività con dislivello/durata plausibili rispetto alla traccia sorgente — tutti
    e tre richiedono la riproduzione completa (minuti reali di esecuzione), non solo la finestra
    breve già coperta.
-2. **Deviazione e rientro** — `injectDeviation` a metà percorso, verifica che lo stato transiti
-   `on_route → uncertain/off_route → on_route` nell'ordine giusto e nei tempi coerenti con le
-   soglie di `offRouteEngine.ts` (già verificate isolatamente in §1, qui si verifica
-   l'integrazione end-to-end).
+2. **Deviazione e rientro** — **implementato**: `realRouteSimulation.test.ts` inietta una
+   deviazione (`injectDeviation`) su una finestra di fix GPS realmente registrati e verifica che
+   lo stato transiti `navigating → uncertain → off_route → navigating` nell'ordine giusto,
+   rispettando i tempi di dwell reali di `offRouteEngine.ts` (già verificati isolatamente in §1,
+   qui si conferma l'integrazione end-to-end su dati veri). Nota tecnica: su un sentiero reale
+   che curva, una deviazione con crescita troppo lenta produce un `distanceToRouteM` che oscilla
+   invece di crescere in modo sostenuto, e l'Off-Route Engine (a ragione) non dichiara mai
+   `off_route` — serve una crescita per passo abbastanza marcata da dominare la curvatura
+   naturale del sentiero, restando comunque sotto la soglia di velocità plausibile del Position
+   Engine (vedi il commento sul test).
 3. **GPS perso e ripristinato** — `injectGpsLoss`, verifica che lo stato passi a `gps_lost` e
    che il ripristino generi l'evento corretto senza corrompere la distanza già accumulata.
 4. **Vie di fuga durante un percorso reale** — nel punto di massima deviazione dello scenario
