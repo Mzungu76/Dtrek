@@ -42,6 +42,8 @@ import GroupModeSection from './GroupModeSection'
 import { publishLivePosition } from '@/lib/navigation/liveLocationPublish'
 import SosButton from './SosButton'
 import GiuliaLiveQa from './GiuliaLiveQa'
+import TrailConfidenceBadge from './TrailConfidenceBadge'
+import { useTrailConfidence } from './useTrailConfidence'
 import { watchBattery, watchBatteryLevel } from '@/lib/navigation/battery'
 import { LocationModeDecider } from '@/lib/navigation/locationModeDecider'
 import { haptics } from '@/lib/navigation/haptics'
@@ -306,6 +308,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   paceEtaRef.current = pace?.liveEtaDate ?? null
 
   const weatherLookahead = useWeatherRefresh(hike.id, routePolyline, positionRef, engineRef, paceEtaRef)
+  const trailConfidence = useTrailConfidence(hike.id, routePolyline, hike.cachedTsTotal ?? hike.cachedTrailScore ?? null)
   // Un nuovo avviso (testo diverso, es. l'ETA si sposta e ora indica pioggia invece di vento)
   // non deve restare nascosto solo perché un avviso precedente era stato chiuso.
   useEffect(() => { setWeatherLookaheadDismissed(false) }, [weatherLookahead?.message])
@@ -958,11 +961,12 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         </div>
       )}
 
-      <div className="absolute right-3 z-10" style={{ top: 'calc(50% + 60px)' }}>
+      <div className="absolute right-3 z-10 flex flex-col items-end gap-2" style={{ top: 'calc(50% + 60px)' }}>
         <MapModeSwitcher
           mode={mapMode} onModeChange={setMapMode} is3D={is3D} onToggle3D={() => setIs3D((v) => !v)} isOnline={isOnline}
           showNatura2000={showNatura2000} onToggleNatura2000={() => setShowNatura2000((v) => !v)}
         />
+        <TrailConfidenceBadge confidence={trailConfidence} />
       </div>
 
       {/* Colonna sinistra dei controlli mappa: scarico offline (quando ha senso), condivisione
