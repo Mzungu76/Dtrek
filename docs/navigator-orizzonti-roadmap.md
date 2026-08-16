@@ -461,7 +461,7 @@ quindi il nuovo campo `elevM` viene persistito automaticamente.
 Qui il dettaglio resta volutamente più leggero — sono idee da specificare meglio quando gli
 Orizzonti 1/2 saranno chiusi, non lavoro pronto per essere costruito subito.
 
-### Fase 8 — Trail Confidence live overlay — non ancora fatto (vision)
+### Fase 8 — Trail Confidence — ✅ landed (v1 ridotta, solo calcolo — nessun overlay live)
 
 Probabilmente la feature più distintiva dell'intero piano — merita una definizione più
 precisa di "trailScore + connettività + community". Non è la somma di segnali alla pari, è
@@ -487,6 +487,35 @@ punteggio 0-1 per segmento/nodo, mostrato come layer colorato su
 esistente). Decisione aperta: se il blend gira offline (solo dati già nel pacchetto) o
 richiede online per il pezzo community — probabilmente degradabile come il resto del
 pacchetto offline.
+
+**Implementato (v1 volutamente ridotta)** (branch `claude/dtrek-navigator-analysis-dld340`):
+solo il **calcolo**, non l'overlay live sulla mappa. `computeTrailConfidence()` combina 2 dei 7
+segnali elencati sopra — Trail Score già calcolato in pianificazione (peso 0.6) e il segnale
+meteo/clima già calcolato da `lib/trailConditions/` (peso 0.4) — più il correttivo community
+(Fase 4, mai oltre +0.1, indipendentemente dal `confidenceWeight`). Ogni risultato porta sempre
+un `factors: string[]` non vuoto, stesso principio "l'utente deve sempre sapere perché"
+dell'Escape Engine.
+
+**Deliberatamente fuori scope in questo giro** (motivo: nessuna delle tre richiede solo
+"scrivere una formula" — servirebbe prima nuova strumentazione live non ancora costruita in
+nessuna fase precedente):
+- **Qualità geometrica del tracciato** — nessun modulo esistente calcola oggi una misura di
+  "densità di vertici/coerenza della polyline" riusabile.
+- **Coerenza GPS osservata dal vivo** — richiederebbe una nuova metrica continua (es. quanto la
+  posizione filtrata da `PositionEngine` si discosta dalla proiezione attesa lungo il tratto,
+  accumulata nel tempo), non solo il verdetto istantaneo già prodotto da `offRouteEngine.ts`.
+- **Qualità/copertura della rete durante la navigazione** — nessun segnale di "quanto è buona
+  la connessione in questo momento" esiste oggi nel motore di navigazione.
+- **Nessun overlay colorato** su `NavigationMap.tsx`/`NavigationMapLibre.tsx` — costruirlo bene
+  su entrambi i renderer (Leaflet e MapLibre) è un lavoro a sé, più grande del solo calcolo.
+  Stesso pattern già usato altrove in questo repo ("infrastruttura prima, consumatore dopo" —
+  vedi il prerequisito trasversale sulla persistenza del trail graph nella roadmap originale):
+  il modulo di calcolo è pronto e testato, l'interfaccia che lo mostra è lavoro futuro.
+
+**Non ancora fatto**: formula di blend non validata su un caso reale (pesi 0.6/0.4/correttivo
+±0.1 sono stime ragionevoli, non calibrate); nessuna decisione presa su offline vs online per
+il pezzo community, dato che non esiste ancora un punto in cui il punteggio viene consumato
+dal vivo.
 
 ### Fase 9 — Modalità gruppo — non ancora fatto (vision)
 
