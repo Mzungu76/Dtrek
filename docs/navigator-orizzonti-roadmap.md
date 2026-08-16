@@ -240,9 +240,12 @@ originale:
   15s, non i "~20s" arrotondati nel commento del modulo — il test riproduce il comportamento
   reale delle soglie di default, non l'approssimazione della prosa.
 
+**CI agganciata**: `.github/workflows/ci.yml` (già esistente per lint/typecheck su ogni push a
+`main` e ogni PR) ora include anche `npm test` nello stesso job — nessun workflow separato,
+stesso `npm ci` già fatto per lint/typecheck. Da qui in avanti un push/PR che rompe i test
+mostra un segno rosso su GitHub, senza bisogno di un terminale locale.
+
 **Non ancora fatto / prossimi passi concreti**:
-- **CI**: `npm test` non è ancora agganciato a nessun workflow GitHub Actions — i test vanno
-  ancora lanciati a mano, non bloccano un PR che li rompe.
 - `mapMatcher.ts`/`positionEngine.ts` (filtro di Kalman) restano non testati, come già
   segnalato dalla roadmap originale — questa fase ha prioritizzato solo i tre moduli sopra.
 
@@ -553,8 +556,8 @@ durante l'implementazione della fase specifica, non prerequisiti.
 2. ✅ Fase 2 — SOS/emergenza a 4 livelli, UI fail-safe (piccola, indipendente, alto valore
    percepito a costo quasi nullo). Resta da fare solo il test su dispositivo reale.
 3. ✅ Fase 3 — Prima infrastruttura di test automatizzato, 28 test verdi su offRouteEngine/
-   escapeEngine/locationModeDecider (livello 1 di Field Testing). Resta da fare l'aggancio a
-   una CI.
+   escapeEngine/locationModeDecider (livello 1 di Field Testing), agganciati a
+   `.github/workflows/ci.yml` su ogni push/PR.
 4. Fase 6 — Qualità voce (piccola, indipendente, migliora subito l'esperienza quotidiana).
 5. Fase 7 — Escape Engine elevation-aware (chiude un limite già documentato e atteso).
 6. Fase 4 — Community layer leggero, architettura senza view pubblica (il pezzo di maggior
