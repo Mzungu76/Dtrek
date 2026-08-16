@@ -522,14 +522,34 @@ interpreta e assiste — mai il contrario.
 connessione dati — questa feature è verosimilmente solo-online, da dichiarare esplicitamente
 vista la natura "in cammino, spesso senza rete" del contesto.
 
-### Fase 11 — Weather look-ahead — non ancora fatto (vision)
+### Fase 11 — Weather look-ahead — ✅ landed (v1)
 
 `fetchDayHourly()` (già esistente in `lib/openmeteo.ts`, previsioni orarie fino a 16 giorni)
-proiettato contro l'ETA per segmento già calcolata da `paceAssistant.ts` — nuovo modulo puro
-`lib/navigation/weatherLookahead.ts` che stima l'ora di arrivo a ogni istruzione futura e pesca
-il bucket orario corrispondente, avvisando se le condizioni attese peggiorano rispetto ad ora.
-Decisione aperta: ogni quanto ri-triggerare la proiezione durante la navigazione (non ad ogni
-fix) per non consumare quota Open-Meteo inutilmente.
+proiettato contro l'ETA già calcolata da `paceAssistant.ts` — nuovo modulo puro
+`lib/navigation/weatherLookahead.ts` (`projectWeatherAtEta`) che pesca il bucket orario più
+vicino all'ETA e lo confronta con quello più vicino ad ora, avvisando solo se le condizioni
+peggiorano (pioggia/vento assenti ora ma previsti all'arrivo).
+
+**Implementato** (branch `claude/dtrek-navigator-analysis-dld340`), con due scelte di scope
+diverse dalla formulazione originale:
+- **Proietta solo sull'ETA di fine percorso** (`PaceAssistant.liveEtaDate`), non su "ogni
+  istruzione futura" come genericamente ipotizzato — un solo checkpoint, riusando una stima già
+  calcolata, invece di costruire una nuova pipeline di ETA per-istruzione (che avrebbe anche
+  moltiplicato il rumore: molte istruzioni di svolta ravvicinate avrebbero prodotto avvisi
+  quasi identici).
+- **Decisione aperta chiusa**: nessuna nuova chiamata Open-Meteo introdotta — `useWeatherRefresh.ts`
+  (già esistente, refresh ogni 20 min per la correzione meteo live del passo) è stato esteso
+  per riusare lo stesso array orario già scaricato, non un secondo hook con un fetch proprio.
+- Banner dismissibile nello stesso contenitore di avvisi impilati già esistente in
+  `ActiveNavigationView.tsx` (mappa offline, fauna...), si riapre da solo se il messaggio
+  cambia; nessun avviso vocale (solo visivo) — scelta di scope, non nella formulazione
+  originale.
+
+**Non ancora fatto**: il primissimo controllo dopo l'avvio della navigazione può non avere
+ancora un ETA disponibile (PaceAssistant non ha dati sufficienti) — si aggiorna al refresh
+successivo (20 min) o alla prossima navigazione, non c'è un secondo tentativo ravvicinato per
+questo caso, per non introdurre una chiamata di rete in più. Nessun test su un caso reale con
+previsioni Open-Meteo vere (solo dati sintetici nei 7 test automatici).
 
 ## Validazione trasversale — Field Testing
 

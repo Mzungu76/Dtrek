@@ -40,6 +40,7 @@ import OfflinePackageDownloader from './OfflinePackageDownloader'
 import LiveShareToggle from './LiveShareToggle'
 import { publishLivePosition } from '@/lib/navigation/liveLocationPublish'
 import SosButton from './SosButton'
+import GiuliaLiveQa from './GiuliaLiveQa'
 import { watchBattery, watchBatteryLevel } from '@/lib/navigation/battery'
 import { LocationModeDecider } from '@/lib/navigation/locationModeDecider'
 import { haptics } from '@/lib/navigation/haptics'
@@ -874,6 +875,14 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         fix={position ? { lat: position.lat, lon: position.lon, accuracyM } : null}
         liveShareUrl={liveShareToken ? `${typeof window !== 'undefined' ? window.location.origin : ''}/s/live/${liveShareToken}` : null}
         onTriggered={(action) => logEvent('sos_triggered', { action })}
+      />
+
+      <GiuliaLiveQa
+        hikeTitle={hike.title}
+        nearestPoiName={remainingPois[0]?.name}
+        nearestPoiDistanceM={remainingPois[0]?.distanceM}
+        distanceRemainingM={distanceRemainingM}
+        isOnline={isOnline}
       />
 
       {availableEpochs.length > 0 && (
