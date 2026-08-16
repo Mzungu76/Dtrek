@@ -1,6 +1,6 @@
 import { runWithConcurrency } from '@/lib/promisePool'
 import { lsGet, lsSet } from '@/lib/localStore'
-import { fetchAndSaveTrailGraph, deleteTrailGraph } from '@/lib/navigation/trailGraphStore'
+import { fetchAndSaveTrailGraph, deleteTrailGraph, loadTrailGraph, applyElevationsToTrailGraph } from '@/lib/navigation/trailGraphStore'
 import { fetchAndSavePoiNotes, deletePoiNotes } from '@/lib/offline/poiNotesStore'
 import { buildElevationProfile } from '@/lib/navigation/elevationProfile'
 import { buildRouteInstructions } from '@/lib/navigation/routeInstructions'
@@ -153,6 +153,35 @@ export async function downloadOfflinePackage(
       manifest.trailGraphNodeCount = nodeCount
     } catch {
       manifest.hasTrailGraph = false
+    }
+  }
+
+  // Fase 7 di docs/navigator-orizzonti-roadmap.md — dislivello nell'Escape Engine, cache-ato
+  // una volta sola qui (mai in tempo reale, vedi lib/dtm/graphElevation.ts) per rispettare il
+  // rate-limit del servizio DTM esterno. Solo se il grafo è disponibile (appena scaricato sopra
+  // o già presente da un download precedente) — nessun senso arricchire un grafo assente, e
+  // best-effort quanto il grafo stesso: un fallimento qui non deve mai far fallire un pacchetto
+  // tile altrimenti completo.
+  if (complete && manifest.hasTrailGraph && !manifest.hasElevationGraph) {
+    try {
+      const network = await loadTrailGraph(hikeId)
+      const nodes = network ? Array.from(network.nodes, ([id, n]) => ({ id, lat: n.lat, lon: n.lon })) : []
+      if (nodes.length > 0) {
+        const res = await fetch('/api/navigation/trail-graph-elevation', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nodes }),
+        })
+        if (res.ok) {
+          const { elevations } = (await res.json()) as { elevations: Record<string, number> }
+          const elevMap = new Map(Object.entries(elevations).map(([id, elevM]) => [Number(id), elevM]))
+          await applyElevationsToTrailGraph(hikeId, elevMap)
+          manifest.hasElevationGraph = elevMap.size > 0
+        } else {
+          manifest.hasElevationGraph = false
+        }
+      }
+    } catch {
+      manifest.hasElevationGraph = false
     }
   }
 

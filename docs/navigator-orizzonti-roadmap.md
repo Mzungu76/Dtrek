@@ -251,7 +251,7 @@ mostra un segno rosso su GitHub, senza bisogno di un terminale locale.
 
 ## Orizzonte 2 — Colmare il gap di mercato — non ancora fatto
 
-### Fase 4 — Community layer leggero — non ancora fatto
+### Fase 4 — Community layer leggero — ✅ landed (v1)
 
 Oggi `lib/trailConditions/` è **100% calcolato** da dati esterni (meteo/suolo), esplicitamente
 documentato come "mai scrive su Supabase" — zero segnale inserito da un utente reale. Il
@@ -319,12 +319,37 @@ CREATE POLICY "trail_completions_owner" ON trail_completions FOR ALL
 **UI**: prompt opt-in post-navigazione (mai automatico) — estensione di
 `EndHikeReviewDialog.tsx` o simile.
 
-**Decisioni aperte**:
-- Dedup dei completamenti (stesso utente/stesso sentiero/stesso weekend conta una volta o
-  N?) — impatta la query aggregata.
-- Fallback quando `osm_relation_id` non risolve — se `polyline_hash` va usato per un
-  fuzzy-match nell'aggregato pubblico.
-- Valore numerico del rate-limit (es. 3 note/giorno/utente) — scelta di prodotto, non tecnica.
+**Implementato** (branch `claude/dtrek-navigator-analysis-dld340`): esattamente lo schema e
+l'architettura sopra, con due dettagli emersi scrivendola:
+- **`lib/si/signals/communitySignals.ts` non esiste più come percorso valido** — verificato che
+  `lib/si/` non è mai stato creato in questo repo: il sistema "SI"/"CL" più ampio a cui quel
+  percorso apparteneva è stato rimosso prima di questa fase (vedi il commento in cima a
+  `lib/trailConditions/types.ts`, "dopo la rimozione di Affidabilità/CL"). Il nuovo collector
+  vive quindi in `lib/trailConditions/communitySignals.ts`, accanto agli unici altri collector
+  ancora vivi (`weatherSignals.ts`/`climateSignals.ts`), non al percorso aspirazionale citato
+  nei commenti da anni.
+- **`fetchCompletionsSummary`** (`lib/community/completionsSummary.ts`, nuovo) fattorizza
+  l'aggregazione condivisa tra la route pubblica e il nuovo collector — non prevista come file
+  a sé nella formulazione originale, emersa per non duplicare la stessa query in due posti.
+- `confidenceWeight` (0..1, mai oltre 0.5) è il primo pezzo reale dell'attenuazione richiesta
+  per un futuro blend in Trail Confidence (Fase 8) — cresce con `completions30d` fino a saturare
+  a 5 completamenti recenti, oltre non aggiunge fiducia.
+- Il testo UI del checkbox in `EndHikeReviewDialog.tsx` è stato scritto badando a non
+  assomigliare a un upsell (vincolo di `docs/navigator-dtrek-boundary.md`) — una prima lettura
+  sembra rispettarlo, non rivista da nessun altro occhio.
+
+**Non ancora fatto / decisioni ancora aperte**:
+- **Nessun dedup dei completamenti**: ogni salvataggio con la checkbox attiva conta come un
+  completamento a sé, anche se lo stesso utente ripete lo stesso sentiero più volte nello stesso
+  weekend — impatta la query aggregata (`completions30d` può essere gonfiato da un singolo
+  utente molto attivo). Non risolto, resta la decisione di prodotto aperta segnalata sopra.
+- **`polyline_hash` non è mai popolato né usato**: il fallback fuzzy-match per un sentiero non
+  matchato a un `osm_relation_id` resta solo una colonna riservata nello schema, nessuna logica
+  la scrive o la legge — un completamento senza match resta semplicemente "non aggregabile"
+  pubblicamente (la riga esiste comunque, privata, nella tabella dell'utente).
+- Valore del rate-limit (3 note/giorno) e la lista di parole bandite restano stime di partenza,
+  non validate con uso reale.
+- Nessun test end-to-end reale (checkbox → salvataggio → conteggio pubblico visibile).
 
 ### Fase 5 — Target iOS (Capacitor) — non ancora fatto
 
@@ -367,7 +392,7 @@ non un blocco unico:
 - Se 5A/5B possono procedere in parallelo con capacità diverse (uno scaffolding, uno Swift) o
   vanno strettamente sequenziali — 5C dipende comunque da entrambe.
 
-### Fase 6 — Qualità voce: coda invece di cancel — non ancora fatto
+### Fase 6 — Qualità voce: coda invece di cancel — ✅ landed (v1)
 
 `lib/navigation/speech.ts` oggi fa `window.speechSynthesis.cancel()` prima di ogni nuovo
 avviso (scelta deliberata, non un bug — commento: "don't stack callouts if one is already
@@ -381,13 +406,16 @@ mid-sentence"). Con vento o passo sostenuto, un'istruzione può sparire a metà 
 - Dedup: stesso testo/tipo già in coda non viene riaccodato.
 - Avanzamento della coda via `onend`/`onerror`, non fire-and-forget.
 
-**Decisioni aperte**:
-- Classificazione esatta "critical" vs "normal" per ogni tipo di evento esistente (off-route,
-  turn-by-turn, moments, POI) — richiede una vera scelta di prodotto, non solo tecnica.
-- Se introdurre varietà di formulazione (non solo distanza, anche nome del prossimo POI) —
-  scope più ampio del semplice accodamento, da valutare separatamente.
+**Implementato** (branch `claude/dtrek-navigator-analysis-dld340`): esattamente la coda con
+priorità descritta sopra, `speak(text, { priority })`. Classificazione applicata: `critical` =
+fuori percorso, direzione sbagliata, GPS perso/permesso negato, promemoria di rientro per il
+buio; `normal` (default, invariato) = arrivo a un POI, moment narrativo, batteria scarica.
 
-### Fase 7 — Escape Engine elevation-aware (cache offline) — non ancora fatto
+**Non ancora fatto**: nessun test su dispositivo reale (comportamento della coda con vento/voce
+di sistema variabile per produttore); varietà di formulazione (non solo distanza, anche nome
+del prossimo POI) resta fuori scope, come già segnalato.
+
+### Fase 7 — Escape Engine elevation-aware (cache offline) — ✅ landed (v1)
 
 Esattamente il piano già scritto come lavoro futuro in `docs/navigation-engine-roadmap.md`
 (Fase 7 originale): niente dislivello nelle vie di fuga oggi, perché il servizio DTM esterno è
@@ -397,28 +425,36 @@ rate-limited a 50 chiamate/24h — inaccettabile da spendere in tempo reale.
 - `lib/routeBuilder/osmGraph.ts`: `GraphNode` guadagna un campo opzionale `elevM?: number`
   (oggi assente) — nessuna breaking change, i consumer esistenti lo trattano come assente
   finché non popolato.
-- `lib/navigation/trailGraphStore.ts`: la serializzazione IndexedDB include `elevM` quando
-  presente.
 - `lib/offline/packageManager.ts` (`downloadOfflinePackage()`): dopo aver salvato il trail
-  graph, una fase best-effort raggruppa i nodi in un numero minimo di bbox DTM (riuso di
-  `lib/dtm/dtmCache.ts`) e popola `elevM` — **un solo tentativo per pacchetto**, mai ripetuto a
-  ogni avvio navigazione.
+  graph, una fase best-effort chiama il nuovo endpoint autenticato
+  `app/api/navigation/trail-graph-elevation` e applica le quote ricevute — **un solo tentativo
+  per pacchetto**, mai ripetuto a ogni avvio navigazione.
 - `packageManifest.ts`: nuovo campo opzionale `hasElevationGraph?: boolean`, degradabile in
   `offlineReadiness.ts` (mai bloccante, stessa filosofia già stabilita per il trail graph).
 - `lib/navigation/escapeEngine.ts`: quando `elevM` è presente sui nodi del path calcolato,
-  somma il dislivello reale per raffinare `safety` oltre al proxy attuale (lunghezza + tag
-  `highway`); quando assente, fallback silenzioso al comportamento di oggi — nessuna
-  regressione per pacchetti scaricati prima di questa fase.
+  somma il dislivello reale e declassa `safety` di un livello oltre ~150 m/km di pendenza,
+  aggiungendo la cifra al motivo mostrato; quando assente, fallback silenzioso al comportamento
+  di oggi — nessuna regressione per pacchetti scaricati prima di questa fase.
 
-**Decisioni aperte**:
-- Costo del rate-limit a scala: se la chiave DTM è condivisa server-side, molti download
-  offline nello stesso giorno potrebbero esaurirla — verificare se serve una cache
-  cross-utente persistente per bbox già scaricate di recente.
-- Densità di campionamento: ogni nodo del grafo (potenzialmente centinaia, `MAX_VISITED_NODES
-  =600` nell'Escape Engine) vs. un sottoinsieme interpolato — impatta quante bbox servono per
-  download.
-- Se rendere questo un'opzione esplicita nel download offline esistente
-  (`OfflinePackageDownloader.tsx`) o sempre-attivo.
+**Semplificazione emersa scrivendolo, diversa dalla formulazione originale**: niente
+"raggruppamento in un numero minimo di bbox DTM" — il bbox del trail graph persistito è già
+quello ~1.1km-padded di `trailGraphStore.ts` (pensato apposta per coprire vie di fuga vicine),
+abbastanza piccolo da stare in un **solo** tile DTM. `lib/dtm/graphElevation.ts` riusa quindi lo
+stesso pattern "una bbox, una chiamata DTM cache-ata 180 giorni" già collaudato in
+`lib/dtm/elevationEnrich.ts` per l'arricchimento dei percorsi in pianificazione — non serviva
+nulla di nuovo, solo applicarlo ai nodi del grafo invece che ai punti di un tracciato.
+`lib/navigation/trailGraphStore.ts` non ha richiesto **nessuna** modifica alla serializzazione
+(a differenza di quanto ipotizzato sopra): salva già l'intero oggetto `GraphNode` così com'è,
+quindi il nuovo campo `elevM` viene persistito automaticamente.
+
+**Non ancora fatto / prossimi passi concreti**:
+- Costo del rate-limit a scala: se molti utenti scaricano pacchetti offline nello stesso giorno
+  in aree diverse, 50 chiamate/24h condivise lato server potrebbero esaurirsi — non misurato
+  con traffico reale.
+- `STEEP_GAIN_PER_KM = 150` (soglia di declassamento) è una stima di partenza, non calibrata su
+  un caso reale — stesso caveat delle altre costanti "a stima" del motore di navigazione.
+- Nessun test su un pacchetto scaricato con copertura DTM reale (solo verificato con
+  `elevM` sintetico nei test automatici) né su dispositivo reale.
 
 ## Orizzonte 3 — Vision (difficile da copiare dalla concorrenza) — non ancora fatto
 
@@ -558,11 +594,11 @@ durante l'implementazione della fase specifica, non prerequisiti.
 3. ✅ Fase 3 — Prima infrastruttura di test automatizzato, 28 test verdi su offRouteEngine/
    escapeEngine/locationModeDecider (livello 1 di Field Testing), agganciati a
    `.github/workflows/ci.yml` su ogni push/PR.
-4. Fase 6 — Qualità voce (piccola, indipendente, migliora subito l'esperienza quotidiana).
-5. Fase 7 — Escape Engine elevation-aware (chiude un limite già documentato e atteso).
-6. Fase 4 — Community layer leggero, architettura senza view pubblica (il pezzo di maggior
-   investimento di prodotto dell'Orizzonte 2, richiede decisioni di moderazione/dedup prima di
-   partire).
+4. ✅ Fase 6 — Qualità voce, coda con priorità critical/normal.
+5. ✅ Fase 7 — Escape Engine elevation-aware, dislivello reale nelle vie di fuga cache-ato al
+   download offline.
+6. ✅ Fase 4 — Community layer leggero, architettura senza view pubblica. Il dedup dei
+   completamenti resta una decisione di prodotto ancora aperta (vedi sopra).
 7. Fase 5A/5B — Target iOS, scaffold + provider nativo (il più costoso in tempo/lavoro nativo;
    5C — collaudo reale — segue solo a valle, non è bloccante per iniziare 5A/5B in parallelo se
    c'è capacità).

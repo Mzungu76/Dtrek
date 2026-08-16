@@ -310,7 +310,11 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
     pendingEvents.current.push({ type, payload, createdAt: new Date().toISOString() })
   }
 
-  const speakIfEnabled = (text: string) => { if (speechEnabledRef.current) speak(text) }
+  // priority di default 'normal' (si accoda) — solo chi passa esplicitamente 'critical'
+  // interrompe un avviso in corso (Fase 6 di docs/navigator-orizzonti-roadmap.md).
+  const speakIfEnabled = (text: string, priority: 'critical' | 'normal' = 'normal') => {
+    if (speechEnabledRef.current) speak(text, { priority })
+  }
 
   const flushToServer = async () => {
     if (!remoteSessionId.current) return
@@ -466,7 +470,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         if (cancelled) return
         logEvent('off_route', { distanceToRouteM })
         setOffRouteBearingDeg(bearingToRouteDeg)
-        speakIfEnabled('Sei fuori dal percorso pianificato')
+        speakIfEnabled('Sei fuori dal percorso pianificato', 'critical')
         haptics.alert()
       })
       engine.on('wrongDirection', ({ expectedHeadingDeg }) => {
@@ -476,7 +480,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         // here rather than "back toward the nearest point" — same UI, the correct meaning for
         // this case (on the trail, just headed the wrong way along it).
         setOffRouteBearingDeg(expectedHeadingDeg)
-        speakIfEnabled('Stai andando nella direzione sbagliata')
+        speakIfEnabled('Stai andando nella direzione sbagliata', 'critical')
         haptics.alert()
       })
       engine.on('backOnRoute', () => {
@@ -489,7 +493,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         if (cancelled) return
         logEvent('gps_lost', { permissionDenied })
         setGpsLostPermissionDenied(permissionDenied)
-        speakIfEnabled(permissionDenied ? 'Permesso di localizzazione negato' : 'Segnale GPS assente')
+        speakIfEnabled(permissionDenied ? 'Permesso di localizzazione negato' : 'Segnale GPS assente', 'critical')
         haptics.alert()
       })
       engine.on('gpsRecovered', () => {
@@ -739,7 +743,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
     }
   }
 
-  const handleSaveRecordedActivity = async (title: string, mode: 'overwrite' | 'new') => {
+  const handleSaveRecordedActivity = async (title: string, mode: 'overwrite' | 'new', reportCompletion: boolean, completionNote: string) => {
     if (!pendingActivity) return
     let offline = false
     const saved = await saveActivityWithEnrichment(pendingActivity, {
@@ -754,6 +758,16 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       onSyncResult: (ok) => { offline = !ok },
     })
     clearRecordedTrack(hike.id).catch(() => {})
+
+    // Fase 4 di docs/navigator-orizzonti-roadmap.md — opt-in esplicito (checkbox deselezionata
+    // di default in EndHikeReviewDialog.tsx), best-effort e fire-and-forget: non deve mai
+    // ritardare né bloccare la navigazione verso il resoconto appena salvato.
+    if (reportCompletion) {
+      fetch('/api/trails/completions', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ activityId: saved.id, note: completionNote || undefined }),
+      }).catch(() => {})
+    }
     if (offline) {
       // The record is already safe (written to IndexedDB before any network attempt — see
       // lib/activitySave.ts), but the dialog is about to be replaced by a page navigation with no
@@ -815,7 +829,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
     if (turnBackNow && !turnBackAlertedRef.current) {
       turnBackAlertedRef.current = true
       logEvent('turnback_warning')
-      if (speechEnabledRef.current) speak('Attenzione: potresti non avere abbastanza luce per rientrare. Valuta di tornare indietro ora.')
+      if (speechEnabledRef.current) speak('Attenzione: potresti non avere abbastanza luce per rientrare. Valuta di tornare indietro ora.', { priority: 'critical' })
       haptics.alert()
     } else if (!turnBackNow) {
       turnBackAlertedRef.current = false

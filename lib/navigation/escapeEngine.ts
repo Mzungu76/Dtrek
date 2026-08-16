@@ -121,6 +121,44 @@ function safetyForDistance(distanceM: number, nearThresholdM: number, farThresho
   return 'bassa'
 }
 
+// Fase 7 di docs/navigator-orizzonti-roadmap.md — dislivello reale quando i nodi del grafo
+// portano `elevM` (lib/dtm/graphElevation.ts, popolato al download del pacchetto offline, non
+// in tempo reale). Correttivo grezzo, non un vero calcolo di pendenza: oltre questa soglia di
+// guadagno per km, un'opzione altrimenti "alta"/"media" scende di un livello.
+const STEEP_GAIN_PER_KM = 150
+
+function downgradeSafety(safety: EscapeSafety): EscapeSafety {
+  if (safety === 'alta') return 'media'
+  return 'bassa'
+}
+
+/** Somma il dislivello in salita lungo la catena `prev` (stessa ricostruzione di reconstructPath, ma sui nodi del grafo invece che sulle coordinate) — null se un solo nodo del percorso non ha `elevM` (grafo scaricato prima della Fase 7, o arricchimento fallito): meglio omettere il dato che mostrarne uno parziale/fuorviante. */
+function pathElevationGainM(network: WalkNetwork, prev: Map<number, number>, targetNodeId: number, startNodeId: number): number | null {
+  const nodeIds: number[] = []
+  let cur: number | undefined = targetNodeId
+  while (cur != null) {
+    nodeIds.unshift(cur)
+    if (cur === startNodeId) break
+    cur = prev.get(cur)
+  }
+
+  let gainM = 0
+  let prevElevM: number | null = null
+  for (const nodeId of nodeIds) {
+    const node = network.nodes.get(nodeId)
+    if (!node || node.elevM == null) return null
+    if (prevElevM != null && node.elevM > prevElevM) gainM += node.elevM - prevElevM
+    prevElevM = node.elevM
+  }
+  return gainM
+}
+
+function refineSafetyForElevation(safety: EscapeSafety, gainM: number | null, distanceM: number): EscapeSafety {
+  if (gainM == null || distanceM <= 0) return safety
+  const gainPerKm = gainM / (distanceM / 1000)
+  return gainPerKm > STEEP_GAIN_PER_KM ? downgradeSafety(safety) : safety
+}
+
 /**
  * Ranked escape options for the current position, per spec §11. Always
  * includes "torna sul percorso" (needs only the route, not the graph);
@@ -184,12 +222,16 @@ export function computeEscapeOptions(input: EscapeEngineInput): EscapeOption[] {
       if (bestTrail) {
         const node = network.nodes.get(bestTrail.nodeId)!
         const quality = TRAIL_HIGHWAY_QUALITY[bestTrail.highway!] ?? 1
+        const baseSafety = quality >= 3 ? safetyForDistance(bestTrail.distM, 400, 1000) : safetyForDistance(bestTrail.distM, 250, 700)
+        const gainM = pathElevationGainM(network, prev, bestTrail.nodeId, start.nodeId)
         options.push({
           kind: 'alternative_trail',
           label: 'Raggiungi trail alternativo',
           distanceM: bestTrail.distM,
-          safety: quality >= 3 ? safetyForDistance(bestTrail.distM, 400, 1000) : safetyForDistance(bestTrail.distM, 250, 700),
-          reason: `Sentiero (${bestTrail.highway}) della rete OSM, a circa ${Math.round(bestTrail.distM)} m seguendo il percorso più breve nel grafo dei sentieri.`,
+          safety: refineSafetyForElevation(baseSafety, gainM, bestTrail.distM),
+          reason: gainM != null
+            ? `Sentiero (${bestTrail.highway}) della rete OSM, a circa ${Math.round(bestTrail.distM)} m seguendo il percorso più breve nel grafo dei sentieri (~${Math.round(gainM)} m di dislivello in salita).`
+            : `Sentiero (${bestTrail.highway}) della rete OSM, a circa ${Math.round(bestTrail.distM)} m seguendo il percorso più breve nel grafo dei sentieri.`,
           bearingDeg: bearingDeg(currentLat, currentLon, node.lat, node.lon),
           targetLat: node.lat,
           targetLon: node.lon,
@@ -199,12 +241,16 @@ export function computeEscapeOptions(input: EscapeEngineInput): EscapeOption[] {
 
       if (bestRoad) {
         const node = network.nodes.get(bestRoad.nodeId)!
+        const baseSafety = safetyForDistance(bestRoad.distM, 500, 1200)
+        const gainM = pathElevationGainM(network, prev, bestRoad.nodeId, start.nodeId)
         options.push({
           kind: 'road',
           label: 'Raggiungi strada',
           distanceM: bestRoad.distM,
-          safety: safetyForDistance(bestRoad.distM, 500, 1200),
-          reason: `Strada (${bestRoad.highway}) raggiungibile seguendo la rete di sentieri e strade — superficie più affidabile in caso di emergenza o maltempo.`,
+          safety: refineSafetyForElevation(baseSafety, gainM, bestRoad.distM),
+          reason: gainM != null
+            ? `Strada (${bestRoad.highway}) raggiungibile seguendo la rete di sentieri e strade (~${Math.round(gainM)} m di dislivello in salita) — superficie più affidabile in caso di emergenza o maltempo.`
+            : `Strada (${bestRoad.highway}) raggiungibile seguendo la rete di sentieri e strade — superficie più affidabile in caso di emergenza o maltempo.`,
           bearingDeg: bearingDeg(currentLat, currentLon, node.lat, node.lon),
           targetLat: node.lat,
           targetLon: node.lon,

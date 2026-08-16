@@ -19,6 +19,7 @@ export interface OfflineReadiness {
   downloadedCount: number
   hasTrailGraph: boolean
   trailGraphNodeCount: number
+  hasElevationGraph: boolean
   hasElevationProfile: boolean
   hasPois: boolean
   hasNavInstructions: boolean
@@ -36,12 +37,16 @@ export interface OfflineReadiness {
 export function checkOfflineReadiness(manifest: OfflinePackageManifest | null): OfflineReadiness {
   const tilesReady = isManifestValid(manifest)
   const hasTrailGraph = !!manifest?.hasTrailGraph
+  const hasElevationGraph = !!manifest?.hasElevationGraph
   const hasElevationProfile = !!manifest?.hasElevationProfile
   const hasPois = !!manifest?.hasPois
   const hasNavInstructions = !!manifest?.hasNavInstructions
 
   const degradedMissing: string[] = []
   if (!hasTrailGraph) degradedMissing.push('Rete sentieri (vie di fuga e alternative)')
+  // Segnalato solo se il grafo stesso c'è ma la quota no — senza il grafo il punto sopra copre
+  // già il problema più grande, ripeterlo qui sarebbe ridondante.
+  if (hasTrailGraph && !hasElevationGraph) degradedMissing.push('Dislivello nelle vie di fuga')
   if (!hasElevationProfile) degradedMissing.push('Profilo altimetrico')
   if (!hasPois) degradedMissing.push('Punti di interesse')
   if (!hasNavInstructions) degradedMissing.push('Istruzioni di navigazione')
@@ -52,6 +57,7 @@ export function checkOfflineReadiness(manifest: OfflinePackageManifest | null): 
     downloadedCount: manifest?.downloadedCount ?? 0,
     hasTrailGraph,
     trailGraphNodeCount: manifest?.trailGraphNodeCount ?? 0,
+    hasElevationGraph,
     hasElevationProfile,
     hasPois,
     hasNavInstructions,

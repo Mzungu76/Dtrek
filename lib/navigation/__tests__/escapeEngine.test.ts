@@ -42,6 +42,17 @@ function buildNetwork(): WalkNetwork {
   }
 }
 
+// Stessa rete di buildNetwork(), ma con elevM sui nodi — Fase 7: il nodo 2 è 200m più in alto
+// del nodo 1 in soli 150m di distanza (~1333 m/km), ben oltre STEEP_GAIN_PER_KM (150) usata da
+// escapeEngine.ts per declassare la sicurezza di un'opzione altrimenti "alta".
+function buildNetworkWithSteepElevation(): WalkNetwork {
+  const network = buildNetwork()
+  network.nodes.get(1)!.elevM = 1000
+  network.nodes.get(2)!.elevM = 1200
+  network.nodes.get(3)!.elevM = 1250
+  return network
+}
+
 const safePoi: NavPoi = { id: 'poi-1', lat: 45.008, lon: 7.005, name: 'Rifugio Test', type: 'hut' }
 
 describe('computeEscapeOptions', () => {
@@ -97,5 +108,23 @@ describe('computeEscapeOptions', () => {
     const road = options.find((o) => o.kind === 'road')
     expect(trail?.targetLat).toBeCloseTo(45.006)
     expect(road?.targetLat).toBeCloseTo(45.007)
+  })
+
+  it('senza elevM sui nodi non menziona il dislivello e non lo usa per declassare la sicurezza (fallback, Fase 7)', () => {
+    const input: EscapeEngineInput = {
+      network: buildNetwork(), routePolyline, currentLat: CURRENT_LAT, currentLon: CURRENT_LON, progress,
+    }
+    const trail = computeEscapeOptions(input).find((o) => o.kind === 'alternative_trail')!
+    expect(trail.reason).not.toContain('dislivello')
+    expect(trail.safety).toBe('alta') // safetyForDistance(150, 250, 700) senza correttivo
+  })
+
+  it('con elevM sui nodi declassa la sicurezza di un\'opzione ripida e lo dice nel motivo (Fase 7)', () => {
+    const input: EscapeEngineInput = {
+      network: buildNetworkWithSteepElevation(), routePolyline, currentLat: CURRENT_LAT, currentLon: CURRENT_LON, progress,
+    }
+    const trail = computeEscapeOptions(input).find((o) => o.kind === 'alternative_trail')!
+    expect(trail.reason).toContain('dislivello')
+    expect(trail.safety).toBe('media') // 'alta' declassata di un livello per pendenza (~1333 m/km > 150 m/km)
   })
 })

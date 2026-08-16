@@ -21,6 +21,11 @@ export interface GraphNode {
   lat: number
   lon: number
   edges: GraphEdge[]
+  /** Quota reale (m), popolata best-effort dopo il fetch (Fase 7 di
+   *  docs/navigator-orizzonti-roadmap.md, lib/dtm/graphElevation.ts) — assente su un nodo appena
+   *  scaricato o su un grafo persistito prima di questa fase. Mai richiesta al momento del
+   *  fetch stesso: il DTM è rate-limited, va cache-ata una volta sola a valle. */
+  elevM?: number
 }
 
 export interface GraphEdge {
