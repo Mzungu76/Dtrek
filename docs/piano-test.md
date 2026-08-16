@@ -17,6 +17,9 @@ In CI: `.github/workflows/ci.yml` esegue `npm test` (insieme a lint e typecheck)
 `main` e a ogni pull request — risultato visibile come segno di spunta sul commit/PR e nella
 scheda **Actions** del repository, senza bisogno di un terminale locale.
 
+Risultati di un'esecuzione reale, test per test: `docs/risultati-test.md` (snapshot, non un
+dashboard live — vedi quel file per come riprodurlo).
+
 ## 1. Test esistenti — motore di navigazione (`lib/navigation/__tests__/`)
 
 Framework: **vitest**. 45 test in 6 file, tutti su moduli puri o eseguibili headless (nessuna
