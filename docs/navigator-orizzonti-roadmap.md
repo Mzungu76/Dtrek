@@ -193,7 +193,7 @@ navigazione — nessuna nuova coda o meccanismo di log introdotto.
 - Nessuna localizzazione per chi usa l'app fuori dall'UE (numero 112 fisso).
 - Livello 1 di "Validazione — Field Testing" non ancora eseguito per questa fase.
 
-### Fase 3 — Prima infrastruttura di test automatizzato del repository (vitest) — non ancora fatto
+### Fase 3 — Prima infrastruttura di test automatizzato del repository (vitest) — ✅ landed (v1)
 
 **Nota**: questa fase, a differenza delle altre due dell'Orizzonte 1, non è "solo aggiungere
 file" — introduce la prima vera modifica infrastrutturale del repository: una nuova
@@ -224,16 +224,27 @@ mockable, replayable"), script `"test": "vitest run"` in `package.json`.
   sempre un `reason` non vuoto (invariante esplicito del modulo).
 - `lib/navigation/__tests__/locationModeDecider.test.ts` — tabella di casi per la priorità
   dichiarata (off_route/wrong_direction → emergency; bivio vicino/velocità/accuracy scarsa →
-  navigation; batteria bassa → battery_save; altrimenti trekking) + isteresi temporale (8s) via
-  `vi.useFakeTimers()`.
+  navigation; batteria bassa → battery_save; altrimenti trekking) + isteresi temporale.
 
-**Decisioni aperte**:
-- CI: aggiungere `npm test` a un workflow GitHub Actions (esiste già
-  `.github/workflows/build-navigator-apk.yml` come precedente) — non deciso se bloccante sui PR
-  da subito.
-- Se estendere nello stesso giro anche a `mapMatcher.ts`/`positionEngine.ts` (filtro di
-  Kalman) o rimandare — la roadmap esistente li segnala già come "non testato", ma questa fase
-  prioritizza solo i tre moduli sopra.
+**Implementato** (branch `claude/dtrek-navigator-analysis-dld340`): esattamente le tre suite
+sopra, **28 test, tutti verdi**. Due dettagli emersi scrivendoli, diversi dalla formulazione
+originale:
+- **`resolve.tsconfigPaths: true` nativo di Vite** invece del plugin `vite-tsconfig-paths` —
+  installato inizialmente, poi rimosso appena il warning di vitest ha segnalato il supporto
+  nativo equivalente: una dipendenza in meno per lo stesso risultato.
+- **Isteresi di `LocationModeDecider` testata senza `vi.useFakeTimers()`**: `update()` prende
+  già `nowMs` come parametro esplicito, quindi il test avanza quel valore a mano tra una
+  chiamata e l'altra — nessun mock di timer reali necessario, più semplice di quanto
+  ipotizzato.
+- `offRouteEngine.test.ts` nota esplicitamente che il dwell di default (`offRouteDwellMs`) è
+  15s, non i "~20s" arrotondati nel commento del modulo — il test riproduce il comportamento
+  reale delle soglie di default, non l'approssimazione della prosa.
+
+**Non ancora fatto / prossimi passi concreti**:
+- **CI**: `npm test` non è ancora agganciato a nessun workflow GitHub Actions — i test vanno
+  ancora lanciati a mano, non bloccano un PR che li rompe.
+- `mapMatcher.ts`/`positionEngine.ts` (filtro di Kalman) restano non testati, come già
+  segnalato dalla roadmap originale — questa fase ha prioritizzato solo i tre moduli sopra.
 
 ## Orizzonte 2 — Colmare il gap di mercato — non ancora fatto
 
@@ -541,9 +552,9 @@ durante l'implementazione della fase specifica, non prerequisiti.
    end-to-end reale (vedi "Non ancora fatto" della Fase 1 sopra).
 2. ✅ Fase 2 — SOS/emergenza a 4 livelli, UI fail-safe (piccola, indipendente, alto valore
    percepito a costo quasi nullo). Resta da fare solo il test su dispositivo reale.
-3. Fase 3 — Prima infrastruttura di test automatizzato (protegge tutto il lavoro già fatto e
-   quello futuro sulle soglie di sicurezza — va chiusa presto, non alla fine; livello 1 di
-   Field Testing).
+3. ✅ Fase 3 — Prima infrastruttura di test automatizzato, 28 test verdi su offRouteEngine/
+   escapeEngine/locationModeDecider (livello 1 di Field Testing). Resta da fare l'aggancio a
+   una CI.
 4. Fase 6 — Qualità voce (piccola, indipendente, migliora subito l'esperienza quotidiana).
 5. Fase 7 — Escape Engine elevation-aware (chiude un limite già documentato e atteso).
 6. Fase 4 — Community layer leggero, architettura senza view pubblica (il pezzo di maggior
