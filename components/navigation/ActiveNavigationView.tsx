@@ -38,6 +38,7 @@ import { matchToTrailGraph, type MapMatchResult } from '@/lib/navigation/mapMatc
 import EscapeOptionsSheet from './EscapeOptionsSheet'
 import OfflinePackageDownloader from './OfflinePackageDownloader'
 import LiveShareToggle from './LiveShareToggle'
+import GroupModeSection from './GroupModeSection'
 import { publishLivePosition } from '@/lib/navigation/liveLocationPublish'
 import SosButton from './SosButton'
 import GiuliaLiveQa from './GiuliaLiveQa'
@@ -1024,6 +1025,11 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         <LiveShareToggle
           sessionId={remoteSessionIdState}
           onSharingChange={(enabled, token) => { setLiveSharingEnabled(enabled); setLiveShareToken(token) }}
+        />
+        <GroupModeSection
+          sessionId={remoteSessionIdState}
+          plannedHikeId={hike.id}
+          onGroupActive={(active) => { if (active) setLiveSharingEnabled(true) }}
         />
       </Sheet>
 
