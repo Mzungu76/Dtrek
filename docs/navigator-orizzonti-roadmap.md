@@ -367,7 +367,7 @@ non un blocco unico:
 - Se 5A/5B possono procedere in parallelo con capacità diverse (uno scaffolding, uno Swift) o
   vanno strettamente sequenziali — 5C dipende comunque da entrambe.
 
-### Fase 6 — Qualità voce: coda invece di cancel — non ancora fatto
+### Fase 6 — Qualità voce: coda invece di cancel — ✅ landed (v1)
 
 `lib/navigation/speech.ts` oggi fa `window.speechSynthesis.cancel()` prima di ogni nuovo
 avviso (scelta deliberata, non un bug — commento: "don't stack callouts if one is already
@@ -381,13 +381,16 @@ mid-sentence"). Con vento o passo sostenuto, un'istruzione può sparire a metà 
 - Dedup: stesso testo/tipo già in coda non viene riaccodato.
 - Avanzamento della coda via `onend`/`onerror`, non fire-and-forget.
 
-**Decisioni aperte**:
-- Classificazione esatta "critical" vs "normal" per ogni tipo di evento esistente (off-route,
-  turn-by-turn, moments, POI) — richiede una vera scelta di prodotto, non solo tecnica.
-- Se introdurre varietà di formulazione (non solo distanza, anche nome del prossimo POI) —
-  scope più ampio del semplice accodamento, da valutare separatamente.
+**Implementato** (branch `claude/dtrek-navigator-analysis-dld340`): esattamente la coda con
+priorità descritta sopra, `speak(text, { priority })`. Classificazione applicata: `critical` =
+fuori percorso, direzione sbagliata, GPS perso/permesso negato, promemoria di rientro per il
+buio; `normal` (default, invariato) = arrivo a un POI, moment narrativo, batteria scarica.
 
-### Fase 7 — Escape Engine elevation-aware (cache offline) — non ancora fatto
+**Non ancora fatto**: nessun test su dispositivo reale (comportamento della coda con vento/voce
+di sistema variabile per produttore); varietà di formulazione (non solo distanza, anche nome
+del prossimo POI) resta fuori scope, come già segnalato.
+
+### Fase 7 — Escape Engine elevation-aware (cache offline) — ✅ landed (v1)
 
 Esattamente il piano già scritto come lavoro futuro in `docs/navigation-engine-roadmap.md`
 (Fase 7 originale): niente dislivello nelle vie di fuga oggi, perché il servizio DTM esterno è
@@ -397,28 +400,36 @@ rate-limited a 50 chiamate/24h — inaccettabile da spendere in tempo reale.
 - `lib/routeBuilder/osmGraph.ts`: `GraphNode` guadagna un campo opzionale `elevM?: number`
   (oggi assente) — nessuna breaking change, i consumer esistenti lo trattano come assente
   finché non popolato.
-- `lib/navigation/trailGraphStore.ts`: la serializzazione IndexedDB include `elevM` quando
-  presente.
 - `lib/offline/packageManager.ts` (`downloadOfflinePackage()`): dopo aver salvato il trail
-  graph, una fase best-effort raggruppa i nodi in un numero minimo di bbox DTM (riuso di
-  `lib/dtm/dtmCache.ts`) e popola `elevM` — **un solo tentativo per pacchetto**, mai ripetuto a
-  ogni avvio navigazione.
+  graph, una fase best-effort chiama il nuovo endpoint autenticato
+  `app/api/navigation/trail-graph-elevation` e applica le quote ricevute — **un solo tentativo
+  per pacchetto**, mai ripetuto a ogni avvio navigazione.
 - `packageManifest.ts`: nuovo campo opzionale `hasElevationGraph?: boolean`, degradabile in
   `offlineReadiness.ts` (mai bloccante, stessa filosofia già stabilita per il trail graph).
 - `lib/navigation/escapeEngine.ts`: quando `elevM` è presente sui nodi del path calcolato,
-  somma il dislivello reale per raffinare `safety` oltre al proxy attuale (lunghezza + tag
-  `highway`); quando assente, fallback silenzioso al comportamento di oggi — nessuna
-  regressione per pacchetti scaricati prima di questa fase.
+  somma il dislivello reale e declassa `safety` di un livello oltre ~150 m/km di pendenza,
+  aggiungendo la cifra al motivo mostrato; quando assente, fallback silenzioso al comportamento
+  di oggi — nessuna regressione per pacchetti scaricati prima di questa fase.
 
-**Decisioni aperte**:
-- Costo del rate-limit a scala: se la chiave DTM è condivisa server-side, molti download
-  offline nello stesso giorno potrebbero esaurirla — verificare se serve una cache
-  cross-utente persistente per bbox già scaricate di recente.
-- Densità di campionamento: ogni nodo del grafo (potenzialmente centinaia, `MAX_VISITED_NODES
-  =600` nell'Escape Engine) vs. un sottoinsieme interpolato — impatta quante bbox servono per
-  download.
-- Se rendere questo un'opzione esplicita nel download offline esistente
-  (`OfflinePackageDownloader.tsx`) o sempre-attivo.
+**Semplificazione emersa scrivendolo, diversa dalla formulazione originale**: niente
+"raggruppamento in un numero minimo di bbox DTM" — il bbox del trail graph persistito è già
+quello ~1.1km-padded di `trailGraphStore.ts` (pensato apposta per coprire vie di fuga vicine),
+abbastanza piccolo da stare in un **solo** tile DTM. `lib/dtm/graphElevation.ts` riusa quindi lo
+stesso pattern "una bbox, una chiamata DTM cache-ata 180 giorni" già collaudato in
+`lib/dtm/elevationEnrich.ts` per l'arricchimento dei percorsi in pianificazione — non serviva
+nulla di nuovo, solo applicarlo ai nodi del grafo invece che ai punti di un tracciato.
+`lib/navigation/trailGraphStore.ts` non ha richiesto **nessuna** modifica alla serializzazione
+(a differenza di quanto ipotizzato sopra): salva già l'intero oggetto `GraphNode` così com'è,
+quindi il nuovo campo `elevM` viene persistito automaticamente.
+
+**Non ancora fatto / prossimi passi concreti**:
+- Costo del rate-limit a scala: se molti utenti scaricano pacchetti offline nello stesso giorno
+  in aree diverse, 50 chiamate/24h condivise lato server potrebbero esaurirsi — non misurato
+  con traffico reale.
+- `STEEP_GAIN_PER_KM = 150` (soglia di declassamento) è una stima di partenza, non calibrata su
+  un caso reale — stesso caveat delle altre costanti "a stima" del motore di navigazione.
+- Nessun test su un pacchetto scaricato con copertura DTM reale (solo verificato con
+  `elevM` sintetico nei test automatici) né su dispositivo reale.
 
 ## Orizzonte 3 — Vision (difficile da copiare dalla concorrenza) — non ancora fatto
 
@@ -558,8 +569,9 @@ durante l'implementazione della fase specifica, non prerequisiti.
 3. ✅ Fase 3 — Prima infrastruttura di test automatizzato, 28 test verdi su offRouteEngine/
    escapeEngine/locationModeDecider (livello 1 di Field Testing), agganciati a
    `.github/workflows/ci.yml` su ogni push/PR.
-4. Fase 6 — Qualità voce (piccola, indipendente, migliora subito l'esperienza quotidiana).
-5. Fase 7 — Escape Engine elevation-aware (chiude un limite già documentato e atteso).
+4. ✅ Fase 6 — Qualità voce, coda con priorità critical/normal.
+5. ✅ Fase 7 — Escape Engine elevation-aware, dislivello reale nelle vie di fuga cache-ato al
+   download offline.
 6. Fase 4 — Community layer leggero, architettura senza view pubblica (il pezzo di maggior
    investimento di prodotto dell'Orizzonte 2, richiede decisioni di moderazione/dedup prima di
    partire).
