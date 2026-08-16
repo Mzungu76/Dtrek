@@ -160,6 +160,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   const [liveShareToken, setLiveShareToken] = useState<string | null>(null)
   const [showNatura2000, setShowNatura2000] = useState(false)
   const [wildlifeAlertDismissed, setWildlifeAlertDismissed] = useState(false)
+  const [weatherLookaheadDismissed, setWeatherLookaheadDismissed] = useState(false)
   const [pace, setPace] = useState<PaceUpdateResult | null>(null)
   const [turnBackDismissed, setTurnBackDismissed] = useState(false)
   // Fino a 3 avvisi "bottom" (off-route/gps-lost, batteria scarica, rientro per
@@ -296,7 +297,16 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   const poiNotesByIdRef = useRef(poiNotesById)
   poiNotesByIdRef.current = poiNotesById
 
-  useWeatherRefresh(hike.id, routePolyline, positionRef, engineRef)
+  // Fase 11 di docs/navigator-orizzonti-roadmap.md — stesso motivo di positionRef: il refresh
+  // meteo dentro useWeatherRefresh vive in un effect a mount unico, una chiusura diretta su
+  // `pace` resterebbe congelata al valore del mount.
+  const paceEtaRef = useRef<Date | null>(null)
+  paceEtaRef.current = pace?.liveEtaDate ?? null
+
+  const weatherLookahead = useWeatherRefresh(hike.id, routePolyline, positionRef, engineRef, paceEtaRef)
+  // Un nuovo avviso (testo diverso, es. l'ETA si sposta e ora indica pioggia invece di vento)
+  // non deve restare nascosto solo perché un avviso precedente era stato chiuso.
+  useEffect(() => { setWeatherLookaheadDismissed(false) }, [weatherLookahead?.message])
   const sunTimes = useSunTimes(hike.id, routePolyline, positionRef)
 
   const remainingPois = useMemo(() => {
@@ -885,8 +895,16 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       {/* Le tre notice qui sotto puntavano tutte allo stesso top-[210px] senza
           alcuna logica di stacking: se più di una era attiva si sovrapponevano
           letteralmente. Un contenitore colonna le impila invece in ordine. */}
-      {(mapFallbackNotice || offlinePackageWarning || offlineDegradedMissing.length > 0 || (state !== 'idle' && relevantWildlifeRisks.length > 0 && !wildlifeAlertDismissed)) && (
+      {(mapFallbackNotice || offlinePackageWarning || offlineDegradedMissing.length > 0 || (state !== 'idle' && relevantWildlifeRisks.length > 0 && !wildlifeAlertDismissed) || (weatherLookahead?.message && !weatherLookaheadDismissed)) && (
         <div className="absolute top-[210px] left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-2 w-[calc(100%-2rem)] max-w-sm">
+          {weatherLookahead?.message && !weatherLookaheadDismissed && (
+            <div className="px-4 py-2 rounded-full bg-stone-800 text-white text-xs font-semibold shadow-lg font-body flex items-center gap-2">
+              <span className="shrink-0">🌦️</span>
+              {weatherLookahead.message}
+              <button onClick={() => setWeatherLookaheadDismissed(true)} className="text-stone-400 hover:text-white ml-1" aria-label="Chiudi avviso">✕</button>
+            </div>
+          )}
+
           {mapFallbackNotice && (
             <div className="px-4 py-2 rounded-full bg-stone-800 text-white text-xs font-semibold shadow-lg font-body">
               Mappa online non disponibile, uso la mappa offline

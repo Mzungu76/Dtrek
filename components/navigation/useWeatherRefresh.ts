@@ -1,19 +1,29 @@
 'use client'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import type { MutableRefObject } from 'react'
 import { fetchDayHourly } from '@/lib/openmeteo'
 import type { NavigationEngine } from '@/lib/navigation/navigationEngine'
+import { projectWeatherAtEta, type WeatherLookahead } from '@/lib/navigation/weatherLookahead'
 
 // Feeds PaceAssistant's weather correction (lib/navigation/paceAssistant.ts) — the engine
 // itself makes no network calls, so this owns the periodic Open-Meteo refresh and pushes
 // the result in. Refreshed every 20min, not per GPS fix: hourly weather doesn't need
 // finer granularity, and re-fetching on every fix would hammer the API for no benefit.
+//
+// Fase 11 di docs/navigator-orizzonti-roadmap.md — lo stesso array orario già scaricato qui
+// alimenta anche la proiezione meteo all'ETA stimato (lib/navigation/weatherLookahead.ts),
+// riusando la stessa cadenza di refresh invece di introdurre una seconda chiamata Open-Meteo
+// indipendente. `etaDateRef` è opzionale: senza (o prima che PaceAssistant abbia una stima) la
+// proiezione resta null, nessun comportamento diverso da prima di questa fase.
 export function useWeatherRefresh(
   hikeId: string,
   routePolyline: [number, number][],
   positionRef: MutableRefObject<{ lat: number; lon: number } | null>,
   engineRef: MutableRefObject<NavigationEngine | null>,
-): void {
+  etaDateRef?: MutableRefObject<Date | null>,
+): WeatherLookahead | null {
+  const [lookahead, setLookahead] = useState<WeatherLookahead | null>(null)
+
   useEffect(() => {
     if (routePolyline.length === 0) return
     let cancelled = false
@@ -28,6 +38,9 @@ export function useWeatherRefresh(
         const closest = hours.reduce((best, h) =>
           Math.abs(new Date(h.time).getTime() - nowMs) < Math.abs(new Date(best.time).getTime() - nowMs) ? h : best)
         engineRef.current?.setWeatherConditions({ tempC: closest.temperature, windKmh: closest.windspeed, precipMm: closest.precipitation })
+
+        const eta = etaDateRef?.current ?? null
+        setLookahead(eta ? projectWeatherAtEta(hours, eta, nowMs) : null)
       }).catch(() => {})
     }
 
@@ -36,4 +49,6 @@ export function useWeatherRefresh(
     return () => { cancelled = true; clearInterval(id) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hikeId])
+
+  return lookahead
 }
