@@ -512,10 +512,22 @@ nessuna fase precedente):
   vedi il prerequisito trasversale sulla persistenza del trail graph nella roadmap originale):
   il modulo di calcolo è pronto e testato, l'interfaccia che lo mostra è lavoro futuro.
 
+**Seguito — prima UI reale** (stesso branch, richiesto esplicitamente dall'utente subito dopo
+il landing della v1): `components/navigation/useTrailConfidence.ts` +
+`TrailConfidenceBadge.tsx` — un badge colorato (verde/ambra/rosso) nella colonna destra dei
+controlli mappa, un tap apre un foglio con punteggio, motivi e una nota esplicita su cosa non
+copre ancora. Riusa `/api/trails/conditions?polyline=...`, lo stesso endpoint/pattern già usato
+da `components/CurrentConditionsNotice.tsx` — nessun nuovo endpoint. **Resta un solo badge per
+l'intera escursione, non un overlay per segmento**: gli input disponibili (Trail Score, meteo/
+clima, community) sono già aggregati sull'intero percorso in questa app, non granulari quanto
+servirebbe per colorare tratti diversi in modo significativo — un vero overlay "per tratto"
+richiede prima i segnali per-segmento ancora mancanti (vedi sopra), non solo una UI diversa
+sullo stesso calcolo.
+
 **Non ancora fatto**: formula di blend non validata su un caso reale (pesi 0.6/0.4/correttivo
 ±0.1 sono stime ragionevoli, non calibrate); nessuna decisione presa su offline vs online per
-il pezzo community, dato che non esiste ancora un punto in cui il punteggio viene consumato
-dal vivo.
+il pezzo community (ora che il punteggio è davvero consumato dal vivo, la domanda è concreta,
+non più ipotetica — ma non ancora affrontata); nessun test end-to-end reale del badge.
 
 ### Fase 9 — Modalità gruppo — ✅ landed (v1)
 
