@@ -743,7 +743,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
     }
   }
 
-  const handleSaveRecordedActivity = async (title: string, mode: 'overwrite' | 'new') => {
+  const handleSaveRecordedActivity = async (title: string, mode: 'overwrite' | 'new', reportCompletion: boolean, completionNote: string) => {
     if (!pendingActivity) return
     let offline = false
     const saved = await saveActivityWithEnrichment(pendingActivity, {
@@ -758,6 +758,16 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       onSyncResult: (ok) => { offline = !ok },
     })
     clearRecordedTrack(hike.id).catch(() => {})
+
+    // Fase 4 di docs/navigator-orizzonti-roadmap.md — opt-in esplicito (checkbox deselezionata
+    // di default in EndHikeReviewDialog.tsx), best-effort e fire-and-forget: non deve mai
+    // ritardare né bloccare la navigazione verso il resoconto appena salvato.
+    if (reportCompletion) {
+      fetch('/api/trails/completions', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ activityId: saved.id, note: completionNote || undefined }),
+      }).catch(() => {})
+    }
     if (offline) {
       // The record is already safe (written to IndexedDB before any network attempt — see
       // lib/activitySave.ts), but the dialog is about to be replaced by a page navigation with no

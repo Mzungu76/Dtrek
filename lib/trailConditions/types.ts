@@ -15,6 +15,25 @@ export interface ClimateSignal {
   seasonBonus: number     // +5 (Apr/Mag, Ott/Nov) | 0
 }
 
+/**
+ * Fase 4 di docs/navigator-orizzonti-roadmap.md — primo segnale con input scritto da utenti
+ * reali (weather/climate sopra restano 100% calcolati da dati esterni). A differenza degli
+ * altri due, `confidenceWeight` non è un moltiplicatore di penalità ma un peso 0..1 pensato per
+ * un futuro blend (Fase 8, Trail Confidence): un segnale rumoroso e volatile nel tempo va
+ * attenuato, mai sommato alla pari con Trail Score/connettività/geometria — vedi il commento
+ * nella roadmap sul perché.
+ */
+export interface CommunitySignal {
+  completions30d: number
+  completionsTotal: number
+  /** Già filtrate e limitate — pronte per essere mostrate senza ulteriore elaborazione. */
+  notes: string[]
+  difficultyMarkerCount: number
+  /** Parole chiave più ricorrenti tra i marker di difficoltà vicini (trail_difficulty_markers) — un assaggio, non l'elenco completo. */
+  recentDifficultyKeywords: string[]
+  confidenceWeight: number
+}
+
 export interface SignalContext {
   bbox: { minLat: number; maxLat: number; minLon: number; maxLon: number }
   geometry: [number, number][]

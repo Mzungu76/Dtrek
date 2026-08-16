@@ -11,7 +11,8 @@ import { computeBbox } from '@/lib/geoUtils'
 import { fetchOsmTags } from '@/lib/trailConditions/osmTags'
 import { collectWeatherSignal } from '@/lib/trailConditions/weatherSignals'
 import { collectClimateSignal } from '@/lib/trailConditions/climateSignals'
-import type { SignalContext, WeatherSignal, ClimateSignal } from '@/lib/trailConditions/types'
+import { collectCommunitySignal } from '@/lib/trailConditions/communitySignals'
+import type { SignalContext, WeatherSignal, ClimateSignal, CommunitySignal } from '@/lib/trailConditions/types'
 
 export const maxDuration = 30
 
@@ -27,6 +28,10 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 interface ConditionsResponse {
   weather: WeatherSignal
   climate: ClimateSignal
+  /** Fase 4 di docs/navigator-orizzonti-roadmap.md — primo segnale scritto da utenti reali, non
+   *  solo calcolato. Vuoto/azzerato quando il percorso non è collegato a un osm_relation_id
+   *  noto (nessun completamento possibile da aggregare). */
+  community: CommunitySignal
 }
 
 export async function GET(req: NextRequest) {
@@ -118,12 +123,13 @@ export async function GET(req: NextRequest) {
     }
 
     const collectorId = osmRelationId ?? 0
-    const [weather, climate] = await Promise.all([
+    const [weather, climate, community] = await Promise.all([
       collectWeatherSignal(collectorId, ctx),
       collectClimateSignal(collectorId, ctx),
+      collectCommunitySignal(collectorId, ctx),
     ])
 
-    const body: ConditionsResponse = { weather, climate }
+    const body: ConditionsResponse = { weather, climate, community }
     return NextResponse.json(body)
   } catch (err) {
     console.error('[trails/conditions] failed', err)
