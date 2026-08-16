@@ -128,7 +128,7 @@ non nella formulazione originale sopra:
   eseguito per questa fase: nessuno scenario di `lib/navigation/simulation/presetScenarios.ts`
   è stato rigiocato contro il nuovo flusso di condivisione.
 
-### Fase 2 — SOS / azione di emergenza — non ancora fatto
+### Fase 2 — SOS / azione di emergenza — ✅ landed (v1)
 
 Nessun pattern `tel:`/`sms:`/112 esiste oggi nel codice — lavoro nuovo, che riusa solo la
 posizione già disponibile in `ActiveNavigationView.tsx`. **Da non progettare come "un bottone,
@@ -170,14 +170,28 @@ UI di navigazione parzialmente degradata.
 (best-effort: se la rete manca, il log resta in coda locale come già avviene per gli altri
 eventi, non blocca né ritarda i livelli 1-3).
 
-**Decisioni aperte**:
-- **Deep-link (`tel:112`, un tap in più per confermare) vs chiamata diretta** (richiederebbe
-  il permesso Android `CALL_PHONE`, oggi assente dal manifest): v1 = deep-link, più sicuro e
-  senza nuovo permesso invasivo.
-- **112 è fisso** per v1 (target Italia/UE) — non gestisce automaticamente numeri di emergenza
-  esteri.
-- Se il testo dell'SMS debba includere anche il link di condivisione live (Fase 1) quando
-  attivo — piccola sinergia tra le due fasi, da valutare insieme.
+**Implementato** (branch `claude/dtrek-navigator-analysis-dld340`): esattamente i 4 livelli
+sopra. Il bottone è montato fisso in un angolo dedicato (alto a destra, sopra ogni banner
+esistente — z-index più alto persino del banner "SIMULAZIONE"), non dentro `NavBottomSheet.tsx`
+come inizialmente ipotizzato, proprio per restare raggiungibile indipendentemente da quale
+altro foglio/banner sia aperto. `onTriggered` registra l'evento (`sos_triggered` + quale azione,
+chiamata o SMS) tramite `logEvent()`, la stessa funzione già usata per tutti gli altri eventi di
+navigazione — nessuna nuova coda o meccanismo di log introdotto.
+
+**Decisioni prese per v1** (non più aperte):
+- **Deep-link (`tel:112`)**, non chiamata diretta — nessun permesso Android nuovo richiesto.
+- **112 fisso**, nessuna localizzazione del numero per ora.
+- **SMS e link di condivisione live tenuti separati**: il testo dell'SMS include solo
+  coordinate + link Google Maps (per restare breve), il link di condivisione live (quando
+  attivo) compare come sezione a sé nello stesso sheet — livello 4, mai incollato dentro il
+  livello 2.
+
+**Non ancora fatto / prossimi passi concreti**:
+- Nessun test end-to-end reale su dispositivo — `tsc --noEmit` e lint puliti, ma i link
+  `tel:`/`sms:` non sono stati verificati su un telefono vero (comportamento del dialer/app SMS
+  può variare per produttore Android).
+- Nessuna localizzazione per chi usa l'app fuori dall'UE (numero 112 fisso).
+- Livello 1 di "Validazione — Field Testing" non ancora eseguito per questa fase.
 
 ### Fase 3 — Prima infrastruttura di test automatizzato del repository (vitest) — non ancora fatto
 
@@ -525,8 +539,8 @@ durante l'implementazione della fase specifica, non prerequisiti.
    più grave, il più economico da costruire vista l'infrastruttura di token già esistente).
    Resta da fare solo l'applicazione della migrazione al progetto Supabase live e un test
    end-to-end reale (vedi "Non ancora fatto" della Fase 1 sopra).
-2. Fase 2 — SOS/emergenza a 4 livelli, UI fail-safe (piccola, indipendente, alto valore
-   percepito a costo quasi nullo).
+2. ✅ Fase 2 — SOS/emergenza a 4 livelli, UI fail-safe (piccola, indipendente, alto valore
+   percepito a costo quasi nullo). Resta da fare solo il test su dispositivo reale.
 3. Fase 3 — Prima infrastruttura di test automatizzato (protegge tutto il lavoro già fatto e
    quello futuro sulle soglie di sicurezza — va chiusa presto, non alla fine; livello 1 di
    Field Testing).
