@@ -498,7 +498,7 @@ come Fase 1) o membership autenticata reciproca ("unisciti al gruppo" esplicito 
 partecipante) — sono due modelli di sicurezza sostanzialmente diversi, da scegliere prima di
 progettare lo schema RLS definitivo.
 
-### Fase 10 — "Giulia in cammino" — non ancora fatto (vision)
+### Fase 10 — "Giulia in cammino" — ✅ landed (v1)
 
 Nuova route `app/api/guide/live-qa/route.ts`, copia strutturale di `app/api/guide/qa/route.ts`
 con `buildContext()` sostituito da una versione che riceve posizione GPS corrente, il POI più
@@ -518,9 +518,34 @@ contesto (posizione, POI vicino, distanza residua) ma non ha alcun canale di scr
 `NavigationEngine`, `offRouteEngine.ts` o `escapeEngine.ts`. Il motore decide, Giulia
 interpreta e assiste — mai il contrario.
 
-**Decisione aperta**: il riconoscimento vocale via Web Speech API richiede probabilmente
-connessione dati — questa feature è verosimilmente solo-online, da dichiarare esplicitamente
-vista la natura "in cammino, spesso senza rete" del contesto.
+**Implementato** (branch `claude/dtrek-navigator-analysis-dld340`), con scelte diverse dalla
+formulazione originale, tutte per restare più leggeri di `guide/qa`:
+- **Nessuna posizione GPS nel contesto inviato al modello** — solo titolo del percorso, nome/
+  distanza del POI più vicino (già ordinato da `remainingPois`) e distanza rimanente. Le
+  coordinate grezze non aggiungono nulla che Giulia possa usare in una risposta breve e non
+  navigazionale, e tenerle fuori dal prompt è anche coerente col vincolo di sicurezza (niente
+  che assomigli a un dato di navigazione nel contesto che il modello vede).
+- **Nessuna ricerca web, nessuna cronologia persistita/rigiocata** — a differenza di
+  `guide/qa`: una domanda "in cammino" deve restare rapida (`max_tokens: 200` contro i 600 di
+  `guide/qa`, nessun tool `web_search`), e non c'è un flusso naturale di "conversazione nel
+  tempo" da salvare come per la guida pre-escursione. Ogni domanda è indipendente.
+- **`liveQa` su Haiku di default** (`lib/claudeModels.ts`), non Sonnet come `guide`/`guideQa` —
+  stesso trattamento economico di `questionnaire`/`caption`, coerente con "domanda breve,
+  contesto minimo" del research brief originale.
+- `components/navigation/GiuliaLiveQa.tsx`: un tap avvia la dettatura, un secondo tap la ferma
+  e invia — nessun bottone "invia" separato, tutta l'interazione è push-to-talk. La risposta
+  viene sia letta ad alta voce (`speak(text, { priority: 'normal' })`, si accoda invece di
+  interrompere un avviso critico in corso) sia mostrata in un piccolo pannello, per chi
+  preferisce non ascoltare.
+
+**Decisione aperta chiusa**: il pulsante è disabilitato quando `isOnline` è `false` — "solo
+online" è dichiarato esplicitamente nell'interfaccia (tooltip "Richiede connessione"), non un
+degrado silenzioso scoperto a metà domanda.
+
+**Non ancora fatto**: nessun test end-to-end reale (riconoscimento vocale del browser, qualità
+della trascrizione italiana, latenza reale della risposta) — solo `tsc`/lint puliti, nessun
+test automatico scritto per questa fase (il componente dipende da Web Speech API e da uno
+stream di rete, entrambi difficili da testare in unit senza un browser reale).
 
 ### Fase 11 — Weather look-ahead — ✅ landed (v1)
 
