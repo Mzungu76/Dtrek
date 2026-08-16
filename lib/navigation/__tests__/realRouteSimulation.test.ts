@@ -32,9 +32,11 @@
  * Il fattore di compressione usato qui (15x) resta sopra entrambe le soglie per i segmenti
  * "veloci" osservati nelle finestre usate sotto — non è stato scelto a caso, vedi il commento
  * su rebaseFixesToNowCompressed(). I test seguenti ("deviazione e rientro", "GPS perso e
- * ripristinato", "vie di fuga") iniettano scenari sintetici su questi stessi dati reali per
- * esercitare anche i casi off_route/rientro, gps_lost/gpsRecovered e computeEscapeOptions()
- * (scenari §3.2, §3.3, §3.4 del piano) — vedi i loro commenti per i dettagli di ciascuno.
+ * ripristinato", "vie di fuga", "batteria in calo") iniettano scenari sintetici su questi stessi
+ * dati reali per esercitare anche i casi off_route/rientro, gps_lost/gpsRecovered,
+ * computeEscapeOptions() e LocationModeDecider (scenari §3.2-§3.5 del piano) — vedi i loro
+ * commenti per i dettagli di ciascuno. L'ultimo, non passando da NavigationEngine, è anche
+ * l'unico che copre l'intera escursione reale invece di una finestra breve.
  */
 import { describe, it, expect } from 'vitest'
 import { NavigationEngine } from '@/lib/navigation/navigationEngine'
@@ -42,6 +44,7 @@ import { SimulationLocationProvider } from '@/lib/navigation/simulation/simulati
 import { injectDeviation, injectGpsLoss } from '@/lib/navigation/simulation/scenarioBuilder'
 import { RouteTracker } from '../routeDeviation'
 import { computeEscapeOptions } from '../escapeEngine'
+import { LocationModeDecider } from '../locationModeDecider'
 import type { WalkNetwork } from '@/lib/routeBuilder/osmGraph'
 import fixture from './fixtures/faggeta-cimino.json'
 import { rebaseFixesToNowCompressed, type RealTrackFixture } from './helpers/realTrackFixture'
@@ -217,5 +220,55 @@ describe('percorso reale end-to-end (Monte Cimino, fix GPS realmente registrati)
     expect(options.find((o) => o.kind === 'safe_poi')).toBeDefined()
 
     for (const option of options) expect(option.reason.length).toBeGreaterThan(0)
+  })
+
+  it('batteria in calo durante l\'intera uscita: passa a battery_save una sola volta, senza sfarfallare (scenario §3.5 del piano)', () => {
+    // A differenza degli altri test in questo file, LocationModeDecider non passa da
+    // NavigationEngine/PositionEngine — è una funzione pura più un piccolo wrapper stateful che
+    // prende `nowMs` come parametro esplicito, non `Date.now()`. Non serve quindi né riprodurre
+    // in tempo reale né comprimere nulla: si può alimentare con l'INTERA escursione reale
+    // (tutti i 400 fix, 4h07m) usando i suoi timestamp originali così come sono — l'unico test in
+    // questo file che copre davvero il percorso per intero, non solo una finestra breve (vedi il
+    // commento in cima al file sul perché gli altri non possono).
+    const points = track.trackPoints
+    const t0 = new Date(points[0].time).getTime()
+    const tLast = new Date(points[points.length - 1].time).getTime()
+    const spanMs = tLast - t0
+
+    const decider = new LocationModeDecider('trekking')
+    const changes: { mode: string; atMs: number; index: number }[] = []
+    let firstBelowThresholdAtMs: number | null = null
+
+    for (let i = 0; i < points.length; i++) {
+      const atMs = new Date(points[i].time).getTime()
+      const fraction = spanMs > 0 ? (atMs - t0) / spanMs : 0
+      const batteryLevel = 0.95 - fraction * 0.90 // scende linearmente da 95% a 5% sull'intera uscita
+
+      if (batteryLevel < 0.30 && firstBelowThresholdAtMs == null) firstBelowThresholdAtMs = atMs
+
+      const mode = decider.update({
+        state: 'navigating',
+        instantSpeedMs: points[i].speedMs ?? 0,
+        accuracyM: 8,
+        distanceToNextInstructionM: null,
+        batteryLevel,
+        batteryCharging: false,
+      }, atMs)
+
+      if (mode) changes.push({ mode, atMs, index: i })
+    }
+
+    // Esattamente una transizione in tutta l'uscita: se il decider sfarfallasse (es. rimbalzasse
+    // dentro e fuori da battery_save per rumore vicino alla soglia) qui ne vedremmo più di una.
+    expect(changes.length).toBe(1)
+    expect(changes[0].mode).toBe('battery_save')
+    expect(firstBelowThresholdAtMs).not.toBeNull()
+
+    // La transizione arriva dopo l'isteresi dichiarata (MODE_CHANGE_DWELL_MS, 8s) dal primo
+    // campione sotto soglia, non prima — e comunque entro un solo intervallo fra due fix reali
+    // (~37s), visto che la cadenza reale è già molto più larga della finestra di isteresi.
+    const dwellMs = changes[0].atMs - firstBelowThresholdAtMs!
+    expect(dwellMs).toBeGreaterThanOrEqual(8000)
+    expect(dwellMs).toBeLessThan(80_000)
   })
 })
