@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  lint-and-typecheck:
+  lint-typecheck-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,3 +23,9 @@ jobs:
 
       - name: Typecheck
         run: npx tsc --noEmit
+
+      # docs/navigator-orizzonti-roadmap.md, Fase 3 — prima suite di test del repository
+      # (lib/navigation/__tests__/), aggiunta qui invece che in un job separato: stesso
+      # `npm ci` già fatto sopra, nessun costo aggiuntivo di installazione.
+      - name: Test
+        run: npm test
