@@ -8,8 +8,9 @@ interface Props {
   sessionId: string | null
   /** Il componente gestisce da solo il proprio stato (token/scadenza) — questo callback serve
    *  solo a far sapere al genitore SE deve far partire il loop di pubblicazione posizione
-   *  (ActiveNavigationView.tsx), senza duplicare la logica di create/revoke/reload qui sopra. */
-  onSharingChange?: (enabled: boolean) => void
+   *  (ActiveNavigationView.tsx) e, quando attivo, il token per mostrare il link anche nella UI
+   *  SOS (Fase 2) — senza duplicare qui la logica di create/revoke/reload. */
+  onSharingChange?: (enabled: boolean, token: string | null) => void
 }
 
 function formatExpiry(iso: string): string {
@@ -44,7 +45,7 @@ export default function LiveShareToggle({ sessionId, onSharingChange }: Props) {
         if (cancelled || !d) return
         setToken(d.token ?? null)
         setExpiresAt(d.expiresAt ?? null)
-        if (d.token) onSharingChange?.(true)
+        if (d.token) onSharingChange?.(true, d.token)
       })
       .catch(() => {})
     return () => { cancelled = true }
@@ -60,7 +61,7 @@ export default function LiveShareToggle({ sessionId, onSharingChange }: Props) {
         body: JSON.stringify({ sessionId }),
       })
       const d = await res.json()
-      if (res.ok) { setToken(d.token); setExpiresAt(d.expiresAt); onSharingChange?.(true) }
+      if (res.ok) { setToken(d.token); setExpiresAt(d.expiresAt); onSharingChange?.(true, d.token) }
     } finally { setBusy(false) }
   }
 
@@ -70,7 +71,7 @@ export default function LiveShareToggle({ sessionId, onSharingChange }: Props) {
     try {
       await fetch(`/api/navigation/share?sessionId=${encodeURIComponent(sessionId)}`, { method: 'DELETE' })
       setToken(null); setExpiresAt(null)
-      onSharingChange?.(false)
+      onSharingChange?.(false, null)
     } finally { setBusy(false) }
   }
 

@@ -39,6 +39,7 @@ import EscapeOptionsSheet from './EscapeOptionsSheet'
 import OfflinePackageDownloader from './OfflinePackageDownloader'
 import LiveShareToggle from './LiveShareToggle'
 import { publishLivePosition } from '@/lib/navigation/liveLocationPublish'
+import SosButton from './SosButton'
 import { watchBattery, watchBatteryLevel } from '@/lib/navigation/battery'
 import { LocationModeDecider } from '@/lib/navigation/locationModeDecider'
 import { haptics } from '@/lib/navigation/haptics'
@@ -156,6 +157,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   const [showOfflineSheet, setShowOfflineSheet] = useState(false)
   const [showLiveShareSheet, setShowLiveShareSheet] = useState(false)
   const [liveSharingEnabled, setLiveSharingEnabled] = useState(false)
+  const [liveShareToken, setLiveShareToken] = useState<string | null>(null)
   const [showNatura2000, setShowNatura2000] = useState(false)
   const [wildlifeAlertDismissed, setWildlifeAlertDismissed] = useState(false)
   const [pace, setPace] = useState<PaceUpdateResult | null>(null)
@@ -841,6 +843,15 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         </div>
       )}
 
+      {/* Fase 2 di docs/navigator-orizzonti-roadmap.md — sempre montato, sempre raggiungibile in
+          1 tap, letto direttamente da position/accuracyM già in stato (fail-safe: nessuna
+          chiamata di rete per mostrarsi o per leggere le coordinate). */}
+      <SosButton
+        fix={position ? { lat: position.lat, lon: position.lon, accuracyM } : null}
+        liveShareUrl={liveShareToken ? `${typeof window !== 'undefined' ? window.location.origin : ''}/s/live/${liveShareToken}` : null}
+        onTriggered={(action) => logEvent('sos_triggered', { action })}
+      />
+
       {availableEpochs.length > 0 && (
         <div className="absolute top-16 left-1/2 -translate-x-1/2 z-10 flex gap-1 bg-white/95 rounded-full shadow-lg p-1">
           {availableEpochs.map((epoch) => (
@@ -971,7 +982,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       >
         <LiveShareToggle
           sessionId={remoteSessionIdState}
-          onSharingChange={setLiveSharingEnabled}
+          onSharingChange={(enabled, token) => { setLiveSharingEnabled(enabled); setLiveShareToken(token) }}
         />
       </Sheet>
 
