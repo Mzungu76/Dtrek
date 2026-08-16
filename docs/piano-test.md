@@ -31,7 +31,7 @@ priorità.
 | `locationModeDecider.test.ts` | `decideLocationMode()`: tabella di priorità dichiarata (off_route/wrong_direction vince su tutto, incluso batteria scarica; bivio vicino, velocità sostenuta o accuracy scarsa scelgono `navigation`; batteria bassa e non in carica sceglie `battery_save` solo se nient'altro è urgente; batteria sconosciuta non è mai trattata come scarica). `LocationModeDecider`: passaggio immediato a `emergency` senza dwell; isteresi temporale di 8s per gli altri cambi; un blip che rientra prima del dwell non scatta nulla; un cambio di segnale desiderato durante l'attesa fa ripartire il conteggio; nessuna ripetizione dello stesso cambio una volta applicato. |
 | `weatherLookahead.test.ts` | `projectWeatherAtEta()` (Fase 11): nessun avviso quando l'ETA cade nella stessa fascia oraria di "adesso" o senza dati; avviso solo quando le condizioni all'ETA peggiorano oltre le soglie di pioggia/vento. |
 | `trailConfidence.test.ts` | `computeTrailConfidence()` (Fase 8): pesi dichiarati fra Trail Score e meteo/clima; bonus community limitato al tetto massimo; `factors` mai vuoto; soglie di etichetta (alta/media/bassa). |
-| `realRouteSimulation.test.ts` | Vedi §3 sotto — l'unica suite che guida `NavigationEngine` per intero (non un singolo motore isolato), con fix GPS realmente registrati su un'escursione vera: percorso pulito (mai off_route), deviazione+rientro (transita davvero `navigating → uncertain → off_route → navigating`), GPS perso e ripristinato (`gpsLost`/`gpsRecovered`, distanza non corrotta). |
+| `realRouteSimulation.test.ts` | Vedi §3 sotto — l'unica suite che guida `NavigationEngine` per intero (non un singolo motore isolato), con fix GPS realmente registrati su un'escursione vera: percorso pulito (mai off_route), deviazione+rientro (transita davvero `navigating → uncertain → off_route → navigating`), GPS perso e ripristinato (`gpsLost`/`gpsRecovered`, distanza non corrotta), vie di fuga (`computeEscapeOptions()` su un grafo sintetico ancorato al percorso reale — vedi §3 per perché non un vero dump OSM). |
 
 **Non coperto** (segnalato anche nella roadmap): `mapMatcher.ts` e `positionEngine.ts` (il
 filtro di Kalman) restano senza test diretti/isolati — `positionEngine.ts` è ora almeno
@@ -154,8 +154,8 @@ considerata plausibile dal motore) — appartiene a una fascia di test lenta/man
 alla suite veloce che gira a ogni push in CI. Resta un passo successivo naturale, non fatto qui
 per restare dentro tempi di CI ragionevoli.
 
-Scenari proposti, in ordine di valore (i primi tre sono ora implementati, almeno in versione
-ridotta — vedi sopra — gli altri restano proposta):
+Scenari proposti, in ordine di valore (i primi quattro sono ora implementati, almeno in versione
+ridotta — vedi sopra — l'ultimo resta proposta):
 
 1. **Percorso pulito, dall'inizio alla fine** — **parzialmente implementato**:
    `realRouteSimulation.test.ts` copre "lo stato non è mai passato per
@@ -187,9 +187,22 @@ ridotta — vedi sopra — gli altri restano proposta):
    posizione al rientro genera talvolta anche un `wrong_direction` transitorio (rumore GPS reale
    a bassa velocità vicino alla partenza) — legittimo comportamento del motore su dati rumorosi
    veri, non asserito da questo test perché fuori dal suo scopo.
-4. **Vie di fuga durante un percorso reale** — nel punto di massima deviazione dello scenario
-   #2, invoca `computeEscapeOptions()` con il trail graph realmente scaricato per quell'area e
-   verifica che almeno "torna sul percorso" sia sempre proposta.
+4. **Vie di fuga durante un percorso reale** — **implementato, con uno scostamento dichiarato
+   dal piano originale**: nel punto di massima deviazione dello scenario #2, invoca
+   `computeEscapeOptions()` e verifica che "torna sul percorso" sia sempre proposta (più, come
+   bonus, che le altre tre tipologie vengano trovate correttamente quando disponibili). Il piano
+   prevedeva "il trail graph realmente scaricato per quell'area" via `fetchWalkNetwork()`
+   (Overpass API) — verificato in questa sessione che **non è praticabile da questo ambiente**:
+   il proxy di rete rifiuta con 403 esplicito (non un timeout) tutti gli endpoint Overpass/
+   Nominatim configurati, e il grafo sentieri, quando l'app lo scarica davvero, resta solo in
+   IndexedDB sul dispositivo (`lib/navigation/trailGraphStore.ts`), mai su Supabase — non esiste
+   da nessuna parte un grafo già scaricato per quest'area recuperabile da qui. Scelta fatta con
+   l'utente: un `WalkNetwork` sintetico ancorato alla geometria reale del percorso (route_polyline
+   come dorsale, due diramazioni sintetiche - sentiero e strada - più un rifugio sintetico vicino
+   al punto deviato) invece di un vero dump OSM. Esercita comunque la logica reale di
+   `computeEscapeOptions()` (Dijkstra, classificazione per qualità highway, dislivello) — solo la
+   rete sentieri sottostante non è OSM autentico. Un test con un grafo OSM davvero scaricato
+   resta possibile fuori da questo ambiente (es. in locale, o passando un dump del grafo).
 5. **Batteria in calo durante un'intera uscita** — alimenta `LocationModeDecider` con la stessa
    sequenza temporale di uno scenario lungo (`clean`, alcune ore) e un livello di batteria che
    scende gradualmente, verificando che le transizioni di modalità avvengano nell'ordine e nei

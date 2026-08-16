@@ -31,20 +31,32 @@
  *
  * Il fattore di compressione usato qui (15x) resta sopra entrambe le soglie per i segmenti
  * "veloci" osservati nelle finestre usate sotto — non è stato scelto a caso, vedi il commento
- * su rebaseFixesToNowCompressed(). Gli altri due test sotto ("deviazione e rientro", "GPS perso
- * e ripristinato") iniettano scenari sintetici su questi stessi fix reali per esercitare anche i
- * casi off_route/rientro e gps_lost/gpsRecovered (scenari §3.2 e §3.3 del piano) — vedi i loro
- * commenti per i dettagli di ciascuno.
+ * su rebaseFixesToNowCompressed(). I test seguenti ("deviazione e rientro", "GPS perso e
+ * ripristinato", "vie di fuga") iniettano scenari sintetici su questi stessi dati reali per
+ * esercitare anche i casi off_route/rientro, gps_lost/gpsRecovered e computeEscapeOptions()
+ * (scenari §3.2, §3.3, §3.4 del piano) — vedi i loro commenti per i dettagli di ciascuno.
  */
 import { describe, it, expect } from 'vitest'
 import { NavigationEngine } from '@/lib/navigation/navigationEngine'
 import { SimulationLocationProvider } from '@/lib/navigation/simulation/simulationLocationProvider'
 import { injectDeviation, injectGpsLoss } from '@/lib/navigation/simulation/scenarioBuilder'
+import { RouteTracker } from '../routeDeviation'
+import { computeEscapeOptions } from '../escapeEngine'
+import type { WalkNetwork } from '@/lib/routeBuilder/osmGraph'
 import fixture from './fixtures/faggeta-cimino.json'
 import { rebaseFixesToNowCompressed, type RealTrackFixture } from './helpers/realTrackFixture'
 import type { GeoFix } from '../types'
 
 const track = fixture as RealTrackFixture
+
+const EARTH_RADIUS_M = 6371000
+/** Stesso spostamento punto-per-bearing/distanza usato da scenarioBuilder.ts (privato lì), qui per costruire la posizione deviata e i nodi sintetici del grafo. */
+function offsetLatLon(lat: number, lon: number, headingDeg: number, distanceM: number): [number, number] {
+  const rad = (headingDeg * Math.PI) / 180
+  const dLat = (distanceM * Math.cos(rad)) / EARTH_RADIUS_M
+  const dLon = (distanceM * Math.sin(rad)) / (EARTH_RADIUS_M * Math.cos((lat * Math.PI) / 180))
+  return [lat + (dLat * 180) / Math.PI, lon + (dLon * 180) / Math.PI]
+}
 
 interface RunResult {
   states: string[]
@@ -139,4 +151,71 @@ describe('percorso reale end-to-end (Monte Cimino, fix GPS realmente registrati)
     expect(afterRecovery).toBeGreaterThanOrEqual(beforeGap)
     expect(afterRecovery - beforeGap).toBeLessThan(500) // niente salti implausibili sul vuoto
   }, 60_000)
+
+  it('vie di fuga nel punto di massima deviazione: "torna sul percorso" è sempre proposta (scenario §3.4 del piano)', () => {
+    // Lo scenario originale (docs/piano-test.md §3) prevedeva "il trail graph realmente
+    // scaricato per quell'area" via fetchWalkNetwork() (lib/routeBuilder/osmGraph.ts), che
+    // interroga Overpass API dal vivo. Verificato in questa sessione: il proxy di rete
+    // dell'ambiente rifiuta con 403 esplicito tutti gli endpoint Overpass/Nominatim configurati
+    // — non un timeout, un rifiuto di policy — e il grafo sentieri, quando l'app lo scarica
+    // davvero, resta solo in IndexedDB sul dispositivo (lib/navigation/trailGraphStore.ts), mai
+    // su Supabase: non esiste da nessuna parte un grafo già scaricato per quest'area recuperabile
+    // da qui. Scelta esplicita (chiesta all'utente): costruire un WalkNetwork sintetico ancorato
+    // alla geometria reale del percorso — nodi presi dalla route_polyline reale come dorsale, più
+    // due diramazioni sintetiche (un sentiero e una strada) e un rifugio sintetico vicino al
+    // punto deviato — invece di un vero dump OSM. Esercita comunque la logica reale di
+    // computeEscapeOptions() (Dijkstra sul grafo, classificazione per tipo/qualità highway,
+    // "back_to_route" sempre presente), solo la rete sentieri sottostante non è OSM autentico.
+    const routePolyline = track.routePolyline
+
+    // "Punto di massima deviazione" coerente con lo scenario §3.2: stesso punto reale, stesso
+    // offset (360m, heading 90°) applicato direttamente (qui non serve la rampa, basta la
+    // posizione finale).
+    const basePoint = track.trackPoints[10]
+    const [currentLat, currentLon] = offsetLatLon(basePoint.lat, basePoint.lon, 90, 360)
+
+    const network: WalkNetwork = { nodes: new Map() }
+    let nextId = 1
+    const anchorId = nextId++
+    network.nodes.set(anchorId, { lat: currentLat, lon: currentLon, edges: [] })
+
+    const addBranch = (headingDeg: number, distanceM: number, highway: string): number => {
+      const [lat, lon] = offsetLatLon(currentLat, currentLon, headingDeg, distanceM)
+      const id = nextId++
+      network.nodes.set(id, { lat, lon, edges: [] })
+      const distM = distanceM // rettilineo dall'anchor, coerente con l'offset appena calcolato
+      network.nodes.get(anchorId)!.edges.push({ to: id, distM, wayId: id, highway })
+      network.nodes.get(id)!.edges.push({ to: anchorId, distM, wayId: id, highway })
+      return id
+    }
+    const trailNodeId = addBranch(200, 150, 'track')
+    const roadNodeId = addBranch(250, 400, 'unclassified')
+
+    const [hutLat, hutLon] = offsetLatLon(currentLat, currentLon, 0, 800)
+
+    const progress = new RouteTracker(routePolyline).update(currentLat, currentLon)
+    const options = computeEscapeOptions({
+      network,
+      routePolyline,
+      currentLat,
+      currentLon,
+      progress,
+      pois: [{ id: 'rifugio-test', lat: hutLat, lon: hutLon, name: 'Rifugio di prova', type: 'hut' }],
+    })
+
+    const backToRoute = options.find((o) => o.kind === 'back_to_route')
+    expect(backToRoute).toBeDefined()
+    expect(backToRoute?.reason).toBeTruthy()
+
+    // Bonus rispetto al minimo richiesto dal piano: con la rete sintetica sopra, anche le altre
+    // tre tipologie sono raggiungibili e vengono trovate — non solo "non crasha", ma trova
+    // davvero i nodi giusti.
+    const trail = options.find((o) => o.kind === 'alternative_trail')
+    expect(trail?.targetLat).toBeCloseTo(network.nodes.get(trailNodeId)!.lat, 6)
+    const road = options.find((o) => o.kind === 'road')
+    expect(road?.targetLat).toBeCloseTo(network.nodes.get(roadNodeId)!.lat, 6)
+    expect(options.find((o) => o.kind === 'safe_poi')).toBeDefined()
+
+    for (const option of options) expect(option.reason.length).toBeGreaterThan(0)
+  })
 })
