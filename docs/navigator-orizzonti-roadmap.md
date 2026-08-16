@@ -517,15 +517,49 @@ nessuna fase precedente):
 il pezzo community, dato che non esiste ancora un punto in cui il punteggio viene consumato
 dal vivo.
 
-### Fase 9 — Modalità gruppo — non ancora fatto (vision)
+### Fase 9 — Modalità gruppo — ✅ landed (v1)
 
 Estensione di Fase 1 a più partecipanti: `hike_navigation_groups` (id, `created_by`,
 `planned_hike_id`) + `hike_navigation_group_members` (group_id, session_id), ogni membro
-pubblica la propria posizione come in Fase 1, la vista di gruppo mostra N marker. **Decisione
-aperta grossa, non solo di dettaglio**: link pubblico broadcast (chiunque col link vede tutti,
-come Fase 1) o membership autenticata reciproca ("unisciti al gruppo" esplicito per ogni
-partecipante) — sono due modelli di sicurezza sostanzialmente diversi, da scegliere prima di
-progettare lo schema RLS definitivo.
+pubblica la propria posizione come in Fase 1, la vista di gruppo mostra N marker.
+
+**Decisione presa esplicitamente con l'utente** (non a stima): **link pubblico broadcast** per
+guardare — chi ha il link vede tutti i partecipanti senza login, stesso modello della Fase 1.
+Unirsi al gruppo per PARTECIPARE (pubblicare la propria posizione) resta invece autenticato,
+come per la condivisione individuale — i due lati (guardare vs. partecipare) non sono simmetrici
+per design, non un'incoerenza.
+
+**Implementato** (branch `claude/dtrek-navigator-analysis-dld340`): esattamente lo schema sopra.
+Dettagli emersi scrivendolo:
+- **Nessuna colonna di posizione duplicata**: un membro del gruppo riusa `hike_navigation_
+  sessions.last_live_lat/lon/ts` già scritto dal loop di pubblicazione della Fase 1 —
+  `hike_navigation_group_members` collega solo "quale sessione appartiene a quale gruppo".
+  Creare o unirsi a un gruppo (`onGroupActive`) attiva lo stesso `liveSharingEnabled` che già
+  guida quel loop — nessun secondo meccanismo di pubblicazione.
+- **Chi unisce un gruppo non è il creatore**: la RLS owner-only su `hike_navigation_groups` non
+  gli permetterebbe di leggere quella riga per risolvere il token. `app/api/navigation/groups/
+  join/route.ts` usa quindi il client service-role per la risoluzione token + l'insert, ma è la
+  route stessa — non la RLS — a verificare che la sessione passata appartenga a chi sta
+  chiamando, prima di scrivere.
+- **Stato "sono nel gruppo" persistito in IndexedDB** (`lib/localStore.ts`, stessa chiave per
+  hike) lato client — non richiesto esplicitamente nella formulazione originale, aggiunto perché
+  altrimenti un refresh della pagina avrebbe fatto perdere all'interfaccia la consapevolezza di
+  essere già iscritti (la riga in `hike_navigation_group_members` resta comunque, solo l'UI non
+  lo saprebbe senza questo).
+- Uscire dal gruppo o chiuderlo **non disattiva** la condivisione individuale (`liveSharingEnabled`)
+  se era già attiva per conto proprio — l'unico modo di fermare del tutto la pubblicazione
+  posizione resta il toggle della Fase 1 (`LiveShareToggle.tsx`, "Disattiva condivisione").
+  Scelta deliberata per restare semplici: un solo interruttore booleano, mai spento
+  automaticamente da un'azione di gruppo.
+
+**Non ancora fatto**:
+- **Migrazione da applicare a mano** (`supabase/migrations/add_navigation_groups.sql`) sul
+  progetto Supabase live + `NOTIFY pgrst, 'reload schema';` — stesso passo manuale già
+  ricorrente per ogni fase che tocca lo schema.
+- Nessun test end-to-end reale (crea gruppo → unisciti da un secondo account → verifica i
+  marker sulla mappa pubblica) — solo `tsc`/lint puliti.
+- Nessun limite al numero di partecipanti né controllo su gruppi abbandonati (un gruppo scade
+  comunque con la stessa finestra di 12h della Fase 1, rinnovabile dal creatore).
 
 ### Fase 10 — "Giulia in cammino" — ✅ landed (v1)
 
@@ -636,26 +670,32 @@ tre i livelli prima di essere considerata "fatta", non solo il primo.
 
 ## Decisioni aperte trasversali (consolidate)
 
+**Chiuse** (risolte durante l'implementazione delle fasi rispettive, non più aperte):
+- ~~Voce: classificazione critical/normal~~ — chiusa in Fase 6 (off-route/wrong_direction/gps_lost/rientro = critical, resto = normal).
+- ~~Modalità gruppo: link broadcast vs membership autenticata~~ — chiusa esplicitamente con
+  l'utente in Fase 9: link broadcast per guardare, autenticazione solo per partecipare.
+- ~~Giulia in cammino: solo-online~~ — chiusa in Fase 10, dichiarata nell'interfaccia (pulsante
+  disabilitato offline), non un degrado silenzioso.
+
+**Ancora aperte**:
 - Live sharing: polling (scrittura GPS ~15-20s, lettura viewer ~10-15s — due frequenze
   distinte e configurabili, non un unico numero) vs Realtime pubblico; durata esatta della
-  finestra di scadenza (12h proposte come default, non ancora validata sull'uso reale).
+  finestra di scadenza (12h proposte come default, non ancora validata sull'uso reale — ora
+  riusata anche per i gruppi in Fase 9).
 - SOS: deep-link vs chiamata diretta; numero fisso 112 vs internazionalizzato; se includere il
   link di condivisione live nel testo SMS quando attiva.
 - Community: granularità del dedup completamenti; fallback senza `osm_relation_id`; valore
   esatto del rate-limit.
 - iOS: se 5A/5B possono procedere in parallelo; parità Battery Status API da verificare, non
-  assumere.
-- Voce: classificazione critical/normal per tipo di evento esistente; se introdurre varietà di
-  formulazione oltre al semplice accodamento.
+  assumere. **Unica fase rimasta non iniziata di tutto il piano.**
+- Se introdurre varietà di formulazione vocale oltre al semplice accodamento (Fase 6).
 - Escape Engine: cache DTM cross-utente vs per-download; densità di campionamento nodi.
-- Trail Confidence: formula esatta di blend/attenuazione temporale del segnale community — da
-  definire quando la fase viene specificata in dettaglio.
-- Modalità gruppo: link broadcast vs membership autenticata — la più grossa, va chiusa prima
-  di scrivere schema/RLS.
-- Giulia in cammino: solo-online da dichiarare esplicitamente.
+- Trail Confidence: formula esatta di blend (pesi 0.6/0.4/correttivo ±0.1 sono stime, non
+  calibrate) e i 3 segnali rimasti fuori scope in v1 (geometria, GPS live, qualità rete) restano
+  da specificare quando/se si decide di completarli.
 
-Nessuna di queste blocca l'inizio della Fase 1 — sono tutte scelte di prodotto da chiudere
-durante l'implementazione della fase specifica, non prerequisiti.
+Nessuna di queste blocca l'implementazione delle fasi già fatte — erano tutte scelte di
+prodotto da chiudere durante l'implementazione della fase specifica, non prerequisiti.
 
 ## Ordine consigliato per le prossime PR
 
@@ -676,8 +716,16 @@ durante l'implementazione della fase specifica, non prerequisiti.
 7. Fase 5A/5B — Target iOS, scaffold + provider nativo (il più costoso in tempo/lavoro nativo;
    5C — collaudo reale — segue solo a valle, non è bloccante per iniziare 5A/5B in parallelo se
    c'è capacità).
-8. Fasi 8-11 (Orizzonte 3) — da specificare meglio una volta chiusi gli Orizzonti 1/2, non da
-   iniziare prima.
+8. ✅ Fase 11 — Weather look-ahead, proiezione all'ETA stimato riusando il refresh meteo già
+   esistente.
+9. ✅ Fase 10 — "Giulia in cammino", push-to-talk in navigazione, read-only rispetto al motore.
+10. ✅ Fase 8 — Trail Confidence (v1 ridotta, solo calcolo — nessun overlay live sulla mappa).
+11. ✅ Fase 9 — Modalità gruppo, link pubblico broadcast per guardare + partecipazione
+    autenticata.
+
+**Unica fase non ancora iniziata di tutto il piano: Fase 5 (target iOS)** — richiede
+scaffolding Capacitor nativo e una riscrittura Swift, non tentata in questa sessione (nessun
+macOS/Xcode disponibile).
 
 In parallelo a ogni fase di Orizzonte 1/2 che tocca posizionamento o sicurezza: applicare i
 tre livelli della sezione "Validazione trasversale — Field Testing" sopra, non solo scrivere
