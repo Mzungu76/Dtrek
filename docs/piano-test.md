@@ -1,0 +1,161 @@
+# Piano dei test — DTrek
+
+Due parti: cosa esiste oggi (Navigator, Fase 3 di `docs/navigator-orizzonti-roadmap.md`) e cosa
+sarebbe utile aggiungere per il resto dell'app, che oggi non ha copertura automatica di nessun
+tipo. La seconda parte è una **proposta**, non lavoro già fatto — va trattata come backlog da
+prioritizzare, non come un elenco di file che esistono già.
+
+## Come eseguire i test oggi
+
+```bash
+npm install
+npm test          # una tantum, stesso comando usato in CI
+npm run test:watch  # per lavorarci sopra
+```
+
+In CI: `.github/workflows/ci.yml` esegue `npm test` (insieme a lint e typecheck) a ogni push su
+`main` e a ogni pull request — risultato visibile come segno di spunta sul commit/PR e nella
+scheda **Actions** del repository, senza bisogno di un terminale locale.
+
+## 1. Test esistenti — motore di navigazione (`lib/navigation/__tests__/`)
+
+Framework: **vitest**. 28 test, tutti su moduli puri (nessuna dipendenza da rete/Supabase/DOM),
+scelti perché governano direttamente la sicurezza in navigazione — vedi Fase 3 della roadmap
+per il perché di questa priorità.
+
+| Suite | Cosa verifica |
+|---|---|
+| `offRouteEngine.test.ts` | I due esempi numerici già documentati nel codice (accuracy 5m + distanza crescente da 25m → OFF ROUTE dopo il dwell di default; accuracy 35m + distanza 20m → UNCERTAIN anche su un solo campione); rientro sul percorso prima che il dwell scada; `sanityDistanceM` (una distanza troppo grande per essere solo rumore GPS non resta UNCERTAIN per sempre); `wrong_direction` con isteresi temporale e soglia minima di velocità; azzeramento immediato di `wrong_direction` quando si esce da `on_route`. |
+| `escapeEngine.test.ts` | `computeEscapeOptions()` su un grafo sentieri sintetico a 3 nodi: l'opzione "torna sul percorso" è sempre presente anche senza grafo/POI; le 4 tipologie compaiono nell'ordine dichiarato dallo spec quando grafo e POI sono disponibili; ogni opzione porta sempre un `reason` non vuoto (invariante esplicito); le opzioni che dipendono dal grafo sono omesse quando il grafo manca; l'opzione POI sicuro è omessa senza un POI di tipo rilevante; una via di qualità migliore (path/track) è preferita a una strada quando entrambe sono raggiungibili. |
+| `locationModeDecider.test.ts` | `decideLocationMode()`: tabella di priorità dichiarata (off_route/wrong_direction vince su tutto, incluso batteria scarica; bivio vicino, velocità sostenuta o accuracy scarsa scelgono `navigation`; batteria bassa e non in carica sceglie `battery_save` solo se nient'altro è urgente; batteria sconosciuta non è mai trattata come scarica). `LocationModeDecider`: passaggio immediato a `emergency` senza dwell; isteresi temporale di 8s per gli altri cambi; un blip che rientra prima del dwell non scatta nulla; un cambio di segnale desiderato durante l'attesa fa ripartire il conteggio; nessuna ripetizione dello stesso cambio una volta applicato. |
+
+**Non coperto** (segnalato anche nella roadmap): `mapMatcher.ts` e `positionEngine.ts` (il
+filtro di Kalman) restano senza test — prioritizzato fuori da questa prima fase, non
+dimenticato.
+
+## 2. Proposta — test per il resto dell'app
+
+DTrek va ben oltre Navigator: pianificazione percorsi, punteggi (Trail Score, Safety Score,
+Beauty Score), import file, sincronizzazione, paywall/entitlement, generazione guide AI.
+Nessuna di queste aree ha oggi una sola riga di test automatico. La lista sotto è ordinata per
+priorità reale, non alfabetica — le prime voci sono aree dove **è già successo un incidente
+concreto** in questo stesso repository (documentato in `docs/navigator-dtrek-boundary.md`), non
+rischi ipotetici.
+
+### Priorità alta — aree con un incidente reale già avvenuto
+
+- **`lib/dtrekEntitlement.ts` (paywall/trial)** — c'è già stato un bug per cui il periodo di
+  prova non dava mai accesso reale all'AI (la chiave condivisa veniva concessa solo a
+  premium/BYOK, mai a un trial attivo, contraddicendo il piano). Test mirati: i due tetti
+  indipendenti (percorsi/resoconti) che non si bloccano a vicenda; `trialExpired` che scatta
+  solo quando **entrambi** i tetti sono esauriti o sono passati i 30 giorni, qualunque arrivi
+  prima; il bypass `is_owner` che vince sempre; BYOK che sblocca tutto, non solo il costo AI.
+- **Punteggi "neutri" (Beauty Score del percorso omaggio)** — bug reale: un percorso pensato
+  come neutro per chiunque veniva calcolato con i pesi TEI personali di chi lo creava invece dei
+  pesi di default. Test: qualunque funzione che calcola un punteggio "condiviso"/"di default"
+  deve usare sempre `DEFAULT_TEI_WEIGHTS`, mai le preferenze salvate del chiamante — a
+  prescindere da chi la invoca.
+- **Import GPX (`lib/gpxParser.ts`)** — bug reale: i GPX con `<name>` multilingua (tipico delle
+  esportazioni CAI, un figlio per lingua) producevano titoli concatenati ("SI Z17SI Z17...").
+  Test: fixture GPX con `<name>` multilingua, con `<name>` a testo semplice, e senza `<name>`
+  affatto → titolo sempre corretto.
+- **`clone_row_for_user` (funzione SQL generica di clonazione)** — bug reale: rimuoveva
+  `created_at`/`updated_at` senza rimpiazzarli, violando un vincolo NOT NULL. Più difficile da
+  testare in unit-test puro (è SQL, non TypeScript) — candidato per un test di integrazione contro
+  un progetto Supabase locale/di test, non per vitest.
+
+### Priorità media — logica pura, mai verificata, ad alto impatto
+
+- **Punteggi di percorso**: `lib/trailScore.ts` (Naismith/Munter, già usato anche da
+  `paceAssistant.ts`), `lib/safetyScore.ts`, `lib/beautyScore.ts`, `lib/tei.ts` — funzioni pure,
+  input/output deterministici, facili da testare con casi noti (es. un percorso pianeggiante di
+  10km vs. uno con 1500m D+ deve dare un tempo Naismith prevedibile).
+- **`lib/geoUtils.ts`** (`haversineM`, `bearingDeg`, `minDistToTrack`) — usata ovunque nel
+  motore di navigazione e nei punteggi; un errore qui si propaga silenziosamente in decine di
+  moduli. Vale la pena verificarla isolatamente con coppie di coordinate note (es. distanza
+  Roma-Milano, bearing cardinali esatti).
+- **`lib/trailConditions/weatherSignals.ts` / `climateSignals.ts`** — penalità calcolate da
+  soglie numeriche esplicite (pioggia ultimi 7gg, temperatura media del mese) già documentate
+  nei tipi (`WeatherSignal`, `ClimateSignal`) — input/output facilmente tabellabili.
+- **Verifica firma webhook Paddle** (`lib/paddle.ts`) — HMAC-SHA256 a tempo costante: un test
+  con firma valida, firma alterata di un carattere, e payload manomesso è economico da scrivere
+  e protegge un endpoint che sposta soldi.
+- **Sync engine** (`lib/sync/syncEngine.ts`, `pullEngine.ts`) — logica di outbox/retry/merge tra
+  dispositivi; più costosa da testare (richiede simulare fallimenti di rete/conflitti), ma è
+  l'area che ha già causato il guasto reale descritto in cima al `README.md` ("mesi di
+  PATCH/POST falliti in silenzio").
+
+### Priorità bassa/da valutare
+
+- **Moderazione community** (Fase 4, non ancora costruita) — quando `lib/community/
+  moderation.ts` esisterà, `moderateNote()` sarà un candidato naturale (funzione pura,
+  deterministica).
+- **Formattazione/paginazione PDF** (`lib/pdfPaginate.ts`, `guideSections.ts`) — utile ma più
+  difficile da asserire senza uno snapshot/golden-file test, area meno critica per la sicurezza.
+
+## 3. Test di simulazione "utente reale" — percorsi eseguiti come in un'uscita vera
+
+Il repository ha già l'infrastruttura giusta per questo, costruita per un altro scopo (test
+interattivo manuale, `?simulate=off_route`) ma riusabile as-is per asserzioni automatiche:
+
+- `lib/navigation/simulation/gpxReplay.ts` — trasforma una traccia GPX reale in una sequenza di
+  fix GPS, rispettando i timestamp originali.
+- `lib/navigation/simulation/scenarioBuilder.ts` — primitive componibili: `walkAlongRoute`
+  (cammino pulito), `injectDeviation`, `injectPoorAccuracy`, `injectGpsLoss`, `injectSpike`.
+- `lib/navigation/simulation/presetScenarios.ts` — scenari pronti (`clean`, `off_route`,
+  `wrong_direction`, `uncertain`, `gps_lost`, `spike`).
+- `NavigationEngine` (`lib/navigation/navigationEngine.ts`) non ha alcuna dipendenza diretta da
+  IndexedDB/localStore o da React — le uniche importazioni sono moduli di calcolo puro più
+  `LocationSource`, che accetta già un `locationProviderFactory` iniettabile (è così che
+  `?simulate=` funziona oggi). Sulla carta è quindi già eseguibile "headless" dentro vitest,
+  fuori da un browser — **non verificato di persona in questa sessione**, va confermato
+  scrivendo il primo test reale prima di darlo per scontato (in particolare se `lib/native/
+  locationSource.ts` importa qualcosa di Capacitor che si comporta diversamente sotto Node).
+
+Scenari proposti, in ordine di valore:
+
+1. **Percorso pulito, dall'inizio alla fine** — rigioca una traccia GPX reale con
+   `walkAlongRoute`, alimenta `NavigationEngine` fix per fix, e verifica alla fine: lo stato non
+   è mai passato per `off_route`/`wrong_direction`; la distanza percorsa calcolata è vicina alla
+   lunghezza reale del percorso entro una tolleranza ragionevole; ogni POI vicino al tracciato
+   genera esattamente un evento `enteredPoi`; `buildActivityFromTrack` produce
+   un'attività con dislivello/durata plausibili rispetto alla traccia sorgente.
+2. **Deviazione e rientro** — `injectDeviation` a metà percorso, verifica che lo stato transiti
+   `on_route → uncertain/off_route → on_route` nell'ordine giusto e nei tempi coerenti con le
+   soglie di `offRouteEngine.ts` (già verificate isolatamente in §1, qui si verifica
+   l'integrazione end-to-end).
+3. **GPS perso e ripristinato** — `injectGpsLoss`, verifica che lo stato passi a `gps_lost` e
+   che il ripristino generi l'evento corretto senza corrompere la distanza già accumulata.
+4. **Vie di fuga durante un percorso reale** — nel punto di massima deviazione dello scenario
+   #2, invoca `computeEscapeOptions()` con il trail graph realmente scaricato per quell'area e
+   verifica che almeno "torna sul percorso" sia sempre proposta.
+5. **Batteria in calo durante un'intera uscita** — alimenta `LocationModeDecider` con la stessa
+   sequenza temporale di uno scenario lungo (`clean`, alcune ore) e un livello di batteria che
+   scende gradualmente, verificando che le transizioni di modalità avvengano nell'ordine e nei
+   tempi attesi senza mai "sfarfallare".
+
+Schema indicativo (non implementazione pronta all'uso — da verificare/adattare quando si scrive
+davvero il primo di questi test):
+
+```ts
+import { describe, it, expect } from 'vitest'
+import { NavigationEngine } from '@/lib/navigation/navigationEngine'
+import { gpxToFixes } from '@/lib/navigation/simulation/gpxReplay'
+import { walkAlongRoute } from '@/lib/navigation/simulation/scenarioBuilder'
+
+describe('percorso pulito end-to-end (simulazione)', () => {
+  it('non entra mai in off_route su una traccia reale senza deviazioni', async () => {
+    const fixes = walkAlongRoute(await gpxToFixes('fixtures/traccia-esempio.gpx'))
+    const engine = new NavigationEngine({ /* routePolyline, pois, ... */ })
+    const states: string[] = []
+    engine.on('stateChanged', (s) => states.push(s.state))
+    for (const fix of fixes) engine.handleFix(fix) // o l'equivalente ingresso pubblico dell'engine
+    expect(states).not.toContain('off_route')
+  })
+})
+```
+
+**Cosa serve prima di scrivere questi test sul serio**: una traccia GPX reale/rappresentativa
+da usare come fixture (non generabile da questa sessione), e la conferma pratica che
+`NavigationEngine` si istanzi e giri fuori da un browser senza mock aggiuntivi oltre al
+location provider già previsto.
