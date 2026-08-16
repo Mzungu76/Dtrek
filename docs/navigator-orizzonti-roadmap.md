@@ -461,7 +461,7 @@ quindi il nuovo campo `elevM` viene persistito automaticamente.
 Qui il dettaglio resta volutamente più leggero — sono idee da specificare meglio quando gli
 Orizzonti 1/2 saranno chiusi, non lavoro pronto per essere costruito subito.
 
-### Fase 8 — Trail Confidence live overlay — non ancora fatto (vision)
+### Fase 8 — Trail Confidence — ✅ landed (v1 ridotta, solo calcolo — nessun overlay live)
 
 Probabilmente la feature più distintiva dell'intero piano — merita una definizione più
 precisa di "trailScore + connettività + community". Non è la somma di segnali alla pari, è
@@ -488,17 +488,80 @@ esistente). Decisione aperta: se il blend gira offline (solo dati già nel pacch
 richiede online per il pezzo community — probabilmente degradabile come il resto del
 pacchetto offline.
 
-### Fase 9 — Modalità gruppo — non ancora fatto (vision)
+**Implementato (v1 volutamente ridotta)** (branch `claude/dtrek-navigator-analysis-dld340`):
+solo il **calcolo**, non l'overlay live sulla mappa. `computeTrailConfidence()` combina 2 dei 7
+segnali elencati sopra — Trail Score già calcolato in pianificazione (peso 0.6) e il segnale
+meteo/clima già calcolato da `lib/trailConditions/` (peso 0.4) — più il correttivo community
+(Fase 4, mai oltre +0.1, indipendentemente dal `confidenceWeight`). Ogni risultato porta sempre
+un `factors: string[]` non vuoto, stesso principio "l'utente deve sempre sapere perché"
+dell'Escape Engine.
+
+**Deliberatamente fuori scope in questo giro** (motivo: nessuna delle tre richiede solo
+"scrivere una formula" — servirebbe prima nuova strumentazione live non ancora costruita in
+nessuna fase precedente):
+- **Qualità geometrica del tracciato** — nessun modulo esistente calcola oggi una misura di
+  "densità di vertici/coerenza della polyline" riusabile.
+- **Coerenza GPS osservata dal vivo** — richiederebbe una nuova metrica continua (es. quanto la
+  posizione filtrata da `PositionEngine` si discosta dalla proiezione attesa lungo il tratto,
+  accumulata nel tempo), non solo il verdetto istantaneo già prodotto da `offRouteEngine.ts`.
+- **Qualità/copertura della rete durante la navigazione** — nessun segnale di "quanto è buona
+  la connessione in questo momento" esiste oggi nel motore di navigazione.
+- **Nessun overlay colorato** su `NavigationMap.tsx`/`NavigationMapLibre.tsx` — costruirlo bene
+  su entrambi i renderer (Leaflet e MapLibre) è un lavoro a sé, più grande del solo calcolo.
+  Stesso pattern già usato altrove in questo repo ("infrastruttura prima, consumatore dopo" —
+  vedi il prerequisito trasversale sulla persistenza del trail graph nella roadmap originale):
+  il modulo di calcolo è pronto e testato, l'interfaccia che lo mostra è lavoro futuro.
+
+**Non ancora fatto**: formula di blend non validata su un caso reale (pesi 0.6/0.4/correttivo
+±0.1 sono stime ragionevoli, non calibrate); nessuna decisione presa su offline vs online per
+il pezzo community, dato che non esiste ancora un punto in cui il punteggio viene consumato
+dal vivo.
+
+### Fase 9 — Modalità gruppo — ✅ landed (v1)
 
 Estensione di Fase 1 a più partecipanti: `hike_navigation_groups` (id, `created_by`,
 `planned_hike_id`) + `hike_navigation_group_members` (group_id, session_id), ogni membro
-pubblica la propria posizione come in Fase 1, la vista di gruppo mostra N marker. **Decisione
-aperta grossa, non solo di dettaglio**: link pubblico broadcast (chiunque col link vede tutti,
-come Fase 1) o membership autenticata reciproca ("unisciti al gruppo" esplicito per ogni
-partecipante) — sono due modelli di sicurezza sostanzialmente diversi, da scegliere prima di
-progettare lo schema RLS definitivo.
+pubblica la propria posizione come in Fase 1, la vista di gruppo mostra N marker.
 
-### Fase 10 — "Giulia in cammino" — non ancora fatto (vision)
+**Decisione presa esplicitamente con l'utente** (non a stima): **link pubblico broadcast** per
+guardare — chi ha il link vede tutti i partecipanti senza login, stesso modello della Fase 1.
+Unirsi al gruppo per PARTECIPARE (pubblicare la propria posizione) resta invece autenticato,
+come per la condivisione individuale — i due lati (guardare vs. partecipare) non sono simmetrici
+per design, non un'incoerenza.
+
+**Implementato** (branch `claude/dtrek-navigator-analysis-dld340`): esattamente lo schema sopra.
+Dettagli emersi scrivendolo:
+- **Nessuna colonna di posizione duplicata**: un membro del gruppo riusa `hike_navigation_
+  sessions.last_live_lat/lon/ts` già scritto dal loop di pubblicazione della Fase 1 —
+  `hike_navigation_group_members` collega solo "quale sessione appartiene a quale gruppo".
+  Creare o unirsi a un gruppo (`onGroupActive`) attiva lo stesso `liveSharingEnabled` che già
+  guida quel loop — nessun secondo meccanismo di pubblicazione.
+- **Chi unisce un gruppo non è il creatore**: la RLS owner-only su `hike_navigation_groups` non
+  gli permetterebbe di leggere quella riga per risolvere il token. `app/api/navigation/groups/
+  join/route.ts` usa quindi il client service-role per la risoluzione token + l'insert, ma è la
+  route stessa — non la RLS — a verificare che la sessione passata appartenga a chi sta
+  chiamando, prima di scrivere.
+- **Stato "sono nel gruppo" persistito in IndexedDB** (`lib/localStore.ts`, stessa chiave per
+  hike) lato client — non richiesto esplicitamente nella formulazione originale, aggiunto perché
+  altrimenti un refresh della pagina avrebbe fatto perdere all'interfaccia la consapevolezza di
+  essere già iscritti (la riga in `hike_navigation_group_members` resta comunque, solo l'UI non
+  lo saprebbe senza questo).
+- Uscire dal gruppo o chiuderlo **non disattiva** la condivisione individuale (`liveSharingEnabled`)
+  se era già attiva per conto proprio — l'unico modo di fermare del tutto la pubblicazione
+  posizione resta il toggle della Fase 1 (`LiveShareToggle.tsx`, "Disattiva condivisione").
+  Scelta deliberata per restare semplici: un solo interruttore booleano, mai spento
+  automaticamente da un'azione di gruppo.
+
+**Non ancora fatto**:
+- **Migrazione da applicare a mano** (`supabase/migrations/add_navigation_groups.sql`) sul
+  progetto Supabase live + `NOTIFY pgrst, 'reload schema';` — stesso passo manuale già
+  ricorrente per ogni fase che tocca lo schema.
+- Nessun test end-to-end reale (crea gruppo → unisciti da un secondo account → verifica i
+  marker sulla mappa pubblica) — solo `tsc`/lint puliti.
+- Nessun limite al numero di partecipanti né controllo su gruppi abbandonati (un gruppo scade
+  comunque con la stessa finestra di 12h della Fase 1, rinnovabile dal creatore).
+
+### Fase 10 — "Giulia in cammino" — ✅ landed (v1)
 
 Nuova route `app/api/guide/live-qa/route.ts`, copia strutturale di `app/api/guide/qa/route.ts`
 con `buildContext()` sostituito da una versione che riceve posizione GPS corrente, il POI più
@@ -518,18 +581,63 @@ contesto (posizione, POI vicino, distanza residua) ma non ha alcun canale di scr
 `NavigationEngine`, `offRouteEngine.ts` o `escapeEngine.ts`. Il motore decide, Giulia
 interpreta e assiste — mai il contrario.
 
-**Decisione aperta**: il riconoscimento vocale via Web Speech API richiede probabilmente
-connessione dati — questa feature è verosimilmente solo-online, da dichiarare esplicitamente
-vista la natura "in cammino, spesso senza rete" del contesto.
+**Implementato** (branch `claude/dtrek-navigator-analysis-dld340`), con scelte diverse dalla
+formulazione originale, tutte per restare più leggeri di `guide/qa`:
+- **Nessuna posizione GPS nel contesto inviato al modello** — solo titolo del percorso, nome/
+  distanza del POI più vicino (già ordinato da `remainingPois`) e distanza rimanente. Le
+  coordinate grezze non aggiungono nulla che Giulia possa usare in una risposta breve e non
+  navigazionale, e tenerle fuori dal prompt è anche coerente col vincolo di sicurezza (niente
+  che assomigli a un dato di navigazione nel contesto che il modello vede).
+- **Nessuna ricerca web, nessuna cronologia persistita/rigiocata** — a differenza di
+  `guide/qa`: una domanda "in cammino" deve restare rapida (`max_tokens: 200` contro i 600 di
+  `guide/qa`, nessun tool `web_search`), e non c'è un flusso naturale di "conversazione nel
+  tempo" da salvare come per la guida pre-escursione. Ogni domanda è indipendente.
+- **`liveQa` su Haiku di default** (`lib/claudeModels.ts`), non Sonnet come `guide`/`guideQa` —
+  stesso trattamento economico di `questionnaire`/`caption`, coerente con "domanda breve,
+  contesto minimo" del research brief originale.
+- `components/navigation/GiuliaLiveQa.tsx`: un tap avvia la dettatura, un secondo tap la ferma
+  e invia — nessun bottone "invia" separato, tutta l'interazione è push-to-talk. La risposta
+  viene sia letta ad alta voce (`speak(text, { priority: 'normal' })`, si accoda invece di
+  interrompere un avviso critico in corso) sia mostrata in un piccolo pannello, per chi
+  preferisce non ascoltare.
 
-### Fase 11 — Weather look-ahead — non ancora fatto (vision)
+**Decisione aperta chiusa**: il pulsante è disabilitato quando `isOnline` è `false` — "solo
+online" è dichiarato esplicitamente nell'interfaccia (tooltip "Richiede connessione"), non un
+degrado silenzioso scoperto a metà domanda.
+
+**Non ancora fatto**: nessun test end-to-end reale (riconoscimento vocale del browser, qualità
+della trascrizione italiana, latenza reale della risposta) — solo `tsc`/lint puliti, nessun
+test automatico scritto per questa fase (il componente dipende da Web Speech API e da uno
+stream di rete, entrambi difficili da testare in unit senza un browser reale).
+
+### Fase 11 — Weather look-ahead — ✅ landed (v1)
 
 `fetchDayHourly()` (già esistente in `lib/openmeteo.ts`, previsioni orarie fino a 16 giorni)
-proiettato contro l'ETA per segmento già calcolata da `paceAssistant.ts` — nuovo modulo puro
-`lib/navigation/weatherLookahead.ts` che stima l'ora di arrivo a ogni istruzione futura e pesca
-il bucket orario corrispondente, avvisando se le condizioni attese peggiorano rispetto ad ora.
-Decisione aperta: ogni quanto ri-triggerare la proiezione durante la navigazione (non ad ogni
-fix) per non consumare quota Open-Meteo inutilmente.
+proiettato contro l'ETA già calcolata da `paceAssistant.ts` — nuovo modulo puro
+`lib/navigation/weatherLookahead.ts` (`projectWeatherAtEta`) che pesca il bucket orario più
+vicino all'ETA e lo confronta con quello più vicino ad ora, avvisando solo se le condizioni
+peggiorano (pioggia/vento assenti ora ma previsti all'arrivo).
+
+**Implementato** (branch `claude/dtrek-navigator-analysis-dld340`), con due scelte di scope
+diverse dalla formulazione originale:
+- **Proietta solo sull'ETA di fine percorso** (`PaceAssistant.liveEtaDate`), non su "ogni
+  istruzione futura" come genericamente ipotizzato — un solo checkpoint, riusando una stima già
+  calcolata, invece di costruire una nuova pipeline di ETA per-istruzione (che avrebbe anche
+  moltiplicato il rumore: molte istruzioni di svolta ravvicinate avrebbero prodotto avvisi
+  quasi identici).
+- **Decisione aperta chiusa**: nessuna nuova chiamata Open-Meteo introdotta — `useWeatherRefresh.ts`
+  (già esistente, refresh ogni 20 min per la correzione meteo live del passo) è stato esteso
+  per riusare lo stesso array orario già scaricato, non un secondo hook con un fetch proprio.
+- Banner dismissibile nello stesso contenitore di avvisi impilati già esistente in
+  `ActiveNavigationView.tsx` (mappa offline, fauna...), si riapre da solo se il messaggio
+  cambia; nessun avviso vocale (solo visivo) — scelta di scope, non nella formulazione
+  originale.
+
+**Non ancora fatto**: il primissimo controllo dopo l'avvio della navigazione può non avere
+ancora un ETA disponibile (PaceAssistant non ha dati sufficienti) — si aggiorna al refresh
+successivo (20 min) o alla prossima navigazione, non c'è un secondo tentativo ravvicinato per
+questo caso, per non introdurre una chiamata di rete in più. Nessun test su un caso reale con
+previsioni Open-Meteo vere (solo dati sintetici nei 7 test automatici).
 
 ## Validazione trasversale — Field Testing
 
@@ -562,26 +670,32 @@ tre i livelli prima di essere considerata "fatta", non solo il primo.
 
 ## Decisioni aperte trasversali (consolidate)
 
+**Chiuse** (risolte durante l'implementazione delle fasi rispettive, non più aperte):
+- ~~Voce: classificazione critical/normal~~ — chiusa in Fase 6 (off-route/wrong_direction/gps_lost/rientro = critical, resto = normal).
+- ~~Modalità gruppo: link broadcast vs membership autenticata~~ — chiusa esplicitamente con
+  l'utente in Fase 9: link broadcast per guardare, autenticazione solo per partecipare.
+- ~~Giulia in cammino: solo-online~~ — chiusa in Fase 10, dichiarata nell'interfaccia (pulsante
+  disabilitato offline), non un degrado silenzioso.
+
+**Ancora aperte**:
 - Live sharing: polling (scrittura GPS ~15-20s, lettura viewer ~10-15s — due frequenze
   distinte e configurabili, non un unico numero) vs Realtime pubblico; durata esatta della
-  finestra di scadenza (12h proposte come default, non ancora validata sull'uso reale).
+  finestra di scadenza (12h proposte come default, non ancora validata sull'uso reale — ora
+  riusata anche per i gruppi in Fase 9).
 - SOS: deep-link vs chiamata diretta; numero fisso 112 vs internazionalizzato; se includere il
   link di condivisione live nel testo SMS quando attiva.
 - Community: granularità del dedup completamenti; fallback senza `osm_relation_id`; valore
   esatto del rate-limit.
 - iOS: se 5A/5B possono procedere in parallelo; parità Battery Status API da verificare, non
-  assumere.
-- Voce: classificazione critical/normal per tipo di evento esistente; se introdurre varietà di
-  formulazione oltre al semplice accodamento.
+  assumere. **Unica fase rimasta non iniziata di tutto il piano.**
+- Se introdurre varietà di formulazione vocale oltre al semplice accodamento (Fase 6).
 - Escape Engine: cache DTM cross-utente vs per-download; densità di campionamento nodi.
-- Trail Confidence: formula esatta di blend/attenuazione temporale del segnale community — da
-  definire quando la fase viene specificata in dettaglio.
-- Modalità gruppo: link broadcast vs membership autenticata — la più grossa, va chiusa prima
-  di scrivere schema/RLS.
-- Giulia in cammino: solo-online da dichiarare esplicitamente.
+- Trail Confidence: formula esatta di blend (pesi 0.6/0.4/correttivo ±0.1 sono stime, non
+  calibrate) e i 3 segnali rimasti fuori scope in v1 (geometria, GPS live, qualità rete) restano
+  da specificare quando/se si decide di completarli.
 
-Nessuna di queste blocca l'inizio della Fase 1 — sono tutte scelte di prodotto da chiudere
-durante l'implementazione della fase specifica, non prerequisiti.
+Nessuna di queste blocca l'implementazione delle fasi già fatte — erano tutte scelte di
+prodotto da chiudere durante l'implementazione della fase specifica, non prerequisiti.
 
 ## Ordine consigliato per le prossime PR
 
@@ -602,8 +716,16 @@ durante l'implementazione della fase specifica, non prerequisiti.
 7. Fase 5A/5B — Target iOS, scaffold + provider nativo (il più costoso in tempo/lavoro nativo;
    5C — collaudo reale — segue solo a valle, non è bloccante per iniziare 5A/5B in parallelo se
    c'è capacità).
-8. Fasi 8-11 (Orizzonte 3) — da specificare meglio una volta chiusi gli Orizzonti 1/2, non da
-   iniziare prima.
+8. ✅ Fase 11 — Weather look-ahead, proiezione all'ETA stimato riusando il refresh meteo già
+   esistente.
+9. ✅ Fase 10 — "Giulia in cammino", push-to-talk in navigazione, read-only rispetto al motore.
+10. ✅ Fase 8 — Trail Confidence (v1 ridotta, solo calcolo — nessun overlay live sulla mappa).
+11. ✅ Fase 9 — Modalità gruppo, link pubblico broadcast per guardare + partecipazione
+    autenticata.
+
+**Unica fase non ancora iniziata di tutto il piano: Fase 5 (target iOS)** — richiede
+scaffolding Capacitor nativo e una riscrittura Swift, non tentata in questa sessione (nessun
+macOS/Xcode disponibile).
 
 In parallelo a ogni fase di Orizzonte 1/2 che tocca posizionamento o sicurezza: applicare i
 tre livelli della sezione "Validazione trasversale — Field Testing" sopra, non solo scrivere
