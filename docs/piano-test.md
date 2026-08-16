@@ -19,19 +19,24 @@ scheda **Actions** del repository, senza bisogno di un terminale locale.
 
 ## 1. Test esistenti — motore di navigazione (`lib/navigation/__tests__/`)
 
-Framework: **vitest**. 28 test, tutti su moduli puri (nessuna dipendenza da rete/Supabase/DOM),
-scelti perché governano direttamente la sicurezza in navigazione — vedi Fase 3 della roadmap
-per il perché di questa priorità.
+Framework: **vitest**. 45 test in 6 file, tutti su moduli puri o eseguibili headless (nessuna
+dipendenza da rete/Supabase/DOM per i primi tre, gli altri toccano funzioni pure aggiunte via via
+dalle fasi successive della roadmap) — vedi Fase 3 della roadmap per il perché di questa
+priorità.
 
 | Suite | Cosa verifica |
 |---|---|
 | `offRouteEngine.test.ts` | I due esempi numerici già documentati nel codice (accuracy 5m + distanza crescente da 25m → OFF ROUTE dopo il dwell di default; accuracy 35m + distanza 20m → UNCERTAIN anche su un solo campione); rientro sul percorso prima che il dwell scada; `sanityDistanceM` (una distanza troppo grande per essere solo rumore GPS non resta UNCERTAIN per sempre); `wrong_direction` con isteresi temporale e soglia minima di velocità; azzeramento immediato di `wrong_direction` quando si esce da `on_route`. |
-| `escapeEngine.test.ts` | `computeEscapeOptions()` su un grafo sentieri sintetico a 3 nodi: l'opzione "torna sul percorso" è sempre presente anche senza grafo/POI; le 4 tipologie compaiono nell'ordine dichiarato dallo spec quando grafo e POI sono disponibili; ogni opzione porta sempre un `reason` non vuoto (invariante esplicito); le opzioni che dipendono dal grafo sono omesse quando il grafo manca; l'opzione POI sicuro è omessa senza un POI di tipo rilevante; una via di qualità migliore (path/track) è preferita a una strada quando entrambe sono raggiungibili. |
+| `escapeEngine.test.ts` | `computeEscapeOptions()` su un grafo sentieri sintetico a 3 nodi: l'opzione "torna sul percorso" è sempre presente anche senza grafo/POI; le 4 tipologie compaiono nell'ordine dichiarato dallo spec quando grafo e POI sono disponibili; ogni opzione porta sempre un `reason` non vuoto (invariante esplicito); le opzioni che dipendono dal grafo sono omesse quando il grafo manca; l'opzione POI sicuro è omessa senza un POI di tipo rilevante; una via di qualità migliore (path/track) è preferita a una strada quando entrambe sono raggiungibili; con dislivello ripido noto sul grafo, un'opzione viene declassata di sicurezza (Fase 7). |
 | `locationModeDecider.test.ts` | `decideLocationMode()`: tabella di priorità dichiarata (off_route/wrong_direction vince su tutto, incluso batteria scarica; bivio vicino, velocità sostenuta o accuracy scarsa scelgono `navigation`; batteria bassa e non in carica sceglie `battery_save` solo se nient'altro è urgente; batteria sconosciuta non è mai trattata come scarica). `LocationModeDecider`: passaggio immediato a `emergency` senza dwell; isteresi temporale di 8s per gli altri cambi; un blip che rientra prima del dwell non scatta nulla; un cambio di segnale desiderato durante l'attesa fa ripartire il conteggio; nessuna ripetizione dello stesso cambio una volta applicato. |
+| `weatherLookahead.test.ts` | `projectWeatherAtEta()` (Fase 11): nessun avviso quando l'ETA cade nella stessa fascia oraria di "adesso" o senza dati; avviso solo quando le condizioni all'ETA peggiorano oltre le soglie di pioggia/vento. |
+| `trailConfidence.test.ts` | `computeTrailConfidence()` (Fase 8): pesi dichiarati fra Trail Score e meteo/clima; bonus community limitato al tetto massimo; `factors` mai vuoto; soglie di etichetta (alta/media/bassa). |
+| `realRouteSimulation.test.ts` | Vedi §3 sotto — l'unica suite che guida `NavigationEngine` per intero (non un singolo motore isolato), con fix GPS realmente registrati su un'escursione vera. |
 
 **Non coperto** (segnalato anche nella roadmap): `mapMatcher.ts` e `positionEngine.ts` (il
-filtro di Kalman) restano senza test — prioritizzato fuori da questa prima fase, non
-dimenticato.
+filtro di Kalman) restano senza test diretti/isolati — `positionEngine.ts` è ora almeno
+esercitato indirettamente da `realRouteSimulation.test.ts`, ma senza asserzioni sui suoi
+comportamenti interni (spike rejection, estrapolazione, ecc.), che restano non prioritizzati.
 
 ## 2. Proposta — test per il resto dell'app
 
@@ -107,19 +112,60 @@ interattivo manuale, `?simulate=off_route`) ma riusabile as-is per asserzioni au
 - `NavigationEngine` (`lib/navigation/navigationEngine.ts`) non ha alcuna dipendenza diretta da
   IndexedDB/localStore o da React — le uniche importazioni sono moduli di calcolo puro più
   `LocationSource`, che accetta già un `locationProviderFactory` iniettabile (è così che
-  `?simulate=` funziona oggi). Sulla carta è quindi già eseguibile "headless" dentro vitest,
-  fuori da un browser — **non verificato di persona in questa sessione**, va confermato
-  scrivendo il primo test reale prima di darlo per scontato (in particolare se `lib/native/
-  locationSource.ts` importa qualcosa di Capacitor che si comporta diversamente sotto Node).
+  `?simulate=` funziona oggi).
 
-Scenari proposti, in ordine di valore:
+### Fatto — `lib/navigation/__tests__/realRouteSimulation.test.ts`
 
-1. **Percorso pulito, dall'inizio alla fine** — rigioca una traccia GPX reale con
-   `walkAlongRoute`, alimenta `NavigationEngine` fix per fix, e verifica alla fine: lo stato non
-   è mai passato per `off_route`/`wrong_direction`; la distanza percorsa calcolata è vicina alla
-   lunghezza reale del percorso entro una tolleranza ragionevole; ogni POI vicino al tracciato
-   genera esattamente un evento `enteredPoi`; `buildActivityFromTrack` produce
-   un'attività con dislivello/durata plausibili rispetto alla traccia sorgente.
+Confermato in pratica (non più solo sulla carta): `NavigationEngine` gira headless sotto
+vitest/Node senza mock aggiuntivi oltre al `locationProviderFactory` già previsto — nessuna
+dipendenza da Capacitor/browser lo blocca all'istanziazione o all'uso.
+
+Il test rigioca fix GPS **realmente registrati** durante un'escursione vera, scaricati con una
+query diretta sul database Supabase (account owner, tabella `activities`, id
+`fit_20260809062332_14178_15173` — "Faggeta del Cimino"), salvati come fixture in
+`lib/navigation/__tests__/fixtures/faggeta-cimino.json` (`route_polyline` + `track_points`, forma
+identica a quella del database). Verifica che lo stato non entri mai in `off_route`/
+`wrong_direction` sui primi minuti reali dell'uscita.
+
+**Scoperta emersa scrivendolo, non ipotizzata in anticipo**: `PositionEngine.checkFixQuality()`
+rifiuta come "stale fix" qualunque fix con `ts` più vecchio di 30s rispetto al vero `Date.now()`
+al momento dell'ingest (guardia anti-replay/anti-spoofing) — quindi una traccia con i suoi
+timestamp originali (registrata giorni prima) viene scartata fix per fix se riprodotta così
+com'è. Il test la ribasa "a ora" comprimendo gli intervalli di un fattore 15x (vedi
+`rebaseFixesToNowCompressed` in `lib/navigation/__tests__/helpers/realTrackFixture.ts`).
+
+**Perché il test copre solo una manciata di minuti, non l'intera escursione da 4h07m**: sono
+stati provati e scartati due tentativi di comprimere/accelerare l'intera traccia, per due motivi
+verificati concretamente (non solo temuti):
+1. Un `dt` fra fix troppo piccolo (sotto la soglia di 0.05s del filtro di Kalman) inietta rumore
+   di processo sproporzionato a ogni passo; su un percorso ad anello (le due direttrici passano
+   vicine in più punti) questo ha fatto perdere l'aggancio al tratto giusto del percorso, con la
+   distanza percorsa calcolata che **tornava indietro** invece di crescere.
+2. Anche restando sopra quella soglia, la velocità implicita fix-a-fix non può eccedere il tetto
+   di plausibilità del Position Engine (~14 m/s): un percorso reale di 14km non può essere
+   "riprodotto" in meno di ~17 minuti reali senza somigliare a uno spoofing GPS — che è
+   esattamente ciò che quel controllo esiste per impedire. Non è un limite del test, è la stessa
+   guardia che protegge un'escursione vera da un fix falsificato.
+
+**Conseguenza pratica**: un test end-to-end sull'**intera** escursione (non solo i primi
+minuti) è fattibile con la stessa tecnica, ma richiede minuti reali di esecuzione (l'ordine di
+grandezza è il tempo che impiegherebbe un escursionista a percorrerla alla velocità più alta
+considerata plausibile dal motore) — appartiene a una fascia di test lenta/manuale/nightly, non
+alla suite veloce che gira a ogni push in CI. Resta un passo successivo naturale, non fatto qui
+per restare dentro tempi di CI ragionevoli.
+
+Scenari proposti, in ordine di valore (una versione ridotta del primo è ora implementata — vedi
+sopra — gli altri restano proposta):
+
+1. **Percorso pulito, dall'inizio alla fine** — **parzialmente implementato**:
+   `realRouteSimulation.test.ts` copre "lo stato non è mai passato per
+   `off_route`/`wrong_direction`" su fix GPS reali, ma solo sui primi minuti (vedi sopra il
+   perché). Restano da fare, sulla stessa traccia: la distanza percorsa calcolata vicina alla
+   lunghezza reale entro una tolleranza ragionevole sull'**intera** escursione; ogni POI vicino
+   al tracciato che genera esattamente un evento `enteredPoi`; `buildActivityFromTrack` che
+   produce un'attività con dislivello/durata plausibili rispetto alla traccia sorgente — tutti
+   e tre richiedono la riproduzione completa (minuti reali di esecuzione), non solo la finestra
+   breve già coperta.
 2. **Deviazione e rientro** — `injectDeviation` a metà percorso, verifica che lo stato transiti
    `on_route → uncertain/off_route → on_route` nell'ordine giusto e nei tempi coerenti con le
    soglie di `offRouteEngine.ts` (già verificate isolatamente in §1, qui si verifica
