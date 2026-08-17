@@ -122,7 +122,11 @@ export function parseGpx(xmlText: string): GpxActivity {
       distanceMeters += haversineM(q.lat, q.lon, p.lat, p.lon)
     if (p.altitudeMeters !== undefined && q.altitudeMeters !== undefined) {
       const d = p.altitudeMeters - q.altitudeMeters
-      if (d > 0) elevationGain += d; else elevationLoss += Math.abs(d)
+      // Dead-band against raw GPS-elevation noise (typically ±3-10m per fix) — same threshold
+      // already used for recorded activities/FIT (gpxActivityParser.ts), otherwise every jitter
+      // gets summed into both D+/D- and a noisy imported track shows inflated, unfiltered stats.
+      if (d > 0.5) elevationGain += d
+      else if (d < -0.5) elevationLoss += Math.abs(d)
     }
   }
 

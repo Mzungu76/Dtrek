@@ -49,6 +49,18 @@ const OVERPASS_DEFAULT_NAMES: Partial<Record<PoiType, string>> = {
   bivouac:   'Bivacco',
 }
 
+// natural=spring, amenity=drinking_water e historic/man_made=well finiscono tutti nello stesso
+// PoiType 'spring' (icona/scoring esistenti restano invariati), ma sono affidabilità molto diverse:
+// una sorgente naturale può essere stagionale/non potabile, un pozzo spesso non è potabile senza
+// trattamento, mentre una fontanella pubblica è l'unica delle tre pensata per essere bevuta. OSM
+// non garantisce nessuna delle tre sia ancora attiva — solo mappata, mai "verificata" da DTrek.
+type WaterSourceKind = 'natural_spring' | 'drinking_water' | 'well'
+const WATER_SOURCE_DEFAULT_NAME: Record<WaterSourceKind, string> = {
+  natural_spring: 'Sorgente naturale (non verificata)',
+  drinking_water: 'Acqua potabile',
+  well:           'Pozzo (potabilità non garantita)',
+}
+
 function parseOverpassElements(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   elements: any[],
@@ -72,10 +84,12 @@ function parseOverpassElements(
     const towerType: string | undefined = tags['tower:type']
 
     let type: PoiType | undefined
+    let waterSourceKind: WaterSourceKind | undefined
 
     // ── Historic ───────────────────────────────────────────────────────────────
     if (historic && HISTORIC_TYPE_MAP[historic]) {
       type = HISTORIC_TYPE_MAP[historic]
+      if (historic === 'well') waterSourceKind = 'well'
     } else if (historic) {
       type = 'ruins'
     }
@@ -90,6 +104,7 @@ function parseOverpassElements(
       type = 'cave'
     } else if (tags.natural === 'spring') {
       type = 'spring'
+      waterSourceKind = 'natural_spring'
     } else if (tags.natural === 'tree') {
       type = 'monument'
     }
@@ -104,6 +119,7 @@ function parseOverpassElements(
     // ── Amenity ────────────────────────────────────────────────────────────────
     else if (tags.amenity === 'drinking_water') {
       type = 'spring'
+      waterSourceKind = 'drinking_water'
     } else if (tags.amenity === 'shelter') {
       type = 'shelter'
     } else if (tags.amenity === 'fountain') {
@@ -131,10 +147,15 @@ function parseOverpassElements(
     if (!type) continue
 
     const explicitName: string | undefined = tags.name || tags['name:it']
-    const name = explicitName ?? OVERPASS_DEFAULT_NAMES[type]
+    const defaultName = waterSourceKind ? WATER_SOURCE_DEFAULT_NAME[waterSourceKind] : OVERPASS_DEFAULT_NAMES[type]
+    const name = explicitName ?? defaultName
     if (!name) continue
 
     const wikiTag = tags.wikipedia ?? (tags.wikidata ? `d:${tags.wikidata}` : undefined)
+    // seasonal=yes/intermittent=yes su OSM è l'unico segnale (spesso assente) che una fonte
+    // d'acqua non è garantita tutto l'anno — propagato così com'è, non inferito, perché la sua
+    // assenza significa "non taggato", non "sicuramente perenne".
+    const seasonal = tags.seasonal === 'yes' || tags.intermittent === 'yes'
 
     pois.push({
       id: el.id ?? 0,
@@ -151,6 +172,8 @@ function parseOverpassElements(
         ...(tags.inscription            ? { inscription:                tags.inscription }            : {}),
         ...(tags['historic:civilization'] ? { 'historic:civilization':  tags['historic:civilization'] } : {}),
         ...(tags.note                   ? { note:                       tags.note }                   : {}),
+        ...(waterSourceKind             ? { waterSourceKind }                                          : {}),
+        ...(seasonal                    ? { waterSeasonal: 'yes' }                                     : {}),
         source: 'overpass',
       },
     })

@@ -27,7 +27,11 @@ function formatDistance(m: number): string {
 }
 
 const TEXT_SHADOW = '0 1px 3px rgba(0,0,0,0.75), 0 1px 8px rgba(0,0,0,0.5)'
-const ICON_BTN = 'w-9 h-9 rounded-full bg-black/45 backdrop-blur-sm text-white flex items-center justify-center shadow-sm shrink-0'
+// 44px, non 36px: questi sono tra i pulsanti più toccati durante il cammino (chiudi/audio/bussola)
+// — devono restare allo stesso minimo di tocco dei controlli secondari della rotaia (SosButton,
+// MapModeSwitcher, ParkingSpotControl), non più piccoli di quelli, per un uso realistico con
+// guanti o in movimento.
+const ICON_BTN = 'w-11 h-11 rounded-full bg-black/45 backdrop-blur-sm text-white flex items-center justify-center shadow-sm shrink-0'
 
 /**
  * Soluzione B (piano di restyling Navigator): niente più scheda bianca — l'indicazione è testo
@@ -50,20 +54,23 @@ export default function InstructionBanner({
     <div>
       <div className="flex items-center gap-2">
         <button onClick={onClose} className={ICON_BTN} aria-label="Termina navigazione">
-          <X className="w-4 h-4" />
+          <X className="w-5 h-5" />
         </button>
 
         {current && (
           <button
             onClick={() => next && setExpanded((v) => !v)}
-            className="flex-1 min-w-0 flex items-center gap-2 text-left"
+            // Sfondo pieno semi-opaco dietro il testo, non solo l'ombra: sotto sole forte o su
+            // una mappa molto chiara (neve, satellite, roccia) la sola ombra non basta a
+            // garantire il contrasto dell'istruzione più importante della schermata.
+            className="flex-1 min-w-0 flex items-center gap-2 text-left bg-black/40 backdrop-blur-sm rounded-2xl pl-1.5 pr-3 py-1.5"
           >
-            <span className="shrink-0 w-7 h-7 rounded-full bg-terra-500 text-white flex items-center justify-center shadow-sm">
-              {current.turn === 'arrive' ? <Flag className="w-3.5 h-3.5" /> : (
-                <ArrowUp className="w-3.5 h-3.5" style={{ transform: `rotate(${TURN_ROTATION[current.turn]}deg)` }} />
+            <span className="shrink-0 w-8 h-8 rounded-full bg-terra-500 text-white flex items-center justify-center shadow-sm">
+              {current.turn === 'arrive' ? <Flag className="w-4 h-4" /> : (
+                <ArrowUp className="w-4 h-4" style={{ transform: `rotate(${TURN_ROTATION[current.turn]}deg)` }} />
               )}
             </span>
-            <span className="min-w-0 truncate text-white font-display font-bold text-[15px]" style={{ textShadow: TEXT_SHADOW }}>
+            <span className="min-w-0 truncate text-white font-display font-bold text-[20px] leading-tight" style={{ textShadow: TEXT_SHADOW }}>
               {current.text}
             </span>
             {next && (
@@ -75,7 +82,7 @@ export default function InstructionBanner({
         )}
 
         <button onClick={onToggleSpeech} className={ICON_BTN} aria-label={speechEnabled ? 'Disattiva audio' : 'Attiva audio'}>
-          {speechEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+          {speechEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
         </button>
 
         {showRightButton && (
@@ -86,13 +93,13 @@ export default function InstructionBanner({
             aria-label={isOnline ? 'Attiva bussola' : 'Offline'}
             title={isOnline ? 'Attiva bussola' : 'Sei offline: uso i dati scaricati'}
           >
-            {isOnline ? <NavigationIcon className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
+            {isOnline ? <NavigationIcon className="w-5 h-5" /> : <WifiOff className="w-5 h-5" />}
           </button>
         )}
       </div>
 
       {expanded && next && (
-        <div className="mt-1.5 ml-11 mr-2 px-3 py-1.5 rounded-xl bg-black/55 backdrop-blur-sm text-white/90 text-xs font-body inline-block">
+        <div className="mt-1.5 ml-14 mr-2 px-3 py-1.5 rounded-xl bg-black/55 backdrop-blur-sm text-white/90 text-sm font-body inline-block">
           Tra {formatDistance(distanceToNextM ?? 0)}: {next.text}
         </div>
       )}

@@ -23,14 +23,22 @@ function queryFor({ osmId, polyline, plannedId }: Props): string | null {
 
 function currentRows(weather: WeatherSignal, climate: ClimateSignal): SignalRow[] {
   const rows: SignalRow[] = []
-  if (weather.totalPenalty < 0) {
+  // Un fallimento di rete verso Open-Meteo non deve leggersi come "nessuna segnalazione" (che
+  // suggerisce condizioni verificate buone) — va detto esplicitamente che il dato manca.
+  if (weather.unavailable) {
+    rows.push({ icon: 'ℹ️', kind: 'weather', text: 'Condizioni meteo/suolo non disponibili al momento' })
+  } else if (weather.totalPenalty < 0) {
     rows.push({ icon: '⚠️', kind: 'weather', text: 'Condizioni meteo/suolo sfavorevoli negli ultimi 7 giorni' })
   }
-  if (climate.tempPenalty < 0) {
-    rows.push({ icon: '⚠️', kind: 'climateTemp', text: 'Temperature attuali sfavorevoli' })
-  }
-  if (climate.altitudeSeason < 0) {
-    rows.push({ icon: '⚠️', kind: 'climateAltitude', text: 'Quota elevata in stagione invernale' })
+  if (climate.unavailable) {
+    rows.push({ icon: 'ℹ️', kind: 'climateTemp', text: 'Temperatura/quota non disponibili al momento' })
+  } else {
+    if (climate.tempPenalty < 0) {
+      rows.push({ icon: '⚠️', kind: 'climateTemp', text: 'Temperature attuali sfavorevoli' })
+    }
+    if (climate.altitudeSeason < 0) {
+      rows.push({ icon: '⚠️', kind: 'climateAltitude', text: 'Quota elevata in stagione invernale' })
+    }
   }
   if (climate.seasonBonus > 0) {
     rows.push({ icon: '✅', kind: 'climateSeason', text: 'Stagione favorevole per questo sentiero' })

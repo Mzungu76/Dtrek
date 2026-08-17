@@ -398,16 +398,18 @@ Non è un punteggio "quanto è bello il codice" — è: quanto è pronto, oggi, 
 
 ### 13.8 Quick win (poco sviluppo, grande impatto)
 
-1. Aggiungere `navigator.wakeLock.request('screen')` durante la navigazione attiva, con opzione di disattivazione — poche righe, gap concreto risolto.
-2. Rendere le "vie d'uscita" raggiungibili anche durante `gps_lost` (usando l'ultima posizione nota) e da un punto di accesso proattivo, non solo dal banner off-route.
-3. Distinguere `spring`/`drinking_water`/`well` con etichette diverse invece di un'unica "acqua potabile".
-4. Applicare la dead-band di rumore già esistente (0.5m) anche ai parser di import file/URL/KML.
-5. Aumentare a 20-24px il testo dell'istruzione di svolta e del riepilogo distanza/ETA nella vista sempre visibile; aggiungere uno sfondo pieno semi-opaco invece della sola ombra.
-6. Uniformare i target di tocco: portare pausa/stop/chiudi/audio a 44px come i controlli secondari.
-7. Cambiare il fallback di errore rete meteo/clima da "penalità 0" a un flag esplicito "non disponibile", propagato come "sconosciuto" in Trail Confidence invece che come "favorevole".
-8. Cambiare l'etichetta di Trail Confidence da "media" a "sconosciuta" quando `factors` dice esplicitamente "dati insufficienti".
-9. Verificare il checksum del pacchetto offline al caricamento, non solo scriverlo.
-10. Aggiornare Next.js oltre la 14.2.3 per chiudere le CVE attive.
+**Stato: tutti e 10 implementati** (branch `claude/dtrek-hiking-audit-9yvsim`, typecheck/build/lint/suite `vitest` — 50/50 — verificati dopo ogni modifica).
+
+1. ✅ Aggiunto `navigator.wakeLock.request('screen')` durante la navigazione attiva (`ActiveNavigationView.tsx`), con toggle "Mantieni lo schermo acceso" nel pannello Dettagli (`NavStatsSheet.tsx`) per chi preferisce risparmiare batteria.
+2. ✅ "Vie d'uscita" ora raggiungibili anche durante `gps_lost` (usa l'ultima posizione nota, mai azzerata) e da un pulsante proattivo sempre visibile nella rotaia azioni, non solo dal banner off-route.
+3. ✅ `spring`/`drinking_water`/`well` distinti con etichette diverse ("Sorgente naturale (non verificata)" / "Acqua potabile" / "Pozzo (potabilità non garantita)") invece di un'unica etichetta, più propagazione del flag OSM `seasonal`/`intermittent` quando presente.
+4. ✅ Dead-band di rumore (0.5m) applicata anche a `gpxParser.ts`, `serverGpxParser.ts`, `kmlParser.ts` (prima solo su attività/FIT).
+5. ✅ Testo dell'istruzione di svolta e del riepilogo distanza/ETA portato a 20px con sfondo pieno semi-opaco (non più solo ombra); aggiunta l'etichetta "arrivo" prima dell'orario.
+6. ✅ Target di tocco uniformati a 44px (`InstructionBanner.tsx`, `NavBottomStrip.tsx`, `NavLayerRail.tsx`) — pausa/stop/chiudi/audio/layer ora alla pari dei controlli secondari della rotaia.
+7. ✅ Fallback di errore rete meteo/clima ora distinto esplicitamente (`WeatherSignal.unavailable`/`ClimateSignal.unavailable`) da una penalità 0 verificata — propagato come segnale assente (non "favorevole") in Trail Confidence e come avviso "non disponibile" in `CurrentConditionsNotice.tsx`.
+8. ✅ Etichetta Trail Confidence ora `sconosciuta` (badge grigio neutro, distinto da "bassa") quando non c'è alcun segnale di base, invece di "media".
+9. ✅ Aggiunta `verifyOfflinePackageChecksum()` — verifica reale contro Cache Storage prima di fidarsi del pacchetto, non solo scrittura; corretto anche un difetto trovato nell'implementazione originale (`computeChecksum` era order-dependent, quindi non avrebbe mai potuto verificare nulla in modo affidabile — reso order-independent).
+10. ✅ Next.js aggiornato da 14.2.3 a 14.2.35 (stessa minor, nessuna migrazione breaking) — `npm audit` conferma **0 vulnerabilità critiche** residue (prima: 1 critica + 13 alte, ora: 0 critiche + 14 alte, le rimanenti richiedono una migrazione a Next 15, fuori scope di un quick win).
 
 ### 13.9 Roadmap proposta
 

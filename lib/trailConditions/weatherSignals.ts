@@ -43,9 +43,11 @@ export async function collectWeatherSignal(_osmRelationId: number, ctx: SignalCo
     const soilPenalty = soilPenaltyFor(soilAvg)
     const totalPenalty = clamp((precipPenalty + soilPenalty) * surfaceMultiplier * slopeMultiplier, -35, 0)
 
-    return { precipPenalty, soilPenalty, surfaceMultiplier, slopeMultiplier, totalPenalty }
+    return { precipPenalty, soilPenalty, surfaceMultiplier, slopeMultiplier, totalPenalty, unavailable: false }
   } catch {
-    return { precipPenalty: 0, soilPenalty: 0, surfaceMultiplier, slopeMultiplier, totalPenalty: 0 }
+    // Rete/timeout/errore Open-Meteo — totalPenalty 0 qui NON è "condizioni verificate buone",
+    // è "non lo sappiamo". unavailable:true lo dice esplicitamente ai chiamanti a valle.
+    return { precipPenalty: 0, soilPenalty: 0, surfaceMultiplier, slopeMultiplier, totalPenalty: 0, unavailable: true }
   }
 }
 

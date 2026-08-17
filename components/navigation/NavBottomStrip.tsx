@@ -14,7 +14,9 @@ interface Props {
   onExpand: () => void
 }
 
-const ICON_BTN = 'w-9 h-9 rounded-full bg-black/45 backdrop-blur-sm text-white flex items-center justify-center shadow-sm shrink-0'
+// 44px: pausa/riprendi e stop sono tra i controlli più toccati durante il cammino — stesso
+// minimo di tocco dei controlli secondari della rotaia azioni, non più piccoli di quelli.
+const ICON_BTN = 'w-11 h-11 rounded-full bg-black/45 backdrop-blur-sm text-white flex items-center justify-center shadow-sm shrink-0'
 const TEXT_SHADOW = '0 1px 3px rgba(0,0,0,0.75), 0 1px 8px rgba(0,0,0,0.5)'
 
 /**
@@ -41,17 +43,23 @@ export default function NavBottomStrip({ summary, timerRunning, onTogglePlayPaus
 
         <div className="w-full flex items-center justify-between gap-3">
           <button onClick={onTogglePlayPause} className={`${ICON_BTN} pointer-events-auto`} aria-label={timerRunning ? 'Pausa' : 'Avvia'}>
-            {timerRunning ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+            {timerRunning ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
           </button>
 
-          <button onClick={onExpand} className="pointer-events-auto flex-1 min-w-0 text-center">
-            <span className="font-mono text-[15px] font-bold text-white" style={{ textShadow: TEXT_SHADOW }}>
+          <button
+            onClick={onExpand}
+            // Sfondo pieno semi-opaco, non solo l'ombra: la distanza residua/ora d'arrivo è un
+            // dato di sicurezza (rientro prima del buio), non solo un dettaglio — deve restare
+            // leggibile anche su una mappa molto chiara sotto sole forte.
+            className="pointer-events-auto flex-1 min-w-0 text-center bg-black/40 backdrop-blur-sm rounded-full px-4 py-2"
+          >
+            <span className="font-mono text-[20px] font-bold text-white" style={{ textShadow: TEXT_SHADOW }}>
               {summary}
             </span>
           </button>
 
           <button onClick={onStop} className={`${ICON_BTN} pointer-events-auto bg-red-600/90`} aria-label="Termina">
-            <Square className="w-4 h-4" />
+            <Square className="w-5 h-5" />
           </button>
         </div>
       </div>
