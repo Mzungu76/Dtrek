@@ -1,8 +1,7 @@
 'use client'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import type * as maplibregl from 'maplibre-gl'
-import { useEffect, useRef, useState } from 'react'
-import { Locate } from 'lucide-react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { maptilerStyleUrl, MAPTILER_KEY, type MapTilerStyleId } from '@/lib/mapStyles'
 import { circlePolygonLonLat } from '@/lib/geoUtils'
 import type { NavState } from '@/lib/navigation/types'
@@ -43,6 +42,13 @@ interface Props {
   nearbyTrails?: [number, number][][]
   /** Called when a POI marker is tapped directly on the map — same purpose as NavigationMap.tsx's prop of the same name. */
   onPoiTap?: (poiId: string | number) => void
+  /** Fired whenever follow-mode toggles (auto-recenter on/off) — same reasoning as
+   *  NavigationMap.tsx's prop of the same name: the recenter button itself lives in the caller now. */
+  onFollowModeChange?: (following: boolean) => void
+}
+
+export interface NavigationMapLibreHandle {
+  recenter: () => void
 }
 
 // Not a fixed deadline from the start — reset on every 'data' event (tile/
@@ -132,11 +138,11 @@ function followZoomFor(is3D: boolean): number { return is3D ? 14.5 : 16 }
  * offline Leaflet map and to avoid disorienting the hiker with a spinning
  * view while walking.
  */
-export default function NavigationMapLibre({
+const NavigationMapLibre = forwardRef<NavigationMapLibreHandle, Props>(function NavigationMapLibre({
   routePolyline, pois, position, bearingDeg, state, styleId, is3D, onStyleFailed, accuracyM,
   natura2000Features, showNatura2000, parkingSpot, nearbyTrails, onPoiTap,
-  showRoute = true, showPois = true, slopeSegments = null,
-}: Props) {
+  showRoute = true, showPois = true, slopeSegments = null, onFollowModeChange,
+}, ref) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const markersRef = useRef<maplibregl.Marker[]>([])
@@ -640,7 +646,7 @@ export default function NavigationMapLibre({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showRoute, slopeSegments])
 
-  const handleRecenter = () => {
+  const handleRecenter = useCallback(() => {
     setFollowMode(true)
     // jumpTo (instant), not easeTo: recenter felt "very slow" when it
     // eased toward a target that itself keeps moving with each new GPS fix
@@ -651,7 +657,13 @@ export default function NavigationMapLibre({
     if (position && mapRef.current) {
       mapRef.current.jumpTo({ center: [position.lon, position.lat], zoom: followZoomFor(is3DRef.current) })
     }
-  }
+  }, [position])
+
+  useImperativeHandle(ref, () => ({ recenter: handleRecenter }), [handleRecenter])
+
+  // Il pulsante "centra" ora vive nel chiamante (ActiveNavigationView.tsx), raggruppato con
+  // NavLayerRail invece di fluttuare da solo a metà schermo — qui basta segnalare i cambi di stato.
+  useEffect(() => { onFollowModeChange?.(followMode) }, [followMode, onFollowModeChange])
 
   return (
     <div className="absolute inset-0">
@@ -679,13 +691,8 @@ export default function NavigationMapLibre({
         </div>
       )}
 
-      <button
-        onClick={handleRecenter}
-        className={`absolute right-3 top-1/2 -translate-y-1/2 z-10 w-11 h-11 rounded-full shadow-lg flex items-center justify-center ${followMode ? 'bg-terra-500 text-white' : 'bg-white text-stone-700'}`}
-        aria-label="Centra sulla mia posizione"
-      >
-        <Locate className="w-5 h-5" />
-      </button>
     </div>
   )
-}
+})
+
+export default NavigationMapLibre
