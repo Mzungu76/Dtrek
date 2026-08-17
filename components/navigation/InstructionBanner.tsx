@@ -26,12 +26,14 @@ function formatDistance(m: number): string {
   return m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m / 10) * 10} m`
 }
 
+const TEXT_SHADOW = '0 1px 3px rgba(0,0,0,0.75), 0 1px 8px rgba(0,0,0,0.5)'
+const ICON_BTN = 'w-9 h-9 rounded-full bg-black/45 backdrop-blur-sm text-white flex items-center justify-center shadow-sm shrink-0'
+
 /**
- * Top instruction card, Dtrek style: a warm paper-like card (not a solid
- * dark navigation-app bar) with a terra waypoint arrow and Playfair Display
- * for the instruction text, closer to a guidebook margin note than a
- * turn-by-turn HUD. Close/compass controls live in the same row as the card
- * (not separately floating at the same offset) so nothing overlaps.
+ * Soluzione B (piano di restyling Navigator): niente più scheda bianca — l'indicazione è testo
+ * nudo con ombra sulla mappa, in un'unica riga con chiudi/audio/bussola. La mappa resta piena
+ * anche qui, non solo ai lati; "Tra 400 m: ..." compare solo quando la riga viene toccata,
+ * dentro una piccola capsula transitoria, non una seconda riga sempre presente.
  */
 export default function InstructionBanner({
   current, next, distanceToNextM, speechEnabled, onToggleSpeech,
@@ -41,64 +43,59 @@ export default function InstructionBanner({
   const showRightButton = !isOnline || (compassSupported && !compassEnabled)
 
   return (
-    <div className="absolute top-3 inset-x-3 z-10">
+    // Non si posiziona da sé: il chiamante (ActiveNavigationView.tsx) lo mette in cima a un'unica
+    // colonna insieme alle epoche/agli avvisi, così l'altezza reale di questa riga — che varia
+    // quando si espande "tra X m: ..." — sposta davvero quello che viene sotto, invece di un
+    // offset fisso scollegato da cosa c'è sopra.
+    <div>
       <div className="flex items-center gap-2">
-        <button onClick={onClose} className="w-12 h-12 rounded-full bg-white text-stone-700 border border-stone-200 flex items-center justify-center shadow-lg flex-shrink-0" aria-label="Termina navigazione">
-          <X className="w-5 h-5" />
+        <button onClick={onClose} className={ICON_BTN} aria-label="Termina navigazione">
+          <X className="w-4 h-4" />
         </button>
 
         {current && (
-          <div className="flex-1 min-w-0 rounded-2xl bg-[#fdfcfa] border border-stone-200 shadow-lg overflow-hidden">
-            <div className="flex items-center gap-3 px-3.5 py-2.5">
-              <div className="flex-shrink-0 w-9 h-9 rounded-full bg-terra-500 text-white flex items-center justify-center">
-                {current.turn === 'arrive' ? <Flag className="w-5 h-5" /> : (
-                  <ArrowUp className="w-5 h-5" style={{ transform: `rotate(${TURN_ROTATION[current.turn]}deg)` }} />
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-base font-bold font-display leading-tight truncate text-stone-900">{current.text}</div>
-              </div>
-              {next && (
-                <button onClick={() => setExpanded((v) => !v)} className="p-1.5 rounded-lg bg-stone-100 text-stone-500 flex-shrink-0" aria-label="Prossima indicazione">
-                  {expanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-                </button>
+          <button
+            onClick={() => next && setExpanded((v) => !v)}
+            className="flex-1 min-w-0 flex items-center gap-2 text-left"
+          >
+            <span className="shrink-0 w-7 h-7 rounded-full bg-terra-500 text-white flex items-center justify-center shadow-sm">
+              {current.turn === 'arrive' ? <Flag className="w-3.5 h-3.5" /> : (
+                <ArrowUp className="w-3.5 h-3.5" style={{ transform: `rotate(${TURN_ROTATION[current.turn]}deg)` }} />
               )}
-            </div>
-            {expanded && next && (
-              <div className="px-3.5 pb-2.5 pt-0 text-sm text-stone-600 font-body border-t border-stone-100">
-                Tra {formatDistance(distanceToNextM ?? 0)}: {next.text}
-              </div>
+            </span>
+            <span className="min-w-0 truncate text-white font-display font-bold text-[15px]" style={{ textShadow: TEXT_SHADOW }}>
+              {current.text}
+            </span>
+            {next && (
+              expanded
+                ? <ChevronUp className="w-4 h-4 text-white/80 shrink-0" style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.6))' }} />
+                : <ChevronDown className="w-4 h-4 text-white/80 shrink-0" style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.6))' }} />
             )}
-          </div>
+          </button>
         )}
+
+        <button onClick={onToggleSpeech} className={ICON_BTN} aria-label={speechEnabled ? 'Disattiva audio' : 'Attiva audio'}>
+          {speechEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+        </button>
 
         {showRightButton && (
           <button
             onClick={isOnline ? onEnableCompass : undefined}
             disabled={!isOnline}
-            // isOnline false means this is purely an offline status indicator,
-            // not an actionable button — it used to render with the exact
-            // same enabled look as the compass button despite onClick being
-            // undefined, a real affordance mismatch (tap does nothing but
-            // looks like it should).
-            className={`w-12 h-12 rounded-full border flex items-center justify-center shadow-lg flex-shrink-0 ${
-              isOnline ? 'bg-white text-terra-600 border-stone-200' : 'bg-stone-100 text-stone-400 border-stone-200 cursor-default'
-            }`}
+            className={`${ICON_BTN} ${isOnline ? 'text-terra-300' : 'text-white/40 cursor-default'}`}
             aria-label={isOnline ? 'Attiva bussola' : 'Offline'}
             title={isOnline ? 'Attiva bussola' : 'Sei offline: uso i dati scaricati'}
           >
-            {isOnline ? <NavigationIcon className="w-5 h-5" /> : <WifiOff className="w-5 h-5" />}
+            {isOnline ? <NavigationIcon className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
           </button>
         )}
       </div>
 
-      <button
-        onClick={onToggleSpeech}
-        className="mt-2 w-10 h-10 rounded-full bg-forest-600 text-white flex items-center justify-center shadow-lg"
-        aria-label={speechEnabled ? 'Disattiva audio' : 'Attiva audio'}
-      >
-        {speechEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
-      </button>
+      {expanded && next && (
+        <div className="mt-1.5 ml-11 mr-2 px-3 py-1.5 rounded-xl bg-black/55 backdrop-blur-sm text-white/90 text-xs font-body inline-block">
+          Tra {formatDistance(distanceToNextM ?? 0)}: {next.text}
+        </div>
+      )}
     </div>
   )
 }
