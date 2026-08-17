@@ -11,6 +11,7 @@ import OfflineSync from '@/components/OfflineSync'
 import SyncEngineProvider from '@/components/SyncEngineProvider'
 import GlobalBackInterceptor from '@/app/components/GlobalBackInterceptor'
 import SplashScreen from '@/components/SplashScreen'
+import NativeStatusBar from '@/components/NativeStatusBar'
 import SessionKeepAlive from '@/components/SessionKeepAlive'
 import OnboardingGate from '@/components/onboarding/OnboardingGate'
 import SyncDebugPanel from '@/components/SyncDebugPanel'
@@ -59,6 +60,7 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
 
   return (
     <>
+      <NativeStatusBar />
       <SplashScreen />
       <SessionKeepAlive />
       <GlobalBackInterceptor />
