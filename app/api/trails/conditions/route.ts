@@ -12,6 +12,7 @@ import { fetchOsmTags } from '@/lib/trailConditions/osmTags'
 import { collectWeatherSignal } from '@/lib/trailConditions/weatherSignals'
 import { collectClimateSignal } from '@/lib/trailConditions/climateSignals'
 import { collectCommunitySignal } from '@/lib/trailConditions/communitySignals'
+import { fetchClosureSummary, type ClosureSignal } from '@/lib/community/closureSummary'
 import type { SignalContext, WeatherSignal, ClimateSignal, CommunitySignal } from '@/lib/trailConditions/types'
 
 export const maxDuration = 30
@@ -32,6 +33,9 @@ interface ConditionsResponse {
    *  solo calcolato. Vuoto/azzerato quando il percorso non è collegato a un osm_relation_id
    *  noto (nessun completamento possibile da aggregare). */
   community: CommunitySignal
+  /** DTREK-AUDIT.md P0 #5 — segnale di chiusura sentiero, separato da `community` perché quello
+   *  alimenta solo un piccolo bonus di fiducia (mai un avviso): vedi lib/community/closureSummary.ts. */
+  closure: ClosureSignal
 }
 
 export async function GET(req: NextRequest) {
@@ -123,13 +127,14 @@ export async function GET(req: NextRequest) {
     }
 
     const collectorId = osmRelationId ?? 0
-    const [weather, climate, community] = await Promise.all([
+    const [weather, climate, community, closure] = await Promise.all([
       collectWeatherSignal(collectorId, ctx),
       collectClimateSignal(collectorId, ctx),
       collectCommunitySignal(collectorId, ctx),
+      fetchClosureSummary(collectorId),
     ])
 
-    const body: ConditionsResponse = { weather, climate, community }
+    const body: ConditionsResponse = { weather, climate, community, closure }
     return NextResponse.json(body)
   } catch (err) {
     console.error('[trails/conditions] failed', err)

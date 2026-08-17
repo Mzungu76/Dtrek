@@ -50,12 +50,16 @@ export function filterNoteText(text: string): ModerationResult {
  * non sul contenuto in sé, non ha senso riapplicato in lettura. Stesso pattern di degrado
  * morbido di lib/aiCooldown.ts: se Redis non è configurato, ogni chiamata torna "consentito" in
  * silenzio — nessun blocco nuovo introdotto quando l'infrastruttura manca.
+ *
+ * `keyPrefix` isola il contatore per tipo di segnalazione (default 'notes', invariato per i
+ * chiamanti esistenti) — una segnalazione di chiusura sentiero non deve consumare la stessa
+ * quota giornaliera delle note di completamento, sono azioni diverse con posta in gioco diversa.
  */
-export async function checkNoteRateLimit(userId: string, maxPerDay: number = MAX_NOTES_PER_DAY): Promise<boolean> {
+export async function checkNoteRateLimit(userId: string, maxPerDay: number = MAX_NOTES_PER_DAY, keyPrefix: string = 'notes'): Promise<boolean> {
   const redis = getClient()
   if (!redis) return true
   try {
-    const key = `dtrek:community:notes:${userId}`
+    const key = `dtrek:community:${keyPrefix}:${userId}`
     const count = await redis.incr(key)
     if (count === 1) await redis.expire(key, 86400)
     return count <= maxPerDay

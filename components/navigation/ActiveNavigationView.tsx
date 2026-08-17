@@ -338,7 +338,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   paceEtaRef.current = pace?.liveEtaDate ?? null
 
   const weatherLookahead = useWeatherRefresh(hike.id, routePolyline, positionRef, engineRef, paceEtaRef)
-  const trailConfidence = useTrailConfidence(hike.id, routePolyline, hike.cachedTsTotal ?? hike.cachedTrailScore ?? null)
+  const { confidence: trailConfidence, closure: trailClosure } = useTrailConfidence(hike.id, routePolyline, hike.cachedTsTotal ?? hike.cachedTrailScore ?? null)
   // Un nuovo avviso (testo diverso, es. l'ETA si sposta e ora indica pioggia invece di vento)
   // non deve restare nascosto solo perché un avviso precedente era stato chiuso.
   useEffect(() => { setWeatherLookaheadDismissed(false) }, [weatherLookahead?.message])
@@ -1241,7 +1241,27 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
               </div>
             ),
           })
-        } else if (state === 'off_route' || state === 'wrong_direction') {
+        }
+        // DTREK-AUDIT.md P0 #5 — un fatto strutturale di sicurezza (chiusura confermata da più
+        // escursionisti) pesa più di una deviazione momentanea ma meno di un problema di
+        // localizzazione attivo: dopo gps_lost, prima di off_route/wrong_direction. Solo
+        // 'confirmed', non 'reported' — un singolo report non confermato resta visibile solo in
+        // pianificazione (CurrentConditionsNotice.tsx), per non allarmare in cammino.
+        if (trailClosure?.status === 'confirmed') {
+          alerts.push({
+            id: 'closure',
+            node: (
+              <div className="max-w-[90%] px-4 py-2 rounded-xl bg-red-800/90 text-white text-sm font-semibold font-body shadow-lg flex items-start gap-2 text-center">
+                <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+                <span>
+                  Sentiero probabilmente chiuso — segnalato da almeno {trailClosure.reporterCount} escursionisti
+                  {trailClosure.reason && <span className="block text-xs font-normal mt-0.5 italic">&ldquo;{trailClosure.reason}&rdquo;</span>}
+                </span>
+              </div>
+            ),
+          })
+        }
+        if (state === 'off_route' || state === 'wrong_direction') {
           const isWrongDirection = state === 'wrong_direction'
           alerts.push({
             id: 'offroute',
