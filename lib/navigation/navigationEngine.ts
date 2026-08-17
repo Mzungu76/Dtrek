@@ -16,6 +16,13 @@ const COMPASS_STALE_MS = 3000 // fall back to GPS-derived bearing if no sensor e
 const MOMENT_TRIGGER_RADIUS_M = 60
 const RENDER_TICK_MS = 100 // ~10Hz render-only interpolation cadence — see renderTick in types.ts
 const MAX_PLAUSIBLE_HIKING_SPEED_MS = 8 // ~29 km/h — generous even for trail running; beyond this a fix jump is treated as GPS noise, not real movement
+// How long after the WebView regains visibility (watchVisibilityForCatchUp) to force RouteTracker's
+// full-track rescan, not just its usual windowed search — a wall-clock window, not a one-shot flag,
+// so a fix that happens to arrive between the resume and the actual delivery of catchUp()'s
+// buffered fixes doesn't consume the protection meant for the real (possibly jumped) one. Generous
+// relative to how quickly buffered fixes are typically replayed in a burst, small relative to the
+// 15s gps_lost watchdog above.
+const CATCH_UP_FULL_SCAN_GRACE_MS = 2000
 
 type Listener<K extends NavEventName> = (payload: NavEventMap[K]) => void
 
@@ -75,6 +82,7 @@ export class NavigationEngine {
   private lastFixAt = 0
   private gpsLostTimer: ReturnType<typeof setTimeout> | null = null
   private traveledDistanceM = 0
+  private forceFullScanUntilMs = 0
   private lastAcceptedFix: GeoFix | null = null
   private renderLoopHandle: number | null = null
   private lastRenderTickAt = 0
@@ -177,7 +185,14 @@ export class NavigationEngine {
   private watchVisibilityForCatchUp(): (() => void) | null {
     if (typeof document === 'undefined') return null
     const onVisibility = () => {
-      if (document.visibilityState === 'visible') void this.gps.catchUp()
+      if (document.visibilityState === 'visible') {
+        // Whatever fixes catchUp() delivers next may not be in spatial continuity with the last
+        // one seen before backgrounding — same reasoning as the gps_lost→navigating transition in
+        // handleFix(), just not gated on that specific state (the native foreground service may
+        // have kept updating lastFixAt without the gps_lost watchdog ever firing).
+        this.forceFullScanUntilMs = Date.now() + CATCH_UP_FULL_SCAN_GRACE_MS
+        void this.gps.catchUp()
+      }
     }
     document.addEventListener('visibilitychange', onVisibility)
     return () => document.removeEventListener('visibilitychange', onVisibility)
@@ -235,7 +250,13 @@ export class NavigationEngine {
       source: raw.source,
     }
 
-    const progress = this.tracker.update(smoothed.lat, smoothed.lon)
+    // forceFullScan: either we just came back from gps_lost (wasLost, computed above), or we're
+    // still inside the post-visibility-resume grace window — both are evidence this fix might not
+    // be in continuity with the last one RouteTracker saw. See routeDeviation.ts's own doc
+    // comments for why a windowed search alone can't safely recover from that on its own.
+    const progress = this.tracker.update(smoothed.lat, smoothed.lon, {
+      forceFullScan: wasLost || Date.now() < this.forceFullScanUntilMs,
+    })
     const instantSpeedMs = this.updateTraveledDistance(smoothed)
     this.emit('positionUpdated', { raw, smoothed, progress, traveledDistanceM: this.traveledDistanceM, instantSpeedMs })
     this.emit('paceUpdated', this.pace.update(progress.distanceAlongRouteM, this.traveledDistanceM, instantSpeedMs, raw.ts))
