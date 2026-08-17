@@ -1,8 +1,8 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { Menu, Compass, Navigation2, Upload, ExternalLink, TriangleAlert } from 'lucide-react'
-import FreeTrackMap from '@/components/navigation/FreeTrackMap'
+import { Menu, Compass, Navigation2, Upload, ExternalLink, TriangleAlert, Locate } from 'lucide-react'
+import FreeTrackMap, { type FreeTrackMapHandle } from '@/components/navigation/FreeTrackMap'
 import NavigatorMenu from '@/components/navigation/NavigatorMenu'
 import { LocationSource, type LocationSourceError } from '@/lib/native/locationSource'
 import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
@@ -31,7 +31,9 @@ export default function NavigatorePage() {
   const [accuracyM, setAccuracyM] = useState<number | null>(null)
   const [gpsWarning, setGpsWarning] = useState<string | null>(null)
   const [readyHike, setReadyHike] = useState<PlannedHikeMeta | null | undefined>(undefined) // undefined = still loading
+  const [followMode, setFollowMode] = useState(true)
   const sourceRef = useRef<LocationSource | null>(null)
+  const mapHandleRef = useRef<FreeTrackMapHandle | null>(null)
 
   useEffect(() => {
     const source = new LocationSource(
@@ -61,7 +63,17 @@ export default function NavigatorePage() {
 
   return (
     <div className="fixed inset-0 bg-stone-900">
-      <FreeTrackMap path={[]} position={position} bearingDeg={bearing} accuracyM={accuracyM} />
+      <FreeTrackMap ref={mapHandleRef} path={[]} position={position} bearingDeg={bearing} accuracyM={accuracyM} onFollowModeChange={setFollowMode} />
+
+      <button
+        onClick={() => mapHandleRef.current?.recenter()}
+        aria-label="Centra sulla mia posizione"
+        className={`absolute right-3 top-1/2 -translate-y-1/2 z-10 w-11 h-11 rounded-full shadow-lg flex items-center justify-center ${
+          followMode ? 'bg-terra-500 text-white' : 'bg-white text-stone-700'
+        }`}
+      >
+        <Locate className="w-5 h-5" />
+      </button>
 
       <div className="absolute top-0 inset-x-0 z-20 bg-gradient-to-b from-black/55 to-transparent px-5 pt-[calc(env(safe-area-inset-top)+16px)] pb-8 flex items-center justify-between pointer-events-none">
         <button

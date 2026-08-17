@@ -832,6 +832,12 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   // enough signal; falls back to the flat average-speed formula for the first stretch of
   // the hike (low confidence) rather than showing nothing.
   const etaDate = pace?.liveEtaDate ?? legacyEtaDate
+  const elevationRemainingM = elevationProfile.length > 1
+    ? remainingElevation(elevationProfile, progress?.distanceAlongRouteM ?? 0).gainM
+    : null
+  const bottomStripSummary = `${(distanceRemainingM / 1000).toFixed(1)} km · ${
+    etaDate ? etaDate.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '—'
+  } · ${elevationRemainingM != null ? `+${Math.round(elevationRemainingM)} m` : '—'}`
 
   const daylightMarginMin = sunTimes?.sunset && etaDate ? daylightMarginMinutes(etaDate, sunTimes.sunset) : null
 
@@ -1221,9 +1227,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       })()}
 
       <NavBottomStrip
-        distanceRemainingM={distanceRemainingM}
-        etaDate={etaDate}
-        elevationRemainingM={elevationProfile.length > 1 ? remainingElevation(elevationProfile, progress?.distanceAlongRouteM ?? 0).gainM : null}
+        summary={bottomStripSummary}
         timerRunning={timerRunning}
         onTogglePlayPause={handleTogglePlayPause}
         onStop={requestEnd}
