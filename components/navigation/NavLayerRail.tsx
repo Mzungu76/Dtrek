@@ -2,8 +2,11 @@
 import { Route, MapPin, Mountain } from 'lucide-react'
 
 interface Props {
-  showRoute: boolean
-  onToggleRoute: () => void
+  /** I sentieri vicini tratteggiati marroni (nearbyTrails, stile CalTopo) — MAI il percorso
+   *  pianificato principale, che resta sempre visibile: è la traccia da seguire, non un layer
+   *  opzionale da poter spegnere per errore. */
+  showNearbyTrails: boolean
+  onToggleNearbyTrails: () => void
   showPois: boolean
   onTogglePois: () => void
   showSlope: boolean
@@ -11,7 +14,7 @@ interface Props {
 }
 
 const ITEMS = [
-  { key: 'route' as const, icon: Route, label: 'Percorso' },
+  { key: 'nearbyTrails' as const, icon: Route, label: 'Sentieri vicini' },
   { key: 'pois' as const, icon: MapPin, label: 'Punti di interesse' },
   { key: 'slope' as const, icon: Mountain, label: 'Pendenze' },
 ]
@@ -19,14 +22,17 @@ const ITEMS = [
 /**
  * Soluzione B (piano di restyling Navigator): rotaia sinistra, agganciata al bordo dello
  * schermo invece di una scheda che sottrae mappa — gli interruttori dei layer restano a un
- * tocco senza mai competere con lo spazio della mappa stessa. Percorso e POI nascondono/
- * mostrano quanto già disegnato oggi; Pendenze sostituisce la linea verde a colore unico con i
- * tratti colorati per difficoltà (lib/navigation/routeSlopeSegments.ts) quando c'è un profilo
- * altimetrico da cui ricavarli.
+ * tocco senza mai competere con lo spazio della mappa stessa.
+ *
+ * "Sentieri vicini" nasconde/mostra i tracciati OSM tratteggiati marroni intorno al percorso
+ * (contesto, non la traccia da seguire) — POI nasconde/mostra i punti di interesse — Pendenze
+ * sostituisce la linea verde a colore unico del percorso principale con i tratti colorati per
+ * pendenza (lib/navigation/routeSlopeSegments.ts, gli stessi colori del profilo altimetrico e
+ * della mappa nella scheda del percorso) quando c'è un profilo altimetrico da cui ricavarli.
  */
-export default function NavLayerRail({ showRoute, onToggleRoute, showPois, onTogglePois, showSlope, onToggleSlope }: Props) {
+export default function NavLayerRail({ showNearbyTrails, onToggleNearbyTrails, showPois, onTogglePois, showSlope, onToggleSlope }: Props) {
   const state: Record<(typeof ITEMS)[number]['key'], [boolean, () => void]> = {
-    route: [showRoute, onToggleRoute],
+    nearbyTrails: [showNearbyTrails, onToggleNearbyTrails],
     pois: [showPois, onTogglePois],
     slope: [showSlope, onToggleSlope],
   }

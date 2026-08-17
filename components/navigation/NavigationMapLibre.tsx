@@ -10,7 +10,7 @@ import { labelNearbyTrail, formatTrailDistance } from '@/lib/navigation/nearbyTr
 import { poiBadgeMarkup } from '@/components/poiIcons'
 import { POI_META, type PoiType } from '@/lib/overpass'
 import { shortestRotation } from '@/lib/navigation/orientation'
-import { SLOPE_GRADE_COLOR, type SlopeSegment } from '@/lib/navigation/routeSlopeSegments'
+import type { SlopeSegment } from '@/lib/navigation/routeSlopeSegments'
 
 interface Props {
   routePolyline: [number, number][]
@@ -250,12 +250,12 @@ const NavigationMapLibre = forwardRef<NavigationMapLibreHandle, Props>(function 
         ? segments!.map((seg) => ({
             type: 'Feature' as const,
             geometry: { type: 'LineString' as const, coordinates: seg.path.map(([lat, lon]) => [lon, lat]) },
-            properties: { grade: seg.grade },
+            properties: { color: seg.color },
           }))
         : [{
             type: 'Feature' as const,
             geometry: { type: 'LineString' as const, coordinates: routePolyline.map(([lat, lon]) => [lon, lat]) },
-            properties: { grade: 'off' },
+            properties: { color: '#277134' },
           }]
     const geojson = { type: 'FeatureCollection' as const, features }
 
@@ -266,17 +266,11 @@ const NavigationMapLibre = forwardRef<NavigationMapLibreHandle, Props>(function 
       map.addLayer({
         id: ROUTE_LAYER_ID, type: 'line', source: ROUTE_SOURCE_ID,
         paint: {
-          // Data-driven by the per-feature `grade` property (NavLayerRail's Pendenze layer) — a
-          // single layer/source handles both the plain route and the slope-colored variant, no
-          // need to swap paint properties or juggle two layers. Features without a matching grade
-          // (the plain 'off' case) fall through to the default green.
-          'line-color': [
-            'match', ['get', 'grade'],
-            'easy', SLOPE_GRADE_COLOR.easy,
-            'moderate', SLOPE_GRADE_COLOR.moderate,
-            'steep', SLOPE_GRADE_COLOR.steep,
-            '#277134',
-          ],
+          // Data-driven dal colore già calcolato per feature (lib/slopeColor.ts, lo stesso usato
+          // dal profilo altimetrico e dalla mappa della scheda percorso) — un'unica sorgente/
+          // layer gestisce sia il tracciato piatto sia la variante colorata per pendenza, senza
+          // dover scambiare proprietà di paint o duplicare il layer.
+          'line-color': ['get', 'color'],
           'line-width': 4, 'line-opacity': 0.85,
         },
       })
