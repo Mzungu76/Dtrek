@@ -7,7 +7,7 @@ import { ScoreTile } from '@/components/ScoreTile'
 
 const CATEGORY_DESCRIPTIONS: Record<string, string> = {
   altitude: 'Rischi legati alla quota massima raggiunta: mal di montagna, meteo instabile, temperature più basse.',
-  terrain: 'Difficoltà del terreno stimata dal dislivello e dalla distanza (indice di impegno tecnico).',
+  terrain: 'Difficoltà del terreno: dislivello e distanza come base, corretta al ribasso quando sono disponibili la pendenza massima reale (DTM) o la scala di difficoltà escursionistica SAC rilevata sul tracciato — mai un rialzo.',
   exposure: 'Durata dell\'escursione e rischio di trovarsi ancora in cammino con poca luce o tempo avverso.',
   wildlife: 'Fauna selvatica potenzialmente presente nella zona in base a regione, quota e stagione.',
   logistics: 'Difficoltà di un eventuale soccorso: quota, lunghezza del percorso, autonomia necessaria.',

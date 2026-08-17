@@ -26,7 +26,7 @@ import { computeTrailScore, type TrailScoreResult } from '@/lib/trailScore'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import { getAllActivities, type ActivityMeta } from '@/lib/blobStore'
 import { getPersonalRecords, difficultyIndex } from '@/lib/stats'
-import { refineSafetyWithSlope } from '@/lib/safetyScore'
+import { refineSafetyWithTerrainSignals } from '@/lib/safetyScore'
 import { computePersonalSafety, verdictPhrase, type PersonalFitProfile, type PersonalFitHistory, type PersonalFitRoute } from '@/lib/personalSafetyFit'
 import { isHikerExperienceLevel, sanitizeHikerConcerns, type HikerExperienceLevel, type HikerConcernKey } from '@/lib/hikerProfile'
 import { type BeautyScore } from '@/lib/beautyScore'
@@ -191,8 +191,11 @@ export default function GuidaHub({ id }: { id?: string }) {
 
   // Sicurezza "per te" (Oggettiva + Idoneità per Te, vedi lib/personalSafetyFit.ts) — la Sicurezza
   // Oggettiva cachata (safetyScore) viene prima corretta con la pendenza DTM già disponibile qui
-  // (refineSafetyWithSlope, vedi il commento sul perché in lib/safetyScore.ts), poi combinata col
-  // profilo escursionista e lo storico personale. Solo presentazionale: non tocca la cache.
+  // (refineSafetyWithTerrainSignals, vedi il commento sul perché in lib/safetyScore.ts), poi
+  // combinata col profilo escursionista e lo storico personale. Da questo fix in poi il calcolo
+  // persistito (computeSafetyForHike/recalcAllSafety) applica già la stessa correzione — questa
+  // chiamata resta un "top-up" solo presentazionale per punteggi cachati prima di questo fix o
+  // quando il DTM diventa disponibile dopo l'ultimo calcolo persistito; non tocca la cache.
   const [activities, setActivities] = useState<ActivityMeta[]>([])
   useEffect(() => { getAllActivities().then(setActivities).catch(() => {}) }, [])
 
@@ -216,7 +219,7 @@ export default function GuidaHub({ id }: { id?: string }) {
   }), [personalRecords])
 
   const refinedSafety = useMemo(
-    () => safetyScore ? refineSafetyWithSlope(safetyScore, dtmProfile?.avgSlopeDeg ?? undefined) : null,
+    () => safetyScore ? refineSafetyWithTerrainSignals(safetyScore, { maxSlopeDeg: dtmProfile?.maxSlopeDeg ?? undefined }) : null,
     [safetyScore, dtmProfile?.avgSlopeDeg],
   )
 
