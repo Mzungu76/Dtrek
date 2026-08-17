@@ -203,8 +203,8 @@ export function combinedSafetyPhrase(objectiveScore: number, personalFitScore: n
 }
 
 export interface PersonalSafety {
-  /** Sicurezza Oggettiva passata in input (già eventualmente corretta con la pendenza da
-   *  refineSafetyWithSlope) — riesposta qui solo per comodità dei chiamanti. */
+  /** Sicurezza Oggettiva passata in input (già eventualmente corretta con pendenza/scala SAC da
+   *  refineSafetyWithTerrainSignals) — riesposta qui solo per comodità dei chiamanti. */
   objective: SafetyScore
   personalFitScore: number
   personalFit: SafetyAdvice

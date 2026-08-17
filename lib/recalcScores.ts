@@ -8,8 +8,8 @@ import { getCtsFallback } from '@/lib/trailScore'
 import { computeCtsCore } from '@/lib/computeCtsForHike'
 import { refreshTsForHike } from '@/lib/computeTsForHike'
 import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
-import { type PoiItem } from '@/lib/overpass'
-import { computeSafetyScore, type WildlifeRisk } from '@/lib/safetyScore'
+import { type PoiItem, fetchTerrainContext } from '@/lib/overpass'
+import { computeSafetyScore, refineSafetyWithTerrainSignals, type WildlifeRisk } from '@/lib/safetyScore'
 import { fetchWildlifeRiskFromGbif } from '@/lib/wildlifeRiskFromGbif'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import { effectiveHikeMetrics } from '@/lib/routeMode'
@@ -110,6 +110,7 @@ export async function recalcAllSafety(onProgress?: (text: string) => void): Prom
 
     let gbifWildlifeRisks: WildlifeRisk[] = []
     let guardianDogRisk: { present: boolean } | undefined
+    let sacScale: string | undefined
     const poly = meta.routePolyline
     if (poly && poly.length >= 2) {
       const bbox = computeBbox(poly, 0.005) // minLat,minLon,maxLat,maxLon
@@ -117,21 +118,24 @@ export async function recalcAllSafety(onProgress?: (text: string) => void): Prom
       const animalsBbox = `${minLat},${maxLat},${minLon},${maxLon}` // /api/animals expects minLat,maxLat,minLon,maxLon
       const month = meta.plannedDate ? new Date(meta.plannedDate).getMonth() + 1 : new Date().getMonth() + 1
 
-      const [gbifResult, guardianResult] = await Promise.allSettled([
+      const [gbifResult, guardianResult, terrainResult] = await Promise.allSettled([
         Promise.race([fetchWildlifeRiskFromGbif(animalsBbox, month), deadline]),
         Promise.race([
           fetch(`/api/trails/guardian-dogs?bbox=${encodeURIComponent(bbox)}`).then(r => r.json()) as Promise<{ present: boolean }>,
           deadline,
         ]),
+        // Scala SAC via Overpass — non rate-limited come il DTM, stesso trattamento best-effort.
+        Promise.race([fetchTerrainContext(poly), deadline]),
       ])
       if (gbifResult.status === 'fulfilled' && gbifResult.value) gbifWildlifeRisks = gbifResult.value
       if (guardianResult.status === 'fulfilled' && guardianResult.value) guardianDogRisk = guardianResult.value
+      if (terrainResult.status === 'fulfilled' && terrainResult.value) sacScale = terrainResult.value.sacScale
     }
 
     // Cifre effettive: un andata e ritorno dichiarato vale il doppio (lib/routeMode.ts), esattamente
     // come in computeSafetyForHike — le due strade non devono dare risultati diversi.
     const effective = effectiveHikeMetrics(meta, meta.routeMode)
-    const safety = computeSafetyScore({
+    let safety = computeSafetyScore({
       distanceMeters: effective.distanceMeters,
       elevationGain: effective.elevationGain,
       elevationLoss: effective.elevationLoss,
@@ -143,6 +147,9 @@ export async function recalcAllSafety(onProgress?: (text: string) => void): Prom
       gbifWildlifeRisks,
       guardianDogRisk,
     })
+    // meta.dtmProfile è già disponibile senza fetch aggiuntiva (PlannedHikeMeta lo include, vedi
+    // lib/plannedStore.ts) — undefined solo se la Guida non è mai stata aperta per questa hike.
+    safety = refineSafetyWithTerrainSignals(safety, { maxSlopeDeg: meta.dtmProfile?.maxSlopeDeg ?? undefined, sacScale })
     await updatePlannedMeta(meta.id, { cachedSafetyScore: safety, cachedSafetyComputedAt: new Date().toISOString() })
     refreshTsForHike(meta.id).catch(() => {})
   })

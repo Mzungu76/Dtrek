@@ -2,11 +2,20 @@
 import { useEffect, useState } from 'react'
 import { computeTrailConfidence, type TrailConfidenceResult } from '@/lib/navigation/trailConfidence'
 import type { WeatherSignal, ClimateSignal, CommunitySignal } from '@/lib/trailConditions/types'
+import type { ClosureSignal } from '@/lib/community/closureSummary'
 
 interface ConditionsResponse {
   weather: WeatherSignal
   climate: ClimateSignal
   community: CommunitySignal
+  closure: ClosureSignal
+}
+
+export interface TrailConfidenceState {
+  confidence: TrailConfidenceResult | null
+  /** null finché il primo fetch non è ancora tornato — distinto da `unknown` (fetch riuscito,
+   *  nessuna segnalazione), stesso principio "assenza dato ≠ dato verificato" del resto del modulo. */
+  closure: ClosureSignal | null
 }
 
 // Fase 8 (seguito) di docs/navigator-orizzonti-roadmap.md — prima UI reale per
@@ -27,8 +36,9 @@ export function useTrailConfidence(
   hikeId: string,
   routePolyline: [number, number][],
   trailScore: number | null,
-): TrailConfidenceResult | null {
-  const [result, setResult] = useState<TrailConfidenceResult | null>(null)
+): TrailConfidenceState {
+  const [confidence, setConfidence] = useState<TrailConfidenceResult | null>(null)
+  const [closure, setClosure] = useState<ClosureSignal | null>(null)
 
   useEffect(() => {
     if (routePolyline.length < 2) return
@@ -40,7 +50,7 @@ export function useTrailConfidence(
         .then((res) => res.json())
         .then((data: ConditionsResponse | { error: string }) => {
           if (cancelled || 'error' in data) return
-          setResult(computeTrailConfidence({
+          setConfidence(computeTrailConfidence({
             trailScore,
             // null, non 0, quando Open-Meteo non ha risposto — un fallimento di rete non deve
             // pesare come "condizioni favorevoli" nella media di Trail Confidence (vedi
@@ -49,6 +59,8 @@ export function useTrailConfidence(
             climatePenalty: data.climate.unavailable ? null : (data.climate.tempPenalty + data.climate.altitudeSeason + data.climate.seasonBonus),
             community: data.community,
           }))
+          // Stesso fetch, nessuna chiamata di rete aggiuntiva — vedi DTREK-AUDIT.md P0 #5.
+          setClosure(data.closure)
         })
         .catch(() => {
           // Best-effort: nessun aggiornamento su fallimento, il badge resta con l'ultimo
@@ -62,5 +74,5 @@ export function useTrailConfidence(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hikeId])
 
-  return result
+  return { confidence, closure }
 }

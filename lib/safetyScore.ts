@@ -188,8 +188,8 @@ function getWildlifeRisks(region: string, altitudeMax: number, month: number): W
 }
 
 // Pesi delle 5 categorie nella media pesata di overall — esportati (non più una costante privata
-// dentro computeSafetyScore) così refineSafetyWithSlope può ricalcolare l'overall con lo stesso
-// identico criterio quando corregge solo il Terreno, invece di duplicare i numeri altrove.
+// dentro computeSafetyScore) così refineSafetyWithTerrainSignals può ricalcolare l'overall con lo
+// stesso identico criterio quando corregge solo il Terreno, invece di duplicare i numeri altrove.
 export const SAFETY_CATEGORY_WEIGHTS = {
   altitude: 0.25,
   terrain: 0.2,
@@ -214,36 +214,62 @@ export function objectiveSafetyLabel(score: number): { label: string; color: str
   return               { label: 'Rischio estremo',              color: '#991b1b' }
 }
 
-// Severità stimata dalla sola pendenza media DTM (Horn), sulle stesse soglie fisiche di
-// lib/trailScore.ts's slopeTerrainMult ma lette come pericolo tecnico/esposizione invece che
-// come moltiplicatore di fatica — un tratto molto ripido è anche quello dove più probabilmente
-// serve mettere le mani, non solo il fiato.
-function slopeHazardScore(avgSlopeDeg: number): number {
-  if (avgSlopeDeg >= 40) return 20
-  if (avgSlopeDeg >= 30) return 40
-  if (avgSlopeDeg >= 20) return 60
-  if (avgSlopeDeg >= 10) return 80
+// Severità stimata dalla pendenza reale DTM (Horn) — dal picco (maxSlopeDeg), non dalla media:
+// un tratto corto e verticale annegato in un profilo altrimenti dolce sposta a malapena la media,
+// ma il picco lo rivela. Stesse soglie fisiche di lib/trailScore.ts's slopeTerrainMult, lette qui
+// come pericolo tecnico/esposizione invece che come moltiplicatore di fatica — un tratto molto
+// ripido è anche quello dove più probabilmente serve mettere le mani, non solo il fiato.
+function slopeHazardScore(maxSlopeDeg: number): number {
+  if (maxSlopeDeg >= 40) return 20
+  if (maxSlopeDeg >= 30) return 40
+  if (maxSlopeDeg >= 20) return 60
+  if (maxSlopeDeg >= 10) return 80
   return 90
 }
 
+// Scala SAC (Club Alpino Svizzero, T1-T6) — stima informata delle soglie di pericolo per fascia,
+// non derivata da uno studio: T1/T2 sono sentiero escursionistico ordinario, T3 introduce
+// esposizione/uso occasionale delle mani, T4+ è terreno da ferrata/attrezzato (spesso richiede
+// equipaggiamento specifico: imbrago, set da ferrata) — oggettivamente pericoloso per un
+// escursionista non attrezzato indipendentemente da quanto sia corto il tratto. Stesso ordine già
+// usato per estrarre il valore reale in lib/overpass.ts's fetchTerrainContext.
+const SAC_SCALE_ORDER = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6']
+const SAC_SCALE_HAZARD: Record<string, number> = { T1: 95, T2: 85, T3: 60, T4: 30, T5: 12, T6: 5 }
+
+function sacScaleHazardScore(sacScale: string): number | null {
+  return SAC_SCALE_ORDER.includes(sacScale) ? SAC_SCALE_HAZARD[sacScale] : null
+}
+
+export interface TerrainHazardSignals {
+  /** Picco di pendenza reale lungo il tracciato (lib/dtm/trailDtmProfile.ts's TrailDtmProfile.maxSlopeDeg). */
+  maxSlopeDeg?: number
+  /** Scala SAC massima reale rilevata sul tracciato via tag OSM (lib/overpass.ts's fetchTerrainContext, T1-T6). */
+  sacScale?: string
+}
+
 /**
- * Corregge (solo in visualizzazione, non tocca la cache persistita da computeSafetyForHike) il
- * punteggio Terreno con un segnale di pendenza reale (DTM), preso nel peggiore dei due insieme al
- * D-score già calcolato — mai compensabile, come il gate di trailScoreV2.
+ * Corregge il punteggio Terreno con segnali di tecnicità reale — pendenza di picco (DTM) e/o
+ * scala SAC (OSM) — presi nel peggiore fra tutti quelli disponibili insieme al D-score già
+ * calcolato — mai compensabile, come il gate di trailScoreV2. Nessun segnale disponibile ⇒
+ * ritorna `safety` invariato.
  *
- * Perché serve: oggi il D-score di Terreno (√(2×dislivello×km)) è in pratica una misura di fatica
+ * Perché serve: il D-score di Terreno (√(2×dislivello×km)) è in pratica una misura di fatica
  * fisica, non di tecnicità — una ferrata corta ma esposta ha poco dislivello e poca distanza,
- * quindi D-score basso ⇒ "Terreno sicuro al 90%" anche quando il pericolo reale è alto. Un vero
- * segnale da scala SAC/attrezzatura OSM non è ancora raccolto da nessuna parte del codice (nessun
- * chiamante valorizza mai `sacScale`/`surfaces` in lib/trailScore.ts): finché non c'è quella
- * pipeline, la pendenza DTM (già disponibile lato client per il Comfort TrailScore) resta il
- * miglior proxy oggettivo che abbiamo per "questo tratto è più verticale che semplicemente
- * faticoso".
+ * quindi D-score basso ⇒ "Terreno sicuro al 90%" anche quando il pericolo reale è alto.
  */
-export function refineSafetyWithSlope(safety: SafetyScore, avgSlopeDeg?: number): SafetyScore {
-  if (avgSlopeDeg == null) return safety
-  const hazard = slopeHazardScore(avgSlopeDeg)
-  const refinedTerrainScore = Math.min(safety.categories.terrain.score, hazard)
+export function refineSafetyWithTerrainSignals(safety: SafetyScore, signals: TerrainHazardSignals): SafetyScore {
+  const hazards: { value: number; reason: string }[] = []
+  if (signals.maxSlopeDeg != null) {
+    hazards.push({ value: slopeHazardScore(signals.maxSlopeDeg), reason: `Pendenza massima reale rilevata: ${Math.round(signals.maxSlopeDeg)}° — corretto per tecnicità del terreno` })
+  }
+  if (signals.sacScale != null) {
+    const hazard = sacScaleHazardScore(signals.sacScale)
+    if (hazard != null) hazards.push({ value: hazard, reason: `Scala di difficoltà escursionistica (SAC) ${signals.sacScale} rilevata sul tracciato — terreno alpinistico/attrezzato` })
+  }
+  if (hazards.length === 0) return safety
+
+  const worst = hazards.reduce((a, b) => (b.value < a.value ? b : a))
+  const refinedTerrainScore = Math.min(safety.categories.terrain.score, worst.value)
   if (refinedTerrainScore === safety.categories.terrain.score) return safety
 
   const w = SAFETY_CATEGORY_WEIGHTS
@@ -255,6 +281,7 @@ export function refineSafetyWithSlope(safety: SafetyScore, avgSlopeDeg?: number)
     safety.categories.logistics.score * w.logistics
   )
   const { label, color } = objectiveSafetyLabel(overall)
+  const terrainItem: SafetyRiskItem = { type: 'danger', text: worst.reason }
 
   return {
     ...safety,
@@ -263,8 +290,13 @@ export function refineSafetyWithSlope(safety: SafetyScore, avgSlopeDeg?: number)
     color,
     categories: {
       ...safety.categories,
-      terrain: { ...safety.categories.terrain, score: refinedTerrainScore },
+      terrain: {
+        ...safety.categories.terrain,
+        score: refinedTerrainScore,
+        items: [...safety.categories.terrain.items, terrainItem],
+      },
     },
+    allRisks: [...safety.allRisks, terrainItem],
   }
 }
 
