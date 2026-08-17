@@ -1,8 +1,7 @@
 'use client'
 import 'leaflet/dist/leaflet.css'
 import type * as L from 'leaflet'
-import { useEffect, useRef, useState } from 'react'
-import { Locate } from 'lucide-react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import type { NavState } from '@/lib/navigation/types'
 import { computeDirectionArrows } from '@/lib/geoUtils'
 import { labelNearbyTrail, formatTrailDistance } from '@/lib/navigation/nearbyTrailLabels'
@@ -36,6 +35,14 @@ interface Props {
    *  this mode (redundant clutter on top of the colored stretches). Null/omitted falls back to
    *  the plain single-color line. */
   slopeSegments?: SlopeSegment[] | null
+  /** Fired whenever follow-mode toggles (auto-recenter on/off) — the "centra sulla mia posizione"
+   *  button itself now lives in the caller (ActiveNavigationView.tsx, grouped with NavLayerRail
+   *  instead of floating independently mid-screen), so it needs to know when to highlight itself. */
+  onFollowModeChange?: (following: boolean) => void
+}
+
+export interface NavigationMapHandle {
+  recenter: () => void
 }
 
 const FOLLOW_ZOOM = 17
@@ -74,10 +81,10 @@ const NEARBY_TRAIL_MIN_LABEL_LENGTH_M = 60
  * hiker manually pans/zooms the map, follow mode turns off so their gesture
  * isn't fought, and a "recenter" button brings it back.
  */
-export default function NavigationMap({
+const NavigationMap = forwardRef<NavigationMapHandle, Props>(function NavigationMap({
   routePolyline, pois, position, bearingDeg, state, nearbyTrails, accuracyM, parkingSpot, onPoiTap,
-  showRoute = true, showPois = true, slopeSegments = null,
-}: Props) {
+  showRoute = true, showPois = true, slopeSegments = null, onFollowModeChange,
+}, ref) {
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstance = useRef<L.Map | null>(null)
   const userMarker = useRef<L.Marker | null>(null)
@@ -329,25 +336,26 @@ export default function NavigationMap({
     return () => { cancelled = true }
   }, [mapReady, parkingSpot])
 
-  const handleRecenter = () => {
+  const handleRecenter = useCallback(() => {
     setFollowMode(true)
     // Instant, not animated: consistent with the online map's fix for the
     // same "recenter feels slow" report, and also resets zoom back to the
     // follow level (panning/pinching away is exactly what disengaged follow
     // mode in the first place).
     if (position && mapInstance.current) mapInstance.current.setView([position.lat, position.lon], FOLLOW_ZOOM)
-  }
+  }, [position])
+
+  useImperativeHandle(ref, () => ({ recenter: handleRecenter }), [handleRecenter])
+
+  // Il pulsante "centra" ora vive nel chiamante (ActiveNavigationView.tsx), raggruppato con
+  // NavLayerRail invece di fluttuare da solo a metà schermo — qui basta segnalare i cambi di stato.
+  useEffect(() => { onFollowModeChange?.(followMode) }, [followMode, onFollowModeChange])
 
   return (
     <div className="absolute inset-0">
       <div ref={mapRef} className="absolute inset-0" />
-      <button
-        onClick={handleRecenter}
-        className={`absolute right-3 top-1/2 -translate-y-1/2 z-10 w-11 h-11 rounded-full shadow-lg flex items-center justify-center ${followMode ? 'bg-terra-500 text-white' : 'bg-white text-stone-700'}`}
-        aria-label="Centra sulla mia posizione"
-      >
-        <Locate className="w-5 h-5" />
-      </button>
     </div>
   )
-}
+})
+
+export default NavigationMap

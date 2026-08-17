@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Capacitor } from '@capacitor/core'
-import { AlertTriangle, BatteryWarning, ArrowUp, Download, CheckCircle2, Radio } from 'lucide-react'
+import { AlertTriangle, BatteryWarning, ArrowUp, Download, CheckCircle2, Radio, Locate } from 'lucide-react'
 import Sheet from '@/components/ui/Sheet'
 import type { PlannedHike } from '@/lib/plannedStore'
 import { updatePlannedMeta } from '@/lib/plannedStore'
@@ -184,6 +184,12 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   const [showRouteLayer, setShowRouteLayer] = useState(true)
   const [showPoiLayer, setShowPoiLayer] = useState(true)
   const [showSlopeLayer, setShowSlopeLayer] = useState(false)
+  // Il pulsante "centra sulla mia posizione" vive qui ora (raggruppato con NavLayerRail), non più
+  // dentro NavigationMap/NavigationMapLibre — quei due espongono solo recenter() via ref e
+  // segnalano i cambi di follow-mode, così non c'è più un controllo indipendente a metà schermo
+  // che si contende il centro con le rotaie qui sotto.
+  const mapHandleRef = useRef<{ recenter: () => void } | null>(null)
+  const [mapFollowMode, setMapFollowMode] = useState(true)
   // Sostituisce gli stati collassato/metà/pieno del vecchio NavBottomSheet: o la striscia sottile
   // (mappa protagonista) o il pannello dettagli a schermo intero, niente via di mezzo.
   const [showStatsSheet, setShowStatsSheet] = useState(false)
@@ -872,17 +878,21 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
     <div className="fixed inset-0 z-[2000] bg-stone-900 font-body">
       {mapMode === 'offline' ? (
         <NavigationMap
+          ref={mapHandleRef}
           routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} state={state}
           nearbyTrails={nearbyTrails} accuracyM={accuracyM} parkingSpot={parkingSpot} onPoiTap={handlePoiTap}
           showRoute={showRouteLayer} showPois={showPoiLayer} slopeSegments={showSlopeLayer ? slopeSegments : null}
+          onFollowModeChange={setMapFollowMode}
         />
       ) : (
         <NavigationMapLibre
+          ref={mapHandleRef}
           routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} state={state}
           styleId={mapMode} is3D={is3D} onStyleFailed={handleMapStyleFailed} accuracyM={accuracyM}
           natura2000Features={natura2000Features} showNatura2000={showNatura2000}
           parkingSpot={parkingSpot} nearbyTrails={nearbyTrails} onPoiTap={handlePoiTap}
           showRoute={showRouteLayer} showPois={showPoiLayer} slopeSegments={showSlopeLayer ? slopeSegments : null}
+          onFollowModeChange={setMapFollowMode}
         />
       )}
 
@@ -892,13 +902,26 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         </div>
       )}
 
-      {/* Soluzione B: rotaia dei layer a bordo sinistro — mappa protagonista, i tre interruttori
-          (Percorso/POI/Pendenze) restano a un tocco senza sottrarle spazio in permanenza. */}
-      <NavLayerRail
-        showRoute={showRouteLayer} onToggleRoute={() => setShowRouteLayer((v) => !v)}
-        showPois={showPoiLayer} onTogglePois={() => setShowPoiLayer((v) => !v)}
-        showSlope={showSlopeLayer} onToggleSlope={() => setShowSlopeLayer((v) => !v)}
-      />
+      {/* Soluzione B: colonna sinistra centrata verticalmente — rotaia dei layer (Percorso/POI/
+          Pendenze) più il pulsante "centra sulla mia posizione", raggruppati invece di lasciare
+          quest'ultimo a fluttuare da solo a metà schermo (dove si scontrava con la rotaia destra
+          una volta centrata anche lei). */}
+      <div className="absolute left-0 z-10 top-1/2 -translate-y-1/2 flex flex-col items-start gap-3">
+        <NavLayerRail
+          showRoute={showRouteLayer} onToggleRoute={() => setShowRouteLayer((v) => !v)}
+          showPois={showPoiLayer} onTogglePois={() => setShowPoiLayer((v) => !v)}
+          showSlope={showSlopeLayer} onToggleSlope={() => setShowSlopeLayer((v) => !v)}
+        />
+        <button
+          onClick={() => mapHandleRef.current?.recenter()}
+          aria-label="Centra sulla mia posizione"
+          className={`ml-3 w-11 h-11 rounded-full shadow-lg flex items-center justify-center ${
+            mapFollowMode ? 'bg-terra-500 text-white' : 'bg-white text-stone-700'
+          }`}
+        >
+          <Locate className="w-5 h-5" />
+        </button>
+      </div>
 
       <GiuliaLiveQa
         hikeTitle={hike.title}
@@ -1002,10 +1025,10 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         )}
       </div>
 
-      {/* Soluzione B: un'unica rotaia destra — SOS, mappa/layer, affidabilità, condivisione live,
-          mappa offline, punto auto — invece di due colonne separate. Ancorata sotto il pulsante
-          "centra" del componente mappa (anch'esso a metà altezza, right-3) per non scontrarcisi. */}
-      <div className="absolute right-3 z-10 flex flex-col items-end gap-2" style={{ top: 'calc(50% + 60px)' }}>
+      {/* Soluzione B: un'unica rotaia destra, centrata verticalmente — SOS, mappa/layer,
+          affidabilità, condivisione live, mappa offline, punto auto — invece di due colonne
+          separate a offset fissi che finivano per scontrarsi con altri controlli fluttuanti. */}
+      <div className="absolute right-3 z-10 top-1/2 -translate-y-1/2 flex flex-col items-end gap-2">
         <SosButton
           fix={position ? { lat: position.lat, lon: position.lon, accuracyM } : null}
           liveShareUrl={liveShareToken ? `${typeof window !== 'undefined' ? window.location.origin : ''}/s/live/${liveShareToken}` : null}

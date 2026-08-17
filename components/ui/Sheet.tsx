@@ -1,5 +1,6 @@
 'use client'
 import { ReactNode, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 
 interface SheetProps {
@@ -24,7 +25,13 @@ export default function Sheet({ open, onClose, title, children }: SheetProps) {
 
   if (!open) return null
 
-  return (
+  // Portato in document.body: chi apre questo foglio spesso vive dentro un contenitore
+  // posizionato con un proprio z-index (es. una rotaia di controlli mappa) — un elemento
+  // posizionato con z-index crea un proprio contesto di stacking, quindi lo z-[60] qui sotto
+  // varrebbe solo AL SUO INTERNO, non contro fratelli esterni con z-index più basso ma dichiarati
+  // dopo nel DOM (visto dal vivo: un avviso "fuori percorso" che finiva sopra questo foglio).
+  // Il portal aggira il problema alla radice, per ogni chiamante presente e futuro.
+  return createPortal(
     <div className="fixed inset-0 z-[60] flex items-end justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px]" onClick={onClose} />
       <div
@@ -42,6 +49,7 @@ export default function Sheet({ open, onClose, title, children }: SheetProps) {
         )}
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

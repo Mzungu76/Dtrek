@@ -32,10 +32,10 @@ export default function NavLayerRail({ showRoute, onToggleRoute, showPois, onTog
   }
 
   return (
-    <div
-      className="absolute left-0 z-10 flex flex-col gap-2 py-2 pl-1.5 pr-2 rounded-r-2xl bg-stone-900/55 backdrop-blur-sm"
-      style={{ top: 'calc(50% + 20px)' }}
-    >
+    // Non si posiziona da sé — il chiamante (ActiveNavigationView.tsx) lo raggruppa col pulsante
+    // "centra sulla mia posizione" in un'unica colonna sinistra centrata verticalmente, così i due
+    // non finiscono a contendersi lo stesso punto sullo schermo.
+    <div className="flex flex-col gap-2 py-2 pl-1.5 pr-2 rounded-r-2xl bg-stone-900/55 backdrop-blur-sm">
       {ITEMS.map(({ key, icon: Icon, label }) => {
         const [on, toggle] = state[key]
         return (
