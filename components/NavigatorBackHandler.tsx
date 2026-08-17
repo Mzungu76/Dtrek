@@ -1,34 +1,52 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
+import { usePathname } from 'next/navigation'
 import { Capacitor, type PluginListenerHandle } from '@capacitor/core'
 import { App } from '@capacitor/app'
+import { closeTopModal } from '@/lib/navigation/backHandlerStack'
 
 // Stessa finestra usata dal pattern "premi ancora per uscire" di qualunque app Android — abbastanza
 // breve da non chiudere per sbaglio con due tocchi involontari distanti, abbastanza lunga da non
 // richiedere un doppio tocco frenetico.
 const EXIT_WINDOW_MS = 2000
+// Pagina di ingresso di Navigator (capacitor.config.ts punta la WebView qui) — vedi il commento
+// sotto sul perché il controllo è sul pathname e non su canGoBack.
+const NAVIGATOR_HOME_PATH = '/navigatore'
 
 /**
  * Gestisce il tasto/gesto "indietro" hardware di Android per tutto Navigator. Registrare un
  * listener su `backButton` toglie ad Android il suo comportamento di default (torna indietro
  * nella cronologia se possibile, altrimenti riduce a icona l'app) — da qui in poi tocca a
- * questo componente riprodurlo per intero:
+ * questo componente riprodurlo per intero.
  *
- * - `canGoBack: true` (c'è una schermata precedente in Navigator): delega a
- *   `window.history.back()`, lo stesso identico evento 'popstate' che oggi già guida
- *   GlobalBackInterceptor.tsx (schermate Dtrek condivise) e il proprio guard di
- *   ActiveNavigationView.tsx (mostra "Terminare la navigazione?" invece di uscire a metà
- *   escursione) — nessuna delle due logiche esistenti va toccata, restano l'unico punto che
- *   decide cosa succede schermata per schermata.
- * - `canGoBack: false` (prima pagina, /navigatore appena aperta o già tornati fin lì a forza di
- *   indietro): mostra "Clicca un'altra volta per chiudere l'app" invece di ridurre a icona in
- *   silenzio; un secondo tocco entro EXIT_WINDOW_MS chiude davvero l'app (`App.exitApp()`, la
- *   stessa chiamata già usata dal pulsante manuale "Chiudi Navigator" di NavigatorMenu.tsx).
+ * La verifica "siamo alla prima pagina?" è sul PATHNAME corrente (== /navigatore), non su
+ * `canGoBack` come in un primo tentativo: GlobalBackInterceptor.tsx pusha una entry di guardia
+ * nella cronologia a ogni cambio di pathname, anche quando si resta sulla stessa pagina — la
+ * cronologia della WebView può quindi restare "profonda" (canGoBack true) anche quando l'utente è
+ * di fatto già sulla home. Un tasto indietro dalla home deve sempre offrire di uscire, a
+ * prescindere da quante voci fantasma ci siano sotto.
+ *
+ * - C'è un pannello/popup modale aperto sopra (menu di Navigator, un foglio dettagli, un
+ *   popup...): lo chiude e basta (backHandlerStack.ts/useModalBackHandler.ts) — mai la logica
+ *   sotto. Senza questo controllo, indietro con il menu aperto sulla home mostrava la proposta di
+ *   uscire invece di chiudere il menu, e un secondo tocco chiudeva l'intera app per sbaglio.
+ * - Non siamo sulla home: delega a `window.history.back()`, lo stesso identico evento
+ *   'popstate' che oggi già guidano GlobalBackInterceptor.tsx (schermate Dtrek condivise) e il
+ *   proprio guard di ActiveNavigationView.tsx (mostra "Terminare la navigazione?" invece di
+ *   uscire a metà escursione) — nessuna delle due logiche esistenti va toccata.
+ * - Siamo sulla home: mostra "Clicca un'altra volta per chiudere l'app" invece di ridurre a
+ *   icona in silenzio; un secondo tocco entro EXIT_WINDOW_MS chiude davvero l'app
+ *   (`App.exitApp()`, la stessa chiamata già usata dal pulsante manuale "Chiudi Navigator" di
+ *   NavigatorMenu.tsx).
  *
  * Montato in AppChrome.tsx e attivo solo dentro l'app nativa (Capacitor.isNativePlatform()) —
  * sul web Dtrek non fa nulla, il tasto indietro del browser resta quello di sempre.
  */
 export default function NavigatorBackHandler() {
+  const pathname = usePathname()
+  const pathnameRef = useRef(pathname)
+  useEffect(() => { pathnameRef.current = pathname }, [pathname])
+
   const [showExitHint, setShowExitHint] = useState(false)
   const lastPressAtRef = useRef(0)
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -38,8 +56,10 @@ export default function NavigatorBackHandler() {
     let listenerHandle: PluginListenerHandle | undefined
     let cancelled = false
 
-    App.addListener('backButton', ({ canGoBack }) => {
-      if (canGoBack) {
+    App.addListener('backButton', () => {
+      if (closeTopModal()) return
+
+      if (pathnameRef.current !== NAVIGATOR_HOME_PATH) {
         setShowExitHint(false)
         if (hideTimerRef.current) clearTimeout(hideTimerRef.current)
         window.history.back()

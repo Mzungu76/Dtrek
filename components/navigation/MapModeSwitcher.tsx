@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { Layers, Box, Check } from 'lucide-react'
 import type { MapTilerStyleId } from '@/lib/mapStyles'
+import { useModalBackHandler } from '@/lib/navigation/useModalBackHandler'
 
 export type MapMode = 'offline' | MapTilerStyleId
 
@@ -39,6 +40,7 @@ export default function MapModeSwitcher({
   showNatura2000, onToggleNatura2000,
 }: Props) {
   const [open, setOpen] = useState(false)
+  useModalBackHandler(open, () => setOpen(false))
   const options = isOnline ? ONLINE_OPTIONS : ONLINE_OPTIONS.filter((o) => o.id === 'offline')
   // Fetched/rendered live (GeoJSON) — same online-only eligibility as the 3D toggle, not part
   // of the downloaded offline package.

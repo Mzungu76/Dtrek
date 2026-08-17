@@ -15,6 +15,7 @@ import { deleteActivity, type HikeNote } from '@/lib/blobStore'
 import { requestOrientationPermission, isOrientationSupported, needsOrientationPermissionGesture } from '@/lib/navigation/orientation'
 import { prefetchTilesAroundPoint } from '@/lib/offline/packageManager'
 import { retryFieldNotePhotos } from '@/lib/offline/retryFieldNotePhotos'
+import { retryFieldNotePhotoIfOnline } from '@/lib/offline/retryFieldNotePhotoIfOnline'
 import FieldNoteSheet from '@/components/navigation/FieldNoteSheet'
 import NavigatorAppPromo from '@/components/navigation/NavigatorAppPromo'
 import SosButton from '@/components/navigation/SosButton'
@@ -160,7 +161,12 @@ export default function TracciaPage() {
     setPhase('recording')
   }
 
-  const handleSaveFieldNote = (note: HikeNote) => setHikeNotes((prev) => [...prev, note])
+  const handleSaveFieldNote = (note: HikeNote) => {
+    setHikeNotes((prev) => [...prev, note])
+    retryFieldNotePhotoIfOnline(trackSessionIdRef.current, note, [note], (changed) => {
+      setHikeNotes((prev) => prev.map((n) => changed.find((c) => c.id === n.id) ?? n))
+    })
+  }
 
   const handlePauseResume = () => {
     if (!sessionRef.current) return
@@ -251,7 +257,6 @@ export default function TracciaPage() {
 
         {showFieldNote && (
           <FieldNoteSheet
-            hikeId={trackSessionIdRef.current}
             position={position}
             onSave={handleSaveFieldNote}
             onClose={() => { setShowFieldNote(false); setFieldNoteAutoCamera(false) }}

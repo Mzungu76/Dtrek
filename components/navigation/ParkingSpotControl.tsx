@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Car, Navigation2, Trash2, MapPin, X } from 'lucide-react'
 import type { ParkingSpot } from '@/lib/navigation/navigationStore'
+import { useModalBackHandler } from '@/lib/navigation/useModalBackHandler'
 
 interface Props {
   spot: ParkingSpot | null
@@ -40,6 +41,7 @@ function formatDist(m: number): string {
  */
 export default function ParkingSpotControl({ spot, position, distanceM, bearingToSpotDeg, onSave, onClear }: Props) {
   const [open, setOpen] = useState(false)
+  useModalBackHandler(open, () => setOpen(false))
 
   return (
     <>

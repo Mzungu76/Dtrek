@@ -1,9 +1,10 @@
 'use client'
 import { useState } from 'react'
-import { X, Pause, Play, MapPin, BookOpen, Camera, NotebookPen, Leaf, Square } from 'lucide-react'
+import { X, Pause, Play, MapPin, BookOpen, Camera, NotebookPen, Square } from 'lucide-react'
 import type { TrackPoint } from '@/lib/tcxParser'
 import ElevationProfileChart from '@/components/ElevationProfileChart'
 import type { PaceStatus } from '@/lib/navigation/paceAssistant'
+import { useModalBackHandler } from '@/lib/navigation/useModalBackHandler'
 
 type Tab = 'tempi' | 'altimetria' | 'percorso'
 
@@ -33,8 +34,10 @@ interface Props {
   guideExcerpts: string[]
   onOpenFoto: () => void
   onOpenNota: () => void
+  /** Non più esposto in UI (riconoscimento specie in stand-by, vedi commento più sotto vicino
+   *  al pulsante rimosso) — il prop resta nel tipo così ActiveNavigationView.tsx continua a
+   *  passarlo senza modifiche, pronto per essere riesposto con un bottone in futuro. */
   onOpenSpecie: () => void
-  specieAvailable: boolean
 }
 
 const PACE_STATUS_STYLE: Record<PaceStatus, { label: string; className: string }> = {
@@ -68,9 +71,10 @@ export default function NavStatsSheet({
   distanceCoveredM, distanceRemainingM, currentSpeedMs, avgSpeedMs, movingTimeMs, etaDate,
   paceStatus, daylightMarginMin,
   timerRunning, onTogglePlayPause, onStop, trackPoints, currentDistanceM, remainingPois, guideExcerpts,
-  onOpenFoto, onOpenNota, onOpenSpecie, specieAvailable,
+  onOpenFoto, onOpenNota,
 }: Props) {
   const [tab, setTab] = useState<Tab>('tempi')
+  useModalBackHandler(open, onClose)
   if (!open) return null
 
   return (
@@ -90,16 +94,11 @@ export default function NavStatsSheet({
           <button onClick={onOpenNota} className="flex-1 flex flex-col items-center gap-1 py-2.5 rounded-2xl bg-stone-100 text-stone-600 text-[10px] font-semibold">
             <NotebookPen className="w-[18px] h-[18px]" /> Nota
           </button>
-          <button
-            onClick={onOpenSpecie}
-            disabled={!specieAvailable}
-            title={specieAvailable ? undefined : 'Richiede una connessione internet'}
-            className={`flex-1 flex flex-col items-center gap-1 py-2.5 rounded-2xl text-[10px] font-semibold ${
-              specieAvailable ? 'bg-stone-100 text-stone-600' : 'bg-stone-50 text-stone-300 cursor-not-allowed'
-            }`}
-          >
-            <Leaf className="w-[18px] h-[18px]" /> Specie
-          </button>
+          {/* Riconoscimento specie in stand-by (dipende da un endpoint iNaturalist non
+              ufficiale/non garantito per l'uso a più utenti — vedi lib/inatIdentify.ts,
+              SpeciesIdentifySheet.tsx e app/api/flora-fauna-identify/route.ts, lasciati intatti
+              e già pronti alla coda offline: basta reintrodurre questo bottone quando/se si
+              deciderà come gestire l'autenticazione OAuth e i limiti di traffico). */}
           <button onClick={onStop} className="flex-1 flex flex-col items-center gap-1 py-2.5 rounded-2xl bg-terra-500 text-white text-[10px] font-bold">
             <Square className="w-[18px] h-[18px]" /> Termina
           </button>

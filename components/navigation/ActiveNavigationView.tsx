@@ -30,6 +30,7 @@ import {
 import { usePoiNotes } from './usePoiNotes'
 import { loadManifest, isManifestValid } from '@/lib/offline/packageManifest'
 import { retryFieldNotePhotos } from '@/lib/offline/retryFieldNotePhotos'
+import { retryFieldNotePhotoIfOnline } from '@/lib/offline/retryFieldNotePhotoIfOnline'
 import { checkOfflineReadiness } from '@/lib/offline/offlineReadiness'
 import { ensureTrailGraph, loadTrailGraph } from '@/lib/navigation/trailGraphStore'
 import type { WalkNetwork } from '@/lib/routeBuilder/osmGraph'
@@ -751,6 +752,14 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
     const updated = [...hikeNotes, note]
     setHikeNotes(updated)
     updatePlannedMeta(hike.id, { hikeNotes: updated }).catch(() => {})
+
+    retryFieldNotePhotoIfOnline(hike.id, note, updated, (changed) => {
+      setHikeNotes((prev) => {
+        const merged = prev.map((n) => changed.find((c) => c.id === n.id) ?? n)
+        updatePlannedMeta(hike.id, { hikeNotes: merged }).catch(() => {})
+        return merged
+      })
+    })
   }
 
   /**
@@ -1113,7 +1122,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
 
       {showFieldNote && (
         <FieldNoteSheet
-          hikeId={hike.id} position={position} onSave={handleSaveFieldNote}
+          position={position} onSave={handleSaveFieldNote}
           onClose={() => { setShowFieldNote(false); setFieldNoteAutoCamera(false) }}
           autoOpenCamera={fieldNoteAutoCamera}
         />
@@ -1159,16 +1168,23 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
           alerts.push({
             id: 'offroute',
             node: (
-              <div className={`max-w-[85%] px-4 py-3 rounded-xl text-white text-sm font-semibold font-body shadow-lg flex flex-col gap-2 ${isWrongDirection ? 'bg-orange-700' : 'bg-terra-500'}`}>
-                {/* Icona + messaggio su una riga che può avvolgere normalmente (min-w-0 sullo span
-                    di testo, niente più stringa nuda incollata al bottone) — il link "Vie d'uscita"
-                    è una riga a sé sotto, non più incastrato in coda al testo dove finiva tagliato
-                    o scomodo da toccare. */}
+              <div
+                className={`max-w-[85%] px-4 py-3 rounded-xl text-white text-sm font-semibold font-body shadow-lg backdrop-blur-sm border-l-4 flex flex-col gap-2 ${
+                  isWrongDirection ? 'bg-orange-950/85 border-orange-400' : 'bg-stone-900/85 border-terra-400'
+                }`}
+              >
+                {/* Sfondo scuro traslucido invece di un blocco a colore pieno — resta
+                    riconoscibile come avviso importante (bordo e icone in colore) senza dominare
+                    lo schermo come il pieno arancione/terra faceva prima. Icona + messaggio su
+                    una riga che può avvolgere normalmente (min-w-0 sullo span di testo, niente
+                    più stringa nuda incollata al bottone) — il link "Vie d'uscita" è una riga a
+                    sé sotto, non più incastrato in coda al testo dove finiva tagliato o scomodo
+                    da toccare. */}
                 <div className="flex items-start gap-2">
                   {offRouteBearingDeg != null && (
-                    <ArrowUp size={16} className="shrink-0 mt-0.5" style={{ transform: `rotate(${offRouteBearingDeg}deg)` }} />
+                    <ArrowUp size={16} className={`shrink-0 mt-0.5 ${isWrongDirection ? 'text-orange-300' : 'text-terra-300'}`} style={{ transform: `rotate(${offRouteBearingDeg}deg)` }} />
                   )}
-                  <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+                  <AlertTriangle size={16} className={`shrink-0 mt-0.5 ${isWrongDirection ? 'text-orange-300' : 'text-terra-300'}`} />
                   <span className="min-w-0">
                     {isWrongDirection
                       ? 'Direzione sbagliata — segui la freccia'
@@ -1254,8 +1270,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         guideExcerpts={guideExcerpts}
         onOpenFoto={() => { setFieldNoteAutoCamera(true); setShowFieldNote(true) }}
         onOpenNota={() => { setFieldNoteAutoCamera(false); setShowFieldNote(true) }}
-        onOpenSpecie={() => { if (isOnline) setShowSpeciesIdentify(true) }}
-        specieAvailable={isOnline}
+        onOpenSpecie={() => setShowSpeciesIdentify(true)}
       />
 
       {callout && (
