@@ -8,7 +8,7 @@ import { labelNearbyTrail, formatTrailDistance } from '@/lib/navigation/nearbyTr
 import { poiBadgeMarkup } from '@/components/poiIcons'
 import { POI_META, type PoiType } from '@/lib/overpass'
 import { shortestRotation } from '@/lib/navigation/orientation'
-import { SLOPE_GRADE_COLOR, type SlopeSegment } from '@/lib/navigation/routeSlopeSegments'
+import type { SlopeSegment } from '@/lib/navigation/routeSlopeSegments'
 
 interface Props {
   routePolyline: [number, number][]
@@ -154,7 +154,7 @@ const NavigationMap = forwardRef<NavigationMapHandle, Props>(function Navigation
       const group = L.layerGroup()
       if (slopeSegments && slopeSegments.length > 0) {
         for (const seg of slopeSegments) {
-          L.polyline(seg.path, { color: SLOPE_GRADE_COLOR[seg.grade], weight: 4, opacity: 0.85 }).addTo(group)
+          L.polyline(seg.path, { color: seg.color, weight: 4, opacity: 0.85 }).addTo(group)
         }
       } else {
         L.polyline(routePolyline, { color: '#277134', weight: 4, opacity: 0.8 }).addTo(group)

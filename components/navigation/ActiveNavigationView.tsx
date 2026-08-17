@@ -178,10 +178,12 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   const [bottomAlertsExpanded, setBottomAlertsExpanded] = useState(false)
   const turnBackAlertedRef = useRef(false)
   const [showFieldNote, setShowFieldNote] = useState(false)
-  // Soluzione B (piano di restyling Navigator): Percorso e POI accesi di default — stesso
+  // Soluzione B (piano di restyling Navigator): sentieri vicini e POI accesi di default — stesso
   // aspetto di sempre finché non si tocca la rotaia — Pendenze spenta di default, è una lettura
-  // in più da attivare quando serve, non il modo consueto di vedere il percorso.
-  const [showRouteLayer, setShowRouteLayer] = useState(true)
+  // in più da attivare quando serve, non il modo consueto di vedere il percorso. Il percorso
+  // pianificato principale NON è tra questi toggle — resta sempre visibile, è la traccia da
+  // seguire, non un layer opzionale.
+  const [showNearbyTrails, setShowNearbyTrails] = useState(true)
   const [showPoiLayer, setShowPoiLayer] = useState(true)
   const [showSlopeLayer, setShowSlopeLayer] = useState(false)
   // Il pulsante "centra sulla mia posizione" vive qui ora (raggruppato con NavLayerRail), non più
@@ -880,8 +882,8 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         <NavigationMap
           ref={mapHandleRef}
           routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} state={state}
-          nearbyTrails={nearbyTrails} accuracyM={accuracyM} parkingSpot={parkingSpot} onPoiTap={handlePoiTap}
-          showRoute={showRouteLayer} showPois={showPoiLayer} slopeSegments={showSlopeLayer ? slopeSegments : null}
+          nearbyTrails={showNearbyTrails ? nearbyTrails : []} accuracyM={accuracyM} parkingSpot={parkingSpot} onPoiTap={handlePoiTap}
+          showPois={showPoiLayer} slopeSegments={showSlopeLayer ? slopeSegments : null}
           onFollowModeChange={setMapFollowMode}
         />
       ) : (
@@ -890,8 +892,8 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
           routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} state={state}
           styleId={mapMode} is3D={is3D} onStyleFailed={handleMapStyleFailed} accuracyM={accuracyM}
           natura2000Features={natura2000Features} showNatura2000={showNatura2000}
-          parkingSpot={parkingSpot} nearbyTrails={nearbyTrails} onPoiTap={handlePoiTap}
-          showRoute={showRouteLayer} showPois={showPoiLayer} slopeSegments={showSlopeLayer ? slopeSegments : null}
+          parkingSpot={parkingSpot} nearbyTrails={showNearbyTrails ? nearbyTrails : []} onPoiTap={handlePoiTap}
+          showPois={showPoiLayer} slopeSegments={showSlopeLayer ? slopeSegments : null}
           onFollowModeChange={setMapFollowMode}
         />
       )}
@@ -902,13 +904,13 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         </div>
       )}
 
-      {/* Soluzione B: colonna sinistra centrata verticalmente — rotaia dei layer (Percorso/POI/
-          Pendenze) più il pulsante "centra sulla mia posizione", raggruppati invece di lasciare
-          quest'ultimo a fluttuare da solo a metà schermo (dove si scontrava con la rotaia destra
-          una volta centrata anche lei). */}
+      {/* Soluzione B: colonna sinistra centrata verticalmente — rotaia dei layer (Sentieri vicini/
+          POI/Pendenze) più il pulsante "centra sulla mia posizione", raggruppati invece di
+          lasciare quest'ultimo a fluttuare da solo a metà schermo (dove si scontrava con la
+          rotaia destra una volta centrata anche lei). */}
       <div className="absolute left-0 z-10 top-1/2 -translate-y-1/2 flex flex-col items-start gap-3">
         <NavLayerRail
-          showRoute={showRouteLayer} onToggleRoute={() => setShowRouteLayer((v) => !v)}
+          showNearbyTrails={showNearbyTrails} onToggleNearbyTrails={() => setShowNearbyTrails((v) => !v)}
           showPois={showPoiLayer} onTogglePois={() => setShowPoiLayer((v) => !v)}
           showSlope={showSlopeLayer} onToggleSlope={() => setShowSlopeLayer((v) => !v)}
         />
@@ -1151,22 +1153,28 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
           alerts.push({
             id: 'offroute',
             node: (
-              <div className={`px-4 py-2 rounded-xl text-white text-sm font-semibold font-body shadow-lg flex flex-col gap-1 ${isWrongDirection ? 'bg-orange-700' : 'bg-terra-500'}`}>
-                <div className="flex items-center gap-2">
+              <div className={`max-w-[85%] px-4 py-3 rounded-xl text-white text-sm font-semibold font-body shadow-lg flex flex-col gap-2 ${isWrongDirection ? 'bg-orange-700' : 'bg-terra-500'}`}>
+                {/* Icona + messaggio su una riga che può avvolgere normalmente (min-w-0 sullo span
+                    di testo, niente più stringa nuda incollata al bottone) — il link "Vie d'uscita"
+                    è una riga a sé sotto, non più incastrato in coda al testo dove finiva tagliato
+                    o scomodo da toccare. */}
+                <div className="flex items-start gap-2">
                   {offRouteBearingDeg != null && (
-                    <ArrowUp size={16} className="shrink-0" style={{ transform: `rotate(${offRouteBearingDeg}deg)` }} />
+                    <ArrowUp size={16} className="shrink-0 mt-0.5" style={{ transform: `rotate(${offRouteBearingDeg}deg)` }} />
                   )}
-                  <AlertTriangle size={16} className="shrink-0" />
-                  {isWrongDirection
-                    ? 'Direzione sbagliata — segui la freccia'
-                    : `Sei fuori dal percorso${offRouteBearingDeg != null ? ' — torna verso la freccia' : ' pianificato'}`}
-                  <button
-                    onClick={handleEscapeOptions}
-                    className="ml-1 shrink-0 text-xs font-bold underline decoration-white/60 underline-offset-2"
-                  >
-                    Vie d&apos;uscita
-                  </button>
+                  <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+                  <span className="min-w-0">
+                    {isWrongDirection
+                      ? 'Direzione sbagliata — segui la freccia'
+                      : `Sei fuori dal percorso${offRouteBearingDeg != null ? ' — torna verso la freccia' : ' pianificato'}`}
+                  </span>
                 </div>
+                <button
+                  onClick={handleEscapeOptions}
+                  className="self-start pl-6 text-xs font-bold underline decoration-white/60 underline-offset-2 py-1"
+                >
+                  Vie d&apos;uscita
+                </button>
                 {/* Map Matching (Fase 4, lib/navigation/mapMatcher.ts): distinguishes "off the plan
                     but on a real, mapped trail" (likely deliberate) from being off any known trail —
                     informational only, never changes the off-route verdict itself above. */}
