@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { X, Pause, Play, Camera, NotebookPen } from 'lucide-react'
 import type { TrackPoint } from '@/lib/tcxParser'
 import ElevationProfileChart from '@/components/ElevationProfileChart'
+import { useModalBackHandler } from '@/lib/navigation/useModalBackHandler'
 
 type Tab = 'tempi' | 'altimetria'
 
@@ -42,6 +43,7 @@ export default function FreeTrackStatsSheet({
   timerRunning, onTogglePlayPause, trackPoints, onOpenFoto, onOpenNota,
 }: Props) {
   const [tab, setTab] = useState<Tab>('tempi')
+  useModalBackHandler(open, onClose)
   if (!open) return null
 
   return (

@@ -30,6 +30,7 @@ import {
 import { usePoiNotes } from './usePoiNotes'
 import { loadManifest, isManifestValid } from '@/lib/offline/packageManifest'
 import { retryFieldNotePhotos } from '@/lib/offline/retryFieldNotePhotos'
+import { retryFieldNotePhotoIfOnline } from '@/lib/offline/retryFieldNotePhotoIfOnline'
 import { checkOfflineReadiness } from '@/lib/offline/offlineReadiness'
 import { ensureTrailGraph, loadTrailGraph } from '@/lib/navigation/trailGraphStore'
 import type { WalkNetwork } from '@/lib/routeBuilder/osmGraph'
@@ -752,19 +753,13 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
     setHikeNotes(updated)
     updatePlannedMeta(hike.id, { hikeNotes: updated }).catch(() => {})
 
-    // FieldNoteSheet.tsx non aspetta più il caricamento della foto prima di salvare — se siamo
-    // già online, tentalo subito invece di aspettare il prossimo evento 'online' (che, restando
-    // connessi tutta l'escursione, potrebbe non arrivare mai in questa sessione).
-    if (note.photoPending && navigator.onLine) {
-      retryFieldNotePhotos(hike.id, updated).then((changed) => {
-        if (changed.length === 0) return
-        setHikeNotes((prev) => {
-          const merged = prev.map((n) => changed.find((c) => c.id === n.id) ?? n)
-          updatePlannedMeta(hike.id, { hikeNotes: merged }).catch(() => {})
-          return merged
-        })
-      }).catch(() => {})
-    }
+    retryFieldNotePhotoIfOnline(hike.id, note, updated, (changed) => {
+      setHikeNotes((prev) => {
+        const merged = prev.map((n) => changed.find((c) => c.id === n.id) ?? n)
+        updatePlannedMeta(hike.id, { hikeNotes: merged }).catch(() => {})
+        return merged
+      })
+    })
   }
 
   /**

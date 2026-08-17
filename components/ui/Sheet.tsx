@@ -2,6 +2,7 @@
 import { ReactNode, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
+import { useModalBackHandler } from '@/lib/navigation/useModalBackHandler'
 
 interface SheetProps {
   open: boolean
@@ -22,6 +23,10 @@ export default function Sheet({ open, onClose, title, children }: SheetProps) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [open, onClose])
+  // Dentro Navigator, il tasto/gesto indietro hardware deve chiudere questo foglio invece di
+  // scavalcarlo — vedi lib/navigation/backHandlerStack.ts. Inerte fuori da Navigator (nessuno
+  // legge lo stack lì).
+  useModalBackHandler(open, onClose)
 
   if (!open) return null
 

@@ -4,6 +4,7 @@ import { X, Pause, Play, MapPin, BookOpen, Camera, NotebookPen, Square } from 'l
 import type { TrackPoint } from '@/lib/tcxParser'
 import ElevationProfileChart from '@/components/ElevationProfileChart'
 import type { PaceStatus } from '@/lib/navigation/paceAssistant'
+import { useModalBackHandler } from '@/lib/navigation/useModalBackHandler'
 
 type Tab = 'tempi' | 'altimetria' | 'percorso'
 
@@ -73,6 +74,7 @@ export default function NavStatsSheet({
   onOpenFoto, onOpenNota,
 }: Props) {
   const [tab, setTab] = useState<Tab>('tempi')
+  useModalBackHandler(open, onClose)
   if (!open) return null
 
   return (

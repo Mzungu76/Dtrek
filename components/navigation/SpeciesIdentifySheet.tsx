@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { X, Camera, Loader2, Leaf, WifiOff } from 'lucide-react'
 import { identifySpeciesFromPhoto, SpeciesIdentifyOfflineError, type SpeciesIdentification } from '@/lib/inatIdentify'
+import { useModalBackHandler } from '@/lib/navigation/useModalBackHandler'
 
 interface Props {
   position: { lat: number; lon: number } | null
@@ -38,6 +39,8 @@ export default function SpeciesIdentifySheet({ position, onClose }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState<PendingRequest | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  useModalBackHandler(true, onClose)
 
   const runIdentify = async (req: PendingRequest) => {
     setLoading(true)
@@ -123,7 +126,15 @@ export default function SpeciesIdentifySheet({ position, onClose }: Props) {
         {pending && !loading && (
           <div className="flex items-start gap-2 py-2 px-3 mb-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs">
             <WifiOff className="w-4 h-4 shrink-0 mt-0.5" />
-            <span>Sei offline: la richiesta resta in attesa e riparte da sola appena torna la connessione, senza bisogno di riprovare.</span>
+            <div className="flex-1 min-w-0">
+              <p>Sei offline: la richiesta resta in attesa e riparte da sola appena torna la connessione.</p>
+              {/* Ripiego manuale: fetch() può lanciare per motivi diversi da un vero
+                  offline/online (captive portal, proxy instabile) senza che l'evento 'online'
+                  scatti mai — questo evita che la richiesta resti bloccata per sempre in quel caso. */}
+              <button onClick={() => runIdentify(pending)} className="mt-1 font-semibold underline decoration-amber-400 underline-offset-2">
+                Riprova ora
+              </button>
+            </div>
           </div>
         )}
 

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { Capacitor, type PluginListenerHandle } from '@capacitor/core'
 import { App } from '@capacitor/app'
+import { closeTopModal } from '@/lib/navigation/backHandlerStack'
 
 // Stessa finestra usata dal pattern "premi ancora per uscire" di qualunque app Android — abbastanza
 // breve da non chiudere per sbaglio con due tocchi involontari distanti, abbastanza lunga da non
@@ -25,6 +26,10 @@ const NAVIGATOR_HOME_PATH = '/navigatore'
  * di fatto già sulla home. Un tasto indietro dalla home deve sempre offrire di uscire, a
  * prescindere da quante voci fantasma ci siano sotto.
  *
+ * - C'è un pannello/popup modale aperto sopra (menu di Navigator, un foglio dettagli, un
+ *   popup...): lo chiude e basta (backHandlerStack.ts/useModalBackHandler.ts) — mai la logica
+ *   sotto. Senza questo controllo, indietro con il menu aperto sulla home mostrava la proposta di
+ *   uscire invece di chiudere il menu, e un secondo tocco chiudeva l'intera app per sbaglio.
  * - Non siamo sulla home: delega a `window.history.back()`, lo stesso identico evento
  *   'popstate' che oggi già guidano GlobalBackInterceptor.tsx (schermate Dtrek condivise) e il
  *   proprio guard di ActiveNavigationView.tsx (mostra "Terminare la navigazione?" invece di
@@ -52,6 +57,8 @@ export default function NavigatorBackHandler() {
     let cancelled = false
 
     App.addListener('backButton', () => {
+      if (closeTopModal()) return
+
       if (pathnameRef.current !== NAVIGATOR_HOME_PATH) {
         setShowExitHint(false)
         if (hideTimerRef.current) clearTimeout(hideTimerRef.current)

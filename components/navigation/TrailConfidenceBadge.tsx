@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ShieldCheck, ShieldAlert, ShieldQuestion, X } from 'lucide-react'
 import type { TrailConfidenceResult } from '@/lib/navigation/trailConfidence'
+import { useModalBackHandler } from '@/lib/navigation/useModalBackHandler'
 
 interface Props {
   confidence: TrailConfidenceResult | null
@@ -30,6 +31,7 @@ const LABEL_STYLE: Record<TrailConfidenceResult['label'], { bg: string; text: st
  */
 export default function TrailConfidenceBadge({ confidence }: Props) {
   const [open, setOpen] = useState(false)
+  useModalBackHandler(open, () => setOpen(false))
   if (!confidence) return null
 
   const style = LABEL_STYLE[confidence.label]

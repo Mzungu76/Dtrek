@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { X, Camera, Mic, Square, Check, NotebookPen } from 'lucide-react'
 import { useSpeechDictation } from '@/lib/useSpeechDictation'
 import type { HikeNote } from '@/lib/blobStore'
+import { useModalBackHandler } from '@/lib/navigation/useModalBackHandler'
 
 interface Props {
   position: { lat: number; lon: number } | null
@@ -33,6 +34,12 @@ export default function FieldNoteSheet({ position, onSave, onClose, autoOpenCame
   const [text, setText] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
   const { recording, supported: speechSupported, toggleRecording } = useSpeechDictation(setText)
+  // Il salvataggio è sincrono da quando non aspetta più l'upload della foto (vedi il commento
+  // sopra) — senza questo guard, un doppio tocco rapido prima che React smonti il foglio poteva
+  // far scattare handleSave due volte e duplicare la nota.
+  const savedRef = useRef(false)
+
+  useModalBackHandler(true, onClose)
 
   useEffect(() => {
     if (autoOpenCamera) fileRef.current?.click()
@@ -48,7 +55,8 @@ export default function FieldNoteSheet({ position, onSave, onClose, autoOpenCame
   const canSave = !!dataUrl || !!text.trim()
 
   function handleSave() {
-    if (!canSave) return
+    if (!canSave || savedRef.current) return
+    savedRef.current = true
     onSave({
       id: crypto.randomUUID(),
       text: text.trim(),

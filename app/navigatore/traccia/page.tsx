@@ -15,6 +15,7 @@ import { deleteActivity, type HikeNote } from '@/lib/blobStore'
 import { requestOrientationPermission, isOrientationSupported, needsOrientationPermissionGesture } from '@/lib/navigation/orientation'
 import { prefetchTilesAroundPoint } from '@/lib/offline/packageManager'
 import { retryFieldNotePhotos } from '@/lib/offline/retryFieldNotePhotos'
+import { retryFieldNotePhotoIfOnline } from '@/lib/offline/retryFieldNotePhotoIfOnline'
 import FieldNoteSheet from '@/components/navigation/FieldNoteSheet'
 import NavigatorAppPromo from '@/components/navigation/NavigatorAppPromo'
 import SosButton from '@/components/navigation/SosButton'
@@ -162,16 +163,9 @@ export default function TracciaPage() {
 
   const handleSaveFieldNote = (note: HikeNote) => {
     setHikeNotes((prev) => [...prev, note])
-
-    // FieldNoteSheet.tsx non aspetta più il caricamento della foto prima di salvare — se siamo
-    // già online, tentalo subito invece di aspettare il prossimo evento 'online' (che, restando
-    // connessi tutta la registrazione, potrebbe non arrivare mai in questa sessione).
-    if (note.photoPending && navigator.onLine) {
-      retryFieldNotePhotos(trackSessionIdRef.current, [note]).then((changed) => {
-        if (changed.length === 0) return
-        setHikeNotes((prev) => prev.map((n) => changed.find((c) => c.id === n.id) ?? n))
-      }).catch(() => {})
-    }
+    retryFieldNotePhotoIfOnline(trackSessionIdRef.current, note, [note], (changed) => {
+      setHikeNotes((prev) => prev.map((n) => changed.find((c) => c.id === n.id) ?? n))
+    })
   }
 
   const handlePauseResume = () => {
