@@ -7,12 +7,19 @@ export interface WeatherSignal {
   surfaceMultiplier: number // 0.5 (gravel/rock) | 1.0 (ground/earth) | 1.5 (mud) | 1.2 (sconosciuto)
   slopeMultiplier: number   // 0.8 (<10%) | 1.0 (10-25%) | 1.3 (>25%)
   totalPenalty: number      // clamp((precipPenalty+soilPenalty) * surfaceMultiplier * slopeMultiplier, -35, 0)
+  /** true quando Open-Meteo non ha risposto (rete/timeout/errore) — in quel caso `totalPenalty`
+   * resta 0 solo per compatibilità dei chiamanti numerici, ma NON significa "verificato buono":
+   * i consumatori (es. Trail Confidence) devono trattare questo segnale come assente, non favorevole. */
+  unavailable: boolean
 }
 
 export interface ClimateSignal {
   tempPenalty: number     // 0 | -10 | -25 | -15 | -30 in base alla temperatura media del mese corrente
   altitudeSeason: number  // -20 | -10 | 0 (alta quota + mesi invernali)
   seasonBonus: number     // +5 (Apr/Mag, Ott/Nov) | 0
+  /** true quando le chiamate a Open-Meteo (temperatura/quota) sono fallite — stesso principio di
+   * WeatherSignal.unavailable: `tempPenalty`/`altitudeSeason` a 0 non è un dato verificato. */
+  unavailable: boolean
 }
 
 /**

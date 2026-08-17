@@ -25,9 +25,13 @@ export async function collectClimateSignal(_osmRelationId: number, ctx: SignalCo
     const tempPenalty = tempPenaltyFor(avgTemp)
     const altitudeSeason = altitudeSeasonFor(elevation, currentMonth)
 
-    return { tempPenalty, altitudeSeason, seasonBonus }
+    return { tempPenalty, altitudeSeason, seasonBonus, unavailable: false }
   } catch {
-    return { tempPenalty: 0, altitudeSeason: 0, seasonBonus }
+    // Rete/timeout/errore Open-Meteo — tempPenalty/altitudeSeason a 0 qui NON è un dato
+    // verificato. seasonBonus resta genuino (calcolato localmente, non dipende dalla rete), ma
+    // l'intero segnale è marcato unavailable per restare onesti a valle sulla parte che invece
+    // dipendeva da una risposta mai arrivata.
+    return { tempPenalty: 0, altitudeSeason: 0, seasonBonus, unavailable: true }
   }
 }
 

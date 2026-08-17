@@ -42,8 +42,11 @@ export function useTrailConfidence(
           if (cancelled || 'error' in data) return
           setResult(computeTrailConfidence({
             trailScore,
-            weatherPenalty: data.weather.totalPenalty,
-            climatePenalty: data.climate.tempPenalty + data.climate.altitudeSeason + data.climate.seasonBonus,
+            // null, non 0, quando Open-Meteo non ha risposto — un fallimento di rete non deve
+            // pesare come "condizioni favorevoli" nella media di Trail Confidence (vedi
+            // WeatherSignal/ClimateSignal.unavailable).
+            weatherPenalty: data.weather.unavailable ? null : data.weather.totalPenalty,
+            climatePenalty: data.climate.unavailable ? null : (data.climate.tempPenalty + data.climate.altitudeSeason + data.climate.seasonBonus),
             community: data.community,
           }))
         })

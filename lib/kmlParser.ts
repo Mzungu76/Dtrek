@@ -94,7 +94,10 @@ export function parseKml(xmlText: string): ServerParsedGpx | null {
     if (p.lat && p.lon && q.lat && q.lon) distanceMeters += haversineM(q.lat, q.lon, p.lat, p.lon)
     if (p.altitudeMeters !== undefined && q.altitudeMeters !== undefined) {
       const d = p.altitudeMeters - q.altitudeMeters
-      if (d > 0) elevationGain += d; else elevationLoss += Math.abs(d)
+      // Dead-band against raw GPS-elevation noise — same threshold used for recorded
+      // activities/FIT (gpxActivityParser.ts), otherwise every jitter inflates D+/D-.
+      if (d > 0.5) elevationGain += d
+      else if (d < -0.5) elevationLoss += Math.abs(d)
     }
   }
 

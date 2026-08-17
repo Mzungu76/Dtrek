@@ -26,7 +26,11 @@ export interface TrailConfidenceInput {
 
 export interface TrailConfidenceResult {
   score: number // 0..1
-  label: 'alta' | 'media' | 'bassa'
+  /** 'sconosciuta' è un'etichetta distinta da 'bassa' — non significa "rischioso", significa "non
+   * abbiamo alcun segnale di base (Trail Score/meteo/clima) su cui fondare un giudizio", anche se
+   * lo score numerico (0.5, neutro) può in teoria ricadere nella fascia 'media'. Confondere le due
+   * cose è esattamente il bias "assenza di dato trattata come dato neutro" da evitare qui. */
+  label: 'alta' | 'media' | 'bassa' | 'sconosciuta'
   /** Sempre popolato — stesso principio "l'utente deve sempre sapere perché" già usato nell'Escape Engine (spec §11). */
   factors: string[]
 }
@@ -65,8 +69,10 @@ export function computeTrailConfidence(input: TrailConfidenceInput): TrailConfid
     else if (totalWeatherClimatePenalty >= 0) factors.push('Condizioni meteo/clima favorevoli')
   }
 
+  const hasBaseSignal = components.length > 0
+
   let base: number
-  if (components.length === 0) {
+  if (!hasBaseSignal) {
     base = 0.5
     factors.push('Dati insufficienti per una stima affidabile')
   } else {
@@ -85,5 +91,9 @@ export function computeTrailConfidence(input: TrailConfidenceInput): TrailConfid
   }
 
   const score = clamp01(base + communityBonus)
-  return { score, label: labelFor(score), factors }
+  // Senza Trail Score/meteo/clima, il correttivo community (max +0.1, mai un componente alla
+  // pari) non basta a trasformare "non lo sappiamo" in un giudizio "medio" genuino — l'etichetta
+  // resta 'sconosciuta' anche se lo score numerico ricadrebbe in fascia 'media'.
+  const label = hasBaseSignal ? labelFor(score) : 'sconosciuta'
+  return { score, label, factors }
 }

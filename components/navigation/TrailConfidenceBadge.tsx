@@ -10,9 +10,12 @@ interface Props {
 }
 
 const LABEL_STYLE: Record<TrailConfidenceResult['label'], { bg: string; text: string; icon: typeof ShieldCheck; word: string }> = {
-  alta:  { bg: 'bg-emerald-600', text: 'text-white', icon: ShieldCheck,   word: 'Affidabilità alta' },
-  media: { bg: 'bg-amber-500',   text: 'text-white', icon: ShieldQuestion, word: 'Affidabilità media' },
-  bassa: { bg: 'bg-red-600',     text: 'text-white', icon: ShieldAlert,   word: 'Affidabilità bassa' },
+  alta:       { bg: 'bg-emerald-600', text: 'text-white',       icon: ShieldCheck,    word: 'Affidabilità alta' },
+  media:      { bg: 'bg-amber-500',   text: 'text-white',       icon: ShieldQuestion, word: 'Affidabilità media' },
+  bassa:      { bg: 'bg-red-600',     text: 'text-white',       icon: ShieldAlert,    word: 'Affidabilità bassa' },
+  // Grigio neutro, deliberatamente distinto da 'bassa' (rosso): "non sappiamo" non è "rischioso",
+  // è l'assenza di qualunque segnale di base (Trail Score/meteo/clima) su cui fondare un giudizio.
+  sconosciuta: { bg: 'bg-stone-500', text: 'text-white',        icon: ShieldQuestion, word: 'Affidabilità sconosciuta' },
 }
 
 /**

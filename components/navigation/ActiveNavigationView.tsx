@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Capacitor } from '@capacitor/core'
-import { AlertTriangle, BatteryWarning, ArrowUp, Download, CheckCircle2, Radio, Locate } from 'lucide-react'
+import { AlertTriangle, BatteryWarning, ArrowUp, Download, CheckCircle2, Radio, Locate, Signpost } from 'lucide-react'
 import Sheet from '@/components/ui/Sheet'
 import type { PlannedHike } from '@/lib/plannedStore'
 import { updatePlannedMeta } from '@/lib/plannedStore'
@@ -32,6 +32,7 @@ import { loadManifest, isManifestValid } from '@/lib/offline/packageManifest'
 import { retryFieldNotePhotos } from '@/lib/offline/retryFieldNotePhotos'
 import { retryFieldNotePhotoIfOnline } from '@/lib/offline/retryFieldNotePhotoIfOnline'
 import { checkOfflineReadiness } from '@/lib/offline/offlineReadiness'
+import { verifyOfflinePackageChecksum } from '@/lib/offline/packageManager'
 import { ensureTrailGraph, loadTrailGraph } from '@/lib/navigation/trailGraphStore'
 import type { WalkNetwork } from '@/lib/routeBuilder/osmGraph'
 import { computeEscapeOptions, type EscapeOption } from '@/lib/navigation/escapeEngine'
@@ -150,6 +151,11 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   const [callout, setCallout] = useState<{ title: string; extract?: string; imageUrl?: string } | null>(null)
   const [compassEnabled, setCompassEnabled] = useState(false)
   const [speechEnabled, setSpeechEnabled] = useState(true)
+  // Schermo acceso durante la navigazione — di default attivo (senza, il browser/OS può
+  // spegnere lo schermo per timeout mentre si cammina, portandosi via l'unico canale visivo
+  // di mappa/istruzioni finché l'utente non lo riaccende a mano). Disattivabile da chi
+  // preferisce risparmiare batteria e affidarsi solo agli avvisi vocali/aptici.
+  const [wakeLockEnabled, setWakeLockEnabled] = useState(true)
   const [isOnline, setIsOnline] = useState(true)
   const [mapMode, setMapMode] = useState<MapMode>('offline')
   const [is3D, setIs3D] = useState(false)
@@ -599,6 +605,21 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         if (readiness.degradedMissing.length > 0) setOfflineDegradedMissing(readiness.degradedMissing)
       }
       setOfflineReady(readiness.tilesReady)
+
+      // The manifest claiming "ready" only means the download completed — it says nothing about
+      // whether the tiles are still intact in Cache Storage right now (partial eviction under
+      // storage pressure, a corrupted write, etc.). Checked here, not blocking navigation start on
+      // a mismatch (a false positive here must never strand a hiker who has a perfectly good
+      // package) — surfaced as one more entry in the same non-blocking "degraded" notice.
+      if (readiness.tilesReady) {
+        verifyOfflinePackageChecksum(hike.id, manifest).then((ok) => {
+          if (!cancelled && !ok) {
+            setOfflineDegradedMissing((prev) => prev.includes('Integrità mappa offline non verificata')
+              ? prev
+              : [...prev, 'Integrità mappa offline non verificata'])
+          }
+        }).catch(() => {})
+      }
     }).catch(() => {})
 
     const flushInterval = setInterval(() => { if (navigator.onLine) flushToServer() }, 30000)
@@ -708,6 +729,35 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
     speechEnabledRef.current = !speechEnabledRef.current
     setSpeechEnabled(speechEnabledRef.current)
   }
+
+  // Screen Wake Lock durante la sessione di navigazione attiva — stesso pattern già in uso per
+  // il rendering video 3D (RouteMap3D.tsx), qui applicato a ciò per cui serve di più: senza,
+  // lo schermo può spegnersi per timeout di sistema mentre si cammina, portandosi via mappa e
+  // istruzioni finché l'utente non lo riaccende a mano. Un solo effetto, chiave sullo stato di
+  // navigazione + il toggle utente, copre acquisizione/rilascio su ogni percorso di uscita
+  // (stop, fine escursione, disattivazione manuale) senza duplicare la logica altrove.
+  useEffect(() => {
+    const active = state !== 'idle' && state !== 'finished'
+    if (!active || !wakeLockEnabled) return
+    if (typeof navigator === 'undefined' || !('wakeLock' in navigator)) return
+    let sentinel: WakeLockSentinel | null = null
+    let cancelled = false
+    const acquire = () => {
+      navigator.wakeLock.request('screen')
+        .then((s) => { if (cancelled) { s.release().catch(() => {}); return } sentinel = s })
+        .catch(() => {}) // negato/non supportato in questo contesto: degrado silenzioso, la navigazione resta usabile
+    }
+    acquire()
+    // Il browser rilascia il lock da solo quando il documento diventa "hidden" (cambio app, non
+    // spegnimento schermo) — se poi torna visibile mentre si è ancora in navigazione, va richiesto di nuovo.
+    const onVisibility = () => { if (document.visibilityState === 'visible' && !sentinel) acquire() }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      cancelled = true
+      document.removeEventListener('visibilitychange', onVisibility)
+      sentinel?.release().catch(() => {})
+    }
+  }, [state, wakeLockEnabled])
 
   const handleTogglePlayPause = () => {
     timerRunningRef.current = !timerRunningRef.current
@@ -844,8 +894,10 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   const elevationRemainingM = elevationProfile.length > 1
     ? remainingElevation(elevationProfile, progress?.distanceAlongRouteM ?? 0).gainM
     : null
+  // "arrivo" esplicito prima dell'orario: senza etichetta, "13:40" letto di sfuggita durante il
+  // cammino può leggersi come un tempo trascorso invece che come l'ora di arrivo stimata.
   const bottomStripSummary = `${(distanceRemainingM / 1000).toFixed(1)} km · ${
-    etaDate ? etaDate.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '—'
+    etaDate ? `arrivo ${etaDate.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}` : '—'
   } · ${elevationRemainingM != null ? `+${Math.round(elevationRemainingM)} m` : '—'}`
 
   const daylightMarginMin = sunTimes?.sunset && etaDate ? daylightMarginMinutes(etaDate, sunTimes.sunset) : null
@@ -1056,6 +1108,18 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
           showNatura2000={showNatura2000} onToggleNatura2000={() => setShowNatura2000((v) => !v)}
         />
         <TrailConfidenceBadge confidence={trailConfidence} />
+        {/* Raggiungibile sempre, non solo dal banner fuori-percorso: prima le "vie d'uscita"
+            comparivano solo dentro l'avviso off_route/wrong_direction, che sparisce del tutto
+            quando lo stato è gps_lost (l'avviso GPS perso lo sostituisce) — proprio nel momento
+            in cui questo strumento serve di più. Un punto di accesso proattivo permette anche di
+            consultarle "per sicurezza" mentre si è ancora regolarmente sul percorso. */}
+        <button
+          onClick={handleEscapeOptions}
+          title="Vie d'uscita"
+          className="w-11 h-11 rounded-full flex items-center justify-center shadow-lg border bg-white/95 border-stone-200"
+        >
+          <Signpost className="w-5 h-5 text-stone-700" />
+        </button>
         <button
           onClick={() => setShowLiveShareSheet(true)}
           title={liveSharingEnabled ? 'Condivisione posizione live attiva' : 'Condividi la tua posizione live'}
@@ -1155,11 +1219,25 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
           alerts.push({
             id: 'gpslost',
             node: (
-              <div className="max-w-[90%] px-4 py-2 rounded-xl bg-red-600 text-white text-sm font-semibold font-body shadow-lg flex items-center gap-2 text-center">
-                <AlertTriangle size={16} className="shrink-0" />
-                {gpsLostPermissionDenied
-                  ? 'Permesso di localizzazione negato — attivalo nelle impostazioni del browser/telefono'
-                  : 'Segnale GPS assente'}
+              <div className="max-w-[90%] px-4 py-3 rounded-xl bg-red-600 text-white text-sm font-semibold font-body shadow-lg flex flex-col gap-2 text-center">
+                <div className="flex items-center gap-2 justify-center">
+                  <AlertTriangle size={16} className="shrink-0" />
+                  {gpsLostPermissionDenied
+                    ? 'Permesso di localizzazione negato — attivalo nelle impostazioni del browser/telefono'
+                    : 'Segnale GPS assente'}
+                </div>
+                {/* Con il GPS perso è esattamente quando le vie d'uscita servono di più — non
+                    devono restare raggiungibili solo dall'avviso fuori-percorso, che questo
+                    stesso avviso sostituisce. Usa l'ultima posizione nota (position/
+                    fullProgressRef non vengono azzerati alla perdita del segnale). */}
+                {!gpsLostPermissionDenied && (
+                  <button
+                    onClick={handleEscapeOptions}
+                    className="self-center text-xs font-bold underline decoration-white/60 underline-offset-2 py-1"
+                  >
+                    Vie d&apos;uscita (dall&apos;ultima posizione nota)
+                  </button>
+                )}
               </div>
             ),
           })
@@ -1271,6 +1349,8 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         onOpenFoto={() => { setFieldNoteAutoCamera(true); setShowFieldNote(true) }}
         onOpenNota={() => { setFieldNoteAutoCamera(false); setShowFieldNote(true) }}
         onOpenSpecie={() => setShowSpeciesIdentify(true)}
+        wakeLockEnabled={wakeLockEnabled}
+        onToggleWakeLock={() => setWakeLockEnabled((v) => !v)}
       />
 
       {callout && (

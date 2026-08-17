@@ -223,6 +223,32 @@ export async function downloadOfflinePackage(
   onProgress?.({ status: manifest.status, downloadedCount: manifest.downloadedCount, tileCount: manifest.tileCount })
 }
 
+/**
+ * Verifies a downloaded package's checksum against what's actually sitting in Cache Storage right
+ * now, instead of trusting `manifest.checksum` just because it's present — computeChecksum() was
+ * written at download time (packageManifest.ts) but never read back anywhere before this. Returns
+ * `true` when there's nothing to verify (no checksum recorded — e.g. an older manifest from before
+ * this field existed) so callers don't treat "can't check" the same as "checked and failed".
+ */
+export async function verifyOfflinePackageChecksum(hikeId: string, manifest: OfflinePackageManifest | null): Promise<boolean> {
+  if (!manifest?.checksum) return true
+  if (typeof window === 'undefined' || !('caches' in window)) return true
+  try {
+    const cache = await caches.open(tileCacheName(hikeId))
+    const requests = await cache.keys()
+    const sizes = await Promise.all(requests.map(async (req) => {
+      const res = await cache.match(req)
+      const blob = await res?.blob()
+      return blob?.size ?? 0
+    }))
+    return computeChecksum(sizes) === manifest.checksum
+  } catch {
+    // Cache API failure (e.g. storage evicted mid-check) isn't proof of corruption either —
+    // stays consistent with the rest of this module's "never let a diagnostic block navigation" rule.
+    return true
+  }
+}
+
 export async function pauseOfflinePackage(hikeId: string): Promise<void> {
   const manifest = await loadManifest(hikeId)
   if (manifest && manifest.status === 'downloading') {

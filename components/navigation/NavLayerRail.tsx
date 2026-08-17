@@ -51,7 +51,7 @@ export default function NavLayerRail({ showNearbyTrails, onToggleNearbyTrails, s
             aria-pressed={on}
             aria-label={label}
             title={label}
-            className={`w-10 h-10 rounded-full flex items-center justify-center shadow-sm transition-colors ${
+            className={`w-11 h-11 rounded-full flex items-center justify-center shadow-sm transition-colors ${
               on ? 'bg-terra-500 text-white' : 'bg-white/15 text-white/55 border border-dashed border-white/40'
             }`}
           >

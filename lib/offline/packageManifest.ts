@@ -88,11 +88,18 @@ export async function deleteManifest(hikeId: string): Promise<void> {
   await lsDel(MANIFEST_KEY(hikeId))
 }
 
-/** Simple non-cryptographic checksum (sum of tile byte lengths mod a large prime) — enough to detect truncation/corruption, not tamper-proofing. */
+/**
+ * Simple non-cryptographic checksum (sum of tile byte lengths + count, mod a large prime) — enough
+ * to detect truncation/corruption, not tamper-proofing. Deliberately order-independent (plain sum,
+ * not a rolling hash over the array order): tiles are downloaded concurrently (see
+ * packageManager.ts's DOWNLOAD_CONCURRENCY) and later re-read from Cache Storage in whatever order
+ * the Cache API enumerates them — neither order is guaranteed to match the other, so an
+ * order-dependent hash would "detect corruption" on every perfectly intact package.
+ */
 export function computeChecksum(tileSizes: number[]): string {
   const PRIME = 4294967291
-  let acc = 0
-  for (const size of tileSizes) acc = (acc * 31 + size) % PRIME
+  let acc = tileSizes.length
+  for (const size of tileSizes) acc = (acc + size) % PRIME
   return acc.toString(16)
 }
 

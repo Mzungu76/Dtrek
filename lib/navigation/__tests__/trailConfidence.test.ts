@@ -13,8 +13,15 @@ describe('computeTrailConfidence', () => {
   it('restituisce uno stato neutro con motivo esplicito quando non c\'è nessun segnale', () => {
     const result = computeTrailConfidence({})
     expect(result.score).toBeCloseTo(0.5)
-    expect(result.label).toBe('media')
+    // 'sconosciuta', non 'media': un punteggio numerico neutro non deve leggersi come un giudizio
+    // vero e proprio quando non c'è alcun segnale di base su cui fondarlo.
+    expect(result.label).toBe('sconosciuta')
     expect(result.factors).toContain('Dati insufficienti per una stima affidabile')
+  })
+
+  it('resta \'sconosciuta\' anche con un piccolo correttivo community, se manca ogni segnale di base', () => {
+    const result = computeTrailConfidence({ community: community({ confidenceWeight: 0.5, completions30d: 5 }) })
+    expect(result.label).toBe('sconosciuta')
   })
 
   it('un Trail Score alto senza altri segnali produce un punteggio alto', () => {
