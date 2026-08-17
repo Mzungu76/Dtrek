@@ -109,7 +109,7 @@ Oltre 30 problemi, ordinati per categoria di gravità. Ogni riga cita dove ripro
 | # | Problema | Dove | Come riprodurlo/verificarlo |
 |---|---|---|---|
 | 1 | Escape Engine irraggiungibile esattamente quando serve di più (GPS perso, che nasconde il banner off-route che lo contiene) | `components/navigation/ActiveNavigationView.tsx` (banner `gps_lost` subordina/nasconde `off_route`) | Simulare scenario `gps_lost` mentre si è anche `off_route` (`?simulate=gps_lost` combinato) — il pulsante "Vie d'uscita" non appare. |
-| 2 | `RouteTracker` non resetta mai la finestra di ricerca (`searchWindow=15`) su un salto ampio di posizione — su percorsi a tornanti/che si incrociano, dopo una sospensione lunga dell'app (schermo spento a lungo, poi ripresa) può agganciarsi al segmento vicino sbagliato, falsando silenziosamente `distanceToRouteM`/`distanceAlongRouteM`/`expectedBearingDeg` | `lib/navigation/routeDeviation.ts:61-69` | Costruire uno scenario di simulazione con un tornante e un salto di posizione oltre 15 segmenti dall'ultimo indice noto. |
+| 2 | ✅ **Risolto** — `RouteTracker` non resettava mai la finestra di ricerca (`searchWindow=15`) su un salto ampio di posizione — su percorsi a tornanti/che si incrociano, dopo una sospensione lunga dell'app (schermo spento a lungo, poi ripresa) poteva agganciarsi al segmento vicino sbagliato, falsando silenziosamente `distanceToRouteM`/`distanceAlongRouteM`/`expectedBearingDeg`. Corretto con un hint esplicito `forceFullScan` (`lib/navigation/routeDeviation.ts`), agganciato in `navigationEngine.ts` a `wasLost` (uscita da `gps_lost`) e a una finestra di grazia dopo la ripresa di visibilità della WebView (`watchVisibilityForCatchUp`). **Nota di design**: la prima versione includeva anche un fallback automatico basato sulla sola distanza (senza hint del chiamante) — rimosso dopo aver rotto un test reale su un percorso ad anello (`realRouteSimulation.test.ts`): un escursionista genuinamente fuori sentiero può risultare, per pura geometria, più vicino a un tratto diverso dello stesso anello — solo un segnale di discontinuità reale può distinguere i due casi, la distanza da sola non basta. Test dedicato in `lib/navigation/__tests__/routeDeviation.test.ts`. | `lib/navigation/routeDeviation.ts`, `lib/navigation/navigationEngine.ts` | Nuovi test unitari + suite `realRouteSimulation.test.ts` (GPS reale) verde. |
 | 3 | Safety Score usa dislivello×distanza come proxy di pericolosità tecnica — sottostima sistematicamente ferrate/creste corte ed esposte | `lib/safetyScore.ts:236-241,345` — ammesso nel commento del codice stesso | Calcolare il safety score di un percorso breve, ripido, esposto (basso dislivello assoluto, alta tecnicità) — riceve punteggio alto. |
 | 4 | Acqua: `spring`/`drinking_water`/`well` tutti presentati come "Acqua potabile", nessuna verifica di stato/stagionalità | `lib/pois/overpassSource.ts:83-111` | Ispezionare un POI di tipo `natural=spring` sulla mappa: etichetta identica a una fontanella pubblica verificata. |
 | 5 | Nessun sistema di chiusura sentiero in nessuna forma verificata | `lib/trailConditions/*` (assente), unico surrogato: regex in `lib/difficultyMarkers.ts` | Grep su "chiusura/closed/frana" in `lib/trailConditions/` — nessun risultato. |
@@ -345,15 +345,15 @@ Non è un punteggio "quanto è bello il codice" — è: quanto è pronto, oggi, 
 
 ### 13.3 Top 10 problemi (per gravità)
 
-1. Escape Engine irraggiungibile proprio durante GPS perso — l'emergenza combinata peggiore.
-2. `RouteTracker` non resetta la finestra di ricerca su salti ampi di posizione — rischio di aggancio al segmento sbagliato su tornanti.
+1. ✅ **Risolto** — Escape Engine irraggiungibile proprio durante GPS perso — l'emergenza combinata peggiore.
+2. ✅ **Risolto** — `RouteTracker` non resetta la finestra di ricerca su salti ampi di posizione — rischio di aggancio al segmento sbagliato su tornanti.
 3. Safety Score sottostima sistematicamente ferrate/creste corte ed esposte (ammesso nel codice).
-4. Acqua: nessuna distinzione tra sorgente/fontanella/pozzo, nessuna verifica di stato.
+4. ✅ **Risolto** — Acqua: nessuna distinzione tra sorgente/fontanella/pozzo, nessuna verifica di stato.
 5. Nessun sistema di chiusura sentiero.
-6. Fallimenti di rete su meteo/clima/community letti come "condizioni buone" invece di "sconosciuto".
-7. Nessun wake lock durante la navigazione attiva.
+6. ✅ **Risolto** — Fallimenti di rete su meteo/clima/community letti come "condizioni buone" invece di "sconosciuto".
+7. ✅ **Risolto** — Nessun wake lock durante la navigazione attiva.
 8. SOS/live-share senza dead-man's switch.
-9. Next.js 14.2.3 con CVE attive, incluse critiche.
+9. ✅ **Risolto** — Next.js 14.2.3 con CVE attive, incluse critiche (aggiornato a 14.2.35).
 10. Tratti esposti/guadi mai generati dal motore DTrek, solo da testo di GPX importati da terzi.
 
 ### 13.4 Top 10 funzioni mancanti (per valore reale)
