@@ -1,12 +1,10 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
-import { X, Camera, Mic, Square, Check, Loader2, NotebookPen } from 'lucide-react'
+import { X, Camera, Mic, Square, Check, NotebookPen } from 'lucide-react'
 import { useSpeechDictation } from '@/lib/useSpeechDictation'
-import { uploadFieldNotePhoto } from '@/lib/fieldNotePhotos'
 import type { HikeNote } from '@/lib/blobStore'
 
 interface Props {
-  hikeId: string
   position: { lat: number; lon: number } | null
   onSave: (note: HikeNote) => void
   onClose: () => void
@@ -19,11 +17,20 @@ interface Props {
  * interesting and wants to remember, a written note, a voice-dictated note, or any
  * combination. Not a report to anyone: purely personal documentation, saved into the hike's
  * own notes (same HikeNote list shown later on the planning/activity page).
+ *
+ * Salvare non aspetta più il caricamento della foto: "Salva nota" scrive subito il riferimento
+ * locale (la data URL appena scattata) e chiude il foglio all'istante — prima invece restava
+ * aperto con uno spinner per tutta la durata dell'upload verso Supabase Storage, anche con
+ * connessione perfetta, perché la nota non veniva considerata "salvata" finché quella chiamata
+ * di rete non finiva. Il caricamento vero avviene poi in background: il chiamante
+ * (ActiveNavigationView.tsx/app/navigatore/traccia/page.tsx) lancia
+ * lib/offline/retryFieldNotePhotos.ts subito dopo aver ricevuto la nota (oltre che al prossimo
+ * evento 'online' se in quel momento non c'è linea) — stessa infrastruttura già usata per il
+ * retry, solo innescata anche appena la nota viene salvata, non solo alla riconnessione.
  */
-export default function FieldNoteSheet({ hikeId, position, onSave, onClose, autoOpenCamera }: Props) {
+export default function FieldNoteSheet({ position, onSave, onClose, autoOpenCamera }: Props) {
   const [dataUrl, setDataUrl] = useState<string | null>(null)
   const [text, setText] = useState('')
-  const [saving, setSaving] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const { recording, supported: speechSupported, toggleRecording } = useSpeechDictation(setText)
 
@@ -40,37 +47,17 @@ export default function FieldNoteSheet({ hikeId, position, onSave, onClose, auto
 
   const canSave = !!dataUrl || !!text.trim()
 
-  async function handleSave() {
+  function handleSave() {
     if (!canSave) return
-    setSaving(true)
-    const id = crypto.randomUUID()
-    let photoUrl: string | undefined
-    let photoStoragePath: string | undefined
-    let photoPending = false
-    if (dataUrl) {
-      try {
-        const photo = await uploadFieldNotePhoto(hikeId, id, dataUrl)
-        photoUrl = photo.url
-        photoStoragePath = photo.storagePath
-      } catch {
-        // Offline, or the upload otherwise failed: keep the photo as a local data URL instead of
-        // losing the whole note (text included) — it still displays fine, and a background retry
-        // (lib/offline/retryFieldNotePhotos.ts) tries to swap it for a real Storage URL later.
-        photoUrl = dataUrl
-        photoPending = true
-      }
-    }
     onSave({
-      id,
+      id: crypto.randomUUID(),
       text: text.trim(),
       timestamp: new Date().toISOString(),
       lat: position?.lat,
       lon: position?.lon,
-      photoUrl,
-      photoStoragePath,
-      photoPending: photoPending || undefined,
+      photoUrl: dataUrl ?? undefined,
+      photoPending: dataUrl ? true : undefined,
     })
-    setSaving(false)
     onClose()
   }
 
@@ -139,10 +126,10 @@ export default function FieldNoteSheet({ hikeId, position, onSave, onClose, auto
 
         <button
           onClick={handleSave}
-          disabled={!canSave || saving}
+          disabled={!canSave}
           className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-terra-500 text-white font-semibold text-sm disabled:opacity-40"
         >
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+          <Check className="w-4 h-4" />
           Salva nota
         </button>
       </div>

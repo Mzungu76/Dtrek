@@ -160,7 +160,19 @@ export default function TracciaPage() {
     setPhase('recording')
   }
 
-  const handleSaveFieldNote = (note: HikeNote) => setHikeNotes((prev) => [...prev, note])
+  const handleSaveFieldNote = (note: HikeNote) => {
+    setHikeNotes((prev) => [...prev, note])
+
+    // FieldNoteSheet.tsx non aspetta più il caricamento della foto prima di salvare — se siamo
+    // già online, tentalo subito invece di aspettare il prossimo evento 'online' (che, restando
+    // connessi tutta la registrazione, potrebbe non arrivare mai in questa sessione).
+    if (note.photoPending && navigator.onLine) {
+      retryFieldNotePhotos(trackSessionIdRef.current, [note]).then((changed) => {
+        if (changed.length === 0) return
+        setHikeNotes((prev) => prev.map((n) => changed.find((c) => c.id === n.id) ?? n))
+      }).catch(() => {})
+    }
+  }
 
   const handlePauseResume = () => {
     if (!sessionRef.current) return
@@ -251,7 +263,6 @@ export default function TracciaPage() {
 
         {showFieldNote && (
           <FieldNoteSheet
-            hikeId={trackSessionIdRef.current}
             position={position}
             onSave={handleSaveFieldNote}
             onClose={() => { setShowFieldNote(false); setFieldNoteAutoCamera(false) }}

@@ -34,7 +34,6 @@ interface Props {
   onOpenFoto: () => void
   onOpenNota: () => void
   onOpenSpecie: () => void
-  specieAvailable: boolean
 }
 
 const PACE_STATUS_STYLE: Record<PaceStatus, { label: string; className: string }> = {
@@ -68,7 +67,7 @@ export default function NavStatsSheet({
   distanceCoveredM, distanceRemainingM, currentSpeedMs, avgSpeedMs, movingTimeMs, etaDate,
   paceStatus, daylightMarginMin,
   timerRunning, onTogglePlayPause, onStop, trackPoints, currentDistanceM, remainingPois, guideExcerpts,
-  onOpenFoto, onOpenNota, onOpenSpecie, specieAvailable,
+  onOpenFoto, onOpenNota, onOpenSpecie,
 }: Props) {
   const [tab, setTab] = useState<Tab>('tempi')
   if (!open) return null
@@ -92,11 +91,7 @@ export default function NavStatsSheet({
           </button>
           <button
             onClick={onOpenSpecie}
-            disabled={!specieAvailable}
-            title={specieAvailable ? undefined : 'Richiede una connessione internet'}
-            className={`flex-1 flex flex-col items-center gap-1 py-2.5 rounded-2xl text-[10px] font-semibold ${
-              specieAvailable ? 'bg-stone-100 text-stone-600' : 'bg-stone-50 text-stone-300 cursor-not-allowed'
-            }`}
+            className="flex-1 flex flex-col items-center gap-1 py-2.5 rounded-2xl bg-stone-100 text-stone-600 text-[10px] font-semibold"
           >
             <Leaf className="w-[18px] h-[18px]" /> Specie
           </button>
