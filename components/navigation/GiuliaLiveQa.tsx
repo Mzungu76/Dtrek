@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Mic, Square, Loader2, X, MessageCircleWarning } from 'lucide-react'
 import { useSpeechDictation } from '@/lib/useSpeechDictation'
 import { speak } from '@/lib/navigation/speech'
+import { useModalBackHandler } from '@/lib/navigation/useModalBackHandler'
 
 interface Props {
   hikeTitle: string
@@ -33,6 +34,7 @@ export default function GiuliaLiveQa({ hikeTitle, nearestPoiName, nearestPoiDist
   const [answer, setAnswer] = useState('')
   const [asking, setAsking] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  useModalBackHandler(open, () => setOpen(false))
 
   const { recording, supported, toggleRecording } = useSpeechDictation(setTranscript)
   const transcriptRef = useRef('')
