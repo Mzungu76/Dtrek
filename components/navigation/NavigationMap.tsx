@@ -9,6 +9,7 @@ import { labelNearbyTrail, formatTrailDistance } from '@/lib/navigation/nearbyTr
 import { poiBadgeMarkup } from '@/components/poiIcons'
 import { POI_META, type PoiType } from '@/lib/overpass'
 import { shortestRotation } from '@/lib/navigation/orientation'
+import { SLOPE_GRADE_COLOR, type SlopeSegment } from '@/lib/navigation/routeSlopeSegments'
 
 interface Props {
   routePolyline: [number, number][]
@@ -26,6 +27,15 @@ interface Props {
   parkingSpot?: { lat: number; lon: number } | null
   /** Called when a POI marker is tapped directly on the map — the caller decides how to show info (ActiveNavigationView.tsx reuses the same callout sheet the proximity-triggered enteredPoi event already opens, so tapping and walking up to a POI show the same info in the same place). */
   onPoiTap?: (poiId: string | number) => void
+  /** Layer toggles (NavLayerRail) — default true/true/false when omitted, matching the always-on
+   *  behavior before these toggles existed. */
+  showRoute?: boolean
+  showPois?: boolean
+  /** Gradient-colored route stretches (lib/navigation/routeSlopeSegments.ts) — when present and
+   *  showRoute is on, replaces the flat green line with these; direction arrows are skipped in
+   *  this mode (redundant clutter on top of the colored stretches). Null/omitted falls back to
+   *  the plain single-color line. */
+  slopeSegments?: SlopeSegment[] | null
 }
 
 const FOLLOW_ZOOM = 17
@@ -64,13 +74,21 @@ const NEARBY_TRAIL_MIN_LABEL_LENGTH_M = 60
  * hiker manually pans/zooms the map, follow mode turns off so their gesture
  * isn't fought, and a "recenter" button brings it back.
  */
-export default function NavigationMap({ routePolyline, pois, position, bearingDeg, state, nearbyTrails, accuracyM, parkingSpot, onPoiTap }: Props) {
+export default function NavigationMap({
+  routePolyline, pois, position, bearingDeg, state, nearbyTrails, accuracyM, parkingSpot, onPoiTap,
+  showRoute = true, showPois = true, slopeSegments = null,
+}: Props) {
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstance = useRef<L.Map | null>(null)
   const userMarker = useRef<L.Marker | null>(null)
   const parkingMarker = useRef<L.Marker | null>(null)
   const accuracyCircle = useRef<L.Circle | null>(null)
   const nearbyTrailLayers = useRef<L.Layer[]>([])
+  // Percorso e POI (NavLayerRail) — layer group/markers ricreati dai due effetti dedicati sotto,
+  // separati dall'effetto di montaggio così accendere/spegnere un layer non richiede
+  // ricreare l'intera mappa.
+  const routeLayerGroup = useRef<L.LayerGroup | null>(null)
+  const poiMarkers = useRef<L.Marker[]>([])
   const hasCentered = useRef(false)
   // Continuous rotation state for the arrow — see NavigationMapLibre.tsx / shortestRotation()'s doc
   // comment for why a raw bearingDeg can't be fed straight into rotate() when animating.
@@ -92,8 +110,47 @@ export default function NavigationMap({ routePolyline, pois, position, bearingDe
       )
       L.tileLayer(TILE_URL, { maxZoom: 18 }).addTo(map)
 
-      if (routePolyline.length > 1) {
-        L.polyline(routePolyline, { color: '#277134', weight: 4, opacity: 0.8 }).addTo(map)
+      // A manual pan/zoom means the hiker wants to look around — stop fighting them with auto-recenter.
+      map.on('dragstart zoomstart', () => setFollowMode(false))
+
+      mapInstance.current = map
+      setMapReady(true)
+      // The container may still have been zero-sized while CSS was loading — force a relayout once mounted.
+      setTimeout(() => map.invalidateSize(), 0)
+    })
+    return () => {
+      cancelled = true
+      mapInstance.current?.remove()
+      mapInstance.current = null
+      parkingMarker.current = null
+      routeLayerGroup.current = null
+      poiMarkers.current = []
+      setMapReady(false)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Percorso layer (NavLayerRail) — proprio effetto, non parte del montaggio, così accendere/
+  // spegnere il layer o passare alle Pendenze non richiede ricreare la mappa. In modalità Pendenze
+  // le frecce di direzione sono omesse: sui segmenti già colorati per difficoltà sarebbero solo
+  // rumore in più, non un'informazione aggiuntiva.
+  useEffect(() => {
+    if (!mapReady || !mapInstance.current) return
+    const map = mapInstance.current
+    let cancelled = false
+    import('leaflet').then((L) => {
+      if (cancelled) return
+      routeLayerGroup.current?.remove()
+      routeLayerGroup.current = null
+      if (!showRoute || routePolyline.length < 2) return
+
+      const group = L.layerGroup()
+      if (slopeSegments && slopeSegments.length > 0) {
+        for (const seg of slopeSegments) {
+          L.polyline(seg.path, { color: SLOPE_GRADE_COLOR[seg.grade], weight: 4, opacity: 0.85 }).addTo(group)
+        }
+      } else {
+        L.polyline(routePolyline, { color: '#277134', weight: 4, opacity: 0.8 }).addTo(group)
         // Frecce di direzione lungo il percorso da seguire (stile Komoot) — distinte dalla
         // freccia dell'escursionista sotto, che indica invece dove sta guardando/andando ORA.
         for (const arrow of computeDirectionArrows(routePolyline, DIRECTION_ARROW_SPACING_M)) {
@@ -105,18 +162,34 @@ export default function NavigationMap({ routePolyline, pois, position, bearingDe
                    </div>`,
             iconSize: [px, px], iconAnchor: [px / 2, px / 2],
           })
-          L.marker([arrow.lat, arrow.lon], { icon: arrowIcon, interactive: false, keyboard: false }).addTo(map)
+          L.marker([arrow.lat, arrow.lon], { icon: arrowIcon, interactive: false, keyboard: false }).addTo(group)
         }
       }
-      // Leaflet's built-in default marker icon resolves its image path
-      // relative to leaflet.css's own URL, which breaks when the CSS is
-      // injected via a plain <link> (see above) instead of bundled — every
-      // L.marker() without an explicit icon 404s on marker-icon.png. A
-      // small divIcon sidesteps that entirely instead of patching L.Icon.Default's path.
+      group.addTo(map)
+      routeLayerGroup.current = group
+    })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapReady, showRoute, slopeSegments])
+
+  // POI layer (NavLayerRail) — stesso motivo del Percorso qui sopra: effetto dedicato così il
+  // toggle non tocca il resto della mappa.
+  useEffect(() => {
+    if (!mapReady || !mapInstance.current) return
+    const map = mapInstance.current
+    let cancelled = false
+    import('leaflet').then((L) => {
+      if (cancelled) return
+      poiMarkers.current.forEach((m) => m.remove())
+      poiMarkers.current = []
+      if (!showPois) return
+
+      // Leaflet's built-in default marker icon resolves its image path relative to leaflet.css's
+      // own URL, which breaks when the CSS is injected via a plain <link> (see above) instead of
+      // bundled — every L.marker() without an explicit icon 404s on marker-icon.png. A small
+      // divIcon sidesteps that entirely instead of patching L.Icon.Default's path.
       // Same per-type icon/color (poiBadgeMarkup + POI_META) as the route-detail page's map
-      // (components/MapView.tsx) — this used to be a single hardcoded orange dot for every POI
-      // regardless of type, the one visible inconsistency between the two maps that wasn't a
-      // deliberate tradeoff (unlike the tile style, see NavigationMap.tsx's TILE_URL comment).
+      // (components/MapView.tsx).
       const defaultPoiColor = '#d97220'
       for (const poi of pois) {
         const meta = poi.type ? POI_META[poi.type as PoiType] : undefined
@@ -128,19 +201,12 @@ export default function NavigationMap({ routePolyline, pois, position, bearingDe
         })
         const marker = L.marker([poi.lat, poi.lon], { title: poi.name, icon }).addTo(map)
         if (onPoiTap) marker.on('click', () => onPoiTap(poi.id))
+        poiMarkers.current.push(marker)
       }
-
-      // A manual pan/zoom means the hiker wants to look around — stop fighting them with auto-recenter.
-      map.on('dragstart zoomstart', () => setFollowMode(false))
-
-      mapInstance.current = map
-      setMapReady(true)
-      // The container may still have been zero-sized while CSS was loading — force a relayout once mounted.
-      setTimeout(() => map.invalidateSize(), 0)
     })
-    return () => { cancelled = true; mapInstance.current?.remove(); mapInstance.current = null; parkingMarker.current = null; setMapReady(false) }
+    return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [mapReady, showPois])
 
   // Context layer, drawn under the main route: other nearby paths (CalTopo-style, with a distance
   // label per segment) give a hiker something to orient by — a fork, a shortcut, a possible escape

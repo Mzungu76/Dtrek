@@ -11,6 +11,7 @@ import { labelNearbyTrail, formatTrailDistance } from '@/lib/navigation/nearbyTr
 import { poiBadgeMarkup } from '@/components/poiIcons'
 import { POI_META, type PoiType } from '@/lib/overpass'
 import { shortestRotation } from '@/lib/navigation/orientation'
+import { SLOPE_GRADE_COLOR, type SlopeSegment } from '@/lib/navigation/routeSlopeSegments'
 
 interface Props {
   routePolyline: [number, number][]
@@ -20,6 +21,14 @@ interface Props {
   state: NavState
   styleId: MapTilerStyleId
   is3D: boolean
+  /** Layer toggles (NavLayerRail) — default true/true/null when omitted, matching the always-on
+   *  behavior before these toggles existed. */
+  showRoute?: boolean
+  showPois?: boolean
+  /** Gradient-colored route stretches (lib/navigation/routeSlopeSegments.ts) — when present and
+   *  showRoute is on, replaces the flat green line with these; direction arrows are hidden in
+   *  this mode. Null/omitted falls back to the plain single-color line. */
+  slopeSegments?: SlopeSegment[] | null
   /** Current GPS fix accuracy in meters, drawn as a translucent circle around the position marker — same trust signal as NavigationMap.tsx's Leaflet version. */
   accuracyM?: number | null
   /** Called if the MapTiler style hasn't finished loading within a few seconds, or errors out (missing/invalid key, no connectivity, domain-restricted key...) — the caller should fall back to the offline-safe map. `reason` is a short diagnostic string, always logged to the console regardless of environment so this is debuggable in production. */
@@ -123,7 +132,11 @@ function followZoomFor(is3D: boolean): number { return is3D ? 14.5 : 16 }
  * offline Leaflet map and to avoid disorienting the hiker with a spinning
  * view while walking.
  */
-export default function NavigationMapLibre({ routePolyline, pois, position, bearingDeg, state, styleId, is3D, onStyleFailed, accuracyM, natura2000Features, showNatura2000, parkingSpot, nearbyTrails, onPoiTap }: Props) {
+export default function NavigationMapLibre({
+  routePolyline, pois, position, bearingDeg, state, styleId, is3D, onStyleFailed, accuracyM,
+  natura2000Features, showNatura2000, parkingSpot, nearbyTrails, onPoiTap,
+  showRoute = true, showPois = true, slopeSegments = null,
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const markersRef = useRef<maplibregl.Marker[]>([])
@@ -154,6 +167,12 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
   showNatura2000Ref.current = showNatura2000
   const nearbyTrailsRef = useRef(nearbyTrails)
   nearbyTrailsRef.current = nearbyTrails
+  // Stesso motivo di natura2000FeaturesRef/showNatura2000Ref — setupRouteLayer() è richiamata
+  // dagli handler 'load'/'style.load' registrati una sola volta al montaggio.
+  const showRouteRef = useRef(showRoute)
+  showRouteRef.current = showRoute
+  const slopeSegmentsRef = useRef(slopeSegments)
+  slopeSegmentsRef.current = slopeSegments
   const dataListener = useRef<(() => void) | null>(null)
   const [followMode, setFollowMode] = useState(true)
   const [styleLoading, setStyleLoading] = useState(true)
@@ -217,16 +236,44 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
   const setupRouteLayer = (maplibregl: any) => {
     const map = mapRef.current
     if (!map || routePolyline.length < 2) return
-    const geojson = {
-      type: 'Feature' as const,
-      geometry: { type: 'LineString' as const, coordinates: routePolyline.map(([lat, lon]) => [lon, lat]) },
-      properties: {},
-    }
+    const segments = slopeSegmentsRef.current
+    const useSlope = showRouteRef.current && !!segments && segments.length > 0
+    const features = !showRouteRef.current
+      ? []
+      : useSlope
+        ? segments!.map((seg) => ({
+            type: 'Feature' as const,
+            geometry: { type: 'LineString' as const, coordinates: seg.path.map(([lat, lon]) => [lon, lat]) },
+            properties: { grade: seg.grade },
+          }))
+        : [{
+            type: 'Feature' as const,
+            geometry: { type: 'LineString' as const, coordinates: routePolyline.map(([lat, lon]) => [lon, lat]) },
+            properties: { grade: 'off' },
+          }]
+    const geojson = { type: 'FeatureCollection' as const, features }
+
     if (map.getSource(ROUTE_SOURCE_ID)) {
       (map.getSource(ROUTE_SOURCE_ID) as maplibregl.GeoJSONSource).setData(geojson)
     } else {
       map.addSource(ROUTE_SOURCE_ID, { type: 'geojson', data: geojson })
-      map.addLayer({ id: ROUTE_LAYER_ID, type: 'line', source: ROUTE_SOURCE_ID, paint: { 'line-color': '#277134', 'line-width': 4, 'line-opacity': 0.85 } })
+      map.addLayer({
+        id: ROUTE_LAYER_ID, type: 'line', source: ROUTE_SOURCE_ID,
+        paint: {
+          // Data-driven by the per-feature `grade` property (NavLayerRail's Pendenze layer) — a
+          // single layer/source handles both the plain route and the slope-colored variant, no
+          // need to swap paint properties or juggle two layers. Features without a matching grade
+          // (the plain 'off' case) fall through to the default green.
+          'line-color': [
+            'match', ['get', 'grade'],
+            'easy', SLOPE_GRADE_COLOR.easy,
+            'moderate', SLOPE_GRADE_COLOR.moderate,
+            'steep', SLOPE_GRADE_COLOR.steep,
+            '#277134',
+          ],
+          'line-width': 4, 'line-opacity': 0.85,
+        },
+      })
     }
     // setStyle() svuota anche le immagini custom insieme a source/layer — hasImage torna false
     // dopo un cambio stile, quindi questa guardia la ri-registra invece di saltarla per sempre.
@@ -246,6 +293,9 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
         },
       })
     }
+    // Le frecce di direzione hanno senso solo sulla linea a colore unico — su tratti già
+    // colorati per pendenza sarebbero solo rumore in più su un'informazione già leggibile.
+    map.setLayoutProperty(ROUTE_ARROW_LAYER_ID, 'visibility', useSlope ? 'none' : 'visible')
   }
 
   /** Same trust-signal circle as NavigationMap.tsx's Leaflet L.circle, approximated as a filled polygon since MapLibre has no native meter-radius circle. Re-added after every style.load like the route/terrain layers. */
@@ -405,20 +455,9 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
         updateAccuracyCircle(map)
         setupNatura2000Layer(map)
         setupNearbyTrailsLayer(map)
-        // Same per-type icon/color (poiBadgeMarkup + POI_META) as NavigationMap.tsx's Leaflet
-        // version and the route-detail page's map (components/MapView.tsx) — this used to be
-        // MapLibre's plain default teardrop pin for every POI, not even matching the Leaflet map's
-        // own (then-uniform) orange dot.
-        const defaultPoiColor = '#d97220'
-        for (const poi of pois) {
-          const meta = poi.type ? POI_META[poi.type as PoiType] : undefined
-          const el = document.createElement('div')
-          el.innerHTML = poiBadgeMarkup((poi.type as PoiType) ?? 'peak', meta?.color ?? defaultPoiColor, 26)
-          el.style.cursor = 'pointer'
-          if (onPoiTap) el.addEventListener('click', (e) => { e.stopPropagation(); onPoiTap(poi.id) })
-          const marker = new maplibregl.Marker({ element: el }).setLngLat([poi.lon, poi.lat]).addTo(map)
-          markersRef.current.push(marker)
-        }
+        // POI markers are set up by their own effect below (same reasoning as the parkingSpot
+        // marker just above: plain DOM markers survive a style change on their own, no need to
+        // recreate them here or on 'style.load').
       })
       // setStyle() wipes custom sources/layers — re-add the route, terrain, accuracy circle and overlay layers after every style switch.
       map.on('style.load', () => { setupRouteLayer(maplibregl); setupTerrain(map); updateAccuracyCircle(map); setupNatura2000Layer(map); setupNearbyTrailsLayer(map) })
@@ -501,6 +540,36 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
     return () => { cancelled = true }
   }, [parkingSpot, styleLoading])
 
+  // POI layer (NavLayerRail) — plain DOM markers, same "survives a style change on its own" logic
+  // as the parkingSpot marker just above, so this only needs to react to the toggle itself (plus
+  // styleLoading to make sure mapRef.current already exists the first time it runs).
+  useEffect(() => {
+    let cancelled = false
+    import('maplibre-gl').then((mod) => {
+      if (cancelled) return
+      const maplibregl = mod.default ?? mod
+      const map = mapRef.current
+      if (!map) return
+      markersRef.current.forEach((m) => m.remove())
+      markersRef.current = []
+      if (!showPois) return
+      // Same per-type icon/color (poiBadgeMarkup + POI_META) as NavigationMap.tsx's Leaflet
+      // version and the route-detail page's map (components/MapView.tsx).
+      const defaultPoiColor = '#d97220'
+      for (const poi of pois) {
+        const meta = poi.type ? POI_META[poi.type as PoiType] : undefined
+        const el = document.createElement('div')
+        el.innerHTML = poiBadgeMarkup((poi.type as PoiType) ?? 'peak', meta?.color ?? defaultPoiColor, 26)
+        el.style.cursor = 'pointer'
+        if (onPoiTap) el.addEventListener('click', (e) => { e.stopPropagation(); onPoiTap(poi.id) })
+        const marker = new maplibregl.Marker({ element: el }).setLngLat([poi.lon, poi.lat]).addTo(map)
+        markersRef.current.push(marker)
+      }
+    })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showPois, styleLoading])
+
   useEffect(() => {
     if (!position || !mapRef.current) return
     import('maplibre-gl').then((mod) => {
@@ -560,6 +629,16 @@ export default function NavigationMapLibre({ routePolyline, pois, position, bear
     else map.once('idle', () => setupNearbyTrailsLayer(map))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nearbyTrails])
+
+  // Percorso/Pendenze layers (NavLayerRail) — same "retry once idle" idiom, so toggling either
+  // one mid-navigation doesn't silently no-op while a tile/style load is still in flight.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    if (map.isStyleLoaded()) setupRouteLayer(null)
+    else map.once('idle', () => setupRouteLayer(null))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showRoute, slopeSegments])
 
   const handleRecenter = () => {
     setFollowMode(true)

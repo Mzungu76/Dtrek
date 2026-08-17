@@ -51,7 +51,9 @@ export default function ParkingSpotControl({ spot, position, distanceM, bearingT
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-13 mt-2 z-20 w-60 p-3 rounded-2xl bg-white shadow-2xl border border-stone-200 font-body">
+          {/* Soluzione B: il controllo ora vive nella rotaia destra — il pannello si apre verso
+              sinistra (right-0, non più left-0) così resta dentro lo schermo invece di uscirne. */}
+          <div className="absolute right-0 top-0 z-20 w-60 p-3 rounded-2xl bg-white shadow-2xl border border-stone-200 font-body">
             {spot ? (
               <>
                 <div className="flex items-center gap-2.5 mb-2.5">
