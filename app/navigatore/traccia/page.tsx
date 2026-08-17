@@ -1,14 +1,14 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import FreeTrackMap from '@/components/navigation/FreeTrackMap'
+import FreeTrackMap, { type FreeTrackMapHandle } from '@/components/navigation/FreeTrackMap'
 import FreeTrackSaveDialog from '@/components/navigation/FreeTrackSaveDialog'
 import { FreeTrackSession, type FreeTrackStats } from '@/lib/navigation/freeTrackSession'
 import { buildActivityFromTrack } from '@/lib/navigation/trackToActivity'
 import { saveActivityWithEnrichment } from '@/lib/activitySave'
 import { navigatorHomePath, openMainAppOrNavigate } from '@/lib/native/mainAppLinks'
 import { haptics } from '@/lib/navigation/haptics'
-import type { TcxActivity } from '@/lib/tcxParser'
+import type { TcxActivity, TrackPoint } from '@/lib/tcxParser'
 import { getNavigatorSlotStatus, type NavigatorSlotStatus } from '@/lib/navigatorSlot'
 import { deletePlanned } from '@/lib/plannedStore'
 import { deleteActivity, type HikeNote } from '@/lib/blobStore'
@@ -17,7 +17,10 @@ import { prefetchTilesAroundPoint } from '@/lib/offline/packageManager'
 import { retryFieldNotePhotos } from '@/lib/offline/retryFieldNotePhotos'
 import FieldNoteSheet from '@/components/navigation/FieldNoteSheet'
 import NavigatorAppPromo from '@/components/navigation/NavigatorAppPromo'
-import { ArrowLeft, Pause, Play, Square, TriangleAlert, Trash2, NotebookPen } from 'lucide-react'
+import SosButton from '@/components/navigation/SosButton'
+import NavBottomStrip from '@/components/navigation/NavBottomStrip'
+import FreeTrackStatsSheet from '@/components/navigation/FreeTrackStatsSheet'
+import { ArrowLeft, Locate, TriangleAlert, Trash2, NotebookPen } from 'lucide-react'
 
 function formatClock(seconds: number): string {
   const h = Math.floor(seconds / 3600)
@@ -66,6 +69,15 @@ export default function TracciaPage() {
   const hikeNotesRef = useRef(hikeNotes)
   useEffect(() => { hikeNotesRef.current = hikeNotes }, [hikeNotes])
   const [showFieldNote, setShowFieldNote] = useState(false)
+  const [fieldNoteAutoCamera, setFieldNoteAutoCamera] = useState(false)
+  // Soluzione B (piano di restyling Navigator): stesso guscio del percorso pianificato — rotaia
+  // destra con SOS/centra, striscia sottile in basso, pannello dettagli a schermo intero.
+  const mapHandleRef = useRef<FreeTrackMapHandle | null>(null)
+  const [mapFollowMode, setMapFollowMode] = useState(true)
+  const [showStatsSheet, setShowStatsSheet] = useState(false)
+  // Punti completi (non solo [lat,lon] come `path`) per il grafico altimetrico del pannello
+  // dettagli — stesso ElevationProfileChart della navigazione pianificata.
+  const [recordedPoints, setRecordedPoints] = useState<TrackPoint[]>([])
 
   useEffect(() => () => { sessionRef.current?.stop() }, [])
 
@@ -113,9 +125,13 @@ export default function TracciaPage() {
     trackSessionIdRef.current = crypto.randomUUID()
     tilesPrefetchedRef.current = false
     setHikeNotes([])
+    setRecordedPoints([])
     const session = new FreeTrackSession()
     session.on('stats', setStats)
-    session.on('point', (p) => { if (p.lat != null && p.lon != null) setPath((prev) => [...prev, [p.lat!, p.lon!]]) })
+    session.on('point', (p) => {
+      if (p.lat != null && p.lon != null) setPath((prev) => [...prev, [p.lat!, p.lon!]])
+      setRecordedPoints((prev) => [...prev, p])
+    })
     // Live marker on the map even while paused (distance/duration freeze, position doesn't) —
     // same behavior as ActiveNavigationView.tsx's planned-route navigator.
     session.on('position', (p) => {
@@ -194,27 +210,43 @@ export default function TracciaPage() {
   // min-h-screen layout below since a full-screen fixed map needs to be the outermost element, the
   // same structural choice ActiveNavigationView.tsx makes.
   if (phase === 'recording' || phase === 'paused') {
+    const bottomSummary = `${(stats.distanceMeters / 1000).toFixed(2)} km · ${formatClock(stats.durationSeconds)} · +${Math.round(stats.elevationGain)} m`
     return (
       <div className="fixed inset-0 z-[2000] bg-stone-900">
         <NavigatorAppPromo />
-        <FreeTrackMap path={path} position={position} bearingDeg={bearing} accuracyM={accuracyM} />
+        <FreeTrackMap ref={mapHandleRef} path={path} position={position} bearingDeg={bearing} accuracyM={accuracyM} onFollowModeChange={setMapFollowMode} />
 
-        <div className="absolute top-0 inset-x-0 z-20 bg-gradient-to-b from-black/55 to-transparent px-5 pt-[calc(env(safe-area-inset-top)+16px)] pb-8 flex items-center gap-3 pointer-events-none">
-          <button onClick={() => router.push(homePath)} className="pointer-events-auto w-9 h-9 flex items-center justify-center rounded-xl bg-white/20 text-white hover:bg-white/30 backdrop-blur-sm">
-            <ArrowLeft className="w-4 h-4" />
-          </button>
-          <h1 className="font-display text-base font-bold text-white drop-shadow flex-1">Registra un percorso</h1>
-          <button
-            onClick={() => setShowFieldNote(true)}
-            className="pointer-events-auto relative w-9 h-9 flex items-center justify-center rounded-xl bg-white/20 text-white hover:bg-white/30 backdrop-blur-sm"
-            aria-label="Aggiungi una nota o una foto"
-            title="Nota o foto sul campo"
-          >
-            <NotebookPen className="w-4 h-4" />
-            {hikeNotes.length > 0 && (
-              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-terra-500 text-[10px] font-bold flex items-center justify-center">{hikeNotes.length}</span>
-            )}
-          </button>
+        {/* Soluzione B: stessa colonna in flusso del percorso pianificato — barra a testo nudo
+            più l'eventuale avviso GPS sotto, niente offset fissi indipendenti. */}
+        <div className="absolute left-3 right-3 z-10 flex flex-col items-center gap-2" style={{ top: 'calc(env(safe-area-inset-top, 0px) + 10px)' }}>
+          <div className="w-full flex items-center gap-2">
+            <button onClick={() => router.push(homePath)} className="w-9 h-9 rounded-full bg-black/45 backdrop-blur-sm text-white flex items-center justify-center shadow-sm shrink-0">
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <h1
+              className="flex-1 min-w-0 truncate text-white font-display font-bold text-[15px]"
+              style={{ textShadow: '0 1px 3px rgba(0,0,0,0.75), 0 1px 8px rgba(0,0,0,0.5)' }}
+            >
+              Registra un percorso
+            </h1>
+            <button
+              onClick={() => { setFieldNoteAutoCamera(false); setShowFieldNote(true) }}
+              className="relative w-9 h-9 rounded-full bg-black/45 backdrop-blur-sm text-white flex items-center justify-center shadow-sm shrink-0"
+              aria-label="Aggiungi una nota o una foto"
+              title="Nota o foto sul campo"
+            >
+              <NotebookPen className="w-4 h-4" />
+              {hikeNotes.length > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-terra-500 text-[10px] font-bold flex items-center justify-center">{hikeNotes.length}</span>
+              )}
+            </button>
+          </div>
+
+          {gpsWarning && (
+            <div className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-sm shadow-lg max-w-full">
+              <TriangleAlert className="w-4 h-4 shrink-0" /> {gpsWarning}
+            </div>
+          )}
         </div>
 
         {showFieldNote && (
@@ -222,51 +254,52 @@ export default function TracciaPage() {
             hikeId={trackSessionIdRef.current}
             position={position}
             onSave={handleSaveFieldNote}
-            onClose={() => setShowFieldNote(false)}
+            onClose={() => { setShowFieldNote(false); setFieldNoteAutoCamera(false) }}
+            autoOpenCamera={fieldNoteAutoCamera}
           />
         )}
 
-        {gpsWarning && (
-          <div className="absolute top-20 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-4 py-2.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-sm shadow-lg max-w-[calc(100%-2rem)]">
-            <TriangleAlert className="w-4 h-4 shrink-0" /> {gpsWarning}
-          </div>
-        )}
-
-        <div className="absolute bottom-0 inset-x-0 z-20 bg-white rounded-t-3xl shadow-[0_-4px_20px_rgba(0,0,0,0.15)] px-5 pt-5 pb-[calc(env(safe-area-inset-bottom)+20px)]">
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200 text-center">
-              <div className="text-2xl font-bold font-mono text-stone-900">{(stats.distanceMeters / 1000).toFixed(2)} km</div>
-              <div className="text-xs text-stone-500">Distanza</div>
-            </div>
-            <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200 text-center">
-              <div className="text-2xl font-bold font-mono text-stone-900">{formatClock(stats.durationSeconds)}</div>
-              <div className="text-xs text-stone-500">Durata</div>
-            </div>
-            <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200 text-center">
-              <div className="text-2xl font-bold font-mono text-stone-900">+{Math.round(stats.elevationGain)} m</div>
-              <div className="text-xs text-stone-500">Dislivello</div>
-            </div>
-            <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200 text-center">
-              <div className="text-2xl font-bold font-mono text-stone-900">{stats.currentSpeedMs != null ? (stats.currentSpeedMs * 3.6).toFixed(1) : '—'} km/h</div>
-              <div className="text-xs text-stone-500">Velocità</div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handlePauseResume}
-              className="flex-1 py-3.5 rounded-full border border-stone-300 text-stone-700 font-semibold flex items-center justify-center gap-2 hover:bg-stone-100"
-            >
-              {phase === 'recording' ? <><Pause className="w-4 h-4" /> Pausa</> : <><Play className="w-4 h-4" /> Riprendi</>}
-            </button>
-            <button
-              onClick={handleStop}
-              className="flex-1 py-3.5 rounded-full bg-red-600 text-white font-semibold flex items-center justify-center gap-2 hover:bg-red-700"
-            >
-              <Square className="w-4 h-4" /> Termina
-            </button>
-          </div>
+        {/* Soluzione B: rotaia destra centrata verticalmente — SOS e "centra sulla mia
+            posizione", stesso trattamento del percorso pianificato (niente rotaia layer a
+            sinistra qui: senza un percorso pianificato non c'è nulla da accendere/spegnere). */}
+        <div className="absolute right-3 z-10 top-1/2 -translate-y-1/2 flex flex-col items-end gap-2">
+          <SosButton
+            fix={position ? { lat: position.lat, lon: position.lon, accuracyM } : null}
+            liveShareUrl={null}
+            onTriggered={() => {}}
+          />
+          <button
+            onClick={() => mapHandleRef.current?.recenter()}
+            aria-label="Centra sulla mia posizione"
+            className={`w-11 h-11 rounded-full shadow-lg flex items-center justify-center ${
+              mapFollowMode ? 'bg-terra-500 text-white' : 'bg-white text-stone-700'
+            }`}
+          >
+            <Locate className="w-5 h-5" />
+          </button>
         </div>
+
+        <NavBottomStrip
+          summary={bottomSummary}
+          timerRunning={phase === 'recording'}
+          onTogglePlayPause={handlePauseResume}
+          onStop={handleStop}
+          onExpand={() => setShowStatsSheet(true)}
+        />
+
+        <FreeTrackStatsSheet
+          open={showStatsSheet}
+          onClose={() => setShowStatsSheet(false)}
+          distanceMeters={stats.distanceMeters}
+          durationSeconds={stats.durationSeconds}
+          elevationGain={stats.elevationGain}
+          currentSpeedMs={stats.currentSpeedMs}
+          timerRunning={phase === 'recording'}
+          onTogglePlayPause={handlePauseResume}
+          trackPoints={recordedPoints}
+          onOpenFoto={() => { setShowStatsSheet(false); setFieldNoteAutoCamera(true); setShowFieldNote(true) }}
+          onOpenNota={() => { setShowStatsSheet(false); setFieldNoteAutoCamera(false); setShowFieldNote(true) }}
+        />
 
         {pendingActivity && (
           <FreeTrackSaveDialog

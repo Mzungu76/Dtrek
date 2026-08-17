@@ -1,8 +1,7 @@
 'use client'
 import 'leaflet/dist/leaflet.css'
 import type * as L from 'leaflet'
-import { useEffect, useRef, useState } from 'react'
-import { Locate } from 'lucide-react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { shortestRotation } from '@/lib/navigation/orientation'
 
 interface Props {
@@ -11,6 +10,14 @@ interface Props {
   position: { lat: number; lon: number } | null
   bearingDeg: number | null
   accuracyM?: number | null
+  /** Fired whenever follow-mode toggles — same reasoning as NavigationMap.tsx's prop of the same
+   *  name: the recenter button itself lives in the caller now (grouped with the rest of the
+   *  Soluzione B edge rail), not floating independently mid-screen. */
+  onFollowModeChange?: (following: boolean) => void
+}
+
+export interface FreeTrackMapHandle {
+  recenter: () => void
 }
 
 const FOLLOW_ZOOM = 17
@@ -27,7 +34,7 @@ const TILE_URL = '/api/tile?z={z}&x={x}&y={y}&style=voyager'
  * planned route/POIs/direction-arrows to draw, since there isn't one here. Drawing the traveled
  * path itself is this screen's only "route" concept.
  */
-export default function FreeTrackMap({ path, position, bearingDeg, accuracyM }: Props) {
+const FreeTrackMap = forwardRef<FreeTrackMapHandle, Props>(function FreeTrackMap({ path, position, bearingDeg, accuracyM, onFollowModeChange }, ref) {
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstance = useRef<L.Map | null>(null)
   const trackLine = useRef<L.Polyline | null>(null)
@@ -114,21 +121,20 @@ export default function FreeTrackMap({ path, position, bearingDeg, accuracyM }: 
     })
   }, [position, bearingDeg, accuracyM, followMode])
 
-  const handleRecenter = () => {
+  const handleRecenter = useCallback(() => {
     setFollowMode(true)
     if (position && mapInstance.current) mapInstance.current.setView([position.lat, position.lon], FOLLOW_ZOOM)
-  }
+  }, [position])
+
+  useImperativeHandle(ref, () => ({ recenter: handleRecenter }), [handleRecenter])
+
+  useEffect(() => { onFollowModeChange?.(followMode) }, [followMode, onFollowModeChange])
 
   return (
     <div className="absolute inset-0">
       <div ref={mapRef} className="absolute inset-0" />
-      <button
-        onClick={handleRecenter}
-        className={`absolute right-3 top-1/2 -translate-y-1/2 z-10 w-11 h-11 rounded-full shadow-lg flex items-center justify-center ${followMode ? 'bg-terra-500 text-white' : 'bg-white text-stone-700'}`}
-        aria-label="Centra sulla mia posizione"
-      >
-        <Locate className="w-5 h-5" />
-      </button>
     </div>
   )
-}
+})
+
+export default FreeTrackMap
