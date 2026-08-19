@@ -36,7 +36,10 @@ const USO_SUOLO_TIMEOUT_MS = 8000
 // field — landCoverCodeToSurface(null) degrades to 'unknown', same as the rest of the pipeline.
 const CLASS_CODE_FIELDS = ['Code_18', 'CODE_18', 'code_18', 'CLC18', 'clc18', 'classe', 'CLASSE']
 
-function extractClassCode(props: Record<string, unknown>): number | null {
+// Esportata solo per il test — DTREK-AUDIT.md P1 #12: nessuna chiamata WFS reale possibile da
+// questo sandbox (egress bloccato dalla policy di rete), verificata contro nomi campo plausibili
+// per DescribeFeatureType, non contro una risposta reale del server.
+export function extractClassCode(props: Record<string, unknown>): number | null {
   for (const f of CLASS_CODE_FIELDS) {
     const v = props[f]
     if (v == null) continue
