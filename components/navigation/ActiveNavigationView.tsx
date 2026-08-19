@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Capacitor } from '@capacitor/core'
-import { AlertTriangle, BatteryWarning, ArrowUp, Download, CheckCircle2, Radio, Locate, Signpost } from 'lucide-react'
+import { AlertTriangle, BatteryWarning, ArrowUp, Download, CheckCircle2, Radio, Locate, Signpost, HelpCircle } from 'lucide-react'
 import Sheet from '@/components/ui/Sheet'
 import type { PlannedHike } from '@/lib/plannedStore'
 import { updatePlannedMeta } from '@/lib/plannedStore'
@@ -67,6 +67,8 @@ import NavLayerRail from './NavLayerRail'
 import ParkingSpotControl from './ParkingSpotControl'
 import { buildSlopeSegments } from '@/lib/navigation/routeSlopeSegments'
 import { readHighContrastPref, writeHighContrastPref } from '@/lib/navigation/highContrastPref'
+import { hasSeenNavOnboarding, markNavOnboardingSeen } from '@/lib/navigation/navOnboardingPref'
+import NavOnboardingSheet from './NavOnboardingSheet'
 import ConfirmEndDialog from './ConfirmEndDialog'
 import EndHikeReviewDialog from './EndHikeReviewDialog'
 import { speak } from '@/lib/navigation/speech'
@@ -162,6 +164,11 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   // localStorage al primo render) e allineato alla preferenza salvata subito dopo il mount, sotto.
   const [highContrastEnabled, setHighContrastEnabled] = useState(false)
   useEffect(() => { setHighContrastEnabled(readHighContrastPref()) }, [])
+  // DTREK-AUDIT.md P2 #26 — mostrato una sola volta per dispositivo, all'avvio della prima
+  // navigazione attiva mai fatta: prima che SOS/vie d'uscita/layer possano servire davvero, non
+  // dopo. Riapribile in ogni momento dal pulsante "?" nella rotaia azioni (vedi sotto).
+  const [showOnboarding, setShowOnboarding] = useState(false)
+  useEffect(() => { if (!hasSeenNavOnboarding()) setShowOnboarding(true) }, [])
   const [isOnline, setIsOnline] = useState(true)
   const [mapMode, setMapMode] = useState<MapMode>('offline')
   const [is3D, setIs3D] = useState(false)
@@ -1172,7 +1179,22 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
           onSave={handleSaveParking}
           onClear={handleClearParking}
         />
+        {/* DTREK-AUDIT.md P2 #26 — riapre in ogni momento il riepilogo mostrato all'avvio della
+            prima navigazione (SOS, vie d'uscita, layer, colori POI), non solo la prima volta. */}
+        <button
+          onClick={() => setShowOnboarding(true)}
+          aria-label="Come funziona la navigazione"
+          title="Come funziona la navigazione"
+          className="w-11 h-11 rounded-full flex items-center justify-center shadow-lg border bg-white/95 border-stone-200"
+        >
+          <HelpCircle className="w-5 h-5 text-stone-700" />
+        </button>
       </div>
+
+      <NavOnboardingSheet
+        open={showOnboarding}
+        onClose={() => { markNavOnboardingSeen(); setShowOnboarding(false) }}
+      />
 
       <Sheet
         open={showOfflineSheet}

@@ -75,22 +75,21 @@ describe('speak — comportamento end-to-end con un Web Speech API finto', () =>
     vi.resetModules()
     spoken = []
     utteranceInstances = []
-    // @ts-expect-error — ambiente di test, non un vero browser
-    global.window = {
+    // `as any` — ambiente di test, non un vero browser: un window/SpeechSynthesisUtterance finti
+    // non hanno motivo di rispettare le interfacce DOM complete, solo la superficie che speech.ts
+    // usa davvero (speechSynthesis.speak/cancel, new SpeechSynthesisUtterance(text)).
+    ;(global as any).window = {
       speechSynthesis: {
         speak: (u: FakeUtterance) => { spoken.push(u.text) },
         cancel: () => {},
       },
     }
-    // @ts-expect-error — usata da new SpeechSynthesisUtterance(...) dentro speech.ts
-    global.SpeechSynthesisUtterance = FakeUtterance
+    ;(global as any).SpeechSynthesisUtterance = FakeUtterance
   })
 
   afterEach(() => {
-    // @ts-expect-error — pulizia tra un test e l'altro
-    delete global.window
-    // @ts-expect-error
-    delete global.SpeechSynthesisUtterance
+    delete (global as any).window
+    delete (global as any).SpeechSynthesisUtterance
   })
 
   async function importFreshSpeech() {
