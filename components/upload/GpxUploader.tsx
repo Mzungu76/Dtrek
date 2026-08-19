@@ -15,6 +15,7 @@ import { computeCtsForHike } from '@/lib/computeCtsForHike'
 import { computeSafetyForHike } from '@/lib/computeSafetyForHike'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import { useEntitlement } from '@/lib/useEntitlement'
+import { MAX_IMPORT_FILE_BYTES } from '@/lib/fetchBoundedBody'
 import { MapPin, FileText, CheckCircle, AlertCircle, Mountain, Clock, TrendingUp, Route } from 'lucide-react'
 
 type GpxStatus = 'idle' | 'parsed' | 'saving' | 'success' | 'error'
@@ -65,6 +66,15 @@ export default function GpxUploader({ sourceApp, afterSaveHref }: GpxUploaderPro
       : lower.endsWith('.geojson') ? 'geojson' : null
     if (!kind) {
       setStatus('error'); setErrorMsg('Seleziona un file con estensione .gpx, .kml, .kmz o .geojson'); return
+    }
+    if (file.size > MAX_IMPORT_FILE_BYTES) {
+      // DTREK-AUDIT.md P1 #14 — file.size è disponibile subito, senza dover leggere il contenuto:
+      // il controllo va prima di ogni file.text()/arrayBuffer() qui sotto, non dopo, altrimenti un
+      // file enorme blocca comunque il thread principale del browser per leggerlo tutto prima di
+      // scoprire che va rifiutato.
+      setStatus('error')
+      setErrorMsg(`File troppo grande (${(file.size / (1024 * 1024)).toFixed(1)} MB) — il limite per l'import è ${MAX_IMPORT_FILE_BYTES / (1024 * 1024)} MB`)
+      return
     }
     setFileName(file.name); setStatus('parsing' as GpxStatus)
     try {

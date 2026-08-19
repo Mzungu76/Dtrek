@@ -5,6 +5,7 @@
 // segue solo un link di download che la pagina stessa espone pubblicamente per chiunque la visiti.
 import { parseGpxServerSide, type ServerParsedGpx } from './serverGpxParser'
 import { isBlockedHost } from './scrapeBlocklist'
+import { textBounded, MAX_IMPORT_FILE_BYTES, MAX_HTML_PAGE_BYTES } from './fetchBoundedBody'
 
 const USER_AGENT = 'DTrek/1.0 (personal hiking diary; mzulpt@gmail.com)'
 const GPX_HREF_RE = /<a\b[^>]*href=["']([^"']+\.gpx(?:[?#][^"']*)?)["']/i
@@ -24,7 +25,7 @@ export async function findGpxLinkOnPage(pageUrl: string): Promise<string | null>
     if (!res.ok) return null
     const contentType = res.headers.get('content-type') ?? ''
     if (!contentType.includes('html')) return null
-    const html = await res.text()
+    const html = await textBounded(res, MAX_HTML_PAGE_BYTES)
     const match = GPX_HREF_RE.exec(html)
     if (!match) return null
     return new URL(match[1], pageUrl).toString()
@@ -45,7 +46,7 @@ export async function downloadAndParseGpx(gpxUrl: string): Promise<ServerParsedG
       signal: AbortSignal.timeout(15_000),
     })
     if (!res.ok) return null
-    const text = await res.text()
+    const text = await textBounded(res, MAX_IMPORT_FILE_BYTES)
     return parseGpxServerSide(text)
   } catch {
     return null
