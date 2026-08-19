@@ -236,7 +236,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
 
   const pois = useMemo<NavPoi[]>(() => {
     const raw = (hike.cachedPois ?? []) as PoiItem[]
-    return raw.filter((p) => p.lat != null && p.lon != null).map((p) => ({ id: p.id, lat: p.lat, lon: p.lon, name: p.name, type: p.type }))
+    return raw.filter((p) => p.lat != null && p.lon != null).map((p) => ({ id: p.id, lat: p.lat, lon: p.lon, name: p.name, type: p.type, openingHours: p.tags?.opening_hours }))
   }, [hike.cachedPois])
 
   const poiWikiById = useMemo(() => {

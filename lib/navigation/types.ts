@@ -37,6 +37,13 @@ export interface NavPoi {
   notifyRadiusM?: number
   /** OSM POI category (lib/overpass.ts's PoiType), when known — lets the Escape Engine (lib/navigation/escapeEngine.ts) tell a hut/bivouac/shelter apart from a viewpoint or a bench when ranking "safe POI" escape destinations. Optional/untyped here (not importing PoiType) to keep this file free of a dependency on the POI-fetching layer; callers narrow it themselves. */
   type?: string
+  /** DTREK-AUDIT.md P2 #24 — tag OSM opening_hours grezzo, quando presente (`lib/overpass.ts`'s
+   *  PoiItem.tags già lo porta, semplicemente mai propagato qui finora). Testo libero non
+   *  interpretato (la sintassi opening_hours OSM è complessa da parsare in modo affidabile,
+   *  fuori scope qui) — l'Escape Engine lo mostra così com'è invece di dichiarare un rifugio/
+   *  bivacco "sicuro" senza sapere se è davvero aperto (vedi docs/rifugi-progettazione.md: dati
+   *  di apertura affidabili richiedono una fonte esterna dedicata, non ancora integrata). */
+  openingHours?: string
 }
 
 /** A non-POI narrative beat along the route (climb start, viewpoint, exposed section...). */
