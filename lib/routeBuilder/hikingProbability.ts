@@ -24,7 +24,6 @@
 //                     invece di gonfiare il componente connesso).
 import { fetchOverpass, type OsmRelation } from '@/lib/overpassTrails'
 import { haversineM, normalizeBboxKey } from '@/lib/geoUtils'
-import { supabase } from '@/lib/supabase'
 
 export type Bbox = [minLat: number, minLon: number, maxLat: number, maxLon: number]
 
@@ -44,7 +43,7 @@ const WALKABLE_HIGHWAY = 'path|track|footway|bridleway|steps|unclassified|reside
 // componente connesso enorme e gonfia il punteggio di topologia anche per un vicolo cittadino.
 const HIKING_HIGHWAY = new Set(['path', 'track', 'footway', 'bridleway', 'steps'])
 
-function isExcluded(tags: Record<string, string>): boolean {
+export function isExcluded(tags: Record<string, string>): boolean {
   if (tags.access === 'private' || tags.access === 'no') return true
   if (tags.foot === 'no') return true
   if (tags.highway === 'footway' && (tags.footway === 'sidewalk' || tags.footway === 'crossing')) return true
@@ -66,7 +65,7 @@ interface RelationScoreInfo {
   isRouteFoot: boolean
 }
 
-function scoreRelationTags(tags: Record<string, string>): number {
+export function scoreRelationTags(tags: Record<string, string>): number {
   let s = tags.route === 'hiking' ? 100 : 50
   if (tags.network) s += NETWORK_BONUS[tags.network] ?? 0
   if (tags['osmc:symbol']) s += 50
@@ -94,7 +93,14 @@ const TRAIL_VISIBILITY_BONUS: Record<string, number> = {
   excellent: 30, good: 30, intermediate: 20, bad: 5, horrible: 5, no: 0,
 }
 
-function scoreWayTags(tags: Record<string, string>, nearCoast: boolean): number {
+// Esportate solo per il test — DTREK-AUDIT.md P2 #21: le soglie di classifyTrailScore erano
+// tarate su un solo caso reale ("Nera Montoro", vedi il commento su classifyTrailScore sotto),
+// generalizzabilità mai verificata contro un dataset più ampio. Nessuna chiamata Overpass reale
+// possibile da questo sandbox (egress bloccato dalla policy di rete), quindi questi helper puri
+// sono verificati contro un set di profili di tag OSM sintetici ma realistici (convenzioni CAI
+// italiane: sac_scale, trail_visibility, osmc:symbol) — amplia la copertura oltre il singolo caso
+// aneddotico, non sostituisce una verifica contro dati Overpass reali.
+export function scoreWayTags(tags: Record<string, string>, nearCoast: boolean): number {
   let s = 0
   if (tags.sac_scale) s += 60
   if (tags.trail_visibility) s += TRAIL_VISIBILITY_BONUS[tags.trail_visibility] ?? 20
@@ -143,7 +149,7 @@ function pointInBbox(lat: number, lon: number, [minLat, minLon, maxLat, maxLon]:
   return lat >= minLat && lat <= maxLat && lon >= minLon && lon <= maxLon
 }
 
-function scoreProtectedAreas(lat: number, lon: number, areas: ProtectedArea[]): number {
+export function scoreProtectedAreas(lat: number, lon: number, areas: ProtectedArea[]): number {
   let best = 0
   for (const a of areas) {
     if (pointInBbox(lat, lon, a.bbox)) best = Math.max(best, PROTECTED_AREA_BONUS[a.tier])
@@ -155,7 +161,7 @@ export interface PoiPoint { lat: number; lon: number }
 
 const POI_PROXIMITY_CAP = 20
 
-function scorePoiProximity(lat: number, lon: number, pois: PoiPoint[]): number {
+export function scorePoiProximity(lat: number, lon: number, pois: PoiPoint[]): number {
   let s = 0
   for (const p of pois) {
     const d = haversineM(lat, lon, p.lat, p.lon)
@@ -200,14 +206,14 @@ const ASPHALT_SURFACES = new Set([
 // abitato (vedi isNearSettlement), non applicato da solo.
 const URBAN_STREET_NAME_RE = /\b(via|viale|piazza|corso|vicolo|largo)\b/i
 
-function isUrbanTransferWay(tags: Record<string, string>, isNearSettlement: boolean): boolean {
+export function isUrbanTransferWay(tags: Record<string, string>, isNearSettlement: boolean): boolean {
   if (!isNearSettlement) return false
   if (tags.highway === 'footway' || tags.highway === 'pedestrian') return true
   if (tags.name && URBAN_STREET_NAME_RE.test(tags.name)) return true
   return false
 }
 
-function computeUrbanPenalty(tags: Record<string, string>, isNearSettlement: boolean): number {
+export function computeUrbanPenalty(tags: Record<string, string>, isNearSettlement: boolean): number {
   let penalty = 0
   if (isNearSettlement) {
     if (tags.highway === 'footway') penalty -= 20
@@ -473,6 +479,12 @@ function withTimeout<T>(p: PromiseLike<T>, ms: number): Promise<T> {
 
 async function fetchRawHikingDataCached(bbox: Bbox): Promise<RawHikingData> {
   const bboxKey = normalizeBboxKey(bboxStr(bbox))
+  // Import dinamico, non statico in cima al file — DTREK-AUDIT.md P2 #21: lib/supabase.ts legge
+  // le env var al momento dell'import e lancia se mancano (createClient('', '')), il che rendeva
+  // impossibile importare questo modulo puro (classifyTrailScore/scoreWayTags/...) da un test
+  // senza credenziali reali — stesso principio già adottato altrove nel repo per i moduli
+  // pure+I/O misti in questo file.
+  const { supabase } = await import('@/lib/supabase')
 
   const { data: cached } = await withTimeout(
     supabase
