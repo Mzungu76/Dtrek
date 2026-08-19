@@ -1724,8 +1724,14 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
     setCurrentAlt(pts[0].altitudeMeters??0)
     let minLon=pts[0].lon!,maxLon=pts[0].lon!,minLat=pts[0].lat!,maxLat=pts[0].lat!
     for(const p of pts){if(p.lon!<minLon)minLon=p.lon!;if(p.lon!>maxLon)maxLon=p.lon!;if(p.lat!<minLat)minLat=p.lat!;if(p.lat!>maxLat)maxLat=p.lat!}
-    const map=new (maplibregl.Map as any)({container:containerRef.current!,style:STYLES[0].url(),
-      center:[(minLon+maxLon)/2,(minLat+maxLat)/2],zoom:11,pitch:55,bearing:0,antialias:true,preserveDrawingBuffer:true}) as MLMap
+    // DTREK-AUDIT.md P2 #33 — in MapLibre 5 `antialias`/`preserveDrawingBuffer` non sono più
+    // opzioni di primo livello di MapOptions (spostate sotto `canvasContextAttributes`): passarle
+    // qui fuori veniva silenziosamente ignorato (il cast ad `any` nascondeva l'errore TS che lo
+    // avrebbe segnalato), e senza preserveDrawingBuffer il canvas WebGL può risultare vuoto/nero
+    // al momento di handleCapture()'s toDataURL(), dopo il primo repaint del browser.
+    const map=new maplibregl.Map({container:containerRef.current!,style:STYLES[0].url(),
+      center:[(minLon+maxLon)/2,(minLat+maxLat)/2],zoom:11,pitch:55,bearing:0,
+      canvasContextAttributes:{antialias:true,preserveDrawingBuffer:true}}) as MLMap
     mapRef.current=map
 
     map.on('load',()=>{
