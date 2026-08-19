@@ -1,6 +1,6 @@
 'use client'
 import { useState } from 'react'
-import { X, Pause, Play, MapPin, BookOpen, Camera, NotebookPen, Square, Sun, Contrast } from 'lucide-react'
+import { X, Pause, Play, MapPin, BookOpen, Camera, NotebookPen, Square, Sun, Contrast, MessageCircle } from 'lucide-react'
 import type { TrackPoint } from '@/lib/tcxParser'
 import ElevationProfileChart from '@/components/ElevationProfileChart'
 import type { PaceStatus } from '@/lib/navigation/paceAssistant'
@@ -44,6 +44,11 @@ interface Props {
    *  interruttore manuale, stesso principio di wakeLockEnabled sopra. */
   highContrastEnabled: boolean
   onToggleHighContrast: () => void
+  /** DTREK-AUDIT.md P4 #38 — indipendente da speechEnabled (InstructionBanner.tsx): quello è il
+   *  master, spegne tutto. Questo spegne solo la narrazione POI/Giulia, lasciando parlare gli
+   *  avvisi operativi (fuori percorso, GPS assente, batteria scarica...). */
+  narrationEnabled: boolean
+  onToggleNarration: () => void
 }
 
 const PACE_STATUS_STYLE: Record<PaceStatus, { label: string; className: string }> = {
@@ -78,6 +83,7 @@ export default function NavStatsSheet({
   paceStatus, daylightMarginMin,
   timerRunning, onTogglePlayPause, onStop, trackPoints, currentDistanceM, remainingPois, guideExcerpts,
   onOpenFoto, onOpenNota, wakeLockEnabled, onToggleWakeLock, highContrastEnabled, onToggleHighContrast,
+  narrationEnabled, onToggleNarration,
 }: Props) {
   const [tab, setTab] = useState<Tab>('tempi')
   useModalBackHandler(open, onClose)
@@ -215,6 +221,25 @@ export default function NavStatsSheet({
                 aria-label="Modalità alto contrasto per sole forte durante la navigazione"
               >
                 <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${highContrastEnabled ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+              </span>
+            </button>
+            {/* DTREK-AUDIT.md P4 #38 — separato dall'interruttore vocale generale (nella barra
+               istruzioni): quello silenzia anche gli avvisi di sicurezza, questo solo la
+               narrazione POI/Giulia — la parte "in più", non gli avvisi operativi. */}
+            <button
+              onClick={onToggleNarration}
+              className="w-full flex items-center justify-between gap-2 mt-3 pt-3 border-t border-stone-100"
+            >
+              <span className="flex items-center gap-2 text-sm text-stone-700 font-body">
+                <MessageCircle className="w-4 h-4 text-stone-400" /> Narrazione POI e Giulia
+              </span>
+              <span
+                className={`relative w-10 h-6 rounded-full transition-colors ${narrationEnabled ? 'bg-forest-500' : 'bg-stone-300'}`}
+                role="switch"
+                aria-checked={narrationEnabled}
+                aria-label="Narrazione vocale di punti di interesse e momenti raccontati durante la navigazione"
+              >
+                <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${narrationEnabled ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
               </span>
             </button>
           </div>

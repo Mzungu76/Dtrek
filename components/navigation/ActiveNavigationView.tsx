@@ -67,6 +67,7 @@ import NavLayerRail from './NavLayerRail'
 import ParkingSpotControl from './ParkingSpotControl'
 import { buildSlopeSegments } from '@/lib/navigation/routeSlopeSegments'
 import { readHighContrastPref, writeHighContrastPref } from '@/lib/navigation/highContrastPref'
+import { readNarrationPref, writeNarrationPref } from '@/lib/navigation/narrationPref'
 import { hasSeenNavOnboarding, markNavOnboardingSeen } from '@/lib/navigation/navOnboardingPref'
 import NavOnboardingSheet from './NavOnboardingSheet'
 import ConfirmEndDialog from './ConfirmEndDialog'
@@ -164,6 +165,16 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   // localStorage al primo render) e allineato alla preferenza salvata subito dopo il mount, sotto.
   const [highContrastEnabled, setHighContrastEnabled] = useState(false)
   useEffect(() => { setHighContrastEnabled(readHighContrastPref()) }, [])
+  // DTREK-AUDIT.md P4 #38 — stesso motivo di highContrastEnabled sopra: inizializzato al valore
+  // di sempre (true, narrazione attiva) per il primo render SSR-safe, allineato alla preferenza
+  // salvata subito dopo il mount.
+  const [narrationEnabled, setNarrationEnabled] = useState(true)
+  const narrationEnabledRef = useRef(true)
+  useEffect(() => {
+    const pref = readNarrationPref()
+    setNarrationEnabled(pref)
+    narrationEnabledRef.current = pref
+  }, [])
   // DTREK-AUDIT.md P2 #26 — mostrato una sola volta per dispositivo, all'avvio della prima
   // navigazione attiva mai fatta: prima che SOS/vie d'uscita/layer possano servire davvero, non
   // dopo. Riapribile in ogni momento dal pulsante "?" nella rotaia azioni (vedi sotto).
@@ -523,15 +534,21 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         const note = poiNotesByIdRef.current.get(Number(poi.id))
         const extract = note ?? wiki?.extract
         setCallout({ title: poi.name ?? 'Punto di interesse', extract, imageUrl: wiki?.thumbnail })
-        speakIfEnabled(`${poi.name ?? 'Sei vicino a un punto di interesse'}. ${extract ?? ''}`.trim())
-        haptics.notify()
+        // DTREK-AUDIT.md P4 #38 — narrazione (voce+aptico), non un avviso operativo: la scheda
+        // visiva (setCallout sopra) resta comunque, solo il "di più" sonoro è disattivabile.
+        if (narrationEnabledRef.current) {
+          speakIfEnabled(`${poi.name ?? 'Sei vicino a un punto di interesse'}. ${extract ?? ''}`.trim())
+          haptics.notify()
+        }
       })
       engine.on('momentReached', ({ moment }) => {
         if (cancelled) return
         logEvent('moment_reached', { momentId: moment.id, kind: moment.kind })
         setCallout({ title: 'Giulia', extract: moment.text })
-        speakIfEnabled(moment.text)
-        haptics.notify()
+        if (narrationEnabledRef.current) {
+          speakIfEnabled(moment.text)
+          haptics.notify()
+        }
       })
       engine.on('offRoute', ({ distanceToRouteM, bearingToRouteDeg }) => {
         if (cancelled) return
@@ -1449,6 +1466,13 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         onToggleWakeLock={() => setWakeLockEnabled((v) => !v)}
         highContrastEnabled={highContrastEnabled}
         onToggleHighContrast={() => setHighContrastEnabled((v) => { const next = !v; writeHighContrastPref(next); return next })}
+        narrationEnabled={narrationEnabled}
+        onToggleNarration={() => setNarrationEnabled((v) => {
+          const next = !v
+          narrationEnabledRef.current = next
+          writeNarrationPref(next)
+          return next
+        })}
       />
 
       {callout && (

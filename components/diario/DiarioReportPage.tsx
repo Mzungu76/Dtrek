@@ -98,7 +98,8 @@ function PhotoPicker({ photos, selected, onChange }: {
                 <button key={ph.id} onClick={() => toggle(ph.id)} title={ph.caption || 'Foto'}
                   style={{ position: 'relative', padding: 0, border: 'none', background: 'none', cursor: 'pointer', lineHeight: 0 }}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={ph.url} alt="" style={{
+                  {/* DTREK-AUDIT.md P3 #35 */}
+                  <img src={ph.thumbUrl ?? ph.url} alt="" style={{
                     width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: 6,
                     outline: on ? '2px solid #e08d3c' : '1px solid #dcd8cc',
                     opacity: on ? 1 : 0.45,
@@ -237,7 +238,8 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
   const progress = useMemo(() => tp.length > 1 ? trackPointsProgress(tp) : [], [tp])
   const photoMarkers = useMemo(() => photos
     .filter(p => typeof p.progress === 'number')
-    .map(p => ({ progress: p.progress, url: p.url })), [photos])
+    // DTREK-AUDIT.md P3 #35 — marker da 26px nel grafico (ProgressChart.tsx), non serve la foto intera
+    .map(p => ({ progress: p.progress, url: p.thumbUrl ?? p.url })), [photos])
 
   const altitudeSeries = useMemo(() => tp
     .map((p, i) => p.altitudeMeters !== undefined ? { progress: progress[i], value: p.altitudeMeters } : null)

@@ -207,7 +207,8 @@ export default function PhotoPlacementMap({
                         : 'border-stone-200 bg-white hover:border-amber-200'
                     }`}>
                     <div className="relative">
-                      <img src={ph.url} alt={ph.caption}
+                      {/* DTREK-AUDIT.md P3 #35 */}
+                      <img src={ph.thumbUrl ?? ph.url} alt={ph.caption}
                         className="w-16 h-16 object-cover rounded-lg" />
                       <span className="absolute -top-1.5 -left-1.5 w-5 h-5 bg-amber-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center font-display">
                         {i + 1}

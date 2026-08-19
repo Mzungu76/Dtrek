@@ -18,6 +18,9 @@ function rowToPhoto(row: Record<string, unknown>) {
     lat:        row.lat as number | undefined,
     lon:        row.lon as number | undefined,
     updatedAt:  row.updated_at as string | undefined,
+    // DTREK-AUDIT.md P3 #35 — assente (NULL) sulle foto caricate prima di questa fix; i
+    // chiamanti ricadono su url in quel caso, non su un errore.
+    thumbUrl:   row.thumb_url as string | undefined,
   }
 }
 
@@ -61,6 +64,7 @@ export async function POST(req: NextRequest) {
       hasExifGps?: boolean
       lat?: number
       lon?: number
+      thumbUrl?: string
     }
     if (!body.id || !body.activityId || !body.url || !body.storagePath) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -88,6 +92,7 @@ export async function POST(req: NextRequest) {
         has_exif_gps: body.hasExifGps ?? false,
         lat:          body.lat ?? null,
         lon:          body.lon ?? null,
+        thumb_url:    body.thumbUrl ?? null,
       }, { onConflict: 'id' })
 
     if (error) throw error
@@ -158,7 +163,13 @@ export async function DELETE(req: NextRequest) {
     if (error) throw error
 
     if (row?.storage_path) {
-      await supabase.storage.from(BUCKET).remove([row.storage_path as string])
+      const storagePath = row.storage_path as string
+      // DTREK-AUDIT.md P3 #35 — uploadPhotoBlob (lib/activityPhotos.ts) carica la miniatura sotto
+      // lo stesso percorso con suffisso "-thumb" prima dell'estensione; senza rimuoverla qui
+      // resterebbe orfana nello Storage a ogni foto eliminata. remove() ignora i path inesistenti,
+      // quindi è sicuro includerlo anche per le foto pre-fix che non hanno mai avuto una miniatura.
+      const thumbPath = storagePath.replace(/(\.[^./]+)$/, '-thumb$1')
+      await supabase.storage.from(BUCKET).remove([storagePath, thumbPath])
     }
 
     return NextResponse.json({ ok: true })

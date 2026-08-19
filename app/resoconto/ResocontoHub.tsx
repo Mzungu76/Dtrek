@@ -663,7 +663,8 @@ export default function ResocontoHub({ id }: { id?: string }) {
               {photos.map(ph => (
                 <button key={ph.id} onClick={() => setCover(ph.id)}
                   className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-colors ${coverPhotoId === ph.id ? 'border-forest-500' : 'border-stone-200 hover:border-forest-300'}`}>
-                  <Image src={ph.url} alt={ph.caption ?? ''} fill sizes="120px" className="object-cover" />
+                  {/* DTREK-AUDIT.md P3 #35 */}
+                  <Image src={ph.thumbUrl ?? ph.url} alt={ph.caption ?? ''} fill sizes="120px" className="object-cover" />
                 </button>
               ))}
             </div>

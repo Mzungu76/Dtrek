@@ -109,3 +109,14 @@ body {
   /* Force two-column body text (md: breakpoint won't fire at ~680px A4 width) */
   .print-columns-2 { columns: 2; column-gap: 2rem; }
 }
+
+/* DTREK-AUDIT.md P3 #37 (B45) — le pagine `.diario-page` (app/diario/page.tsx) sono un riquadro
+   fisso da 794px, cioè la larghezza di un A4 a 96 CSS px/pollice: già disegnate per riempire
+   l'intera pagina da bordo a bordo, margine incluso nel proprio layout interno. Il margine
+   `@page` sopra (1.5cm) è pensato per contenuti normali (testo scorrevole), non per queste — sommato
+   ai loro 794px fissi, la stampa nativa (Ctrl+P) doveva o rimpicciolire (shrink-to-fit) o tagliare i
+   bordi. Una regola `@page` nominata, applicata solo a `.diario-page` via la proprietà `page`,
+   azzera il margine solo lì senza toccare `@page` per il resto del sito (export PDF via
+   HiddenPdfRoot.tsx resta un percorso separato, non tocca questa regola). */
+.diario-page { page: diario; }
+@page diario { size: A4; margin: 0; }
