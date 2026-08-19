@@ -1,8 +1,9 @@
 'use client'
-import { useState } from 'react'
-import { AlertOctagon, Phone, MessageSquareText, MapPin, Radio } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { AlertOctagon, Phone, MessageSquareText, MapPin, Radio, SignalHigh, SignalLow, SignalZero } from 'lucide-react'
 import Sheet from '@/components/ui/Sheet'
 import { buildEmergencyCallLink, buildEmergencySmsLink, formatCoordinatesForDisplay, type EmergencyFix } from '@/lib/navigation/sos'
+import { readConnectionQuality, watchConnectionQuality, type ConnectionQuality } from '@/lib/navigation/connectionQuality'
 
 interface Props {
   /** Letta direttamente dallo stato di posizione già in memoria (nessuna chiamata di rete) —
@@ -20,8 +21,22 @@ interface Props {
  * decrescente, non equivalenti: chiamata (garantita in UE), SMS (best-effort, non ovunque),
  * coordinate a schermo (sempre disponibili, nessuna azione richiesta), link live (extra).
  */
+// DTREK-AUDIT.md P2 #28 — segnale live (non predittivo), non un giudizio, quindi neutro invece di
+// allarmante quando è 'sconosciuta' (browser senza Network Information API, es. Safari/iOS).
+const QUALITY_STYLE: Record<ConnectionQuality, { Icon: typeof SignalHigh; label: string; className: string }> = {
+  buona: { Icon: SignalHigh, label: 'Segnale dati buono in questo momento', className: 'text-emerald-700' },
+  debole: { Icon: SignalLow, label: 'Segnale dati debole in questo momento — la chiamata può comunque funzionare anche senza dati', className: 'text-amber-700' },
+  sconosciuta: { Icon: SignalZero, label: 'Qualità del segnale non rilevabile su questo dispositivo', className: 'text-stone-400' },
+}
+
 export default function SosButton({ fix, liveShareUrl, onTriggered }: Props) {
   const [open, setOpen] = useState(false)
+  const [connectionQuality, setConnectionQuality] = useState<ConnectionQuality>('sconosciuta')
+
+  useEffect(() => {
+    setConnectionQuality(readConnectionQuality())
+    return watchConnectionQuality(setConnectionQuality)
+  }, [])
 
   return (
     <>
@@ -38,6 +53,19 @@ export default function SosButton({ fix, liveShareUrl, onTriggered }: Props) {
 
       <Sheet open={open} onClose={() => setOpen(false)} title="Emergenza">
         <div className="space-y-3">
+          {/* DTREK-AUDIT.md P2 #28 — segnale live del dispositivo, mai una previsione di
+              copertura lungo il percorso (nessun dataset disponibile per quello): risponde solo
+              a "adesso, qui, come va il segnale", non a "avrò campo più avanti". */}
+          {(() => {
+            const { Icon, label, className } = QUALITY_STYLE[connectionQuality]
+            return (
+              <div className={`flex items-center gap-2 text-xs ${className}`}>
+                <Icon className="w-3.5 h-3.5 shrink-0" />
+                <span>{label}</span>
+              </div>
+            )
+          })()}
+
           <a
             href={buildEmergencyCallLink()}
             onClick={() => onTriggered?.('call')}

@@ -20,7 +20,30 @@ export interface SpeakOptions {
   lang?: string
 }
 
-interface QueueItem { text: string; lang: string }
+interface QueueItem { text: string; lang: string; queuedAt: number }
+
+// DTREK-AUDIT.md P2 #25 — la coda `normal` (POI/momenti) non aveva limite né scadenza: in un
+// tratto denso di POI si accumulavano annunci che l'escursionista sentiva minuti dopo essere già
+// passato oltre, sempre più "in ritardo" rispetto alla propria posizione reale. Due correttivi
+// indipendenti, entrambi puri e testabili senza il Web Speech API reale:
+// - MAX_QUEUE_SIZE: quando un nuovo avviso arriva a coda piena, scarta il più VECCHIO (il meno
+//   rilevante alla posizione attuale, non il più nuovo) per fargli posto.
+// - MAX_QUEUE_AGE_MS: un avviso rimasto in coda troppo a lungo (l'escursionista si è mosso ben
+//   oltre il contesto a cui si riferiva) viene saltato invece di essere pronunciato comunque.
+export const MAX_QUEUE_SIZE = 3
+export const MAX_QUEUE_AGE_MS = 60_000
+
+/** Pura — scarta gli elementi più vecchi in eccesso rispetto a maxSize, mantenendo i più recenti. */
+export function trimQueueOverflow<T>(queue: T[], maxSize: number): T[] {
+  return queue.length <= maxSize ? queue : queue.slice(queue.length - maxSize)
+}
+
+/** Pura — scarta dalla TESTA della coda ogni elemento più vecchio di maxAgeMs rispetto a `now`. */
+export function dropStaleQueueHead(queue: QueueItem[], now: number, maxAgeMs: number): QueueItem[] {
+  let i = 0
+  while (i < queue.length && now - queue[i].queuedAt > maxAgeMs) i++
+  return i === 0 ? queue : queue.slice(i)
+}
 
 let queue: QueueItem[] = []
 let speaking = false
@@ -35,6 +58,7 @@ export function isSpeechSupported(): boolean {
 
 function playNext(): void {
   currentUtterance = null
+  queue = dropStaleQueueHead(queue, Date.now(), MAX_QUEUE_AGE_MS)
   if (queue.length === 0) { speaking = false; return }
   const item = queue.shift()!
   speaking = true
@@ -54,7 +78,7 @@ export function speak(text: string, options: SpeakOptions = {}): void {
   if (priority === 'critical') {
     currentUtterance = null
     window.speechSynthesis.cancel()
-    queue = [{ text, lang }]
+    queue = [{ text, lang, queuedAt: Date.now() }]
     speaking = false
     playNext()
     return
@@ -63,7 +87,8 @@ export function speak(text: string, options: SpeakOptions = {}): void {
   // Dedup: lo stesso testo già in coda (o già in corso) non viene riaccodato — evita, ad
   // esempio, tre avvisi identici di svolta ravvicinati che finirebbero tutti in coda.
   if (currentUtterance?.text === text || queue.some((item) => item.text === text)) return
-  queue.push({ text, lang })
+  queue.push({ text, lang, queuedAt: Date.now() })
+  queue = trimQueueOverflow(queue, MAX_QUEUE_SIZE)
   if (!speaking) playNext()
 }
 

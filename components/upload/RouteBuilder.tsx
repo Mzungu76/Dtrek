@@ -24,6 +24,7 @@ import { resolvePlaceClientFirst } from '@/lib/routeBuilder/resolvePlaceClient'
 import type { SearchResultCandidate } from '@/app/api/route-search/route'
 import type { FoundRouteResult } from '@/app/api/route-build/search/route'
 import type { FoundRouteItem, ResolvedTrack } from '@/lib/routeBuilder/foundRoute'
+import { isComfortVerdictStale } from '@/lib/routeBuilder/foundRoute'
 import { classifyTrackShape } from '@/lib/geoUtils'
 import {
   MIN_TARGET_DISTANCE_KM, MAX_TARGET_DISTANCE_KM, MIN_BUILT_RESULTS, RETRY_DISTANCE_FACTORS,
@@ -556,6 +557,10 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
             name: c.name, zone: c.zone, difficulty: c.difficulty, description: c.description,
             sourceUrl: c.sourceUrl ?? undefined, comfortVerdict: c.comfortVerdict, comfortNote: c.comfortNote,
             osmId: c.osmId ?? undefined, track,
+            // DTREK-AUDIT.md P2 #23 — preservati per isComfortVerdictStale: i numeri su cui
+            // comfortVerdict/comfortNote si basano sono una stima dell'LLM dal web, non ancora
+            // verificata contro `track` (già risolto qui via OSM/DTM reale).
+            estimatedDistanceKm: c.distanceKm, estimatedElevationGainM: c.elevationGainM,
           },
         })
         continue
@@ -681,7 +686,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       if (hasDestination) {
         raw = destRawCandidates ?? []
       } else {
-        const cRes = await postJSON('/api/route-build/step/candidates', { bbox, startNodeIds, routeType, targetDistanceM: distanceM })
+        const cRes = await postJSON('/api/route-build/step/candidates', { bbox, startNodeIds, routeType, targetDistanceM: distanceM, concerns })
         if (!cRes.ok) return { candidates: [], errorMessage: silent ? null : (cRes.data.message || cRes.data.error) }
         raw = cRes.data.rawCandidates ?? []
       }
@@ -1483,6 +1488,15 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     const foundData = selected.kind === 'found' ? selected.data : null
     const builtData = selected.kind === 'built' ? selected.data : null
     const vs = foundData?.comfortVerdict ? verdictStyle(foundData.comfortVerdict) : null
+    // DTREK-AUDIT.md P2 #23 — il verdetto/nota è stato generato dall'LLM sui numeri stimati dal
+    // web, ora che `foundData.track` porta i numeri reali (OSM/DTM) potrebbero non corrispondere
+    // più a quella valutazione.
+    const comfortVerdictStale = foundData
+      ? isComfortVerdictStale(
+          { distanceKm: foundData.estimatedDistanceKm, elevationGainM: foundData.estimatedElevationGainM },
+          { distanceMeters: foundData.track.distanceMeters, elevationGain: foundData.track.elevationGain, hasElevation: foundData.track.hasElevation },
+        )
+      : false
 
     return (
       <>
@@ -1568,6 +1582,11 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
                   <div>
                     <p className="font-semibold">{vs.label}</p>
                     {foundData.comfortNote && <p className="mt-0.5 text-xs opacity-90">{foundData.comfortNote}</p>}
+                    {comfortVerdictStale && (
+                      <p className="mt-1 text-xs opacity-90 italic">
+                        Valutazione basata su una stima iniziale — i numeri reali qui sopra sono diversi, potrebbe non essere più accurata.
+                      </p>
+                    )}
                   </div>
                 </div>
               )}

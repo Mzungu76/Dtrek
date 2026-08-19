@@ -74,7 +74,7 @@ function downsampleTracks(pts: TrackPoint[], max = 400): TrackPoint[] {
  * su quel nodo concatenerebbe TUTTE le lingue senza separatore ("SI Z17SI Z17SI Z17..."), quindi se
  * <name> ha elementi figli si prende solo l'italiano (o il primo disponibile), mai la concatenazione.
  */
-function extractGpxTitle(nameEl: Element | null): string {
+export function extractGpxTitle(nameEl: Element | null): string {
   if (!nameEl) return ''
   if (nameEl.children.length > 0) {
     const itChild = nameEl.querySelector('it')

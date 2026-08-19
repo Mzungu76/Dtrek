@@ -13,7 +13,8 @@
 // target — la geometria (bearing) serve solo a scegliere candidati in direzioni diverse tra loro,
 // mai a decidere se un nodo è raggiungibile.
 import { haversineM } from '@/lib/geoUtils'
-import { nearestGraphNode, type WalkNetwork } from './osmGraph'
+import { nearestGraphNode, type WalkNetwork, type GraphEdge } from './osmGraph'
+import type { HikerConcernKey } from '@/lib/hikerProfile'
 
 // Tolleranza sulla lunghezza target: un candidato la cui lunghezza reale si discosta oltre questa
 // percentuale dal target richiesto viene scartato — meglio pochi candidati affidabili che uno
@@ -131,14 +132,43 @@ interface DijkstraResult {
   prev: Map<number, number>
 }
 
+// DTREK-AUDIT.md P2 #22 — il Dijkstra minimizzava solo la distanza: nessun costo per scalini/
+// terreno tecnico nel routing stesso, solo una penalità a valle sul punteggio finale (e solo se
+// l'utente aveva già dichiarato preoccupazioni tipo vertigini/terreno instabile) — un percorso
+// poteva quindi comunque VENIRE SCELTO attraverso una scalinata o un tratto SAC T3+ anche per un
+// utente che aveva dichiarato di volerli evitare, se quello era il percorso più corto, e la
+// penalità a valle si limitava a farlo apparire con un punteggio più basso tra gli altri candidati
+// già generati — mai a impedire che il pathfinding lo scegliesse quando un'alternativa più lunga
+// ma più semplice esisteva. Corretto SOLO quando l'utente ha dichiarato preoccupazioni pertinenti
+// (mai un cambiamento di comportamento per chi non le ha dichiarate, stesso principio "attivo solo
+// su segnale esplicito" già usato per concernsPenalty/stepsPenalty in scoreCandidates.ts) —
+// nessun dato di pendenza è disponibile a questo livello (il grafo non porta l'elevazione dei
+// nodi al momento del routing), quindi il proxy è lo stesso segnale già disponibile sull'arco:
+// scala SAC (T3+, terreno tecnico/esposto) e scalini (highway=steps).
+const STEPS_COST_MULTIPLIER = 3
+const EXPOSED_SAC_COST_MULTIPLIER = 2
+
+// Esportata solo per il test.
+export function terrainCostMultiplier(edge: GraphEdge, concerns: HikerConcernKey[]): number {
+  if (concerns.length === 0) return 1
+  const avoidsSteps = concerns.includes('vertigini') || concerns.includes('terreno_instabile') || concerns.includes('orientamento')
+  const avoidsExposed = concerns.includes('vertigini') || concerns.includes('salite_ripide') || concerns.includes('terreno_instabile')
+  let mult = 1
+  if (avoidsSteps && edge.highway === 'steps') mult *= STEPS_COST_MULTIPLIER
+  if (avoidsExposed && edge.sacScale && EXPOSED_SAC_SCALES.has(edge.sacScale)) mult *= EXPOSED_SAC_COST_MULTIPLIER
+  return mult
+}
+
 /**
  * Dijkstra a sorgente singola verso TUTTA la rete raggiungibile (non si ferma a un nodo target) —
  * usato sia per mappare le distanze reali da cui scegliere i candidati, sia per il tratto di
  * ritorno di un anello. `penalizedEdges`, se presente, moltiplica il costo (non la distanza reale)
  * degli archi già usati in un altro tratto, per preferire un percorso diverso senza escluderlo del
- * tutto se è l'unica via.
+ * tutto se è l'unica via. `concerns`, se presente e non vuoto, applica lo stesso principio a
+ * scalini/terreno tecnico (vedi terrainCostMultiplier sopra) — il costo cresce, il percorso non
+ * viene mai escluso del tutto se è l'unica via percorribile.
  */
-function dijkstraAll(network: WalkNetwork, startId: number, penalizedEdges?: Set<string>): DijkstraResult {
+function dijkstraAll(network: WalkNetwork, startId: number, penalizedEdges?: Set<string>, concerns: HikerConcernKey[] = []): DijkstraResult {
   const dist = new Map<number, number>([[startId, 0]])
   const prev = new Map<number, number>()
   const visited = new Set<number>()
@@ -155,7 +185,8 @@ function dijkstraAll(network: WalkNetwork, startId: number, penalizedEdges?: Set
     for (const edge of node.edges) {
       if (visited.has(edge.to)) continue
       const penalty = penalizedEdges?.has(edgeKey(cur.nodeId, edge.to)) ? REUSED_EDGE_PENALTY : 1
-      const cost = (dist.get(cur.nodeId) ?? Infinity) + edge.distM * penalty
+      const terrainMult = terrainCostMultiplier(edge, concerns)
+      const cost = (dist.get(cur.nodeId) ?? Infinity) + edge.distM * penalty * terrainMult
       if (cost < (dist.get(edge.to) ?? Infinity)) {
         dist.set(edge.to, cost)
         prev.set(edge.to, cur.nodeId)
@@ -314,11 +345,12 @@ export function generateOutAndBackCandidates(
   startNodeId: number,
   targetDistanceM: number,
   maxCandidates = 14,
+  concerns: HikerConcernKey[] = [],
 ): RouteCandidate[] {
   const start = network.nodes.get(startNodeId)
   if (!start) return []
 
-  const { dist, prev } = dijkstraAll(network, startNodeId)
+  const { dist, prev } = dijkstraAll(network, startNodeId, undefined, concerns)
   logReachDiagnostics(dist, network.nodes.size, targetDistanceM / 2)
   const picked = pickCandidateNodesByDirection(network, start, dist, targetDistanceM / 2, maxCandidates)
 
@@ -345,11 +377,12 @@ export function generateOneWayCandidates(
   startNodeId: number,
   targetDistanceM: number,
   maxCandidates = 14,
+  concerns: HikerConcernKey[] = [],
 ): RouteCandidate[] {
   const start = network.nodes.get(startNodeId)
   if (!start) return []
 
-  const { dist, prev } = dijkstraAll(network, startNodeId)
+  const { dist, prev } = dijkstraAll(network, startNodeId, undefined, concerns)
   logReachDiagnostics(dist, network.nodes.size, targetDistanceM)
   const picked = pickCandidateNodesByDirection(network, start, dist, targetDistanceM, maxCandidates)
 
@@ -372,11 +405,12 @@ export function generateLoopCandidates(
   startNodeId: number,
   targetDistanceM: number,
   maxCandidates = 14,
+  concerns: HikerConcernKey[] = [],
 ): RouteCandidate[] {
   const start = network.nodes.get(startNodeId)
   if (!start) return []
 
-  const { dist, prev } = dijkstraAll(network, startNodeId)
+  const { dist, prev } = dijkstraAll(network, startNodeId, undefined, concerns)
   logReachDiagnostics(dist, network.nodes.size, targetDistanceM / 2)
   // Più candidati grezzi del necessario: per un anello il tratto di ritorno (via diversa) può
   // allungare il totale oltre tolleranza anche quando l'andata era ben piazzata, quindi conviene
@@ -391,7 +425,7 @@ export function generateLoopCandidates(
     const usedEdges = new Set<string>()
     for (let i = 0; i < outPath.length - 1; i++) usedEdges.add(edgeKey(outPath[i], outPath[i + 1]))
 
-    const { prev: backPrev } = dijkstraAll(network, farNodeId, usedEdges)
+    const { prev: backPrev } = dijkstraAll(network, farNodeId, usedEdges, concerns)
     const backPath = reconstructPath(backPrev, farNodeId, startNodeId)
     if (!backPath) continue
 
@@ -428,6 +462,7 @@ export function generateOutAndBackToPoint(
   destLon: number,
   snapThresholdM = DESTINATION_SNAP_THRESHOLD_M,
   oneWay = false,
+  concerns: HikerConcernKey[] = [],
 ): RouteCandidate | null {
   const start = network.nodes.get(startNodeId)
   if (!start) return null
@@ -435,7 +470,7 @@ export function generateOutAndBackToPoint(
   const destNode = nearestGraphNode(network, destLat, destLon, snapThresholdM)
   if (!destNode) return null
 
-  const { prev } = dijkstraAll(network, startNodeId)
+  const { prev } = dijkstraAll(network, startNodeId, undefined, concerns)
   const outPath = reconstructPath(prev, startNodeId, destNode.nodeId)
   if (!outPath) return null
 

@@ -272,12 +272,22 @@ export function computeEscapeOptions(input: EscapeEngineInput): EscapeOption[] {
     if (bestPoi) {
       const { poi, distM } = bestPoi
       const isHut = poi.type === 'hut'
+      const kindLabel = poi.name ?? (isHut ? 'Rifugio' : poi.type === 'bivouac' ? 'Bivacco' : 'Riparo')
+      // DTREK-AUDIT.md P2 #24 — mai più "punto di appoggio sicuro" incondizionato: OSM copre bene
+      // DOVE si trova un rifugio/bivacco, quasi mai SE è aperto adesso (docs/rifugi-progettazione.md
+      // — una fonte gestionale dedicata, non ancora integrata, servirebbe per saperlo davvero). Il
+      // tag opening_hours grezzo, quando OSM lo porta, viene mostrato così com'è (nessuna
+      // interpretazione della sintassi, complessa e fuori scope qui) invece di essere ignorato;
+      // altrimenti il testo dichiara esplicitamente che l'apertura non è verificata.
+      const openingNote = poi.openingHours
+        ? ` Orari indicati su OpenStreetMap: ${poi.openingHours} — verifica comunque prima di contarci.`
+        : ' Apertura non verificata: non è detto sia raggiungibile o presidiato.'
       options.push({
         kind: 'safe_poi',
         label: poi.name ? `Raggiungi ${poi.name}` : 'Raggiungi un punto di appoggio',
         distanceM: distM,
         safety: isHut ? safetyForDistance(distM, 1200, 2200) : safetyForDistance(distM, 600, 1500),
-        reason: `${poi.name ?? (isHut ? 'Rifugio' : poi.type === 'bivouac' ? 'Bivacco' : 'Riparo')} nelle vicinanze, a circa ${Math.round(distM)} m in linea d'aria — punto di appoggio sicuro.`,
+        reason: `${kindLabel} nelle vicinanze, a circa ${Math.round(distM)} m in linea d'aria.${openingNote}`,
         bearingDeg: bearingDeg(currentLat, currentLon, poi.lat, poi.lon),
         targetLat: poi.lat,
         targetLon: poi.lon,

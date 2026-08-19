@@ -91,14 +91,15 @@ export function parseBuildRequestBody(raw: unknown): BuildRequestBody {
 // sia da app/api/route-build/step/candidates/route.ts (i ritentativi con lunghezza alternativa).
 export function generateRawCandidatesForLength(
   network: WalkNetwork, startNodeId: number, routeType: RouteType, distanceM: number,
+  concerns: ReturnType<typeof sanitizeHikerConcerns> = [],
 ): RouteCandidate[] {
   switch (routeType) {
     case 'anello':
-      return generateLoopCandidates(network, startNodeId, distanceM)
+      return generateLoopCandidates(network, startNodeId, distanceM, 14, concerns)
     case 'solo_andata':
-      return generateOneWayCandidates(network, startNodeId, distanceM)
+      return generateOneWayCandidates(network, startNodeId, distanceM, 14, concerns)
     default:
-      return generateOutAndBackCandidates(network, startNodeId, distanceM)
+      return generateOutAndBackCandidates(network, startNodeId, distanceM, 14, concerns)
   }
 }
 
@@ -146,8 +147,9 @@ function collectFreeAnchors(
 // esclude altre solo per essere stata esplorata per prima.
 export function generateRawCandidatesForAnchors(
   network: WalkNetwork, startNodeIds: number[], routeType: RouteType, distanceM: number, maxCandidates = 14,
+  concerns: ReturnType<typeof sanitizeHikerConcerns> = [],
 ): RouteCandidate[] {
-  const all = startNodeIds.flatMap(id => generateRawCandidatesForLength(network, id, routeType, distanceM))
+  const all = startNodeIds.flatMap(id => generateRawCandidatesForLength(network, id, routeType, distanceM, concerns))
   return all
     .sort((a, b) => Math.abs(a.distanceM - distanceM) - Math.abs(b.distanceM - distanceM))
     .slice(0, maxCandidates)
@@ -257,7 +259,7 @@ export async function prepareNetworkStep(
   if (hasDestination) {
     const destinationCandidate = generateOutAndBackToPoint(
       network, startNodeIds[0], params.destinationLat!, params.destinationLon!,
-      undefined, params.routeType === 'solo_andata',
+      undefined, params.routeType === 'solo_andata', concerns,
     )
     if (!destinationCandidate) {
       return {

@@ -24,6 +24,27 @@ const LON_RE = /lon="([^"]+)"/i
 const ELE_RE = /<ele[^>]*>([^<]*)<\/ele>/i
 const TIME_RE = /<time[^>]*>([^<]*)<\/time>/i
 const NAME_RE = /<trk>[\s\S]*?<name>([^<]*)<\/name>/i
+// DTREK-AUDIT.md P2 #27 — alcuni GPX (es. le esportazioni "togpx" del Sentiero Italia CAI, vedi
+// lib/gpxParser.ts's extractGpxTitle) usano <name> con un figlio per lingua invece di un testo
+// diretto: <name><it>SI Z17</it><en>SI Z17</en>...</name>. NAME_RE sopra (nessun tag annidato
+// ammesso, [^<]*) semplicemente non fa match in quel caso — non concatena come farebbe un
+// .textContent DOM, ma produce comunque un titolo vuoto invece del testo reale disponibile.
+const NAME_IT_CHILD_RE = /<trk>[\s\S]*?<name>\s*<it[^>]*>([^<]*)<\/it>/i
+const NAME_ANY_CHILD_RE = /<trk>[\s\S]*?<name>\s*<(\w+)[^>]*>([^<]*)<\/\1>/i
+
+/**
+ * Pura — stessa gerarchia di lib/gpxParser.ts's extractGpxTitle, via regex invece di DOM (questo
+ * modulo gira lato server, senza DOMParser): testo diretto se <name> non ha figli, altrimenti il
+ * figlio <it> o il primo figlio disponibile — mai la concatenazione di tutte le lingue.
+ */
+export function extractServerGpxTitle(xmlText: string): string {
+  const direct = NAME_RE.exec(xmlText)
+  if (direct?.[1]?.trim()) return direct[1].trim()
+  const itChild = NAME_IT_CHILD_RE.exec(xmlText)
+  if (itChild?.[1]?.trim()) return itChild[1].trim()
+  const anyChild = NAME_ANY_CHILD_RE.exec(xmlText)
+  return anyChild?.[2]?.trim() ?? ''
+}
 
 // Stesso schema di lib/gpxParser.ts's downsampleTracks — mantiene leggero il payload/cache.
 function downsample(pts: TrackPoint[], max = 400): TrackPoint[] {
@@ -75,10 +96,8 @@ export function parseGpxServerSide(xmlText: string): ServerParsedGpx | null {
   const distKm = distanceMeters / 1000
   const estimatedTimeSeconds = Math.round((distKm / 4 + elevationGain / 300) * 3600)
 
-  const nameM = NAME_RE.exec(xmlText)
-
   return {
-    title: nameM?.[1]?.trim() || '',
+    title: extractServerGpxTitle(xmlText),
     distanceMeters: Math.round(distanceMeters),
     elevationGain: Math.round(elevationGain),
     elevationLoss: Math.round(elevationLoss),

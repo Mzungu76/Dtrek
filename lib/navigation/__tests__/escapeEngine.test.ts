@@ -127,4 +127,38 @@ describe('computeEscapeOptions', () => {
     expect(trail.reason).toContain('dislivello')
     expect(trail.safety).toBe('media') // 'alta' declassata di un livello per pendenza (~1333 m/km > 150 m/km)
   })
+
+  // DTREK-AUDIT.md P2 #24 — un rifugio/bivacco non deve mai essere dichiarato "punto di appoggio
+  // sicuro" senza sapere se è davvero aperto: OSM copre bene dove si trova, quasi mai se è aperto
+  // adesso (docs/rifugi-progettazione.md). opening_hours grezzo, quando OSM lo porta, va mostrato
+  // così com'è; altrimenti il motivo deve dire esplicitamente che l'apertura non è verificata.
+  describe('safe_poi — apertura mai data per scontata (P2 #24)', () => {
+    it('mai più "sicuro" incondizionato: senza opening_hours il motivo dichiara che l\'apertura non è verificata', () => {
+      const input: EscapeEngineInput = {
+        network: null, routePolyline, currentLat: CURRENT_LAT, currentLon: CURRENT_LON, progress, pois: [safePoi],
+      }
+      const poi = computeEscapeOptions(input).find((o) => o.kind === 'safe_poi')!
+      expect(poi.reason).not.toContain('punto di appoggio sicuro')
+      expect(poi.reason).toContain('non verificata')
+    })
+
+    it('con opening_hours presente su OSM, il motivo lo riporta invece di ignorarlo', () => {
+      const poiWithHours: NavPoi = { ...safePoi, openingHours: 'Jun-Sep' }
+      const input: EscapeEngineInput = {
+        network: null, routePolyline, currentLat: CURRENT_LAT, currentLon: CURRENT_LON, progress, pois: [poiWithHours],
+      }
+      const poi = computeEscapeOptions(input).find((o) => o.kind === 'safe_poi')!
+      expect(poi.reason).toContain('Jun-Sep')
+      expect(poi.reason).toContain('verifica comunque')
+    })
+
+    it('con opening_hours presente, il motivo non dichiara più "apertura non verificata" (i due testi sono mutuamente esclusivi)', () => {
+      const poiWithHours: NavPoi = { ...safePoi, openingHours: 'Jun-Sep' }
+      const input: EscapeEngineInput = {
+        network: null, routePolyline, currentLat: CURRENT_LAT, currentLon: CURRENT_LON, progress, pois: [poiWithHours],
+      }
+      const poi = computeEscapeOptions(input).find((o) => o.kind === 'safe_poi')!
+      expect(poi.reason).not.toContain('non verificata')
+    })
+  })
 })

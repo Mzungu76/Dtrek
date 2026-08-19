@@ -200,7 +200,7 @@ async function executeBuild(
   let rawCandidates = prepOutcome.prep.rawCandidates
 
   if (!hasDestination) {
-    rawCandidates = generateRawCandidatesForAnchors(network, startNodeIds, params.routeType, targetDistanceM)
+    rawCandidates = generateRawCandidatesForAnchors(network, startNodeIds, params.routeType, targetDistanceM, 14, concerns)
   }
 
   console.log(`[route-build] candidati grezzi entro tolleranza: ${rawCandidates.length}`)
@@ -247,7 +247,7 @@ async function executeBuild(
       const seen = new Set(candidates.map(candidateSignature))
       const altBatches = await Promise.all(RETRY_DISTANCE_FACTORS.map(async factor => {
         const altDistanceM = Math.min(Math.max(targetDistanceM * factor, MIN_TARGET_DISTANCE_KM * 1000), MAX_TARGET_DISTANCE_KM * 1000)
-        const altRaw = generateRawCandidatesForAnchors(network, startNodeIds, params.routeType, altDistanceM)
+        const altRaw = generateRawCandidatesForAnchors(network, startNodeIds, params.routeType, altDistanceM, 14, concerns)
         if (altRaw.length === 0) return [] as ScoredCandidate[]
         try {
           // Il punteggio resta ancorato all'obiettivo originale, non alla lunghezza del

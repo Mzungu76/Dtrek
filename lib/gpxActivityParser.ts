@@ -1,6 +1,7 @@
 import type { TrackPoint, TcxActivity } from './tcxParser'
 import { computeMovingStats, computeIEV } from './tcxParser'
 import { arrayMax, arrayMin } from './arrayMinMax'
+import { extractGpxTitle } from './gpxParser'
 
 function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371000
@@ -24,8 +25,11 @@ export function parseGpxActivity(xmlText: string): TcxActivity {
   const doc = new DOMParser().parseFromString(xmlText, 'application/xml')
   if (doc.querySelector('parsererror')) throw new Error('File GPX non valido')
 
+  // DTREK-AUDIT.md P2 #27 — usava .textContent diretto, mai extractGpxTitle: un GPX con <name>
+  // multilingua (<name><it>...</it><en>...</en></name>, es. le esportazioni "togpx" del Sentiero
+  // Italia CAI) concatenava tutte le lingue senza separatore invece di prendere solo l'italiano.
   const nameEl = doc.querySelector('trk > name') ?? doc.querySelector('name')
-  const notes = nameEl?.textContent?.trim() || 'Escursione'
+  const notes = extractGpxTitle(nameEl) || 'Escursione'
 
   const trkptEls = Array.from(doc.querySelectorAll('trkpt'))
   if (trkptEls.length === 0) throw new Error('Nessun punto GPS trovato nel file GPX')
