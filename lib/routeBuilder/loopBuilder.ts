@@ -58,6 +58,19 @@ export interface RouteCandidate {
   // scalinata dell'intero bbox di ricerca, anche a km di distanza dal tracciato, contro OGNI punto
   // del percorso entro 20m, risultando quasi sempre vero in una zona con molti borghi/scalinate).
   hasSteps: boolean
+  // DTREK-AUDIT.md P0 #10 — tratti esposti (scala SAC T4+) e guadi EFFETTIVAMENTE percorsi dal
+  // pathfinding, dagli archi reali — stesso principio/stessa fonte dati di hasSteps sopra (vedi
+  // pathHazardMarkers), non un'euristica separata. Prima di questo fix un percorso costruito dal
+  // Route Builder non aveva mai un solo difficultyMarker, a differenza di uno importato da GPX.
+  hazardMarkers: HazardMarker[]
+}
+
+export interface HazardMarker {
+  lat: number
+  lon: number
+  kind: 'exposed' | 'ford'
+  text: string
+  sacScale?: string
 }
 
 function bearingFromStart(start: { lat: number; lon: number }, node: { lat: number; lon: number }): number {
@@ -198,6 +211,40 @@ function pathHasSteps(network: WalkNetwork, path: number[]): boolean {
   return false
 }
 
+// DTREK-AUDIT.md P0 #10 — mirror di pathHasSteps sopra: stessa fonte (archi EFFETTIVAMENTE
+// percorsi dal pathfinding, vedi osmGraph.ts's GraphEdge.sacScale/ford), zero costo aggiuntivo.
+// Soglia T4+ (alpine_hiking e oltre): T1-T3 sono escursionismo ordinario, non "esposto" nel senso
+// di questo P0 — coerente con SAC_SCALE_HAZARD di lib/safetyScore.ts, dove T4 è già il primo
+// gradino "hazard" significativo (30/100, contro 60+ di T1-T3).
+const EXPOSED_SAC_SCALES = new Set(['T4', 'T5', 'T6'])
+
+// Esportata (a differenza di pathHasSteps sopra) per essere testata direttamente su un grafo di
+// fixture minimale — stesso principio già seguito per computeLiveStatus/summarizeClosureReports/
+// refineSafetyWithTerrainSignals nei P0 precedenti: la logica nuova di un fix guadagna un test
+// diretto, senza dover ricostruire un intero Dijkstra reale solo per esercitarla.
+export function pathHazardMarkers(network: WalkNetwork, path: number[]): HazardMarker[] {
+  const markers: HazardMarker[] = []
+  for (let i = 0; i < path.length - 1; i++) {
+    const node = network.nodes.get(path[i])
+    const edge = node?.edges.find(e => e.to === path[i + 1])
+    const to = network.nodes.get(path[i + 1])
+    if (!edge || !to) continue
+    if (edge.ford) {
+      markers.push({
+        lat: to.lat, lon: to.lon, kind: 'ford',
+        text: 'Guado — attraversamento di un corso d\'acqua, verifica il livello prima di procedere',
+      })
+    }
+    if (edge.sacScale && EXPOSED_SAC_SCALES.has(edge.sacScale)) {
+      markers.push({
+        lat: to.lat, lon: to.lon, kind: 'exposed', sacScale: edge.sacScale,
+        text: `Tratto tecnico/esposto — scala di difficoltà escursionistica (SAC) ${edge.sacScale} rilevata sul tracciato`,
+      })
+    }
+  }
+  return markers
+}
+
 function nodeSetOverlap(a: Set<number>, b: Set<number>): number {
   let shared = 0
   const [small, big] = a.size <= b.size ? [a, b] : [b, a]
@@ -283,7 +330,7 @@ export function generateOutAndBackCandidates(
     const fullPath = [...outPath, ...backPath]
     const polyline = pathToPolyline(network, fullPath)
     const bearingDeg = bearingFromStart(start, network.nodes.get(nodeId)!)
-    candidates.push({ type: 'andata_ritorno', polyline, distanceM: oneWayM * 2, bearingDeg, hasSteps: pathHasSteps(network, fullPath), nodeSet: new Set(outPath) })
+    candidates.push({ type: 'andata_ritorno', polyline, distanceM: oneWayM * 2, bearingDeg, hasSteps: pathHasSteps(network, fullPath), hazardMarkers: pathHazardMarkers(network, fullPath), nodeSet: new Set(outPath) })
   }
 
   candidates.sort((a, b) => Math.abs(a.distanceM - targetDistanceM) - Math.abs(b.distanceM - targetDistanceM))
@@ -312,7 +359,7 @@ export function generateOneWayCandidates(
     if (!outPath) continue
     const polyline = pathToPolyline(network, outPath)
     const bearingDeg = bearingFromStart(start, network.nodes.get(nodeId)!)
-    candidates.push({ type: 'solo_andata', polyline, distanceM, bearingDeg, hasSteps: pathHasSteps(network, outPath), nodeSet: new Set(outPath) })
+    candidates.push({ type: 'solo_andata', polyline, distanceM, bearingDeg, hasSteps: pathHasSteps(network, outPath), hazardMarkers: pathHazardMarkers(network, outPath), nodeSet: new Set(outPath) })
   }
 
   candidates.sort((a, b) => Math.abs(a.distanceM - targetDistanceM) - Math.abs(b.distanceM - targetDistanceM))
@@ -354,7 +401,7 @@ export function generateLoopCandidates(
 
     const polyline = pathToPolyline(network, fullPath)
     const bearingDeg = bearingFromStart(start, network.nodes.get(farNodeId)!)
-    candidates.push({ type: 'anello', polyline, distanceM, bearingDeg, hasSteps: pathHasSteps(network, fullPath), nodeSet: new Set(fullPath) })
+    candidates.push({ type: 'anello', polyline, distanceM, bearingDeg, hasSteps: pathHasSteps(network, fullPath), hazardMarkers: pathHazardMarkers(network, fullPath), nodeSet: new Set(fullPath) })
   }
 
   candidates.sort((a, b) => Math.abs(a.distanceM - targetDistanceM) - Math.abs(b.distanceM - targetDistanceM))
@@ -396,7 +443,7 @@ export function generateOutAndBackToPoint(
   if (oneWay) {
     return {
       type: 'solo_andata', polyline: pathToPolyline(network, outPath), distanceM: pathDistanceM(network, outPath),
-      bearingDeg, hasSteps: pathHasSteps(network, outPath),
+      bearingDeg, hasSteps: pathHasSteps(network, outPath), hazardMarkers: pathHazardMarkers(network, outPath),
     }
   }
 
@@ -405,5 +452,5 @@ export function generateOutAndBackToPoint(
   const polyline = pathToPolyline(network, fullPath)
   const distanceM = pathDistanceM(network, outPath) * 2
 
-  return { type: 'andata_ritorno', polyline, distanceM, bearingDeg, hasSteps: pathHasSteps(network, fullPath) }
+  return { type: 'andata_ritorno', polyline, distanceM, bearingDeg, hasSteps: pathHasSteps(network, fullPath), hazardMarkers: pathHazardMarkers(network, fullPath) }
 }

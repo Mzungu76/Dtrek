@@ -8,7 +8,7 @@ import { getUserFromRequestDetailed } from '@/lib/supabaseAuth'
 import { scoreAndEnrichCandidates } from '@/lib/routeBuilder/scoreCandidates'
 import { sanitizeHikerConcerns, sanitizeHikerEnvironmentPrefs } from '@/lib/hikerProfile'
 import { POI_META, type PoiType } from '@/lib/overpass'
-import type { RouteCandidate } from '@/lib/routeBuilder/loopBuilder'
+import type { RouteCandidate, HazardMarker } from '@/lib/routeBuilder/loopBuilder'
 import { ENRICH_CAP } from '@/lib/routeBuilder/buildConstants'
 
 export const dynamic = 'force-dynamic'
@@ -27,6 +27,31 @@ interface EnrichRequestBody {
   bbox: [number, number, number, number]
 }
 
+const VALID_HAZARD_KINDS = new Set(['exposed', 'ford'])
+
+// DTREK-AUDIT.md P0 #10 — hazardMarkers arriva dallo step precedente via il client (stesso confine
+// di fiducia già attraversato da tutti gli altri campi di RouteCandidate qui sotto, validato campo
+// per campo invece di un cast cieco). Un elemento malformato viene scartato singolarmente, non
+// invalida l'intero candidato.
+function parseHazardMarkers(raw: unknown): HazardMarker[] {
+  if (!Array.isArray(raw)) return []
+  const out: HazardMarker[] = []
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue
+    const m = item as Record<string, unknown>
+    const lat = Number(m.lat)
+    const lon = Number(m.lon)
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue
+    if (!VALID_HAZARD_KINDS.has(m.kind as string)) continue
+    if (typeof m.text !== 'string' || !m.text) continue
+    out.push({
+      lat, lon, kind: m.kind as HazardMarker['kind'], text: m.text,
+      sacScale: typeof m.sacScale === 'string' ? m.sacScale : undefined,
+    })
+  }
+  return out
+}
+
 function parseCandidate(raw: unknown): RouteCandidate | null {
   if (!raw || typeof raw !== 'object') return null
   const c = raw as Record<string, unknown>
@@ -35,7 +60,10 @@ function parseCandidate(raw: unknown): RouteCandidate | null {
   const distanceM = Number(c.distanceM)
   const bearingDeg = Number(c.bearingDeg)
   if (!Number.isFinite(distanceM) || !Number.isFinite(bearingDeg)) return null
-  return { type: c.type as RouteCandidate['type'], polyline: c.polyline as [number, number][], distanceM, bearingDeg, hasSteps: c.hasSteps === true }
+  return {
+    type: c.type as RouteCandidate['type'], polyline: c.polyline as [number, number][], distanceM, bearingDeg,
+    hasSteps: c.hasSteps === true, hazardMarkers: parseHazardMarkers(c.hazardMarkers),
+  }
 }
 
 function parseBody(raw: unknown): EnrichRequestBody {

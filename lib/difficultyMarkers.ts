@@ -10,7 +10,11 @@ export interface DifficultyMarkerCandidate {
   lat: number
   lon: number
   text: string
-  source: 'gpx_waypoint' | 'gpx_track_cmt'
+  // 'osm_way' — DTREK-AUDIT.md P0 #10: tratto esposto (scala SAC T4+) o guado, rilevato dagli
+  // stessi tag OSM già percorsi dal pathfinding del Route Builder, non da testo GPX importato —
+  // vedi lib/routeBuilder/loopBuilder.ts's pathHazardMarkers. Già classificato a monte (severity
+  // nota dalla soglia SAC/dal tipo di tag), non passa da classifyDifficultyText sotto.
+  source: 'gpx_waypoint' | 'gpx_track_cmt' | 'osm_way'
 }
 
 export interface ClassifiedDifficultyMarker extends DifficultyMarkerCandidate {

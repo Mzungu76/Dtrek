@@ -12,7 +12,7 @@ import type { HikerConcernKey, HikerEnvironmentPrefKey } from '@/lib/hikerProfil
 import { DtmUnavailableError } from '@/lib/dtm/dtmClient'
 import { computeProvisionalScore, type ProvisionalScore } from './provisionalScore'
 import { naismithHours } from '@/lib/trailScore'
-import type { RouteCandidate } from './loopBuilder'
+import type { RouteCandidate, HazardMarker } from './loopBuilder'
 
 // Quanti POI (i più vicini al tracciato) portare con sé nel risultato — per l'anteprima grafica
 // nella scheda risultato (componenti/upload/RouteBuilder.tsx), non serve l'elenco completo.
@@ -40,6 +40,9 @@ export interface ScoredCandidate {
   // Stima leggera (vedi provisionalScore.ts) — sempre presente, va mostrata con l'etichetta
   // "Provvisorio", mai come il punteggio definitivo (quello arriva solo dopo l'importazione).
   provisionalScore: ProvisionalScore
+  // DTREK-AUDIT.md P0 #10 — propagato invariato da RouteCandidate.hazardMarkers (loopBuilder.ts),
+  // nessun effetto su scoring/matchNote, stesso trattamento "solo dati da propagare" di `pois`.
+  hazardMarkers: HazardMarker[]
 }
 
 // NOTA su 'ombra' (HIKER_ENVIRONMENT_PREFS): deliberatamente non punteggiata in questo giro.
@@ -227,6 +230,7 @@ export async function scoreAndEnrichCandidates(
       hasSteepSections,
       pois: topPois,
       hasElevation: false,
+      hazardMarkers: candidate.hazardMarkers,
       provisionalScore: computeProvisionalScore({
         routePolyline: candidate.polyline,
         trackPoints: enrichedTrack.trackPoints,
