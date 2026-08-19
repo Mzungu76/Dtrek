@@ -1,16 +1,17 @@
 # DTREK — UX, Usability & Information Architecture Audit
 
-**Data**: 2026-08-19
+**Data**: 2026-08-19 (aggiornato con evidenza visiva reale lo stesso giorno)
 **Metodo**: lettura diretta del codice sorgente (route Next.js, componenti, testi UI reali, commenti
-architetturali) e dei documenti di progetto (`README.md`, `docs/navigator-dtrek-boundary.md`).
-**Limite dichiarato**: questa sessione non ha un ambiente con credenziali Supabase/Anthropic
-funzionanti per avviare l'app dal vivo su un dispositivo reale — non sono stati acquisiti screenshot
-di un runtime in esecuzione. L'analisi di gerarchia visiva, mobile UX e comportamento a runtime è
-quindi ricostruita leggendo con attenzione markup, classi Tailwind, stati e logica dei componenti (che
-sono espliciti e ben commentati) piuttosto che osservata su schermo. Dove la fonte è solo codice e non
-osservazione diretta, è segnalato esplicitamente. Questo è un audit **separato** da quello funzionale
-(`DTREK-AUDIT.md`), che valuta se le funzioni esistono e funzionano — qui la domanda è se l'utente le
-capisce, le trova, e le usa senza attrito.
+architetturali) e dei documenti di progetto (`README.md`, `docs/navigator-dtrek-boundary.md`), **integrata
+con 37 screenshot reali forniti dall'utente** — un giro completo di Bacheca, Guida (dettaglio percorso
+"Camposecco"), Resoconto (dettaglio "Faggeta del Cimino"), Diario (copertina, indice, statistiche,
+pagine-resoconto), Profilo, e l'app nativa DTrek Navigator (home mappa, menu, elenco percorsi, import,
+registrazione libera, navigazione attiva). Dove un rilievo è confermato da uno screenshot è segnalato
+come **CONFERMATO**; dove resta dedotto dal solo codice (nessuno screenshot disponibile per quell'area
+— tipicamente Impostazioni, Statistiche standalone, Vette, Percorsi-per-te) resta segnalato come
+**da codice**. Questo è un audit **separato** da quello funzionale (`DTREK-AUDIT.md`), che valuta se le
+funzioni esistono e funzionano — qui la domanda è se l'utente le capisce, le trova, e le usa senza
+attrito.
 
 ---
 
@@ -35,9 +36,16 @@ apre un libro impaginato di ricordi, non un diario da scrivere.
 
 Il problema più grande non è la mancanza di funzionalità — ce ne sono moltissime, spesso ben progettate
 singolarmente — ma la **mancanza di una gerarchia esplicita che dica all'utente dove comincia il suo
-compito**. Punteggio complessivo stimato: **5.5/10** — un prodotto potente con un'architettura
-informativa che richiede tempo di apprendimento sproporzionato rispetto alla sua natura (un'app da
-usare *durante* un'escursione, spesso con attenzione e connettività limitate).
+compito**. Gli screenshot reali confermano questa diagnosi e ne aggiungono una seconda, altrettanto
+seria: la **schermata di navigazione attiva** di DTrek Navigator (§11) — il momento in cui l'utente sta
+davvero camminando sul sentiero — è la più densa e sovraccarica di controlli di tutta l'app: fino a 12
+icone solo-icona impilate ai bordi dello schermo e due avvisi importanti (fauna selvatica, luce
+insufficiente per rientrare) mostrati sovrapposti nello stesso istante, proprio nel momento in cui la
+chiarezza conta di più. Punteggio complessivo aggiornato: **5.2/10** — un prodotto potente con
+un'architettura informativa che richiede tempo di apprendimento sproporzionato rispetto alla sua natura
+(un'app da usare *durante* un'escursione, spesso con attenzione e connettività limitate), e con un
+momento d'uso critico (la navigazione reale) meno curato del resto dell'app dal punto di vista del
+sovraccarico visivo.
 
 ---
 
@@ -261,7 +269,7 @@ DTREK (app web, dietro paywall/trial dopo import iniziale)
 | "Continuare una navigazione interrotta" | Dentro la mappa/navigazione stessa | Non emerge un punto esplicito di ripresa nella UI esaminata: si riparte da "pronto per la navigazione" in Navigator, ma non è chiaro se riprenda la sessione o la ricrei | Sì — punto critico non risolto visibilmente in superficie |
 | "Foto scattate durante un'escursione" | Dentro il resoconto di quell'escursione | Sì, dentro Resoconto/Diario (`activityPhotos`) — corretto | No |
 | "Analizzare un GPX" | Un'area "importa e analizza" | Si ottiene analizzandolo *implicitamente* durante l'import in Guide (Trail/Safety/Beauty Score) — nessuna sezione "analisi" a sé stante nominata come tale | Parziale — funziona ma non ha un nome proprio nella UI |
-| "Prepararsi per usarlo offline" | Un bottone "Scarica offline" visibile sul percorso | Esiste un pacchetto offline (POI notes, trailGraphStore) ma non è emerso nella UI esplorata un controllo esplicito e ben visibile "Rendi disponibile offline" nella scheda del percorso | Da verificare — se nascosto, è un problema di discoverability grave per un'app outdoor |
+| "Prepararsi per usarlo offline" | Un bottone "Scarica offline" visibile sul percorso | **CONFERMATO da screenshot**: un'icona di download esiste, ma solo nell'elenco "Percorsi pianificati" **di Navigator** — non è mai comparsa negli screenshot della sezione "Guide" di Dtrek web | Sì — chi pianifica da Dtrek (probabilmente la maggioranza, essendo dove si crea/valuta un percorso) non vede questa opzione finché non apre anche Navigator |
 
 **In quattro casi su sei la risposta non è univoca o non è ovvia** — soglia superata per dichiarare un
 problema di architettura secondo il criterio richiesto ("se esistono più risposte plausibili, segnalare
@@ -275,11 +283,13 @@ un problema").
 |---|---|---|---|---|
 | 1 | **Bacheca** vs **Statistiche** (`/statistiche`) | Stessi dati (recovery, streak, grafici), presentazione diversa (fullscreen/foto vs. pagina bianca classica); Bacheca stessa linka a "Tutte le statistiche" | Diverse nell'uso (Bacheca = digest curato "di oggi"; Statistiche = archivio completo esplorabile) ma il nome "Bacheca" non comunica affatto questa relazione | Rinominare concettualmente: Bacheca dovrebbe presentarsi come "digest" con un titolo/hint esplicito ("Riepilogo di oggi"), e il link a Statistiche va reso più prominente, non un'unica tile tra tante |
 | 2 | **Resoconti** vs **Diario** | Entrambi collezioni della stessa entità (escursioni concluse raccontate); un utente non sa quale aprire per "rivedere l'ultima gita" | Diverse per formato di output (galleria interattiva vs. libro stampabile/condivisibile) — distinzione reale ma non dichiarata in UI | Nella UI, "Diario" dovrebbe presentarsi esplicitamente come "il tuo libro/PDF" e "Resoconti" come "sfoglia le tue escursioni" — oggi sono solo due nomi vicini nel tab bar |
-| 3 | **"Naviga adesso" / "Avvia navigazione ora" / "Registra senza pianificazione"** | Tre etichette diverse (`app/upload/page.tsx:68`, stesso file, e `NavigatorMenu.tsx:89`) per una traccia GPS libera senza percorso pre-pianificato | Sembrano essere la STESSA funzione (`/navigatore/traccia`) raggiunta da tre punti con tre nomi | Unificare l'etichetta ovunque, es. sempre "Traccia libera" |
+| 3 | **"Naviga adesso" / "Avvia navigazione ora" / "Registra senza pianificazione" / "Registra un percorso"** | **CONFERMATO da screenshot**: quattro etichette diverse per la stessa funzione di traccia GPS libera — le prime due lato Dtrek web (`app/upload/page.tsx:68`), la terza è la voce di menu in Navigator, la quarta è il titolo della stessa schermata una volta aperta da Navigator (screenshot "Registra un percorso") | Sembrano essere la STESSA funzione (`/navigatore/traccia`) raggiunta da quattro punti con quattro nomi diversi | Unificare l'etichetta ovunque, es. sempre "Traccia libera" |
 | 4 | **Tre modalità di import GPX** (File / Manuale / Da diario esistente) sotto un'unica tab "gpx" | Nessuna guida su quale scegliere; "Manuale" e "Da diario esistente" nel contesto "crea una guida" non sono spiegate | Sì, realmente diverse (fonte del tracciato) | Aggiungere una riga descrittiva sotto ciascuna delle tre opzioni, non solo l'icona+etichetta |
 | 5 | **Percorsi pianificati** (Dtrek, in Guide) vs **Percorsi pianificati** (Navigator, stesso nome nel menu) | Stesso nome esatto, stesso dato sincronizzato, ma due interfacce e due limiti diversi (Navigator ha tetto di percorsi "pronti", Dtrek no) | No — è (giustamente) lo stesso dato, ma l'utente non sa che aprirlo da un'app o dall'altra ha conseguenze diverse (limite raggiunto) | Il tetto di Navigator andrebbe comunicato preventivamente da dentro Dtrek quando si crea un percorso, non scoperto solo aprendo Navigator |
 | 6 | **Ricerche salvate** e **Log ricerche** (`/profilo/ricerche-salvate`, `/profilo/log-ricerche`) | Due sistemi di "memoria di ricerca" separati, nessuna spiegazione della differenza (salvate = preferite? log = cronologia automatica?) | Presumibilmente sì (una è intenzionale, una automatica) ma il nome da solo non lo dice, e nessuna delle due è raggiungibile dal punto in cui si effettua una ricerca | Etichettare esplicitamente "Ricerche salvate (preferite)" vs "Cronologia ricerche (automatica)"; linkarle da dove si cerca |
 | 7 | **Badge Premium/trial** (gioiello) presente su: avatar Navbar, header Profilo, foto profilo Impostazioni, card prezzi, banner trial | Stesso significato ovunque (coerente!) ma la ripetizione in 5+ punti aumenta la sensazione di "vendita" pervasiva in un'app che l'utente percepiva come diario personale | Non una vera ridondanza funzionale — è intenzionale e ben documentata (`docs/navigator-dtrek-boundary.md`, sessione 13) | Nessuna azione necessaria: la coerenza qui è un punto di forza, non un difetto — segnalato solo perché rientra nel criterio "stesso elemento in più punti" |
+| 8 | **CONFERMATO da screenshot**: "Andamento" (foto in sequenza), "Punti di interesse" (mappa+2 POI) e "Galleria fotografica" (mappa+15 pin numerati) nella stessa pagina di Resoconto | Tre sezioni consecutive mostrano versioni diverse della stessa relazione foto↔posizione lungo il tracciato, senza che i nomi comunichino la differenza | Parzialmente — "Punti di interesse" mostra i POI esterni (rifugi, vette), "Galleria" mostra le foto proprie dell'utente: distinzione reale ma non ovvia dai soli titoli | Chiarire nei sottotitoli la differenza (es. "Punti di interesse — luoghi notevoli lungo il percorso" vs "Galleria fotografica — le tue foto sulla mappa") |
+| 9 | **CONFERMATO da screenshot**: l'anello "Voto" (1-10, soggettivo) e l'anello "Comfort TrailScore"/CTS (0-100, calcolato) nella stessa pagina di Resoconto | Stesso trattamento visivo (anello colorato + etichetta "NELLA MEDIA") per un numero che l'utente ha scelto e uno che l'app ha calcolato | Sì, concetti diversi (opinione personale vs. punteggio oggettivo) | Differenziare visivamente i due anelli (stile/colore/forma) o etichettarli in modo che la differenza salti all'occhio anche senza leggere il testo piccolo |
 
 ---
 
@@ -327,35 +337,68 @@ persistente (non un tab).
 
 ---
 
-## 9. Gerarchia visiva (letta dal codice, non osservata a schermo)
+## 9. Gerarchia visiva — CONFERMATO da screenshot reali
 
 Nelle schermate "hub" (Bacheca/Guida/Resoconto), il pattern è coerente: foto/mappa a piena pagina,
 overlay scuro in alto e in basso, titolo enorme (`text-2xl sm:text-4xl font-black uppercase`), pillole
 bianche flottanti per i dati sintetici, filmstrip orizzontale in basso. Questo pattern è ben eseguito
-visivamente (buon contrasto testo/sfondo con `textShadow`, buona gerarchia titolo→sottotitolo→pillole).
+visivamente (buon contrasto testo/sfondo, buona gerarchia titolo→sottotitolo→pillole) — confermato dallo
+screenshot della Bacheca ("BILANCIO FISICO", pillole "In Calo · 4 sett. · 13 km/sett.").
 
-Punti di attrito individuati leggendo il markup:
+Gli screenshot confermano — e rendono più gravi — i punti di attrito già ipotizzati dal codice, più
+alcuni nuovi non deducibili dal solo markup:
 
-- **Densità nella scheda "featured" di Guida**: in `GuidaHub`/`GuideReader` convivono nello stesso
-  scroll: mappa 3D, meteo, POI, flora, fauna, tre punteggi diversi, editing note/titolo, azioni di
-  archiviazione/proroga, export PDF, avviso "Verificato online". Non emerge dal codice una gerarchia
-  esplicita PRIMARY/SECONDARY/TERTIARY dichiarata — le azioni (naviga, esporta, elimina, archivia) sono
-  distribuite in popover/chip di pari peso visivo invece che con un'azione primaria dominante chiara
-  ("Naviga questo percorso" dovrebbe probabilmente essere l'azione visivamente più forte su una guida
-  pronta, ma condivide spazio con chip meteo/data/scadenza).
+- **Densità confermata e più alta del previsto nella scheda di un percorso/resoconto**: aprendo
+  "Camposecco" (Guida) o "Faggeta del Cimino" (Resoconto) lo scroll misura **oltre 10 schermate intere**
+  di contenuto continuo: meteo, punteggio complessivo, mappa interattiva, altimetria, "Verificato
+  online", specie arboree, sapori e tradizioni, consigli finali (Guida) / cronaca, natura e storia, dati
+  e punteggi, FC/velocità/passo, punti di interesse, galleria fotografica, gestione foto (Resoconto). Non
+  esiste una gerarchia PRIMARY/SECONDARY/TERTIARY dichiarata: il bottone "Naviga" resta fisso e ben
+  visibile (punto di forza confermato), ma tutto il resto compete allo stesso livello visivo.
+- **Lo stesso pulsante "Approfondisci con Giulia (AI)" con lo stesso selettore a tre livelli
+  (Essenziale/Approfondita/Molto approfondita) si ripete identico almeno 4 volte nella stessa pagina**
+  (una per sezione: Il percorso, Specie arboree e flora, Sapori e tradizioni, Consigli finali) — per un
+  percorso appena importato, la maggior parte della prima visita mostra la stessa scritta "Testo narrato
+  non ancora generato" ripetuta invece di contenuto. Coerente (stesso controllo, stesso posto), ma
+  amplifica la sensazione di una pagina vuota/da costruire più che di una guida pronta.
+- **Bug di overlap confermato — chip "Voto X/10" fluttuante fisso**: nella pagina di Resoconto un chip
+  "☆ Voto 5/10" resta ancorato in basso a destra per l'intera lunghezza dello scroll e **copre
+  visibilmente testo e grafici sottostanti** — confermato su più schermate: taglia un paragrafo di
+  "Cronaca", si sovrappone al grafico di frequenza cardiaca, copre parzialmente una foto nella galleria.
+  Non è un rischio, è un difetto visibile.
+- **Bug di overlap confermato — rail di 9 icone nel Diario**: le icone fluttuanti fisse ai due lati dello
+  schermo **coprono davvero testo reale** durante lo scroll del libro — confermato: "PER USCITA" tagliato
+  in "R USCITA", il conteggio escursioni sulla copertina reso illeggibile, la legenda della mappa
+  d'insieme tagliata a sinistra, un chip "calorie" tagliato a destra. In più occupano stabilmente ~15-20%
+  della larghezza utile su entrambi i lati per l'intera lettura del libro.
+- **Titolo non troncato/gestito**: un percorso importato con il nome file GPX originale ("Sentiero della
+  Faggeta giro ad anello con partenza da Monte Cimino UNESCO ancient depressed beech forest") viene
+  mostrato per intero, in maiuscolo, su 5 righe, riempiendo l'intera immagine hero e sovrapponendosi a
+  un'icona nell'header — e nell'indice del Diario la stessa voce spezza l'altezza uniforme delle righe
+  della lista rispetto alle altre voci (titoli brevi tipo "Eremo di San Girolamo"). Nessun troncamento,
+  nessun suggerimento di rinominare un titolo anomalo.
+- **Due anelli-punteggio visivamente identici per concetti diversi**: il "Voto" personale (1-10,
+  soggettivo, assegnato dall'utente) e il "Comfort TrailScore"/CTS (0-100, calcolato dall'app) usano lo
+  stesso trattamento visivo — anello colorato + etichetta "NELLA MEDIA" — nella stessa pagina di
+  Resoconto. Un utente può ragionevolmente pensare che siano la stessa cosa espressa in due scale.
+- **Tripla ridondanza mappa+foto numerate sulla stessa pagina di Resoconto**: "Andamento" (foto con
+  badge numerati in sequenza lineare), "Punti di interesse" (mappa con 2 marker POI, che nello screenshot
+  arrivano a sovrapporsi tra loro) e "Galleria fotografica" (un'altra mappa con marker numerati 1-15) sono
+  tre presentazioni diverse di dati in gran parte sovrapponibili (foto + posizione lungo il percorso),
+  senza che il nome delle tre sezioni comunichi la differenza.
 - **Filmstrip come unica lista di navigazione**: sia in Bacheca che in Guida/Resoconto la lista dei
   contenuti è un filmstrip orizzontale scrollabile (`data-hscroll`) — efficiente per lo swipe ma povero
   per la scansione rapida di molti elementi (es. 30+ percorsi pianificati): non emerge ricerca/filtro
-  testuale nella galleria stessa oltre ai filtri per categoria in Bacheca.
+  testuale nella galleria stessa oltre ai filtri per categoria in Bacheca e ai controlli di ordinamento
+  (Data/Km/D+/TS/Distanza, confermati nello screenshot dell'elenco Guide) in fondo alla schermata.
 - **Badge/chip multipli sulla stessa card**: badge punteggio, preferito (stella), "NUOVO" (tile Percorsi
   per te), scadenza pending, tutti co-presenti — rischio di "troppi badge" quando più condizioni sono
   vere insieme (percorso preferito + in scadenza + con punteggio + con avviso "Verificato online").
-- **Icon-only rails nel Diario**: 9 pulsanti solo-icona (nessuna label visibile, solo `title` per
-  hover/tooltip — inutile su touch) distribuiti su due colonne laterali fisse
-  (`app/diario/page.tsx:684-973`). Su mobile, tooltip via `title` non è mai visibile (nessun hover):
-  l'utente deve premere per scoprire cosa fa ogni icona, oppure indovinare dall'icona stessa (Lock,
-  Eye/EyeOff, Archive, FileDown, Share2 — ragionevolmente standard, ma non tutte immediate: "Archive"
-  per "escluse dal diario" richiede un salto interpretativo).
+- **Icon-only ovunque, non solo nel Diario**: oltre alle 9 icone del Diario (Lock, Eye/EyeOff, Archive,
+  FileDown, Share2), ogni singola mappa interattiva (Il percorso, Punti di interesse, Galleria
+  fotografica) mostra **la stessa fila di 5-6 icone solo-icona** (orientamento, direzione, 3D/cubo,
+  centra, espandi, blocca) — confermato identico su tre mappe diverse nella stessa pagina di Resoconto,
+  senza mai un'etichetta testuale.
 
 ---
 
@@ -381,35 +424,77 @@ Osservazioni dal codice (classi Tailwind, `env(safe-area-inset-*)`, gestori touc
 - **Le due navbar diverse** (`Navbar.tsx` per pagine "normali", `HubNavBar` per pagine hub) sono ora
   **la stessa implementazione** dopo il fix — punto risolto, citato qui solo per completezza essendo
   esplicitamente richiesto dal template di verificare la coerenza mobile.
-- **Icon rail del Diario su schermi stretti (360px)**: 5 pulsanti impilati verticalmente per lato,
-  ciascuno con popover che si apre lateralmente (`left-full ml-3` / `right-full mr-3`) — su un viewport
-  di 360px questi popover (larghi fino a `w-72` = 288px) rischiano di uscire dallo schermo o sovrapporsi
-  al centro pagina; non è confermabile senza test reale ma è un rischio concreto vista la matematica
-  (288px di popover + rail su una finestra di 360px lascia margini minimi).
+- **Icon rail del Diario — CONFERMATO da screenshot (non solo un rischio teorico)**: sullo screenshot
+  reale (viewport ~360-390px) le 9 icone fluttuanti ai due lati **coprono visibilmente testo reale**
+  durante lo scroll — non un rischio di overflow dei popover come ipotizzato dal solo codice, ma un
+  difetto già visibile nel caso base (senza nemmeno aprire un popover): "PER USCITA" tagliato in
+  "R USCITA", numeri di copertina illeggibili, legenda mappa tagliata, chip dati tagliati. I popover
+  laterali (`w-72` = 288px) restano un rischio aggiuntivo non ancora verificato.
+- **Schermata di navigazione attiva in Navigator — CONFERMATO da screenshot**: sullo stesso viewport
+  mobile, 12 controlli icon-only più due box di avviso sovrapposti (vedi §11) affollano lo schermo
+  durante il momento d'uso più critico dell'app — il caso di sovraccarico mobile più severo confermato in
+  questo audit.
 
 ---
 
-## 11. La mappa come interfaccia principale
+## 11. La mappa come interfaccia principale — CONFERMATO da screenshot reali, conclusione ribaltata
 
-Nel Navigator (`app/navigatore/page.tsx`), la mappa è correttamente il primo elemento renderizzato
-(`FreeTrackMap` a schermo intero, `fixed inset-0`), con la posizione GPS live avviata immediatamente
-all'apertura. Buona scelta map-first.
+Sette screenshot reali di DTrek Navigator (home, menu, elenco percorsi, import, registrazione libera,
+navigazione attiva) permettono ora una valutazione diretta, non più dedotta dal solo codice — e la
+conclusione cambia rispetto a quanto la sola lettura del codice suggeriva.
 
-Verifica dei cinque elementi richiesti durante la navigazione ("dove sono / dove devo andare / in che
-direzione / quanto manca / cosa devo fare"):
+**Home del Navigator (mappa in attesa)**: confermato un buon design map-first — mappa a schermo intero,
+posizione live, un solo bottone "centra sulla mia posizione", pannello inferiore chiaro "PRONTO PER LA
+NAVIGAZIONE — Camposecco". Il menu (☰) è pulito e testuale (Percorsi pianificati, Importa un percorso,
+Registra senza pianificazione, Apri Dtrek, Esci) — coerente col codice. **Confermato anche un piccolo
+indicatore "Sincronizzazione: 4/5"** in alto sul pannello: buon feedback di stato, anche se il
+significato del rapporto "4/5" non è spiegato lì per lì.
 
-- **Dove sono**: sì, marker di posizione + bearing (`FreeTrackMap`, `bearingDeg`).
-- **Quanto manca / dove devo andare**: non emerge, dalla sola Home del Navigator, alcuna indicazione di
-  progresso lungo il percorso pianificato (distanza residua, ETA) — questi dati esistono altrove
-  nell'app (pillole km/D+/durata nella scheda del percorso) ma non risultano riproposti come overlay
-  live sulla mappa di navigazione dal codice esaminato (`app/guida/[id]/naviga/page.tsx`, non letto
-  interamente per limiti di tempo/token in questa sessione — segnalato come **area da verificare**, non
-  come difetto confermato).
-- **Cosa devo fare**: analogamente da verificare nel dettaglio di `naviga/page.tsx`.
+**Verifica dei cinque elementi richiesti durante la navigazione attiva** ("dove sono / dove devo andare /
+in che direzione / quanto manca / cosa devo fare") — ora confermabile sullo screenshot della navigazione
+in corso:
 
-Il numero di controlli sovrapposti alla mappa nella Home del Navigator è contenuto e ben scelto (menu ☰,
-titolo, eventuale "Apri Dtrek", ricentra, pannello inferiore) — non sovraccarica la mappa. Questo è un
-punto di forza del Navigator rispetto alla densità informativa vista in `GuidaHub`.
+- **Dove sono / direzione**: sì, marker di posizione con freccia di direzione sulla mappa.
+- **Cosa devo fare**: sì, presente un banner istruzione in alto ("Si parte!" con icona di svolta).
+- **Quanto manca**: sì, presente in basso ("0.0 km · arrivo 03:04 · +1104 m").
+
+Le tre informazioni **ci sono davvero** — a differenza di quanto lasciato aperto nella prima stesura di
+questo audit basata solo sul codice. Il problema reale, confermato dallo screenshot, è un altro e più
+serio:
+
+**La schermata di navigazione attiva è la più sovraccarica di controlli di tutta l'app.** Nello
+screenshot della navigazione in corso si contano contemporaneamente:
+- **12 pulsanti solo-icona senza etichetta**, distribuiti su due cluster verticali (9 sulla colonna
+  destra: allerta, layer, velocità/andatura, bussola, segnale, download, auto, aiuto, microfono; 3 sulla
+  colonna sinistra: percorso, posizione, quota/altimetria) — nessuno spiega cosa fa senza premerlo,
+  esattamente il criterio "capirei cosa fa senza premere?" richiesto da questo audit, e qui la risposta è
+  no per la quasi totalità.
+- **Due avvisi sovrapposti nello stesso momento**: un box "Fauna nella zona" (semi-trasparente, in alto)
+  e un box rosso pieno "Luce insufficiente per rientrare — valuta di tornare indietro ora" (al centro,
+  sopra la mappa) — il secondo copre parzialmente il primo cluster di icone a sinistra e parte dei dati
+  quota/distanza sulla mappa sottostante.
+- **La mappa stessa è invasa da decine di etichette numeriche** (quote e distanze dei punti del sentiero,
+  es. "710 m", "1.3 km", "576 m"…) sparse fittamente su tutto lo schermo — la leggibilità della mappa ne
+  risente in modo diretto, proprio nel momento (cammino reale, possibile scarsa attenzione disponibile)
+  in cui dovrebbe essere massima.
+- **Bug di contenuto nell'avviso fauna**: l'elenco recita *"Orso marsicano, Lupo appenninico, Vipera,
+  Ursus arctos, Canis lupus"* — mescola nomi comuni italiani e nomi scientifici latini come voci
+  separate, per quelle che sembrano essere le stesse due specie (Orso marsicano = *Ursus arctos
+  marsicanus*, Lupo appenninico = *Canis lupus italicus*) elencate due volte con nomi diversi. Un avviso
+  di sicurezza che sembra raddoppiare gli animali presenti mina la fiducia proprio nel contenuto più
+  critico da prendere sul serio.
+
+**Conclusione ribaltata rispetto alla versione precedente di questo audit**: la Home del Navigator (in
+attesa, prima di partire) è ben progettata e sobria; la schermata di **navigazione attiva** (durante il
+cammino) è invece il punto più denso e meno leggibile di tutto DTrek — l'opposto di quanto un'app di
+navigazione outdoor dovrebbe offrire nel suo momento d'uso più critico. Vedi P-C3 in §21.
+
+**Confermato anche**: un'icona di download per singolo percorso esiste nell'elenco "Percorsi pianificati"
+di Navigator (in alto a destra su ogni card) — presumibilmente per il pacchetto offline. Risolve il punto
+lasciato aperto in §5/§14 ("prepararsi per l'uso offline"), ma con una precisazione: **questa icona esiste
+solo dentro Navigator**, non è mai apparsa negli screenshot della sezione "Guide" di Dtrek web — un altro
+caso in cui la stessa esigenza (offline) ha una risposta diversa a seconda di quale delle due app si sta
+usando.
 
 ---
 
@@ -481,7 +566,7 @@ Altri rilievi di linguaggio:
 | Vedere le "Vette raggiunte" | **HARD** | Solo dentro Profilo, nessun collegamento da Statistiche/Bacheca dove ci si aspetterebbe un rimando naturale (è un record personale) |
 | Cronologia navigazione | **HARD** | Solo dentro Profilo, nome poco distintivo da "Resoconti"/"Diario" |
 | Ricerche salvate / Log ricerche | **VERY HARD** | Solo dentro Profilo, non linkate dal punto di ricerca stesso |
-| Scaricare un percorso per l'uso offline (se esiste un controllo dedicato) | **UNDISCOVERABLE** nella superficie UI esaminata | Il supporto tecnico offline esiste (poiNotesStore, trailGraphStore) ma nessun controllo "Rendi disponibile offline" è emerso nelle pagine lette — da verificare direttamente nel componente `GuideReader` (non letto per intero) prima di considerarlo un difetto confermato |
+| Scaricare un percorso per l'uso offline | **EASY, ma solo dentro Navigator** — **MODERATE/HARD** se si parte da Dtrek web | **CONFERMATO da screenshot**: icona di download ben visibile su ogni card in "Percorsi pianificati" di Navigator; nessuna icona equivalente osservata nella sezione "Guide" di Dtrek web, dove il percorso viene effettivamente creato/valutato |
 | Passare da Dtrek a Navigator (o viceversa) | **MODERATE** | Un solo pulsante ("Apri Dtrek" / "Upgrade a Dtrek"), ma la sua esistenza e il perché delle due app non sono spiegati la prima volta che compare |
 
 ---
@@ -591,16 +676,28 @@ Punti di incoerenza:
 
 ---
 
-## 20. Visual QA — limiti di questa sessione
+## 20. Visual QA — bug confermati da screenshot reali
 
-Non è stato possibile acquisire screenshot di un runtime funzionante (mancano credenziali Supabase/
-Anthropic valide in questo ambiente sandbox, come indicato anche nel `README.md` e ripetutamente nel
-`docs/navigator-dtrek-boundary.md`, dove sessioni precedenti riportano lo stesso limite: "Non testato in
-un browser reale in questa sessione"). Le osservazioni su gerarchia visiva, densità, spaziature e
-overflow (§9, §10) sono quindi **inferite dal markup/CSS**, non misurate su schermo. Si raccomanda una
-sessione dedicata di Visual QA su device reale (360/390/412px, verticale e orizzontale) prima di
-considerare chiuse le voci di questa sezione — in particolare i popover della rail del Diario (rischio
-overflow concreto, vedi §10) e la densità della card "featured" di Guida.
+A differenza della prima stesura di questo audit (basata solo su codice, senza un runtime disponibile in
+sandbox), l'utente ha fornito 37 screenshot reali (viewport Android ~360-390px, giro completo
+Bacheca→Guida→Resoconto→Diario→Profilo→Navigator) che permettono di confermare o correggere le ipotesi
+fatte dal solo markup. Bug visivi **confermati**, in ordine di gravità:
+
+1. **Chip "Voto X/10" fluttuante nel Resoconto** copre stabilmente testo/grafici/foto per l'intera
+   lunghezza della pagina (§9).
+2. **Rail di 9 icone nel Diario** copre stabilmente testo reale durante lo scroll del libro, non solo in
+   teoria (§9, §10).
+3. **Schermata di navigazione attiva in Navigator**: 12 controlli icon-only + due avvisi sovrapposti +
+   mappa invasa da etichette numeriche, tutti presenti simultaneamente (§11).
+4. **Titolo GPX grezzo non gestito**: nessun troncamento né suggerimento di rinomina per un titolo di 5
+   righe che riempie l'intera immagine hero e altera l'altezza delle righe nell'indice del Diario (§9).
+5. **Densità reale confermata**: oltre 10 schermate di scroll continuo per aprire un singolo percorso o
+   resoconto, con lo stesso controllo AI (Essenziale/Approfondita/Molto approfondita) ripetuto 4+ volte
+   e la stessa fila di 5-6 icone mappa ripetuta identica su 3 mappe diverse nella stessa pagina (§9).
+
+Aree **non coperte da screenshot** e quindi ancora "da codice, non confermate a schermo": Impostazioni,
+Statistiche standalone, Vette, Percorsi-per-te, viewport tablet/orizzontale. Si raccomanda comunque una
+sessione dedicata a queste aree prima di considerare chiusa questa sezione.
 
 ---
 
@@ -633,6 +730,26 @@ overflow concreto, vedi §10) e la densità della card "featured" di Guida.
 - RECOMMENDATION: aggiungere un secondo CTA equivalente verso `/upload?tab=gpx` (o verso
   `/percorsi-per-te`).
 - PRIORITY: CRITICAL (primo momento d'uso, alto tasso di abbandono potenziale).
+
+**P-C3 — CONFERMATO da screenshot: la schermata di navigazione attiva è sovraccarica proprio nel momento
+d'uso più critico**
+- EVIDENCE: screenshot reale della navigazione attiva in DTrek Navigator — 12 controlli icon-only senza
+  etichetta, due avvisi di sicurezza sovrapposti nello stesso istante (fauna selvatica + "luce
+  insufficiente per rientrare"), mappa invasa da decine di etichette numeriche.
+- USER IMPACT: proprio nel momento in cui l'utente cammina sul sentiero — possibilmente stanco, con poca
+  attenzione disponibile, in condizioni di luce calante secondo l'avviso stesso mostrato — l'interfaccia
+  richiede più decodifica visiva che in qualunque altra schermata dell'app. Rientra esplicitamente nel
+  criterio CRITICAL di questo audit ("l'utente... può compiere azioni pericolose/confondenti durante la
+  navigazione").
+- CURRENT BEHAVIOR: tutti i controlli e gli avvisi vengono mostrati contemporaneamente, sempre visibili,
+  senza priorità dichiarata tra loro.
+- EXPECTED BEHAVIOR: un solo avviso alla volta (in coda se necessario, non sovrapposti), un sottoinsieme
+  minimo di controlli sempre visibili con gli altri dietro un unico menu "altro", ed etichette numeriche
+  sulla mappa mostrate solo su richiesta (es. al tap su un punto) invece che tutte insieme di default.
+- RECOMMENDATION: ridisegnare la gerarchia della schermata di navigazione attiva dando priorità a
+  posizione/direzione/istruzione/ETA (già presenti e corretti) e nascondendo il resto dietro
+  progressive disclosure.
+- PRIORITY: CRITICAL.
 
 ### HIGH UX
 
@@ -674,6 +791,26 @@ salvate/Log ricerche)**
   punto di ricerca).
 - PRIORITY: HIGH.
 
+**P-H6 — CONFERMATO da screenshot: elementi fluttuanti persistenti coprono contenuto reale**
+- EVIDENCE: chip "Voto X/10" nel Resoconto e rail di 9 icone nel Diario, entrambi confermati coprire
+  testo/grafici/foto durante lo scroll (§9, §20).
+- USER IMPACT: informazioni parzialmente illeggibili (numeri di copertina, chip dati, paragrafi di
+  racconto) in due delle sezioni più curate dell'app dal punto di vista dei contenuti.
+- RECOMMENDATION: rendere questi elementi collassabili/trasparenti solo quando davvero necessario, o
+  spostarli fuori dall'area di scroll del contenuto (es. barra fissa in alto invece che fluttuante sopra
+  il testo).
+- PRIORITY: HIGH.
+
+**P-H7 — CONFERMATO da screenshot: avviso di sicurezza sulla fauna sembra elencare le stesse specie due
+volte**
+- EVIDENCE: "Fauna nella zona: Orso marsicano, Lupo appenninico, Vipera, Ursus arctos, Canis lupus" —
+  nomi comuni e nomi scientifici della stessa specie presentati come voci distinte.
+- USER IMPACT: un avviso di sicurezza che appare internamente incoerente rischia di essere preso meno sul
+  serio nel suo insieme.
+- RECOMMENDATION: deduplicare per specie, scegliendo un solo formato di nome (comune o scientifico, non
+  entrambi come voci separate).
+- PRIORITY: HIGH (è un avviso di sicurezza, non un'etichetta qualsiasi).
+
 ### MEDIUM UX
 
 **P-M1 — Bacheca e Statistiche duplicano contenuto senza dichiarare la relazione**
@@ -702,6 +839,20 @@ salvate/Log ricerche)**
 - EVIDENCE: `app/bacheca/page.tsx`, badgeText vari.
 - RECOMMENDATION: preferire etichette in linguaggio naturale nella card, lasciare la sigla come
   dettaglio secondario nel pannello info.
+- PRIORITY: MEDIUM.
+
+**P-M6 — CONFERMATO da screenshot: titolo GPX grezzo mostrato senza troncamento**
+- EVIDENCE: un percorso con nome file lunghissimo occupa 5 righe nell'immagine hero e altera l'altezza
+  della riga nell'indice del Diario.
+- RECOMMENDATION: troncare con ellissi oltre una lunghezza ragionevole (mantenendo il titolo completo
+  disponibile al tap), o proporre attivamente di rinominare un titolo importato anomalo.
+- PRIORITY: MEDIUM.
+
+**P-M7 — CONFERMATO da screenshot: due anelli-punteggio visivamente identici per concetti diversi**
+- EVIDENCE: "Voto" (1-10, soggettivo) e "Comfort TrailScore" (0-100, calcolato) con lo stesso stile
+  visivo nella stessa pagina di Resoconto (Ridondanza #9).
+- RECOMMENDATION: differenziare stile/colore dei due anelli o accompagnarli con etichette che rendano
+  ovvia la differenza a colpo d'occhio.
 - PRIORITY: MEDIUM.
 
 ### LOW UX
@@ -739,13 +890,14 @@ di percorsi "pronti" (`NAVIGATOR_SLOT_LIMIT`) eviterebbe la sorpresa scoperta so
 | **Information Architecture** | 4.5 | Categorie sovrapposte (Bacheca/Statistiche, Resoconti/Diario), assenza di una "Mappa" di primo livello, due app parallele con nomi identici per lo stesso concetto ("Percorsi pianificati"). |
 | **Navigation** | 6 | Tab bar coerente, stato attivo corretto, ma nomi ambigui e assenza di ingresso mappa; buona la coerenza tecnica raggiunta tra le pagine hub. |
 | **Consistency** | 7 | Punto di forza reale: navbar unificata (fix documentato), pattern hub condiviso Guida/Resoconto, linguaggio colore Premium coerente ovunque. Penalizzato dal Diario come paradigma a sé e dal `confirm()` nativo fuori stile. |
-| **Visual hierarchy** | 5.5 (stima da codice, non da schermo) | Buon contrasto e gerarchia titolo/sottotitolo nelle pagine hub; densità elevata nella scheda "featured" di Guida senza gerarchia PRIMARY/SECONDARY dichiarata tra le molte azioni disponibili. |
-| **Mobile usability** | 6.5 (stima da codice) | Ottima cura di safe-area/edge-to-edge (con bug reali già trovati e corretti), target touch adeguati dove verificabili; rischio concreto di overflow popover su viewport stretti nella rail del Diario, da confermare su device. |
+| **Visual hierarchy** | 4.5 (CONFERMATO da screenshot, rivisto al ribasso) | Buon contrasto e gerarchia titolo/sottotitolo nelle pagine hub; ma confermati due bug di overlap reali (chip Voto, rail Diario) e una schermata di navigazione attiva con 12 controlli icon-only senza priorità dichiarata — non più solo un rischio teorico. |
+| **Mobile usability** | 5 (CONFERMATO da screenshot, rivisto al ribasso) | Ottima cura di safe-area/edge-to-edge (con bug reali già trovati e corretti in passato); ma confermati elementi fluttuanti che coprono contenuto e una schermata di navigazione affollata proprio sul viewport mobile che conta di più. |
 | **Efficiency (utente esperto)** | 6 | Buona per consumo di contenuto (swipe/filmstrip), meno per azioni di gestione/pubblicazione (multi-icona, nessuna scorciatoia per operazioni ripetute come l'import). |
 | **Error recovery** | 6.5 | Alcuni esempi solidi e documentati (retry PATCH diario, toast di conferma eliminazione, messaggi di errore distinti da tecnicismi); copertura non verificabile per l'intera app in questa sessione. |
 | **Overall coherence** | 5.5 | Il prodotto è coerente *internamente* a ciascuna sezione, meno coerente *tra* le sezioni per nomi e paradigmi. |
 
-**Media semplice: ~5.7/10.**
+**Media semplice: ~5.5/10** (rivista da 5.7 dopo la conferma visiva di bug precedentemente solo
+ipotizzati dal codice).
 
 ---
 
@@ -759,28 +911,43 @@ di percorsi "pronti" (`NAVIGATOR_SLOT_LIMIT`) eviterebbe la sorpresa scoperta so
 3. **Rinominare il tab "Guide" in qualcosa che comunichi "i miei percorsi"** (es. "Percorsi"), liberando
    "guida" per il solo testo narrativo AI — risolve P-H1 e P-H2 insieme, un solo cambio di etichetta con
    effetto a cascata su tutta la comprensione dell'IA.
+4. **CONFERMATO da screenshot — semplificare la schermata di navigazione attiva** in Navigator: ridurre i
+   12 controlli icon-only a un sottoinsieme minimo sempre visibile, mostrare un solo avviso alla volta
+   invece di due sovrapposti, alleggerire le etichette numeriche sulla mappa — risolve P-C3, il problema
+   più grave scoperto dagli screenshot perché avviene nel momento d'uso più critico (sul sentiero).
+5. **Correggere l'avviso fauna che sembra duplicare le specie** (nomi comuni e scientifici della stessa
+   specie come voci separate) — risolve P-H7, basso sforzo, riguarda la fiducia in un avviso di sicurezza.
 
 ### P1 — alto impatto, sforzo contenuto
-4. Unificare l'etichetta della funzione di traccia libera ovunque compaia (P-H4).
-5. Collegare Vette raggiunte, Cronologia navigazione, Ricerche salvate dai loro contesti d'uso naturali
+6. **CONFERMATO da screenshot — rendere gli elementi fluttuanti persistenti (chip Voto, rail Diario) non
+   invasivi**: farli collassare o spostarli fuori dall'area di scroll del contenuto, così da smettere di
+   coprire testo/grafici reali — risolve P-H6.
+7. Unificare l'etichetta della funzione di traccia libera ovunque compaia, incluso il titolo di pagina
+   "Registra un percorso" confermato in Navigator (P-H4, ora con 4 varianti confermate).
+8. Collegare Vette raggiunte, Cronologia navigazione, Ricerche salvate dai loro contesti d'uso naturali
    invece che solo da Profilo (P-H5).
-6. Comunicare preventivamente il limite di Navigator al momento della creazione percorso in Dtrek (P-O3).
-7. Dichiarare esplicitamente la differenza Bacheca/Statistiche e Resoconti/Diario con un sottotitolo o
-   hint nella UI (P-M1, P-M2).
+9. Comunicare preventivamente il limite di Navigator al momento della creazione percorso in Dtrek (P-O3).
+10. Dichiarare esplicitamente la differenza Bacheca/Statistiche e Resoconti/Diario con un sottotitolo o
+    hint nella UI (P-M1, P-M2).
 
 ### P2 — miglioramento sostanziale, non bloccante
-8. Aggiungere righe descrittive alle tre sotto-modalità di import GPX (P-M3).
-9. Sostituire il `confirm()` nativo con il pattern Sheet/popover coerente col resto dell'app (P-M4).
-10. Preferire etichette in linguaggio naturale sulle card di Bacheca, spostando le sigle tecniche nel
+11. Aggiungere righe descrittive alle tre sotto-modalità di import GPX (P-M3) — nota: lo screenshot della
+    schermata "Importa un percorso" di Navigator mostra un buon esempio di testo esplicativo ("Come
+    funziona") da cui prendere spunto anche per Dtrek web.
+12. Sostituire il `confirm()` nativo con il pattern Sheet/popover coerente col resto dell'app (P-M4).
+13. Preferire etichette in linguaggio naturale sulle card di Bacheca, spostando le sigle tecniche nel
     solo pannello di dettaglio (P-M5).
-11. Chiudere il ciclo utente con un CTA "Pianifica la prossima uscita" al termine di un Resoconto (P-O1).
+14. Troncare/gestire i titoli GPX anomali invece di mostrarli per intero senza limiti (P-M6).
+15. Differenziare visivamente l'anello "Voto" da quello "Comfort TrailScore" (P-M7).
+16. Chiudere il ciclo utente con un CTA "Pianifica la prossima uscita" al termine di un Resoconto (P-O1).
 
 ### P3 — rifiniture
-12. Micro-label o hint per le icone icon-only della rail del Diario (P-L1).
-13. Un indizio visivo la prima volta che si apre il Diario, per introdurre il cambio di paradigma
+17. Micro-label o hint per le icone icon-only della rail del Diario e delle mappe interattive (ripetute
+    identiche su ogni mappa della stessa pagina) (P-L1).
+18. Un indizio visivo la prima volta che si apre il Diario, per introdurre il cambio di paradigma
     (scroll verticale libro vs. swipe orizzontale delle altre sezioni) (P-L2).
-14. Sessione dedicata di Visual QA su device reale (360/390/412px) per confermare/escludere i rischi di
-    overflow identificati nella rail del Diario (§10, §20).
+19. Sessione dedicata di Visual QA su device reale per le aree non ancora coperte da screenshot
+    (Impostazioni, Statistiche standalone, Vette, Percorsi-per-te, orientamento orizzontale/tablet).
 
 ---
 
@@ -803,14 +970,17 @@ di percorsi "pronti" (`NAVIGATOR_SLOT_LIMIT`) eviterebbe la sorpresa scoperta so
    Diario) non distinte esplicitamente.
 8. **È chiaro dove trovare foto e note?** Sì, dentro il Resoconto/Diario della relativa escursione —
    punto positivo, nessuna ambiguità rilevata qui.
-9. **È chiaro cosa succede offline?** Non confermabile positivamente dalla superficie UI esaminata — area
-   da verificare con priorità, essendo centrale per un'app outdoor.
+9. **È chiaro cosa succede offline?** **CONFERMATO da screenshot**: un'icona di download esiste, ma solo
+   dentro Navigator ("Percorsi pianificati") — non compare lato Dtrek web, dove il percorso viene
+   effettivamente creato. Chiaro solo per chi ha già scoperto ed esplorato Navigator.
 10. **La navigazione (tab bar) è realmente centrata sul compito?** Parzialmente: centrata sui *contenuti*
     (percorsi, resoconti, diario, statistiche) più che sui *compiti* dell'utente (pianifica, cammina,
     documenta, rivivi).
-11. **La mappa è sovraccarica?** Nel Navigator no (buona sobrietà). Nella scheda "featured" di un
-    percorso in Guida, la mappa convive con moltissimi altri elementi nella stessa vista — la vista nel
-    suo complesso è densa, anche se la mappa in sé è pulita.
+11. **La mappa è sovraccarica?** **Risposta corretta dopo gli screenshot**: la Home del Navigator (in
+    attesa) è sobria e ben progettata; ma la schermata di **navigazione attiva** (durante il cammino) è
+    invece la più sovraccarica di tutta l'app — 12 controlli icon-only, due avvisi sovrapposti, mappa
+    invasa da etichette numeriche. Nella scheda "featured" di un percorso in Guida/Resoconto, la mappa in
+    sé resta pulita ma convive con moltissimi altri elementi nella pagina.
 12. **Esistono funzioni duplicate?** Sì — vedi tabella Ridondanze (§6): tre etichette per la stessa
     funzione di traccia libera è il caso più netto; Bacheca/Statistiche e Resoconti/Diario sono
     sovrapposizioni parziali, non vere duplicazioni.
@@ -837,22 +1007,32 @@ di percorsi "pronti" (`NAVIGATOR_SLOT_LIMIT`) eviterebbe la sorpresa scoperta so
 20. **Qual è il principale problema UX di DTREK?** L'assenza di una Home che comunichi chiaramente il
     compito primario dell'app ("pianifica e vivi un'escursione") — la Home reale (Bacheca) comunica
     invece "monitora il tuo allenamento", spostando l'intera prima impressione fuori target.
-21. **Qual è il secondo?** La terminologia sovrapposta tra le quattro sezioni principali (Guida/
-    Resoconti/Diario/Attività), che costringe ogni nuovo utente a un periodo di apprendimento per
-    disambiguare nomi che dovrebbero essere autoesplicativi.
-22. **Qual è il terzo?** La rottura del ciclo di navigazione GPS tra due app separate (Dtrek web e
-    Navigator nativo), non comunicata proattivamente nel momento in cui l'utente ne ha più bisogno
-    (subito prima di partire per il sentiero).
+21. **Qual è il secondo?** **CONFERMATO da screenshot**: la schermata di navigazione attiva di Navigator
+    — il momento in cui l'utente sta davvero camminando sul sentiero — è la più sovraccarica di controlli
+    icon-only e avvisi sovrapposti di tutta l'app, invece di essere la più semplice e prioritaria come
+    dovrebbe essere in un'app di navigazione outdoor (P-C3).
+22. **Qual è il terzo?** La terminologia sovrapposta tra le sezioni principali (Guida/Resoconti/Diario/
+    Attività/Traccia — quest'ultima confermata avere **quattro** nomi diversi per la stessa funzione di
+    traccia libera), che costringe ogni nuovo utente a un periodo di apprendimento per disambiguare nomi
+    che dovrebbero essere autoesplicativi.
 23. **Quale singola modifica produrrebbe il maggiore miglioramento dell'esperienza?**
-    **Ridefinire la Home**: sostituire (o affiancare in cima, sopra il cruscotto statistico) lo stato di
-    apertura dell'app con una vista che risponda prima di tutto alla domanda "cosa voglio fare oggi?" —
-    con due-tre azioni esplicite e in linguaggio naturale (Pianifica un percorso · Continua l'ultima
-    escursione · Rivedi cosa ho fatto), lasciando il cruscotto Recovery/TSB/badge come sezione
-    raggiungibile subito sotto, non come unico contenuto della schermata di apertura. Questa singola
-    modifica risolverebbe da sola la maggior parte dei problemi CRITICAL e HIGH di questo audit (P-C2,
-    parzialmente P-C1 e P-H1), perché è il primo momento in cui l'utente forma il suo modello mentale
-    dell'intero prodotto.
+    Restano **due** modifiche di pari impatto, per due momenti d'uso diversi, entrambe confermate dagli
+    screenshot come i punti più critici del prodotto:
+    - **Ridefinire la Home**: sostituire (o affiancare in cima, sopra il cruscotto statistico) lo stato
+      di apertura dell'app con una vista che risponda prima di tutto alla domanda "cosa voglio fare
+      oggi?" — con due-tre azioni esplicite e in linguaggio naturale (Pianifica un percorso · Continua
+      l'ultima escursione · Rivedi cosa ho fatto), lasciando il cruscotto Recovery/TSB/badge come sezione
+      raggiungibile subito sotto. Risolve da sola la maggior parte dei problemi che colpiscono il
+      **primo momento d'uso** (P-C2, parzialmente P-C1 e P-H1).
+    - **Alleggerire la schermata di navigazione attiva** in Navigator: un solo avviso alla volta, un
+      sottoinsieme minimo di controlli sempre visibili, il resto dietro un unico menu. Risolve il
+      problema che colpisce il **momento d'uso più critico** (P-C3), quello in cui l'utente è realmente
+      sul sentiero e la chiarezza conta più che altrove.
+    Se si può agire solo su una delle due, la Home ha impatto più ampio (tocca il 100% degli utenti al
+    primo avvio); la navigazione attiva ha impatto più profondo per chi la raggiunge (implica anche un
+    fattore di sicurezza, non solo di comprensione).
 
 ---
 
-*Fine audit UX. Report funzionale correlato: `DTREK-AUDIT.md`.*
+*Fine audit UX, aggiornato con evidenza visiva reale (37 screenshot: Bacheca, Guida, Resoconto, Diario,
+Profilo, DTrek Navigator). Report funzionale correlato: `DTREK-AUDIT.md`.*
