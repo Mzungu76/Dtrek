@@ -170,6 +170,8 @@ export default function ReportReader({
   const [loading,     setLoading]     = useState(true)
   const [apiError,    setApiError]    = useState<string | null>(null)
   const [sharePdfUrl,   setSharePdfUrl]   = useState<string | null>(null)
+  // DTREK-AUDIT.md P2 #32 — token opaco per il link pubblico, non l'activityId in chiaro.
+  const [shareToken,    setShareToken]    = useState<string | null>(null)
   const [showPublish,   setShowPublish]   = useState(false)
   const [copyOk,        setCopyOk]        = useState(false)
   const [publishing,    setPublishing]    = useState(false)
@@ -252,9 +254,14 @@ export default function ReportReader({
   useEffect(() => {
     let cancelled = false
     setSharePdfUrl(null)
+    setShareToken(null)
     fetch(`/api/share-report?activityId=${encodeURIComponent(id)}`)
       .then(r => r.json())
-      .then(d => { if (!cancelled && d.share_pdf_url) setSharePdfUrl(d.share_pdf_url) })
+      .then(d => {
+        if (cancelled) return
+        if (d.share_pdf_url) setSharePdfUrl(d.share_pdf_url)
+        if (d.share_token) setShareToken(d.share_token)
+      })
       .catch(() => null)
     return () => { cancelled = true }
   }, [id])
@@ -518,12 +525,14 @@ export default function ReportReader({
       const { uploadReportPdf } = await import('@/lib/pdfUpload')
       const url = await uploadReportPdf(user.id, id, blob)
 
-      await fetch('/api/share-report', {
+      const res = await fetch('/api/share-report', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ activityId: id, sharePdfUrl: url }),
       })
+      const d = await res.json().catch(() => null)
       setSharePdfUrl(url)
+      if (d?.share_token) setShareToken(d.share_token)
     } catch (e) {
       setPublishError(String(e))
     } finally {
@@ -546,6 +555,7 @@ export default function ReportReader({
   const unpublishPdf = async () => {
     await fetch(`/api/share-report?activityId=${encodeURIComponent(id)}`, { method: 'DELETE' })
     setSharePdfUrl(null)
+    setShareToken(null)
   }
 
   // ── Widget per le sezioni dati fisse ──────────────────────────────────────
@@ -945,13 +955,17 @@ export default function ReportReader({
                       <div className="mt-3 flex items-center gap-3 flex-wrap">
                         {sharePdfUrl ? (
                           <>
-                            <a href={`/leggi/r/${encodeURIComponent(id)}`} target="_blank" rel="noopener noreferrer"
+                            {/* DTREK-AUDIT.md P2 #32 — link per token opaco, non per activityId in
+                                chiaro; /leggi/r resta solo come fallback per il breve intervallo
+                                prima che il token arrivi dal PATCH/GET. */}
+                            <a href={shareToken ? `/leggi/p/${encodeURIComponent(shareToken)}` : `/leggi/r/${encodeURIComponent(id)}`} target="_blank" rel="noopener noreferrer"
                               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 text-xs font-display font-bold uppercase tracking-wide transition-colors">
                               <ExternalLink className="w-3.5 h-3.5" /> Apri lettore
                             </a>
                             <button
                               onClick={async () => {
-                                const viewerUrl = `${window.location.origin}/leggi/r/${encodeURIComponent(id)}`
+                                const viewerPath = shareToken ? `/leggi/p/${encodeURIComponent(shareToken)}` : `/leggi/r/${encodeURIComponent(id)}`
+                                const viewerUrl = `${window.location.origin}${viewerPath}`
                                 await navigator.clipboard.writeText(viewerUrl)
                                 setCopyOk(true); setTimeout(() => setCopyOk(false), 2000)
                               }}
