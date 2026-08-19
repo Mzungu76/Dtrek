@@ -16,12 +16,24 @@ const SESSION_KEY = 'dtrek-navigator-promo-shown'
  * sessione, non ad ogni apertura pagina — sessionStorage), poi un'icona di richiamo che resta
  * visibile e riapre lo stesso popup al tocco, invece di sparire del tutto dopo la chiusura.
  */
+// DTREK-AUDIT.md P2 #34 — Dtrek Navigator esiste solo come shell Capacitor Android
+// (`capacitor.config.ts`, nessuna cartella `ios/`): promuoverlo anche su iOS prometterebbe un
+// download che su quella piattaforma non esiste e non è previsto (gap architetturale dichiarato,
+// non risolvibile in questo giro — richiede un target nativo iOS/Xcode/App Store separati). Stesso
+// controllo UA già usato per lo stesso scopo in `components/InstallPWA.tsx` (diversa preoccupazione:
+// lì è l'installabilità PWA del sito principale, disponibile anche su iOS via "Aggiungi a Home").
+function isIOS(): boolean {
+  if (typeof navigator === 'undefined') return false
+  const ua = navigator.userAgent.toLowerCase()
+  return /iphone|ipad|ipod/.test(ua) && !(window as any).MSStream
+}
+
 export default function NavigatorAppPromo() {
   const [open, setOpen] = useState(false)
   const [dismissed, setDismissed] = useState(false)
 
   useEffect(() => {
-    if (Capacitor.isNativePlatform()) return
+    if (Capacitor.isNativePlatform() || isIOS()) return
     if (sessionStorage.getItem(SESSION_KEY)) {
       setDismissed(true)
     } else {
@@ -30,7 +42,7 @@ export default function NavigatorAppPromo() {
     }
   }, [])
 
-  if (Capacitor.isNativePlatform()) return null
+  if (Capacitor.isNativePlatform() || isIOS()) return null
 
   function close() {
     setOpen(false)
