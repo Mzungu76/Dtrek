@@ -66,6 +66,7 @@ import NavStatsSheet from './NavStatsSheet'
 import NavLayerRail from './NavLayerRail'
 import ParkingSpotControl from './ParkingSpotControl'
 import { buildSlopeSegments } from '@/lib/navigation/routeSlopeSegments'
+import { readHighContrastPref, writeHighContrastPref } from '@/lib/navigation/highContrastPref'
 import ConfirmEndDialog from './ConfirmEndDialog'
 import EndHikeReviewDialog from './EndHikeReviewDialog'
 import { speak } from '@/lib/navigation/speech'
@@ -157,6 +158,10 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   // di mappa/istruzioni finché l'utente non lo riaccende a mano). Disattivabile da chi
   // preferisce risparmiare batteria e affidarsi solo agli avvisi vocali/aptici.
   const [wakeLockEnabled, setWakeLockEnabled] = useState(true)
+  // DTREK-AUDIT.md P1 #20 — inizializzato a false qui (SSR-safe, useState non può leggere
+  // localStorage al primo render) e allineato alla preferenza salvata subito dopo il mount, sotto.
+  const [highContrastEnabled, setHighContrastEnabled] = useState(false)
+  useEffect(() => { setHighContrastEnabled(readHighContrastPref()) }, [])
   const [isOnline, setIsOnline] = useState(true)
   const [mapMode, setMapMode] = useState<MapMode>('offline')
   const [is3D, setIs3D] = useState(false)
@@ -344,7 +349,11 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   paceEtaRef.current = pace?.liveEtaDate ?? null
 
   const weatherLookahead = useWeatherRefresh(hike.id, routePolyline, positionRef, engineRef, paceEtaRef)
-  const { confidence: trailConfidence, closure: trailClosure } = useTrailConfidence(hike.id, routePolyline, hike.cachedTsTotal ?? hike.cachedTrailScore ?? null)
+  // DTREK-AUDIT.md P1 #17 — cachedTrailScore (Comfort TrailScore personale, non gated) invece di
+  // cachedTsTotal (già gated dalla Sicurezza): il gate viene applicato di nuovo, separatamente,
+  // dentro computeTrailConfidence via safetyScore — così il fattore mostrato all'utente sa
+  // distinguere "non ti si addice" da "non è sicuro" invece di un unico numero già mescolato.
+  const { confidence: trailConfidence, closure: trailClosure } = useTrailConfidence(hike.id, routePolyline, hike.cachedTrailScore ?? null, hike.cachedSafetyScore?.overall ?? null)
   // Un nuovo avviso (testo diverso, es. l'ETA si sposta e ora indica pioggia invece di vento)
   // non deve restare nascosto solo perché un avviso precedente era stato chiuso.
   useEffect(() => { setWeatherLookaheadDismissed(false) }, [weatherLookahead?.message])
@@ -1035,6 +1044,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
             compassSupported={isOrientationSupported() && needsOrientationPermissionGesture()}
             compassEnabled={compassEnabled}
             onEnableCompass={handleEnableCompass}
+            highContrast={highContrastEnabled}
           />
         </div>
 
@@ -1389,6 +1399,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         onTogglePlayPause={handleTogglePlayPause}
         onStop={requestEnd}
         onExpand={() => setShowStatsSheet(true)}
+        highContrast={highContrastEnabled}
       />
 
       <NavStatsSheet
@@ -1414,6 +1425,8 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         onOpenSpecie={() => setShowSpeciesIdentify(true)}
         wakeLockEnabled={wakeLockEnabled}
         onToggleWakeLock={() => setWakeLockEnabled((v) => !v)}
+        highContrastEnabled={highContrastEnabled}
+        onToggleHighContrast={() => setHighContrastEnabled((v) => { const next = !v; writeHighContrastPref(next); return next })}
       />
 
       {callout && (

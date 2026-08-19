@@ -36,6 +36,11 @@ export function useTrailConfidence(
   hikeId: string,
   routePolyline: [number, number][],
   trailScore: number | null,
+  // DTREK-AUDIT.md P1 #17 — canale separato dal Trail Score personale (fatica/bellezza): senza
+  // questo, l'unico segnale disponibile era già gated dalla Sicurezza a monte (cachedTsTotal),
+  // rendendo impossibile per computeTrailConfidence distinguere "non ti si addice" da "non è
+  // sicuro" nel fattore testuale mostrato all'utente.
+  safetyScore: number | null,
 ): TrailConfidenceState {
   const [confidence, setConfidence] = useState<TrailConfidenceResult | null>(null)
   const [closure, setClosure] = useState<ClosureSignal | null>(null)
@@ -52,6 +57,7 @@ export function useTrailConfidence(
           if (cancelled || 'error' in data) return
           setConfidence(computeTrailConfidence({
             trailScore,
+            safetyScore,
             // null, non 0, quando Open-Meteo non ha risposto — un fallimento di rete non deve
             // pesare come "condizioni favorevoli" nella media di Trail Confidence (vedi
             // WeatherSignal/ClimateSignal.unavailable).

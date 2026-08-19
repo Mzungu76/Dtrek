@@ -14,6 +14,9 @@ interface Props {
   compassSupported: boolean
   compassEnabled: boolean
   onEnableCompass: () => void
+  /** DTREK-AUDIT.md P1 #20 — interruttore manuale (nessun sensore di luce disponibile a una
+   *  pagina web): sfondo pieno opaco invece di semi-trasparente sotto sole forte. */
+  highContrast?: boolean
 }
 
 const TURN_ROTATION: Record<TurnType, number> = {
@@ -41,10 +44,16 @@ const ICON_BTN = 'w-11 h-11 rounded-full bg-black/45 backdrop-blur-sm text-white
  */
 export default function InstructionBanner({
   current, next, distanceToNextM, speechEnabled, onToggleSpeech,
-  onClose, isOnline, compassSupported, compassEnabled, onEnableCompass,
+  onClose, isOnline, compassSupported, compassEnabled, onEnableCompass, highContrast,
 }: Props) {
   const [expanded, setExpanded] = useState(false)
   const showRightButton = !isOnline || (compassSupported && !compassEnabled)
+  // DTREK-AUDIT.md P1 #20 — sfondo pieno opaco (bg-black, non bg-black/40-55) sotto sole forte
+  // per testo/pulsanti icona: la trasparenza lascia passare troppa luce su uno schermo molto
+  // luminoso perché restino leggibili/riconoscibili.
+  const textBg = highContrast ? 'bg-black' : 'bg-black/40 backdrop-blur-sm'
+  const expandedBg = highContrast ? 'bg-black' : 'bg-black/55 backdrop-blur-sm'
+  const iconBtn = highContrast ? ICON_BTN.replace('bg-black/45', 'bg-black') : ICON_BTN
 
   return (
     // Non si posiziona da sé: il chiamante (ActiveNavigationView.tsx) lo mette in cima a un'unica
@@ -53,7 +62,7 @@ export default function InstructionBanner({
     // offset fisso scollegato da cosa c'è sopra.
     <div>
       <div className="flex items-center gap-2">
-        <button onClick={onClose} className={ICON_BTN} aria-label="Termina navigazione">
+        <button onClick={onClose} className={iconBtn} aria-label="Termina navigazione">
           <X className="w-5 h-5" />
         </button>
 
@@ -63,7 +72,7 @@ export default function InstructionBanner({
             // Sfondo pieno semi-opaco dietro il testo, non solo l'ombra: sotto sole forte o su
             // una mappa molto chiara (neve, satellite, roccia) la sola ombra non basta a
             // garantire il contrasto dell'istruzione più importante della schermata.
-            className="flex-1 min-w-0 flex items-center gap-2 text-left bg-black/40 backdrop-blur-sm rounded-2xl pl-1.5 pr-3 py-1.5"
+            className={`flex-1 min-w-0 flex items-center gap-2 text-left ${textBg} rounded-2xl pl-1.5 pr-3 py-1.5`}
           >
             <span className="shrink-0 w-8 h-8 rounded-full bg-terra-500 text-white flex items-center justify-center shadow-sm">
               {current.turn === 'arrive' ? <Flag className="w-4 h-4" /> : (
@@ -81,7 +90,7 @@ export default function InstructionBanner({
           </button>
         )}
 
-        <button onClick={onToggleSpeech} className={ICON_BTN} aria-label={speechEnabled ? 'Disattiva audio' : 'Attiva audio'}>
+        <button onClick={onToggleSpeech} className={iconBtn} aria-label={speechEnabled ? 'Disattiva audio' : 'Attiva audio'}>
           {speechEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
         </button>
 
@@ -89,7 +98,7 @@ export default function InstructionBanner({
           <button
             onClick={isOnline ? onEnableCompass : undefined}
             disabled={!isOnline}
-            className={`${ICON_BTN} ${isOnline ? 'text-terra-300' : 'text-white/40 cursor-default'}`}
+            className={`${iconBtn} ${isOnline ? 'text-terra-300' : 'text-white/40 cursor-default'}`}
             aria-label={isOnline ? 'Attiva bussola' : 'Offline'}
             title={isOnline ? 'Attiva bussola' : 'Sei offline: uso i dati scaricati'}
           >
@@ -99,7 +108,7 @@ export default function InstructionBanner({
       </div>
 
       {expanded && next && (
-        <div className="mt-1.5 ml-14 mr-2 px-3 py-1.5 rounded-xl bg-black/55 backdrop-blur-sm text-white/90 text-sm font-body inline-block">
+        <div className={`mt-1.5 ml-14 mr-2 px-3 py-1.5 rounded-xl ${expandedBg} text-white/90 text-sm font-body inline-block`}>
           Tra {formatDistance(distanceToNextM ?? 0)}: {next.text}
         </div>
       )}

@@ -7,6 +7,7 @@
 import type { TrackPoint } from '@/lib/tcxParser'
 import { bboxBufferMeters } from '@/lib/geo/bufferUtils'
 import { fetchDtmTileCached } from '@/lib/dtm/dtmCache'
+import type { FetchDtmTileOptions } from '@/lib/dtm/dtmClient'
 import { elevationAtPoint } from '@/lib/dtm/slopeAspect'
 import { totalDistanceKm, estimateTimeMinutes } from '@/lib/trailStats'
 
@@ -69,12 +70,14 @@ export function estimateElevationForGeometry(geometry: [number, number][]): Enri
  * completo di altitudeMeters, pronto per savePlanned — la stessa forma che produce un import GPX.
  * Ritorna null se il DTM non ha copertura per questo bbox (percorso comunque importabile senza
  * profilo altimetrico, come un import manuale, non un errore bloccante per il chiamante).
+ * `opts.onUnavailable`, se passato, riceve il motivo (rate limit vs nessuna copertura genuina —
+ * DTREK-AUDIT.md P1 #11) senza cambiare questo comportamento tollerante.
  */
-export async function enrichGeometryWithElevation(geometry: [number, number][]): Promise<EnrichedTrack | null> {
+export async function enrichGeometryWithElevation(geometry: [number, number][], opts: FetchDtmTileOptions = {}): Promise<EnrichedTrack | null> {
   if (geometry.length < 2) return null
 
   const bbox = bboxBufferMeters(geometry, TILE_BUFFER_M)
-  const tile = await fetchDtmTileCached(bbox)
+  const tile = await fetchDtmTileCached(bbox, opts)
   if (!tile) return null
 
   const trackPoints: TrackPoint[] = []

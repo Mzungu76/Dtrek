@@ -3,6 +3,7 @@
 import { parseGeoJson } from './geoJsonParser'
 import type { ServerParsedGpx } from './serverGpxParser'
 import { isBlockedHost } from './scrapeBlocklist'
+import { textBounded, MAX_IMPORT_FILE_BYTES, MAX_HTML_PAGE_BYTES } from './fetchBoundedBody'
 
 const USER_AGENT = 'DTrek/1.0 (personal hiking diary; mzulpt@gmail.com)'
 const GEOJSON_HREF_RE = /<a\b[^>]*href=["']([^"']+\.geojson(?:[?#][^"']*)?)["']/i
@@ -16,7 +17,7 @@ export async function findGeoJsonLinkOnPage(pageUrl: string): Promise<string | n
     if (!res.ok) return null
     const contentType = res.headers.get('content-type') ?? ''
     if (!contentType.includes('html')) return null
-    const html = await res.text()
+    const html = await textBounded(res, MAX_HTML_PAGE_BYTES)
     const match = GEOJSON_HREF_RE.exec(html)
     if (!match) return null
     return new URL(match[1], pageUrl).toString()
@@ -32,7 +33,7 @@ export async function downloadAndParseGeoJson(url: string): Promise<ServerParsed
   try {
     const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT }, signal: AbortSignal.timeout(15_000) })
     if (!res.ok) return null
-    const text = await res.text()
+    const text = await textBounded(res, MAX_IMPORT_FILE_BYTES)
     return parseGeoJson(text)
   } catch {
     return null

@@ -71,7 +71,12 @@ function firstStringField(props: Record<string, unknown>, fields: string[]): str
 // decode the EU SITETYPE A/B/C convention (A=ZPS-only, B=SIC/ZSC-only, C=overlap), since getting
 // that letter-mapping wrong would silently mislabel every site. Revisit once a real endpoint's
 // actual field values are inspected via scripts/probe-natura2000.ts.
-function extractDesignation(props: Record<string, unknown>): Natura2000Designation {
+// Esportate solo per il test — DTREK-AUDIT.md P1 #12: nessuna chiamata WFS reale è possibile da
+// questo sandbox (egress verso wms.pcn.minambiente.it bloccato dalla policy di rete), quindi
+// questi helper puri sono verificati contro fixture GML sintetiche costruite seguendo esattamente
+// le assunzioni WFS 1.1.0/GML 3.1.1 già documentate qui — non sostituisce una verifica contro una
+// risposta reale del server, ma cattura almeno un'incoerenza interna tra queste funzioni.
+export function extractDesignation(props: Record<string, unknown>): Natura2000Designation {
   const sicZsc = firstStringField(props, [SIC_ZSC_FIELD])
   if (sicZsc) {
     const upper = sicZsc.toUpperCase()
@@ -105,7 +110,7 @@ function matchAllPrefixedTagBlocks(xml: string, tag: string): string[] {
   return out
 }
 
-function extractFeatureBlocks(xml: string, typeName: string): string[] {
+export function extractFeatureBlocks(xml: string, typeName: string): string[] {
   const memberBlocks = matchAllPrefixedTagBlocks(xml, 'featureMember')
   if (memberBlocks.length > 0) return memberBlocks
 
@@ -175,7 +180,7 @@ function extractRings(polygonXml: string): LonLat[][] {
   return rings
 }
 
-function extractGeometry(featureXml: string): AnyPolygonGeometry | null {
+export function extractGeometry(featureXml: string): AnyPolygonGeometry | null {
   const polygonBlocks = matchAllGmlTagBlocks(featureXml, 'Polygon')
   const polygons = polygonBlocks.map(extractRings).filter(rings => rings.length > 0)
   if (polygons.length === 0) return null
@@ -186,7 +191,7 @@ function extractGeometry(featureXml: string): AnyPolygonGeometry | null {
 // Flat attribute extraction only (no nesting) — matches every dataset's schema in this repo
 // (PAI, Geologia, Uso Suolo all expose a flat property bag), and Natura2000's EU-standard
 // schema is documented as flat too.
-function extractFlatProperties(featureXml: string): Record<string, unknown> {
+export function extractFlatProperties(featureXml: string): Record<string, unknown> {
   const props: Record<string, unknown> = {}
   const re = /<([\w.]+):([\w.]+)(?:\s[^>]*)?>([^<]*)<\/\1:\2>/g
   let m: RegExpExecArray | null

@@ -9,6 +9,7 @@ import type { ServerParsedGpx } from '@/lib/serverGpxParser'
 import { isBlockedHost } from '@/lib/scrapeBlocklist'
 import { resolveAreaBbox, searchHikingRoutesByName } from '@/lib/overpassTrails'
 import { downsamplePolyline } from '@/lib/downsamplePolyline'
+import { textBounded, MAX_HTML_PAGE_BYTES } from '@/lib/fetchBoundedBody'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -32,7 +33,7 @@ async function fetchPageHtml(pageUrl: string): Promise<string | null> {
     if (!res.ok) return null
     const contentType = res.headers.get('content-type') ?? ''
     if (!contentType.includes('html')) return null
-    return await res.text()
+    return await textBounded(res, MAX_HTML_PAGE_BYTES)
   } catch {
     return null
   }

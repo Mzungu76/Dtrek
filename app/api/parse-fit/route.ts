@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest } from '@/lib/supabaseAuth'
 import type { TrackPoint, TcxActivity } from '@/lib/tcxParser'
+import { arrayMax, arrayMin } from '@/lib/arrayMinMax'
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const _fitMod = require('fit-file-parser')
@@ -132,14 +133,15 @@ export async function POST(req: NextRequest) {
     calories:           (sess.total_calories as number) ?? 0,
     avgHeartRate:       (sess.avg_heart_rate as number) ??
                         (hrValues.length ? Math.round(hrValues.reduce((a, b) => a + b, 0) / hrValues.length) : 0),
-    maxHeartRate:       (sess.max_heart_rate as number) ??
-                        (hrValues.length ? Math.max(...hrValues) : 0),
+    // arrayMax/Min, non Math.max/min(...arr) — un file FIT registrato a lungo può arrivare a
+    // decine di migliaia di punti, oltre il limite di argomenti dello spread (DTREK-AUDIT.md P1
+    // #16), stesso fix già applicato al pattern gemello in lib/gpxParser.ts.
+    maxHeartRate:       (sess.max_heart_rate as number) ?? arrayMax(hrValues),
     avgSpeedMs:         (sess.avg_speed as number) ??
                         (speeds.length ? speeds.reduce((a, b) => a + b, 0) / speeds.length : 0),
-    maxSpeedMs:         (sess.max_speed as number) ??
-                        (speeds.length ? Math.max(...speeds) : 0),
-    altitudeMin:        alts.length ? Math.min(...alts) : 0,
-    altitudeMax:        alts.length ? Math.max(...alts) : 0,
+    maxSpeedMs:         (sess.max_speed as number) ?? arrayMax(speeds),
+    altitudeMin:        arrayMin(alts),
+    altitudeMax:        arrayMax(alts),
     elevationGain:      (sess.total_ascent as number) ?? elevationGain,
     elevationLoss:      (sess.total_descent as number) ?? elevationLoss,
     trackPoints,

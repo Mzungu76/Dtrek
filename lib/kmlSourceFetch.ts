@@ -5,6 +5,7 @@ import { parseKml } from './kmlParser'
 import type { ServerParsedGpx } from './serverGpxParser'
 import { extractKmlFromKmz } from './kmzExtract'
 import { isBlockedHost } from './scrapeBlocklist'
+import { textBounded, bufferBounded, MAX_IMPORT_FILE_BYTES, MAX_HTML_PAGE_BYTES } from './fetchBoundedBody'
 
 const USER_AGENT = 'DTrek/1.0 (personal hiking diary; mzulpt@gmail.com)'
 const KML_HREF_RE = /<a\b[^>]*href=["']([^"']+\.km[lz](?:[?#][^"']*)?)["']/i
@@ -26,7 +27,7 @@ export async function findKmlLinkOnPage(pageUrl: string): Promise<{ url: string;
     if (!res.ok) return null
     const contentType = res.headers.get('content-type') ?? ''
     if (!contentType.includes('html')) return null
-    const html = await res.text()
+    const html = await textBounded(res, MAX_HTML_PAGE_BYTES)
     const match = KML_HREF_RE.exec(html)
     if (!match) return null
     const url = new URL(match[1], pageUrl).toString()
@@ -45,11 +46,11 @@ export async function downloadAndParseKml(url: string, kind: KmlKind): Promise<S
     const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT }, signal: AbortSignal.timeout(15_000) })
     if (!res.ok) return null
     if (kind === 'kmz') {
-      const buf = new Uint8Array(await res.arrayBuffer())
+      const buf = await bufferBounded(res, MAX_IMPORT_FILE_BYTES)
       const kmlText = extractKmlFromKmz(buf)
       return kmlText ? parseKml(kmlText) : null
     }
-    const text = await res.text()
+    const text = await textBounded(res, MAX_IMPORT_FILE_BYTES)
     return parseKml(text)
   } catch {
     return null

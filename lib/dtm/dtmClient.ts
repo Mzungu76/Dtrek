@@ -5,8 +5,10 @@
 // bbox (e.g. the API answers with an error for this dataset/area) is a per-request fact —
 // returns null, never throws, because there's nothing anomalous to report, it's the normal
 // "no DTM here". fetchDtmTile is the single network-aware boundary that folds every flavor of
-// (2) — HTTP error, rate limit, undecodable GeoTIFF — into null.
-import { fetchGlobalDem } from '@/lib/dtm/openTopographyClient'
+// (2) — HTTP error, rate limit, undecodable GeoTIFF — into null. Callers that want to tell a
+// transient rate limit apart from genuine no-coverage (DTREK-AUDIT.md P1 #11) can pass
+// `onUnavailable` — purely informational, doesn't change the null-never-throws contract above.
+import { fetchGlobalDem, OpenTopographyApiError } from '@/lib/dtm/openTopographyClient'
 import { parseDtmGeoTiff } from '@/lib/dtm/slopeAspect'
 import { isCircuitOpen, recordFailure, recordSuccess } from '@/lib/geo/circuitBreaker'
 
@@ -15,6 +17,30 @@ import { isCircuitOpen, recordFailure, recordSuccess } from '@/lib/geo/circuitBr
 const BREAKER_KEY = 'dtm-opentopography'
 
 export class DtmUnavailableError extends Error {}
+
+// DTREK-AUDIT.md P1 #11 — 'rate_limited' (quota 50 chiamate/24h esaurita, o breaker aperto per
+// fallimenti recenti: entrambi transitori, si risolvono da soli) vs 'no_coverage' (bbox
+// genuinamente fuori dal dataset EU_DTM, o errore diverso: non si risolve ritentando più tardi).
+// Puramente informativo via il callback opzionale `onUnavailable` sotto — non cambia il
+// contratto esistente di fetchDtmTile (torna sempre null per questi casi, mai un throw), per non
+// rompere i chiamanti tolleranti che oggi si aspettano "mai un'eccezione qui" (es.
+// lib/routeBuilder/resolveTrack.ts:108, lib/dtm/graphElevation.ts).
+export type DtmUnavailableReason = 'rate_limited' | 'no_coverage'
+
+export interface FetchDtmTileOptions {
+  onUnavailable?: (reason: DtmUnavailableReason) => void
+}
+
+/**
+ * Pura, testabile senza mock di rete — HTTP 429 è l'unico segnale affidabile di rate limit che
+ * OpenTopography restituisce (vedi openTopographyClient.ts); ogni altro fallimento (bbox fuori
+ * copertura, chiave non valida, timeout, GeoTIFF non decodificabile) è 'no_coverage': non c'è
+ * modo di distinguerli ulteriormente da qui, ma nessuno di questi si risolve da solo ritentando
+ * più tardi come invece fa il rate limit.
+ */
+export function classifyDtmFailure(e: unknown): DtmUnavailableReason {
+  return e instanceof OpenTopographyApiError && e.status === 429 ? 'rate_limited' : 'no_coverage'
+}
 
 export interface DtmTile {
   elevations: Float64Array
@@ -33,7 +59,7 @@ export interface DtmTile {
 // maxDuration 30s: route-search/resolve, route-import, route-build: maxDuration 60s).
 const DTM_TIMEOUT_MS = 20000
 
-export async function fetchDtmTile(bbox: string): Promise<DtmTile | null> {
+export async function fetchDtmTile(bbox: string, opts: FetchDtmTileOptions = {}): Promise<DtmTile | null> {
   if (!process.env.OPENTOPOGRAPHY_API_KEY) {
     throw new DtmUnavailableError('OPENTOPOGRAPHY_API_KEY not set (see .env.example)')
   }
@@ -46,6 +72,7 @@ export async function fetchDtmTile(bbox: string): Promise<DtmTile | null> {
   // tentativi reali sono stati solo i primi 3.
   if (isCircuitOpen(BREAKER_KEY)) {
     console.warn(`[dtm] circuit breaker aperto per ${BREAKER_KEY} — richiesta per bbox ${bbox} saltata senza contattare OpenTopography`)
+    opts.onUnavailable?.('rate_limited')
     return null
   }
 
@@ -59,8 +86,10 @@ export async function fetchDtmTile(bbox: string): Promise<DtmTile | null> {
     // visibilità sul motivo reale, altrimenti indistinguibile dall'esterno tra bbox genuinamente
     // fuori copertura, rate limit (50 chiamate/24h per chiavi non accademiche, vedi
     // scripts/probe-dtm.ts), chiave non valida o timeout.
-    console.warn(`[dtm] fetchDtmTile fallito per bbox ${bbox}:`, e instanceof Error ? e.message : e)
+    const reason = classifyDtmFailure(e)
+    console.warn(`[dtm] fetchDtmTile fallito per bbox ${bbox} (${reason}):`, e instanceof Error ? e.message : e)
     recordFailure(BREAKER_KEY)
+    opts.onUnavailable?.(reason)
     return null
   }
 }

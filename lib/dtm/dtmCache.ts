@@ -5,7 +5,7 @@
 // tei-terrain issue fixed in cf8b28d.
 import { normalizeBboxKey } from '@/lib/geoUtils'
 import { supabase } from '@/lib/supabase'
-import { fetchDtmTile, DtmUnavailableError, type DtmTile } from '@/lib/dtm/dtmClient'
+import { fetchDtmTile, DtmUnavailableError, type DtmTile, type FetchDtmTileOptions } from '@/lib/dtm/dtmClient'
 import { shouldRunCleanup } from '@/lib/cacheCleanupThrottle'
 
 // Terrain elevation doesn't change over time — same reasoning as geologia's 180-day TTL,
@@ -30,7 +30,7 @@ interface StoredDtmTile extends Omit<DtmTile, 'elevations'> {
   elevations: number[]
 }
 
-export async function fetchDtmTileCached(bbox: string): Promise<DtmTile | null> {
+export async function fetchDtmTileCached(bbox: string, opts: FetchDtmTileOptions = {}): Promise<DtmTile | null> {
   if (!process.env.OPENTOPOGRAPHY_API_KEY) {
     throw new DtmUnavailableError('OPENTOPOGRAPHY_API_KEY not set (see .env.example)')
   }
@@ -63,7 +63,7 @@ export async function fetchDtmTileCached(bbox: string): Promise<DtmTile | null> 
     return { ...stored, elevations: Float64Array.from(stored.elevations) }
   }
 
-  const tile = await fetchDtmTile(bbox)
+  const tile = await fetchDtmTile(bbox, opts)
 
   // Solo un risultato positivo viene cachato (vedi sopra) — un fallimento resta un fatto
   // dell'istante, da ritentare alla prossima richiesta invece di restare scritto per 180 giorni.

@@ -143,7 +143,12 @@ registerEntityFlusher(ENTITY_TYPE, async (rows) => {
     body:      JSON.stringify(merged),
     keepalive: true,
   })
-  if (!res.ok) return { succeededIds: [] }
+  if (!res.ok) {
+    // DTREK-AUDIT.md P1 #15 — errore reale (non solo "fallito") per lib/localStore.ts's
+    // obRecordFailure, stesso principio di flushRows in syncEngine.ts.
+    const error = `POST /api/user-settings HTTP ${res.status}`
+    return { succeededIds: [], failures: rows.map((r) => ({ outboxId: r.outboxId!, error })) }
+  }
   refreshUserSettings().catch(() => {})
   return { succeededIds: rows.map((r) => r.outboxId!) }
 })

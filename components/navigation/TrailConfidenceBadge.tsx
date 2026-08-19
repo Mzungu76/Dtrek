@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ShieldCheck, ShieldAlert, ShieldQuestion, X } from 'lucide-react'
+import { ThumbsUp, Gauge, ThumbsDown, HelpCircle, X } from 'lucide-react'
 import type { TrailConfidenceResult } from '@/lib/navigation/trailConfidence'
 import { useModalBackHandler } from '@/lib/navigation/useModalBackHandler'
 
@@ -9,13 +9,20 @@ interface Props {
   confidence: TrailConfidenceResult | null
 }
 
-const LABEL_STYLE: Record<TrailConfidenceResult['label'], { bg: string; text: string; icon: typeof ShieldCheck; word: string }> = {
-  alta:       { bg: 'bg-emerald-600', text: 'text-white',       icon: ShieldCheck,    word: 'Affidabilità alta' },
-  media:      { bg: 'bg-amber-500',   text: 'text-white',       icon: ShieldQuestion, word: 'Affidabilità media' },
-  bassa:      { bg: 'bg-red-600',     text: 'text-white',       icon: ShieldAlert,    word: 'Affidabilità bassa' },
+// DTREK-AUDIT.md P1 #17 — "Affidabilità" + icone a scudo (ShieldCheck/ShieldAlert) leggevano come
+// un giudizio di SICUREZZA anche quando il segnale è per il 60% quanto il percorso ti si addice
+// personalmente (fatica/bellezza, mai gated da un vero pericolo se non tramite il gate esplicito
+// in computeTrailConfidence) — un percorso sicuro ma faticoso per il tuo profilo mostrava lo
+// stesso scudo rosso d'allarme di un percorso davvero pericoloso. Icone e testo ora parlano di
+// "quanto ti si addice", mai di "sicuro"/"pericoloso" — quel giudizio resta comunque incluso
+// (vedi safetyScore in computeTrailConfidence) ma riportato nei singoli `factors`, mai nel titolo.
+const LABEL_STYLE: Record<TrailConfidenceResult['label'], { bg: string; text: string; icon: typeof ThumbsUp; word: string }> = {
+  alta:       { bg: 'bg-emerald-600', text: 'text-white', icon: ThumbsUp,   word: 'Ti si addice bene' },
+  media:      { bg: 'bg-amber-500',   text: 'text-white', icon: Gauge,      word: 'Ti si addice nella media' },
+  bassa:      { bg: 'bg-red-600',     text: 'text-white', icon: ThumbsDown, word: 'Potrebbe non addirsi bene' },
   // Grigio neutro, deliberatamente distinto da 'bassa' (rosso): "non sappiamo" non è "rischioso",
   // è l'assenza di qualunque segnale di base (Trail Score/meteo/clima) su cui fondare un giudizio.
-  sconosciuta: { bg: 'bg-stone-500', text: 'text-white',        icon: ShieldQuestion, word: 'Affidabilità sconosciuta' },
+  sconosciuta: { bg: 'bg-stone-500', text: 'text-white',  icon: HelpCircle, word: 'Non ancora valutato' },
 }
 
 /**
@@ -54,7 +61,7 @@ export default function TrailConfidenceBadge({ confidence }: Props) {
         <div className="fixed inset-0 z-[3000] bg-black/50 flex items-center justify-center p-4" onClick={() => setOpen(false)}>
           <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl p-5" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
-              <h2 className="font-display text-lg font-semibold text-stone-900">Affidabilità del percorso</h2>
+              <h2 className="font-display text-lg font-semibold text-stone-900">Quanto ti si addice questo percorso</h2>
               <button onClick={() => setOpen(false)} className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center text-stone-400 hover:text-stone-600 transition-colors shrink-0" aria-label="Chiudi">
                 <X className="w-4 h-4" />
               </button>
@@ -75,9 +82,12 @@ export default function TrailConfidenceBadge({ confidence }: Props) {
                 </ul>
               </div>
               <p className="text-[11px] text-stone-400 leading-relaxed">
-                Combina il Trail Score calcolato in pianificazione, le condizioni meteo/clima recenti
-                e — quando disponibili — le conferme di altri escursionisti. Non tiene ancora conto
-                della qualità del segnale GPS osservata dal vivo né della copertura di rete.
+                Combina il Trail Score calcolato in pianificazione (fatica/bellezza per il tuo
+                profilo), le condizioni meteo/clima recenti e — quando disponibili — le conferme di
+                altri escursionisti. Non è un giudizio di sicurezza: quello resta il Punteggio
+                Sicurezza in pianificazione, qui applicato solo come correttivo separato (vedi i
+                motivi sopra). Non tiene ancora conto della qualità del segnale GPS osservata dal
+                vivo né della copertura di rete.
               </p>
             </div>
           </div>

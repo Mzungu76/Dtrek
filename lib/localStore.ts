@@ -17,6 +17,11 @@ export interface OutboxRow {
   createdAt: number
   attempts: number
   lastError?: string
+  // DTREK-AUDIT.md P1 #15 — timestamp dell'ultimo tentativo di flush fallito, in millisecondi
+  // epoch. undefined = mai tentato ancora (sempre idoneo a un tentativo immediato). Insieme ad
+  // `attempts`, permette a lib/sync/syncEngine.ts di applicare un backoff esponenziale invece di
+  // ritentare alla stessa cadenza aggressiva di ogni riga sana.
+  lastAttemptAt?: number
 }
 
 const DB_NAME     = 'dtrek'
@@ -109,6 +114,13 @@ export async function isLocalStoreAvailable(): Promise<boolean> {
 
 // ── Outbox (pending-sync queue) ────────────────────────────────────────────
 
+// DTREK-AUDIT.md P1 #15 — un nuovo edit dell'utente su un record che ha già righe pendenti in
+// coda merita un tentativo di sync fresco, non l'eredità del backoff/dead-letter di un tentativo
+// fallito precedente: senza questo reset, un record che ha appena superato la soglia di
+// dead-letter (vedi MAX_SYNC_ATTEMPTS in syncEngine.ts) resterebbe bloccato anche dopo che
+// l'utente lo ha corretto.
+const RESET_RETRY_STATE = { attempts: 0, lastError: undefined, lastAttemptAt: undefined }
+
 /**
  * Enqueues a local change for later sync to Supabase, coalescing with any
  * pending row for the same (entityType, recordId) instead of piling up one
@@ -132,21 +144,21 @@ export async function obEnqueue(entityType: string, recordId: string, op: Outbox
         if (!existing) {
           store.add({ entityType, recordId, op, payload, clientUpdatedAt: now, createdAt: Date.now(), attempts: 0 } as OutboxRow)
         } else if (op === 'delete') {
-          store.put({ ...existing, op: 'delete', payload: undefined, clientUpdatedAt: now })
+          store.put({ ...existing, op: 'delete', payload: undefined, clientUpdatedAt: now, ...RESET_RETRY_STATE })
         } else if (existing.op === 'delete') {
-          store.put({ ...existing, op, payload, clientUpdatedAt: now })
+          store.put({ ...existing, op, payload, clientUpdatedAt: now, ...RESET_RETRY_STATE })
         } else if (existing.op === 'upsert') {
           // A pending 'upsert' may not have reached the server yet — any further patch/upsert on
           // the same record must stay 'upsert' (never downgrade to 'patch'), otherwise the flush
           // would PATCH a row that doesn't exist server-side yet and silently do nothing, losing
           // the record entirely instead of just losing the latest edit.
           const mergedPayload = { ...(existing.payload as object ?? {}), ...(payload as object ?? {}) }
-          store.put({ ...existing, op: 'upsert', payload: mergedPayload, clientUpdatedAt: now })
+          store.put({ ...existing, op: 'upsert', payload: mergedPayload, clientUpdatedAt: now, ...RESET_RETRY_STATE })
         } else {
           // existing.op === 'patch': an incoming 'upsert' supersedes it with the full record;
           // an incoming 'patch' merges into the accumulated partial payload.
           const mergedPayload = op === 'upsert' ? payload : { ...(existing.payload as object ?? {}), ...(payload as object ?? {}) }
-          store.put({ ...existing, op, payload: mergedPayload, clientUpdatedAt: now })
+          store.put({ ...existing, op, payload: mergedPayload, clientUpdatedAt: now, ...RESET_RETRY_STATE })
         }
       }
       tx.oncomplete = () => resolve()
@@ -186,6 +198,33 @@ export async function obDelete(outboxId: number): Promise<void> {
     try {
       const tx = db.transaction(OUTBOX, 'readwrite')
       tx.objectStore(OUTBOX).delete(outboxId)
+      tx.oncomplete = () => resolve()
+      tx.onerror    = () => resolve()
+    } catch { resolve() }
+  })
+}
+
+/**
+ * DTREK-AUDIT.md P1 #15 — registra un tentativo di flush fallito su una riga: incrementa
+ * `attempts`, salva `lastError` e `lastAttemptAt`. Mai chiamata su una riga già rimossa (una riga
+ * cancellata nel frattempo da un'altra tab/flush concorrente fa silenziosamente nulla, stesso
+ * comportamento tollerante di ogni altra funzione qui). Non cancella mai la riga — un dead-letter
+ * qui significa "smetti di ritentare in automatico", mai "perdi il dato": vedi isRowDueForRetry
+ * in lib/sync/syncEngine.ts per dove la soglia viene applicata.
+ */
+export async function obRecordFailure(outboxId: number, error: string): Promise<void> {
+  const db = await openDB().catch(() => null)
+  if (!db) return
+  return new Promise((resolve) => {
+    try {
+      const tx    = db.transaction(OUTBOX, 'readwrite')
+      const store = tx.objectStore(OUTBOX)
+      const req   = store.get(outboxId)
+      req.onsuccess = () => {
+        const existing = req.result as OutboxRow | undefined
+        if (!existing) return
+        store.put({ ...existing, attempts: existing.attempts + 1, lastError: error, lastAttemptAt: Date.now() })
+      }
       tx.oncomplete = () => resolve()
       tx.onerror    = () => resolve()
     } catch { resolve() }

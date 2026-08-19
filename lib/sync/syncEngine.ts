@@ -9,15 +9,43 @@
  * cover several entities' pending changes at once.
  */
 
-import { obGetAll, obGetByEntity, obDelete, type OutboxRow } from '@/lib/localStore'
+import { obGetAll, obGetByEntity, obDelete, obRecordFailure, type OutboxRow } from '@/lib/localStore'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 
 export interface FlushResult {
   /** outboxId of every row that was successfully applied server-side and can be removed from the queue. */
   succeededIds: number[]
+  /** DTREK-AUDIT.md P1 #15 — messaggio d'errore reale per una riga fallita in questo giro, se il
+   *  flusher lo conosce (flushRows sotto lo popola sempre; un flusher che fallisce l'intero
+   *  batch, come userSettingsStore.ts, può ometterlo — flush() usa un messaggio generico per le
+   *  righe fallite senza un'entry qui). Puramente diagnostico (obRecordFailure/lastError), non
+   *  cambia quali righe restano in coda. */
+  failures?: { outboxId: number; error: string }[]
 }
 
 type FlushHandler = (rows: OutboxRow[]) => Promise<FlushResult>
+
+// DTREK-AUDIT.md P1 #15 — backoff esponenziale (30s, 60s, 120s, ... fino al tetto di 30 min) invece
+// di ritentare una riga fallita alla stessa cadenza aggressiva di ogni riga sana (ogni debounce di
+// 15s, ogni cambio di visibilità, ogni riconnessione). Oltre MAX_SYNC_ATTEMPTS smette del tutto di
+// ritentare in automatico (dead-letter) — la riga resta in coda (mai persa, vedi obRecordFailure)
+// ma non viene più proposta a un flusher finché un nuovo edit dell'utente non la resetta (vedi
+// RESET_RETRY_STATE in localStore.ts).
+const BACKOFF_BASE_MS = 30_000
+const BACKOFF_CAP_MS = 30 * 60 * 1000
+export const MAX_SYNC_ATTEMPTS = 10
+
+export function backoffMs(attempts: number): number {
+  return Math.min(BACKOFF_BASE_MS * Math.pow(2, attempts), BACKOFF_CAP_MS)
+}
+
+/** Pura — se questa riga è idonea a un nuovo tentativo di flush adesso, o va saltata perché in
+ *  backoff o dead-lettered (attempts >= MAX_SYNC_ATTEMPTS). */
+export function isRowDueForRetry(row: OutboxRow, now: number): boolean {
+  if (row.attempts >= MAX_SYNC_ATTEMPTS) return false
+  if (!row.lastAttemptAt) return true
+  return now - row.lastAttemptAt >= backoffMs(row.attempts)
+}
 
 const flushHandlers = new Map<string, FlushHandler>()
 
@@ -34,15 +62,18 @@ export function registerEntityFlusher(entityType: string, handler: FlushHandler)
  */
 export async function flushRows(rows: OutboxRow[], apply: (row: OutboxRow) => Promise<void>): Promise<FlushResult> {
   const succeededIds: number[] = []
+  const failures: { outboxId: number; error: string }[] = []
   for (const row of rows) {
     try {
       await apply(row)
       succeededIds.push(row.outboxId!)
-    } catch {
-      // Leave this row pending — retried on the next flush trigger.
+    } catch (e) {
+      // Leave this row pending — retried on the next flush trigger, subject to the backoff/
+      // dead-letter policy in flush() below (DTREK-AUDIT.md P1 #15).
+      failures.push({ outboxId: row.outboxId!, error: e instanceof Error ? e.message : String(e) })
     }
   }
-  return { succeededIds }
+  return { succeededIds, failures }
 }
 
 const DEBOUNCE_MS = 15_000
@@ -85,14 +116,31 @@ export async function flush(): Promise<void> {
       byEntity.set(row.entityType, list)
     }
 
+    const now = Date.now()
     for (const [entityType, entityRows] of Array.from(byEntity.entries())) {
       const handler = flushHandlers.get(entityType)
       if (!handler) continue
+      // DTREK-AUDIT.md P1 #15 — una riga in backoff (fallita di recente) o dead-lettered (oltre
+      // MAX_SYNC_ATTEMPTS) non viene nemmeno proposta al flusher questo giro: non ha senso
+      // ritentarla alla stessa cadenza di una riga sana, e un dead-letter deve smettere di
+      // consumare rete/CPU a ogni trigger, non solo smettere di avere successo.
+      const dueRows = entityRows.filter((row) => isRowDueForRetry(row, now))
+      if (dueRows.length === 0) continue
       try {
-        const { succeededIds } = await handler(entityRows)
+        const { succeededIds, failures } = await handler(dueRows)
         await Promise.all(succeededIds.map((id) => obDelete(id)))
-      } catch {
-        // Leave these rows pending — retried on the next flush trigger.
+        const succeededSet = new Set(succeededIds)
+        const failureByRowId = new Map((failures ?? []).map((f) => [f.outboxId, f.error]))
+        await Promise.all(
+          dueRows
+            .filter((row) => !succeededSet.has(row.outboxId!))
+            .map((row) => obRecordFailure(row.outboxId!, failureByRowId.get(row.outboxId!) ?? 'Sync fallita')),
+        )
+      } catch (e) {
+        // L'intero handler ha lanciato (non solo una riga) — ogni riga proposta questo giro resta
+        // pendente, con lo stesso errore registrato per tutte.
+        const message = e instanceof Error ? e.message : String(e)
+        await Promise.all(dueRows.map((row) => obRecordFailure(row.outboxId!, message)))
       }
     }
   } finally {
