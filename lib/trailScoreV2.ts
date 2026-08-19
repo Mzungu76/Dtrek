@@ -59,7 +59,13 @@ export interface TrailScoreV2Input {
  */
 export function computeTrailScoreV2(input: TrailScoreV2Input): TrailScoreV2Result | null {
   const { cts, safety } = input
-  if (cts == null || safety == null) return null
+  // Number.isFinite rejects NaN/±Infinity too, not just null/undefined — a NaN input (e.g. from
+  // a 0/0 upstream in a degenerate track) used to slip past the `== null` check and come out the
+  // other end of Math.max(0, Math.min(100, score)) as NaN, not clamped to a bound, because
+  // Math.min/max treat NaN as neither greater nor less than anything. That's a different failure
+  // than "input missing" (the case this function already handles honestly by returning null) and
+  // deserves the same null, not a NaN silently rendered as "NaN" wherever the score is displayed.
+  if (cts == null || safety == null || !Number.isFinite(cts) || !Number.isFinite(safety)) return null
 
   const gate = safetyGate(safety)
   const score = cts * gate
