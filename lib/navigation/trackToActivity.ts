@@ -1,6 +1,7 @@
 import type { TrackPoint, TcxActivity } from '@/lib/tcxParser'
 import { computeMovingStats, computeIEV } from '@/lib/tcxParser'
 import { haversineM } from '@/lib/geoUtils'
+import { arrayMax, arrayMin } from '@/lib/arrayMinMax'
 
 function downsampleTracks(pts: TrackPoint[], max = 400): TrackPoint[] {
   if (pts.length <= max) return pts
@@ -41,8 +42,10 @@ export function buildActivityFromTrack(rawPoints: TrackPoint[]): TcxActivity {
   }
 
   const alts = rawPoints.filter((p) => p.altitudeMeters !== undefined).map((p) => p.altitudeMeters!)
-  const altitudeMax = alts.length ? Math.max(...alts) : 0
-  const altitudeMin = alts.length ? Math.min(...alts) : 0
+  // arrayMax/Min, non Math.max/min(...arr) — una navigazione lunga può accumulare decine di
+  // migliaia di punti, oltre il limite di argomenti dello spread (DTREK-AUDIT.md P1 #16).
+  const altitudeMax = arrayMax(alts)
+  const altitudeMin = arrayMin(alts)
 
   const startTime = rawPoints[0].time
   const endTime = rawPoints[rawPoints.length - 1].time
@@ -51,11 +54,11 @@ export function buildActivityFromTrack(rawPoints: TrackPoint[]): TcxActivity {
   const avgSpeedMs = speedSamples.length
     ? speedSamples.reduce((a, b) => a + b, 0) / speedSamples.length
     : distanceMeters / totalTimeSeconds || 0
-  const maxSpeedMs = speedSamples.length ? Math.max(...speedSamples) : 0
+  const maxSpeedMs = arrayMax(speedSamples)
 
   const hrValues = rawPoints.filter((p) => p.heartRateBpm).map((p) => p.heartRateBpm!)
   const avgHeartRate = hrValues.length ? Math.round(hrValues.reduce((a, b) => a + b, 0) / hrValues.length) : 0
-  const maxHeartRate = hrValues.length ? Math.max(...hrValues) : 0
+  const maxHeartRate = arrayMax(hrValues)
 
   const id = 'nav_' + startTime.replace(/\D/g, '').slice(0, 14) + '_' + Math.floor(distanceMeters)
 

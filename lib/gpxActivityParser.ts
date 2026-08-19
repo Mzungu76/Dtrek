@@ -1,5 +1,6 @@
 import type { TrackPoint, TcxActivity } from './tcxParser'
 import { computeMovingStats, computeIEV } from './tcxParser'
+import { arrayMax, arrayMin } from './arrayMinMax'
 
 function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371000
@@ -78,8 +79,10 @@ export function parseGpxActivity(xmlText: string): TcxActivity {
   }
 
   const alts = rawPoints.filter(p => p.altitudeMeters !== undefined).map(p => p.altitudeMeters!)
-  const altitudeMax = alts.length ? Math.max(...alts) : 0
-  const altitudeMin = alts.length ? Math.min(...alts) : 0
+  // arrayMax/Min, non Math.max/min(...arr) — una traccia registrata a lungo può arrivare a decine
+  // di migliaia di punti, oltre il limite di argomenti dello spread (DTREK-AUDIT.md P1 #16).
+  const altitudeMax = arrayMax(alts)
+  const altitudeMin = arrayMin(alts)
 
   const startTime = rawPoints[0].time
   const endTime   = rawPoints[rawPoints.length - 1].time
@@ -91,11 +94,11 @@ export function parseGpxActivity(xmlText: string): TcxActivity {
   const avgSpeedMs = speedSamples.length
     ? speedSamples.reduce((a, b) => a + b, 0) / speedSamples.length
     : distanceMeters / totalTimeSeconds || 0
-  const maxSpeedMs = speedSamples.length ? Math.max(...speedSamples) : 0
+  const maxSpeedMs = arrayMax(speedSamples)
 
   const hrValues   = rawPoints.filter(p => p.heartRateBpm).map(p => p.heartRateBpm!)
   const avgHeartRate = hrValues.length ? Math.round(hrValues.reduce((a, b) => a + b, 0) / hrValues.length) : 0
-  const maxHeartRate = hrValues.length ? Math.max(...hrValues) : 0
+  const maxHeartRate = arrayMax(hrValues)
 
   const id = 'gpx_' + startTime.replace(/\D/g, '').slice(0, 14) + '_' + Math.floor(distanceMeters)
 
