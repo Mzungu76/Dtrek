@@ -125,13 +125,13 @@ Oltre 30 problemi, ordinati per categoria di gravità. Ogni riga cita dove ripro
 |---|---|---|
 | 11 | Rate limit DTM (50 chiamate/24h) indistinguibile da "nessuna copertura genuina" per l'utente finale — degrada silenziosamente a quota stimata | `lib/dtm/dtmClient.ts:57-65,60-61` |
 | 12 | Tre client geo esterni (Natura2000, uso-suolo, in parte DTM) dichiarati nel codice stesso "mai verificati contro una risposta reale" | `lib/natura2000/natura2000Client.ts:12-15`, `lib/usosuolo/usoSuoloClient.ts`, `openTopographyClient.ts:6-9` |
-| 13 | Nessuna dead-band di rumore sull'elevazione per import file/URL/KML (presente solo per attività/FIT) | `lib/gpxParser.ts:123-126`, `lib/serverGpxParser.ts:60-63`, `lib/kmlParser.ts:94-98` |
+| 13 | ✅ **Risolto (quick win)** — Verificato in questa sessione: dead-band di rumore elevazione ora presente anche per import file/URL/KML, stessa soglia usata per attività/FIT registrate (`// Dead-band against raw GPS-elevation noise`). | `lib/gpxParser.ts:125`, `lib/serverGpxParser.ts:63`, `lib/kmlParser.ts:97` |
 | 14 | Nessun limite di dimensione file in tutta la catena di import (client e fetch-da-URL) | `components/upload/GpxUploader.tsx`, `lib/gpxSourceFetch.ts:48` |
 | 15 | Outbox di sync senza backoff/dead-letter — `attempts`/`lastError` definiti ma mai scritti, retry infiniti silenziosi | `lib/localStore.ts:18-19,133` |
 | 16 | `Math.max(...array)`/`Math.min(...array)` con spread su array potenzialmente enormi — rischio di stack overflow su tracce/FIT molto lunghi, fix già applicato in un file gemello ma non ovunque | `lib/gpxActivityParser.ts:81-82,94,98`; `app/api/parse-fit/route.ts:136,140,142` (contro il pattern corretto in `lib/gpxParser.ts:132-135`) |
 | 17 | "Trail Confidence" confonde "mi si addice" (Trail Score personale, 60% del peso) con "è affidabile/sicuro" — un percorso sicuro ma faticoso riceve un'etichetta che legge come avviso di sicurezza | `lib/navigation/trailConfidence.ts` |
 | 18 | Default senza segnali = punteggio 0.5 → etichetta "media" (non "sconosciuto"), pur con `factors` che dice "dati insufficienti" — testo ed etichetta in disaccordo | `lib/navigation/trailConfidence.ts:68-75` |
-| 19 | Target di tocco incoerenti: i controlli più usati in cammino (pausa/stop/chiudi/audio) sono 36px, i secondari 44px — al contrario di ciò che serve con guanti | `InstructionBanner.tsx:30,52,77,82`, `NavBottomStrip.tsx:17,43,53` |
+| 19 | ✅ **Risolto (quick win)** — Verificato in questa sessione: tutti i controlli principali (pausa/stop/chiudi/audio/bussola) ora a 44px (`ICON_BTN = 'w-11 h-11 ...'`), con commento esplicito nel codice sul perché ("tra i pulsanti più toccati durante il cammino"). | `InstructionBanner.tsx:30,34`, `NavBottomStrip.tsx:17,19` |
 | 20 | Nessuna modalità alto contrasto/sole forte | `InstructionBanner.tsx:66`, `NavBottomStrip.tsx:48` |
 
 ### P2 — Problemi importanti
