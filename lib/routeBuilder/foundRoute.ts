@@ -43,4 +43,42 @@ export interface FoundRouteItem {
   // Stima leggera (vedi lib/routeBuilder/provisionalScore.ts) — assente per lo stesso motivo di
   // `pois` sopra (righe di cache precedenti a questo campo).
   provisionalScore?: ProvisionalScore
+  // DTREK-AUDIT.md P2 #23 — i numeri (distanceKm/elevationGainM) su cui l'LLM ha basato
+  // comfortVerdict/comfortNote, stimati dal web PRIMA della risoluzione OSM/DTM reale in `track`
+  // — mai ri-verificati contro i dati reali una volta risolti. Preservati qui solo per calcolare
+  // isComfortVerdictStale sotto, mai mostrati direttamente all'utente.
+  estimatedDistanceKm?: number | null
+  estimatedElevationGainM?: number | null
+}
+
+// Sopra questa soglia relativa, il verdetto/nota dell'LLM (basato sui numeri stimati dal web) è
+// considerato non più affidabile: i numeri reali risolti dopo (OSM/DTM) sono cambiati abbastanza
+// da rendere plausibile che anche il giudizio "adatto"/"sconsigliato" e la nota che lo spiega
+// (es. "dislivello superiore alla tua media recente") si basino ormai su un dato superato. Soglia
+// prudente (non minima): un piccolo scarto è normale anche per una stima web ragionevole, qui si
+// vuole intercettare solo un disallineamento sostanziale.
+const STALE_THRESHOLD = 0.4
+
+function relativeDiff(estimated: number, resolved: number): number {
+  if (resolved <= 0) return estimated > 0 ? Infinity : 0
+  return Math.abs(estimated - resolved) / resolved
+}
+
+/**
+ * Vero se i numeri reali risolti (OSM/DTM) sono cambiati abbastanza rispetto alla stima su cui
+ * l'LLM aveva basato comfortVerdict/comfortNote da rendere quel giudizio non più affidabile.
+ * Confronta solo le grandezze per cui esiste sia una stima sia un dato reale — nessun controllo
+ * possibile (mai null/null) torna sempre false, mai un falso "obsoleto" per assenza di dati.
+ */
+export function isComfortVerdictStale(
+  estimated: { distanceKm?: number | null; elevationGainM?: number | null },
+  resolved: { distanceMeters: number; elevationGain: number; hasElevation: boolean },
+): boolean {
+  if (estimated.distanceKm != null && relativeDiff(estimated.distanceKm, resolved.distanceMeters / 1000) > STALE_THRESHOLD) {
+    return true
+  }
+  if (resolved.hasElevation && estimated.elevationGainM != null && relativeDiff(estimated.elevationGainM, resolved.elevationGain) > STALE_THRESHOLD) {
+    return true
+  }
+  return false
 }
