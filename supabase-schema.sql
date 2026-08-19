@@ -980,6 +980,16 @@ ALTER TABLE activity_photos ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT 
 CREATE INDEX IF NOT EXISTS idx_activities_updated_at    ON activities (updated_at);
 CREATE INDEX IF NOT EXISTS idx_planned_hikes_updated_at ON planned_hikes (updated_at);
 
+-- ═══════════════════════════════════════════════════════════
+-- DTREK-AUDIT.md P3 #35 — le foto venivano scaricate a 1600px (lib/activityPhotos.ts,
+-- shrinkForUpload) anche dove mostrate come miniatura ritagliata piccola (griglie foto, pin
+-- mappa, timeline): nessuna colonna per una seconda copia più piccola. NULL per le foto già
+-- caricate prima di questa fix — restano sul fallback url esistente, nessuna migrazione dei
+-- dati storici necessaria (thumb_url IS NULL ⇒ i chiamanti usano url, comportamento identico
+-- a oggi).
+-- ═══════════════════════════════════════════════════════════
+ALTER TABLE activity_photos ADD COLUMN IF NOT EXISTS thumb_url TEXT;
+
 CREATE OR REPLACE FUNCTION set_updated_at() RETURNS TRIGGER
 LANGUAGE plpgsql
 SET search_path = public, pg_temp

@@ -20,6 +20,10 @@ export interface RoutePhoto {
   lon?: number
   /** Server-side last-modified timestamp — see lib/sync/pullEngine.ts. */
   updatedAt?: string
+  /** DTREK-AUDIT.md P3 #35 — copia piccola (vedi THUMB_PHOTO_SIDE) per le viste a griglia/pin,
+   *  che oggi scaricavano l'intera foto da MAX_PHOTO_SIDE solo per ritagliarla a poche decine di
+   *  px. Assente sulle foto caricate prima di questa fix — i chiamanti devono ricadere su `url`. */
+  thumbUrl?: string
 }
 
 /** Copertina "intelligente" quando l'utente non ne ha scelta una a mano (vedi
@@ -70,6 +74,32 @@ export const MAX_PHOTOS_PER_ACTIVITY = 15
 const MAX_PHOTO_SIDE = 1600
 const PHOTO_JPEG_QUALITY = 0.82
 
+// DTREK-AUDIT.md P3 #35 — lato lungo per la copia "miniatura": le viste a griglia/pin la
+// mostrano ritagliata a quadrato o poco più (w-36/w-16/w-14 Tailwind, cioè 144/64/56 px CSS),
+// 320 px copre anche uno schermo retina 2x senza avvicinarsi al peso della copia intera.
+const THUMB_PHOTO_SIDE = 320
+const THUMB_JPEG_QUALITY = 0.75
+
+/** Ridimensiona (se serve) e ricomprime un'immagine già decodificata al lato lungo massimo dato. */
+async function resizeDecodedImage(img: HTMLImageElement, dataUrl: string, maxSide: number, quality: number): Promise<Blob> {
+  const longSide = Math.max(img.naturalWidth, img.naturalHeight)
+  if (longSide <= maxSide) return dataUrlToBlob(dataUrl)
+
+  const k = maxSide / longSide
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.round(img.naturalWidth * k)
+  canvas.height = Math.round(img.naturalHeight * k)
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return dataUrlToBlob(dataUrl)
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+
+  const blob = await new Promise<Blob | null>(res => canvas.toBlob(res, 'image/jpeg', quality))
+  canvas.width = 0; canvas.height = 0
+  // Se il browser non produce il blob (quota di memoria, canvas contaminato) si carica l'originale:
+  // meglio una foto pesante che una foto persa.
+  return blob ?? dataUrlToBlob(dataUrl)
+}
+
 /**
  * Ridimensiona la foto prima di caricarla.
  *
@@ -85,23 +115,20 @@ async function shrinkForUpload(dataUrl: string): Promise<Blob> {
   const img = new Image()
   img.src = dataUrl
   await img.decode()
+  return resizeDecodedImage(img, dataUrl, MAX_PHOTO_SIDE, PHOTO_JPEG_QUALITY)
+}
 
-  const longSide = Math.max(img.naturalWidth, img.naturalHeight)
-  if (longSide <= MAX_PHOTO_SIDE) return dataUrlToBlob(dataUrl)
-
-  const k = MAX_PHOTO_SIDE / longSide
-  const canvas = document.createElement('canvas')
-  canvas.width = Math.round(img.naturalWidth * k)
-  canvas.height = Math.round(img.naturalHeight * k)
-  const ctx = canvas.getContext('2d')
-  if (!ctx) return dataUrlToBlob(dataUrl)
-  ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-
-  const blob = await new Promise<Blob | null>(res => canvas.toBlob(res, 'image/jpeg', PHOTO_JPEG_QUALITY))
-  canvas.width = 0; canvas.height = 0
-  // Se il browser non produce il blob (quota di memoria, canvas contaminato) si carica l'originale:
-  // meglio una foto pesante che una foto persa.
-  return blob ?? dataUrlToBlob(dataUrl)
+/**
+ * Seconda copia, piccola, per le viste a griglia/pin (DTREK-AUDIT.md P3 #35) — quelle scaricavano
+ * l'intera foto da MAX_PHOTO_SIDE solo per mostrarne un ritaglio di poche decine di px. Ridotta e
+ * ricompressa a THUMB_JPEG_QUALITY; se lo scatto originale è già più piccolo di THUMB_PHOTO_SIDE
+ * (raro coi telefoni reali) resta quello, come già fa shrinkForUpload per lo stesso caso.
+ */
+async function shrinkForThumbnail(dataUrl: string): Promise<Blob> {
+  const img = new Image()
+  img.src = dataUrl
+  await img.decode()
+  return resizeDecodedImage(img, dataUrl, THUMB_PHOTO_SIDE, THUMB_JPEG_QUALITY)
 }
 
 function dataUrlToBlob(dataUrl: string): Blob {
@@ -137,6 +164,7 @@ async function saveMetadata(params: {
   hasExifGps: boolean
   lat?: number
   lon?: number
+  thumbUrl?: string
 }): Promise<void> {
   const res = await fetch('/api/activity-photos', {
     method: 'POST',
@@ -156,10 +184,10 @@ async function fetchFromServer(activityId: string): Promise<RoutePhoto[]> {
   if (isStaleSwResponse(res)) throw new Error('served from a stale offline cache')
   const rows = await res.json() as Array<{
     id: string; url: string; caption: string; progress: number
-    hasExifGps: boolean; lat?: number; lon?: number; updatedAt?: string
+    hasExifGps: boolean; lat?: number; lon?: number; updatedAt?: string; thumbUrl?: string
   }>
   return rows
-    .map(r => ({ id: r.id, url: r.url, caption: r.caption, progress: r.progress, hasExifGps: r.hasExifGps, lat: r.lat, lon: r.lon, updatedAt: r.updatedAt }))
+    .map(r => ({ id: r.id, url: r.url, caption: r.caption, progress: r.progress, hasExifGps: r.hasExifGps, lat: r.lat, lon: r.lon, updatedAt: r.updatedAt, thumbUrl: r.thumbUrl }))
     .sort((a, b) => a.progress - b.progress)
 }
 
@@ -275,8 +303,17 @@ export async function addActivityPhoto(activityId: string, photo: {
   lon?: number
 }): Promise<RoutePhoto> {
   const userId = await getUserId()
-  const blob = await shrinkForUpload(photo.dataUrl)
-  const { url, storagePath } = await uploadPhotoBlob(userId, activityId, photo.id, blob)
+  const [blob, thumbBlob] = await Promise.all([
+    shrinkForUpload(photo.dataUrl),
+    shrinkForThumbnail(photo.dataUrl),
+  ])
+  const [{ url, storagePath }, thumbUpload] = await Promise.all([
+    uploadPhotoBlob(userId, activityId, photo.id, blob),
+    // DTREK-AUDIT.md P3 #35 — stesso bucket/cartella della foto principale, solo un suffisso nel
+    // nome file: nessun bucket separato da configurare, nessuna nuova policy RLS da scrivere.
+    uploadPhotoBlob(userId, activityId, `${photo.id}-thumb`, thumbBlob),
+  ])
+  const thumbUrl = thumbUpload.url
   await saveMetadata({
     id: photo.id,
     activityId,
@@ -287,8 +324,9 @@ export async function addActivityPhoto(activityId: string, photo: {
     hasExifGps: photo.hasExifGps,
     lat: photo.lat,
     lon: photo.lon,
+    thumbUrl,
   })
-  const result = { id: photo.id, url, progress: photo.progress, caption: photo.caption, hasExifGps: photo.hasExifGps, lat: photo.lat, lon: photo.lon }
+  const result = { id: photo.id, url, progress: photo.progress, caption: photo.caption, hasExifGps: photo.hasExifGps, lat: photo.lat, lon: photo.lon, thumbUrl }
   const local = await lsGet<RoutePhoto[]>(LS_KEYS.activityPhotos(activityId))
   await lsSet(LS_KEYS.activityPhotos(activityId), [...(local ?? []), result].sort((a, b) => a.progress - b.progress))
   return result

@@ -270,7 +270,8 @@ export default function ActivityPhotoManager({
             <div key={photo.id} className="group rounded-xl overflow-hidden border border-stone-100 shadow-sm bg-white">
               {/* Thumbnail — click to open placement map */}
               <div className="relative cursor-pointer" onClick={() => setShowPlacementMap(true)}>
-                <img src={photo.url} alt={photo.caption}
+                {/* DTREK-AUDIT.md P3 #35 — miniatura piccola invece della foto intera per una griglia */}
+                <img src={photo.thumbUrl ?? photo.url} alt={photo.caption}
                   className="w-full aspect-square object-cover group-hover:opacity-90 transition-opacity" />
                 {/* GPS / position badge */}
                 {photo.hasExifGps
@@ -344,7 +345,7 @@ export default function ActivityPhotoManager({
         >
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xs overflow-hidden">
             <div className="flex items-start gap-3 px-5 pt-5 pb-4">
-              <img src={pendingDelete.url} alt="" className="w-16 h-16 rounded-xl object-cover shrink-0 border border-stone-200" />
+              <img src={pendingDelete.thumbUrl ?? pendingDelete.url} alt="" className="w-16 h-16 rounded-xl object-cover shrink-0 border border-stone-200" />
               <div className="min-w-0">
                 <h3 className="font-display font-bold text-stone-800 text-[15px] leading-snug">Eliminare questa foto?</h3>
                 <p className="text-[11.5px] text-stone-500 leading-snug mt-1">

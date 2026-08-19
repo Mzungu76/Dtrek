@@ -279,7 +279,8 @@ export default function SectionEditor({
                         isPrimary ? 'border-forest-500' : isExtra ? 'border-forest-300' : 'border-stone-200 hover:border-stone-300'
                       }`}
                     >
-                      <img src={p.url} alt={p.caption} className="w-full h-full object-cover" />
+                      {/* DTREK-AUDIT.md P3 #35 */}
+                      <img src={p.thumbUrl ?? p.url} alt={p.caption} className="w-full h-full object-cover" />
                       {included && (
                         <div className="absolute inset-0 bg-forest-900/10" />
                       )}

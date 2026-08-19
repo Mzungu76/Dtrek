@@ -1320,7 +1320,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
         label: src?.caption?.trim() || 'Foto', seconds: photoDurationSec,
         // La miniatura vera dentro il pin: sulla mappa si riconosce QUALE foto si sta spostando,
         // invece di un'icona uguale per tutte — vedi photoPinHtml in RouteLeafletEditor.tsx.
-        thumbUrl: src?.url,
+        // DTREK-AUDIT.md P3 #35 — src.thumbUrl è la copia piccola (lib/activityPhotos.ts); assente
+        // sulle foto caricate prima di questa fix, che ricadono su src.url come sempre.
+        thumbUrl: src?.thumbUrl ?? src?.url,
         // Bloccata finché non la si sblocca esplicitamente — dall'elenco foto o dal lucchetto
         // sulla mappa stessa, vedi unlockedPhotoIds. Gli stacchi non hanno questo campo: restano
         // sempre trascinabili.
@@ -1633,7 +1635,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
       el.style.cssText = 'cursor:pointer'
       el.innerHTML = `<div style="position:relative;display:inline-block">
         <div style="width:36px;height:36px;background:white;border-radius:6px;border:2.5px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.45);overflow:hidden">
-          <img src="${photo.url}" style="width:100%;height:100%;object-fit:cover;display:block"/>
+          <img src="${photo.thumbUrl ?? photo.url}" style="width:100%;height:100%;object-fit:cover;display:block"/>
         </div>
         <div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:9px solid white;margin:0 auto;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.35))"></div>
       </div>`
@@ -4669,7 +4671,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                         <div className="relative shrink-0">
                           <button onClick={()=>setActivePhotoRowId(active?null:photo.id)}
                             title="Sposta o ripristina questa foto" className="block">
-                            <img src={photo.url} alt="" className={`w-11 h-11 rounded-lg object-cover ${active?'ring-2 ring-forest-500':''}`}/>
+                            <img src={photo.thumbUrl ?? photo.url} alt="" className={`w-11 h-11 rounded-lg object-cover ${active?'ring-2 ring-forest-500':''}`}/>
                           </button>
                           {photo.hasExifGps&&(
                             <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-forest-500 flex items-center justify-center" title="GPS automatico">
@@ -5148,7 +5150,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           {routePhotos.find(p=>p.id===placingPhoto.id)&&(
             <div className="absolute top-20 right-3 pointer-events-none">
               <div className="bg-white/10 backdrop-blur-md rounded-xl p-1.5 shadow-xl border border-white/20">
-                <img src={routePhotos.find(p=>p.id===placingPhoto.id)!.url} alt="" className="w-16 h-16 rounded-lg object-cover"/>
+                <img src={routePhotos.find(p=>p.id===placingPhoto.id)!.thumbUrl ?? routePhotos.find(p=>p.id===placingPhoto.id)!.url} alt="" className="w-16 h-16 rounded-lg object-cover"/>
               </div>
             </div>
           )}
@@ -5281,7 +5283,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                   {routePhotos.map(photo=>(
                     <button key={photo.id} onClick={()=>setCoverPhotoId(prev=>prev===photo.id?null:photo.id)}
                       className={`shrink-0 w-16 h-16 rounded-xl overflow-hidden border-2 transition-all ${coverPhotoId===photo.id?'border-terra-400 scale-105 shadow-lg shadow-terra-500/30':'border-white/10 opacity-55 hover:opacity-90'}`}>
-                      <img src={photo.url} className="w-full h-full object-cover" alt=""/>
+                      <img src={photo.thumbUrl ?? photo.url} className="w-full h-full object-cover" alt=""/>
                     </button>
                   ))}
                 </div>

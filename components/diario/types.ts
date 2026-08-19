@@ -27,7 +27,10 @@ export type BookPage =
 
 export type AccentTheme = { bg: string; border: string; text: string; iconBg: string; iconColor: string }
 
-export const GREEN:  AccentTheme = { bg: '#f0fdf4', border: '#bbf7d0', text: '#166534', iconBg: '#dcfce7', iconColor: '#16a34a' }
+// DTREK-AUDIT.md P3 #36 — era la palette 'green' generica di Tailwind, non il brand DTrek (tailwind.config.ts
+// 'forest'). Stessi passi 50/200/800/100/600 dello scale, solo sull'altra palette — nessuna variazione di
+// contrasto testo/sfondo rispetto a prima, solo la tinta cambia.
+export const GREEN:  AccentTheme = { bg: '#f1f8f2', border: '#bbe0bf', text: '#1c4724', iconBg: '#dcf0de', iconColor: '#277134' }
 export const AMBER:  AccentTheme = { bg: '#fffbeb', border: '#fde68a', text: '#78350f', iconBg: '#fef3c7', iconColor: '#d97706' }
 export const BLUE:   AccentTheme = { bg: '#eff6ff', border: '#bfdbfe', text: '#1e40af', iconBg: '#dbeafe', iconColor: '#2563eb' }
 export const VIOLET: AccentTheme = { bg: '#f5f3ff', border: '#ddd6fe', text: '#4c1d95', iconBg: '#ede9fe', iconColor: '#7c3aed' }
