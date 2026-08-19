@@ -12,6 +12,9 @@ interface Props {
   /** Apre il pannello dettagli a schermo intero — il resto (tempi, altimetria, foto/nota/...) vive
    *  lì, non più in una scheda sempre montata sopra la mappa. */
   onExpand: () => void
+  /** DTREK-AUDIT.md P1 #20 — interruttore manuale (nessun sensore di luce disponibile a una
+   *  pagina web): sfondo pieno opaco invece di semi-trasparente sotto sole forte. */
+  highContrast?: boolean
 }
 
 // 44px: pausa/riprendi e stop sono tra i controlli più toccati durante il cammino — stesso
@@ -27,7 +30,12 @@ const TEXT_SHADOW = '0 1px 3px rgba(0,0,0,0.75), 0 1px 8px rgba(0,0,0,0.5)'
  * il percorso pianificato (ActiveNavigationView.tsx) e la registrazione libera
  * (app/navigatore/traccia/page.tsx): stessa striscia, contenuto diverso.
  */
-export default function NavBottomStrip({ summary, timerRunning, onTogglePlayPause, onStop, onExpand }: Props) {
+export default function NavBottomStrip({ summary, timerRunning, onTogglePlayPause, onStop, onExpand, highContrast }: Props) {
+  // DTREK-AUDIT.md P1 #20 — sfondo pieno opaco (bg-black, non bg-black/40-45) sotto sole forte per
+  // testo/pulsanti icona: la trasparenza lascia passare troppa luce su uno schermo molto luminoso
+  // perché restino leggibili/riconoscibili.
+  const iconBtn = highContrast ? ICON_BTN.replace('bg-black/45', 'bg-black') : ICON_BTN
+  const summaryBg = highContrast ? 'bg-black' : 'bg-black/40 backdrop-blur-sm'
   return (
     <div className="absolute bottom-0 inset-x-0 z-10 pointer-events-none">
       <div className="h-24 bg-gradient-to-t from-black/55 to-transparent" />
@@ -42,7 +50,7 @@ export default function NavBottomStrip({ summary, timerRunning, onTogglePlayPaus
         </button>
 
         <div className="w-full flex items-center justify-between gap-3">
-          <button onClick={onTogglePlayPause} className={`${ICON_BTN} pointer-events-auto`} aria-label={timerRunning ? 'Pausa' : 'Avvia'}>
+          <button onClick={onTogglePlayPause} className={`${iconBtn} pointer-events-auto`} aria-label={timerRunning ? 'Pausa' : 'Avvia'}>
             {timerRunning ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
           </button>
 
@@ -51,14 +59,14 @@ export default function NavBottomStrip({ summary, timerRunning, onTogglePlayPaus
             // Sfondo pieno semi-opaco, non solo l'ombra: la distanza residua/ora d'arrivo è un
             // dato di sicurezza (rientro prima del buio), non solo un dettaglio — deve restare
             // leggibile anche su una mappa molto chiara sotto sole forte.
-            className="pointer-events-auto flex-1 min-w-0 text-center bg-black/40 backdrop-blur-sm rounded-full px-4 py-2"
+            className={`pointer-events-auto flex-1 min-w-0 text-center ${summaryBg} rounded-full px-4 py-2`}
           >
             <span className="font-mono text-[20px] font-bold text-white" style={{ textShadow: TEXT_SHADOW }}>
               {summary}
             </span>
           </button>
 
-          <button onClick={onStop} className={`${ICON_BTN} pointer-events-auto bg-red-600/90`} aria-label="Termina">
+          <button onClick={onStop} className={`${iconBtn} pointer-events-auto bg-red-600/90`} aria-label="Termina">
             <Square className="w-5 h-5" />
           </button>
         </div>

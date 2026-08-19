@@ -1,6 +1,6 @@
 'use client'
 import { useState } from 'react'
-import { X, Pause, Play, MapPin, BookOpen, Camera, NotebookPen, Square, Sun } from 'lucide-react'
+import { X, Pause, Play, MapPin, BookOpen, Camera, NotebookPen, Square, Sun, Contrast } from 'lucide-react'
 import type { TrackPoint } from '@/lib/tcxParser'
 import ElevationProfileChart from '@/components/ElevationProfileChart'
 import type { PaceStatus } from '@/lib/navigation/paceAssistant'
@@ -40,6 +40,10 @@ interface Props {
   onOpenSpecie: () => void
   wakeLockEnabled: boolean
   onToggleWakeLock: () => void
+  /** DTREK-AUDIT.md P1 #20 — nessun sensore di luce ambientale disponibile a una pagina web:
+   *  interruttore manuale, stesso principio di wakeLockEnabled sopra. */
+  highContrastEnabled: boolean
+  onToggleHighContrast: () => void
 }
 
 const PACE_STATUS_STYLE: Record<PaceStatus, { label: string; className: string }> = {
@@ -73,7 +77,7 @@ export default function NavStatsSheet({
   distanceCoveredM, distanceRemainingM, currentSpeedMs, avgSpeedMs, movingTimeMs, etaDate,
   paceStatus, daylightMarginMin,
   timerRunning, onTogglePlayPause, onStop, trackPoints, currentDistanceM, remainingPois, guideExcerpts,
-  onOpenFoto, onOpenNota, wakeLockEnabled, onToggleWakeLock,
+  onOpenFoto, onOpenNota, wakeLockEnabled, onToggleWakeLock, highContrastEnabled, onToggleHighContrast,
 }: Props) {
   const [tab, setTab] = useState<Tab>('tempi')
   useModalBackHandler(open, onClose)
@@ -190,6 +194,27 @@ export default function NavStatsSheet({
                 aria-label="Mantieni lo schermo acceso durante la navigazione"
               >
                 <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${wakeLockEnabled ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+              </span>
+            </button>
+            {/* DTREK-AUDIT.md P1 #20 — nessuna modalità alto contrasto per il sole forte: gli
+               sfondi semi-trasparenti dietro il testo di navigazione restano insufficienti sotto
+               sole diretto o su uno schermo molto luminoso. Nessun sensore di luce disponibile a
+               una pagina web (rimosso ovunque per privacy) — interruttore manuale, stesso
+               principio di "Mantieni lo schermo acceso" sopra. */}
+            <button
+              onClick={onToggleHighContrast}
+              className="w-full flex items-center justify-between gap-2 mt-3 pt-3 border-t border-stone-100"
+            >
+              <span className="flex items-center gap-2 text-sm text-stone-700 font-body">
+                <Contrast className="w-4 h-4 text-stone-400" /> Modalità alto contrasto (sole forte)
+              </span>
+              <span
+                className={`relative w-10 h-6 rounded-full transition-colors ${highContrastEnabled ? 'bg-forest-500' : 'bg-stone-300'}`}
+                role="switch"
+                aria-checked={highContrastEnabled}
+                aria-label="Modalità alto contrasto per sole forte durante la navigazione"
+              >
+                <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${highContrastEnabled ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
               </span>
             </button>
           </div>

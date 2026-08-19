@@ -66,6 +66,7 @@ import NavStatsSheet from './NavStatsSheet'
 import NavLayerRail from './NavLayerRail'
 import ParkingSpotControl from './ParkingSpotControl'
 import { buildSlopeSegments } from '@/lib/navigation/routeSlopeSegments'
+import { readHighContrastPref, writeHighContrastPref } from '@/lib/navigation/highContrastPref'
 import ConfirmEndDialog from './ConfirmEndDialog'
 import EndHikeReviewDialog from './EndHikeReviewDialog'
 import { speak } from '@/lib/navigation/speech'
@@ -157,6 +158,10 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   // di mappa/istruzioni finché l'utente non lo riaccende a mano). Disattivabile da chi
   // preferisce risparmiare batteria e affidarsi solo agli avvisi vocali/aptici.
   const [wakeLockEnabled, setWakeLockEnabled] = useState(true)
+  // DTREK-AUDIT.md P1 #20 — inizializzato a false qui (SSR-safe, useState non può leggere
+  // localStorage al primo render) e allineato alla preferenza salvata subito dopo il mount, sotto.
+  const [highContrastEnabled, setHighContrastEnabled] = useState(false)
+  useEffect(() => { setHighContrastEnabled(readHighContrastPref()) }, [])
   const [isOnline, setIsOnline] = useState(true)
   const [mapMode, setMapMode] = useState<MapMode>('offline')
   const [is3D, setIs3D] = useState(false)
@@ -1039,6 +1044,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
             compassSupported={isOrientationSupported() && needsOrientationPermissionGesture()}
             compassEnabled={compassEnabled}
             onEnableCompass={handleEnableCompass}
+            highContrast={highContrastEnabled}
           />
         </div>
 
@@ -1393,6 +1399,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         onTogglePlayPause={handleTogglePlayPause}
         onStop={requestEnd}
         onExpand={() => setShowStatsSheet(true)}
+        highContrast={highContrastEnabled}
       />
 
       <NavStatsSheet
@@ -1418,6 +1425,8 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         onOpenSpecie={() => setShowSpeciesIdentify(true)}
         wakeLockEnabled={wakeLockEnabled}
         onToggleWakeLock={() => setWakeLockEnabled((v) => !v)}
+        highContrastEnabled={highContrastEnabled}
+        onToggleHighContrast={() => setHighContrastEnabled((v) => { const next = !v; writeHighContrastPref(next); return next })}
       />
 
       {callout && (
