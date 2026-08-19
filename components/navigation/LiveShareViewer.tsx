@@ -3,6 +3,8 @@ import 'leaflet/dist/leaflet.css'
 import type * as L from 'leaflet'
 import { useEffect, useRef, useState } from 'react'
 import type { PublicLiveSession } from '@/lib/liveSharePublic'
+import { computeLiveStatus, type LiveShareStatus } from '@/lib/navigation/liveShareStatus'
+import { triggerDeadManAlert, requestDeadManAlertPermission, deadManAlertPermissionGranted } from '@/lib/navigation/deadManAlert'
 
 interface Props {
   token: string
@@ -15,6 +17,10 @@ const TILE_URL = '/api/tile?z={z}&x={x}&y={y}&style=voyager'
 // distinte e configurabili (scrittura lato camminatore ~15-20s, lettura qui ~10-15s),
 // nessuna precisione promessa oltre il fix GPS realmente disponibile in quel momento.
 const POLL_MS = 12000
+// Indipendente dal poll — ricalcola l'età di last_live_ts anche se il poll smette di aggiornare
+// `session` (proprio il caso che DTREK-AUDIT.md P0 #8 segnala: un poll che continua a rispondere
+// 200 OK con lo stesso last_live_ts vecchio non farebbe mai avanzare lo stato altrimenti).
+const TICK_MS = 5000
 
 function timeAgo(iso: string): string {
   const sec = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000))
@@ -37,12 +43,42 @@ export default function LiveShareViewer({ token, initial }: Props) {
   const marker = useRef<L.CircleMarker | null>(null)
   const accuracyCircle = useRef<L.Circle | null>(null)
   const [session, setSession] = useState<PublicLiveSession>(initial)
-  const [stale, setStale] = useState(false)
+  // Rinominato da "stale": riflette SOLO un fallimento dell'ultima chiamata fetch (problema di
+  // rete di chi guarda), non l'età della posizione — vedi `liveStatus` sotto per quella, i due
+  // sono indipendenti (un fetch può riuscire e restituire comunque un last_live_ts vecchio di ore).
+  const [unreachable, setUnreachable] = useState(false)
+  // Ricalcolato ogni TICK_MS, indipendente dal poll — vedi commento su TICK_MS in testa al file.
+  const [now, setNow] = useState(() => Date.now())
+  const [alertsEnabled, setAlertsEnabled] = useState(false)
+  const prevStatusRef = useRef<LiveShareStatus>('live')
   // Distinto da "session esiste" (la pagina non renderizza nemmeno senza — vedi
   // app/s/live/[token]/page.tsx, notFound() se fetchLiveSession non trova un fix): questo
   // traccia solo se la mappa Leaflet (caricata via import dinamico) e il primo marker sono già
   // a schermo, per non lasciare la mappa vuota e silenziosa nell'attesa.
   const [markerPlaced, setMarkerPlaced] = useState(false)
+
+  const liveStatus = computeLiveStatus(session.lastUpdateTs, now)
+
+  useEffect(() => {
+    setAlertsEnabled(deadManAlertPermissionGranted())
+  }, [])
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), TICK_MS)
+    return () => clearInterval(id)
+  }, [])
+
+  // Avviso solo all'INGRESSO in 'critical' (edge-triggered), mai a ogni render/tick — altrimenti
+  // suonerebbe/vibrerebbe ogni TICK_MS finché lo stato resta critico.
+  useEffect(() => {
+    if (liveStatus === 'critical' && prevStatusRef.current !== 'critical') {
+      triggerDeadManAlert(
+        'DTrek — nessun aggiornamento',
+        `${session.hikeTitle}: nessun aggiornamento di posizione da oltre 15 minuti.`,
+      )
+    }
+    prevStatusRef.current = liveStatus
+  }, [liveStatus, session.hikeTitle])
 
   useEffect(() => {
     let cancelled = false
@@ -98,24 +134,51 @@ export default function LiveShareViewer({ token, initial }: Props) {
     const id = setInterval(async () => {
       try {
         const res = await fetch(`/api/navigation/share/${token}`, { cache: 'no-store' })
-        if (!res.ok) { setStale(true); return }
+        if (!res.ok) { setUnreachable(true); return }
         const data = (await res.json()) as PublicLiveSession
         setSession(data)
-        setStale(false)
+        setUnreachable(false)
       } catch {
-        setStale(true)
+        setUnreachable(true)
       }
     }, POLL_MS)
     return () => clearInterval(id)
   }, [token])
 
+  const enableAlerts = async () => {
+    const granted = await requestDeadManAlertPermission()
+    setAlertsEnabled(granted)
+  }
+
   return (
     <div className="fixed inset-0 flex flex-col">
-      <div className="absolute top-0 inset-x-0 z-10 bg-white/95 backdrop-blur-sm border-b border-stone-200 px-4 py-3">
-        <p className="text-sm font-semibold text-stone-800">{session.hikeTitle}</p>
-        <p className={`text-xs mt-0.5 ${stale ? 'text-terra-600 font-medium' : 'text-stone-500'}`}>
-          {stale ? 'Impossibile aggiornare — ultima posizione nota' : 'Posizione live'} · aggiornata {timeAgo(session.lastUpdateTs)}
+      <div
+        className={`absolute top-0 inset-x-0 z-10 backdrop-blur-sm border-b px-4 py-3 ${
+          liveStatus === 'critical' ? 'bg-red-600 border-red-700' : liveStatus === 'stale' ? 'bg-amber-50 border-amber-200' : 'bg-white/95 border-stone-200'
+        }`}
+      >
+        <p className={`text-sm font-semibold ${liveStatus === 'critical' ? 'text-white' : 'text-stone-800'}`}>{session.hikeTitle}</p>
+        <p
+          className={`text-xs mt-0.5 font-medium ${
+            liveStatus === 'critical' ? 'text-white' : unreachable || liveStatus === 'stale' ? 'text-amber-700' : 'text-stone-500 font-normal'
+          }`}
+        >
+          {unreachable
+            ? 'Impossibile aggiornare — ultima posizione nota'
+            : liveStatus === 'critical'
+              ? 'Nessun aggiornamento da oltre 15 minuti'
+              : liveStatus === 'stale'
+                ? 'Nessun aggiornamento recente — potrebbe essere temporaneo (galleria, bosco fitto)'
+                : 'Posizione live'} · aggiornata {timeAgo(session.lastUpdateTs)}
         </p>
+        {!alertsEnabled && (
+          <button
+            onClick={enableAlerts}
+            className={`mt-1.5 text-xs font-semibold underline underline-offset-2 ${liveStatus === 'critical' ? 'text-white' : 'text-sky-700'}`}
+          >
+            🔔 Attiva avviso se la posizione si ferma
+          </button>
+        )}
       </div>
       <div ref={mapRef} className="absolute inset-0" />
       {!markerPlaced && (

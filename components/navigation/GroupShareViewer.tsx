@@ -3,6 +3,8 @@ import 'leaflet/dist/leaflet.css'
 import type * as L from 'leaflet'
 import { useEffect, useRef, useState } from 'react'
 import type { PublicGroup } from '@/lib/groupSharePublic'
+import { computeLiveStatus, type LiveShareStatus } from '@/lib/navigation/liveShareStatus'
+import { triggerDeadManAlert, requestDeadManAlertPermission, deadManAlertPermissionGranted } from '@/lib/navigation/deadManAlert'
 
 interface Props {
   token: string
@@ -11,6 +13,22 @@ interface Props {
 
 const TILE_URL = '/api/tile?z={z}&x={x}&y={y}&style=voyager'
 const POLL_MS = 12000 // stessa cadenza di LiveShareViewer.tsx (Fase 1)
+// Stesso principio di LiveShareViewer.tsx (DTREK-AUDIT.md P0 #8) — ricalcola l'età di ogni
+// lastUpdateTs indipendentemente dal poll.
+const TICK_MS = 5000
+
+const STATUS_RANK: Record<LiveShareStatus, number> = { live: 0, stale: 1, critical: 2 }
+
+// Worst-of tra i partecipanti — stesso principio già usato in lib/safetyScore.ts: un solo
+// partecipante fermo da 20 minuti non deve sparire nella media, deve dominare il banner.
+function worstStatus(members: { lastUpdateTs: string }[], nowMs: number): LiveShareStatus {
+  let worst: LiveShareStatus = 'live'
+  for (const m of members) {
+    const s = computeLiveStatus(m.lastUpdateTs, nowMs)
+    if (STATUS_RANK[s] > STATUS_RANK[worst]) worst = s
+  }
+  return worst
+}
 // Palette fissa, ripetuta ciclicamente per gruppi numerosi — non serve un colore per
 // partecipante garantito univoco, solo distinguibile a occhio tra pochi marker vicini.
 const MEMBER_COLORS = ['#0284c7', '#dc2626', '#16a34a', '#9333ea', '#ea580c', '#0d9488']
@@ -35,7 +53,33 @@ export default function GroupShareViewer({ token, initial }: Props) {
   const markers = useRef<Map<string, L.CircleMarker>>(new Map())
   const [group, setGroup] = useState<PublicGroup>(initial)
   const [mapReady, setMapReady] = useState(false)
-  const [stale, setStale] = useState(false)
+  // Rinominato da "stale": riflette solo un fallimento dell'ultima fetch, indipendente dall'età
+  // reale delle posizioni (vedi liveStatus sotto) — stessa distinzione di LiveShareViewer.tsx.
+  const [unreachable, setUnreachable] = useState(false)
+  const [now, setNow] = useState(() => Date.now())
+  const [alertsEnabled, setAlertsEnabled] = useState(false)
+  const prevStatusRef = useRef<LiveShareStatus>('live')
+
+  const liveStatus = worstStatus(group.members, now)
+
+  useEffect(() => {
+    setAlertsEnabled(deadManAlertPermissionGranted())
+  }, [])
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), TICK_MS)
+    return () => clearInterval(id)
+  }, [])
+
+  useEffect(() => {
+    if (liveStatus === 'critical' && prevStatusRef.current !== 'critical') {
+      triggerDeadManAlert(
+        'DTrek — nessun aggiornamento',
+        `${group.groupName}: almeno un partecipante non aggiorna la posizione da oltre 15 minuti.`,
+      )
+    }
+    prevStatusRef.current = liveStatus
+  }, [liveStatus, group.groupName])
 
   useEffect(() => {
     let cancelled = false
@@ -87,27 +131,52 @@ export default function GroupShareViewer({ token, initial }: Props) {
     const id = setInterval(async () => {
       try {
         const res = await fetch(`/api/navigation/groups/${token}`, { cache: 'no-store' })
-        if (!res.ok) { setStale(true); return }
+        if (!res.ok) { setUnreachable(true); return }
         setGroup(await res.json())
-        setStale(false)
+        setUnreachable(false)
       } catch {
-        setStale(true)
+        setUnreachable(true)
       }
     }, POLL_MS)
     return () => clearInterval(id)
   }, [token])
 
+  const enableAlerts = async () => {
+    const granted = await requestDeadManAlertPermission()
+    setAlertsEnabled(granted)
+  }
+
   return (
     <div className="fixed inset-0 flex flex-col">
-      <div className="absolute top-0 inset-x-0 z-10 bg-white/95 backdrop-blur-sm border-b border-stone-200 px-4 py-3">
-        <p className="text-sm font-semibold text-stone-800">{group.groupName}</p>
-        <p className={`text-xs mt-0.5 ${stale ? 'text-terra-600 font-medium' : 'text-stone-500'}`}>
-          {stale
+      <div
+        className={`absolute top-0 inset-x-0 z-10 backdrop-blur-sm border-b px-4 py-3 ${
+          liveStatus === 'critical' ? 'bg-red-600 border-red-700' : liveStatus === 'stale' ? 'bg-amber-50 border-amber-200' : 'bg-white/95 border-stone-200'
+        }`}
+      >
+        <p className={`text-sm font-semibold ${liveStatus === 'critical' ? 'text-white' : 'text-stone-800'}`}>{group.groupName}</p>
+        <p
+          className={`text-xs mt-0.5 font-medium ${
+            liveStatus === 'critical' ? 'text-white' : unreachable || liveStatus === 'stale' ? 'text-amber-700' : 'text-stone-500 font-normal'
+          }`}
+        >
+          {unreachable
             ? 'Impossibile aggiornare — ultime posizioni note'
-            : group.members.length === 0
-              ? 'Nessun partecipante ha ancora una posizione'
-              : `${group.members.length} ${group.members.length === 1 ? 'partecipante' : 'partecipanti'}`}
+            : liveStatus === 'critical'
+              ? 'Almeno un partecipante fermo da oltre 15 minuti'
+              : liveStatus === 'stale'
+                ? 'Almeno un partecipante senza aggiornamenti recenti'
+                : group.members.length === 0
+                  ? 'Nessun partecipante ha ancora una posizione'
+                  : `${group.members.length} ${group.members.length === 1 ? 'partecipante' : 'partecipanti'}`}
         </p>
+        {!alertsEnabled && (
+          <button
+            onClick={enableAlerts}
+            className={`mt-1.5 text-xs font-semibold underline underline-offset-2 ${liveStatus === 'critical' ? 'text-white' : 'text-sky-700'}`}
+          >
+            🔔 Attiva avviso se una posizione si ferma
+          </button>
+        )}
       </div>
       <div ref={mapRef} className="absolute inset-0" />
       {!mapReady && (
