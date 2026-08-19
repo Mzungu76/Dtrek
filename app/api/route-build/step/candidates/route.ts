@@ -14,6 +14,7 @@ import { getUserFromRequestDetailed } from '@/lib/supabaseAuth'
 import { fetchWalkNetworkCached } from '@/lib/routeBuilder/walkNetworkCache'
 import { generateRawCandidatesForAnchors } from '@/lib/routeBuilder/buildSteps'
 import type { RouteType } from '@/lib/routeBuilder/loopBuilder'
+import { sanitizeHikerConcerns } from '@/lib/hikerProfile'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -26,6 +27,11 @@ interface CandidatesRequestBody {
   startNodeIds: number[]
   routeType: RouteType
   targetDistanceM: number
+  // DTREK-AUDIT.md P2 #22 — già restituito dallo step precedente (step/network), il client lo
+  // rimanda qui così il pathfinding stesso può evitare scalini/terreno tecnico quando l'utente li
+  // ha dichiarati, non solo penalizzarli a valle nel punteggio finale (vedi loopBuilder.ts's
+  // terrainCostMultiplier). Assente/non valido ⇒ nessun cambiamento di comportamento.
+  concerns: ReturnType<typeof sanitizeHikerConcerns>
 }
 
 function parseBody(raw: unknown): CandidatesRequestBody {
@@ -42,8 +48,9 @@ function parseBody(raw: unknown): CandidatesRequestBody {
   }
   const targetDistanceM = Number(body.targetDistanceM)
   if (!Number.isFinite(targetDistanceM) || targetDistanceM <= 0) throw new Error('targetDistanceM non valido')
+  const concerns = sanitizeHikerConcerns(Array.isArray(body.concerns) ? body.concerns : [])
 
-  return { bbox: bbox as [number, number, number, number], startNodeIds, routeType: body.routeType, targetDistanceM }
+  return { bbox: bbox as [number, number, number, number], startNodeIds, routeType: body.routeType, targetDistanceM, concerns }
 }
 
 export async function POST(req: NextRequest) {
@@ -87,6 +94,6 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'network_unavailable', message: 'Rete sentieri non disponibile in questo momento, riprova.' }, { status: 502 })
   }
 
-  const rawCandidates = generateRawCandidatesForAnchors(network, params.startNodeIds, params.routeType, params.targetDistanceM)
+  const rawCandidates = generateRawCandidatesForAnchors(network, params.startNodeIds, params.routeType, params.targetDistanceM, 14, params.concerns)
   return NextResponse.json({ rawCandidates })
 }

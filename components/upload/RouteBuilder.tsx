@@ -681,7 +681,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       if (hasDestination) {
         raw = destRawCandidates ?? []
       } else {
-        const cRes = await postJSON('/api/route-build/step/candidates', { bbox, startNodeIds, routeType, targetDistanceM: distanceM })
+        const cRes = await postJSON('/api/route-build/step/candidates', { bbox, startNodeIds, routeType, targetDistanceM: distanceM, concerns })
         if (!cRes.ok) return { candidates: [], errorMessage: silent ? null : (cRes.data.message || cRes.data.error) }
         raw = cRes.data.rawCandidates ?? []
       }
