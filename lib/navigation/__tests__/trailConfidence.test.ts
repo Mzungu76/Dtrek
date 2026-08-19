@@ -42,6 +42,40 @@ describe('computeTrailConfidence', () => {
     expect(conMeteo.factors).toContain('Condizioni meteo/clima recenti penalizzanti')
   })
 
+  // DTREK-AUDIT.md P1 #17 — Trail Score personale (fatica/bellezza) e Sicurezza sono canali
+  // separati: un percorso sicuro ma poco adatto al profilo non deve mai leggersi come pericoloso,
+  // e viceversa un percorso davvero rischioso non deve leggersi come "semplicemente faticoso".
+  describe('safetyScore — canale separato dal Trail Score personale', () => {
+    it('un Trail Score personale basso produce un fattore su "quanto ti si addice", mai su sicurezza/pericolo', () => {
+      const result = computeTrailConfidence({ trailScore: 15 })
+      const testo = result.factors.join(' | ')
+      expect(testo).toMatch(/non è un giudizio di sicurezza/)
+      expect(testo).not.toMatch(/pericoloso|non sicuro/i)
+    })
+
+    it('un percorso sicuro (safetyScore alto) ma poco adatto (trailScore basso) resta "bassa" per il profilo, senza il fattore di sicurezza', () => {
+      const result = computeTrailConfidence({ trailScore: 15, safetyScore: 95 })
+      expect(result.label).toBe('bassa')
+      expect(result.factors.some((f) => f.includes('Punteggio di Sicurezza'))).toBe(false)
+    })
+
+    it('un percorso poco sicuro (safetyScore basso) abbassa il punteggio anche con un Trail Score personale alto, con un fattore distinto', () => {
+      const altoTrailScore = computeTrailConfidence({ trailScore: 90 })
+      const bassaSicurezza = computeTrailConfidence({ trailScore: 90, safetyScore: 10 })
+      expect(bassaSicurezza.score).toBeLessThan(altoTrailScore.score)
+      expect(bassaSicurezza.factors.some((f) => f.includes('Punteggio di Sicurezza basso'))).toBe(true)
+      // Il fattore sul Trail Score personale resta comunque quello "alto" — i due giudizi non si
+      // mescolano nello stesso testo.
+      expect(bassaSicurezza.factors).toContain('Il percorso ti si addice bene, secondo il tuo profilo escursionistico')
+    })
+
+    it('un safetyScore alto non riduce praticamente nulla (gate vicino a 1)', () => {
+      const senzaSafety = computeTrailConfidence({ trailScore: 90 })
+      const conSafetyAlto = computeTrailConfidence({ trailScore: 90, safetyScore: 95 })
+      expect(conSafetyAlto.score).toBeCloseTo(senzaSafety.score, 1)
+    })
+  })
+
   it('il segnale community non supera mai un piccolo correttivo, anche al peso massimo', () => {
     const senzaCommunity = computeTrailConfidence({ trailScore: 50 })
     const conCommunityMax = computeTrailConfidence({ trailScore: 50, community: community({ confidenceWeight: 0.5, completions30d: 5 }) })

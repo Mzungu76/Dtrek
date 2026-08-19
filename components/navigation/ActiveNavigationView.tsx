@@ -344,7 +344,11 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   paceEtaRef.current = pace?.liveEtaDate ?? null
 
   const weatherLookahead = useWeatherRefresh(hike.id, routePolyline, positionRef, engineRef, paceEtaRef)
-  const { confidence: trailConfidence, closure: trailClosure } = useTrailConfidence(hike.id, routePolyline, hike.cachedTsTotal ?? hike.cachedTrailScore ?? null)
+  // DTREK-AUDIT.md P1 #17 — cachedTrailScore (Comfort TrailScore personale, non gated) invece di
+  // cachedTsTotal (già gated dalla Sicurezza): il gate viene applicato di nuovo, separatamente,
+  // dentro computeTrailConfidence via safetyScore — così il fattore mostrato all'utente sa
+  // distinguere "non ti si addice" da "non è sicuro" invece di un unico numero già mescolato.
+  const { confidence: trailConfidence, closure: trailClosure } = useTrailConfidence(hike.id, routePolyline, hike.cachedTrailScore ?? null, hike.cachedSafetyScore?.overall ?? null)
   // Un nuovo avviso (testo diverso, es. l'ETA si sposta e ora indica pioggia invece di vento)
   // non deve restare nascosto solo perché un avviso precedente era stato chiuso.
   useEffect(() => { setWeatherLookaheadDismissed(false) }, [weatherLookahead?.message])

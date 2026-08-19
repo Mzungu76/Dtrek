@@ -12,10 +12,23 @@
 // come componente pesato alla pari — coerente col principio "attenuato, non sommato alla pari"
 // della roadmap.
 import type { CommunitySignal } from '@/lib/trailConditions/types'
+import { safetyGate } from '@/lib/trailScoreV2'
 
 export interface TrailConfidenceInput {
-  /** Trail Score aggregato già calcolato in pianificazione (0-100 tipicamente, lib/trailScoreV2.ts) — null/undefined se non ancora calcolato per questo percorso. */
+  /** DTREK-AUDIT.md P1 #17 — il Comfort TrailScore PERSONALE (fatica/bellezza per QUESTO
+   *  escursionista, 0-100 tipicamente, lib/trailScoreV2.ts's `cts`) — non più il TrailScoreV2 già
+   *  gated dalla Sicurezza (`cachedTsTotal`). Prima di questo fix i due segnali erano confusi in
+   *  un unico numero: un percorso sicuro ma faticoso/poco adatto al profilo dell'utente produceva
+   *  lo stesso punteggio basso di un percorso davvero pericoloso, con la stessa etichetta
+   *  d'allarme — vedi `safetyScore` sotto, ora il canale separato per il giudizio di sicurezza. */
   trailScore?: number | null
+  /** DTREK-AUDIT.md P1 #17 — Punteggio Sicurezza calcolato in pianificazione (0-100,
+   *  lib/safetyScore.ts's `overall`), applicato come gate SEPARATO — stesso principio
+   *  non-compensabile di `lib/trailScoreV2.ts`'s `safetyGate` (un percorso rischioso non può
+   *  essere "salvato" da quanto ti si addice), ma qui il motivo viene riportato in `factors` con
+   *  un testo esplicitamente distinto da quello sul Trail Score personale, così un'etichetta
+   *  bassa causata da scarsa sicurezza non si legge come "non ti si addice" e viceversa. */
+  safetyScore?: number | null
   /** WeatherSignal.totalPenalty da lib/trailConditions/weatherSignals.ts (tipicamente -35..0, 0 = nessuna penalità). */
   weatherPenalty?: number | null
   /** ClimateSignal — somma di tempPenalty/altitudeSeason/seasonBonus da lib/trailConditions/climateSignals.ts. */
@@ -58,7 +71,14 @@ export function computeTrailConfidence(input: TrailConfidenceInput): TrailConfid
   if (input.trailScore != null && Number.isFinite(input.trailScore)) {
     const norm = clamp01(input.trailScore / 100)
     components.push({ value: norm, weight: 0.6 })
-    factors.push(norm >= 0.7 ? 'Trail Score buono in fase di pianificazione' : norm >= 0.4 ? 'Trail Score nella media' : 'Trail Score basso in fase di pianificazione')
+    // DTREK-AUDIT.md P1 #17 — testo esplicitamente sul "quanto ti si addice" (fatica/bellezza
+    // personale), mai su "sicuro"/"pericoloso": quel giudizio ha ora il proprio fattore separato
+    // sotto, guidato da safetyScore, non da questo componente.
+    factors.push(
+      norm >= 0.7 ? 'Il percorso ti si addice bene, secondo il tuo profilo escursionistico' :
+      norm >= 0.4 ? 'Il percorso ti si addice nella media, secondo il tuo profilo escursionistico' :
+      'Il percorso potrebbe risultarti più faticoso o meno adatto del previsto (non è un giudizio di sicurezza)',
+    )
   }
 
   const totalWeatherClimatePenalty = (input.weatherPenalty ?? 0) + (input.climatePenalty ?? 0)
@@ -90,7 +110,21 @@ export function computeTrailConfidence(input: TrailConfidenceInput): TrailConfid
     )
   }
 
-  const score = clamp01(base + communityBonus)
+  const preGateScore = clamp01(base + communityBonus)
+
+  // DTREK-AUDIT.md P1 #17 — gate SEPARATO sulla Sicurezza, stesso principio non-compensabile di
+  // lib/trailScoreV2.ts's safetyGate (un percorso rischioso non può essere "salvato" da quanto ti
+  // si addice) ma riportato con un fattore testuale distinto, mai mescolato nella stessa frase del
+  // Trail Score personale — così un'etichetta bassa causata da scarsa sicurezza non si legge come
+  // "non ti si addice" (fattore sopra) e viceversa.
+  let score = preGateScore
+  if (input.safetyScore != null && Number.isFinite(input.safetyScore)) {
+    const gate = safetyGate(input.safetyScore)
+    score = clamp01(preGateScore * gate)
+    if (gate < 0.5) factors.push('Punteggio di Sicurezza basso in fase di pianificazione — non un giudizio di comodità')
+    else if (gate < 0.9) factors.push('Punteggio di Sicurezza moderato in fase di pianificazione — non un giudizio di comodità')
+  }
+
   // Senza Trail Score/meteo/clima, il correttivo community (max +0.1, mai un componente alla
   // pari) non basta a trasformare "non lo sappiamo" in un giudizio "medio" genuino — l'etichetta
   // resta 'sconosciuta' anche se lo score numerico ricadrebbe in fascia 'media'.
