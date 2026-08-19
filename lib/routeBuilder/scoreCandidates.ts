@@ -9,7 +9,7 @@ import { haversineM } from '@/lib/geoUtils'
 import { fetchPoisNearPolyline } from './nearbyPois'
 import type { PoiItem, PoiType } from '@/lib/overpass'
 import type { HikerConcernKey, HikerEnvironmentPrefKey } from '@/lib/hikerProfile'
-import { DtmUnavailableError } from '@/lib/dtm/dtmClient'
+import { DtmUnavailableError, type DtmUnavailableReason } from '@/lib/dtm/dtmClient'
 import { computeProvisionalScore, type ProvisionalScore } from './provisionalScore'
 import { naismithHours } from '@/lib/trailScore'
 import type { RouteCandidate, HazardMarker } from './loopBuilder'
@@ -37,6 +37,12 @@ export interface ScoredCandidate {
   // il candidato (mai per l'intera lista di risultati). Stesso concetto già usato da ResolvedTrack
   // per i percorsi "trovati", qui sempre false finché non arriva l'arricchimento reale.
   hasElevation: boolean
+  // DTREK-AUDIT.md P1 #11 — presente SOLO quando hasElevation è false e si conosce il motivo
+  // reale (dopo un tentativo di enrichBuiltCandidateWithRealElevation): 'rate_limited' è
+  // transitorio (quota OpenTopography esaurita o breaker aperto, si risolve da solo), 'no_coverage'
+  // no (bbox genuinamente fuori dal dataset EU_DTM, o dataset non configurato). undefined in ogni
+  // risultato di ricerca (mai arricchito) — non implica nulla sul motivo, solo "non ancora tentato".
+  elevationUnavailableReason?: DtmUnavailableReason
   // Stima leggera (vedi provisionalScore.ts) — sempre presente, va mostrata con l'etichetta
   // "Provvisorio", mai come il punteggio definitivo (quello arriva solo dopo l'importazione).
   provisionalScore: ProvisionalScore
@@ -261,14 +267,22 @@ export async function scoreAndEnrichCandidates(
  * DtmUnavailableError), il candidato torna invariato — resta con la quota stimata,
  * `hasElevation: false` — stesso comportamento tollerante già usato da resolveTrack.ts per i
  * percorsi "trovati": un profilo altimetrico mancante non deve mai impedire di salvare il percorso.
+ * Nel caso di fallimento imposta anche `elevationUnavailableReason` (DTREK-AUDIT.md P1 #11) così
+ * la UI può distinguere un rate limit transitorio da una vera assenza di copertura.
  */
 export async function enrichBuiltCandidateWithRealElevation(candidate: ScoredCandidate): Promise<ScoredCandidate> {
-  const enrichedTrack = await enrichGeometryWithElevation(candidate.routePolyline).catch(e => {
+  let unavailableReason: DtmUnavailableReason | undefined
+  const enrichedTrack = await enrichGeometryWithElevation(candidate.routePolyline, {
+    onUnavailable: (reason) => { unavailableReason = reason },
+  }).catch(e => {
     if (e instanceof DtmUnavailableError) console.error('[route-build] DTM non configurato (OPENTOPOGRAPHY_API_KEY mancante):', e.message)
     else console.error('[route-build] enrichBuiltCandidateWithRealElevation errore inatteso:', e)
+    // Non configurato o un errore inatteso (mai propagato da fetchDtmTile in condizioni normali):
+    // trattato come 'no_coverage' — non è un rate limit, non si risolve ritentando più tardi.
+    unavailableReason = unavailableReason ?? 'no_coverage'
     return null
   })
-  if (!enrichedTrack) return candidate
+  if (!enrichedTrack) return { ...candidate, elevationUnavailableReason: unavailableReason }
 
   return {
     ...candidate,
