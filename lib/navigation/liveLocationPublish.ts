@@ -19,9 +19,13 @@ export interface LiveFix {
   accuracyM: number | null
 }
 
-export async function publishLivePosition(sessionId: string, fix: LiveFix): Promise<void> {
+// DTREK-AUDIT.md P0 #8 — torna un booleano di successo (prima Promise<void>, l'esito era del
+// tutto invisibile al chiamante) così che ActiveNavigationView.tsx possa accorgersi se il proprio
+// "battito" di posizione live smette di arrivare al server e avvisare l'escursionista stesso —
+// oggi l'unico modo per saperlo era controllare a mano il link pubblico da un altro dispositivo.
+export async function publishLivePosition(sessionId: string, fix: LiveFix): Promise<boolean> {
   try {
-    await getBrowserSupabase()
+    const { error } = await getBrowserSupabase()
       .from('hike_navigation_sessions')
       .update({
         last_live_lat: fix.lat,
@@ -30,7 +34,9 @@ export async function publishLivePosition(sessionId: string, fix: LiveFix): Prom
         last_live_accuracy_m: fix.accuracyM,
       })
       .eq('id', sessionId)
+    return !error
   } catch {
     // Silenzioso by design — vedi commento in testa al file: si riprova al prossimo tick.
+    return false
   }
 }

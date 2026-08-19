@@ -4,6 +4,7 @@
 // i nodi condivisi tra way diverse restano visibili come intersezioni reali della rete stradale.
 import { fetchOverpass } from '@/lib/overpassTrails'
 import { haversineM } from '@/lib/geoUtils'
+import { mapOsmSacScale } from '@/lib/osm/sacScale'
 
 // Tag highway ammessi per un percorso escursionistico: sentieri/tracciati/carrarecce (comprese le
 // "strade bianche", tipicamente track/unclassified) più residential — necessario perché un punto
@@ -33,6 +34,11 @@ export interface GraphEdge {
   distM: number
   wayId: number
   highway?: string
+  // DTREK-AUDIT.md P0 #10 — già presenti sui tag della way scaricata per il grafo (nessuna nuova
+  // query Overpass), semplicemente mai letti finora oltre a `highway`. sacScale è già mappato a
+  // T1-T6 (vedi lib/osm/sacScale.ts), non il valore OSM grezzo.
+  sacScale?: string
+  ford?: boolean
 }
 
 export interface WalkNetwork {
@@ -55,14 +61,14 @@ interface OverpassWayEl {
 
 type OverpassEl = OverpassNodeEl | OverpassWayEl
 
-function addEdge(nodes: Map<number, GraphNode>, fromId: number, toId: number, wayId: number, highway?: string) {
+function addEdge(nodes: Map<number, GraphNode>, fromId: number, toId: number, wayId: number, highway?: string, sacScale?: string, ford?: boolean) {
   const from = nodes.get(fromId)
   const to = nodes.get(toId)
   if (!from || !to) return
   const distM = haversineM(from.lat, from.lon, to.lat, to.lon)
   if (distM <= 0) return
-  from.edges.push({ to: toId, distM, wayId, highway })
-  to.edges.push({ to: fromId, distM, wayId, highway })
+  from.edges.push({ to: toId, distM, wayId, highway, sacScale, ford })
+  to.edges.push({ to: fromId, distM, wayId, highway, sacScale, ford })
 }
 
 /**
@@ -73,10 +79,18 @@ function addEdge(nodes: Map<number, GraphNode>, fromId: number, toId: number, wa
  */
 export async function fetchWalkNetwork(bbox: [number, number, number, number]): Promise<WalkNetwork> {
   const [minLat, minLon, maxLat, maxLon] = bbox
+  // DTREK-AUDIT.md P0 #10 — "out skel qt" (verbosità precedente) NON include mai i tag delle way,
+  // solo id/skeleton: el.tags?.highway era quindi sempre undefined, e con esso anche
+  // pathHasSteps/hasSteps (bug preesistente, mai notato perché "nessuno scalino rilevato" è
+  // indistinguibile da "davvero nessuno scalino" senza guardare il codice). "out body qt" include
+  // i tag — stessa identica combinazione filtro/bbox già usata con successo in produzione da
+  // lib/routeBuilder/hikingProbability.ts::fetchTaggedNetwork (lì con [timeout:25] anziché 18, ma
+  // il costo lato server di trovare le way corrispondenti è identico: cambia solo la
+  // serializzazione/il trasferimento, non la ricerca) — stesso pattern, non una query nuova.
   const query = `[out:json][timeout:18][maxsize:536870912];
 way["highway"~"^(${WALKABLE_HIGHWAY})$"]["access"!~"^(private|no)$"](${minLat},${minLon},${maxLat},${maxLon});
 (._;>;);
-out skel qt;`
+out body qt;`
 
   // Timeout client allineato al [timeout:18] della query — fetchOverpass ritenta una volta sola
   // dopo una breve pausa (vedi lib/overpassTrails.ts), quindi il caso peggiore resta ~37s invece
@@ -92,8 +106,12 @@ out skel qt;`
 
   for (const el of elements) {
     if (el.type !== 'way' || !el.nodes || el.nodes.length < 2) continue
+    const sacScale = mapOsmSacScale(el.tags?.sac_scale) ?? undefined
+    // "no" è un valore esplicito valido per il tag ford (nessun guado) — solo qualunque altro
+    // valore presente (yes, stepping_stones, ...) conta come guado reale.
+    const ford = el.tags?.ford != null && el.tags.ford !== 'no'
     for (let i = 0; i < el.nodes.length - 1; i++) {
-      addEdge(nodes, el.nodes[i], el.nodes[i + 1], el.id, el.tags?.highway)
+      addEdge(nodes, el.nodes[i], el.nodes[i + 1], el.id, el.tags?.highway, sacScale, ford)
     }
   }
 

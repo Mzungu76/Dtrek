@@ -42,6 +42,7 @@ import OfflinePackageDownloader from './OfflinePackageDownloader'
 import LiveShareToggle from './LiveShareToggle'
 import GroupModeSection from './GroupModeSection'
 import { publishLivePosition } from '@/lib/navigation/liveLocationPublish'
+import { LIVE_STALE_MS } from '@/lib/navigation/liveShareStatus'
 import SosButton from './SosButton'
 import GiuliaLiveQa from './GiuliaLiveQa'
 import TrailConfidenceBadge from './TrailConfidenceBadge'
@@ -172,6 +173,11 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   const [showLiveShareSheet, setShowLiveShareSheet] = useState(false)
   const [liveSharingEnabled, setLiveSharingEnabled] = useState(false)
   const [liveShareToken, setLiveShareToken] = useState<string | null>(null)
+  // DTREK-AUDIT.md P0 #8 — l'escursionista stesso deve poter sapere se il proprio "battito" di
+  // posizione live smette di arrivare al server (oggi falliva in silenzio totale, senza che
+  // nessuno se ne accorgesse finché un contatto non controllava a mano il link pubblico).
+  const [liveShareSelfStale, setLiveShareSelfStale] = useState(false)
+  const lastLivePublishSuccessRef = useRef<number | null>(null)
   const [showNatura2000, setShowNatura2000] = useState(false)
   const [wildlifeAlertDismissed, setWildlifeAlertDismissed] = useState(false)
   const [weatherLookaheadDismissed, setWeatherLookaheadDismissed] = useState(false)
@@ -642,11 +648,19 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       // — il fix di posizione arriva comunque, in pausa o no. Condizionare la condivisione live a
       // quel bottone avrebbe lasciato la posizione mai pubblicata finché l'utente non lo preme
       // esplicitamente, un requisito che chi attiva "Posizione live" non ha motivo di aspettarsi.
-      if (!positionRef.current) return
-      publishLivePosition(remoteSessionId.current, {
-        lat: positionRef.current.lat, lon: positionRef.current.lon,
-        ts: Date.now(), accuracyM: accuracyMRef.current,
-      })
+      if (positionRef.current) {
+        publishLivePosition(remoteSessionId.current, {
+          lat: positionRef.current.lat, lon: positionRef.current.lon,
+          ts: Date.now(), accuracyM: accuracyMRef.current,
+        }).then((ok) => {
+          if (ok) lastLivePublishSuccessRef.current = Date.now()
+        })
+      }
+      // DTREK-AUDIT.md P0 #8 — controllato a ogni tick indipendentemente dal successo qui sopra
+      // (anche senza un fix GPS quest'ultima volta, l'assenza di successi recenti resta rilevante):
+      // livello, non un evento una tantum, si auto-risolve appena un publish torna a riuscire.
+      const successAgeMs = lastLivePublishSuccessRef.current == null ? Infinity : Date.now() - lastLivePublishSuccessRef.current
+      setLiveShareSelfStale(successAgeMs >= LIVE_STALE_MS)
     }, 18000)
 
     return () => {
@@ -1175,12 +1189,25 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       >
         <LiveShareToggle
           sessionId={remoteSessionIdState}
-          onSharingChange={(enabled, token) => { setLiveSharingEnabled(enabled); setLiveShareToken(token) }}
+          onSharingChange={(enabled, token) => {
+            setLiveSharingEnabled(enabled)
+            setLiveShareToken(token)
+            // Baseline al momento dell'attivazione — senza questo il primo tick dopo l'accensione
+            // leggerebbe "nessun successo mai registrato" come se fosse già fermo da sempre.
+            lastLivePublishSuccessRef.current = enabled ? Date.now() : null
+            setLiveShareSelfStale(false)
+          }}
         />
         <GroupModeSection
           sessionId={remoteSessionIdState}
           plannedHikeId={hike.id}
-          onGroupActive={(active) => { if (active) setLiveSharingEnabled(true) }}
+          onGroupActive={(active) => {
+            if (active) {
+              setLiveSharingEnabled(true)
+              lastLivePublishSuccessRef.current = Date.now()
+              setLiveShareSelfStale(false)
+            }
+          }}
         />
       </Sheet>
 
@@ -1316,6 +1343,22 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
               <div className="px-4 py-2 rounded-xl bg-stone-800 text-white text-sm font-semibold font-body shadow-lg flex items-center gap-2">
                 <BatteryWarning size={16} className="shrink-0 text-amber-400" /> Batteria scarica
                 <button onClick={() => setLowBatteryNotice(false)} className="text-stone-400 hover:text-white ml-1" aria-label="Chiudi avviso">✕</button>
+              </div>
+            ),
+          })
+        }
+        // DTREK-AUDIT.md P0 #8 — solo per l'escursionista stesso, mai un banner critico
+        // full-screen come turnback/gps_lost: chi ha attivato "Posizione live" deve sapere che il
+        // proprio battito non sta più raggiungendo il server (oggi falliva in silenzio totale),
+        // senza che questo interferisca con avvisi di navigazione ben più urgenti. Si
+        // auto-risolve appena un publish torna a riuscire, nessun bottone di chiusura — vedi
+        // liveShareInterval più sopra.
+        if (liveSharingEnabledRef.current && liveShareSelfStale) {
+          alerts.push({
+            id: 'liveshare-self-stale',
+            node: (
+              <div className="px-4 py-2 rounded-xl bg-stone-800 text-white text-sm font-semibold font-body shadow-lg flex items-center gap-2">
+                <Radio size={16} className="shrink-0 text-amber-400" /> La tua posizione live non si aggiorna
               </div>
             ),
           })

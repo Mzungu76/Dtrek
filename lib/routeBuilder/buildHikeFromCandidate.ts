@@ -25,6 +25,23 @@ export function buildHikeFromBuilt(data: BuiltCandidate, title: string, date: st
     trackPoints: data.trackPoints,
     routePolyline: downsamplePolyline(data.trackPoints),
     pendingExpiresAt,
+    // DTREK-AUDIT.md P0 #10 — prima di questo fix un percorso costruito qui non aveva MAI
+    // difficultyMarkers (campo popolato solo da GpxUploader.tsx per un GPX importato), a
+    // prescindere da quanto reale fosse un tratto esposto/guado sul tracciato: stessa forma
+    // (ClassifiedDifficultyMarker) di un import GPX, così MapView.tsx/GuidaHub.tsx la mostrano
+    // senza bisogno di alcuna modifica a valle. Già classificato dalla soglia SAC/dal tipo di
+    // hazard in pathHazardMarkers — non passa da classifyMarkers (quello resta per il testo
+    // libero dei GPX importati, dove la severity non è nota a monte).
+    difficultyMarkers: data.hazardMarkers?.length
+      ? data.hazardMarkers.map((h) => ({
+          lat: h.lat,
+          lon: h.lon,
+          text: h.text,
+          source: 'osm_way' as const,
+          severity: h.kind === 'ford' ? 'warning' as const : h.sacScale === 'T4' ? 'warning' as const : 'danger' as const,
+          keywords: h.kind === 'ford' ? ['guado'] : [`sac_scale:${h.sacScale}`],
+        }))
+      : undefined,
   }
 }
 

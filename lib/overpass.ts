@@ -1,5 +1,6 @@
 // Overpass API — OpenStreetMap, 100% gratuita, nessuna chiave
 // https://overpass-api.de/
+import { mapOsmSacScale } from './osm/sacScale'
 
 export type PoiType =
   | 'peak'
@@ -224,7 +225,11 @@ out tags;`
     if (['fell','heath','grassland','scree','bare_rock'].includes(t['natural'])) ctx.openTerrain = true
     if (t['boundary'] === 'national_park')                                  { ctx.isNationalPark = true; ctx.isProtected = true }
     if (t['boundary'] === 'protected_area' || t['leisure'] === 'nature_reserve') ctx.isProtected = true
-    if (t['sac_scale']) { const i = sacOrder.indexOf(t['sac_scale']); if (i > maxSac) maxSac = i }
+    // DTREK-AUDIT.md P0 #10 — mapOsmSacScale converte i valori LUNGHI reali del tag OSM (hiking,
+    // mountain_hiking, ...) alle sigle T1-T6: un confronto diretto contro t['sac_scale'] qui sotto
+    // non riconosceva mai un dato OSM reale (nessuna way è mai taggata sac_scale="T5" alla lettera).
+    const mappedSac = mapOsmSacScale(t['sac_scale'])
+    if (mappedSac) { const i = sacOrder.indexOf(mappedSac); if (i > maxSac) maxSac = i }
     if (t['surface'])   surfaces.add(t['surface'])
   }
 
