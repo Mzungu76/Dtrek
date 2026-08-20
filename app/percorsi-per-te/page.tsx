@@ -10,12 +10,7 @@ import { Loader2, MapPin } from 'lucide-react'
 import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import BackLink from '@/app/components/BackLink'
 import { FoundRouteCard, BuiltRouteCard, type FeedbackControls } from '@/components/RouteResultCard'
-import { buildHikeFromBuilt, buildHikeFromFound, enrichWithPois, enrichBuiltCandidateForImport, enrichFoundCandidateForImport } from '@/lib/routeBuilder/buildHikeFromCandidate'
-import { savePlanned } from '@/lib/plannedStore'
-import { computeCtsForHike } from '@/lib/computeCtsForHike'
-import { computeSafetyForHike } from '@/lib/computeSafetyForHike'
-import { defaultPendingExpiresAt } from '@/components/upload/sharedHelpers'
-import { routeTypeLabel } from '@/lib/routeBuilder/loopBuilder'
+import { openRecommendationCard } from '@/lib/routeBuilder/openRecommendationCard'
 import type { RecommendationCard } from '@/lib/routeBuilder/generateRecommendations'
 import type { ScoredCandidate } from '@/lib/routeBuilder/scoreCandidates'
 import type { FoundRouteItem } from '@/lib/routeBuilder/foundRoute'
@@ -95,19 +90,8 @@ export default function PercorsiPerTePage() {
     setOpeningId(card.id)
     setErrorMsg('')
     try {
-      const pendingExpiresAt = await defaultPendingExpiresAt()
-      // Stessa logica di RouteBuilder.tsx's handleSave: ENTRAMBI i tipi di card arrivano con quota
-      // stimata (generateRecommendations.ts non chiama mai il DTM reale durante la generazione, né
-      // per "Su misura" né per "Esistenti") — arricchita qui, una sola volta, per la sola card
-      // scelta.
-      const hike = card.kind === 'built'
-        ? buildHikeFromBuilt(await enrichBuiltCandidateForImport(card.data as ScoredCandidate), `${routeTypeLabel((card.data as ScoredCandidate).type)} per te`, '', pendingExpiresAt)
-        : buildHikeFromFound(await enrichFoundCandidateForImport(card.data as FoundRouteItem), (card.data as FoundRouteItem).name, '', pendingExpiresAt)
-      await enrichWithPois(hike)
-      await savePlanned(hike)
-      computeCtsForHike(hike).catch(() => {})
-      computeSafetyForHike(hike).catch(() => {})
-      router.push(`/guida/${encodeURIComponent(hike.id)}`)
+      const hikeId = await openRecommendationCard(card)
+      router.push(`/guida/${encodeURIComponent(hikeId)}`)
     } catch (e) {
       setErrorMsg(`Errore nel salvataggio: ${e instanceof Error ? e.message : String(e)}`)
       setOpeningId(null)

@@ -1077,8 +1077,18 @@ Sessione del 2026-08-20, stesso branch di questo audit. Riscritto `app/bacheca/p
   fallback all'ultima escursione fatta, terzo stato dell'hero ("La tua ultima uscita" + CTA
   "Rivedi") per chi ha già camminato ma non ha nulla pianificato. Verificato dal vivo: l'hero mostra
   la foto reale del POI Wikipedia (Monte Autore) al posto del tracciato, come da catena di fallback.
-- **Fasi 3-4**: non ancora iniziate (Percorsi-per-te come righe di card vere; Regione obbligatoria
-  nel wizard).
+- **Fase 3 — IMPLEMENTATA (sessione successiva alla diagnosi del cron rotto, vedi sotto)**: il
+  teaser singolo "Percorsi per te" è sostituito da una riga scorrevole di card vere e cliccabili
+  (stesso stile della riga "Curiosità": card compatte 170px con tracciato via `RouteThumb`, non la
+  mappa interattiva pesante di `TrailPreviewMap` usata nella pagina completa), popolata dalle stesse
+  card lette da `?peek=1` (nessuna generazione in più, la Home non aspetta mai una ricerca
+  Overpass). Toccare una card salva il percorso come pianificato e apre `/guida/[id]`, esattamente
+  come il bottone "Apri" della pagina completa — logica estratta in
+  `lib/routeBuilder/openRecommendationCard.ts`, condivisa tra le due pagine invece di duplicata.
+  Link "Vedi tutti" verso `/percorsi-per-te` per i controlli ♥/✕ non presenti nella riga compatta.
+  Non costruita finché la pipeline dati non era affidabile end-to-end (vedi la diagnosi sotto) —
+  costruirci sopra prima avrebbe solo reso più visibile un difetto a monte.
+- **Fase 4**: non ancora iniziata (Regione obbligatoria nel wizard).
 
 **"Percorsi per te" — diagnosi della causa reale del malfunzionamento (sessione successiva) e fix
 applicato**: verificato in produzione (query diretta su `route_recommendations` via Supabase MCP)
