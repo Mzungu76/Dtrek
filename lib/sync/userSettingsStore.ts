@@ -62,6 +62,10 @@ export interface UserSettingsData {
   onboardingCompletedAt: string | null
   /** Indipendente da onboardingCompletedAt — vedi supabase/migrations/add_gift_route_offered_at.sql. */
   giftRouteOfferedAt: string | null
+  /** Slug di lib/italianRegions.ts, scelto nell'onboarding (auto o manuale) — null se non ancora
+   *  raccolta o se l'utente ha scelto esplicitamente di non specificarla. Vedi
+   *  supabase/migrations/add_home_region.sql. */
+  homeRegion: string | null
   /** Server-side last-modified timestamp — see lib/sync/pullEngine.ts. */
   updatedAt: string | null
   aiUseBiometricData: boolean
