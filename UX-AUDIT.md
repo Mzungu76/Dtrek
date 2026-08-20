@@ -1061,6 +1061,40 @@ ipotizzati dal codice).
 
 ## 23. Recommended Changes
 
+### Stato implementazione — Home (P-O5 / Opzione D)
+
+Sessione del 2026-08-20, stesso branch di questo audit. Riscritto `app/bacheca/page.tsx`.
+
+- **Fase 1 — CONFERMATA da screenshot su dispositivo reale**: hero compatta con la prossima uscita
+  pianificata (o fallback), card "Lo sapevi che…" dal POI/Wikipedia già arricchito, teaser
+  "Percorsi per te" invariato, tre numeri di andamento con link a `/statistiche`. Verificato dal
+  vivo: etichetta corretta "Pianificato, senza data ancora" + CTA "Vai al percorso" quando il
+  percorso in evidenza non ha una data; curiosità che pesca davvero un estratto Wikipedia reale
+  (Monte Autore, POI di Camposecco); teaser "Percorsi per te" correttamente nascosto (non rotto)
+  quando quella funzione non ha risultati.
+- **Fase 2 — CONFERMATA da screenshot su dispositivo reale**: catena di fallback per la foto
+  dell'hero (foto propria → foto del POI Wikipedia → tracciato → immagine generica), curiosità con
+  fallback all'ultima escursione fatta, terzo stato dell'hero ("La tua ultima uscita" + CTA
+  "Rivedi") per chi ha già camminato ma non ha nulla pianificato. Verificato dal vivo: l'hero mostra
+  la foto reale del POI Wikipedia (Monte Autore) al posto del tracciato, come da catena di fallback.
+- **Fasi 3-4**: non ancora iniziate (Percorsi-per-te come righe di card vere; Regione obbligatoria
+  nel wizard).
+
+**Miglioramenti aperti, emersi verificando la Fase 2 dal vivo** (non ancora implementati):
+- **Curiosità multiple — IMPLEMENTATO**: correzione di lettura del mockup "DTrek Home Layouts",
+  Opzione D — le due card di "Curiosità dai tuoi percorsi" avevano due nomi di percorso diversi
+  come etichetta (Camposecco, Faggeta del Cimino), quindi una curiosità per percorso distinto, non
+  più POI dello stesso percorso in evidenza. La Home ora mostra fino a tre card in riga scorrevole,
+  una dal percorso in evidenza e una da ciascuna delle due escursioni più recenti, ognuna saltata
+  singolarmente se quel percorso non ha POI arricchiti — mai una card vuota o duplicata.
+- **Più percorsi mostrati in Home**: da distinguere in due casi. (a) Percorsi *raccomandati* (non
+  ancora dell'utente) — coincide con la Fase 3 già pianificata. (b) *Proprie* prossime uscite
+  multiple, oltre a quella in evidenza nell'hero — **non prevista nel disegno attuale**: la scelta
+  deliberata era una sola azione primaria in hero, coerente con il principio dell'audit di non far
+  competere più elementi per la stessa attenzione (§9); le altre uscite pianificate restano
+  raggiungibili da "Guide". Da decidere esplicitamente con l'autore del prodotto prima di
+  implementarla, perché in tensione con quel principio.
+
 ### P0 — impatto massimo, agire per primi
 1. **Aggiungere un secondo CTA "Pianifica un percorso" nello stato vuoto della Home** (accanto/al posto
    di "Crea un Resoconto" come unico invito) — risolve P-C2, bassissimo sforzo tecnico. **Nota
