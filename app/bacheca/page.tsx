@@ -6,8 +6,9 @@ import { it } from 'date-fns/locale'
 import { Navigation, Sparkles, ArrowRight, TrendingUp, Flame, BarChart3, Loader2 } from 'lucide-react'
 import HubNavBar from '@/components/routehub/HubNavBar'
 import RouteThumb from '@/components/RouteThumb'
-import { getAllActivities, computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
+import { getAllActivities, getActivityById, computeGlobalStats, type ActivityMeta, type StoredActivity } from '@/lib/blobStore'
 import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
+import { fetchActivityPhotos, pickBestCoverPhoto } from '@/lib/activityPhotos'
 import { useCtsUpdated } from '@/lib/sync/useCtsUpdated'
 import { computeStreaks } from '@/lib/stats'
 import { computeTrainingLoad, activityStress, currentForm } from '@/lib/trainingLoad'
@@ -16,6 +17,9 @@ import type { WikiPage } from '@/lib/wikipedia'
 import type { PoiItem } from '@/lib/overpass'
 
 const FALLBACK_HERO = '/stato-hero-fallback.jpg'
+// Stessi valori usati da RouteHub.tsx per le foto di copertina — coerenza visiva quando l'hero
+// della Home mostra una foto reale (propria o da un POI Wikipedia) invece del solo tracciato.
+const HERO_IMAGE_FILTER = 'saturate(1.25) contrast(1.08) brightness(0.85)'
 
 // Bacheca — Home reale dell'app (redirect di "/", vedi app/page.tsx). Ridisegnata secondo la
 // direzione "Opzione D" decisa nell'audit UX (UX-AUDIT.md, P-O5): risponde prima di tutto a "cosa
@@ -86,13 +90,55 @@ export default function BachecaPage() {
     return { hike: sorted[0], hasDate: false }
   }, [planned])
 
-  // Curiosità storico-culturale: il primo POI+estratto Wikipedia già arricchito gratuitamente
-  // all'import del percorso in evidenza (GpxUploader.tsx) — nessuna chiamata AI. Assente su un
-  // percorso senza GPS o non ancora arricchito: la card sparisce, non mostra un vuoto.
+  // Fallback quando non c'è (ancora) un percorso pianificato in evidenza: l'ultima escursione già
+  // fatta. Serve sia per la curiosità (il suo poiWiki) sia per la foto dell'hero (la sua copertina
+  // reale) — catena di fallback descritta in UX-AUDIT.md P-O5. ActivityMeta (già caricata sopra)
+  // non porta poiWiki/foto: vanno recuperati a parte, solo per l'unica attività che serve qui.
+  const latestActivity = useMemo(() => {
+    if (activities.length === 0) return null
+    return activities.slice().sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())[0]
+  }, [activities])
+
+  const [latestActivityFull, setLatestActivityFull] = useState<StoredActivity | null>(null)
+  const [latestActivityCover, setLatestActivityCover] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!latestActivity) { setLatestActivityFull(null); setLatestActivityCover(null); return }
+    let cancelled = false
+    getActivityById(latestActivity.id).then(full => { if (!cancelled) setLatestActivityFull(full) }).catch(() => {})
+    fetchActivityPhotos(latestActivity.id)
+      .then(photos => { if (!cancelled) setLatestActivityCover(pickBestCoverPhoto(photos)?.url ?? null) })
+      .catch(() => {})
+    return () => { cancelled = true }
+    // Volutamente solo l'id: latestActivity è un nuovo oggetto a ogni ricalcolo di activities
+    // (lo useMemo sopra), il fetch non deve ripartire finché l'attività più recente resta la stessa.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [latestActivity?.id])
+
+  // Curiosità storico-culturale: prima il POI+estratto Wikipedia del percorso in evidenza (già
+  // arricchito gratis all'import, GpxUploader.tsx — nessuna chiamata AI); se assente, quello
+  // dell'ultima escursione fatta. Sparisce del tutto solo se nessuna delle due fonti ne ha uno —
+  // mai un buco vuoto al posto di un difetto silenzioso.
   const curiosity = useMemo(() => {
-    const wiki = featured?.hike.cachedPoiWiki as { poi: PoiItem; wiki: WikiPage }[] | undefined
-    return wiki && wiki.length > 0 ? wiki[0] : null
-  }, [featured])
+    const fromFeatured = featured?.hike.cachedPoiWiki as { poi: PoiItem; wiki: WikiPage }[] | undefined
+    if (fromFeatured && fromFeatured.length > 0) return fromFeatured[0]
+    const fromActivity = latestActivityFull?.poiWiki
+    return fromActivity && fromActivity.length > 0 ? fromActivity[0] : null
+  }, [featured, latestActivityFull])
+
+  // Foto dell'hero: catena di fallback (P-O5) — foto propria (solo per un'escursione già fatta,
+  // non ha senso per un percorso ancora da percorrere) → foto del POI Wikipedia → tracciato su
+  // sfondo topografico (gestito nel JSX) → immagine generica di fallback.
+  const heroPhotoUrl = useMemo(() => {
+    if (featured) {
+      const wiki = featured.hike.cachedPoiWiki as { poi: PoiItem; wiki: WikiPage }[] | undefined
+      return wiki?.[0]?.wiki.thumbnail ?? null
+    }
+    if (latestActivity) {
+      return latestActivityCover ?? latestActivityFull?.poiWiki?.[0]?.wiki.thumbnail ?? null
+    }
+    return null
+  }, [featured, latestActivity, latestActivityCover, latestActivityFull])
 
   if (loading) {
     return (
@@ -109,12 +155,17 @@ export default function BachecaPage() {
     <div className="min-h-screen bg-stone-100">
       <div className="sticky top-0 z-40"><HubNavBar /></div>
 
-      {/* Hero compatta: prossima uscita, o CTA a pianificare la prima */}
+      {/* Hero compatta: prossima uscita pianificata, poi l'ultima uscita fatta, poi il CTA a
+          pianificare la prima — mai un solo stato "vuoto" quando esiste comunque qualcosa da
+          mostrare. Foto: prima quella vera (propria o da un POI Wikipedia, vedi heroPhotoUrl sopra),
+          poi il tracciato su sfondo topografico, poi l'immagine generica di fallback. */}
       <div className="relative h-[340px] overflow-hidden">
-        {featured?.hike.routePolyline?.length ? (
+        {heroPhotoUrl ? (
+          <img src={heroPhotoUrl} alt="" className="absolute inset-0 w-full h-full object-cover" style={{ filter: HERO_IMAGE_FILTER }} />
+        ) : (featured?.hike.routePolyline?.length || latestActivity?.routePolyline?.length) ? (
           <div className="absolute inset-0 bg-gradient-to-b from-forest-50 to-stone-50 bg-topography">
             <div className="absolute inset-6">
-              <RouteThumb polyline={featured.hike.routePolyline} color="#2d7a3d" strokeWidth={3} />
+              <RouteThumb polyline={(featured?.hike.routePolyline ?? latestActivity?.routePolyline)!} color="#2d7a3d" strokeWidth={3} />
             </div>
           </div>
         ) : (
@@ -143,6 +194,30 @@ export default function BachecaPage() {
               >
                 <Navigation className="w-4 h-4" /> {featured.hasDate ? 'Naviga' : 'Vai al percorso'}
               </Link>
+            </>
+          ) : latestActivity ? (
+            <>
+              <p className="font-barlow font-extrabold text-[11px] tracking-[2px] uppercase text-terra-300 mb-1">
+                La tua ultima uscita · {format(new Date(latestActivity.startTime), 'd MMMM', { locale: it })}
+              </p>
+              <h1 className="font-display font-black text-[28px] text-white leading-tight" style={{ textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>
+                {latestActivity.title}
+              </h1>
+              <p className="text-[12px] text-white/85 mt-1" style={{ textShadow: '0 1px 6px rgba(0,0,0,0.55)' }}>
+                {(latestActivity.distanceMeters / 1000).toFixed(1)} km · +{Math.round(latestActivity.elevationGain)} m
+                {latestActivity.totalTimeSeconds ? ` · ${formatDuration(latestActivity.totalTimeSeconds)}` : ''}
+              </p>
+              <div className="mt-3 flex items-center gap-3">
+                <Link
+                  href={`/resoconto/${encodeURIComponent(latestActivity.id)}`}
+                  className="inline-flex items-center gap-2 bg-terra-500 hover:bg-terra-600 text-white text-[13px] font-semibold px-5 py-2.5 rounded-full shadow-lg transition-colors"
+                >
+                  <Navigation className="w-4 h-4" /> Rivedi
+                </Link>
+                <Link href="/upload?tab=gpx" className="text-[12px] font-semibold text-white/90" style={{ textShadow: '0 1px 6px rgba(0,0,0,0.55)' }}>
+                  Pianifica la prossima uscita →
+                </Link>
+              </div>
             </>
           ) : (
             <>
