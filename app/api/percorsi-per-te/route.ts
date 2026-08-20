@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest } from '@/lib/supabaseAuth'
 import { supabase } from '@/lib/supabase'
-import { refreshRecommendationsForUser } from '@/lib/routeBuilder/generateRecommendations'
+import { refreshRecommendationsForUser, STALE_AFTER_DAYS } from '@/lib/routeBuilder/generateRecommendations'
 
 export const dynamic = 'force-dynamic'
 // Copre il bootstrap al primo accesso (vedi sotto), che chiama la generazione vera e propria
@@ -44,10 +44,12 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// GET: legge il batch corrente di "Percorsi per te" per l'utente. La rigenerazione periodica vive
-// solo nel cron (app/api/cron/refresh-recommendations/route.ts) — l'unica eccezione è il primissimo
-// accesso di un utente che non ha ancora nessuna riga: qui si genera subito, invece di fargli
-// aspettare il prossimo giro notturno, prima di mostrare una pagina vuota.
+// GET: legge il batch corrente di "Percorsi per te" per l'utente. La rigenerazione periodica
+// dovrebbe idealmente vivere solo nel cron (app/api/cron/refresh-recommendations/route.ts), ma
+// questa route rigenera anche lei, sincronamente, in due casi: il primissimo accesso di un utente
+// che non ha ancora nessuna riga, e una riga esistente dirty/stale che il cron non ha ancora
+// ripreso (vedi STALE_SELF_HEAL sotto) — invece di fargli aspettare indefinitamente un giro
+// notturno che si è osservato non scattare affatto in produzione.
 //
 // ?peek=1: salta il bootstrap — usato dalla tile teaser in Bacheca (app/bacheca/page.tsx), che fa
 // lo stesso fetch leggero ad ogni apertura della Bacheca solo per un conteggio/badge. Senza questo,
@@ -65,7 +67,7 @@ async function handleGet(req: NextRequest): Promise<NextResponse> {
   // questo caso: un Supabase lento non deve poter innescare una generazione forse-duplicata solo
   // perché non siamo riusciti a verificare se una riga esiste già.
   const existingResult = await withTimeout(
-    supabase.from('route_recommendations').select('status, cards, feedback, generated_at').eq('user_id', user.id).maybeSingle(),
+    supabase.from('route_recommendations').select('status, cards, feedback, generated_at, dirty').eq('user_id', user.id).maybeSingle(),
     SUPABASE_READ_TIMEOUT_MS,
   ).catch(() => null)
 
@@ -74,7 +76,21 @@ async function handleGet(req: NextRequest): Promise<NextResponse> {
   }
   const { data: existing } = existingResult
 
-  if (existing) {
+  // STALE_SELF_HEAL: una riga esiste ma è `dirty` (nuova escursione, vedi app/api/user-settings/
+  // history/route.ts) o più vecchia di STALE_AFTER_DAYS — normalmente compito del cron
+  // (app/api/cron/refresh-recommendations/route.ts), ma quel cron si è osservato NON scattare
+  // affatto per settimane in produzione (nessuna invocazione nei runtime log pur essendo
+  // dichiarato in vercel.json) lasciando l'utente bloccato su un batch vecchio/vuoto a tempo
+  // indeterminato. Qui rigeneriamo al volo, sulla stessa identica visita reale che lo scoprirebbe
+  // comunque stantio — la freschezza dei dati non può dipendere solo dal cron.
+  const staleBefore = Date.now() - STALE_AFTER_DAYS * 24 * 60 * 60 * 1000
+  const needsRefresh = !existing || existing.dirty === true
+    || (existing.generated_at ? new Date(existing.generated_at).getTime() < staleBefore : true)
+
+  // ?peek=1 non innesca MAI una generazione (vedi il commento sulla funzione) — restituisce quel
+  // che c'è, anche se dirty/stale/assente, mai altro.
+  if (peek || !needsRefresh) {
+    if (!existing) return NextResponse.json({ status: 'pending', cards: [], feedback: {}, generatedAt: null })
     return NextResponse.json({
       status: existing.status,
       cards: existing.cards ?? [],
@@ -83,33 +99,46 @@ async function handleGet(req: NextRequest): Promise<NextResponse> {
     })
   }
 
-  if (peek) {
-    return NextResponse.json({ status: 'pending', cards: [], feedback: {}, generatedAt: null })
-  }
-
-  // Nessuna riga ancora — calcolo in-request legittimo (stesso pattern di executeBuild, non
+  // Serve una rigenerazione — calcolo in-request legittimo (stesso pattern di executeBuild, non
   // l'anti-pattern di continuazione in background: la richiesta resta aperta finché il calcolo non
   // è finito, aspetta davvero la risposta prima di uscire). Il Promise.race sotto impone comunque
-  // un tetto morbido: se il calcolo va oltre, rispondiamo "pending" invece di rischiare un kill
-  // della piattaforma — il calcolo abbandonato prosegue comunque e scriverà la riga quando finisce,
-  // pronta per il prossimo caricamento della pagina.
+  // un tetto morbido: se il calcolo va oltre, rispondiamo con quel che avevamo già (se c'era una
+  // riga precedente, meglio dati stantii ma reali di un vuoto "pending") invece di rischiare un
+  // kill della piattaforma — il calcolo abbandonato prosegue comunque e scriverà la riga quando
+  // finisce, pronta per il prossimo caricamento della pagina.
   const outcome = await Promise.race([
     refreshRecommendationsForUser(user.id).then(() => ({ kind: 'done' as const })),
     new Promise<{ kind: 'timeout' }>(resolve => setTimeout(() => resolve({ kind: 'timeout' }), BOOTSTRAP_SOFT_DEADLINE_MS)),
   ])
   if (outcome.kind === 'timeout') {
+    if (existing) {
+      return NextResponse.json({
+        status: existing.status,
+        cards: existing.cards ?? [],
+        feedback: existing.feedback ?? {},
+        generatedAt: existing.generated_at,
+      })
+    }
     return NextResponse.json({ status: 'pending', cards: [], feedback: {}, generatedAt: null })
   }
 
   // La generazione è comunque finita (outcome.kind === 'done') — se questa lettura di conferma
-  // fallisce/scade, 'pending' è la risposta onesta (la riga c'è quasi certamente, riprovare basta),
-  // non 'error' che implicherebbe un fallimento della generazione stessa.
+  // fallisce/scade, la riga precedente (se c'era) resta la risposta onesta più utile, non 'error'
+  // che implicherebbe un fallimento della generazione stessa.
   const freshResult = await withTimeout(
     supabase.from('route_recommendations').select('status, cards, feedback, generated_at').eq('user_id', user.id).maybeSingle(),
     SUPABASE_READ_TIMEOUT_MS,
   ).catch(() => null)
 
   if (freshResult === null) {
+    if (existing) {
+      return NextResponse.json({
+        status: existing.status,
+        cards: existing.cards ?? [],
+        feedback: existing.feedback ?? {},
+        generatedAt: existing.generated_at,
+      })
+    }
     return NextResponse.json({ status: 'pending', cards: [], feedback: {}, generatedAt: null })
   }
   const { data: fresh } = freshResult
