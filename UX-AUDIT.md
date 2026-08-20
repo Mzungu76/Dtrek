@@ -1081,6 +1081,13 @@ Sessione del 2026-08-20, stesso branch di questo audit. Riscritto `app/bacheca/p
   nel wizard).
 
 **Miglioramenti aperti, emersi verificando la Fase 2 dal vivo** (non ancora implementati):
+- **Popup "Leggi tutto" — IMPLEMENTATO**: la card di curiosità non porta più subito fuori
+  dall'app con un link Wikipedia in evidenza (verde). Mostra "Leggi tutto", che apre un popup con
+  testo esteso (fetch on-demand, non solo l'incipit breve già in cache), eventuali altre foto
+  trovate sulla stessa pagina Wikipedia/Wikivoyage, e solo lì il link alla fonte, in grigio chiaro
+  e non più in evidenza. Nessuna fonte oltre a Wikipedia/Wikivoyage esiste nell'arricchimento
+  attuale (`fetchWikiForNamedPois`) — il popup chiede solo più contenuto alla stessa pagina già
+  trovata, non ne cerca di nuove.
 - **Curiosità multiple — IMPLEMENTATO (v2, sessione successiva)**: la prima versione ("una
   curiosità per percorso distinto", capped a 3 fonti fisse: percorso in evidenza + ultime 2
   uscite) era ancora troppo restrittiva — verificato dal vivo che in pratica mostrava sempre e sole
