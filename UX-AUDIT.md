@@ -1077,8 +1077,18 @@ Sessione del 2026-08-20, stesso branch di questo audit. Riscritto `app/bacheca/p
   fallback all'ultima escursione fatta, terzo stato dell'hero ("La tua ultima uscita" + CTA
   "Rivedi") per chi ha già camminato ma non ha nulla pianificato. Verificato dal vivo: l'hero mostra
   la foto reale del POI Wikipedia (Monte Autore) al posto del tracciato, come da catena di fallback.
-- **Fasi 3-4**: non ancora iniziate (Percorsi-per-te come righe di card vere; Regione obbligatoria
-  nel wizard).
+- **Fase 3 — rimandata su decisione esplicita dell'autore**: Percorsi-per-te resta un teaser (non
+  ancora righe di card vere) finché quella funzione non è confermata affidabile end-to-end.
+- **Fase 4 — IMPLEMENTATA, da verificare dal vivo**: `components/onboarding/GiftRouteStep.tsx`
+  (già eseguito dopo il wizard di profilo, già con geolocalizzazione + picker manuale per il
+  percorso omaggio) ora persiste anche una `home_region` su `user_settings`, riusabile ovunque
+  serva un primo segnale geografico senza AI. Quando la geolocalizzazione non basta, il picker
+  manuale diventa l'unica via avanti (via tolta la scorciatoia "Salta" solo in quella fase) ma resta
+  sempre disponibile l'opzione neutra "Preferisco non specificare ora" — mai un blocco duro. **Nota
+  operativa**: richiede la migrazione `supabase/migrations/add_home_region.sql` sul progetto
+  Supabase reale prima che il campo si salvi davvero (l'endpoint ha comunque un fallback che elimina
+  da solo le colonne non ancora migrate, quindi non rompe nulla nel frattempo — semplicemente
+  `homeRegion` resta vuoto finché la colonna non esiste).
 
 **Miglioramenti aperti, emersi verificando la Fase 2 dal vivo** (non ancora implementati):
 - **Popup "Leggi tutto" — IMPLEMENTATO**: la card di curiosità non porta più subito fuori
