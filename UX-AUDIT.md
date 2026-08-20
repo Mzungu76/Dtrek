@@ -8,8 +8,12 @@ con 51 screenshot reali forniti dall'utente in due giri successivi** — il prim
 statistiche, pagine-resoconto), Profilo, e l'app nativa DTrek Navigator (home mappa, menu, elenco
 percorsi, import, registrazione libera, navigazione attiva); il secondo copre Statistiche (Panoramica,
 Andamento, Traguardi, Confronto) e Profilo → Impostazioni. Dove un rilievo è confermato da uno screenshot
-è segnalato come **CONFERMATO**; dove resta dedotto dal solo codice (nessuno screenshot disponibile per
-quell'area — restano Percorsi-per-te e i viewport tablet/orizzontale) resta segnalato come **da codice**.
+è segnalato come **CONFERMATO**; dove resta dedotto dal solo codice resta segnalato come **da codice**.
+Due precisazioni dirette dall'autore del prodotto, incorporate in questa revisione: "Percorsi per te" è
+**attualmente non funzionante** (non un problema di adozione/scoperta ma un difetto funzionale a monte,
+fuori perimetro per `DTREK-AUDIT.md`) ed è **candidata esplicita a diventare la nuova Home**; e
+l'orientamento su smartphone è **fissato verticale per scelta di prodotto**, quindi non è un'area aperta
+di verifica — resta aperta solo la resa su PC/tablet, per cui non sono ancora disponibili screenshot.
 Questo è un audit **separato** da quello funzionale (`DTREK-AUDIT.md`), che valuta se le funzioni
 esistono e funzionano — qui la domanda è se l'utente le capisce, le trova, e le usa senza attrito.
 
@@ -240,7 +244,14 @@ DTREK (app web, dietro paywall/trial dopo import iniziale)
   radicalmente diverse (galleria vs. libro), entrambe tab di primo livello.
 - **Funzioni fuori posto**: "Percorsi per te" (raccomandazione/scoperta di nuovi percorsi) è
   raggiungibile solo da una tile in Bacheca — concettualmente appartiene a "Guide" (dove si gestiscono i
-  percorsi) o meriterebbe un ingresso proprio, non un teaser dentro il cruscotto statistico. "Vette
+  percorsi) o meriterebbe un ingresso proprio, non un teaser dentro il cruscotto statistico. **Nota
+  dell'autore del prodotto**: la funzione **non funziona ancora** oggi (dipende interamente dall'AI, che
+  richiede sblocco/BYOK) ed è vista come **candidata a diventare la Home** — coerente con la diagnosi di
+  questo audit (§16, P-C2, Q23): risponde esattamente al bisogno "cosa voglio fare oggi" che la Home
+  attuale non copre. Perché possa svolgere quel ruolo, però, deve funzionare anche **senza AI** (con un
+  fallback basato su dati oggettivi — distanza da casa, punteggi calcolati, storico personale — non solo
+  su generazione AI), altrimenti una Home che dipende da una funzione a pagamento/gated lascerebbe senza
+  nulla proprio i nuovi utenti in prova, cioè chi ne ha più bisogno al primo avvio. "Vette
   raggiunte" e "Cronologia navigazione" sono dati derivati dalle attività/percorsi ma vivono solo dentro
   Profilo → Impostazioni-adiacenti, lontano dal contesto (un'attività, un percorso) a cui si
   riferiscono.
@@ -404,6 +415,11 @@ alcuni nuovi non deducibili dal solo markup:
 
 ## 10. Mobile-first
 
+**Nota dell'autore del prodotto**: l'orientamento su smartphone è **fissato verticale per scelta di
+prodotto** — non è quindi un'area aperta da verificare in orizzontale su telefono, a differenza di quanto
+il template di questo audit chiederebbe in generale. Resta aperta la resa su PC/tablet (nessuno
+screenshot disponibile a oggi).
+
 Osservazioni dal codice (classi Tailwind, `env(safe-area-inset-*)`, gestori touch):
 
 - **Safe area**: gestita sistematicamente e con cura reale — `MOBILE_TOPBAR_SPACER`, `pb-[calc(env(safe-area-inset-bottom,0px)+…)]` ricorrono in tutte le pagine esaminate. Il changelog in
@@ -564,7 +580,7 @@ Altri rilievi di linguaggio:
 |---|---|---|
 | Cambiare tab (Bacheca/Guide/Resoconti/Diario) | **EASY** | Tab bar sempre visibile |
 | Aprire il proprio profilo/impostazioni | **EASY** | Avatar persistente in alto a destra |
-| Trovare "Percorsi per te" | **MODERATE** | Solo una tile tra tante in fondo alla Bacheca |
+| Trovare "Percorsi per te" | **MODERATE, ma la funzione non è ancora funzionante** (nota dell'autore) | Solo una tile tra tante in fondo alla Bacheca; anche trovata, oggi non restituisce risultati utilizzabili — la discoverability è un problema secondario finché la funzione stessa non funziona |
 | Importare un GPX | **MODERATE** | Nessun ingresso diretto dal tab bar; richiede sapere che "Crea una guida" dentro Guide (stato vuoto) o navigare a `/upload` |
 | Vedere le "Vette raggiunte" | **MODERATE** (corretto dopo screenshot: era HARD) | **CONFERMATO da screenshot**: raggiungibile da Profilo **e** da Statistiche → Panoramica (banner "Vette Conquistate", incontrato scorrendo oltre "Record personali") — non isolata come inizialmente scritto, ma comunque non raggiungibile in meno di 2-3 scroll/tap da nessuno dei due punti |
 | Cronologia navigazione | **HARD** | Solo dentro Profilo, nome poco distintivo da "Resoconti"/"Diario" |
@@ -709,7 +725,10 @@ Distanza/Dislivello/Quota/Costanza/Speciale, percentuali di completamento, banne
 ben eseguito — il problema resta la sua collocazione (solo dentro Statistiche/Profilo, mai al momento
 naturale subito dopo un'escursione, vedi P-O2), non la qualità del contenuto stesso.
 
-Aree **ancora non coperte da screenshot**: Percorsi-per-te, viewport tablet/orizzontale, l'esperienza di
+Aree **ancora non coperte da screenshot**: la resa su PC/tablet (nessuno screenshot disponibile a oggi;
+l'orientamento orizzontale su smartphone non è invece un'area aperta — vedi nota in §10, orientamento
+fissato verticale per scelta di prodotto). "Percorsi per te" non è coperta da screenshot perché, per
+ammissione dell'autore, **non è ancora funzionante** — vedi §4 e §21 (P-O4). Resta anche l'esperienza di
 digitazione nei form. Si raccomanda comunque una sessione dedicata a queste aree residue.
 
 ---
@@ -915,6 +934,17 @@ raggiungibile solo scorrendo dentro Statistiche.
 **P-O3** — Comunicare in anticipo, al momento di creare un percorso da Dtrek, che Navigator ha un tetto
 di percorsi "pronti" (`NAVIGATOR_SLOT_LIMIT`) eviterebbe la sorpresa scoperta solo aprendo l'altra app.
 
+**P-O4 — "Percorsi per te" come base della nuova Home, ma con un fallback senza AI** — Confermato
+dall'autore del prodotto: la funzione oggi non è ancora funzionante ed è pensata come candidata a
+diventare la Home (coerente con P-C2 e con la risposta alla domanda 23 in §24, che indicava esattamente
+questo bisogno). Perché possa davvero ricoprire quel ruolo, la raccomandazione di questo audit è di
+progettarla fin dall'inizio con **due percorsi di generazione**: uno basato su AI (racconto/motivazione
+personalizzata, quando l'accesso è sbloccato) e uno **puramente basato su dati oggettivi già calcolati
+dall'app** (distanza dal punto di partenza salvato, Trail/Safety Score, storico personale, stagionalità)
+per chi è in prova senza AI attiva o ha esaurito il periodo di prova. Una Home che mostra risultati solo a
+chi ha già sbloccato l'AI escluderebbe proprio i nuovi utenti del primo avvio — l'esatto pubblico che
+questa modifica dovrebbe servire meglio.
+
 ---
 
 ## 22. UX Score (0-10)
@@ -941,7 +971,10 @@ ipotizzati dal codice).
 
 ### P0 — impatto massimo, agire per primi
 1. **Aggiungere un secondo CTA "Pianifica un percorso" nello stato vuoto della Home** (accanto/al posto
-   di "Crea un Resoconto" come unico invito) — risolve P-C2, bassissimo sforzo tecnico.
+   di "Crea un Resoconto" come unico invito) — risolve P-C2, bassissimo sforzo tecnico. **Nota
+   dell'autore, incorporata qui**: "Percorsi per te" è la candidata naturale per diventare questa Home
+   nel medio periodo, ma va prima resa funzionante e dotata di un percorso senza AI (P-O4) — finché non
+   lo è, questo CTA minimo resta comunque il fix immediato da fare subito.
 2. **Onboarding esplicito che spieghi la relazione Dtrek/Navigator** la primissima volta che l'utente
    incontra l'altra app o il pulsante che le collega — risolve P-C1.
 3. **Rinominare il tab "Guide" in qualcosa che comunichi "i miei percorsi"** (es. "Percorsi"), liberando
@@ -987,8 +1020,8 @@ ipotizzati dal codice).
     identiche su ogni mappa della stessa pagina) (P-L1).
 19. Un indizio visivo la prima volta che si apre il Diario, per introdurre il cambio di paradigma
     (scroll verticale libro vs. swipe orizzontale delle altre sezioni) (P-L2).
-20. Sessione dedicata di Visual QA su device reale per le ultime aree non coperte da screenshot
-    (Percorsi-per-te, orientamento orizzontale/tablet).
+20. Sessione dedicata di Visual QA su device reale per l'unica area ancora priva di screenshot: la resa
+    su PC/tablet (l'orientamento orizzontale su smartphone non si applica, vedi §10).
 
 ---
 
@@ -1072,6 +1105,13 @@ ipotizzati dal codice).
     Se si può agire solo su una delle due, la Home ha impatto più ampio (tocca il 100% degli utenti al
     primo avvio); la navigazione attiva ha impatto più profondo per chi la raggiunge (implica anche un
     fattore di sicurezza, non solo di comprensione).
+
+    **Aggiornamento dopo il confronto con l'autore del prodotto**: la direzione già individuata per la
+    Home coincide con quella di questo audit — "Percorsi per te" è pensata proprio come sua sostituta
+    naturale. La condizione perché quella scelta funzioni davvero è quella indicata in P-O4: deve
+    rispondere anche senza AI attiva, non solo per chi ha già sbloccato/pagato — altrimenti la nuova Home
+    risolverebbe il problema di comprensione (P-C2) ma ne creerebbe uno nuovo, escludendo silenziosamente
+    proprio i nuovi utenti in prova.
 
 ---
 
