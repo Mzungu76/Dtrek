@@ -220,6 +220,75 @@ export async function fetchWikiForNamedPois(
 }
 
 
+// Etichetta leggibile della fonte di un WikiPage, per la citazione nel popup "Leggi tutto" della
+// Home (app/bacheca/page.tsx) — un'entry senza `source` viene da una cache scritta prima
+// dell'introduzione di quel campo, l'unico caso in cui il fallback generico va usato.
+export function wikiSourceLabel(source?: WikiPage['source']): string {
+  if (source === 'wikivoyage-it') return 'Wikivoyage'
+  if (source === 'wikipedia-en') return 'Wikipedia (EN)'
+  return 'Wikipedia'
+}
+
+export interface WikiFullDetails {
+  /** Testo più lungo del breve incipit già in WikiPage.extract — non l'intero articolo, tagliato a
+   *  un numero di caratteri ragionevole per un popup mobile. */
+  extract: string
+  /** Foto aggiuntive dell'articolo oltre a WikiPage.thumbnail, quando presenti — best-effort. */
+  images: string[]
+}
+
+interface WikiExtractsApiResponse {
+  query?: { pages?: Record<string, { extract?: string }> }
+}
+
+interface WikiMediaListResponse {
+  items?: { type: string; srcset?: { src: string }[] }[]
+}
+
+function projectAndLangFromSource(source?: WikiPage['source']): { lang: string; project: 'wikipedia' | 'wikivoyage' } {
+  if (source === 'wikivoyage-it') return { lang: 'it', project: 'wikivoyage' }
+  if (source === 'wikipedia-en') return { lang: 'en', project: 'wikipedia' }
+  return { lang: 'it', project: 'wikipedia' }
+}
+
+/**
+ * Testo esteso + eventuali altre foto dell'articolo di un WikiPage già noto (POI arricchito su un
+ * percorso) — per il popup "Leggi tutto" della Home, chiamata solo quando l'utente lo apre
+ * esplicitamente, non insieme a fetchWikiForNamedPois sopra (che gira su ogni POI del percorso).
+ * Nessuna nuova fonte oltre a Wikipedia/Wikivoyage (le uniche già integrate in questo modulo):
+ * qui ci limitiamo a chiedere più contenuto alla stessa pagina già trovata, non a cercarne altre.
+ */
+export async function fetchWikiFullDetails(wiki: WikiPage): Promise<WikiFullDetails> {
+  const { lang, project } = projectAndLangFromSource(wiki.source)
+  const titleSlug = encodeURIComponent(wiki.title.replace(/ /g, '_'))
+
+  const [extract, images] = await Promise.all([
+    fetch(`https://${lang}.${project}.org/w/api.php?` + new URLSearchParams({
+      action: 'query', prop: 'extracts', explaintext: '1', exchars: '2000',
+      titles: wiki.title, format: 'json', origin: '*',
+    }))
+      .then(r => (r.ok ? r.json() as Promise<WikiExtractsApiResponse> : null))
+      .then(data => {
+        const page = Object.values(data?.query?.pages ?? {})[0]
+        return page?.extract?.trim() || wiki.extract
+      })
+      .catch(() => wiki.extract),
+    fetch(`https://${lang}.${project}.org/api/rest_v1/page/media-list/${titleSlug}`)
+      .then(r => (r.ok ? r.json() as Promise<WikiMediaListResponse> : null))
+      .then(data => (data?.items ?? [])
+        .filter(it => it.type === 'image' && it.srcset?.length)
+        .map(it => {
+          const src = it.srcset![it.srcset!.length - 1].src
+          return src.startsWith('//') ? `https:${src}` : src
+        })
+        .filter(src => !/\.svg(\?|$)/i.test(src))
+        .slice(0, 8))
+      .catch(() => [] as string[]),
+  ])
+
+  return { extract, images }
+}
+
 export async function fetchNearbyWiki(
   lat: number,
   lon: number,
