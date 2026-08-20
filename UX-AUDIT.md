@@ -1077,8 +1077,19 @@ Sessione del 2026-08-20, stesso branch di questo audit. Riscritto `app/bacheca/p
   fallback all'ultima escursione fatta, terzo stato dell'hero ("La tua ultima uscita" + CTA
   "Rivedi") per chi ha già camminato ma non ha nulla pianificato. Verificato dal vivo: l'hero mostra
   la foto reale del POI Wikipedia (Monte Autore) al posto del tracciato, come da catena di fallback.
-- **Fase 3 — rimandata su decisione esplicita dell'autore**: Percorsi-per-te resta un teaser (non
-  ancora righe di card vere) finché quella funzione non è confermata affidabile end-to-end.
+- **Fase 3 — IMPLEMENTATA (sessione successiva alla diagnosi del cron rotto, vedi sotto)**: il
+  teaser singolo "Percorsi per te" è sostituito da una riga scorrevole di card vere e cliccabili
+  (stesso stile della riga "Curiosità": card compatte 170px con tracciato via `RouteThumb`, non la
+  mappa interattiva pesante di `TrailPreviewMap` usata nella pagina completa), popolata dalle stesse
+  card lette da `?peek=1` (nessuna generazione in più, la Home non aspetta mai una ricerca
+  Overpass). Toccare una card salva il percorso come pianificato e apre `/guida/[id]`, esattamente
+  come il bottone "Apri" della pagina completa — logica estratta in
+  `lib/routeBuilder/openRecommendationCard.ts`, condivisa tra le due pagine invece di duplicata.
+  Link "Vedi tutti" verso `/percorsi-per-te` per i controlli ♥/✕ non presenti nella riga compatta.
+  Non costruita finché la pipeline dati non era affidabile end-to-end (vedi la diagnosi sotto) —
+  costruirci sopra prima avrebbe solo reso più visibile un difetto a monte. (Nota storica: un ramo
+  di lavoro parallelo aveva inizialmente rimandato questa fase perché la funzione non era ancora
+  confermata affidabile — la diagnosi/fix del cron sotto ha risolto esattamente quel blocco.)
 - **Fase 4 — IMPLEMENTATA, da verificare dal vivo**: `components/onboarding/GiftRouteStep.tsx`
   (già eseguito dopo il wizard di profilo, già con geolocalizzazione + picker manuale per il
   percorso omaggio) ora persiste anche una `home_region` su `user_settings`, riusabile ovunque
@@ -1089,6 +1100,32 @@ Sessione del 2026-08-20, stesso branch di questo audit. Riscritto `app/bacheca/p
   Supabase reale prima che il campo si salvi davvero (l'endpoint ha comunque un fallback che elimina
   da solo le colonne non ancora migrate, quindi non rompe nulla nel frattempo — semplicemente
   `homeRegion` resta vuoto finché la colonna non esiste).
+
+**"Percorsi per te" — diagnosi della causa reale del malfunzionamento (sessione successiva) e fix
+applicato**: verificato in produzione (query diretta su `route_recommendations` via Supabase MCP)
+che la riga dell'account owner è ferma da quasi un mese (`generated_at` 2026-07-24, `status='ok'`
+ma **0 card**, `dirty=true` da un'attività completata il 2026-08-18) — mai più aggiornata. Causa
+reale, confermata sui runtime log di Vercel (MCP): il Cron Job `/api/cron/refresh-recommendations`
+(`vercel.json`, deployato e presente in produzione dal 2026-08-14) **non ha mai una sola volta
+eseguito** — zero invocazioni registrate nei log delle ultime 30 giorni, nonostante 6+ finestre
+giornaliere (03:00 UTC) trascorse da quando è stato aggiunto. Causa di piattaforma non confermabile
+da questo sandbox (verificare in Vercel → Project Settings → Cron Jobs se il job risulta
+effettivamente registrato/abilitato, e se l'account Hobby — che nello stesso team ha decine di altri
+progetti — non abbia già saturato altrove il tetto di cron consentiti). Indipendentemente dalla
+causa di piattaforma, il bug applicativo vero è che **niente altro poteva mai correggere una riga
+già esistente ma dirty/stale**: il bootstrap sincrono di `app/api/percorsi-per-te/route.ts`
+scattava solo quando la riga non esisteva affatto, quindi un utente con una riga vecchia restava
+bloccato a tempo indeterminato su quella, con l'unico meccanismo di refresh (il cron) silenziosamente
+rotto. Corretto rendendo la lettura stessa auto-risanante: `route.ts` ora rigenera sincronamente
+(stesso tetto morbido già in uso per il bootstrap) anche quando la riga esistente è `dirty` o più
+vecchia di `STALE_AFTER_DAYS` (7gg, condivisa con il cron via `generateRecommendations.ts`) — mai
+per `?peek=1`, che resta di sola lettura come già era. In caso di timeout del tetto morbido, la
+risposta ora ricade sulla riga precedente (stantia ma reale) invece di un `pending` vuoto. Il cron
+resta comunque utile per pre-scaldare la cache prima della visita dell'utente, ma la freschezza dei
+dati non dipende più solo da lui. Lato pagina (`app/percorsi-per-te/page.tsx`), aggiunto uno stato
+`pending` esplicito con un ritentativo automatico dopo 5s, al posto del falso "nessun percorso
+disponibile" che veniva mostrato ogni volta che il bootstrap superava il tetto morbido.
+`npx tsc --noEmit` pulito, `next lint` pulito sui file toccati.
 
 **Miglioramenti aperti, emersi verificando la Fase 2 dal vivo** (non ancora implementati):
 - **Popup "Leggi tutto" — IMPLEMENTATO**: la card di curiosità non porta più subito fuori

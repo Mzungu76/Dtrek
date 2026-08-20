@@ -10,17 +10,12 @@ import { Loader2, MapPin } from 'lucide-react'
 import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import BackLink from '@/app/components/BackLink'
 import { FoundRouteCard, BuiltRouteCard, type FeedbackControls } from '@/components/RouteResultCard'
-import { buildHikeFromBuilt, buildHikeFromFound, enrichWithPois, enrichBuiltCandidateForImport, enrichFoundCandidateForImport } from '@/lib/routeBuilder/buildHikeFromCandidate'
-import { savePlanned } from '@/lib/plannedStore'
-import { computeCtsForHike } from '@/lib/computeCtsForHike'
-import { computeSafetyForHike } from '@/lib/computeSafetyForHike'
-import { defaultPendingExpiresAt } from '@/components/upload/sharedHelpers'
-import { routeTypeLabel } from '@/lib/routeBuilder/loopBuilder'
+import { openRecommendationCard } from '@/lib/routeBuilder/openRecommendationCard'
 import type { RecommendationCard } from '@/lib/routeBuilder/generateRecommendations'
 import type { ScoredCandidate } from '@/lib/routeBuilder/scoreCandidates'
 import type { FoundRouteItem } from '@/lib/routeBuilder/foundRoute'
 
-type PageStatus = 'loading' | 'ok' | 'empty_no_location' | 'error'
+type PageStatus = 'loading' | 'ok' | 'empty_no_location' | 'error' | 'pending'
 type FeedbackValue = 'like' | 'dislike' | null
 
 export default function PercorsiPerTePage() {
@@ -33,24 +28,43 @@ export default function PercorsiPerTePage() {
 
   useEffect(() => {
     let cancelled = false
-    fetch('/api/percorsi-per-te')
-      .then(res => (res.ok ? res.json() : Promise.reject(new Error(`Errore ${res.status}`))))
-      .then(data => {
-        if (cancelled) return
-        if (data.status === 'empty_no_location') { setStatus('empty_no_location'); return }
-        setCards(data.cards ?? [])
-        const fb: Record<string, FeedbackValue> = {}
-        for (const [id, v] of Object.entries((data.feedback ?? {}) as Record<string, { value?: FeedbackValue }>)) {
-          fb[id] = v?.value ?? null
-        }
-        setFeedback(fb)
-        setStatus('ok')
-      })
-      .catch(() => {
-        if (cancelled) return
-        setStatus('error')
-        setErrorMsg('Non è stato possibile caricare i percorsi consigliati, riprova.')
-      })
+    // 'pending' (tetto morbido della rigenerazione in-request scaduto senza una riga precedente da
+    // mostrare, vedi app/api/percorsi-per-te/route.ts) si ritenta UNA sola volta dopo una pausa breve
+    // — il calcolo abbandonato prosegue comunque lato server e scrive la riga a breve, non serve
+    // fare aspettare l'utente su un loader indefinito né mostrargli un falso "nessun percorso".
+    let retried = false
+
+    function load() {
+      fetch('/api/percorsi-per-te')
+        .then(res => (res.ok ? res.json() : Promise.reject(new Error(`Errore ${res.status}`))))
+        .then(data => {
+          if (cancelled) return
+          if (data.status === 'empty_no_location') { setStatus('empty_no_location'); return }
+          if (data.status === 'pending') {
+            if (!retried) {
+              retried = true
+              setTimeout(() => { if (!cancelled) load() }, 5000)
+              return
+            }
+            setStatus('pending')
+            return
+          }
+          setCards(data.cards ?? [])
+          const fb: Record<string, FeedbackValue> = {}
+          for (const [id, v] of Object.entries((data.feedback ?? {}) as Record<string, { value?: FeedbackValue }>)) {
+            fb[id] = v?.value ?? null
+          }
+          setFeedback(fb)
+          setStatus('ok')
+        })
+        .catch(() => {
+          if (cancelled) return
+          setStatus('error')
+          setErrorMsg('Non è stato possibile caricare i percorsi consigliati, riprova.')
+        })
+    }
+
+    load()
     return () => { cancelled = true }
   }, [])
 
@@ -76,19 +90,8 @@ export default function PercorsiPerTePage() {
     setOpeningId(card.id)
     setErrorMsg('')
     try {
-      const pendingExpiresAt = await defaultPendingExpiresAt()
-      // Stessa logica di RouteBuilder.tsx's handleSave: ENTRAMBI i tipi di card arrivano con quota
-      // stimata (generateRecommendations.ts non chiama mai il DTM reale durante la generazione, né
-      // per "Su misura" né per "Esistenti") — arricchita qui, una sola volta, per la sola card
-      // scelta.
-      const hike = card.kind === 'built'
-        ? buildHikeFromBuilt(await enrichBuiltCandidateForImport(card.data as ScoredCandidate), `${routeTypeLabel((card.data as ScoredCandidate).type)} per te`, '', pendingExpiresAt)
-        : buildHikeFromFound(await enrichFoundCandidateForImport(card.data as FoundRouteItem), (card.data as FoundRouteItem).name, '', pendingExpiresAt)
-      await enrichWithPois(hike)
-      await savePlanned(hike)
-      computeCtsForHike(hike).catch(() => {})
-      computeSafetyForHike(hike).catch(() => {})
-      router.push(`/guida/${encodeURIComponent(hike.id)}`)
+      const hikeId = await openRecommendationCard(card)
+      router.push(`/guida/${encodeURIComponent(hikeId)}`)
     } catch (e) {
       setErrorMsg(`Errore nel salvataggio: ${e instanceof Error ? e.message : String(e)}`)
       setOpeningId(null)
@@ -124,6 +127,15 @@ export default function PercorsiPerTePage() {
 
         {status === 'error' && (
           <div className="bg-white rounded-2xl border border-stone-200 p-5 text-sm text-red-600">{errorMsg}</div>
+        )}
+
+        {status === 'pending' && (
+          <div className="bg-white rounded-2xl border border-stone-200 p-5 text-center space-y-2">
+            <Loader2 className="w-5 h-5 mx-auto text-stone-300 animate-spin" />
+            <p className="text-sm text-stone-600">
+              Stiamo ancora preparando i tuoi consigli — torna tra poco, non serve fare nulla.
+            </p>
+          </div>
         )}
 
         {status === 'ok' && cards.length === 0 && (

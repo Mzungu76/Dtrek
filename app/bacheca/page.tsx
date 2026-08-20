@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { Navigation, Sparkles, ArrowRight, TrendingUp, Flame, BarChart3, Loader2 } from 'lucide-react'
@@ -14,8 +15,28 @@ import { useCtsUpdated } from '@/lib/sync/useCtsUpdated'
 import { computeStreaks } from '@/lib/stats'
 import { computeTrainingLoad, activityStress, currentForm } from '@/lib/trainingLoad'
 import { formatDuration } from '@/lib/tcxParser'
+import { openRecommendationCard } from '@/lib/routeBuilder/openRecommendationCard'
+import { routeTypeLabel } from '@/lib/routeBuilder/loopBuilder'
+import type { RecommendationCard } from '@/lib/routeBuilder/generateRecommendations'
+import type { ScoredCandidate } from '@/lib/routeBuilder/scoreCandidates'
+import type { FoundRouteItem } from '@/lib/routeBuilder/foundRoute'
 import type { WikiPage } from '@/lib/wikipedia'
 import type { PoiItem } from '@/lib/overpass'
+
+// Riassunto minimo per la card compatta della riga "Percorsi per te" in Home — a differenza di
+// app/percorsi-per-te/page.tsx (che mostra FoundRouteCard/BuiltRouteCard per intero, con mappa
+// interattiva e badge punteggio) qui serve solo titolo/distanza/dislivello/tracciato per una card
+// piccola in riga scorrevole, coerente con lo stile della riga "Curiosità" sopra.
+function recoCardSummary(card: RecommendationCard): {
+  title: string; polyline: [number, number][]; distanceMeters: number; elevationGain: number; hasElevation: boolean
+} {
+  if (card.kind === 'found') {
+    const d = card.data as FoundRouteItem
+    return { title: d.name, polyline: d.track.routePolyline, distanceMeters: d.track.distanceMeters, elevationGain: d.track.elevationGain, hasElevation: d.track.hasElevation }
+  }
+  const d = card.data as ScoredCandidate
+  return { title: `${routeTypeLabel(d.type)} per te`, polyline: d.routePolyline, distanceMeters: d.distanceMeters, elevationGain: d.elevationGain, hasElevation: d.hasElevation }
+}
 
 const FALLBACK_HERO = '/stato-hero-fallback.jpg'
 // Stessi valori usati da RouteHub.tsx per le foto di copertina — coerenza visiva quando l'hero
@@ -28,25 +49,42 @@ const HERO_IMAGE_FILTER = 'saturate(1.25) contrast(1.08) brightness(0.85)'
 // statistiche complete restano un tap di distanza (/statistiche, che ha già Panoramica/Andamento/
 // Traguardi/Confronto) invece di essere duplicate qui per intero.
 //
-// "Percorsi per te" resta per ora un singolo teaser (come nella versione precedente di questa
-// pagina), non righe di card: la funzione non è ancora affidabile end-to-end (vedi P-O5/Fase 3),
-// quindi non ha senso costruirci sopra una UI più ricca finché non lo è.
+// "Percorsi per te" — Fase 3 di P-O5: ora una riga di card vere (non più solo un teaser), possibile
+// da quando app/api/percorsi-per-te/route.ts si auto-risana da solo su una riga dirty/stale invece
+// di dipendere solo dal cron (vedi UX-AUDIT.md §23) — la pipeline dati è affidabile end-to-end.
 export default function BachecaPage() {
+  const router = useRouter()
   const [activities, setActivities] = useState<ActivityMeta[]>([])
   const [planned, setPlanned] = useState<PlannedHikeMeta[]>([])
   const [loading, setLoading] = useState(true)
   const [recoStatus, setRecoStatus] = useState<'loading' | 'ok' | 'empty_no_location' | 'error' | 'pending'>('loading')
-  const [recoCount, setRecoCount] = useState(0)
+  const [recoCards, setRecoCards] = useState<RecommendationCard[]>([])
+  const [openingRecoId, setOpeningRecoId] = useState<string | null>(null)
+  const [recoErrorMsg, setRecoErrorMsg] = useState('')
   const [openCuriosity, setOpenCuriosity] = useState<{ routeTitle: string; wiki: WikiPage } | null>(null)
 
   useEffect(() => {
-    // ?peek=1: non innesca mai una generazione — vedi app/api/percorsi-per-te/route.ts. Solo per il
-    // conteggio del teaser, non deve rallentare l'apertura della Home.
+    // ?peek=1: non innesca mai una generazione — vedi app/api/percorsi-per-te/route.ts. Restituisce
+    // comunque le card già pronte (se una riga esiste), solo senza rigenerarle al volo qui: la Home
+    // non deve mai aspettare una ricerca Overpass per aprirsi.
     fetch('/api/percorsi-per-te?peek=1')
       .then(res => (res.ok ? res.json() : Promise.reject()))
-      .then(data => { setRecoStatus(data.status); setRecoCount((data.cards ?? []).length) })
+      .then(data => { setRecoStatus(data.status); setRecoCards(data.cards ?? []) })
       .catch(() => setRecoStatus('error'))
   }, [])
+
+  async function handleOpenReco(card: RecommendationCard) {
+    if (openingRecoId) return
+    setOpeningRecoId(card.id)
+    setRecoErrorMsg('')
+    try {
+      const hikeId = await openRecommendationCard(card)
+      router.push(`/guida/${encodeURIComponent(hikeId)}`)
+    } catch (e) {
+      setRecoErrorMsg(`Errore nel salvataggio: ${e instanceof Error ? e.message : String(e)}`)
+      setOpeningRecoId(null)
+    }
+  }
 
   // getAllActivities/getAllPlanned sono cache-first (IndexedDB) e, quando la cache locale ha un
   // buco noto (es. routePolyline mancante su un'entry vecchia — vedi i commenti "self-heal" dentro
@@ -327,20 +365,50 @@ export default function BachecaPage() {
           </div>
         )}
 
-        {recoStatus === 'ok' && recoCount > 0 && (
-          <Link
-            href="/percorsi-per-te"
-            className="mt-4 flex items-center gap-3 bg-gradient-to-br from-terra-500 to-terra-800 text-white rounded-2xl p-4 shadow-sm"
-          >
-            <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-              <Sparkles className="w-4.5 h-4.5" />
+        {recoStatus === 'ok' && recoCards.length > 0 && (
+          <div className="mt-4">
+            <div className="flex items-center justify-between mb-2">
+              <p className="font-barlow font-extrabold text-[11px] tracking-[1.5px] uppercase text-stone-400">Percorsi per te</p>
+              <Link href="/percorsi-per-te" className="text-[11px] font-semibold text-forest-600 flex items-center gap-1 shrink-0">
+                Vedi tutti <ArrowRight className="w-3 h-3" />
+              </Link>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-semibold text-sm">Percorsi per te</p>
-              <p className="text-[12px] text-white/80">{recoCount} scelti per te</p>
+            {recoErrorMsg && <p className="text-[11px] text-red-600 mb-1.5">{recoErrorMsg}</p>}
+            <div className="flex gap-2.5 overflow-x-auto pb-1 -mx-4 px-4" style={{ scrollbarWidth: 'none' }}>
+              {recoCards.map(card => {
+                const s = recoCardSummary(card)
+                const isOpening = openingRecoId === card.id
+                return (
+                  <button
+                    key={card.id}
+                    onClick={() => handleOpenReco(card)}
+                    disabled={openingRecoId !== null}
+                    className="shrink-0 w-[170px] bg-white border border-stone-200 rounded-2xl overflow-hidden shadow-sm text-left disabled:opacity-60 transition-opacity"
+                  >
+                    <div className="relative h-[90px] bg-gradient-to-b from-forest-50 to-stone-50 bg-topography">
+                      <div className="absolute inset-3">
+                        <RouteThumb polyline={s.polyline} color="#2d7a3d" strokeWidth={2.5} />
+                      </div>
+                      <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-full bg-terra-600/90 text-white text-[9px] font-semibold uppercase tracking-wide">
+                        <Sparkles className="w-2.5 h-2.5" /> Consigliato
+                      </div>
+                      {isOpening && (
+                        <div className="absolute inset-0 bg-white/75 flex items-center justify-center">
+                          <Loader2 className="w-4 h-4 animate-spin text-forest-600" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-2.5">
+                      <p className="text-[12.5px] font-semibold text-stone-800 leading-snug line-clamp-2">{s.title}</p>
+                      <p className="text-[11px] text-stone-400 mt-1">
+                        {(s.distanceMeters / 1000).toFixed(1)} km · {s.hasElevation ? '' : '~'}+{Math.round(s.elevationGain)} m
+                      </p>
+                    </div>
+                  </button>
+                )
+              })}
             </div>
-            <ArrowRight className="w-4 h-4 shrink-0" />
-          </Link>
+          </div>
         )}
 
         <div className="mt-5 border-t border-stone-200 pt-4">
