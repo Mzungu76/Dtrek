@@ -759,8 +759,10 @@ digitazione nei form. Si raccomanda comunque una sessione dedicata a queste aree
 - CURRENT BEHAVIOR: unico CTA porta al flusso di registrazione attività (post-escursione).
 - EXPECTED BEHAVIOR: almeno due CTA nello stato vuoto — "Pianifica un percorso" e "Registra
   un'escursione fatta" — o un unico ingresso che chiede prima l'intento.
-- RECOMMENDATION: aggiungere un secondo CTA equivalente verso `/upload?tab=gpx` (o verso
-  `/percorsi-per-te`).
+- RECOMMENDATION: nel breve periodo, aggiungere un secondo CTA equivalente verso `/upload?tab=gpx` (o
+  verso `/percorsi-per-te`) — quick fix a bassissimo sforzo. Nel medio periodo, sostituire lo stato
+  vuoto (e l'intera Home) con la soluzione a tre componenti decisa in sessione con l'autore del prodotto
+  — vedi P-O5.
 - PRIORITY: CRITICAL (primo momento d'uso, alto tasso di abbandono potenziale).
 
 **P-C3 — CONFERMATO da screenshot: la schermata di navigazione attiva è sovraccarica proprio nel momento
@@ -945,6 +947,43 @@ per chi è in prova senza AI attiva o ha esaurito il periodo di prova. Una Home 
 chi ha già sbloccato l'AI escluderebbe proprio i nuovi utenti del primo avvio — l'esatto pubblico che
 questa modifica dovrebbe servire meglio.
 
+**P-O5 — Direzione decisa per la nuova Home (sessione con l'autore del prodotto, 2026-08-20): tre
+componenti, nessuno dei quali richiede AI per funzionare al minimo indispensabile.**
+
+Discusse e scartate prima di arrivare qui due alternative più semplici: (a) la sola Bacheca attuale
+(bocciata dalla diagnosi di questo audit, §16/P-C2); (b) una Home "editoriale" con notizie generiche dal
+mondo trekking/turismo, scartata perché risponde a "cosa succede nel mondo" invece di "cosa faccio io
+oggi" (lo stesso errore della Bacheca, con un contenuto diverso) e perché richiederebbe comunque una
+pipeline di curation o di generazione AI per restare pertinente e localizzata.
+
+La direzione scelta:
+
+1. **Scorciatoie d'azione esplicite** in linguaggio naturale — Pianifica un percorso · Continua l'ultima
+   escursione (se esiste un percorso pronto) · Rivedi cosa ho fatto — sostituiscono il cruscotto
+   statistico come primo contenuto della schermata.
+2. **"Prossima uscita" in cima quando esiste**: se un percorso pianificato ha una `plannedDate` impostata
+   (campo già presente nel modello dati, usato oggi solo dentro `GuidaHub` — vedi il `dateChip` in
+   §21/P-C2 evidence), la Home dovrebbe aprirsi direttamente su quello — titolo, meteo, conto alla
+   rovescia — invece che su statistiche generiche. Nessun nuovo dato da calcolare, solo da riportare in
+   superficie.
+3. **Un digest "curiosità" storico-culturale legato a un percorso/resoconto reale dell'utente**, non a
+   notizie esterne generiche. La app arricchisce **già oggi automaticamente** ogni percorso importato con
+   POI + estratto Wikipedia (Overpass/Wikipedia, gratuito, nessuna chiamata AI — visto nel codice di
+   `GpxUploader.tsx` e confermato dagli screenshot: sezioni "Natura e storia"/"Punti di interesse" già
+   scritte per "Faggeta del Cimino" e "Camposecco"). Questo contenuto oggi resta sepolto in fondo a 8-9
+   schermate di scroll (§9) — la Home dovrebbe pescarne uno a rotazione dal prossimo percorso pianificato
+   o dall'ultimo resoconto, con un formato tipo "Lo sapevi che…", invece di lasciarlo scoperto solo da chi
+   apre per intero quel singolo percorso. Funziona anche per il percorso omaggio/di default offerto
+   all'onboarding, quindi copre anche il caso di un utente nuovo senza storico.
+
+Il cruscotto Recovery/TSB/badge di oggi non sparisce: diventa sezione secondaria raggiungibile subito
+sotto (o con uno swipe), non più il primo e unico contenuto della schermata di apertura. Questa
+combinazione risolve insieme il cold-start (nessun dato personale richiesto nel caso limite), la
+dipendenza da AI (P-O4, qui risolta anche meglio: il digest culturale è oggettivo per costruzione, non
+solo "con un fallback"), e il collegamento fase→fase del ciclo utente che mancava (P-O1) — un utente che
+finisce un resoconto vede la propria prossima uscita e una curiosità legata a un proprio percorso, non
+un vicolo cieco.
+
 ---
 
 ## 22. UX Score (0-10)
@@ -1106,12 +1145,17 @@ ipotizzati dal codice).
     primo avvio); la navigazione attiva ha impatto più profondo per chi la raggiunge (implica anche un
     fattore di sicurezza, non solo di comprensione).
 
-    **Aggiornamento dopo il confronto con l'autore del prodotto**: la direzione già individuata per la
-    Home coincide con quella di questo audit — "Percorsi per te" è pensata proprio come sua sostituta
-    naturale. La condizione perché quella scelta funzioni davvero è quella indicata in P-O4: deve
-    rispondere anche senza AI attiva, non solo per chi ha già sbloccato/pagato — altrimenti la nuova Home
-    risolverebbe il problema di comprensione (P-C2) ma ne creerebbe uno nuovo, escludendo silenziosamente
-    proprio i nuovi utenti in prova.
+    **Aggiornamento — direzione decisa in sessione con l'autore del prodotto (2026-08-20), vedi P-O5**:
+    confermato che la Home va ridefinita nella direzione indicata sopra, con una sintesi più precisa di
+    "due-tre azioni esplicite": (1) scorciatoie d'azione (Pianifica · Continua · Rivedi), che diventano
+    "prossima uscita" quando esiste già una data pianificata; (2) un digest di curiosità
+    storico-culturali pescato dai POI/Wikipedia che l'app arricchisce già automaticamente per ogni
+    percorso, non da notizie esterne generiche (idea valutata e scartata proprio perché avrebbe risposto
+    alla domanda sbagliata — "cosa succede nel mondo" invece di "cosa faccio io oggi", vedi P-O5); (3) il
+    cruscotto Recovery/TSB/badge spostato in sezione secondaria. Il punto di forza di questa sintesi
+    rispetto alla versione precedente (basata solo su "Percorsi per te" + AI) è che il digest culturale
+    **non dipende da AI per definizione** (Overpass/Wikipedia sono chiamate oggettive) — risolve quindi il
+    rischio descritto in P-O4 in modo strutturale, non solo con un fallback aggiunto in un secondo tempo.
 
 ---
 
