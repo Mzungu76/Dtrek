@@ -1081,11 +1081,12 @@ Sessione del 2026-08-20, stesso branch di questo audit. Riscritto `app/bacheca/p
   nel wizard).
 
 **Miglioramenti aperti, emersi verificando la Fase 2 dal vivo** (non ancora implementati):
-- **Più curiosità per singolo percorso**: `cachedPoiWiki` è un array — un percorso arricchito può
-  avere più di un POI con estratto Wikipedia (confermato dagli screenshot: "Faggeta del Cimino"
-  aveva sia "Monte Cimino" sia "Acropoli protostorica" come voci distinte). La Home oggi mostra solo
-  `wiki[0]`. Mostrarne 2-3 in una riga scorrevole (come nel mockup "DTrek Home Layouts", Opzione
-  C/D) è a basso sforzo perché il dato è già disponibile, non richiede nuove chiamate.
+- **Curiosità multiple — IMPLEMENTATO**: correzione di lettura del mockup "DTrek Home Layouts",
+  Opzione D — le due card di "Curiosità dai tuoi percorsi" avevano due nomi di percorso diversi
+  come etichetta (Camposecco, Faggeta del Cimino), quindi una curiosità per percorso distinto, non
+  più POI dello stesso percorso in evidenza. La Home ora mostra fino a tre card in riga scorrevole,
+  una dal percorso in evidenza e una da ciascuna delle due escursioni più recenti, ognuna saltata
+  singolarmente se quel percorso non ha POI arricchiti — mai una card vuota o duplicata.
 - **Più percorsi mostrati in Home**: da distinguere in due casi. (a) Percorsi *raccomandati* (non
   ancora dell'utente) — coincide con la Fase 3 già pianificata. (b) *Proprie* prossime uscite
   multiple, oltre a quella in evidenza nell'hero — **non prevista nel disegno attuale**: la scelta
