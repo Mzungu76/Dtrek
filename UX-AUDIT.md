@@ -3,15 +3,19 @@
 **Data**: 2026-08-19 (aggiornato con evidenza visiva reale lo stesso giorno)
 **Metodo**: lettura diretta del codice sorgente (route Next.js, componenti, testi UI reali, commenti
 architetturali) e dei documenti di progetto (`README.md`, `docs/navigator-dtrek-boundary.md`), **integrata
-con 37 screenshot reali forniti dall'utente** — un giro completo di Bacheca, Guida (dettaglio percorso
-"Camposecco"), Resoconto (dettaglio "Faggeta del Cimino"), Diario (copertina, indice, statistiche,
-pagine-resoconto), Profilo, e l'app nativa DTrek Navigator (home mappa, menu, elenco percorsi, import,
-registrazione libera, navigazione attiva). Dove un rilievo è confermato da uno screenshot è segnalato
-come **CONFERMATO**; dove resta dedotto dal solo codice (nessuno screenshot disponibile per quell'area
-— tipicamente Impostazioni, Statistiche standalone, Vette, Percorsi-per-te) resta segnalato come
-**da codice**. Questo è un audit **separato** da quello funzionale (`DTREK-AUDIT.md`), che valuta se le
-funzioni esistono e funzionano — qui la domanda è se l'utente le capisce, le trova, e le usa senza
-attrito.
+con 51 screenshot reali forniti dall'utente in due giri successivi** — il primo copre Bacheca, Guida
+(dettaglio percorso "Camposecco"), Resoconto (dettaglio "Faggeta del Cimino"), Diario (copertina, indice,
+statistiche, pagine-resoconto), Profilo, e l'app nativa DTrek Navigator (home mappa, menu, elenco
+percorsi, import, registrazione libera, navigazione attiva); il secondo copre Statistiche (Panoramica,
+Andamento, Traguardi, Confronto) e Profilo → Impostazioni. Dove un rilievo è confermato da uno screenshot
+è segnalato come **CONFERMATO**; dove resta dedotto dal solo codice resta segnalato come **da codice**.
+Due precisazioni dirette dall'autore del prodotto, incorporate in questa revisione: "Percorsi per te" è
+**attualmente non funzionante** (non un problema di adozione/scoperta ma un difetto funzionale a monte,
+fuori perimetro per `DTREK-AUDIT.md`) ed è **candidata esplicita a diventare la nuova Home**; e
+l'orientamento su smartphone è **fissato verticale per scelta di prodotto**, quindi non è un'area aperta
+di verifica — resta aperta solo la resa su PC/tablet, per cui non sono ancora disponibili screenshot.
+Questo è un audit **separato** da quello funzionale (`DTREK-AUDIT.md`), che valuta se le funzioni
+esistono e funzionano — qui la domanda è se l'utente le capisce, le trova, e le usa senza attrito.
 
 ---
 
@@ -240,7 +244,14 @@ DTREK (app web, dietro paywall/trial dopo import iniziale)
   radicalmente diverse (galleria vs. libro), entrambe tab di primo livello.
 - **Funzioni fuori posto**: "Percorsi per te" (raccomandazione/scoperta di nuovi percorsi) è
   raggiungibile solo da una tile in Bacheca — concettualmente appartiene a "Guide" (dove si gestiscono i
-  percorsi) o meriterebbe un ingresso proprio, non un teaser dentro il cruscotto statistico. "Vette
+  percorsi) o meriterebbe un ingresso proprio, non un teaser dentro il cruscotto statistico. **Nota
+  dell'autore del prodotto**: la funzione **non funziona ancora** oggi (dipende interamente dall'AI, che
+  richiede sblocco/BYOK) ed è vista come **candidata a diventare la Home** — coerente con la diagnosi di
+  questo audit (§16, P-C2, Q23): risponde esattamente al bisogno "cosa voglio fare oggi" che la Home
+  attuale non copre. Perché possa svolgere quel ruolo, però, deve funzionare anche **senza AI** (con un
+  fallback basato su dati oggettivi — distanza da casa, punteggi calcolati, storico personale — non solo
+  su generazione AI), altrimenti una Home che dipende da una funzione a pagamento/gated lascerebbe senza
+  nulla proprio i nuovi utenti in prova, cioè chi ne ha più bisogno al primo avvio. "Vette
   raggiunte" e "Cronologia navigazione" sono dati derivati dalle attività/percorsi ma vivono solo dentro
   Profilo → Impostazioni-adiacenti, lontano dal contesto (un'attività, un percorso) a cui si
   riferiscono.
@@ -404,6 +415,11 @@ alcuni nuovi non deducibili dal solo markup:
 
 ## 10. Mobile-first
 
+**Nota dell'autore del prodotto**: l'orientamento su smartphone è **fissato verticale per scelta di
+prodotto** — non è quindi un'area aperta da verificare in orizzontale su telefono, a differenza di quanto
+il template di questo audit chiederebbe in generale. Resta aperta la resa su PC/tablet (nessuno
+screenshot disponibile a oggi).
+
 Osservazioni dal codice (classi Tailwind, `env(safe-area-inset-*)`, gestori touch):
 
 - **Safe area**: gestita sistematicamente e con cura reale — `MOBILE_TOPBAR_SPACER`, `pb-[calc(env(safe-area-inset-bottom,0px)+…)]` ricorrono in tutte le pagine esaminate. Il changelog in
@@ -530,7 +546,10 @@ Altri rilievi di linguaggio:
 - **Sigle tecniche esposte senza spiegazione immediata nel testo stesso**: CTS, TSS, IEV, EF, TSB
   compaiono come etichette di card in Bacheca (`badgeText: 'TSS'`, `'EF'`, `'IEV'`) — comprensibili solo
   aprendo il pannello info. Per un pubblico di escursionisti (non ciclisti/triatleti abituati al
-  training-load), queste sigle sono gergo settoriale non universalmente noto.
+  training-load), queste sigle sono gergo settoriale non universalmente noto. **CONFERMATO da
+  screenshot**: anche in Impostazioni, il titolo di sezione "Bellezza del percorso (**TEI**)" espone
+  un'ulteriore sigla mai sciolta nel testo visibile — un sesto acronimo tecnico (dopo CTS/TSS/IEV/EF/TSB)
+  che l'utente incontra prima ancora di sapere cosa significhi.
 
 ---
 
@@ -561,9 +580,9 @@ Altri rilievi di linguaggio:
 |---|---|---|
 | Cambiare tab (Bacheca/Guide/Resoconti/Diario) | **EASY** | Tab bar sempre visibile |
 | Aprire il proprio profilo/impostazioni | **EASY** | Avatar persistente in alto a destra |
-| Trovare "Percorsi per te" | **MODERATE** | Solo una tile tra tante in fondo alla Bacheca |
+| Trovare "Percorsi per te" | **MODERATE, ma la funzione non è ancora funzionante** (nota dell'autore) | Solo una tile tra tante in fondo alla Bacheca; anche trovata, oggi non restituisce risultati utilizzabili — la discoverability è un problema secondario finché la funzione stessa non funziona |
 | Importare un GPX | **MODERATE** | Nessun ingresso diretto dal tab bar; richiede sapere che "Crea una guida" dentro Guide (stato vuoto) o navigare a `/upload` |
-| Vedere le "Vette raggiunte" | **HARD** | Solo dentro Profilo, nessun collegamento da Statistiche/Bacheca dove ci si aspetterebbe un rimando naturale (è un record personale) |
+| Vedere le "Vette raggiunte" | **MODERATE** (corretto dopo screenshot: era HARD) | **CONFERMATO da screenshot**: raggiungibile da Profilo **e** da Statistiche → Panoramica (banner "Vette Conquistate", incontrato scorrendo oltre "Record personali") — non isolata come inizialmente scritto, ma comunque non raggiungibile in meno di 2-3 scroll/tap da nessuno dei due punti |
 | Cronologia navigazione | **HARD** | Solo dentro Profilo, nome poco distintivo da "Resoconti"/"Diario" |
 | Ricerche salvate / Log ricerche | **VERY HARD** | Solo dentro Profilo, non linkate dal punto di ricerca stesso |
 | Scaricare un percorso per l'uso offline | **EASY, ma solo dentro Navigator** — **MODERATE/HARD** se si parte da Dtrek web | **CONFERMATO da screenshot**: icona di download ben visibile su ogni card in "Percorsi pianificati" di Navigator; nessuna icona equivalente osservata nella sezione "Guide" di Dtrek web, dove il percorso viene effettivamente creato/valutato |
@@ -695,9 +714,22 @@ fatte dal solo markup. Bug visivi **confermati**, in ordine di gravità:
    resoconto, con lo stesso controllo AI (Essenziale/Approfondita/Molto approfondita) ripetuto 4+ volte
    e la stessa fila di 5-6 icone mappa ripetuta identica su 3 mappe diverse nella stessa pagina (§9).
 
-Aree **non coperte da screenshot** e quindi ancora "da codice, non confermate a schermo": Impostazioni,
-Statistiche standalone, Vette, Percorsi-per-te, viewport tablet/orizzontale. Si raccomanda comunque una
-sessione dedicata a queste aree prima di considerare chiusa questa sezione.
+6. **Tab e colonne scrollabili orizzontalmente tagliati senza indizio visivo** — confermato in Statistiche
+   (tab "Tr…", colonna "Distanz…") oltre che nei tab di dettaglio Guida/Resoconto (§21, P-H8).
+
+Un secondo giro di screenshot (Statistiche — Panoramica/Andamento/Traguardi/Confronto, Profilo →
+Impostazioni) copre anche le aree che restavano aperte: **confermato positivamente** che Impostazioni è
+tra le schermate meglio scritte dell'app (microcopy chiara sotto ogni controllo, valori derivati
+calcolati automaticamente, es. FC max via formula Tanaka) e che il sistema Traguardi/badge (categorie
+Distanza/Dislivello/Quota/Costanza/Speciale, percentuali di completamento, banner di sblocco) è ricco e
+ben eseguito — il problema resta la sua collocazione (solo dentro Statistiche/Profilo, mai al momento
+naturale subito dopo un'escursione, vedi P-O2), non la qualità del contenuto stesso.
+
+Aree **ancora non coperte da screenshot**: la resa su PC/tablet (nessuno screenshot disponibile a oggi;
+l'orientamento orizzontale su smartphone non è invece un'area aperta — vedi nota in §10, orientamento
+fissato verticale per scelta di prodotto). "Percorsi per te" non è coperta da screenshot perché, per
+ammissione dell'autore, **non è ancora funzionante** — vedi §4 e §21 (P-O4). Resta anche l'esperienza di
+digitazione nei form. Si raccomanda comunque una sessione dedicata a queste aree residue.
 
 ---
 
@@ -793,13 +825,32 @@ salvate/Log ricerche)**
 
 **P-H6 — CONFERMATO da screenshot: elementi fluttuanti persistenti coprono contenuto reale**
 - EVIDENCE: chip "Voto X/10" nel Resoconto e rail di 9 icone nel Diario, entrambi confermati coprire
-  testo/grafici/foto durante lo scroll (§9, §20).
+  testo/grafici/foto durante lo scroll (§9, §20). **Terza occorrenza confermata**: nel grafico "Training
+  Load" di Statistiche, un tooltip data ("16 ago · Stress (TSS): 40") copre parzialmente il titolo del
+  grafico immediatamente sottostante ("Carico giornaliero") — lo stesso difetto di categoria (elemento
+  fluttuante non consapevole di cosa ha sotto) in una terza area indipendente dell'app.
 - USER IMPACT: informazioni parzialmente illeggibili (numeri di copertina, chip dati, paragrafi di
-  racconto) in due delle sezioni più curate dell'app dal punto di vista dei contenuti.
+  racconto, titoli di grafico) in tre delle sezioni più curate dell'app dal punto di vista dei contenuti
+  — non un incidente isolato ma un pattern che si ripete ogni volta che l'app sovrappone un elemento
+  fluttuante a contenuto scrollabile.
 - RECOMMENDATION: rendere questi elementi collassabili/trasparenti solo quando davvero necessario, o
   spostarli fuori dall'area di scroll del contenuto (es. barra fissa in alto invece che fluttuante sopra
   il testo).
 - PRIORITY: HIGH.
+
+**P-H8 — CONFERMATO da screenshot: tab e colonne scrollabili orizzontalmente si tagliano al bordo senza
+alcun indizio visivo**
+- EVIDENCE: i tab "Panoramica/Andamento/Confronto/Traguardi" di Statistiche mostrano solo "Tr…" per
+  l'ultimo, tagliato di netto al bordo destro senza sfumatura né freccia; la tabella "Tutte le
+  escursioni" mostra la colonna "Distanza" tagliata in "Distanz…"; lo stesso pattern era già stato
+  osservato nei tab di dettaglio Guida/Resoconto ("In si…" per "In sintesi"). Confermato in almeno 3 aree
+  indipendenti dell'app.
+- USER IMPACT: un utente può non accorgersi che esiste altro contenuto scorrendo lateralmente — soprattutto
+  la prima volta, prima di aver imparato che quei tab/quelle tabelle sono scrollabili — e perdere sezioni
+  intere (es. "Traguardi" in Statistiche) semplicemente perché il nome è tagliato e non invita al tap.
+- RECOMMENDATION: aggiungere un'indicazione visiva di scroll disponibile (sfumatura/ombra sul bordo, o
+  mostrare sempre l'inizio della voce successiva) su ogni fila di tab/tabella scrollabile orizzontalmente.
+- PRIORITY: HIGH (pattern sistemico, basso sforzo di correzione una volta centralizzato).
 
 **P-H7 — CONFERMATO da screenshot: avviso di sicurezza sulla fauna sembra elencare le stesse specie due
 volte**
@@ -874,10 +925,25 @@ chiuderebbe esplicitamente il ciclo utente (§15/17) invece di lasciare che l'ut
 bar.
 
 **P-O2** — Un badge/riepilogo "traguardi appena sbloccati" mostrato subito dopo aver salvato un Resoconto
-collegherebbe la fase "Memoria" (oggi isolata in Profilo) al momento più naturale per riceverla.
+collegherebbe la fase "Memoria" (oggi isolata in Profilo/Statistiche) al momento più naturale per
+riceverla. **Nota confermata da screenshot**: il sistema esiste già ed è ben fatto (categorie
+Distanza/Dislivello/Quota/Costanza/Speciale, percentuali di completamento, banner "Hai sbloccato 5 nuovi
+badge!") — non va costruito da zero, va solo *spostato/duplicato* al momento giusto invece di restare
+raggiungibile solo scorrendo dentro Statistiche.
 
 **P-O3** — Comunicare in anticipo, al momento di creare un percorso da Dtrek, che Navigator ha un tetto
 di percorsi "pronti" (`NAVIGATOR_SLOT_LIMIT`) eviterebbe la sorpresa scoperta solo aprendo l'altra app.
+
+**P-O4 — "Percorsi per te" come base della nuova Home, ma con un fallback senza AI** — Confermato
+dall'autore del prodotto: la funzione oggi non è ancora funzionante ed è pensata come candidata a
+diventare la Home (coerente con P-C2 e con la risposta alla domanda 23 in §24, che indicava esattamente
+questo bisogno). Perché possa davvero ricoprire quel ruolo, la raccomandazione di questo audit è di
+progettarla fin dall'inizio con **due percorsi di generazione**: uno basato su AI (racconto/motivazione
+personalizzata, quando l'accesso è sbloccato) e uno **puramente basato su dati oggettivi già calcolati
+dall'app** (distanza dal punto di partenza salvato, Trail/Safety Score, storico personale, stagionalità)
+per chi è in prova senza AI attiva o ha esaurito il periodo di prova. Una Home che mostra risultati solo a
+chi ha già sbloccato l'AI escluderebbe proprio i nuovi utenti del primo avvio — l'esatto pubblico che
+questa modifica dovrebbe servire meglio.
 
 ---
 
@@ -905,7 +971,10 @@ ipotizzati dal codice).
 
 ### P0 — impatto massimo, agire per primi
 1. **Aggiungere un secondo CTA "Pianifica un percorso" nello stato vuoto della Home** (accanto/al posto
-   di "Crea un Resoconto" come unico invito) — risolve P-C2, bassissimo sforzo tecnico.
+   di "Crea un Resoconto" come unico invito) — risolve P-C2, bassissimo sforzo tecnico. **Nota
+   dell'autore, incorporata qui**: "Percorsi per te" è la candidata naturale per diventare questa Home
+   nel medio periodo, ma va prima resa funzionante e dotata di un percorso senza AI (P-O4) — finché non
+   lo è, questo CTA minimo resta comunque il fix immediato da fare subito.
 2. **Onboarding esplicito che spieghi la relazione Dtrek/Navigator** la primissima volta che l'utente
    incontra l'altra app o il pulsante che le collega — risolve P-C1.
 3. **Rinominare il tab "Guide" in qualcosa che comunichi "i miei percorsi"** (es. "Percorsi"), liberando
@@ -924,30 +993,35 @@ ipotizzati dal codice).
    coprire testo/grafici reali — risolve P-H6.
 7. Unificare l'etichetta della funzione di traccia libera ovunque compaia, incluso il titolo di pagina
    "Registra un percorso" confermato in Navigator (P-H4, ora con 4 varianti confermate).
-8. Collegare Vette raggiunte, Cronologia navigazione, Ricerche salvate dai loro contesti d'uso naturali
+8. **CONFERMATO da screenshot — aggiungere un'indicazione di scroll disponibile** a ogni tab/tabella
+   scrollabile orizzontalmente (Statistiche, dettaglio Guida/Resoconto) — pattern sistemico, correzione
+   centralizzabile in un solo componente condiviso (P-H8).
+9. Collegare Vette raggiunte, Cronologia navigazione, Ricerche salvate dai loro contesti d'uso naturali
    invece che solo da Profilo (P-H5).
-9. Comunicare preventivamente il limite di Navigator al momento della creazione percorso in Dtrek (P-O3).
-10. Dichiarare esplicitamente la differenza Bacheca/Statistiche e Resoconti/Diario con un sottotitolo o
+10. Comunicare preventivamente il limite di Navigator al momento della creazione percorso in Dtrek (P-O3).
+11. Dichiarare esplicitamente la differenza Bacheca/Statistiche e Resoconti/Diario con un sottotitolo o
     hint nella UI (P-M1, P-M2).
 
 ### P2 — miglioramento sostanziale, non bloccante
-11. Aggiungere righe descrittive alle tre sotto-modalità di import GPX (P-M3) — nota: lo screenshot della
+12. Aggiungere righe descrittive alle tre sotto-modalità di import GPX (P-M3) — nota: lo screenshot della
     schermata "Importa un percorso" di Navigator mostra un buon esempio di testo esplicativo ("Come
     funziona") da cui prendere spunto anche per Dtrek web.
-12. Sostituire il `confirm()` nativo con il pattern Sheet/popover coerente col resto dell'app (P-M4).
-13. Preferire etichette in linguaggio naturale sulle card di Bacheca, spostando le sigle tecniche nel
-    solo pannello di dettaglio (P-M5).
-14. Troncare/gestire i titoli GPX anomali invece di mostrarli per intero senza limiti (P-M6).
-15. Differenziare visivamente l'anello "Voto" da quello "Comfort TrailScore" (P-M7).
-16. Chiudere il ciclo utente con un CTA "Pianifica la prossima uscita" al termine di un Resoconto (P-O1).
+13. Sostituire il `confirm()` nativo con il pattern Sheet/popover coerente col resto dell'app (P-M4).
+14. Preferire etichette in linguaggio naturale sulle card di Bacheca, spostando le sigle tecniche nel
+    solo pannello di dettaglio (P-M5) — vale anche per "TEI" in Impostazioni.
+15. Troncare/gestire i titoli GPX anomali invece di mostrarli per intero senza limiti (P-M6).
+16. Differenziare visivamente l'anello "Voto" da quello "Comfort TrailScore" (P-M7).
+17. Chiudere il ciclo utente con un CTA "Pianifica la prossima uscita" al termine di un Resoconto (P-O1),
+    magari accompagnato dal riepilogo Traguardi appena sbloccati (P-O2) — il sistema di badge esiste già
+    ed è ben fatto, va solo mostrato al momento giusto.
 
 ### P3 — rifiniture
-17. Micro-label o hint per le icone icon-only della rail del Diario e delle mappe interattive (ripetute
+18. Micro-label o hint per le icone icon-only della rail del Diario e delle mappe interattive (ripetute
     identiche su ogni mappa della stessa pagina) (P-L1).
-18. Un indizio visivo la prima volta che si apre il Diario, per introdurre il cambio di paradigma
+19. Un indizio visivo la prima volta che si apre il Diario, per introdurre il cambio di paradigma
     (scroll verticale libro vs. swipe orizzontale delle altre sezioni) (P-L2).
-19. Sessione dedicata di Visual QA su device reale per le aree non ancora coperte da screenshot
-    (Impostazioni, Statistiche standalone, Vette, Percorsi-per-te, orientamento orizzontale/tablet).
+20. Sessione dedicata di Visual QA su device reale per l'unica area ancora priva di screenshot: la resa
+    su PC/tablet (l'orientamento orizzontale su smartphone non si applica, vedi §10).
 
 ---
 
@@ -1032,7 +1106,14 @@ ipotizzati dal codice).
     primo avvio); la navigazione attiva ha impatto più profondo per chi la raggiunge (implica anche un
     fattore di sicurezza, non solo di comprensione).
 
+    **Aggiornamento dopo il confronto con l'autore del prodotto**: la direzione già individuata per la
+    Home coincide con quella di questo audit — "Percorsi per te" è pensata proprio come sua sostituta
+    naturale. La condizione perché quella scelta funzioni davvero è quella indicata in P-O4: deve
+    rispondere anche senza AI attiva, non solo per chi ha già sbloccato/pagato — altrimenti la nuova Home
+    risolverebbe il problema di comprensione (P-C2) ma ne creerebbe uno nuovo, escludendo silenziosamente
+    proprio i nuovi utenti in prova.
+
 ---
 
-*Fine audit UX, aggiornato con evidenza visiva reale (37 screenshot: Bacheca, Guida, Resoconto, Diario,
-Profilo, DTrek Navigator). Report funzionale correlato: `DTREK-AUDIT.md`.*
+*Fine audit UX, aggiornato con evidenza visiva reale (51 screenshot: Bacheca, Guida, Resoconto, Diario,
+Profilo, Statistiche, Impostazioni, DTrek Navigator). Report funzionale correlato: `DTREK-AUDIT.md`.*
