@@ -6,7 +6,7 @@ import { it } from 'date-fns/locale'
 import { Navigation, Sparkles, ArrowRight, TrendingUp, Flame, BarChart3, Loader2 } from 'lucide-react'
 import HubNavBar from '@/components/routehub/HubNavBar'
 import RouteThumb from '@/components/RouteThumb'
-import { getAllActivities, getActivityById, computeGlobalStats, type ActivityMeta, type StoredActivity } from '@/lib/blobStore'
+import { getAllActivities, getActivityById, computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
 import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { fetchActivityPhotos, pickBestCoverPhoto } from '@/lib/activityPhotos'
 import { useCtsUpdated } from '@/lib/sync/useCtsUpdated'
@@ -46,7 +46,17 @@ export default function BachecaPage() {
       .catch(() => setRecoStatus('error'))
   }, [])
 
-  const loadAll = () => Promise.all([getAllActivities(), getAllPlanned()]).then(([acts, plans]) => {
+  // getAllActivities/getAllPlanned sono cache-first (IndexedDB) e, quando la cache locale ha un
+  // buco noto (es. routePolyline mancante su un'entry vecchia — vedi i commenti "self-heal" dentro
+  // lib/blobStore.ts e lib/plannedStore.ts), rilanciano in background un refetch dal server e lo
+  // scrivono in cache SUBITO ma lo consegnano al chiamante solo tramite onRefresh — altrimenti resta
+  // invisibile finché la pagina non viene riaperta da zero. Senza onRefresh qui, la prima apertura di
+  // Bacheca su una cache così poteva mostrare l'hero senza mappa/foto finché non si tornava indietro
+  // e si rientrava: il fix è semplicemente ascoltare quel callback.
+  const loadAll = () => Promise.all([
+    getAllActivities(acts => setActivities(acts)),
+    getAllPlanned(plans => setPlanned(plans)),
+  ]).then(([acts, plans]) => {
     setActivities(acts)
     setPlanned(plans)
   })
@@ -91,27 +101,31 @@ export default function BachecaPage() {
   }, [planned])
 
   // Fallback quando non c'è (ancora) un percorso pianificato in evidenza: l'ultima escursione già
-  // fatta. Serve sia per la curiosità (il suo poiWiki) sia per la foto dell'hero (la sua copertina
+  // fatta. Serve sia per le curiosità (il suo poiWiki) sia per la foto dell'hero (la sua copertina
   // reale) — catena di fallback descritta in UX-AUDIT.md P-O5. ActivityMeta (già caricata sopra)
-  // non porta poiWiki/foto: vanno recuperati a parte, solo per l'unica attività che serve qui.
+  // non porta poiWiki/foto: vanno recuperati a parte.
   const recentActivitiesSorted = useMemo(
     () => activities.slice().sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime()),
     [activities],
   )
   const latestActivity = recentActivitiesSorted[0] ?? null
-  // Solo per arricchire la riga "Curiosità dai tuoi percorsi" con una seconda voce quando
-  // disponibile (vedi curiosityEntries sotto) — non usata per la foto/CTA dell'hero, che restano
-  // legate alla sola escursione più recente.
-  const secondActivity = recentActivitiesSorted[1] ?? null
+  // Quante uscite già fatte scansionare per estrarre curiosità POI+Wikipedia (oltre al percorso in
+  // evidenza e agli altri percorsi pianificati attivi) — vedi curiosityEntries sotto. Non tutte le
+  // attività dell'utente: getActivityById è cache-first quindi economico, ma non ha senso scansionare
+  // uscite di anni fa per popolare una riga della Home.
+  const RECENT_ACTIVITIES_FOR_CURIOSITY = 8
+  const recentActivitiesForCuriosity = useMemo(
+    () => recentActivitiesSorted.slice(0, RECENT_ACTIVITIES_FOR_CURIOSITY),
+    [recentActivitiesSorted],
+  )
+  const recentActivityIdsKey = recentActivitiesForCuriosity.map(a => a.id).join(',')
 
-  const [latestActivityFull, setLatestActivityFull] = useState<StoredActivity | null>(null)
   const [latestActivityCover, setLatestActivityCover] = useState<string | null>(null)
-  const [secondActivityFull, setSecondActivityFull] = useState<StoredActivity | null>(null)
+  const [activityPoiWikiById, setActivityPoiWikiById] = useState<Record<string, { poi: PoiItem; wiki: WikiPage }[]>>({})
 
   useEffect(() => {
-    if (!latestActivity) { setLatestActivityFull(null); setLatestActivityCover(null); return }
+    if (!latestActivity) { setLatestActivityCover(null); return }
     let cancelled = false
-    getActivityById(latestActivity.id).then(full => { if (!cancelled) setLatestActivityFull(full) }).catch(() => {})
     fetchActivityPhotos(latestActivity.id)
       .then(photos => { if (!cancelled) setLatestActivityCover(pickBestCoverPhoto(photos)?.url ?? null) })
       .catch(() => {})
@@ -122,31 +136,56 @@ export default function BachecaPage() {
   }, [latestActivity?.id])
 
   useEffect(() => {
-    if (!secondActivity) { setSecondActivityFull(null); return }
+    if (recentActivitiesForCuriosity.length === 0) { setActivityPoiWikiById({}); return }
     let cancelled = false
-    getActivityById(secondActivity.id).then(full => { if (!cancelled) setSecondActivityFull(full) }).catch(() => {})
+    Promise.all(
+      recentActivitiesForCuriosity.map(a =>
+        getActivityById(a.id)
+          .then(full => [a.id, full?.poiWiki ?? []] as const)
+          .catch(() => [a.id, []] as const),
+      ),
+    ).then(pairs => { if (!cancelled) setActivityPoiWikiById(Object.fromEntries(pairs)) })
     return () => { cancelled = true }
+    // Volutamente la chiave di soli id, non l'array di attività: recentActivitiesForCuriosity è un
+    // nuovo array a ogni ricalcolo di activities, il fetch non deve ripartire finché il set di
+    // uscite recenti resta lo stesso.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [secondActivity?.id])
+  }, [recentActivityIdsKey])
 
-  // Curiosità storico-culturale — una per percorso, non più voci dello stesso percorso: il
-  // percorso in evidenza, poi le due escursioni più recenti, ciascuna col proprio primo
-  // POI+estratto Wikipedia già arricchito gratis (nessuna chiamata AI). Un percorso senza POI
-  // arricchiti viene saltato, non mostrato vuoto; al massimo tre voci, mostrate in una riga
-  // scorrevole (coerente col mockup "DTrek Home Layouts", Opzione D).
+  // Curiosità storico-culturali dai POI già arricchiti gratis (Overpass + Wikipedia, nessuna
+  // chiamata AI — vedi GpxUploader/UrlImportUploader/buildHikeFromCandidate) raccolte da TUTTI i
+  // percorsi disponibili: il percorso in evidenza, poi gli altri percorsi pianificati attivi, poi le
+  // uscite già fatte più recenti — non solo dal percorso in evidenza. Un percorso con più POI
+  // arricchiti contribuisce con più di una curiosità (fino a MAX_POI_PER_ROUTE), non solo la prima:
+  // fetchWikiForNamedPois (lib/wikipedia.ts) può restituirne fino a 10 per percorso. Deduplicate per
+  // pagina Wikipedia (lo stesso POI raggiunto da percorsi diversi non compare due volte).
+  // MAX_CURIOSITY_CARDS limita solo la lunghezza della riga scorrevole, non le fonti scansionate.
+  const MAX_POI_PER_ROUTE = 4
+  const MAX_CURIOSITY_CARDS = 20
   const curiosityEntries = useMemo(() => {
-    const entries: { routeTitle: string; wiki: WikiPage }[] = []
-    const seenTitles = new Set<string>()
-    const addFrom = (title: string | undefined, wikiList: { poi: PoiItem; wiki: WikiPage }[] | undefined) => {
-      if (entries.length >= 3 || !title || seenTitles.has(title) || !wikiList?.length) return
-      seenTitles.add(title)
-      entries.push({ routeTitle: title, wiki: wikiList[0].wiki })
+    const entries: { key: string; routeTitle: string; wiki: WikiPage }[] = []
+    const seenWiki = new Set<string>()
+    const addRoute = (title: string | undefined, wikiList: { poi: PoiItem; wiki: WikiPage }[] | undefined) => {
+      if (!title || !wikiList?.length) return
+      let addedForThisRoute = 0
+      for (const { wiki } of wikiList) {
+        if (entries.length >= MAX_CURIOSITY_CARDS || addedForThisRoute >= MAX_POI_PER_ROUTE) return
+        if (seenWiki.has(wiki.url)) continue
+        seenWiki.add(wiki.url)
+        entries.push({ key: wiki.url, routeTitle: title, wiki })
+        addedForThisRoute++
+      }
     }
-    addFrom(featured?.hike.title, featured?.hike.cachedPoiWiki as { poi: PoiItem; wiki: WikiPage }[] | undefined)
-    addFrom(latestActivity?.title, latestActivityFull?.poiWiki)
-    addFrom(secondActivity?.title, secondActivityFull?.poiWiki)
+    addRoute(featured?.hike.title, featured?.hike.cachedPoiWiki as { poi: PoiItem; wiki: WikiPage }[] | undefined)
+    for (const h of planned) {
+      if (h.archivedAt || h.id === featured?.hike.id) continue
+      addRoute(h.title, h.cachedPoiWiki as { poi: PoiItem; wiki: WikiPage }[] | undefined)
+    }
+    for (const a of recentActivitiesForCuriosity) {
+      addRoute(a.title, activityPoiWikiById[a.id])
+    }
     return entries
-  }, [featured, latestActivity, latestActivityFull, secondActivity, secondActivityFull])
+  }, [featured, planned, recentActivitiesForCuriosity, activityPoiWikiById])
 
   // Foto dell'hero: catena di fallback (P-O5) — foto propria (solo per un'escursione già fatta,
   // non ha senso per un percorso ancora da percorrere) → foto del POI Wikipedia → tracciato su
@@ -157,10 +196,10 @@ export default function BachecaPage() {
       return wiki?.[0]?.wiki.thumbnail ?? null
     }
     if (latestActivity) {
-      return latestActivityCover ?? latestActivityFull?.poiWiki?.[0]?.wiki.thumbnail ?? null
+      return latestActivityCover ?? activityPoiWikiById[latestActivity.id]?.[0]?.wiki.thumbnail ?? null
     }
     return null
-  }, [featured, latestActivity, latestActivityCover, latestActivityFull])
+  }, [featured, latestActivity, latestActivityCover, activityPoiWikiById])
 
   if (loading) {
     return (
@@ -267,7 +306,7 @@ export default function BachecaPage() {
             </p>
             <div className="flex gap-2.5 overflow-x-auto pb-1 -mx-4 px-4" style={{ scrollbarWidth: 'none' }}>
               {curiosityEntries.map(entry => (
-                <div key={entry.routeTitle} className="shrink-0 w-[230px] bg-white border border-stone-200 rounded-2xl p-3.5 shadow-sm">
+                <div key={entry.key} className="shrink-0 w-[230px] bg-white border border-stone-200 rounded-2xl p-3.5 shadow-sm">
                   <div className="flex items-center gap-1.5 mb-1.5">
                     <Sparkles className="w-3 h-3 text-terra-500 shrink-0" />
                     <span className="text-[9.5px] font-bold uppercase tracking-wide text-stone-400 truncate">{entry.routeTitle}</span>

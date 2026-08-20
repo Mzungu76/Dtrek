@@ -1081,12 +1081,28 @@ Sessione del 2026-08-20, stesso branch di questo audit. Riscritto `app/bacheca/p
   nel wizard).
 
 **Miglioramenti aperti, emersi verificando la Fase 2 dal vivo** (non ancora implementati):
-- **Curiosità multiple — IMPLEMENTATO**: correzione di lettura del mockup "DTrek Home Layouts",
-  Opzione D — le due card di "Curiosità dai tuoi percorsi" avevano due nomi di percorso diversi
-  come etichetta (Camposecco, Faggeta del Cimino), quindi una curiosità per percorso distinto, non
-  più POI dello stesso percorso in evidenza. La Home ora mostra fino a tre card in riga scorrevole,
-  una dal percorso in evidenza e una da ciascuna delle due escursioni più recenti, ognuna saltata
-  singolarmente se quel percorso non ha POI arricchiti — mai una card vuota o duplicata.
+- **Curiosità multiple — IMPLEMENTATO (v2, sessione successiva)**: la prima versione ("una
+  curiosità per percorso distinto", capped a 3 fonti fisse: percorso in evidenza + ultime 2
+  uscite) era ancora troppo restrittiva — verificato dal vivo che in pratica mostrava sempre e sole
+  una card, anche su un account con molti percorsi. Causa: prendeva solo la prima voce
+  (`wikiList[0]`) di ogni percorso, mentre un percorso arricchito può averne fino a 10
+  (`fetchWikiForNamedPois`, cap 10 POI). Corretto: la riga "Curiosità dai tuoi percorsi" ora
+  scansiona *tutti* i percorsi disponibili (percorso in evidenza, tutti gli altri percorsi
+  pianificati attivi, le ultime 8 uscite già fatte) e per ciascuno prende fino a 4 POI+Wikipedia,
+  non solo il primo — quindi più card anche dallo stesso percorso quando ha più POI arricchiti, non
+  solo una per percorso. Deduplicate per pagina Wikipedia (stesso POI raggiunto da percorsi diversi
+  non compare due volte). Tetto complessivo di 20 card, solo per limitare la lunghezza della riga
+  scorrevole, non le fonti scansionate. Un percorso senza POI arricchiti viene saltato, mai una card
+  vuota.
+- **Fix: hero senza mappa/foto al primo caricamento** — verificato dal vivo su un account con un
+  solo percorso: la prima apertura della Home mostrava l'hero senza mappa né foto (solo sfondo
+  generico), poi si aggiornava correttamente rientrando nella pagina. Causa reale: `getAllActivities`
+  e `getAllPlanned` (lib/blobStore.ts, lib/plannedStore.ts) sono cache-first e, quando la cache
+  locale ha un buco noto (es. `routePolyline` mancante su un'entry scritta da una build più vecchia),
+  rilanciano da soli un refetch in background — ma lo consegnavano al chiamante solo tramite un
+  parametro opzionale `onRefresh`, che `app/bacheca/page.tsx` non passava. Il dato corretto veniva
+  scritto in cache silenziosamente, mai nello stato React della pagina già aperta: da qui "si
+  aggiorna solo se rientri". Corretto passando `onRefresh` a entrambe le chiamate in `loadAll()`.
 - **Più percorsi mostrati in Home**: da distinguere in due casi. (a) Percorsi *raccomandati* (non
   ancora dell'utente) — coincide con la Fase 3 già pianificata. (b) *Proprie* prossime uscite
   multiple, oltre a quella in evidenza nell'hero — **non prevista nel disegno attuale**: la scelta
