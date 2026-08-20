@@ -94,13 +94,19 @@ export default function BachecaPage() {
   // fatta. Serve sia per la curiosità (il suo poiWiki) sia per la foto dell'hero (la sua copertina
   // reale) — catena di fallback descritta in UX-AUDIT.md P-O5. ActivityMeta (già caricata sopra)
   // non porta poiWiki/foto: vanno recuperati a parte, solo per l'unica attività che serve qui.
-  const latestActivity = useMemo(() => {
-    if (activities.length === 0) return null
-    return activities.slice().sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())[0]
-  }, [activities])
+  const recentActivitiesSorted = useMemo(
+    () => activities.slice().sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime()),
+    [activities],
+  )
+  const latestActivity = recentActivitiesSorted[0] ?? null
+  // Solo per arricchire la riga "Curiosità dai tuoi percorsi" con una seconda voce quando
+  // disponibile (vedi curiosityEntries sotto) — non usata per la foto/CTA dell'hero, che restano
+  // legate alla sola escursione più recente.
+  const secondActivity = recentActivitiesSorted[1] ?? null
 
   const [latestActivityFull, setLatestActivityFull] = useState<StoredActivity | null>(null)
   const [latestActivityCover, setLatestActivityCover] = useState<string | null>(null)
+  const [secondActivityFull, setSecondActivityFull] = useState<StoredActivity | null>(null)
 
   useEffect(() => {
     if (!latestActivity) { setLatestActivityFull(null); setLatestActivityCover(null); return }
@@ -115,16 +121,32 @@ export default function BachecaPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [latestActivity?.id])
 
-  // Curiosità storico-culturale: prima il POI+estratto Wikipedia del percorso in evidenza (già
-  // arricchito gratis all'import, GpxUploader.tsx — nessuna chiamata AI); se assente, quello
-  // dell'ultima escursione fatta. Sparisce del tutto solo se nessuna delle due fonti ne ha uno —
-  // mai un buco vuoto al posto di un difetto silenzioso.
-  const curiosity = useMemo(() => {
-    const fromFeatured = featured?.hike.cachedPoiWiki as { poi: PoiItem; wiki: WikiPage }[] | undefined
-    if (fromFeatured && fromFeatured.length > 0) return fromFeatured[0]
-    const fromActivity = latestActivityFull?.poiWiki
-    return fromActivity && fromActivity.length > 0 ? fromActivity[0] : null
-  }, [featured, latestActivityFull])
+  useEffect(() => {
+    if (!secondActivity) { setSecondActivityFull(null); return }
+    let cancelled = false
+    getActivityById(secondActivity.id).then(full => { if (!cancelled) setSecondActivityFull(full) }).catch(() => {})
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [secondActivity?.id])
+
+  // Curiosità storico-culturale — una per percorso, non più voci dello stesso percorso: il
+  // percorso in evidenza, poi le due escursioni più recenti, ciascuna col proprio primo
+  // POI+estratto Wikipedia già arricchito gratis (nessuna chiamata AI). Un percorso senza POI
+  // arricchiti viene saltato, non mostrato vuoto; al massimo tre voci, mostrate in una riga
+  // scorrevole (coerente col mockup "DTrek Home Layouts", Opzione D).
+  const curiosityEntries = useMemo(() => {
+    const entries: { routeTitle: string; wiki: WikiPage }[] = []
+    const seenTitles = new Set<string>()
+    const addFrom = (title: string | undefined, wikiList: { poi: PoiItem; wiki: WikiPage }[] | undefined) => {
+      if (entries.length >= 3 || !title || seenTitles.has(title) || !wikiList?.length) return
+      seenTitles.add(title)
+      entries.push({ routeTitle: title, wiki: wikiList[0].wiki })
+    }
+    addFrom(featured?.hike.title, featured?.hike.cachedPoiWiki as { poi: PoiItem; wiki: WikiPage }[] | undefined)
+    addFrom(latestActivity?.title, latestActivityFull?.poiWiki)
+    addFrom(secondActivity?.title, secondActivityFull?.poiWiki)
+    return entries
+  }, [featured, latestActivity, latestActivityFull, secondActivity, secondActivityFull])
 
   // Foto dell'hero: catena di fallback (P-O5) — foto propria (solo per un'escursione già fatta,
   // non ha senso per un percorso ancora da percorrere) → foto del POI Wikipedia → tracciato su
@@ -238,19 +260,28 @@ export default function BachecaPage() {
 
       <div className="max-w-lg mx-auto px-4 pb-10">
 
-        {curiosity && (
-          <div className="mt-4 bg-white border border-stone-200 rounded-2xl p-4 shadow-sm">
-            <div className="flex items-center gap-2 mb-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-terra-500" />
-              <span className="text-[10px] font-bold uppercase tracking-wide text-stone-400">Lo sapevi che…</span>
+        {curiosityEntries.length > 0 && (
+          <div className="mt-4">
+            <p className="font-barlow font-extrabold text-[11px] tracking-[1.5px] uppercase text-stone-400 mb-2">
+              Curiosità dai tuoi percorsi
+            </p>
+            <div className="flex gap-2.5 overflow-x-auto pb-1 -mx-4 px-4" style={{ scrollbarWidth: 'none' }}>
+              {curiosityEntries.map(entry => (
+                <div key={entry.routeTitle} className="shrink-0 w-[230px] bg-white border border-stone-200 rounded-2xl p-3.5 shadow-sm">
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <Sparkles className="w-3 h-3 text-terra-500 shrink-0" />
+                    <span className="text-[9.5px] font-bold uppercase tracking-wide text-stone-400 truncate">{entry.routeTitle}</span>
+                  </div>
+                  <p className="text-[12px] text-stone-700 leading-snug line-clamp-4">{entry.wiki.extract}</p>
+                  <a
+                    href={entry.wiki.url} target="_blank" rel="noopener noreferrer"
+                    className="inline-block text-[11px] font-semibold text-forest-600 mt-1.5"
+                  >
+                    Wikipedia →
+                  </a>
+                </div>
+              ))}
             </div>
-            <p className="text-[13px] text-stone-700 leading-snug">{curiosity.wiki.extract}</p>
-            <a
-              href={curiosity.wiki.url} target="_blank" rel="noopener noreferrer"
-              className="inline-block text-[11.5px] font-semibold text-forest-600 mt-2"
-            >
-              Fonte: Wikipedia →
-            </a>
           </div>
         )}
 
