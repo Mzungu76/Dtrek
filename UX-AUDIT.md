@@ -984,6 +984,35 @@ solo "con un fallback"), e il collegamento fase→fase del ciclo utente che manc
 finisce un resoconto vede la propria prossima uscita e una curiosità legata a un proprio percorso, non
 un vicolo cieco.
 
+**Raffinamento (sessione con l'autore del prodotto, seguito del 2026-08-20): Regione obbligatoria nel
+wizard iniziale, come base del punto 3 sopra invece che il solo percorso omaggio.**
+
+Il punto 3 di P-O5, così come scritto, copre bene il cold-start solo se l'utente ha completato
+l'onboarding col percorso omaggio (skippabile, quindi non garantito — vedi P-O4/P-O5 originale). La
+proposta che lo rende robusto: rendere **obbligatoria la scelta della Regione** nel wizard iniziale quando
+la geolocalizzazione automatica non è concessa (con una riga di spiegazione sintetica del perché serve),
+mai un vero blocco senza via d'uscita — un utente che chiude comunque il wizard deve ricadere su un
+default neutro (es. scala nazionale) piuttosto che restare bloccato. Regione/posizione alimenta due cose
+utilizzabili **dal primo avvio, senza AI**:
+
+- **POI pertinenti alla zona**, per popolare da subito il digest "curiosità" del punto 3 anche senza che
+  l'utente abbia ancora un proprio percorso o resoconto.
+- **Una prima ricerca di percorsi non-AI nella zona** (candidata naturale per "Percorsi per te" prima che
+  esista uno storico personale da cui affinarla — coerente con P-O4) — quindi la Home ha sempre un
+  percorso reale da proporre come "prossima uscita candidata", non solo quando arriva dal percorso
+  omaggio.
+
+Effetto pratico sulle tre opzioni di layout (§ mockup "DTrek Home Layouts"): attenua parecchio la
+debolezza sul cold-start che questo audit attribuiva all'Opzione A (hero a schermo intero) — con la
+Regione sempre disponibile, l'hero ha quasi sempre un soggetto reale da mostrare fin dal giorno 1, non
+solo nel caso limite del percorso omaggio completato.
+
+**Nota di estensibilità, non di scope**: l'autore del prodotto ha segnalato una possibile modalità
+futura dedicata a borghi/città (dove i POI contano quanto o più dei sentieri). Non è una decisione da
+prendere ora per la Home, ma è un motivo in più per scrivere fin da subito il modulo curiosità/POI in
+modo generico — "nella tua zona", non "nei tuoi percorsi" — così l'eventuale estensione futura non
+richiede di riprogettare la Home da capo.
+
 ---
 
 ## 22. UX Score (0-10)
