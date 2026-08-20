@@ -1080,6 +1080,32 @@ Sessione del 2026-08-20, stesso branch di questo audit. Riscritto `app/bacheca/p
 - **Fasi 3-4**: non ancora iniziate (Percorsi-per-te come righe di card vere; Regione obbligatoria
   nel wizard).
 
+**"Percorsi per te" — diagnosi della causa reale del malfunzionamento (sessione successiva) e fix
+applicato**: verificato in produzione (query diretta su `route_recommendations` via Supabase MCP)
+che la riga dell'account owner è ferma da quasi un mese (`generated_at` 2026-07-24, `status='ok'`
+ma **0 card**, `dirty=true` da un'attività completata il 2026-08-18) — mai più aggiornata. Causa
+reale, confermata sui runtime log di Vercel (MCP): il Cron Job `/api/cron/refresh-recommendations`
+(`vercel.json`, deployato e presente in produzione dal 2026-08-14) **non ha mai una sola volta
+eseguito** — zero invocazioni registrate nei log delle ultime 30 giorni, nonostante 6+ finestre
+giornaliere (03:00 UTC) trascorse da quando è stato aggiunto. Causa di piattaforma non confermabile
+da questo sandbox (verificare in Vercel → Project Settings → Cron Jobs se il job risulta
+effettivamente registrato/abilitato, e se l'account Hobby — che nello stesso team ha decine di altri
+progetti — non abbia già saturato altrove il tetto di cron consentiti). Indipendentemente dalla
+causa di piattaforma, il bug applicativo vero è che **niente altro poteva mai correggere una riga
+già esistente ma dirty/stale**: il bootstrap sincrono di `app/api/percorsi-per-te/route.ts`
+scattava solo quando la riga non esisteva affatto, quindi un utente con una riga vecchia restava
+bloccato a tempo indeterminato su quella, con l'unico meccanismo di refresh (il cron) silenziosamente
+rotto. Corretto rendendo la lettura stessa auto-risanante: `route.ts` ora rigenera sincronamente
+(stesso tetto morbido già in uso per il bootstrap) anche quando la riga esistente è `dirty` o più
+vecchia di `STALE_AFTER_DAYS` (7gg, condivisa con il cron via `generateRecommendations.ts`) — mai
+per `?peek=1`, che resta di sola lettura come già era. In caso di timeout del tetto morbido, la
+risposta ora ricade sulla riga precedente (stantia ma reale) invece di un `pending` vuoto. Il cron
+resta comunque utile per pre-scaldare la cache prima della visita dell'utente, ma la freschezza dei
+dati non dipende più solo da lui. Lato pagina (`app/percorsi-per-te/page.tsx`), aggiunto uno stato
+`pending` esplicito con un ritentativo automatico dopo 5s, al posto del falso "nessun percorso
+disponibile" che veniva mostrato ogni volta che il bootstrap superava il tetto morbido.
+`npx tsc --noEmit` pulito, `next lint` pulito sui file toccati.
+
 **Miglioramenti aperti, emersi verificando la Fase 2 dal vivo** (non ancora implementati):
 - **Curiosità multiple — IMPLEMENTATO (v2, sessione successiva)**: la prima versione ("una
   curiosità per percorso distinto", capped a 3 fonti fisse: percorso in evidenza + ultime 2

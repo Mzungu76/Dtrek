@@ -59,6 +59,13 @@ export interface GenerateRecommendationsResult {
   centroid: { lat: number; lon: number } | null
 }
 
+// Condivisa con app/api/cron/refresh-recommendations/route.ts (quando una riga va ripresa dal
+// sweep) e app/api/percorsi-per-te/route.ts (quando una riga dirty/stale va rigenerata al volo su
+// una visita reale, invece di aspettare il prossimo giro del cron — vedi il commento su
+// STALE_SELF_HEAL in quel file: il cron si è osservato in produzione NON scattare mai per settimane
+// di fila, quindi la freschezza dei dati non può dipendere solo da lui).
+export const STALE_AFTER_DAYS = 7
+
 const TOTAL_CARDS = 5
 // Lunghezza target per un utente senza storico attività — lo stesso identico caso già gestito nel
 // wizard (nessun default salvato, si assume una gita "media" invece di rifiutare la generazione).
