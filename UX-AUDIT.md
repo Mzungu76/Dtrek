@@ -1013,6 +1013,30 @@ prendere ora per la Home, ma è un motivo in più per scrivere fin da subito il 
 modo generico — "nella tua zona", non "nei tuoi percorsi" — così l'eventuale estensione futura non
 richiede di riprogettare la Home da capo.
 
+**Nota implementativa: da dove vengono le foto dell'hero/della card in Opzione A e C** (chiarita per i
+mockup "DTrek Home Layouts", che usano un'illustrazione vettoriale segnaposto non avendo foto reali a
+disposizione). Nessuna nuova fonte da costruire — una catena di fallback che riusa solo cose che l'app
+già fa:
+
+1. **Foto dell'utente**, quando esistono — per un'escursione già registrata (resoconto/"ultima uscita")
+   l'app usa già oggi `pickBestCoverPhoto`/`fetchActivityPhotos` (`app/bacheca/page.tsx`) per scegliere la
+   copertina tra le foto caricate per quell'attività. Stessa logica riusabile senza modifiche.
+2. **Foto del POI da Wikipedia**, per un percorso non ancora fatto (prossima uscita pianificata, o
+   proposta regionale del giorno 1, P-O5 sopra) — l'arricchimento automatico all'import (`GpxUploader.tsx`)
+   scarica già "estratto + foto" da Wikipedia per i POI vicini al tracciato, gratis, senza AI: è la fonte
+   più adatta sia per l'hero senza foto propria sia per la card "curiosità".
+3. **Il tracciato disegnato su sfondo topografico** (`RouteThumb` + il pattern `bg-topography` già in
+   `tailwind.config.ts`) — il modo in cui l'app mostra oggi un percorso senza foto (filmstrip di
+   Guida/Resoconto): fallback intermedio coerente con lo stile esistente, non una foto ma non un buco
+   vuoto.
+4. **L'immagine di fallback generica** che la Bacheca usa già oggi (`FALLBACK_HERO =
+   '/stato-hero-fallback.jpg'`, `app/bacheca/page.tsx`) come ultima rete di sicurezza.
+
+Attenzione a un dettaglio non solo estetico: le foto da Wikipedia/Wikimedia Commons richiedono quasi
+sempre attribuzione visibile (licenza CC-BY-SA nella maggior parte dei casi) — va previsto un credito
+discreto sull'immagine stessa quando la fonte 2 è quella usata, non solo un rimando alla pagina "Fonti e
+crediti" già esistente in Profilo.
+
 ---
 
 ## 22. UX Score (0-10)
