@@ -7,6 +7,7 @@ import { it } from 'date-fns/locale'
 import { Navigation, Sparkles, ArrowRight, TrendingUp, Flame, BarChart3, Loader2 } from 'lucide-react'
 import HubNavBar from '@/components/routehub/HubNavBar'
 import RouteThumb from '@/components/RouteThumb'
+import CuriosityModal from '@/components/bacheca/CuriosityModal'
 import { getAllActivities, getActivityById, computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
 import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { fetchActivityPhotos, pickBestCoverPhoto } from '@/lib/activityPhotos'
@@ -60,6 +61,7 @@ export default function BachecaPage() {
   const [recoCards, setRecoCards] = useState<RecommendationCard[]>([])
   const [openingRecoId, setOpeningRecoId] = useState<string | null>(null)
   const [recoErrorMsg, setRecoErrorMsg] = useState('')
+  const [openCuriosity, setOpenCuriosity] = useState<{ routeTitle: string; wiki: WikiPage } | null>(null)
 
   useEffect(() => {
     // ?peek=1: non innesca mai una generazione — vedi app/api/percorsi-per-te/route.ts. Restituisce
@@ -350,12 +352,13 @@ export default function BachecaPage() {
                     <span className="text-[9.5px] font-bold uppercase tracking-wide text-stone-400 truncate">{entry.routeTitle}</span>
                   </div>
                   <p className="text-[12px] text-stone-700 leading-snug line-clamp-4">{entry.wiki.extract}</p>
-                  <a
-                    href={entry.wiki.url} target="_blank" rel="noopener noreferrer"
+                  <button
+                    type="button"
+                    onClick={() => setOpenCuriosity({ routeTitle: entry.routeTitle, wiki: entry.wiki })}
                     className="inline-block text-[11px] font-semibold text-forest-600 mt-1.5"
                   >
-                    Wikipedia →
-                  </a>
+                    Leggi tutto →
+                  </button>
                 </div>
               ))}
             </div>
@@ -428,6 +431,14 @@ export default function BachecaPage() {
           )}
         </div>
       </div>
+
+      {openCuriosity && (
+        <CuriosityModal
+          routeTitle={openCuriosity.routeTitle}
+          wiki={openCuriosity.wiki}
+          onClose={() => setOpenCuriosity(null)}
+        />
+      )}
     </div>
   )
 }

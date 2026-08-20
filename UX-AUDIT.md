@@ -1087,8 +1087,19 @@ Sessione del 2026-08-20, stesso branch di questo audit. Riscritto `app/bacheca/p
   `lib/routeBuilder/openRecommendationCard.ts`, condivisa tra le due pagine invece di duplicata.
   Link "Vedi tutti" verso `/percorsi-per-te` per i controlli ♥/✕ non presenti nella riga compatta.
   Non costruita finché la pipeline dati non era affidabile end-to-end (vedi la diagnosi sotto) —
-  costruirci sopra prima avrebbe solo reso più visibile un difetto a monte.
-- **Fase 4**: non ancora iniziata (Regione obbligatoria nel wizard).
+  costruirci sopra prima avrebbe solo reso più visibile un difetto a monte. (Nota storica: un ramo
+  di lavoro parallelo aveva inizialmente rimandato questa fase perché la funzione non era ancora
+  confermata affidabile — la diagnosi/fix del cron sotto ha risolto esattamente quel blocco.)
+- **Fase 4 — IMPLEMENTATA, da verificare dal vivo**: `components/onboarding/GiftRouteStep.tsx`
+  (già eseguito dopo il wizard di profilo, già con geolocalizzazione + picker manuale per il
+  percorso omaggio) ora persiste anche una `home_region` su `user_settings`, riusabile ovunque
+  serva un primo segnale geografico senza AI. Quando la geolocalizzazione non basta, il picker
+  manuale diventa l'unica via avanti (via tolta la scorciatoia "Salta" solo in quella fase) ma resta
+  sempre disponibile l'opzione neutra "Preferisco non specificare ora" — mai un blocco duro. **Nota
+  operativa**: richiede la migrazione `supabase/migrations/add_home_region.sql` sul progetto
+  Supabase reale prima che il campo si salvi davvero (l'endpoint ha comunque un fallback che elimina
+  da solo le colonne non ancora migrate, quindi non rompe nulla nel frattempo — semplicemente
+  `homeRegion` resta vuoto finché la colonna non esiste).
 
 **"Percorsi per te" — diagnosi della causa reale del malfunzionamento (sessione successiva) e fix
 applicato**: verificato in produzione (query diretta su `route_recommendations` via Supabase MCP)
@@ -1117,6 +1128,13 @@ disponibile" che veniva mostrato ogni volta che il bootstrap superava il tetto m
 `npx tsc --noEmit` pulito, `next lint` pulito sui file toccati.
 
 **Miglioramenti aperti, emersi verificando la Fase 2 dal vivo** (non ancora implementati):
+- **Popup "Leggi tutto" — IMPLEMENTATO**: la card di curiosità non porta più subito fuori
+  dall'app con un link Wikipedia in evidenza (verde). Mostra "Leggi tutto", che apre un popup con
+  testo esteso (fetch on-demand, non solo l'incipit breve già in cache), eventuali altre foto
+  trovate sulla stessa pagina Wikipedia/Wikivoyage, e solo lì il link alla fonte, in grigio chiaro
+  e non più in evidenza. Nessuna fonte oltre a Wikipedia/Wikivoyage esiste nell'arricchimento
+  attuale (`fetchWikiForNamedPois`) — il popup chiede solo più contenuto alla stessa pagina già
+  trovata, non ne cerca di nuove.
 - **Curiosità multiple — IMPLEMENTATO (v2, sessione successiva)**: la prima versione ("una
   curiosità per percorso distinto", capped a 3 fonti fisse: percorso in evidenza + ultime 2
   uscite) era ancora troppo restrittiva — verificato dal vivo che in pratica mostrava sempre e sole

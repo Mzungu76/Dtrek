@@ -1117,6 +1117,10 @@ ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS paddle_subscription_id TEXT;
 -- Flag indipendente da onboarding_completed_at — vedi add_gift_route_offered_at.sql per il perché.
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS gift_route_offered_at TIMESTAMPTZ;
 
+-- Slug di lib/italianRegions.ts (es. 'lazio'), NULL se l'utente ha scelto esplicitamente di non
+-- specificarla — vedi add_home_region.sql per il perché.
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS home_region TEXT;
+
 -- Confine Navigator/Dtrek, modello "un'icona sola" — vedi
 -- supabase/migrations/add_dtrek_activated_at.sql per i commenti completi. NULL finché l'utente
 -- non ha mai toccato "Passa a Dtrek" dentro Navigator; nessun default a NOW() perché l'assenza
