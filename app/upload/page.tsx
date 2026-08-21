@@ -20,10 +20,10 @@ export default function UploadPage() {
   )
 }
 
-// Due punti d'ingresso distinti (bottoni "Crea una guida" in Guide, "Importa o Naviga" in
+// Due punti d'ingresso distinti (bottoni "Crea un percorso" in Percorsi, "Importa o Naviga" in
 // Resoconti — GuidaHub.tsx/ResocontoHub.tsx e i rispettivi elenco/page.tsx), non più uno
-// switcher dentro la pagina: chi arriva da Resoconti non ha motivo di vedere l'opzione "per la
-// Guida" e viceversa, erano due percorsi mentali diversi mascherati da un'unica pagina.
+// switcher dentro la pagina: chi arriva da Resoconti non ha motivo di vedere l'opzione "per i
+// Percorsi" e viceversa, erano due percorsi mentali diversi mascherati da un'unica pagina.
 function UploadPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -46,7 +46,7 @@ function UploadPageInner() {
             <Mountain className="w-8 h-8 text-forest-600" />
           </div>
           <h1 className="font-display text-3xl font-semibold text-stone-800 mb-2">
-            {tab === 'activity' ? 'Crea un Resoconto' : 'Crea una guida'}
+            {tab === 'activity' ? 'Crea un Resoconto' : 'Crea un percorso'}
           </h1>
           <p className="text-stone-500 text-sm">
             {tab === 'activity'
@@ -65,7 +65,7 @@ function UploadPageInner() {
               <Compass className="w-4.5 h-4.5" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-semibold text-sm text-stone-800">Avvia navigazione ora</p>
+              <p className="font-semibold text-sm text-stone-800">Traccia libera</p>
               <p className="text-xs text-stone-500">Traccia GPS libera, senza pianificazione — invece di caricare un file già pronto</p>
             </div>
           </button>

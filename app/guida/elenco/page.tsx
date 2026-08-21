@@ -58,7 +58,7 @@ export default function GuidaIndexPage() {
         <div className="absolute inset-0 bg-gradient-to-b from-sky-900/15 to-sky-900/85" />
         <div className="absolute left-6 right-6 bottom-6 sm:left-10 sm:right-10 sm:bottom-8 flex items-end justify-between gap-4">
           <div className="max-w-[1400px]">
-            <p className="text-sky-300 text-[13px] font-semibold mb-1.5">Guida</p>
+            <p className="text-sky-300 text-[13px] font-semibold mb-1.5">Percorsi</p>
             <h1 className="font-display text-[24px] sm:text-3xl font-bold text-white leading-tight">
               Percorsi in attesa
             </h1>
@@ -75,7 +75,7 @@ export default function GuidaIndexPage() {
               href="/upload?tab=gpx"
               className="flex items-center gap-2 px-4 py-2.5 bg-white text-sky-900 rounded-xl font-semibold text-sm shadow-lg hover:bg-sky-50 transition-colors"
             >
-              <Upload className="w-4 h-4" /> Crea una guida
+              <Upload className="w-4 h-4" /> Crea un percorso
             </Link>
           </div>
         </div>
@@ -125,7 +125,7 @@ export default function GuidaIndexPage() {
               href="/upload?tab=gpx"
               className="flex items-center gap-2 px-6 py-3 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-medium transition-colors"
             >
-              <Upload className="w-5 h-5" /> Crea una guida
+              <Upload className="w-5 h-5" /> Crea un percorso
             </Link>
           </div>
         ) : (

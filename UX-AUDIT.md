@@ -1414,6 +1414,56 @@ non basta invece di limitarsi a mostrare meno di 5 card. Implementato in
   raggiungibili da "Guide". Da decidere esplicitamente con l'autore del prodotto prima di
   implementarla, perché in tensione con quel principio.
 
+### Stato implementazione — quattro punti P0 rimasti (sessione 2026-08-21)
+
+Verificato nel codice (non solo dedotto dal testo dell'audit) prima di intervenire — vedi le note
+per ciascun punto:
+
+- **P-H1/P-H2/P0-3 — IMPLEMENTATO**: tab rinominato "Guide" → "Percorsi" (`components/Navbar.tsx`,
+  icona Compass invariata — non richiesto). "Guida"/"guida" resta riservato al solo testo narrativo
+  AI (confermato che le uniche altre occorrenze di "Guida" in UI, `app/profilo/impostazioni/page.tsx`
+  e `RouteMap3D.tsx`, si riferiscono già correttamente al contenuto AI, non alla sezione — nessuna
+  modifica necessaria lì). Rinominati anche i CTA "Crea una guida" → "Crea un percorso"
+  (`GuidaHub.tsx`, `app/guida/elenco/page.tsx` ×2, `app/upload/page.tsx`) e l'eyebrow "Guida" →
+  "Percorsi" nell'header di `/guida/elenco`, per coerenza con il nuovo nome del tab.
+- **P-H4 — IMPLEMENTATO**: le 4 etichette diverse per la stessa funzione di traccia GPS libera
+  unificate in "Traccia libera" ovunque compaiano: `app/upload/page.tsx` (era "Avvia navigazione
+  ora"), `components/navigation/NavigatorMenu.tsx` (era "Registra senza pianificazione"),
+  `app/navigatore/traccia/page.tsx` ×2 — titolo header e titolo in fase di registrazione (era
+  "Registra un percorso").
+- **P-H7 — verificato, GIÀ RISOLTO**: il dedup fauna (`lib/safetyScore.ts`'s `wildlifeByName` Map,
+  `lib/wildlifeRiskFromGbif.ts`'s dedup by-species con preferenza al nome italiano) rende il caso
+  specifico dello screenshot ("Orso marsicano" + "Ursus arctos" come voci separate) non riproducibile
+  allo stato attuale del codice — nessuna modifica necessaria.
+- **P-C3/P0-4 — verificato, GIÀ IN GRAN PARTE RISOLTO da un lavoro precedente non tracciato in
+  questo file** (commenti nel codice: "Piano di ristrutturazione", "Soluzione B" —
+  `components/navigation/ActiveNavigationView.tsx`): gli avvisi "bottom" (rientro per il buio, GPS
+  perso, fuori percorso, chiusura sentiero, batteria scarica) sono già consolidati per priorità (un
+  solo avviso sempre visibile, gli altri dietro "+N altri avvisi", mai impilati); l'avviso fauna e
+  gli altri avvisi "top" (meteo, mappa offline) sono già in un'unica colonna a flusso naturale che
+  non si sovrappone mai a se stessa; i controlli icon-only sono già raggruppati in due rotaie
+  laterali (sinistra: layer mappa + centra posizione; destra: SOS, modalità mappa, affidabilità
+  sentiero, vie d'uscita, condivisione live, offline, punto auto, aiuto) invece che sparsi. Lo
+  specifico overlap "fauna + luce insufficiente" dello screenshot originale non è più riproducibile
+  strutturalmente: sono due contenitori distinti (colonna in alto vs. gruppo prioritario in basso).
+  Non ancora affrontato: le etichette numeriche di distanza sui sentieri vicini
+  (`components/navigation/NavigationMap.tsx`) restano sempre visibili quando il layer "Sentieri
+  vicini" è attivo (default acceso) invece che solo su richiesta — miglioramento minore rimasto
+  aperto, non implementato in questa sessione per evitare di toccare la resa mappa senza uno
+  screenshot aggiornato da cui verificare la densità reale oggi.
+- **P-C1/P0-2 — IMPLEMENTATO**: nuovo `components/onboarding/AppBoundaryInfoStep.tsx` (stesso
+  linguaggio visivo di `GiftRouteStep.tsx`/`NavOnboardingSheet.tsx`), mostrato una sola volta per
+  dispositivo (`lib/onboarding/appBoundaryPref.ts`, stesso principio di
+  `lib/navigation/navOnboardingPref.ts` — preferenza locale, non un dato utente da sincronizzare)
+  in entrambe le shell: lato Dtrek web, nuova fase `'boundary'` in `OnboardingGate.tsx` dopo il
+  passo del percorso omaggio (spiega dove trovare Navigator per la navigazione GPS); lato Navigator
+  nativo, mostrato alla primissima apertura di `app/navigatore/page.tsx` (spiega dove trovare Dtrek
+  per pianificazione/diario/statistiche). Essendo una preferenza locale nuova, ricompare una volta
+  anche per gli utenti che avevano già completato l'onboarding in passato — comportamento voluto,
+  la spiegazione mancava anche a loro.
+
+`npx tsc --noEmit` e `next lint` puliti su tutti i file toccati in questa sessione.
+
 ### P0 — impatto massimo, agire per primi
 1. **Aggiungere un secondo CTA "Pianifica un percorso" nello stato vuoto della Home** (accanto/al posto
    di "Crea un Resoconto" come unico invito) — risolve P-C2, bassissimo sforzo tecnico. **Nota
