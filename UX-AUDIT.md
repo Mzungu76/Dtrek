@@ -1285,6 +1285,22 @@ refetch in più) anche per un percorso che genuinamente non ha POI.
 
 `npx tsc --noEmit` e `next lint` puliti su tutti i file toccati in questo giro.
 
+**Sessione successiva — carosello foto nel popup + rinomina della riga**:
+- **Foto ingrandibili con carosello**: sia la copertina sia ogni miniatura della galleria in
+  `CuriosityModal.tsx` sono ora cliccabili, aprono `PhotoCarousel` (stesso file, nuovo componente
+  interno) a schermo intero sopra il popup, sulla foto toccata — frecce prev/next, swipe touch
+  (soglia 40px), frecce da tastiera, contatore "N / M", ciclico (l'ultima foto porta alla prima e
+  viceversa, coerente con "funzione carosello" richiesta). Nessuna libreria nuova, solo touch
+  events nativi.
+- **Rinominata "Curiosità dai tuoi percorsi" → "Info dai tuoi percorsi"**: il contenuto (incipit
+  Wikipedia di POI storico-culturali lungo un percorso) non è propriamente una "curiosità" (un
+  fatto sorprendente/aneddotico) quanto un'informazione enciclopedica diretta — etichetta più
+  onesta sul contenuto reale. Solo la stringa visibile è cambiata, non i nomi interni
+  (`curiosityEntries`, `CuriosityModal`, ecc. — puro refactor di naming interno rimandato, non
+  necessario per l'effetto visibile richiesto).
+
+`npx tsc --noEmit` e `next lint` puliti.
+
 **"Percorsi per te" — diagnosi della causa reale del malfunzionamento (sessione successiva) e fix
 applicato**: verificato in produzione (query diretta su `route_recommendations` via Supabase MCP)
 che la riga dell'account owner è ferma da quasi un mese (`generated_at` 2026-07-24, `status='ok'`
