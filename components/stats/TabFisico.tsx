@@ -202,7 +202,7 @@ export default function TabFisico({ activities }: Props) {
         </p>
         {hasEFData ? (
           <>
-            <div className="h-56">
+            <div className="h-56 overflow-hidden">
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
@@ -244,7 +244,7 @@ export default function TabFisico({ activities }: Props) {
         </p>
         {hasIevData ? (
           <>
-            <div className="h-56">
+            <div className="h-56 overflow-hidden">
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />

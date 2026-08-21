@@ -295,7 +295,17 @@ export default function DiarioPage() {
 
     function recalc() {
       const outerWidth = outer!.clientWidth
-      setScale(Math.min(1, outerWidth / 794))
+      // UX-AUDIT.md P-H6 — le due rotaie laterali sono `fixed` (sempre ancorate al bordo dello
+      // schermo, non al contenitore del libro): senza questo margine il libro veniva scalato per
+      // riempire l'intera larghezza disponibile, arrivando fino ai bordi veri dello schermo su
+      // viewport stretti — esattamente dove sono ancorate le rotaie, che finivano quindi per
+      // coprire testo reale della pagina (titolo copertina, contatore, legenda mappa, chip dati).
+      // Riservando qui lo spazio di entrambe le rotaie (bottone più il loro offset dal bordo, con
+      // un margine per l'hover/ombra), il libro resta sempre centrato dentro un'area che le
+      // rotaie non toccano mai, a qualunque larghezza di schermo.
+      const RAIL_GUTTER_PX = 76
+      const availableWidth = Math.max(0, outerWidth - RAIL_GUTTER_PX * 2)
+      setScale(Math.min(1, availableWidth / 794))
       setInnerHeight(inner!.scrollHeight)
     }
     recalc()

@@ -67,8 +67,10 @@ export interface TabDef {
   badge?: ReactNode
 }
 
-/** The page's pinned primary CTA (e.g. "Naviga"/"Vota bellezza") — always visible regardless of
- *  scroll position, never covered by the page's own scrollable content. */
+/** The page's pinned primary CTA (e.g. "Naviga"/"Vota bellezza") — reachable at any scroll
+ *  position (fixed bottom-right), but faded out while the content actively scrolls and back in
+ *  once it settles (RoutePage.tsx), so it never sits opaque over a paragraph/photo/chart passing
+ *  underneath mid-scroll — UX-AUDIT.md P-H6, the "Voto X/10" chip confirmed doing exactly that. */
 export interface PrimaryAction {
   label: string
   icon: LucideIcon

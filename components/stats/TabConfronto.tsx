@@ -381,7 +381,7 @@ export default function TabConfronto({ activities, preselectId }: Props) {
           {/* Radar */}
           <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
             <h3 className="font-medium text-stone-700 mb-4">Radar confronto (normalizzato 0-100)</h3>
-            <div className="h-80">
+            <div className="h-80 overflow-hidden">
               <ResponsiveContainer width="100%" height="100%">
                 <RadarChart data={radarData}>
                   <PolarGrid />

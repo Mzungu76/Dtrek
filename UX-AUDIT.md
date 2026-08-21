@@ -1464,6 +1464,43 @@ per ciascun punto:
 
 `npx tsc --noEmit` e `next lint` puliti su tutti i file toccati in questa sessione.
 
+### Stato implementazione — P-H6 "elementi fluttuanti che coprono contenuto" (sessione 2026-08-21, seguito)
+
+Le tre occorrenze citate come evidenza di P-H6 — **IMPLEMENTATE**, tutte con la stessa idea di
+fondo (contenere/affievolire l'elemento fluttuante invece di lasciarlo libero di coprire ciò che
+gli sta sotto), adattata caso per caso:
+
+- **Rail 9 icone del Diario**: causa reale trovata in `app/diario/page.tsx` — il libro (larghezza
+  fissa 794px) veniva scalato per riempire l'intera larghezza del contenitore
+  (`Math.min(1, outerWidth / 794)`), arrivando fino ai bordi veri dello schermo su viewport stretti,
+  proprio dove sono ancorate le due rotaie `fixed`. Corretto riservando `RAIL_GUTTER_PX = 76` per
+  lato nel calcolo della scala (`Math.min(1, (outerWidth - 76*2) / 794)`): il libro resta sempre
+  centrato dentro un'area che le rotaie non toccano mai, a qualunque larghezza — nessuna modifica
+  alle rotaie stesse, nessun nuovo componente.
+- **Chip "Voto X/10" nel Resoconto**: è in realtà lo stesso `primaryAction` (fixed bottom-right)
+  usato anche da Guida per "Naviga" — il commento del tipo (`components/routehub/types.ts`)
+  dichiarava esplicitamente l'intento "mai coperto dal contenuto scrollabile", intento che
+  l'implementazione non manteneva. Corretto in `RoutePage.tsx`: il bottone si affievolisce
+  (opacità/traslazione, `pointer-events-none`) durante lo scroll attivo del contenuto (sia in modalità
+  `continuous` di Guida sia `tabbed` di Resoconto, via `onScroll` su entrambi i contenitori) e torna
+  visibile ~220ms dopo che lo scroll si ferma — resta quindi raggiungibile a riposo (quando l'utente
+  si è fermato a leggere/decidere) senza restare stabilmente sopra un paragrafo/foto/grafico mentre
+  scorre. Comportamento invariato per "Naviga" a riposo, che l'audit segnalava come punto di forza.
+- **Tooltip dei grafici Recharts** (Training Load in Statistiche, citato come "terza occorrenza" in
+  P-H6): causa reale — nessuno dei contenitori dei grafici (`<div className="h-NN">` che avvolge
+  `ResponsiveContainer`, o `ResponsiveContainer` stesso quando l'altezza è passata come prop) aveva
+  `overflow-hidden`, quindi un tooltip posizionato vicino al bordo poteva visivamente uscire dal
+  proprio grafico e sovrapporsi alla card successiva. Pattern sistemico, non isolato a un solo
+  grafico (17 contenitori in `HRChart.tsx`, `SpeedChart.tsx`, `TabFisico.tsx`, `TabConfronto.tsx`,
+  `TabGrafici.tsx`, `TabForma.tsx` + 14 istanze in `components/bacheca/ChartPanels.tsx`, usato dalla
+  Bacheca con lo stesso rischio anche se non citato esplicitamente nello screenshot) — corretto
+  aggiungendo `overflow-hidden` a ciascun contenitore (o `className="overflow-hidden"` su
+  `ResponsiveContainer` dove non c'è un div wrapper dedicato), stessa modifica CSS-only ovunque,
+  nessun impatto su legenda/assi/InfoButton (tutti in flusso normale, mai posizionati fuori dai
+  propri contenitori).
+
+`npx tsc --noEmit` e `next lint` puliti su tutti i file toccati in questo giro.
+
 ### P0 — impatto massimo, agire per primi
 1. **Aggiungere un secondo CTA "Pianifica un percorso" nello stato vuoto della Home** (accanto/al posto
    di "Crea un Resoconto" come unico invito) — risolve P-C2, bassissimo sforzo tecnico. **Nota
@@ -1483,9 +1520,10 @@ per ciascun punto:
    specie come voci separate) — risolve P-H7, basso sforzo, riguarda la fiducia in un avviso di sicurezza.
 
 ### P1 — alto impatto, sforzo contenuto
-6. **CONFERMATO da screenshot — rendere gli elementi fluttuanti persistenti (chip Voto, rail Diario) non
-   invasivi**: farli collassare o spostarli fuori dall'area di scroll del contenuto, così da smettere di
-   coprire testo/grafici reali — risolve P-H6.
+6. ~~**CONFERMATO da screenshot — rendere gli elementi fluttuanti persistenti (chip Voto, rail Diario) non
+   invasivi**~~ — **IMPLEMENTATO** (sessione 2026-08-21, vedi "Stato implementazione — P-H6" sopra):
+   rail Diario contenuta in un margine di sicurezza, chip Voto/Naviga si affievolisce durante lo
+   scroll attivo, tooltip dei grafici Recharts contenuti nel proprio box — risolve P-H6.
 7. Unificare l'etichetta della funzione di traccia libera ovunque compaia, incluso il titolo di pagina
    "Registra un percorso" confermato in Navigator (P-H4, ora con 4 varianti confermate).
 8. **CONFERMATO da screenshot — aggiungere un'indicazione di scroll disponibile** a ogni tab/tabella

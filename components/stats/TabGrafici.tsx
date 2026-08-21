@@ -143,7 +143,7 @@ export default function TabGrafici({ activities }: Props) {
             <InfoButton section="confronto-annuale" />
           </h3>
           <p className="text-xs text-stone-400 mb-4">Distanza totale e dislivello anno per anno.</p>
-          <div className="h-56">
+          <div className="h-56 overflow-hidden">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={annualData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
@@ -164,7 +164,7 @@ export default function TabGrafici({ activities }: Props) {
       {/* Monthly */}
       <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
         <h3 className="font-medium text-stone-700 mb-4">Distanza e dislivello mensili</h3>
-        <div className="h-64">
+        <div className="h-64 overflow-hidden">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={monthlyData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
@@ -194,7 +194,7 @@ export default function TabGrafici({ activities }: Props) {
               Trend Trail Score: {trailTrend.slope > 0.05 ? '↑ in miglioramento' : trailTrend.slope < -0.05 ? '↓ in calo' : '→ stabile'}
             </p>
           )}
-          <div className="h-64">
+          <div className="h-64 overflow-hidden">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
@@ -252,7 +252,7 @@ export default function TabGrafici({ activities }: Props) {
             ))}
           </div>
           {seasonalBarData.some(d => d.km > 0) && (
-            <div className="h-48">
+            <div className="h-48 overflow-hidden">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={seasonalBarData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" vertical={false} />
@@ -275,7 +275,7 @@ export default function TabGrafici({ activities }: Props) {
       <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
         <h3 className="font-medium text-stone-700 mb-1">Distribuzione per giorno della settimana</h3>
         <p className="text-xs text-stone-400 mb-4">In quale giorno esci di più?</p>
-        <div className="h-48">
+        <div className="h-48 overflow-hidden">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={weekdayData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" vertical={false} />
@@ -293,7 +293,7 @@ export default function TabGrafici({ activities }: Props) {
       <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
         <h3 className="font-medium text-stone-700 mb-1">Distribuzione per lunghezza</h3>
         <p className="text-xs text-stone-400 mb-4">Quante escursioni rientrano in ciascuna fascia di distanza?</p>
-        <div className="h-48">
+        <div className="h-48 overflow-hidden">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={distHistogram} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" vertical={false} />
@@ -315,7 +315,7 @@ export default function TabGrafici({ activities }: Props) {
             <InfoButton section="altimetrica" />
           </h3>
           <p className="text-xs text-stone-400 mb-4">Fino a che quota arrivi più spesso?</p>
-          <div className="h-48">
+          <div className="h-48 overflow-hidden">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={altBands} layout="vertical" margin={{ top: 4, right: 40, bottom: 0, left: 56 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" horizontal={false} />
@@ -336,7 +336,7 @@ export default function TabGrafici({ activities }: Props) {
           Trend fitness (FC media) <InfoButton section="fc-trend" />
         </h3>
         <p className="text-xs text-stone-400 mb-4">Se la FC media scende nel tempo mantenendo distanze simili, stai migliorando.</p>
-        <div className="h-56">
+        <div className="h-56 overflow-hidden">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={fcTrend.filter(d => d.fc > 0)} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
@@ -353,7 +353,7 @@ export default function TabGrafici({ activities }: Props) {
       <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
         <h3 className="font-medium text-stone-700 mb-1">Distanza vs Dislivello</h3>
         <p className="text-xs text-stone-400 mb-4">In alto a destra le escursioni più impegnative.</p>
-        <div className="h-64">
+        <div className="h-64 overflow-hidden">
           <ResponsiveContainer width="100%" height="100%">
             <ScatterChart margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
