@@ -1617,6 +1617,19 @@ gli sta sotto), adattata caso per caso:
 
 `npx tsc --noEmit` e `next lint` puliti su tutti i file toccati in questo giro.
 
+- **P-O1/P-O2 — IMPLEMENTATO**: nuovo `components/resoconto/NextStepBanner.tsx`, montato in fondo
+  a `ReportReader.tsx` (dopo l'ultima sezione dati/racconto, prima degli strumenti "Pubblica PDF" —
+  print:hidden, non ha senso in un PDF stampato). Sempre presente: CTA "Pianifica la prossima
+  uscita" → `/upload?tab=gpx` (P-O1). Condizionale: se ci sono badge appena sbloccati, una riga
+  "🎉 Hai sbloccato N nuovi badge!" con link a `/statistiche?tab=traguardi` (P-O2) — stessa identica
+  logica di calcolo/dedup già usata da `TabTraguardi.tsx`, estratta in `lib/badgesSeen.ts` (stessa
+  chiave `localStorage`) così un badge festeggiato qui non si ripete in Statistiche e viceversa.
+  `ReportReader` non riceve già `activities`/`streaks` (ha una sola `activity`): il banner li carica
+  da sé (`getAllActivities` + `computeStreaks`, stesse funzioni già usate altrove) invece di far
+  risalire quel dato attraverso tutta la catena di prop del reader.
+
+`npx tsc --noEmit` e `next lint` puliti su tutti i file toccati in questo giro.
+
 ### P2 — miglioramento sostanziale, non bloccante
 12. ~~Aggiungere righe descrittive alle tre sotto-modalità di import GPX~~ — **IMPLEMENTATO** (P-M3).
 13. ~~Sostituire il `confirm()` nativo con il pattern Sheet/popover coerente col resto dell'app~~ —
@@ -1626,9 +1639,13 @@ gli sta sotto), adattata caso per caso:
 15. ~~Troncare/gestire i titoli GPX anomali~~ — **IMPLEMENTATO** (P-M6).
 16. ~~Differenziare visivamente l'anello "Voto" da quello "Comfort TrailScore"~~ — **IMPLEMENTATO**
     (P-M7).
-17. Chiudere il ciclo utente con un CTA "Pianifica la prossima uscita" al termine di un Resoconto (P-O1),
-    magari accompagnato dal riepilogo Traguardi appena sbloccati (P-O2) — il sistema di badge esiste già
-    ed è ben fatto, va solo mostrato al momento giusto.
+17. ~~Chiudere il ciclo utente con un CTA "Pianifica la prossima uscita" al termine di un Resoconto
+    (P-O1), magari accompagnato dal riepilogo Traguardi appena sbloccati (P-O2)~~ —
+    **IMPLEMENTATO**: entrambi in un solo banner in fondo al Resoconto.
+
+Con questo, **tutti i P0/P1/P2 dell'audit sono implementati o verificati** (alcuni si sono rivelati
+già risolti da lavoro precedente non tracciato qui, o basati su una premessa non più valida nel
+codice attuale — vedi le note puntuali sopra). Restano solo i P3 (rifiniture) qui sotto.
 
 ### P3 — rifiniture
 18. Micro-label o hint per le icone icon-only della rail del Diario e delle mappe interattive (ripetute

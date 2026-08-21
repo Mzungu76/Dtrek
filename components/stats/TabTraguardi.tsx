@@ -3,21 +3,9 @@ import { useMemo, useEffect, useState } from 'react'
 import { ActivityMeta } from '@/lib/blobStore'
 import { Streaks } from '@/lib/stats'
 import { computeBadges, BADGE_CATEGORY_LABELS, type BadgeCategory, type ComputedBadge } from '@/lib/badges'
+import { getSeenBadgeIds, markBadgesSeen } from '@/lib/badgesSeen'
 import { Trophy, Lock } from 'lucide-react'
 import InfoButton from './InfoButton'
-
-const LS_KEY = 'dtrek_badges_seen'
-
-function getSeen(): Set<string> {
-  try { return new Set(JSON.parse(localStorage.getItem(LS_KEY) ?? '[]')) } catch { return new Set() }
-}
-function markSeen(ids: string[]) {
-  try {
-    const current = getSeen()
-    ids.forEach(id => current.add(id))
-    localStorage.setItem(LS_KEY, JSON.stringify(Array.from(current)))
-  } catch {}
-}
 
 const CATEGORY_ORDER: BadgeCategory[] = ['distanza', 'dislivello', 'quota', 'frequenza', 'speciale']
 
@@ -31,11 +19,11 @@ export default function TabTraguardi({ activities, streaks }: Props) {
   const [newlyUnlocked, setNewlyUnlocked] = useState<Set<string>>(new Set())
 
   useEffect(() => {
-    const seen = getSeen()
+    const seen = getSeenBadgeIds()
     const fresh = badges.filter(b => b.unlocked && !seen.has(b.id)).map(b => b.id)
     if (fresh.length > 0) {
       setNewlyUnlocked(new Set(fresh))
-      markSeen(badges.filter(b => b.unlocked).map(b => b.id))
+      markBadgesSeen(badges.filter(b => b.unlocked).map(b => b.id))
     }
   }, [badges])
 
