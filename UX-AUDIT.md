@@ -1101,6 +1101,38 @@ Sessione del 2026-08-20, stesso branch di questo audit. Riscritto `app/bacheca/p
   da solo le colonne non ancora migrate, quindi non rompe nulla nel frattempo — semplicemente
   `homeRegion` resta vuoto finché la colonna non esiste).
 
+**Fix (sessione successiva alla merge di Fase 3+4) — il passo si ripresentava a ogni accesso invece
+che una sola volta**: il bottone "Salta" in alto a destra (visibile nelle fasi 'locating'/'done', mai
+in 'manual') chiamava `onDone()` direttamente, senza mai scrivere `gift_route_offered_at` —
+contraddiceva il commento del componente stesso ("Segna gift_route_offered_at indipendentemente
+dall'esito"). Chi lo toccava durante la fase 'locating' (spinner "Cerchiamo il percorso più vicino a
+te…", prima che `claim()` la scrivesse da solo) tornava quindi a vedere il passo del regalo/regione a
+ogni apertura dell'app, perché `OnboardingGate.tsx` rilegge quel flag da `user_settings` a ogni
+accesso. `declineRegion()` (il bottone "Preferisco non specificare ora" in fase 'manual') era già
+corretto. Corretto aggiungendo `skip()`, che scrive il flag prima di chiamare `onDone()`, usato dal
+bottone "Salta".
+
+**Fix — testo del popup "Leggi tutto" troncato a metà frase**: `fetchWikiFullDetails`
+(`lib/wikipedia.ts`) chiede il testo esteso con `exchars: '2000'` — un taglio duro a un numero di
+caratteri dell'API Wikipedia, non a un confine di frase, quindi l'ultima frase risultava quasi
+sempre interrotta a metà. Aggiunta `trimToCompleteSentence()`: arretra il testo fino all'ultima
+punteggiatura di fine frase (`.`/`!`/`?`) seguita da spazio o fine stringa, così il popup mostra
+sempre un testo che finisce su una frase compiuta (il costo è perdere l'ultima frase incompleta, non
+l'intero paragrafo) — se non trova nessuna punteggiatura del genere il testo resta invariato invece
+di sparire.
+
+**Segnalazione "le card si ripetono" — non riprodotta con i dati reali di produzione**: simulata la
+stessa identica logica di dedup di `curiosityEntries` (`app/bacheca/page.tsx`, dedup per `wiki.url`
+condiviso tra percorso in evidenza, tutti i percorsi pianificati attivi e le ultime 8 uscite) contro
+i dati reali dell'account owner via Supabase MCP (32 percorsi con POI arricchiti, incluse le stesse
+POI — es. "Monte Cimino" — citate da 7+ percorsi diversi): il risultato finale non contiene nessun
+`wiki.url`/titolo duplicato, la logica di dedup regge. La riga `route_recommendations` (le card di
+"Percorsi per te", l'altra riga di card nella stessa Home) risulta ancora vuota per questo account
+(`cards: []`, mai rigenerata da quando esiste la funzione self-heal) — non può quindi essere la
+causa osservata su questo account specifico. Non essendo riuscito a riprodurre il difetto con i dati
+disponibili, resta da chiarire con l'autore quale riga di card esattamente mostra i doppioni (e
+idealmente uno screenshot) prima di poter intervenire nel codice con sicurezza.
+
 **"Percorsi per te" — diagnosi della causa reale del malfunzionamento (sessione successiva) e fix
 applicato**: verificato in produzione (query diretta su `route_recommendations` via Supabase MCP)
 che la riga dell'account owner è ferma da quasi un mese (`generated_at` 2026-07-24, `status='ok'`
