@@ -233,7 +233,7 @@ export default function TracciaPage() {
               className="flex-1 min-w-0 truncate text-white font-display font-bold text-[15px]"
               style={{ textShadow: '0 1px 3px rgba(0,0,0,0.75), 0 1px 8px rgba(0,0,0,0.5)' }}
             >
-              Registra un percorso
+              Traccia libera
             </h1>
             <button
               onClick={() => { setFieldNoteAutoCamera(false); setShowFieldNote(true) }}
@@ -325,7 +325,7 @@ export default function TracciaPage() {
         <button onClick={() => router.push(homePath)} className="w-9 h-9 flex items-center justify-center rounded-xl bg-white/15 text-white hover:bg-white/25">
           <ArrowLeft className="w-4 h-4" />
         </button>
-        <h1 className="font-display text-lg font-bold text-white">Registra un percorso</h1>
+        <h1 className="font-display text-lg font-bold text-white">Traccia libera</h1>
       </div>
 
       {phase === 'saved' ? (

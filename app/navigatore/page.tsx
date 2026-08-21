@@ -4,6 +4,8 @@ import Link from 'next/link'
 import { Menu, Compass, Navigation2, Upload, ExternalLink, TriangleAlert, Locate } from 'lucide-react'
 import FreeTrackMap, { type FreeTrackMapHandle } from '@/components/navigation/FreeTrackMap'
 import NavigatorMenu from '@/components/navigation/NavigatorMenu'
+import AppBoundaryInfoStep from '@/components/onboarding/AppBoundaryInfoStep'
+import { hasSeenNavigatorAppBoundaryInfo, markNavigatorAppBoundaryInfoSeen } from '@/lib/onboarding/appBoundaryPref'
 import { LocationSource, type LocationSourceError } from '@/lib/native/locationSource'
 import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { openMainApp } from '@/lib/native/mainAppLinks'
@@ -34,6 +36,10 @@ export default function NavigatorePage() {
   const [followMode, setFollowMode] = useState(true)
   const sourceRef = useRef<LocationSource | null>(null)
   const mapHandleRef = useRef<FreeTrackMapHandle | null>(null)
+  // UX-AUDIT.md P-C1/P0-2 — spiega la relazione Navigator/Dtrek alla primissima apertura di questa
+  // shell, prima che l'utente incontri "Apri Dtrek" senza contesto pregresso.
+  const [showBoundaryInfo, setShowBoundaryInfo] = useState(false)
+  useEffect(() => { if (!hasSeenNavigatorAppBoundaryInfo()) setShowBoundaryInfo(true) }, [])
 
   useEffect(() => {
     const source = new LocationSource(
@@ -135,6 +141,13 @@ export default function NavigatorePage() {
       </div>
 
       <NavigatorMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
+
+      {showBoundaryInfo && (
+        <AppBoundaryInfoStep
+          variant="navigator"
+          onDone={() => { markNavigatorAppBoundaryInfoSeen(); setShowBoundaryInfo(false) }}
+        />
+      )}
     </div>
   )
 }

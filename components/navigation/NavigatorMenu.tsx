@@ -86,7 +86,7 @@ export default function NavigatorMenu({ open, onClose }: Props) {
           <div className="w-9 h-9 rounded-xl bg-forest-100 text-forest-700 flex items-center justify-center shrink-0">
             <MapPinned className="w-4.5 h-4.5" />
           </div>
-          <span className="font-semibold text-sm text-stone-800">Registra senza pianificazione</span>
+          <span className="font-semibold text-sm text-stone-800">Traccia libera</span>
         </button>
 
         {entitlement.dtrekActivated ? (

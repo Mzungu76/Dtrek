@@ -11,13 +11,15 @@ import GemStatusBadge from '@/components/premium/GemStatusBadge'
 import type { User as SupabaseUser, Session, AuthChangeEvent } from '@supabase/supabase-js'
 
 // 4 tab principali del nuovo posizionamento: Bacheca (centro di controllo:
-// statistiche + badge + AI discreta — sezione di apertura dell'app), Guide
-// (import GPX → guida turistica AI), Resoconti (escursioni concluse: dati +
-// racconto), Diario (libro impaginato).
+// statistiche + badge + AI discreta — sezione di apertura dell'app), Percorsi
+// (import GPX → guida turistica AI; l'etichetta era "Guide", rinominata perché
+// non comunicava "i miei percorsi pianificati" — vedi UX-AUDIT.md P-H1/P-H2,
+// "guida" resta riservato al solo testo narrativo AI dentro la sezione),
+// Resoconti (escursioni concluse: dati + racconto), Diario (libro impaginato).
 // Il Profilo non è un tab alla pari ma un'icona persistente (vedi ProfileAvatar).
 export const NAV_LINKS = [
   { href: '/bacheca',    label: 'Bacheca',    icon: Home       },
-  { href: '/guida',      label: 'Guide',      icon: Compass    },
+  { href: '/guida',      label: 'Percorsi',   icon: Compass    },
   { href: '/resoconto',  label: 'Resoconti',  icon: BookOpen   },
   { href: '/diario',     label: 'Diario',     icon: BookMarked },
 ]
