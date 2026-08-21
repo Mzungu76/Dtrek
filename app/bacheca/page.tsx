@@ -462,7 +462,7 @@ export default function BachecaPage() {
         {curiosityEntries.length > 0 && (
           <div className="mt-4">
             <p className="font-barlow font-extrabold text-[11px] tracking-[1.5px] uppercase text-stone-400 mb-2">
-              Curiosità dai tuoi percorsi
+              Info dai tuoi percorsi
             </p>
             <div className="flex gap-2.5 overflow-x-auto pb-1 -mx-4 px-4" style={{ scrollbarWidth: 'none' }}>
               {curiosityEntries.map(entry => (
