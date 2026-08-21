@@ -1247,6 +1247,44 @@ refetch in più) anche per un percorso che genuinamente non ha POI.
 
 `npx tsc --noEmit` e `next lint` puliti.
 
+**Sessione successiva — tre ulteriori richieste, tutte implementate:**
+- **"Naviga" nell'hero ora prova prima l'app nativa Navigator**: prima era solo un link a
+  `/guida/[id]` (apriva la guida web, mai il navigatore). Ora, quando il percorso ha una data
+  (fase "Naviga", non "Vai al percorso"), chiama `tryOpenNavigatorApp` — la stessa identica azione
+  del bottone "Naviga" già presente dentro la guida di un percorso (`app/guida/GuidaHub.tsx`'s
+  `primaryAction`), non una nuova. **Limite dichiarato, non di questa sessione**: lo schema
+  `dtreknavigator://open` (`lib/navigatorHandoff.ts`) riapre solo la Home dell'app nativa, mai una
+  schermata precisa — un vero deep-link su un percorso specifico dentro l'app nativa richiederebbe
+  un cambiamento lato Android (intent-filter + MainActivity), fuori dal perimetro di questo repo
+  web; il commento esistente in `lib/navigatorHandoff.ts` lo segnala già come miglioramento futuro
+  possibile, non come una regressione. Il ripiego via web (`/guida/[id]/naviga`, quando l'app non
+  risponde entro 1.6s o non è installata) apre comunque già quel percorso preciso, pronto.
+- **Mappa Leaflet/OSM reale sulle card "Altre uscite in programma" senza foto**: prima mostravano
+  solo il tracciato SVG (`RouteThumb`). Ora, quando il percorso non ha una foto POI, usano
+  `GalleryMapThumb` (`components/routehub/BottomGallery.tsx`) — lo stesso identico componente già
+  usato altrove nell'app per lo stesso identico caso (copertina di un percorso senza foto in
+  Guide/Resoconti quando non c'è nulla in galleria): mappa reale non interattiva (tutti i gesti
+  disattivati, sicura dentro una card che è già essa stessa un link), con fallback SVG immediato e
+  caricamento lazy via `IntersectionObserver` finché la card non scorre in vista — nessun nuovo
+  componente scritto, solo riuso.
+- **Wizard che ripartiva a ogni accesso — causa reale trovata**: verificato sui dati reali
+  (Supabase MCP) che `onboarding_completed_at`/`gift_route_offered_at` erano correttamente
+  scritti lato server (il fix del giro precedente per "Salta" funzionava) — il difetto era quindi
+  nella LETTURA, non nella scrittura. `getUserSettingsCached()` (`lib/sync/userSettingsStore.ts`)
+  ritorna `{}` (zero chiavi) quando sia la cache locale sia il fetch di rete falliscono — un
+  fallimento plausibile e non raro su un cold start della PWA (il primo fetch può correre prima
+  che la sessione Supabase sia del tutto pronta lato server, stessa classe di race già documentata
+  altrove nel repo per `syncEngine.ts`/`pullEngine.ts`). `OnboardingGate.tsx` trattava quell'oggetto
+  vuoto come "onboarding non fatto" e mostrava di nuovo il wizard — a ogni fallimento di rete
+  transitorio, non solo al primo accesso vero. Corretto distinguendo il caso: una risposta server
+  riuscita valorizza SEMPRE tutte le chiavi (anche a `null` per un utente nuovo, per costruzione
+  dell'endpoint `GET /api/user-settings`), quindi un oggetto con zero chiavi è un segnale
+  affidabile di "lettura fallita, non so ancora" — `OnboardingGate` ora esce senza cambiare fase in
+  quel caso, invece di assumere "wizard necessario". Non servita nessuna nuova colonna Supabase: i
+  due flag esistenti erano già scritti correttamente, il problema era solo nella lettura lato client.
+
+`npx tsc --noEmit` e `next lint` puliti su tutti i file toccati in questo giro.
+
 **"Percorsi per te" — diagnosi della causa reale del malfunzionamento (sessione successiva) e fix
 applicato**: verificato in produzione (query diretta su `route_recommendations` via Supabase MCP)
 che la riga dell'account owner è ferma da quasi un mese (`generated_at` 2026-07-24, `status='ok'`

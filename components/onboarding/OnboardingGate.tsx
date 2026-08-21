@@ -28,6 +28,15 @@ export default function OnboardingGate() {
       try {
         const settings = await getUserSettingsCached()
         if (cancelled) return
+        // getUserSettingsCached() ritorna {} (zero chiavi) SOLO quando sia la cache locale sia il
+        // fetch di rete sono falliti (lib/sync/userSettingsStore.ts) — una risposta server riuscita
+        // valorizza SEMPRE ogni chiave (anche a null per un utente nuovo, vedi
+        // app/api/user-settings/route.ts's GET). Trattare quel fallimento come "onboarding non
+        // fatto" mostrava il wizard/passo regalo a ogni errore di rete transitorio — tipicamente un
+        // cold start della PWA, dove questo primo fetch può correre prima che la sessione Supabase
+        // sia del tutto pronta lato server — bug reale osservato in produzione: il wizard tornava a
+        // ripresentarsi a ogni apertura dell'app anche per un utente che l'aveva già completato.
+        if (Object.keys(settings).length === 0) return
         if (!('onboardingCompletedAt' in settings && settings.onboardingCompletedAt)) {
           setPhase('wizard')
         } else if (!('giftRouteOfferedAt' in settings && settings.giftRouteOfferedAt)) {

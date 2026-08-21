@@ -17,6 +17,8 @@ import { computeTrainingLoad, activityStress, currentForm } from '@/lib/training
 import { formatDuration } from '@/lib/tcxParser'
 import { openRecommendationCard } from '@/lib/routeBuilder/openRecommendationCard'
 import { routeTypeLabel } from '@/lib/routeBuilder/loopBuilder'
+import { tryOpenNavigatorApp } from '@/lib/navigatorHandoff'
+import { GalleryMapThumb } from '@/components/routehub/BottomGallery'
 import type { RecommendationCard } from '@/lib/routeBuilder/generateRecommendations'
 import type { ScoredCandidate } from '@/lib/routeBuilder/scoreCandidates'
 import type { FoundRouteItem } from '@/lib/routeBuilder/foundRoute'
@@ -334,12 +336,25 @@ export default function BachecaPage() {
                 {featured.hike.estimatedTimeSeconds ? ` · ${formatDuration(featured.hike.estimatedTimeSeconds)}` : ''}
               </p>
               <div className="mt-3 flex items-center gap-2">
-                <Link
-                  href={`/guida/${encodeURIComponent(featured.hike.id)}`}
-                  className="inline-flex items-center gap-2 bg-terra-500 hover:bg-terra-600 text-white text-[13px] font-semibold px-5 py-2.5 rounded-full shadow-lg transition-colors"
-                >
-                  <Navigation className="w-4 h-4" /> {featured.hasDate ? 'Naviga' : 'Vai al percorso'}
-                </Link>
+                {featured.hasDate ? (
+                  // "Naviga" prova prima l'app nativa Navigator, altrimenti ricade sul navigatore
+                  // via web — stessa identica azione del bottone "Naviga" dentro la guida di questo
+                  // stesso percorso (app/guida/GuidaHub.tsx's primaryAction), non solo un link alla
+                  // pagina della guida.
+                  <button
+                    onClick={() => tryOpenNavigatorApp(router, `/guida/${encodeURIComponent(featured.hike.id)}/naviga`)}
+                    className="inline-flex items-center gap-2 bg-terra-500 hover:bg-terra-600 text-white text-[13px] font-semibold px-5 py-2.5 rounded-full shadow-lg transition-colors"
+                  >
+                    <Navigation className="w-4 h-4" /> Naviga
+                  </button>
+                ) : (
+                  <Link
+                    href={`/guida/${encodeURIComponent(featured.hike.id)}`}
+                    className="inline-flex items-center gap-2 bg-terra-500 hover:bg-terra-600 text-white text-[13px] font-semibold px-5 py-2.5 rounded-full shadow-lg transition-colors"
+                  >
+                    <Navigation className="w-4 h-4" /> Vai al percorso
+                  </Link>
+                )}
                 {/* Apre la copertina del percorso (mappa, statistiche, POI) invece di saltare
                     direttamente alla guida narrata — ?scheda=1 disattiva l'auto-apertura di
                     default per un link diretto (vedi app/guida/[id]/page.tsx). */}
@@ -422,9 +437,11 @@ export default function BachecaPage() {
                         ) : null}
                       </>
                     ) : f.hike.routePolyline?.length ? (
-                      <div className="absolute inset-3">
-                        <RouteThumb polyline={f.hike.routePolyline} color="#2d7a3d" strokeWidth={2.5} />
-                      </div>
+                      // Nessuna foto POI per questo percorso — mappa Leaflet/OSM reale (non solo il
+                      // tracciato SVG) come già altrove nell'app (es. la copertina di un percorso
+                      // senza foto in Guide/Resoconti, stesso componente): non interattiva (tutti i
+                      // gesti disattivati), sicura dentro una card che è già essa stessa un link.
+                      <GalleryMapThumb polyline={f.hike.routePolyline} />
                     ) : null}
                   </div>
                   <div className="p-2.5">
