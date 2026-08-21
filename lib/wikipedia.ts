@@ -251,6 +251,22 @@ function projectAndLangFromSource(source?: WikiPage['source']): { lang: string; 
   return { lang: 'it', project: 'wikipedia' }
 }
 
+// `exchars` sotto è un taglio duro a un numero di caratteri, non a un confine di frase — di norma
+// interrompe l'ultima frase a metà (osservato dal vivo nel popup "Leggi tutto"). Qui si arretra
+// fino all'ultima punteggiatura di fine frase (., !, ?) seguita da spazio/a-capo/fine stringa, così
+// il testo mostrato finisce sempre su una frase completa invece che su una parola tronca — un
+// costo minimo di caratteri persi (quasi sempre l'ultima frase incompleta) contro un testo che
+// legge sempre come compiuto. Se non si trova nessuna punteggiatura del genere (testo molto breve o
+// senza punti), il testo originale resta invariato: meglio mostrarlo per intero che tagliarlo alla
+// cieca.
+function trimToCompleteSentence(text: string): string {
+  const matches = Array.from(text.matchAll(/[.!?](?=\s|$)/g))
+  if (matches.length === 0) return text
+  const last = matches[matches.length - 1]
+  const cutIndex = (last.index ?? text.length - 1) + 1
+  return text.slice(0, cutIndex).trimEnd()
+}
+
 /**
  * Testo esteso + eventuali altre foto dell'articolo di un WikiPage già noto (POI arricchito su un
  * percorso) — per il popup "Leggi tutto" della Home, chiamata solo quando l'utente lo apre
@@ -270,7 +286,8 @@ export async function fetchWikiFullDetails(wiki: WikiPage): Promise<WikiFullDeta
       .then(r => (r.ok ? r.json() as Promise<WikiExtractsApiResponse> : null))
       .then(data => {
         const page = Object.values(data?.query?.pages ?? {})[0]
-        return page?.extract?.trim() || wiki.extract
+        const raw = page?.extract?.trim() || wiki.extract
+        return trimToCompleteSentence(raw)
       })
       .catch(() => wiki.extract),
     fetch(`https://${lang}.${project}.org/api/rest_v1/page/media-list/${titleSlug}`)

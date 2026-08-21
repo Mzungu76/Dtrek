@@ -82,6 +82,18 @@ export default function GiftRouteStep({ onDone }: Props) {
     onDone()
   }
 
+  // "Salta" in alto (visibile solo in 'locating'/'done', mai in 'manual' — vedi sopra) chiamava
+  // onDone() direttamente, SENZA mai marcare gift_route_offered_at: se l'utente lo toccava mentre
+  // il passo era ancora 'locating' (prima che claim() lo facesse da solo), il flag non veniva mai
+  // scritto — OnboardingGate.tsx lo rilegge da user_settings a ogni accesso, quindi il passo si
+  // ripresentava a ogni apertura dell'app invece che una sola volta, contraddicendo il commento
+  // sopra ("Segna gift_route_offered_at indipendentemente dall'esito"). Nessun effetto quando
+  // toccato in fase 'done' (claim() l'ha già scritto lì), solo idempotente.
+  function skip() {
+    void updateUserSettings({ giftRouteOfferedAt: new Date().toISOString() })
+    onDone()
+  }
+
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px]" />
@@ -92,7 +104,7 @@ export default function GiftRouteStep({ onDone }: Props) {
           </div>
           <div className="flex-1" />
           {phase !== 'claiming' && phase !== 'manual' && (
-            <button onClick={onDone} className="text-xs font-medium text-stone-400 hover:text-stone-600 transition-colors uppercase tracking-wide">
+            <button onClick={skip} className="text-xs font-medium text-stone-400 hover:text-stone-600 transition-colors uppercase tracking-wide">
               Salta
             </button>
           )}
