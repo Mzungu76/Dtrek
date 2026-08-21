@@ -1224,6 +1224,29 @@ implementate):**
 
 `npx tsc --noEmit` e `next lint` puliti su tutti i file toccati in questo giro.
 
+**Sessione successiva — bug reale trovato dietro entrambe le segnalazioni "niente foto"**: verificato
+dal vivo che il fix di cui sopra ("Sfondo delle card") non aveva alcun effetto visibile, e che anche
+l'hero (che prima funzionava) aveva smesso di mostrare la foto a ogni nuovo accesso, **anche sullo
+stesso account** dove aveva funzionato prima del logout. Causa reale trovata in
+`app/api/planned/route.ts`: `META_COLS`, le colonne selezionate dall'endpoint di LISTA (`GET
+/api/planned` → `PlannedHikeMeta[]`, quello che popola `planned` in tutta l'app, Home inclusa), non
+ha **mai** incluso `cached_pois`/`cached_poi_wiki` — assenti da quando questo file è stato scritto,
+non una regressione di questa sessione. Confermato sui dati reali (Supabase MCP): "Anello delle
+Cinque Cascate di Cerveteri" ha 5 POI arricchiti, "Anello costruito Faggeta Monte Cimino" (l'hero
+nello screenshot senza più foto) ne ha 1 — entrambi avrebbero dovuto avere una foto, nessuno dei due
+la mostrava. La ragione per cui "prima funzionava" nella stessa sessione: aprire `/guida/[id]` fa un
+fetch pieno (`select('*')`, endpoint singolo) di QUEL percorso, che `lib/plannedStore.ts` rimescola
+anche dentro la cache locale della lista — funzionava solo per i percorsi aperti individualmente in
+quella sessione, mai per un accesso a freddo (login pulito, cache locale vuota) né per un percorso
+mai aperto singolarmente. Corretto aggiungendo le due colonne a `META_COLS` (e a `META_COLS_CORE`,
+il fallback per ambienti non ancora migrati — sono comunque nello schema base, non un'aggiunta
+successiva). Per chi ha già una cache locale scritta prima di questo fix (il caso reale segnalato),
+`getAllPlanned`'s self-heal (`lib/plannedStore.ts`) ora considera anche "entrambi i campi assenti"
+come segnale di cache pre-fix, innescando un refetch in background — un costo trascurabile (un
+refetch in più) anche per un percorso che genuinamente non ha POI.
+
+`npx tsc --noEmit` e `next lint` puliti.
+
 **"Percorsi per te" — diagnosi della causa reale del malfunzionamento (sessione successiva) e fix
 applicato**: verificato in produzione (query diretta su `route_recommendations` via Supabase MCP)
 che la riga dell'account owner è ferma da quasi un mese (`generated_at` 2026-07-24, `status='ok'`
