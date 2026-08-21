@@ -488,7 +488,7 @@ export default function BachecaPage() {
         {recoStatus === 'ok' && recoCards.length > 0 && (
           <div className="mt-4">
             <div className="flex items-center justify-between mb-2">
-              <p className="font-barlow font-extrabold text-[11px] tracking-[1.5px] uppercase text-stone-400">Percorsi per te</p>
+              <p className="font-barlow font-extrabold text-[11px] tracking-[1.5px] uppercase text-stone-400">Percorsi suggeriti</p>
               <Link href="/percorsi-per-te" className="text-[11px] font-semibold text-forest-600 flex items-center gap-1 shrink-0">
                 Vedi tutti <ArrowRight className="w-3 h-3" />
               </Link>
@@ -529,6 +529,29 @@ export default function BachecaPage() {
               })}
             </div>
           </div>
+        )}
+
+        {/* Punto d'accesso minimo, sempre presente, per quando la riga sopra non c'è ancora
+            (nessuna card generata per questo account/zona, o riga mai generata) — senza questo la
+            funzione era del tutto invisibile in Bacheca finché non aveva già dei risultati da
+            mostrare, un vicolo cieco per chiunque non l'avesse mai aperta da /percorsi-per-te
+            direttamente. Un solo link, non una riga di card: /percorsi-per-te fa lei stessa una
+            generazione reale alla visita (vedi app/api/percorsi-per-te/route.ts) se la riga manca
+            o è stantia, quindi questo link è anche il modo con cui la funzione si "accende" la
+            prima volta. Non mostrato per 'empty_no_location'/'error' (nessun suggerimento
+            possibile o pagina comunque da riprovare, non un invito a esplorare) né 'loading'
+            (evita un flash prima che il primo ?peek=1 risponda). */}
+        {!(recoStatus === 'ok' && recoCards.length > 0) && (recoStatus === 'ok' || recoStatus === 'pending') && (
+          <Link
+            href="/percorsi-per-te"
+            className="mt-4 flex items-center justify-between bg-white border border-stone-200 rounded-2xl px-4 py-3 shadow-sm"
+          >
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-terra-500 shrink-0" />
+              <span className="text-[13px] font-semibold text-stone-700">Percorsi suggeriti</span>
+            </div>
+            <ArrowRight className="w-4 h-4 text-stone-400 shrink-0" />
+          </Link>
         )}
 
         <div className="mt-5 border-t border-stone-200 pt-4">
