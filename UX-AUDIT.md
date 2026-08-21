@@ -1197,7 +1197,12 @@ implementate):**
   prop `startClosed`.
 - **Sfondo delle card "Altre uscite in programma"**: quando il percorso ha un POI Wikipedia
   arricchito, la card compatta usa la sua foto come sfondo (stessa fonte/priorità di
-  `heroPhotoUrl`) invece del solo tracciato — coerente con l'hero, che già usava le foto.
+  `heroPhotoUrl`) invece del solo tracciato — coerente con l'hero, che già usava le foto. **Giro
+  successivo, verificato dal vivo**: la foto (quando presente) faceva sparire il tracciato, non più
+  visibile affatto su quella card — stesso identico problema già risolto per l'hero nello stesso
+  giro precedente, dimenticato qui. Corretto con lo stesso trattamento: un piccolo riquadro col
+  tracciato (bianco su sfondo scuro semi-trasparente) sovrapposto in un angolo quando c'è una foto;
+  il tracciato pieno, come già, quando non c'è.
 - **Spazi bianchi enormi tra paragrafi nel popup "Leggi tutto"**: causa reale — il testo grezzo di
   Wikipedia ha tipicamente una riga vuota prima e dopo ogni intestazione di sezione; tolta la riga
   dell'intestazione stessa (fix del giro precedente per i simboli "=="), restavano 2+ righe vuote

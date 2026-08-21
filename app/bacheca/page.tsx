@@ -408,9 +408,19 @@ export default function BachecaPage() {
                   href={`/guida/${encodeURIComponent(f.hike.id)}`}
                   className="shrink-0 w-[170px] bg-white border border-stone-200 rounded-2xl overflow-hidden shadow-sm"
                 >
-                  <div className="relative h-[90px] bg-gradient-to-b from-forest-50 to-stone-50 bg-topography">
+                  <div className="relative h-[90px] bg-gradient-to-b from-forest-50 to-stone-50 bg-topography overflow-hidden">
                     {photoUrl ? (
-                      <img src={photoUrl} alt="" className="absolute inset-0 w-full h-full object-cover" style={{ filter: HERO_IMAGE_FILTER }} />
+                      <>
+                        <img src={photoUrl} alt="" className="absolute inset-0 w-full h-full object-cover" style={{ filter: HERO_IMAGE_FILTER }} />
+                        {/* Stesso trattamento dell'hero: la foto non deve far sparire il tracciato,
+                            solo un riquadro piccolo invece della mappa piena — qui non c'è spazio
+                            per altro. */}
+                        {f.hike.routePolyline?.length ? (
+                          <div className="absolute top-1.5 right-1.5 w-7 h-7 rounded-md bg-black/45 backdrop-blur-sm border border-white/20 p-1">
+                            <RouteThumb polyline={f.hike.routePolyline} color="#ffffff" strokeWidth={2} />
+                          </div>
+                        ) : null}
+                      </>
                     ) : f.hike.routePolyline?.length ? (
                       <div className="absolute inset-3">
                         <RouteThumb polyline={f.hike.routePolyline} color="#2d7a3d" strokeWidth={2.5} />
