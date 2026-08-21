@@ -1301,6 +1301,21 @@ refetch in più) anche per un percorso che genuinamente non ha POI.
 
 `npx tsc --noEmit` e `next lint` puliti.
 
+**Sessione successiva — "Percorsi per te" invisibile in Bacheca finché non ha già dei risultati**:
+segnalato dall'autore che la sezione (rinominata "Percorsi suggeriti" nel giro precedente) non
+compariva da nessuna parte sul suo account — corretto perché la riga di card vere si mostra solo a
+`recoCards.length > 0`, ma la riga dell'account non ha mai avuto card (il cron rotto diagnosticato
+prima in questa stessa sessione, mai riavviato perché il self-heal scatta solo su una visita reale a
+`/percorsi-per-te`, non ancora avvenuta). Prima di questo fix, senza quella riga popolata la funzione
+era del tutto invisibile e senza nessun punto d'accesso — un vicolo cieco strutturale, non solo per
+questo account: chiunque non avesse mai aperto `/percorsi-per-te` direttamente non aveva modo di
+scoprirla da Bacheca. Aggiunto un singolo link minimo (non una nuova riga di card, per non
+sovraccaricare la Home), mostrato ogni volta che quella riga non c'è ancora ma potrebbe esserci
+(stato `ok` senza card, o riga mai generata) — porta a `/percorsi-per-te`, che essendo una visita
+reale (non `?peek=1`) innesca lei stessa la prima generazione vera. Non mostrato per
+`empty_no_location`/`error` (nessun suggerimento sensato, o pagina comunque da riprovare) né durante
+il caricamento iniziale.
+
 **"Percorsi per te" — diagnosi della causa reale del malfunzionamento (sessione successiva) e fix
 applicato**: verificato in produzione (query diretta su `route_recommendations` via Supabase MCP)
 che la riga dell'account owner è ferma da quasi un mese (`generated_at` 2026-07-24, `status='ok'`
