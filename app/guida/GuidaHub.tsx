@@ -116,6 +116,10 @@ export default function GuidaHub({ id, startClosed }: { id?: string; startClosed
   const [editNotes, setEditNotes] = useState(false)
   const [titleVal, setTitleVal] = useState('')
   const [editTitle, setEditTitle] = useState(false)
+  // UX-AUDIT.md P-M4 — confirm() nativo del browser stonava con il resto dell'app: stesso pattern
+  // a due passi già usato per editTitle/editNotes qui sotto, non un nuovo Sheet sopra il pannello
+  // "Strumenti" già aperto.
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const [showGradient, setShowGradient] = useState(false)
   const [showAspect,   setShowAspect]   = useState(false)
   const [showStreetView, setShowStreetView] = useState(false)
@@ -615,7 +619,7 @@ export default function GuidaHub({ id, startClosed }: { id?: string; startClosed
   }
 
   const handleDelete = async () => {
-    if (!hike || !confirm('Eliminare questa escursione pianificata?')) return
+    if (!hike) return
     setSaving(true)
     try {
       await deletePlanned(hike.id)
@@ -958,10 +962,22 @@ export default function GuidaHub({ id, startClosed }: { id?: string; startClosed
           )}
         </div>
         <div className="pt-1 mt-1 border-t border-stone-200">
-          <button onClick={handleDelete} disabled={saving} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-red-50 transition-colors text-left text-red-600">
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-            <span className="text-sm font-medium">Elimina guida</span>
-          </button>
+          {confirmDelete ? (
+            <div className="px-2 py-2 space-y-2">
+              <p className={`text-sm ${textMuted}`}>Eliminare questa escursione pianificata? Non si può annullare.</p>
+              <div className="flex gap-2">
+                <button onClick={handleDelete} disabled={saving} className="flex items-center gap-1.5 px-4 py-1.5 bg-red-600 text-white rounded-lg text-sm hover:bg-red-500 transition-colors disabled:opacity-60">
+                  {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Conferma eliminazione
+                </button>
+                <button onClick={() => setConfirmDelete(false)} disabled={saving} className={`px-4 py-1.5 text-sm transition-colors ${textMuted}`}>Annulla</button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => setConfirmDelete(true)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-red-50 transition-colors text-left text-red-600">
+              <Trash2 className="w-4 h-4" />
+              <span className="text-sm font-medium">Elimina guida</span>
+            </button>
+          )}
         </div>
       </div>
     )

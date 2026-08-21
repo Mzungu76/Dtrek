@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { Star } from 'lucide-react'
 import { useCountUp } from '@/components/ScoreRing'
 
 const NEUTRAL_TRACK = 'rgba(255,255,255,0.18)'
@@ -30,6 +31,14 @@ interface Props {
  * (components/TrailScoreGaugeBadge.tsx: anello colorato animato, numero grande al centro,
  * didascalia a fianco), un solo anello invece di due perché qui non c'è un secondo dato
  * (Sicurezza) da mostrare separatamente — solo il voto 0-10 dell'utente.
+ *
+ * UX-AUDIT.md P-M7 — nel Resoconto questo anello compare subito sopra quello del Comfort
+ * TrailScore (TrailScoreGaugeBadge con safety=null, quindi anch'esso un anello singolo): stesso
+ * trattamento visivo per un numero scelto dall'utente (opinione) e uno calcolato dall'app
+ * (oggettivo), confermato da screenshot come fonte di confusione. La stella nell'angolo (stessa
+ * icona del bottone "Vota bellezza" in ResocontoHub.tsx) rende il Voto riconoscibile come "l'ho
+ * scelto io" a colpo d'occhio, senza dover leggere la didascalia — nessuna modifica a
+ * TrailScoreGaugeBadge, componente condiviso con molte altre schermate.
  */
 export function RatingGaugeBadge({ value, size = 80, showLabel = true, note }: Props) {
   const [mounted, setMounted] = useState(false)
@@ -67,6 +76,12 @@ export function RatingGaugeBadge({ value, size = 80, showLabel = true, note }: P
             {Math.round(animatedValue)}
           </span>
         </div>
+        <span
+          className="absolute -top-1 -right-1 flex items-center justify-center rounded-full text-white"
+          style={{ width: size * 0.3, height: size * 0.3, backgroundColor: color }}
+        >
+          <Star className="fill-current" style={{ width: size * 0.17, height: size * 0.17 }} />
+        </span>
       </div>
       {showLabel && (
         <div className="flex flex-col">

@@ -97,6 +97,18 @@ function UploadPageInner() {
           </div>
         )}
 
+        {/* UX-AUDIT.md P-M3 — tre modi di creare lo stesso tipo di oggetto (un percorso
+            pianificato), nessun consiglio su quale scegliere finché non se ne apre uno. Una riga
+            sola, per l'opzione attiva, invece di tre sottotitoli fissi che affollerebbero i tab
+            compatti a tre colonne. */}
+        {tab === 'gpx' && (
+          <p className="text-stone-400 text-xs -mt-4 mb-6 px-1">
+            {gpxSource === 'file' && 'Hai già una traccia (GPX/KML/KMZ/GeoJSON) di un percorso trovato altrove — la carichi e basta.'}
+            {gpxSource === 'manual' && 'Non hai un file pronto: cerca un percorso già documentato, costruiscine uno nuovo sui sentieri della zona, o inserisci i dati a mano.'}
+            {gpxSource === 'from-activity' && 'Vuoi ripianificare un’escursione che hai già fatto — riusa la traccia di un’attività registrata in precedenza.'}
+          </p>
+        )}
+
         {tab === 'activity' && <ActivityUploader />}
         {tab === 'gpx' && gpxSource === 'file' && <GpxUploader />}
         {tab === 'gpx' && gpxSource === 'manual' && <ManualImportChoice />}

@@ -78,13 +78,20 @@ export default function TopOverlay({ itemKey, title, statPills, weatherIcon, onO
           </div>
 
           <div className="mt-3 flex items-start gap-2.5">
+            {/* UX-AUDIT.md P-M6 — un titolo GPX grezzo (es. il nome del file importato) può
+                estendersi su 5+ righe, riempiendo l'hero e sovrapponendosi a meteo/preferito/
+                confronto qui accanto. line-clamp-N tronca senza troncare il dato (il titolo
+                completo resta modificabile da "Rinomina", raggiungibile dal pannello Strumenti) —
+                niente altra utility `display` nella stessa classe (vedi il bug noto e già
+                documentato in BottomGallery.tsx, dove `block` disattivava silenziosamente il clamp). */}
             <p
               className={
                 variant === 'magazine'
-                  ? 'flex-1 font-display text-2xl sm:text-4xl font-black uppercase tracking-tight text-white leading-[1.05]'
-                  : 'flex-1 font-display text-xl sm:text-2xl font-bold text-white'
+                  ? 'flex-1 line-clamp-3 font-display text-2xl sm:text-4xl font-black uppercase tracking-tight text-white leading-[1.05]'
+                  : 'flex-1 line-clamp-2 font-display text-xl sm:text-2xl font-bold text-white'
               }
               style={{ textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}
+              title={title}
             >
               {title}
             </p>
