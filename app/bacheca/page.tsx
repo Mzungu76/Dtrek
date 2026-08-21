@@ -38,6 +38,14 @@ function recoCardSummary(card: RecommendationCard): {
   return { title: `${routeTypeLabel(d.type)} per te`, polyline: d.routePolyline, distanceMeters: d.distanceMeters, elevationGain: d.elevationGain, hasElevation: d.hasElevation }
 }
 
+// Foto del primo POI Wikipedia arricchito di un percorso pianificato — stessa fonte/priorità di
+// heroPhotoUrl sotto, riusata qui per le card compatte di "Altre uscite in programma" (sfondo
+// invece del solo tracciato, quando disponibile).
+function plannedHikePhotoUrl(hike: PlannedHikeMeta): string | null {
+  const wiki = hike.cachedPoiWiki as { poi: PoiItem; wiki: WikiPage }[] | undefined
+  return wiki?.[0]?.wiki.thumbnail ?? null
+}
+
 const FALLBACK_HERO = '/stato-hero-fallback.jpg'
 // Stessi valori usati da RouteHub.tsx per le foto di copertina — coerenza visiva quando l'hero
 // della Home mostra una foto reale (propria o da un POI Wikipedia) invece del solo tracciato.
@@ -125,14 +133,14 @@ export default function BachecaPage() {
     return Math.round(wActs.reduce((s, a) => s + a.distanceMeters / 1000, 0) * 10) / 10
   }, [activities])
 
-  // "Percorsi in evidenza": fino a 3, non più solo 1 — un solo percorso "vinceva" per sempre finché
-  // non arrivava un'uscita con data ancora più vicina, restando "in evidenza" sempre lo stesso anche
-  // quando l'utente aveva più uscite pianificate valide da vedere (richiesta esplicita dell'autore
-  // del prodotto). Ordine di priorità, senza mai duplicare lo stesso percorso: (1) uscite con data,
-  // dalla più vicina; (2) preferiti (favorite:true) non già inclusi, dal più recente creato; (3) più
-  // recenti creati non già inclusi. `featured` (il primo della lista) resta l'hero, invariato in
-  // forma — il resto popola la riga sotto.
-  const MAX_FEATURED = 3
+  // "Percorsi in evidenza": l'hero (il primo della lista) più fino a 5 "altre uscite in programma"
+  // — un solo percorso "vinceva" per sempre finché non arrivava un'uscita con data ancora più
+  // vicina, restando "in evidenza" sempre lo stesso anche quando l'utente aveva più uscite
+  // pianificate valide da vedere (richiesta esplicita dell'autore del prodotto). Ordine di
+  // priorità, senza mai duplicare lo stesso percorso: (1) uscite con data, dalla più vicina; (2)
+  // preferiti (favorite:true) non già inclusi, dal più recente creato; (3) più recenti creati non
+  // già inclusi.
+  const MAX_FEATURED = 6 // 1 hero + 5 nella riga "Altre uscite in programma"
   const featuredList = useMemo(() => {
     const active = planned.filter(h => !h.archivedAt)
     if (active.length === 0) return []
@@ -287,7 +295,10 @@ export default function BachecaPage() {
       {/* Hero compatta: prossima uscita pianificata, poi l'ultima uscita fatta, poi il CTA a
           pianificare la prima — mai un solo stato "vuoto" quando esiste comunque qualcosa da
           mostrare. Foto: prima quella vera (propria o da un POI Wikipedia, vedi heroPhotoUrl sopra),
-          poi il tracciato su sfondo topografico, poi l'immagine generica di fallback. */}
+          poi il tracciato su sfondo topografico, poi l'immagine generica di fallback. Quando una
+          foto vera è disponibile, il tracciato ci fosse comunque perso (la foto lo sostituisce
+          interamente) — una piccola mappa in un angolo lo riporta visibile, sempre, senza
+          rinunciare alla foto. */}
       <div className="relative h-[340px] overflow-hidden">
         {heroPhotoUrl ? (
           <img src={heroPhotoUrl} alt="" className="absolute inset-0 w-full h-full object-cover" style={{ filter: HERO_IMAGE_FILTER }} />
@@ -300,6 +311,11 @@ export default function BachecaPage() {
         ) : (
           <img src={FALLBACK_HERO} alt="" className="absolute inset-0 w-full h-full object-cover" />
         )}
+        {heroPhotoUrl && (featured?.hike.routePolyline ?? latestActivity?.routePolyline)?.length ? (
+          <div className="absolute top-4 right-4 w-16 h-16 rounded-xl bg-black/45 backdrop-blur-sm border border-white/20 p-2 shadow-lg">
+            <RouteThumb polyline={(featured?.hike.routePolyline ?? latestActivity?.routePolyline)!} color="#ffffff" strokeWidth={2} />
+          </div>
+        ) : null}
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-black/40" />
 
         <div className="absolute left-5 right-5 bottom-5">
@@ -317,12 +333,23 @@ export default function BachecaPage() {
                 {(featured.hike.distanceMeters / 1000).toFixed(1)} km · +{Math.round(featured.hike.elevationGain)} m
                 {featured.hike.estimatedTimeSeconds ? ` · ${formatDuration(featured.hike.estimatedTimeSeconds)}` : ''}
               </p>
-              <Link
-                href={`/guida/${encodeURIComponent(featured.hike.id)}`}
-                className="mt-3 inline-flex items-center gap-2 bg-terra-500 hover:bg-terra-600 text-white text-[13px] font-semibold px-5 py-2.5 rounded-full shadow-lg transition-colors"
-              >
-                <Navigation className="w-4 h-4" /> {featured.hasDate ? 'Naviga' : 'Vai al percorso'}
-              </Link>
+              <div className="mt-3 flex items-center gap-2">
+                <Link
+                  href={`/guida/${encodeURIComponent(featured.hike.id)}`}
+                  className="inline-flex items-center gap-2 bg-terra-500 hover:bg-terra-600 text-white text-[13px] font-semibold px-5 py-2.5 rounded-full shadow-lg transition-colors"
+                >
+                  <Navigation className="w-4 h-4" /> {featured.hasDate ? 'Naviga' : 'Vai al percorso'}
+                </Link>
+                {/* Apre la copertina del percorso (mappa, statistiche, POI) invece di saltare
+                    direttamente alla guida narrata — ?scheda=1 disattiva l'auto-apertura di
+                    default per un link diretto (vedi app/guida/[id]/page.tsx). */}
+                <Link
+                  href={`/guida/${encodeURIComponent(featured.hike.id)}?scheda=1`}
+                  className="inline-flex items-center gap-2 bg-white/15 hover:bg-white/25 text-white text-[13px] font-semibold px-4 py-2.5 rounded-full border border-white/30 backdrop-blur-sm transition-colors"
+                >
+                  Apri scheda
+                </Link>
+              </div>
             </>
           ) : latestActivity ? (
             <>
@@ -373,14 +400,18 @@ export default function BachecaPage() {
               Altre uscite in programma
             </p>
             <div className="flex gap-2.5 overflow-x-auto pb-1 -mx-4 px-4" style={{ scrollbarWidth: 'none' }}>
-              {featuredList.slice(1).map(f => (
+              {featuredList.slice(1).map(f => {
+                const photoUrl = plannedHikePhotoUrl(f.hike)
+                return (
                 <Link
                   key={f.hike.id}
                   href={`/guida/${encodeURIComponent(f.hike.id)}`}
                   className="shrink-0 w-[170px] bg-white border border-stone-200 rounded-2xl overflow-hidden shadow-sm"
                 >
                   <div className="relative h-[90px] bg-gradient-to-b from-forest-50 to-stone-50 bg-topography">
-                    {f.hike.routePolyline?.length ? (
+                    {photoUrl ? (
+                      <img src={photoUrl} alt="" className="absolute inset-0 w-full h-full object-cover" style={{ filter: HERO_IMAGE_FILTER }} />
+                    ) : f.hike.routePolyline?.length ? (
                       <div className="absolute inset-3">
                         <RouteThumb polyline={f.hike.routePolyline} color="#2d7a3d" strokeWidth={2.5} />
                       </div>
@@ -395,7 +426,8 @@ export default function BachecaPage() {
                     </p>
                   </div>
                 </Link>
-              ))}
+                )
+              })}
             </div>
           </div>
         )}

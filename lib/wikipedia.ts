@@ -254,13 +254,17 @@ function projectAndLangFromSource(source?: WikiPage['source']): { lang: string; 
 // L'API extracts (explaintext=1, senza exintro) restituisce le intestazioni di sezione come testo
 // letterale "== Titolo ==" (a qualunque livello, fino a "======") — explaintext toglie il markup
 // inline ma non quello di sezione. Rumore visivo puro per un popup pensato come prosa continua, non
-// un indice — tolte riga per riga, il resto del testo (già diviso in paragrafi da MediaWiki) resta
-// intatto.
+// un indice — tolte riga per riga. Il testo originale ha tipicamente una riga vuota prima e dopo
+// ogni intestazione (per separarla dai paragrafi); tolta la riga dell'intestazione stessa restano
+// 2+ righe vuote consecutive una accanto all'altra, che con `whitespace-pre-line` (CuriosityModal)
+// diventano un salto visivo enorme tra un paragrafo e il successivo — collassate a una sola riga
+// vuota (un normale a-capo di paragrafo), mai più.
 function stripHeadingMarkup(text: string): string {
   return text
     .split('\n')
     .filter(line => !/^\s*={2,}[^=]*={2,}\s*$/.test(line))
     .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
 }
 
 // `exchars` sotto è un taglio duro a un numero di caratteri, non a un confine di frase. Quando
