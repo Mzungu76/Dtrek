@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type Ref, type ReactNode } from 'react'
 import { ChevronDown, Menu, X } from 'lucide-react'
+import ScrollFadeContainer from '@/components/ui/ScrollFadeContainer'
 import type { RouteHubItem, SectionKind, TabDef, PrimaryAction } from './types'
 
 // Symmetric to RouteCarousel's OPEN_DRAG_DISTANCE_PX — how far the header handle must be dragged
@@ -215,10 +216,12 @@ export default function RoutePage({
         </div>
       ) : (
         <>
-          <div
-            ref={pillBarRef}
-            className="shrink-0 flex gap-1.5 px-4 pb-2 overflow-x-auto [&::-webkit-scrollbar]:hidden"
-            style={{ scrollbarWidth: 'none', touchAction: 'pan-x', WebkitOverflowScrolling: 'touch' }}
+          <ScrollFadeContainer
+            className="shrink-0"
+            scrollRef={pillBarRef}
+            scrollClassName="flex gap-1.5 px-4 pb-2 overflow-x-auto [&::-webkit-scrollbar]:hidden"
+            scrollStyle={{ scrollbarWidth: 'none', touchAction: 'pan-x', WebkitOverflowScrolling: 'touch' }}
+            fadeFromClassName="from-[#fdfcfa]"
           >
             {tabs.map(t => (
               <button
@@ -233,7 +236,7 @@ export default function RoutePage({
                 {t.badge}
               </button>
             ))}
-          </div>
+          </ScrollFadeContainer>
 
           <div
             className="flex-1 overflow-hidden"

@@ -2,6 +2,7 @@
 import { useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
 import StatCard from '@/components/StatCard'
+import ScrollFadeContainer from '@/components/ui/ScrollFadeContainer'
 import RecordCard from './RecordCard'
 import InfoButton from './InfoButton'
 import ShareModal from '@/components/ShareModal'
@@ -296,7 +297,7 @@ export default function TabPanoramica({ activities, records, streaks }: Props) {
         <div className="px-5 py-4 border-b border-stone-100">
           <h3 className="font-medium text-stone-700">Tutte le escursioni</h3>
         </div>
-        <div className="overflow-x-auto">
+        <ScrollFadeContainer scrollClassName="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-stone-50 text-stone-500 text-xs uppercase tracking-wider">
               <tr>
@@ -336,7 +337,7 @@ export default function TabPanoramica({ activities, records, streaks }: Props) {
               ))}
             </tbody>
           </table>
-        </div>
+        </ScrollFadeContainer>
       </div>
     </div>
 

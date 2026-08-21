@@ -10,6 +10,7 @@ import { exportStatsPdf, exportMapPdf } from '@/utils/pdfExport'
 import ExportMenu, { type ExportMenuAction } from '@/components/ExportMenu'
 import { Loader2, Mountain, FileSpreadsheet, Share2, FileDown, Map } from 'lucide-react'
 import ShareModal from '@/components/ShareModal'
+import ScrollFadeContainer from '@/components/ui/ScrollFadeContainer'
 import TabPanoramica  from '@/components/stats/TabPanoramica'
 import TabAndamento   from '@/components/stats/TabAndamento'
 import TabConfronto   from '@/components/stats/TabConfronto'
@@ -98,7 +99,11 @@ function StatisticheContent() {
         ) : (
           <>
             {/* Tab bar — scrollable on mobile */}
-            <div className="flex gap-1 bg-stone-100 rounded-xl p-1 mb-6 sm:mb-8 overflow-x-auto">
+            <ScrollFadeContainer
+              className="bg-stone-100 rounded-xl mb-6 sm:mb-8"
+              scrollClassName="flex gap-1 p-1 overflow-x-auto"
+              fadeFromClassName="from-stone-100"
+            >
               {TABS.map(t => (
                 <button key={t.id} onClick={() => setTab(t.id)}
                   className={`flex-none px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
@@ -107,7 +112,7 @@ function StatisticheContent() {
                   {t.label}
                 </button>
               ))}
-            </div>
+            </ScrollFadeContainer>
 
             {tab === 'panoramica' && <TabPanoramica  activities={activities} records={records} streaks={streaks} />}
             {tab === 'andamento'  && <TabAndamento   activities={activities} />}

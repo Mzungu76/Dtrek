@@ -556,12 +556,16 @@ export default function BachecaPage() {
         )}
 
         <div className="mt-5 border-t border-stone-200 pt-4">
-          <div className="flex items-center justify-between mb-2.5">
+          <div className="flex items-center justify-between mb-1">
             <span className="font-barlow font-extrabold text-[11px] tracking-[1.5px] uppercase text-stone-400">Il tuo andamento</span>
             <Link href="/statistiche" className="text-[11px] font-semibold text-forest-600 flex items-center gap-1">
               Statistiche <ArrowRight className="w-3 h-3" />
             </Link>
           </div>
+          {/* UX-AUDIT.md P-M1 — Bacheca e Statistiche mostrano in parte gli stessi dati con
+              presentazioni diverse, senza che "Bacheca" comunichi da sola la relazione: qui è la
+              sintesi di oggi, in Statistiche l'archivio completo esplorabile. */}
+          <p className="text-[11px] text-stone-400 mb-2.5">Solo una sintesi — l&apos;archivio completo è in Statistiche.</p>
           {globalStats.totalActivities === 0 ? (
             <p className="text-[12px] text-stone-400 text-center py-3">
               I tuoi numeri appariranno qui dopo la tua prima escursione registrata.
