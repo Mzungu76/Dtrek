@@ -104,7 +104,7 @@ function metaToItem(h: PlannedHikeMeta): RouteHubItem {
   }
 }
 
-export default function GuidaHub({ id }: { id?: string }) {
+export default function GuidaHub({ id, startClosed }: { id?: string; startClosed?: boolean }) {
   const router = useRouter()
 
   const [items,   setItems]   = useState<RouteHubItem[]>([])
@@ -986,10 +986,12 @@ export default function GuidaHub({ id }: { id?: string }) {
         mode="guida"
         items={displayItems}
         initialIndex={initialIndex}
-        // Solo per un arrivo da link diretto a UN percorso preciso (id passato dal chiamante, es.
-        // /guida/[id] raggiunto dal CTA "Vai al percorso"/"Naviga" della Home) — mai per la lista
-        // generica /guida (id assente), dove la copertina chiusa resta il punto di partenza giusto.
-        autoOpenSection={id ? 'featured' : undefined}
+        // Default per un arrivo da link diretto a UN percorso preciso (id passato dal chiamante,
+        // es. /guida/[id] raggiunto dal CTA "Naviga"/"Vai al percorso" della Home) — mai per la
+        // lista generica /guida (id assente), dove la copertina chiusa resta il punto di partenza
+        // giusto. startClosed (da /guida/[id]/page.tsx's ?scheda=1, il bottone "Apri scheda" della
+        // Home) disattiva esplicitamente l'auto-apertura per chi vuole vedere prima la copertina.
+        autoOpenSection={id && !startClosed ? 'featured' : undefined}
         favoritesFilter={favoritesFilter}
         nextOutingFilter={nextOutingFilter}
         onToggleNextOutingFilter={() => setNextOutingFilter(v => !v)}

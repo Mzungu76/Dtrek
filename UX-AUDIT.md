@@ -1185,6 +1185,40 @@ ripetono" (non riconfermata anche in questo giro, resta aperta come sopra):**
 
 `npx tsc --noEmit` e `next lint` puliti su tutti i file toccati in questo giro.
 
+**Sessione successiva — verifica dal vivo su dispositivo reale, sei rifiniture ulteriori (tutte
+implementate):**
+- **Bottone "Apri scheda" accanto a "Naviga"/"Vai al percorso"**: il CTA principale dell'hero apre
+  direttamente la guida narrata (fix del giro precedente); ora affiancato da un secondo bottone
+  (stile secondario, sfondo semi-trasparente) che apre la stessa pagina ma sulla copertina chiusa
+  (mappa, statistiche, POI) invece di saltare alla guida — per chi vuole prima un colpo d'occhio.
+  Nuovo query param `?scheda=1` su `/guida/[id]` disattiva l'auto-apertura di default solo per
+  questo link (`app/guida/[id]/page.tsx`, avvolto in `<Suspense>` per `useSearchParams`, stesso
+  pattern già usato altrove nel repo — es. `app/login/page.tsx`); propagato a `GuidaHub.tsx` come
+  prop `startClosed`.
+- **Sfondo delle card "Altre uscite in programma"**: quando il percorso ha un POI Wikipedia
+  arricchito, la card compatta usa la sua foto come sfondo (stessa fonte/priorità di
+  `heroPhotoUrl`) invece del solo tracciato — coerente con l'hero, che già usava le foto.
+- **Spazi bianchi enormi tra paragrafi nel popup "Leggi tutto"**: causa reale — il testo grezzo di
+  Wikipedia ha tipicamente una riga vuota prima e dopo ogni intestazione di sezione; tolta la riga
+  dell'intestazione stessa (fix del giro precedente per i simboli "=="), restavano 2+ righe vuote
+  consecutive, che con `whitespace-pre-line` diventavano un salto visivo enorme. `stripHeadingMarkup`
+  ora collassa le righe vuote multiple a una sola.
+- **"Altre uscite in programma" ora fino a 5** (non più 2): `MAX_FEATURED` portato da 3 a 6 (1 hero
+  + 5 nella riga sotto).
+- **Perché alcuni percorsi principali non hanno la foto del POI**: non un bug — verificato che per
+  quel percorso specifico (es. "Sentiero 651 – Le mole di Narni") l'arricchimento POI/Wikipedia non
+  ha mai trovato nulla (`cachedPoiWiki` vuoto, 0 voci), quindi l'hero ricade correttamente sul
+  tracciato su sfondo topografico (secondo anello della catena di fallback, mai il terzo/fallback
+  generico dato che la geometria c'è) — comportamento corretto data l'assenza di dati, non
+  un'incoerenza da correggere.
+- **Mappa assente quando l'hero mostra una foto**: la foto (quando disponibile) sostituiva
+  interamente il tracciato, mai mostrati insieme. Aggiunta una piccola mappa in un angolo dell'hero
+  (tracciato bianco su sfondo scuro semi-trasparente) ogni volta che sia la foto sia una geometria
+  sono disponibili — solo per l'hero, non per le card compatte di "Altre uscite in programma"
+  (richiesta esplicita: quelle restano solo foto, niente mappa sovrapposta).
+
+`npx tsc --noEmit` e `next lint` puliti su tutti i file toccati in questo giro.
+
 **"Percorsi per te" — diagnosi della causa reale del malfunzionamento (sessione successiva) e fix
 applicato**: verificato in produzione (query diretta su `route_recommendations` via Supabase MCP)
 che la riga dell'account owner è ferma da quasi un mese (`generated_at` 2026-07-24, `status='ok'`
