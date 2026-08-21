@@ -1524,16 +1524,69 @@ gli sta sotto), adattata caso per caso:
    invasivi**~~ — **IMPLEMENTATO** (sessione 2026-08-21, vedi "Stato implementazione — P-H6" sopra):
    rail Diario contenuta in un margine di sicurezza, chip Voto/Naviga si affievolisce durante lo
    scroll attivo, tooltip dei grafici Recharts contenuti nel proprio box — risolve P-H6.
-7. Unificare l'etichetta della funzione di traccia libera ovunque compaia, incluso il titolo di pagina
-   "Registra un percorso" confermato in Navigator (P-H4, ora con 4 varianti confermate).
-8. **CONFERMATO da screenshot — aggiungere un'indicazione di scroll disponibile** a ogni tab/tabella
-   scrollabile orizzontalmente (Statistiche, dettaglio Guida/Resoconto) — pattern sistemico, correzione
-   centralizzabile in un solo componente condiviso (P-H8).
-9. Collegare Vette raggiunte, Cronologia navigazione, Ricerche salvate dai loro contesti d'uso naturali
-   invece che solo da Profilo (P-H5).
-10. Comunicare preventivamente il limite di Navigator al momento della creazione percorso in Dtrek (P-O3).
-11. Dichiarare esplicitamente la differenza Bacheca/Statistiche e Resoconti/Diario con un sottotitolo o
-    hint nella UI (P-M1, P-M2).
+7. ~~Unificare l'etichetta della funzione di traccia libera ovunque compaia~~ — **IMPLEMENTATO**
+   (sessione precedente, 2026-08-21): "Traccia libera" ovunque (P-H4).
+8. ~~**CONFERMATO da screenshot — aggiungere un'indicazione di scroll disponibile**~~ —
+   **IMPLEMENTATO** (sessione 2026-08-21, vedi "Stato implementazione — P1 rimanenti" sotto): nuovo
+   `ScrollFadeContainer` condiviso, applicato al tab bar di Statistiche, alla tabella "Tutte le
+   escursioni" e al tab bar "In sintesi" di Guida/Resoconto (P-H8).
+9. ~~Collegare Vette raggiunte, Cronologia navigazione, Ricerche salvate dai loro contesti d'uso
+   naturali~~ — **VERIFICATO, in gran parte già risolto o non applicabile** (vedi sotto): P-H5.
+10. ~~Comunicare preventivamente il limite di Navigator al momento della creazione percorso in
+    Dtrek~~ — **VERIFICATO, la premessa non regge** (vedi sotto): P-O3.
+11. ~~Dichiarare esplicitamente la differenza Bacheca/Statistiche e Resoconti/Diario con un
+    sottotitolo o hint nella UI~~ — **IMPLEMENTATO** (sessione 2026-08-21): P-M1, P-M2.
+
+### Stato implementazione — P1 rimanenti (sessione 2026-08-21, terzo giro)
+
+- **P-H8 — IMPLEMENTATO**: nuovo `components/ui/ScrollFadeContainer.tsx`, una sfumatura sul bordo
+  che sta ancora tagliando contenuto (sparisce da sola quando quel lato è già in fondo, mai un
+  indizio "fantasma"). Applicato ai tre punti confermati dallo screenshot: tab bar di
+  `app/statistiche/page.tsx`, tabella "Tutte le escursioni" in `TabPanoramica.tsx`, tab bar "In
+  sintesi" di `RoutePage.tsx` (Guida/Resoconto — qui il componente espone anche `scrollRef` per non
+  rompere lo scroll-into-view esistente della tab attiva).
+- **P-H5 — verificato voce per voce, non serviva quasi nulla**:
+  - *Vette raggiunte*: già raggiungibile da Statistiche → Panoramica (banner dedicato) oltre che da
+    Profilo — l'audit stesso l'aveva già derubricato da HARD a MODERATE dopo gli screenshot.
+  - *Ricerche salvate*: **già linkata** dal punto esatto in cui si effettua una ricerca —
+    `components/upload/ManualImportChoice.tsx` (la schermata "Manuale" prima del wizard
+    "Costruisci o trova un percorso") ha in cima una card "Le mie ricerche salvate" →
+    `/profilo/ricerche-salvate`. Non è chiaro se risalga a questa stessa sessione precedente o a un
+    giro non tracciato qui, ma il problema descritto dall'audit non esiste più nel codice attuale.
+  - *Log ricerche* (`/profilo/log-ricerche`): l'audit lo classificava come "cronologia automatica"
+    delle ricerche dell'utente, ma il codice (`components/profilo/SectionLogRicerche.tsx`, "Log
+    privato... per capire a colpo d'occhio quale livello ha risolto una ricerca... senza dover
+    leggere i log Vercel") è in realtà uno strumento di **diagnostica per l'autore del prodotto**
+    (tier raggiunto, retry, escalation ad AI, durata in ms) — non un contenuto per l'utente finale.
+    Linkarlo più in vista sarebbe un peggioramento, non un miglioramento: resta corretto che sia
+    sepolto in Profilo, raggiungibile solo da chi sa già di doverlo cercare.
+  - *Cronologia navigazione* (`/profilo/cronologia-navigazione`): altra premessa da correggere —
+    non è una cronologia sfogliabile di uscite passate (il nome lo suggerisce, il contenuto reale
+    no), è un **controllo di cancellazione dati** (sessioni/eventi/tracce GPS lato server). La sua
+    collocazione in Profilo, vicino agli altri controlli privacy, è già quella corretta; il nome
+    andrebbe eventualmente chiarito ma non è quello che P-H5 chiedeva di correggere (collegamento
+    da un contesto d'uso), quindi non toccato in questa sessione.
+- **P-O3 — verificato, la premessa non regge**: il commento di `lib/navigatorSlot.ts` è esplicito —
+  "a route planned in the *main* app and merely synced into Navigator's list is NOT limited by
+  this — only `sourceApp: 'navigator'` rows... count against the slot". Un percorso creato in
+  Dtrek non è mai soggetto al tetto di Navigator: il tetto si applica solo a un import/registrazione
+  fatto DENTRO Navigator stesso. Avvisare l'utente del limite mentre crea un percorso in Dtrek
+  sarebbe quindi fuorviante (implicherebbe una restrizione che non si applica a quell'azione). Il
+  limite è già comunicato esattamente dove si applica davvero: `app/navigatore/importa/page.tsx`
+  mostra "Hai già un percorso in Navigator... Sovrascrivilo per importarne uno nuovo, oppure usa
+  l'app DTrek principale per pianificarne quanti vuoi" quando `atLimit` è vero. Nessuna modifica
+  necessaria.
+- **P-M1/P-M2 — IMPLEMENTATO**: tre hint testuali minimi, nessun redesign.
+  - Bacheca (`app/bacheca/page.tsx`): sotto l'intestazione "Il tuo andamento" ora c'è "Solo una
+    sintesi — l'archivio completo è in Statistiche."
+  - Resoconto (`app/resoconto/elenco/page.tsx`): sotto il titolo dell'hero, "Sfoglia le tue
+    escursioni una per una — il libro completo è nel Diario" (link).
+  - Diario (`app/diario/page.tsx`): una riga sotto la nav bar, "Il tuo libro di escursioni, pronto
+    da stampare o condividere — per sfogliarle una per una vedi Resoconti" (link,
+    **`print:hidden`** — non deve mai comparire nel PDF esportato, che riusa lo stesso markup delle
+    pagine del libro).
+
+`npx tsc --noEmit` e `next lint` puliti su tutti i file toccati in questo giro.
 
 ### P2 — miglioramento sostanziale, non bloccante
 12. Aggiungere righe descrittive alle tre sotto-modalità di import GPX (P-M3) — nota: lo screenshot della

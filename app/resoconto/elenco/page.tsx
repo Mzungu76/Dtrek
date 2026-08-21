@@ -305,6 +305,13 @@ export default function ResocontoIndexPage() {
                   : 'Nessuna escursione conclusa'
               }
             </h1>
+            {/* UX-AUDIT.md P-M2 — Resoconti e Diario sono la stessa collezione di dati esposta in
+                due UI radicalmente diverse (galleria vs. libro), senza che i nomi da soli lo
+                comunichino: un hint minimo qui, non un redesign delle due sezioni. */}
+            <p className="text-white/60 text-[12px] sm:text-[13px] mt-1.5">
+              Sfoglia le tue escursioni una per una — il libro completo è nel{' '}
+              <Link href="/diario" className="underline decoration-white/40 hover:decoration-white">Diario</Link>.
+            </p>
           </div>
         </div>
       </div>

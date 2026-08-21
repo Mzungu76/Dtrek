@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
 import HubNavBar from '@/components/routehub/HubNavBar'
 import { RailButton } from '@/components/routehub/SideRails'
 import { getAllActivities, getActivityById, computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
@@ -690,6 +691,14 @@ export default function DiarioPage() {
       <div className="sticky top-0 z-40 print:hidden">
         <HubNavBar />
       </div>
+
+      {/* UX-AUDIT.md P-M2 — Resoconti e Diario sono la stessa collezione di dati (racconti di
+          escursioni) esposta in due UI radicalmente diverse (galleria vs. libro), senza che i nomi
+          da soli lo comunichino. Solo a schermo, mai nel PDF esportato (print:hidden). */}
+      <p className="text-center text-[12px] text-stone-400 py-2 px-4 print:hidden">
+        Il tuo libro di escursioni, pronto da stampare o condividere — per sfogliarle una per una vedi{' '}
+        <Link href="/resoconto" className="underline decoration-stone-300 hover:decoration-stone-500 text-stone-500">Resoconti</Link>.
+      </p>
 
       {/* Left icon rail — cover customization */}
       <div className="fixed left-3 md:left-5 top-1/2 -translate-y-1/2 z-30 flex flex-col gap-3 print:hidden">
