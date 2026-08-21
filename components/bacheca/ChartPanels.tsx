@@ -65,7 +65,7 @@ export function AnnualBarChart({ activities }: { activities: ActivityMeta[] }) {
       .map(d => ({ year: String(d.year), km: Math.round(d.km), gain: Math.round(d.gain) }))
   }, [activities])
   return (
-    <ResponsiveContainer width="100%" height={170}>
+    <ResponsiveContainer className="overflow-hidden" width="100%" height={170}>
       <BarChart data={data}>
         <CartesianGrid vertical={false} stroke={CHART_GRID} />
         <XAxis dataKey="year" tick={CHART_TICK} />
@@ -92,7 +92,7 @@ export function MonthlyBarChart({ activities }: { activities: ActivityMeta[] }) 
       .slice(-12)
   , [activities])
   return (
-    <ResponsiveContainer width="100%" height={170}>
+    <ResponsiveContainer className="overflow-hidden" width="100%" height={170}>
       <BarChart data={data}>
         <CartesianGrid vertical={false} stroke={CHART_GRID} />
         <XAxis dataKey="month" tick={CHART_TICK} interval={1} />
@@ -111,7 +111,7 @@ export function SeasonalBarChart({ activities }: { activities: ActivityMeta[] })
     computeSeasonalStats(activities).map(s => ({ name: s.label, km: s.avgKm, gain: s.avgGain }))
   , [activities])
   return (
-    <ResponsiveContainer width="100%" height={170}>
+    <ResponsiveContainer className="overflow-hidden" width="100%" height={170}>
       <BarChart data={data}>
         <CartesianGrid vertical={false} stroke={CHART_GRID} />
         <XAxis dataKey="name" tick={CHART_TICK} />
@@ -133,7 +133,7 @@ export function WeekdayBarChart({ activities }: { activities: ActivityMeta[] }) 
     return labels.map((day, i) => ({ day, count: counts[i] }))
   }, [activities])
   return (
-    <ResponsiveContainer width="100%" height={160}>
+    <ResponsiveContainer className="overflow-hidden" width="100%" height={160}>
       <BarChart data={data}>
         <CartesianGrid vertical={false} stroke={CHART_GRID} />
         <XAxis dataKey="day" tick={{ ...CHART_TICK, fontWeight: 600 }} />
@@ -155,7 +155,7 @@ export function DistanceHistogramChart({ activities }: { activities: ActivityMet
     { label: '20+',   count: activities.filter(a => a.distanceMeters >= 20000).length },
   ], [activities])
   return (
-    <ResponsiveContainer width="100%" height={160}>
+    <ResponsiveContainer className="overflow-hidden" width="100%" height={160}>
       <BarChart data={data}>
         <CartesianGrid vertical={false} stroke={CHART_GRID} />
         <XAxis dataKey="label" tick={CHART_TICK} unit=" km" />
@@ -182,7 +182,7 @@ export function altitudeBands(activities: ActivityMeta[]) {
 export function AltitudeBarChart({ activities }: { activities: ActivityMeta[] }) {
   const data = useMemo(() => altitudeBands(activities), [activities])
   return (
-    <ResponsiveContainer width="100%" height={160}>
+    <ResponsiveContainer className="overflow-hidden" width="100%" height={160}>
       <BarChart data={data} layout="vertical" margin={{ left: 8 }}>
         <CartesianGrid horizontal={false} stroke={CHART_GRID} />
         <XAxis type="number" tick={CHART_TICK} allowDecimals={false} />
@@ -203,7 +203,7 @@ export function FcTrendChart({ activities }: { activities: ActivityMeta[] }) {
       .filter(d => d.fc > 0)
   , [activities])
   return (
-    <ResponsiveContainer width="100%" height={160}>
+    <ResponsiveContainer className="overflow-hidden" width="100%" height={160}>
       <LineChart data={data}>
         <CartesianGrid vertical={false} stroke={CHART_GRID} />
         <XAxis dataKey="data" tick={CHART_TICK} />
@@ -221,7 +221,7 @@ export function DistanceVsGainScatter({ activities }: { activities: ActivityMeta
     activities.map(a => ({ km: +(a.distanceMeters / 1000).toFixed(2), gain: Math.round(a.elevationGain), title: a.title ?? 'Escursione', id: a.id }))
   , [activities])
   return (
-    <ResponsiveContainer width="100%" height={170}>
+    <ResponsiveContainer className="overflow-hidden" width="100%" height={170}>
       <ScatterChart>
         <CartesianGrid stroke={CHART_GRID} />
         <XAxis type="number" dataKey="km" name="Distanza" unit=" km" tick={CHART_TICK} />
@@ -244,7 +244,7 @@ export function TssBarChart({ activities }: { activities: ActivityMeta[] }) {
     return computeTrainingLoad(events, 90).filter(d => d.stress > 0)
   }, [activities])
   return (
-    <ResponsiveContainer width="100%" height={160}>
+    <ResponsiveContainer className="overflow-hidden" width="100%" height={160}>
       <BarChart data={data}>
         <CartesianGrid vertical={false} stroke={CHART_GRID} />
         <XAxis dataKey="date" tick={CHART_TICK} tickFormatter={d => format(new Date(d), 'd/M')} minTickGap={40} />
@@ -269,7 +269,7 @@ export function ZoneFcBarChart({ activities, maxHR }: { activities: ActivityMeta
     return ['Z1', 'Z2', 'Z3', 'Z4', 'Z5'].map((z, i) => ({ zone: z, minuti: Math.round(totals[i]) }))
   }, [activities, maxHR])
   return (
-    <ResponsiveContainer width="100%" height={160}>
+    <ResponsiveContainer className="overflow-hidden" width="100%" height={160}>
       <BarChart data={data}>
         <CartesianGrid vertical={false} stroke={CHART_GRID} />
         <XAxis dataKey="zone" tick={CHART_TICK} />
@@ -285,7 +285,7 @@ export function ZoneFcBarChart({ activities, maxHR }: { activities: ActivityMeta
 export function EfTrendChart({ activities }: { activities: ActivityMeta[] }) {
   const data = useMemo(() => computeEFTrend(activities), [activities])
   return (
-    <ResponsiveContainer width="100%" height={160}>
+    <ResponsiveContainer className="overflow-hidden" width="100%" height={160}>
       <LineChart data={data}>
         <CartesianGrid vertical={false} stroke={CHART_GRID} />
         <XAxis dataKey="date" tick={CHART_TICK} tickFormatter={d => format(new Date(d), 'd/M')} minTickGap={40} />
@@ -302,7 +302,7 @@ export function EfTrendChart({ activities }: { activities: ActivityMeta[] }) {
 export function IevTrendChart({ activities }: { activities: ActivityMeta[] }) {
   const data = useMemo(() => computeIEVTrend(activities), [activities])
   return (
-    <ResponsiveContainer width="100%" height={160}>
+    <ResponsiveContainer className="overflow-hidden" width="100%" height={160}>
       <LineChart data={data}>
         <CartesianGrid vertical={false} stroke={CHART_GRID} />
         <XAxis dataKey="date" tick={CHART_TICK} tickFormatter={d => format(new Date(d), 'd/M')} minTickGap={40} />
@@ -324,7 +324,7 @@ export function CalorieBarChart({ activities, weightKg }: { activities: Activity
       .map(a => ({ title: a.title ?? 'Escursione', date: format(new Date(a.startTime), 'dd/MM'), eff: computeCalorieEfficiency(a, weightKg) }))
   , [activities, weightKg])
   return (
-    <ResponsiveContainer width="100%" height={160}>
+    <ResponsiveContainer className="overflow-hidden" width="100%" height={160}>
       <BarChart data={data}>
         <CartesianGrid vertical={false} stroke={CHART_GRID} />
         <XAxis dataKey="date" tick={CHART_TICK} />
@@ -360,7 +360,7 @@ export function ScoreEvolutionChart({ activities }: { activities: ActivityMeta[]
           Trend Trail Score: {trend.slope > 0.05 ? '↑ in miglioramento' : trend.slope < -0.05 ? '↓ in calo' : '→ stabile'}
         </p>
       )}
-      <ResponsiveContainer width="100%" height={150}>
+      <ResponsiveContainer className="overflow-hidden" width="100%" height={150}>
         <ComposedChart>
           <CartesianGrid vertical={false} stroke={CHART_GRID} />
           <XAxis dataKey="date" tick={false} hide />

@@ -120,7 +120,7 @@ export default function TabForma({ activities }: Props) {
       <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
         <h3 className="font-medium text-stone-700 mb-1">Volume settimanale — ultime 16 settimane</h3>
         <p className="text-xs text-stone-400 mb-4">Km percorsi e dislivello per settimana.</p>
-        <div className="h-56">
+        <div className="h-56 overflow-hidden">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={weeklyVolumeData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
@@ -172,7 +172,7 @@ export default function TabForma({ activities }: Props) {
         <p className="text-xs text-stone-400 mb-4">
           CTL (fitness, verde) · ATL (fatica, arancio) · TSB (forma, blu — positivo = fresco, negativo = affaticato)
         </p>
-        <div className="h-72">
+        <div className="h-72 overflow-hidden">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={trainingLoadData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
@@ -200,7 +200,7 @@ export default function TabForma({ activities }: Props) {
         <h3 className="font-medium text-stone-700 mb-4 flex items-center gap-2 flex-wrap">
           Carico giornaliero (TSS stimato) <InfoButton section="tss" />
         </h3>
-        <div className="h-48">
+        <div className="h-48 overflow-hidden">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={trainingLoadData.filter(d => d.stress > 0)} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />

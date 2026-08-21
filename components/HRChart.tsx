@@ -72,7 +72,7 @@ export default function HRChart({ trackPoints, avgHR, maxHR, syncId, onHover }: 
           <Layers className="w-3 h-3" /> Quota
         </button>
       </div>
-      <div className="h-52">
+      <div className="h-52 overflow-hidden">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }} syncId={syncId}
             onMouseMove={(e: any) => {

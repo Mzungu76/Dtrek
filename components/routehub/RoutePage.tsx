@@ -109,6 +109,24 @@ export default function RoutePage({
   const activePanelRef = useRef<HTMLDivElement | null>(null)
   const innerHScrollRef = useRef<HTMLElement | null>(null)
 
+  // UX-AUDIT.md P-H6 — primaryAction è fixed bottom-right per restare raggiungibile a qualunque
+  // scroll, ma su una pagina lunga (10+ schermate, vedi §9) questo significa che resta anche
+  // stabilmente sopra qualunque testo/foto/grafico passi in quell'angolo — confermato da
+  // screenshot per il chip "Voto X/10" del Resoconto (tagliava paragrafi, un grafico FC, una
+  // foto). Si affievolisce durante lo scroll attivo e torna visibile ~200ms dopo che si ferma,
+  // così resta sempre raggiungibile a riposo (quando l'utente si è fermato a leggere/decidere,
+  // il momento in cui serve davvero) senza restare opaco sopra il contenuto mentre scorre.
+  const [primaryActionFading, setPrimaryActionFading] = useState(false)
+  const primaryActionFadeTimer = useRef<number | null>(null)
+  const handleContentScroll = () => {
+    setPrimaryActionFading(true)
+    if (primaryActionFadeTimer.current != null) window.clearTimeout(primaryActionFadeTimer.current)
+    primaryActionFadeTimer.current = window.setTimeout(() => setPrimaryActionFading(false), 220)
+  }
+  useEffect(() => () => {
+    if (primaryActionFadeTimer.current != null) window.clearTimeout(primaryActionFadeTimer.current)
+  }, [])
+
   const handleTabPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     tabStartX.current = e.clientX
     tabStartY.current = e.clientY
@@ -192,7 +210,7 @@ export default function RoutePage({
       </div>
 
       {bodyMode === 'continuous' ? (
-        <div className="flex-1 overflow-y-auto pb-28">
+        <div className="flex-1 overflow-y-auto pb-28" onScroll={handleContentScroll}>
           {renderSection('featured', item, onRequestClose)}
         </div>
       ) : (
@@ -241,6 +259,7 @@ export default function RoutePage({
                     <div
                       ref={mergeRefs(tabScrollRef?.(t.key), i === activeIndex ? activePanelRef : undefined)}
                       className="h-full overflow-y-auto pb-28 md:max-w-2xl md:mx-auto"
+                      onScroll={i === activeIndex ? handleContentScroll : undefined}
                     >
                       {heroPhotos}
                       {renderSection(t.key, item, onRequestClose)}
@@ -256,7 +275,9 @@ export default function RoutePage({
       {primaryAction && (
         <button
           onClick={primaryAction.onClick}
-          className={`fixed z-30 bottom-[calc(env(safe-area-inset-bottom,0px)+16px)] right-4 flex items-center gap-2 pl-3.5 pr-4 py-2.5 rounded-full text-sm font-semibold shadow-lg transition-transform hover:scale-[1.03] ${CTA_VARIANTS[primaryAction.variant]}`}
+          className={`fixed z-30 bottom-[calc(env(safe-area-inset-bottom,0px)+16px)] right-4 flex items-center gap-2 pl-3.5 pr-4 py-2.5 rounded-full text-sm font-semibold shadow-lg transition-all duration-200 ${
+            primaryActionFading ? 'opacity-0 translate-y-1.5 pointer-events-none' : 'opacity-100 translate-y-0 hover:scale-[1.03]'
+          } ${CTA_VARIANTS[primaryAction.variant]}`}
         >
           <primaryAction.icon className="w-4 h-4" />
           {primaryAction.label}
