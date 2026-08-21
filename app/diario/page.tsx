@@ -14,10 +14,12 @@ import type { TrackPoint } from '@/lib/tcxParser'
 import {
   FileDown, Share2, Copy, Link2Off, ExternalLink,
   Loader2, Image as ImageIcon, BarChart2, X, Pencil,
-  Lock, LockOpen, Eye, EyeOff, Archive, RotateCcw, RefreshCw, AlertTriangle,
+  Lock, LockOpen, Eye, EyeOff, Archive, RotateCcw, RefreshCw, AlertTriangle, HelpCircle,
 } from 'lucide-react'
 import { ROUTE_COLORS } from '@/lib/designTokens'
 import { mapOutH } from '@/components/diario/chartUtils'
+import { hasSeenDiarioOnboarding, markDiarioOnboardingSeen } from '@/lib/diario/diarioOnboardingPref'
+import DiarioOnboardingSheet from '@/components/diario/DiarioOnboardingSheet'
 import { DiarioCover } from '@/components/diario/DiarioCover'
 import { DiarioIndice } from '@/components/diario/DiarioIndice'
 import { DiarioStubPage } from '@/components/diario/DiarioStubPage'
@@ -127,6 +129,10 @@ export default function DiarioPage() {
   const [showShareMenu,    setShowShareMenu]    = useState(false)
   const [showExcludedMenu, setShowExcludedMenu] = useState(false)
   const [mapsInteractive,  setMapsInteractive]  = useState(false)
+  // UX-AUDIT.md P-L1/P-L2 — mostrato una sola volta alla primissima apertura, prima di incontrare
+  // le icone solo-icona delle rotaie; riapribile in ogni momento dal bottone "?" sulla rotaia destra.
+  const [showOnboarding, setShowOnboarding] = useState(false)
+  useEffect(() => { if (!hasSeenDiarioOnboarding()) setShowOnboarding(true) }, [])
 
   /** Intervallo dell'esportazione PDF. Il Diario a schermo resta completo — è il *documento* a
    *  essere ritagliato, perché è lui a diventare ingestibile: cinque anni di escursioni sono
@@ -989,7 +995,16 @@ export default function DiarioPage() {
             </div>
           )}
         </div>
+
+        <RailButton onClick={() => setShowOnboarding(true)} title="Come funziona il Diario">
+          <HelpCircle className="w-5 h-5 text-white" />
+        </RailButton>
       </div>
+
+      <DiarioOnboardingSheet
+        open={showOnboarding}
+        onClose={() => { markDiarioOnboardingSeen(); setShowOnboarding(false) }}
+      />
 
       {/* Loading */}
       {loading && (
