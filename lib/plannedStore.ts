@@ -169,7 +169,20 @@ export async function getAllPlanned(onRefresh?: (data: PlannedHikeMeta[]) => voi
     // only re-fetches when the server's updatedAt is newer, which a missing-field cache doesn't
     // trigger). The list is still fully usable for display in the meantime, so this repairs in the
     // background instead of blocking the return.
-    const needsRepair = local.some((h) => !h.archivedAt && !h.routePolyline?.length && h.osmId == null)
+    //
+    // Second condition: app/api/planned/route.ts's META_COLS omitted cached_pois/cached_poi_wiki
+    // from its SELECT since this list endpoint was first written — every plannedList cached before
+    // that fix has BOTH fields undefined on every entry, regardless of how many POI/Wikipedia the
+    // route actually has (the real bug behind the Home hero/card photos and "Curiosità" silently
+    // missing on a cold login: only a route opened individually this session, via getPlannedById's
+    // own full select('*'), ever got these fields — see that self-heal below). Both-undefined is a
+    // reasonable enough signal of "pre-fix cache" to also trigger a refetch here — a route that
+    // genuinely has neither (plenty do) just costs one harmless extra background refresh per page
+    // load, not a wrong result.
+    const needsRepair = local.some((h) => !h.archivedAt && (
+      (!h.routePolyline?.length && h.osmId == null)
+      || (h.cachedPois === undefined && h.cachedPoiWiki === undefined)
+    ))
     if (needsRepair) {
       apiFetch<PlannedHikeMeta[]>('/api/planned')
         .then(async (data) => { await lsSet(LS_KEYS.plannedList, data); onRefresh?.(data) })

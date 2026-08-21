@@ -140,12 +140,22 @@ function hikeToRow(h: PlannedHike) {
   }
 }
 
-// Columns for list view — excludes track_points
+// Columns for list view — excludes track_points. cached_pois/cached_poi_wiki erano assenti da
+// sempre: la Home (app/bacheca/page.tsx, foto POI dell'hero e delle card "Altre uscite in
+// programma") e la riga "Curiosità" leggono questi campi da QUESTA lista (`planned`), non dal
+// singolo percorso — con la colonna mai selezionata qui, quei campi erano sempre `undefined` per
+// ogni voce fresca dalla lista, indipendentemente da quanti POI/Wikipedia il percorso avesse
+// davvero. Il motivo per cui a volte "funzionava" durante una sessione già in corso: aprire
+// /guida/[id] fa un fetch pieno (select('*') sotto) di QUEL SOLO percorso, che
+// lib/plannedStore.ts poi rimescola anche dentro la cache locale della lista (vedi i suoi
+// commenti "self-heal") — corretto solo per i percorsi aperti individualmente in quella sessione,
+// mai per un accesso a freddo (login pulito, cache locale vuota) né per un percorso mai aperto.
 const META_COLS = [
   'id', 'title', 'planned_date', 'file_name', 'user_notes', 'hike_notes', 'tags',
   'created_at', 'distance_meters', 'elevation_gain', 'elevation_loss',
   'altitude_max', 'altitude_min', 'estimated_time_seconds',
-  'route_polyline', 'assessment', 'cached_guide', 'cached_guide_subtitle', 'cached_guide_notices', 'cached_guide_sources', 'guide_tier', 'guide_generated_at', 'osm_relation_id',
+  'route_polyline', 'assessment', 'cached_pois', 'cached_poi_wiki',
+  'cached_guide', 'cached_guide_subtitle', 'cached_guide_notices', 'cached_guide_sources', 'guide_tier', 'guide_generated_at', 'osm_relation_id',
   'cached_beauty_score', 'cached_trail_score', 'cached_trail_score_confidence', 'cached_scores_computed_at',
   'cached_safety_score', 'cached_safety_computed_at', 'cached_ts_total', 'cached_epoch_pois',
   'cached_driving_distance_m', 'cached_driving_duration_s',
@@ -158,12 +168,14 @@ const META_COLS = [
 // Guaranteed-to-exist columns (base schema, no ALTER TABLE additions — updated_at
 // deliberately excluded here too: it's itself an ALTER TABLE addition, see
 // supabase/migrations/add_updated_at_tracking.sql, so an environment that hasn't
-// run that migration yet must still be able to fall back to this list)
+// run that migration yet must still be able to fall back to this list). cached_pois/
+// cached_poi_wiki sono anche loro nello schema base (supabase-schema.sql), non un'aggiunta
+// successiva — inclusi qui per lo stesso motivo per cui sono ora in META_COLS sopra.
 const META_COLS_CORE = [
   'id', 'title', 'planned_date', 'file_name', 'user_notes', 'tags',
   'created_at', 'distance_meters', 'elevation_gain', 'elevation_loss',
   'altitude_max', 'altitude_min', 'estimated_time_seconds',
-  'route_polyline', 'assessment',
+  'route_polyline', 'assessment', 'cached_pois', 'cached_poi_wiki',
 ].join(', ')
 
 // ── GET /api/planned          → PlannedHikeMeta[] ────────────────────────────
