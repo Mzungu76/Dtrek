@@ -1588,18 +1588,64 @@ gli sta sotto), adattata caso per caso:
 
 `npx tsc --noEmit` e `next lint` puliti su tutti i file toccati in questo giro.
 
+### Stato implementazione — P2 (sessione 2026-08-21, quarto giro)
+
+- **P-M3 — IMPLEMENTATO**: `app/upload/page.tsx`, una riga descrittiva sotto il selettore a tre tab
+  (File traccia/Manuale/Da diario esistente), dinamica per l'opzione attiva invece di tre sottotitoli
+  fissi che avrebbero affollato i tab compatti a tre colonne.
+- **P-M4 — IMPLEMENTATO**: `confirm()` nativo sostituito in entrambi i punti trovati (l'audit ne
+  citava uno, `GuidaHub.tsx`, ma lo stesso pattern era duplicato in `ResocontoHub.tsx`) con lo stesso
+  conferma-a-due-passi già usato in questo stesso pannello per rinomina/note ("Sicuro? [Conferma
+  eliminazione] [Annulla]" in linea, non un nuovo Sheet sopra il pannello "Strumenti" già aperto).
+- **P-M5 — verificato, una sola violazione reale**: `badgeText`/la griglia di ~25 card con sigle non
+  esiste più nel codice attuale (sostituita dalla Home P-O5). Delle sigle rimaste, solo "IEV nel
+  Tempo" (`TabFisico.tsx`) usava la sigla grezza come titolo primario mentre il gemello "EF" sopra
+  usava già "Efficienza Aerobica nel Tempo" — corretto in "Efficienza Verticale nel Tempo" per
+  coerenza. "Bellezza del percorso (TEI)" in Impostazioni già segue il pattern corretto (lingua
+  naturale primaria, sigla secondaria tra parentesi) — nessuna modifica necessaria lì.
+- **P-M6 — IMPLEMENTATO** nei due punti confermati dallo screenshot: titolo dell'hero
+  (`components/routehub/TopOverlay.tsx`, condiviso da Guida/Resoconto) con `line-clamp-3`/
+  `line-clamp-2` invece di andare a capo senza limiti (attenzione: mai combinato con un'altra
+  utility `display` nella stessa classe — bug noto già documentato altrove nel repo,
+  `BottomGallery.tsx`, dove `block` disattivava silenziosamente il clamp); riga dell'indice del
+  Diario (`DiarioIndice.tsx`) con ellissi invece di andare a capo e spezzare l'altezza uniforme della
+  riga. Titolo completo sempre raggiungibile (`title` HTML nativo, o aprendo il resoconto/la guida).
+- **P-M7 — IMPLEMENTATO**: l'anello "Voto" (`RatingGaugeBadge.tsx`) ha ora una stella nell'angolo
+  (stessa icona del bottone "Vota bellezza" che lo apre) — riconoscibile come "l'ho scelto io" a
+  colpo d'occhio, senza toccare `TrailScoreGaugeBadge.tsx` (l'anello del Comfort TrailScore, ma
+  anche un componente condiviso con molte altre schermate che non andava alterato per questo).
+
+`npx tsc --noEmit` e `next lint` puliti su tutti i file toccati in questo giro.
+
+- **P-O1/P-O2 — IMPLEMENTATO**: nuovo `components/resoconto/NextStepBanner.tsx`, montato in fondo
+  a `ReportReader.tsx` (dopo l'ultima sezione dati/racconto, prima degli strumenti "Pubblica PDF" —
+  print:hidden, non ha senso in un PDF stampato). Sempre presente: CTA "Pianifica la prossima
+  uscita" → `/upload?tab=gpx` (P-O1). Condizionale: se ci sono badge appena sbloccati, una riga
+  "🎉 Hai sbloccato N nuovi badge!" con link a `/statistiche?tab=traguardi` (P-O2) — stessa identica
+  logica di calcolo/dedup già usata da `TabTraguardi.tsx`, estratta in `lib/badgesSeen.ts` (stessa
+  chiave `localStorage`) così un badge festeggiato qui non si ripete in Statistiche e viceversa.
+  `ReportReader` non riceve già `activities`/`streaks` (ha una sola `activity`): il banner li carica
+  da sé (`getAllActivities` + `computeStreaks`, stesse funzioni già usate altrove) invece di far
+  risalire quel dato attraverso tutta la catena di prop del reader.
+
+`npx tsc --noEmit` e `next lint` puliti su tutti i file toccati in questo giro.
+
 ### P2 — miglioramento sostanziale, non bloccante
-12. Aggiungere righe descrittive alle tre sotto-modalità di import GPX (P-M3) — nota: lo screenshot della
-    schermata "Importa un percorso" di Navigator mostra un buon esempio di testo esplicativo ("Come
-    funziona") da cui prendere spunto anche per Dtrek web.
-13. Sostituire il `confirm()` nativo con il pattern Sheet/popover coerente col resto dell'app (P-M4).
-14. Preferire etichette in linguaggio naturale sulle card di Bacheca, spostando le sigle tecniche nel
-    solo pannello di dettaglio (P-M5) — vale anche per "TEI" in Impostazioni.
-15. Troncare/gestire i titoli GPX anomali invece di mostrarli per intero senza limiti (P-M6).
-16. Differenziare visivamente l'anello "Voto" da quello "Comfort TrailScore" (P-M7).
-17. Chiudere il ciclo utente con un CTA "Pianifica la prossima uscita" al termine di un Resoconto (P-O1),
-    magari accompagnato dal riepilogo Traguardi appena sbloccati (P-O2) — il sistema di badge esiste già
-    ed è ben fatto, va solo mostrato al momento giusto.
+12. ~~Aggiungere righe descrittive alle tre sotto-modalità di import GPX~~ — **IMPLEMENTATO** (P-M3).
+13. ~~Sostituire il `confirm()` nativo con il pattern Sheet/popover coerente col resto dell'app~~ —
+    **IMPLEMENTATO** (P-M4).
+14. ~~Preferire etichette in linguaggio naturale sulle card di Bacheca~~ — **VERIFICATO/IMPLEMENTATO**
+    (P-M5): la griglia di card con sigle non esiste più, corretta l'unica violazione residua.
+15. ~~Troncare/gestire i titoli GPX anomali~~ — **IMPLEMENTATO** (P-M6).
+16. ~~Differenziare visivamente l'anello "Voto" da quello "Comfort TrailScore"~~ — **IMPLEMENTATO**
+    (P-M7).
+17. ~~Chiudere il ciclo utente con un CTA "Pianifica la prossima uscita" al termine di un Resoconto
+    (P-O1), magari accompagnato dal riepilogo Traguardi appena sbloccati (P-O2)~~ —
+    **IMPLEMENTATO**: entrambi in un solo banner in fondo al Resoconto.
+
+Con questo, **tutti i P0/P1/P2 dell'audit sono implementati o verificati** (alcuni si sono rivelati
+già risolti da lavoro precedente non tracciato qui, o basati su una premessa non più valida nel
+codice attuale — vedi le note puntuali sopra). Restano solo i P3 (rifiniture) qui sotto.
 
 ### P3 — rifiniture
 18. Micro-label o hint per le icone icon-only della rail del Diario e delle mappe interattive (ripetute

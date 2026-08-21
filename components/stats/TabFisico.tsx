@@ -236,7 +236,7 @@ export default function TabFisico({ activities }: Props) {
       {/* ── Efficienza Verticale (IEV) ── */}
       <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
         <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2 flex-wrap">
-          <Zap className="w-4 h-4 text-amber-600" /> IEV nel Tempo
+          <Zap className="w-4 h-4 text-amber-600" /> Efficienza Verticale nel Tempo
           <InfoButton section="iev" />
         </h3>
         <p className="text-xs text-stone-400 mb-4">

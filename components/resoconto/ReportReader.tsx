@@ -32,6 +32,7 @@ import SectionCard from '@/components/editorial/SectionCard'
 import { ComfortTrailScoreWidget } from '@/components/ComfortTrailScoreWidget'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 import { RatingGaugeBadge } from '@/components/resoconto/RatingGaugeBadge'
+import NextStepBanner from '@/components/resoconto/NextStepBanner'
 import Kicker from '@/components/ui/Kicker'
 import StatCard from '@/components/StatCard'
 import HRChart from '@/components/HRChart'
@@ -943,6 +944,14 @@ export default function ReportReader({
                       )
                     })}
                   </div>
+
+                {/* UX-AUDIT.md P-O1/P-O2 — al termine del racconto/dati, invece di lasciare
+                    l'utente a un vicolo cieco: invito a pianificare la prossima uscita, più
+                    l'eventuale sblocco di nuovi badge (entrambi print:hidden, non hanno senso in
+                    un PDF/racconto stampato). */}
+                <div className="mt-6 print:hidden">
+                  <NextStepBanner />
+                </div>
 
                 {/* ── Pubblica PDF ──────────────────────────────────────────── */}
                 {hasContent && (
