@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
-import { Navigation, Sparkles, ArrowRight, TrendingUp, Flame, BarChart3, Loader2 } from 'lucide-react'
+import { Navigation, Sparkles, MapPin, ArrowRight, TrendingUp, Flame, BarChart3, Loader2 } from 'lucide-react'
 import HubNavBar from '@/components/routehub/HubNavBar'
 import RouteThumb from '@/components/RouteThumb'
 import CuriosityModal from '@/components/bacheca/CuriosityModal'
@@ -125,20 +125,48 @@ export default function BachecaPage() {
     return Math.round(wActs.reduce((s, a) => s + a.distanceMeters / 1000, 0) * 10) / 10
   }, [activities])
 
-  // "Prossima uscita": percorso pianificato attivo con la data più vicina da oggi in poi. Se
-  // nessuno ha una data, il più recente creato (comunque "quello che stavi già pianificando"). Se
-  // non esiste nessun percorso pianificato, null — stato vuoto gestito a parte sotto.
-  const featured = useMemo(() => {
+  // "Percorsi in evidenza": fino a 3, non più solo 1 — un solo percorso "vinceva" per sempre finché
+  // non arrivava un'uscita con data ancora più vicina, restando "in evidenza" sempre lo stesso anche
+  // quando l'utente aveva più uscite pianificate valide da vedere (richiesta esplicita dell'autore
+  // del prodotto). Ordine di priorità, senza mai duplicare lo stesso percorso: (1) uscite con data,
+  // dalla più vicina; (2) preferiti (favorite:true) non già inclusi, dal più recente creato; (3) più
+  // recenti creati non già inclusi. `featured` (il primo della lista) resta l'hero, invariato in
+  // forma — il resto popola la riga sotto.
+  const MAX_FEATURED = 3
+  const featuredList = useMemo(() => {
     const active = planned.filter(h => !h.archivedAt)
-    if (active.length === 0) return null
+    if (active.length === 0) return []
     const today = new Date(); today.setHours(0, 0, 0, 0)
+    const seen = new Set<string>()
+    const result: { hike: PlannedHikeMeta; hasDate: boolean }[] = []
+
     const withDate = active
       .filter(h => h.plannedDate && new Date(h.plannedDate) >= today)
       .sort((a, b) => new Date(a.plannedDate!).getTime() - new Date(b.plannedDate!).getTime())
-    if (withDate.length > 0) return { hike: withDate[0], hasDate: true }
-    const sorted = active.slice().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    return { hike: sorted[0], hasDate: false }
+    for (const h of withDate) {
+      if (result.length >= MAX_FEATURED) break
+      seen.add(h.id); result.push({ hike: h, hasDate: true })
+    }
+
+    const favorites = active
+      .filter(h => h.favorite && !seen.has(h.id))
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    for (const h of favorites) {
+      if (result.length >= MAX_FEATURED) break
+      seen.add(h.id); result.push({ hike: h, hasDate: false })
+    }
+
+    const recent = active
+      .filter(h => !seen.has(h.id))
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    for (const h of recent) {
+      if (result.length >= MAX_FEATURED) break
+      seen.add(h.id); result.push({ hike: h, hasDate: false })
+    }
+
+    return result
   }, [planned])
+  const featured = featuredList[0] ?? null
 
   // Fallback quando non c'è (ancora) un percorso pianificato in evidenza: l'ultima escursione già
   // fatta. Serve sia per le curiosità (il suo poiWiki) sia per la foto dell'hero (la sua copertina
@@ -339,6 +367,39 @@ export default function BachecaPage() {
 
       <div className="max-w-lg mx-auto px-4 pb-10">
 
+        {featuredList.length > 1 && (
+          <div className="mt-4">
+            <p className="font-barlow font-extrabold text-[11px] tracking-[1.5px] uppercase text-stone-400 mb-2">
+              Altre uscite in programma
+            </p>
+            <div className="flex gap-2.5 overflow-x-auto pb-1 -mx-4 px-4" style={{ scrollbarWidth: 'none' }}>
+              {featuredList.slice(1).map(f => (
+                <Link
+                  key={f.hike.id}
+                  href={`/guida/${encodeURIComponent(f.hike.id)}`}
+                  className="shrink-0 w-[170px] bg-white border border-stone-200 rounded-2xl overflow-hidden shadow-sm"
+                >
+                  <div className="relative h-[90px] bg-gradient-to-b from-forest-50 to-stone-50 bg-topography">
+                    {f.hike.routePolyline?.length ? (
+                      <div className="absolute inset-3">
+                        <RouteThumb polyline={f.hike.routePolyline} color="#2d7a3d" strokeWidth={2.5} />
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="p-2.5">
+                    <p className="text-[12.5px] font-semibold text-stone-800 leading-snug line-clamp-2">{f.hike.title}</p>
+                    <p className="text-[11px] text-stone-400 mt-1">
+                      {f.hasDate && f.hike.plannedDate
+                        ? format(new Date(f.hike.plannedDate), 'd MMM', { locale: it })
+                        : `${(f.hike.distanceMeters / 1000).toFixed(1)} km`}
+                    </p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
         {curiosityEntries.length > 0 && (
           <div className="mt-4">
             <p className="font-barlow font-extrabold text-[11px] tracking-[1.5px] uppercase text-stone-400 mb-2">
@@ -348,7 +409,7 @@ export default function BachecaPage() {
               {curiosityEntries.map(entry => (
                 <div key={entry.key} className="shrink-0 w-[230px] bg-white border border-stone-200 rounded-2xl p-3.5 shadow-sm">
                   <div className="flex items-center gap-1.5 mb-1.5">
-                    <Sparkles className="w-3 h-3 text-terra-500 shrink-0" />
+                    <MapPin className="w-3 h-3 text-terra-500 shrink-0" />
                     <span className="text-[9.5px] font-bold uppercase tracking-wide text-stone-400 truncate">{entry.routeTitle}</span>
                   </div>
                   <p className="text-[12px] text-stone-700 leading-snug line-clamp-4">{entry.wiki.extract}</p>

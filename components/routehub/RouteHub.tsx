@@ -27,9 +27,9 @@ export default function RouteHub({
   tabScrollRef, primaryAction, summaryBanner, weatherIcon, onSectionChange,
   scoreBadges, scoreGaugeBadge, scoreBadgesTargetSection, heroPhotos, headerActions, importLabel, onImport,
   subtitle, topOverlayVariant, favoritesFilter, onToggleFavoritesFilter, onToggleFavorite, onCompare,
-  nextOutingFilter, onToggleNextOutingFilter,
+  nextOutingFilter, onToggleNextOutingFilter, autoOpenSection,
 }: RouteHubProps) {
-  const [state, dispatch] = useRouteHubState(initialIndex)
+  const [state, dispatch] = useRouteHubState(initialIndex, autoOpenSection ?? null)
   const [sortBy, setSortBy] = useState<SortKey>('date')
   const [searchQuery, setSearchQuery] = useState('')
   // Vista alternativa alla striscia orizzontale (ExpandedGalleryList.tsx, punto 2 Sezione 3) — un
@@ -44,8 +44,10 @@ export default function RouteHub({
   // Continuous "how open is Screen 2" value (0 closed → 1 fully open), driven live by whichever
   // drag is in progress (open-drag on the closed card, close-drag on the open page's header) and
   // settled by CSS transition otherwise — this is what makes the open/close dissolve smoothly
-  // instead of cutting or sliding abruptly.
-  const [openProgress, setOpenProgress] = useState(0)
+  // instead of cutting or sliding abruptly. Starts at 1 (not 0) when autoOpenSection is set, so a
+  // deep link to one specific route renders already-open on the very first paint — no flash of the
+  // closed cover followed by an animated open the user never asked for.
+  const [openProgress, setOpenProgress] = useState(autoOpenSection ? 1 : 0)
   const [dragLive, setDragLive] = useState(false)
 
   // Keeps openProgress in sync whenever openSection flips through a path that doesn't go through
@@ -87,8 +89,9 @@ export default function RouteHub({
   }
 
   // Keeps RoutePage mounted while any part of the open animation is live (including the tail end
-  // of a close fade-out) instead of vanishing the instant openSection goes null.
-  const [pageMounted, setPageMounted] = useState(false)
+  // of a close fade-out) instead of vanishing the instant openSection goes null. Starts true when
+  // autoOpenSection is set — same reasoning as openProgress above.
+  const [pageMounted, setPageMounted] = useState(!!autoOpenSection)
   useEffect(() => {
     if (isOpen || openProgress > 0) { setPageMounted(true); return }
     const t = setTimeout(() => setPageMounted(false), SHEET_TRANSITION_MS)

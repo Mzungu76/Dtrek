@@ -251,20 +251,35 @@ function projectAndLangFromSource(source?: WikiPage['source']): { lang: string; 
   return { lang: 'it', project: 'wikipedia' }
 }
 
-// `exchars` sotto è un taglio duro a un numero di caratteri, non a un confine di frase — di norma
-// interrompe l'ultima frase a metà (osservato dal vivo nel popup "Leggi tutto"). Qui si arretra
-// fino all'ultima punteggiatura di fine frase (., !, ?) seguita da spazio/a-capo/fine stringa, così
-// il testo mostrato finisce sempre su una frase completa invece che su una parola tronca — un
-// costo minimo di caratteri persi (quasi sempre l'ultima frase incompleta) contro un testo che
-// legge sempre come compiuto. Se non si trova nessuna punteggiatura del genere (testo molto breve o
-// senza punti), il testo originale resta invariato: meglio mostrarlo per intero che tagliarlo alla
-// cieca.
+// L'API extracts (explaintext=1, senza exintro) restituisce le intestazioni di sezione come testo
+// letterale "== Titolo ==" (a qualunque livello, fino a "======") — explaintext toglie il markup
+// inline ma non quello di sezione. Rumore visivo puro per un popup pensato come prosa continua, non
+// un indice — tolte riga per riga, il resto del testo (già diviso in paragrafi da MediaWiki) resta
+// intatto.
+function stripHeadingMarkup(text: string): string {
+  return text
+    .split('\n')
+    .filter(line => !/^\s*={2,}[^=]*={2,}\s*$/.test(line))
+    .join('\n')
+}
+
+// `exchars` sotto è un taglio duro a un numero di caratteri, non a un confine di frase. Quando
+// tronca, l'API stessa aggiunge "..."/"…" in coda — trattarlo come una fine-frase valida (l'ultimo
+// dei tre punti è comunque seguito da fine stringa) vanificherebbe il trim sotto, lasciando il testo
+// troncato esattamente come prima di questa funzione: va rimosso PRIMA di cercare l'ultima frase
+// compiuta nel testo restante. Poi si arretra fino all'ultima punteggiatura di fine frase (., !, ?)
+// seguita da spazio/a-capo/fine stringa, così il testo mostrato finisce sempre su una frase completa
+// invece che su una parola tronca — un costo minimo di caratteri persi (quasi sempre l'ultima frase
+// incompleta) contro un testo che legge sempre come compiuto. Se non si trova nessuna punteggiatura
+// del genere (testo molto breve o senza punti), il testo (senza l'eventuale ellissi finale) resta
+// invariato: meglio mostrarlo per intero che tagliarlo alla cieca.
 function trimToCompleteSentence(text: string): string {
-  const matches = Array.from(text.matchAll(/[.!?](?=\s|$)/g))
-  if (matches.length === 0) return text
+  const withoutTrailingEllipsis = text.replace(/(\s*(\.{3}|…))+\s*$/, '').trimEnd()
+  const matches = Array.from(withoutTrailingEllipsis.matchAll(/[.!?](?=\s|$)/g))
+  if (matches.length === 0) return withoutTrailingEllipsis || text
   const last = matches[matches.length - 1]
-  const cutIndex = (last.index ?? text.length - 1) + 1
-  return text.slice(0, cutIndex).trimEnd()
+  const cutIndex = (last.index ?? withoutTrailingEllipsis.length - 1) + 1
+  return withoutTrailingEllipsis.slice(0, cutIndex).trimEnd()
 }
 
 /**
@@ -287,7 +302,7 @@ export async function fetchWikiFullDetails(wiki: WikiPage): Promise<WikiFullDeta
       .then(data => {
         const page = Object.values(data?.query?.pages ?? {})[0]
         const raw = page?.extract?.trim() || wiki.extract
-        return trimToCompleteSentence(raw)
+        return trimToCompleteSentence(stripHeadingMarkup(raw))
       })
       .catch(() => wiki.extract),
     fetch(`https://${lang}.${project}.org/api/rest_v1/page/media-list/${titleSlug}`)
