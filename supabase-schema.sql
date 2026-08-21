@@ -559,6 +559,7 @@ CREATE TABLE IF NOT EXISTS route_recommendations (
   status        TEXT NOT NULL DEFAULT 'pending', -- 'pending' | 'ok' | 'empty_no_location' | 'error'
   cards         JSONB NOT NULL DEFAULT '[]',     -- [{id, kind:'built'|'found', data}]
   feedback      JSONB NOT NULL DEFAULT '{}',     -- { [cardId]: { value:'like'|'dislike', at } }
+  shown_history JSONB NOT NULL DEFAULT '{}',     -- { [osmId]: { lastShownAt, timesShown } }, per la rotazione
   centroid_lat  DOUBLE PRECISION,
   centroid_lon  DOUBLE PRECISION,
   generated_at  TIMESTAMPTZ,

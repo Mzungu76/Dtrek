@@ -49,6 +49,10 @@ export interface FoundRouteItem {
   // isComfortVerdictStale sotto, mai mostrati direttamente all'utente.
   estimatedDistanceKm?: number | null
   estimatedElevationGainM?: number | null
+  // Vero solo per una card di "Percorsi per te" ripescata tra i preferiti dell'utente perché la
+  // raggiera di percorsi freschi non bastava a riempire il batch (vedi generateRecommendations.ts's
+  // gatherRevisitCandidates) — mai per un risultato di ricerca normale (wizard, AI).
+  isRevisit?: boolean
 }
 
 // Sopra questa soglia relativa, il verdetto/nota dell'LLM (basato sui numeri stimati dal web) è

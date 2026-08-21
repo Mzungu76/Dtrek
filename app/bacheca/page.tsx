@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
-import { Navigation, Sparkles, MapPin, ArrowRight, TrendingUp, Flame, BarChart3, Loader2 } from 'lucide-react'
+import { Navigation, Sparkles, MapPin, ArrowRight, TrendingUp, Flame, BarChart3, Loader2, Heart } from 'lucide-react'
 import HubNavBar from '@/components/routehub/HubNavBar'
 import RouteThumb from '@/components/RouteThumb'
 import CuriosityModal from '@/components/bacheca/CuriosityModal'
@@ -30,14 +30,14 @@ import type { PoiItem } from '@/lib/overpass'
 // interattiva e badge punteggio) qui serve solo titolo/distanza/dislivello/tracciato per una card
 // piccola in riga scorrevole, coerente con lo stile della riga "Curiosità" sopra.
 function recoCardSummary(card: RecommendationCard): {
-  title: string; polyline: [number, number][]; distanceMeters: number; elevationGain: number; hasElevation: boolean
+  title: string; polyline: [number, number][]; distanceMeters: number; elevationGain: number; hasElevation: boolean; isRevisit: boolean
 } {
   if (card.kind === 'found') {
     const d = card.data as FoundRouteItem
-    return { title: d.name, polyline: d.track.routePolyline, distanceMeters: d.track.distanceMeters, elevationGain: d.track.elevationGain, hasElevation: d.track.hasElevation }
+    return { title: d.name, polyline: d.track.routePolyline, distanceMeters: d.track.distanceMeters, elevationGain: d.track.elevationGain, hasElevation: d.track.hasElevation, isRevisit: !!d.isRevisit }
   }
   const d = card.data as ScoredCandidate
-  return { title: `${routeTypeLabel(d.type)} per te`, polyline: d.routePolyline, distanceMeters: d.distanceMeters, elevationGain: d.elevationGain, hasElevation: d.hasElevation }
+  return { title: `${routeTypeLabel(d.type)} per te`, polyline: d.routePolyline, distanceMeters: d.distanceMeters, elevationGain: d.elevationGain, hasElevation: d.hasElevation, isRevisit: false }
 }
 
 // Foto del primo POI Wikipedia arricchito di un percorso pianificato — stessa fonte/priorità di
@@ -509,8 +509,9 @@ export default function BachecaPage() {
                       <div className="absolute inset-3">
                         <RouteThumb polyline={s.polyline} color="#2d7a3d" strokeWidth={2.5} />
                       </div>
-                      <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-full bg-terra-600/90 text-white text-[9px] font-semibold uppercase tracking-wide">
-                        <Sparkles className="w-2.5 h-2.5" /> Consigliato
+                      <div className={`absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-white text-[9px] font-semibold uppercase tracking-wide ${s.isRevisit ? 'bg-forest-600/90' : 'bg-terra-600/90'}`}>
+                        {s.isRevisit ? <Heart className="w-2.5 h-2.5" fill="currentColor" /> : <Sparkles className="w-2.5 h-2.5" />}
+                        {s.isRevisit ? 'Preferito' : 'Consigliato'}
                       </div>
                       {isOpening && (
                         <div className="absolute inset-0 bg-white/75 flex items-center justify-center">
