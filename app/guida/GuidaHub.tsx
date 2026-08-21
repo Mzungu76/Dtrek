@@ -986,6 +986,10 @@ export default function GuidaHub({ id }: { id?: string }) {
         mode="guida"
         items={displayItems}
         initialIndex={initialIndex}
+        // Solo per un arrivo da link diretto a UN percorso preciso (id passato dal chiamante, es.
+        // /guida/[id] raggiunto dal CTA "Vai al percorso"/"Naviga" della Home) — mai per la lista
+        // generica /guida (id assente), dove la copertina chiusa resta il punto di partenza giusto.
+        autoOpenSection={id ? 'featured' : undefined}
         favoritesFilter={favoritesFilter}
         nextOutingFilter={nextOutingFilter}
         onToggleNextOutingFilter={() => setNextOutingFilter(v => !v)}

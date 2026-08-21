@@ -1133,6 +1133,58 @@ causa osservata su questo account specifico. Non essendo riuscito a riprodurre i
 disponibili, resta da chiarire con l'autore quale riga di card esattamente mostra i doppioni (e
 idealmente uno screenshot) prima di poter intervenire nel codice con sicurezza.
 
+**Sessione successiva — sei segnalazioni ulteriori, tutte diagnosticate e corrette tranne "le card si
+ripetono" (non riconfermata anche in questo giro, resta aperta come sopra):**
+
+- **Problema grosso — il wizard/passo regalo tornava a ripresentarsi da solo, anche ad app già
+  avviata**: causa reale trovata in `lib/sync/userSettingsStore.ts`, non in
+  `GiftRouteStep.tsx`/`OnboardingWizard.tsx` (già corretti nel giro precedente). `updateUserSettings`
+  scrive subito in cache locale ma mette in coda l'invio al server con un debounce di **15 secondi**
+  (`scheduleFlush`, `lib/sync/syncEngine.ts`). Nel frattempo, un "pull ambientale" (l'app torna in
+  primo piano, si riconnette — `registerPullTask`, scatta a ogni cambio di visibilità) chiamava
+  `refreshUserSettings()` **senza alcun controllo** su scritture locali ancora in coda, sovrascrivendo
+  la cache con lo snapshot vecchio dal server — cancellando il flag appena scritto (es.
+  `gift_route_offered_at` dopo aver saltato l'onboarding) prima ancora che il flush avesse la
+  possibilità di partire. `OnboardingGate.tsx` rilegge quel flag a ogni evento di autenticazione:
+  trovandolo di nuovo assente, il passo tornava a comparire. Stesso meccanismo di protezione già
+  esistente per le entità a lista (`getPendingRecordIds`, usato da `registerListReconciler` in
+  `lib/sync/pullEngine.ts` per lo stesso motivo) ora applicato anche a questa, l'unica entità a riga
+  singola: il pull ambientale salta il refresh se c'è ancora una scrittura in coda per
+  `user_settings`; il refresh chiamato dal flusher subito dopo un invio riuscito resta invece SENZA
+  quel controllo (altrimenti darebbe un falso positivo, dato che la riga outbox non è ancora stata
+  rimossa in quel momento preciso — avviene dopo, in `syncEngine.ts`'s `flush()`).
+- **Icona della card "Curiosità"**: `Sparkles` (associata a "generato dall'AI" nel resto del
+  prodotto, es. il badge "Su misura per te") sostituita con `MapPin` — questa funzione non usa AI
+  (POI+Wikipedia, vedi sopra), l'icona non doveva suggerire il contrario.
+- **Popup ancora troncato con puntini di sospensione**: causa reale del fix precedente non bastare —
+  l'API `extracts` di Wikipedia, quando tronca per `exchars`, **aggiunge lei stessa `"..."`/`"…"` in
+  coda**; l'ultimo di quei tre punti risultava comunque "seguito da fine stringa", quindi il trim
+  precedente lo trattava come una fine-frase valida e non tagliava nulla. `trimToCompleteSentence`
+  ora toglie prima l'eventuale ellissi finale, poi cerca l'ultima frase compiuta nel testo rimasto.
+- **Simboli "==" nel testo**: l'API `extracts` (senza `exintro`) restituisce le intestazioni di
+  sezione come testo letterale `"== Titolo =="` — `explaintext` toglie il markup inline ma non
+  quello di sezione. Nuova `stripHeadingMarkup()` toglie quelle righe prima del trim, lasciando solo
+  prosa continua.
+- **Percorso in evidenza sempre lo stesso, anche cambiando data — ora fino a 3**: implementata la
+  proposta dell'autore: `featuredList` (`app/bacheca/page.tsx`) sostituisce il singolo `featured` con
+  fino a 3 percorsi distinti, ordine di priorità (1) con data, dalla più vicina, (2) preferiti
+  (`favorite:true`) non già inclusi, (3) più recenti creati non già inclusi. Il primo resta l'hero
+  (forma invariata); gli altri 1-2 popolano una nuova riga scorrevole "Altre uscite in programma"
+  subito sotto, stesso stile compatto delle righe "Percorsi per te"/"Curiosità", link diretto a
+  `/guida/[id]` di quel percorso (già salvato, nessun salvataggio da rifare).
+- **"Vai al percorso"/"Naviga" apriva la copertina chiusa invece della scheda**: `RouteHub.tsx`
+  (usato sia da `/guida` in lista sia da `/guida/[id]` per un percorso preciso) parte SEMPRE con
+  `openSection: null` (copertina chiusa, "trascinabile" per aprirla) — corretto per la navigazione a
+  lista, sbagliato per un link diretto a un percorso già scelto, dove l'intento è chiaro e la
+  copertina chiusa è solo un tap in più senza motivo. Nuovo prop opzionale `autoOpenSection`
+  (`components/routehub/types.ts`, propagato in `useRouteHubState.ts`) fa partire Screen 2 già
+  aperta sulla sezione indicata — `GuidaHub.tsx` lo passa solo quando riceve un `id` esplicito (il
+  caso `/guida/[id]`), mai per la lista generica `/guida` senza id, dove la copertina chiusa resta il
+  punto di partenza corretto. `ResocontoHub.tsx` (altro consumatore di `RouteHub`) non tocca il nuovo
+  prop, nessun cambiamento per lui.
+
+`npx tsc --noEmit` e `next lint` puliti su tutti i file toccati in questo giro.
+
 **"Percorsi per te" — diagnosi della causa reale del malfunzionamento (sessione successiva) e fix
 applicato**: verificato in produzione (query diretta su `route_recommendations` via Supabase MCP)
 che la riga dell'account owner è ferma da quasi un mese (`generated_at` 2026-07-24, `status='ok'`

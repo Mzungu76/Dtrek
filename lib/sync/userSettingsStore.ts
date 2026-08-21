@@ -14,7 +14,7 @@
  */
 
 import { lsGet, lsSet, LS_KEYS, obEnqueue } from '@/lib/localStore'
-import { registerEntityFlusher, scheduleFlush } from './syncEngine'
+import { registerEntityFlusher, scheduleFlush, getPendingRecordIds } from './syncEngine'
 import { registerPullTask } from './pullEngine'
 import { isStaleSwResponse } from '@/lib/apiFetch'
 
@@ -160,4 +160,23 @@ registerEntityFlusher(ENTITY_TYPE, async (rows) => {
 // A single small row per user — cheap enough to just re-fetch on every pull cycle (app open,
 // reconnect, becoming visible) instead of building list/digest machinery for one record. See
 // lib/sync/pullEngine.ts.
-registerPullTask(async () => { await refreshUserSettings() })
+//
+// NON usa refreshUserSettings() direttamente: quella sovrascrive la cache SENZA controllare se
+// c'è ancora una scrittura locale in coda per questo record — bug reale osservato in produzione
+// (DTREK-AUDIT.md/UX-AUDIT.md): un pull "ambientale" come questo può scattare in qualunque momento
+// (l'app torna in primo piano, si riconnette) DENTRO la finestra di debounce di 15s prima che il
+// flush parta (o più a lungo, se il flush stesso è in backoff) — se in quella finestra arriva,
+// riporta indietro il record ancora vecchio dal server e CANCELLA un campo appena scritto in
+// locale (es. gift_route_offered_at marcato subito dopo aver saltato l'onboarding), facendo
+// ripresentare il passo di onboarding "da solo" all'utente. getPendingRecordIds è lo stesso
+// meccanismo già usato da lib/sync/pullEngine.ts's registerListReconciler per lo stesso motivo
+// sulle entità a lista — qui applicato anche a questa, l'unica entità a riga singola. Il flusher
+// sopra (riga 156) resta invece SENZA questo controllo di proposito: quando lo chiama sa già che
+// il server ha appena ricevuto la sua scrittura, anche se la riga outbox non è ancora stata
+// rimossa dalla coda locale (avviene dopo, in syncEngine.ts's flush()) — qui il controllo
+// darebbe un falso positivo e salterebbe un refresh legittimo.
+registerPullTask(async () => {
+  const pending = await getPendingRecordIds(ENTITY_TYPE)
+  if (pending.has(RECORD_ID)) return
+  await refreshUserSettings()
+})

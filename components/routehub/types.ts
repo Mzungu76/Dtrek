@@ -81,6 +81,12 @@ export interface RouteHubProps {
   mode: HubMode
   items: RouteHubItem[]
   initialIndex: number
+  /** Se presente, Screen 2 (RoutePage) parte già aperta su questa sezione invece della copertina
+   *  chiusa di default — per un arrivo da un link diretto a UN percorso preciso (es. il CTA "Vai al
+   *  percorso"/"Naviga" della Home), dove l'intento è già chiaro e passare comunque dalla copertina
+   *  chiusa sarebbe un tap in più senza motivo. Assente/undefined per la navigazione a lista (es.
+   *  `/guida` senza id), dove la copertina chiusa resta il punto di partenza corretto. */
+  autoOpenSection?: SectionKind
   /** Called (debounced) whenever the current route settles on a new index — used to sync the URL. */
   onIndexChange?: (item: RouteHubItem, index: number) => void
   /** 'continuous': Screen 2 is a single scroll hosting renderSection('featured', ...) (Guida's
