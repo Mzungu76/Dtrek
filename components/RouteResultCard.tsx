@@ -207,9 +207,15 @@ export function FoundRouteCard({ data, onChoose, feedback, selectable, onOpen3D 
         {onOpen3D && <Map3DChip onOpen3D={onOpen3D} />}
       </div>
       <div className="p-4 space-y-2.5">
-        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide bg-terra-50 text-terra-700">
-          <Sparkles className="w-3 h-3" /> Percorso trovato
-        </span>
+        {data.isRevisit ? (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide bg-forest-50 text-forest-700">
+            <Heart className="w-3 h-3" fill="currentColor" /> Uno dei tuoi preferiti
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide bg-terra-50 text-terra-700">
+            <Sparkles className="w-3 h-3" /> Percorso trovato
+          </span>
+        )}
 
         <div>
           <h4 className="font-display text-base font-semibold text-stone-800">{data.name}</h4>

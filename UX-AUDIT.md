@@ -1342,6 +1342,40 @@ dati non dipende più solo da lui. Lato pagina (`app/percorsi-per-te/page.tsx`),
 disponibile" che veniva mostrato ogni volta che il bootstrap superava il tetto morbido.
 `npx tsc --noEmit` pulito, `next lint` pulito sui file toccati.
 
+**"Percorsi per te" — meccanismo di rotazione/personalizzazione (sessione successiva)**: richiesto
+dall'autore un modo "intelligente e non limitante" per evitare di riproporre sempre la stessa
+cinquina in una zona con pochi sentieri mappati vicini, con variante esplicita quando anche quello
+non basta invece di limitarsi a mostrare meno di 5 card. Implementato in
+`lib/routeBuilder/generateRecommendations.ts`, nuova colonna `route_recommendations.shown_history`
+(`supabase/migrations/add_recommendations_shown_history.sql`, applicata in produzione):
+- **Esclusione permanente**: un percorso con feedback "non fa per me", o già presente nella libreria
+  dell'utente (`planned_hikes.osm_relation_id`, da qualunque origine) non viene più riproposto come
+  "nuovo" — prima il feedback veniva raccolto ma non usato per nulla (documentato esplicitamente nel
+  codice come "prossimo passo, non ancora costruito"). Corretta anche la potatura del feedback in
+  `refreshRecommendationsForUser`: un dislike deve sopravvivere anche quando la sua card esce dal
+  batch corrente — è proprio quel feedback a tenerla esclusa nei giri successivi, quindi potarlo alla
+  prima scomparsa dal batch (comportamento originale, pensato solo per i "mi piace" UI-only) avrebbe
+  annullato l'esclusione al giro dopo.
+- **Rotazione**: la ricerca per raggio ora valuta l'intero pool eligibile (fino a 20 candidati dalla
+  cache `trails`, non solo i primi 5 più vicini) e sceglie per bucket di "quanto tempo fa mostrato"
+  (mai mostrato > mostrato ≥14gg fa > mostrato di recente, quest'ultimo comunque non escluso) con un
+  piccolo jitter di distanza per rompere le parità — così due generazioni in una zona povera di
+  sentieri non pescano meccanicamente sempre nello stesso ordine.
+- **Raggio esteso**: aggiunto un quinto giro a 80km (prima il massimo era 40km) — mai il primo
+  tentativo, solo se i raggi più stretti non bastano; i tetti morbidi già esistenti per raggio/totale
+  restano invariati e continuano a impedire sforamenti.
+- **Livello D — "Rivediamo un tuo preferito"**: quando anche raggiera+rotazione non bastano a
+  riempire il batch, si ripescano i percorsi che l'utente ha già segnato preferito
+  (`planned_hikes.favorite=true`), etichettati chiaramente come tali (`isRevisit`, badge "Uno dei tuoi
+  preferiti"/"Preferito" con cuore pieno in `RouteResultCard.tsx` e `app/bacheca/page.tsx`) così
+  l'utente capisce che è un ripasso volontario, non una scoperta nuova.
+- **Cessazione silenziosa**: se anche il ripescaggio preferiti non basta, il batch resta più corto di
+  5 card senza alcun ulteriore tentativo forzato né messaggio d'errore — `status` resta `'ok'` con
+  qualunque numero di card da 0 in su, esattamente come già succedeva prima per il caso "pool
+  esaurito"; non implementata alcuna escalation aggiuntiva (retry più aggressivi, candidati fuori
+  target) proprio per rispettare questo vincolo esplicito dell'autore.
+`npx tsc --noEmit` e `next lint` puliti.
+
 **Miglioramenti aperti, emersi verificando la Fase 2 dal vivo** (non ancora implementati):
 - **Popup "Leggi tutto" — IMPLEMENTATO**: la card di curiosità non porta più subito fuori
   dall'app con un link Wikipedia in evidenza (verde). Mostra "Leggi tutto", che apre un popup con

@@ -59,6 +59,15 @@ export interface GenerateRecommendationsResult {
   centroid: { lat: number; lon: number } | null
 }
 
+// Bookkeeping di rotazione per un singolo osmId — vedi shown_history su route_recommendations
+// (supabase/migrations/add_recommendations_shown_history.sql). `timesShown` non è ancora usato per
+// nessuna decisione (solo lastShownAt lo è, vedi rotationBucket sotto) ma si tiene comunque: è quasi
+// gratis da mantenere e utile diagnosticamente ("quante volte gli abbiamo già proposto questo?").
+export interface ShownEntry {
+  lastShownAt: string
+  timesShown: number
+}
+
 // Condivisa con app/api/cron/refresh-recommendations/route.ts (quando una riga va ripresa dal
 // sweep) e app/api/percorsi-per-te/route.ts (quando una riga dirty/stale va rigenerata al volo su
 // una visita reale, invece di aspettare il prossimo giro del cron — vedi il commento su
@@ -75,10 +84,15 @@ const DEFAULT_NEW_USER_DISTANCE_KM = 6
 // già raggiunto TOTAL_CARDS — mai il contrario, un risultato più vicino è sempre preferibile a uno
 // più lontano. Valori scelti per coprire sia chi vive già in montagna (5km spesso bastano) sia chi
 // deve allontanarsi parecchio dalla città per trovare sentieri (40km).
-const SEARCH_RADII_KM = [5, 10, 20, 40]
+// 80km in coda (oltre i 40 di prima) — mai il primo tentativo, ci si arriva solo se i raggi più
+// stretti non hanno bastato: è una "gita più lontana", non più la zona abituale, ma resta preferibile
+// a mostrare sempre la stessa cinquina esaurita o niente affatto. Il tetto complessivo sotto
+// (TOTAL_RING_BUDGET_MS) e il controllo prima di ogni nuovo raggio impediscono comunque che questo
+// quinto giro faccia sforare il tempo, esattamente come già succede oggi con 4 raggi.
+const SEARCH_RADII_KM = [5, 10, 20, 40, 80]
 // Tetto complessivo di riserva sull'intera raggiera (tutti i raggi messi insieme) — ridondante nel
 // caso normale, dato che ogni singolo raggio ha già il proprio tetto morbido più stretto
-// (PER_RADIUS_SOFT_DEADLINE_MS, vedi sotto: 4 raggi × 15s = 60s nel caso peggiore), ma resta come
+// (PER_RADIUS_SOFT_DEADLINE_MS, vedi sotto: 5 raggi × 15s = 75s nel caso peggiore), ma resta come
 // seconda rete di sicurezza che interrompe la raggiera TRA un raggio e l'altro, prima ancora di
 // iniziarne uno nuovo. Con margine reale sotto il tetto morbido di 45s del bootstrap di
 // app/api/percorsi-per-te/route.ts (e sotto il budget per-utente del cron).
@@ -118,6 +132,47 @@ async function deriveOrigin(userId: string): Promise<{ lat: number; lon: number 
   }
 
   return null
+}
+
+// Percorsi con feedback "non fa per me" o già presenti nella libreria dell'utente (planned_hikes,
+// da qualunque origine: questo stesso generatore, ricerca AI, GPX importato...) — mai riproposti come
+// "nuovo" suggerimento: un dislike è un segnale esplicito, un percorso già salvato non è più una
+// novità per chi lo ha. Letto insieme allo storico di rotazione (shown_history) perché entrambi
+// vivono sulla stessa riga route_recommendations — una sola query invece di due.
+async function loadPersonalization(userId: string): Promise<{ excludedOsmIds: Set<number>; shownHistory: Record<string, ShownEntry> }> {
+  const [{ data: rec }, { data: planned }] = await Promise.all([
+    supabase.from('route_recommendations').select('feedback, shown_history').eq('user_id', userId).maybeSingle(),
+    supabase.from('planned_hikes').select('osm_relation_id').eq('user_id', userId).not('osm_relation_id', 'is', null),
+  ])
+
+  const excludedOsmIds = new Set<number>()
+  const feedback = (rec?.feedback as Record<string, { value?: string }> | null) ?? {}
+  for (const [cardId, fb] of Object.entries(feedback)) {
+    if (fb?.value !== 'dislike') continue
+    const m = /^found:(\d+)$/.exec(cardId)
+    if (m) excludedOsmIds.add(Number(m[1]))
+  }
+  for (const row of planned ?? []) {
+    const osmId = row.osm_relation_id as number | null
+    if (osmId != null) excludedOsmIds.add(osmId)
+  }
+
+  const shownHistory = (rec?.shown_history as Record<string, ShownEntry> | null) ?? {}
+  return { excludedOsmIds, shownHistory }
+}
+
+// Sopra questa soglia un percorso già mostrato conta come "rivisto abbastanza a lungo fa" — torna
+// in gioco alla pari di uno mai mostrato invece di restare permanentemente in fondo alla fila.
+const ROTATION_COOLDOWN_DAYS = 14
+
+// 0 = mai mostrato (priorità massima), 1 = mostrato ma abbastanza tempo fa, 2 = mostrato di recente
+// (priorità minima, ma NON escluso — a differenza di dislike/già salvato sopra, un percorso visto la
+// scorsa settimana resta un'opzione valida se è l'unica cosa buona vicina, solo l'ultima scelta).
+function rotationBucket(osmId: number, shownHistory: Record<string, ShownEntry>): 0 | 1 | 2 {
+  const entry = shownHistory[String(osmId)]
+  if (!entry) return 0
+  const daysSince = (Date.now() - new Date(entry.lastShownAt).getTime()) / 86_400_000
+  return daysSince >= ROTATION_COOLDOWN_DAYS ? 1 : 2
 }
 
 function bboxFromPolyline(polyline: [number, number][]): { minLat: number; maxLat: number; minLon: number; maxLon: number } {
@@ -162,12 +217,13 @@ async function cacheResolvedTrail(candidate: HikingRouteCandidate, track: Resolv
   }
 }
 
-// `seen` traccia gli osmId già raccolti nei raggi precedenti di QUESTA generazione — senza questo,
-// allargare il raggio da 5 a 10km ripresenterebbe (e ri-arricchirebbe inutilmente) gli stessi
-// percorsi già trovati al raggio più stretto, dato che un bbox più grande include sempre quello
-// più piccolo.
+// `seen` traccia gli osmId già raccolti (o comunque valutati e scartati) nei raggi precedenti di
+// QUESTA generazione — senza questo, allargare il raggio da 5 a 10km ripresenterebbe (e
+// ri-arricchirebbe inutilmente) gli stessi percorsi già considerati al raggio più stretto, dato che
+// un bbox più grande include sempre quello più piccolo.
 async function gatherFoundCandidates(
   origin: { lat: number; lon: number }, targetDistanceKm: number, radiusKm: number, wanted: number, seen: Set<number>,
+  excludedOsmIds: Set<number>, shownHistory: Record<string, ShownEntry>,
 ): Promise<FoundRouteItem[]> {
   const items: FoundRouteItem[] = []
 
@@ -178,18 +234,29 @@ async function gatherFoundCandidates(
   // morbido per raggio scadeva prima che questa ri-elaborazione finisse, anche con la cache piena).
   try {
     const cached = await findCachedTrailsNearPoint(origin.lat, origin.lon, radiusKm, 20)
+    // Fino a 20 candidati eligibili per raggio (non solo i primi `wanted`) — la selezione finale
+    // sotto pesca da qui per rotazione, non solo per vicinanza, quindi serve vedere l'intero pool
+    // disponibile a questo raggio prima di scegliere. Un piccolo jitter (± metà della soglia di
+    // "vicino") rompe la parità tra candidati quasi equidistanti, così due generazioni diverse non
+    // scelgono meccanicamente sempre nello stesso ordine anche a parità di bucket di rotazione.
+    const JITTER_M = 400
     const candidates = cached
       .filter(row => row.distanceKm != null && Math.abs(row.distanceKm - targetDistanceKm) <= targetDistanceKm * 0.5)
-      .filter(row => !seen.has(row.osmRelationId))
+      .filter(row => !seen.has(row.osmRelationId) && !excludedOsmIds.has(row.osmRelationId))
       .map(row => ({
         row,
-        d: haversineM(origin.lat, origin.lon, (row.bbox.minLat + row.bbox.maxLat) / 2, (row.bbox.minLon + row.bbox.maxLon) / 2),
+        bucket: rotationBucket(row.osmRelationId, shownHistory),
+        d: haversineM(origin.lat, origin.lon, (row.bbox.minLat + row.bbox.maxLat) / 2, (row.bbox.minLon + row.bbox.maxLon) / 2) + Math.random() * JITTER_M,
       }))
-      .sort((a, b) => a.d - b.d)
+      .sort((a, b) => a.bucket - b.bucket || a.d - b.d)
+
+    // Segnati come visti SUBITO, per l'intero pool eligibile a questo raggio — non solo per i
+    // `wanted` poi effettivamente scelti: un candidato più vicino ha già avuto la sua occasione qui,
+    // ripresentarlo a un raggio più largo (che lo includerebbe di nuovo) non aggiungerebbe nulla.
+    for (const { row } of candidates) seen.add(row.osmRelationId)
 
     for (const { row } of candidates) {
       if (items.length >= wanted) break
-      seen.add(row.osmRelationId)
       const distanceKm = row.distanceKm as number
       const track: ResolvedTrack = {
         trackPoints: [],
@@ -234,7 +301,7 @@ async function gatherFoundCandidates(
       const relations = await queryHikingRelationsInBbox(minLat, minLon, maxLat, maxLon, 20)
       for (const candidate of relations) {
         if (items.length >= wanted) break
-        if (seen.has(candidate.id)) continue
+        if (seen.has(candidate.id) || excludedOsmIds.has(candidate.id)) continue
         const resolved = await resolveTrackForCandidate({ osmId: candidate.id, gpxUrl: null }, { estimateOnly: true })
         if (!resolved.ok) continue
         seen.add(candidate.id)
@@ -284,9 +351,10 @@ const PER_RADIUS_SOFT_DEADLINE_MS = 15_000
 
 async function gatherFoundCandidatesWithDeadline(
   origin: { lat: number; lon: number }, targetDistanceKm: number, radiusKm: number, wanted: number, seen: Set<number>,
+  excludedOsmIds: Set<number>, shownHistory: Record<string, ShownEntry>,
 ): Promise<FoundRouteItem[]> {
   const outcome = await Promise.race([
-    gatherFoundCandidates(origin, targetDistanceKm, radiusKm, wanted, seen).then(res => ({ kind: 'done' as const, res })),
+    gatherFoundCandidates(origin, targetDistanceKm, radiusKm, wanted, seen, excludedOsmIds, shownHistory).then(res => ({ kind: 'done' as const, res })),
     new Promise<{ kind: 'timeout' }>(resolve => setTimeout(() => resolve({ kind: 'timeout' }), PER_RADIUS_SOFT_DEADLINE_MS)),
   ])
   if (outcome.kind === 'timeout') {
@@ -296,18 +364,84 @@ async function gatherFoundCandidatesWithDeadline(
   return outcome.res
 }
 
+// Ultima spiaggia quando la raggiera (percorsi mai/da tempo mostrati, mai scartati, non ancora in
+// libreria) non basta a riempire il batch — invece di lasciare l'utente con meno di 5 card o
+// forzare candidati scadenti solo per fare numero, si ripesca tra i SUOI stessi percorsi preferiti
+// (planned_hikes.favorite = true), etichettati come tali (isRevisit) così l'utente capisce che è un
+// "ripasso" volontario e non una scoperta nuova. Nessuna ricerca geografica qui: sono già percorsi
+// risolti e salvati, quindi a costo quasi zero (una query + un calcolo puro).
+async function gatherRevisitCandidates(userId: string, excludeOsmIds: Set<number>, wanted: number): Promise<FoundRouteItem[]> {
+  if (wanted <= 0) return []
+  try {
+    const { data } = await supabase
+      .from('planned_hikes')
+      .select('title, distance_meters, elevation_gain, elevation_loss, altitude_max, altitude_min, estimated_time_seconds, route_polyline, osm_relation_id, zone, difficulty, source_url, cached_pois')
+      .eq('user_id', userId)
+      .eq('favorite', true)
+      .not('osm_relation_id', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(20)
+
+    const items: FoundRouteItem[] = []
+    for (const row of data ?? []) {
+      if (items.length >= wanted) break
+      const osmId = row.osm_relation_id as number
+      if (excludeOsmIds.has(osmId)) continue
+      const polyline = (row.route_polyline as [number, number][] | null) ?? []
+      if (!polyline.length) continue
+      excludeOsmIds.add(osmId)
+
+      const track: ResolvedTrack = {
+        trackPoints: [],
+        routePolyline: polyline,
+        distanceMeters: (row.distance_meters as number | null) ?? 0,
+        elevationGain: (row.elevation_gain as number | null) ?? 0,
+        elevationLoss: (row.elevation_loss as number | null) ?? 0,
+        altitudeMax: (row.altitude_max as number | null) ?? 0,
+        altitudeMin: (row.altitude_min as number | null) ?? 0,
+        estimatedTimeSeconds: (row.estimated_time_seconds as number | null) ?? 0,
+        hasElevation: true,
+      }
+      const pois = (row.cached_pois as FoundRouteItem['pois']) ?? []
+      items.push({
+        name: row.title as string,
+        zone: (row.zone as string | null) ?? undefined,
+        difficulty: (row.difficulty as string | null) ?? undefined,
+        description: 'Uno dei tuoi preferiti — vale la pena rifarlo.',
+        sourceUrl: (row.source_url as string | null) ?? undefined,
+        osmId,
+        track,
+        pois,
+        provisionalScore: computeProvisionalScore({
+          routePolyline: track.routePolyline, trackPoints: track.trackPoints, distanceMeters: track.distanceMeters,
+          elevationGain: track.elevationGain, elevationLoss: track.elevationLoss, altitudeMax: track.altitudeMax,
+          altitudeMin: track.altitudeMin, estimatedTimeSeconds: track.estimatedTimeSeconds, pois,
+        }),
+        isRevisit: true,
+      })
+    }
+    return items
+  } catch (e) {
+    console.error('[generateRecommendations] recupero preferiti da rivisitare fallito:', e)
+    return []
+  }
+}
+
 export async function generateRecommendationsForUser(userId: string): Promise<GenerateRecommendationsResult> {
   const origin = await deriveOrigin(userId)
   if (!origin) return { status: 'empty_no_location', cards: [], centroid: null }
 
   const history = await fetchActivitySummary(userId)
   const targetDistanceKm = clampDistanceKm(history.count > 0 ? history.avgDistanceKm : DEFAULT_NEW_USER_DISTANCE_KM)
+  const { excludedOsmIds, shownHistory } = await loadPersonalization(userId)
 
   // Stessa identica procedura, economica e già affidabile, della ricerca "Cerca esistenti" del
   // wizard (app/api/route-build/search/route.ts's tier0: queryHikingRelationsInBbox +
   // resolveTrackForCandidate, nessun grafo/pathfinding) — qui applicata a raggiera perché non parte
   // da un nome/luogo digitato dall'utente ma dal suo punto reale (vedi deriveOrigin): si allarga
-  // solo finché non completa le 5 card totali (o esaurisce i raggi, o il budget).
+  // solo finché non completa le 5 card totali (o esaurisce i raggi, o il budget). Mai un percorso
+  // con dislike o già in libreria (excludedOsmIds); tra quelli buoni, priorità a chi non è mai stato
+  // proposto o non lo è stato di recente (shownHistory, vedi rotationBucket).
   const foundItems: FoundRouteItem[] = []
   const foundSeen = new Set<number>()
   const startedAt = Date.now()
@@ -322,8 +456,19 @@ export async function generateRecommendationsForUser(userId: string): Promise<Ge
     }
 
     const stillWanted = TOTAL_CARDS - foundItems.length
-    const newFound = await gatherFoundCandidatesWithDeadline(origin, targetDistanceKm, radiusKm, stillWanted, foundSeen)
+    const newFound = await gatherFoundCandidatesWithDeadline(origin, targetDistanceKm, radiusKm, stillWanted, foundSeen, excludedOsmIds, shownHistory)
     foundItems.push(...newFound)
+  }
+
+  // Livello D — la raggiera fresca non basta (zona povera di sentieri nuovi/non-scartati): invece
+  // di fermarsi con un batch corto o forzare candidati fuori target solo per fare numero, si
+  // completa con percorsi preferiti dell'utente stesso, chiaramente etichettati come "ripasso"
+  // (isRevisit). Se anche questo non basta, il batch resta più corto di TOTAL_CARDS — nessun
+  // ulteriore tentativo forzato: è una cessazione silenziosa, non un errore (vedi status sotto,
+  // sempre 'ok' con qualunque numero di card da 0 in su).
+  if (foundItems.length < TOTAL_CARDS) {
+    const revisit = await gatherRevisitCandidates(userId, foundSeen, TOTAL_CARDS - foundItems.length)
+    foundItems.push(...revisit)
   }
 
   // Stessa convenzione di logging della ricerca interattiva (kind:'search', vedi tier0 in
@@ -348,22 +493,49 @@ export async function generateRecommendationsForUser(userId: string): Promise<Ge
   return { status: 'ok', cards, centroid: origin }
 }
 
+// Quanto a lungo si tiene traccia di un percorso mostrato, prima di lasciare che shown_history si
+// dimentichi di lui — un JSONB che cresce senza limiti non è mai un problema di correttezza qui
+// (le voci più vecchie semplicemente non contano più per rotationBucket), solo di dimensione riga.
+const SHOWN_HISTORY_PRUNE_AFTER_MS = 180 * 24 * 60 * 60 * 1000
+
 // Genera e salva — unico punto che scrive su route_recommendations, usato sia dal cron sia dal
 // bootstrap al primo accesso a /percorsi-per-te (app/api/percorsi-per-te/route.ts).
 export async function refreshRecommendationsForUser(userId: string): Promise<void> {
   try {
     const result = await generateRecommendationsForUser(userId)
 
-    const { data: existing } = await supabase.from('route_recommendations').select('feedback').eq('user_id', userId).maybeSingle()
-    const prevFeedback = (existing?.feedback as Record<string, unknown> | null) ?? {}
+    const { data: existing } = await supabase.from('route_recommendations').select('feedback, shown_history').eq('user_id', userId).maybeSingle()
+    const prevFeedback = (existing?.feedback as Record<string, { value?: string }> | null) ?? {}
     const validIds = new Set(result.cards.map(c => c.id))
-    const prunedFeedback = Object.fromEntries(Object.entries(prevFeedback).filter(([id]) => validIds.has(id)))
+    // Un "non fa per me" resta per sempre, anche quando il percorso esce dal batch corrente — è
+    // proprio quel feedback a tenerlo escluso dalle generazioni future (vedi loadPersonalization
+    // sopra): se lo si potasse via non appena la card sparisce dal batch (esattamente ciò che
+    // l'esclusione produce), l'esclusione stessa si annullerebbe al giro successivo. Un "mi piace"
+    // resta invece solo UI per la card mostrata — si pota quando esce dal batch, come prima.
+    const prunedFeedback = Object.fromEntries(
+      Object.entries(prevFeedback).filter(([id, fb]) => validIds.has(id) || fb?.value === 'dislike'),
+    )
+
+    const nowIso = new Date().toISOString()
+    const prevShownHistory = (existing?.shown_history as Record<string, ShownEntry> | null) ?? {}
+    const nextShownHistory: Record<string, ShownEntry> = { ...prevShownHistory }
+    for (const card of result.cards) {
+      if (card.kind !== 'found') continue
+      const osmId = (card.data as FoundRouteItem).osmId
+      if (osmId == null) continue
+      const key = String(osmId)
+      nextShownHistory[key] = { lastShownAt: nowIso, timesShown: (nextShownHistory[key]?.timesShown ?? 0) + 1 }
+    }
+    for (const [key, entry] of Object.entries(nextShownHistory)) {
+      if (Date.now() - new Date(entry.lastShownAt).getTime() > SHOWN_HISTORY_PRUNE_AFTER_MS) delete nextShownHistory[key]
+    }
 
     await supabase.from('route_recommendations').upsert({
       user_id: userId,
       status: result.status,
       cards: result.cards,
       feedback: prunedFeedback,
+      shown_history: nextShownHistory,
       centroid_lat: result.centroid?.lat ?? null,
       centroid_lon: result.centroid?.lon ?? null,
       generated_at: new Date().toISOString(),
