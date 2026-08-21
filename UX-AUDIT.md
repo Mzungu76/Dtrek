@@ -1647,13 +1647,36 @@ Con questo, **tutti i P0/P1/P2 dell'audit sono implementati o verificati** (alcu
 già risolti da lavoro precedente non tracciato qui, o basati su una premessa non più valida nel
 codice attuale — vedi le note puntuali sopra). Restano solo i P3 (rifiniture) qui sotto.
 
+### Stato implementazione — P3 (sessione 2026-08-21, quinto giro)
+
+- **P-L1/P-L2 — IMPLEMENTATO insieme (rail del Diario)**: nuovo `DiarioOnboardingSheet.tsx`,
+  mostrato una sola volta per dispositivo (`lib/diario/diarioOnboardingPref.ts`, stesso principio
+  di `lib/navigation/navOnboardingPref.ts`) alla primissima apertura del Diario, PRIMA di
+  incontrare le 8 icone solo-icona delle due rotaie — un unico pannello che copre sia il cambio di
+  paradigma (scroll verticale libro vs. swipe orizzontale delle altre sezioni, P-L2) sia il nome/
+  scopo di ciascuna icona (P-L1), stesse icone dei controlli veri. Riapribile in ogni momento da un
+  nuovo bottone "?" in fondo alla rotaia destra — stesso pattern già collaudato in Navigator
+  (`NavOnboardingSheet.tsx`/`ActiveNavigationView.tsx`), non un'invenzione nuova.
+- **P-L1 — non esteso ai controlli delle mappe interattive**: la parte di P-L1 sulla fila di icone
+  ripetuta su ogni mappa (orientamento, direzione, 3D, centra, espandi, blocca) vive dentro
+  `components/RouteMap3D.tsx`, un file da 5000+ righe non ancora mappato in dettaglio in questa
+  sessione — il rischio di un tocco esteso a quel file non è giustificato per una rifinitura P3
+  (priorità più bassa dell'intero elenco). Lasciato aperto, da riprendere con una sessione dedicata
+  a quel componente specifico se e quando serve.
+- **P-L2/P3 #20 — non eseguibile da qui**: "sessione dedicata di Visual QA su device reale" per la
+  resa PC/tablet richiede hardware e screenshot reali che questo ambiente non ha — resta un'attività
+  per l'autore del prodotto, non automatizzabile in questa sessione.
+
+`npx tsc --noEmit` e `next lint` puliti su tutti i file toccati in questo giro.
+
 ### P3 — rifiniture
-18. Micro-label o hint per le icone icon-only della rail del Diario e delle mappe interattive (ripetute
-    identiche su ogni mappa della stessa pagina) (P-L1).
-19. Un indizio visivo la prima volta che si apre il Diario, per introdurre il cambio di paradigma
-    (scroll verticale libro vs. swipe orizzontale delle altre sezioni) (P-L2).
+18. ~~Micro-label o hint per le icone icon-only della rail del Diario~~ — **IMPLEMENTATO** (P-L1,
+    parte "rail del Diario" — vedi sopra). Parte "mappe interattive" non fatta, vedi nota sopra.
+19. ~~Un indizio visivo la prima volta che si apre il Diario~~ — **IMPLEMENTATO** (P-L2, stesso
+    pannello di cui sopra).
 20. Sessione dedicata di Visual QA su device reale per l'unica area ancora priva di screenshot: la resa
-    su PC/tablet (l'orientamento orizzontale su smartphone non si applica, vedi §10).
+    su PC/tablet (l'orientamento orizzontale su smartphone non si applica, vedi §10) — **non
+    eseguibile da questo ambiente**, richiede hardware reale.
 
 ---
 
