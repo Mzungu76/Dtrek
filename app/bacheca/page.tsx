@@ -231,9 +231,14 @@ export default function BachecaPage() {
   }, [recentActivityIdsKey])
 
   // Curiosità storico-culturali dai POI già arricchiti gratis (Overpass + Wikipedia, nessuna
-  // chiamata AI — vedi GpxUploader/UrlImportUploader/buildHikeFromCandidate) raccolte da TUTTI i
-  // percorsi disponibili: il percorso in evidenza, poi gli altri percorsi pianificati attivi, poi le
-  // uscite già fatte più recenti — non solo dal percorso in evidenza. Un percorso con più POI
+  // chiamata AI — vedi GpxUploader/UrlImportUploader/buildHikeFromCandidate) raccolte SOLO dai
+  // percorsi che l'utente vede già in questa stessa Home: il percorso in evidenza e la riga "Altre
+  // uscite in programma" (featuredList, fino a MAX_FEATURED) — non più da qualunque percorso
+  // pianificato esistesse (anche invisibile qui) né dalle ultime 8 uscite già fatte, per non
+  // mostrare informazioni su percorsi con cui l'utente non ha alcun aggancio visivo sulla Home
+  // (richiesta esplicita dell'autore del prodotto). Le uscite già fatte restano un ripiego, non una
+  // fonte regolare: scattano SOLO quando non c'è alcun percorso pianificato attivo (featuredList
+  // vuota), stesso caso limite già gestito per l'hero/la foto (P-O5). Un percorso con più POI
   // arricchiti contribuisce con più di una curiosità (fino a MAX_POI_PER_ROUTE), non solo la prima:
   // fetchWikiForNamedPois (lib/wikipedia.ts) può restituirne fino a 10 per percorso. Deduplicate per
   // pagina Wikipedia (lo stesso POI raggiunto da percorsi diversi non compare due volte).
@@ -241,29 +246,34 @@ export default function BachecaPage() {
   const MAX_POI_PER_ROUTE = 4
   const MAX_CURIOSITY_CARDS = 20
   const curiosityEntries = useMemo(() => {
-    const entries: { key: string; routeTitle: string; wiki: WikiPage }[] = []
+    const entries: { key: string; routeTitle: string; wiki: WikiPage; polyline?: [number, number][] }[] = []
     const seenWiki = new Set<string>()
-    const addRoute = (title: string | undefined, wikiList: { poi: PoiItem; wiki: WikiPage }[] | undefined) => {
+    const addRoute = (
+      title: string | undefined,
+      wikiList: { poi: PoiItem; wiki: WikiPage }[] | undefined,
+      polyline?: [number, number][],
+    ) => {
       if (!title || !wikiList?.length) return
       let addedForThisRoute = 0
       for (const { wiki } of wikiList) {
         if (entries.length >= MAX_CURIOSITY_CARDS || addedForThisRoute >= MAX_POI_PER_ROUTE) return
         if (seenWiki.has(wiki.url)) continue
         seenWiki.add(wiki.url)
-        entries.push({ key: wiki.url, routeTitle: title, wiki })
+        entries.push({ key: wiki.url, routeTitle: title, wiki, polyline })
         addedForThisRoute++
       }
     }
-    addRoute(featured?.hike.title, featured?.hike.cachedPoiWiki as { poi: PoiItem; wiki: WikiPage }[] | undefined)
-    for (const h of planned) {
-      if (h.archivedAt || h.id === featured?.hike.id) continue
-      addRoute(h.title, h.cachedPoiWiki as { poi: PoiItem; wiki: WikiPage }[] | undefined)
-    }
-    for (const a of recentActivitiesForCuriosity) {
-      addRoute(a.title, activityPoiWikiById[a.id])
+    if (featuredList.length > 0) {
+      for (const f of featuredList) {
+        addRoute(f.hike.title, f.hike.cachedPoiWiki as { poi: PoiItem; wiki: WikiPage }[] | undefined, f.hike.routePolyline)
+      }
+    } else {
+      for (const a of recentActivitiesForCuriosity) {
+        addRoute(a.title, activityPoiWikiById[a.id], a.routePolyline)
+      }
     }
     return entries
-  }, [featured, planned, recentActivitiesForCuriosity, activityPoiWikiById])
+  }, [featuredList, recentActivitiesForCuriosity, activityPoiWikiById])
 
   // Foto dell'hero: catena di fallback (P-O5) — foto propria (solo per un'escursione già fatta,
   // non ha senso per un percorso ancora da percorrere) → foto del POI Wikipedia → tracciato su
@@ -468,7 +478,17 @@ export default function BachecaPage() {
               {curiosityEntries.map(entry => (
                 <div key={entry.key} className="shrink-0 w-[230px] bg-white border border-stone-200 rounded-2xl p-3.5 shadow-sm">
                   <div className="flex items-center gap-1.5 mb-1.5">
-                    <MapPin className="w-3 h-3 text-terra-500 shrink-0" />
+                    {/* Traccia del percorso invece della sola icona MapPin, cosi l'utente associa
+                        anche visivamente l'informazione al percorso a cui appartiene — stessa
+                        posizione/dimensione dell'icona che sostituisce, ripiego su MapPin per un
+                        percorso senza tracciato (es. inserito a mano). */}
+                    {entry.polyline && entry.polyline.length >= 2 ? (
+                      <div className="w-4 h-4 rounded-sm bg-terra-50 shrink-0 p-0.5">
+                        <RouteThumb polyline={entry.polyline} color="#d97220" strokeWidth={5} />
+                      </div>
+                    ) : (
+                      <MapPin className="w-3 h-3 text-terra-500 shrink-0" />
+                    )}
                     <span className="text-[9.5px] font-bold uppercase tracking-wide text-stone-400 truncate">{entry.routeTitle}</span>
                   </div>
                   <p className="text-[12px] text-stone-700 leading-snug line-clamp-4">{entry.wiki.extract}</p>
