@@ -32,10 +32,19 @@ import type { PoiItem } from '@/lib/overpass'
 // piccola in riga scorrevole, coerente con lo stile della riga "Curiosità" sopra.
 function recoCardSummary(card: RecommendationCard): {
   title: string; polyline: [number, number][]; distanceMeters: number; elevationGain: number; hasElevation: boolean; isRevisit: boolean
+  // Perché DTrek propone proprio questo percorso (lib/routeBuilder/generateRecommendations.ts) —
+  // assente per una card 'built' (mai prodotta da generateRecommendationsForUser, solo righe
+  // storiche precedenti alla rimozione di "Su misura" da questa pipeline, vedi il commento in cima
+  // a quel file), ricade sull'etichetta generica nella UI.
+  reasonTag?: string
 } {
   if (card.kind === 'found') {
     const d = card.data as FoundRouteItem
-    return { title: d.name, polyline: d.track.routePolyline, distanceMeters: d.track.distanceMeters, elevationGain: d.track.elevationGain, hasElevation: d.track.hasElevation, isRevisit: !!d.isRevisit }
+    return {
+      title: d.name, polyline: d.track.routePolyline, distanceMeters: d.track.distanceMeters,
+      elevationGain: d.track.elevationGain, hasElevation: d.track.hasElevation, isRevisit: !!d.isRevisit,
+      reasonTag: d.reasonTag,
+    }
   }
   const d = card.data as ScoredCandidate
   return { title: `${routeTypeLabel(d.type)} per te`, polyline: d.routePolyline, distanceMeters: d.distanceMeters, elevationGain: d.elevationGain, hasElevation: d.hasElevation, isRevisit: false }
@@ -600,9 +609,13 @@ export default function BachecaPage() {
                       <div className="absolute inset-3">
                         <RouteThumb polyline={s.polyline} color="#2d7a3d" strokeWidth={2.5} />
                       </div>
-                      <div className={`absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-white text-[9px] font-semibold uppercase tracking-wide ${s.isRevisit ? 'bg-forest-600/90' : 'bg-terra-600/90'}`}>
-                        {s.isRevisit ? <Heart className="w-2.5 h-2.5" fill="currentColor" /> : <Sparkles className="w-2.5 h-2.5" />}
-                        {s.isRevisit ? 'Preferito' : 'Consigliato'}
+                      {/* Report AI sulla Bacheca, 2026-08-22 — "CONSIGLIATO" da solo, identico su
+                          ogni card, non spiegava perché DTrek l'avesse scelta. reasonTag
+                          (lib/routeBuilder/generateRecommendations.ts) ricade su "Consigliato" solo
+                          per righe storiche precedenti a questo campo. */}
+                      <div className={`absolute top-2 left-2 max-w-[calc(100%-16px)] flex items-center gap-1 px-2 py-0.5 rounded-full text-white text-[9px] font-semibold uppercase tracking-wide ${s.isRevisit ? 'bg-forest-600/90' : 'bg-terra-600/90'}`}>
+                        {s.isRevisit ? <Heart className="w-2.5 h-2.5 shrink-0" fill="currentColor" /> : <Sparkles className="w-2.5 h-2.5 shrink-0" />}
+                        <span className="truncate">{s.isRevisit ? 'Preferito' : (s.reasonTag ?? 'Consigliato')}</span>
                       </div>
                       {isOpening && (
                         <div className="absolute inset-0 bg-white/75 flex items-center justify-center">
