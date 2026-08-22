@@ -19,6 +19,7 @@ export type TerritoryRouteCategory = 'planned' | 'suggested'
 
 export interface TerritoryRoute {
   key: string
+  title: string
   polyline: [number, number][]
   category: TerritoryRouteCategory
 }
@@ -41,6 +42,37 @@ interface Props {
   routes?: TerritoryRoute[]
   height?: string
   interactive?: boolean
+}
+
+// Caricamento condiviso a livello di modulo, non per-mount: leaflet.markercluster è un side-effect
+// import (patcha `window.L` invece di esportare qualcosa) e un modulo ESM esegue il proprio corpo
+// UNA SOLA VOLTA in tutto il processo, non a ogni `import()`. Se ogni mount di questo componente
+// creasse la propria copia mutabile di L (vedi il commento sotto sul perché serve una copia) e la
+// assegnasse a window.L, solo il PRIMO mount a montare (qui, la mappa compatta in Bacheca)
+// riceverebbe davvero la patch: i mount successivi (qui, la stessa mappa più grande nel foglio a
+// comparsa) rifarebbero la copia ma il plugin non ci girerebbe più sopra una seconda volta, quindi
+// `L.markerClusterGroup` risulterebbe sistematicamente assente su di loro. Una sola copia,
+// riutilizzata da ogni mount presente e futuro, evita il problema alla radice.
+let leafletWithClusterPromise: Promise<typeof import('leaflet')> | null = null
+function loadLeafletWithCluster() {
+  if (!leafletWithClusterPromise) {
+    leafletWithClusterPromise = import('leaflet').then(async leafletModule => {
+      // leaflet.markercluster è un plugin "vecchio stile" che si aspetta L già globale (come da
+      // un tag <script>, non da un import ESM/CJS) e vi assegna direttamente nuove proprietà
+      // (`L.MarkerClusterGroup = L.FeatureGroup.extend(...)`). Il namespace object restituito da
+      // `import('leaflet')` è però non estensibile per specifica ECMAScript — quell'assegnazione
+      // lanciava un TypeError silenzioso (promise mai catturata) che interrompeva l'inizializzazione
+      // della mappa a metà, PRIMA di disegnare i marker POI e di chiamare fitBounds: da fuori
+      // sembrava che i POI fossero spariti e che lo zoom iniziale ignorasse tracciati/POI. Una copia
+      // semplice (mutabile) risolve: le classi/factory di Leaflet restano le stesse, solo il
+      // contenitore cambia.
+      const L = { ...leafletModule } as typeof leafletModule
+      ;(window as unknown as { L: typeof L }).L = L
+      await import('leaflet.markercluster')
+      return L
+    })
+  }
+  return leafletWithClusterPromise
 }
 
 /**
@@ -71,16 +103,7 @@ export default function TerritoryMap({ pois, routes = [], height = '200px', inte
     if (validPois.length === 0 && validRoutes.length === 0) return
 
     let cancelled = false
-    import('leaflet').then(async L => {
-      if (cancelled || !mapRef.current || mapInstance.current) return
-
-      // leaflet.markercluster è un plugin "vecchio stile" che si aspetta L già globale (come da
-      // un tag <script>, non da un import ESM/CJS) — senza questa riga il suo codice interno
-      // (`L.MarkerClusterGroup = L.FeatureGroup.extend(...)`) lancia un ReferenceError su `L` non
-      // definito appena importato in un bundle Next.js.
-      ;(window as unknown as { L: typeof L }).L = L
-      await import('leaflet.markercluster')
-
+    loadLeafletWithCluster().then(L => {
       if (cancelled || !mapRef.current || mapInstance.current) return
 
       const map = L.map(mapRef.current!, {
@@ -108,6 +131,14 @@ export default function TerritoryMap({ pois, routes = [], height = '200px', inte
           opacity: 0.75,
           smoothFactor: 1.5,
         }).addTo(map)
+        // Stessa etichetta sempre visibile dei POI sotto: senza, un tracciato tra tanti resta solo
+        // una linea colorata senza nome, difficile da individuare quanto i POI lo erano prima del
+        // clustering.
+        line.bindTooltip(route.title, {
+          permanent: true,
+          direction: 'center',
+          className: 'territory-map-label',
+        })
         allBounds.push(line.getBounds())
       }
 
@@ -153,6 +184,11 @@ export default function TerritoryMap({ pois, routes = [], height = '200px', inte
       const ro = new ResizeObserver(() => map.invalidateSize())
       ro.observe(mapRef.current!)
       resizeObserverRef.current = ro
+    }).catch(err => {
+      // La causa reale del bug "POI spariti e zoom iniziale non centrato" (vedi il commento sopra
+      // su leaflet.markercluster) era esattamente questo: un errore qui non arrivava mai a console,
+      // solo un fallimento silenzioso a metà inizializzazione.
+      if (!cancelled) console.error('TerritoryMap: inizializzazione mappa fallita', err)
     })
 
     return () => {

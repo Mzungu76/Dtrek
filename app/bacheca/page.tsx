@@ -331,11 +331,11 @@ export default function BachecaPage() {
   const territoryRoutes = useMemo(() => {
     const planned = featuredList.slice(1)
       .filter(f => f.hike.routePolyline?.length)
-      .map(f => ({ key: `planned-${f.hike.id}`, polyline: f.hike.routePolyline!, category: 'planned' as const }))
+      .map(f => ({ key: `planned-${f.hike.id}`, title: f.hike.title, polyline: f.hike.routePolyline!, category: 'planned' as const }))
     const suggested = recoCards.map(card => {
       const s = recoCardSummary(card)
-      return s.polyline?.length ? { key: `suggested-${card.id}`, polyline: s.polyline, category: 'suggested' as const } : null
-    }).filter((r): r is { key: string; polyline: [number, number][]; category: 'suggested' } => r !== null)
+      return s.polyline?.length ? { key: `suggested-${card.id}`, title: s.title, polyline: s.polyline, category: 'suggested' as const } : null
+    }).filter((r): r is { key: string; title: string; polyline: [number, number][]; category: 'suggested' } => r !== null)
     return [...planned, ...suggested]
   }, [featuredList, recoCards])
   const [territoryMapOpen, setTerritoryMapOpen] = useState(false)
