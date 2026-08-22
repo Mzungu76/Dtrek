@@ -123,6 +123,10 @@ export default function TerritoryMap({ pois, routes = [], height = '200px', inte
       }).addTo(map)
 
       const allBounds: L.LatLngBounds[] = []
+      // Etichette permanenti (route + POI), nell'ordine in cui vince un conflitto di spazio sotto
+      // — vedi declutterLabels più sotto: i tracciati "in programma" vengono prima dei "suggeriti"
+      // perché territoryRoutes (app/bacheca/page.tsx) li costruisce già in quest'ordine.
+      const labelLayers: L.Layer[] = []
 
       for (const route of validRoutes) {
         const line = L.polyline(route.polyline, {
@@ -139,6 +143,7 @@ export default function TerritoryMap({ pois, routes = [], height = '200px', inte
           direction: 'center',
           className: 'territory-map-label',
         })
+        labelLayers.push(line)
         allBounds.push(line.getBounds())
       }
 
@@ -167,10 +172,18 @@ export default function TerritoryMap({ pois, routes = [], height = '200px', inte
             offset: [8, 0],
             className: 'territory-map-label',
           })
+          labelLayers.push(marker)
           clusterGroup.addLayer(marker)
         }
         clusterGroup.addTo(map)
         allBounds.push(clusterGroup.getBounds())
+
+        // Leaflet non nasconde da solo un'etichetta permanente quando due marker/tracciati finiscono
+        // vicini sullo schermo (la sovrapposizione segnalata dall'utente): riprogrammata a ogni
+        // evento che può cambiare CHI è visibile a questo zoom — non solo pan/zoom della mappa, ma
+        // anche 'animationend' del cluster (un marker che (s)compare dal raggruppamento non tocca
+        // né zoomend né moveend).
+        clusterGroup.on('animationend', scheduleDeclutter)
       }
 
       if (allBounds.length > 0) {
@@ -184,6 +197,34 @@ export default function TerritoryMap({ pois, routes = [], height = '200px', inte
       const ro = new ResizeObserver(() => map.invalidateSize())
       ro.observe(mapRef.current!)
       resizeObserverRef.current = ro
+
+      // Tiene solo la prima etichetta di ogni gruppo che si sovrappone sullo schermo (con un
+      // margine), nascondendo le altre — non uno spostamento reciproco (spiderfy esiste già per i
+      // marker raggruppati, non per le etichette testuali), solo un diradamento: a zoom basso più
+      // tracciati/POI restano senza nome finché non si zooma abbastanza da separarli, invece di
+      // un ammasso illeggibile di riquadri bianchi.
+      let declutterRaf: number | null = null
+      function declutterLabels() {
+        const kept: DOMRect[] = []
+        const PAD = 3
+        for (const layer of labelLayers) {
+          const el = layer.getTooltip()?.getElement()
+          if (!el) continue
+          const rect = el.getBoundingClientRect()
+          const overlaps = kept.some(r => !(
+            rect.right + PAD < r.left || r.right + PAD < rect.left ||
+            rect.bottom + PAD < r.top || r.bottom + PAD < rect.top
+          ))
+          el.style.visibility = overlaps ? 'hidden' : ''
+          if (!overlaps) kept.push(rect)
+        }
+      }
+      function scheduleDeclutter() {
+        if (declutterRaf != null) cancelAnimationFrame(declutterRaf)
+        declutterRaf = requestAnimationFrame(() => { declutterLabels(); declutterRaf = null })
+      }
+      map.on('zoomend moveend', scheduleDeclutter)
+      scheduleDeclutter()
     }).catch(err => {
       // La causa reale del bug "POI spariti e zoom iniziale non centrato" (vedi il commento sopra
       // su leaflet.markercluster) era esattamente questo: un errore qui non arrivava mai a console,
