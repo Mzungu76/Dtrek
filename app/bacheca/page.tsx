@@ -479,12 +479,16 @@ export default function BachecaPage() {
                 <div key={entry.key} className="shrink-0 w-[230px] bg-white border border-stone-200 rounded-2xl p-3.5 shadow-sm">
                   <div className="flex items-center gap-1.5 mb-1.5">
                     {/* Traccia del percorso invece della sola icona MapPin, cosi l'utente associa
-                        anche visivamente l'informazione al percorso a cui appartiene — stessa
-                        posizione/dimensione dell'icona che sostituisce, ripiego su MapPin per un
-                        percorso senza tracciato (es. inserito a mano). */}
+                        anche visivamente l'informazione al percorso a cui appartiene — ripiego su
+                        MapPin per un percorso senza tracciato (es. inserito a mano). Nota:
+                        RouteThumb disegna con vectorEffect="non-scaling-stroke", quindi
+                        strokeWidth è in pixel schermo costanti (non scala con il contenitore) —
+                        un valore pensato per l'anteprima da 90px di "Percorsi suggeriti" (2.5)
+                        diventava una macchiolina qui dentro un contenitore da 16px: qui serve un
+                        contenitore leggermente più grande e un tratto più sottile. */}
                     {entry.polyline && entry.polyline.length >= 2 ? (
-                      <div className="w-4 h-4 rounded-sm bg-terra-50 shrink-0 p-0.5">
-                        <RouteThumb polyline={entry.polyline} color="#d97220" strokeWidth={5} />
+                      <div className="w-6 h-6 rounded-md bg-terra-50 shrink-0 p-1">
+                        <RouteThumb polyline={entry.polyline} color="#d97220" strokeWidth={1.5} />
                       </div>
                     ) : (
                       <MapPin className="w-3 h-3 text-terra-500 shrink-0" />
@@ -523,9 +527,14 @@ export default function BachecaPage() {
                     key={card.id}
                     onClick={() => handleOpenReco(card)}
                     disabled={openingRecoId !== null}
-                    className="shrink-0 w-[170px] bg-white border border-stone-200 rounded-2xl overflow-hidden shadow-sm text-left disabled:opacity-60 transition-opacity"
+                    className="shrink-0 w-[170px] flex flex-col bg-white border border-stone-200 rounded-2xl overflow-hidden shadow-sm text-left disabled:opacity-60 transition-opacity"
                   >
-                    <div className="relative h-[90px] bg-gradient-to-b from-forest-50 to-stone-50 bg-topography">
+                    {/* shrink-0 esplicito: senza, la riga (flex + overflow-x-auto, align-items:
+                        stretch di default) allunga ogni card all'altezza della più alta — con un
+                        titolo che va a capo su 2 righe invece di 1 in una card vicina, l'altezza
+                        extra finiva scaricata qui invece che restare confinata al blocco di testo
+                        sotto, spostando badge/mappa in verticale da una card all'altra. */}
+                    <div className="relative h-[90px] shrink-0 bg-gradient-to-b from-forest-50 to-stone-50 bg-topography">
                       <div className="absolute inset-3">
                         <RouteThumb polyline={s.polyline} color="#2d7a3d" strokeWidth={2.5} />
                       </div>
@@ -539,7 +548,7 @@ export default function BachecaPage() {
                         </div>
                       )}
                     </div>
-                    <div className="p-2.5">
+                    <div className="p-2.5 min-w-0">
                       <p className="text-[12.5px] font-semibold text-stone-800 leading-snug line-clamp-2">{s.title}</p>
                       <p className="text-[11px] text-stone-400 mt-1">
                         {(s.distanceMeters / 1000).toFixed(1)} km · {s.hasElevation ? '' : '~'}+{Math.round(s.elevationGain)} m
