@@ -4,8 +4,8 @@
 // rigenerazione dopo un'escursione completata), letto qui in sola lettura tranne il segnale
 // esplicito ♥/✕ per card. Nessuna azione di ricerca propria: per cercare/costruire un percorso su
 // misura si passa dal wizard esistente (components/upload/RouteBuilder.tsx).
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Loader2, MapPin } from 'lucide-react'
 import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import BackLink from '@/app/components/BackLink'
@@ -19,7 +19,21 @@ type PageStatus = 'loading' | 'ok' | 'empty_no_location' | 'error' | 'pending'
 type FeedbackValue = 'like' | 'dislike' | null
 
 export default function PercorsiPerTePage() {
+  return (
+    <Suspense fallback={null}>
+      <PercorsiPerTePageInner />
+    </Suspense>
+  )
+}
+
+// useSearchParams (per ?focus=, arrivo da una card di Bacheca) richiede un confine Suspense
+// intorno al componente che la chiama — stesso pattern di app/upload/page.tsx.
+function PercorsiPerTePageInner() {
   const router = useRouter()
+  // ?focus=<id> — arrivo da una card di "Percorsi suggeriti" in Bacheca (app/bacheca/page.tsx):
+  // porta dritti su QUESTA card specifica invece di lasciare l'utente a cercarla di nuovo in cima
+  // a una lista di 5.
+  const focusCardId = useSearchParams().get('focus')
   const [status, setStatus] = useState<PageStatus>('loading')
   const [cards, setCards] = useState<RecommendationCard[]>([])
   const [feedback, setFeedback] = useState<Record<string, FeedbackValue>>({})
@@ -67,6 +81,11 @@ export default function PercorsiPerTePage() {
     load()
     return () => { cancelled = true }
   }, [])
+
+  useEffect(() => {
+    if (!focusCardId || status !== 'ok') return
+    document.getElementById(`reco-card-${focusCardId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [focusCardId, status])
 
   async function setCardFeedback(cardId: string, value: 'like' | 'dislike') {
     // Ri-toccare lo stesso valore lo azzera (mi piace → mi piace = "annulla"), invece di un
@@ -153,18 +172,20 @@ export default function PercorsiPerTePage() {
                 onLike: () => setCardFeedback(card.id, 'like'),
                 onDislike: () => setCardFeedback(card.id, 'dislike'),
               }
-              return card.kind === 'found'
-                ? (
-                  <FoundRouteCard
-                    key={card.id} data={card.data as FoundRouteItem}
-                    onChoose={() => handleOpen(card)} feedback={controls}
-                  />
-                ) : (
-                  <BuiltRouteCard
-                    key={card.id} data={card.data as ScoredCandidate}
-                    onChoose={() => handleOpen(card)} feedback={controls}
-                  />
-                )
+              const isFocused = focusCardId === card.id
+              return (
+                <div
+                  key={card.id}
+                  id={`reco-card-${card.id}`}
+                  className={isFocused ? 'rounded-2xl ring-2 ring-terra-400 ring-offset-2 ring-offset-stone-50' : undefined}
+                >
+                  {card.kind === 'found' ? (
+                    <FoundRouteCard data={card.data as FoundRouteItem} onChoose={() => handleOpen(card)} feedback={controls} />
+                  ) : (
+                    <BuiltRouteCard data={card.data as ScoredCandidate} onChoose={() => handleOpen(card)} feedback={controls} />
+                  )}
+                </div>
+              )
             })}
           </div>
         )}
