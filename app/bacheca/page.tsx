@@ -4,11 +4,15 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
-import { Navigation, Sparkles, MapPin, ArrowRight, TrendingUp, Flame, BarChart3, Loader2, Heart, Maximize2 } from 'lucide-react'
+import {
+  Navigation, Sparkles, MapPin, ArrowRight, TrendingUp, Flame, BarChart3, Loader2, Heart, Maximize2,
+  Clock, CalendarDays, Compass, BookOpen, Map as MapIcon, Activity,
+} from 'lucide-react'
 import HubNavBar from '@/components/routehub/HubNavBar'
 import RouteThumb from '@/components/RouteThumb'
 import CuriosityModal from '@/components/bacheca/CuriosityModal'
 import TerritoryMap from '@/components/bacheca/TerritoryMap'
+import SectionEyebrow from '@/components/bacheca/SectionEyebrow'
 import Sheet from '@/components/ui/Sheet'
 import { getAllActivities, getActivityById, computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
 import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
@@ -367,7 +371,7 @@ export default function BachecaPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-stone-100">
+      <div className="min-h-screen bg-[#fdfcfa]">
         <div className="sticky top-0 z-40"><HubNavBar /></div>
         <div className="flex items-center justify-center py-32 text-stone-400 gap-3">
           <Loader2 className="w-6 h-6 animate-spin" /><span>Caricamento…</span>
@@ -377,7 +381,7 @@ export default function BachecaPage() {
   }
 
   return (
-    <div className="min-h-screen bg-stone-100">
+    <div className="min-h-screen bg-[#fdfcfa]">
       <div className="sticky top-0 z-40"><HubNavBar /></div>
 
       {/* Hero compatta: prossima uscita pianificata, poi l'ultima uscita fatta, poi il CTA a
@@ -533,15 +537,13 @@ export default function BachecaPage() {
                 un'etichetta: qui iniziano le fasi successive del ciclo utente (a breve → da
                 scoprire → nel tempo), per rendere leggibile a colpo d'occhio in che momento si
                 trova ciascun gruppo di contenuti. */}
-            <p className="font-barlow font-extrabold text-[13px] tracking-[1.5px] uppercase text-terra-600 mb-1">A breve</p>
+            <SectionEyebrow icon={Clock} color="#c05a17" size="md" className="mb-1">A breve</SectionEyebrow>
             {upcomingCount > 0 && (
-              <p className="text-[12px] text-stone-500 mb-1.5">
+              <p className="text-[12px] text-stone-500 mb-1.5 mt-1.5">
                 Hai {upcomingCount} percors{upcomingCount === 1 ? 'o' : 'i'} programmat{upcomingCount === 1 ? 'o' : 'i'} nei prossimi {UPCOMING_WINDOW_DAYS} giorni.
               </p>
             )}
-            <p className="font-barlow font-extrabold text-[11px] tracking-[1.5px] uppercase text-stone-400 mb-2">
-              Altre uscite in programma
-            </p>
+            <SectionEyebrow icon={CalendarDays} color="#277134" className="mb-2 mt-3">Altre uscite in programma</SectionEyebrow>
             <div className="flex gap-2.5 overflow-x-auto pb-1 -mx-4 px-4" style={{ scrollbarWidth: 'none' }}>
               {featuredList.slice(1).map(f => {
                 const photoUrl = plannedHikePhotoUrl(f.hike)
@@ -588,7 +590,7 @@ export default function BachecaPage() {
         )}
 
         {(curiosityEntries.length > 0 || recoStatus === 'ok' || recoStatus === 'pending') && (
-          <p className="font-barlow font-extrabold text-[13px] tracking-[1.5px] uppercase text-terra-600 mt-6 mb-1">Da scoprire</p>
+          <SectionEyebrow icon={Compass} color="#c05a17" size="md" className="mt-6 mb-1">Da scoprire</SectionEyebrow>
         )}
 
         {curiosityEntries.length > 0 && (
@@ -598,9 +600,7 @@ export default function BachecaPage() {
                 stimato (nessun nuovo dato, solo lunghezza del testo già in cache) — un passo verso
                 "ogni elemento risponde a: perché me lo sta mostrando?", senza ancora la
                 categorizzazione (Natura/Storia/Cultura) che richiederebbe classificare il testo. */}
-            <p className="font-barlow font-extrabold text-[11px] tracking-[1.5px] uppercase text-stone-400 mb-2">
-              Da sapere sui tuoi percorsi
-            </p>
+            <SectionEyebrow icon={BookOpen} color="#c05a17" className="mb-2">Da sapere sui tuoi percorsi</SectionEyebrow>
             <div className="flex gap-2.5 overflow-x-auto pb-1 -mx-4 px-4" style={{ scrollbarWidth: 'none' }}>
               {curiosityEntries.map(entry => (
                 <div key={entry.key} className="shrink-0 w-[230px] bg-white border border-stone-200 rounded-2xl p-3.5 shadow-sm">
@@ -649,12 +649,12 @@ export default function BachecaPage() {
           // (altezza compatta, sotto le altre righe di Bacheca). Il tocco per ingrandire apre la
           // stessa mappa, più grande e interattiva, in un foglio a comparsa.
           <div className="mt-4">
-            <div className="flex items-center justify-between mb-2">
-              <p className="font-barlow font-extrabold text-[11px] tracking-[1.5px] uppercase text-stone-400">Il tuo territorio</p>
+            <div className="flex items-start justify-between mb-2">
+              <SectionEyebrow icon={MapIcon} color="#c05a17">Il tuo territorio</SectionEyebrow>
               <button
                 type="button"
                 onClick={() => setTerritoryMapOpen(true)}
-                className="text-[11px] font-semibold text-forest-600 flex items-center gap-1 shrink-0"
+                className="text-[11px] font-semibold text-forest-600 flex items-center gap-1 shrink-0 pt-0.5"
               >
                 Espandi <Maximize2 className="w-3 h-3" />
               </button>
@@ -671,9 +671,9 @@ export default function BachecaPage() {
 
         {recoStatus === 'ok' && recoCards.length > 0 && (
           <div className="mt-4">
-            <div className="flex items-center justify-between mb-2">
-              <p className="font-barlow font-extrabold text-[11px] tracking-[1.5px] uppercase text-stone-400">Percorsi suggeriti</p>
-              <Link href="/percorsi-per-te" className="text-[11px] font-semibold text-forest-600 flex items-center gap-1 shrink-0">
+            <div className="flex items-start justify-between mb-2">
+              <SectionEyebrow icon={Sparkles} color="#c05a17">Percorsi suggeriti</SectionEyebrow>
+              <Link href="/percorsi-per-te" className="text-[11px] font-semibold text-forest-600 flex items-center gap-1 shrink-0 pt-0.5">
                 Vedi tutti <ArrowRight className="w-3 h-3" />
               </Link>
             </div>
@@ -748,11 +748,11 @@ export default function BachecaPage() {
           </Link>
         )}
 
-        <p className="font-barlow font-extrabold text-[13px] tracking-[1.5px] uppercase text-terra-600 mt-6 mb-1">Nel tempo</p>
+        <SectionEyebrow icon={TrendingUp} color="#c05a17" size="md" className="mt-6 mb-1">Nel tempo</SectionEyebrow>
         <div className="border-t border-stone-200 pt-4">
-          <div className="flex items-center justify-between mb-1">
-            <span className="font-barlow font-extrabold text-[11px] tracking-[1.5px] uppercase text-stone-400">Il tuo andamento</span>
-            <Link href="/statistiche" className="text-[11px] font-semibold text-forest-600 flex items-center gap-1">
+          <div className="flex items-start justify-between mb-1">
+            <SectionEyebrow icon={Activity} color="#277134">Il tuo andamento</SectionEyebrow>
+            <Link href="/statistiche" className="text-[11px] font-semibold text-forest-600 flex items-center gap-1 pt-0.5">
               Vedi statistiche <ArrowRight className="w-3 h-3" />
             </Link>
           </div>
