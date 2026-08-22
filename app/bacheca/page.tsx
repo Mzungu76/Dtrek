@@ -14,6 +14,7 @@ import { fetchActivityPhotos, pickBestCoverPhoto } from '@/lib/activityPhotos'
 import { useCtsUpdated } from '@/lib/sync/useCtsUpdated'
 import { computeStreaks } from '@/lib/stats'
 import { computeTrainingLoad, activityStress, currentForm } from '@/lib/trainingLoad'
+import { ctsLabel } from '@/lib/trailScore'
 import { formatDuration } from '@/lib/tcxParser'
 import { openRecommendationCard } from '@/lib/routeBuilder/openRecommendationCard'
 import { routeTypeLabel } from '@/lib/routeBuilder/loopBuilder'
@@ -46,6 +47,13 @@ function recoCardSummary(card: RecommendationCard): {
 function plannedHikePhotoUrl(hike: PlannedHikeMeta): string | null {
   const wiki = hike.cachedPoiWiki as { poi: PoiItem; wiki: WikiPage }[] | undefined
   return wiki?.[0]?.wiki.thumbnail ?? null
+}
+
+// Tempo di lettura stimato per una card "Da sapere sui tuoi percorsi" — solo il testo già in cache
+// (nessuna nuova chiamata), velocità di lettura media ~200 parole/minuto, sempre almeno 1 minuto.
+function estimateReadingMinutes(text: string): number {
+  const words = text.trim().split(/\s+/).filter(Boolean).length
+  return Math.max(1, Math.round(words / 200))
 }
 
 const FALLBACK_HERO = '/stato-hero-fallback.jpg'
@@ -133,6 +141,24 @@ export default function BachecaPage() {
     start.setDate(start.getDate() - 6)
     const wActs = activities.filter(a => { const d = new Date(a.startTime); return d >= start && d <= end })
     return Math.round(wActs.reduce((s, a) => s + a.distanceMeters / 1000, 0) * 10) / 10
+  }, [activities])
+
+  // Micro-personalizzazione concreta (non un saluto da chatbot): quante uscite pianificate cadono
+  // nei prossimi 14 giorni, su TUTTI i percorsi attivi (non solo i 6 di featuredList) — è un fatto,
+  // deve restare vero anche se il conteggio visibile in "Altre uscite in programma" è più corto.
+  const UPCOMING_WINDOW_DAYS = 14
+  const upcomingCount = useMemo(() => {
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    const limit = new Date(today); limit.setDate(limit.getDate() + UPCOMING_WINDOW_DAYS)
+    return planned.filter(h => !h.archivedAt && h.plannedDate && new Date(h.plannedDate) >= today && new Date(h.plannedDate) <= limit).length
+  }, [planned])
+
+  // Riepilogo ultimi 30 giorni per anticipare un dato reale accanto al link "Statistiche", invece
+  // di lasciarlo un link muto — riusa computeGlobalStats già importato, solo su una finestra più
+  // corta di `activities` (già in memoria, nessuna nuova chiamata).
+  const recentStats = useMemo(() => {
+    const limit = new Date(); limit.setDate(limit.getDate() - 30)
+    return computeGlobalStats(activities.filter(a => new Date(a.startTime) >= limit))
   }, [activities])
 
   // "Percorsi in evidenza": l'hero (il primo della lista) più fino a 5 "altre uscite in programma"
@@ -345,6 +371,14 @@ export default function BachecaPage() {
                 {(featured.hike.distanceMeters / 1000).toFixed(1)} km · +{Math.round(featured.hike.elevationGain)} m
                 {featured.hike.estimatedTimeSeconds ? ` · ${formatDuration(featured.hike.estimatedTimeSeconds)}` : ''}
               </p>
+              {featured.hike.cachedTrailScore != null && (
+                <span
+                  className="inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold text-white"
+                  style={{ backgroundColor: `${ctsLabel(featured.hike.cachedTrailScore).color}b3` }}
+                >
+                  TS {Math.round(featured.hike.cachedTrailScore)} · {ctsLabel(featured.hike.cachedTrailScore).label}
+                </span>
+              )}
               <div className="mt-3 flex items-center gap-2">
                 {featured.hasDate ? (
                   // "Naviga" prova prima l'app nativa Navigator, altrimenti ricade sul navigatore
@@ -388,6 +422,14 @@ export default function BachecaPage() {
                 {(latestActivity.distanceMeters / 1000).toFixed(1)} km · +{Math.round(latestActivity.elevationGain)} m
                 {latestActivity.totalTimeSeconds ? ` · ${formatDuration(latestActivity.totalTimeSeconds)}` : ''}
               </p>
+              {latestActivity.trailScore != null && (
+                <span
+                  className="inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold text-white"
+                  style={{ backgroundColor: `${ctsLabel(latestActivity.trailScore).color}b3` }}
+                >
+                  TS {Math.round(latestActivity.trailScore)} · {ctsLabel(latestActivity.trailScore).label}
+                </span>
+              )}
               <div className="mt-3 flex items-center gap-3">
                 <Link
                   href={`/resoconto/${encodeURIComponent(latestActivity.id)}`}
@@ -421,6 +463,16 @@ export default function BachecaPage() {
 
         {featuredList.length > 1 && (
           <div className="mt-4">
+            {/* Gerarchia temporale esplicita — "adesso" è già l'hero sopra, senza bisogno di
+                un'etichetta: qui iniziano le fasi successive del ciclo utente (a breve → da
+                scoprire → nel tempo), per rendere leggibile a colpo d'occhio in che momento si
+                trova ciascun gruppo di contenuti. */}
+            <p className="font-barlow font-extrabold text-[10px] tracking-[2.5px] uppercase text-terra-600/80 mb-1">A breve</p>
+            {upcomingCount > 0 && (
+              <p className="text-[12px] text-stone-500 mb-1.5">
+                Hai {upcomingCount} percors{upcomingCount === 1 ? 'o' : 'i'} programmat{upcomingCount === 1 ? 'o' : 'i'} nei prossimi {UPCOMING_WINDOW_DAYS} giorni.
+              </p>
+            )}
             <p className="font-barlow font-extrabold text-[11px] tracking-[1.5px] uppercase text-stone-400 mb-2">
               Altre uscite in programma
             </p>
@@ -458,7 +510,7 @@ export default function BachecaPage() {
                     <p className="text-[12.5px] font-semibold text-stone-800 leading-snug line-clamp-2">{f.hike.title}</p>
                     <p className="text-[11px] text-stone-400 mt-1">
                       {f.hasDate && f.hike.plannedDate
-                        ? format(new Date(f.hike.plannedDate), 'd MMM', { locale: it })
+                        ? `${format(new Date(f.hike.plannedDate), 'd MMM', { locale: it })} · ${(f.hike.distanceMeters / 1000).toFixed(1)} km`
                         : `${(f.hike.distanceMeters / 1000).toFixed(1)} km`}
                     </p>
                   </div>
@@ -469,10 +521,19 @@ export default function BachecaPage() {
           </div>
         )}
 
+        {(curiosityEntries.length > 0 || recoStatus === 'ok' || recoStatus === 'pending') && (
+          <p className="font-barlow font-extrabold text-[10px] tracking-[2.5px] uppercase text-terra-600/80 mt-6 mb-1">Da scoprire</p>
+        )}
+
         {curiosityEntries.length > 0 && (
           <div className="mt-4">
+            {/* UX-AUDIT.md/report AI 2026-08-22 — "Info dai tuoi percorsi" non comunicava perché
+                DTrek mostra proprio quel contenuto: rinominata e affiancata da un tempo di lettura
+                stimato (nessun nuovo dato, solo lunghezza del testo già in cache) — un passo verso
+                "ogni elemento risponde a: perché me lo sta mostrando?", senza ancora la
+                categorizzazione (Natura/Storia/Cultura) che richiederebbe classificare il testo. */}
             <p className="font-barlow font-extrabold text-[11px] tracking-[1.5px] uppercase text-stone-400 mb-2">
-              Info dai tuoi percorsi
+              Da sapere sui tuoi percorsi
             </p>
             <div className="flex gap-2.5 overflow-x-auto pb-1 -mx-4 px-4" style={{ scrollbarWidth: 'none' }}>
               {curiosityEntries.map(entry => (
@@ -493,7 +554,8 @@ export default function BachecaPage() {
                     ) : (
                       <MapPin className="w-3 h-3 text-terra-500 shrink-0" />
                     )}
-                    <span className="text-[9.5px] font-bold uppercase tracking-wide text-stone-400 truncate">{entry.routeTitle}</span>
+                    <span className="text-[9.5px] font-bold uppercase tracking-wide text-stone-400 truncate flex-1 min-w-0">{entry.routeTitle}</span>
+                    <span className="text-[9px] text-stone-300 shrink-0">{estimateReadingMinutes(entry.wiki.extract)} min</span>
                   </div>
                   <p className="text-[12px] text-stone-700 leading-snug line-clamp-4">{entry.wiki.extract}</p>
                   <button
@@ -584,27 +646,43 @@ export default function BachecaPage() {
           </Link>
         )}
 
-        <div className="mt-5 border-t border-stone-200 pt-4">
+        <p className="font-barlow font-extrabold text-[10px] tracking-[2.5px] uppercase text-terra-600/80 mt-6 mb-1">Nel tempo</p>
+        <div className="border-t border-stone-200 pt-4">
           <div className="flex items-center justify-between mb-1">
             <span className="font-barlow font-extrabold text-[11px] tracking-[1.5px] uppercase text-stone-400">Il tuo andamento</span>
             <Link href="/statistiche" className="text-[11px] font-semibold text-forest-600 flex items-center gap-1">
-              Statistiche <ArrowRight className="w-3 h-3" />
+              Vedi statistiche <ArrowRight className="w-3 h-3" />
             </Link>
           </div>
           {/* UX-AUDIT.md P-M1 — Bacheca e Statistiche mostrano in parte gli stessi dati con
               presentazioni diverse, senza che "Bacheca" comunichi da sola la relazione: qui è la
               sintesi di oggi, in Statistiche l'archivio completo esplorabile. */}
-          <p className="text-[11px] text-stone-400 mb-2.5">Solo una sintesi — l&apos;archivio completo è in Statistiche.</p>
+          <p className="text-[11px] text-stone-400 mb-1">Solo una sintesi — l&apos;archivio completo è in Statistiche.</p>
+          {/* Anticipa un dato reale invece di lasciare il link muto — riusa recentStats (ultimi 30
+              giorni, già calcolato sulle activities in memoria). Nessun confronto "+18% sul mese
+              scorso" per ora: richiederebbe la stessa finestra sul mese precedente, rimandato. */}
+          {recentStats.totalActivities > 0 && (
+            <p className="text-[12px] text-stone-600 mb-2.5">
+              Ultimi 30 giorni: <strong className="font-semibold">{recentStats.totalActivities}</strong> percors{recentStats.totalActivities === 1 ? 'o' : 'i'} ·{' '}
+              {recentStats.totalDistanceKm.toFixed(0)} km · {Math.round(recentStats.totalElevationGain).toLocaleString('it')} m D+
+            </p>
+          )}
           {globalStats.totalActivities === 0 ? (
             <p className="text-[12px] text-stone-400 text-center py-3">
               I tuoi numeri appariranno qui dopo la tua prima escursione registrata.
             </p>
           ) : (
-            <div className="grid grid-cols-3 gap-2">
-              <StatCard icon={BarChart3} value={`${weeklyKm}`} unit="km/sett." />
-              <StatCard icon={Flame} value={`${streaks.currentWeeks}`} unit="sett. streak" />
-              <StatCard icon={TrendingUp} value={forma.label} unit="bilancio" />
-            </div>
+            <>
+              <div className="grid grid-cols-3 gap-2">
+                <StatCard icon={BarChart3} value={`${weeklyKm}`} unit="km/sett." />
+                <StatCard icon={Flame} value={`${streaks.currentWeeks}`} unit="sett. streak" />
+                <StatCard icon={TrendingUp} value={forma.label} unit="bilancio" />
+              </div>
+              {/* Da contatore a compagno che interpreta i dati — currentForm() (lib/trainingLoad.ts)
+                  calcola già questa frase per ogni fascia di TSB, semplicemente non veniva mostrata
+                  qui: nessun nuovo dato o calcolo. */}
+              <p className="text-[11px] text-stone-400 mt-2 text-center">{forma.description}</p>
+            </>
           )}
         </div>
       </div>
