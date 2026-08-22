@@ -49,20 +49,23 @@ body {
 /* Etichetta col nome del luogo, sempre visibile (non solo al tocco) accanto ai marker di
    components/bacheca/TerritoryMap.tsx — a differenza degli altri usi di poiBadgeMarkup nell'app,
    qui i luoghi non sono su un unico tracciato con cui l'utente possa già orientarsi. */
+/* !important su ogni proprietà già impostata da .leaflet-tooltip (leaflet/dist/leaflet.css):
+   quella regola ha la stessa specificità di questa (una sola classe), quindi chi vince dipende
+   dall'ordine con cui webpack/Next concatenano i due fogli di stile nel bundle finale — non
+   dall'ordine con cui appaiono nel codice sorgente. Verificato dal vivo: senza !important
+   white-space restava "nowrap" (il default di Leaflet), il testo lungo continuava a uscire dal
+   riquadro invece di andare a capo. */
 .territory-map-label {
-  background: white;
-  border: none;
-  border-radius: 6px;
-  padding: 2px 6px;
+  background: white !important;
+  border: none !important;
+  border-radius: 6px !important;
+  padding: 2px 6px !important;
   font-size: 10.5px;
   font-weight: 600;
-  color: #44403c;
+  color: #44403c !important;
   box-shadow: 0 1px 3px rgba(0,0,0,0.25);
-  /* Leaflet's default .leaflet-tooltip è white-space: nowrap — un titolo di percorso lungo
-     (es. "Cascata del Picchio – I Cavoni di Nepi giro ad anello con partenza da Nepi") sfondava
-     la mappa su un solo rigo invece di andare a capo, uscendo dal riquadro visibile. */
   max-width: 130px;
-  white-space: normal;
+  white-space: normal !important;
   line-height: 1.3;
 }
 .territory-map-label::before { display: none; }
