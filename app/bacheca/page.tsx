@@ -325,6 +325,19 @@ export default function BachecaPage() {
     })),
     [curiosityEntries],
   )
+  // Stessi tracciati delle righe "Altre uscite in programma" e "Percorsi suggeriti" più sotto in
+  // questa stessa pagina — non il percorso in evidenza dell'hero, che sulla mappa non aggiungerebbe
+  // un luogo nuovo da orientare rispetto agli altri (è già la storia che l'utente sta guardando).
+  const territoryRoutes = useMemo(() => {
+    const planned = featuredList.slice(1)
+      .filter(f => f.hike.routePolyline?.length)
+      .map(f => ({ key: `planned-${f.hike.id}`, polyline: f.hike.routePolyline!, category: 'planned' as const }))
+    const suggested = recoCards.map(card => {
+      const s = recoCardSummary(card)
+      return s.polyline?.length ? { key: `suggested-${card.id}`, polyline: s.polyline, category: 'suggested' as const } : null
+    }).filter((r): r is { key: string; polyline: [number, number][]; category: 'suggested' } => r !== null)
+    return [...planned, ...suggested]
+  }, [featuredList, recoCards])
   const [territoryMapOpen, setTerritoryMapOpen] = useState(false)
 
   // Foto dell'hero: catena di fallback (P-O5) — foto propria (solo per un'escursione già fatta,
@@ -520,7 +533,7 @@ export default function BachecaPage() {
                 un'etichetta: qui iniziano le fasi successive del ciclo utente (a breve → da
                 scoprire → nel tempo), per rendere leggibile a colpo d'occhio in che momento si
                 trova ciascun gruppo di contenuti. */}
-            <p className="font-barlow font-extrabold text-[10px] tracking-[2.5px] uppercase text-terra-600/80 mb-1">A breve</p>
+            <p className="font-barlow font-extrabold text-[13px] tracking-[1.5px] uppercase text-terra-600 mb-1">A breve</p>
             {upcomingCount > 0 && (
               <p className="text-[12px] text-stone-500 mb-1.5">
                 Hai {upcomingCount} percors{upcomingCount === 1 ? 'o' : 'i'} programmat{upcomingCount === 1 ? 'o' : 'i'} nei prossimi {UPCOMING_WINDOW_DAYS} giorni.
@@ -575,7 +588,7 @@ export default function BachecaPage() {
         )}
 
         {(curiosityEntries.length > 0 || recoStatus === 'ok' || recoStatus === 'pending') && (
-          <p className="font-barlow font-extrabold text-[10px] tracking-[2.5px] uppercase text-terra-600/80 mt-6 mb-1">Da scoprire</p>
+          <p className="font-barlow font-extrabold text-[13px] tracking-[1.5px] uppercase text-terra-600 mt-6 mb-1">Da scoprire</p>
         )}
 
         {curiosityEntries.length > 0 && (
@@ -610,6 +623,10 @@ export default function BachecaPage() {
                     <span className="text-[9.5px] font-bold uppercase tracking-wide text-stone-400 truncate flex-1 min-w-0">{entry.routeTitle}</span>
                     <span className="text-[9px] text-stone-300 shrink-0">{estimateReadingMinutes(entry.wiki.extract)} min</span>
                   </div>
+                  {/* Il nome del percorso sopra (routeTitle) dice DA DOVE viene la curiosità, non
+                      DI COSA parla — senza questo titolo l'argomento (es. "Acquedotto di Nepi")
+                      compariva solo annegato dentro il testo dell'estratto sotto. */}
+                  <p className="text-[13px] font-bold text-stone-800 leading-snug mb-0.5">{entry.wiki.title}</p>
                   <p className="text-[12px] text-stone-700 leading-snug line-clamp-4">{entry.wiki.extract}</p>
                   <button
                     type="button"
@@ -624,12 +641,13 @@ export default function BachecaPage() {
           </div>
         )}
 
-        {territoryPois.length > 0 && (
-          // Stessi luoghi della riga "Da sapere sui tuoi percorsi" sopra, qui in forma di mappa
-          // invece che di testo — un blocco a piena larghezza apposta, non un'altra riga
-          // scorrevole di card: rompe il ritmo delle righe orizzontali senza però diventare un
-          // elemento dominante (altezza compatta, sotto le altre righe di Bacheca). Il tocco per
-          // ingrandire apre la stessa mappa, più grande e interattiva, in un foglio a comparsa.
+        {(territoryPois.length > 0 || territoryRoutes.length > 0) && (
+          // Stessi luoghi della riga "Da sapere sui tuoi percorsi" sopra e stessi tracciati di
+          // "Altre uscite in programma"/"Percorsi suggeriti" sotto, qui in forma di mappa invece
+          // che di testo/card — un blocco a piena larghezza apposta, non un'altra riga scorrevole:
+          // rompe il ritmo delle righe orizzontali senza però diventare un elemento dominante
+          // (altezza compatta, sotto le altre righe di Bacheca). Il tocco per ingrandire apre la
+          // stessa mappa, più grande e interattiva, in un foglio a comparsa.
           <div className="mt-4">
             <div className="flex items-center justify-between mb-2">
               <p className="font-barlow font-extrabold text-[11px] tracking-[1.5px] uppercase text-stone-400">Il tuo territorio</p>
@@ -642,13 +660,13 @@ export default function BachecaPage() {
               </button>
             </div>
             <button type="button" onClick={() => setTerritoryMapOpen(true)} className="block w-full">
-              <TerritoryMap pois={territoryPois} height="160px" interactive={false} />
+              <TerritoryMap pois={territoryPois} routes={territoryRoutes} height="160px" interactive={false} />
             </button>
           </div>
         )}
 
         <Sheet open={territoryMapOpen} onClose={() => setTerritoryMapOpen(false)} title="Il tuo territorio">
-          {territoryMapOpen && <TerritoryMap pois={territoryPois} height="70vh" interactive />}
+          {territoryMapOpen && <TerritoryMap pois={territoryPois} routes={territoryRoutes} height="70vh" interactive />}
         </Sheet>
 
         {recoStatus === 'ok' && recoCards.length > 0 && (
@@ -730,7 +748,7 @@ export default function BachecaPage() {
           </Link>
         )}
 
-        <p className="font-barlow font-extrabold text-[10px] tracking-[2.5px] uppercase text-terra-600/80 mt-6 mb-1">Nel tempo</p>
+        <p className="font-barlow font-extrabold text-[13px] tracking-[1.5px] uppercase text-terra-600 mt-6 mb-1">Nel tempo</p>
         <div className="border-t border-stone-200 pt-4">
           <div className="flex items-center justify-between mb-1">
             <span className="font-barlow font-extrabold text-[11px] tracking-[1.5px] uppercase text-stone-400">Il tuo andamento</span>
