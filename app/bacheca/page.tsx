@@ -22,7 +22,6 @@ import { computeStreaks } from '@/lib/stats'
 import { computeTrainingLoad, activityStress, currentForm } from '@/lib/trainingLoad'
 import { ctsLabel } from '@/lib/trailScore'
 import { formatDuration } from '@/lib/tcxParser'
-import { openRecommendationCard } from '@/lib/routeBuilder/openRecommendationCard'
 import { routeTypeLabel } from '@/lib/routeBuilder/loopBuilder'
 import { tryOpenNavigatorApp } from '@/lib/navigatorHandoff'
 import { GalleryMapThumb } from '@/components/routehub/BottomGallery'
@@ -92,8 +91,6 @@ export default function BachecaPage() {
   const [loading, setLoading] = useState(true)
   const [recoStatus, setRecoStatus] = useState<'loading' | 'ok' | 'empty_no_location' | 'error' | 'pending'>('loading')
   const [recoCards, setRecoCards] = useState<RecommendationCard[]>([])
-  const [openingRecoId, setOpeningRecoId] = useState<string | null>(null)
-  const [recoErrorMsg, setRecoErrorMsg] = useState('')
   const [openCuriosity, setOpenCuriosity] = useState<{ routeTitle: string; wiki: WikiPage } | null>(null)
 
   useEffect(() => {
@@ -105,19 +102,6 @@ export default function BachecaPage() {
       .then(data => { setRecoStatus(data.status); setRecoCards(data.cards ?? []) })
       .catch(() => setRecoStatus('error'))
   }, [])
-
-  async function handleOpenReco(card: RecommendationCard) {
-    if (openingRecoId) return
-    setOpeningRecoId(card.id)
-    setRecoErrorMsg('')
-    try {
-      const hikeId = await openRecommendationCard(card)
-      router.push(`/guida/${encodeURIComponent(hikeId)}`)
-    } catch (e) {
-      setRecoErrorMsg(`Errore nel salvataggio: ${e instanceof Error ? e.message : String(e)}`)
-      setOpeningRecoId(null)
-    }
-  }
 
   // getAllActivities/getAllPlanned sono cache-first (IndexedDB) e, quando la cache locale ha un
   // buco noto (es. routePolyline mancante su un'entry vecchia — vedi i commenti "self-heal" dentro
@@ -677,17 +661,18 @@ export default function BachecaPage() {
                 Vedi tutti <ArrowRight className="w-3 h-3" />
               </Link>
             </div>
-            {recoErrorMsg && <p className="text-[11px] text-red-600 mb-1.5">{recoErrorMsg}</p>}
             <div className="flex gap-2.5 overflow-x-auto pb-1 -mx-4 px-4" style={{ scrollbarWidth: 'none' }}>
               {recoCards.map(card => {
                 const s = recoCardSummary(card)
-                const isOpening = openingRecoId === card.id
                 return (
-                  <button
+                  // Porta alla card vera in "Percorsi per te" invece di salvare direttamente tra i
+                  // pianificati — un percorso "consigliato" è ancora una proposta da valutare (mappa,
+                  // descrizione, verdetto comfort), non una scelta già fatta: solo da quella pagina,
+                  // con l'azione esplicita sulla card, l'utente lo aggiunge davvero ai pianificati.
+                  <Link
                     key={card.id}
-                    onClick={() => handleOpenReco(card)}
-                    disabled={openingRecoId !== null}
-                    className="shrink-0 w-[170px] flex flex-col bg-white border border-stone-200 rounded-2xl overflow-hidden shadow-sm text-left disabled:opacity-60 transition-opacity"
+                    href={`/percorsi-per-te?focus=${encodeURIComponent(card.id)}`}
+                    className="shrink-0 w-[170px] flex flex-col bg-white border border-stone-200 rounded-2xl overflow-hidden shadow-sm text-left"
                   >
                     {/* shrink-0 esplicito: senza, la riga (flex + overflow-x-auto, align-items:
                         stretch di default) allunga ogni card all'altezza della più alta — con un
@@ -706,11 +691,6 @@ export default function BachecaPage() {
                         {s.isRevisit ? <Heart className="w-2.5 h-2.5 shrink-0" fill="currentColor" /> : <Sparkles className="w-2.5 h-2.5 shrink-0" />}
                         <span className="truncate">{s.isRevisit ? 'Preferito' : (s.reasonTag ?? 'Consigliato')}</span>
                       </div>
-                      {isOpening && (
-                        <div className="absolute inset-0 bg-white/75 flex items-center justify-center">
-                          <Loader2 className="w-4 h-4 animate-spin text-forest-600" />
-                        </div>
-                      )}
                     </div>
                     <div className="p-2.5 min-w-0">
                       <p className="text-[12.5px] font-semibold text-stone-800 leading-snug line-clamp-2">{s.title}</p>
@@ -718,7 +698,7 @@ export default function BachecaPage() {
                         {(s.distanceMeters / 1000).toFixed(1)} km · {s.hasElevation ? '' : '~'}+{Math.round(s.elevationGain)} m
                       </p>
                     </div>
-                  </button>
+                  </Link>
                 )
               })}
             </div>
