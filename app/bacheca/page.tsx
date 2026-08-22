@@ -4,10 +4,12 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
-import { Navigation, Sparkles, MapPin, ArrowRight, TrendingUp, Flame, BarChart3, Loader2, Heart } from 'lucide-react'
+import { Navigation, Sparkles, MapPin, ArrowRight, TrendingUp, Flame, BarChart3, Loader2, Heart, Maximize2 } from 'lucide-react'
 import HubNavBar from '@/components/routehub/HubNavBar'
 import RouteThumb from '@/components/RouteThumb'
 import CuriosityModal from '@/components/bacheca/CuriosityModal'
+import TerritoryMap from '@/components/bacheca/TerritoryMap'
+import Sheet from '@/components/ui/Sheet'
 import { getAllActivities, getActivityById, computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
 import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { fetchActivityPhotos, pickBestCoverPhoto } from '@/lib/activityPhotos'
@@ -281,7 +283,7 @@ export default function BachecaPage() {
   const MAX_POI_PER_ROUTE = 4
   const MAX_CURIOSITY_CARDS = 20
   const curiosityEntries = useMemo(() => {
-    const entries: { key: string; routeTitle: string; wiki: WikiPage; polyline?: [number, number][] }[] = []
+    const entries: { key: string; routeTitle: string; wiki: WikiPage; poi: PoiItem; polyline?: [number, number][] }[] = []
     const seenWiki = new Set<string>()
     const addRoute = (
       title: string | undefined,
@@ -290,11 +292,11 @@ export default function BachecaPage() {
     ) => {
       if (!title || !wikiList?.length) return
       let addedForThisRoute = 0
-      for (const { wiki } of wikiList) {
+      for (const { poi, wiki } of wikiList) {
         if (entries.length >= MAX_CURIOSITY_CARDS || addedForThisRoute >= MAX_POI_PER_ROUTE) return
         if (seenWiki.has(wiki.url)) continue
         seenWiki.add(wiki.url)
-        entries.push({ key: wiki.url, routeTitle: title, wiki, polyline })
+        entries.push({ key: wiki.url, routeTitle: title, wiki, poi, polyline })
         addedForThisRoute++
       }
     }
@@ -309,6 +311,21 @@ export default function BachecaPage() {
     }
     return entries
   }, [featuredList, recentActivitiesForCuriosity, activityPoiWikiById])
+
+  // "Il tuo territorio" — stessi luoghi di "Da sapere sui tuoi percorsi" sopra, riproposti su una
+  // mappa invece che in testo: nessun nuovo dato/chiamata, solo le coordinate (dell'articolo
+  // Wikipedia quando disponibili, altrimenti del POI OSM sottostante) già presenti in ogni entry.
+  const territoryPois = useMemo(
+    () => curiosityEntries.map(entry => ({
+      key: entry.key,
+      lat: entry.wiki.lat ?? entry.poi.lat,
+      lon: entry.wiki.lon ?? entry.poi.lon,
+      name: entry.wiki.title,
+      type: entry.poi.type,
+    })),
+    [curiosityEntries],
+  )
+  const [territoryMapOpen, setTerritoryMapOpen] = useState(false)
 
   // Foto dell'hero: catena di fallback (P-O5) — foto propria (solo per un'escursione già fatta,
   // non ha senso per un percorso ancora da percorrere) → foto del POI Wikipedia → tracciato su
@@ -579,6 +596,33 @@ export default function BachecaPage() {
             </div>
           </div>
         )}
+
+        {territoryPois.length > 0 && (
+          // Stessi luoghi della riga "Da sapere sui tuoi percorsi" sopra, qui in forma di mappa
+          // invece che di testo — un blocco a piena larghezza apposta, non un'altra riga
+          // scorrevole di card: rompe il ritmo delle righe orizzontali senza però diventare un
+          // elemento dominante (altezza compatta, sotto le altre righe di Bacheca). Il tocco per
+          // ingrandire apre la stessa mappa, più grande e interattiva, in un foglio a comparsa.
+          <div className="mt-4">
+            <div className="flex items-center justify-between mb-2">
+              <p className="font-barlow font-extrabold text-[11px] tracking-[1.5px] uppercase text-stone-400">Il tuo territorio</p>
+              <button
+                type="button"
+                onClick={() => setTerritoryMapOpen(true)}
+                className="text-[11px] font-semibold text-forest-600 flex items-center gap-1 shrink-0"
+              >
+                Espandi <Maximize2 className="w-3 h-3" />
+              </button>
+            </div>
+            <button type="button" onClick={() => setTerritoryMapOpen(true)} className="block w-full">
+              <TerritoryMap pois={territoryPois} height="160px" interactive={false} />
+            </button>
+          </div>
+        )}
+
+        <Sheet open={territoryMapOpen} onClose={() => setTerritoryMapOpen(false)} title="Il tuo territorio">
+          {territoryMapOpen && <TerritoryMap pois={territoryPois} height="70vh" interactive />}
+        </Sheet>
 
         {recoStatus === 'ok' && recoCards.length > 0 && (
           <div className="mt-4">

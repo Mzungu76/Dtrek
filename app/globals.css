@@ -46,6 +46,21 @@ body {
 /* Leaflet override z-index */
 .leaflet-container { z-index: 0; }
 
+/* Etichetta col nome del luogo, sempre visibile (non solo al tocco) accanto ai marker di
+   components/bacheca/TerritoryMap.tsx — a differenza degli altri usi di poiBadgeMarkup nell'app,
+   qui i luoghi non sono su un unico tracciato con cui l'utente possa già orientarsi. */
+.territory-map-label {
+  background: white;
+  border: none;
+  border-radius: 6px;
+  padding: 1px 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #44403c;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+}
+.territory-map-label::before { display: none; }
+
 /* Mobile: nascondi la scrollbar orizzontale su gallerie/filmstrip/tab a scorrimento —
    lo scroll resta attivo, solo l'indicatore visivo sparisce (coerente col resto dell'app). */
 @media (max-width: 767px) {
