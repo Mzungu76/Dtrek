@@ -330,6 +330,17 @@ export default function BachecaPage() {
   // Foto dell'hero: catena di fallback (P-O5) — foto propria (solo per un'escursione già fatta,
   // non ha senso per un percorso ancora da percorrere) → foto del POI Wikipedia → tracciato su
   // sfondo topografico (gestito nel JSX) → immagine generica di fallback.
+  // Quarto stato dell'hero, oltre a "prossima uscita pianificata"/"ultima uscita"/"CTA iniziale":
+  // quando non c'è nulla di pianificato e l'ultima uscita risale a parecchio, l'hero lo dice
+  // esplicitamente invece di mostrare in silenzio la stessa "ultima uscita" di settimane fa come se
+  // fosse ancora un contenuto fresco — e capovolge la priorità dei due pulsanti sotto, verso
+  // pianificare qualcosa di nuovo piuttosto che rivedere quanto già fatto.
+  const DAYS_STALE_THRESHOLD = 14
+  const daysSinceLastActivity = latestActivity
+    ? Math.floor((Date.now() - new Date(latestActivity.startTime).getTime()) / 86400000)
+    : null
+  const isStale = !featured && daysSinceLastActivity !== null && daysSinceLastActivity >= DAYS_STALE_THRESHOLD
+
   const heroPhotoUrl = useMemo(() => {
     if (featured) {
       const wiki = featured.hike.cachedPoiWiki as { poi: PoiItem; wiki: WikiPage }[] | undefined
@@ -439,7 +450,7 @@ export default function BachecaPage() {
           ) : latestActivity ? (
             <>
               <p className="font-barlow font-extrabold text-[11px] tracking-[2px] uppercase text-terra-300 mb-1">
-                La tua ultima uscita · {format(new Date(latestActivity.startTime), 'd MMMM', { locale: it })}
+                {isStale ? `Sei fermo da ${daysSinceLastActivity} giorni` : `La tua ultima uscita · ${format(new Date(latestActivity.startTime), 'd MMMM', { locale: it })}`}
               </p>
               <h1 className="font-display font-black text-[28px] text-white leading-tight" style={{ textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>
                 {latestActivity.title}
@@ -457,15 +468,31 @@ export default function BachecaPage() {
                 </span>
               )}
               <div className="mt-3 flex items-center gap-3">
-                <Link
-                  href={`/resoconto/${encodeURIComponent(latestActivity.id)}`}
-                  className="inline-flex items-center gap-2 bg-terra-500 hover:bg-terra-600 text-white text-[13px] font-semibold px-5 py-2.5 rounded-full shadow-lg transition-colors"
-                >
-                  <Navigation className="w-4 h-4" /> Rivedi
-                </Link>
-                <Link href="/upload?tab=gpx" className="text-[12px] font-semibold text-white/90" style={{ textShadow: '0 1px 6px rgba(0,0,0,0.55)' }}>
-                  Pianifica la prossima uscita →
-                </Link>
+                {isStale ? (
+                  <>
+                    <Link
+                      href="/upload?tab=gpx"
+                      className="inline-flex items-center gap-2 bg-terra-500 hover:bg-terra-600 text-white text-[13px] font-semibold px-5 py-2.5 rounded-full shadow-lg transition-colors"
+                    >
+                      <Navigation className="w-4 h-4" /> Pianifica una nuova uscita
+                    </Link>
+                    <Link href={`/resoconto/${encodeURIComponent(latestActivity.id)}`} className="text-[12px] font-semibold text-white/90" style={{ textShadow: '0 1px 6px rgba(0,0,0,0.55)' }}>
+                      Rivedi l&apos;ultima uscita
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <Link
+                      href={`/resoconto/${encodeURIComponent(latestActivity.id)}`}
+                      className="inline-flex items-center gap-2 bg-terra-500 hover:bg-terra-600 text-white text-[13px] font-semibold px-5 py-2.5 rounded-full shadow-lg transition-colors"
+                    >
+                      <Navigation className="w-4 h-4" /> Rivedi
+                    </Link>
+                    <Link href="/upload?tab=gpx" className="text-[12px] font-semibold text-white/90" style={{ textShadow: '0 1px 6px rgba(0,0,0,0.55)' }}>
+                      Pianifica la prossima uscita →
+                    </Link>
+                  </>
+                )}
               </div>
             </>
           ) : (
