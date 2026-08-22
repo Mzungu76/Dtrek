@@ -212,8 +212,11 @@ export function FoundRouteCard({ data, onChoose, feedback, selectable, onOpen3D 
             <Heart className="w-3 h-3" fill="currentColor" /> Uno dei tuoi preferiti
           </span>
         ) : (
+          // reasonTag (lib/routeBuilder/generateRecommendations.ts) esiste solo per le card di
+          // "Percorsi per te" — un risultato di ricerca normale (wizard, AI, ricerche salvate)
+          // non ha un profilo da cui derivarlo, quindi ricade sull'etichetta generica di sempre.
           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide bg-terra-50 text-terra-700">
-            <Sparkles className="w-3 h-3" /> Percorso trovato
+            <Sparkles className="w-3 h-3" /> {data.reasonTag ?? 'Percorso trovato'}
           </span>
         )}
 

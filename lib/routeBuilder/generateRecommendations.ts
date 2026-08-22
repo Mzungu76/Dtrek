@@ -186,10 +186,34 @@ function bboxFromPolyline(polyline: [number, number][]): { minLat: number; maxLa
   return { minLat, maxLat, minLon, maxLon }
 }
 
-function foundReason(distanceKm: number, targetDistanceKm: number): string {
-  return Math.abs(distanceKm - targetDistanceKm) <= targetDistanceKm * 0.3
-    ? 'Lunghezza vicina alle tue ultime uscite, nella zona che conosci.'
-    : 'Percorso già documentato vicino alla tua zona abituale.'
+// Report AI sulla Bacheca, 2026-08-22 — "Percorsi suggeriti" mostrava solo "CONSIGLIATO" per ogni
+// card, sempre lo stesso, senza spiegare perché DTrek l'avesse scelta: un'etichetta breve (per il
+// badge — 2-3 parole, deve stare in una pillola su una card compatta da 170px, vedi
+// app/bacheca/page.tsx) più una descrizione estesa (per il testo sotto il titolo nella card intera
+// di /percorsi-per-te, components/RouteResultCard.tsx), derivate dagli stessi due segnali già
+// calcolati qui — nessuna nuova chiamata/dato: il raggio a cui è stato trovato (SEARCH_RADII_KM,
+// quanto è vicino a casa) e quanto la sua lunghezza si avvicina alla media delle uscite
+// dell'utente. Il raggio ha priorità sulla lunghezza quando entrambi i segnali sono forti: "vicino
+// a te" è un fatto più concreto e verificabile a colpo d'occhio (è dietro l'angolo) di "lunghezza
+// simile" (richiede confrontare due numeri). isRevisit (percorsi preferiti ripescati) ha la
+// propria etichetta a parte, decisa da gatherRevisitCandidates, mai da qui.
+function foundReason(distanceKm: number, targetDistanceKm: number, radiusKm: number): { tag: string; description: string } {
+  const lengthMatches = Math.abs(distanceKm - targetDistanceKm) <= targetDistanceKm * 0.3
+  if (radiusKm <= 10) {
+    return {
+      tag: 'Vicino a te',
+      description: lengthMatches
+        ? 'Vicino a te, con una lunghezza simile alle tue ultime uscite.'
+        : 'Vicino a te — a pochi passi dalla tua zona abituale.',
+    }
+  }
+  if (lengthMatches) {
+    return { tag: 'Stessa lunghezza', description: 'Lunghezza vicina alle tue ultime uscite, nella zona che conosci.' }
+  }
+  if (radiusKm >= 80) {
+    return { tag: 'Gita più lontana', description: 'Più lontano del solito, ma un percorso reale trovato apposta per te.' }
+  }
+  return { tag: 'Nella tua zona', description: 'Percorso già documentato vicino alla tua zona abituale.' }
 }
 
 // Scrive nella cache `trails` un candidato risolto dal fallback Overpass live — best-effort, un
@@ -269,10 +293,12 @@ async function gatherFoundCandidates(
         estimatedTimeSeconds: (row.estimatedTimeMin ?? Math.round((distanceKm / 4) * 60)) * 60,
         hasElevation: row.dataQuality === 'calculated',
       }
+      const reason = foundReason(distanceKm, targetDistanceKm, radiusKm)
       items.push({
         name: row.name,
         difficulty: row.difficulty ?? undefined,
-        description: foundReason(distanceKm, targetDistanceKm),
+        description: reason.description,
+        reasonTag: reason.tag,
         sourceUrl: `https://www.openstreetmap.org/relation/${row.osmRelationId}`,
         osmId: row.osmRelationId,
         track,
@@ -319,9 +345,11 @@ async function gatherFoundCandidates(
           elevationGain: track.elevationGain, elevationLoss: track.elevationLoss, altitudeMax: track.altitudeMax,
           altitudeMin: track.altitudeMin, estimatedTimeSeconds: track.estimatedTimeSeconds, pois,
         })
+        const reason = foundReason(track.distanceMeters / 1000, targetDistanceKm, radiusKm)
         items.push({
           name: candidate.name,
-          description: foundReason(track.distanceMeters / 1000, targetDistanceKm),
+          description: reason.description,
+          reasonTag: reason.tag,
           sourceUrl: `https://www.openstreetmap.org/relation/${candidate.id}`,
           osmId: candidate.id,
           track,
@@ -408,6 +436,7 @@ async function gatherRevisitCandidates(userId: string, excludeOsmIds: Set<number
         zone: (row.zone as string | null) ?? undefined,
         difficulty: (row.difficulty as string | null) ?? undefined,
         description: 'Uno dei tuoi preferiti — vale la pena rifarlo.',
+        reasonTag: 'Uno dei tuoi preferiti',
         sourceUrl: (row.source_url as string | null) ?? undefined,
         osmId,
         track,
