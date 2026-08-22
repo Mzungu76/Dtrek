@@ -46,9 +46,11 @@ body {
 /* Leaflet override z-index */
 .leaflet-container { z-index: 0; }
 
-/* Etichetta col nome del luogo, sempre visibile (non solo al tocco) accanto ai marker di
+/* Etichetta col nome del luogo/percorso, sempre visibile (non solo al tocco), di
    components/bacheca/TerritoryMap.tsx — a differenza degli altri usi di poiBadgeMarkup nell'app,
-   qui i luoghi non sono su un unico tracciato con cui l'utente possa già orientarsi. */
+   qui i luoghi non sono su un unico tracciato con cui l'utente possa già orientarsi. Troncata di
+   default (una riga), espandibile al tocco solo se più lunga della soglia — vedi
+   bindExpandableTooltip in TerritoryMap.tsx. */
 /* !important su ogni proprietà già impostata da .leaflet-tooltip (leaflet/dist/leaflet.css):
    quella regola ha la stessa specificità di questa (una sola classe), quindi chi vince dipende
    dall'ordine con cui webpack/Next concatenano i due fogli di stile nel bundle finale — non
@@ -64,11 +66,26 @@ body {
   font-weight: 600;
   color: #44403c !important;
   box-shadow: 0 1px 3px rgba(0,0,0,0.25);
-  max-width: 130px;
+}
+.territory-map-label.territory-label-expandable { cursor: pointer; }
+/* Solo qui va a capo — il testo troncato di default è già corto abbastanza per stare su una riga
+   sola, wrapparlo comunque avrebbe solo reintrodotto le colonne altissime da una parola a riga
+   viste prima di aggiungere il troncamento. */
+.territory-map-label.territory-label-expanded {
   white-space: normal !important;
+  max-width: 160px;
   line-height: 1.3;
 }
-.territory-map-label::before { display: none; }
+
+/* Colore del percorso riportato sull'etichetta stessa (non solo sul pallino/tracciato sotto),
+   testo bianco per il contrasto — stessa lettura cromatica della legenda "In programma"/
+   "Suggeriti" più sotto sulla mappa. Il triangolino di Leaflet (.leaflet-tooltip-top::before,
+   qui riabilitato togliendo il vecchio "display:none") punta verso il pallino: colorato uguale
+   allo sfondo dell'etichetta, non resta un residuo bianco scollegato dal resto del fumetto. */
+.territory-map-label.territory-label-planned { background: #2d7a3d !important; color: #fff !important; }
+.territory-map-label.territory-label-suggested { background: #d97220 !important; color: #fff !important; }
+.territory-label-planned.leaflet-tooltip-top::before { border-top-color: #2d7a3d !important; }
+.territory-label-suggested.leaflet-tooltip-top::before { border-top-color: #d97220 !important; }
 
 /* Mobile: nascondi la scrollbar orizzontale su gallerie/filmstrip/tab a scorrimento —
    lo scroll resta attivo, solo l'indicatore visivo sparisce (coerente col resto dell'app). */

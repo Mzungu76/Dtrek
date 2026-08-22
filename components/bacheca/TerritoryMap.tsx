@@ -44,6 +44,58 @@ interface Props {
   interactive?: boolean
 }
 
+// Oltre questa lunghezza un'etichetta viene troncata di default — un titolo intero ("Cascata del
+// Picchio – I Cavoni di Nepi giro ad anello con partenza da Nepi") andava a capo su 5-6 righe da
+// solo, più alto di quanto la mappa potesse mostrare in modo leggibile. Tocco per espandere/
+// ridurre invece di mostrare sempre tutto o sempre solo l'anteprima.
+const TRUNCATE_LENGTH = 20
+function truncateLabelText(text: string): string {
+  return text.length > TRUNCATE_LENGTH ? `${text.slice(0, TRUNCATE_LENGTH).trimEnd()}…` : text
+}
+
+/**
+ * Etichetta permanente troncata di default, espandibile al tocco (solo se davvero più lunga della
+ * soglia — un'etichetta già corta non ha nulla da nascondere/mostrare, resta un testo semplice).
+ * bindTooltip/setTooltipContent non toccano mai il className del contenitore DOM, quindi la classe
+ * "espansa" va aggiunta/rimossa direttamente sull'elemento a ogni tocco.
+ */
+function bindExpandableTooltip(
+  layer: L.Layer,
+  fullText: string,
+  baseClassName: string,
+  options: L.TooltipOptions,
+  onToggle: () => void,
+) {
+  const truncatable = fullText.length > TRUNCATE_LENGTH
+  let expanded = false
+  layer.bindTooltip(truncateLabelText(fullText), {
+    ...options,
+    className: `${baseClassName}${truncatable ? ' territory-label-expandable' : ''}`,
+    interactive: truncatable,
+  })
+  if (!truncatable) return
+  // Per un layer già sulla mappa (sempre il caso qui: bindExpandableTooltip viene chiamata dopo
+  // .addTo(map)), bindTooltip con permanent:true apre subito il tooltip in modo sincrono, PRIMA che
+  // il codice torni qui sotto — un ascoltatore 'tooltipopen' registrato solo dopo bindTooltip
+  // arriva sempre troppo tardi per quel primo evento (già emesso e perso), quindi il click non
+  // veniva mai agganciato. Si aggancia subito, e 'tooltipopen' resta solo come ripescaggio per
+  // l'eventuale caso in cui il layer non fosse ancora montato al momento del bind.
+  const attachClickHandler = () => {
+    const el = layer.getTooltip()?.getElement()
+    if (!el || el.dataset.expandBound) return
+    el.dataset.expandBound = '1'
+    el.addEventListener('click', e => {
+      e.stopPropagation()
+      expanded = !expanded
+      layer.setTooltipContent(expanded ? fullText : truncateLabelText(fullText))
+      el.classList.toggle('territory-label-expanded', expanded)
+      onToggle()
+    })
+  }
+  attachClickHandler()
+  layer.on('tooltipopen', attachClickHandler)
+}
+
 // Caricamento condiviso a livello di modulo, non per-mount: leaflet.markercluster è un side-effect
 // import (patcha `window.L` invece di esportare qualcosa) e un modulo ESM esegue il proprio corpo
 // UNA SOLA VOLTA in tutto il processo, non a ogni `import()`. Se ogni mount di questo componente
@@ -135,15 +187,27 @@ export default function TerritoryMap({ pois, routes = [], height = '200px', inte
           opacity: 0.75,
           smoothFactor: 1.5,
         }).addTo(map)
-        // Stessa etichetta sempre visibile dei POI sotto: senza, un tracciato tra tanti resta solo
-        // una linea colorata senza nome, difficile da individuare quanto i POI lo erano prima del
-        // clustering.
-        line.bindTooltip(route.title, {
-          permanent: true,
-          direction: 'center',
-          className: 'territory-map-label',
-        })
-        labelLayers.push(line)
+        // L'etichetta non è più legata al tracciato stesso (un tooltip 'center' finiva sempre
+        // sopra la linea, nascondendola) ma a un piccolo pallino colorato piazzato su un vertice
+        // reale del percorso (non il centro del bounding box, che per un tracciato a L/a zig-zag
+        // può cadere fuori dalla linea) — l'etichetta sta sopra il pallino (direction 'top'), con
+        // la punta del fumetto di Leaflet a fare da indicatore verso il punto reale.
+        const anchorPoint = route.polyline[Math.floor((route.polyline.length - 1) / 2)]
+        const anchorDot = L.circleMarker(anchorPoint, {
+          radius: 4,
+          color: '#fff',
+          weight: 1.5,
+          fillColor: ROUTE_CATEGORY_COLOR[route.category],
+          fillOpacity: 1,
+        }).addTo(map)
+        bindExpandableTooltip(
+          anchorDot,
+          route.title,
+          `territory-map-label territory-label-${route.category}`,
+          { permanent: true, direction: 'top', offset: [0, -6] },
+          scheduleDeclutter,
+        )
+        labelLayers.push(anchorDot)
         allBounds.push(line.getBounds())
       }
 
@@ -166,12 +230,13 @@ export default function TerritoryMap({ pois, routes = [], height = '200px', inte
             iconAnchor: [12, 12],
           })
           const marker = L.marker([poi.lat, poi.lon], { icon, title: poi.name })
-          marker.bindTooltip(poi.name, {
-            permanent: true,
-            direction: 'right',
-            offset: [8, 0],
-            className: 'territory-map-label',
-          })
+          bindExpandableTooltip(
+            marker,
+            poi.name,
+            'territory-map-label',
+            { permanent: true, direction: 'right', offset: [8, 0] },
+            scheduleDeclutter,
+          )
           labelLayers.push(marker)
           clusterGroup.addLayer(marker)
         }
