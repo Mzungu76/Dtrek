@@ -1,8 +1,75 @@
 'use client'
-import { forwardRef, useState, type ReactNode } from 'react'
-import { Volume2, Sparkles, ChevronRight, ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
+import { forwardRef, useEffect, useRef, useState, type ReactNode } from 'react'
+import { Volume2, Sparkles, ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
+import type { GuideTextLength } from '@/lib/guideSections'
 import MagazineBody, { type ExtraPhoto } from './MagazineBody'
 import { truncateBody } from './textTruncate'
+
+export interface LengthOption {
+  key: GuideTextLength
+  label: string
+  description: string
+  disabled?: boolean
+  disabledReason?: string
+}
+
+/** Bottone "Approfondisci con Giulia" — con `lengthOptions` apre un piccolo menu per scegliere la
+ *  lunghezza (Essenziale/Approfondita/Molto approfondita, con la loro descrizione) invece di
+ *  mostrare sempre le tre pillole accanto al link; la scelta stessa avvia l'approfondimento invece
+ *  di essere un passo separato. Senza `lengthOptions` (es. "Verificato online", che non usa il
+ *  concetto di lunghezza) resta un tap solo. */
+function ApprofondisciTrigger({ onApprofondisci, lengthOptions }: {
+  onApprofondisci?: (length?: GuideTextLength) => void
+  lengthOptions?: LengthOption[]
+}) {
+  const [open, setOpen] = useState(false)
+  const wrapRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onDocPointerDown = (e: PointerEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('pointerdown', onDocPointerDown)
+    return () => document.removeEventListener('pointerdown', onDocPointerDown)
+  }, [open])
+
+  if (!onApprofondisci) return null
+  const hasOptions = !!lengthOptions?.length
+
+  return (
+    <div ref={wrapRef} className="relative inline-block shrink-0">
+      <button
+        type="button"
+        onClick={() => (hasOptions ? setOpen(o => !o) : onApprofondisci())}
+        className="inline-flex items-center gap-1 text-[12px] font-bold text-stone-700 hover:text-stone-900 underline underline-offset-2 whitespace-nowrap"
+      >
+        Approfondisci con Giulia <ChevronDown className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && hasOptions && (
+        // Ancorato SOPRA il bottone, non sotto: il trigger nel footer discreto sta in fondo a
+        // una card con `overflow-hidden` (per gli angoli arrotondati delle foto), quindi un menu
+        // che si apre verso il basso verrebbe tagliato dal bordo della card.
+        <div className="absolute right-0 bottom-full mb-1.5 w-64 bg-white rounded-2xl border border-stone-200 shadow-xl z-20 overflow-hidden text-left">
+          <p className="font-barlow font-semibold text-[10px] uppercase tracking-wide text-stone-400 px-3.5 pt-3 pb-1.5">Scegli la lunghezza</p>
+          {lengthOptions!.map(opt => (
+            <button
+              key={opt.key}
+              type="button"
+              disabled={opt.disabled}
+              title={opt.disabledReason}
+              onClick={() => { setOpen(false); onApprofondisci(opt.key) }}
+              className="block w-full text-left px-3.5 py-2.5 border-t border-stone-100 first:border-t-0 hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <p className="text-[12.5px] font-bold text-stone-800">{opt.label}</p>
+              <p className="text-[11px] text-stone-500 mt-0.5 leading-snug">{opt.description}</p>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 interface Props {
   title: string
@@ -23,14 +90,15 @@ interface Props {
   /** True once la guida esiste ma questa sezione non ha ancora testo AI (tier Breve, o
    *  approfondimento non ancora richiesto) — pilota il footer discreto / la riga compatta. */
   showApprofondisciHint?: boolean
-  onApprofondisci?: () => void
+  onApprofondisci?: (length?: GuideTextLength) => void
   /** True mentre è in corso "Approfondisci" proprio SU QUESTA sezione — mostra uno spinner al
    *  posto del pulsante invece di lasciarlo cliccabile una seconda volta. */
   approfondendo?: boolean
-  /** Selettore "Essenziale/Approfondita/Molto approfondita" per questa sezione, mostrato accanto al
-   *  bottone "Approfondisci con Giulia" — vedi components/guida/GuideReader.tsx. Assente quando il
-   *  bottone stesso non è mostrato (nessun approfondimento possibile in questo momento). */
-  lengthSelector?: ReactNode
+  /** Opzioni "Essenziale/Approfondita/Molto approfondita" per questa sezione, mostrate in un
+   *  menu a comparsa dietro al bottone "Approfondisci con Giulia" invece che come pillole sempre
+   *  visibili — vedi components/guida/GuideReader.tsx. Assente quando il bottone stesso non è
+   *  mostrato, o quando l'approfondimento non usa il concetto di lunghezza (es. "Verificato online"). */
+  lengthOptions?: LengthOption[]
   /** Il corpo parte troncato a poche parole ("Leggi tutto"/"Riduci"), per dare subito più spazio
    *  a foto/mappa/dati invece di un lungo muro di testo. Il PDF/stampa (HiddenPdfRoot) non passa
    *  da qui, quindi resta sempre integrale a prescindere da questo stato. */
@@ -54,7 +122,7 @@ interface Props {
 const SectionCard = forwardRef<HTMLElement, Props>(function SectionCard(
   {
     title, subtitle, icon, color, body, widget, sectionPhoto, photoCaption, extraFloatNode, photoIndexBadge, extraPhotos,
-    twoColumns, isVoiceActive, onSpeak, showApprofondisciHint, onApprofondisci, approfondendo, collapsible, truncateWords, lengthSelector,
+    twoColumns, isVoiceActive, onSpeak, showApprofondisciHint, onApprofondisci, approfondendo, collapsible, truncateWords, lengthOptions,
   },
   ref,
 ) {
@@ -79,15 +147,9 @@ const SectionCard = forwardRef<HTMLElement, Props>(function SectionCard(
             </span>
           )}
         </div>
-        {/* Riga separata (non affiancata al titolo): la lunghezza + il bottone insieme possono
-            superare la larghezza disponibile su mobile — vedi flex-wrap qui sotto per il caso
-            limite in cui non entrano nemmeno su una riga propria. */}
         {!approfondendo && onApprofondisci && (
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {lengthSelector}
-            <button onClick={onApprofondisci} className="flex items-center gap-0.5 text-[11.5px] font-bold text-terra-600 hover:text-terra-700 shrink-0 whitespace-nowrap">
-              Approfondisci con Giulia (AI) <ChevronRight className="w-3 h-3" />
-            </button>
+          <div className="flex items-center justify-end">
+            <ApprofondisciTrigger onApprofondisci={onApprofondisci} lengthOptions={lengthOptions} />
           </div>
         )}
       </article>
@@ -177,10 +239,9 @@ const SectionCard = forwardRef<HTMLElement, Props>(function SectionCard(
         )}
         {!hasBody && !approfondendo && showApprofondisciHint && (
           <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-stone-100 text-[11.5px] text-stone-400">
-            <Sparkles className="w-3.5 h-3.5" />
-            Testo narrato non ancora generato —{' '}
-            <button onClick={onApprofondisci} className="text-terra-600 font-bold hover:text-terra-700">Approfondisci con Giulia (AI)</button>
-            {lengthSelector}
+            <Sparkles className="w-3.5 h-3.5 shrink-0" />
+            <span>Testo narrato non ancora generato —</span>
+            <ApprofondisciTrigger onApprofondisci={onApprofondisci} lengthOptions={lengthOptions} />
           </div>
         )}
       </div>
