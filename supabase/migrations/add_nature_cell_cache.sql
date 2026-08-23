@@ -13,8 +13,8 @@
 -- Due percorsi diversi che toccano la stessa cella condividono la riga, anche se
 -- hanno forma o lunghezza completamente diverse — cosa che con la vecchia cache
 -- (chiave = bbox dell'intero percorso) succedeva solo per percorsi quasi identici.
--- TTL lungo (120gg, non 7): la presenza di una specie in una zona non cambia di
--- settimana in settimana; la stagionalità resta comunque coperta dal mese in chiave.
+-- TTL lungo (270gg, come natura2000_cache — non 7): la presenza di una specie in una zona
+-- non cambia di settimana in settimana; la stagionalità resta comunque coperta dal mese in chiave.
 CREATE TABLE IF NOT EXISTS nature_cell_cache (
   id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   cell_key      text NOT NULL,        -- "<latCell>_<lonCell>", vedi cellsForBounds() in lib/natureGrid.ts

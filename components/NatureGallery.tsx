@@ -1,7 +1,6 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
-import Image from 'next/image'
 import Navbar from '@/components/Navbar'
 import BackLink from '@/app/components/BackLink'
 import { Leaf, PawPrint, X, Loader2, LocateFixed, Lock, LockOpen, Maximize2, Minimize2, ExternalLink, Info } from 'lucide-react'
@@ -66,16 +65,32 @@ function sourceLabel(gbifUrl: string | null): string {
   return 'Fonte'
 }
 
-function NaturePhotoCard({ item, onTap }: { item: NatureItem; onTap: () => void }) {
+function NaturePhotoCard({ item, layerIcon, onTap }: { item: NatureItem; layerIcon: typeof Leaf; onTap: () => void }) {
   const displayName = item.vernacularIta ?? item.scientificName
   const danger = hasDangerLevel(item) ? dangerColor(item.dangerLevel) : null
+  // <img> semplice, non next/image: le foto vengono da GBIF/iNaturalist, host non nella
+  // whitelist remotePatterns di next.config.js (solo Wikipedia/Wikimedia lo sono) — next/image le
+  // rifiutava silenziosamente, restava l'icona di immagine rotta al posto della foto.
+  const [imgError, setImgError] = useState(false)
+  const LayerIcon = layerIcon
   return (
     <button
       onClick={onTap}
       className="group relative flex flex-col shrink-0 w-40 sm:w-44 rounded-xl overflow-hidden border border-stone-100 hover:border-stone-200 shadow-sm hover:shadow-md transition-all bg-white text-left"
     >
       <div className="relative h-28 sm:h-32 overflow-hidden bg-stone-100">
-        <Image src={item.thumbUrl ?? ''} alt={displayName} fill sizes="176px" className="object-cover group-hover:scale-105 transition-transform duration-500" />
+        {!imgError && item.thumbUrl ? (
+          <img
+            src={item.thumbUrl}
+            alt={displayName}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            onError={() => setImgError(true)}
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-stone-100">
+            <LayerIcon className="w-8 h-8 text-stone-300" />
+          </div>
+        )}
         {danger && <span className="absolute top-1.5 left-1.5 w-2.5 h-2.5 rounded-full border-2 border-white shadow-sm" style={{ background: danger }} />}
       </div>
       <div className="p-2.5 pb-1">
@@ -136,28 +151,26 @@ const FALLBACK_LEVEL_LABEL: Record<2 | 3, string> = {
   3: 'Specie tipiche dell’area protetta — non osservazione diretta in questo punto',
 }
 
-interface NatureGalleryProps {
+export interface NatureGalleryContentProps {
   trackPoints: TrackPoint[]
   /** 1-12 — month to use for the seasonal GBIF query. */
   month: number
   loadingTrack: boolean
-  /** Overrides the default back-link label (e.g. the hike/activity title). */
-  backLabel?: string
-  /** When provided, renders as a closable popup (X button, no Navbar) instead of a standalone page. */
-  onClose?: () => void
   /** Layer mostrato all'apertura — l'altro viene richiesto solo quando l'utente lo tocca nel
    *  selettore, non prima (stesso principio "nessuna chiamata finché nessuno la chiede" della
    *  cascata GBIF/iNaturalist dietro, vedi lib/galleryCascade.ts). */
   initialLayer?: NatureLayer
 }
 
-/** Un solo popup per Flora e Fauna (prima erano due componenti/popup separati, FloraGallery.tsx e
- *  AnimalGallery.tsx) — selettore di livello in cima, mappa con pin colorati per livello attivo e
- *  controlli raggruppati (stesso trattamento di RouteMapSection.tsx/PoiMap.tsx), galleria sotto
- *  nello stesso stile di "I luoghi da non perdere" (PoiListWidget.tsx): una riga di chip per le
- *  specie senza foto, una riga di card fotografiche per quelle con foto. Il livello non ancora
- *  toccato non genera nessuna chiamata finché non lo si seleziona. */
-export default function NatureGallery({ trackPoints, month, loadingTrack, backLabel, onClose, initialLayer = 'flora' }: NatureGalleryProps) {
+/** Selettore di livello Flora/Fauna, mappa con pin colorati per livello attivo e controlli
+ *  raggruppati (stesso trattamento di RouteMapSection.tsx/PoiMap.tsx), galleria sotto nello
+ *  stesso stile di "I luoghi da non perdere" (PoiListWidget.tsx): una riga di chip per le specie
+ *  senza foto, una riga di card fotografiche per quelle con foto. Il livello non ancora toccato
+ *  non genera nessuna chiamata finché non lo si seleziona. Nessun proprio header/chrome di
+ *  pagina — usato sia dentro NatureGallery (popup/pagina standalone) sia inline dentro
+ *  NaturaWidget.tsx (sezione "La natura intorno a te" della guida), dove il montaggio stesso è
+ *  già rimandato a quando la sezione entra in vista (vedi lì). */
+export function NatureGalleryContent({ trackPoints, month, loadingTrack, initialLayer = 'flora' }: NatureGalleryContentProps) {
   const [layer, setLayer] = useState<NatureLayer>(initialLayer)
   const [floraItems, setFloraItems] = useState<FloraItem[]>([])
   const [animalItems, setAnimalItems] = useState<AnimalItem[]>([])
@@ -218,6 +231,134 @@ export default function NatureGallery({ trackPoints, month, loadingTrack, backLa
   const toggleFullscreen = () => { setFullscreen(v => !v); if (!fullscreen) setLocked(false) }
 
   return (
+    <div>
+      <div className="flex gap-1 bg-stone-100 rounded-xl p-1 mb-4 max-w-xs">
+        {(Object.keys(LAYER_META) as NatureLayer[]).map(l => (
+          <button
+            key={l}
+            onClick={() => setLayer(l)}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-[13px] font-semibold transition-colors ${
+              layer === l ? 'bg-white shadow-sm text-stone-800' : 'text-stone-500 hover:text-stone-700'
+            }`}
+          >
+            {l === 'flora' ? <Leaf className="w-3.5 h-3.5" /> : <PawPrint className="w-3.5 h-3.5" />}
+            {LAYER_META[l].label}
+          </button>
+        ))}
+      </div>
+
+      {loadingTrack ? (
+        <div className="flex items-center gap-2 text-stone-400 text-sm py-12 justify-center">
+          <Loader2 className="w-4 h-4 animate-spin" /> Caricamento…
+        </div>
+      ) : gpsPoints.length < 2 ? (
+        <div className="text-center py-16 text-stone-400">
+          <meta.icon className="w-16 h-16 mx-auto mb-3 text-stone-300" />
+          <p>Percorso GPS non disponibile per questa escursione</p>
+        </div>
+      ) : (
+        <>
+          {!loading && markers.length > 0 && (
+            <div
+              className={fullscreen ? 'fixed inset-0 z-[70] bg-black isolate' : 'relative isolate rounded-2xl overflow-hidden border mb-4'}
+              style={fullscreen ? undefined : { height: 220, borderColor: '#dcd8cc' }}
+            >
+              <MapView
+                trackPoints={trackPoints} height="100%" interactive={!locked}
+                pois={[]} floraMarkers={markers} floraMarkerColor={meta.color} floraMarkerEmoji={meta.emoji}
+                fitSignal={fitTick}
+              />
+              <div className="absolute inset-x-3 z-[1000] flex items-center justify-between" style={{ top: fullscreen ? 'calc(env(safe-area-inset-top, 0px) + 12px)' : '12px' }}>
+                <div className="flex items-center gap-0.5 bg-black/50 backdrop-blur-md border border-white/15 rounded-full p-1">
+                  <button onClick={() => setFitTick(t => t + 1)} title="Inquadra tutti i punti" className={pillChipIdle}>
+                    <LocateFixed className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setLocked(v => !v)}
+                    title={locked ? 'Sblocca la mappa per navigarla' : 'Blocca la mappa'}
+                    className={locked ? pillChipIdle : pillChipActive}
+                  >
+                    {locked ? <Lock className="w-4 h-4" /> : <LockOpen className="w-4 h-4" />}
+                  </button>
+                </div>
+                <button onClick={toggleFullscreen} title={fullscreen ? 'Esci da schermo intero' : 'Schermo intero'} className={chipIdle}>
+                  {fullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {loading ? (
+            <div className="flex items-center gap-2 text-stone-400 text-sm py-12 justify-center">
+              <Loader2 className="w-4 h-4 animate-spin" /> Cerco {meta.label.toLowerCase()} osservata in zona…
+            </div>
+          ) : items.length === 0 ? (
+            <div className="text-center py-16 text-stone-400 max-w-md mx-auto">
+              <meta.icon className="w-16 h-16 mx-auto mb-3 text-stone-300" />
+              <p className="font-display text-lg text-stone-600 mb-2">Nessuna osservazione disponibile</p>
+              <p className="text-sm">
+                I dati dipendono dalle osservazioni di GBIF/iNaturalist e dagli enti competenti. Le
+                aree meno frequentate o i percorsi ad alta quota possono avere copertura limitata
+                per questo mese.
+              </p>
+            </div>
+          ) : (
+            <>
+              {fallbackLevel !== 1 && (
+                <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-stone-100 text-stone-500 text-xs">
+                  <Info className="w-3.5 h-3.5 shrink-0" /> {FALLBACK_LEVEL_LABEL[fallbackLevel]}
+                </div>
+              )}
+
+              {withoutPhoto.length > 0 && (
+                <>
+                  <p className="font-barlow font-semibold text-[11px] uppercase tracking-wide text-stone-400 mb-2">Senza foto</p>
+                  <div className="flex gap-2.5 overflow-x-auto pb-1 mb-4">
+                    {withoutPhoto.map(item => (
+                      <NatureChip key={item.scientificName} item={item} color={meta.color} onTap={() => setSelected(item)} />
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {withPhoto.length > 0 && (
+                <>
+                  <p className="font-barlow font-semibold text-[11px] uppercase tracking-wide text-stone-400 mb-2">Con foto</p>
+                  <div className="flex gap-3 overflow-x-auto pb-1">
+                    {withPhoto.map(item => (
+                      <NaturePhotoCard key={item.scientificName} item={item} layerIcon={meta.icon} onTap={() => setSelected(item)} />
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
+          )}
+        </>
+      )}
+
+      <div className="text-xs text-stone-400 text-center py-4 mt-2">
+        Dati e immagini: GBIF.org, iNaturalist, Wikidata/Commons, EEA Natura 2000. Licenze CC0/CC BY.
+        Attribution per immagine nelle singole schede.{' '}
+        <a href="/fonti-e-crediti" className="hover:underline text-terra-700">Dettaglio fonti e licenze ↗</a>
+      </div>
+
+      {selected && <NatureDetailModal item={selected} layer={layer} month={month} onClose={() => setSelected(null)} />}
+    </div>
+  )
+}
+
+export interface NatureGalleryProps extends NatureGalleryContentProps {
+  /** Overrides the default back-link label (e.g. the hike/activity title). */
+  backLabel?: string
+  /** When provided, renders as a closable popup (X button, no Navbar) instead of a standalone page. */
+  onClose?: () => void
+}
+
+/** Pagina/popup standalone per le rotte dedicate (/guida/[id]/flora, /guida/[id]/animali, e gli
+ *  equivalenti in /resoconto) — dentro la guida stessa, la stessa NatureGalleryContent vive
+ *  invece in linea dentro NaturaWidget.tsx, senza questo involucro. */
+export default function NatureGallery({ trackPoints, month, loadingTrack, backLabel, onClose, initialLayer = 'flora' }: NatureGalleryProps) {
+  return (
     <div className={onClose ? 'fixed inset-0 z-50 bg-stone-50 overflow-y-auto' : 'min-h-screen bg-stone-50'}>
       {!onClose && <Navbar />}
       <div className="max-w-3xl mx-auto px-4 py-6">
@@ -232,118 +373,8 @@ export default function NatureGallery({ trackPoints, month, loadingTrack, backLa
         <h1 className="font-display text-2xl font-semibold text-stone-800 mb-1">Flora e fauna</h1>
         <p className="text-sm text-stone-500 mb-4">Osservazioni in zona — {MONTHS[month - 1]}</p>
 
-        <div className="flex gap-1 bg-stone-100 rounded-xl p-1 mb-4 max-w-xs">
-          {(Object.keys(LAYER_META) as NatureLayer[]).map(l => (
-            <button
-              key={l}
-              onClick={() => setLayer(l)}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-[13px] font-semibold transition-colors ${
-                layer === l ? 'bg-white shadow-sm text-stone-800' : 'text-stone-500 hover:text-stone-700'
-              }`}
-            >
-              {l === 'flora' ? <Leaf className="w-3.5 h-3.5" /> : <PawPrint className="w-3.5 h-3.5" />}
-              {LAYER_META[l].label}
-            </button>
-          ))}
-        </div>
-
-        {loadingTrack ? (
-          <div className="flex items-center gap-2 text-stone-400 text-sm py-12 justify-center">
-            <Loader2 className="w-4 h-4 animate-spin" /> Caricamento…
-          </div>
-        ) : gpsPoints.length < 2 ? (
-          <div className="text-center py-16 text-stone-400">
-            <meta.icon className="w-16 h-16 mx-auto mb-3 text-stone-300" />
-            <p>Percorso GPS non disponibile per questa escursione</p>
-          </div>
-        ) : (
-          <>
-            {!loading && markers.length > 0 && (
-              <div
-                className={fullscreen ? 'fixed inset-0 z-[70] bg-black isolate' : 'relative isolate rounded-2xl overflow-hidden border mb-4'}
-                style={fullscreen ? undefined : { height: 220, borderColor: '#dcd8cc' }}
-              >
-                <MapView
-                  trackPoints={trackPoints} height="100%" interactive={!locked}
-                  pois={[]} floraMarkers={markers} floraMarkerColor={meta.color} floraMarkerEmoji={meta.emoji}
-                  fitSignal={fitTick}
-                />
-                <div className="absolute inset-x-3 z-[1000] flex items-center justify-between" style={{ top: fullscreen ? 'calc(env(safe-area-inset-top, 0px) + 12px)' : '12px' }}>
-                  <div className="flex items-center gap-0.5 bg-black/50 backdrop-blur-md border border-white/15 rounded-full p-1">
-                    <button onClick={() => setFitTick(t => t + 1)} title="Inquadra tutti i punti" className={pillChipIdle}>
-                      <LocateFixed className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => setLocked(v => !v)}
-                      title={locked ? 'Sblocca la mappa per navigarla' : 'Blocca la mappa'}
-                      className={locked ? pillChipIdle : pillChipActive}
-                    >
-                      {locked ? <Lock className="w-4 h-4" /> : <LockOpen className="w-4 h-4" />}
-                    </button>
-                  </div>
-                  <button onClick={toggleFullscreen} title={fullscreen ? 'Esci da schermo intero' : 'Schermo intero'} className={chipIdle}>
-                    {fullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {loading ? (
-              <div className="flex items-center gap-2 text-stone-400 text-sm py-12 justify-center">
-                <Loader2 className="w-4 h-4 animate-spin" /> Cerco {meta.label.toLowerCase()} osservata in zona…
-              </div>
-            ) : items.length === 0 ? (
-              <div className="text-center py-16 text-stone-400 max-w-md mx-auto">
-                <meta.icon className="w-16 h-16 mx-auto mb-3 text-stone-300" />
-                <p className="font-display text-lg text-stone-600 mb-2">Nessuna osservazione disponibile</p>
-                <p className="text-sm">
-                  I dati dipendono dalle osservazioni di GBIF/iNaturalist e dagli enti competenti. Le
-                  aree meno frequentate o i percorsi ad alta quota possono avere copertura limitata
-                  per questo mese.
-                </p>
-              </div>
-            ) : (
-              <>
-                {fallbackLevel !== 1 && (
-                  <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-stone-100 text-stone-500 text-xs">
-                    <Info className="w-3.5 h-3.5 shrink-0" /> {FALLBACK_LEVEL_LABEL[fallbackLevel]}
-                  </div>
-                )}
-
-                {withoutPhoto.length > 0 && (
-                  <>
-                    <p className="font-barlow font-semibold text-[11px] uppercase tracking-wide text-stone-400 mb-2">Senza foto</p>
-                    <div className="flex gap-2.5 overflow-x-auto pb-1 mb-4">
-                      {withoutPhoto.map(item => (
-                        <NatureChip key={item.scientificName} item={item} color={meta.color} onTap={() => setSelected(item)} />
-                      ))}
-                    </div>
-                  </>
-                )}
-
-                {withPhoto.length > 0 && (
-                  <>
-                    <p className="font-barlow font-semibold text-[11px] uppercase tracking-wide text-stone-400 mb-2">Con foto</p>
-                    <div className="flex gap-3 overflow-x-auto pb-1">
-                      {withPhoto.map(item => (
-                        <NaturePhotoCard key={item.scientificName} item={item} onTap={() => setSelected(item)} />
-                      ))}
-                    </div>
-                  </>
-                )}
-              </>
-            )}
-          </>
-        )}
-
-        <div className="text-xs text-stone-400 text-center py-4 mt-6">
-          Dati e immagini: GBIF.org, iNaturalist, Wikidata/Commons, EEA Natura 2000. Licenze CC0/CC BY.
-          Attribution per immagine nelle singole schede.{' '}
-          <a href="/fonti-e-crediti" className="hover:underline text-terra-700">Dettaglio fonti e licenze ↗</a>
-        </div>
+        <NatureGalleryContent trackPoints={trackPoints} month={month} loadingTrack={loadingTrack} initialLayer={initialLayer} />
       </div>
-
-      {selected && <NatureDetailModal item={selected} layer={layer} month={month} onClose={() => setSelected(null)} />}
     </div>
   )
 }

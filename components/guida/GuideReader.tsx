@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef, useCallback, useMemo, type ReactNode } from 'react'
 import { updatePlannedMeta, type PlannedHike } from '@/lib/plannedStore'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
-import { formatDuration } from '@/lib/tcxParser'
+import { formatDuration, type TrackPoint } from '@/lib/tcxParser'
 import { classifyTrackShape } from '@/lib/geoUtils'
 import type { StartPointInfo } from '@/lib/routeBuilder/startPointInfo'
 import { getCachedGeoInfo, setCachedGeoInfo } from '@/lib/routeBuilder/geoInfoCache'
@@ -115,8 +115,9 @@ export interface NaturaBundle {
   hasGps: boolean
   flora?: FloraResult | null
   floraLoading: boolean
-  onOpenFloraGallery: () => void
-  onOpenAnimalGallery: () => void
+  trackPoints: TrackPoint[]
+  /** 1-12 — mese pianificato (o corrente, se non ancora datato) per la query stagionale GBIF. */
+  month: number
 }
 
 interface Props {

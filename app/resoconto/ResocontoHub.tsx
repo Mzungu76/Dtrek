@@ -47,7 +47,6 @@ import { useCtsRecompute } from '@/lib/useCtsRecompute'
 
 const RouteMap3D      = dynamic(() => import('@/components/RouteMap3D'),      { ssr: false })
 const StreetViewPanel = dynamic(() => import('@/components/StreetViewPanel'), { ssr: false })
-const NatureGallery   = dynamic(() => import('@/components/NatureGallery'),   { ssr: false })
 
 const COVER_FETCH_CAP = 40
 
@@ -147,7 +146,6 @@ export default function ResocontoHub({ id }: { id?: string }) {
   }, [activity])
 
   const flora = useFlora(heroPolyline, activity?.altitudeMax)
-  const [natureGalleryLayer, setNatureGalleryLayer] = useState<'flora' | 'fauna' | null>(null)
 
   // Lightweight list of all completed hikes, most recent first — backs the carousel/gallery.
   // getAllActivities() is stale-while-revalidate: it resolves instantly with last visit's
@@ -478,7 +476,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
           }}
           natura={{
             hasGps: hasGps && heroPolyline.length > 1, flora: flora.data, floraLoading: flora.loading,
-            onOpenFloraGallery: () => setNatureGalleryLayer('flora'), onOpenAnimalGallery: () => setNatureGalleryLayer('fauna'),
+            trackPoints: activity.trackPoints, month: new Date(activity.startTime).getMonth() + 1,
           }}
           onOpenMap3D={() => setShow3D(true)}
           onOpenVideoWizard={() => { setOpenVideoWizard(true); setShow3D(true) }}
@@ -723,15 +721,6 @@ export default function ResocontoHub({ id }: { id?: string }) {
         <StreetViewPanel lat={centerPt.lat} lon={centerPt.lon} title={activity?.title ?? undefined} onClose={() => setShowStreetView(false)} />
       )}
 
-      {natureGalleryLayer && activity && (
-        <NatureGallery
-          trackPoints={activity.trackPoints}
-          month={new Date(activity.startTime).getMonth() + 1}
-          loadingTrack={false}
-          initialLayer={natureGalleryLayer}
-          onClose={() => setNatureGalleryLayer(null)}
-        />
-      )}
     </>
   )
 }
