@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState, type ReactNode } from 'react'
+import { ChevronDown } from 'lucide-react'
 import { tsColor, useCountUp } from '@/components/ScoreRing'
 import { ctsLabel } from '@/lib/trailScore'
 import { objectiveSafetyLabel } from '@/lib/safetyScore'
@@ -50,6 +51,16 @@ export interface TrailScoreGaugeBadgeProps {
    *  comunque 90 — l'avviso segnala solo "verifica prima di partire", non ricalcola il rischio.
    *  Assente/vuoto ⇒ nessun puntino. */
   notices?: { severity: NoticeDotSeverity }[]
+  /** true (default) sulle copertine/miniature scure (foto o mappa) — testo bianco con ombra.
+   *  false nelle card chiare proprie (Guida "Dati e sicurezza", Resoconto "Dati e punteggi"). */
+  dark?: boolean
+  /** "stacked" con un Consiglio (percorso + personalSafety): quel Consiglio da solo resta sempre
+   *  visibile come verdetto, le altre righe (Sicurezza oggettiva/Idoneità) vanno dietro "Vedi il
+   *  dettaglio" — un solo elemento a vista invece di quattro righe sempre impilate (piano
+   *  semplificazione visiva). `detailExtra` è contenuto aggiuntivo mostrato nello stesso pannello
+   *  a comparsa (ScoresWidget ci passa ScoreRing invece di tenerlo come card separata sotto).
+   *  Ignorato per captionLayout="curved" o quando non c'è un Consiglio da riassumere. */
+  detailExtra?: ReactNode
 }
 
 export type NoticeDotSeverity = 'danger' | 'warning' | 'info'
@@ -63,7 +74,8 @@ const NOTICE_DOT_COLOR: Record<NoticeDotSeverity, string> = {
 // comunque crea avvisi solo per problemi concreti e specifici, non ci si aspetta di arrivarci.
 const MAX_NOTICE_DOTS = 5
 
-const NEUTRAL_TRACK = 'rgba(255,255,255,0.18)'
+const NEUTRAL_TRACK_DARK = 'rgba(255,255,255,0.18)'
+const NEUTRAL_TRACK_LIGHT = '#efe9df'
 
 /**
  * Badge compatto del Trail Score: due anelli concentrici — l'anello esterno sottile è la
@@ -84,13 +96,15 @@ const NEUTRAL_TRACK = 'rgba(255,255,255,0.18)'
  */
 export function TrailScoreGaugeBadge({
   total, safety, personalSafety, loading, vetoed, size = 80, showLabel = true, disclaimer = 'none',
-  captionLayout = 'curved', notices,
+  captionLayout = 'curved', notices, detailExtra, dark = true,
 }: TrailScoreGaugeBadgeProps) {
   const [mounted, setMounted] = useState(false)
   useEffect(() => {
     const raf = requestAnimationFrame(() => setMounted(true))
     return () => cancelAnimationFrame(raf)
   }, [])
+  const [detailOpen, setDetailOpen] = useState(false)
+  const neutralTrack = dark ? NEUTRAL_TRACK_DARK : NEUTRAL_TRACK_LIGHT
 
   const cx = size / 2
   const cy = size / 2
@@ -169,10 +183,20 @@ export function TrailScoreGaugeBadge({
       const verdict = verdictPhrase(total, personalSafety)
       scoreLines.push({
         key: 'consiglio', label: 'Consiglio', value: verdict.label, color: verdict.color, infoSection: 'consiglio-percorso',
-        extra: disclaimer === 'inline' ? <span className="ml-1 text-white/50">*</span> : null,
+        extra: disclaimer === 'inline' ? <span className="ml-1 text-stone-400">*</span> : null,
       })
     }
   }
+
+  // Quando c'è un Consiglio, riassume già Sicurezza oggettiva + Idoneità in una frase sola — quelle
+  // due righe (più i punteggi grezzi di ScoreRing via `detailExtra`) restano dietro "Vedi il
+  // dettaglio" invece di sempre a vista. Senza Consiglio (nessun personalSafety) le righe erano già
+  // solo una o due: niente da nascondere, si mostrano tutte come prima.
+  const consiglioLine = scoreLines.find(l => l.key === 'consiglio')
+  const collapsible = captionLayout === 'stacked' && !!consiglioLine
+  const primaryLine = collapsible ? consiglioLine! : null
+  const subtitleLine = collapsible ? scoreLines.find(l => l.key === 'ts') ?? null : null
+  const secondaryLines = collapsible ? scoreLines.filter(l => l.key === 'objective' || l.key === 'fit') : []
 
   // Stima di altezza riga/interlinea (font 11-12px, leading-tight) — approssimata perché non c'è
   // una misura reale del DOM disponibile qui, ma l'effetto è comunque impercettibilmente diverso
@@ -191,7 +215,7 @@ export function TrailScoreGaugeBadge({
       <div className={`flex gap-2.5 ${captionLayout === 'stacked' ? 'items-start' : 'items-center'}`}>
         <div className="relative shrink-0" style={{ width: size, height: size }}>
           <svg width={size} height={size} style={{ overflow: 'visible' }}>
-            <circle cx={cx} cy={cy} r={rOuter} fill="none" stroke={NEUTRAL_TRACK} strokeWidth={swOuter} />
+            <circle cx={cx} cy={cy} r={rOuter} fill="none" stroke={neutralTrack} strokeWidth={swOuter} />
 
             {!personalSafety && safety != null && (
               <circle
@@ -229,7 +253,7 @@ export function TrailScoreGaugeBadge({
               </>
             )}
 
-            <circle cx={cx} cy={cy} r={rInner} fill="none" stroke={NEUTRAL_TRACK} strokeWidth={swInner} />
+            <circle cx={cx} cy={cy} r={rInner} fill="none" stroke={neutralTrack} strokeWidth={swInner} />
             {total != null && (
               <circle
                 cx={cx} cy={cy} r={rInner} fill="none" stroke={totalColor} strokeWidth={swInner} strokeLinecap="round"
@@ -250,7 +274,10 @@ export function TrailScoreGaugeBadge({
             })}
           </svg>
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <span className="font-display font-black leading-none text-white tabular-nums" style={{ fontSize: size * 0.32, textShadow: '0 1px 4px rgba(0,0,0,0.6)' }}>
+            <span
+              className={`font-display font-black leading-none tabular-nums ${dark ? 'text-white' : 'text-stone-800'}`}
+              style={{ fontSize: size * 0.32, textShadow: dark ? '0 1px 4px rgba(0,0,0,0.6)' : 'none' }}
+            >
               {total != null ? Math.round(animatedTotal) : '—'}
             </span>
           </div>
@@ -291,17 +318,30 @@ export function TrailScoreGaugeBadge({
                   </div>
                 )
               })
+            ) : collapsible ? (
+              // Solo il verdetto a vista — riassume già Sicurezza oggettiva + Idoneità in una
+              // frase sola, col Trail Score come sottotitolo. Il resto sta dietro "Vedi il
+              // dettaglio" più sotto, non impilato qui.
+              <div className="min-w-0">
+                <p className="text-stone-400 text-[10px] font-semibold uppercase tracking-wide leading-tight">
+                  {subtitleLine ? `Trail Score · ${subtitleLine.value}` : primaryLine!.label}
+                </p>
+                <p className="text-[15px] font-bold leading-snug mt-1" style={{ color: primaryLine!.color ?? '#2b2419' }}>
+                  {primaryLine!.value}
+                  {primaryLine!.extra}
+                </p>
+              </div>
             ) : (
               // Etichetta e valore su righe separate — in mobile la colonna di testo è troppo
               // stretta perché "ETICHETTA valore" stia su una riga sola: qui il valore va a capo
               // sotto la propria etichetta invece di spezzarsi a metà parola accanto ad essa.
               scoreLines.map(line => (
                 <div key={line.key} className="min-w-0">
-                  <p className="flex items-center gap-1 text-white/55 text-[10px] font-semibold uppercase tracking-wide leading-tight">
+                  <p className="flex items-center gap-1 text-stone-400 text-[10px] font-semibold uppercase tracking-wide leading-tight">
                     {line.label}
-                    {line.infoSection && <InfoButton section={line.infoSection} onDark />}
+                    {line.infoSection && <InfoButton section={line.infoSection} />}
                   </p>
-                  <p className="text-sm font-bold leading-snug mt-0.5" style={{ color: line.color ?? '#fff', textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}>
+                  <p className="text-sm font-bold leading-snug mt-0.5" style={{ color: line.color ?? '#2b2419' }}>
                     {line.value}
                     {line.extra}
                   </p>
@@ -311,11 +351,44 @@ export function TrailScoreGaugeBadge({
           </div>
         )}
       </div>
+
+      {showLabel && collapsible && (
+        <>
+          <button
+            type="button"
+            onClick={() => setDetailOpen(o => !o)}
+            className="mt-3 inline-flex items-center gap-1 text-stone-800 text-[12.5px] font-bold"
+          >
+            Vedi il dettaglio
+            <ChevronDown className={`w-3.5 h-3.5 transition-transform ${detailOpen ? 'rotate-180' : ''}`} />
+          </button>
+          {detailOpen && (
+            <div className="mt-3 pt-3 border-t border-dashed border-stone-200 space-y-2.5">
+              {secondaryLines.map(line => (
+                <div key={line.key} className="min-w-0">
+                  <p className="flex items-center gap-1 text-stone-400 text-[10px] font-semibold uppercase tracking-wide leading-tight">
+                    {line.label}
+                    {line.infoSection && <InfoButton section={line.infoSection} />}
+                  </p>
+                  <p className="text-sm font-bold leading-snug mt-0.5" style={{ color: line.color ?? '#2b2419' }}>
+                    {line.value}
+                  </p>
+                </div>
+              ))}
+              {detailExtra}
+            </div>
+          )}
+        </>
+      )}
+      {/* Senza un Consiglio (nessun personalSafety) le righe erano già solo una o due — niente da
+          nascondere dietro un tap, quindi detailExtra (ScoreRing) resta semplicemente a vista. */}
+      {showLabel && !collapsible && detailExtra && <div className="mt-3">{detailExtra}</div>}
+
       {/* Disclaimer a piena larghezza sotto anello+didascalie, non stretto nella colonna di testo
           accanto all'anello — nel pannello "Punteggio complessivo" quella colonna è troppo stretta
           perché ci stia comodamente un intero paragrafo di testo. */}
       {showLabel && disclaimer === 'inline' && (
-        <div className="mt-3"><SafetyDisclaimer variant="inline" dark /></div>
+        <div className="mt-3"><SafetyDisclaimer variant="inline" dark={dark} /></div>
       )}
     </div>
   )

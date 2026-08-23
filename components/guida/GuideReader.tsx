@@ -44,7 +44,7 @@ import GuideHero from './GuideHero'
 import GuideStatsStrip from './GuideStatsStrip'
 import SectionNav from '@/components/editorial/SectionNav'
 import VoicePlayer from '@/components/editorial/VoicePlayer'
-import SectionCard from '@/components/editorial/SectionCard'
+import SectionCard, { type LengthOption } from '@/components/editorial/SectionCard'
 import type { CtsProps } from '@/components/ScoreRing'
 import type { SafetyScore } from '@/lib/safetyScore'
 import type { PersonalSafety } from '@/lib/personalSafetyFit'
@@ -397,7 +397,7 @@ export default function GuideReader({
   //  - aggiunta di sezioni a una guida già esistente: nessun reset, nessuna anteprima live — solo
   //    uno spinner per-sezione (generatingSections) finché il risultato non è pronto, poi fuso nel
   //    testo già visibile con mergeGuideSection (lib/guideParse.ts), sezione per sezione.
-  const generateSections = useCallback(async (sections: GuideSectionKey[]) => {
+  const generateSections = useCallback(async (sections: GuideSectionKey[], overrides?: Partial<SectionLengthMap>) => {
     if (generating || generatingSections.length > 0 || sections.length === 0) return
     const isInitial = guideText.trim().length <= 50
     // Istantanea del testo già esistente PRIMA di questa chiamata — usata per fondere in anteprima
@@ -426,11 +426,15 @@ export default function GuideReader({
       // irraggiungibile, nessun utente verificabile) — la copia che il browser ha già in
       // locale, per non bloccare la generazione in quei momenti. Ignorato in condizioni normali.
       // Override "per singola guida" della lunghezza — solo per le sezioni di QUESTA richiesta,
-      // presa dal selettore accanto al bottone "Approfondisci"/"Genera il resto" (sectionLengths
-      // state, di partenza uguale al default salvato in Impostazioni). Il server la fonde con
-      // quel default per ogni altra sezione non toccata qui — vedi effectiveSectionLengths in
-      // app/api/guide/route.ts.
-      const sectionLengthsForCall = Object.fromEntries(sections.map(k => [k, sectionLengths[k]]))
+      // presa dal menu a comparsa del bottone "Approfondisci"/"Genera il resto". `overrides` copre
+      // la scelta appena fatta in questo stesso click (lo state sectionLengths non è ancora
+      // aggiornato in questo giro di render — chiusura stale), sectionLengths lo state di
+      // partenza per tutto il resto (uguale al default salvato in Impostazioni). Il server la
+      // fonde con quel default per ogni altra sezione non toccata qui — vedi
+      // effectiveSectionLengths in app/api/guide/route.ts.
+      const sectionLengthsForCall = Object.fromEntries(
+        sections.map(k => [k, overrides?.[k] ?? sectionLengths[k]]),
+      )
       let acc = await streamFetchText('/api/guide', {
         hikeId: hike.id,
         sections,
@@ -842,37 +846,26 @@ export default function GuideReader({
     }
   }
 
-  // Selettore "Essenziale/Approfondita/Molto approfondita" mostrato accanto al bottone
-  // "Approfondisci con Giulia" di ogni sezione ancora senza testo (vedi SectionCard's
-  // lengthSelector) — parte dal default salvato in Impostazioni (sectionLengths state) ma è solo
+  // Opzioni "Essenziale/Approfondita/Molto approfondita" mostrate nel menu a comparsa del
+  // bottone "Approfondisci con Giulia" di ogni sezione ancora senza testo (vedi SectionCard's
+  // lengthOptions) — parte dal default salvato in Impostazioni (sectionLengths state) ma è solo
   // un override locale per QUESTA generazione, non persistito.
-  const renderLengthSelector = (key: GuideSectionKey) => {
+  const buildLengthOptions = (key: GuideSectionKey): LengthOption[] => {
     const moltoCount = countMoltoApprofondita(sectionLengths)
-    return (
-    <div className="flex items-center gap-0.5 rounded-full border border-stone-200 p-0.5 shrink-0">
-      {GUIDE_TEXT_LENGTHS.map(l => {
-        const isCurrent = sectionLengths[key] === l.key
-        // Stesso limite di Impostazioni (components/profilo/SectionGuida.tsx) — il tetto vale
-        // sull'intera sectionLengths condivisa, non solo sulle sezioni di questa generazione,
-        // perché "Genera il resto della guida" può richiederle tutte insieme in una sola chiamata.
-        const atLimit = l.key === 'molto_approfondita' && !isCurrent && moltoCount >= MAX_MOLTO_APPROFONDITA_SECTIONS
-        return (
-          <button
-            key={l.key}
-            type="button"
-            onClick={() => setSectionLengths(prev => ({ ...prev, [key]: l.key }))}
-            disabled={atLimit}
-            title={atLimit ? `Massimo ${MAX_MOLTO_APPROFONDITA_SECTIONS} sezioni in "Molto approfondita" — riduci un'altra sezione prima` : l.description}
-            className={`px-2 py-0.5 rounded-full text-[10.5px] font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-              isCurrent ? 'bg-stone-700 text-white' : 'text-stone-400 hover:bg-stone-100'
-            }`}
-          >
-            {l.label}
-          </button>
-        )
-      })}
-    </div>
-    )
+    return GUIDE_TEXT_LENGTHS.map(l => {
+      const isCurrent = sectionLengths[key] === l.key
+      // Stesso limite di Impostazioni (components/profilo/SectionGuida.tsx) — il tetto vale
+      // sull'intera sectionLengths condivisa, non solo sulle sezioni di questa generazione,
+      // perché "Genera il resto della guida" può richiederle tutte insieme in una sola chiamata.
+      const atLimit = l.key === 'molto_approfondita' && !isCurrent && moltoCount >= MAX_MOLTO_APPROFONDITA_SECTIONS
+      return {
+        key: l.key,
+        label: l.label,
+        description: l.description,
+        disabled: atLimit,
+        disabledReason: atLimit ? `Massimo ${MAX_MOLTO_APPROFONDITA_SECTIONS} sezioni in "Molto approfondita" — riduci un'altra sezione prima` : undefined,
+      }
+    })
   }
 
   const hasGuide  = guideText.trim().length > 50
@@ -1119,7 +1112,15 @@ export default function GuideReader({
                     isVoiceActive={activeSection === i && (isPlaying || isPaused)}
                     onSpeak={() => speakSection(i)}
                     showApprofondisciHint={canApprofondisciSection}
-                    onApprofondisci={canApprofondisciSection ? () => generateSections([s.guideKey!]) : undefined}
+                    onApprofondisci={canApprofondisciSection ? (length) => {
+                      // La scelta della lunghezza nel menu a comparsa e l'avvio della
+                      // generazione sono un solo click — l'override va passato esplicitamente a
+                      // generateSections invece di affidarsi al setSectionLengths qui sopra,
+                      // perché quello state non è ancora aggiornato in questo stesso giro di
+                      // render (chiusura stale, vedi generateSections).
+                      if (length) setSectionLengths(prev => ({ ...prev, [s.guideKey!]: length }))
+                      generateSections([s.guideKey!], length ? { [s.guideKey!]: length } : undefined)
+                    } : undefined}
                     approfondendo={generatingSections.includes(s.guideKey as GuideSectionKey)}
                     // Corpo troncato di default (piano semplificazione visiva) — soglia più larga
                     // di quella di Resoconto (26 parole): qui l'utente è arrivato apposta per
@@ -1130,9 +1131,9 @@ export default function GuideReader({
                     // "Verificato online" non passa mai dal meccanismo delle lunghezze (è generata
                     // da una chiamata AI dedicata alla sola ricerca web, indipendente da
                     // sectionLengths — vedi SECTION_LENGTH_BY_LEVEL in app/api/guide/route.ts):
-                    // mostrare il selettore lì sarebbe un controllo che sembra fare qualcosa ma non
+                    // mostrare le opzioni lì sarebbe un controllo che sembra fare qualcosa ma non
                     // ha alcun effetto.
-                    lengthSelector={canApprofondisciSection && s.guideKey !== 'verificato' ? renderLengthSelector(s.guideKey!) : undefined}
+                    lengthOptions={canApprofondisciSection && s.guideKey !== 'verificato' ? buildLengthOptions(s.guideKey!) : undefined}
                   />
                 )
               })}

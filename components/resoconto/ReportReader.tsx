@@ -573,32 +573,40 @@ export default function ReportReader({
         const rated = (activity.userRating ?? 0) > 0
         return (
           <div className="space-y-5">
-            {rated && (
-              <div className="rounded-2xl bg-gradient-to-br from-stone-900 to-stone-800 px-5 py-6 flex flex-col sm:flex-row items-center gap-4">
-                <RatingGaugeBadge value={activity.userRating!} size={96} />
+            {/* UX-AUDIT.md P-M7 — un voto scelto dall'utente (opinione) e un Trail Score calcolato
+                dall'app (oggettivo) avevano lo stesso trattamento visivo (due card scure identiche
+                impilate), confermato confuso da screenshot. Qui una card chiara sola — quando
+                entrambi i dati esistono, due colonne di pari peso ma con etichette esplicite
+                ("La tua opinione" / "Il dato oggettivo") a dire subito da dove viene ciascun
+                numero, invece di lasciarlo intuire dalla sola forma dell'anello. */}
+            {(rated || ts != null) && (
+              <div className="rounded-2xl bg-white border border-stone-100 px-5 py-6">
+                <Kicker className="text-center mb-3">Punteggio complessivo</Kicker>
+                <div className={`grid gap-4 ${rated && ts != null ? 'grid-cols-2 divide-x divide-dashed divide-stone-200' : 'grid-cols-1'}`}>
+                  {rated && (
+                    <div className="flex flex-col items-center text-center">
+                      <RatingGaugeBadge value={activity.userRating!} size={72} showLabel={false} dark={false} />
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-stone-400 mt-2.5">La tua opinione</p>
+                      <p className="text-[12.5px] font-bold text-stone-800 mt-0.5">Voto {activity.userRating}/10</p>
+                    </div>
+                  )}
+                  {ts != null && (
+                    <div className="flex flex-col items-center text-center">
+                      <TrailScoreGaugeBadge total={Math.round(ts)} safety={null} showLabel={false} size={72} dark={false} />
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-stone-400 mt-2.5">Il dato oggettivo</p>
+                      {scoreLabel && <p className="text-[12.5px] font-bold text-stone-800 mt-0.5">Trail Score · {scoreLabel}</p>}
+                    </div>
+                  )}
+                </div>
                 {activity.userRatingNote && (
-                  <p className="flex-1 min-w-0 text-white/85 text-sm italic leading-relaxed text-center sm:text-left">
+                  <p className="text-stone-500 text-[12.5px] italic leading-relaxed text-center mt-4 pt-4 border-t border-stone-100">
                     “{activity.userRatingNote}”
                   </p>
                 )}
               </div>
             )}
             {ts != null ? (
-              <>
-                {/* Stessa impaginazione della "Punteggio complessivo" di Guida
-                    (components/guida/widgets/ScoresWidget.tsx): card scura + badge grande. Un solo
-                    anello (safety=null) perché qui c'è un solo dato da mostrare, non due. */}
-                <div className="rounded-2xl bg-gradient-to-br from-stone-900 to-stone-800 px-5 py-7 flex flex-col items-center gap-2">
-                  <Kicker className="text-stone-400">Punteggio complessivo</Kicker>
-                  <TrailScoreGaugeBadge total={Math.round(ts)} safety={null} showLabel={false} size={128} />
-                  {scoreLabel && (
-                    <p className="text-white text-[11px] sm:text-xs font-bold uppercase tracking-wide" style={{ textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}>
-                      {scoreLabel}
-                    </p>
-                  )}
-                </div>
-                <ComfortTrailScoreWidget result={data.ctsResult} cached={activity.trailScore} beautyScore={activity.linkedBeautyScore} />
-              </>
+              <ComfortTrailScoreWidget result={data.ctsResult} cached={activity.trailScore} beautyScore={activity.linkedBeautyScore} />
             ) : (
               <div className="flex items-center justify-between gap-4 rounded-2xl bg-stone-50 border border-stone-200 px-5 py-4">
                 <p className="text-sm text-stone-500">Il punteggio non è ancora stato calcolato.</p>
