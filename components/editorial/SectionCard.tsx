@@ -31,11 +31,14 @@ interface Props {
    *  bottone "Approfondisci con Giulia" — vedi components/guida/GuideReader.tsx. Assente quando il
    *  bottone stesso non è mostrato (nessun approfondimento possibile in questo momento). */
   lengthSelector?: ReactNode
-  /** Resoconto-only: il corpo parte troncato a poche parole ("Leggi tutto"/"Riduci"), per dare
-   *  subito più spazio a foto/mappa/dati invece di un lungo muro di testo — assente per Guida,
-   *  che mostra sempre il testo intero. Il PDF/stampa (HiddenPdfRoot) non passa da qui, quindi
-   *  resta sempre integrale a prescindere da questo stato. */
+  /** Il corpo parte troncato a poche parole ("Leggi tutto"/"Riduci"), per dare subito più spazio
+   *  a foto/mappa/dati invece di un lungo muro di testo. Il PDF/stampa (HiddenPdfRoot) non passa
+   *  da qui, quindi resta sempre integrale a prescindere da questo stato. */
   collapsible?: boolean
+  /** Soglia di parole dell'anteprima quando `collapsible` — default di `truncateBody` (26,
+   *  pensato per Resoconto). La Guida usa una soglia più larga: l'utente ci è arrivato apposta
+   *  per leggere, non solo per scorrere. */
+  truncateWords?: number
 }
 
 /**
@@ -51,14 +54,14 @@ interface Props {
 const SectionCard = forwardRef<HTMLElement, Props>(function SectionCard(
   {
     title, subtitle, icon, color, body, widget, sectionPhoto, photoCaption, extraFloatNode, photoIndexBadge, extraPhotos,
-    twoColumns, isVoiceActive, onSpeak, showApprofondisciHint, onApprofondisci, approfondendo, collapsible, lengthSelector,
+    twoColumns, isVoiceActive, onSpeak, showApprofondisciHint, onApprofondisci, approfondendo, collapsible, truncateWords, lengthSelector,
   },
   ref,
 ) {
   const hasBody = !!body?.trim()
   const hasWidget = widget != null
   const [expanded, setExpanded] = useState(false)
-  const { preview, isTruncated } = collapsible && body ? truncateBody(body) : { preview: '', isTruncated: false }
+  const { preview, isTruncated } = collapsible && body ? truncateBody(body, truncateWords) : { preview: '', isTruncated: false }
   // Se il corpo sta già tutto nelle 20-30 parole, non c'è nulla da troncare — va dritto al testo
   // formattato (foto/curiosità inclusi), altrimenti l'utente resterebbe bloccato sull'anteprima
   // piana senza mai vedere l'impaginazione vera e senza un modo per espanderla.
@@ -94,28 +97,39 @@ const SectionCard = forwardRef<HTMLElement, Props>(function SectionCard(
   return (
     <article
       ref={ref}
-      className={`scroll-mt-16 bg-white rounded-2xl mb-4 overflow-hidden shadow-sm transition-shadow ${
+      className={`scroll-mt-16 bg-white rounded-2xl border border-stone-100 mb-6 overflow-hidden shadow-[0_5px_16px_-6px_rgba(43,36,25,0.14)] transition-shadow ${
         isVoiceActive ? 'ring-2 ring-terra-300 shadow-terra-100 shadow-md' : 'hover:shadow-md'
       }`}
     >
-      <div className="px-5 pt-5 pb-1 sm:px-7 sm:pt-6 md:px-8 md:pt-7">
-        <div className="flex items-center gap-2">
-          <span className="[&>svg]:w-3.5 [&>svg]:h-3.5" style={{ color }}>{icon}</span>
-          <p className="font-barlow font-bold uppercase tracking-wide text-[11px]" style={{ color }}>{title}</p>
-          <div className="flex-1" />
-          {hasBody && onSpeak && (
-            <button onClick={onSpeak} className="text-stone-300 hover:text-stone-500 transition-colors" title="Ascolta questa sezione">
-              <Volume2 className="w-3.5 h-3.5" />
-            </button>
-          )}
+      {/* Header editoriale — un solo elemento "acceso" per sezione: il badge tondo pieno porta il
+          colore, eyebrow/titolo tornano a inchiostro neutro invece di gridare anche loro (piano
+          "semplificazione visiva" — vedi i mockup discussi, direzione C1: card vera + badge). */}
+      <div className="px-5 pt-5 pb-3 sm:px-7 sm:pt-6 md:px-8 md:pt-7">
+        <div className="flex items-start gap-3">
+          <span
+            className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-white [&>svg]:w-[18px] [&>svg]:h-[18px]"
+            style={{ background: color }}
+          >
+            {icon}
+          </span>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <p className="font-barlow font-semibold uppercase tracking-wide text-[11px] text-stone-400">{title}</p>
+              <div className="flex-1" />
+              {hasBody && onSpeak && (
+                <button onClick={onSpeak} className="text-stone-300 hover:text-stone-500 transition-colors shrink-0" title="Ascolta questa sezione">
+                  <Volume2 className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+            <h2 className="font-display text-[22px] sm:text-[26px] font-semibold text-stone-800 mt-1 leading-tight" style={{ textWrap: 'balance' as const }}>
+              {title}
+            </h2>
+            {subtitle && (
+              <p className="text-[12.5px] text-stone-400 mt-1 leading-snug">{subtitle}</p>
+            )}
+          </div>
         </div>
-        <h2 className="font-display text-[22px] sm:text-[26px] font-semibold text-stone-800 mt-1.5 leading-tight" style={{ textWrap: 'balance' as const }}>
-          {title}
-        </h2>
-        {subtitle && (
-          <p className="text-[12.5px] text-stone-400 mt-1 leading-snug">{subtitle}</p>
-        )}
-        <div className="mt-3 h-[2px] w-10 rounded-full" style={{ background: color }} />
       </div>
 
       <div className="px-5 py-5 sm:px-7 md:px-8 md:pb-7">
@@ -129,8 +143,7 @@ const SectionCard = forwardRef<HTMLElement, Props>(function SectionCard(
                   {isTruncated && (
                     <button
                       onClick={() => setExpanded(true)}
-                      className="inline-flex items-center gap-0.5 font-bold text-[13px] align-baseline whitespace-nowrap"
-                      style={{ color }}
+                      className="inline-flex items-center gap-0.5 font-bold text-[13px] align-baseline whitespace-nowrap text-stone-700 hover:text-stone-900 underline underline-offset-2"
                     >
                       Leggi tutto <ChevronDown className="w-3 h-3" />
                     </button>
@@ -140,7 +153,7 @@ const SectionCard = forwardRef<HTMLElement, Props>(function SectionCard(
             ) : (
               <>
                 <MagazineBody
-                  body={body!} color={color} sectionPhoto={sectionPhoto} twoColumns={twoColumns}
+                  body={body!} sectionPhoto={sectionPhoto} twoColumns={twoColumns}
                   photoCaption={photoCaption} extraFloatNode={extraFloatNode} photoIndexBadge={photoIndexBadge}
                   extraPhotos={extraPhotos}
                 />

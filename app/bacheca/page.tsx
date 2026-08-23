@@ -6,13 +6,14 @@ import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import {
   Navigation, Sparkles, MapPin, ArrowRight, TrendingUp, Flame, BarChart3, Loader2, Heart, Maximize2,
-  Clock, CalendarDays, Compass, BookOpen, Map as MapIcon, Activity,
+  BookOpen, Map as MapIcon, Activity,
 } from 'lucide-react'
 import HubNavBar from '@/components/routehub/HubNavBar'
 import RouteThumb from '@/components/RouteThumb'
 import CuriosityModal from '@/components/bacheca/CuriosityModal'
 import TerritoryMap from '@/components/bacheca/TerritoryMap'
 import SectionEyebrow from '@/components/bacheca/SectionEyebrow'
+import BachecaStage from '@/components/bacheca/BachecaStage'
 import Sheet from '@/components/ui/Sheet'
 import { getAllActivities, getActivityById, computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
 import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
@@ -24,7 +25,6 @@ import { ctsLabel } from '@/lib/trailScore'
 import { formatDuration } from '@/lib/tcxParser'
 import { routeTypeLabel } from '@/lib/routeBuilder/loopBuilder'
 import { tryOpenNavigatorApp } from '@/lib/navigatorHandoff'
-import { GalleryMapThumb } from '@/components/routehub/BottomGallery'
 import type { RecommendationCard } from '@/lib/routeBuilder/generateRecommendations'
 import type { ScoredCandidate } from '@/lib/routeBuilder/scoreCandidates'
 import type { FoundRouteItem } from '@/lib/routeBuilder/foundRoute'
@@ -364,217 +364,198 @@ export default function BachecaPage() {
     )
   }
 
-  return (
-    <div className="min-h-screen bg-[#fdfcfa]">
-      <div className="sticky top-0 z-40"><HubNavBar /></div>
-
-      {/* Hero compatta: prossima uscita pianificata, poi l'ultima uscita fatta, poi il CTA a
-          pianificare la prima — mai un solo stato "vuoto" quando esiste comunque qualcosa da
-          mostrare. Foto: prima quella vera (propria o da un POI Wikipedia, vedi heroPhotoUrl sopra),
-          poi il tracciato su sfondo topografico, poi l'immagine generica di fallback. Quando una
-          foto vera è disponibile, il tracciato ci fosse comunque perso (la foto lo sostituisce
-          interamente) — una piccola mappa in un angolo lo riporta visibile, sempre, senza
-          rinunciare alla foto. */}
-      <div className="relative h-[340px] overflow-hidden">
-        {heroPhotoUrl ? (
-          <img src={heroPhotoUrl} alt="" className="absolute inset-0 w-full h-full object-cover" style={{ filter: HERO_IMAGE_FILTER }} />
-        ) : (featured?.hike.routePolyline?.length || latestActivity?.routePolyline?.length) ? (
-          <div className="absolute inset-0 bg-gradient-to-b from-forest-50 to-stone-50 bg-topography">
-            <div className="absolute inset-6">
-              <RouteThumb polyline={(featured?.hike.routePolyline ?? latestActivity?.routePolyline)!} color="#2d7a3d" strokeWidth={3} />
-            </div>
+  // Schermo 1 — copertina a piena pagina: identica logica hero di prima (foto vera → tracciato su
+  // topografia → fallback generico), solo divisa in due fratelli invece di un unico blocco:
+  // `background` è l'unica superficie che risponde al trascinamento verso l'alto (vedi
+  // BachecaStage.tsx sul perché dev'essere un fratello, non un genitore, della galleria).
+  const background = (
+    <div className="relative w-full h-full overflow-hidden">
+      {heroPhotoUrl ? (
+        <img src={heroPhotoUrl} alt="" className="absolute inset-0 w-full h-full object-cover" style={{ filter: HERO_IMAGE_FILTER }} />
+      ) : (featured?.hike.routePolyline?.length || latestActivity?.routePolyline?.length) ? (
+        <div className="absolute inset-0 bg-gradient-to-b from-forest-50 to-stone-50 bg-topography">
+          <div className="absolute inset-6">
+            <RouteThumb polyline={(featured?.hike.routePolyline ?? latestActivity?.routePolyline)!} color="#2d7a3d" strokeWidth={3} />
           </div>
-        ) : (
-          <img src={FALLBACK_HERO} alt="" className="absolute inset-0 w-full h-full object-cover" />
-        )}
-        {heroPhotoUrl && (featured?.hike.routePolyline ?? latestActivity?.routePolyline)?.length ? (
-          <div className="absolute top-4 right-4 w-16 h-16 rounded-xl bg-black/45 backdrop-blur-sm border border-white/20 p-2 shadow-lg">
-            <RouteThumb polyline={(featured?.hike.routePolyline ?? latestActivity?.routePolyline)!} color="#ffffff" strokeWidth={2} />
-          </div>
-        ) : null}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-black/40" />
-
-        <div className="absolute left-5 right-5 bottom-5">
-          {featured ? (
-            <>
-              <p className="font-barlow font-extrabold text-[11px] tracking-[2px] uppercase text-terra-300 mb-1">
-                {featured.hasDate
-                  ? `Prossima uscita · ${format(new Date(featured.hike.plannedDate!), 'EEEE d MMMM', { locale: it })}`
-                  : 'Pianificato, senza data ancora'}
-              </p>
-              <h1 className="font-display font-black text-[28px] text-white leading-tight" style={{ textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>
-                {featured.hike.title}
-              </h1>
-              <p className="text-[12px] text-white/85 mt-1" style={{ textShadow: '0 1px 6px rgba(0,0,0,0.55)' }}>
-                {(featured.hike.distanceMeters / 1000).toFixed(1)} km · +{Math.round(featured.hike.elevationGain)} m
-                {featured.hike.estimatedTimeSeconds ? ` · ${formatDuration(featured.hike.estimatedTimeSeconds)}` : ''}
-              </p>
-              {featured.hike.cachedTrailScore != null && (
-                <span
-                  className="inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold text-white"
-                  style={{ backgroundColor: `${ctsLabel(featured.hike.cachedTrailScore).color}b3` }}
-                >
-                  TS {Math.round(featured.hike.cachedTrailScore)} · {ctsLabel(featured.hike.cachedTrailScore).label}
-                </span>
-              )}
-              <div className="mt-3 flex items-center gap-2">
-                {featured.hasDate ? (
-                  // "Naviga" prova prima l'app nativa Navigator, altrimenti ricade sul navigatore
-                  // via web — stessa identica azione del bottone "Naviga" dentro la guida di questo
-                  // stesso percorso (app/guida/GuidaHub.tsx's primaryAction), non solo un link alla
-                  // pagina della guida.
-                  <button
-                    onClick={() => tryOpenNavigatorApp(router, `/guida/${encodeURIComponent(featured.hike.id)}/naviga`)}
-                    className="inline-flex items-center gap-2 bg-terra-500 hover:bg-terra-600 text-white text-[13px] font-semibold px-5 py-2.5 rounded-full shadow-lg transition-colors"
-                  >
-                    <Navigation className="w-4 h-4" /> Naviga
-                  </button>
-                ) : (
-                  <Link
-                    href={`/guida/${encodeURIComponent(featured.hike.id)}`}
-                    className="inline-flex items-center gap-2 bg-terra-500 hover:bg-terra-600 text-white text-[13px] font-semibold px-5 py-2.5 rounded-full shadow-lg transition-colors"
-                  >
-                    <Navigation className="w-4 h-4" /> Vai al percorso
-                  </Link>
-                )}
-                {/* Apre la copertina del percorso (mappa, statistiche, POI) invece di saltare
-                    direttamente alla guida narrata — ?scheda=1 disattiva l'auto-apertura di
-                    default per un link diretto (vedi app/guida/[id]/page.tsx). */}
-                <Link
-                  href={`/guida/${encodeURIComponent(featured.hike.id)}?scheda=1`}
-                  className="inline-flex items-center gap-2 bg-white/15 hover:bg-white/25 text-white text-[13px] font-semibold px-4 py-2.5 rounded-full border border-white/30 backdrop-blur-sm transition-colors"
-                >
-                  Apri scheda
-                </Link>
-              </div>
-            </>
-          ) : latestActivity ? (
-            <>
-              <p className="font-barlow font-extrabold text-[11px] tracking-[2px] uppercase text-terra-300 mb-1">
-                {isStale ? `Sei fermo da ${daysSinceLastActivity} giorni` : `La tua ultima uscita · ${format(new Date(latestActivity.startTime), 'd MMMM', { locale: it })}`}
-              </p>
-              <h1 className="font-display font-black text-[28px] text-white leading-tight" style={{ textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>
-                {latestActivity.title}
-              </h1>
-              <p className="text-[12px] text-white/85 mt-1" style={{ textShadow: '0 1px 6px rgba(0,0,0,0.55)' }}>
-                {(latestActivity.distanceMeters / 1000).toFixed(1)} km · +{Math.round(latestActivity.elevationGain)} m
-                {latestActivity.totalTimeSeconds ? ` · ${formatDuration(latestActivity.totalTimeSeconds)}` : ''}
-              </p>
-              {latestActivity.trailScore != null && (
-                <span
-                  className="inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold text-white"
-                  style={{ backgroundColor: `${ctsLabel(latestActivity.trailScore).color}b3` }}
-                >
-                  TS {Math.round(latestActivity.trailScore)} · {ctsLabel(latestActivity.trailScore).label}
-                </span>
-              )}
-              <div className="mt-3 flex items-center gap-3">
-                {isStale ? (
-                  <>
-                    <Link
-                      href="/upload?tab=gpx"
-                      className="inline-flex items-center gap-2 bg-terra-500 hover:bg-terra-600 text-white text-[13px] font-semibold px-5 py-2.5 rounded-full shadow-lg transition-colors"
-                    >
-                      <Navigation className="w-4 h-4" /> Pianifica una nuova uscita
-                    </Link>
-                    <Link href={`/resoconto/${encodeURIComponent(latestActivity.id)}`} className="text-[12px] font-semibold text-white/90" style={{ textShadow: '0 1px 6px rgba(0,0,0,0.55)' }}>
-                      Rivedi l&apos;ultima uscita
-                    </Link>
-                  </>
-                ) : (
-                  <>
-                    <Link
-                      href={`/resoconto/${encodeURIComponent(latestActivity.id)}`}
-                      className="inline-flex items-center gap-2 bg-terra-500 hover:bg-terra-600 text-white text-[13px] font-semibold px-5 py-2.5 rounded-full shadow-lg transition-colors"
-                    >
-                      <Navigation className="w-4 h-4" /> Rivedi
-                    </Link>
-                    <Link href="/upload?tab=gpx" className="text-[12px] font-semibold text-white/90" style={{ textShadow: '0 1px 6px rgba(0,0,0,0.55)' }}>
-                      Pianifica la prossima uscita →
-                    </Link>
-                  </>
-                )}
-              </div>
-            </>
-          ) : (
-            <>
-              <p className="font-barlow font-extrabold text-[11px] tracking-[2px] uppercase text-terra-300 mb-1">Inizia da qui</p>
-              <h1 className="font-display font-black text-[26px] text-white leading-tight" style={{ textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>
-                Pianifica il tuo primo percorso
-              </h1>
-              <Link
-                href="/upload?tab=gpx"
-                className="mt-3 inline-flex items-center gap-2 bg-terra-500 hover:bg-terra-600 text-white text-[13px] font-semibold px-5 py-2.5 rounded-full shadow-lg transition-colors"
-              >
-                <Navigation className="w-4 h-4" /> Pianifica un percorso
-              </Link>
-            </>
-          )}
         </div>
-      </div>
+      ) : (
+        <img src={FALLBACK_HERO} alt="" className="absolute inset-0 w-full h-full object-cover" />
+      )}
+      {heroPhotoUrl && (featured?.hike.routePolyline ?? latestActivity?.routePolyline)?.length ? (
+        <div className="absolute top-16 right-4 w-16 h-16 rounded-xl bg-black/45 backdrop-blur-sm border border-white/20 p-2 shadow-lg">
+          <RouteThumb polyline={(featured?.hike.routePolyline ?? latestActivity?.routePolyline)!} color="#ffffff" strokeWidth={2} />
+        </div>
+      ) : null}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/15 to-black/35" />
+    </div>
+  )
 
-      <div className="max-w-lg mx-auto px-4 pb-10">
-
-        {featuredList.length > 1 && (
-          <div className="mt-4">
-            {/* Gerarchia temporale esplicita — "adesso" è già l'hero sopra, senza bisogno di
-                un'etichetta: qui iniziano le fasi successive del ciclo utente (a breve → da
-                scoprire → nel tempo), per rendere leggibile a colpo d'occhio in che momento si
-                trova ciascun gruppo di contenuti. */}
-            <SectionEyebrow icon={Clock} color="#c05a17" size="md" className="mb-1">A breve</SectionEyebrow>
-            {upcomingCount > 0 && (
-              <p className="text-[12px] text-stone-500 mb-1.5 mt-1.5">
-                Hai {upcomingCount} percors{upcomingCount === 1 ? 'o' : 'i'} programmat{upcomingCount === 1 ? 'o' : 'i'} nei prossimi {UPCOMING_WINDOW_DAYS} giorni.
-              </p>
+  // Testo/CTA/galleria in basso su Schermo 1 — un fratello dello sfondo (vedi sopra), sfuma e
+  // smette di intercettare i tocchi mentre Schermo 2 sale (gestito da BachecaStage). "Altre uscite
+  // in programma" vive qui ora, non più come riga separata sotto lo scroll — nessuna doppia
+  // rappresentazione dello stesso percorso (card + tracciato) e "A breve" sparisce come etichetta:
+  // la copertina stessa comunica "a breve" senza bisogno di dirlo.
+  const chrome = (
+    <div className="px-5 pb-1">
+      {featured ? (
+        <>
+          <p className="font-barlow font-extrabold text-[11px] tracking-[2px] uppercase text-terra-300 mb-1">
+            {featured.hasDate
+              ? `Prossima uscita · ${format(new Date(featured.hike.plannedDate!), 'EEEE d MMMM', { locale: it })}`
+              : 'Pianificato, senza data ancora'}
+          </p>
+          <h1 className="font-display font-black text-[28px] text-white leading-tight" style={{ textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>
+            {featured.hike.title}
+          </h1>
+          <p className="text-[12px] text-white/85 mt-1" style={{ textShadow: '0 1px 6px rgba(0,0,0,0.55)' }}>
+            {(featured.hike.distanceMeters / 1000).toFixed(1)} km · +{Math.round(featured.hike.elevationGain)} m
+            {featured.hike.estimatedTimeSeconds ? ` · ${formatDuration(featured.hike.estimatedTimeSeconds)}` : ''}
+          </p>
+          {featured.hike.cachedTrailScore != null && (
+            <span
+              className="inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold text-white"
+              style={{ backgroundColor: `${ctsLabel(featured.hike.cachedTrailScore).color}b3` }}
+            >
+              TS {Math.round(featured.hike.cachedTrailScore)} · {ctsLabel(featured.hike.cachedTrailScore).label}
+            </span>
+          )}
+          <div className="mt-3 flex items-center gap-2">
+            {featured.hasDate ? (
+              // "Naviga" prova prima l'app nativa Navigator, altrimenti ricade sul navigatore
+              // via web — stessa identica azione del bottone "Naviga" dentro la guida di questo
+              // stesso percorso (app/guida/GuidaHub.tsx's primaryAction), non solo un link alla
+              // pagina della guida.
+              <button
+                onClick={() => tryOpenNavigatorApp(router, `/guida/${encodeURIComponent(featured.hike.id)}/naviga`)}
+                className="inline-flex items-center gap-2 bg-terra-500 hover:bg-terra-600 text-white text-[13px] font-semibold px-5 py-2.5 rounded-full shadow-lg transition-colors"
+              >
+                <Navigation className="w-4 h-4" /> Naviga
+              </button>
+            ) : (
+              <Link
+                href={`/guida/${encodeURIComponent(featured.hike.id)}`}
+                className="inline-flex items-center gap-2 bg-terra-500 hover:bg-terra-600 text-white text-[13px] font-semibold px-5 py-2.5 rounded-full shadow-lg transition-colors"
+              >
+                <Navigation className="w-4 h-4" /> Vai al percorso
+              </Link>
             )}
-            <SectionEyebrow icon={CalendarDays} color="#277134" className="mb-2 mt-3">Altre uscite in programma</SectionEyebrow>
-            <div className="flex gap-2.5 overflow-x-auto pb-1 -mx-4 px-4" style={{ scrollbarWidth: 'none' }}>
-              {featuredList.slice(1).map(f => {
-                const photoUrl = plannedHikePhotoUrl(f.hike)
-                return (
+            {/* Apre la copertina del percorso (mappa, statistiche, POI) invece di saltare
+                direttamente alla guida narrata — ?scheda=1 disattiva l'auto-apertura di
+                default per un link diretto (vedi app/guida/[id]/page.tsx). */}
+            <Link
+              href={`/guida/${encodeURIComponent(featured.hike.id)}?scheda=1`}
+              className="inline-flex items-center gap-2 bg-white/15 hover:bg-white/25 text-white text-[13px] font-semibold px-4 py-2.5 rounded-full border border-white/30 backdrop-blur-sm transition-colors"
+            >
+              Apri scheda
+            </Link>
+          </div>
+        </>
+      ) : latestActivity ? (
+        <>
+          <p className="font-barlow font-extrabold text-[11px] tracking-[2px] uppercase text-terra-300 mb-1">
+            {isStale ? `Sei fermo da ${daysSinceLastActivity} giorni` : `La tua ultima uscita · ${format(new Date(latestActivity.startTime), 'd MMMM', { locale: it })}`}
+          </p>
+          <h1 className="font-display font-black text-[28px] text-white leading-tight" style={{ textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>
+            {latestActivity.title}
+          </h1>
+          <p className="text-[12px] text-white/85 mt-1" style={{ textShadow: '0 1px 6px rgba(0,0,0,0.55)' }}>
+            {(latestActivity.distanceMeters / 1000).toFixed(1)} km · +{Math.round(latestActivity.elevationGain)} m
+            {latestActivity.totalTimeSeconds ? ` · ${formatDuration(latestActivity.totalTimeSeconds)}` : ''}
+          </p>
+          {latestActivity.trailScore != null && (
+            <span
+              className="inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold text-white"
+              style={{ backgroundColor: `${ctsLabel(latestActivity.trailScore).color}b3` }}
+            >
+              TS {Math.round(latestActivity.trailScore)} · {ctsLabel(latestActivity.trailScore).label}
+            </span>
+          )}
+          <div className="mt-3 flex items-center gap-3">
+            {isStale ? (
+              <>
                 <Link
-                  key={f.hike.id}
-                  href={`/guida/${encodeURIComponent(f.hike.id)}`}
-                  className="shrink-0 w-[170px] bg-white border border-stone-200 rounded-2xl overflow-hidden shadow-sm"
+                  href="/upload?tab=gpx"
+                  className="inline-flex items-center gap-2 bg-terra-500 hover:bg-terra-600 text-white text-[13px] font-semibold px-5 py-2.5 rounded-full shadow-lg transition-colors"
                 >
-                  <div className="relative h-[90px] bg-gradient-to-b from-forest-50 to-stone-50 bg-topography overflow-hidden">
+                  <Navigation className="w-4 h-4" /> Pianifica una nuova uscita
+                </Link>
+                <Link href={`/resoconto/${encodeURIComponent(latestActivity.id)}`} className="text-[12px] font-semibold text-white/90" style={{ textShadow: '0 1px 6px rgba(0,0,0,0.55)' }}>
+                  Rivedi l&apos;ultima uscita
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link
+                  href={`/resoconto/${encodeURIComponent(latestActivity.id)}`}
+                  className="inline-flex items-center gap-2 bg-terra-500 hover:bg-terra-600 text-white text-[13px] font-semibold px-5 py-2.5 rounded-full shadow-lg transition-colors"
+                >
+                  <Navigation className="w-4 h-4" /> Rivedi
+                </Link>
+                <Link href="/upload?tab=gpx" className="text-[12px] font-semibold text-white/90" style={{ textShadow: '0 1px 6px rgba(0,0,0,0.55)' }}>
+                  Pianifica la prossima uscita →
+                </Link>
+              </>
+            )}
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="font-barlow font-extrabold text-[11px] tracking-[2px] uppercase text-terra-300 mb-1">Inizia da qui</p>
+          <h1 className="font-display font-black text-[26px] text-white leading-tight" style={{ textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>
+            Pianifica il tuo primo percorso
+          </h1>
+          <Link
+            href="/upload?tab=gpx"
+            className="mt-3 inline-flex items-center gap-2 bg-terra-500 hover:bg-terra-600 text-white text-[13px] font-semibold px-5 py-2.5 rounded-full shadow-lg transition-colors"
+          >
+            <Navigation className="w-4 h-4" /> Pianifica un percorso
+          </Link>
+        </>
+      )}
+
+      {featuredList.length > 1 && (
+        <div className="mt-4">
+          {upcomingCount > 0 && (
+            <p className="text-[11px] text-white/70 mb-2" style={{ textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>
+              Hai {upcomingCount} percors{upcomingCount === 1 ? 'o' : 'i'} programmat{upcomingCount === 1 ? 'o' : 'i'} nei prossimi {UPCOMING_WINDOW_DAYS} giorni.
+            </p>
+          )}
+          <p className="font-barlow font-semibold text-[10px] uppercase tracking-[1.5px] text-white/55 mb-2">Altre uscite in programma</p>
+          <div className="flex gap-2 overflow-x-auto pb-1 -mx-5 px-5" style={{ scrollbarWidth: 'none' }}>
+            {featuredList.slice(1).map(f => {
+              const photoUrl = plannedHikePhotoUrl(f.hike)
+              return (
+                <Link key={f.hike.id} href={`/guida/${encodeURIComponent(f.hike.id)}`} className="shrink-0 w-[108px]">
+                  <div className="relative h-[62px] rounded-xl overflow-hidden bg-gradient-to-b from-forest-900 to-forest-800 border border-white/25">
                     {photoUrl ? (
-                      <>
-                        <img src={photoUrl} alt="" className="absolute inset-0 w-full h-full object-cover" style={{ filter: HERO_IMAGE_FILTER }} />
-                        {/* Stesso trattamento dell'hero: la foto non deve far sparire il tracciato,
-                            solo un riquadro piccolo invece della mappa piena — qui non c'è spazio
-                            per altro. */}
-                        {f.hike.routePolyline?.length ? (
-                          <div className="absolute top-1.5 right-1.5 w-7 h-7 rounded-md bg-black/45 backdrop-blur-sm border border-white/20 p-1">
-                            <RouteThumb polyline={f.hike.routePolyline} color="#ffffff" strokeWidth={2} />
-                          </div>
-                        ) : null}
-                      </>
+                      <img src={photoUrl} alt="" className="absolute inset-0 w-full h-full object-cover" style={{ filter: HERO_IMAGE_FILTER }} />
                     ) : f.hike.routePolyline?.length ? (
-                      // Nessuna foto POI per questo percorso — mappa Leaflet/OSM reale (non solo il
-                      // tracciato SVG) come già altrove nell'app (es. la copertina di un percorso
-                      // senza foto in Guide/Resoconti, stesso componente): non interattiva (tutti i
-                      // gesti disattivati), sicura dentro una card che è già essa stessa un link.
-                      <GalleryMapThumb polyline={f.hike.routePolyline} />
+                      <div className="absolute inset-2"><RouteThumb polyline={f.hike.routePolyline} color="#ffffff" strokeWidth={2} /></div>
                     ) : null}
                   </div>
-                  <div className="p-2.5">
-                    <p className="text-[12.5px] font-semibold text-stone-800 leading-snug line-clamp-2">{f.hike.title}</p>
-                    <p className="text-[11px] text-stone-400 mt-1">
-                      {f.hasDate && f.hike.plannedDate
-                        ? `${format(new Date(f.hike.plannedDate), 'd MMM', { locale: it })} · ${(f.hike.distanceMeters / 1000).toFixed(1)} km`
-                        : `${(f.hike.distanceMeters / 1000).toFixed(1)} km`}
-                    </p>
-                  </div>
+                  <p className="text-[10.5px] font-semibold text-white mt-1 truncate" style={{ textShadow: '0 1px 4px rgba(0,0,0,0.6)' }}>{f.hike.title}</p>
+                  <p className="text-[9px] text-white/60">
+                    {f.hasDate && f.hike.plannedDate
+                      ? `${format(new Date(f.hike.plannedDate), 'd MMM', { locale: it })} · ${(f.hike.distanceMeters / 1000).toFixed(1)} km`
+                      : `${(f.hike.distanceMeters / 1000).toFixed(1)} km`}
+                  </p>
                 </Link>
-                )
-              })}
-            </div>
+              )
+            })}
           </div>
-        )}
+        </div>
+      )}
+    </div>
+  )
+
+  // Schermo 2 — il resto della Bacheca, rivelato trascinando Schermo 1 verso l'alto (o toccando la
+  // freccia): "Da scoprire" e "Nel tempo" restano, con le micro-sezioni nel trattamento a badge
+  // deciso per la Guida (SectionEyebrow.tsx).
+  const detail = (
+    <div className="max-w-lg mx-auto px-4 pt-4">
 
         {(curiosityEntries.length > 0 || recoStatus === 'ok' || recoStatus === 'pending') && (
-          <SectionEyebrow icon={Compass} color="#c05a17" size="md" className="mt-6 mb-1">Da scoprire</SectionEyebrow>
+          <SectionEyebrow size="md" className="mb-1">Da scoprire</SectionEyebrow>
         )}
 
         {curiosityEntries.length > 0 && (
@@ -634,7 +615,7 @@ export default function BachecaPage() {
           // stessa mappa, più grande e interattiva, in un foglio a comparsa.
           <div className="mt-4">
             <div className="flex items-start justify-between mb-2">
-              <SectionEyebrow icon={MapIcon} color="#c05a17">Il tuo territorio</SectionEyebrow>
+              <SectionEyebrow icon={MapIcon} color="#0f6e94">Il tuo territorio</SectionEyebrow>
               <button
                 type="button"
                 onClick={() => setTerritoryMapOpen(true)}
@@ -656,7 +637,7 @@ export default function BachecaPage() {
         {recoStatus === 'ok' && recoCards.length > 0 && (
           <div className="mt-4">
             <div className="flex items-start justify-between mb-2">
-              <SectionEyebrow icon={Sparkles} color="#c05a17">Percorsi suggeriti</SectionEyebrow>
+              <SectionEyebrow icon={Sparkles} color="#d97220">Percorsi suggeriti</SectionEyebrow>
               <Link href="/percorsi-per-te" className="text-[11px] font-semibold text-forest-600 flex items-center gap-1 shrink-0 pt-0.5">
                 Vedi tutti <ArrowRight className="w-3 h-3" />
               </Link>
@@ -728,10 +709,10 @@ export default function BachecaPage() {
           </Link>
         )}
 
-        <SectionEyebrow icon={TrendingUp} color="#c05a17" size="md" className="mt-6 mb-1">Nel tempo</SectionEyebrow>
+        <SectionEyebrow size="md" className="mt-6 mb-1">Nel tempo</SectionEyebrow>
         <div className="border-t border-stone-200 pt-4">
           <div className="flex items-start justify-between mb-1">
-            <SectionEyebrow icon={Activity} color="#277134">Il tuo andamento</SectionEyebrow>
+            <SectionEyebrow icon={Activity} color="#378d44">Il tuo andamento</SectionEyebrow>
             <Link href="/statistiche" className="text-[11px] font-semibold text-forest-600 flex items-center gap-1 pt-0.5">
               Vedi statistiche <ArrowRight className="w-3 h-3" />
             </Link>
@@ -767,7 +748,12 @@ export default function BachecaPage() {
             </>
           )}
         </div>
-      </div>
+    </div>
+  )
+
+  return (
+    <>
+      <BachecaStage background={background} chrome={chrome} detail={detail} detailTitle="Bacheca" />
 
       {openCuriosity && (
         <CuriosityModal
@@ -776,7 +762,7 @@ export default function BachecaPage() {
           onClose={() => setOpenCuriosity(null)}
         />
       )}
-    </div>
+    </>
   )
 }
 
