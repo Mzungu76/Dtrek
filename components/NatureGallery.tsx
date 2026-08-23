@@ -1,7 +1,6 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
-import Image from 'next/image'
 import Navbar from '@/components/Navbar'
 import BackLink from '@/app/components/BackLink'
 import { Leaf, PawPrint, X, Loader2, LocateFixed, Lock, LockOpen, Maximize2, Minimize2, ExternalLink, Info } from 'lucide-react'
@@ -66,16 +65,32 @@ function sourceLabel(gbifUrl: string | null): string {
   return 'Fonte'
 }
 
-function NaturePhotoCard({ item, onTap }: { item: NatureItem; onTap: () => void }) {
+function NaturePhotoCard({ item, layerIcon, onTap }: { item: NatureItem; layerIcon: typeof Leaf; onTap: () => void }) {
   const displayName = item.vernacularIta ?? item.scientificName
   const danger = hasDangerLevel(item) ? dangerColor(item.dangerLevel) : null
+  // <img> semplice, non next/image: le foto vengono da GBIF/iNaturalist, host non nella
+  // whitelist remotePatterns di next.config.js (solo Wikipedia/Wikimedia lo sono) — next/image le
+  // rifiutava silenziosamente, restava l'icona di immagine rotta al posto della foto.
+  const [imgError, setImgError] = useState(false)
+  const LayerIcon = layerIcon
   return (
     <button
       onClick={onTap}
       className="group relative flex flex-col shrink-0 w-40 sm:w-44 rounded-xl overflow-hidden border border-stone-100 hover:border-stone-200 shadow-sm hover:shadow-md transition-all bg-white text-left"
     >
       <div className="relative h-28 sm:h-32 overflow-hidden bg-stone-100">
-        <Image src={item.thumbUrl ?? ''} alt={displayName} fill sizes="176px" className="object-cover group-hover:scale-105 transition-transform duration-500" />
+        {!imgError && item.thumbUrl ? (
+          <img
+            src={item.thumbUrl}
+            alt={displayName}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            onError={() => setImgError(true)}
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-stone-100">
+            <LayerIcon className="w-8 h-8 text-stone-300" />
+          </div>
+        )}
         {danger && <span className="absolute top-1.5 left-1.5 w-2.5 h-2.5 rounded-full border-2 border-white shadow-sm" style={{ background: danger }} />}
       </div>
       <div className="p-2.5 pb-1">
@@ -326,7 +341,7 @@ export default function NatureGallery({ trackPoints, month, loadingTrack, backLa
                     <p className="font-barlow font-semibold text-[11px] uppercase tracking-wide text-stone-400 mb-2">Con foto</p>
                     <div className="flex gap-3 overflow-x-auto pb-1">
                       {withPhoto.map(item => (
-                        <NaturePhotoCard key={item.scientificName} item={item} onTap={() => setSelected(item)} />
+                        <NaturePhotoCard key={item.scientificName} item={item} layerIcon={meta.icon} onTap={() => setSelected(item)} />
                       ))}
                     </div>
                   </>
