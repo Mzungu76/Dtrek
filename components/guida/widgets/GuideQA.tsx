@@ -110,16 +110,26 @@ export default function GuideQA({ hikeId, hikeFallback }: { hikeId: string; hike
   }
 
   return (
-    <div className="bg-white rounded-2xl mb-4 overflow-hidden shadow-sm">
-      <div className="flex items-center gap-3 px-5 py-3" style={{ background: '#813619' }}>
-        <div className="w-1.5 h-6 rounded-full bg-white/25 shrink-0" />
-        <div className="flex items-center gap-2 text-white">
-          <MessageCircleQuestion className="w-4 h-4 opacity-80" />
-          <h2 className="font-display text-[12px] font-bold tracking-[2px] uppercase">Chiedi a Giulia</h2>
+    <div className="bg-white rounded-2xl border border-stone-100 mb-6 overflow-hidden shadow-[0_5px_16px_-6px_rgba(43,36,25,0.14)]">
+      {/* Stesso header C1 delle sezioni della guida (vedi editorial/SectionCard.tsx): badge tondo
+          colorato + eyebrow/titolo a inchiostro neutro, non più una fascia piena colorata — questo
+          era l'unico widget della Guida a uscire da quel linguaggio. */}
+      <div className="flex items-start gap-3 px-5 pt-5 pb-3 sm:px-7 sm:pt-6 md:px-8 md:pt-7">
+        <span
+          className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-white [&>svg]:w-[18px] [&>svg]:h-[18px]"
+          style={{ background: '#813619' }}
+        >
+          <MessageCircleQuestion />
+        </span>
+        <div className="flex-1 min-w-0">
+          <p className="font-barlow font-semibold uppercase tracking-wide text-[11px] text-stone-400">Chiedi a Giulia</p>
+          <h2 className="font-display text-[22px] sm:text-[26px] font-semibold text-stone-800 mt-1 leading-tight" style={{ textWrap: 'balance' as const }}>
+            Chiedi a Giulia
+          </h2>
         </div>
       </div>
 
-      <div className="px-5 py-5 sm:px-6">
+      <div className="px-5 py-5 sm:px-7 md:px-8 md:pb-7">
         <p className="text-[13px] text-stone-500 mb-4">
           Hai un dubbio su questo percorso? Chiedi pure — Giulia risponde solo a domande pertinenti a questa escursione.
         </p>

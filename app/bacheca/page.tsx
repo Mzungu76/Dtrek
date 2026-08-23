@@ -71,9 +71,16 @@ function estimateReadingMinutes(text: string): number {
 }
 
 const FALLBACK_HERO = '/stato-hero-fallback.jpg'
-// Stessi valori usati da RouteHub.tsx per le foto di copertina — coerenza visiva quando l'hero
-// della Home mostra una foto reale (propria o da un POI Wikipedia) invece del solo tracciato.
-const HERO_IMAGE_FILTER = 'saturate(1.25) contrast(1.08) brightness(0.85)'
+// Più tenue dei valori "gemelli" di RouteHub.tsx (saturate 1.25/contrast 1.08/brightness 0.85):
+// qui la sorgente è spesso una miniatura Wikipedia bassa risoluzione ingrandita su tutto lo
+// schermo (vedi HERO_PHOTO_HEIGHT più sotto), quindi un filtro più aggressivo ne accentuava
+// la grana invece di limitarsi a scurirla. Una sfocatura minima ammorbidisce i bordi dei
+// blocchi JPEG senza risultare percettibile a distanza normale.
+const HERO_IMAGE_FILTER = 'saturate(1.1) contrast(1.02) brightness(0.92) blur(0.5px)'
+// La foto di copertina non riempie più l'intero schermo: da qui in giù (fino al bordo dello
+// stage) resta lo sfondo scuro di BachecaStage — meno l'immagine viene ingrandita, meno la sua
+// bassa risoluzione si nota.
+const HERO_PHOTO_HEIGHT = '58vh'
 
 // Bacheca — Home reale dell'app (redirect di "/", vedi app/page.tsx). Ridisegnata secondo la
 // direzione "Opzione D" decisa nell'audit UX (UX-AUDIT.md, P-O5): risponde prima di tutto a "cosa
@@ -370,17 +377,19 @@ export default function BachecaPage() {
   // BachecaStage.tsx sul perché dev'essere un fratello, non un genitore, della galleria).
   const background = (
     <div className="relative w-full h-full overflow-hidden">
-      {heroPhotoUrl ? (
-        <img src={heroPhotoUrl} alt="" className="absolute inset-0 w-full h-full object-cover" style={{ filter: HERO_IMAGE_FILTER }} />
-      ) : (featured?.hike.routePolyline?.length || latestActivity?.routePolyline?.length) ? (
-        <div className="absolute inset-0 bg-gradient-to-b from-forest-50 to-stone-50 bg-topography">
-          <div className="absolute inset-6">
-            <RouteThumb polyline={(featured?.hike.routePolyline ?? latestActivity?.routePolyline)!} color="#2d7a3d" strokeWidth={3} />
+      <div className="absolute inset-x-0 top-0 overflow-hidden" style={{ height: HERO_PHOTO_HEIGHT }}>
+        {heroPhotoUrl ? (
+          <img src={heroPhotoUrl} alt="" className="absolute inset-0 w-full h-full object-cover scale-105" style={{ filter: HERO_IMAGE_FILTER }} />
+        ) : (featured?.hike.routePolyline?.length || latestActivity?.routePolyline?.length) ? (
+          <div className="absolute inset-0 bg-gradient-to-b from-forest-50 to-stone-50 bg-topography">
+            <div className="absolute inset-6">
+              <RouteThumb polyline={(featured?.hike.routePolyline ?? latestActivity?.routePolyline)!} color="#2d7a3d" strokeWidth={3} />
+            </div>
           </div>
-        </div>
-      ) : (
-        <img src={FALLBACK_HERO} alt="" className="absolute inset-0 w-full h-full object-cover" />
-      )}
+        ) : (
+          <img src={FALLBACK_HERO} alt="" className="absolute inset-0 w-full h-full object-cover" />
+        )}
+      </div>
       {heroPhotoUrl && (featured?.hike.routePolyline ?? latestActivity?.routePolyline)?.length ? (
         <div className="absolute top-16 right-4 w-16 h-16 rounded-xl bg-black/45 backdrop-blur-sm border border-white/20 p-2 shadow-lg">
           <RouteThumb polyline={(featured?.hike.routePolyline ?? latestActivity?.routePolyline)!} color="#ffffff" strokeWidth={2} />

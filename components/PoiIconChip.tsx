@@ -10,6 +10,11 @@ import { POI_ICON } from '@/components/poiIcons'
  *  volta, sia in mappa che nella galleria — vedi PoiMap.tsx e PoiListWidget.tsx). */
 const dimmedClass = 'opacity-35 grayscale transition-opacity'
 
+// Sfondo neutro + icona a tratto nel colore del tipo (non più un cerchio pieno colorato): sulla
+// mappa poco sotto ogni tipo ha ancora il suo colore pieno (poiBadgeMarkup, dove serve distinguere
+// tanti pin sparsi a colpo d'occhio), ma nella riga di chip qui una fila di cerchi tutti diversi
+// diventava rumore — il colore resta solo nell'icona, il resto torna neutro.
+
 export function NamedPoiIcon({ poi, highlighted, dimmed, onTap }: { poi: PoiItem; highlighted: boolean; dimmed?: boolean; onTap?: () => void }) {
   const Icon = POI_ICON[poi.type]
   const meta = POI_META[poi.type]
@@ -19,10 +24,10 @@ export function NamedPoiIcon({ poi, highlighted, dimmed, onTap }: { poi: PoiItem
       className={`flex flex-col shrink-0 self-start items-center w-16 gap-1.5 group ${dimmed ? dimmedClass : ''}`}
     >
       <span
-        className="flex items-center justify-center w-[38px] h-[38px] rounded-full shadow-sm shrink-0 transition-transform group-hover:scale-105"
-        style={{ backgroundColor: meta.color, boxShadow: highlighted ? '0 0 0 3px #7dd3fc' : undefined }}
+        className="flex items-center justify-center w-[38px] h-[38px] rounded-full bg-stone-100 shrink-0 transition-transform group-hover:scale-105"
+        style={{ boxShadow: highlighted ? '0 0 0 3px #7dd3fc' : undefined }}
       >
-        <Icon width={16} height={16} color="#fff" strokeWidth={2.25} />
+        <Icon width={17} height={17} color={meta.color} strokeWidth={2.25} />
       </span>
       <span className="text-[10px] leading-tight text-center text-stone-700 font-semibold line-clamp-2">
         {poi.name}
@@ -44,12 +49,12 @@ export function GroupPoiBadge({
     >
       <span className="relative w-[38px] h-[38px]">
         <span
-          className="flex items-center justify-center w-[38px] h-[38px] rounded-full shadow-sm"
-          style={{ backgroundColor: meta.color, boxShadow: highlighted ? '0 0 0 3px #7dd3fc' : undefined }}
+          className="flex items-center justify-center w-[38px] h-[38px] rounded-full bg-stone-100"
+          style={{ boxShadow: highlighted ? '0 0 0 3px #7dd3fc' : undefined }}
         >
-          <Icon width={16} height={16} color="#fff" strokeWidth={2.25} />
+          <Icon width={17} height={17} color={meta.color} strokeWidth={2.25} />
         </span>
-        <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-forest-500 text-white text-[10px] font-bold flex items-center justify-center border-2 border-white shadow-sm">
+        <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-terra-700 text-white text-[10px] font-bold flex items-center justify-center border-2 border-white shadow-sm">
           {pois.length}
         </span>
       </span>
