@@ -1,5 +1,6 @@
 'use client'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, type ReactNode } from 'react'
+import { Droplets, Droplet, Wind, Sun, Mountain, Clock, AlertTriangle, CheckCircle2, Info } from 'lucide-react'
 import {
   fetchHistoricalWeather, fetchForecastWeather, fetchDayHourly,
   clothingSuggestions, weatherAdvice, weatherAdviceFromDaily, wmoInfo, windDirLabel, findGoodWeatherWindows,
@@ -45,11 +46,38 @@ function priorityLabel(p: ClothingItem['priority']) {
   return p === 'essential' ? 'essenziale' : p === 'recommended' ? 'consigliato' : 'opzionale'
 }
 
-function adviceStyle(s: WeatherAdviceItem['severity']) {
-  return s === 'danger'   ? 'bg-red-50 border-red-200 text-red-800'
-       : s === 'caution'  ? 'bg-amber-50 border-amber-200 text-amber-800'
-       : s === 'positive' ? 'bg-forest-50 border-forest-200 text-forest-800'
-       : 'bg-sky-50 border-sky-200 text-sky-800'
+function adviceIcon(s: WeatherAdviceItem['severity']) {
+  return s === 'danger'   ? { Icon: AlertTriangle, color: '#dc2626' }
+       : s === 'caution'  ? { Icon: AlertTriangle, color: '#d97706' }
+       : s === 'positive' ? { Icon: CheckCircle2,  color: '#277134' }
+       : { Icon: Info, color: '#0284c7' }
+}
+
+// Etichetta di sezione interna a una card — un filo tratteggiato invece di una nuova card colorata
+// per ogni blocco (meteo/ora per ora/consigli/abbigliamento/7 giorni), così la card resta una sola
+// indipendentemente da quanti blocchi ha contenuto (piano semplificazione visiva).
+function SectionLabel({ children }: { children: ReactNode }) {
+  return (
+    <p className="text-[10px] font-semibold uppercase tracking-wide text-stone-400 mt-3.5 pt-3.5 border-t border-dashed border-stone-200">
+      {children}
+    </p>
+  )
+}
+
+function AdviceRows({ advice }: { advice: WeatherAdviceItem[] }) {
+  return (
+    <div className="space-y-2 mt-2.5">
+      {advice.map((a, i) => {
+        const { Icon, color } = adviceIcon(a.severity)
+        return (
+          <div key={i} className="flex items-start gap-2 border-l-2 pl-2.5 py-0.5" style={{ borderColor: color }}>
+            <Icon className="w-3.5 h-3.5 shrink-0 mt-0.5" style={{ color }} />
+            <p className="text-sm text-stone-700 flex-1">{a.text}</p>
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 // 7-day strip shared across modes
@@ -181,14 +209,17 @@ export default function WeatherWidget(props: Props) {
     const tMax  = Math.max(...hourly.map(h => h.temperature))
 
     return (
-      <div className="rounded-xl border border-sky-100 bg-sky-50 p-4">
-        <p className="text-xs font-semibold text-sky-700 uppercase tracking-wide mb-2">Meteo del giorno</p>
+      <div className="rounded-2xl border border-stone-100 bg-white p-4">
+        <p className="text-xs font-semibold text-stone-400 uppercase tracking-wide mb-2">Meteo del giorno</p>
         <div className="flex items-center gap-4">
-          <span className="text-4xl">{info.emoji}</span>
+          <span className="text-4xl leading-none">{info.emoji}</span>
           <div>
             <p className="font-semibold text-stone-800">{info.label}</p>
-            <p className="text-sm text-stone-600">{tMin.toFixed(0)}° – {tMax.toFixed(0)}°C · vento {noon.windspeed} km/h</p>
-            {rain > 0 && <p className="text-sm text-sky-700">💧 Precipitazioni: {rain.toFixed(1)} mm</p>}
+            <p className="text-sm text-stone-600">{tMin.toFixed(0)}° – {tMax.toFixed(0)}°C</p>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-xs text-stone-500">
+              <span className="flex items-center gap-1"><Wind className="w-3.5 h-3.5 text-stone-400" /> {noon.windspeed} km/h</span>
+              {rain > 0 && <span className="flex items-center gap-1"><Droplets className="w-3.5 h-3.5 text-stone-400" /> {rain.toFixed(1)} mm</span>}
+            </div>
           </div>
         </div>
         <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
@@ -210,20 +241,14 @@ export default function WeatherWidget(props: Props) {
   // ── Forecast mode ────────────────────────────────────────────────────────────
   if (props.mode === 'forecast') {
     return (
-      <div className="space-y-3">
-        <div className="rounded-xl border border-amber-100 bg-amber-50 p-4">
-          <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-3">Previsioni meteo</p>
-          <DayStrip daily={daily} />
-        </div>
+      <div className="rounded-2xl border border-stone-100 bg-white p-4">
+        <p className="text-xs font-semibold text-stone-400 uppercase tracking-wide mb-3">Previsioni meteo</p>
+        <DayStrip daily={daily} />
         {advice.length > 0 && (
-          <div className="space-y-2">
-            {advice.map((a, i) => (
-              <div key={i} className={`flex items-start gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm ${adviceStyle(a.severity)}`}>
-                <span className="text-base leading-none shrink-0">{a.icon}</span>
-                <span className="flex-1">{a.text}</span>
-              </div>
-            ))}
-          </div>
+          <>
+            <SectionLabel>Consigli</SectionLabel>
+            <AdviceRows advice={advice} />
+          </>
         )}
       </div>
     )
@@ -265,125 +290,115 @@ export default function WeatherWidget(props: Props) {
     ? new Date(plannedDate + 'T12:00:00').toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })
     : null
 
+  // Un'unica card invece di una card principale + una per consiglio + una per l'abbigliamento +
+  // una per i 7 giorni: ogni blocco diventa una sezione interna (SectionLabel, filo tratteggiato),
+  // così la card resta sempre una sola indipendentemente da quanti consigli ci sono da mostrare
+  // (piano semplificazione visiva). Icone piccole coerenti col resto dell'app (lucide) al posto
+  // delle emoji di chrome — l'emoji grande della condizione meteo resta, è un linguaggio già
+  // universale, non un'icona di interfaccia.
   return (
-    <div className="space-y-3">
+    <div className="rounded-2xl border border-stone-100 bg-white overflow-hidden p-4">
 
-      {/* ── Main weather card ── */}
-      <div className="rounded-xl border border-sky-100 bg-sky-50 overflow-hidden">
-
-        {/* Header */}
-        <div className="px-4 pt-4 pb-3 flex items-start gap-4">
-          <span className="text-5xl shrink-0 leading-none">{displayInfo?.emoji ?? '🌡️'}</span>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold text-sky-700 uppercase tracking-wide mb-0.5">
-              {dateLabel ? `Meteo pianificata · ${dateLabel}` : 'Previsioni meteo'}
+      {/* Header */}
+      <div className="flex items-start gap-4">
+        <span className="text-5xl shrink-0 leading-none">{displayInfo?.emoji ?? '🌡️'}</span>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-semibold text-stone-400 uppercase tracking-wide mb-0.5">
+            {dateLabel ? `Meteo pianificata · ${dateLabel}` : 'Previsioni meteo'}
+          </p>
+          <p className="font-semibold text-stone-800">{displayInfo?.label ?? '—'}</p>
+          {displayTMin !== null && displayTMax !== null && (
+            <p className="text-sm text-stone-600">
+              {displayTMin.toFixed(0)}° – {displayTMax.toFixed(0)}°C
+              {noon && ` · Percepita ${noon.feelsLike.toFixed(0)}°`}
             </p>
-            <p className="font-semibold text-stone-800">{displayInfo?.label ?? '—'}</p>
-            {displayTMin !== null && displayTMax !== null && (
-              <p className="text-sm text-stone-600">
-                {displayTMin.toFixed(0)}° – {displayTMax.toFixed(0)}°C
-                {noon && ` · Percepita ${noon.feelsLike.toFixed(0)}°`}
-              </p>
-            )}
-          </div>
+          )}
         </div>
-
-        {/* Key stats row */}
-        {(displayRain !== null || displayWind !== null || (noon?.humidity ?? 0) > 0 || (maxUV ?? 0) > 0) && (
-          <div className="px-4 pb-3 flex flex-wrap gap-x-5 gap-y-1.5">
-            {(displayRain ?? 0) > 0 && (
-              <div className="flex items-center gap-1.5 text-xs">
-                <span>💧</span>
-                <span className="font-semibold text-stone-700">{(displayRain ?? 0).toFixed(1)} mm pioggia</span>
-              </div>
-            )}
-            {(displayWind ?? 0) > 0 && (
-              <div className="flex items-center gap-1.5 text-xs">
-                <span>💨</span>
-                <span className="font-semibold text-stone-700">
-                  {(displayWind ?? 0).toFixed(0)} km/h{noon ? ` ${windDirLabel(noon.windDirection)}` : ''}
-                </span>
-              </div>
-            )}
-            {(noon?.humidity ?? 0) > 0 && (
-              <div className="flex items-center gap-1.5 text-xs">
-                <span>💦</span>
-                <span className="font-semibold text-stone-700">{noon!.humidity}% umidità</span>
-              </div>
-            )}
-            {(maxUV ?? 0) > 0 && (
-              <div className="flex items-center gap-1.5 text-xs">
-                <span>☀️</span>
-                <span className="font-semibold text-stone-700">UV {maxUV?.toFixed(0)}</span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Summit temperature estimate */}
-        {altitudeMax > 1000 && summitTempMin !== null && summitTempMax !== null && (
-          <div className="mx-4 mb-3 bg-white/60 rounded-lg px-3 py-2 flex items-center gap-2 border border-sky-100">
-            <span className="text-base">⛰️</span>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs text-stone-500">Temperatura stimata in quota</p>
-              <p className="text-sm font-semibold text-stone-800">
-                {summitTempMin}° – {summitTempMax}°C a ~{Math.round(altitudeMax)} m
-              </p>
-            </div>
-            <p className="text-[10px] text-stone-400 text-right shrink-0">−{altCorr.toFixed(1)}°C</p>
-          </div>
-        )}
-
-        {/* Good-weather windows */}
-        {goodWindows.length > 0 && (
-          <div className="mx-4 mb-3 bg-white/60 rounded-lg px-3 py-2 border border-sky-100">
-            <p className="text-xs text-stone-500 mb-1">☀️ Finestre di bel tempo</p>
-            <p className="text-sm font-semibold text-stone-800">
-              {goodWindows.map(w => `${formatHour(w.startTime)}–${formatHour(w.endTime)}`).join(' · ')}
-            </p>
-          </div>
-        )}
-
-        {/* Hourly strip */}
-        {hasDetail && (
-          <div className="px-4 pb-4">
-            <p className="text-[10px] font-semibold text-stone-400 uppercase tracking-wide mb-2">Ora per ora</p>
-            <div className="flex gap-3 overflow-x-auto pb-1">
-              {hourlyFull.filter((_, i) => i % 2 === 0).map(h => {
-                const inf = wmoInfo(h.weathercode)
-                const isRainy = h.precipitation > 0.3
-                return (
-                  <div key={h.time} className="flex-shrink-0 text-center min-w-[44px]">
-                    <p className="text-[10px] text-stone-400">{h.time.slice(11, 16)}</p>
-                    <p className="text-xl my-0.5">{inf.emoji}</p>
-                    <p className="text-xs font-bold text-stone-800">{h.temperature.toFixed(0)}°</p>
-                    {isRainy && <p className="text-[9px] text-sky-600">{h.precipitation.toFixed(1)}</p>}
-                    {h.windspeed > 20 && <p className="text-[9px] text-stone-400">{h.windspeed.toFixed(0)}</p>}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* ── Consigli sulla situazione meteo ── */}
-      {advice.length > 0 && (
-        <div className="space-y-2">
-          {advice.map((a, i) => (
-            <div key={i} className={`flex items-start gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm ${adviceStyle(a.severity)}`}>
-              <span className="text-base leading-none shrink-0">{a.icon}</span>
-              <span className="flex-1">{a.text}</span>
+      {/* Key stats row */}
+      {(displayRain !== null || displayWind !== null || (noon?.humidity ?? 0) > 0 || (maxUV ?? 0) > 0) && (
+        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5">
+          {(displayRain ?? 0) > 0 && (
+            <div className="flex items-center gap-1.5 text-xs">
+              <Droplets className="w-3.5 h-3.5 text-stone-400" />
+              <span className="font-semibold text-stone-700">{(displayRain ?? 0).toFixed(1)} mm pioggia</span>
             </div>
-          ))}
+          )}
+          {(displayWind ?? 0) > 0 && (
+            <div className="flex items-center gap-1.5 text-xs">
+              <Wind className="w-3.5 h-3.5 text-stone-400" />
+              <span className="font-semibold text-stone-700">
+                {(displayWind ?? 0).toFixed(0)} km/h{noon ? ` ${windDirLabel(noon.windDirection)}` : ''}
+              </span>
+            </div>
+          )}
+          {(noon?.humidity ?? 0) > 0 && (
+            <div className="flex items-center gap-1.5 text-xs">
+              <Droplet className="w-3.5 h-3.5 text-stone-400" />
+              <span className="font-semibold text-stone-700">{noon!.humidity}% umidità</span>
+            </div>
+          )}
+          {(maxUV ?? 0) > 0 && (
+            <div className="flex items-center gap-1.5 text-xs">
+              <Sun className="w-3.5 h-3.5 text-stone-400" />
+              <span className="font-semibold text-stone-700">UV {maxUV?.toFixed(0)}</span>
+            </div>
+          )}
         </div>
       )}
 
-      {/* ── Clothing & gear suggestions ── */}
+      {/* Summit temperature estimate */}
+      {altitudeMax > 1000 && summitTempMin !== null && summitTempMax !== null && (
+        <div className="mt-3 flex items-center gap-2 text-sm text-stone-600">
+          <Mountain className="w-3.5 h-3.5 text-stone-400 shrink-0" />
+          <span>Temperatura in quota <span className="font-semibold text-stone-800">{summitTempMin}° – {summitTempMax}°C</span> a ~{Math.round(altitudeMax)} m</span>
+        </div>
+      )}
+
+      {/* Good-weather windows */}
+      {goodWindows.length > 0 && (
+        <div className="mt-2 flex items-center gap-2 text-sm text-stone-600">
+          <Clock className="w-3.5 h-3.5 text-stone-400 shrink-0" />
+          <span>Bel tempo <span className="font-semibold text-stone-800">{goodWindows.map(w => `${formatHour(w.startTime)}–${formatHour(w.endTime)}`).join(' · ')}</span></span>
+        </div>
+      )}
+
+      {/* Hourly strip */}
+      {hasDetail && (
+        <>
+          <SectionLabel>Ora per ora</SectionLabel>
+          <div className="flex gap-3 overflow-x-auto pb-1 mt-2">
+            {hourlyFull.filter((_, i) => i % 2 === 0).map(h => {
+              const inf = wmoInfo(h.weathercode)
+              const isRainy = h.precipitation > 0.3
+              return (
+                <div key={h.time} className="flex-shrink-0 text-center min-w-[44px]">
+                  <p className="text-[10px] text-stone-400">{h.time.slice(11, 16)}</p>
+                  <p className="text-xl my-0.5">{inf.emoji}</p>
+                  <p className="text-xs font-bold text-stone-800">{h.temperature.toFixed(0)}°</p>
+                  {isRainy && <p className="text-[9px] text-sky-600">{h.precipitation.toFixed(1)}</p>}
+                  {h.windspeed > 20 && <p className="text-[9px] text-stone-400">{h.windspeed.toFixed(0)}</p>}
+                </div>
+              )
+            })}
+          </div>
+        </>
+      )}
+
+      {/* Consigli sulla situazione meteo */}
+      {advice.length > 0 && (
+        <>
+          <SectionLabel>Consigli per l&apos;uscita</SectionLabel>
+          <AdviceRows advice={advice} />
+        </>
+      )}
+
+      {/* Clothing & gear suggestions */}
       {clothes.length > 0 && (
-        <div className="rounded-xl border border-stone-200 bg-white p-4">
-          <p className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-3">Abbigliamento consigliato</p>
-          <div className="space-y-2">
+        <>
+          <SectionLabel>Abbigliamento consigliato</SectionLabel>
+          <div className="space-y-2 mt-2.5">
             {clothes.filter(c => c.priority !== 'optional').slice(0, 8).map((c, i) => (
               <div key={i} className="flex items-center gap-3">
                 <span className="text-base w-6 text-center shrink-0">{c.icon}</span>
@@ -412,15 +427,15 @@ export default function WeatherWidget(props: Props) {
               </details>
             )}
           </div>
-        </div>
+        </>
       )}
 
-      {/* ── 7-day context strip ── */}
+      {/* 7-day context strip */}
       {daily.length > 0 && (
-        <div className="rounded-xl border border-amber-100 bg-amber-50 p-4">
-          <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-3">Prossimi 7 giorni</p>
-          <DayStrip daily={daily.slice(0, 7)} />
-        </div>
+        <>
+          <SectionLabel>Prossimi 7 giorni</SectionLabel>
+          <div className="mt-2.5"><DayStrip daily={daily.slice(0, 7)} /></div>
+        </>
       )}
     </div>
   )
