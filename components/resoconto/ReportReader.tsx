@@ -3,7 +3,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type React
 import { useRouter, useSearchParams } from 'next/navigation'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
-import { formatDuration, msToKmh, formatPace } from '@/lib/tcxParser'
+import { formatDuration, msToKmh, formatPace, type TrackPoint } from '@/lib/tcxParser'
 import type { StoredActivity } from '@/lib/blobStore'
 import type { RoutePhoto } from '@/lib/activityPhotos'
 import type { PoiItem } from '@/lib/overpass'
@@ -111,8 +111,9 @@ export interface NaturaBundle {
   hasGps: boolean
   flora: FloraResult | null
   floraLoading: boolean
-  onOpenFloraGallery: () => void
-  onOpenAnimalGallery: () => void
+  trackPoints: TrackPoint[]
+  /** 1-12 — mese dell'uscita, per la query stagionale GBIF. */
+  month: number
 }
 
 interface Props {

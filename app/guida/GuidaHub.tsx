@@ -55,7 +55,6 @@ import { tryOpenNavigatorApp } from '@/lib/navigatorHandoff'
 
 const StreetViewPanel = dynamic(() => import('@/components/StreetViewPanel'), { ssr: false })
 const RouteMap3D       = dynamic(() => import('@/components/RouteMap3D'),      { ssr: false })
-const NatureGallery    = dynamic(() => import('@/components/NatureGallery'),   { ssr: false })
 
 /** cachedTsTotal is the Trail Score v2 (0-100, see lib/trailScoreV2.ts) persisted to Supabase once
  *  computed live for this hike (see the sync effect in GuidaHub) — reading it back is instant.
@@ -129,7 +128,6 @@ export default function GuidaHub({ id, startClosed }: { id?: string; startClosed
   const [ctsResult,      setCtsResult]     = useState<TrailScoreResult | null>(null)
   const [ctsComputing,   setCtsComputing]  = useState(false)
   const [show3D, setShow3D] = useState(false)
-  const [natureGalleryLayer, setNatureGalleryLayer] = useState<'flora' | 'fauna' | null>(null)
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [exportingGuidePdf, setExportingGuidePdf] = useState(false)
   const [guidePdfError, setGuidePdfError] = useState<string | null>(null)
@@ -891,7 +889,10 @@ export default function GuidaHub({ id, startClosed }: { id?: string; startClosed
           }}
           safetyDetails={{ assessment: hike.assessment, hasGps, osmId: hike.osmId, polyline: hike.routePolyline, plannedId: hike.id, markers, highlightedMarkerIndex: null }}
           poiList={{ pois, poiWikiEntries, hasGps, centerLat: centerPt?.lat, centerLon: centerPt?.lon, onWikiLoaded: setWikiPages }}
-          natura={{ hasGps: hasGps && !!hike.routePolyline && hike.routePolyline.length >= 2, flora: flora.data, floraLoading: flora.loading, onOpenFloraGallery: () => setNatureGalleryLayer('flora'), onOpenAnimalGallery: () => setNatureGalleryLayer('fauna') }}
+          natura={{
+            hasGps: hasGps && !!hike.routePolyline && hike.routePolyline.length >= 2, flora: flora.data, floraLoading: flora.loading,
+            trackPoints: hike.trackPoints ?? [], month: hike.plannedDate ? new Date(hike.plannedDate).getMonth() + 1 : new Date().getMonth() + 1,
+          }}
         />
       )
     }
@@ -1052,16 +1053,6 @@ export default function GuidaHub({ id, startClosed }: { id?: string; startClosed
         importLabel="Crea guida"
         onImport={() => router.push('/upload?tab=gpx')}
       />
-
-      {natureGalleryLayer && hike && (
-        <NatureGallery
-          trackPoints={hike.trackPoints ?? []}
-          month={hike.plannedDate ? new Date(hike.plannedDate).getMonth() + 1 : new Date().getMonth() + 1}
-          loadingTrack={false}
-          initialLayer={natureGalleryLayer}
-          onClose={() => setNatureGalleryLayer(null)}
-        />
-      )}
 
       {show3D && hike && hasGps && (
         <RouteMap3D

@@ -20,7 +20,7 @@ import { cellsForBounds, type BboxBounds } from '@/lib/natureGrid'
 
 export type { BboxBounds } from '@/lib/natureGrid'
 
-const CACHE_TTL_MS = 120 * 24 * 60 * 60 * 1000 // 120gg — la presenza di una specie in una zona non cambia settimana per settimana; la stagionalità resta comunque coperta dal mese in chiave
+const CACHE_TTL_MS = 270 * 24 * 60 * 60 * 1000 // 270gg, come natura2000_cache — la presenza di una specie in una zona non cambia settimana per settimana; la stagionalità resta comunque coperta dal mese in chiave
 const MIN_SPECIES_THRESHOLD = 3
 
 // Quante celle "fredde" (mai viste) vengono popolate in parallelo per una singola richiesta —
