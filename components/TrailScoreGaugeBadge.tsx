@@ -51,6 +51,9 @@ export interface TrailScoreGaugeBadgeProps {
    *  comunque 90 — l'avviso segnala solo "verifica prima di partire", non ricalcola il rischio.
    *  Assente/vuoto ⇒ nessun puntino. */
   notices?: { severity: NoticeDotSeverity }[]
+  /** true (default) sulle copertine/miniature scure (foto o mappa) — testo bianco con ombra.
+   *  false nelle card chiare proprie (Guida "Dati e sicurezza", Resoconto "Dati e punteggi"). */
+  dark?: boolean
   /** "stacked" con un Consiglio (percorso + personalSafety): quel Consiglio da solo resta sempre
    *  visibile come verdetto, le altre righe (Sicurezza oggettiva/Idoneità) vanno dietro "Vedi il
    *  dettaglio" — un solo elemento a vista invece di quattro righe sempre impilate (piano
@@ -93,7 +96,7 @@ const NEUTRAL_TRACK_LIGHT = '#efe9df'
  */
 export function TrailScoreGaugeBadge({
   total, safety, personalSafety, loading, vetoed, size = 80, showLabel = true, disclaimer = 'none',
-  captionLayout = 'curved', notices, detailExtra,
+  captionLayout = 'curved', notices, detailExtra, dark = true,
 }: TrailScoreGaugeBadgeProps) {
   const [mounted, setMounted] = useState(false)
   useEffect(() => {
@@ -101,11 +104,6 @@ export function TrailScoreGaugeBadge({
     return () => cancelAnimationFrame(raf)
   }, [])
   const [detailOpen, setDetailOpen] = useState(false)
-
-  // "curved" è sempre sovrapposto a una foto/mappa (copertina, miniatura di galleria) ⇒ testo
-  // bianco con ombra; "stacked" è sempre dentro una card chiara propria (ScoresWidget) ⇒ inchiostro
-  // scuro, nessuna ombra. I due layout non si mescolano mai nell'uso reale (grep captionLayout=).
-  const dark = captionLayout === 'curved'
   const neutralTrack = dark ? NEUTRAL_TRACK_DARK : NEUTRAL_TRACK_LIGHT
 
   const cx = size / 2
