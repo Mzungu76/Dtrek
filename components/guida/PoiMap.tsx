@@ -32,7 +32,11 @@ interface Props {
 
 const chipBase = 'flex items-center justify-center w-9 h-9 rounded-full backdrop-blur-md border transition-colors shrink-0'
 const chipIdle = `${chipBase} bg-black/50 border-white/15 text-white/90`
-const chipActive = `${chipBase} bg-terra-500 border-terra-300/40 text-white`
+// Stessa pillola raggruppata di RouteMapSection.tsx ("Il percorso") — anche qui i comandi
+// secondari restano insieme, isolato solo lo schermo intero.
+const pillChipBase = 'flex items-center justify-center w-8 h-8 rounded-full transition-colors shrink-0'
+const pillChipIdle = `${pillChipBase} text-white/90 hover:bg-white/10`
+const pillChipActive = `${pillChipBase} bg-terra-500 text-white`
 
 /**
  * Mappa dedicata ai punti di interesse — stessi controlli della mappa "Il percorso"
@@ -89,37 +93,39 @@ export default function PoiMap({
         resizeSignal={resizeTick}
       />
       <div
-        className="absolute inset-x-3 z-[1000] flex items-center justify-end gap-2"
+        className="absolute inset-x-3 z-[1000] flex items-center justify-between"
         style={{ top: fullscreen ? 'calc(env(safe-area-inset-top, 0px) + 12px)' : '12px' }}
       >
-        <button
-          onClick={() => setShowArrows(v => !v)}
-          title={showArrows ? 'Nascondi le frecce di direzione' : 'Mostra le frecce di direzione'}
-          className={showArrows ? chipActive : chipIdle}
-        >
-          <Navigation className="w-4 h-4" />
-        </button>
-        {onOpenMap3D && (
-          <button onClick={onOpenMap3D} title="Vista 3D" className={chipIdle}>
-            <Box className="w-4 h-4" />
+        <div className="flex items-center gap-0.5 bg-black/50 backdrop-blur-md border border-white/15 rounded-full p-1">
+          <button
+            onClick={() => setShowArrows(v => !v)}
+            title={showArrows ? 'Nascondi le frecce di direzione' : 'Mostra le frecce di direzione'}
+            className={showArrows ? pillChipActive : pillChipIdle}
+          >
+            <Navigation className="w-4 h-4" />
           </button>
-        )}
-        <button onClick={() => setFitTick(t => t + 1)} title="Inquadra tutto il percorso" className={chipIdle}>
-          <LocateFixed className="w-4 h-4" />
-        </button>
+          {onOpenMap3D && (
+            <button onClick={onOpenMap3D} title="Vista 3D" className={pillChipIdle}>
+              <Box className="w-4 h-4" />
+            </button>
+          )}
+          <button onClick={() => setFitTick(t => t + 1)} title="Inquadra tutto il percorso" className={pillChipIdle}>
+            <LocateFixed className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setLocked(v => !v)}
+            title={locked ? 'Sblocca la mappa per navigarla' : 'Blocca la mappa (evita spostamenti involontari)'}
+            className={locked ? pillChipIdle : pillChipActive}
+          >
+            {locked ? <Lock className="w-4 h-4" /> : <LockOpen className="w-4 h-4" />}
+          </button>
+        </div>
         <button
           onClick={toggleFullscreen}
           title={fullscreen ? 'Esci da schermo intero' : 'Schermo intero'}
           className={chipIdle}
         >
           {fullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-        </button>
-        <button
-          onClick={() => setLocked(v => !v)}
-          title={locked ? 'Sblocca la mappa per navigarla' : 'Blocca la mappa (evita spostamenti involontari)'}
-          className={locked ? chipIdle : chipActive}
-        >
-          {locked ? <Lock className="w-4 h-4" /> : <LockOpen className="w-4 h-4" />}
         </button>
       </div>
     </div>
