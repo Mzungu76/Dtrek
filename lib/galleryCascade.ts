@@ -2,16 +2,32 @@
 // (app/api/flora/route.ts, app/api/animals/route.ts). Implements the 3-level fallback from
 // the product spec: 1) direct bbox GBIF+iNaturalist, 2) buffer esteso (bbox *2), 3) specie
 // tipiche dei siti Natura 2000 intersecanti (fonte EEA — n2000_site_species — non MASE, per
-// la licenza commerciale CC BY 4.0 garantita). Result cached per (bbox_key, gallery_type,
-// month) in gallery_cascade_cache, same bbox-keyed shape as lib/natura2000/natura2000Cache.ts.
+// la licenza commerciale CC BY 4.0 garantita).
+//
+// Cache per CELLA di griglia fissa (nature_cell_cache), non per il bbox dell'intero percorso
+// come faceva la vecchia gallery_cascade_cache: un percorso qualunque tocca 1-poche celle
+// (CELL_SIZE_DEG di lato), ciascuna cachata indipendentemente e per sempre riusabile da
+// qualunque altro percorso che la tocchi — anche di forma o lunghezza completamente diversa.
+// Prima, con la cache a bbox-intero-percorso, due percorsi diversi nella stessa zona quasi mai
+// producevano lo stesso bbox arrotondato, quindi condividevano la cache solo se praticamente
+// identici.
 import { supabase } from '@/lib/supabase'
-import { normalizeBboxKey } from '@/lib/geoUtils'
 import { fetchWikidataImage } from '@/lib/wikidataFallback'
 import { fetchNatura2000PolygonsCached } from '@/lib/natura2000/natura2000Cache'
 import { Natura2000UnavailableError } from '@/lib/natura2000/natura2000Client'
+import { runWithConcurrency } from '@/lib/promisePool'
+import { cellsForBounds, type BboxBounds } from '@/lib/natureGrid'
 
-const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 7gg — le osservazioni variano per stagione
+export type { BboxBounds } from '@/lib/natureGrid'
+
+const CACHE_TTL_MS = 120 * 24 * 60 * 60 * 1000 // 120gg — la presenza di una specie in una zona non cambia settimana per settimana; la stagionalità resta comunque coperta dal mese in chiave
 const MIN_SPECIES_THRESHOLD = 3
+
+// Quante celle "fredde" (mai viste) vengono popolate in parallelo per una singola richiesta —
+// stesso numero totale di chiamate esterne, ma spalmate nel tempo invece che tutte insieme,
+// così anche più utenti che aprono zone nuove nello stesso istante non generano un unico picco
+// verso GBIF/iNaturalist/Wikipedia.
+const CELL_FETCH_CONCURRENCY = 3
 
 export interface CascadeItem {
   scientificName: string
@@ -32,8 +48,6 @@ export interface CascadeItem {
   taxonClass: string | null
   taxonOrder: string | null
 }
-
-export interface BboxBounds { minLat: number; maxLat: number; minLon: number; maxLon: number }
 
 export interface CascadeResult {
   items: CascadeItem[]
@@ -104,11 +118,11 @@ async function fetchN2000FallbackItems(siteCodes: string[], taxonGroups: string[
   }))
 }
 
-async function readCache(bboxKey: string, galleryType: 'flora' | 'fauna', month: number): Promise<CascadeResult | null> {
+async function readCellCache(cellKey: string, galleryType: 'flora' | 'fauna', month: number): Promise<CascadeResult | null> {
   const { data } = await supabase
-    .from('gallery_cascade_cache')
+    .from('nature_cell_cache')
     .select('items, fallback_level')
-    .eq('bbox_key', bboxKey)
+    .eq('cell_key', cellKey)
     .eq('gallery_type', galleryType)
     .eq('month', month)
     .gt('expires_at', new Date().toISOString())
@@ -117,15 +131,15 @@ async function readCache(bboxKey: string, galleryType: 'flora' | 'fauna', month:
   return { items: data.items as CascadeItem[], fallbackLevel: data.fallback_level as 1 | 2 | 3 }
 }
 
-function writeCache(bboxKey: string, galleryType: 'flora' | 'fauna', month: number, result: CascadeResult): void {
+function writeCellCache(cellKey: string, galleryType: 'flora' | 'fauna', month: number, result: CascadeResult): void {
   const expiresAt = new Date(Date.now() + CACHE_TTL_MS).toISOString()
   supabase
-    .from('gallery_cascade_cache')
+    .from('nature_cell_cache')
     .upsert(
-      { bbox_key: bboxKey, gallery_type: galleryType, month, fallback_level: result.fallbackLevel, items: result.items, expires_at: expiresAt },
-      { onConflict: 'bbox_key,gallery_type,month' },
+      { cell_key: cellKey, gallery_type: galleryType, month, fallback_level: result.fallbackLevel, items: result.items, expires_at: expiresAt },
+      { onConflict: 'cell_key,gallery_type,month' },
     )
-    .then(({ error }) => { if (error) console.error('[gallery_cascade_cache] upsert error:', error.message) })
+    .then(({ error }) => { if (error) console.error('[nature_cell_cache] upsert error:', error.message) })
 }
 
 interface RunCascadeOptions {
@@ -138,20 +152,17 @@ interface RunCascadeOptions {
   n2000TaxonGroups: string[]
 }
 
-// Runs the 3-level cascade and fills in Wikidata fallback images for items still missing
-// one. Caches the final result keyed by the *original* (level-1) bbox so repeat opens of
-// the same trail/activity skip the whole cascade, not just the GBIF call.
-export async function runGalleryCascade(opts: RunCascadeOptions): Promise<CascadeResult> {
-  const bboxKey = normalizeBboxKey(`${opts.bounds.minLat},${opts.bounds.minLon},${opts.bounds.maxLat},${opts.bounds.maxLon}`)
-
-  const cached = await readCache(bboxKey, opts.galleryType, opts.month)
-  if (cached) return cached
-
-  let items = dedupeByScientificName(await opts.fetchDirect(opts.bounds))
+// Il 3-livelli + immagini Wikidata di riserva per UNA cella — il risultato è completo e
+// autosufficiente (immagini incluse) prima di essere messo in cache, così una cella riusata da
+// un'altra richiesta non deve ripetere nemmeno il top-up Wikidata.
+async function computeCellResult(
+  cellBounds: BboxBounds, fetchDirect: (bounds: BboxBounds) => Promise<CascadeItem[]>, n2000TaxonGroups: string[],
+): Promise<CascadeResult> {
+  let items = dedupeByScientificName(await fetchDirect(cellBounds))
   let fallbackLevel: 1 | 2 | 3 = 1
 
   if (items.length < MIN_SPECIES_THRESHOLD) {
-    const extended = dedupeByScientificName(await opts.fetchDirect(expandBbox(opts.bounds, 2)))
+    const extended = dedupeByScientificName(await fetchDirect(expandBbox(cellBounds, 2)))
     if (extended.length > items.length) {
       items = extended
       fallbackLevel = 2
@@ -159,8 +170,8 @@ export async function runGalleryCascade(opts: RunCascadeOptions): Promise<Cascad
   }
 
   if (items.length < MIN_SPECIES_THRESHOLD) {
-    const siteCodes = await fetchN2000SiteCodesInBbox(expandBbox(opts.bounds, 2.5))
-    const n2000Items = await fetchN2000FallbackItems(siteCodes, opts.n2000TaxonGroups)
+    const siteCodes = await fetchN2000SiteCodesInBbox(expandBbox(cellBounds, 2.5))
+    const n2000Items = await fetchN2000FallbackItems(siteCodes, n2000TaxonGroups)
     if (n2000Items.length > 0) {
       items = dedupeByScientificName([...items, ...n2000Items])
       fallbackLevel = 3
@@ -172,7 +183,27 @@ export async function runGalleryCascade(opts: RunCascadeOptions): Promise<Cascad
     item.thumbUrl = item.thumbUrl ?? item.imageUrl
   }))
 
-  const result: CascadeResult = { items, fallbackLevel }
-  writeCache(bboxKey, opts.galleryType, opts.month, result)
-  return result
+  return { items, fallbackLevel }
+}
+
+// Copre ogni cella toccata dal percorso (get-from-cache-or-compute, CELL_FETCH_CONCURRENCY alla
+// volta — vedi il commento sulla costante) e unisce i risultati. Una cella già vista da
+// QUALUNQUE altro percorso passato di lì, anche di forma o lunghezza diversa, non viene
+// ricalcolata — a differenza della vecchia cache per bbox-dell'intero-percorso, che condivideva
+// la cache solo tra percorsi quasi identici.
+export async function runGalleryCascade(opts: RunCascadeOptions): Promise<CascadeResult> {
+  const cells = cellsForBounds(opts.bounds)
+
+  const perCell: CascadeResult[] = []
+  await runWithConcurrency(cells, CELL_FETCH_CONCURRENCY, async cell => {
+    const cached = await readCellCache(cell.key, opts.galleryType, opts.month)
+    if (cached) return cached
+    const computed = await computeCellResult(cell.bounds, opts.fetchDirect, opts.n2000TaxonGroups)
+    writeCellCache(cell.key, opts.galleryType, opts.month, computed)
+    return computed
+  }, (_cell, result) => { perCell.push(result) })
+
+  const items = dedupeByScientificName(perCell.flatMap(r => r.items))
+  const fallbackLevel = Math.max(1, ...perCell.map(r => r.fallbackLevel)) as 1 | 2 | 3
+  return { items, fallbackLevel }
 }

@@ -2,7 +2,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useParams } from 'next/navigation'
 import { getActivityById, type StoredActivity } from '@/lib/blobStore'
-import AnimalGallery from '@/components/AnimalGallery'
+import NatureGallery from '@/components/NatureGallery'
 
 export default function ActivityAnimalsPage() {
   const params = useParams()
@@ -28,11 +28,12 @@ export default function ActivityAnimalsPage() {
   const title = activity?.title ?? activity?.notes ?? 'Escursione'
 
   return (
-    <AnimalGallery
+    <NatureGallery
       trackPoints={trackPoints}
       month={month}
       loadingTrack={loadingActivity}
       backLabel={title}
+      initialLayer="fauna"
     />
   )
 }

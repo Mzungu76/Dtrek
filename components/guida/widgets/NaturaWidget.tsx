@@ -1,8 +1,7 @@
 'use client'
-import { Leaf, PawPrint } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
 import { FloraPanel } from '@/components/FloraPanel'
 import type { FloraResult } from '@/lib/floraTypes'
-import { glassTile, glassTileHover, textPrimary } from '@/components/routehub/overlayTheme'
 
 interface Props {
   hasGps: boolean
@@ -12,20 +11,23 @@ interface Props {
   onOpenAnimalGallery: () => void
 }
 
-/** Flora + gallerie verde/animali — spostati dalla vecchia tab "Natura" nella
- *  sezione "La natura intorno a te" della guida magazine. */
+/** Flora + gallerie verde/animali — spostati dalla vecchia tab "Natura" nella sezione "La natura
+ *  intorno a te" della guida magazine. I due trigger sono link discreti (stesso trattamento di
+ *  "Approfondisci con Giulia"/"Leggi tutto"), non più pillole piene affiancate — il popup che
+ *  aprono (components/NatureGallery.tsx) resta comunque dietro un tap esplicito: nessuna
+ *  chiamata finché non lo si tocca. */
 export default function NaturaWidget({
   hasGps, flora, floraLoading, onOpenFloraGallery, onOpenAnimalGallery,
 }: Props) {
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
       {hasGps && <FloraPanel flora={flora ?? null} floraLoading={floraLoading} />}
-      <div className="flex gap-2">
-        <button onClick={onOpenFloraGallery} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-colors ${glassTile} ${glassTileHover} ${textPrimary}`}>
-          <Leaf className="w-4 h-4 text-emerald-400" /> Galleria Verde
+      <div className="flex gap-5">
+        <button onClick={onOpenFloraGallery} className="inline-flex items-center gap-0.5 text-[12.5px] font-bold text-stone-700 hover:text-stone-900 underline underline-offset-2">
+          Galleria Verde <ChevronRight className="w-3 h-3" />
         </button>
-        <button onClick={onOpenAnimalGallery} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-colors ${glassTile} ${glassTileHover} ${textPrimary}`}>
-          <PawPrint className="w-4 h-4 text-amber-500" /> Galleria Animali
+        <button onClick={onOpenAnimalGallery} className="inline-flex items-center gap-0.5 text-[12.5px] font-bold text-stone-700 hover:text-stone-900 underline underline-offset-2">
+          Galleria Animali <ChevronRight className="w-3 h-3" />
         </button>
       </div>
     </div>
