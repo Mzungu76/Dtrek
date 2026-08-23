@@ -1121,6 +1121,12 @@ export default function GuideReader({
                     showApprofondisciHint={canApprofondisciSection}
                     onApprofondisci={canApprofondisciSection ? () => generateSections([s.guideKey!]) : undefined}
                     approfondendo={generatingSections.includes(s.guideKey as GuideSectionKey)}
+                    // Corpo troncato di default (piano semplificazione visiva) — soglia più larga
+                    // di quella di Resoconto (26 parole): qui l'utente è arrivato apposta per
+                    // leggere, non solo per scorrere, quindi la prima anteprima resta comunque
+                    // sostanziosa invece di essere quasi sempre un frammento.
+                    collapsible
+                    truncateWords={75}
                     // "Verificato online" non passa mai dal meccanismo delle lunghezze (è generata
                     // da una chiamata AI dedicata alla sola ricerca web, indipendente da
                     // sectionLengths — vedi SECTION_LENGTH_BY_LEVEL in app/api/guide/route.ts):

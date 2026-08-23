@@ -8,7 +8,6 @@ export interface ExtraPhoto { url: string; caption?: string }
 
 interface Props {
   body: string
-  color: string
   sectionPhoto?: string
   twoColumns?: boolean
   /** Didascalia sotto la foto — quando assente (Guida) resta "© Wikimedia Commons"; il
@@ -34,7 +33,7 @@ interface Props {
  * callout `[curiosita]`/`[avviso]` e sottotitoli per-POI (usati dallo scroll-to-POI della mappa).
  * Condiviso tra Guida (GuideReader) e Resoconto (ReportReader).
  */
-export default function MagazineBody({ body, color, sectionPhoto, twoColumns, photoCaption, extraFloatNode, photoIndexBadge, extraPhotos }: Props) {
+export default function MagazineBody({ body, sectionPhoto, twoColumns, photoCaption, extraFloatNode, photoIndexBadge, extraPhotos }: Props) {
   const blocks = useMemo(() => parseMarkupBlocks(body), [body])
 
   // First paragraph (lead) stands alone full-width; rest flow in columns
@@ -71,13 +70,15 @@ export default function MagazineBody({ body, color, sectionPhoto, twoColumns, ph
         )}
         {rest.flatMap((b, i) => {
           if (b.type === 'curiosita') {
+            // Neutro, non più nel colore di sezione — un "Lo sapevi?" acceso quanto l'header
+            // competeva con la sezione stessa per l'attenzione (piano semplificazione visiva).
             return [(
               <div
                 key={i}
-                className="my-5 rounded-xl bg-stone-50 border-l-2 pl-4 pr-4 py-3"
-                style={{ borderColor: color, columnSpan: 'all' as const, breakInside: 'avoid' }}
+                className="my-5 rounded-xl bg-stone-50 border-l-2 border-stone-200 pl-4 pr-4 py-3"
+                style={{ columnSpan: 'all' as const, breakInside: 'avoid' }}
               >
-                <p className="text-[9px] font-bold tracking-[2.5px] uppercase mb-1.5" style={{ color }}>
+                <p className="text-[9px] font-semibold tracking-[2px] uppercase mb-1.5 text-stone-400">
                   ◆ Lo sapevi?
                 </p>
                 <p className="italic text-[14px] leading-relaxed text-stone-700">
@@ -112,8 +113,8 @@ export default function MagazineBody({ body, color, sectionPhoto, twoColumns, ph
               <h3
                 key={i}
                 id={slugifyHeading(b.text)}
-                className="font-display text-[11px] font-bold tracking-[1.5px] uppercase mt-6 mb-2 scroll-mt-24"
-                style={{ color, breakAfter: 'avoid' }}
+                className="font-display text-[11px] font-semibold tracking-[1.5px] uppercase mt-6 mb-2 scroll-mt-24 text-stone-500"
+                style={{ breakAfter: 'avoid' }}
               >
                 {b.text}
               </h3>
