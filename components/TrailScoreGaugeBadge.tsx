@@ -212,7 +212,7 @@ export function TrailScoreGaugeBadge({
 
   return (
     <div style={{ opacity: mounted ? 1 : 0, transform: mounted ? 'scale(1)' : 'scale(0.9)', transition: 'opacity 400ms ease, transform 400ms cubic-bezier(.22,.8,.25,1)' }}>
-      <div className={`flex gap-2.5 ${captionLayout === 'stacked' ? 'items-start' : 'items-center'}`}>
+      <div className={captionLayout === 'stacked' ? 'flex flex-col items-center text-center gap-3' : 'flex items-center gap-2.5'}>
         <div className="relative shrink-0" style={{ width: size, height: size }}>
           <svg width={size} height={size} style={{ overflow: 'visible' }}>
             <circle cx={cx} cy={cy} r={rOuter} fill="none" stroke={neutralTrack} strokeWidth={swOuter} />
@@ -292,7 +292,7 @@ export function TrailScoreGaugeBadge({
           )}
         </div>
         {showLabel && scoreLines.length > 0 && (
-          <div className={`flex flex-col flex-1 min-w-0 ${captionLayout === 'stacked' ? 'gap-2.5' : 'gap-1'}`}>
+          <div className={captionLayout === 'stacked' ? 'flex flex-col items-center gap-2.5 w-full' : 'flex flex-col flex-1 min-w-0 gap-1'}>
             {captionLayout === 'curved' ? (
               // Una riga per punteggio, col margine che segue la curva del cerchio (equazione
               // della circonferenza) invece di un gap piatto uguale per tutte — pensato per le
@@ -353,7 +353,7 @@ export function TrailScoreGaugeBadge({
       </div>
 
       {showLabel && collapsible && (
-        <>
+        <div className={captionLayout === 'stacked' ? 'text-center' : undefined}>
           <button
             type="button"
             onClick={() => setDetailOpen(o => !o)}
@@ -363,7 +363,7 @@ export function TrailScoreGaugeBadge({
             <ChevronDown className={`w-3.5 h-3.5 transition-transform ${detailOpen ? 'rotate-180' : ''}`} />
           </button>
           {detailOpen && (
-            <div className="mt-3 pt-3 border-t border-dashed border-stone-200 space-y-2.5">
+            <div className="mt-3 pt-3 border-t border-dashed border-stone-200 space-y-2.5 text-left">
               {secondaryLines.map(line => (
                 <div key={line.key} className="min-w-0">
                   <p className="flex items-center gap-1 text-stone-400 text-[10px] font-semibold uppercase tracking-wide leading-tight">
@@ -378,7 +378,7 @@ export function TrailScoreGaugeBadge({
               {detailExtra}
             </div>
           )}
-        </>
+        </div>
       )}
       {/* Senza un Consiglio (nessun personalSafety) le righe erano già solo una o due — niente da
           nascondere dietro un tap, quindi detailExtra (ScoreRing) resta semplicemente a vista. */}

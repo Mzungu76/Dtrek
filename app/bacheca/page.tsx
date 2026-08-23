@@ -55,12 +55,22 @@ function recoCardSummary(card: RecommendationCard): {
   return { title: `${routeTypeLabel(d.type)} per te`, polyline: d.routePolyline, distanceMeters: d.distanceMeters, elevationGain: d.elevationGain, hasElevation: d.hasElevation, isRevisit: false }
 }
 
-// Foto del primo POI Wikipedia arricchito di un percorso pianificato — stessa fonte/priorità di
+// Molte voci Wikipedia vicine al percorso sono pagine di comuni/enti — il thumbnail che l'API
+// sceglie per l'infobox è spesso una bandiera o uno stemma invece di una foto del luogo (es.
+// "Anello delle Cinque Terre" che finisce con la bandiera di un comune come copertina). Sceglie
+// la prima voce il cui thumbnail non sembra araldica/amministrativa, invece di prendere sempre e
+// comunque la prima in assoluto.
+const NON_SCENIC_THUMBNAIL_PATTERN = /flag_of|bandiera|stemma|coat_of_arms|crest_of|blason|seal_of|logo/i
+function pickScenicWikiThumbnail(entries: { wiki: WikiPage }[] | undefined): string | null {
+  const entry = entries?.find(e => e.wiki.thumbnail && !NON_SCENIC_THUMBNAIL_PATTERN.test(e.wiki.thumbnail))
+  return entry?.wiki.thumbnail ?? null
+}
+
+// Foto del miglior POI Wikipedia arricchito di un percorso pianificato — stessa fonte/priorità di
 // heroPhotoUrl sotto, riusata qui per le card compatte di "Altre uscite in programma" (sfondo
 // invece del solo tracciato, quando disponibile).
 function plannedHikePhotoUrl(hike: PlannedHikeMeta): string | null {
-  const wiki = hike.cachedPoiWiki as { poi: PoiItem; wiki: WikiPage }[] | undefined
-  return wiki?.[0]?.wiki.thumbnail ?? null
+  return pickScenicWikiThumbnail(hike.cachedPoiWiki as { poi: PoiItem; wiki: WikiPage }[] | undefined)
 }
 
 // Tempo di lettura stimato per una card "Da sapere sui tuoi percorsi" — solo il testo già in cache
@@ -351,11 +361,10 @@ export default function BachecaPage() {
 
   const heroPhotoUrl = useMemo(() => {
     if (featured) {
-      const wiki = featured.hike.cachedPoiWiki as { poi: PoiItem; wiki: WikiPage }[] | undefined
-      return wiki?.[0]?.wiki.thumbnail ?? null
+      return pickScenicWikiThumbnail(featured.hike.cachedPoiWiki as { poi: PoiItem; wiki: WikiPage }[] | undefined)
     }
     if (latestActivity) {
-      return latestActivityCover ?? activityPoiWikiById[latestActivity.id]?.[0]?.wiki.thumbnail ?? null
+      return latestActivityCover ?? pickScenicWikiThumbnail(activityPoiWikiById[latestActivity.id])
     }
     return null
   }, [featured, latestActivity, latestActivityCover, activityPoiWikiById])
@@ -542,7 +551,7 @@ export default function BachecaPage() {
                       <div className="absolute inset-2"><RouteThumb polyline={f.hike.routePolyline} color="#ffffff" strokeWidth={2} /></div>
                     ) : null}
                   </div>
-                  <p className="text-[10.5px] font-semibold text-white mt-1 truncate" style={{ textShadow: '0 1px 4px rgba(0,0,0,0.6)' }}>{f.hike.title}</p>
+                  <p className="text-[10.5px] font-semibold text-white mt-1 leading-tight line-clamp-2" style={{ textShadow: '0 1px 4px rgba(0,0,0,0.6)' }}>{f.hike.title}</p>
                   <p className="text-[9px] text-white/60">
                     {f.hasDate && f.hike.plannedDate
                       ? `${format(new Date(f.hike.plannedDate), 'd MMM', { locale: it })} · ${(f.hike.distanceMeters / 1000).toFixed(1)} km`
