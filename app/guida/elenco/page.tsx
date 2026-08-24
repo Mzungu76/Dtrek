@@ -41,7 +41,9 @@ export default function GuidaIndexPage() {
 
   const q = query.trim().toLowerCase()
   const all      = q ? (planned ?? []).filter(h => h.title.toLowerCase().includes(q)) : (planned ?? [])
-  const active   = all.filter(h => !h.archivedAt)
+  // firstCompletedAt: il percorso è già stato camminato — prima veniva cancellato al completamento
+  // (lib/activitySave.ts), ora resta come ancora per Reportage futuri ma non è più "in attesa" qui.
+  const active   = all.filter(h => !h.archivedAt && !h.firstCompletedAt)
   const archived = all.filter(h => h.archivedAt)
   const sorted = active.slice().sort((a, b) => {
     const da = a.pendingExpiresAt ? new Date(a.pendingExpiresAt).getTime() : Infinity

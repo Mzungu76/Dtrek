@@ -82,7 +82,6 @@ export default function ActivityUploader() {
         linkedPlannedId: selectedPlanned?.id,
         linkedPlannedTrackPoints,
         hikeNotes: linkedPlannedNotes,
-        deleteLinkedPlanned: !!selectedPlanned,
       })
       setStatus('success')
       setTimeout(() => router.push(`/resoconto/${encodeURIComponent(saved.id)}`), 1200)
@@ -286,7 +285,7 @@ export default function ActivityUploader() {
 
         {selectedPlanned && (
           <p className="mt-3 text-xs text-sky-700 bg-sky-50 rounded-lg px-3 py-2">
-            Il percorso pianificato <strong>«{selectedPlanned.title}»</strong> verrà eliminato dalla lista programma dopo il salvataggio.
+            Il percorso pianificato <strong>«{selectedPlanned.title}»</strong> verrà collegato a questa escursione — resta comunque disponibile per essere ricamminato in futuro.
           </p>
         )}
       </div>

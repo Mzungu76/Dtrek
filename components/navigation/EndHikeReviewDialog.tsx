@@ -7,11 +7,11 @@ import { MAX_NOTE_LENGTH } from '@/lib/community/moderation'
 interface Props {
   activity: TcxActivity
   defaultTitle: string
-  /** mode 'overwrite' consumes the linked planned hike into this activity (same as before);
-   * 'new' saves this as an independent activity and leaves the planned hike untouched, so it
-   * can be hiked again later. reportCompletion/completionNote sono Fase 4 di
-   * docs/navigator-orizzonti-roadmap.md — opt-in esplicito, mai automatico (default deselezionato). */
-  onSave: (title: string, mode: 'overwrite' | 'new', reportCompletion: boolean, completionNote: string) => Promise<void>
+  /** Il percorso pianificato collegato non viene mai cancellato dal salvataggio — resta
+   * un'ancora ripetibile a cui questo Reportage si aggiunge (vedi lib/activitySave.ts).
+   * reportCompletion/completionNote sono Fase 4 di docs/navigator-orizzonti-roadmap.md —
+   * opt-in esplicito, mai automatico (default deselezionato). */
+  onSave: (title: string, reportCompletion: boolean, completionNote: string) => Promise<void>
   onDiscard: () => void
 }
 
@@ -32,19 +32,19 @@ function formatDuration(seconds: number): string {
  */
 export default function EndHikeReviewDialog({ activity, defaultTitle, onSave, onDiscard }: Props) {
   const [title, setTitle] = useState(defaultTitle)
-  const [saving, setSaving] = useState<'overwrite' | 'new' | null>(null)
+  const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [reportCompletion, setReportCompletion] = useState(false)
   const [completionNote, setCompletionNote] = useState('')
 
-  const handleSave = async (mode: 'overwrite' | 'new') => {
-    setSaving(mode)
+  const handleSave = async () => {
+    setSaving(true)
     setError(null)
     try {
-      await onSave(title, mode, reportCompletion, completionNote)
+      await onSave(title, reportCompletion, completionNote)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Errore nel salvataggio')
-      setSaving(null)
+      setSaving(false)
     }
   }
 
@@ -117,25 +117,16 @@ export default function EndHikeReviewDialog({ activity, defaultTitle, onSave, on
 
         <div className="flex flex-col gap-2">
           <button
-            onClick={() => handleSave('new')}
-            disabled={!!saving}
+            onClick={handleSave}
+            disabled={saving}
             className="w-full py-2.5 rounded-xl bg-forest-500 text-white font-semibold font-body text-sm hover:bg-forest-600 disabled:opacity-70 flex items-center justify-center gap-2"
           >
-            {saving === 'new' ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-            {saving === 'new' ? 'Salvataggio…' : 'Salva come nuovo percorso'}
-          </button>
-          <button
-            onClick={() => handleSave('overwrite')}
-            disabled={!!saving}
-            title="Il percorso pianificato viene eliminato e sostituito da questa escursione registrata"
-            className="w-full py-2.5 rounded-xl border border-forest-300 text-forest-700 font-semibold font-body text-sm hover:bg-forest-50 disabled:opacity-50 flex items-center justify-center gap-2"
-          >
-            {saving === 'overwrite' ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-            {saving === 'overwrite' ? 'Salvataggio…' : 'Sovrascrivi il percorso pianificato'}
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+            {saving ? 'Salvataggio…' : 'Salva'}
           </button>
           <button
             onClick={onDiscard}
-            disabled={!!saving}
+            disabled={saving}
             className="w-full py-2 text-stone-500 font-semibold font-body text-sm hover:text-stone-700 disabled:opacity-50"
           >
             Scarta
