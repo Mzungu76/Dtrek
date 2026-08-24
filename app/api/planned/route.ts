@@ -8,6 +8,7 @@ import { assessHike } from '@/lib/hikeAssessment'
 import type { SafetyScore } from '@/lib/safetyScore'
 import { downsamplePolyline } from '@/lib/downsamplePolyline'
 import { resolveDtrekEntitlement } from '@/lib/dtrekEntitlement'
+import { deletePercorsoCascade } from '@/lib/deletePercorsoCascade'
 
 export const dynamic = 'force-dynamic'
 
@@ -511,13 +512,12 @@ export async function DELETE(req: NextRequest) {
     const id = req.nextUrl.searchParams.get('id')
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
-    const { error } = await supabase
-      .from('planned_hikes')
-      .delete()
-      .eq('id', id)
-      .eq('user_id', user.id)
+    // Un Percorso è un sentiero ripetibile (Fase 0 di docs/diario-fulcro-piano.md): può avere più
+    // Reportage collegati (activities.linked_planned_id, mai un vincolo FK). Cancellarlo deve
+    // sempre portarli via con sé — vedi lib/deletePercorsoCascade.ts — altrimenti restano orfani
+    // con un riferimento ormai inesistente.
+    await deletePercorsoCascade(user.id, id)
 
-    if (error) throw error
     return NextResponse.json({ ok: true })
   } catch (e) {
     console.error('DELETE /api/planned:', e)

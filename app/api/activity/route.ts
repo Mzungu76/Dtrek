@@ -4,6 +4,7 @@ import { getUserFromRequest } from '@/lib/supabaseAuth'
 import type { StoredActivity } from '@/lib/blobStore'
 import type { TrackPoint } from '@/lib/tcxParser'
 import { downsamplePolyline } from '@/lib/downsamplePolyline'
+import { deleteActivityCascade } from '@/lib/deleteActivityCascade'
 
 export const dynamic = 'force-dynamic'
 
@@ -233,43 +234,11 @@ export async function DELETE(req: NextRequest) {
     const id = req.nextUrl.searchParams.get('id')
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
-    // activity_photos.activity_id is a plain text column, not a foreign key (no DB cascade) —
-    // without this, deleting an activity leaves its photo rows and Storage blobs permanently
-    // orphaned (confirmed against production data: 10 of 11 activity_photos rows had an
-    // activity_id with no matching activities row). Delete photos first: if this activity never
-    // had any, both calls below are no-ops; if it did, they're gone before the parent row is,
-    // so a request that dies between the two steps never leaves photos referencing a live row
-    // with no photos, only the same already-tolerated orphan shape this fix is closing.
-    const { data: photoRows } = await supabase
-      .from('activity_photos')
-      .select('storage_path')
-      .eq('activity_id', id)
-      .eq('user_id', user.id)
+    // Foto, resoconto scritto (hike_reports) ed eventuale PDF esportato — nessuno dei tre ha un
+    // vincolo FK verso activities (colonne di testo semplice, non REFERENCES): senza questa
+    // cascata applicativa restano orfani per sempre. Vedi lib/deleteActivityCascade.ts.
+    await deleteActivityCascade(user.id, id)
 
-    if (photoRows && photoRows.length > 0) {
-      const paths = photoRows.flatMap((row) => {
-        const storagePath = row.storage_path as string | null
-        if (!storagePath) return []
-        const thumbPath = storagePath.replace(/(\.[^./]+)$/, '-thumb$1')
-        return [storagePath, thumbPath]
-      })
-      if (paths.length > 0) await supabase.storage.from('dtrek-photos').remove(paths)
-
-      const { error: photosError } = await supabase
-        .from('activity_photos')
-        .delete()
-        .eq('activity_id', id)
-        .eq('user_id', user.id)
-      if (photosError) throw photosError
-    }
-
-    const { error } = await supabase
-      .from('activities')
-      .delete()
-      .eq('id', id)
-      .eq('user_id', user.id)
-
-    if (error) throw error
     return NextResponse.json({ ok: true })
   } catch (e) {
     console.error('DELETE /api/activity:', e)
