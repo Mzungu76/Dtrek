@@ -9,7 +9,7 @@ import { defaultPendingExpiresAt } from './sharedHelpers'
 
 // ── Da diario esistente (clona un'attività conclusa) ──────────────────────────
 
-export default function FromActivityUploader() {
+export default function FromActivityUploader({ diaryId }: { diaryId?: string } = {}) {
   const router = useRouter()
   const [activities, setActivities] = useState<ActivityMeta[] | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -26,6 +26,7 @@ export default function FromActivityUploader() {
       if (!activity) throw new Error('Attività non trovata')
       const pendingExpiresAt = await defaultPendingExpiresAt()
       const hike = plannedFromActivity(activity, pendingExpiresAt)
+      if (diaryId) hike.diaryId = diaryId
       await savePlanned(hike)
       router.push(`/guida/${encodeURIComponent(hike.id)}`)
     } catch (e) {

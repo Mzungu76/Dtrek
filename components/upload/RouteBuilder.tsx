@@ -108,7 +108,7 @@ export type ResultItem =
  * ("Esistenti" / "Su misura") — e ogni risultato mostrato ha sempre una traccia reale su mappa,
  * mai solo statistiche testuali.
  */
-export default function RouteBuilder({ onBack }: { onBack: () => void }) {
+export default function RouteBuilder({ onBack, diaryId }: { onBack: () => void; diaryId?: string }) {
   const router = useRouter()
   const [step, setStep] = useState<Step>('start')
   // Tab dello step "Risultati": percorsi già esistenti (trovati) vs generati su misura
@@ -952,7 +952,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     setSaving(true)
     try {
       const pendingExpiresAt = await defaultPendingExpiresAt()
-      const hike = await saveResultItemToGuide(selected, title, date, pendingExpiresAt)
+      const hike = await saveResultItemToGuide(selected, title, date, pendingExpiresAt, diaryId)
       router.push(`/guida/${encodeURIComponent(hike.id)}`)
     } catch (e) {
       setErrorMsg(`Errore nel salvataggio: ${e instanceof Error ? e.message : String(e)}`)
@@ -987,7 +987,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       const pendingExpiresAt = await defaultPendingExpiresAt()
       let done = 0
       for (const { item, i } of items) {
-        await saveResultItemToGuide(item, defaultTitleFor(item, i), '', pendingExpiresAt)
+        await saveResultItemToGuide(item, defaultTitleFor(item, i), '', pendingExpiresAt, diaryId)
         done += 1
         setBulkProgress({ done, total: items.length })
       }

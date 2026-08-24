@@ -5,15 +5,50 @@ import Link from 'next/link'
 import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import RouteThumb from '@/components/RouteThumb'
 import type { DiarioDetail } from '@/app/api/diaries/[id]/route'
-import { ArrowLeft, Loader2, Lock, LockOpen, Mountain } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Loader2, Lock, LockOpen, Mountain, Route } from 'lucide-react'
 
 /**
- * "Dentro un Diario" — Fase 1 di docs/diario-fulcro-piano.md (sola lettura). Elenco dei Percorsi
- * di questo Diario, con stato (in programma / N Reportage) e idoneità alla pubblicazione.
+ * "Dentro un Diario" — Fase 1-2 di docs/diario-fulcro-piano.md (sola lettura) + Fase 3 (composer).
+ * Elenco dei Percorsi di questo Diario, con stato (in programma / N Reportage) e idoneità alla
+ * pubblicazione. Ogni riga rimanda a /diari/[id]/percorsi/[percorsoId] (Fase 2): la Guida
+ * oggettiva (GuidaHub, invariata) più l'elenco dei Reportage collegati.
  *
- * Ogni riga rimanda a /diari/[id]/percorsi/[percorsoId] (Fase 2): la Guida oggettiva (GuidaHub,
- * invariata) più l'elenco dei Reportage collegati.
+ * Il composer a due corsie ("Già fatta" / "Da pianificare") non riscrive gli import esistenti —
+ * porta dentro /upload (già ActivityUploader/GpxUploader/ManualImportChoice/FromActivityUploader,
+ * invariati) con `diaryId` in query, così il Percorso creato entra in questo Diario invece che in
+ * quello di default. Vedi app/upload/page.tsx.
  */
+function Composer({ diaryId }: { diaryId: string }) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+      <Link
+        href={`/upload?tab=activity&diaryId=${encodeURIComponent(diaryId)}`}
+        className="flex items-center gap-3 bg-white rounded-2xl px-4 py-4 border border-forest-200 hover:border-forest-400 hover:shadow-sm transition-all"
+      >
+        <div className="w-10 h-10 rounded-xl bg-forest-50 text-forest-600 flex items-center justify-center shrink-0">
+          <CheckCircle2 className="w-5 h-5" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-[14px] font-bold text-stone-800">Già fatta</p>
+          <p className="text-[12px] text-stone-500">Importa un&apos;escursione conclusa — GPS, orologio o traccia libera</p>
+        </div>
+      </Link>
+      <Link
+        href={`/upload?tab=gpx&diaryId=${encodeURIComponent(diaryId)}`}
+        className="flex items-center gap-3 bg-white rounded-2xl px-4 py-4 border border-sky-200 hover:border-sky-400 hover:shadow-sm transition-all"
+      >
+        <div className="w-10 h-10 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center shrink-0">
+          <Route className="w-5 h-5" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-[14px] font-bold text-stone-800">Da pianificare</p>
+          <p className="text-[12px] text-stone-500">Trova o costruisci un percorso, importa un file o un link</p>
+        </div>
+      </Link>
+    </div>
+  )
+}
+
 export default function DiarioDetailPage() {
   const params = useParams<{ id: string }>()
   const [detail, setDetail] = useState<DiarioDetail | null>(null)
@@ -59,16 +94,21 @@ export default function DiarioDetailPage() {
             <Loader2 className="w-6 h-6 animate-spin" /><span>Caricamento…</span>
           </div>
         ) : detail && detail.percorsi.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="w-20 h-20 rounded-full bg-forest-50 border border-forest-200 flex items-center justify-center mb-6">
-              <Mountain className="w-10 h-10 text-forest-400" />
+          <>
+            <Composer diaryId={params.id} />
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="w-20 h-20 rounded-full bg-forest-50 border border-forest-200 flex items-center justify-center mb-6">
+                <Mountain className="w-10 h-10 text-forest-400" />
+              </div>
+              <h2 className="font-display text-2xl font-semibold text-stone-700 mb-2">Nessun percorso ancora</h2>
+              <p className="text-stone-400 text-sm max-w-sm px-4">
+                I percorsi che pianifichi o le uscite che importi in questo Diario compariranno qui.
+              </p>
             </div>
-            <h2 className="font-display text-2xl font-semibold text-stone-700 mb-2">Nessun percorso ancora</h2>
-            <p className="text-stone-400 text-sm max-w-sm px-4">
-              I percorsi che pianifichi o le uscite che importi in questo Diario compariranno qui.
-            </p>
-          </div>
+          </>
         ) : detail && (
+          <>
+          <Composer diaryId={params.id} />
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {detail.percorsi.map(p => (
               <Link
@@ -109,6 +149,7 @@ export default function DiarioDetailPage() {
               </Link>
             ))}
           </div>
+          </>
         )}
       </main>
     </div>
