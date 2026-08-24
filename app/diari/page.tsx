@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import type { DiarySummary } from '@/app/api/diaries/route'
-import { BookMarked, Loader2, Lock, LockOpen } from 'lucide-react'
+import { ArrowRight, BookMarked, Compass, Loader2, Lock, LockOpen } from 'lucide-react'
 
 /**
  * "I miei Diari" — Fase 1 di docs/diario-fulcro-piano.md (sola lettura). Home del Diario: ogni
@@ -49,6 +49,19 @@ export default function DiariPage() {
           </div>
         ) : (
           <div className="flex flex-col gap-3">
+            <Link
+              href="/percorsi"
+              className="flex items-center gap-3 bg-white rounded-2xl px-4 py-3.5 border border-stone-200 hover:border-forest-300 transition-colors"
+            >
+              <div className="w-9 h-9 rounded-xl bg-forest-50 text-forest-600 flex items-center justify-center shrink-0">
+                <Compass className="w-4.5 h-4.5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[14px] font-bold text-stone-800">Tutti i Percorsi</p>
+                <p className="text-[12px] text-stone-500">Ritrova un percorso in qualunque Diario, senza doverlo ricordare</p>
+              </div>
+              <ArrowRight className="w-4 h-4 text-stone-300 shrink-0" />
+            </Link>
             {diaries?.map(d => (
               <Link
                 key={d.id}

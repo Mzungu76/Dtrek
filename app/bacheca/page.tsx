@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import {
-  Navigation, Sparkles, MapPin, ArrowRight, TrendingUp, Flame, BarChart3, Loader2, Heart, Maximize2,
+  Navigation, Sparkles, MapPin, ArrowRight, TrendingUp, Flame, BarChart3, Loader2, Maximize2,
   BookOpen, Map as MapIcon, Activity,
 } from 'lucide-react'
 import HubNavBar from '@/components/routehub/HubNavBar'
@@ -14,6 +14,7 @@ import CuriosityModal from '@/components/bacheca/CuriosityModal'
 import TerritoryMap from '@/components/bacheca/TerritoryMap'
 import SectionEyebrow from '@/components/bacheca/SectionEyebrow'
 import BachecaStage from '@/components/bacheca/BachecaStage'
+import RecoSuggestedRow from '@/components/bacheca/RecoSuggestedRow'
 import Sheet from '@/components/ui/Sheet'
 import { getAllActivities, getActivityById, computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
 import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
@@ -23,37 +24,11 @@ import { computeStreaks } from '@/lib/stats'
 import { computeTrainingLoad, activityStress, currentForm } from '@/lib/trainingLoad'
 import { ctsLabel } from '@/lib/trailScore'
 import { formatDuration } from '@/lib/tcxParser'
-import { routeTypeLabel } from '@/lib/routeBuilder/loopBuilder'
 import { tryOpenNavigatorApp } from '@/lib/navigatorHandoff'
 import type { RecommendationCard } from '@/lib/routeBuilder/generateRecommendations'
-import type { ScoredCandidate } from '@/lib/routeBuilder/scoreCandidates'
-import type { FoundRouteItem } from '@/lib/routeBuilder/foundRoute'
+import { recoCardSummary } from '@/lib/routeBuilder/recoCardSummary'
 import type { WikiPage } from '@/lib/wikipedia'
 import type { PoiItem } from '@/lib/overpass'
-
-// Riassunto minimo per la card compatta della riga "Percorsi per te" in Home — a differenza di
-// app/percorsi-per-te/page.tsx (che mostra FoundRouteCard/BuiltRouteCard per intero, con mappa
-// interattiva e badge punteggio) qui serve solo titolo/distanza/dislivello/tracciato per una card
-// piccola in riga scorrevole, coerente con lo stile della riga "Curiosità" sopra.
-function recoCardSummary(card: RecommendationCard): {
-  title: string; polyline: [number, number][]; distanceMeters: number; elevationGain: number; hasElevation: boolean; isRevisit: boolean
-  // Perché DTrek propone proprio questo percorso (lib/routeBuilder/generateRecommendations.ts) —
-  // assente per una card 'built' (mai prodotta da generateRecommendationsForUser, solo righe
-  // storiche precedenti alla rimozione di "Su misura" da questa pipeline, vedi il commento in cima
-  // a quel file), ricade sull'etichetta generica nella UI.
-  reasonTag?: string
-} {
-  if (card.kind === 'found') {
-    const d = card.data as FoundRouteItem
-    return {
-      title: d.name, polyline: d.track.routePolyline, distanceMeters: d.track.distanceMeters,
-      elevationGain: d.track.elevationGain, hasElevation: d.track.hasElevation, isRevisit: !!d.isRevisit,
-      reasonTag: d.reasonTag,
-    }
-  }
-  const d = card.data as ScoredCandidate
-  return { title: `${routeTypeLabel(d.type)} per te`, polyline: d.routePolyline, distanceMeters: d.distanceMeters, elevationGain: d.elevationGain, hasElevation: d.hasElevation, isRevisit: false }
-}
 
 // Molte voci Wikipedia vicine al percorso sono pagine di comuni/enti — il thumbnail che l'API
 // sceglie per l'infobox è spesso una bandiera o uno stemma invece di una foto del luogo (es.
@@ -660,47 +635,7 @@ export default function BachecaPage() {
                 Vedi tutti <ArrowRight className="w-3 h-3" />
               </Link>
             </div>
-            <div className="flex gap-2.5 overflow-x-auto pb-1 -mx-4 px-4" style={{ scrollbarWidth: 'none' }}>
-              {recoCards.map(card => {
-                const s = recoCardSummary(card)
-                return (
-                  // Porta alla card vera in "Percorsi per te" invece di salvare direttamente tra i
-                  // pianificati — un percorso "consigliato" è ancora una proposta da valutare (mappa,
-                  // descrizione, verdetto comfort), non una scelta già fatta: solo da quella pagina,
-                  // con l'azione esplicita sulla card, l'utente lo aggiunge davvero ai pianificati.
-                  <Link
-                    key={card.id}
-                    href={`/percorsi-per-te?focus=${encodeURIComponent(card.id)}`}
-                    className="shrink-0 w-[170px] flex flex-col bg-white border border-stone-200 rounded-2xl overflow-hidden shadow-sm text-left"
-                  >
-                    {/* shrink-0 esplicito: senza, la riga (flex + overflow-x-auto, align-items:
-                        stretch di default) allunga ogni card all'altezza della più alta — con un
-                        titolo che va a capo su 2 righe invece di 1 in una card vicina, l'altezza
-                        extra finiva scaricata qui invece che restare confinata al blocco di testo
-                        sotto, spostando badge/mappa in verticale da una card all'altra. */}
-                    <div className="relative h-[90px] shrink-0 bg-gradient-to-b from-forest-50 to-stone-50 bg-topography">
-                      <div className="absolute inset-3">
-                        <RouteThumb polyline={s.polyline} color="#2d7a3d" strokeWidth={2.5} />
-                      </div>
-                      {/* Report AI sulla Bacheca, 2026-08-22 — "CONSIGLIATO" da solo, identico su
-                          ogni card, non spiegava perché DTrek l'avesse scelta. reasonTag
-                          (lib/routeBuilder/generateRecommendations.ts) ricade su "Consigliato" solo
-                          per righe storiche precedenti a questo campo. */}
-                      <div className={`absolute top-2 left-2 max-w-[calc(100%-16px)] flex items-center gap-1 px-2 py-0.5 rounded-full text-white text-[9px] font-semibold uppercase tracking-wide ${s.isRevisit ? 'bg-forest-600/90' : 'bg-terra-600/90'}`}>
-                        {s.isRevisit ? <Heart className="w-2.5 h-2.5 shrink-0" fill="currentColor" /> : <Sparkles className="w-2.5 h-2.5 shrink-0" />}
-                        <span className="truncate">{s.isRevisit ? 'Preferito' : (s.reasonTag ?? 'Consigliato')}</span>
-                      </div>
-                    </div>
-                    <div className="p-2.5 min-w-0">
-                      <p className="text-[12.5px] font-semibold text-stone-800 leading-snug line-clamp-2">{s.title}</p>
-                      <p className="text-[11px] text-stone-400 mt-1">
-                        {(s.distanceMeters / 1000).toFixed(1)} km · {s.hasElevation ? '' : '~'}+{Math.round(s.elevationGain)} m
-                      </p>
-                    </div>
-                  </Link>
-                )
-              })}
-            </div>
+            <RecoSuggestedRow cards={recoCards} />
           </div>
         )}
 

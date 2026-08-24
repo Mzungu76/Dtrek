@@ -4,8 +4,37 @@ import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import RouteThumb from '@/components/RouteThumb'
+import SectionEyebrow from '@/components/bacheca/SectionEyebrow'
+import RecoSuggestedRow from '@/components/bacheca/RecoSuggestedRow'
 import type { DiarioDetail } from '@/app/api/diaries/[id]/route'
-import { ArrowLeft, CheckCircle2, Loader2, Lock, LockOpen, Mountain, Route, Share2 } from 'lucide-react'
+import type { RecommendationCard } from '@/lib/routeBuilder/generateRecommendations'
+import { ArrowLeft, CheckCircle2, Loader2, Lock, LockOpen, Mountain, Route, Share2, Sparkles } from 'lucide-react'
+
+/**
+ * "Percorsi per te" come intermezzo dentro un Diario — Fase 5 di docs/diario-fulcro-piano.md.
+ * Stesso motore e stessa card di app/bacheca/page.tsx (generateRecommendations.ts via
+ * /api/percorsi-per-te?peek=1, mai una generazione al volo qui): un Diario senza ancora molti
+ * Percorsi propri riceve comunque un suggerimento concreto, invece di restare solo un elenco vuoto.
+ */
+function PercorsiPerTe() {
+  const [status, setStatus] = useState<'loading' | 'ok' | 'empty_no_location' | 'error' | 'pending'>('loading')
+  const [cards, setCards] = useState<RecommendationCard[]>([])
+
+  useEffect(() => {
+    fetch('/api/percorsi-per-te?peek=1')
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(data => { setStatus(data.status); setCards(data.cards ?? []) })
+      .catch(() => setStatus('error'))
+  }, [])
+
+  if (status !== 'ok' || cards.length === 0) return null
+  return (
+    <div className="mb-6">
+      <SectionEyebrow icon={Sparkles} color="#d97220" className="mb-2">Percorsi per te</SectionEyebrow>
+      <RecoSuggestedRow cards={cards} />
+    </div>
+  )
+}
 
 /**
  * "Dentro un Diario" — Fase 1-2 di docs/diario-fulcro-piano.md (sola lettura) + Fase 3 (composer).
@@ -106,6 +135,7 @@ export default function DiarioDetailPage() {
         ) : detail && detail.percorsi.length === 0 ? (
           <>
             <Composer diaryId={params.id} />
+            <PercorsiPerTe />
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <div className="w-20 h-20 rounded-full bg-forest-50 border border-forest-200 flex items-center justify-center mb-6">
                 <Mountain className="w-10 h-10 text-forest-400" />
@@ -119,6 +149,7 @@ export default function DiarioDetailPage() {
         ) : detail && (
           <>
           <Composer diaryId={params.id} />
+          <PercorsiPerTe />
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {detail.percorsi.map(p => (
               <Link
