@@ -887,7 +887,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
     }
   }
 
-  const handleSaveRecordedActivity = async (title: string, mode: 'overwrite' | 'new', reportCompletion: boolean, completionNote: string) => {
+  const handleSaveRecordedActivity = async (title: string, reportCompletion: boolean, completionNote: string) => {
     if (!pendingActivity) return
     let offline = false
     const saved = await saveActivityWithEnrichment(pendingActivity, {
@@ -895,10 +895,6 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       linkedPlannedId: hike.id,
       linkedPlannedTrackPoints: (hike.trackPoints ?? []).filter((p) => p.lat && p.lon),
       hikeNotes,
-      // 'overwrite' consumes the plan into this activity (as before); 'new' keeps the linkage
-      // for reference (comparison chart, "generato da") but leaves the planned hike untouched
-      // so it can be hiked again later instead of being deleted.
-      deleteLinkedPlanned: mode === 'overwrite',
       onSyncResult: (ok) => { offline = !ok },
     })
     clearRecordedTrack(hike.id).catch(() => {})

@@ -245,7 +245,9 @@ export default function GuidaHub({ id, startClosed }: { id?: string; startClosed
   // cachedSafetyScore) is written to the local cache for next time but never reaches this
   // session's `items` — so the gallery's TS ring stays pinned to whatever it was a visit ago.
   const applyList = useCallback((list: PlannedHikeMeta[]) => {
-    const active = list.filter(h => !h.archivedAt)
+    // firstCompletedAt: già camminato — prima la riga spariva (cancellata al completamento), ora
+    // resta come ancora per Reportage futuri ma non è più "in attesa" qui.
+    const active = list.filter(h => !h.archivedAt && !h.firstCompletedAt)
     const sorted = active.slice().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     setItems(prev => {
       const prevById = new Map(prev.map(it => [it.id, it]))

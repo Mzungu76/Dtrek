@@ -487,12 +487,13 @@ export async function POST(req: NextRequest) {
   }
 
   // Guida scritta PRIMA dell'uscita. Veniva letta solo da planned_hikes tramite
-  // linked_planned_id — ma quella riga viene CANCELLATA quando l'uscita si completa
-  // (saveActivityWithEnrichment → deleteLinkedPlanned), quindi la lettura trovava sempre il vuoto e
-  // il reportage non ha mai visto una riga di guida. Ora la fonte principale è l'attività stessa
-  // (le colonne guide_* / poi_wiki, travasate al salvataggio); planned_hikes resta come ripiego per
-  // i casi in cui il piano esiste ancora — attività salvate prima della migrazione, o uscite
-  // completate mentre il piano non era ancora stato rimosso.
+  // linked_planned_id — ma quella riga veniva CANCELLATA quando l'uscita si completava
+  // (vecchio comportamento di saveActivityWithEnrichment, rimosso: un percorso ora resta come
+  // ancora permanente, mai cancellato, per poter essere ricamminato), quindi la lettura trovava
+  // sempre il vuoto e il reportage non ha mai visto una riga di guida. La fonte principale resta
+  // l'attività stessa (le colonne guide_* / poi_wiki, travasate al salvataggio); planned_hikes
+  // resta come ripiego per i casi in cui quel travaso non è mai avvenuto — attività salvate prima
+  // di questa colonna.
   let guideText: string | undefined = (activity.guide_text as string | undefined) || undefined
   let guideGeneratedAt: string | undefined = (activity.guide_generated_at as string | undefined) || undefined
   let poiBlock: string | undefined = buildPoiBlock(undefined, activity.poi_wiki as { poi: PoiItem; wiki: WikiPage }[] | undefined) || undefined

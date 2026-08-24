@@ -1,6 +1,6 @@
 import type { TcxActivity, TrackPoint } from './tcxParser'
 import { saveActivity, type StoredActivity, type HikeNote } from './blobStore'
-import { deletePlanned, getPlannedById } from './plannedStore'
+import { getPlannedById, updatePlannedMeta } from './plannedStore'
 import { fetchPoisNearTrack } from './poisProxy'
 import { type PoiItem } from './overpass'
 import { computeTEI, teiToBeautyScore, type OsmTeiData } from './tei'
@@ -18,8 +18,6 @@ export interface SaveActivityOptions {
   linkedPlannedId?: string
   linkedPlannedTrackPoints?: TrackPoint[]
   hikeNotes?: HikeNote[]
-  /** Deletes the planned_hikes row at linkedPlannedId after a successful save — the plan is "consumed" into the completed activity, same behavior as linking an imported GPX to a plan. */
-  deleteLinkedPlanned?: boolean
   /** Set only by the standalone Navigator app's free-track recording flow (app/navigatore/traccia) — see lib/navigatorSlot.ts. Never set by the main app's own upload/save flows. */
   sourceApp?: 'navigator'
   /**
@@ -153,6 +151,10 @@ export async function saveActivityWithEnrichment(
   // volta sola e altrimenti perso per sempre nel momento in cui il piano viene consumato in questa
   // attività. Il resoconto e il video ne hanno bisogno per raccontare il percorso, non solo mostrarlo.
   let guideCarry: Pick<StoredActivity, 'guideText'|'guideSubtitle'|'guideNotices'|'guideGeneratedAt'|'poiWiki'> = {}
+  // Se questo percorso non è mai stato camminato prima (nessun firstCompletedAt), va marcato dopo
+  // il salvataggio — mai cancellato: un Percorso resta l'ancora permanente a cui più Reportage
+  // (più uscite nel tempo) si collegano via activities.linked_planned_id.
+  let plannedNeedsFirstCompletedAt = false
   if (opts.linkedPlannedId) {
     try {
       const planned = await getPlannedById(opts.linkedPlannedId)
@@ -164,6 +166,7 @@ export async function saveActivityWithEnrichment(
           guideGeneratedAt: planned.guideGeneratedAt,
           poiWiki:          planned.cachedPoiWiki as StoredActivity['poiWiki'],
         }
+        plannedNeedsFirstCompletedAt = !planned.firstCompletedAt
       }
     } catch {} // non-blocking — un'escursione non deve fallire il salvataggio per la sua guida
   }
@@ -187,8 +190,8 @@ export async function saveActivityWithEnrichment(
   const { ok } = await saveActivity(stored)
   opts.onSyncResult?.(ok)
 
-  if (opts.deleteLinkedPlanned && opts.linkedPlannedId) {
-    await deletePlanned(opts.linkedPlannedId).catch(() => {})
+  if (opts.linkedPlannedId && plannedNeedsFirstCompletedAt) {
+    await updatePlannedMeta(opts.linkedPlannedId, { firstCompletedAt: new Date().toISOString() }).catch(() => {})
   }
 
   // Aggiorna lo storico aggregato (lib/hikerHistory.ts) usato dalla sezione guida "Su misura per
