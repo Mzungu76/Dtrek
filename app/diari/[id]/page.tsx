@@ -5,7 +5,7 @@ import Link from 'next/link'
 import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import RouteThumb from '@/components/RouteThumb'
 import type { DiarioDetail } from '@/app/api/diaries/[id]/route'
-import { ArrowLeft, CheckCircle2, Loader2, Lock, LockOpen, Mountain, Route } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Loader2, Lock, LockOpen, Mountain, Route, Share2 } from 'lucide-react'
 
 /**
  * "Dentro un Diario" — Fase 1-2 di docs/diario-fulcro-piano.md (sola lettura) + Fase 3 (composer).
@@ -67,17 +67,27 @@ export default function DiarioDetailPage() {
 
       <div className="relative h-[200px] sm:h-[240px] overflow-hidden bg-gradient-to-br from-forest-800 to-forest-900">
         <div className="absolute inset-0 bg-gradient-to-b from-forest-900/15 to-forest-900/85" />
-        <div className="absolute left-6 right-6 bottom-6 sm:left-10 sm:right-10 sm:bottom-8">
-          <Link href="/diari" className="inline-flex items-center gap-1.5 text-forest-300 text-[13px] font-semibold mb-1.5 hover:text-white transition-colors">
-            <ArrowLeft className="w-3.5 h-3.5" /> I miei Diari
-          </Link>
-          <h1 className="font-display text-[24px] sm:text-3xl font-bold text-white leading-tight">
-            {detail?.title ?? ' '}
-          </h1>
+        <div className="absolute left-6 right-6 bottom-6 sm:left-10 sm:right-10 sm:bottom-8 flex items-end justify-between gap-4">
+          <div className="min-w-0">
+            <Link href="/diari" className="inline-flex items-center gap-1.5 text-forest-300 text-[13px] font-semibold mb-1.5 hover:text-white transition-colors">
+              <ArrowLeft className="w-3.5 h-3.5" /> I miei Diari
+            </Link>
+            <h1 className="font-display text-[24px] sm:text-3xl font-bold text-white leading-tight">
+              {detail?.title ?? ' '}
+            </h1>
+            {detail && (
+              <p className="text-forest-200 text-[13px] mt-1">
+                {detail.percorsi.length} {detail.percorsi.length === 1 ? 'percorso' : 'percorsi'}
+              </p>
+            )}
+          </div>
           {detail && (
-            <p className="text-forest-200 text-[13px] mt-1">
-              {detail.percorsi.length} {detail.percorsi.length === 1 ? 'percorso' : 'percorsi'}
-            </p>
+            <Link
+              href={`/diari/${encodeURIComponent(params.id)}/pubblica`}
+              className="shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-white text-[12px] font-semibold transition-colors"
+            >
+              <Share2 className="w-3.5 h-3.5" /> Pubblica
+            </Link>
           )}
         </div>
       </div>
