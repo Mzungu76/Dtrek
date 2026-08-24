@@ -11,8 +11,8 @@ import { ArrowLeft, Loader2, Lock, LockOpen, Mountain } from 'lucide-react'
  * "Dentro un Diario" — Fase 1 di docs/diario-fulcro-piano.md (sola lettura). Elenco dei Percorsi
  * di questo Diario, con stato (in programma / N Reportage) e idoneità alla pubblicazione.
  *
- * Ogni riga rimanda per ora a /guida/[id] (la pagina Guida esistente) — la vera pagina "Percorso
- * aperto" a due zone (Guida oggettiva + Reportage) è Fase 2, non ancora costruita.
+ * Ogni riga rimanda a /diari/[id]/percorsi/[percorsoId] (Fase 2): la Guida oggettiva (GuidaHub,
+ * invariata) più l'elenco dei Reportage collegati.
  */
 export default function DiarioDetailPage() {
   const params = useParams<{ id: string }>()
@@ -73,7 +73,7 @@ export default function DiarioDetailPage() {
             {detail.percorsi.map(p => (
               <Link
                 key={p.id}
-                href={`/guida/${encodeURIComponent(p.id)}`}
+                href={`/diari/${encodeURIComponent(params.id)}/percorsi/${encodeURIComponent(p.id)}`}
                 className="block bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-md transition-shadow border border-stone-200"
               >
                 <div className="relative h-[140px] bg-gradient-to-b from-forest-50 to-stone-50">
