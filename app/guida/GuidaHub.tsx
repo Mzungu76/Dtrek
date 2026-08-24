@@ -965,7 +965,11 @@ export default function GuidaHub({ id, startClosed }: { id?: string; startClosed
         <div className="pt-1 mt-1 border-t border-stone-200">
           {confirmDelete ? (
             <div className="px-2 py-2 space-y-2">
-              <p className={`text-sm ${textMuted}`}>Eliminare questa escursione pianificata? Non si può annullare.</p>
+              <p className={`text-sm ${textMuted}`}>
+                {hike.firstCompletedAt
+                  ? 'Eliminare questo percorso? Con lui vengono eliminati anche tutti i Reportage collegati (foto, video, racconti inclusi). Non si può annullare.'
+                  : 'Eliminare questa escursione pianificata? Non si può annullare.'}
+              </p>
               <div className="flex gap-2">
                 <button onClick={handleDelete} disabled={saving} className="flex items-center gap-1.5 px-4 py-1.5 bg-red-600 text-white rounded-lg text-sm hover:bg-red-500 transition-colors disabled:opacity-60">
                   {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Conferma eliminazione

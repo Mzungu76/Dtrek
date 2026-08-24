@@ -108,7 +108,7 @@ export type ResultItem =
  * ("Esistenti" / "Su misura") — e ogni risultato mostrato ha sempre una traccia reale su mappa,
  * mai solo statistiche testuali.
  */
-export default function RouteBuilder({ onBack }: { onBack: () => void }) {
+export default function RouteBuilder({ onBack, diaryId }: { onBack: () => void; diaryId?: string }) {
   const router = useRouter()
   const [step, setStep] = useState<Step>('start')
   // Tab dello step "Risultati": percorsi già esistenti (trovati) vs generati su misura
@@ -137,6 +137,18 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   // luogo generico come una città, o un POI senza sentieri esattamente addosso, es. "Cascata del
   // Picchio") — vedi startMode in app/api/route-build/route.ts.
   const [startMode, setStartMode] = useState<'esatto' | 'dintorni'>('esatto')
+  // Chip di richiamo rapido delle ultime ricerche (route_search_history, già esistente — vedi
+  // app/api/route-build/search-history/route.ts) — Fase 5 di docs/diario-fulcro-piano.md, al posto
+  // di dover andare fino a Profilo → Ricerche salvate per riusare una query già fatta. Solo le
+  // righe leggere (senza i risultati completi): un tap compila di nuovo testo+modalità, la ricerca
+  // vera parte comunque dal normale invio (Invio o il pulsante), non in automatico.
+  const [recentSearches, setRecentSearches] = useState<{ id: string; query: string | null; place_name: string | null; mode: 'esistenti' | 'su_misura' }[]>([])
+  useEffect(() => {
+    fetch('/api/route-build/search-history')
+      .then(r => r.ok ? r.json() : { searches: [] })
+      .then(data => setRecentSearches((data.searches ?? []).slice(0, 6)))
+      .catch(() => {})
+  }, [])
   // Rivelato automaticamente solo quando i livelli 0/1 (gratuito/economico) non trovano nulla — mai
   // un'apertura manuale che implicherebbe di dover scegliere a priori se "cercare con l'AI".
   const [showGiulia, setShowGiulia] = useState(false)
@@ -952,7 +964,7 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
     setSaving(true)
     try {
       const pendingExpiresAt = await defaultPendingExpiresAt()
-      const hike = await saveResultItemToGuide(selected, title, date, pendingExpiresAt)
+      const hike = await saveResultItemToGuide(selected, title, date, pendingExpiresAt, diaryId)
       router.push(`/guida/${encodeURIComponent(hike.id)}`)
     } catch (e) {
       setErrorMsg(`Errore nel salvataggio: ${e instanceof Error ? e.message : String(e)}`)
@@ -974,7 +986,9 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   // sequenziale, non in parallelo, perché ciascun salvataggio arricchisce già con DTM/POI (vedi
   // saveResultItemToGuide) — N richieste pesanti insieme sovraccaricherebbero inutilmente le stesse API
   // esterne. Al termine porta all'elenco dei percorsi in attesa (non a una singola guida: con più
-  // percorsi importati insieme non ce n'è uno "principale" verso cui navigare).
+  // percorsi importati insieme non ce n'è uno "principale" verso cui navigare) — dentro il Diario
+  // corrente se importati da lì (Fase 3 di docs/diario-fulcro-piano.md), altrimenti la Guida
+  // (app/guida/elenco è stata ritirata in Fase 7).
   async function handleBulkImport() {
     const items = results
       .map((item, i) => ({ item, i }))
@@ -987,13 +1001,13 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
       const pendingExpiresAt = await defaultPendingExpiresAt()
       let done = 0
       for (const { item, i } of items) {
-        await saveResultItemToGuide(item, defaultTitleFor(item, i), '', pendingExpiresAt)
+        await saveResultItemToGuide(item, defaultTitleFor(item, i), '', pendingExpiresAt, diaryId)
         done += 1
         setBulkProgress({ done, total: items.length })
       }
       setSelectedIds(new Set())
       setSelectMode(false)
-      router.push('/guida/elenco')
+      router.push(diaryId ? `/diari/${encodeURIComponent(diaryId)}` : '/guida')
     } catch (e) {
       setErrorMsg(`Errore nell'importazione: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
@@ -1099,6 +1113,26 @@ export default function RouteBuilder({ onBack }: { onBack: () => void }) {
               />
             </div>
           </div>
+          {query.trim() === '' && recentSearches.length > 0 && (
+            <div className="flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {recentSearches.map(s => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => {
+                    setSearchMode(s.mode)
+                    setQuery(s.query || s.place_name || '')
+                    setQueryMapConfirmed(false)
+                    setPoiBridge(null); setErrorMsg('')
+                  }}
+                  className="shrink-0 flex items-center gap-1 bg-white/85 backdrop-blur shadow-sm rounded-full px-3 py-1.5 text-[11px] font-medium text-stone-600 hover:bg-white whitespace-nowrap"
+                >
+                  <SearchIcon className="w-3 h-3 text-stone-400 shrink-0" />
+                  {(s.query || s.place_name || '').slice(0, 28)}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="flex justify-center">
             <div className="inline-flex bg-white/95 backdrop-blur rounded-full shadow-md p-1 gap-1">
               <button type="button" onClick={() => { setSearchMode('esistenti'); setPoiBridge(null); setErrorMsg('') }}

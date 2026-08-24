@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
+import { useParams } from 'next/navigation'
 import HubNavBar from '@/components/routehub/HubNavBar'
 import { RailButton } from '@/components/routehub/SideRails'
 import { getAllActivities, getActivityById, computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
@@ -12,9 +13,9 @@ import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import type { TrackPoint } from '@/lib/tcxParser'
 import {
-  FileDown, Share2, Copy, Link2Off, ExternalLink,
+  ArrowLeft, FileDown, Share2, Copy, Link2Off, ExternalLink,
   Loader2, Image as ImageIcon, BarChart2, X, Pencil,
-  Lock, LockOpen, Eye, EyeOff, Archive, RotateCcw, RefreshCw, AlertTriangle, HelpCircle,
+  Lock, LockOpen, Eye, EyeOff, Archive, RotateCcw, HelpCircle,
 } from 'lucide-react'
 import { ROUTE_COLORS } from '@/lib/designTokens'
 import { mapOutH } from '@/components/diario/chartUtils'
@@ -29,75 +30,21 @@ import { DiarioMappa } from '@/components/diario/DiarioMappa'
 import { DiarioStatistiche } from '@/components/diario/DiarioStatistiche'
 import { DiarioReportPage } from '@/components/diario/DiarioReportPage'
 import type { DiaryReport, ReportExtras, BookPage } from '@/components/diario/types'
-import {
-  type DiaryConfig, normalizeDiaryConfig, resolveReportExtras,
-  DEFAULT_DIARY_CONFIG, LEGACY_LOCALSTORAGE_KEYS,
-} from '@/lib/diaryConfig'
+import { type DiaryConfig, normalizeDiaryConfig, resolveReportExtras, DEFAULT_DIARY_CONFIG } from '@/lib/diaryConfig'
 import { uploadDiaryCover } from '@/lib/diaryCoverUpload'
 
-// ── Migrazione una tantum da localStorage (vedi lib/diaryConfig.ts) ────────────────────────────
-//
-// Prima della Fase 3 la personalizzazione del diario viveva in sei chiavi separate di
-// localStorage: seguiva il dispositivo, non l'account. Al primo caricamento con la nuova
-// configurazione lato server, se questa è ancora ai valori di default (cioè non è mai stata
-// salvata da NESSUN dispositivo) e il dispositivo corrente ha valori legacy, li adotta e li
-// carica sul server una volta sola. Il flag `dtrek_diary_migrated_v1` evita di ripetere il
-// tentativo — e soprattutto di sovrascrivere, ai prossimi caricamenti, una configurazione ormai
-// genuinamente personalizzata dal server con dati vecchi di questo dispositivo.
-const MIGRATED_FLAG = 'dtrek_diary_migrated_v1'
+/**
+ * "Pubblica il Diario" — Fase 4 di docs/diario-fulcro-piano.md. Stesso libro/PDF/link pubblico di
+ * app/diario/page.tsx (invariata, resta dietro il vecchio /diario a singolo Diario per utente),
+ * parametrizzato per un Diario specifico tra i tanti che l'utente può avere: dati, configurazione
+ * e link di condivisione passano dagli endpoint per-Diario (/api/diaries/[id]/entries|config|token)
+ * invece che dai singleton per-utente. Nessuna riscrittura della UI del libro — un solo prop in
+ * più (diaryId) su ogni chiamata che prima presumeva un unico Diario.
+ */
+export default function DiarioPubblicaPage() {
+  const params = useParams<{ id: string }>()
+  const diaryId = params.id
 
-function isConfigDefault(c: DiaryConfig): boolean {
-  return (
-    c.title === DEFAULT_DIARY_CONFIG.title &&
-    c.subtitle === DEFAULT_DIARY_CONFIG.subtitle &&
-    c.author === '' &&
-    c.coverUrl === null &&
-    JSON.stringify(c.statsToggles) === JSON.stringify(DEFAULT_DIARY_CONFIG.statsToggles) &&
-    JSON.stringify(c.reportExtrasDefault) === JSON.stringify(DEFAULT_DIARY_CONFIG.reportExtrasDefault) &&
-    Object.keys(c.reportExtrasByActivity).length === 0 &&
-    c.excludedActivityIds.length === 0
-  )
-}
-
-async function migrateLegacyConfigIfNeeded(serverConfig: DiaryConfig): Promise<DiaryConfig> {
-  try {
-    if (localStorage.getItem(MIGRATED_FLAG) === '1') return serverConfig
-    if (!isConfigDefault(serverConfig)) { localStorage.setItem(MIGRATED_FLAG, '1'); return serverConfig }
-
-    const title    = localStorage.getItem(LEGACY_LOCALSTORAGE_KEYS.title)
-    const subtitle = localStorage.getItem(LEGACY_LOCALSTORAGE_KEYS.subtitle)
-    const author   = localStorage.getItem(LEGACY_LOCALSTORAGE_KEYS.author)
-    let stats: unknown = null, reportExtras: unknown = null
-    try { stats = JSON.parse(localStorage.getItem(LEGACY_LOCALSTORAGE_KEYS.stats) ?? 'null') } catch { /* ignore */ }
-    try { reportExtras = JSON.parse(localStorage.getItem(LEGACY_LOCALSTORAGE_KEYS.reportExtras) ?? 'null') } catch { /* ignore */ }
-
-    if (!title && !subtitle && !author && !stats && !reportExtras) {
-      localStorage.setItem(MIGRATED_FLAG, '1')
-      return serverConfig
-    }
-
-    const merged = normalizeDiaryConfig({
-      ...serverConfig,
-      title: title ?? serverConfig.title,
-      subtitle: subtitle ?? serverConfig.subtitle,
-      author: author ?? serverConfig.author,
-      statsToggles: stats ?? serverConfig.statsToggles,
-      reportExtrasDefault: reportExtras ?? serverConfig.reportExtrasDefault,
-    })
-
-    const res = await fetch('/api/diary-config', {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(merged),
-    })
-    localStorage.setItem(MIGRATED_FLAG, '1')
-    return res.ok ? merged : serverConfig
-  } catch {
-    return serverConfig
-  }
-}
-
-// ── Main page ──────────────────────────────────────────────────────────────────
-
-export default function DiarioPage() {
   const [activities,   setActivities]   = useState<ActivityMeta[]>([])
   const [reports,      setReports]      = useState<DiaryReport[]>([])
   const [bookPages,    setBookPages]    = useState<BookPage[]>([])
@@ -106,17 +53,13 @@ export default function DiarioPage() {
   const [mapImgUrl,    setMapImgUrl]    = useState<string | null>(null)
   const [loading,      setLoading]      = useState(true)
   // Diventa true solo dopo che foto e trackpoint di OGNI resoconto sono arrivati (o falliti) — la
-  // pubblicazione resta disabilitata fino ad allora: prima si poteva pubblicare un attimo dopo
-  // l'apertura della pagina e ottenere un PDF senza foto né grafici, senza alcun avviso, perché
-  // "loading" diventava false non appena arrivavano solo le attività/i resoconti grezzi.
+  // pubblicazione resta disabilitata fino ad allora, vedi il commento gemello in app/diario/page.tsx.
   const [chartsAndPhotosReady, setChartsAndPhotosReady] = useState(false)
 
   const [diaryPdfUrl,  setDiaryPdfUrl]  = useState<string | null>(null)
   const [diaryToken,   setDiaryToken]   = useState<string | null>(null)
   const [downloading,  setDownloading]  = useState(false)
   const [publishing,   setPublishing]   = useState(false)
-  /** Pubblicazione del solo link: una PATCH da poche centinaia di byte, non ha nulla a che vedere
-   *  con la generazione del PDF e non deve condividerne né lo stato né gli errori. */
   const [linkPublishing, setLinkPublishing] = useState(false)
   const [publishError, setPublishError] = useState<string | null>(null)
   const [publishProgress, setPublishProgress] = useState<{ done: number; total: number } | null>(null)
@@ -129,22 +72,12 @@ export default function DiarioPage() {
   const [showShareMenu,    setShowShareMenu]    = useState(false)
   const [showExcludedMenu, setShowExcludedMenu] = useState(false)
   const [mapsInteractive,  setMapsInteractive]  = useState(false)
-  // UX-AUDIT.md P-L1/P-L2 — mostrato una sola volta alla primissima apertura, prima di incontrare
-  // le icone solo-icona delle rotaie; riapribile in ogni momento dal bottone "?" sulla rotaia destra.
   const [showOnboarding, setShowOnboarding] = useState(false)
   useEffect(() => { if (!hasSeenDiarioOnboarding()) setShowOnboarding(true) }, [])
 
-  /** Intervallo dell'esportazione PDF. Il Diario a schermo resta completo — è il *documento* a
-   *  essere ritagliato, perché è lui a diventare ingestibile: cinque anni di escursioni sono
-   *  centinaia di pagine e decine di MB, impossibili da generare su un telefono e da mandare a
-   *  qualcuno. `null` = tutto. */
   const [exportYear, setExportYear] = useState<number | null>(null)
   const [showExportMenu, setShowExportMenu] = useState(false)
 
-  // Configurazione del diario — titolo, sottotitolo, autore, copertina, toggle, escursioni
-  // escluse. Caricata da /api/diary-config (Supabase), non più da localStorage: segue l'utente
-  // tra dispositivi, e il PDF pubblicato riflette sempre la stessa configurazione ovunque lo si
-  // pubblichi da.
   const [config, setConfig] = useState<DiaryConfig>(DEFAULT_DIARY_CONFIG)
   const [configLoaded, setConfigLoaded] = useState(false)
   const configSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -158,16 +91,21 @@ export default function DiarioPage() {
   useEffect(() => {
     Promise.all([
       getAllActivities(),
-      fetch('/api/resoconto?all=true').then(r => r.ok ? r.json() : []),
-      fetch('/api/diary-token').then(r => r.ok ? r.json() : {}),
-      fetch('/api/diary-config').then(r => r.ok ? r.json() : DEFAULT_DIARY_CONFIG),
+      fetch(`/api/diaries/${encodeURIComponent(diaryId)}/entries`).then(r => r.ok ? r.json() : { reports: [], activityIds: [] }),
+      fetch(`/api/diaries/${encodeURIComponent(diaryId)}/token`).then(r => r.ok ? r.json() : {}),
+      fetch(`/api/diaries/${encodeURIComponent(diaryId)}/config`).then(r => r.ok ? r.json() : DEFAULT_DIARY_CONFIG),
       getUserSettingsCached(),
-    ]).then(async ([acts, reps, dt, dc, us]) => {
-      const sortedActs = (acts as ActivityMeta[]).sort((a, b) =>
-        new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
+    ]).then(async ([allActs, entriesRes, dt, dc, us]) => {
+      const entries = entriesRes as { reports?: DiaryReport[]; activityIds?: string[] }
+      // Le attività locali (IndexedDB, blobStore) non sanno di Diari — si restringono qui
+      // all'insieme che il server dice appartenere ai Percorsi di QUESTO Diario.
+      const scopedIds = new Set(entries.activityIds ?? [])
+      const sortedActs = (allActs as ActivityMeta[])
+        .filter(a => scopedIds.has(a.id))
+        .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
       setActivities(sortedActs)
 
-      const sortedReps = Array.isArray(reps) ? [...reps].sort((a: DiaryReport, b: DiaryReport) =>
+      const sortedReps = Array.isArray(entries.reports) ? [...entries.reports].sort((a: DiaryReport, b: DiaryReport) =>
         new Date(a.activity?.start_time ?? a.created_at).getTime() -
         new Date(b.activity?.start_time ?? b.created_at).getTime()
       ) : []
@@ -185,33 +123,19 @@ export default function DiarioPage() {
       ].sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
       setBookPages(pages)
 
-      // Load diary PDF url and viewer token
       const dtData = dt as { diary_pdf_url?: string | null; diary_token?: string | null }
       if (dtData.diary_pdf_url) setDiaryPdfUrl(dtData.diary_pdf_url)
       if (dtData.diary_token)   setDiaryToken(dtData.diary_token)
 
-      // Configurazione: normalizza, prova la migrazione da localStorage se non è mai stata
-      // salvata da nessun dispositivo, poi usa il nome del profilo come autore di default se non
-      // è mai stato impostato esplicitamente.
       const usData = us as { display_name?: string; name?: string }
       const profileName = usData.display_name ?? usData.name ?? ''
       let cfg = normalizeDiaryConfig(dc)
-      cfg = await migrateLegacyConfigIfNeeded(cfg)
       if (!cfg.author && profileName) cfg = { ...cfg, author: profileName }
       setConfig(cfg)
       setConfigLoaded(true)
 
-      // Core data (activities/reports/pages) is ready — show the book now
-      // rather than waiting for every report's photos and full trackpoints to
-      // load too. Those are fetched below in the background and populate the
-      // charts/photos progressively as they arrive, instead of blocking the
-      // initial render (which used to make opening the diary feel very slow
-      // once there were many reports).
       setLoading(false)
 
-      // Load photos + full trackpoints per reported activity, together — chartsAndPhotosReady
-      // diventa true solo quando ENTRAMBE le liste sono arrivate, ed è quello che sblocca la
-      // pubblicazione (vedi guardia su generateAndUploadPdf).
       const photosPromise = Promise.all(sortedReps.map(async (rep: DiaryReport): Promise<readonly [string, RoutePhoto[]]> => {
         try { return [rep.activity_id, await fetchActivityPhotos(rep.activity_id)] }
         catch { return [rep.activity_id, []] }
@@ -234,33 +158,24 @@ export default function DiarioPage() {
 
       Promise.all([photosPromise, trackPointsPromise]).then(() => setChartsAndPhotosReady(true))
 
-      // Raster della mappa d'insieme generato in anticipo, usato come cache dall'esportazione PDF
-      // (vedi `mapForPdf` in generateAndUploadPdf): averlo già pronto evita di far attendere
-      // l'utente al momento della pubblicazione.
-      //
-      // Il commento precedente diceva che serviva alla stampa nativa del browser (Ctrl+P). Non era
-      // così: l'unico consumatore era un <img> in DiarioMappa che, per via di un `display:none` in
-      // linea, non è mai comparso — né a schermo né in stampa. Quell'immagine è stata rimossa.
       import('@/utils/pdfExport').then(({ fetchAllRoutesSatMap, mapBoxAspect }) => {
         const allPts = sortedActs.filter(a => (a.routePolyline?.length ?? 0) > 1).flatMap(a => a.routePolyline!)
         return fetchAllRoutesSatMap(sortedActs, 660, mapOutH(mapBoxAspect(allPts, 0.12)))
       }).then(img => { if (img) setMapImgUrl(img) })
     }).catch(() => { setLoading(false); setConfigLoaded(true) })
-  }, [])
+  }, [diaryId])
 
-  // Salvataggio con debounce: ogni modifica alla configurazione (titolo, toggle, esclusioni…)
-  // riscrive l'intero oggetto sul server 800ms dopo l'ultima modifica, invece di un round-trip
-  // per ogni tasto premuto o ogni singolo toggle.
+  // Salvataggio con debounce — vedi il commento gemello in app/diario/page.tsx.
   useEffect(() => {
     if (!configLoaded) return
     if (configSaveTimer.current) clearTimeout(configSaveTimer.current)
     configSaveTimer.current = setTimeout(() => {
-      fetch('/api/diary-config', {
+      fetch(`/api/diaries/${encodeURIComponent(diaryId)}/config`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(config),
       }).catch(() => { /* riprovato al prossimo cambiamento */ })
     }, 800)
     return () => { if (configSaveTimer.current) clearTimeout(configSaveTimer.current) }
-  }, [config, configLoaded])
+  }, [config, configLoaded, diaryId])
 
   function toggleStat(key: keyof DiaryConfig['statsToggles']) {
     setConfig(c => ({ ...c, statsToggles: { ...c.statsToggles, [key]: !c.statsToggles[key] } }))
@@ -292,8 +207,6 @@ export default function DiarioPage() {
     setConfig(c => ({ ...c, showStubs: v }))
   }
 
-  // Scale the fixed-794px book to fit the viewport, like a responsive PDF viewer —
-  // recalculated on resize and whenever content height changes (photos load async).
   useLayoutEffect(() => {
     if (loading) return
     const outer = bookOuterRef.current
@@ -302,14 +215,6 @@ export default function DiarioPage() {
 
     function recalc() {
       const outerWidth = outer!.clientWidth
-      // UX-AUDIT.md P-H6 — le due rotaie laterali sono `fixed` (sempre ancorate al bordo dello
-      // schermo, non al contenitore del libro): senza questo margine il libro veniva scalato per
-      // riempire l'intera larghezza disponibile, arrivando fino ai bordi veri dello schermo su
-      // viewport stretti — esattamente dove sono ancorate le rotaie, che finivano quindi per
-      // coprire testo reale della pagina (titolo copertina, contatore, legenda mappa, chip dati).
-      // Riservando qui lo spazio di entrambe le rotaie (bottone più il loro offset dal bordo, con
-      // un margine per l'hover/ombra), il libro resta sempre centrato dentro un'area che le
-      // rotaie non toccano mai, a qualunque larghezza di schermo.
       const RAIL_GUTTER_PX = 76
       const availableWidth = Math.max(0, outerWidth - RAIL_GUTTER_PX * 2)
       setScale(Math.min(1, availableWidth / 794))
@@ -352,17 +257,10 @@ export default function DiarioPage() {
     setCoverUploading(true); setCoverError(null)
     try {
       const supabase = getBrowserSupabase()
-      // getSession() (a differenza di getUser()) rinfresca proattivamente un token vicino alla
-      // scadenza. Senza, una scheda tenuta aperta a lungo (il timer di autoRefreshToken viene
-      // rallentato/sospeso dal browser quando l'app va in background, comune su mobile) può
-      // superare comunque il controllo di getUser() qui sotto con un token ormai scaduto — per
-      // poi farsi rifiutare dallo Storage nella chiamata di rete separata subito dopo, con un
-      // errore RLS generico invece che di autenticazione (stesso difetto già corretto in
-      // lib/activityPhotos.ts, non applicato qui).
       await supabase.auth.getSession()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Non autenticato')
-      const url = await uploadDiaryCover(user.id, file)
+      const url = await uploadDiaryCover(user.id, file, diaryId)
       setConfig(c => ({ ...c, coverUrl: url }))
     } catch (e) {
       setCoverError(e instanceof Error ? e.message : String(e))
@@ -381,9 +279,6 @@ export default function DiarioPage() {
       const mapForPdf = mapImgUrl || await fetchAllRoutesSatMap(activities, 660, mapOutH(mapBoxAspect(allPts, 0.12))) || null
 
       const actById = new Map(activities.map(a => [a.id, a]))
-      // Stessa palette della mappa e della legenda a schermo (lib/designTokens.ts): prima questo
-      // elenco era una quarta copia, con colori diversi dalle altre tre — il tracciato di
-      // un'escursione poteva risultare di un colore sulla mappa e di un altro nel PDF.
       const PALETTE = ROUTE_COLORS
 
       const host = document.createElement('div')
@@ -393,33 +288,18 @@ export default function DiarioPage() {
       const reportPages = Array.from(
         document.querySelectorAll<HTMLElement>('#diario-book .diario-page')
       ).filter(p => !p.classList.contains('diario-stub-page'))
-        // Ritaglio per annata: una pagina di escursione dichiara il proprio anno, l'apparato
-        // (copertina, indice, mappa, statistiche) no e resta sempre.
         .filter(p => {
           if (exportYear === null) return true
           const y = p.getAttribute('data-year')
           return y === null || Number(y) === exportYear
         })
 
-      // Clone all pages first (cheap, synchronous) and collect the per-report
-      // map fetches needed, without awaiting them yet — they're fired off
-      // together below with limited concurrency instead of one-at-a-time,
-      // which is what made publishing scale linearly (and badly) with the
-      // number of reports.
       const mapTasks: { el: HTMLElement; pts: [number, number][]; color: string }[] = []
 
       for (const p of reportPages) {
         const clone = p.cloneNode(true) as HTMLElement
         clone.style.margin = '0'
         clone.style.boxShadow = 'none'
-        // Le mappe Leaflet vive vengono sostituite più sotto con un raster generato apposta, a
-        // risoluzione controllata.
-        //
-        // Questa riga è difensiva, non risolutiva: il commento precedente sosteneva che servisse a
-        // togliere canvas "sporcati" dalle tile cross-origin, ma Leaflet disegna le tile con <img>
-        // e le polilinee in SVG, e le tile passano comunque dal proxy same-origin /api/tile. Oggi
-        // nelle pagine del diario non c'è alcun <canvas> (i grafici sono SVG), quindi la riga non
-        // rimuove nulla; resta a protezione di eventuali canvas introdotti in futuro.
         clone.querySelectorAll('canvas').forEach(c => c.remove())
         const globalMapWrapper = clone.querySelector<HTMLElement>('.diario-global-map')
         if (globalMapWrapper) {
@@ -446,28 +326,14 @@ export default function DiarioPage() {
         clone.querySelectorAll<HTMLElement>('img[alt="Mappa percorsi"]').forEach(i => {
           i.style.display = 'none'
         })
-        // I controlli dell'editor (esclusione, personalizzazione per pagina) usano la classe
-        // Tailwind `print:hidden`, ma quella regola vive dentro un `@media print` — non si attiva
-        // durante la cattura con html2canvas, che non è un contesto di stampa reale. Da qui la
-        // classe `diario-editor-control` dedicata, nascosta esplicitamente qui: NON va confusa con
-        // `.diario-global-map`/`.diario-report-map`, che portano anch'esse `print:hidden` ma per
-        // un motivo diverso (contengono la Leaflet interattiva, sostituita da un raster poco più
-        // sotto) — quei due wrapper restano visibili apposta, altrimenti anche il raster appena
-        // inserito al loro interno sparirebbe dalla cattura.
         clone.querySelectorAll<HTMLElement>('.diario-editor-control').forEach(el => { el.style.display = 'none' })
         host.appendChild(clone)
         clones.push(clone)
       }
 
-      // Fetch report maps in parallel, capped at 5 concurrent requests so we
-      // don't hammer the public OSM tile servers when there are many reports.
       const MAP_CONCURRENCY = 5
       for (let i = 0; i < mapTasks.length; i += MAP_CONCURRENCY) {
         const batch = mapTasks.slice(i, i + MAP_CONCURRENCY)
-        // Mappa del singolo resoconto contenuta: a 660 px di larghezza `mapOutH` può restituire
-        // fino a 733 px di altezza, e con statistiche e grafici davanti la coda non entrava in una
-        // pagina sola — ne serviva una seconda per la sola mappa, lasciando ~380 px bianchi sulla
-        // prima e ~380 sulla seconda. A 560x320 la coda di un resoconto sta tutta su una pagina.
         const imgs = await Promise.all(batch.map(t => fetchSatMap(
           t.pts, 560, Math.min(320, mapOutH(mapBoxAspect(t.pts, 0.18), 560)), t.color)))
         batch.forEach((t, j) => {
@@ -483,23 +349,11 @@ export default function DiarioPage() {
 
       document.body.appendChild(host)
 
-      // Il libro a schermo è già stato clonato dentro `host`: da qui in poi è solo peso morto per
-      // la cattura, che clona l'intero documento a ogni blocco di pagine. Marcarlo lo tiene fuori
-      // da tutti quei cloni (vedi data-pdf-ignore in lib/pdfPaginate.ts) — su un diario lungo è la
-      // differenza fra clonare due libri per pagina e clonarne nessuno.
       const liveBook = document.getElementById('diario-book')
       liveBook?.setAttribute('data-pdf-ignore', '')
 
       await nextLayout()
 
-      // ── Composizione a colonne ────────────────────────────────────────────────────────────────
-      // Le pagine del libro a schermo sono a colonna singola: qui vengono ricomposte in pagine
-      // magazine a due colonne, già impaginate. Il libro a schermo resta com'è — è una scelta:
-      // comporre anche lì raddoppierebbe il DOM vivo della rotta più pesante dopo /resoconto.
-      //
-      // Le immagini devono essere decodificate PRIMA di misurare: un'immagine senza dimensioni
-      // intrinseche falsa l'altezza dei blocchi e con essa tutta la composizione. `paginateToPdf`
-      // le attende già, ma lo fa dopo — troppo tardi per noi.
       const { composeReportPages, composeCardPages, MAG } = await import('@/lib/diaryMagazine')
       const { waitForImages } = await import('@/lib/pdfImages')
       await waitForImages(host)
@@ -509,8 +363,6 @@ export default function DiarioPage() {
       for (const clone of clones) {
         const card = clone.querySelector<HTMLElement>('[data-mag="card"]')
         if (card) {
-          // Escursione senza racconto: al posto della pagina intera va la scheda compatta, che
-          // viene impilata con le altre più sotto invece di occupare due pagine da sola.
           card.style.display = ''
           cards.push(card)
           continue
@@ -519,7 +371,6 @@ export default function DiarioPage() {
           composed.push(...composeReportPages(clone))
           continue
         }
-        // Copertina, indice, mappa d'insieme: restano pagine a sé (nessun blocco marcato).
         composed.push(clone)
       }
 
@@ -534,9 +385,6 @@ export default function DiarioPage() {
         composed.push(...composeCardPages(cards))
       }
 
-      // Le pagine composte devono stare nel documento per essere catturate. `appendChild` sposta i
-      // nodi già esistenti (copertina, indice…) invece di duplicarli, quindi il vecchio host resta
-      // con dentro solo i cloni dei resoconti ormai ricomposti.
       const pdfHost = document.createElement('div')
       pdfHost.style.cssText = 'position:absolute;left:-10000px;top:0;width:794px;background:#fff;z-index:-1'
       for (const p of composed) pdfHost.appendChild(p)
@@ -560,9 +408,6 @@ export default function DiarioPage() {
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a'); a.href = url; a.download = 'diario-dtrek.pdf'
         a.click(); URL.revokeObjectURL(url)
-        // Un solo PDF, un solo posto dove si genera: se il link pubblico esiste, la stessa copia
-        // appena scaricata diventa anche quella allegata al sito. Prima erano due azioni separate
-        // — «Scarica» e «Allega» — che potevano produrre due documenti diversi.
         if (diaryToken) {
           try {
             const { getBrowserSupabase } = await import('@/lib/supabaseBrowser')
@@ -571,42 +416,35 @@ export default function DiarioPage() {
             const { data: { user } } = await sb.auth.getUser()
             if (user) {
               const { uploadDiaryPdf } = await import('@/lib/pdfUpload')
-              const pdfUrl = await uploadDiaryPdf(user.id, blob)
-              await fetch('/api/diary-token', {
+              const pdfUrl = await uploadDiaryPdf(user.id, blob, diaryId)
+              await fetch(`/api/diaries/${encodeURIComponent(diaryId)}/token`, {
                 method: 'PATCH', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ diaryPdfUrl: pdfUrl }),
               })
               setDiaryPdfUrl(pdfUrl)
             }
           } catch (e) {
-            // Il download è già riuscito: un allegato non aggiornato non deve farlo sembrare fallito.
             console.warn('[diario] PDF scaricato ma allegato non aggiornato:', e)
           }
         }
       } else {
         const { getBrowserSupabase } = await import('@/lib/supabaseBrowser')
         const sb = getBrowserSupabase()
-        // Vedi il commento gemello in handleCoverUpload sopra.
         await sb.auth.getSession()
         const { data: { user } } = await sb.auth.getUser()
         if (!user) throw new Error('Non autenticato')
         const { uploadDiaryPdf } = await import('@/lib/pdfUpload')
-        const pdfUrl = await uploadDiaryPdf(user.id, blob)
-        // A questo punto la parte costosa (rendere e caricare il PDF, anche minuti su un diario
-        // lungo) è già fatta: perdere tutto per un singolo blip di rete su questa PATCH — piccola
-        // e idempotente — su un giro di correzioni segnalato proprio come "Failed to fetch"
-        // durante la ripubblicazione, sarebbe uno spreco evitabile. Due tentativi in più prima di
-        // arrendersi, non un retry infinito.
+        const pdfUrl = await uploadDiaryPdf(user.id, blob, diaryId)
         let patchData: { diary_token?: string } = {}
         let lastErr: unknown
         for (let attempt = 0; attempt < 3; attempt++) {
           try {
-            const patchRes = await fetch('/api/diary-token', {
+            const patchRes = await fetch(`/api/diaries/${encodeURIComponent(diaryId)}/token`, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ diaryPdfUrl: pdfUrl }),
             })
-            if (!patchRes.ok) throw new Error(`PATCH /api/diary-token → ${patchRes.status}`)
+            if (!patchRes.ok) throw new Error(`PATCH /api/diaries/${diaryId}/token → ${patchRes.status}`)
             patchData = await patchRes.json() as { diary_token?: string }
             lastErr = undefined
             break
@@ -617,16 +455,9 @@ export default function DiarioPage() {
         }
         setDiaryPdfUrl(pdfUrl)
         if (patchData.diary_token) setDiaryToken(patchData.diary_token)
-        // Il PDF è comunque caricato e raggiungibile dal vecchio token/URL diretto: un fallimento
-        // qui non è la stessa cosa di un fallimento della generazione, e viene segnalato come tale
-        // invece di far ripartire l'utente da capo.
         if (lastErr) throw new Error('PDF caricato, ma l’aggiornamento del link pubblico non è riuscito. Riprova a ripubblicare.')
       }
     } catch (e) {
-      // Prima gli errori del solo download venivano inghiottiti (`if (!download) setPublishError`)
-      // — lo spinner si fermava e non succedeva altro, senza un solo log. Ora l'errore è sempre
-      // visibile, e per il download si apre il pannello di condivisione (dove il messaggio viene
-      // mostrato) perché altrimenti l'unico riscontro sarebbe lo spinner che si ferma.
       console.error('[diario] generazione PDF fallita:', e)
       setPublishError(e instanceof Error ? e.message : String(e))
       if (download) setShowShareMenu(true)
@@ -636,22 +467,12 @@ export default function DiarioPage() {
     }
   }
 
-  /**
-   * Pubblica il link pubblico, e basta.
-   *
-   * È l'operazione che prima non esisteva: condividere il Diario obbligava a generare e caricare
-   * il PDF (decine di MB da un telefono), e finché quell'upload non riusciva non c'era alcun link.
-   * Ora la pagina pubblica legge il contenuto dal database, quindi per condividere basta far
-   * esistere il token — una richiesta piccola, immediata e che non può impantanarsi.
-   */
   async function publishLink() {
     setLinkPublishing(true); setPublishError(null)
     try {
-      const res = await fetch('/api/diary-token', {
+      const res = await fetch(`/api/diaries/${encodeURIComponent(diaryId)}/token`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        // Corpo vuoto di proposito: assicura il token senza toccare `diary_pdf_url`, così
-        // pubblicare il link non cancella un PDF già allegato.
         body: '{}',
       })
       if (!res.ok) throw new Error(`Pubblicazione non riuscita (${res.status})`)
@@ -666,7 +487,7 @@ export default function DiarioPage() {
   }
 
   async function handleRevokeLink() {
-    await fetch('/api/diary-token', { method: 'DELETE' })
+    await fetch(`/api/diaries/${encodeURIComponent(diaryId)}/token`, { method: 'DELETE' })
     setDiaryPdfUrl(null)
     setDiaryToken(null)
   }
@@ -680,7 +501,6 @@ export default function DiarioPage() {
     return first === last ? first : `${first} – ${last}`
   }, [activities])
 
-  /** Anni presenti nel libro, dal più recente. */
   const availableYears = useMemo(() => Array.from(
     new Set(visibleBookPages.map(p => new Date(p.startTime).getFullYear())),
   ).sort((a, b) => b - a), [visibleBookPages])
@@ -692,21 +512,17 @@ export default function DiarioPage() {
 
   return (
     <div className="min-h-screen bg-stone-100">
-      {/* Top nav — stessa barra di Bacheca/Guida/Resoconto (components/Navbar.tsx), sticky sopra
-          il libro come le altre sezioni "hub" dell'app (niente tab bar in basso qui). */}
       <div className="sticky top-0 z-40 print:hidden">
         <HubNavBar />
       </div>
 
-      {/* UX-AUDIT.md P-M2 — Resoconti e Diario sono la stessa collezione di dati (racconti di
-          escursioni) esposta in due UI radicalmente diverse (galleria vs. libro), senza che i nomi
-          da soli lo comunichino. Solo a schermo, mai nel PDF esportato (print:hidden). */}
       <p className="text-center text-[12px] text-stone-400 py-2 px-4 print:hidden">
-        Il tuo libro di escursioni, pronto da stampare o condividere — per sfogliarle una per una vedi{' '}
-        <Link href="/resoconto" className="underline decoration-stone-300 hover:decoration-stone-500 text-stone-500">Resoconti</Link>.
+        <Link href={`/diari/${encodeURIComponent(diaryId)}`} className="inline-flex items-center gap-1 underline decoration-stone-300 hover:decoration-stone-500 text-stone-500">
+          <ArrowLeft className="w-3 h-3" /> Torna al Diario
+        </Link>
+        {' '}— pronto da stampare o condividere.
       </p>
 
-      {/* Left icon rail — cover customization */}
       <div className="fixed left-3 md:left-5 top-1/2 -translate-y-1/2 z-30 flex flex-col gap-3 print:hidden">
         <RailButton onClick={() => coverInputRef.current?.click()} title="Foto copertina">
           {coverUploading ? <Loader2 className="w-5 h-5 text-white animate-spin" /> : <ImageIcon className="w-5 h-5 text-white" />}
@@ -804,7 +620,6 @@ export default function DiarioPage() {
         </div>
       </div>
 
-      {/* Right icon rail — view options + export/share */}
       <div className="fixed right-3 md:right-5 top-1/2 -translate-y-1/2 z-30 flex flex-col gap-3 print:hidden">
         <RailButton
           onClick={() => setMapsInteractive(v => !v)}
@@ -882,8 +697,6 @@ export default function DiarioPage() {
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
-              {/* Un diario che copre anni diventa un documento da centinaia di pagine: qui si
-                  sceglie cosa metterci dentro. Il libro a schermo resta comunque completo. */}
               <p className="text-[10px] text-stone-400 leading-snug">Quali escursioni includere</p>
               <div className="space-y-1">
                 <button onClick={() => { setExportYear(null); setShowExportMenu(false); generateAndUploadPdf(true) }}
@@ -932,9 +745,6 @@ export default function DiarioPage() {
 
               {publishError && <p className="text-xs text-red-500">{publishError}</p>}
 
-              {/* Il link è ora indipendente dal PDF: la pagina pubblica legge il contenuto dal
-                  database, quindi condividere costa una richiesta da poche centinaia di byte
-                  invece di un upload da decine di MB che su rete mobile si pianta. */}
               {diaryToken ? (
                 <div className="space-y-1.5">
                   <a href={`/leggi/d/${diaryToken}`} target="_blank" rel="noopener noreferrer"
@@ -949,8 +759,6 @@ export default function DiarioPage() {
                     <Copy className="w-3.5 h-3.5" /> {copyOk ? 'Copiato!' : 'Copia link'}
                   </button>
 
-                  {/* Cosa mostrare sul sito. Il PDF non è più un'azione a sé: lo aggiorna
-                      l'esportazione del Diario, che è l'unico posto dove il documento si genera. */}
                   <div className="pt-1.5 border-t border-stone-100 space-y-1">
                     <p className="text-[10px] font-barlow font-bold uppercase tracking-widest text-stone-400 mb-1">
                       Mostra sul sito
@@ -1006,7 +814,6 @@ export default function DiarioPage() {
         onClose={() => { markDiarioOnboardingSeen(); setShowOnboarding(false) }}
       />
 
-      {/* Loading */}
       {loading && (
         <div className="flex items-center justify-center py-32 text-stone-400 gap-3">
           <Loader2 className="w-6 h-6 animate-spin" />
@@ -1014,7 +821,6 @@ export default function DiarioPage() {
         </div>
       )}
 
-      {/* Book — scaled to fit the viewport width, like a responsive PDF viewer */}
       {!loading && (
         <div ref={bookOuterRef} className="bg-stone-200 min-h-screen overflow-hidden">
           <div style={{ height: innerHeight ? innerHeight * scale + 48 : undefined, position: 'relative' }}>
@@ -1061,9 +867,6 @@ export default function DiarioPage() {
                         selectedPhotoIds={config.photoIdsByActivity[page.report.activity_id]}
                         onSelectedPhotosChange={ids => setConfig(c => {
                           const next = { ...c.photoIdsByActivity }
-                          // Elenco vuoto = torna alla scelta automatica: si toglie la chiave invece
-                          // di salvare un array vuoto, così la configurazione non accumula voci
-                          // che dicono «niente di particolare».
                           if (ids.length === 0) delete next[page.report.activity_id]
                           else next[page.report.activity_id] = ids
                           return { ...c, photoIdsByActivity: next }

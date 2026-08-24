@@ -38,6 +38,9 @@ export interface DiaryConfig {
   author:   string
   /** URL su Supabase Storage. Mai più un data URL: vedi lib/diaryCoverUpload.ts. */
   coverUrl: string | null
+  /** Testo libero in fondo a ogni pagina pubblicata (PDF e sito) — vedi diaries.footer_text. Vuoto
+   *  di default: un Diario senza testo di chiusura non mostra nulla, non un segnaposto. */
+  footerText: string
   statsToggles: DiaryStatsToggles
 
   /** Impostazioni "per ogni percorso" applicate quando l'escursione non ha un proprio override. */
@@ -78,6 +81,7 @@ export const DEFAULT_DIARY_CONFIG: DiaryConfig = {
   subtitle: 'I miei percorsi',
   author: '',
   coverUrl: null,
+  footerText: '',
   statsToggles: DEFAULT_DIARY_STATS_TOGGLES,
   reportExtrasDefault: DEFAULT_DIARY_REPORT_EXTRAS,
   reportExtrasByActivity: {},
@@ -123,6 +127,7 @@ export function normalizeDiaryConfig(raw: unknown): DiaryConfig {
     subtitle: typeof r.subtitle === 'string' ? r.subtitle : DEFAULT_DIARY_CONFIG.subtitle,
     author:   typeof r.author   === 'string' ? r.author   : DEFAULT_DIARY_CONFIG.author,
     coverUrl: typeof r.coverUrl === 'string' ? r.coverUrl : null,
+    footerText: typeof r.footerText === 'string' ? r.footerText : DEFAULT_DIARY_CONFIG.footerText,
     statsToggles,
     reportExtrasDefault,
     reportExtrasByActivity,

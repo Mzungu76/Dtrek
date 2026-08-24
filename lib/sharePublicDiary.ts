@@ -70,23 +70,85 @@ export function hasNarrative(content: string): boolean {
 export async function fetchPublicDiary(token: string): Promise<PublicDiary | null> {
   if (!UUID_RE.test(token)) return null
 
-  const { data: settings, error } = await supabase
-    .from('user_settings')
-    .select('user_id, display_name, diary_pdf_url, diary_config')
-    .eq('diary_token', token)
+  // Prima si cerca tra i Diari multipli (docs/diario-fulcro-piano.md Fase 4): ogni Diario ha il
+  // proprio share_token. Se non trovato, si ricade sul vecchio Diario singolo per utente
+  // (user_settings.diary_token) — non ancora migrato o dietro il vecchio /diario, che resta
+  // invariato finché non viene ritirato (Fase 7).
+  const { data: diary } = await supabase
+    .from('diaries')
+    .select('id, user_id, title, subtitle, author, cover_url, footer_text, config, share_pdf_url')
+    .eq('share_token', token)
     .maybeSingle()
 
-  if (error || !settings) return null
+  let userId: string
+  let config: DiaryConfig
+  let pdfUrl: string | null
+  let percorsoIds: string[] | null = null // null = nessuno scoping per Diario (vecchio percorso)
 
-  const config = normalizeDiaryConfig(settings.diary_config)
+  if (diary) {
+    userId = diary.user_id as string
+    config = normalizeDiaryConfig({
+      ...(diary.config as object),
+      title: diary.title, subtitle: diary.subtitle, author: diary.author,
+      coverUrl: diary.cover_url, footerText: diary.footer_text,
+    })
+    pdfUrl = (diary.share_pdf_url as string) ?? null
+
+    const { data: percorsi } = await supabase
+      .from('planned_hikes')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('diary_id', diary.id as string)
+    percorsoIds = (percorsi ?? []).map(p => p.id as string)
+  } else {
+    const { data: settings, error } = await supabase
+      .from('user_settings')
+      .select('user_id, diary_pdf_url, diary_config')
+      .eq('diary_token', token)
+      .maybeSingle()
+    if (error || !settings) return null
+    userId = settings.user_id as string
+    config = normalizeDiaryConfig(settings.diary_config)
+    pdfUrl = (settings.diary_pdf_url as string) ?? null
+  }
+
+  const { data: settingsForName } = await supabase
+    .from('user_settings')
+    .select('display_name')
+    .eq('user_id', userId)
+    .maybeSingle()
+
   const excluded = new Set(config.excludedActivityIds)
 
-  const { data: reports } = await supabase
-    .from('hike_reports')
-    .select('id, activity_id, title, content, created_at')
-    .eq('user_id', settings.user_id as string)
+  // Percorso genitore assente ⇒ nessun Reportage per questo Diario, senza nemmeno interrogare
+  // hike_reports (Diario appena creato, o senza ancora un solo Percorso — mai pubblicabile finché
+  // non lo è, ma il link stesso resta comunque valido).
+  let reports: { id: string; activity_id: string; title: string; content: string; created_at: string }[] = []
+  if (percorsoIds === null) {
+    // Vecchio Diario singolo per utente: nessuno scoping, tutti i resoconti dell'utente.
+    const { data } = await supabase
+      .from('hike_reports')
+      .select('id, activity_id, title, content, created_at')
+      .eq('user_id', userId)
+    reports = data ?? []
+  } else if (percorsoIds.length > 0) {
+    const { data: scopedActivities } = await supabase
+      .from('activities')
+      .select('id')
+      .eq('user_id', userId)
+      .in('linked_planned_id', percorsoIds)
+    const scopedActivityIds = (scopedActivities ?? []).map(a => a.id as string)
+    if (scopedActivityIds.length > 0) {
+      const { data } = await supabase
+        .from('hike_reports')
+        .select('id, activity_id, title, content, created_at')
+        .eq('user_id', userId)
+        .in('activity_id', scopedActivityIds)
+      reports = data ?? []
+    }
+  }
 
-  const visibleReports = (reports ?? []).filter(r => !excluded.has(r.activity_id as string))
+  const visibleReports = reports.filter(r => !excluded.has(r.activity_id))
   const activityIds = visibleReports.map(r => r.activity_id as string).filter(Boolean)
 
   // Le due letture dipendono entrambe solo da `activityIds`: si fanno insieme, non in fila.
@@ -164,8 +226,8 @@ export async function fetchPublicDiary(token: string): Promise<PublicDiary | nul
   }
 
   return {
-    ownerName: (settings.display_name as string) || 'Escursionista',
-    pdfUrl: (settings.diary_pdf_url as string) ?? null,
+    ownerName: (settingsForName?.display_name as string) || 'Escursionista',
+    pdfUrl,
     config,
     entries,
     totalKm,

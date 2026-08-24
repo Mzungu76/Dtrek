@@ -26,13 +26,13 @@ export default function PercorsiPerTePage() {
   )
 }
 
-// useSearchParams (per ?focus=, arrivo da una card di Bacheca) richiede un confine Suspense
-// intorno al componente che la chiama — stesso pattern di app/upload/page.tsx.
+// useSearchParams (per ?focus=, arrivo da una card di RecoSuggestedRow) richiede un confine
+// Suspense intorno al componente che la chiama — stesso pattern di app/upload/page.tsx.
 function PercorsiPerTePageInner() {
   const router = useRouter()
-  // ?focus=<id> — arrivo da una card di "Percorsi suggeriti" in Bacheca (app/bacheca/page.tsx):
-  // porta dritti su QUESTA card specifica invece di lasciare l'utente a cercarla di nuovo in cima
-  // a una lista di 5.
+  // ?focus=<id> — arrivo da una card di "Percorsi suggeriti" (components/bacheca/
+  // RecoSuggestedRow.tsx, oggi dentro app/diari/[id]/page.tsx): porta dritti su QUESTA card
+  // specifica invece di lasciare l'utente a cercarla di nuovo in cima a una lista di 5.
   const focusCardId = useSearchParams().get('focus')
   const [status, setStatus] = useState<PageStatus>('loading')
   const [cards, setCards] = useState<RecommendationCard[]>([])

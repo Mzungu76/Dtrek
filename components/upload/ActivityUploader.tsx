@@ -4,14 +4,15 @@ import { useRouter } from 'next/navigation'
 import { parseTcx, formatDuration, type TcxActivity } from '@/lib/tcxParser'
 import { parseGpxActivity } from '@/lib/gpxActivityParser'
 import { saveActivityWithEnrichment } from '@/lib/activitySave'
-import { getAllPlanned, getPlannedById, type PlannedHikeMeta } from '@/lib/plannedStore'
+import { getAllPlanned, getPlannedById, savePlanned, type PlannedHike, type PlannedHikeMeta } from '@/lib/plannedStore'
+import { downsamplePolyline } from '@/lib/downsamplePolyline'
 import { Upload, CheckCircle, AlertCircle, Mountain, Clock, TrendingUp, Route, Link2, Link2Off, Info } from 'lucide-react'
 
 type ActivityStatus = 'idle' | 'parsing' | 'parsed' | 'analyzing' | 'saving' | 'success' | 'error'
 
 // ── Activity uploader (TCX / GPX / FIT) ───────────────────────────────────────
 
-export default function ActivityUploader() {
+export default function ActivityUploader({ diaryId }: { diaryId?: string } = {}) {
   const router   = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
   const [dragging,         setDragging]         = useState(false)
@@ -65,6 +66,7 @@ export default function ActivityUploader() {
       // ── Resolve linked planned hike track points ──────────────────
       let linkedPlannedTrackPoints: import('@/lib/tcxParser').TrackPoint[] | undefined
       let linkedPlannedNotes: import('@/lib/blobStore').HikeNote[] | undefined
+      let linkedPlannedId = selectedPlanned?.id
       if (selectedPlanned) {
         try {
           const full = await getPlannedById(selectedPlanned.id)
@@ -72,6 +74,28 @@ export default function ActivityUploader() {
           if (validPts.length >= 2) linkedPlannedTrackPoints = validPts
           if (full?.hikeNotes?.length) linkedPlannedNotes = full.hikeNotes
         } catch {}
+      } else if (diaryId) {
+        // Nessun percorso pianificato selezionato ma siamo dentro un Diario (composer Fase 3,
+        // corsia "Già fatta") — un Reportage ha sempre un Percorso genitore (vedi
+        // docs/diario-fulcro-piano.md), quindi se ne crea uno sintetico da questa stessa
+        // attività, già segnato come vissuto, invece di lasciare l'uscita senza Percorso.
+        const synthetic: PlannedHike = {
+          id: 'synth_' + Date.now().toString(36),
+          title: titleVal.trim() || parsedActivity.notes || 'Percorso',
+          createdAt: new Date().toISOString(),
+          distanceMeters: parsedActivity.distanceMeters,
+          elevationGain: parsedActivity.elevationGain,
+          elevationLoss: parsedActivity.elevationLoss,
+          altitudeMax: parsedActivity.altitudeMax,
+          altitudeMin: parsedActivity.altitudeMin,
+          estimatedTimeSeconds: parsedActivity.totalTimeSeconds,
+          trackPoints: parsedActivity.trackPoints,
+          routePolyline: parsedActivity.trackPoints?.length ? downsamplePolyline(parsedActivity.trackPoints) : undefined,
+          diaryId,
+          firstCompletedAt: parsedActivity.startTime || new Date().toISOString(),
+        }
+        await savePlanned(synthetic)
+        linkedPlannedId = synthetic.id
       }
 
       setStatus('analyzing')
@@ -79,7 +103,7 @@ export default function ActivityUploader() {
       const saved = await saveActivityWithEnrichment(parsedActivity, {
         title: titleVal,
         fileName,
-        linkedPlannedId: selectedPlanned?.id,
+        linkedPlannedId,
         linkedPlannedTrackPoints,
         hikeNotes: linkedPlannedNotes,
       })

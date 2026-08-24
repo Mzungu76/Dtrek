@@ -29,6 +29,10 @@ function UploadPageInner() {
   const searchParams = useSearchParams()
   const tab: 'activity' | 'gpx' = searchParams.get('tab') === 'gpx' ? 'gpx' : 'activity'
   const [gpxSource, setGpxSource] = useState<'file' | 'manual' | 'from-activity'>('file')
+  // Presente solo quando si arriva dal composer di un Diario (app/diari/[id]/page.tsx, Fase 3 di
+  // docs/diario-fulcro-piano.md) — assente altrove, il Percorso finisce nel Diario di default
+  // (assegnato lato server, vedi app/api/planned/route.ts).
+  const diaryId = searchParams.get('diaryId') ?? undefined
 
   // "Naviga adesso" prova prima l'app nativa (se il device può averla), altrimenti ricade sul
   // navigatore libero via web già esistente (app/navigatore/traccia) — vedi lib/navigatorHandoff.ts.
@@ -109,10 +113,10 @@ function UploadPageInner() {
           </p>
         )}
 
-        {tab === 'activity' && <ActivityUploader />}
-        {tab === 'gpx' && gpxSource === 'file' && <GpxUploader />}
-        {tab === 'gpx' && gpxSource === 'manual' && <ManualImportChoice />}
-        {tab === 'gpx' && gpxSource === 'from-activity' && <FromActivityUploader />}
+        {tab === 'activity' && <ActivityUploader diaryId={diaryId} />}
+        {tab === 'gpx' && gpxSource === 'file' && <GpxUploader diaryId={diaryId} />}
+        {tab === 'gpx' && gpxSource === 'manual' && <ManualImportChoice diaryId={diaryId} />}
+        {tab === 'gpx' && gpxSource === 'from-activity' && <FromActivityUploader diaryId={diaryId} />}
       </main>
     </div>
   )

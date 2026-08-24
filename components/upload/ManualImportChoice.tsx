@@ -16,12 +16,12 @@ type Mode = 'choice' | 'manual' | 'url' | 'build'
  * su OpenStreetMap senza AI (ex "Cerca senza AI", PlainSearchUploader) è stata rimossa: chi conosce
  * già il percorso ha "Importa da un link" o "Inserisci a mano" per arrivarci senza l'AI.
  */
-export default function ManualImportChoice() {
+export default function ManualImportChoice({ diaryId }: { diaryId?: string } = {}) {
   const [mode, setMode] = useState<Mode>('choice')
 
-  if (mode === 'manual') return <ManualPlanUploader />
-  if (mode === 'url') return <UrlImportUploader onBack={() => setMode('choice')} />
-  if (mode === 'build') return <RouteBuilder onBack={() => setMode('choice')} />
+  if (mode === 'manual') return <ManualPlanUploader diaryId={diaryId} />
+  if (mode === 'url') return <UrlImportUploader onBack={() => setMode('choice')} diaryId={diaryId} />
+  if (mode === 'build') return <RouteBuilder onBack={() => setMode('choice')} diaryId={diaryId} />
 
   return (
     <div className="space-y-3">

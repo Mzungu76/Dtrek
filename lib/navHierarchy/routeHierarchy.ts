@@ -15,21 +15,27 @@ interface RouteEntry {
 }
 
 export const ROUTE_HIERARCHY: RouteEntry[] = [
-  // Bacheca è il vero root dell'app (prima voce della tab bar, components/Navbar.tsx's
-  // NAV_LINKS): è l'unico punto in cui il pulsante back hardware/gesture può ricadere sul
-  // comportamento nativo (minimizza/esci). Ogni altra tab di primo livello (Guida, Resoconto,
-  // Diario) e le pagine raggiunte da qui (Statistiche, Profilo) tornano prima qui, non l'una
-  // dentro l'altra — anche se ci si è arrivati passando fisicamente da un'altra tab.
-  { pattern: '/bacheca', parent: null },
-  { pattern: '/guida', parent: '/bacheca' },
+  // Diario è il vero root dell'app (prima voce della tab bar, components/Navbar.tsx's NAV_LINKS,
+  // cutover Fase 7 di docs/diario-fulcro-piano.md — prima era Bacheca, ora ritirata): è l'unico
+  // punto in cui il pulsante back hardware/gesture può ricadere sul comportamento nativo
+  // (minimizza/esci). Ogni altra tab di primo livello (Guida, Resoconto) e le pagine raggiunte da
+  // qui (Statistiche, Profilo, Tutti i Percorsi) tornano prima qui, non l'una dentro l'altra —
+  // anche se ci si è arrivati passando fisicamente da un'altra tab.
+  { pattern: '/diari', parent: null },
+  { pattern: '/diari/[id]', parent: '/diari' },
+  { pattern: '/diari/[id]/percorsi/[percorsoId]', parent: (p) => `/diari/${p.id}` },
+  { pattern: '/diari/[id]/pubblica', parent: (p) => `/diari/${p.id}` },
+  { pattern: '/percorsi', parent: '/diari' },
+
+  { pattern: '/guida', parent: '/diari' },
   { pattern: '/guida/[id]', parent: '/guida' },
   { pattern: '/guida/[id]/percorso', parent: (p) => `/guida/${p.id}` },
   { pattern: '/guida/[id]/flora', parent: (p) => `/guida/${p.id}` },
   { pattern: '/guida/[id]/animali', parent: (p) => `/guida/${p.id}` },
   { pattern: '/guida/[id]/naviga', parent: (p) => `/guida/${p.id}` },
 
-  { pattern: '/statistiche', parent: '/bacheca' },
-  { pattern: '/profilo', parent: '/bacheca' },
+  { pattern: '/statistiche', parent: '/diari' },
+  { pattern: '/profilo', parent: '/diari' },
   { pattern: '/profilo/impostazioni', parent: '/profilo' },
   { pattern: '/profilo/ai', parent: '/profilo' },
   { pattern: '/profilo/cronologia-navigazione', parent: '/profilo' },
@@ -40,14 +46,11 @@ export const ROUTE_HIERARCHY: RouteEntry[] = [
   { pattern: '/vette', parent: '/profilo' },
 
   // ── Resoconto — escursioni concluse (dati + racconto) ───────────────────────
-  { pattern: '/resoconto', parent: '/bacheca' },
+  { pattern: '/resoconto', parent: '/diari' },
   { pattern: '/resoconto/[id]', parent: '/resoconto' },
   { pattern: '/resoconto/[id]/racconta', parent: (p) => `/resoconto/${p.id}` },
   { pattern: '/resoconto/[id]/flora', parent: (p) => `/resoconto/${p.id}` },
   { pattern: '/resoconto/[id]/animali', parent: (p) => `/resoconto/${p.id}` },
-
-  // ── Diario (il libro impaginato) ────────────────────────────────────────────
-  { pattern: '/diario', parent: '/bacheca' },
 
   { pattern: '/login', parent: null },
   { pattern: '/signup', parent: null },
@@ -58,10 +61,9 @@ export const ROUTE_HIERARCHY: RouteEntry[] = [
 ]
 
 export const ROUTE_LABELS: Record<string, string> = {
-  '/bacheca': 'Bacheca',
+  '/diari': 'Diario',
   '/guida': 'Guida',
   '/resoconto': 'Resoconto',
-  '/diario': 'Diario',
   '/statistiche': 'Statistiche',
   '/profilo': 'Profilo',
   '/profilo/ricerche-salvate': 'Le mie ricerche',

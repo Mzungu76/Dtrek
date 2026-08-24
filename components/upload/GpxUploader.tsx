@@ -44,9 +44,12 @@ interface GpxUploaderProps {
    *  (comportamento storico). Navigator passa invece la schermata di navigazione diretta, dato che
    *  /guida/{id} è una pagina di Dtrek che non ha senso aprire dentro la webview di Navigator. */
   afterSaveHref?: (id: string) => string
+  /** Diario in cui creare il Percorso — vedi docs/diario-fulcro-piano.md Fase 3. undefined per
+   *  gli import fuori dal composer di un Diario (assegnato al Diario di default lato server). */
+  diaryId?: string
 }
 
-export default function GpxUploader({ sourceApp, afterSaveHref }: GpxUploaderProps = {}) {
+export default function GpxUploader({ sourceApp, afterSaveHref, diaryId }: GpxUploaderProps = {}) {
   const router   = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
   // Solo per gli import da Navigator (sourceApp === 'navigator') prima che l'account abbia
@@ -131,6 +134,7 @@ export default function GpxUploader({ sourceApp, afterSaveHref }: GpxUploaderPro
         // blank until /api/planned succeeds, which can be delayed indefinitely during an outage.
         routePolyline: parsed.trackPoints?.length ? downsamplePolyline(parsed.trackPoints) : undefined,
         sourceApp,
+        diaryId,
       }
 
       // Prefetch POIs during save so the detail page shows them immediately.

@@ -3,25 +3,24 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { Compass, BookMarked, BookOpen, User, Home } from 'lucide-react'
+import { Compass, BookMarked, BookOpen, User } from 'lucide-react'
 import { getProfile } from '@/lib/userProfile'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import GemStatusBadge from '@/components/premium/GemStatusBadge'
 import type { User as SupabaseUser, Session, AuthChangeEvent } from '@supabase/supabase-js'
 
-// 4 tab principali del nuovo posizionamento: Bacheca (centro di controllo:
-// statistiche + badge + AI discreta — sezione di apertura dell'app), Percorsi
-// (import GPX → guida turistica AI; l'etichetta era "Guide", rinominata perché
-// non comunicava "i miei percorsi pianificati" — vedi UX-AUDIT.md P-H1/P-H2,
-// "guida" resta riservato al solo testo narrativo AI dentro la sezione),
-// Resoconti (escursioni concluse: dati + racconto), Diario (libro impaginato).
-// Il Profilo non è un tab alla pari ma un'icona persistente (vedi ProfileAvatar).
+// Cutover Fase 7 di docs/diario-fulcro-piano.md — Bacheca è ritirata (i suoi contenuti unici,
+// streak/andamento/territorio/curiosità, non sono stati portati altrove: decisione esplicita,
+// restano solo nella cronologia git di questo branch se servissero in futuro). Diario è ora
+// l'ingresso principale, prima voce della tab bar — "I miei Diari" (app/diari/page.tsx), da cui si
+// arriva a ogni Percorso pianificato/vissuto e ai suoi Reportage. Percorsi e Resoconti restano
+// come motori riusati dentro un Diario (GuidaHub/ResocontoHub, invariati) ma anche raggiungibili
+// qui come tab a sé, per chi vuole lavorare su un percorso senza passare dal Diario che lo contiene.
 export const NAV_LINKS = [
-  { href: '/bacheca',    label: 'Bacheca',    icon: Home       },
+  { href: '/diari',      label: 'Diario',     icon: BookMarked },
   { href: '/guida',      label: 'Percorsi',   icon: Compass    },
   { href: '/resoconto',  label: 'Resoconti',  icon: BookOpen   },
-  { href: '/diario',     label: 'Diario',     icon: BookMarked },
 ]
 
 export function isActive(href: string, path: string) {
@@ -110,7 +109,7 @@ function DesktopNav() {
   return (
     <nav className="hidden md:block sticky top-0 z-50 bg-white/90 backdrop-blur-sm border-b border-stone-200 shadow-sm">
       <div className="max-w-[1400px] mx-auto px-4 flex items-center justify-between h-14">
-        <Link href="/guida" className="flex items-center gap-2 group shrink-0">
+        <Link href="/diari" className="flex items-center gap-2 group shrink-0">
           <Image src="/icon-192.png" alt="DTrek" width={28} height={28} className="rounded-md" />
           <span className="font-display font-semibold text-lg text-stone-800 tracking-tight">
             Diario Trekking
@@ -149,9 +148,9 @@ function DesktopNav() {
 // della UI: qui deve combaciare esattamente con lo sfondo che Android/iOS danno alla status bar.
 //
 // Esportata (non solo uso interno) perché è la STESSA barra usata dalle pagine "magazine" a
-// schermo intero (Bacheca, Diario, Guide/Resoconto — components/routehub/HubNavBar.tsx): prima
-// del redesign quelle pagine avevano una loro pillola fluttuante indipendente che è finita fuori
-// sincrono con questa. Un solo componente, mai due implementazioni che possono divergere di nuovo.
+// schermo intero (Guide/Resoconto — components/routehub/HubNavBar.tsx): prima del redesign quelle
+// pagine avevano una loro pillola fluttuante indipendente che è finita fuori sincrono con questa.
+// Un solo componente, mai due implementazioni che possono divergere di nuovo.
 // `pointer-events-auto` è sempre presente perché HubNavBar la monta dentro un antenato
 // `pointer-events-none` (l'overlay trasparente sopra la foto/mappa) — innocuo qui, dove
 // l'antenato è già interattivo di suo.
