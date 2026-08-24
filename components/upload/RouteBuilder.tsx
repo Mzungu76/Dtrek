@@ -986,7 +986,9 @@ export default function RouteBuilder({ onBack, diaryId }: { onBack: () => void; 
   // sequenziale, non in parallelo, perché ciascun salvataggio arricchisce già con DTM/POI (vedi
   // saveResultItemToGuide) — N richieste pesanti insieme sovraccaricherebbero inutilmente le stesse API
   // esterne. Al termine porta all'elenco dei percorsi in attesa (non a una singola guida: con più
-  // percorsi importati insieme non ce n'è uno "principale" verso cui navigare).
+  // percorsi importati insieme non ce n'è uno "principale" verso cui navigare) — dentro il Diario
+  // corrente se importati da lì (Fase 3 di docs/diario-fulcro-piano.md), altrimenti la Guida
+  // (app/guida/elenco è stata ritirata in Fase 7).
   async function handleBulkImport() {
     const items = results
       .map((item, i) => ({ item, i }))
@@ -1005,7 +1007,7 @@ export default function RouteBuilder({ onBack, diaryId }: { onBack: () => void; 
       }
       setSelectedIds(new Set())
       setSelectMode(false)
-      router.push('/guida/elenco')
+      router.push(diaryId ? `/diari/${encodeURIComponent(diaryId)}` : '/guida')
     } catch (e) {
       setErrorMsg(`Errore nell'importazione: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
