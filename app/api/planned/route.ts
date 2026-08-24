@@ -63,6 +63,7 @@ function rowToHike(row: Record<string, unknown>, includeTracks = true): PlannedH
     archivedAt:                   row.archived_at                    as string | undefined,
     favorite:                     row.favorite                       as boolean | undefined,
     firstCompletedAt:             row.first_completed_at             as string | undefined,
+    diaryId:                      row.diary_id                       as string | undefined,
     routeMode:                    row.route_mode                     as PlannedHike['routeMode'],
     dtmProfile:                   row.dtm_profile                    as PlannedHike['dtmProfile'],
     dtmTrackHash:                 row.dtm_track_hash                 as string | undefined,
@@ -131,6 +132,7 @@ function hikeToRow(h: PlannedHike) {
     pending_expires_at:               h.pendingExpiresAt ?? null,
     archived_at:                      h.archivedAt ?? null,
     first_completed_at:               h.firstCompletedAt ?? null,
+    diary_id:                         h.diaryId ?? null,
     favorite:                         h.favorite ?? false,
     route_mode:                       h.routeMode ?? null,
     source_url:                       h.sourceUrl ?? null,
@@ -162,7 +164,7 @@ const META_COLS = [
   'cached_safety_score', 'cached_safety_computed_at', 'cached_ts_total', 'cached_epoch_pois',
   'cached_driving_distance_m', 'cached_driving_duration_s',
   'cached_driving_origin_lat', 'cached_driving_origin_lon',
-  'pending_expires_at', 'archived_at', 'favorite', 'first_completed_at', 'route_mode', 'updated_at',
+  'pending_expires_at', 'archived_at', 'favorite', 'first_completed_at', 'diary_id', 'route_mode', 'updated_at',
   'source_url', 'comfort_verdict', 'comfort_note', 'zone', 'difficulty', 'source_app',
   'is_sample', 'sample_region',
 ].join(', ')
@@ -293,6 +295,19 @@ export async function POST(req: NextRequest) {
       hike.routePolyline = downsamplePolyline(hike.trackPoints)
     }
 
+    // Ogni Percorso appartiene a un Diario — un nuovo percorso senza diaryId esplicito (flussi
+    // di creazione non ancora aggiornati alla Fase 3 di docs/diario-fulcro-piano.md) finisce nel
+    // Diario di default dell'utente invece di restare orfano. Non tocca un percorso già esistente.
+    if (!existingHike && !hike.diaryId) {
+      const { data: defaultDiary } = await supabase
+        .from('diaries')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('is_default', true)
+        .maybeSingle()
+      if (defaultDiary) hike.diaryId = defaultDiary.id as string
+    }
+
     // Personalised assessment using completed activities as context
     // Falls back to Supabase if blob is gone
     let activities: Parameters<typeof assessHike>[3] = []
@@ -412,6 +427,7 @@ export async function PATCH(req: NextRequest) {
       archivedAt?: string | null
       favorite?: boolean
       firstCompletedAt?: string | null
+      diaryId?: string | null
       routeMode?: PlannedHike['routeMode']
       dtmProfile?: PlannedHike['dtmProfile']
       dtmTrackHash?: string
@@ -457,6 +473,7 @@ export async function PATCH(req: NextRequest) {
     if (patch.archivedAt                   !== undefined) dbPatch.archived_at                    = patch.archivedAt
     if (patch.favorite                     !== undefined) dbPatch.favorite                       = patch.favorite
     if (patch.firstCompletedAt             !== undefined) dbPatch.first_completed_at             = patch.firstCompletedAt
+    if (patch.diaryId                      !== undefined) dbPatch.diary_id                       = patch.diaryId
     if (patch.routeMode                    !== undefined) dbPatch.route_mode                     = patch.routeMode
     if (patch.dtmProfile                   !== undefined) dbPatch.dtm_profile                    = patch.dtmProfile
     if (patch.dtmTrackHash                 !== undefined) dbPatch.dtm_track_hash                 = patch.dtmTrackHash

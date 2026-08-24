@@ -99,6 +99,10 @@ export interface PlannedHike {
   // — mai più cancellato: un percorso è un sentiero ripetibile, non consumato dalla prima uscita.
   // Assente = "in programma", mai camminato.
   firstCompletedAt?:             string
+  // Il Diario (supabase/migrations/add_diaries_table.sql) a cui appartiene questo Percorso — un
+  // solo Diario per Percorso. Assente solo su righe create prima della migrazione e non ancora
+  // sanate dal backfill.
+  diaryId?:                      string
   // Sola andata o andata e ritorno, per i soli percorsi lineari — vedi lib/routeMode.ts.
   // Assente su un percorso non lineare (la domanda non si pone) e su un percorso lineare appena
   // importato, dove è proprio l'assenza a far comparire il popup di scelta obbligatoria prima
@@ -301,7 +305,7 @@ export async function savePlanned(hike: PlannedHike): Promise<{ assessment?: Hik
 /** Applies a partial update to the local cache immediately and queues it for background sync. */
 export async function updatePlannedMeta(
   id: string,
-  meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'hikeNotes' | 'tags' | 'plannedDate' | 'cachedPois' | 'cachedPoiWiki' | 'cachedGuide' | 'cachedGuideSubtitle' | 'cachedGuideNotices' | 'cachedGuideSources' | 'guideTier' | 'guideGeneratedAt' | 'cachedEpochPois' | 'cachedBeautyScore' | 'cachedTrailScore' | 'cachedTrailScoreConfidence' | 'cachedScoresComputedAt' | 'cachedSafetyScore' | 'cachedSafetyComputedAt' | 'cachedTsTotal' | 'cachedDrivingDistanceMeters' | 'cachedDrivingDurationSeconds' | 'cachedDrivingOriginLat' | 'cachedDrivingOriginLon' | 'pendingExpiresAt' | 'archivedAt' | 'favorite' | 'firstCompletedAt' | 'routeMode' | 'dtmProfile' | 'dtmTrackHash' | 'dtmComputedAt' | 'terrainProfile' | 'terrainTrackHash' | 'terrainComputedAt' | 'cachedInProtectedArea' | 'cachedProtectedAreaTrackHash' | 'cachedProtectedAreaComputedAt' | 'floraResult' | 'floraTrackHash' | 'floraComputedAt'>>,
+  meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'hikeNotes' | 'tags' | 'plannedDate' | 'cachedPois' | 'cachedPoiWiki' | 'cachedGuide' | 'cachedGuideSubtitle' | 'cachedGuideNotices' | 'cachedGuideSources' | 'guideTier' | 'guideGeneratedAt' | 'cachedEpochPois' | 'cachedBeautyScore' | 'cachedTrailScore' | 'cachedTrailScoreConfidence' | 'cachedScoresComputedAt' | 'cachedSafetyScore' | 'cachedSafetyComputedAt' | 'cachedTsTotal' | 'cachedDrivingDistanceMeters' | 'cachedDrivingDurationSeconds' | 'cachedDrivingOriginLat' | 'cachedDrivingOriginLon' | 'pendingExpiresAt' | 'archivedAt' | 'favorite' | 'firstCompletedAt' | 'diaryId' | 'routeMode' | 'dtmProfile' | 'dtmTrackHash' | 'dtmComputedAt' | 'terrainProfile' | 'terrainTrackHash' | 'terrainComputedAt' | 'cachedInProtectedArea' | 'cachedProtectedAreaTrackHash' | 'cachedProtectedAreaComputedAt' | 'floraResult' | 'floraTrackHash' | 'floraComputedAt'>>,
 ): Promise<void> {
   const local = await lsGet<PlannedHike>(LS_KEYS.planned(id))
   if (local) await lsSet(LS_KEYS.planned(id), { ...local, ...meta })
