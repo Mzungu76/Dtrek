@@ -14,6 +14,7 @@ import type { ReportFixedSectionKey } from '@/components/resoconto/sectionStyle'
 import { PhotoLightbox } from '@/app/resoconto/[id]/PhotoLightbox'
 import { FONT } from '@/lib/designTokens'
 import { Loader2 } from 'lucide-react'
+import ReportGenerationPanel from './ReportGenerationPanel'
 
 const ALWAYS_PRESENT: ReportFixedSectionKey[] = ['dati_punteggi', 'andamento']
 
@@ -48,9 +49,16 @@ export default function ReportBookPage({ basePath, diarioTitle, activityId, page
   const bd = useReportageBookData(activityId)
   const [highlightedPoiId, setHighlightedPoiId] = useState<number | null>(null)
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+  // useReportageBookData non espone un setter per il contenuto (Fase 1, loader magro): il testo
+  // appena generato dal pannello inline sotto arriva qui via callback, non da un refetch — stesso
+  // principio del pannello Guida (GuideGenerationPanel), ma lì il refetch di getPlannedById era
+  // comunque necessario per gli altri campi persistiti (cachedGuideNotices/Sources), qui il solo
+  // testo basta.
+  const [overrideContent, setOverrideContent] = useState<string | null>(null)
+  const content = overrideContent ?? bd.content
 
-  const narrativeChapters = useMemo(() => parseSections(bd.content), [bd.content])
-  const displaySections = useMemo(() => buildReportDisplaySections(bd.content), [bd.content])
+  const narrativeChapters = useMemo(() => parseSections(content), [content])
+  const displaySections = useMemo(() => buildReportDisplaySections(content), [content])
 
   const hasNatura = bd.natura.hasGps && !!bd.natura.flora?.available
   const hasLuoghi = bd.pois.length > 0 || bd.poiWikiEntries.length > 0
@@ -139,6 +147,15 @@ export default function ReportBookPage({ basePath, diarioTitle, activityId, page
         </p>
       )}
       {widget}
+      {!content.trim() && (
+        <ReportGenerationPanel
+          activityId={activityId}
+          activityTitle={bd.activity.title ?? 'Escursione'}
+          hasContent={false}
+          photos={bd.photos}
+          onGenerated={setOverrideContent}
+        />
+      )}
       {lightboxIndex != null && (
         <PhotoLightbox photos={bd.photos} index={lightboxIndex} onNavigate={setLightboxIndex} onClose={() => setLightboxIndex(null)} />
       )}

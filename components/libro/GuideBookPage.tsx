@@ -8,11 +8,14 @@
 // GuideReader.tsx — stesso identico widget per la stessa sezione, letto qui e nel lettore
 // continuo di /guida/[id] dalla stessa funzione, non da due copie che possono divergere.
 //
-// Gate di presenza (quali sezioni diventano pagine): stesso principio validato nel mockup — una
-// pagina esiste solo se ha davvero qualcosa da mostrare, non un placeholder vuoto in attesa di
-// generazione. Le tre sezioni con widget sempre attivo quando il dato sorgente esiste (mappa,
-// dati e sicurezza, meteo) restano presenti anche senza testo AI; le sezioni solo-testo
-// (verificato/comfort/sapori/consigli) richiedono che Giulia abbia già scritto qualcosa.
+// Gate di presenza (quali sezioni diventano pagine): rivisto dopo il primo giro di verifica a
+// schermo con l'utente — la versione originale (vedi git history) faceva sparire del tutto le
+// sezioni solo-testo senza AI (verificato/comfort/sapori/consigli), coerente col mockup ma con un
+// difetto reale: senza una pagina raggiungibile non c'era dove mettere un "Approfondisci con
+// Giulia" per generarle dal libro stesso, che è esattamente ciò che l'utente ha chiesto dopo aver
+// visto il flusso. Ora tutte le 9 sezioni canoniche sono sempre raggiungibili; le tre legate a un
+// dato sorgente specifico (meteo, POI, flora) restano condizionate a quel dato — un widget di
+// meteo senza coordinate non avrebbe comunque nulla da mostrare, a prescindere dal testo.
 import { useMemo } from 'react'
 import BookPage, { type BookPageSection } from './BookPage'
 import { useGuidaBookData } from '@/app/diari/[id]/percorsi/[percorsoId]/useGuidaBookData'
@@ -21,8 +24,9 @@ import type { GuideSectionKey } from '@/lib/guideSections'
 import { normalizeGuideNotices } from '@/lib/guideNotices'
 import { FONT } from '@/lib/designTokens'
 import { Loader2 } from 'lucide-react'
+import GuideGenerationPanel from './GuideGenerationPanel'
 
-const ALWAYS_PRESENT: GuideSectionKey[] = ['il_percorso', 'dati_sicurezza']
+const ALWAYS_PRESENT: GuideSectionKey[] = ['il_percorso', 'dati_sicurezza', 'verificato', 'comfort', 'sapori', 'consigli']
 
 function isSectionPresent(s: DisplaySection, hasWeather: boolean, hasLuoghi: boolean, hasNatura: boolean): boolean {
   if (!s.guideKey) return false
@@ -30,9 +34,7 @@ function isSectionPresent(s: DisplaySection, hasWeather: boolean, hasLuoghi: boo
   if (s.guideKey === 'prima_di_partire') return hasWeather
   if (s.guideKey === 'luoghi') return hasLuoghi
   if (s.guideKey === 'natura') return hasNatura
-  // verificato / comfort / sapori / consigli — solo testo, nessun widget: la pagina esiste solo se
-  // Giulia ha già scritto qualcosa per quella sezione.
-  return !!s.body?.trim()
+  return false
 }
 
 interface Props {
@@ -134,6 +136,18 @@ export default function GuideBookPage({ basePath, diarioTitle, percorsoId, secti
         </p>
       )}
       {widget}
+      {!current.body?.trim() && (
+        <GuideGenerationPanel
+          hike={bd.hike}
+          percorsoId={percorsoId}
+          hasAiAccess={bd.hasAiAccess}
+          aiUnavailable={bd.aiUnavailable}
+          trialExpired={bd.trialExpired}
+          onHikeUpdate={bd.onHikeUpdate}
+          sectionKey={sectionKey}
+          enrichmentReady={bd.enrichmentReady}
+        />
+      )}
     </BookPage>
   )
 }

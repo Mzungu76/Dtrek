@@ -7,14 +7,18 @@
 // server, vedi app/api/guide/route.ts) — qui basta rileggere il percorso a fine stream, non c'è
 // merge da rifare lato client.
 import { useState } from 'react'
-import { BookOpen, KeyRound, Loader2 } from 'lucide-react'
+import { BookOpen, KeyRound, Loader2, Sparkles } from 'lucide-react'
 import type { PlannedHike } from '@/lib/plannedStore'
 import { getPlannedById } from '@/lib/plannedStore'
 import { buildGuideDisplaySections } from '@/lib/guida/guideDisplaySections'
-import { GUIDE_SECTIONS, type GuideSectionKey, type GuideTextLength, GUIDE_TEXT_LENGTHS, DEFAULT_TEXT_LENGTH } from '@/lib/guideSections'
+import {
+  GUIDE_SECTIONS, type GuideSectionKey, type GuideTextLength, type SectionLengthMap,
+  GUIDE_TEXT_LENGTHS, DEFAULT_TEXT_LENGTH,
+} from '@/lib/guideSections'
 import { streamFetchText, StreamFetchError } from '@/lib/streamFetchText'
 import { extractGuideAiError, type GuideAiError } from '@/lib/guideAiError'
 import CreditErrorModal from '@/components/guida/CreditErrorModal'
+import { ApprofondisciTrigger } from '@/components/editorial/SectionCard'
 
 interface Props {
   hike: PlannedHike
@@ -23,9 +27,21 @@ interface Props {
   aiUnavailable: boolean
   trialExpired: boolean
   onHikeUpdate: (patch: Partial<PlannedHike>) => void
+  /** Con `sectionKey` il pannello mostra solo il trigger "Approfondisci con Giulia" per QUESTA
+   *  sezione — usato dentro components/libro/GuideBookPage.tsx per riportare l'azione dentro la
+   *  pagina del libro invece di lasciarla solo sul riepilogo del Percorso (preferenza esplicita
+   *  dell'utente dopo aver visto il libro a schermo). Senza `sectionKey` resta il pannello bulk
+   *  della pagina di riepilogo (sezioni mancanti / rigenera tutta la guida). */
+  sectionKey?: GuideSectionKey
+  /** Solo con `sectionKey` — stesso gate di GuideReader.tsx (`showApprofondisciHint`): nessun
+   *  invito ad approfondire finché i dati del percorso non sono assestati. Default `true` per non
+   *  richiederlo a ogni chiamante che non lo passa (solo GuideBookPage lo passa oggi). */
+  enrichmentReady?: boolean
 }
 
-export default function GuideGenerationPanel({ hike, percorsoId, hasAiAccess, aiUnavailable, trialExpired, onHikeUpdate }: Props) {
+export default function GuideGenerationPanel({
+  hike, percorsoId, hasAiAccess, aiUnavailable, trialExpired, onHikeUpdate, sectionKey, enrichmentReady = true,
+}: Props) {
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [creditError, setCreditError] = useState<GuideAiError | null>(null)
@@ -36,7 +52,7 @@ export default function GuideGenerationPanel({ hike, percorsoId, hasAiAccess, ai
     .filter(s => s.guideKey && !s.body?.trim())
     .map(s => s.guideKey as GuideSectionKey)
 
-  const run = async (sections: GuideSectionKey[]) => {
+  const run = async (sections: GuideSectionKey[], overrides?: Partial<SectionLengthMap>) => {
     if (generating || sections.length === 0) return
     setGenerating(true)
     setError(null)
@@ -44,7 +60,7 @@ export default function GuideGenerationPanel({ hike, percorsoId, hasAiAccess, ai
       const acc = await streamFetchText('/api/guide', {
         hikeId: percorsoId,
         sections,
-        sectionLengths: Object.fromEntries(sections.map(k => [k, length])),
+        sectionLengths: Object.fromEntries(sections.map(k => [k, overrides?.[k] ?? length])),
         hikeFallback: {
           title: hike.title, plannedDate: hike.plannedDate, userNotes: hike.userNotes, tags: hike.tags,
           distanceMeters: hike.distanceMeters, elevationGain: hike.elevationGain, elevationLoss: hike.elevationLoss,
@@ -66,6 +82,37 @@ export default function GuideGenerationPanel({ hike, percorsoId, hasAiAccess, ai
     } finally {
       setGenerating(false)
     }
+  }
+
+  // ── Trigger inline in una pagina del libro (GuideBookPage) — una sola sezione ──────────────
+  if (sectionKey) {
+    // Stesso gate di GuideReader.tsx (showApprofondisciHint): niente invito finché i dati non
+    // sono pronti o senza accesso AI — la pagina di riepilogo comunica già quei due stati in modo
+    // prominente, ripeterli qui su ogni sezione sarebbe solo rumore.
+    if (!enrichmentReady || hasAiAccess !== true) return null
+    const lengthOptions = sectionKey !== 'verificato'
+      ? GUIDE_TEXT_LENGTHS.map(l => ({ key: l.key, label: l.label, description: l.description }))
+      : undefined
+    return (
+      <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-stone-100 text-[11.5px] text-stone-400">
+        {creditError && <CreditErrorModal message={creditError.message} onClose={() => setCreditError(null)} />}
+        {generating ? (
+          <span className="flex items-center gap-1.5">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" /> Giulia sta approfondendo questa sezione…
+          </span>
+        ) : (
+          <>
+            <Sparkles className="w-3.5 h-3.5 shrink-0" />
+            <span>Testo non ancora generato —</span>
+            <ApprofondisciTrigger
+              onApprofondisci={len => run([sectionKey], len ? { [sectionKey]: len } as Partial<SectionLengthMap> : undefined)}
+              lengthOptions={lengthOptions}
+            />
+          </>
+        )}
+        {error && <span className="text-red-600 basis-full">{error}</span>}
+      </div>
+    )
   }
 
   if (hasAiAccess === false && aiUnavailable) {
