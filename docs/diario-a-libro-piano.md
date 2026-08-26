@@ -375,6 +375,36 @@ di riepilogo del Percorso (`PercorsoPageLibro` in
 ancora la palette pergamena (è rimasta nello stile "app moderna" fin dalla Fase 6, un gap
 preesistente non segnalato in questo giro di feedback).
 
+**Fase 11 — Home dell'app: apertura sull'ultimo Diario, drawer per cambiarlo** ✅ **COMPLETATA**
+
+Richiesta esplicita: rendere il Sommario (elenco Percorsi) la home dell'app, aprendo sull'ultimo
+Diario visualizzato prima della chiusura precedente, con lo scaffale "I miei Diari" sempre
+raggiungibile (non più il primo schermo, ma mai nascosto).
+
+- Nuova colonna `user_settings.last_diary_id` (`supabase/migrations/add_last_diary_id.sql`, UUID,
+  `ON DELETE SET NULL`, stesso pattern di `diario_libro_enabled`) — segue l'utente su ogni
+  dispositivo invece di restare legato al browser (localStorage, l'alternativa scartata).
+  `app/api/user-settings/route.ts` e `lib/sync/userSettingsStore.ts` esposti/aggiornati di
+  conseguenza (`lastDiaryId`).
+- `DiarioIndexLibro` (`app/diari/[id]/page.tsx`) scrive `lastDiaryId` a ogni caricamento riuscito
+  del Sommario — solo dopo il caricamento, mai dall'id grezzo nell'URL, così un link vecchio o non
+  più accessibile non può mai diventare il prossimo punto di apertura.
+- `app/page.tsx` (`/`, la home) non fa più un redirect fisso lato server a `/diari`: a flag spento
+  il comportamento resta identico a prima; a flag acceso legge `diarioLibroEnabled`+`lastDiaryId`
+  (client-side, stesso pattern `getUserSettingsCached()` di ogni altra pagina gated di questo
+  piano) e apre direttamente `/diari/[lastDiaryId]` — verificato contro l'elenco vero dei Diari
+  (non fidandosi ciecamente del valore salvato: un Diario eliminato nel frattempo farebbe aprire
+  un Sommario 404), con ricaduta sul Diario di default. `/diari` stesso (lo scaffale) resta
+  invariato e sempre raggiungibile con la stessa URL di sempre — nessun redirect-loop possibile.
+- Nuovo `components/libro/DiarioSwitcherDrawer.tsx` — drawer laterale (preferenza esplicita tra le
+  opzioni proposte, invece di una bottom sheet) con l'elenco compatto di tutti i Diari (non le
+  copertine ricche dello scaffale, quelle restano lì) e un link in fondo verso lo scaffale per la
+  gestione completa (copertine, nuovo Diario). Aperto dal titolo in cima al Sommario: `BookPage.tsx`
+  guadagna un prop opzionale `onTitleClick` che trasforma quel link in un bottone — usato solo da
+  `DiarioIndexLibro` (dove `indexHref` punterebbe allo scaffale, ora raggiungibile solo da qui in
+  poi); ogni altra pagina del libro (Guida/Reportage/pubblica) continua a navigare normalmente,
+  invariata.
+
 ## File critici
 - `components/guida/GuideReader.tsx`, `components/resoconto/ReportReader.tsx` — sorgente da cui
   estratto in Fase 0, non riscritti.
@@ -414,6 +444,17 @@ preesistente non segnalato in questo giro di feedback).
 - `app/api/diaries/route.ts` — nuovo `POST` (Fase 6): crea un Diario aggiuntivo, gated su
   `resolveDtrekEntitlement`.
 - `lib/dtrekEntitlement.ts` — non toccato, riusato per il gate di creazione Diario.
+- `app/diari/[id]/page.tsx` — Fase 9 (allineamento colonne fisse, filtro di stato, sfondo
+  tinteggiato, ordine invertibile del Sommario) e Fase 11 (scrittura `lastDiaryId`, drawer).
+- `components/libro/BookSpineShadow.tsx` — nuovo in Fase 10, montato in `BookPage.tsx` e in
+  `DiariPageLibro` (`app/diari/page.tsx`).
+- `components/libro/DiarioSwitcherDrawer.tsx` — nuovo in Fase 11, montato solo da
+  `DiarioIndexLibro`; `BookPage.tsx`'s prop opzionale `onTitleClick` è il suo unico punto
+  d'aggancio.
+- `app/page.tsx` — riscritto in Fase 11 (redirect condizionale invece che fisso a `/diari`).
+- `supabase/migrations/add_last_diary_id.sql`, `app/api/user-settings/route.ts`,
+  `lib/sync/userSettingsStore.ts` — `lastDiaryId`, Fase 11, stesso pattern di
+  `diario_libro_enabled`.
 
 ## Verifica
 - Fase 0-2: `tsc --noEmit`, `eslint`, `npm run build` (la build fallisce nella sandbox corrente per

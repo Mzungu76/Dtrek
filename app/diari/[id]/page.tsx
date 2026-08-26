@@ -7,13 +7,14 @@ import RouteThumb from '@/components/RouteThumb'
 import SectionEyebrow from '@/components/bacheca/SectionEyebrow'
 import RecoSuggestedRow from '@/components/bacheca/RecoSuggestedRow'
 import BookPage from '@/components/libro/BookPage'
+import DiarioSwitcherDrawer from '@/components/libro/DiarioSwitcherDrawer'
 import { GalleryMapThumb } from '@/components/routehub/BottomGallery'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 import { ctsLabel } from '@/lib/trailScore'
 import { formatDuration } from '@/lib/tcxParser'
 import type { DiarioDetail } from '@/app/api/diaries/[id]/route'
 import type { RecommendationCard } from '@/lib/routeBuilder/generateRecommendations'
-import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
+import { getUserSettingsCached, updateUserSettings } from '@/lib/sync/userSettingsStore'
 import { FONT } from '@/lib/designTokens'
 import {
   ArrowDown, ArrowLeft, ArrowUp, CheckCircle2, ChevronRight, Clock, Loader2, Lock, LockOpen, Mountain,
@@ -315,6 +316,7 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
   const [statusFilter, setStatusFilter] = useState<SommarioStatusFilter>('all')
   const [sortBy, setSortBy] = useState<SommarioSortKey>('date')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  const [switcherOpen, setSwitcherOpen] = useState(false)
 
   useEffect(() => {
     fetch(`/api/diaries/${encodeURIComponent(diaryId)}`)
@@ -322,6 +324,13 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
       .then(setDetail)
       .catch(e => setError(e instanceof Error ? e.message : String(e)))
   }, [diaryId])
+
+  // Ultimo Diario aperto, Fase 11 — app/page.tsx (home) lo legge per decidere dove aprire l'app.
+  // Scritto solo dopo un caricamento riuscito (non dall'URL grezzo): un id non valido o non più
+  // accessibile non deve mai diventare il prossimo punto di apertura.
+  useEffect(() => {
+    if (detail) updateUserSettings({ lastDiaryId: diaryId })
+  }, [detail, diaryId])
 
   // Stessi filtri/ricerca/ordinamento di components/routehub/ExpandedGalleryList.tsx ("Tutti i
   // percorsi") — qui senza "Distanza" (richiede l'indirizzo di partenza + una chiamata Google
@@ -366,7 +375,13 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
 
   return (
     <>
-      <BookPage diarioTitle={detail.title} indexHref="/diari" sectionLabel="Indice">
+      <DiarioSwitcherDrawer open={switcherOpen} onClose={() => setSwitcherOpen(false)} currentDiaryId={diaryId} />
+      <BookPage
+        diarioTitle={detail.title}
+        indexHref="/diari"
+        onTitleClick={() => setSwitcherOpen(true)}
+        sectionLabel="Indice"
+      >
         <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 10, color: '#8a7f52', margin: '0 0 3px' }}>
           Sommario
         </p>
