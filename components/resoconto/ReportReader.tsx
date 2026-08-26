@@ -1,9 +1,9 @@
 'use client'
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
-import { formatDuration, msToKmh, formatPace, type TrackPoint } from '@/lib/tcxParser'
+import { formatDuration, type TrackPoint } from '@/lib/tcxParser'
 import type { StoredActivity } from '@/lib/blobStore'
 import type { RoutePhoto } from '@/lib/activityPhotos'
 import type { PoiItem } from '@/lib/overpass'
@@ -11,8 +11,8 @@ import type { WikiPage } from '@/lib/wikipedia'
 import { fetchWikiForNamedPois } from '@/lib/wikipedia'
 import type { FloraResult } from '@/lib/floraTypes'
 import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
-import { ctsLabel, type TrailScoreResult } from '@/lib/trailScore'
-import { computeDEP, depLabel, type findSimilarActivities } from '@/lib/stats'
+import type { TrailScoreResult } from '@/lib/trailScore'
+import type { findSimilarActivities } from '@/lib/stats'
 import {
   parseSections, markdownToSections, sectionsToMarkdown, SCAFFOLD_SECTIONS,
   type ReportSection, type ReportAuthoredBy, type HikeReport,
@@ -29,37 +29,21 @@ import { bucketPhotosByChapter } from '@/lib/photoBuckets'
 import { computeMaterialScore } from '@/lib/materialScore'
 import SectionNav from '@/components/editorial/SectionNav'
 import SectionCard from '@/components/editorial/SectionCard'
-import { ComfortTrailScoreWidget } from '@/components/ComfortTrailScoreWidget'
-import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
-import { RatingGaugeBadge } from '@/components/resoconto/RatingGaugeBadge'
 import NextStepBanner from '@/components/resoconto/NextStepBanner'
-import Kicker from '@/components/ui/Kicker'
-import StatCard from '@/components/StatCard'
-import HRChart from '@/components/HRChart'
-import SpeedChart from '@/components/SpeedChart'
-import RouteMapSection from '@/components/RouteMapSection'
-import WeatherWidget from '@/components/WeatherWidget'
-import PoiListWidget from '@/components/guida/widgets/PoiListWidget'
-import NaturaWidget from '@/components/guida/widgets/NaturaWidget'
-import RouteTimeline from '@/app/components/RouteTimeline'
 import ManualEditor from '@/app/components/ManualEditor'
-import ActivityPhotoManager from '@/app/components/ActivityPhotoManager'
-import { PhotoGallery } from '@/app/resoconto/[id]/PhotoGallery'
 import { PhotoLightbox } from '@/app/resoconto/[id]/PhotoLightbox'
-import { PrintPhotoGrid } from '@/app/resoconto/[id]/PrintPhotoGrid'
 // Import dinamico: il modulo si porta dietro il template del PDF, `react-dom/client` e jsPDF/
 // html2canvas per via delle sue dipendenze. Statico finiva nel bundle di /resoconto — la rotta più
 // pesante dell'app — anche per chi apre un resoconto senza mai esportarlo.
 import ReportHero from './ReportHero'
 import ReportStatsStrip from './ReportStatsStrip'
 import PhotoShowcase from './PhotoShowcase'
-import PhotoMapSection from './PhotoMapSection'
 import StickyRouteMap from './StickyRouteMap'
 import { pickBestCoverPhoto } from '@/lib/activityPhotos'
-import { REPORT_SECTION_STYLE, REPORT_SECTION_TITLE, narrativeStyleFor, type ReportFixedSectionKey } from './sectionStyle'
+import type { ReportFixedSectionKey } from './sectionStyle'
+import { buildReportDisplaySections, renderReportFixedWidget, type DisplaySection } from '@/lib/resoconto/reportDisplaySections'
 import {
-  Pencil, Loader2, BookOpen, Share2, Copy, Link2Off, ExternalLink,
-  Layers, RefreshCw, Heart, Zap, Flame, Download,
+  Pencil, Loader2, BookOpen, Share2, Copy, Link2Off, ExternalLink, RefreshCw, Download,
 } from 'lucide-react'
 
 /** Frase a effetto da mostrare in grande, stile rivista, a metà lettura — preferisce un
@@ -85,14 +69,6 @@ function extractPullQuote(sections: { title: string; body: string }[]): string |
 }
 
 type ResocontoLength = 'breve' | 'media' | 'lunga'
-
-interface DisplaySection {
-  key: string
-  title: string
-  icon: ReactNode
-  color: string
-  narrativeIndex?: number
-}
 
 export interface DataSectionBundle {
   ctsResult: TrailScoreResult | null
@@ -336,15 +312,7 @@ export default function ReportReader({
   // "Galleria fotografica" resta sempre presente (come le altre sezioni fisse) anche senza foto:
   // è l'unico punto da cui caricarle (vedi ActivityPhotoManager dentro il suo widget), quindi
   // nasconderla in assenza di foto renderebbe impossibile aggiungerne la prima.
-  const displaySections = useMemo<DisplaySection[]>(() => {
-    const narrative: DisplaySection[] = sections.map((s, i) => ({
-      key: `narrative-${i}`, title: s.title, narrativeIndex: i, ...narrativeStyleFor(i),
-    }))
-    const fixed: DisplaySection[] = (Object.keys(REPORT_SECTION_STYLE) as ReportFixedSectionKey[]).map(k => ({
-      key: k, title: REPORT_SECTION_TITLE[k], ...REPORT_SECTION_STYLE[k],
-    }))
-    return [...narrative, ...fixed]
-  }, [sections])
+  const displaySections = useMemo<DisplaySection[]>(() => buildReportDisplaySections(content), [content])
 
   // Foto di ogni capitolo — se il racconto ha una struttura editata a mano (reportSections, in
   // sync 1:1 con i capitoli attuali) si usa la scelta esplicita dell'utente (foto principale +
@@ -561,183 +529,15 @@ export default function ReportReader({
   }
 
   // ── Widget per le sezioni dati fisse ──────────────────────────────────────
-  function renderFixedWidget(key: ReportFixedSectionKey): ReactNode {
-    switch (key) {
-      case 'dati_punteggi': {
-        const hasHR  = (activity.avgHeartRate ?? 0) > 0
-        const hasCal = (activity.calories ?? 0) > 0
-        const hasNetSpeed = (activity.netSpeedMs ?? 0) > 0 && (activity.pauseTimeSeconds ?? 0) > 0
-        const hasIev = (activity.iev ?? 0) > 0
-        const dep = computeDEP(activity.distanceMeters, activity.elevationGain)
-        const ts = data.ctsResult?.ts ?? activity.trailScore
-        const scoreLabel = ts != null ? (data.ctsResult ?? ctsLabel(ts)).label : undefined
-        const rated = (activity.userRating ?? 0) > 0
-        return (
-          <div className="space-y-5">
-            {/* UX-AUDIT.md P-M7 — un voto scelto dall'utente (opinione) e un Trail Score calcolato
-                dall'app (oggettivo) avevano lo stesso trattamento visivo (due card scure identiche
-                impilate), confermato confuso da screenshot. Qui una card chiara sola — quando
-                entrambi i dati esistono, due colonne di pari peso ma con etichette esplicite
-                ("La tua opinione" / "Il dato oggettivo") a dire subito da dove viene ciascun
-                numero, invece di lasciarlo intuire dalla sola forma dell'anello. */}
-            {(rated || ts != null) && (
-              <div className="rounded-2xl bg-white border border-stone-100 px-5 py-6">
-                <Kicker className="text-center mb-3">Punteggio complessivo</Kicker>
-                <div className={`grid gap-4 ${rated && ts != null ? 'grid-cols-2 divide-x divide-dashed divide-stone-200' : 'grid-cols-1'}`}>
-                  {rated && (
-                    <div className="flex flex-col items-center text-center">
-                      <RatingGaugeBadge value={activity.userRating!} size={72} showLabel={false} dark={false} />
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-stone-400 mt-2.5">La tua opinione</p>
-                      <p className="text-[12.5px] font-bold text-stone-800 mt-0.5">Voto {activity.userRating}/10</p>
-                    </div>
-                  )}
-                  {ts != null && (
-                    <div className="flex flex-col items-center text-center">
-                      <TrailScoreGaugeBadge total={Math.round(ts)} safety={null} showLabel={false} size={72} dark={false} />
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-stone-400 mt-2.5">Il dato oggettivo</p>
-                      {scoreLabel && <p className="text-[12.5px] font-bold text-stone-800 mt-0.5">Trail Score · {scoreLabel}</p>}
-                    </div>
-                  )}
-                </div>
-                {activity.userRatingNote && (
-                  <p className="text-stone-500 text-[12.5px] italic leading-relaxed text-center mt-4 pt-4 border-t border-stone-100">
-                    “{activity.userRatingNote}”
-                  </p>
-                )}
-              </div>
-            )}
-            {ts != null ? (
-              <ComfortTrailScoreWidget result={data.ctsResult} cached={activity.trailScore} beautyScore={activity.linkedBeautyScore} />
-            ) : (
-              <div className="flex items-center justify-between gap-4 rounded-2xl bg-stone-50 border border-stone-200 px-5 py-4">
-                <p className="text-sm text-stone-500">Il punteggio non è ancora stato calcolato.</p>
-                <button onClick={data.onComputeCts} disabled={data.ctsComputing} className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl bg-forest-500 hover:bg-forest-400 disabled:opacity-50 text-white text-sm font-medium transition-colors">
-                  {data.ctsComputing ? <><Loader2 className="w-4 h-4 animate-spin" /> Calcolo…</> : <><RefreshCw className="w-4 h-4" /> Calcola CTS</>}
-                </button>
-              </div>
-            )}
-
-            {hasGps && data.dtmProfile?.source === 'dtm' && (
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {activity.trackPoints.some(p => p.altitudeMeters !== undefined) && (
-                  <button onClick={data.onToggleGradient} className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border transition-colors ${data.showGradient ? 'bg-forest-500 text-white border-forest-500' : 'bg-stone-50 border-stone-200 text-stone-500'}`}>
-                    <Layers className="w-3 h-3" /> Pendenza
-                  </button>
-                )}
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {hasHR && <StatCard label="FC Media" value={`${activity.avgHeartRate} bpm`} sub={`Max ${activity.maxHeartRate} bpm`} color="red" icon={<Heart className="w-3.5 h-3.5" />} />}
-              <StatCard label="Vel. Media" value={`${msToKmh(activity.avgSpeedMs)} km/h`} sub={`Max ${msToKmh(activity.maxSpeedMs)} km/h`} color="blue" icon={<Zap className="w-3.5 h-3.5" />} />
-              {hasNetSpeed && <StatCard label="Vel. Crociera" value={`${msToKmh(activity.netSpeedMs!)} km/h`} sub={`Pause ${formatDuration(activity.pauseTimeSeconds!)}`} color="blue" />}
-              {hasCal && <StatCard label="Calorie" value={`${activity.calories} kcal`} color="terra" icon={<Flame className="w-3.5 h-3.5" />} />}
-              <StatCard label="DEP" value={`${dep.toFixed(1)} km`} sub={depLabel(dep)} color="stone" />
-              {hasIev && <StatCard label="Efficienza verticale" value={`${activity.iev!.toFixed(0)} m/min`} color="forest" />}
-            </div>
-
-            <dl className="rounded-2xl bg-stone-50 border border-stone-200 p-4 grid grid-cols-2 gap-x-3 gap-y-1.5">
-              {[
-                ['Passo medio', formatPace(activity.distanceMeters, activity.totalTimeSeconds)],
-                ['Quota partenza', `${activity.trackPoints[0]?.altitudeMeters?.toFixed(1) ?? '--'} m`],
-                ['Quota minima', `${activity.altitudeMin.toFixed(1)} m`],
-                ['Quota massima', `${activity.altitudeMax.toFixed(1)} m`],
-                ['Trackpoint', activity.trackPoints.length.toLocaleString('it')],
-                ['Sport', activity.sport],
-              ].map(([k, v]) => (
-                <div key={k} className="flex justify-between border-b border-stone-100 py-1">
-                  <dt className="text-stone-400 text-xs">{k}</dt>
-                  <dd className="font-mono text-xs font-medium text-stone-800">{v}</dd>
-                </div>
-              ))}
-            </dl>
-
-            {hasGps && dateISO && <WeatherWidget mode="historical" lat={gpsPoints[Math.floor(gpsPoints.length / 2)].lat!} lon={gpsPoints[Math.floor(gpsPoints.length / 2)].lon!} date={dateISO} />}
-
-            {data.similarActivities.length > 0 && (
-              <div>
-                <p className="text-sm font-semibold mb-2 text-stone-800">Percorsi simili</p>
-                <div className="rounded-2xl bg-stone-50 border border-stone-200 overflow-hidden">
-                  <table className="w-full text-xs">
-                    <tbody>
-                      {data.similarActivities.slice(0, 5).map(({ activity: a, startDistanceM }) => (
-                        <tr key={a.id} className="border-t border-stone-100 first:border-t-0 hover:bg-stone-100 cursor-pointer" onClick={() => data.onOpenSimilar(a.id)}>
-                          <td className="px-3 py-2 text-stone-800">{new Date(a.startTime).toLocaleDateString('it-IT')}</td>
-                          <td className="px-3 py-2 text-stone-800">{(a.distanceMeters / 1000).toFixed(1)} km</td>
-                          <td className="px-3 py-2 text-stone-400">{startDistanceM < 50 ? 'stesso punto' : `${startDistanceM.toFixed(0)} m`}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </div>
-        )
-      }
-      case 'andamento':
-        return (
-          <div className="space-y-5">
-            {hasGps && activity.trackPoints.length ? (
-              <RouteMapSection
-                trackPoints={activity.trackPoints}
-                showPois={false}
-                onOpenMap3D={onOpenMap3D}
-                showGradient={data.showGradient}
-                showAspect={data.showAspect}
-                showAspectToggle={data.dtmProfile?.source === 'dtm'}
-                onToggleAspect={data.onToggleAspect}
-                dtmProfile={data.dtmProfile}
-              />
-            ) : (
-              <p className="text-sm italic text-center py-8 text-stone-400">Profilo altimetrico non disponibile senza un tracciato GPS.</p>
-            )}
-            {activity.trackPoints.some(p => (p.heartRateBpm ?? 0) > 0) && (
-              <HRChart trackPoints={activity.trackPoints} avgHR={activity.avgHeartRate} maxHR={activity.maxHeartRate} />
-            )}
-            <SpeedChart trackPoints={activity.trackPoints} avgSpeedMs={activity.avgSpeedMs} />
-            {photos.length > 0 && <RouteTimeline trackPoints={activity.trackPoints} photos={photos} />}
-          </div>
-        )
-      case 'natura':
-        return <NaturaWidget {...natura} />
-      case 'poi':
-        return (
-          <PoiListWidget
-            hikeId={id}
-            pois={pois}
-            poiWikiEntries={poiWikiEntries}
-            hasGps={hasGps}
-            centerLat={gpsPoints[Math.floor(gpsPoints.length / 2)]?.lat}
-            centerLon={gpsPoints[Math.floor(gpsPoints.length / 2)]?.lon}
-            onWikiLoaded={() => {}}
-            highlightedPoiId={highlightedPoiId}
-            onItemTap={poi => setHighlightedPoiId(prev => prev === poi.id ? null : poi.id)}
-            trackPoints={activity.trackPoints}
-            onOpenMap3D={onOpenMap3D}
-          />
-        )
-      case 'galleria_foto':
-        return (
-          <div className="space-y-6">
-            {hasGps && (
-              <PhotoMapSection trackPoints={activity.trackPoints} photos={photos} onPhotoTap={openLightboxById} onOpenMap3D={onOpenMap3D} />
-            )}
-            {photos.length > 0 && (
-              <>
-                <PhotoGallery photos={photos} onPhotoClick={photo => openLightboxById(photo.id)} />
-                <PrintPhotoGrid photos={photos} />
-              </>
-            )}
-            <ActivityPhotoManager
-              activityId={activity.id}
-              trackPoints={activity.trackPoints}
-              photos={photos}
-              onPhotosChange={onPhotosChange}
-            />
-          </div>
-        )
-    }
+  // Dispatcher estratto in lib/resoconto/reportDisplaySections.tsx (renderReportFixedWidget) —
+  // stessa identica logica, condivisa con le nuove pagine "a libro" del Diario; qui resta solo il
+  // passaggio delle variabili di chiusura come props esplicite.
+  function renderFixedWidget(key: ReportFixedSectionKey) {
+    return renderReportFixedWidget(key, {
+      activity, data, natura, hasGps, gpsPoints, dateISO, onOpenMap3D, pois, poiWikiEntries,
+      highlightedPoiId, onPoiTap: poiId => setHighlightedPoiId(prev => prev === poiId ? null : poiId),
+      photos, onPhotoTap: openLightboxById, onPhotosChange,
+    })
   }
 
   if (loading) return (
