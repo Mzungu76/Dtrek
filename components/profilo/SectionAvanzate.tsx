@@ -1,8 +1,22 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { recalcAllCts, recalcAllSafety } from '@/lib/recalcScores'
-import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
+import { getUserSettingsCached, updateUserSettings } from '@/lib/sync/userSettingsStore'
 import { Loader2, RefreshCw, ChevronDown, Wrench } from 'lucide-react'
+
+function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+  return (
+    <button
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={`w-9 h-5 rounded-full relative transition-colors shrink-0 disabled:opacity-50 ${checked ? 'bg-forest-500' : 'bg-stone-200'}`}
+    >
+      <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${checked ? 'left-4' : 'left-0.5'}`} />
+    </button>
+  )
+}
 
 /**
  * Strumenti di manutenzione dati — ricalcolo massivo dei punteggi (CTS,
@@ -18,6 +32,27 @@ export default function SectionAvanzate() {
   const [safetyProgress, setSafetyProgress] = useState('')
   const [allRunning,     setAllRunning]     = useState(false)
   const [allProgress,    setAllProgress]    = useState('')
+
+  // Flag di rollout Fase 4 — docs/diario-a-libro-piano.md. Scoped SOLO al punto d'ingresso
+  // Percorso del Diario (/diari/[id]/percorsi/[percorsoId]): /guida/[id] e /resoconto/[id]
+  // standalone restano sempre sul motore invariato, a prescindere da questo flag. Default spento
+  // finché non validato in produzione — qui solo per poterlo accendere sul proprio account durante
+  // la validazione, non pensato per un rollout via impostazioni utente diffuso.
+  const [libroEnabled, setLibroEnabled] = useState(false)
+  const [savingLibro,  setSavingLibro]  = useState(false)
+
+  useEffect(() => {
+    getUserSettingsCached().then(d => {
+      if (typeof d.diarioLibroEnabled === 'boolean') setLibroEnabled(d.diarioLibroEnabled)
+    }).catch(() => {})
+  }, [])
+
+  async function handleLibroChange(v: boolean) {
+    setLibroEnabled(v)
+    setSavingLibro(true)
+    await updateUserSettings({ diarioLibroEnabled: v })
+    setSavingLibro(false)
+  }
 
   const anyRunning = ctsRunning || safetyRunning || allRunning
 
@@ -78,6 +113,19 @@ export default function SectionAvanzate() {
       </summary>
 
       <div className="px-6 pb-6 pt-1 border-t border-stone-100 flex flex-col gap-2">
+        <div className="flex items-center justify-between gap-3 py-2">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-stone-700">Diario a libro (beta)</p>
+            <p className="text-xs text-stone-400">
+              Apri un Percorso del Diario nella nuova veste a pagine sfogliabili invece della
+              schermata Guida classica. /guida/[id] e /resoconto/[id] restano invariati.
+            </p>
+          </div>
+          <Toggle checked={libroEnabled} onChange={handleLibroChange} disabled={savingLibro} />
+        </div>
+
+        <div className="border-t border-stone-100 pt-2" />
+
         <button
           onClick={handleFullRecalcCts}
           disabled={anyRunning}
