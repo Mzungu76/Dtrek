@@ -163,6 +163,30 @@ export default function GuideBookPage({ basePath, diarioTitle, percorsoId, secti
           enrichmentReady={bd.enrichmentReady}
         />
       )}
+      {/* Generazione/rigenerazione in blocco — prima viveva sulla pagina di riepilogo del
+          Percorso, rimossa su richiesta dell'utente (ridotta a "solo le uscite"). Non eliminata:
+          resta qui, sulla prima pagina della Guida, l'unico posto sempre raggiungibile prima di
+          aver letto qualunque sezione. Il trigger per-sezione sopra resta per chi vuole
+          approfondire solo QUESTA pagina; questo è per chi vuole generare/rigenerare tutto insieme. */}
+      {sectionKey === 'il_percorso' && (
+        <div className="mt-8 pt-6" style={{ borderTop: '1px solid #e4d9bd' }}>
+          <p
+            className="mb-3"
+            style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 10, color: '#8a7f52' }}
+          >
+            Genera tutta la guida
+          </p>
+          <GuideGenerationPanel
+            hike={bd.hike}
+            percorsoId={percorsoId}
+            hasAiAccess={bd.hasAiAccess}
+            aiUnavailable={bd.aiUnavailable}
+            trialExpired={bd.trialExpired}
+            onHikeUpdate={bd.onHikeUpdate}
+            panelClassName={WEATHER_PANEL_CLASS}
+          />
+        </div>
+      )}
     </BookPage>
   )
 }

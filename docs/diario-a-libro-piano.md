@@ -462,6 +462,35 @@ montagne di `DiarioCover.tsx`, usato sulla copertina stampabile.
   cima del Sommario (`DiarioIndexLibro`) — prima ciascuno aveva il proprio placeholder, ora ce n'è
   uno solo, coerente con quanto stampato.
 
+**Fase 14 — Riepilogo del Percorso eliminato, copertine con testo nel drawer e nel Sommario** ✅ **COMPLETATA**
+
+Due richieste dopo aver visto Fase 13 in uso.
+
+*Riepilogo del Percorso eliminato.* La pagina (copertina verde, "Apri la Guida"/"Apri in
+modalità classica", pannello di generazione in blocco) non doveva più esistere. Decisioni prese
+con l'utente per non perdere le due funzioni che ci vivevano:
+- **"Le tue uscite" resta**, ma la pagina (`app/diari/[id]/percorsi/[percorsoId]/page.tsx`,
+  `PercorsoPageLibro`) è ridotta a un titolo minimo (solo testo, niente riquadro) più l'elenco —
+  niente CTA verso la Guida (già raggiunta da lì quando si arriva dal Sommario o dal pallino
+  "Reportage" di una pagina di Guida, i due soli punti d'ingresso qui). Stessa URL di prima:
+  badge "N uscite" del Sommario e pallino "Reportage" non sono cambiati.
+- **La generazione in blocco non è stata eliminata** — spostata sulla prima pagina della Guida
+  ("Il percorso", `components/libro/GuideBookPage.tsx`), l'unico punto sempre raggiungibile prima
+  di aver letto qualunque sezione. `GuideGenerationPanel` guadagna un prop opzionale
+  `panelClassName` (stesso pattern di `WeatherWidget` in Fase 6) per il tono pergamena invece del
+  bianco/stone pensato per la pagina ora rimossa.
+
+*Copertine con testo nel drawer e in cima al Sommario.* L'utente ha chiarito: quei due punti
+devono mostrare "la riproduzione in piccolo dell'effettiva copertina" — non solo lo sfondo
+(foto/gradiente) ma anche titolo/sottotitolo/autore, come la copertina vera. `DiarioCoverThumb`
+guadagna una modalità con testo: quando riceve `width` + `title`, renderizza la stessa
+`<DiarioCover>` scalata (stesso trucco già usato in `/diari/[id]/copertina`, ora centralizzato
+qui e riusato anche da quella pagina invece di duplicato); senza `title` resta il comportamento
+di Fase 13 (solo sfondo, 100% del contenitore) — usato ancora dallo scaffale (`DiarioCoverCard`),
+che ha già il proprio riquadro di testo e raddoppierebbe altrimenti. `DiarioDetail` guadagna
+`author` (colonna già esistente su `diaries`, non selezionata finora) per poter riprodurre
+l'autore anche nella miniatura del Sommario.
+
 ## File critici
 - `components/guida/GuideReader.tsx`, `components/resoconto/ReportReader.tsx` — sorgente da cui
   estratto in Fase 0, non riscritti.
@@ -526,6 +555,15 @@ montagne di `DiarioCover.tsx`, usato sulla copertina stampabile.
 - `app/diari/[id]/pubblica/page.tsx` — invariata in Fase 13: i suoi controlli foto/testi copertina
   restano (un utente potrebbe già averci fatto l'abitudine), solo i link da scaffale/drawer non
   puntano più qui per personalizzare la copertina.
+- `app/diari/[id]/percorsi/[percorsoId]/page.tsx` — Fase 14: `PercorsoPageLibro` ridotta a titolo
+  + `ReportageSection`, niente altro (era il riepilogo completo di Fase 3).
+- `components/libro/GuideBookPage.tsx`, `GuideGenerationPanel.tsx` — Fase 14: il pannello di
+  generazione in blocco (rimosso dal riepilogo) vive ora qui, solo sulla sezione `il_percorso`;
+  `panelClassName` nuovo prop opzionale per il tono pergamena.
+- `components/diario/DiarioCoverThumb.tsx` — Fase 14: nuova modalità con testo (`width`+`title`),
+  usata da `DiarioSwitcherDrawer.tsx` e dal Sommario; `/diari/[id]/copertina/page.tsx` riusa la
+  stessa invece della propria copia locale del trucco di scala.
+- `app/api/diaries/[id]/route.ts` — `DiarioDetail.author` aggiunto in Fase 14.
 
 ## Verifica
 - Fase 0-2: `tsc --noEmit`, `eslint`, `npm run build` (la build fallisce nella sandbox corrente per

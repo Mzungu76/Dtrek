@@ -6,12 +6,10 @@ import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import GuidaHub from '@/app/guida/GuidaHub'
 import TrialStatusBanner from '@/components/dtrek/TrialStatusBanner'
-import GuideGenerationPanel from '@/components/libro/GuideGenerationPanel'
 import { useGuidaBookData } from './useGuidaBookData'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
-import { formatDuration } from '@/lib/tcxParser'
 import type { ReportageRow } from '@/app/api/percorsi/[id]/reportage/route'
-import { ArrowLeft, BookOpen, ChevronRight, Loader2, PenLine } from 'lucide-react'
+import { ArrowLeft, ChevronRight, Loader2, PenLine } from 'lucide-react'
 
 /**
  * Pagina del Percorso — Fase 3/4 di docs/diario-a-libro-piano.md. Dietro il flag
@@ -98,7 +96,15 @@ function PercorsoPageClassico({ diarioId, percorsoId }: { diarioId: string; perc
   )
 }
 
-/** Pagina di riepilogo del libro — vedi Fase 3 per il dettaglio. */
+/**
+ * Pagina minima "solo uscite" — prima era il riepilogo completo del Percorso (copertina,
+ * "Apri la Guida"/"Apri in modalità classica", generazione guida in blocco): eliminata su
+ * richiesta esplicita dell'utente. Raggiunta solo dal badge "N uscite" del Sommario e dal
+ * pallino "Reportage" di ogni pagina di Guida — in entrambi i casi chi arriva qui vuole *solo*
+ * l'elenco delle uscite, non un secondo punto d'ingresso alla Guida (già raggiunta da lì). La
+ * generazione in blocco è stata spostata sulla prima pagina della Guida (GuideBookPage.tsx),
+ * non eliminata — vedi lì per il perché.
+ */
 function PercorsoPageLibro({ diarioId, percorsoId, basePath }: { diarioId: string; percorsoId: string; basePath: string }) {
   const bd = useGuidaBookData(percorsoId)
 
@@ -116,40 +122,8 @@ function PercorsoPageLibro({ diarioId, percorsoId, basePath }: { diarioId: strin
       ) : (
         <>
           <div className="max-w-[900px] mx-auto px-4 pt-6 pb-2">
-            <div className="rounded-3xl bg-gradient-to-br from-forest-800 to-forest-900 text-white px-6 py-8 mb-6">
-              <p className="uppercase text-[11px] tracking-[0.2em] text-terra-300 font-bold mb-2">Percorso</p>
-              <h1 className="font-display text-2xl sm:text-3xl font-bold mb-4">{bd.hike.title}</h1>
-              <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-white/80">
-                <span>{(bd.hike.distanceMeters / 1000).toFixed(1)} km</span>
-                <span>{Math.round(bd.hike.elevationGain)} m dislivello</span>
-                {bd.hike.estimatedTimeSeconds != null && <span>{formatDuration(bd.hike.estimatedTimeSeconds)}</span>}
-                {bd.hike.plannedDate && <span>{format(new Date(bd.hike.plannedDate), 'd MMMM yyyy', { locale: it })}</span>}
-              </div>
-            </div>
-
-            {/* Non più il CTA principale — dall'indice del Diario si arriva già dritti in Guida
-                (feedback dell'utente): questi restano solo due link secondari, per chi capita su
-                questa pagina dal pallino "Reportage" di una pagina di Guida e vuole tornarci. */}
-            <div className="flex flex-wrap items-center gap-4 mb-6 text-[13px]">
-              <Link href={`${basePath}/guida/il_percorso`} className="inline-flex items-center gap-1.5 text-stone-500 underline underline-offset-2 hover:text-stone-700">
-                <BookOpen className="w-3.5 h-3.5" /> Apri la Guida
-              </Link>
-              <Link href={`/guida/${encodeURIComponent(percorsoId)}`} className="text-stone-500 underline underline-offset-2 hover:text-stone-700">
-                Apri in modalità classica
-              </Link>
-            </div>
-
-            <GuideGenerationPanel
-              hike={bd.hike}
-              percorsoId={percorsoId}
-              hasAiAccess={bd.hasAiAccess}
-              aiUnavailable={bd.aiUnavailable}
-              trialExpired={bd.trialExpired}
-              onHikeUpdate={bd.onHikeUpdate}
-            />
+            <h1 className="font-display text-xl font-bold text-stone-800">{bd.hike.title}</h1>
           </div>
-
-          <div className="max-w-[900px] mx-auto px-4 pb-2" />
           <ReportageSection
             diarioId={diarioId}
             percorsoId={percorsoId}

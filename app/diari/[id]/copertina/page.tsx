@@ -12,15 +12,13 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
-import { DiarioCover } from '@/components/diario/DiarioCover'
+import { DiarioCoverThumb } from '@/components/diario/DiarioCoverThumb'
 import { uploadDiaryCover } from '@/lib/diaryCoverUpload'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
-import { PDF_PAGE_W, PDF_PAGE_H } from '@/lib/pdfPageGeometry'
 import { normalizeDiaryConfig, DEFAULT_DIARY_CONFIG, type DiaryConfig } from '@/lib/diaryConfig'
 import { ArrowLeft, ImageIcon, Loader2, Trash2 } from 'lucide-react'
 
 const PREVIEW_W = 220
-const PREVIEW_SCALE = PREVIEW_W / PDF_PAGE_W
 
 export default function DiarioCopertinaPage() {
   const params = useParams<{ id: string }>()
@@ -94,19 +92,14 @@ export default function DiarioCopertinaPage() {
         ) : (
           <div className="flex flex-col sm:flex-row gap-8 items-start">
             <div className="shrink-0 mx-auto sm:mx-0" style={{ width: PREVIEW_W }}>
-              <div
-                className="rounded-lg overflow-hidden shadow-lg"
-                style={{ width: PREVIEW_W, height: PDF_PAGE_H * PREVIEW_SCALE, position: 'relative' }}
-              >
-                <div style={{ transform: `scale(${PREVIEW_SCALE})`, transformOrigin: 'top left' }}>
-                  <DiarioCover
-                    coverUrl={config.coverUrl}
-                    diaryTitle={config.title}
-                    diarySubtitle={config.subtitle}
-                    diaryAuthor={config.author}
-                  />
-                </div>
-              </div>
+              <DiarioCoverThumb
+                coverUrl={config.coverUrl}
+                width={PREVIEW_W}
+                title={config.title}
+                subtitle={config.subtitle}
+                author={config.author}
+                className="rounded-lg shadow-lg"
+              />
 
               <button
                 type="button"

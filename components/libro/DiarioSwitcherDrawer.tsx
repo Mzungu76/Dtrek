@@ -4,9 +4,10 @@
 // onTitleClick), che ora è la home dell'app: senza questo, l'unico modo per vedere gli altri
 // Diari sarebbe tornare allo scaffale (/diari) perdendo il punto in cui si era.
 //
-// Elenco compatto (icona + titolo + conteggio Percorsi), non le copertine ricche dello scaffale —
-// quelle restano lì, raggiungibile dal link in fondo insieme a "+ Nuovo Diario" e
-// "Personalizza copertina" (già esistenti, non duplicati qui).
+// Elenco compatto: ogni riga mostra una miniatura dell'EFFETTIVA copertina del Diario (foto o
+// gradiente di default, più titolo/sottotitolo/autore in scala — DiarioCoverThumb con `width`,
+// richiesto esplicitamente dall'utente) più conteggio Percorsi. Le copertine grandi dello
+// scaffale restano lì, raggiungibile dal link in fondo insieme a "+ Nuovo Diario".
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { ChevronRight, Loader2, Pencil, X } from 'lucide-react'
@@ -75,9 +76,14 @@ export default function DiarioSwitcherDrawer({
                     onClick={onClose}
                     className="flex items-center gap-3 flex-1 min-w-0"
                   >
-                    <div className="w-9 h-11 rounded-[3px] shrink-0 overflow-hidden">
-                      <DiarioCoverThumb coverUrl={d.coverUrl} />
-                    </div>
+                    <DiarioCoverThumb
+                      coverUrl={d.coverUrl}
+                      width={36}
+                      title={d.title}
+                      subtitle={d.subtitle}
+                      author={d.author}
+                      className="rounded-[3px] shrink-0"
+                    />
                     <div className="min-w-0 flex-1">
                       <p className="truncate" style={{ fontSize: 13.5, fontWeight: 600, color: INK_TEXT }}>{d.title}</p>
                       <p style={{ fontSize: 11, color: INK_MUTED }}>
