@@ -438,6 +438,30 @@ quella del vecchio Diario singolo per utente, `user_settings.diary_config->>'cov
   riguarda — costruire un editor dedicato più leggero avrebbe duplicato una funzione che esiste
   già e scrive esattamente nel campo giusto.
 
+**Fase 13 — Pagina dedicata per la copertina, default coerente ovunque** ✅ **COMPLETATA**
+
+Due correzioni dopo aver visto Fase 12 in uso: (1) la matita apriva `/pubblica`, l'intera console
+di pubblicazione del libro (esportazione PDF, condivisione, statistiche, escursioni escluse) — non
+quello che l'utente intendeva per "modificare la copertina"; (2) i placeholder senza foto erano
+diversi da elenco a elenco (icona su panna nel drawer/Sommario, gradienti ciclici nello scaffale)
+e nessuno dei due era "quella di default" che l'utente vede davvero — il verde con profilo di
+montagne di `DiarioCover.tsx`, usato sulla copertina stampabile.
+
+- Nuova pagina `/diari/[id]/copertina` (`app/diari/[id]/copertina/page.tsx`): foto, titolo,
+  sottotitolo, autore — nient'altro. Stessa fonte dati di `/pubblica` (GET/PATCH
+  `/api/diaries/[id]/config`, che legge/scrive le colonne di `diaries` — nessuna duplicazione di
+  logica di salvataggio, "corpo sempre completo" mantenuto anche qui per non perdere le
+  impostazioni di pubblicazione che questa pagina non tocca). Anteprima dal vivo con lo stesso
+  componente `DiarioCover` della copertina stampabile (scalato, non un componente a sé), pulsanti
+  "Cambia foto" e "Rimuovi foto" (torna al verde di default). `/pubblica` resta invariata (i suoi
+  stessi controlli restano lì, un utente potrebbe già averci fatto l'abitudine) — solo i link da
+  scaffale e drawer puntano ora qui.
+- Nuovo `components/diario/DiarioCoverThumb.tsx`: la stessa miniatura (foto se presente, altrimenti
+  il gradiente verde + profilo di montagne del default reale, semplificato per leggibilità a
+  dimensioni piccole) riusata da scaffale (`DiarioCoverCard`), drawer (`DiarioSwitcherDrawer`) e
+  cima del Sommario (`DiarioIndexLibro`) — prima ciascuno aveva il proprio placeholder, ora ce n'è
+  uno solo, coerente con quanto stampato.
+
 ## File critici
 - `components/guida/GuideReader.tsx`, `components/resoconto/ReportReader.tsx` — sorgente da cui
   estratto in Fase 0, non riscritti.
@@ -494,6 +518,14 @@ quella del vecchio Diario singolo per utente, `user_settings.diary_config->>'cov
   scoperti: `diaries.cover_url` è la STESSA colonna che `/pubblica` legge/scrive come
   `config.coverUrl` (non due campi distinti) — il gap era solo nei dati storici del Diario di
   default, colmato dal backfill sopra.
+- `app/diari/[id]/copertina/page.tsx` — nuova in Fase 13, riusa `/api/diaries/[id]/config` e
+  `components/diario/DiarioCover.tsx` (stessa anteprima della copertina stampabile, scalata).
+- `components/diario/DiarioCoverThumb.tsx` — nuovo in Fase 13, riusato da `app/diari/page.tsx`
+  (`DiarioCoverCard`), `components/libro/DiarioSwitcherDrawer.tsx` e `app/diari/[id]/page.tsx`
+  (cima del Sommario) al posto di tre placeholder diversi.
+- `app/diari/[id]/pubblica/page.tsx` — invariata in Fase 13: i suoi controlli foto/testi copertina
+  restano (un utente potrebbe già averci fatto l'abitudine), solo i link da scaffale/drawer non
+  puntano più qui per personalizzare la copertina.
 
 ## Verifica
 - Fase 0-2: `tsc --noEmit`, `eslint`, `npm run build` (la build fallisce nella sandbox corrente per

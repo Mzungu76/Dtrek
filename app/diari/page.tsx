@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import BookSpineShadow from '@/components/libro/BookSpineShadow'
+import { DiarioCoverThumb } from '@/components/diario/DiarioCoverThumb'
 import type { DiarySummary } from '@/app/api/diaries/route'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import { FONT } from '@/lib/designTokens'
@@ -107,16 +108,6 @@ function DiariPageClassico() {
   )
 }
 
-// Palette delle copertine — nessun campo "tema colore" esiste nello schema reale (solo
-// diaries.cover_url, una foto), a differenza del mockup che alternava 3 gradienti come scelta
-// dell'utente. Qui si cicla per indice: varietà visiva senza inventare un campo nuovo per
-// qualcosa che nessuno può ancora impostare.
-const COVER_GRADIENTS = [
-  'linear-gradient(160deg,#2a4d1f,#152112)',
-  'linear-gradient(160deg,#9a4a22,#4d2213)',
-  'linear-gradient(160deg,#8a6a1f,#3d2e0d)',
-]
-
 /**
  * Copertina di un Diario — stessa identità visiva validata nel mockup "Diario a schermo intero"
  * (artifact 2e1f7d0a-5d69-4e17-9c8b-038aa651e13b, funzione shelfCoverHtml/.bk-cover): dorso di
@@ -127,24 +118,17 @@ const COVER_GRADIENTS = [
  * verificare a schermo in questa sandbox.
  */
 function DiarioCoverCard({ d, index }: { d: DiarySummary; index: number }) {
-  const gradient = COVER_GRADIENTS[index % COVER_GRADIENTS.length]
   return (
-    // Non un unico <Link> come nel mockup: "Personalizza" (foto/testi di copertina, già esistenti
-    // in /pubblica — non un editor nuovo) deve restare un link a sé, non annidato nel link che
-    // apre il Diario.
+    // Non un unico <Link> come nel mockup: "Personalizza" (foto/testi di copertina, pagina a sé —
+    // vedi /diari/[id]/copertina) deve restare un link a sé, non annidato nel link che apre il
+    // Diario.
     <div className="flex flex-col items-center gap-3 shrink-0 w-[168px] sm:w-[190px]">
       <Link href={`/diari/${encodeURIComponent(d.id)}`} className="w-full flex flex-col items-center">
       <div
         className="relative w-full rounded-[6px] overflow-hidden"
-        style={{
-          aspectRatio: '3 / 4',
-          background: d.coverUrl ? undefined : gradient,
-          boxShadow: '0 22px 44px -18px rgba(0,0,0,0.6), 0 2px 0 rgba(255,255,255,0.06) inset',
-        }}
+        style={{ aspectRatio: '3 / 4', boxShadow: '0 22px 44px -18px rgba(0,0,0,0.6), 0 2px 0 rgba(255,255,255,0.06) inset' }}
       >
-        {d.coverUrl && (
-          <img src={d.coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
-        )}
+        <DiarioCoverThumb coverUrl={d.coverUrl} className="absolute inset-0" />
         {d.coverUrl && <div className="absolute inset-0 bg-gradient-to-b from-black/10 to-black/60" />}
         {/* Taglio pagine — un filo di carta sul bordo destro, l'unico indizio "è un libro" utile
             visto così, di taglio. */}
@@ -195,7 +179,7 @@ function DiarioCoverCard({ d, index }: { d: DiarySummary; index: number }) {
       </span>
       </Link>
       <Link
-        href={`/diari/${encodeURIComponent(d.id)}/pubblica`}
+        href={`/diari/${encodeURIComponent(d.id)}/copertina`}
         className="inline-flex items-center gap-1.5 text-[11.5px]"
         style={{ color: 'rgba(255,255,255,0.45)' }}
       >

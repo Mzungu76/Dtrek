@@ -8,6 +8,7 @@ import SectionEyebrow from '@/components/bacheca/SectionEyebrow'
 import RecoSuggestedRow from '@/components/bacheca/RecoSuggestedRow'
 import BookPage from '@/components/libro/BookPage'
 import DiarioSwitcherDrawer from '@/components/libro/DiarioSwitcherDrawer'
+import { DiarioCoverThumb } from '@/components/diario/DiarioCoverThumb'
 import { GalleryMapThumb } from '@/components/routehub/BottomGallery'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 import { ctsLabel } from '@/lib/trailScore'
@@ -391,9 +392,9 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
               scaffale e del drawer, non un'immagine a sé. */}
           <div
             className="w-14 h-[74px] rounded-[4px] shrink-0 overflow-hidden"
-            style={{ background: detail.coverUrl ? undefined : '#e9dcb8', boxShadow: '0 6px 14px -8px rgba(63,58,34,0.45)' }}
+            style={{ boxShadow: '0 6px 14px -8px rgba(63,58,34,0.45)' }}
           >
-            {detail.coverUrl && <img src={detail.coverUrl} alt="" className="w-full h-full object-cover" />}
+            <DiarioCoverThumb coverUrl={detail.coverUrl} />
           </div>
           <div className="min-w-0 flex-1">
             <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 10, color: '#8a7f52', margin: '0 0 3px' }}>
