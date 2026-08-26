@@ -377,20 +377,36 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
     <>
       <DiarioSwitcherDrawer open={switcherOpen} onClose={() => setSwitcherOpen(false)} currentDiaryId={diaryId} />
       <BookPage
-        diarioTitle={detail.title}
+        // Titolo statico invece del nome di QUESTO Diario: da quando questo bottone apre il
+        // drawer di tutti i Diari (non solo un link "torna a questo Sommario"), mostrare qui il
+        // nome di un solo Diario sarebbe fuorviante — il vero titolo resta comunque subito sotto,
+        // nell'h1 della pagina.
+        diarioTitle="I miei Diari"
         indexHref="/diari"
         onTitleClick={() => setSwitcherOpen(true)}
         sectionLabel="Indice"
       >
-        <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 10, color: '#8a7f52', margin: '0 0 3px' }}>
-          Sommario
-        </p>
-        <h1 style={{ fontFamily: FONT.display, fontWeight: 600, fontSize: 21, color: '#3f3a22', margin: '0 0 3px' }}>
-          {detail.title}
-        </h1>
-        <p style={{ fontFamily: FONT.lora, fontStyle: 'italic', fontSize: 12, color: '#8a7f52', margin: '0 0 14px' }}>
-          {detail.subtitle ? `${detail.subtitle} — ` : ''}{detail.percorsi.length} {detail.percorsi.length === 1 ? 'percorso' : 'percorsi'}
-        </p>
+        <div className="flex items-start gap-3 mb-3">
+          {/* Copertina del Diario in cima al Sommario — stesso campo (detail.coverUrl) dello
+              scaffale e del drawer, non un'immagine a sé. */}
+          <div
+            className="w-14 h-[74px] rounded-[4px] shrink-0 overflow-hidden"
+            style={{ background: detail.coverUrl ? undefined : '#e9dcb8', boxShadow: '0 6px 14px -8px rgba(63,58,34,0.45)' }}
+          >
+            {detail.coverUrl && <img src={detail.coverUrl} alt="" className="w-full h-full object-cover" />}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 10, color: '#8a7f52', margin: '0 0 3px' }}>
+              Sommario
+            </p>
+            <h1 style={{ fontFamily: FONT.display, fontWeight: 600, fontSize: 21, color: '#3f3a22', margin: '0 0 3px' }}>
+              {detail.title}
+            </h1>
+            <p style={{ fontFamily: FONT.lora, fontStyle: 'italic', fontSize: 12, color: '#8a7f52', margin: 0 }}>
+              {detail.subtitle ? `${detail.subtitle} — ` : ''}{detail.percorsi.length} {detail.percorsi.length === 1 ? 'percorso' : 'percorsi'}
+            </p>
+          </div>
+        </div>
 
         <Link
           href={`/upload?diaryId=${encodeURIComponent(diaryId)}`}

@@ -405,6 +405,39 @@ raggiungibile (non più il primo schermo, ma mai nascosto).
   poi); ogni altra pagina del libro (Guida/Reportage/pubblica) continua a navigare normalmente,
   invariata.
 
+**Fase 12 — Copertine reali nel drawer, nello scaffale e in cima al Sommario** ✅ **COMPLETATA**
+
+Richiesta dopo aver visto il drawer di Fase 11 con copertine vuote (icona segnalibro) anche per
+"Il mio Diario" (56 percorsi, non certo un Diario nuovo). Causa reale, non un bug di questa
+sessione: `diaries.cover_url` (letto da scaffale/drawer/Sommario) è sempre stato NULL per il
+Diario di default di ogni utente — il backfill che l'ha creato (Fase 0 di "Diario come fulcro")
+è avvenuto prima che esistesse `diaries` come tabella, quando l'unica copertina possibile era
+quella del vecchio Diario singolo per utente, `user_settings.diary_config->>'coverUrl'`
+(`add_diary_config.sql`) — mai migrata sul nuovo campo.
+
+- Nuovo `supabase/migrations/backfill_default_diary_cover.sql`: copia quella foto (se esiste) su
+  `diaries.cover_url` del Diario di default, solo dove `cover_url` è ancora NULL — idempotente,
+  non tocca titolo/sottotitolo/autore (non richiesti), non sovrascrive mai una copertina già
+  impostata dopo. Nessuna riga di codice applicativo cambiata per questo: `/api/diaries` e
+  `/api/diaries/[id]` leggono già `cover_url` direttamente, il gap era solo nei dati.
+- `DiarioSwitcherDrawer.tsx`: ogni riga guadagna un'icona a matita (link a
+  `/diari/[id]/pubblica`, sibling del link che apre il Sommario — non annidato, stesso principio
+  di `DiarioCoverCard` in `app/diari/page.tsx`). Non serve toccare la resa della copertina stessa
+  (`d.coverUrl`): il codice la mostrava già correttamente, mancavano solo i dati (vedi sopra).
+- `DiarioIndexLibro` (`app/diari/[id]/page.tsx`): la copertina del Diario (stesso
+  `detail.coverUrl` di scaffale/drawer) compare ora accanto al titolo in cima al Sommario.
+- Il titolo in cima alla pagina (il bottone che apre il drawer) mostra ora sempre "I miei Diari"
+  invece del nome di questo Diario specifico — da quando apre un drawer con TUTTI i Diari,
+  ripetere il nome di uno solo era fuorviante; il vero titolo del Diario resta subito sotto,
+  nell'h1 della pagina, invariato.
+- **Decisione deliberata, non una nuova pagina**: "Personalizza copertina" (matita nel drawer,
+  già anche nello scaffale da Fase 6) continua a puntare a `/diari/[id]/pubblica` — quella pagina
+  ha già, sempre visibili in una barra laterale fissa, sia il caricamento foto sia i testi
+  (titolo/sottotitolo/autore): "ogni aspetto della copertina" richiesto è già interamente
+  editabile lì, e infatti è la STESSA colonna `diaries.cover_url` che questo giro di feedback
+  riguarda — costruire un editor dedicato più leggero avrebbe duplicato una funzione che esiste
+  già e scrive esattamente nel campo giusto.
+
 ## File critici
 - `components/guida/GuideReader.tsx`, `components/resoconto/ReportReader.tsx` — sorgente da cui
   estratto in Fase 0, non riscritti.
@@ -455,6 +488,12 @@ raggiungibile (non più il primo schermo, ma mai nascosto).
 - `supabase/migrations/add_last_diary_id.sql`, `app/api/user-settings/route.ts`,
   `lib/sync/userSettingsStore.ts` — `lastDiaryId`, Fase 11, stesso pattern di
   `diario_libro_enabled`.
+- `supabase/migrations/backfill_default_diary_cover.sql` — Fase 12, backfill una tantum di
+  `diaries.cover_url` dal vecchio `user_settings.diary_config->>'coverUrl'`.
+- `app/api/diaries/[id]/config/route.ts`, `lib/diaryConfig.ts` — non toccati in Fase 12, solo
+  scoperti: `diaries.cover_url` è la STESSA colonna che `/pubblica` legge/scrive come
+  `config.coverUrl` (non due campi distinti) — il gap era solo nei dati storici del Diario di
+  default, colmato dal backfill sopra.
 
 ## Verifica
 - Fase 0-2: `tsc --noEmit`, `eslint`, `npm run build` (la build fallisce nella sandbox corrente per
