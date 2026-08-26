@@ -16,6 +16,7 @@ interface HistoricalProps {
   lat: number
   lon: number
   date: string  // YYYY-MM-DD
+  panelClassName?: string
 }
 
 interface ForecastProps {
@@ -23,6 +24,7 @@ interface ForecastProps {
   lat: number
   lon: number
   days?: number
+  panelClassName?: string
 }
 
 interface PlannedProps {
@@ -33,6 +35,11 @@ interface PlannedProps {
   altitudeMax?: number   // summit altitude in meters
   elevationGain?: number // total elevation gain in meters
   days?: number
+  /** Sovrascrive lo sfondo bianco della card — usato dalle pagine "a libro" del Diario
+   *  (components/libro/GuideBookPage.tsx), dove una card bianca stona sulla pergamena. Assente
+   *  ovunque il widget resti nel suo contesto originale (GuideReader/ResocontoHub), che non
+   *  cambia. */
+  panelClassName?: string
 }
 
 type Props = HistoricalProps | ForecastProps | PlannedProps
@@ -209,7 +216,7 @@ export default function WeatherWidget(props: Props) {
     const tMax  = Math.max(...hourly.map(h => h.temperature))
 
     return (
-      <div className="rounded-2xl border border-stone-100 bg-white p-4">
+      <div className={`rounded-2xl border p-4 ${props.panelClassName ?? 'border-stone-100 bg-white'}`}>
         <p className="text-xs font-semibold text-stone-400 uppercase tracking-wide mb-2">Meteo del giorno</p>
         <div className="flex items-center gap-4">
           <span className="text-4xl leading-none">{info.emoji}</span>
@@ -241,7 +248,7 @@ export default function WeatherWidget(props: Props) {
   // ── Forecast mode ────────────────────────────────────────────────────────────
   if (props.mode === 'forecast') {
     return (
-      <div className="rounded-2xl border border-stone-100 bg-white p-4">
+      <div className={`rounded-2xl border p-4 ${props.panelClassName ?? 'border-stone-100 bg-white'}`}>
         <p className="text-xs font-semibold text-stone-400 uppercase tracking-wide mb-3">Previsioni meteo</p>
         <DayStrip daily={daily} />
         {advice.length > 0 && (
@@ -297,7 +304,7 @@ export default function WeatherWidget(props: Props) {
   // delle emoji di chrome — l'emoji grande della condizione meteo resta, è un linguaggio già
   // universale, non un'icona di interfaccia.
   return (
-    <div className="rounded-2xl border border-stone-100 bg-white overflow-hidden p-4">
+    <div className={`rounded-2xl border overflow-hidden p-4 ${(props as PlannedProps).panelClassName ?? 'border-stone-100 bg-white'}`}>
 
       {/* Header */}
       <div className="flex items-start gap-4">

@@ -23,8 +23,15 @@ import { buildGuideDisplaySections, renderGuideWidget, type DisplaySection } fro
 import type { GuideSectionKey } from '@/lib/guideSections'
 import { normalizeGuideNotices } from '@/lib/guideNotices'
 import { FONT } from '@/lib/designTokens'
-import { Loader2 } from 'lucide-react'
+import { Loader2, PenLine } from 'lucide-react'
 import GuideGenerationPanel from './GuideGenerationPanel'
+import MagazineBody from '@/components/editorial/MagazineBody'
+
+// Sfondo dei widget "a card bianca" (Meteo) dentro il libro — un tono più scuro della pergamena
+// stessa (#fbf6e8), non bianco: sull'estetica calda della pagina una card bianca stonava (feedback
+// dell'utente dopo la prima verifica a schermo). Stessi toni di BookPage.tsx (PAPER_HAIRLINE/
+// PILL_BG), qui non riesportati da lì perché usati solo in questo file.
+const WEATHER_PANEL_CLASS = 'border-[#e4d9bd] bg-[#f1e9d2]'
 
 const ALWAYS_PRESENT: GuideSectionKey[] = ['il_percorso', 'dati_sicurezza', 'verificato', 'comfort', 'sapori', 'consigli']
 
@@ -83,11 +90,18 @@ export default function GuideBookPage({ basePath, diarioTitle, percorsoId, secti
   const idx = present.findIndex(s => s.guideKey === sectionKey)
   const current = idx >= 0 ? present[idx] : undefined
 
-  const sections: BookPageSection[] = present.map(s => ({
-    key: s.guideKey as string,
-    label: s.title,
-    href: `${basePath}/guida/${s.guideKey}`,
-  }))
+  const sections: BookPageSection[] = [
+    ...present.map(s => ({
+      key: s.guideKey as string,
+      label: s.title,
+      href: `${basePath}/guida/${s.guideKey}`,
+    })),
+    // Non è una sezione della Guida — è l'uscita verso il Reportage di questo Percorso. Vive qui
+    // (e non nell'indice del Diario, che ora porta dritto qui dentro) perché altrimenti, uscita
+    // dall'indice, non ci sarebbe più un modo per raggiungere le uscite di questo Percorso da
+    // nessuna pagina della Guida — vedi "Decisione aperta" in docs/diario-a-libro-piano.md.
+    { key: 'reportage', label: 'Reportage', href: basePath, icon: <PenLine className="w-3 h-3" /> },
+  ]
 
   if (!current) {
     return (
@@ -108,6 +122,7 @@ export default function GuideBookPage({ basePath, diarioTitle, percorsoId, secti
     scores: bd.scores, dtmProfile: bd.dtmProfile, guideNotices, guideSources,
     safetyDetails: bd.safetyDetails, poiList: bd.poiList, highlightedPoiId: bd.highlightedPoiId, onPoiTap: bd.onPoiTap,
     isLinearRoute: bd.isLinearRoute, returnOptions: bd.returnOptions, endPoint: bd.endPoint, natura: bd.natura,
+    weatherPanelClassName: WEATHER_PANEL_CLASS,
   })
 
   return (
@@ -131,9 +146,9 @@ export default function GuideBookPage({ basePath, diarioTitle, percorsoId, secti
         {current.title}
       </h1>
       {current.body?.trim() && (
-        <p style={{ fontFamily: FONT.lora, fontSize: 14.5, lineHeight: 1.7, color: '#4a4530', whiteSpace: 'pre-wrap', margin: '0 0 16px' }}>
-          {current.body}
-        </p>
+        <div style={{ fontFamily: FONT.lora, fontSize: 14.5, lineHeight: 1.7, color: '#4a4530', marginBottom: 16 }}>
+          <MagazineBody body={current.body} />
+        </div>
       )}
       {widget}
       {!current.body?.trim() && (

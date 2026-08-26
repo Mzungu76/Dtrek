@@ -127,14 +127,14 @@ function PercorsoPageLibro({ diarioId, percorsoId, basePath }: { diarioId: strin
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-4 mb-6">
-              <Link
-                href={`${basePath}/guida/il_percorso`}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-terra-600 text-white text-sm font-semibold hover:bg-terra-700 transition-colors"
-              >
-                <BookOpen className="w-4 h-4" /> Apri la Guida
+            {/* Non più il CTA principale — dall'indice del Diario si arriva già dritti in Guida
+                (feedback dell'utente): questi restano solo due link secondari, per chi capita su
+                questa pagina dal pallino "Reportage" di una pagina di Guida e vuole tornarci. */}
+            <div className="flex flex-wrap items-center gap-4 mb-6 text-[13px]">
+              <Link href={`${basePath}/guida/il_percorso`} className="inline-flex items-center gap-1.5 text-stone-500 underline underline-offset-2 hover:text-stone-700">
+                <BookOpen className="w-3.5 h-3.5" /> Apri la Guida
               </Link>
-              <Link href={`/guida/${encodeURIComponent(percorsoId)}`} className="text-[13px] text-stone-500 underline underline-offset-2 hover:text-stone-700">
+              <Link href={`/guida/${encodeURIComponent(percorsoId)}`} className="text-stone-500 underline underline-offset-2 hover:text-stone-700">
                 Apri in modalità classica
               </Link>
             </div>

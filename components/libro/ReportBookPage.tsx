@@ -15,6 +15,7 @@ import { PhotoLightbox } from '@/app/resoconto/[id]/PhotoLightbox'
 import { FONT } from '@/lib/designTokens'
 import { Loader2 } from 'lucide-react'
 import ReportGenerationPanel from './ReportGenerationPanel'
+import MagazineBody from '@/components/editorial/MagazineBody'
 
 const ALWAYS_PRESENT: ReportFixedSectionKey[] = ['dati_punteggi', 'andamento']
 
@@ -142,9 +143,9 @@ export default function ReportBookPage({ basePath, diarioTitle, activityId, page
         {current.title}
       </h1>
       {chapterBody?.trim() && (
-        <p style={{ fontFamily: FONT.lora, fontSize: 14.5, lineHeight: 1.7, color: '#4a4530', whiteSpace: 'pre-wrap', margin: '0 0 16px' }}>
-          {chapterBody}
-        </p>
+        <div style={{ fontFamily: FONT.lora, fontSize: 14.5, lineHeight: 1.7, color: '#4a4530', marginBottom: 16 }}>
+          <MagazineBody body={chapterBody} />
+        </div>
       )}
       {widget}
       {!content.trim() && (
