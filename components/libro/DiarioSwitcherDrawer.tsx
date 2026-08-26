@@ -9,7 +9,7 @@
 // "Personalizza copertina" (già esistenti, non duplicati qui).
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { BookMarked, ChevronRight, Loader2, X } from 'lucide-react'
+import { BookMarked, ChevronRight, Loader2, Pencil, X } from 'lucide-react'
 import type { DiarySummary } from '@/app/api/diaries/route'
 import { FONT } from '@/lib/designTokens'
 
@@ -61,29 +61,45 @@ export default function DiarioSwitcherDrawer({
             diaries.map(d => {
               const active = d.id === currentDiaryId
               return (
-                <Link
+                // Non un unico <Link> come nella riga precedente (pre pencil): la matita apre la
+                // copertina dell'editor completo in /pubblica (foto + testi, vedi quella pagina),
+                // un link a sé che non può stare annidato dentro quello che apre il Sommario.
+                <div
                   key={d.id}
-                  href={`/diari/${encodeURIComponent(d.id)}`}
-                  onClick={onClose}
-                  className="flex items-center gap-3 px-2 py-2.5 rounded-lg transition-colors"
+                  className="flex items-center gap-2 px-2 py-2 rounded-lg transition-colors"
                   style={active ? { background: PILL_BG } : undefined}
                 >
-                  <div
-                    className="w-9 h-11 rounded-[3px] shrink-0 flex items-center justify-center overflow-hidden"
-                    style={{ background: d.coverUrl ? undefined : '#e9dcb8' }}
+                  <Link
+                    href={`/diari/${encodeURIComponent(d.id)}`}
+                    onClick={onClose}
+                    className="flex items-center gap-3 flex-1 min-w-0"
                   >
-                    {d.coverUrl
-                      ? <img src={d.coverUrl} alt="" className="w-full h-full object-cover" />
-                      : <BookMarked className="w-4 h-4" style={{ color: '#c9b98a' }} />}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate" style={{ fontSize: 13.5, fontWeight: 600, color: INK_TEXT }}>{d.title}</p>
-                    <p style={{ fontSize: 11, color: INK_MUTED }}>
-                      {d.percorsiCount} {d.percorsiCount === 1 ? 'percorso' : 'percorsi'}
-                    </p>
-                  </div>
-                  {active && <ChevronRight className="w-3.5 h-3.5 shrink-0" style={{ color: INK_MUTED }} />}
-                </Link>
+                    <div
+                      className="w-9 h-11 rounded-[3px] shrink-0 flex items-center justify-center overflow-hidden"
+                      style={{ background: d.coverUrl ? undefined : '#e9dcb8' }}
+                    >
+                      {d.coverUrl
+                        ? <img src={d.coverUrl} alt="" className="w-full h-full object-cover" />
+                        : <BookMarked className="w-4 h-4" style={{ color: '#c9b98a' }} />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate" style={{ fontSize: 13.5, fontWeight: 600, color: INK_TEXT }}>{d.title}</p>
+                      <p style={{ fontSize: 11, color: INK_MUTED }}>
+                        {d.percorsiCount} {d.percorsiCount === 1 ? 'percorso' : 'percorsi'}
+                      </p>
+                    </div>
+                    {active && <ChevronRight className="w-3.5 h-3.5 shrink-0" style={{ color: INK_MUTED }} />}
+                  </Link>
+                  <Link
+                    href={`/diari/${encodeURIComponent(d.id)}/pubblica`}
+                    onClick={onClose}
+                    title="Personalizza copertina"
+                    className="shrink-0 p-1.5 rounded-full hover:opacity-70 transition-opacity"
+                    style={{ color: INK_MUTED }}
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
               )
             })
           )}
