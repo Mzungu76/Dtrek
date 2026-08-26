@@ -201,6 +201,51 @@ esplicitamente, non lasciati impliciti:
   Diario→Percorso→Guida/Reportage a pagine con dati reali, e solo dopo decidere se/quando flippare
   il default a `true` per tutti.
 
+**Fase 5 — Feedback dopo la prima verifica a schermo** ✅ **COMPLETATA**
+
+L'utente ha eseguito la migrazione, acceso il flag e verificato il flusso su dati reali. Due
+richieste emerse da quella verifica:
+
+- **"Approfondisci con Giulia" dentro le sezioni, non solo nel riepilogo** — `GuideGenerationPanel`
+  accetta ora un `sectionKey` opzionale: con `sectionKey` si comporta da trigger inline identico a
+  quello del lettore classico (`ApprofondisciTrigger`, riesportato — non duplicato — da
+  `components/editorial/SectionCard.tsx`), montato da `GuideBookPage.tsx` sotto ogni sezione priva
+  di testo. Cambia di conseguenza il gate di presenza: verificato/comfort/sapori/consigli sono ora
+  SEMPRE pagine raggiungibili (prima sparivano senza testo AI — la versione originale, coerente col
+  mockup ma incompatibile con l'idea di generarle da lì). Per il Reportage — che si genera per
+  intero, non per capitolo, quindi non esiste un "approfondisci questa sezione" vero — `ReportBookPage`
+  monta `ReportGenerationPanel` quando il Reportage non ha ancora contenuto, qualunque pagina si
+  stia guardando.
+- **Layout dello scaffale `/diari` e dell'indice del Diario** — rimasti nello stile "app moderna"
+  (card bianche, palette forest/stone) mentre Guida/Reportage erano già a pergamena: lo scarto
+  visivo segnalato. Il mockup validato (`2e1f7d0a-5d69-4e17-9c8b-038aa651e13b`, "Diario a schermo
+  intero" — ancora accessibile come artifact pubblicato, non nel repo) aveva già uno scaffale
+  (`renderShelf`/`.bk-cover`) e un indice (`renderIndexPage`/`.bk-index-*`) per il "Modello B"
+  scelto: entrambi ora portati nell'app reale, dietro lo stesso flag `diarioLibroEnabled` di Fase 4
+  (a flag spento restano `app/diari/page.tsx` e `app/diari/[id]/page.tsx` esattamente come prima —
+  rinominate `*Classico`, non riscritte).
+  - Scaffale: copertine verticali (rapporto 3:4, gradiente caldo o `coverUrl` reale, taglio pagine
+    sul bordo) — adattamento deliberato: riga scorrevole di link invece del carosello
+    drag/swipe a una copertina alla volta del mockup, perché una gestura del genere non si può
+    verificare a schermo in questa sandbox e un errore lì sarebbe silenzioso finché qualcuno non ci
+    prova sul serio. Nessun campo "tema colore" nello schema reale (solo `cover_url`, una foto): il
+    gradiente cicla per indice invece di essere una scelta salvata.
+  - Indice: **riusa `components/libro/BookPage.tsx`** (stessa running head/chrome di ogni altra
+    pagina del libro) con dentro l'elenco Percorsi in stile "Sommario" del mockup (anteprima
+    tracciato, stato uscite, tap → pagina di riepilogo del Percorso). "+ Nuovo percorso" collegato
+    a `/upload?diaryId=...` (una sola scelta invece del composer a due corsie della versione
+    classica — quello resta raggiungibile spegnendo il flag). **Differenza strutturale importante**
+    dal resto del piano: qui non esiste un "Apri in modalità classica" a cui rimandare, perché
+    l'indice condivide la STESSA URL della versione classica (scelta solo dal flag), non una route
+    a sé come `/guida/[id]`/`/resoconto/[id]` — funzioni più pesanti ("Percorsi per te", il composer
+    a due corsie) restano quindi raggiungibili solo spegnendo il flag. L'eliminazione del Diario
+    (distruttiva, rara) resta invece un'eccezione voluta: montata anche nella versione a libro,
+    sotto la pagina, perché è l'unica azione della vecchia pagina che non doveva sparire nemmeno a
+    flag acceso.
+  - **Non fatto**: la scorciatoia one-tap "Statistiche del Diario" del mockup non esiste nell'app
+    reale (nessuna vista statistiche filtrata per Diario, solo `/statistiche` globale) — non
+    riprodotta per non promettere una vista che non esiste; l'indice qui non ha quel link.
+
 ## File critici
 - `components/guida/GuideReader.tsx`, `components/resoconto/ReportReader.tsx` — sorgente da cui
   estratto in Fase 0, non riscritti.
@@ -220,6 +265,11 @@ esplicitamente, non lasciati impliciti:
   `.../guida/[sectionKey]/page.tsx`, `.../reportage/[activityId]/page.tsx`,
   `.../reportage/[activityId]/sezione/[n]/page.tsx` — il routing di Fase 3.
 - `lib/diario/useDiarioTitle.ts` — titolo del Diario per la running head, Fase 3.
+- `components/editorial/SectionCard.tsx` — `ApprofondisciTrigger` riesportato per Fase 5, non
+  duplicato.
+- `app/diari/page.tsx`, `app/diari/[id]/page.tsx` — scaffale e indice, Fase 5: contengono sia la
+  versione `*Classico` (invariata, a flag spento) sia quella a libro (`DiariPageLibro`/
+  `DiarioIndexLibro`).
 
 ## Verifica
 - Fase 0-2: `tsc --noEmit`, `eslint`, `npm run build` (la build fallisce nella sandbox corrente per
@@ -251,21 +301,27 @@ questo file è stato scritto:
 - Quei quattro commit non erano mai stati portati oltre `claude/dtrek-diary-focal-point-sziwkj`
   (né in `main`, né sul branch di routing `claude/dtrek-diary-routing-p1b5ou` da cui questa sessione
   è ripartita) — recuperati con un merge all'inizio di questa sessione prima di riprendere il piano.
-- **Fatto in questa sessione** (branch `claude/dtrek-diary-routing-p1b5ou`): Fase 3 (routing) per
-  intero, con la decisione sul pannello di generazione presa con l'utente (pannello nuovo e isolato,
-  non estrazione di `generateSections`), e Fase 4 (flag di rollout) per intero — vedi le rispettive
-  sezioni sopra per il dettaglio completo di cosa è stato costruito e cosa deliberatamente
-  rimandato a "modalità classica".
+- **Fatto in questa sessione** (branch `claude/dtrek-diary-routing-p1b5ou`, poi ripartito da `main`
+  due volte dopo ogni merge — vedi nota sotto): Fase 3 (routing), Fase 4 (flag di rollout) e Fase 5
+  (feedback dopo la prima verifica a schermo: "Approfondisci con Giulia" nelle sezioni, layout di
+  scaffale/indice) — vedi le rispettive sezioni sopra per il dettaglio completo di cosa è stato
+  costruito e cosa deliberatamente rimandato.
+- **Merge**: Fase 3+4 → PR #786, "Approfondisci con Giulia" nelle sezioni → PR #787, entrambe
+  mergiate in `main` (CI verde: `lint-typecheck-test` + Vercel). Dopo ogni merge il branch è stato
+  riavviato da `main` (`git checkout -B` + stash) invece di continuare sul branch già mergiato, per
+  seguire la convenzione di questo progetto (una PR già mergiata non va più allungata).
 - **Verifica fatta in questa sessione**: `tsc --noEmit` ed `eslint` puliti sull'intero progetto dopo
-  il merge di Fase 0-2, di nuovo dopo Fase 3 e di nuovo dopo Fase 4 (0 errori in tutti e tre i casi;
-  solo warning preesistenti non introdotti da questo lavoro).
-- **Mai verificato a schermo**: nessuna delle pagine scritte finora (Fase 0-4) è stata vista
-  renderizzata con dati reali — questa sandbox non ha credenziali Supabase, `npm run build` fallisce
-  per lo stesso motivo già documentato per Fase 0-2 (variabili d'ambiente assenti, non un errore
-  introdotto da questo lavoro). La migrazione `add_diario_libro_enabled.sql` non è stata eseguita
-  su nessun database reale.
-- **Prossimo passo — non più su questo piano, ma sull'ambiente reale**: eseguire la migrazione,
-  accendere il flag "Diario a libro (beta)" sul proprio account (Impostazioni → Impostazioni
-  avanzate), e verificare a schermo l'intero flusso Diario→Percorso→Guida/Reportage a pagine
-  (gate di presenza, generazione/rigenerazione AI, clamp del Reportage, link "Apri in modalità
-  classica" su ogni pagina) prima di decidere se/quando flippare il default del flag a `true`.
+  ogni fase (0 errori in tutti i casi; solo warning preesistenti non introdotti da questo lavoro —
+  65 al momento, uno in più delle 64 di partenza per il nuovo `<img>` di copertina nello scaffale,
+  stessa convenzione già in uso altrove nell'app).
+- **Trovato durante Fase 5**: il mockup validato (`2e1f7d0a-5d69-4e17-9c8b-038aa651e13b`) esiste
+  ancora come artifact pubblicato — non serve ricostruire lo scaffale/indice a memoria, la specifica
+  visiva completa (classi CSS, struttura HTML) è lì.
+- **Mai verificato a schermo**: nessuna delle pagine scritte in questa sessione (Fase 3-5) è stata
+  vista renderizzata con dati reali in QUESTA sandbox (nessuna credenziale Supabase). L'utente ha
+  però eseguito la migrazione di Fase 4 e verificato il flusso Fase 3-4 sul proprio ambiente reale
+  prima di chiedere i due ritocchi di Fase 5 — quei due ritocchi stessi non sono stati ancora
+  riverificati a schermo dopo essere stati scritti.
+- **Prossimo passo — sull'ambiente reale**: verificare a schermo i due cambi di Fase 5 (trigger
+  inline nelle sezioni, nuovo scaffale/indice a libro) sullo stesso account con il flag già acceso,
+  poi decidere se/quando flippare il default del flag a `true` per tutti.
