@@ -17,6 +17,7 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { ChevronLeft, ChevronRight, BookOpen } from 'lucide-react'
 import { FONT, TERRA } from '@/lib/designTokens'
+import BookSpineShadow from './BookSpineShadow'
 
 const PAPER_BG = '#fbf6e8'
 const PAPER_HAIRLINE = '#e4d9bd'
@@ -55,6 +56,7 @@ export default function BookPage({
 }: BookPageProps) {
   return (
     <div className="min-h-screen flex flex-col" style={{ background: PAPER_BG }}>
+      <BookSpineShadow variant="light" />
       <div
         className="flex items-center justify-between gap-3 px-5 sm:px-8 pt-5 pb-3 border-b sticky top-0 z-10"
         style={{ borderColor: PAPER_HAIRLINE, background: PAPER_BG }}

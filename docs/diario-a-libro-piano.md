@@ -356,6 +356,25 @@ programma", entrambe a larghezza libera dentro lo stesso flexbox). In `app/diari
   scelto, "Data" incluso — inverte l'array già filtrato/ordinato invece di aggiungere un
   comparatore per data (l'API lo restituisce già in `created_at desc`).
 
+**Fase 10 — "Piega" del libro sul bordo sinistro** ✅ **COMPLETATA**
+
+Richiesta: far percepire ogni schermata del Diario a libro come parte di un taccuino rilegato,
+con una piega elegante sul bordo sinistro. Nuovo `components/libro/BookSpineShadow.tsx`: un
+`<div>` fisso, largo 24px, con un gradiente statico (nessuna animazione, costo zero) che
+scurisce verso il bordo sinistro — due varianti di colore (`light` per la pergamena, `dark` per
+lo sfondo scuro dello scaffale), `pointer-events: none` per non intercettare mai tap/click.
+Montato in `BookPage.tsx` (quindi automaticamente su Sommario/Guida/Reportage/`/pubblica`, tutte
+le pagine che già usano quel guscio) e in `DiariPageLibro` (lo scaffale).
+
+**Scoped deliberatamente alle sole schermate del Diario a libro**, non a tutta l'app: le altre
+schermate (GuidaHub/ResocontoHub/RouteHub e il resto) restano fuori dal perimetro di questo piano
+per la stessa decisione architetturale di sempre (vedi sopra) — hanno palette/sfondi propri con
+cui una piega pensata per la pergamena o per lo scaffale scuro non è stata verificata. La pagina
+di riepilogo del Percorso (`PercorsoPageLibro` in
+`app/diari/[id]/percorsi/[percorsoId]/page.tsx`) non la riceve per lo stesso motivo: non usa
+ancora la palette pergamena (è rimasta nello stile "app moderna" fin dalla Fase 6, un gap
+preesistente non segnalato in questo giro di feedback).
+
 ## File critici
 - `components/guida/GuideReader.tsx`, `components/resoconto/ReportReader.tsx` — sorgente da cui
   estratto in Fase 0, non riscritti.
