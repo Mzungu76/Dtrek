@@ -6,9 +6,15 @@ import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import RouteThumb from '@/components/RouteThumb'
 import SectionEyebrow from '@/components/bacheca/SectionEyebrow'
 import RecoSuggestedRow from '@/components/bacheca/RecoSuggestedRow'
+import BookPage from '@/components/libro/BookPage'
 import type { DiarioDetail } from '@/app/api/diaries/[id]/route'
 import type { RecommendationCard } from '@/lib/routeBuilder/generateRecommendations'
-import { ArrowLeft, CheckCircle2, Loader2, Lock, LockOpen, Mountain, Route, Share2, Sparkles, Trash2 } from 'lucide-react'
+import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
+import { FONT } from '@/lib/designTokens'
+import {
+  ArrowLeft, CheckCircle2, ChevronRight, Loader2, Lock, LockOpen, Mountain, Plus, Route, Share2,
+  Sparkles, Trash2,
+} from 'lucide-react'
 
 /**
  * Eliminazione del Diario — Fase 6 di docs/diario-fulcro-piano.md. Mai un default silenzioso:
@@ -151,7 +157,7 @@ function Composer({ diaryId }: { diaryId: string }) {
   )
 }
 
-export default function DiarioDetailPage() {
+function DiarioDetailPageClassico() {
   const params = useParams<{ id: string }>()
   const [detail, setDetail] = useState<DiarioDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -270,4 +276,146 @@ export default function DiarioDetailPage() {
       </main>
     </div>
   )
+}
+
+const SWATCH_GRADIENTS = [
+  ['#e9ab64', '#c05a17'], ['#8cc894', '#277134'], ['#dcd8cc', '#8a7f6e'], ['#f2cd9d', '#9f4315'],
+]
+
+/**
+ * "Sommario" — indice del Diario come pagina del libro (docs/diario-a-libro-piano.md), stessa
+ * identità visiva validata nel mockup "Diario a schermo intero" (funzione renderIndexPage,
+ * classi .bk-index-*): occhiello "Sommario", titolo, elenco Percorsi con un'anteprima del
+ * tracciato, pagina di destinazione con un tap.
+ *
+ * Adattamento deliberato: qui e nella pagina di riepilogo del Percorso non c'è un "Apri in
+ * modalità classica" a cui rimandare come per Guida/Reportage (/guida/[id], /resoconto/[id]
+ * esistono come route a sé; questo indice invece condivide la STESSA URL della versione classica,
+ * scelta solo dal flag) — funzioni più pesanti (il composer a due corsie, "Percorsi per te")
+ * restano quindi raggiungibili solo spegnendo il flag. L'eliminazione del Diario (distruttiva,
+ * rara) resta invece raggiungibile anche qui, sotto la pagina, non rimandata a un'altra modalità
+ * che qui non esiste.
+ */
+function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
+  const [detail, setDetail] = useState<DiarioDetail | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetch(`/api/diaries/${encodeURIComponent(diaryId)}`)
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
+      .then(setDetail)
+      .catch(e => setError(e instanceof Error ? e.message : String(e)))
+  }, [diaryId])
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-sm px-6 text-center" style={{ background: '#fbf6e8', color: '#b3413a', fontFamily: FONT.body }}>
+        Impossibile caricare questo Diario: {error}
+      </div>
+    )
+  }
+  if (!detail) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#fbf6e8' }}>
+        <Loader2 className="w-6 h-6 animate-spin" style={{ color: '#a9915f' }} />
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <BookPage diarioTitle={detail.title} indexHref="/diari" sectionLabel="Indice">
+        <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 10, color: '#8a7f52', margin: '0 0 3px' }}>
+          Sommario
+        </p>
+        <h1 style={{ fontFamily: FONT.display, fontWeight: 600, fontSize: 21, color: '#3f3a22', margin: '0 0 3px' }}>
+          {detail.title}
+        </h1>
+        <p style={{ fontFamily: FONT.lora, fontStyle: 'italic', fontSize: 12, color: '#8a7f52', margin: '0 0 14px' }}>
+          {detail.subtitle ? `${detail.subtitle} — ` : ''}{detail.percorsi.length} {detail.percorsi.length === 1 ? 'percorso' : 'percorsi'}
+        </p>
+
+        <Link
+          href={`/upload?diaryId=${encodeURIComponent(diaryId)}`}
+          className="flex items-center gap-2 mb-3 px-3 py-2.5 rounded-lg"
+          style={{
+            color: '#c05a17', fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase',
+            letterSpacing: '0.05em', fontSize: 12, border: '1px dashed #d9b98a',
+          }}
+        >
+          <Plus className="w-3.5 h-3.5" /> Nuovo percorso
+        </Link>
+
+        {detail.percorsi.length === 0 ? (
+          <p style={{ fontFamily: FONT.body, fontSize: 13, color: '#8a7f52' }}>Nessun percorso ancora — comincia da qui.</p>
+        ) : (
+          <div className="flex flex-col">
+            {detail.percorsi.map((p, i) => {
+              const [c0, c1] = SWATCH_GRADIENTS[i % SWATCH_GRADIENTS.length]
+              return (
+                <Link
+                  key={p.id}
+                  href={`/diari/${encodeURIComponent(diaryId)}/percorsi/${encodeURIComponent(p.id)}`}
+                  className="flex items-center gap-2.5 py-2.5"
+                  style={{ borderBottom: '1px dotted #ddd0a3' }}
+                >
+                  <span
+                    className="w-[26px] h-[26px] rounded-md shrink-0 flex items-center justify-center"
+                    style={{ background: `linear-gradient(160deg, ${c0}, ${c1})` }}
+                  >
+                    {p.routePolyline && p.routePolyline.length > 1
+                      ? <RouteThumb polyline={p.routePolyline} color="#fff" strokeWidth={6} className="!w-[18px] !h-[18px]" />
+                      : <Mountain className="w-3.5 h-3.5 text-white/80" />}
+                  </span>
+                  <span className="flex-1 min-w-0 truncate" style={{ fontSize: 13.5, fontWeight: 600, color: '#3f3a22' }}>
+                    {p.title}
+                  </span>
+                  <span className="shrink-0" style={{ fontSize: 10.5, color: '#8a7f52' }}>
+                    {p.reportageCount > 0 ? `${p.reportageCount} ${p.reportageCount === 1 ? 'uscita' : 'uscite'}` : 'in programma'}
+                  </span>
+                  <ChevronRight className="w-3.5 h-3.5 shrink-0" style={{ color: '#b5a677' }} />
+                </Link>
+              )
+            })}
+          </div>
+        )}
+
+        <div className="flex flex-col mt-2 pt-1" style={{ borderTop: '1px solid #e4d9bd' }}>
+          <Link
+            href={`/diari/${encodeURIComponent(diaryId)}/pubblica`}
+            className="flex items-center justify-between gap-2 py-2.5"
+            style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: 11.5, color: '#6b6142' }}
+          >
+            <span className="inline-flex items-center gap-1.5"><Share2 className="w-3.5 h-3.5" /> Pubblicazione</span>
+            <ChevronRight className="w-3.5 h-3.5" style={{ color: '#b5a677' }} />
+          </Link>
+        </div>
+      </BookPage>
+      {!detail.isDefault && (
+        <div className="max-w-[640px] mx-auto px-5 sm:px-8" style={{ background: '#fbf6e8' }}>
+          <DeleteDiarioSection diaryId={diaryId} />
+        </div>
+      )}
+    </>
+  )
+}
+
+export default function DiarioDetailPage() {
+  const params = useParams<{ id: string }>()
+  const [libroEnabled, setLibroEnabled] = useState<boolean | null>(null)
+  useEffect(() => {
+    getUserSettingsCached()
+      .then(d => setLibroEnabled(d.diarioLibroEnabled === true))
+      .catch(() => setLibroEnabled(false))
+  }, [])
+
+  if (libroEnabled === null) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-stone-400">
+        <Loader2 className="w-6 h-6 animate-spin" />
+      </div>
+    )
+  }
+
+  return libroEnabled ? <DiarioIndexLibro diaryId={params.id} /> : <DiarioDetailPageClassico />
 }
