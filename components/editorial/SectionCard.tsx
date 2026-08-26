@@ -18,7 +18,7 @@ export interface LengthOption {
  *  mostrare sempre le tre pillole accanto al link; la scelta stessa avvia l'approfondimento invece
  *  di essere un passo separato. Senza `lengthOptions` (es. "Verificato online", che non usa il
  *  concetto di lunghezza) resta un tap solo. */
-function ApprofondisciTrigger({ onApprofondisci, lengthOptions }: {
+export function ApprofondisciTrigger({ onApprofondisci, lengthOptions }: {
   onApprofondisci?: (length?: GuideTextLength) => void
   lengthOptions?: LengthOption[]
 }) {
