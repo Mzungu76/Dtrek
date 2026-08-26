@@ -388,14 +388,16 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
         sectionLabel="Indice"
       >
         <div className="flex items-start gap-3 mb-3">
-          {/* Copertina del Diario in cima al Sommario — stesso campo (detail.coverUrl) dello
-              scaffale e del drawer, non un'immagine a sé. */}
-          <div
-            className="w-14 h-[74px] rounded-[4px] shrink-0 overflow-hidden"
-            style={{ boxShadow: '0 6px 14px -8px rgba(63,58,34,0.45)' }}
-          >
-            <DiarioCoverThumb coverUrl={detail.coverUrl} />
-          </div>
+          {/* Riproduzione in piccolo dell'effettiva copertina del Diario (foto/gradiente + testi),
+              stessa DiarioCoverThumb con `width` del drawer — non un'immagine a sé. */}
+          <DiarioCoverThumb
+            coverUrl={detail.coverUrl}
+            width={56}
+            title={detail.title}
+            subtitle={detail.subtitle}
+            author={detail.author}
+            className="rounded-[4px] shrink-0 shadow-md"
+          />
           <div className="min-w-0 flex-1">
             <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 10, color: '#8a7f52', margin: '0 0 3px' }}>
               Sommario

@@ -37,10 +37,16 @@ interface Props {
    *  invito ad approfondire finché i dati del percorso non sono assestati. Default `true` per non
    *  richiederlo a ogni chiamante che non lo passa (solo GuideBookPage lo passa oggi). */
   enrichmentReady?: boolean
+  /** Solo per il pannello bulk (senza `sectionKey`) — tono del riquadro. Default il bianco/stone
+   *  originale (pensato per il riepilogo del Percorso in stile "app moderna", ora rimosso);
+   *  GuideBookPage.tsx passa il tono pergamena per non ripetere lo stesso stacco cromatico già
+   *  corretto per WeatherWidget in Fase 6. */
+  panelClassName?: string
 }
 
 export default function GuideGenerationPanel({
   hike, percorsoId, hasAiAccess, aiUnavailable, trialExpired, onHikeUpdate, sectionKey, enrichmentReady = true,
+  panelClassName,
 }: Props) {
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -117,7 +123,7 @@ export default function GuideGenerationPanel({
 
   if (hasAiAccess === false && aiUnavailable) {
     return (
-      <PanelShell>
+      <PanelShell className={panelClassName}>
         <p className="text-[13px] text-stone-500 leading-relaxed">
           Non riusciamo a verificare la tua chiave AI in questo momento — riprova tra poco.
         </p>
@@ -127,7 +133,7 @@ export default function GuideGenerationPanel({
 
   if (hasAiAccess === false) {
     return (
-      <PanelShell icon={<KeyRound className="w-5 h-5 text-terra-500" />}>
+      <PanelShell className={panelClassName} icon={<KeyRound className="w-5 h-5 text-terra-500" />}>
         <p className="text-[13px] text-stone-500 leading-relaxed">
           {trialExpired ? 'Il periodo di prova gratuito è terminato — ' : 'Al momento non hai accesso alla generazione AI — '}
           <a href="/prezzi" className="text-terra-600 font-medium underline underline-offset-2">sblocca Dtrek</a> per far scrivere a Giulia la guida di questo percorso.
@@ -137,7 +143,7 @@ export default function GuideGenerationPanel({
   }
 
   return (
-    <PanelShell icon={<BookOpen className="w-5 h-5 text-terra-500" />}>
+    <PanelShell className={panelClassName} icon={<BookOpen className="w-5 h-5 text-terra-500" />}>
       {creditError && <CreditErrorModal message={creditError.message} onClose={() => setCreditError(null)} />}
       <div className="flex flex-wrap items-center gap-2 mb-3">
         {GUIDE_TEXT_LENGTHS.map(l => (
@@ -182,9 +188,9 @@ export default function GuideGenerationPanel({
   )
 }
 
-function PanelShell({ icon, children }: { icon?: React.ReactNode; children: React.ReactNode }) {
+function PanelShell({ icon, children, className }: { icon?: React.ReactNode; children: React.ReactNode; className?: string }) {
   return (
-    <div className="bg-white rounded-2xl border border-stone-200 px-5 py-4">
+    <div className={`rounded-2xl border px-5 py-4 ${className ?? 'bg-white border-stone-200'}`}>
       <div className="flex items-start gap-3">
         {icon && <div className="w-9 h-9 rounded-full bg-terra-50 flex items-center justify-center shrink-0">{icon}</div>}
         <div className="flex-1 min-w-0">{children}</div>

@@ -34,6 +34,9 @@ export interface DiarioDetail {
   id: string
   title: string
   subtitle: string
+  /** Fase 14 — usato per riprodurre in miniatura l'effettiva copertina (DiarioCoverThumb) in
+   *  cima al Sommario, non solo per /pubblica. */
+  author: string
   isDefault: boolean
   coverUrl: string | null
   percorsi: DiarioPercorsoRow[]
@@ -48,7 +51,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
     const { data: diary, error: diaryErr } = await supabase
       .from('diaries')
-      .select('id, title, subtitle, is_default, cover_url')
+      .select('id, title, subtitle, author, is_default, cover_url')
       .eq('id', params.id)
       .eq('user_id', user.id)
       .single()
@@ -99,6 +102,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       id:        diary.id as string,
       title:     diary.title as string,
       subtitle:  diary.subtitle as string,
+      author:    diary.author as string,
       isDefault: diary.is_default as boolean,
       coverUrl:  diary.cover_url as string | null,
       percorsi,
