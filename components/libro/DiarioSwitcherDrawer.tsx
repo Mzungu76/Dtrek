@@ -9,8 +9,9 @@
 // "Personalizza copertina" (già esistenti, non duplicati qui).
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { BookMarked, ChevronRight, Loader2, Pencil, X } from 'lucide-react'
+import { ChevronRight, Loader2, Pencil, X } from 'lucide-react'
 import type { DiarySummary } from '@/app/api/diaries/route'
+import { DiarioCoverThumb } from '@/components/diario/DiarioCoverThumb'
 import { FONT } from '@/lib/designTokens'
 
 const PAPER_BG = '#fbf6e8'
@@ -74,13 +75,8 @@ export default function DiarioSwitcherDrawer({
                     onClick={onClose}
                     className="flex items-center gap-3 flex-1 min-w-0"
                   >
-                    <div
-                      className="w-9 h-11 rounded-[3px] shrink-0 flex items-center justify-center overflow-hidden"
-                      style={{ background: d.coverUrl ? undefined : '#e9dcb8' }}
-                    >
-                      {d.coverUrl
-                        ? <img src={d.coverUrl} alt="" className="w-full h-full object-cover" />
-                        : <BookMarked className="w-4 h-4" style={{ color: '#c9b98a' }} />}
+                    <div className="w-9 h-11 rounded-[3px] shrink-0 overflow-hidden">
+                      <DiarioCoverThumb coverUrl={d.coverUrl} />
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate" style={{ fontSize: 13.5, fontWeight: 600, color: INK_TEXT }}>{d.title}</p>
@@ -91,7 +87,7 @@ export default function DiarioSwitcherDrawer({
                     {active && <ChevronRight className="w-3.5 h-3.5 shrink-0" style={{ color: INK_MUTED }} />}
                   </Link>
                   <Link
-                    href={`/diari/${encodeURIComponent(d.id)}/pubblica`}
+                    href={`/diari/${encodeURIComponent(d.id)}/copertina`}
                     onClick={onClose}
                     title="Personalizza copertina"
                     className="shrink-0 p-1.5 rounded-full hover:opacity-70 transition-opacity"
