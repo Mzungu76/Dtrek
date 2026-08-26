@@ -340,6 +340,22 @@ chiamata di rete per filtrare/ordinare):
   "Distanza" (richiede `useDrivingDistance`, dal vivo) e la sotto-sezione "Prossima uscita" dei
   preferiti (specifica del carosello a swipe, non richiesta per il Sommario).
 
+**Fase 9 — Sommario: allineamento CTS, filtro di stato, evidenza uscite, ordine invertibile** ✅ **COMPLETATA**
+
+Feedback dopo altri screenshot: l'anello Trail Score non era allineato in verticale da una riga
+all'altra (dipendeva da quanto testo aveva l'etichetta di stato a destra, "N uscite" vs "in
+programma", entrambe a larghezza libera dentro lo stesso flexbox). In `app/diari/[id]/page.tsx`:
+- Sia la colonna dell'anello TS sia quella dello stato a destra hanno ora una larghezza fissa
+  (`w-10` / `width: 82`), non più "shrink-to-content" — l'anello resta quindi alla stessa distanza
+  dal bordo destro su ogni riga, con o senza uscite.
+- Nuovo filtro di stato (Tutti / In programma / Con uscita), stesso stile a pillola dei chip di
+  ordinamento già presenti.
+- Le righe con almeno un'uscita hanno ora uno sfondo tinteggiato (terra molto tenue,
+  `rgba(192,90,23,0.07)`) — riconoscibili a colpo d'occhio, non solo dall'etichetta testuale.
+- Ordinamento invertibile: nuovo toggle (icona freccia su/giù) applicato a qualunque criterio
+  scelto, "Data" incluso — inverte l'array già filtrato/ordinato invece di aggiungere un
+  comparatore per data (l'API lo restituisce già in `created_at desc`).
+
 ## File critici
 - `components/guida/GuideReader.tsx`, `components/resoconto/ReportReader.tsx` — sorgente da cui
   estratto in Fase 0, non riscritti.
