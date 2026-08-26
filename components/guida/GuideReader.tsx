@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useRef, useCallback, useMemo, type ReactNode } from 'react'
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { updatePlannedMeta, type PlannedHike } from '@/lib/plannedStore'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import { formatDuration, type TrackPoint } from '@/lib/tcxParser'
@@ -16,7 +16,7 @@ import type { PoiItem } from '@/lib/overpass'
 import PhotoMosaic from '@/components/PhotoMosaic'
 import { extractEpochPois } from '@/lib/epochPois'
 import { extractCoverSubtitle } from '@/lib/coverSubtitle'
-import { extractGuideNotices, normalizeGuideNotices, parseNoticeSource, type GuideNotice } from '@/lib/guideNotices'
+import { extractGuideNotices, normalizeGuideNotices, type GuideNotice } from '@/lib/guideNotices'
 import { extractGuideSources, type GuideSource } from '@/lib/guideSources'
 import { stripGuideStatus } from '@/lib/guideStatus'
 import { extractGuideAiError, type GuideAiError } from '@/lib/guideAiError'
@@ -24,22 +24,17 @@ import CreditErrorModal from './CreditErrorModal'
 import RouteModeDialog from './RouteModeDialog'
 import { effectiveHikeMetrics, type RouteMode } from '@/lib/routeMode'
 import { streamFetchText, StreamFetchError } from '@/lib/streamFetchText'
-import { AlertTriangle, Link2, KeyRound, Info } from 'lucide-react'
+import { KeyRound } from 'lucide-react'
 import GuideQA from './widgets/GuideQA'
 import type { ReturnOption } from '@/lib/routeBuilder/returnOptions'
 import {
-  GUIDE_SECTIONS, DEFAULT_BREVE_SECTIONS, GUIDE_TEXT_LENGTHS, DEFAULT_SECTION_LENGTHS,
+  DEFAULT_BREVE_SECTIONS, GUIDE_TEXT_LENGTHS, DEFAULT_SECTION_LENGTHS,
   sanitizeSectionLengths, countMoltoApprofondita, MAX_MOLTO_APPROFONDITA_SECTIONS,
   type GuideSectionKey, type GuideTextLength, type SectionLengthMap,
 } from '@/lib/guideSections'
 import { parseGuideSections, mergeGuideSection } from '@/lib/guideParse'
-import { SECTION_STYLE, LEGACY_STYLE } from './sectionStyle'
 import { slugifyHeading } from '@/lib/guideSlug'
-import WeatherWidget from '@/components/WeatherWidget'
-import RouteMapSection from '@/components/RouteMapSection'
-import DatiSicurezzaTabs from './widgets/DatiSicurezzaTabs'
-import PoiListWidget from './widgets/PoiListWidget'
-import NaturaWidget from './widgets/NaturaWidget'
+import { buildGuideDisplaySections, renderGuideWidget, type DisplaySection } from '@/lib/guida/guideDisplaySections'
 import GuideHero from './GuideHero'
 import GuideStatsStrip from './GuideStatsStrip'
 import SectionNav from '@/components/editorial/SectionNav'
@@ -54,24 +49,6 @@ import type { FloraResult } from '@/lib/floraTypes'
 import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-
-// Stile del riquadro avviso per gravità (vedi lib/guideNotices.ts) — una chiusura reale (danger)
-// deve leggersi diversamente da una nota stagionale (info), non tutte uguali in ambra.
-const NOTICE_SEVERITY_STYLE: Record<GuideNotice['severity'], { box: string; icon: string; text: string; link: string }> = {
-  danger:  { box: 'border-red-200 bg-red-50',       icon: 'text-red-600',    text: 'text-red-900',    link: 'bg-red-100 hover:bg-red-200 text-red-800' },
-  warning: { box: 'border-amber-200 bg-amber-50',   icon: 'text-amber-600',  text: 'text-amber-900',  link: 'bg-amber-100 hover:bg-amber-200 text-amber-800' },
-  info:    { box: 'border-sky-200 bg-sky-50',       icon: 'text-sky-600',    text: 'text-sky-900',    link: 'bg-sky-100 hover:bg-sky-200 text-sky-800' },
-}
-
-interface DisplaySection {
-  key: GuideSectionKey | `legacy-${number}`
-  guideKey: GuideSectionKey | null
-  title: string
-  subtitle?: string
-  body?: string
-  icon: ReactNode
-  color: string
-}
 
 export interface ScoresBundle {
   safety: SafetyScore | null
@@ -275,20 +252,7 @@ export default function GuideReader({
     finally { setSavingRouteMode(false) }
   }
 
-  const parsedSections = useMemo(() => guideText ? parseGuideSections(guideText) : [], [guideText])
-
-  const displaySections = useMemo<DisplaySection[]>(() => {
-    const byKey = new Map(parsedSections.filter(s => s.key).map(s => [s.key as GuideSectionKey, s]))
-    const fixed: DisplaySection[] = GUIDE_SECTIONS.map(def => {
-      const parsed = byKey.get(def.key)
-      const style = SECTION_STYLE[def.key]
-      return { key: def.key, guideKey: def.key, title: def.title, subtitle: def.subtitle, body: parsed?.body, icon: style.icon, color: style.color }
-    })
-    const legacy: DisplaySection[] = parsedSections
-      .filter(s => !s.key)
-      .map((s, i) => ({ key: `legacy-${i}` as const, guideKey: null, title: s.title, body: s.body, icon: LEGACY_STYLE.icon, color: LEGACY_STYLE.color }))
-    return [...fixed, ...legacy]
-  }, [parsedSections])
+  const displaySections = useMemo<DisplaySection[]>(() => buildGuideDisplaySections(guideText), [guideText])
 
   // Voice state
   const [isPlaying,     setIsPlaying]     = useState(false)
@@ -737,114 +701,16 @@ export default function GuideReader({
   }
 
   // ── Widgets per section ───────────────────────────────────────────────────
+  // Dispatcher estratto in lib/guida/guideDisplaySections.tsx (renderGuideWidget) — stessa identica
+  // logica, condivisa con le nuove pagine "a libro" del Diario; qui resta solo il passaggio delle
+  // variabili di chiusura come props esplicite.
 
-  function renderWidget(key: DisplaySection['key'], body?: string): ReactNode {
-    switch (key) {
-      case 'prima_di_partire':
-        return weather
-          ? <WeatherWidget mode={weather.mode} lat={weather.lat} lon={weather.lon} date={hike.plannedDate} altitudeMax={hike.altitudeMax} elevationGain={hike.elevationGain} days={7} />
-          : null
-      case 'il_percorso':
-        return (
-          <RouteMapSection
-            trackPoints={hike.trackPoints}
-            showPois={false}
-            onOpenMap3D={onOpenMap3D}
-            showGradient={showGradient}
-            showAspect={showAspect}
-            showAspectToggle={scores?.showAspectToggle}
-            onToggleAspect={scores?.onToggleAspect}
-            dtmProfile={dtmProfile}
-            planned
-          />
-        )
-      case 'dati_sicurezza':
-        return <DatiSicurezzaTabs scores={scores ? { ...scores, guideNotices } : scores} safetyDetails={safetyDetails} />
-      case 'luoghi':
-        return poiList
-          ? (
-            <PoiListWidget
-              {...poiList}
-              hikeId={hike.id}
-              highlightedPoiId={highlightedPoiId}
-              onItemTap={poi => onPoiTap?.(poi.id)}
-              trackPoints={hike.trackPoints}
-              onOpenMap3D={onOpenMap3D}
-              returnOptions={isLinearRoute ? returnOptions : undefined}
-              returnOptionsOrigin={endPoint ?? undefined}
-            />
-          )
-          : null
-      case 'natura':
-        return natura ? <NaturaWidget {...natura} /> : null
-      case 'verificato': {
-        // Avvisi (banner colorati per gravità) + fonti consultate — prima mostrati globalmente
-        // sopra tutte le sezioni, ora vivono qui: stessi dati (guideNotices/guideSources, mai
-        // toccati), solo raccolti in un unico posto invece di sparsi in due blocchi separati.
-        // Il disclaimer sotto compare ogni volta che la sezione ha un testo (quindi la ricerca è
-        // stata davvero eseguita), non solo quando ci sono avvisi/fonti da mostrare — anche un
-        // "nessuna criticità nota" è comunque un esito di una ricerca AI, non un fatto verificato
-        // da una fonte umana, e va segnalato come tale.
-        if (!body?.trim()) return null
-        return (
-          <div className="space-y-3">
-            {guideNotices.length > 0 && (
-              <div className="space-y-2">
-                {guideNotices.map((notice, i) => {
-                  const { text, url } = parseNoticeSource(notice.text)
-                  const style = NOTICE_SEVERITY_STYLE[notice.severity]
-                  return (
-                    <div key={i} className={`flex items-start gap-2.5 rounded-xl border px-4 py-3 ${style.box}`}>
-                      <AlertTriangle className={`w-4 h-4 shrink-0 mt-0.5 ${style.icon}`} />
-                      <div className="min-w-0">
-                        <p className={`text-[13px] leading-relaxed ${style.text}`}>{text}</p>
-                        {url && (
-                          <a
-                            href={url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className={`mt-1.5 inline-flex items-center gap-1.5 max-w-full px-2.5 py-1 rounded-full transition-colors text-[11px] ${style.link}`}
-                            title={url}
-                          >
-                            <Link2 className={`w-3 h-3 shrink-0 ${style.icon}`} />
-                            <span className="truncate">Vai alla fonte</span>
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-            {guideSources.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {guideSources.map((s, i) => (
-                  <a
-                    key={i}
-                    href={s.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 max-w-full px-3 py-1.5 rounded-full bg-stone-100 hover:bg-stone-200 transition-colors text-[11px] text-stone-600"
-                    title={s.url}
-                  >
-                    <Link2 className="w-3 h-3 shrink-0 text-stone-400" />
-                    <span className="truncate">{s.title}</span>
-                  </a>
-                ))}
-              </div>
-            )}
-            <div className="flex items-start gap-2 rounded-xl bg-stone-50 border border-stone-100 px-3.5 py-2.5">
-              <Info className="w-3.5 h-3.5 shrink-0 text-stone-400 mt-0.5" />
-              <p className="text-[11px] text-stone-400 leading-relaxed">
-                Verifica condotta da un&apos;intelligenza artificiale tramite ricerche automatiche sul web: può contenere errori o non cogliere tutte le criticità reali. Non sostituisce la prudenza sul campo — controlla sempre le condizioni aggiornate prima di partire.
-              </p>
-            </div>
-          </div>
-        )
-      }
-      default:
-        return null
-    }
+  function renderWidget(key: DisplaySection['key'], body?: string) {
+    return renderGuideWidget(key, body, {
+      hike, weather, onOpenMap3D, showGradient, showAspect, scores, dtmProfile,
+      guideNotices, guideSources, safetyDetails, poiList, highlightedPoiId, onPoiTap,
+      isLinearRoute, returnOptions, endPoint, natura,
+    })
   }
 
   // Opzioni "Essenziale/Approfondita/Molto approfondita" mostrate nel menu a comparsa del
