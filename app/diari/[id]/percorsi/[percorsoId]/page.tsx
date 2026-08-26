@@ -4,21 +4,24 @@ import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
+import GuidaHub from '@/app/guida/GuidaHub'
 import TrialStatusBanner from '@/components/dtrek/TrialStatusBanner'
 import GuideGenerationPanel from '@/components/libro/GuideGenerationPanel'
 import { useGuidaBookData } from './useGuidaBookData'
+import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import { formatDuration } from '@/lib/tcxParser'
 import type { ReportageRow } from '@/app/api/percorsi/[id]/reportage/route'
 import { ArrowLeft, BookOpen, ChevronRight, Loader2, PenLine } from 'lucide-react'
 
 /**
- * Pagina di riepilogo del Percorso — Fase 3 di docs/diario-a-libro-piano.md: prima montava
- * direttamente <GuidaHub id={percorsoId} /> (stessa schermata scura immersiva di /guida/[id]),
- * lo "stacco visivo" segnalato dall'utente. Ora è una vera pagina di indice del libro: copertina,
- * statistiche chiave, CTA verso la Guida a pagine e link "Apri in modalità classica" — mai
- * rimosso, resta il modo per Scarica PDF e ogni altra funzione non (ancora) ricollocata qui.
+ * Pagina del Percorso — Fase 3/4 di docs/diario-a-libro-piano.md. Dietro il flag
+ * `diarioLibroEnabled` (Fase 4, default spento, vedi components/profilo/SectionAvanzate.tsx):
+ * la nuova pagina di riepilogo del libro (copertina, statistiche, CTA "Apri la Guida", link
+ * "Apri in modalità classica", elenco Reportage) quando acceso, l'embed diretto di GuidaHub
+ * (comportamento invariato) quando spento o non ancora risolto — mai uno stato intermedio
+ * silenzioso: finché il flag non è noto si mostra solo uno spinner, non una delle due UI a caso.
  */
-function ReportageSection({ diarioId, percorsoId, basePath }: { diarioId: string; percorsoId: string; basePath: string }) {
+function ReportageSection({ diarioId, percorsoId, linkTo }: { diarioId: string; percorsoId: string; linkTo: (activityId: string) => string }) {
   const [rows, setRows] = useState<ReportageRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -60,7 +63,7 @@ function ReportageSection({ diarioId, percorsoId, basePath }: { diarioId: string
           {rows?.map(r => (
             <Link
               key={r.id}
-              href={`${basePath}/reportage/${encodeURIComponent(r.id)}`}
+              href={linkTo(r.id)}
               className="flex items-center gap-3 bg-white rounded-xl px-4 py-3 border border-stone-200 hover:border-forest-300 hover:shadow-sm transition-all"
             >
               <div className="w-9 h-9 rounded-full bg-forest-50 flex items-center justify-center shrink-0">
@@ -84,11 +87,19 @@ function ReportageSection({ diarioId, percorsoId, basePath }: { diarioId: string
   )
 }
 
-function PercorsoPageInner() {
-  const params = useParams<{ id: string; percorsoId: string }>()
-  const diarioId = decodeURIComponent(params.id)
-  const percorsoId = decodeURIComponent(params.percorsoId)
-  const basePath = `/diari/${encodeURIComponent(diarioId)}/percorsi/${encodeURIComponent(percorsoId)}`
+/** Comportamento invariato, pre-Fase 3 — stessa schermata scura immersiva di /guida/[id]. */
+function PercorsoPageClassico({ diarioId, percorsoId }: { diarioId: string; percorsoId: string }) {
+  return (
+    <>
+      <TrialStatusBanner />
+      <GuidaHub id={percorsoId} />
+      <ReportageSection diarioId={diarioId} percorsoId={percorsoId} linkTo={id => `/resoconto/${encodeURIComponent(id)}`} />
+    </>
+  )
+}
+
+/** Pagina di riepilogo del libro — vedi Fase 3 per il dettaglio. */
+function PercorsoPageLibro({ diarioId, percorsoId, basePath }: { diarioId: string; percorsoId: string; basePath: string }) {
   const bd = useGuidaBookData(percorsoId)
 
   return (
@@ -139,11 +150,41 @@ function PercorsoPageInner() {
           </div>
 
           <div className="max-w-[900px] mx-auto px-4 pb-2" />
-          <ReportageSection diarioId={diarioId} percorsoId={percorsoId} basePath={basePath} />
+          <ReportageSection
+            diarioId={diarioId}
+            percorsoId={percorsoId}
+            linkTo={id => `${basePath}/reportage/${encodeURIComponent(id)}`}
+          />
         </>
       )}
     </>
   )
+}
+
+function PercorsoPageInner() {
+  const params = useParams<{ id: string; percorsoId: string }>()
+  const diarioId = decodeURIComponent(params.id)
+  const percorsoId = decodeURIComponent(params.percorsoId)
+  const basePath = `/diari/${encodeURIComponent(diarioId)}/percorsi/${encodeURIComponent(percorsoId)}`
+
+  const [libroEnabled, setLibroEnabled] = useState<boolean | null>(null)
+  useEffect(() => {
+    getUserSettingsCached()
+      .then(d => setLibroEnabled(d.diarioLibroEnabled === true))
+      .catch(() => setLibroEnabled(false))
+  }, [])
+
+  if (libroEnabled === null) {
+    return (
+      <div className="flex items-center justify-center py-24 text-stone-400">
+        <Loader2 className="w-6 h-6 animate-spin" />
+      </div>
+    )
+  }
+
+  return libroEnabled
+    ? <PercorsoPageLibro diarioId={diarioId} percorsoId={percorsoId} basePath={basePath} />
+    : <PercorsoPageClassico diarioId={diarioId} percorsoId={percorsoId} />
 }
 
 export default function PercorsoPage() {

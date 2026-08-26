@@ -172,13 +172,34 @@ esplicitamente, non lasciati impliciti:
 - Presence-gating di Fase 2 (`isSectionPresent` in `GuideBookPage.tsx`/`ReportBookPage.tsx`) non
   toccato in questa fase — resta un giudizio "ragionevole ma non confermato dall'utente".
 
-**Fase 4 — Flag di rollout** ⬜ **DA FARE**
-- Riuso del pattern già in uso nel progetto (booleano su `user_settings`, letto via
-  `getUserSettingsCached()`, come `guideBreveSections`) invece di inventarne uno nuovo — scoped
-  **solo** al punto d'ingresso Percorso del Diario. `/guida/[id]` e `/resoconto/[id]` standalone
-  restano fuori dal flag, sempre sul motore invariato.
-- Cutover del default flag solo dopo validazione in produzione, stesso principio già seguito nel
-  piano originale (Fase 7 lì).
+**Fase 4 — Flag di rollout** ✅ **COMPLETATA**
+- Nuova colonna `diario_libro_enabled` su `user_settings` (booleano, default `false`) — migrazione
+  `supabase/migrations/add_diario_libro_enabled.sql`, non ancora eseguita in nessun ambiente reale
+  (nessuna credenziale Supabase in questa sandbox — va lanciata a mano nello SQL Editor, stesso
+  flusso già seguito per ogni altra migrazione di questo progetto). Finché non è eseguita, la
+  colonna semplicemente non esiste: il fallback automatico già presente in
+  `app/api/user-settings/route.ts` (droppa dalla `upsert` la colonna che Postgres segnala mancante)
+  copre la scrittura, e la lettura torna comunque al default `false` via `?? false` — nessun errore
+  visibile all'utente nel frattempo, solo il comportamento classico finché la colonna non c'è.
+- `lib/sync/userSettingsStore.ts` (`diarioLibroEnabled`), `app/api/user-settings/route.ts` (GET/POST)
+  seguono lo stesso pattern di `guideBreveSections`/`aiUseBiometricData`.
+- `app/diari/[id]/percorsi/[percorsoId]/page.tsx`: unico punto di gating, come da scope della
+  Fase 4 — a flag spento monta esattamente il vecchio `<GuidaHub id={percorsoId} />` +
+  `<ReportageSection>` con link a `/resoconto/[id]` (contenuto recuperato dalla history git,
+  `git show c8a0c39^:...`, non riscritto a mano); a flag acceso monta la pagina di riepilogo di
+  Fase 3. Le route nuove sotto (`guida/[sectionKey]`, `reportage/[activityId]`,
+  `reportage/[activityId]/sezione/[n]`) non hanno un proprio gate: a flag spento restano
+  semplicemente prive di link in ingresso (nessuna UI ci rimanda), non disabilitate — raggiungibili
+  solo digitando l'URL a mano, coerente con "scoped solo al punto d'ingresso Percorso".
+  `/guida/[id]` e `/resoconto/[id]` standalone non sono mai stati toccati, a prescindere dal flag.
+- Toggle per accendere il flag sul proprio account durante la validazione:
+  `components/profilo/SectionAvanzate.tsx` → "Diario a libro (beta)" (sezione "Impostazioni
+  avanzate", collassata di default) — non pensato per un rollout diffuso via impostazioni utente,
+  solo per poterlo verificare a schermo prima del cutover del default.
+- **Non fatto** (resta il passo successivo, fuori da questo piano): eseguire davvero la migrazione
+  su Supabase, accendere il flag sul proprio account, verificare a schermo l'intero flusso
+  Diario→Percorso→Guida/Reportage a pagine con dati reali, e solo dopo decidere se/quando flippare
+  il default a `true` per tutti.
 
 ## File critici
 - `components/guida/GuideReader.tsx`, `components/resoconto/ReportReader.tsx` — sorgente da cui
@@ -232,15 +253,19 @@ questo file è stato scritto:
   è ripartita) — recuperati con un merge all'inizio di questa sessione prima di riprendere il piano.
 - **Fatto in questa sessione** (branch `claude/dtrek-diary-routing-p1b5ou`): Fase 3 (routing) per
   intero, con la decisione sul pannello di generazione presa con l'utente (pannello nuovo e isolato,
-  non estrazione di `generateSections`) — vedi la sezione Fase 3 sopra per il dettaglio completo di
-  cosa è stato costruito e cosa deliberatamente rimandato a "modalità classica".
+  non estrazione di `generateSections`), e Fase 4 (flag di rollout) per intero — vedi le rispettive
+  sezioni sopra per il dettaglio completo di cosa è stato costruito e cosa deliberatamente
+  rimandato a "modalità classica".
 - **Verifica fatta in questa sessione**: `tsc --noEmit` ed `eslint` puliti sull'intero progetto dopo
-  il merge di Fase 0-2 e di nuovo dopo Fase 3 (0 errori in entrambi i casi; solo warning
-  preesistenti non introdotti da questo lavoro).
-- **Mai verificato a schermo**: nessuna delle pagine scritte finora (Fase 0-3) è stata vista
+  il merge di Fase 0-2, di nuovo dopo Fase 3 e di nuovo dopo Fase 4 (0 errori in tutti e tre i casi;
+  solo warning preesistenti non introdotti da questo lavoro).
+- **Mai verificato a schermo**: nessuna delle pagine scritte finora (Fase 0-4) è stata vista
   renderizzata con dati reali — questa sandbox non ha credenziali Supabase, `npm run build` fallisce
   per lo stesso motivo già documentato per Fase 0-2 (variabili d'ambiente assenti, non un errore
-  introdotto da questo lavoro). La verifica end-to-end (Playwright, o anche solo apertura manuale
-  del flusso Diario→Percorso→Guida/Reportage a pagine, generazione compresa) resta da fare in un
-  ambiente con l'app che gira per davvero prima del cutover del flag (Fase 4).
-- **Prossimo passo**: Fase 4 (flag di rollout) — non ancora iniziata.
+  introdotto da questo lavoro). La migrazione `add_diario_libro_enabled.sql` non è stata eseguita
+  su nessun database reale.
+- **Prossimo passo — non più su questo piano, ma sull'ambiente reale**: eseguire la migrazione,
+  accendere il flag "Diario a libro (beta)" sul proprio account (Impostazioni → Impostazioni
+  avanzate), e verificare a schermo l'intero flusso Diario→Percorso→Guida/Reportage a pagine
+  (gate di presenza, generazione/rigenerazione AI, clamp del Reportage, link "Apri in modalità
+  classica" su ogni pagina) prima di decidere se/quando flippare il default del flag a `true`.

@@ -75,6 +75,10 @@ export interface UserSettingsData {
    *  lib/routeBuilder/resolvePlace.ts e components/upload/RouteBuilder.tsx. Sovrascrivibile per
    *  singola ricerca nel wizard, questa è solo la scelta di partenza salvata in profilo. */
   routeBuildAiPlaceSearch: boolean
+  /** Flag di rollout Fase 4, docs/diario-a-libro-piano.md — scoped al solo punto d'ingresso
+   *  Percorso del Diario, vedi components/profilo/SectionAvanzate.tsx e
+   *  app/diari/[id]/percorsi/[percorsoId]/page.tsx. */
+  diarioLibroEnabled: boolean
 }
 
 const ENTITY_TYPE = 'user_settings'
