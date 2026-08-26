@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
@@ -16,8 +16,8 @@ import type { RecommendationCard } from '@/lib/routeBuilder/generateRecommendati
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import { FONT } from '@/lib/designTokens'
 import {
-  ArrowLeft, CheckCircle2, ChevronRight, Clock, Loader2, Lock, LockOpen, Mountain, Plus, Route,
-  Share2, Sparkles, Trash2, TrendingUp,
+  ArrowLeft, ArrowUpDown, CheckCircle2, ChevronRight, Clock, Loader2, Lock, LockOpen, Mountain,
+  Plus, Route, Search, Share2, Sparkles, Star, Trash2, TrendingUp, X,
 } from 'lucide-react'
 
 /**
@@ -296,9 +296,17 @@ function DiarioDetailPageClassico() {
  * rara) resta invece raggiungibile anche qui, sotto la pagina, non rimandata a un'altra modalità
  * che qui non esiste.
  */
+type SommarioSortKey = 'date' | 'km' | 'dplus' | 'cts'
+const SOMMARIO_SORT_OPTIONS: { id: SommarioSortKey; label: string }[] = [
+  { id: 'date', label: 'Data' }, { id: 'km', label: 'Km' }, { id: 'dplus', label: 'D+' }, { id: 'cts', label: 'TS' },
+]
+
 function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
   const [detail, setDetail] = useState<DiarioDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [favoritesOnly, setFavoritesOnly] = useState(false)
+  const [sortBy, setSortBy] = useState<SommarioSortKey>('date')
 
   useEffect(() => {
     fetch(`/api/diaries/${encodeURIComponent(diaryId)}`)
@@ -306,6 +314,27 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
       .then(setDetail)
       .catch(e => setError(e instanceof Error ? e.message : String(e)))
   }, [diaryId])
+
+  // Stessi filtri/ricerca/ordinamento di components/routehub/ExpandedGalleryList.tsx ("Tutti i
+  // percorsi") — qui senza "Distanza" (richiede l'indirizzo di partenza + una chiamata Google
+  // Maps per percorso, non praticabile per un intero elenco insieme, vedi Fase 7) e senza la
+  // sotto-sezione "Prossima uscita" dei preferiti (specifica del carosello che si swipa, non del
+  // Sommario). "Data" è l'ordine con cui l'API restituisce già i percorsi (created_at desc), non
+  // serve un secondo ordinamento per quello.
+  const visiblePercorsi = useMemo(() => {
+    let rows = detail?.percorsi ?? []
+    if (favoritesOnly) rows = rows.filter(p => p.favorite)
+    const q = searchQuery.trim().toLowerCase()
+    if (q) rows = rows.filter(p => p.title.toLowerCase().includes(q))
+    if (sortBy !== 'date') {
+      rows = [...rows].sort((a, b) => {
+        if (sortBy === 'km') return b.distanceMeters - a.distanceMeters
+        if (sortBy === 'dplus') return b.elevationGain - a.elevationGain
+        return (b.trailScore ?? 0) - (a.trailScore ?? 0)
+      })
+    }
+    return rows
+  }, [detail, favoritesOnly, searchQuery, sortBy])
 
   if (error) {
     return (
@@ -346,11 +375,59 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
           <Plus className="w-3.5 h-3.5" /> Nuovo percorso
         </Link>
 
+        {detail.percorsi.length > 0 && (
+          <div className="mb-3">
+            <div className="relative mb-2">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#a9915f' }} />
+              <input
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Cerca per titolo…"
+                className="w-full pl-8 pr-8 py-2 rounded-full text-[13px] outline-none"
+                style={{ background: '#f1e9d2', border: '1px solid #e4d9bd', color: '#3f3a22' }}
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2"
+                  style={{ color: '#a9915f' }}
+                  aria-label="Cancella ricerca"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+              <button
+                onClick={() => setFavoritesOnly(f => !f)}
+                title="Solo preferiti"
+                className="shrink-0 flex items-center justify-center w-6 h-6 rounded-full transition-colors"
+                style={favoritesOnly ? { background: '#c05a17', color: '#fff' } : { background: '#f1e9d2', color: '#8a7f52' }}
+              >
+                <Star className="w-3 h-3" fill={favoritesOnly ? 'currentColor' : 'none'} />
+              </button>
+              <ArrowUpDown className="w-3 h-3 shrink-0" style={{ color: '#a9915f' }} />
+              {SOMMARIO_SORT_OPTIONS.map(s => (
+                <button
+                  key={s.id}
+                  onClick={() => setSortBy(s.id)}
+                  className="shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold transition-colors"
+                  style={sortBy === s.id ? { background: '#c05a17', color: '#fff' } : { background: '#f1e9d2', color: '#8a7f52' }}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {detail.percorsi.length === 0 ? (
           <p style={{ fontFamily: FONT.body, fontSize: 13, color: '#8a7f52' }}>Nessun percorso ancora — comincia da qui.</p>
+        ) : visiblePercorsi.length === 0 ? (
+          <p style={{ fontFamily: FONT.body, fontSize: 13, color: '#8a7f52' }}>Nessun percorso corrisponde alla ricerca.</p>
         ) : (
           <div className="flex flex-col">
-            {detail.percorsi.map(p => {
+            {visiblePercorsi.map(p => {
               const percorsoPath = `/diari/${encodeURIComponent(diaryId)}/percorsi/${encodeURIComponent(p.id)}`
               const scoreLabel = p.trailScore != null ? ctsLabel(p.trailScore).label : null
               return (

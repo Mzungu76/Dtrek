@@ -320,6 +320,26 @@ euristica "solo colonne già in tabella" del resto del piano):
   calcolata dal vivo (geocoding+indicazioni) — fattibile per un solo percorso aperto, non per un
   elenco di 56 senza N chiamate live per pagina. Omessa, non finta.
 
+**Fase 8 — Ricerca e filtri nel Sommario** ✅ **COMPLETATA**
+
+Richiesta esplicita: "tutti i filtri e la ricerca come nell'elenco precedente" — stessi controlli
+di `ExpandedGalleryList.tsx`, non solo la card della riga (Fase 7). Aggiunti alla pagina Sommario
+(`DiarioIndexLibro`), client-side su `detail.percorsi` già caricato per intero (nessuna nuova
+chiamata di rete per filtrare/ordinare):
+- Campo di ricerca per titolo (stesso comportamento di `app/percorsi/page.tsx`: sottostringa,
+  case-insensitive).
+- Filtro "solo preferiti" (stella) — nuovo campo `favorite` su `DiarioPercorsoRow`
+  (`planned_hikes.favorite`, colonna già esistente, stesso concetto del filtro a stella di
+  GuidaHub).
+- Ordinamento Data/Km/D+/TS, stessa etichetta e stesso significato di
+  `SORT_OPTIONS_BY_MODE.guida` in `components/routehub/BottomGallery.tsx` — non riesportate da lì
+  perché quell'array include anche `rating` (Resoconto) e `distance`, entrambi non pertinenti o
+  non disponibili qui; "Data" è l'ordine con cui l'API restituisce già i percorsi
+  (`created_at desc`), non un ordinamento aggiuntivo.
+- **Non incluso** (deliberatamente, stesso principio di Fase 7): l'opzione di ordinamento
+  "Distanza" (richiede `useDrivingDistance`, dal vivo) e la sotto-sezione "Prossima uscita" dei
+  preferiti (specifica del carosello a swipe, non richiesta per il Sommario).
+
 ## File critici
 - `components/guida/GuideReader.tsx`, `components/resoconto/ReportReader.tsx` — sorgente da cui
   estratto in Fase 0, non riscritti.
