@@ -1,11 +1,12 @@
 'use client'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import type { DiarySummary } from '@/app/api/diaries/route'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import { FONT } from '@/lib/designTokens'
-import { ArrowRight, BookMarked, BookOpen, Compass, Loader2, Lock, LockOpen, Pencil } from 'lucide-react'
+import { ArrowRight, BookMarked, BookOpen, Compass, Loader2, Lock, LockOpen, Pencil, Plus } from 'lucide-react'
 
 /**
  * "I miei Diari" — Fase 1 di docs/diario-fulcro-piano.md (sola lettura). Home del Diario: ogni
@@ -203,6 +204,64 @@ function DiarioCoverCard({ d, index }: { d: DiarySummary; index: number }) {
   )
 }
 
+/**
+ * "+ Nuovo Diario" — stessa tessera tratteggiata del mockup (shelfNewTileHtml), ma qui crea
+ * davvero un Diario invece di un toast placeholder: POST /api/diaries, gated (vedi quella route)
+ * — il Diario di default è incluso per tutti, ulteriori Diari solo per chi ha sbloccato Dtrek.
+ * Titolo segnaposto ("Nuovo Diario"): l'utente lo rinomina da "Personalizza copertina" sulla
+ * copertina appena creata, riusando l'editor già esistente in /pubblica invece di costruirne uno
+ * per la creazione.
+ */
+function NewDiarioTile() {
+  const router = useRouter()
+  const [creating, setCreating] = useState(false)
+  const [blockedMessage, setBlockedMessage] = useState<string | null>(null)
+
+  async function handleCreate() {
+    if (creating) return
+    setCreating(true)
+    setBlockedMessage(null)
+    try {
+      const res = await fetch('/api/diaries', { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setBlockedMessage(data.message ?? 'Impossibile creare il Diario.')
+        return
+      }
+      router.push(`/diari/${encodeURIComponent(data.id)}`)
+    } catch {
+      setBlockedMessage('Errore di rete. Riprova.')
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-center gap-3 shrink-0 w-[168px] sm:w-[190px]">
+      <button
+        type="button"
+        onClick={handleCreate}
+        disabled={creating}
+        className="relative w-full rounded-[6px] flex flex-col items-center justify-center gap-2 disabled:opacity-60"
+        style={{ aspectRatio: '3 / 4', border: '2px dashed rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.03)' }}
+      >
+        {creating
+          ? <Loader2 className="w-6 h-6 animate-spin" style={{ color: 'rgba(255,255,255,0.55)' }} />
+          : <Plus className="w-6 h-6" style={{ color: 'rgba(255,255,255,0.55)' }} />}
+        <span style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 11, color: 'rgba(255,255,255,0.55)' }}>
+          Nuovo Diario
+        </span>
+      </button>
+      {blockedMessage && (
+        <p className="text-[11.5px] text-center" style={{ color: 'rgba(255,255,255,0.6)' }}>
+          {blockedMessage}{' '}
+          <a href="/prezzi" className="underline" style={{ color: '#e9ab64' }}>Sblocca Dtrek</a>
+        </p>
+      )}
+    </div>
+  )
+}
+
 function DiariPageLibro() {
   const [diaries, setDiaries] = useState<DiarySummary[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -239,6 +298,7 @@ function DiariPageLibro() {
           <>
             <div className="flex gap-6 sm:gap-8 overflow-x-auto pb-4 -mx-4 px-4 sm:mx-0 sm:px-0">
               {diaries?.map((d, i) => <DiarioCoverCard key={d.id} d={d} index={i} />)}
+              <NewDiarioTile />
             </div>
             <Link
               href="/percorsi"

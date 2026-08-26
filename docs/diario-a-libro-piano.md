@@ -287,12 +287,17 @@ scaffale) con sei osservazioni puntuali:
   leggono — non serviva un editor nuovo, solo renderla raggiungibile da dove si vede la copertina.
   Aggiunto un link discreto "Personalizza copertina" su ogni copertina dello scaffale, verso quella
   stessa pagina (un `<Link>` sorella di "Apri Diario", non annidata).
-- **Non fatto — richiede una decisione, non solo un cambiamento di stile**: creare un nuovo Diario.
-  Non esiste da nessuna parte nell'app reale (nessun `POST /api/diaries`, nessuna UI, in nessuna
-  delle due versioni, classica o a libro) — è una funzione mai costruita, non solo assente dallo
-  scaffale a libro. Prima di costruirla va deciso se multi-Diario è libero per tutti o gated per
-  tier (`subscriptionTier` esiste già in `user_settings` ma nessun limite sul numero di Diari è mai
-  stato implementato altrove) — **chiesto all'utente, risposta in sospeso**.
+- **Creare un nuovo Diario** — non esisteva da nessuna parte nell'app reale (nessun `POST
+  /api/diaries`, nessuna UI). Decisione dell'utente: il Diario di default resta incluso per tutti
+  (non passa da questa route — esiste già dal backfill), Diari aggiuntivi solo per chi ha
+  sbloccato Dtrek. `POST /api/diaries` (nuovo) conta i Diari esistenti e, se ≥1, verifica
+  `resolveDtrekEntitlement(user.id).unlocked` (stessa risoluzione centrale di ogni altro gate —
+  Premium, BYOK o owner — non un controllo nuovo inventato qui) prima di creare la riga; risponde
+  403 con un messaggio se non sbloccato. Il nuovo Diario nasce con un titolo segnaposto ("Nuovo
+  Diario") — l'utente lo rinomina da "Personalizza copertina" sulla copertina appena creata,
+  riusando l'editor di `/pubblica` già esistente invece di costruirne uno per la creazione. Tessera
+  "+ Nuovo Diario" (`NewDiarioTile` in `app/diari/page.tsx`) solo nello scaffale a libro — quello
+  classico resta esattamente com'era, mai avendo avuto questa funzione.
 
 ## File critici
 - `components/guida/GuideReader.tsx`, `components/resoconto/ReportReader.tsx` — sorgente da cui
@@ -326,6 +331,9 @@ scaffale) con sei osservazioni puntuali:
 - `app/api/diaries/[id]/route.ts` — `DiarioPercorsoRow.trailScore` aggiunto in Fase 6.
 - `app/diari/[id]/pubblica/page.tsx` — non toccato in Fase 6, solo scoperto: già ha l'editing di
   foto/titolo/sottotitolo/autore del Diario che la Fase 6 rende raggiungibile dallo scaffale.
+- `app/api/diaries/route.ts` — nuovo `POST` (Fase 6): crea un Diario aggiuntivo, gated su
+  `resolveDtrekEntitlement`.
+- `lib/dtrekEntitlement.ts` — non toccato, riusato per il gate di creazione Diario.
 
 ## Verifica
 - Fase 0-2: `tsc --noEmit`, `eslint`, `npm run build` (la build fallisce nella sandbox corrente per
