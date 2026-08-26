@@ -299,6 +299,27 @@ scaffale) con sei osservazioni puntuali:
   "+ Nuovo Diario" (`NewDiarioTile` in `app/diari/page.tsx`) solo nello scaffale a libro — quello
   classico resta esattamente com'era, mai avendo avuto questa funzione.
 
+**Fase 7 — Riga del Sommario: riuso della vera card di "Tutti i percorsi"** ✅ **COMPLETATA**
+
+L'utente ha allegato due screenshot: la riga del Sommario (Fase 6) contro la card di
+`ExpandedGalleryList.tsx` ("Tutti i percorsi", il pannello a comparsa scuro di GuidaHub/RouteHub)
+— chiedendo la stessa ricchezza dati, ricolorata per la pergamena invece del suo sfondo scuro.
+Confrontando i due componenti: quella card usa `GalleryMapThumb` (vera mappa Leaflet, lazy via
+IntersectionObserver — non l'anteprima SVG astratta di `RouteThumb` usata finora qui),
+`TrailScoreGaugeBadge` (anello Trail Score+Sicurezza) ed etichetta idoneità/rischio da
+`ctsLabel()` — tutti dati già cachati su `planned_hikes` (nessuna chiamata live nuova, la stessa
+euristica "solo colonne già in tabella" del resto del piano):
+- `/api/diaries/[id]` ora seleziona anche `altitude_max`, `estimated_time_seconds`,
+  `cached_safety_score` — `DiarioPercorsoRow` guadagna `altitudeMax`, `estimatedTimeSeconds`,
+  `safety: SafetyPreview | null` (stesso sottoinsieme overall/color/label già usato da
+  `RouteHubItem.safetyPreview` in `app/guida/GuidaHub.tsx`, non un tipo nuovo).
+- La riga in `app/diari/[id]/page.tsx` riusa `GalleryMapThumb` e `TrailScoreGaugeBadge`
+  (`dark={false}`, per la card chiara — lo stesso prop già usato da "Dati e sicurezza"/"Dati e
+  punteggi") direttamente, non li reimplementa; solo i colori/testo intorno sono pergamena.
+- **Non incluso**: la distanza "in auto" mostrata da quella card viene da `useDrivingDistance`,
+  calcolata dal vivo (geocoding+indicazioni) — fattibile per un solo percorso aperto, non per un
+  elenco di 56 senza N chiamate live per pagina. Omessa, non finta.
+
 ## File critici
 - `components/guida/GuideReader.tsx`, `components/resoconto/ReportReader.tsx` — sorgente da cui
   estratto in Fase 0, non riscritti.
@@ -328,7 +349,11 @@ scaffale) con sei osservazioni puntuali:
   `ReportBookPage.tsx` per la suddivisione in paragrafi, non toccato.
 - `components/WeatherWidget.tsx` — nuovo prop opzionale `panelClassName` (Fase 6), additivo, non
   usato dal lettore classico.
-- `app/api/diaries/[id]/route.ts` — `DiarioPercorsoRow.trailScore` aggiunto in Fase 6.
+- `app/api/diaries/[id]/route.ts` — `DiarioPercorsoRow.trailScore` aggiunto in Fase 6,
+  `altitudeMax`/`estimatedTimeSeconds`/`safety` in Fase 7.
+- `components/routehub/BottomGallery.tsx` (`GalleryMapThumb`), `components/TrailScoreGaugeBadge.tsx`,
+  `lib/trailScore.ts` (`ctsLabel`) — non toccati, riusati direttamente da Fase 7 nella riga del
+  Sommario.
 - `app/diari/[id]/pubblica/page.tsx` — non toccato in Fase 6, solo scoperto: già ha l'editing di
   foto/titolo/sottotitolo/autore del Diario che la Fase 6 rende raggiungibile dallo scaffale.
 - `app/api/diaries/route.ts` — nuovo `POST` (Fase 6): crea un Diario aggiuntivo, gated su

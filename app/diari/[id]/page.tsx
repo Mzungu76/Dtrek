@@ -7,13 +7,17 @@ import RouteThumb from '@/components/RouteThumb'
 import SectionEyebrow from '@/components/bacheca/SectionEyebrow'
 import RecoSuggestedRow from '@/components/bacheca/RecoSuggestedRow'
 import BookPage from '@/components/libro/BookPage'
+import { GalleryMapThumb } from '@/components/routehub/BottomGallery'
+import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
+import { ctsLabel } from '@/lib/trailScore'
+import { formatDuration } from '@/lib/tcxParser'
 import type { DiarioDetail } from '@/app/api/diaries/[id]/route'
 import type { RecommendationCard } from '@/lib/routeBuilder/generateRecommendations'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import { FONT } from '@/lib/designTokens'
 import {
-  ArrowLeft, CheckCircle2, ChevronRight, Loader2, Lock, LockOpen, Mountain, Plus, Route, Share2,
-  Sparkles, Trash2,
+  ArrowLeft, CheckCircle2, ChevronRight, Clock, Loader2, Lock, LockOpen, Mountain, Plus, Route,
+  Share2, Sparkles, Trash2, TrendingUp,
 } from 'lucide-react'
 
 /**
@@ -278,10 +282,6 @@ function DiarioDetailPageClassico() {
   )
 }
 
-const SWATCH_GRADIENTS = [
-  ['#e9ab64', '#c05a17'], ['#8cc894', '#277134'], ['#dcd8cc', '#8a7f6e'], ['#f2cd9d', '#9f4315'],
-]
-
 /**
  * "Sommario" — indice del Diario come pagina del libro (docs/diario-a-libro-piano.md), stessa
  * identità visiva validata nel mockup "Diario a schermo intero" (funzione renderIndexPage,
@@ -350,37 +350,41 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
           <p style={{ fontFamily: FONT.body, fontSize: 13, color: '#8a7f52' }}>Nessun percorso ancora — comincia da qui.</p>
         ) : (
           <div className="flex flex-col">
-            {detail.percorsi.map((p, i) => {
-              const [c0, c1] = SWATCH_GRADIENTS[i % SWATCH_GRADIENTS.length]
+            {detail.percorsi.map(p => {
               const percorsoPath = `/diari/${encodeURIComponent(diaryId)}/percorsi/${encodeURIComponent(p.id)}`
+              const scoreLabel = p.trailScore != null ? ctsLabel(p.trailScore).label : null
               return (
                 <div key={p.id} className="flex items-center gap-3 py-3" style={{ borderBottom: '1px dotted #ddd0a3' }}>
-                  {/* Va dritto alla Guida — non alla vecchia pagina di riepilogo, che qui non serve
-                      più da tappa obbligata (feedback dell'utente: un tap in più senza motivo). */}
+                  {/* Stessa riga di components/routehub/ExpandedGalleryList.tsx (mappa reale,
+                      etichetta idoneità/sicurezza, pillole dati, anello Trail Score) — qui
+                      ricolorata per la pergamena invece dello sfondo scuro di quella lista, e va
+                      dritta alla Guida invece che alla vecchia pagina di riepilogo (un tap in
+                      meno, feedback dell'utente). */}
                   <Link href={`${percorsoPath}/guida/il_percorso`} className="flex items-center gap-3 flex-1 min-w-0">
-                    <span
-                      className="w-14 h-14 rounded-lg shrink-0 flex items-center justify-center overflow-hidden"
-                      style={{ background: `linear-gradient(160deg, ${c0}, ${c1})` }}
-                    >
+                    <div className="w-16 h-16 rounded-lg shrink-0 overflow-hidden relative" style={{ background: '#e9dcb8' }}>
                       {p.routePolyline && p.routePolyline.length > 1
-                        ? <RouteThumb polyline={p.routePolyline} color="#fff" strokeWidth={5} className="!w-[42px] !h-[42px]" />
-                        : <Mountain className="w-5 h-5 text-white/80" />}
-                    </span>
+                        ? <GalleryMapThumb polyline={p.routePolyline} />
+                        : <div className="w-full h-full flex items-center justify-center"><Mountain className="w-5 h-5" style={{ color: '#c9b98a' }} /></div>}
+                    </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate" style={{ fontSize: 14, fontWeight: 600, color: '#3f3a22' }}>{p.title}</p>
-                      <div className="flex items-center gap-2.5 flex-wrap mt-0.5" style={{ fontSize: 11, color: '#8a7f52' }}>
-                        <span>{(p.distanceMeters / 1000).toFixed(1)} km</span>
-                        <span>{Math.round(p.elevationGain)} m D+</span>
-                        {p.trailScore != null && (
-                          <span
-                            className="inline-flex items-center px-1.5 py-0.5 rounded"
-                            style={{ background: '#f1e9d2', color: '#9f4315', fontWeight: 700, fontSize: 10.5 }}
-                          >
-                            TS {Math.round(p.trailScore)}
-                          </span>
-                        )}
+                      {(scoreLabel || p.safety) && (
+                        <p className="truncate" style={{ fontSize: 10.5, fontWeight: 600, color: '#8a7f52', marginTop: 1 }}>
+                          {[scoreLabel, p.safety?.label].filter(Boolean).join(' · ')}
+                        </p>
+                      )}
+                      <div className="flex items-center flex-wrap gap-x-2.5 gap-y-0.5 mt-1" style={{ fontSize: 10.5, color: '#6b6142' }}>
+                        <span className="inline-flex items-center gap-1"><Route className="w-3 h-3" style={{ color: '#a9915f' }} /> {(p.distanceMeters / 1000).toFixed(1)} km</span>
+                        <span className="inline-flex items-center gap-1"><TrendingUp className="w-3 h-3" style={{ color: '#a9915f' }} /> +{Math.round(p.elevationGain)} m</span>
+                        <span className="inline-flex items-center gap-1"><Mountain className="w-3 h-3" style={{ color: '#a9915f' }} /> {Math.round(p.altitudeMax)} m</span>
+                        <span className="inline-flex items-center gap-1"><Clock className="w-3 h-3" style={{ color: '#a9915f' }} /> {formatDuration(p.estimatedTimeSeconds)}</span>
                       </div>
                     </div>
+                    {p.trailScore != null && (
+                      <div className="shrink-0">
+                        <TrailScoreGaugeBadge total={p.trailScore} safety={p.safety} size={40} showLabel={false} dark={false} />
+                      </div>
+                    )}
                   </Link>
                   {p.reportageCount > 0 ? (
                     <Link
