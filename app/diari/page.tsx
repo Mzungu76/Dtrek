@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
+import BookSpineShadow from '@/components/libro/BookSpineShadow'
 import type { DiarySummary } from '@/app/api/diaries/route'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import { FONT } from '@/lib/designTokens'
@@ -275,6 +276,7 @@ function DiariPageLibro() {
 
   return (
     <div className={`min-h-screen ${MOBILE_TOPBAR_SPACER}`} style={{ background: 'radial-gradient(ellipse at 50% 0%, #453b2c 0%, #2a2419 70%)' }}>
+      <BookSpineShadow variant="dark" />
       <Navbar />
       <div className="max-w-[1100px] mx-auto px-4 sm:px-8 pt-8 pb-14">
         <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', fontSize: 11, color: 'rgba(255,255,255,0.45)' }} className="mb-1.5">

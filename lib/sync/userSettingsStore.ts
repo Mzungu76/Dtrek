@@ -79,6 +79,9 @@ export interface UserSettingsData {
    *  Percorso del Diario, vedi components/profilo/SectionAvanzate.tsx e
    *  app/diari/[id]/percorsi/[percorsoId]/page.tsx. */
   diarioLibroEnabled: boolean
+  /** Ultimo Diario aperto, Fase 11 — null finché l'utente non ha ancora aperto un Sommario. Letto
+   *  da app/page.tsx per decidere dove aprire l'app, scritto da DiarioIndexLibro a ogni apertura. */
+  lastDiaryId: string | null
 }
 
 const ENTITY_TYPE = 'user_settings'

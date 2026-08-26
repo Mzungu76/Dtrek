@@ -7,16 +7,17 @@ import RouteThumb from '@/components/RouteThumb'
 import SectionEyebrow from '@/components/bacheca/SectionEyebrow'
 import RecoSuggestedRow from '@/components/bacheca/RecoSuggestedRow'
 import BookPage from '@/components/libro/BookPage'
+import DiarioSwitcherDrawer from '@/components/libro/DiarioSwitcherDrawer'
 import { GalleryMapThumb } from '@/components/routehub/BottomGallery'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 import { ctsLabel } from '@/lib/trailScore'
 import { formatDuration } from '@/lib/tcxParser'
 import type { DiarioDetail } from '@/app/api/diaries/[id]/route'
 import type { RecommendationCard } from '@/lib/routeBuilder/generateRecommendations'
-import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
+import { getUserSettingsCached, updateUserSettings } from '@/lib/sync/userSettingsStore'
 import { FONT } from '@/lib/designTokens'
 import {
-  ArrowLeft, ArrowUpDown, CheckCircle2, ChevronRight, Clock, Loader2, Lock, LockOpen, Mountain,
+  ArrowDown, ArrowLeft, ArrowUp, CheckCircle2, ChevronRight, Clock, Loader2, Lock, LockOpen, Mountain,
   Plus, Route, Search, Share2, Sparkles, Star, Trash2, TrendingUp, X,
 } from 'lucide-react'
 
@@ -301,12 +302,21 @@ const SOMMARIO_SORT_OPTIONS: { id: SommarioSortKey; label: string }[] = [
   { id: 'date', label: 'Data' }, { id: 'km', label: 'Km' }, { id: 'dplus', label: 'D+' }, { id: 'cts', label: 'TS' },
 ]
 
+/** Stato del Percorso — filtro richiesto in aggiunta a ricerca/preferiti/ordinamento (Fase 9). */
+type SommarioStatusFilter = 'all' | 'programmate' | 'con_uscita'
+const SOMMARIO_STATUS_OPTIONS: { id: SommarioStatusFilter; label: string }[] = [
+  { id: 'all', label: 'Tutti' }, { id: 'programmate', label: 'In programma' }, { id: 'con_uscita', label: 'Con uscita' },
+]
+
 function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
   const [detail, setDetail] = useState<DiarioDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [favoritesOnly, setFavoritesOnly] = useState(false)
+  const [statusFilter, setStatusFilter] = useState<SommarioStatusFilter>('all')
   const [sortBy, setSortBy] = useState<SommarioSortKey>('date')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  const [switcherOpen, setSwitcherOpen] = useState(false)
 
   useEffect(() => {
     fetch(`/api/diaries/${encodeURIComponent(diaryId)}`)
@@ -314,6 +324,13 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
       .then(setDetail)
       .catch(e => setError(e instanceof Error ? e.message : String(e)))
   }, [diaryId])
+
+  // Ultimo Diario aperto, Fase 11 — app/page.tsx (home) lo legge per decidere dove aprire l'app.
+  // Scritto solo dopo un caricamento riuscito (non dall'URL grezzo): un id non valido o non più
+  // accessibile non deve mai diventare il prossimo punto di apertura.
+  useEffect(() => {
+    if (detail) updateUserSettings({ lastDiaryId: diaryId })
+  }, [detail, diaryId])
 
   // Stessi filtri/ricerca/ordinamento di components/routehub/ExpandedGalleryList.tsx ("Tutti i
   // percorsi") — qui senza "Distanza" (richiede l'indirizzo di partenza + una chiamata Google
@@ -324,6 +341,8 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
   const visiblePercorsi = useMemo(() => {
     let rows = detail?.percorsi ?? []
     if (favoritesOnly) rows = rows.filter(p => p.favorite)
+    if (statusFilter === 'programmate') rows = rows.filter(p => p.reportageCount === 0)
+    else if (statusFilter === 'con_uscita') rows = rows.filter(p => p.reportageCount > 0)
     const q = searchQuery.trim().toLowerCase()
     if (q) rows = rows.filter(p => p.title.toLowerCase().includes(q))
     if (sortBy !== 'date') {
@@ -333,8 +352,11 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
         return (b.trailScore ?? 0) - (a.trailScore ?? 0)
       })
     }
+    // "Data" arriva già in ordine created_at desc dall'API: invertire l'intero elenco (qui, non
+    // dentro il sort sopra) copre anche quel caso senza bisogno di un comparatore per data.
+    if (sortDir === 'asc') rows = [...rows].reverse()
     return rows
-  }, [detail, favoritesOnly, searchQuery, sortBy])
+  }, [detail, favoritesOnly, statusFilter, searchQuery, sortBy, sortDir])
 
   if (error) {
     return (
@@ -353,7 +375,13 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
 
   return (
     <>
-      <BookPage diarioTitle={detail.title} indexHref="/diari" sectionLabel="Indice">
+      <DiarioSwitcherDrawer open={switcherOpen} onClose={() => setSwitcherOpen(false)} currentDiaryId={diaryId} />
+      <BookPage
+        diarioTitle={detail.title}
+        indexHref="/diari"
+        onTitleClick={() => setSwitcherOpen(true)}
+        sectionLabel="Indice"
+      >
         <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 10, color: '#8a7f52', margin: '0 0 3px' }}>
           Sommario
         </p>
@@ -397,7 +425,7 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                 </button>
               )}
             </div>
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 mb-1.5">
               <button
                 onClick={() => setFavoritesOnly(f => !f)}
                 title="Solo preferiti"
@@ -406,7 +434,14 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
               >
                 <Star className="w-3 h-3" fill={favoritesOnly ? 'currentColor' : 'none'} />
               </button>
-              <ArrowUpDown className="w-3 h-3 shrink-0" style={{ color: '#a9915f' }} />
+              <button
+                onClick={() => setSortDir(d => d === 'desc' ? 'asc' : 'desc')}
+                title={sortDir === 'desc' ? 'Ordine decrescente — tocca per invertire' : 'Ordine crescente — tocca per invertire'}
+                className="shrink-0 flex items-center justify-center w-6 h-6 rounded-full transition-colors"
+                style={{ background: '#f1e9d2', color: '#8a7f52' }}
+              >
+                {sortDir === 'desc' ? <ArrowDown className="w-3 h-3" /> : <ArrowUp className="w-3 h-3" />}
+              </button>
               {SOMMARIO_SORT_OPTIONS.map(s => (
                 <button
                   key={s.id}
@@ -418,25 +453,49 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                 </button>
               ))}
             </div>
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+              {SOMMARIO_STATUS_OPTIONS.map(s => (
+                <button
+                  key={s.id}
+                  onClick={() => setStatusFilter(s.id)}
+                  className="shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold transition-colors"
+                  style={statusFilter === s.id ? { background: '#3f3a22', color: '#fbf6e8' } : { background: '#f1e9d2', color: '#8a7f52' }}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
         {detail.percorsi.length === 0 ? (
           <p style={{ fontFamily: FONT.body, fontSize: 13, color: '#8a7f52' }}>Nessun percorso ancora — comincia da qui.</p>
         ) : visiblePercorsi.length === 0 ? (
-          <p style={{ fontFamily: FONT.body, fontSize: 13, color: '#8a7f52' }}>Nessun percorso corrisponde alla ricerca.</p>
+          <p style={{ fontFamily: FONT.body, fontSize: 13, color: '#8a7f52' }}>Nessun percorso corrisponde ai filtri.</p>
         ) : (
           <div className="flex flex-col">
             {visiblePercorsi.map(p => {
               const percorsoPath = `/diari/${encodeURIComponent(diaryId)}/percorsi/${encodeURIComponent(p.id)}`
               const scoreLabel = p.trailScore != null ? ctsLabel(p.trailScore).label : null
+              const haOgniUscita = p.reportageCount > 0
               return (
-                <div key={p.id} className="flex items-center gap-3 py-3" style={{ borderBottom: '1px dotted #ddd0a3' }}>
+                <div
+                  key={p.id}
+                  className="flex items-center gap-3 py-3 px-2 -mx-2 rounded-lg"
+                  style={{
+                    borderBottom: '1px dotted #ddd0a3',
+                    // Sfondo tinteggiato (terra, molto tenue) per i percorsi con almeno un'uscita —
+                    // riconoscibili a colpo d'occhio senza dover leggere l'etichetta a destra.
+                    background: haOgniUscita ? 'rgba(192, 90, 23, 0.07)' : 'transparent',
+                  }}
+                >
                   {/* Stessa riga di components/routehub/ExpandedGalleryList.tsx (mappa reale,
                       etichetta idoneità/sicurezza, pillole dati, anello Trail Score) — qui
                       ricolorata per la pergamena invece dello sfondo scuro di quella lista, e va
                       dritta alla Guida invece che alla vecchia pagina di riepilogo (un tap in
-                      meno, feedback dell'utente). */}
+                      meno, feedback dell'utente). Anello TS e stato a destra hanno una larghezza
+                      fissa (non "shrink-to-content") così restano allineati in verticale da una
+                      riga all'altra, indipendentemente da quanto testo hanno le righe vicine. */}
                   <Link href={`${percorsoPath}/guida/il_percorso`} className="flex items-center gap-3 flex-1 min-w-0">
                     <div className="w-16 h-16 rounded-lg shrink-0 overflow-hidden relative" style={{ background: '#e9dcb8' }}>
                       {p.routePolyline && p.routePolyline.length > 1
@@ -457,26 +516,26 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                         <span className="inline-flex items-center gap-1"><Clock className="w-3 h-3" style={{ color: '#a9915f' }} /> {formatDuration(p.estimatedTimeSeconds)}</span>
                       </div>
                     </div>
-                    {p.trailScore != null && (
-                      <div className="shrink-0">
+                    <div className="shrink-0 w-10 flex items-center justify-center">
+                      {p.trailScore != null && (
                         <TrailScoreGaugeBadge total={p.trailScore} safety={p.safety} size={40} showLabel={false} dark={false} />
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </Link>
-                  {p.reportageCount > 0 ? (
-                    <Link
-                      href={percorsoPath}
-                      className="shrink-0 flex flex-col items-end gap-0.5"
-                      style={{ fontSize: 10.5, color: '#8a7f52' }}
-                    >
-                      <span className="inline-flex items-center gap-0.5">
+                  <div className="shrink-0" style={{ width: 82, textAlign: 'right' }}>
+                    {haOgniUscita ? (
+                      <Link
+                        href={percorsoPath}
+                        className="inline-flex items-center gap-0.5 whitespace-nowrap"
+                        style={{ fontSize: 10.5, color: '#8a7f52' }}
+                      >
                         {p.reportageCount} {p.reportageCount === 1 ? 'uscita' : 'uscite'}
                         <ChevronRight className="w-3 h-3" style={{ color: '#b5a677' }} />
-                      </span>
-                    </Link>
-                  ) : (
-                    <span className="shrink-0" style={{ fontSize: 10.5, color: '#8a7f52' }}>in programma</span>
-                  )}
+                      </Link>
+                    ) : (
+                      <span className="whitespace-nowrap" style={{ fontSize: 10.5, color: '#8a7f52' }}>in programma</span>
+                    )}
+                  </div>
                 </div>
               )
             })}

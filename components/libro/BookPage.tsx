@@ -17,6 +17,7 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { ChevronLeft, ChevronRight, BookOpen } from 'lucide-react'
 import { FONT, TERRA } from '@/lib/designTokens'
+import BookSpineShadow from './BookSpineShadow'
 
 const PAPER_BG = '#fbf6e8'
 const PAPER_HAIRLINE = '#e4d9bd'
@@ -36,6 +37,11 @@ interface BookPageProps {
   /** Titolo del Diario — link di "torna all'indice" del Percorso/Diario. */
   diarioTitle: string
   indexHref: string
+  /** Se presente, il titolo diventa un bottone che apre il drawer dei Diari (Fase 11) invece di
+   *  navigare a indexHref — usato solo dal Sommario stesso, dove indexHref porterebbe allo
+   *  scaffale: da lì si vuole poter cambiare Diario senza lasciare la pagina. Ogni altra pagina
+   *  del libro (Guida/Reportage/pubblica) continua a navigare normalmente. */
+  onTitleClick?: () => void
   /** Etichetta della sezione corrente, mostrata a destra della running head (es. "Percorso",
    *  "Dati e sicurezza", "Cronaca"). */
   sectionLabel: string
@@ -51,22 +57,36 @@ interface BookPageProps {
 }
 
 export default function BookPage({
-  diarioTitle, indexHref, sectionLabel, prevHref, nextHref, sections, currentSectionKey, pageLabel, children,
+  diarioTitle, indexHref, onTitleClick, sectionLabel, prevHref, nextHref, sections, currentSectionKey, pageLabel, children,
 }: BookPageProps) {
+  const titleStyle = { fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.1em', fontSize: 11, color: INK_MUTED }
   return (
     <div className="min-h-screen flex flex-col" style={{ background: PAPER_BG }}>
+      <BookSpineShadow variant="light" />
       <div
         className="flex items-center justify-between gap-3 px-5 sm:px-8 pt-5 pb-3 border-b sticky top-0 z-10"
         style={{ borderColor: PAPER_HAIRLINE, background: PAPER_BG }}
       >
-        <Link
-          href={indexHref}
-          className="flex items-center gap-1.5 shrink-0 min-w-0 hover:opacity-70 transition-opacity"
-          style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 11, color: INK_MUTED }}
-        >
-          <BookOpen className="w-3.5 h-3.5 shrink-0" />
-          <span className="truncate">{diarioTitle}</span>
-        </Link>
+        {onTitleClick ? (
+          <button
+            type="button"
+            onClick={onTitleClick}
+            className="flex items-center gap-1.5 shrink-0 min-w-0 hover:opacity-70 transition-opacity"
+            style={titleStyle}
+          >
+            <BookOpen className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">{diarioTitle}</span>
+          </button>
+        ) : (
+          <Link
+            href={indexHref}
+            className="flex items-center gap-1.5 shrink-0 min-w-0 hover:opacity-70 transition-opacity"
+            style={titleStyle}
+          >
+            <BookOpen className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">{diarioTitle}</span>
+          </Link>
+        )}
         <span
           className="shrink-0"
           style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 11, color: INK_MUTED }}
