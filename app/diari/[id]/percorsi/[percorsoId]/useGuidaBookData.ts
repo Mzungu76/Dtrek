@@ -10,6 +10,9 @@
 // le altre schede, preferiti, copertine, toast di eliminazione): serve un solo percorso.
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { getPlannedById, updatePlannedMeta, type PlannedHike } from '@/lib/plannedStore'
+import { getCachedGeoInfo, setCachedGeoInfo } from '@/lib/routeBuilder/geoInfoCache'
+import { LS_KEYS } from '@/lib/localStore'
+import type { ReturnOption } from '@/lib/routeBuilder/returnOptions'
 import { useCtsUpdated } from '@/lib/sync/useCtsUpdated'
 import { useHasAiAccess } from '@/app/guida/useHasAiAccess'
 import { useEnrichmentTimeout } from '@/app/guida/useEnrichmentTimeout'
@@ -30,7 +33,7 @@ import { isHikerExperienceLevel, sanitizeHikerConcerns, type HikerExperienceLeve
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import { getAllActivities, type ActivityMeta } from '@/lib/blobStore'
 import { getPersonalRecords, difficultyIndex } from '@/lib/stats'
-import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
+import { computeBbox, minDistToTrack, classifyTrackShape } from '@/lib/geoUtils'
 import { getUserStartingPoint, googleMapsDirectionsUrl } from '@/lib/drivingInfo'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
 import { type PoiItem } from '@/lib/overpass'
@@ -60,6 +63,9 @@ export interface UseGuidaBookDataResult {
   weather?: { lat: number; lon: number; mode: 'planned' | 'forecast' }
   hasGps: boolean
   pois: PoiItem[]
+  isLinearRoute: boolean
+  endPoint: { lat: number; lon: number } | null
+  returnOptions: ReturnOption[] | null
   highlightedPoiId: number | null
   onPoiTap: (poiId: number) => void
   scrollToSectionKey: GuideSectionKey | null
@@ -280,6 +286,43 @@ export function useGuidaBookData(percorsoId: string | undefined): UseGuidaBookDa
   const centerPt = gpsPoints[Math.floor(gpsPoints.length / 2)]
   const hasGps = gpsPoints.length > 0
 
+  // isLinearRoute/endPoint/returnOptions: nel lettore continuo (GuideReader.tsx) sono calcolati
+  // internamente, non passati da GuidaHub — replicati qui identici (righe 238, 774-802 lì) perché
+  // il widget "luoghi" (PoiListWidget → sezione "Tornare al punto di partenza") ne ha bisogno
+  // esattamente come nel lettore continuo: senza, un percorso a tratta unica perderebbe in
+  // silenzio quella sottosezione nel libro.
+  const isLinearRoute = useMemo(() => classifyTrackShape(hike?.routePolyline ?? []) === 'linear', [hike?.routePolyline])
+  const endPoint = useMemo(() => {
+    if (!hike) return null
+    const fromTrack = [...(hike.trackPoints ?? [])].reverse().find(p => p.lat != null && p.lon != null)
+    if (fromTrack) return { lat: fromTrack.lat!, lon: fromTrack.lon! }
+    const poly = hike.routePolyline
+    if (poly && poly.length > 0) return { lat: poly[poly.length - 1][0], lon: poly[poly.length - 1][1] }
+    return null
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hike?.trackPoints, hike?.routePolyline])
+
+  const [returnOptions, setReturnOptions] = useState<ReturnOption[] | null>(null)
+  useEffect(() => {
+    setReturnOptions(null)
+    if (!hike || !isLinearRoute || !endPoint) return
+    let cancelled = false
+    const cacheKey = LS_KEYS.returnOptions(hike.id)
+    getCachedGeoInfo<ReturnOption[]>(cacheKey).then(cached => {
+      if (cached.hit) { if (!cancelled) setReturnOptions(cached.value); return }
+      fetch(`/api/route-build/return-options?lat=${endPoint.lat}&lon=${endPoint.lon}`)
+        .then(res => res.json())
+        .then(data => {
+          const options: ReturnOption[] = Array.isArray(data.options) ? data.options : []
+          if (!cancelled) setReturnOptions(options)
+          setCachedGeoInfo(cacheKey, options)
+        })
+        .catch(() => { if (!cancelled) setReturnOptions([]) })
+    })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLinearRoute, endPoint, hike?.id])
+
   const scores: ScoresBundle = {
     safety: refinedSafety,
     personalSafety,
@@ -315,7 +358,7 @@ export function useGuidaBookData(percorsoId: string | undefined): UseGuidaBookDa
   return {
     loading, notFound, hike, onHikeUpdate, enrichmentReady, hasAiAccess, aiUnavailable, trialExpired,
     driving, dtmProfile, onRouteModeChange, scores, safetyDetails, poiList, natura, weather,
-    hasGps, pois,
+    hasGps, pois, isLinearRoute, endPoint, returnOptions,
     highlightedPoiId,
     onPoiTap: (poiId: number) => setHighlightedPoiId(prev => prev === poiId ? null : poiId),
     scrollToSectionKey,

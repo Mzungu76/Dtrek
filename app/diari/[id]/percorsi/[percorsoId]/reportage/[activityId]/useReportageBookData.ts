@@ -16,6 +16,7 @@ import {
   type StoredActivity, type ActivityMeta,
 } from '@/lib/blobStore'
 import { fetchActivityPhotos, type RoutePhoto } from '@/lib/activityPhotos'
+import { getReport } from '@/lib/sync/hikeReportStore'
 import { computeTrailScore, type TrailScoreResult } from '@/lib/trailScore'
 import { findSimilarActivities } from '@/lib/stats'
 import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
@@ -39,6 +40,9 @@ export interface UseReportageBookDataResult {
   loading: boolean
   notFound: boolean
   activity: StoredActivity | null
+  /** Markdown del Resoconto (hike_reports.content) — passalo a buildReportDisplaySections per
+   *  ottenere i capitoli narrativi ("Cronaca"), esattamente come fa ReportReader.tsx. */
+  content: string
   driving: { distanceMeters: number; mapsUrl?: string } | null
   weatherIcon: { emoji: string; label: string } | null
   data: DataSectionBundle
@@ -58,6 +62,10 @@ export interface UseReportageBookDataResult {
 export function useReportageBookData(activityId: string | undefined): UseReportageBookDataResult {
   const router = useRouter()
   const [activity, setActivity] = useState<StoredActivity | null>(null)
+  // Testo del Resoconto vero e proprio (tabella hike_reports, 1:1 su activity_id) — NON fa parte di
+  // StoredActivity/ActivityMeta: nel lettore continuo (ReportReader.tsx) è un fetch a sé (getReport),
+  // qui replicato identico. Senza questo i capitoli narrativi ("Cronaca") sarebbero sempre vuoti.
+  const [content, setContent] = useState('')
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [showGradient, setShowGradient] = useState(false)
@@ -122,12 +130,14 @@ export function useReportageBookData(activityId: string | undefined): UseReporta
         .finally(() => setPoisLoaded(true))
     }
     setPois([]); setPoisLoaded(false); setPoiWikiEntries([]); setPhotos([]); setPhotosError(false); setCoverPhotoId(null)
+    setContent('')
     getActivityById(activityId).then(a => {
       if (!a) { setNotFound(true); setLoading(false); return }
       setActivity(a)
       loadPoisFor(a)
       setLoading(false)
     }).catch(() => { setNotFound(true); setLoading(false) })
+    getReport(activityId).then(rep => { if (rep) setContent(rep.content ?? '') }).catch(() => {})
     fetchActivityPhotos(activityId).then(setPhotos).catch(() => setPhotosError(true))
     const savedCover = typeof window !== 'undefined' ? localStorage.getItem(`dtrek_cover_${activityId}`) : null
     if (savedCover) setCoverPhotoId(savedCover)
@@ -138,6 +148,7 @@ export function useReportageBookData(activityId: string | undefined): UseReporta
   useCtsUpdated(() => {
     if (!activityId) return
     getActivityById(activityId).then(a => { if (a) setActivity(a) }).catch(() => {})
+    getReport(activityId).then(rep => { if (rep) setContent(rep.content ?? '') }).catch(() => {})
   })
 
   useCtsRecompute({
@@ -235,7 +246,7 @@ export function useReportageBookData(activityId: string | undefined): UseReporta
   }
 
   return {
-    loading, notFound, activity, driving, weatherIcon, data, natura,
+    loading, notFound, activity, content, driving, weatherIcon, data, natura,
     pois, poisLoaded, poiWikiEntries,
     photos, photosError, onRetryPhotos: retryPhotos, onPhotosChange: setPhotos,
     coverPhotoId, setCoverPhotoId: setCoverPhotoIdPersisted,
