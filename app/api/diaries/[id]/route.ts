@@ -25,6 +25,9 @@ export interface DiarioPercorsoRow {
    *  (overall/color/label) che app/guida/GuidaHub.tsx passa a RouteHubItem.safetyPreview per
    *  l'anello esterno di TrailScoreGaugeBadge, qui riusato identico per il Sommario del Diario. */
   safety: SafetyPreview | null
+  /** planned_hikes.favorite — per il filtro "solo preferiti" del Sommario, stesso concetto già
+   *  usato dal filtro a stella di ExpandedGalleryList.tsx/GuidaHub.tsx. */
+  favorite: boolean
 }
 
 export interface DiarioDetail {
@@ -53,7 +56,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
     const { data: planned, error: plannedErr } = await supabase
       .from('planned_hikes')
-      .select('id, title, distance_meters, elevation_gain, altitude_max, estimated_time_seconds, route_polyline, first_completed_at, cached_ts_total, cached_safety_score')
+      .select('id, title, distance_meters, elevation_gain, altitude_max, estimated_time_seconds, route_polyline, first_completed_at, cached_ts_total, cached_safety_score, favorite')
       .eq('user_id', user.id)
       .eq('diary_id', params.id)
       .order('created_at', { ascending: false })
@@ -88,6 +91,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         pubblicabile:          reportageCount > 0,
         trailScore:            (p.cached_ts_total as number | null) ?? null,
         safety:                safetyScore ? { overall: safetyScore.overall, color: safetyScore.color, label: safetyScore.label } : null,
+        favorite:              (p.favorite as boolean | null) ?? false,
       }
     })
 
