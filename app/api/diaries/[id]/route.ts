@@ -14,6 +14,10 @@ export interface DiarioPercorsoRow {
   firstCompletedAt: string | null
   reportageCount: number
   pubblicabile: boolean
+  /** Trail Score totale già cachato (planned_hikes.cached_ts_total) — null se non ancora
+   *  calcolato. Nessun ricalcolo qui: stessa convenzione di sola lettura del resto di questa
+   *  route, il calcolo vero avviene altrove (useGuidaBookData/GuidaHub). */
+  trailScore: number | null
 }
 
 export interface DiarioDetail {
@@ -42,7 +46,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
     const { data: planned, error: plannedErr } = await supabase
       .from('planned_hikes')
-      .select('id, title, distance_meters, elevation_gain, route_polyline, first_completed_at')
+      .select('id, title, distance_meters, elevation_gain, route_polyline, first_completed_at, cached_ts_total')
       .eq('user_id', user.id)
       .eq('diary_id', params.id)
       .order('created_at', { ascending: false })
@@ -72,6 +76,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         firstCompletedAt:  p.first_completed_at as string | null,
         reportageCount,
         pubblicabile:      reportageCount > 0,
+        trailScore:        (p.cached_ts_total as number | null) ?? null,
       }
     })
 

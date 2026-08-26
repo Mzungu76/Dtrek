@@ -246,6 +246,54 @@ richieste emerse da quella verifica:
     reale (nessuna vista statistiche filtrata per Diario, solo `/statistiche` globale) — non
     riprodotta per non promettere una vista che non esiste; l'indice qui non ha quel link.
 
+**Fase 6 — Feedback dopo la seconda verifica a schermo (screenshot reali)** ✅ **COMPLETATA (parziale — vedi non fatto)**
+
+L'utente ha mandato screenshot reali del flusso (Sommario, riepilogo Percorso, pagine Guida,
+scaffale) con sei osservazioni puntuali:
+
+- **Righe del Sommario troppo povere** — mancavano le statistiche essenziali, il Trail Score e
+  un'anteprima del tracciato che c'erano nella vecchia griglia (`app/percorsi/page.tsx`, la stessa
+  card riusata anche dal vecchio `/diari/[id]`). Righe riscritte: miniatura 56×56 con
+  `RouteThumb`, km/dislivello, badge Trail Score. Il Trail Score non era esposto da
+  `/api/diaries/[id]` — aggiunta `trailScore` a `DiarioPercorsoRow` (colonna già esistente,
+  `planned_hikes.cached_ts_total`, nessun ricalcolo nuovo).
+- **La pagina di riepilogo del Percorso con "Apri la Guida" è un tap in più inutile** — il tap
+  dalla riga del Sommario va ora dritto a `.../guida/il_percorso`, non più alla pagina di
+  riepilogo. Quella pagina non sparisce (ci vive ancora il pannello di generazione bulk e "Le tue
+  uscite"): il CTA "Apri la Guida" è stato ridotto da pulsante pieno a link secondario, e resta
+  raggiungibile da ogni pagina di Guida tramite un pallino extra "Reportage" aggiunto in coda ai
+  pallini di sezione (`GuideBookPage.tsx`) — così un Percorso con 0 uscite non perde comunque
+  l'accesso a quella pagina. Riga del Sommario ridisegnata di conseguenza: l'area principale
+  (miniatura+titolo+dati) è un `<Link>` verso la Guida, il badge "N uscite"/"in programma" è un
+  `<Link>` **sorella** separata verso il riepilogo (non annidata — due `<a>` nello stesso HTML
+  sarebbero non validi).
+- **"Muri di testo" nelle sezioni della Guida** — il corpo era un singolo `<p>` con
+  `whiteSpace:'pre-wrap'`. Sostituito con `components/editorial/MagazineBody.tsx`, lo stesso
+  componente già usato dal lettore classico (via `SectionCard.tsx`): paragrafo di apertura in
+  corsivo, resto diviso in `<p>` veri, callout `[curiosita]`/`[avviso]` riconosciuti — riuso, non
+  una riscrittura. Stesso trattamento anche per i capitoli narrativi del Reportage
+  (`ReportBookPage.tsx`), stesso difetto.
+- **Banner Meteo a sfondo bianco stonava sulla pergamena** — l'utente ha indicato esplicitamente
+  la preferenza: un tono più scuro della pergamena, non lo stesso bianco del lettore classico.
+  Aggiunto un prop opzionale `panelClassName` a `WeatherWidget.tsx` (tutti e tre i suoi modi:
+  historical/forecast/planned) che sovrascrive lo sfondo bianco di default — additivo, il lettore
+  classico (GuideReader/ResocontoHub) non lo passa e resta bianco com'era. `GuideBookPage.tsx` lo
+  valorizza a un tono pergamena più scuro (`#f1e9d2` su bordo `#e4d9bd`, stessi toni di
+  `BookPage.tsx`).
+- **Copertine dei Diari: foto e testi personalizzabili, "riviste di settore"** — la personalizzazione
+  **esiste già**: `/diari/[id]/pubblica` ha da tempo l'upload della foto di copertina e l'editing di
+  titolo/sottotitolo/autore (`app/diari/[id]/pubblica/page.tsx`, righe ~527-570), e scrive nelle
+  stesse colonne (`diaries.title/subtitle/author/cover_url`) che lo scaffale e l'indice già
+  leggono — non serviva un editor nuovo, solo renderla raggiungibile da dove si vede la copertina.
+  Aggiunto un link discreto "Personalizza copertina" su ogni copertina dello scaffale, verso quella
+  stessa pagina (un `<Link>` sorella di "Apri Diario", non annidata).
+- **Non fatto — richiede una decisione, non solo un cambiamento di stile**: creare un nuovo Diario.
+  Non esiste da nessuna parte nell'app reale (nessun `POST /api/diaries`, nessuna UI, in nessuna
+  delle due versioni, classica o a libro) — è una funzione mai costruita, non solo assente dallo
+  scaffale a libro. Prima di costruirla va deciso se multi-Diario è libero per tutti o gated per
+  tier (`subscriptionTier` esiste già in `user_settings` ma nessun limite sul numero di Diari è mai
+  stato implementato altrove) — **chiesto all'utente, risposta in sospeso**.
+
 ## File critici
 - `components/guida/GuideReader.tsx`, `components/resoconto/ReportReader.tsx` — sorgente da cui
   estratto in Fase 0, non riscritti.
@@ -269,7 +317,15 @@ richieste emerse da quella verifica:
   duplicato.
 - `app/diari/page.tsx`, `app/diari/[id]/page.tsx` — scaffale e indice, Fase 5: contengono sia la
   versione `*Classico` (invariata, a flag spento) sia quella a libro (`DiariPageLibro`/
-  `DiarioIndexLibro`).
+  `DiarioIndexLibro`); Fase 6 ha riscritto le righe del Sommario (stats/CTS/link doppio) e aggiunto
+  "Personalizza copertina" allo scaffale.
+- `components/editorial/MagazineBody.tsx` — riusato in Fase 6 da `GuideBookPage.tsx`/
+  `ReportBookPage.tsx` per la suddivisione in paragrafi, non toccato.
+- `components/WeatherWidget.tsx` — nuovo prop opzionale `panelClassName` (Fase 6), additivo, non
+  usato dal lettore classico.
+- `app/api/diaries/[id]/route.ts` — `DiarioPercorsoRow.trailScore` aggiunto in Fase 6.
+- `app/diari/[id]/pubblica/page.tsx` — non toccato in Fase 6, solo scoperto: già ha l'editing di
+  foto/titolo/sottotitolo/autore del Diario che la Fase 6 rende raggiungibile dallo scaffale.
 
 ## Verifica
 - Fase 0-2: `tsc --noEmit`, `eslint`, `npm run build` (la build fallisce nella sandbox corrente per

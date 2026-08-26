@@ -352,29 +352,51 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
           <div className="flex flex-col">
             {detail.percorsi.map((p, i) => {
               const [c0, c1] = SWATCH_GRADIENTS[i % SWATCH_GRADIENTS.length]
+              const percorsoPath = `/diari/${encodeURIComponent(diaryId)}/percorsi/${encodeURIComponent(p.id)}`
               return (
-                <Link
-                  key={p.id}
-                  href={`/diari/${encodeURIComponent(diaryId)}/percorsi/${encodeURIComponent(p.id)}`}
-                  className="flex items-center gap-2.5 py-2.5"
-                  style={{ borderBottom: '1px dotted #ddd0a3' }}
-                >
-                  <span
-                    className="w-[26px] h-[26px] rounded-md shrink-0 flex items-center justify-center"
-                    style={{ background: `linear-gradient(160deg, ${c0}, ${c1})` }}
-                  >
-                    {p.routePolyline && p.routePolyline.length > 1
-                      ? <RouteThumb polyline={p.routePolyline} color="#fff" strokeWidth={6} className="!w-[18px] !h-[18px]" />
-                      : <Mountain className="w-3.5 h-3.5 text-white/80" />}
-                  </span>
-                  <span className="flex-1 min-w-0 truncate" style={{ fontSize: 13.5, fontWeight: 600, color: '#3f3a22' }}>
-                    {p.title}
-                  </span>
-                  <span className="shrink-0" style={{ fontSize: 10.5, color: '#8a7f52' }}>
-                    {p.reportageCount > 0 ? `${p.reportageCount} ${p.reportageCount === 1 ? 'uscita' : 'uscite'}` : 'in programma'}
-                  </span>
-                  <ChevronRight className="w-3.5 h-3.5 shrink-0" style={{ color: '#b5a677' }} />
-                </Link>
+                <div key={p.id} className="flex items-center gap-3 py-3" style={{ borderBottom: '1px dotted #ddd0a3' }}>
+                  {/* Va dritto alla Guida — non alla vecchia pagina di riepilogo, che qui non serve
+                      più da tappa obbligata (feedback dell'utente: un tap in più senza motivo). */}
+                  <Link href={`${percorsoPath}/guida/il_percorso`} className="flex items-center gap-3 flex-1 min-w-0">
+                    <span
+                      className="w-14 h-14 rounded-lg shrink-0 flex items-center justify-center overflow-hidden"
+                      style={{ background: `linear-gradient(160deg, ${c0}, ${c1})` }}
+                    >
+                      {p.routePolyline && p.routePolyline.length > 1
+                        ? <RouteThumb polyline={p.routePolyline} color="#fff" strokeWidth={5} className="!w-[42px] !h-[42px]" />
+                        : <Mountain className="w-5 h-5 text-white/80" />}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate" style={{ fontSize: 14, fontWeight: 600, color: '#3f3a22' }}>{p.title}</p>
+                      <div className="flex items-center gap-2.5 flex-wrap mt-0.5" style={{ fontSize: 11, color: '#8a7f52' }}>
+                        <span>{(p.distanceMeters / 1000).toFixed(1)} km</span>
+                        <span>{Math.round(p.elevationGain)} m D+</span>
+                        {p.trailScore != null && (
+                          <span
+                            className="inline-flex items-center px-1.5 py-0.5 rounded"
+                            style={{ background: '#f1e9d2', color: '#9f4315', fontWeight: 700, fontSize: 10.5 }}
+                          >
+                            TS {Math.round(p.trailScore)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </Link>
+                  {p.reportageCount > 0 ? (
+                    <Link
+                      href={percorsoPath}
+                      className="shrink-0 flex flex-col items-end gap-0.5"
+                      style={{ fontSize: 10.5, color: '#8a7f52' }}
+                    >
+                      <span className="inline-flex items-center gap-0.5">
+                        {p.reportageCount} {p.reportageCount === 1 ? 'uscita' : 'uscite'}
+                        <ChevronRight className="w-3 h-3" style={{ color: '#b5a677' }} />
+                      </span>
+                    </Link>
+                  ) : (
+                    <span className="shrink-0" style={{ fontSize: 10.5, color: '#8a7f52' }}>in programma</span>
+                  )}
+                </div>
               )
             })}
           </div>

@@ -75,6 +75,9 @@ export interface RenderGuideWidgetProps {
   returnOptions?: ReturnOption[] | null
   endPoint?: { lat: number; lon: number } | null
   natura?: NaturaBundle
+  /** Sovrascrive lo sfondo bianco del widget Meteo — vedi WeatherWidget.tsx's `panelClassName`.
+   *  Assente per il lettore classico (GuideReader), che resta invariato. */
+  weatherPanelClassName?: string
 }
 
 /** Sceglie il widget dati per una sezione fissa della Guida — stesso dispatcher di
@@ -83,11 +86,12 @@ export interface RenderGuideWidgetProps {
  *  puro: `default: return null`. */
 export function renderGuideWidget(key: DisplaySection['key'], body: string | undefined, props: RenderGuideWidgetProps): ReactNode {
   const { hike, weather, onOpenMap3D, showGradient, showAspect, scores, dtmProfile, guideNotices, guideSources,
-    safetyDetails, poiList, highlightedPoiId, onPoiTap, isLinearRoute, returnOptions, endPoint, natura } = props
+    safetyDetails, poiList, highlightedPoiId, onPoiTap, isLinearRoute, returnOptions, endPoint, natura,
+    weatherPanelClassName } = props
   switch (key) {
     case 'prima_di_partire':
       return weather
-        ? <WeatherWidget mode={weather.mode} lat={weather.lat} lon={weather.lon} date={hike.plannedDate} altitudeMax={hike.altitudeMax} elevationGain={hike.elevationGain} days={7} />
+        ? <WeatherWidget mode={weather.mode} lat={weather.lat} lon={weather.lon} date={hike.plannedDate} altitudeMax={hike.altitudeMax} elevationGain={hike.elevationGain} days={7} panelClassName={weatherPanelClassName} />
         : null
     case 'il_percorso':
       return (
