@@ -4,21 +4,21 @@ import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
-import GuidaHub from '@/app/guida/GuidaHub'
 import TrialStatusBanner from '@/components/dtrek/TrialStatusBanner'
+import GuideGenerationPanel from '@/components/libro/GuideGenerationPanel'
+import { useGuidaBookData } from './useGuidaBookData'
+import { formatDuration } from '@/lib/tcxParser'
 import type { ReportageRow } from '@/app/api/percorsi/[id]/reportage/route'
-import { ArrowLeft, ChevronRight, Loader2, PenLine } from 'lucide-react'
+import { ArrowLeft, BookOpen, ChevronRight, Loader2, PenLine } from 'lucide-react'
 
 /**
- * "Percorso aperto" — Fase 2 di docs/diario-fulcro-piano.md. La Guida oggettiva (narrativa,
- * punteggio, mappa, POI, natura, personalizzazione) è GuidaHub invariato — stesso motore di
- * /guida/[id], nessuna riscrittura: è già la pagina che il piano descrive come "zona Guida".
- * Sotto, la sezione Reportage elenca le uscite collegate a questo Percorso: 0 (in programma),
- * 1 o più (un Percorso è un sentiero ripetibile). Ogni riga rimanda per ora a /resoconto/[id],
- * la pagina esistente — già "il Reportage" per contenuto (narrativa personale, foto, video),
- * non serve ricostruirla da zero.
+ * Pagina di riepilogo del Percorso — Fase 3 di docs/diario-a-libro-piano.md: prima montava
+ * direttamente <GuidaHub id={percorsoId} /> (stessa schermata scura immersiva di /guida/[id]),
+ * lo "stacco visivo" segnalato dall'utente. Ora è una vera pagina di indice del libro: copertina,
+ * statistiche chiave, CTA verso la Guida a pagine e link "Apri in modalità classica" — mai
+ * rimosso, resta il modo per Scarica PDF e ogni altra funzione non (ancora) ricollocata qui.
  */
-function ReportageSection({ diarioId, percorsoId }: { diarioId: string; percorsoId: string }) {
+function ReportageSection({ diarioId, percorsoId, basePath }: { diarioId: string; percorsoId: string; basePath: string }) {
   const [rows, setRows] = useState<ReportageRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -60,7 +60,7 @@ function ReportageSection({ diarioId, percorsoId }: { diarioId: string; percorso
           {rows?.map(r => (
             <Link
               key={r.id}
-              href={`/resoconto/${encodeURIComponent(r.id)}`}
+              href={`${basePath}/reportage/${encodeURIComponent(r.id)}`}
               className="flex items-center gap-3 bg-white rounded-xl px-4 py-3 border border-stone-200 hover:border-forest-300 hover:shadow-sm transition-all"
             >
               <div className="w-9 h-9 rounded-full bg-forest-50 flex items-center justify-center shrink-0">
@@ -88,11 +88,60 @@ function PercorsoPageInner() {
   const params = useParams<{ id: string; percorsoId: string }>()
   const diarioId = decodeURIComponent(params.id)
   const percorsoId = decodeURIComponent(params.percorsoId)
+  const basePath = `/diari/${encodeURIComponent(diarioId)}/percorsi/${encodeURIComponent(percorsoId)}`
+  const bd = useGuidaBookData(percorsoId)
+
   return (
     <>
       <TrialStatusBanner />
-      <GuidaHub id={percorsoId} />
-      <ReportageSection diarioId={diarioId} percorsoId={percorsoId} />
+      {bd.loading ? (
+        <div className="flex items-center justify-center py-24 text-stone-400">
+          <Loader2 className="w-6 h-6 animate-spin" />
+        </div>
+      ) : bd.notFound || !bd.hike ? (
+        <div className="max-w-[900px] mx-auto px-4 py-16 text-center text-stone-500 text-sm">
+          Percorso non trovato.
+        </div>
+      ) : (
+        <>
+          <div className="max-w-[900px] mx-auto px-4 pt-6 pb-2">
+            <div className="rounded-3xl bg-gradient-to-br from-forest-800 to-forest-900 text-white px-6 py-8 mb-6">
+              <p className="uppercase text-[11px] tracking-[0.2em] text-terra-300 font-bold mb-2">Percorso</p>
+              <h1 className="font-display text-2xl sm:text-3xl font-bold mb-4">{bd.hike.title}</h1>
+              <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-white/80">
+                <span>{(bd.hike.distanceMeters / 1000).toFixed(1)} km</span>
+                <span>{Math.round(bd.hike.elevationGain)} m dislivello</span>
+                {bd.hike.estimatedTimeSeconds != null && <span>{formatDuration(bd.hike.estimatedTimeSeconds)}</span>}
+                {bd.hike.plannedDate && <span>{format(new Date(bd.hike.plannedDate), 'd MMMM yyyy', { locale: it })}</span>}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-4 mb-6">
+              <Link
+                href={`${basePath}/guida/il_percorso`}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-terra-600 text-white text-sm font-semibold hover:bg-terra-700 transition-colors"
+              >
+                <BookOpen className="w-4 h-4" /> Apri la Guida
+              </Link>
+              <Link href={`/guida/${encodeURIComponent(percorsoId)}`} className="text-[13px] text-stone-500 underline underline-offset-2 hover:text-stone-700">
+                Apri in modalità classica
+              </Link>
+            </div>
+
+            <GuideGenerationPanel
+              hike={bd.hike}
+              percorsoId={percorsoId}
+              hasAiAccess={bd.hasAiAccess}
+              aiUnavailable={bd.aiUnavailable}
+              trialExpired={bd.trialExpired}
+              onHikeUpdate={bd.onHikeUpdate}
+            />
+          </div>
+
+          <div className="max-w-[900px] mx-auto px-4 pb-2" />
+          <ReportageSection diarioId={diarioId} percorsoId={percorsoId} basePath={basePath} />
+        </>
+      )}
     </>
   )
 }

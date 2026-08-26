@@ -5,7 +5,7 @@
 // ("Cronaca") non hanno una chiave stabile — sono titoli liberi scritti da Giulia o dall'utente —
 // quindi qui la pagina è indirizzata da un indice numerico 1-based (vedi Fase 3,
 // `.../reportage/[activityId]/sezione/[n]/page.tsx`), non da uno slug come per Guida.
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import BookPage, { type BookPageSection } from './BookPage'
 import { useReportageBookData } from '@/app/diari/[id]/percorsi/[percorsoId]/reportage/[activityId]/useReportageBookData'
 import { buildReportDisplaySections, renderReportFixedWidget, type DisplaySection } from '@/lib/resoconto/reportDisplaySections'
@@ -35,9 +35,16 @@ interface Props {
   /** 1-based, coerente con la route `.../sezione/[n]`. */
   pageIndex: number
   onOpenMap3D?: () => void
+  /** `pageIndex` fuori dall'intervallo valido [1, numero di sezioni presenti] — capita quando una
+   *  rigenerazione cambia il numero di capitoli dopo che un link a `pageIndex` è già stato aperto
+   *  (Fase 3, docs/diario-a-libro-piano.md: "clamp/redirect esplicito"). Il chiamante (la route
+   *  `.../sezione/[n]/page.tsx`) decide cosa fare — di norma redirect a `sezione/1` o alla pagina
+   *  di riepilogo — invece che questo componente lo faccia da solo, perché non conosce l'URL della
+   *  pagina di riepilogo (basePath qui è quello del Reportage, non del suo indice). */
+  onInvalidPageIndex?: (presentCount: number) => void
 }
 
-export default function ReportBookPage({ basePath, diarioTitle, activityId, pageIndex, onOpenMap3D }: Props) {
+export default function ReportBookPage({ basePath, diarioTitle, activityId, pageIndex, onOpenMap3D, onInvalidPageIndex }: Props) {
   const bd = useReportageBookData(activityId)
   const [highlightedPoiId, setHighlightedPoiId] = useState<number | null>(null)
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
@@ -54,6 +61,18 @@ export default function ReportBookPage({ basePath, diarioTitle, activityId, page
     [displaySections, hasNatura, hasLuoghi, hasPhotos],
   )
 
+  const idx = pageIndex - 1
+  const current = idx >= 0 && idx < present.length ? present[idx] : undefined
+
+  // present.length parte da 0 finché i dati non sono arrivati — non è ancora un "fuori intervallo"
+  // reale, solo un ancora-non-caricato: il chiamante deve reagire solo a dati assestati (loading
+  // concluso, activity trovata) e comunque senza una sezione a quell'indice.
+  const ready = !bd.loading && !bd.notFound && !!bd.activity
+  useEffect(() => {
+    if (ready && !current) onInvalidPageIndex?.(present.length)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, current, present.length])
+
   if (bd.loading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: '#fbf6e8' }}>
@@ -68,9 +87,6 @@ export default function ReportBookPage({ basePath, diarioTitle, activityId, page
       </div>
     )
   }
-
-  const idx = pageIndex - 1
-  const current = idx >= 0 && idx < present.length ? present[idx] : undefined
 
   const sections: BookPageSection[] = present.map((s, i) => ({
     key: s.key,

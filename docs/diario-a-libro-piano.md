@@ -121,33 +121,56 @@ esplicitamente, non lasciati impliciti:
   dimensionamento di RouteMapSection/HRChart/SpeedChart/PoiMap dentro il nuovo contenitore a piena
   pagina (oggi vivono in una colonna `max-w-3xl`/`lg:max-w-[52rem]` dentro GuideReader/ReportReader).
 
-**Fase 3 — Routing** ⬜ **DA FARE**
+**Fase 3 — Routing** ✅ **COMPLETATA** (non ancora committata come commit a sé — vedi stato sotto)
+- **Decisione presa con l'utente** (non riusare/estrarre `generateSections` di GuideReader): pannello
+  di generazione nuovo e isolato, `components/libro/GuideGenerationPanel.tsx` /
+  `components/libro/ReportGenerationPanel.tsx` — chiamano `/api/guide`/`/api/resoconto` direttamente
+  via `streamFetchText` (nessuna anteprima live carattere-per-carattere, solo spinner fino al
+  completamento). Il server persiste già lui stesso il risultato (`cached_guide` lato
+  `/api/guide`, `hike_reports` lato `/api/resoconto`) — il pannello Guida rilegge il percorso con
+  `getPlannedById` a fine stream invece di rifare il merge lato client; il pannello Reportage riceve
+  il testo finale direttamente dallo stream e lo passa su via callback (`onGenerated`).
 - `app/diari/[id]/percorsi/[percorsoId]/page.tsx`: da embed diretto di GuidaHub a vera pagina di
   riepilogo (copertina, statistiche chiave, CTA "Apri la Guida", link "Apri in modalità classica",
-  elenco Reportage restilizzato) — qui vive il chrome extra-loop assegnato sopra.
-- Nuova: `.../percorsi/[percorsoId]/guida/[sectionKey]/page.tsx` — slug stabile (`GuideSectionKey`),
-  monta `<GuideBookPage basePath=... diarioTitle=... percorsoId=... sectionKey=... />`.
-- Nuova: `.../percorsi/[percorsoId]/reportage/[activityId]/page.tsx` — riepilogo Reportage, non
-  esiste oggi (oggi si rimanda a `/resoconto/[id]`).
-- Nuova: `.../reportage/[activityId]/sezione/[n]/page.tsx` — indice numerico 1-based, monta
-  `<ReportBookPage basePath=... diarioTitle=... activityId=... pageIndex={n} />`; clamp/redirect
-  esplicito se il numero di capitoli cambia dopo una rigenerazione (`n` fuori range → redirect a
-  `sezione/1` o alla pagina di riepilogo).
-- Scaffale `/diari` (oggi lista/grid semplice, nessun componente "copertina" riusabile — va
-  costruito) e indice del Diario: soprattutto lavoro visivo/di link.
-- **Decisione aperta, non ancora presa**: dove va davvero il pannello di generazione/rigenerazione
-  AI nel libro. GuideReader oggi genera testo con la sua logica interna (`generateSections`,
-  `autoGenSections`, bottoni "Approfondisci" per-sezione dentro ogni `SectionCard`) — quella logica
-  NON è stata estratta in Fase 0 (solo build/render delle sezioni lo è stata) e GuideBookPage non la
-  richiama. Se una sezione non ha ancora testo AI, oggi nel libro quella pagina semplicemente non
-  esiste (gate di presenza) — il piano assume che generare/rigenerare avvenga dalla pagina di
-  riepilogo (Fase 3) o da "Apri in modalità classica", ma il *come* (riusare un pezzo di
-  GuideReader? un pannello nuovo che chiama `/api/guide` direttamente?) non è stato disegnato.
-  **Da chiarire con l'utente prima di costruire la pagina di riepilogo.**
-- Presence-gating già implementato in Fase 2 (`isSectionPresent` in GuideBookPage.tsx,
-  `resocontoSectionsFor`-equivalente in ReportBookPage.tsx) è un giudizio "ragionevole ma non
-  confermato dall'utente" — copiato dai criteri del mockup ma non testato su dati reali. Da
-  rivedere quando si potranno vedere le pagine vere a schermo.
+  elenco Reportage restilizzato, `GuideGenerationPanel`).
+- `.../percorsi/[percorsoId]/guida/[sectionKey]/page.tsx`: slug stabile (`GuideSectionKey`), monta
+  `<GuideBookPage>`; `sectionKey` non valida → `notFound()`.
+- `.../percorsi/[percorsoId]/reportage/[activityId]/page.tsx`: riepilogo Reportage (nuovo — prima si
+  rimandava sempre a `/resoconto/[id]`): copertina, statistiche, CTA "Apri il Reportage",
+  `ReportGenerationPanel`, `NextStepBanner`.
+- `.../reportage/[activityId]/sezione/[n]/page.tsx`: indice numerico 1-based, monta
+  `<ReportBookPage>`. Clamp/redirect implementato con un prop nuovo, additivo, su
+  `ReportBookPage` — `onInvalidPageIndex?: (presentCount: number) => void`, chiamato in un
+  `useEffect` quando `pageIndex` cade fuori da `[1, sezioni presenti]` — la route lo usa per un
+  `router.replace` a `sezione/1` (se esistono sezioni) o alla pagina di riepilogo (se zero).
+  `ReportBookPage` non conosce l'URL della pagina di riepilogo (il suo `basePath` è quello del
+  Reportage, non del suo indice), quindi la decisione resta al chiamante.
+- `lib/diario/useDiarioTitle.ts` (nuovo, piccolo): le pagine di sezione conoscono solo l'id del
+  Diario dall'URL — fetch minimo di `/api/diaries/[id]` per il titolo vero nella running head di
+  `BookPage`, invece del placeholder `"Diario"`.
+- **Deliberatamente rimandato "Apri in modalità classica"** (non ricollocato in questa fase — resta
+  sempre raggiungibile, mai rimosso, come da principio del piano):
+  - Pubblica/scarica PDF ed editor manuale (`editorMode==='manual'`), sia per Guida che per
+    Reportage: costruirli dentro la pagina di riepilogo è un lavoro a sé (export jsPDF, ShareModal,
+    editor a due colonne) sproporzionato rispetto alla portata di "routing" di questa fase.
+  - `VoicePlayer`, `GuideQA`, `RouteMap3D`/Street View — come già previsto dal piano originale.
+  - **Scorciatoia one-tap "tocca il badge Trail Score / avviso → vai a Dati e sicurezza /
+    Verificato online"**: nella galleria a carosello (`GuidaHub.scoreGaugeBadge`,
+    `pendingScrollSection`) è un tap su `TrailScoreGaugeBadge`/`CoverNoticesChip` nella card di
+    copertina. Riprodurlo identico nella pagina di riepilogo del libro richiede portare lì anche
+    `computeTrailScoreBreakdown`/`isTrailScoreVetoed` e verificare che i due componenti non
+    annidino elementi interattivi in un contesto diverso (card scura immersiva vs. riepilogo
+    pergamena) — non fatto in questa fase. La sezione "Dati e sicurezza" resta comunque
+    raggiungibile in due tap (CTA "Apri la Guida" → pillola di navigazione), non sparisce: si perde
+    solo la scorciatoia a un tap, non l'accesso. Da rivalutare se/quando GuidaHub verrà davvero
+    ritirato per questo flusso (Fase 4).
+  - Scaffale `/diari` (lista/grid) e indice del Diario: nessun link da correggere (già puntavano a
+    `/diari/[id]/percorsi/[percorsoId]`, path invariato — la nuova pagina di riepilogo ci vive
+    sopra senza bisogno di toccare chi ci rimanda). Un restyling visivo del scaffale stesso (una
+    "copertina" del Diario come card, oggi assente) resta non fatto — pura rifinitura estetica, non
+    bloccante per il flusso.
+- Presence-gating di Fase 2 (`isSectionPresent` in `GuideBookPage.tsx`/`ReportBookPage.tsx`) non
+  toccato in questa fase — resta un giudizio "ragionevole ma non confermato dall'utente".
 
 **Fase 4 — Flag di rollout** ⬜ **DA FARE**
 - Riuso del pattern già in uso nel progetto (booleano su `user_settings`, letto via
@@ -169,7 +192,13 @@ esplicitamente, non lasciati impliciti:
   Fase 0, punto unico di verità per il dispatch dei widget.
 - `app/diari/[id]/percorsi/[percorsoId]/useGuidaBookData.ts`,
   `.../reportage/[activityId]/useReportageBookData.ts` — i loader di Fase 1.
-- `components/libro/BookPage.tsx`, `GuideBookPage.tsx`, `ReportBookPage.tsx` — il guscio di Fase 2.
+- `components/libro/BookPage.tsx`, `GuideBookPage.tsx`, `ReportBookPage.tsx` — il guscio di Fase 2;
+  `ReportBookPage.tsx` ha in più il prop `onInvalidPageIndex` aggiunto in Fase 3.
+- `components/libro/GuideGenerationPanel.tsx`, `ReportGenerationPanel.tsx` — i pannelli di Fase 3.
+- `app/diari/[id]/percorsi/[percorsoId]/page.tsx`,
+  `.../guida/[sectionKey]/page.tsx`, `.../reportage/[activityId]/page.tsx`,
+  `.../reportage/[activityId]/sezione/[n]/page.tsx` — il routing di Fase 3.
+- `lib/diario/useDiarioTitle.ts` — titolo del Diario per la running head, Fase 3.
 
 ## Verifica
 - Fase 0-2: `tsc --noEmit`, `eslint`, `npm run build` (la build fallisce nella sandbox corrente per
@@ -198,13 +227,20 @@ questo file è stato scritto:
   internamente da `GuideReader.tsx`, non passati da `GuidaHub` — e `useReportageBookData` non
   recuperava affatto il testo del Resoconto, `hike_reports.content`, un fetch a sé rispetto a
   `StoredActivity`).
-- **Prossimo passo**: Fase 3 (routing). Prima di scriverla, decidere con l'utente dove va il
-  pannello di generazione/rigenerazione AI nel libro (vedi "Decisione aperta" sopra) — è l'unico
-  punto del piano dove GuideReader tiene una logica (generazione testo) mai estratta, perché non fa
-  parte del dispatch sezioni/widget di Fase 0.
-- **Mai verificato a schermo**: nessuna delle pagine scritte finora è stata vista renderizzata con
-  dati reali — questa sandbox non ha credenziali Supabase. La verifica end-to-end (Playwright, o
-  anche solo apertura manuale) va fatta in un ambiente con l'app che gira per davvero, idealmente
-  prima di scrivere altro codice sopra Fase 2 (rischio di build-on-sand se GuideBookPage/
-  ReportBookPage hanno un difetto non visibile a `tsc`/`eslint`, es. un widget che esplode a
-  runtime con `props` reali).
+- Quei quattro commit non erano mai stati portati oltre `claude/dtrek-diary-focal-point-sziwkj`
+  (né in `main`, né sul branch di routing `claude/dtrek-diary-routing-p1b5ou` da cui questa sessione
+  è ripartita) — recuperati con un merge all'inizio di questa sessione prima di riprendere il piano.
+- **Fatto in questa sessione** (branch `claude/dtrek-diary-routing-p1b5ou`): Fase 3 (routing) per
+  intero, con la decisione sul pannello di generazione presa con l'utente (pannello nuovo e isolato,
+  non estrazione di `generateSections`) — vedi la sezione Fase 3 sopra per il dettaglio completo di
+  cosa è stato costruito e cosa deliberatamente rimandato a "modalità classica".
+- **Verifica fatta in questa sessione**: `tsc --noEmit` ed `eslint` puliti sull'intero progetto dopo
+  il merge di Fase 0-2 e di nuovo dopo Fase 3 (0 errori in entrambi i casi; solo warning
+  preesistenti non introdotti da questo lavoro).
+- **Mai verificato a schermo**: nessuna delle pagine scritte finora (Fase 0-3) è stata vista
+  renderizzata con dati reali — questa sandbox non ha credenziali Supabase, `npm run build` fallisce
+  per lo stesso motivo già documentato per Fase 0-2 (variabili d'ambiente assenti, non un errore
+  introdotto da questo lavoro). La verifica end-to-end (Playwright, o anche solo apertura manuale
+  del flusso Diario→Percorso→Guida/Reportage a pagine, generazione compresa) resta da fare in un
+  ambiente con l'app che gira per davvero prima del cutover del flag (Fase 4).
+- **Prossimo passo**: Fase 4 (flag di rollout) — non ancora iniziata.
