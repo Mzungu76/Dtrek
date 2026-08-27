@@ -986,6 +986,53 @@ concreto e sicuro, non l'ultima parola sull'argomento.
 Verificato tutto su una build di produzione vera: copertina, mappa e badge corretti, testo sempre
 visibile.
 
+**Fase 29 — Righe ingrandite del 15%, mappe nei colori originali come ritagli incollati, tracciato
+a china nera, piega semplificata** ✅ **COMPLETATA**
+
+Idea dell'utente, non un bug da correggere: quattro richieste esplicite sull'elenco Percorsi, con
+invito a fare domande in caso di dubbio — nessuna posta, le indicazioni erano sufficienti per
+decidere con margine ragionevole (i simboli aggiuntivi erano esplicitamente lasciati alla mia
+scelta, "vedi tu quali").
+
+1. **Righe ingrandite del 15%**: miniatura 76→87px, e con essa (non isolatamente) i font
+   (titolo 17→19.5, sottotitolo/statistiche 10.5→12, stato 13→15), le icone (12→14px), l'anello
+   del punteggio (40→46px), gli spazi (`gap`/`padding` della riga) e la larghezza fissa della
+   colonna di stato (82→94px) — "di conseguenza" come richiesto, non solo la mappa da sola.
+2. **Colori originali della mappa**: tolto ogni `filter` CSS di ricolorazione (seppia di Fase 22,
+   verde di Fase 27, marrone di Fase 28) — tre tentativi di ricolorare la stessa mappa, mai quello
+   che l'utente voleva davvero. La vera mappa OSM ora nei suoi colori nativi.
+3. **"Ritaglio incollato"**: la miniatura non ha più `HandDrawnFrame` (un bordo "disegnato", non
+   più coerente con "una foto incollata sulla pagina") — bordo bianco spesso (3px, colore carta
+   chiara) + ombra sfalsata + una rotazione lieve e STABILE per percorso (`cutoutRotation`, hash
+   dell'id — mai `Math.random()`, che risalterebbe a ogni render), stesso principio già validato
+   per la copertina in `DiarioCoverThumb`.
+4. **Tracciato a china nera tratteggiata + simboli**: `GalleryMapThumb` (condiviso con le gallerie
+   Guida/Resoconto — **non toccato nel comportamento di default**, solo esteso) riceve quattro
+   nuove prop opzionali — `lineColor`, `lineWeight`, `dashArray`, `showEndpoints` — tutte
+   `undefined`/`false` di default, quindi invisibili agli altri due chiamanti esistenti
+   (`BottomGallery`, `ExpandedGalleryList`). Il Sommario passa un inchiostro quasi nero, tratteggio
+   Leaflet **nativo** (`dashArray`, non un filtro SVG applicato al rendering interno di Leaflet —
+   la stessa combinazione già scartata in Fase 21 per il rischio di corrompere il testo delle righe
+   vicine) e `showEndpoints` per due soli simboli, un pallino pieno alla partenza e uno vuoto
+   all'arrivo (`L.circleMarker`, nessuna icona personalizzata) — "senza intasare troppo" come
+   richiesto, niente per ogni tappa intermedia. La precisione del percorso resta intatta: stessi
+   punti GPS, cambia solo lo stile del tratto. Aggiunta anche una prop `dimTiles` (default `true`,
+   comportamento invariato altrove): il velo scuro esistente serviva a far risaltare il ciano
+   acceso su sfondo nero delle gallerie, in contrasto coi "colori originali" richiesti qui — tolto
+   solo per questa istanza (`dimTiles={false}`).
+5. **Piega del taccuino semplificata**: la linea organica a tremore (introdotta in Fase 21,
+   ritoccata più volte) bocciata a schermo ("la grafica... non mi piace... più una sfumatura
+   scura per simulare la rilegatura") — tolta del tutto. `TaccuinoSpineShadow` è ora un solo
+   `linear-gradient` CSS, allargato (34/38→40/44px) e con una caduta a più tappe invece di due soli
+   stop (più scura e netta subito accanto al bordo, più lunga e morbida dopo) — l'ombra vera di un
+   avvallamento, non il tratto di una piega disegnata a matita.
+
+Verificato tutto su una build di produzione vera: righe visibilmente più grandi, bordo/ombra/rotazione
+della miniatura confermati via `getComputedStyle` (matrice di rotazione ≈2.4°, box-shadow presente),
+tracciato tratteggiato e simboli di partenza/arrivo visibili, testo sempre leggibile, nessun nuovo
+warning ESLint (l'`useEffect` di `GalleryMapThumb` ha guadagnato le nuove prop nell'array di
+dipendenze, altrimenti segnalate come mancanti).
+
 ## File critici
 - `components/guida/GuideReader.tsx`, `components/resoconto/ReportReader.tsx` — sorgente da cui
   estratto in Fase 0, non riscritti.

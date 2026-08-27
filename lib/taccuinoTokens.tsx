@@ -176,42 +176,31 @@ export function TaccuinoPaperTexture({ flip = false }: { flip?: boolean }) {
 }
 
 /**
- * "Piega" del taccuino — come `BookSpineShadow` (bordo curvato invece di un gradiente lineare
- * statico) ma disegnata a mano con lo stesso filtro tremore, un lato a scelta: sinistro per una
- * pagina raggiunta "sfogliando in avanti", destro per una "all'indietro" (stessa idea del mockup,
- * pagine alternate). Per ora ogni pagina taccuino usa `side="left"`; l'alternanza vera arriverà
- * insieme al routing multi-pagina che la giustifica.
+ * "Piega" del taccuino — l'ombra della rilegatura al centro pagina, un lato a scelta: sinistro per
+ * una pagina raggiunta "sfogliando in avanti", destro per una "all'indietro" (stessa idea del
+ * mockup, pagine alternate). Per ora ogni pagina taccuino usa `side="left"`; l'alternanza vera
+ * arriverà insieme al routing multi-pagina che la giustifica.
  *
- * Fase 27 — striscia allargata e sfumata invece della sola linea sottile: un `<div>` con
- * `background: linear-gradient(...)` (CSS puro, dietro) dà la caduta morbida d'ombra verso il
- * centro pagina vista nel mockup, la linea organica sopra (ora di nuovo col `HandWobbleFilter` —
- * verificato sicuro in Fase 24, questa striscia stretta non è mai stata la causa del bug) resta il
- * dettaglio "disegnato a matita" della piega vera e propria, non più l'unica fonte d'ombra.
+ * Fase 29 — tolta la linea organica a tremore (Fase 21-27): l'utente l'ha bocciata a schermo
+ * ("la grafica... non mi piace"), voleva "più una sfumatura scura per simulare la rilegatura" —
+ * non il tratto di matita di una piega disegnata, ma l'ombra vera che il libro proietta nel suo
+ * stesso avvallamento. Resta solo il `linear-gradient` CSS, allargato e scurito vicino al bordo
+ * (doppia tappa invece di due soli stop, per una caduta più netta subito e più lunga dopo — la
+ * stessa curva di un'ombra reale, non un fondino piatto).
  */
 export function TaccuinoSpineShadow({ side = 'left' }: { side?: 'left' | 'right' }) {
-  const width = side === 'left' ? 34 : 38
-  const d = side === 'left'
-    ? 'M0 0 Q18 70 10 170 Q2 270 16 390 Q26 470 8 570 Q-4 670 14 750 Q22 800 0 844'
-    : 'M26 0 Q6 60 14 160 Q22 260 8 380 Q-4 460 12 560 Q24 660 6 740 Q-2 800 26 844'
-  const filterId = useHandWobbleId()
+  const width = side === 'left' ? 40 : 44
+  const stops = [
+    'rgba(0,0,0,0.32) 0%', 'rgba(0,0,0,0.22) 12%', 'rgba(0,0,0,0.1) 40%', 'transparent 100%',
+  ].join(', ')
   return (
     <div
       aria-hidden="true"
       className={`fixed inset-y-0 z-40 pointer-events-none ${side === 'left' ? 'left-0' : 'right-0'}`}
-      style={{ width }}
-    >
-      <div
-        className="absolute inset-0"
-        style={{
-          background: side === 'left'
-            ? 'linear-gradient(to right, rgba(0,0,0,0.16) 0%, rgba(0,0,0,0.05) 55%, transparent 100%)'
-            : 'linear-gradient(to left, rgba(0,0,0,0.16) 0%, rgba(0,0,0,0.05) 55%, transparent 100%)',
-        }}
-      />
-      <svg width={width} height="100%" viewBox={`0 0 ${width - 12} 844`} preserveAspectRatio="none" className="absolute inset-0">
-        <defs><HandWobbleFilter id={filterId} seed={3} baseFrequency={0.015} scale={3} /></defs>
-        <path d={d} fill="none" stroke="rgba(0,0,0,0.15)" strokeWidth={side === 'left' ? 9 : 10} filter={`url(#${filterId})`} />
-      </svg>
-    </div>
+      style={{
+        width,
+        background: side === 'left' ? `linear-gradient(to right, ${stops})` : `linear-gradient(to left, ${stops})`,
+      }}
+    />
   )
 }
