@@ -676,6 +676,35 @@ taccuino, una consolidazione deliberata: il taccuino ha una palette più contenu
 Il titolo del Diario passa a `FONT_HAND` (come "I miei Diari" sullo scaffale) — stesso principio,
 titoli a mano/corpo tipografico, applicato qui alla seconda pagina reale.
 
+**Fase 21 — Fedeltà al mockup: texture, piega, rotazioni, non solo la palette** ✅ **COMPLETATA**
+
+Verificata a schermo, la Fase 20 non assomigliava al mockup (`taccuino-canvas/SommarioTaccuino.dc.html`,
+non nel repo) — solo la palette era cambiata, non la texture di carta, la piega disegnata a mano, le
+rotazioni "imperfette" o l'uso diffuso del font a mano che danno al mockup la sua identità. Corretto
+punto per punto contro il mockup:
+
+- **`lib/taccuinoTokens.tsx`** — `HandWobbleFilter` guadagna `baseFrequency`/`scale` opzionali (prima
+  fissi, pensati per un solo caso d'uso); nuovi `TaccuinoPaperTexture` (macchie sfumate + linee di
+  livello disegnate a mano, `fixed`, dietro al contenuto, z-index negativo) e `TaccuinoSpineShadow`
+  (piega con lo stesso tremore invece del gradiente lineare piatto di `BookSpineShadow`, un lato
+  `left`/`right` per la futura alternanza sfogliando). Nuovo token `TACCUINO_PAPER.highlight`
+  (evidenziatore caldo per righe importanti, sempre con opacità in coda — mai a piena tinta).
+- **`BookPage.tsx`** — col tema "taccuino" monta `TaccuinoPaperTexture`/`TaccuinoSpineShadow` al
+  posto di `BookSpineShadow`; il tema "pergamena" resta identico a prima.
+- **`components/RouteThumb.tsx`** — `strokeDasharray`/`filter` opzionali (default assenti, nessun
+  chiamante esistente cambia aspetto): permettono di ricalcare a mano la traccia REALE di un
+  percorso invece di disegnarne una finta, riusando la stessa normalizzazione delle coordinate.
+- **`app/diari/[id]/page.tsx`** — copertina come tassello incollato (bordo + ombra sfalsata 2px/3px
+  + rotazione); titolo, sottotitolo, pulsante "nuovo percorso", chip di filtro/ordinamento e righe
+  dei Percorsi passano al font a mano (prima solo il titolo); chip da "pillola piena" a "contorno
+  attivo/testo semplice inattivo" (mockup); miniatura di ogni percorso da `GalleryMapThumb` (mappa
+  pulita) a `RouteThumb` con tratteggio e tremore condiviso (un solo filtro montato in cima alla
+  pagina, referenziato da ogni riga — mai un filtro duplicato per riga); divisore riga da punteggiato
+  a tratteggiato; evidenziazione dei percorsi con un Reportage passata dal tinteggio arancio-accento
+  al colore "evidenziatore" del mockup; spunta disegnata (icona `Check`) prima di "N reportage".
+  Rotazioni tenute solo su titolo/pulsante/copertina, non sulle righe dell'elenco (a quella densità
+  avrebbe reso illeggibile invece che artigianale).
+
 ## File critici
 - `components/guida/GuideReader.tsx`, `components/resoconto/ReportReader.tsx` — sorgente da cui
   estratto in Fase 0, non riscritti.
@@ -773,7 +802,12 @@ titoli a mano/corpo tipografico, applicato qui alla seconda pagina reale.
   ancora, restano tutti su pergamena finché non convertiti.
 - `app/diari/[id]/page.tsx` (`DiarioIndexLibro`) — Fase 20: `theme="taccuino"` su `BookPage`, toni
   pergamena hardcoded sostituiti da `TACCUINO_PAPER`/`TACCUINO_INK`, titolo del Diario su
-  `FONT_HAND`.
+  `FONT_HAND`. Fase 21: vedi sopra — copertina a tassello, font a mano diffuso, chip a contorno,
+  miniature `RouteThumb` ricalcate a mano, divisore tratteggiato, evidenziatore, spunta `Check`.
+- `lib/taccuinoTokens.tsx` — Fase 21: `HandWobbleFilter` con `baseFrequency`/`scale` opzionali;
+  nuovi `TaccuinoPaperTexture`, `TaccuinoSpineShadow`, token `TACCUINO_PAPER.highlight`.
+- `components/RouteThumb.tsx` — Fase 21: `strokeDasharray`/`filter` opzionali (default assenti,
+  nessuna modifica per i chiamanti esistenti).
 - `app/diari/[id]/percorsi/[percorsoId]/page.tsx` — Fase 15: `PercorsoPageLibro` rimossa del tutto,
   redirect immediato alla Guida a flag acceso. `PercorsoPageClassico`/`ReportageSection`
   invariate.

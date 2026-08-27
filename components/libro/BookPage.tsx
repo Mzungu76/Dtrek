@@ -35,11 +35,18 @@
 // scartata: duplicare BookPage per il Sommario in stile taccuino avrebbe biforcato la struttura
 // (barra inferiore, spacer, sticky header) che invece deve restare identica su ogni pagina del
 // libro — qui cambia solo la palette, non il comportamento.
+//
+// Fase 21 — la Fase 20 cambiava solo i colori: verificata a schermo contro il mockup
+// (`taccuino-canvas/SommarioTaccuino.dc.html`, non nel repo), il risultato non gli assomigliava
+// affatto ("sembra che hai cambiato semplicemente il font del titolo"). Il tema "taccuino" ora
+// monta anche `TaccuinoPaperTexture`/`TaccuinoSpineShadow` (texture di carta + piega disegnata a
+// mano) al posto del flat `BookSpineShadow` — la parte del mockup che dava davvero l'identità
+// "taccuino", non solo la palette.
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { ChevronLeft, ChevronRight, BookMarked, Wrench } from 'lucide-react'
 import { FONT, TERRA } from '@/lib/designTokens'
-import { TACCUINO_PAPER, TACCUINO_INK } from '@/lib/taccuinoTokens'
+import { TACCUINO_PAPER, TACCUINO_INK, TaccuinoPaperTexture, TaccuinoSpineShadow } from '@/lib/taccuinoTokens'
 import BookSpineShadow from './BookSpineShadow'
 
 const THEMES = {
@@ -105,7 +112,14 @@ export default function BookPage({
   }
   return (
     <div className="min-h-screen flex flex-col" style={{ background: t.paperBg }}>
-      <BookSpineShadow variant="light" />
+      {theme === 'taccuino' ? (
+        <>
+          <TaccuinoPaperTexture />
+          <TaccuinoSpineShadow side="left" />
+        </>
+      ) : (
+        <BookSpineShadow variant="light" />
+      )}
       <div
         className="flex items-center justify-between gap-3 px-5 sm:px-8 pt-5 pb-3 border-b sticky top-0 z-10"
         style={{ borderColor: t.hairline, background: t.paperBg }}
