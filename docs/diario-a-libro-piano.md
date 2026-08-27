@@ -569,6 +569,42 @@ cima e tagliando il fondo. Corretto con un `translateY(-24px)` nella stessa `tra
 dalla dimensione della miniatura). Stesso fix per tutti e tre i punti che usano quella modalità
 (drawer, Sommario, e l'anteprima di `/diari/[id]/copertina`, che riusa lo stesso componente).
 
+**Fase 17 — Menù inferiore, prime fondamenta della direzione "taccuino topografico"** ✅ **COMPLETATA**
+
+Prima di questa fase l'utente ha chiesto un mockup (non nel repo — canvas Claude Design pubblicato
+a parte) per due proposte: un menù di navigazione fisso in basso al posto dei collegamenti sparsi
+di oggi, e una variante di stile "taccuino da campo disegnato a mano" per l'intera estetica del
+libro. Approvate entrambe: il menù inferiore va costruito subito nello stile pergamena attuale
+(questa fase); il taccuino è una direzione futura da integrare gradualmente, non un redesign
+immediato — qui nasce solo il file di token su cui si costruirà.
+
+*Menù inferiore.* L'utente aveva segnalato incoerenza: il titolo in testata faceva doppio uso
+(link o apertura del drawer Diari a seconda della pagina), la pillola "Strumenti" viveva in mezzo
+alle sezioni della Guida, prev/next stavano in un footer a sé — tre paradigmi diversi per spostarsi.
+`BookPage.tsx` ha ora una barra fissa in fondo, uguale su ogni pagina del libro: **Indietro /
+Indice / Strumenti / Avanti**.
+- La testata in cima è ora **solo informativa** (titolo del Diario, sezione, numero di pagina) —
+  non più cliccabile. `onTitleClick` è diventato `onIndexClick`, spostato dal titolo al nuovo
+  bottone "Indice"; sul Sommario continua ad aprire `DiarioSwitcherDrawer` (Fase 11), altrove
+  naviga a `indexHref` come prima.
+- "Strumenti" è un bottone opzionale (prop `onToolsClick`) — presente solo dove esiste
+  `PercorsoToolsDrawer.tsx` (le pagine di Guida), assente su Sommario/Reportage.
+- La striscia di pillole per le sezioni della Guida **resta invariata** — indice dei contenuti
+  della pagina corrente, non navigazione dell'app: non c'entra con l'incoerenza segnalata.
+- `BookPageSection.onClick` (aggiunto in Fase 15 solo per la pillola "Strumenti", ora rimossa da
+  lì) è stato tolto: nessun altro chiamante lo usava, tenerlo sarebbe stata capacità morta.
+
+*Prime fondamenta del taccuino.* Nuovo `lib/taccuinoTokens.tsx` — palette carta/inchiostro,
+l'accento riusa la scala `TERRA` esistente (non un colore nuovo), il font `Kalam` (self-hosted in
+`app/layout.tsx` come gli altri, variabile `--font-kalam`) per titoli/annotazioni scritte a mano,
+il testo narrativo resta su `FONT.lora` esistente — un vero taccuino ha contenuto preciso e note a
+margine personali, non tutto scritto a mano allo stesso modo. Include anche `HandWobbleFilter` +
+`useHandWobbleId` (il filtro SVG per il tratto "a mano" validato nel mockup, con id univoco per
+evitare collisioni tra istanze sulla stessa pagina). **Deliberatamente non ancora usato da nessun
+componente reale** — è la base su cui costruire, schermata per schermata, nelle prossime fasi;
+tenerlo separato da `lib/designTokens.ts` (che serve l'intera app nell'estetica attuale) evita di
+mescolare una direzione non ancora applicata da nessuna parte con quella in produzione.
+
 ## File critici
 - `components/guida/GuideReader.tsx`, `components/resoconto/ReportReader.tsx` — sorgente da cui
   estratto in Fase 0, non riscritti.
@@ -642,6 +678,12 @@ dalla dimensione della miniatura). Stesso fix per tutti e tre i punti che usano 
   usata da `DiarioSwitcherDrawer.tsx` e dal Sommario; `/diari/[id]/copertina/page.tsx` riusa la
   stessa invece della propria copia locale del trucco di scala.
 - `app/api/diaries/[id]/route.ts` — `DiarioDetail.author` aggiunto in Fase 14.
+- `components/libro/BookPage.tsx` — Fase 17: barra inferiore fissa (Indietro/Indice/Strumenti/
+  Avanti), titolo in testata non più cliccabile, `onTitleClick`→`onIndexClick`, `onToolsClick`
+  nuovo, `BookPageSection.onClick` rimosso (nessun chiamante rimasto).
+- `lib/taccuinoTokens.tsx`, `app/layout.tsx` (font `Kalam`) — nuovi in Fase 17: fondamenta della
+  direzione "taccuino topografico" (approvata, integrazione graduale) — non ancora usati da
+  nessun componente reale.
 - `app/diari/[id]/percorsi/[percorsoId]/page.tsx` — Fase 15: `PercorsoPageLibro` rimossa del tutto,
   redirect immediato alla Guida a flag acceso. `PercorsoPageClassico`/`ReportageSection`
   invariate.

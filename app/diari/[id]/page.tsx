@@ -378,13 +378,12 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
     <>
       <DiarioSwitcherDrawer open={switcherOpen} onClose={() => setSwitcherOpen(false)} currentDiaryId={diaryId} />
       <BookPage
-        // Titolo statico invece del nome di QUESTO Diario: da quando questo bottone apre il
-        // drawer di tutti i Diari (non solo un link "torna a questo Sommario"), mostrare qui il
-        // nome di un solo Diario sarebbe fuorviante — il vero titolo resta comunque subito sotto,
-        // nell'h1 della pagina.
-        diarioTitle="I miei Diari"
+        // Il titolo in testata non è più cliccabile da nessuna pagina del libro (Fase 17): mostra
+        // di nuovo il nome di QUESTO Diario (non più la label statica "I miei Diari") — "torna
+        // allo scaffale/apri il drawer" vive ora nel bottone "Indice" della barra inferiore.
+        diarioTitle={detail.title}
         indexHref="/diari"
-        onTitleClick={() => setSwitcherOpen(true)}
+        onIndexClick={() => setSwitcherOpen(true)}
         sectionLabel="Indice"
       >
         <div className="flex items-start gap-3 mb-3">

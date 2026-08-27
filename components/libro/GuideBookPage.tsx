@@ -24,7 +24,7 @@ import { buildGuideDisplaySections, renderGuideWidget, type DisplaySection } fro
 import type { GuideSectionKey } from '@/lib/guideSections'
 import { normalizeGuideNotices } from '@/lib/guideNotices'
 import { FONT } from '@/lib/designTokens'
-import { Loader2, Wrench } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import GuideGenerationPanel from './GuideGenerationPanel'
 import PercorsoToolsDrawer from './PercorsoToolsDrawer'
 import MagazineBody from '@/components/editorial/MagazineBody'
@@ -101,18 +101,15 @@ export default function GuideBookPage({ basePath, diarioHref, diarioTitle, perco
   const idx = present.findIndex(s => s.guideKey === sectionKey)
   const current = idx >= 0 ? present[idx] : undefined
 
-  const sections: BookPageSection[] = [
-    ...present.map(s => ({
-      key: s.guideKey as string,
-      label: s.title,
-      href: `${basePath}/guida/${s.guideKey}`,
-    })),
-    // Non è una sezione della Guida — apre il drawer degli strumenti del Percorso (Fase 15):
-    // Reportage, generazione in blocco, esporta PDF/GPX, video 3D. Vive qui (e non nell'indice del
-    // Diario, che ora porta dritto qui dentro) perché altrimenti, usciti dall'indice, non ci
-    // sarebbe più un modo per raggiungerli da nessuna pagina della Guida.
-    { key: 'strumenti', label: 'Strumenti', onClick: () => setToolsOpen(true), icon: <Wrench className="w-3 h-3" /> },
-  ]
+  // Solo le sezioni vere della Guida — "Strumenti" (Reportage, generazione in blocco, esporta
+  // PDF/GPX, video 3D) non è più una pillola qui in mezzo: vive nella barra inferiore di
+  // BookPage.tsx (Fase 17), stesso posto su ogni pagina del libro invece che in mezzo alle
+  // sezioni solo qui.
+  const sections: BookPageSection[] = present.map(s => ({
+    key: s.guideKey as string,
+    label: s.title,
+    href: `${basePath}/guida/${s.guideKey}`,
+  }))
 
   if (!current) {
     return (
@@ -161,6 +158,7 @@ export default function GuideBookPage({ basePath, diarioHref, diarioTitle, perco
       <BookPage
         diarioTitle={diarioTitle}
         indexHref={diarioHref}
+        onToolsClick={() => setToolsOpen(true)}
         sectionLabel={current.title}
         prevHref={idx > 0 ? `${basePath}/guida/${present[idx - 1].guideKey}` : undefined}
         nextHref={idx < present.length - 1 ? `${basePath}/guida/${present[idx + 1].guideKey}` : basePath}
