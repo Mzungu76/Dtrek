@@ -22,6 +22,7 @@ function GuideSectionPageInner() {
   return (
     <GuideBookPage
       basePath={basePath}
+      diarioHref={`/diari/${encodeURIComponent(diarioId)}`}
       diarioTitle={diarioTitle}
       percorsoId={percorsoId}
       sectionKey={sectionKey}
