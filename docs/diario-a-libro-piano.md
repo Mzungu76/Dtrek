@@ -796,6 +796,39 @@ pulsante, chip, tutte le righe (titolo/statistiche/stato) visibili.
 `TaccuinoSpineShadow` non è stata toccata in questa fase (verificata innocente dal test A/B) — resta
 un `<svg>` `fixed`, ma è una striscia stretta (22-26px), non un overlay a piena pagina.
 
+**Fase 25 — Anche la Fase 24 non bastava: rimosso il `filter` CSS sulla miniatura mappa** ✅ **COMPLETATA**
+
+La Fase 24 non ha risolto: l'utente ha rimandato lo stesso identico schermo (mappe reali visibili,
+titolo/statistiche/stato di ogni riga ancora del tutto assenti), questa volta con un'indicazione
+precisa — il difetto è comparso "probabilmente dopo la modifica dei font e dei colori delle
+miniature delle mappe". Indica il `filter` **CSS** (`sepia() saturate() hue-rotate() brightness()
+contrast()`) applicato al contenitore di `GalleryMapThumb` in ogni riga del Sommario, introdotto in
+Fase 22 e mai più toccato da allora — quindi presente, identico, in tutti e tre i tentativi falliti
+(22, 23, 24).
+
+Non riprodotto in locale con certezza: un test A/B sulla stessa pagina (stessa riga, con e senza
+`filter`) non mostra differenze in Chromium headless desktop con dati di prova, ma qui mancano le
+tile reali (`/api/tile` non raggiungibile in questo ambiente) — la stessa limitazione che ha reso
+inaffidabili le verifiche isolate delle fasi precedenti. Circostanza comunque concreta: `filter`
+promuove il suo contenitore a un layer compositato dalla GPU, e Leaflet (`GalleryMapThumb`) ci
+disegna dentro decine di tile ciascuna con la propria trasformazione — la stessa famiglia di bug
+già isolata in Fase 24 (un elemento che forza un compositing complesso adiacente al testo di riga
+corrompe quel testo su certi dispositivi/driver Android), qui innescata da `filter` invece che da un
+`<svg>` overlay a piena pagina.
+
+**Correzione**: tolto il `filter` CSS dal contenitore della miniatura in `app/diari/[id]/page.tsx`
+(Sommario) — stesso principio già seguito in Fase 24 (rimuovere il meccanismo sospetto invece di
+un'ennesima "verifica" non affidabile in questo ambiente): la mappa resta quella vera (Leaflet,
+tile OSM), solo senza la ricolorazione verso la palette taccuino. `GalleryMapThumb` stesso non è
+stato toccato (nessun filtro applicato al componente, solo al contenitore chiamante — resta neutro
+per gli altri suoi usi). I filtri CSS analoghi su `GuideHero`/`ReportHero` (immagine hero singola,
+non una mappa Leaflet con decine di tile in un elenco ripetuto) non sono stati toccati — combinazione
+diversa, nessuna segnalazione su quelle pagine.
+
+Questa correzione **non è verificata con la stessa certezza** della Fase 24 (lì l'A/B aveva isolato
+la causa in modo riproducibile): qui si rimuove il sospetto più concreto rimasto sul tavolo dopo tre
+tentativi falliti, in attesa di conferma dell'utente sul dispositivo reale.
+
 ## File critici
 - `components/guida/GuideReader.tsx`, `components/resoconto/ReportReader.tsx` — sorgente da cui
   estratto in Fase 0, non riscritti.
