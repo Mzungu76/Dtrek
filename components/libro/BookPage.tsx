@@ -13,9 +13,18 @@
 // dell'app); i toni caldi di pergamena/inchiostro sotto sono invece nuovi e locali a questo
 // albero di componenti — non esiste (ancora) un token app-wide per "pergamena", e non ce n'è
 // bisogno finché resta l'unico posto che lo usa.
+//
+// Fase 17 — menù inferiore. L'utente ha segnalato che i modi per spostarsi tra le pagine del
+// libro erano troppi e incoerenti: il titolo in testata faceva doppio uso (a volte un link, a
+// volte apriva il drawer dei Diari solo sul Sommario), la pillola "Strumenti" viveva in mezzo
+// alle sezioni della Guida, prev/next stavano in un footer a sé. Consolidati in un'unica barra
+// fissa in fondo (Indietro / Indice / Strumenti / Avanti), sempre nello stesso posto su ogni
+// pagina del libro — la testata in cima ora è solo informativa (titolo del Diario, sezione,
+// numero di pagina), non più cliccabile. La striscia di pillole per saltare tra le sezioni della
+// Guida resta invariata: è un indice dei contenuti della pagina, non navigazione dell'app.
 import Link from 'next/link'
 import type { ReactNode } from 'react'
-import { ChevronLeft, ChevronRight, BookOpen } from 'lucide-react'
+import { ChevronLeft, ChevronRight, BookMarked, Wrench } from 'lucide-react'
 import { FONT, TERRA } from '@/lib/designTokens'
 import BookSpineShadow from './BookSpineShadow'
 
@@ -26,25 +35,31 @@ const INK_FOOTER = '#b5a677'
 const PILL_BG = '#f1e9d2'
 const PILL_TEXT = '#6b6142'
 
+/** Altezza riservata dalla barra inferiore fissa — le pagine applicano questo spazio prima della
+ *  barra vera e propria per non lasciarci sotto l'ultima riga di contenuto. Stesso principio di
+ *  MOBILE_TOPBAR_SPACER in components/Navbar.tsx, qui in fondo invece che in cima. */
+const BOTTOM_BAR_SPACER = 'calc(env(safe-area-inset-bottom, 0px) + 68px)'
+
 export interface BookPageSection {
   key: string
   label: string
-  /** Una delle due: `href` naviga (comportamento normale), `onClick` apre qualcos'altro sul posto
-   *  (es. il drawer degli strumenti del Percorso, Fase 15) — mai entrambe insieme. */
-  href?: string
-  onClick?: () => void
+  href: string
   icon?: ReactNode
 }
 
 interface BookPageProps {
-  /** Titolo del Diario — link di "torna all'indice" del Percorso/Diario. */
+  /** Titolo del Diario — sola visualizzazione, non più un link (Fase 17: "torna all'indice" vive
+   *  ora nel bottone "Indice" della barra inferiore, un solo posto invece di due). */
   diarioTitle: string
+  /** Destinazione del bottone "Indice" — ignorata quando è passato `onIndexClick`. */
   indexHref: string
-  /** Se presente, il titolo diventa un bottone che apre il drawer dei Diari (Fase 11) invece di
-   *  navigare a indexHref — usato solo dal Sommario stesso, dove indexHref porterebbe allo
-   *  scaffale: da lì si vuole poter cambiare Diario senza lasciare la pagina. Ogni altra pagina
-   *  del libro (Guida/Reportage/pubblica) continua a navigare normalmente. */
-  onTitleClick?: () => void
+  /** Se presente, "Indice" apre il drawer dei Diari (Fase 11) invece di navigare a `indexHref` —
+   *  usato solo dal Sommario stesso, dove indexHref porterebbe allo scaffale: da lì si vuole
+   *  poter cambiare Diario senza lasciare la pagina. */
+  onIndexClick?: () => void
+  /** Se presente, la barra inferiore mostra anche "Strumenti" — solo le pagine di Guida (dove
+   *  esiste components/libro/PercorsoToolsDrawer.tsx) lo passano. */
+  onToolsClick?: () => void
   /** Etichetta della sezione corrente, mostrata a destra della running head (es. "Percorso",
    *  "Dati e sicurezza", "Cronaca"). */
   sectionLabel: string
@@ -60,9 +75,13 @@ interface BookPageProps {
 }
 
 export default function BookPage({
-  diarioTitle, indexHref, onTitleClick, sectionLabel, prevHref, nextHref, sections, currentSectionKey, pageLabel, children,
+  diarioTitle, indexHref, onIndexClick, onToolsClick, sectionLabel, prevHref, nextHref,
+  sections, currentSectionKey, pageLabel, children,
 }: BookPageProps) {
-  const titleStyle = { fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.1em', fontSize: 11, color: INK_MUTED }
+  const navButtonStyle = {
+    fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase' as const,
+    letterSpacing: '0.04em', fontSize: 9.5, color: INK_MUTED,
+  }
   return (
     <div className="min-h-screen flex flex-col" style={{ background: PAPER_BG }}>
       <BookSpineShadow variant="light" />
@@ -70,31 +89,23 @@ export default function BookPage({
         className="flex items-center justify-between gap-3 px-5 sm:px-8 pt-5 pb-3 border-b sticky top-0 z-10"
         style={{ borderColor: PAPER_HAIRLINE, background: PAPER_BG }}
       >
-        {onTitleClick ? (
-          <button
-            type="button"
-            onClick={onTitleClick}
-            className="flex items-center gap-1.5 shrink-0 min-w-0 hover:opacity-70 transition-opacity"
-            style={titleStyle}
-          >
-            <BookOpen className="w-3.5 h-3.5 shrink-0" />
-            <span className="truncate">{diarioTitle}</span>
-          </button>
-        ) : (
-          <Link
-            href={indexHref}
-            className="flex items-center gap-1.5 shrink-0 min-w-0 hover:opacity-70 transition-opacity"
-            style={titleStyle}
-          >
-            <BookOpen className="w-3.5 h-3.5 shrink-0" />
-            <span className="truncate">{diarioTitle}</span>
-          </Link>
-        )}
         <span
-          className="shrink-0"
+          className="flex items-center gap-1.5 shrink-0 min-w-0"
           style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 11, color: INK_MUTED }}
         >
-          {sectionLabel}
+          <BookMarked className="w-3.5 h-3.5 shrink-0" />
+          <span className="truncate">{diarioTitle}</span>
+        </span>
+        <span className="shrink-0 text-right">
+          <span
+            className="block"
+            style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 11, color: INK_MUTED }}
+          >
+            {sectionLabel}
+          </span>
+          {pageLabel && (
+            <span className="block" style={{ fontFamily: FONT.mono, fontSize: 9, color: INK_FOOTER }}>{pageLabel}</span>
+          )}
         </span>
       </div>
 
@@ -102,14 +113,13 @@ export default function BookPage({
         <div className="flex gap-1.5 overflow-x-auto px-5 sm:px-8 pt-3 pb-1" style={{ background: PAPER_BG }}>
           {sections.map(s => {
             const on = s.key === currentSectionKey
-            const pillClassName = "shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11.5px] font-semibold whitespace-nowrap transition-colors"
-            const pillStyle = on ? { background: TERRA[600], color: '#fff' } : { background: PILL_BG, color: PILL_TEXT }
-            return s.onClick ? (
-              <button key={s.key} type="button" onClick={s.onClick} className={pillClassName} style={pillStyle}>
-                {s.icon}{s.label}
-              </button>
-            ) : (
-              <Link key={s.key} href={s.href ?? '#'} className={pillClassName} style={pillStyle}>
+            return (
+              <Link
+                key={s.key}
+                href={s.href}
+                className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11.5px] font-semibold whitespace-nowrap transition-colors"
+                style={on ? { background: TERRA[600], color: '#fff' } : { background: PILL_BG, color: PILL_TEXT }}
+              >
                 {s.icon}{s.label}
               </Link>
             )
@@ -121,28 +131,54 @@ export default function BookPage({
         {children}
       </div>
 
-      <div className="flex items-center justify-between gap-4 px-5 sm:px-8 py-4 border-t" style={{ borderColor: PAPER_HAIRLINE }}>
+      <div style={{ height: BOTTOM_BAR_SPACER }} />
+
+      <div
+        className="fixed inset-x-0 bottom-0 z-10 flex items-stretch justify-around"
+        style={{ background: PILL_BG, borderTop: `1px solid ${PAPER_HAIRLINE}`, paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+      >
         {prevHref ? (
-          <Link
-            href={prevHref}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-full hover:opacity-70 transition-opacity"
-            style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: 11.5, color: INK_MUTED, background: PILL_BG }}
-          >
-            <ChevronLeft className="w-3.5 h-3.5" /> Indietro
+          <Link href={prevHref} className="flex flex-col items-center justify-center gap-1 px-5 py-2.5" style={navButtonStyle}>
+            <ChevronLeft className="w-[18px] h-[18px]" />
+            Indietro
           </Link>
-        ) : <span />}
-        {pageLabel && (
-          <span style={{ fontFamily: FONT.mono, fontSize: 10, color: INK_FOOTER }}>{pageLabel}</span>
+        ) : (
+          <span className="flex flex-col items-center justify-center gap-1 px-5 py-2.5 opacity-30" style={navButtonStyle}>
+            <ChevronLeft className="w-[18px] h-[18px]" />
+            Indietro
+          </span>
         )}
-        {nextHref ? (
-          <Link
-            href={nextHref}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-full hover:opacity-70 transition-opacity"
-            style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: 11.5, color: INK_MUTED, background: PILL_BG }}
-          >
-            Avanti <ChevronRight className="w-3.5 h-3.5" />
+
+        {onIndexClick ? (
+          <button type="button" onClick={onIndexClick} className="flex flex-col items-center justify-center gap-1 px-5 py-2.5" style={navButtonStyle}>
+            <BookMarked className="w-[18px] h-[18px]" />
+            Indice
+          </button>
+        ) : (
+          <Link href={indexHref} className="flex flex-col items-center justify-center gap-1 px-5 py-2.5" style={navButtonStyle}>
+            <BookMarked className="w-[18px] h-[18px]" />
+            Indice
           </Link>
-        ) : <span />}
+        )}
+
+        {onToolsClick && (
+          <button type="button" onClick={onToolsClick} className="flex flex-col items-center justify-center gap-1 px-5 py-2.5" style={{ ...navButtonStyle, color: TERRA[600] }}>
+            <Wrench className="w-[18px] h-[18px]" />
+            Strumenti
+          </button>
+        )}
+
+        {nextHref ? (
+          <Link href={nextHref} className="flex flex-col items-center justify-center gap-1 px-5 py-2.5" style={navButtonStyle}>
+            <ChevronRight className="w-[18px] h-[18px]" />
+            Avanti
+          </Link>
+        ) : (
+          <span className="flex flex-col items-center justify-center gap-1 px-5 py-2.5 opacity-30" style={navButtonStyle}>
+            <ChevronRight className="w-[18px] h-[18px]" />
+            Avanti
+          </span>
+        )}
       </div>
     </div>
   )

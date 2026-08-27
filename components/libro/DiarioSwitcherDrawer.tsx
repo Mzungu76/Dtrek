@@ -1,8 +1,9 @@
 'use client'
 // Drawer laterale per cambiare Diario senza lasciare la pagina — Fase 11 di
-// docs/diario-a-libro-piano.md. Aperto dal titolo in cima al Sommario (vedi BookPage.tsx's
-// onTitleClick), che ora è la home dell'app: senza questo, l'unico modo per vedere gli altri
-// Diari sarebbe tornare allo scaffale (/diari) perdendo il punto in cui si era.
+// docs/diario-a-libro-piano.md. Aperto dal bottone "Indice" della barra inferiore del Sommario
+// (vedi BookPage.tsx's onIndexClick, Fase 17), che ora è la home dell'app: senza questo, l'unico
+// modo per vedere gli altri Diari sarebbe tornare allo scaffale (/diari) perdendo il punto in cui
+// si era.
 //
 // Elenco compatto: ogni riga mostra una miniatura dell'EFFETTIVA copertina del Diario (foto o
 // gradiente di default, più titolo/sottotitolo/autore in scala — DiarioCoverThumb con `width`,
