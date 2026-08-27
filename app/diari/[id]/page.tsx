@@ -562,12 +562,22 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                         Guida/Resoconto), non un disegno astratto: un tentativo precedente qui
                         (traccia ricalcata a mano su sfondo pieno) toglieva un'informazione reale
                         (dove si trova il percorso) senza motivo — l'utente l'ha chiesta indietro
-                        esplicitamente. Il filtro CSS sul contenitore (non sul componente, che resta
-                        neutro per gli altri suoi usi) scalda i toni delle tile verso la palette
-                        taccuino invece del blu/verde standard della mappa. */}
+                        esplicitamente.
+                        Fase 25 — niente più `filter` CSS qui (scaldava i toni verso la palette
+                        taccuino, introdotto in Fase 22): il testo invisibile della riga, segnalato
+                        di nuovo dopo la Fase 24 (che aveva corretto un problema reale ma diverso,
+                        l'`<svg>` di `TaccuinoPaperTexture`, senza risolvere questo), punta a questo
+                        `filter` come sospetto più concreto — promuove il contenitore a un layer
+                        compositato dalla GPU, e Leaflet dentro ci aggiunge decine di tile con le
+                        proprie trasformazioni: sulla combinazione filtro+tile compositati corrotti
+                        alcuni dispositivi/driver Android sembrano corrompere il testo delle righe
+                        vicine (stessa famiglia di bug della Fase 24, innescata da un meccanismo
+                        diverso). Non riproducibile in locale con dati di test (qui i tile reali non
+                        sono disponibili), quindi tolto per principio invece di un'ennesima "verifica"
+                        inaffidabile: la mappa resta vera, solo senza la ricolorazione via CSS. */}
                     <div
                       className="w-[76px] h-[76px] rounded-[3px] shrink-0 overflow-hidden relative"
-                      style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}`, filter: 'sepia(0.55) saturate(1.6) hue-rotate(-10deg) brightness(0.92) contrast(1.05)' }}
+                      style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}
                     >
                       {p.routePolyline && p.routePolyline.length > 1
                         ? <GalleryMapThumb polyline={p.routePolyline} />
