@@ -33,6 +33,10 @@ export const TACCUINO_PAPER = {
   cardBorder: '#c9b78c',
   /** Linee di livello disegnate a mano sullo sfondo pagina, molto tenui. */
   contourLine: '#b09a6e',
+  /** Evidenziatore — striscia calda dietro una riga "importante" (es. un percorso con un
+   *  Reportage), sempre con un'opacità in coda (`${highlight}66` ecc.), mai a piena tinta: deve
+   *  restare una pennellata di evidenziatore su carta, non un riquadro colorato. */
+  highlight: '#e9d4ae',
 } as const
 
 /** Toni di inchiostro — il testo "stampato" (narrativo, professionale) e quello scritto a mano
@@ -64,11 +68,96 @@ export function useHandWobbleId(): string {
   return `hand-wobble-${useId()}`
 }
 
-export function HandWobbleFilter({ id, seed = 5 }: { id: string; seed?: number }) {
+export function HandWobbleFilter({ id, seed = 5, baseFrequency = 0.02, scale = 3.5 }: {
+  id: string; seed?: number; baseFrequency?: number; scale?: number
+}) {
   return (
     <filter id={id}>
-      <feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves={2} seed={seed} result="n" />
-      <feDisplacementMap in="SourceGraphic" in2="n" scale={3.5} />
+      <feTurbulence type="fractalNoise" baseFrequency={baseFrequency} numOctaves={2} seed={seed} result="n" />
+      <feDisplacementMap in="SourceGraphic" in2="n" scale={scale} />
     </filter>
+  )
+}
+
+/**
+ * Texture di sfondo del taccuino — carta invecchiata (due macchie sfumate) + linee di livello
+ * disegnate a mano, tutta la pagina, dietro al contenuto. Verificata nel mockup
+ * (`taccuino-canvas/SommarioTaccuino.dc.html`/`Main.dc.html`, non nel repo) — prima di questo
+ * componente il tema "taccuino" di `BookPage.tsx` usava solo due `radial-gradient` CSS piatti al
+ * posto di questa texture, un'approssimazione troppo debole: da lì l'utente ha segnalato che il
+ * risultato a schermo non assomigliava al mockup.
+ *
+ * `fixed` (non `absolute`) come `BookSpineShadow`: il guscio di `BookPage.tsx` non è
+ * `position:relative`, `fixed` evita di doverlo aggiungere e con `preserveAspectRatio="xMidYMid
+ * slice"` copre il viewport a qualunque altezza di contenuto senza deformare le curve. Z-index
+ * negativo esplicito: un elemento `fixed` senza z-index dipinge comunque sopra il contenuto in
+ * flusso normale (regola CSS nota) — va sotto per restare uno sfondo.
+ *
+ * `flip` inverte la posizione delle due macchie (in alto-a-sinistra/basso-a-destra o viceversa) —
+ * per quando pagine adiacenti del libro (sinistra/destra sfogliando) avranno ciascuna la propria
+ * istanza: non identiche a specchio l'una dell'altra sarebbe stato più piatto.
+ */
+export function TaccuinoPaperTexture({ flip = false }: { flip?: boolean }) {
+  const filterId = useHandWobbleId()
+  const stain1 = flip ? { cx: 85, cy: 8 } : { cx: 20, cy: 10 }
+  const stain2 = flip ? { cx: 10, cy: 85 } : { cx: 90, cy: 70 }
+  return (
+    <svg
+      aria-hidden="true"
+      className="fixed inset-0 -z-10 pointer-events-none"
+      width="100%" height="100%"
+      viewBox="0 0 390 844"
+      preserveAspectRatio="xMidYMid slice"
+    >
+      <defs>
+        <HandWobbleFilter id={filterId} seed={flip ? 11 : 7} baseFrequency={0.018} scale={4} />
+        <radialGradient id={`${filterId}-s1`} cx={`${stain1.cx}%`} cy={`${stain1.cy}%`} r="42%">
+          <stop offset="0%" stopColor={TACCUINO_PAPER.stain1} stopOpacity={0.5} />
+          <stop offset="100%" stopColor={TACCUINO_PAPER.stain1} stopOpacity={0} />
+        </radialGradient>
+        <radialGradient id={`${filterId}-s2`} cx={`${stain2.cx}%`} cy={`${stain2.cy}%`} r="40%">
+          <stop offset="0%" stopColor={TACCUINO_PAPER.stain2} stopOpacity={0.48} />
+          <stop offset="100%" stopColor={TACCUINO_PAPER.stain2} stopOpacity={0} />
+        </radialGradient>
+      </defs>
+      <rect width="390" height="844" fill={TACCUINO_PAPER.base} />
+      <rect width="390" height="844" fill={`url(#${filterId}-s1)`} />
+      <rect width="390" height="844" fill={`url(#${filterId}-s2)`} />
+      <g filter={`url(#${filterId})`} fill="none" stroke={TACCUINO_PAPER.contourLine} strokeWidth={1} opacity={0.32}>
+        <path d="M-20 120 Q80 90 180 130 T420 100" />
+        <path d="M-20 180 Q90 150 190 190 T420 165" />
+        <path d="M-20 700 Q100 670 210 705 T420 680" />
+        <path d="M-20 750 Q100 725 220 755 T420 735" />
+      </g>
+    </svg>
+  )
+}
+
+/**
+ * "Piega" del taccuino — come `BookSpineShadow` (bordo curvato invece di un gradiente lineare
+ * statico) ma disegnata a mano con lo stesso filtro tremore, un lato a scelta: sinistro per una
+ * pagina raggiunta "sfogliando in avanti", destro per una "all'indietro" (stessa idea del mockup,
+ * pagine alternate). Per ora ogni pagina taccuino usa `side="left"`; l'alternanza vera arriverà
+ * insieme al routing multi-pagina che la giustifica.
+ */
+export function TaccuinoSpineShadow({ side = 'left' }: { side?: 'left' | 'right' }) {
+  const filterId = useHandWobbleId()
+  const width = side === 'left' ? 22 : 26
+  const d = side === 'left'
+    ? 'M0 0 Q18 70 10 170 Q2 270 16 390 Q26 470 8 570 Q-4 670 14 750 Q22 800 0 844'
+    : 'M26 0 Q6 60 14 160 Q22 260 8 380 Q-4 460 12 560 Q24 660 6 740 Q-2 800 26 844'
+  return (
+    <svg
+      aria-hidden="true"
+      className={`fixed inset-y-0 z-40 pointer-events-none ${side === 'left' ? 'left-0' : 'right-0'}`}
+      width={width} height="100%"
+      viewBox={`0 0 ${width} 844`}
+      preserveAspectRatio="none"
+    >
+      <defs>
+        <HandWobbleFilter id={filterId} seed={side === 'left' ? 11 : 7} baseFrequency={0.018} scale={4} />
+      </defs>
+      <path d={d} fill="none" stroke="rgba(0,0,0,0.13)" strokeWidth={side === 'left' ? 9 : 10} filter={`url(#${filterId})`} />
+    </svg>
   )
 }

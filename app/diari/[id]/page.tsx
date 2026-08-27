@@ -8,7 +8,6 @@ import SectionEyebrow from '@/components/bacheca/SectionEyebrow'
 import RecoSuggestedRow from '@/components/bacheca/RecoSuggestedRow'
 import BookPage from '@/components/libro/BookPage'
 import { DiarioCoverThumb } from '@/components/diario/DiarioCoverThumb'
-import { GalleryMapThumb } from '@/components/routehub/BottomGallery'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 import { ctsLabel } from '@/lib/trailScore'
 import { formatDuration } from '@/lib/tcxParser'
@@ -16,9 +15,12 @@ import type { DiarioDetail } from '@/app/api/diaries/[id]/route'
 import type { RecommendationCard } from '@/lib/routeBuilder/generateRecommendations'
 import { getUserSettingsCached, updateUserSettings } from '@/lib/sync/userSettingsStore'
 import { FONT } from '@/lib/designTokens'
-import { TACCUINO_PAPER, TACCUINO_INK, FONT_HAND } from '@/lib/taccuinoTokens'
 import {
-  ArrowDown, ArrowLeft, ArrowUp, CheckCircle2, ChevronRight, Clock, Loader2, Lock, LockOpen, Mountain,
+  TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, FONT_HAND,
+  TaccuinoPaperTexture, HandWobbleFilter, useHandWobbleId,
+} from '@/lib/taccuinoTokens'
+import {
+  ArrowDown, ArrowLeft, ArrowUp, Check, CheckCircle2, ChevronRight, Clock, Loader2, Lock, LockOpen, Mountain,
   Plus, Route, Search, Share2, Sparkles, Star, Trash2, TrendingUp, X,
 } from 'lucide-react'
 
@@ -293,8 +295,18 @@ function DiarioDetailPageClassico() {
  * Fase 20 — seconda pagina reale in stile taccuino dopo lo scaffale (Fase 18): `<BookPage
  * theme="taccuino">` invece del default "pergamena" (il guscio, header/barra inferiore, non
  * cambia struttura — solo palette), e i toni pergamena locali a questo file sostituiti dai token
- * di `lib/taccuinoTokens.tsx`. Il titolo del Diario passa al font a mano (`FONT_HAND`), come "I
- * miei Diari" sullo scaffale — il resto del contenuto (elenco, filtri) resta sui font esistenti.
+ * di `lib/taccuinoTokens.tsx`.
+ *
+ * Fase 21 — la Fase 20 si è fermata alla palette (a schermo sembrava "solo il font del titolo
+ * cambiato", segnalato dall'utente col mockup alla mano): qui arriva il resto validato in
+ * `taccuino-canvas/SommarioTaccuino.dc.html` (non nel repo) — texture di carta e piega a mano
+ * (`BookPage.tsx`, tema "taccuino"), copertina come tassello incollato (bordo + ombra sfalsata +
+ * rotazione), titolo/sottotitolo/pulsante/chip/righe sul font a mano (`FONT_HAND`, non solo il
+ * titolo), miniatura di ogni percorso ricalcata a mano dalla traccia reale (`RouteThumb` con
+ * tratteggio + tremore condiviso, non più `GalleryMapThumb`), spunta disegnata per i percorsi con
+ * un Reportage. Le rotazioni (`transform: rotate(...)`) restano solo su titolo/pulsante/copertina
+ * — applicarle anche a ogni riga dell'elenco avrebbe reso una lista densa illeggibile invece che
+ * "artigianale".
  *
  * Adattamento deliberato: qui e nella pagina di riepilogo del Percorso non c'è un "Apri in
  * modalità classica" a cui rimandare come per Guida/Reportage (/guida/[id], /resoconto/[id]
@@ -323,6 +335,10 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
   const [statusFilter, setStatusFilter] = useState<SommarioStatusFilter>('all')
   const [sortBy, setSortBy] = useState<SommarioSortKey>('date')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  // Un solo filtro "tratto a mano" per l'intera pagina (lib/taccuinoTokens.tsx), referenziato da
+  // ogni miniatura di percorso sotto — mai un id per riga: sarebbe lo stesso filtro duplicato N
+  // volte nel DOM per un elenco che può avere decine di percorsi.
+  const routeWobbleId = useHandWobbleId()
 
   useEffect(() => {
     fetch(`/api/diaries/${encodeURIComponent(diaryId)}`)
@@ -367,6 +383,7 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
   if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center text-sm px-6 text-center" style={{ background: TACCUINO_PAPER.base, color: '#b3413a', fontFamily: FONT.body }}>
+        <TaccuinoPaperTexture />
         Impossibile caricare questo Diario: {error}
       </div>
     )
@@ -374,6 +391,7 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
   if (!detail) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: TACCUINO_PAPER.base }}>
+        <TaccuinoPaperTexture />
         <Loader2 className="w-6 h-6 animate-spin" style={{ color: TACCUINO_INK.handMuted }} />
       </div>
     )
@@ -392,39 +410,51 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
         sectionLabel="Indice"
         theme="taccuino"
       >
+        {/* Filtro "tratto a mano" montato una volta sola, referenziato da ogni miniatura di
+            percorso sotto — vedi routeWobbleId. */}
+        <svg width={0} height={0} style={{ position: 'absolute' }} aria-hidden="true">
+          <defs><HandWobbleFilter id={routeWobbleId} baseFrequency={0.03} scale={3} seed={4} /></defs>
+        </svg>
+
         <div className="flex items-start gap-3 mb-3">
           {/* Riproduzione in piccolo dell'effettiva copertina del Diario (foto/gradiente + testi),
-              stessa DiarioCoverThumb con `width` del drawer — non un'immagine a sé. */}
-          <DiarioCoverThumb
-            coverUrl={detail.coverUrl}
-            width={56}
-            title={detail.title}
-            subtitle={detail.subtitle}
-            author={detail.author}
-            className="rounded-[4px] shrink-0 shadow-md"
-          />
+              stessa DiarioCoverThumb con `width` del drawer — non un'immagine a sé. Cornice "tassello
+              incollato" (bordo + ombra sfalsata + rotazione) verificata nel mockup — prima era solo
+              un angolo arrotondato con ombra generica, non assomigliava a nulla di "incollato". */}
+          <div
+            className="shrink-0"
+            style={{ border: `1.5px solid ${TACCUINO_INK.mapContour}`, boxShadow: `2px 3px 0 ${TACCUINO_PAPER.cardBorder}`, transform: 'rotate(-2deg)' }}
+          >
+            <DiarioCoverThumb
+              coverUrl={detail.coverUrl}
+              width={52}
+              title={detail.title}
+              subtitle={detail.subtitle}
+              author={detail.author}
+            />
+          </div>
           <div className="min-w-0 flex-1">
             <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 10, color: TACCUINO_INK.handMuted, margin: '0 0 3px' }}>
               Sommario
             </p>
-            <h1 style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 26, color: TACCUINO_INK.typed, margin: '0 0 3px' }}>
+            <h1 style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 27, color: TACCUINO_INK.typed, margin: 0, transform: 'rotate(-0.5deg)' }}>
               {detail.title}
             </h1>
-            <p style={{ fontFamily: FONT.lora, fontStyle: 'italic', fontSize: 12, color: TACCUINO_INK.handMuted, margin: 0 }}>
-              {detail.subtitle ? `${detail.subtitle} — ` : ''}{detail.percorsi.length} {detail.percorsi.length === 1 ? 'percorso' : 'percorsi'}
+            <p style={{ fontFamily: FONT_HAND, fontSize: 14, color: TACCUINO_INK.handMuted, margin: '3px 0 0' }}>
+              {detail.subtitle ? `"${detail.subtitle}" — ` : ''}{detail.percorsi.length} {detail.percorsi.length === 1 ? 'percorso' : 'percorsi'}
             </p>
           </div>
         </div>
 
         <Link
           href={`/upload?diaryId=${encodeURIComponent(diaryId)}`}
-          className="flex items-center gap-2 mb-3 px-3 py-2.5 rounded-lg"
+          className="flex items-center gap-2 mb-3 px-3.5 py-2.5 rounded"
           style={{
-            color: '#c05a17', fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase',
-            letterSpacing: '0.05em', fontSize: 12, border: `1px dashed ${TACCUINO_PAPER.cardBorder}`,
+            color: TACCUINO_ACCENT[600], fontFamily: FONT_HAND, fontWeight: 700, fontSize: 15,
+            border: `2px dashed ${TACCUINO_PAPER.contourLine}`, transform: 'rotate(-0.3deg)',
           }}
         >
-          <Plus className="w-3.5 h-3.5" /> Nuovo percorso
+          <Plus className="w-4 h-4" /> nuovo percorso
         </Link>
 
         {detail.percorsi.length > 0 && (
@@ -434,9 +464,9 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
               <input
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Cerca per titolo…"
-                className="w-full pl-8 pr-8 py-2 rounded-full text-[13px] outline-none"
-                style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}`, color: TACCUINO_INK.typed }}
+                placeholder="cerca per titolo…"
+                className="w-full pl-8 pr-8 py-2 rounded-[3px] text-[14px] outline-none"
+                style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}`, color: TACCUINO_INK.typed, fontFamily: FONT_HAND }}
               />
               {searchQuery && (
                 <button
@@ -454,7 +484,9 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                 onClick={() => setFavoritesOnly(f => !f)}
                 title="Solo preferiti"
                 className="shrink-0 flex items-center justify-center w-6 h-6 rounded-full transition-colors"
-                style={favoritesOnly ? { background: '#c05a17', color: '#fff' } : { background: TACCUINO_PAPER.card, color: TACCUINO_INK.handMuted }}
+                style={favoritesOnly
+                  ? { background: TACCUINO_PAPER.card, color: TACCUINO_ACCENT[600], border: `1.5px solid ${TACCUINO_ACCENT[600]}` }
+                  : { background: 'transparent', color: TACCUINO_INK.handMuted, border: '1.5px solid transparent' }}
               >
                 <Star className="w-3 h-3" fill={favoritesOnly ? 'currentColor' : 'none'} />
               </button>
@@ -462,7 +494,7 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                 onClick={() => setSortDir(d => d === 'desc' ? 'asc' : 'desc')}
                 title={sortDir === 'desc' ? 'Ordine decrescente — tocca per invertire' : 'Ordine crescente — tocca per invertire'}
                 className="shrink-0 flex items-center justify-center w-6 h-6 rounded-full transition-colors"
-                style={{ background: TACCUINO_PAPER.card, color: TACCUINO_INK.handMuted }}
+                style={{ background: 'transparent', color: TACCUINO_INK.handMuted }}
               >
                 {sortDir === 'desc' ? <ArrowDown className="w-3 h-3" /> : <ArrowUp className="w-3 h-3" />}
               </button>
@@ -470,8 +502,10 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                 <button
                   key={s.id}
                   onClick={() => setSortBy(s.id)}
-                  className="shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold transition-colors"
-                  style={sortBy === s.id ? { background: '#c05a17', color: '#fff' } : { background: TACCUINO_PAPER.card, color: TACCUINO_INK.handMuted }}
+                  className="shrink-0 px-3 py-1 rounded-full text-[13px] transition-colors"
+                  style={sortBy === s.id
+                    ? { fontFamily: FONT_HAND, fontWeight: 700, background: TACCUINO_PAPER.card, color: TACCUINO_INK.typed, border: `1px solid ${TACCUINO_ACCENT[600]}` }
+                    : { fontFamily: FONT_HAND, background: 'transparent', color: TACCUINO_INK.handMuted, border: '1px solid transparent' }}
                 >
                   {s.label}
                 </button>
@@ -482,10 +516,12 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                 <button
                   key={s.id}
                   onClick={() => setStatusFilter(s.id)}
-                  className="shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold transition-colors"
-                  style={statusFilter === s.id ? { background: TACCUINO_INK.typed, color: TACCUINO_PAPER.base } : { background: TACCUINO_PAPER.card, color: TACCUINO_INK.handMuted }}
+                  className="shrink-0 px-3 py-1 rounded-full text-[13px] transition-colors"
+                  style={statusFilter === s.id
+                    ? { fontFamily: FONT_HAND, fontWeight: 700, background: TACCUINO_PAPER.card, color: TACCUINO_INK.typed, border: `1px solid ${TACCUINO_ACCENT[600]}` }
+                    : { fontFamily: FONT_HAND, background: 'transparent', color: TACCUINO_INK.handMuted, border: '1px solid transparent' }}
                 >
-                  {s.label}
+                  {s.label.toLowerCase()}
                 </button>
               ))}
             </div>
@@ -505,17 +541,19 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
               return (
                 <div
                   key={p.id}
-                  className="flex items-center gap-3 py-3 px-2 -mx-2 rounded-lg"
+                  className="flex items-center gap-3 py-3 px-2 -mx-2"
                   style={{
-                    borderBottom: `1px dotted ${TACCUINO_PAPER.cardBorder}`,
-                    // Sfondo tinteggiato (terra, molto tenue) per i percorsi con almeno un'uscita —
+                    borderBottom: `1px dashed ${TACCUINO_PAPER.cardBorder}`,
+                    // "Passata di evidenziatore" per i percorsi con almeno un'uscita —
                     // riconoscibili a colpo d'occhio senza dover leggere l'etichetta a destra.
-                    background: haOgniUscita ? 'rgba(192, 90, 23, 0.07)' : 'transparent',
+                    // Colore ripreso dal mockup (`#e9d4ae66`), non il tinteggio arancio-accento di
+                    // prima: doveva leggersi come evidenziatore su carta, non come uno stato "attivo".
+                    background: haOgniUscita ? `${TACCUINO_PAPER.highlight}66` : 'transparent',
                   }}
                 >
                   {/* Stessa riga di components/routehub/ExpandedGalleryList.tsx (mappa reale,
                       etichetta idoneità/sicurezza, pillole dati, anello Trail Score) — qui
-                      ricolorata per la pergamena invece dello sfondo scuro di quella lista.
+                      ricolorata per il taccuino invece dello sfondo scuro di quella lista.
                       Un solo Link per l'intera riga (prima ce n'erano due, scomodo): va sempre
                       alla Guida, l'indicazione dei Reportage è solo informativa, non un secondo
                       collegamento — la pagina dell'elenco Reportage a sé non esiste più (Fase 15),
@@ -524,19 +562,30 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                       verticale da una riga all'altra, indipendentemente da quanto testo hanno le
                       righe vicine. */}
                   <Link href={`${percorsoPath}/guida/il_percorso`} className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="w-[76px] h-[76px] rounded-lg shrink-0 overflow-hidden relative" style={{ background: TACCUINO_PAPER.card }}>
+                    {/* Miniatura "ricalcata a mano" dalla traccia reale (RouteThumb, non un
+                        disegno finto) — tratto sepia tratteggiato + tremore condiviso
+                        (routeWobbleId), quadrata senza arrotondamento come nel mockup. */}
+                    <div className="w-14 h-14 shrink-0 overflow-hidden relative" style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}>
                       {p.routePolyline && p.routePolyline.length > 1
-                        ? <GalleryMapThumb polyline={p.routePolyline} />
-                        : <div className="w-full h-full flex items-center justify-center"><Mountain className="w-5 h-5" style={{ color: TACCUINO_PAPER.cardBorder }} /></div>}
+                        ? (
+                          <RouteThumb
+                            polyline={p.routePolyline}
+                            color={TACCUINO_INK.mapSepia}
+                            strokeWidth={2}
+                            strokeDasharray="1 5"
+                            filter={`url(#${routeWobbleId})`}
+                          />
+                        )
+                        : <div className="w-full h-full flex items-center justify-center"><Mountain className="w-4 h-4" style={{ color: TACCUINO_PAPER.cardBorder }} /></div>}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate" style={{ fontSize: 14, fontWeight: 600, color: TACCUINO_INK.typed }}>{p.title}</p>
+                      <p className="truncate" style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 17, color: TACCUINO_INK.typed }}>{p.title}</p>
                       {(scoreLabel || p.safety) && (
                         <p className="truncate" style={{ fontSize: 10.5, fontWeight: 600, color: TACCUINO_INK.handMuted, marginTop: 1 }}>
                           {[scoreLabel, p.safety?.label].filter(Boolean).join(' · ')}
                         </p>
                       )}
-                      <div className="flex items-center flex-wrap gap-x-2.5 gap-y-0.5 mt-1" style={{ fontSize: 10.5, color: TACCUINO_INK.hand }}>
+                      <div className="flex items-center flex-wrap gap-x-2.5 gap-y-0.5 mt-1" style={{ fontFamily: FONT.lora, fontSize: 10.5, color: TACCUINO_INK.hand }}>
                         <span className="inline-flex items-center gap-1"><Route className="w-3 h-3" style={{ color: TACCUINO_INK.handMuted }} /> {(p.distanceMeters / 1000).toFixed(1)} km</span>
                         <span className="inline-flex items-center gap-1"><TrendingUp className="w-3 h-3" style={{ color: TACCUINO_INK.handMuted }} /> +{Math.round(p.elevationGain)} m</span>
                         <span className="inline-flex items-center gap-1"><Mountain className="w-3 h-3" style={{ color: TACCUINO_INK.handMuted }} /> {Math.round(p.altitudeMax)} m</span>
@@ -548,8 +597,12 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                         <TrailScoreGaugeBadge total={p.trailScore} safety={p.safety} size={40} showLabel={false} dark={false} />
                       )}
                     </div>
-                    <div className="shrink-0" style={{ width: 82, textAlign: 'right', fontSize: 10.5, color: TACCUINO_INK.handMuted }}>
-                      {haOgniUscita ? `${p.reportageCount} Reportage` : 'in programma'}
+                    <div
+                      className="shrink-0 flex items-center justify-end gap-1"
+                      style={{ width: 82, fontFamily: FONT_HAND, fontSize: 13, color: haOgniUscita ? TACCUINO_ACCENT[600] : TACCUINO_INK.handMuted, fontWeight: haOgniUscita ? 700 : 400 }}
+                    >
+                      {haOgniUscita && <Check className="w-3 h-3 shrink-0" strokeWidth={3} />}
+                      {haOgniUscita ? `${p.reportageCount} reportage` : 'in programma'}
                     </div>
                   </Link>
                 </div>
