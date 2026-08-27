@@ -5,6 +5,17 @@ const config: Config = {
     './pages/**/*.{js,ts,jsx,tsx,mdx}',
     './components/**/*.{js,ts,jsx,tsx,mdx}',
     './app/**/*.{js,ts,jsx,tsx,mdx}',
+    // Fase 26 — mancava questa cartella: alcuni file con JSX/className vivono qui (es.
+    // lib/taccuinoTokens.tsx) e in una build di produzione da zero Tailwind non li scansiona,
+    // quindi le classi usate SOLO lì (es. `-z-10`, mai scritta altrove nel repo) non vengono
+    // generate — l'elemento resta `position: fixed` ma con `z-index: auto` invece di `-10`,
+    // e per le regole di stacking di un elemento posizionato senza z-index esplicito dipinge
+    // DOPO il contenuto normale di flusso, cioè sopra il testo della pagina invece che sotto.
+    // Il bug non si vedeva con `next dev` perché la cache JIT di Tailwind di quel processo aveva
+    // già generato la classe da un uso precedente altrove nel repo, mascherando il problema in
+    // ogni verifica fatta finora in questa modalità — solo una build pulita (`next build`) lo
+    // riproduce in modo affidabile. Vedi docs/diario-a-libro-piano.md, Fase 26.
+    './lib/**/*.{js,ts,jsx,tsx,mdx}',
   ],
   theme: {
     extend: {

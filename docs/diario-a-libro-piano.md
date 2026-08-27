@@ -829,6 +829,64 @@ Questa correzione **non è verificata con la stessa certezza** della Fase 24 (l�
 la causa in modo riproducibile): qui si rimuove il sospetto più concreto rimasto sul tavolo dopo tre
 tentativi falliti, in attesa di conferma dell'utente sul dispositivo reale.
 
+**Fase 26 — La causa reale, per la prima volta verificata su una build di produzione vera**
+✅ **COMPLETATA**
+
+La Fase 25 non ha risolto: l'utente ha rimandato lo stesso identico schermo (mappe reali, stavolta
+nei loro colori naturali — coerente con la rimozione del `filter`, ma titolo/statistiche/stato
+ancora del tutto assenti su ogni riga), con un'osservazione decisiva: *"non è che hai applicato un
+layer sopra i testi?"*.
+
+**Il vero errore metodologico di tutte le fasi 22-25**: ogni singola verifica di questa saga — inclusa
+quella (falsamente) "rigorosa" A/B/C della Fase 24 — è stata condotta con `npm run dev`. Mai una
+volta con una build di produzione reale (`next build && next start`), l'unico artefatto che riflette
+davvero cosa gira su Vercel. Ricostruita la pagina del Sommario (con dati finti, stessa identica
+struttura: `BookPage`, `GalleryMapThumb`, `TrailScoreGaugeBadge`) e servita con `next build && next
+start` invece di `next dev`: **il bug si riproduce immediatamente e in modo deterministico**, prima
+volta in questa sessione. Bisezione sistematica (con lo stesso metodo A/B, stavolta su una build di
+produzione vera, unica differenza rispetto alle fasi precedenti): righe senza `<BookPage>` — testo
+visibile; con `<BookPage theme="pergamena">` (il tema originale, mai toccato in questa saga) — testo
+visibile; con `<BookPage theme="taccuino">` — testo invisibile. Isolato ulteriormente dentro il
+guscio: `TaccuinoSpineShadow` da solo — innocuo; **`TaccuinoPaperTexture` da sola (il `<div>` con
+`background: radial-gradient(...)` scritto in Fase 24, senza alcun `<svg>`) — testo invisibile**,
+riprodotto con un singolo elemento, nessuna mappa, nessun filtro, nessuna delle cause sospettate
+nelle fasi precedenti.
+
+**Causa reale**, confermata via `getComputedStyle` nel browser: l'elemento ha `className="fixed
+inset-0 -z-10 pointer-events-none"` ma `z-index` calcolato risultava **`auto`**, non `-10` — la
+regola CSS `.-z-10{z-index:-10}` era del tutto assente dal foglio di stile generato in produzione
+(verificato leggendo direttamente i file `.next/static/css/*.css`). Motivo: `tailwind.config.ts`
+scansiona solo `./pages/**`, `./components/**`, `./app/**` per generare le classi usate — **mai
+`./lib/**`**, la cartella dove vive `lib/taccuinoTokens.tsx`. La stringa `-z-10` non compare in
+nessun altro file del repo dentro quei tre glob (verificato con una ricerca globale), quindi Tailwind
+non l'ha mai generata per una build pulita. Un elemento `position: fixed` con `z-index: auto`
+(invece di un valore negativo esplicito) dipinge, per le regole di stacking del CSS, **dopo** il
+contenuto normale di flusso della pagina — cioè sopra il testo di ogni riga, non sotto — anche se
+appare per primo nel DOM: esattamente il "layer sopra i testi" descritto dall'utente. Non un bug di
+compositing GPU, non Android-specifico, non legato a mappe/filtri/SVG: una classe Tailwind
+silenziosamente non generata in produzione.
+
+Perché non si è mai visto con `npm run dev`: la cache JIT di Tailwind di un processo `next dev` di
+lunga durata accumula le classi già viste (anche da usi altrove nel repo nel frattempo rimossi) senza
+mai ripartire da una scansione pulita — a differenza di una build di produzione da zero, che
+ri-scansiona i glob di `content` da capo. Questo spiega perché ogni "verifica" di questa saga,
+comprese quelle che sembravano più rigorose (Fase 24), abbia sempre mostrato il testo visibile in
+sviluppo pur non correggendo il difetto reale in produzione.
+
+**Correzione**: aggiunto `'./lib/**/*.{js,ts,jsx,tsx,mdx}'` ai `content` di `tailwind.config.ts`.
+Verificato che altri tre file sotto `lib/` (`resoconto/reportDisplaySections.tsx`,
+`guideContent.tsx`, `guida/guideDisplaySections.tsx`) usano `className` ed erano quindi ugualmente
+esposti allo stesso rischio silenzioso, non ancora segnalato — coperti dalla stessa correzione.
+Verificato con `getComputedStyle` (`z-index` ora `-10`) e visivamente, sempre su una build di
+produzione vera: testo visibile in ogni combinazione testata (texture da sola, texture+piega,
+texture+header sticky+barra fissa, tutto insieme) e sulla pagina reale del Sommario ricostruita con
+`GalleryMapThumb`/`TrailScoreGaugeBadge`.
+
+La Fase 25 (rimozione del `filter` CSS dalla miniatura mappa) non era necessaria per questo bug —
+non ne era la causa — ma resta comunque innocua: non reintrodotta in questa fase, la mappa continua
+a mostrarsi nei suoi colori naturali. Un'eventuale ricolorazione verso la palette taccuino potrà
+tornare in un secondo momento, ora su basi solide.
+
 ## File critici
 - `components/guida/GuideReader.tsx`, `components/resoconto/ReportReader.tsx` — sorgente da cui
   estratto in Fase 0, non riscritti.
