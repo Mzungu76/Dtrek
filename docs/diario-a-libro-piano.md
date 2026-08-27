@@ -491,6 +491,57 @@ che ha già il proprio riquadro di testo e raddoppierebbe altrimenti. `DiarioDet
 `author` (colonna già esistente su `diaries`, non selezionata finora) per poter riprodurre
 l'autore anche nella miniatura del Sommario.
 
+**Fase 15 — Un solo link per riga nel Sommario, drawer "Strumenti del Percorso"** ✅ **COMPLETATA**
+
+Tre richieste, la seconda e la terza legate insieme (il drawer è dove finisce l'elenco Reportage
+che prima viveva sulla pagina eliminata).
+
+*Sommario.* Miniatura mappa più grande (64→76px, l'altezza della riga segue), e un solo `<Link>`
+per riga invece di due — prima la riga andava alla Guida ma l'etichetta di stato a destra era un
+secondo link separato verso l'elenco Reportage. Ora tutta la riga va sempre alla Guida; l'etichetta
+resta solo informativa ("N Reportage" invece di "N uscite" — la terminologia "uscita" non era mai
+stata usata altrove nel libro, "Reportage" sì).
+
+*Pagina di riepilogo del Percorso eliminata per davvero.* Dopo Fase 14 restava una pagina minima
+("solo uscite"); ora non esiste più affatto in modalità libro — `PercorsoPageInner`
+(`app/diari/[id]/percorsi/[percorsoId]/page.tsx`) fa un redirect immediato a
+`{basePath}/guida/il_percorso` quando il flag è acceso, così un link vecchio (bookmark, storico
+del browser) non mostra una pagina ormai vuota. La modalità classica (flag spento) non è toccata:
+`PercorsoPageClassico`/`ReportageSection` restano esattamente come sempre stati.
+
+*Nuovo drawer "Strumenti del Percorso"* (`components/libro/PercorsoToolsDrawer.tsx`), aperto dalla
+pillola "Strumenti" (prima "Reportage") in ogni pagina di Guida — slide da destra, non da sinistra
+come `DiarioSwitcherDrawer` (quello è navigazione tra Diari, questo sono azioni sul Percorso
+corrente, meglio non confonderli visivamente). Contiene, tutti riusi diretti di funzioni già
+esistenti altrove, **mai raggiungibili dal libro prima d'ora**:
+- **Elenco Reportage** — stessa `/api/percorsi/[id]/reportage`, righe proprie in tono pergamena
+  (non la stessa `ReportageSection`, rimasta bianco/stone per il lettore classico — duplicarne la
+  resa qui è stato più semplice che parametrizzarne il tono).
+- **Generazione in blocco** — lo stesso `<GuideGenerationPanel>` bulk. Fase 14 lo aveva messo solo
+  sulla pagina "Il percorso"; qui è raggiungibile da qualunque sezione, quindi quel montaggio
+  dedicato è stato rimosso (il drawer lo sostituisce, non lo affianca).
+- **Esporta PDF/GPX** — stesse `exportGuidePdf`/`exportPlannedHikeToGpx` di `app/guida/GuidaHub.tsx`,
+  mai passate dal libro.
+- **Video 3D** — stesso `<RouteMap3D>` di GuidaHub. Scoperta scrivendo questa fase: il prop
+  `onOpenMap3D` di `GuideBookPage.tsx` esisteva già (passato ai widget) ma nessuna route lo
+  valorizzava mai — restava sempre `undefined`, quindi il bottone 3D dentro "Il percorso" non ha
+  mai funzionato nel libro. Ora `GuideBookPage` tiene lo stato e monta `RouteMap3D` lei stessa
+  (stesso import dinamico `ssr:false` di GuidaHub — MapLibre non è compatibile col rendering
+  server), il drawer si limita ad aprirlo.
+- **"Apri in modalità classica"** — esisteva sulla pagina di riepilogo ora eliminata, ricollocato
+  qui.
+- **Non incluso** (deciso con l'utente): la condivisione di un singolo Percorso non esiste da
+  nessuna parte nell'app (solo Reportage/statistiche hanno un "Condividi", `ShareModal.tsx`) — è
+  una funzione nuova da progettare a sé, rimandata.
+
+`BookPage.tsx`'s `BookPageSection` accetta ora `onClick` in alternativa a `href` (mai entrambi) —
+la pillola "Strumenti" apre il drawer sul posto invece di navigare. `GuideBookPage` guadagna un
+prop `diarioHref` esplicito: il titolo in testata portava alla pagina di riepilogo ora eliminata,
+ora va al Sommario del Diario (non esiste più un "indice" a livello di Percorso). Il riepilogo del
+Reportage (`.../reportage/[activityId]/page.tsx`, pagina diversa e ancora esistente — mostra le
+statistiche di UNA uscita, non l'elenco) aveva anch'esso un link "Torna al Percorso" verso la
+pagina eliminata: ora porta alla Guida, rietichettato "Torna alla Guida".
+
 ## File critici
 - `components/guida/GuideReader.tsx`, `components/resoconto/ReportReader.tsx` — sorgente da cui
   estratto in Fase 0, non riscritti.
@@ -564,6 +615,19 @@ l'autore anche nella miniatura del Sommario.
   usata da `DiarioSwitcherDrawer.tsx` e dal Sommario; `/diari/[id]/copertina/page.tsx` riusa la
   stessa invece della propria copia locale del trucco di scala.
 - `app/api/diaries/[id]/route.ts` — `DiarioDetail.author` aggiunto in Fase 14.
+- `app/diari/[id]/percorsi/[percorsoId]/page.tsx` — Fase 15: `PercorsoPageLibro` rimossa del tutto,
+  redirect immediato alla Guida a flag acceso. `PercorsoPageClassico`/`ReportageSection`
+  invariate.
+- `components/libro/PercorsoToolsDrawer.tsx` — nuovo in Fase 15, montato solo da
+  `GuideBookPage.tsx`; riusa `GuideGenerationPanel` (bulk), `exportGuidePdf`,
+  `exportPlannedHikeToGpx`, `/api/percorsi/[id]/reportage`.
+- `components/RouteMap3D.tsx` — non toccato, montato per la prima volta dal libro in Fase 15
+  (`GuideBookPage.tsx`, stesso import dinamico `ssr:false` di `app/guida/GuidaHub.tsx`).
+- `components/libro/BookPage.tsx` — `BookPageSection.onClick` aggiunto in Fase 15 (alternativa a
+  `href`, usato dalla pillola "Strumenti").
+- `app/diari/[id]/percorsi/[percorsoId]/reportage/[activityId]/page.tsx` — riepilogo di UN
+  Reportage (pagina diversa dall'elenco eliminato in Fase 15, ancora esistente): solo il link
+  "Torna al Percorso" aggiornato per puntare alla Guida invece della pagina eliminata.
 
 ## Verifica
 - Fase 0-2: `tsc --noEmit`, `eslint`, `npm run build` (la build fallisce nella sandbox corrente per

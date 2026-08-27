@@ -1,23 +1,22 @@
 'use client'
 import { Suspense, useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import GuidaHub from '@/app/guida/GuidaHub'
 import TrialStatusBanner from '@/components/dtrek/TrialStatusBanner'
-import { useGuidaBookData } from './useGuidaBookData'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import type { ReportageRow } from '@/app/api/percorsi/[id]/reportage/route'
 import { ArrowLeft, ChevronRight, Loader2, PenLine } from 'lucide-react'
 
 /**
- * Pagina del Percorso — Fase 3/4 di docs/diario-a-libro-piano.md. Dietro il flag
- * `diarioLibroEnabled` (Fase 4, default spento, vedi components/profilo/SectionAvanzate.tsx):
- * la nuova pagina di riepilogo del libro (copertina, statistiche, CTA "Apri la Guida", link
- * "Apri in modalità classica", elenco Reportage) quando acceso, l'embed diretto di GuidaHub
- * (comportamento invariato) quando spento o non ancora risolto — mai uno stato intermedio
+ * Pagina del Percorso — dietro il flag `diarioLibroEnabled` (Fase 4, default spento, vedi
+ * components/profilo/SectionAvanzate.tsx): l'embed diretto di GuidaHub (comportamento invariato,
+ * `ReportageSection` sotto) a flag spento o non ancora risolto — mai uno stato intermedio
  * silenzioso: finché il flag non è noto si mostra solo uno spinner, non una delle due UI a caso.
+ * A flag acceso questa pagina non esiste più (Fase 15): redirect immediato alla Guida, vedi
+ * `PercorsoPageInner` più sotto.
  */
 function ReportageSection({ diarioId, percorsoId, linkTo }: { diarioId: string; percorsoId: string; linkTo: (activityId: string) => string }) {
   const [rows, setRows] = useState<ReportageRow[] | null>(null)
@@ -96,47 +95,9 @@ function PercorsoPageClassico({ diarioId, percorsoId }: { diarioId: string; perc
   )
 }
 
-/**
- * Pagina minima "solo uscite" — prima era il riepilogo completo del Percorso (copertina,
- * "Apri la Guida"/"Apri in modalità classica", generazione guida in blocco): eliminata su
- * richiesta esplicita dell'utente. Raggiunta solo dal badge "N uscite" del Sommario e dal
- * pallino "Reportage" di ogni pagina di Guida — in entrambi i casi chi arriva qui vuole *solo*
- * l'elenco delle uscite, non un secondo punto d'ingresso alla Guida (già raggiunta da lì). La
- * generazione in blocco è stata spostata sulla prima pagina della Guida (GuideBookPage.tsx),
- * non eliminata — vedi lì per il perché.
- */
-function PercorsoPageLibro({ diarioId, percorsoId, basePath }: { diarioId: string; percorsoId: string; basePath: string }) {
-  const bd = useGuidaBookData(percorsoId)
-
-  return (
-    <>
-      <TrialStatusBanner />
-      {bd.loading ? (
-        <div className="flex items-center justify-center py-24 text-stone-400">
-          <Loader2 className="w-6 h-6 animate-spin" />
-        </div>
-      ) : bd.notFound || !bd.hike ? (
-        <div className="max-w-[900px] mx-auto px-4 py-16 text-center text-stone-500 text-sm">
-          Percorso non trovato.
-        </div>
-      ) : (
-        <>
-          <div className="max-w-[900px] mx-auto px-4 pt-6 pb-2">
-            <h1 className="font-display text-xl font-bold text-stone-800">{bd.hike.title}</h1>
-          </div>
-          <ReportageSection
-            diarioId={diarioId}
-            percorsoId={percorsoId}
-            linkTo={id => `${basePath}/reportage/${encodeURIComponent(id)}`}
-          />
-        </>
-      )}
-    </>
-  )
-}
-
 function PercorsoPageInner() {
   const params = useParams<{ id: string; percorsoId: string }>()
+  const router = useRouter()
   const diarioId = decodeURIComponent(params.id)
   const percorsoId = decodeURIComponent(params.percorsoId)
   const basePath = `/diari/${encodeURIComponent(diarioId)}/percorsi/${encodeURIComponent(percorsoId)}`
@@ -148,7 +109,15 @@ function PercorsoPageInner() {
       .catch(() => setLibroEnabled(false))
   }, [])
 
-  if (libroEnabled === null) {
+  // Questa pagina non esiste più in modalità libro (Fase 15, richiesta esplicita dell'utente) —
+  // l'elenco Reportage e gli altri strumenti del Percorso vivono ora nel drawer "Strumenti" di
+  // GuideBookPage.tsx, raggiungibile da ogni pagina di Guida. Un link vecchio (bookmark, storico
+  // del browser) rimanda quindi dritto lì invece di mostrare una pagina ormai vuota.
+  useEffect(() => {
+    if (libroEnabled === true) router.replace(`${basePath}/guida/il_percorso`)
+  }, [libroEnabled, basePath, router])
+
+  if (libroEnabled === null || libroEnabled === true) {
     return (
       <div className="flex items-center justify-center py-24 text-stone-400">
         <Loader2 className="w-6 h-6 animate-spin" />
@@ -156,9 +125,7 @@ function PercorsoPageInner() {
     )
   }
 
-  return libroEnabled
-    ? <PercorsoPageLibro diarioId={diarioId} percorsoId={percorsoId} basePath={basePath} />
-    : <PercorsoPageClassico diarioId={diarioId} percorsoId={percorsoId} />
+  return <PercorsoPageClassico diarioId={diarioId} percorsoId={percorsoId} />
 }
 
 export default function PercorsoPage() {

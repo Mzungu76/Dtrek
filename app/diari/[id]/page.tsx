@@ -510,13 +510,16 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                 >
                   {/* Stessa riga di components/routehub/ExpandedGalleryList.tsx (mappa reale,
                       etichetta idoneità/sicurezza, pillole dati, anello Trail Score) — qui
-                      ricolorata per la pergamena invece dello sfondo scuro di quella lista, e va
-                      dritta alla Guida invece che alla vecchia pagina di riepilogo (un tap in
-                      meno, feedback dell'utente). Anello TS e stato a destra hanno una larghezza
-                      fissa (non "shrink-to-content") così restano allineati in verticale da una
-                      riga all'altra, indipendentemente da quanto testo hanno le righe vicine. */}
+                      ricolorata per la pergamena invece dello sfondo scuro di quella lista.
+                      Un solo Link per l'intera riga (prima ce n'erano due, scomodo): va sempre
+                      alla Guida, l'indicazione dei Reportage è solo informativa, non un secondo
+                      collegamento — la pagina dell'elenco Reportage a sé non esiste più (Fase 15),
+                      quell'elenco vive ora dentro la Guida stessa. Anello TS e stato a destra
+                      hanno una larghezza fissa (non "shrink-to-content") così restano allineati in
+                      verticale da una riga all'altra, indipendentemente da quanto testo hanno le
+                      righe vicine. */}
                   <Link href={`${percorsoPath}/guida/il_percorso`} className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="w-16 h-16 rounded-lg shrink-0 overflow-hidden relative" style={{ background: '#e9dcb8' }}>
+                    <div className="w-[76px] h-[76px] rounded-lg shrink-0 overflow-hidden relative" style={{ background: '#e9dcb8' }}>
                       {p.routePolyline && p.routePolyline.length > 1
                         ? <GalleryMapThumb polyline={p.routePolyline} />
                         : <div className="w-full h-full flex items-center justify-center"><Mountain className="w-5 h-5" style={{ color: '#c9b98a' }} /></div>}
@@ -540,21 +543,10 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                         <TrailScoreGaugeBadge total={p.trailScore} safety={p.safety} size={40} showLabel={false} dark={false} />
                       )}
                     </div>
+                    <div className="shrink-0" style={{ width: 82, textAlign: 'right', fontSize: 10.5, color: '#8a7f52' }}>
+                      {haOgniUscita ? `${p.reportageCount} Reportage` : 'in programma'}
+                    </div>
                   </Link>
-                  <div className="shrink-0" style={{ width: 82, textAlign: 'right' }}>
-                    {haOgniUscita ? (
-                      <Link
-                        href={percorsoPath}
-                        className="inline-flex items-center gap-0.5 whitespace-nowrap"
-                        style={{ fontSize: 10.5, color: '#8a7f52' }}
-                      >
-                        {p.reportageCount} {p.reportageCount === 1 ? 'uscita' : 'uscite'}
-                        <ChevronRight className="w-3 h-3" style={{ color: '#b5a677' }} />
-                      </Link>
-                    ) : (
-                      <span className="whitespace-nowrap" style={{ fontSize: 10.5, color: '#8a7f52' }}>in programma</span>
-                    )}
-                  </div>
                 </div>
               )
             })}

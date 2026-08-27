@@ -29,7 +29,10 @@ const PILL_TEXT = '#6b6142'
 export interface BookPageSection {
   key: string
   label: string
-  href: string
+  /** Una delle due: `href` naviga (comportamento normale), `onClick` apre qualcos'altro sul posto
+   *  (es. il drawer degli strumenti del Percorso, Fase 15) — mai entrambe insieme. */
+  href?: string
+  onClick?: () => void
   icon?: ReactNode
 }
 
@@ -99,13 +102,14 @@ export default function BookPage({
         <div className="flex gap-1.5 overflow-x-auto px-5 sm:px-8 pt-3 pb-1" style={{ background: PAPER_BG }}>
           {sections.map(s => {
             const on = s.key === currentSectionKey
-            return (
-              <Link
-                key={s.key}
-                href={s.href}
-                className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11.5px] font-semibold whitespace-nowrap transition-colors"
-                style={on ? { background: TERRA[600], color: '#fff' } : { background: PILL_BG, color: PILL_TEXT }}
-              >
+            const pillClassName = "shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11.5px] font-semibold whitespace-nowrap transition-colors"
+            const pillStyle = on ? { background: TERRA[600], color: '#fff' } : { background: PILL_BG, color: PILL_TEXT }
+            return s.onClick ? (
+              <button key={s.key} type="button" onClick={s.onClick} className={pillClassName} style={pillStyle}>
+                {s.icon}{s.label}
+              </button>
+            ) : (
+              <Link key={s.key} href={s.href ?? '#'} className={pillClassName} style={pillStyle}>
                 {s.icon}{s.label}
               </Link>
             )

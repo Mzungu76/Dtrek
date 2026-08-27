@@ -16,16 +16,22 @@
 // visto il flusso. Ora tutte le 9 sezioni canoniche sono sempre raggiungibili; le tre legate a un
 // dato sorgente specifico (meteo, POI, flora) restano condizionate a quel dato — un widget di
 // meteo senza coordinate non avrebbe comunque nulla da mostrare, a prescindere dal testo.
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
+import dynamic from 'next/dynamic'
 import BookPage, { type BookPageSection } from './BookPage'
 import { useGuidaBookData } from '@/app/diari/[id]/percorsi/[percorsoId]/useGuidaBookData'
 import { buildGuideDisplaySections, renderGuideWidget, type DisplaySection } from '@/lib/guida/guideDisplaySections'
 import type { GuideSectionKey } from '@/lib/guideSections'
 import { normalizeGuideNotices } from '@/lib/guideNotices'
 import { FONT } from '@/lib/designTokens'
-import { Loader2, PenLine } from 'lucide-react'
+import { Loader2, Wrench } from 'lucide-react'
 import GuideGenerationPanel from './GuideGenerationPanel'
+import PercorsoToolsDrawer from './PercorsoToolsDrawer'
 import MagazineBody from '@/components/editorial/MagazineBody'
+
+// Stesso import dinamico (niente SSR) di app/guida/GuidaHub.tsx — MapLibre non è compatibile col
+// rendering server.
+const RouteMap3D = dynamic(() => import('@/components/RouteMap3D'), { ssr: false })
 
 // Sfondo dei widget "a card bianca" (Meteo) dentro il libro — un tono più scuro della pergamena
 // stessa (#fbf6e8), non bianco: sull'estetica calda della pagina una card bianca stonava (feedback
@@ -49,14 +55,19 @@ interface Props {
    *  costruire i link di indice/sezione, senza che questo componente conosca i nomi dei
    *  parametri di route (decisi in Fase 3). */
   basePath: string
+  /** URL del Sommario del Diario — destinazione del titolo in testata da quando la pagina di
+   *  riepilogo del Percorso non esiste più (Fase 15): non c'è più un "indice" a livello di
+   *  Percorso a cui tornare, solo quello del Diario. */
+  diarioHref: string
   diarioTitle: string
   percorsoId: string
   sectionKey: GuideSectionKey
-  onOpenMap3D?: () => void
 }
 
-export default function GuideBookPage({ basePath, diarioTitle, percorsoId, sectionKey, onOpenMap3D }: Props) {
+export default function GuideBookPage({ basePath, diarioHref, diarioTitle, percorsoId, sectionKey }: Props) {
   const bd = useGuidaBookData(percorsoId)
+  const [toolsOpen, setToolsOpen] = useState(false)
+  const [show3D, setShow3D] = useState(false)
 
   const displaySections = useMemo(
     () => buildGuideDisplaySections(bd.hike?.cachedGuide ?? ''),
@@ -96,11 +107,11 @@ export default function GuideBookPage({ basePath, diarioTitle, percorsoId, secti
       label: s.title,
       href: `${basePath}/guida/${s.guideKey}`,
     })),
-    // Non è una sezione della Guida — è l'uscita verso il Reportage di questo Percorso. Vive qui
-    // (e non nell'indice del Diario, che ora porta dritto qui dentro) perché altrimenti, uscita
-    // dall'indice, non ci sarebbe più un modo per raggiungere le uscite di questo Percorso da
-    // nessuna pagina della Guida — vedi "Decisione aperta" in docs/diario-a-libro-piano.md.
-    { key: 'reportage', label: 'Reportage', href: basePath, icon: <PenLine className="w-3 h-3" /> },
+    // Non è una sezione della Guida — apre il drawer degli strumenti del Percorso (Fase 15):
+    // Reportage, generazione in blocco, esporta PDF/GPX, video 3D. Vive qui (e non nell'indice del
+    // Diario, che ora porta dritto qui dentro) perché altrimenti, usciti dall'indice, non ci
+    // sarebbe più un modo per raggiungerli da nessuna pagina della Guida.
+    { key: 'strumenti', label: 'Strumenti', onClick: () => setToolsOpen(true), icon: <Wrench className="w-3 h-3" /> },
   ]
 
   if (!current) {
@@ -118,7 +129,7 @@ export default function GuideBookPage({ basePath, diarioTitle, percorsoId, secti
   const guideSources = bd.hike.cachedGuideSources ?? []
 
   const widget = renderGuideWidget(current.key, current.body, {
-    hike: bd.hike, weather: bd.weather, onOpenMap3D, showGradient: bd.scores.showGradient, showAspect: bd.scores.showAspect,
+    hike: bd.hike, weather: bd.weather, onOpenMap3D: () => setShow3D(true), showGradient: bd.scores.showGradient, showAspect: bd.scores.showAspect,
     scores: bd.scores, dtmProfile: bd.dtmProfile, guideNotices, guideSources,
     safetyDetails: bd.safetyDetails, poiList: bd.poiList, highlightedPoiId: bd.highlightedPoiId, onPoiTap: bd.onPoiTap,
     isLinearRoute: bd.isLinearRoute, returnOptions: bd.returnOptions, endPoint: bd.endPoint, natura: bd.natura,
@@ -126,56 +137,53 @@ export default function GuideBookPage({ basePath, diarioTitle, percorsoId, secti
   })
 
   return (
-    <BookPage
-      diarioTitle={diarioTitle}
-      indexHref={basePath}
-      sectionLabel={current.title}
-      prevHref={idx > 0 ? `${basePath}/guida/${present[idx - 1].guideKey}` : undefined}
-      nextHref={idx < present.length - 1 ? `${basePath}/guida/${present[idx + 1].guideKey}` : basePath}
-      sections={sections}
-      currentSectionKey={sectionKey}
-      pageLabel={`${idx + 1} di ${present.length}`}
-    >
-      <p
-        className="mb-2"
-        style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 10, color: '#8a7f52' }}
-      >
-        {current.subtitle}
-      </p>
-      <h1 style={{ fontFamily: FONT.display, fontWeight: 600, fontSize: 22, color: '#3f3a22', margin: '0 0 14px' }}>
-        {current.title}
-      </h1>
-      {current.body?.trim() && (
-        <div style={{ fontFamily: FONT.lora, fontSize: 14.5, lineHeight: 1.7, color: '#4a4530', marginBottom: 16 }}>
-          <MagazineBody body={current.body} />
-        </div>
-      )}
-      {widget}
-      {!current.body?.trim() && (
-        <GuideGenerationPanel
-          hike={bd.hike}
-          percorsoId={percorsoId}
-          hasAiAccess={bd.hasAiAccess}
-          aiUnavailable={bd.aiUnavailable}
-          trialExpired={bd.trialExpired}
-          onHikeUpdate={bd.onHikeUpdate}
-          sectionKey={sectionKey}
-          enrichmentReady={bd.enrichmentReady}
+    <>
+      <PercorsoToolsDrawer
+        open={toolsOpen}
+        onClose={() => setToolsOpen(false)}
+        basePath={basePath}
+        percorsoId={percorsoId}
+        hike={bd.hike}
+        hasAiAccess={bd.hasAiAccess}
+        aiUnavailable={bd.aiUnavailable}
+        trialExpired={bd.trialExpired}
+        onHikeUpdate={bd.onHikeUpdate}
+        hasGps={bd.hasGps}
+        onOpen3D={() => setShow3D(true)}
+      />
+      {show3D && bd.hasGps && (
+        <RouteMap3D
+          trackPoints={bd.hike.trackPoints ?? []} title={bd.hike.title} onClose={() => setShow3D(false)}
+          plannedDate={bd.hike.plannedDate} pois={bd.pois} dtmProfile={bd.dtmProfile}
+          distanceMeters={bd.hike.distanceMeters} elevationGain={bd.hike.elevationGain}
         />
       )}
-      {/* Generazione/rigenerazione in blocco — prima viveva sulla pagina di riepilogo del
-          Percorso, rimossa su richiesta dell'utente (ridotta a "solo le uscite"). Non eliminata:
-          resta qui, sulla prima pagina della Guida, l'unico posto sempre raggiungibile prima di
-          aver letto qualunque sezione. Il trigger per-sezione sopra resta per chi vuole
-          approfondire solo QUESTA pagina; questo è per chi vuole generare/rigenerare tutto insieme. */}
-      {sectionKey === 'il_percorso' && (
-        <div className="mt-8 pt-6" style={{ borderTop: '1px solid #e4d9bd' }}>
-          <p
-            className="mb-3"
-            style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 10, color: '#8a7f52' }}
-          >
-            Genera tutta la guida
-          </p>
+      <BookPage
+        diarioTitle={diarioTitle}
+        indexHref={diarioHref}
+        sectionLabel={current.title}
+        prevHref={idx > 0 ? `${basePath}/guida/${present[idx - 1].guideKey}` : undefined}
+        nextHref={idx < present.length - 1 ? `${basePath}/guida/${present[idx + 1].guideKey}` : basePath}
+        sections={sections}
+        currentSectionKey={sectionKey}
+        pageLabel={`${idx + 1} di ${present.length}`}
+      >
+        <p
+          className="mb-2"
+          style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 10, color: '#8a7f52' }}
+        >
+          {current.subtitle}
+        </p>
+        <h1 style={{ fontFamily: FONT.display, fontWeight: 600, fontSize: 22, color: '#3f3a22', margin: '0 0 14px' }}>
+          {current.title}
+        </h1>
+        {current.body?.trim() && (
+          <div style={{ fontFamily: FONT.lora, fontSize: 14.5, lineHeight: 1.7, color: '#4a4530', marginBottom: 16 }}>
+            <MagazineBody body={current.body} />
+          </div>
+        )}
+        {widget}
+        {!current.body?.trim() && (
           <GuideGenerationPanel
             hike={bd.hike}
             percorsoId={percorsoId}
@@ -183,10 +191,11 @@ export default function GuideBookPage({ basePath, diarioTitle, percorsoId, secti
             aiUnavailable={bd.aiUnavailable}
             trialExpired={bd.trialExpired}
             onHikeUpdate={bd.onHikeUpdate}
-            panelClassName={WEATHER_PANEL_CLASS}
+            sectionKey={sectionKey}
+            enrichmentReady={bd.enrichmentReady}
           />
-        </div>
-      )}
-    </BookPage>
+        )}
+      </BookPage>
+    </>
   )
 }
