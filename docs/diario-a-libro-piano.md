@@ -655,6 +655,27 @@ mano) non al font specifico dietro, per non dover rinominare di nuovo a un pross
 `app/layout.tsx`: `Kalam` → `Caveat` da `next/font/google`, variabile `--font-kalam` →
 `--font-caveat`.
 
+**Fase 20 — Il Sommario (elenco Percorsi di un Diario) in stile taccuino** ✅ **COMPLETATA**
+
+Continuazione dell'integrazione graduale: dopo lo scaffale (Fase 18), il Sommario di un singolo
+Diario (`app/diari/[id]/page.tsx`, `DiarioIndexLibro`) — richiesto esplicitamente dall'utente come
+prossimo passo.
+
+*`BookPage.tsx` guadagna una prop `theme`.* Invece di duplicare il guscio (header sticky, striscia
+sezioni, barra inferiore, spacer) in una seconda versione taccuino, `BookPage` accetta ora
+`theme?: 'pergamena' | 'taccuino'` (default `'pergamena'`, invariato per tutti i chiamanti
+esistenti — `GuideBookPage.tsx`, `ReportBookPage.tsx` non lo passano, restano pergamena). I sei
+colori locali (sfondo pagina, hairline, due toni di inchiostro muto, sfondo/testo delle pillole)
+diventano un oggetto per tema; il markup non cambia, cambiano solo i valori.
+
+*Il Sommario stesso* passa `theme="taccuino"` e sostituisce tutti i toni pergamena hardcoded nel
+proprio contenuto (ricerca, filtri, righe dei Percorsi, link pubblicazione, schermate di
+caricamento/errore) con `TACCUINO_PAPER`/`TACCUINO_INK` — alcune coppie di toni pergamena molto
+vicini (es. due sfumature di hairline, due di inchiostro muto) sono confluite nello stesso token
+taccuino, una consolidazione deliberata: il taccuino ha una palette più contenuta della pergamena.
+Il titolo del Diario passa a `FONT_HAND` (come "I miei Diari" sullo scaffale) — stesso principio,
+titoli a mano/corpo tipografico, applicato qui alla seconda pagina reale.
+
 ## File critici
 - `components/guida/GuideReader.tsx`, `components/resoconto/ReportReader.tsx` — sorgente da cui
   estratto in Fase 0, non riscritti.
@@ -747,6 +768,12 @@ mano) non al font specifico dietro, per non dover rinominare di nuovo a un pross
 - `lib/taccuinoTokens.tsx`, `app/layout.tsx` — Fase 19: font a mano `Kalam` → `Caveat` (ancora in
   prova), token rinominati `FONT_KALAM`/`FONT_VAR_KALAM` → `FONT_HAND`/`FONT_VAR_HAND` (nome legato
   al ruolo, non al font specifico), variabile CSS `--font-kalam` → `--font-caveat`.
+- `components/libro/BookPage.tsx` — Fase 20: nuova prop `theme` (`'pergamena'` default o
+  `'taccuino'`), i colori locali diventano un oggetto per tema; nessun chiamante esistente la passa
+  ancora, restano tutti su pergamena finché non convertiti.
+- `app/diari/[id]/page.tsx` (`DiarioIndexLibro`) — Fase 20: `theme="taccuino"` su `BookPage`, toni
+  pergamena hardcoded sostituiti da `TACCUINO_PAPER`/`TACCUINO_INK`, titolo del Diario su
+  `FONT_HAND`.
 - `app/diari/[id]/percorsi/[percorsoId]/page.tsx` — Fase 15: `PercorsoPageLibro` rimossa del tutto,
   redirect immediato alla Guida a flag acceso. `PercorsoPageClassico`/`ReportageSection`
   invariate.

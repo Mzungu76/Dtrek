@@ -16,6 +16,7 @@ import type { DiarioDetail } from '@/app/api/diaries/[id]/route'
 import type { RecommendationCard } from '@/lib/routeBuilder/generateRecommendations'
 import { getUserSettingsCached, updateUserSettings } from '@/lib/sync/userSettingsStore'
 import { FONT } from '@/lib/designTokens'
+import { TACCUINO_PAPER, TACCUINO_INK, FONT_HAND } from '@/lib/taccuinoTokens'
 import {
   ArrowDown, ArrowLeft, ArrowUp, CheckCircle2, ChevronRight, Clock, Loader2, Lock, LockOpen, Mountain,
   Plus, Route, Search, Share2, Sparkles, Star, Trash2, TrendingUp, X,
@@ -289,6 +290,12 @@ function DiarioDetailPageClassico() {
  * classi .bk-index-*): occhiello "Sommario", titolo, elenco Percorsi con un'anteprima del
  * tracciato, pagina di destinazione con un tap.
  *
+ * Fase 20 — seconda pagina reale in stile taccuino dopo lo scaffale (Fase 18): `<BookPage
+ * theme="taccuino">` invece del default "pergamena" (il guscio, header/barra inferiore, non
+ * cambia struttura — solo palette), e i toni pergamena locali a questo file sostituiti dai token
+ * di `lib/taccuinoTokens.tsx`. Il titolo del Diario passa al font a mano (`FONT_HAND`), come "I
+ * miei Diari" sullo scaffale — il resto del contenuto (elenco, filtri) resta sui font esistenti.
+ *
  * Adattamento deliberato: qui e nella pagina di riepilogo del Percorso non c'è un "Apri in
  * modalità classica" a cui rimandare come per Guida/Reportage (/guida/[id], /resoconto/[id]
  * esistono come route a sé; questo indice invece condivide la STESSA URL della versione classica,
@@ -359,15 +366,15 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-sm px-6 text-center" style={{ background: '#fbf6e8', color: '#b3413a', fontFamily: FONT.body }}>
+      <div className="min-h-screen flex items-center justify-center text-sm px-6 text-center" style={{ background: TACCUINO_PAPER.base, color: '#b3413a', fontFamily: FONT.body }}>
         Impossibile caricare questo Diario: {error}
       </div>
     )
   }
   if (!detail) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#fbf6e8' }}>
-        <Loader2 className="w-6 h-6 animate-spin" style={{ color: '#a9915f' }} />
+      <div className="min-h-screen flex items-center justify-center" style={{ background: TACCUINO_PAPER.base }}>
+        <Loader2 className="w-6 h-6 animate-spin" style={{ color: TACCUINO_INK.handMuted }} />
       </div>
     )
   }
@@ -383,6 +390,7 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
         indexHref="/diari"
         indexLabel="Diari"
         sectionLabel="Indice"
+        theme="taccuino"
       >
         <div className="flex items-start gap-3 mb-3">
           {/* Riproduzione in piccolo dell'effettiva copertina del Diario (foto/gradiente + testi),
@@ -396,13 +404,13 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
             className="rounded-[4px] shrink-0 shadow-md"
           />
           <div className="min-w-0 flex-1">
-            <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 10, color: '#8a7f52', margin: '0 0 3px' }}>
+            <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 10, color: TACCUINO_INK.handMuted, margin: '0 0 3px' }}>
               Sommario
             </p>
-            <h1 style={{ fontFamily: FONT.display, fontWeight: 600, fontSize: 21, color: '#3f3a22', margin: '0 0 3px' }}>
+            <h1 style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 26, color: TACCUINO_INK.typed, margin: '0 0 3px' }}>
               {detail.title}
             </h1>
-            <p style={{ fontFamily: FONT.lora, fontStyle: 'italic', fontSize: 12, color: '#8a7f52', margin: 0 }}>
+            <p style={{ fontFamily: FONT.lora, fontStyle: 'italic', fontSize: 12, color: TACCUINO_INK.handMuted, margin: 0 }}>
               {detail.subtitle ? `${detail.subtitle} — ` : ''}{detail.percorsi.length} {detail.percorsi.length === 1 ? 'percorso' : 'percorsi'}
             </p>
           </div>
@@ -413,7 +421,7 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
           className="flex items-center gap-2 mb-3 px-3 py-2.5 rounded-lg"
           style={{
             color: '#c05a17', fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase',
-            letterSpacing: '0.05em', fontSize: 12, border: '1px dashed #d9b98a',
+            letterSpacing: '0.05em', fontSize: 12, border: `1px dashed ${TACCUINO_PAPER.cardBorder}`,
           }}
         >
           <Plus className="w-3.5 h-3.5" /> Nuovo percorso
@@ -422,19 +430,19 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
         {detail.percorsi.length > 0 && (
           <div className="mb-3">
             <div className="relative mb-2">
-              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#a9915f' }} />
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: TACCUINO_INK.handMuted }} />
               <input
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 placeholder="Cerca per titolo…"
                 className="w-full pl-8 pr-8 py-2 rounded-full text-[13px] outline-none"
-                style={{ background: '#f1e9d2', border: '1px solid #e4d9bd', color: '#3f3a22' }}
+                style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}`, color: TACCUINO_INK.typed }}
               />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
                   className="absolute right-3 top-1/2 -translate-y-1/2"
-                  style={{ color: '#a9915f' }}
+                  style={{ color: TACCUINO_INK.handMuted }}
                   aria-label="Cancella ricerca"
                 >
                   <X className="w-3.5 h-3.5" />
@@ -446,7 +454,7 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                 onClick={() => setFavoritesOnly(f => !f)}
                 title="Solo preferiti"
                 className="shrink-0 flex items-center justify-center w-6 h-6 rounded-full transition-colors"
-                style={favoritesOnly ? { background: '#c05a17', color: '#fff' } : { background: '#f1e9d2', color: '#8a7f52' }}
+                style={favoritesOnly ? { background: '#c05a17', color: '#fff' } : { background: TACCUINO_PAPER.card, color: TACCUINO_INK.handMuted }}
               >
                 <Star className="w-3 h-3" fill={favoritesOnly ? 'currentColor' : 'none'} />
               </button>
@@ -454,7 +462,7 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                 onClick={() => setSortDir(d => d === 'desc' ? 'asc' : 'desc')}
                 title={sortDir === 'desc' ? 'Ordine decrescente — tocca per invertire' : 'Ordine crescente — tocca per invertire'}
                 className="shrink-0 flex items-center justify-center w-6 h-6 rounded-full transition-colors"
-                style={{ background: '#f1e9d2', color: '#8a7f52' }}
+                style={{ background: TACCUINO_PAPER.card, color: TACCUINO_INK.handMuted }}
               >
                 {sortDir === 'desc' ? <ArrowDown className="w-3 h-3" /> : <ArrowUp className="w-3 h-3" />}
               </button>
@@ -463,7 +471,7 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                   key={s.id}
                   onClick={() => setSortBy(s.id)}
                   className="shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold transition-colors"
-                  style={sortBy === s.id ? { background: '#c05a17', color: '#fff' } : { background: '#f1e9d2', color: '#8a7f52' }}
+                  style={sortBy === s.id ? { background: '#c05a17', color: '#fff' } : { background: TACCUINO_PAPER.card, color: TACCUINO_INK.handMuted }}
                 >
                   {s.label}
                 </button>
@@ -475,7 +483,7 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                   key={s.id}
                   onClick={() => setStatusFilter(s.id)}
                   className="shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold transition-colors"
-                  style={statusFilter === s.id ? { background: '#3f3a22', color: '#fbf6e8' } : { background: '#f1e9d2', color: '#8a7f52' }}
+                  style={statusFilter === s.id ? { background: TACCUINO_INK.typed, color: TACCUINO_PAPER.base } : { background: TACCUINO_PAPER.card, color: TACCUINO_INK.handMuted }}
                 >
                   {s.label}
                 </button>
@@ -485,9 +493,9 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
         )}
 
         {detail.percorsi.length === 0 ? (
-          <p style={{ fontFamily: FONT.body, fontSize: 13, color: '#8a7f52' }}>Nessun percorso ancora — comincia da qui.</p>
+          <p style={{ fontFamily: FONT.body, fontSize: 13, color: TACCUINO_INK.handMuted }}>Nessun percorso ancora — comincia da qui.</p>
         ) : visiblePercorsi.length === 0 ? (
-          <p style={{ fontFamily: FONT.body, fontSize: 13, color: '#8a7f52' }}>Nessun percorso corrisponde ai filtri.</p>
+          <p style={{ fontFamily: FONT.body, fontSize: 13, color: TACCUINO_INK.handMuted }}>Nessun percorso corrisponde ai filtri.</p>
         ) : (
           <div className="flex flex-col">
             {visiblePercorsi.map(p => {
@@ -499,7 +507,7 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                   key={p.id}
                   className="flex items-center gap-3 py-3 px-2 -mx-2 rounded-lg"
                   style={{
-                    borderBottom: '1px dotted #ddd0a3',
+                    borderBottom: `1px dotted ${TACCUINO_PAPER.cardBorder}`,
                     // Sfondo tinteggiato (terra, molto tenue) per i percorsi con almeno un'uscita —
                     // riconoscibili a colpo d'occhio senza dover leggere l'etichetta a destra.
                     background: haOgniUscita ? 'rgba(192, 90, 23, 0.07)' : 'transparent',
@@ -516,23 +524,23 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                       verticale da una riga all'altra, indipendentemente da quanto testo hanno le
                       righe vicine. */}
                   <Link href={`${percorsoPath}/guida/il_percorso`} className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="w-[76px] h-[76px] rounded-lg shrink-0 overflow-hidden relative" style={{ background: '#e9dcb8' }}>
+                    <div className="w-[76px] h-[76px] rounded-lg shrink-0 overflow-hidden relative" style={{ background: TACCUINO_PAPER.card }}>
                       {p.routePolyline && p.routePolyline.length > 1
                         ? <GalleryMapThumb polyline={p.routePolyline} />
-                        : <div className="w-full h-full flex items-center justify-center"><Mountain className="w-5 h-5" style={{ color: '#c9b98a' }} /></div>}
+                        : <div className="w-full h-full flex items-center justify-center"><Mountain className="w-5 h-5" style={{ color: TACCUINO_PAPER.cardBorder }} /></div>}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate" style={{ fontSize: 14, fontWeight: 600, color: '#3f3a22' }}>{p.title}</p>
+                      <p className="truncate" style={{ fontSize: 14, fontWeight: 600, color: TACCUINO_INK.typed }}>{p.title}</p>
                       {(scoreLabel || p.safety) && (
-                        <p className="truncate" style={{ fontSize: 10.5, fontWeight: 600, color: '#8a7f52', marginTop: 1 }}>
+                        <p className="truncate" style={{ fontSize: 10.5, fontWeight: 600, color: TACCUINO_INK.handMuted, marginTop: 1 }}>
                           {[scoreLabel, p.safety?.label].filter(Boolean).join(' · ')}
                         </p>
                       )}
-                      <div className="flex items-center flex-wrap gap-x-2.5 gap-y-0.5 mt-1" style={{ fontSize: 10.5, color: '#6b6142' }}>
-                        <span className="inline-flex items-center gap-1"><Route className="w-3 h-3" style={{ color: '#a9915f' }} /> {(p.distanceMeters / 1000).toFixed(1)} km</span>
-                        <span className="inline-flex items-center gap-1"><TrendingUp className="w-3 h-3" style={{ color: '#a9915f' }} /> +{Math.round(p.elevationGain)} m</span>
-                        <span className="inline-flex items-center gap-1"><Mountain className="w-3 h-3" style={{ color: '#a9915f' }} /> {Math.round(p.altitudeMax)} m</span>
-                        <span className="inline-flex items-center gap-1"><Clock className="w-3 h-3" style={{ color: '#a9915f' }} /> {formatDuration(p.estimatedTimeSeconds)}</span>
+                      <div className="flex items-center flex-wrap gap-x-2.5 gap-y-0.5 mt-1" style={{ fontSize: 10.5, color: TACCUINO_INK.hand }}>
+                        <span className="inline-flex items-center gap-1"><Route className="w-3 h-3" style={{ color: TACCUINO_INK.handMuted }} /> {(p.distanceMeters / 1000).toFixed(1)} km</span>
+                        <span className="inline-flex items-center gap-1"><TrendingUp className="w-3 h-3" style={{ color: TACCUINO_INK.handMuted }} /> +{Math.round(p.elevationGain)} m</span>
+                        <span className="inline-flex items-center gap-1"><Mountain className="w-3 h-3" style={{ color: TACCUINO_INK.handMuted }} /> {Math.round(p.altitudeMax)} m</span>
+                        <span className="inline-flex items-center gap-1"><Clock className="w-3 h-3" style={{ color: TACCUINO_INK.handMuted }} /> {formatDuration(p.estimatedTimeSeconds)}</span>
                       </div>
                     </div>
                     <div className="shrink-0 w-10 flex items-center justify-center">
@@ -540,7 +548,7 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                         <TrailScoreGaugeBadge total={p.trailScore} safety={p.safety} size={40} showLabel={false} dark={false} />
                       )}
                     </div>
-                    <div className="shrink-0" style={{ width: 82, textAlign: 'right', fontSize: 10.5, color: '#8a7f52' }}>
+                    <div className="shrink-0" style={{ width: 82, textAlign: 'right', fontSize: 10.5, color: TACCUINO_INK.handMuted }}>
                       {haOgniUscita ? `${p.reportageCount} Reportage` : 'in programma'}
                     </div>
                   </Link>
@@ -550,19 +558,19 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
           </div>
         )}
 
-        <div className="flex flex-col mt-2 pt-1" style={{ borderTop: '1px solid #e4d9bd' }}>
+        <div className="flex flex-col mt-2 pt-1" style={{ borderTop: `1px solid ${TACCUINO_PAPER.cardBorder}` }}>
           <Link
             href={`/diari/${encodeURIComponent(diaryId)}/pubblica`}
             className="flex items-center justify-between gap-2 py-2.5"
-            style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: 11.5, color: '#6b6142' }}
+            style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: 11.5, color: TACCUINO_INK.hand }}
           >
             <span className="inline-flex items-center gap-1.5"><Share2 className="w-3.5 h-3.5" /> Pubblicazione</span>
-            <ChevronRight className="w-3.5 h-3.5" style={{ color: '#b5a677' }} />
+            <ChevronRight className="w-3.5 h-3.5" style={{ color: TACCUINO_INK.handMuted }} />
           </Link>
         </div>
       </BookPage>
       {!detail.isDefault && (
-        <div className="max-w-[640px] mx-auto px-5 sm:px-8" style={{ background: '#fbf6e8' }}>
+        <div className="max-w-[640px] mx-auto px-5 sm:px-8" style={{ background: TACCUINO_PAPER.base }}>
           <DeleteDiarioSection diaryId={diaryId} />
         </div>
       )}
