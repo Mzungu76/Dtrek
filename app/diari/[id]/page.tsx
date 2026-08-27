@@ -572,14 +572,18 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                         del testo invisibile della riga — sospetto rivelatosi sbagliato in Fase 26
                         (la vera causa era `tailwind.config.ts` che non scansionava `lib/`, dove vive
                         `-z-10` di `TaccuinoPaperTexture`): reintrodotto in Fase 27, verificato
-                        innocente. `GalleryMapThumb` stesso resta neutro (nessun filtro sul
-                        componente, solo sul contenitore chiamante) — i suoi altri usi (gallerie
-                        Guida/Resoconto) restano nei colori standard della mappa. */}
+                        innocente. La Fase 27 lo aveva spostato verso il verde (`hue-rotate(60deg)`)
+                        per avvicinarsi a un riferimento ad acquerello — l'utente lo ha bocciato a
+                        schermo ("le mappe non mi piacciono"), preferendo il seppia caldo originale
+                        di Fase 22 ("un tono più marroncino"): tornato qui, leggermente più intenso.
+                        `GalleryMapThumb` stesso resta neutro (nessun filtro sul componente, solo sul
+                        contenitore chiamante) — i suoi altri usi (gallerie Guida/Resoconto) restano
+                        nei colori standard della mappa. */}
                     <div
                       className="w-[76px] h-[76px] rounded-[3px] shrink-0 overflow-hidden relative"
                       style={{
                         background: TACCUINO_PAPER.card,
-                        filter: 'sepia(0.35) saturate(1.35) hue-rotate(60deg) brightness(0.97) contrast(1.05)',
+                        filter: 'sepia(0.6) saturate(1.4) hue-rotate(-5deg) brightness(0.93) contrast(1.05)',
                       }}
                     >
                       {p.routePolyline && p.routePolyline.length > 1
@@ -601,9 +605,17 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                         <span className="inline-flex items-center gap-1"><Clock className="w-3 h-3" style={{ color: TACCUINO_INK.handMuted }} /> {formatDuration(p.estimatedTimeSeconds)}</span>
                       </div>
                     </div>
-                    <div className="shrink-0 w-10 flex items-center justify-center">
+                    <div className="relative shrink-0 w-10 h-10 flex items-center justify-center">
                       {p.trailScore != null && (
-                        <TrailScoreGaugeBadge total={p.trailScore} safety={p.safety} size={40} showLabel={false} dark={false} />
+                        <>
+                          {/* Anello a tremore intorno al badge — non tocca `TrailScoreGaugeBadge`
+                              stesso (condiviso con Guida/Resoconto/gallerie, su sfondi scuri:
+                              un ritocco lì si vedrebbe ovunque, non solo qui). Un'aggiunta esterna,
+                              scoperta e contenuta, dà solo a questa riga un accenno "cerchiato a
+                              penna" invece del cerchio perfetto del componente. */}
+                          <HandDrawnFrame stroke={TACCUINO_INK.mapContour} strokeWidth={1} rx={50} seed={7} className="scale-110" />
+                          <TrailScoreGaugeBadge total={p.trailScore} safety={p.safety} size={40} showLabel={false} dark={false} />
+                        </>
                       )}
                     </div>
                     <div

@@ -946,6 +946,46 @@ Verificato con una build di produzione vera (lezione della Fase 26: mai fidarsi 
 dev`): tutti i testi restano visibili, tutti i bordi a tremore renderizzano correttamente sulla
 pagina reale ricostruita con `GalleryMapThumb`/`TrailScoreGaugeBadge`.
 
+**Fase 28 — Colore mappa bocciato, un vero bug nella copertina in miniatura, primo accenno
+"acquerello" al badge del punteggio** ✅ **COMPLETATA**
+
+L'utente ha rimandato uno screenshot del Sommario reale (Fase 27 già in produzione) con tre
+segnalazioni: (1) il verde della Fase 27 non piace, tornare al seppia di prima ma "più marroncino";
+(2) le miniature delle copertine dei Diari (l'anteprima in cima al Sommario) sono "spostate verso il
+basso"; (3) i badge del punteggio dovrebbero sembrare "fatti ad acquerello".
+
+**Copertina in miniatura — bug reale, non estetico.** `DiarioCoverThumb` (con `title`+`width`, usata
+in cima al Sommario) applicava già un `translateY(-24px)` per compensare il `margin: 24px auto`
+proprio di `<DiarioCover>` (fix di una fase precedente) — ma quel margine, senza nulla che lo
+contenga, **collassa fuori** dal `<div>` che porta la trasformazione durante il layout: diventa
+spazio reale PRIMA che il `<div>` inizi, non più al suo interno, e una trasformazione applicata AL
+`<div>` non può annullare uno spazio già "scappato" fuori dal suo perimetro. Isolato empiricamente
+misurando `getBoundingClientRect()` a ogni livello dell'albero (non deducibile dalla sola lettura del
+codice) — la copertina reale iniziava ~22px più in basso del suo contenitore invece di ~0.
+**Correzione**: `overflow: hidden` sul `<div>` della trasformazione blocca il collasso, contenendo il
+margine dove `translateY(-24px)` può davvero annullarlo — ma questo da solo introduceva un secondo
+problema (quel `<div>`, largo "auto", eredita la larghezza già scalata del suo genitore, molto più
+stretta di `PDF_PAGE_W`: con `overflow: hidden` quello ritagliava `DiarioCover` a una fetta verticale
+invece di lasciarla sporgere invisibilmente) — richiesta anche una `width: PDF_PAGE_W` esplicita sullo
+stesso `<div>`. Verificato con `getBoundingClientRect()`: la copertina ora coincide esattamente col
+suo contenitore, nessun vuoto, nessun taglio.
+
+**Mappa**: tolto il verde della Fase 27, tornato al seppia caldo di Fase 22 con toni leggermente più
+intensi (`sepia(0.6) saturate(1.4) hue-rotate(-5deg) brightness(0.93) contrast(1.05)`).
+
+**Badge del punteggio — un primo passo, non una riscrittura.** `TrailScoreGaugeBadge` è condiviso
+con Guida, Resoconto e le gallerie (sfondi scuri, animato, 395 righe) — ritoccarne il rendering
+interno per un look "ad acquerello" si vedrebbe ovunque nell'app, non solo qui, un cambiamento
+architetturale che il componente stesso non è stato pensato per accogliere (nessun concetto di
+variante per tema). Invece di riscriverlo, aggiunto un `HandDrawnFrame` esterno (stessa tecnica di
+Fase 27, contenuto nel proprio riquadro) intorno all'istanza del Sommario soltanto — un anello a
+tremore leggermente più grande del badge reale, che dà un accenno "cerchiato a penna" senza toccare
+il componente condiviso. Non è ancora l'acquerello vero e proprio del riferimento — un passo
+concreto e sicuro, non l'ultima parola sull'argomento.
+
+Verificato tutto su una build di produzione vera: copertina, mappa e badge corretti, testo sempre
+visibile.
+
 ## File critici
 - `components/guida/GuideReader.tsx`, `components/resoconto/ReportReader.tsx` — sorgente da cui
   estratto in Fase 0, non riscritti.

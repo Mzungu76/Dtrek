@@ -34,9 +34,20 @@ export function DiarioCoverThumb({ coverUrl, className, width, title, subtitle, 
         {/* <DiarioCover> ha un margin: '24px auto' proprio (pensato per la sua vetrina a schermo
             intero su /pubblica e /diari/[id]/copertina, dove c'è spazio intorno) — qui, ritagliata
             in una miniatura, quel margine spingeva la copertina verso il basso lasciando un vuoto
-            in cima e tagliando il fondo (segnalato dall'utente). translateY(-24px) prima dello
-            scale lo annulla: le unità sono quelle "vere" del contenuto non ancora scalato. */}
-        <div style={{ transform: `scale(${scale}) translateY(-24px)`, transformOrigin: 'top left' }}>
+            in cima e tagliando il fondo (segnalato dall'utente, ancora presente dopo un primo
+            tentativo con la sola `translateY(-24px)`: quel margine, senza nulla che lo contenga,
+            COLLASSA fuori da questo `<div>` durante il layout — diventa spazio reale PRIMA che il
+            `<div>` inizi, non più al suo interno — e una trasformazione applicata AL `<div>` non
+            può annullare uno spazio che è già "scappato" fuori dal suo perimetro prima ancora del
+            calcolo del transform). `overflow: hidden` blocca il collasso — il margine resta
+            contenuto dentro questo `<div>`, dove `translateY(-24px)` (nelle stesse unità "vere" del
+            contenuto non ancora scalato, applicata PRIMA di `scale` nell'ordine di lettura) può
+            davvero annullarlo. Serve anche `width: PDF_PAGE_W` esplicita: senza, la larghezza
+            "auto" di questo `<div>` è quella del SUO genitore (già scalata a `width` px, molto più
+            stretta di `PDF_PAGE_W`) — con `overflow: hidden` quello avrebbe ritagliato `DiarioCover`
+            a una fetta verticale invece di lasciarla semplicemente sporgere (comportamento di
+            `overflow: visible`, invisibile finché non si aggiunge `hidden` per il motivo sopra). */}
+        <div className="overflow-hidden" style={{ width: PDF_PAGE_W, transform: `scale(${scale}) translateY(-24px)`, transformOrigin: 'top left' }}>
           <DiarioCover coverUrl={coverUrl} diaryTitle={title} diarySubtitle={subtitle ?? ''} diaryAuthor={author ?? ''} />
         </div>
       </div>
