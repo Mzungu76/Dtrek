@@ -1082,6 +1082,71 @@ Non richiesta né tentata in questa fase: la mappa "acquerello" illustrata gener
 riferimento iniziale — esplicitamente giudicata "troppo illustrata per Dtrek". La direzione
 confermata resta cartografia reale (dati/geometria veri) trattata con misura, non un'illustrazione.
 
+**Fase 31 — "Travel Journal contemporaneo": nuova palette esatta, texture quasi impercettibile,
+rilegatura fisica a più livelli** ✅ **COMPLETATA (Fase 1 di 4)**
+
+Specifica dettagliata dell'utente (30 sezioni, palette esadecimale esatta, principi di design
+espliciti — "70% UI moderna, 30% diario fisico", "REALISMO > DECORAZIONE", "la casualità è
+decorativa, non funzionale") per evolvere lo stile taccuino verso un vero "Travel Journal /
+Field Notebook" contemporaneo, con un piano di lavoro in 4 fasi proprio (carta/tipografia/
+rilegatura/separatori/barra inferiore → miniature mappa → tracciato → rifiniture). Questa fase
+copre la prima, più qualche anticipo della seconda (i token della miniatura, non ancora la
+cartografia).
+
+**Due correzioni rispetto al lavoro precedente**, non nuove aggiunte:
+1. **Trail Score**: tolto l'anello a tremore aggiunto in Fase 28 — la nuova specifica dice
+   l'esatto contrario ("uno degli elementi più moderni... non trasformarlo in vintage, il
+   contrasto diario/mappa vs score/dati è voluto, crea il carattere di Dtrek").
+2. **Palette cartografica per-elemento** (sezione 13 della specifica, boschi/strade/acqua
+   ciascuno con un colore proprio): non ottenibile da un filtro CSS su una tile raster già
+   renderizzata (agisce sull'immagine intera, non sui singoli livelli) — la specifica stessa lo
+   prevede ("se le tile non possono essere sostituite, applica un filtro CSS"), quindi rimandato
+   alla Fase 2 (OpenTopoMap, già in uso dalla Fase 30, più un filtro di desaturazione mirato).
+
+**Palette** (`lib/taccuinoTokens.tsx`) — sostituita con i valori esadecimali esatti forniti:
+`TACCUINO_PAPER.base` `#F2E8D2` (prima `#f2e8d5`, tono quasi identico ma ora la fonte è la
+specifica, non un tentativo a occhio), nuovo `light` `#F6EEDC` (zone "in luce"), `card`/
+`cardBorder` diventano `#E9DDBF`/`#D8C7A3`. `TACCUINO_INK.typed` `#29231E` — mai nero puro, un
+quasi-nero caldo (richiesta esplicita). Tolte `stain1`/`stain2` (le "macchie" visibili delle fasi
+precedenti, l'opposto di "leggerissima variazione di tonalità") — `app/diari/page.tsx` (lo
+scaffale, fuori dallo scopo di questa fase) le usava anche lui: portato a uno sfondo piatto
+provvisorio, la stessa texture non gli è ancora arrivata.
+
+**Texture di carta** — `TaccuinoPaperTexture` riscritta da capo: non più due macchie sfumate
+riconoscibili, ma UNA sola sfumatura di luce ampia a opacità bassissima più un rumore
+`feTurbulence` piastrellato, codificato come `background-image` (`data:image/svg+xml,...` via
+`encodeURIComponent` — non un `<svg>` vivo nel DOM: la classe di bug isolata in Fase 24 riguardava
+solo un `<svg>` che ricopre la pagina, qui è comunque una semplice immagine di sfondo). "L'utente
+deve percepire carta senza vedere chiaramente una texture" — verificato a schermo, il rumore è
+sotto la soglia di percezione a distanza normale, resta leggibile solo ingrandendo molto.
+
+**Rilegatura** (`TaccuinoSpineShadow`) — riscritta da capo su una specifica di composizione precisa:
+non più una sfumatura nera uniforme dall'alto al basso (Fase 29), ma più livelli orizzontali
+(ombra interna → linea di piega → piccola zona di luce → ombra esterna morbida, tutti in un
+marrone caldo trasparente, mai nero) combinati con un `mask-image` verticale che sfuma l'intera
+composizione a `transparent` in cima e in fondo (più intensa al centro della pagina, come
+richiesto) — le due dimensioni restano indipendenti invece di dover ricalcolare i gradienti
+orizzontali per l'altezza. Niente anelli/punti di cucitura (discussi nella specifica stessa e
+scartati se "risultano troppo decorativi" — con la sola ombra già leggibile come rilegatura,
+aggiungerli sarebbe stata decorazione sopra un effetto già chiaro). Verificato via screenshot
+ravvicinato (`deviceScaleFactor` alto): visibile e riconoscibile come piega fisica, non un'ombra
+piatta, ma non appariscente alla scala normale di uno schermo di telefono.
+
+**Il resto della pagina**: separatori con opacità ~50% (non più il colore pieno di `cardBorder`);
+pulsante "nuovo percorso" e casella di ricerca invariati nella struttura (già coerenti con la
+specifica: bordo `HandDrawnFrame`, sfondo quasi trasparente/leggermente più scuro) solo ricolorati
+con i nuovi token; chip di ordinamento/stato/preferiti — tolto lo sfondo pieno dallo stato attivo
+(restava solo il contorno arancione `HandDrawnFrame`, la specifica lo chiede esplicitamente:
+"nessun background pieno molto forte"); sottotitolo di riga (giudizio/rischio) passato al font a
+mano (prima l'unico testo "personale" ancora in un sans di default); rotazione della miniatura
+ridotta da ±2.5° a ±0.7° (Fase 29 l'aveva impostata troppo ampia — "NON usare rotazioni troppo
+evidenti"); ombra della miniatura ammorbidita (più diffusa, più bassa opacità, tinta calda invece
+di nero); barra inferiore con una leggerissima ombra verso l'alto invece del confine piatto di
+prima (solo per il tema taccuino, la pergamena resta invariata).
+
+Verificato tutto su una build di produzione vera: testo sempre leggibile, nessuna regressione,
+gerarchia tipografica coerente (titolo protagonista, sottotitolo/dati via via più tenui).
+
 ## File critici
 - `components/guida/GuideReader.tsx`, `components/resoconto/ReportReader.tsx` — sorgente da cui
   estratto in Fase 0, non riscritti.

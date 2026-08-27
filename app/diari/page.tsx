@@ -383,9 +383,11 @@ function DiariPageLibro() {
     <div
       className="min-h-screen"
       style={{
-        background: `radial-gradient(ellipse at 15% 0%, ${TACCUINO_PAPER.stain1} 0%, transparent 45%),`
-          + `radial-gradient(ellipse at 100% 30%, ${TACCUINO_PAPER.stain2} 0%, transparent 50%),`
-          + TACCUINO_PAPER.base,
+        // Fase 31 — le due "macchie" radiali sono state tolte dalla palette (lib/taccuinoTokens.tsx):
+        // la nuova direzione vuole una carta con variazione di tonalità quasi impercettibile, non
+        // macchie visibili come tali. Sfondo piatto qui (questa pagina — lo scaffale — resta fuori
+        // dallo scopo di questa fase, incentrata sul Sommario) finché non le arriva la stessa texture.
+        background: TACCUINO_PAPER.base,
       }}
     >
       <BookSpineShadow variant="light" />

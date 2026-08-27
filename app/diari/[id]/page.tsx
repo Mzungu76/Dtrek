@@ -335,11 +335,13 @@ const SOMMARIO_STATUS_OPTIONS: { id: SommarioStatusFilter; label: string }[] = [
 
 /** Rotazione stabile per percorso (Fase 29, "ritaglio incollato") — derivata dall'id, non
  *  `Math.random()`: la stessa riga deve inclinarsi sempre allo stesso modo tra un render e
- *  l'altro (un valore casuale ricalcolato salterebbe a ogni aggiornamento della lista). */
+ *  l'altro (un valore casuale ricalcolato salterebbe a ogni aggiornamento della lista). Ampiezza
+ *  ridotta in Fase 31 a ±0.7° (era ±2.5°) — "NON usare rotazioni troppo evidenti", una miniatura
+ *  appoggiata sulla pagina, non uno scrapbook. */
 function cutoutRotation(id: string): number {
   let hash = 0
   for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0
-  return ((Math.abs(hash) % 50) / 10) - 2.5
+  return ((Math.abs(hash) % 14) / 10) - 0.7
 }
 
 function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
@@ -471,7 +473,7 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 placeholder="cerca per titolo…"
-                className="w-full pl-8 pr-8 py-2 rounded-[3px] text-[14px] outline-none"
+                className="w-full pl-8 pr-8 py-2 rounded-[3px] text-[14px] outline-none placeholder:text-[#8a9bab]"
                 style={{ background: TACCUINO_PAPER.card, color: TACCUINO_INK.typed, fontFamily: FONT_HAND }}
               />
               {searchQuery && (
@@ -492,8 +494,8 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                 title="Solo preferiti"
                 className="relative shrink-0 flex items-center justify-center w-6 h-6 rounded-full transition-colors"
                 style={favoritesOnly
-                  ? { background: TACCUINO_PAPER.card, color: TACCUINO_ACCENT[600] }
-                  : { background: 'transparent', color: TACCUINO_INK.handMuted }}
+                  ? { color: TACCUINO_ACCENT[600] }
+                  : { color: TACCUINO_INK.handMuted }}
               >
                 {favoritesOnly && <HandDrawnFrame stroke={TACCUINO_ACCENT[600]} strokeWidth={1.5} rx={50} />}
                 <Star className="w-3 h-3" fill={favoritesOnly ? 'currentColor' : 'none'} />
@@ -512,7 +514,7 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                   onClick={() => setSortBy(s.id)}
                   className="relative shrink-0 px-3 py-1 rounded-full text-[13px] transition-colors"
                   style={sortBy === s.id
-                    ? { fontFamily: FONT_HAND, fontWeight: 700, background: TACCUINO_PAPER.card, color: TACCUINO_INK.typed }
+                    ? { fontFamily: FONT_HAND, fontWeight: 700, color: TACCUINO_INK.typed }
                     : { fontFamily: FONT_HAND, background: 'transparent', color: TACCUINO_INK.handMuted }}
                 >
                   {sortBy === s.id && <HandDrawnFrame stroke={TACCUINO_ACCENT[600]} strokeWidth={1.5} rx={50} />}
@@ -527,7 +529,7 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                   onClick={() => setStatusFilter(s.id)}
                   className="relative shrink-0 px-3 py-1 rounded-full text-[13px] transition-colors"
                   style={statusFilter === s.id
-                    ? { fontFamily: FONT_HAND, fontWeight: 700, background: TACCUINO_PAPER.card, color: TACCUINO_INK.typed }
+                    ? { fontFamily: FONT_HAND, fontWeight: 700, color: TACCUINO_INK.typed }
                     : { fontFamily: FONT_HAND, background: 'transparent', color: TACCUINO_INK.handMuted }}
                 >
                   {statusFilter === s.id && <HandDrawnFrame stroke={TACCUINO_ACCENT[600]} strokeWidth={1.5} rx={50} />}
@@ -553,7 +555,10 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                   key={p.id}
                   className="flex items-center gap-3.5 py-3.5 px-2 -mx-2"
                   style={{
-                    borderBottom: `1px dashed ${TACCUINO_PAPER.cardBorder}`,
+                    // Fase 31 — separatore con opacità (non più il colore pieno di `cardBorder`):
+                    // "linee tratteggiate stampate, colore molto tenue, opacità 0.4-0.6", non un
+                    // bordo pieno come una card. `80` = ~50% alpha.
+                    borderBottom: `1px dashed ${TACCUINO_PAPER.cardBorder}80`,
                     // "Passata di evidenziatore" per i percorsi con almeno un'uscita —
                     // riconoscibili a colpo d'occhio senza dover leggere l'etichetta a destra.
                     // Colore ripreso dal mockup (`#e9d4ae66`), non il tinteggio arancio-accento di
@@ -596,8 +601,11 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                       className="w-[87px] h-[87px] shrink-0 overflow-hidden relative"
                       style={{
                         background: TACCUINO_PAPER.card,
-                        border: '3px solid #fbf8f1',
-                        boxShadow: `2px 3px 4px rgba(0,0,0,0.22)`,
+                        border: `3px solid ${TACCUINO_PAPER.light}`,
+                        // Fase 31 — ombra "molto morbida... piccola, molto diffusa, opacità bassa,
+                        // leggermente spostata verso il basso" (non più un'ombra da card moderna:
+                        // offset ridotto, sfocatura maggiore, tinta calda invece di nero puro).
+                        boxShadow: `0 4px 10px rgba(41,35,30,0.15)`,
                         transform: `rotate(${cutoutRotation(p.id)}deg)`,
                       }}
                     >
@@ -618,7 +626,10 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                     <div className="min-w-0 flex-1">
                       <p className="truncate" style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 19.5, color: TACCUINO_INK.typed }}>{p.title}</p>
                       {(scoreLabel || p.safety) && (
-                        <p className="truncate" style={{ fontSize: 12, fontWeight: 600, color: TACCUINO_INK.handMuted, marginTop: 1 }}>
+                        // Fase 31 — font a mano anche qui ("sottotitoli personali" nella specifica
+                        // tipografica, non più il sans di default): resta comunque un gradino sotto
+                        // il titolo (corpo più piccolo, stesso tono tenue di prima).
+                        <p className="truncate" style={{ fontFamily: FONT_HAND, fontSize: 14, fontWeight: 600, color: TACCUINO_INK.handMuted, marginTop: 1 }}>
                           {[scoreLabel, p.safety?.label].filter(Boolean).join(' · ')}
                         </p>
                       )}
@@ -636,16 +647,13 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                       </div>
                     </div>
                     <div className="relative shrink-0 w-11 h-11 flex items-center justify-center">
+                      {/* Fase 31 — tolto l'anello a tremore aggiunto in Fase 28: la nuova specifica
+                          dice esplicitamente il contrario ("il Trail Score è uno degli elementi più
+                          moderni, non trasformarlo in vintage — il contrasto tra diario/mappa e
+                          score/dati è voluto, crea il carattere di Dtrek"). Resta tecnico e pulito,
+                          non toccato. */}
                       {p.trailScore != null && (
-                        <>
-                          {/* Anello a tremore intorno al badge — non tocca `TrailScoreGaugeBadge`
-                              stesso (condiviso con Guida/Resoconto/gallerie, su sfondi scuri:
-                              un ritocco lì si vedrebbe ovunque, non solo qui). Un'aggiunta esterna,
-                              scoperta e contenuta, dà solo a questa riga un accenno "cerchiato a
-                              penna" invece del cerchio perfetto del componente. */}
-                          <HandDrawnFrame stroke={TACCUINO_INK.mapContour} strokeWidth={1} rx={50} seed={7} className="scale-110" />
-                          <TrailScoreGaugeBadge total={p.trailScore} safety={p.safety} size={46} showLabel={false} dark={false} />
-                        </>
+                        <TrailScoreGaugeBadge total={p.trailScore} safety={p.safety} size={46} showLabel={false} dark={false} />
                       )}
                     </div>
                     <div

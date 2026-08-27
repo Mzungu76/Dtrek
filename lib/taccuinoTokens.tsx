@@ -23,31 +23,36 @@ export const FONT_VAR_HAND = '--font-caveat'
  *  professionalità e precisione del contenuto, non tutto scritto a mano allo stesso modo. */
 export const FONT_HAND = `var(${FONT_VAR_HAND}), cursive`
 
-/** Carta invecchiata — sfondo pagina e le due macchie/ombreggiature che le danno profondità. */
+/** Carta — Fase 31, palette esatta fornita dall'utente per il "Travel Journal" contemporaneo
+ *  (non più la pergamena calda approssimata a mano di Fase 17-30): sfondo tenue, quasi nessuna
+ *  variazione percepibile, mai una "macchia" visibile come tale — la texture vera vive in
+ *  `TaccuinoPaperTexture` come rumore quasi impercettibile, non come due chiazze scure. */
 export const TACCUINO_PAPER = {
-  base:    '#f2e8d5',
-  stain1:  '#e2d2a8',
-  stain2:  '#d9c79a',
-  /** Sfondo di una "card incollata" — mappe, foto — leggermente più scuro della pagina stessa. */
-  card:       '#e9dcb8',
-  cardBorder: '#c9b78c',
+  base:   '#F2E8D2',
+  /** Variante più chiara — zone "in luce" (piega, evidenziature leggere), mai lo sfondo pagina. */
+  light:  '#F6EEDC',
+  /** Sfondo di una "card incollata" — mappe, ricerca — leggermente più scuro della pagina stessa. */
+  card:       '#E9DDBF',
+  cardBorder: '#D8C7A3',
   /** Linee di livello disegnate a mano sullo sfondo pagina, molto tenui. */
-  contourLine: '#b09a6e',
+  contourLine: '#987C5B',
   /** Evidenziatore — striscia calda dietro una riga "importante" (es. un percorso con un
    *  Reportage), sempre con un'opacità in coda (`${highlight}66` ecc.), mai a piena tinta: deve
    *  restare una pennellata di evidenziatore su carta, non un riquadro colorato. */
-  highlight: '#e9d4ae',
+  highlight: '#E9DDBF',
 } as const
 
 /** Toni di inchiostro — il testo "stampato" (narrativo, professionale) e quello scritto a mano
  *  (titoli, etichette, annotazioni) sono volutamente due toni diversi, come in un vero taccuino
- *  dove il contenuto di base è preciso e le note a margine sono personali. */
+ *  dove il contenuto di base è preciso e le note a margine sono personali. `typed` non è mai nero
+ *  puro (Fase 31, richiesta esplicita): un quasi-nero caldo resta coerente con la carta invece di
+ *  "bucarla" con un contrasto da schermo. */
 export const TACCUINO_INK = {
-  typed:     '#2c2420',
-  hand:      '#4a3728',
-  handMuted: '#8a6a4a',
+  typed:     '#29231E',
+  hand:      '#806746',
+  handMuted: '#987C5B',
   mapSepia:   '#3d2b1f',
-  mapContour: '#a68a5c',
+  mapContour: '#C8B99F',
 } as const
 
 /** Accento funzionale (stati attivi, CTA) — la stessa scala terra del brand, non un colore nuovo:
@@ -130,76 +135,97 @@ export function HandDrawnFrame({
 }
 
 /**
- * Texture di sfondo del taccuino — carta invecchiata (due macchie sfumate), tutta la pagina,
- * dietro al contenuto. Verificata nel mockup (`taccuino-canvas/SommarioTaccuino.dc.html`/
- * `Main.dc.html`, non nel repo).
+ * Rumore di carta quasi impercettibile — un `<rect>` di `feTurbulence` codificato come immagine
+ * (mai un `<svg>` vivo nel DOM, per la classe di bug isolata in Fase 24: qui è un
+ * `background-image` — una risorsa immagine rasterizzata per il browser, non un nodo SVG
+ * interattivo) — piastrellato a bassa opacità dentro `TaccuinoPaperTexture`. Costruito una volta
+ * sola a import-time (stringa statica), non ricalcolato a ogni render.
+ */
+const PAPER_NOISE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="140" height="140">`
+  + `<filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" stitchTiles="stitch"/>`
+  + `<feColorMatrix type="matrix" values="0 0 0 0 0.30  0 0 0 0 0.24  0 0 0 0 0.16  0 0 0 0.05 0"/></filter>`
+  + `<rect width="100%" height="100%" filter="url(#n)"/></svg>`
+// encodeURIComponent, non un'escaping a mano di # e % soltanto — gestisce anche spazi e virgolette
+// senza doversi fidare che ogni browser le accetti non codificate in un data URI.
+const PAPER_NOISE_URL = `data:image/svg+xml,${encodeURIComponent(PAPER_NOISE_SVG)}`
+
+/**
+ * Texture di sfondo del taccuino — tutta la pagina, dietro al contenuto. Fase 31: riscritta da
+ * capo su richiesta esplicita ("l'utente deve percepire carta senza vedere chiaramente una
+ * texture") — le due macchie sfumate delle fasi precedenti (Fase 17-30) erano visibili come tali,
+ * l'opposto di "leggerissima variazione di tonalità". Sostituite da: (1) il colore piatto di base,
+ * (2) UNA sola sfumatura di luce, ampia e a opacità bassissima, non due macchie riconoscibili, (3)
+ * il rumore di `PAPER_NOISE_URL` piastrellato sopra, anch'esso a opacità bassissima.
  *
  * Fase 24 — **causa reale, finalmente isolata**, del bug "titolo/statistiche invisibili" nelle
- * righe del Sommario (segnalato di nuovo dopo la Fase 23, che aveva tolto solo il filtro
- * `HandWobbleFilter` da qui senza risolvere). Isolato con una A/B/C sulla STESSA pagina (non due
- * caricamenti separati, per escludere qualunque differenza di timing/ambiente): con
- * `TaccuinoPaperTexture` montato, il testo delle colonne vicine spariva — comprese etichette
- * semplici, senza font/colori taccuino — mentre immagini e icone nelle stesse righe restavano
- * visibili; `TaccuinoSpineShadow` montato da solo, nessun problema. Confermato NON essere lo
- * z-index (negativo, zero, o assente — stesso risultato), non `position:fixed` in sé
- * (`position:absolute` stesso risultato) — è specificamente **un elemento `<svg>` live che
- * ricopre la pagina** (fisso o assoluto, con o senza filtro, con o senza z-index) a corrompere il
- * rendering del testo altrove nel DOM. Lo stesso identico contenuto come `<svg>` statico (in
- * flusso normale, non sovrapposto) non causa nulla — conferma che il problema è la
- * SOVRAPPOSIZIONE via SVG, non l'SVG in sé.
+ * righe del Sommario: qualunque `<svg>` **vivo che ricopre la pagina** (fisso o assoluto, con o
+ * senza filtro, con o senza z-index) corrompeva il rendering del testo altrove nel DOM — mai
+ * l'SVG in sé, sempre la sovrapposizione. Questo componente resta quindi un `<div>` con sfondo
+ * CSS puro (colore + gradiente + `background-image`), mai un elemento SVG nel DOM.
  *
- * Corretto sostituendo l'SVG con un `<div>` e uno sfondo **CSS puro** (`radial-gradient`,
- * nessun elemento SVG) — stesso principio già provato altrove nell'app (es. l'utility Tailwind
- * `bg-topography`, un'immagine di sfondo invece di un SVG vivo nel DOM). Le linee di livello
- * disegnate (i quattro tracciati organici) sono state tolte in questo passaggio, non riportate
- * come immagine di sfondo: prima la stabilità del testo, l'abbellimento può tornare in un
- * secondo momento con un `background-image` (mai un altro `<svg>` overlay).
- *
- * `flip` inverte la posizione delle due macchie (in alto-a-sinistra/basso-a-destra o viceversa) —
- * per quando pagine adiacenti del libro (sinistra/destra sfogliando) avranno ciascuna la propria
- * istanza: non identiche a specchio l'una dell'altra sarebbe stato più piatto.
+ * `flip` inverte il lato della sfumatura di luce (per pagine adiacenti del libro, sinistra/destra
+ * sfogliando) — non identiche a specchio l'una dell'altra sarebbe stato più piatto.
  */
 export function TaccuinoPaperTexture({ flip = false }: { flip?: boolean }) {
-  const stain1Pos = flip ? '85% 8%' : '20% 10%'
-  const stain2Pos = flip ? '10% 85%' : '90% 70%'
+  const lightPos = flip ? '80% 15%' : '15% 10%'
   return (
     <div
       aria-hidden="true"
       className="fixed inset-0 -z-10 pointer-events-none"
       style={{
-        background: `radial-gradient(ellipse at ${stain1Pos}, ${TACCUINO_PAPER.stain1} 0%, transparent 45%),`
-          + `radial-gradient(ellipse at ${stain2Pos}, ${TACCUINO_PAPER.stain2} 0%, transparent 50%),`
-          + TACCUINO_PAPER.base,
+        backgroundColor: TACCUINO_PAPER.base,
+        backgroundImage: `radial-gradient(ellipse 70% 55% at ${lightPos}, ${TACCUINO_PAPER.light}, transparent 60%), url("${PAPER_NOISE_URL}")`,
+        backgroundSize: 'auto, 140px 140px',
+        backgroundRepeat: 'no-repeat, repeat',
       }}
     />
   )
 }
 
 /**
- * "Piega" del taccuino — l'ombra della rilegatura al centro pagina, un lato a scelta: sinistro per
- * una pagina raggiunta "sfogliando in avanti", destro per una "all'indietro" (stessa idea del
- * mockup, pagine alternate). Per ora ogni pagina taccuino usa `side="left"`; l'alternanza vera
- * arriverà insieme al routing multi-pagina che la giustifica.
+ * Rilegatura — l'ombra e la piega fisiche al centro pagina, un lato a scelta: sinistro per una
+ * pagina raggiunta "sfogliando in avanti", destro per una "all'indietro" (stessa idea del mockup,
+ * pagine alternate). Per ora ogni pagina taccuino usa `side="left"`; l'alternanza vera arriverà
+ * insieme al routing multi-pagina che la giustifica.
  *
- * Fase 29 — tolta la linea organica a tremore (Fase 21-27): l'utente l'ha bocciata a schermo
- * ("la grafica... non mi piace"), voleva "più una sfumatura scura per simulare la rilegatura" —
- * non il tratto di matita di una piega disegnata, ma l'ombra vera che il libro proietta nel suo
- * stesso avvallamento. Resta solo il `linear-gradient` CSS, allargato e scurito vicino al bordo
- * (doppia tappa invece di due soli stop, per una caduta più netta subito e più lunga dopo — la
- * stessa curva di un'ombra reale, non un fondino piatto).
+ * Fase 31 — riscritta da capo su specifica dettagliata dell'utente: non più una singola sfumatura
+ * nera uniforme dall'alto al basso (Fase 29), ma una composizione a più livelli che simula la
+ * rilegatura fisica — (1) ombra interna, (2) linea di piega sottile, (3) piccola zona di luce
+ * appena oltre, (4) ombra esterna molto più morbida, tutte in un marrone caldo TRASPARENTE
+ * (`TACCUINO_INK.hand`/`TACCUINO_PAPER.light`, mai nero) — e più intensa al centro verticale della
+ * pagina, non uniforme dall'alto al basso: un `mask-image` verticale (sfuma a `transparent` in
+ * cima e in fondo) applicato sopra i gradienti orizzontali che compongono i livelli, invece di
+ * ricalcolare quei gradienti per l'altezza — le due dimensioni restano indipendenti. Niente
+ * `<svg>` (mai stata la causa del bug isolato in Fase 24, ma qui basta il CSS): un solo `<div>`,
+ * `background` per i livelli orizzontali, `mask-image`/`-webkit-mask-image` per la sagoma
+ * verticale. Niente anelli o punti di cucitura (discussi e scartati: "se risultano troppo
+ * decorativi, eliminarli" — con la sola ombra già chiaramente una rilegatura, aggiungerli sarebbe
+ * stata decorazione sopra un effetto già leggibile).
  */
 export function TaccuinoSpineShadow({ side = 'left' }: { side?: 'left' | 'right' }) {
-  const width = side === 'left' ? 40 : 44
-  const stops = [
-    'rgba(0,0,0,0.32) 0%', 'rgba(0,0,0,0.22) 12%', 'rgba(0,0,0,0.1) 40%', 'transparent 100%',
+  const width = 26
+  const shadowIn = 'rgba(41,35,30,0.30)'   // ombra interna, marrone-nero caldo (TACCUINO_INK.typed)
+  const crease   = 'rgba(128,103,70,0.28)' // linea di piega (TACCUINO_INK.hand)
+  const light    = 'rgba(246,238,220,0.4)' // piccola zona di luce (TACCUINO_PAPER.light)
+  const shadowOut = 'rgba(41,35,30,0.09)'  // ombra esterna, molto più morbida
+  const stopsLTR = [
+    `${shadowIn} 0%`, `${shadowIn} 6%`, `${crease} 11%`, `${crease} 15%`,
+    `${light} 21%`, `${shadowOut} 32%`, 'transparent 55%',
   ].join(', ')
+  const stopsRTL = [
+    `${shadowIn} 100%`, `${shadowIn} 94%`, `${crease} 89%`, `${crease} 85%`,
+    `${light} 79%`, `${shadowOut} 68%`, 'transparent 45%',
+  ].join(', ')
+  const verticalMask = 'linear-gradient(to bottom, transparent 0%, black 18%, black 82%, transparent 100%)'
   return (
     <div
       aria-hidden="true"
       className={`fixed inset-y-0 z-40 pointer-events-none ${side === 'left' ? 'left-0' : 'right-0'}`}
       style={{
         width,
-        background: side === 'left' ? `linear-gradient(to right, ${stops})` : `linear-gradient(to left, ${stops})`,
+        background: `linear-gradient(to right, ${side === 'left' ? stopsLTR : stopsRTL})`,
+        WebkitMaskImage: verticalMask,
+        maskImage: verticalMask,
       }}
     />
   )
