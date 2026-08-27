@@ -887,6 +887,17 @@ non ne era la causa — ma resta comunque innocua: non reintrodotta in questa fa
 a mostrarsi nei suoi colori naturali. Un'eventuale ricolorazione verso la palette taccuino potrà
 tornare in un secondo momento, ora su basi solide.
 
+**Conferma finale**: dopo il merge, l'utente ha rimandato lo stesso schermo ancora rotto sul
+dispositivo reale — a quel punto è stato letto direttamente il CSS del deploy live di Vercel
+(`mcp__Vercel__web_fetch_vercel_url`, bypassando il blocco di rete di questo ambiente) confermando
+byte-per-byte che la regola `z-index:-10` era davvero presente in produzione: il server serviva già
+la correzione. La discrepanza era quindi lato client — coerente con l'avviso già documentato in
+`components/ServiceWorkerRegister.tsx` (un service worker può restare "vecchio" più a lungo di quanto
+un reload da solo risolva). Testato in una scheda in incognito (nessuna cache/service worker
+pregressi): **testo visibile, bug risolto**. La Fase 26 è quindi la causa reale e definitiva; la
+persistenza del sintomo sul browser normale dell'utente era un service worker/cache non aggiornati
+sul dispositivo, non un difetto di codice residuo.
+
 ## File critici
 - `components/guida/GuideReader.tsx`, `components/resoconto/ReportReader.tsx` — sorgente da cui
   estratto in Fase 0, non riscritti.
