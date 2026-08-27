@@ -898,6 +898,54 @@ pregressi): **testo visibile, bug risolto**. La Fase 26 è quindi la causa reale
 persistenza del sintomo sul browser normale dell'utente era un service worker/cache non aggiornati
 sul dispositivo, non un difetto di codice residuo.
 
+**Fase 27 — Bordi disegnati a mano su miniature e pulsanti, ombra della piega più ricca, mappa
+ricolorata di nuovo** ✅ **COMPLETATA**
+
+Col Sommario finalmente funzionante, l'utente ha allegato due screenshot (uno del Sommario reale
+funzionante, uno di una mappa d'esempio in stile acquerello) chiedendo tre cose: (1) i colori/stile
+della mappa più vicini a quel riferimento, (2) i contorni di miniature e pulsanti "non geometrici
+regolari" ma "leggermente allungati come se fossero cerchiati a mano", (3) l'ombra al centro pagina
+migliorata. L'illustrazione ad acquerello vera e propria (vegetazione dipinta, etichette a mano,
+quote) non è riproducibile per un percorso GPS reale dell'utente senza un motore cartografico
+personalizzato (discusso e scartato per ora, vedi la risposta a questo messaggio) — qui si è preso
+solo l'aspetto ottenibile con la mappa reale: colori e contorni.
+
+**`HandDrawnFrame`** (nuovo, `lib/taccuinoTokens.tsx`) — un `<rect>` con `HandWobbleFilter`
+all'interno di un `<svg absolute inset-0>` dentro l'elemento chiamante (che deve essere
+`position: relative`), mai un overlay a piena pagina: la stessa distinzione già isolata in Fase 24
+("un `<svg>` che ricopre la pagina" vs "una forma piccola contenuta nel proprio riquadro", quest'
+ultima già documentata sicura) — qui finalmente sfruttata invece di uno stub non usato.
+`viewBox="0 0 100 100"` con `preserveAspectRatio="none"` scala il rettangolo alle dimensioni reali
+dell'elemento (anche non quadrato) senza calcoli manuali; `vectorEffect="non-scaling-stroke"` (già
+usato in `RouteThumb.tsx`) mantiene lo spessore del tratto in pixel veri. Un `rx` alto (50) su un
+riquadro non quadrato produce una pillola con angoli leggermente ellittici — l'imperfezione voluta,
+non un difetto. Applicato a: miniatura mappa di ogni riga, pulsante "nuovo percorso" (con
+`strokeDasharray`), casella di ricerca, chip attivi (ordinamento/stato/preferiti) — sempre al posto
+di un `border` CSS piatto, mai in aggiunta (un bordo doppio avrebbe vanificato l'effetto).
+
+Attenzione all'ordine di montaggio quando l'elemento con sfondo opaco (es. l'`<input>` della
+ricerca) è un **fratello** di `HandDrawnFrame` (non un genitore) — un fratello dipinto dopo copre
+uno dipinto prima: `HandDrawnFrame` va per ultimo nel JSX in quel caso, così il suo bordo (che ha
+`fill="none"`, quindi non nasconde nulla sotto) si dipinge sopra lo sfondo dell'input invece di
+sparire dietro. Quando invece `HandDrawnFrame` è figlio diretto dell'elemento con lo sfondo (es. i
+pulsanti, dove lo sfondo è sul `<button>` stesso), l'ordine tra fratelli non conta — lo sfondo del
+genitore si dipinge sempre prima dei suoi figli, in qualunque ordine siano scritti.
+
+**Mappa ricolorata di nuovo** — il `filter` CSS tolto in Fase 25 per sospetto (rivelatosi innocente
+in Fase 26) torna sul contenitore della miniatura, con toni spostati verso il verde
+(`hue-rotate(60deg)` invece di `-10deg`) per avvicinarsi alla palette del riferimento invece del
+seppia caldo di prima.
+
+**`TaccuinoSpineShadow`** allargata (22→34px sinistra, 26→38px destra) con un `<div>` a
+`background: linear-gradient(...)` (CSS puro) dietro la linea organica per la caduta d'ombra morbida
+verso il centro pagina vista nel riferimento — la linea a tremore sopra riguadagna il
+`HandWobbleFilter` (verificato innocuo in Fase 24, questa striscia stretta non ne era mai stata la
+causa) invece di restare una curva rigida.
+
+Verificato con una build di produzione vera (lezione della Fase 26: mai fidarsi solo di `npm run
+dev`): tutti i testi restano visibili, tutti i bordi a tremore renderizzano correttamente sulla
+pagina reale ricostruita con `GalleryMapThumb`/`TrailScoreGaugeBadge`.
+
 ## File critici
 - `components/guida/GuideReader.tsx`, `components/resoconto/ReportReader.tsx` — sorgente da cui
   estratto in Fase 0, non riscritti.

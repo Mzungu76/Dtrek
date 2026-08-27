@@ -16,7 +16,7 @@ import type { DiarioDetail } from '@/app/api/diaries/[id]/route'
 import type { RecommendationCard } from '@/lib/routeBuilder/generateRecommendations'
 import { getUserSettingsCached, updateUserSettings } from '@/lib/sync/userSettingsStore'
 import { FONT } from '@/lib/designTokens'
-import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, FONT_HAND, TaccuinoPaperTexture } from '@/lib/taccuinoTokens'
+import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, FONT_HAND, TaccuinoPaperTexture, HandDrawnFrame } from '@/lib/taccuinoTokens'
 import {
   ArrowDown, ArrowLeft, ArrowUp, Check, CheckCircle2, ChevronRight, Clock, Loader2, Lock, LockOpen, Mountain,
   Plus, Route, Search, Share2, Sparkles, Star, Trash2, TrendingUp, X,
@@ -444,12 +444,13 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
 
         <Link
           href={`/upload?diaryId=${encodeURIComponent(diaryId)}`}
-          className="flex items-center gap-2 mb-3 px-3.5 py-2.5 rounded"
+          className="relative flex items-center gap-2 mb-3 px-3.5 py-2.5 rounded"
           style={{
             color: TACCUINO_ACCENT[600], fontFamily: FONT_HAND, fontWeight: 700, fontSize: 15,
-            border: `2px dashed ${TACCUINO_PAPER.contourLine}`, transform: 'rotate(-0.3deg)',
+            transform: 'rotate(-0.3deg)',
           }}
         >
+          <HandDrawnFrame stroke={TACCUINO_PAPER.contourLine} strokeWidth={2} rx={6} dashed />
           <Plus className="w-4 h-4" /> nuovo percorso
         </Link>
 
@@ -462,7 +463,7 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                 onChange={e => setSearchQuery(e.target.value)}
                 placeholder="cerca per titolo…"
                 className="w-full pl-8 pr-8 py-2 rounded-[3px] text-[14px] outline-none"
-                style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}`, color: TACCUINO_INK.typed, fontFamily: FONT_HAND }}
+                style={{ background: TACCUINO_PAPER.card, color: TACCUINO_INK.typed, fontFamily: FONT_HAND }}
               />
               {searchQuery && (
                 <button
@@ -474,16 +475,18 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                   <X className="w-3.5 h-3.5" />
                 </button>
               )}
+              <HandDrawnFrame stroke={TACCUINO_PAPER.cardBorder} strokeWidth={1.5} rx={4} />
             </div>
             <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 mb-1.5">
               <button
                 onClick={() => setFavoritesOnly(f => !f)}
                 title="Solo preferiti"
-                className="shrink-0 flex items-center justify-center w-6 h-6 rounded-full transition-colors"
+                className="relative shrink-0 flex items-center justify-center w-6 h-6 rounded-full transition-colors"
                 style={favoritesOnly
-                  ? { background: TACCUINO_PAPER.card, color: TACCUINO_ACCENT[600], border: `1.5px solid ${TACCUINO_ACCENT[600]}` }
-                  : { background: 'transparent', color: TACCUINO_INK.handMuted, border: '1.5px solid transparent' }}
+                  ? { background: TACCUINO_PAPER.card, color: TACCUINO_ACCENT[600] }
+                  : { background: 'transparent', color: TACCUINO_INK.handMuted }}
               >
+                {favoritesOnly && <HandDrawnFrame stroke={TACCUINO_ACCENT[600]} strokeWidth={1.5} rx={50} />}
                 <Star className="w-3 h-3" fill={favoritesOnly ? 'currentColor' : 'none'} />
               </button>
               <button
@@ -498,11 +501,12 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                 <button
                   key={s.id}
                   onClick={() => setSortBy(s.id)}
-                  className="shrink-0 px-3 py-1 rounded-full text-[13px] transition-colors"
+                  className="relative shrink-0 px-3 py-1 rounded-full text-[13px] transition-colors"
                   style={sortBy === s.id
-                    ? { fontFamily: FONT_HAND, fontWeight: 700, background: TACCUINO_PAPER.card, color: TACCUINO_INK.typed, border: `1px solid ${TACCUINO_ACCENT[600]}` }
-                    : { fontFamily: FONT_HAND, background: 'transparent', color: TACCUINO_INK.handMuted, border: '1px solid transparent' }}
+                    ? { fontFamily: FONT_HAND, fontWeight: 700, background: TACCUINO_PAPER.card, color: TACCUINO_INK.typed }
+                    : { fontFamily: FONT_HAND, background: 'transparent', color: TACCUINO_INK.handMuted }}
                 >
+                  {sortBy === s.id && <HandDrawnFrame stroke={TACCUINO_ACCENT[600]} strokeWidth={1.5} rx={50} />}
                   {s.label}
                 </button>
               ))}
@@ -512,11 +516,12 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                 <button
                   key={s.id}
                   onClick={() => setStatusFilter(s.id)}
-                  className="shrink-0 px-3 py-1 rounded-full text-[13px] transition-colors"
+                  className="relative shrink-0 px-3 py-1 rounded-full text-[13px] transition-colors"
                   style={statusFilter === s.id
-                    ? { fontFamily: FONT_HAND, fontWeight: 700, background: TACCUINO_PAPER.card, color: TACCUINO_INK.typed, border: `1px solid ${TACCUINO_ACCENT[600]}` }
-                    : { fontFamily: FONT_HAND, background: 'transparent', color: TACCUINO_INK.handMuted, border: '1px solid transparent' }}
+                    ? { fontFamily: FONT_HAND, fontWeight: 700, background: TACCUINO_PAPER.card, color: TACCUINO_INK.typed }
+                    : { fontFamily: FONT_HAND, background: 'transparent', color: TACCUINO_INK.handMuted }}
                 >
+                  {statusFilter === s.id && <HandDrawnFrame stroke={TACCUINO_ACCENT[600]} strokeWidth={1.5} rx={50} />}
                   {s.label.toLowerCase()}
                 </button>
               ))}
@@ -563,25 +568,24 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                         (traccia ricalcata a mano su sfondo pieno) toglieva un'informazione reale
                         (dove si trova il percorso) senza motivo — l'utente l'ha chiesta indietro
                         esplicitamente.
-                        Fase 25 — niente più `filter` CSS qui (scaldava i toni verso la palette
-                        taccuino, introdotto in Fase 22): il testo invisibile della riga, segnalato
-                        di nuovo dopo la Fase 24 (che aveva corretto un problema reale ma diverso,
-                        l'`<svg>` di `TaccuinoPaperTexture`, senza risolvere questo), punta a questo
-                        `filter` come sospetto più concreto — promuove il contenitore a un layer
-                        compositato dalla GPU, e Leaflet dentro ci aggiunge decine di tile con le
-                        proprie trasformazioni: sulla combinazione filtro+tile compositati corrotti
-                        alcuni dispositivi/driver Android sembrano corrompere il testo delle righe
-                        vicine (stessa famiglia di bug della Fase 24, innescata da un meccanismo
-                        diverso). Non riproducibile in locale con dati di test (qui i tile reali non
-                        sono disponibili), quindi tolto per principio invece di un'ennesima "verifica"
-                        inaffidabile: la mappa resta vera, solo senza la ricolorazione via CSS. */}
+                        Fase 25 aveva tolto il `filter` CSS di ricolorazione qui, sospettandolo causa
+                        del testo invisibile della riga — sospetto rivelatosi sbagliato in Fase 26
+                        (la vera causa era `tailwind.config.ts` che non scansionava `lib/`, dove vive
+                        `-z-10` di `TaccuinoPaperTexture`): reintrodotto in Fase 27, verificato
+                        innocente. `GalleryMapThumb` stesso resta neutro (nessun filtro sul
+                        componente, solo sul contenitore chiamante) — i suoi altri usi (gallerie
+                        Guida/Resoconto) restano nei colori standard della mappa. */}
                     <div
                       className="w-[76px] h-[76px] rounded-[3px] shrink-0 overflow-hidden relative"
-                      style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}
+                      style={{
+                        background: TACCUINO_PAPER.card,
+                        filter: 'sepia(0.35) saturate(1.35) hue-rotate(60deg) brightness(0.97) contrast(1.05)',
+                      }}
                     >
                       {p.routePolyline && p.routePolyline.length > 1
                         ? <GalleryMapThumb polyline={p.routePolyline} />
                         : <div className="w-full h-full flex items-center justify-center"><Mountain className="w-5 h-5" style={{ color: TACCUINO_PAPER.cardBorder }} /></div>}
+                      <HandDrawnFrame stroke={TACCUINO_INK.mapContour} strokeWidth={1.5} rx={3} />
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate" style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 17, color: TACCUINO_INK.typed }}>{p.title}</p>
