@@ -98,6 +98,7 @@ function ThumbBadge({ sortBy, item, showPlannedDate }: { sortBy: SortKey; item: 
 // invece di duplicarne la logica IntersectionObserver/Leaflet.
 export function GalleryMapThumb({
   polyline, lineColor = '#7dd3fc', lineWeight = 4, dashArray, showEndpoints = false, dimTiles = true,
+  tileStyle = 'light',
 }: {
   polyline?: [number, number][]
   /** Colore del tracciato — di default il ciano della galleria (sfondo scuro). Il Sommario del
@@ -118,6 +119,11 @@ export function GalleryMapThumb({
    *  due chiamanti) — l'utente ha chiesto esplicitamente "il colore originale" per il Sommario, un
    *  velo qui andrebbe contro quella richiesta. `false` lo toglie senza cambiare nulla altrove. */
   dimTiles?: boolean
+  /** `style` inoltrato a `/api/tile` (vedi `PROVIDERS` lì) — di default lo stesso OSM "light" già
+   *  usato da tutti i chiamanti finora. Il Sommario del taccuino (Fase 30) passa `'topo'`
+   *  (OpenTopoMap, curve di livello e cartografia escursionistica reale) per sembrare un reperto
+   *  cartaceo invece di uno screenshot da app di navigazione. */
+  tileStyle?: string
 }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<HTMLDivElement>(null)
@@ -146,16 +152,21 @@ export function GalleryMapThumb({
         doubleClickZoom: false, boxZoom: false, keyboard: false, touchZoom: false, attributionControl: false,
       })
       mapInstance.current = map
-      L.tileLayer('/api/tile?z={z}&x={x}&y={y}&style=light', { maxZoom: 19 }).addTo(map)
+      // OpenTopoMap non copre gli zoom più alti ovunque (a differenza di CARTO/OSM standard) —
+      // `maxNativeZoom` ferma le richieste di tile a 17 e lascia che Leaflet ingrandisca l'ultimo
+      // livello disponibile invece di richiedere tile che darebbero 404.
+      const isTopo = tileStyle === 'topo'
+      L.tileLayer(`/api/tile?z={z}&x={x}&y={y}&style=${tileStyle}`, { maxZoom: 19, maxNativeZoom: isTopo ? 17 : 19 }).addTo(map)
       const line = L.polyline(polyline, { color: lineColor, weight: lineWeight, opacity: 0.95, dashArray }).addTo(map)
       if (showEndpoints) {
         const start = polyline[0]
         const end = polyline[polyline.length - 1]
-        // Pallino pieno = partenza, quadratino vuoto = arrivo — stessa china del tracciato, due
-        // simboli soli (non uno per ogni tappa intermedia): bastano a leggere "dove si comincia,
-        // dove si finisce" senza affollare una miniatura di 87px.
-        L.circleMarker(start, { radius: 3.5, color: lineColor, weight: 1.5, fillColor: lineColor, fillOpacity: 1 }).addTo(map)
-        L.circleMarker(end, { radius: 3.5, color: lineColor, weight: 1.5, fillColor: '#fff', fillOpacity: 1 }).addTo(map)
+        // Pallino pieno = partenza, cerchio vuoto = arrivo — due simboli soli (non uno per ogni
+        // tappa intermedia): bastano a leggere "dove si comincia, dove si finisce" senza
+        // affollare una miniatura di 87px. Fase 30 — rimpiccioliti e assottigliati (l'utente li
+        // ha trovati "troppo marker di Leaflet"): un punto e un cerchio minimi, non un pittogramma.
+        L.circleMarker(start, { radius: 2.2, color: lineColor, weight: 1, fillColor: lineColor, fillOpacity: 1 }).addTo(map)
+        L.circleMarker(end, { radius: 2.2, color: lineColor, weight: 1, fillColor: '#fff', fillOpacity: 1 }).addTo(map)
       }
       const fit = () => map.fitBounds(line.getBounds(), { padding: [4, 4] })
 
@@ -177,7 +188,7 @@ export function GalleryMapThumb({
       observer?.disconnect()
       if (mapInstance.current) { mapInstance.current.remove(); mapInstance.current = null }
     }
-  }, [nearView, polyline, lineColor, lineWeight, dashArray, showEndpoints])
+  }, [nearView, polyline, lineColor, lineWeight, dashArray, showEndpoints, tileStyle])
 
   const hasRoute = polyline && polyline.length > 1
 
