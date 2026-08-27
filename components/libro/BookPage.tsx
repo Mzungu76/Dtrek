@@ -29,18 +29,29 @@
 // (griglia, ricerca), quel drawer duplicava una destinazione che ora vale la pena raggiungere
 // per intero. Il Sommario passa `indexLabel="Diari"` (etichetta diversa, stessa meccanica di
 // sempre) invece di intercettare il click.
+//
+// Fase 20 — prop `theme` opzionale ("pergamena", default, invariato per i chiamanti esistenti, o
+// "taccuino"): il guscio resta lo stesso componente/markup, cambiano solo i toni. Alternativa
+// scartata: duplicare BookPage per il Sommario in stile taccuino avrebbe biforcato la struttura
+// (barra inferiore, spacer, sticky header) che invece deve restare identica su ogni pagina del
+// libro — qui cambia solo la palette, non il comportamento.
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { ChevronLeft, ChevronRight, BookMarked, Wrench } from 'lucide-react'
 import { FONT, TERRA } from '@/lib/designTokens'
+import { TACCUINO_PAPER, TACCUINO_INK } from '@/lib/taccuinoTokens'
 import BookSpineShadow from './BookSpineShadow'
 
-const PAPER_BG = '#fbf6e8'
-const PAPER_HAIRLINE = '#e4d9bd'
-const INK_MUTED = '#a9915f'
-const INK_FOOTER = '#b5a677'
-const PILL_BG = '#f1e9d2'
-const PILL_TEXT = '#6b6142'
+const THEMES = {
+  pergamena: {
+    paperBg: '#fbf6e8', hairline: '#e4d9bd', inkMuted: '#a9915f', inkFooter: '#b5a677',
+    pillBg: '#f1e9d2', pillText: '#6b6142',
+  },
+  taccuino: {
+    paperBg: TACCUINO_PAPER.base, hairline: TACCUINO_PAPER.cardBorder, inkMuted: TACCUINO_INK.handMuted,
+    inkFooter: TACCUINO_INK.handMuted, pillBg: TACCUINO_PAPER.card, pillText: TACCUINO_INK.hand,
+  },
+} as const
 
 /** Altezza riservata dalla barra inferiore fissa — le pagine applicano questo spazio prima della
  *  barra vera e propria per non lasciarci sotto l'ultima riga di contenuto. Stesso principio di
@@ -77,27 +88,31 @@ interface BookPageProps {
   currentSectionKey?: string
   /** Es. "3 di 9" — numero di pagina stile libro, non un contatore tecnico. */
   pageLabel?: string
+  /** Palette del guscio — "pergamena" (default, invariata) o "taccuino" (Fase 20). Il markup e il
+   *  comportamento restano identici, cambiano solo i toni. */
+  theme?: keyof typeof THEMES
   children: ReactNode
 }
 
 export default function BookPage({
   diarioTitle, indexHref, indexLabel = 'Indice', onToolsClick, sectionLabel, prevHref, nextHref,
-  sections, currentSectionKey, pageLabel, children,
+  sections, currentSectionKey, pageLabel, theme = 'pergamena', children,
 }: BookPageProps) {
+  const t = THEMES[theme]
   const navButtonStyle = {
     fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase' as const,
-    letterSpacing: '0.04em', fontSize: 9.5, color: INK_MUTED,
+    letterSpacing: '0.04em', fontSize: 9.5, color: t.inkMuted,
   }
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: PAPER_BG }}>
+    <div className="min-h-screen flex flex-col" style={{ background: t.paperBg }}>
       <BookSpineShadow variant="light" />
       <div
         className="flex items-center justify-between gap-3 px-5 sm:px-8 pt-5 pb-3 border-b sticky top-0 z-10"
-        style={{ borderColor: PAPER_HAIRLINE, background: PAPER_BG }}
+        style={{ borderColor: t.hairline, background: t.paperBg }}
       >
         <span
           className="flex items-center gap-1.5 shrink-0 min-w-0"
-          style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 11, color: INK_MUTED }}
+          style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 11, color: t.inkMuted }}
         >
           <BookMarked className="w-3.5 h-3.5 shrink-0" />
           <span className="truncate">{diarioTitle}</span>
@@ -105,18 +120,18 @@ export default function BookPage({
         <span className="shrink-0 text-right">
           <span
             className="block"
-            style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 11, color: INK_MUTED }}
+            style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 11, color: t.inkMuted }}
           >
             {sectionLabel}
           </span>
           {pageLabel && (
-            <span className="block" style={{ fontFamily: FONT.mono, fontSize: 9, color: INK_FOOTER }}>{pageLabel}</span>
+            <span className="block" style={{ fontFamily: FONT.mono, fontSize: 9, color: t.inkFooter }}>{pageLabel}</span>
           )}
         </span>
       </div>
 
       {sections && sections.length > 0 && (
-        <div className="flex gap-1.5 overflow-x-auto px-5 sm:px-8 pt-3 pb-1" style={{ background: PAPER_BG }}>
+        <div className="flex gap-1.5 overflow-x-auto px-5 sm:px-8 pt-3 pb-1" style={{ background: t.paperBg }}>
           {sections.map(s => {
             const on = s.key === currentSectionKey
             return (
@@ -124,7 +139,7 @@ export default function BookPage({
                 key={s.key}
                 href={s.href}
                 className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11.5px] font-semibold whitespace-nowrap transition-colors"
-                style={on ? { background: TERRA[600], color: '#fff' } : { background: PILL_BG, color: PILL_TEXT }}
+                style={on ? { background: TERRA[600], color: '#fff' } : { background: t.pillBg, color: t.pillText }}
               >
                 {s.icon}{s.label}
               </Link>
@@ -141,7 +156,7 @@ export default function BookPage({
 
       <div
         className="fixed inset-x-0 bottom-0 z-10 flex items-stretch justify-around"
-        style={{ background: PILL_BG, borderTop: `1px solid ${PAPER_HAIRLINE}`, paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+        style={{ background: t.pillBg, borderTop: `1px solid ${t.hairline}`, paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
         {prevHref ? (
           <Link href={prevHref} className="flex flex-col items-center justify-center gap-1 px-5 py-2.5" style={navButtonStyle}>
