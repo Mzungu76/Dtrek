@@ -96,7 +96,29 @@ function ThumbBadge({ sortBy, item, showPlannedDate }: { sortBy: SortKey; item: 
 // (quasi) in vista per non creare troppe istanze Leaflet in una lista lunga.
 // Esportata: riusata identica dalle righe di ExpandedGalleryList.tsx, stessa miniatura-mappa
 // invece di duplicarne la logica IntersectionObserver/Leaflet.
-export function GalleryMapThumb({ polyline }: { polyline?: [number, number][] }) {
+export function GalleryMapThumb({
+  polyline, lineColor = '#7dd3fc', lineWeight = 4, dashArray, showEndpoints = false, dimTiles = true,
+}: {
+  polyline?: [number, number][]
+  /** Colore del tracciato — di default il ciano della galleria (sfondo scuro). Il Sommario del
+   *  taccuino (Fase 29) passa un inchiostro quasi nero: entrambi gli altri due chiamanti
+   *  (BottomGallery, ExpandedGalleryList) non lo passano e restano invariati. */
+  lineColor?: string
+  lineWeight?: number
+  /** `dashArray` di Leaflet (nativo, non un filtro SVG) — dà l'aria "tracciata a china" richiesta
+   *  per il Sommario senza toccare il rendering interno di Leaflet: la stessa combinazione
+   *  filtro-SVG-dentro-Leaflet già scartata in Fase 21 (testo corrotto nelle righe vicine) qui
+   *  non serve, il tratteggio da solo basta a leggersi come "disegnato a mano" mantenendo intatta
+   *  la precisione del percorso (stessi punti GPS, nessuna deformazione). */
+  dashArray?: string
+  /** Pallino pieno alla partenza, quadratino vuoto all'arrivo — solo quando richiesto (Sommario):
+   *  gli altri due chiamanti mostrano già altre indicazioni proprie, non serve raddoppiarle qui. */
+  showEndpoints?: boolean
+  /** Il velo scuro sotto era pensato per far risaltare il ciano acceso su sfondo scuro (gli altri
+   *  due chiamanti) — l'utente ha chiesto esplicitamente "il colore originale" per il Sommario, un
+   *  velo qui andrebbe contro quella richiesta. `false` lo toglie senza cambiare nulla altrove. */
+  dimTiles?: boolean
+}) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<HTMLDivElement>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -125,7 +147,16 @@ export function GalleryMapThumb({ polyline }: { polyline?: [number, number][] })
       })
       mapInstance.current = map
       L.tileLayer('/api/tile?z={z}&x={x}&y={y}&style=light', { maxZoom: 19 }).addTo(map)
-      const line = L.polyline(polyline, { color: '#7dd3fc', weight: 4, opacity: 0.95 }).addTo(map)
+      const line = L.polyline(polyline, { color: lineColor, weight: lineWeight, opacity: 0.95, dashArray }).addTo(map)
+      if (showEndpoints) {
+        const start = polyline[0]
+        const end = polyline[polyline.length - 1]
+        // Pallino pieno = partenza, quadratino vuoto = arrivo — stessa china del tracciato, due
+        // simboli soli (non uno per ogni tappa intermedia): bastano a leggere "dove si comincia,
+        // dove si finisce" senza affollare una miniatura di 87px.
+        L.circleMarker(start, { radius: 3.5, color: lineColor, weight: 1.5, fillColor: lineColor, fillOpacity: 1 }).addTo(map)
+        L.circleMarker(end, { radius: 3.5, color: lineColor, weight: 1.5, fillColor: '#fff', fillOpacity: 1 }).addTo(map)
+      }
       const fit = () => map.fitBounds(line.getBounds(), { padding: [4, 4] })
 
       // Stessa correzione di CoverMap.tsx: appena montata via IntersectionObserver (vedi sopra),
@@ -146,7 +177,7 @@ export function GalleryMapThumb({ polyline }: { polyline?: [number, number][] })
       observer?.disconnect()
       if (mapInstance.current) { mapInstance.current.remove(); mapInstance.current = null }
     }
-  }, [nearView, polyline])
+  }, [nearView, polyline, lineColor, lineWeight, dashArray, showEndpoints])
 
   const hasRoute = polyline && polyline.length > 1
 
@@ -155,10 +186,10 @@ export function GalleryMapThumb({ polyline }: { polyline?: [number, number][] })
       {!hasRoute && (
         <div className="w-full h-full flex items-center justify-center"><Mountain className="w-5 h-5 text-sky-300/60" /></div>
       )}
-      {hasRoute && !nearView && <RouteThumb polyline={polyline!} color="#7dd3fc" strokeWidth={3} />}
+      {hasRoute && !nearView && <RouteThumb polyline={polyline!} color={lineColor} strokeWidth={3} strokeDasharray={dashArray} />}
       {hasRoute && nearView && <div ref={mapRef} className="absolute inset-0" />}
       {/* Darkens the tile so the colored route stands out more clearly than the raw raster tiles. */}
-      <div className="absolute inset-0 bg-black/20 pointer-events-none" />
+      {dimTiles && <div className="absolute inset-0 bg-black/20 pointer-events-none" />}
     </div>
   )
 }

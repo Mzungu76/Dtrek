@@ -333,6 +333,15 @@ const SOMMARIO_STATUS_OPTIONS: { id: SommarioStatusFilter; label: string }[] = [
   { id: 'all', label: 'Tutti' }, { id: 'programmate', label: 'In programma' }, { id: 'con_uscita', label: 'Con uscita' },
 ]
 
+/** Rotazione stabile per percorso (Fase 29, "ritaglio incollato") — derivata dall'id, non
+ *  `Math.random()`: la stessa riga deve inclinarsi sempre allo stesso modo tra un render e
+ *  l'altro (un valore casuale ricalcolato salterebbe a ogni aggiornamento della lista). */
+function cutoutRotation(id: string): number {
+  let hash = 0
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0
+  return ((Math.abs(hash) % 50) / 10) - 2.5
+}
+
 function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
   const [detail, setDetail] = useState<DiarioDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -542,7 +551,7 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
               return (
                 <div
                   key={p.id}
-                  className="flex items-center gap-3 py-3 px-2 -mx-2"
+                  className="flex items-center gap-3.5 py-3.5 px-2 -mx-2"
                   style={{
                     borderBottom: `1px dashed ${TACCUINO_PAPER.cardBorder}`,
                     // "Passata di evidenziatore" per i percorsi con almeno un'uscita —
@@ -562,50 +571,59 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                       hanno una larghezza fissa (non "shrink-to-content") così restano allineati in
                       verticale da una riga all'altra, indipendentemente da quanto testo hanno le
                       righe vicine. */}
-                  <Link href={`${percorsoPath}/guida/il_percorso`} className="flex items-center gap-3 flex-1 min-w-0">
-                    {/* Vera mappa OSM (GalleryMapThumb, invariata — stessa usata dalla galleria
-                        Guida/Resoconto), non un disegno astratto: un tentativo precedente qui
-                        (traccia ricalcata a mano su sfondo pieno) toglieva un'informazione reale
-                        (dove si trova il percorso) senza motivo — l'utente l'ha chiesta indietro
-                        esplicitamente.
-                        Fase 25 aveva tolto il `filter` CSS di ricolorazione qui, sospettandolo causa
-                        del testo invisibile della riga — sospetto rivelatosi sbagliato in Fase 26
-                        (la vera causa era `tailwind.config.ts` che non scansionava `lib/`, dove vive
-                        `-z-10` di `TaccuinoPaperTexture`): reintrodotto in Fase 27, verificato
-                        innocente. La Fase 27 lo aveva spostato verso il verde (`hue-rotate(60deg)`)
-                        per avvicinarsi a un riferimento ad acquerello — l'utente lo ha bocciato a
-                        schermo ("le mappe non mi piacciono"), preferendo il seppia caldo originale
-                        di Fase 22 ("un tono più marroncino"): tornato qui, leggermente più intenso.
-                        `GalleryMapThumb` stesso resta neutro (nessun filtro sul componente, solo sul
-                        contenitore chiamante) — i suoi altri usi (gallerie Guida/Resoconto) restano
-                        nei colori standard della mappa. */}
+                  <Link href={`${percorsoPath}/guida/il_percorso`} className="flex items-center gap-3.5 flex-1 min-w-0">
+                    {/* Vera mappa OSM (GalleryMapThumb, invariata nel componente — stessa usata
+                        dalla galleria Guida/Resoconto), non un disegno astratto: l'utente l'ha
+                        chiesta esplicitamente, coi SUOI colori reali (Fase 29: niente più `filter`
+                        CSS di ricolorazione, tolto qui — le fasi 22-28 avevano provato seppia poi
+                        verde, mai i "colori originali" richiesti alla fine). Il "ritaglio incollato"
+                        (bordo bianco spesso + ombra sfalsata + lieve rotazione stabile per
+                        percorso, stesso principio della copertina in `DiarioCoverThumb`) sostituisce
+                        `HandDrawnFrame` qui — coerente con "una foto incollata sulla pagina", non
+                        più "una mappa disegnata a mano". Il tracciato (`lineColor`/`dashArray` di
+                        Leaflet, nativi — non un filtro SVG dentro Leaflet, la stessa combinazione
+                        già scartata in Fase 21) diventa china nera tratteggiata, `showEndpoints`
+                        aggiunge partenza (pallino pieno) e arrivo (pallino vuoto): la precisione
+                        del percorso resta intatta, sono gli stessi punti GPS, solo lo stile del
+                        tratto cambia. `dimTiles={false}` toglie il velo scuro pensato per la
+                        galleria a sfondo nero (qui contro i "colori originali" richiesti). */}
                     <div
-                      className="w-[76px] h-[76px] rounded-[3px] shrink-0 overflow-hidden relative"
+                      className="w-[87px] h-[87px] shrink-0 overflow-hidden relative"
                       style={{
                         background: TACCUINO_PAPER.card,
-                        filter: 'sepia(0.6) saturate(1.4) hue-rotate(-5deg) brightness(0.93) contrast(1.05)',
+                        border: '3px solid #fbf8f1',
+                        boxShadow: `2px 3px 4px rgba(0,0,0,0.22)`,
+                        transform: `rotate(${cutoutRotation(p.id)}deg)`,
                       }}
                     >
                       {p.routePolyline && p.routePolyline.length > 1
-                        ? <GalleryMapThumb polyline={p.routePolyline} />
+                        ? (
+                          <GalleryMapThumb
+                            polyline={p.routePolyline}
+                            lineColor={TACCUINO_INK.typed}
+                            lineWeight={2}
+                            dashArray="3 2.5"
+                            showEndpoints
+                            dimTiles={false}
+                          />
+                        )
                         : <div className="w-full h-full flex items-center justify-center"><Mountain className="w-5 h-5" style={{ color: TACCUINO_PAPER.cardBorder }} /></div>}
-                      <HandDrawnFrame stroke={TACCUINO_INK.mapContour} strokeWidth={1.5} rx={3} />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate" style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 17, color: TACCUINO_INK.typed }}>{p.title}</p>
+                      <p className="truncate" style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 19.5, color: TACCUINO_INK.typed }}>{p.title}</p>
                       {(scoreLabel || p.safety) && (
-                        <p className="truncate" style={{ fontSize: 10.5, fontWeight: 600, color: TACCUINO_INK.handMuted, marginTop: 1 }}>
+                        <p className="truncate" style={{ fontSize: 12, fontWeight: 600, color: TACCUINO_INK.handMuted, marginTop: 1 }}>
                           {[scoreLabel, p.safety?.label].filter(Boolean).join(' · ')}
                         </p>
                       )}
-                      <div className="flex items-center flex-wrap gap-x-2.5 gap-y-0.5 mt-1" style={{ fontFamily: FONT.lora, fontSize: 10.5, color: TACCUINO_INK.hand }}>
-                        <span className="inline-flex items-center gap-1"><Route className="w-3 h-3" style={{ color: TACCUINO_INK.handMuted }} /> {(p.distanceMeters / 1000).toFixed(1)} km</span>
-                        <span className="inline-flex items-center gap-1"><TrendingUp className="w-3 h-3" style={{ color: TACCUINO_INK.handMuted }} /> +{Math.round(p.elevationGain)} m</span>
-                        <span className="inline-flex items-center gap-1"><Mountain className="w-3 h-3" style={{ color: TACCUINO_INK.handMuted }} /> {Math.round(p.altitudeMax)} m</span>
-                        <span className="inline-flex items-center gap-1"><Clock className="w-3 h-3" style={{ color: TACCUINO_INK.handMuted }} /> {formatDuration(p.estimatedTimeSeconds)}</span>
+                      <div className="flex items-center flex-wrap gap-x-3 gap-y-1 mt-1.5" style={{ fontFamily: FONT.lora, fontSize: 12, color: TACCUINO_INK.hand }}>
+                        <span className="inline-flex items-center gap-1"><Route className="w-3.5 h-3.5" style={{ color: TACCUINO_INK.handMuted }} /> {(p.distanceMeters / 1000).toFixed(1)} km</span>
+                        <span className="inline-flex items-center gap-1"><TrendingUp className="w-3.5 h-3.5" style={{ color: TACCUINO_INK.handMuted }} /> +{Math.round(p.elevationGain)} m</span>
+                        <span className="inline-flex items-center gap-1"><Mountain className="w-3.5 h-3.5" style={{ color: TACCUINO_INK.handMuted }} /> {Math.round(p.altitudeMax)} m</span>
+                        <span className="inline-flex items-center gap-1"><Clock className="w-3.5 h-3.5" style={{ color: TACCUINO_INK.handMuted }} /> {formatDuration(p.estimatedTimeSeconds)}</span>
                       </div>
                     </div>
-                    <div className="relative shrink-0 w-10 h-10 flex items-center justify-center">
+                    <div className="relative shrink-0 w-11 h-11 flex items-center justify-center">
                       {p.trailScore != null && (
                         <>
                           {/* Anello a tremore intorno al badge — non tocca `TrailScoreGaugeBadge`
@@ -614,15 +632,15 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                               scoperta e contenuta, dà solo a questa riga un accenno "cerchiato a
                               penna" invece del cerchio perfetto del componente. */}
                           <HandDrawnFrame stroke={TACCUINO_INK.mapContour} strokeWidth={1} rx={50} seed={7} className="scale-110" />
-                          <TrailScoreGaugeBadge total={p.trailScore} safety={p.safety} size={40} showLabel={false} dark={false} />
+                          <TrailScoreGaugeBadge total={p.trailScore} safety={p.safety} size={46} showLabel={false} dark={false} />
                         </>
                       )}
                     </div>
                     <div
                       className="shrink-0 flex items-center justify-end gap-1"
-                      style={{ width: 82, fontFamily: FONT_HAND, fontSize: 13, color: haOgniUscita ? TACCUINO_ACCENT[600] : TACCUINO_INK.handMuted, fontWeight: haOgniUscita ? 700 : 400 }}
+                      style={{ width: 94, fontFamily: FONT_HAND, fontSize: 15, color: haOgniUscita ? TACCUINO_ACCENT[600] : TACCUINO_INK.handMuted, fontWeight: haOgniUscita ? 700 : 400 }}
                     >
-                      {haOgniUscita && <Check className="w-3 h-3 shrink-0" strokeWidth={3} />}
+                      {haOgniUscita && <Check className="w-3.5 h-3.5 shrink-0" strokeWidth={3} />}
                       {haOgniUscita ? `${p.reportageCount} reportage` : 'in programma'}
                     </div>
                   </Link>
