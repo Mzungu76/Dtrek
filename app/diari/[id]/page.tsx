@@ -572,21 +572,26 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                       verticale da una riga all'altra, indipendentemente da quanto testo hanno le
                       righe vicine. */}
                   <Link href={`${percorsoPath}/guida/il_percorso`} className="flex items-center gap-3.5 flex-1 min-w-0">
-                    {/* Vera mappa OSM (GalleryMapThumb, invariata nel componente — stessa usata
-                        dalla galleria Guida/Resoconto), non un disegno astratto: l'utente l'ha
-                        chiesta esplicitamente, coi SUOI colori reali (Fase 29: niente più `filter`
-                        CSS di ricolorazione, tolto qui — le fasi 22-28 avevano provato seppia poi
-                        verde, mai i "colori originali" richiesti alla fine). Il "ritaglio incollato"
-                        (bordo bianco spesso + ombra sfalsata + lieve rotazione stabile per
-                        percorso, stesso principio della copertina in `DiarioCoverThumb`) sostituisce
-                        `HandDrawnFrame` qui — coerente con "una foto incollata sulla pagina", non
-                        più "una mappa disegnata a mano". Il tracciato (`lineColor`/`dashArray` di
-                        Leaflet, nativi — non un filtro SVG dentro Leaflet, la stessa combinazione
-                        già scartata in Fase 21) diventa china nera tratteggiata, `showEndpoints`
-                        aggiunge partenza (pallino pieno) e arrivo (pallino vuoto): la precisione
-                        del percorso resta intatta, sono gli stessi punti GPS, solo lo stile del
-                        tratto cambia. `dimTiles={false}` toglie il velo scuro pensato per la
-                        galleria a sfondo nero (qui contro i "colori originali" richiesti). */}
+                    {/* Vera mappa (GalleryMapThumb, invariata nel componente — stessa usata dalla
+                        galleria Guida/Resoconto), non un disegno astratto — ma non più lo stile
+                        "app di navigazione" di CartoDB: Fase 29 aveva tolto il `filter` CSS
+                        (seppia poi verde, mai i "colori originali" voluti) restituendo però una
+                        mappa ancora "troppo digitale" (verde acceso, POI commerciali, testi da
+                        app). Fase 30 — cambiato il *tile provider* invece di ripiegare su un altro
+                        filtro: `tileStyle="topo"` (OpenTopoMap, curve di livello e cartografia
+                        escursionistica reale, vedi `app/api/tile/route.ts`) è cartografia pensata
+                        per il trekking, non una mappa stradale ricolorata via CSS. Il "ritaglio
+                        incollato" (bordo bianco spesso + ombra sfalsata + lieve rotazione stabile
+                        per percorso, stesso principio della copertina in `DiarioCoverThumb`)
+                        sostituisce `HandDrawnFrame` qui — coerente con "una foto incollata sulla
+                        pagina". Il tracciato (`lineColor`/`dashArray` di Leaflet, nativi — non un
+                        filtro SVG dentro Leaflet, la stessa combinazione già scartata in Fase 21)
+                        resta china nera tratteggiata (validata a schermo: "funziona sorprendente-
+                        mente bene"), `showEndpoints` aggiunge partenza/arrivo, rimpiccioliti in
+                        Fase 30 (sembravano "marker di Leaflet"): la precisione del percorso resta
+                        intatta, sono gli stessi punti GPS, solo lo stile del tratto cambia.
+                        `dimTiles={false}` toglie il velo scuro pensato per la galleria a sfondo
+                        nero (qui contro i "colori originali" richiesti). */}
                     <div
                       className="w-[87px] h-[87px] shrink-0 overflow-hidden relative"
                       style={{
@@ -605,6 +610,7 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                             dashArray="3 2.5"
                             showEndpoints
                             dimTiles={false}
+                            tileStyle="topo"
                           />
                         )
                         : <div className="w-full h-full flex items-center justify-center"><Mountain className="w-5 h-5" style={{ color: TACCUINO_PAPER.cardBorder }} /></div>}
@@ -616,11 +622,17 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                           {[scoreLabel, p.safety?.label].filter(Boolean).join(' · ')}
                         </p>
                       )}
-                      <div className="flex items-center flex-wrap gap-x-3 gap-y-1 mt-1.5" style={{ fontFamily: FONT.lora, fontSize: 12, color: TACCUINO_INK.hand }}>
-                        <span className="inline-flex items-center gap-1"><Route className="w-3.5 h-3.5" style={{ color: TACCUINO_INK.handMuted }} /> {(p.distanceMeters / 1000).toFixed(1)} km</span>
-                        <span className="inline-flex items-center gap-1"><TrendingUp className="w-3.5 h-3.5" style={{ color: TACCUINO_INK.handMuted }} /> +{Math.round(p.elevationGain)} m</span>
-                        <span className="inline-flex items-center gap-1"><Mountain className="w-3.5 h-3.5" style={{ color: TACCUINO_INK.handMuted }} /> {Math.round(p.altitudeMax)} m</span>
-                        <span className="inline-flex items-center gap-1"><Clock className="w-3.5 h-3.5" style={{ color: TACCUINO_INK.handMuted }} /> {formatDuration(p.estimatedTimeSeconds)}</span>
+                      {/* Fase 30 — peso visivo ridotto rispetto al titolo su richiesta esplicita
+                          dell'utente ("nel concetto Diario farei emergere molto di più nome +
+                          giudizio + fotografia... lasciando i numeri come annotazioni secondarie"):
+                          font più piccolo, stesso grigio-marrone tenue delle icone invece del
+                          marrone più scuro di prima, icone rimpicciolite — restano leggibili ma
+                          non competono più col titolo per attenzione. */}
+                      <div className="flex items-center flex-wrap gap-x-2.5 gap-y-1 mt-1.5" style={{ fontFamily: FONT.lora, fontSize: 11, color: TACCUINO_INK.handMuted }}>
+                        <span className="inline-flex items-center gap-1"><Route className="w-3 h-3" /> {(p.distanceMeters / 1000).toFixed(1)} km</span>
+                        <span className="inline-flex items-center gap-1"><TrendingUp className="w-3 h-3" /> +{Math.round(p.elevationGain)} m</span>
+                        <span className="inline-flex items-center gap-1"><Mountain className="w-3 h-3" /> {Math.round(p.altitudeMax)} m</span>
+                        <span className="inline-flex items-center gap-1"><Clock className="w-3 h-3" /> {formatDuration(p.estimatedTimeSeconds)}</span>
                       </div>
                     </div>
                     <div className="relative shrink-0 w-11 h-11 flex items-center justify-center">

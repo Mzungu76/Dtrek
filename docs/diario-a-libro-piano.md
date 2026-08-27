@@ -1033,6 +1033,55 @@ tracciato tratteggiato e simboli di partenza/arrivo visibili, testo sempre leggi
 warning ESLint (l'`useEffect` di `GalleryMapThumb` ha guadagnato le nuove prop nell'array di
 dipendenze, altrimenti segnalate come mancanti).
 
+**Fase 30 — Cartografia escursionistica reale al posto di un filtro, simboli affinati, gerarchia
+del Diario come principio guida** ✅ **COMPLETATA**
+
+Riscontro dettagliato dell'utente sulla Fase 29, con una lettura di design che va oltre le singole
+miniature — merita di essere riportata perché guiderà scelte future, non solo questa fase:
+
+> Hai quasi creato una gerarchia: **Diario → pagina**, **Percorsi → schede**, **Mappa → piccolo
+> documento fisico**, **Traccia → annotazione personale**, **Reportage → testimonianza**. [...]
+> Deve sembrare un reperto del viaggio, non un elemento grafico che compete con il titolo del
+> percorso.
+
+Tre correzioni concrete emerse da questa lettura:
+
+1. **La mappa era ancora "troppo digitale"** — dopo tre fasi passate a inseguire il colore giusto
+   con un `filter` CSS su una mappa CartoDB (seppia in Fase 22, verde in Fase 27, marrone in Fase
+   28, poi tolto del tutto in Fase 29 per i "colori originali"), il vero problema non era il colore
+   ma la *cartografia stessa*: verde acceso, POI commerciali, testi da app di navigazione — nessun
+   filtro può togliere elementi che il tile non ha mai smesso di avere. Cambiato il **tile
+   provider**: `GalleryMapThumb` guadagna una prop `tileStyle` (default `'light'`, invariato per
+   gli altri due chiamanti) inoltrata a `/api/tile` (nuova voce `topo` in `PROVIDERS`, OpenTopoMap
+   — curve di livello, boschi desaturati, cartografia pensata per il trekking, licenza CC-BY-SA
+   come i tile OSM già in uso). `maxNativeZoom` limitato a 17 per questo provider (non copre zoom
+   più alti ovunque come CARTO/OSM standard) — Leaflet ingrandisce l'ultimo livello disponibile
+   invece di richiedere tile inesistenti. Non riproducibile in locale (stesso limite di rete già
+   noto: anche i provider esistenti restituiscono 404 in questo ambiente sandboxato, confermato
+   confrontando `style=light`/`voyager`/`topo` — tutti e tre 404 identici, non un problema del
+   nuovo provider) — il codice segue esattamente lo stesso pattern (aggiunta additiva a `PROVIDERS`,
+   già usato tre volte prima) di provider già in produzione.
+2. **Simboli di partenza/arrivo troppo "da app"** — "sembrano marker di Leaflet". Rimpiccioliti
+   (raggio 3.5→2.2, spessore 1.5→1): un punto e un cerchio minimi, non un pittogramma. Il tracciato
+   nero tratteggiato (Fase 29) è stato invece validato esplicitamente ("funziona sorprendentemente
+   bene... il nero/marrone fa pensare a *questo percorso è stato segnato su una carta*") — non
+   toccato.
+3. **Le statistiche numeriche pesavano quanto il titolo** — richiesta esplicita di far emergere
+   "nome + giudizio + fotografia/mappa", lasciando km/D+/quota/tempo come annotazioni secondarie:
+   font ridotto (12→11), colore portato allo stesso grigio-marrone tenue delle icone (prima un
+   marrone più scuro, stessa forza del testo principale), icone rimpicciolite (14→12px).
+
+La rotazione già stabile per percorso (Fase 29) e il bordo bianco spesso restano invariati —
+espressamente lodati ("una delle cose che mi piace di più... foto della mappa → attaccata al
+diario"). Suggerita anche una lieve variazione dell'ombra oltre alla rotazione, ma con l'esplicito
+avviso "con estrema moderazione, se esageri diventa scrapbook" — non aggiunta in questa fase: la
+sola rotazione già dà la varietà percepita e cercata, un'ombra variabile aggiungerebbe un secondo
+grado di libertà per un guadagno visivo marginale.
+
+Non richiesta né tentata in questa fase: la mappa "acquerello" illustrata generata dall'utente come
+riferimento iniziale — esplicitamente giudicata "troppo illustrata per Dtrek". La direzione
+confermata resta cartografia reale (dati/geometria veri) trattata con misura, non un'illustrazione.
+
 ## File critici
 - `components/guida/GuideReader.tsx`, `components/resoconto/ReportReader.tsx` — sorgente da cui
   estratto in Fase 0, non riscritti.
