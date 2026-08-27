@@ -64,14 +64,14 @@ export const TACCUINO_ACCENT = TERRA
  * — mai un id fisso: due istanze sulla stessa pagina (es. una mappa nel Sommario e una nella
  * pagina del Percorso, se mai finissero nello stesso DOM) si scontrerebbero.
  *
- * ⚠️ Fase 23 — NON usarlo su un elemento `fixed`/`position:absolute` a piena pagina, montato
- * stabilmente (es. uno sfondo). Verificato riproducibile (non solo su Android — anche in Chromium
- * headless su desktop): applicato così, questo filtro (`feTurbulence`+`feDisplacementMap`) può
- * corrompere il rendering del testo in elementi FRATELLI sottostanti nel DOM, non solo
- * dell'elemento filtrato — `TaccuinoPaperTexture`/`TaccuinoSpineShadow` sotto lo usavano proprio
- * così ed è per questo che sono stati tolti da lì. Resta sicuro su una forma piccola/contenuta
- * dentro il proprio riquadro (una mappa in miniatura, un bordo locale) — il problema è la
- * combinazione con un filtro a piena pagina sempre montato, non il filtro in sé.
+ * ⚠️ Fase 23→24 — la Fase 23 aveva tolto questo filtro da `TaccuinoPaperTexture` sospettandolo
+ * causa di un bug (testo invisibile nelle righe del Sommario), senza risolvere: isolato meglio in
+ * Fase 24, la causa reale non era il filtro ma qualunque `<svg>` **che ricopre la pagina**
+ * (`fixed`/`absolute` a piena area), con o senza questo filtro, con o senza z-index —
+ * `TaccuinoPaperTexture` è stata riscritta senza SVG (sfondo CSS puro). Questo filtro resta quindi
+ * sicuro dove l'avevo già descritto: una forma piccola/contenuta nel proprio riquadro (una mappa
+ * in miniatura, un bordo locale) — non su un `<svg>` che ricopre l'intera pagina, a prescindere
+ * dal filtro.
  */
 export function useHandWobbleId(): string {
   return `hand-wobble-${useId()}`
@@ -89,68 +89,48 @@ export function HandWobbleFilter({ id, seed = 5, baseFrequency = 0.02, scale = 3
 }
 
 /**
- * Texture di sfondo del taccuino — carta invecchiata (due macchie sfumate) + linee di livello,
- * tutta la pagina, dietro al contenuto. Verificata nel mockup
- * (`taccuino-canvas/SommarioTaccuino.dc.html`/`Main.dc.html`, non nel repo) — prima di questo
- * componente il tema "taccuino" di `BookPage.tsx` usava solo due `radial-gradient` CSS piatti al
- * posto di questa texture, un'approssimazione troppo debole: da lì l'utente ha segnalato che il
- * risultato a schermo non assomigliava al mockup.
+ * Texture di sfondo del taccuino — carta invecchiata (due macchie sfumate), tutta la pagina,
+ * dietro al contenuto. Verificata nel mockup (`taccuino-canvas/SommarioTaccuino.dc.html`/
+ * `Main.dc.html`, non nel repo).
  *
- * Fase 23 — le linee di livello **non usano più** `HandWobbleFilter`: applicato qui (un filtro
- * `feTurbulence`/`feDisplacementMap` su un elemento `fixed`, a piena pagina, montato su ogni
- * pagina taccuino) corrompeva il rendering del testo nelle righe dell'elenco Percorsi del
- * Sommario — riproducibile in modo deterministico (isolato con un rendering fuori dall'app sotto
- * `/s/…`, non solo segnalato su un dispositivo Android). Due tentativi precedenti avevano
- * cambiato altro (le miniature dei percorsi, Fase 21→22) senza risolvere: la causa reale era
- * sempre qui. Vedi l'avviso su `HandWobbleFilter` sopra.
+ * Fase 24 — **causa reale, finalmente isolata**, del bug "titolo/statistiche invisibili" nelle
+ * righe del Sommario (segnalato di nuovo dopo la Fase 23, che aveva tolto solo il filtro
+ * `HandWobbleFilter` da qui senza risolvere). Isolato con una A/B/C sulla STESSA pagina (non due
+ * caricamenti separati, per escludere qualunque differenza di timing/ambiente): con
+ * `TaccuinoPaperTexture` montato, il testo delle colonne vicine spariva — comprese etichette
+ * semplici, senza font/colori taccuino — mentre immagini e icone nelle stesse righe restavano
+ * visibili; `TaccuinoSpineShadow` montato da solo, nessun problema. Confermato NON essere lo
+ * z-index (negativo, zero, o assente — stesso risultato), non `position:fixed` in sé
+ * (`position:absolute` stesso risultato) — è specificamente **un elemento `<svg>` live che
+ * ricopre la pagina** (fisso o assoluto, con o senza filtro, con o senza z-index) a corrompere il
+ * rendering del testo altrove nel DOM. Lo stesso identico contenuto come `<svg>` statico (in
+ * flusso normale, non sovrapposto) non causa nulla — conferma che il problema è la
+ * SOVRAPPOSIZIONE via SVG, non l'SVG in sé.
  *
- * `fixed` (non `absolute`) come `BookSpineShadow`: il guscio di `BookPage.tsx` non è
- * `position:relative`, `fixed` evita di doverlo aggiungere e con `preserveAspectRatio="xMidYMid
- * slice"` copre il viewport a qualunque altezza di contenuto senza deformare le curve. Z-index
- * negativo esplicito: un elemento `fixed` senza z-index dipinge comunque sopra il contenuto in
- * flusso normale (regola CSS nota) — va sotto per restare uno sfondo.
+ * Corretto sostituendo l'SVG con un `<div>` e uno sfondo **CSS puro** (`radial-gradient`,
+ * nessun elemento SVG) — stesso principio già provato altrove nell'app (es. l'utility Tailwind
+ * `bg-topography`, un'immagine di sfondo invece di un SVG vivo nel DOM). Le linee di livello
+ * disegnate (i quattro tracciati organici) sono state tolte in questo passaggio, non riportate
+ * come immagine di sfondo: prima la stabilità del testo, l'abbellimento può tornare in un
+ * secondo momento con un `background-image` (mai un altro `<svg>` overlay).
  *
  * `flip` inverte la posizione delle due macchie (in alto-a-sinistra/basso-a-destra o viceversa) —
  * per quando pagine adiacenti del libro (sinistra/destra sfogliando) avranno ciascuna la propria
  * istanza: non identiche a specchio l'una dell'altra sarebbe stato più piatto.
  */
 export function TaccuinoPaperTexture({ flip = false }: { flip?: boolean }) {
-  const gradientId = useHandWobbleId()
-  const stain1 = flip ? { cx: 85, cy: 8 } : { cx: 20, cy: 10 }
-  const stain2 = flip ? { cx: 10, cy: 85 } : { cx: 90, cy: 70 }
+  const stain1Pos = flip ? '85% 8%' : '20% 10%'
+  const stain2Pos = flip ? '10% 85%' : '90% 70%'
   return (
-    <svg
+    <div
       aria-hidden="true"
       className="fixed inset-0 -z-10 pointer-events-none"
-      width="100%" height="100%"
-      viewBox="0 0 390 844"
-      preserveAspectRatio="xMidYMid slice"
-    >
-      <defs>
-        <radialGradient id={`${gradientId}-s1`} cx={`${stain1.cx}%`} cy={`${stain1.cy}%`} r="42%">
-          <stop offset="0%" stopColor={TACCUINO_PAPER.stain1} stopOpacity={0.5} />
-          <stop offset="100%" stopColor={TACCUINO_PAPER.stain1} stopOpacity={0} />
-        </radialGradient>
-        <radialGradient id={`${gradientId}-s2`} cx={`${stain2.cx}%`} cy={`${stain2.cy}%`} r="40%">
-          <stop offset="0%" stopColor={TACCUINO_PAPER.stain2} stopOpacity={0.48} />
-          <stop offset="100%" stopColor={TACCUINO_PAPER.stain2} stopOpacity={0} />
-        </radialGradient>
-      </defs>
-      <rect width="390" height="844" fill={TACCUINO_PAPER.base} />
-      <rect width="390" height="844" fill={`url(#${gradientId}-s1)`} />
-      <rect width="390" height="844" fill={`url(#${gradientId}-s2)`} />
-      {/* Linee di livello — niente più `filter={HandWobbleFilter}` qui (Fase 23): con un elemento
-          `fixed`, a piena pagina, montato su OGNI pagina taccuino, il filtro `feTurbulence`/
-          `feDisplacementMap` corrompeva il rendering del testo nelle righe sottostanti (verificato
-          in modo riproducibile, non solo su Android — vedi commento sotto). Le curve di Bézier
-          restano organiche di per sé, solo senza il tremore aggiuntivo. */}
-      <g fill="none" stroke={TACCUINO_PAPER.contourLine} strokeWidth={1} opacity={0.32}>
-        <path d="M-20 120 Q80 90 180 130 T420 100" />
-        <path d="M-20 180 Q90 150 190 190 T420 165" />
-        <path d="M-20 700 Q100 670 210 705 T420 680" />
-        <path d="M-20 750 Q100 725 220 755 T420 735" />
-      </g>
-    </svg>
+      style={{
+        background: `radial-gradient(ellipse at ${stain1Pos}, ${TACCUINO_PAPER.stain1} 0%, transparent 45%),`
+          + `radial-gradient(ellipse at ${stain2Pos}, ${TACCUINO_PAPER.stain2} 0%, transparent 50%),`
+          + TACCUINO_PAPER.base,
+      }}
+    />
   )
 }
 
@@ -174,8 +154,12 @@ export function TaccuinoSpineShadow({ side = 'left' }: { side?: 'left' | 'right'
       viewBox={`0 0 ${width} 844`}
       preserveAspectRatio="none"
     >
-      {/* Niente più `filter={HandWobbleFilter}` (Fase 23, stesso motivo di TaccuinoPaperTexture
-          sopra) — la curva stessa resta organica, solo senza il tremore aggiuntivo. */}
+      {/* Niente più `filter={HandWobbleFilter}` da qui (tolto in Fase 23 insieme a
+          TaccuinoPaperTexture, per sospetto) — verificato in Fase 24 che QUESTO componente non
+          era la causa del bug (isolato con un test A/B, restava innocuo anche col filtro): la
+          striscia stretta (22-26px) non è un `<svg>` che ricopre la pagina come l'altro. Il
+          filtro non è stato reintrodotto comunque — la curva resta organica di per sé, il
+          tremore aggiuntivo era un dettaglio minore non essenziale. */}
       <path d={d} fill="none" stroke="rgba(0,0,0,0.13)" strokeWidth={side === 'left' ? 9 : 10} />
     </svg>
   )

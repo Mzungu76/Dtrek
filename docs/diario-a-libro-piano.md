@@ -761,6 +761,41 @@ più il filtro. `HandWobbleFilter`/`useHandWobbleId` restano esportati con un av
 commento: sicuri su una forma piccola/contenuta nel proprio riquadro, mai su un elemento `fixed` a
 piena pagina montato stabilmente.
 
+**Fase 24 — La Fase 23 aveva diagnosticato male: causa reale isolata con un A/B/C rigoroso** ✅ **COMPLETATA**
+
+La Fase 23 non ha risolto: l'utente ha disinstallato l'app, si è collegato direttamente all'URL
+Vercel (escludendo con certezza qualunque cache — service worker o altro) e ha rimandato lo stesso
+identico schermo. La diagnosi della Fase 23 (il filtro `HandWobbleFilter`) era quindi **sbagliata**
+— il filtro era già stato rimosso e il bug persisteva.
+
+Isolato questa volta con un metodo diverso, molto più rigoroso: invece di confrontare screenshot da
+caricamenti di pagina separati (soggetti a differenze di timing/ambiente che avevano già portato a
+una falsa conferma in Fase 23), un **A/B/C sulla STESSA pagina, stesso caricamento** — colonne
+affiancate, alcune con `TaccuinoPaperTexture`/`TaccuinoSpineShadow` montati, altre no. Risultato
+netto: `TaccuinoSpineShadow` da solo — nessun problema, testo sempre visibile. `TaccuinoPaperTexture`
+da solo — testo sparito ovunque nella stessa colonna, **comprese etichette di prova senza alcun
+font/colore taccuino** (mentre immagini e icone nella stessa riga restavano visibili). Esclusi uno
+per uno, con lo stesso metodo A/B: lo z-index (negativo, zero, o assente — stesso risultato),
+`position:fixed` in sé (`position:absolute` stesso risultato). L'unica variabile che faceva la
+differenza: **un `<svg>` live che ricopre la pagina** (qualunque combinazione fixed/absolute,
+con o senza filtro, con o senza z-index) corrompe il rendering del testo altrove nel DOM. Lo stesso
+contenuto come `<svg>` **statico**, in flusso normale (non sovrapposto ad altro contenuto), non
+causa alcun problema — conferma che è la sovrapposizione via SVG live, non l'SVG in sé né i suoi
+contenuti (gradienti, `feTurbulence`, o altro).
+
+**Correzione**: `TaccuinoPaperTexture` riscritta senza alcun elemento `<svg>` — un `<div>` con
+`background: radial-gradient(...), radial-gradient(...), colore-base` (CSS puro), stesso principio
+già in uso altrove nell'app per evitare esattamente questa classe di problema (l'utility Tailwind
+`bg-topography`, un'immagine di sfondo invece di un SVG vivo nel DOM). Le quattro linee di livello
+disegnate sono state tolte in questo passaggio — non riportate nemmeno come immagine di sfondo:
+prima la stabilità del testo, un'eventuale reintroduzione come `background-image` (mai un altro
+`<svg>` overlay) resta possibile in un secondo momento. Verificato con lo stesso componente
+`BookPage` reale (non una ricostruzione a mano) e l'intera pagina Sommario: titolo, sottotitolo,
+pulsante, chip, tutte le righe (titolo/statistiche/stato) visibili.
+
+`TaccuinoSpineShadow` non è stata toccata in questa fase (verificata innocente dal test A/B) — resta
+un `<svg>` `fixed`, ma è una striscia stretta (22-26px), non un overlay a piena pagina.
+
 ## File critici
 - `components/guida/GuideReader.tsx`, `components/resoconto/ReportReader.tsx` — sorgente da cui
   estratto in Fase 0, non riscritti.
@@ -864,10 +899,12 @@ piena pagina montato stabilmente.
   ricolorazione sul contenitore, al posto di `RouteThumb`+filtro SVG (sospettato di un bug di
   compositing che rendeva invisibili titolo/statistiche della riga).
 - `lib/taccuinoTokens.tsx` — Fase 21: `HandWobbleFilter` con `baseFrequency`/`scale` opzionali;
-  nuovi `TaccuinoPaperTexture`, `TaccuinoSpineShadow`, token `TACCUINO_PAPER.highlight`. **Fase 23
-  (causa reale del bug testo-invisibile)**: `HandWobbleFilter` rimosso da entrambi — restava solo
-  come capacità generica, con un avviso esplicito nel commento a non riapplicarlo a un elemento
-  `fixed` a piena pagina.
+  nuovi `TaccuinoPaperTexture`, `TaccuinoSpineShadow`, token `TACCUINO_PAPER.highlight`. Fase 23
+  (diagnosi poi corretta in Fase 24): `HandWobbleFilter` rimosso da entrambi, sospettato causa del
+  bug testo-invisibile — non lo era. **Fase 24 (causa reale)**: `TaccuinoPaperTexture` riscritta
+  senza alcun `<svg>` — un `<div>` con `background: radial-gradient(...)` CSS puro; le linee di
+  livello disegnate tolte (non reintrodotte come immagine di sfondo in questo passaggio).
+  `TaccuinoSpineShadow` invariata (verificata innocente).
 - `components/RouteThumb.tsx` — Fase 21: `strokeDasharray`/`filter` opzionali (default assenti,
   nessuna modifica per i chiamanti esistenti). Non più usato dal Sommario dopo la Fase 22, restano
   validi per altri chiamanti futuri.
