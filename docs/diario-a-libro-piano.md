@@ -637,6 +637,24 @@ perché lì porta allo scaffale, non al proprio stesso indice. `DiarioSwitcherDr
   laterale" riguardava il drawer (`DiarioSwitcherDrawer`, il pannello che scorre lateralmente), non
   la barra di navigazione classica in cima, che resta come sempre.
 
+**Fase 19 — Via anche la Navbar classica dallo scaffale; Caveat al posto di Kalam** ✅ **COMPLETATA**
+
+Vista la Fase 18 a schermo, l'utente ha chiesto di andare oltre: niente più `<Navbar/>` (le tab
+Diario/Percorsi/Resoconti in cima) nemmeno sullo scaffale — "voglio passare definitivamente al
+nuovo layout e abbandonare quello precedente". Rimozione **solo su questa pagina** (`DiariPageLibro`
+in `app/diari/page.tsx`): `DiariPageClassico` e le altre pagine ancora nel vecchio chrome (es.
+`/percorsi`) non sono toccate, non è un cambio del componente `Navbar` condiviso. `MOBILE_TOPBAR_SPACER`
+(il padding-top pensato per compensare la Navbar fissa) va via con lei; al suo posto un
+padding-top minimo con `env(safe-area-inset-top)` per il notch, stesso principio già usato in
+fondo da `BOTTOM_BAR_SPACER` in `BookPage.tsx`.
+
+Contestualmente, richiesta di provare `Caveat` al posto di `Kalam` per il tratto a mano (font
+ancora in valutazione, non una scelta finale). Rinominati i token da `FONT_KALAM`/`FONT_VAR_KALAM`
+a `FONT_HAND`/`FONT_VAR_HAND` in `lib/taccuinoTokens.tsx` — nome legato al ruolo (il font scritto a
+mano) non al font specifico dietro, per non dover rinominare di nuovo a un prossimo cambio.
+`app/layout.tsx`: `Kalam` → `Caveat` da `next/font/google`, variabile `--font-kalam` →
+`--font-caveat`.
+
 ## File critici
 - `components/guida/GuideReader.tsx`, `components/resoconto/ReportReader.tsx` — sorgente da cui
   estratto in Fase 0, non riscritti.
@@ -721,9 +739,14 @@ perché lì porta allo scaffale, non al proprio stesso indice. `DiarioSwitcherDr
 - `components/libro/DiarioSwitcherDrawer.tsx` — eliminato in Fase 18 (zero chiamanti rimasti: il
   Sommario naviga ora direttamente allo scaffale via `indexHref="/diari"`, `indexLabel="Diari"`).
 - `app/diari/page.tsx` (`DiariPageLibro`) — Fase 18: primo uso reale di `lib/taccuinoTokens.tsx`
-  (carta invecchiata, font Kalam sul titolo); griglia `grid-cols-2` al posto della riga scorrevole;
+  (carta invecchiata, font sul titolo); griglia `grid-cols-2` al posto della riga scorrevole;
   nuovo `GlobalRouteSearch` (ricerca su `/api/percorsi` senza lasciare lo scaffale); link "Tutti i
-  Percorsi" spostato sotto la ricerca. `<Navbar/>` invariata.
+  Percorsi" spostato sotto la ricerca. Fase 19: `<Navbar/>`/`MOBILE_TOPBAR_SPACER` rimossi da
+  questa funzione (non dal componente condiviso), sostituiti da un padding-top minimo con
+  `env(safe-area-inset-top)`.
+- `lib/taccuinoTokens.tsx`, `app/layout.tsx` — Fase 19: font a mano `Kalam` → `Caveat` (ancora in
+  prova), token rinominati `FONT_KALAM`/`FONT_VAR_KALAM` → `FONT_HAND`/`FONT_VAR_HAND` (nome legato
+  al ruolo, non al font specifico), variabile CSS `--font-kalam` → `--font-caveat`.
 - `app/diari/[id]/percorsi/[percorsoId]/page.tsx` — Fase 15: `PercorsoPageLibro` rimossa del tutto,
   redirect immediato alla Guida a flag acceso. `PercorsoPageClassico`/`ReportageSection`
   invariate.
