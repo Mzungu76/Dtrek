@@ -542,6 +542,33 @@ Reportage (`.../reportage/[activityId]/page.tsx`, pagina diversa e ancora esiste
 statistiche di UNA uscita, non l'elenco) aveva anch'esso un link "Torna al Percorso" verso la
 pagina eliminata: ora porta alla Guida, rietichettato "Torna alla Guida".
 
+**Fase 16 — Pannello di generazione in blocco ripulito, copertine in miniatura corrette** ✅ **COMPLETATA**
+
+Due difetti visivi segnalati dopo aver visto il drawer "Strumenti" (Fase 15) e le copertine con
+testo (Fase 14) in uso.
+
+*Pannello "Genera tutta la guida".* Da quando la pagina di riepilogo del Percorso non esiste più,
+`GuideGenerationPanel` in modalità bulk (senza `sectionKey`) è montato SOLO dentro
+`PercorsoToolsDrawer.tsx` — verificato con una ricerca mirata prima di toccare nulla, per essere
+sicuri di non rompere un altro chiamante. La card bianca con icona a cerchio (`PanelShell`,
+pensata per il vecchio riepilogo in stile "app moderna") stonava nel drawer pergamena, l'utente
+l'ha trovata "non conforme al layout attuale". Riscritto senza riquadro proprio: chip di lunghezza
+testo nello stesso stile a pillola dei filtri del Sommario (terra attivo/pergamena chiaro
+inattivo), pulsanti "Genera"/"Rigenera" nello stesso stile piatto (`ToolButton`) delle altre righe
+del drawer (Esporta PDF, Esporta GPX, Video 3D) — nessun elemento visivo nuovo, solo pattern già
+in uso altrove nello stesso drawer/Sommario. `panelClassName` (nato apposta in Fase 15 per questo
+tono) rimosso: con un solo chiamante rimasto e senza più un riquadro da colorare, non serviva più.
+
+*Copertine in miniatura spostate verso il basso.* `DiarioCoverThumb` in modalità "con testo"
+(drawer, cima del Sommario) riproduce `<DiarioCover>` scalata — quel componente ha però un
+`margin: '24px auto'` proprio, pensato per la sua vetrina a schermo intero su `/pubblica` e
+`/diari/[id]/copertina` (dove c'è spazio intorno). Ritagliata in una miniatura con
+`overflow:hidden`, quel margine spingeva la copertina verso il basso lasciando un vuoto vuoto in
+cima e tagliando il fondo. Corretto con un `translateY(-24px)` nella stessa `transform` di scala
+(le unità sono quelle vere del contenuto non ancora scalato, si annulla esattamente indipendentemente
+dalla dimensione della miniatura). Stesso fix per tutti e tre i punti che usano quella modalità
+(drawer, Sommario, e l'anteprima di `/diari/[id]/copertina`, che riusa lo stesso componente).
+
 ## File critici
 - `components/guida/GuideReader.tsx`, `components/resoconto/ReportReader.tsx` — sorgente da cui
   estratto in Fase 0, non riscritti.

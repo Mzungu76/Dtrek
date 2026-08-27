@@ -1,13 +1,14 @@
 'use client'
-// Pannello di generazione/rigenerazione della Guida per la pagina di riepilogo del Percorso
-// (Fase 3, vedi docs/diario-a-libro-piano.md — "Decisione aperta"). Scelta fatta con l'utente:
+// Pannello di generazione/rigenerazione della Guida — nato per la pagina di riepilogo del
+// Percorso (Fase 3), oggi montato solo dentro components/libro/PercorsoToolsDrawer.tsx (Fase 15,
+// quella pagina è stata eliminata). Scelta fatta con l'utente all'origine:
 // pannello nuovo e isolato, che chiama /api/guide direttamente con una UI propria (spinner fino al
 // completamento) invece di riusare/estrarre la logica a streaming live di GuideReader.tsx
 // (generateSections). Il server persiste già lui stesso cached_guide (mergeGuideSection lato
 // server, vedi app/api/guide/route.ts) — qui basta rileggere il percorso a fine stream, non c'è
 // merge da rifare lato client.
 import { useState } from 'react'
-import { BookOpen, KeyRound, Loader2, Sparkles } from 'lucide-react'
+import { BookOpen, Loader2, Sparkles } from 'lucide-react'
 import type { PlannedHike } from '@/lib/plannedStore'
 import { getPlannedById } from '@/lib/plannedStore'
 import { buildGuideDisplaySections } from '@/lib/guida/guideDisplaySections'
@@ -31,22 +32,17 @@ interface Props {
    *  sezione — usato dentro components/libro/GuideBookPage.tsx per riportare l'azione dentro la
    *  pagina del libro invece di lasciarla solo sul riepilogo del Percorso (preferenza esplicita
    *  dell'utente dopo aver visto il libro a schermo). Senza `sectionKey` resta il pannello bulk
-   *  della pagina di riepilogo (sezioni mancanti / rigenera tutta la guida). */
+   *  (sezioni mancanti / rigenera tutta la guida), montato oggi solo dentro
+   *  components/libro/PercorsoToolsDrawer.tsx. */
   sectionKey?: GuideSectionKey
   /** Solo con `sectionKey` — stesso gate di GuideReader.tsx (`showApprofondisciHint`): nessun
    *  invito ad approfondire finché i dati del percorso non sono assestati. Default `true` per non
    *  richiederlo a ogni chiamante che non lo passa (solo GuideBookPage lo passa oggi). */
   enrichmentReady?: boolean
-  /** Solo per il pannello bulk (senza `sectionKey`) — tono del riquadro. Default il bianco/stone
-   *  originale (pensato per il riepilogo del Percorso in stile "app moderna", ora rimosso);
-   *  GuideBookPage.tsx passa il tono pergamena per non ripetere lo stesso stacco cromatico già
-   *  corretto per WeatherWidget in Fase 6. */
-  panelClassName?: string
 }
 
 export default function GuideGenerationPanel({
   hike, percorsoId, hasAiAccess, aiUnavailable, trialExpired, onHikeUpdate, sectionKey, enrichmentReady = true,
-  panelClassName,
 }: Props) {
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -121,80 +117,69 @@ export default function GuideGenerationPanel({
     )
   }
 
+  // ── Pannello bulk — solo dentro PercorsoToolsDrawer.tsx, stile piatto coerente con le altre
+  // righe di quel drawer (ToolButton) invece della card bianca con icona a cerchio di prima
+  // (pensata per il riepilogo del Percorso in stile "app moderna", ora rimosso — l'utente l'ha
+  // trovata "non conforme al layout attuale" una volta vista nel drawer pergamena). Nessun
+  // riquadro/bordo proprio: il drawer fornisce già il proprio titolo di sezione sopra.
   if (hasAiAccess === false && aiUnavailable) {
     return (
-      <PanelShell className={panelClassName}>
-        <p className="text-[13px] text-stone-500 leading-relaxed">
-          Non riusciamo a verificare la tua chiave AI in questo momento — riprova tra poco.
-        </p>
-      </PanelShell>
+      <p className="text-[12.5px] leading-relaxed" style={{ color: '#8a7f52' }}>
+        Non riusciamo a verificare la tua chiave AI in questo momento — riprova tra poco.
+      </p>
     )
   }
 
   if (hasAiAccess === false) {
     return (
-      <PanelShell className={panelClassName} icon={<KeyRound className="w-5 h-5 text-terra-500" />}>
-        <p className="text-[13px] text-stone-500 leading-relaxed">
-          {trialExpired ? 'Il periodo di prova gratuito è terminato — ' : 'Al momento non hai accesso alla generazione AI — '}
-          <a href="/prezzi" className="text-terra-600 font-medium underline underline-offset-2">sblocca Dtrek</a> per far scrivere a Giulia la guida di questo percorso.
-        </p>
-      </PanelShell>
+      <p className="text-[12.5px] leading-relaxed" style={{ color: '#8a7f52' }}>
+        {trialExpired ? 'Il periodo di prova gratuito è terminato — ' : 'Al momento non hai accesso alla generazione AI — '}
+        <a href="/prezzi" className="font-semibold underline underline-offset-2" style={{ color: '#c05a17' }}>sblocca Dtrek</a> per far scrivere a Giulia la guida di questo percorso.
+      </p>
     )
   }
 
   return (
-    <PanelShell className={panelClassName} icon={<BookOpen className="w-5 h-5 text-terra-500" />}>
+    <div className="flex flex-col gap-2">
       {creditError && <CreditErrorModal message={creditError.message} onClose={() => setCreditError(null)} />}
-      <div className="flex flex-wrap items-center gap-2 mb-3">
+      <div className="flex flex-wrap gap-1.5">
         {GUIDE_TEXT_LENGTHS.map(l => (
           <button
             key={l.key}
             type="button"
             disabled={generating}
             onClick={() => setLength(l.key)}
-            className={`px-3 py-1.5 rounded-full text-[12px] font-semibold transition-colors ${
-              length === l.key ? 'bg-terra-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-            }`}
+            className="px-2.5 py-1 rounded-full text-[10px] font-bold transition-colors"
+            style={length === l.key ? { background: '#c05a17', color: '#fff' } : { background: '#f1e9d2', color: '#8a7f52' }}
           >
             {l.label}
           </button>
         ))}
       </div>
-      <div className="flex flex-wrap gap-2">
-        {missingKeys.length > 0 && (
-          <button
-            type="button"
-            disabled={generating}
-            onClick={() => run(missingKeys)}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-terra-600 text-white text-[13px] font-semibold disabled:opacity-60"
-          >
-            {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <BookOpen className="w-4 h-4" />}
-            Genera le sezioni mancanti ({missingKeys.length})
-          </button>
-        )}
+      {missingKeys.length > 0 && (
         <button
           type="button"
           disabled={generating}
-          onClick={() => run(GUIDE_SECTIONS.map(s => s.key))}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-stone-100 text-stone-700 text-[13px] font-semibold disabled:opacity-60 hover:bg-stone-200"
+          onClick={() => run(missingKeys)}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors disabled:opacity-40"
+          style={{ background: '#c05a17', color: '#fff', fontSize: 13.5, fontWeight: 600 }}
         >
-          {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-          Rigenera tutta la guida
+          {generating ? <Loader2 className="w-4 h-4 animate-spin shrink-0" /> : <BookOpen className="w-4 h-4 shrink-0" />}
+          Genera le sezioni mancanti ({missingKeys.length})
         </button>
-      </div>
-      {generating && <p className="text-stone-400 text-[12.5px] mt-2">Giulia sta scrivendo…</p>}
-      {error && <p className="text-red-600 text-[12.5px] mt-2">{error}</p>}
-    </PanelShell>
-  )
-}
-
-function PanelShell({ icon, children, className }: { icon?: React.ReactNode; children: React.ReactNode; className?: string }) {
-  return (
-    <div className={`rounded-2xl border px-5 py-4 ${className ?? 'bg-white border-stone-200'}`}>
-      <div className="flex items-start gap-3">
-        {icon && <div className="w-9 h-9 rounded-full bg-terra-50 flex items-center justify-center shrink-0">{icon}</div>}
-        <div className="flex-1 min-w-0">{children}</div>
-      </div>
+      )}
+      <button
+        type="button"
+        disabled={generating}
+        onClick={() => run(GUIDE_SECTIONS.map(s => s.key))}
+        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors disabled:opacity-40"
+        style={{ background: '#f1e9d2', color: '#3f3a22', fontSize: 13.5, fontWeight: 600 }}
+      >
+        {generating && <Loader2 className="w-4 h-4 animate-spin shrink-0" />}
+        Rigenera tutta la guida
+      </button>
+      {generating && <p className="text-[11.5px]" style={{ color: '#8a7f52' }}>Giulia sta scrivendo…</p>}
+      {error && <p className="text-[11.5px]" style={{ color: '#b3413a' }}>{error}</p>}
     </div>
   )
 }

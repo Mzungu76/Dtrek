@@ -181,7 +181,6 @@ export default function PercorsoToolsDrawer({
             aiUnavailable={aiUnavailable}
             trialExpired={trialExpired}
             onHikeUpdate={onHikeUpdate}
-            panelClassName="border-[#e4d9bd] bg-[#f1e9d2]"
           />
 
           <SectionLabel>Esporta</SectionLabel>
