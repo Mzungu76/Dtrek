@@ -55,7 +55,10 @@ const THEMES = {
     pillBg: '#f1e9d2', pillText: '#6b6142',
   },
   taccuino: {
-    paperBg: TACCUINO_PAPER.base, hairline: TACCUINO_PAPER.cardBorder, inkMuted: TACCUINO_INK.handMuted,
+    // Fase 31 — `hairline` con opacità (non il colore pieno di `cardBorder`): la specifica chiede
+    // separatori "marrone/beige molto tenue, opacità 0.4-0.6", non una linea piena come un bordo
+    // di card. `80` = ~50% alpha in notazione hex a 8 cifre.
+    paperBg: TACCUINO_PAPER.base, hairline: `${TACCUINO_PAPER.cardBorder}80`, inkMuted: TACCUINO_INK.handMuted,
     inkFooter: TACCUINO_INK.handMuted, pillBg: TACCUINO_PAPER.card, pillText: TACCUINO_INK.hand,
   },
 } as const
@@ -170,7 +173,12 @@ export default function BookPage({
 
       <div
         className="fixed inset-x-0 bottom-0 z-10 flex items-stretch justify-around"
-        style={{ background: t.pillBg, borderTop: `1px solid ${t.hairline}`, paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+        style={{
+          background: t.pillBg, borderTop: `1px solid ${t.hairline}`, paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+          // Fase 31 — solo il taccuino: "una fascia di carta sovrapposta alla pagina", un'ombra
+          // morbida verso l'alto invece del confine piatto di prima (la pergamena resta invariata).
+          boxShadow: theme === 'taccuino' ? '0 -3px 10px rgba(41,35,30,0.06)' : undefined,
+        }}
       >
         {prevHref ? (
           <Link href={prevHref} className="flex flex-col items-center justify-center gap-1 px-5 py-2.5" style={navButtonStyle}>
