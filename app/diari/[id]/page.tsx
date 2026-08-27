@@ -4,6 +4,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import RouteThumb from '@/components/RouteThumb'
+import { GalleryMapThumb } from '@/components/routehub/BottomGallery'
 import SectionEyebrow from '@/components/bacheca/SectionEyebrow'
 import RecoSuggestedRow from '@/components/bacheca/RecoSuggestedRow'
 import BookPage from '@/components/libro/BookPage'
@@ -15,10 +16,7 @@ import type { DiarioDetail } from '@/app/api/diaries/[id]/route'
 import type { RecommendationCard } from '@/lib/routeBuilder/generateRecommendations'
 import { getUserSettingsCached, updateUserSettings } from '@/lib/sync/userSettingsStore'
 import { FONT } from '@/lib/designTokens'
-import {
-  TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, FONT_HAND,
-  TaccuinoPaperTexture, HandWobbleFilter, useHandWobbleId,
-} from '@/lib/taccuinoTokens'
+import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, FONT_HAND, TaccuinoPaperTexture } from '@/lib/taccuinoTokens'
 import {
   ArrowDown, ArrowLeft, ArrowUp, Check, CheckCircle2, ChevronRight, Clock, Loader2, Lock, LockOpen, Mountain,
   Plus, Route, Search, Share2, Sparkles, Star, Trash2, TrendingUp, X,
@@ -302,11 +300,19 @@ function DiarioDetailPageClassico() {
  * `taccuino-canvas/SommarioTaccuino.dc.html` (non nel repo) — texture di carta e piega a mano
  * (`BookPage.tsx`, tema "taccuino"), copertina come tassello incollato (bordo + ombra sfalsata +
  * rotazione), titolo/sottotitolo/pulsante/chip/righe sul font a mano (`FONT_HAND`, non solo il
- * titolo), miniatura di ogni percorso ricalcata a mano dalla traccia reale (`RouteThumb` con
- * tratteggio + tremore condiviso, non più `GalleryMapThumb`), spunta disegnata per i percorsi con
- * un Reportage. Le rotazioni (`transform: rotate(...)`) restano solo su titolo/pulsante/copertina
- * — applicarle anche a ogni riga dell'elenco avrebbe reso una lista densa illeggibile invece che
- * "artigianale".
+ * titolo), spunta disegnata per i percorsi con un Reportage. Le rotazioni
+ * (`transform: rotate(...)`) restano solo su titolo/pulsante/copertina — applicarle anche a ogni
+ * riga dell'elenco avrebbe reso una lista densa illeggibile invece che "artigianale".
+ *
+ * Fase 21 aveva anche sostituito la miniatura di ogni riga con `RouteThumb` (traccia ricalcata a
+ * mano, tratteggiata, con un filtro SVG `feDisplacementMap` condiviso) al posto della vera mappa
+ * `GalleryMapThumb` — segnalato a schermo insieme a un difetto separato (titolo/statistiche di
+ * ogni riga invisibili, pur presenti nel DOM): la causa più verosimile è un bug di compositing
+ * GPU noto su Android/Chromium con filtri SVG dentro contenitori `overflow:hidden` adiacenti a
+ * testo. **Fase 22** ripristina `GalleryMapThumb` (mappa OSM reale, invariata) — l'utente ha
+ * anche chiesto esplicitamente di tenere la mappa vera invece di un disegno astratto — con un
+ * `filter` CSS (non SVG) sul contenitore per scaldarne i toni verso la palette taccuino: stesso
+ * meccanismo di ricolorazione, nessun filtro SVG sospetto vicino al testo della riga.
  *
  * Adattamento deliberato: qui e nella pagina di riepilogo del Percorso non c'è un "Apri in
  * modalità classica" a cui rimandare come per Guida/Reportage (/guida/[id], /resoconto/[id]
@@ -335,10 +341,6 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
   const [statusFilter, setStatusFilter] = useState<SommarioStatusFilter>('all')
   const [sortBy, setSortBy] = useState<SommarioSortKey>('date')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
-  // Un solo filtro "tratto a mano" per l'intera pagina (lib/taccuinoTokens.tsx), referenziato da
-  // ogni miniatura di percorso sotto — mai un id per riga: sarebbe lo stesso filtro duplicato N
-  // volte nel DOM per un elenco che può avere decine di percorsi.
-  const routeWobbleId = useHandWobbleId()
 
   useEffect(() => {
     fetch(`/api/diaries/${encodeURIComponent(diaryId)}`)
@@ -410,12 +412,6 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
         sectionLabel="Indice"
         theme="taccuino"
       >
-        {/* Filtro "tratto a mano" montato una volta sola, referenziato da ogni miniatura di
-            percorso sotto — vedi routeWobbleId. */}
-        <svg width={0} height={0} style={{ position: 'absolute' }} aria-hidden="true">
-          <defs><HandWobbleFilter id={routeWobbleId} baseFrequency={0.03} scale={3} seed={4} /></defs>
-        </svg>
-
         <div className="flex items-start gap-3 mb-3">
           {/* Riproduzione in piccolo dell'effettiva copertina del Diario (foto/gradiente + testi),
               stessa DiarioCoverThumb con `width` del drawer — non un'immagine a sé. Cornice "tassello
@@ -562,21 +558,20 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                       verticale da una riga all'altra, indipendentemente da quanto testo hanno le
                       righe vicine. */}
                   <Link href={`${percorsoPath}/guida/il_percorso`} className="flex items-center gap-3 flex-1 min-w-0">
-                    {/* Miniatura "ricalcata a mano" dalla traccia reale (RouteThumb, non un
-                        disegno finto) — tratto sepia tratteggiato + tremore condiviso
-                        (routeWobbleId), quadrata senza arrotondamento come nel mockup. */}
-                    <div className="w-14 h-14 shrink-0 overflow-hidden relative" style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}>
+                    {/* Vera mappa OSM (GalleryMapThumb, invariata — stessa usata dalla galleria
+                        Guida/Resoconto), non un disegno astratto: un tentativo precedente qui
+                        (traccia ricalcata a mano su sfondo pieno) toglieva un'informazione reale
+                        (dove si trova il percorso) senza motivo — l'utente l'ha chiesta indietro
+                        esplicitamente. Il filtro CSS sul contenitore (non sul componente, che resta
+                        neutro per gli altri suoi usi) scalda i toni delle tile verso la palette
+                        taccuino invece del blu/verde standard della mappa. */}
+                    <div
+                      className="w-[76px] h-[76px] rounded-[3px] shrink-0 overflow-hidden relative"
+                      style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}`, filter: 'sepia(0.55) saturate(1.6) hue-rotate(-10deg) brightness(0.92) contrast(1.05)' }}
+                    >
                       {p.routePolyline && p.routePolyline.length > 1
-                        ? (
-                          <RouteThumb
-                            polyline={p.routePolyline}
-                            color={TACCUINO_INK.mapSepia}
-                            strokeWidth={2}
-                            strokeDasharray="1 5"
-                            filter={`url(#${routeWobbleId})`}
-                          />
-                        )
-                        : <div className="w-full h-full flex items-center justify-center"><Mountain className="w-4 h-4" style={{ color: TACCUINO_PAPER.cardBorder }} /></div>}
+                        ? <GalleryMapThumb polyline={p.routePolyline} />
+                        : <div className="w-full h-full flex items-center justify-center"><Mountain className="w-5 h-5" style={{ color: TACCUINO_PAPER.cardBorder }} /></div>}
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate" style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 17, color: TACCUINO_INK.typed }}>{p.title}</p>

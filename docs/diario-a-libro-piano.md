@@ -705,6 +705,34 @@ punto per punto contro il mockup:
   Rotazioni tenute solo su titolo/pulsante/copertina, non sulle righe dell'elenco (a quella densità
   avrebbe reso illeggibile invece che artigianale).
 
+**Fase 22 — Torna la vera mappa OSM nelle righe, ricolorata invece che astratta** ✅ **COMPLETATA**
+
+Verificata a schermo la Fase 21, due segnalazioni sulla stessa riga dell'elenco Percorsi:
+
+1. Titolo, statistiche ed etichetta di stato di ogni riga non si vedevano più — presenti nel DOM
+   (verificato con un rendering isolato della riga fuori dall'app, bypassando l'autenticazione via
+   `isSharedContentPath`/`isPublicPath`, `lib/publicPaths.ts`), ma non a schermo. La causa più
+   probabile individuata: `RouteThumb` con `filter="url(#...)"` (Fase 21, `feTurbulence`/
+   `feDisplacementMap`) dentro un contenitore `overflow:hidden` adiacente al testo — un bug di
+   compositing GPU non raro su Android/Chromium con filtri SVG in questa combinazione, che può
+   corrompere il rendering di contenuto adiacente invece che solo dell'elemento filtrato. Non
+   riprodotto con certezza assoluta (serve un dispositivo Android reale per confermarlo), ma
+   sufficientemente verosimile da giustificare la rimozione preventiva del filtro SVG da un
+   elemento di lista ripetuto N volte per pagina.
+2. Richiesta esplicita: la miniatura di ogni percorso deve tornare a essere la vera mappa OSM
+   (roads, terreno — un'informazione reale, dove si trova il percorso), non un disegno astratto,
+   ma con i toni scaldati verso la palette taccuino invece del blu/verde standard della mappa.
+
+Le due correzioni convergono sulla stessa modifica: `GalleryMapThumb` (mappa Leaflet reale, invariata
+— stessa usata dalla galleria Guida/Resoconto, `components/routehub/BottomGallery.tsx`) torna al
+posto di `RouteThumb`+filtro SVG. La ricolorazione usa un `filter` **CSS** (`sepia() saturate()
+hue-rotate() brightness() contrast()`) sul contenitore della miniatura, non un filtro SVG — stesso
+risultato (le tile prendono i toni caldi del taccuino), ma un meccanismo di rendering completamente
+diverso (raster, non SVG `feDisplacementMap`) e non applicato al componente `GalleryMapThumb` stesso
+(che resta neutro per i suoi altri usi, es. la galleria non-taccuino). `RouteThumb`, `useHandWobbleId`
+e `HandWobbleFilter` restano nel repo (altri usi legittimi, es. la ricerca globale dello scaffale non
+usa filtri SVG) — solo questa riga smette di combinarli nel modo sospetto.
+
 ## File critici
 - `components/guida/GuideReader.tsx`, `components/resoconto/ReportReader.tsx` — sorgente da cui
   estratto in Fase 0, non riscritti.
@@ -804,10 +832,14 @@ punto per punto contro il mockup:
   pergamena hardcoded sostituiti da `TACCUINO_PAPER`/`TACCUINO_INK`, titolo del Diario su
   `FONT_HAND`. Fase 21: vedi sopra — copertina a tassello, font a mano diffuso, chip a contorno,
   miniature `RouteThumb` ricalcate a mano, divisore tratteggiato, evidenziatore, spunta `Check`.
+  Fase 22: miniatura tornata a `GalleryMapThumb` (mappa OSM reale) con un `filter` CSS di
+  ricolorazione sul contenitore, al posto di `RouteThumb`+filtro SVG (sospettato di un bug di
+  compositing che rendeva invisibili titolo/statistiche della riga).
 - `lib/taccuinoTokens.tsx` — Fase 21: `HandWobbleFilter` con `baseFrequency`/`scale` opzionali;
   nuovi `TaccuinoPaperTexture`, `TaccuinoSpineShadow`, token `TACCUINO_PAPER.highlight`.
 - `components/RouteThumb.tsx` — Fase 21: `strokeDasharray`/`filter` opzionali (default assenti,
-  nessuna modifica per i chiamanti esistenti).
+  nessuna modifica per i chiamanti esistenti). Non più usato dal Sommario dopo la Fase 22, restano
+  validi per altri chiamanti futuri.
 - `app/diari/[id]/percorsi/[percorsoId]/page.tsx` — Fase 15: `PercorsoPageLibro` rimossa del tutto,
   redirect immediato alla Guida a flag acceso. `PercorsoPageClassico`/`ReportageSection`
   invariate.
