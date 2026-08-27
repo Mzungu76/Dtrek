@@ -31,7 +31,12 @@ export function DiarioCoverThumb({ coverUrl, className, width, title, subtitle, 
     const height = width * (PDF_PAGE_H / PDF_PAGE_W)
     return (
       <div className={`relative overflow-hidden ${className ?? ''}`} style={{ width, height }}>
-        <div style={{ transform: `scale(${scale})`, transformOrigin: 'top left' }}>
+        {/* <DiarioCover> ha un margin: '24px auto' proprio (pensato per la sua vetrina a schermo
+            intero su /pubblica e /diari/[id]/copertina, dove c'è spazio intorno) — qui, ritagliata
+            in una miniatura, quel margine spingeva la copertina verso il basso lasciando un vuoto
+            in cima e tagliando il fondo (segnalato dall'utente). translateY(-24px) prima dello
+            scale lo annulla: le unità sono quelle "vere" del contenuto non ancora scalato. */}
+        <div style={{ transform: `scale(${scale}) translateY(-24px)`, transformOrigin: 'top left' }}>
           <DiarioCover coverUrl={coverUrl} diaryTitle={title} diarySubtitle={subtitle ?? ''} diaryAuthor={author ?? ''} />
         </div>
       </div>
