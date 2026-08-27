@@ -89,6 +89,47 @@ export function HandWobbleFilter({ id, seed = 5, baseFrequency = 0.02, scale = 3
 }
 
 /**
+ * Bordo "disegnato a mano" — un `<rect>` con lieve tremore organico (`HandWobbleFilter`), pensato
+ * per sostituire un `border` CSS piatto su miniature, pulsanti e pillole (Fase 27, richiesto
+ * dall'utente col mockup alla mano: "contorni... leggermente allungati come se fossero cerchiati a
+ * mano"). Sicuro rispetto al bug delle Fasi 23-24: è un `<svg>` **assoluto dentro il proprio
+ * elemento** (`position: relative` sul chiamante), mai `fixed`/`absolute` a piena pagina — la
+ * classe di bug isolata allora riguardava solo un `<svg>` che *ricopre la pagina*, non una forma
+ * piccola contenuta nel proprio riquadro (esattamente il caso d'uso per cui `HandWobbleFilter` era
+ * già documentato sicuro).
+ *
+ * `viewBox="0 0 100 100"` con `preserveAspectRatio="none"` fa scalare il rettangolo alle
+ * dimensioni reali dell'elemento (anche non quadrato) senza calcoli manuali — `vectorEffect=
+ * "non-scaling-stroke"` (stesso trucco di `components/RouteThumb.tsx`) mantiene lo spessore del
+ * tratto in pixel reali invece di deformarsi con lo stretch. Un `rx` alto (es. 50) su un
+ * rettangolo largo produce automaticamente una pillola — la leggera ellitticità che ne risulta
+ * sugli angoli (raggio non uniforme quando il riquadro non è quadrato) è parte del look "non
+ * perfettamente geometrico", non un difetto da correggere.
+ */
+export function HandDrawnFrame({
+  stroke, strokeWidth = 1.5, rx = 4, dashed = false, seed = 5, className = '',
+}: { stroke: string; strokeWidth?: number; rx?: number; dashed?: boolean; seed?: number; className?: string }) {
+  const filterId = useHandWobbleId()
+  return (
+    <svg
+      aria-hidden="true"
+      className={`absolute inset-0 w-full h-full pointer-events-none ${className}`}
+      viewBox="0 0 100 100"
+      preserveAspectRatio="none"
+    >
+      <defs><HandWobbleFilter id={filterId} seed={seed} baseFrequency={0.06} scale={1.6} /></defs>
+      <rect
+        x="2" y="2" width="96" height="96" rx={rx}
+        fill="none" stroke={stroke} strokeWidth={strokeWidth}
+        strokeDasharray={dashed ? '3 2.5' : undefined}
+        filter={`url(#${filterId})`}
+        vectorEffect="non-scaling-stroke"
+      />
+    </svg>
+  )
+}
+
+/**
  * Texture di sfondo del taccuino — carta invecchiata (due macchie sfumate), tutta la pagina,
  * dietro al contenuto. Verificata nel mockup (`taccuino-canvas/SommarioTaccuino.dc.html`/
  * `Main.dc.html`, non nel repo).
@@ -140,27 +181,37 @@ export function TaccuinoPaperTexture({ flip = false }: { flip?: boolean }) {
  * pagina raggiunta "sfogliando in avanti", destro per una "all'indietro" (stessa idea del mockup,
  * pagine alternate). Per ora ogni pagina taccuino usa `side="left"`; l'alternanza vera arriverà
  * insieme al routing multi-pagina che la giustifica.
+ *
+ * Fase 27 — striscia allargata e sfumata invece della sola linea sottile: un `<div>` con
+ * `background: linear-gradient(...)` (CSS puro, dietro) dà la caduta morbida d'ombra verso il
+ * centro pagina vista nel mockup, la linea organica sopra (ora di nuovo col `HandWobbleFilter` —
+ * verificato sicuro in Fase 24, questa striscia stretta non è mai stata la causa del bug) resta il
+ * dettaglio "disegnato a matita" della piega vera e propria, non più l'unica fonte d'ombra.
  */
 export function TaccuinoSpineShadow({ side = 'left' }: { side?: 'left' | 'right' }) {
-  const width = side === 'left' ? 22 : 26
+  const width = side === 'left' ? 34 : 38
   const d = side === 'left'
     ? 'M0 0 Q18 70 10 170 Q2 270 16 390 Q26 470 8 570 Q-4 670 14 750 Q22 800 0 844'
     : 'M26 0 Q6 60 14 160 Q22 260 8 380 Q-4 460 12 560 Q24 660 6 740 Q-2 800 26 844'
+  const filterId = useHandWobbleId()
   return (
-    <svg
+    <div
       aria-hidden="true"
       className={`fixed inset-y-0 z-40 pointer-events-none ${side === 'left' ? 'left-0' : 'right-0'}`}
-      width={width} height="100%"
-      viewBox={`0 0 ${width} 844`}
-      preserveAspectRatio="none"
+      style={{ width }}
     >
-      {/* Niente più `filter={HandWobbleFilter}` da qui (tolto in Fase 23 insieme a
-          TaccuinoPaperTexture, per sospetto) — verificato in Fase 24 che QUESTO componente non
-          era la causa del bug (isolato con un test A/B, restava innocuo anche col filtro): la
-          striscia stretta (22-26px) non è un `<svg>` che ricopre la pagina come l'altro. Il
-          filtro non è stato reintrodotto comunque — la curva resta organica di per sé, il
-          tremore aggiuntivo era un dettaglio minore non essenziale. */}
-      <path d={d} fill="none" stroke="rgba(0,0,0,0.13)" strokeWidth={side === 'left' ? 9 : 10} />
-    </svg>
+      <div
+        className="absolute inset-0"
+        style={{
+          background: side === 'left'
+            ? 'linear-gradient(to right, rgba(0,0,0,0.16) 0%, rgba(0,0,0,0.05) 55%, transparent 100%)'
+            : 'linear-gradient(to left, rgba(0,0,0,0.16) 0%, rgba(0,0,0,0.05) 55%, transparent 100%)',
+        }}
+      />
+      <svg width={width} height="100%" viewBox={`0 0 ${width - 12} 844`} preserveAspectRatio="none" className="absolute inset-0">
+        <defs><HandWobbleFilter id={filterId} seed={3} baseFrequency={0.015} scale={3} /></defs>
+        <path d={d} fill="none" stroke="rgba(0,0,0,0.15)" strokeWidth={side === 'left' ? 9 : 10} filter={`url(#${filterId})`} />
+      </svg>
+    </div>
   )
 }
