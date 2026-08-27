@@ -10,7 +10,7 @@ import type { DiarySummary } from '@/app/api/diaries/route'
 import type { AllPercorsiRow } from '@/app/api/percorsi/route'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import { FONT } from '@/lib/designTokens'
-import { TACCUINO_PAPER, FONT_KALAM } from '@/lib/taccuinoTokens'
+import { TACCUINO_PAPER, FONT_HAND } from '@/lib/taccuinoTokens'
 import { ArrowRight, BookMarked, BookOpen, Compass, Loader2, Lock, LockOpen, Mountain, Pencil, Plus, Search, X } from 'lucide-react'
 
 /**
@@ -362,6 +362,11 @@ function GlobalRouteSearch() {
  * ragione: prima l'unico modo per ritrovare un percorso senza ricordarne il Diario era uscire da
  * qui verso "Tutti i Percorsi" — ora è disponibile senza lasciare lo scaffale, e quel link resta
  * sotto per la vista esaustiva.
+ *
+ * Fase 19 — anche `<Navbar/>` (tab Diario/Percorsi/Resoconti) è stata tolta da qui: l'utente ha
+ * chiesto di abbandonare del tutto il vecchio chrome su questa pagina, non solo il drawer. Resta
+ * invariata sulle pagine non ancora convertite (`/percorsi`, i Diari classici) — è una rimozione
+ * per-pagina, non un cambio del componente condiviso.
  */
 function DiariPageLibro() {
   const [diaries, setDiaries] = useState<DiarySummary[] | null>(null)
@@ -376,7 +381,7 @@ function DiariPageLibro() {
 
   return (
     <div
-      className={`min-h-screen ${MOBILE_TOPBAR_SPACER}`}
+      className="min-h-screen"
       style={{
         background: `radial-gradient(ellipse at 15% 0%, ${TACCUINO_PAPER.stain1} 0%, transparent 45%),`
           + `radial-gradient(ellipse at 100% 30%, ${TACCUINO_PAPER.stain2} 0%, transparent 50%),`
@@ -384,12 +389,11 @@ function DiariPageLibro() {
       }}
     >
       <BookSpineShadow variant="light" />
-      <Navbar />
-      <div className="max-w-[900px] mx-auto px-4 sm:px-8 pt-8 pb-14">
+      <div className="max-w-[900px] mx-auto px-4 sm:px-8 pb-14" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 28px)' }}>
         <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', fontSize: 11, color: '#8a7f52' }} className="mb-1.5">
           Diario
         </p>
-        <h1 style={{ fontFamily: FONT_KALAM, fontWeight: 700, fontSize: 34, color: '#3f3a22' }} className="mb-8">
+        <h1 style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 34, color: '#3f3a22' }} className="mb-8">
           I miei Diari
         </h1>
 

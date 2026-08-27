@@ -10,17 +10,18 @@
 // parte lo confonderebbe. Quando il taccuino avrà preso il posto della pergamena ovunque, questi
 // token potranno confluire lì.
 //
-// Il font Kalam è self-hosted da next/font (app/layout.tsx, variabile --font-kalam) con lo stesso
-// meccanismo degli altri — mai scrivere il nome letterale "Kalam" in un fontFamily al di fuori di
-// qui, si comporterebbe come un font non caricato (stesso principio spiegato in designTokens.ts
-// per gli altri font del brand).
+// Il font a mano è self-hosted da next/font (app/layout.tsx, variabile --font-caveat) con lo
+// stesso meccanismo degli altri — mai scrivere il nome letterale del font in un fontFamily al di
+// fuori di qui, si comporterebbe come un font non caricato (stesso principio spiegato in
+// designTokens.ts per gli altri font del brand). Caveat sostituisce Kalam, provato per primo in
+// Fase 17 (git history) — stesso ruolo, tratto diverso, ancora in valutazione.
 import { useId } from 'react'
 import { TERRA } from './designTokens'
 
-export const FONT_VAR_KALAM = '--font-kalam'
+export const FONT_VAR_HAND = '--font-caveat'
 /** Titoli e annotazioni scritte a mano — corpo del testo resta su FONT.lora (designTokens.ts):
  *  professionalità e precisione del contenuto, non tutto scritto a mano allo stesso modo. */
-export const FONT_KALAM = `var(${FONT_VAR_KALAM}), cursive`
+export const FONT_HAND = `var(${FONT_VAR_HAND}), cursive`
 
 /** Carta invecchiata — sfondo pagina e le due macchie/ombreggiature che le danno profondità. */
 export const TACCUINO_PAPER = {

@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next'
-import { Playfair_Display, DM_Sans, JetBrains_Mono, Barlow_Condensed, Lora, Kalam } from 'next/font/google'
+import { Playfair_Display, DM_Sans, JetBrains_Mono, Barlow_Condensed, Lora, Caveat } from 'next/font/google'
 import './globals.css'
 import AppChrome from '@/components/AppChrome'
 
@@ -29,9 +29,10 @@ const lora = Lora({
 })
 // Direzione "taccuino topografico" (docs/diario-a-libro-piano.md, Fase 17 — variante approvata,
 // integrazione graduale) — annotazioni e titoli scritti a mano, vedi lib/taccuinoTokens.tsx.
-const kalam = Kalam({
+// Caveat sostituisce Kalam (Fase 19, ancora in prova): stesso ruolo, tratto diverso.
+const caveat = Caveat({
   subsets: ['latin'], weight: ['400', '700'],
-  variable: '--font-kalam', display: 'swap',
+  variable: '--font-caveat', display: 'swap',
 })
 
 export const metadata: Metadata = {
@@ -71,7 +72,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="it" className={`${playfairDisplay.variable} ${dmSans.variable} ${jetBrainsMono.variable} ${barlowCondensed.variable} ${lora.variable} ${kalam.variable}`}>
+    <html lang="it" className={`${playfairDisplay.variable} ${dmSans.variable} ${jetBrainsMono.variable} ${barlowCondensed.variable} ${lora.variable} ${caveat.variable}`}>
       <body className="antialiased">
         <AppChrome>{children}</AppChrome>
       </body>
