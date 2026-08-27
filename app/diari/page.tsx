@@ -1,14 +1,17 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import BookSpineShadow from '@/components/libro/BookSpineShadow'
 import { DiarioCoverThumb } from '@/components/diario/DiarioCoverThumb'
+import RouteThumb from '@/components/RouteThumb'
 import type { DiarySummary } from '@/app/api/diaries/route'
+import type { AllPercorsiRow } from '@/app/api/percorsi/route'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import { FONT } from '@/lib/designTokens'
-import { ArrowRight, BookMarked, BookOpen, Compass, Loader2, Lock, LockOpen, Pencil, Plus } from 'lucide-react'
+import { TACCUINO_PAPER, FONT_KALAM } from '@/lib/taccuinoTokens'
+import { ArrowRight, BookMarked, BookOpen, Compass, Loader2, Lock, LockOpen, Mountain, Pencil, Plus, Search, X } from 'lucide-react'
 
 /**
  * "I miei Diari" — Fase 1 di docs/diario-fulcro-piano.md (sola lettura). Home del Diario: ogni
@@ -111,8 +114,11 @@ function DiariPageClassico() {
 /**
  * Copertina di un Diario — stessa identità visiva validata nel mockup "Diario a schermo intero"
  * (artifact 2e1f7d0a-5d69-4e17-9c8b-038aa651e13b, funzione shelfCoverHtml/.bk-cover): dorso di
- * libro verticale, taglio pagine sul bordo destro, titolo/occhiello/sottotitolo centrati.
- * Adattamento deliberato rispetto al mockup: qui è una riga scorrevole di copertine reali (link
+ * libro verticale, taglio pagine sul bordo destro, titolo/occhiello/sottotitolo centrati. Il
+ * dorso lucido resta invariato dalla Fase 18 (direzione taccuino, vedi `DiariPageLibro` sotto):
+ * più libri scuri appoggiati su un foglio di carta chiara è coerente con quell'estetica, solo
+ * l'ombra è stata scaldata per non stonare sul nuovo sfondo chiaro.
+ * Adattamento deliberato rispetto al mockup: qui è una griglia di copertine reali (link
  * cliccabili, niente drag/swipe a schermo intero) invece di un carosello a una copertina alla
  * volta — più utilizzabile su desktop, e senza reimplementare una gestura che non si può
  * verificare a schermo in questa sandbox.
@@ -122,11 +128,11 @@ function DiarioCoverCard({ d, index }: { d: DiarySummary; index: number }) {
     // Non un unico <Link> come nel mockup: "Personalizza" (foto/testi di copertina, pagina a sé —
     // vedi /diari/[id]/copertina) deve restare un link a sé, non annidato nel link che apre il
     // Diario.
-    <div className="flex flex-col items-center gap-3 shrink-0 w-[168px] sm:w-[190px]">
+    <div className="flex flex-col items-center gap-3 w-full">
       <Link href={`/diari/${encodeURIComponent(d.id)}`} className="w-full flex flex-col items-center">
       <div
         className="relative w-full rounded-[6px] overflow-hidden"
-        style={{ aspectRatio: '3 / 4', boxShadow: '0 22px 44px -18px rgba(0,0,0,0.6), 0 2px 0 rgba(255,255,255,0.06) inset' }}
+        style={{ aspectRatio: '3 / 4', boxShadow: '0 16px 30px -14px rgba(61,43,31,0.4), 0 2px 0 rgba(255,255,255,0.06) inset' }}
       >
         <DiarioCoverThumb coverUrl={d.coverUrl} className="absolute inset-0" />
         {d.coverUrl && <div className="absolute inset-0 bg-gradient-to-b from-black/10 to-black/60" />}
@@ -222,31 +228,141 @@ function NewDiarioTile() {
   }
 
   return (
-    <div className="flex flex-col items-center gap-3 shrink-0 w-[168px] sm:w-[190px]">
+    <div className="flex flex-col items-center gap-3 w-full">
       <button
         type="button"
         onClick={handleCreate}
         disabled={creating}
         className="relative w-full rounded-[6px] flex flex-col items-center justify-center gap-2 disabled:opacity-60"
-        style={{ aspectRatio: '3 / 4', border: '2px dashed rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.03)' }}
+        style={{ aspectRatio: '3 / 4', border: `2px dashed ${TACCUINO_PAPER.cardBorder}`, background: TACCUINO_PAPER.card }}
       >
         {creating
-          ? <Loader2 className="w-6 h-6 animate-spin" style={{ color: 'rgba(255,255,255,0.55)' }} />
-          : <Plus className="w-6 h-6" style={{ color: 'rgba(255,255,255,0.55)' }} />}
-        <span style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 11, color: 'rgba(255,255,255,0.55)' }}>
+          ? <Loader2 className="w-6 h-6 animate-spin" style={{ color: '#a9915f' }} />
+          : <Plus className="w-6 h-6" style={{ color: '#a9915f' }} />}
+        <span style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 11, color: '#8a7f52' }}>
           Nuovo Diario
         </span>
       </button>
       {blockedMessage && (
-        <p className="text-[11.5px] text-center" style={{ color: 'rgba(255,255,255,0.6)' }}>
+        <p className="text-[11.5px] text-center" style={{ color: '#8a7f52' }}>
           {blockedMessage}{' '}
-          <a href="/prezzi" className="underline" style={{ color: '#e9ab64' }}>Sblocca Dtrek</a>
+          <a href="/prezzi" className="underline" style={{ color: '#c05a17' }}>Sblocca Dtrek</a>
         </p>
       )}
     </div>
   )
 }
 
+/**
+ * Ricerca testuale su tutti i Percorsi, in ogni Diario — Fase 18: prima l'unico modo per ritrovare
+ * un percorso senza ricordare in quale Diario fosse era andare alla pagina "Tutti i Percorsi" a
+ * sé (`/percorsi`, ancora raggiungibile, invariata, sotto). Qui invece i risultati compaiono senza
+ * lasciare lo scaffale — stessa API (`/api/percorsi`), un sottoinsieme (max 8) invece dell'elenco
+ * intero perché qui è una scorciatoia, non la vista esaustiva.
+ */
+function GlobalRouteSearch() {
+  const [rows, setRows] = useState<AllPercorsiRow[] | null>(null)
+  const [query, setQuery] = useState('')
+
+  useEffect(() => {
+    fetch('/api/percorsi')
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
+      .then(setRows)
+      .catch(() => setRows([]))
+  }, [])
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q || !rows) return []
+    return rows.filter(r => r.title.toLowerCase().includes(q) || (r.diaryTitle ?? '').toLowerCase().includes(q))
+  }, [rows, query])
+
+  const hasQuery = query.trim().length > 0
+
+  return (
+    <div className="mb-8">
+      <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 11, color: '#8a7f52' }} className="mb-2">
+        Cerca un Percorso
+      </p>
+      <div className="relative">
+        <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#a9915f' }} />
+        <input
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          placeholder="Titolo del percorso o del Diario…"
+          className="w-full pl-8 pr-8 py-2.5 rounded-full text-[13px] outline-none"
+          style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}`, color: '#3f3a22' }}
+        />
+        {hasQuery && (
+          <button
+            onClick={() => setQuery('')}
+            className="absolute right-3 top-1/2 -translate-y-1/2"
+            style={{ color: '#a9915f' }}
+            aria-label="Cancella ricerca"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+
+      {hasQuery && (
+        rows === null ? (
+          <div className="flex items-center justify-center py-6">
+            <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#a9915f' }} />
+          </div>
+        ) : filtered.length === 0 ? (
+          <p className="text-[13px] py-4" style={{ color: '#8a7f52' }}>Nessun percorso corrisponde alla ricerca.</p>
+        ) : (
+          <div className="mt-2 flex flex-col rounded-2xl overflow-hidden" style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}>
+            {filtered.slice(0, 8).map(p => (
+              <Link
+                key={p.id}
+                href={p.diaryId ? `/diari/${encodeURIComponent(p.diaryId)}/percorsi/${encodeURIComponent(p.id)}/guida/il_percorso` : '/diari'}
+                className="flex items-center gap-3 px-3 py-2.5"
+                style={{ borderBottom: `1px dotted ${TACCUINO_PAPER.cardBorder}` }}
+              >
+                <div className="w-11 h-11 rounded-lg shrink-0 overflow-hidden relative" style={{ background: TACCUINO_PAPER.base }}>
+                  {p.routePolyline && p.routePolyline.length > 1
+                    ? <RouteThumb polyline={p.routePolyline} color="#c05a17" strokeWidth={2.5} />
+                    : <div className="w-full h-full flex items-center justify-center"><Mountain className="w-4 h-4" style={{ color: '#c9b98a' }} /></div>}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate" style={{ fontSize: 13.5, fontWeight: 600, color: '#3f3a22' }}>{p.title}</p>
+                  <div className="flex items-center gap-2 flex-wrap" style={{ fontSize: 10.5, color: '#8a7f52' }}>
+                    {p.diaryTitle && <span className="truncate">{p.diaryTitle}</span>}
+                    <span>{(p.distanceMeters / 1000).toFixed(1)} km</span>
+                    <span>+{Math.round(p.elevationGain)} m</span>
+                  </div>
+                </div>
+              </Link>
+            ))}
+            {filtered.length > 8 && (
+              <Link href="/percorsi" className="px-3 py-2.5 text-[12px] font-semibold text-center" style={{ color: '#c05a17' }}>
+                +{filtered.length - 8} altri risultati — apri Tutti i Percorsi
+              </Link>
+            )}
+          </div>
+        )
+      )}
+    </div>
+  )
+}
+
+/**
+ * "I miei Diari" in stile taccuino topografico — Fase 18 di docs/diario-a-libro-piano.md, primo
+ * uso reale di lib/taccuinoTokens.tsx (finora solo fondamenta inutilizzate). Sostituisce lo sfondo
+ * scuro immersivo ereditato dal mockup originale con la carta invecchiata già validata per la
+ * pergamena (BookPage.tsx) — i dorsi scuri delle copertine restano lucidi e invariati, come libri
+ * veri appoggiati su un tavolo di carta invece che su uno scaffale in penombra.
+ *
+ * Griglia verticale a 2 colonne (prima una riga scorrevole orizzontale): raggiunta ora direttamente
+ * dal bottone "Diari" della barra inferiore del Sommario (BookPage.tsx, Fase 18) invece che dal
+ * drawer laterale rimosso — che qui non avrebbe più senso, essendo questa stessa pagina la
+ * destinazione che il drawer duplicava. La ricerca sui Percorsi (GlobalRouteSearch) è la stessa
+ * ragione: prima l'unico modo per ritrovare un percorso senza ricordarne il Diario era uscire da
+ * qui verso "Tutti i Percorsi" — ora è disponibile senza lasciare lo scaffale, e quel link resta
+ * sotto per la vista esaustiva.
+ */
 function DiariPageLibro() {
   const [diaries, setDiaries] = useState<DiarySummary[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -259,37 +375,47 @@ function DiariPageLibro() {
   }, [])
 
   return (
-    <div className={`min-h-screen ${MOBILE_TOPBAR_SPACER}`} style={{ background: 'radial-gradient(ellipse at 50% 0%, #453b2c 0%, #2a2419 70%)' }}>
-      <BookSpineShadow variant="dark" />
+    <div
+      className={`min-h-screen ${MOBILE_TOPBAR_SPACER}`}
+      style={{
+        background: `radial-gradient(ellipse at 15% 0%, ${TACCUINO_PAPER.stain1} 0%, transparent 45%),`
+          + `radial-gradient(ellipse at 100% 30%, ${TACCUINO_PAPER.stain2} 0%, transparent 50%),`
+          + TACCUINO_PAPER.base,
+      }}
+    >
+      <BookSpineShadow variant="light" />
       <Navbar />
-      <div className="max-w-[1100px] mx-auto px-4 sm:px-8 pt-8 pb-14">
-        <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', fontSize: 11, color: 'rgba(255,255,255,0.45)' }} className="mb-1.5">
+      <div className="max-w-[900px] mx-auto px-4 sm:px-8 pt-8 pb-14">
+        <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', fontSize: 11, color: '#8a7f52' }} className="mb-1.5">
           Diario
         </p>
-        <h1 style={{ fontFamily: FONT.display, fontWeight: 600, fontSize: 26, color: '#fdf8ea' }} className="mb-8">
+        <h1 style={{ fontFamily: FONT_KALAM, fontWeight: 700, fontSize: 34, color: '#3f3a22' }} className="mb-8">
           I miei Diari
         </h1>
 
         {error && (
-          <p className="text-sm text-red-300 bg-red-950/40 border border-red-900 rounded-xl px-4 py-3 mb-6">
+          <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-6">
             Impossibile caricare i tuoi Diari: {error}
           </p>
         )}
 
         {diaries === null && !error ? (
-          <div className="flex items-center justify-center py-24 gap-3" style={{ color: 'rgba(255,255,255,0.4)' }}>
+          <div className="flex items-center justify-center py-24 gap-3" style={{ color: '#a9915f' }}>
             <Loader2 className="w-6 h-6 animate-spin" /><span>Caricamento…</span>
           </div>
         ) : (
           <>
-            <div className="flex gap-6 sm:gap-8 overflow-x-auto pb-4 -mx-4 px-4 sm:mx-0 sm:px-0">
+            <div className="grid grid-cols-2 gap-4 sm:gap-6 mb-8">
               {diaries?.map((d, i) => <DiarioCoverCard key={d.id} d={d} index={i} />)}
               <NewDiarioTile />
             </div>
+
+            <GlobalRouteSearch />
+
             <Link
               href="/percorsi"
-              className="inline-flex items-center gap-2 mt-4 text-[13px] hover:text-white transition-colors"
-              style={{ color: 'rgba(255,255,255,0.55)' }}
+              className="inline-flex items-center gap-2 text-[13px] transition-colors"
+              style={{ color: '#8a7f52' }}
             >
               <Compass className="w-4 h-4" /> Tutti i Percorsi, in ogni Diario <ArrowRight className="w-3.5 h-3.5" />
             </Link>

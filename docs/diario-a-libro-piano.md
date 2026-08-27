@@ -605,6 +605,38 @@ componente reale** — è la base su cui costruire, schermata per schermata, nel
 tenerlo separato da `lib/designTokens.ts` (che serve l'intera app nell'estetica attuale) evita di
 mescolare una direzione non ancora applicata da nessuna parte con quella in produzione.
 
+**Fase 18 — Il bottone "Diari" sostituisce il drawer, scaffale ridisegnato in taccuino** ✅ **COMPLETATA**
+
+L'utente ha segnalato, guardando il Sommario a schermo: il bottone "Indice" della barra inferiore
+apriva `DiarioSwitcherDrawer` (Fase 11) invece di portare davvero allo scaffale — ma con lo
+scaffale stesso migliorato (griglia, ricerca), quel drawer duplica una destinazione che ora vale la
+pena raggiungere per intero. "In questo contesto il Tab laterale non ha più molto senso."
+
+*Bottone "Diari".* `BookPage.tsx`: `onIndexClick` rimosso (un solo chiamante, il Sommario), il
+bottone "Indice"/"Diari" torna a essere sempre un `<Link href={indexHref}>` semplice; nuova prop
+opzionale `indexLabel` (default `"Indice"`) per l'etichetta — il Sommario passa `indexLabel="Diari"`
+perché lì porta allo scaffale, non al proprio stesso indice. `DiarioSwitcherDrawer.tsx` eliminato
+(zero chiamanti rimasti dopo questo cambio, non teneva capacità morta).
+
+*Scaffale in stile taccuino* (`app/diari/page.tsx`, `DiariPageLibro`) — primo uso reale di
+`lib/taccuinoTokens.tsx`, finora solo fondamenta inutilizzate (Fase 17):
+- Sfondo scuro immersivo → carta invecchiata (`TACCUINO_PAPER`, due macchie sfumate agli angoli),
+  `BookSpineShadow` da `dark` a `light`. I dorsi lucidi delle copertine restano invariati — libri
+  scuri su un tavolo di carta chiara invece che su uno scaffale in penombra, solo l'ombra di ogni
+  copertina è stata scaldata (era pensata per un fondo scuro).
+- Titolo "I miei Diari" sul font `Kalam` (`FONT_KALAM`) — prima annotazione a mano reale nell'app,
+  il resto dei testi (eyebrow, corpo) resta sui font esistenti.
+- Riga scorrevole orizzontale → griglia verticale `grid-cols-2`, più righe: la larghezza di ogni
+  cella (~165px su mobile con questo padding/gap) è praticamente identica ai 168px fissi di prima,
+  nessun ridimensionamento interno alle card necessario.
+- Nuovo `GlobalRouteSearch`: ricerca testuale su tutti i Percorsi (stessa `/api/percorsi` di
+  "Tutti i Percorsi"), risultati (max 8, per titolo o Diario) mostrati senza lasciare lo scaffale —
+  prima l'unico modo era uscire verso quella pagina a sé. Il link a quella pagina resta, spostato
+  sotto la ricerca (era subito sotto la riga di copertine).
+- `<Navbar/>` (tab Diario/Percorsi/Resoconti) **non toccata** — la richiesta di rimuovere "il Tab
+  laterale" riguardava il drawer (`DiarioSwitcherDrawer`, il pannello che scorre lateralmente), non
+  la barra di navigazione classica in cima, che resta come sempre.
+
 ## File critici
 - `components/guida/GuideReader.tsx`, `components/resoconto/ReportReader.tsx` — sorgente da cui
   estratto in Fase 0, non riscritti.
@@ -684,6 +716,14 @@ mescolare una direzione non ancora applicata da nessuna parte con quella in prod
 - `lib/taccuinoTokens.tsx`, `app/layout.tsx` (font `Kalam`) — nuovi in Fase 17: fondamenta della
   direzione "taccuino topografico" (approvata, integrazione graduale) — non ancora usati da
   nessun componente reale.
+- `components/libro/BookPage.tsx` — Fase 18: `onIndexClick` rimosso, nuova prop `indexLabel`
+  (default `"Indice"`) per l'etichetta del bottone che porta a `indexHref`.
+- `components/libro/DiarioSwitcherDrawer.tsx` — eliminato in Fase 18 (zero chiamanti rimasti: il
+  Sommario naviga ora direttamente allo scaffale via `indexHref="/diari"`, `indexLabel="Diari"`).
+- `app/diari/page.tsx` (`DiariPageLibro`) — Fase 18: primo uso reale di `lib/taccuinoTokens.tsx`
+  (carta invecchiata, font Kalam sul titolo); griglia `grid-cols-2` al posto della riga scorrevole;
+  nuovo `GlobalRouteSearch` (ricerca su `/api/percorsi` senza lasciare lo scaffale); link "Tutti i
+  Percorsi" spostato sotto la ricerca. `<Navbar/>` invariata.
 - `app/diari/[id]/percorsi/[percorsoId]/page.tsx` — Fase 15: `PercorsoPageLibro` rimossa del tutto,
   redirect immediato alla Guida a flag acceso. `PercorsoPageClassico`/`ReportageSection`
   invariate.

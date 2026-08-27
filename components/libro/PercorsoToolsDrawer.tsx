@@ -3,8 +3,8 @@
 // pallino "Reportage" (che portava alla pagina di riepilogo, eliminata su richiesta dell'utente):
 // tutto ciò che prima viveva su quella pagina o nella console "strumenti" di GuidaHub.tsx, ma mai
 // raggiungibile dal libro, ora sta qui — un solo posto, raggiungibile da ogni pagina di Guida.
-// Slide dal lato destro (non sinistro come DiarioSwitcherDrawer, per non confondere i due: uno è
-// navigazione tra Diari, questo sono azioni sul Percorso corrente).
+// Slide dal lato destro — azioni sul Percorso corrente, non navigazione tra Diari (quella vive
+// ora nello scaffale vero e proprio, /diari, non più in un drawer, Fase 18).
 //
 // Ogni strumento è un riuso diretto, non una reimplementazione:
 // - Elenco Reportage: stessa /api/percorsi/[id]/reportage di ReportageSection (rimasta invariata

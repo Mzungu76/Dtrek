@@ -22,6 +22,13 @@
 // pagina del libro — la testata in cima ora è solo informativa (titolo del Diario, sezione,
 // numero di pagina), non più cliccabile. La striscia di pillole per saltare tra le sezioni della
 // Guida resta invariata: è un indice dei contenuti della pagina, non navigazione dell'app.
+//
+// Fase 18 — il bottone "Indice" torna a essere un semplice `<Link>` a `indexHref`, sempre: il
+// Sommario (unico chiamante di `onIndexClick`, Fase 11) apriva lì un drawer laterale per cambiare
+// Diario senza lasciare la pagina — ma con lo scaffale stesso ridisegnato in stile taccuino
+// (griglia, ricerca), quel drawer duplicava una destinazione che ora vale la pena raggiungere
+// per intero. Il Sommario passa `indexLabel="Diari"` (etichetta diversa, stessa meccanica di
+// sempre) invece di intercettare il click.
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { ChevronLeft, ChevronRight, BookMarked, Wrench } from 'lucide-react'
@@ -51,12 +58,11 @@ interface BookPageProps {
   /** Titolo del Diario — sola visualizzazione, non più un link (Fase 17: "torna all'indice" vive
    *  ora nel bottone "Indice" della barra inferiore, un solo posto invece di due). */
   diarioTitle: string
-  /** Destinazione del bottone "Indice" — ignorata quando è passato `onIndexClick`. */
+  /** Destinazione del bottone "Indice"/"Diari" nella barra inferiore. */
   indexHref: string
-  /** Se presente, "Indice" apre il drawer dei Diari (Fase 11) invece di navigare a `indexHref` —
-   *  usato solo dal Sommario stesso, dove indexHref porterebbe allo scaffale: da lì si vuole
-   *  poter cambiare Diario senza lasciare la pagina. */
-  onIndexClick?: () => void
+  /** Etichetta di quel bottone — "Indice" (default, torna al Sommario del Diario corrente) o
+   *  "Diari" (solo il Sommario stesso, dove porta invece allo scaffale — Fase 18). */
+  indexLabel?: string
   /** Se presente, la barra inferiore mostra anche "Strumenti" — solo le pagine di Guida (dove
    *  esiste components/libro/PercorsoToolsDrawer.tsx) lo passano. */
   onToolsClick?: () => void
@@ -75,7 +81,7 @@ interface BookPageProps {
 }
 
 export default function BookPage({
-  diarioTitle, indexHref, onIndexClick, onToolsClick, sectionLabel, prevHref, nextHref,
+  diarioTitle, indexHref, indexLabel = 'Indice', onToolsClick, sectionLabel, prevHref, nextHref,
   sections, currentSectionKey, pageLabel, children,
 }: BookPageProps) {
   const navButtonStyle = {
@@ -149,17 +155,10 @@ export default function BookPage({
           </span>
         )}
 
-        {onIndexClick ? (
-          <button type="button" onClick={onIndexClick} className="flex flex-col items-center justify-center gap-1 px-5 py-2.5" style={navButtonStyle}>
-            <BookMarked className="w-[18px] h-[18px]" />
-            Indice
-          </button>
-        ) : (
-          <Link href={indexHref} className="flex flex-col items-center justify-center gap-1 px-5 py-2.5" style={navButtonStyle}>
-            <BookMarked className="w-[18px] h-[18px]" />
-            Indice
-          </Link>
-        )}
+        <Link href={indexHref} className="flex flex-col items-center justify-center gap-1 px-5 py-2.5" style={navButtonStyle}>
+          <BookMarked className="w-[18px] h-[18px]" />
+          {indexLabel}
+        </Link>
 
         {onToolsClick && (
           <button type="button" onClick={onToolsClick} className="flex flex-col items-center justify-center gap-1 px-5 py-2.5" style={{ ...navButtonStyle, color: TERRA[600] }}>

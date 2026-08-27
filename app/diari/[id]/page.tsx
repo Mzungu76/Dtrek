@@ -7,7 +7,6 @@ import RouteThumb from '@/components/RouteThumb'
 import SectionEyebrow from '@/components/bacheca/SectionEyebrow'
 import RecoSuggestedRow from '@/components/bacheca/RecoSuggestedRow'
 import BookPage from '@/components/libro/BookPage'
-import DiarioSwitcherDrawer from '@/components/libro/DiarioSwitcherDrawer'
 import { DiarioCoverThumb } from '@/components/diario/DiarioCoverThumb'
 import { GalleryMapThumb } from '@/components/routehub/BottomGallery'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
@@ -317,7 +316,6 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
   const [statusFilter, setStatusFilter] = useState<SommarioStatusFilter>('all')
   const [sortBy, setSortBy] = useState<SommarioSortKey>('date')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
-  const [switcherOpen, setSwitcherOpen] = useState(false)
 
   useEffect(() => {
     fetch(`/api/diaries/${encodeURIComponent(diaryId)}`)
@@ -376,14 +374,14 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
 
   return (
     <>
-      <DiarioSwitcherDrawer open={switcherOpen} onClose={() => setSwitcherOpen(false)} currentDiaryId={diaryId} />
       <BookPage
         // Il titolo in testata non è più cliccabile da nessuna pagina del libro (Fase 17): mostra
         // di nuovo il nome di QUESTO Diario (non più la label statica "I miei Diari") — "torna
-        // allo scaffale/apri il drawer" vive ora nel bottone "Indice" della barra inferiore.
+        // allo scaffale" vive ora nel bottone "Diari" della barra inferiore (Fase 18: naviga
+        // direttamente allo scaffale ridisegnato, niente più drawer laterale).
         diarioTitle={detail.title}
         indexHref="/diari"
-        onIndexClick={() => setSwitcherOpen(true)}
+        indexLabel="Diari"
         sectionLabel="Indice"
       >
         <div className="flex items-start gap-3 mb-3">
