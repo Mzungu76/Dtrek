@@ -733,6 +733,34 @@ diverso (raster, non SVG `feDisplacementMap`) e non applicato al componente `Gal
 e `HandWobbleFilter` restano nel repo (altri usi legittimi, es. la ricerca globale dello scaffale non
 usa filtri SVG) — solo questa riga smette di combinarli nel modo sospetto.
 
+**Fase 23 — Trovata e corretta la causa reale: il filtro sullo sfondo, non sulle miniature** ✅ **COMPLETATA**
+
+La Fase 22 non ha risolto: l'utente ha rimandato lo stesso schermo, testo ancora invisibile. Questa
+volta isolato con certezza, non per ipotesi: una pagina fuori dall'app sotto `/s/…` (bypassa
+l'autenticazione via `isSharedContentPath`) con l'esatta struttura della riga del Sommario, prima
+senza `TaccuinoPaperTexture`/`TaccuinoSpineShadow` (testo visibile, sia con `RouteThumb`+filtro SVG
+sia con `GalleryMapThumb`) poi CON quei due componenti montati (testo invisibile, riprodotto in modo
+deterministico in Chromium headless su desktop — non serviva un dispositivo Android reale). Rimosso
+selettivamente il filtro da dentro `TaccuinoPaperTexture` soltanto (lasciando texture/piega/`GalleryMapThumb`
+tutti montati insieme): testo di nuovo visibile su tutte le righe testate.
+
+**Causa reale**: `HandWobbleFilter` (`feTurbulence`+`feDisplacementMap`) applicato dentro
+`TaccuinoPaperTexture` e `TaccuinoSpineShadow` — entrambi elementi `fixed`, a piena pagina/altezza,
+montati stabilmente su OGNI pagina in tema taccuino (non solo il Sommario: anche lo scaffale, Fase 18,
+li usa — segno che il problema era probabilmente presente anche lì, solo non segnalato perché quella
+pagina non ha un elenco di righe con altro testo sotto lo stesso schermo). Il filtro, così applicato,
+corrompe il rendering del testo in elementi **fratelli sottostanti nel DOM**, non solo dell'elemento
+filtrato — un comportamento non specifico ad Android, riprodotto anche in Chromium desktop.
+
+Le due fasi precedenti (21→22) avevano cambiato la miniatura del percorso pensando che il filtro lì
+fosse la causa — coincidenza di tempistica (introdotto nella stessa PR di Fase 21 in cui è arrivato
+anche `TaccuinoPaperTexture`), non la causa vera. `lib/taccuinoTokens.tsx`: le linee di livello di
+`TaccuinoPaperTexture` e la piega di `TaccuinoSpineShadow` restano curve di Bézier organiche (nessun
+cambiamento visivo di rilievo — il tremore aggiuntivo del filtro era comunque sottile), solo senza
+più il filtro. `HandWobbleFilter`/`useHandWobbleId` restano esportati con un avviso esplicito nel
+commento: sicuri su una forma piccola/contenuta nel proprio riquadro, mai su un elemento `fixed` a
+piena pagina montato stabilmente.
+
 ## File critici
 - `components/guida/GuideReader.tsx`, `components/resoconto/ReportReader.tsx` — sorgente da cui
   estratto in Fase 0, non riscritti.
@@ -836,7 +864,10 @@ usa filtri SVG) — solo questa riga smette di combinarli nel modo sospetto.
   ricolorazione sul contenitore, al posto di `RouteThumb`+filtro SVG (sospettato di un bug di
   compositing che rendeva invisibili titolo/statistiche della riga).
 - `lib/taccuinoTokens.tsx` — Fase 21: `HandWobbleFilter` con `baseFrequency`/`scale` opzionali;
-  nuovi `TaccuinoPaperTexture`, `TaccuinoSpineShadow`, token `TACCUINO_PAPER.highlight`.
+  nuovi `TaccuinoPaperTexture`, `TaccuinoSpineShadow`, token `TACCUINO_PAPER.highlight`. **Fase 23
+  (causa reale del bug testo-invisibile)**: `HandWobbleFilter` rimosso da entrambi — restava solo
+  come capacità generica, con un avviso esplicito nel commento a non riapplicarlo a un elemento
+  `fixed` a piena pagina.
 - `components/RouteThumb.tsx` — Fase 21: `strokeDasharray`/`filter` opzionali (default assenti,
   nessuna modifica per i chiamanti esistenti). Non più usato dal Sommario dopo la Fase 22, restano
   validi per altri chiamanti futuri.

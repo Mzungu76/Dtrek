@@ -63,6 +63,15 @@ export const TACCUINO_ACCENT = TERRA
  * qualunque altro elemento con `filter="url(#ID)"`, `ID` = l'`id` restituito da `useHandWobbleId`
  * — mai un id fisso: due istanze sulla stessa pagina (es. una mappa nel Sommario e una nella
  * pagina del Percorso, se mai finissero nello stesso DOM) si scontrerebbero.
+ *
+ * ⚠️ Fase 23 — NON usarlo su un elemento `fixed`/`position:absolute` a piena pagina, montato
+ * stabilmente (es. uno sfondo). Verificato riproducibile (non solo su Android — anche in Chromium
+ * headless su desktop): applicato così, questo filtro (`feTurbulence`+`feDisplacementMap`) può
+ * corrompere il rendering del testo in elementi FRATELLI sottostanti nel DOM, non solo
+ * dell'elemento filtrato — `TaccuinoPaperTexture`/`TaccuinoSpineShadow` sotto lo usavano proprio
+ * così ed è per questo che sono stati tolti da lì. Resta sicuro su una forma piccola/contenuta
+ * dentro il proprio riquadro (una mappa in miniatura, un bordo locale) — il problema è la
+ * combinazione con un filtro a piena pagina sempre montato, non il filtro in sé.
  */
 export function useHandWobbleId(): string {
   return `hand-wobble-${useId()}`
@@ -80,12 +89,20 @@ export function HandWobbleFilter({ id, seed = 5, baseFrequency = 0.02, scale = 3
 }
 
 /**
- * Texture di sfondo del taccuino — carta invecchiata (due macchie sfumate) + linee di livello
- * disegnate a mano, tutta la pagina, dietro al contenuto. Verificata nel mockup
+ * Texture di sfondo del taccuino — carta invecchiata (due macchie sfumate) + linee di livello,
+ * tutta la pagina, dietro al contenuto. Verificata nel mockup
  * (`taccuino-canvas/SommarioTaccuino.dc.html`/`Main.dc.html`, non nel repo) — prima di questo
  * componente il tema "taccuino" di `BookPage.tsx` usava solo due `radial-gradient` CSS piatti al
  * posto di questa texture, un'approssimazione troppo debole: da lì l'utente ha segnalato che il
  * risultato a schermo non assomigliava al mockup.
+ *
+ * Fase 23 — le linee di livello **non usano più** `HandWobbleFilter`: applicato qui (un filtro
+ * `feTurbulence`/`feDisplacementMap` su un elemento `fixed`, a piena pagina, montato su ogni
+ * pagina taccuino) corrompeva il rendering del testo nelle righe dell'elenco Percorsi del
+ * Sommario — riproducibile in modo deterministico (isolato con un rendering fuori dall'app sotto
+ * `/s/…`, non solo segnalato su un dispositivo Android). Due tentativi precedenti avevano
+ * cambiato altro (le miniature dei percorsi, Fase 21→22) senza risolvere: la causa reale era
+ * sempre qui. Vedi l'avviso su `HandWobbleFilter` sopra.
  *
  * `fixed` (non `absolute`) come `BookSpineShadow`: il guscio di `BookPage.tsx` non è
  * `position:relative`, `fixed` evita di doverlo aggiungere e con `preserveAspectRatio="xMidYMid
@@ -98,7 +115,7 @@ export function HandWobbleFilter({ id, seed = 5, baseFrequency = 0.02, scale = 3
  * istanza: non identiche a specchio l'una dell'altra sarebbe stato più piatto.
  */
 export function TaccuinoPaperTexture({ flip = false }: { flip?: boolean }) {
-  const filterId = useHandWobbleId()
+  const gradientId = useHandWobbleId()
   const stain1 = flip ? { cx: 85, cy: 8 } : { cx: 20, cy: 10 }
   const stain2 = flip ? { cx: 10, cy: 85 } : { cx: 90, cy: 70 }
   return (
@@ -110,20 +127,24 @@ export function TaccuinoPaperTexture({ flip = false }: { flip?: boolean }) {
       preserveAspectRatio="xMidYMid slice"
     >
       <defs>
-        <HandWobbleFilter id={filterId} seed={flip ? 11 : 7} baseFrequency={0.018} scale={4} />
-        <radialGradient id={`${filterId}-s1`} cx={`${stain1.cx}%`} cy={`${stain1.cy}%`} r="42%">
+        <radialGradient id={`${gradientId}-s1`} cx={`${stain1.cx}%`} cy={`${stain1.cy}%`} r="42%">
           <stop offset="0%" stopColor={TACCUINO_PAPER.stain1} stopOpacity={0.5} />
           <stop offset="100%" stopColor={TACCUINO_PAPER.stain1} stopOpacity={0} />
         </radialGradient>
-        <radialGradient id={`${filterId}-s2`} cx={`${stain2.cx}%`} cy={`${stain2.cy}%`} r="40%">
+        <radialGradient id={`${gradientId}-s2`} cx={`${stain2.cx}%`} cy={`${stain2.cy}%`} r="40%">
           <stop offset="0%" stopColor={TACCUINO_PAPER.stain2} stopOpacity={0.48} />
           <stop offset="100%" stopColor={TACCUINO_PAPER.stain2} stopOpacity={0} />
         </radialGradient>
       </defs>
       <rect width="390" height="844" fill={TACCUINO_PAPER.base} />
-      <rect width="390" height="844" fill={`url(#${filterId}-s1)`} />
-      <rect width="390" height="844" fill={`url(#${filterId}-s2)`} />
-      <g filter={`url(#${filterId})`} fill="none" stroke={TACCUINO_PAPER.contourLine} strokeWidth={1} opacity={0.32}>
+      <rect width="390" height="844" fill={`url(#${gradientId}-s1)`} />
+      <rect width="390" height="844" fill={`url(#${gradientId}-s2)`} />
+      {/* Linee di livello — niente più `filter={HandWobbleFilter}` qui (Fase 23): con un elemento
+          `fixed`, a piena pagina, montato su OGNI pagina taccuino, il filtro `feTurbulence`/
+          `feDisplacementMap` corrompeva il rendering del testo nelle righe sottostanti (verificato
+          in modo riproducibile, non solo su Android — vedi commento sotto). Le curve di Bézier
+          restano organiche di per sé, solo senza il tremore aggiuntivo. */}
+      <g fill="none" stroke={TACCUINO_PAPER.contourLine} strokeWidth={1} opacity={0.32}>
         <path d="M-20 120 Q80 90 180 130 T420 100" />
         <path d="M-20 180 Q90 150 190 190 T420 165" />
         <path d="M-20 700 Q100 670 210 705 T420 680" />
@@ -141,7 +162,6 @@ export function TaccuinoPaperTexture({ flip = false }: { flip?: boolean }) {
  * insieme al routing multi-pagina che la giustifica.
  */
 export function TaccuinoSpineShadow({ side = 'left' }: { side?: 'left' | 'right' }) {
-  const filterId = useHandWobbleId()
   const width = side === 'left' ? 22 : 26
   const d = side === 'left'
     ? 'M0 0 Q18 70 10 170 Q2 270 16 390 Q26 470 8 570 Q-4 670 14 750 Q22 800 0 844'
@@ -154,10 +174,9 @@ export function TaccuinoSpineShadow({ side = 'left' }: { side?: 'left' | 'right'
       viewBox={`0 0 ${width} 844`}
       preserveAspectRatio="none"
     >
-      <defs>
-        <HandWobbleFilter id={filterId} seed={side === 'left' ? 11 : 7} baseFrequency={0.018} scale={4} />
-      </defs>
-      <path d={d} fill="none" stroke="rgba(0,0,0,0.13)" strokeWidth={side === 'left' ? 9 : 10} filter={`url(#${filterId})`} />
+      {/* Niente più `filter={HandWobbleFilter}` (Fase 23, stesso motivo di TaccuinoPaperTexture
+          sopra) — la curva stessa resta organica, solo senza il tremore aggiuntivo. */}
+      <path d={d} fill="none" stroke="rgba(0,0,0,0.13)" strokeWidth={side === 'left' ? 9 : 10} />
     </svg>
   )
 }
