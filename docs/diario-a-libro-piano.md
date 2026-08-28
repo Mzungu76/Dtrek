@@ -1205,6 +1205,36 @@ stessa ("se le tile non possono essere sostituite, applica un filtro CSS").
   colore) resta da confermare sul dispositivo reale dell'utente, dove le tile OpenTopoMap si
   caricano per davvero.
 
+**Fase 34 — Bug responsive: la pagina scorreva leggermente in orizzontale** ✅ **COMPLETATA**
+
+Segnalato dall'utente su dispositivo reale (screenshot): il Sommario in taccuino, in alcuni casi,
+restava scorso di qualche decina di pixel a destra in orizzontale, tagliando il bordo sinistro
+della pagina (copertina, prima colonna di ogni riga, chip "tutti"). Causa più probabile: diversi
+elementi del tema taccuino usano `transform: rotate(...)` vicino al bordo (miniature, titolo del
+Diario, copertina, "+ nuovo percorso", chip attivi) — un `transform` può far dipingere un elemento
+qualche pixel oltre il proprio box di layout senza generare un vero overflow "misurabile", e su
+mobile basta che il DOCUMENTO risulti anche solo leggermente più largo del viewport perché l'intera
+pagina diventi scorrevole in orizzontale; uno swipe su una delle liste interne a scorrimento (i due
+filtri a chip) può allora "incastrare" lo scroll della pagina invece di quello della sola lista.
+
+Corretto in `app/globals.css` con `html, body { overflow-x: hidden; }` — impedisce che il
+DOCUMENTO scorra in orizzontale, senza toccare lo scroll orizzontale voluto delle liste interne
+(`overflow-x-auto` su un discendente resta scorrevole sul proprio asse, indipendente dall'overflow
+dell'antenato). Fix globale (non scoped al solo taccuino) perché la stessa classe di bug può
+capitare ovunque nell'app abbia elementi ruotati o margini negativi vicino al bordo. Verificato:
+`tsc --noEmit` ed `eslint` puliti, build di produzione pulita. Non riproducibile a schermo in
+questa sandbox (serve un vero touch-scroll su dispositivo mobile) — la correzione è la mitigazione
+standard per questa classe di bug, non richiede di isolare l'esatto elemento che sporgeva.
+
+**Tre mockup per la direzione mappe/rilegatura** — l'utente ha anche chiesto di allontanarsi
+dall'attuale resa delle miniature mappa e avvicinarsi a un riferimento visivo condiviso (rilegatura
+a fori, mappe cartografiche più illustrate). Prodotti 3 mockup a confronto in un artifact HTML a sé
+(non nel repo — solo un confronto visivo prima di scegliere una direzione da implementare), con
+mappe disegnate via `<canvas>` (curve di livello/boschi/acqua generati proceduralmente da un seme
+fisso) al posto di tile reali — questa sandbox non riesce a raggiungere i server di mappe (stessa
+restrizione di rete di sempre). In attesa del riscontro dell'utente su quale direzione (o mix)
+implementare nell'app reale.
+
 ## File critici
 - `components/guida/GuideReader.tsx`, `components/resoconto/ReportReader.tsx` — sorgente da cui
   estratto in Fase 0, non riscritti.
