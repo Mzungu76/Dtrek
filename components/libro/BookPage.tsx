@@ -182,10 +182,12 @@ export default function BookPage({
           rimonta da solo il componente pagina per un cambio di parametro dinamico), quindi senza
           una key esplicita l'animazione non ripartirebbe mai dopo il primo mount. Il verso della
           rotazione e dell'ombra segue `spineSide` (cardine/ombra dalla parte della piega, coerente
-          con lo sfogliare fisico). */}
+          con lo sfogliare fisico); l'angolo che si "srotola" (`.curl-left`/`.curl-right`, stesso
+          file CSS) va invece nell'angolo inferiore OPPOSTO alla piega — richiesto esplicitamente
+          per rinforzare la sensazione che la pagina si adagi fisicamente sul libro. */}
       <div
         key={pathname}
-        className="flex-1 min-h-0 px-5 sm:px-8 py-5 book-page-turn"
+        className={`flex-1 min-h-0 px-5 sm:px-8 py-5 book-page-turn ${spineSide === 'left' ? 'curl-right' : 'curl-left'}`}
         style={{
           fontFamily: FONT.body,
           transformOrigin: spineSide === 'left' ? 'left center' : 'right center',
