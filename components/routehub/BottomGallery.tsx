@@ -177,8 +177,12 @@ export function GalleryMapThumb({
       if (vintageTiles) {
         // `.leaflet-tile-pane` è un pannello fratello di `.leaflet-overlay-pane` (dove vivono
         // tracciato e marker, resi come SVG) — il filtro qui non li tocca.
+        // Fase 36 — rinforzato: i valori della Fase 33 (grayscale 15/sepia 30/saturate 70/
+        // contrast 85/brightness 105) restavano troppo vicini ai colori originali di OpenTopoMap
+        // per essere notati ("mi sembra siano rimasti invariati") — desaturazione e calo di
+        // contrasto più marcati, più un lieve hue-rotate verso il caldo invece del solo sepia.
         const tilePane = map.getPane('tilePane')
-        if (tilePane) tilePane.style.filter = 'grayscale(15%) sepia(30%) saturate(70%) contrast(85%) brightness(105%)'
+        if (tilePane) tilePane.style.filter = 'grayscale(30%) sepia(45%) saturate(45%) contrast(78%) brightness(110%) hue-rotate(-6deg)'
       }
       const line = L.polyline(polyline, { color: lineColor, weight: lineWeight, opacity: 0.95, dashArray }).addTo(map)
       if (showEndpoints) {
@@ -224,7 +228,7 @@ export function GalleryMapThumb({
       {hasRoute && nearView && <div ref={mapRef} className="absolute inset-0" />}
       {/* Darkens the tile so the colored route stands out more clearly than the raw raster tiles. */}
       {dimTiles && <div className="absolute inset-0 bg-black/20 pointer-events-none" />}
-      {paperOverlay && <div className="absolute inset-0 pointer-events-none" style={{ background: 'rgba(242,232,210,0.15)' }} />}
+      {paperOverlay && <div className="absolute inset-0 pointer-events-none" style={{ background: 'rgba(242,232,210,0.22)' }} />}
     </div>
   )
 }

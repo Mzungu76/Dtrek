@@ -172,23 +172,25 @@ export default function BookPage({
         </div>
       )}
 
-      {/* Fase 35 — "effetto pagina girata": rigioca un'animazione di ingresso (leggera rotazione
-          3D che si assesta, cardine sul lato della piega) a ogni cambio di pagina del libro,
-          richiesto esplicitamente per "sembrare di sfogliare un taccuino". `key={pathname}` forza
-          React a rimontare questo `<div>` a ogni navigazione: senza next/prev/sezioni cambiano
-          solo i `props` di BookPage (stesso componente, stessa posizione nell'albero — Next.js
-          App Router non rimonta da solo il componente pagina per un cambio di parametro dinamico),
-          quindi senza una key esplicita l'animazione non ripartirebbe mai dopo il primo mount. Il
-          verso della rotazione segue `spineSide` (cardine dalla parte della piega, coerente con lo
-          sfogliare fisico); l'animazione stessa vive in `app/globals.css` (`.book-page-turn`,
-          disattivata sotto `prefers-reduced-motion: reduce`). */}
+      {/* "Effetto pagina girata": rigioca un'animazione di ingresso (rotazione 3D con un piccolo
+          rimbalzo che si assesta, più un'ombra che si muove in sincrono, vedi `.book-page-turn`
+          in app/globals.css) a ogni cambio di pagina del libro, richiesto esplicitamente per
+          "sembrare di sfogliare un taccuino" — poi reso più marcato/memorabile ispirandosi a
+          turn.js su richiesta esplicita successiva. `key={pathname}` forza React a rimontare
+          questo `<div>` a ogni navigazione: senza next/prev/sezioni cambiano solo i `props` di
+          BookPage (stesso componente, stessa posizione nell'albero — Next.js App Router non
+          rimonta da solo il componente pagina per un cambio di parametro dinamico), quindi senza
+          una key esplicita l'animazione non ripartirebbe mai dopo il primo mount. Il verso della
+          rotazione e dell'ombra segue `spineSide` (cardine/ombra dalla parte della piega, coerente
+          con lo sfogliare fisico). */}
       <div
         key={pathname}
         className="flex-1 min-h-0 px-5 sm:px-8 py-5 book-page-turn"
         style={{
           fontFamily: FONT.body,
           transformOrigin: spineSide === 'left' ? 'left center' : 'right center',
-          '--page-turn-deg': spineSide === 'left' ? '-6deg' : '6deg',
+          '--page-turn-deg': spineSide === 'left' ? '-11deg' : '11deg',
+          '--page-turn-shadow-dir': spineSide === 'left' ? 'right' : 'left',
         } as CSSProperties}
       >
         {children}
