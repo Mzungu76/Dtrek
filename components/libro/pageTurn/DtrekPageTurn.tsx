@@ -1,42 +1,49 @@
 'use client'
-// Dtrek Page Turning Engine — componente centrale. Sostituisce interamente il vecchio sistema
-// (View Transitions API + `@keyframes page-turn-in/out` in app/globals.css, rimossi) con un motore
-// proprietario. Il gesto è l'interazione primaria (Sezione 1/3 della specifica: "non un effetto
-// autonomo su click, ma dinamico e legato al movimento dell'utente") — il dito aggancia la pagina
-// dal primo istante e la piega/sposta materialmente ovunque la si tocchi (`usePageDrag.ts`, non
-// più ristretto a un bordo stretto e difficile da trovare); click/tastiera restano disponibili
-// come scorciatoia immediata (utile su desktop, dove trascinare col mouse è meno naturale) e
-// passano dallo STESSO identico codice di rendering/fisica — mai due animazioni scollegate
-// (Sezione 2/13 della specifica).
+// Dtrek Page Turning Engine — componente centrale. Il gesto è l'interazione primaria (Sezione
+// 1/3 della specifica: "non un effetto autonomo su click, ma dinamico e legato al movimento
+// dell'utente") — il dito aggancia la pagina dal primo istante e la piega/sposta materialmente
+// ovunque la si tocchi (`usePageDrag.ts`); click/tastiera restano come scorciatoia immediata
+// (più naturale su desktop, dove trascinare col mouse lo è meno).
+//
+// Due rese visive diverse, a seconda di CHI avvia lo sfoglio — non due motori scollegati (stesso
+// `flipProgress`, stesso runner di tween, stessa soglia/velocità di completamento), solo due modi
+// di disegnarlo:
+// - click/tastiera/ingresso: `.dtp-leaf` ruota intero in 3D (rotateY + retro pagina), il
+//   meccanismo già in uso da prima — resta così perché deve restare immediato, e riusare
+//   `{children}` dal vivo senza bisogno di un'istantanea è più semplice per un'animazione che
+//   parte e finisce da sola.
+// - trascinamento: la carta si piega davvero sotto il dito, in stile "vero flipbook" (riferimento
+//   dell'utente: heyzine.com) — un lembo di larghezza fissa (PageCurlOverlay.tsx) scorre dal
+//   bordo libero verso il cardine mentre ruota su se stesso, mostrando un'istantanea della
+//   porzione di pagina visibile (lib/pageTurn/pageSnapshot.ts, via html2canvas) invece del
+//   contenuto vivo — impossibile piegare/mostrare il retro di una mappa interattiva reale senza
+//   smontarla. Il resto della pagina, ovunque il lembo non arrivi ancora, resta il DOM reale
+//   inalterato: niente clic, mappe o gallerie perdono mai il proprio stato, tornano semplicemente
+//   a rispondere al tocco appena lo sfoglio finisce (Sezione 15).
 //
 // Perché non serve un Context/Provider a livello di root layout: ogni pagina del libro (Guida,
 // Reportage) è una route Next.js a sé, quindi cambia sezione = smonta il vecchio `page.tsx` e ne
 // monta uno nuovo — questo componente non sopravvive a quel cambio. La continuità visiva tra "la
 // pagina che se ne va" e "la pagina che arriva" passa quindi da `lib/pageTurn/pageTurnHandoff.ts`
 // (un semplice modulo condiviso, sopravvive perché la navigazione resta lato client, mai un
-// reload) invece che da uno stato React condiviso: chi lascia anima da 0 fino a un punto di
-// passaggio e SUBITO DOPO naviga (Sezione 1, "non deve rallentare la navigazione" — non si aspetta
-// la fine dello sfoglio), chi arriva legge quel punto e continua l'animazione fino a 0 (pagina
-// piatta, posata) — le due metà, sommate, si leggono come un solo sfoglio ininterrotto.
-//
-// Layer del DOM (dal basso in alto): `.dtp-base` (sfondo di sicurezza color pagina — Sezione 10,
-// mai un flash bianco), `.dtp-contact-shadow`/`.dtp-spine-glow` (ombre che restano piatte sulla
-// "pagina sottostante", non ruotano), `.dtp-leaf` (il foglio vero, ruota in 3D — contiene la
-// faccia frontale con il CONTENUTO REALE, mai smontato/clonato durante il gesto, così mappe e stato
-// interno restano intatti — e la faccia posteriore, texture di carta, mai un duplicato del
-// contenuto). Tutta la matematica (Sezione 2, "tutti gli effetti dipendono da flipProgress") vive
-// in `lib/pageTurn/pageTurnMath.ts`; qui si scrive un solo custom property CSS per frame
-// (`--dtp-rotate` e affini, mai React state per frame — Sezione 14) e il resto lo fa app/globals.css.
+// reload): chi lascia anima fino a un punto di passaggio e SUBITO DOPO naviga (Sezione 1, "non
+// deve rallentare la navigazione"), chi arriva legge quel punto e continua fino a 0 (pagina
+// piatta, posata) — sempre col ramo "rotateY intero", anche se l'uscita era stata un
+// trascinamento: l'ingresso è breve e per lo più coperto da ciò che resta dell'uscita, non vale
+// la complessità di un'altra istantanea per una frazione di secondo.
 import {
   forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState, type CSSProperties, type ReactNode,
 } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import {
   computePageTurnVisualState, dragCommitDurationMs, easeOutBack, easeOutCubic, easeInCubic,
   PAGE_TURN_TIMING, type HingeSide,
 } from '@/lib/pageTurn/pageTurnMath'
 import { consumePageTurnHandoff, writePageTurnHandoff } from '@/lib/pageTurn/pageTurnHandoff'
+import { captureVisiblePageSnapshot, visiblePageRect, type PageSnapshot } from '@/lib/pageTurn/pageSnapshot'
 import { usePageDrag } from './usePageDrag'
+import PageCurlOverlay, { type PageCurlOverlayHandle, type OverlayRect } from './PageCurlOverlay'
 
 export interface DtrekPageTurnHandle {
   /** Avvia uno sfoglio programmatico (click o tastiera) verso `href`, intorno al cardine indicato.
@@ -73,6 +80,12 @@ function useReducedMotion(): boolean {
   return reduced
 }
 
+interface CurlOverlayState {
+  rect: OverlayRect
+  snapshot: PageSnapshot
+  hinge: HingeSide
+}
+
 const DtrekPageTurn = forwardRef<DtrekPageTurnHandle, DtrekPageTurnProps>(function DtrekPageTurn(
   { prevHref, nextHref, paperBg, children, className }, ref,
 ) {
@@ -81,24 +94,28 @@ const DtrekPageTurn = forwardRef<DtrekPageTurnHandle, DtrekPageTurnProps>(functi
   const rootRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const cancelTweenRef = useRef<(() => void) | null>(null)
-  const showingBackRef = useRef(false)
+  const activeRef = useRef(false)
+  const snapshotRef = useRef<PageSnapshot | null>(null)
+  /** true mentre il trascinamento IN CORSO usa il lembo con istantanea (PageCurlOverlay) invece
+   *  del rotateY a pagina intera — deciso una volta sola all'avvio del gesto (serve un flag
+   *  letto in modo sincrono da `onDragProgress`, uno stato React arriverebbe un render troppo
+   *  tardi per il primissimo evento). */
+  const curlModeRef = useRef(false)
+  const curlOverlayHandleRef = useRef<PageCurlOverlayHandle>(null)
 
   const [hinge, setHinge] = useState<HingeSide>('left')
   const [active, setActive] = useState(false)
   const [fadingOut, setFadingOut] = useState(false)
+  const [curlOverlay, setCurlOverlay] = useState<CurlOverlayState | null>(null)
 
+  useEffect(() => { activeRef.current = active }, [active])
+
+  /** Rende il ramo "rotateY a pagina intera" (click/tastiera/ingresso) — scrive un solo custom
+   *  property CSS per frame (Sezione 14), mai React state. */
   const applyProgress = useCallback((progress: number, h: HingeSide) => {
     const el = rootRef.current
     if (!el) return
     const v = computePageTurnVisualState(progress, h)
-    // Il contenuto reale è girato di schiena rispetto allo schermo oltre la metà rotazione — non
-    // solo invisibile (`backface-visibility`, già CSS), anche assente per la lettura assistita
-    // finché non torna frontale, invece di restare "presente" nell'albero di accessibilità mentre
-    // non lo è visivamente. Scritto solo al cambio di stato, non ad ogni frame.
-    if (contentRef.current && v.isShowingBack !== showingBackRef.current) {
-      showingBackRef.current = v.isShowingBack
-      contentRef.current.setAttribute('aria-hidden', v.isShowingBack ? 'true' : 'false')
-    }
     el.style.setProperty('--dtp-rotate', `${v.rotateDeg}deg`)
     el.style.setProperty('--dtp-lift', `${v.liftPx}px`)
     el.style.setProperty('--dtp-shift', `${v.shiftPx}px`)
@@ -111,9 +128,16 @@ const DtrekPageTurn = forwardRef<DtrekPageTurnHandle, DtrekPageTurnProps>(functi
     el.style.setProperty('--dtp-spine-o', `${v.spineGlowOpacity}`)
   }, [])
 
+  // Il contenuto reale è coperto (in un modo o nell'altro, a seconda del ramo) per tutta la
+  // durata di uno sfoglio attivo — assente per la lettura assistita in quella finestra invece di
+  // restare "presente" nell'albero di accessibilità mentre non lo è visivamente (Sezione 16).
+  useEffect(() => {
+    contentRef.current?.setAttribute('aria-hidden', active ? 'true' : 'false')
+  }, [active])
+
   /** Se il focus è dentro il contenuto reale quando parte uno sfoglio, lo sposta via prima di
-   *  marcarlo `aria-hidden` oltre metà rotazione — evitare `aria-hidden` su un antenato
-   *  dell'elemento attivo è raccomandato esplicitamente dalle specifiche ARIA. */
+   *  marcarlo `aria-hidden` — evitarlo su un antenato dell'elemento attivo è raccomandato
+   *  esplicitamente dalle specifiche ARIA. */
   const blurContentFocus = useCallback(() => {
     const active = document.activeElement
     if (active instanceof HTMLElement && contentRef.current?.contains(active)) active.blur()
@@ -121,13 +145,15 @@ const DtrekPageTurn = forwardRef<DtrekPageTurnHandle, DtrekPageTurnProps>(functi
 
   /** Runner unico per ogni tween (auto-flip, coasting di un drag committato, ritorno elastico di
    *  un annullamento, ingresso) — Sezione 2: un solo posto che traduce il tempo in `flipProgress`,
-   *  mai una seconda animazione indipendente. */
+   *  mai una seconda animazione indipendente. `onFrame` è già legato al ramo giusto (rotateY o
+   *  lembo con istantanea) da chi chiama — il runner stesso non sa quale dei due sia. */
   const runTween = useCallback((
-    from: number, to: number, durationMs: number, ease: (t: number) => number, h: HingeSide, onDone?: () => void,
+    from: number, to: number, durationMs: number, ease: (t: number) => number,
+    onFrame: (progress: number) => void, onDone?: () => void,
   ) => {
     cancelTweenRef.current?.()
     if (durationMs <= 0) {
-      applyProgress(to, h)
+      onFrame(to)
       onDone?.()
       return
     }
@@ -135,7 +161,7 @@ const DtrekPageTurn = forwardRef<DtrekPageTurnHandle, DtrekPageTurnProps>(functi
     let raf = 0
     const tick = (now: number) => {
       const t = Math.min(1, (now - start) / durationMs)
-      applyProgress(from + (to - from) * ease(t), h)
+      onFrame(from + (to - from) * ease(t))
       if (t < 1) {
         raf = requestAnimationFrame(tick)
       } else {
@@ -145,11 +171,68 @@ const DtrekPageTurn = forwardRef<DtrekPageTurnHandle, DtrekPageTurnProps>(functi
     }
     raf = requestAnimationFrame(tick)
     cancelTweenRef.current = () => cancelAnimationFrame(raf)
-  }, [applyProgress])
+  }, [])
 
   useEffect(() => () => cancelTweenRef.current?.(), [])
 
+  /** Chiude uno sfoglio a trascinamento (committato o annullato): sempre gli stessi tre passi,
+   *  mai dimenticarne uno dei due rami. */
+  const endDragVisual = useCallback(() => {
+    setActive(false)
+    setCurlOverlay(null)
+    curlModeRef.current = false
+  }, [])
+
+  // ── Istantanea per il lembo del trascinamento — catturata in anticipo (mai al volo all'avvio
+  // del gesto, che introdurrebbe un ritardo prima che il dito veda un effetto — Sezione 14) e
+  // riaggiornata quando lo scroll si ferma, così resta ragionevolmente allineata a cosa si vede
+  // ora anche se l'utente ha letto/scorso la pagina nel frattempo. Mai mentre uno sfoglio è già
+  // attivo (inutile, e il contenuto è comunque coperto). Un lembo senza istantanea pronta ricade
+  // semplicemente sul rotateY a pagina intera (vedi onDragStart) — mai un errore, solo un grado
+  // di ricchezza in meno per quel singolo gesto.
+  useEffect(() => {
+    if (reducedMotion) return
+    let cancelled = false
+    const capture = () => {
+      if (cancelled || activeRef.current) return
+      const el = contentRef.current
+      if (!el) return
+      captureVisiblePageSnapshot(el, paperBg).then(snap => {
+        if (!cancelled && snap) snapshotRef.current = snap
+      })
+    }
+    const initialTimer = window.setTimeout(capture, 400)
+    let scrollTimer = 0
+    const onScroll = () => {
+      window.clearTimeout(scrollTimer)
+      scrollTimer = window.setTimeout(capture, 150)
+    }
+    // Un ridimensionamento (rotazione dello schermo, tastiera virtuale, finestra desktop
+    // ridimensionata) invalida subito l'istantanea in cache — le sue dimensioni non
+    // combacerebbero più con la larghezza reale usata da `computeCurlGeometry` al prossimo
+    // trascinamento. Meglio ricadere sul rotateY di riserva per un gesto (vedi onDragStart) che
+    // mostrare un'immagine stirata/disallineata.
+    let resizeTimer = 0
+    const onResize = () => {
+      snapshotRef.current = null
+      window.clearTimeout(resizeTimer)
+      resizeTimer = window.setTimeout(capture, 200)
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('resize', onResize)
+    return () => {
+      cancelled = true
+      window.clearTimeout(initialTimer)
+      window.clearTimeout(scrollTimer)
+      window.clearTimeout(resizeTimer)
+      window.removeEventListener('scroll', onScroll)
+      window.removeEventListener('resize', onResize)
+    }
+  }, [reducedMotion, paperBg])
+
   // ── Ingresso: continua un eventuale sfoglio lasciato a metà dalla pagina precedente ──────────
+  // Sempre sul ramo rotateY (vedi commento in cima al file: l'ingresso resta semplice a
+  // prescindere da come si era usciti dalla pagina precedente).
   useEffect(() => {
     if (reducedMotion) return
     const handoff = consumePageTurnHandoff()
@@ -157,12 +240,16 @@ const DtrekPageTurn = forwardRef<DtrekPageTurnHandle, DtrekPageTurnProps>(functi
     setHinge(handoff.hinge)
     setActive(true)
     applyProgress(handoff.enterFromProgress, handoff.hinge)
-    runTween(handoff.enterFromProgress, 0, PAGE_TURN_TIMING.enterMs, easeOutCubic, handoff.hinge, () => setActive(false))
+    runTween(
+      handoff.enterFromProgress, 0, PAGE_TURN_TIMING.enterMs, easeOutCubic,
+      p => applyProgress(p, handoff.hinge),
+      () => setActive(false),
+    )
     // Una tantum al mount — non deve rieseguire se `reducedMotion` cambia più tardi.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // ── Sfoglio programmatico (click/tastiera) ────────────────────────────────────────────────
+  // ── Sfoglio programmatico (click/tastiera) — sempre rotateY, mai il lembo con istantanea ─────
   const flipTo = useCallback((href: string, h: HingeSide): boolean => {
     if (active) return false // uno sfoglio è già in corso: lascia fare alla navigazione normale
 
@@ -179,16 +266,20 @@ const DtrekPageTurn = forwardRef<DtrekPageTurnHandle, DtrekPageTurnProps>(functi
     blurContentFocus()
     setHinge(h)
     setActive(true)
-    runTween(0, PAGE_TURN_TIMING.clickHandoffProgress, PAGE_TURN_TIMING.clickExitMs, easeInCubic, h, () => {
-      writePageTurnHandoff({ enterFromProgress: PAGE_TURN_TIMING.clickHandoffProgress, hinge: h })
-      router.push(href)
-    })
+    runTween(
+      0, PAGE_TURN_TIMING.clickHandoffProgress, PAGE_TURN_TIMING.clickExitMs, easeInCubic,
+      p => applyProgress(p, h),
+      () => {
+        writePageTurnHandoff({ enterFromProgress: PAGE_TURN_TIMING.clickHandoffProgress, hinge: h })
+        router.push(href)
+      },
+    )
     return true
-  }, [active, reducedMotion, router, runTween, blurContentFocus])
+  }, [active, reducedMotion, router, runTween, blurContentFocus, applyProgress])
 
   useImperativeHandle(ref, () => ({ flipTo }), [flipTo])
 
-  // ── Sfoglio gesture-driven ─────────────────────────────────────────────────────────────────
+  // ── Sfoglio gesture-driven — sceglie il ramo (lembo con istantanea, o rotateY di riserva) ────
   const { dragSurfaceProps } = usePageDrag({
     containerRef: rootRef,
     disabled: active || reducedMotion,
@@ -198,21 +289,45 @@ const DtrekPageTurn = forwardRef<DtrekPageTurnHandle, DtrekPageTurnProps>(functi
       blurContentFocus()
       setHinge(h)
       setActive(true)
-      applyProgress(0, h)
+
+      const el = contentRef.current
+      const snap = snapshotRef.current
+      const rect = el ? visiblePageRect(el) : null
+      if (snap && rect) {
+        curlModeRef.current = true
+        setCurlOverlay({ rect, snapshot: snap, hinge: h })
+      } else {
+        curlModeRef.current = false
+        setCurlOverlay(null)
+        applyProgress(0, h)
+      }
     },
     onDragProgress: (progress, h) => {
-      applyProgress(progress, h)
+      if (curlModeRef.current) curlOverlayHandleRef.current?.setProgress(progress)
+      else applyProgress(progress, h)
     },
     onDragCommit: (direction, h, fromProgress) => {
       const href = direction === 'next' ? nextHref : prevHref
-      if (!href) { runTween(fromProgress, 0, PAGE_TURN_TIMING.cancelReturnMs, easeOutBack, h, () => setActive(false)); return }
-      runTween(fromProgress, 1, dragCommitDurationMs(fromProgress), easeOutCubic, h, () => {
+      const onFrame = curlModeRef.current
+        ? (p: number) => curlOverlayHandleRef.current?.setProgress(p)
+        : (p: number) => applyProgress(p, h)
+      if (!href) {
+        runTween(fromProgress, 0, PAGE_TURN_TIMING.cancelReturnMs, easeOutBack, onFrame, endDragVisual)
+        return
+      }
+      runTween(fromProgress, 1, dragCommitDurationMs(fromProgress), easeOutCubic, onFrame, () => {
         writePageTurnHandoff({ enterFromProgress: 1, hinge: h })
         router.push(href)
+        // Niente `endDragVisual()` qui: il componente sta per smontarsi con la navigazione, e
+        // fino ad allora l'overlay/lembo resta "a pagina girata" (Sezione 10) — esattamente
+        // come fa `.dtp-leaf` sul ramo rotateY.
       })
     },
     onDragCancel: (fromProgress, h) => {
-      runTween(fromProgress, 0, PAGE_TURN_TIMING.cancelReturnMs, easeOutBack, h, () => setActive(false))
+      const onFrame = curlModeRef.current
+        ? (p: number) => curlOverlayHandleRef.current?.setProgress(p)
+        : (p: number) => applyProgress(p, h)
+      runTween(fromProgress, 0, PAGE_TURN_TIMING.cancelReturnMs, easeOutBack, onFrame, endDragVisual)
     },
   })
 
@@ -239,6 +354,22 @@ const DtrekPageTurn = forwardRef<DtrekPageTurnHandle, DtrekPageTurnProps>(functi
         </div>
         <div className="dtp-face dtp-face--back" aria-hidden="true" />
       </div>
+      {/* Portale su `document.body`, non un figlio normale qui: `.dtp-root` ha `perspective` per
+          il rotateY di `.dtp-leaf`, e `perspective`/`transform` su un antenato trasformano
+          `position: fixed` in qualcosa di relativo a QUELL'antenato invece che al viewport (regola
+          CSS, non un bug del browser) — l'overlay finirebbe disegnato nel posto sbagliato.
+          `getBoundingClientRect()` in visiblePageRect.ts è già in coordinate di viewport vere,
+          quindi deve restarci anche il `position: fixed` che lo usa. */}
+      {curlOverlay && typeof document !== 'undefined' && createPortal(
+        <PageCurlOverlay
+          ref={curlOverlayHandleRef}
+          rect={curlOverlay.rect}
+          snapshot={curlOverlay.snapshot}
+          hinge={curlOverlay.hinge}
+          paperBg={paperBg}
+        />,
+        document.body,
+      )}
     </div>
   )
 })

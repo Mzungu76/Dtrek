@@ -150,3 +150,88 @@ export function dragCommitDurationMs(progress: number): number {
   const remaining = clamp(1 - progress, 0, 1)
   return PAGE_TURN_TIMING.dragCommitMinMs + remaining * (PAGE_TURN_TIMING.dragCommitMaxMs - PAGE_TURN_TIMING.dragCommitMinMs)
 }
+
+// ── Curl del gesto (drag) — components/libro/pageTurn/PageCurlOverlay.tsx ─────────────────────
+//
+// Il rotateY "a porta rigida" qui sopra resta invariato per click/tastiera (Sezione 1: su
+// desktop il click deve restare immediato, e riusa un meccanismo già verificato). Per il
+// trascinamento invece — l'interazione primaria, quella che deve "materialmente piegare la
+// carta sotto il dito" — questo modulo descrive una geometria diversa: non l'intera pagina che
+// ruota come un pannello, ma una porzione di larghezza FISSA ("il lembo", `CURL_SPAN` della
+// larghezza pagina) che scorre dal bordo libero verso il cardine mentre ruota su se stessa da
+// 0° a 180°. Dove il lembo è già passato resta un'area piatta "già girata" (il retro, appoggiato
+// sul lato opposto); dove non è ancora arrivato, il contenuto reale della pagina resta a vista
+// invariato — è per questo che il lembo, e SOLO il lembo, ha bisogno di un'istantanea della
+// pagina (lib/pageTurn/pageSnapshot.ts): non si può piegare/mostrare il retro di una mappa
+// interattiva viva, ma il resto della pagina non viene mai toccato.
+//
+// Non è una vera superficie cilindrica continua (richiederebbe una mesh a più strisce con
+// trigonometria per-pixel, troppo rischiosa da tarare senza poterla vedere dal vivo): un solo
+// pannello rigido di larghezza fissa che scorre e ruota è una semplificazione dichiarata — si
+// vede una piega che avanza sulla pagina invece di una porta intera che gira, già molto più
+// vicina alla sensazione richiesta ("la carta si piega sotto il dito") pur restando
+// implementabile con sicurezza.
+export const CURL_SPAN = 0.42
+
+export interface CurlGeometry {
+  /** px da sinistra dello schermo dove comincia il lembo che ruota. */
+  flapLeftPx: number
+  /** larghezza del lembo — costante per tutto lo sfoglio. */
+  flapWidthPx: number
+  /** gradi di rotazione del lembo intorno al proprio bordo agganciato alla zona non ancora
+   *  girata (0° = piatto, appena staccato dal resto della pagina; 180° = piatto sul lato
+   *  opposto, di schiena). */
+  flapRotateDeg: number
+  /** true oltre i 90° locali del lembo — la sua faccia frontale (l'istantanea) è girata di
+   *  schiena, `backface-visibility` mostra il retro. */
+  flapShowingBack: boolean
+  /** Regione già "girata" tra il lembo e il bordo libero — piatta, mostra solo il retro
+   *  (nessuna istantanea necessaria: è comunque carta, non contenuto). Larghezza 0 a riposo. */
+  turnedLeftPx: number
+  turnedWidthPx: number
+  /** Posizione (px, coordinate dell'istantanea intera) da cui ritagliare lo sfondo del lembo —
+   *  `background-position-x` sull'elemento del lembo, sempre negativo o zero. */
+  snapshotCropX: number
+  /** Ombra di contatto alle due giunture del lembo (con la parte ancora piatta e con quella già
+   *  girata) — stessa idea dell'ombra "a riposo poi via" dello sfoglio a porta rigida, qui
+   *  applicata alla piega che avanza invece che all'intera pagina. */
+  shadowOpacity: number
+}
+
+/**
+ * Traduce `flipProgress` (0→1, distanza percorsa dal dito in frazione della larghezza pagina) e
+ * il cardine nella geometria del lembo, in coordinate schermo assolute (px da sinistra) — così
+ * chi la consuma (PageCurlOverlay.tsx) scrive `left`/`width`/`transform` senza dover rifare
+ * calcoli specchiati per `hinge`.
+ */
+export function computeCurlGeometry(progress: number, hinge: HingeSide, pageWidthPx: number): CurlGeometry {
+  const p = clamp(progress, 0, 1)
+  const w = Math.max(0, pageWidthPx)
+  const flapWidthPx = w * CURL_SPAN
+  const travel = Math.max(0, w - flapWidthPx)
+  // Distanza percorsa dal bordo del lembo più vicino al bordo libero — 0 a riposo (il lembo è
+  // appoggiato proprio sul bordo libero), `travel` quando il lembo ha raggiunto il cardine.
+  const nearFreeEdgeD = travel * p
+
+  // Cardine a sinistra: il bordo libero è a destra, il lembo scorre da destra (flapLeftPx alto,
+  // vicino a `w`) verso sinistra (flapLeftPx → 0). Cardine a destra: speculare, il bordo libero
+  // è a sinistra, il lembo scorre da sinistra verso destra. La regione "già girata" (`turned...`)
+  // sta sempre tra il lembo e il bordo libero, larga `nearFreeEdgeD` in entrambi i casi.
+  const flapLeftPx = hinge === 'left' ? w - nearFreeEdgeD - flapWidthPx : nearFreeEdgeD
+  const turnedLeftPx = hinge === 'left' ? flapLeftPx + flapWidthPx : 0
+
+  const sign = hingeSign(hinge)
+  const flapRotateDeg = sign * p * 180
+  const arc = Math.sin(p * Math.PI)
+
+  return {
+    flapLeftPx,
+    flapWidthPx,
+    flapRotateDeg,
+    flapShowingBack: p > 0.5,
+    turnedLeftPx,
+    turnedWidthPx: nearFreeEdgeD,
+    snapshotCropX: -flapLeftPx,
+    shadowOpacity: arc * 0.4,
+  }
+}
