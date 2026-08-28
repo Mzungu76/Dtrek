@@ -1235,6 +1235,53 @@ fisso) al posto di tile reali — questa sandbox non riesce a raggiungere i serv
 restrizione di rete di sempre). In attesa del riscontro dell'utente su quale direzione (o mix)
 implementare nell'app reale.
 
+**Fase 35 — Piega rinforzata e alternata, effetto "pagina girata"** ✅ **COMPLETATA**
+
+Dopo aver visto i mockup di Fase 34: la piega rinforzata (più larga, più scura) va bene — approvata
+così com'è. L'"inchiostro assorbito dalla carta" applicato alle mappe nel primo giro di mockup era
+un fraintendimento mio: l'utente lo intendeva per i **contorni di bottoni e caselle di testo**, non
+per le mappe; visto un secondo mockup corretto in quel senso, l'effetto è stato comunque giudicato
+"molto brutto" e scartato del tutto — non implementato da nessuna parte nell'app (i mockup restano
+solo artifact esterni, mai stati nel repo).
+
+Due richieste nuove, implementate direttamente (non più mockup):
+
+1. **Piega rinforzata ovunque, alternata su Guida/Resoconto, fissa a sinistra sul Sommario.**
+   `TaccuinoSpineShadow` (`lib/taccuinoTokens.tsx`) e `BookSpineShadow` (il gradiente più semplice
+   usato dal tema pergamena di Guida/Resoconto/scaffale) sono stati rinforzati allo stesso modo
+   (larghezza maggiore, alpha quasi raddoppiata agli estremi) — lo stesso ritocco validato nel
+   mockup, applicato a entrambi i componenti per coerenza invece che al solo taccuino. Entrambi
+   accettano già (`TaccuinoSpineShadow`) o hanno guadagnato ora (`BookSpineShadow`) un prop `side`.
+   `BookPage.tsx` guadagna un nuovo prop `spineSide?: 'left' | 'right'` (default `'left'`) che
+   sceglie quale dei due componenti-piega riceve quel lato. `GuideBookPage.tsx`/`ReportBookPage.tsx`
+   lo calcolano dall'indice di pagina già disponibile (`idx % 2 === 0 ? 'left' : 'right'`) — pari a
+   sinistra, dispari a destra, per leggersi come pagine recto/verso di un libro vero sfogliandolo.
+   Il Sommario (`DiarioIndexLibro`) non passa questo prop: resta sempre a sinistra come richiesto
+   esplicitamente ("l'elenco Percorsi non è una pagina in una sequenza").
+2. **Effetto "pagina girata" a ogni cambio pagina.** Nuova animazione CSS (`app/globals.css`,
+   `.book-page-turn`/`@keyframes page-turn-in`): una leggera rotazione 3D (`rotateY`, ~6°) con
+   cardine sul lato della piega che si assesta a `rotateY(0)`, non un flip a 90° drammatico — coerente
+   con "70% UI moderna, 30% diario fisico" dello stesso principio guida di Fase 31, non un effetto
+   vistoso. Applicata al contenitore del contenuto in `BookPage.tsx`, con `key={pathname}`
+   (`usePathname()` di `next/navigation`) per forzare React a rimontarlo a ogni navigazione: senza
+   quella key l'animazione non ripartirebbe mai dopo il primo mount, perché cambiare sezione/pagina
+   dentro Guida o Resoconto naviga verso un parametro dinamico diverso ma **non** rimonta da solo il
+   componente pagina (stesso componente React, stessa posizione nell'albero — una sottigliezza nota
+   di Next.js App Router). Disattivata sotto `prefers-reduced-motion: reduce`. Nota storica: la
+   Fase 10 aveva scartato esplicitamente un'animazione di svolta pagina a favore di un'ombra
+   statica, su preferenza dell'utente di allora — questa fase la reintroduce su nuova richiesta
+   esplicita, senza toccare la scelta "statica" della sola ombra di piega in sé.
+   - **Verificato** (route di debug temporanea, rimossa prima del commit, build di produzione
+     vera): la piega compare rispettivamente a sinistra/destra sulle due pagine di prova con
+     `spineSide` opposto; cliccando "Avanti" il `transform` dell'elemento passa da un
+     `matrix3d`/`rotateY` non-identità (~80ms dopo il click, animazione in corso) a un'identità
+     assestata (a fine animazione) — l'animazione si rigioca a ogni navigazione com'era richiesto,
+     non solo al primo caricamento della pagina.
+- **Non toccato**: la pagina di riepilogo Reportage/percorso, `/pubblica`, `/copertina` — usano
+  `BookPage` in tema pergamena ma non fanno parte di una sequenza Guida/Resoconto sfogliabile,
+  restano su `spineSide` di default (sinistra), coerente con "il Sommario non è una pagina in
+  sequenza" applicato per estensione a ogni pagina non numerata di quel tipo.
+
 ## File critici
 - `components/guida/GuideReader.tsx`, `components/resoconto/ReportReader.tsx` — sorgente da cui
   estratto in Fase 0, non riscritti.

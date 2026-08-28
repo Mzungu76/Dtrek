@@ -165,6 +165,7 @@ export default function GuideBookPage({ basePath, diarioHref, diarioTitle, perco
         sections={sections}
         currentSectionKey={sectionKey}
         pageLabel={`${idx + 1} di ${present.length}`}
+        spineSide={idx % 2 === 0 ? 'left' : 'right'}
       >
         <p
           className="mb-2"
