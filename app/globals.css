@@ -11,6 +11,17 @@
 
 * { box-sizing: border-box; }
 
+/* Alcuni elementi (miniature/titoli/chip ruotati con `transform: rotate(...)`, righe con margine
+   negativo per il "full-bleed" dell'evidenziatore) possono sporgere di qualche pixel oltre il
+   bordo della pagina — su mobile questo basta a rendere l'intero documento scorrevole in
+   orizzontale, e uno swipe su una lista interna a scorrimento (es. i filtri) può "incastrare" lo
+   scroll della pagina qualche pixel a destra invece di tornare a zero. `overflow-x: hidden` qui
+   non blocca lo scroll orizzontale voluto internamente (le liste con `overflow-x-auto` restano
+   scorrevoli sul proprio asse, indipendenti dall'antenato) — impedisce solo che il DOCUMENTO
+   stesso possa scorrere. Va su entrambi `html` e `body`: alcuni browser mobili trattano `html`
+   come l'elemento di scroll effettivo, altri `body`. */
+html, body { overflow-x: hidden; }
+
 body {
   font-family: var(--font-body), sans-serif;
   background-color: #f8f7f4;
