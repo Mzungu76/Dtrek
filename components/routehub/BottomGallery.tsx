@@ -119,10 +119,10 @@ export function GalleryMapThumb({
    *  due chiamanti) — l'utente ha chiesto esplicitamente "il colore originale" per il Sommario, un
    *  velo qui andrebbe contro quella richiesta. `false` lo toglie senza cambiare nulla altrove. */
   dimTiles?: boolean
-  /** `style` inoltrato a `/api/tile` (vedi `PROVIDERS` lì) — di default lo stesso OSM "light" già
-   *  usato da tutti i chiamanti finora. Il Sommario del taccuino (Fase 30) passa `'topo'`
-   *  (OpenTopoMap, curve di livello e cartografia escursionistica reale) per sembrare un reperto
-   *  cartaceo invece di uno screenshot da app di navigazione. */
+  /** `style` inoltrato a `/api/tile` (vedi `PROVIDERS` lì) — di default OSM "light", i colori
+   *  nativi di una mappa OSM/Leaflet standard: il Sommario del taccuino aveva provato `'topo'`
+   *  (OpenTopoMap) per un'aria "da reperto cartaceo", ma non è quello che l'utente intende per
+   *  "colore originale" — tolto, nessun chiamante lo passa più. */
   tileStyle?: string
 }) {
   const wrapRef = useRef<HTMLDivElement>(null)

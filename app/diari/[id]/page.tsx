@@ -578,30 +578,24 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                       righe vicine. */}
                   <Link href={`${percorsoPath}/guida/il_percorso`} className="flex items-center gap-3.5 flex-1 min-w-0">
                     {/* Vera mappa (GalleryMapThumb, invariata nel componente — stessa usata dalla
-                        galleria Guida/Resoconto), non un disegno astratto — ma non più lo stile
-                        "app di navigazione" di CartoDB: Fase 29 aveva tolto il `filter` CSS
-                        (seppia poi verde, mai i "colori originali" voluti) restituendo però una
-                        mappa ancora "troppo digitale" (verde acceso, POI commerciali, testi da
-                        app). Fase 30 — cambiato il *tile provider* invece di ripiegare su un altro
-                        filtro: `tileStyle="topo"` (OpenTopoMap, curve di livello e cartografia
-                        escursionistica reale, vedi `app/api/tile/route.ts`) è cartografia pensata
-                        per il trekking, non una mappa stradale ricolorata via CSS. Il "ritaglio
-                        incollato" (bordo bianco spesso + ombra sfalsata + lieve rotazione stabile
-                        per percorso, stesso principio della copertina in `DiarioCoverThumb`)
-                        sostituisce `HandDrawnFrame` qui — coerente con "una foto incollata sulla
-                        pagina". Il tracciato (`lineColor`/`dashArray` di Leaflet, nativi — non un
-                        filtro SVG dentro Leaflet, la stessa combinazione già scartata in Fase 21)
-                        resta china nera tratteggiata (validata a schermo: "funziona sorprendente-
-                        mente bene"), `showEndpoints` aggiunge partenza/arrivo, rimpiccioliti in
-                        Fase 30 (sembravano "marker di Leaflet"): la precisione del percorso resta
-                        intatta, sono gli stessi punti GPS, solo lo stile del tratto cambia.
-                        `dimTiles={false}` toglie il velo scuro pensato per la galleria a sfondo
-                        nero (qui contro i "colori originali" richiesti). Fase 32-38 avevano provato
-                        un filtro CSS di ricolorazione (`vintageTiles`/`paperOverlay`) sulle tile,
-                        mai riuscito a convincere su prova reale (troppo simile all'originale, poi
-                        sbiadito verso il bianco): Fase 39 lo toglie del tutto su richiesta esplicita
-                        — "voglio il colore originale" — le tile restano quelle native di
-                        OpenTopoMap, senza alcuna manipolazione di colore. */}
+                        galleria Guida/Resoconto), non un disegno astratto. Fasi 29-39 avevano
+                        provato via via un `filter` CSS di ricolorazione e poi un tile provider
+                        diverso (OpenTopoMap, `tileStyle="topo"`) per farla sembrare "carta da
+                        campo": nessuna delle due letture era quello che l'utente intendeva per
+                        "colore originale" — chiarito esplicitamente come i colori nativi di una
+                        mappa OSM/Leaflet standard. `tileStyle` torna quindi al default ('light',
+                        vedi `PROVIDERS` in `app/api/tile/route.ts`), senza alcun filtro CSS sopra.
+                        Il "ritaglio incollato" (bordo bianco spesso + ombra sfalsata + lieve
+                        rotazione stabile per percorso, stesso principio della copertina in
+                        `DiarioCoverThumb`) sostituisce `HandDrawnFrame` qui — coerente con "una
+                        foto incollata sulla pagina". Il tracciato (`lineColor`/`dashArray` di
+                        Leaflet, nativi — non un filtro SVG dentro Leaflet, la stessa combinazione
+                        già scartata in Fase 21) resta china nera tratteggiata (validata a schermo:
+                        "funziona sorprendentemente bene"), `showEndpoints` aggiunge
+                        partenza/arrivo, rimpiccioliti in Fase 30 (sembravano "marker di Leaflet"):
+                        la precisione del percorso resta intatta, sono gli stessi punti GPS, solo
+                        lo stile del tratto cambia. `dimTiles={false}` toglie il velo scuro pensato
+                        per la galleria a sfondo nero (qui contro i "colori originali" richiesti). */}
                     <div
                       className="w-[87px] h-[87px] shrink-0 overflow-hidden relative"
                       style={{
@@ -623,7 +617,6 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                             dashArray="3 2.5"
                             showEndpoints
                             dimTiles={false}
-                            tileStyle="topo"
                           />
                         )
                         : <div className="w-full h-full flex items-center justify-center"><Mountain className="w-5 h-5" style={{ color: TACCUINO_PAPER.cardBorder }} /></div>}
