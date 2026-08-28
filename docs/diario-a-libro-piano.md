@@ -1282,6 +1282,47 @@ Due richieste nuove, implementate direttamente (non più mockup):
   restano su `spineSide` di default (sinistra), coerente con "il Sommario non è una pagina in
   sequenza" applicato per estensione a ogni pagina non numerata di quel tipo.
 
+**Fase 36 — Pagina girata più memorabile, via il riflesso bianco, filtro mappa rinforzato** ✅ **COMPLETATA**
+
+Tre correzioni dopo la prima verifica della Fase 35.
+
+1. **Via il "riflesso bianco" della piega statica.** `TaccuinoSpineShadow` (`lib/taccuinoTokens.tsx`)
+   aveva una `light` (`rgba(246,238,220,0.42)`, un caldo quasi-bianco) come "piccola zona di luce
+   appena oltre la piega" — segnalata esplicitamente come indesiderata. Rimossa: la composizione
+   resta a più livelli (ombra interna → linea di piega → ombra esterna più morbida →
+   trasparente), solo senza lo schiarimento. `BookSpineShadow` (pergamena) non aveva mai avuto
+   questo stop, non toccata.
+2. **Effetto "pagina girata" più memorabile**, ispirato a turn.js (l'utente ha condiviso
+   html.it/articoli/turnjs-ottenere-un-effetto-page-flip-dimpatto — non raggiungibile da questa
+   sandbox per lo stesso blocco di rete di sempre, letto tramite ricerca web indiretta: la tecnica
+   di turn.js combina trasformazioni 3D, gradienti per profondità/ombreggiatura e ombre che
+   simulano la piega). Riprodurre la vera curvatura a mesh di turn.js (canvas, pagina che si
+   flette fisicamente) è fuori scala per una micro-interazione di cambio pagina — replicati invece
+   i due ingredienti che davano l'impatto percepito, in puro CSS:
+   - **Rotazione con un piccolo rimbalzo** invece di fermarsi di scatto: un keyframe intermedio al
+     65% supera leggermente lo zero nella direzione opposta prima di assestarsi (`rotateY(var(...)
+     * -0.07)`) — una pagina vera non si ferma di colpo. Angolo aumentato da 6° a 11°, durata da
+     420 a 560ms.
+   - **Ombra che si muove e si affievolisce in sincrono** (`.book-page-turn::before`, nuovo):
+     gradiente scuro (mai bianco) dal lato della piega verso il centro pagina, che parte quasi
+     opaco e sfuma a trasparente sulla stessa durata dell'animazione — non un'ombra statica, una
+     che "passa" sopra la pagina mentre si gira. Verificato via `getComputedStyle` a metà
+     animazione: `transform` un `rotateY` non-identità, opacità dell'ombra a metà strada tra
+     l'iniziale e lo zero finale, entrambi confermano che l'animazione procede come progettato
+     (non solo che parte/arriva).
+3. **Filtro cartografico delle miniature rinforzato** (`components/routehub/BottomGallery.tsx`).
+   I valori della Fase 33 (`grayscale 15% sepia 30% saturate 70% contrast 85% brightness 105%`)
+   restavano troppo vicini ai colori originali di OpenTopoMap per essere notati sul dispositivo
+   reale ("mi sembra siano rimasti invariati dalla precedente") — OpenTopoMap ha già una palette
+   escursionistica relativamente tenue, quindi un filtro leggero sopra non produceva una
+   differenza percepibile. Rinforzato a `grayscale 30% sepia 45% saturate 45% contrast 78%
+   brightness 110% hue-rotate(-6deg)` — desaturazione e calo di contrasto più marcati, più un
+   lieve `hue-rotate` verso il caldo invece del solo seppia. `paperOverlay` alzato da 0.15 a 0.22
+   di opacità per lo stesso motivo. **Non verificabile a schermo in questa sandbox** (il fetch
+   reale delle tile resta bloccato) — la resa finale va confermata sul dispositivo dell'utente;
+   se ancora insufficiente, il prossimo passo naturale non è un altro giro di filtro CSS ma le
+   tile vettoriali/uno stile dedicato (fuori scala per questa fase).
+
 ## File critici
 - `components/guida/GuideReader.tsx`, `components/resoconto/ReportReader.tsx` — sorgente da cui
   estratto in Fase 0, non riscritti.

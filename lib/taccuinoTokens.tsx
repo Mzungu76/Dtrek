@@ -208,20 +208,21 @@ export function TaccuinoPaperTexture({ flip = false }: { flip?: boolean }) {
  * Fase 21) ora viene anche alternato da chi chiama `BookPage` — vedi `spineSide` lì — per
  * simulare pagine recto/verso di un libro vero sfogliandolo tra Guida/Resoconto; il Sommario
  * resta fisso a sinistra (non passa mai `spineSide`, resta sul default).
+ *
+ * Fase 36 — tolta la "piccola zona di luce" (`light`, un caldo quasi-bianco): segnalata
+ * esplicitamente come "riflesso bianco" indesiderato. La composizione resta comunque a più
+ * livelli (ombra interna → piega → ombra esterna più morbida), solo senza lo schiarimento.
  */
 export function TaccuinoSpineShadow({ side = 'left' }: { side?: 'left' | 'right' }) {
   const width = 34
   const shadowIn = 'rgba(41,35,30,0.48)'   // ombra interna, marrone-nero caldo (TACCUINO_INK.typed)
-  const crease   = 'rgba(128,103,70,0.34)' // linea di piega (TACCUINO_INK.hand)
-  const light    = 'rgba(246,238,220,0.42)' // piccola zona di luce (TACCUINO_PAPER.light)
+  const crease   = 'rgba(128,103,70,0.36)' // linea di piega (TACCUINO_INK.hand)
   const shadowOut = 'rgba(41,35,30,0.17)'  // ombra esterna, più morbida ma non più quasi invisibile
   const stopsLTR = [
-    `${shadowIn} 0%`, `${shadowIn} 7%`, `${crease} 13%`, `${crease} 17%`,
-    `${light} 24%`, `${shadowOut} 36%`, 'transparent 62%',
+    `${shadowIn} 0%`, `${shadowIn} 7%`, `${crease} 15%`, `${shadowOut} 30%`, 'transparent 60%',
   ].join(', ')
   const stopsRTL = [
-    `${shadowIn} 100%`, `${shadowIn} 93%`, `${crease} 87%`, `${crease} 83%`,
-    `${light} 76%`, `${shadowOut} 64%`, 'transparent 38%',
+    `${shadowIn} 100%`, `${shadowIn} 93%`, `${crease} 85%`, `${shadowOut} 70%`, 'transparent 40%',
   ].join(', ')
   const verticalMask = 'linear-gradient(to bottom, transparent 0%, black 18%, black 82%, transparent 100%)'
   return (

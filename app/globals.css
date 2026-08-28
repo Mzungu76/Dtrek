@@ -49,22 +49,46 @@ body {
   box-shadow: 0 12px 32px rgba(0,0,0,0.12);
 }
 
-/* "Pagina girata" del Diario a libro (components/libro/BookPage.tsx, Fase 35) — una leggera
-   rotazione 3D che si assesta a ogni cambio di pagina, cardine sul lato della piega
-   (`--page-turn-deg`, impostato inline da BookPage secondo `spineSide`). Applicata a un elemento
-   rimontato via `key` a ogni navigazione: un'animazione CSS su un elemento appena inserito nel
-   DOM parte da sé, non serve altro trigger. `backface-visibility: hidden` evita che si veda il
-   "retro" della pagina durante la rotazione. Disattivata sotto `prefers-reduced-motion`. */
+/* "Pagina girata" del Diario a libro (components/libro/BookPage.tsx) — rotazione 3D che si
+   assesta a ogni cambio di pagina, cardine sul lato della piega (`--page-turn-deg`, impostato
+   inline da BookPage secondo `spineSide`). Applicata a un elemento rimontato via `key` a ogni
+   navigazione: un'animazione CSS su un elemento appena inserito nel DOM parte da sé, non serve
+   altro trigger. `backface-visibility: hidden` evita che si veda il "retro" della pagina durante
+   la rotazione. Disattivata sotto `prefers-reduced-motion`.
+   Fase 36 — resa "più memorabile" ispirandosi a turn.js (vedi html.it/articoli/turnjs-ottenere-
+   un-effetto-page-flip-dimpatto): non solo una rotazione lineare che si ferma, ma (1) un piccolo
+   "rimbalzo" oltre lo zero al 65% (il moltiplicatore negativo sul + termine finale) prima di
+   assestarsi — una pagina vera non si ferma di scatto, oscilla un attimo — e (2) un'ombra che si
+   muove e si affievolisce in sincrono (`::before`, gradiente scuro dal lato della piega verso il
+   centro pagina, mai bianco — la "zona di luce" della piega statica era stata tolta apposta,
+   niente di simile va reintrodotto qui). Durata portata da 420 a 560ms: uno scatto secco non si
+   percepiva come "sfogliare", solo come un fade generico. */
 @keyframes page-turn-in {
-  from { transform: perspective(1400px) rotateY(var(--page-turn-deg, -6deg)); opacity: 0.55; }
-  to   { transform: perspective(1400px) rotateY(0deg); opacity: 1; }
+  0%   { transform: perspective(1600px) rotateY(var(--page-turn-deg, -11deg)); opacity: 0.5; }
+  65%  { transform: perspective(1600px) rotateY(calc(var(--page-turn-deg, -11deg) * -0.07)); opacity: 1; }
+  100% { transform: perspective(1600px) rotateY(0deg); opacity: 1; }
+}
+@keyframes page-turn-shadow {
+  0%   { opacity: 0.85; }
+  70%  { opacity: 0.28; }
+  100% { opacity: 0; }
 }
 .book-page-turn {
-  animation: page-turn-in 420ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  position: relative;
+  animation: page-turn-in 560ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
   backface-visibility: hidden;
+}
+.book-page-turn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(to var(--page-turn-shadow-dir, right), rgba(41,35,30,0.4), transparent 55%);
+  animation: page-turn-shadow 560ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
 @media (prefers-reduced-motion: reduce) {
   .book-page-turn { animation: none; }
+  .book-page-turn::before { animation: none; content: none; }
 }
 
 /* Scrollbar sottile */
