@@ -98,7 +98,7 @@ function ThumbBadge({ sortBy, item, showPlannedDate }: { sortBy: SortKey; item: 
 // invece di duplicarne la logica IntersectionObserver/Leaflet.
 export function GalleryMapThumb({
   polyline, lineColor = '#7dd3fc', lineWeight = 4, dashArray, showEndpoints = false, dimTiles = true,
-  tileStyle = 'light',
+  tileStyle = 'light', vintageTiles = false, paperOverlay = false,
 }: {
   polyline?: [number, number][]
   /** Colore del tracciato — di default il ciano della galleria (sfondo scuro). Il Sommario del
@@ -124,6 +124,23 @@ export function GalleryMapThumb({
    *  (OpenTopoMap, curve di livello e cartografia escursionistica reale) per sembrare un reperto
    *  cartaceo invece di uno screenshot da app di navigazione. */
   tileStyle?: string
+  /** Fase 32 (piano taccuino, "Fase 2/4" dell'utente) — filtro CSS applicato SOLO al
+   *  `.leaflet-tile-pane` di questa istanza (non all'intero contenitore Leaflet, così il
+   *  tracciato/i marker SVG nel pannello overlay separato non vengono scoloriti insieme alle
+   *  tile): desatura, abbassa il contrasto, scalda leggermente — l'esatto fallback previsto dalla
+   *  specifica quando "le tile attuali non possono essere sostituite facilmente" (una vera
+   *  cartografia con boschi/strade/acqua a colori propri richiederebbe tile vettoriali, non
+   *  disponibili qui). Applicato una sola volta alla creazione del layer (il nodo pane non viene
+   *  ricreato quando arrivano nuove tile). Mai sulla mappa di navigazione — solo i chiamanti che
+   *  lo passano esplicitamente lo ricevono.
+   */
+  vintageTiles?: boolean
+  /** Fase 32 — leggerissimo velo colore carta sopra l'intera miniatura (tile + tracciato),
+   *  richiesto per "fondere la cartografia con il resto della pagina" invece di farla sembrare
+   *  una finestra ritagliata su un'app di mappe. Separato da `dimTiles` (quel velo è nero, pensato
+   *  per far risaltare un tracciato ciano su sfondo scuro — l'opposto di questo).
+   */
+  paperOverlay?: boolean
 }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<HTMLDivElement>(null)
@@ -157,6 +174,12 @@ export function GalleryMapThumb({
       // livello disponibile invece di richiedere tile che darebbero 404.
       const isTopo = tileStyle === 'topo'
       L.tileLayer(`/api/tile?z={z}&x={x}&y={y}&style=${tileStyle}`, { maxZoom: 19, maxNativeZoom: isTopo ? 17 : 19 }).addTo(map)
+      if (vintageTiles) {
+        // `.leaflet-tile-pane` è un pannello fratello di `.leaflet-overlay-pane` (dove vivono
+        // tracciato e marker, resi come SVG) — il filtro qui non li tocca.
+        const tilePane = map.getPane('tilePane')
+        if (tilePane) tilePane.style.filter = 'grayscale(15%) sepia(30%) saturate(70%) contrast(85%) brightness(105%)'
+      }
       const line = L.polyline(polyline, { color: lineColor, weight: lineWeight, opacity: 0.95, dashArray }).addTo(map)
       if (showEndpoints) {
         const start = polyline[0]
@@ -188,7 +211,7 @@ export function GalleryMapThumb({
       observer?.disconnect()
       if (mapInstance.current) { mapInstance.current.remove(); mapInstance.current = null }
     }
-  }, [nearView, polyline, lineColor, lineWeight, dashArray, showEndpoints, tileStyle])
+  }, [nearView, polyline, lineColor, lineWeight, dashArray, showEndpoints, tileStyle, vintageTiles])
 
   const hasRoute = polyline && polyline.length > 1
 
@@ -201,6 +224,7 @@ export function GalleryMapThumb({
       {hasRoute && nearView && <div ref={mapRef} className="absolute inset-0" />}
       {/* Darkens the tile so the colored route stands out more clearly than the raw raster tiles. */}
       {dimTiles && <div className="absolute inset-0 bg-black/20 pointer-events-none" />}
+      {paperOverlay && <div className="absolute inset-0 pointer-events-none" style={{ background: 'rgba(242,232,210,0.15)' }} />}
     </div>
   )
 }
