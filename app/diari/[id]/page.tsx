@@ -596,7 +596,13 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                         Fase 30 (sembravano "marker di Leaflet"): la precisione del percorso resta
                         intatta, sono gli stessi punti GPS, solo lo stile del tratto cambia.
                         `dimTiles={false}` toglie il velo scuro pensato per la galleria a sfondo
-                        nero (qui contro i "colori originali" richiesti). */}
+                        nero (qui contro i "colori originali" richiesti). Fase 32 ("Fase 2/4" del
+                        piano taccuino) — `vintageTiles` applica alle sole tile (non al tracciato)
+                        il filtro CSS desaturato/caldo previsto dalla specifica come fallback,
+                        cartografia vettoriale con boschi/strade/acqua a colori propri non essendo
+                        disponibile qui; `paperOverlay` aggiunge il velo colore carta richiesto per
+                        fondere la miniatura con la pagina invece di farla sembrare una finestra
+                        ritagliata su un'app di mappe. */}
                     <div
                       className="w-[87px] h-[87px] shrink-0 overflow-hidden relative"
                       style={{
@@ -619,6 +625,8 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                             showEndpoints
                             dimTiles={false}
                             tileStyle="topo"
+                            vintageTiles
+                            paperOverlay
                           />
                         )
                         : <div className="w-full h-full flex items-center justify-center"><Mountain className="w-5 h-5" style={{ color: TACCUINO_PAPER.cardBorder }} /></div>}

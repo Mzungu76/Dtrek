@@ -1161,6 +1161,50 @@ di produzione vera con un titolo volutamente molto lungo (oltre 100 caratteri): 
 in verticale, miniatura mappa e badge Trail Score restano centrati rispetto al blocco titolo grazie
 a `items-center` già presente sul contenitore flex, nessuna sovrapposizione o rottura del layout.
 
+**Fase 33 — Stile cartografico delle miniature ("Fase 2 di 4" del piano taccuino)** ✅ **COMPLETATA**
+
+Sezione 13/14 della specifica di Fase 31: le miniature mappa devono avere l'aria di una piccola
+carta escursionistica vintage (fondo avorio, verdi desaturati, contrasto basso, colori caldi)
+invece della cartografia digitale a piena saturazione di OpenTopoMap. La palette per-elemento
+esatta della specifica (boschi/strade/acqua ciascuno con un colore proprio) richiederebbe tile
+vettoriali — non disponibili qui (si resta su tile raster già renderizzate, vedi `PROVIDERS` in
+`app/api/tile/route.ts`) — quindi si applica il fallback esplicitamente previsto dalla specifica
+stessa ("se le tile non possono essere sostituite, applica un filtro CSS").
+
+- `components/routehub/BottomGallery.tsx` (`GalleryMapThumb`): due nuovi prop opzionali, entrambi
+  `false` di default (nessun cambiamento per gli altri due chiamanti, `BottomGallery.tsx` e
+  `ExpandedGalleryList.tsx`).
+  - `vintageTiles` — applica `filter: grayscale(15%) sepia(30%) saturate(70%) contrast(85%)
+    brightness(105%)` (desatura, abbassa il contrasto, scalda leggermente — la stessa famiglia di
+    funzioni CSS suggerita dalla specifica) **solo** al pannello `tilePane` di Leaflet
+    (`map.getPane('tilePane')`), non all'intero contenitore: `tilePane` e `overlayPane` (dove
+    vivono tracciato e marker, resi come SVG) sono pannelli fratelli nella stessa mappa, quindi il
+    filtro non scolorisce il tracciato nero/i marker di partenza-arrivo. Verificato via
+    `getComputedStyle` su una build di produzione (il fetch reale delle tile OpenTopoMap non è
+    raggiungibile da questa sandbox, stessa restrizione di rete già incontrata per Supabase — la
+    resa a colori va quindi confermata sul dispositivo dell'utente o sull'anteprima Vercel, non
+    verificabile qui): `tilePane` della miniatura con `vintageTiles` porta esattamente quel
+    filtro, `overlayPane` della stessa miniatura e l'intera mappa dell'altra (senza il prop)
+    restano `none`.
+  - `paperOverlay` — un velo `rgba(242,232,210,0.15)` sopra l'intera miniatura (tile e tracciato
+    insieme), la stessa tinta "paper" della specifica (sezione 18), per fondere la miniatura con
+    la pagina invece di farla sembrare una finestra ritagliata su un'app di mappe. Distinto da
+    `dimTiles` (velo nero, pensato per il tracciato ciano su sfondo scuro della galleria — l'uso
+    opposto).
+- `app/diari/[id]/page.tsx`: la riga del Sommario passa ora `vintageTiles` e `paperOverlay` a
+  `GalleryMapThumb`.
+- **Non incluso** (sezione 17 della specifica, "ridurre POI/etichette"): non ottenibile su tile
+  raster già renderizzate — le etichette sono già "cotte" nell'immagine, un filtro CSS non può
+  rimuoverle selettivamente. Resterebbe possibile solo cambiando fornitore di tile (nessuna
+  variante "senza POI" nota per la cartografia escursionistica) o passando a tile vettoriali,
+  entrambi fuori scopo per questa fase — non fatto, non promesso.
+- **Verifica**: `tsc --noEmit` ed `eslint` puliti (65 warning invariati, 0 errori); build di
+  produzione (`next build && next start`) su una route di debug temporanea con due righe (una con
+  `vintageTiles`/`paperOverlay`, una senza) — layout e testo confermati intatti, il filtro applicato
+  correttamente solo dove atteso. La resa cromatica finale (quanto "vintage" appare davvero il
+  colore) resta da confermare sul dispositivo reale dell'utente, dove le tile OpenTopoMap si
+  caricano per davvero.
+
 ## File critici
 - `components/guida/GuideReader.tsx`, `components/resoconto/ReportReader.tsx` — sorgente da cui
   estratto in Fase 0, non riscritti.
