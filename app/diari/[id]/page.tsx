@@ -624,7 +624,15 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                         : <div className="w-full h-full flex items-center justify-center"><Mountain className="w-5 h-5" style={{ color: TACCUINO_PAPER.cardBorder }} /></div>}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate" style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 19.5, color: TACCUINO_INK.typed }}>{p.title}</p>
+                      {/* Fase 32 — non più `truncate` (richiesta esplicita: il titolo deve leggersi
+                          sempre per intero, non tagliato con "..."): va a capo libero invece di
+                          troncare su una riga sola. Nessuna interazione di "tocca per espandere"
+                          necessaria — l'intera riga è già un `<Link>` verso la Guida, un'area
+                          cliccabile separata solo sul titolo per mostrarlo esteso avrebbe voluto
+                          dire intercettare quel click (`preventDefault`/`stopPropagation`) dentro
+                          l'unico link della riga, un secondo target interattivo annidato in quello
+                          esistente invece di una singola area cliccabile chiara. */}
+                      <p style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 19.5, color: TACCUINO_INK.typed, lineHeight: 1.15 }}>{p.title}</p>
                       {(scoreLabel || p.safety) && (
                         // Fase 31 — font a mano anche qui ("sottotitoli personali" nella specifica
                         // tipografica, non più il sans di default): resta comunque un gradino sotto

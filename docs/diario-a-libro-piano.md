@@ -1147,6 +1147,20 @@ prima (solo per il tema taccuino, la pergamena resta invariata).
 Verificato tutto su una build di produzione vera: testo sempre leggibile, nessuna regressione,
 gerarchia tipografica coerente (titolo protagonista, sottotitolo/dati via via più tenui).
 
+**Fase 32 — Il titolo del percorso non va più troncato** ✅ **COMPLETATA**
+
+Richiesta: il titolo di ogni riga del Sommario deve sempre leggersi per intero — o tutto già
+visibile, o rivelabile per intero al tocco. In `app/diari/[id]/page.tsx`, il `<p>` del titolo
+perde la classe `truncate` (niente più taglio a una riga con `...`): va a capo su più righe quanto
+serve, senza limite (`lineHeight: 1.15` per tenere compatte le righe multiple). Scartata l'opzione
+"tocca per espandere": l'intera riga è già un `<Link>` verso la Guida (Fase 15) — un'area cliccabile
+separata solo sul titolo per mostrarlo esteso avrebbe richiesto intercettare quel click
+(`preventDefault`/`stopPropagation`) dentro l'unico link della riga, un secondo target interattivo
+annidato in quello esistente invece di una singola area cliccabile chiara. Verificato su una build
+di produzione vera con un titolo volutamente molto lungo (oltre 100 caratteri): la riga si allunga
+in verticale, miniatura mappa e badge Trail Score restano centrati rispetto al blocco titolo grazie
+a `items-center` già presente sul contenitore flex, nessuna sovrapposizione o rottura del layout.
+
 ## File critici
 - `components/guida/GuideReader.tsx`, `components/resoconto/ReportReader.tsx` — sorgente da cui
   estratto in Fase 0, non riscritti.
