@@ -62,9 +62,9 @@ body {
    sia durante un drag dal vivo sia durante un tween automatico) guida tutte le regole qui sotto —
    mai una seconda animazione indipendente. Dettagli/formule: lib/pageTurn/pageTurnMath.ts.
 
-   Le zone di presa (`.dtp-edge`) sono strisce sottili SOLO ai bordi della pagina: il resto del
-   contenuto (mappe, gallerie a scorrimento, grafico altimetrico) non ha alcun listener del motore
-   sopra e continua a ricevere i propri gesti nativi indisturbato. */
+   Il gesto (usePageDrag.ts) aggancia il dito ovunque lo si appoggi sul contenuto — mai un effetto
+   che parte da solo al click: mappe, gallerie a scorrimento e grafico altimetrico restano
+   riconosciuti ed esclusi dal loro stesso elemento (nessun overlay separato sopra di loro). */
 .dtp-root {
   position: relative;
   perspective: 1800px;
@@ -88,7 +88,7 @@ body {
 /* Piega/dorso reattivo (Sezione 8) — non la decorazione statica e permanente della rilegatura
    (quella resta BookSpineShadow.tsx/TaccuinoSpineShadow, invariata): questa è specifica del
    cardine di QUESTO sfoglio (può non coincidere col lato "decorativo" della pagina quando lo
-   sfoglio parte da un gesto — vedi commento in useEdgePageDrag.ts) e vive solo mentre reagisce. */
+   sfoglio parte da un gesto — vedi commento in usePageDrag.ts) e vive solo mentre reagisce. */
 .dtp-spine-glow {
   position: absolute; inset-block: 0; width: 46px; z-index: 2; pointer-events: none;
   opacity: var(--dtp-spine-o, 0);
@@ -119,7 +119,21 @@ body {
   -webkit-backface-visibility: hidden;
 }
 .dtp-face--front { position: relative; }
-.dtp-root--active .dtp-content { pointer-events: none; }
+/* `.dtp-content` porta anche il gesto (vedi usePageDrag.ts): DEVE restare `pointer-events: auto`
+   su se stesso anche a sfoglio confermato, altrimenti l'elemento che ha appena catturato il
+   puntatore (`setPointerCapture`) rischierebbe di non ricevere più i propri stessi eventi di
+   trascinamento. A diventare inerte durante uno sfoglio è invece il contenuto reale al suo
+   interno — mappe/link non devono più reagire mentre la pagina sta girando — tramite i figli
+   diretti (`pointer-events` si eredita, arriva comunque a ogni discendente). Tolta anche la
+   selezione testo, che altrimenti un trascinamento orizzontale sopra un paragrafo la innescherebbe
+   come farebbe su qualunque testo normale. */
+.dtp-root--active .dtp-content {
+  user-select: none;
+  -webkit-user-select: none;
+}
+.dtp-root--active .dtp-content > * {
+  pointer-events: none;
+}
 
 /* Ombreggiatura sulla superficie stessa della pagina, non sulla pagina sottostante (Sezione 7:
    intensità/posizione cambiano insieme, mai un'unica ombra statica) — si scurisce verso il bordo
@@ -159,19 +173,6 @@ body {
     linear-gradient(160deg, rgba(120,90,50,0.12), rgba(50,35,18,0.18));
   mix-blend-mode: multiply;
 }
-
-/* Niente `z-index` qui, di proposito (Sezione 15): stanno PRIMA di `.dtp-content` nel markup
-   (vedi DtrekPageTurn.tsx) così un qualunque controllo reale della pagina che galleggia vicino al
-   bordo (i chip della mappa, un bottone) — venendo dopo nell'ordine del documento, stesso livello
-   di stacking `auto` — vince naturalmente il tocco sopra la zona di presa. Il gesto di sfoglio
-   resta agganciabile solo dove non c'è nient'altro sopra a reclamarlo. Larghezza impostata inline
-   da useEdgePageDrag.ts (`EDGE_GRAB_PX`, lib/pageTurn/pageTurnMath.ts) — un solo numero, non
-   duplicato qui. */
-.dtp-edge {
-  position: absolute; inset-block: 0;
-}
-.dtp-edge--start { left: 0; cursor: grab; }
-.dtp-edge--end { right: 0; cursor: grab; }
 
 /* Fallback a movimento ridotto (Sezione 16) — niente rotazione 3D, solo una dissolvenza breve: il
    componente rileva `prefers-reduced-motion` in JS e in quel caso non scrive mai `--dtp-*` (il

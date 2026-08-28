@@ -1,6 +1,6 @@
 // Dtrek Page Turning Engine — parte "fisica" pura (nessun DOM, nessun React): un unico posto dove
 // vivono le costanti e le formule che descrivono come si comporta una pagina che si sfoglia,
-// condivise sia dal ramo gesture (drag dal bordo, components/libro/pageTurn/useEdgePageDrag.ts)
+// condivise sia dal ramo gesture (trascinamento, components/libro/pageTurn/usePageDrag.ts)
 // sia dal ramo programmatico (click/tastiera su Indietro/Avanti/pillole, DtrekPageTurn.tsx). Tenerle
 // qui invece che duplicate nei due punti d'uso è il motivo per cui "un click" e "un drag completato
 // oltre soglia" finiscono nello stesso identico movimento invece di due animazioni scollegate.
@@ -77,14 +77,6 @@ export const PAGE_TURN_TIMING = {
    *  leggermente mentre si solleva" invece di un rotateY rigido sul posto. */
   shiftPx: 7,
 } as const
-
-/** Larghezza (px) della zona di presa al bordo libero — Sezione 3, "l'utente appoggia il dito sul
- *  bordo della pagina": abbastanza stretta da non intercettare scroll/pan della mappa altrove
- *  sulla pagina (Sezione 15), abbastanza larga da restare facile da agganciare col pollice. Un
- *  puro valore di layout CSS (`.dtp-edge` in app/globals.css), non parte della fisica dello
- *  sfoglio: vive qui solo perché è l'altro numero "a occhio" che un secondo giro di rifinitura
- *  (Sezione 24) potrebbe voler cambiare insieme al resto. */
-export const EDGE_GRAB_PX = 28
 
 export interface PageTurnVisualState {
   /** Gradi di rotazione da applicare a `.dtp-leaf` (già col segno del cardine). */

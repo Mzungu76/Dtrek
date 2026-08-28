@@ -1,11 +1,13 @@
 'use client'
 // Dtrek Page Turning Engine — componente centrale. Sostituisce interamente il vecchio sistema
 // (View Transitions API + `@keyframes page-turn-in/out` in app/globals.css, rimossi) con un motore
-// proprietario che gestisce sia lo sfoglio programmatico (click su Indietro/Avanti/pillole/Indice,
-// frecce da tastiera — tutti richiamano `flipTo` tramite il ref imperativo) sia lo sfoglio
-// gesture-driven (drag dal bordo libero della pagina, gestito da `useEdgePageDrag`) con lo STESSO
-// identico codice di rendering/fisica — mai due animazioni scollegate (Sezione 2/13 della
-// specifica).
+// proprietario. Il gesto è l'interazione primaria (Sezione 1/3 della specifica: "non un effetto
+// autonomo su click, ma dinamico e legato al movimento dell'utente") — il dito aggancia la pagina
+// dal primo istante e la piega/sposta materialmente ovunque la si tocchi (`usePageDrag.ts`, non
+// più ristretto a un bordo stretto e difficile da trovare); click/tastiera restano disponibili
+// come scorciatoia immediata (utile su desktop, dove trascinare col mouse è meno naturale) e
+// passano dallo STESSO identico codice di rendering/fisica — mai due animazioni scollegate
+// (Sezione 2/13 della specifica).
 //
 // Perché non serve un Context/Provider a livello di root layout: ogni pagina del libro (Guida,
 // Reportage) è una route Next.js a sé, quindi cambia sezione = smonta il vecchio `page.tsx` e ne
@@ -34,7 +36,7 @@ import {
   PAGE_TURN_TIMING, type HingeSide,
 } from '@/lib/pageTurn/pageTurnMath'
 import { consumePageTurnHandoff, writePageTurnHandoff } from '@/lib/pageTurn/pageTurnHandoff'
-import { useEdgePageDrag } from './useEdgePageDrag'
+import { usePageDrag } from './usePageDrag'
 
 export interface DtrekPageTurnHandle {
   /** Avvia uno sfoglio programmatico (click o tastiera) verso `href`, intorno al cardine indicato.
@@ -44,8 +46,10 @@ export interface DtrekPageTurnHandle {
 }
 
 interface DtrekPageTurnProps {
-  /** Assente ⇒ nessuna zona di presa per "indietro"/"avanti" su quel lato (stesso significato dei
-   *  pulsanti disabilitati già presenti in BookPage.tsx). */
+  /** Assente ⇒ un trascinamento in quella direzione non porta da nessuna parte e resta senza
+   *  effetto (stesso significato dei pulsanti disabilitati già presenti in BookPage.tsx) — non è
+   *  più una zona di presa dedicata su un lato: la direzione la decide il verso del trascinamento,
+   *  ovunque parta sulla pagina (vedi usePageDrag.ts). */
   prevHref?: string
   nextHref?: string
   /** Colore di sfondo del tema corrente — usato per lo strato di sicurezza sotto il foglio e per
@@ -185,7 +189,7 @@ const DtrekPageTurn = forwardRef<DtrekPageTurnHandle, DtrekPageTurnProps>(functi
   useImperativeHandle(ref, () => ({ flipTo }), [flipTo])
 
   // ── Sfoglio gesture-driven ─────────────────────────────────────────────────────────────────
-  const { startEdgeProps, endEdgeProps } = useEdgePageDrag({
+  const { dragSurfaceProps } = usePageDrag({
     containerRef: rootRef,
     disabled: active || reducedMotion,
     canGoPrev: !!prevHref,
@@ -224,14 +228,12 @@ const DtrekPageTurn = forwardRef<DtrekPageTurnHandle, DtrekPageTurnProps>(functi
       <div className="dtp-spine-glow" aria-hidden="true" />
       <div className="dtp-leaf">
         <div className="dtp-face dtp-face--front">
-          {/* Le zone di presa vengono PRIMA del contenuto reale nel markup, apposta: stesso livello
-              di stacking (nessuno dei due ha uno z-index esplicito), quindi qualunque controllo
-              vero della pagina vicino al bordo (i chip della mappa, un bottone) vince il tocco
-              sopra la zona di presa semplicemente perché arriva dopo nel DOM — mai bisogno di
-              indovinare quale bordo intercetterebbe quale bottone (Sezione 15). */}
-          {!!prevHref && <div className="dtp-edge dtp-edge--start" aria-hidden="true" {...startEdgeProps} />}
-          {!!nextHref && <div className="dtp-edge dtp-edge--end" aria-hidden="true" {...endEdgeProps} />}
-          <div className="dtp-content" ref={contentRef}>{children}</div>
+          {/* Il gesto è agganciato qui, sul contenitore del contenuto VERO — non su un div a parte
+              sovrapposto — cosicché `e.target` dentro usePageDrag.ts sia sempre l'elemento
+              realmente toccato (un link, la mappa, il testo) e possa riconoscere ed escludere i
+              pochi widget con un proprio gesto orizzontale prima di catturare qualunque cosa
+              (Sezione 15). Ovunque altro sulla pagina, il tocco aggancia lo sfoglio. */}
+          <div className="dtp-content" ref={contentRef} {...dragSurfaceProps}>{children}</div>
           <div className="dtp-self-shadow" aria-hidden="true" />
           <div className="dtp-highlight" aria-hidden="true" />
         </div>
