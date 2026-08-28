@@ -43,61 +43,23 @@
 // mano) al posto del flat `BookSpineShadow` — la parte del mockup che dava davvero l'identità
 // "taccuino", non solo la palette.
 //
-// Fase 39 — "effetto pagina girata" riscritto da capo sulla View Transitions API del browser, dopo
-// che la versione CSS-only di Fase 35-37 (una `rotateY` sulla sola pagina in arrivo, rimontata via
-// `key={pathname}`) è stata giudicata "non bella o sufficiente". Il limite reale di quella
-// versione: la pagina che si lascia scompariva di scatto, nessun "volta pagina" vero — solo la
-// pagina nuova che entrava ruotando. Con `document.startViewTransition()` il browser cattura uno
-// screenshot della pagina VECCHIA e uno della NUOVA e li anima entrambi (`::view-transition-old`/
-// `::view-transition-new(root)`, stilizzati in app/globals.css) — la pagina che si lascia ruota
-// davvero via mentre la nuova ruota dentro, lo stesso principio (perspective+rotateY+ombra) di
-// prima ma applicato a entrambi i lati del cambio pagina, non a uno solo. Supportata nei browser
-// Chromium recenti (compreso il WebView Android della PWA); su browser senza supporto o con
-// `prefers-reduced-motion` la navigazione ricade sul comportamento normale di `<Link>`/`router.push`
-// senza transizione, non un errore.
+// Fase 39 aveva riscritto l'"effetto pagina girata" sulla View Transitions API del browser: un
+// singolo screenshot piatto di prima/dopo, ruotato come un'unica immagine. Sostituito qui per
+// intero dal Dtrek Page Turning Engine (components/libro/pageTurn/DtrekPageTurn.tsx) — un vero
+// elemento 3D con cardine, retro pagina, ombre/luce reattive e uno sfoglio gesture-driven dal
+// bordo, oltre al click/tastiera di prima. `pageTurnRef` espone `flipTo(href, hinge)`: ogni
+// `<Link>` di questa barra prova prima a farlo animare dal motore (`preventDefault` solo se il
+// motore accetta), altrimenti naviga normalmente — stesso fallback "silenzioso" di prima per
+// `prefers-reduced-motion` o per un secondo click arrivato mentre uno sfoglio è già in corso.
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { flushSync } from 'react-dom'
-import type { MouseEvent, ReactNode } from 'react'
+import { useCallback, useEffect, useRef, type MouseEvent, type ReactNode } from 'react'
 import { ChevronLeft, ChevronRight, BookMarked, Wrench } from 'lucide-react'
 import { FONT, TERRA } from '@/lib/designTokens'
 import { TACCUINO_PAPER, TACCUINO_INK, TaccuinoPaperTexture, TaccuinoSpineShadow } from '@/lib/taccuinoTokens'
 import BookSpineShadow from './BookSpineShadow'
-
-/** `document.startViewTransition` non è ancora nei tipi DOM standard di ogni versione di
- *  TypeScript — un cast locale invece di allargare `lib` nel tsconfig per un'unica API. */
-type DocumentWithViewTransition = Document & { startViewTransition?: (cb: () => void) => unknown }
-
-/**
- * Avvia la navigazione dentro una View Transition quando possibile, impostando prima le variabili
- * CSS che dicono a `::view-transition-old/new(root)` (app/globals.css) da che lato agganciare il
- * cardine di ciascuna pagina — calcolate qui perché solo chi clicca conosce sia `spineSide` della
- * pagina che sta lasciando sia, per costruzione (Guida/Resoconto alternano un
- * lato per pagina), il lato opposto della pagina in arrivo. `flushSync` è necessario perché
- * `router.push` di Next.js aggiorna il DOM in modo asincrono (batching di React) — senza,
- * `startViewTransition` catturerebbe lo screenshot "dopo" prima che il nuovo contenuto sia
- * davvero nel DOM.
- */
-function navigateWithPageTurn(
-  e: MouseEvent<HTMLAnchorElement>,
-  router: ReturnType<typeof useRouter>,
-  href: string,
-  exitSide: 'left' | 'right',
-) {
-  // Tasti modificatori/tasto non sinistro → lascia fare al browser (nuova scheda, ecc.).
-  if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return
-  const doc = document as DocumentWithViewTransition
-  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  if (!doc.startViewTransition || reduceMotion) return // niente preventDefault: <Link> naviga normalmente
-  e.preventDefault()
-  const enterSide: 'left' | 'right' = exitSide === 'left' ? 'right' : 'left'
-  const root = document.documentElement.style
-  root.setProperty('--page-turn-exit-origin', exitSide === 'left' ? 'left center' : 'right center')
-  root.setProperty('--page-turn-enter-origin', enterSide === 'left' ? 'left center' : 'right center')
-  root.setProperty('--page-turn-exit-deg', exitSide === 'left' ? '-16deg' : '16deg')
-  root.setProperty('--page-turn-enter-deg', enterSide === 'left' ? '-16deg' : '16deg')
-  doc.startViewTransition(() => { flushSync(() => router.push(href)) })
-}
+import DtrekPageTurn, { type DtrekPageTurnHandle } from './pageTurn/DtrekPageTurn'
+import type { HingeSide } from '@/lib/pageTurn/pageTurnMath'
 
 const THEMES = {
   pergamena: {
@@ -155,7 +117,7 @@ interface BookPageProps {
    *  pagina per pagina (pari→sinistra, dispari→destra) per simulare le pagine recto/verso di un
    *  libro vero; il Sommario non passa questo prop e resta sempre a sinistra, come richiesto
    *  esplicitamente (l'elenco Percorsi non è "una pagina" in una sequenza sfogliabile). */
-  spineSide?: 'left' | 'right'
+  spineSide?: HingeSide
   children: ReactNode
 }
 
@@ -165,10 +127,40 @@ export default function BookPage({
 }: BookPageProps) {
   const t = THEMES[theme]
   const router = useRouter()
+  const pageTurnRef = useRef<DtrekPageTurnHandle>(null)
   const navButtonStyle = {
     fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase' as const,
     letterSpacing: '0.04em', fontSize: 9.5, color: t.inkMuted,
   }
+
+  /** Ogni link di questa barra (pillole, Indietro/Indice/Avanti) prova a passare dal motore prima
+   *  di lasciare che `<Link>` navighi normalmente — stesso `spineSide` per tutti, per continuità
+   *  con la rilegatura statica di questa pagina (mai un calcolo avanti/indietro diverso qui: lo
+   *  faceva già così `navigateWithPageTurn`, invariato). */
+  const handleNavClick = useCallback((e: MouseEvent<HTMLAnchorElement>, href: string) => {
+    if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return
+    const handled = pageTurnRef.current?.flipTo(href, spineSide)
+    if (handled) e.preventDefault()
+  }, [spineSide])
+
+  // Frecce da tastiera (Sezione 16) — solo quando il focus non è già dentro un campo di testo, per
+  // non rubare l'input mentre si scrive (es. la ricerca del Sommario che monta questo stesso guscio
+  // altrove nell'app). Stessa via di `flipTo` dei click: se il motore rifiuta (uno sfoglio è già in
+  // corso), naviga comunque con `router.push`, mai un tasto che sembra non fare nulla.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return
+      const target = e.target as HTMLElement | null
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return
+      const href = e.key === 'ArrowRight' ? nextHref : e.key === 'ArrowLeft' ? prevHref : undefined
+      if (!href) return
+      e.preventDefault()
+      if (!pageTurnRef.current?.flipTo(href, spineSide)) router.push(href)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [nextHref, prevHref, spineSide, router])
+
   return (
     <div className="min-h-screen flex flex-col" style={{ background: t.paperBg }}>
       {theme === 'taccuino' ? (
@@ -211,7 +203,7 @@ export default function BookPage({
               <Link
                 key={s.key}
                 href={s.href}
-                onClick={e => navigateWithPageTurn(e, router, s.href, spineSide)}
+                onClick={e => handleNavClick(e, s.href)}
                 className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11.5px] font-semibold whitespace-nowrap transition-colors"
                 style={on ? { background: TERRA[600], color: '#fff' } : { background: t.pillBg, color: t.pillText }}
               >
@@ -223,7 +215,9 @@ export default function BookPage({
       )}
 
       <div className="flex-1 min-h-0 px-5 sm:px-8 py-5" style={{ fontFamily: FONT.body }}>
-        {children}
+        <DtrekPageTurn ref={pageTurnRef} prevHref={prevHref} nextHref={nextHref} paperBg={t.paperBg}>
+          {children}
+        </DtrekPageTurn>
       </div>
 
       <div style={{ height: BOTTOM_BAR_SPACER }} />
@@ -238,7 +232,7 @@ export default function BookPage({
         }}
       >
         {prevHref ? (
-          <Link href={prevHref} onClick={e => navigateWithPageTurn(e, router, prevHref, spineSide)} className="flex flex-col items-center justify-center gap-1 px-5 py-2.5" style={navButtonStyle}>
+          <Link href={prevHref} onClick={e => handleNavClick(e, prevHref)} className="flex flex-col items-center justify-center gap-1 px-5 py-2.5" style={navButtonStyle}>
             <ChevronLeft className="w-[18px] h-[18px]" />
             Indietro
           </Link>
@@ -249,7 +243,7 @@ export default function BookPage({
           </span>
         )}
 
-        <Link href={indexHref} onClick={e => navigateWithPageTurn(e, router, indexHref, spineSide)} className="flex flex-col items-center justify-center gap-1 px-5 py-2.5" style={navButtonStyle}>
+        <Link href={indexHref} onClick={e => handleNavClick(e, indexHref)} className="flex flex-col items-center justify-center gap-1 px-5 py-2.5" style={navButtonStyle}>
           <BookMarked className="w-[18px] h-[18px]" />
           {indexLabel}
         </Link>
@@ -262,7 +256,7 @@ export default function BookPage({
         )}
 
         {nextHref ? (
-          <Link href={nextHref} onClick={e => navigateWithPageTurn(e, router, nextHref, spineSide)} className="flex flex-col items-center justify-center gap-1 px-5 py-2.5" style={navButtonStyle}>
+          <Link href={nextHref} onClick={e => handleNavClick(e, nextHref)} className="flex flex-col items-center justify-center gap-1 px-5 py-2.5" style={navButtonStyle}>
             <ChevronRight className="w-[18px] h-[18px]" />
             Avanti
           </Link>
