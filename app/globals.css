@@ -49,48 +49,136 @@ body {
   box-shadow: 0 12px 32px rgba(0,0,0,0.12);
 }
 
-/* "Pagina girata" del Diario a libro — Fase 39, riscritta sulla View Transitions API del browser
-   (components/libro/BookPage.tsx, `navigateWithPageTurn`) al posto della versione CSS-only di
-   Fase 35-37 (giudicata "non bella o sufficiente": animava solo la pagina in arrivo, quella
-   lasciata spariva di scatto). Il browser cattura da sé uno screenshot della pagina prima e dopo
-   la navigazione ed espone due pseudo-elementi sul documento — `::view-transition-old(root)`
-   (l'istantanea vecchia) e `::view-transition-new(root)` (quella nuova) — entrambi animabili
-   come immagini qualsiasi: qui con lo stesso principio prima usato solo sulla pagina in arrivo
-   (perspective+rotateY con un piccolo rimbalzo, cardine sul lato della piega, un'ombra scura mai
-   bianca che si affievolisce), applicato però a ENTRAMBI i lati del cambio pagina — la vecchia
-   pagina ruota via mentre la nuova ruota dentro, un volta pagina vero invece di un solo ingresso
-   animato. Le variabili CSS (`--page-turn-exit-*`/`--page-turn-enter-*`) sono impostate da
-   `navigateWithPageTurn` prima di avviare la transizione, in base a `spineSide` della pagina che
-   si lascia e al suo opposto (il lato della pagina in arrivo, per costruzione — vedi commento
-   nel componente). Se il browser non supporta l'API o l'utente ha `prefers-reduced-motion`,
-   `navigateWithPageTurn` non la avvia affatto e la navigazione resta quella normale di `<Link>` —
-   queste regole restano quindi innocue (mai applicate) in quei casi, non serve una media query qui. */
-@keyframes page-turn-out {
-  0%   { transform: perspective(1600px) rotateY(0deg); filter: brightness(1); }
-  100% { transform: perspective(1600px) rotateY(var(--page-turn-exit-deg, -16deg)); filter: brightness(0.8); opacity: 0.1; }
-}
-@keyframes page-turn-in {
-  0%   { transform: perspective(1600px) rotateY(var(--page-turn-enter-deg, 16deg)); filter: brightness(0.86); opacity: 0.55; }
-  65%  { transform: perspective(1600px) rotateY(calc(var(--page-turn-enter-deg, 16deg) * -0.07)); filter: brightness(1); opacity: 1; }
-  100% { transform: perspective(1600px) rotateY(0deg); filter: brightness(1); opacity: 1; }
-}
-::view-transition-old(root) {
-  animation: 620ms cubic-bezier(0.22, 0.61, 0.36, 1) both page-turn-out;
-  transform-origin: var(--page-turn-exit-origin, left center);
-}
-::view-transition-new(root) {
-  animation: 620ms cubic-bezier(0.22, 0.61, 0.36, 1) both page-turn-in;
-  transform-origin: var(--page-turn-enter-origin, right center);
-}
-/* `::view-transition-old/new(root)` sono trattati dal browser come un'unica immagine sostituita —
-   non si può aggiungere un'ombra direzionale come layer separato sopra (niente `::before` su uno
-   pseudo-elemento). L'"ombra della piega" qui è quindi il `filter: brightness(...)` nei keyframe
-   sopra: la pagina si scurisce leggermente mentre ruota via/dentro, come se ricevesse meno luce
-   inclinandosi — lo stesso principio (una pagina che si piega prende meno luce) reso con lo
-   strumento disponibile su questo tipo di pseudo-elemento, mai un vero gradiente in movimento. */
-::view-transition-image-pair(root) {
+/* ────────────────────────────────────────────────────────────────────────────────────────────
+   Dtrek Page Turning Engine — components/libro/pageTurn/DtrekPageTurn.tsx
+   ────────────────────────────────────────────────────────────────────────────────────────────
+   Sostituisce interamente il vecchio "volta pagina" su View Transitions API (Fase 39, rimosso: il
+   browser catturava un semplice screenshot di prima/dopo e lo ruotava come un'unica immagine piatta
+   — niente vero sollevamento/curvatura/retro pagina, ed era impossibile agganciarci un gesto dal
+   vivo). Il nuovo motore non usa View Transitions: `.dtp-leaf` è un vero elemento 3D che ruota
+   intorno al proprio cardine, con contenuto reale al suo interno (mai clonato/smontato durante lo
+   sfoglio — niente perdita di stato di mappe/form), un retro di sola carta, e ombre/luce/piega che
+   reagiscono in continuo. Un solo custom property scritto per frame (`--dtp-*`, dal componente,
+   sia durante un drag dal vivo sia durante un tween automatico) guida tutte le regole qui sotto —
+   mai una seconda animazione indipendente. Dettagli/formule: lib/pageTurn/pageTurnMath.ts.
+
+   Le zone di presa (`.dtp-edge`) sono strisce sottili SOLO ai bordi della pagina: il resto del
+   contenuto (mappe, gallerie a scorrimento, grafico altimetrico) non ha alcun listener del motore
+   sopra e continua a ricevere i propri gesti nativi indisturbato. */
+.dtp-root {
+  position: relative;
+  perspective: 1800px;
+  perspective-origin: 50% 50%;
   isolation: isolate;
 }
+.dtp-base {
+  position: absolute; inset: 0; z-index: 0;
+  background: var(--dtp-paper-bg, #fbf6e8);
+}
+.dtp-contact-shadow {
+  position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  opacity: var(--dtp-contact-shadow-o, 0);
+}
+.dtp-root[data-hinge="left"] .dtp-contact-shadow {
+  background: linear-gradient(to right, rgba(20,16,10,0.4), transparent var(--dtp-contact-shadow-spread, 20%));
+}
+.dtp-root[data-hinge="right"] .dtp-contact-shadow {
+  background: linear-gradient(to left, rgba(20,16,10,0.4), transparent var(--dtp-contact-shadow-spread, 20%));
+}
+/* Piega/dorso reattivo (Sezione 8) — non la decorazione statica e permanente della rilegatura
+   (quella resta BookSpineShadow.tsx/TaccuinoSpineShadow, invariata): questa è specifica del
+   cardine di QUESTO sfoglio (può non coincidere col lato "decorativo" della pagina quando lo
+   sfoglio parte da un gesto — vedi commento in useEdgePageDrag.ts) e vive solo mentre reagisce. */
+.dtp-spine-glow {
+  position: absolute; inset-block: 0; width: 46px; z-index: 2; pointer-events: none;
+  opacity: var(--dtp-spine-o, 0);
+}
+.dtp-root[data-hinge="left"] .dtp-spine-glow { left: 0; background: linear-gradient(to right, rgba(41,35,30,0.5), transparent); }
+.dtp-root[data-hinge="right"] .dtp-spine-glow { right: 0; background: linear-gradient(to left, rgba(41,35,30,0.5), transparent); }
+
+.dtp-leaf {
+  /* Niente altezza esplicita: le pagine del libro hanno lunghezza variabile (un testo lungo fa
+     scorrere il documento intero, non un riquadro interno) — `.dtp-leaf` prende semplicemente
+     l'altezza naturale del proprio contenuto, come faceva il `<div>` piatto che sostituisce, e
+     `.dtp-face--back`/`.dtp-base`/`.dtp-contact-shadow`/`.dtp-spine-glow` (tutti `inset:0` su un
+     antenato `position:relative`) la seguono automaticamente. */
+  position: relative; z-index: 3;
+  transform-style: preserve-3d;
+  transform:
+    translateX(var(--dtp-shift, 0px))
+    translateZ(var(--dtp-lift, 0px))
+    rotateY(var(--dtp-rotate, 0deg))
+    scale(var(--dtp-scale, 1));
+  will-change: transform;
+}
+.dtp-root[data-hinge="left"] .dtp-leaf { transform-origin: left center; }
+.dtp-root[data-hinge="right"] .dtp-leaf { transform-origin: right center; }
+
+.dtp-face {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.dtp-face--front { position: relative; }
+.dtp-root--active .dtp-content { pointer-events: none; }
+
+/* Ombreggiatura sulla superficie stessa della pagina, non sulla pagina sottostante (Sezione 7:
+   intensità/posizione cambiano insieme, mai un'unica ombra statica) — si scurisce verso il bordo
+   libero mentre la pagina si allontana dalla luce. */
+.dtp-self-shadow {
+  position: absolute; inset: 0; z-index: 5; pointer-events: none;
+  opacity: var(--dtp-self-shadow-o, 0);
+}
+.dtp-root[data-hinge="left"] .dtp-self-shadow { background: linear-gradient(to right, transparent 30%, rgba(18,14,9,0.6) 100%); }
+.dtp-root[data-hinge="right"] .dtp-self-shadow { background: linear-gradient(to left, transparent 30%, rgba(18,14,9,0.6) 100%); }
+
+/* Pennellata di luce che attraversa il foglio mentre si solleva (Sezione 9) — molto sottile,
+   mai un effetto "videogioco": una sola banda stretta che scorre, non un bagliore diffuso. */
+.dtp-highlight {
+  position: absolute; inset: 0; z-index: 6; pointer-events: none;
+  opacity: var(--dtp-highlight-o, 0);
+  background: linear-gradient(
+    100deg,
+    transparent calc(var(--dtp-highlight-pos, 0%) - 16%),
+    rgba(255,252,240,0.5) var(--dtp-highlight-pos, 0%),
+    transparent calc(var(--dtp-highlight-pos, 0%) + 16%)
+  );
+}
+
+/* Retro pagina (Sezione 6) — mai un duplicato del contenuto reale: solo la carta, più calda e meno
+   contrastata, visibile esclusivamente oltre metà rotazione grazie a `backface-visibility`. */
+.dtp-face--back {
+  position: absolute; inset: 0;
+  transform: rotateY(180deg);
+  background: var(--dtp-paper-bg, #fbf6e8);
+}
+.dtp-face--back::after {
+  content: '';
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse 70% 55% at 30% 20%, rgba(255,247,225,0.4), transparent 60%),
+    linear-gradient(160deg, rgba(120,90,50,0.12), rgba(50,35,18,0.18));
+  mix-blend-mode: multiply;
+}
+
+/* Niente `z-index` qui, di proposito (Sezione 15): stanno PRIMA di `.dtp-content` nel markup
+   (vedi DtrekPageTurn.tsx) così un qualunque controllo reale della pagina che galleggia vicino al
+   bordo (i chip della mappa, un bottone) — venendo dopo nell'ordine del documento, stesso livello
+   di stacking `auto` — vince naturalmente il tocco sopra la zona di presa. Il gesto di sfoglio
+   resta agganciabile solo dove non c'è nient'altro sopra a reclamarlo. Larghezza impostata inline
+   da useEdgePageDrag.ts (`EDGE_GRAB_PX`, lib/pageTurn/pageTurnMath.ts) — un solo numero, non
+   duplicato qui. */
+.dtp-edge {
+  position: absolute; inset-block: 0;
+}
+.dtp-edge--start { left: 0; cursor: grab; }
+.dtp-edge--end { right: 0; cursor: grab; }
+
+/* Fallback a movimento ridotto (Sezione 16) — niente rotazione 3D, solo una dissolvenza breve: il
+   componente rileva `prefers-reduced-motion` in JS e in quel caso non scrive mai `--dtp-*` (il
+   foglio resta piatto, tutte le regole sopra restano ai loro valori di riposo), limitandosi ad
+   aggiungere questa classe per una dissolvenza semplice prima di navigare. */
+.dtp-leaf { transition: none; }
+.dtp-root--fading .dtp-leaf { transition: opacity 120ms ease; opacity: 0; }
 
 /* Scrollbar sottile */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
