@@ -1349,6 +1349,31 @@ adagia — non un dettaglio isolato, ma sincronizzato con la stessa animazione d
   per entrambe le pagine di prova.
 - Disattivato sotto `prefers-reduced-motion`, come le altre due animazioni dello stesso elemento.
 
+**Fase 38 — Filtro mappa corretto su prova reale: sbiadiva invece di scaldare** ✅ **COMPLETATA**
+
+L'utente ha confermato (anche in incognito, escludendo la cache) che il filtro della Fase 36 era
+davvero live in produzione — verificato anche da qui via `mcp__Vercel__web_fetch_vercel_url`
+sul CSS pubblicato — ma mandando uno screenshot reale delle miniature del Sommario si è vista la
+causa: le mappe apparivano sbiadite verso il grigio/bianco (specialmente sul terreno già
+grigio-roccioso delle uscite in montagna), non scaldate verso l'ivory "carta da campo" voluto.
+
+**Causa**: `grayscale(30%)` **e** `saturate(45%)` insieme desaturano due volte (l'uno rimuove
+colore in modo uniforme, l'altro riduce ulteriormente la crominanza rimasta), e
+`brightness(110%)` sopra un risultato già desaturato spinge tutto verso il bianco anziché verso
+un tono caldo. `hue-rotate(-6deg)` sommato al viraggio di tonalità già dato da `sepia` rendeva
+l'esito imprevedibile a seconda del colore di partenza della tile.
+
+**Correzione** (`components/routehub/BottomGallery.tsx`): tolti `grayscale` e `hue-rotate` —
+resta solo `sepia`+`saturate` a fare il lavoro di scaldare/desaturare (una desaturazione sola,
+non tre sommate); `brightness` riportato a 100% (nessuno schiarimento aggiuntivo);
+`contrast` meno drastico (90% invece di 78%, non schiaccia tutto verso il grigio medio). Filtro
+finale: `sepia(38%) saturate(65%) contrast(90%) brightness(100%)`.
+
+Questa è la prima correzione al filtro mappa basata su una prova reale (screenshot del
+dispositivo dell'utente) invece che su un ragionamento "alla cieca" sui valori — le due fasi
+precedenti (33, 36) erano state scritte senza poter verificare il risultato su tile vere da questa
+sandbox. Ancora da confermare sul dispositivo dopo questo giro.
+
 ## File critici
 - `components/guida/GuideReader.tsx`, `components/resoconto/ReportReader.tsx` — sorgente da cui
   estratto in Fase 0, non riscritti.
