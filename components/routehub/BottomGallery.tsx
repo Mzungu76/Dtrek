@@ -177,12 +177,19 @@ export function GalleryMapThumb({
       if (vintageTiles) {
         // `.leaflet-tile-pane` è un pannello fratello di `.leaflet-overlay-pane` (dove vivono
         // tracciato e marker, resi come SVG) — il filtro qui non li tocca.
-        // Fase 36 — rinforzato: i valori della Fase 33 (grayscale 15/sepia 30/saturate 70/
-        // contrast 85/brightness 105) restavano troppo vicini ai colori originali di OpenTopoMap
-        // per essere notati ("mi sembra siano rimasti invariati") — desaturazione e calo di
-        // contrasto più marcati, più un lieve hue-rotate verso il caldo invece del solo sepia.
+        // Fase 38 — la Fase 36 (grayscale 30/sepia 45/saturate 45/contrast 78/brightness 110/
+        // hue-rotate -6) è stata verificata su uno screenshot reale del dispositivo dell'utente:
+        // sbiadiva le mappe verso un grigio/bianco slavato invece di scaldarle, specialmente sul
+        // terreno già grigio-roccioso di montagna. Causa individuata: `grayscale()` E
+        // `saturate()` ridotto INSIEME desaturano due volte, e `brightness(110%)` sopra un
+        // risultato già desaturato spinge tutto verso il bianco invece che verso un caldo carta
+        // da campo. Tolti `grayscale` e `hue-rotate` (il secondo, sommato al viraggio di tonalità
+        // già dato da `sepia`, rendeva l'esito imprevedibile); `brightness` riportato a 100%
+        // (nessuno schiarimento aggiuntivo); `contrast` meno drastico (90% invece di 78%, non
+        // schiaccia più tutto verso il grigio medio) — resta solo `sepia`+`saturate` a fare il
+        // lavoro di scaldare/desaturare, effetto singolo invece di tre desaturazioni sommate.
         const tilePane = map.getPane('tilePane')
-        if (tilePane) tilePane.style.filter = 'grayscale(30%) sepia(45%) saturate(45%) contrast(78%) brightness(110%) hue-rotate(-6deg)'
+        if (tilePane) tilePane.style.filter = 'sepia(38%) saturate(65%) contrast(90%) brightness(100%)'
       }
       const line = L.polyline(polyline, { color: lineColor, weight: lineWeight, opacity: 0.95, dashArray }).addTo(map)
       if (showEndpoints) {
