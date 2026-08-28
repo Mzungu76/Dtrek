@@ -201,20 +201,27 @@ export function TaccuinoPaperTexture({ flip = false }: { flip?: boolean }) {
  * verticale. Niente anelli o punti di cucitura (discussi e scartati: "se risultano troppo
  * decorativi, eliminarli" — con la sola ombra già chiaramente una rilegatura, aggiungerli sarebbe
  * stata decorazione sopra un effetto già leggibile).
+ *
+ * Fase 35 — rinforzata su richiesta esplicita dell'utente dopo un confronto prima/dopo: più
+ * larga (26→34px) e più scura ai due estremi (`shadowIn`/`shadowOut` quasi raddoppiati), a leggersi
+ * chiaramente come rilegatura invece di un'ombra appena accennata. Il `side` (già presente,
+ * Fase 21) ora viene anche alternato da chi chiama `BookPage` — vedi `spineSide` lì — per
+ * simulare pagine recto/verso di un libro vero sfogliandolo tra Guida/Resoconto; il Sommario
+ * resta fisso a sinistra (non passa mai `spineSide`, resta sul default).
  */
 export function TaccuinoSpineShadow({ side = 'left' }: { side?: 'left' | 'right' }) {
-  const width = 26
-  const shadowIn = 'rgba(41,35,30,0.30)'   // ombra interna, marrone-nero caldo (TACCUINO_INK.typed)
-  const crease   = 'rgba(128,103,70,0.28)' // linea di piega (TACCUINO_INK.hand)
-  const light    = 'rgba(246,238,220,0.4)' // piccola zona di luce (TACCUINO_PAPER.light)
-  const shadowOut = 'rgba(41,35,30,0.09)'  // ombra esterna, molto più morbida
+  const width = 34
+  const shadowIn = 'rgba(41,35,30,0.48)'   // ombra interna, marrone-nero caldo (TACCUINO_INK.typed)
+  const crease   = 'rgba(128,103,70,0.34)' // linea di piega (TACCUINO_INK.hand)
+  const light    = 'rgba(246,238,220,0.42)' // piccola zona di luce (TACCUINO_PAPER.light)
+  const shadowOut = 'rgba(41,35,30,0.17)'  // ombra esterna, più morbida ma non più quasi invisibile
   const stopsLTR = [
-    `${shadowIn} 0%`, `${shadowIn} 6%`, `${crease} 11%`, `${crease} 15%`,
-    `${light} 21%`, `${shadowOut} 32%`, 'transparent 55%',
+    `${shadowIn} 0%`, `${shadowIn} 7%`, `${crease} 13%`, `${crease} 17%`,
+    `${light} 24%`, `${shadowOut} 36%`, 'transparent 62%',
   ].join(', ')
   const stopsRTL = [
-    `${shadowIn} 100%`, `${shadowIn} 94%`, `${crease} 89%`, `${crease} 85%`,
-    `${light} 79%`, `${shadowOut} 68%`, 'transparent 45%',
+    `${shadowIn} 100%`, `${shadowIn} 93%`, `${crease} 87%`, `${crease} 83%`,
+    `${light} 76%`, `${shadowOut} 64%`, 'transparent 38%',
   ].join(', ')
   const verticalMask = 'linear-gradient(to bottom, transparent 0%, black 18%, black 82%, transparent 100%)'
   return (

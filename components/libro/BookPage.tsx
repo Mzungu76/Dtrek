@@ -43,7 +43,8 @@
 // mano) al posto del flat `BookSpineShadow` — la parte del mockup che dava davvero l'identità
 // "taccuino", non solo la palette.
 import Link from 'next/link'
-import type { ReactNode } from 'react'
+import { usePathname } from 'next/navigation'
+import type { CSSProperties, ReactNode } from 'react'
 import { ChevronLeft, ChevronRight, BookMarked, Wrench } from 'lucide-react'
 import { FONT, TERRA } from '@/lib/designTokens'
 import { TACCUINO_PAPER, TACCUINO_INK, TaccuinoPaperTexture, TaccuinoSpineShadow } from '@/lib/taccuinoTokens'
@@ -101,14 +102,20 @@ interface BookPageProps {
   /** Palette del guscio — "pergamena" (default, invariata) o "taccuino" (Fase 20). Il markup e il
    *  comportamento restano identici, cambiano solo i toni. */
   theme?: keyof typeof THEMES
+  /** Lato della piega/rilegatura (Fase 21/35) — "left" di default. Guida e Resoconto la alternano
+   *  pagina per pagina (pari→sinistra, dispari→destra) per simulare le pagine recto/verso di un
+   *  libro vero; il Sommario non passa questo prop e resta sempre a sinistra, come richiesto
+   *  esplicitamente (l'elenco Percorsi non è "una pagina" in una sequenza sfogliabile). */
+  spineSide?: 'left' | 'right'
   children: ReactNode
 }
 
 export default function BookPage({
   diarioTitle, indexHref, indexLabel = 'Indice', onToolsClick, sectionLabel, prevHref, nextHref,
-  sections, currentSectionKey, pageLabel, theme = 'pergamena', children,
+  sections, currentSectionKey, pageLabel, theme = 'pergamena', spineSide = 'left', children,
 }: BookPageProps) {
   const t = THEMES[theme]
+  const pathname = usePathname()
   const navButtonStyle = {
     fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase' as const,
     letterSpacing: '0.04em', fontSize: 9.5, color: t.inkMuted,
@@ -118,10 +125,10 @@ export default function BookPage({
       {theme === 'taccuino' ? (
         <>
           <TaccuinoPaperTexture />
-          <TaccuinoSpineShadow side="left" />
+          <TaccuinoSpineShadow side={spineSide} />
         </>
       ) : (
-        <BookSpineShadow variant="light" />
+        <BookSpineShadow variant="light" side={spineSide} />
       )}
       <div
         className="flex items-center justify-between gap-3 px-5 sm:px-8 pt-5 pb-3 border-b sticky top-0 z-10"
@@ -165,7 +172,25 @@ export default function BookPage({
         </div>
       )}
 
-      <div className="flex-1 min-h-0 px-5 sm:px-8 py-5" style={{ fontFamily: FONT.body }}>
+      {/* Fase 35 — "effetto pagina girata": rigioca un'animazione di ingresso (leggera rotazione
+          3D che si assesta, cardine sul lato della piega) a ogni cambio di pagina del libro,
+          richiesto esplicitamente per "sembrare di sfogliare un taccuino". `key={pathname}` forza
+          React a rimontare questo `<div>` a ogni navigazione: senza next/prev/sezioni cambiano
+          solo i `props` di BookPage (stesso componente, stessa posizione nell'albero — Next.js
+          App Router non rimonta da solo il componente pagina per un cambio di parametro dinamico),
+          quindi senza una key esplicita l'animazione non ripartirebbe mai dopo il primo mount. Il
+          verso della rotazione segue `spineSide` (cardine dalla parte della piega, coerente con lo
+          sfogliare fisico); l'animazione stessa vive in `app/globals.css` (`.book-page-turn`,
+          disattivata sotto `prefers-reduced-motion: reduce`). */}
+      <div
+        key={pathname}
+        className="flex-1 min-h-0 px-5 sm:px-8 py-5 book-page-turn"
+        style={{
+          fontFamily: FONT.body,
+          transformOrigin: spineSide === 'left' ? 'left center' : 'right center',
+          '--page-turn-deg': spineSide === 'left' ? '-6deg' : '6deg',
+        } as CSSProperties}
+      >
         {children}
       </div>
 
