@@ -1323,6 +1323,32 @@ Tre correzioni dopo la prima verifica della Fase 35.
    se ancora insufficiente, il prossimo passo naturale non è un altro giro di filtro CSS ma le
    tile vettoriali/uno stile dedicato (fuori scala per questa fase).
 
+**Fase 37 — Angolo che si "srotola" nel punto opposto alla piega** ✅ **COMPLETATA**
+
+Richiesta esplicita: rinforzare la sensazione fisica dell'assestamento con un piccolo
+arricciamento nell'angolo inferiore OPPOSTO alla piega, che si "srotola" mentre la pagina si
+adagia — non un dettaglio isolato, ma sincronizzato con la stessa animazione di Fase 35/36.
+
+- Nuovo `::after` su `.book-page-turn` (`app/globals.css`): un piccolo triangolo (48×48px)
+  ancorato all'angolo giusto — `.curl-right`/`.curl-left`, classe scelta da `BookPage.tsx` in base
+  a `spineSide` (piega a sinistra → arricciamento in basso a destra, e viceversa: sempre l'angolo
+  diagonalmente opposto al cardine). Un gradiente di sola ombra calda (`rgba(41,35,30,...)`, mai
+  bianco — stesso principio della Fase 36) va da quasi trasparente sulla linea di piega teorica a
+  più scuro sulla punta dell'angolo vero.
+- Animato con `transform-origin` sull'angolo stesso (non sul centro del triangolo): parte più
+  grande (`scale(1.4)`, ben visibile, "arricciato") e si restringe verso l'angolo vero mentre
+  sfuma a trasparente (`scale(0.3)`, opacità 0) — la punta resta ancorata, il resto si "appiattisce"
+  verso di essa, invece di sembrare un elemento che semplicemente scompare. Stessa durata/easing
+  delle altre due animazioni della pagina (560ms, `cubic-bezier(0.22,0.61,0.36,1)`) per restare
+  sincronizzato con rotazione e ombra della piega.
+- **Verificato** (route di debug temporanea, rimossa, build di produzione vera): congelando
+  l'animazione a `currentTime = 0` via `Animation.pause()`/`currentTime` (per catturare lo stato
+  iniziale altrimenti troppo rapido da fermare con uno screenshot temporizzato), lo screenshot
+  ravvicinato mostra il triangolo d'ombra nell'angolo corretto, sfumato ai bordi, mai un blocco
+  netto o bianco; la classe `curl-left`/`curl-right` risulta sempre quella opposta a `spineSide`
+  per entrambe le pagine di prova.
+- Disattivato sotto `prefers-reduced-motion`, come le altre due animazioni dello stesso elemento.
+
 ## File critici
 - `components/guida/GuideReader.tsx`, `components/resoconto/ReportReader.tsx` — sorgente da cui
   estratto in Fase 0, non riscritti.

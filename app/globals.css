@@ -86,8 +86,42 @@ body {
   background: linear-gradient(to var(--page-turn-shadow-dir, right), rgba(41,35,30,0.4), transparent 55%);
   animation: page-turn-shadow 560ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
+
+/* Angolo che si "srotola" nel punto opposto alla piega mentre la pagina si assesta — richiesto
+   esplicitamente per rinforzare la sensazione fisica dell'assestamento. Un piccolo triangolo
+   d'ombra (mai bianco, stesso principio del riflesso tolto altrove) ancorato all'angolo inferiore
+   opposto al cardine (`.curl-right`/`.curl-left`, classe scelta da BookPage secondo `spineSide`):
+   parte più grande/visibile (il "arricciamento") e si restringe verso l'angolo vero mentre sfuma,
+   `transform-origin` sull'angolo stesso così la punta resta ancorata e il resto si "appiattisce"
+   verso di essa invece di scomparire da un punto a caso. Stessa durata/easing delle altre due
+   animazioni per restare sincronizzato. */
+@keyframes page-curl-settle {
+  0%   { transform: scale(1.4); opacity: 0.95; }
+  100% { transform: scale(0.3); opacity: 0; }
+}
+.book-page-turn::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  width: 48px;
+  height: 48px;
+  pointer-events: none;
+  background: linear-gradient(135deg, transparent 42%, rgba(41,35,30,0.14) 55%, rgba(41,35,30,0.3) 100%);
+  animation: page-curl-settle 560ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+.book-page-turn.curl-right::after {
+  right: 0;
+  clip-path: polygon(100% 100%, 35% 100%, 100% 35%);
+  transform-origin: bottom right;
+}
+.book-page-turn.curl-left::after {
+  left: 0;
+  clip-path: polygon(0% 100%, 65% 100%, 0% 35%);
+  transform-origin: bottom left;
+}
 @media (prefers-reduced-motion: reduce) {
   .book-page-turn { animation: none; }
+  .book-page-turn::after { animation: none; content: none; }
   .book-page-turn::before { animation: none; content: none; }
 }
 
