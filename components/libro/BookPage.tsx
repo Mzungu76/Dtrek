@@ -42,13 +42,62 @@
 // monta anche `TaccuinoPaperTexture`/`TaccuinoSpineShadow` (texture di carta + piega disegnata a
 // mano) al posto del flat `BookSpineShadow` — la parte del mockup che dava davvero l'identità
 // "taccuino", non solo la palette.
+//
+// Fase 39 — "effetto pagina girata" riscritto da capo sulla View Transitions API del browser, dopo
+// che la versione CSS-only di Fase 35-37 (una `rotateY` sulla sola pagina in arrivo, rimontata via
+// `key={pathname}`) è stata giudicata "non bella o sufficiente". Il limite reale di quella
+// versione: la pagina che si lascia scompariva di scatto, nessun "volta pagina" vero — solo la
+// pagina nuova che entrava ruotando. Con `document.startViewTransition()` il browser cattura uno
+// screenshot della pagina VECCHIA e uno della NUOVA e li anima entrambi (`::view-transition-old`/
+// `::view-transition-new(root)`, stilizzati in app/globals.css) — la pagina che si lascia ruota
+// davvero via mentre la nuova ruota dentro, lo stesso principio (perspective+rotateY+ombra) di
+// prima ma applicato a entrambi i lati del cambio pagina, non a uno solo. Supportata nei browser
+// Chromium recenti (compreso il WebView Android della PWA); su browser senza supporto o con
+// `prefers-reduced-motion` la navigazione ricade sul comportamento normale di `<Link>`/`router.push`
+// senza transizione, non un errore.
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import type { CSSProperties, ReactNode } from 'react'
+import { useRouter } from 'next/navigation'
+import { flushSync } from 'react-dom'
+import type { MouseEvent, ReactNode } from 'react'
 import { ChevronLeft, ChevronRight, BookMarked, Wrench } from 'lucide-react'
 import { FONT, TERRA } from '@/lib/designTokens'
 import { TACCUINO_PAPER, TACCUINO_INK, TaccuinoPaperTexture, TaccuinoSpineShadow } from '@/lib/taccuinoTokens'
 import BookSpineShadow from './BookSpineShadow'
+
+/** `document.startViewTransition` non è ancora nei tipi DOM standard di ogni versione di
+ *  TypeScript — un cast locale invece di allargare `lib` nel tsconfig per un'unica API. */
+type DocumentWithViewTransition = Document & { startViewTransition?: (cb: () => void) => unknown }
+
+/**
+ * Avvia la navigazione dentro una View Transition quando possibile, impostando prima le variabili
+ * CSS che dicono a `::view-transition-old/new(root)` (app/globals.css) da che lato agganciare il
+ * cardine di ciascuna pagina — calcolate qui perché solo chi clicca conosce sia `spineSide` della
+ * pagina che sta lasciando sia, per costruzione (Guida/Resoconto alternano un
+ * lato per pagina), il lato opposto della pagina in arrivo. `flushSync` è necessario perché
+ * `router.push` di Next.js aggiorna il DOM in modo asincrono (batching di React) — senza,
+ * `startViewTransition` catturerebbe lo screenshot "dopo" prima che il nuovo contenuto sia
+ * davvero nel DOM.
+ */
+function navigateWithPageTurn(
+  e: MouseEvent<HTMLAnchorElement>,
+  router: ReturnType<typeof useRouter>,
+  href: string,
+  exitSide: 'left' | 'right',
+) {
+  // Tasti modificatori/tasto non sinistro → lascia fare al browser (nuova scheda, ecc.).
+  if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return
+  const doc = document as DocumentWithViewTransition
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  if (!doc.startViewTransition || reduceMotion) return // niente preventDefault: <Link> naviga normalmente
+  e.preventDefault()
+  const enterSide: 'left' | 'right' = exitSide === 'left' ? 'right' : 'left'
+  const root = document.documentElement.style
+  root.setProperty('--page-turn-exit-origin', exitSide === 'left' ? 'left center' : 'right center')
+  root.setProperty('--page-turn-enter-origin', enterSide === 'left' ? 'left center' : 'right center')
+  root.setProperty('--page-turn-exit-deg', exitSide === 'left' ? '-16deg' : '16deg')
+  root.setProperty('--page-turn-enter-deg', enterSide === 'left' ? '-16deg' : '16deg')
+  doc.startViewTransition(() => { flushSync(() => router.push(href)) })
+}
 
 const THEMES = {
   pergamena: {
@@ -115,7 +164,7 @@ export default function BookPage({
   sections, currentSectionKey, pageLabel, theme = 'pergamena', spineSide = 'left', children,
 }: BookPageProps) {
   const t = THEMES[theme]
-  const pathname = usePathname()
+  const router = useRouter()
   const navButtonStyle = {
     fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase' as const,
     letterSpacing: '0.04em', fontSize: 9.5, color: t.inkMuted,
@@ -162,6 +211,7 @@ export default function BookPage({
               <Link
                 key={s.key}
                 href={s.href}
+                onClick={e => navigateWithPageTurn(e, router, s.href, spineSide)}
                 className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11.5px] font-semibold whitespace-nowrap transition-colors"
                 style={on ? { background: TERRA[600], color: '#fff' } : { background: t.pillBg, color: t.pillText }}
               >
@@ -172,29 +222,7 @@ export default function BookPage({
         </div>
       )}
 
-      {/* "Effetto pagina girata": rigioca un'animazione di ingresso (rotazione 3D con un piccolo
-          rimbalzo che si assesta, più un'ombra che si muove in sincrono, vedi `.book-page-turn`
-          in app/globals.css) a ogni cambio di pagina del libro, richiesto esplicitamente per
-          "sembrare di sfogliare un taccuino" — poi reso più marcato/memorabile ispirandosi a
-          turn.js su richiesta esplicita successiva. `key={pathname}` forza React a rimontare
-          questo `<div>` a ogni navigazione: senza next/prev/sezioni cambiano solo i `props` di
-          BookPage (stesso componente, stessa posizione nell'albero — Next.js App Router non
-          rimonta da solo il componente pagina per un cambio di parametro dinamico), quindi senza
-          una key esplicita l'animazione non ripartirebbe mai dopo il primo mount. Il verso della
-          rotazione e dell'ombra segue `spineSide` (cardine/ombra dalla parte della piega, coerente
-          con lo sfogliare fisico); l'angolo che si "srotola" (`.curl-left`/`.curl-right`, stesso
-          file CSS) va invece nell'angolo inferiore OPPOSTO alla piega — richiesto esplicitamente
-          per rinforzare la sensazione che la pagina si adagi fisicamente sul libro. */}
-      <div
-        key={pathname}
-        className={`flex-1 min-h-0 px-5 sm:px-8 py-5 book-page-turn ${spineSide === 'left' ? 'curl-right' : 'curl-left'}`}
-        style={{
-          fontFamily: FONT.body,
-          transformOrigin: spineSide === 'left' ? 'left center' : 'right center',
-          '--page-turn-deg': spineSide === 'left' ? '-11deg' : '11deg',
-          '--page-turn-shadow-dir': spineSide === 'left' ? 'right' : 'left',
-        } as CSSProperties}
-      >
+      <div className="flex-1 min-h-0 px-5 sm:px-8 py-5" style={{ fontFamily: FONT.body }}>
         {children}
       </div>
 
@@ -210,7 +238,7 @@ export default function BookPage({
         }}
       >
         {prevHref ? (
-          <Link href={prevHref} className="flex flex-col items-center justify-center gap-1 px-5 py-2.5" style={navButtonStyle}>
+          <Link href={prevHref} onClick={e => navigateWithPageTurn(e, router, prevHref, spineSide)} className="flex flex-col items-center justify-center gap-1 px-5 py-2.5" style={navButtonStyle}>
             <ChevronLeft className="w-[18px] h-[18px]" />
             Indietro
           </Link>
@@ -221,7 +249,7 @@ export default function BookPage({
           </span>
         )}
 
-        <Link href={indexHref} className="flex flex-col items-center justify-center gap-1 px-5 py-2.5" style={navButtonStyle}>
+        <Link href={indexHref} onClick={e => navigateWithPageTurn(e, router, indexHref, spineSide)} className="flex flex-col items-center justify-center gap-1 px-5 py-2.5" style={navButtonStyle}>
           <BookMarked className="w-[18px] h-[18px]" />
           {indexLabel}
         </Link>
@@ -234,7 +262,7 @@ export default function BookPage({
         )}
 
         {nextHref ? (
-          <Link href={nextHref} className="flex flex-col items-center justify-center gap-1 px-5 py-2.5" style={navButtonStyle}>
+          <Link href={nextHref} onClick={e => navigateWithPageTurn(e, router, nextHref, spineSide)} className="flex flex-col items-center justify-center gap-1 px-5 py-2.5" style={navButtonStyle}>
             <ChevronRight className="w-[18px] h-[18px]" />
             Avanti
           </Link>

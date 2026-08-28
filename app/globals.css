@@ -49,80 +49,47 @@ body {
   box-shadow: 0 12px 32px rgba(0,0,0,0.12);
 }
 
-/* "Pagina girata" del Diario a libro (components/libro/BookPage.tsx) — rotazione 3D che si
-   assesta a ogni cambio di pagina, cardine sul lato della piega (`--page-turn-deg`, impostato
-   inline da BookPage secondo `spineSide`). Applicata a un elemento rimontato via `key` a ogni
-   navigazione: un'animazione CSS su un elemento appena inserito nel DOM parte da sé, non serve
-   altro trigger. `backface-visibility: hidden` evita che si veda il "retro" della pagina durante
-   la rotazione. Disattivata sotto `prefers-reduced-motion`.
-   Fase 36 — resa "più memorabile" ispirandosi a turn.js (vedi html.it/articoli/turnjs-ottenere-
-   un-effetto-page-flip-dimpatto): non solo una rotazione lineare che si ferma, ma (1) un piccolo
-   "rimbalzo" oltre lo zero al 65% (il moltiplicatore negativo sul + termine finale) prima di
-   assestarsi — una pagina vera non si ferma di scatto, oscilla un attimo — e (2) un'ombra che si
-   muove e si affievolisce in sincrono (`::before`, gradiente scuro dal lato della piega verso il
-   centro pagina, mai bianco — la "zona di luce" della piega statica era stata tolta apposta,
-   niente di simile va reintrodotto qui). Durata portata da 420 a 560ms: uno scatto secco non si
-   percepiva come "sfogliare", solo come un fade generico. */
+/* "Pagina girata" del Diario a libro — Fase 39, riscritta sulla View Transitions API del browser
+   (components/libro/BookPage.tsx, `navigateWithPageTurn`) al posto della versione CSS-only di
+   Fase 35-37 (giudicata "non bella o sufficiente": animava solo la pagina in arrivo, quella
+   lasciata spariva di scatto). Il browser cattura da sé uno screenshot della pagina prima e dopo
+   la navigazione ed espone due pseudo-elementi sul documento — `::view-transition-old(root)`
+   (l'istantanea vecchia) e `::view-transition-new(root)` (quella nuova) — entrambi animabili
+   come immagini qualsiasi: qui con lo stesso principio prima usato solo sulla pagina in arrivo
+   (perspective+rotateY con un piccolo rimbalzo, cardine sul lato della piega, un'ombra scura mai
+   bianca che si affievolisce), applicato però a ENTRAMBI i lati del cambio pagina — la vecchia
+   pagina ruota via mentre la nuova ruota dentro, un volta pagina vero invece di un solo ingresso
+   animato. Le variabili CSS (`--page-turn-exit-*`/`--page-turn-enter-*`) sono impostate da
+   `navigateWithPageTurn` prima di avviare la transizione, in base a `spineSide` della pagina che
+   si lascia e al suo opposto (il lato della pagina in arrivo, per costruzione — vedi commento
+   nel componente). Se il browser non supporta l'API o l'utente ha `prefers-reduced-motion`,
+   `navigateWithPageTurn` non la avvia affatto e la navigazione resta quella normale di `<Link>` —
+   queste regole restano quindi innocue (mai applicate) in quei casi, non serve una media query qui. */
+@keyframes page-turn-out {
+  0%   { transform: perspective(1600px) rotateY(0deg); filter: brightness(1); }
+  100% { transform: perspective(1600px) rotateY(var(--page-turn-exit-deg, -16deg)); filter: brightness(0.8); opacity: 0.1; }
+}
 @keyframes page-turn-in {
-  0%   { transform: perspective(1600px) rotateY(var(--page-turn-deg, -11deg)); opacity: 0.5; }
-  65%  { transform: perspective(1600px) rotateY(calc(var(--page-turn-deg, -11deg) * -0.07)); opacity: 1; }
-  100% { transform: perspective(1600px) rotateY(0deg); opacity: 1; }
+  0%   { transform: perspective(1600px) rotateY(var(--page-turn-enter-deg, 16deg)); filter: brightness(0.86); opacity: 0.55; }
+  65%  { transform: perspective(1600px) rotateY(calc(var(--page-turn-enter-deg, 16deg) * -0.07)); filter: brightness(1); opacity: 1; }
+  100% { transform: perspective(1600px) rotateY(0deg); filter: brightness(1); opacity: 1; }
 }
-@keyframes page-turn-shadow {
-  0%   { opacity: 0.85; }
-  70%  { opacity: 0.28; }
-  100% { opacity: 0; }
+::view-transition-old(root) {
+  animation: 620ms cubic-bezier(0.22, 0.61, 0.36, 1) both page-turn-out;
+  transform-origin: var(--page-turn-exit-origin, left center);
 }
-.book-page-turn {
-  position: relative;
-  animation: page-turn-in 560ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
-  backface-visibility: hidden;
+::view-transition-new(root) {
+  animation: 620ms cubic-bezier(0.22, 0.61, 0.36, 1) both page-turn-in;
+  transform-origin: var(--page-turn-enter-origin, right center);
 }
-.book-page-turn::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(to var(--page-turn-shadow-dir, right), rgba(41,35,30,0.4), transparent 55%);
-  animation: page-turn-shadow 560ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
-}
-
-/* Angolo che si "srotola" nel punto opposto alla piega mentre la pagina si assesta — richiesto
-   esplicitamente per rinforzare la sensazione fisica dell'assestamento. Un piccolo triangolo
-   d'ombra (mai bianco, stesso principio del riflesso tolto altrove) ancorato all'angolo inferiore
-   opposto al cardine (`.curl-right`/`.curl-left`, classe scelta da BookPage secondo `spineSide`):
-   parte più grande/visibile (il "arricciamento") e si restringe verso l'angolo vero mentre sfuma,
-   `transform-origin` sull'angolo stesso così la punta resta ancorata e il resto si "appiattisce"
-   verso di essa invece di scomparire da un punto a caso. Stessa durata/easing delle altre due
-   animazioni per restare sincronizzato. */
-@keyframes page-curl-settle {
-  0%   { transform: scale(1.4); opacity: 0.95; }
-  100% { transform: scale(0.3); opacity: 0; }
-}
-.book-page-turn::after {
-  content: "";
-  position: absolute;
-  bottom: 0;
-  width: 48px;
-  height: 48px;
-  pointer-events: none;
-  background: linear-gradient(135deg, transparent 42%, rgba(41,35,30,0.14) 55%, rgba(41,35,30,0.3) 100%);
-  animation: page-curl-settle 560ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
-}
-.book-page-turn.curl-right::after {
-  right: 0;
-  clip-path: polygon(100% 100%, 35% 100%, 100% 35%);
-  transform-origin: bottom right;
-}
-.book-page-turn.curl-left::after {
-  left: 0;
-  clip-path: polygon(0% 100%, 65% 100%, 0% 35%);
-  transform-origin: bottom left;
-}
-@media (prefers-reduced-motion: reduce) {
-  .book-page-turn { animation: none; }
-  .book-page-turn::after { animation: none; content: none; }
-  .book-page-turn::before { animation: none; content: none; }
+/* `::view-transition-old/new(root)` sono trattati dal browser come un'unica immagine sostituita —
+   non si può aggiungere un'ombra direzionale come layer separato sopra (niente `::before` su uno
+   pseudo-elemento). L'"ombra della piega" qui è quindi il `filter: brightness(...)` nei keyframe
+   sopra: la pagina si scurisce leggermente mentre ruota via/dentro, come se ricevesse meno luce
+   inclinandosi — lo stesso principio (una pagina che si piega prende meno luce) reso con lo
+   strumento disponibile su questo tipo di pseudo-elemento, mai un vero gradiente in movimento. */
+::view-transition-image-pair(root) {
+  isolation: isolate;
 }
 
 /* Scrollbar sottile */

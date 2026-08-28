@@ -1374,6 +1374,70 @@ dispositivo dell'utente) invece che su un ragionamento "alla cieca" sui valori �
 precedenti (33, 36) erano state scritte senza poter verificare il risultato su tile vere da questa
 sandbox. Ancora da confermare sul dispositivo dopo questo giro.
 
+### Fase 39 — Mappe senza filtro + volta pagina riscritta con la View Transitions API ✅
+Due richieste esplicite dell'utente, indipendenti tra loro.
+
+**1. Mappe: tolto ogni filtro, colore originale.** Le fasi 32/33/36/38 avevano provato a
+ricolorare le tile di `GalleryMapThumb` (`vintageTiles` + `sepia/saturate/contrast/brightness`,
+più un velo `paperOverlay`) per farle sembrare "carta da campo" invece di una mappa online. Anche
+dopo la correzione della Fase 38, il risultato non ha convinto su prova reale — troppo simile
+all'originale in alcuni casi, sbiadito verso il bianco in altri. L'utente ha chiesto di tornare
+puliti: "togli qualsiasi effetto dalle mappe, rivoglio il colore originale". Rimossi del tutto,
+non solo disattivati: le prop `vintageTiles`/`paperOverlay` (con relativa logica su `tilePane` e
+il `<div>` di overlay) sono sparite da `GalleryMapThumb`
+(`components/routehub/BottomGallery.tsx`) e dalla sua unica chiamata nel Sommario
+(`app/diari/[id]/page.tsx`) — nessuna prop morta lasciata per compatibilità. Le tile OpenTopoMap
+tornano a renderizzare esattamente come le serve il tile server, senza alcuna manipolazione
+CSS. Non verificabile visivamente da questa sandbox (il proxy di rete blocca le richieste verso
+`opentopomap.org`), ma essendo una pura rimozione di codice il risultato — "colore originale" — è
+garantito dalla stessa assenza di filtro, non da un valore da tarare a occhio come nelle fasi
+precedenti.
+
+**2. Volta pagina: dalla CSS-only alla View Transitions API.** Le Fasi 35-37 animavano solo la
+pagina "in arrivo" (un `key` di React sul contenuto forzava il remount, un keyframe CSS la faceva
+ruotare dentro con un'ombra e un arricciamento d'angolo) — la pagina lasciata spariva di scatto,
+senza animazione propria: da qui il giudizio dell'utente ("non belli o sufficienti") e la
+richiesta esplicita di una ricerca online sulla tecnica migliore possibile. La ricerca (via
+`WebSearch`, dato che il fetch diretto di terzi è bloccato da questa sandbox) ha indicato la
+**View Transitions API** del browser (`document.startViewTransition`) come lo strumento nativo
+pensato proprio per questo: cattura automaticamente uno screenshot del DOM prima e dopo un
+cambiamento di stato, ed espone due pseudo-elementi — `::view-transition-old(root)` (l'istantanea
+vecchia) e `::view-transition-new(root)` (quella nuova) — entrambi animabili in CSS in modo
+indipendente. Per la prima volta la pagina che si lascia ha una sua animazione di uscita, non solo
+quella in arrivo.
+
+Implementazione (`components/libro/BookPage.tsx`, funzione `navigateWithPageTurn`): l'`onClick`
+dei link di navigazione (pillole di sezione, Indietro/Indice/Avanti) intercetta il click, imposta
+quattro custom property CSS (angolo e cardine di rotazione per l'uscita e per l'ingresso, in base
+a `spineSide` della pagina lasciata e al suo opposto) e avvia
+`document.startViewTransition(() => flushSync(() => router.push(href)))` — `flushSync` (da
+`react-dom`) è necessario perché altrimenti l'aggiornamento del DOM di Next.js, essendo
+asincrono, arriverebbe dopo che l'API ha già catturato la sua istantanea "dopo", vanificando la
+transizione. In `app/globals.css`, `::view-transition-old(root)` ruota via con
+`perspective+rotateY` scurendosi (`filter: brightness`) e sfumando in opacità, mentre
+`::view-transition-new(root)` ruota dentro con un piccolo rimbalzo elastico — lo stesso principio
+delle fasi precedenti, ma ora su entrambi i lati del cambio pagina, un volta pagina vero. Il
+`filter: brightness()` sostituisce l'ombra direzionale: questi pseudo-elementi sono trattati dal
+browser come un'unica immagine sostituita, non si può aggiungere un layer `::before`/`::after`
+separato sopra.
+
+Compatibilità: se il browser non supporta l'API (rilevato con `'startViewTransition' in
+document`) o l'utente ha `prefers-reduced-motion: reduce`, `navigateWithPageTurn` non intercetta
+affatto il click — la navigazione resta quella normale di `<Link>`, senza bisogno di una media
+query CSS dedicata (le regole in `globals.css` semplicemente non vengono mai innescate in quel
+caso). Preservato anche il comportamento standard su click con modificatori (Ctrl/Cmd/Shift/Alt,
+tasto centrale) per aprire in nuova scheda.
+
+Verificato in sandbox via Playwright/Chromium (a differenza del filtro mappa, questa è pura logica
+DOM/CSS, non dipende da fetch di rete esterni bloccati): (a) `document.startViewTransition` viene
+davvero invocato al click; (b) gli stili calcolati a metà transizione sui due pseudo-elementi
+mostrano transform/opacity/filter realmente in movimento; (c) uno screenshot a metà transizione
+mostra entrambe le pagine — vecchia e nuova — sovrapposte in rotazione, confermando un volta
+pagina a due lati e non un solo ingresso; (d) lo stato finale si assesta correttamente con la
+piega nella posizione giusta; (e) con `prefers-reduced-motion: reduce` l'API non viene invocata
+ma la navigazione avviene comunque. Il giudizio estetico ("il miglior effetto possibile") resta
+comunque da confermare su dispositivo reale, essendo intrinsecamente visivo/soggettivo.
+
 ## File critici
 - `components/guida/GuideReader.tsx`, `components/resoconto/ReportReader.tsx` — sorgente da cui
   estratto in Fase 0, non riscritti.
