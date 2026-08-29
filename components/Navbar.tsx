@@ -173,6 +173,7 @@ function DesktopNav() {
 // l'antenato è già interattivo di suo.
 export function MobileNavBar({ className = '' }: { className?: string }) {
   const path = usePathname()
+  const [nuovoOpen, setNuovoOpen] = useState(false)
   return (
     <nav
       className={`pointer-events-auto bg-forest-600/95 backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.18)] ${className}`}
@@ -182,14 +183,19 @@ export function MobileNavBar({ className = '' }: { className?: string }) {
         <div className="flex-1 flex items-center justify-around">
           {NAV_LINKS.map(({ href, label, icon: Icon }) => {
             const active = isActive(href, path)
+            const linkClassName = `flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-2xl transition-colors ${
+              active ? 'text-white' : 'text-forest-300'
+            }`
+            if (href === '/upload') {
+              return (
+                <button key={href} type="button" onClick={() => setNuovoOpen(true)} className={linkClassName}>
+                  <Icon className="w-4 h-4" strokeWidth={2} />
+                  <span className="text-[9px] font-bold leading-none">{label}</span>
+                </button>
+              )
+            }
             return (
-              <Link
-                key={href}
-                href={href}
-                className={`flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-2xl transition-colors ${
-                  active ? 'text-white' : 'text-forest-300'
-                }`}
-              >
+              <Link key={href} href={href} className={linkClassName}>
                 <Icon className="w-4 h-4" strokeWidth={2} />
                 <span className="text-[9px] font-bold leading-none">{label}</span>
               </Link>
@@ -198,6 +204,7 @@ export function MobileNavBar({ className = '' }: { className?: string }) {
         </div>
         <ProfileAvatar size={32} iconSize={14} />
       </div>
+      <NuovoDiarioSheet open={nuovoOpen} onClose={() => setNuovoOpen(false)} tab={nuovoTabFor(path)} />
     </nav>
   )
 }
