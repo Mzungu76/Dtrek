@@ -10,19 +10,18 @@ import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import GemStatusBadge from '@/components/premium/GemStatusBadge'
 import type { User as SupabaseUser, Session, AuthChangeEvent } from '@supabase/supabase-js'
 
-// Redesign menù globale (fase 1) — Diario > Percorsi > Reportage è ora la gerarchia reale
+// Redesign menù globale (fase 1-2) — Diario > Percorsi > Reportage è ora la gerarchia reale
 // dell'app (un Diario contiene Percorsi, un Percorso contiene i suoi Reportage): questa barra
 // resta comunque piatta/trasversale, non annidata — ogni voce porta all'elenco "tutti i ..." di
-// quella categoria su tutti i Diari, non dentro uno specifico. "Reportage" punta per ora a
-// /resoconto (ResocontoHub esistente, ancora nello stile "vecchio") come destinazione provvisoria:
-// una vista piatta dedicata ("Tutti i Reportage", sul modello di app/percorsi/page.tsx) è lavoro
-// successivo non ancora fatto. "Nuovo" punta a /upload (oggi apre di default "Crea un Resoconto",
-// tab=activity) — la scelta contestuale Percorso/Reportage e la selezione del Diario di
-// destinazione sono anch'esse lavoro successivo, non ancora implementate.
+// quella categoria su tutti i Diari, non dentro uno specifico. "Reportage" punta a /reportage
+// (fase 2, app/reportage/page.tsx + app/api/reportage/route.ts), gemella di "Tutti i Percorsi".
+// "Nuovo" punta a /upload (oggi apre di default "Crea un Resoconto", tab=activity) — la scelta
+// contestuale Percorso/Reportage e la selezione del Diario di destinazione sono lavoro successivo
+// (fase 3), non ancora implementate.
 export const NAV_LINKS = [
   { href: '/diari',      label: 'Diario',     icon: BookMarked },
   { href: '/percorsi',   label: 'Percorsi',   icon: Compass    },
-  { href: '/resoconto',  label: 'Reportage',  icon: PenLine    },
+  { href: '/reportage',  label: 'Reportage',  icon: PenLine    },
   { href: '/upload',     label: 'Nuovo',      icon: Plus       },
 ]
 
