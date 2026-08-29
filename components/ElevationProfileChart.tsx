@@ -83,12 +83,6 @@ export default function ElevationProfileChart({ trackPoints, syncId, onHover, cu
       </div>
       <div
         className="h-52"
-        // Il grafico legge da sé il trascinamento orizzontale per mostrare il punto attivo
-        // (`onMouseMove` di Recharts, che internamente risponde anche al tocco) — `data-page-turn-
-        // ignore` dice al Dtrek Page Turning Engine (components/libro/pageTurn/usePageDrag.ts) di
-        // non intercettare un dito che parte da qui per uno sfoglio, altrimenti scorrere il dito
-        // sul grafico per leggere l'altimetria girerebbe la pagina invece di muovere il cursore.
-        data-page-turn-ignore
         // Recharts non emette un equivalente di onMouseLeave per il touch (sollevare il dito non
         // è geometricamente un "leave") — senza questo, su mobile la pendenza mostrata sulla
         // mappa restava colorata anche dopo aver lasciato il grafico.

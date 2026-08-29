@@ -42,25 +42,12 @@
 // monta anche `TaccuinoPaperTexture`/`TaccuinoSpineShadow` (texture di carta + piega disegnata a
 // mano) al posto del flat `BookSpineShadow` — la parte del mockup che dava davvero l'identità
 // "taccuino", non solo la palette.
-//
-// Fase 39 aveva riscritto l'"effetto pagina girata" sulla View Transitions API del browser: un
-// singolo screenshot piatto di prima/dopo, ruotato come un'unica immagine. Sostituito qui per
-// intero dal Dtrek Page Turning Engine (components/libro/pageTurn/DtrekPageTurn.tsx) — un vero
-// elemento 3D con cardine, retro pagina, ombre/luce reattive e uno sfoglio agganciato al dito
-// ovunque lo si tocchi sulla pagina, oltre al click/tastiera di prima. `pageTurnRef` espone
-// `flipTo(href, hinge)`: ogni
-// `<Link>` di questa barra prova prima a farlo animare dal motore (`preventDefault` solo se il
-// motore accetta), altrimenti naviga normalmente — stesso fallback "silenzioso" di prima per
-// `prefers-reduced-motion` o per un secondo click arrivato mentre uno sfoglio è già in corso.
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useRef, type MouseEvent, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { ChevronLeft, ChevronRight, BookMarked, Wrench } from 'lucide-react'
 import { FONT, TERRA } from '@/lib/designTokens'
 import { TACCUINO_PAPER, TACCUINO_INK, TaccuinoPaperTexture, TaccuinoSpineShadow } from '@/lib/taccuinoTokens'
 import BookSpineShadow from './BookSpineShadow'
-import DtrekPageTurn, { type DtrekPageTurnHandle } from './pageTurn/DtrekPageTurn'
-import type { HingeSide } from '@/lib/pageTurn/pageTurnMath'
 
 const THEMES = {
   pergamena: {
@@ -114,63 +101,27 @@ interface BookPageProps {
   /** Palette del guscio — "pergamena" (default, invariata) o "taccuino" (Fase 20). Il markup e il
    *  comportamento restano identici, cambiano solo i toni. */
   theme?: keyof typeof THEMES
-  /** Lato della piega/rilegatura (Fase 21/35) — "left" di default. Guida e Resoconto la alternano
-   *  pagina per pagina (pari→sinistra, dispari→destra) per simulare le pagine recto/verso di un
-   *  libro vero; il Sommario non passa questo prop e resta sempre a sinistra, come richiesto
-   *  esplicitamente (l'elenco Percorsi non è "una pagina" in una sequenza sfogliabile). */
-  spineSide?: HingeSide
   children: ReactNode
 }
 
 export default function BookPage({
   diarioTitle, indexHref, indexLabel = 'Indice', onToolsClick, sectionLabel, prevHref, nextHref,
-  sections, currentSectionKey, pageLabel, theme = 'pergamena', spineSide = 'left', children,
+  sections, currentSectionKey, pageLabel, theme = 'pergamena', children,
 }: BookPageProps) {
   const t = THEMES[theme]
-  const router = useRouter()
-  const pageTurnRef = useRef<DtrekPageTurnHandle>(null)
   const navButtonStyle = {
     fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase' as const,
     letterSpacing: '0.04em', fontSize: 9.5, color: t.inkMuted,
   }
-
-  /** Ogni link di questa barra (pillole, Indietro/Indice/Avanti) prova a passare dal motore prima
-   *  di lasciare che `<Link>` navighi normalmente — stesso `spineSide` per tutti, per continuità
-   *  con la rilegatura statica di questa pagina (mai un calcolo avanti/indietro diverso qui: lo
-   *  faceva già così `navigateWithPageTurn`, invariato). */
-  const handleNavClick = useCallback((e: MouseEvent<HTMLAnchorElement>, href: string) => {
-    if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return
-    const handled = pageTurnRef.current?.flipTo(href, spineSide)
-    if (handled) e.preventDefault()
-  }, [spineSide])
-
-  // Frecce da tastiera (Sezione 16) — solo quando il focus non è già dentro un campo di testo, per
-  // non rubare l'input mentre si scrive (es. la ricerca del Sommario che monta questo stesso guscio
-  // altrove nell'app). Stessa via di `flipTo` dei click: se il motore rifiuta (uno sfoglio è già in
-  // corso), naviga comunque con `router.push`, mai un tasto che sembra non fare nulla.
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return
-      const target = e.target as HTMLElement | null
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return
-      const href = e.key === 'ArrowRight' ? nextHref : e.key === 'ArrowLeft' ? prevHref : undefined
-      if (!href) return
-      e.preventDefault()
-      if (!pageTurnRef.current?.flipTo(href, spineSide)) router.push(href)
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [nextHref, prevHref, spineSide, router])
-
   return (
     <div className="min-h-screen flex flex-col" style={{ background: t.paperBg }}>
       {theme === 'taccuino' ? (
         <>
           <TaccuinoPaperTexture />
-          <TaccuinoSpineShadow side={spineSide} />
+          <TaccuinoSpineShadow />
         </>
       ) : (
-        <BookSpineShadow variant="light" side={spineSide} />
+        <BookSpineShadow variant="light" />
       )}
       <div
         className="flex items-center justify-between gap-3 px-5 sm:px-8 pt-5 pb-3 border-b sticky top-0 z-10"
@@ -204,7 +155,6 @@ export default function BookPage({
               <Link
                 key={s.key}
                 href={s.href}
-                onClick={e => handleNavClick(e, s.href)}
                 className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11.5px] font-semibold whitespace-nowrap transition-colors"
                 style={on ? { background: TERRA[600], color: '#fff' } : { background: t.pillBg, color: t.pillText }}
               >
@@ -216,9 +166,7 @@ export default function BookPage({
       )}
 
       <div className="flex-1 min-h-0 px-5 sm:px-8 py-5" style={{ fontFamily: FONT.body }}>
-        <DtrekPageTurn ref={pageTurnRef} prevHref={prevHref} nextHref={nextHref} paperBg={t.paperBg}>
-          {children}
-        </DtrekPageTurn>
+        {children}
       </div>
 
       <div style={{ height: BOTTOM_BAR_SPACER }} />
@@ -233,7 +181,7 @@ export default function BookPage({
         }}
       >
         {prevHref ? (
-          <Link href={prevHref} onClick={e => handleNavClick(e, prevHref)} className="flex flex-col items-center justify-center gap-1 px-5 py-2.5" style={navButtonStyle}>
+          <Link href={prevHref} className="flex flex-col items-center justify-center gap-1 px-5 py-2.5" style={navButtonStyle}>
             <ChevronLeft className="w-[18px] h-[18px]" />
             Indietro
           </Link>
@@ -244,7 +192,7 @@ export default function BookPage({
           </span>
         )}
 
-        <Link href={indexHref} onClick={e => handleNavClick(e, indexHref)} className="flex flex-col items-center justify-center gap-1 px-5 py-2.5" style={navButtonStyle}>
+        <Link href={indexHref} className="flex flex-col items-center justify-center gap-1 px-5 py-2.5" style={navButtonStyle}>
           <BookMarked className="w-[18px] h-[18px]" />
           {indexLabel}
         </Link>
@@ -257,7 +205,7 @@ export default function BookPage({
         )}
 
         {nextHref ? (
-          <Link href={nextHref} onClick={e => handleNavClick(e, nextHref)} className="flex flex-col items-center justify-center gap-1 px-5 py-2.5" style={navButtonStyle}>
+          <Link href={nextHref} className="flex flex-col items-center justify-center gap-1 px-5 py-2.5" style={navButtonStyle}>
             <ChevronRight className="w-[18px] h-[18px]" />
             Avanti
           </Link>

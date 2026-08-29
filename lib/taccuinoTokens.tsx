@@ -183,10 +183,7 @@ export function TaccuinoPaperTexture({ flip = false }: { flip?: boolean }) {
 }
 
 /**
- * Rilegatura — l'ombra e la piega fisiche al centro pagina, un lato a scelta: sinistro per una
- * pagina raggiunta "sfogliando in avanti", destro per una "all'indietro" (stessa idea del mockup,
- * pagine alternate). Per ora ogni pagina taccuino usa `side="left"`; l'alternanza vera arriverà
- * insieme al routing multi-pagina che la giustifica.
+ * Rilegatura — l'ombra e la piega fisiche sul bordo sinistro dello schermo.
  *
  * Fase 31 — riscritta da capo su specifica dettagliata dell'utente: non più una singola sfumatura
  * nera uniforme dall'alto al basso (Fase 29), ma una composizione a più livelli che simula la
@@ -204,34 +201,30 @@ export function TaccuinoPaperTexture({ flip = false }: { flip?: boolean }) {
  *
  * Fase 35 — rinforzata su richiesta esplicita dell'utente dopo un confronto prima/dopo: più
  * larga (26→34px) e più scura ai due estremi (`shadowIn`/`shadowOut` quasi raddoppiati), a leggersi
- * chiaramente come rilegatura invece di un'ombra appena accennata. Il `side` (già presente,
- * Fase 21) ora viene anche alternato da chi chiama `BookPage` — vedi `spineSide` lì — per
- * simulare pagine recto/verso di un libro vero sfogliandolo tra Guida/Resoconto; il Sommario
- * resta fisso a sinistra (non passa mai `spineSide`, resta sul default).
+ * chiaramente come rilegatura invece di un'ombra appena accennata. Aveva anche guadagnato un lato
+ * alternabile per l'effetto pagina girata (poi rimosso su richiesta esplicita, insieme a tutto il
+ * resto dello sfoglio animato): resta solo sul bordo sinistro, come prima di quella fase.
  *
  * Fase 36 — tolta la "piccola zona di luce" (`light`, un caldo quasi-bianco): segnalata
  * esplicitamente come "riflesso bianco" indesiderato. La composizione resta comunque a più
  * livelli (ombra interna → piega → ombra esterna più morbida), solo senza lo schiarimento.
  */
-export function TaccuinoSpineShadow({ side = 'left' }: { side?: 'left' | 'right' }) {
+export function TaccuinoSpineShadow() {
   const width = 34
   const shadowIn = 'rgba(41,35,30,0.48)'   // ombra interna, marrone-nero caldo (TACCUINO_INK.typed)
   const crease   = 'rgba(128,103,70,0.36)' // linea di piega (TACCUINO_INK.hand)
   const shadowOut = 'rgba(41,35,30,0.17)'  // ombra esterna, più morbida ma non più quasi invisibile
-  const stopsLTR = [
+  const stops = [
     `${shadowIn} 0%`, `${shadowIn} 7%`, `${crease} 15%`, `${shadowOut} 30%`, 'transparent 60%',
-  ].join(', ')
-  const stopsRTL = [
-    `${shadowIn} 100%`, `${shadowIn} 93%`, `${crease} 85%`, `${shadowOut} 70%`, 'transparent 40%',
   ].join(', ')
   const verticalMask = 'linear-gradient(to bottom, transparent 0%, black 18%, black 82%, transparent 100%)'
   return (
     <div
       aria-hidden="true"
-      className={`fixed inset-y-0 z-40 pointer-events-none ${side === 'left' ? 'left-0' : 'right-0'}`}
+      className="fixed inset-y-0 left-0 z-40 pointer-events-none"
       style={{
         width,
-        background: `linear-gradient(to right, ${side === 'left' ? stopsLTR : stopsRTL})`,
+        background: `linear-gradient(to right, ${stops})`,
         WebkitMaskImage: verticalMask,
         maskImage: verticalMask,
       }}

@@ -12,25 +12,21 @@
 // una piega pensata per la pergamena o per lo scaffale scuro non è stata verificata.
 //
 // Fase 35 — rinforzata (più larga, più scura ai due estremi) sulla scia dello stesso ritocco
-// fatto su `TaccuinoSpineShadow`, e `side` alternabile: Guida/Resoconto (`BookPage.tsx`) la
-// alternano sinistra/destra pagina per pagina per simulare un libro vero che si sfoglia; lo
-// scaffale (`DiariPageLibro`) e ogni altro chiamante che non passa `side` restano a sinistra.
+// fatto su `TaccuinoSpineShadow`. Aveva anche guadagnato un lato alternabile per l'effetto pagina
+// girata (poi rimosso su richiesta esplicita, insieme a tutto il resto dello sfoglio animato):
+// resta solo sul bordo sinistro, come prima di quella fase.
 //
 // `pointer-events: none` — non deve mai intercettare tap/click, anche se visivamente sopra il
 // contenuto (serve solo a stare sopra per essere visibile su sfondi chiari e scuri).
-export default function BookSpineShadow({ variant, side = 'left' }: { variant: 'light' | 'dark'; side?: 'left' | 'right' }) {
+export default function BookSpineShadow({ variant }: { variant: 'light' | 'dark' }) {
   const gradient = variant === 'light'
     ? 'linear-gradient(to right, rgba(63,58,34,0.34) 0%, rgba(63,58,34,0.16) 28%, rgba(63,58,34,0.06) 55%, rgba(63,58,34,0) 85%)'
     : 'linear-gradient(to right, rgba(0,0,0,0.62) 0%, rgba(0,0,0,0.28) 28%, rgba(0,0,0,0.09) 55%, rgba(0,0,0,0) 85%)'
   return (
     <div
       aria-hidden="true"
-      className={`fixed inset-y-0 z-40 ${side === 'left' ? 'left-0' : 'right-0'}`}
-      style={{
-        width: 34,
-        background: side === 'left' ? gradient : gradient.replace('to right', 'to left'),
-        pointerEvents: 'none',
-      }}
+      className="fixed inset-y-0 left-0 z-40"
+      style={{ width: 34, background: gradient, pointerEvents: 'none' }}
     />
   )
 }

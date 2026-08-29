@@ -138,7 +138,6 @@ export default function ReportBookPage({ basePath, diarioTitle, activityId, page
       sections={sections}
       currentSectionKey={current.key}
       pageLabel={`${idx + 1} di ${present.length}`}
-      spineSide={idx % 2 === 0 ? 'left' : 'right'}
     >
       <h1 style={{ fontFamily: FONT.display, fontWeight: 600, fontSize: 22, color: '#3f3a22', margin: '0 0 14px' }}>
         {current.title}

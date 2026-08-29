@@ -33,10 +33,6 @@ export function PhotoLightbox({ photos, index, onNavigate, onClose }: {
   return (
     <div
       className="fixed inset-0 z-[95] bg-black/90 flex items-center justify-center p-4 print:hidden"
-      // Ha già il proprio swipe orizzontale (sotto) per passare da una foto all'altra — dice al
-      // Dtrek Page Turning Engine (components/libro/pageTurn/usePageDrag.ts) di lasciarlo stare,
-      // altrimenti trascinare per cambiare foto girerebbe anche la pagina del libro sotto di lei.
-      data-page-turn-ignore
       onClick={onClose}
       onTouchStart={e => { touchStartX.current = e.touches[0].clientX }}
       onTouchEnd={e => {
