@@ -8,16 +8,17 @@ import { getProfile } from '@/lib/userProfile'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import GemStatusBadge from '@/components/premium/GemStatusBadge'
+import NuovoDiarioSheet from '@/components/nuovo/NuovoDiarioSheet'
 import type { User as SupabaseUser, Session, AuthChangeEvent } from '@supabase/supabase-js'
 
-// Redesign menù globale (fase 1-2) — Diario > Percorsi > Reportage è ora la gerarchia reale
+// Redesign menù globale (fase 1-3) — Diario > Percorsi > Reportage è ora la gerarchia reale
 // dell'app (un Diario contiene Percorsi, un Percorso contiene i suoi Reportage): questa barra
 // resta comunque piatta/trasversale, non annidata — ogni voce porta all'elenco "tutti i ..." di
 // quella categoria su tutti i Diari, non dentro uno specifico. "Reportage" punta a /reportage
 // (fase 2, app/reportage/page.tsx + app/api/reportage/route.ts), gemella di "Tutti i Percorsi".
-// "Nuovo" punta a /upload (oggi apre di default "Crea un Resoconto", tab=activity) — la scelta
-// contestuale Percorso/Reportage e la selezione del Diario di destinazione sono lavoro successivo
-// (fase 3), non ancora implementate.
+// "Nuovo" non è un <Link> come le altre tre voci (vedi DesktopNav/MobileBottomBar sotto): apre
+// NuovoDiarioSheet, che chiede sempre il Diario di destinazione — tab contestuale alla sezione
+// attiva (nuovoTabFor), mai un default automatico silenzioso.
 export const NAV_LINKS = [
   { href: '/diari',      label: 'Diario',     icon: BookMarked },
   { href: '/percorsi',   label: 'Percorsi',   icon: Compass    },
@@ -29,6 +30,13 @@ export const NAV_LINKS = [
 // un semplice startsWith avrebbe acceso il tab anche su /percorsi-per-te, rotta distinta.
 export function isActive(href: string, path: string) {
   return href === '/' ? path === '/' : path === href || path.startsWith(`${href}/`)
+}
+
+// "Nuovo" (fase 3) — contestuale alla sezione attiva: dentro Percorsi crea un percorso da
+// pianificare (tab=gpx), ovunque altrove crea un Reportage/Resoconto (tab=activity, il default di
+// app/upload/page.tsx). Stesso confine di segmento di isActive, per lo stesso motivo.
+function nuovoTabFor(path: string): 'activity' | 'gpx' {
+  return path === '/percorsi' || path.startsWith('/percorsi/') ? 'gpx' : 'activity'
 }
 
 // ── Avatar (desktop + tab bar icon) ─────────────────────────────────────────────
@@ -107,6 +115,7 @@ export const MOBILE_BOTTOMBAR_SPACER = 'pb-[calc(env(safe-area-inset-bottom,0px)
 
 function DesktopNav() {
   const path = usePathname()
+  const [nuovoOpen, setNuovoOpen] = useState(false)
 
   return (
     <nav className="hidden md:block sticky top-0 z-50 bg-white/90 backdrop-blur-sm border-b border-stone-200 shadow-sm">
@@ -121,14 +130,19 @@ function DesktopNav() {
         <div className="flex items-center gap-1">
           {NAV_LINKS.map(({ href, label, icon: Icon }) => {
             const active = isActive(href, path)
+            const className = `flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+              active ? 'bg-forest-50 text-forest-700' : 'text-stone-500 hover:text-stone-800 hover:bg-stone-100'
+            }`
+            if (href === '/upload') {
+              return (
+                <button key={href} type="button" onClick={() => setNuovoOpen(true)} className={className}>
+                  <Icon className="w-4 h-4" />
+                  <span>{label}</span>
+                </button>
+              )
+            }
             return (
-              <Link
-                key={href}
-                href={href}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                  active ? 'bg-forest-50 text-forest-700' : 'text-stone-500 hover:text-stone-800 hover:bg-stone-100'
-                }`}
-              >
+              <Link key={href} href={href} className={className}>
                 <Icon className="w-4 h-4" />
                 <span>{label}</span>
               </Link>
@@ -138,6 +152,7 @@ function DesktopNav() {
           <ProfileAvatar />
         </div>
       </div>
+      <NuovoDiarioSheet open={nuovoOpen} onClose={() => setNuovoOpen(false)} tab={nuovoTabFor(path)} />
     </nav>
   )
 }
@@ -196,6 +211,7 @@ export function MobileNavBar({ className = '' }: { className?: string }) {
 // diversa cornice, per non toccare quelle pagine finché non vengono ridisegnate.
 function MobileBottomBar() {
   const path = usePathname()
+  const [nuovoOpen, setNuovoOpen] = useState(false)
   return (
     <nav
       className="md:hidden fixed z-40 inset-x-0 bottom-0 bg-forest-600/95 backdrop-blur-md shadow-[0_-2px_12px_rgba(0,0,0,0.18)]"
@@ -204,20 +220,26 @@ function MobileBottomBar() {
       <div className="flex items-center justify-around h-16 px-2">
         {NAV_LINKS.map(({ href, label, icon: Icon }) => {
           const active = isActive(href, path)
+          const className = `flex flex-col items-center gap-1 px-3 py-1.5 rounded-2xl transition-colors ${
+            active ? 'text-white' : 'text-forest-300'
+          }`
+          if (href === '/upload') {
+            return (
+              <button key={href} type="button" onClick={() => setNuovoOpen(true)} className={className}>
+                <Icon className="w-5 h-5" strokeWidth={2} />
+                <span className="text-[10px] font-bold leading-none">{label}</span>
+              </button>
+            )
+          }
           return (
-            <Link
-              key={href}
-              href={href}
-              className={`flex flex-col items-center gap-1 px-3 py-1.5 rounded-2xl transition-colors ${
-                active ? 'text-white' : 'text-forest-300'
-              }`}
-            >
+            <Link key={href} href={href} className={className}>
               <Icon className="w-5 h-5" strokeWidth={2} />
               <span className="text-[10px] font-bold leading-none">{label}</span>
             </Link>
           )
         })}
       </div>
+      <NuovoDiarioSheet open={nuovoOpen} onClose={() => setNuovoOpen(false)} tab={nuovoTabFor(path)} />
     </nav>
   )
 }
