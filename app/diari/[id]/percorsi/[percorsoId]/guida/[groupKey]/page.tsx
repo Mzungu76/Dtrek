@@ -1,21 +1,23 @@
 'use client'
 // Una pagina della Guida "a libro" — Fase 3 di docs/diario-a-libro-piano.md. Slug stabile
-// (GuideSectionKey): monta GuideBookPage.tsx (Fase 2), che si occupa di caricamento dati, gate di
-// presenza e dispatch del widget giusto per la sezione.
+// (GuideNavGroupKey, Fase 40 — prima GuideSectionKey, 9 slug possibili: docs/
+// taccuino-botanico-piano.md ha raggruppato la navigazione in 3): monta GuideBookPage.tsx
+// (Fase 2), che si occupa di caricamento dati, gate di presenza e dispatch dei widget delle
+// sotto-sezioni del gruppo.
 import { Suspense } from 'react'
 import { useParams, notFound } from 'next/navigation'
 import GuideBookPage from '@/components/libro/GuideBookPage'
-import { isGuideSectionKey } from '@/lib/guideSections'
+import { isGuideNavGroupKey } from '@/lib/guideSections'
 import { useDiarioTitle } from '@/lib/diario/useDiarioTitle'
 
-function GuideSectionPageInner() {
-  const params = useParams<{ id: string; percorsoId: string; sectionKey: string }>()
+function GuideGroupPageInner() {
+  const params = useParams<{ id: string; percorsoId: string; groupKey: string }>()
   const diarioId = decodeURIComponent(params.id)
   const percorsoId = decodeURIComponent(params.percorsoId)
-  const sectionKey = decodeURIComponent(params.sectionKey)
+  const groupKey = decodeURIComponent(params.groupKey)
   const diarioTitle = useDiarioTitle(diarioId)
 
-  if (!isGuideSectionKey(sectionKey)) notFound()
+  if (!isGuideNavGroupKey(groupKey)) notFound()
 
   const basePath = `/diari/${encodeURIComponent(diarioId)}/percorsi/${encodeURIComponent(percorsoId)}`
 
@@ -25,15 +27,15 @@ function GuideSectionPageInner() {
       diarioHref={`/diari/${encodeURIComponent(diarioId)}`}
       diarioTitle={diarioTitle}
       percorsoId={percorsoId}
-      sectionKey={sectionKey}
+      groupKey={groupKey}
     />
   )
 }
 
-export default function GuideSectionPage() {
+export default function GuideGroupPage() {
   return (
     <Suspense>
-      <GuideSectionPageInner />
+      <GuideGroupPageInner />
     </Suspense>
   )
 }

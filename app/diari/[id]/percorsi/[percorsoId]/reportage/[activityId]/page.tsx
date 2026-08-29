@@ -48,7 +48,7 @@ function ReportageSummaryInner() {
         {/* Non più `percorsoPath` (bare) — quella pagina di riepilogo non esiste più (Fase 15),
             eliminata su richiesta dell'utente: l'elenco Reportage e gli altri strumenti del
             Percorso vivono ora nel drawer "Strumenti" raggiungibile da ogni pagina di Guida. */}
-        <Link href={`${percorsoPath}/guida/il_percorso`} className="text-[13px] text-forest-600 font-medium hover:text-forest-700 inline-flex items-center gap-1">
+        <Link href={`${percorsoPath}/guida/prima_di_partire`} className="text-[13px] text-forest-600 font-medium hover:text-forest-700 inline-flex items-center gap-1">
           <ArrowLeft className="w-3.5 h-3.5" /> Torna alla Guida
         </Link>
       </div>

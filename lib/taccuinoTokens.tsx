@@ -1,9 +1,13 @@
-// Fonte unica di verità per la direzione "taccuino topografico" — variante approvata dall'utente
-// dopo il mockup (docs/diario-a-libro-piano.md, Fase 17) per succedere gradualmente alla
-// pergamena calda di components/libro/BookPage.tsx. Non sostituisce nulla da sola: è il file che
-// ogni pagina o componente riscritto in questo stile importerà, un pezzo alla volta, invece di
-// ridefinire gli stessi valori localmente come è successo per la pergamena (vedi il commento in
-// cima a BookPage.tsx) — questa volta la palette nasce già centralizzata.
+// Fonte unica di verità per la direzione "taccuino" — variante approvata dall'utente dopo il
+// mockup (docs/diario-a-libro-piano.md, Fase 17) per succedere gradualmente alla pergamena calda
+// di components/libro/BookPage.tsx. Non sostituisce nulla da sola: è il file che ogni pagina o
+// componente riscritto in questo stile importerà, un pezzo alla volta, invece di ridefinire gli
+// stessi valori localmente come è successo per la pergamena (vedi il commento in cima a
+// BookPage.tsx) — questa volta la palette nasce già centralizzata.
+//
+// Fase 40 — palette riallineata alla direzione "Taccuino Botanico" (salvia/terracotta), scelta
+// tra tre proposte (Campo/terra, Topografico/pino, Botanico) — docs/taccuino-botanico-piano.md.
+// Non un nuovo file: lo stesso "taccuino" di Fase 17, solo con i toni definitivi.
 //
 // Separato da lib/designTokens.ts (non aggiunto lì) perché quel file serve l'intera app, oggi
 // ancora nella sua estetica corrente — mescolarci una direzione non ancora applicata da nessuna
@@ -16,30 +20,30 @@
 // designTokens.ts per gli altri font del brand). Caveat sostituisce Kalam, provato per primo in
 // Fase 17 (git history) — stesso ruolo, tratto diverso, ancora in valutazione.
 import { useId } from 'react'
-import { TERRA } from './designTokens'
 
 export const FONT_VAR_HAND = '--font-caveat'
 /** Titoli e annotazioni scritte a mano — corpo del testo resta su FONT.lora (designTokens.ts):
  *  professionalità e precisione del contenuto, non tutto scritto a mano allo stesso modo. */
 export const FONT_HAND = `var(${FONT_VAR_HAND}), cursive`
 
-/** Carta — Fase 31, palette esatta fornita dall'utente per il "Travel Journal" contemporaneo
- *  (non più la pergamena calda approssimata a mano di Fase 17-30): sfondo tenue, quasi nessuna
- *  variazione percepibile, mai una "macchia" visibile come tale — la texture vera vive in
- *  `TaccuinoPaperTexture` come rumore quasi impercettibile, non come due chiazze scure. */
+/** Carta — Fase 31, palette "Travel Journal" iniziale, poi riallineata in Fase 40 alla direzione
+ *  approvata "Taccuino Botanico" (docs/taccuino-botanico-piano.md — valori esatti dalla guida,
+ *  stessi usati dal chrome di sistema in tailwind.config.ts, colori `botanico.*`): sfondo tenue,
+ *  quasi nessuna variazione percepibile, mai una "macchia" visibile come tale — la texture vera
+ *  vive in `TaccuinoPaperTexture` come rumore quasi impercettibile, non come due chiazze scure. */
 export const TACCUINO_PAPER = {
-  base:   '#F2E8D2',
+  base:   '#F5EDDD',
   /** Variante più chiara — zone "in luce" (piega, evidenziature leggere), mai lo sfondo pagina. */
-  light:  '#F6EEDC',
+  light:  '#F9F2E4',
   /** Sfondo di una "card incollata" — mappe, ricerca — leggermente più scuro della pagina stessa. */
-  card:       '#E9DDBF',
-  cardBorder: '#D8C7A3',
+  card:       '#EBE0C8',
+  cardBorder: '#D9C9A8',
   /** Linee di livello disegnate a mano sullo sfondo pagina, molto tenui. */
-  contourLine: '#987C5B',
+  contourLine: '#A89A78',
   /** Evidenziatore — striscia calda dietro una riga "importante" (es. un percorso con un
    *  Reportage), sempre con un'opacità in coda (`${highlight}66` ecc.), mai a piena tinta: deve
    *  restare una pennellata di evidenziatore su carta, non un riquadro colorato. */
-  highlight: '#E9DDBF',
+  highlight: '#EBE0C8',
 } as const
 
 /** Toni di inchiostro — il testo "stampato" (narrativo, professionale) e quello scritto a mano
@@ -48,16 +52,23 @@ export const TACCUINO_PAPER = {
  *  puro (Fase 31, richiesta esplicita): un quasi-nero caldo resta coerente con la carta invece di
  *  "bucarla" con un contrasto da schermo. */
 export const TACCUINO_INK = {
-  typed:     '#29231E',
-  hand:      '#806746',
-  handMuted: '#987C5B',
+  typed:     '#2E2A22',
+  hand:      '#7A6F52',
+  handMuted: '#95886A',
   mapSepia:   '#3d2b1f',
   mapContour: '#C8B99F',
 } as const
 
-/** Accento funzionale (stati attivi, CTA) — la stessa scala terra del brand, non un colore nuovo:
- *  il taccuino è una nuova ambientazione per l'app esistente, non un brand a sé. */
-export const TACCUINO_ACCENT = TERRA
+/** Accento funzionale (stati attivi, CTA) — Fase 40, direzione "Taccuino Botanico": non più la
+ *  scala TERRA del brand, ma il duo salvia/terracotta approvato (docs/taccuino-botanico-piano.md).
+ *  Solo `[600]` è mai stato usato dai chiamanti (BookPage.tsx, app/diari/[id]/page.tsx) — niente
+ *  scala completa a 9 gradini come TERRA/FOREST, sarebbero valori inventati e mai referenziati. */
+export const TACCUINO_ACCENT = { 600: '#C0603D' } as const
+/** Accento secondario — salvia polverosa, mai per CTA/stati selezionati (quelli restano
+ *  `TACCUINO_ACCENT`, terracotta). */
+export const TACCUINO_ACCENT_SECONDARY = '#7C8F6E'
+/** Tinta di sfondo per badge/chip nello stato attivo, dietro testo `TACCUINO_ACCENT`. */
+export const TACCUINO_ACCENT_TINT = '#E9DAC3'
 
 /**
  * Filtro SVG che dà un tratto "disegnato a mano" (leggero tremore organico) a un path/forma —

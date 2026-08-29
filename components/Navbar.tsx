@@ -90,13 +90,13 @@ export function ProfileAvatar({ size = 32, iconSize = 16 }: { size?: number; ico
     >
       <span
         className={`flex items-center justify-center w-full h-full rounded-full border-2 overflow-hidden transition-all ${
-          active ? 'border-forest-500' : 'border-stone-200 hover:border-forest-400'
+          active ? 'border-botanico-accent' : 'border-stone-200 hover:border-botanico-accent-2'
         }`}
       >
         {faceUrl
           ? <img src={faceUrl} alt="Profilo" className="w-full h-full object-cover" />
           : user
-            ? <span className="w-full h-full flex items-center justify-center bg-forest-600 text-white text-xs font-bold">{initials}</span>
+            ? <span className="w-full h-full flex items-center justify-center bg-botanico-accent text-white text-xs font-bold">{initials}</span>
             : <User style={{ width: iconSize, height: iconSize }} className="text-stone-400" />
         }
       </span>
@@ -131,7 +131,7 @@ function DesktopNav() {
           {NAV_LINKS.map(({ href, label, icon: Icon }) => {
             const active = isActive(href, path)
             const className = `flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-              active ? 'bg-forest-50 text-forest-700' : 'text-stone-500 hover:text-stone-800 hover:bg-stone-100'
+              active ? 'bg-botanico-accent-tint text-botanico-accent' : 'text-stone-500 hover:text-stone-800 hover:bg-stone-100'
             }`
             if (href === '/upload') {
               return (
@@ -161,8 +161,8 @@ function DesktopNav() {
 // Un'unica fascia edge-to-edge (niente pillola flottante separata dalla status bar, niente
 // gap tra le due) — lo sfondo sale a coprire anche safe-area-inset-top, così la barra di
 // sistema e quella dell'app appaiono come un'unica superficie continua invece di due elementi
-// scollegati. forest-600 = manifest.json theme_color (#277134), non forest-900 come il resto
-// della UI: qui deve combaciare esattamente con lo sfondo che Android/iOS danno alla status bar.
+// scollegati. botanico-bar = manifest.json theme_color (#5F7355, direzione "Taccuino Botanico"):
+// qui deve combaciare esattamente con lo sfondo che Android/iOS danno alla status bar.
 //
 // Esportata (non solo uso interno) perché è la STESSA barra usata dalle pagine "magazine" a
 // schermo intero (Guide/Resoconto — components/routehub/HubNavBar.tsx): prima del redesign quelle
@@ -176,7 +176,7 @@ export function MobileNavBar({ className = '' }: { className?: string }) {
   const [nuovoOpen, setNuovoOpen] = useState(false)
   return (
     <nav
-      className={`pointer-events-auto bg-forest-600/95 backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.18)] ${className}`}
+      className={`pointer-events-auto bg-botanico-bar/95 backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.18)] ${className}`}
       style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
     >
       <div className="flex items-center gap-1 px-3 h-14">
@@ -184,7 +184,7 @@ export function MobileNavBar({ className = '' }: { className?: string }) {
           {NAV_LINKS.map(({ href, label, icon: Icon }) => {
             const active = isActive(href, path)
             const linkClassName = `flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-2xl transition-colors ${
-              active ? 'text-white' : 'text-forest-300'
+              active ? 'text-botanico-bar-active' : 'text-botanico-bar-inactive'
             }`
             if (href === '/upload') {
               return (
@@ -221,14 +221,14 @@ function MobileBottomBar() {
   const [nuovoOpen, setNuovoOpen] = useState(false)
   return (
     <nav
-      className="md:hidden fixed z-40 inset-x-0 bottom-0 bg-forest-600/95 backdrop-blur-md shadow-[0_-2px_12px_rgba(0,0,0,0.18)]"
+      className="md:hidden fixed z-40 inset-x-0 bottom-0 bg-botanico-bar/95 backdrop-blur-md shadow-[0_-2px_12px_rgba(0,0,0,0.18)]"
       style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
     >
       <div className="flex items-center justify-around h-16 px-2">
         {NAV_LINKS.map(({ href, label, icon: Icon }) => {
           const active = isActive(href, path)
           const className = `flex flex-col items-center gap-1 px-3 py-1.5 rounded-2xl transition-colors ${
-            active ? 'text-white' : 'text-forest-300'
+            active ? 'text-botanico-bar-active' : 'text-botanico-bar-inactive'
           }`
           if (href === '/upload') {
             return (

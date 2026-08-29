@@ -344,7 +344,7 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                       hanno una larghezza fissa (non "shrink-to-content") così restano allineati in
                       verticale da una riga all'altra, indipendentemente da quanto testo hanno le
                       righe vicine. */}
-                  <Link href={`${percorsoPath}/guida/il_percorso`} className="flex items-center gap-3.5 flex-1 min-w-0">
+                  <Link href={`${percorsoPath}/guida/prima_di_partire`} className="flex items-center gap-3.5 flex-1 min-w-0">
                     {/* Vera mappa (GalleryMapThumb, invariata nel componente — stessa usata dalla
                         galleria Guida/Resoconto), non un disegno astratto. Fasi 29-39 avevano
                         provato via via un `filter` CSS di ricolorazione e poi un tile provider

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import {
-  Compass, Route, BarChart2, Heart, MapPin, Leaf, Utensils, ShieldCheck, BookOpen, Radar,
+  Compass, Route, BarChart2, MapPin, Leaf, Utensils, ShieldCheck, BookOpen, Radar,
 } from 'lucide-react'
 import type { GuideSectionKey } from '@/lib/guideSections'
 
@@ -14,7 +14,6 @@ export const SECTION_STYLE: Record<GuideSectionKey, { icon: ReactNode; color: st
   il_percorso:      { icon: <Route       className="w-4 h-4" />, color: '#277134' }, // forest-600
   verificato:       { icon: <Radar       className="w-4 h-4" />, color: '#0f6e94' }, // sky-700
   dati_sicurezza:   { icon: <BarChart2   className="w-4 h-4" />, color: '#73695c' }, // stone-700
-  comfort:          { icon: <Heart       className="w-4 h-4" />, color: '#9f4315' }, // terra-700
   luoghi:           { icon: <MapPin      className="w-4 h-4" />, color: '#813619' }, // terra-800
   natura:           { icon: <Leaf        className="w-4 h-4" />, color: '#378d44' }, // forest-500
   sapori:           { icon: <Utensils    className="w-4 h-4" />, color: '#d97220' }, // terra-500

@@ -46,13 +46,13 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { ChevronLeft, ChevronRight, BookMarked, Wrench } from 'lucide-react'
 import { FONT, TERRA } from '@/lib/designTokens'
-import { TACCUINO_PAPER, TACCUINO_INK, TaccuinoPaperTexture, TaccuinoSpineShadow } from '@/lib/taccuinoTokens'
+import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, TaccuinoPaperTexture, TaccuinoSpineShadow } from '@/lib/taccuinoTokens'
 import BookSpineShadow from './BookSpineShadow'
 
 const THEMES = {
   pergamena: {
     paperBg: '#fbf6e8', hairline: '#e4d9bd', inkMuted: '#a9915f', inkFooter: '#b5a677',
-    pillBg: '#f1e9d2', pillText: '#6b6142',
+    pillBg: '#f1e9d2', pillText: '#6b6142', accent: TERRA[600],
   },
   taccuino: {
     // Fase 31 — `hairline` con opacità (non il colore pieno di `cardBorder`): la specifica chiede
@@ -60,6 +60,9 @@ const THEMES = {
     // di card. `80` = ~50% alpha in notazione hex a 8 cifre.
     paperBg: TACCUINO_PAPER.base, hairline: `${TACCUINO_PAPER.cardBorder}80`, inkMuted: TACCUINO_INK.handMuted,
     inkFooter: TACCUINO_INK.handMuted, pillBg: TACCUINO_PAPER.card, pillText: TACCUINO_INK.hand,
+    // "Taccuino Botanico" (docs/taccuino-botanico-piano.md) — accento primario del tema (pillola
+    // sezione attiva, icona "Strumenti"): duo salvia/terracotta, non più TERRA (terra pura).
+    accent: TACCUINO_ACCENT[600],
   },
 } as const
 
@@ -157,7 +160,7 @@ export default function BookPage({
                 key={s.key}
                 href={s.href}
                 className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11.5px] font-semibold whitespace-nowrap transition-colors"
-                style={on ? { background: TERRA[600], color: '#fff' } : { background: t.pillBg, color: t.pillText }}
+                style={on ? { background: t.accent, color: '#fff' } : { background: t.pillBg, color: t.pillText }}
               >
                 {s.icon}{s.label}
               </Link>
@@ -199,7 +202,7 @@ export default function BookPage({
         </Link>
 
         {onToolsClick && (
-          <button type="button" onClick={onToolsClick} className="flex flex-col items-center justify-center gap-1 px-5 py-2.5" style={{ ...navButtonStyle, color: TERRA[600] }}>
+          <button type="button" onClick={onToolsClick} className="flex flex-col items-center justify-center gap-1 px-5 py-2.5" style={{ ...navButtonStyle, color: t.accent }}>
             <Wrench className="w-[18px] h-[18px]" />
             Strumenti
           </button>

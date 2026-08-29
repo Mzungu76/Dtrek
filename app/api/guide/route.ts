@@ -36,9 +36,7 @@ import { extractEpochPois } from '@/lib/epochPois'
 import { logAiUsage } from '@/lib/aiUsageLog'
 import { extractPoiNotes } from '@/lib/poiNotes'
 import { effectiveHikeMetrics } from '@/lib/routeMode'
-import { readOrBackfillHistoryStats, formatHistoryStatsBlock } from '@/lib/hikerHistory'
 import { findAllSourceImages } from '@/lib/sourceImageFetch'
-import { concernLabel, environmentPrefLabel } from '@/lib/hikerProfile'
 import { resolveComuneFromLatLon } from '@/lib/overpassTrails'
 
 export const dynamic = 'force-dynamic'
@@ -206,37 +204,6 @@ function poiDistance(m: number) {
   return m < 1000 ? `${m.toFixed(0)} m dal percorso` : `${(m / 1000).toFixed(1)} km dal percorso`
 }
 
-// ── Profilo + storico per la sezione "Su misura per te" ───────────────────────
-
-async function fetchHikerProfileForComfort(userId: string): Promise<{ experienceLevel: string | null; concerns: string[]; environmentPrefs: string[] }> {
-  const { data, error } = await supabase
-    .from('user_settings')
-    .select('hiker_experience_level, hiker_concerns, hiker_environment_prefs')
-    .eq('user_id', userId)
-    .maybeSingle()
-  if (error) console.error('[guide] fetchHikerProfileForComfort failed:', error.message)
-  return {
-    experienceLevel: (data?.hiker_experience_level as string | null) ?? null,
-    concerns: (data?.hiker_concerns as string[] | null) ?? [],
-    environmentPrefs: (data?.hiker_environment_prefs as string[] | null) ?? [],
-  }
-}
-
-/** Testo pronto per il prompt della sezione 'comfort' — vedi buildPrompt's comfortContext. */
-async function buildComfortContext(userId: string): Promise<string> {
-  const [profile, history] = await Promise.all([
-    fetchHikerProfileForComfort(userId),
-    readOrBackfillHistoryStats(userId),
-  ])
-  const lines = [
-    `Livello di esperienza dichiarato: ${profile.experienceLevel ?? 'non indicato'}`,
-    profile.concerns.length ? `Attenzioni indicate dall'utente: ${profile.concerns.map(concernLabel).join('; ')}` : `Nessuna attenzione particolare indicata`,
-    profile.environmentPrefs.length ? `Preferenze ambientali: ${profile.environmentPrefs.map(environmentPrefLabel).join('; ')}` : `Nessuna preferenza ambientale indicata`,
-    formatHistoryStatsBlock(history),
-  ]
-  return lines.join('\n')
-}
-
 // Numero massimo di POI Wikipedia inclusi nel prompt (vedi anche buildPrompt, che tronca l'elenco
 // stesso a questa cifra) — a livello di modulo perché serve sia lì sia alla stima di
 // computeGuideMaxTokens più sotto, che deve conoscere quanti "luoghi" al massimo la sezione
@@ -261,7 +228,6 @@ const SECTION_LENGTH_BY_LEVEL: Record<GuideSectionKey, Record<GuideTextLength, s
   il_percorso:      { essenziale: '80-100 parole',       approfondita: '180-220 parole',      molto_approfondita: '320-380 parole' },
   verificato:       { essenziale: '(non usato)',         approfondita: '(non usato)',         molto_approfondita: '(non usato)' },
   dati_sicurezza:   { essenziale: '50-65 parole',        approfondita: '110-140 parole',      molto_approfondita: '190-230 parole' },
-  comfort:          { essenziale: '70-90 parole',        approfondita: '150-190 parole',      molto_approfondita: '260-320 parole' },
   luoghi:           { essenziale: '40-60 parole/luogo',  approfondita: '90-120 parole/luogo', molto_approfondita: '150-200 parole/luogo' },
   natura:           { essenziale: '80-100 parole',       approfondita: '160-200 parole',      molto_approfondita: '300-360 parole' },
   sapori:           { essenziale: '60-80 parole',        approfondita: '130-170 parole',      molto_approfondita: '220-280 parole' },
@@ -275,7 +241,6 @@ const SECTION_WORD_CEILING: Record<GuideSectionKey, Record<GuideTextLength, numb
   il_percorso:      { essenziale: 100, approfondita: 220, molto_approfondita: 380 },
   verificato:       { essenziale: 0,   approfondita: 0,   molto_approfondita: 0 },
   dati_sicurezza:   { essenziale: 65,  approfondita: 140, molto_approfondita: 230 },
-  comfort:          { essenziale: 90,  approfondita: 190, molto_approfondita: 320 },
   luoghi:           { essenziale: 60,  approfondita: 120, molto_approfondita: 200 },  // per luogo
   natura:           { essenziale: 100, approfondita: 200, molto_approfondita: 360 },
   sapori:           { essenziale: 80,  approfondita: 170, molto_approfondita: 280 },
@@ -285,7 +250,7 @@ const SECTION_WORD_CEILING: Record<GuideSectionKey, Record<GuideTextLength, numb
 // Sezioni dove, a "Molto approfondita", è utile poter distendere la narrazione su più paragrafi
 // tematici invece di un unico blocco — non "luoghi" (già strutturata per singolo luogo con ### ,
 // vedi SYSTEM_CORE) né le sezioni pratiche/brevi per natura (prima_di_partire, dati_sicurezza,
-// comfort, consigli), che restano un blocco unico anche al livello massimo: più ricche di dettaglio,
+// consigli), che restano un blocco unico anche al livello massimo: più ricche di dettaglio,
 // non spezzettate.
 const SECTIONS_ALLOWING_SUBPARAGRAPHS = new Set<GuideSectionKey>(['il_percorso', 'luoghi', 'natura', 'sapori'])
 
@@ -354,20 +319,6 @@ principali indicati nella VALUTAZIONE PERSONALIZZATA e i punteggi di Trail Score
 dai un consiglio pratico su come affrontarli. Sii onesta sui rischi reali (quota, dislivello, esposizione,
 meteo, terreno) anche quando il percorso è nel complesso alla portata — il tuo tono caldo non deve mai
 tradursi nel minimizzare una difficoltà vera pur di sembrare più incoraggiante.`,
-  comfort: `## Su misura per te
-Usa il PROFILO E STORICO DI QUESTO ESCURSIONISTA fornito più sotto (se presente) per valutare a parole,
-in modo specifico e onesto, quanto QUESTO percorso è in linea con le sue capacità reali e le sue
-preferenze dichiarate — un'interpretazione razionale ed emotiva che affianca, non ripete, i punteggi
-numerici già mostrati (Trail Score, Comfort TrailScore, punteggio Sicurezza). Sii equilibrata, non solo
-rassicurante: se il percorso è oggettivamente più impegnativo del suo storico o in contrasto con
-un'attenzione dichiarata, dillo chiaramente, senza minimizzare per sembrare più incoraggiante. Cita un
-confronto reale con il suo storico quando disponibile (es. "rispetto alle tue ultime uscite, che si
-aggirano su...") ed eventuali attenzioni legate alle sue limitazioni indicate, mai un consiglio generico
-valido per chiunque.
-Se il PROFILO E STORICO non è disponibile o è vuoto, dillo in una riga sola e passa subito a commentare
-il percorso in assoluto (dislivello, distanza, terreno) — senza aggiungere entusiasmo o previsioni non
-basate su nulla (es. mai frasi come "le probabilità che tu la ami sono alte" quando non hai nessun dato
-per saperlo).`,
   luoghi: `## I luoghi da non perdere
 Approfondimento sui punti di interesse più significativi (quelli nell'elenco LUOGHI CON VOCE
 WIKIPEDIA più sotto). Racconta la loro storia, le leggende, le curiosità che la maggior parte dei
@@ -381,7 +332,7 @@ Aggiungi curiosità naturalistiche legate alla stagione.`,
   sapori: `## Sapori e tradizioni
 Gastronomia locale, prodotti tipici del territorio, piatti da assaggiare dopo l'escursione.
 Tradizioni e feste locali, artigianato, cultura popolare della zona.`,
-  consigli: `## Consigli finali
+  consigli: `## Consigli
 Sicurezza, segnaletica, varianti del percorso, cosa fare in caso di maltempo,
 contatti utili (soccorso alpino, rifugi). Non nominare app specifiche (vale come per ogni altra sezione,
 vedi istruzione generale più sopra): se serve, parla genericamente di "un'app di navigazione".`,
@@ -456,10 +407,6 @@ function buildPrompt(
    *  apertura del prompt (vedi sotto); il sottotitolo di copertina è pilotato separatamente lato
    *  SYSTEM_SUBTITLE, non da qui. */
   isFirstGeneration: boolean,
-  /** Profilo + storico dell'escursionista (lib/hikerProfile.ts + lib/hikerHistory.ts), già
-   *  formattato — solo per la sezione 'comfort' ("Su misura per te"), undefined quando quella
-   *  sezione non viene scritta in questa richiesta (risparmia la lettura Supabase altrimenti). */
-  comfortContext?: string,
   /** Lunghezza scelta per ciascuna sezione (default utente, sovrascrivibile per questa singola
    *  generazione — vedi requestedSectionLengths in generateGuide). Sempre completa. */
   sectionLengths: SectionLengthMap = sanitizeSectionLengths(undefined),
@@ -555,8 +502,6 @@ ${assessment?.suitabilityScore ? `ADATTA A: ${assessment.suitabilityScore}% degl
 ${assessmentBlock}
 
 ${scoresBlock ? `PUNTEGGI E SEGNALAZIONI (già mostrati graficamente nell'app, usali solo per commentare):\n${scoresBlock}` : ''}
-
-${comfortContext ? `PROFILO E STORICO DI QUESTO ESCURSIONISTA (usali SOLO per la sezione "Su misura per te"):\n${comfortContext}` : ''}
 
 LUOGHI CON VOCE WIKIPEDIA (usa questi come base per la narrazione storico-culturale):
 ${wikiBlock}
@@ -703,7 +648,7 @@ async function generateGuide(req: NextRequest): Promise<Response> {
     )
   }
 
-  const { apiKey, userGender, breveSections, claudeModel, aiUseBiometricData, aiUseHistoryData, aiUseWebSearch, sectionLengths, entitlement, lookupFailed } = user
+  const { apiKey, userGender, breveSections, claudeModel, aiUseBiometricData, aiUseWebSearch, sectionLengths, entitlement, lookupFailed } = user
     ? await resolveApiKeyAndSettings(user.id, 'guide')
     : await resolveEmergencySharedKey('guide')
 
@@ -797,14 +742,6 @@ async function generateGuide(req: NextRequest): Promise<Response> {
       { status: 429, headers: { 'Content-Type': 'application/json' } },
     )
   }
-
-  // Va letta solo quando la sezione 'comfort' ("Su misura per te") è davvero tra quelle richieste
-  // in questa generazione — evita una lettura Supabase in più su ogni altra chiamata. Rispetta
-  // anche il consenso dell'utente all'uso dello storico nei prompt AI (vedi
-  // components/profilo/SectionAiPrivacy.tsx) — a consenso negato la sezione viene comunque scritta,
-  // solo senza il confronto personalizzato con storico/profilo dichiarato.
-  const needsComfortSection = sectionKeys.includes('comfort')
-  const comfortContext = needsComfortSection && user && aiUseHistoryData ? await buildComfortContext(user.id) : undefined
 
   let hike: PlannedHike
   let scores: DataScores
@@ -991,7 +928,7 @@ async function generateGuide(req: NextRequest): Promise<Response> {
     })
   }
 
-  const prompt = buildPrompt(hike, nature, narrativeSectionKeys, scores, isFirstGeneration, comfortContext, effectiveSectionLengths)
+  const prompt = buildPrompt(hike, nature, narrativeSectionKeys, scores, isFirstGeneration, effectiveSectionLengths)
 
   // SYSTEM_CORE (+ SYSTEM_SUBTITLE quando applicabile) è testo fisso, identico per ogni utente e
   // ogni percorso nella stessa combinazione (~1700-1900 token) — niente cache_control (rimosso
