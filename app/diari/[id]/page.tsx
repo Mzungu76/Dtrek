@@ -2,24 +2,19 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
-import RouteThumb from '@/components/RouteThumb'
 import { GalleryMapThumb } from '@/components/routehub/BottomGallery'
-import SectionEyebrow from '@/components/bacheca/SectionEyebrow'
-import RecoSuggestedRow from '@/components/bacheca/RecoSuggestedRow'
 import BookPage from '@/components/libro/BookPage'
 import { DiarioCoverThumb } from '@/components/diario/DiarioCoverThumb'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 import { ctsLabel } from '@/lib/trailScore'
 import { formatDuration } from '@/lib/tcxParser'
 import type { DiarioDetail } from '@/app/api/diaries/[id]/route'
-import type { RecommendationCard } from '@/lib/routeBuilder/generateRecommendations'
-import { getUserSettingsCached, updateUserSettings } from '@/lib/sync/userSettingsStore'
+import { updateUserSettings } from '@/lib/sync/userSettingsStore'
 import { FONT } from '@/lib/designTokens'
 import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, FONT_HAND, TaccuinoPaperTexture, HandDrawnFrame } from '@/lib/taccuinoTokens'
 import {
-  ArrowDown, ArrowLeft, ArrowUp, Check, CheckCircle2, ChevronRight, Clock, Loader2, Lock, LockOpen, Mountain,
-  Plus, Route, Search, Share2, Sparkles, Star, Trash2, TrendingUp, X,
+  ArrowDown, ArrowLeft, ArrowUp, Check, ChevronRight, Clock, Loader2, Lock, LockOpen, Mountain,
+  Plus, Route, Search, Share2, Star, Trash2, TrendingUp, X,
 } from 'lucide-react'
 
 /**
@@ -95,233 +90,6 @@ function DeleteDiarioSection({ diaryId }: { diaryId: string }) {
   )
 }
 
-/**
- * "Percorsi per te" come intermezzo dentro un Diario — Fase 5 di docs/diario-fulcro-piano.md.
- * Stesso motore e stessa card di app/bacheca/page.tsx (generateRecommendations.ts via
- * /api/percorsi-per-te?peek=1, mai una generazione al volo qui): un Diario senza ancora molti
- * Percorsi propri riceve comunque un suggerimento concreto, invece di restare solo un elenco vuoto.
- */
-function PercorsiPerTe() {
-  const [status, setStatus] = useState<'loading' | 'ok' | 'empty_no_location' | 'error' | 'pending'>('loading')
-  const [cards, setCards] = useState<RecommendationCard[]>([])
-
-  useEffect(() => {
-    fetch('/api/percorsi-per-te?peek=1')
-      .then(r => r.ok ? r.json() : Promise.reject())
-      .then(data => { setStatus(data.status); setCards(data.cards ?? []) })
-      .catch(() => setStatus('error'))
-  }, [])
-
-  if (status !== 'ok' || cards.length === 0) return null
-  return (
-    <div className="mb-6">
-      <SectionEyebrow icon={Sparkles} color="#d97220" className="mb-2">Percorsi per te</SectionEyebrow>
-      <RecoSuggestedRow cards={cards} />
-    </div>
-  )
-}
-
-/**
- * "Dentro un Diario" — Fase 1-2 di docs/diario-fulcro-piano.md (sola lettura) + Fase 3 (composer).
- * Elenco dei Percorsi di questo Diario, con stato (in programma / N Reportage) e idoneità alla
- * pubblicazione. Ogni riga rimanda a /diari/[id]/percorsi/[percorsoId] (Fase 2): la Guida
- * oggettiva (GuidaHub, invariata) più l'elenco dei Reportage collegati.
- *
- * Il composer a due corsie ("Già fatta" / "Da pianificare") non riscrive gli import esistenti —
- * porta dentro /upload (già ActivityUploader/GpxUploader/ManualImportChoice/FromActivityUploader,
- * invariati) con `diaryId` in query, così il Percorso creato entra in questo Diario invece che in
- * quello di default. Vedi app/upload/page.tsx.
- */
-function Composer({ diaryId }: { diaryId: string }) {
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
-      <Link
-        href={`/upload?tab=activity&diaryId=${encodeURIComponent(diaryId)}`}
-        className="flex items-center gap-3 bg-white rounded-2xl px-4 py-4 border border-forest-200 hover:border-forest-400 hover:shadow-sm transition-all"
-      >
-        <div className="w-10 h-10 rounded-xl bg-forest-50 text-forest-600 flex items-center justify-center shrink-0">
-          <CheckCircle2 className="w-5 h-5" />
-        </div>
-        <div className="min-w-0">
-          <p className="text-[14px] font-bold text-stone-800">Già fatta</p>
-          <p className="text-[12px] text-stone-500">Importa un&apos;escursione conclusa — GPS, orologio o traccia libera</p>
-        </div>
-      </Link>
-      <Link
-        href={`/upload?tab=gpx&diaryId=${encodeURIComponent(diaryId)}`}
-        className="flex items-center gap-3 bg-white rounded-2xl px-4 py-4 border border-sky-200 hover:border-sky-400 hover:shadow-sm transition-all"
-      >
-        <div className="w-10 h-10 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center shrink-0">
-          <Route className="w-5 h-5" />
-        </div>
-        <div className="min-w-0">
-          <p className="text-[14px] font-bold text-stone-800">Da pianificare</p>
-          <p className="text-[12px] text-stone-500">Trova o costruisci un percorso, importa un file o un link</p>
-        </div>
-      </Link>
-    </div>
-  )
-}
-
-function DiarioDetailPageClassico() {
-  const params = useParams<{ id: string }>()
-  const [detail, setDetail] = useState<DiarioDetail | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    fetch(`/api/diaries/${encodeURIComponent(params.id)}`)
-      .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
-      .then(setDetail)
-      .catch(e => setError(e instanceof Error ? e.message : String(e)))
-  }, [params.id])
-
-  return (
-    <div className={`min-h-screen bg-stone-50 md:pb-0 ${MOBILE_TOPBAR_SPACER}`}>
-      <Navbar />
-
-      <div className="relative h-[200px] sm:h-[240px] overflow-hidden bg-gradient-to-br from-forest-800 to-forest-900">
-        <div className="absolute inset-0 bg-gradient-to-b from-forest-900/15 to-forest-900/85" />
-        <div className="absolute left-6 right-6 bottom-6 sm:left-10 sm:right-10 sm:bottom-8 flex items-end justify-between gap-4">
-          <div className="min-w-0">
-            <Link href="/diari" className="inline-flex items-center gap-1.5 text-forest-300 text-[13px] font-semibold mb-1.5 hover:text-white transition-colors">
-              <ArrowLeft className="w-3.5 h-3.5" /> I miei Diari
-            </Link>
-            <h1 className="font-display text-[24px] sm:text-3xl font-bold text-white leading-tight">
-              {detail?.title ?? ' '}
-            </h1>
-            {detail && (
-              <p className="text-forest-200 text-[13px] mt-1">
-                {detail.percorsi.length} {detail.percorsi.length === 1 ? 'percorso' : 'percorsi'}
-              </p>
-            )}
-          </div>
-          {detail && (
-            <Link
-              href={`/diari/${encodeURIComponent(params.id)}/pubblica`}
-              className="shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-white text-[12px] font-semibold transition-colors"
-            >
-              <Share2 className="w-3.5 h-3.5" /> Pubblica
-            </Link>
-          )}
-        </div>
-      </div>
-
-      <main className="max-w-[1400px] mx-auto px-4 py-6 sm:py-8">
-        {error && (
-          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-4">
-            Impossibile caricare questo Diario: {error}
-          </p>
-        )}
-
-        {detail === null && !error ? (
-          <div className="flex items-center justify-center py-24 text-stone-400 gap-3">
-            <Loader2 className="w-6 h-6 animate-spin" /><span>Caricamento…</span>
-          </div>
-        ) : detail && detail.percorsi.length === 0 ? (
-          <>
-            <Composer diaryId={params.id} />
-            <PercorsiPerTe />
-            <div className="flex flex-col items-center justify-center py-16 text-center">
-              <div className="w-20 h-20 rounded-full bg-forest-50 border border-forest-200 flex items-center justify-center mb-6">
-                <Mountain className="w-10 h-10 text-forest-400" />
-              </div>
-              <h2 className="font-display text-2xl font-semibold text-stone-700 mb-2">Nessun percorso ancora</h2>
-              <p className="text-stone-400 text-sm max-w-sm px-4">
-                I percorsi che pianifichi o le uscite che importi in questo Diario compariranno qui.
-              </p>
-            </div>
-          </>
-        ) : detail && (
-          <>
-          <Composer diaryId={params.id} />
-          <PercorsiPerTe />
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {detail.percorsi.map(p => (
-              <Link
-                key={p.id}
-                href={`/diari/${encodeURIComponent(params.id)}/percorsi/${encodeURIComponent(p.id)}`}
-                className="block bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-md transition-shadow border border-stone-200"
-              >
-                <div className="relative h-[140px] bg-gradient-to-b from-forest-50 to-stone-50">
-                  {p.routePolyline && p.routePolyline.length > 1 ? (
-                    <div className="absolute inset-3">
-                      <RouteThumb polyline={p.routePolyline} color="#2d7a3d" strokeWidth={3} />
-                    </div>
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <Mountain className="w-10 h-10 text-forest-200" />
-                    </div>
-                  )}
-                  <span className={`absolute top-3 right-3 text-[11px] font-bold px-2.5 py-1 rounded-full shadow-sm ${p.reportageCount > 0 ? 'bg-forest-600 text-white' : 'bg-white/92 text-stone-500'}`}>
-                    {p.reportageCount === 0 ? 'In programma' : `${p.reportageCount} ${p.reportageCount === 1 ? 'uscita' : 'uscite'}`}
-                  </span>
-                </div>
-                <div className="px-[18px] pt-4 pb-[18px]">
-                  <p className="text-[16px] font-bold text-stone-800 mb-2 truncate">{p.title}</p>
-                  <div className="flex items-center gap-3 text-[13px] text-stone-500 flex-wrap">
-                    <span>{(p.distanceMeters / 1000).toFixed(1)} km</span>
-                    <span>{Math.round(p.elevationGain)} m D+</span>
-                    {p.pubblicabile ? (
-                      <span className="inline-flex items-center gap-1 text-forest-700 font-medium">
-                        <LockOpen className="w-3 h-3" /> Pubblicabile
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-stone-400">
-                        <Lock className="w-3 h-3" /> Non pubblicabile
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-          </>
-        )}
-
-        {detail && !detail.isDefault && <DeleteDiarioSection diaryId={params.id} />}
-      </main>
-    </div>
-  )
-}
-
-/**
- * "Sommario" — indice del Diario come pagina del libro (docs/diario-a-libro-piano.md), stessa
- * identità visiva validata nel mockup "Diario a schermo intero" (funzione renderIndexPage,
- * classi .bk-index-*): occhiello "Sommario", titolo, elenco Percorsi con un'anteprima del
- * tracciato, pagina di destinazione con un tap.
- *
- * Fase 20 — seconda pagina reale in stile taccuino dopo lo scaffale (Fase 18): `<BookPage
- * theme="taccuino">` invece del default "pergamena" (il guscio, header/barra inferiore, non
- * cambia struttura — solo palette), e i toni pergamena locali a questo file sostituiti dai token
- * di `lib/taccuinoTokens.tsx`.
- *
- * Fase 21 — la Fase 20 si è fermata alla palette (a schermo sembrava "solo il font del titolo
- * cambiato", segnalato dall'utente col mockup alla mano): qui arriva il resto validato in
- * `taccuino-canvas/SommarioTaccuino.dc.html` (non nel repo) — texture di carta e piega a mano
- * (`BookPage.tsx`, tema "taccuino"), copertina come tassello incollato (bordo + ombra sfalsata +
- * rotazione), titolo/sottotitolo/pulsante/chip/righe sul font a mano (`FONT_HAND`, non solo il
- * titolo), spunta disegnata per i percorsi con un Reportage. Le rotazioni
- * (`transform: rotate(...)`) restano solo su titolo/pulsante/copertina — applicarle anche a ogni
- * riga dell'elenco avrebbe reso una lista densa illeggibile invece che "artigianale".
- *
- * Fase 21 aveva anche sostituito la miniatura di ogni riga con `RouteThumb` (traccia ricalcata a
- * mano, tratteggiata, con un filtro SVG `feDisplacementMap` condiviso) al posto della vera mappa
- * `GalleryMapThumb` — segnalato a schermo insieme a un difetto separato (titolo/statistiche di
- * ogni riga invisibili, pur presenti nel DOM): la causa più verosimile è un bug di compositing
- * GPU noto su Android/Chromium con filtri SVG dentro contenitori `overflow:hidden` adiacenti a
- * testo. **Fase 22** ripristina `GalleryMapThumb` (mappa OSM reale, invariata) — l'utente ha
- * anche chiesto esplicitamente di tenere la mappa vera invece di un disegno astratto — con un
- * `filter` CSS (non SVG) sul contenitore per scaldarne i toni verso la palette taccuino: stesso
- * meccanismo di ricolorazione, nessun filtro SVG sospetto vicino al testo della riga.
- *
- * Adattamento deliberato: qui e nella pagina di riepilogo del Percorso non c'è un "Apri in
- * modalità classica" a cui rimandare come per Guida/Reportage (/guida/[id], /resoconto/[id]
- * esistono come route a sé; questo indice invece condivide la STESSA URL della versione classica,
- * scelta solo dal flag) — funzioni più pesanti (il composer a due corsie, "Percorsi per te")
- * restano quindi raggiungibili solo spegnendo il flag. L'eliminazione del Diario (distruttiva,
- * rara) resta invece raggiungibile anche qui, sotto la pagina, non rimandata a un'altra modalità
- * che qui non esiste.
- */
 type SommarioSortKey = 'date' | 'km' | 'dplus' | 'cts'
 const SOMMARIO_SORT_OPTIONS: { id: SommarioSortKey; label: string }[] = [
   { id: 'date', label: 'Data' }, { id: 'km', label: 'Km' }, { id: 'dplus', label: 'D+' }, { id: 'cts', label: 'TS' },
@@ -698,20 +466,5 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
 
 export default function DiarioDetailPage() {
   const params = useParams<{ id: string }>()
-  const [libroEnabled, setLibroEnabled] = useState<boolean | null>(null)
-  useEffect(() => {
-    getUserSettingsCached()
-      .then(d => setLibroEnabled(d.diarioLibroEnabled === true))
-      .catch(() => setLibroEnabled(false))
-  }, [])
-
-  if (libroEnabled === null) {
-    return (
-      <div className="min-h-screen flex items-center justify-center text-stone-400">
-        <Loader2 className="w-6 h-6 animate-spin" />
-      </div>
-    )
-  }
-
-  return libroEnabled ? <DiarioIndexLibro diaryId={params.id} /> : <DiarioDetailPageClassico />
+  return <DiarioIndexLibro diaryId={params.id} />
 }

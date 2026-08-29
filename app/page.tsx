@@ -1,14 +1,14 @@
 'use client'
 // Home dell'app — Fase 11 di docs/diario-a-libro-piano.md. Richiesta esplicita dell'utente:
 // aprire direttamente sul Sommario dell'ultimo Diario visualizzato, invece che sullo scaffale
-// "I miei Diari" (comunque sempre raggiungibile: link in fondo al drawer di
-// DiarioSwitcherDrawer.tsx, o dal logo in Navbar.tsx). A flag diarioLibroEnabled spento il
-// comportamento resta esattamente quello di prima — redirect diretto allo scaffale.
+// "I miei Diari" (comunque sempre raggiungibile: tab Diario della barra globale, o dal logo su
+// desktop). Redesign menù globale (fase 1) — questo comportamento era dietro il flag beta
+// `diarioLibroEnabled` (default spento, redirect diretto allo scaffale); flag rimosso, ora è
+// l'unico comportamento.
 //
-// Non più un redirect lato server: la scelta dipende da user_settings (diarioLibroEnabled,
-// lastDiaryId), letto con lo stesso pattern client-first già usato da ogni altra pagina gated di
-// questo piano (getUserSettingsCached) — nessuna lettura server-side esiste altrove nel progetto
-// per questi dati.
+// Non più un redirect lato server: la scelta dipende da user_settings (lastDiaryId), letto con lo
+// stesso pattern client-first già usato da ogni altra pagina di questo piano
+// (getUserSettingsCached) — nessuna lettura server-side esiste altrove nel progetto per questi dati.
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
@@ -23,10 +23,6 @@ export default function RootPage() {
 
     async function resolve() {
       const settings = await getUserSettingsCached()
-      if (settings.diarioLibroEnabled !== true) {
-        router.replace('/diari')
-        return
-      }
 
       try {
         const res = await fetch('/api/diaries')

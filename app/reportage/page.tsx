@@ -3,24 +3,27 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import Navbar, { MOBILE_BOTTOMBAR_SPACER } from '@/components/Navbar'
 import RouteThumb from '@/components/RouteThumb'
-import type { AllPercorsiRow } from '@/app/api/percorsi/route'
-import { ArrowLeft, Loader2, Lock, LockOpen, Mountain, Search, X } from 'lucide-react'
+import type { AllReportageRow } from '@/app/api/reportage/route'
+import { formatDuration } from '@/lib/tcxParser'
+import { ArrowLeft, Loader2, PenLine, Search, Star, X } from 'lucide-react'
 
 /**
- * "Tutti i Percorsi" — Fase 5 di docs/diario-fulcro-piano.md. Vista trasversale di sola
- * consultazione su tutti i Diari dell'utente insieme, con l'etichetta del Diario di provenienza su
- * ogni card — per ritrovare un Percorso senza dover ricordare in quale Diario l'avevi messo.
- * Lavorarci (Guida, Reportage, pubblicazione) resta dentro il Diario che lo contiene: ogni card
- * rimanda a /diari/[diaryId]/percorsi/[id], la pagina già costruita in Fase 2.
+ * "Tutti i Reportage" — redesign menù globale, fase 2. Gemella di app/percorsi/page.tsx ("Tutti i
+ * Percorsi"): vista trasversale di sola consultazione su tutti i Diari dell'utente insieme, con
+ * l'etichetta del Percorso e del Diario di provenienza su ogni card — per ritrovare un'uscita senza
+ * dover ricordare in quale Diario/Percorso l'avevi messa. Ogni card rimanda al Reportage dentro il
+ * Diario che lo contiene (/diari/[diaryId]/percorsi/[percorsoId]/reportage/[id]); un'attività senza
+ * Percorso/Diario noto (vedi commento in app/api/reportage/route.ts) ricade sul lettore standalone
+ * /resoconto/[id], che non richiede quel contesto.
  */
-export default function TuttiIPercorsiPage() {
-  const [rows, setRows] = useState<AllPercorsiRow[] | null>(null)
+export default function TuttiIReportagePage() {
+  const [rows, setRows] = useState<AllReportageRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [showSearch, setShowSearch] = useState(false)
 
   useEffect(() => {
-    fetch('/api/percorsi')
+    fetch('/api/reportage')
       .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
       .then(setRows)
       .catch(e => setError(e instanceof Error ? e.message : String(e)))
@@ -30,8 +33,18 @@ export default function TuttiIPercorsiPage() {
     if (!rows) return []
     const q = query.trim().toLowerCase()
     if (!q) return rows
-    return rows.filter(r => r.title.toLowerCase().includes(q) || (r.diaryTitle ?? '').toLowerCase().includes(q))
+    return rows.filter(r =>
+      r.title.toLowerCase().includes(q) ||
+      (r.diaryTitle ?? '').toLowerCase().includes(q) ||
+      (r.percorsoTitle ?? '').toLowerCase().includes(q)
+    )
   }, [rows, query])
+
+  function hrefFor(r: AllReportageRow) {
+    return r.diaryId && r.percorsoId
+      ? `/diari/${encodeURIComponent(r.diaryId)}/percorsi/${encodeURIComponent(r.percorsoId)}/reportage/${encodeURIComponent(r.id)}`
+      : `/resoconto/${encodeURIComponent(r.id)}`
+  }
 
   return (
     <div className={`min-h-screen bg-stone-50 md:pb-0 ${MOBILE_BOTTOMBAR_SPACER}`}>
@@ -44,11 +57,11 @@ export default function TuttiIPercorsiPage() {
             <ArrowLeft className="w-3.5 h-3.5" /> I miei Diari
           </Link>
           <h1 className="font-display text-[24px] sm:text-3xl font-bold text-white leading-tight">
-            Tutti i Percorsi
+            Tutti i Reportage
           </h1>
           {rows && (
             <p className="text-forest-200 text-[13px] mt-1">
-              {rows.length} {rows.length === 1 ? 'percorso' : 'percorsi'}, in tutti i tuoi Diari
+              {rows.length} {rows.length === 1 ? 'uscita' : 'uscite'}, in tutti i tuoi Diari
             </p>
           )}
         </div>
@@ -57,7 +70,7 @@ export default function TuttiIPercorsiPage() {
       <main className="max-w-[1400px] mx-auto px-4 py-6 sm:py-8">
         {error && (
           <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-4">
-            Impossibile caricare i percorsi: {error}
+            Impossibile caricare i Reportage: {error}
           </p>
         )}
 
@@ -68,11 +81,11 @@ export default function TuttiIPercorsiPage() {
         ) : rows && rows.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <div className="w-20 h-20 rounded-full bg-forest-50 border border-forest-200 flex items-center justify-center mb-6">
-              <Mountain className="w-10 h-10 text-forest-400" />
+              <PenLine className="w-10 h-10 text-forest-400" />
             </div>
-            <h2 className="font-display text-2xl font-semibold text-stone-700 mb-2">Nessun percorso ancora</h2>
+            <h2 className="font-display text-2xl font-semibold text-stone-700 mb-2">Nessun Reportage ancora</h2>
             <p className="text-stone-400 text-sm max-w-sm px-4">
-              I percorsi che pianifichi o le uscite che importi in un Diario compariranno qui.
+              Quando cammini un percorso e importi l&apos;uscita in un Diario, il Reportage comparirà qui.
             </p>
           </div>
         ) : (
@@ -85,7 +98,7 @@ export default function TuttiIPercorsiPage() {
                     autoFocus
                     value={query}
                     onChange={e => setQuery(e.target.value)}
-                    placeholder="Cerca per titolo o Diario…"
+                    placeholder="Cerca per titolo, Percorso o Diario…"
                     className="flex-1 min-w-0 bg-transparent text-sm text-stone-800 outline-none placeholder:text-stone-400"
                   />
                   <button onClick={() => { setShowSearch(false); setQuery('') }} className="text-stone-400 hover:text-stone-600">
@@ -103,45 +116,46 @@ export default function TuttiIPercorsiPage() {
             </div>
 
             {filtered.length === 0 ? (
-              <p className="text-stone-400 text-sm text-center py-12">Nessun percorso corrisponde alla ricerca.</p>
+              <p className="text-stone-400 text-sm text-center py-12">Nessun Reportage corrisponde alla ricerca.</p>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filtered.map(p => (
+                {filtered.map(r => (
                   <Link
-                    key={p.id}
-                    href={p.diaryId ? `/diari/${encodeURIComponent(p.diaryId)}/percorsi/${encodeURIComponent(p.id)}` : '/diari'}
+                    key={r.id}
+                    href={hrefFor(r)}
                     className="block bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-md transition-shadow border border-stone-200"
                   >
                     <div className="relative h-[140px] bg-gradient-to-b from-forest-50 to-stone-50">
-                      {p.routePolyline && p.routePolyline.length > 1 ? (
+                      {r.routePolyline && r.routePolyline.length > 1 ? (
                         <div className="absolute inset-3">
-                          <RouteThumb polyline={p.routePolyline} color="#2d7a3d" strokeWidth={3} />
+                          <RouteThumb polyline={r.routePolyline} color="#2d7a3d" strokeWidth={3} />
                         </div>
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">
-                          <Mountain className="w-10 h-10 text-forest-200" />
+                          <PenLine className="w-10 h-10 text-forest-200" />
                         </div>
                       )}
-                      <span className={`absolute top-3 right-3 text-[11px] font-bold px-2.5 py-1 rounded-full shadow-sm ${p.reportageCount > 0 ? 'bg-forest-600 text-white' : 'bg-white/92 text-stone-500'}`}>
-                        {p.reportageCount === 0 ? 'In programma' : `${p.reportageCount} ${p.reportageCount === 1 ? 'uscita' : 'uscite'}`}
+                      <span className="absolute top-3 right-3 text-[11px] font-bold px-2.5 py-1 rounded-full shadow-sm bg-white/92 text-stone-600">
+                        {new Date(r.startTime).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' })}
                       </span>
                     </div>
                     <div className="px-[18px] pt-4 pb-[18px]">
-                      {p.diaryTitle && (
-                        <p className="text-[10px] font-bold uppercase tracking-wide text-forest-500 mb-1 truncate">{p.diaryTitle}</p>
+                      {(r.diaryTitle || r.percorsoTitle) && (
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-forest-500 mb-1 truncate">
+                          {[r.diaryTitle, r.percorsoTitle].filter(Boolean).join(' · ')}
+                        </p>
                       )}
-                      <p className="text-[16px] font-bold text-stone-800 mb-2 truncate">{p.title}</p>
+                      <p className="text-[16px] font-bold text-stone-800 mb-2 truncate">{r.title}</p>
                       <div className="flex items-center gap-3 text-[13px] text-stone-500 flex-wrap">
-                        <span>{(p.distanceMeters / 1000).toFixed(1)} km</span>
-                        <span>{Math.round(p.elevationGain)} m D+</span>
-                        {p.pubblicabile ? (
-                          <span className="inline-flex items-center gap-1 text-forest-700 font-medium">
-                            <LockOpen className="w-3 h-3" /> Pubblicabile
+                        <span>{(r.distanceMeters / 1000).toFixed(1)} km</span>
+                        <span>{formatDuration(r.totalTimeSeconds)}</span>
+                        {r.userRating != null && (
+                          <span className="inline-flex items-center gap-1 text-amber-600 font-medium">
+                            <Star className="w-3 h-3 fill-current" /> {r.userRating}/10
                           </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-stone-400">
-                            <Lock className="w-3 h-3" /> Non pubblicabile
-                          </span>
+                        )}
+                        {!r.hasWrittenReport && (
+                          <span className="text-orange-600 font-medium">Da raccontare</span>
                         )}
                       </div>
                     </div>

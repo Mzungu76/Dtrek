@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
+import Navbar, { MOBILE_BOTTOMBAR_SPACER } from '@/components/Navbar'
 import BackLink from '@/app/components/BackLink'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
@@ -52,7 +52,7 @@ export default function RicercheSalvatePage() {
   }
 
   return (
-    <div className={`min-h-screen bg-stone-50 md:pb-8 ${MOBILE_TOPBAR_SPACER}`}>
+    <div className={`min-h-screen bg-stone-50 md:pb-8 ${MOBILE_BOTTOMBAR_SPACER}`}>
       <Navbar />
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
         <BackLink className="inline-flex items-center gap-1 text-sm text-stone-400 hover:text-stone-600 transition mb-1" />

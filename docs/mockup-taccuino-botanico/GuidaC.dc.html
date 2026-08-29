@@ -1,0 +1,184 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body style="margin:0">
+<x-dc>
+<helmet>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Lora:ital,wght@0,400;0,500;0,600;1,500&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@600;700&family=JetBrains+Mono:wght@500&display=swap');
+:root {
+  --paper-base: #F5EDDD;
+  --paper-light: #F9F2E4;
+  --card: #EBE0C8;
+  --card-border: #D9C9A8;
+  --contour: #A89A78;
+  --ink-typed: #2E2A22;
+  --ink-hand: #7A6F52;
+  --ink-muted: #95886A;
+  --accent: #C0603D;
+  --accent-2: #7C8F6E;
+  --accent-tint: #E9DAC3;
+  --bar-bg: #5F7355;
+  --bar-active: #F5EDDD;
+  --bar-inactive: #B9C4AE;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+.phone {
+  width: 390px; height: 844px; position: relative; overflow: hidden;
+  background: var(--paper-base); font-family: 'DM Sans', system-ui, sans-serif;
+  color: var(--ink-typed); -webkit-font-smoothing: antialiased;
+}
+.paper-tex {
+  position: absolute; inset: 0; pointer-events: none;
+  background:
+    radial-gradient(ellipse 70% 50% at 15% 8%, var(--paper-light), transparent 60%);
+}
+.eyebrow {
+  font-family: 'DM Sans', sans-serif; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .16em; font-size: 10.5px; color: var(--ink-muted);
+}
+.hand { font-family: 'Caveat', cursive; }
+.display { font-family: 'Playfair Display', Georgia, serif; }
+.narrative { font-family: 'Lora', Georgia, serif; }
+.mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+.avatar-float {
+  position: absolute; top: 22px; right: 18px; width: 38px; height: 38px; border-radius: 999px;
+  background: rgba(255,255,255,.85); display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,.18); z-index: 5;
+}
+.avatar-float .inner {
+  width: 32px; height: 32px; border-radius: 999px; background: var(--accent-tint);
+  display: flex; align-items: center; justify-content: center; color: var(--accent);
+  border: 2px solid var(--card-border);
+}
+
+.bottombar {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 78px;
+  background: var(--bar-bg); display: flex; align-items: center; justify-content: space-around;
+  padding: 0 8px 10px; box-shadow: 0 -2px 12px rgba(0,0,0,.18); z-index: 6;
+}
+.bb-item { display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--bar-inactive); }
+.bb-item.active { color: var(--bar-active); }
+.bb-label { font-size: 9.5px; font-weight: 700; letter-spacing: .01em; }
+
+.bookbar {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 74px;
+  background: var(--card); border-top: 1px solid var(--card-border);
+  display: flex; align-items: stretch; justify-content: space-around; z-index: 6;
+}
+.bk-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--ink-muted); }
+.bk-label { font-family: 'DM Sans'; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; font-size: 9px; }
+.bk-item.accent { color: var(--accent); }
+
+.book-header {
+  padding: 20px 20px 10px; border-bottom: 1px solid var(--card-border);
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
+}
+
+.card {
+  background: var(--card); border-radius: 14px; border: 1px solid var(--card-border);
+  position: relative;
+}
+.card-dashed { border-style: dashed; }
+
+.badge {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; font-weight: 700;
+  padding: 4px 9px; border-radius: 999px; background: var(--accent-tint); color: var(--accent);
+}
+.badge-muted { background: var(--card); color: var(--ink-muted); border: 1px solid var(--card-border); }
+
+.btn-primary {
+  display: inline-flex; align-items: center; gap: 7px; background: var(--accent); color: var(--paper-light);
+  font-weight: 700; font-size: 13px; padding: 11px 18px; border-radius: 12px; border: none;
+}
+
+.pill {
+  display: inline-flex; align-items: center; gap: 6px; background: var(--paper-light); color: var(--ink-typed);
+  font-size: 11px; font-weight: 600; padding: 6px 11px; border-radius: 999px; border: 1px solid var(--card-border);
+}
+
+.settings-row {
+  display: flex; align-items: center; gap: 12px; padding: 14px 4px; border-bottom: 1px solid var(--card-border);
+}
+.settings-row .ic {
+  width: 34px; height: 34px; border-radius: 10px; background: var(--accent-tint); color: var(--accent);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { color: var(--accent-2); }
+</style>
+</helmet>
+<!-- Taccuino Botanico — Guida (Prima di partire) -->
+<div class="phone">
+
+      <div class="book-header">
+        <div>
+          <p class="eyebrow" style="display:flex;align-items:center;gap:6px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5c2.5-1 5-1 8 0v14c-3-1-5.5-1-8 0V5z"></path><path d="M21 5c-2.5-1-5-1-8 0v14c3-1 5.5-1 8 0V5z"></path></svg>Sentieri di Casa</p>
+          <h1 class="hand" style="font-size:24px;margin:4px 0 0;color:var(--ink-typed);">Anello del Monte Cimino</h1>
+        </div>
+        <p class="mono" style="font-size:10px;color:var(--ink-muted);margin:0;white-space:nowrap;">1 di 3</p>
+      </div>
+      <div style="display:flex;gap:8px;padding:12px 20px 4px;overflow-x:auto;"><span class="pill" style="background:#C0603D;color:#fff;border-color:transparent;flex-shrink:0;">Prima di partire</span><span class="pill" style="flex-shrink:0;">Percorso</span><span class="pill" style="flex-shrink:0;">Luoghi e Natura</span></div>
+      <div style="padding:8px 20px 90px;">
+        
+        <div style="position:relative;height:190px;border-radius:14px;overflow:hidden;">
+          <svg width="320" height="190" style="position:absolute;inset:0"><circle cx="104" cy="29" r="69" fill="#4A5A3F" opacity="0.55"></circle><circle cx="23" cy="102" r="52" fill="#5C6B4C" opacity="0.55"></circle><circle cx="19" cy="96" r="32" fill="#3F4C36" opacity="0.55"></circle><circle cx="139" cy="13" r="35" fill="#6B7D58" opacity="0.55"></circle><circle cx="136" cy="157" r="37" fill="#465239" opacity="0.55"></circle><circle cx="71" cy="119" r="87" fill="#4A5A3F" opacity="0.55"></circle><circle cx="185" cy="75" r="89" fill="#5C6B4C" opacity="0.55"></circle><circle cx="15" cy="163" r="47" fill="#3F4C36" opacity="0.55"></circle><circle cx="46" cy="22" r="49" fill="#6B7D58" opacity="0.55"></circle><circle cx="261" cy="34" r="65" fill="#465239" opacity="0.55"></circle><circle cx="204" cy="71" r="63" fill="#4A5A3F" opacity="0.55"></circle><circle cx="20" cy="11" r="42" fill="#5C6B4C" opacity="0.55"></circle><circle cx="218" cy="81" r="49" fill="#3F4C36" opacity="0.55"></circle><circle cx="187" cy="86" r="48" fill="#6B7D58" opacity="0.55"></circle></svg>
+          <svg width="320" height="190" style="position:absolute;inset:0"><path d="M 58 148 Q 122 57 176 95 T 272 42" fill="none" stroke="#F9F2E4" stroke-width="3" stroke-linecap="round" stroke-dasharray="1 7"></path><circle cx="57.599999999999994" cy="148.20000000000002" r="4" fill="#F9F2E4" stroke="#fff" stroke-width="1.5"></circle><circle cx="272.0" cy="41.8" r="4" fill="#F9F2E4" stroke="#fff" stroke-width="1.5"></circle></svg>
+          <div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.22),transparent 45%,rgba(0,0,0,.35));"></div>
+          <div style="position:absolute;top:10px;left:10px;display:flex;gap:6px;">
+            <span class="pill" style="background:rgba(0,0,0,.5);color:#fff;border-color:transparent;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 4.5v11L12 22l-8-4.5v-11L12 2z"></path><path d="M4 6.5l8 4.5 8-4.5"></path><path d="M12 11v11"></path></svg>3D &middot; Satellite</span>
+          </div>
+          <div style="position:absolute;top:10px;right:10px;width:32px;height:32px;border-radius:999px;background:rgba(255,255,255,.92);display:flex;align-items:center;justify-content:center;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#2E2A22" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3H3v6"></path><path d="M15 3h6v6"></path><path d="M9 21H3v-6"></path><path d="M15 21h6v-6"></path></svg>
+          </div>
+          <div style="position:absolute;bottom:10px;left:10px;right:10px;display:flex;gap:6px;flex-wrap:wrap;">
+            <span class="pill" style="background:rgba(255,255,255,.92);">12,4 km</span>
+            <span class="pill" style="background:rgba(255,255,255,.92);">640 m D+</span>
+          </div>
+        </div>
+        
+        <div class="card" style="margin-top:12px;padding:12px 14px;display:flex;align-items:center;gap:12px;">
+          <div style="color:var(--accent);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4"></path><path d="M5.6 8.6l2.8 2.8"></path><path d="M18.4 8.6l-2.8 2.8"></path><path d="M3 15h18"></path><path d="M6 15a6 6 0 0112 0"></path></svg></div>
+          <div>
+            <p style="margin:0;font-weight:700;font-size:14px;">18&deg;C, sereno</p>
+            <p style="margin:2px 0 0;font-size:11.5px;color:var(--ink-muted);">Ottime condizioni per la partenza consigliata (7:30)</p>
+          </div>
+        </div>
+
+        <p class="eyebrow" style="margin:16px 0 2px;">Consigli pratici</p>
+        <div>
+        <div style="display:flex;align-items:flex-start;gap:10px;padding:7px 0;">
+          <div style="color:var(--accent);flex-shrink:0;margin-top:1px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4l4 2 4-2 3 3-2.5 2.5L16 8v12H8V8l-1.5 1.5L4 7l4-3z"></path></svg></div>
+          <p style="margin:0;font-size:12.5px;line-height:1.5;color:var(--ink-typed);">Scarponi e bastoncini — tratto roccioso in vetta</p>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:10px;padding:7px 0;">
+          <div style="color:var(--accent);flex-shrink:0;margin-top:1px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4"></path><path d="M5.6 8.6l2.8 2.8"></path><path d="M18.4 8.6l-2.8 2.8"></path><path d="M3 15h18"></path><path d="M6 15a6 6 0 0112 0"></path></svg></div>
+          <p style="margin:0;font-size:12.5px;line-height:1.5;color:var(--ink-typed);">Meglio partire presto: poca ombra dopo il faggeto</p>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:10px;padding:7px 0;">
+          <div style="color:var(--accent);flex-shrink:0;margin-top:1px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><polyline points="12 7 12 12 16 14"></polyline></svg></div>
+          <p style="margin:0;font-size:12.5px;line-height:1.5;color:var(--ink-typed);">Stagione ideale: da aprile a ottobre</p>
+        </div></div>
+
+        <div class="card" style="margin-top:14px;padding:13px 14px;">
+          <div style="display:flex;align-items:center;gap:7px;margin-bottom:6px;">
+            <span class="badge"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l4-1 11-11-3-3L5 16l-1 4z"></path><path d="M14 5l3 3"></path></svg>Giulia &middot; AI</span>
+            <p class="eyebrow" style="margin:0;">Consigli, un ulteriore approfondimento</p>
+          </div>
+          <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;"><span class="pill" style="background:#C0603D;color:#fff;border-color:transparent;font-size:10px;padding:5px 9px;">Essenziale</span><span class="pill" style="font-size:10px;padding:5px 9px;">Approfondita</span><span class="pill" style="font-size:10px;padding:5px 9px;">Molto approfondita</span></div>
+          <p class="narrative" style="font-size:12px;font-style:italic;color:var(--ink-muted);margin:0;">Testo narrato non ancora generato — tocca per approfondire con Giulia.</p>
+        </div>
+      </div>
+      <div class="bookbar"><div class="bk-item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg><span class="bk-label">Indietro</span></div><div class="bk-item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5c2.5-1 5-1 8 0v14c-3-1-5.5-1-8 0V5z"></path><path d="M21 5c-2.5-1-5-1-8 0v14c3-1 5.5-1 8 0V5z"></path></svg><span class="bk-label">Diari</span></div><div class="bk-item accent"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 00-5.4 5.4L4 17l3 3 5.3-5.3a4 4 0 005.4-5.4l-2.4 2.4-2-2 2.4-2.4z"></path></svg><span class="bk-label">Strumenti</span></div><div class="bk-item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg><span class="bk-label">Avanti</span></div></div>
+    
+</div>
+</x-dc>
+</body>
+</html>

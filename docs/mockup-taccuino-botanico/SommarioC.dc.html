@@ -1,0 +1,171 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body style="margin:0">
+<x-dc>
+<helmet>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Lora:ital,wght@0,400;0,500;0,600;1,500&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@600;700&family=JetBrains+Mono:wght@500&display=swap');
+:root {
+  --paper-base: #F5EDDD;
+  --paper-light: #F9F2E4;
+  --card: #EBE0C8;
+  --card-border: #D9C9A8;
+  --contour: #A89A78;
+  --ink-typed: #2E2A22;
+  --ink-hand: #7A6F52;
+  --ink-muted: #95886A;
+  --accent: #C0603D;
+  --accent-2: #7C8F6E;
+  --accent-tint: #E9DAC3;
+  --bar-bg: #5F7355;
+  --bar-active: #F5EDDD;
+  --bar-inactive: #B9C4AE;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+.phone {
+  width: 390px; height: 844px; position: relative; overflow: hidden;
+  background: var(--paper-base); font-family: 'DM Sans', system-ui, sans-serif;
+  color: var(--ink-typed); -webkit-font-smoothing: antialiased;
+}
+.paper-tex {
+  position: absolute; inset: 0; pointer-events: none;
+  background:
+    radial-gradient(ellipse 70% 50% at 15% 8%, var(--paper-light), transparent 60%);
+}
+.eyebrow {
+  font-family: 'DM Sans', sans-serif; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .16em; font-size: 10.5px; color: var(--ink-muted);
+}
+.hand { font-family: 'Caveat', cursive; }
+.display { font-family: 'Playfair Display', Georgia, serif; }
+.narrative { font-family: 'Lora', Georgia, serif; }
+.mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+.avatar-float {
+  position: absolute; top: 22px; right: 18px; width: 38px; height: 38px; border-radius: 999px;
+  background: rgba(255,255,255,.85); display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,.18); z-index: 5;
+}
+.avatar-float .inner {
+  width: 32px; height: 32px; border-radius: 999px; background: var(--accent-tint);
+  display: flex; align-items: center; justify-content: center; color: var(--accent);
+  border: 2px solid var(--card-border);
+}
+
+.bottombar {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 78px;
+  background: var(--bar-bg); display: flex; align-items: center; justify-content: space-around;
+  padding: 0 8px 10px; box-shadow: 0 -2px 12px rgba(0,0,0,.18); z-index: 6;
+}
+.bb-item { display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--bar-inactive); }
+.bb-item.active { color: var(--bar-active); }
+.bb-label { font-size: 9.5px; font-weight: 700; letter-spacing: .01em; }
+
+.bookbar {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 74px;
+  background: var(--card); border-top: 1px solid var(--card-border);
+  display: flex; align-items: stretch; justify-content: space-around; z-index: 6;
+}
+.bk-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--ink-muted); }
+.bk-label { font-family: 'DM Sans'; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; font-size: 9px; }
+.bk-item.accent { color: var(--accent); }
+
+.book-header {
+  padding: 20px 20px 10px; border-bottom: 1px solid var(--card-border);
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
+}
+
+.card {
+  background: var(--card); border-radius: 14px; border: 1px solid var(--card-border);
+  position: relative;
+}
+.card-dashed { border-style: dashed; }
+
+.badge {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; font-weight: 700;
+  padding: 4px 9px; border-radius: 999px; background: var(--accent-tint); color: var(--accent);
+}
+.badge-muted { background: var(--card); color: var(--ink-muted); border: 1px solid var(--card-border); }
+
+.btn-primary {
+  display: inline-flex; align-items: center; gap: 7px; background: var(--accent); color: var(--paper-light);
+  font-weight: 700; font-size: 13px; padding: 11px 18px; border-radius: 12px; border: none;
+}
+
+.pill {
+  display: inline-flex; align-items: center; gap: 6px; background: var(--paper-light); color: var(--ink-typed);
+  font-size: 11px; font-weight: 600; padding: 6px 11px; border-radius: 999px; border: 1px solid var(--card-border);
+}
+
+.settings-row {
+  display: flex; align-items: center; gap: 12px; padding: 14px 4px; border-bottom: 1px solid var(--card-border);
+}
+.settings-row .ic {
+  width: 34px; height: 34px; border-radius: 10px; background: var(--accent-tint); color: var(--accent);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { color: var(--accent-2); }
+</style>
+</helmet>
+<!-- Taccuino Botanico — Sommario -->
+<div class="phone">
+
+      <div class="paper-tex"></div>
+      <div class="book-header">
+        <div>
+          <p class="eyebrow" style="display:flex;align-items:center;gap:6px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5c2.5-1 5-1 8 0v14c-3-1-5.5-1-8 0V5z"></path><path d="M21 5c-2.5-1-5-1-8 0v14c3-1 5.5-1 8 0V5z"></path></svg>Sentieri di Casa</p>
+          <h1 class="hand" style="font-size:26px;margin:4px 0 0;color:var(--ink-typed);">Sommario</h1>
+        </div>
+        <div style="text-align:right;">
+          <p class="eyebrow" style="margin:0;">Percorsi</p>
+          <p class="mono" style="font-size:10px;color:var(--ink-muted);margin:2px 0 0;">3 di 12</p>
+        </div>
+      </div>
+      <div style="padding:12px 20px 0;">
+        <div class="pill" style="margin-bottom:10px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>Cerca in questo Diario&hellip;</div>
+        
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid var(--card-border);">
+          <div style="width:56px;height:56px;border-radius:10px;background:var(--paper-light);flex-shrink:0;display:flex;align-items:center;justify-content:center;">
+            <svg width="48" height="40" viewBox="0 0 48 40"><path d="M 6 30 Q 14 8 26 18 T 43 8" fill="none" stroke="#C0603D" stroke-width="2.6" stroke-linecap="round"></path><circle cx="5.76" cy="30.0" r="3.2" fill="#C0603D"></circle><circle cx="43.2" cy="8.0" r="3.2" fill="#C0603D"></circle></svg>
+          </div>
+          <div style="flex:1;min-width:0;">
+            <p style="margin:0 0 3px;font-weight:700;font-size:14.5px;color:var(--ink-typed);">Anello del Monte Cimino</p>
+            <p style="margin:0;font-size:12px;color:var(--ink-muted);">12,4 km &middot; 640 m D+</p>
+          </div>
+          <span class="badge">3 uscite</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid var(--card-border);">
+          <div style="width:56px;height:56px;border-radius:10px;background:var(--paper-light);flex-shrink:0;display:flex;align-items:center;justify-content:center;">
+            <svg width="48" height="40" viewBox="0 0 48 40"><path d="M 6 30 Q 14 8 26 18 T 43 8" fill="none" stroke="#C0603D" stroke-width="2.6" stroke-linecap="round"></path><circle cx="5.76" cy="30.0" r="3.2" fill="#C0603D"></circle><circle cx="43.2" cy="8.0" r="3.2" fill="#C0603D"></circle></svg>
+          </div>
+          <div style="flex:1;min-width:0;">
+            <p style="margin:0 0 3px;font-weight:700;font-size:14.5px;color:var(--ink-typed);">Cascata del Salto</p>
+            <p style="margin:0;font-size:12px;color:var(--ink-muted);">6,1 km &middot; 210 m D+</p>
+          </div>
+          <span class="badge badge-muted">In programma</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid var(--card-border);">
+          <div style="width:56px;height:56px;border-radius:10px;background:var(--paper-light);flex-shrink:0;display:flex;align-items:center;justify-content:center;">
+            <svg width="48" height="40" viewBox="0 0 48 40"><path d="M 6 30 Q 14 8 26 18 T 43 8" fill="none" stroke="#C0603D" stroke-width="2.6" stroke-linecap="round"></path><circle cx="5.76" cy="30.0" r="3.2" fill="#C0603D"></circle><circle cx="43.2" cy="8.0" r="3.2" fill="#C0603D"></circle></svg>
+          </div>
+          <div style="flex:1;min-width:0;">
+            <p style="margin:0 0 3px;font-weight:700;font-size:14.5px;color:var(--ink-typed);">Eremo di San Girolamo</p>
+            <p style="margin:0;font-size:12px;color:var(--ink-muted);">8,7 km &middot; 380 m D+</p>
+          </div>
+          <span class="badge">1 uscite</span>
+        </div>
+      </div>
+      <div class="bookbar"><div class="bk-item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg><span class="bk-label">Indietro</span></div><div class="bk-item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5c2.5-1 5-1 8 0v14c-3-1-5.5-1-8 0V5z"></path><path d="M21 5c-2.5-1-5-1-8 0v14c3-1 5.5-1 8 0V5z"></path></svg><span class="bk-label">Diari</span></div><div class="bk-item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg><span class="bk-label">Avanti</span></div></div>
+    
+</div>
+</x-dc>
+</body>
+</html>

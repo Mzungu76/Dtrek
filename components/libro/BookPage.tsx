@@ -65,7 +65,8 @@ const THEMES = {
 
 /** Altezza riservata dalla barra inferiore fissa — le pagine applicano questo spazio prima della
  *  barra vera e propria per non lasciarci sotto l'ultima riga di contenuto. Stesso principio di
- *  MOBILE_TOPBAR_SPACER in components/Navbar.tsx, qui in fondo invece che in cima. */
+ *  MOBILE_BOTTOMBAR_SPACER in components/Navbar.tsx, qui per la barra voltapagina del libro
+ *  invece che per il menù globale. */
 const BOTTOM_BAR_SPACER = 'calc(env(safe-area-inset-bottom, 0px) + 68px)'
 
 export interface BookPageSection {
