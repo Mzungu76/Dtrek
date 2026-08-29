@@ -50,17 +50,17 @@ export default function TuttiIReportagePage() {
     <div className={`min-h-screen bg-stone-50 md:pb-0 ${MOBILE_BOTTOMBAR_SPACER}`}>
       <Navbar />
 
-      <div className="relative h-[200px] sm:h-[240px] overflow-hidden bg-gradient-to-br from-forest-800 to-forest-900">
-        <div className="absolute inset-0 bg-gradient-to-b from-forest-900/15 to-forest-900/85" />
+      <div className="relative h-[200px] sm:h-[240px] overflow-hidden" style={{ background: 'linear-gradient(to bottom right, #4A5A3F, #2E3A26)' }}>
+        <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, rgba(46,58,38,.15), rgba(46,58,38,.85))' }} />
         <div className="absolute left-6 right-6 bottom-6 sm:left-10 sm:right-10 sm:bottom-8">
-          <Link href="/diari" className="inline-flex items-center gap-1.5 text-forest-300 text-[13px] font-semibold mb-1.5 hover:text-white transition-colors">
+          <Link href="/diari" className="inline-flex items-center gap-1.5 text-[#E9DAC3] text-[13px] font-semibold mb-1.5 hover:text-white transition-colors">
             <ArrowLeft className="w-3.5 h-3.5" /> I miei Diari
           </Link>
           <h1 className="font-display text-[24px] sm:text-3xl font-bold text-white leading-tight">
             Tutti i Reportage
           </h1>
           {rows && (
-            <p className="text-forest-200 text-[13px] mt-1">
+            <p className="text-white/75 text-[13px] mt-1">
               {rows.length} {rows.length === 1 ? 'uscita' : 'uscite'}, in tutti i tuoi Diari
             </p>
           )}
@@ -80,8 +80,8 @@ export default function TuttiIReportagePage() {
           </div>
         ) : rows && rows.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="w-20 h-20 rounded-full bg-forest-50 border border-forest-200 flex items-center justify-center mb-6">
-              <PenLine className="w-10 h-10 text-forest-400" />
+            <div className="w-20 h-20 rounded-full bg-[#E9DAC3] border border-[#D9C9A8] flex items-center justify-center mb-6">
+              <PenLine className="w-10 h-10 text-[#C0603D]" />
             </div>
             <h2 className="font-display text-2xl font-semibold text-stone-700 mb-2">Nessun Reportage ancora</h2>
             <p className="text-stone-400 text-sm max-w-sm px-4">
@@ -125,14 +125,14 @@ export default function TuttiIReportagePage() {
                     href={hrefFor(r)}
                     className="block bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-md transition-shadow border border-stone-200"
                   >
-                    <div className="relative h-[140px] bg-gradient-to-b from-forest-50 to-stone-50">
+                    <div className="relative h-[140px] bg-gradient-to-b from-[#EBE0C8] to-stone-50">
                       {r.routePolyline && r.routePolyline.length > 1 ? (
                         <div className="absolute inset-3">
                           <RouteThumb polyline={r.routePolyline} color="#2d7a3d" strokeWidth={3} />
                         </div>
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">
-                          <PenLine className="w-10 h-10 text-forest-200" />
+                          <PenLine className="w-10 h-10 text-[#D9C9A8]" />
                         </div>
                       )}
                       <span className="absolute top-3 right-3 text-[11px] font-bold px-2.5 py-1 rounded-full shadow-sm bg-white/92 text-stone-600">
@@ -141,7 +141,7 @@ export default function TuttiIReportagePage() {
                     </div>
                     <div className="px-[18px] pt-4 pb-[18px]">
                       {(r.diaryTitle || r.percorsoTitle) && (
-                        <p className="text-[10px] font-bold uppercase tracking-wide text-forest-500 mb-1 truncate">
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-[#7C8F6E] mb-1 truncate">
                           {[r.diaryTitle, r.percorsoTitle].filter(Boolean).join(' · ')}
                         </p>
                       )}

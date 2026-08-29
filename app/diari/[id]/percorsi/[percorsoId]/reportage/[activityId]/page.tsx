@@ -48,13 +48,13 @@ function ReportageSummaryInner() {
         {/* Non più `percorsoPath` (bare) — quella pagina di riepilogo non esiste più (Fase 15),
             eliminata su richiesta dell'utente: l'elenco Reportage e gli altri strumenti del
             Percorso vivono ora nel drawer "Strumenti" raggiungibile da ogni pagina di Guida. */}
-        <Link href={`${percorsoPath}/guida/prima_di_partire`} className="text-[13px] text-forest-600 font-medium hover:text-forest-700 inline-flex items-center gap-1">
+        <Link href={`${percorsoPath}/guida/prima_di_partire`} className="text-[13px] text-[#C0603D] font-medium hover:text-[#a84e30] inline-flex items-center gap-1">
           <ArrowLeft className="w-3.5 h-3.5" /> Torna alla Guida
         </Link>
       </div>
 
-      <div className="rounded-3xl bg-gradient-to-br from-forest-800 to-forest-900 text-white px-6 py-8 mb-6">
-        <p className="uppercase text-[11px] tracking-[0.2em] text-terra-300 font-bold mb-2">Reportage</p>
+      <div className="rounded-3xl text-white px-6 py-8 mb-6" style={{ background: 'linear-gradient(to bottom right, #4A5A3F, #2E3A26)' }}>
+        <p className="uppercase text-[11px] tracking-[0.2em] text-[#E9DAC3] font-bold mb-2">Reportage</p>
         <h1 className="font-display text-2xl sm:text-3xl font-bold mb-4">{activity.title ?? 'Escursione'}</h1>
         <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-white/80">
           <span>{format(new Date(activity.startTime), 'd MMMM yyyy', { locale: it })}</span>
@@ -67,7 +67,7 @@ function ReportageSummaryInner() {
       <div className="flex flex-wrap items-center gap-4 mb-6">
         <Link
           href={`${basePath}/sezione/1`}
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-forest-700 text-white text-sm font-semibold hover:bg-forest-800 transition-colors"
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#C0603D] text-white text-sm font-semibold hover:bg-[#a84e30] transition-colors"
         >
           <BookOpen className="w-4 h-4" /> Apri il Reportage
         </Link>
