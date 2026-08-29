@@ -3,28 +3,33 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { Compass, BookMarked, BookOpen, User } from 'lucide-react'
+import { Compass, BookMarked, PenLine, Plus, User } from 'lucide-react'
 import { getProfile } from '@/lib/userProfile'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import GemStatusBadge from '@/components/premium/GemStatusBadge'
 import type { User as SupabaseUser, Session, AuthChangeEvent } from '@supabase/supabase-js'
 
-// Cutover Fase 7 di docs/diario-fulcro-piano.md — Bacheca è ritirata (i suoi contenuti unici,
-// streak/andamento/territorio/curiosità, non sono stati portati altrove: decisione esplicita,
-// restano solo nella cronologia git di questo branch se servissero in futuro). Diario è ora
-// l'ingresso principale, prima voce della tab bar — "I miei Diari" (app/diari/page.tsx), da cui si
-// arriva a ogni Percorso pianificato/vissuto e ai suoi Reportage. Percorsi e Resoconti restano
-// come motori riusati dentro un Diario (GuidaHub/ResocontoHub, invariati) ma anche raggiungibili
-// qui come tab a sé, per chi vuole lavorare su un percorso senza passare dal Diario che lo contiene.
+// Redesign menù globale (fase 1) — Diario > Percorsi > Reportage è ora la gerarchia reale
+// dell'app (un Diario contiene Percorsi, un Percorso contiene i suoi Reportage): questa barra
+// resta comunque piatta/trasversale, non annidata — ogni voce porta all'elenco "tutti i ..." di
+// quella categoria su tutti i Diari, non dentro uno specifico. "Reportage" punta per ora a
+// /resoconto (ResocontoHub esistente, ancora nello stile "vecchio") come destinazione provvisoria:
+// una vista piatta dedicata ("Tutti i Reportage", sul modello di app/percorsi/page.tsx) è lavoro
+// successivo non ancora fatto. "Nuovo" punta a /upload (oggi apre di default "Crea un Resoconto",
+// tab=activity) — la scelta contestuale Percorso/Reportage e la selezione del Diario di
+// destinazione sono anch'esse lavoro successivo, non ancora implementate.
 export const NAV_LINKS = [
   { href: '/diari',      label: 'Diario',     icon: BookMarked },
-  { href: '/guida',      label: 'Percorsi',   icon: Compass    },
-  { href: '/resoconto',  label: 'Resoconti',  icon: BookOpen   },
+  { href: '/percorsi',   label: 'Percorsi',   icon: Compass    },
+  { href: '/resoconto',  label: 'Reportage',  icon: PenLine    },
+  { href: '/upload',     label: 'Nuovo',      icon: Plus       },
 ]
 
+// Confine di segmento esplicito (non solo startsWith): da quando "Percorsi" punta a /percorsi,
+// un semplice startsWith avrebbe acceso il tab anche su /percorsi-per-te, rotta distinta.
 export function isActive(href: string, path: string) {
-  return href === '/' ? path === '/' : path.startsWith(href)
+  return href === '/' ? path === '/' : path === href || path.startsWith(`${href}/`)
 }
 
 // ── Avatar (desktop + tab bar icon) ─────────────────────────────────────────────
@@ -93,13 +98,11 @@ export function ProfileAvatar({ size = 32, iconSize = 16 }: { size?: number; ico
   )
 }
 
-// Altezza riservata dalla MobileTopBar fissa in alto — le pagine "normali" (non a schermo
-// intero) applicano questa classe al loro contenitore per non finire sotto la barra.
-// Un'unica costante per restare "uniformi" (punto 4): cambiarla qui la cambia ovunque.
-// 56px di contenuto (h-14) sotto la status bar, +16px di margine di sicurezza: un test dal vivo
-// ha mostrato il titolo di pagina toccare/nascondersi parzialmente sotto la barra con lo stretto
-// necessario (56px) — un po' di respiro in più costa poco ed evita che torni a succedere.
-export const MOBILE_TOPBAR_SPACER = 'pt-[calc(env(safe-area-inset-top,0px)+72px)] md:pt-0'
+// Altezza riservata dalla MobileBottomBar fissa in fondo — le pagine "normali" (non a schermo
+// intero) applicano questa classe al loro contenitore per non finire sotto la barra. Un'unica
+// costante per restare "uniformi": cambiarla qui la cambia ovunque. 64px di contenuto (h-16) +
+// safe-area-bottom, stesso principio di BOTTOM_BAR_SPACER in components/libro/BookPage.tsx.
+export const MOBILE_BOTTOMBAR_SPACER = 'pb-[calc(env(safe-area-inset-bottom,0px)+64px)] md:pb-0'
 
 // ── Desktop top bar ──────────────────────────────────────────────────────────
 
@@ -185,8 +188,54 @@ export function MobileNavBar({ className = '' }: { className?: string }) {
   )
 }
 
-function MobileTopBar() {
-  return <MobileNavBar className="md:hidden fixed z-40 inset-x-0 top-0" />
+// ── Mobile: barra unica in fondo (redesign fase 1) ──────────────────────────────
+// Sposta la navigazione principale in basso, raggiungibile col pollice — l'avatar Profilo non ci
+// vive più dentro (era l'unico modo per raggiungere Profilo su mobile, ora un'icona a sé,
+// FloatingProfileAvatar sotto): 4 voci pari, nessuna eccezione di forma per l'ultima.
+// Non riusa <MobileNavBar/> (quella resta la pillola in alto delle pagine "magazine"
+// Guide/Resoconto, invariata — components/routehub/HubNavBar.tsx): stesse voci (NAV_LINKS),
+// diversa cornice, per non toccare quelle pagine finché non vengono ridisegnate.
+function MobileBottomBar() {
+  const path = usePathname()
+  return (
+    <nav
+      className="md:hidden fixed z-40 inset-x-0 bottom-0 bg-forest-600/95 backdrop-blur-md shadow-[0_-2px_12px_rgba(0,0,0,0.18)]"
+      style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+    >
+      <div className="flex items-center justify-around h-16 px-2">
+        {NAV_LINKS.map(({ href, label, icon: Icon }) => {
+          const active = isActive(href, path)
+          return (
+            <Link
+              key={href}
+              href={href}
+              className={`flex flex-col items-center gap-1 px-3 py-1.5 rounded-2xl transition-colors ${
+                active ? 'text-white' : 'text-forest-300'
+              }`}
+            >
+              <Icon className="w-5 h-5" strokeWidth={2} />
+              <span className="text-[10px] font-bold leading-none">{label}</span>
+            </Link>
+          )
+        })}
+      </div>
+    </nav>
+  )
+}
+
+// Profilo non è più una voce della barra (resta un'icona a parte, come sull'avatar desktop) —
+// fluttuante invece che incassata in una barra fissa in alto, perché quella barra non esiste
+// più su mobile: stesso <ProfileAvatar/> di sempre, solo montato qui invece che dentro
+// MobileTopBar. Sopra la MobileBottomBar (z-40) ma non ci si sovrappone: angoli opposti.
+function FloatingProfileAvatar() {
+  return (
+    <div
+      className="md:hidden fixed z-40 right-4 rounded-full bg-white/90 backdrop-blur-sm shadow-[0_2px_8px_rgba(0,0,0,0.18)] p-0.5"
+      style={{ top: 'calc(env(safe-area-inset-top, 0px) + 12px)' }}
+    >
+      <ProfileAvatar size={36} iconSize={16} />
+    </div>
+  )
 }
 
 // ── Navbar ─────────────────────────────────────────────────────────────────────
@@ -195,7 +244,8 @@ export default function Navbar() {
   return (
     <>
       <DesktopNav />
-      <MobileTopBar />
+      <MobileBottomBar />
+      <FloatingProfileAvatar />
     </>
   )
 }

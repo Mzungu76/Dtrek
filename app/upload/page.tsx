@@ -1,7 +1,7 @@
 'use client'
 import { useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
+import Navbar, { MOBILE_BOTTOMBAR_SPACER } from '@/components/Navbar'
 import ActivityUploader from '@/components/upload/ActivityUploader'
 import GpxUploader from '@/components/upload/GpxUploader'
 import ManualImportChoice from '@/components/upload/ManualImportChoice'
@@ -41,7 +41,7 @@ function UploadPageInner() {
   }
 
   return (
-    <div className={`min-h-screen bg-stone-50 md:pb-0 ${MOBILE_TOPBAR_SPACER}`}>
+    <div className={`min-h-screen bg-stone-50 md:pb-0 ${MOBILE_BOTTOMBAR_SPACER}`}>
       <Navbar />
       <TrialStatusBanner />
       <main className="max-w-2xl mx-auto px-4 py-8 sm:py-12 fade-up">

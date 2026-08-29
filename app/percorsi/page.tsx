@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
+import Navbar, { MOBILE_BOTTOMBAR_SPACER } from '@/components/Navbar'
 import RouteThumb from '@/components/RouteThumb'
 import type { AllPercorsiRow } from '@/app/api/percorsi/route'
 import { ArrowLeft, Loader2, Lock, LockOpen, Mountain, Search, X } from 'lucide-react'
@@ -34,7 +34,7 @@ export default function TuttiIPercorsiPage() {
   }, [rows, query])
 
   return (
-    <div className={`min-h-screen bg-stone-50 md:pb-0 ${MOBILE_TOPBAR_SPACER}`}>
+    <div className={`min-h-screen bg-stone-50 md:pb-0 ${MOBILE_BOTTOMBAR_SPACER}`}>
       <Navbar />
 
       <div className="relative h-[200px] sm:h-[240px] overflow-hidden bg-gradient-to-br from-forest-800 to-forest-900">

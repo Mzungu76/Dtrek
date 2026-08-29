@@ -11,7 +11,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
+import Navbar, { MOBILE_BOTTOMBAR_SPACER } from '@/components/Navbar'
 import { DiarioCoverThumb } from '@/components/diario/DiarioCoverThumb'
 import { uploadDiaryCover } from '@/lib/diaryCoverUpload'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
@@ -69,7 +69,7 @@ export default function DiarioCopertinaPage() {
   }
 
   return (
-    <div className={`min-h-screen bg-stone-100 ${MOBILE_TOPBAR_SPACER}`}>
+    <div className={`min-h-screen bg-stone-100 ${MOBILE_BOTTOMBAR_SPACER}`}>
       <Navbar />
       <div className="max-w-[720px] mx-auto px-4 py-6 sm:py-10">
         <Link
