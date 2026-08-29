@@ -54,15 +54,15 @@ export const metadata: Metadata = {
   },
   other: {
     'mobile-web-app-capable':  'yes',
-    'msapplication-TileColor': '#277134',
+    'msapplication-TileColor': '#5F7355',
     'msapplication-TileImage': '/icon-192.png',
   },
 }
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#277134' },
-    { media: '(prefers-color-scheme: dark)',  color: '#193b20' },
+    { media: '(prefers-color-scheme: light)', color: '#5F7355' },
+    { media: '(prefers-color-scheme: dark)',  color: '#4A5A3F' },
   ],
   width: 'device-width',
   initialScale: 1,

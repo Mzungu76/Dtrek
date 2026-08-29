@@ -69,6 +69,27 @@ const config: Config = {
           800: '#5e564c',
           900: '#4d4740',
         },
+        // Direzione "Taccuino Botanico" (docs/taccuino-botanico-piano.md) — palette del chrome di
+        // sistema (barra inferiore, avatar flottante, pillola Guida/Resoconto, tema "taccuino" di
+        // BookPage): sostituisce FOREST come colore di sistema. Non una scala numerica come
+        // terra/forest/stone (qui i ruoli sono discreti, non un gradiente 50-900) — chiavi
+        // nominali che rispecchiano 1:1 le righe della tabella palette della guida.
+        botanico: {
+          paper: '#F5EDDD',
+          'paper-light': '#F9F2E4',
+          card: '#EBE0C8',
+          'card-border': '#D9C9A8',
+          contour: '#A89A78',
+          ink: '#2E2A22',
+          'ink-hand': '#7A6F52',
+          'ink-muted': '#95886A',
+          accent: '#C0603D',       // terracotta — primario, CTA/stato selezionato
+          'accent-2': '#7C8F6E',   // salvia polverosa — secondario, non CTA
+          'accent-tint': '#E9DAC3',
+          bar: '#5F7355',          // salvia scura — barra globale / status bar
+          'bar-active': '#F5EDDD',
+          'bar-inactive': '#B9C4AE',
+        },
       },
       backgroundImage: {
         'topography': "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='400' height='400' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E\")",
