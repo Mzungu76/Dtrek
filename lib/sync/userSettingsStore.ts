@@ -75,10 +75,6 @@ export interface UserSettingsData {
    *  lib/routeBuilder/resolvePlace.ts e components/upload/RouteBuilder.tsx. Sovrascrivibile per
    *  singola ricerca nel wizard, questa è solo la scelta di partenza salvata in profilo. */
   routeBuildAiPlaceSearch: boolean
-  /** Flag di rollout Fase 4, docs/diario-a-libro-piano.md — scoped al solo punto d'ingresso
-   *  Percorso del Diario, vedi components/profilo/SectionAvanzate.tsx e
-   *  app/diari/[id]/percorsi/[percorsoId]/page.tsx. */
-  diarioLibroEnabled: boolean
   /** Ultimo Diario aperto, Fase 11 — null finché l'utente non ha ancora aperto un Sommario. Letto
    *  da app/page.tsx per decidere dove aprire l'app, scritto da DiarioIndexLibro a ogni apertura. */
   lastDiaryId: string | null

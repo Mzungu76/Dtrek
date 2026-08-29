@@ -123,8 +123,6 @@ export async function GET(req: NextRequest) {
     // Pronto quando ci sono abbastanza risposte al questionario per un segnale di stile affidabile
     // (lib/writingStyleProfile.ts) — usato per il badge "nel tuo stile" nel resoconto.
     writingStyleReady:        isProfileReady((data?.writing_style_profile as WritingStyleProfile | null) ?? null),
-    // Flag di rollout Fase 4, docs/diario-a-libro-piano.md — default spento finché non validato.
-    diarioLibroEnabled:       (data?.diario_libro_enabled as boolean | null) ?? false,
     // Ultimo Diario aperto, Fase 11 — null finché l'utente non ha ancora aperto un Sommario (app/
     // page.tsx ricade sul Diario di default in quel caso).
     lastDiaryId:              (data?.last_diary_id as string | null) ?? null,
@@ -183,7 +181,6 @@ export async function POST(req: NextRequest) {
     aiUseHistoryData?: boolean
     aiUseWebSearch?: boolean
     routeBuildAiPlaceSearch?: boolean
-    diarioLibroEnabled?: boolean
     lastDiaryId?: string | null
   }
 
@@ -387,11 +384,6 @@ export async function POST(req: NextRequest) {
   }
   if (body.routeBuildAiPlaceSearch !== undefined) {
     upsertData.route_build_ai_place_search = !!body.routeBuildAiPlaceSearch
-  }
-
-  // Flag di rollout Fase 4, docs/diario-a-libro-piano.md.
-  if (body.diarioLibroEnabled !== undefined) {
-    upsertData.diario_libro_enabled = !!body.diarioLibroEnabled
   }
 
   // Ultimo Diario aperto, Fase 11 — scritto da DiarioIndexLibro ogni volta che il Sommario carica

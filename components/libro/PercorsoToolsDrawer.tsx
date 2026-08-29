@@ -208,7 +208,7 @@ export default function PercorsoToolsDrawer({
             className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg"
             style={{ background: PILL_BG, color: INK_TEXT, fontSize: 13.5, fontWeight: 600 }}
           >
-            <span className="inline-flex items-center gap-2"><BookOpen className="w-4 h-4" /> Apri in modalità classica</span>
+            <span className="inline-flex items-center gap-2"><BookOpen className="w-4 h-4" /> Apri vista estesa (mappa, 3D)</span>
             <ChevronRight className="w-3.5 h-3.5" style={{ color: INK_MUTED }} />
           </Link>
         </div>

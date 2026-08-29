@@ -1,10 +1,10 @@
 'use client'
 // Pagina di riepilogo del Reportage — Fase 3 di docs/diario-a-libro-piano.md. Non esisteva prima:
-// oggi un Reportage nel Diario rimanda direttamente a /resoconto/[id] (schermata classica). Qui
+// oggi un Reportage nel Diario rimanda direttamente a /resoconto/[id] (vista estesa standalone). Qui
 // vive il chrome che nel lettore continuo (ReportReader.tsx) compare una sola volta per lettura,
 // non per sezione: pannello di generazione/rigenerazione, CTA verso il libro e
 // NextStepBanner. Pubblica/scarica PDF ed editor manuale restano — per ora — raggiungibili solo
-// da "Apri in modalità classica": ricollocarli qui è lavoro a sé, rimandato oltre questa fase.
+// da "Apri vista estesa": ricollocarli qui è lavoro a sé, rimandato oltre questa fase.
 import { Suspense, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
@@ -72,7 +72,7 @@ function ReportageSummaryInner() {
           <BookOpen className="w-4 h-4" /> Apri il Reportage
         </Link>
         <Link href={`/resoconto/${encodeURIComponent(activityId)}`} className="text-[13px] text-stone-500 underline underline-offset-2 hover:text-stone-700">
-          Apri in modalità classica
+          Apri vista estesa (pubblica, PDF, editor)
         </Link>
       </div>
 
