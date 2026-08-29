@@ -1,4 +1,4 @@
-import { Compass, Route, MapPin, Leaf, UtensilsCrossed, ShieldCheck, Radar, BarChart2, Heart } from 'lucide-react'
+import { Compass, Route, MapPin, Leaf, UtensilsCrossed, ShieldCheck, Radar, BarChart2 } from 'lucide-react'
 import type { GuideData } from './GuideTemplate'
 import GuideAssessment from './GuideAssessment'
 
@@ -14,7 +14,6 @@ const TOC_ITEMS: { key: keyof GuideData['sections']; label: string; icon: typeof
   { key: 'ilPercorso',     label: 'Il percorso',              icon: Route,            color: '#277134' },
   { key: 'verificato',     label: 'Verificato online',        icon: Radar,            color: '#0f6e94' },
   { key: 'datiSicurezza',  label: 'Dati e sicurezza',         icon: BarChart2,        color: '#73695c' },
-  { key: 'suMisura',       label: 'Su misura per te',         icon: Heart,            color: '#9f4315' },
   { key: 'iLuoghi',        label: 'I luoghi da non perdere',  icon: MapPin,           color: '#813619' },
   { key: 'laNatura',       label: 'La natura intorno a te',   icon: Leaf,             color: '#378d44' },
   { key: 'sapori',         label: 'Sapori e tradizioni',      icon: UtensilsCrossed,  color: '#d97220' },

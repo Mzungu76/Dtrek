@@ -39,7 +39,6 @@ export interface GuideData {
      *  sono testo semplice come "Consigli finali". */
     verificato?:    { text: string }
     datiSicurezza?: { text: string }
-    suMisura?:      { text: string }
     iLuoghi?:       { text: string }
     laNatura?:      { text: string; photo?: GuideSectionPhoto }
     sapori?:        { text: string; photo?: GuideSectionPhoto }
@@ -147,18 +146,6 @@ export default function GuideTemplate({ data, forPrint = false }: Props) {
             text={sections.datiSicurezza.text}
             layout="full-width"
             accentColor="#73695c"
-          />
-        </div>
-      )}
-
-      {has(sections.suMisura) && (
-        <div className="guide-print-page">
-          <GuideSection
-            title="SU MISURA PER TE"
-            subtitle="Quanto questo percorso è in linea con le tue capacità e preferenze personali."
-            text={sections.suMisura.text}
-            layout="full-width"
-            accentColor="#9f4315"
           />
         </div>
       )}

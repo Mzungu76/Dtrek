@@ -218,7 +218,7 @@ function GlobalRouteSearch() {
             {filtered.slice(0, 8).map(p => (
               <Link
                 key={p.id}
-                href={p.diaryId ? `/diari/${encodeURIComponent(p.diaryId)}/percorsi/${encodeURIComponent(p.id)}/guida/il_percorso` : '/diari'}
+                href={p.diaryId ? `/diari/${encodeURIComponent(p.diaryId)}/percorsi/${encodeURIComponent(p.id)}/guida/prima_di_partire` : '/diari'}
                 className="flex items-center gap-3 px-3 py-2.5"
                 style={{ borderBottom: `1px dotted ${TACCUINO_PAPER.cardBorder}` }}
               >

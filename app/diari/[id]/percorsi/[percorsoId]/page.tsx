@@ -18,7 +18,7 @@ function PercorsoPageInner() {
   const basePath = `/diari/${encodeURIComponent(diarioId)}/percorsi/${encodeURIComponent(percorsoId)}`
 
   useEffect(() => {
-    router.replace(`${basePath}/guida/il_percorso`)
+    router.replace(`${basePath}/guida/prima_di_partire`)
   }, [basePath, router])
 
   return (
