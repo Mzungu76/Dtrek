@@ -1,0 +1,148 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body style="margin:0">
+<x-dc>
+<helmet>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Lora:ital,wght@0,400;0,500;0,600;1,500&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@600;700&family=JetBrains+Mono:wght@500&display=swap');
+:root {
+  --paper-base: #F5EDDD;
+  --paper-light: #F9F2E4;
+  --card: #EBE0C8;
+  --card-border: #D9C9A8;
+  --contour: #A89A78;
+  --ink-typed: #2E2A22;
+  --ink-hand: #7A6F52;
+  --ink-muted: #95886A;
+  --accent: #C0603D;
+  --accent-2: #7C8F6E;
+  --accent-tint: #E9DAC3;
+  --bar-bg: #5F7355;
+  --bar-active: #F5EDDD;
+  --bar-inactive: #B9C4AE;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+.phone {
+  width: 390px; height: 844px; position: relative; overflow: hidden;
+  background: var(--paper-base); font-family: 'DM Sans', system-ui, sans-serif;
+  color: var(--ink-typed); -webkit-font-smoothing: antialiased;
+}
+.paper-tex {
+  position: absolute; inset: 0; pointer-events: none;
+  background:
+    radial-gradient(ellipse 70% 50% at 15% 8%, var(--paper-light), transparent 60%);
+}
+.eyebrow {
+  font-family: 'DM Sans', sans-serif; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .16em; font-size: 10.5px; color: var(--ink-muted);
+}
+.hand { font-family: 'Caveat', cursive; }
+.display { font-family: 'Playfair Display', Georgia, serif; }
+.narrative { font-family: 'Lora', Georgia, serif; }
+.mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+.avatar-float {
+  position: absolute; top: 22px; right: 18px; width: 38px; height: 38px; border-radius: 999px;
+  background: rgba(255,255,255,.85); display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,.18); z-index: 5;
+}
+.avatar-float .inner {
+  width: 32px; height: 32px; border-radius: 999px; background: var(--accent-tint);
+  display: flex; align-items: center; justify-content: center; color: var(--accent);
+  border: 2px solid var(--card-border);
+}
+
+.bottombar {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 78px;
+  background: var(--bar-bg); display: flex; align-items: center; justify-content: space-around;
+  padding: 0 8px 10px; box-shadow: 0 -2px 12px rgba(0,0,0,.18); z-index: 6;
+}
+.bb-item { display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--bar-inactive); }
+.bb-item.active { color: var(--bar-active); }
+.bb-label { font-size: 9.5px; font-weight: 700; letter-spacing: .01em; }
+
+.bookbar {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 74px;
+  background: var(--card); border-top: 1px solid var(--card-border);
+  display: flex; align-items: stretch; justify-content: space-around; z-index: 6;
+}
+.bk-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--ink-muted); }
+.bk-label { font-family: 'DM Sans'; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; font-size: 9px; }
+.bk-item.accent { color: var(--accent); }
+
+.book-header {
+  padding: 20px 20px 10px; border-bottom: 1px solid var(--card-border);
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
+}
+
+.card {
+  background: var(--card); border-radius: 14px; border: 1px solid var(--card-border);
+  position: relative;
+}
+.card-dashed { border-style: dashed; }
+
+.badge {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; font-weight: 700;
+  padding: 4px 9px; border-radius: 999px; background: var(--accent-tint); color: var(--accent);
+}
+.badge-muted { background: var(--card); color: var(--ink-muted); border: 1px solid var(--card-border); }
+
+.btn-primary {
+  display: inline-flex; align-items: center; gap: 7px; background: var(--accent); color: var(--paper-light);
+  font-weight: 700; font-size: 13px; padding: 11px 18px; border-radius: 12px; border: none;
+}
+
+.pill {
+  display: inline-flex; align-items: center; gap: 6px; background: var(--paper-light); color: var(--ink-typed);
+  font-size: 11px; font-weight: 600; padding: 6px 11px; border-radius: 999px; border: 1px solid var(--card-border);
+}
+
+.settings-row {
+  display: flex; align-items: center; gap: 12px; padding: 14px 4px; border-bottom: 1px solid var(--card-border);
+}
+.settings-row .ic {
+  width: 34px; height: 34px; border-radius: 10px; background: var(--accent-tint); color: var(--accent);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { color: var(--accent-2); }
+</style>
+</helmet>
+<!-- Taccuino Botanico — Mappa 3D espansa -->
+<div class="phone">
+
+      <div style="position:absolute;inset:0;">
+        <svg width="390" height="844" style="position:absolute;inset:0"><circle cx="223" cy="362" r="65" fill="#4A5A3F" opacity="0.55"></circle><circle cx="80" cy="686" r="79" fill="#5C6B4C" opacity="0.55"></circle><circle cx="255" cy="135" r="61" fill="#3F4C36" opacity="0.55"></circle><circle cx="128" cy="211" r="87" fill="#6B7D58" opacity="0.55"></circle><circle cx="389" cy="38" r="82" fill="#465239" opacity="0.55"></circle><circle cx="235" cy="322" r="47" fill="#4A5A3F" opacity="0.55"></circle><circle cx="263" cy="386" r="71" fill="#5C6B4C" opacity="0.55"></circle><circle cx="258" cy="112" r="76" fill="#3F4C36" opacity="0.55"></circle><circle cx="383" cy="818" r="67" fill="#6B7D58" opacity="0.55"></circle><circle cx="17" cy="3" r="38" fill="#465239" opacity="0.55"></circle><circle cx="367" cy="256" r="52" fill="#4A5A3F" opacity="0.55"></circle><circle cx="350" cy="265" r="63" fill="#5C6B4C" opacity="0.55"></circle><circle cx="170" cy="55" r="65" fill="#3F4C36" opacity="0.55"></circle><circle cx="329" cy="132" r="43" fill="#6B7D58" opacity="0.55"></circle></svg>
+        <svg width="390" height="844" style="position:absolute;inset:0"><path d="M 70 658 Q 148 253 215 422 T 332 186" fill="none" stroke="#F9F2E4" stroke-width="3" stroke-linecap="round" stroke-dasharray="1 7"></path><circle cx="70.2" cy="658.32" r="4" fill="#F9F2E4" stroke="#fff" stroke-width="1.5"></circle><circle cx="331.5" cy="185.68" r="4" fill="#F9F2E4" stroke="#fff" stroke-width="1.5"></circle></svg>
+        <div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.32),transparent 20%,transparent 70%,rgba(0,0,0,.42));"></div>
+      </div>
+
+      <div style="position:absolute;top:22px;left:18px;"><div style="width:44px;height:44px;border-radius:999px;background:rgba(255,255,255,.94);display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.28);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2E2A22" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg></div></div>
+
+      <div style="position:absolute;top:22px;right:18px;display:flex;background:rgba(0,0,0,.45);border-radius:999px;padding:3px;">
+        <span style="padding:6px 12px;border-radius:999px;background:#C0603D;color:#fff;font-size:11px;font-weight:700;">Satellite</span>
+        <span style="padding:6px 12px;border-radius:999px;color:rgba(255,255,255,.75);font-size:11px;font-weight:700;">Topografica</span>
+      </div>
+
+      <div style="position:absolute;top:86px;right:18px;"><div style="margin-bottom:10px;"><div style="width:44px;height:44px;border-radius:999px;background:rgba(255,255,255,.94);display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.28);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2E2A22" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l6 15-6-3.5L6 18l6-15z"></path></svg></div></div><div style="margin-bottom:10px;"><div style="width:44px;height:44px;border-radius:999px;background:rgba(255,255,255,.94);display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.28);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2E2A22" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 4.5v11L12 22l-8-4.5v-11L12 2z"></path><path d="M4 6.5l8 4.5 8-4.5"></path><path d="M12 11v11"></path></svg></div></div><div style="margin-bottom:10px;"><div style="width:44px;height:44px;border-radius:999px;background:rgba(255,255,255,.94);display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.28);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2E2A22" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><line x1="12" y1="2" x2="12" y2="5"></line><line x1="12" y1="19" x2="12" y2="22"></line><line x1="2" y1="12" x2="5" y2="12"></line><line x1="19" y1="12" x2="22" y2="12"></line></svg></div></div><div style="margin-bottom:10px;"><div style="width:44px;height:44px;border-radius:999px;background:rgba(255,255,255,.94);display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.28);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2E2A22" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V7a4 4 0 018 0v4"></path></svg></div></div></div>
+
+      <div style="position:absolute;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--card-border);
+                  padding:16px 20px calc(18px + env(safe-area-inset-bottom,0px));">
+        <p class="eyebrow" style="margin:0 0 2px;">Anello del Monte Cimino</p>
+        <div style="display:flex;gap:8px;margin:6px 0 12px;flex-wrap:wrap;">
+          <span class="pill">12,4 km</span><span class="pill">640 m D+</span><span class="pill">4h 30</span>
+        </div>
+        <div class="btn-primary" style="width:100%;justify-content:center;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#F9F2E4" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 21V4"></path><path d="M6 4h12l-3 4 3 4H6"></path></svg>Naviga</div>
+      </div>
+    
+</div>
+</x-dc>
+</body>
+</html>
