@@ -62,9 +62,9 @@ body {
    sia durante un drag dal vivo sia durante un tween automatico) guida tutte le regole qui sotto —
    mai una seconda animazione indipendente. Dettagli/formule: lib/pageTurn/pageTurnMath.ts.
 
-   Le zone di presa (`.dtp-edge`) sono strisce sottili SOLO ai bordi della pagina: il resto del
-   contenuto (mappe, gallerie a scorrimento, grafico altimetrico) non ha alcun listener del motore
-   sopra e continua a ricevere i propri gesti nativi indisturbato. */
+   Il gesto (usePageDrag.ts) aggancia il dito ovunque lo si appoggi sul contenuto — mai un effetto
+   che parte da solo al click: mappe, gallerie a scorrimento e grafico altimetrico restano
+   riconosciuti ed esclusi dal loro stesso elemento (nessun overlay separato sopra di loro). */
 .dtp-root {
   position: relative;
   perspective: 1800px;
@@ -88,7 +88,7 @@ body {
 /* Piega/dorso reattivo (Sezione 8) — non la decorazione statica e permanente della rilegatura
    (quella resta BookSpineShadow.tsx/TaccuinoSpineShadow, invariata): questa è specifica del
    cardine di QUESTO sfoglio (può non coincidere col lato "decorativo" della pagina quando lo
-   sfoglio parte da un gesto — vedi commento in useEdgePageDrag.ts) e vive solo mentre reagisce. */
+   sfoglio parte da un gesto — vedi commento in usePageDrag.ts) e vive solo mentre reagisce. */
 .dtp-spine-glow {
   position: absolute; inset-block: 0; width: 46px; z-index: 2; pointer-events: none;
   opacity: var(--dtp-spine-o, 0);
@@ -119,7 +119,21 @@ body {
   -webkit-backface-visibility: hidden;
 }
 .dtp-face--front { position: relative; }
-.dtp-root--active .dtp-content { pointer-events: none; }
+/* `.dtp-content` porta anche il gesto (vedi usePageDrag.ts): DEVE restare `pointer-events: auto`
+   su se stesso anche a sfoglio confermato, altrimenti l'elemento che ha appena catturato il
+   puntatore (`setPointerCapture`) rischierebbe di non ricevere più i propri stessi eventi di
+   trascinamento. A diventare inerte durante uno sfoglio è invece il contenuto reale al suo
+   interno — mappe/link non devono più reagire mentre la pagina sta girando — tramite i figli
+   diretti (`pointer-events` si eredita, arriva comunque a ogni discendente). Tolta anche la
+   selezione testo, che altrimenti un trascinamento orizzontale sopra un paragrafo la innescherebbe
+   come farebbe su qualunque testo normale. */
+.dtp-root--active .dtp-content {
+  user-select: none;
+  -webkit-user-select: none;
+}
+.dtp-root--active .dtp-content > * {
+  pointer-events: none;
+}
 
 /* Ombreggiatura sulla superficie stessa della pagina, non sulla pagina sottostante (Sezione 7:
    intensità/posizione cambiano insieme, mai un'unica ombra statica) — si scurisce verso il bordo
@@ -159,19 +173,76 @@ body {
     linear-gradient(160deg, rgba(120,90,50,0.12), rgba(50,35,18,0.18));
   mix-blend-mode: multiply;
 }
-
-/* Niente `z-index` qui, di proposito (Sezione 15): stanno PRIMA di `.dtp-content` nel markup
-   (vedi DtrekPageTurn.tsx) così un qualunque controllo reale della pagina che galleggia vicino al
-   bordo (i chip della mappa, un bottone) — venendo dopo nell'ordine del documento, stesso livello
-   di stacking `auto` — vince naturalmente il tocco sopra la zona di presa. Il gesto di sfoglio
-   resta agganciabile solo dove non c'è nient'altro sopra a reclamarlo. Larghezza impostata inline
-   da useEdgePageDrag.ts (`EDGE_GRAB_PX`, lib/pageTurn/pageTurnMath.ts) — un solo numero, non
-   duplicato qui. */
-.dtp-edge {
-  position: absolute; inset-block: 0;
+/* Stessa tinta "carta, di schiena" di `.dtp-face--back::after` — condivisa anche dal lembo e
+   dalla regione già girata del trascinamento (PageCurlOverlay.tsx), un solo posto per non
+   scriverla tre volte identica. */
+.dtp-paper-back-tint::after {
+  content: '';
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse 70% 55% at 30% 20%, rgba(255,247,225,0.4), transparent 60%),
+    linear-gradient(160deg, rgba(120,90,50,0.12), rgba(50,35,18,0.18));
+  mix-blend-mode: multiply;
 }
-.dtp-edge--start { left: 0; cursor: grab; }
-.dtp-edge--end { right: 0; cursor: grab; }
+
+/* ────────────────────────────────────────────────────────────────────────────────────────────
+   Lembo del trascinamento — components/libro/pageTurn/PageCurlOverlay.tsx
+   ────────────────────────────────────────────────────────────────────────────────────────────
+   Montato SOLO mentre un trascinamento è confermato (mai per click/tastiera, che restano sul
+   rotateY a pagina intera qui sopra). `position: fixed`, ancorato al rettangolo di ciò che è
+   visibile in quel momento — non all'intera altezza del contenuto, che può scorrere per più
+   schermate (Sezione 15: si piega "il foglio che si ha sotto gli occhi ora"). Geometria (px,
+   assoluti dentro l'overlay) calcolata da lib/pageTurn/pageTurnMath.ts (`computeCurlGeometry`) e
+   scritta qui direttamente come `style`, non tramite ulteriori custom property CSS — a
+   differenza del rotateY sopra, qui cambiano posizione E larghezza insieme, più semplice
+   calcolarli in un posto che comporli in CSS puro. */
+.dtp-curl-overlay {
+  pointer-events: none;
+  perspective: 1800px;
+  /* Sopra la piega statica della rilegatura (BookSpineShadow.tsx/TaccuinoSpineShadow, z-40,
+     fixed su tutta l'altezza dello schermo) — durante un trascinamento attivo il lembo deve
+     restare in vista per intero, non tagliato da quella decorazione. */
+  z-index: 50;
+}
+.dtp-curl-turned, .dtp-curl-flap {
+  position: absolute; top: 0; bottom: 0;
+}
+/* Regione già "girata" tra il lembo e il bordo libero — piatta, niente istantanea: è comunque
+   solo carta, non contenuto (Sezione 6). */
+.dtp-curl-turned {
+  background: var(--dtp-paper-bg, #fbf6e8);
+}
+.dtp-curl-flap {
+  transform-style: preserve-3d;
+  will-change: transform, left, width;
+}
+.dtp-curl-overlay[data-hinge="left"] .dtp-curl-flap { transform-origin: left center; }
+.dtp-curl-overlay[data-hinge="right"] .dtp-curl-flap { transform-origin: right center; }
+
+.dtp-curl-flap-front, .dtp-curl-flap-back {
+  position: absolute; inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.dtp-curl-flap-back {
+  transform: rotateY(180deg);
+  background: var(--dtp-paper-bg, #fbf6e8);
+}
+/* Ombra alle due giunture del lembo (con la parte non ancora toccata e con quella già girata) —
+   un solo gradiente sopra l'istantanea invece di un elemento separato, così si muove e ruota
+   insieme al lembo senza calcoli in più. */
+.dtp-curl-flap-front {
+  background-repeat: no-repeat;
+}
+.dtp-curl-flap-front::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(
+    to right,
+    rgba(0,0,0,var(--curl-shadow-o, 0)) 0%, transparent 12%,
+    transparent 88%, rgba(0,0,0,var(--curl-shadow-o, 0)) 100%
+  );
+}
 
 /* Fallback a movimento ridotto (Sezione 16) — niente rotazione 3D, solo una dissolvenza breve: il
    componente rileva `prefers-reduced-motion` in JS e in quel caso non scrive mai `--dtp-*` (il

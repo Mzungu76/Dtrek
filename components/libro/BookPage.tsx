@@ -46,8 +46,9 @@
 // Fase 39 aveva riscritto l'"effetto pagina girata" sulla View Transitions API del browser: un
 // singolo screenshot piatto di prima/dopo, ruotato come un'unica immagine. Sostituito qui per
 // intero dal Dtrek Page Turning Engine (components/libro/pageTurn/DtrekPageTurn.tsx) — un vero
-// elemento 3D con cardine, retro pagina, ombre/luce reattive e uno sfoglio gesture-driven dal
-// bordo, oltre al click/tastiera di prima. `pageTurnRef` espone `flipTo(href, hinge)`: ogni
+// elemento 3D con cardine, retro pagina, ombre/luce reattive e uno sfoglio agganciato al dito
+// ovunque lo si tocchi sulla pagina, oltre al click/tastiera di prima. `pageTurnRef` espone
+// `flipTo(href, hinge)`: ogni
 // `<Link>` di questa barra prova prima a farlo animare dal motore (`preventDefault` solo se il
 // motore accetta), altrimenti naviga normalmente — stesso fallback "silenzioso" di prima per
 // `prefers-reduced-motion` o per un secondo click arrivato mentre uno sfoglio è già in corso.
