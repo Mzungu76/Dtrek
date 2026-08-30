@@ -45,17 +45,27 @@ const config: Config = {
           800: '#813619',
           900: '#6a2e18',
         },
+        // Direzione "Taccuino Botanico" (docs/taccuino-botanico-piano.md), fase di estensione a
+        // tutta l'app: la chiave resta `forest` (rinominarla avrebbe richiesto toccare ~100 file
+        // per la sola stringa della classe, senza cambiare nulla nel risultato visivo) ma i valori
+        // non sono più il verde brillante originale — sono una rampa salvia, stessa gerarchia di
+        // luminosità (50 chiarissimo → 900 scurissimo) usata finora per badge/icone/bottoni verdi
+        // "generici" in tutta l'app. 500/600/700 sono esattamente gli hex della tabella palette
+        // della guida (salvia polverosa/accento secondario, salvia scura/barra globale, hero
+        // scuro) — non inventati. Il colore delle tracce sulle mappe non passa da qui: usa
+        // FOREST/ROUTE_COLORS in lib/designTokens.ts, un oggetto JS separato, mai toccato — quel
+        // verde resta quello originale apposta (già "ripristinato" più volte in sessioni precedenti).
         forest: {
-          50:  '#f1f8f2',
-          100: '#dcf0de',
-          200: '#bbe0bf',
-          300: '#8cc894',
-          400: '#58aa63',
-          500: '#378d44',
-          600: '#277134',
-          700: '#20592b',
-          800: '#1c4724',
-          900: '#193b20',
+          50:  '#F4F7F0',
+          100: '#E9EEE3',
+          200: '#D7E0CE',
+          300: '#BCC9AF',
+          400: '#9BAC8C',
+          500: '#7C8F6E',
+          600: '#5F7355',
+          700: '#4A5A3F',
+          800: '#3A4A32',
+          900: '#2E3A26',
         },
         stone: {
           50:  '#f8f7f4',
