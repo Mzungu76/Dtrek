@@ -1,0 +1,3 @@
+# Estratto OSM — file grande, scaricare localmente, non via git
+*.osm.pbf
+*.pbf

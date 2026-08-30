@@ -33,10 +33,26 @@ function emptyStats(): ImportStats {
   return { processed: 0, linkedToExisting: 0, createdNew: 0, flaggedForReview: 0, skippedInvalidCoordinates: 0, errors: [] }
 }
 
+const EXISTING_PLACE_COLS = 'id, name, meta_type, subtype, latitude, longitude, municipality, municipality_istat_code, wikidata_id'
+
+function rowToExistingPlace(r: Record<string, unknown>): ExistingPlace {
+  return {
+    id:                    r.id as string,
+    name:                  r.name as string,
+    metaType:              r.meta_type as ExistingPlace['metaType'],
+    subtype:               r.subtype as string | null,
+    latitude:              r.latitude as number,
+    longitude:             r.longitude as number,
+    municipality:          r.municipality as string | null,
+    municipalityIstatCode: r.municipality_istat_code as string | null,
+    wikidataId:            r.wikidata_id as string | null,
+  }
+}
+
 async function findNearbyExisting(supabase: SupabaseClient, candidate: PlaceCandidate): Promise<ExistingPlace[]> {
   const { data, error } = await supabase
     .from('dtrek_places')
-    .select('id, name, meta_type, subtype, latitude, longitude, municipality, wikidata_id')
+    .select(EXISTING_PLACE_COLS)
     .eq('meta_type', candidate.metaType)
     .gte('latitude', candidate.latitude - NEARBY_DEGREES)
     .lte('latitude', candidate.latitude + NEARBY_DEGREES)
@@ -44,16 +60,26 @@ async function findNearbyExisting(supabase: SupabaseClient, candidate: PlaceCand
     .lte('longitude', candidate.longitude + NEARBY_DEGREES)
 
   if (error) throw error
-  return (data ?? []).map((r): ExistingPlace => ({
-    id:           r.id as string,
-    name:         r.name as string,
-    metaType:     r.meta_type as ExistingPlace['metaType'],
-    subtype:      r.subtype as string | null,
-    latitude:     r.latitude as number,
-    longitude:    r.longitude as number,
-    municipality: r.municipality as string | null,
-    wikidataId:   r.wikidata_id as string | null,
-  }))
+  const results = (data ?? []).map(rowToExistingPlace)
+
+  // Un Comune grande/irregolare può avere un centroide di poligono a diversi km dal punto che
+  // un'altra fonte userebbe per lo stesso Comune (verificato su dati reali: Latina, Sabaudia,
+  // Pontinia — oltre il raggio NEARBY_DEGREES) — il corto-circuito su municipality_istat_code in
+  // deduplicate.ts serve a niente se la riga non arriva mai fin qui. Query aggiuntiva, indipendente
+  // dalla distanza, solo quando ha senso (due 'borgo_citta' con lo stesso codice Comune).
+  if (candidate.metaType === 'borgo_citta' && candidate.municipalityIstatCode) {
+    const { data: byCode, error: codeError } = await supabase
+      .from('dtrek_places')
+      .select(EXISTING_PLACE_COLS)
+      .eq('meta_type', 'borgo_citta')
+      .eq('municipality_istat_code', candidate.municipalityIstatCode)
+    if (codeError) throw codeError
+    for (const row of (byCode ?? []).map(rowToExistingPlace)) {
+      if (!results.some(r => r.id === row.id)) results.push(row)
+    }
+  }
+
+  return results
 }
 
 async function linkSourceToPlace(supabase: SupabaseClient, placeId: string, candidate: PlaceCandidate) {

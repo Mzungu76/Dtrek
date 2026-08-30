@@ -1,19 +1,37 @@
 # OpenStreetMap (estratto regionale) → dtrek_places
 
-Non ancora implementato per un catalogo persistente. Il piano (§9) è esplicito: **non** fare
-query Overpass live per ogni ricerca utente — scaricare un estratto regionale e importarlo.
+Implementato: `fetch.ts` in questa cartella (piano `docs/piano-mete-multitipologia.md` §9). Legge
+un estratto `.osm.pbf` scaricato UNA VOLTA (mai Overpass live per-ricerca-utente, piano §9/§21/§48.7).
 
-## Cosa esiste già nel repository (da NON duplicare la logica di mapping)
+## Fonte (verificata via WebSearch/WebFetch in questa sessione — 2026-08-30)
 
-`lib/pois/overpassSource.ts` interroga live gli endpoint Overpass pubblici (elenco con failover in
-cima al file) per popolare i POI attorno a una traccia già pianificata — questo resta corretto per
-il suo scopo attuale (piano §18, "mantenere il sistema attuale" per i Sentieri), ma è esattamente
-l'uso "live per query utente" che il piano vieta come motore principale per Borghi/Città/Siti
-(§9, §21). La mappa tag→tipologia (`HISTORIC_TYPE_MAP` e le altre in quel file) è però un
-riferimento diretto e riusabile per classificare le feature di un estratto offline.
+Geofabrik (https://download.geofabrik.de/europe/italy.html) **non** pubblica estratti per singola
+regione italiana — solo 5 macro-aree (Nord-Ovest/Nord-Est/Centro/Sud/Isole; il Lazio è dentro
+"Centro" insieme ad altre 5 regioni). Provider alternativo con granularità per-regione, verificato
+con un fetch reale della pagina indice (elenca esplicitamente `lazio-latest.osm.pbf`):
 
-Categorie iniziali indicate dal piano (§9), da mappare su `meta_type`/`site_type`
-(`lib/metaTypes.ts`):
+```
+http://download.openstreetmap.fr/extracts/europe/italy/lazio-latest.osm.pbf   (~120 MB)
+```
+
+Mirror comunitario OSM France (https://download.openstreetmap.fr/). Licenza ODbL 1.0.
+
+## Cosa esiste già nel repository (riusato come riferimento, non duplicato)
+
+`lib/pois/overpassSource.ts` — fetcher live per i Sentieri (piano §18, non toccato). `fetch.ts`
+riusa lo STILE della sua `HISTORIC_TYPE_MAP` (tag OSM → categoria) ma non i valori: quel file mira
+a `PoiType` (icone POI dei Sentieri), qui il bersaglio è `SiteType` (`lib/metaTypes.ts`), un
+vocabolario diverso — vedi i commenti in `fetch.ts` per le scelte di mapping quando non c'è un
+corrispondente 1:1 (es. `historic=ruins`, `natural=peak`, `natural=spring`).
+
+## Libreria di parsing
+
+`osm-pbf-parser` (MIT/LGPL, pura JS, nessun binario nativo) — aggiunta come devDependency in
+questa sessione. La forma degli oggetti restituiti (`scripts/places/osm.d.ts`) è verificata
+installando il pacchetto reale e leggendo il suo sorgente pubblicato (non documentazione di terze
+parti).
+
+## Categorie (piano §9)
 
 ```
 tourism=museum, tourism=gallery, tourism=attraction
@@ -22,18 +40,20 @@ natural=waterfall, natural=cave_entrance, natural=peak, natural=viewpoint, natur
 amenity=place_of_worship
 ```
 
-## Cosa manca
+## Bloccante di rete
 
-Un estratto regionale scaricato (es. un provider di estratti regionali OSM in formato .osm.pbf per
-il Lazio) e un parser che ne estrae solo i tag sopra, converte in `PlaceCandidate[]` e rispetta
-l'attribuzione ODbL (piano §44) — non riportare qui un URL/provider specifico non verificato in
-questa sessione (nessun accesso di rete disponibile in questo ambiente). Il file .pbf va parsato
-offline (es. con una libreria PBF Node, non ancora una dipendenza di questo progetto) — verificarne
-la licenza/dimensione prima di aggiungerla.
+Stesso di ISTAT/PTPR/MiC: il proxy di questo ambiente rifiuta la connessione a
+download.openstreetmap.fr (policy dell'organizzazione, verificato con `curl -v`). Il file da
+~120MB non è stato scaricato né parsato in questa sessione. 0 righe importate.
 
-## Interfaccia attesa
+## Test
 
-Un `fetch.ts` che legge l'estratto scaricato in `data/osm/` (gitignored, stesso pattern di
-`data/ptpr/`) e produce `PlaceCandidate[]` con `source: 'osm'`, `sourceId` = l'OSM id
-(`node/way/relation` + id numerico, univoco solo se include il tipo di elemento), `rawType` = il
-tag OSM originale (es. `historic=castle`) per audit.
+`scripts/places/__tests__/osm.test.ts` copre `osmElementToPlaceCandidate` (mapping di tutte le
+categorie del piano §9, scarto di elementi senza nome/coordinate/categoria riconosciuta) — non
+richiede rete/filesystem.
+
+## Uso
+
+```bash
+npx tsx scripts/places/osm/fetch.ts --dry-run
+```

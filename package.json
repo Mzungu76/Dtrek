@@ -60,6 +60,7 @@
     "autoprefixer": "^10.0.1",
     "eslint": "^8",
     "eslint-config-next": "14.2.3",
+    "osm-pbf-parser": "^2.3.0",
     "postcss": "^8",
     "shapefile": "^0.6.6",
     "tailwindcss": "^3.4.1",

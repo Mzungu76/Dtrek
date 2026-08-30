@@ -1,32 +1,58 @@
 # MiC (Ministero della Cultura) → dtrek_places
 
-Non ancora implementato per il dataset generale "Luoghi della cultura" (piano
-`docs/piano-mete-multitipologia.md` §8: musei, aree archeologiche, monumenti, castelli/
-fortificazioni, palazzi, chiese, abbazie).
+Implementato: `fetch.ts` in questa cartella (piano `docs/piano-mete-multitipologia.md` §8).
 
-## Cosa esiste già nel repository (da NON duplicare)
+## Fonte (verificata via WebSearch/WebFetch in questa sessione — 2026-08-30)
 
-Il repository ha già un fetcher **live** per il solo layer archeologico MiC via GNA (Geoportale
-Nazionale per l'Archeologia): `lib/pois/gnaSource.ts`, che interroga
-`https://gna.cultura.gov.it/ogc/wfs` (layer `gna:mosi_puntuali`/`mosi_lineari`/`mosi_poligonali`) —
-URL verificato, già in uso nel prodotto per popolare i POI di un percorso. Quel fetcher è pensato
-per query live per-bbox attorno a una traccia, non per popolare un catalogo persistente — riusarne
-la logica di parsing (`parseGnaFeatures`, `gnaTypologyToPoiType`) per un adapter batch verso
-`dtrek_places` è ragionevole; **non serve implementare da zero il client WFS/GNA**.
+Il dataset "Luoghi della cultura" del piano corrisponde ad **ArCo** ("Architettura della
+Conoscenza"), il knowledge graph ufficiale del MiC:
 
-## Cosa manca
+- Progetto: https://github.com/ICCD-MiBACT/ArCo — endpoint SPARQL pubblico dichiarato dalla home
+  ufficiale (https://dati.beniculturali.it/arco/index.php?lang=en): `https://dati.cultura.gov.it/sparql`
+- Classe RDF (verificata leggendo il file ontologia da GitHub, non un URL indovinato):
+  `http://dati.beniculturali.it/cis/CulturalInstituteOrSite` — proprietà
+  `hasCulturalInstituteOrSiteType` per la tipologia, `hasTimeIndexedTypedLocation` →
+  `atSite`/`atLocation` per la geolocalizzazione (pattern "time indexed location" tipico di ArCo).
+- ID reali osservati in risultati di ricerca pubblici (es.
+  `http://dati.beniculturali.it/mibact/luoghi/resource/CulturalInstituteOrSite/104060`) — usati
+  come `sourceId`.
 
-Il dataset "Luoghi della cultura" del piano è più ampio della sola componente archeologica (musei,
-monumenti, castelli, palazzi, chiese, abbazie) — non risulta coperto da GNA. Verificare al momento
-dell'implementazione se il MiC pubblica quel dataset più ampio come endpoint WFS/OGC separato o
-come dataset scaricabile (es. su dati.gov.it) — non riportare qui un URL non verificato in questa
-sessione (nessun accesso di rete disponibile in questo ambiente).
+**Non verificato**: il predicato esatto che porta il valore finale di lat/long (la classe
+`Coordinates` dell'ontologia location non ha proprietà lat/long proprie, le delega alla classe
+esterna CLV `Geometry` — il cui vocabolario non è stato ispezionabile in questa sessione: le pagine
+LodView di dati.beniculturali.it/dati.cultura.gov.it sono andate sistematicamente in timeout via
+WebFetch, e l'endpoint SPARQL stesso non è raggiungibile dalla shell di questo ambiente per lo
+stesso motivo di rete di ISTAT/PTPR — vedi sotto). La query in `fetch.ts` prova la forma più comune
+(WGS84 Geo Vocabulary `geo:lat`/`geo:long`) ma **va verificata contro l'endpoint reale prima del
+primo uso** (partire con `LIMIT 5` e ispezionare l'output).
 
-## Interfaccia attesa
+## Cosa esisteva già nel repository (riusato come riferimento, non duplicato)
 
-Un `fetch.ts` che produce `PlaceCandidate[]` con `source: 'mic'`, `sourceId` = l'identificativo
-originale del record MiC (mai inventato — piano §48.12), `metaType: 'sito'` e `subtype` uno dei
-`SiteType` di `lib/metaTypes.ts` derivato dalla tipologia MiC (vedi `GNA_TYPE_MAP` in
-`lib/pois/gnaSource.ts` come riferimento per il mapping tipologia→categoria). Rispettare la
-licenza CC BY-SA 4.0 dichiarata dal piano (§44) — non copiare testo descrittivo esteso se la
-struttura/licenza della fonte non lo consente esplicitamente (piano §8).
+`lib/pois/gnaSource.ts` — fetcher live per il solo layer archeologico MiC via GNA (WFS), non
+duplicato qui. `MIC_TYPE_MAP` in `fetch.ts` segue lo stesso approccio a sottostringa di
+`GNA_TYPE_MAP` in quel file, applicato però all'**etichetta testuale** del tipo (non a un codice),
+perché il thesaurus dei tipi ArCo non è stato verificabile in questa sessione.
+
+## Bloccante di rete
+
+Stesso di ISTAT/PTPR: il proxy di questo ambiente rifiuta la connessione a `dati.cultura.gov.it`
+(verificato con `curl -v` — policy dell'organizzazione, non un URL sbagliato). La query SPARQL in
+`fetch.ts` non è stata eseguita contro l'endpoint reale in questa sessione. 0 righe importate.
+
+## Licenza (piano §8/§44 — CC BY-SA 4.0)
+
+`fetch.ts` non richiede/usa nessun campo di descrizione testuale estesa — solo dati strutturati
+(nome, tipologia, indirizzo/comune, coordinate). `description` resta sempre `undefined` per questa
+fonte.
+
+## Test
+
+`scripts/places/__tests__/mic.test.ts` copre `micTypeLabelToSiteType` (mapping tipologia→SiteType)
+e `micBindingToPlaceCandidate` (costruzione del candidato, licenza, sourceId/sourceUrl reali) — non
+richiede rete.
+
+## Uso
+
+```bash
+npx tsx scripts/places/mic/fetch.ts --dry-run --region Lazio
+```

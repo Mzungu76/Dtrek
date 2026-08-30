@@ -1,30 +1,38 @@
 # Wikidata → arricchimento di dtrek_places (NON una fonte primaria)
 
-Non ancora implementato. Diversamente dalle altre cartelle in `scripts/places/`, questo NON è un
-importer che crea nuove righe in `dtrek_places` da zero — il piano è esplicito (§11): "Wikidata
-NON è fonte primaria dell'anagrafe... NON rendere Wikidata obbligatorio". Il suo ruolo è
-knowledge layer: arricchire una Meta già esistente (creata da ISTAT/PTPR/MiC/OSM) con
-`wikidata_id`, periodo storico, persone/eventi collegati, immagini.
+Implementato: `enrich.ts` in questa cartella (piano `docs/piano-mete-multitipologia.md` §11).
 
-## Cosa esiste già nel repository (endpoint verificato, riusabile)
+Diversamente dalle altre cartelle in `scripts/places/`, questo NON è un fetcher che produce
+`PlaceCandidate[]` — il piano è esplicito (§11): "Wikidata NON è fonte primaria dell'anagrafe...
+NON rendere Wikidata obbligatorio". `enrich.ts` legge righe `dtrek_places` già esistenti con
+`wikidata_id IS NULL`, cerca un match per nome+prossimità via SPARQL, e su match ad alta confidenza
+fa un `UPDATE dtrek_places SET wikidata_id = ...` — **mai un INSERT**.
+
+## Fonte (già verificata e in produzione in questo repository)
 
 `lib/pois/wikidataSource.ts` interroga già dal vivo l'endpoint SPARQL pubblico ufficiale
-`https://query.wikidata.org/sparql` (query POST, header `Accept: application/sparql-results+json`)
-per popolare POI attorno a una traccia — endpoint reale e verificato (già in produzione in questo
-repository, non un URL indovinato in questa sessione). La mappa `WD_TYPE` (QID → tipologia) in
-quel file è un riferimento diretto per la classificazione, anche se qui il bersaglio finale è
-`SiteType`/`PlaceCategory` (`lib/metaTypes.ts`) invece del `PoiType` interno ai Sentieri.
+`https://query.wikidata.org/sparql` — stesso endpoint riusato qui, non un URL indovinato in questa
+sessione. La query usa `wikibase:around` (centro+raggio) invece del bbox di quel file, più adatto
+ad arricchire righe puntuali già note.
 
-## Interfaccia attesa
+## Bloccante di rete
 
-Uno script batch (non un `fetch.ts` isolato come le altre fonti, perché opera SU righe già in
-`dtrek_places`, non produce `PlaceCandidate[]` indipendenti) che:
+Stesso di ISTAT/PTPR/MiC/OSM: query.wikidata.org rifiutato dal proxy di questo ambiente (policy
+dell'organizzazione, verificato con `curl -v`). Non eseguito contro l'endpoint reale in questa
+sessione — e comunque non avrebbe righe da arricchire finché le altre fonti non hanno scritto in
+`dtrek_places` (nessuna scrittura reale avvenuta in nessuna fonte in questa sessione, vedi le altre
+cartelle).
 
-1. Legge le righe `dtrek_places` con `wikidata_id IS NULL` in un'area/regione.
-2. Per ciascuna, prova un match SPARQL per nome + coordinate (raggio piccolo, es. 200m) +
-   eventualmente `municipality_istat_code` se il Comune ha un QID noto.
-3. Su match ad alta confidenza, fa un `UPDATE dtrek_places SET wikidata_id = ...` — mai un
-   `INSERT`: questo script non crea Mete.
+## Logica di matching
 
-Non implementato in questo blocco perché richiede accesso di rete non disponibile in questo
-ambiente per essere scritto e verificato con query reali, non per incertezza sull'endpoint.
+`pickBestWikidataMatch` (pura, testata in `scripts/places/__tests__/wikidata-enrich.test.ts`)
+sceglie, tra i candidati Wikidata già filtrati per raggio (200m di default) dalla query SPARQL, il
+nome con la similarità più alta sopra soglia — nessun candidato sopra soglia → nessun match, mai un
+fallback "il più vicino a prescindere dal nome" (piano §14, stesso principio del dedup multi-fonte:
+un match incerto non va fuso).
+
+## Uso
+
+```bash
+SUPABASE_URL=... SUPABASE_SERVICE_KEY=... npx tsx scripts/places/wikidata/enrich.ts --dry-run --region Lazio
+```
