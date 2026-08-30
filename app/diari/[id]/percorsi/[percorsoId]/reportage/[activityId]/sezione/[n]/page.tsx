@@ -26,11 +26,12 @@ function SezionePageInner() {
   return (
     <ReportBookPage
       basePath={basePath}
+      diarioHref={`/diari/${encodeURIComponent(diarioId)}`}
       diarioTitle={diarioTitle}
       activityId={activityId}
       pageIndex={pageIndex}
       onInvalidPageIndex={(presentCount) => {
-        router.replace(presentCount > 0 ? `${basePath}/sezione/1` : `/resoconto/${encodeURIComponent(activityId)}`)
+        router.replace(presentCount > 0 ? `${basePath}/sezione/1` : basePath)
       }}
     />
   )

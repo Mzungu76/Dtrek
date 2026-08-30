@@ -320,12 +320,18 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
         ) : (
           <div className="flex flex-col">
             {visibleReportage.map(r => {
-              // Ogni riga rimanda a /resoconto/[id] (ResocontoHub → ReportReader.tsx) — richiesta
-              // esplicita dell'utente: generazione AI, editor testuale assistito e racconto
-              // guidato a domande vivono lì, non in una pagina di riepilogo intermedia dentro il
-              // Diario (eliminata). Da lì, se il Reportage ha già contenuto, un link porta alla
-              // lettura "a libro" a pagine (.../reportage/[activityId]/sezione/1), invariata.
-              const reportagePath = `/resoconto/${encodeURIComponent(r.id)}`
+              // Ogni riga rimanda alla lettura "a libro" a pagine del Reportage — stesso
+              // trattamento già usato per la Guida (le vecchie righe Percorso rimandavano a
+              // `${percorsoPath}/guida/prima_di_partire`, non a GuidaHub): generazione AI, editor
+              // testuale assistito e racconto guidato a domande vivono nel drawer "Strumenti" di
+              // quella lettura (ReportageToolsDrawer), non in una pagina di riepilogo a sé né
+              // nella vista estesa /resoconto/[id] (resta un link secondario da lì). Un Reportage
+              // nato dopo la ristrutturazione Diario/Mete ha sempre un percorsoId; uno antecedente
+              // ai Diari (percorsoId nullo) ripiega sulla vista estesa, l'unica raggiungibile senza
+              // una Meta di riferimento per costruire il percorso della lettura a libro.
+              const reportagePath = r.percorsoId
+                ? `/diari/${encodeURIComponent(diaryId)}/percorsi/${encodeURIComponent(r.percorsoId)}/reportage/${encodeURIComponent(r.id)}/sezione/1`
+                : `/resoconto/${encodeURIComponent(r.id)}`
               const scoreLabel = r.trailScore != null ? ctsLabel(r.trailScore).label : null
               return (
                 <div

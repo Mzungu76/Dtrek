@@ -5,17 +5,27 @@
 // ("Cronaca") non hanno una chiave stabile — sono titoli liberi scritti da Giulia o dall'utente —
 // quindi qui la pagina è indirizzata da un indice numerico 1-based (vedi Fase 3,
 // `.../reportage/[activityId]/sezione/[n]/page.tsx`), non da uno slug come per Guida.
+//
+// Ristrutturazione Diario/Mete (richiesta esplicita dell'utente): il Reportage ora si allinea
+// interamente allo stile "a libro" già usato per la Guida — generazione AI inline quando manca
+// ancora contenuto (stesso principio di GuideGenerationPanel dentro GuideBookPage.tsx), editor
+// testuale assistito e rigenerazione raggiungibili dal drawer "Strumenti" (ReportageToolsDrawer,
+// stesso ruolo di PercorsoToolsDrawer.tsx), "Indice" e il giro di boa a fine libro che tornano al
+// Sommario del Diario (non più a una vista estesa).
 import { useEffect, useMemo, useState } from 'react'
 import BookPage, { type BookPageSection } from './BookPage'
 import { useReportageBookData } from '@/app/diari/[id]/percorsi/[percorsoId]/reportage/[activityId]/useReportageBookData'
 import { buildReportDisplaySections, renderReportFixedWidget, type DisplaySection } from '@/lib/resoconto/reportDisplaySections'
-import { parseSections } from '@/lib/reportStore'
+import { parseSections, sectionsToMarkdown, markdownToSections, SCAFFOLD_SECTIONS, type ReportSection, type ReportAuthoredBy } from '@/lib/reportStore'
+import { getReport, saveReportContent } from '@/lib/sync/hikeReportStore'
 import type { ReportFixedSectionKey } from '@/components/resoconto/sectionStyle'
 import { PhotoLightbox } from '@/app/resoconto/[id]/PhotoLightbox'
 import { FONT } from '@/lib/designTokens'
-import { Loader2, Pencil } from 'lucide-react'
-import Link from 'next/link'
+import { Loader2 } from 'lucide-react'
 import MagazineBody from '@/components/editorial/MagazineBody'
+import ReportGenerationPanel from './ReportGenerationPanel'
+import ReportageToolsDrawer from './ReportageToolsDrawer'
+import ManualEditor from '@/app/components/ManualEditor'
 
 const ALWAYS_PRESENT: ReportFixedSectionKey[] = ['dati_punteggi', 'andamento']
 
@@ -32,6 +42,8 @@ function isSectionPresent(s: DisplaySection, hasNatura: boolean, hasLuoghi: bool
 interface Props {
   /** Base path del Reportage nel Diario (es. `/diari/{id}/percorsi/{percorsoId}/reportage/{activityId}`). */
   basePath: string
+  /** URL del Sommario del Diario — stesso ruolo di `diarioHref` in GuideBookPage.tsx. */
+  diarioHref: string
   diarioTitle: string
   activityId: string
   /** 1-based, coerente con la route `.../sezione/[n]`. */
@@ -40,16 +52,54 @@ interface Props {
   /** `pageIndex` fuori dall'intervallo valido [1, numero di sezioni presenti] — capita quando una
    *  rigenerazione cambia il numero di capitoli dopo che un link a `pageIndex` è già stato aperto
    *  (Fase 3, docs/diario-a-libro-piano.md: "clamp/redirect esplicito"). Il chiamante (la route
-   *  `.../sezione/[n]/page.tsx`) decide cosa fare — di norma redirect a `sezione/1` o a
-   *  `/resoconto/[id]` — la scelta di routing resta lì, non qui. */
+   *  `.../sezione/[n]/page.tsx`) decide cosa fare — di norma redirect a `sezione/1` — la scelta di
+   *  routing resta lì, non qui. */
   onInvalidPageIndex?: (presentCount: number) => void
 }
 
-export default function ReportBookPage({ basePath, diarioTitle, activityId, pageIndex, onOpenMap3D, onInvalidPageIndex }: Props) {
+export default function ReportBookPage({ basePath, diarioHref, diarioTitle, activityId, pageIndex, onOpenMap3D, onInvalidPageIndex }: Props) {
   const bd = useReportageBookData(activityId)
   const [highlightedPoiId, setHighlightedPoiId] = useState<number | null>(null)
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
-  const content = bd.content
+  const [toolsOpen, setToolsOpen] = useState(false)
+  const [editorMode, setEditorMode] = useState<'view' | 'manual'>('view')
+  // useReportageBookData non espone un setter per il contenuto (Fase 1, loader magro): il testo
+  // appena generato dal pannello inline sotto arriva qui via callback, non da un refetch — stesso
+  // principio del pannello Guida (GuideGenerationPanel), ma lì il refetch di getPlannedById era
+  // comunque necessario per gli altri campi persistiti (cachedGuideNotices/Sources), qui il solo
+  // testo basta.
+  const [overrideContent, setOverrideContent] = useState<string | null>(null)
+  const content = overrideContent ?? bd.content
+
+  // Struttura a sezioni dell'editor manuale (hike_reports.sections) — non fa parte di
+  // useReportageBookData (che espone solo `content`, il markdown già appiattito): fetch separato,
+  // stesso principio di ReportReader.tsx.
+  const [reportSections, setReportSections] = useState<ReportSection[]>([])
+  const [reportAuthoredBy, setReportAuthoredBy] = useState<ReportAuthoredBy>('ai')
+  useEffect(() => {
+    getReport(activityId).then(rep => {
+      if (rep?.sections?.length) setReportSections(rep.sections)
+      if (rep?.authored_by) setReportAuthoredBy(rep.authored_by)
+    }).catch(() => {})
+  }, [activityId])
+
+  async function saveSections(sections: ReportSection[], authoredBy: ReportAuthoredBy) {
+    const newContent = sectionsToMarkdown(sections)
+    await saveReportContent(activityId, newContent, sections, authoredBy)
+    setReportSections(sections)
+    setReportAuthoredBy(authoredBy)
+    setOverrideContent(newContent)
+  }
+
+  function startManualEditor() {
+    const hasContent = !!content.trim()
+    if (reportSections.length === 0) {
+      setReportSections(hasContent ? markdownToSections(content) : SCAFFOLD_SECTIONS)
+      if (!hasContent) setReportAuthoredBy('manual')
+      else if (reportAuthoredBy === 'ai') setReportAuthoredBy('mixed')
+    }
+    setEditorMode('manual')
+  }
 
   const narrativeChapters = useMemo(() => parseSections(content), [content])
   const displaySections = useMemo(() => buildReportDisplaySections(content), [content])
@@ -90,6 +140,23 @@ export default function ReportBookPage({ basePath, diarioTitle, activityId, page
     )
   }
 
+  if (editorMode === 'manual') {
+    return (
+      <div className="max-w-[900px] mx-auto px-4 pt-6 pb-12">
+        <ManualEditor
+          activityId={activityId}
+          activity={bd.activity}
+          photos={bd.photos}
+          onPhotosChange={bd.onPhotosChange}
+          initialSections={reportSections.length > 0 ? reportSections : SCAFFOLD_SECTIONS}
+          initialAuthoredBy={reportAuthoredBy}
+          onSave={saveSections}
+          onCancel={() => setEditorMode('view')}
+        />
+      </div>
+    )
+  }
+
   const sections: BookPageSection[] = present.map((s, i) => ({
     key: s.key,
     label: s.title,
@@ -121,44 +188,51 @@ export default function ReportBookPage({ basePath, diarioTitle, activityId, page
 
   const chapterBody = current.narrativeIndex != null ? narrativeChapters[current.narrativeIndex]?.body : undefined
 
-  // "Indice" e il giro di boa a fine libro portano al Resoconto (non più a una pagina di
-  // riepilogo dentro il Diario, eliminata su richiesta dell'utente): generazione AI, editor
-  // testuale assistito e racconto guidato a domande vivono tutti lì, non in questa lettura.
-  const resocontoHref = `/resoconto/${encodeURIComponent(activityId)}`
-
   return (
-    <BookPage
-      diarioTitle={diarioTitle}
-      indexHref={resocontoHref}
-      indexLabel="Resoconto"
-      sectionLabel={current.title}
-      prevHref={idx > 0 ? `${basePath}/sezione/${idx}` : undefined}
-      nextHref={idx < present.length - 1 ? `${basePath}/sezione/${idx + 2}` : resocontoHref}
-      sections={sections}
-      currentSectionKey={current.key}
-      pageLabel={`${idx + 1} di ${present.length}`}
-    >
-      <h1 style={{ fontFamily: FONT.display, fontWeight: 600, fontSize: 22, color: '#3f3a22', margin: '0 0 14px' }}>
-        {current.title}
-      </h1>
-      {chapterBody?.trim() && (
-        <div style={{ fontFamily: FONT.lora, fontSize: 14.5, lineHeight: 1.7, color: '#4a4530', marginBottom: 16 }}>
-          <MagazineBody body={chapterBody} />
-        </div>
-      )}
-      {widget}
-      {!content.trim() && (
-        <Link
-          href={resocontoHref}
-          className="inline-flex items-center gap-1.5 mt-2 px-4 py-2 rounded-full text-white text-sm font-semibold"
-          style={{ background: '#C0603D' }}
-        >
-          <Pencil className="w-3.5 h-3.5" /> Scrivi il resoconto su Resoconto
-        </Link>
-      )}
-      {lightboxIndex != null && (
-        <PhotoLightbox photos={bd.photos} index={lightboxIndex} onNavigate={setLightboxIndex} onClose={() => setLightboxIndex(null)} />
-      )}
-    </BookPage>
+    <>
+      <ReportageToolsDrawer
+        open={toolsOpen}
+        onClose={() => setToolsOpen(false)}
+        activityId={activityId}
+        activityTitle={bd.activity.title ?? 'Escursione'}
+        hasContent={!!content.trim()}
+        photos={bd.photos}
+        onGenerated={setOverrideContent}
+        onOpenEditor={startManualEditor}
+      />
+      <BookPage
+        diarioTitle={diarioTitle}
+        indexHref={diarioHref}
+        onToolsClick={() => setToolsOpen(true)}
+        sectionLabel={current.title}
+        prevHref={idx > 0 ? `${basePath}/sezione/${idx}` : undefined}
+        nextHref={idx < present.length - 1 ? `${basePath}/sezione/${idx + 2}` : basePath}
+        sections={sections}
+        currentSectionKey={current.key}
+        pageLabel={`${idx + 1} di ${present.length}`}
+      >
+        <h1 style={{ fontFamily: FONT.display, fontWeight: 600, fontSize: 22, color: '#3f3a22', margin: '0 0 14px' }}>
+          {current.title}
+        </h1>
+        {chapterBody?.trim() && (
+          <div style={{ fontFamily: FONT.lora, fontSize: 14.5, lineHeight: 1.7, color: '#4a4530', marginBottom: 16 }}>
+            <MagazineBody body={chapterBody} />
+          </div>
+        )}
+        {widget}
+        {!content.trim() && (
+          <ReportGenerationPanel
+            activityId={activityId}
+            activityTitle={bd.activity.title ?? 'Escursione'}
+            hasContent={false}
+            photos={bd.photos}
+            onGenerated={setOverrideContent}
+          />
+        )}
+        {lightboxIndex != null && (
+          <PhotoLightbox photos={bd.photos} index={lightboxIndex} onNavigate={setLightboxIndex} onClose={() => setLightboxIndex(null)} />
+        )}
+      </BookPage>
+    </>
   )
 }
