@@ -87,6 +87,11 @@ function rowToHike(row: Record<string, unknown>, includeTracks = true): PlannedH
     sourceApp:                     row.source_app                      as PlannedHike['sourceApp'],
     isSample:                      row.is_sample                       as boolean | undefined,
     sampleRegion:                  row.sample_region                   as string | undefined,
+    // meta_type ha DEFAULT 'sentiero' a livello di colonna, ma una riga letta con META_COLS_CORE
+    // (fallback pre-migrazione) non seleziona affatto la colonna — da cui il fallback esplicito
+    // qui, per non lasciare mai metaType undefined su una riga realmente esistente.
+    metaType:                      (row.meta_type as PlannedHike['metaType']) ?? 'sentiero',
+    siteType:                      row.site_type as PlannedHike['siteType'] | undefined,
   }
 }
 
@@ -142,6 +147,8 @@ function hikeToRow(h: PlannedHike) {
     zone:                             h.zone ?? null,
     difficulty:                       h.difficulty ?? null,
     source_app:                       h.sourceApp ?? null,
+    meta_type:                        h.metaType ?? 'sentiero',
+    site_type:                        h.siteType ?? null,
   }
 }
 
@@ -167,7 +174,7 @@ const META_COLS = [
   'cached_driving_origin_lat', 'cached_driving_origin_lon',
   'pending_expires_at', 'archived_at', 'favorite', 'first_completed_at', 'diary_id', 'route_mode', 'updated_at',
   'source_url', 'comfort_verdict', 'comfort_note', 'zone', 'difficulty', 'source_app',
-  'is_sample', 'sample_region',
+  'is_sample', 'sample_region', 'meta_type', 'site_type',
 ].join(', ')
 
 // Guaranteed-to-exist columns (base schema, no ALTER TABLE additions — updated_at
@@ -333,12 +340,17 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    hike.assessment = assessHike(
-      hike.distanceMeters,
-      hike.elevationGain,
-      hike.altitudeMax,
-      activities,
-    )
+    // assessHike produce un giudizio (facile/moderata/impegnativa/estrema) su distanza/dislivello —
+    // ha senso solo per un sentiero (piano §9); per un Borgo/Città o un Sito, dove queste metriche
+    // sono spesso 0, resta undefined invece di produrre un giudizio fuorviante.
+    if ((hike.metaType ?? 'sentiero') === 'sentiero') {
+      hike.assessment = assessHike(
+        hike.distanceMeters,
+        hike.elevationGain,
+        hike.altitudeMax,
+        activities,
+      )
+    }
 
     const { error } = await supabase
       .from('planned_hikes')
