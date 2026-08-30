@@ -35,21 +35,32 @@
  *   crearne una nuova.
  *
  * ── Verifica ─────────────────────────────────────────────────────────────────────────────────
- * Come per istat/fetch.ts: WebFetch/WebSearch confermano che questi URL/pagine esistono, ma il
- * proxy di questo ambiente rifiuta la connessione diretta a dati.lazio.it/geoportale.regione.lazio.it
- * (policy dell'organizzazione, verificato con `curl -v`) — i due shapefile non sono stati
- * scaricati né ispezionati byte-per-byte. I nomi di campo assunti sotto (ID_RL, NOME, COMUNE,
- * VINCOLO, NOTE_) sono quelli già VERIFICATI nei 3 layer Tavola B gemelli già importati da
- * scripts/import-ptpr.ts (stesso ufficio regionale, stessa serie "Tavola B") — un'assunzione
- * ragionevole ma non confermata per questi 2 layer specifici, per questo la lettura è
- * deliberatamente tollerante (campo mancante → stringa vuota, mai un errore) invece che a schema
- * rigido. Verificare il "Tracciato record" (XLSX allegato a ciascun dataset) al primo uso reale.
+ * Aree borghi identitari: VERIFICATO byte-per-byte in questa sessione — l'utente ha scaricato
+ * `areeborghiidentitari.zip` su una macchina con accesso di rete normale e lo ha caricato qui.
+ * Ispezione diretta di `Aree_borghi_identitari.{shp,dbf,prj,cpg}` (47 record) ha corretto
+ * un'assunzione sbagliata: questo layer NON condivide lo schema dei 3 layer archeologici gemelli
+ * (niente NOME/COMUNE/VINCOLO). I campi reali sono OGGETTO, LOCALITA_, INDIRIZZO, DESTINAZIO
+ * (troncato da "DESTINAZIONE"), USO_ATTUAL (troncato da "USO_ATTUALE"), AMBITO, ID_RL — vedi
+ * `PtprBorgoIdentitarioRow` e `readBorghiIdentitariLayer` più sotto per il dettaglio. Il `.cpg`
+ * reale è UTF-8 (non latin1 come assunto inizialmente). Il `.prj` reale è
+ * `ED_1950_UTM_Zone_33N`, che CONFERMA l'assunzione EPSG:23033 (nessuna correzione necessaria lì).
+ * Nessun campo COMUNE: LOCALITA_ è un toponimo (es. "Maccarese", "Borgo Montello", "Borgo Grappa")
+ * non necessariamente coincidente con un Comune — per questo `municipality` resta `undefined` sul
+ * candidato, il dedup lo lega geograficamente invece che per nome-Comune.
+ *
+ * Centri storici: NON verificato — nessun file per questo layer è stato caricato in questa
+ * sessione (solo "Aree borghi identitari" e i due file ISTAT lo sono stati). I nomi di campo
+ * assunti sotto (ID_RL, NOME, COMUNE, VINCOLO) restano quelli dei 3 layer Tavola B gemelli già
+ * importati da scripts/import-ptpr.ts (stesso ufficio regionale, stessa serie "Tavola B") — una
+ * congettura ragionevole ma NON confermata per questo layer specifico, e la lettura resta per
+ * questo deliberatamente tollerante (campo mancante → stringa vuota, mai un errore). Verificare il
+ * "Tracciato record" (XLSX allegato al dataset) o il file reale al primo uso.
  *
  * Usage:
  *   npx tsx scripts/places/ptpr/extra-layers.ts [--dry-run] [--only borghi|centri|fondazione]
  *
  * File attesi in data/ptpr/ (gitignored, stesso pattern dei 3 layer archeologici già presenti):
- *   borghi_identitari.shp / .dbf / .shx
+ *   borghi_identitari.shp / .dbf / .shx   — rinominato da Aree_borghi_identitari.* al download
  *   centri_storici.shp / .dbf / .shx
  */
 import fs from 'fs'
@@ -65,15 +76,23 @@ proj4.defs('EPSG:23033', '+proj=utm +zone=33 +ellps=intl +towgs84=-87,-98,-121,0
 const ATTRIBUTION_URL = 'https://geoportale.regione.lazio.it'
 
 // ── Righe grezze (già estratte dallo shapefile, coordinate già WGS84) ───────────────────────────
+
+// Aree borghi identitari — schema VERIFICATO sul file reale caricato dall'utente in questa
+// sessione (Aree_borghi_identitari.dbf, 47 record). Niente NOME/COMUNE/VINCOLO: questo layer usa
+// un vocabolario diverso dai 3 layer archeologici gemelli.
 export interface PtprBorgoIdentitarioRow {
   idRl: string | null
-  nome: string | null
-  comune: string | null
-  vincolo: string | null
+  oggetto: string | null      // OGGETTO — nome proprio dell'insediamento, es. "Villaggio San Giorgio"
+  localita: string | null     // LOCALITA_ — toponimo, es. "Maccarese", "Borgo Montello" (non un Comune)
+  indirizzo: string | null    // INDIRIZZO
+  destinazione: string | null // DESTINAZIO (troncato da "DESTINAZIONE" — limite 10 caratteri del formato .dbf)
+  usoAttuale: string | null   // USO_ATTUAL (troncato da "USO_ATTUALE")
+  ambito: string | null       // AMBITO
   lat: number
   lon: number
 }
 
+// Centri storici — schema NON verificato, vedi nota "Verifica" in cima al file.
 export interface PtprCentroStoricoRow {
   idRl: string | null
   nome: string | null
@@ -85,14 +104,16 @@ export interface PtprCentroStoricoRow {
 
 // Pura, testabile senza rete/filesystem.
 export function borgoIdentitarioToPlaceCandidate(row: PtprBorgoIdentitarioRow): PlaceCandidate {
-  const name = row.nome?.trim() || row.comune?.trim() || 'Borgo identitario PTPR'
+  const name = row.oggetto?.trim() || row.localita?.trim() || 'Borgo identitario PTPR'
   return {
     name,
     metaType: 'borgo_citta',
     // Classificazione borgo/città (piano §6) NON assegnata qui — resta un segnale in metadata,
     // mai la fonte diretta di `subtype` (che è "classificazione Dtrek", non un'importazione 1:1).
     subtype: undefined,
-    municipality: row.comune?.trim() || undefined,
+    // Nessun campo COMUNE in questo layer (vedi nota "Verifica") — LOCALITA_ è un toponimo, non
+    // affidabile come nome di Comune, per questo non viene messo in `municipality`.
+    address: row.indirizzo?.trim() || undefined,
     latitude: row.lat,
     longitude: row.lon,
     region: 'Lazio',
@@ -103,7 +124,10 @@ export function borgoIdentitarioToPlaceCandidate(row: PtprBorgoIdentitarioRow): 
     confidence: 1,
     metadata: {
       ptprBorgoIdentitario: true,
-      vincolo: row.vincolo ?? undefined,
+      localita: row.localita ?? undefined,
+      destinazione: row.destinazione ?? undefined,
+      usoAttuale: row.usoAttuale ?? undefined,
+      ambito: row.ambito ?? undefined,
     },
   }
 }
@@ -209,12 +233,13 @@ function centroidOf(geometry: any): { lat: number; lon: number } | null {
   }
 }
 
-async function readLayer<T extends { idRl: string | null; nome: string | null; comune: string | null; vincolo: string | null; lat: number; lon: number }>(
-  shpPath: string,
-): Promise<T[]> {
+// Legge le feature grezze di uno shapefile applicando gli stessi controlli di sanità geografica
+// (piano/scripts/import-ptpr.ts) — la sola parte condivisa tra i due layer, che dopo la verifica
+// sul file reale hanno schemi di campi troppo diversi per una lettura generica unica.
+async function readRawFeatures(shpPath: string, encoding: string): Promise<{ props: Record<string, unknown>; lat: number; lon: number }[]> {
   const dbfPath = shpPath.replace(/\.shp$/i, '.dbf')
-  const rows: T[] = []
-  const source = await shapefile.open(shpPath, dbfPath, { encoding: 'latin1' })
+  const out: { props: Record<string, unknown>; lat: number; lon: number }[] = []
+  const source = await shapefile.open(shpPath, dbfPath, { encoding })
 
   while (true) {
     const { value: feature, done } = await source.read()
@@ -226,18 +251,40 @@ async function readLayer<T extends { idRl: string | null; nome: string | null; c
     // Stesso controllo di sanità di scripts/import-ptpr.ts.
     if (centroid.lat < 35 || centroid.lat > 48 || centroid.lon < 6 || centroid.lon > 19) continue
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const props: any = feature.properties ?? {}
-    rows.push({
-      idRl:    str(props['ID_RL']),
-      nome:    str(props['NOME']),
-      comune:  str(props['COMUNE']),
-      vincolo: str(props['VINCOLO']),
-      lat: centroid.lat,
-      lon: centroid.lon,
-    } as T)
+    out.push({ props: (feature.properties ?? {}) as Record<string, unknown>, lat: centroid.lat, lon: centroid.lon })
   }
-  return rows
+  return out
+}
+
+// Aree borghi identitari — campi VERIFICATI sul file reale (vedi nota "Verifica" in cima al file).
+// .cpg reale = UTF-8, non latin1 come i layer Tavola B gemelli.
+async function readBorghiIdentitariLayer(shpPath: string): Promise<PtprBorgoIdentitarioRow[]> {
+  const features = await readRawFeatures(shpPath, 'utf-8')
+  return features.map(({ props, lat, lon }) => ({
+    idRl:        str(props['ID_RL']),
+    oggetto:     str(props['OGGETTO']),
+    localita:    str(props['LOCALITA_']),
+    indirizzo:   str(props['INDIRIZZO']),
+    destinazione: str(props['DESTINAZIO']),
+    usoAttuale:  str(props['USO_ATTUAL']),
+    ambito:      str(props['AMBITO']),
+    lat,
+    lon,
+  }))
+}
+
+// Centri storici — campi NON verificati (vedi nota "Verifica" in cima al file), assunti identici
+// ai layer Tavola B archeologici gemelli già importati da scripts/import-ptpr.ts.
+async function readCentroStoriciLayer(shpPath: string): Promise<PtprCentroStoricoRow[]> {
+  const features = await readRawFeatures(shpPath, 'latin1')
+  return features.map(({ props, lat, lon }) => ({
+    idRl:    str(props['ID_RL']),
+    nome:    str(props['NOME']),
+    comune:  str(props['COMUNE']),
+    vincolo: str(props['VINCOLO']),
+    lat,
+    lon,
+  }))
 }
 
 async function main() {
@@ -251,7 +298,7 @@ async function main() {
   if (!only || only === 'borghi') {
     const p = path.join(dataDir, 'borghi_identitari.shp')
     if (fs.existsSync(p)) {
-      const rows = await readLayer<PtprBorgoIdentitarioRow>(p)
+      const rows = await readBorghiIdentitariLayer(p)
       console.log(`Borghi identitari: ${rows.length} feature lette.`)
       candidates.push(...rows.map(borgoIdentitarioToPlaceCandidate))
     } else {
@@ -262,7 +309,7 @@ async function main() {
   if (!only || only === 'centri') {
     const p = path.join(dataDir, 'centri_storici.shp')
     if (fs.existsSync(p)) {
-      const rows = await readLayer<PtprCentroStoricoRow>(p)
+      const rows = await readCentroStoriciLayer(p)
       console.log(`Centri storici: ${rows.length} feature lette.`)
       candidates.push(...rows.map(centroStoricoToPlaceCandidate))
     } else {

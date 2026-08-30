@@ -7,8 +7,13 @@ import {
 } from '../ptpr/extra-layers'
 import type { PtprBorgoIdentitarioRow, PtprCentroStoricoRow } from '../ptpr/extra-layers'
 
-const CALCATA: PtprBorgoIdentitarioRow = {
-  idRl: '1234', nome: 'Calcata', comune: 'Calcata', vincolo: 'D.M. 1968', lat: 42.2278, lon: 12.3392,
+// Fixture basata sui campi reali (verificati sul file caricato dall'utente in questa sessione:
+// Aree_borghi_identitari.dbf — OGGETTO, LOCALITA_, INDIRIZZO, DESTINAZIO, USO_ATTUAL, AMBITO,
+// ID_RL — non NOME/COMUNE/VINCOLO come nei layer archeologici gemelli).
+const BORGO_MONTELLO: PtprBorgoIdentitarioRow = {
+  idRl: '1234', oggetto: 'Borgo Montello', localita: 'Borgo Montello',
+  indirizzo: 'Via Borgo Montello', destinazione: 'Rurale', usoAttuale: 'Residenziale',
+  ambito: 'Agro Pontino', lat: 41.5321, lon: 12.9587,
 }
 
 const VITERBO_CENTRO: PtprCentroStoricoRow = {
@@ -17,26 +22,30 @@ const VITERBO_CENTRO: PtprCentroStoricoRow = {
 
 describe('borgoIdentitarioToPlaceCandidate', () => {
   it('produce un candidato borgo_citta con subtype indefinito (piano §6 — mai dedotto da una fonte)', () => {
-    const c = borgoIdentitarioToPlaceCandidate(CALCATA)
+    const c = borgoIdentitarioToPlaceCandidate(BORGO_MONTELLO)
     expect(c.metaType).toBe('borgo_citta')
     expect(c.subtype).toBeUndefined()
-    expect(c.name).toBe('Calcata')
+    expect(c.name).toBe('Borgo Montello')
   })
 
-  it('porta il segnale ptprBorgoIdentitario in metadata (piano §6, mai come subtype diretto)', () => {
-    const c = borgoIdentitarioToPlaceCandidate(CALCATA)
+  it('porta i segnali OGGETTO/LOCALITA_/USO_ATTUAL/AMBITO in metadata (piano §6, mai come subtype diretto)', () => {
+    const c = borgoIdentitarioToPlaceCandidate(BORGO_MONTELLO)
     expect(c.metadata?.ptprBorgoIdentitario).toBe(true)
+    expect(c.metadata?.localita).toBe('Borgo Montello')
+    expect(c.metadata?.usoAttuale).toBe('Residenziale')
+    expect(c.metadata?.ambito).toBe('Agro Pontino')
   })
 
   it('source/sourceId ricostruibili (piano §48.12)', () => {
-    const c = borgoIdentitarioToPlaceCandidate(CALCATA)
+    const c = borgoIdentitarioToPlaceCandidate(BORGO_MONTELLO)
     expect(c.source).toBe('ptpr_lazio')
     expect(c.sourceId).toBe('borgo_identitario:1234')
   })
 
-  it('ricade sul nome del Comune quando NOME manca', () => {
-    const c = borgoIdentitarioToPlaceCandidate({ ...CALCATA, nome: null })
-    expect(c.name).toBe('Calcata') // torna al COMUNE
+  it('ricade su LOCALITA_ quando OGGETTO manca (nessun campo COMUNE in questo layer)', () => {
+    const c = borgoIdentitarioToPlaceCandidate({ ...BORGO_MONTELLO, oggetto: null })
+    expect(c.name).toBe('Borgo Montello') // torna a LOCALITA_
+    expect(c.municipality).toBeUndefined()
   })
 })
 
