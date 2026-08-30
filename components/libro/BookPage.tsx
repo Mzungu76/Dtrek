@@ -48,6 +48,7 @@ import { ChevronLeft, ChevronRight, BookMarked, Wrench } from 'lucide-react'
 import { FONT, TERRA } from '@/lib/designTokens'
 import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, TaccuinoPaperTexture, TaccuinoSpineShadow } from '@/lib/taccuinoTokens'
 import BookSpineShadow from './BookSpineShadow'
+import Navbar, { MOBILE_BOTTOMBAR_SPACER } from '@/components/Navbar'
 
 const THEMES = {
   pergamena: {
@@ -105,12 +106,20 @@ interface BookPageProps {
   /** Palette del guscio — "pergamena" (default, invariata) o "taccuino" (Fase 20). Il markup e il
    *  comportamento restano identici, cambiano solo i toni. */
   theme?: keyof typeof THEMES
+  /** Barra di navigazione in fondo alla pagina — "pageTurn" (default, invariato: Indietro/Indice/
+   *  Strumenti/Avanti per sfogliare le pagine sorelle di questo libro) o "global" (il menù
+   *  dell'app, Diario/Mete/Nuovo — per una pagina indice come il Sommario del Diario, dove
+   *  Indietro/Avanti sono comunque sempre disattivati: non esiste una pagina "sorella" prima o
+   *  dopo, quella barra morta non serviva a nulla). Con "global" `indexHref`/`indexLabel`/
+   *  `onToolsClick`/`prevHref`/`nextHref` non hanno alcun effetto — restano ignorati, non serve
+   *  toglierli dalla chiamata. */
+  bottomBar?: 'pageTurn' | 'global'
   children: ReactNode
 }
 
 export default function BookPage({
   diarioTitle, indexHref, indexLabel = 'Indice', onToolsClick, sectionLabel, prevHref, nextHref,
-  sections, currentSectionKey, pageLabel, theme = 'pergamena', children,
+  sections, currentSectionKey, pageLabel, theme = 'pergamena', bottomBar = 'pageTurn', children,
 }: BookPageProps) {
   const t = THEMES[theme]
   const navButtonStyle = {
@@ -118,7 +127,7 @@ export default function BookPage({
     letterSpacing: '0.04em', fontSize: 9.5, color: t.inkMuted,
   }
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: t.paperBg }}>
+    <div className={`min-h-screen flex flex-col ${bottomBar === 'global' ? MOBILE_BOTTOMBAR_SPACER : ''}`} style={{ background: t.paperBg }}>
       {theme === 'taccuino' ? (
         <>
           <TaccuinoPaperTexture />
@@ -173,53 +182,59 @@ export default function BookPage({
         {children}
       </div>
 
-      <div style={{ height: BOTTOM_BAR_SPACER }} />
+      {bottomBar === 'global' ? (
+        <Navbar />
+      ) : (
+        <>
+          <div style={{ height: BOTTOM_BAR_SPACER }} />
 
-      <div
-        className="fixed inset-x-0 bottom-0 z-10 flex items-stretch justify-around"
-        style={{
-          background: t.pillBg, borderTop: `1px solid ${t.hairline}`, paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-          // Fase 31 — solo il taccuino: "una fascia di carta sovrapposta alla pagina", un'ombra
-          // morbida verso l'alto invece del confine piatto di prima (la pergamena resta invariata).
-          boxShadow: theme === 'taccuino' ? '0 -3px 10px rgba(41,35,30,0.06)' : undefined,
-        }}
-      >
-        {prevHref ? (
-          <Link href={prevHref} className="flex flex-col items-center justify-center gap-1 px-5 py-2.5" style={navButtonStyle}>
-            <ChevronLeft className="w-[18px] h-[18px]" />
-            Indietro
-          </Link>
-        ) : (
-          <span className="flex flex-col items-center justify-center gap-1 px-5 py-2.5 opacity-30" style={navButtonStyle}>
-            <ChevronLeft className="w-[18px] h-[18px]" />
-            Indietro
-          </span>
-        )}
+          <div
+            className="fixed inset-x-0 bottom-0 z-10 flex items-stretch justify-around"
+            style={{
+              background: t.pillBg, borderTop: `1px solid ${t.hairline}`, paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+              // Fase 31 — solo il taccuino: "una fascia di carta sovrapposta alla pagina", un'ombra
+              // morbida verso l'alto invece del confine piatto di prima (la pergamena resta invariata).
+              boxShadow: theme === 'taccuino' ? '0 -3px 10px rgba(41,35,30,0.06)' : undefined,
+            }}
+          >
+            {prevHref ? (
+              <Link href={prevHref} className="flex flex-col items-center justify-center gap-1 px-5 py-2.5" style={navButtonStyle}>
+                <ChevronLeft className="w-[18px] h-[18px]" />
+                Indietro
+              </Link>
+            ) : (
+              <span className="flex flex-col items-center justify-center gap-1 px-5 py-2.5 opacity-30" style={navButtonStyle}>
+                <ChevronLeft className="w-[18px] h-[18px]" />
+                Indietro
+              </span>
+            )}
 
-        <Link href={indexHref} className="flex flex-col items-center justify-center gap-1 px-5 py-2.5" style={navButtonStyle}>
-          <BookMarked className="w-[18px] h-[18px]" />
-          {indexLabel}
-        </Link>
+            <Link href={indexHref} className="flex flex-col items-center justify-center gap-1 px-5 py-2.5" style={navButtonStyle}>
+              <BookMarked className="w-[18px] h-[18px]" />
+              {indexLabel}
+            </Link>
 
-        {onToolsClick && (
-          <button type="button" onClick={onToolsClick} className="flex flex-col items-center justify-center gap-1 px-5 py-2.5" style={{ ...navButtonStyle, color: t.accent }}>
-            <Wrench className="w-[18px] h-[18px]" />
-            Strumenti
-          </button>
-        )}
+            {onToolsClick && (
+              <button type="button" onClick={onToolsClick} className="flex flex-col items-center justify-center gap-1 px-5 py-2.5" style={{ ...navButtonStyle, color: t.accent }}>
+                <Wrench className="w-[18px] h-[18px]" />
+                Strumenti
+              </button>
+            )}
 
-        {nextHref ? (
-          <Link href={nextHref} className="flex flex-col items-center justify-center gap-1 px-5 py-2.5" style={navButtonStyle}>
-            <ChevronRight className="w-[18px] h-[18px]" />
-            Avanti
-          </Link>
-        ) : (
-          <span className="flex flex-col items-center justify-center gap-1 px-5 py-2.5 opacity-30" style={navButtonStyle}>
-            <ChevronRight className="w-[18px] h-[18px]" />
-            Avanti
-          </span>
-        )}
-      </div>
+            {nextHref ? (
+              <Link href={nextHref} className="flex flex-col items-center justify-center gap-1 px-5 py-2.5" style={navButtonStyle}>
+                <ChevronRight className="w-[18px] h-[18px]" />
+                Avanti
+              </Link>
+            ) : (
+              <span className="flex flex-col items-center justify-center gap-1 px-5 py-2.5 opacity-30" style={navButtonStyle}>
+                <ChevronRight className="w-[18px] h-[18px]" />
+                Avanti
+              </span>
+            )}
+          </div>
+        </>
+      )}
     </div>
   )
 }

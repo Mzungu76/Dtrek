@@ -9,12 +9,19 @@ export interface AllPercorsiRow {
   title: string
   distanceMeters: number
   elevationGain: number
+  altitudeMax: number
+  estimatedTimeSeconds: number
   routePolyline?: [number, number][]
+  createdAt: string
   firstCompletedAt: string | null
   diaryId: string | null
   diaryTitle: string | null
   reportageCount: number
   pubblicabile: boolean
+  /** planned_hikes.cached_ts_total — già cachato, nessun ricalcolo qui (stessa convenzione di
+   *  sola lettura di app/api/diaries/[id]/route.ts). */
+  trailScore: number | null
+  favorite: boolean
 }
 
 // GET /api/percorsi → "Tutti i Percorsi" — Fase 5 di docs/diario-fulcro-piano.md. Vista trasversale
@@ -28,7 +35,7 @@ export async function GET(req: NextRequest) {
 
     const { data: planned, error: plannedErr } = await supabase
       .from('planned_hikes')
-      .select('id, title, distance_meters, elevation_gain, route_polyline, first_completed_at, diary_id, archived_at')
+      .select('id, title, distance_meters, elevation_gain, altitude_max, estimated_time_seconds, route_polyline, created_at, first_completed_at, diary_id, archived_at, cached_ts_total, favorite')
       .eq('user_id', user.id)
       .is('archived_at', null)
       .order('created_at', { ascending: false })
@@ -58,16 +65,21 @@ export async function GET(req: NextRequest) {
       const reportageCount = reportageCounts.get(p.id as string) ?? 0
       const diaryId = (p.diary_id as string) ?? null
       return {
-        id:                p.id as string,
-        title:             p.title as string,
-        distanceMeters:    p.distance_meters as number,
-        elevationGain:     p.elevation_gain as number,
-        routePolyline:     p.route_polyline as [number, number][] | undefined,
-        firstCompletedAt:  p.first_completed_at as string | null,
+        id:                    p.id as string,
+        title:                 p.title as string,
+        distanceMeters:        p.distance_meters as number,
+        elevationGain:         p.elevation_gain as number,
+        altitudeMax:           p.altitude_max as number,
+        estimatedTimeSeconds:  p.estimated_time_seconds as number,
+        routePolyline:         p.route_polyline as [number, number][] | undefined,
+        createdAt:             p.created_at as string,
+        firstCompletedAt:      p.first_completed_at as string | null,
         diaryId,
-        diaryTitle:        diaryId ? (diaryTitleById.get(diaryId) ?? null) : null,
+        diaryTitle:            diaryId ? (diaryTitleById.get(diaryId) ?? null) : null,
         reportageCount,
-        pubblicabile:      reportageCount > 0,
+        pubblicabile:          reportageCount > 0,
+        trailScore:            (p.cached_ts_total as number | null) ?? null,
+        favorite:              (p.favorite as boolean | null) ?? false,
       }
     })
 

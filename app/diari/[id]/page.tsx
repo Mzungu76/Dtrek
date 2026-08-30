@@ -187,14 +187,18 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
     <>
       <BookPage
         // Il titolo in testata non è più cliccabile da nessuna pagina del libro (Fase 17): mostra
-        // di nuovo il nome di QUESTO Diario (non più la label statica "I miei Diari") — "torna
-        // allo scaffale" vive ora nel bottone "Diari" della barra inferiore (Fase 18: naviga
-        // direttamente allo scaffale ridisegnato, niente più drawer laterale).
+        // di nuovo il nome di QUESTO Diario (non più la label statica "I miei Diari").
         diarioTitle={detail.title}
         indexHref="/diari"
         indexLabel="Diari"
         sectionLabel="Indice"
         theme="taccuino"
+        // Richiesta esplicita dell'utente: il Sommario è una pagina indice, non una pagina "a
+        // libro" da sfogliare — Indietro/Avanti erano comunque sempre disattivati (nessuna pagina
+        // sorella prima/dopo), una barra morta. Il menù in fondo è quindi quello globale dell'app
+        // (Diario/Mete/Nuovo), non la barra voltapagina — che resta invariata nelle pagine di
+        // lettura vera (sezioni di Guida e Reportage, dove si sfoglia davvero).
+        bottomBar="global"
       >
         <div className="flex items-start gap-3 mb-3">
           {/* Riproduzione in piccolo dell'effettiva copertina del Diario (foto/gradiente + testi),
