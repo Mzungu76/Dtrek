@@ -320,14 +320,12 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
         ) : (
           <div className="flex flex-col">
             {visibleReportage.map(r => {
-              // Un Reportage nato dopo la ristrutturazione Diario/Mete ha sempre una Meta
-              // collegata (percorsoId): la riga rimanda al riepilogo "a libro" già esistente
-              // (docs/diario-a-libro-piano.md), dove vive anche il pannello di generazione AI. Un
-              // Reportage antecedente ai Diari (percorsoId nullo) ripiega sulla vista estesa
-              // standalone, l'unica raggiungibile senza una Meta di riferimento.
-              const reportagePath = r.percorsoId
-                ? `/diari/${encodeURIComponent(diaryId)}/percorsi/${encodeURIComponent(r.percorsoId)}/reportage/${encodeURIComponent(r.id)}`
-                : `/resoconto/${encodeURIComponent(r.id)}`
+              // Ogni riga rimanda a /resoconto/[id] (ResocontoHub → ReportReader.tsx) — richiesta
+              // esplicita dell'utente: generazione AI, editor testuale assistito e racconto
+              // guidato a domande vivono lì, non in una pagina di riepilogo intermedia dentro il
+              // Diario (eliminata). Da lì, se il Reportage ha già contenuto, un link porta alla
+              // lettura "a libro" a pagine (.../reportage/[activityId]/sezione/1), invariata.
+              const reportagePath = `/resoconto/${encodeURIComponent(r.id)}`
               const scoreLabel = r.trailScore != null ? ctsLabel(r.trailScore).label : null
               return (
                 <div

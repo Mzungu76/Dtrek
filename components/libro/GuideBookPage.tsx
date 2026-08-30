@@ -300,7 +300,6 @@ export default function GuideBookPage({ basePath, diarioHref, diarioTitle, perco
       <PercorsoToolsDrawer
         open={toolsOpen}
         onClose={() => setToolsOpen(false)}
-        basePath={basePath}
         percorsoId={percorsoId}
         hike={bd.hike}
         hasAiAccess={bd.hasAiAccess}
