@@ -25,16 +25,16 @@
  *     https://www.istat.it/classificazione/codici-dei-comuni-delle-province-e-delle-regioni/ →
  *     permalink dichiarato stabile https://www.istat.it/storage/codici-unita-amministrative/Elenco-comuni-italiani.xlsx
  *
- * Verifica: WebFetch/WebSearch in questa sessione confermano che questi URL/pagine esistono e
- * descrivono questa struttura, ma il download effettivo degli shapefile/xlsx non è stato
- * possibile — il proxy di rete di questo ambiente rifiuta esplicitamente la connessione a
- * istat.it per policy dell'organizzazione (stesso blocco già incontrato dalla sessione precedente
- * per motivi diversi, verificato qui con `curl -v` → "CONNECT tunnel failed, response 403",
- * dettaglio "gateway answered 403 to CONNECT (policy denial)"). Questo script è quindi scritto e
- * testato contro fixture realistiche (vedi `__tests__/istat.test.ts`) coerenti con i nomi di campo
- * sopra, ma NON eseguito contro i file reali in questa sessione. Un utente con accesso di rete
- * (locale, o un ambiente con policy diversa) deve scaricare i due file sopra in data/istat/ prima
- * di eseguire questo script — vedi data/istat/README.md.
+ * Verifica: il proxy di rete di questo ambiente rifiuta la connessione diretta a istat.it (policy
+ * dell'organizzazione) — i due file sono stati scaricati dall'utente su una macchina con accesso
+ * di rete normale e caricati in questa sessione, poi ispezionati riga per riga con lo shapefile
+ * reale (`Com01012025_g_WGS84.shp`, edizione 2025) e l'xlsx reale (`Elenco-comuni-italiani.xlsx`,
+ * "CODICI al 21_02_2026"). Tutti i nomi di campo sopra sono confermati byte-per-byte, incluso un
+ * dettaglio che una prima stesura (basata solo su un PDF di metadati, non sul file) aveva sbagliato:
+ * la colonna Provincia nell'xlsx si chiama "Denominazione dell'Unità territoriale sovracomunale",
+ * non una "Denominazione" generica — vedi il commento su `idxProvincia` in `readCodesRows` più
+ * sotto per il dettaglio del bug e della correzione. 7896 Comuni letti dallo shapefile 2025 (378 in
+ * Lazio, COD_REG 12), join sulla tabella di codifica verificato su Agliè e Viterbo.
  *
  * Usage:
  *   npx tsx scripts/places/istat/fetch.ts [--dry-run] [--region "Lazio"]
@@ -177,7 +177,11 @@ async function readGeometryRows(shpPath: string): Promise<IstatComuneGeoRow[]> {
     const centroid = centroidOf(feature.geometry)
     if (!centroid || Number.isNaN(centroid.lat) || Number.isNaN(centroid.lon)) continue
 
-    const proCom = props['PRO_COM'] != null ? String(props['PRO_COM']) : null
+    // PRO_COM_T (alfanumerico, zero-padded — es. "056059"), non PRO_COM (numerico, "56059"): è
+    // la forma convenzionale del codice ISTAT di un Comune, ed è quella che combacia col codice
+    // "alfanumerico" della tabella di codifica (vedi readCodesRows) senza dover normalizzare gli
+    // zeri iniziali su un lato o sull'altro. Verificato con lo shapefile reale in questa sessione.
+    const proCom = props['PRO_COM_T'] != null ? String(props['PRO_COM_T']).trim() : null
     const comune = props['COMUNE'] != null ? String(props['COMUNE']).trim() : ''
     if (!proCom || !comune) continue
 
@@ -221,21 +225,35 @@ function readCodesRows(xlsxPath: string): Map<string, IstatCodesRow> {
   const header = (rows[headerIdx] ?? []).map(c => (c ?? '').toString())
 
   const idxRegione   = findColumnIndex(header, ['denominazione', 'regione'])
-  const idxProvincia = findColumnIndex(header, ['denominazione'], ['regione', 'comune', 'lingua', 'unità', 'unita'])
-  const idxComuneNum = findColumnIndex(header, ['comune', 'numeric'])
-  const idxComuneAlt = findColumnIndex(header, ['comune', 'alfanumeric'])
+  // "Provincia" nell'edizione corrente del file ISTAT (verificata con un file reale in questa
+  // sessione) è chiamata "Unità territoriale sovracomunale" — includere 'unit' (sottostringa di
+  // "unità") invece di escluderlo, come faceva una versione precedente di questo file basata solo
+  // sullo schema atteso (non verificato) e che per questo prendeva la colonna sbagliata
+  // ("Denominazione (Italiana e straniera)", il nome bilingue del Comune, non la Provincia).
+  const idxProvincia = findColumnIndex(header, ['denominazione', 'unit'])
+  // Chiave di join con lo shapefile: il codice ALFANUMERICO (zero-padded, es. "001001"), non il
+  // "formato numerico" (es. "1001", senza zero iniziali) — corrisponde esattamente a PRO_COM_T
+  // nello shapefile (verificato con un file reale: entrambi "001001" per Agliè), invece di
+  // PRO_COM (numerico, "1001") che andrebbe convertito a stringa senza gli zeri iniziali per
+  // combaciare. Nota anche che la sottostringa "numeric" combacia sia con "numerico" sia con
+  // "alfanumerico" — undefined comportamento se cercata da sola, per questo qui si cerca
+  // direttamente e solo 'alfanumeric'.
+  const idxComuneCode = findColumnIndex(header, ['comune', 'alfanumeric'])
   const idxComuneNome = findColumnIndex(header, ['denominazione', 'italiano'], ['altra lingua', 'regione'])
 
   for (let i = headerIdx + 1; i < rows.length; i++) {
     const row = rows[i]
     if (!row || row.length === 0) continue
-    const proComRaw = idxComuneNum >= 0 ? row[idxComuneNum] : undefined
+    const proComRaw = idxComuneCode >= 0 ? row[idxComuneCode] : undefined
     const proCom = proComRaw != null ? String(proComRaw).trim() : ''
     if (!proCom || !/^\d+$/.test(proCom)) continue
 
     map.set(proCom, {
       proCom,
-      comune:    (idxComuneNome >= 0 ? row[idxComuneNome] : row[idxComuneAlt])?.toString().trim() ?? '',
+      // Nessun fallback su idxComuneCode qui (sarebbe un codice, non un nome) — se la colonna
+      // nome non è stata trovata, meglio una stringa vuota (gestita a valle da
+      // istatRowToPlaceCandidate, che ricade sul nome dello shapefile) che un valore fuorviante.
+      comune:    idxComuneNome >= 0 ? row[idxComuneNome]?.toString().trim() ?? '' : '',
       provincia: idxProvincia >= 0 ? row[idxProvincia]?.toString().trim() : undefined,
       regione:   idxRegione >= 0 ? row[idxRegione]?.toString().trim() : undefined,
     })
