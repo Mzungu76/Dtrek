@@ -18,8 +18,10 @@ import { ArrowDown, ArrowLeft, ArrowUp, Clock, Loader2, Mountain, Route, Search,
  * si raggiunge dal suo Diario (app/diari/[id]/page.tsx, che ora elenca i Reportage). Vista
  * trasversale su tutte le Mete dell'utente, indipendente da un Diario specifico: una Meta non
  * appartiene a nessun Diario finché non viene camminata (il Diario di destinazione si sceglie solo
- * alla creazione del Reportage, vedi components/upload/ActivityUploader.tsx) — ogni card rimanda
- * quindi a /guida/[id] (lettura diary-agnostic, invariata), non a una rotta annidata in un Diario.
+ * alla creazione del Reportage, vedi components/upload/ActivityUploader.tsx) — ogni riga rimanda
+ * quindi alla stessa lettura "a libro" già usata per un Percorso dentro un Diario, ma nella sua
+ * variante diary-agnostic (app/guida/[id]/[groupKey]/page.tsx — GuidaHub, /guida/[id], resta solo
+ * la "vista estesa" raggiungibile da lì, non più la destinazione diretta del click).
  *
  * L'elenco (ricerca, ordinamento, righe) allineato allo stesso layout "taccuino" del Sommario del
  * Diario (app/diari/[id]/page.tsx) — richiesta esplicita dell'utente: stessa riga a "ritaglio
@@ -191,7 +193,7 @@ export default function MetePage() {
                   return (
                     <Link
                       key={p.id}
-                      href={`/guida/${encodeURIComponent(p.id)}`}
+                      href={`/guida/${encodeURIComponent(p.id)}/prima_di_partire`}
                       className="flex items-center gap-3.5 py-3.5 px-2 -mx-2"
                       style={{ borderBottom: `1px dashed ${TACCUINO_PAPER.cardBorder}80` }}
                     >
