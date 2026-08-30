@@ -13,8 +13,8 @@ import { parseSections } from '@/lib/reportStore'
 import type { ReportFixedSectionKey } from '@/components/resoconto/sectionStyle'
 import { PhotoLightbox } from '@/app/resoconto/[id]/PhotoLightbox'
 import { FONT } from '@/lib/designTokens'
-import { Loader2 } from 'lucide-react'
-import ReportGenerationPanel from './ReportGenerationPanel'
+import { Loader2, Pencil } from 'lucide-react'
+import Link from 'next/link'
 import MagazineBody from '@/components/editorial/MagazineBody'
 
 const ALWAYS_PRESENT: ReportFixedSectionKey[] = ['dati_punteggi', 'andamento']
@@ -40,9 +40,8 @@ interface Props {
   /** `pageIndex` fuori dall'intervallo valido [1, numero di sezioni presenti] — capita quando una
    *  rigenerazione cambia il numero di capitoli dopo che un link a `pageIndex` è già stato aperto
    *  (Fase 3, docs/diario-a-libro-piano.md: "clamp/redirect esplicito"). Il chiamante (la route
-   *  `.../sezione/[n]/page.tsx`) decide cosa fare — di norma redirect a `sezione/1` o alla pagina
-   *  di riepilogo — invece che questo componente lo faccia da solo, perché non conosce l'URL della
-   *  pagina di riepilogo (basePath qui è quello del Reportage, non del suo indice). */
+   *  `.../sezione/[n]/page.tsx`) decide cosa fare — di norma redirect a `sezione/1` o a
+   *  `/resoconto/[id]` — la scelta di routing resta lì, non qui. */
   onInvalidPageIndex?: (presentCount: number) => void
 }
 
@@ -50,13 +49,7 @@ export default function ReportBookPage({ basePath, diarioTitle, activityId, page
   const bd = useReportageBookData(activityId)
   const [highlightedPoiId, setHighlightedPoiId] = useState<number | null>(null)
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
-  // useReportageBookData non espone un setter per il contenuto (Fase 1, loader magro): il testo
-  // appena generato dal pannello inline sotto arriva qui via callback, non da un refetch — stesso
-  // principio del pannello Guida (GuideGenerationPanel), ma lì il refetch di getPlannedById era
-  // comunque necessario per gli altri campi persistiti (cachedGuideNotices/Sources), qui il solo
-  // testo basta.
-  const [overrideContent, setOverrideContent] = useState<string | null>(null)
-  const content = overrideContent ?? bd.content
+  const content = bd.content
 
   const narrativeChapters = useMemo(() => parseSections(content), [content])
   const displaySections = useMemo(() => buildReportDisplaySections(content), [content])
@@ -128,13 +121,19 @@ export default function ReportBookPage({ basePath, diarioTitle, activityId, page
 
   const chapterBody = current.narrativeIndex != null ? narrativeChapters[current.narrativeIndex]?.body : undefined
 
+  // "Indice" e il giro di boa a fine libro portano al Resoconto (non più a una pagina di
+  // riepilogo dentro il Diario, eliminata su richiesta dell'utente): generazione AI, editor
+  // testuale assistito e racconto guidato a domande vivono tutti lì, non in questa lettura.
+  const resocontoHref = `/resoconto/${encodeURIComponent(activityId)}`
+
   return (
     <BookPage
       diarioTitle={diarioTitle}
-      indexHref={basePath}
+      indexHref={resocontoHref}
+      indexLabel="Resoconto"
       sectionLabel={current.title}
       prevHref={idx > 0 ? `${basePath}/sezione/${idx}` : undefined}
-      nextHref={idx < present.length - 1 ? `${basePath}/sezione/${idx + 2}` : basePath}
+      nextHref={idx < present.length - 1 ? `${basePath}/sezione/${idx + 2}` : resocontoHref}
       sections={sections}
       currentSectionKey={current.key}
       pageLabel={`${idx + 1} di ${present.length}`}
@@ -149,13 +148,13 @@ export default function ReportBookPage({ basePath, diarioTitle, activityId, page
       )}
       {widget}
       {!content.trim() && (
-        <ReportGenerationPanel
-          activityId={activityId}
-          activityTitle={bd.activity.title ?? 'Escursione'}
-          hasContent={false}
-          photos={bd.photos}
-          onGenerated={setOverrideContent}
-        />
+        <Link
+          href={resocontoHref}
+          className="inline-flex items-center gap-1.5 mt-2 px-4 py-2 rounded-full text-white text-sm font-semibold"
+          style={{ background: '#C0603D' }}
+        >
+          <Pencil className="w-3.5 h-3.5" /> Scrivi il resoconto su Resoconto
+        </Link>
       )}
       {lightboxIndex != null && (
         <PhotoLightbox photos={bd.photos} index={lightboxIndex} onNavigate={setLightboxIndex} onClose={() => setLightboxIndex(null)} />

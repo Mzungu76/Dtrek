@@ -30,7 +30,7 @@ function SezionePageInner() {
       activityId={activityId}
       pageIndex={pageIndex}
       onInvalidPageIndex={(presentCount) => {
-        router.replace(presentCount > 0 ? `${basePath}/sezione/1` : basePath)
+        router.replace(presentCount > 0 ? `${basePath}/sezione/1` : `/resoconto/${encodeURIComponent(activityId)}`)
       }}
     />
   )

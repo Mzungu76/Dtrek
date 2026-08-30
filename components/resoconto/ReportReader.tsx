@@ -21,6 +21,7 @@ import { getReport, saveReportContent, cacheReport } from '@/lib/sync/hikeReport
 import { useCtsUpdated } from '@/lib/sync/useCtsUpdated'
 import { streamFetchText, StreamFetchError } from '@/lib/streamFetchText'
 import { getQuestionnaire } from '@/lib/questionnaireStore'
+import { getPlannedById } from '@/lib/plannedStore'
 import { extractLeadSubtitle } from '@/lib/extractLeadSubtitle'
 import { withForcedDownload } from '@/lib/storageDownloadUrl'
 // Estratta in lib/photoBuckets.ts quando è servita anche alla pagina pubblica del Diario:
@@ -158,6 +159,23 @@ export default function ReportReader({
   const [questionnaireStatus, setQuestionnaireStatus] = useState<'none' | 'in_progress' | 'completed' | 'skipped'>('none')
   const [questionnaireCounts, setQuestionnaireCounts] = useState({ answered: 0, total: 0 })
   const [writingStyleReady, setWritingStyleReady] = useState(false)
+  // Rotta della lettura "a libro" a pagine (.../reportage/[id]/sezione/1) — esiste solo se questa
+  // attività è collegata a una Meta che appartiene già a un Diario (ristrutturazione Diario/Mete:
+  // succede sempre per un Reportage nato dopo, dato che ActivityUploader.tsx scrive diaryId sulla
+  // Meta proprio alla creazione del Reportage). Un Reportage antecedente ai Diari, o non collegato
+  // a nessuna Meta, non ha una lettura "a libro" da offrire: resta solo questa vista.
+  const [bookHref, setBookHref] = useState<string | null>(null)
+  useEffect(() => {
+    setBookHref(null)
+    const percorsoId = activity.linkedPlannedId
+    if (!percorsoId) return
+    let cancelled = false
+    getPlannedById(percorsoId).then(hike => {
+      if (cancelled || !hike?.diaryId) return
+      setBookHref(`/diari/${encodeURIComponent(hike.diaryId)}/percorsi/${encodeURIComponent(percorsoId)}/reportage/${encodeURIComponent(id)}/sezione/1`)
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [activity.linkedPlannedId, id])
   const [editorMode,       setEditorMode]       = useState<'view' | 'manual'>('view')
   const [showAiPanel,      setShowAiPanel]      = useState(true)
   const [reportSections,   setReportSections]   = useState<ReportSection[]>([])
@@ -687,20 +705,29 @@ export default function ReportReader({
                   </div>
                 )}
 
-                {/* ── Passa all'editor strutturato ─────────────────────────── */}
+                {/* ── Passa all'editor strutturato / apri lettura a libro ──── */}
                 {hasContent && (
-                  <div className="flex items-center justify-between mb-3 mt-2 print:hidden">
+                  <div className="flex items-center justify-between mb-3 mt-2 print:hidden flex-wrap gap-2">
                     <div className="flex items-center gap-2">
                       {report?.updated_at && <span className="text-xs italic text-stone-400">Salvato {new Date(report.updated_at).toLocaleString('it-IT')}</span>}
                     </div>
-                    <button
-                      onClick={() => {
-                        if (reportSections.length === 0) { setReportSections(markdownToSections(content)); setReportAuthoredBy(reportAuthoredBy === 'ai' ? 'mixed' : reportAuthoredBy) }
-                        setEditorMode('manual')
-                      }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-forest-200 text-xs font-display font-bold uppercase tracking-wide text-forest-700 hover:bg-forest-50 transition-colors">
-                      <Pencil className="w-3.5 h-3.5" /> Modifica
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {bookHref && (
+                        <button
+                          onClick={() => router.push(bookHref)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-xs font-display font-bold uppercase tracking-wide text-stone-600 hover:bg-stone-50 transition-colors">
+                          <BookOpen className="w-3.5 h-3.5" /> Lettura a libro
+                        </button>
+                      )}
+                      <button
+                        onClick={() => {
+                          if (reportSections.length === 0) { setReportSections(markdownToSections(content)); setReportAuthoredBy(reportAuthoredBy === 'ai' ? 'mixed' : reportAuthoredBy) }
+                          setEditorMode('manual')
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-forest-200 text-xs font-display font-bold uppercase tracking-wide text-forest-700 hover:bg-forest-50 transition-colors">
+                        <Pencil className="w-3.5 h-3.5" /> Modifica
+                      </button>
+                    </div>
                   </div>
                 )}
 
