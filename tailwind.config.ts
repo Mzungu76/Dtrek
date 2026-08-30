@@ -33,29 +33,44 @@ const config: Config = {
         mono: ['var(--font-mono)', 'monospace'],
       },
       colors: {
+        // Direzione "Taccuino Botanico" — stessa operazione già fatta su `forest` (vedi sotto):
+        // rampa ridefinita da arancione brillante a terracotta, chiave invariata. 500 è
+        // esattamente botanico.accent (#C0603D, "accento primario" della guida); 600 è lo stesso
+        // hover più scuro già usato a mano nei restyling precedenti (RouteMap3D, hero Percorsi/
+        // Reportage — #A84E30), non un nuovo valore inventato qui.
         terra: {
-          50:  '#fdf6ee',
-          100: '#f9e8d0',
-          200: '#f2cd9d',
-          300: '#e9ab64',
-          400: '#e08d3c',
-          500: '#d97220',
-          600: '#c05a17',
-          700: '#9f4315',
-          800: '#813619',
-          900: '#6a2e18',
+          50:  '#FBF3EA',
+          100: '#F6E2CE',
+          200: '#EBC7A3',
+          300: '#DDA476',
+          400: '#CF8055',
+          500: '#C0603D',
+          600: '#A84E30',
+          700: '#8A3D26',
+          800: '#6E301E',
+          900: '#542417',
         },
+        // Direzione "Taccuino Botanico" (docs/taccuino-botanico-piano.md), fase di estensione a
+        // tutta l'app: la chiave resta `forest` (rinominarla avrebbe richiesto toccare ~100 file
+        // per la sola stringa della classe, senza cambiare nulla nel risultato visivo) ma i valori
+        // non sono più il verde brillante originale — sono una rampa salvia, stessa gerarchia di
+        // luminosità (50 chiarissimo → 900 scurissimo) usata finora per badge/icone/bottoni verdi
+        // "generici" in tutta l'app. 500/600/700 sono esattamente gli hex della tabella palette
+        // della guida (salvia polverosa/accento secondario, salvia scura/barra globale, hero
+        // scuro) — non inventati. Il colore delle tracce sulle mappe non passa da qui: usa
+        // FOREST/ROUTE_COLORS in lib/designTokens.ts, un oggetto JS separato, mai toccato — quel
+        // verde resta quello originale apposta (già "ripristinato" più volte in sessioni precedenti).
         forest: {
-          50:  '#f1f8f2',
-          100: '#dcf0de',
-          200: '#bbe0bf',
-          300: '#8cc894',
-          400: '#58aa63',
-          500: '#378d44',
-          600: '#277134',
-          700: '#20592b',
-          800: '#1c4724',
-          900: '#193b20',
+          50:  '#F4F7F0',
+          100: '#E9EEE3',
+          200: '#D7E0CE',
+          300: '#BCC9AF',
+          400: '#9BAC8C',
+          500: '#7C8F6E',
+          600: '#5F7355',
+          700: '#4A5A3F',
+          800: '#3A4A32',
+          900: '#2E3A26',
         },
         stone: {
           50:  '#f8f7f4',

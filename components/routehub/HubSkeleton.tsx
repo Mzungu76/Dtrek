@@ -9,7 +9,7 @@ import HubNavBar from './HubNavBar'
  */
 export default function HubSkeleton() {
   return (
-    <div className="fixed inset-0 bg-gradient-to-br from-[#123448] to-[#071824] overflow-hidden">
+    <div className="fixed inset-0 bg-gradient-to-br from-[#4A5A3F] to-[#2E3A26] overflow-hidden">
       <div className="absolute inset-x-0 top-0 z-20">
         <HubNavBar />
         <div className="px-3 sm:px-4 pt-4 flex items-center gap-1.5">

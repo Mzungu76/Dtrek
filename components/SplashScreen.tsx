@@ -23,10 +23,11 @@ const FADE_MS = 220
  * round-trip has even settled the navigation, before /guida's own client-side data fetching
  * starts. Replaces what would otherwise be a blank white flash with the app's own branding, then
  * fades out and unmounts once the app has actually started rendering underneath it (the /guida
- * hub shows its own "Caricamento…" state in the same #0b1a24 shell color, so the handoff reads as
- * one continuous screen instead of splash → flash → different spinner).
+ * hub shows its own "Caricamento…" state in the same #2E3A26 shell color — direzione "Taccuino
+ * Botanico", salvia scuro al posto del blu notte originale — so the handoff reads as one
+ * continuous screen instead of splash → flash → different spinner).
  *
- * Inside DTrek Navigator (the Capacitor shell), this same #0b1a24 screen is also the hand-off
+ * Inside DTrek Navigator (the Capacitor shell), this same #2E3A26 screen is also the hand-off
  * point from the NATIVE splash (drawable/splash.png, kept on screen the whole time via
  * `SplashScreen: { launchAutoHide: false }` in capacitor.config.ts) — the WebView has to fetch
  * the whole `/navigatore` page over the network before this component's own effect can even run,
@@ -56,7 +57,7 @@ export default function SplashScreen() {
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-4 bg-[#0b1a24] transition-opacity ease-out"
+      className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-4 bg-[#2E3A26] transition-opacity ease-out"
       style={{ opacity: fading ? 0 : 1, transitionDuration: `${FADE_MS}ms` }}
       aria-hidden="true"
     >

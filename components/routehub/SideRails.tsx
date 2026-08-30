@@ -16,7 +16,7 @@ export function RailButton({ onClick, title, children, variant = 'glass', badge,
     >
       {children}
       {badge && (
-        <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-sky-500 border-2 border-[#0b1a24] text-[9px] font-bold text-white flex items-center justify-center leading-none">
+        <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-sky-500 border-2 border-[#2E3A26] text-[9px] font-bold text-white flex items-center justify-center leading-none">
           {badge}
         </span>
       )}

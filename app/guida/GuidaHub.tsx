@@ -557,7 +557,7 @@ export default function GuidaHub({ id, startClosed }: { id?: string; startClosed
     return (
       <>
         {deletedToastNode}
-        <div className="fixed inset-0 bg-[#0b1a24] flex flex-col items-center justify-center gap-4 text-center px-6">
+        <div className="fixed inset-0 bg-[#2E3A26] flex flex-col items-center justify-center gap-4 text-center px-6">
           <p className="text-stone-300 text-sm">Nessun percorso in attesa.</p>
           <button onClick={() => router.push('/upload?tab=gpx')} className="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-sm font-semibold transition-colors">
             Crea un percorso

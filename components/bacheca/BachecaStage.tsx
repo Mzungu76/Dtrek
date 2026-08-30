@@ -90,7 +90,7 @@ export default function BachecaStage({ background, chrome, detail, detailTitle }
   }
 
   return (
-    <div className="fixed inset-0 overflow-hidden bg-[#0b1a24] select-none">
+    <div className="fixed inset-0 overflow-hidden bg-[#2E3A26] select-none">
       <div
         className="absolute inset-0 touch-none cursor-grab active:cursor-grabbing"
         onPointerDown={progress < 1 ? onDown('open') : undefined}

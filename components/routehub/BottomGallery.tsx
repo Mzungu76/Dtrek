@@ -193,7 +193,7 @@ export function GalleryMapThumb({
   const hasRoute = polyline && polyline.length > 1
 
   return (
-    <div ref={wrapRef} className="absolute inset-0 bg-gradient-to-br from-[#123448] to-[#071824]">
+    <div ref={wrapRef} className="absolute inset-0 bg-gradient-to-br from-[#4A5A3F] to-[#2E3A26]">
       {!hasRoute && (
         <div className="w-full h-full flex items-center justify-center"><Mountain className="w-5 h-5 text-sky-300/60" /></div>
       )}

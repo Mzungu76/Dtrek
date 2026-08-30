@@ -4,19 +4,23 @@ import {
 } from 'lucide-react'
 import type { GuideSectionKey } from '@/lib/guideSections'
 
-// Colori presi dalla palette terra/forest/stone dell'app (tailwind.config.ts). Usati con
-// parsimonia nel nuovo header editoriale (icona/eyebrow/riga d'accento) invece che come
-// riempimento pieno — vedi SectionCard.tsx. "verificato" è l'unica eccezione alla palette
-// terra/forest/stone (un azzurro "verifica live"), per distinguerla visivamente dalle altre
-// sezioni — è l'unica con contenuto che cambia nel tempo, non narrativa statica.
+// Colori presi dalla palette terra/forest/stone dell'app (tailwind.config.ts) — hex letterali,
+// non classi Tailwind (usati con style={{color}}, non className), quindi NON seguono da soli un
+// cambio della scala: quando terra/forest cambiano in tailwind.config.ts vanno aggiornati anche
+// qui a mano (Fase 40, direzione "Taccuino Botanico" — valori allineati alla rampa salvia/
+// terracotta ridefinita lì). Usati con parsimonia nel nuovo header editoriale (icona/eyebrow/riga
+// d'accento) invece che come riempimento pieno — vedi SectionCard.tsx. "verificato" è l'unica
+// eccezione alla palette terra/forest/stone (un azzurro "verifica live"), per distinguerla
+// visivamente dalle altre sezioni — è l'unica con contenuto che cambia nel tempo, non narrativa
+// statica.
 export const SECTION_STYLE: Record<GuideSectionKey, { icon: ReactNode; color: string }> = {
-  prima_di_partire: { icon: <Compass     className="w-4 h-4" />, color: '#c05a17' }, // terra-600
-  il_percorso:      { icon: <Route       className="w-4 h-4" />, color: '#277134' }, // forest-600
+  prima_di_partire: { icon: <Compass     className="w-4 h-4" />, color: '#A84E30' }, // terra-600
+  il_percorso:      { icon: <Route       className="w-4 h-4" />, color: '#5F7355' }, // forest-600
   verificato:       { icon: <Radar       className="w-4 h-4" />, color: '#0f6e94' }, // sky-700
   dati_sicurezza:   { icon: <BarChart2   className="w-4 h-4" />, color: '#73695c' }, // stone-700
-  luoghi:           { icon: <MapPin      className="w-4 h-4" />, color: '#813619' }, // terra-800
-  natura:           { icon: <Leaf        className="w-4 h-4" />, color: '#378d44' }, // forest-500
-  sapori:           { icon: <Utensils    className="w-4 h-4" />, color: '#d97220' }, // terra-500
+  luoghi:           { icon: <MapPin      className="w-4 h-4" />, color: '#6E301E' }, // terra-800
+  natura:           { icon: <Leaf        className="w-4 h-4" />, color: '#7C8F6E' }, // forest-500
+  sapori:           { icon: <Utensils    className="w-4 h-4" />, color: '#C0603D' }, // terra-500
   consigli:         { icon: <ShieldCheck className="w-4 h-4" />, color: '#5e564c' }, // stone-800
 }
 
