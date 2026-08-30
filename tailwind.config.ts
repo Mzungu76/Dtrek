@@ -33,17 +33,22 @@ const config: Config = {
         mono: ['var(--font-mono)', 'monospace'],
       },
       colors: {
+        // Direzione "Taccuino Botanico" — stessa operazione già fatta su `forest` (vedi sotto):
+        // rampa ridefinita da arancione brillante a terracotta, chiave invariata. 500 è
+        // esattamente botanico.accent (#C0603D, "accento primario" della guida); 600 è lo stesso
+        // hover più scuro già usato a mano nei restyling precedenti (RouteMap3D, hero Percorsi/
+        // Reportage — #A84E30), non un nuovo valore inventato qui.
         terra: {
-          50:  '#fdf6ee',
-          100: '#f9e8d0',
-          200: '#f2cd9d',
-          300: '#e9ab64',
-          400: '#e08d3c',
-          500: '#d97220',
-          600: '#c05a17',
-          700: '#9f4315',
-          800: '#813619',
-          900: '#6a2e18',
+          50:  '#FBF3EA',
+          100: '#F6E2CE',
+          200: '#EBC7A3',
+          300: '#DDA476',
+          400: '#CF8055',
+          500: '#C0603D',
+          600: '#A84E30',
+          700: '#8A3D26',
+          800: '#6E301E',
+          900: '#542417',
         },
         // Direzione "Taccuino Botanico" (docs/taccuino-botanico-piano.md), fase di estensione a
         // tutta l'app: la chiave resta `forest` (rinominarla avrebbe richiesto toccare ~100 file
