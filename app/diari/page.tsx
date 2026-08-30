@@ -158,12 +158,13 @@ function NewDiarioTile() {
  * Ricerca testuale su tutti i percorsi (Mete e Reportage), in ogni Diario — Fase 18: risultati
  * senza lasciare lo scaffale, stessa API (`/api/percorsi`, invariata: resta l'unica vista
  * trasversale non filtrata, condivisa con app/percorsi/page.tsx), un sottoinsieme (max 8) invece
- * dell'elenco intero perché qui è una scorciatoia. Ogni riga rimanda a `/guida/[id]`
- * (diary-agnostic — stesso principio di app/percorsi/page.tsx dopo la ristrutturazione
- * Diario/Mete): funziona sia per una Meta non ancora camminata sia per il percorso di un
- * Reportage già raccontato, senza bisogno del diaryId per costruire il link. Nessun link
- * "vedi tutti" in fondo: "Tutti i Percorsi" a sé non esiste più — `/percorsi` ("Mete") ora mostra
- * solo le Mete senza Reportage, un sottoinsieme che non copre questi risultati.
+ * dell'elenco intero perché qui è una scorciatoia. Ogni riga rimanda alla stessa lettura "a libro"
+ * di app/percorsi/page.tsx: annidata nel Diario quando lo conosciamo già (`diaryId` presente — un
+ * percorso con almeno un Reportage, che quindi appartiene già a un Diario), altrimenti nella
+ * variante diary-agnostic (app/guida/[id]/[groupKey]/page.tsx — sempre il caso per una Meta, che
+ * non ha ancora un Diario). Nessun link "vedi tutti" in fondo: "Tutti i Percorsi" a sé non esiste
+ * più — `/percorsi` ("Mete") ora mostra solo le Mete senza Reportage, un sottoinsieme che non
+ * copre questi risultati.
  */
 function GlobalRouteSearch() {
   const [rows, setRows] = useState<AllPercorsiRow[] | null>(null)
@@ -222,7 +223,9 @@ function GlobalRouteSearch() {
             {filtered.slice(0, 8).map(p => (
               <Link
                 key={p.id}
-                href={`/guida/${encodeURIComponent(p.id)}`}
+                href={p.diaryId
+                  ? `/diari/${encodeURIComponent(p.diaryId)}/percorsi/${encodeURIComponent(p.id)}/guida/prima_di_partire`
+                  : `/guida/${encodeURIComponent(p.id)}/prima_di_partire`}
                 className="flex items-center gap-3 px-3 py-2.5"
                 style={{ borderBottom: `1px dotted ${TACCUINO_PAPER.cardBorder}` }}
               >

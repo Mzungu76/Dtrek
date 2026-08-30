@@ -61,13 +61,20 @@ function isSectionPresent(s: DisplaySection, hasWeather: boolean, hasLuoghi: boo
 }
 
 interface Props {
-  /** Base path del Percorso nel Diario (es. `/diari/{id}/percorsi/{percorsoId}`) — usata per
-   *  costruire i link di indice/gruppo, senza che questo componente conosca i nomi dei
-   *  parametri di route (decisi in Fase 3). */
+  /** Base path del Percorso (es. `/diari/{id}/percorsi/{percorsoId}` quando annidato in un
+   *  Diario, o `/guida/{percorsoId}` per una Meta senza Diario) — usata dal drawer "Strumenti"
+   *  per l'elenco Reportage (`${basePath}/reportage/[id]/sezione/1`); per una Meta quell'elenco è
+   *  sempre vuoto per definizione (una Meta non ha ancora un Reportage), quindi lì non viene mai
+   *  reso un link reale. */
   basePath: string
-  /** URL del Sommario del Diario — destinazione del titolo in testata da quando la pagina di
-   *  riepilogo del Percorso non esiste più (Fase 15): non c'è più un "indice" a livello di
-   *  Percorso a cui tornare, solo quello del Diario. */
+  /** Prefisso per i link tra i gruppi (pillole, prev/next) — default `${basePath}/guida`
+   *  (comportamento invariato per il Percorso annidato in un Diario, dove la rotta vera è
+   *  `.../percorsi/{percorsoId}/guida/{groupKey}`). La rotta diary-agnostic di una Meta
+   *  (app/guida/[id]/[groupKey]/page.tsx) passa qui `/guida/{percorsoId}` direttamente — lì non
+   *  c'è un segmento "/guida" in più da ripetere, la rotta è già sotto `/guida`. */
+  groupPath?: string
+  /** URL del Sommario del Diario, o dell'elenco Mete per una Meta senza Diario — destinazione del
+   *  titolo in testata da quando la pagina di riepilogo del Percorso non esiste più (Fase 15). */
   diarioHref: string
   diarioTitle: string
   percorsoId: string
@@ -134,7 +141,8 @@ function MapPreview({
   )
 }
 
-export default function GuideBookPage({ basePath, diarioHref, diarioTitle, percorsoId, groupKey }: Props) {
+export default function GuideBookPage({ basePath, groupPath, diarioHref, diarioTitle, percorsoId, groupKey }: Props) {
+  const gp = groupPath ?? `${basePath}/guida`
   const bd = useGuidaBookData(percorsoId)
   const [toolsOpen, setToolsOpen] = useState(false)
   const [show3D, setShow3D] = useState(false)
@@ -175,7 +183,7 @@ export default function GuideBookPage({ basePath, diarioHref, diarioTitle, perco
   // PDF/GPX, video 3D) non è una pillola qui in mezzo: vive nella barra inferiore di
   // BookPage.tsx (Fase 17), stesso posto su ogni pagina del libro invece che in mezzo ai gruppi.
   const pills: BookPageSection[] = GUIDE_NAV_GROUPS.map(g => ({
-    key: g.key, label: g.label, href: `${basePath}/guida/${g.key}`,
+    key: g.key, label: g.label, href: `${gp}/${g.key}`,
   }))
 
   if (!currentGroup) {
@@ -323,8 +331,12 @@ export default function GuideBookPage({ basePath, diarioHref, diarioTitle, perco
         indexHref={diarioHref}
         onToolsClick={() => setToolsOpen(true)}
         sectionLabel={currentGroup.label}
-        prevHref={prevGroup ? `${basePath}/guida/${prevGroup.key}` : undefined}
-        nextHref={nextGroup ? `${basePath}/guida/${nextGroup.key}` : basePath}
+        prevHref={prevGroup ? `${gp}/${prevGroup.key}` : undefined}
+        // Giro di boa a fine libro → torna diretto al primo gruppo (non più un rimbalzo su
+        // `basePath`, che per il Percorso annidato in un Diario redirige comunque a
+        // `guida/prima_di_partire` — qui evitiamo quel giro extra, e per la Meta diary-agnostic
+        // `basePath` da solo non sarebbe nemmeno una pagina di libro).
+        nextHref={nextGroup ? `${gp}/${nextGroup.key}` : `${gp}/${GUIDE_NAV_GROUPS[0].key}`}
         sections={pills}
         currentSectionKey={groupKey}
         pageLabel={`${groupIdx + 1} di ${GUIDE_NAV_GROUPS.length}`}
