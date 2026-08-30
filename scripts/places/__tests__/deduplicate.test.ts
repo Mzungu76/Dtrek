@@ -46,6 +46,37 @@ describe('scoreCandidateAgainstPlace', () => {
     expect(result.confidence).toBe(1)
   })
 
+  it('stesso municipality_istat_code su due borgo_citta → match certo (1) anche oltre MAX_MATCH_DISTANCE_M — caso reale: il centroide del confine comunale di un Comune grande/irregolare (es. Latina) può distare km dal punto usato da un\'altra fonte per lo stesso Comune', () => {
+    const result = scoreCandidateAgainstPlace(
+      candidate({
+        name: 'Latina', metaType: 'borgo_citta', subtype: undefined,
+        municipalityIstatCode: '059011', latitude: 41.4676, longitude: 12.9037,
+      }),
+      existing({
+        name: 'Latina', metaType: 'borgo_citta', subtype: undefined,
+        municipalityIstatCode: '059011', latitude: 41.47284, longitude: 12.84509, // ~4.9km di distanza
+      }),
+    )
+    expect(result.confidence).toBe(1)
+  })
+
+  it('municipality_istat_code diverso NON fa scattare il corto-circuito — resta il punteggio pesato normale', () => {
+    const result = scoreCandidateAgainstPlace(
+      candidate({ metaType: 'borgo_citta', subtype: undefined, municipalityIstatCode: '059011' }),
+      existing({ metaType: 'borgo_citta', subtype: undefined, municipalityIstatCode: '058091' }),
+    )
+    expect(result.reasons.map(r => r.factor)).not.toContain('municipality_istat_code')
+    expect(result.reasons.map(r => r.factor)).toContain('distance') // è passato dal percorso pesato, non dal corto-circuito
+  })
+
+  it('municipality_istat_code uguale ma un lato è un Sito (non borgo_citta) → nessun corto-circuito, mai fondere un Sito con il suo Comune', () => {
+    const result = scoreCandidateAgainstPlace(
+      candidate({ metaType: 'sito', municipalityIstatCode: '059011', latitude: 45.0, longitude: 7.0 }),
+      existing({ metaType: 'borgo_citta', subtype: undefined, municipalityIstatCode: '059011' }),
+    )
+    expect(result.confidence).toBe(0) // metaType diverso + oltre MAX_MATCH_DISTANCE_M
+  })
+
   it('oltre la distanza massima → confidence 0, anche con nome identico', () => {
     const result = scoreCandidateAgainstPlace(
       candidate({ latitude: 45.0, longitude: 7.0 }), // Torino

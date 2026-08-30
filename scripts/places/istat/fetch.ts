@@ -37,7 +37,7 @@
  * Lazio, COD_REG 12), join sulla tabella di codifica verificato su Agliè e Viterbo.
  *
  * Usage:
- *   npx tsx scripts/places/istat/fetch.ts [--dry-run] [--region "Lazio"]
+ *   npx tsx scripts/places/istat/fetch.ts [--dry-run] [--region "Lazio"] [--to-json <file>]
  *
  * File attesi in data/istat/ (gitignored, stesso pattern di data/ptpr/):
  *   Com0101<ANNO>_g.shp / .dbf / .shx   — confini/centroidi comunali (EPSG:32632)
@@ -265,6 +265,10 @@ async function main() {
   const DRY_RUN = process.argv.includes('--dry-run')
   const regionArgIdx = process.argv.indexOf('--region')
   const regionFilter = regionArgIdx !== -1 ? process.argv[regionArgIdx + 1] : null
+  // Stesso pattern di scripts/import-ptpr.ts — dump dei candidati senza connessione Supabase, per
+  // ambienti che non hanno accesso di rete diretto al progetto (vedi nota "Verifica" in cima).
+  const toJsonIdx = process.argv.indexOf('--to-json')
+  const toJsonFile = toJsonIdx !== -1 ? process.argv[toJsonIdx + 1] : null
 
   const dataDir = path.join(process.cwd(), 'data', 'istat')
   const shpPath = findShpFile(dataDir)
@@ -297,6 +301,12 @@ async function main() {
   if (DRY_RUN) {
     console.log('[DRY RUN] Esempio candidato:', JSON.stringify(candidates[0], null, 2))
     console.log(`[DRY RUN] ${candidates.length} candidati pronti, nessuna scrittura.`)
+    return
+  }
+
+  if (toJsonFile) {
+    fs.writeFileSync(toJsonFile, JSON.stringify(candidates, null, 0))
+    console.log(`Scritti ${candidates.length} candidati in ${toJsonFile}`)
     return
   }
 

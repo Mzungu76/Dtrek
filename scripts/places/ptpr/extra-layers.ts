@@ -57,7 +57,7 @@
  * "Tracciato record" (XLSX allegato al dataset) o il file reale al primo uso.
  *
  * Usage:
- *   npx tsx scripts/places/ptpr/extra-layers.ts [--dry-run] [--only borghi|centri|fondazione]
+ *   npx tsx scripts/places/ptpr/extra-layers.ts [--dry-run] [--only borghi|centri|fondazione] [--to-json <file>]
  *
  * File attesi in data/ptpr/ (gitignored, stesso pattern dei 3 layer archeologici già presenti):
  *   borghi_identitari.shp / .dbf / .shx   — rinominato da Aree_borghi_identitari.* al download
@@ -291,6 +291,9 @@ async function main() {
   const DRY_RUN = process.argv.includes('--dry-run')
   const onlyIdx = process.argv.indexOf('--only')
   const only = onlyIdx !== -1 ? process.argv[onlyIdx + 1] : null
+  // Stesso pattern di scripts/import-ptpr.ts / scripts/places/istat/fetch.ts.
+  const toJsonIdx = process.argv.indexOf('--to-json')
+  const toJsonFile = toJsonIdx !== -1 ? process.argv[toJsonIdx + 1] : null
 
   const dataDir = path.join(process.cwd(), 'data', 'ptpr')
   const candidates: PlaceCandidate[] = []
@@ -325,6 +328,12 @@ async function main() {
   if (DRY_RUN) {
     console.log('[DRY RUN] Esempio candidato:', JSON.stringify(candidates[0], null, 2))
     console.log(`[DRY RUN] ${candidates.length} candidati pronti, nessuna scrittura.`)
+    return
+  }
+
+  if (toJsonFile) {
+    fs.writeFileSync(toJsonFile, JSON.stringify(candidates, null, 0))
+    console.log(`Scritti ${candidates.length} candidati in ${toJsonFile}`)
     return
   }
 

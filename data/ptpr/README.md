@@ -52,3 +52,16 @@ Pontino), nessun file da scaricare per quella parte.
 npx tsx scripts/places/ptpr/extra-layers.ts --dry-run
 npx tsx scripts/places/ptpr/extra-layers.ts --dry-run --only fondazione   # solo la tabella statica
 ```
+
+## Stato: importato in produzione (2026-08-30)
+
+I 47 "Borghi identitari" e le 5 "Città di fondazione" sono stati scritti in `dtrek_places` /
+`dtrek_place_sources` sul progetto Supabase reale (`sdxlcpxgbkagbxhukehd`) — non via
+`extra-layers.ts` direttamente (questo sandbox non ha accesso di rete diretto nemmeno verso
+Supabase, verificato con `curl`), ma generando SQL dallo stesso output del fetcher ed eseguendolo
+via MCP. Le 5 città di fondazione si sono correttamente fuse (auto-merge) con il Comune ISTAT
+omonimo già importato, grazie al corto-circuito `municipality_istat_code` aggiunto in
+`deduplicate.ts` — necessario perché il centroide del confine comunale ISTAT di un Comune
+grande/irregolare (Latina 4.9km, Pontinia 4.7km, Sabaudia 2.8km dal punto usato da questo layer)
+può superare la soglia di distanza massima del matching. "Centri storici" resta non importato
+(nessun file caricato, schema non verificato).

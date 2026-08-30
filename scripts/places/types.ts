@@ -66,5 +66,6 @@ export interface ExistingPlace {
   latitude: number
   longitude: number
   municipality?: string | null
+  municipalityIstatCode?: string | null
   wikidataId?: string | null
 }

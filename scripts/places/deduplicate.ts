@@ -46,6 +46,19 @@ export function scoreCandidateAgainstPlace(candidate: PlaceCandidate, existing: 
     return { place: existing, confidence: 1, reasons: [{ factor: 'wikidata_id', score: 1, weight: 1 }] }
   }
 
+  // Match certo per due 'borgo_citta' con lo stesso codice Comune ISTAT — un identificativo
+  // ufficiale univoco quanto un QID Wikidata, a differenza del centroide geometrico: un Comune
+  // grande/irregolare (es. Latina, Sabaudia — verificato su dati reali) può avere un centroide di
+  // poligono a diversi km dal centro città che ogni fonte "a occhio" userebbe, superando
+  // MAX_MATCH_DISTANCE_M anche per due candidati che sono innegabilmente lo stesso Comune.
+  // Ristretto a 'borgo_citta' su entrambi i lati: un Sito con lo stesso municipalityIstatCode (è
+  // solo "dentro" quel Comune) non deve fondersi con la Meta del Comune stesso.
+  if (candidate.metaType === 'borgo_citta' && existing.metaType === 'borgo_citta'
+    && candidate.municipalityIstatCode && existing.municipalityIstatCode
+    && candidate.municipalityIstatCode === existing.municipalityIstatCode) {
+    return { place: existing, confidence: 1, reasons: [{ factor: 'municipality_istat_code', score: 1, weight: 1 }] }
+  }
+
   const distM = haversineM(candidate.latitude, candidate.longitude, existing.latitude, existing.longitude)
   const distScore = distanceScore(distM)
   reasons.push({ factor: 'distance', score: distScore, weight: 0.5 })

@@ -60,5 +60,15 @@ npx tsx scripts/places/istat/fetch.ts --dry-run --region Lazio   # pilota Lazio,
 npx tsx scripts/places/istat/fetch.ts --region Lazio
 ```
 
-Non eseguito contro dati reali in questa sessione (file non scaricabili, vedi sopra) — chi ha
-accesso di rete a istat.it deve scaricare i file in `data/istat/` e lanciare lo script.
+## Stato: importato in produzione (2026-08-30)
+
+L'utente ha caricato lo shapefile 2025 (`Com01012025_g_WGS84.*`) e `Elenco-comuni-italiani.xlsx`
+in sessione — verificati con `--dry-run` (7896 Comuni nazionali, 378 in Lazio, join di
+provincia/regione corretto). I 378 Comuni del Lazio sono stati scritti in `dtrek_places` /
+`dtrek_place_sources` sul progetto Supabase reale (`sdxlcpxgbkagbxhukehd`) — non via `fetch.ts`
+direttamente (questo sandbox non ha accesso di rete diretto nemmeno verso Supabase, verificato con
+`curl`), ma generando SQL dallo stesso output del fetcher (`--to-json`) ed eseguendolo via MCP.
+Il resto d'Italia (7518 Comuni) non è stato importato — resta il pilota Lazio del piano §42.
+
+Chi ha accesso di rete a istat.it e a Supabase può rilanciare `fetch.ts` direttamente (env var
+`SUPABASE_URL`/`SUPABASE_SERVICE_KEY`) per estendere ad altre regioni o rinfrescare i dati.
