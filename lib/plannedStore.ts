@@ -15,6 +15,7 @@ import type { TrailTerrainProfile } from './terrain/trailTerrainProfile'
 import type { FloraResult } from './floraTypes'
 import type { GuideNotice } from './guideNotices'
 import type { RouteMode } from './routeMode'
+import type { MetaType, SiteType } from './metaTypes'
 
 export type { HikeAssessment, AssessmentItem } from './hikeAssessment'
 export type { HikeNote } from './blobStore'
@@ -146,6 +147,14 @@ export interface PlannedHike {
    *  (lib/italianRegions.ts) solo quando isSample è true. */
   isSample?:                     boolean
   sampleRegion?:                 string
+  // Tipologia della Meta (docs/piano-mete-multitipologia.md) — assente solo lato client prima del
+  // round-trip col server, che valorizza sempre 'sentiero' per default di colonna (vedi
+  // supabase/migrations/add_meta_type_columns.sql). Usare metaHasHikingMetrics()/isMetaType() da
+  // lib/metaTypes.ts invece di confrontare la stringa direttamente. Mai dedotto da trackPoints o
+  // altra euristica: scelto esplicitamente dall'utente alla creazione della Meta.
+  metaType?:                     MetaType
+  // Valorizzato solo quando metaType === 'sito'; assente per sentiero/borgo_citta.
+  siteType?:                     SiteType
 }
 
 // Index entry — no trackPoints (kept lightweight for the list)

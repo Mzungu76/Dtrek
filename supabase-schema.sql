@@ -1118,6 +1118,21 @@ ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS paddle_subscription_id TEXT;
 -- Flag indipendente da onboarding_completed_at — vedi add_gift_route_offered_at.sql per il perché.
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS gift_route_offered_at TIMESTAMPTZ;
 
+-- Piano mete multi-tipologia — vedi supabase/migrations/add_meta_type_columns.sql per i commenti
+-- completi. DEFAULT 'sentiero' così ogni riga esistente resta invariata; site_type valorizzato
+-- solo quando meta_type = 'sito'. Mai dedotto da geometria/GPX — sempre scelto esplicitamente.
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS meta_type TEXT NOT NULL DEFAULT 'sentiero'
+  CHECK (meta_type IN ('sentiero', 'borgo_citta', 'sito'));
+
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS site_type TEXT
+  CHECK (site_type IS NULL OR site_type IN (
+    'museo', 'castello', 'abbazia', 'chiesa', 'sito_archeologico', 'monumento',
+    'palazzo', 'teatro', 'cascata', 'grotta', 'belvedere', 'area_naturale', 'altro'
+  ));
+
+CREATE INDEX IF NOT EXISTS idx_planned_hikes_meta_type ON planned_hikes (meta_type);
+CREATE INDEX IF NOT EXISTS idx_planned_hikes_site_type ON planned_hikes (site_type);
+
 -- Slug di lib/italianRegions.ts (es. 'lazio'), NULL se l'utente ha scelto esplicitamente di non
 -- specificarla — vedi add_home_region.sql per il perché.
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS home_region TEXT;
