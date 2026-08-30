@@ -605,6 +605,111 @@ CREATE INDEX IF NOT EXISTS idx_ptpr_pois_lat_lon ON ptpr_pois (lat, lon);
 
 
 -- ═══════════════════════════════════════════════════════════
+-- Piano mete multi-tipologia — Places Engine (Blocco B). Stesso blocco anche
+-- in supabase/migrations/add_places_catalog.sql, con i commenti completi.
+-- ═══════════════════════════════════════════════════════════
+
+CREATE EXTENSION IF NOT EXISTS postgis;
+
+CREATE TABLE IF NOT EXISTS dtrek_places (
+  id                      uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name                    text NOT NULL,
+  meta_type               text NOT NULL CHECK (meta_type IN ('sentiero', 'borgo_citta', 'sito')),
+  subtype                 text,
+  description             text,
+  latitude                double precision NOT NULL,
+  longitude               double precision NOT NULL,
+  geometry                geometry(Geometry, 4326),
+  region                  text,
+  province                text,
+  municipality            text,
+  municipality_istat_code text,
+  address                 text,
+  image_url               text,
+  official_url            text,
+  website                 text,
+  opening_hours           jsonb,
+  source                  text NOT NULL,
+  source_id               text NOT NULL,
+  confidence               double precision NOT NULL DEFAULT 1.0 CHECK (confidence BETWEEN 0 AND 1),
+  wikidata_id              text,
+  metadata                 jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at               timestamptz NOT NULL DEFAULT now(),
+  updated_at                timestamptz NOT NULL DEFAULT now(),
+  last_verified_at          timestamptz,
+  UNIQUE (source, source_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_dtrek_places_geometry     ON dtrek_places USING GIST (geometry);
+CREATE INDEX IF NOT EXISTS idx_dtrek_places_meta_type    ON dtrek_places (meta_type);
+CREATE INDEX IF NOT EXISTS idx_dtrek_places_subtype      ON dtrek_places (subtype);
+CREATE INDEX IF NOT EXISTS idx_dtrek_places_municipality_istat_code ON dtrek_places (municipality_istat_code);
+CREATE INDEX IF NOT EXISTS idx_dtrek_places_region        ON dtrek_places (region);
+CREATE INDEX IF NOT EXISTS idx_dtrek_places_lat_lon        ON dtrek_places (latitude, longitude);
+
+CREATE OR REPLACE FUNCTION dtrek_places_set_geometry_from_latlon() RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = public, pg_temp
+AS $$
+BEGIN
+  IF NEW.geometry IS NULL THEN
+    NEW.geometry := ST_SetSRID(ST_MakePoint(NEW.longitude, NEW.latitude), 4326);
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_dtrek_places_set_geometry ON dtrek_places;
+CREATE TRIGGER trg_dtrek_places_set_geometry
+  BEFORE INSERT OR UPDATE ON dtrek_places
+  FOR EACH ROW EXECUTE FUNCTION dtrek_places_set_geometry_from_latlon();
+
+-- trg_dtrek_places_updated_at è creato più avanti in questo file, subito dopo la definizione di
+-- set_updated_at() (§ "Timestamp di aggiornamento") — questa CREATE TABLE viene eseguita prima
+-- che quella funzione esista in un progetto nuovo che lancia lo script dall'inizio.
+
+ALTER TABLE dtrek_places ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "dtrek_places_public_read" ON dtrek_places;
+CREATE POLICY "dtrek_places_public_read" ON dtrek_places FOR SELECT USING (true);
+
+CREATE TABLE IF NOT EXISTS dtrek_place_sources (
+  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  place_id       uuid NOT NULL REFERENCES dtrek_places(id) ON DELETE CASCADE,
+  source         text NOT NULL,
+  source_id      text NOT NULL,
+  source_url     text,
+  raw_type       text,
+  confidence     double precision NOT NULL DEFAULT 1.0 CHECK (confidence BETWEEN 0 AND 1),
+  last_synced_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (source, source_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_dtrek_place_sources_place_id ON dtrek_place_sources (place_id);
+
+ALTER TABLE dtrek_place_sources ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "dtrek_place_sources_public_read" ON dtrek_place_sources;
+CREATE POLICY "dtrek_place_sources_public_read" ON dtrek_place_sources FOR SELECT USING (true);
+
+CREATE TABLE IF NOT EXISTS dtrek_place_relations (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  from_place_id uuid NOT NULL REFERENCES dtrek_places(id) ON DELETE CASCADE,
+  to_place_id   uuid NOT NULL REFERENCES dtrek_places(id) ON DELETE CASCADE,
+  relation_type text NOT NULL CHECK (relation_type IN ('contains', 'located_in', 'part_of', 'near', 'associated_with')),
+  metadata      jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (from_place_id, to_place_id, relation_type),
+  CHECK (from_place_id <> to_place_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_dtrek_place_relations_from ON dtrek_place_relations (from_place_id);
+CREATE INDEX IF NOT EXISTS idx_dtrek_place_relations_to   ON dtrek_place_relations (to_place_id);
+
+ALTER TABLE dtrek_place_relations ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "dtrek_place_relations_public_read" ON dtrek_place_relations;
+CREATE POLICY "dtrek_place_relations_public_read" ON dtrek_place_relations FOR SELECT USING (true);
+
+
+-- ═══════════════════════════════════════════════════════════
 -- Geoportale Nazionale MASE/ISPRA — Fase 2 (PSInSAR)
 -- Stesso blocco anche in supabase/migrations/add_psinsar_tables.sql
 -- ═══════════════════════════════════════════════════════════
@@ -1029,6 +1134,14 @@ CREATE TRIGGER trg_hike_reports_updated_at
 DROP TRIGGER IF EXISTS trg_hike_questionnaires_updated_at ON hike_questionnaires;
 CREATE TRIGGER trg_hike_questionnaires_updated_at
   BEFORE UPDATE ON hike_questionnaires
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- dtrek_places (Places Engine, creata più sopra in questo file) — il trigger va qui, non alla
+-- CREATE TABLE, perché set_updated_at() non esiste ancora a quel punto in uno script eseguito
+-- dall'inizio su un progetto nuovo.
+DROP TRIGGER IF EXISTS trg_dtrek_places_updated_at ON dtrek_places;
+CREATE TRIGGER trg_dtrek_places_updated_at
+  BEFORE UPDATE ON dtrek_places
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 
