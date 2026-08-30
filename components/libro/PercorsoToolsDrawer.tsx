@@ -9,8 +9,10 @@
 // Ogni strumento è un riuso diretto, non una reimplementazione:
 // - Elenco Reportage: stessa /api/percorsi/[id]/reportage di ReportageSection (rimasta invariata
 //   per il lettore classico), righe proprie qui solo per il tono pergamena invece del bianco/stone.
-//   Ogni riga rimanda a /resoconto/[id] — non più a una pagina di riepilogo dentro il Diario
-//   (eliminata su richiesta dell'utente): generazione AI ed editor vivono solo lì.
+//   Ogni riga rimanda alla lettura "a libro" del Reportage (.../reportage/[id]/sezione/1) — stesso
+//   trattamento "a pagine" già usato per la Guida, richiesta esplicita dell'utente: generazione AI
+//   ed editor vivono lì (ReportBookPage.tsx + ReportageToolsDrawer.tsx), non più in una pagina di
+//   riepilogo a sé (eliminata) né nella vista estesa /resoconto/[id] (resta un link secondario).
 // - Generazione in blocco: lo stesso <GuideGenerationPanel> bulk già esistente (prima viveva solo
 //   sulla pagina "Il percorso" da Fase 14 — spostato qui, raggiungibile da qualunque sezione, non
 //   solo da quella).
@@ -39,6 +41,7 @@ const PILL_BG = '#f1e9d2'
 interface Props {
   open: boolean
   onClose: () => void
+  basePath: string
   percorsoId: string
   hike: PlannedHike
   hasAiAccess: boolean | null
@@ -66,7 +69,7 @@ function ToolButton({ icon, label, onClick, disabled, busy }: {
   )
 }
 
-function ReportageList({ percorsoId }: { percorsoId: string }) {
+function ReportageList({ percorsoId, basePath }: { percorsoId: string; basePath: string }) {
   const [rows, setRows] = useState<ReportageRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -97,7 +100,7 @@ function ReportageList({ percorsoId }: { percorsoId: string }) {
       {rows.map(r => (
         <Link
           key={r.id}
-          href={`/resoconto/${encodeURIComponent(r.id)}`}
+          href={`${basePath}/reportage/${encodeURIComponent(r.id)}/sezione/1`}
           className="flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors"
           style={{ background: PILL_BG }}
         >
@@ -132,7 +135,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 }
 
 export default function PercorsoToolsDrawer({
-  open, onClose, percorsoId, hike, hasAiAccess, aiUnavailable, trialExpired, onHikeUpdate, hasGps, onOpen3D,
+  open, onClose, basePath, percorsoId, hike, hasAiAccess, aiUnavailable, trialExpired, onHikeUpdate, hasGps, onOpen3D,
 }: Props) {
   const [exportingPdf, setExportingPdf] = useState(false)
   const [pdfError, setPdfError] = useState<string | null>(null)
@@ -172,7 +175,7 @@ export default function PercorsoToolsDrawer({
 
         <div className="flex-1 px-5 py-4">
           <SectionLabel>Reportage</SectionLabel>
-          <ReportageList percorsoId={percorsoId} />
+          <ReportageList percorsoId={percorsoId} basePath={basePath} />
 
           <SectionLabel>Genera tutta la guida</SectionLabel>
           <GuideGenerationPanel
