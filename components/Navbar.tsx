@@ -1,9 +1,9 @@
 'use client'
 import Link from 'next/link'
 import Image from 'next/image'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { Compass, BookMarked, PenLine, Plus, User } from 'lucide-react'
+import { Compass, BookMarked, Plus, User } from 'lucide-react'
 import { getProfile } from '@/lib/userProfile'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
@@ -11,32 +11,51 @@ import GemStatusBadge from '@/components/premium/GemStatusBadge'
 import NuovoDiarioSheet from '@/components/nuovo/NuovoDiarioSheet'
 import type { User as SupabaseUser, Session, AuthChangeEvent } from '@supabase/supabase-js'
 
-// Redesign menù globale (fase 1-3) — Diario > Percorsi > Reportage è ora la gerarchia reale
-// dell'app (un Diario contiene Percorsi, un Percorso contiene i suoi Reportage): questa barra
-// resta comunque piatta/trasversale, non annidata — ogni voce porta all'elenco "tutti i ..." di
-// quella categoria su tutti i Diari, non dentro uno specifico. "Reportage" punta a /reportage
-// (fase 2, app/reportage/page.tsx + app/api/reportage/route.ts), gemella di "Tutti i Percorsi".
-// "Nuovo" non è un <Link> come le altre tre voci (vedi DesktopNav/MobileBottomBar sotto): apre
-// NuovoDiarioSheet, che chiede sempre il Diario di destinazione — tab contestuale alla sezione
-// attiva (nuovoTabFor), mai un default automatico silenzioso.
+// Ristrutturazione Diario/Mete (richiesta esplicita dell'utente, dopo il redesign menù globale
+// fase 1-3): Diario > Reportage e Mete sono ora due alberi paralleli, non più annidati — un Diario
+// contiene solo i Reportage delle uscite già fatte; una Meta (ex "Percorso", stesso record
+// planned_hikes, solo rinominato in UI) resta senza Diario finché non viene camminata: il Diario
+// di destinazione si sceglie solo alla creazione del Reportage (vedi NuovoDiarioSheet), mai prima.
+// Niente più voce "Reportage" in questa barra (era app/reportage/page.tsx + app/api/reportage/
+// route.ts, entrambi rimossi): un Reportage si raggiunge solo entrando nel suo Diario. La voce
+// "Mete" punta ancora a /percorsi (URL tecnico invariato, solo l'etichetta cambia) — elenca ora
+// solo le Mete non ancora camminate (reportageCount === 0), vedi app/percorsi/page.tsx.
+// "Nuovo" non è un <Link> come le altre voci (vedi DesktopNav/MobileBottomBar sotto): apre
+// NuovoDiarioSheet — tab contestuale alla sezione attiva (nuovoTabFor), mai un default automatico
+// silenzioso.
 export const NAV_LINKS = [
-  { href: '/diari',      label: 'Diario',     icon: BookMarked },
-  { href: '/percorsi',   label: 'Percorsi',   icon: Compass    },
-  { href: '/reportage',  label: 'Reportage',  icon: PenLine    },
-  { href: '/upload',     label: 'Nuovo',      icon: Plus       },
+  { href: '/diari',      label: 'Diario', icon: BookMarked },
+  { href: '/percorsi',   label: 'Mete',   icon: Compass    },
+  { href: '/upload',     label: 'Nuovo',  icon: Plus       },
 ]
 
-// Confine di segmento esplicito (non solo startsWith): da quando "Percorsi" punta a /percorsi,
-// un semplice startsWith avrebbe acceso il tab anche su /percorsi-per-te, rotta distinta.
+// Confine di segmento esplicito (non solo startsWith): da quando "Mete" punta a /percorsi, un
+// semplice startsWith avrebbe acceso il tab anche su /percorsi-per-te, rotta distinta.
 export function isActive(href: string, path: string) {
   return href === '/' ? path === '/' : path === href || path.startsWith(`${href}/`)
 }
 
-// "Nuovo" (fase 3) — contestuale alla sezione attiva: dentro Percorsi crea un percorso da
-// pianificare (tab=gpx), ovunque altrove crea un Reportage/Resoconto (tab=activity, il default di
-// app/upload/page.tsx). Stesso confine di segmento di isActive, per lo stesso motivo.
+// "Nuovo" (fase 3) — contestuale alla sezione attiva: dentro Mete crea una nuova meta da
+// pianificare (tab=gpx, senza Diario), ovunque altrove crea un Reportage/Resoconto (tab=activity,
+// il default di app/upload/page.tsx — lì si sceglie il Diario di destinazione). Stesso confine di
+// segmento di isActive, per lo stesso motivo.
 function nuovoTabFor(path: string): 'activity' | 'gpx' {
   return path === '/percorsi' || path.startsWith('/percorsi/') ? 'gpx' : 'activity'
+}
+
+// Una Meta (tab='gpx') non appartiene a un Diario finché non viene camminata (ristrutturazione
+// Diario/Mete, richiesta esplicita dell'utente): niente più NuovoDiarioSheet — che esiste apposta
+// per scegliere il Diario di destinazione — per quel caso, si va dritti a /upload?tab=gpx. Un
+// Reportage (tab='activity') continua invece a chiedere sempre il Diario, come prima.
+function useNuovoTrigger(path: string) {
+  const router = useRouter()
+  const [sheetOpen, setSheetOpen] = useState(false)
+  const tab = nuovoTabFor(path)
+  const openNuovo = () => {
+    if (tab === 'gpx') router.push('/upload?tab=gpx')
+    else setSheetOpen(true)
+  }
+  return { sheetOpen, openNuovo, closeNuovo: () => setSheetOpen(false), tab }
 }
 
 // ── Avatar (desktop + tab bar icon) ─────────────────────────────────────────────
@@ -115,7 +134,7 @@ export const MOBILE_BOTTOMBAR_SPACER = 'pb-[calc(env(safe-area-inset-bottom,0px)
 
 function DesktopNav() {
   const path = usePathname()
-  const [nuovoOpen, setNuovoOpen] = useState(false)
+  const { sheetOpen, openNuovo, closeNuovo, tab } = useNuovoTrigger(path)
 
   return (
     <nav className="hidden md:block sticky top-0 z-50 bg-white/90 backdrop-blur-sm border-b border-stone-200 shadow-sm">
@@ -135,7 +154,7 @@ function DesktopNav() {
             }`
             if (href === '/upload') {
               return (
-                <button key={href} type="button" onClick={() => setNuovoOpen(true)} className={className}>
+                <button key={href} type="button" onClick={openNuovo} className={className}>
                   <Icon className="w-4 h-4" />
                   <span>{label}</span>
                 </button>
@@ -152,7 +171,7 @@ function DesktopNav() {
           <ProfileAvatar />
         </div>
       </div>
-      <NuovoDiarioSheet open={nuovoOpen} onClose={() => setNuovoOpen(false)} tab={nuovoTabFor(path)} />
+      <NuovoDiarioSheet open={sheetOpen} onClose={closeNuovo} tab={tab} />
     </nav>
   )
 }
@@ -173,7 +192,7 @@ function DesktopNav() {
 // l'antenato è già interattivo di suo.
 export function MobileNavBar({ className = '' }: { className?: string }) {
   const path = usePathname()
-  const [nuovoOpen, setNuovoOpen] = useState(false)
+  const { sheetOpen, openNuovo, closeNuovo, tab } = useNuovoTrigger(path)
   return (
     <nav
       className={`pointer-events-auto bg-botanico-bar/95 backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.18)] ${className}`}
@@ -188,7 +207,7 @@ export function MobileNavBar({ className = '' }: { className?: string }) {
             }`
             if (href === '/upload') {
               return (
-                <button key={href} type="button" onClick={() => setNuovoOpen(true)} className={linkClassName}>
+                <button key={href} type="button" onClick={openNuovo} className={linkClassName}>
                   <Icon className="w-4 h-4" strokeWidth={2} />
                   <span className="text-[9px] font-bold leading-none">{label}</span>
                 </button>
@@ -204,7 +223,7 @@ export function MobileNavBar({ className = '' }: { className?: string }) {
         </div>
         <ProfileAvatar size={32} iconSize={14} />
       </div>
-      <NuovoDiarioSheet open={nuovoOpen} onClose={() => setNuovoOpen(false)} tab={nuovoTabFor(path)} />
+      <NuovoDiarioSheet open={sheetOpen} onClose={closeNuovo} tab={tab} />
     </nav>
   )
 }
@@ -212,13 +231,13 @@ export function MobileNavBar({ className = '' }: { className?: string }) {
 // ── Mobile: barra unica in fondo (redesign fase 1) ──────────────────────────────
 // Sposta la navigazione principale in basso, raggiungibile col pollice — l'avatar Profilo non ci
 // vive più dentro (era l'unico modo per raggiungere Profilo su mobile, ora un'icona a sé,
-// FloatingProfileAvatar sotto): 4 voci pari, nessuna eccezione di forma per l'ultima.
+// FloatingProfileAvatar sotto): voci pari, nessuna eccezione di forma per l'ultima.
 // Non riusa <MobileNavBar/> (quella resta la pillola in alto delle pagine "magazine"
 // Guide/Resoconto, invariata — components/routehub/HubNavBar.tsx): stesse voci (NAV_LINKS),
 // diversa cornice, per non toccare quelle pagine finché non vengono ridisegnate.
 function MobileBottomBar() {
   const path = usePathname()
-  const [nuovoOpen, setNuovoOpen] = useState(false)
+  const { sheetOpen, openNuovo, closeNuovo, tab } = useNuovoTrigger(path)
   return (
     <nav
       className="md:hidden fixed z-40 inset-x-0 bottom-0 bg-botanico-bar/95 backdrop-blur-md shadow-[0_-2px_12px_rgba(0,0,0,0.18)]"
@@ -232,7 +251,7 @@ function MobileBottomBar() {
           }`
           if (href === '/upload') {
             return (
-              <button key={href} type="button" onClick={() => setNuovoOpen(true)} className={className}>
+              <button key={href} type="button" onClick={openNuovo} className={className}>
                 <Icon className="w-5 h-5" strokeWidth={2} />
                 <span className="text-[10px] font-bold leading-none">{label}</span>
               </button>
@@ -246,7 +265,7 @@ function MobileBottomBar() {
           )
         })}
       </div>
-      <NuovoDiarioSheet open={nuovoOpen} onClose={() => setNuovoOpen(false)} tab={nuovoTabFor(path)} />
+      <NuovoDiarioSheet open={sheetOpen} onClose={closeNuovo} tab={tab} />
     </nav>
   )
 }

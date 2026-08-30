@@ -296,18 +296,14 @@ export async function POST(req: NextRequest) {
       hike.routePolyline = downsamplePolyline(hike.trackPoints)
     }
 
-    // Ogni Percorso appartiene a un Diario — un nuovo percorso senza diaryId esplicito (flussi
-    // di creazione non ancora aggiornati alla Fase 3 di docs/diario-fulcro-piano.md) finisce nel
-    // Diario di default dell'utente invece di restare orfano. Non tocca un percorso già esistente.
-    if (!existingHike && !hike.diaryId) {
-      const { data: defaultDiary } = await supabase
-        .from('diaries')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('is_default', true)
-        .maybeSingle()
-      if (defaultDiary) hike.diaryId = defaultDiary.id as string
-    }
+    // Ristrutturazione Diario/Mete (richiesta esplicita dell'utente): una Meta (questo Percorso)
+    // NON appartiene più a un Diario per default — resta diary_id NULL finché non viene camminata.
+    // Prima di questo cambio, un nuovo percorso senza diaryId esplicito finiva silenziosamente nel
+    // Diario di default; ora il Diario si sceglie solo alla creazione del Reportage (vedi
+    // components/upload/ActivityUploader.tsx, che scrive diaryId sul Percorso collegato in quel
+    // momento). Un diaryId esplicito passato dal chiamante (raro ora, restava per compatibilità
+    // con flussi non ancora aggiornati) viene comunque rispettato, semplicemente non c'è più un
+    // fallback silenzioso quando manca.
 
     // Personalised assessment using completed activities as context
     // Falls back to Supabase if blob is gone

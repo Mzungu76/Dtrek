@@ -13,17 +13,19 @@ import { updateUserSettings } from '@/lib/sync/userSettingsStore'
 import { FONT } from '@/lib/designTokens'
 import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, FONT_HAND, TaccuinoPaperTexture, HandDrawnFrame } from '@/lib/taccuinoTokens'
 import {
-  ArrowDown, ArrowLeft, ArrowUp, Check, ChevronRight, Clock, Loader2, Lock, LockOpen, Mountain,
+  ArrowDown, ArrowLeft, ArrowUp, BookOpen, ChevronRight, Clock, Loader2, Mountain,
   Plus, Route, Search, Share2, Star, Trash2, TrendingUp, X,
 } from 'lucide-react'
 
 /**
- * Eliminazione del Diario — Fase 6 di docs/diario-fulcro-piano.md. Mai un default silenzioso:
- * l'utente sceglie esplicitamente se spostare i Percorsi nel Diario di default (che resta intatto
- * insieme ai loro Reportage) o eliminare tutto (Percorsi e Reportage — foto, video, racconti
- * inclusi). Il Diario di default non espone mai questa sezione (vedi il chiamante). Stesso pattern
- * di conferma inline già usato altrove nell'app (es. "Elimina guida" in app/guida/GuidaHub.tsx) —
- * qui con due scelte esplicite invece di una sola conferma, perché non ce n'è una "di default".
+ * Eliminazione del Diario — Fase 6 di docs/diario-fulcro-piano.md, aggiornata per la
+ * ristrutturazione Diario/Mete: un Diario contiene solo Reportage, quindi la scelta ora riguarda
+ * loro (non più le Mete, che restano invariate — un Diario non "possiede" una Meta finché non
+ * viene camminata). Mai un default silenzioso: l'utente sceglie esplicitamente se spostare i
+ * Reportage nel Diario di default o eliminare tutto (foto, video, racconti inclusi). Il Diario di
+ * default non espone mai questa sezione (vedi il chiamante). Stesso pattern di conferma inline già
+ * usato altrove nell'app (es. "Elimina guida" in app/guida/GuidaHub.tsx) — qui con due scelte
+ * esplicite invece di una sola conferma, perché non ce n'è una "di default".
  */
 function DeleteDiarioSection({ diaryId }: { diaryId: string }) {
   const router = useRouter()
@@ -57,7 +59,7 @@ function DeleteDiarioSection({ diaryId }: { diaryId: string }) {
         </button>
       ) : (
         <div className="bg-red-50 border border-red-200 rounded-2xl p-4 max-w-lg space-y-3">
-          <p className="text-sm text-red-800 font-medium">Cosa succede ai Percorsi di questo Diario?</p>
+          <p className="text-sm text-red-800 font-medium">Cosa succede ai Reportage di questo Diario?</p>
           {error && <p className="text-sm text-red-600">{error}</p>}
           <div className="flex flex-col gap-2">
             <button
@@ -66,7 +68,7 @@ function DeleteDiarioSection({ diaryId }: { diaryId: string }) {
               className="flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-red-200 hover:border-red-300 rounded-xl text-sm font-medium text-stone-700 transition-colors disabled:opacity-60"
             >
               {busy === 'migrate' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              Sposta i Percorsi nel Diario di default, poi elimina questo Diario
+              Sposta i Reportage nel Diario di default, poi elimina questo Diario
             </button>
             <button
               onClick={() => run('deleteAll')}
@@ -74,7 +76,7 @@ function DeleteDiarioSection({ diaryId }: { diaryId: string }) {
               className="flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-700 rounded-xl text-sm font-medium text-white transition-colors disabled:opacity-60"
             >
               {busy === 'deleteAll' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              Elimina tutto — Percorsi e Reportage inclusi (foto, video, racconti)
+              Elimina tutto — Reportage inclusi (foto, video, racconti)
             </button>
             <button
               onClick={() => setOpen(false)}
@@ -95,13 +97,16 @@ const SOMMARIO_SORT_OPTIONS: { id: SommarioSortKey; label: string }[] = [
   { id: 'date', label: 'Data' }, { id: 'km', label: 'Km' }, { id: 'dplus', label: 'D+' }, { id: 'cts', label: 'TS' },
 ]
 
-/** Stato del Percorso — filtro richiesto in aggiunta a ricerca/preferiti/ordinamento (Fase 9). */
-type SommarioStatusFilter = 'all' | 'programmate' | 'con_uscita'
+/** Stato del Reportage — filtro richiesto in aggiunta a ricerca/preferiti/ordinamento (Fase 9),
+ *  aggiornato per la ristrutturazione Diario/Mete: ogni riga del Sommario è già un Reportage (non
+ *  più una Meta "in programma" o "con uscita"), quindi lo stato distingue se ha già un racconto
+ *  scritto (hike_reports) oppure no. */
+type SommarioStatusFilter = 'all' | 'raccontati' | 'senza_racconto'
 const SOMMARIO_STATUS_OPTIONS: { id: SommarioStatusFilter; label: string }[] = [
-  { id: 'all', label: 'Tutti' }, { id: 'programmate', label: 'In programma' }, { id: 'con_uscita', label: 'Con uscita' },
+  { id: 'all', label: 'Tutti' }, { id: 'raccontati', label: 'Raccontati' }, { id: 'senza_racconto', label: 'Senza racconto' },
 ]
 
-/** Rotazione stabile per percorso (Fase 29, "ritaglio incollato") — derivata dall'id, non
+/** Rotazione stabile per reportage (Fase 29, "ritaglio incollato") — derivata dall'id, non
  *  `Math.random()`: la stessa riga deve inclinarsi sempre allo stesso modo tra un render e
  *  l'altro (un valore casuale ricalcolato salterebbe a ogni aggiornamento della lista). Ampiezza
  *  ridotta in Fase 31 a ±0.7° (era ±2.5°) — "NON usare rotazioni troppo evidenti", una miniatura
@@ -139,15 +144,15 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
   // percorsi") — qui senza "Distanza" (richiede l'indirizzo di partenza + una chiamata Google
   // Maps per percorso, non praticabile per un intero elenco insieme, vedi Fase 7) e senza la
   // sotto-sezione "Prossima uscita" dei preferiti (specifica del carosello che si swipa, non del
-  // Sommario). "Data" è l'ordine con cui l'API restituisce già i percorsi (created_at desc), non
+  // Sommario). "Data" è l'ordine con cui l'API restituisce già i reportage (start_time desc), non
   // serve un secondo ordinamento per quello.
-  const visiblePercorsi = useMemo(() => {
-    let rows = detail?.percorsi ?? []
-    if (favoritesOnly) rows = rows.filter(p => p.favorite)
-    if (statusFilter === 'programmate') rows = rows.filter(p => p.reportageCount === 0)
-    else if (statusFilter === 'con_uscita') rows = rows.filter(p => p.reportageCount > 0)
+  const visibleReportage = useMemo(() => {
+    let rows = detail?.reportage ?? []
+    if (favoritesOnly) rows = rows.filter(r => r.favorite)
+    if (statusFilter === 'raccontati') rows = rows.filter(r => r.hasWrittenReport)
+    else if (statusFilter === 'senza_racconto') rows = rows.filter(r => !r.hasWrittenReport)
     const q = searchQuery.trim().toLowerCase()
-    if (q) rows = rows.filter(p => p.title.toLowerCase().includes(q))
+    if (q) rows = rows.filter(r => r.title.toLowerCase().includes(q))
     if (sortBy !== 'date') {
       rows = [...rows].sort((a, b) => {
         if (sortBy === 'km') return b.distanceMeters - a.distanceMeters
@@ -155,7 +160,7 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
         return (b.trailScore ?? 0) - (a.trailScore ?? 0)
       })
     }
-    // "Data" arriva già in ordine created_at desc dall'API: invertire l'intero elenco (qui, non
+    // "Data" arriva già in ordine start_time desc dall'API: invertire l'intero elenco (qui, non
     // dentro il sort sopra) copre anche quel caso senza bisogno di un comparatore per data.
     if (sortDir === 'asc') rows = [...rows].reverse()
     return rows
@@ -216,13 +221,13 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
               {detail.title}
             </h1>
             <p style={{ fontFamily: FONT_HAND, fontSize: 14, color: TACCUINO_INK.handMuted, margin: '3px 0 0' }}>
-              {detail.subtitle ? `"${detail.subtitle}" — ` : ''}{detail.percorsi.length} {detail.percorsi.length === 1 ? 'percorso' : 'percorsi'}
+              {detail.subtitle ? `"${detail.subtitle}" — ` : ''}{detail.reportage.length} reportage
             </p>
           </div>
         </div>
 
         <Link
-          href={`/upload?diaryId=${encodeURIComponent(diaryId)}`}
+          href={`/upload?tab=activity&diaryId=${encodeURIComponent(diaryId)}`}
           className="relative flex items-center gap-2 mb-3 px-3.5 py-2.5 rounded"
           style={{
             color: TACCUINO_ACCENT[600], fontFamily: FONT_HAND, fontWeight: 700, fontSize: 15,
@@ -230,10 +235,10 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
           }}
         >
           <HandDrawnFrame stroke={TACCUINO_PAPER.contourLine} strokeWidth={2} rx={6} dashed />
-          <Plus className="w-4 h-4" /> nuovo percorso
+          <Plus className="w-4 h-4" /> nuovo reportage
         </Link>
 
-        {detail.percorsi.length > 0 && (
+        {detail.reportage.length > 0 && (
           <div className="mb-3">
             <div className="relative mb-2">
               <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: TACCUINO_INK.handMuted }} />
@@ -308,78 +313,62 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
           </div>
         )}
 
-        {detail.percorsi.length === 0 ? (
-          <p style={{ fontFamily: FONT.body, fontSize: 13, color: TACCUINO_INK.handMuted }}>Nessun percorso ancora — comincia da qui.</p>
-        ) : visiblePercorsi.length === 0 ? (
-          <p style={{ fontFamily: FONT.body, fontSize: 13, color: TACCUINO_INK.handMuted }}>Nessun percorso corrisponde ai filtri.</p>
+        {detail.reportage.length === 0 ? (
+          <p style={{ fontFamily: FONT.body, fontSize: 13, color: TACCUINO_INK.handMuted }}>Nessun reportage ancora — comincia da qui.</p>
+        ) : visibleReportage.length === 0 ? (
+          <p style={{ fontFamily: FONT.body, fontSize: 13, color: TACCUINO_INK.handMuted }}>Nessun reportage corrisponde ai filtri.</p>
         ) : (
           <div className="flex flex-col">
-            {visiblePercorsi.map(p => {
-              const percorsoPath = `/diari/${encodeURIComponent(diaryId)}/percorsi/${encodeURIComponent(p.id)}`
-              const scoreLabel = p.trailScore != null ? ctsLabel(p.trailScore).label : null
-              const haOgniUscita = p.reportageCount > 0
+            {visibleReportage.map(r => {
+              // Un Reportage nato dopo la ristrutturazione Diario/Mete ha sempre una Meta
+              // collegata (percorsoId): la riga rimanda al riepilogo "a libro" già esistente
+              // (docs/diario-a-libro-piano.md), dove vive anche il pannello di generazione AI. Un
+              // Reportage antecedente ai Diari (percorsoId nullo) ripiega sulla vista estesa
+              // standalone, l'unica raggiungibile senza una Meta di riferimento.
+              const reportagePath = r.percorsoId
+                ? `/diari/${encodeURIComponent(diaryId)}/percorsi/${encodeURIComponent(r.percorsoId)}/reportage/${encodeURIComponent(r.id)}`
+                : `/resoconto/${encodeURIComponent(r.id)}`
+              const scoreLabel = r.trailScore != null ? ctsLabel(r.trailScore).label : null
               return (
                 <div
-                  key={p.id}
+                  key={r.id}
                   className="flex items-center gap-3.5 py-3.5 px-2 -mx-2"
                   style={{
                     // Fase 31 — separatore con opacità (non più il colore pieno di `cardBorder`):
                     // "linee tratteggiate stampate, colore molto tenue, opacità 0.4-0.6", non un
                     // bordo pieno come una card. `80` = ~50% alpha.
                     borderBottom: `1px dashed ${TACCUINO_PAPER.cardBorder}80`,
-                    // "Passata di evidenziatore" per i percorsi con almeno un'uscita —
-                    // riconoscibili a colpo d'occhio senza dover leggere l'etichetta a destra.
-                    // Colore ripreso dal mockup (`#e9d4ae66`), non il tinteggio arancio-accento di
-                    // prima: doveva leggersi come evidenziatore su carta, non come uno stato "attivo".
-                    background: haOgniUscita ? `${TACCUINO_PAPER.highlight}66` : 'transparent',
+                    // "Passata di evidenziatore" per i reportage già raccontati — riconoscibili a
+                    // colpo d'occhio senza dover leggere l'etichetta a destra. Colore ripreso dal
+                    // mockup (`#e9d4ae66`), non il tinteggio arancio-accento di prima: doveva
+                    // leggersi come evidenziatore su carta, non come uno stato "attivo".
+                    background: r.hasWrittenReport ? `${TACCUINO_PAPER.highlight}66` : 'transparent',
                   }}
                 >
                   {/* Stessa riga di components/routehub/ExpandedGalleryList.tsx (mappa reale,
-                      etichetta idoneità/sicurezza, pillole dati, anello Trail Score) — qui
-                      ricolorata per il taccuino invece dello sfondo scuro di quella lista.
-                      Un solo Link per l'intera riga (prima ce n'erano due, scomodo): va sempre
-                      alla Guida, l'indicazione dei Reportage è solo informativa, non un secondo
-                      collegamento — la pagina dell'elenco Reportage a sé non esiste più (Fase 15),
-                      quell'elenco vive ora dentro la Guida stessa. Anello TS e stato a destra
-                      hanno una larghezza fissa (non "shrink-to-content") così restano allineati in
-                      verticale da una riga all'altra, indipendentemente da quanto testo hanno le
-                      righe vicine. */}
-                  <Link href={`${percorsoPath}/guida/prima_di_partire`} className="flex items-center gap-3.5 flex-1 min-w-0">
-                    {/* Vera mappa (GalleryMapThumb, invariata nel componente — stessa usata dalla
-                        galleria Guida/Resoconto), non un disegno astratto. Fasi 29-39 avevano
-                        provato via via un `filter` CSS di ricolorazione e poi un tile provider
-                        diverso (OpenTopoMap, `tileStyle="topo"`) per farla sembrare "carta da
-                        campo": nessuna delle due letture era quello che l'utente intendeva per
-                        "colore originale" — chiarito esplicitamente come i colori nativi di una
-                        mappa OSM/Leaflet standard. `tileStyle` torna quindi al default ('light',
-                        vedi `PROVIDERS` in `app/api/tile/route.ts`), senza alcun filtro CSS sopra.
-                        Il "ritaglio incollato" (bordo bianco spesso + ombra sfalsata + lieve
-                        rotazione stabile per percorso, stesso principio della copertina in
-                        `DiarioCoverThumb`) sostituisce `HandDrawnFrame` qui — coerente con "una
-                        foto incollata sulla pagina". Il tracciato (`lineColor`/`dashArray` di
-                        Leaflet, nativi — non un filtro SVG dentro Leaflet, la stessa combinazione
-                        già scartata in Fase 21) resta china nera tratteggiata (validata a schermo:
-                        "funziona sorprendentemente bene"), `showEndpoints` aggiunge
-                        partenza/arrivo, rimpiccioliti in Fase 30 (sembravano "marker di Leaflet"):
-                        la precisione del percorso resta intatta, sono gli stessi punti GPS, solo
-                        lo stile del tratto cambia. `dimTiles={false}` toglie il velo scuro pensato
-                        per la galleria a sfondo nero (qui contro i "colori originali" richiesti). */}
+                      pillole dati, anello Trail Score) — qui ricolorata per il taccuino invece
+                      dello sfondo scuro di quella lista. Un solo Link per l'intera riga. Anello TS
+                      e stato a destra hanno una larghezza fissa (non "shrink-to-content") così
+                      restano allineati in verticale da una riga all'altra, indipendentemente da
+                      quanto testo hanno le righe vicine. */}
+                  <Link href={reportagePath} className="flex items-center gap-3.5 flex-1 min-w-0">
+                    {/* Vera mappa (GalleryMapThumb) del tracciato registrato (activities.route_polyline),
+                        non quello pianificato — "ritaglio incollato" (bordo bianco spesso + ombra
+                        sfalsata + lieve rotazione stabile per reportage, stesso principio della
+                        copertina in `DiarioCoverThumb`). */}
                     <div
                       className="w-[87px] h-[87px] shrink-0 overflow-hidden relative"
                       style={{
                         background: TACCUINO_PAPER.card,
                         border: `3px solid ${TACCUINO_PAPER.light}`,
-                        // Fase 31 — ombra "molto morbida... piccola, molto diffusa, opacità bassa,
-                        // leggermente spostata verso il basso" (non più un'ombra da card moderna:
-                        // offset ridotto, sfocatura maggiore, tinta calda invece di nero puro).
                         boxShadow: `0 4px 10px rgba(41,35,30,0.15)`,
-                        transform: `rotate(${cutoutRotation(p.id)}deg)`,
+                        transform: `rotate(${cutoutRotation(r.id)}deg)`,
                       }}
                     >
-                      {p.routePolyline && p.routePolyline.length > 1
+                      {r.routePolyline && r.routePolyline.length > 1
                         ? (
                           <GalleryMapThumb
-                            polyline={p.routePolyline}
+                            polyline={r.routePolyline}
                             lineColor={TACCUINO_INK.typed}
                             lineWeight={2}
                             dashArray="3 2.5"
@@ -392,32 +381,28 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                     <div className="min-w-0 flex-1">
                       {/* Fase 32 — non più `truncate` (richiesta esplicita: il titolo deve leggersi
                           sempre per intero, non tagliato con "..."): va a capo libero invece di
-                          troncare su una riga sola. Nessuna interazione di "tocca per espandere"
-                          necessaria — l'intera riga è già un `<Link>` verso la Guida, un'area
-                          cliccabile separata solo sul titolo per mostrarlo esteso avrebbe voluto
-                          dire intercettare quel click (`preventDefault`/`stopPropagation`) dentro
-                          l'unico link della riga, un secondo target interattivo annidato in quello
-                          esistente invece di una singola area cliccabile chiara. */}
-                      <p style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 19.5, color: TACCUINO_INK.typed, lineHeight: 1.15 }}>{p.title}</p>
-                      {(scoreLabel || p.safety) && (
+                          troncare su una riga sola. */}
+                      <p style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 19.5, color: TACCUINO_INK.typed, lineHeight: 1.15 }}>{r.title}</p>
+                      {scoreLabel && (
                         // Fase 31 — font a mano anche qui ("sottotitoli personali" nella specifica
                         // tipografica, non più il sans di default): resta comunque un gradino sotto
                         // il titolo (corpo più piccolo, stesso tono tenue di prima).
                         <p className="truncate" style={{ fontFamily: FONT_HAND, fontSize: 14, fontWeight: 600, color: TACCUINO_INK.handMuted, marginTop: 1 }}>
-                          {[scoreLabel, p.safety?.label].filter(Boolean).join(' · ')}
+                          {scoreLabel}
                         </p>
                       )}
-                      {/* Fase 30 — peso visivo ridotto rispetto al titolo su richiesta esplicita
-                          dell'utente ("nel concetto Diario farei emergere molto di più nome +
-                          giudizio + fotografia... lasciando i numeri come annotazioni secondarie"):
-                          font più piccolo, stesso grigio-marrone tenue delle icone invece del
-                          marrone più scuro di prima, icone rimpicciolite — restano leggibili ma
-                          non competono più col titolo per attenzione. */}
+                      {/* Fase 30 — peso visivo ridotto rispetto al titolo: font più piccolo, stesso
+                          grigio-marrone tenue delle icone invece del marrone più scuro di prima,
+                          icone rimpicciolite — restano leggibili ma non competono col titolo per
+                          attenzione. */}
                       <div className="flex items-center flex-wrap gap-x-2.5 gap-y-1 mt-1.5" style={{ fontFamily: FONT.lora, fontSize: 11, color: TACCUINO_INK.handMuted }}>
-                        <span className="inline-flex items-center gap-1"><Route className="w-3 h-3" /> {(p.distanceMeters / 1000).toFixed(1)} km</span>
-                        <span className="inline-flex items-center gap-1"><TrendingUp className="w-3 h-3" /> +{Math.round(p.elevationGain)} m</span>
-                        <span className="inline-flex items-center gap-1"><Mountain className="w-3 h-3" /> {Math.round(p.altitudeMax)} m</span>
-                        <span className="inline-flex items-center gap-1"><Clock className="w-3 h-3" /> {formatDuration(p.estimatedTimeSeconds)}</span>
+                        <span className="inline-flex items-center gap-1"><Route className="w-3 h-3" /> {(r.distanceMeters / 1000).toFixed(1)} km</span>
+                        <span className="inline-flex items-center gap-1"><TrendingUp className="w-3 h-3" /> +{Math.round(r.elevationGain)} m</span>
+                        <span className="inline-flex items-center gap-1"><Mountain className="w-3 h-3" /> {Math.round(r.altitudeMax)} m</span>
+                        <span className="inline-flex items-center gap-1"><Clock className="w-3 h-3" /> {formatDuration(r.totalTimeSeconds)}</span>
+                        {r.userRating != null && (
+                          <span className="inline-flex items-center gap-1"><Star className="w-3 h-3" fill="currentColor" /> {r.userRating}/10</span>
+                        )}
                       </div>
                     </div>
                     <div className="relative shrink-0 w-11 h-11 flex items-center justify-center">
@@ -426,16 +411,17 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                           moderni, non trasformarlo in vintage — il contrasto tra diario/mappa e
                           score/dati è voluto, crea il carattere di Dtrek"). Resta tecnico e pulito,
                           non toccato. */}
-                      {p.trailScore != null && (
-                        <TrailScoreGaugeBadge total={p.trailScore} safety={p.safety} size={46} showLabel={false} dark={false} />
+                      {r.trailScore != null && (
+                        <TrailScoreGaugeBadge total={r.trailScore} safety={null} size={46} showLabel={false} dark={false} />
                       )}
                     </div>
                     <div
                       className="shrink-0 flex items-center justify-end gap-1"
-                      style={{ width: 94, fontFamily: FONT_HAND, fontSize: 15, color: haOgniUscita ? TACCUINO_ACCENT[600] : TACCUINO_INK.handMuted, fontWeight: haOgniUscita ? 700 : 400 }}
+                      style={{ width: 94, fontFamily: FONT_HAND, fontSize: 15, color: r.hasWrittenReport ? TACCUINO_ACCENT[600] : TACCUINO_INK.handMuted, fontWeight: r.hasWrittenReport ? 700 : 400 }}
                     >
-                      {haOgniUscita && <Check className="w-3.5 h-3.5 shrink-0" strokeWidth={3} />}
-                      {haOgniUscita ? `${p.reportageCount} reportage` : 'in programma'}
+                      {r.hasWrittenReport
+                        ? <><BookOpen className="w-3.5 h-3.5 shrink-0" strokeWidth={2.5} /> raccontato</>
+                        : 'senza racconto'}
                     </div>
                   </Link>
                 </div>

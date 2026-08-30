@@ -7,9 +7,12 @@ import type { DiarySummary } from '@/app/api/diaries/route'
 interface Props {
   open: boolean
   onClose: () => void
-  /** "gpx" = "Crea un percorso" (/upload?tab=gpx), "activity" = "Crea un Resoconto"
-   *  (/upload?tab=activity, il default della pagina) — decisa dal chiamante in base alla sezione
-   *  attiva (Percorsi vs il resto), non da questo componente. */
+  /** Solo "activity" ("Crea un Resoconto", /upload?tab=activity) arriva davvero qui —
+   *  components/Navbar.tsx (useNuovoTrigger) apre questo sheet solo in quel caso. "gpx" ("Crea
+   *  una Meta") salta invece dritto a /upload?tab=gpx senza passare da qui: ristrutturazione
+   *  Diario/Mete, richiesta esplicita dell'utente — una Meta non appartiene a un Diario finché non
+   *  viene camminata, quindi non ha senso chiederlo alla pianificazione. Il tipo resta un'unione
+   *  (non solo 'activity') perché questo componente non deve sapere/assumere chi lo chiama. */
   tab: 'activity' | 'gpx'
 }
 
@@ -17,7 +20,9 @@ interface Props {
 // non ha un Diario di contesto (a differenza del composer dentro un Diario specifico, rimosso in
 // fase 1): invece di assegnarlo in automatico al Diario di default lato server (comportamento
 // preesistente di app/api/planned/route.ts per i flussi senza diaryId), si chiede sempre — anche
-// con un solo Diario esistente, per coerenza, nessun caso speciale silenzioso.
+// con un solo Diario esistente, per coerenza, nessun caso speciale silenzioso. Vale per la
+// creazione di un Reportage (tab='activity'); una Meta (tab='gpx') non passa più da qui, vedi il
+// commento su `tab` sopra.
 export default function NuovoDiarioSheet({ open, onClose, tab }: Props) {
   const router = useRouter()
   const [diaries, setDiaries] = useState<DiarySummary[] | null>(null)
@@ -67,9 +72,9 @@ export default function NuovoDiarioSheet({ open, onClose, tab }: Props) {
         <div className="flex items-center justify-between px-5 py-4 border-b border-stone-100">
           <div>
             <p className="text-[15px] font-bold text-stone-800">
-              {tab === 'gpx' ? 'Nuovo percorso — in quale Diario?' : 'Nuova uscita — in quale Diario?'}
+              {tab === 'gpx' ? 'Nuova meta — in quale Diario?' : 'Nuova uscita — in quale Diario?'}
             </p>
-            <p className="text-[12px] text-stone-400">Ogni Percorso e ogni Reportage appartengono a un Diario</p>
+            <p className="text-[12px] text-stone-400">Ogni Reportage appartiene a un Diario</p>
           </div>
           <button onClick={onClose} aria-label="Chiudi" className="text-stone-400 hover:text-stone-600 shrink-0">
             <X className="w-5 h-5" />
@@ -102,7 +107,7 @@ export default function NuovoDiarioSheet({ open, onClose, tab }: Props) {
                   <div className="min-w-0 flex-1">
                     <p className="text-[14px] font-bold text-stone-800 truncate">{d.title}</p>
                     <p className="text-[12px] text-stone-500">
-                      {d.percorsiCount} {d.percorsiCount === 1 ? 'percorso' : 'percorsi'}
+                      {d.reportageCount} reportage
                       {d.isDefault ? ' · Diario di default' : ''}
                     </p>
                   </div>
