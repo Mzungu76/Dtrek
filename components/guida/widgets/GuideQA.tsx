@@ -117,7 +117,7 @@ export default function GuideQA({ hikeId, hikeFallback }: { hikeId: string; hike
       <div className="flex items-start gap-3 px-5 pt-5 pb-3 sm:px-7 sm:pt-6 md:px-8 md:pt-7">
         <span
           className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-white [&>svg]:w-[18px] [&>svg]:h-[18px]"
-          style={{ background: '#813619' }}
+          style={{ background: '#6E301E' /* terra-800 */ }}
         >
           <MessageCircleQuestion />
         </span>

@@ -246,7 +246,7 @@ export default function RouteHub({
 
   if (items.length === 0) {
     return (
-      <div className="fixed inset-0 bg-[#0b1a24] flex items-center justify-center text-stone-400 text-sm">
+      <div className="fixed inset-0 bg-[#2E3A26] flex items-center justify-center text-stone-400 text-sm">
         Nessun percorso disponibile.
       </div>
     )
@@ -254,7 +254,7 @@ export default function RouteHub({
 
   if (visibleItems.length === 0) {
     return (
-      <div className="fixed inset-0 bg-[#0b1a24] flex flex-col items-center justify-center gap-3 text-stone-400 text-sm px-6 text-center">
+      <div className="fixed inset-0 bg-[#2E3A26] flex flex-col items-center justify-center gap-3 text-stone-400 text-sm px-6 text-center">
         {favoritesFilter && nextOutingFilter && !searchQueryNorm
           ? <CalendarClock className="w-8 h-8 text-stone-600" />
           : <Star className="w-8 h-8 text-stone-600" />}
@@ -299,7 +299,7 @@ export default function RouteHub({
     // it previously broke the bottom gallery's native horizontal scroll, since that strip lives
     // inside this same wrapper. Each element that actually needs to own a gesture sets its own
     // touch-action directly (RouteCarousel, RoutePage's header handle).
-    <div className="fixed inset-0 overflow-hidden bg-[#0b1a24] select-none">
+    <div className="fixed inset-0 overflow-hidden bg-[#2E3A26] select-none">
       {/* STAGE — the closed-card "magazine cover": a real photo when available (Resoconto), else
           a stylized non-interactive route map (CoverMap) — never a live/interactive map anymore. */}
       <div className="absolute inset-0">
@@ -327,7 +327,7 @@ export default function RouteHub({
                 />
                 <div
                   className="absolute inset-0 pointer-events-none mix-blend-multiply"
-                  style={{ background: 'linear-gradient(160deg, rgba(129,54,25,0.35) 0%, rgba(28,71,36,0.3) 55%, rgba(7,24,36,0.45) 100%)' }}
+                  style={{ background: 'linear-gradient(160deg, rgba(110,48,30,0.35) 0%, rgba(58,74,50,0.3) 55%, rgba(46,58,38,0.45) 100%)' }}
                 />
               </div>
             ) : inWindow ? (
@@ -380,8 +380,8 @@ export default function RouteHub({
             >
               <Star
                 className="w-6 h-6"
-                color={item.favorite ? '#e9ab64' : '#fff'}
-                fill={item.favorite ? '#e9ab64' : 'none'}
+                color={item.favorite ? '#DDA476' : '#fff'}
+                fill={item.favorite ? '#DDA476' : 'none'}
                 style={{ filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.5))' }}
               />
             </button>

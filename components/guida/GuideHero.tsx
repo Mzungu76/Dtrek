@@ -66,17 +66,17 @@ export default function GuideHero({ trackPoints, routePolyline, title, categoryB
             interactive={false}
             bare
             showEndpointMarkers={false}
-            routeColor="#813619"
+            routeColor="#6E301E"
             routeWeight={2.5}
             routeOpacity={0.7}
           />
         </div>
       ) : (
-        <div className="absolute inset-0" style={{ background: 'linear-gradient(160deg, #f9e8d0 0%, #dcf0de 100%)' }} />
+        <div className="absolute inset-0" style={{ background: 'linear-gradient(160deg, #F6E2CE 0%, #E9EEE3 100%)' }} />
       )}
 
       <div className="absolute inset-0" style={{
-        background: 'linear-gradient(to top, rgba(31,22,15,0.88) 0%, rgba(31,22,15,0.4) 42%, rgba(31,22,15,0.08) 78%, transparent 100%)',
+        background: 'linear-gradient(to top, rgba(46,42,34,0.88) 0%, rgba(46,42,34,0.4) 42%, rgba(46,42,34,0.08) 78%, transparent 100%)',
       }} />
 
       <div className="absolute bottom-0 left-0 right-0 px-5 sm:px-8 md:px-10 pb-5 md:pb-7">

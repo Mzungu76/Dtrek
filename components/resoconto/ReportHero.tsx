@@ -83,17 +83,17 @@ export default function ReportHero({ trackPoints, title, categoryBadge, startTim
             interactive={false}
             bare
             showEndpointMarkers={false}
-            routeColor="#193b20"
+            routeColor="#2E3A26"
             routeWeight={2.5}
             routeOpacity={0.7}
           />
         </div>
       ) : (
-        <div className="absolute inset-0" style={{ background: 'linear-gradient(160deg, #dcf0de 0%, #f9e8d0 100%)' }} />
+        <div className="absolute inset-0" style={{ background: 'linear-gradient(160deg, #E9EEE3 0%, #F6E2CE 100%)' }} />
       )}
 
       <div className="absolute inset-0" style={{
-        background: 'linear-gradient(to top, rgba(15,26,17,0.88) 0%, rgba(15,26,17,0.4) 42%, rgba(15,26,17,0.08) 78%, transparent 100%)',
+        background: 'linear-gradient(to top, rgba(46,42,34,0.88) 0%, rgba(46,42,34,0.4) 42%, rgba(46,42,34,0.08) 78%, transparent 100%)',
       }} />
 
       {photos.length > 1 && (

@@ -44,7 +44,7 @@ export default function ExpandedGalleryList({
   const touchStartY = useRef<number | null>(null)
 
   return (
-    <div className="fixed inset-0 z-50 bg-[#0b1a24] flex flex-col">
+    <div className="fixed inset-0 z-50 bg-[#2E3A26] flex flex-col">
       <div
         className="shrink-0 px-4 pt-[calc(env(safe-area-inset-top,0px)+10px)] pb-2 border-b border-white/10"
         onTouchStart={e => { touchStartY.current = e.touches[0].clientY }}

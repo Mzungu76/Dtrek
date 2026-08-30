@@ -31,7 +31,7 @@ export default function CoverMap({ polyline }: Props) {
       })
       mapInstance.current = map
       L.tileLayer('/api/tile?z={z}&x={x}&y={y}&style=light', { maxZoom: 19 }).addTo(map)
-      const line = L.polyline(polyline, { color: '#f2cd9d', weight: 5, opacity: 0.95 }).addTo(map)
+      const line = L.polyline(polyline, { color: '#E9DAC3', weight: 5, opacity: 0.95 }).addTo(map)
       const fit = () => map.fitBounds(line.getBounds(), { padding: [28, 28] })
 
       // Il contenitore (una card dentro il carosello swipeable di RouteHub) può essere ancora a
@@ -59,17 +59,17 @@ export default function CoverMap({ polyline }: Props) {
   }, [polyline])
 
   return (
-    <div className="absolute inset-0 overflow-hidden bg-gradient-to-br from-[#123448] to-[#071824]">
+    <div className="absolute inset-0 overflow-hidden bg-gradient-to-br from-[#4A5A3F] to-[#2E3A26]">
       <div
         ref={mapRef}
         className="absolute inset-0"
         style={{ filter: 'saturate(1.35) contrast(1.12) brightness(0.78)' }}
       />
-      {/* Color-grade tint in the app's own palette (terra/forest/deep navy), so the raw OSM tiles
-          read as a designed magazine cover rather than a screenshot of a map. */}
+      {/* Color-grade tint in the app's own palette (terra/forest, direzione "Taccuino Botanico"),
+          so the raw OSM tiles read as a designed magazine cover rather than a screenshot of a map. */}
       <div
         className="absolute inset-0 pointer-events-none mix-blend-multiply"
-        style={{ background: 'linear-gradient(160deg, rgba(129,54,25,0.55) 0%, rgba(28,71,36,0.5) 55%, rgba(7,24,36,0.65) 100%)' }}
+        style={{ background: 'linear-gradient(160deg, rgba(110,48,30,0.55) 0%, rgba(58,74,50,0.5) 55%, rgba(46,58,38,0.65) 100%)' }}
       />
       <div className="absolute inset-0 pointer-events-none" style={{ boxShadow: 'inset 0 0 120px 40px rgba(0,0,0,0.45)' }} />
     </div>
