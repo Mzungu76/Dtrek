@@ -605,6 +605,12 @@ export default function ResocontoHub({ id }: { id?: string }) {
         mode="resoconto"
         items={displayItems}
         initialIndex={initialIndex}
+        // Un `id` esplicito (rotta /resoconto/[id], es. da un Diario) apre direttamente la
+        // lettura invece della copertina chiusa dello stage — stesso pattern già usato da
+        // GuidaHub.tsx (`autoOpenSection`). Prima di questa riga /resoconto/[id] mostrava sempre
+        // la copertina chiusa, indipendentemente dall'id: comportamento pensato per sfogliare la
+        // galleria, non per arrivare già su UN Reportage preciso.
+        autoOpenSection={id ? 'featured' : undefined}
         favoritesFilter={favoritesFilter}
         onToggleFavoritesFilter={() => setFavoritesFilter(v => !v)}
         onToggleFavorite={handleToggleFavorite}
