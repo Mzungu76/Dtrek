@@ -2,31 +2,29 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { getUserFromRequest } from '@/lib/supabaseAuth'
 import { deletePercorsoCascade } from '@/lib/deletePercorsoCascade'
-import type { SafetyPreview } from '@/components/TrailScoreGaugeBadge'
 
 export const dynamic = 'force-dynamic'
 
-export interface DiarioPercorsoRow {
+export interface DiarioReportageRow {
+  /** activities.id */
   id: string
   title: string
+  startTime: string
   distanceMeters: number
   elevationGain: number
   altitudeMax: number
-  estimatedTimeSeconds: number
+  totalTimeSeconds: number
   routePolyline?: [number, number][]
-  firstCompletedAt: string | null
-  reportageCount: number
-  pubblicabile: boolean
-  /** Trail Score totale già cachato (planned_hikes.cached_ts_total) — null se non ancora
-   *  calcolato. Nessun ricalcolo qui: stessa convenzione di sola lettura del resto di questa
-   *  route, il calcolo vero avviene altrove (useGuidaBookData/GuidaHub). */
+  /** activities.trail_score — già cachato, nessun ricalcolo qui (stessa convenzione di sola
+   *  lettura del resto di questa route). */
   trailScore: number | null
-  /** Sicurezza Oggettiva già cachata (planned_hikes.cached_safety_score) — stesso sottoinsieme
-   *  (overall/color/label) che app/guida/GuidaHub.tsx passa a RouteHubItem.safetyPreview per
-   *  l'anello esterno di TrailScoreGaugeBadge, qui riusato identico per il Sommario del Diario. */
-  safety: SafetyPreview | null
-  /** planned_hikes.favorite — per il filtro "solo preferiti" del Sommario, stesso concetto già
-   *  usato dal filtro a stella di ExpandedGalleryList.tsx/GuidaHub.tsx. */
+  userRating: number | null
+  hasWrittenReport: boolean
+  /** planned_hikes.id della Meta camminata — sempre presente per un Reportage creato dopo la
+   *  ristrutturazione Diario/Mete (ActivityUploader.tsx collega sempre a una Meta, esistente o
+   *  sintetica). Resta null solo per Reportage antecedenti l'introduzione dei Diari. */
+  percorsoId: string | null
+  /** activities.favorite — filtro "solo preferiti" del Sommario. */
   favorite: boolean
 }
 
@@ -39,11 +37,16 @@ export interface DiarioDetail {
   author: string
   isDefault: boolean
   coverUrl: string | null
-  percorsi: DiarioPercorsoRow[]
+  reportage: DiarioReportageRow[]
 }
 
-// GET /api/diaries/[id] → il Diario e l'elenco dei suoi Percorsi, ciascuno col conteggio dei
-// Reportage (activities collegate) e il bollino di idoneità alla pubblicazione (≥1 Reportage).
+// GET /api/diaries/[id] → il Diario e l'elenco dei suoi Reportage — ristrutturazione Diario/Mete
+// richiesta esplicitamente dall'utente: un Diario contiene esclusivamente Reportage, mai Mete
+// ancora senza uscita (quelle vivono in app/percorsi/page.tsx, trasversali a tutti i Diari). Un
+// Reportage appartiene a QUESTO Diario indirettamente: activities non ha una colonna diary_id
+// propria, l'appartenenza passa dalla Meta collegata (activities.linked_planned_id →
+// planned_hikes.diary_id), coerente con components/upload/ActivityUploader.tsx che scrive
+// diary_id sulla Meta proprio nel momento in cui nasce il Reportage.
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const user = await getUserFromRequest(req)
@@ -59,44 +62,51 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
     const { data: planned, error: plannedErr } = await supabase
       .from('planned_hikes')
-      .select('id, title, distance_meters, elevation_gain, altitude_max, estimated_time_seconds, route_polyline, first_completed_at, cached_ts_total, cached_safety_score, favorite')
+      .select('id')
       .eq('user_id', user.id)
       .eq('diary_id', params.id)
-      .order('created_at', { ascending: false })
     if (plannedErr) throw plannedErr
 
-    const { data: activities, error: activitiesErr } = await supabase
-      .from('activities')
-      .select('linked_planned_id')
-      .eq('user_id', user.id)
-      .not('linked_planned_id', 'is', null)
-    if (activitiesErr) throw activitiesErr
+    const plannedIds = (planned ?? []).map(p => p.id as string)
 
-    const reportageCounts = new Map<string, number>()
-    for (const a of activities ?? []) {
-      const id = a.linked_planned_id as string
-      reportageCounts.set(id, (reportageCounts.get(id) ?? 0) + 1)
-    }
+    let reportage: DiarioReportageRow[] = []
+    if (plannedIds.length > 0) {
+      const { data: activities, error: activitiesErr } = await supabase
+        .from('activities')
+        .select('id, title, start_time, distance_meters, elevation_gain, altitude_max, total_time_seconds, route_polyline, trail_score, user_rating, favorite, linked_planned_id')
+        .eq('user_id', user.id)
+        .in('linked_planned_id', plannedIds)
+        .order('start_time', { ascending: false })
+      if (activitiesErr) throw activitiesErr
 
-    const percorsi: DiarioPercorsoRow[] = (planned ?? []).map(p => {
-      const reportageCount = reportageCounts.get(p.id as string) ?? 0
-      const safetyScore = p.cached_safety_score as { overall: number; color: string; label: string } | null
-      return {
-        id:                    p.id as string,
-        title:                 p.title as string,
-        distanceMeters:        p.distance_meters as number,
-        elevationGain:         p.elevation_gain as number,
-        altitudeMax:           p.altitude_max as number,
-        estimatedTimeSeconds:  p.estimated_time_seconds as number,
-        routePolyline:         p.route_polyline as [number, number][] | undefined,
-        firstCompletedAt:      p.first_completed_at as string | null,
-        reportageCount,
-        pubblicabile:          reportageCount > 0,
-        trailScore:            (p.cached_ts_total as number | null) ?? null,
-        safety:                safetyScore ? { overall: safetyScore.overall, color: safetyScore.color, label: safetyScore.label } : null,
-        favorite:              (p.favorite as boolean | null) ?? false,
+      const activityIds = (activities ?? []).map(a => a.id as string)
+      let reportedIds = new Set<string>()
+      if (activityIds.length > 0) {
+        const { data: reports, error: reportsErr } = await supabase
+          .from('hike_reports')
+          .select('activity_id')
+          .eq('user_id', user.id)
+          .in('activity_id', activityIds)
+        if (reportsErr) throw reportsErr
+        reportedIds = new Set((reports ?? []).map(r => r.activity_id as string))
       }
-    })
+
+      reportage = (activities ?? []).map(a => ({
+        id:               a.id as string,
+        title:            a.title as string,
+        startTime:        a.start_time as string,
+        distanceMeters:   a.distance_meters as number,
+        elevationGain:    a.elevation_gain as number,
+        altitudeMax:      a.altitude_max as number,
+        totalTimeSeconds: a.total_time_seconds as number,
+        routePolyline:    a.route_polyline as [number, number][] | undefined,
+        trailScore:       (a.trail_score as number | null) ?? null,
+        userRating:       (a.user_rating as number | null) ?? null,
+        hasWrittenReport: reportedIds.has(a.id as string),
+        percorsoId:       (a.linked_planned_id as string | null) ?? null,
+        favorite:         (a.favorite as boolean | null) ?? false,
+      }))
+    }
 
     const detail: DiarioDetail = {
       id:        diary.id as string,
@@ -105,7 +115,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       author:    diary.author as string,
       isDefault: diary.is_default as boolean,
       coverUrl:  diary.cover_url as string | null,
-      percorsi,
+      reportage,
     }
     return NextResponse.json(detail)
   } catch (e) {

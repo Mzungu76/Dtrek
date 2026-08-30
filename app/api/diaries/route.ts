@@ -13,14 +13,16 @@ export interface DiarySummary {
   coverUrl: string | null
   footerText: string
   isDefault: boolean
-  /** Numero di Percorsi (planned_hikes) che appartengono a questo Diario. */
-  percorsiCount: number
-  /** True se almeno un Percorso di questo Diario ha almeno un Reportage (un'activity collegata) —
-   *  la regola dei "requisiti minimi": solo un Diario così può essere pubblicato/condiviso. */
+  /** Numero di Reportage (activities collegate, tramite le Mete di questo Diario) che
+   *  appartengono a questo Diario — ristrutturazione Diario/Mete: un Diario contiene solo
+   *  Reportage, non più Mete "in programma" ancora senza uscita. */
+  reportageCount: number
+  /** True se questo Diario ha almeno un Reportage — la regola dei "requisiti minimi": solo un
+   *  Diario così può essere pubblicato/condiviso. */
   pubblicabile: boolean
 }
 
-// GET /api/diaries → tutti i Diari dell'utente, con conteggio Percorsi e idoneità alla
+// GET /api/diaries → tutti i Diari dell'utente, con conteggio Reportage e idoneità alla
 // pubblicazione. "Il mio Diario" (is_default) sempre per primo.
 export async function GET(req: NextRequest) {
   try {
@@ -39,6 +41,7 @@ export async function GET(req: NextRequest) {
       .from('planned_hikes')
       .select('id, diary_id')
       .eq('user_id', user.id)
+      .not('diary_id', 'is', null)
     if (plannedErr) throw plannedErr
 
     const { data: activities, error: activitiesErr } = await supabase
@@ -48,20 +51,29 @@ export async function GET(req: NextRequest) {
       .not('linked_planned_id', 'is', null)
     if (activitiesErr) throw activitiesErr
 
-    const percorsiConReportage = new Set((activities ?? []).map(a => a.linked_planned_id as string))
+    // Una Meta non ha una colonna diary_id "propria" del suo Diario finché non viene camminata
+    // (vedi app/api/planned/route.ts) — quindi il Diario di ogni Reportage si ricava passando
+    // dalla sua Meta collegata, non da una colonna diretta su activities (che non esiste).
+    const diaryIdByPlannedId = new Map((planned ?? []).map(p => [p.id as string, p.diary_id as string]))
+    const reportageCountByDiaryId = new Map<string, number>()
+    for (const a of activities ?? []) {
+      const diaryId = diaryIdByPlannedId.get(a.linked_planned_id as string)
+      if (!diaryId) continue
+      reportageCountByDiaryId.set(diaryId, (reportageCountByDiaryId.get(diaryId) ?? 0) + 1)
+    }
 
     const summaries: DiarySummary[] = (diaries ?? []).map(d => {
-      const percorsiDiQuestoDiario = (planned ?? []).filter(p => p.diary_id === d.id)
+      const reportageCount = reportageCountByDiaryId.get(d.id as string) ?? 0
       return {
-        id:            d.id as string,
-        title:         d.title as string,
-        subtitle:      d.subtitle as string,
-        author:        d.author as string,
-        coverUrl:      d.cover_url as string | null,
-        footerText:    d.footer_text as string,
-        isDefault:     d.is_default as boolean,
-        percorsiCount: percorsiDiQuestoDiario.length,
-        pubblicabile:  percorsiDiQuestoDiario.some(p => percorsiConReportage.has(p.id as string)),
+        id:             d.id as string,
+        title:          d.title as string,
+        subtitle:       d.subtitle as string,
+        author:         d.author as string,
+        coverUrl:       d.cover_url as string | null,
+        footerText:     d.footer_text as string,
+        isDefault:      d.is_default as boolean,
+        reportageCount,
+        pubblicabile:   reportageCount > 0,
       }
     })
 

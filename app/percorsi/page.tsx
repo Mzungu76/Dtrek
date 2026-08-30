@@ -4,16 +4,23 @@ import Link from 'next/link'
 import Navbar, { MOBILE_BOTTOMBAR_SPACER } from '@/components/Navbar'
 import RouteThumb from '@/components/RouteThumb'
 import type { AllPercorsiRow } from '@/app/api/percorsi/route'
-import { ArrowLeft, Loader2, Lock, LockOpen, Mountain, Search, X } from 'lucide-react'
+import { ArrowLeft, Loader2, Mountain, Search, X } from 'lucide-react'
 
 /**
- * "Tutti i Percorsi" — Fase 5 di docs/diario-fulcro-piano.md. Vista trasversale di sola
- * consultazione su tutti i Diari dell'utente insieme, con l'etichetta del Diario di provenienza su
- * ogni card — per ritrovare un Percorso senza dover ricordare in quale Diario l'avevi messo.
- * Lavorarci (Guida, Reportage, pubblicazione) resta dentro il Diario che lo contiene: ogni card
- * rimanda a /diari/[diaryId]/percorsi/[id], la pagina già costruita in Fase 2.
+ * "Mete" (ex "Tutti i Percorsi") — ristrutturazione Diario/Mete richiesta esplicitamente
+ * dall'utente dopo il redesign menù globale: una Meta è un percorso pianificato non ancora
+ * camminato (nessun Reportage collegato) — appena nasce un Reportage smette di comparire qui e
+ * si raggiunge dal suo Diario (app/diari/[id]/page.tsx, che ora elenca i Reportage). Vista
+ * trasversale su tutte le Mete dell'utente, indipendente da un Diario specifico: una Meta non
+ * appartiene a nessun Diario finché non viene camminata (il Diario di destinazione si sceglie solo
+ * alla creazione del Reportage, vedi components/upload/ActivityUploader.tsx) — ogni card rimanda
+ * quindi a /guida/[id] (lettura diary-agnostic), non più a una rotta annidata in un Diario.
+ *
+ * `/api/percorsi` resta invariata (non filtrata lato server): serve invariata anche a
+ * app/diari/page.tsx (GlobalRouteSearch), che deve poter ritrovare un percorso indipendentemente
+ * da quante uscite ha già — il filtro "solo non ancora camminate" è locale a questa pagina.
  */
-export default function TuttiIPercorsiPage() {
+export default function MetePage() {
   const [rows, setRows] = useState<AllPercorsiRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
@@ -26,12 +33,13 @@ export default function TuttiIPercorsiPage() {
       .catch(e => setError(e instanceof Error ? e.message : String(e)))
   }, [])
 
+  const mete = useMemo(() => (rows ?? []).filter(r => r.reportageCount === 0), [rows])
+
   const filtered = useMemo(() => {
-    if (!rows) return []
     const q = query.trim().toLowerCase()
-    if (!q) return rows
-    return rows.filter(r => r.title.toLowerCase().includes(q) || (r.diaryTitle ?? '').toLowerCase().includes(q))
-  }, [rows, query])
+    if (!q) return mete
+    return mete.filter(r => r.title.toLowerCase().includes(q))
+  }, [mete, query])
 
   return (
     <div className={`min-h-screen bg-stone-50 md:pb-0 ${MOBILE_BOTTOMBAR_SPACER}`}>
@@ -44,11 +52,11 @@ export default function TuttiIPercorsiPage() {
             <ArrowLeft className="w-3.5 h-3.5" /> I miei Diari
           </Link>
           <h1 className="font-display text-[24px] sm:text-3xl font-bold text-white leading-tight">
-            Tutti i Percorsi
+            Mete
           </h1>
           {rows && (
             <p className="text-white/75 text-[13px] mt-1">
-              {rows.length} {rows.length === 1 ? 'percorso' : 'percorsi'}, in tutti i tuoi Diari
+              {mete.length} {mete.length === 1 ? 'meta' : 'mete'} da camminare
             </p>
           )}
         </div>
@@ -57,7 +65,7 @@ export default function TuttiIPercorsiPage() {
       <main className="max-w-[1400px] mx-auto px-4 py-6 sm:py-8">
         {error && (
           <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-4">
-            Impossibile caricare i percorsi: {error}
+            Impossibile caricare le mete: {error}
           </p>
         )}
 
@@ -65,14 +73,14 @@ export default function TuttiIPercorsiPage() {
           <div className="flex items-center justify-center py-24 text-stone-400 gap-3">
             <Loader2 className="w-6 h-6 animate-spin" /><span>Caricamento…</span>
           </div>
-        ) : rows && rows.length === 0 ? (
+        ) : mete.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <div className="w-20 h-20 rounded-full bg-[#E9DAC3] border border-[#D9C9A8] flex items-center justify-center mb-6">
               <Mountain className="w-10 h-10 text-[#C0603D]" />
             </div>
-            <h2 className="font-display text-2xl font-semibold text-stone-700 mb-2">Nessun percorso ancora</h2>
+            <h2 className="font-display text-2xl font-semibold text-stone-700 mb-2">Nessuna meta ancora</h2>
             <p className="text-stone-400 text-sm max-w-sm px-4">
-              I percorsi che pianifichi o le uscite che importi in un Diario compariranno qui.
+              I percorsi che pianifichi compariranno qui, finché non li cammini — a quel punto diventano un Reportage nel Diario che scegli.
             </p>
           </div>
         ) : (
@@ -85,7 +93,7 @@ export default function TuttiIPercorsiPage() {
                     autoFocus
                     value={query}
                     onChange={e => setQuery(e.target.value)}
-                    placeholder="Cerca per titolo o Diario…"
+                    placeholder="Cerca per titolo…"
                     className="flex-1 min-w-0 bg-transparent text-sm text-stone-800 outline-none placeholder:text-stone-400"
                   />
                   <button onClick={() => { setShowSearch(false); setQuery('') }} className="text-stone-400 hover:text-stone-600">
@@ -103,13 +111,13 @@ export default function TuttiIPercorsiPage() {
             </div>
 
             {filtered.length === 0 ? (
-              <p className="text-stone-400 text-sm text-center py-12">Nessun percorso corrisponde alla ricerca.</p>
+              <p className="text-stone-400 text-sm text-center py-12">Nessuna meta corrisponde alla ricerca.</p>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filtered.map(p => (
                   <Link
                     key={p.id}
-                    href={p.diaryId ? `/diari/${encodeURIComponent(p.diaryId)}/percorsi/${encodeURIComponent(p.id)}` : '/diari'}
+                    href={`/guida/${encodeURIComponent(p.id)}`}
                     className="block bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-md transition-shadow border border-stone-200"
                   >
                     <div className="relative h-[140px] bg-gradient-to-b from-[#EBE0C8] to-stone-50">
@@ -122,27 +130,15 @@ export default function TuttiIPercorsiPage() {
                           <Mountain className="w-10 h-10 text-[#D9C9A8]" />
                         </div>
                       )}
-                      <span className={`absolute top-3 right-3 text-[11px] font-bold px-2.5 py-1 rounded-full shadow-sm ${p.reportageCount > 0 ? 'bg-[#C0603D] text-white' : 'bg-white/92 text-stone-500'}`}>
-                        {p.reportageCount === 0 ? 'In programma' : `${p.reportageCount} ${p.reportageCount === 1 ? 'uscita' : 'uscite'}`}
+                      <span className="absolute top-3 right-3 text-[11px] font-bold px-2.5 py-1 rounded-full shadow-sm bg-white/92 text-stone-500">
+                        In programma
                       </span>
                     </div>
                     <div className="px-[18px] pt-4 pb-[18px]">
-                      {p.diaryTitle && (
-                        <p className="text-[10px] font-bold uppercase tracking-wide text-[#7C8F6E] mb-1 truncate">{p.diaryTitle}</p>
-                      )}
                       <p className="text-[16px] font-bold text-stone-800 mb-2 truncate">{p.title}</p>
                       <div className="flex items-center gap-3 text-[13px] text-stone-500 flex-wrap">
                         <span>{(p.distanceMeters / 1000).toFixed(1)} km</span>
                         <span>{Math.round(p.elevationGain)} m D+</span>
-                        {p.pubblicabile ? (
-                          <span className="inline-flex items-center gap-1 text-[#7C8F6E] font-medium">
-                            <LockOpen className="w-3 h-3" /> Pubblicabile
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-stone-400">
-                            <Lock className="w-3 h-3" /> Non pubblicabile
-                          </span>
-                        )}
                       </div>
                     </div>
                   </Link>

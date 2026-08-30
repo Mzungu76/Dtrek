@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import { parseTcx, formatDuration, type TcxActivity } from '@/lib/tcxParser'
 import { parseGpxActivity } from '@/lib/gpxActivityParser'
 import { saveActivityWithEnrichment } from '@/lib/activitySave'
-import { getAllPlanned, getPlannedById, savePlanned, type PlannedHike, type PlannedHikeMeta } from '@/lib/plannedStore'
+import { getAllPlanned, getPlannedById, savePlanned, updatePlannedMeta, type PlannedHike, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { downsamplePolyline } from '@/lib/downsamplePolyline'
 import { Upload, CheckCircle, AlertCircle, Mountain, Clock, TrendingUp, Route, Link2, Link2Off, Info } from 'lucide-react'
 
@@ -74,6 +74,11 @@ export default function ActivityUploader({ diaryId }: { diaryId?: string } = {})
           if (validPts.length >= 2) linkedPlannedTrackPoints = validPts
           if (full?.hikeNotes?.length) linkedPlannedNotes = full.hikeNotes
         } catch {}
+        // Una Meta pianificata non ha ancora un Diario (ristrutturazione Diario/Mete, richiesta
+        // esplicita dell'utente) — nasce camminandola: qui è il momento in cui il Reportage la
+        // collega a un Diario, esattamente come già succede per la Meta sintetica creata sotto
+        // quando non se ne seleziona una esistente.
+        if (diaryId) await updatePlannedMeta(selectedPlanned.id, { diaryId })
       } else if (diaryId) {
         // Nessun percorso pianificato selezionato ma siamo dentro un Diario (composer Fase 3,
         // corsia "Già fatta") — un Reportage ha sempre un Percorso genitore (vedi

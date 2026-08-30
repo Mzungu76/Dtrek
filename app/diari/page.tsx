@@ -73,8 +73,8 @@ function DiarioCoverCard({ d, index }: { d: DiarySummary; index: number }) {
           )}
           <span className="w-7 h-px my-3.5" style={{ background: 'rgba(255,255,255,0.35)' }} />
           <p style={{ fontFamily: FONT.barlow, textTransform: 'uppercase', letterSpacing: '0.14em', fontSize: 10.5, color: 'rgba(255,255,255,0.6)' }}>
-            {d.percorsiCount} {d.percorsiCount === 1 ? 'percorso' : 'percorsi'}
-            {d.percorsiCount > 0 && ` · ${d.pubblicabile ? 'pubblicabile' : 'non pubblicabile'}`}
+            {d.reportageCount} reportage
+            {d.reportageCount > 0 && ` · ${d.pubblicabile ? 'pubblicabile' : 'non pubblicabile'}`}
           </p>
         </div>
       </div>
@@ -155,11 +155,15 @@ function NewDiarioTile() {
 }
 
 /**
- * Ricerca testuale su tutti i Percorsi, in ogni Diario — Fase 18: prima l'unico modo per ritrovare
- * un percorso senza ricordare in quale Diario fosse era andare alla pagina "Tutti i Percorsi" a
- * sé (`/percorsi`, ancora raggiungibile, invariata, sotto). Qui invece i risultati compaiono senza
- * lasciare lo scaffale — stessa API (`/api/percorsi`), un sottoinsieme (max 8) invece dell'elenco
- * intero perché qui è una scorciatoia, non la vista esaustiva.
+ * Ricerca testuale su tutti i percorsi (Mete e Reportage), in ogni Diario — Fase 18: risultati
+ * senza lasciare lo scaffale, stessa API (`/api/percorsi`, invariata: resta l'unica vista
+ * trasversale non filtrata, condivisa con app/percorsi/page.tsx), un sottoinsieme (max 8) invece
+ * dell'elenco intero perché qui è una scorciatoia. Ogni riga rimanda a `/guida/[id]`
+ * (diary-agnostic — stesso principio di app/percorsi/page.tsx dopo la ristrutturazione
+ * Diario/Mete): funziona sia per una Meta non ancora camminata sia per il percorso di un
+ * Reportage già raccontato, senza bisogno del diaryId per costruire il link. Nessun link
+ * "vedi tutti" in fondo: "Tutti i Percorsi" a sé non esiste più — `/percorsi` ("Mete") ora mostra
+ * solo le Mete senza Reportage, un sottoinsieme che non copre questi risultati.
  */
 function GlobalRouteSearch() {
   const [rows, setRows] = useState<AllPercorsiRow[] | null>(null)
@@ -183,14 +187,14 @@ function GlobalRouteSearch() {
   return (
     <div className="mb-8">
       <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 11, color: '#8a7f52' }} className="mb-2">
-        Cerca un Percorso
+        Cerca un percorso
       </p>
       <div className="relative">
         <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#a9915f' }} />
         <input
           value={query}
           onChange={e => setQuery(e.target.value)}
-          placeholder="Titolo del percorso o del Diario…"
+          placeholder="Titolo della meta, del reportage o del Diario…"
           className="w-full pl-8 pr-8 py-2.5 rounded-full text-[13px] outline-none"
           style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}`, color: '#3f3a22' }}
         />
@@ -218,7 +222,7 @@ function GlobalRouteSearch() {
             {filtered.slice(0, 8).map(p => (
               <Link
                 key={p.id}
-                href={p.diaryId ? `/diari/${encodeURIComponent(p.diaryId)}/percorsi/${encodeURIComponent(p.id)}/guida/prima_di_partire` : '/diari'}
+                href={`/guida/${encodeURIComponent(p.id)}`}
                 className="flex items-center gap-3 px-3 py-2.5"
                 style={{ borderBottom: `1px dotted ${TACCUINO_PAPER.cardBorder}` }}
               >
@@ -238,9 +242,9 @@ function GlobalRouteSearch() {
               </Link>
             ))}
             {filtered.length > 8 && (
-              <Link href="/percorsi" className="px-3 py-2.5 text-[12px] font-semibold text-center" style={{ color: '#c05a17' }}>
-                +{filtered.length - 8} altri risultati — apri Tutti i Percorsi
-              </Link>
+              <p className="px-3 py-2.5 text-[12px] font-semibold text-center" style={{ color: '#8a7f52' }}>
+                +{filtered.length - 8} altri risultati — affina la ricerca
+              </p>
             )}
           </div>
         )
@@ -259,17 +263,20 @@ function GlobalRouteSearch() {
  * Griglia verticale a 2 colonne (prima una riga scorrevole orizzontale): raggiunta ora direttamente
  * dal bottone "Diari" della barra inferiore del Sommario (BookPage.tsx, Fase 18) invece che dal
  * drawer laterale rimosso — che qui non avrebbe più senso, essendo questa stessa pagina la
- * destinazione che il drawer duplicava. La ricerca sui Percorsi (GlobalRouteSearch) è la stessa
+ * destinazione che il drawer duplicava. La ricerca sui percorsi (GlobalRouteSearch) è la stessa
  * ragione: prima l'unico modo per ritrovare un percorso senza ricordarne il Diario era uscire da
- * qui verso "Tutti i Percorsi" — ora è disponibile senza lasciare lo scaffale, e quel link resta
- * sotto per la vista esaustiva.
+ * qui verso "Tutti i Percorsi" — ora è disponibile senza lasciare lo scaffale. Il link sotto verso
+ * `/percorsi` resta, ma ristrutturazione Diario/Mete: quella pagina ("Mete") oggi mostra solo le
+ * Mete senza Reportage, non più l'elenco esaustivo di ogni percorso — vedi GlobalRouteSearch sopra
+ * per ritrovare anche un Reportage già raccontato.
  *
  * Redesign menù globale (fase 1) — la Fase 19 aveva tolto `<Navbar/>` da questa pagina (il vecchio
  * chrome in alto, abbandonato qui per primo). Ora `<Navbar/>` torna, ma è lo stesso componente
- * cambiato alla radice: su mobile monta la nuova barra in fondo (Diario/Percorsi/Reportage/Nuovo)
- * invece della vecchia in cima — coerente con "niente vecchio chrome", non un passo indietro.
- * `DiariPageClassico` (la variante pre-taccuino, dietro il flag beta `diarioLibroEnabled`) è stata
- * rimossa: questa è ora l'unica implementazione di /diari.
+ * cambiato alla radice: su mobile monta la nuova barra in fondo (Diario/Mete/Nuovo) invece della
+ * vecchia in cima — coerente con "niente vecchio chrome", non un passo indietro. La barra non ha
+ * più una voce "Reportage" a sé (ristrutturazione Diario/Mete): un Reportage si crea da "Nuovo",
+ * si legge dentro il suo Diario. `DiariPageClassico` (la variante pre-taccuino, dietro il flag
+ * beta `diarioLibroEnabled`) è stata rimossa: questa è ora l'unica implementazione di /diari.
  */
 function DiariPageLibro() {
   const [diaries, setDiaries] = useState<DiarySummary[] | null>(null)
@@ -327,7 +334,7 @@ function DiariPageLibro() {
               className="inline-flex items-center gap-2 text-[13px] transition-colors"
               style={{ color: '#8a7f52' }}
             >
-              <Compass className="w-4 h-4" /> Tutti i Percorsi, in ogni Diario <ArrowRight className="w-3.5 h-3.5" />
+              <Compass className="w-4 h-4" /> Tutte le Mete <ArrowRight className="w-3.5 h-3.5" />
             </Link>
           </>
         )}
