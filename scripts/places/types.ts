@@ -1,12 +1,10 @@
-import type { MetaType, SiteType } from '../../lib/metaTypes'
+import type { MetaType, SiteType, PlaceCategory } from '../../lib/metaTypes'
+
+export type { PlaceCategory }
 
 // Sorgenti supportate dalla pipeline (piano §41). Ogni fonte deve avere `source`/`source_id`
 // (piano §48.12) — mai un candidato senza provenienza ricostruibile.
 export type PlaceSource = 'istat' | 'ptpr_lazio' | 'mic' | 'osm' | 'wikidata'
-
-// Categoria Dtrek per una Meta borgo_citta (piano §6) — mai dedotta da "Comune = Borgo":
-// una classificazione propria, separata dall'entità amministrativa ISTAT.
-export type PlaceCategory = 'borgo' | 'citta'
 
 // Output normalizzato di un singolo fetcher di sorgente (scripts/places/<fonte>/), prima di
 // deduplicazione/import — il "modello comune" richiesto dal piano §41 ("l'importer finale deve

@@ -12,6 +12,12 @@ import {
 // prima del round-trip col server.
 export type MetaType = 'sentiero' | 'borgo_citta' | 'sito'
 
+// Categoria Dtrek per una Meta borgo_citta (piano §6) — mai dedotta da "Comune = Borgo": una
+// classificazione propria, separata dall'entità amministrativa ISTAT. Non ancora assegnata dalla
+// pipeline di import (scripts/places/istat/fetch.ts la lascia undefined di proposito) — riservata
+// per quando esisterà una classificazione esplicita (Blocco C/D).
+export type PlaceCategory = 'borgo' | 'citta'
+
 // Sottotipologia di un sito culturale/naturalistico — valorizzata solo quando meta_type = 'sito'.
 export type SiteType =
   | 'museo'
