@@ -155,6 +155,13 @@ export interface PlannedHike {
   metaType?:                     MetaType
   // Valorizzato solo quando metaType === 'sito'; assente per sentiero/borgo_citta.
   siteType?:                     SiteType
+  // Posizione + collegamento a dtrek_places per Mete 'borgo_citta'/'sito' (piano Blocco D §25/§26,
+  // supabase/migrations/add_planned_hikes_place_link.sql) — un sentiero ricava la sua posizione
+  // da trackPoints/routePolyline e non usa mai questi campi. placeId può azzerarsi (SET NULL) se
+  // la riga di catalogo viene rimossa; latitude/longitude restano comunque valorizzate.
+  placeId?:                      string
+  latitude?:                     number
+  longitude?:                    number
 }
 
 // Index entry — no trackPoints (kept lightweight for the list)

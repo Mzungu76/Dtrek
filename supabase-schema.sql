@@ -1246,6 +1246,17 @@ ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS site_type TEXT
 CREATE INDEX IF NOT EXISTS idx_planned_hikes_meta_type ON planned_hikes (meta_type);
 CREATE INDEX IF NOT EXISTS idx_planned_hikes_site_type ON planned_hikes (site_type);
 
+-- Piano mete multi-tipologia, Blocco D — vedi supabase/migrations/add_planned_hikes_place_link.sql
+-- per i commenti completi. Un Percorso 'borgo_citta'/'sito' non ha una traccia GPX da cui
+-- derivare la posizione: place_id collega alla riga dtrek_places (SET NULL se la riga di
+-- catalogo viene rimossa — la Meta salvata dall'utente sopravvive comunque), latitude/longitude
+-- restano popolate indipendentemente. Sempre NULL per un sentiero.
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS place_id UUID REFERENCES dtrek_places(id) ON DELETE SET NULL;
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION;
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION;
+
+CREATE INDEX IF NOT EXISTS idx_planned_hikes_place_id ON planned_hikes (place_id);
+
 -- Slug di lib/italianRegions.ts (es. 'lazio'), NULL se l'utente ha scelto esplicitamente di non
 -- specificarla — vedi add_home_region.sql per il perché.
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS home_region TEXT;

@@ -92,6 +92,9 @@ function rowToHike(row: Record<string, unknown>, includeTracks = true): PlannedH
     // qui, per non lasciare mai metaType undefined su una riga realmente esistente.
     metaType:                      (row.meta_type as PlannedHike['metaType']) ?? 'sentiero',
     siteType:                      row.site_type as PlannedHike['siteType'] | undefined,
+    placeId:                       row.place_id as string | undefined,
+    latitude:                      row.latitude as number | undefined,
+    longitude:                     row.longitude as number | undefined,
   }
 }
 
@@ -149,6 +152,9 @@ function hikeToRow(h: PlannedHike) {
     source_app:                       h.sourceApp ?? null,
     meta_type:                        h.metaType ?? 'sentiero',
     site_type:                        h.siteType ?? null,
+    place_id:                         h.placeId ?? null,
+    latitude:                         h.latitude ?? null,
+    longitude:                        h.longitude ?? null,
   }
 }
 
@@ -174,7 +180,7 @@ const META_COLS = [
   'cached_driving_origin_lat', 'cached_driving_origin_lon',
   'pending_expires_at', 'archived_at', 'favorite', 'first_completed_at', 'diary_id', 'route_mode', 'updated_at',
   'source_url', 'comfort_verdict', 'comfort_note', 'zone', 'difficulty', 'source_app',
-  'is_sample', 'sample_region', 'meta_type', 'site_type',
+  'is_sample', 'sample_region', 'meta_type', 'site_type', 'place_id', 'latitude', 'longitude',
 ].join(', ')
 
 // Guaranteed-to-exist columns (base schema, no ALTER TABLE additions — updated_at

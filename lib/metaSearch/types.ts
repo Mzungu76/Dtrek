@@ -30,6 +30,12 @@ export type ExperienceType = 'essenziale' | 'completa' | 'storica' | 'fotografic
 
 export type TimeBudget = '30min' | '1h' | '2h' | 'mezza_giornata' | 'giornata'
 
+const TIME_BUDGETS: readonly string[] = ['30min', '1h', '2h', 'mezza_giornata', 'giornata']
+
+export function isTimeBudget(value: unknown): value is TimeBudget {
+  return typeof value === 'string' && TIME_BUDGETS.includes(value)
+}
+
 export interface BorghiSearchParams {
   metaType: 'borgo_citta'
   region?: string
