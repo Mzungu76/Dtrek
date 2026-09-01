@@ -52,6 +52,7 @@ import { useDrivingDistance } from './useDrivingDistance'
 import { useSafetyScore } from './useSafetyScore'
 import { useCtsRecompute } from '@/lib/useCtsRecompute'
 import { tryOpenNavigatorApp } from '@/lib/navigatorHandoff'
+import { metaHasHikingMetrics } from '@/lib/metaTypes'
 
 const StreetViewPanel = dynamic(() => import('@/components/StreetViewPanel'), { ssr: false })
 const RouteMap3D       = dynamic(() => import('@/components/RouteMap3D'),      { ssr: false })
@@ -167,26 +168,33 @@ export default function GuidaHub({ id, startClosed }: { id?: string; startClosed
   // auto mostrata tra i dati principali di ogni scheda e come filtro di ordinamento.
   useEffect(() => { getUserStartingPoint().then(setUserOrigin).catch(() => {}) }, [])
 
+  // Le metriche escursionistiche (Trail/Safety Score, DTM, terreno, area protetta, flora,
+  // distanza in auto) hanno senso solo per un sentiero (piano §9/§48.9, docs/meta-multitype-audit.md
+  // §1 punto 2) — passare `null` invece di `hike` a questi hook per una Meta Borgo/Città o Sito
+  // evita ogni chiamata DTM/Overpass/flora incondizionata, non solo per assenza tecnica di
+  // trackPoints ma come scelta esplicita di dominio.
+  const hikingMetricsHike = hike && metaHasHikingMetrics(hike.metaType) ? hike : null
+
   const flora = useFlora(
-    hike?.routePolyline, hike?.altitudeMax,
-    hike ? { plannedId: hike.id, data: hike.floraResult, trackHash: hike.floraTrackHash } : undefined,
+    hikingMetricsHike?.routePolyline, hikingMetricsHike?.altitudeMax,
+    hikingMetricsHike ? { plannedId: hikingMetricsHike.id, data: hikingMetricsHike.floraResult, trackHash: hikingMetricsHike.floraTrackHash } : undefined,
   )
 
   const { hasAiAccess, aiUnavailable, trialExpired } = useHasAiAccess()
   const enrichmentTimedOut = useEnrichmentTimeout(hike?.id)
-  const dtmProfile = useDtmProfile(hike)
-  const terrainProfile = useTerrainProfile(hike)
-  const inProtectedArea = useProtectedAreaCheck(hike)
-  const driving = useDrivingDistance(hike)
+  const dtmProfile = useDtmProfile(hikingMetricsHike)
+  const terrainProfile = useTerrainProfile(hikingMetricsHike)
+  const inProtectedArea = useProtectedAreaCheck(hikingMetricsHike)
+  const driving = useDrivingDistance(hikingMetricsHike)
   const drivingWithMaps = useMemo(() => {
     if (!driving) return driving
-    const trailStart = hike?.routePolyline?.[0]
+    const trailStart = hikingMetricsHike?.routePolyline?.[0]
     const mapsUrl = userOrigin && trailStart
       ? googleMapsDirectionsUrl(userOrigin.lat, userOrigin.lon, trailStart[0], trailStart[1])
       : undefined
     return { ...driving, mapsUrl }
-  }, [driving, userOrigin, hike?.routePolyline])
-  const { safetyScore, setSafetyScore } = useSafetyScore(hike, setHike)
+  }, [driving, userOrigin, hikingMetricsHike?.routePolyline])
+  const { safetyScore, setSafetyScore } = useSafetyScore(hikingMetricsHike, setHike)
   const { prefsLoaded, prefSforzo, prefDurata, hrRest, hrMax } = useUserPrefs()
 
   // Sicurezza "per te" (Oggettiva + Idoneità per Te, vedi lib/personalSafetyFit.ts) — la Sicurezza
@@ -234,6 +242,7 @@ export default function GuidaHub({ id, startClosed }: { id?: string; startClosed
   // flora, Safety and CTS scores. True once every source has settled (resolved or deliberately
   // skipped, e.g. no GPS) — or once the 90s watchdog above fires regardless.
   const enrichmentReady = enrichmentTimedOut ||
+    !hikingMetricsHike || // Borgo/Città o Sito: nessuna Sicurezza/CTS da attendere, mai bloccato
     (poisFullyLoaded && !flora.loading && safetyScore != null && ctsSettled)
 
   // Lightweight list of every active (non-archived) planned hike, sorted by import
@@ -394,15 +403,15 @@ export default function GuidaHub({ id, startClosed }: { id?: string; startClosed
   }, [poisFullyLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    const bs = hike?.cachedBeautyScore
-    if (!bs?.categories?.length || !prefsLoaded || !hike) return
+    const bs = hikingMetricsHike?.cachedBeautyScore
+    if (!bs?.categories?.length || !prefsLoaded || !hikingMetricsHike) return
     const computed = computeTrailScore(bs, {
-      distanceMeters: hike.distanceMeters, elevationGain: hike.elevationGain,
-      elevationLoss: hike.elevationLoss, altitudeMax: hike.altitudeMax,
+      distanceMeters: hikingMetricsHike.distanceMeters, elevationGain: hikingMetricsHike.elevationGain,
+      elevationLoss: hikingMetricsHike.elevationLoss, altitudeMax: hikingMetricsHike.altitudeMax,
       prefSforzo, prefDurata,
     })
-    setCtsResult({ ...computed, ts: hike.cachedTrailScore ?? computed.ts })
-  }, [hike?.id, hike?.cachedBeautyScore, hike?.cachedTrailScore, prefsLoaded, prefSforzo, prefDurata]) // eslint-disable-line react-hooks/exhaustive-deps
+    setCtsResult({ ...computed, ts: hikingMetricsHike.cachedTrailScore ?? computed.ts })
+  }, [hikingMetricsHike?.id, hikingMetricsHike?.cachedBeautyScore, hikingMetricsHike?.cachedTrailScore, prefsLoaded, prefSforzo, prefDurata]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // CTS+Beauty: same policy as Safety above — computed once at import, and re-verified here
   // only if missing (an older hike, imported before this policy existed) or stale. Reuses the
@@ -413,11 +422,15 @@ export default function GuidaHub({ id, startClosed }: { id?: string; startClosed
   // it can hand their results to computeCtsForHike as `prefetched` instead of having it repeat
   // the exact same /api/pois, /api/tei-dtm, /api/tei-terrain and /api/natura2000 calls this
   // component is already making for its own map/UI state.
-  useEffect(() => { setCtsSettled(false) }, [hike?.id])
+  // Nessuna metrica escursionistica da attendere per un Borgo/Città o Sito (hikingMetricsHike
+  // null) — "settled" da subito, altrimenti resterebbe bloccato per sempre: useCtsRecompute sotto
+  // non chiama mai onSettled quando entity è null (piano §48.9, mai una metrica per una Meta
+  // senza tracciato).
+  useEffect(() => { setCtsSettled(!hikingMetricsHike) }, [hike?.id, hikingMetricsHike])
 
   useCtsRecompute({
-    entity: hike,
-    entityId: hike?.id,
+    entity: hikingMetricsHike,
+    entityId: hikingMetricsHike?.id,
     isFresh: (h) => h.cachedTrailScore != null && isScoreFresh(h.cachedScoresComputedAt),
     hasEnoughGps: (h) => (h.trackPoints ?? []).filter(p => p.lat && p.lon).length >= 2,
     poisReady: poisFullyLoaded,
