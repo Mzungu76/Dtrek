@@ -63,6 +63,16 @@ html, body { margin: 0; padding: 0; }
   background: var(--accent-tint);
   box-shadow: 0 1px 3px rgba(46,42,34,.2); z-index: 2;
 }
+.photo-obj {
+  position: relative; background-size: cover; background-position: center;
+  filter: drop-shadow(2px 6px 10px rgba(46,42,34,.24)) drop-shadow(0 1px 2px rgba(46,42,34,.16));
+}
+.cut-1 { clip-path: polygon(0.0% 1.0%, 16.7% 1.5%, 33.3% 3.2%, 50.0% 1.1%, 66.7% 1.3%, 83.3% 1.7%, 100.0% 0%, 98.7% 16.7%, 98.1% 33.3%, 97.4% 50.0%, 100% 66.7%, 99.7% 83.3%, 100% 100.0%, 83.3% 97.3%, 66.7% 97.8%, 50.0% 100%, 33.3% 96.5%, 16.7% 96.6%, 0.0% 98.0%, 1.8% 83.3%, 0% 66.7%, 0% 50.0%, 1.4% 33.3%, 0% 16.7%); }
+.cut-2 { clip-path: polygon(0.0% 3.4%, 16.7% 0%, 33.3% 0%, 50.0% 3.6%, 66.7% 0%, 83.3% 0%, 100.0% 2.0%, 99.5% 16.7%, 96.9% 33.3%, 100.0% 50.0%, 96.6% 66.7%, 99.6% 83.3%, 98.3% 100.0%, 83.3% 96.7%, 66.7% 97.9%, 50.0% 96.8%, 33.3% 97.8%, 16.7% 100%, 0.0% 97.0%, 1.7% 83.3%, 0.4% 66.7%, 0% 50.0%, 2.9% 33.3%, 1.6% 16.7%); }
+.cut-3 { clip-path: polygon(0.0% 1.6%, 16.7% 1.9%, 33.3% 2.7%, 50.0% 0.2%, 66.7% 2.0%, 83.3% 3.1%, 100.0% 3.2%, 100% 16.7%, 98.0% 33.3%, 98.2% 50.0%, 98.7% 66.7%, 96.6% 83.3%, 98.6% 100.0%, 83.3% 99.0%, 66.7% 96.7%, 50.0% 98.1%, 33.3% 99.7%, 16.7% 99.6%, 0.0% 98.8%, 0% 83.3%, 1.8% 66.7%, 2.4% 50.0%, 0.9% 33.3%, 2.9% 16.7%); }
+.cut-4 { clip-path: polygon(0.0% 0.8%, 16.7% 1.5%, 33.3% 3.0%, 50.0% 0%, 66.7% 0%, 83.3% 0%, 100.0% 0%, 100% 16.7%, 100% 33.3%, 98.7% 50.0%, 96.4% 66.7%, 97.8% 83.3%, 99.3% 100.0%, 83.3% 99.2%, 66.7% 97.8%, 50.0% 99.6%, 33.3% 100%, 16.7% 97.1%, 0.0% 98.2%, 0% 83.3%, 0% 66.7%, 0% 50.0%, 3.4% 33.3%, 0% 16.7%); }
+.cut-top-a { clip-path: polygon(0.0% 0%, 16.7% 3.0%, 33.3% 0%, 50.0% 2.1%, 66.7% 2.5%, 83.3% 2.1%, 100.0% 0.3%, 99.5% 16.7%, 98.0% 33.3%, 96.9% 50.0%, 100% 66.7%, 100% 83.3%, 100% 100.0%, 0.0% 100.0%, 0% 83.3%, 0% 66.7%, 1.8% 50.0%, 1.3% 33.3%, 0.7% 16.7%); }
+.cut-top-b { clip-path: polygon(0.0% 0%, 16.7% 0.8%, 33.3% 0.1%, 50.0% 0.9%, 66.7% 0.1%, 83.3% 2.6%, 100.0% 1.4%, 97.9% 16.7%, 97.1% 33.3%, 98.9% 50.0%, 100% 66.7%, 100% 83.3%, 100% 100.0%, 0.0% 100.0%, 0% 83.3%, 0% 66.7%, 1.0% 50.0%, 0% 33.3%, 2.3% 16.7%); }
 .eyebrow {
   font-family: 'DM Sans', sans-serif; font-weight: 700; text-transform: uppercase;
   letter-spacing: .16em; font-size: 10.5px; color: var(--ink-muted);
@@ -157,10 +167,12 @@ a:hover { color: var(--accent-2); }
 
         <div style="position:relative;">
           <div class="tape" style="top:-6px;left:64%;margin-left:-17px;transform:rotate(6deg);z-index:3;"></div>
-          <div style="position:relative;height:190px;border-radius:14px;overflow:hidden;box-shadow:2px 6px 16px rgba(46,42,34,.22);transform:rotate(-.6deg);">
+          <div style="position:relative;height:190px;transform:rotate(-.6deg);">
+          <div class="photo-obj cut-2" style="position:absolute;inset:0;">
           <svg width="320" height="190" style="position:absolute;inset:0"><circle cx="104" cy="29" r="69" fill="#4A5A3F" opacity="0.55"></circle><circle cx="23" cy="102" r="52" fill="#5C6B4C" opacity="0.55"></circle><circle cx="19" cy="96" r="32" fill="#3F4C36" opacity="0.55"></circle><circle cx="139" cy="13" r="35" fill="#6B7D58" opacity="0.55"></circle><circle cx="136" cy="157" r="37" fill="#465239" opacity="0.55"></circle><circle cx="71" cy="119" r="87" fill="#4A5A3F" opacity="0.55"></circle><circle cx="185" cy="75" r="89" fill="#5C6B4C" opacity="0.55"></circle><circle cx="15" cy="163" r="47" fill="#3F4C36" opacity="0.55"></circle><circle cx="46" cy="22" r="49" fill="#6B7D58" opacity="0.55"></circle><circle cx="261" cy="34" r="65" fill="#465239" opacity="0.55"></circle><circle cx="204" cy="71" r="63" fill="#4A5A3F" opacity="0.55"></circle><circle cx="20" cy="11" r="42" fill="#5C6B4C" opacity="0.55"></circle><circle cx="218" cy="81" r="49" fill="#3F4C36" opacity="0.55"></circle><circle cx="187" cy="86" r="48" fill="#6B7D58" opacity="0.55"></circle></svg>
           <svg width="320" height="190" style="position:absolute;inset:0"><path d="M 58 148 Q 122 57 176 95 T 272 42" fill="none" stroke="#F9F2E4" stroke-width="3" stroke-linecap="round" stroke-dasharray="1 7"></path><circle cx="57.599999999999994" cy="148.20000000000002" r="4" fill="#F9F2E4" stroke="#fff" stroke-width="1.5"></circle><circle cx="272.0" cy="41.8" r="4" fill="#F9F2E4" stroke="#fff" stroke-width="1.5"></circle></svg>
           <div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.22),transparent 45%,rgba(0,0,0,.35));"></div>
+          </div>
           <div style="position:absolute;top:10px;left:10px;display:flex;gap:6px;">
             <span class="pill" style="background:rgba(0,0,0,.5);color:#fff;border-color:transparent;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 4.5v11L12 22l-8-4.5v-11L12 2z"></path><path d="M4 6.5l8 4.5 8-4.5"></path><path d="M12 11v11"></path></svg>3D &middot; Satellite</span>
           </div>

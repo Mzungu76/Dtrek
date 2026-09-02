@@ -11,8 +11,10 @@ sostituito perché troppo tenue anche dopo un primo rinforzo — la nuova versio
 più marcata) più qualche imperfezione sparsa (piccole macchie e puntini scuri, posizione diversa
 per schermata, non un overlay ripetuto identico). Ogni foto — comprese le anteprime mappa dentro le
 card, es. l'hero di `GuidaC.dc.html` — ha un pin a tinta unita in posizione variabile (mai sempre al
-centro) e una leggera rotazione, mai su testo o note; rotazioni minime e mai in cascata sullo stesso
-schermo. Niente pagine affiancate — provato in `ReportageC.dc.html` e rimosso: poco valore aggiunto
+centro), una leggera rotazione e un **bordo irregolare "ritagliato a mano"** (contorno leggermente
+frastagliato via `clip-path`, 4 varianti diverse per le foto "sciolte" + 2 varianti a bordo inferiore
+piatto per le copertine dei Diari, che devono restare a filo col pannello sotto); mai su testo o
+note; rotazioni minime e mai in cascata sullo stesso schermo. Niente pagine affiancate — provato in `ReportageC.dc.html` e rimosso: poco valore aggiunto
 per lo spazio che occupava. Palette e tipografia invariate.
 
 Questi file sono in formato "Design Component" (`.dc.html`): richiedono il runtime del canvas
