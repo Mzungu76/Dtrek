@@ -23,6 +23,12 @@ function GuideGroupPageInner() {
   return (
     <GuideBookPage
       basePath={`/guida/${encodeURIComponent(percorsoId)}`}
+      // Senza questo, GuideBookPage ricade sul default `${basePath}/guida` (pensato per il
+      // Percorso annidato in un Diario, dove la rotta vera è .../percorsi/{id}/guida/{groupKey})
+      // — qui la rotta è già sotto /guida, un segmento "/guida" in più produceva un link 404 per
+      // le pillole "Percorso"/"Luoghi e Natura" (mai esercitato finché nessuna Meta arrivava qui
+      // senza passare da un Diario).
+      groupPath={`/guida/${encodeURIComponent(percorsoId)}`}
       diarioHref="/percorsi"
       diarioTitle="Mete"
       percorsoId={percorsoId}
