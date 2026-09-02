@@ -36,7 +36,7 @@ html, body { margin: 0; padding: 0; }
   box-shadow: inset 0 0 0 5px var(--paper-light), inset 0 0 34px rgba(46,42,34,.16);
 }
 .paper-grain {
-  position: absolute; inset: 0; pointer-events: none; opacity: .95; mix-blend-mode: multiply;
+  position: absolute; inset: 0; pointer-events: none; z-index: -1; opacity: .95; mix-blend-mode: multiply;
   background-image:
     radial-gradient(circle at 12% 22%, rgba(46,42,34,.22) 0, rgba(46,42,34,.22) 1.6px, transparent 3.2px),
     radial-gradient(circle at 68% 8%, rgba(46,42,34,.18) 0, rgba(46,42,34,.18) 1.3px, transparent 2.8px),
@@ -50,7 +50,7 @@ html, body { margin: 0; padding: 0; }
   background-size: 46px 52px, 61px 41px, 71px 83px, 33px 63px, 83px 47px, 53px 69px, 39px 59px, 67px 37px, 51px 73px;
 }
 .paper-imperfections {
-  position: absolute; inset: 0; pointer-events: none; mix-blend-mode: multiply;
+  position: absolute; inset: 0; pointer-events: none; z-index: -1; mix-blend-mode: multiply;
   background-image:
     radial-gradient(ellipse 68px 46px at 80% 12%, rgba(122,111,82,.11), transparent 72%),
     radial-gradient(ellipse 46px 74px at 12% 65%, rgba(122,111,82,.09), transparent 72%),
