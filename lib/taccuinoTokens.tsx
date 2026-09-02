@@ -202,6 +202,17 @@ const PAPER_IMPERFECTIONS_IMAGES = [
  *
  * `flip` inverte il lato della sfumatura di luce (per pagine adiacenti del libro, sinistra/destra
  * sfogliando) — non identiche a specchio l'una dell'altra sarebbe stato più piatto.
+ *
+ * ⚠️ Il chiamante NON deve mettere un `background` opaco sul proprio contenitore radice (lo
+ * stesso `<div>` in cui questo componente viene montato come figlio): quel contenitore, essendo
+ * un box non posizionato, dipinge il proprio sfondo (categoria 3 dell'ordine di stacking,
+ * CSS2.1 §E.2) SOPRA questo `<div fixed>` a z-index negativo (categoria 2) — anche se nel markup
+ * il componente compare prima. È la stessa classe di bug isolata in Fase 24 (un `<svg>` che
+ * ricopre la pagina rompeva lo stacking), qui capovolta: non serve un colore duplicato sul
+ * contenitore, questo componente fornisce già `TACCUINO_PAPER.base` come propria `backgroundColor`
+ * — un `background` in più sul genitore nasconde grana e imperfezioni lasciando visibile solo il
+ * colore piatto (bug reale riscontrato su build reale in Fase 40, corretto rimuovendolo da
+ * `app/diari/page.tsx` e `app/profilo/page.tsx`).
  */
 export function TaccuinoPaperTexture({ flip = false }: { flip?: boolean }) {
   const lightPos = flip ? '80% 15%' : '15% 10%'

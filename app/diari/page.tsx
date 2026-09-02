@@ -298,10 +298,7 @@ function DiariPageLibro() {
   }, [])
 
   return (
-    <div
-      className={`min-h-screen ${MOBILE_BOTTOMBAR_SPACER}`}
-      style={{ background: TACCUINO_PAPER.base }}
-    >
+    <div className={`min-h-screen ${MOBILE_BOTTOMBAR_SPACER}`}>
       <TaccuinoPaperTexture />
       <Navbar />
       <BookSpineShadow variant="light" />

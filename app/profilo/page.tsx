@@ -123,7 +123,7 @@ export default function ProfiloPage() {
   ]
 
   return (
-    <div className="min-h-screen pb-8" style={{ background: TACCUINO_PAPER.base }}>
+    <div className="min-h-screen pb-8">
       <TaccuinoPaperTexture />
       <div className="relative pt-[calc(env(safe-area-inset-top,0px)+2rem)] pb-7 px-6 text-center">
         <button
