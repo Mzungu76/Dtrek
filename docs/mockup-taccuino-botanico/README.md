@@ -3,14 +3,17 @@
 10 schermate della direzione scelta (su 3 presentate), esportate dal canvas Claude Design usato per
 la revisione — vedi `docs/taccuino-botanico-piano.md` per la guida sintetica alla realizzazione.
 
-Tutte le schermate (tranne `NavigatoreC.dc.html`/`Mappa3DC.dc.html`, mappe a schermo intero senza
-sfondo carta per scelta) portano la spinta editoriale "taccuino di viaggio": grana carta marcata
-(niente più la sfumatura chiara in alto a sinistra della prima versione, rimossa), ogni foto —
-comprese le anteprime mappa dentro le card, es. l'hero di `GuidaC.dc.html` — con un pin a tinta
-unita in posizione variabile (mai sempre al centro) e una leggera rotazione, mai su testo o note,
-rotazioni minime e mai in cascata sullo stesso schermo. Niente pagine affiancate — provato in
-`ReportageC.dc.html` e rimosso: poco valore aggiunto per lo spazio che occupava. Palette e
-tipografia invariate.
+Ogni schermata ha un **contorno pagina** (filo sottile + margine più chiaro + leggera vignettatura)
+sul bordo dello schermo, comprese `NavigatoreC.dc.html`/`Mappa3DC.dc.html` (mappe a schermo intero,
+che però restano senza sfondo carta/grana per scelta). Le altre 8 portano la spinta editoriale
+"taccuino di viaggio": grana carta rifatta da zero come puntinatura CSS (niente più filtro SVG,
+sostituito perché troppo tenue anche dopo un primo rinforzo — la nuova versione è deliberatamente
+più marcata) più qualche imperfezione sparsa (piccole macchie e puntini scuri, posizione diversa
+per schermata, non un overlay ripetuto identico). Ogni foto — comprese le anteprime mappa dentro le
+card, es. l'hero di `GuidaC.dc.html` — ha un pin a tinta unita in posizione variabile (mai sempre al
+centro) e una leggera rotazione, mai su testo o note; rotazioni minime e mai in cascata sullo stesso
+schermo. Niente pagine affiancate — provato in `ReportageC.dc.html` e rimosso: poco valore aggiunto
+per lo spazio che occupava. Palette e tipografia invariate.
 
 Questi file sono in formato "Design Component" (`.dc.html`): richiedono il runtime del canvas
 editor (`support.js`, non incluso qui) per essere visualizzati come pagina — non sono codice

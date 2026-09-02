@@ -32,11 +32,31 @@ html, body { margin: 0; padding: 0; }
   width: 390px; height: 844px; position: relative; overflow: hidden;
   background: var(--paper-base); font-family: 'DM Sans', system-ui, sans-serif;
   color: var(--ink-typed); -webkit-font-smoothing: antialiased;
+  border: 1px solid var(--contour);
+  box-shadow: inset 0 0 0 5px var(--paper-light), inset 0 0 34px rgba(46,42,34,.16);
 }
 .paper-grain {
-  position: absolute; inset: 0; pointer-events: none; opacity: .72; mix-blend-mode: multiply;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.29 0 0 0 0 0.26 0 0 0 0 0.19 0 0 0 0.14 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-size: 120px 120px;
+  position: absolute; inset: 0; pointer-events: none; opacity: .95; mix-blend-mode: multiply;
+  background-image:
+    radial-gradient(circle at 12% 22%, rgba(46,42,34,.22) 0, rgba(46,42,34,.22) 1.6px, transparent 3.2px),
+    radial-gradient(circle at 68% 8%, rgba(46,42,34,.18) 0, rgba(46,42,34,.18) 1.3px, transparent 2.8px),
+    radial-gradient(circle at 40% 55%, rgba(46,42,34,.20) 0, rgba(46,42,34,.20) 1.7px, transparent 3.4px),
+    radial-gradient(circle at 85% 40%, rgba(46,42,34,.17) 0, rgba(46,42,34,.17) 1.2px, transparent 2.6px),
+    radial-gradient(circle at 25% 82%, rgba(46,42,34,.20) 0, rgba(46,42,34,.20) 1.5px, transparent 3px),
+    radial-gradient(circle at 92% 88%, rgba(46,42,34,.17) 0, rgba(46,42,34,.17) 1.3px, transparent 2.8px),
+    radial-gradient(circle at 55% 30%, rgba(46,42,34,.15) 0, rgba(46,42,34,.15) 1.1px, transparent 2.4px),
+    radial-gradient(circle at 15% 45%, rgba(46,42,34,.16) 0, rgba(46,42,34,.16) 1.2px, transparent 2.6px),
+    radial-gradient(circle at 75% 65%, rgba(46,42,34,.15) 0, rgba(46,42,34,.15) 1.1px, transparent 2.4px);
+  background-size: 46px 52px, 61px 41px, 71px 83px, 33px 63px, 83px 47px, 53px 69px, 39px 59px, 67px 37px, 51px 73px;
+}
+.paper-imperfections {
+  position: absolute; inset: 0; pointer-events: none; mix-blend-mode: multiply;
+  background-image:
+    radial-gradient(ellipse 68px 46px at 85% 75%, rgba(122,111,82,.11), transparent 72%),
+    radial-gradient(ellipse 46px 74px at 15% 15%, rgba(122,111,82,.09), transparent 72%),
+    radial-gradient(circle 1.6px at 50% 60%, rgba(46,42,34,.4), transparent 100%),
+    radial-gradient(circle 1.3px at 30% 10%, rgba(46,42,34,.32), transparent 100%),
+    radial-gradient(circle 1.4px at 70% 40%, rgba(46,42,34,.3), transparent 100%);
 }
 .eyebrow {
   font-family: 'DM Sans', sans-serif; font-weight: 700; text-transform: uppercase;
@@ -119,6 +139,7 @@ a:hover { color: var(--accent-2); }
 <div class="phone">
 
       <div class="paper-grain"></div>
+      <div class="paper-imperfections"></div>
       <div class="book-header">
         <div>
           <p class="eyebrow" style="display:flex;align-items:center;gap:6px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5c2.5-1 5-1 8 0v14c-3-1-5.5-1-8 0V5z"></path><path d="M21 5c-2.5-1-5-1-8 0v14c3-1 5.5-1 8 0V5z"></path></svg>Sentieri di Casa</p>
