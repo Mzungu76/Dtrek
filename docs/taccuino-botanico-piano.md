@@ -127,6 +127,53 @@ il resto della migrazione palette (verde `#277134`/`FOREST` ancora presente in `
 `WeatherWidget.tsx`, `utils/pdfExport/*`, `app/profilo/page.tsx`, `scripts/gen-app-icons.mjs`) resta
 da fare.
 
+## Mappatura pagine app → mockup (censimento rotte, prima dell'implementazione)
+
+Censimento di tutte le route reali sotto `app/` (non assunto — letto file per file), incrociato con
+le 10 schermate del mockup, per capire cosa va **modificato** (restyling di una pagina che esiste
+già) e cosa va **aggiunto** (schermata nuova, nessuna route corrispondente oggi).
+
+### Da modificare (pagina esiste, solo restyling — salvo dove indicato)
+
+| Schermata mockup | Route reale | File |
+|---|---|---|
+| Diario (Home) | `/diari` | `app/diari/page.tsx` (`DiariPage`) |
+| Sommario | `/diari/[id]` | `app/diari/[id]/page.tsx` (`DiarioDetailPage`) |
+| Guida — Prima di partire (+ struttura 3 sezioni, vedi sopra) | `/guida/[id]/[groupKey]` **e** `/diari/[id]/percorsi/[percorsoId]/guida/[groupKey]` | due route per lo stesso layout "a libro" (`GuideGroupPage`) — verificare che condividano davvero lo stesso componente prima di restilizzare due volte |
+| Percorsi (vista piatta) | `/percorsi` | `app/percorsi/page.tsx` (`MetePage`) — **nota**: oggi lista solo Mete non ancora percorse, non "tutti i percorsi"; verificare che lo scope combaci col mockup o se serve un adattamento minimo oltre al colore |
+| Statistiche | `/statistiche` | `app/statistiche/page.tsx` (`StatistichePage`) |
+| Profilo | `/profilo` | `app/profilo/page.tsx` (`ProfiloPage`) |
+| Navigatore | `/navigatore` | `app/navigatore/page.tsx` (`NavigatorePage`) |
+| Mappa 3D espansa | *(componente, non route dedicata)* | `components/RouteMap3D.tsx`, vedi sezione dedicata sopra |
+| Reportage | `/resoconto/[id]` (`EscursionePage`) **e/o** `/diari/[id]/percorsi/[percorsoId]/reportage/[activityId]` (`ReportageSummaryPage`) | due possibili route per lo stesso concetto — per commento in `Navbar.tsx` un Reportage oggi si raggiunge solo via Diario, quindi `ReportageSummaryPage` è probabilmente quella attiva e `/resoconto/[id]` legacy/alternativa: **da chiarire prima di restilizzare entrambe** |
+
+### Da aggiungere (nessuna route oggi)
+
+- **Hub "Mete"** (scelta Sentieri / Borghi e Città / Siti) — vedi "Estensione IA" sopra, già
+  approvato dall'utente ("ok per hub mete"). `/percorsi` oggi è già la lista piatta,
+  `/percorsi/cerca` gestisce solo creazione/ricerca `borgo_citta`/`sito` — nessuna delle due è un
+  hub di scelta tipo. Da decidere prima di costruire: `/percorsi` diventa l'hub e la lista piatta
+  trasloca altrove, oppure l'hub è una route nuova (es. `/percorsi/nuovo` o `/mete`) e `/percorsi`
+  resta com'è.
+
+### Fuori scope per decisioni già prese
+
+- **Barra di navigazione a 5 voci** — l'utente ha confermato di lasciarla invariata (3 voci +
+  avatar, `components/Navbar.tsx`).
+- **Audio-guida a tappe durante l'uscita** — in pausa: prima va valutato se il GPS ha senso durante
+  l'uscita (e se implementarlo sia in Dtrek che nel navigatore esterno), solo per le nuove sezioni
+  Borgo/Città e Sito (Percorsi ha già l'app esterna Navigatore).
+- **`GuidaHub`/`ResocontoHub`/`HubNavBar`** (hub prima di entrare in una Guida/Resoconto specifica,
+  contenuto scuro immersivo) — fuori scope dal piano originale, non toccati qui.
+
+### Pagine non coperte da nessuna schermata del mockup (non toccate in questo giro)
+
+Copertina Diario, pubblica Diario, Percorsi-per-te, Guida flora/animali/naviga, Resoconto
+racconta/flora/animali, Profilo impostazioni/AI/cronologia navigazione/log ricerche/ricerche
+salvate, Vette, Navigatore percorsi/importa/traccia, Upload, pagine di autenticazione, Prezzi,
+Fonti e crediti, pagine pubbliche di condivisione (`/leggi/*`, `/s/*`). Nessuna di queste è
+menzionata nel mockup: restano come sono finché non viene chiesto altrimenti.
+
 ## Cosa NON è ancora deciso/fatto
 
 - Il restyling completo di `GuidaHub`/`ResocontoHub`/`HubNavBar` (contenuto scuro immersivo) resta
