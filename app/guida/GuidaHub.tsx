@@ -53,6 +53,7 @@ import { useSafetyScore } from './useSafetyScore'
 import { useCtsRecompute } from '@/lib/useCtsRecompute'
 import { tryOpenNavigatorApp } from '@/lib/navigatorHandoff'
 import { metaHasHikingMetrics } from '@/lib/metaTypes'
+import { markMetaVisited } from '@/lib/visitCompletion'
 
 const StreetViewPanel = dynamic(() => import('@/components/StreetViewPanel'), { ssr: false })
 const RouteMap3D       = dynamic(() => import('@/components/RouteMap3D'),      { ssr: false })
@@ -74,12 +75,14 @@ function metaToItem(h: PlannedHikeMeta): RouteHubItem {
     id: h.id,
     title: h.title,
     polyline: h.routePolyline,
-    statPills: [
+    // Solo per un sentiero (piano §48.9) — un Borgo/Città/Sito non ha mai queste cifre
+    // (nessuna traccia GPS, vedi lib/visitCompletion.ts): mai "0.0 km" nella galleria.
+    statPills: metaHasHikingMetrics(h.metaType) ? [
       { icon: Route,       label: `${(h.distanceMeters / 1000).toFixed(1)} km` },
       { icon: TrendingUp,  label: `+${Math.round(h.elevationGain)} m` },
       { icon: Mountain,    label: `${Math.round(h.altitudeMax)} m` },
       { icon: Clock,       label: formatDuration(h.estimatedTimeSeconds) },
-    ],
+    ] : [],
     sortValues: {
       date: new Date(h.createdAt).getTime(),
       km: h.distanceMeters,
@@ -100,6 +103,8 @@ function metaToItem(h: PlannedHikeMeta): RouteHubItem {
     safetyPreview: h.cachedSafetyScore ? { overall: h.cachedSafetyScore.overall, color: h.cachedSafetyScore.color, label: h.cachedSafetyScore.label } : undefined,
     favorite: h.favorite,
     plannedDate: h.plannedDate,
+    metaType: h.metaType,
+    firstCompletedAt: h.firstCompletedAt,
   }
 }
 
@@ -115,6 +120,9 @@ export default function GuidaHub({ id, startClosed }: { id?: string; startClosed
   const [editNotes, setEditNotes] = useState(false)
   const [titleVal, setTitleVal] = useState('')
   const [editTitle, setEditTitle] = useState(false)
+  // "Segna come visitata" (piano Blocco D §27/Blocco F, vedi handleMarkVisited/primaryAction più
+  // sotto) — id della Meta per cui la chiamata è in corso, per disabilitare doppi tap.
+  const [markingVisitedId, setMarkingVisitedId] = useState<string | null>(null)
   // UX-AUDIT.md P-M4 — confirm() nativo del browser stonava con il resto dell'app: stesso pattern
   // a due passi già usato per editTitle/editNotes qui sotto, non un nuovo Sheet sopra il pannello
   // "Strumenti" già aperto.
@@ -1001,14 +1009,48 @@ export default function GuidaHub({ id, startClosed }: { id?: string; startClosed
     )
   }
 
-  const primaryAction = (routeItem: RouteHubItem): PrimaryAction => ({
-    label: 'Naviga',
-    icon: Navigation,
-    // Prova prima l'app nativa Navigator (se il device può averla), altrimenti ricade sulla
-    // stessa pagina di navigazione via web che serviva già da sola (lib/navigatorHandoff.ts).
-    onClick: () => tryOpenNavigatorApp(router, `/guida/${encodeURIComponent(routeItem.id)}/naviga`),
-    variant: 'terra',
-  })
+  // "Segna come visitata" (piano Blocco D §27/Blocco F) — il CTA primario equivalente a "Naviga"
+  // per una Meta senza traccia GPS: un Borgo/Città/Sito non ha un percorso da navigare, quindi
+  // completarla è un tocco, non un arrivo a un GPX (piano §48.10, mai richiedere GPS). Fetcha il
+  // PlannedHike completo (RouteHubItem non porta siteType) invece di allargare RouteHubItem con
+  // altri campi hike-specifici solo per questo singolo utilizzo.
+  async function handleMarkVisited(itemId: string) {
+    if (markingVisitedId) return
+    setMarkingVisitedId(itemId)
+    try {
+      const full = await getPlannedById(itemId)
+      if (!full || full.firstCompletedAt) return
+      await markMetaVisited(full)
+      // Riflette subito firstCompletedAt sulla lista locale (galleria) e, se è la Meta aperta,
+      // anche su `hike` — senza aspettare il refetch in background della lista.
+      const now = new Date().toISOString()
+      setItems(prev => prev.map(it => it.id === itemId ? { ...it, firstCompletedAt: now } : it))
+      setHike(prev => prev && prev.id === itemId ? { ...prev, firstCompletedAt: now } : prev)
+    } catch (e) {
+      console.error('[GuidaHub] markMetaVisited fallito:', e)
+    } finally {
+      setMarkingVisitedId(null)
+    }
+  }
+
+  const primaryAction = (routeItem: RouteHubItem): PrimaryAction => {
+    if (!metaHasHikingMetrics(routeItem.metaType)) {
+      return {
+        label: routeItem.firstCompletedAt ? 'Visitata' : 'Segna come visitata',
+        icon: Check,
+        onClick: () => handleMarkVisited(routeItem.id),
+        variant: 'terra',
+      }
+    }
+    return {
+      label: 'Naviga',
+      icon: Navigation,
+      // Prova prima l'app nativa Navigator (se il device può averla), altrimenti ricade sulla
+      // stessa pagina di navigazione via web che serviva già da sola (lib/navigatorHandoff.ts).
+      onClick: () => tryOpenNavigatorApp(router, `/guida/${encodeURIComponent(routeItem.id)}/naviga`),
+      variant: 'terra',
+    }
+  }
 
   const currentItem = displayItems.find(i => i.id === currentId) ?? displayItems[0]
   const initialIndex = Math.max(0, displayItems.findIndex(i => i.id === currentItem.id))

@@ -12,6 +12,7 @@ import type { DiarioDetail } from '@/app/api/diaries/[id]/route'
 import { updateUserSettings } from '@/lib/sync/userSettingsStore'
 import { FONT } from '@/lib/designTokens'
 import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, FONT_HAND, TaccuinoPaperTexture, HandDrawnFrame } from '@/lib/taccuinoTokens'
+import { metaHasHikingMetrics } from '@/lib/metaTypes'
 import {
   ArrowDown, ArrowLeft, ArrowUp, BookOpen, ChevronRight, Clock, Loader2, Mountain,
   Plus, Route, Search, Share2, Star, Trash2, TrendingUp, X,
@@ -404,10 +405,17 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                           icone rimpicciolite — restano leggibili ma non competono col titolo per
                           attenzione. */}
                       <div className="flex items-center flex-wrap gap-x-2.5 gap-y-1 mt-1.5" style={{ fontFamily: FONT.lora, fontSize: 11, color: TACCUINO_INK.handMuted }}>
-                        <span className="inline-flex items-center gap-1"><Route className="w-3 h-3" /> {(r.distanceMeters / 1000).toFixed(1)} km</span>
-                        <span className="inline-flex items-center gap-1"><TrendingUp className="w-3 h-3" /> +{Math.round(r.elevationGain)} m</span>
-                        <span className="inline-flex items-center gap-1"><Mountain className="w-3 h-3" /> {Math.round(r.altitudeMax)} m</span>
-                        <span className="inline-flex items-center gap-1"><Clock className="w-3 h-3" /> {formatDuration(r.totalTimeSeconds)}</span>
+                        {/* Solo per un sentiero (piano §48.9) — una Meta borgo_citta/sito ha sempre
+                            queste cifre a 0 (nessuna traccia GPS, vedi lib/visitCompletion.ts):
+                            mostrarle produrrebbe "0.0 km" invece di semplicemente ometterle. */}
+                        {metaHasHikingMetrics(r.metaType) && (
+                          <>
+                            <span className="inline-flex items-center gap-1"><Route className="w-3 h-3" /> {(r.distanceMeters / 1000).toFixed(1)} km</span>
+                            <span className="inline-flex items-center gap-1"><TrendingUp className="w-3 h-3" /> +{Math.round(r.elevationGain)} m</span>
+                            <span className="inline-flex items-center gap-1"><Mountain className="w-3 h-3" /> {Math.round(r.altitudeMax)} m</span>
+                            <span className="inline-flex items-center gap-1"><Clock className="w-3 h-3" /> {formatDuration(r.totalTimeSeconds)}</span>
+                          </>
+                        )}
                         {r.userRating != null && (
                           <span className="inline-flex items-center gap-1"><Star className="w-3 h-3" fill="currentColor" /> {r.userRating}/10</span>
                         )}

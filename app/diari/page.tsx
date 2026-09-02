@@ -10,6 +10,7 @@ import type { DiarySummary } from '@/app/api/diaries/route'
 import type { AllPercorsiRow } from '@/app/api/percorsi/route'
 import { FONT } from '@/lib/designTokens'
 import { TACCUINO_PAPER, FONT_HAND } from '@/lib/taccuinoTokens'
+import { metaHasHikingMetrics } from '@/lib/metaTypes'
 import { ArrowRight, BookMarked, BookOpen, Compass, Loader2, Mountain, Pencil, Plus, Search, X } from 'lucide-react'
 
 /**
@@ -238,8 +239,12 @@ function GlobalRouteSearch() {
                   <p className="truncate" style={{ fontSize: 13.5, fontWeight: 600, color: '#3f3a22' }}>{p.title}</p>
                   <div className="flex items-center gap-2 flex-wrap" style={{ fontSize: 10.5, color: '#8a7f52' }}>
                     {p.diaryTitle && <span className="truncate">{p.diaryTitle}</span>}
-                    <span>{(p.distanceMeters / 1000).toFixed(1)} km</span>
-                    <span>+{Math.round(p.elevationGain)} m</span>
+                    {metaHasHikingMetrics(p.metaType) && (
+                      <>
+                        <span>{(p.distanceMeters / 1000).toFixed(1)} km</span>
+                        <span>+{Math.round(p.elevationGain)} m</span>
+                      </>
+                    )}
                   </div>
                 </div>
               </Link>

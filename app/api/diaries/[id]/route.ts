@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { getUserFromRequest } from '@/lib/supabaseAuth'
 import { deletePercorsoCascade } from '@/lib/deletePercorsoCascade'
+import type { MetaType } from '@/lib/metaTypes'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,6 +27,9 @@ export interface DiarioReportageRow {
   percorsoId: string | null
   /** activities.favorite — filtro "solo preferiti" del Sommario. */
   favorite: boolean
+  /** "Travasato" dalla Meta al salvataggio (piano Blocco F §32) — determina se il Sommario mostra
+   *  le metriche escursionistiche di questa riga o le omette (piano §48.9). */
+  metaType: MetaType
 }
 
 export interface DiarioDetail {
@@ -73,7 +77,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     if (plannedIds.length > 0) {
       const { data: activities, error: activitiesErr } = await supabase
         .from('activities')
-        .select('id, title, start_time, distance_meters, elevation_gain, altitude_max, total_time_seconds, route_polyline, trail_score, user_rating, favorite, linked_planned_id')
+        .select('id, title, start_time, distance_meters, elevation_gain, altitude_max, total_time_seconds, route_polyline, trail_score, user_rating, favorite, linked_planned_id, meta_type')
         .eq('user_id', user.id)
         .in('linked_planned_id', plannedIds)
         .order('start_time', { ascending: false })
@@ -105,6 +109,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         hasWrittenReport: reportedIds.has(a.id as string),
         percorsoId:       (a.linked_planned_id as string | null) ?? null,
         favorite:         (a.favorite as boolean | null) ?? false,
+        metaType:         (a.meta_type as MetaType) ?? 'sentiero',
       }))
     }
 

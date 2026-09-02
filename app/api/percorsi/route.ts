@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { getUserFromRequest } from '@/lib/supabaseAuth'
+import type { MetaType } from '@/lib/metaTypes'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,6 +23,7 @@ export interface AllPercorsiRow {
    *  sola lettura di app/api/diaries/[id]/route.ts). */
   trailScore: number | null
   favorite: boolean
+  metaType: MetaType
 }
 
 // GET /api/percorsi → "Tutti i Percorsi" — Fase 5 di docs/diario-fulcro-piano.md. Vista trasversale
@@ -35,7 +37,7 @@ export async function GET(req: NextRequest) {
 
     const { data: planned, error: plannedErr } = await supabase
       .from('planned_hikes')
-      .select('id, title, distance_meters, elevation_gain, altitude_max, estimated_time_seconds, route_polyline, created_at, first_completed_at, diary_id, archived_at, cached_ts_total, favorite')
+      .select('id, title, distance_meters, elevation_gain, altitude_max, estimated_time_seconds, route_polyline, created_at, first_completed_at, diary_id, archived_at, cached_ts_total, favorite, meta_type')
       .eq('user_id', user.id)
       .is('archived_at', null)
       .order('created_at', { ascending: false })
@@ -80,6 +82,7 @@ export async function GET(req: NextRequest) {
         pubblicabile:          reportageCount > 0,
         trailScore:            (p.cached_ts_total as number | null) ?? null,
         favorite:              (p.favorite as boolean | null) ?? false,
+        metaType:              (p.meta_type as MetaType) ?? 'sentiero',
       }
     })
 

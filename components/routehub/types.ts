@@ -1,6 +1,7 @@
 import type { ReactNode, Ref } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import type { SafetyPreview } from '@/components/TrailScoreGaugeBadge'
+import type { MetaType } from '@/lib/metaTypes'
 
 export type HubMode = 'guida' | 'resoconto'
 
@@ -57,6 +58,15 @@ export interface RouteHubItem {
    *  app/guida/GuidaHub.tsx. È ciò che distingue un preferito qualsiasi da una "prossima uscita"
    *  (sottosezione dei preferiti: quelli con una data da qui in avanti, in ordine di calendario). */
   plannedDate?: string
+  /** Guida-only — piano mete multi-tipologia, Blocco F. Assente per Resoconto (dove il concetto
+   *  non serve: un'Attività esiste già, non c'è un "tipo di Meta da creare" da distinguere qui).
+   *  Determina se il CTA primario è "Naviga" (sentiero) o "Segna come visitata" (Borgo/Città/Sito,
+   *  vedi lib/visitCompletion.ts) — piano §48.9, mai richiedere una traccia GPS per una Meta senza
+   *  cammino. */
+  metaType?: MetaType
+  /** Guida-only — presente quando questa Meta ha già una prima visita/attività registrata (piano
+   *  Blocco D §27), per distinguere "Segna come visitata" da "Visitata" nel CTA primario. */
+  firstCompletedAt?: string
 }
 
 /** One tab of the Screen 2 page's pill tab-bar — only meaningful when bodyMode === 'tabbed'. */
