@@ -169,17 +169,26 @@ const PAPER_GRAIN_IMAGES = [
 const PAPER_GRAIN_SIZES = ['58px 65px', '76px 51px', '89px 104px', '41px 79px', '104px 59px', '66px 86px', '49px 74px', '84px 46px', '64px 91px']
 
 /**
- * Imperfezioni sparse (macchie e piccoli puntini scuri) — rompono l'uniformità della grana sopra,
- * stesso principio della carta invecchiata vista nel mockup: posizioni fisse (un solo componente
- * condiviso da tutta l'app, non una posizione diversa per schermata come nel canvas di
- * riferimento, dove ogni artboard era indipendente).
+ * Imperfezioni — variazione di tono "nuvolata" della carta, non più macchie/puntini dai bordi
+ * netti (Fase 41: su screenshot reale quei bordi definiti leggevano come sporco sparso, non come
+ * carta — l'utente ha chiesto esplicitamente un effetto "nuvolato", mostrando un riferimento di
+ * texture con chiazze morbide che si fondono nel fondo, senza contorni visibili). Ellissi grandi
+ * (140-300px) con dissolvenza molto ampia (`transparent` all'75-82%, contro il 72% delle vecchie
+ * macchie e il 100% a bordo netto dei vecchi puntini) e alternanza chiaro/scuro
+ * (`TACCUINO_PAPER.light`/`TACCUINO_INK.hand`) invece di un'unica tinta scura: stesso principio
+ * della carta invecchiata, ma la variazione ora è tonale e diffusa, non puntiforme. Posizioni
+ * fisse (un solo componente condiviso da tutta l'app, non una posizione diversa per schermata
+ * come nel canvas di riferimento).
  */
 const PAPER_IMPERFECTIONS_IMAGES = [
-  'radial-gradient(ellipse 56px 38px at 80% 12%, rgba(122,111,82,.06), transparent 72%)',
-  'radial-gradient(ellipse 38px 60px at 12% 65%, rgba(122,111,82,.05), transparent 72%)',
-  'radial-gradient(circle 1.3px at 45% 40%, rgba(46,42,34,.22), transparent 100%)',
-  'radial-gradient(circle 1.1px at 70% 75%, rgba(46,42,34,.18), transparent 100%)',
-  'radial-gradient(circle 1.2px at 20% 20%, rgba(46,42,34,.17), transparent 100%)',
+  'radial-gradient(ellipse 260px 190px at 18% 14%, rgba(249,242,228,.55), transparent 80%)',
+  'radial-gradient(ellipse 200px 240px at 72% 10%, rgba(122,111,82,.07), transparent 78%)',
+  'radial-gradient(ellipse 300px 220px at 45% 38%, rgba(249,242,228,.45), transparent 82%)',
+  'radial-gradient(ellipse 180px 260px at 85% 42%, rgba(122,111,82,.06), transparent 76%)',
+  'radial-gradient(ellipse 220px 260px at 10% 62%, rgba(249,242,228,.5), transparent 80%)',
+  'radial-gradient(ellipse 260px 190px at 55% 72%, rgba(122,111,82,.07), transparent 78%)',
+  'radial-gradient(ellipse 200px 240px at 88% 78%, rgba(249,242,228,.45), transparent 82%)',
+  'radial-gradient(ellipse 240px 200px at 30% 92%, rgba(122,111,82,.06), transparent 76%)',
 ]
 
 /**
@@ -191,8 +200,9 @@ const PAPER_IMPERFECTIONS_IMAGES = [
  * visibile come tale.
  *
  * Composizione: (1) il colore piatto di base, (2) UNA sfumatura di luce (posizione data da `flip`),
- * (3) grana piastrellata (`PAPER_GRAIN_IMAGES`), (4) imperfezioni sparse
- * (`PAPER_IMPERFECTIONS_IMAGES`).
+ * (3) grana piastrellata (`PAPER_GRAIN_IMAGES`), (4) variazione di tono "nuvolata"
+ * (`PAPER_IMPERFECTIONS_IMAGES`, Fase 41 — chiazze morbide senza contorni, non più macchie/puntini
+ * dai bordi netti).
  *
  * Fase 24 — **causa reale, finalmente isolata**, del bug "titolo/statistiche invisibili" nelle
  * righe del Sommario: qualunque `<svg>` **vivo che ricopre la pagina** (fisso o assoluto, con o
