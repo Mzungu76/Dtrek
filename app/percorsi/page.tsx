@@ -107,6 +107,16 @@ export default function MetePage() {
       </div>
 
       <main className="max-w-[720px] mx-auto px-5 sm:px-8 py-6 sm:py-8">
+        {/* Borgo/Città/Sito (piano §17/§25) — l'unico punto d'ingresso, oltre a "+ Nuovo" (che
+            resta /upload?tab=gpx, un sentiero), per aggiungere una Meta non escursionistica. */}
+        <Link
+          href="/percorsi/cerca"
+          className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-[14px] font-semibold mb-5 transition-colors"
+          style={{ background: TACCUINO_PAPER.card, color: TACCUINO_INK.typed, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}
+        >
+          <Search className="w-4 h-4" /> Cerca un Borgo, una Città o un Sito
+        </Link>
+
         {error && (
           <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-4">
             Impossibile caricare le mete: {error}

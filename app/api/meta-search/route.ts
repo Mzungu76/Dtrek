@@ -89,6 +89,7 @@ function parseMetaSearchParams(body: unknown): MetaSearchParams | null {
   if (!isMetaType(b.metaType)) return null
 
   const limit = parseNumber(b.limit)
+  const query = parseString(b.query)
   const region = parseString(b.region)
   const province = parseString(b.province)
   const origin = parseOrigin(b.origin)
@@ -98,7 +99,7 @@ function parseMetaSearchParams(body: unknown): MetaSearchParams | null {
   if (b.metaType === 'borgo_citta') {
     return {
       metaType: 'borgo_citta',
-      region, province, origin, maxDistanceKm, interests,
+      query, region, province, origin, maxDistanceKm, interests,
       category: parseStringArray(b.category, PLACE_CATEGORIES),
       experienceType: parseEnum(b.experienceType, EXPERIENCE_TYPES),
       timeAvailable: parseEnum(b.timeAvailable, TIME_BUDGETS),
@@ -109,7 +110,7 @@ function parseMetaSearchParams(body: unknown): MetaSearchParams | null {
   if (b.metaType === 'sito') {
     return {
       metaType: 'sito',
-      region, province, origin, maxDistanceKm, interests,
+      query, region, province, origin, maxDistanceKm, interests,
       category: parseStringArray(b.category, SITE_TYPE_SET)?.filter(isSiteType),
       limit,
     }

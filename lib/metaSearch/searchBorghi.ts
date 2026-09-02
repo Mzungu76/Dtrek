@@ -45,6 +45,7 @@ export async function searchBorghi(supabase: SupabaseClient, params: BorghiSearc
     .select('id, name, subtype, description, latitude, longitude, region, province, municipality, image_url, official_url, website, address, source, confidence, metadata')
     .eq('meta_type', 'borgo_citta')
 
+  if (params.query) query = query.ilike('name', `%${params.query}%`)
   if (params.region) query = query.ilike('region', params.region)
   if (params.province) query = query.ilike('province', params.province)
   if (params.category && params.category.length > 0) query = query.in('subtype', params.category)

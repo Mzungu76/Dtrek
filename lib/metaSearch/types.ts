@@ -38,6 +38,8 @@ export function isTimeBudget(value: unknown): value is TimeBudget {
 
 export interface BorghiSearchParams {
   metaType: 'borgo_citta'
+  /** Ricerca libera per nome (ILIKE, sottostringa) — es. "Calcata". Assente = nessun filtro nome. */
+  query?: string
   region?: string
   province?: string
   origin?: MetaSearchOrigin
@@ -51,6 +53,8 @@ export interface BorghiSearchParams {
 
 export interface SitiSearchParams {
   metaType: 'sito'
+  /** Ricerca libera per nome (ILIKE, sottostringa) — es. "Colosseo". Assente = nessun filtro nome. */
+  query?: string
   category?: SiteType[]
   region?: string
   province?: string
