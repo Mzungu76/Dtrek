@@ -175,20 +175,30 @@ export function useGuidaBookData(percorsoId: string | undefined): UseGuidaBookDa
       if (!h) { setNotFound(true); setLoading(false); return }
       setHike(h)
       const gps = (h.trackPoints ?? []).filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
+      // Un Borgo/Città/Sito non ha mai una traccia GPS, ma da Blocco D ha le proprie
+      // latitude/longitude (supabase/migrations/add_planned_hikes_place_link.sql) — usale come
+      // "traccia" di un solo punto: minDistToTrack/computeBbox gestiscono già nativamente un
+      // array a un elemento come semplice distanza/bbox dal punto, nessuna nuova funzione serve.
+      // Raggio più ampio di quello per un sentiero (300m, pensato per POI a bordo tracciato): un
+      // centro storico o un sito copre un'area più estesa di una manciata di metri dal binario.
+      const originGps: [number, number][] = gps.length > 0
+        ? gps
+        : (h.latitude != null && h.longitude != null ? [[h.latitude, h.longitude]] : [])
+      const poiRadiusM = gps.length > 0 ? 300 : 800
       setPois([]); setPoiWikiEntries([]); setPoisFullyLoaded(false)
-      if (gps.length > 0) {
+      if (originGps.length > 0) {
         if (h.cachedPois?.length) {
           setPois(h.cachedPois as PoiItem[])
           if (h.cachedPoiWiki?.length) setPoiWikiEntries(h.cachedPoiWiki as { poi: PoiItem; wiki: WikiPage }[])
           setPoisFullyLoaded(true)
         } else {
-          const bbox = computeBbox(gps)
+          const bbox = computeBbox(originGps, gps.length > 0 ? 0.01 : 0.03)
           fetch(`/api/pois?bbox=${bbox}`)
             .then(r => r.json())
             .then((all: PoiItem[]) => {
               const nearby = all
-                .filter(p => minDistToTrack(p.lat, p.lon, gps) <= 300)
-                .map(p => ({ ...p, distFromTrack: Math.round(minDistToTrack(p.lat, p.lon, gps)) }))
+                .filter(p => minDistToTrack(p.lat, p.lon, originGps) <= poiRadiusM)
+                .map(p => ({ ...p, distFromTrack: Math.round(minDistToTrack(p.lat, p.lon, originGps)) }))
               setPois(nearby)
               fetchWikiForNamedPois(nearby)
                 .then(entries => { setPoiWikiEntries(entries); setPoisFullyLoaded(true) })
@@ -354,8 +364,16 @@ export function useGuidaBookData(percorsoId: string | undefined): UseGuidaBookDa
     plannedId: hike?.id ?? '', markers: hike?.difficultyMarkers ?? [], highlightedMarkerIndex: null,
   }
 
+  // Punto su cui centrare meteo/POI vicini/mappa quando non c'è una traccia GPS da cui derivarlo
+  // — le latitude/longitude della Meta (Blocco D), non più "niente" per un Borgo/Città/Sito.
+  // hasGps resta un concetto separato (c'è o non c'è una traccia registrata, usato altrove per
+  // profilo altimetrico/3D/DEP): un punto di origine può esistere anche senza traccia.
+  const originPoint = centerPt?.lat != null && centerPt?.lon != null
+    ? { lat: centerPt.lat, lon: centerPt.lon }
+    : (hike?.latitude != null && hike?.longitude != null ? { lat: hike.latitude, lon: hike.longitude } : null)
+
   const poiList: PoiListBundle = {
-    pois, poiWikiEntries, hasGps, centerLat: centerPt?.lat, centerLon: centerPt?.lon,
+    pois, poiWikiEntries, hasGps, centerLat: originPoint?.lat, centerLon: originPoint?.lon,
     onWikiLoaded: () => {},
   }
 
@@ -366,8 +384,8 @@ export function useGuidaBookData(percorsoId: string | undefined): UseGuidaBookDa
     month: hike?.plannedDate ? new Date(hike.plannedDate).getMonth() + 1 : new Date().getMonth() + 1,
   }
 
-  const weather = hasGps && centerPt?.lat != null && centerPt?.lon != null
-    ? { lat: centerPt.lat, lon: centerPt.lon, mode: (hike?.plannedDate ? 'planned' : 'forecast') as 'planned' | 'forecast' }
+  const weather = originPoint
+    ? { lat: originPoint.lat, lon: originPoint.lon, mode: (hike?.plannedDate ? 'planned' : 'forecast') as 'planned' | 'forecast' }
     : undefined
 
   return {

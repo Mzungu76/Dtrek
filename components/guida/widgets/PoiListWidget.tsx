@@ -135,7 +135,10 @@ export default function PoiListWidget({
   // arrivano anche gli articoli Wikipedia nei dintorni).
   const [nearbyPagesSettled, setNearbyPagesSettled] = useState(false)
   useEffect(() => {
-    if (!hasGps || centerLat == null || centerLon == null) { setNearbyPagesSettled(true); return }
+    // fetchNearbyWiki è puramente per coordinate (raggio fisso, nessuna traccia coinvolta) — mai
+    // dipeso davvero da hasGps: un centro/punto valido basta, anche per un Borgo/Città/Sito senza
+    // traccia (piano §48.9/§48.10, le coordinate della Meta arrivano comunque da Blocco D).
+    if (centerLat == null || centerLon == null) { setNearbyPagesSettled(true); return }
     let cancelled = false
     fetchNearbyWiki(centerLat, centerLon, 8000).then(pages => {
       if (cancelled) return
@@ -144,7 +147,7 @@ export default function PoiListWidget({
     }).catch(() => {}).finally(() => { if (!cancelled) setNearbyPagesSettled(true) })
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasGps, centerLat, centerLon])
+  }, [centerLat, centerLon])
 
   const galleryEntries = useMemo<GalleryEntry[]>(() => {
     const seen = new Set<string>()
