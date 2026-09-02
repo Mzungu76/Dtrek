@@ -22,6 +22,7 @@ import { useCtsUpdated } from '@/lib/sync/useCtsUpdated'
 import { streamFetchText, StreamFetchError } from '@/lib/streamFetchText'
 import { getQuestionnaire } from '@/lib/questionnaireStore'
 import { getPlannedById } from '@/lib/plannedStore'
+import { metaHasHikingMetrics } from '@/lib/metaTypes'
 import { extractLeadSubtitle } from '@/lib/extractLeadSubtitle'
 import { withForcedDownload } from '@/lib/storageDownloadUrl'
 // Estratta in lib/photoBuckets.ts quando è servita anche alla pagina pubblica del Diario:
@@ -330,7 +331,10 @@ export default function ReportReader({
   // "Galleria fotografica" resta sempre presente (come le altre sezioni fisse) anche senza foto:
   // è l'unico punto da cui caricarle (vedi ActivityPhotoManager dentro il suo widget), quindi
   // nasconderla in assenza di foto renderebbe impossibile aggiungerne la prima.
-  const displaySections = useMemo<DisplaySection[]>(() => buildReportDisplaySections(content), [content])
+  const displaySections = useMemo<DisplaySection[]>(
+    () => buildReportDisplaySections(content, metaHasHikingMetrics(activity.metaType)),
+    [content, activity.metaType],
+  )
 
   // Foto di ogni capitolo — se il racconto ha una struttura editata a mano (reportSections, in
   // sync 1:1 con i capitoli attuali) si usa la scelta esplicita dell'utente (foto principale +
@@ -578,16 +582,18 @@ export default function ReportReader({
         readingMinutes={hasContent ? readingMinutes : undefined}
       />
 
-      <ReportStatsStrip
-        distanceKm={activity.distanceMeters / 1000}
-        elevationGain={activity.elevationGain}
-        durationLabel={formatDuration(activity.totalTimeSeconds)}
-        fourth={
-          (activity.calories ?? 0) > 0 ? { value: `${activity.calories} kcal`, label: 'Calorie' }
-          : (activity.avgHeartRate ?? 0) > 0 ? { value: `${activity.avgHeartRate} bpm`, label: 'FC media' }
-          : undefined
-        }
-      />
+      {metaHasHikingMetrics(activity.metaType) && (
+        <ReportStatsStrip
+          distanceKm={activity.distanceMeters / 1000}
+          elevationGain={activity.elevationGain}
+          durationLabel={formatDuration(activity.totalTimeSeconds)}
+          fourth={
+            (activity.calories ?? 0) > 0 ? { value: `${activity.calories} kcal`, label: 'Calorie' }
+            : (activity.avgHeartRate ?? 0) > 0 ? { value: `${activity.avgHeartRate} bpm`, label: 'FC media' }
+            : undefined
+          }
+        />
+      )}
 
       <PhotoShowcase photos={showcasePhotos} onPhotoClick={openLightboxById} />
 

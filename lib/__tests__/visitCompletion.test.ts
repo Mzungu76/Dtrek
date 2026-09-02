@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { canCompleteWithoutTrack, markMetaVisited } from '../visitCompletion'
 
-const updatePlannedMeta = vi.fn()
-vi.mock('../plannedStore', () => ({
-  updatePlannedMeta: (...args: unknown[]) => updatePlannedMeta(...args),
+const saveActivityWithEnrichment = vi.fn()
+vi.mock('../activitySave', () => ({
+  saveActivityWithEnrichment: (...args: unknown[]) => saveActivityWithEnrichment(...args),
 }))
 
 beforeEach(() => {
-  updatePlannedMeta.mockReset()
-  updatePlannedMeta.mockResolvedValue(undefined)
+  saveActivityWithEnrichment.mockReset()
+  saveActivityWithEnrichment.mockResolvedValue(undefined)
 })
 
 describe('canCompleteWithoutTrack', () => {
@@ -28,20 +28,29 @@ describe('canCompleteWithoutTrack', () => {
 
 describe('markMetaVisited', () => {
   it('rifiuta un sentiero — nessuno shortcut rispetto a un\'attività reale', async () => {
-    await expect(markMetaVisited({ id: '1', metaType: 'sentiero' })).rejects.toThrow()
-    expect(updatePlannedMeta).not.toHaveBeenCalled()
+    await expect(markMetaVisited({ id: '1', title: 'Test', metaType: 'sentiero' })).rejects.toThrow()
+    expect(saveActivityWithEnrichment).not.toHaveBeenCalled()
   })
 
-  it('valorizza firstCompletedAt per un borgo_citta non ancora visitato', async () => {
-    await markMetaVisited({ id: '1', metaType: 'borgo_citta' })
-    expect(updatePlannedMeta).toHaveBeenCalledTimes(1)
-    const [id, patch] = updatePlannedMeta.mock.calls[0]
-    expect(id).toBe('1')
-    expect(typeof patch.firstCompletedAt).toBe('string')
+  it('crea un\'Attività senza traccia, collegata alla Meta, per un borgo_citta non ancora visitato', async () => {
+    await markMetaVisited({ id: '1', title: 'Calcata', metaType: 'borgo_citta' })
+    expect(saveActivityWithEnrichment).toHaveBeenCalledTimes(1)
+    const [activity, opts] = saveActivityWithEnrichment.mock.calls[0]
+    expect(activity.distanceMeters).toBe(0)
+    expect(activity.trackPoints).toEqual([])
+    expect(opts.linkedPlannedId).toBe('1')
+    expect(opts.title).toBe('Calcata')
+    expect(opts.metaType).toBe('borgo_citta')
   })
 
-  it('idempotente: non tocca una firstCompletedAt già presente', async () => {
-    await markMetaVisited({ id: '1', metaType: 'sito', firstCompletedAt: '2026-01-01T00:00:00.000Z' })
-    expect(updatePlannedMeta).not.toHaveBeenCalled()
+  it('porta il siteType per un sito', async () => {
+    await markMetaVisited({ id: '1', title: 'Colosseo', metaType: 'sito', siteType: 'sito_archeologico' })
+    const [, opts] = saveActivityWithEnrichment.mock.calls[0]
+    expect(opts.siteType).toBe('sito_archeologico')
+  })
+
+  it('idempotente: non crea una seconda Attività se firstCompletedAt è già presente', async () => {
+    await markMetaVisited({ id: '1', title: 'Test', metaType: 'sito', firstCompletedAt: '2026-01-01T00:00:00.000Z' })
+    expect(saveActivityWithEnrichment).not.toHaveBeenCalled()
   })
 })

@@ -15,7 +15,7 @@ import type { TrailTerrainProfile } from './terrain/trailTerrainProfile'
 import type { FloraResult } from './floraTypes'
 import type { GuideNotice } from './guideNotices'
 import type { RouteMode } from './routeMode'
-import type { MetaType, SiteType } from './metaTypes'
+import { metaHasHikingMetrics, type MetaType, type SiteType } from './metaTypes'
 
 export type { HikeAssessment, AssessmentItem } from './hikeAssessment'
 export type { HikeNote } from './blobStore'
@@ -203,8 +203,12 @@ export async function getAllPlanned(onRefresh?: (data: PlannedHikeMeta[]) => voi
     // reasonable enough signal of "pre-fix cache" to also trigger a refetch here — a route that
     // genuinely has neither (plenty do) just costs one harmless extra background refresh per page
     // load, not a wrong result.
+    // Il ramo routePolyline/osmId ha senso solo per un sentiero (piano §48.9, docs/
+    // meta-multitype-audit.md §6): una Meta borgo_citta/sito non ha mai né l'uno né l'altro per
+    // definizione, quindi senza questo gate la condizione sarebbe sempre vera e scatenerebbe un
+    // refetch di sfondo permanente e inutile a ogni lettura della cache.
     const needsRepair = local.some((h) => !h.archivedAt && (
-      (!h.routePolyline?.length && h.osmId == null)
+      (metaHasHikingMetrics(h.metaType) && !h.routePolyline?.length && h.osmId == null)
       || (h.cachedPois === undefined && h.cachedPoiWiki === undefined)
     ))
     if (needsRepair) {

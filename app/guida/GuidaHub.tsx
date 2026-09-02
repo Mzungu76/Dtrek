@@ -52,6 +52,8 @@ import { useDrivingDistance } from './useDrivingDistance'
 import { useSafetyScore } from './useSafetyScore'
 import { useCtsRecompute } from '@/lib/useCtsRecompute'
 import { tryOpenNavigatorApp } from '@/lib/navigatorHandoff'
+import { metaHasHikingMetrics } from '@/lib/metaTypes'
+import { markMetaVisited } from '@/lib/visitCompletion'
 
 const StreetViewPanel = dynamic(() => import('@/components/StreetViewPanel'), { ssr: false })
 const RouteMap3D       = dynamic(() => import('@/components/RouteMap3D'),      { ssr: false })
@@ -73,12 +75,14 @@ function metaToItem(h: PlannedHikeMeta): RouteHubItem {
     id: h.id,
     title: h.title,
     polyline: h.routePolyline,
-    statPills: [
+    // Solo per un sentiero (piano §48.9) — un Borgo/Città/Sito non ha mai queste cifre
+    // (nessuna traccia GPS, vedi lib/visitCompletion.ts): mai "0.0 km" nella galleria.
+    statPills: metaHasHikingMetrics(h.metaType) ? [
       { icon: Route,       label: `${(h.distanceMeters / 1000).toFixed(1)} km` },
       { icon: TrendingUp,  label: `+${Math.round(h.elevationGain)} m` },
       { icon: Mountain,    label: `${Math.round(h.altitudeMax)} m` },
       { icon: Clock,       label: formatDuration(h.estimatedTimeSeconds) },
-    ],
+    ] : [],
     sortValues: {
       date: new Date(h.createdAt).getTime(),
       km: h.distanceMeters,
@@ -99,6 +103,8 @@ function metaToItem(h: PlannedHikeMeta): RouteHubItem {
     safetyPreview: h.cachedSafetyScore ? { overall: h.cachedSafetyScore.overall, color: h.cachedSafetyScore.color, label: h.cachedSafetyScore.label } : undefined,
     favorite: h.favorite,
     plannedDate: h.plannedDate,
+    metaType: h.metaType,
+    firstCompletedAt: h.firstCompletedAt,
   }
 }
 
@@ -114,6 +120,9 @@ export default function GuidaHub({ id, startClosed }: { id?: string; startClosed
   const [editNotes, setEditNotes] = useState(false)
   const [titleVal, setTitleVal] = useState('')
   const [editTitle, setEditTitle] = useState(false)
+  // "Segna come visitata" (piano Blocco D §27/Blocco F, vedi handleMarkVisited/primaryAction più
+  // sotto) — id della Meta per cui la chiamata è in corso, per disabilitare doppi tap.
+  const [markingVisitedId, setMarkingVisitedId] = useState<string | null>(null)
   // UX-AUDIT.md P-M4 — confirm() nativo del browser stonava con il resto dell'app: stesso pattern
   // a due passi già usato per editTitle/editNotes qui sotto, non un nuovo Sheet sopra il pannello
   // "Strumenti" già aperto.
@@ -167,26 +176,33 @@ export default function GuidaHub({ id, startClosed }: { id?: string; startClosed
   // auto mostrata tra i dati principali di ogni scheda e come filtro di ordinamento.
   useEffect(() => { getUserStartingPoint().then(setUserOrigin).catch(() => {}) }, [])
 
+  // Le metriche escursionistiche (Trail/Safety Score, DTM, terreno, area protetta, flora,
+  // distanza in auto) hanno senso solo per un sentiero (piano §9/§48.9, docs/meta-multitype-audit.md
+  // §1 punto 2) — passare `null` invece di `hike` a questi hook per una Meta Borgo/Città o Sito
+  // evita ogni chiamata DTM/Overpass/flora incondizionata, non solo per assenza tecnica di
+  // trackPoints ma come scelta esplicita di dominio.
+  const hikingMetricsHike = hike && metaHasHikingMetrics(hike.metaType) ? hike : null
+
   const flora = useFlora(
-    hike?.routePolyline, hike?.altitudeMax,
-    hike ? { plannedId: hike.id, data: hike.floraResult, trackHash: hike.floraTrackHash } : undefined,
+    hikingMetricsHike?.routePolyline, hikingMetricsHike?.altitudeMax,
+    hikingMetricsHike ? { plannedId: hikingMetricsHike.id, data: hikingMetricsHike.floraResult, trackHash: hikingMetricsHike.floraTrackHash } : undefined,
   )
 
   const { hasAiAccess, aiUnavailable, trialExpired } = useHasAiAccess()
   const enrichmentTimedOut = useEnrichmentTimeout(hike?.id)
-  const dtmProfile = useDtmProfile(hike)
-  const terrainProfile = useTerrainProfile(hike)
-  const inProtectedArea = useProtectedAreaCheck(hike)
-  const driving = useDrivingDistance(hike)
+  const dtmProfile = useDtmProfile(hikingMetricsHike)
+  const terrainProfile = useTerrainProfile(hikingMetricsHike)
+  const inProtectedArea = useProtectedAreaCheck(hikingMetricsHike)
+  const driving = useDrivingDistance(hikingMetricsHike)
   const drivingWithMaps = useMemo(() => {
     if (!driving) return driving
-    const trailStart = hike?.routePolyline?.[0]
+    const trailStart = hikingMetricsHike?.routePolyline?.[0]
     const mapsUrl = userOrigin && trailStart
       ? googleMapsDirectionsUrl(userOrigin.lat, userOrigin.lon, trailStart[0], trailStart[1])
       : undefined
     return { ...driving, mapsUrl }
-  }, [driving, userOrigin, hike?.routePolyline])
-  const { safetyScore, setSafetyScore } = useSafetyScore(hike, setHike)
+  }, [driving, userOrigin, hikingMetricsHike?.routePolyline])
+  const { safetyScore, setSafetyScore } = useSafetyScore(hikingMetricsHike, setHike)
   const { prefsLoaded, prefSforzo, prefDurata, hrRest, hrMax } = useUserPrefs()
 
   // Sicurezza "per te" (Oggettiva + Idoneità per Te, vedi lib/personalSafetyFit.ts) — la Sicurezza
@@ -234,6 +250,7 @@ export default function GuidaHub({ id, startClosed }: { id?: string; startClosed
   // flora, Safety and CTS scores. True once every source has settled (resolved or deliberately
   // skipped, e.g. no GPS) — or once the 90s watchdog above fires regardless.
   const enrichmentReady = enrichmentTimedOut ||
+    !hikingMetricsHike || // Borgo/Città o Sito: nessuna Sicurezza/CTS da attendere, mai bloccato
     (poisFullyLoaded && !flora.loading && safetyScore != null && ctsSettled)
 
   // Lightweight list of every active (non-archived) planned hike, sorted by import
@@ -394,15 +411,15 @@ export default function GuidaHub({ id, startClosed }: { id?: string; startClosed
   }, [poisFullyLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    const bs = hike?.cachedBeautyScore
-    if (!bs?.categories?.length || !prefsLoaded || !hike) return
+    const bs = hikingMetricsHike?.cachedBeautyScore
+    if (!bs?.categories?.length || !prefsLoaded || !hikingMetricsHike) return
     const computed = computeTrailScore(bs, {
-      distanceMeters: hike.distanceMeters, elevationGain: hike.elevationGain,
-      elevationLoss: hike.elevationLoss, altitudeMax: hike.altitudeMax,
+      distanceMeters: hikingMetricsHike.distanceMeters, elevationGain: hikingMetricsHike.elevationGain,
+      elevationLoss: hikingMetricsHike.elevationLoss, altitudeMax: hikingMetricsHike.altitudeMax,
       prefSforzo, prefDurata,
     })
-    setCtsResult({ ...computed, ts: hike.cachedTrailScore ?? computed.ts })
-  }, [hike?.id, hike?.cachedBeautyScore, hike?.cachedTrailScore, prefsLoaded, prefSforzo, prefDurata]) // eslint-disable-line react-hooks/exhaustive-deps
+    setCtsResult({ ...computed, ts: hikingMetricsHike.cachedTrailScore ?? computed.ts })
+  }, [hikingMetricsHike?.id, hikingMetricsHike?.cachedBeautyScore, hikingMetricsHike?.cachedTrailScore, prefsLoaded, prefSforzo, prefDurata]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // CTS+Beauty: same policy as Safety above — computed once at import, and re-verified here
   // only if missing (an older hike, imported before this policy existed) or stale. Reuses the
@@ -413,11 +430,15 @@ export default function GuidaHub({ id, startClosed }: { id?: string; startClosed
   // it can hand their results to computeCtsForHike as `prefetched` instead of having it repeat
   // the exact same /api/pois, /api/tei-dtm, /api/tei-terrain and /api/natura2000 calls this
   // component is already making for its own map/UI state.
-  useEffect(() => { setCtsSettled(false) }, [hike?.id])
+  // Nessuna metrica escursionistica da attendere per un Borgo/Città o Sito (hikingMetricsHike
+  // null) — "settled" da subito, altrimenti resterebbe bloccato per sempre: useCtsRecompute sotto
+  // non chiama mai onSettled quando entity è null (piano §48.9, mai una metrica per una Meta
+  // senza tracciato).
+  useEffect(() => { setCtsSettled(!hikingMetricsHike) }, [hike?.id, hikingMetricsHike])
 
   useCtsRecompute({
-    entity: hike,
-    entityId: hike?.id,
+    entity: hikingMetricsHike,
+    entityId: hikingMetricsHike?.id,
     isFresh: (h) => h.cachedTrailScore != null && isScoreFresh(h.cachedScoresComputedAt),
     hasEnoughGps: (h) => (h.trackPoints ?? []).filter(p => p.lat && p.lon).length >= 2,
     poisReady: poisFullyLoaded,
@@ -988,14 +1009,48 @@ export default function GuidaHub({ id, startClosed }: { id?: string; startClosed
     )
   }
 
-  const primaryAction = (routeItem: RouteHubItem): PrimaryAction => ({
-    label: 'Naviga',
-    icon: Navigation,
-    // Prova prima l'app nativa Navigator (se il device può averla), altrimenti ricade sulla
-    // stessa pagina di navigazione via web che serviva già da sola (lib/navigatorHandoff.ts).
-    onClick: () => tryOpenNavigatorApp(router, `/guida/${encodeURIComponent(routeItem.id)}/naviga`),
-    variant: 'terra',
-  })
+  // "Segna come visitata" (piano Blocco D §27/Blocco F) — il CTA primario equivalente a "Naviga"
+  // per una Meta senza traccia GPS: un Borgo/Città/Sito non ha un percorso da navigare, quindi
+  // completarla è un tocco, non un arrivo a un GPX (piano §48.10, mai richiedere GPS). Fetcha il
+  // PlannedHike completo (RouteHubItem non porta siteType) invece di allargare RouteHubItem con
+  // altri campi hike-specifici solo per questo singolo utilizzo.
+  async function handleMarkVisited(itemId: string) {
+    if (markingVisitedId) return
+    setMarkingVisitedId(itemId)
+    try {
+      const full = await getPlannedById(itemId)
+      if (!full || full.firstCompletedAt) return
+      await markMetaVisited(full)
+      // Riflette subito firstCompletedAt sulla lista locale (galleria) e, se è la Meta aperta,
+      // anche su `hike` — senza aspettare il refetch in background della lista.
+      const now = new Date().toISOString()
+      setItems(prev => prev.map(it => it.id === itemId ? { ...it, firstCompletedAt: now } : it))
+      setHike(prev => prev && prev.id === itemId ? { ...prev, firstCompletedAt: now } : prev)
+    } catch (e) {
+      console.error('[GuidaHub] markMetaVisited fallito:', e)
+    } finally {
+      setMarkingVisitedId(null)
+    }
+  }
+
+  const primaryAction = (routeItem: RouteHubItem): PrimaryAction => {
+    if (!metaHasHikingMetrics(routeItem.metaType)) {
+      return {
+        label: routeItem.firstCompletedAt ? 'Visitata' : 'Segna come visitata',
+        icon: Check,
+        onClick: () => handleMarkVisited(routeItem.id),
+        variant: 'terra',
+      }
+    }
+    return {
+      label: 'Naviga',
+      icon: Navigation,
+      // Prova prima l'app nativa Navigator (se il device può averla), altrimenti ricade sulla
+      // stessa pagina di navigazione via web che serviva già da sola (lib/navigatorHandoff.ts).
+      onClick: () => tryOpenNavigatorApp(router, `/guida/${encodeURIComponent(routeItem.id)}/naviga`),
+      variant: 'terra',
+    }
+  }
 
   const currentItem = displayItems.find(i => i.id === currentId) ?? displayItems[0]
   const initialIndex = Math.max(0, displayItems.findIndex(i => i.id === currentItem.id))

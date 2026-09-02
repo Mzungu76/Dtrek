@@ -11,6 +11,7 @@ import { computeTrailScore } from './trailScore'
 import { computeBbox } from './geoUtils'
 import { fetchWeatherAtHike, type WeatherAtHike } from './openmeteo'
 import { getUserSettingsCached } from './sync/userSettingsStore'
+import { metaHasHikingMetrics, type MetaType, type SiteType } from './metaTypes'
 
 export interface SaveActivityOptions {
   title?: string
@@ -18,6 +19,11 @@ export interface SaveActivityOptions {
   linkedPlannedId?: string
   linkedPlannedTrackPoints?: TrackPoint[]
   hikeNotes?: HikeNote[]
+  // Travasati dalla Meta collegata (piano Blocco E §30, lib/visitCompletion.ts) — assenti su ogni
+  // chiamata esistente (import GPX/registrazione Navigator), che continua a lasciare 'sentiero'
+  // come default di colonna via activityToRow (app/api/activity/route.ts).
+  metaType?: MetaType
+  siteType?: SiteType
   /** Set only by the standalone Navigator app's free-track recording flow (app/navigatore/traccia) — see lib/navigatorSlot.ts. Never set by the main app's own upload/save flows. */
   sourceApp?: 'navigator'
   /**
@@ -185,6 +191,8 @@ export async function saveActivityWithEnrichment(
     trailScoreComputedAt,
     weatherAtHike,
     sourceApp: opts.sourceApp,
+    metaType: opts.metaType,
+    siteType: opts.siteType,
     ...guideCarry,
   }
   const { ok } = await saveActivity(stored)
@@ -198,16 +206,21 @@ export async function saveActivityWithEnrichment(
   // te" — fire-and-forget, non deve mai bloccare o far fallire il salvataggio dell'escursione.
   // Unico punto in cui una NUOVA escursione completata viene salvata (vedi commento sopra sulla
   // funzione condivisa), quindi il posto giusto per incrementare, non un'edit successiva.
-  fetch('/api/user-settings/history', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      distanceMeters: stored.distanceMeters,
-      elevationGain: stored.elevationGain,
-      totalTimeSeconds: stored.totalTimeSeconds,
-      completedAt: stored.startTime,
-    }),
-  }).catch(() => {})
+  // Solo per un sentiero (piano §48.9): una "visita" senza traccia (Borgo/Città/Sito, vedi
+  // lib/visitCompletion.ts) ha sempre distanza/dislivello/durata a 0 — sommarla allo storico
+  // escursionistico ne falserebbe le medie, non semplicemente un valore in più.
+  if (metaHasHikingMetrics(opts.metaType)) {
+    fetch('/api/user-settings/history', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        distanceMeters: stored.distanceMeters,
+        elevationGain: stored.elevationGain,
+        totalTimeSeconds: stored.totalTimeSeconds,
+        completedAt: stored.startTime,
+      }),
+    }).catch(() => {})
+  }
 
   return stored
 }

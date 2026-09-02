@@ -9,6 +9,7 @@ import { formatDuration } from '@/lib/tcxParser'
 import type { AllPercorsiRow } from '@/app/api/percorsi/route'
 import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, FONT_HAND, HandDrawnFrame } from '@/lib/taccuinoTokens'
 import { FONT } from '@/lib/designTokens'
+import { metaHasHikingMetrics } from '@/lib/metaTypes'
 import { ArrowDown, ArrowLeft, ArrowUp, Clock, Loader2, Mountain, Route, Search, Star, TrendingUp, X } from 'lucide-react'
 
 /**
@@ -106,6 +107,16 @@ export default function MetePage() {
       </div>
 
       <main className="max-w-[720px] mx-auto px-5 sm:px-8 py-6 sm:py-8">
+        {/* Borgo/Città/Sito (piano §17/§25) — l'unico punto d'ingresso, oltre a "+ Nuovo" (che
+            resta /upload?tab=gpx, un sentiero), per aggiungere una Meta non escursionistica. */}
+        <Link
+          href="/percorsi/cerca"
+          className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-[14px] font-semibold mb-5 transition-colors"
+          style={{ background: TACCUINO_PAPER.card, color: TACCUINO_INK.typed, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}
+        >
+          <Search className="w-4 h-4" /> Cerca un Borgo, una Città o un Sito
+        </Link>
+
         {error && (
           <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-4">
             Impossibile caricare le mete: {error}
@@ -227,10 +238,17 @@ export default function MetePage() {
                           </p>
                         )}
                         <div className="flex items-center flex-wrap gap-x-2.5 gap-y-1 mt-1.5" style={{ fontFamily: FONT.lora, fontSize: 11, color: TACCUINO_INK.handMuted }}>
-                          <span className="inline-flex items-center gap-1"><Route className="w-3 h-3" /> {(p.distanceMeters / 1000).toFixed(1)} km</span>
-                          <span className="inline-flex items-center gap-1"><TrendingUp className="w-3 h-3" /> +{Math.round(p.elevationGain)} m</span>
-                          <span className="inline-flex items-center gap-1"><Mountain className="w-3 h-3" /> {Math.round(p.altitudeMax)} m</span>
-                          <span className="inline-flex items-center gap-1"><Clock className="w-3 h-3" /> {formatDuration(p.estimatedTimeSeconds)}</span>
+                          {/* Solo per un sentiero (piano §48.9) — una Meta borgo_citta/sito ha
+                              sempre queste cifre a 0: mostrarle produrrebbe "0.0 km", non un dato
+                              in meno. */}
+                          {metaHasHikingMetrics(p.metaType) && (
+                            <>
+                              <span className="inline-flex items-center gap-1"><Route className="w-3 h-3" /> {(p.distanceMeters / 1000).toFixed(1)} km</span>
+                              <span className="inline-flex items-center gap-1"><TrendingUp className="w-3 h-3" /> +{Math.round(p.elevationGain)} m</span>
+                              <span className="inline-flex items-center gap-1"><Mountain className="w-3 h-3" /> {Math.round(p.altitudeMax)} m</span>
+                              <span className="inline-flex items-center gap-1"><Clock className="w-3 h-3" /> {formatDuration(p.estimatedTimeSeconds)}</span>
+                            </>
+                          )}
                         </div>
                       </div>
                       <div className="relative shrink-0 w-11 h-11 flex items-center justify-center">

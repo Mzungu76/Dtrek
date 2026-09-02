@@ -43,6 +43,7 @@ export async function searchSiti(supabase: SupabaseClient, params: SitiSearchPar
     .select('id, name, subtype, description, latitude, longitude, region, province, municipality, image_url, official_url, website, address, opening_hours, source, confidence, metadata')
     .eq('meta_type', 'sito')
 
+  if (params.query) query = query.ilike('name', `%${params.query}%`)
   if (params.region) query = query.ilike('region', params.region)
   if (params.province) query = query.ilike('province', params.province)
   // Match categoria (piano §23) — applicato come filtro qui, non come fattore di punteggio: ogni

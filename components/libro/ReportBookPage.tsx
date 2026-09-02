@@ -15,7 +15,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import BookPage, { type BookPageSection } from './BookPage'
 import { useReportageBookData } from '@/app/diari/[id]/percorsi/[percorsoId]/reportage/[activityId]/useReportageBookData'
-import { buildReportDisplaySections, renderReportFixedWidget, type DisplaySection } from '@/lib/resoconto/reportDisplaySections'
+import { buildReportDisplaySections, renderReportFixedWidget, HIKING_ONLY_FIXED_SECTIONS, type DisplaySection } from '@/lib/resoconto/reportDisplaySections'
+import { metaHasHikingMetrics } from '@/lib/metaTypes'
 import { parseSections, sectionsToMarkdown, markdownToSections, SCAFFOLD_SECTIONS, type ReportSection, type ReportAuthoredBy } from '@/lib/reportStore'
 import { getReport, saveReportContent } from '@/lib/sync/hikeReportStore'
 import type { ReportFixedSectionKey } from '@/components/resoconto/sectionStyle'
@@ -29,10 +30,13 @@ import ManualEditor from '@/app/components/ManualEditor'
 
 const ALWAYS_PRESENT: ReportFixedSectionKey[] = ['dati_punteggi', 'andamento']
 
-function isSectionPresent(s: DisplaySection, hasNatura: boolean, hasLuoghi: boolean, hasPhotos: boolean): boolean {
+function isSectionPresent(s: DisplaySection, hasNatura: boolean, hasLuoghi: boolean, hasPhotos: boolean, hikingMetrics: boolean): boolean {
   if (s.narrativeIndex != null) return true
   const key = s.key as ReportFixedSectionKey
-  if (ALWAYS_PRESENT.includes(key)) return true
+  // "Dati e punteggi"/"Andamento" restano sempre presenti solo per un sentiero — per una Meta
+  // senza traccia GPS (Borgo/Città/Sito) buildReportDisplaySections le esclude già a monte
+  // dall'elenco (vedi HIKING_ONLY_FIXED_SECTIONS), questo controllo è solo una difesa in più.
+  if (ALWAYS_PRESENT.includes(key)) return hikingMetrics || !HIKING_ONLY_FIXED_SECTIONS.includes(key)
   if (key === 'natura') return hasNatura
   if (key === 'poi') return hasLuoghi
   if (key === 'galleria_foto') return hasPhotos
@@ -101,16 +105,17 @@ export default function ReportBookPage({ basePath, diarioHref, diarioTitle, acti
     setEditorMode('manual')
   }
 
+  const hikingMetrics = metaHasHikingMetrics(bd.activity?.metaType)
   const narrativeChapters = useMemo(() => parseSections(content), [content])
-  const displaySections = useMemo(() => buildReportDisplaySections(content), [content])
+  const displaySections = useMemo(() => buildReportDisplaySections(content, hikingMetrics), [content, hikingMetrics])
 
   const hasNatura = bd.natura.hasGps && !!bd.natura.flora?.available
   const hasLuoghi = bd.pois.length > 0 || bd.poiWikiEntries.length > 0
   const hasPhotos = bd.photos.length > 0
 
   const present = useMemo(
-    () => displaySections.filter(s => isSectionPresent(s, hasNatura, hasLuoghi, hasPhotos)),
-    [displaySections, hasNatura, hasLuoghi, hasPhotos],
+    () => displaySections.filter(s => isSectionPresent(s, hasNatura, hasLuoghi, hasPhotos, hikingMetrics)),
+    [displaySections, hasNatura, hasLuoghi, hasPhotos, hikingMetrics],
   )
 
   const idx = pageIndex - 1
