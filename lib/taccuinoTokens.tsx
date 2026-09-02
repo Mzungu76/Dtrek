@@ -156,17 +156,17 @@ export function HandDrawnFrame({
  * import-time (stringhe statiche), non ricalcolata a ogni render.
  */
 const PAPER_GRAIN_IMAGES = [
-  'radial-gradient(circle at 12% 22%, rgba(46,42,34,.22) 0, rgba(46,42,34,.22) 1.6px, transparent 3.2px)',
-  'radial-gradient(circle at 68% 8%, rgba(46,42,34,.18) 0, rgba(46,42,34,.18) 1.3px, transparent 2.8px)',
-  'radial-gradient(circle at 40% 55%, rgba(46,42,34,.20) 0, rgba(46,42,34,.20) 1.7px, transparent 3.4px)',
-  'radial-gradient(circle at 85% 40%, rgba(46,42,34,.17) 0, rgba(46,42,34,.17) 1.2px, transparent 2.6px)',
-  'radial-gradient(circle at 25% 82%, rgba(46,42,34,.20) 0, rgba(46,42,34,.20) 1.5px, transparent 3px)',
-  'radial-gradient(circle at 92% 88%, rgba(46,42,34,.17) 0, rgba(46,42,34,.17) 1.3px, transparent 2.8px)',
-  'radial-gradient(circle at 55% 30%, rgba(46,42,34,.15) 0, rgba(46,42,34,.15) 1.1px, transparent 2.4px)',
-  'radial-gradient(circle at 15% 45%, rgba(46,42,34,.16) 0, rgba(46,42,34,.16) 1.2px, transparent 2.6px)',
-  'radial-gradient(circle at 75% 65%, rgba(46,42,34,.15) 0, rgba(46,42,34,.15) 1.1px, transparent 2.4px)',
+  'radial-gradient(circle at 12% 22%, rgba(46,42,34,.11) 0, rgba(46,42,34,.11) 1.3px, transparent 2.6px)',
+  'radial-gradient(circle at 68% 8%, rgba(46,42,34,.09) 0, rgba(46,42,34,.09) 1.1px, transparent 2.3px)',
+  'radial-gradient(circle at 40% 55%, rgba(46,42,34,.10) 0, rgba(46,42,34,.10) 1.4px, transparent 2.8px)',
+  'radial-gradient(circle at 85% 40%, rgba(46,42,34,.09) 0, rgba(46,42,34,.09) 1px, transparent 2.2px)',
+  'radial-gradient(circle at 25% 82%, rgba(46,42,34,.10) 0, rgba(46,42,34,.10) 1.2px, transparent 2.5px)',
+  'radial-gradient(circle at 92% 88%, rgba(46,42,34,.09) 0, rgba(46,42,34,.09) 1.1px, transparent 2.3px)',
+  'radial-gradient(circle at 55% 30%, rgba(46,42,34,.08) 0, rgba(46,42,34,.08) 1px, transparent 2px)',
+  'radial-gradient(circle at 15% 45%, rgba(46,42,34,.08) 0, rgba(46,42,34,.08) 1px, transparent 2.2px)',
+  'radial-gradient(circle at 75% 65%, rgba(46,42,34,.08) 0, rgba(46,42,34,.08) 1px, transparent 2px)',
 ]
-const PAPER_GRAIN_SIZES = ['46px 52px', '61px 41px', '71px 83px', '33px 63px', '83px 47px', '53px 69px', '39px 59px', '67px 37px', '51px 73px']
+const PAPER_GRAIN_SIZES = ['58px 65px', '76px 51px', '89px 104px', '41px 79px', '104px 59px', '66px 86px', '49px 74px', '84px 46px', '64px 91px']
 
 /**
  * Imperfezioni sparse (macchie e piccoli puntini scuri) — rompono l'uniformità della grana sopra,
@@ -175,11 +175,11 @@ const PAPER_GRAIN_SIZES = ['46px 52px', '61px 41px', '71px 83px', '33px 63px', '
  * riferimento, dove ogni artboard era indipendente).
  */
 const PAPER_IMPERFECTIONS_IMAGES = [
-  'radial-gradient(ellipse 68px 46px at 80% 12%, rgba(122,111,82,.11), transparent 72%)',
-  'radial-gradient(ellipse 46px 74px at 12% 65%, rgba(122,111,82,.09), transparent 72%)',
-  'radial-gradient(circle 1.6px at 45% 40%, rgba(46,42,34,.4), transparent 100%)',
-  'radial-gradient(circle 1.3px at 70% 75%, rgba(46,42,34,.32), transparent 100%)',
-  'radial-gradient(circle 1.4px at 20% 20%, rgba(46,42,34,.3), transparent 100%)',
+  'radial-gradient(ellipse 56px 38px at 80% 12%, rgba(122,111,82,.06), transparent 72%)',
+  'radial-gradient(ellipse 38px 60px at 12% 65%, rgba(122,111,82,.05), transparent 72%)',
+  'radial-gradient(circle 1.3px at 45% 40%, rgba(46,42,34,.22), transparent 100%)',
+  'radial-gradient(circle 1.1px at 70% 75%, rgba(46,42,34,.18), transparent 100%)',
+  'radial-gradient(circle 1.2px at 20% 20%, rgba(46,42,34,.17), transparent 100%)',
 ]
 
 /**
