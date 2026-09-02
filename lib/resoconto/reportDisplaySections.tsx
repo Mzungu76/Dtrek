@@ -43,18 +43,25 @@ export interface DisplaySection {
   narrativeIndex?: number
 }
 
+// "Dati e punteggi" e "Andamento" sono intrinsecamente numeriche escursionistiche (passo, DEP,
+// quote, profilo altimetrico/velocità — docs/meta-multitype-audit.md §4) e non hanno senso per una
+// Meta senza traccia GPS (piano §48.9): una "visita" (Borgo/Città/Sito, vedi lib/visitCompletion.ts)
+// ha sempre distance_meters/track_points a 0, quindi mostrarle produrrebbe solo zeri fuorvianti.
+export const HIKING_ONLY_FIXED_SECTIONS: ReportFixedSectionKey[] = ['dati_punteggi', 'andamento']
+
 /** Costruisce l'elenco piatto delle sezioni del Resoconto: i capitoli narrativi (titoli liberi,
- *  parsati dal markdown) seguiti dalle 5 sezioni dati fisse, sempre presenti indipendentemente dal
- *  racconto — stesso principio di buildGuideDisplaySections. Pura funzione del markdown, nessuno
- *  stato React. */
-export function buildReportDisplaySections(content: string): DisplaySection[] {
+ *  parsati dal markdown) seguiti dalle sezioni dati fisse (5 per un sentiero, sempre presenti
+ *  indipendentemente dal racconto; 3 per una Meta senza traccia GPS, vedi sopra) — stesso
+ *  principio di buildGuideDisplaySections. Pura funzione del markdown + tipologia, nessuno stato
+ *  React. */
+export function buildReportDisplaySections(content: string, hikingMetrics = true): DisplaySection[] {
   const sections = parseSections(content)
   const narrative: DisplaySection[] = sections.map((s, i) => ({
     key: `narrative-${i}`, title: s.title, narrativeIndex: i, ...narrativeStyleFor(i),
   }))
-  const fixed: DisplaySection[] = (Object.keys(REPORT_SECTION_STYLE) as ReportFixedSectionKey[]).map(k => ({
-    key: k, title: REPORT_SECTION_TITLE[k], ...REPORT_SECTION_STYLE[k],
-  }))
+  const fixed: DisplaySection[] = (Object.keys(REPORT_SECTION_STYLE) as ReportFixedSectionKey[])
+    .filter(k => hikingMetrics || !HIKING_ONLY_FIXED_SECTIONS.includes(k))
+    .map(k => ({ key: k, title: REPORT_SECTION_TITLE[k], ...REPORT_SECTION_STYLE[k] }))
   return [...narrative, ...fixed]
 }
 

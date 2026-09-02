@@ -14,6 +14,7 @@ import { parseSections } from '@/lib/reportStore'
 import { parseInlineEmphasis } from '@/lib/guideMarkup'
 import { selectSpreadPhotos } from '@/lib/photoBuckets'
 import { MAX_PHOTOS_PER_ACTIVITY } from '@/lib/activityPhotos'
+import { metaHasHikingMetrics } from '@/lib/metaTypes'
 import { LazyMount } from '@/components/LazyMount'
 import { LocatorMap } from '@/components/LocatorMap'
 import { trackPointsProgress, extractCuriosita } from './chartUtils'
@@ -232,7 +233,9 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
   const weather = act?.weather_at_hike
   const weatherInfo = weather ? wmoInfo(weather.weathercode) : null
   const showMappa       = extras.mappa       && (meta?.routePolyline?.length ?? 0) > 1
-  const showStatistiche = extras.statistiche && !!meta
+  // Solo per un sentiero (piano §48.9): una "visita" (Borgo/Città/Sito, lib/visitCompletion.ts) ha
+  // sempre distanza/dislivello a 0 — mostrarli produrrebbe solo cifre fuorvianti, non un dato in meno.
+  const showStatistiche = extras.statistiche && !!meta && metaHasHikingMetrics(meta.metaType)
 
   const tp = trackPoints ?? []
   const progress = useMemo(() => tp.length > 1 ? trackPointsProgress(tp) : [], [tp])

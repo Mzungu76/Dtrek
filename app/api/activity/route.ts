@@ -65,6 +65,8 @@ function rowToActivity(row: Record<string, unknown>): StoredActivity {
     guideNotices:         row.guide_notices            as StoredActivity['guideNotices'] | undefined,
     guideGeneratedAt:     row.guide_generated_at       as string | undefined,
     poiWiki:              row.poi_wiki                 as StoredActivity['poiWiki'] | undefined,
+    metaType:             (row.meta_type as StoredActivity['metaType']) ?? 'sentiero',
+    siteType:             row.site_type as StoredActivity['siteType'] | undefined,
   }
 }
 
@@ -112,6 +114,8 @@ function activityToRow(a: StoredActivity) {
     guide_notices:                a.guideNotices ?? null,
     guide_generated_at:           a.guideGeneratedAt ?? null,
     poi_wiki:                     a.poiWiki ?? null,
+    meta_type:                    a.metaType ?? 'sentiero',
+    site_type:                    a.siteType ?? null,
     route_polyline:       downsamplePolyline(a.trackPoints ?? []),
     track_points:         downsampleTrackPoints(a.trackPoints ?? []),
   }

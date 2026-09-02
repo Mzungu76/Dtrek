@@ -41,6 +41,18 @@ CREATE INDEX IF NOT EXISTS idx_activities_start_time  ON activities (start_time 
 CREATE INDEX IF NOT EXISTS idx_activities_user_rating ON activities (user_rating DESC NULLS LAST);
 CREATE INDEX IF NOT EXISTS idx_activities_user_id     ON activities (user_id);
 
+-- Piano mete multi-tipologia, Blocco E — vedi supabase/migrations/add_activities_meta_type_columns.sql
+-- per i commenti completi. "Travasati" dalla Meta al salvataggio (lib/activitySave.ts), come già
+-- fatto per guide_text/poi_wiki — mai una dipendenza runtime dal join a planned_hikes.
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS meta_type TEXT NOT NULL DEFAULT 'sentiero'
+  CHECK (meta_type IN ('sentiero', 'borgo_citta', 'sito'));
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS site_type TEXT
+  CHECK (site_type IS NULL OR site_type IN (
+    'museo', 'castello', 'abbazia', 'chiesa', 'sito_archeologico', 'monumento',
+    'palazzo', 'teatro', 'cascata', 'grotta', 'belvedere', 'area_naturale', 'altro'
+  ));
+CREATE INDEX IF NOT EXISTS idx_activities_meta_type ON activities (meta_type);
+
 -- ── Escursioni pianificate ───────────────────────────────────
 CREATE TABLE IF NOT EXISTS planned_hikes (
   id                      TEXT PRIMARY KEY,

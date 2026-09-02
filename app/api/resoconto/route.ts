@@ -14,6 +14,8 @@ import { tryAcquireCooldown } from '@/lib/aiCooldown'
 import { wmoInfo, type WeatherAtHike } from '@/lib/openmeteo'
 import { readProfile, isProfileReady, formatStyleProfileBlock, type WritingStyleProfile } from '@/lib/writingStyleProfile'
 import { resolveDtrekEntitlement } from '@/lib/dtrekEntitlement'
+import { reportProfileFor, type ReportProfile } from '@/lib/reportProfiles'
+import type { MetaType } from '@/lib/metaTypes'
 
 export const maxDuration = 120
 export const dynamic = 'force-dynamic'
@@ -152,6 +154,9 @@ function buildPrompt(
   styleProfile: WritingStyleProfile | null = null,
   /** Quando la guida pre-uscita è stata scritta — serve a datarla nel prompt. */
   guideGeneratedAt?: string,
+  /** Profilo di tipologia (lib/reportProfiles.ts, Blocco E) — sentiero di default per compatibilità
+   *  con ogni chiamata esistente. */
+  profile: ReportProfile = reportProfileFor('sentiero'),
 ): { text: string; imageBlocks: Anthropic.ImageBlockParam[] } {
   const dateStr = activity.start_time
     ? format(new Date(activity.start_time as string), "EEEE d MMMM yyyy", { locale: it })
@@ -264,18 +269,26 @@ ${styleLine ? `${styleLine}\nCalibra la lunghezza e il ritmo delle frasi di ques
 `
     : ''
 
-  const text = `Scrivi un reportage giornalistico di questa escursione per una rivista outdoor italiana di qualità:
-
-TITOLO ESCURSIONE: ${activity.title ?? 'Escursione'}
-${dateStr ? `DATA: ${dateStr}` : ''}
-
-DATI DEL PERCORSO:
+  // Il blocco distanza/dislivello/durata/quota ha senso solo per un sentiero (piano §48.9) — per
+  // una Meta borgo_citta/sito queste cifre sono sempre 0 (nessuna traccia GPS da cui derivarle,
+  // vedi lib/visitCompletion.ts) e commentarle produrrebbe un dato fuorviante, non semplicemente
+  // vuoto.
+  const hikingMetricsBlock = profile.hikingMetrics
+    ? `DATI DEL PERCORSO:
 DISTANZA: ${((activity.distance_meters as number) / 1000).toFixed(1)} km
 DISLIVELLO POSITIVO: ${Math.round(activity.elevation_gain as number)} m
 DISLIVELLO NEGATIVO: ${Math.round((activity.elevation_loss as number) ?? 0)} m
 DURATA EFFETTIVA: ${formatDuration(activity.total_time_seconds as number)}
 ${(activity.altitude_max as number) > 0 ? `QUOTA MASSIMA RAGGIUNTA: ${Math.round(activity.altitude_max as number)} m slm` : ''}
-${weatherLine}
+`
+    : ''
+
+  const text = `Scrivi un reportage giornalistico di questa Meta per una rivista outdoor italiana di qualità:
+
+TITOLO: ${activity.title ?? 'Escursione'}
+${dateStr ? `DATA: ${dateStr}` : ''}
+
+${hikingMetricsBlock}${weatherLine}
 ${tagsLine}
 ${biometricBlock ? `\nDATI DI RIFERIMENTO (usa solo se rilevanti, non come sezione separata):\n${biometricBlock}` : ''}
 ${activity.user_notes ? `\nNOTE DELL'ESCURSIONISTA:\n${activity.user_notes}` : ''}
@@ -288,10 +301,8 @@ ${photoBlock}
 
 Scrivi il reportage strutturato in queste ${hasQa ? 'quattro' : 'tre'} sezioni (usa ## per ogni titolo):
 
-## Il percorso
-Descrivi il tracciato e il territorio attraversato: paesaggio, morfologia del terreno,
-punti panoramici, cambi di vegetazione. Contestualizza geograficamente il percorso
-senza usare toni enfatici. Usa i dati di distanza, dislivello e quota come ancoraggio.${guideBlock ? ' Metti a confronto la GUIDA SCRITTA PRIMA DELL\'USCITA con quello che i dati e le foto mostrano davvero: dove trova conferma, dove il terreno si è rivelato diverso da come era descritto (tempi, difficoltà, condizioni del sentiero, presenza d\'acqua). Se una previsione della guida non trova riscontro nei dati reali, dillo esplicitamente invece di riscrivere la guida al passato — è proprio quello lo scarto che rende utile un resoconto rispetto a una guida.' : ''}${weatherLine ? ' Se rilevante, integra il METEO IL GIORNO DELL\'ESCURSIONE fornito sopra come elemento narrativo (luce, condizioni del sentiero, visibilità), non come sezione a parte.' : ''}
+## ${profile.sectionTitle}
+${profile.sectionBrief}${profile.hikingMetrics ? ' Usa i dati di distanza, dislivello e quota come ancoraggio.' : ''}${guideBlock ? ' Metti a confronto la GUIDA SCRITTA PRIMA DELL\'USCITA con quello che i dati e le foto mostrano davvero: dove trova conferma, dove si è rivelato diverso da come era descritto. Se una previsione della guida non trova riscontro nei dati reali, dillo esplicitamente invece di riscriverla al passato — è proprio quello lo scarto che rende utile un resoconto rispetto a una guida.' : ''}${weatherLine ? ' Se rilevante, integra il METEO fornito sopra come elemento narrativo (luce, condizioni, visibilità), non come sezione a parte.' : ''}
 ${cronacaBlock}
 ## Natura e storia
 Approfondisci i luoghi attraversati: geologia, flora, fauna, siti storici o
@@ -534,8 +545,13 @@ export async function POST(req: NextRequest) {
 
   const styleProfile = await readProfile(user.id)
 
+  // "Travasato" dalla Meta all'Attività al salvataggio (lib/activitySave.ts) — vedi
+  // supabase/migrations/add_activities_meta_type_columns.sql. Assente/undefined trattato come
+  // 'sentiero' (il default di colonna), coerente con lib/guideProfiles.ts.
+  const reportProfile = reportProfileFor(activity.meta_type as MetaType | undefined)
+
   const client  = new Anthropic({ apiKey })
-  const { text: prompt, imageBlocks } = buildPrompt(activity, length, photos, guideText, qa, poiBlock, nature, aiUseBiometricData, styleProfile, guideGeneratedAt)
+  const { text: prompt, imageBlocks } = buildPrompt(activity, length, photos, guideText, qa, poiBlock, nature, aiUseBiometricData, styleProfile, guideGeneratedAt, reportProfile)
   const { maxTokens } = LENGTH_CONFIG[length]
 
   let fullText = ''
@@ -543,7 +559,7 @@ export async function POST(req: NextRequest) {
   const aiStream = client.messages.stream({
     model:      claudeModel,
     max_tokens: maxTokens,
-    system:     SYSTEM,
+    system:     SYSTEM + (reportProfile.personaAddendum ?? ''),
     messages:   [{ role: 'user', content: [...imageBlocks, { type: 'text', text: prompt }] }],
   })
 
