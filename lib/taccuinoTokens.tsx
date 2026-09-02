@@ -146,48 +146,81 @@ export function HandDrawnFrame({
 }
 
 /**
- * Rumore di carta quasi impercettibile — un `<rect>` di `feTurbulence` codificato come immagine
- * (mai un `<svg>` vivo nel DOM, per la classe di bug isolata in Fase 24: qui è un
- * `background-image` — una risorsa immagine rasterizzata per il browser, non un nodo SVG
- * interattivo) — piastrellato a bassa opacità dentro `TaccuinoPaperTexture`. Costruito una volta
- * sola a import-time (stringa statica), non ricalcolato a ogni render.
+ * Grana della carta — CSS puro (nessun `<svg>`/`feTurbulence`, per la classe di bug isolata in
+ * Fase 24, vedi sotto), piastrellata dentro `TaccuinoPaperTexture`. Sostituisce un tentativo
+ * precedente con `feTurbulence` codificato come `background-image` (alpha 0.05): quella versione
+ * si è rivelata invisibile su schermo reale (non solo nel mockup — stesso feedback ripetuto anche
+ * qui in produzione), sostituita con più livelli di `radial-gradient` a passo diverso — tecnica
+ * verificata e affinata nel canvas di riferimento (`docs/mockup-taccuino-botanico/*.dc.html`,
+ * `docs/taccuino-botanico-piano.md`) prima di essere portata qui. Costruita una volta sola a
+ * import-time (stringhe statiche), non ricalcolata a ogni render.
  */
-const PAPER_NOISE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="140" height="140">`
-  + `<filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" stitchTiles="stitch"/>`
-  + `<feColorMatrix type="matrix" values="0 0 0 0 0.30  0 0 0 0 0.24  0 0 0 0 0.16  0 0 0 0.05 0"/></filter>`
-  + `<rect width="100%" height="100%" filter="url(#n)"/></svg>`
-// encodeURIComponent, non un'escaping a mano di # e % soltanto — gestisce anche spazi e virgolette
-// senza doversi fidare che ogni browser le accetti non codificate in un data URI.
-const PAPER_NOISE_URL = `data:image/svg+xml,${encodeURIComponent(PAPER_NOISE_SVG)}`
+const PAPER_GRAIN_IMAGES = [
+  'radial-gradient(circle at 12% 22%, rgba(46,42,34,.22) 0, rgba(46,42,34,.22) 1.6px, transparent 3.2px)',
+  'radial-gradient(circle at 68% 8%, rgba(46,42,34,.18) 0, rgba(46,42,34,.18) 1.3px, transparent 2.8px)',
+  'radial-gradient(circle at 40% 55%, rgba(46,42,34,.20) 0, rgba(46,42,34,.20) 1.7px, transparent 3.4px)',
+  'radial-gradient(circle at 85% 40%, rgba(46,42,34,.17) 0, rgba(46,42,34,.17) 1.2px, transparent 2.6px)',
+  'radial-gradient(circle at 25% 82%, rgba(46,42,34,.20) 0, rgba(46,42,34,.20) 1.5px, transparent 3px)',
+  'radial-gradient(circle at 92% 88%, rgba(46,42,34,.17) 0, rgba(46,42,34,.17) 1.3px, transparent 2.8px)',
+  'radial-gradient(circle at 55% 30%, rgba(46,42,34,.15) 0, rgba(46,42,34,.15) 1.1px, transparent 2.4px)',
+  'radial-gradient(circle at 15% 45%, rgba(46,42,34,.16) 0, rgba(46,42,34,.16) 1.2px, transparent 2.6px)',
+  'radial-gradient(circle at 75% 65%, rgba(46,42,34,.15) 0, rgba(46,42,34,.15) 1.1px, transparent 2.4px)',
+]
+const PAPER_GRAIN_SIZES = ['46px 52px', '61px 41px', '71px 83px', '33px 63px', '83px 47px', '53px 69px', '39px 59px', '67px 37px', '51px 73px']
 
 /**
- * Texture di sfondo del taccuino — tutta la pagina, dietro al contenuto. Fase 31: riscritta da
- * capo su richiesta esplicita ("l'utente deve percepire carta senza vedere chiaramente una
- * texture") — le due macchie sfumate delle fasi precedenti (Fase 17-30) erano visibili come tali,
- * l'opposto di "leggerissima variazione di tonalità". Sostituite da: (1) il colore piatto di base,
- * (2) UNA sola sfumatura di luce, ampia e a opacità bassissima, non due macchie riconoscibili, (3)
- * il rumore di `PAPER_NOISE_URL` piastrellato sopra, anch'esso a opacità bassissima.
+ * Imperfezioni sparse (macchie e piccoli puntini scuri) — rompono l'uniformità della grana sopra,
+ * stesso principio della carta invecchiata vista nel mockup: posizioni fisse (un solo componente
+ * condiviso da tutta l'app, non una posizione diversa per schermata come nel canvas di
+ * riferimento, dove ogni artboard era indipendente).
+ */
+const PAPER_IMPERFECTIONS_IMAGES = [
+  'radial-gradient(ellipse 68px 46px at 80% 12%, rgba(122,111,82,.11), transparent 72%)',
+  'radial-gradient(ellipse 46px 74px at 12% 65%, rgba(122,111,82,.09), transparent 72%)',
+  'radial-gradient(circle 1.6px at 45% 40%, rgba(46,42,34,.4), transparent 100%)',
+  'radial-gradient(circle 1.3px at 70% 75%, rgba(46,42,34,.32), transparent 100%)',
+  'radial-gradient(circle 1.4px at 20% 20%, rgba(46,42,34,.3), transparent 100%)',
+]
+
+/**
+ * Texture di sfondo del taccuino — tutta la pagina, dietro al contenuto. Fase 40 — grana e
+ * imperfezioni rinforzate su feedback esplicito dell'utente su build reale ("non si notano"),
+ * sostituendo la versione "quasi impercettibile" della Fase 31: quella scelta (carta con
+ * variazione di tonalità appena percepibile, niente texture riconoscibile) è stata rivista qui,
+ * non è più l'obiettivo — la direzione attuale (`docs/taccuino-botanico-piano.md`) vuole la carta
+ * visibile come tale.
+ *
+ * Composizione: (1) il colore piatto di base, (2) UNA sfumatura di luce (posizione data da `flip`),
+ * (3) grana piastrellata (`PAPER_GRAIN_IMAGES`), (4) imperfezioni sparse
+ * (`PAPER_IMPERFECTIONS_IMAGES`).
  *
  * Fase 24 — **causa reale, finalmente isolata**, del bug "titolo/statistiche invisibili" nelle
  * righe del Sommario: qualunque `<svg>` **vivo che ricopre la pagina** (fisso o assoluto, con o
  * senza filtro, con o senza z-index) corrompeva il rendering del testo altrove nel DOM — mai
  * l'SVG in sé, sempre la sovrapposizione. Questo componente resta quindi un `<div>` con sfondo
- * CSS puro (colore + gradiente + `background-image`), mai un elemento SVG nel DOM.
+ * CSS puro (colore + gradienti), mai un elemento SVG nel DOM.
  *
  * `flip` inverte il lato della sfumatura di luce (per pagine adiacenti del libro, sinistra/destra
  * sfogliando) — non identiche a specchio l'una dell'altra sarebbe stato più piatto.
  */
 export function TaccuinoPaperTexture({ flip = false }: { flip?: boolean }) {
   const lightPos = flip ? '80% 15%' : '15% 10%'
+  const images = [
+    `radial-gradient(ellipse 70% 55% at ${lightPos}, ${TACCUINO_PAPER.light}, transparent 60%)`,
+    ...PAPER_GRAIN_IMAGES,
+    ...PAPER_IMPERFECTIONS_IMAGES,
+  ]
+  const sizes = ['auto', ...PAPER_GRAIN_SIZES, ...PAPER_IMPERFECTIONS_IMAGES.map(() => 'auto')]
+  const repeats = ['no-repeat', ...PAPER_GRAIN_SIZES.map(() => 'repeat'), ...PAPER_IMPERFECTIONS_IMAGES.map(() => 'no-repeat')]
   return (
     <div
       aria-hidden="true"
       className="fixed inset-0 -z-10 pointer-events-none"
       style={{
         backgroundColor: TACCUINO_PAPER.base,
-        backgroundImage: `radial-gradient(ellipse 70% 55% at ${lightPos}, ${TACCUINO_PAPER.light}, transparent 60%), url("${PAPER_NOISE_URL}")`,
-        backgroundSize: 'auto, 140px 140px',
-        backgroundRepeat: 'no-repeat, repeat',
+        backgroundImage: images.join(', '),
+        backgroundSize: sizes.join(', '),
+        backgroundRepeat: repeats.join(', '),
       }}
     />
   )
