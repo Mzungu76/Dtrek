@@ -10,11 +10,11 @@ anche dopo un primo rinforzo) più qualche imperfezione sparsa (piccole macchie 
 posizione diversa per schermata, non un overlay ripetuto identico). Ogni foto — comprese le
 anteprime mappa dentro le card, es. l'hero di `GuidaC.dc.html` — ha un pin a tinta unita in
 posizione variabile (mai sempre al centro), una leggera rotazione e un **bordo "strappato a mano"**
-(margine irregolare a strappo via `clip-path`, non un taglio netto — un sottile filo chiaro segue
-il profilo come la carta vista di lato nello strappo, via `filter: drop-shadow()`; 4 varianti a
-perimetro intero per le foto "sciolte" + 2 varianti a bordo inferiore piatto per le copertine dei
-Diari, che devono restare a filo col pannello sotto); mai su testo o note; rotazioni minime e mai
-in cascata sullo stesso schermo. Niente pagine affiancate — provato in `ReportageC.dc.html` e
+(margine leggermente irregolare via `clip-path`, ampiezza contenuta — un accenno di strappo, non
+seghettato — con un sottile filo chiaro che segue il profilo come la carta vista di lato, via
+`filter: drop-shadow()`; 4 varianti a perimetro intero per le foto "sciolte" + 2 varianti a bordo
+inferiore piatto per le copertine dei Diari, che devono restare a filo col pannello sotto); mai su
+testo o note; rotazioni minime e mai in cascata sullo stesso schermo. Niente pagine affiancate — provato in `ReportageC.dc.html` e
 rimosso: poco valore aggiunto per lo spazio che occupava. Palette e tipografia invariate.
 
 Questi file sono in formato "Design Component" (`.dc.html`): richiedono il runtime del canvas
