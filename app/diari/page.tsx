@@ -9,7 +9,7 @@ import RouteThumb from '@/components/RouteThumb'
 import type { DiarySummary } from '@/app/api/diaries/route'
 import type { AllPercorsiRow } from '@/app/api/percorsi/route'
 import { FONT } from '@/lib/designTokens'
-import { TACCUINO_PAPER, FONT_HAND } from '@/lib/taccuinoTokens'
+import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, FONT_HAND, TaccuinoPaperTexture } from '@/lib/taccuinoTokens'
 import { metaHasHikingMetrics } from '@/lib/metaTypes'
 import { ArrowRight, BookMarked, BookOpen, Compass, Loader2, Mountain, Pencil, Plus, Search, X } from 'lucide-react'
 
@@ -81,7 +81,7 @@ function DiarioCoverCard({ d, index }: { d: DiarySummary; index: number }) {
       </div>
       <span
         className="inline-flex items-center gap-2 px-4 py-2 mt-3 rounded-full text-white"
-        style={{ background: '#c05a17', fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: 12.5 }}
+        style={{ background: TACCUINO_ACCENT[600], fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: 12.5 }}
       >
         <BookOpen className="w-3.5 h-3.5" /> Apri Diario
       </span>
@@ -139,16 +139,16 @@ function NewDiarioTile() {
         style={{ aspectRatio: '3 / 4', border: `2px dashed ${TACCUINO_PAPER.cardBorder}`, background: TACCUINO_PAPER.card }}
       >
         {creating
-          ? <Loader2 className="w-6 h-6 animate-spin" style={{ color: '#a9915f' }} />
-          : <Plus className="w-6 h-6" style={{ color: '#a9915f' }} />}
-        <span style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 11, color: '#8a7f52' }}>
+          ? <Loader2 className="w-6 h-6 animate-spin" style={{ color: TACCUINO_INK.handMuted }} />
+          : <Plus className="w-6 h-6" style={{ color: TACCUINO_INK.handMuted }} />}
+        <span style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 11, color: TACCUINO_INK.hand }}>
           Nuovo Diario
         </span>
       </button>
       {blockedMessage && (
-        <p className="text-[11.5px] text-center" style={{ color: '#8a7f52' }}>
+        <p className="text-[11.5px] text-center" style={{ color: TACCUINO_INK.hand }}>
           {blockedMessage}{' '}
-          <a href="/prezzi" className="underline" style={{ color: '#c05a17' }}>Sblocca Dtrek</a>
+          <a href="/prezzi" className="underline" style={{ color: TACCUINO_ACCENT[600] }}>Sblocca Dtrek</a>
         </p>
       )}
     </div>
@@ -188,23 +188,23 @@ function GlobalRouteSearch() {
 
   return (
     <div className="mb-8">
-      <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 11, color: '#8a7f52' }} className="mb-2">
+      <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 11, color: TACCUINO_INK.hand }} className="mb-2">
         Cerca un percorso
       </p>
       <div className="relative">
-        <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#a9915f' }} />
+        <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: TACCUINO_INK.handMuted }} />
         <input
           value={query}
           onChange={e => setQuery(e.target.value)}
           placeholder="Titolo della meta, del reportage o del Diario…"
           className="w-full pl-8 pr-8 py-2.5 rounded-full text-[13px] outline-none"
-          style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}`, color: '#3f3a22' }}
+          style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}`, color: TACCUINO_INK.typed }}
         />
         {hasQuery && (
           <button
             onClick={() => setQuery('')}
             className="absolute right-3 top-1/2 -translate-y-1/2"
-            style={{ color: '#a9915f' }}
+            style={{ color: TACCUINO_INK.handMuted }}
             aria-label="Cancella ricerca"
           >
             <X className="w-3.5 h-3.5" />
@@ -215,10 +215,10 @@ function GlobalRouteSearch() {
       {hasQuery && (
         rows === null ? (
           <div className="flex items-center justify-center py-6">
-            <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#a9915f' }} />
+            <Loader2 className="w-4 h-4 animate-spin" style={{ color: TACCUINO_INK.handMuted }} />
           </div>
         ) : filtered.length === 0 ? (
-          <p className="text-[13px] py-4" style={{ color: '#8a7f52' }}>Nessun percorso corrisponde alla ricerca.</p>
+          <p className="text-[13px] py-4" style={{ color: TACCUINO_INK.hand }}>Nessun percorso corrisponde alla ricerca.</p>
         ) : (
           <div className="mt-2 flex flex-col rounded-2xl overflow-hidden" style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}>
             {filtered.slice(0, 8).map(p => (
@@ -232,12 +232,12 @@ function GlobalRouteSearch() {
               >
                 <div className="w-11 h-11 rounded-lg shrink-0 overflow-hidden relative" style={{ background: TACCUINO_PAPER.base }}>
                   {p.routePolyline && p.routePolyline.length > 1
-                    ? <RouteThumb polyline={p.routePolyline} color="#c05a17" strokeWidth={2.5} />
+                    ? <RouteThumb polyline={p.routePolyline} color={TACCUINO_ACCENT[600]} strokeWidth={2.5} />
                     : <div className="w-full h-full flex items-center justify-center"><Mountain className="w-4 h-4" style={{ color: '#c9b98a' }} /></div>}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate" style={{ fontSize: 13.5, fontWeight: 600, color: '#3f3a22' }}>{p.title}</p>
-                  <div className="flex items-center gap-2 flex-wrap" style={{ fontSize: 10.5, color: '#8a7f52' }}>
+                  <p className="truncate" style={{ fontSize: 13.5, fontWeight: 600, color: TACCUINO_INK.typed }}>{p.title}</p>
+                  <div className="flex items-center gap-2 flex-wrap" style={{ fontSize: 10.5, color: TACCUINO_INK.hand }}>
                     {p.diaryTitle && <span className="truncate">{p.diaryTitle}</span>}
                     {metaHasHikingMetrics(p.metaType) && (
                       <>
@@ -250,7 +250,7 @@ function GlobalRouteSearch() {
               </Link>
             ))}
             {filtered.length > 8 && (
-              <p className="px-3 py-2.5 text-[12px] font-semibold text-center" style={{ color: '#8a7f52' }}>
+              <p className="px-3 py-2.5 text-[12px] font-semibold text-center" style={{ color: TACCUINO_INK.hand }}>
                 +{filtered.length - 8} altri risultati — affina la ricerca
               </p>
             )}
@@ -300,21 +300,16 @@ function DiariPageLibro() {
   return (
     <div
       className={`min-h-screen ${MOBILE_BOTTOMBAR_SPACER}`}
-      style={{
-        // Fase 31 — le due "macchie" radiali sono state tolte dalla palette (lib/taccuinoTokens.tsx):
-        // la nuova direzione vuole una carta con variazione di tonalità quasi impercettibile, non
-        // macchie visibili come tali. Sfondo piatto qui (questa pagina — lo scaffale — resta fuori
-        // dallo scopo di questa fase, incentrata sul Sommario) finché non le arriva la stessa texture.
-        background: TACCUINO_PAPER.base,
-      }}
+      style={{ background: TACCUINO_PAPER.base }}
     >
+      <TaccuinoPaperTexture />
       <Navbar />
       <BookSpineShadow variant="light" />
       <div className="max-w-[900px] mx-auto px-4 sm:px-8 pb-14" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 28px)' }}>
-        <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', fontSize: 11, color: '#8a7f52' }} className="mb-1.5">
+        <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', fontSize: 11, color: TACCUINO_INK.hand }} className="mb-1.5">
           Diario
         </p>
-        <h1 style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 34, color: '#3f3a22' }} className="mb-8">
+        <h1 style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 34, color: TACCUINO_INK.typed }} className="mb-8">
           I miei Diari
         </h1>
 
@@ -325,7 +320,7 @@ function DiariPageLibro() {
         )}
 
         {diaries === null && !error ? (
-          <div className="flex items-center justify-center py-24 gap-3" style={{ color: '#a9915f' }}>
+          <div className="flex items-center justify-center py-24 gap-3" style={{ color: TACCUINO_INK.handMuted }}>
             <Loader2 className="w-6 h-6 animate-spin" /><span>Caricamento…</span>
           </div>
         ) : (
@@ -340,7 +335,7 @@ function DiariPageLibro() {
             <Link
               href="/percorsi"
               className="inline-flex items-center gap-2 text-[13px] transition-colors"
-              style={{ color: '#8a7f52' }}
+              style={{ color: TACCUINO_INK.hand }}
             >
               <Compass className="w-4 h-4" /> Tutte le Mete <ArrowRight className="w-3.5 h-3.5" />
             </Link>

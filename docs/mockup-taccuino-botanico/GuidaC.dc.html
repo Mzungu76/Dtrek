@@ -33,11 +33,44 @@ html, body { margin: 0; padding: 0; }
   background: var(--paper-base); font-family: 'DM Sans', system-ui, sans-serif;
   color: var(--ink-typed); -webkit-font-smoothing: antialiased;
 }
-.paper-tex {
-  position: absolute; inset: 0; pointer-events: none;
-  background:
-    radial-gradient(ellipse 70% 50% at 15% 8%, var(--paper-light), transparent 60%);
+.paper-grain {
+  position: absolute; inset: 0; pointer-events: none; z-index: -1; opacity: .95; mix-blend-mode: multiply;
+  background-image:
+    radial-gradient(circle at 12% 22%, rgba(46,42,34,.22) 0, rgba(46,42,34,.22) 1.6px, transparent 3.2px),
+    radial-gradient(circle at 68% 8%, rgba(46,42,34,.18) 0, rgba(46,42,34,.18) 1.3px, transparent 2.8px),
+    radial-gradient(circle at 40% 55%, rgba(46,42,34,.20) 0, rgba(46,42,34,.20) 1.7px, transparent 3.4px),
+    radial-gradient(circle at 85% 40%, rgba(46,42,34,.17) 0, rgba(46,42,34,.17) 1.2px, transparent 2.6px),
+    radial-gradient(circle at 25% 82%, rgba(46,42,34,.20) 0, rgba(46,42,34,.20) 1.5px, transparent 3px),
+    radial-gradient(circle at 92% 88%, rgba(46,42,34,.17) 0, rgba(46,42,34,.17) 1.3px, transparent 2.8px),
+    radial-gradient(circle at 55% 30%, rgba(46,42,34,.15) 0, rgba(46,42,34,.15) 1.1px, transparent 2.4px),
+    radial-gradient(circle at 15% 45%, rgba(46,42,34,.16) 0, rgba(46,42,34,.16) 1.2px, transparent 2.6px),
+    radial-gradient(circle at 75% 65%, rgba(46,42,34,.15) 0, rgba(46,42,34,.15) 1.1px, transparent 2.4px);
+  background-size: 46px 52px, 61px 41px, 71px 83px, 33px 63px, 83px 47px, 53px 69px, 39px 59px, 67px 37px, 51px 73px;
 }
+.paper-imperfections {
+  position: absolute; inset: 0; pointer-events: none; z-index: -1; mix-blend-mode: multiply;
+  background-image:
+    radial-gradient(ellipse 68px 46px at 70% 60%, rgba(122,111,82,.11), transparent 72%),
+    radial-gradient(ellipse 46px 74px at 10% 10%, rgba(122,111,82,.09), transparent 72%),
+    radial-gradient(circle 1.6px at 40% 30%, rgba(46,42,34,.4), transparent 100%),
+    radial-gradient(circle 1.3px at 85% 80%, rgba(46,42,34,.32), transparent 100%),
+    radial-gradient(circle 1.4px at 20% 55%, rgba(46,42,34,.3), transparent 100%);
+}
+.tape {
+  position: absolute; width: 34px; height: 13px; border-radius: 2px;
+  background: var(--accent-tint);
+  box-shadow: 0 1px 3px rgba(46,42,34,.2); z-index: 2;
+}
+.photo-obj {
+  position: relative; background-size: cover; background-position: center;
+  filter: drop-shadow(0 0 1.5px var(--paper-light)) drop-shadow(2px 6px 10px rgba(46,42,34,.24)) drop-shadow(0 1px 2px rgba(46,42,34,.16));
+}
+.cut-1 { clip-path: polygon(0% 0.5%, 11.0% 0.7%, 23.5% 1.7%, 34.7% 0.3%, 44.3% 1.2%, 54.8% 0.8%, 66.5% 1.1%, 78.3% 1.4%, 88.1% 1.7%, 100% 0.2%, 98.3% 10.9%, 98.6% 22.8%, 99.2% 32.3%, 99.3% 45.0%, 98.5% 54.3%, 98.4% 67.7%, 99.7% 78.7%, 99.1% 89.6%, 99.7% 100%, 90.1% 99.5%, 77.3% 98.7%, 66.6% 98.4%, 56.0% 98.7%, 43.0% 98.2%, 32.6% 99.6%, 21.5% 98.9%, 11.6% 99.6%, 0% 99.8%, 0.5% 88.6%, 0.7% 79.2%, 1.1% 66.8%, 1.6% 56.3%, 1.5% 45.2%, 1.4% 32.6%, 1.6% 22.4%, 1.2% 11.2%); }
+.cut-2 { clip-path: polygon(0% 0.2%, 10.2% 1.1%, 23.3% 0.2%, 32.5% 0.7%, 45.6% 1.2%, 56.3% 0.8%, 67.4% 1.8%, 77.1% 0.2%, 87.5% 0.4%, 100% 0.1%, 98.7% 12.2%, 98.3% 23.0%, 99.4% 33.4%, 99.1% 43.7%, 98.9% 57.0%, 99.6% 66.9%, 98.5% 77.0%, 99.3% 90.4%, 99.6% 100%, 87.6% 99.6%, 76.5% 99.5%, 67.7% 99.1%, 56.3% 99.4%, 43.6% 98.9%, 33.3% 99.8%, 23.4% 99.2%, 9.9% 99.4%, 0% 99.5%, 0.9% 88.1%, 0.9% 77.3%, 1.2% 68.1%, 0.5% 55.2%, 0.7% 45.8%, 0.4% 33.7%, 0.6% 22.2%, 1.5% 10.2%); }
+.cut-3 { clip-path: polygon(0% 0.4%, 11.3% 1.2%, 23.1% 0.8%, 33.6% 1.4%, 43.8% 1.6%, 54.9% 1.2%, 65.6% 0.4%, 78.4% 1.6%, 89.0% 0.4%, 100% 0.4%, 99.4% 10.4%, 99.7% 22.2%, 99.4% 32.8%, 99.3% 45.8%, 99.7% 54.4%, 99.4% 67.0%, 99.6% 76.5%, 99.8% 89.4%, 99.9% 100%, 89.1% 98.8%, 79.3% 99.5%, 67.7% 99.3%, 54.8% 98.8%, 44.6% 99.1%, 32.4% 98.3%, 22.3% 99.6%, 9.7% 99.1%, 0% 99.7%, 0.8% 89.5%, 1.5% 76.3%, 0.8% 66.8%, 1.4% 56.2%, 1.6% 44.9%, 0.3% 34.4%, 1.9% 23.3%, 0.7% 11.6%); }
+.cut-4 { clip-path: polygon(0% 0.4%, 11.7% 0.3%, 20.8% 0.7%, 33.4% 0.3%, 43.5% 1.7%, 55.3% 1.1%, 68.0% 0.9%, 76.4% 1.9%, 89.2% 0.6%, 100% 0.2%, 98.7% 11.0%, 98.7% 21.3%, 99.4% 34.8%, 99.1% 44.5%, 98.5% 56.9%, 99.1% 66.0%, 98.9% 78.0%, 99.6% 88.7%, 99.6% 100%, 88.0% 99.1%, 76.7% 99.1%, 65.3% 99.2%, 55.1% 99.5%, 43.6% 98.6%, 33.9% 98.5%, 23.1% 98.9%, 10.0% 98.3%, 0% 100.0%, 1.4% 88.9%, 1.6% 77.4%, 1.5% 67.2%, 0.7% 56.2%, 1.5% 45.5%, 1.7% 32.5%, 0.7% 23.0%, 0.4% 11.8%); }
+.cut-top-a { clip-path: polygon(0% 0.1%, 12.1% 1.3%, 23.5% 1.8%, 33.5% 1.4%, 45.9% 1.1%, 54.2% 1.6%, 67.7% 1.2%, 76.9% 1.4%, 88.4% 1.8%, 100% 0.1%, 99.6% 16.7%, 98.8% 33.3%, 99.2% 50.0%, 100% 66.7%, 100% 83.3%, 100% 100.0%, 0.0% 100.0%, 0% 83.3%, 0% 66.7%, 0.5% 50.0%, 1.7% 33.3%, 0.4% 16.7%); }
+.cut-top-b { clip-path: polygon(0% 0.0%, 10.5% 0.9%, 23.0% 1.5%, 33.4% 1.7%, 45.1% 0.5%, 55.6% 1.9%, 65.2% 1.2%, 79.2% 1.3%, 90.2% 1.1%, 100% 0.0%, 98.4% 16.7%, 98.6% 33.3%, 98.9% 50.0%, 100% 66.7%, 100% 83.3%, 100% 100.0%, 0.0% 100.0%, 0% 83.3%, 0% 66.7%, 1.7% 50.0%, 0.9% 33.3%, 1.8% 16.7%); }
 .eyebrow {
   font-family: 'DM Sans', sans-serif; font-weight: 700; text-transform: uppercase;
   letter-spacing: .16em; font-size: 10.5px; color: var(--ink-muted);
@@ -118,6 +151,8 @@ a:hover { color: var(--accent-2); }
 <!-- Taccuino Botanico — Guida (Prima di partire) -->
 <div class="phone">
 
+      <div class="paper-grain"></div>
+      <div class="paper-imperfections"></div>
       <div class="book-header">
         <div>
           <p class="eyebrow" style="display:flex;align-items:center;gap:6px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5c2.5-1 5-1 8 0v14c-3-1-5.5-1-8 0V5z"></path><path d="M21 5c-2.5-1-5-1-8 0v14c3-1 5.5-1 8 0V5z"></path></svg>Sentieri di Casa</p>
@@ -127,11 +162,15 @@ a:hover { color: var(--accent-2); }
       </div>
       <div style="display:flex;gap:8px;padding:12px 20px 4px;overflow-x:auto;"><span class="pill" style="background:#C0603D;color:#fff;border-color:transparent;flex-shrink:0;">Prima di partire</span><span class="pill" style="flex-shrink:0;">Percorso</span><span class="pill" style="flex-shrink:0;">Luoghi e Natura</span></div>
       <div style="padding:8px 20px 90px;">
-        
-        <div style="position:relative;height:190px;border-radius:14px;overflow:hidden;">
+
+        <div style="position:relative;">
+          <div class="tape" style="top:-6px;left:64%;margin-left:-17px;transform:rotate(6deg);z-index:3;"></div>
+          <div style="position:relative;height:190px;transform:rotate(-.6deg);">
+          <div class="photo-obj cut-2" style="position:absolute;inset:0;">
           <svg width="320" height="190" style="position:absolute;inset:0"><circle cx="104" cy="29" r="69" fill="#4A5A3F" opacity="0.55"></circle><circle cx="23" cy="102" r="52" fill="#5C6B4C" opacity="0.55"></circle><circle cx="19" cy="96" r="32" fill="#3F4C36" opacity="0.55"></circle><circle cx="139" cy="13" r="35" fill="#6B7D58" opacity="0.55"></circle><circle cx="136" cy="157" r="37" fill="#465239" opacity="0.55"></circle><circle cx="71" cy="119" r="87" fill="#4A5A3F" opacity="0.55"></circle><circle cx="185" cy="75" r="89" fill="#5C6B4C" opacity="0.55"></circle><circle cx="15" cy="163" r="47" fill="#3F4C36" opacity="0.55"></circle><circle cx="46" cy="22" r="49" fill="#6B7D58" opacity="0.55"></circle><circle cx="261" cy="34" r="65" fill="#465239" opacity="0.55"></circle><circle cx="204" cy="71" r="63" fill="#4A5A3F" opacity="0.55"></circle><circle cx="20" cy="11" r="42" fill="#5C6B4C" opacity="0.55"></circle><circle cx="218" cy="81" r="49" fill="#3F4C36" opacity="0.55"></circle><circle cx="187" cy="86" r="48" fill="#6B7D58" opacity="0.55"></circle></svg>
           <svg width="320" height="190" style="position:absolute;inset:0"><path d="M 58 148 Q 122 57 176 95 T 272 42" fill="none" stroke="#F9F2E4" stroke-width="3" stroke-linecap="round" stroke-dasharray="1 7"></path><circle cx="57.599999999999994" cy="148.20000000000002" r="4" fill="#F9F2E4" stroke="#fff" stroke-width="1.5"></circle><circle cx="272.0" cy="41.8" r="4" fill="#F9F2E4" stroke="#fff" stroke-width="1.5"></circle></svg>
           <div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.22),transparent 45%,rgba(0,0,0,.35));"></div>
+          </div>
           <div style="position:absolute;top:10px;left:10px;display:flex;gap:6px;">
             <span class="pill" style="background:rgba(0,0,0,.5);color:#fff;border-color:transparent;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 4.5v11L12 22l-8-4.5v-11L12 2z"></path><path d="M4 6.5l8 4.5 8-4.5"></path><path d="M12 11v11"></path></svg>3D &middot; Satellite</span>
           </div>
@@ -142,8 +181,9 @@ a:hover { color: var(--accent-2); }
             <span class="pill" style="background:rgba(255,255,255,.92);">12,4 km</span>
             <span class="pill" style="background:rgba(255,255,255,.92);">640 m D+</span>
           </div>
+          </div>
         </div>
-        
+
         <div class="card" style="margin-top:12px;padding:12px 14px;display:flex;align-items:center;gap:12px;">
           <div style="color:var(--accent);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4"></path><path d="M5.6 8.6l2.8 2.8"></path><path d="M18.4 8.6l-2.8 2.8"></path><path d="M3 15h18"></path><path d="M6 15a6 6 0 0112 0"></path></svg></div>
           <div>

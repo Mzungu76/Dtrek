@@ -33,11 +33,44 @@ html, body { margin: 0; padding: 0; }
   background: var(--paper-base); font-family: 'DM Sans', system-ui, sans-serif;
   color: var(--ink-typed); -webkit-font-smoothing: antialiased;
 }
-.paper-tex {
-  position: absolute; inset: 0; pointer-events: none;
-  background:
-    radial-gradient(ellipse 70% 50% at 15% 8%, var(--paper-light), transparent 60%);
+.paper-grain {
+  position: absolute; inset: 0; pointer-events: none; z-index: -1; opacity: .95; mix-blend-mode: multiply;
+  background-image:
+    radial-gradient(circle at 12% 22%, rgba(46,42,34,.22) 0, rgba(46,42,34,.22) 1.6px, transparent 3.2px),
+    radial-gradient(circle at 68% 8%, rgba(46,42,34,.18) 0, rgba(46,42,34,.18) 1.3px, transparent 2.8px),
+    radial-gradient(circle at 40% 55%, rgba(46,42,34,.20) 0, rgba(46,42,34,.20) 1.7px, transparent 3.4px),
+    radial-gradient(circle at 85% 40%, rgba(46,42,34,.17) 0, rgba(46,42,34,.17) 1.2px, transparent 2.6px),
+    radial-gradient(circle at 25% 82%, rgba(46,42,34,.20) 0, rgba(46,42,34,.20) 1.5px, transparent 3px),
+    radial-gradient(circle at 92% 88%, rgba(46,42,34,.17) 0, rgba(46,42,34,.17) 1.3px, transparent 2.8px),
+    radial-gradient(circle at 55% 30%, rgba(46,42,34,.15) 0, rgba(46,42,34,.15) 1.1px, transparent 2.4px),
+    radial-gradient(circle at 15% 45%, rgba(46,42,34,.16) 0, rgba(46,42,34,.16) 1.2px, transparent 2.6px),
+    radial-gradient(circle at 75% 65%, rgba(46,42,34,.15) 0, rgba(46,42,34,.15) 1.1px, transparent 2.4px);
+  background-size: 46px 52px, 61px 41px, 71px 83px, 33px 63px, 83px 47px, 53px 69px, 39px 59px, 67px 37px, 51px 73px;
 }
+.paper-imperfections {
+  position: absolute; inset: 0; pointer-events: none; z-index: -1; mix-blend-mode: multiply;
+  background-image:
+    radial-gradient(ellipse 68px 46px at 15% 70%, rgba(122,111,82,.11), transparent 72%),
+    radial-gradient(ellipse 46px 74px at 85% 20%, rgba(122,111,82,.09), transparent 72%),
+    radial-gradient(circle 1.6px at 55% 15%, rgba(46,42,34,.4), transparent 100%),
+    radial-gradient(circle 1.3px at 30% 85%, rgba(46,42,34,.32), transparent 100%),
+    radial-gradient(circle 1.4px at 90% 50%, rgba(46,42,34,.3), transparent 100%);
+}
+.tape {
+  position: absolute; width: 34px; height: 13px; border-radius: 2px;
+  background: var(--accent-tint);
+  box-shadow: 0 1px 3px rgba(46,42,34,.2); z-index: 2;
+}
+.photo-obj {
+  position: relative; background-size: cover; background-position: center;
+  filter: drop-shadow(0 0 1.5px var(--paper-light)) drop-shadow(2px 6px 10px rgba(46,42,34,.24)) drop-shadow(0 1px 2px rgba(46,42,34,.16));
+}
+.cut-1 { clip-path: polygon(0% 0.5%, 11.0% 0.7%, 23.5% 1.7%, 34.7% 0.3%, 44.3% 1.2%, 54.8% 0.8%, 66.5% 1.1%, 78.3% 1.4%, 88.1% 1.7%, 100% 0.2%, 98.3% 10.9%, 98.6% 22.8%, 99.2% 32.3%, 99.3% 45.0%, 98.5% 54.3%, 98.4% 67.7%, 99.7% 78.7%, 99.1% 89.6%, 99.7% 100%, 90.1% 99.5%, 77.3% 98.7%, 66.6% 98.4%, 56.0% 98.7%, 43.0% 98.2%, 32.6% 99.6%, 21.5% 98.9%, 11.6% 99.6%, 0% 99.8%, 0.5% 88.6%, 0.7% 79.2%, 1.1% 66.8%, 1.6% 56.3%, 1.5% 45.2%, 1.4% 32.6%, 1.6% 22.4%, 1.2% 11.2%); }
+.cut-2 { clip-path: polygon(0% 0.2%, 10.2% 1.1%, 23.3% 0.2%, 32.5% 0.7%, 45.6% 1.2%, 56.3% 0.8%, 67.4% 1.8%, 77.1% 0.2%, 87.5% 0.4%, 100% 0.1%, 98.7% 12.2%, 98.3% 23.0%, 99.4% 33.4%, 99.1% 43.7%, 98.9% 57.0%, 99.6% 66.9%, 98.5% 77.0%, 99.3% 90.4%, 99.6% 100%, 87.6% 99.6%, 76.5% 99.5%, 67.7% 99.1%, 56.3% 99.4%, 43.6% 98.9%, 33.3% 99.8%, 23.4% 99.2%, 9.9% 99.4%, 0% 99.5%, 0.9% 88.1%, 0.9% 77.3%, 1.2% 68.1%, 0.5% 55.2%, 0.7% 45.8%, 0.4% 33.7%, 0.6% 22.2%, 1.5% 10.2%); }
+.cut-3 { clip-path: polygon(0% 0.4%, 11.3% 1.2%, 23.1% 0.8%, 33.6% 1.4%, 43.8% 1.6%, 54.9% 1.2%, 65.6% 0.4%, 78.4% 1.6%, 89.0% 0.4%, 100% 0.4%, 99.4% 10.4%, 99.7% 22.2%, 99.4% 32.8%, 99.3% 45.8%, 99.7% 54.4%, 99.4% 67.0%, 99.6% 76.5%, 99.8% 89.4%, 99.9% 100%, 89.1% 98.8%, 79.3% 99.5%, 67.7% 99.3%, 54.8% 98.8%, 44.6% 99.1%, 32.4% 98.3%, 22.3% 99.6%, 9.7% 99.1%, 0% 99.7%, 0.8% 89.5%, 1.5% 76.3%, 0.8% 66.8%, 1.4% 56.2%, 1.6% 44.9%, 0.3% 34.4%, 1.9% 23.3%, 0.7% 11.6%); }
+.cut-4 { clip-path: polygon(0% 0.4%, 11.7% 0.3%, 20.8% 0.7%, 33.4% 0.3%, 43.5% 1.7%, 55.3% 1.1%, 68.0% 0.9%, 76.4% 1.9%, 89.2% 0.6%, 100% 0.2%, 98.7% 11.0%, 98.7% 21.3%, 99.4% 34.8%, 99.1% 44.5%, 98.5% 56.9%, 99.1% 66.0%, 98.9% 78.0%, 99.6% 88.7%, 99.6% 100%, 88.0% 99.1%, 76.7% 99.1%, 65.3% 99.2%, 55.1% 99.5%, 43.6% 98.6%, 33.9% 98.5%, 23.1% 98.9%, 10.0% 98.3%, 0% 100.0%, 1.4% 88.9%, 1.6% 77.4%, 1.5% 67.2%, 0.7% 56.2%, 1.5% 45.5%, 1.7% 32.5%, 0.7% 23.0%, 0.4% 11.8%); }
+.cut-top-a { clip-path: polygon(0% 0.1%, 12.1% 1.3%, 23.5% 1.8%, 33.5% 1.4%, 45.9% 1.1%, 54.2% 1.6%, 67.7% 1.2%, 76.9% 1.4%, 88.4% 1.8%, 100% 0.1%, 99.6% 16.7%, 98.8% 33.3%, 99.2% 50.0%, 100% 66.7%, 100% 83.3%, 100% 100.0%, 0.0% 100.0%, 0% 83.3%, 0% 66.7%, 0.5% 50.0%, 1.7% 33.3%, 0.4% 16.7%); }
+.cut-top-b { clip-path: polygon(0% 0.0%, 10.5% 0.9%, 23.0% 1.5%, 33.4% 1.7%, 45.1% 0.5%, 55.6% 1.9%, 65.2% 1.2%, 79.2% 1.3%, 90.2% 1.1%, 100% 0.0%, 98.4% 16.7%, 98.6% 33.3%, 98.9% 50.0%, 100% 66.7%, 100% 83.3%, 100% 100.0%, 0.0% 100.0%, 0% 83.3%, 0% 66.7%, 1.7% 50.0%, 0.9% 33.3%, 1.8% 16.7%); }
 .eyebrow {
   font-family: 'DM Sans', sans-serif; font-weight: 700; text-transform: uppercase;
   letter-spacing: .16em; font-size: 10.5px; color: var(--ink-muted);
@@ -118,46 +151,51 @@ a:hover { color: var(--accent-2); }
 <!-- Taccuino Botanico — Diario -->
 <div class="phone">
 
-      <div class="paper-tex"></div>
+      <div class="paper-grain"></div>
+      <div class="paper-imperfections"></div>
       <div class="avatar-float"><div class="inner"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 20c0-4 4-6 8-6s8 2 8 6"></path></svg></div></div>
       <div style="padding:26px 20px 0;">
         <p class="eyebrow">Diario</p>
         <h1 class="hand" style="font-size:34px;margin:2px 0 18px;color:var(--ink-typed);">I miei Diari</h1>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
           
-        <div style="border-radius:12px;overflow:hidden;box-shadow:0 4px 10px rgba(0,0,0,.14);">
-          <div style="height:118px;background:linear-gradient(160deg,#C0603D,#2E2A22);position:relative;display:flex;align-items:flex-end;padding:10px;">
+        <div style="position:relative;box-shadow:0 4px 10px rgba(0,0,0,.14);border-radius:12px;">
+          <div class="tape" style="top:-5px;left:28%;margin-left:-17px;transform:rotate(-6deg);"></div>
+          <div class="photo-obj cut-top-a" style="height:118px;background:linear-gradient(160deg,#C0603D,#2E2A22);display:flex;align-items:flex-end;padding:10px;transform:rotate(-.7deg);">
             <span class="hand" style="color:#F9F2E4;font-size:19px;line-height:1.1;">Sentieri di Casa</span>
           </div>
-          <div style="background:var(--card);padding:8px 10px 10px;">
+          <div style="background:var(--card);border-radius:0 0 12px 12px;padding:8px 10px 10px;">
             <span class="badge">Default</span>
             <p style="margin:4px 0 0;font-size:11.5px;color:var(--ink-muted);">12 percorsi</p>
           </div>
         </div>
-        <div style="border-radius:12px;overflow:hidden;box-shadow:0 4px 10px rgba(0,0,0,.14);">
-          <div style="height:118px;background:linear-gradient(160deg,#7A6F52,#2E2A22);position:relative;display:flex;align-items:flex-end;padding:10px;">
+        <div style="position:relative;box-shadow:0 4px 10px rgba(0,0,0,.14);border-radius:12px;">
+          <div class="tape" style="top:-5px;left:74%;margin-left:-17px;transform:rotate(5deg);"></div>
+          <div class="photo-obj cut-top-b" style="height:118px;background:linear-gradient(160deg,#7A6F52,#2E2A22);display:flex;align-items:flex-end;padding:10px;transform:rotate(.6deg);">
             <span class="hand" style="color:#F9F2E4;font-size:19px;line-height:1.1;">Weekend in Appennino</span>
           </div>
-          <div style="background:var(--card);padding:8px 10px 10px;">
-            
+          <div style="background:var(--card);border-radius:0 0 12px 12px;padding:8px 10px 10px;">
+
             <p style="margin:4px 0 0;font-size:11.5px;color:var(--ink-muted);">6 percorsi</p>
           </div>
         </div>
-        <div style="border-radius:12px;overflow:hidden;box-shadow:0 4px 10px rgba(0,0,0,.14);">
-          <div style="height:118px;background:linear-gradient(160deg,#A89A78,#2E2A22);position:relative;display:flex;align-items:flex-end;padding:10px;">
+        <div style="position:relative;box-shadow:0 4px 10px rgba(0,0,0,.14);border-radius:12px;">
+          <div class="tape" style="top:-5px;left:38%;margin-left:-17px;transform:rotate(-8deg);"></div>
+          <div class="photo-obj cut-top-a" style="height:118px;background:linear-gradient(160deg,#A89A78,#2E2A22);display:flex;align-items:flex-end;padding:10px;transform:rotate(-.5deg);">
             <span class="hand" style="color:#F9F2E4;font-size:19px;line-height:1.1;">Anelli del Cimino</span>
           </div>
-          <div style="background:var(--card);padding:8px 10px 10px;">
-            
+          <div style="background:var(--card);border-radius:0 0 12px 12px;padding:8px 10px 10px;">
+
             <p style="margin:4px 0 0;font-size:11.5px;color:var(--ink-muted);">4 percorsi</p>
           </div>
         </div>
-        <div style="border-radius:12px;overflow:hidden;box-shadow:0 4px 10px rgba(0,0,0,.14);">
-          <div style="height:118px;background:linear-gradient(160deg,#7C8F6E,#2E2A22);position:relative;display:flex;align-items:flex-end;padding:10px;">
+        <div style="position:relative;box-shadow:0 4px 10px rgba(0,0,0,.14);border-radius:12px;">
+          <div class="tape" style="top:-5px;left:64%;margin-left:-17px;transform:rotate(7deg);"></div>
+          <div class="photo-obj cut-top-b" style="height:118px;background:linear-gradient(160deg,#7C8F6E,#2E2A22);display:flex;align-items:flex-end;padding:10px;transform:rotate(.8deg);">
             <span class="hand" style="color:#F9F2E4;font-size:19px;line-height:1.1;">Alta Via</span>
           </div>
-          <div style="background:var(--card);padding:8px 10px 10px;">
-            
+          <div style="background:var(--card);border-radius:0 0 12px 12px;padding:8px 10px 10px;">
+
             <p style="margin:4px 0 0;font-size:11.5px;color:var(--ink-muted);">9 percorsi</p>
           </div>
         </div>
