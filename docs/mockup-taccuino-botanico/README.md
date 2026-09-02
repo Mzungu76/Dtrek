@@ -4,10 +4,13 @@
 la revisione — vedi `docs/taccuino-botanico-piano.md` per la guida sintetica alla realizzazione.
 
 Tutte le schermate (tranne `NavigatoreC.dc.html`/`Mappa3DC.dc.html`, mappe a schermo intero senza
-sfondo carta per scelta) portano la spinta editoriale "taccuino di viaggio": grana carta sottile,
-foto con un piccolo pin/etichetta a tinta unita in alto (mai su testo o note), rotazioni minime e
-mai in cascata sullo stesso schermo. Niente pagine affiancate — provato in `ReportageC.dc.html` e
-rimosso: poco valore aggiunto per lo spazio che occupava. Palette e tipografia invariate.
+sfondo carta per scelta) portano la spinta editoriale "taccuino di viaggio": grana carta marcata
+(niente più la sfumatura chiara in alto a sinistra della prima versione, rimossa), ogni foto —
+comprese le anteprime mappa dentro le card, es. l'hero di `GuidaC.dc.html` — con un pin a tinta
+unita in posizione variabile (mai sempre al centro) e una leggera rotazione, mai su testo o note,
+rotazioni minime e mai in cascata sullo stesso schermo. Niente pagine affiancate — provato in
+`ReportageC.dc.html` e rimosso: poco valore aggiunto per lo spazio che occupava. Palette e
+tipografia invariate.
 
 Questi file sono in formato "Design Component" (`.dc.html`): richiedono il runtime del canvas
 editor (`support.js`, non incluso qui) per essere visualizzati come pagina — non sono codice

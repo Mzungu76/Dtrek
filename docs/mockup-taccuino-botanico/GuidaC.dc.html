@@ -33,15 +33,15 @@ html, body { margin: 0; padding: 0; }
   background: var(--paper-base); font-family: 'DM Sans', system-ui, sans-serif;
   color: var(--ink-typed); -webkit-font-smoothing: antialiased;
 }
-.paper-tex {
-  position: absolute; inset: 0; pointer-events: none;
-  background:
-    radial-gradient(ellipse 70% 50% at 15% 8%, var(--paper-light), transparent 60%);
-}
 .paper-grain {
-  position: absolute; inset: 0; pointer-events: none; opacity: .55; mix-blend-mode: multiply;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.29 0 0 0 0 0.26 0 0 0 0 0.19 0 0 0 0.06 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-size: 140px 140px;
+  position: absolute; inset: 0; pointer-events: none; opacity: .72; mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.29 0 0 0 0 0.26 0 0 0 0 0.19 0 0 0 0.14 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 120px 120px;
+}
+.tape {
+  position: absolute; width: 34px; height: 13px; border-radius: 2px;
+  background: var(--accent-tint);
+  box-shadow: 0 1px 3px rgba(46,42,34,.2); z-index: 2;
 }
 .eyebrow {
   font-family: 'DM Sans', sans-serif; font-weight: 700; text-transform: uppercase;
@@ -123,7 +123,6 @@ a:hover { color: var(--accent-2); }
 <!-- Taccuino Botanico — Guida (Prima di partire) -->
 <div class="phone">
 
-      <div class="paper-tex"></div>
       <div class="paper-grain"></div>
       <div class="book-header">
         <div>
@@ -134,8 +133,10 @@ a:hover { color: var(--accent-2); }
       </div>
       <div style="display:flex;gap:8px;padding:12px 20px 4px;overflow-x:auto;"><span class="pill" style="background:#C0603D;color:#fff;border-color:transparent;flex-shrink:0;">Prima di partire</span><span class="pill" style="flex-shrink:0;">Percorso</span><span class="pill" style="flex-shrink:0;">Luoghi e Natura</span></div>
       <div style="padding:8px 20px 90px;">
-        
-        <div style="position:relative;height:190px;border-radius:14px;overflow:hidden;">
+
+        <div style="position:relative;">
+          <div class="tape" style="top:-6px;left:64%;margin-left:-17px;transform:rotate(6deg);z-index:3;"></div>
+          <div style="position:relative;height:190px;border-radius:14px;overflow:hidden;box-shadow:2px 6px 16px rgba(46,42,34,.22);transform:rotate(-.6deg);">
           <svg width="320" height="190" style="position:absolute;inset:0"><circle cx="104" cy="29" r="69" fill="#4A5A3F" opacity="0.55"></circle><circle cx="23" cy="102" r="52" fill="#5C6B4C" opacity="0.55"></circle><circle cx="19" cy="96" r="32" fill="#3F4C36" opacity="0.55"></circle><circle cx="139" cy="13" r="35" fill="#6B7D58" opacity="0.55"></circle><circle cx="136" cy="157" r="37" fill="#465239" opacity="0.55"></circle><circle cx="71" cy="119" r="87" fill="#4A5A3F" opacity="0.55"></circle><circle cx="185" cy="75" r="89" fill="#5C6B4C" opacity="0.55"></circle><circle cx="15" cy="163" r="47" fill="#3F4C36" opacity="0.55"></circle><circle cx="46" cy="22" r="49" fill="#6B7D58" opacity="0.55"></circle><circle cx="261" cy="34" r="65" fill="#465239" opacity="0.55"></circle><circle cx="204" cy="71" r="63" fill="#4A5A3F" opacity="0.55"></circle><circle cx="20" cy="11" r="42" fill="#5C6B4C" opacity="0.55"></circle><circle cx="218" cy="81" r="49" fill="#3F4C36" opacity="0.55"></circle><circle cx="187" cy="86" r="48" fill="#6B7D58" opacity="0.55"></circle></svg>
           <svg width="320" height="190" style="position:absolute;inset:0"><path d="M 58 148 Q 122 57 176 95 T 272 42" fill="none" stroke="#F9F2E4" stroke-width="3" stroke-linecap="round" stroke-dasharray="1 7"></path><circle cx="57.599999999999994" cy="148.20000000000002" r="4" fill="#F9F2E4" stroke="#fff" stroke-width="1.5"></circle><circle cx="272.0" cy="41.8" r="4" fill="#F9F2E4" stroke="#fff" stroke-width="1.5"></circle></svg>
           <div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.22),transparent 45%,rgba(0,0,0,.35));"></div>
@@ -149,8 +150,9 @@ a:hover { color: var(--accent-2); }
             <span class="pill" style="background:rgba(255,255,255,.92);">12,4 km</span>
             <span class="pill" style="background:rgba(255,255,255,.92);">640 m D+</span>
           </div>
+          </div>
         </div>
-        
+
         <div class="card" style="margin-top:12px;padding:12px 14px;display:flex;align-items:center;gap:12px;">
           <div style="color:var(--accent);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4"></path><path d="M5.6 8.6l2.8 2.8"></path><path d="M18.4 8.6l-2.8 2.8"></path><path d="M3 15h18"></path><path d="M6 15a6 6 0 0112 0"></path></svg></div>
           <div>

@@ -33,15 +33,10 @@ html, body { margin: 0; padding: 0; }
   background: var(--paper-base); font-family: 'DM Sans', system-ui, sans-serif;
   color: var(--ink-typed); -webkit-font-smoothing: antialiased;
 }
-.paper-tex {
-  position: absolute; inset: 0; pointer-events: none;
-  background:
-    radial-gradient(ellipse 70% 50% at 15% 8%, var(--paper-light), transparent 60%);
-}
 .paper-grain {
-  position: absolute; inset: 0; pointer-events: none; opacity: .55; mix-blend-mode: multiply;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.29 0 0 0 0 0.26 0 0 0 0 0.19 0 0 0 0.06 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-size: 140px 140px;
+  position: absolute; inset: 0; pointer-events: none; opacity: .72; mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.29 0 0 0 0 0.26 0 0 0 0 0.19 0 0 0 0.14 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 120px 120px;
 }
 .tape {
   position: absolute; width: 38px; height: 14px; border-radius: 2px;
@@ -132,7 +127,6 @@ a:hover { color: var(--accent-2); }
 <!-- Taccuino Botanico — Cover -->
 <div class="phone">
 
-      <div class="paper-tex"></div>
       <div class="paper-grain"></div>
       <div style="padding:26px 22px 0;">
         <p class="eyebrow">Direzione C</p>
@@ -195,15 +189,15 @@ a:hover { color: var(--accent-2); }
             <span style="position:absolute;left:6px;bottom:5px;font-size:8px;font-weight:700;color:var(--ink-muted);">Grana carta</span>
           </div>
           <div style="border-radius:9px;overflow:hidden;position:relative;height:64px;background:var(--card);border:1px solid var(--card-border);display:flex;align-items:center;justify-content:center;">
-            <div class="photo-obj" style="width:34px;height:34px;background:linear-gradient(160deg,#7C8F6E,#2E2A22);"></div>
-            <div class="tape" style="top:14px;left:50%;margin-left:-19px;"></div>
+            <div class="photo-obj" style="width:34px;height:34px;transform:rotate(-1deg);background:linear-gradient(160deg,#7C8F6E,#2E2A22);"></div>
+            <div class="tape" style="width:24px;height:10px;top:12px;left:57%;margin-left:-10px;transform:rotate(6deg);"></div>
             <span style="position:absolute;left:6px;bottom:5px;font-size:8px;font-weight:700;color:var(--ink-muted);">Foto + pin</span>
           </div>
           <div style="border-radius:9px;overflow:hidden;position:relative;height:64px;background:var(--paper-light);border:1px solid var(--card-border);display:flex;align-items:center;justify-content:center;">
             <span class="hand" style="font-size:19px;color:var(--ink-hand);">Valle del Treja</span>
           </div>
         </div>
-        <p style="font-size:9.5px;line-height:1.4;color:var(--ink-muted);margin:8px 0 0;">Regola: rotazioni contenute (max ~1°, solo su elementi isolati, mai in cascata); il pin/nastro (tinta unita, non rigato) solo su fotografie, mai su testo o note.</p>
+        <p style="font-size:9.5px;line-height:1.4;color:var(--ink-muted);margin:8px 0 0;">Regola: ogni foto (comprese le anteprime mappa dentro le card) prende pin + leggera rotazione (max ~1°); il pin (tinta unita, non rigato) ha posizione variabile — mai sempre al centro — e non va mai su testo o note. Elementi a schermo intero (Navigatore, Mappa 3D) restano senza carta/pin.</p>
       </div>
 
 </div>

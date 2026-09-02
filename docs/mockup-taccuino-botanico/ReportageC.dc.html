@@ -33,15 +33,10 @@ html, body { margin: 0; padding: 0; }
   background: var(--paper-base); font-family: 'DM Sans', system-ui, sans-serif;
   color: var(--ink-typed); -webkit-font-smoothing: antialiased;
 }
-.paper-tex {
-  position: absolute; inset: 0; pointer-events: none;
-  background:
-    radial-gradient(ellipse 70% 50% at 15% 8%, var(--paper-light), transparent 60%);
-}
 .paper-grain {
-  position: absolute; inset: 0; pointer-events: none; opacity: .55; mix-blend-mode: multiply;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.29 0 0 0 0 0.26 0 0 0 0 0.19 0 0 0 0.06 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-size: 140px 140px;
+  position: absolute; inset: 0; pointer-events: none; opacity: .72; mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.29 0 0 0 0 0.26 0 0 0 0 0.19 0 0 0 0.14 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 120px 120px;
 }
 .eyebrow {
   font-family: 'DM Sans', sans-serif; font-weight: 700; text-transform: uppercase;
@@ -88,7 +83,6 @@ a:hover { color: var(--accent-2); }
 <!-- Taccuino Botanico — Reportage (spinta editoriale) -->
 <div class="phone">
 
-  <div class="paper-tex"></div>
   <div class="paper-grain"></div>
 
   <div style="padding:16px 20px 0;display:flex;align-items:center;justify-content:space-between;">
@@ -98,8 +92,8 @@ a:hover { color: var(--accent-2); }
   </div>
 
   <div style="padding:12px 26px 0;position:relative;">
-    <div class="photo-obj" style="height:150px;background:linear-gradient(155deg,#7C8F6E,#2E2A22 78%);"></div>
-    <div class="tape" style="top:-6px;left:50%;margin-left:-19px;"></div>
+    <div class="photo-obj" style="height:150px;transform:rotate(-.6deg);background:linear-gradient(155deg,#7C8F6E,#2E2A22 78%);"></div>
+    <div class="tape" style="top:-6px;left:30%;margin-left:-19px;transform:rotate(-5deg);"></div>
   </div>
 
   <div style="padding:14px 22px 0;">
@@ -117,15 +111,15 @@ a:hover { color: var(--accent-2); }
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
       <div style="position:relative;grid-column:span 2;">
         <div class="photo-obj" style="height:120px;transform:rotate(.6deg);background:linear-gradient(160deg,#C0603D,#2E2A22 75%);"></div>
-        <div class="tape" style="top:-6px;left:50%;margin-left:-19px;"></div>
+        <div class="tape" style="top:-6px;left:66%;margin-left:-19px;transform:rotate(7deg);"></div>
       </div>
       <div style="position:relative;">
         <div class="photo-obj" style="height:92px;transform:rotate(-.7deg);background:linear-gradient(160deg,#A89A78,#2E2A22 75%);"></div>
-        <div class="tape" style="top:-6px;left:50%;margin-left:-19px;"></div>
+        <div class="tape" style="top:-6px;left:32%;margin-left:-19px;transform:rotate(-6deg);"></div>
       </div>
       <div style="position:relative;">
         <div class="photo-obj" style="height:92px;transform:rotate(.5deg);background:linear-gradient(160deg,#5F7355,#2E2A22 75%);"></div>
-        <div class="tape" style="top:-6px;left:50%;margin-left:-19px;"></div>
+        <div class="tape" style="top:-6px;left:60%;margin-left:-19px;transform:rotate(4deg);"></div>
       </div>
     </div>
   </div>
