@@ -44,8 +44,8 @@ html, body { margin: 0; padding: 0; }
   background-size: 140px 140px;
 }
 .tape {
-  position: absolute; width: 46px; height: 18px;
-  background: repeating-linear-gradient(45deg, rgba(233,218,195,.92) 0 5px, rgba(217,201,168,.78) 5px 10px);
+  position: absolute; width: 38px; height: 14px; border-radius: 2px;
+  background: var(--accent-tint);
   box-shadow: 0 1px 3px rgba(46,42,34,.2);
 }
 .photo-obj {
@@ -190,26 +190,20 @@ a:hover { color: var(--accent-2); }
 
         <p class="eyebrow" style="margin:10px 0 6px;">Texture &amp; materia — spinta ulteriore</p>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">
-          <div style="border-radius:9px;overflow:hidden;position:relative;height:60px;background:var(--paper-base);border:1px solid var(--card-border);">
+          <div style="border-radius:9px;overflow:hidden;position:relative;height:64px;background:var(--paper-base);border:1px solid var(--card-border);">
             <div class="paper-grain" style="opacity:.85;"></div>
             <span style="position:absolute;left:6px;bottom:5px;font-size:8px;font-weight:700;color:var(--ink-muted);">Grana carta</span>
           </div>
-          <div style="border-radius:9px;overflow:hidden;position:relative;height:60px;background:var(--card);border:1px solid var(--card-border);display:flex;align-items:center;justify-content:center;">
-            <div class="photo-obj" style="width:34px;height:34px;background:linear-gradient(160deg,#7C8F6E,#2E2A22);transform:rotate(-4deg);"></div>
-            <div class="tape" style="top:4px;left:22px;width:36px;height:14px;transform:rotate(-32deg);"></div>
-            <span style="position:absolute;left:6px;bottom:5px;font-size:8px;font-weight:700;color:var(--ink-muted);">Foto + nastro</span>
+          <div style="border-radius:9px;overflow:hidden;position:relative;height:64px;background:var(--card);border:1px solid var(--card-border);display:flex;align-items:center;justify-content:center;">
+            <div class="photo-obj" style="width:34px;height:34px;background:linear-gradient(160deg,#7C8F6E,#2E2A22);"></div>
+            <div class="tape" style="top:14px;left:50%;margin-left:-19px;"></div>
+            <span style="position:absolute;left:6px;bottom:5px;font-size:8px;font-weight:700;color:var(--ink-muted);">Foto + pin</span>
           </div>
-          <div style="border-radius:9px;overflow:hidden;position:relative;height:60px;background:var(--paper-light);border:1px solid var(--card-border);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;">
-            <span class="hand" style="font-size:15px;color:var(--ink-hand);transform:rotate(-3deg);display:block;">Valle del</span>
-            <span class="hand" style="font-size:15px;color:var(--ink-hand);transform:rotate(1.5deg) translateX(3px);display:block;margin-top:-3px;">Treja &middot;</span>
+          <div style="border-radius:9px;overflow:hidden;position:relative;height:64px;background:var(--paper-light);border:1px solid var(--card-border);display:flex;align-items:center;justify-content:center;">
+            <span class="hand" style="font-size:19px;color:var(--ink-hand);">Valle del Treja</span>
           </div>
         </div>
-        <div style="margin-top:6px;height:40px;border-radius:9px;overflow:hidden;position:relative;border:1px solid var(--card-border);display:flex;">
-          <div style="flex:1;background:var(--card);"></div>
-          <div style="width:9px;background:linear-gradient(90deg,rgba(46,42,34,.16),rgba(46,42,34,0) 55%,rgba(46,42,34,.16));"></div>
-          <div style="flex:1;background:var(--paper-light);"></div>
-          <span style="position:absolute;left:7px;bottom:4px;font-size:8px;font-weight:700;color:var(--ink-muted);">Pagine affiancate, piega centrale</span>
-        </div>
+        <p style="font-size:9.5px;line-height:1.4;color:var(--ink-muted);margin:8px 0 0;">Regola: rotazioni contenute (max ~1°, solo su elementi isolati, mai in cascata); il pin/nastro (tinta unita, non rigato) solo su fotografie, mai su testo o note.</p>
       </div>
 
 </div>

@@ -3,9 +3,11 @@
 10 schermate della direzione scelta (su 3 presentate), esportate dal canvas Claude Design usato per
 la revisione — vedi `docs/taccuino-botanico-piano.md` per la guida sintetica alla realizzazione.
 
-`CoverC.dc.html` e `ReportageC.dc.html` sono alla versione aggiornata con la spinta editoriale
-"taccuino di viaggio" (grana carta, foto trattate come oggetti fisici con nastro, scrittura a mano
-irregolare, pagine affiancate con piega centrale) — palette e tipografia invariate.
+Tutte le schermate (tranne `NavigatoreC.dc.html`/`Mappa3DC.dc.html`, mappe a schermo intero senza
+sfondo carta per scelta) portano la spinta editoriale "taccuino di viaggio": grana carta sottile,
+foto con un piccolo pin/etichetta a tinta unita in alto (mai su testo o note), rotazioni minime e
+mai in cascata sullo stesso schermo. Niente pagine affiancate — provato in `ReportageC.dc.html` e
+rimosso: poco valore aggiunto per lo spazio che occupava. Palette e tipografia invariate.
 
 Questi file sono in formato "Design Component" (`.dc.html`): richiedono il runtime del canvas
 editor (`support.js`, non incluso qui) per essere visualizzati come pagina — non sono codice

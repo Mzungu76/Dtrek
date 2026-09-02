@@ -38,6 +38,16 @@ html, body { margin: 0; padding: 0; }
   background:
     radial-gradient(ellipse 70% 50% at 15% 8%, var(--paper-light), transparent 60%);
 }
+.paper-grain {
+  position: absolute; inset: 0; pointer-events: none; opacity: .55; mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.29 0 0 0 0 0.26 0 0 0 0 0.19 0 0 0 0.06 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 140px 140px;
+}
+.tape {
+  position: absolute; width: 34px; height: 13px; border-radius: 2px;
+  background: var(--accent-tint);
+  box-shadow: 0 1px 3px rgba(46,42,34,.2); z-index: 2;
+}
 .eyebrow {
   font-family: 'DM Sans', sans-serif; font-weight: 700; text-transform: uppercase;
   letter-spacing: .16em; font-size: 10.5px; color: var(--ink-muted);
@@ -119,45 +129,50 @@ a:hover { color: var(--accent-2); }
 <div class="phone">
 
       <div class="paper-tex"></div>
+      <div class="paper-grain"></div>
       <div class="avatar-float"><div class="inner"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 20c0-4 4-6 8-6s8 2 8 6"></path></svg></div></div>
       <div style="padding:26px 20px 0;">
         <p class="eyebrow">Diario</p>
         <h1 class="hand" style="font-size:34px;margin:2px 0 18px;color:var(--ink-typed);">I miei Diari</h1>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
           
-        <div style="border-radius:12px;overflow:hidden;box-shadow:0 4px 10px rgba(0,0,0,.14);">
-          <div style="height:118px;background:linear-gradient(160deg,#C0603D,#2E2A22);position:relative;display:flex;align-items:flex-end;padding:10px;">
+        <div style="position:relative;box-shadow:0 4px 10px rgba(0,0,0,.14);border-radius:12px;">
+          <div class="tape" style="top:-5px;left:50%;margin-left:-17px;"></div>
+          <div style="height:118px;border-radius:12px 12px 0 0;background:linear-gradient(160deg,#C0603D,#2E2A22);position:relative;display:flex;align-items:flex-end;padding:10px;">
             <span class="hand" style="color:#F9F2E4;font-size:19px;line-height:1.1;">Sentieri di Casa</span>
           </div>
-          <div style="background:var(--card);padding:8px 10px 10px;">
+          <div style="background:var(--card);border-radius:0 0 12px 12px;padding:8px 10px 10px;">
             <span class="badge">Default</span>
             <p style="margin:4px 0 0;font-size:11.5px;color:var(--ink-muted);">12 percorsi</p>
           </div>
         </div>
-        <div style="border-radius:12px;overflow:hidden;box-shadow:0 4px 10px rgba(0,0,0,.14);">
-          <div style="height:118px;background:linear-gradient(160deg,#7A6F52,#2E2A22);position:relative;display:flex;align-items:flex-end;padding:10px;">
+        <div style="position:relative;box-shadow:0 4px 10px rgba(0,0,0,.14);border-radius:12px;">
+          <div class="tape" style="top:-5px;left:50%;margin-left:-17px;"></div>
+          <div style="height:118px;border-radius:12px 12px 0 0;background:linear-gradient(160deg,#7A6F52,#2E2A22);position:relative;display:flex;align-items:flex-end;padding:10px;">
             <span class="hand" style="color:#F9F2E4;font-size:19px;line-height:1.1;">Weekend in Appennino</span>
           </div>
-          <div style="background:var(--card);padding:8px 10px 10px;">
-            
+          <div style="background:var(--card);border-radius:0 0 12px 12px;padding:8px 10px 10px;">
+
             <p style="margin:4px 0 0;font-size:11.5px;color:var(--ink-muted);">6 percorsi</p>
           </div>
         </div>
-        <div style="border-radius:12px;overflow:hidden;box-shadow:0 4px 10px rgba(0,0,0,.14);">
-          <div style="height:118px;background:linear-gradient(160deg,#A89A78,#2E2A22);position:relative;display:flex;align-items:flex-end;padding:10px;">
+        <div style="position:relative;box-shadow:0 4px 10px rgba(0,0,0,.14);border-radius:12px;">
+          <div class="tape" style="top:-5px;left:50%;margin-left:-17px;"></div>
+          <div style="height:118px;border-radius:12px 12px 0 0;background:linear-gradient(160deg,#A89A78,#2E2A22);position:relative;display:flex;align-items:flex-end;padding:10px;">
             <span class="hand" style="color:#F9F2E4;font-size:19px;line-height:1.1;">Anelli del Cimino</span>
           </div>
-          <div style="background:var(--card);padding:8px 10px 10px;">
-            
+          <div style="background:var(--card);border-radius:0 0 12px 12px;padding:8px 10px 10px;">
+
             <p style="margin:4px 0 0;font-size:11.5px;color:var(--ink-muted);">4 percorsi</p>
           </div>
         </div>
-        <div style="border-radius:12px;overflow:hidden;box-shadow:0 4px 10px rgba(0,0,0,.14);">
-          <div style="height:118px;background:linear-gradient(160deg,#7C8F6E,#2E2A22);position:relative;display:flex;align-items:flex-end;padding:10px;">
+        <div style="position:relative;box-shadow:0 4px 10px rgba(0,0,0,.14);border-radius:12px;">
+          <div class="tape" style="top:-5px;left:50%;margin-left:-17px;"></div>
+          <div style="height:118px;border-radius:12px 12px 0 0;background:linear-gradient(160deg,#7C8F6E,#2E2A22);position:relative;display:flex;align-items:flex-end;padding:10px;">
             <span class="hand" style="color:#F9F2E4;font-size:19px;line-height:1.1;">Alta Via</span>
           </div>
-          <div style="background:var(--card);padding:8px 10px 10px;">
-            
+          <div style="background:var(--card);border-radius:0 0 12px 12px;padding:8px 10px 10px;">
+
             <p style="margin:4px 0 0;font-size:11.5px;color:var(--ink-muted);">9 percorsi</p>
           </div>
         </div>
