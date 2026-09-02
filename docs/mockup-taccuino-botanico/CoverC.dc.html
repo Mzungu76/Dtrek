@@ -32,8 +32,6 @@ html, body { margin: 0; padding: 0; }
   width: 390px; height: 844px; position: relative; overflow: hidden;
   background: var(--paper-base); font-family: 'DM Sans', system-ui, sans-serif;
   color: var(--ink-typed); -webkit-font-smoothing: antialiased;
-  border: 1px solid var(--contour);
-  box-shadow: inset 0 0 0 5px var(--paper-light), inset 0 0 34px rgba(46,42,34,.16);
 }
 .paper-grain {
   position: absolute; inset: 0; pointer-events: none; z-index: -1; opacity: .95; mix-blend-mode: multiply;
@@ -65,14 +63,14 @@ html, body { margin: 0; padding: 0; }
 }
 .photo-obj {
   position: relative; background-size: cover; background-position: center;
-  filter: drop-shadow(2px 6px 10px rgba(46,42,34,.24)) drop-shadow(0 1px 2px rgba(46,42,34,.16));
+  filter: drop-shadow(0 0 1.5px var(--paper-light)) drop-shadow(2px 6px 10px rgba(46,42,34,.24)) drop-shadow(0 1px 2px rgba(46,42,34,.16));
 }
-.cut-1 { clip-path: polygon(0.0% 1.0%, 16.7% 1.5%, 33.3% 3.2%, 50.0% 1.1%, 66.7% 1.3%, 83.3% 1.7%, 100.0% 0%, 98.7% 16.7%, 98.1% 33.3%, 97.4% 50.0%, 100% 66.7%, 99.7% 83.3%, 100% 100.0%, 83.3% 97.3%, 66.7% 97.8%, 50.0% 100%, 33.3% 96.5%, 16.7% 96.6%, 0.0% 98.0%, 1.8% 83.3%, 0% 66.7%, 0% 50.0%, 1.4% 33.3%, 0% 16.7%); }
-.cut-2 { clip-path: polygon(0.0% 3.4%, 16.7% 0%, 33.3% 0%, 50.0% 3.6%, 66.7% 0%, 83.3% 0%, 100.0% 2.0%, 99.5% 16.7%, 96.9% 33.3%, 100.0% 50.0%, 96.6% 66.7%, 99.6% 83.3%, 98.3% 100.0%, 83.3% 96.7%, 66.7% 97.9%, 50.0% 96.8%, 33.3% 97.8%, 16.7% 100%, 0.0% 97.0%, 1.7% 83.3%, 0.4% 66.7%, 0% 50.0%, 2.9% 33.3%, 1.6% 16.7%); }
-.cut-3 { clip-path: polygon(0.0% 1.6%, 16.7% 1.9%, 33.3% 2.7%, 50.0% 0.2%, 66.7% 2.0%, 83.3% 3.1%, 100.0% 3.2%, 100% 16.7%, 98.0% 33.3%, 98.2% 50.0%, 98.7% 66.7%, 96.6% 83.3%, 98.6% 100.0%, 83.3% 99.0%, 66.7% 96.7%, 50.0% 98.1%, 33.3% 99.7%, 16.7% 99.6%, 0.0% 98.8%, 0% 83.3%, 1.8% 66.7%, 2.4% 50.0%, 0.9% 33.3%, 2.9% 16.7%); }
-.cut-4 { clip-path: polygon(0.0% 0.8%, 16.7% 1.5%, 33.3% 3.0%, 50.0% 0%, 66.7% 0%, 83.3% 0%, 100.0% 0%, 100% 16.7%, 100% 33.3%, 98.7% 50.0%, 96.4% 66.7%, 97.8% 83.3%, 99.3% 100.0%, 83.3% 99.2%, 66.7% 97.8%, 50.0% 99.6%, 33.3% 100%, 16.7% 97.1%, 0.0% 98.2%, 0% 83.3%, 0% 66.7%, 0% 50.0%, 3.4% 33.3%, 0% 16.7%); }
-.cut-top-a { clip-path: polygon(0.0% 0%, 16.7% 3.0%, 33.3% 0%, 50.0% 2.1%, 66.7% 2.5%, 83.3% 2.1%, 100.0% 0.3%, 99.5% 16.7%, 98.0% 33.3%, 96.9% 50.0%, 100% 66.7%, 100% 83.3%, 100% 100.0%, 0.0% 100.0%, 0% 83.3%, 0% 66.7%, 1.8% 50.0%, 1.3% 33.3%, 0.7% 16.7%); }
-.cut-top-b { clip-path: polygon(0.0% 0%, 16.7% 0.8%, 33.3% 0.1%, 50.0% 0.9%, 66.7% 0.1%, 83.3% 2.6%, 100.0% 1.4%, 97.9% 16.7%, 97.1% 33.3%, 98.9% 50.0%, 100% 66.7%, 100% 83.3%, 100% 100.0%, 0.0% 100.0%, 0% 83.3%, 0% 66.7%, 1.0% 50.0%, 0% 33.3%, 2.3% 16.7%); }
+.cut-1 { clip-path: polygon(0% 0.0%, 12.3% 1.7%, 27.1% 4.1%, 39.9% 0.6%, 49.7% 3.0%, 61.2% 1.9%, 74.7% 2.9%, 88.3% 3.4%, 100% 0.8%, 98.5% 10.0%, 95.9% 24.7%, 96.6% 38.4%, 98.0% 48.3%, 98.3% 63.5%, 96.3% 72.8%, 96.0% 89.2%, 98.4% 100%, 88.3% 96.7%, 72.6% 95.8%, 61.2% 99.0%, 49.6% 95.9%, 35.5% 97.9%, 24.8% 96.1%, 14.4% 97.2%, 0% 99.4%, 3.7% 88.8%, 3.5% 73.7%, 3.9% 62.7%, 3.1% 50.1%, 3.1% 35.1%, 3.3% 23.2%, 1.8% 13.2%); }
+.cut-2 { clip-path: polygon(0% 0.2%, 11.0% 2.8%, 26.8% 0.6%, 36.2% 1.6%, 51.8% 2.9%, 63.7% 1.9%, 76.3% 4.3%, 86.4% 0.6%, 100% 0.2%, 97.0% 11.5%, 95.9% 24.2%, 95.9% 38.8%, 98.5% 50.1%, 98.0% 61.2%, 97.3% 77.4%, 98.9% 87.9%, 98.8% 100%, 88.8% 98.6%, 73.5% 97.2%, 62.5% 99.5%, 50.7% 98.0%, 35.1% 99.3%, 26.1% 98.7%, 10.7% 97.3%, 0% 99.9%, 1.7% 89.8%, 1.0% 75.7%, 1.4% 62.5%, 2.9% 49.1%, 4.2% 39.5%, 3.9% 25.0%, 2.8% 10.2%); }
+.cut-3 { clip-path: polygon(0% 1.6%, 12.8% 3.0%, 26.4% 1.9%, 38.0% 3.4%, 48.9% 3.8%, 61.4% 3.1%, 73.2% 0.9%, 88.5% 4.0%, 100% 1.6%, 97.2% 13.9%, 97.8% 23.3%, 97.8% 39.2%, 99.2% 49.9%, 98.5% 61.6%, 98.4% 77.3%, 99.3% 85.5%, 99.5% 100%, 86.3% 97.0%, 77.0% 98.6%, 64.4% 98.7%, 49.9% 96.5%, 38.4% 98.6%, 22.9% 96.9%, 12.5% 98.6%, 0% 98.2%, 3.9% 88.3%, 0.8% 76.8%, 4.5% 64.3%, 1.6% 50.8%, 4.1% 35.8%, 1.1% 25.3%, 2.2% 11.1%); }
+.cut-4 { clip-path: polygon(0% 0.9%, 13.4% 0.7%, 22.6% 1.6%, 37.7% 0.8%, 48.5% 4.0%, 62.0% 2.8%, 77.2% 2.1%, 85.3% 4.5%, 100% 0.4%, 99.1% 13.3%, 96.8% 24.8%, 96.7% 36.0%, 98.7% 52.4%, 97.8% 62.6%, 96.3% 77.2%, 97.9% 86.4%, 99.5% 100%, 86.8% 98.7%, 73.5% 96.5%, 63.4% 96.4%, 51.5% 97.1%, 35.7% 95.8%, 24.6% 97.1%, 13.9% 99.2%, 0% 99.7%, 4.0% 87.8%, 1.2% 76.6%, 4.3% 62.3%, 1.7% 47.5%, 1.4% 35.6%, 0.7% 22.5%, 1.4% 10.4%); }
+.cut-top-a { clip-path: polygon(0% 0.6%, 14.2% 3.2%, 27.1% 4.3%, 37.7% 3.4%, 52.4% 2.8%, 60.2% 4.0%, 76.7% 3.1%, 86.0% 3.4%, 100% 0.7%, 99.1% 16.7%, 96.3% 33.3%, 96.2% 50.0%, 100% 66.7%, 100% 83.3%, 100% 100.0%, 0.0% 100.0%, 0% 83.3%, 0% 66.7%, 1.9% 50.0%, 1.2% 33.3%, 4.2% 16.7%); }
+.cut-top-b { clip-path: polygon(0% 1.7%, 11.5% 2.2%, 26.2% 3.6%, 37.6% 4.0%, 51.1% 1.2%, 62.6% 4.5%, 72.6% 3.1%, 89.9% 3.3%, 100% 1.6%, 96.6% 16.7%, 99.3% 33.3%, 98.9% 50.0%, 100% 66.7%, 100% 83.3%, 100% 100.0%, 0.0% 100.0%, 0% 83.3%, 0% 66.7%, 1.6% 50.0%, 3.8% 33.3%, 3.4% 16.7%); }
 .eyebrow {
   font-family: 'DM Sans', sans-serif; font-weight: 700; text-transform: uppercase;
   letter-spacing: .16em; font-size: 10.5px; color: var(--ink-muted);
@@ -224,7 +222,7 @@ a:hover { color: var(--accent-2); }
             <span class="hand" style="font-size:19px;color:var(--ink-hand);">Valle del Treja</span>
           </div>
         </div>
-        <p style="font-size:9.5px;line-height:1.4;color:var(--ink-muted);margin:8px 0 0;">Regola: ogni foto (comprese le anteprime mappa dentro le card) prende pin + leggera rotazione (max ~1°) + bordo irregolare "ritagliato a mano" (contorno leggermente frastagliato invece di un rettangolo perfetto, 4 varianti diverse); il pin (tinta unita, non rigato) ha posizione variabile — mai sempre al centro — e non va mai su testo o note. Grana carta rinforzata (puntinato a più livelli) + qualche imperfezione sparsa (piccole macchie e puntini, posizione diversa per schermata) per rompere l'uniformità. Il bordo di questa stessa schermata è il "contorno pagina": filo sottile + margine più chiaro, applicato a ogni schermata. Elementi a schermo intero (Navigatore, Mappa 3D) restano senza carta/grana/pin, ma prendono comunque il contorno.</p>
+        <p style="font-size:9.5px;line-height:1.4;color:var(--ink-muted);margin:8px 0 0;">Regola: ogni foto (comprese le anteprime mappa dentro le card) prende pin + leggera rotazione (max ~1°) + bordo "strappato a mano" (margine irregolare a strappo, non un taglio netto — un sottile filo chiaro segue il profilo, come la carta vista di lato nello strappo; 4 varianti diverse). Il pin (tinta unita, non rigato) ha posizione variabile — mai sempre al centro — e non va mai su testo o note. Grana carta rinforzata + qualche imperfezione sparsa (macchie e puntini, posizione diversa per schermata) per rompere l'uniformità. Nessun contorno pagina sullo schermo (rimosso). Elementi a schermo intero (Navigatore, Mappa 3D) restano senza carta/grana/pin.</p>
       </div>
 
 </div>

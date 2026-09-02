@@ -3,19 +3,19 @@
 10 schermate della direzione scelta (su 3 presentate), esportate dal canvas Claude Design usato per
 la revisione — vedi `docs/taccuino-botanico-piano.md` per la guida sintetica alla realizzazione.
 
-Ogni schermata ha un **contorno pagina** (filo sottile + margine più chiaro + leggera vignettatura)
-sul bordo dello schermo, comprese `NavigatoreC.dc.html`/`Mappa3DC.dc.html` (mappe a schermo intero,
-che però restano senza sfondo carta/grana per scelta). Le altre 8 portano la spinta editoriale
-"taccuino di viaggio": grana carta rifatta da zero come puntinatura CSS (niente più filtro SVG,
-sostituito perché troppo tenue anche dopo un primo rinforzo — la nuova versione è deliberatamente
-più marcata) più qualche imperfezione sparsa (piccole macchie e puntini scuri, posizione diversa
-per schermata, non un overlay ripetuto identico). Ogni foto — comprese le anteprime mappa dentro le
-card, es. l'hero di `GuidaC.dc.html` — ha un pin a tinta unita in posizione variabile (mai sempre al
-centro), una leggera rotazione e un **bordo irregolare "ritagliato a mano"** (contorno leggermente
-frastagliato via `clip-path`, 4 varianti diverse per le foto "sciolte" + 2 varianti a bordo inferiore
-piatto per le copertine dei Diari, che devono restare a filo col pannello sotto); mai su testo o
-note; rotazioni minime e mai in cascata sullo stesso schermo. Niente pagine affiancate — provato in `ReportageC.dc.html` e rimosso: poco valore aggiunto
-per lo spazio che occupava. Palette e tipografia invariate.
+Nessun contorno pagina sullo schermo (provato e rimosso). `NavigatoreC.dc.html`/`Mappa3DC.dc.html`
+(mappe a schermo intero) restano senza sfondo carta/grana per scelta. Le altre 8 portano la spinta
+editoriale "taccuino di viaggio": grana carta come puntinatura CSS (niente filtro SVG, troppo tenue
+anche dopo un primo rinforzo) più qualche imperfezione sparsa (piccole macchie e puntini scuri,
+posizione diversa per schermata, non un overlay ripetuto identico). Ogni foto — comprese le
+anteprime mappa dentro le card, es. l'hero di `GuidaC.dc.html` — ha un pin a tinta unita in
+posizione variabile (mai sempre al centro), una leggera rotazione e un **bordo "strappato a mano"**
+(margine irregolare a strappo via `clip-path`, non un taglio netto — un sottile filo chiaro segue
+il profilo come la carta vista di lato nello strappo, via `filter: drop-shadow()`; 4 varianti a
+perimetro intero per le foto "sciolte" + 2 varianti a bordo inferiore piatto per le copertine dei
+Diari, che devono restare a filo col pannello sotto); mai su testo o note; rotazioni minime e mai
+in cascata sullo stesso schermo. Niente pagine affiancate — provato in `ReportageC.dc.html` e
+rimosso: poco valore aggiunto per lo spazio che occupava. Palette e tipografia invariate.
 
 Questi file sono in formato "Design Component" (`.dc.html`): richiedono il runtime del canvas
 editor (`support.js`, non incluso qui) per essere visualizzati come pagina — non sono codice
