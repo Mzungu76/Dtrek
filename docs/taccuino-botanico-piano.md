@@ -101,9 +101,40 @@ non una pagina nuova. Solo restyling nella nuova palette:
 - Scheda inferiore con titolo percorso, pillole km/D+/tempo, CTA "Naviga" — stesso pattern delle
   card app-wide.
 
+## Estensione IA — schermate da `bozza_mockup_dtrek`
+
+Riferimento: `docs/mockup-dtrek-completo/` (15 schermate, mockup più recente ma ancora nella
+palette verde vecchia — **non** cambia la scelta palette sopra, la sostituisce comunque con
+salvia/terracotta). A differenza del resto di questa guida (solo restyling), qui il mockup introduce
+anche struttura/flussi non ancora tutti presenti in codice. Stato reale per schermata (verificato nel
+codice, non assunto):
+
+| Schermata mockup | Stato in codice | Note |
+|---|---|---|
+| Mete / scelta categoria (Sentieri, Borghi e Città, Siti) | **Non esiste** | `app/percorsi/page.tsx` è già una lista piatta di Mete non ancora percorse (tutti i tipi mischiati), `app/percorsi/cerca/page.tsx` gestisce solo creazione/ricerca `borgo_citta`/`sito`. Una schermata hub dedicata a scegliere il tipo è lavoro nuovo, non solo restyling. |
+| Ricerca sentieri/borghi/siti, card type-aware | **Esiste** | `lib/metaSearch/` (`searchMeta()`, `searchSentieri.ts`), `lib/metaCard.ts` (`metaCardStats()`), `app/api/meta-search/route.ts`. Solo da restilizzare in salvia/terracotta. |
+| Scheda sentiero — Trail Score | **Esiste, ma diverso pattern grafico** | `lib/trailScore.ts`/`trailScoreV2.ts`, UI in `components/TrailScoreGaugeBadge.tsx`/`components/ScoreRing.tsx` (gauge/anello, non radar chart come nel mockup). Proposta: restilizzare il gauge/ring esistente nella nuova palette invece di costruire un radar chart nuovo — da confermare, non deciso qui. |
+| Scheda borgo/sito, tab Panoramica/Da vedere/Info | **Esiste** | Stessa rotta di sentiero, `app/guida/[id]/page.tsx`, type-aware via `lib/guideProfiles.ts` (`GUIDE_PROFILES`, esclude `dati_sicurezza` per non-sentiero). Coerente con la struttura Guida a 3 sezioni già pianificata sopra. |
+| Itinerario (mappa + tappe cronometrate) | **Esiste** | `lib/itinerary.ts`, `app/api/meta-itinerary/route.ts`, persistenza in `lib/plannedStore.ts`/`lib/metaToPlannedHike.ts`. Solo restyling mappa/card nella nuova palette. |
+| Guida durante l'uscita — audio-tour "Tappa N di M" | **Non esiste** | Nessun componente di guida audio con play/pausa e navigazione a tappe trovato in codice (verificato: nessun hit su audioguida/step-player). È una feature nuova, non un restyling — impatto maggiore del resto di questa guida, da valutare/decidere separatamente prima di implementarla. |
+| Reportage / pagine reportage | **Esiste** | `app/resoconto/ResocontoHub.tsx`, `components/resoconto/*`, `components/diario/DiarioReportPage.tsx`, `lib/reportProfiles.ts`. Lo stile "taccuino" (foto graffate, bordi strappati) di queste due schermate del mockup è già coerente con la direzione approvata — buon riferimento diretto per il restyling di `ResocontoHub`. |
+| Barra di navigazione inferiore a 5 voci (Diario/Mete/Guida/Mappa/Profilo) | **Diverge da quanto in codice oggi** | `components/Navbar.tsx` (`NAV_LINKS`) ha oggi solo 3 voci (Diario→`/diari`, Mete→`/percorsi`, Nuovo→`/upload`), con Profilo come icona avatar separata, non nella barra. La barra a 5 voci del mockup è un cambio di struttura oltre alla palette (che resta comunque `--bar-bg: #5F7355`, non crema come nel mockup) — da decidere se adottarla, non assunto qui. |
+| Mappa full-screen, toggle Mappa/Satellite | **Coerente con quanto già pianificato** | Vedi "Mappa 3D espansa" sopra — stesso pattern (toggle satellite/topo, back button, scheda inferiore), ma il mockup mostra una mappa 2D stile marker classici, non la `RouteMap3D` 3D navigabile già in app. Da restilizzare **`RouteMap3D`** esistente, non sostituirla con una mappa 2D. |
+
+Nota positiva: `public/manifest.json` (`theme_color`) risulta **già aggiornato a `#5F7355`** (salvia) —
+il resto della migrazione palette (verde `#277134`/`FOREST` ancora presente in `tailwind.config.ts`,
+`lib/designTokens.ts`, `NavigationMap.tsx`, `NavigationMapLibre.tsx`, `RouteLeafletEditor.tsx`,
+`WeatherWidget.tsx`, `utils/pdfExport/*`, `app/profilo/page.tsx`, `scripts/gen-app-icons.mjs`) resta
+da fare.
+
 ## Cosa NON è ancora deciso/fatto
 
 - Il restyling completo di `GuidaHub`/`ResocontoHub`/`HubNavBar` (contenuto scuro immersivo) resta
   fuori scope: qui è stata aggiornata solo la vista "a libro" (`GuideBookPage`).
+- L'hub "Mete" (scelta tipo Sentiero/Borgo e Città/Sito) e l'audio-guida a tappe durante l'uscita
+  sono feature nuove viste nel mockup più recente (`docs/mockup-dtrek-completo/`), non solo
+  restyling: vanno progettate/decise a parte prima di essere implementate.
+- Se adottare la barra di navigazione a 5 voci (Diario/Mete/Guida/Mappa/Profilo) del nuovo mockup
+  al posto delle 3 voci + avatar attuali (`components/Navbar.tsx`) non è deciso qui.
 - Nessun codice applicativo è stato toccato in questa sessione — solo il mockup e questa guida.
   Le Fasi 1–5 già pushate su questo branch riguardano il menù globale (navigazione), non i colori.
