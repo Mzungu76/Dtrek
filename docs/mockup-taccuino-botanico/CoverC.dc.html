@@ -38,6 +38,20 @@ html, body { margin: 0; padding: 0; }
   background:
     radial-gradient(ellipse 70% 50% at 15% 8%, var(--paper-light), transparent 60%);
 }
+.paper-grain {
+  position: absolute; inset: 0; pointer-events: none; opacity: .55; mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.29 0 0 0 0 0.26 0 0 0 0 0.19 0 0 0 0.06 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 140px 140px;
+}
+.tape {
+  position: absolute; width: 46px; height: 18px;
+  background: repeating-linear-gradient(45deg, rgba(233,218,195,.92) 0 5px, rgba(217,201,168,.78) 5px 10px);
+  box-shadow: 0 1px 3px rgba(46,42,34,.2);
+}
+.photo-obj {
+  border-radius: 3px; box-shadow: 2px 6px 16px rgba(46,42,34,.24), 0 1px 2px rgba(46,42,34,.16);
+  position: relative;
+}
 .eyebrow {
   font-family: 'DM Sans', sans-serif; font-weight: 700; text-transform: uppercase;
   letter-spacing: .16em; font-size: 10.5px; color: var(--ink-muted);
@@ -119,6 +133,7 @@ a:hover { color: var(--accent-2); }
 <div class="phone">
 
       <div class="paper-tex"></div>
+      <div class="paper-grain"></div>
       <div style="padding:26px 22px 0;">
         <p class="eyebrow">Direzione C</p>
         <h1 class="hand" style="font-size:38px;margin:2px 0 6px;color:var(--ink-typed);">Taccuino Botanico</h1>
@@ -170,10 +185,33 @@ a:hover { color: var(--accent-2); }
         </div>
         <div style="margin-top:12px;background:#5F7355;border-radius:14px;padding:12px 10px;display:flex;justify-content:space-around;"><div style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#F5EDDD;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5c2.5-1 5-1 8 0v14c-3-1-5.5-1-8 0V5z"></path><path d="M21 5c-2.5-1-5-1-8 0v14c3-1 5.5-1 8 0V5z"></path></svg><span style="font-size:8px;font-weight:700;">Diario</span></div><div style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#B9C4AE;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M15.2 8.8l-2 6.4-6.4 2 2-6.4 6.4-2z"></path></svg><span style="font-size:8px;font-weight:700;">Percorsi</span></div><div style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#B9C4AE;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l4-1 11-11-3-3L5 16l-1 4z"></path><path d="M14 5l3 3"></path></svg><span style="font-size:8px;font-weight:700;">Reportage</span></div><div style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#B9C4AE;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg><span style="font-size:8px;font-weight:700;">Nuovo</span></div></div>
 
-        <p class="eyebrow" style="margin:20px 0 6px;">Motivazione</p>
-        <p style="font-size:12px;line-height:1.55;color:var(--ink-typed);margin:0;">La direzione più illustrata ed editoriale: carta più chiara e calda, un duo salvia polverosa/terracotta ispirato agli erbari naturalistici, piccoli motivi botanici come separatori. Il più caratterizzato dei tre, ma anche il più lontano dall’estetica attuale — più lavoro per estenderlo a schermate dense come Statistiche.</p>
+        <p class="eyebrow" style="margin:14px 0 6px;">Motivazione</p>
+        <p style="font-size:12px;line-height:1.5;color:var(--ink-typed);margin:0;">La direzione più illustrata ed editoriale: carta più chiara e calda, un duo salvia polverosa/terracotta ispirato agli erbari naturalistici, piccoli motivi botanici come separatori.</p>
+
+        <p class="eyebrow" style="margin:10px 0 6px;">Texture &amp; materia — spinta ulteriore</p>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">
+          <div style="border-radius:9px;overflow:hidden;position:relative;height:60px;background:var(--paper-base);border:1px solid var(--card-border);">
+            <div class="paper-grain" style="opacity:.85;"></div>
+            <span style="position:absolute;left:6px;bottom:5px;font-size:8px;font-weight:700;color:var(--ink-muted);">Grana carta</span>
+          </div>
+          <div style="border-radius:9px;overflow:hidden;position:relative;height:60px;background:var(--card);border:1px solid var(--card-border);display:flex;align-items:center;justify-content:center;">
+            <div class="photo-obj" style="width:34px;height:34px;background:linear-gradient(160deg,#7C8F6E,#2E2A22);transform:rotate(-4deg);"></div>
+            <div class="tape" style="top:4px;left:22px;width:36px;height:14px;transform:rotate(-32deg);"></div>
+            <span style="position:absolute;left:6px;bottom:5px;font-size:8px;font-weight:700;color:var(--ink-muted);">Foto + nastro</span>
+          </div>
+          <div style="border-radius:9px;overflow:hidden;position:relative;height:60px;background:var(--paper-light);border:1px solid var(--card-border);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;">
+            <span class="hand" style="font-size:15px;color:var(--ink-hand);transform:rotate(-3deg);display:block;">Valle del</span>
+            <span class="hand" style="font-size:15px;color:var(--ink-hand);transform:rotate(1.5deg) translateX(3px);display:block;margin-top:-3px;">Treja &middot;</span>
+          </div>
+        </div>
+        <div style="margin-top:6px;height:40px;border-radius:9px;overflow:hidden;position:relative;border:1px solid var(--card-border);display:flex;">
+          <div style="flex:1;background:var(--card);"></div>
+          <div style="width:9px;background:linear-gradient(90deg,rgba(46,42,34,.16),rgba(46,42,34,0) 55%,rgba(46,42,34,.16));"></div>
+          <div style="flex:1;background:var(--paper-light);"></div>
+          <span style="position:absolute;left:7px;bottom:4px;font-size:8px;font-weight:700;color:var(--ink-muted);">Pagine affiancate, piega centrale</span>
+        </div>
       </div>
-    
+
 </div>
 </x-dc>
 </body>

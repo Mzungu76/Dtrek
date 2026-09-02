@@ -1,7 +1,11 @@
 # Mockup "Taccuino Botanico" — riferimento visivo
 
-9 schermate della direzione scelta (su 3 presentate), esportate dal canvas Claude Design usato per
+10 schermate della direzione scelta (su 3 presentate), esportate dal canvas Claude Design usato per
 la revisione — vedi `docs/taccuino-botanico-piano.md` per la guida sintetica alla realizzazione.
+
+`CoverC.dc.html` e `ReportageC.dc.html` sono alla versione aggiornata con la spinta editoriale
+"taccuino di viaggio" (grana carta, foto trattate come oggetti fisici con nastro, scrittura a mano
+irregolare, pagine affiancate con piega centrale) — palette e tipografia invariate.
 
 Questi file sono in formato "Design Component" (`.dc.html`): richiedono il runtime del canvas
 editor (`support.js`, non incluso qui) per essere visualizzati come pagina — non sono codice
@@ -24,3 +28,4 @@ non aggiornato oltre lo stato salvato qui.
 | `ProfiloC.dc.html` | Profilo |
 | `NavigatoreC.dc.html` | Navigatore |
 | `Mappa3DC.dc.html` | Mappa 3D espansa (schermo intero) |
+| `ReportageC.dc.html` | Reportage — nuova, applica la spinta editoriale per intero |
