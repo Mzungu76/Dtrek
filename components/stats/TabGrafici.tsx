@@ -12,6 +12,8 @@ import {
   ComposedChart, ReferenceLine,
 } from 'recharts'
 import { CalendarDays, BarChart2, TrendingUp, Star, Sun } from 'lucide-react'
+import { TornFrame, tornVariant } from '@/components/TornFrame'
+import { TACCUINO_PAPER } from '@/lib/taccuinoTokens'
 
 interface Props { activities: ActivityMeta[] }
 
@@ -117,41 +119,67 @@ export default function TabGrafici({ activities }: Props) {
   return (
     <div className="space-y-6">
       {/* Annual heatmap */}
-      <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-medium text-stone-700 flex items-center gap-2 flex-wrap">
-            <CalendarDays className="w-4 h-4 text-forest-600" /> Attività annuale
-            <InfoButton section="heatmap" />
-          </h3>
-          <div className="flex gap-1">
-            {years.map(y => (
-              <button key={y} onClick={() => setHeatmapYear(y)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
-                  y === heatmapYear ? 'bg-forest-100 text-forest-700' : 'text-stone-400 hover:text-stone-600'
-                }`}>{y}</button>
-            ))}
+      <TornFrame size="card" variant={tornVariant('grafici-heatmap')}>
+        <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-medium text-stone-700 flex items-center gap-2 flex-wrap">
+              <CalendarDays className="w-4 h-4 text-forest-600" /> Attività annuale
+              <InfoButton section="heatmap" />
+            </h3>
+            <div className="flex gap-1">
+              {years.map(y => (
+                <button key={y} onClick={() => setHeatmapYear(y)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
+                    y === heatmapYear ? 'bg-forest-100 text-forest-700' : 'text-stone-400 hover:text-stone-600'
+                  }`}>{y}</button>
+              ))}
+            </div>
           </div>
+          <ActivityHeatmap activities={activities} year={heatmapYear} />
         </div>
-        <ActivityHeatmap activities={activities} year={heatmapYear} />
-      </div>
+      </TornFrame>
 
       {/* Annual comparison */}
       {annualData.length > 1 && (
-        <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-          <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2 flex-wrap">
-            <BarChart2 className="w-4 h-4 text-forest-600" /> Confronto annuale
-            <InfoButton section="confronto-annuale" />
-          </h3>
-          <p className="text-xs text-stone-400 mb-4">Distanza totale e dislivello anno per anno.</p>
-          <div className="h-56 overflow-hidden">
+        <TornFrame size="card" variant={tornVariant('grafici-confronto-annuale')}>
+          <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+            <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2 flex-wrap">
+              <BarChart2 className="w-4 h-4 text-forest-600" /> Confronto annuale
+              <InfoButton section="confronto-annuale" />
+            </h3>
+            <p className="text-xs text-stone-400 mb-4">Distanza totale e dislivello anno per anno.</p>
+            <div className="h-56 overflow-hidden">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={annualData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
+                  <XAxis dataKey="year" tick={{ fontSize: 12 }} tickLine={false} />
+                  <YAxis yAxisId="km"   orientation="left"  tick={{ fontSize: 11 }} tickLine={false} axisLine={false} unit=" km" width={52} />
+                  <YAxis yAxisId="gain" orientation="right" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} unit=" m"  width={56} />
+                  <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
+                    formatter={(v: any, name: string) => [name === 'km' ? `${v} km` : `${v} m`, name === 'km' ? 'Distanza' : 'Dislivello D+']} />
+                  <Legend formatter={(v: string) => v === 'km' ? 'Distanza (km)' : 'Dislivello D+ (m)'} wrapperStyle={{ fontSize: 12 }} />
+                  <Bar yAxisId="km"   dataKey="km"   fill="#378d44" radius={[4,4,0,0]} />
+                  <Bar yAxisId="gain" dataKey="gain" fill="#c05a17" radius={[4,4,0,0]} opacity={0.8} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </TornFrame>
+      )}
+
+      {/* Monthly */}
+      <TornFrame size="card" variant={tornVariant('grafici-mensile')}>
+        <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+          <h3 className="font-medium text-stone-700 mb-4">Distanza e dislivello mensili</h3>
+          <div className="h-64 overflow-hidden">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={annualData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+              <BarChart data={monthlyData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
-                <XAxis dataKey="year" tick={{ fontSize: 12 }} tickLine={false} />
-                <YAxis yAxisId="km"   orientation="left"  tick={{ fontSize: 11 }} tickLine={false} axisLine={false} unit=" km" width={52} />
-                <YAxis yAxisId="gain" orientation="right" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} unit=" m"  width={56} />
+                <XAxis dataKey="month" tick={{ fontSize: 11 }} tickLine={false} />
+                <YAxis yAxisId="km"   orientation="left"  tick={{ fontSize: 11 }} tickLine={false} axisLine={false} unit=" km" width={48} />
+                <YAxis yAxisId="gain" orientation="right" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} unit=" m"  width={52} />
                 <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
-                  formatter={(v: any, name: string) => [name === 'km' ? `${v} km` : `${v} m`, name === 'km' ? 'Distanza' : 'Dislivello D+']} />
+                  formatter={(v: any, name: string) => [name === 'km' ? `${v} km` : `${v} m`, name === 'km' ? 'Distanza' : 'Dislivello']} />
                 <Legend formatter={(v: string) => v === 'km' ? 'Distanza (km)' : 'Dislivello D+ (m)'} wrapperStyle={{ fontSize: 12 }} />
                 <Bar yAxisId="km"   dataKey="km"   fill="#378d44" radius={[4,4,0,0]} />
                 <Bar yAxisId="gain" dataKey="gain" fill="#c05a17" radius={[4,4,0,0]} opacity={0.8} />
@@ -159,226 +187,220 @@ export default function TabGrafici({ activities }: Props) {
             </ResponsiveContainer>
           </div>
         </div>
-      )}
-
-      {/* Monthly */}
-      <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-        <h3 className="font-medium text-stone-700 mb-4">Distanza e dislivello mensili</h3>
-        <div className="h-64 overflow-hidden">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={monthlyData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
-              <XAxis dataKey="month" tick={{ fontSize: 11 }} tickLine={false} />
-              <YAxis yAxisId="km"   orientation="left"  tick={{ fontSize: 11 }} tickLine={false} axisLine={false} unit=" km" width={48} />
-              <YAxis yAxisId="gain" orientation="right" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} unit=" m"  width={52} />
-              <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
-                formatter={(v: any, name: string) => [name === 'km' ? `${v} km` : `${v} m`, name === 'km' ? 'Distanza' : 'Dislivello']} />
-              <Legend formatter={(v: string) => v === 'km' ? 'Distanza (km)' : 'Dislivello D+ (m)'} wrapperStyle={{ fontSize: 12 }} />
-              <Bar yAxisId="km"   dataKey="km"   fill="#378d44" radius={[4,4,0,0]} />
-              <Bar yAxisId="gain" dataKey="gain" fill="#c05a17" radius={[4,4,0,0]} opacity={0.8} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
+      </TornFrame>
 
       {/* NEW: Score evolution */}
       {hasScoreData && (
-        <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-          <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2 flex-wrap">
-            <Star className="w-4 h-4 text-terra-500" /> Evoluzione Score nel Tempo
-            <InfoButton section="score-evolution" />
-          </h3>
-          <p className="text-xs text-stone-400 mb-1">Media mobile su 5 uscite. Trail Score (0-100) · Soddisfazione e Rating scalati a 100.</p>
-          {trailTrend && (
-            <p className={`text-xs font-medium mb-3 ${trailTrend.slope > 0 ? 'text-green-600' : trailTrend.slope < -0.05 ? 'text-red-500' : 'text-stone-500'}`}>
-              Trend Trail Score: {trailTrend.slope > 0.05 ? '↑ in miglioramento' : trailTrend.slope < -0.05 ? '↓ in calo' : '→ stabile'}
-            </p>
-          )}
-          <div className="h-64 overflow-hidden">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
-                <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} hide />
-                <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={32} />
-                <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
-                  labelFormatter={() => ''}
-                  formatter={(v: any, name: string) => {
-                    const labels: Record<string, string> = { trail: 'Trail Score (MA)', sodd: 'Soddisfazione ×10 (MA)', rating: 'Rating ×10 (MA)' }
-                    return [`${v}`, labels[name] ?? name]
-                  }} />
-                {scoreEvolution.trail.length > 0 && (
-                  <Line data={scoreEvolution.trail} type="monotone" dataKey="value" name="trail"
-                    stroke="#378d44" strokeWidth={2.5} dot={false} />
-                )}
-                {scoreEvolution.sodd.length > 0 && (
-                  <Line data={scoreEvolution.sodd} type="monotone" dataKey="value" name="sodd"
-                    stroke="#c05a17" strokeWidth={2} dot={false} strokeDasharray="4 2" />
-                )}
-                {scoreEvolution.rating.length > 0 && (
-                  <Line data={scoreEvolution.rating} type="monotone" dataKey="value" name="rating"
-                    stroke="#2563eb" strokeWidth={2} dot={false} strokeDasharray="2 3" />
-                )}
-                <Legend wrapperStyle={{ fontSize: 11 }} formatter={(v: string) => ({ trail: 'Trail Score', sodd: 'Soddisfazione', rating: 'Rating' }[v] ?? v)} />
-              </ComposedChart>
-            </ResponsiveContainer>
+        <TornFrame size="card" variant={tornVariant('grafici-evoluzione-score')}>
+          <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+            <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2 flex-wrap">
+              <Star className="w-4 h-4 text-terra-500" /> Evoluzione Score nel Tempo
+              <InfoButton section="score-evolution" />
+            </h3>
+            <p className="text-xs text-stone-400 mb-1">Media mobile su 5 uscite. Trail Score (0-100) · Soddisfazione e Rating scalati a 100.</p>
+            {trailTrend && (
+              <p className={`text-xs font-medium mb-3 ${trailTrend.slope > 0 ? 'text-green-600' : trailTrend.slope < -0.05 ? 'text-red-500' : 'text-stone-500'}`}>
+                Trend Trail Score: {trailTrend.slope > 0.05 ? '↑ in miglioramento' : trailTrend.slope < -0.05 ? '↓ in calo' : '→ stabile'}
+              </p>
+            )}
+            <div className="h-64 overflow-hidden">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
+                  <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} hide />
+                  <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={32} />
+                  <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
+                    labelFormatter={() => ''}
+                    formatter={(v: any, name: string) => {
+                      const labels: Record<string, string> = { trail: 'Trail Score (MA)', sodd: 'Soddisfazione ×10 (MA)', rating: 'Rating ×10 (MA)' }
+                      return [`${v}`, labels[name] ?? name]
+                    }} />
+                  {scoreEvolution.trail.length > 0 && (
+                    <Line data={scoreEvolution.trail} type="monotone" dataKey="value" name="trail"
+                      stroke="#378d44" strokeWidth={2.5} dot={false} />
+                  )}
+                  {scoreEvolution.sodd.length > 0 && (
+                    <Line data={scoreEvolution.sodd} type="monotone" dataKey="value" name="sodd"
+                      stroke="#c05a17" strokeWidth={2} dot={false} strokeDasharray="4 2" />
+                  )}
+                  {scoreEvolution.rating.length > 0 && (
+                    <Line data={scoreEvolution.rating} type="monotone" dataKey="value" name="rating"
+                      stroke="#2563eb" strokeWidth={2} dot={false} strokeDasharray="2 3" />
+                  )}
+                  <Legend wrapperStyle={{ fontSize: 11 }} formatter={(v: string) => ({ trail: 'Trail Score', sodd: 'Soddisfazione', rating: 'Rating' }[v] ?? v)} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
           </div>
-        </div>
+        </TornFrame>
       )}
 
       {/* NEW: Seasonal analysis */}
       {hasSeasonal && (
-        <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-          <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2 flex-wrap">
-            <Sun className="w-4 h-4 text-yellow-500" /> Analisi Stagionale
-            <InfoButton section="stagionale" />
-          </h3>
-          <p className="text-xs text-stone-400 mb-4">Km medi e dislivello medio per stagione.</p>
-          {/* Season cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-            {seasonalStats.map(s => (
-              <div key={s.season} className="rounded-xl border p-3 text-center" style={{ borderColor: s.color + '50', backgroundColor: s.color + '10' }}>
-                <p className="text-xs font-semibold mb-2" style={{ color: s.color }}>{s.label}</p>
-                <p className="font-display text-2xl font-bold text-stone-800">{s.count}</p>
-                <p className="text-xs text-stone-400">uscite</p>
-                {s.count > 0 && (
-                  <div className="mt-2 space-y-0.5 text-xs text-stone-500">
-                    <p>{s.avgKm} km medi</p>
-                    <p>↑ {s.avgGain} m medi</p>
-                    {s.avgHR > 0 && <p className="text-red-500">{s.avgHR} bpm</p>}
-                    {s.avgSatisfaction > 0 && <p className="text-amber-600">😊 {s.avgSatisfaction}/10</p>}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-          {seasonalBarData.some(d => d.km > 0) && (
-            <div className="h-48 overflow-hidden">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={seasonalBarData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fontSize: 11 }} tickLine={false} />
-                  <YAxis yAxisId="km"   orientation="left"  tick={{ fontSize: 10 }} tickLine={false} axisLine={false} unit=" km" width={44} />
-                  <YAxis yAxisId="gain" orientation="right" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} unit=" m"  width={48} />
-                  <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
-                    formatter={(v: any, name: string) => [name === 'km' ? `${v} km` : `${v} m`, name === 'km' ? 'Km medi' : 'D+ medio']} />
-                  <Legend formatter={(v: string) => v === 'km' ? 'Km medi/uscita' : 'D+ medio/uscita'} wrapperStyle={{ fontSize: 11 }} />
-                  <Bar yAxisId="km"   dataKey="km"   fill="#378d44" radius={[4,4,0,0]} />
-                  <Bar yAxisId="gain" dataKey="gain" fill="#c05a17" radius={[4,4,0,0]} opacity={0.8} />
-                </BarChart>
-              </ResponsiveContainer>
+        <TornFrame size="card" variant={tornVariant('grafici-stagionale')}>
+          <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+            <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2 flex-wrap">
+              <Sun className="w-4 h-4 text-yellow-500" /> Analisi Stagionale
+              <InfoButton section="stagionale" />
+            </h3>
+            <p className="text-xs text-stone-400 mb-4">Km medi e dislivello medio per stagione.</p>
+            {/* Season cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+              {seasonalStats.map(s => (
+                <div key={s.season} className="rounded-xl border p-3 text-center" style={{ borderColor: s.color + '50', backgroundColor: s.color + '10' }}>
+                  <p className="text-xs font-semibold mb-2" style={{ color: s.color }}>{s.label}</p>
+                  <p className="font-display text-2xl font-bold text-stone-800">{s.count}</p>
+                  <p className="text-xs text-stone-400">uscite</p>
+                  {s.count > 0 && (
+                    <div className="mt-2 space-y-0.5 text-xs text-stone-500">
+                      <p>{s.avgKm} km medi</p>
+                      <p>↑ {s.avgGain} m medi</p>
+                      {s.avgHR > 0 && <p className="text-red-500">{s.avgHR} bpm</p>}
+                      {s.avgSatisfaction > 0 && <p className="text-amber-600">😊 {s.avgSatisfaction}/10</p>}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
-          )}
-        </div>
+            {seasonalBarData.some(d => d.km > 0) && (
+              <div className="h-48 overflow-hidden">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={seasonalBarData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" vertical={false} />
+                    <XAxis dataKey="name" tick={{ fontSize: 11 }} tickLine={false} />
+                    <YAxis yAxisId="km"   orientation="left"  tick={{ fontSize: 10 }} tickLine={false} axisLine={false} unit=" km" width={44} />
+                    <YAxis yAxisId="gain" orientation="right" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} unit=" m"  width={48} />
+                    <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
+                      formatter={(v: any, name: string) => [name === 'km' ? `${v} km` : `${v} m`, name === 'km' ? 'Km medi' : 'D+ medio']} />
+                    <Legend formatter={(v: string) => v === 'km' ? 'Km medi/uscita' : 'D+ medio/uscita'} wrapperStyle={{ fontSize: 11 }} />
+                    <Bar yAxisId="km"   dataKey="km"   fill="#378d44" radius={[4,4,0,0]} />
+                    <Bar yAxisId="gain" dataKey="gain" fill="#c05a17" radius={[4,4,0,0]} opacity={0.8} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+        </TornFrame>
       )}
 
       {/* Weekday distribution */}
-      <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-        <h3 className="font-medium text-stone-700 mb-1">Distribuzione per giorno della settimana</h3>
-        <p className="text-xs text-stone-400 mb-4">In quale giorno esci di più?</p>
-        <div className="h-48 overflow-hidden">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={weekdayData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" vertical={false} />
-              <XAxis dataKey="day" tick={{ fontSize: 12, fontWeight: 600 }} tickLine={false} />
-              <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={28} allowDecimals={false} />
-              <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
-                formatter={(v: any) => [v, 'Escursioni']} />
-              <Bar dataKey="count" fill="#378d44" radius={[6,6,0,0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* Distance histogram */}
-      <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-        <h3 className="font-medium text-stone-700 mb-1">Distribuzione per lunghezza</h3>
-        <p className="text-xs text-stone-400 mb-4">Quante escursioni rientrano in ciascuna fascia di distanza?</p>
-        <div className="h-48 overflow-hidden">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={distHistogram} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" vertical={false} />
-              <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} />
-              <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={28} allowDecimals={false} />
-              <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
-                formatter={(v: any) => [v, 'Escursioni']} />
-              <Bar dataKey="count" fill="#c05a17" radius={[6,6,0,0]} opacity={0.85} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* Altitude distribution (new) */}
-      {altBands.length > 1 && (
-        <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-          <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2 flex-wrap">
-            <TrendingUp className="w-4 h-4 text-forest-600" /> Distribuzione per quota massima
-            <InfoButton section="altimetrica" />
-          </h3>
-          <p className="text-xs text-stone-400 mb-4">Fino a che quota arrivi più spesso?</p>
+      <TornFrame size="card" variant={tornVariant('grafici-giorno-settimana')}>
+        <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+          <h3 className="font-medium text-stone-700 mb-1">Distribuzione per giorno della settimana</h3>
+          <p className="text-xs text-stone-400 mb-4">In quale giorno esci di più?</p>
           <div className="h-48 overflow-hidden">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={altBands} layout="vertical" margin={{ top: 4, right: 40, bottom: 0, left: 56 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 11 }} tickLine={false} allowDecimals={false} />
-                <YAxis type="category" dataKey="label" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={64} />
+              <BarChart data={weekdayData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" vertical={false} />
+                <XAxis dataKey="day" tick={{ fontSize: 12, fontWeight: 600 }} tickLine={false} />
+                <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={28} allowDecimals={false} />
                 <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
                   formatter={(v: any) => [v, 'Escursioni']} />
-                <Bar dataKey="count" fill="#0284c7" radius={[0,4,4,0]} />
+                <Bar dataKey="count" fill="#378d44" radius={[6,6,0,0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
+      </TornFrame>
+
+      {/* Distance histogram */}
+      <TornFrame size="card" variant={tornVariant('grafici-lunghezza')}>
+        <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+          <h3 className="font-medium text-stone-700 mb-1">Distribuzione per lunghezza</h3>
+          <p className="text-xs text-stone-400 mb-4">Quante escursioni rientrano in ciascuna fascia di distanza?</p>
+          <div className="h-48 overflow-hidden">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={distHistogram} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} />
+                <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={28} allowDecimals={false} />
+                <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
+                  formatter={(v: any) => [v, 'Escursioni']} />
+                <Bar dataKey="count" fill="#c05a17" radius={[6,6,0,0]} opacity={0.85} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </TornFrame>
+
+      {/* Altitude distribution (new) */}
+      {altBands.length > 1 && (
+        <TornFrame size="card" variant={tornVariant('grafici-quota-massima')}>
+          <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+            <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2 flex-wrap">
+              <TrendingUp className="w-4 h-4 text-forest-600" /> Distribuzione per quota massima
+              <InfoButton section="altimetrica" />
+            </h3>
+            <p className="text-xs text-stone-400 mb-4">Fino a che quota arrivi più spesso?</p>
+            <div className="h-48 overflow-hidden">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={altBands} layout="vertical" margin={{ top: 4, right: 40, bottom: 0, left: 56 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" horizontal={false} />
+                  <XAxis type="number" tick={{ fontSize: 11 }} tickLine={false} allowDecimals={false} />
+                  <YAxis type="category" dataKey="label" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={64} />
+                  <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
+                    formatter={(v: any) => [v, 'Escursioni']} />
+                  <Bar dataKey="count" fill="#0284c7" radius={[0,4,4,0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </TornFrame>
       )}
 
       {/* FC trend */}
-      <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-        <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2 flex-wrap">
-          Trend fitness (FC media) <InfoButton section="fc-trend" />
-        </h3>
-        <p className="text-xs text-stone-400 mb-4">Se la FC media scende nel tempo mantenendo distanze simili, stai migliorando.</p>
-        <div className="h-56 overflow-hidden">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={fcTrend.filter(d => d.fc > 0)} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
-              <XAxis dataKey="data" tick={{ fontSize: 11 }} tickLine={false} />
-              <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} unit=" bpm" width={60} />
-              <Tooltip formatter={(v: number) => [`${v} bpm`, 'FC media']} contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }} />
-              <Line type="monotone" dataKey="fc" stroke="#C0392B" strokeWidth={2} dot={{ r: 3, fill: '#C0392B' }} />
-            </LineChart>
-          </ResponsiveContainer>
+      <TornFrame size="card" variant={tornVariant('grafici-fc-trend')}>
+        <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+          <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2 flex-wrap">
+            Trend fitness (FC media) <InfoButton section="fc-trend" />
+          </h3>
+          <p className="text-xs text-stone-400 mb-4">Se la FC media scende nel tempo mantenendo distanze simili, stai migliorando.</p>
+          <div className="h-56 overflow-hidden">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={fcTrend.filter(d => d.fc > 0)} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
+                <XAxis dataKey="data" tick={{ fontSize: 11 }} tickLine={false} />
+                <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} unit=" bpm" width={60} />
+                <Tooltip formatter={(v: number) => [`${v} bpm`, 'FC media']} contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }} />
+                <Line type="monotone" dataKey="fc" stroke="#C0392B" strokeWidth={2} dot={{ r: 3, fill: '#C0392B' }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         </div>
-      </div>
+      </TornFrame>
 
       {/* Scatter km vs D+ */}
-      <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-        <h3 className="font-medium text-stone-700 mb-1">Distanza vs Dislivello</h3>
-        <p className="text-xs text-stone-400 mb-4">In alto a destra le escursioni più impegnative.</p>
-        <div className="h-64 overflow-hidden">
-          <ResponsiveContainer width="100%" height="100%">
-            <ScatterChart margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
-              <XAxis type="number" dataKey="km" name="Distanza" unit=" km" tick={{ fontSize: 11 }} tickLine={false} />
-              <YAxis type="number" dataKey="gain" name="Dislivello" unit=" m" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={56} />
-              <ZAxis range={[60, 60]} />
-              <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
-                content={({ payload }) => {
-                  if (!payload?.length) return null
-                  const d = payload[0].payload
-                  return (
-                    <div className="bg-white border border-stone-200 rounded-lg p-2 text-xs shadow">
-                      <p className="font-medium text-stone-700 mb-1">{d.title}</p>
-                      <p className="text-forest-700">{d.km} km</p>
-                      <p className="text-terra-600">↑ {d.gain} m</p>
-                    </div>
-                  )
-                }} />
-              <Scatter data={scatterData} fill="#378d44" fillOpacity={0.75}
-                onClick={(d: any) => window.location.href = `/resoconto/${encodeURIComponent(d.id)}`}
-                style={{ cursor: 'pointer' }} />
-            </ScatterChart>
-          </ResponsiveContainer>
+      <TornFrame size="card" variant={tornVariant('grafici-scatter-km-dislivello')}>
+        <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+          <h3 className="font-medium text-stone-700 mb-1">Distanza vs Dislivello</h3>
+          <p className="text-xs text-stone-400 mb-4">In alto a destra le escursioni più impegnative.</p>
+          <div className="h-64 overflow-hidden">
+            <ResponsiveContainer width="100%" height="100%">
+              <ScatterChart margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
+                <XAxis type="number" dataKey="km" name="Distanza" unit=" km" tick={{ fontSize: 11 }} tickLine={false} />
+                <YAxis type="number" dataKey="gain" name="Dislivello" unit=" m" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={56} />
+                <ZAxis range={[60, 60]} />
+                <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
+                  content={({ payload }) => {
+                    if (!payload?.length) return null
+                    const d = payload[0].payload
+                    return (
+                      <div className="bg-white border border-stone-200 rounded-lg p-2 text-xs shadow">
+                        <p className="font-medium text-stone-700 mb-1">{d.title}</p>
+                        <p className="text-forest-700">{d.km} km</p>
+                        <p className="text-terra-600">↑ {d.gain} m</p>
+                      </div>
+                    )
+                  }} />
+                <Scatter data={scatterData} fill="#378d44" fillOpacity={0.75}
+                  onClick={(d: any) => window.location.href = `/resoconto/${encodeURIComponent(d.id)}`}
+                  style={{ cursor: 'pointer' }} />
+              </ScatterChart>
+            </ResponsiveContainer>
+          </div>
         </div>
-      </div>
+      </TornFrame>
     </div>
   )
 }

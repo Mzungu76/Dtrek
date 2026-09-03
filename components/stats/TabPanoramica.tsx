@@ -15,6 +15,8 @@ import {
   Zap, Target, ChevronUp, ChevronDown, ChevronsUpDown, Map, Info, Share2,
 } from 'lucide-react'
 import { msToKmh } from '@/lib/tcxParser'
+import { TornFrame, tornVariant } from '@/components/TornFrame'
+import { TACCUINO_PAPER } from '@/lib/taccuinoTokens'
 
 const AllRoutesMap = dynamic(() => import('@/components/AllRoutesMap'), { ssr: false })
 
@@ -108,24 +110,26 @@ export default function TabPanoramica({ activities, records, streaks }: Props) {
           <StatCard label="Distanza totale"   value={`${stats.totalDistanceKm.toFixed(1)} km`}                         color="forest" icon={<Route className="w-3.5 h-3.5"/>} />
           <StatCard label="Dislivello totale" value={`${Math.round(stats.totalElevationGain).toLocaleString('it')} m`} color="forest" icon={<Mountain className="w-3.5 h-3.5"/>} />
         </div>
-        <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden mt-3">
-          <button onClick={() => setShowMoreTotals(v => !v)} className="w-full flex items-center justify-between px-5 py-3.5 text-left">
-            <span className="text-sm font-medium text-stone-600">Altri totali (tempo, calorie, FC, quota, DEP…)</span>
-            <ChevronDown className={`w-4 h-4 text-stone-400 transition-transform ${showMoreTotals ? 'rotate-180' : ''}`} />
-          </button>
-          {showMoreTotals && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 px-5 pb-5">
-              <StatCard label="Tempo totale"      value={formatDuration(stats.totalTimeSeconds)}                            color="terra"  icon={<Clock className="w-3.5 h-3.5"/>} />
-              <StatCard label="Calorie totali"    value={`${stats.totalCalories.toLocaleString('it')} kcal`}               color="red"    icon={<Flame className="w-3.5 h-3.5"/>} />
-              <StatCard label="FC media storica"  value={`${stats.avgHeartRate} bpm`}                                      color="red"    icon={<Heart className="w-3.5 h-3.5"/>} />
-              <StatCard label="Quota max mai"     value={`${Math.round(stats.highestAlt)} m`}                              color="blue"   icon={<TrendingUp className="w-3.5 h-3.5"/>} />
-              <StatCard label="DEP totale"        value={`${stats.totalDepKm.toFixed(0)} km`}
-                sub={`equivale all'Italia ×${(stats.totalDepKm / 1300).toFixed(1)}`}
-                color="stone" icon={<Route className="w-3.5 h-3.5"/>}
-                tooltip="Distanza Equivalente in Piano cumulata (formula CAI): somma di km + dislivello/100 di tutte le escursioni." />
-            </div>
-          )}
-        </div>
+        <TornFrame size="card" variant={tornVariant('panoramica-altri-totali')} className="mt-3">
+          <div className="overflow-hidden" style={{ background: TACCUINO_PAPER.card }}>
+            <button onClick={() => setShowMoreTotals(v => !v)} className="w-full flex items-center justify-between px-5 py-3.5 text-left">
+              <span className="text-sm font-medium text-stone-600">Altri totali (tempo, calorie, FC, quota, DEP…)</span>
+              <ChevronDown className={`w-4 h-4 text-stone-400 transition-transform ${showMoreTotals ? 'rotate-180' : ''}`} />
+            </button>
+            {showMoreTotals && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 px-5 pb-5">
+                <StatCard label="Tempo totale"      value={formatDuration(stats.totalTimeSeconds)}                            color="terra"  icon={<Clock className="w-3.5 h-3.5"/>} />
+                <StatCard label="Calorie totali"    value={`${stats.totalCalories.toLocaleString('it')} kcal`}               color="red"    icon={<Flame className="w-3.5 h-3.5"/>} />
+                <StatCard label="FC media storica"  value={`${stats.avgHeartRate} bpm`}                                      color="red"    icon={<Heart className="w-3.5 h-3.5"/>} />
+                <StatCard label="Quota max mai"     value={`${Math.round(stats.highestAlt)} m`}                              color="blue"   icon={<TrendingUp className="w-3.5 h-3.5"/>} />
+                <StatCard label="DEP totale"        value={`${stats.totalDepKm.toFixed(0)} km`}
+                  sub={`equivale all'Italia ×${(stats.totalDepKm / 1300).toFixed(1)}`}
+                  color="stone" icon={<Route className="w-3.5 h-3.5"/>}
+                  tooltip="Distanza Equivalente in Piano cumulata (formula CAI): somma di km + dislivello/100 di tutte le escursioni." />
+              </div>
+            )}
+          </div>
+        </TornFrame>
       </div>
 
       {/* Mappa generale */}
@@ -167,44 +171,47 @@ export default function TabPanoramica({ activities, records, streaks }: Props) {
       </div>
 
       {/* Streak — 2 numeri primari, il resto dietro accordion */}
-      <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-        <h3 className="font-medium text-stone-700 mb-4 flex items-center gap-2 flex-wrap">
-          <Activity className="w-4 h-4 text-forest-600" /> Continuità
-          <InfoButton section="streak" />
-        </h3>
-        <div className="grid grid-cols-2 gap-4">
-          {[
-            { label: 'Streak attuale (giorni)', value: streaks.currentDays },
-            { label: 'Record streak (giorni)',  value: streaks.longestDays },
-          ].map(({ label, value }) => (
-            <div key={label} className="text-center">
-              <p className="font-display text-3xl font-bold text-forest-700">{value}</p>
-              <p className="text-xs text-stone-400 mt-1 leading-tight">{label}</p>
-            </div>
-          ))}
-        </div>
-        <button onClick={() => setShowMoreStreak(v => !v)} className="w-full flex items-center justify-center gap-1.5 text-xs font-medium text-stone-400 hover:text-stone-600 mt-4 pt-3 border-t border-stone-100">
-          Altri dati di continuità <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showMoreStreak ? 'rotate-180' : ''}`} />
-        </button>
-        {showMoreStreak && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4">
+      <TornFrame size="card" variant={tornVariant('panoramica-continuita')}>
+        <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+          <h3 className="font-medium text-stone-700 mb-4 flex items-center gap-2 flex-wrap">
+            <Activity className="w-4 h-4 text-forest-600" /> Continuità
+            <InfoButton section="streak" />
+          </h3>
+          <div className="grid grid-cols-2 gap-4">
             {[
-              { label: 'Streak attuale (settimane)', value: streaks.currentWeeks },
-              { label: 'Record streak (settimane)',  value: streaks.longestWeeks },
-              { label: 'Giorni attivi totali',       value: streaks.totalActiveDays },
-              { label: 'Settimane attive totali',    value: streaks.totalActiveWeeks },
+              { label: 'Streak attuale (giorni)', value: streaks.currentDays },
+              { label: 'Record streak (giorni)',  value: streaks.longestDays },
             ].map(({ label, value }) => (
               <div key={label} className="text-center">
-                <p className="font-display text-2xl font-bold text-forest-700">{value}</p>
+                <p className="font-display text-3xl font-bold text-forest-700">{value}</p>
                 <p className="text-xs text-stone-400 mt-1 leading-tight">{label}</p>
               </div>
             ))}
           </div>
-        )}
-      </div>
+          <button onClick={() => setShowMoreStreak(v => !v)} className="w-full flex items-center justify-center gap-1.5 text-xs font-medium text-stone-400 hover:text-stone-600 mt-4 pt-3 border-t border-stone-100">
+            Altri dati di continuità <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showMoreStreak ? 'rotate-180' : ''}`} />
+          </button>
+          {showMoreStreak && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4">
+              {[
+                { label: 'Streak attuale (settimane)', value: streaks.currentWeeks },
+                { label: 'Record streak (settimane)',  value: streaks.longestWeeks },
+                { label: 'Giorni attivi totali',       value: streaks.totalActiveDays },
+                { label: 'Settimane attive totali',    value: streaks.totalActiveWeeks },
+              ].map(({ label, value }) => (
+                <div key={label} className="text-center">
+                  <p className="font-display text-2xl font-bold text-forest-700">{value}</p>
+                  <p className="text-xs text-stone-400 mt-1 leading-tight">{label}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </TornFrame>
 
       {/* Personal records — dietro un accordion, come nel mockup del restyling */}
-      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+      <TornFrame size="card" variant={tornVariant('panoramica-record-personali')}>
+        <div className="overflow-hidden" style={{ background: TACCUINO_PAPER.card }}>
         <button onClick={() => setShowRecords(v => !v)} className="w-full flex items-center justify-between px-5 py-4 text-left">
           <span className="font-medium text-stone-700 flex items-center gap-2 flex-wrap">
             <Trophy className="w-4 h-4 text-terra-500" /> Record personali
@@ -280,7 +287,8 @@ export default function TabPanoramica({ activities, records, streaks }: Props) {
           )}
         </div>
         )}
-      </div>
+        </div>
+      </TornFrame>
 
       {/* Peak bagging shortcut */}
       <a href="/vette"
@@ -293,7 +301,8 @@ export default function TabPanoramica({ activities, records, streaks }: Props) {
       </a>
 
       {/* Activities table */}
-      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+      <TornFrame size="card" variant={tornVariant('panoramica-tabella-attivita')}>
+      <div className="overflow-hidden" style={{ background: TACCUINO_PAPER.card }}>
         <div className="px-5 py-4 border-b border-stone-100">
           <h3 className="font-medium text-stone-700">Tutte le escursioni</h3>
         </div>
@@ -339,6 +348,7 @@ export default function TabPanoramica({ activities, records, streaks }: Props) {
           </table>
         </ScrollFadeContainer>
       </div>
+      </TornFrame>
     </div>
 
     {showShareMap && (
