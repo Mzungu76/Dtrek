@@ -8,6 +8,7 @@ import { ctsLabel } from '@/lib/trailScore'
 import { formatDuration } from '@/lib/tcxParser'
 import type { AllPercorsiRow } from '@/app/api/percorsi/route'
 import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, FONT_HAND, HandDrawnFrame, TaccuinoPaperTexture } from '@/lib/taccuinoTokens'
+import { TornFrame, tornVariant } from '@/components/TornFrame'
 import { FONT } from '@/lib/designTokens'
 import { metaHasHikingMetrics } from '@/lib/metaTypes'
 import { ArrowDown, ArrowLeft, ArrowUp, Clock, Loader2, Mountain, Route, Search, Star, TrendingUp, X } from 'lucide-react'
@@ -206,18 +207,18 @@ export default function MetePage() {
                     <Link
                       key={p.id}
                       href={`/guida/${encodeURIComponent(p.id)}/prima_di_partire`}
-                      className="flex items-center gap-3.5 py-3.5 px-2 -mx-2"
+                      // py-5 (invece di py-3.5) — spazio per il nastro e l'ombra "sollevata" che
+                      // sporgono oltre il riquadro 87x87 di ogni TornFrame (Taccuino Botanico).
+                      className="flex items-center gap-3.5 py-5 px-2 -mx-2"
                       style={{ borderBottom: `1px dashed ${TACCUINO_PAPER.cardBorder}80` }}
                     >
-                      <div
-                        className="w-[87px] h-[87px] shrink-0 overflow-hidden relative"
-                        style={{
-                          background: TACCUINO_PAPER.card,
-                          border: `3px solid ${TACCUINO_PAPER.light}`,
-                          boxShadow: `0 4px 10px rgba(41,35,30,0.15)`,
-                          transform: `rotate(${cutoutRotation(p.id)}deg)`,
-                        }}
-                      >
+                      {/* Nastro washi + bordo strappato (Taccuino Botanico) al posto del vecchio bordo
+                          bianco spesso + ombra "da card" — calibrato in un mockup dedicato prima di
+                          questo porting, stessa tecnica di app/resoconto/[id]/PhotoGallery.tsx
+                          riscalata (size="map") sul riquadro 87x87. cutoutRotation(p.id) resta
+                          l'inclinazione dell'intero riquadro; tornVariant(p.id) sceglie
+                          indipendentemente taglio e posizione del nastro. */}
+                      <TornFrame size="map" variant={tornVariant(p.id)} rotate={cutoutRotation(p.id)}>
                         {p.routePolyline && p.routePolyline.length > 1
                           ? (
                             <GalleryMapThumb
@@ -230,7 +231,7 @@ export default function MetePage() {
                             />
                           )
                           : <div className="w-full h-full flex items-center justify-center"><Mountain className="w-5 h-5" style={{ color: TACCUINO_PAPER.cardBorder }} /></div>}
-                      </div>
+                      </TornFrame>
                       <div className="min-w-0 flex-1">
                         <p style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 19.5, color: TACCUINO_INK.typed, lineHeight: 1.15 }}>{p.title}</p>
                         {scoreLabel && (
