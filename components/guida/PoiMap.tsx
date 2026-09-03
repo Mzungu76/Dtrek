@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic'
 import { Lock, LockOpen, Maximize2, Minimize2, Box, LocateFixed, Navigation } from 'lucide-react'
 import type { TrackPoint } from '@/lib/tcxParser'
 import type { PoiItem } from '@/lib/overpass'
+import { TornFrame } from '@/components/TornFrame'
 
 const MapView = dynamic(() => import('@/components/MapView'), { ssr: false })
 
@@ -74,11 +75,8 @@ export default function PoiMap({
     setResizeTick(t => t + 1)
   }
 
-  return (
-    <div
-      className={fullscreen ? 'fixed inset-0 z-[70] bg-black isolate' : 'relative isolate rounded-2xl overflow-hidden border'}
-      style={fullscreen ? undefined : { height: 260, borderColor: '#dcd8cc' }}
-    >
+  const mapContent = (
+    <>
       <MapView
         trackPoints={trackPoints ?? []} height="100%" interactive={!locked}
         pois={pois} showPoiLayer poiMarkerScale={1.25} streetViewPoiIds={streetViewPoiIds}
@@ -91,6 +89,7 @@ export default function PoiMap({
         returnMarkers={returnMarkers}
         showDirectionArrows={showArrows}
         resizeSignal={resizeTick}
+        bare
       />
       <div
         className="absolute inset-x-3 z-[1000] flex items-center justify-between"
@@ -128,6 +127,17 @@ export default function PoiMap({
           {fullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
         </button>
       </div>
+    </>
+  )
+
+  return (
+    <div
+      // Nastro washi + bordo strappato (Taccuino Botanico, test) al posto del vecchio riquadro
+      // arrotondato bordato — solo da chiusa, stesso pattern di RouteMapSection.
+      className={fullscreen ? 'fixed inset-0 z-[70] bg-black isolate' : 'relative isolate'}
+      style={fullscreen ? undefined : { height: 260 }}
+    >
+      {fullscreen ? mapContent : <TornFrame size="hero" variant={1}>{mapContent}</TornFrame>}
     </div>
   )
 }

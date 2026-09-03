@@ -572,6 +572,7 @@ export default function ReportReader({
     <div style={{ background: '#fdfcfa' }}>
 
       <ReportHero
+        id={activity.id}
         trackPoints={activity.trackPoints}
         title={activity.title ?? activity.notes ?? 'Escursione'}
         categoryBadge={categoryBadge}

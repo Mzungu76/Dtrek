@@ -9,6 +9,7 @@
 import { useState } from 'react'
 import { Sparkles, TrendingUp, Route, ExternalLink, AlertTriangle, Check, X, Heart, Clock, Box, Repeat } from 'lucide-react'
 import TrailPreviewMap from '@/components/TrailPreviewMap'
+import { TornBottomEdge, tornVariant } from '@/components/TornFrame'
 import { NamedPoiIcon, GroupPoiBadge } from '@/components/PoiIconChip'
 import { isSpecificName } from '@/lib/wikipedia'
 import { classifyTrackShape } from '@/lib/geoUtils'
@@ -202,9 +203,13 @@ export function FoundRouteCard({ data, onChoose, feedback, selectable, onOpen3D 
     : { loop: 'Anello', out_and_back: 'Andata e ritorno', linear: 'Lineare' }[shape]
   return (
     <div className={`bg-white rounded-2xl border overflow-hidden transition-colors ${selectable?.selected ? 'border-forest-500 ring-2 ring-forest-100' : 'border-stone-200'}`}>
-      <div className="relative isolate">
-        <TrailPreviewMap polyline={track.routePolyline} height="180px" expandable />
-        {onOpen3D && <Map3DChip onOpen3D={onOpen3D} />}
+      {/* Strappo sul solo bordo inferiore, senza nastro (Taccuino Botanico, test) — la card è in
+          cima al riquadro, senza un margine sopra su cui il nastro possa proseguire. */}
+      <div className="relative isolate" style={{ height: 180 }}>
+        <TornBottomEdge variant={tornVariant(data.name)}>
+          <TrailPreviewMap polyline={track.routePolyline} height="100%" expandable roundedCorners={false} />
+          {onOpen3D && <Map3DChip onOpen3D={onOpen3D} />}
+        </TornBottomEdge>
       </div>
       <div className="p-4 space-y-2.5">
         {data.isRevisit ? (
@@ -303,9 +308,14 @@ export function BuiltRouteCard({ data, onChoose, feedback, selectable, onOpen3D 
   const displayElevGain = data.elevationGain * (showAsRoundTrip ? 2 : 1)
   return (
     <div className={`bg-white rounded-2xl border overflow-hidden transition-colors ${selectable?.selected ? 'border-forest-500 ring-2 ring-forest-100' : 'border-stone-200'}`}>
-      <div className="relative isolate">
-        <TrailPreviewMap polyline={data.routePolyline} height="180px" expandable />
-        {onOpen3D && <Map3DChip onOpen3D={onOpen3D} />}
+      {/* Strappo sul solo bordo inferiore, senza nastro (Taccuino Botanico, test) — la card è in
+          cima al riquadro, senza un margine sopra su cui il nastro possa proseguire. Nessun id
+          stabile per un candidato "costruito" (non ancora salvato): variante fissa. */}
+      <div className="relative isolate" style={{ height: 180 }}>
+        <TornBottomEdge variant={3}>
+          <TrailPreviewMap polyline={data.routePolyline} height="100%" expandable roundedCorners={false} />
+          {onOpen3D && <Map3DChip onOpen3D={onOpen3D} />}
+        </TornBottomEdge>
       </div>
       <div className="p-4 space-y-2.5">
         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide bg-forest-50 text-forest-700">

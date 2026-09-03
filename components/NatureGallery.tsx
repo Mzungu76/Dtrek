@@ -7,6 +7,7 @@ import { Leaf, PawPrint, X, Loader2, LocateFixed, Lock, LockOpen, Maximize2, Min
 import type { FloraItem } from '@/app/api/flora/route'
 import type { AnimalItem } from '@/app/api/animals/route'
 import type { TrackPoint } from '@/lib/tcxParser'
+import { TornFrame } from '@/components/TornFrame'
 
 const MapView = dynamic(() => import('@/components/MapView'), { ssr: false })
 
@@ -259,32 +260,42 @@ export function NatureGalleryContent({ trackPoints, month, loadingTrack, initial
       ) : (
         <>
           {!loading && markers.length > 0 && (
+            // Nastro washi + bordo strappato (Taccuino Botanico, test) al posto del vecchio
+            // riquadro arrotondato bordato — solo da chiusa, stesso pattern di RouteMapSection.
             <div
-              className={fullscreen ? 'fixed inset-0 z-[70] bg-black isolate' : 'relative isolate rounded-2xl overflow-hidden border mb-4'}
-              style={fullscreen ? undefined : { height: 220, borderColor: '#dcd8cc' }}
+              className={fullscreen ? 'fixed inset-0 z-[70] bg-black isolate' : 'relative isolate mb-4'}
+              style={fullscreen ? undefined : { height: 220 }}
             >
-              <MapView
-                trackPoints={trackPoints} height="100%" interactive={!locked}
-                pois={[]} floraMarkers={markers} floraMarkerColor={meta.color} floraMarkerEmoji={meta.emoji}
-                fitSignal={fitTick}
-              />
-              <div className="absolute inset-x-3 z-[1000] flex items-center justify-between" style={{ top: fullscreen ? 'calc(env(safe-area-inset-top, 0px) + 12px)' : '12px' }}>
-                <div className="flex items-center gap-0.5 bg-black/50 backdrop-blur-md border border-white/15 rounded-full p-1">
-                  <button onClick={() => setFitTick(t => t + 1)} title="Inquadra tutti i punti" className={pillChipIdle}>
-                    <LocateFixed className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => setLocked(v => !v)}
-                    title={locked ? 'Sblocca la mappa per navigarla' : 'Blocca la mappa'}
-                    className={locked ? pillChipIdle : pillChipActive}
-                  >
-                    {locked ? <Lock className="w-4 h-4" /> : <LockOpen className="w-4 h-4" />}
-                  </button>
-                </div>
-                <button onClick={toggleFullscreen} title={fullscreen ? 'Esci da schermo intero' : 'Schermo intero'} className={chipIdle}>
-                  {fullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-                </button>
-              </div>
+              {(() => {
+                const mapContent = (
+                  <>
+                    <MapView
+                      trackPoints={trackPoints} height="100%" interactive={!locked}
+                      pois={[]} floraMarkers={markers} floraMarkerColor={meta.color} floraMarkerEmoji={meta.emoji}
+                      fitSignal={fitTick}
+                      bare
+                    />
+                    <div className="absolute inset-x-3 z-[1000] flex items-center justify-between" style={{ top: fullscreen ? 'calc(env(safe-area-inset-top, 0px) + 12px)' : '12px' }}>
+                      <div className="flex items-center gap-0.5 bg-black/50 backdrop-blur-md border border-white/15 rounded-full p-1">
+                        <button onClick={() => setFitTick(t => t + 1)} title="Inquadra tutti i punti" className={pillChipIdle}>
+                          <LocateFixed className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => setLocked(v => !v)}
+                          title={locked ? 'Sblocca la mappa per navigarla' : 'Blocca la mappa'}
+                          className={locked ? pillChipIdle : pillChipActive}
+                        >
+                          {locked ? <Lock className="w-4 h-4" /> : <LockOpen className="w-4 h-4" />}
+                        </button>
+                      </div>
+                      <button onClick={toggleFullscreen} title={fullscreen ? 'Esci da schermo intero' : 'Schermo intero'} className={chipIdle}>
+                        {fullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </>
+                )
+                return fullscreen ? mapContent : <TornFrame size="hero" variant={2}>{mapContent}</TornFrame>
+              })()}
             </div>
           )}
 

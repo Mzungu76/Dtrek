@@ -807,6 +807,7 @@ export default function GuideReader({
     <div style={{ background: '#fdfcfa' }}>
 
       <GuideHero
+        id={hike.id}
         trackPoints={hike.trackPoints}
         routePolyline={hike.routePolyline}
         title={hikeTitle}

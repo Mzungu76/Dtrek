@@ -111,3 +111,27 @@ export function TornFrame({
 export function TornBadge({ children }: { children: ReactNode }) {
   return <span className="torn-badge" style={{ background: TACCUINO_ACCENT[600] }}>{children}</span>
 }
+
+/**
+ * Strappo sul solo bordo inferiore, senza nastro — per i banner a piena pagina (GuideHero,
+ * ReportHero) che riempiono lo schermo da bordo a bordo: non hanno un margine/pagina intorno su
+ * cui il nastro possa proseguire, e alto/sinistra/destra restano comunque flush con lo schermo
+ * (dove uno strappo non si vedrebbe). Stessa separazione clip-path/filter di TornFrame (vedi il
+ * commento lì) ma solo due layer: un'ombra sotto lo strappo e il contenuto reale sopra, sempre
+ * pienamente opaco (nessuna maschera, non c'è nastro verso cui affievolirsi).
+ */
+export function TornBottomEdge({ variant, className, children }: {
+  /** Da `tornVariant(id)` — 0-3. */
+  variant: number
+  className?: string
+  children: ReactNode
+}) {
+  const idx = ((variant % 4) + 4) % 4
+  const cut = idx + 1
+  return (
+    <div className={`relative w-full h-full ${className ?? ''}`}>
+      <div className="torn-banner-shadow"><div className={`torn-filler torn-cut-bottom-${cut}`} /></div>
+      <div className={`torn-content torn-cut-bottom-${cut}`}>{children}</div>
+    </div>
+  )
+}

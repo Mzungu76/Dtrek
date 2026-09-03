@@ -5,6 +5,7 @@ import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { Car, Clock } from 'lucide-react'
 import type { TrackPoint } from '@/lib/tcxParser'
+import { TornBottomEdge, tornVariant } from '@/components/TornFrame'
 
 const MapView = dynamic(() => import('@/components/MapView'), { ssr: false })
 
@@ -13,6 +14,9 @@ const CAROUSEL_INTERVAL_MS = 5000
 interface HeroPhoto { id: string; url: string }
 
 interface Props {
+  /** Sceglie lo strappo del bordo inferiore (tornVariant) — assente ⇒ ricade sul titolo, così
+   *  resta comunque deterministico invece di un valore fisso per ogni resoconto. */
+  id?: string
   trackPoints?: TrackPoint[]
   title: string
   categoryBadge: string
@@ -39,7 +43,7 @@ interface Props {
  * invece della sola mappa ricolorata (usata comunque come sfondo di riserva quando non c'è ancora
  * nessuna foto).
  */
-export default function ReportHero({ trackPoints, title, categoryBadge, startTime, heroPhotos, driving, weatherIcon, readingMinutes }: Props) {
+export default function ReportHero({ id, trackPoints, title, categoryBadge, startTime, heroPhotos, driving, weatherIcon, readingMinutes }: Props) {
   const points = useMemo(
     () => (trackPoints ?? []).filter(p => p.lat !== undefined && p.lon !== undefined),
     [trackPoints],
@@ -58,9 +62,12 @@ export default function ReportHero({ trackPoints, title, categoryBadge, startTim
 
   return (
     <div
-      className="relative w-full overflow-hidden [--hero-h:clamp(200px,50vw,300px)] md:[--hero-h:clamp(240px,32vw,380px)] lg:[--hero-h:clamp(280px,26vw,460px)]"
+      className="relative w-full [--hero-h:clamp(200px,50vw,300px)] md:[--hero-h:clamp(240px,32vw,380px)] lg:[--hero-h:clamp(280px,26vw,460px)]"
       style={{ height: 'var(--hero-h)' }}
     >
+      {/* Strappo sul solo bordo inferiore, senza nastro (Taccuino Botanico, test) — banner a piena
+          pagina, senza un margine/pagina intorno su cui il nastro possa proseguire. */}
+      <TornBottomEdge variant={tornVariant(id ?? title)}>
       {photos.length > 0 ? (
         photos.map((ph, i) => (
           // eslint-disable-next-line @next/next/no-img-element -- foto propria dell'utente (Supabase Storage), non ottimizzabile da next/image senza un loader remoto dedicato
@@ -153,6 +160,7 @@ export default function ReportHero({ trackPoints, title, categoryBadge, startTim
           )
         )}
       </div>
+      </TornBottomEdge>
     </div>
   )
 }
