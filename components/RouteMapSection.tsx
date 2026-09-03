@@ -3,7 +3,8 @@ import { useState } from 'react'
 import dynamic from 'next/dynamic'
 import { Lock, LockOpen, Maximize2, Minimize2, Box, LocateFixed, Compass, Navigation } from 'lucide-react'
 import ElevationProfileChart from '@/components/ElevationProfileChart'
-import { TornFrame } from '@/components/TornFrame'
+import { TornFrame, tornVariant } from '@/components/TornFrame'
+import { TACCUINO_PAPER } from '@/lib/taccuinoTokens'
 import type { TrackPoint } from '@/lib/tcxParser'
 import type { PoiItem } from '@/lib/overpass'
 import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
@@ -162,7 +163,11 @@ export default function RouteMapSection({
       >
         {fullscreen ? mapContent : <TornFrame size="hero" variant={0}>{mapContent}</TornFrame>}
       </div>
-      <ElevationProfileChart trackPoints={trackPoints ?? []} onHover={setActiveIndex} />
+      <TornFrame size="card" variant={tornVariant('profilo-altimetrico')}>
+        <div className="p-4" style={{ background: TACCUINO_PAPER.light }}>
+          <ElevationProfileChart trackPoints={trackPoints ?? []} onHover={setActiveIndex} />
+        </div>
+      </TornFrame>
     </div>
   )
 }

@@ -221,7 +221,7 @@ export default function VettePage() {
                   <Link
                     href={`/resoconto/${encodeURIComponent(peak.activityId)}`}
                     className="flex items-center gap-4 px-4 py-3 group"
-                    style={{ background: TACCUINO_PAPER.card }}
+                    style={{ background: TACCUINO_PAPER.light }}
                   >
                     <span className="text-stone-300 font-mono text-xs w-5 text-right shrink-0">
                       {sortBy === 'ele' ? idx + 1 : ''}

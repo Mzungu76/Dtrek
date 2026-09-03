@@ -87,7 +87,7 @@ function PoiCard({ entry, highlighted, dimmed, onTap, hasStreetView }: {
               className="object-cover group-hover:scale-105 transition-transform duration-500"
             />
           </div>
-          <div className="p-2.5 pb-1" style={{ background: TACCUINO_PAPER.card }}>
+          <div className="p-2.5 pb-1" style={{ background: TACCUINO_PAPER.light }}>
             <p className="font-display font-semibold text-stone-800 text-[14px] leading-tight line-clamp-1 tracking-wide">
               {entry.title}
             </p>

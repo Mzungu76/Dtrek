@@ -120,7 +120,7 @@ export default function TabGrafici({ activities }: Props) {
     <div className="space-y-6">
       {/* Annual heatmap */}
       <TornFrame size="card" variant={tornVariant('grafici-heatmap')}>
-        <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+        <div className="p-5" style={{ background: TACCUINO_PAPER.light }}>
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-medium text-stone-700 flex items-center gap-2 flex-wrap">
               <CalendarDays className="w-4 h-4 text-forest-600" /> Attività annuale
@@ -142,7 +142,7 @@ export default function TabGrafici({ activities }: Props) {
       {/* Annual comparison */}
       {annualData.length > 1 && (
         <TornFrame size="card" variant={tornVariant('grafici-confronto-annuale')}>
-          <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+          <div className="p-5" style={{ background: TACCUINO_PAPER.light }}>
             <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2 flex-wrap">
               <BarChart2 className="w-4 h-4 text-forest-600" /> Confronto annuale
               <InfoButton section="confronto-annuale" />
@@ -169,7 +169,7 @@ export default function TabGrafici({ activities }: Props) {
 
       {/* Monthly */}
       <TornFrame size="card" variant={tornVariant('grafici-mensile')}>
-        <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+        <div className="p-5" style={{ background: TACCUINO_PAPER.light }}>
           <h3 className="font-medium text-stone-700 mb-4">Distanza e dislivello mensili</h3>
           <div className="h-64 overflow-hidden">
             <ResponsiveContainer width="100%" height="100%">
@@ -192,7 +192,7 @@ export default function TabGrafici({ activities }: Props) {
       {/* NEW: Score evolution */}
       {hasScoreData && (
         <TornFrame size="card" variant={tornVariant('grafici-evoluzione-score')}>
-          <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+          <div className="p-5" style={{ background: TACCUINO_PAPER.light }}>
             <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2 flex-wrap">
               <Star className="w-4 h-4 text-terra-500" /> Evoluzione Score nel Tempo
               <InfoButton section="score-evolution" />
@@ -238,7 +238,7 @@ export default function TabGrafici({ activities }: Props) {
       {/* NEW: Seasonal analysis */}
       {hasSeasonal && (
         <TornFrame size="card" variant={tornVariant('grafici-stagionale')}>
-          <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+          <div className="p-5" style={{ background: TACCUINO_PAPER.light }}>
             <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2 flex-wrap">
               <Sun className="w-4 h-4 text-yellow-500" /> Analisi Stagionale
               <InfoButton section="stagionale" />
@@ -285,7 +285,7 @@ export default function TabGrafici({ activities }: Props) {
 
       {/* Weekday distribution */}
       <TornFrame size="card" variant={tornVariant('grafici-giorno-settimana')}>
-        <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+        <div className="p-5" style={{ background: TACCUINO_PAPER.light }}>
           <h3 className="font-medium text-stone-700 mb-1">Distribuzione per giorno della settimana</h3>
           <p className="text-xs text-stone-400 mb-4">In quale giorno esci di più?</p>
           <div className="h-48 overflow-hidden">
@@ -305,7 +305,7 @@ export default function TabGrafici({ activities }: Props) {
 
       {/* Distance histogram */}
       <TornFrame size="card" variant={tornVariant('grafici-lunghezza')}>
-        <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+        <div className="p-5" style={{ background: TACCUINO_PAPER.light }}>
           <h3 className="font-medium text-stone-700 mb-1">Distribuzione per lunghezza</h3>
           <p className="text-xs text-stone-400 mb-4">Quante escursioni rientrano in ciascuna fascia di distanza?</p>
           <div className="h-48 overflow-hidden">
@@ -326,7 +326,7 @@ export default function TabGrafici({ activities }: Props) {
       {/* Altitude distribution (new) */}
       {altBands.length > 1 && (
         <TornFrame size="card" variant={tornVariant('grafici-quota-massima')}>
-          <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+          <div className="p-5" style={{ background: TACCUINO_PAPER.light }}>
             <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2 flex-wrap">
               <TrendingUp className="w-4 h-4 text-forest-600" /> Distribuzione per quota massima
               <InfoButton section="altimetrica" />
@@ -350,7 +350,7 @@ export default function TabGrafici({ activities }: Props) {
 
       {/* FC trend */}
       <TornFrame size="card" variant={tornVariant('grafici-fc-trend')}>
-        <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+        <div className="p-5" style={{ background: TACCUINO_PAPER.light }}>
           <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2 flex-wrap">
             Trend fitness (FC media) <InfoButton section="fc-trend" />
           </h3>
@@ -371,7 +371,7 @@ export default function TabGrafici({ activities }: Props) {
 
       {/* Scatter km vs D+ */}
       <TornFrame size="card" variant={tornVariant('grafici-scatter-km-dislivello')}>
-        <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+        <div className="p-5" style={{ background: TACCUINO_PAPER.light }}>
           <h3 className="font-medium text-stone-700 mb-1">Distanza vs Dislivello</h3>
           <p className="text-xs text-stone-400 mb-4">In alto a destra le escursioni più impegnative.</p>
           <div className="h-64 overflow-hidden">

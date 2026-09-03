@@ -111,7 +111,7 @@ export default function TabPanoramica({ activities, records, streaks }: Props) {
           <StatCard label="Dislivello totale" value={`${Math.round(stats.totalElevationGain).toLocaleString('it')} m`} color="forest" icon={<Mountain className="w-3.5 h-3.5"/>} />
         </div>
         <TornFrame size="card" variant={tornVariant('panoramica-altri-totali')} className="mt-3">
-          <div className="overflow-hidden" style={{ background: TACCUINO_PAPER.card }}>
+          <div className="overflow-hidden" style={{ background: TACCUINO_PAPER.light }}>
             <button onClick={() => setShowMoreTotals(v => !v)} className="w-full flex items-center justify-between px-5 py-3.5 text-left">
               <span className="text-sm font-medium text-stone-600">Altri totali (tempo, calorie, FC, quota, DEP…)</span>
               <ChevronDown className={`w-4 h-4 text-stone-400 transition-transform ${showMoreTotals ? 'rotate-180' : ''}`} />
@@ -148,7 +148,11 @@ export default function TabPanoramica({ activities, records, streaks }: Props) {
           )}
         </div>
         {routesWithPolyline.length > 0 ? (
-          <AllRoutesMap routes={mapRoutes} height="380px" />
+          <div style={{ height: '380px' }}>
+            <TornFrame size="hero" variant={tornVariant('mappa-generale')}>
+              <AllRoutesMap routes={mapRoutes} height="100%" bare />
+            </TornFrame>
+          </div>
         ) : (
           <div
             className="flex items-center justify-center rounded-xl bg-stone-100 border border-stone-200 text-stone-400"
@@ -172,7 +176,7 @@ export default function TabPanoramica({ activities, records, streaks }: Props) {
 
       {/* Streak — 2 numeri primari, il resto dietro accordion */}
       <TornFrame size="card" variant={tornVariant('panoramica-continuita')}>
-        <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+        <div className="p-5" style={{ background: TACCUINO_PAPER.light }}>
           <h3 className="font-medium text-stone-700 mb-4 flex items-center gap-2 flex-wrap">
             <Activity className="w-4 h-4 text-forest-600" /> Continuità
             <InfoButton section="streak" />
@@ -211,7 +215,7 @@ export default function TabPanoramica({ activities, records, streaks }: Props) {
 
       {/* Personal records — dietro un accordion, come nel mockup del restyling */}
       <TornFrame size="card" variant={tornVariant('panoramica-record-personali')}>
-        <div className="overflow-hidden" style={{ background: TACCUINO_PAPER.card }}>
+        <div className="overflow-hidden" style={{ background: TACCUINO_PAPER.light }}>
         <button onClick={() => setShowRecords(v => !v)} className="w-full flex items-center justify-between px-5 py-4 text-left">
           <span className="font-medium text-stone-700 flex items-center gap-2 flex-wrap">
             <Trophy className="w-4 h-4 text-terra-500" /> Record personali
@@ -302,7 +306,7 @@ export default function TabPanoramica({ activities, records, streaks }: Props) {
 
       {/* Activities table */}
       <TornFrame size="card" variant={tornVariant('panoramica-tabella-attivita')}>
-      <div className="overflow-hidden" style={{ background: TACCUINO_PAPER.card }}>
+      <div className="overflow-hidden" style={{ background: TACCUINO_PAPER.light }}>
         <div className="px-5 py-4 border-b border-stone-100">
           <h3 className="font-medium text-stone-700">Tutte le escursioni</h3>
         </div>

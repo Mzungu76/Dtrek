@@ -265,7 +265,7 @@ export default function TabConfronto({ activities, preselectId }: Props) {
         <div className="space-y-6">
           {/* Resoconto AI */}
           <TornFrame size="card" variant={tornVariant('confronto-resoconto-ai')}>
-          <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+          <div className="p-5" style={{ background: TACCUINO_PAPER.light }}>
             {!aiResult && !aiLoading && (
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div className="flex items-start gap-3">
@@ -331,7 +331,7 @@ export default function TabConfronto({ activities, preselectId }: Props) {
 
           {/* Stats table */}
           <TornFrame size="card" variant={tornVariant('confronto-tabella-statistiche')}>
-          <div className="overflow-hidden" style={{ background: TACCUINO_PAPER.card }}>
+          <div className="overflow-hidden" style={{ background: TACCUINO_PAPER.light }}>
             <div className="px-5 py-4 border-b border-stone-100 flex items-center justify-between">
               <h3 className="font-medium text-stone-700">Confronto statistiche</h3>
               {shareActivities.length >= 2 && (
@@ -386,7 +386,7 @@ export default function TabConfronto({ activities, preselectId }: Props) {
 
           {/* Radar */}
           <TornFrame size="card" variant={tornVariant('confronto-radar')}>
-          <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+          <div className="p-5" style={{ background: TACCUINO_PAPER.light }}>
             <h3 className="font-medium text-stone-700 mb-4">Radar confronto (normalizzato 0-100)</h3>
             <div className="h-80 overflow-hidden">
               <ResponsiveContainer width="100%" height="100%">
@@ -408,7 +408,7 @@ export default function TabConfronto({ activities, preselectId }: Props) {
 
           {/* Elevation profiles + HR zones */}
           <TornFrame size="card" variant={tornVariant('confronto-profili-altimetrici')}>
-          <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+          <div className="p-5" style={{ background: TACCUINO_PAPER.light }}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-medium text-stone-700 flex items-center gap-1.5 flex-wrap">
                 Profili altimetrici sovrapposti + Zone FC

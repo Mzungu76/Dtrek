@@ -15,6 +15,11 @@ interface Props {
   routes: RouteEntry[]
   height?: string
   interactive?: boolean
+  /** Toglie il bordo/ombra/angoli arrotondati propri — usato quando il chiamante avvolge già
+   *  questa mappa in un bordo strappato (components/TornFrame.tsx): senza, l'angolo arrotondato
+   *  non allineato allo strappo lascerebbe scoperto un pezzetto di riquadro, rivelando dietro il
+   *  riempimento invisibile dell'ombra (stesso bug corretto altrove passando `bare` a MapView). */
+  bare?: boolean
 }
 
 // Palette condivisa (lib/designTokens.ts), non più una copia locale: prima questo file, la
@@ -23,7 +28,7 @@ interface Props {
 // nella legenda o nel PDF.
 const PALETTE = ROUTE_COLORS
 
-export default function AllRoutesMap({ routes, height = '500px', interactive = true }: Props) {
+export default function AllRoutesMap({ routes, height = '500px', interactive = true, bare = false }: Props) {
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstance = useRef<L.Map | null>(null)
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
@@ -131,7 +136,7 @@ export default function AllRoutesMap({ routes, height = '500px', interactive = t
   if (validRoutes.length === 0) {
     return (
       <div
-        className="flex items-center justify-center rounded-xl bg-stone-100 border border-stone-200 text-stone-400 text-sm"
+        className={`flex items-center justify-center bg-stone-100 text-stone-400 text-sm ${bare ? '' : 'rounded-xl border border-stone-200'}`}
         style={{ height }}
       >
         Nessun percorso GPS disponibile
@@ -143,7 +148,7 @@ export default function AllRoutesMap({ routes, height = '500px', interactive = t
     <div
       ref={mapRef}
       style={{ height }}
-      className="rounded-xl overflow-hidden border border-stone-200 shadow-sm"
+      className={bare ? 'overflow-hidden' : 'rounded-xl overflow-hidden border border-stone-200 shadow-sm'}
     />
   )
 }

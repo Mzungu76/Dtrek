@@ -139,7 +139,7 @@ function PercorsiPerTePageInner() {
 
         {status === 'empty_no_location' && (
           <TornFrame size="card" variant={tornVariant('empty-no-location')}>
-            <div className="p-5 text-center space-y-2" style={{ background: TACCUINO_PAPER.card }}>
+            <div className="p-5 text-center space-y-2" style={{ background: TACCUINO_PAPER.light }}>
               <MapPin className="w-6 h-6 mx-auto text-stone-300" />
               <p className="text-sm text-stone-600">
                 Completa la tua prima escursione, o imposta un indirizzo di partenza nel profilo, per ricevere consigli personalizzati.
@@ -150,13 +150,13 @@ function PercorsiPerTePageInner() {
 
         {status === 'error' && (
           <TornFrame size="card" variant={tornVariant('error')}>
-            <div className="p-5 text-sm text-red-600" style={{ background: TACCUINO_PAPER.card }}>{errorMsg}</div>
+            <div className="p-5 text-sm text-red-600" style={{ background: TACCUINO_PAPER.light }}>{errorMsg}</div>
           </TornFrame>
         )}
 
         {status === 'pending' && (
           <TornFrame size="card" variant={tornVariant('pending')}>
-            <div className="p-5 text-center space-y-2" style={{ background: TACCUINO_PAPER.card }}>
+            <div className="p-5 text-center space-y-2" style={{ background: TACCUINO_PAPER.light }}>
               <Loader2 className="w-5 h-5 mx-auto text-stone-300 animate-spin" />
               <p className="text-sm text-stone-600">
                 Stiamo ancora preparando i tuoi consigli — torna tra poco, non serve fare nulla.
@@ -167,7 +167,7 @@ function PercorsiPerTePageInner() {
 
         {status === 'ok' && cards.length === 0 && (
           <TornFrame size="card" variant={tornVariant('ok-empty')}>
-            <div className="p-5 text-sm text-stone-600" style={{ background: TACCUINO_PAPER.card }}>
+            <div className="p-5 text-sm text-stone-600" style={{ background: TACCUINO_PAPER.light }}>
               Nessun percorso disponibile per ora nella tua zona — riprova dopo la prossima escursione.
             </div>
           </TornFrame>

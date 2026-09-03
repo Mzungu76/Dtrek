@@ -25,7 +25,7 @@ export function ScoreTile({ title, score, label, color, badge, open, onToggle, h
       {/* Sfondo opaco sotto la tinta trasparente del punteggio (${color}10): senza, quel 6% di
           opacità lascerebbe trasparire il riempimento invisibile di .torn-cast sotto (nero) invece
           della carta. */}
-      <div style={{ background: TACCUINO_PAPER.card }}>
+      <div style={{ background: TACCUINO_PAPER.light }}>
         <button
           onClick={onToggle}
           disabled={!hasDetail}
