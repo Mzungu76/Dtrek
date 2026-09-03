@@ -41,7 +41,7 @@ export function AssessmentPanel({ a }: { a: HikeAssessment }) {
     <div className="space-y-3">
       <Kicker>La tua valutazione</Kicker>
       <TornFrame size="card" variant={tornVariant('valutazione')}>
-      <div className="px-5 py-5 space-y-4" style={{ background: TACCUINO_PAPER.card }}>
+      <div className="px-5 py-5 space-y-4" style={{ background: TACCUINO_PAPER.light }}>
         {a.summary && (
           <p className={`text-sm font-medium leading-relaxed ${textPrimary}`}>{a.summary}</p>
         )}

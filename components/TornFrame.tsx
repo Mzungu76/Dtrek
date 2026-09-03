@@ -55,10 +55,14 @@ const HERO_TAPE: TapePreset[] = [
   { tapeX: '50%', tapeY: '4px', rotate: -4, style: { top: -14, left: '50%', marginLeft: -38 } },
 ]
 // Riquadro "carta" generico (grafici, tessere, righe elenco) — larghezza intrinseca come una
-// card qualunque (non 100% garantito come "hero"): nastro comunque centrato in alto in %, stessa
-// ragione di HERO_TAPE.
+// card qualunque (non 100% garantito come "hero"): quattro posizioni in % (non solo al centro,
+// per un effetto più realistico — un nastro vero non finisce sempre nello stesso punto), stessa
+// ragione di HERO_TAPE per l'uso di % invece di px.
 const CARD_TAPE: TapePreset[] = [
+  { tapeX: '18%', tapeY: '3px', rotate: -8, style: { top: -11, left: '18%', marginLeft: -28 } },
+  { tapeX: '82%', tapeY: '3px', rotate: 7, style: { top: -12, left: '82%', marginLeft: -28 } },
   { tapeX: '50%', tapeY: '3px', rotate: -4, style: { top: -11, left: '50%', marginLeft: -28 } },
+  { tapeX: '32%', tapeY: '3px', rotate: 8, style: { top: -10, left: '32%', marginLeft: -28 } },
 ]
 const TAPE_PRESETS: Record<TornSize, TapePreset[]> = { photo: PHOTO_TAPE, map: MAP_TAPE, hero: HERO_TAPE, card: CARD_TAPE }
 /** .torn-cut-N (foto/mappe/hero) usa jitter percentuale, tarato su riquadri piccoli/quadrati —

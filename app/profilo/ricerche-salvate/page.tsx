@@ -86,7 +86,7 @@ export default function RicercheSalvatePage() {
         <div className="space-y-5">
           {searches?.map(s => (
             <TornFrame key={s.id} size="card" variant={tornVariant(s.id)}>
-              <div className="flex items-center gap-3 p-4" style={{ background: TACCUINO_PAPER.card }}>
+              <div className="flex items-center gap-3 p-4" style={{ background: TACCUINO_PAPER.light }}>
                 <Link href={`/profilo/ricerche-salvate/${encodeURIComponent(s.id)}`} className="flex items-center gap-3 flex-1 min-w-0">
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${s.mode === 'su_misura' ? 'bg-forest-50 text-forest-600' : 'bg-terra-50 text-terra-600'}`}>
                     {s.mode === 'su_misura' ? <Route className="w-4.5 h-4.5" /> : <Search className="w-4.5 h-4.5" />}

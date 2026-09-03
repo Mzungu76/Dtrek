@@ -83,7 +83,7 @@ function WeatherCard({ tornKey, panelClassName, children }: { tornKey: string; p
   }
   return (
     <TornFrame size="card" variant={tornVariant(tornKey)}>
-      <div className="p-4" style={{ background: TACCUINO_PAPER.card }}>{children}</div>
+      <div className="p-4" style={{ background: TACCUINO_PAPER.light }}>{children}</div>
     </TornFrame>
   )
 }

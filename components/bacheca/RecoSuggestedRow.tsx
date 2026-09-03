@@ -37,7 +37,7 @@ export default function RecoSuggestedRow({ cards }: { cards: RecommendationCard[
                   <span className="truncate">{s.isRevisit ? 'Preferito' : (s.reasonTag ?? 'Consigliato')}</span>
                 </div>
               </div>
-              <div className="p-2.5 min-w-0" style={{ background: TACCUINO_PAPER.card }}>
+              <div className="p-2.5 min-w-0" style={{ background: TACCUINO_PAPER.light }}>
                 <p className="text-[12.5px] font-semibold text-stone-800 leading-snug line-clamp-2">{s.title}</p>
                 <p className="text-[11px] text-stone-400 mt-1">
                   {(s.distanceMeters / 1000).toFixed(1)} km · {s.hasElevation ? '' : '~'}+{Math.round(s.elevationGain)} m

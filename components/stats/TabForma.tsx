@@ -76,8 +76,8 @@ export default function TabForma({ activities }: Props) {
     <div className="space-y-6">
       {latestForm && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <TornFrame size="card" variant={tornVariant('forma-bilancio-fisico')}>
-            <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+          <TornFrame size="card" variant={tornVariant('forma-bilancio-fisico')} className="h-full">
+            <div className="p-5 h-full" style={{ background: TACCUINO_PAPER.light }}>
               <p className="text-xs text-stone-400 uppercase tracking-wide font-medium mb-1 flex items-center gap-1.5 flex-wrap">
                 <Brain className="w-3.5 h-3.5" /> Bilancio fisico attuale
                 <InfoButton section="training-load" />
@@ -86,15 +86,15 @@ export default function TabForma({ activities }: Props) {
               <p className="text-xs text-stone-500 mt-1">{latestForm.status.description}</p>
             </div>
           </TornFrame>
-          <TornFrame size="card" variant={tornVariant('forma-ctl')}>
-            <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+          <TornFrame size="card" variant={tornVariant('forma-ctl')} className="h-full">
+            <div className="p-5 h-full" style={{ background: TACCUINO_PAPER.light }}>
               <p className="text-xs text-stone-400 uppercase tracking-wide font-medium mb-1">CTL — Fitness (τ=42gg)</p>
               <p className="text-2xl font-bold text-forest-700">{latestForm.ctl.toFixed(1)}</p>
               <p className="text-xs text-stone-500 mt-1">Carico cronico accumulato</p>
             </div>
           </TornFrame>
-          <TornFrame size="card" variant={tornVariant('forma-atl')}>
-            <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+          <TornFrame size="card" variant={tornVariant('forma-atl')} className="h-full">
+            <div className="p-5 h-full" style={{ background: TACCUINO_PAPER.light }}>
               <p className="text-xs text-stone-400 uppercase tracking-wide font-medium mb-1">ATL — Fatica (τ=7gg)</p>
               <p className="text-2xl font-bold text-terra-600">{latestForm.atl.toFixed(1)}</p>
               <p className="text-xs text-stone-500 mt-1">Carico acuto recente</p>
@@ -105,7 +105,7 @@ export default function TabForma({ activities }: Props) {
 
       {weeklyAvg && (
         <TornFrame size="card" variant={tornVariant('forma-medie-settimanali')}>
-          <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+          <div className="p-5" style={{ background: TACCUINO_PAPER.light }}>
             <h3 className="font-medium text-stone-700 mb-4 flex items-center gap-2 flex-wrap">
               <Activity className="w-4 h-4 text-forest-600" /> Medie settimanali (ultime 16 settimane)
               <InfoButton section="volume-settimanale" />
@@ -128,7 +128,7 @@ export default function TabForma({ activities }: Props) {
       )}
 
       <TornFrame size="card" variant={tornVariant('forma-volume-settimanale')}>
-        <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+        <div className="p-5" style={{ background: TACCUINO_PAPER.light }}>
           <h3 className="font-medium text-stone-700 mb-1">Volume settimanale — ultime 16 settimane</h3>
           <p className="text-xs text-stone-400 mb-4">Km percorsi e dislivello per settimana.</p>
           <div className="h-56 overflow-hidden">
@@ -150,7 +150,7 @@ export default function TabForma({ activities }: Props) {
       </TornFrame>
 
       <TornFrame size="card" variant={tornVariant('forma-progressione-mensile')}>
-        <div className="overflow-hidden" style={{ background: TACCUINO_PAPER.card }}>
+        <div className="overflow-hidden" style={{ background: TACCUINO_PAPER.light }}>
           <div className="px-5 py-4 border-b border-stone-100">
             <h3 className="font-medium text-stone-700">Progressione mensile — ultimi 6 mesi</h3>
           </div>
@@ -179,7 +179,7 @@ export default function TabForma({ activities }: Props) {
       </TornFrame>
 
       <TornFrame size="card" variant={tornVariant('forma-training-load')}>
-        <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+        <div className="p-5" style={{ background: TACCUINO_PAPER.light }}>
           <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2 flex-wrap">
             <Brain className="w-4 h-4 text-forest-600" /> Training Load — ultimi 90 giorni
             <InfoButton section="training-load" />
@@ -213,7 +213,7 @@ export default function TabForma({ activities }: Props) {
       </TornFrame>
 
       <TornFrame size="card" variant={tornVariant('forma-carico-giornaliero')}>
-        <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+        <div className="p-5" style={{ background: TACCUINO_PAPER.light }}>
           <h3 className="font-medium text-stone-700 mb-4 flex items-center gap-2 flex-wrap">
             Carico giornaliero (TSS stimato) <InfoButton section="tss" />
           </h3>

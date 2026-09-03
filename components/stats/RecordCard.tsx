@@ -12,7 +12,7 @@ export default function RecordCard({ label, value, sub, icon, href, polyline }: 
 }) {
   const inner = (
     <TornFrame size="card" variant={tornVariant(label)} className="h-full">
-      <div className="p-4 flex items-start gap-3 h-full" style={{ background: TACCUINO_PAPER.card }}>
+      <div className="p-4 flex items-start gap-3 h-full" style={{ background: TACCUINO_PAPER.light }}>
         <div className="text-terra-500 mt-0.5 shrink-0">{icon}</div>
         <div className="min-w-0 flex-1">
           <p className="text-xs text-stone-400 uppercase tracking-wide font-medium">{label}</p>

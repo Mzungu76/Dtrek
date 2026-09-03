@@ -111,8 +111,8 @@ export default function TabFisico({ activities }: Props) {
       {/* ── Stato Attuale ── */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* Recovery Score */}
-        <TornFrame size="card" variant={tornVariant('fisico-recovery-score')}>
-          <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+        <TornFrame size="card" variant={tornVariant('fisico-recovery-score')} className="h-full">
+          <div className="p-5 h-full" style={{ background: TACCUINO_PAPER.light }}>
             <p className="text-xs text-stone-400 uppercase tracking-wide font-medium mb-2 flex items-center gap-1.5 flex-wrap">
               <Activity className="w-3.5 h-3.5" /> Recovery Score
               <InfoButton section="recovery-score" />
@@ -134,8 +134,8 @@ export default function TabFisico({ activities }: Props) {
         </TornFrame>
 
         {/* Fitness Score */}
-        <TornFrame size="card" variant={tornVariant('fisico-fitness-score')}>
-          <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+        <TornFrame size="card" variant={tornVariant('fisico-fitness-score')} className="h-full">
+          <div className="p-5 h-full" style={{ background: TACCUINO_PAPER.light }}>
             <p className="text-xs text-stone-400 uppercase tracking-wide font-medium mb-2 flex items-center gap-1.5 flex-wrap">
               <TrendingUp className="w-3.5 h-3.5" /> Fitness Score
               <InfoButton section="fitness-score" />
@@ -166,8 +166,8 @@ export default function TabFisico({ activities }: Props) {
         </TornFrame>
 
         {/* VO2max estimate */}
-        <TornFrame size="card" variant={tornVariant('fisico-vo2max')}>
-          <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+        <TornFrame size="card" variant={tornVariant('fisico-vo2max')} className="h-full">
+          <div className="p-5 h-full" style={{ background: TACCUINO_PAPER.light }}>
             <p className="text-xs text-stone-400 uppercase tracking-wide font-medium mb-2 flex items-center gap-1.5 flex-wrap">
               <Heart className="w-3.5 h-3.5" /> VO₂max Stimato
               <InfoButton section="vo2max" />
@@ -201,7 +201,7 @@ export default function TabFisico({ activities }: Props) {
 
       {/* ── Efficienza Aerobica (EF) ── */}
       <TornFrame size="card" variant={tornVariant('fisico-ef-aerobica')}>
-        <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+        <div className="p-5" style={{ background: TACCUINO_PAPER.light }}>
           <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2 flex-wrap">
             <Zap className="w-4 h-4 text-forest-600" /> Efficienza Aerobica nel Tempo
             <InfoButton section="ef-aerobica" />
@@ -245,7 +245,7 @@ export default function TabFisico({ activities }: Props) {
 
       {/* ── Efficienza Verticale (IEV) ── */}
       <TornFrame size="card" variant={tornVariant('fisico-iev')}>
-        <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+        <div className="p-5" style={{ background: TACCUINO_PAPER.light }}>
           <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2 flex-wrap">
             <Zap className="w-4 h-4 text-amber-600" /> Efficienza Verticale nel Tempo
             <InfoButton section="iev" />
@@ -290,7 +290,7 @@ export default function TabFisico({ activities }: Props) {
       {/* ── Distribuzione sforzo (Polarized) ── */}
       {polarized.hasData && (
         <TornFrame size="card" variant={tornVariant('fisico-distribuzione-polarizzata')}>
-          <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+          <div className="p-5" style={{ background: TACCUINO_PAPER.light }}>
             <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2 flex-wrap">
               <Activity className="w-4 h-4 text-forest-600" /> Distribuzione Intensità Allenamento
               <InfoButton section="distribuzione-polarizzata" />
@@ -332,7 +332,7 @@ export default function TabFisico({ activities }: Props) {
       {/* ── Calorie per kg ── */}
       {calorieEff.length > 0 && (
         <TornFrame size="card" variant={tornVariant('fisico-calorie-metabolismo')}>
-          <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+          <div className="p-5" style={{ background: TACCUINO_PAPER.light }}>
             <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2 flex-wrap">
               Efficienza Metabolica (kcal/kg/h)
               <InfoButton section="calorie-metabolismo" />

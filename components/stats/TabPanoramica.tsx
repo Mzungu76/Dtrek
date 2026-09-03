@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { msToKmh } from '@/lib/tcxParser'
 import { TornFrame, tornVariant } from '@/components/TornFrame'
+import { PaperAccordion } from '@/components/PaperAccordion'
 import { TACCUINO_PAPER } from '@/lib/taccuinoTokens'
 
 const AllRoutesMap = dynamic(() => import('@/components/AllRoutesMap'), { ssr: false })
@@ -110,26 +111,31 @@ export default function TabPanoramica({ activities, records, streaks }: Props) {
           <StatCard label="Distanza totale"   value={`${stats.totalDistanceKm.toFixed(1)} km`}                         color="forest" icon={<Route className="w-3.5 h-3.5"/>} />
           <StatCard label="Dislivello totale" value={`${Math.round(stats.totalElevationGain).toLocaleString('it')} m`} color="forest" icon={<Mountain className="w-3.5 h-3.5"/>} />
         </div>
-        <TornFrame size="card" variant={tornVariant('panoramica-altri-totali')} className="mt-3">
-          <div className="overflow-hidden" style={{ background: TACCUINO_PAPER.card }}>
-            <button onClick={() => setShowMoreTotals(v => !v)} className="w-full flex items-center justify-between px-5 py-3.5 text-left">
-              <span className="text-sm font-medium text-stone-600">Altri totali (tempo, calorie, FC, quota, DEP…)</span>
-              <ChevronDown className={`w-4 h-4 text-stone-400 transition-transform ${showMoreTotals ? 'rotate-180' : ''}`} />
-            </button>
-            {showMoreTotals && (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 px-5 pb-5">
-                <StatCard label="Tempo totale"      value={formatDuration(stats.totalTimeSeconds)}                            color="terra"  icon={<Clock className="w-3.5 h-3.5"/>} />
-                <StatCard label="Calorie totali"    value={`${stats.totalCalories.toLocaleString('it')} kcal`}               color="red"    icon={<Flame className="w-3.5 h-3.5"/>} />
-                <StatCard label="FC media storica"  value={`${stats.avgHeartRate} bpm`}                                      color="red"    icon={<Heart className="w-3.5 h-3.5"/>} />
-                <StatCard label="Quota max mai"     value={`${Math.round(stats.highestAlt)} m`}                              color="blue"   icon={<TrendingUp className="w-3.5 h-3.5"/>} />
-                <StatCard label="DEP totale"        value={`${stats.totalDepKm.toFixed(0)} km`}
-                  sub={`equivale all'Italia ×${(stats.totalDepKm / 1300).toFixed(1)}`}
-                  color="stone" icon={<Route className="w-3.5 h-3.5"/>}
-                  tooltip="Distanza Equivalente in Piano cumulata (formula CAI): somma di km + dislivello/100 di tutte le escursioni." />
-              </div>
-            )}
-          </div>
-        </TornFrame>
+        <PaperAccordion
+          id="panoramica-altri-totali"
+          open={showMoreTotals}
+          className="mt-3"
+          header={
+            <div style={{ background: TACCUINO_PAPER.light }}>
+              <button onClick={() => setShowMoreTotals(v => !v)} className="w-full flex items-center justify-between px-5 py-3.5 text-left">
+                <span className="text-sm font-medium text-stone-600">Altri totali (tempo, calorie, FC, quota, DEP…)</span>
+                <ChevronDown className={`w-4 h-4 text-stone-400 transition-transform ${showMoreTotals ? 'rotate-180' : ''}`} />
+              </button>
+            </div>
+          }
+          sheets={[
+            <div key="totali" className="grid grid-cols-2 sm:grid-cols-3 gap-3 px-5 pt-4 pb-5">
+              <StatCard label="Tempo totale"      value={formatDuration(stats.totalTimeSeconds)}                            color="terra"  icon={<Clock className="w-3.5 h-3.5"/>} />
+              <StatCard label="Calorie totali"    value={`${stats.totalCalories.toLocaleString('it')} kcal`}               color="red"    icon={<Flame className="w-3.5 h-3.5"/>} />
+              <StatCard label="FC media storica"  value={`${stats.avgHeartRate} bpm`}                                      color="red"    icon={<Heart className="w-3.5 h-3.5"/>} />
+              <StatCard label="Quota max mai"     value={`${Math.round(stats.highestAlt)} m`}                              color="blue"   icon={<TrendingUp className="w-3.5 h-3.5"/>} />
+              <StatCard label="DEP totale"        value={`${stats.totalDepKm.toFixed(0)} km`}
+                sub={`equivale all'Italia ×${(stats.totalDepKm / 1300).toFixed(1)}`}
+                color="stone" icon={<Route className="w-3.5 h-3.5"/>}
+                tooltip="Distanza Equivalente in Piano cumulata (formula CAI): somma di km + dislivello/100 di tutte le escursioni." />
+            </div>,
+          ]}
+        />
       </div>
 
       {/* Mappa generale */}
@@ -148,7 +154,11 @@ export default function TabPanoramica({ activities, records, streaks }: Props) {
           )}
         </div>
         {routesWithPolyline.length > 0 ? (
-          <AllRoutesMap routes={mapRoutes} height="380px" />
+          <div style={{ height: '380px' }}>
+            <TornFrame size="hero" variant={tornVariant('mappa-generale')}>
+              <AllRoutesMap routes={mapRoutes} height="100%" bare />
+            </TornFrame>
+          </div>
         ) : (
           <div
             className="flex items-center justify-center rounded-xl bg-stone-100 border border-stone-200 text-stone-400"
@@ -171,56 +181,65 @@ export default function TabPanoramica({ activities, records, streaks }: Props) {
       </div>
 
       {/* Streak — 2 numeri primari, il resto dietro accordion */}
-      <TornFrame size="card" variant={tornVariant('panoramica-continuita')}>
-        <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
-          <h3 className="font-medium text-stone-700 mb-4 flex items-center gap-2 flex-wrap">
-            <Activity className="w-4 h-4 text-forest-600" /> Continuità
-            <InfoButton section="streak" />
-          </h3>
-          <div className="grid grid-cols-2 gap-4">
-            {[
-              { label: 'Streak attuale (giorni)', value: streaks.currentDays },
-              { label: 'Record streak (giorni)',  value: streaks.longestDays },
-            ].map(({ label, value }) => (
-              <div key={label} className="text-center">
-                <p className="font-display text-3xl font-bold text-forest-700">{value}</p>
-                <p className="text-xs text-stone-400 mt-1 leading-tight">{label}</p>
-              </div>
-            ))}
-          </div>
-          <button onClick={() => setShowMoreStreak(v => !v)} className="w-full flex items-center justify-center gap-1.5 text-xs font-medium text-stone-400 hover:text-stone-600 mt-4 pt-3 border-t border-stone-100">
-            Altri dati di continuità <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showMoreStreak ? 'rotate-180' : ''}`} />
-          </button>
-          {showMoreStreak && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4">
+      <PaperAccordion
+        id="panoramica-continuita"
+        open={showMoreStreak}
+        header={
+          <div className="p-5" style={{ background: TACCUINO_PAPER.light }}>
+            <h3 className="font-medium text-stone-700 mb-4 flex items-center gap-2 flex-wrap">
+              <Activity className="w-4 h-4 text-forest-600" /> Continuità
+              <InfoButton section="streak" />
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
               {[
-                { label: 'Streak attuale (settimane)', value: streaks.currentWeeks },
-                { label: 'Record streak (settimane)',  value: streaks.longestWeeks },
-                { label: 'Giorni attivi totali',       value: streaks.totalActiveDays },
-                { label: 'Settimane attive totali',    value: streaks.totalActiveWeeks },
+                { label: 'Streak attuale (giorni)', value: streaks.currentDays },
+                { label: 'Record streak (giorni)',  value: streaks.longestDays },
               ].map(({ label, value }) => (
                 <div key={label} className="text-center">
-                  <p className="font-display text-2xl font-bold text-forest-700">{value}</p>
+                  <p className="font-display text-3xl font-bold text-forest-700">{value}</p>
                   <p className="text-xs text-stone-400 mt-1 leading-tight">{label}</p>
                 </div>
               ))}
             </div>
-          )}
-        </div>
-      </TornFrame>
+            <button onClick={() => setShowMoreStreak(v => !v)} className="w-full flex items-center justify-center gap-1.5 text-xs font-medium text-stone-400 hover:text-stone-600 mt-4 pt-3 border-t border-stone-100">
+              Altri dati di continuità <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showMoreStreak ? 'rotate-180' : ''}`} />
+            </button>
+          </div>
+        }
+        sheets={[
+          <div key="streak" className="grid grid-cols-2 sm:grid-cols-4 gap-4 px-5 pt-4 pb-5">
+            {[
+              { label: 'Streak attuale (settimane)', value: streaks.currentWeeks },
+              { label: 'Record streak (settimane)',  value: streaks.longestWeeks },
+              { label: 'Giorni attivi totali',       value: streaks.totalActiveDays },
+              { label: 'Settimane attive totali',    value: streaks.totalActiveWeeks },
+            ].map(({ label, value }) => (
+              <div key={label} className="text-center">
+                <p className="font-display text-2xl font-bold text-forest-700">{value}</p>
+                <p className="text-xs text-stone-400 mt-1 leading-tight">{label}</p>
+              </div>
+            ))}
+          </div>,
+        ]}
+      />
 
       {/* Personal records — dietro un accordion, come nel mockup del restyling */}
-      <TornFrame size="card" variant={tornVariant('panoramica-record-personali')}>
-        <div className="overflow-hidden" style={{ background: TACCUINO_PAPER.card }}>
-        <button onClick={() => setShowRecords(v => !v)} className="w-full flex items-center justify-between px-5 py-4 text-left">
-          <span className="font-medium text-stone-700 flex items-center gap-2 flex-wrap">
-            <Trophy className="w-4 h-4 text-terra-500" /> Record personali
-            <InfoButton section="records" />
-          </span>
-          <ChevronDown className={`w-4 h-4 text-stone-400 transition-transform ${showRecords ? 'rotate-180' : ''}`} />
-        </button>
-        {showRecords && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 px-5 pb-5">
+      <PaperAccordion
+        id="panoramica-record-personali"
+        open={showRecords}
+        header={
+          <div style={{ background: TACCUINO_PAPER.light }}>
+            <button onClick={() => setShowRecords(v => !v)} className="w-full flex items-center justify-between px-5 py-4 text-left">
+              <span className="font-medium text-stone-700 flex items-center gap-2 flex-wrap">
+                <Trophy className="w-4 h-4 text-terra-500" /> Record personali
+                <InfoButton section="records" />
+              </span>
+              <ChevronDown className={`w-4 h-4 text-stone-400 transition-transform ${showRecords ? 'rotate-180' : ''}`} />
+            </button>
+          </div>
+        }
+        sheets={[
+        <div key="records" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 px-5 pt-4 pb-5">
           {records.longestKm && (
             <RecordCard label="Più lunga" icon={<Route className="w-4 h-4"/>}
               value={`${(records.longestKm.distanceMeters/1000).toFixed(2)} km`}
@@ -285,10 +304,9 @@ export default function TabPanoramica({ activities, records, streaks }: Props) {
               href={`/resoconto/${encodeURIComponent(records.highestDifficulty.id)}`}
             />
           )}
-        </div>
-        )}
-        </div>
-      </TornFrame>
+        </div>,
+        ]}
+      />
 
       {/* Peak bagging shortcut */}
       <a href="/vette"
@@ -302,7 +320,7 @@ export default function TabPanoramica({ activities, records, streaks }: Props) {
 
       {/* Activities table */}
       <TornFrame size="card" variant={tornVariant('panoramica-tabella-attivita')}>
-      <div className="overflow-hidden" style={{ background: TACCUINO_PAPER.card }}>
+      <div className="overflow-hidden" style={{ background: TACCUINO_PAPER.light }}>
         <div className="px-5 py-4 border-b border-stone-100">
           <h3 className="font-medium text-stone-700">Tutte le escursioni</h3>
         </div>

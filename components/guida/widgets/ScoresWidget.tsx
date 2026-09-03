@@ -5,6 +5,8 @@ import type { SafetyScore } from '@/lib/safetyScore'
 import type { PersonalSafety } from '@/lib/personalSafetyFit'
 import type { GuideNotice } from '@/lib/guideNotices'
 import Kicker from '@/components/ui/Kicker'
+import { TornFrame, tornVariant } from '@/components/TornFrame'
+import { TACCUINO_PAPER } from '@/lib/taccuinoTokens'
 
 interface Props {
   safety: SafetyScore | null
@@ -29,21 +31,23 @@ export default function ScoresWidget({ safety, personalSafety, cts, guideNotices
     <div className="space-y-3">
       <Kicker>Punteggio complessivo</Kicker>
 
-      <div className="rounded-2xl bg-stone-50 border border-stone-100 px-5 py-6">
-        <TrailScoreGaugeBadge
-          total={breakdown.total > 0 ? breakdown.total : null}
-          value={breakdown.value}
-          safety={safety}
-          personalSafety={personalSafety}
-          disclaimer="inline"
-          captionLayout="stacked"
-          dark={false}
-          vetoed={isTrailScoreVetoed(safety)}
-          notices={guideNotices}
-          size={128}
-          detailExtra={<ScoreRing safety={safety} cts={cts} />}
-        />
-      </div>
+      <TornFrame size="card" variant={tornVariant('punteggio-complessivo')}>
+        <div className="px-5 py-6" style={{ background: TACCUINO_PAPER.light }}>
+          <TrailScoreGaugeBadge
+            total={breakdown.total > 0 ? breakdown.total : null}
+            value={breakdown.value}
+            safety={safety}
+            personalSafety={personalSafety}
+            disclaimer="inline"
+            captionLayout="stacked"
+            dark={false}
+            vetoed={isTrailScoreVetoed(safety)}
+            notices={guideNotices}
+            size={128}
+            detailExtra={<ScoreRing safety={safety} cts={cts} />}
+          />
+        </div>
+      </TornFrame>
     </div>
   )
 }
