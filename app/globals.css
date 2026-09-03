@@ -358,3 +358,56 @@ body {
   background: #C0603D; color: #fff; display: flex; align-items: center; justify-content: center;
   font-weight: 700; font-size: 11px; box-shadow: 0 2px 4px rgba(46,42,34,.3); z-index: 3;
 }
+
+/* ── Fisarmonica di carta — components/PaperAccordion.tsx ──
+   Meccanica di apertura per le card espandibili: non un accordion (niente height:auto/
+   max-height/scaleY sul contenuto), un vero foglio incernierato che si apre ruotando. Calibrata
+   in un mockup dedicato (Artifact, non su file) prima di questo porting — stessa tecnica lì
+   validata: ogni "foglio" aggiuntivo è annidato dentro il precedente (mai posizionato in
+   assoluto rispetto alla card), l'unico modo per cui le rotazioni si compongono fisicamente
+   come farebbe una vera catena di cerniere di carta. A riposo ogni cerniera sta a
+   rotateX(180deg) (ripiegata all'indietro esattamente sul foglio precedente, invisibile dietro
+   il foglio 0 — la card così com'è oggi); aperta, rotateX(0deg), in sequenza. Il primo foglio
+   (l'intestazione, sempre presente) resta un <TornFrame> invariato — il bordo strappato non
+   cambia; i fogli aggiuntivi hanno solo una piega (.paper-crease-line), mai lo strappo. */
+.paper-accordion{ position: relative; perspective: 1800px; }
+
+.paper-hinge{
+  position: absolute; left: 0; top: 100%; width: 100%;
+  transform-origin: top center;
+  transform-style: preserve-3d;
+  transform: rotateX(180deg);
+  transition: transform .68s cubic-bezier(.5,0,.2,1);
+  /* Ripiegata a 180° la cerniera proietta il proprio riquadro ALL'INDIETRO, esattamente sopra
+     il foglio 0 (l'intestazione) — invisibile per via di backface-visibility su .paper-hinge-face,
+     ma backface-visibility nasconde solo la resa grafica, non la partecipazione all'hit-testing:
+     senza pointer-events:none qui, il riquadro chiuso intercetta comunque i tap destinati al
+     bottone dell'intestazione sotto di lui (bug reale, riscontrato aprendo "Altri totali"). */
+  pointer-events: none;
+}
+.paper-accordion.open .paper-hinge{ transform: rotateX(0deg); pointer-events: auto; }
+
+/* Due facce per foglio, come una vera pagina di carta — quella con il contenuto e il suo verso
+   (carta liscia, nessun contenuto specchiato). Funziona perché la rotazione sta sulla hinge
+   (transform-style:preserve-3d) e le facce sono figlie dirette senza una propria trasformazione
+   locale: l'orientamento 3D passa correttamente a loro. Mettere backface-visibility su un figlio
+   di un elemento con transform-style:flat (il default) NON funziona — verificato nel mockup,
+   il contenuto restava visibile (specchiato) oltre i 90° invece di sparire. */
+.paper-hinge-face{ position: absolute; inset: 0; backface-visibility: hidden; }
+.paper-hinge-face-back{
+  transform: rotateY(180deg);
+  background: linear-gradient(155deg, rgba(61,43,31,.09), transparent 45%), #F9F2E4;
+}
+
+/* Bordo superiore dei fogli aggiuntivi: mai lo strappo (quello resta solo sul bordo ESTERNO
+   della card, foglio 0) — è una PIEGA, lo stesso foglio ripiegato, non un foglio a parte
+   strappato via. Un'ombra scura netta sulla cerniera (dove la carta si incassa) seguita da una
+   cresta chiara nello STESSO tono caldo della carta — mai bianco, altrimenti legge come una riga
+   incollata sopra invece che un'indentatura nella carta. */
+.paper-crease-line{
+  position: absolute; left: 0; right: 0; top: 0; height: 9px;
+  background: linear-gradient(180deg,
+    rgba(61,43,31,.32) 0%, rgba(61,43,31,.32) 38%,
+    rgba(252,246,234,.85) 48%, rgba(252,246,234,.25) 72%, transparent 100%);
+  pointer-events: none;
+}

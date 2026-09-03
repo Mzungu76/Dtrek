@@ -43,8 +43,8 @@ export default function StatCard({ label, value, sub, color = 'stone', icon, too
   }
   const c = colorMap[color]
   return (
-    <TornFrame size="card" variant={tornVariant(label)}>
-      <div className={`${c.bg} px-4 py-3 flex flex-col gap-0.5`} title={tooltip}>
+    <TornFrame size="card" variant={tornVariant(label)} className="h-full">
+      <div className={`${c.bg} px-4 py-3 flex flex-col gap-0.5 h-full`} title={tooltip}>
         <div className={`flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider stat-badge ${c.text}`}>
           {icon && <span>{icon}</span>}
           {label}
