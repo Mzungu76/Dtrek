@@ -146,27 +146,23 @@ export function HandDrawnFrame({
 }
 
 /**
- * Grana della carta — CSS puro (nessun `<svg>`/`feTurbulence`, per la classe di bug isolata in
- * Fase 24, vedi sotto), piastrellata dentro `TaccuinoPaperTexture`. Sostituisce un tentativo
- * precedente con `feTurbulence` codificato come `background-image` (alpha 0.05): quella versione
- * si è rivelata invisibile su schermo reale (non solo nel mockup — stesso feedback ripetuto anche
- * qui in produzione), sostituita con più livelli di `radial-gradient` a passo diverso — tecnica
- * verificata e affinata nel canvas di riferimento (`docs/mockup-taccuino-botanico/*.dc.html`,
- * `docs/taccuino-botanico-piano.md`) prima di essere portata qui. Costruita una volta sola a
- * import-time (stringhe statiche), non ricalcolata a ogni render.
+ * Grana della carta — fibre verticali sottili via `repeating-linear-gradient`, non più cerchi
+ * piastrellati (Fase 42: quei cerchi — per quanto alleggeriti in Fase 41 — restavano comunque
+ * "puntini" riconoscibili come tali su schermo reale; l'utente ha ripetuto il feedback anche dopo
+ * la Fase 41, che aveva toccato solo le imperfezioni sotto, non questo layer). Tre passi diversi
+ * (3px/5px/8px) sovrapposti a angolazione quasi verticale ma leggermente diversa l'uno dall'altro
+ * rompono la perfetta regolarità di un singolo pattern, per un effetto di fibra tessuta/carta
+ * piuttosto che di righe meccaniche — stesso principio del riferimento "nuvolato" fornito
+ * dall'utente, che mostra striature verticali sottili mai puntiformi. Nessun `<svg>`/`feTurbulence`
+ * (per la classe di bug isolata in Fase 24, vedi sotto). Costruita una volta sola a import-time
+ * (stringhe statiche), non ricalcolata a ogni render.
  */
 const PAPER_GRAIN_IMAGES = [
-  'radial-gradient(circle at 12% 22%, rgba(46,42,34,.11) 0, rgba(46,42,34,.11) 1.3px, transparent 2.6px)',
-  'radial-gradient(circle at 68% 8%, rgba(46,42,34,.09) 0, rgba(46,42,34,.09) 1.1px, transparent 2.3px)',
-  'radial-gradient(circle at 40% 55%, rgba(46,42,34,.10) 0, rgba(46,42,34,.10) 1.4px, transparent 2.8px)',
-  'radial-gradient(circle at 85% 40%, rgba(46,42,34,.09) 0, rgba(46,42,34,.09) 1px, transparent 2.2px)',
-  'radial-gradient(circle at 25% 82%, rgba(46,42,34,.10) 0, rgba(46,42,34,.10) 1.2px, transparent 2.5px)',
-  'radial-gradient(circle at 92% 88%, rgba(46,42,34,.09) 0, rgba(46,42,34,.09) 1.1px, transparent 2.3px)',
-  'radial-gradient(circle at 55% 30%, rgba(46,42,34,.08) 0, rgba(46,42,34,.08) 1px, transparent 2px)',
-  'radial-gradient(circle at 15% 45%, rgba(46,42,34,.08) 0, rgba(46,42,34,.08) 1px, transparent 2.2px)',
-  'radial-gradient(circle at 75% 65%, rgba(46,42,34,.08) 0, rgba(46,42,34,.08) 1px, transparent 2px)',
+  'repeating-linear-gradient(89deg, rgba(122,111,82,.05) 0px, rgba(122,111,82,.05) 1px, transparent 1px, transparent 3px)',
+  'repeating-linear-gradient(91deg, rgba(46,42,34,.04) 0px, rgba(46,42,34,.04) 1px, transparent 1px, transparent 5px)',
+  'repeating-linear-gradient(90.5deg, rgba(122,111,82,.035) 0px, rgba(122,111,82,.035) 1px, transparent 1px, transparent 8px)',
 ]
-const PAPER_GRAIN_SIZES = ['58px 65px', '76px 51px', '89px 104px', '41px 79px', '104px 59px', '66px 86px', '49px 74px', '84px 46px', '64px 91px']
+const PAPER_GRAIN_SIZES = ['auto', 'auto', 'auto']
 
 /**
  * Imperfezioni — variazione di tono "nuvolata" della carta, non più macchie/puntini dai bordi
@@ -200,9 +196,9 @@ const PAPER_IMPERFECTIONS_IMAGES = [
  * visibile come tale.
  *
  * Composizione: (1) il colore piatto di base, (2) UNA sfumatura di luce (posizione data da `flip`),
- * (3) grana piastrellata (`PAPER_GRAIN_IMAGES`), (4) variazione di tono "nuvolata"
- * (`PAPER_IMPERFECTIONS_IMAGES`, Fase 41 — chiazze morbide senza contorni, non più macchie/puntini
- * dai bordi netti).
+ * (3) fibre verticali sottili (`PAPER_GRAIN_IMAGES`, Fase 42 — non più cerchi piastrellati),
+ * (4) variazione di tono "nuvolata" (`PAPER_IMPERFECTIONS_IMAGES`, Fase 41 — chiazze morbide senza
+ * contorni, non più macchie/puntini dai bordi netti).
  *
  * Fase 24 — **causa reale, finalmente isolata**, del bug "titolo/statistiche invisibili" nelle
  * righe del Sommario: qualunque `<svg>` **vivo che ricopre la pagina** (fisso o assoluto, con o
@@ -232,7 +228,7 @@ export function TaccuinoPaperTexture({ flip = false }: { flip?: boolean }) {
     ...PAPER_IMPERFECTIONS_IMAGES,
   ]
   const sizes = ['auto', ...PAPER_GRAIN_SIZES, ...PAPER_IMPERFECTIONS_IMAGES.map(() => 'auto')]
-  const repeats = ['no-repeat', ...PAPER_GRAIN_SIZES.map(() => 'repeat'), ...PAPER_IMPERFECTIONS_IMAGES.map(() => 'no-repeat')]
+  const repeats = ['no-repeat', ...PAPER_GRAIN_IMAGES.map(() => 'no-repeat'), ...PAPER_IMPERFECTIONS_IMAGES.map(() => 'no-repeat')]
   return (
     <div
       aria-hidden="true"
