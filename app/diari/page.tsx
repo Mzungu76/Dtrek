@@ -9,7 +9,7 @@ import RouteThumb from '@/components/RouteThumb'
 import type { DiarySummary } from '@/app/api/diaries/route'
 import type { AllPercorsiRow } from '@/app/api/percorsi/route'
 import { FONT } from '@/lib/designTokens'
-import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, FONT_HAND, TaccuinoPaperTexture } from '@/lib/taccuinoTokens'
+import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, FONT_HAND, INK_ABSORB_STYLE, TaccuinoPaperTexture } from '@/lib/taccuinoTokens'
 import { metaHasHikingMetrics } from '@/lib/metaTypes'
 import { ArrowRight, BookMarked, BookOpen, Compass, Loader2, Mountain, Pencil, Plus, Search, X } from 'lucide-react'
 
@@ -306,7 +306,7 @@ function DiariPageLibro() {
         <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', fontSize: 11, color: TACCUINO_INK.hand }} className="mb-1.5">
           Diario
         </p>
-        <h1 style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 34, color: TACCUINO_INK.typed }} className="mb-8">
+        <h1 style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 34, ...INK_ABSORB_STYLE }} className="mb-8">
           I miei Diari
         </h1>
 

@@ -19,12 +19,28 @@
 // fuori di qui, si comporterebbe come un font non caricato (stesso principio spiegato in
 // designTokens.ts per gli altri font del brand). Caveat sostituisce Kalam, provato per primo in
 // Fase 17 (git history) — stesso ruolo, tratto diverso, ancora in valutazione.
-import { useId } from 'react'
+import { useId, type CSSProperties } from 'react'
 
 export const FONT_VAR_HAND = '--font-caveat'
 /** Titoli e annotazioni scritte a mano — corpo del testo resta su FONT.lora (designTokens.ts):
  *  professionalità e precisione del contenuto, non tutto scritto a mano allo stesso modo. */
 export const FONT_HAND = `var(${FONT_VAR_HAND}), cursive`
+
+/**
+ * Inchiostro "assorbito" nella carta — da applicare (via spread, dopo `fontFamily: FONT_HAND`) ai
+ * titoli/etichette scritti a mano. Fase 43: confrontate in un mockup quattro varianti (colore
+ * piatto; alone sfumato via `text-shadow`; assorbimento via `mix-blend-mode`; le due sommate con un
+ * bordo irregolare via filtro SVG) — approvata la terza. `mix-blend-mode: multiply` fa sì che il
+ * colore dell'inchiostro si scurisca insieme a grana/nuvolato sotto invece di restare un blocco
+ * piatto sopra la carta, più coerente con una scrittura che si "beve" nelle fibre. Il colore deve
+ * avere alpha <1 (mai un hex pieno): `multiply` con un colore completamente opaco produce lo stesso
+ * risultato di nessun blend. Il `textShadow` aggiunge un accenno di capillare attorno al tratto.
+ */
+export const INK_ABSORB_STYLE: CSSProperties = {
+  color: 'rgba(46,42,34,.82)',
+  mixBlendMode: 'multiply',
+  textShadow: '0 0 2px rgba(122,90,50,.3)',
+}
 
 /** Carta — Fase 31, palette "Travel Journal" iniziale, poi riallineata in Fase 40 alla direzione
  *  approvata "Taccuino Botanico" (docs/taccuino-botanico-piano.md — valori esatti dalla guida,
@@ -165,40 +181,50 @@ const PAPER_GRAIN_IMAGES = [
 const PAPER_GRAIN_SIZES = ['auto', 'auto', 'auto']
 
 /**
- * Imperfezioni — variazione di tono "nuvolata" della carta, non più macchie/puntini dai bordi
- * netti (Fase 41: su screenshot reale quei bordi definiti leggevano come sporco sparso, non come
- * carta — l'utente ha chiesto esplicitamente un effetto "nuvolato", mostrando un riferimento di
- * texture con chiazze morbide che si fondono nel fondo, senza contorni visibili). Ellissi grandi
- * (140-300px) con dissolvenza molto ampia (`transparent` all'75-82%, contro il 72% delle vecchie
- * macchie e il 100% a bordo netto dei vecchi puntini) e alternanza chiaro/scuro
- * (`TACCUINO_PAPER.light`/`TACCUINO_INK.hand`) invece di un'unica tinta scura: stesso principio
- * della carta invecchiata, ma la variazione ora è tonale e diffusa, non puntiforme. Posizioni
- * fisse (un solo componente condiviso da tutta l'app, non una posizione diversa per schermata
- * come nel canvas di riferimento).
+ * Nuvolato — variazione di tono diffusa e leggera, non più chiazze marcate (Fase 43: le chiazze
+ * grandi e sature testate nei giri precedenti leggevano o come "sporco" o restavano invisibili
+ * sotto la sfumatura di luce dell'epoca — calibrata su un secondo riferimento fornito dall'utente:
+ * "il nuvolato deve essere leggero e scurirsi con una vignettatura", la profondità principale ora
+ * la dà `PAPER_VIGNETTE_IMAGE` sotto, non più queste chiazze). 10 ellissi piccole (95-165px) a
+ * bassa opacità (.05-.10 per le colorate) e dissolvenza morbida (66-72%), quattro tonalità — crema
+ * e bruno di prima più ambra e salvia (quest'ultima da `TACCUINO_ACCENT_SECONDARY`) per una
+ * variazione anche di colore, non solo di chiaro/scuro.
  */
-const PAPER_IMPERFECTIONS_IMAGES = [
-  'radial-gradient(ellipse 260px 190px at 18% 14%, rgba(249,242,228,.55), transparent 80%)',
-  'radial-gradient(ellipse 200px 240px at 72% 10%, rgba(122,111,82,.07), transparent 78%)',
-  'radial-gradient(ellipse 300px 220px at 45% 38%, rgba(249,242,228,.45), transparent 82%)',
-  'radial-gradient(ellipse 180px 260px at 85% 42%, rgba(122,111,82,.06), transparent 76%)',
-  'radial-gradient(ellipse 220px 260px at 10% 62%, rgba(249,242,228,.5), transparent 80%)',
-  'radial-gradient(ellipse 260px 190px at 55% 72%, rgba(122,111,82,.07), transparent 78%)',
-  'radial-gradient(ellipse 200px 240px at 88% 78%, rgba(249,242,228,.45), transparent 82%)',
-  'radial-gradient(ellipse 240px 200px at 30% 92%, rgba(122,111,82,.06), transparent 76%)',
+const PAPER_CLOUD_IMAGES = [
+  'radial-gradient(ellipse 150px 115px at 18% 14%, rgba(249,242,228,.35), transparent 70%)',
+  'radial-gradient(ellipse 125px 140px at 72% 10%, rgba(122,111,82,.10), transparent 68%)',
+  'radial-gradient(ellipse 165px 125px at 45% 38%, rgba(184,142,86,.08), transparent 72%)',
+  'radial-gradient(ellipse 110px 140px at 85% 42%, rgba(124,143,110,.07), transparent 68%)',
+  'radial-gradient(ellipse 125px 140px at 10% 62%, rgba(249,242,228,.3), transparent 70%)',
+  'radial-gradient(ellipse 140px 115px at 55% 72%, rgba(192,96,61,.06), transparent 68%)',
+  'radial-gradient(ellipse 115px 130px at 88% 78%, rgba(122,111,82,.09), transparent 68%)',
+  'radial-gradient(ellipse 130px 115px at 30% 92%, rgba(184,142,86,.08), transparent 66%)',
+  'radial-gradient(ellipse 100px 90px at 60% 22%, rgba(124,143,110,.06), transparent 68%)',
+  'radial-gradient(ellipse 95px 110px at 22% 45%, rgba(192,96,61,.05), transparent 68%)',
 ]
 
 /**
- * Texture di sfondo del taccuino — tutta la pagina, dietro al contenuto. Fase 40 — grana e
- * imperfezioni rinforzate su feedback esplicito dell'utente su build reale ("non si notano"),
- * sostituendo la versione "quasi impercettibile" della Fase 31: quella scelta (carta con
- * variazione di tonalità appena percepibile, niente texture riconoscibile) è stata rivista qui,
- * non è più l'obiettivo — la direzione attuale (`docs/taccuino-botanico-piano.md`) vuole la carta
- * visibile come tale.
+ * Vignettatura — bordo che scurisce verso gli angoli lasciando il centro chiaro (Fase 43, su
+ * riferimento fotografico: carta invecchiata con vignettatura in seppia/ambra). Sostituisce la
+ * sfumatura di luce legata a `flip` (Fase 17-40): quel singolo blob chiaro in un angolo competeva
+ * visivamente con il nuvolato sotto, coprendolo proprio dove contava di più. La vignettatura è
+ * centrata e simmetrica — non serve più `flip` per posizionarla (il parametro resta nella firma di
+ * `TaccuinoPaperTexture` per compatibilità con i chiamanti esistenti, ma non ha più effetto).
+ * Colore ambra caldo (#8B5E2C, non un token esistente — scelto su un giro di calibrazione visiva,
+ * più caldo del seppia `TACCUINO_INK.mapSepia` provato per primo) con centro trasparente esteso
+ * (55%) e dissolvenza rapida solo nella fascia esterna, per un effetto concentrato sul contorno
+ * invece che diffuso verso il centro.
+ */
+const PAPER_VIGNETTE_IMAGE =
+  'radial-gradient(ellipse 90% 84% at 50% 40%, transparent 55%, rgba(139,94,44,.15) 78%, rgba(139,94,44,.48) 100%)'
+
+/**
+ * Texture di sfondo del taccuino — tutta la pagina, dietro al contenuto.
  *
- * Composizione: (1) il colore piatto di base, (2) UNA sfumatura di luce (posizione data da `flip`),
- * (3) fibre verticali sottili (`PAPER_GRAIN_IMAGES`, Fase 42 — non più cerchi piastrellati),
- * (4) variazione di tono "nuvolata" (`PAPER_IMPERFECTIONS_IMAGES`, Fase 41 — chiazze morbide senza
- * contorni, non più macchie/puntini dai bordi netti).
+ * Composizione, dal layer più in alto al più in basso (l'ordine conta: in CSS multi-background il
+ * primo elencato in `background-image` dipinge sopra gli altri): (1) vignettatura
+ * (`PAPER_VIGNETTE_IMAGE`), (2) nuvolato leggero (`PAPER_CLOUD_IMAGES`), (3) fibre verticali
+ * sottili (`PAPER_GRAIN_IMAGES`), (4) il colore piatto di base in fondo a tutto.
  *
  * Fase 24 — **causa reale, finalmente isolata**, del bug "titolo/statistiche invisibili" nelle
  * righe del Sommario: qualunque `<svg>` **vivo che ricopre la pagina** (fisso o assoluto, con o
@@ -206,8 +232,9 @@ const PAPER_IMPERFECTIONS_IMAGES = [
  * l'SVG in sé, sempre la sovrapposizione. Questo componente resta quindi un `<div>` con sfondo
  * CSS puro (colore + gradienti), mai un elemento SVG nel DOM.
  *
- * `flip` inverte il lato della sfumatura di luce (per pagine adiacenti del libro, sinistra/destra
- * sfogliando) — non identiche a specchio l'una dell'altra sarebbe stato più piatto.
+ * `flip` non ha più effetto (Fase 43): posizionava la vecchia sfumatura di luce su un lato o
+ * l'altro, sostituita dalla vignettatura centrata e simmetrica. Il parametro resta nella firma solo
+ * per compatibilità con i chiamanti esistenti (`BookPage.tsx`, `app/diari/[id]/page.tsx`).
  *
  * ⚠️ Il chiamante NON deve mettere un `background` opaco sul proprio contenitore radice (lo
  * stesso `<div>` in cui questo componente viene montato come figlio): quel contenitore, essendo
@@ -216,19 +243,19 @@ const PAPER_IMPERFECTIONS_IMAGES = [
  * il componente compare prima. È la stessa classe di bug isolata in Fase 24 (un `<svg>` che
  * ricopre la pagina rompeva lo stacking), qui capovolta: non serve un colore duplicato sul
  * contenitore, questo componente fornisce già `TACCUINO_PAPER.base` come propria `backgroundColor`
- * — un `background` in più sul genitore nasconde grana e imperfezioni lasciando visibile solo il
+ * — un `background` in più sul genitore nasconde grana e nuvolato lasciando visibile solo il
  * colore piatto (bug reale riscontrato su build reale in Fase 40, corretto rimuovendolo da
  * `app/diari/page.tsx` e `app/profilo/page.tsx`).
  */
 export function TaccuinoPaperTexture({ flip = false }: { flip?: boolean }) {
-  const lightPos = flip ? '80% 15%' : '15% 10%'
+  void flip
   const images = [
-    `radial-gradient(ellipse 70% 55% at ${lightPos}, ${TACCUINO_PAPER.light}, transparent 60%)`,
+    PAPER_VIGNETTE_IMAGE,
+    ...PAPER_CLOUD_IMAGES,
     ...PAPER_GRAIN_IMAGES,
-    ...PAPER_IMPERFECTIONS_IMAGES,
   ]
-  const sizes = ['auto', ...PAPER_GRAIN_SIZES, ...PAPER_IMPERFECTIONS_IMAGES.map(() => 'auto')]
-  const repeats = ['no-repeat', ...PAPER_GRAIN_IMAGES.map(() => 'no-repeat'), ...PAPER_IMPERFECTIONS_IMAGES.map(() => 'no-repeat')]
+  const sizes = ['auto', ...PAPER_CLOUD_IMAGES.map(() => 'auto'), ...PAPER_GRAIN_SIZES]
+  const repeats = ['no-repeat', ...PAPER_CLOUD_IMAGES.map(() => 'no-repeat'), ...PAPER_GRAIN_IMAGES.map(() => 'no-repeat')]
   return (
     <div
       aria-hidden="true"
