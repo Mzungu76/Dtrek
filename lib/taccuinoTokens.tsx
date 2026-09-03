@@ -164,19 +164,22 @@ export function HandDrawnFrame({
 /**
  * Grana della carta — fibre verticali sottili via `repeating-linear-gradient`, non più cerchi
  * piastrellati (Fase 42: quei cerchi — per quanto alleggeriti in Fase 41 — restavano comunque
- * "puntini" riconoscibili come tali su schermo reale; l'utente ha ripetuto il feedback anche dopo
- * la Fase 41, che aveva toccato solo le imperfezioni sotto, non questo layer). Tre passi diversi
- * (3px/5px/8px) sovrapposti a angolazione quasi verticale ma leggermente diversa l'uno dall'altro
- * rompono la perfetta regolarità di un singolo pattern, per un effetto di fibra tessuta/carta
- * piuttosto che di righe meccaniche — stesso principio del riferimento "nuvolato" fornito
- * dall'utente, che mostra striature verticali sottili mai puntiformi. Nessun `<svg>`/`feTurbulence`
- * (per la classe di bug isolata in Fase 24, vedi sotto). Costruita una volta sola a import-time
- * (stringhe statiche), non ricalcolata a ogni render.
+ * "puntini" riconoscibili come tali su schermo reale). Tre passi diversi (3px/5px/8px) sovrapposti
+ * a angolazione quasi verticale ma leggermente diversa l'uno dall'altro rompono la perfetta
+ * regolarità di un singolo pattern, per un effetto di fibra tessuta/carta piuttosto che di righe
+ * meccaniche. Nessun `<svg>`/`feTurbulence` (per la classe di bug isolata in Fase 24, vedi sotto).
+ * Costruita una volta sola a import-time (stringhe statiche), non ricalcolata a ogni render.
+ *
+ * Fase 43 — alpha dimezzata più volte rispetto alla Fase 42 (.05/.04/.035 → .008/.006/.005):
+ * calibrata nel mockup di anteprima insieme a nuvolato/vignettatura ma non riportata nel codice
+ * reale al primo giro di implementazione (Fase 43a) — bug distinto dal nuvolato, corretto qui.
+ * Su schermo reale anche i valori "leggeri" del nuvolato bastano da soli a dare struttura alla
+ * carta; le fibre restano solo un accenno appena percepibile da vicino.
  */
 const PAPER_GRAIN_IMAGES = [
-  'repeating-linear-gradient(89deg, rgba(122,111,82,.05) 0px, rgba(122,111,82,.05) 1px, transparent 1px, transparent 3px)',
-  'repeating-linear-gradient(91deg, rgba(46,42,34,.04) 0px, rgba(46,42,34,.04) 1px, transparent 1px, transparent 5px)',
-  'repeating-linear-gradient(90.5deg, rgba(122,111,82,.035) 0px, rgba(122,111,82,.035) 1px, transparent 1px, transparent 8px)',
+  'repeating-linear-gradient(89deg, rgba(122,111,82,.008) 0px, rgba(122,111,82,.008) 1px, transparent 1px, transparent 3px)',
+  'repeating-linear-gradient(91deg, rgba(46,42,34,.006) 0px, rgba(46,42,34,.006) 1px, transparent 1px, transparent 5px)',
+  'repeating-linear-gradient(90.5deg, rgba(122,111,82,.005) 0px, rgba(122,111,82,.005) 1px, transparent 1px, transparent 8px)',
 ]
 const PAPER_GRAIN_SIZES = ['auto', 'auto', 'auto']
 
