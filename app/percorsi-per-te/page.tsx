@@ -14,6 +14,8 @@ import { openRecommendationCard } from '@/lib/routeBuilder/openRecommendationCar
 import type { RecommendationCard } from '@/lib/routeBuilder/generateRecommendations'
 import type { ScoredCandidate } from '@/lib/routeBuilder/scoreCandidates'
 import type { FoundRouteItem } from '@/lib/routeBuilder/foundRoute'
+import { TornFrame, tornVariant } from '@/components/TornFrame'
+import { TACCUINO_PAPER } from '@/lib/taccuinoTokens'
 
 type PageStatus = 'loading' | 'ok' | 'empty_no_location' | 'error' | 'pending'
 type FeedbackValue = 'like' | 'dislike' | null
@@ -136,31 +138,39 @@ function PercorsiPerTePageInner() {
         )}
 
         {status === 'empty_no_location' && (
-          <div className="bg-white rounded-2xl border border-stone-200 p-5 text-center space-y-2">
-            <MapPin className="w-6 h-6 mx-auto text-stone-300" />
-            <p className="text-sm text-stone-600">
-              Completa la tua prima escursione, o imposta un indirizzo di partenza nel profilo, per ricevere consigli personalizzati.
-            </p>
-          </div>
+          <TornFrame size="card" variant={tornVariant('empty-no-location')}>
+            <div className="p-5 text-center space-y-2" style={{ background: TACCUINO_PAPER.card }}>
+              <MapPin className="w-6 h-6 mx-auto text-stone-300" />
+              <p className="text-sm text-stone-600">
+                Completa la tua prima escursione, o imposta un indirizzo di partenza nel profilo, per ricevere consigli personalizzati.
+              </p>
+            </div>
+          </TornFrame>
         )}
 
         {status === 'error' && (
-          <div className="bg-white rounded-2xl border border-stone-200 p-5 text-sm text-red-600">{errorMsg}</div>
+          <TornFrame size="card" variant={tornVariant('error')}>
+            <div className="p-5 text-sm text-red-600" style={{ background: TACCUINO_PAPER.card }}>{errorMsg}</div>
+          </TornFrame>
         )}
 
         {status === 'pending' && (
-          <div className="bg-white rounded-2xl border border-stone-200 p-5 text-center space-y-2">
-            <Loader2 className="w-5 h-5 mx-auto text-stone-300 animate-spin" />
-            <p className="text-sm text-stone-600">
-              Stiamo ancora preparando i tuoi consigli — torna tra poco, non serve fare nulla.
-            </p>
-          </div>
+          <TornFrame size="card" variant={tornVariant('pending')}>
+            <div className="p-5 text-center space-y-2" style={{ background: TACCUINO_PAPER.card }}>
+              <Loader2 className="w-5 h-5 mx-auto text-stone-300 animate-spin" />
+              <p className="text-sm text-stone-600">
+                Stiamo ancora preparando i tuoi consigli — torna tra poco, non serve fare nulla.
+              </p>
+            </div>
+          </TornFrame>
         )}
 
         {status === 'ok' && cards.length === 0 && (
-          <div className="bg-white rounded-2xl border border-stone-200 p-5 text-sm text-stone-600">
-            Nessun percorso disponibile per ora nella tua zona — riprova dopo la prossima escursione.
-          </div>
+          <TornFrame size="card" variant={tornVariant('ok-empty')}>
+            <div className="p-5 text-sm text-stone-600" style={{ background: TACCUINO_PAPER.card }}>
+              Nessun percorso disponibile per ora nella tua zona — riprova dopo la prossima escursione.
+            </div>
+          </TornFrame>
         )}
 
         {status === 'ok' && cards.length > 0 && (

@@ -9,6 +9,8 @@ import { fetchPoisNearTrack } from '@/lib/poisProxy'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { Mountain, Loader2, Trophy, RefreshCw } from 'lucide-react'
+import { TornFrame, tornVariant } from '@/components/TornFrame'
+import { TACCUINO_PAPER } from '@/lib/taccuinoTokens'
 
 interface Peak {
   id: number
@@ -200,39 +202,43 @@ export default function VettePage() {
 
             {/* Summit badge */}
             {highest && (
-              <div className="bg-gradient-to-r from-forest-700 to-forest-900 text-white rounded-2xl p-5 mb-6 flex items-center gap-4">
-                <Trophy className="w-10 h-10 text-yellow-400 shrink-0" />
-                <div>
-                  <p className="text-forest-200 text-xs font-semibold uppercase tracking-wide">Cima più alta raggiunta</p>
-                  <p className="font-display text-2xl font-bold">{highest.name}</p>
-                  <p className="text-forest-300 text-sm">⛰ {highest.ele} m slm · {format(new Date(highest.activityDate), 'd MMM yyyy', { locale: it })}</p>
+              <TornFrame size="card" variant={tornVariant('cima-piu-alta')} className="mb-6">
+                <div className="bg-gradient-to-r from-forest-700 to-forest-900 text-white p-5 flex items-center gap-4">
+                  <Trophy className="w-10 h-10 text-yellow-400 shrink-0" />
+                  <div>
+                    <p className="text-forest-200 text-xs font-semibold uppercase tracking-wide">Cima più alta raggiunta</p>
+                    <p className="font-display text-2xl font-bold">{highest.name}</p>
+                    <p className="text-forest-300 text-sm">⛰ {highest.ele} m slm · {format(new Date(highest.activityDate), 'd MMM yyyy', { locale: it })}</p>
+                  </div>
                 </div>
-              </div>
+              </TornFrame>
             )}
 
             {/* Peaks list */}
-            <div className="space-y-2">
+            <div className="space-y-5">
               {sorted.map((peak, idx) => (
-                <Link
-                  key={peak.id}
-                  href={`/resoconto/${encodeURIComponent(peak.activityId)}`}
-                  className="flex items-center gap-4 bg-white rounded-xl border border-stone-200 px-4 py-3 hover:border-forest-300 hover:bg-forest-50 transition-all group"
-                >
-                  <span className="text-stone-300 font-mono text-xs w-5 text-right shrink-0">
-                    {sortBy === 'ele' ? idx + 1 : ''}
-                  </span>
-                  <span className="text-2xl shrink-0">⛰</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-stone-800 group-hover:text-forest-700 transition-colors">{peak.name}</p>
-                    <p className="text-xs text-stone-400 truncate">
-                      {format(new Date(peak.activityDate), 'dd MMM yyyy', { locale: it })} · {peak.activityTitle}
-                    </p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="font-display font-bold text-forest-700">{peak.ele > 0 ? `${peak.ele} m` : '—'}</p>
-                    <p className="text-xs text-stone-400">slm</p>
-                  </div>
-                </Link>
+                <TornFrame key={peak.id} size="card" variant={tornVariant(String(peak.id))}>
+                  <Link
+                    href={`/resoconto/${encodeURIComponent(peak.activityId)}`}
+                    className="flex items-center gap-4 px-4 py-3 group"
+                    style={{ background: TACCUINO_PAPER.card }}
+                  >
+                    <span className="text-stone-300 font-mono text-xs w-5 text-right shrink-0">
+                      {sortBy === 'ele' ? idx + 1 : ''}
+                    </span>
+                    <span className="text-2xl shrink-0">⛰</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-stone-800 group-hover:text-forest-700 transition-colors">{peak.name}</p>
+                      <p className="text-xs text-stone-400 truncate">
+                        {format(new Date(peak.activityDate), 'dd MMM yyyy', { locale: it })} · {peak.activityTitle}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="font-display font-bold text-forest-700">{peak.ele > 0 ? `${peak.ele} m` : '—'}</p>
+                      <p className="text-xs text-stone-400">slm</p>
+                    </div>
+                  </Link>
+                </TornFrame>
               ))}
             </div>
           </>

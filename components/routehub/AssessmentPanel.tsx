@@ -1,6 +1,8 @@
 import type { HikeAssessment } from '@/lib/plannedStore'
 import { textPrimary, textMuted } from '@/components/routehub/overlayTheme'
 import Kicker from '@/components/ui/Kicker'
+import { TornFrame, tornVariant } from '@/components/TornFrame'
+import { TACCUINO_PAPER } from '@/lib/taccuinoTokens'
 
 const DIFFICULTY_LABEL: Record<string, string> = {
   facile: 'Facile', moderata: 'Moderata', impegnativa: 'Impegnativa', estrema: 'Estrema',
@@ -38,7 +40,8 @@ export function AssessmentPanel({ a }: { a: HikeAssessment }) {
   return (
     <div className="space-y-3">
       <Kicker>La tua valutazione</Kicker>
-      <div className="rounded-2xl bg-stone-50 border border-stone-100 px-5 py-5 space-y-4">
+      <TornFrame size="card" variant={tornVariant('valutazione')}>
+      <div className="px-5 py-5 space-y-4" style={{ background: TACCUINO_PAPER.card }}>
         {a.summary && (
           <p className={`text-sm font-medium leading-relaxed ${textPrimary}`}>{a.summary}</p>
         )}
@@ -104,6 +107,7 @@ export function AssessmentPanel({ a }: { a: HikeAssessment }) {
           </div>
         )}
       </div>
+      </TornFrame>
     </div>
   )
 }

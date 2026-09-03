@@ -10,6 +10,8 @@ import {
 } from 'recharts'
 import { Brain, Activity } from 'lucide-react'
 import InfoButton from './InfoButton'
+import { TornFrame, tornVariant } from '@/components/TornFrame'
+import { TACCUINO_PAPER } from '@/lib/taccuinoTokens'
 
 interface Props { activities: ActivityMeta[] }
 
@@ -74,147 +76,163 @@ export default function TabForma({ activities }: Props) {
     <div className="space-y-6">
       {latestForm && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-            <p className="text-xs text-stone-400 uppercase tracking-wide font-medium mb-1 flex items-center gap-1.5 flex-wrap">
-              <Brain className="w-3.5 h-3.5" /> Bilancio fisico attuale
-              <InfoButton section="training-load" />
-            </p>
-            <p className="text-2xl font-bold mt-1" style={{ color: latestForm.status.color }}>{latestForm.status.label}</p>
-            <p className="text-xs text-stone-500 mt-1">{latestForm.status.description}</p>
-          </div>
-          <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-            <p className="text-xs text-stone-400 uppercase tracking-wide font-medium mb-1">CTL — Fitness (τ=42gg)</p>
-            <p className="text-2xl font-bold text-forest-700">{latestForm.ctl.toFixed(1)}</p>
-            <p className="text-xs text-stone-500 mt-1">Carico cronico accumulato</p>
-          </div>
-          <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-            <p className="text-xs text-stone-400 uppercase tracking-wide font-medium mb-1">ATL — Fatica (τ=7gg)</p>
-            <p className="text-2xl font-bold text-terra-600">{latestForm.atl.toFixed(1)}</p>
-            <p className="text-xs text-stone-500 mt-1">Carico acuto recente</p>
-          </div>
+          <TornFrame size="card" variant={tornVariant('forma-bilancio-fisico')}>
+            <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+              <p className="text-xs text-stone-400 uppercase tracking-wide font-medium mb-1 flex items-center gap-1.5 flex-wrap">
+                <Brain className="w-3.5 h-3.5" /> Bilancio fisico attuale
+                <InfoButton section="training-load" />
+              </p>
+              <p className="text-2xl font-bold mt-1" style={{ color: latestForm.status.color }}>{latestForm.status.label}</p>
+              <p className="text-xs text-stone-500 mt-1">{latestForm.status.description}</p>
+            </div>
+          </TornFrame>
+          <TornFrame size="card" variant={tornVariant('forma-ctl')}>
+            <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+              <p className="text-xs text-stone-400 uppercase tracking-wide font-medium mb-1">CTL — Fitness (τ=42gg)</p>
+              <p className="text-2xl font-bold text-forest-700">{latestForm.ctl.toFixed(1)}</p>
+              <p className="text-xs text-stone-500 mt-1">Carico cronico accumulato</p>
+            </div>
+          </TornFrame>
+          <TornFrame size="card" variant={tornVariant('forma-atl')}>
+            <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+              <p className="text-xs text-stone-400 uppercase tracking-wide font-medium mb-1">ATL — Fatica (τ=7gg)</p>
+              <p className="text-2xl font-bold text-terra-600">{latestForm.atl.toFixed(1)}</p>
+              <p className="text-xs text-stone-500 mt-1">Carico acuto recente</p>
+            </div>
+          </TornFrame>
         </div>
       )}
 
       {weeklyAvg && (
-        <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-          <h3 className="font-medium text-stone-700 mb-4 flex items-center gap-2 flex-wrap">
-            <Activity className="w-4 h-4 text-forest-600" /> Medie settimanali (ultime 16 settimane)
-            <InfoButton section="volume-settimanale" />
-          </h3>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {[
-              { label: 'Km medi/settimana',  value: `${weeklyAvg.avgKm} km` },
-              { label: 'Settimana migliore',  value: `${weeklyAvg.maxKm} km` },
-              { label: 'D+ medi/settimana',   value: `${weeklyAvg.avgGain} m` },
-              { label: 'Settimane attive',    value: `${weeklyAvg.activeWeeks}/16` },
-            ].map(({ label, value }) => (
-              <div key={label} className="text-center">
-                <p className="font-display text-2xl font-bold text-forest-700">{value}</p>
-                <p className="text-xs text-stone-400 mt-1 leading-tight">{label}</p>
-              </div>
-            ))}
+        <TornFrame size="card" variant={tornVariant('forma-medie-settimanali')}>
+          <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+            <h3 className="font-medium text-stone-700 mb-4 flex items-center gap-2 flex-wrap">
+              <Activity className="w-4 h-4 text-forest-600" /> Medie settimanali (ultime 16 settimane)
+              <InfoButton section="volume-settimanale" />
+            </h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              {[
+                { label: 'Km medi/settimana',  value: `${weeklyAvg.avgKm} km` },
+                { label: 'Settimana migliore',  value: `${weeklyAvg.maxKm} km` },
+                { label: 'D+ medi/settimana',   value: `${weeklyAvg.avgGain} m` },
+                { label: 'Settimane attive',    value: `${weeklyAvg.activeWeeks}/16` },
+              ].map(({ label, value }) => (
+                <div key={label} className="text-center">
+                  <p className="font-display text-2xl font-bold text-forest-700">{value}</p>
+                  <p className="text-xs text-stone-400 mt-1 leading-tight">{label}</p>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        </TornFrame>
       )}
 
-      <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-        <h3 className="font-medium text-stone-700 mb-1">Volume settimanale — ultime 16 settimane</h3>
-        <p className="text-xs text-stone-400 mb-4">Km percorsi e dislivello per settimana.</p>
-        <div className="h-56 overflow-hidden">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={weeklyVolumeData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
-              <XAxis dataKey="week" tick={{ fontSize: 10 }} tickLine={false} interval={1} />
-              <YAxis yAxisId="km"   orientation="left"  tick={{ fontSize: 10 }} tickLine={false} axisLine={false} unit=" km" width={44} />
-              <YAxis yAxisId="gain" orientation="right" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} unit=" m"  width={48} />
-              <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
-                formatter={(v: any, name: string) => [name === 'km' ? `${v} km` : `${v} m`, name === 'km' ? 'Distanza' : 'Dislivello D+']} />
-              <Legend formatter={(v: string) => v === 'km' ? 'Distanza (km)' : 'Dislivello D+ (m)'} wrapperStyle={{ fontSize: 12 }} />
-              <Bar yAxisId="km"   dataKey="km"   fill="#378d44" radius={[3,3,0,0]} />
-              <Bar yAxisId="gain" dataKey="gain" fill="#c05a17" radius={[3,3,0,0]} opacity={0.8} />
-            </BarChart>
-          </ResponsiveContainer>
+      <TornFrame size="card" variant={tornVariant('forma-volume-settimanale')}>
+        <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+          <h3 className="font-medium text-stone-700 mb-1">Volume settimanale — ultime 16 settimane</h3>
+          <p className="text-xs text-stone-400 mb-4">Km percorsi e dislivello per settimana.</p>
+          <div className="h-56 overflow-hidden">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={weeklyVolumeData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
+                <XAxis dataKey="week" tick={{ fontSize: 10 }} tickLine={false} interval={1} />
+                <YAxis yAxisId="km"   orientation="left"  tick={{ fontSize: 10 }} tickLine={false} axisLine={false} unit=" km" width={44} />
+                <YAxis yAxisId="gain" orientation="right" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} unit=" m"  width={48} />
+                <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
+                  formatter={(v: any, name: string) => [name === 'km' ? `${v} km` : `${v} m`, name === 'km' ? 'Distanza' : 'Dislivello D+']} />
+                <Legend formatter={(v: string) => v === 'km' ? 'Distanza (km)' : 'Dislivello D+ (m)'} wrapperStyle={{ fontSize: 12 }} />
+                <Bar yAxisId="km"   dataKey="km"   fill="#378d44" radius={[3,3,0,0]} />
+                <Bar yAxisId="gain" dataKey="gain" fill="#c05a17" radius={[3,3,0,0]} opacity={0.8} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
-      </div>
+      </TornFrame>
 
-      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
-        <div className="px-5 py-4 border-b border-stone-100">
-          <h3 className="font-medium text-stone-700">Progressione mensile — ultimi 6 mesi</h3>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-stone-50 text-stone-500 text-xs uppercase tracking-wider">
-              <tr>
-                {['Mese', 'Escursioni', 'Distanza', 'Dislivello'].map(h => (
-                  <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-stone-100">
-              {monthlyProgressData.map((m, i) => (
-                <tr key={m.month} className={i === monthlyProgressData.length - 1 ? 'bg-forest-50' : ''}>
-                  <td className="px-4 py-3 font-medium text-stone-700 capitalize">{m.month}</td>
-                  <td className="px-4 py-3 font-mono text-stone-600">{m.esc}</td>
-                  <td className="px-4 py-3 font-mono text-forest-700">{m.km} km</td>
-                  <td className="px-4 py-3 font-mono text-terra-600">{m.gain.toLocaleString('it')} m</td>
+      <TornFrame size="card" variant={tornVariant('forma-progressione-mensile')}>
+        <div className="overflow-hidden" style={{ background: TACCUINO_PAPER.card }}>
+          <div className="px-5 py-4 border-b border-stone-100">
+            <h3 className="font-medium text-stone-700">Progressione mensile — ultimi 6 mesi</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-stone-50 text-stone-500 text-xs uppercase tracking-wider">
+                <tr>
+                  {['Mese', 'Escursioni', 'Distanza', 'Dislivello'].map(h => (
+                    <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-stone-100">
+                {monthlyProgressData.map((m, i) => (
+                  <tr key={m.month} className={i === monthlyProgressData.length - 1 ? 'bg-forest-50' : ''}>
+                    <td className="px-4 py-3 font-medium text-stone-700 capitalize">{m.month}</td>
+                    <td className="px-4 py-3 font-mono text-stone-600">{m.esc}</td>
+                    <td className="px-4 py-3 font-mono text-forest-700">{m.km} km</td>
+                    <td className="px-4 py-3 font-mono text-terra-600">{m.gain.toLocaleString('it')} m</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      </TornFrame>
 
-      <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-        <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2 flex-wrap">
-          <Brain className="w-4 h-4 text-forest-600" /> Training Load — ultimi 90 giorni
-          <InfoButton section="training-load" />
-        </h3>
-        <p className="text-xs text-stone-400 mb-4">
-          CTL (fitness, verde) · ATL (fatica, arancio) · TSB (forma, blu — positivo = fresco, negativo = affaticato)
-        </p>
-        <div className="h-72 overflow-hidden">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={trainingLoadData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
-              <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false}
-                tickFormatter={d => format(new Date(d), 'dd/MM')} interval={13} />
-              <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={36} />
-              <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
-                labelFormatter={d => format(new Date(d as string), 'dd MMM yyyy', { locale: it })}
-                formatter={(v: any, name: string) => {
-                  const labels: Record<string, string> = { ctl: 'Fitness (CTL)', atl: 'Fatica (ATL)', tsb: 'Forma (TSB)' }
-                  return [v, labels[name] ?? name]
-                }} />
-              <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="4 4" />
-              <Line type="monotone" dataKey="ctl" stroke="#378d44" strokeWidth={2} dot={false} name="ctl" />
-              <Line type="monotone" dataKey="atl" stroke="#c05a17" strokeWidth={2} dot={false} name="atl" />
-              <Line type="monotone" dataKey="tsb" stroke="#0ea5e9" strokeWidth={2} dot={false} name="tsb" />
-              <Legend wrapperStyle={{ fontSize: 12 }}
-                formatter={(v: string) => ({ ctl: 'Fitness (CTL)', atl: 'Fatica (ATL)', tsb: 'Forma (TSB)' }[v] ?? v)} />
-            </LineChart>
-          </ResponsiveContainer>
+      <TornFrame size="card" variant={tornVariant('forma-training-load')}>
+        <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+          <h3 className="font-medium text-stone-700 mb-1 flex items-center gap-2 flex-wrap">
+            <Brain className="w-4 h-4 text-forest-600" /> Training Load — ultimi 90 giorni
+            <InfoButton section="training-load" />
+          </h3>
+          <p className="text-xs text-stone-400 mb-4">
+            CTL (fitness, verde) · ATL (fatica, arancio) · TSB (forma, blu — positivo = fresco, negativo = affaticato)
+          </p>
+          <div className="h-72 overflow-hidden">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={trainingLoadData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
+                <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false}
+                  tickFormatter={d => format(new Date(d), 'dd/MM')} interval={13} />
+                <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={36} />
+                <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
+                  labelFormatter={d => format(new Date(d as string), 'dd MMM yyyy', { locale: it })}
+                  formatter={(v: any, name: string) => {
+                    const labels: Record<string, string> = { ctl: 'Fitness (CTL)', atl: 'Fatica (ATL)', tsb: 'Forma (TSB)' }
+                    return [v, labels[name] ?? name]
+                  }} />
+                <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="4 4" />
+                <Line type="monotone" dataKey="ctl" stroke="#378d44" strokeWidth={2} dot={false} name="ctl" />
+                <Line type="monotone" dataKey="atl" stroke="#c05a17" strokeWidth={2} dot={false} name="atl" />
+                <Line type="monotone" dataKey="tsb" stroke="#0ea5e9" strokeWidth={2} dot={false} name="tsb" />
+                <Legend wrapperStyle={{ fontSize: 12 }}
+                  formatter={(v: string) => ({ ctl: 'Fitness (CTL)', atl: 'Fatica (ATL)', tsb: 'Forma (TSB)' }[v] ?? v)} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         </div>
-      </div>
+      </TornFrame>
 
-      <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-        <h3 className="font-medium text-stone-700 mb-4 flex items-center gap-2 flex-wrap">
-          Carico giornaliero (TSS stimato) <InfoButton section="tss" />
-        </h3>
-        <div className="h-48 overflow-hidden">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={trainingLoadData.filter(d => d.stress > 0)} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
-              <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false}
-                tickFormatter={d => format(new Date(d), 'dd/MM')} />
-              <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={36} />
-              <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
-                labelFormatter={d => format(new Date(d as string), 'dd MMM', { locale: it })}
-                formatter={(v: any) => [v, 'Stress (TSS)']} />
-              <Bar dataKey="stress" fill="#378d44" radius={[3, 3, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+      <TornFrame size="card" variant={tornVariant('forma-carico-giornaliero')}>
+        <div className="p-5" style={{ background: TACCUINO_PAPER.card }}>
+          <h3 className="font-medium text-stone-700 mb-4 flex items-center gap-2 flex-wrap">
+            Carico giornaliero (TSS stimato) <InfoButton section="tss" />
+          </h3>
+          <div className="h-48 overflow-hidden">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={trainingLoadData.filter(d => d.stress > 0)} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
+                <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false}
+                  tickFormatter={d => format(new Date(d), 'dd/MM')} />
+                <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={36} />
+                <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
+                  labelFormatter={d => format(new Date(d as string), 'dd MMM', { locale: it })}
+                  formatter={(v: any) => [v, 'Stress (TSS)']} />
+                <Bar dataKey="stress" fill="#378d44" radius={[3, 3, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
-      </div>
+      </TornFrame>
 
       <div className="bg-sky-50 rounded-2xl border border-sky-100 p-5 text-sm text-sky-800 space-y-2">
         <p className="font-semibold">Come leggere questi grafici</p>

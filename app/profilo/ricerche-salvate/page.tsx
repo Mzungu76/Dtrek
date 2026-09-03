@@ -6,6 +6,8 @@ import BackLink from '@/app/components/BackLink'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { Loader2, Search, Route, FolderSearch, Trash2 } from 'lucide-react'
+import { TornFrame, tornVariant } from '@/components/TornFrame'
+import { TACCUINO_PAPER } from '@/lib/taccuinoTokens'
 
 interface SearchHistoryRow {
   id: string
@@ -81,45 +83,46 @@ export default function RicercheSalvatePage() {
           </div>
         )}
 
-        <div className="space-y-2.5">
+        <div className="space-y-5">
           {searches?.map(s => (
-            <div key={s.id}
-              className="flex items-center gap-3 bg-white rounded-2xl border border-stone-200 hover:border-stone-300 hover:shadow-sm transition-all p-4">
-              <Link href={`/profilo/ricerche-salvate/${encodeURIComponent(s.id)}`} className="flex items-center gap-3 flex-1 min-w-0">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${s.mode === 'su_misura' ? 'bg-forest-50 text-forest-600' : 'bg-terra-50 text-terra-600'}`}>
-                  {s.mode === 'su_misura' ? <Route className="w-4.5 h-4.5" /> : <Search className="w-4.5 h-4.5" />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-stone-800 truncate">{s.place_name || s.query || 'Ricerca senza nome'}</p>
-                  <p className="text-xs text-stone-400 mt-0.5">
-                    {s.mode === 'su_misura' ? 'Su misura' : 'Esistenti'} · {s.result_count} percors{s.result_count === 1 ? 'o' : 'i'} · {format(new Date(s.created_at), 'd MMM yyyy, HH:mm', { locale: it })}
-                  </p>
-                </div>
-              </Link>
-              {confirmId === s.id ? (
-                <div className="flex items-center gap-1.5 shrink-0">
+            <TornFrame key={s.id} size="card" variant={tornVariant(s.id)}>
+              <div className="flex items-center gap-3 p-4" style={{ background: TACCUINO_PAPER.card }}>
+                <Link href={`/profilo/ricerche-salvate/${encodeURIComponent(s.id)}`} className="flex items-center gap-3 flex-1 min-w-0">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${s.mode === 'su_misura' ? 'bg-forest-50 text-forest-600' : 'bg-terra-50 text-terra-600'}`}>
+                    {s.mode === 'su_misura' ? <Route className="w-4.5 h-4.5" /> : <Search className="w-4.5 h-4.5" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-stone-800 truncate">{s.place_name || s.query || 'Ricerca senza nome'}</p>
+                    <p className="text-xs text-stone-400 mt-0.5">
+                      {s.mode === 'su_misura' ? 'Su misura' : 'Esistenti'} · {s.result_count} percors{s.result_count === 1 ? 'o' : 'i'} · {format(new Date(s.created_at), 'd MMM yyyy, HH:mm', { locale: it })}
+                    </p>
+                  </div>
+                </Link>
+                {confirmId === s.id ? (
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      onClick={() => handleDelete(s.id)}
+                      disabled={deletingId === s.id}
+                      className="px-2.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-semibold disabled:opacity-50"
+                    >
+                      {deletingId === s.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Elimina'}
+                    </button>
+                    <button onClick={() => setConfirmId(null)} className="px-2.5 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 text-xs font-semibold">
+                      Annulla
+                    </button>
+                  </div>
+                ) : (
                   <button
-                    onClick={() => handleDelete(s.id)}
-                    disabled={deletingId === s.id}
-                    className="px-2.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-semibold disabled:opacity-50"
+                    onClick={() => setConfirmId(s.id)}
+                    title="Elimina questa ricerca"
+                    aria-label="Elimina questa ricerca"
+                    className="shrink-0 w-9 h-9 rounded-lg flex items-center justify-center text-stone-300 hover:text-red-600 hover:bg-red-50 transition-colors"
                   >
-                    {deletingId === s.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Elimina'}
+                    <Trash2 className="w-4 h-4" />
                   </button>
-                  <button onClick={() => setConfirmId(null)} className="px-2.5 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 text-xs font-semibold">
-                    Annulla
-                  </button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setConfirmId(s.id)}
-                  title="Elimina questa ricerca"
-                  aria-label="Elimina questa ricerca"
-                  className="shrink-0 w-9 h-9 rounded-lg flex items-center justify-center text-stone-300 hover:text-red-600 hover:bg-red-50 transition-colors"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              )}
-            </div>
+                )}
+              </div>
+            </TornFrame>
           ))}
         </div>
       </div>
