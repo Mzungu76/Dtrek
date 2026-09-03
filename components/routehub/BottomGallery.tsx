@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import Image from 'next/image'
 import { Mountain, ArrowUpDown, Upload, Star, Search, X, Rows3, CalendarClock } from 'lucide-react'
 import RouteThumb from '@/components/RouteThumb'
+import { TornFrame, tornVariant } from '@/components/TornFrame'
 import { MiniScoreRing } from '@/components/ScoreRing'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 import { ctsLabel } from '@/lib/trailScore'
@@ -365,46 +366,57 @@ export default function BottomGallery({
             key={item.id}
             data-route-id={item.id}
             onClick={() => onSelect(i)}
-            className={`shrink-0 w-20 h-20 rounded-2xl overflow-hidden relative ${
-              isCurrent ? 'border-[3px] border-sky-400 shadow-[0_0_0_2px_rgba(56,189,248,0.35)]' : 'border-[1.5px] border-white/35'
-            }`}
-            style={{ scrollSnapAlign: 'start' }}
+            className="shrink-0"
+            style={{
+              scrollSnapAlign: 'start',
+              // Bagliore azzurro al posto del vecchio bordo/anello: un bordo rotondo non ha più
+              // senso sopra un bordo strappato. filter:drop-shadow segue la sagoma reale (alpha)
+              // del composito sottostante, quindi il bagliore abbraccia lo strappo invece di un
+              // rettangolo. Non sul frame stesso (già impegnato in tre drop-shadow propri):
+              // sarebbe un quarto filtro sullo stesso elemento, sequenziale come gli altri —
+              // qui va sul wrapper esterno apposta per restare indipendente.
+              filter: isCurrent ? 'drop-shadow(0 0 2px #38bdf8) drop-shadow(0 0 5px #38bdf8)' : undefined,
+            }}
           >
-            {item.coverPhotoUrl ? (
-              <>
-                <Image src={item.coverPhotoUrl} alt={item.title} fill sizes="80px" className="object-cover" loading="lazy" />
-                <div className="absolute inset-0 bg-black/20 pointer-events-none" />
-              </>
-            ) : (
-              // Nessuna foto ⇒ mappa del percorso, non un placeholder generico — stessa priorità
-              // usata per la copertina grande a percorso aperto (vedi cover() in ResocontoHub.tsx e
-              // CoverMap in RouteHub.tsx). Guida non ha mai coverPhotoUrl, quindi qui vede sempre
-              // la mappa, come prima.
-              <GalleryMapThumb polyline={item.polyline} />
-            )}
-            {(hasSortData || (favoritesFilter && nextOutingFilter)) && (
-              <div className="absolute top-1 left-1">
-                <ThumbBadge sortBy={sortBy} item={item} showPlannedDate={favoritesFilter && nextOutingFilter} />
-              </div>
-            )}
-            <div className="absolute bottom-0 inset-x-0 px-1.5 pb-1 pt-5 bg-gradient-to-t from-black/75 to-transparent">
-              {/* Frase sintetica TS+Sicurezza — sulla scheda chiusa i due numeri nell'anello (in
-                  alto) non si capiscono da soli: qui si traduce il punteggio nelle stesse etichette
-                  qualitative già usate altrove nell'app (lib/trailScore.ts, lib/safetyScore.ts),
-                  non un nuovo testo inventato ad hoc. */}
-              {mode === 'guida' && item.scorePreview && item.safetyPreview && (
-                <span className="block text-[8px] font-semibold text-white/75 truncate leading-tight mb-0.5">
-                  {ctsLabel(item.scorePreview.value).label} · {item.safetyPreview.label}
-                </span>
+            {/* Nastro washi + bordo strappato (Taccuino Botanico, components/TornFrame.tsx) al
+                posto del vecchio riquadro arrotondato bordato. */}
+            <TornFrame size="map" variant={tornVariant(item.id)}>
+              {item.coverPhotoUrl ? (
+                <>
+                  <Image src={item.coverPhotoUrl} alt={item.title} fill sizes="87px" className="object-cover" loading="lazy" />
+                  <div className="absolute inset-0 bg-black/20 pointer-events-none" />
+                </>
+              ) : (
+                // Nessuna foto ⇒ mappa del percorso, non un placeholder generico — stessa priorità
+                // usata per la copertina grande a percorso aperto (vedi cover() in ResocontoHub.tsx e
+                // CoverMap in RouteHub.tsx). Guida non ha mai coverPhotoUrl, quindi qui vede sempre
+                // la mappa, come prima.
+                <GalleryMapThumb polyline={item.polyline} />
               )}
-              {/* Una riga sola con ellissi — il tentativo precedente (line-clamp-2) restava senza
-                  effetto in produzione (line-clamp e `block` si contendono la proprietà `display`
-                  nel CSS generato da Tailwind: `block` può vincere e disattivare il clamp), col
-                  risultato di un titolo lungo che si avvolgeva su più righe fino a riempire l'intera
-                  miniatura. Il nome per intero resta comunque leggibile: vedi il pulsante "Vedi
-                  tutti in elenco" qui sotto, che apre ExpandedGalleryList.tsx senza troncamenti. */}
-              <span className="block text-[10px] font-bold text-white truncate leading-tight">{item.title}</span>
-            </div>
+              {(hasSortData || (favoritesFilter && nextOutingFilter)) && (
+                <div className="absolute top-1 left-1">
+                  <ThumbBadge sortBy={sortBy} item={item} showPlannedDate={favoritesFilter && nextOutingFilter} />
+                </div>
+              )}
+              <div className="absolute bottom-0 inset-x-0 px-1.5 pb-1 pt-5 bg-gradient-to-t from-black/75 to-transparent">
+                {/* Frase sintetica TS+Sicurezza — sulla scheda chiusa i due numeri nell'anello (in
+                    alto) non si capiscono da soli: qui si traduce il punteggio nelle stesse etichette
+                    qualitative già usate altrove nell'app (lib/trailScore.ts, lib/safetyScore.ts),
+                    non un nuovo testo inventato ad hoc. */}
+                {mode === 'guida' && item.scorePreview && item.safetyPreview && (
+                  <span className="block text-[8px] font-semibold text-white/75 truncate leading-tight mb-0.5">
+                    {ctsLabel(item.scorePreview.value).label} · {item.safetyPreview.label}
+                  </span>
+                )}
+                {/* Una riga sola con ellissi — il tentativo precedente (line-clamp-2) restava senza
+                    effetto in produzione (line-clamp e `block` si contendono la proprietà `display`
+                    nel CSS generato da Tailwind: `block` può vincere e disattivare il clamp), col
+                    risultato di un titolo lungo che si avvolgeva su più righe fino a riempire l'intera
+                    miniatura. Il nome per intero resta comunque leggibile: vedi il pulsante "Vedi
+                    tutti in elenco" qui sotto, che apre ExpandedGalleryList.tsx senza troncamenti. */}
+                <span className="block text-[10px] font-bold text-white truncate leading-tight">{item.title}</span>
+              </div>
+            </TornFrame>
           </button>
           )
         })}

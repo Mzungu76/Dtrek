@@ -6,6 +6,7 @@ import { it } from 'date-fns/locale'
 import { Car, SquareParking, Milestone, MapPinned } from 'lucide-react'
 import type { TrackPoint } from '@/lib/tcxParser'
 import type { StartPointInfo } from '@/lib/routeBuilder/startPointInfo'
+import { TornBottomEdge, tornVariant } from '@/components/TornFrame'
 
 const MapView = dynamic(() => import('@/components/MapView'), { ssr: false })
 
@@ -16,6 +17,9 @@ const START_POINT_ICON = {
 } as const
 
 interface Props {
+  /** Sceglie lo strappo del bordo inferiore (tornVariant) — assente ⇒ ricade sul titolo, così
+   *  resta comunque deterministico invece di un valore fisso per ogni guida. */
+  id?: string
   trackPoints?: TrackPoint[]
   routePolyline?: [number, number][]
   title: string
@@ -37,7 +41,7 @@ interface Props {
  * TUO percorso, non una foto generica trovata online, e non dipende dalla disponibilità di foto.
  * Le foto Wikimedia restano usate più sotto (mosaico e foto per-sezione), solo non più qui.
  */
-export default function GuideHero({ trackPoints, routePolyline, title, categoryBadge, plannedDate, driving, startPoint }: Props) {
+export default function GuideHero({ id, trackPoints, routePolyline, title, categoryBadge, plannedDate, driving, startPoint }: Props) {
   const points = useMemo(() => {
     const fromTrack = (trackPoints ?? []).filter(p => p.lat !== undefined && p.lon !== undefined)
     if (fromTrack.length > 1) return fromTrack
@@ -48,9 +52,12 @@ export default function GuideHero({ trackPoints, routePolyline, title, categoryB
 
   return (
     <div
-      className="relative w-full overflow-hidden [--hero-h:clamp(200px,50vw,300px)] md:[--hero-h:clamp(240px,32vw,380px)] lg:[--hero-h:clamp(280px,26vw,460px)]"
+      className="relative w-full [--hero-h:clamp(200px,50vw,300px)] md:[--hero-h:clamp(240px,32vw,380px)] lg:[--hero-h:clamp(280px,26vw,460px)]"
       style={{ height: 'var(--hero-h)' }}
     >
+      {/* Strappo sul solo bordo inferiore, senza nastro (Taccuino Botanico, test) — banner a piena
+          pagina, senza un margine/pagina intorno su cui il nastro possa proseguire. */}
+      <TornBottomEdge variant={tornVariant(id ?? title)}>
       {hasGps ? (
         <div
           className="absolute inset-0 pointer-events-none"
@@ -121,6 +128,7 @@ export default function GuideHero({ trackPoints, routePolyline, title, categoryB
           )
         })()}
       </div>
+      </TornBottomEdge>
     </div>
   )
 }
