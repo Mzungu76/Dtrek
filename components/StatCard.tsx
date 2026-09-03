@@ -1,3 +1,5 @@
+import { TornFrame, tornVariant } from '@/components/TornFrame'
+
 interface Props {
   label: string
   value: string
@@ -41,13 +43,15 @@ export default function StatCard({ label, value, sub, color = 'stone', icon, too
   }
   const c = colorMap[color]
   return (
-    <div className={`rounded-xl border ${c.bg} ${c.border} px-4 py-3 flex flex-col gap-0.5`} title={tooltip}>
-      <div className={`flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider stat-badge ${c.text}`}>
-        {icon && <span>{icon}</span>}
-        {label}
+    <TornFrame size="card" variant={tornVariant(label)}>
+      <div className={`${c.bg} px-4 py-3 flex flex-col gap-0.5`} title={tooltip}>
+        <div className={`flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider stat-badge ${c.text}`}>
+          {icon && <span>{icon}</span>}
+          {label}
+        </div>
+        <div className={`font-display text-2xl font-semibold ${c.val}`}>{value}</div>
+        {sub && <div className="text-xs text-stone-400">{sub}</div>}
       </div>
-      <div className={`font-display text-2xl font-semibold ${c.val}`}>{value}</div>
-      {sub && <div className="text-xs text-stone-400">{sub}</div>}
-    </div>
+    </TornFrame>
   )
 }

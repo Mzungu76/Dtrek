@@ -1,4 +1,6 @@
 import RouteThumb from '@/components/RouteThumb'
+import { TornFrame, tornVariant } from '@/components/TornFrame'
+import { TACCUINO_PAPER } from '@/lib/taccuinoTokens'
 
 export default function RecordCard({ label, value, sub, icon, href, polyline }: {
   label: string
@@ -9,8 +11,8 @@ export default function RecordCard({ label, value, sub, icon, href, polyline }: 
   polyline?: [number, number][]
 }) {
   const inner = (
-    <div className="bg-white rounded-xl border border-stone-200 p-4 hover:border-forest-300 transition-colors h-full">
-      <div className="flex items-start gap-3">
+    <TornFrame size="card" variant={tornVariant(label)} className="h-full">
+      <div className="p-4 flex items-start gap-3 h-full" style={{ background: TACCUINO_PAPER.card }}>
         <div className="text-terra-500 mt-0.5 shrink-0">{icon}</div>
         <div className="min-w-0 flex-1">
           <p className="text-xs text-stone-400 uppercase tracking-wide font-medium">{label}</p>
@@ -28,7 +30,7 @@ export default function RecordCard({ label, value, sub, icon, href, polyline }: 
           </div>
         )}
       </div>
-    </div>
+    </TornFrame>
   )
   if (href) return <a href={href} className="block h-full">{inner}</a>
   return inner

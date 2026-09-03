@@ -15,7 +15,7 @@ import { TACCUINO_ACCENT, TACCUINO_ACCENT_TINT } from '@/lib/taccuinoTokens'
  * è invisibile (sempre coperto dal contenuto reale sopra) — vedi il commento in globals.css.
  */
 
-type TornSize = 'photo' | 'map' | 'hero'
+type TornSize = 'photo' | 'map' | 'hero' | 'card'
 
 type CSSVarStyle = CSSProperties & Record<`--${string}`, string>
 
@@ -54,7 +54,19 @@ const MAP_TAPE: TapePreset[] = [
 const HERO_TAPE: TapePreset[] = [
   { tapeX: '50%', tapeY: '4px', rotate: -4, style: { top: -14, left: '50%', marginLeft: -38 } },
 ]
-const TAPE_PRESETS: Record<TornSize, TapePreset[]> = { photo: PHOTO_TAPE, map: MAP_TAPE, hero: HERO_TAPE }
+// Riquadro "carta" generico (grafici, tessere, righe elenco) — larghezza intrinseca come una
+// card qualunque (non 100% garantito come "hero"): nastro comunque centrato in alto in %, stessa
+// ragione di HERO_TAPE.
+const CARD_TAPE: TapePreset[] = [
+  { tapeX: '50%', tapeY: '3px', rotate: -4, style: { top: -11, left: '50%', marginLeft: -28 } },
+]
+const TAPE_PRESETS: Record<TornSize, TapePreset[]> = { photo: PHOTO_TAPE, map: MAP_TAPE, hero: HERO_TAPE, card: CARD_TAPE }
+/** .torn-cut-N (foto/mappe/hero) usa jitter percentuale, tarato su riquadri piccoli/quadrati —
+ *  .torn-cut-card-N usa invece jitter in px fissi (come .torn-cut-bottom-N): una card può essere
+ *  larga quanto l'intera colonna di contenuto, dove il jitter percentuale risulterebbe invisibile. */
+function cutClass(size: TornSize, cut: number): string {
+  return size === 'card' ? `torn-cut-card-${cut}` : `torn-cut-${cut}`
+}
 
 /**
  * Taglio (1-4) e posizione del nastro (indice 0-3, stesso indice del taglio) derivati dall'id —
@@ -82,6 +94,7 @@ export function TornFrame({
 }) {
   const idx = ((variant % 4) + 4) % 4
   const cut = idx + 1
+  const cutCls = cutClass(size, cut)
   const presets = TAPE_PRESETS[size]
   const tape = presets[idx % presets.length]
   const frameStyle: CSSVarStyle = {
@@ -91,13 +104,13 @@ export function TornFrame({
   }
   return (
     <div className={`torn-frame torn-frame-${size} ${className ?? ''}`} style={frameStyle}>
-      <div className={`torn-ao torn-ao-${size}`}><div className={`torn-filler torn-cut-${cut}`} /></div>
-      <div className={`torn-rim torn-rim-${size}`}><div className={`torn-filler torn-cut-${cut}`} /></div>
-      <div className={`torn-cast torn-cast-${size}`}><div className={`torn-filler torn-cut-${cut}`} /></div>
+      <div className={`torn-ao torn-ao-${size}`}><div className={`torn-filler ${cutCls}`} /></div>
+      <div className={`torn-rim torn-rim-${size}`}><div className={`torn-filler ${cutCls}`} /></div>
+      <div className={`torn-cast torn-cast-${size}`}><div className={`torn-filler ${cutCls}`} /></div>
       {/* Sempre in cima, mai mascherato/filtrato — vedi il commento su .torn-content in
           globals.css: se questo layer condividesse la maschera "affievolisci verso il nastro"
           di .torn-cast, vicino al nastro sparirebbe la foto vera insieme all'ombra. */}
-      <div className={`torn-content torn-cut-${cut}`}>{children}</div>
+      <div className={`torn-content ${cutCls}`}>{children}</div>
       {badge}
       <div
         className={`torn-tape torn-tape-${size}`}

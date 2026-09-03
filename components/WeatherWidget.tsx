@@ -6,6 +6,8 @@ import {
   clothingSuggestions, weatherAdvice, weatherAdviceFromDaily, wmoInfo, windDirLabel, findGoodWeatherWindows,
 } from '@/lib/openmeteo'
 import type { HourlyWeather, HourlyWeatherFull, DailyWeather, ClothingItem, WeatherAdviceItem } from '@/lib/openmeteo'
+import { TornFrame, tornVariant } from '@/components/TornFrame'
+import { TACCUINO_PAPER } from '@/lib/taccuinoTokens'
 
 function formatHour(iso: string): string {
   return iso.slice(11, 16)
@@ -68,6 +70,21 @@ function SectionLabel({ children }: { children: ReactNode }) {
     <p className="text-[10px] font-semibold uppercase tracking-wide text-stone-400 mt-3.5 pt-3.5 border-t border-dashed border-stone-200">
       {children}
     </p>
+  )
+}
+
+// Involucro condiviso dai tre modi (historical/forecast/planned) — quando il chiamante passa
+// `panelClassName` (pagine "a libro" del Diario, dove una card bianca stonerebbe sulla pergamena,
+// un contesto decorativo a sé rispetto a questo effetto Taccuino Botanico) resta il vecchio
+// riquadro semplice, invariato; altrimenti bordo strappato + nastro come le altre card.
+function WeatherCard({ tornKey, panelClassName, children }: { tornKey: string; panelClassName?: string; children: ReactNode }) {
+  if (panelClassName) {
+    return <div className={`rounded-2xl border p-4 ${panelClassName}`}>{children}</div>
+  }
+  return (
+    <TornFrame size="card" variant={tornVariant(tornKey)}>
+      <div className="p-4" style={{ background: TACCUINO_PAPER.card }}>{children}</div>
+    </TornFrame>
   )
 }
 
@@ -216,7 +233,7 @@ export default function WeatherWidget(props: Props) {
     const tMax  = Math.max(...hourly.map(h => h.temperature))
 
     return (
-      <div className={`rounded-2xl border p-4 ${props.panelClassName ?? 'border-stone-100 bg-white'}`}>
+      <WeatherCard tornKey="meteo-storico" panelClassName={props.panelClassName}>
         <p className="text-xs font-semibold text-stone-400 uppercase tracking-wide mb-2">Meteo del giorno</p>
         <div className="flex items-center gap-4">
           <span className="text-4xl leading-none">{info.emoji}</span>
@@ -241,14 +258,14 @@ export default function WeatherWidget(props: Props) {
             )
           })}
         </div>
-      </div>
+      </WeatherCard>
     )
   }
 
   // ── Forecast mode ────────────────────────────────────────────────────────────
   if (props.mode === 'forecast') {
     return (
-      <div className={`rounded-2xl border p-4 ${props.panelClassName ?? 'border-stone-100 bg-white'}`}>
+      <WeatherCard tornKey="meteo-previsioni" panelClassName={props.panelClassName}>
         <p className="text-xs font-semibold text-stone-400 uppercase tracking-wide mb-3">Previsioni meteo</p>
         <DayStrip daily={daily} />
         {advice.length > 0 && (
@@ -257,7 +274,7 @@ export default function WeatherWidget(props: Props) {
             <AdviceRows advice={advice} />
           </>
         )}
-      </div>
+      </WeatherCard>
     )
   }
 
@@ -304,7 +321,7 @@ export default function WeatherWidget(props: Props) {
   // delle emoji di chrome — l'emoji grande della condizione meteo resta, è un linguaggio già
   // universale, non un'icona di interfaccia.
   return (
-    <div className={`rounded-2xl border overflow-hidden p-4 ${(props as PlannedProps).panelClassName ?? 'border-stone-100 bg-white'}`}>
+    <WeatherCard tornKey={`meteo-pianificata-${plannedDate ?? 'senza-data'}`} panelClassName={(props as PlannedProps).panelClassName}>
 
       {/* Header */}
       <div className="flex items-start gap-4">
@@ -444,6 +461,6 @@ export default function WeatherWidget(props: Props) {
           <div className="mt-2.5"><DayStrip daily={daily.slice(0, 7)} /></div>
         </>
       )}
-    </div>
+    </WeatherCard>
   )
 }
