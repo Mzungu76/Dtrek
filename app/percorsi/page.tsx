@@ -7,7 +7,7 @@ import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 import { ctsLabel } from '@/lib/trailScore'
 import { formatDuration } from '@/lib/tcxParser'
 import type { AllPercorsiRow } from '@/app/api/percorsi/route'
-import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, FONT_HAND, HandDrawnFrame } from '@/lib/taccuinoTokens'
+import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, FONT_HAND, HandDrawnFrame, TaccuinoPaperTexture } from '@/lib/taccuinoTokens'
 import { FONT } from '@/lib/designTokens'
 import { metaHasHikingMetrics } from '@/lib/metaTypes'
 import { ArrowDown, ArrowLeft, ArrowUp, Clock, Loader2, Mountain, Route, Search, Star, TrendingUp, X } from 'lucide-react'
@@ -86,7 +86,8 @@ export default function MetePage() {
   }, [mete, favoritesOnly, query, sortBy, sortDir])
 
   return (
-    <div className={`min-h-screen md:pb-0 ${MOBILE_BOTTOMBAR_SPACER}`} style={{ background: TACCUINO_PAPER.base }}>
+    <div className={`min-h-screen md:pb-0 ${MOBILE_BOTTOMBAR_SPACER}`}>
+      <TaccuinoPaperTexture />
       <Navbar />
 
       <div className="relative h-[200px] sm:h-[240px] overflow-hidden" style={{ background: 'linear-gradient(to bottom right, #4A5A3F, #2E3A26)' }}>

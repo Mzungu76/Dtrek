@@ -11,7 +11,7 @@ import { formatDuration } from '@/lib/tcxParser'
 import type { DiarioDetail } from '@/app/api/diaries/[id]/route'
 import { updateUserSettings } from '@/lib/sync/userSettingsStore'
 import { FONT } from '@/lib/designTokens'
-import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, FONT_HAND, TaccuinoPaperTexture, HandDrawnFrame } from '@/lib/taccuinoTokens'
+import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, FONT_HAND, INK_ABSORB_STYLE, TaccuinoPaperTexture, HandDrawnFrame } from '@/lib/taccuinoTokens'
 import { metaHasHikingMetrics } from '@/lib/metaTypes'
 import {
   ArrowDown, ArrowLeft, ArrowUp, BookOpen, ChevronRight, Clock, Loader2, Mountain,
@@ -169,7 +169,7 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-sm px-6 text-center" style={{ background: TACCUINO_PAPER.base, color: '#b3413a', fontFamily: FONT.body }}>
+      <div className="min-h-screen flex items-center justify-center text-sm px-6 text-center" style={{ color: '#b3413a', fontFamily: FONT.body }}>
         <TaccuinoPaperTexture />
         Impossibile caricare questo Diario: {error}
       </div>
@@ -177,7 +177,7 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
   }
   if (!detail) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: TACCUINO_PAPER.base }}>
+      <div className="min-h-screen flex items-center justify-center">
         <TaccuinoPaperTexture />
         <Loader2 className="w-6 h-6 animate-spin" style={{ color: TACCUINO_INK.handMuted }} />
       </div>
@@ -222,7 +222,7 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
             <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 10, color: TACCUINO_INK.handMuted, margin: '0 0 3px' }}>
               Sommario
             </p>
-            <h1 style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 27, color: TACCUINO_INK.typed, margin: 0, transform: 'rotate(-0.5deg)' }}>
+            <h1 style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 27, margin: 0, transform: 'rotate(-0.5deg)', ...INK_ABSORB_STYLE }}>
               {detail.title}
             </h1>
             <p style={{ fontFamily: FONT_HAND, fontSize: 14, color: TACCUINO_INK.handMuted, margin: '3px 0 0' }}>
