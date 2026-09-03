@@ -22,6 +22,7 @@ import { getReport, saveReportContent } from '@/lib/sync/hikeReportStore'
 import type { ReportFixedSectionKey } from '@/components/resoconto/sectionStyle'
 import { PhotoLightbox } from '@/app/resoconto/[id]/PhotoLightbox'
 import { FONT } from '@/lib/designTokens'
+import { TACCUINO_PAPER, TACCUINO_INK } from '@/lib/taccuinoTokens'
 import { Loader2 } from 'lucide-react'
 import MagazineBody from '@/components/editorial/MagazineBody'
 import ReportGenerationPanel from './ReportGenerationPanel'
@@ -132,14 +133,14 @@ export default function ReportBookPage({ basePath, diarioHref, diarioTitle, acti
 
   if (bd.loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#fbf6e8' }}>
-        <Loader2 className="w-6 h-6 animate-spin" style={{ color: '#a9915f' }} />
+      <div className="min-h-screen flex items-center justify-center" style={{ background: TACCUINO_PAPER.base }}>
+        <Loader2 className="w-6 h-6 animate-spin" style={{ color: TACCUINO_INK.handMuted }} />
       </div>
     )
   }
   if (bd.notFound || !bd.activity) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-sm" style={{ background: '#fbf6e8', color: '#6b6142', fontFamily: FONT.body }}>
+      <div className="min-h-screen flex items-center justify-center text-sm" style={{ background: TACCUINO_PAPER.base, color: TACCUINO_INK.handMuted, fontFamily: FONT.body }}>
         Reportage non trovato.
       </div>
     )
@@ -170,7 +171,7 @@ export default function ReportBookPage({ basePath, diarioHref, diarioTitle, acti
 
   if (!current) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-sm" style={{ background: '#fbf6e8', color: '#6b6142', fontFamily: FONT.body }}>
+      <div className="min-h-screen flex items-center justify-center text-sm" style={{ background: TACCUINO_PAPER.base, color: TACCUINO_INK.handMuted, fontFamily: FONT.body }}>
         Questa sezione non è ancora disponibile per questo Reportage.
       </div>
     )
@@ -215,12 +216,13 @@ export default function ReportBookPage({ basePath, diarioHref, diarioTitle, acti
         sections={sections}
         currentSectionKey={current.key}
         pageLabel={`${idx + 1} di ${present.length}`}
+        theme="taccuino"
       >
-        <h1 style={{ fontFamily: FONT.display, fontWeight: 600, fontSize: 22, color: '#3f3a22', margin: '0 0 14px' }}>
+        <h1 style={{ fontFamily: FONT.display, fontWeight: 600, fontSize: 22, color: TACCUINO_INK.typed, margin: '0 0 14px' }}>
           {current.title}
         </h1>
         {chapterBody?.trim() && (
-          <div style={{ fontFamily: FONT.lora, fontSize: 14.5, lineHeight: 1.7, color: '#4a4530', marginBottom: 16 }}>
+          <div style={{ fontFamily: FONT.lora, fontSize: 14.5, lineHeight: 1.7, color: TACCUINO_INK.hand, marginBottom: 16 }}>
             <MagazineBody body={chapterBody} />
           </div>
         )}

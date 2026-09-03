@@ -4653,7 +4653,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           }
           controls.push({ kind:'custom', id:'photo-list', label:`Foto del percorso (${routePhotos.length})`, render:()=>(
             <div>
-              <label className={`flex items-center gap-1.5 text-[11px] font-semibold text-terra-600 hover:text-terra-700 cursor-pointer mb-2 ${photoBeingAdded?'opacity-50 pointer-events-none':''}`}>
+              <label className={`flex items-center gap-1.5 text-[11px] font-semibold text-botanico-accent hover:opacity-80 cursor-pointer mb-2 ${photoBeingAdded?'opacity-50 pointer-events-none':''}`}>
                 {photoBeingAdded?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<ImagePlus className="w-3.5 h-3.5"/>}
                 Aggiungi foto
                 <input type="file" accept="image/*" multiple className="hidden" onChange={handlePhotoUpload}/>
@@ -4675,16 +4675,16 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                         <div className="relative shrink-0">
                           <button onClick={()=>setActivePhotoRowId(active?null:photo.id)}
                             title="Sposta o ripristina questa foto" className="block">
-                            <img src={photo.thumbUrl ?? photo.url} alt="" className={`w-11 h-11 rounded-lg object-cover ${active?'ring-2 ring-forest-500':''}`}/>
+                            <img src={photo.thumbUrl ?? photo.url} alt="" className={`w-11 h-11 rounded-lg object-cover ${active?'ring-2 ring-botanico-accent':''}`}/>
                           </button>
                           {photo.hasExifGps&&(
-                            <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-forest-500 flex items-center justify-center" title="GPS automatico">
+                            <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-botanico-accent flex items-center justify-center" title="GPS automatico">
                               <Check className="w-2 h-2 text-white"/>
                             </span>
                           )}
                           <button onClick={()=>togglePhotoIncluded(photo.id)}
                             title={included?'Escludi dal video':'Includi nel video'}
-                            className={`absolute -top-1 -left-1 w-4 h-4 rounded-full flex items-center justify-center border-2 border-white transition-colors ${included?'bg-forest-600':'bg-stone-400'}`}>
+                            className={`absolute -top-1 -left-1 w-4 h-4 rounded-full flex items-center justify-center border-2 border-white transition-colors ${included?'bg-botanico-accent':'bg-stone-400'}`}>
                             {included&&<Check className="w-2.5 h-2.5 text-white"/>}
                           </button>
                         </div>
@@ -4709,7 +4709,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                             <div className="flex items-center gap-1.5 mb-1.5">
                               <button onClick={()=>togglePhotoLock(photo.id)}
                                 className={`flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-lg transition-colors ${
-                                  locked ? 'bg-stone-200 text-stone-600 hover:bg-stone-300' : 'bg-forest-600 text-white hover:bg-forest-700'}`}>
+                                  locked ? 'bg-stone-200 text-stone-600 hover:bg-stone-300' : 'bg-botanico-accent text-white hover:opacity-90'}`}>
                                 {locked ? <Lock className="w-3 h-3"/> : <LockOpen className="w-3 h-3"/>}
                                 {locked ? 'Bloccata' : 'Sbloccata: trascinala sulla mappa'}
                               </button>

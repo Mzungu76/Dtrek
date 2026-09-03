@@ -127,7 +127,15 @@ export default function BookPage({
     letterSpacing: '0.04em', fontSize: 9.5, color: t.inkMuted,
   }
   return (
-    <div className={`min-h-screen flex flex-col ${bottomBar === 'global' ? MOBILE_BOTTOMBAR_SPACER : ''}`} style={{ background: t.paperBg }}>
+    <div
+      className={`min-h-screen flex flex-col ${bottomBar === 'global' ? MOBILE_BOTTOMBAR_SPACER : ''}`}
+      // Solo "pergamena" porta il proprio background qui: "taccuino" lo fornisce già
+      // TaccuinoPaperTexture (montata sotto, come figlio) — un background anche qui lo
+      // nasconderebbe, stesso bug di stacking corretto in app/diari/page.tsx e app/profilo/page.tsx
+      // (CSS2.1 §E.2: questo contenitore, non posizionato, dipingerebbe sopra il `<div fixed>` a
+      // z-index negativo della texture).
+      style={{ background: theme === 'taccuino' ? undefined : t.paperBg }}
+    >
       {theme === 'taccuino' ? (
         <>
           <TaccuinoPaperTexture />

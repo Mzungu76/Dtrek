@@ -75,7 +75,7 @@ export default function NavigatorePage() {
         onClick={() => mapHandleRef.current?.recenter()}
         aria-label="Centra sulla mia posizione"
         className={`absolute right-3 top-1/2 -translate-y-1/2 z-10 w-11 h-11 rounded-full shadow-lg flex items-center justify-center ${
-          followMode ? 'bg-terra-500 text-white' : 'bg-white text-stone-700'
+          followMode ? 'bg-botanico-accent text-white' : 'bg-white text-stone-700'
         }`}
       >
         <Locate className="w-5 h-5" />
@@ -119,7 +119,7 @@ export default function NavigatorePage() {
         ) : readyHike ? (
           <Link
             href={`/guida/${encodeURIComponent(readyHike.id)}/naviga`}
-            className="flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-forest-500 text-white shadow-sm hover:bg-forest-600 transition-colors"
+            className="flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-botanico-accent text-white shadow-sm hover:opacity-90 transition-colors"
           >
             <Navigation2 className="w-5 h-5 shrink-0" />
             <div className="flex-1 min-w-0">
