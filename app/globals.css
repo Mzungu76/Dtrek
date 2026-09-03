@@ -172,3 +172,99 @@ body {
    HiddenPdfRoot.tsx resta un percorso separato, non tocca questa regola). */
 .diario-page { page: diario; }
 @page diario { size: A4; margin: 0; }
+
+/* ── Taccuino Botanico — foto/mappe "ritagliate a mano" con nastro washi ──
+   Calibrata in un mockup dedicato (Artifact, non su file) prima di questo porting: bordo
+   strappato (clip-path), bordino di carta bianco, ombra "sollevata" e occlusione ambientale
+   (entrambe affievolite verso il nastro), nastro che prosegue sullo sfondo. Usata da
+   components/TornFrame.tsx — non usare queste classi direttamente altrove senza passare da lì,
+   il posizionamento del nastro (--tape-x/--tape-y) deve restare sincronizzato con i preset di
+   quel componente.
+
+   clip-path e filter:drop-shadow non possono stare sullo STESSO elemento — clip-path ritaglia
+   tutto ciò che l'elemento disegna, filtro incluso. Ogni "ruolo" (ao/rim/cast) è quindi diviso
+   in due: un contenitore SENZA clip-path che porta il filtro (ombra), e un figlio interno CON
+   clip-path (.torn-filler o .torn-content) che gli dà la sagoma strappata da cui il filtro
+   calcola l'alpha. .torn-ao e .torn-rim non sono mai visibili di per sé (coperti dal contenuto
+   reale in .torn-cast, disegnato sopra): il loro .torn-filler è un riempimento opaco qualunque,
+   serve solo a dare al filtro una sagoma su cui calcolare l'ombra — non ha bisogno di essere
+   una copia della foto/mappa reale, quel contenuto vive UNA sola volta, dentro .torn-cast. */
+.torn-frame{ position: relative; }
+.torn-frame-photo{ width: 144px; height: 112px; }
+.torn-frame-map{ width: 87px; height: 87px; flex-shrink: 0; }
+
+.torn-content, .torn-filler{ position: absolute; inset: 0; }
+.torn-filler{ background: #000; }
+/* .torn-content è SEMPRE l'ultimo layer, sopra ao/rim/cast — mai mascherato, mai un filtro
+   proprio: se ricevesse la maschera "affievolisci vicino al nastro" di .torn-cast, vicino al
+   nastro sparirebbe anche la foto vera (non solo l'ombra), rivelando il riempimento invisibile
+   del layer sotto invece della foto stessa (bug reale riscontrato nel porting: vicino al nastro
+   comparivano chiazze nere/chiare al posto della foto). Restando un layer a parte, sempre
+   opaco al 100%, copre sempre per intero i riempimenti invisibile di ao/rim/cast qualunque sia
+   il loro stato di maschera — solo i LORO aloni di ombra, che sporgono oltre il riquadro
+   originale nella zona di padding, restano visibili. */
+.torn-content{ overflow: hidden; }
+
+.torn-cut-1{ clip-path: polygon(0.0% 0.1%, 6.2% 0.0%, 12.5% 0.8%, 18.8% 0.7%, 25.0% 0.0%, 31.2% 0.3%, 37.5% 0.0%, 43.8% 0.0%, 50.0% 0.0%, 56.2% 0.3%, 62.5% 0.0%, 68.8% 0.8%, 75.0% 0.0%, 81.2% 0.0%, 87.5% 0.0%, 93.8% 0.5%, 100.0% 0.0%, 99.8% 6.2%, 100.0% 12.5%, 99.6% 18.8%, 99.8% 25.0%, 100.0% 31.2%, 99.8% 37.5%, 99.9% 43.8%, 100.0% 50.0%, 99.9% 56.2%, 99.8% 62.5%, 100.0% 68.8%, 99.4% 75.0%, 99.6% 81.2%, 100.0% 87.5%, 100.0% 93.8%, 100.0% 100.0%, 93.8% 100.0%, 87.5% 99.6%, 81.2% 99.6%, 75.0% 100.0%, 68.8% 100.0%, 62.5% 99.8%, 56.2% 100.0%, 50.0% 100.0%, 43.8% 99.3%, 37.5% 99.4%, 31.2% 100.0%, 25.0% 100.0%, 18.8% 100.0%, 12.5% 99.4%, 6.2% 100.0%, 0.0% 100.0%, 0.6% 93.8%, 0.4% 87.5%, 0.0% 81.2%, 0.0% 75.0%, 0.4% 68.8%, 0.5% 62.5%, 0.0% 56.2%, 0.0% 50.0%, 0.7% 43.8%, 0.0% 37.5%, 0.3% 31.2%, 0.0% 25.0%, 0.2% 18.8%, 0.6% 12.5%, 0.1% 6.2%); }
+.torn-cut-2{ clip-path: polygon(0.0% 0.4%, 6.2% 0.2%, 12.5% 0.0%, 18.8% 0.0%, 25.0% 0.3%, 31.2% 0.8%, 37.5% 0.0%, 43.8% 0.6%, 50.0% 0.0%, 56.2% 0.0%, 62.5% 0.0%, 68.8% 0.0%, 75.0% 0.2%, 81.2% 0.6%, 87.5% 0.0%, 93.8% 0.6%, 100.0% 0.0%, 99.4% 6.2%, 99.8% 12.5%, 100.0% 18.8%, 99.5% 25.0%, 99.8% 31.2%, 99.4% 37.5%, 99.8% 43.8%, 99.6% 50.0%, 99.5% 56.2%, 100.0% 62.5%, 100.0% 68.8%, 99.3% 75.0%, 100.0% 81.2%, 99.9% 87.5%, 99.2% 93.8%, 100.0% 100.0%, 93.8% 100.0%, 87.5% 99.9%, 81.2% 100.0%, 75.0% 100.0%, 68.8% 100.0%, 62.5% 99.7%, 56.2% 100.0%, 50.0% 99.2%, 43.8% 100.0%, 37.5% 100.0%, 31.2% 99.7%, 25.0% 99.2%, 18.8% 99.4%, 12.5% 99.4%, 6.2% 100.0%, 0.0% 100.0%, 0.4% 93.8%, 0.1% 87.5%, 0.0% 81.2%, 0.6% 75.0%, 0.0% 68.8%, 0.8% 62.5%, 0.0% 56.2%, 0.0% 50.0%, 0.4% 43.8%, 0.0% 37.5%, 0.8% 31.2%, 0.3% 25.0%, 0.0% 18.8%, 0.8% 12.5%, 0.0% 6.2%); }
+.torn-cut-3{ clip-path: polygon(0.0% 0.0%, 6.2% 0.8%, 12.5% 0.0%, 18.8% 0.8%, 25.0% 0.8%, 31.2% 0.0%, 37.5% 0.0%, 43.8% 0.0%, 50.0% 0.0%, 56.2% 0.5%, 62.5% 0.6%, 68.8% 0.0%, 75.0% 0.1%, 81.2% 0.3%, 87.5% 0.2%, 93.8% 0.0%, 100.0% 0.0%, 100.0% 6.2%, 99.4% 12.5%, 100.0% 18.8%, 100.0% 25.0%, 99.7% 31.2%, 100.0% 37.5%, 99.9% 43.8%, 100.0% 50.0%, 99.6% 56.2%, 100.0% 62.5%, 100.0% 68.8%, 99.3% 75.0%, 100.0% 81.2%, 100.0% 87.5%, 100.0% 93.8%, 100.0% 100.0%, 93.8% 99.9%, 87.5% 99.8%, 81.2% 100.0%, 75.0% 100.0%, 68.8% 99.5%, 62.5% 99.8%, 56.2% 100.0%, 50.0% 99.9%, 43.8% 99.7%, 37.5% 99.7%, 31.2% 99.5%, 25.0% 99.2%, 18.8% 99.7%, 12.5% 99.2%, 6.2% 100.0%, 0.0% 100.0%, 0.0% 93.8%, 0.0% 87.5%, 0.4% 81.2%, 0.0% 75.0%, 0.4% 68.8%, 0.0% 62.5%, 0.3% 56.2%, 0.5% 50.0%, 0.0% 43.8%, 0.8% 37.5%, 0.0% 31.2%, 0.7% 25.0%, 0.0% 18.8%, 0.6% 12.5%, 0.1% 6.2%); }
+.torn-cut-4{ clip-path: polygon(0.0% 0.0%, 6.2% 0.0%, 12.5% 0.0%, 18.8% 0.0%, 25.0% 0.2%, 31.2% 0.0%, 37.5% 0.0%, 43.8% 0.0%, 50.0% 0.7%, 56.2% 0.3%, 62.5% 0.0%, 68.8% 0.1%, 75.0% 0.0%, 81.2% 0.1%, 87.5% 0.4%, 93.8% 0.0%, 100.0% 0.0%, 99.2% 6.2%, 99.6% 12.5%, 99.4% 18.8%, 99.4% 25.0%, 99.8% 31.2%, 99.7% 37.5%, 100.0% 43.8%, 100.0% 50.0%, 99.8% 56.2%, 100.0% 62.5%, 100.0% 68.8%, 100.0% 75.0%, 100.0% 81.2%, 100.0% 87.5%, 99.9% 93.8%, 100.0% 100.0%, 93.8% 100.0%, 87.5% 100.0%, 81.2% 100.0%, 75.0% 100.0%, 68.8% 100.0%, 62.5% 100.0%, 56.2% 99.3%, 50.0% 100.0%, 43.8% 100.0%, 37.5% 99.2%, 31.2% 99.8%, 25.0% 100.0%, 18.8% 100.0%, 12.5% 99.2%, 6.2% 99.7%, 0.0% 99.3%, 0.0% 93.8%, 0.5% 87.5%, 0.1% 81.2%, 0.0% 75.0%, 0.4% 68.8%, 0.3% 62.5%, 0.0% 56.2%, 0.0% 50.0%, 0.1% 43.8%, 0.5% 37.5%, 0.7% 31.2%, 0.7% 25.0%, 0.0% 18.8%, 0.0% 12.5%, 0.0% 6.2%); }
+
+/* Bordino di carta — sempre uniforme (taglio del foglio, non illuminazione): stesso valore per
+   photo/map, resta invariato anche sotto il nastro. */
+.torn-rim-photo, .torn-rim-map{ position: absolute; inset: 0; filter: drop-shadow(0 0 1.5px #fff) drop-shadow(0 0 6px #fff); }
+
+/* Occlusione ambientale — ombra di contatto stretta, affievolita verso il nastro (dove la carta
+   è comunque incollata allo sfondo, non "sollevata") via mask-image radiale centrata su
+   --tape-x/--tape-y. Riquadro allargato (inset negativo) per contenere lo sfioccamento del
+   filtro senza che mask-repeat:no-repeat lo tagli via. */
+.torn-ao-photo{
+  position: absolute; inset: -18px;
+  filter: drop-shadow(0 1.5px 4px rgba(46,42,34,.52)) drop-shadow(0 0 2.5px rgba(46,42,34,.42));
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-image: radial-gradient(circle 55px at calc(var(--tape-x,72px) + 18px) calc(var(--tape-y,0px) + 18px), transparent 0%, transparent 20%, black 100%);
+  mask-image: radial-gradient(circle 55px at calc(var(--tape-x,72px) + 18px) calc(var(--tape-y,0px) + 18px), transparent 0%, transparent 20%, black 100%);
+}
+.torn-ao-photo .torn-filler{ inset: 18px; }
+.torn-ao-map{
+  position: absolute; inset: -11px;
+  filter: drop-shadow(0 1px 2.5px rgba(46,42,34,.52)) drop-shadow(0 0 1.5px rgba(46,42,34,.42));
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-image: radial-gradient(circle 33px at calc(var(--tape-x,44px) + 11px) calc(var(--tape-y,0px) + 11px), transparent 0%, transparent 20%, black 100%);
+  mask-image: radial-gradient(circle 33px at calc(var(--tape-x,44px) + 11px) calc(var(--tape-y,0px) + 11px), transparent 0%, transparent 20%, black 100%);
+}
+.torn-ao-map .torn-filler{ inset: 11px; }
+
+/* Ombra "sollevata" — dipende dalla fisica del nastro come l'AO sopra, stessa tecnica di
+   maschera, riquadro allargato di più (la sfocatura è maggiore). */
+.torn-cast-photo{
+  position: absolute; inset: -32px;
+  filter: drop-shadow(3px 8px 13px rgba(46,42,34,.38)) drop-shadow(0 2px 3px rgba(46,42,34,.26));
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-image: radial-gradient(circle 74px at calc(var(--tape-x,72px) + 32px) calc(var(--tape-y,0px) + 32px), transparent 0%, transparent 25%, black 100%);
+  mask-image: radial-gradient(circle 74px at calc(var(--tape-x,72px) + 32px) calc(var(--tape-y,0px) + 32px), transparent 0%, transparent 25%, black 100%);
+}
+.torn-cast-photo .torn-filler{ inset: 32px; }
+.torn-cast-map{
+  position: absolute; inset: -20px;
+  filter: drop-shadow(2px 5px 8px rgba(46,42,34,.38)) drop-shadow(0 1.5px 2px rgba(46,42,34,.26));
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-image: radial-gradient(circle 44px at calc(var(--tape-x,44px) + 20px) calc(var(--tape-y,0px) + 20px), transparent 0%, transparent 25%, black 100%);
+  mask-image: radial-gradient(circle 44px at calc(var(--tape-x,44px) + 20px) calc(var(--tape-y,0px) + 20px), transparent 0%, transparent 25%, black 100%);
+}
+.torn-cast-map .torn-filler{ inset: 20px; }
+
+/* Nastro — fratello, non figlio, degli elementi con clip-path sopra (altrimenti verrebbe
+   tagliato insieme al resto): prosegue chiaramente oltre il bordo, sulla carta dietro. Colore
+   pieno TACCUINO_ACCENT_TINT (lib/taccuinoTokens.tsx) — se quel token cambia, aggiornare anche
+   qui. */
+.torn-tape-photo{ position: absolute; width: 58px; height: 20px; border-radius: 1px; background: #E9DAC3; box-shadow: 0 2px 4px rgba(46,42,34,.3); opacity: .9; z-index: 3; }
+.torn-tape-map{ position: absolute; width: 40px; height: 14px; border-radius: 1px; background: #E9DAC3; box-shadow: 0 1.5px 3px rgba(46,42,34,.3); opacity: .9; z-index: 3; }
+
+/* Numero di galleria — sostituisce bg-amber-500 (colore fuori palette taccuino) col terracotta
+   TACCUINO_ACCENT[600], sporgente sull'angolo come un'etichetta appuntata invece che incassato. */
+.torn-badge{
+  position: absolute; top: -9px; left: -9px; width: 22px; height: 22px; border-radius: 50%;
+  background: #C0603D; color: #fff; display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 11px; box-shadow: 0 2px 4px rgba(46,42,34,.3); z-index: 3;
+}
