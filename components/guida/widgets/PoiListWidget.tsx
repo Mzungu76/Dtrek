@@ -14,6 +14,8 @@ import ReturnOptionsSection from './ReturnOptionsSection'
 import { buildReturnOptionMapsUrl, type ReturnOption } from '@/lib/routeBuilder/returnOptions'
 import { getCachedGeoInfo, setCachedGeoInfo } from '@/lib/routeBuilder/geoInfoCache'
 import { LS_KEYS } from '@/lib/localStore'
+import { TornFrame, tornVariant } from '@/components/TornFrame'
+import { TACCUINO_PAPER } from '@/lib/taccuinoTokens'
 
 interface Props {
   /** Id della guida — solo per la cache locale della copertura Street View (vedi
@@ -67,47 +69,52 @@ function PoiCard({ entry, highlighted, dimmed, onTap, hasStreetView }: {
 }) {
   return (
     <div
-      className={`group relative flex flex-col shrink-0 w-40 sm:w-44 rounded-xl overflow-hidden border shadow-sm hover:shadow-md transition-all bg-white ${
-        highlighted ? 'border-sky-400 ring-2 ring-sky-200' : 'border-stone-100 hover:border-stone-200'
-      } ${dimmed ? 'opacity-35 grayscale' : ''}`}
+      className={`shrink-0 w-40 sm:w-44 transition-opacity ${dimmed ? 'opacity-35 grayscale' : ''}`}
+      style={highlighted ? { filter: 'drop-shadow(0 0 2px #38bdf8) drop-shadow(0 0 5px #38bdf8)' } : undefined}
     >
-      <a href={entry.url} target="_blank" rel="noopener noreferrer" onClick={onTap}>
-        <div className="relative h-28 sm:h-32 overflow-hidden bg-stone-100">
-          <Image
-            src={entry.thumbnail}
-            alt={entry.title}
-            fill
-            sizes="176px"
-            className="object-cover group-hover:scale-105 transition-transform duration-500"
-          />
-        </div>
-        <div className="p-2.5 pb-1">
-          <p className="font-display font-semibold text-stone-800 text-[14px] leading-tight line-clamp-1 tracking-wide">
-            {entry.title}
-          </p>
-          {entry.description && (
-            <p className="text-[10px] text-stone-400 mt-0.5 line-clamp-1">{entry.description}</p>
-          )}
-          <span className="flex items-center gap-0.5 text-[10px] mt-1 text-terra-800">
-            <ExternalLink className="w-2.5 h-2.5" /> Wikipedia
-          </span>
-        </div>
-      </a>
-      {/* Icona separata, non annidata nel link Wikipedia sopra — visibile solo dove è nota una
-          copertura plausibile (vedi lib/routeBuilder/streetViewCoverage.ts): molti POI lungo i
-          sentieri non ne hanno, mostrarla ovunque porterebbe spesso a un punto scoperto/irrilevante. */}
-      {hasStreetView && entry.lat != null && entry.lon != null && (
-        <a
-          href={streetViewUrl(entry.lat, entry.lon)}
-          target="_blank"
-          rel="noopener noreferrer"
-          title="Vedi"
-          aria-label="Vedi il luogo dalla strada"
-          className="absolute top-1.5 right-1.5 z-10 w-6 h-6 rounded-full bg-black/55 backdrop-blur-sm flex items-center justify-center text-white hover:bg-black/70 transition-colors"
-        >
-          <Eye className="w-3 h-3" />
+      {/* Nastro washi + bordo strappato (Taccuino Botanico) al posto del vecchio riquadro
+          arrotondato bordato — l'anello di selezione (sky-400) diventa un bagliore drop-shadow
+          sul wrapper esterno, che segue la sagoma strappata invece di un cerchio attorno a un
+          rettangolo (stesso trattamento di BottomGallery.tsx). */}
+      <TornFrame size="card" variant={tornVariant(entry.key)} className="group relative">
+        <a href={entry.url} target="_blank" rel="noopener noreferrer" onClick={onTap}>
+          <div className="relative h-28 sm:h-32 overflow-hidden bg-stone-100">
+            <Image
+              src={entry.thumbnail}
+              alt={entry.title}
+              fill
+              sizes="176px"
+              className="object-cover group-hover:scale-105 transition-transform duration-500"
+            />
+          </div>
+          <div className="p-2.5 pb-1" style={{ background: TACCUINO_PAPER.card }}>
+            <p className="font-display font-semibold text-stone-800 text-[14px] leading-tight line-clamp-1 tracking-wide">
+              {entry.title}
+            </p>
+            {entry.description && (
+              <p className="text-[10px] text-stone-400 mt-0.5 line-clamp-1">{entry.description}</p>
+            )}
+            <span className="flex items-center gap-0.5 text-[10px] mt-1 text-terra-800">
+              <ExternalLink className="w-2.5 h-2.5" /> Wikipedia
+            </span>
+          </div>
         </a>
-      )}
+        {/* Icona separata, non annidata nel link Wikipedia sopra — visibile solo dove è nota una
+            copertura plausibile (vedi lib/routeBuilder/streetViewCoverage.ts): molti POI lungo i
+            sentieri non ne hanno, mostrarla ovunque porterebbe spesso a un punto scoperto/irrilevante. */}
+        {hasStreetView && entry.lat != null && entry.lon != null && (
+          <a
+            href={streetViewUrl(entry.lat, entry.lon)}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Vedi"
+            aria-label="Vedi il luogo dalla strada"
+            className="absolute top-1.5 right-1.5 z-10 w-6 h-6 rounded-full bg-black/55 backdrop-blur-sm flex items-center justify-center text-white hover:bg-black/70 transition-colors"
+          >
+            <Eye className="w-3 h-3" />
+          </a>
+        )}
+      </TornFrame>
     </div>
   )
 }
@@ -316,7 +323,8 @@ export default function PoiListWidget({
           <p className="text-sm italic text-center py-8 text-stone-400">Nessun luogo trovato lungo il percorso.</p>
         )
       ) : (
-        <div data-hscroll className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1">
+        // pt-3 in più — spazio per il nastro che sporge sopra ogni card (Taccuino Botanico).
+        <div data-hscroll className="flex gap-3 overflow-x-auto pt-3 pb-1 -mx-1 px-1">
           {galleryEntries.map(entry => (
             <PoiCard
               key={entry.key}
