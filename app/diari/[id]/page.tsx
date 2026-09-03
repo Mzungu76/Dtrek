@@ -12,6 +12,7 @@ import type { DiarioDetail } from '@/app/api/diaries/[id]/route'
 import { updateUserSettings } from '@/lib/sync/userSettingsStore'
 import { FONT } from '@/lib/designTokens'
 import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, FONT_HAND, INK_ABSORB_STYLE, TaccuinoPaperTexture, HandDrawnFrame } from '@/lib/taccuinoTokens'
+import { TornFrame, tornVariant } from '@/components/TornFrame'
 import { metaHasHikingMetrics } from '@/lib/metaTypes'
 import {
   ArrowDown, ArrowLeft, ArrowUp, BookOpen, ChevronRight, Clock, Loader2, Mountain,
@@ -341,7 +342,9 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
               return (
                 <div
                   key={r.id}
-                  className="flex items-center gap-3.5 py-3.5 px-2 -mx-2"
+                  // py-5 (invece di py-3.5) — spazio per il nastro e l'ombra "sollevata" che
+                  // sporgono oltre il riquadro 87x87 di ogni TornFrame (Taccuino Botanico).
+                  className="flex items-center gap-3.5 py-5 px-2 -mx-2"
                   style={{
                     // Fase 31 — separatore con opacità (non più il colore pieno di `cardBorder`):
                     // "linee tratteggiate stampate, colore molto tenue, opacità 0.4-0.6", non un
@@ -361,19 +364,12 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                       restano allineati in verticale da una riga all'altra, indipendentemente da
                       quanto testo hanno le righe vicine. */}
                   <Link href={reportagePath} className="flex items-center gap-3.5 flex-1 min-w-0">
-                    {/* Vera mappa (GalleryMapThumb) del tracciato registrato (activities.route_polyline),
-                        non quello pianificato — "ritaglio incollato" (bordo bianco spesso + ombra
-                        sfalsata + lieve rotazione stabile per reportage, stesso principio della
-                        copertina in `DiarioCoverThumb`). */}
-                    <div
-                      className="w-[87px] h-[87px] shrink-0 overflow-hidden relative"
-                      style={{
-                        background: TACCUINO_PAPER.card,
-                        border: `3px solid ${TACCUINO_PAPER.light}`,
-                        boxShadow: `0 4px 10px rgba(41,35,30,0.15)`,
-                        transform: `rotate(${cutoutRotation(r.id)}deg)`,
-                      }}
-                    >
+                    {/* Nastro washi + bordo strappato (Taccuino Botanico), stessa tecnica di
+                        app/percorsi/page.tsx — cutoutRotation(r.id) resta l'inclinazione
+                        dell'intero riquadro, tornVariant(r.id) sceglie indipendentemente taglio
+                        e posizione del nastro. Vera mappa (GalleryMapThumb) del tracciato
+                        registrato (activities.route_polyline), non quello pianificato. */}
+                    <TornFrame size="map" variant={tornVariant(r.id)} rotate={cutoutRotation(r.id)}>
                       {r.routePolyline && r.routePolyline.length > 1
                         ? (
                           <GalleryMapThumb
@@ -386,7 +382,7 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                           />
                         )
                         : <div className="w-full h-full flex items-center justify-center"><Mountain className="w-5 h-5" style={{ color: TACCUINO_PAPER.cardBorder }} /></div>}
-                    </div>
+                    </TornFrame>
                     <div className="min-w-0 flex-1">
                       {/* Fase 32 — non più `truncate` (richiesta esplicita: il titolo deve leggersi
                           sempre per intero, non tagliato con "..."): va a capo libero invece di

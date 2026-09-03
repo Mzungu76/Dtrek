@@ -3,6 +3,7 @@ import { useState } from 'react'
 import dynamic from 'next/dynamic'
 import { Lock, LockOpen, Maximize2, Minimize2, Box, LocateFixed, Compass, Navigation } from 'lucide-react'
 import ElevationProfileChart from '@/components/ElevationProfileChart'
+import { TornFrame } from '@/components/TornFrame'
 import type { TrackPoint } from '@/lib/tcxParser'
 import type { PoiItem } from '@/lib/overpass'
 import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
@@ -80,69 +81,79 @@ export default function RouteMapSection({
   // altimetrico (activeIndex valorizzato) — non un secondo toggle persistente come showGradient.
   const transientGradient = !showGradient && activeIndex != null
 
-  return (
-    <div className="space-y-4">
+  const mapContent = (
+    <>
+      <MapView
+        trackPoints={trackPoints ?? []} height="100%" interactive={!locked}
+        pois={pois} planned={planned} showPoiLayer={showPois}
+        highlightedPoiIndices={highlightedPoiIndices}
+        onPoiTap={poi => onPoiTap?.(poi)}
+        activeIndex={activeIndex}
+        showGradient={showGradient} showAspect={showAspect} dtmProfile={dtmProfile}
+        transientGradient={transientGradient}
+        fitSignal={fitTick}
+        showDirectionArrows={showArrows}
+        resizeSignal={resizeTick}
+      />
       <div
-        className={fullscreen ? 'fixed inset-0 z-[70] bg-black isolate' : 'relative isolate rounded-2xl overflow-hidden border'}
-        style={fullscreen ? undefined : { height: 260, borderColor: '#dcd8cc' }}
+        className="absolute inset-x-3 z-[1000] flex items-center justify-between"
+        style={{ top: fullscreen ? 'calc(env(safe-area-inset-top, 0px) + 12px)' : '12px' }}
       >
-        <MapView
-          trackPoints={trackPoints ?? []} height="100%" interactive={!locked}
-          pois={pois} planned={planned} showPoiLayer={showPois}
-          highlightedPoiIndices={highlightedPoiIndices}
-          onPoiTap={poi => onPoiTap?.(poi)}
-          activeIndex={activeIndex}
-          showGradient={showGradient} showAspect={showAspect} dtmProfile={dtmProfile}
-          transientGradient={transientGradient}
-          fitSignal={fitTick}
-          showDirectionArrows={showArrows}
-          resizeSignal={resizeTick}
-        />
-        <div
-          className="absolute inset-x-3 z-[1000] flex items-center justify-between"
-          style={{ top: fullscreen ? 'calc(env(safe-area-inset-top, 0px) + 12px)' : '12px' }}
-        >
-          <div className="flex items-center gap-0.5 bg-black/50 backdrop-blur-md border border-white/15 rounded-full p-1">
-            {showAspectToggle && (
-              <button
-                onClick={onToggleAspect}
-                title="Esposizione dei versanti"
-                className={showAspect ? pillChipActive : pillChipIdle}
-              >
-                <Compass className="w-4 h-4" />
-              </button>
-            )}
+        <div className="flex items-center gap-0.5 bg-black/50 backdrop-blur-md border border-white/15 rounded-full p-1">
+          {showAspectToggle && (
             <button
-              onClick={() => setShowArrows(v => !v)}
-              title={showArrows ? 'Nascondi le frecce di direzione' : 'Mostra le frecce di direzione'}
-              className={showArrows ? pillChipActive : pillChipIdle}
+              onClick={onToggleAspect}
+              title="Esposizione dei versanti"
+              className={showAspect ? pillChipActive : pillChipIdle}
             >
-              <Navigation className="w-4 h-4" />
+              <Compass className="w-4 h-4" />
             </button>
-            {onOpenMap3D && (
-              <button onClick={onOpenMap3D} title="Vista 3D" className={pillChipIdle}>
-                <Box className="w-4 h-4" />
-              </button>
-            )}
-            <button onClick={() => setFitTick(t => t + 1)} title="Inquadra tutto il percorso" className={pillChipIdle}>
-              <LocateFixed className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setLocked(v => !v)}
-              title={locked ? 'Sblocca la mappa per navigarla' : 'Blocca la mappa (evita spostamenti involontari)'}
-              className={locked ? pillChipIdle : pillChipActive}
-            >
-              {locked ? <Lock className="w-4 h-4" /> : <LockOpen className="w-4 h-4" />}
-            </button>
-          </div>
+          )}
           <button
-            onClick={toggleFullscreen}
-            title={fullscreen ? 'Esci da schermo intero' : 'Schermo intero'}
-            className={chipIdle}
+            onClick={() => setShowArrows(v => !v)}
+            title={showArrows ? 'Nascondi le frecce di direzione' : 'Mostra le frecce di direzione'}
+            className={showArrows ? pillChipActive : pillChipIdle}
           >
-            {fullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+            <Navigation className="w-4 h-4" />
+          </button>
+          {onOpenMap3D && (
+            <button onClick={onOpenMap3D} title="Vista 3D" className={pillChipIdle}>
+              <Box className="w-4 h-4" />
+            </button>
+          )}
+          <button onClick={() => setFitTick(t => t + 1)} title="Inquadra tutto il percorso" className={pillChipIdle}>
+            <LocateFixed className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setLocked(v => !v)}
+            title={locked ? 'Sblocca la mappa per navigarla' : 'Blocca la mappa (evita spostamenti involontari)'}
+            className={locked ? pillChipIdle : pillChipActive}
+          >
+            {locked ? <Lock className="w-4 h-4" /> : <LockOpen className="w-4 h-4" />}
           </button>
         </div>
+        <button
+          onClick={toggleFullscreen}
+          title={fullscreen ? 'Esci da schermo intero' : 'Schermo intero'}
+          className={chipIdle}
+        >
+          {fullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+        </button>
+      </div>
+    </>
+  )
+
+  return (
+    <div className="space-y-4">
+      {/* Test: nastro washi + bordo strappato (Taccuino Botanico, components/TornFrame.tsx) al
+          posto del vecchio riquadro arrotondato bordato — solo da chiuso. Lo schermo intero resta
+          il vecchio riquadro edge-to-edge invariato: non ha senso "nastrare" tutto lo schermo, e
+          serve comunque il massimo spazio utile per navigare la mappa. */}
+      <div
+        className={fullscreen ? 'fixed inset-0 z-[70] bg-black isolate' : 'relative isolate'}
+        style={fullscreen ? undefined : { height: 260 }}
+      >
+        {fullscreen ? mapContent : <TornFrame size="hero" variant={0}>{mapContent}</TornFrame>}
       </div>
       <ElevationProfileChart trackPoints={trackPoints ?? []} onHover={setActiveIndex} />
     </div>

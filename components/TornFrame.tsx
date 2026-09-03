@@ -15,7 +15,7 @@ import { TACCUINO_ACCENT, TACCUINO_ACCENT_TINT } from '@/lib/taccuinoTokens'
  * è invisibile (sempre coperto dal contenuto reale sopra) — vedi il commento in globals.css.
  */
 
-type TornSize = 'photo' | 'map'
+type TornSize = 'photo' | 'map' | 'hero'
 
 type CSSVarStyle = CSSProperties & Record<`--${string}`, string>
 
@@ -41,6 +41,14 @@ const MAP_TAPE: TapePreset[] = [
   { tapeX: 28, tapeY: 3, rotate: -5, style: { top: -9, left: '24%', marginLeft: -20 } },
   { tapeX: 10, tapeY: 3, rotate: 8, style: { top: -8, left: -4 } },
 ]
+// Un solo preset, in basso a sinistra — lontano dai chip di controllo della mappa (in alto,
+// components/RouteMapSection.tsx) invece che in alto come photo/map. `tapeY` assume l'altezza
+// fissa (260px) con cui RouteMapSection monta oggi questo riquadro: da rivedere se quel valore
+// cambia (test iniziale, non ancora tarato in un mockup dedicato come photo/map).
+const HERO_TAPE: TapePreset[] = [
+  { tapeX: 40, tapeY: 236, rotate: -6, style: { bottom: -14, left: 28 } },
+]
+const TAPE_PRESETS: Record<TornSize, TapePreset[]> = { photo: PHOTO_TAPE, map: MAP_TAPE, hero: HERO_TAPE }
 
 /**
  * Taglio (1-4) e posizione del nastro (indice 0-3, stesso indice del taglio) derivati dall'id —
@@ -68,7 +76,8 @@ export function TornFrame({
 }) {
   const idx = ((variant % 4) + 4) % 4
   const cut = idx + 1
-  const tape = (size === 'photo' ? PHOTO_TAPE : MAP_TAPE)[idx]
+  const presets = TAPE_PRESETS[size]
+  const tape = presets[idx % presets.length]
   const frameStyle: CSSVarStyle = {
     '--tape-x': `${tape.tapeX}px`,
     '--tape-y': `${tape.tapeY}px`,

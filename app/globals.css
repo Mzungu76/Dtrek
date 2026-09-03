@@ -192,6 +192,12 @@ body {
 .torn-frame{ position: relative; }
 .torn-frame-photo{ width: 144px; height: 112px; }
 .torn-frame-map{ width: 87px; height: 87px; flex-shrink: 0; }
+/* Riquadro grande e responsivo (mappa "Il percorso" della guida, components/RouteMapSection.tsx)
+   — a differenza di photo/map (dimensione fissa, ripetuta in un elenco), riempie il contenitore
+   del chiamante: la larghezza reale non è nota qui, ma il clip-path resta corretto a qualunque
+   dimensione (percentuali) — solo ombra/maschera/nastro restano valori fissi in px, tarati "a
+   occhio" su questa scala più grande (test, non ancora ricalibrati in un mockup dedicato). */
+.torn-frame-hero{ width: 100%; height: 100%; }
 
 .torn-content, .torn-filler{ position: absolute; inset: 0; }
 .torn-filler{ background: #000; }
@@ -212,7 +218,7 @@ body {
 
 /* Bordino di carta — sempre uniforme (taglio del foglio, non illuminazione): stesso valore per
    photo/map, resta invariato anche sotto il nastro. */
-.torn-rim-photo, .torn-rim-map{ position: absolute; inset: 0; filter: drop-shadow(0 0 1.5px #fff) drop-shadow(0 0 6px #fff); }
+.torn-rim-photo, .torn-rim-map, .torn-rim-hero{ position: absolute; inset: 0; filter: drop-shadow(0 0 1.5px #fff) drop-shadow(0 0 6px #fff); }
 
 /* Occlusione ambientale — ombra di contatto stretta, affievolita verso il nastro (dove la carta
    è comunque incollata allo sfondo, non "sollevata") via mask-image radiale centrata su
@@ -234,6 +240,14 @@ body {
   mask-image: radial-gradient(circle 33px at calc(var(--tape-x,44px) + 11px) calc(var(--tape-y,0px) + 11px), transparent 0%, transparent 20%, black 100%);
 }
 .torn-ao-map .torn-filler{ inset: 11px; }
+.torn-ao-hero{
+  position: absolute; inset: -22px;
+  filter: drop-shadow(0 2px 5px rgba(46,42,34,.52)) drop-shadow(0 0 3px rgba(46,42,34,.42));
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-image: radial-gradient(circle 66px at calc(var(--tape-x,72px) + 22px) calc(var(--tape-y,0px) + 22px), transparent 0%, transparent 20%, black 100%);
+  mask-image: radial-gradient(circle 66px at calc(var(--tape-x,72px) + 22px) calc(var(--tape-y,0px) + 22px), transparent 0%, transparent 20%, black 100%);
+}
+.torn-ao-hero .torn-filler{ inset: 22px; }
 
 /* Ombra "sollevata" — dipende dalla fisica del nastro come l'AO sopra, stessa tecnica di
    maschera, riquadro allargato di più (la sfocatura è maggiore). */
@@ -253,6 +267,14 @@ body {
   mask-image: radial-gradient(circle 44px at calc(var(--tape-x,44px) + 20px) calc(var(--tape-y,0px) + 20px), transparent 0%, transparent 25%, black 100%);
 }
 .torn-cast-map .torn-filler{ inset: 20px; }
+.torn-cast-hero{
+  position: absolute; inset: -40px;
+  filter: drop-shadow(4px 10px 16px rgba(46,42,34,.38)) drop-shadow(0 2.5px 4px rgba(46,42,34,.26));
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-image: radial-gradient(circle 90px at calc(var(--tape-x,72px) + 40px) calc(var(--tape-y,0px) + 40px), transparent 0%, transparent 25%, black 100%);
+  mask-image: radial-gradient(circle 90px at calc(var(--tape-x,72px) + 40px) calc(var(--tape-y,0px) + 40px), transparent 0%, transparent 25%, black 100%);
+}
+.torn-cast-hero .torn-filler{ inset: 40px; }
 
 /* Nastro — fratello, non figlio, degli elementi con clip-path sopra (altrimenti verrebbe
    tagliato insieme al resto): prosegue chiaramente oltre il bordo, sulla carta dietro. Colore
@@ -260,6 +282,7 @@ body {
    qui. */
 .torn-tape-photo{ position: absolute; width: 58px; height: 20px; border-radius: 1px; background: #E9DAC3; box-shadow: 0 2px 4px rgba(46,42,34,.3); opacity: .9; z-index: 3; }
 .torn-tape-map{ position: absolute; width: 40px; height: 14px; border-radius: 1px; background: #E9DAC3; box-shadow: 0 1.5px 3px rgba(46,42,34,.3); opacity: .9; z-index: 3; }
+.torn-tape-hero{ position: absolute; width: 76px; height: 26px; border-radius: 1px; background: #E9DAC3; box-shadow: 0 3px 6px rgba(46,42,34,.3); opacity: .9; z-index: 3; }
 
 /* Numero di galleria — sostituisce bg-amber-500 (colore fuori palette taccuino) col terracotta
    TACCUINO_ACCENT[600], sporgente sull'angolo come un'etichetta appuntata invece che incassato. */
