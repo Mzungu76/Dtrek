@@ -85,6 +85,13 @@ export default function RouteMapSection({
     <>
       <MapView
         trackPoints={trackPoints ?? []} height="100%" interactive={!locked}
+        // bare — toglie il bordo/ombra/angoli arrotondati propri di MapView: da chiusa il
+        // "riquadro" lo dà ormai TornFrame (strappo, non stondatura), non più questo componente;
+        // a schermo intero non deve comunque avere una propria card interna. Senza `bare`,
+        // l'angolo arrotondato di MapView (non allineato allo strappo) lasciava scoperto un
+        // pezzetto di riquadro — dietro, invisibile ma opaco, il riempimento nero di .torn-cast,
+        // visto come artefatto nero proprio in prossimità di quegli angoli.
+        bare
         pois={pois} planned={planned} showPoiLayer={showPois}
         highlightedPoiIndices={highlightedPoiIndices}
         onPoiTap={poi => onPoiTap?.(poi)}

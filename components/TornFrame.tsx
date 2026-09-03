@@ -20,33 +20,39 @@ type TornSize = 'photo' | 'map' | 'hero'
 type CSSVarStyle = CSSProperties & Record<`--${string}`, string>
 
 interface TapePreset {
-  tapeX: number
-  tapeY: number
+  /** Posizione del nastro dentro `--tape-x`/`--tape-y` (con unità: px o %) — coordinate del
+   *  riquadro ORIGINALE (non ingrandito), consumate via calc() da .torn-ao/.torn-cast per
+   *  centrare la maschera radiale. Una % (non solo px) permette a un riquadro responsivo (size
+   *  "hero", larghezza non nota qui) di restare corretta a qualunque larghezza. */
+  tapeX: string
+  tapeY: string
   rotate: number
   style: CSSProperties
 }
 
-// Quattro varianti per dimensione, indice allineato al taglio (.torn-cut-1..4) — stessi valori
-// calibrati nel mockup approvato, non riscalati automaticamente: le due dimensioni (144x112 e
-// 87x87) sono state tarate a mano l'una dall'altra nel mockup, non da un unico fattore di scala.
+// Il nastro sta SEMPRE sul lato superiore (mai in basso: è così che si nastra davvero una foto a
+// un quaderno). Quattro varianti per dimensione, indice allineato al taglio (.torn-cut-1..4) —
+// stessi valori calibrati nel mockup approvato, non riscalati automaticamente: le due dimensioni
+// (144x112 e 87x87) sono state tarate a mano l'una dall'altra nel mockup, non da un unico fattore
+// di scala.
 const PHOTO_TAPE: TapePreset[] = [
-  { tapeX: 20, tapeY: 4, rotate: -9, style: { top: -13, left: -4 } },
-  { tapeX: 121, tapeY: 4, rotate: 7, style: { top: -14, right: -8 } },
-  { tapeX: 46, tapeY: 4, rotate: -5, style: { top: -12, left: '32%', marginLeft: -29 } },
-  { tapeX: 17, tapeY: 4, rotate: 8, style: { top: -13, left: -6 } },
+  { tapeX: '20px', tapeY: '4px', rotate: -9, style: { top: -13, left: -4 } },
+  { tapeX: '121px', tapeY: '4px', rotate: 7, style: { top: -14, right: -8 } },
+  { tapeX: '46px', tapeY: '4px', rotate: -5, style: { top: -12, left: '32%', marginLeft: -29 } },
+  { tapeX: '17px', tapeY: '4px', rotate: 8, style: { top: -13, left: -6 } },
 ]
 const MAP_TAPE: TapePreset[] = [
-  { tapeX: 12, tapeY: 3, rotate: -9, style: { top: -9, left: -3 } },
-  { tapeX: 60, tapeY: 3, rotate: 7, style: { top: -9, right: -5 } },
-  { tapeX: 28, tapeY: 3, rotate: -5, style: { top: -9, left: '24%', marginLeft: -20 } },
-  { tapeX: 10, tapeY: 3, rotate: 8, style: { top: -8, left: -4 } },
+  { tapeX: '12px', tapeY: '3px', rotate: -9, style: { top: -9, left: -3 } },
+  { tapeX: '60px', tapeY: '3px', rotate: 7, style: { top: -9, right: -5 } },
+  { tapeX: '28px', tapeY: '3px', rotate: -5, style: { top: -9, left: '24%', marginLeft: -20 } },
+  { tapeX: '10px', tapeY: '3px', rotate: 8, style: { top: -8, left: -4 } },
 ]
-// Un solo preset, in basso a sinistra — lontano dai chip di controllo della mappa (in alto,
-// components/RouteMapSection.tsx) invece che in alto come photo/map. `tapeY` assume l'altezza
-// fissa (260px) con cui RouteMapSection monta oggi questo riquadro: da rivedere se quel valore
-// cambia (test iniziale, non ancora tarato in un mockup dedicato come photo/map).
+// Un solo preset, in alto al centro — riquadro responsivo (larghezza non nota qui): `tapeX`
+// resta in % (non px) così la maschera segue il centro a qualunque larghezza. Posizionato fra i
+// due cluster di chip della mappa (entrambi in alto, ma ai lati — components/RouteMapSection.tsx)
+// invece che sopra uno dei due (test iniziale, non ancora tarato in un mockup dedicato).
 const HERO_TAPE: TapePreset[] = [
-  { tapeX: 40, tapeY: 236, rotate: -6, style: { bottom: -14, left: 28 } },
+  { tapeX: '50%', tapeY: '4px', rotate: -4, style: { top: -14, left: '50%', marginLeft: -38 } },
 ]
 const TAPE_PRESETS: Record<TornSize, TapePreset[]> = { photo: PHOTO_TAPE, map: MAP_TAPE, hero: HERO_TAPE }
 
@@ -79,8 +85,8 @@ export function TornFrame({
   const presets = TAPE_PRESETS[size]
   const tape = presets[idx % presets.length]
   const frameStyle: CSSVarStyle = {
-    '--tape-x': `${tape.tapeX}px`,
-    '--tape-y': `${tape.tapeY}px`,
+    '--tape-x': tape.tapeX,
+    '--tape-y': tape.tapeY,
     ...(rotate ? { transform: `rotate(${rotate}deg)` } : {}),
   }
   return (
