@@ -8,6 +8,7 @@ import { getProfile } from '@/lib/userProfile'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import GemStatusBadge from '@/components/premium/GemStatusBadge'
+import { TACCUINO_PAPER } from '@/lib/taccuinoTokens'
 import type { User as SupabaseUser, Session, AuthChangeEvent } from '@supabase/supabase-js'
 
 // Menù inferiore (richiesta esplicita dell'utente, revisione struttura app): cinque voci fisse —
@@ -200,15 +201,17 @@ export function MobileNavBar({ className = '' }: { className?: string }) {
 // Diari non è una voce come le altre: bottone terracotta sollevato di 20px sopra il filo della
 // barra (mockup approvato dall'utente), sempre acceso indipendentemente dalla sezione attiva —
 // è il "torna a casa", non una sezione tra le altre. Icona Notebook (mai BookMarked: scelta
-// esplicita dell'utente dopo revisione delle icone candidate). L'alone chiaro (ring 5px, colore
-// botanico.paper #F5EDDD) è quello del mockup: senza, il disco si fonde col verde della barra e
-// perde la separazione netta che lo fa leggere come elemento sollevato invece che piatto.
+// esplicita dell'utente dopo revisione delle icone candidate). L'alone chiaro (ring 5px) è quello
+// del mockup: senza, il disco si fonde col verde della barra e perde la separazione netta che lo
+// fa leggere come elemento sollevato invece che piatto. Colore dell'alone = TACCUINO_PAPER.base,
+// lo stesso sfondo "taccuino" delle pagine (es. /diari, dove questo bottone è più visto) — non un
+// hex a sé: se lo sfondo pagina cambia, l'alone lo segue senza dover toccare due punti.
 function RaisedDiariButton({ href, label, icon: Icon }: (typeof NAV_LINKS)[number]) {
   return (
     <Link href={href} className="relative -top-5 flex flex-none w-[60px] flex-col items-center gap-1.5">
       <span
         className="flex h-[52px] w-[52px] items-center justify-center rounded-full bg-botanico-accent text-botanico-bar-active"
-        style={{ boxShadow: '0 0 0 5px #F5EDDD, 0 10px 20px -6px rgba(192,96,61,0.55)' }}
+        style={{ boxShadow: `0 0 0 5px ${TACCUINO_PAPER.base}, 0 10px 20px -6px rgba(192,96,61,0.55)` }}
       >
         <Icon className="w-6 h-6" strokeWidth={2} />
       </span>
