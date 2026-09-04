@@ -175,10 +175,10 @@ body {
 
 /* ── Taccuino Botanico — foto/mappe "ritagliate a mano" con nastro washi ──
    Calibrata in un mockup dedicato (Artifact, non su file) prima di questo porting: bordo
-   strappato (clip-path), bordino di carta bianco, occlusione ambientale affievolita verso il
-   punto esatto del nastro (torn-ao) e ombra "sollevata" assente lungo tutto il lato superiore
-   (torn-cast — quel lato è incollato dal nastro, non sollevato: niente ombra sospesa lì, resta
-   solo il contatto), nastro che prosegue sullo sfondo. Usata da
+   strappato (clip-path), bordino di carta bianco, sia l'occlusione ambientale (torn-ao) sia
+   l'ombra "sollevata" (torn-cast) assenti lungo tutto il lato superiore — quel lato è incollato
+   dal nastro, non in bilico: niente ombra propria lì, ci pensa il nastro stesso a leggersi come
+   contatto — piena su tutti gli altri lati, nastro che prosegue sullo sfondo. Usata da
    components/TornFrame.tsx — non usare queste classi direttamente altrove senza passare da lì,
    il posizionamento del nastro (--tape-x/--tape-y) deve restare sincronizzato con i preset di
    quel componente.
@@ -272,40 +272,41 @@ body {
    photo/map, resta invariato anche sotto il nastro. */
 .torn-rim-photo, .torn-rim-map, .torn-rim-hero, .torn-rim-card{ position: absolute; inset: 0; filter: drop-shadow(0 0 1.5px #fff) drop-shadow(0 0 6px #fff); }
 
-/* Occlusione ambientale — ombra di contatto stretta, affievolita verso il nastro (dove la carta
-   è comunque incollata allo sfondo, non "sollevata") via mask-image radiale centrata su
-   --tape-x/--tape-y. Riquadro allargato (inset negativo) per contenere lo sfioccamento del
-   filtro senza che mask-repeat:no-repeat lo tagli via. */
+/* Occlusione ambientale — ombra di contatto stretta. Come torn-cast sopra: assente lungo TUTTO
+   il lato superiore (quel lato è incollato dal nastro, non in bilico — niente da "occludere"
+   contro la pagina lì, il nastro stesso fa già da contatto visivo), maschera lineare dall'alto
+   invece del vecchio cerchio localizzato solo sul punto del nastro. Riquadro allargato (inset
+   negativo) per contenere lo sfioccamento del filtro senza che mask-repeat:no-repeat lo tagli via. */
 .torn-ao-photo{
   position: absolute; inset: -18px;
   filter: drop-shadow(0 1.5px 4px rgba(46,42,34,.52)) drop-shadow(0 0 2.5px rgba(46,42,34,.42));
   -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
-  -webkit-mask-image: radial-gradient(circle 55px at calc(var(--tape-x,72px) + 18px) calc(var(--tape-y,0px) + 18px), transparent 0%, transparent 20%, black 100%);
-  mask-image: radial-gradient(circle 55px at calc(var(--tape-x,72px) + 18px) calc(var(--tape-y,0px) + 18px), transparent 0%, transparent 20%, black 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 18px), black calc(var(--tape-y,0px) + 73px));
+  mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 18px), black calc(var(--tape-y,0px) + 73px));
 }
 .torn-ao-photo .torn-filler{ inset: 18px; }
 .torn-ao-map{
   position: absolute; inset: -11px;
   filter: drop-shadow(0 1px 2.5px rgba(46,42,34,.52)) drop-shadow(0 0 1.5px rgba(46,42,34,.42));
   -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
-  -webkit-mask-image: radial-gradient(circle 33px at calc(var(--tape-x,44px) + 11px) calc(var(--tape-y,0px) + 11px), transparent 0%, transparent 20%, black 100%);
-  mask-image: radial-gradient(circle 33px at calc(var(--tape-x,44px) + 11px) calc(var(--tape-y,0px) + 11px), transparent 0%, transparent 20%, black 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 11px), black calc(var(--tape-y,0px) + 44px));
+  mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 11px), black calc(var(--tape-y,0px) + 44px));
 }
 .torn-ao-map .torn-filler{ inset: 11px; }
 .torn-ao-hero{
   position: absolute; inset: -22px;
   filter: drop-shadow(0 2px 5px rgba(46,42,34,.52)) drop-shadow(0 0 3px rgba(46,42,34,.42));
   -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
-  -webkit-mask-image: radial-gradient(circle 66px at calc(var(--tape-x,72px) + 22px) calc(var(--tape-y,0px) + 22px), transparent 0%, transparent 20%, black 100%);
-  mask-image: radial-gradient(circle 66px at calc(var(--tape-x,72px) + 22px) calc(var(--tape-y,0px) + 22px), transparent 0%, transparent 20%, black 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 22px), black calc(var(--tape-y,0px) + 88px));
+  mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 22px), black calc(var(--tape-y,0px) + 88px));
 }
 .torn-ao-hero .torn-filler{ inset: 22px; }
 .torn-ao-card{
   position: absolute; inset: -16px;
   filter: drop-shadow(0 1px 3px rgba(46,42,34,.5)) drop-shadow(0 0 2px rgba(46,42,34,.4));
   -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
-  -webkit-mask-image: radial-gradient(circle 40px at calc(var(--tape-x,50%) + 16px) calc(var(--tape-y,0px) + 16px), transparent 0%, transparent 20%, black 100%);
-  mask-image: radial-gradient(circle 40px at calc(var(--tape-x,50%) + 16px) calc(var(--tape-y,0px) + 16px), transparent 0%, transparent 20%, black 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 16px), black calc(var(--tape-y,0px) + 56px));
+  mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 16px), black calc(var(--tape-y,0px) + 56px));
 }
 .torn-ao-card .torn-filler{ inset: 16px; }
 
