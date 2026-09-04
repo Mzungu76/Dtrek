@@ -268,9 +268,20 @@ body {
 }
 .torn-banner-shadow .torn-filler{ inset: 50px; }
 
-/* Bordino di carta — sempre uniforme (taglio del foglio, non illuminazione): stesso valore per
-   photo/map, resta invariato anche sotto il nastro. */
-.torn-rim-photo, .torn-rim-map, .torn-rim-hero, .torn-rim-card{ position: absolute; inset: 0; filter: drop-shadow(0 0 1.5px #fff) drop-shadow(0 0 6px #fff); }
+/* Bordino di carta — bagliore bianco che segna il taglio del foglio. Stesso valore su tutti e
+   quattro i lati per tre lati su quattro: sul lato superiore, dove il nastro tiene la carta
+   incollata al fondo, niente bagliore — con cast e AO già assenti lì (vedi sopra), un bordino
+   bianco rimasto acceso da solo avrebbe fatto un alone innaturale, l'unica traccia rimasta
+   sarebbe dovuta essere il profilo irregolare dello strappo stesso. Stessa maschera lineare
+   dall'alto delle altre due, distanza di sfumatura più corta (il bagliore è già stretto, 6px di
+   raggio) — condivisa fra le quattro taglie come lo era la regola originale. */
+.torn-rim-photo, .torn-rim-map, .torn-rim-hero, .torn-rim-card{
+  position: absolute; inset: 0;
+  filter: drop-shadow(0 0 1.5px #fff) drop-shadow(0 0 6px #fff);
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 2px), black calc(var(--tape-y,0px) + 18px));
+  mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 2px), black calc(var(--tape-y,0px) + 18px));
+}
 
 /* Occlusione ambientale — ombra di contatto stretta. Come torn-cast sopra: assente lungo TUTTO
    il lato superiore (quel lato è incollato dal nastro, non in bilico — niente da "occludere"
