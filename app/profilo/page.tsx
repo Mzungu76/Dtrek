@@ -13,7 +13,7 @@ import { computeStreaks } from '@/lib/stats'
 import { computeCurrentBadges } from '@/lib/badges'
 import SectionAbbonamento from '@/components/profilo/SectionAbbonamento'
 import GemStatusBadge from '@/components/premium/GemStatusBadge'
-import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, TACCUINO_ACCENT_TINT, TaccuinoPaperTexture } from '@/lib/taccuinoTokens'
+import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, TACCUINO_ACCENT_TINT, TaccuinoPaperTexture, TaccuinoRuledLines } from '@/lib/taccuinoTokens'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 import {
   BarChart2, Trophy, Mountain, Compass, Settings, Sparkles, ArrowDownToLine,
@@ -123,8 +123,9 @@ export default function ProfiloPage() {
   ]
 
   return (
-    <div className="min-h-screen pb-8">
+    <div className="relative min-h-screen pb-8">
       <TaccuinoPaperTexture />
+      <TaccuinoRuledLines />
       <div className="relative pt-[calc(env(safe-area-inset-top,0px)+2rem)] pb-7 px-6 text-center">
         <button
           onClick={() => router.back()}

@@ -2,7 +2,7 @@
 import { useEffect, useState, useMemo, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Navbar, { MOBILE_BOTTOMBAR_SPACER } from '@/components/Navbar'
-import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, TaccuinoPaperTexture } from '@/lib/taccuinoTokens'
+import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, TaccuinoPaperTexture, TaccuinoRuledLines } from '@/lib/taccuinoTokens'
 import { getAllActivities, computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
 import { useCtsUpdated } from '@/lib/sync/useCtsUpdated'
 import { getPersonalRecords, computeStreaks } from '@/lib/stats'
@@ -60,8 +60,9 @@ function StatisticheContent() {
   const streaks = useMemo(() => computeStreaks(activities),         [activities])
 
   return (
-    <div className={`min-h-screen md:pb-0 ${MOBILE_BOTTOMBAR_SPACER}`}>
+    <div className={`relative min-h-screen md:pb-0 ${MOBILE_BOTTOMBAR_SPACER}`}>
       <TaccuinoPaperTexture />
+      <TaccuinoRuledLines />
       <Navbar />
       <main className="max-w-6xl mx-auto px-3 sm:px-4 py-5 sm:py-8 fade-up">
 

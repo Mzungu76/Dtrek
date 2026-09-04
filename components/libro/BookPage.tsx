@@ -46,7 +46,7 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { ChevronLeft, ChevronRight, BookMarked, Wrench } from 'lucide-react'
 import { FONT, TERRA } from '@/lib/designTokens'
-import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, TaccuinoPaperTexture, TaccuinoSpineShadow } from '@/lib/taccuinoTokens'
+import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, TaccuinoPaperTexture, TaccuinoRuledLines, TaccuinoSpineShadow } from '@/lib/taccuinoTokens'
 import BookSpineShadow from './BookSpineShadow'
 import Navbar, { MOBILE_BOTTOMBAR_SPACER } from '@/components/Navbar'
 
@@ -128,17 +128,19 @@ export default function BookPage({
   }
   return (
     <div
-      className={`min-h-screen flex flex-col ${bottomBar === 'global' ? MOBILE_BOTTOMBAR_SPACER : ''}`}
+      className={`relative min-h-screen flex flex-col ${bottomBar === 'global' ? MOBILE_BOTTOMBAR_SPACER : ''}`}
       // Solo "pergamena" porta il proprio background qui: "taccuino" lo fornisce già
       // TaccuinoPaperTexture (montata sotto, come figlio) — un background anche qui lo
       // nasconderebbe, stesso bug di stacking corretto in app/diari/page.tsx e app/profilo/page.tsx
       // (CSS2.1 §E.2: questo contenitore, non posizionato, dipingerebbe sopra il `<div fixed>` a
-      // z-index negativo della texture).
+      // z-index negativo della texture). `relative` (per la rigatura, vedi sotto) non cambia
+      // questo discorso: senza z-index proprio non apre un nuovo contesto di stacking.
       style={{ background: theme === 'taccuino' ? undefined : t.paperBg }}
     >
       {theme === 'taccuino' ? (
         <>
           <TaccuinoPaperTexture />
+          <TaccuinoRuledLines />
           <TaccuinoSpineShadow />
         </>
       ) : (
