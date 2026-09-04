@@ -117,7 +117,7 @@ export function ProfileAvatar({ size = 32, iconSize = 16, label, labelClassName 
       </span>
       <span className={`flex items-center gap-1 ${labelTextClassName} font-bold leading-none ${active ? 'text-botanico-bar-active' : 'text-botanico-bar-inactive'}`}>
         {label}
-        <GemStatusBadge size={10} />
+        <GemStatusBadge size={11} />
       </span>
     </Link>
   )
@@ -125,9 +125,10 @@ export function ProfileAvatar({ size = 32, iconSize = 16, label, labelClassName 
 
 // Altezza riservata dalla MobileBottomBar fissa in fondo — le pagine "normali" (non a schermo
 // intero) applicano questa classe al loro contenitore per non finire sotto la barra. Un'unica
-// costante per restare "uniformi": cambiarla qui la cambia ovunque. 64px di contenuto (h-16) +
+// costante per restare "uniformi": cambiarla qui la cambia ovunque. 80px di contenuto (h-20,
+// alzata da 64px/h-16: icone e testo troppo piccoli, segnalato dall'utente su build reale) +
 // safe-area-bottom, stesso principio di BOTTOM_BAR_SPACER in components/libro/BookPage.tsx.
-export const MOBILE_BOTTOMBAR_SPACER = 'pb-[calc(env(safe-area-inset-bottom,0px)+64px)] md:pb-0'
+export const MOBILE_BOTTOMBAR_SPACER = 'pb-[calc(env(safe-area-inset-bottom,0px)+80px)] md:pb-0'
 
 // ── Desktop top bar ──────────────────────────────────────────────────────────
 
@@ -216,23 +217,37 @@ export function MobileNavBar({ className = '' }: { className?: string }) {
 // sfondo della barra stessa (vedi MobileBottomBar, useDiariNotchMask) — qui resta solo un'ombra
 // morbida per dare rilievo al disco, non per crearne il distacco visivo.
 // Solo il DISCO è sollevato (position:absolute, staccato dal flusso) — l'etichetta "Diari" resta
-// nel flusso normale del link, alla stessa altezza delle altre quattro etichette (stesso py-1.5,
-// stesso segnaposto invisibile al posto dell'icona piatta w-5 h-5): prima l'intero link (disco +
+// nel flusso normale del link, alla stessa altezza delle altre quattro etichette (stesso py-2,
+// stesso segnaposto invisibile al posto dell'icona piatta w-6 h-6): prima l'intero link (disco +
 // testo) veniva sollevato insieme, e "Diari" finiva a cavallo del ritaglio di trasparenza — senza
 // sfondo verde dietro per contrasto, sembrava tagliato via (segnalato dall'utente su build reale).
+// Dimensioni (disco 60px, icona 28px) alzate insieme al resto della barra — troppo piccole prima
+// (segnalato dall'utente): vedi RAISED_CIRCLE_SIZE sotto, condivisa con la maschera del ritaglio
+// così le due cose non possono più andare fuori sincrono tra loro. Il valore di `top` qui sotto è
+// solo la stima iniziale di quanto il disco sporge sopra la barra (a occhio, per il primo
+// disegno) — la posizione VERA usata dal ritaglio (useDiariNotchMask, sotto) non si fida di
+// questo numero: misura sempre dove il disco è finito per davvero con getBoundingClientRect,
+// quindi resta corretta anche se cambia l'altezza del testo sotto o quella del link.
+const RAISED_CIRCLE_SIZE = 60
+
 function RaisedDiariButton({
   href, label, icon: Icon, circleRef,
 }: (typeof NAV_LINKS)[number] & { circleRef: React.RefObject<HTMLSpanElement> }) {
   return (
-    <Link href={href} className="relative flex flex-none w-[60px] flex-col items-center gap-1 py-1.5">
-      <span aria-hidden className="h-5 w-5" />
-      <span className="text-[10px] font-bold leading-none text-botanico-bar-active">{label}</span>
+    <Link href={href} className="relative flex flex-none w-16 flex-col items-center gap-1.5 py-2">
+      <span aria-hidden className="h-6 w-6" />
+      <span className="text-[11px] font-bold leading-none text-botanico-bar-active">{label}</span>
       <span
         ref={circleRef}
-        className="absolute left-1/2 -translate-x-1/2 flex h-[52px] w-[52px] items-center justify-center rounded-full bg-botanico-accent text-botanico-bar-active"
-        style={{ top: '-31px', boxShadow: '0 10px 20px -6px rgba(192,96,61,0.55)' }}
+        className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center rounded-full bg-botanico-accent text-botanico-bar-active"
+        style={{
+          width: RAISED_CIRCLE_SIZE,
+          height: RAISED_CIRCLE_SIZE,
+          top: -35,
+          boxShadow: '0 10px 20px -6px rgba(192,96,61,0.55)',
+        }}
       >
-        <Icon className="w-6 h-6" strokeWidth={2} />
+        <Icon className="w-7 h-7" strokeWidth={2} />
       </span>
     </Link>
   )
@@ -241,13 +256,22 @@ function RaisedDiariButton({
 // Ritaglio circolare nello sfondo della barra, in corrispondenza del disco Diari: invece di
 // indovinare un colore che imiti "quello che c'è sotto" (fragile, sbagliato appena lo sfondo
 // pagina cambia), un vero foro nel pannello colorato lascia vedere il contenuto reale che scorre
-// dietro alla barra fissa — sempre corretto, su qualunque pagina.
-// La posizione del foro NON è più un 50% fisso: presupponeva che le voci a sinistra (Mete,
-// Navigator) e a destra (Statistiche, ProfileAvatar) occupassero larghezze uguali, falso — l'avatar
+// dietro alla barra fissa — sempre corretto, su qualunque pagina. Raggio = metà disco + 5px di
+// margine (ridotto da 8px su richiesta esplicita: il distacco visivo tra bordo del disco e bordo
+// del foro era troppo largo).
+const NOTCH_MARGIN = 5
+const NOTCH_RADIUS = RAISED_CIRCLE_SIZE / 2 + NOTCH_MARGIN
+
+// La posizione del foro NON è un 50% fisso: presupporrebbe che le voci a sinistra (Mete,
+// Navigator) e a destra (Statistiche, ProfileAvatar) occupino larghezze uguali, falso — l'avatar
 // ha padding/contenuto diversi da una voce piatta, quindi il disco non cade mai esattamente al
-// centro e il foro finiva visibilmente fuori asse (segnalato dall'utente su build reale). Il foro
-// ora insegue la posizione reale del disco, misurata via ref con getBoundingClientRect — corretta
-// per costruzione qualunque sia la larghezza delle voci intorno, e si aggiorna al resize/rotazione.
+// centro. Il foro insegue la posizione reale del disco, misurata via ref con
+// getBoundingClientRect. Una sola misura al mount NON bastava (causa reale del disallineamento
+// segnalato due volte dall'utente): il webfont del testo (DM Sans, caricato con `display: swap`
+// in app/layout.tsx) sostituisce il font di fallback un istante dopo il primo render, le
+// etichette cambiano larghezza di qualche pixel, la riga si redistribuisce e il disco si sposta —
+// dopo che la misura era già stata presa. `document.fonts.ready` si risolve solo quando il
+// caricamento/swap dei font è davvero finito: da lì la misura è stabile.
 function useDiariNotchMask(navRef: React.RefObject<HTMLElement>, circleRef: React.RefObject<HTMLSpanElement>) {
   const [mask, setMask] = useState<string | undefined>(undefined)
 
@@ -260,10 +284,11 @@ function useDiariNotchMask(navRef: React.RefObject<HTMLElement>, circleRef: Reac
       const circleRect = circle.getBoundingClientRect()
       const x = circleRect.left + circleRect.width / 2 - navRect.left
       const y = circleRect.top + circleRect.height / 2 - navRect.top
-      setMask(`radial-gradient(circle 34px at ${x}px ${y}px, transparent 0 34px, #000 35px)`)
+      setMask(`radial-gradient(circle ${NOTCH_RADIUS}px at ${x}px ${y}px, transparent 0 ${NOTCH_RADIUS}px, #000 ${NOTCH_RADIUS + 1}px)`)
     }
     measure()
     window.addEventListener('resize', measure)
+    document.fonts?.ready?.then(measure)
     return () => window.removeEventListener('resize', measure)
   }, [navRef, circleRef])
 
@@ -285,6 +310,8 @@ function useDiariNotchMask(navRef: React.RefObject<HTMLElement>, circleRef: Reac
 // sopra, intatto, per non essere anch'esso "bucato" dalla maschera. Niente backdrop-blur sul primo
 // livello: sfocava anche il contenuto visto attraverso il foro (un "fantasma" sfocato della card
 // sottostante, notato dall'utente) — un ritaglio deve mostrare quel che c'è sotto nitido, non sfocato.
+// Barra alzata da h-16 (64px) a h-20 (80px), icone da 20 a 24px, testo da 10 a 11px, avatar
+// Profilo da 22 a 26px: tutto era troppo piccolo (segnalato dall'utente).
 function MobileBottomBar() {
   const path = usePathname()
   const diari = NAV_LINKS.find(l => l.href === '/diari')!
@@ -296,13 +323,13 @@ function MobileBottomBar() {
 
   const renderFlat = ({ href, label, icon: Icon }: (typeof NAV_LINKS)[number]) => {
     const active = isActive(href, path)
-    const className = `flex flex-col items-center gap-1 px-3 py-1.5 rounded-2xl transition-colors ${
+    const className = `flex flex-col items-center gap-1.5 px-3 py-2 rounded-2xl transition-colors ${
       active ? 'text-botanico-bar-active' : 'text-botanico-bar-inactive'
     }`
     return (
       <Link key={href} href={href} className={className}>
-        <Icon className="w-5 h-5" strokeWidth={2} />
-        <span className="text-[10px] font-bold leading-none">{label}</span>
+        <Icon className="w-6 h-6" strokeWidth={2} />
+        <span className="text-[11px] font-bold leading-none">{label}</span>
       </Link>
     )
   }
@@ -317,11 +344,11 @@ function MobileBottomBar() {
         className="absolute inset-0 bg-botanico-bar/95 shadow-[0_-2px_12px_rgba(0,0,0,0.18)]"
         style={{ maskImage: notchMask, WebkitMaskImage: notchMask }}
       />
-      <div className="relative flex items-center justify-around h-16 px-2">
+      <div className="relative flex items-center justify-around h-20 px-2">
         {others.slice(0, 2).map(renderFlat)}
         <RaisedDiariButton key={diari.href} {...diari} circleRef={circleRef} />
         {others.slice(2).map(renderFlat)}
-        <ProfileAvatar size={22} iconSize={11} label="Profilo" labelClassName="px-3 py-1.5 rounded-2xl" />
+        <ProfileAvatar size={26} iconSize={13} label="Profilo" labelClassName="px-3 py-2 rounded-2xl" labelTextClassName="text-[11px]" />
       </div>
     </nav>
   )
