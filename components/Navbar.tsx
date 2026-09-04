@@ -2,7 +2,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { MapPinned, Notebook, Navigation2, Activity, CircleUser } from 'lucide-react'
 import { getProfile } from '@/lib/userProfile'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
@@ -205,10 +205,13 @@ export function MobileNavBar({ className = '' }: { className?: string }) {
 // costruzione su pagine con sfondo diverso da /diari): la separazione dalla barra ora è un vero
 // ritaglio nello sfondo della barra stessa (vedi MobileBottomBar, notchMask) — qui resta solo
 // un'ombra morbida per dare rilievo al disco, non per crearne il distacco visivo.
-function RaisedDiariButton({ href, label, icon: Icon }: (typeof NAV_LINKS)[number]) {
+function RaisedDiariButton({
+  href, label, icon: Icon, circleRef,
+}: (typeof NAV_LINKS)[number] & { circleRef: React.RefObject<HTMLSpanElement> }) {
   return (
     <Link href={href} className="relative -top-5 flex flex-none w-[60px] flex-col items-center gap-1.5">
       <span
+        ref={circleRef}
         className="flex h-[52px] w-[52px] items-center justify-center rounded-full bg-botanico-accent text-botanico-bar-active"
         style={{ boxShadow: '0 10px 20px -6px rgba(192,96,61,0.55)' }}
       >
@@ -222,11 +225,34 @@ function RaisedDiariButton({ href, label, icon: Icon }: (typeof NAV_LINKS)[numbe
 // Ritaglio circolare nello sfondo della barra, in corrispondenza del disco Diari: invece di
 // indovinare un colore che imiti "quello che c'è sotto" (fragile, sbagliato appena lo sfondo
 // pagina cambia), un vero foro nel pannello colorato lascia vedere il contenuto reale che scorre
-// dietro alla barra fissa — sempre corretto, su qualunque pagina. Cerchio di raggio 34px (26 del
-// disco + 8 di margine) centrato in orizzontale (il bottone è la voce centrale su 5, con lo stesso
-// numero di voci piatte a sinistra e a destra) e a 3px dal bordo superiore della barra — quota a
-// cui il disco (sollevato di 20px, alto 52px) comincia davvero a sovrapporsi al pannello.
-const DIARI_NOTCH_MASK = 'radial-gradient(circle 34px at 50% 3px, transparent 0 34px, #000 35px)'
+// dietro alla barra fissa — sempre corretto, su qualunque pagina.
+// La posizione del foro NON è più un 50% fisso: presupponeva che le voci a sinistra (Mete,
+// Navigator) e a destra (Statistiche, ProfileAvatar) occupassero larghezze uguali, falso — l'avatar
+// ha padding/contenuto diversi da una voce piatta, quindi il disco non cade mai esattamente al
+// centro e il foro finiva visibilmente fuori asse (segnalato dall'utente su build reale). Il foro
+// ora insegue la posizione reale del disco, misurata via ref con getBoundingClientRect — corretta
+// per costruzione qualunque sia la larghezza delle voci intorno, e si aggiorna al resize/rotazione.
+function useDiariNotchMask(navRef: React.RefObject<HTMLElement>, circleRef: React.RefObject<HTMLSpanElement>) {
+  const [mask, setMask] = useState<string | undefined>(undefined)
+
+  useEffect(() => {
+    const measure = () => {
+      const nav = navRef.current
+      const circle = circleRef.current
+      if (!nav || !circle) return
+      const navRect = nav.getBoundingClientRect()
+      const circleRect = circle.getBoundingClientRect()
+      const x = circleRect.left + circleRect.width / 2 - navRect.left
+      const y = circleRect.top + circleRect.height / 2 - navRect.top
+      setMask(`radial-gradient(circle 34px at ${x}px ${y}px, transparent 0 34px, #000 35px)`)
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [navRef, circleRef])
+
+  return mask
+}
 
 // ── Mobile: barra unica in fondo ─────────────────────────────────────────────────
 // Cinque voci raggiungibili col pollice: Mete, Navigator, Diari, Statistiche, Profilo — Diari
@@ -239,12 +265,18 @@ const DIARI_NOTCH_MASK = 'radial-gradient(circle 34px at 50% 3px, transparent 0 
 // Guide/Resoconto, invariata — components/routehub/HubNavBar.tsx): stesse voci (NAV_LINKS),
 // diversa cornice, per non toccare quelle pagine finché non vengono ridisegnate.
 // Sfondo e contenuto sono due livelli separati (non più un unico <nav> colorato): solo il primo
-// porta il ritaglio (DIARI_NOTCH_MASK), il secondo — icone, etichette, il disco stesso — resta
-// sopra, intatto, per non essere anch'esso "bucato" dalla maschera.
+// porta il ritaglio (useDiariNotchMask), il secondo — icone, etichette, il disco stesso — resta
+// sopra, intatto, per non essere anch'esso "bucato" dalla maschera. Niente backdrop-blur sul primo
+// livello: sfocava anche il contenuto visto attraverso il foro (un "fantasma" sfocato della card
+// sottostante, notato dall'utente) — un ritaglio deve mostrare quel che c'è sotto nitido, non sfocato.
 function MobileBottomBar() {
   const path = usePathname()
   const diari = NAV_LINKS.find(l => l.href === '/diari')!
   const others = NAV_LINKS.filter(l => l.href !== '/diari')
+
+  const navRef = useRef<HTMLElement>(null)
+  const circleRef = useRef<HTMLSpanElement>(null)
+  const notchMask = useDiariNotchMask(navRef, circleRef)
 
   const renderFlat = ({ href, label, icon: Icon }: (typeof NAV_LINKS)[number]) => {
     const active = isActive(href, path)
@@ -261,16 +293,17 @@ function MobileBottomBar() {
 
   return (
     <nav
+      ref={navRef}
       className="md:hidden fixed z-40 inset-x-0 bottom-0"
       style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
     >
       <div
-        className="absolute inset-0 bg-botanico-bar/95 backdrop-blur-md shadow-[0_-2px_12px_rgba(0,0,0,0.18)]"
-        style={{ maskImage: DIARI_NOTCH_MASK, WebkitMaskImage: DIARI_NOTCH_MASK }}
+        className="absolute inset-0 bg-botanico-bar/95 shadow-[0_-2px_12px_rgba(0,0,0,0.18)]"
+        style={{ maskImage: notchMask, WebkitMaskImage: notchMask }}
       />
       <div className="relative flex items-center justify-around h-16 px-2">
         {others.slice(0, 2).map(renderFlat)}
-        <RaisedDiariButton key={diari.href} {...diari} />
+        <RaisedDiariButton key={diari.href} {...diari} circleRef={circleRef} />
         {others.slice(2).map(renderFlat)}
         <ProfileAvatar size={22} iconSize={11} label="Profilo" labelClassName="px-3 py-1.5 rounded-2xl" />
       </div>
