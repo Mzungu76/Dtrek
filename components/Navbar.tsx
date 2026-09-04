@@ -20,7 +20,7 @@ import type { User as SupabaseUser, Session, AuthChangeEvent } from '@supabase/s
 // a /percorsi (URL tecnico invariato, solo l'etichetta cambia). "Profilo" non è in questa lista:
 // resta <ProfileAvatar/>, montato come quinta voce della barra (vedi DesktopNav/MobileBottomBar).
 export const NAV_LINKS = [
-  { href: '/diari',       label: 'Diario',      icon: BookMarked  },
+  { href: '/diari',       label: 'Diari',       icon: BookMarked  },
   { href: '/percorsi',    label: 'Mete',        icon: MapPin      },
   { href: '/navigatore',  label: 'Navigator',   icon: Navigation2 },
   { href: '/statistiche', label: 'Statistiche', icon: BarChart3   },
