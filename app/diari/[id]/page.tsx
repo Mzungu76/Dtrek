@@ -11,7 +11,7 @@ import { formatDuration } from '@/lib/tcxParser'
 import type { DiarioDetail } from '@/app/api/diaries/[id]/route'
 import { updateUserSettings } from '@/lib/sync/userSettingsStore'
 import { FONT } from '@/lib/designTokens'
-import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, TACCUINO_LIST_DIVIDER, FONT_HAND, INK_ABSORB_STYLE, TaccuinoPaperTexture, HandDrawnFrame } from '@/lib/taccuinoTokens'
+import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, TACCUINO_LIST_DIVIDER, TACCUINO_RULED_TEXT_STYLE, FONT_HAND, INK_ABSORB_STYLE, TaccuinoPaperTexture, HandDrawnFrame } from '@/lib/taccuinoTokens'
 import { TornFrame, tornVariant } from '@/components/TornFrame'
 import { metaHasHikingMetrics } from '@/lib/metaTypes'
 import {
@@ -220,13 +220,13 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
             />
           </div>
           <div className="min-w-0 flex-1">
-            <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 10, color: TACCUINO_INK.handMuted, margin: '0 0 3px' }}>
+            <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 10, color: TACCUINO_INK.handMuted, margin: '0 0 3px', ...TACCUINO_RULED_TEXT_STYLE }}>
               Sommario
             </p>
-            <h1 style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 27, margin: 0, transform: 'rotate(-0.5deg)', ...INK_ABSORB_STYLE }}>
+            <h1 style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 27, margin: 0, transform: 'rotate(-0.5deg)', ...INK_ABSORB_STYLE, ...TACCUINO_RULED_TEXT_STYLE }}>
               {detail.title}
             </h1>
-            <p style={{ fontFamily: FONT_HAND, fontSize: 14, color: TACCUINO_INK.handMuted, margin: '3px 0 0' }}>
+            <p style={{ fontFamily: FONT_HAND, fontSize: 14, color: TACCUINO_INK.handMuted, margin: '3px 0 0', ...TACCUINO_RULED_TEXT_STYLE }}>
               {detail.subtitle ? `"${detail.subtitle}" — ` : ''}{detail.reportage.length} reportage
             </p>
           </div>
@@ -320,9 +320,9 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
         )}
 
         {detail.reportage.length === 0 ? (
-          <p style={{ fontFamily: FONT.body, fontSize: 13, color: TACCUINO_INK.handMuted }}>Nessun reportage ancora — comincia da qui.</p>
+          <p style={{ fontFamily: FONT.body, fontSize: 13, color: TACCUINO_INK.handMuted, ...TACCUINO_RULED_TEXT_STYLE }}>Nessun reportage ancora — comincia da qui.</p>
         ) : visibleReportage.length === 0 ? (
-          <p style={{ fontFamily: FONT.body, fontSize: 13, color: TACCUINO_INK.handMuted }}>Nessun reportage corrisponde ai filtri.</p>
+          <p style={{ fontFamily: FONT.body, fontSize: 13, color: TACCUINO_INK.handMuted, ...TACCUINO_RULED_TEXT_STYLE }}>Nessun reportage corrisponde ai filtri.</p>
         ) : (
           <div className="flex flex-col">
             {visibleReportage.map(r => {
@@ -387,12 +387,12 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                       {/* Fase 32 — non più `truncate` (richiesta esplicita: il titolo deve leggersi
                           sempre per intero, non tagliato con "..."): va a capo libero invece di
                           troncare su una riga sola. */}
-                      <p style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 19.5, color: TACCUINO_INK.typed, lineHeight: 1.15 }}>{r.title}</p>
+                      <p style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 19.5, color: TACCUINO_INK.typed, ...TACCUINO_RULED_TEXT_STYLE }}>{r.title}</p>
                       {scoreLabel && (
                         // Fase 31 — font a mano anche qui ("sottotitoli personali" nella specifica
                         // tipografica, non più il sans di default): resta comunque un gradino sotto
                         // il titolo (corpo più piccolo, stesso tono tenue di prima).
-                        <p className="truncate" style={{ fontFamily: FONT_HAND, fontSize: 14, fontWeight: 600, color: TACCUINO_INK.handMuted, marginTop: 1 }}>
+                        <p className="truncate" style={{ fontFamily: FONT_HAND, fontSize: 14, fontWeight: 600, color: TACCUINO_INK.handMuted, ...TACCUINO_RULED_TEXT_STYLE }}>
                           {scoreLabel}
                         </p>
                       )}
@@ -427,6 +427,10 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                         <TrailScoreGaugeBadge total={r.trailScore} safety={null} size={46} showLabel={false} dark={false} />
                       )}
                     </div>
+                    {/* Niente TACCUINO_RULED_TEXT_STYLE qui: l'etichetta va a capo su due righe in
+                        questa colonna stretta, e con line-height agganciato al passo della
+                        rigatura le due righe si staccherebbero vistosamente l'una dall'altra —
+                        un'etichetta di stato compatta, non un paragrafo. */}
                     <div
                       className="shrink-0 flex items-center justify-end gap-1"
                       style={{ width: 94, fontFamily: FONT_HAND, fontSize: 15, color: r.hasWrittenReport ? TACCUINO_ACCENT[600] : TACCUINO_INK.handMuted, fontWeight: r.hasWrittenReport ? 700 : 400 }}

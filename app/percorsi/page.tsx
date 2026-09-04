@@ -135,7 +135,7 @@ export default function MetePage() {
             <div className="w-20 h-20 rounded-full flex items-center justify-center mb-6" style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}>
               <Mountain className="w-10 h-10" style={{ color: TACCUINO_ACCENT[600] }} />
             </div>
-            <h2 className="font-display text-2xl font-semibold mb-2" style={{ color: TACCUINO_INK.typed }}>Nessuna meta ancora</h2>
+            <h2 className="font-display text-2xl font-semibold mb-2" style={{ color: TACCUINO_INK.typed, ...TACCUINO_RULED_TEXT_STYLE }}>Nessuna meta ancora</h2>
             <p className="text-sm max-w-sm px-4" style={{ color: TACCUINO_INK.handMuted, ...TACCUINO_RULED_TEXT_STYLE }}>
               I percorsi che pianifichi compariranno qui, finché non li cammini — a quel punto diventano un Reportage nel Diario che scegli.
             </p>
@@ -199,7 +199,7 @@ export default function MetePage() {
             </div>
 
             {filtered.length === 0 ? (
-              <p className="text-sm text-center py-12" style={{ color: TACCUINO_INK.handMuted }}>Nessuna meta corrisponde ai filtri.</p>
+              <p className="text-sm text-center py-12" style={{ color: TACCUINO_INK.handMuted, ...TACCUINO_RULED_TEXT_STYLE }}>Nessuna meta corrisponde ai filtri.</p>
             ) : (
               <div className="flex flex-col">
                 {filtered.map(p => {
@@ -234,9 +234,9 @@ export default function MetePage() {
                           : <div className="w-full h-full flex items-center justify-center"><Mountain className="w-5 h-5" style={{ color: TACCUINO_PAPER.cardBorder }} /></div>}
                       </TornFrame>
                       <div className="min-w-0 flex-1">
-                        <p style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 19.5, color: TACCUINO_INK.typed, lineHeight: 1.15 }}>{p.title}</p>
+                        <p style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 19.5, color: TACCUINO_INK.typed, ...TACCUINO_RULED_TEXT_STYLE }}>{p.title}</p>
                         {scoreLabel && (
-                          <p className="truncate" style={{ fontFamily: FONT_HAND, fontSize: 14, fontWeight: 600, color: TACCUINO_INK.handMuted, marginTop: 1 }}>
+                          <p className="truncate" style={{ fontFamily: FONT_HAND, fontSize: 14, fontWeight: 600, color: TACCUINO_INK.handMuted, ...TACCUINO_RULED_TEXT_STYLE }}>
                             {scoreLabel}
                           </p>
                         )}
@@ -259,6 +259,10 @@ export default function MetePage() {
                           <TrailScoreGaugeBadge total={p.trailScore} safety={null} size={46} showLabel={false} dark={false} />
                         )}
                       </div>
+                      {/* Niente TACCUINO_RULED_TEXT_STYLE qui: l'etichetta va a capo su due righe
+                          in questa colonna stretta, e con line-height agganciato al passo della
+                          rigatura le due righe si staccherebbero vistosamente l'una dall'altra —
+                          un'etichetta di stato compatta, non un paragrafo. */}
                       <div
                         className="shrink-0 flex items-center justify-end"
                         style={{ width: 94, fontFamily: FONT_HAND, fontSize: 15, color: TACCUINO_INK.handMuted }}

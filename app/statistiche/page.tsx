@@ -2,7 +2,7 @@
 import { useEffect, useState, useMemo, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Navbar, { MOBILE_BOTTOMBAR_SPACER } from '@/components/Navbar'
-import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, TaccuinoPaperTexture, TaccuinoRuledLines } from '@/lib/taccuinoTokens'
+import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, TACCUINO_RULED_TEXT_STYLE, TaccuinoPaperTexture, TaccuinoRuledLines } from '@/lib/taccuinoTokens'
 import { getAllActivities, computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
 import { useCtsUpdated } from '@/lib/sync/useCtsUpdated'
 import { getPersonalRecords, computeStreaks } from '@/lib/stats'
@@ -69,8 +69,8 @@ function StatisticheContent() {
         {/* Header */}
         <div className="flex items-center justify-between gap-3 mb-5 sm:mb-6 flex-wrap">
           <div>
-            <h1 className="font-display text-2xl sm:text-3xl font-bold" style={{ color: TACCUINO_INK.typed }}>Statistiche</h1>
-            <p className="text-sm mt-1" style={{ color: TACCUINO_INK.handMuted }}>
+            <h1 className="font-display text-2xl sm:text-3xl font-bold" style={{ color: TACCUINO_INK.typed, ...TACCUINO_RULED_TEXT_STYLE }}>Statistiche</h1>
+            <p className="text-sm mt-1" style={{ color: TACCUINO_INK.handMuted, ...TACCUINO_RULED_TEXT_STYLE }}>
               {loading ? 'Caricamento…' : `${stats.totalActivities} escursioni registrate in totale`}
             </p>
           </div>
@@ -95,12 +95,12 @@ function StatisticheContent() {
 
         {loading ? (
           <div className="flex items-center justify-center py-24 gap-3" style={{ color: TACCUINO_INK.handMuted }}>
-            <Loader2 className="w-6 h-6 animate-spin" /><span>Caricamento dati…</span>
+            <Loader2 className="w-6 h-6 animate-spin" /><span style={TACCUINO_RULED_TEXT_STYLE}>Caricamento dati…</span>
           </div>
         ) : activities.length === 0 ? (
           <div className="text-center py-24" style={{ color: TACCUINO_INK.handMuted }}>
             <Mountain className="w-12 h-12 mx-auto mb-3 opacity-30" />
-            <p className="text-lg font-medium">Nessuna escursione ancora</p>
+            <p className="text-lg font-medium" style={TACCUINO_RULED_TEXT_STYLE}>Nessuna escursione ancora</p>
           </div>
         ) : (
           <>

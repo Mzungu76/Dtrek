@@ -9,7 +9,7 @@ import RouteThumb from '@/components/RouteThumb'
 import type { DiarySummary } from '@/app/api/diaries/route'
 import type { AllPercorsiRow } from '@/app/api/percorsi/route'
 import { FONT } from '@/lib/designTokens'
-import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, FONT_HAND, INK_ABSORB_STYLE, TaccuinoPaperTexture, TaccuinoRuledLines } from '@/lib/taccuinoTokens'
+import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, TACCUINO_RULED_TEXT_STYLE, FONT_HAND, INK_ABSORB_STYLE, TaccuinoPaperTexture, TaccuinoRuledLines } from '@/lib/taccuinoTokens'
 import { metaHasHikingMetrics } from '@/lib/metaTypes'
 import { ArrowRight, BookMarked, BookOpen, Compass, Loader2, Mountain, Pencil, Plus, Search, X } from 'lucide-react'
 
@@ -218,7 +218,7 @@ function GlobalRouteSearch() {
             <Loader2 className="w-4 h-4 animate-spin" style={{ color: TACCUINO_INK.handMuted }} />
           </div>
         ) : filtered.length === 0 ? (
-          <p className="text-[13px] py-4" style={{ color: TACCUINO_INK.hand }}>Nessun percorso corrisponde alla ricerca.</p>
+          <p className="text-[13px] py-4" style={{ color: TACCUINO_INK.hand, ...TACCUINO_RULED_TEXT_STYLE }}>Nessun percorso corrisponde alla ricerca.</p>
         ) : (
           <div className="mt-2 flex flex-col rounded-2xl overflow-hidden" style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}>
             {filtered.slice(0, 8).map(p => (
@@ -304,10 +304,10 @@ function DiariPageLibro() {
       <Navbar />
       <BookSpineShadow variant="light" />
       <div className="max-w-[900px] mx-auto px-4 sm:px-8 pb-14" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 28px)' }}>
-        <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', fontSize: 11, color: TACCUINO_INK.hand }} className="mb-1.5">
+        <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', fontSize: 11, color: TACCUINO_INK.hand, ...TACCUINO_RULED_TEXT_STYLE }} className="mb-1.5">
           Diario
         </p>
-        <h1 style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 34, ...INK_ABSORB_STYLE }} className="mb-8">
+        <h1 style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 34, ...INK_ABSORB_STYLE, ...TACCUINO_RULED_TEXT_STYLE }} className="mb-8">
           I miei Diari
         </h1>
 
@@ -319,7 +319,7 @@ function DiariPageLibro() {
 
         {diaries === null && !error ? (
           <div className="flex items-center justify-center py-24 gap-3" style={{ color: TACCUINO_INK.handMuted }}>
-            <Loader2 className="w-6 h-6 animate-spin" /><span>Caricamento…</span>
+            <Loader2 className="w-6 h-6 animate-spin" /><span style={TACCUINO_RULED_TEXT_STYLE}>Caricamento…</span>
           </div>
         ) : (
           <>
@@ -333,7 +333,7 @@ function DiariPageLibro() {
             <Link
               href="/percorsi"
               className="inline-flex items-center gap-2 text-[13px] transition-colors"
-              style={{ color: TACCUINO_INK.hand }}
+              style={{ color: TACCUINO_INK.hand, ...TACCUINO_RULED_TEXT_STYLE }}
             >
               <Compass className="w-4 h-4" /> Tutte le Mete <ArrowRight className="w-3.5 h-3.5" />
             </Link>

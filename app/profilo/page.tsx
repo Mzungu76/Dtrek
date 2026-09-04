@@ -13,7 +13,7 @@ import { computeStreaks } from '@/lib/stats'
 import { computeCurrentBadges } from '@/lib/badges'
 import SectionAbbonamento from '@/components/profilo/SectionAbbonamento'
 import GemStatusBadge from '@/components/premium/GemStatusBadge'
-import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, TACCUINO_ACCENT_TINT, TaccuinoPaperTexture, TaccuinoRuledLines } from '@/lib/taccuinoTokens'
+import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, TACCUINO_ACCENT_TINT, TACCUINO_RULED_TEXT_STYLE, TaccuinoPaperTexture, TaccuinoRuledLines } from '@/lib/taccuinoTokens'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 import {
   BarChart2, Trophy, Mountain, Compass, Settings, Sparkles, ArrowDownToLine,
@@ -147,8 +147,8 @@ export default function ProfiloPage() {
           </div>
           <GemStatusBadge size={24} className="absolute bottom-0 right-0" />
         </div>
-        <h1 className="font-display text-[21px] font-bold mb-1" style={{ color: TACCUINO_INK.typed }}>{displayName}</h1>
-        <p className="text-[13px]" style={{ color: TACCUINO_INK.handMuted }}>
+        <h1 className="font-display text-[21px] font-bold mb-1" style={{ color: TACCUINO_INK.typed, ...TACCUINO_RULED_TEXT_STYLE }}>{displayName}</h1>
+        <p className="text-[13px]" style={{ color: TACCUINO_INK.handMuted, ...TACCUINO_RULED_TEXT_STYLE }}>
           {streakWeeks > 0 ? `${streakWeeks} settiman${streakWeeks === 1 ? 'a' : 'e'} di streak` : 'Inizia la tua streak'}
           {badgeCount > 0 && ` · ${badgeCount} traguardi`}
         </p>
@@ -165,8 +165,8 @@ export default function ProfiloPage() {
                 {r.icon}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold" style={{ color: r.danger ? '#b91c1c' : TACCUINO_INK.typed }}>{r.label}</p>
-                {r.sub && <p className="text-xs mt-0.5" style={{ color: TACCUINO_INK.handMuted }}>{r.sub}</p>}
+                <p className="text-sm font-bold" style={{ color: r.danger ? '#b91c1c' : TACCUINO_INK.typed, ...TACCUINO_RULED_TEXT_STYLE }}>{r.label}</p>
+                {r.sub && <p className="text-xs mt-0.5" style={{ color: TACCUINO_INK.handMuted, ...TACCUINO_RULED_TEXT_STYLE }}>{r.sub}</p>}
               </div>
               {!r.danger && <ChevronRight className="w-4 h-4 shrink-0" style={{ color: TACCUINO_INK.handMuted }} />}
             </>
