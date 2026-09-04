@@ -365,10 +365,13 @@ body {
    tagliato insieme al resto): prosegue chiaramente oltre il bordo, sulla carta dietro. Colore
    pieno TACCUINO_ACCENT_TINT (lib/taccuinoTokens.tsx) — se quel token cambia, aggiornare anche
    qui. */
-.torn-tape-photo{ position: absolute; width: 58px; height: 20px; border-radius: 1px; background: #E9DAC3; box-shadow: 0 2px 4px rgba(46,42,34,.3); opacity: .9; z-index: 3; }
-.torn-tape-map{ position: absolute; width: 40px; height: 14px; border-radius: 1px; background: #E9DAC3; box-shadow: 0 1.5px 3px rgba(46,42,34,.3); opacity: .9; z-index: 3; }
-.torn-tape-hero{ position: absolute; width: 76px; height: 26px; border-radius: 1px; background: #E9DAC3; box-shadow: 0 3px 6px rgba(46,42,34,.3); opacity: .9; z-index: 3; }
-.torn-tape-card{ position: absolute; width: 56px; height: 20px; border-radius: 1px; background: #E9DAC3; box-shadow: 0 2px 4px rgba(46,42,34,.3); opacity: .9; z-index: 3; }
+/* Niente box-shadow: anche il nastro è incollato, non sollevato — coerente con l'aderenza già
+   tolta al resto del lato superiore (torn-cast/torn-ao/torn-rim sopra). Resta solo un contorno
+   sottile (non un'ombra) per leggerlo comunque contro la carta, molto simile di tono. */
+.torn-tape-photo{ position: absolute; width: 58px; height: 20px; border-radius: 1px; background: #E9DAC3; border: 1px solid rgba(61,43,31,.16); opacity: .9; z-index: 3; }
+.torn-tape-map{ position: absolute; width: 40px; height: 14px; border-radius: 1px; background: #E9DAC3; border: 1px solid rgba(61,43,31,.16); opacity: .9; z-index: 3; }
+.torn-tape-hero{ position: absolute; width: 76px; height: 26px; border-radius: 1px; background: #E9DAC3; border: 1px solid rgba(61,43,31,.16); opacity: .9; z-index: 3; }
+.torn-tape-card{ position: absolute; width: 56px; height: 20px; border-radius: 1px; background: #E9DAC3; border: 1px solid rgba(61,43,31,.16); opacity: .9; z-index: 3; }
 
 /* Numero di galleria — sostituisce bg-amber-500 (colore fuori palette taccuino) col terracotta
    TACCUINO_ACCENT[600], sporgente sull'angolo come un'etichetta appuntata invece che incassato. */
