@@ -68,46 +68,56 @@ function useAvatar() {
   return { user, faceUrl }
 }
 
-// Stato Premium/prova (docs/navigator-dtrek-boundary.md) come un piccolo gioiello sull'avatar
-// stesso invece di un'icona a sé (non una stella, per non richiamare l'AI) — GemStatusBadge
+// Stato Premium/prova (docs/navigator-dtrek-boundary.md) come un piccolo gioiello — GemStatusBadge
 // legge da solo /api/dtrek-entitlement e sceglie il colore giusto. Un tap sull'avatar porta a
 // /profilo, che mostra lo stato per esteso in cima (SectionAbbonamento).
 // `label` opzionale: montata dentro NAV_LINKS-style bar (mobile top/bottom) mostra "Profilo" sotto
 // l'avatar, stessa forma (flex-col, testo 9/10px bold) delle altre voci — così Profilo è una voce
 // della barra come le altre, non più un'icona fluttuante a sé.
+// Il gioiello sull'angolo dell'avatar (dimensione fissa 16px) andava bene sull'avatar grande di
+// desktop (size=32) ma su quello piccolo della bottom bar (size=22, richiesto per stare nella
+// riga con le altre icone) copriva metà foto/iniziali dell'utente — segnalato dall'utente su build
+// reale. Con `label` presente il gioiello si sposta quindi a fianco del testo "Profilo" (fuori
+// dall'avatar, dimensione ridotta 10px): resta visibile ma non nasconde più nulla. Senza `label`
+// (avatar desktop, dove c'è spazio) resta come prima, incastonato sull'angolo dell'avatar.
 export function ProfileAvatar({ size = 32, iconSize = 16, label, labelClassName = '', labelTextClassName = 'text-[10px]' }: { size?: number; iconSize?: number; label?: string; labelClassName?: string; labelTextClassName?: string }) {
   const path = usePathname()
   const { user, faceUrl } = useAvatar()
   const initials = (user?.user_metadata?.display_name as string | undefined ?? user?.email ?? '?')[0].toUpperCase()
   const active = isActive('/profilo', path)
 
-  const avatar = (
-    <span className="relative flex items-center justify-center shrink-0" style={{ width: size, height: size }}>
-      <span
-        className={`flex items-center justify-center w-full h-full rounded-full border-2 overflow-hidden transition-all ${
-          active ? 'border-botanico-accent' : 'border-stone-200 hover:border-botanico-accent-2'
-        }`}
-      >
-        {faceUrl
-          ? <img src={faceUrl} alt="Profilo" className="w-full h-full object-cover" />
-          : user
-            ? <span className="w-full h-full flex items-center justify-center bg-botanico-accent text-white text-xs font-bold">{initials}</span>
-            : <CircleUser style={{ width: iconSize, height: iconSize }} className="text-stone-400" />
-        }
-      </span>
-      <GemStatusBadge size={16} className="absolute -bottom-1 -right-1" />
+  const avatarCircle = (
+    <span
+      className={`flex items-center justify-center w-full h-full rounded-full border-2 overflow-hidden transition-all ${
+        active ? 'border-botanico-accent' : 'border-stone-200 hover:border-botanico-accent-2'
+      }`}
+    >
+      {faceUrl
+        ? <img src={faceUrl} alt="Profilo" className="w-full h-full object-cover" />
+        : user
+          ? <span className="w-full h-full flex items-center justify-center bg-botanico-accent text-white text-xs font-bold">{initials}</span>
+          : <CircleUser style={{ width: iconSize, height: iconSize }} className="text-stone-400" />
+      }
     </span>
   )
 
   if (!label) {
-    return <Link href="/profilo" className="shrink-0" title="Profilo">{avatar}</Link>
+    return (
+      <Link href="/profilo" className="relative flex items-center justify-center shrink-0" style={{ width: size, height: size }} title="Profilo">
+        {avatarCircle}
+        <GemStatusBadge size={16} className="absolute -bottom-1 -right-1" />
+      </Link>
+    )
   }
 
   return (
     <Link href="/profilo" className={`flex flex-col items-center gap-1 ${labelClassName}`} title="Profilo">
-      {avatar}
-      <span className={`${labelTextClassName} font-bold leading-none ${active ? 'text-botanico-bar-active' : 'text-botanico-bar-inactive'}`}>
+      <span className="flex items-center justify-center shrink-0" style={{ width: size, height: size }}>
+        {avatarCircle}
+      </span>
+      <span className={`flex items-center gap-1 ${labelTextClassName} font-bold leading-none ${active ? 'text-botanico-bar-active' : 'text-botanico-bar-inactive'}`}>
         {label}
+        <GemStatusBadge size={10} />
       </span>
     </Link>
   )
