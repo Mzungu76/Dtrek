@@ -22,7 +22,7 @@ import { getReport, saveReportContent } from '@/lib/sync/hikeReportStore'
 import type { ReportFixedSectionKey } from '@/components/resoconto/sectionStyle'
 import { PhotoLightbox } from '@/app/resoconto/[id]/PhotoLightbox'
 import { FONT } from '@/lib/designTokens'
-import { TACCUINO_PAPER, TACCUINO_INK } from '@/lib/taccuinoTokens'
+import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_RULED_TEXT_STYLE } from '@/lib/taccuinoTokens'
 import { Loader2 } from 'lucide-react'
 import MagazineBody from '@/components/editorial/MagazineBody'
 import ReportGenerationPanel from './ReportGenerationPanel'
@@ -218,11 +218,11 @@ export default function ReportBookPage({ basePath, diarioHref, diarioTitle, acti
         pageLabel={`${idx + 1} di ${present.length}`}
         theme="taccuino"
       >
-        <h1 style={{ fontFamily: FONT.display, fontWeight: 600, fontSize: 22, color: TACCUINO_INK.typed, margin: '0 0 14px' }}>
+        <h1 style={{ fontFamily: FONT.display, fontWeight: 600, fontSize: 22, color: TACCUINO_INK.typed, margin: '0 0 14px', ...TACCUINO_RULED_TEXT_STYLE }}>
           {current.title}
         </h1>
         {chapterBody?.trim() && (
-          <div style={{ fontFamily: FONT.lora, fontSize: 14.5, lineHeight: 1.7, color: TACCUINO_INK.hand, marginBottom: 16 }}>
+          <div style={{ fontFamily: FONT.lora, fontSize: 14.5, color: TACCUINO_INK.hand, marginBottom: 16, ...TACCUINO_RULED_TEXT_STYLE }}>
             <MagazineBody body={chapterBody} />
           </div>
         )}

@@ -35,7 +35,7 @@ import { buildGuideDisplaySections, renderGuideWidget, type DisplaySection } fro
 import { GUIDE_SECTIONS, GUIDE_NAV_GROUPS, type GuideNavGroupKey, type GuideSectionKey } from '@/lib/guideSections'
 import { normalizeGuideNotices } from '@/lib/guideNotices'
 import { FONT } from '@/lib/designTokens'
-import { TACCUINO_INK, TACCUINO_PAPER, TACCUINO_ACCENT, TACCUINO_ACCENT_TINT } from '@/lib/taccuinoTokens'
+import { TACCUINO_INK, TACCUINO_PAPER, TACCUINO_ACCENT, TACCUINO_ACCENT_TINT, TACCUINO_RULED_TEXT_STYLE } from '@/lib/taccuinoTokens'
 import RouteThumb from '@/components/RouteThumb'
 import GuideGenerationPanel from './GuideGenerationPanel'
 import PercorsoToolsDrawer from './PercorsoToolsDrawer'
@@ -221,12 +221,12 @@ export default function GuideBookPage({ basePath, groupPath, diarioHref, diarioT
     const widget = renderGuideWidget(s.key, s.body, widgetProps)
     return (
       <div key={s.key} className={first ? '' : 'mt-7 pt-7 border-t'} style={first ? undefined : { borderColor: `${TACCUINO_PAPER.cardBorder}80` }}>
-        <p className="mb-2" style={eyebrowStyle}>{s.subtitle}</p>
-        <h2 style={{ fontFamily: FONT.display, fontWeight: 600, fontSize: 18, color: TACCUINO_INK.typed, margin: '0 0 12px' }}>
+        <p className="mb-2" style={{ ...eyebrowStyle, ...TACCUINO_RULED_TEXT_STYLE }}>{s.subtitle}</p>
+        <h2 style={{ fontFamily: FONT.display, fontWeight: 600, fontSize: 18, color: TACCUINO_INK.typed, margin: '0 0 12px', ...TACCUINO_RULED_TEXT_STYLE }}>
           {s.title}
         </h2>
         {s.body?.trim() && (
-          <div style={{ fontFamily: FONT.lora, fontSize: 14.5, lineHeight: 1.7, color: TACCUINO_INK.typed, marginBottom: 16 }}>
+          <div style={{ fontFamily: FONT.lora, fontSize: 14.5, color: TACCUINO_INK.typed, marginBottom: 16, ...TACCUINO_RULED_TEXT_STYLE }}>
             <MagazineBody body={s.body} />
           </div>
         )}
@@ -263,8 +263,8 @@ export default function GuideBookPage({ basePath, groupPath, diarioHref, diarioT
         )}
         {weatherWidget}
         <div>
-          <p className="mb-1" style={eyebrowStyle}>Consigli pratici</p>
-          <p style={{ fontFamily: FONT.lora, fontSize: 14, lineHeight: 1.6, color: TACCUINO_INK.typed }}>
+          <p className="mb-1" style={{ ...eyebrowStyle, ...TACCUINO_RULED_TEXT_STYLE }}>Consigli pratici</p>
+          <p style={{ fontFamily: FONT.lora, fontSize: 14, color: TACCUINO_INK.typed, ...TACCUINO_RULED_TEXT_STYLE }}>
             {practicalSubtitle}
           </p>
         </div>
@@ -297,7 +297,7 @@ export default function GuideBookPage({ basePath, groupPath, diarioHref, diarioT
     body = memberSections.length > 0
       ? <>{memberSections.map((s, i) => renderStackedSection(s, i === 0))}</>
       : (
-        <p className="text-sm" style={{ color: TACCUINO_INK.handMuted, fontFamily: FONT.body }}>
+        <p className="text-sm" style={{ color: TACCUINO_INK.handMuted, fontFamily: FONT.body, ...TACCUINO_RULED_TEXT_STYLE }}>
           Questa sezione non è ancora disponibile per questo percorso.
         </p>
       )
