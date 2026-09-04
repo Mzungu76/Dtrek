@@ -208,21 +208,62 @@ export function MobileNavBar({ className = '' }: { className?: string }) {
   )
 }
 
+// Quarto giro sul trattamento di Diari (richiesta esplicita dell'utente, dopo aver scartato
+// pillola sempre accesa, bottone a sinistra, bottone centrato con ritaglio, e infine la barra
+// piatta a 5 voci): si riprende il concetto "disco sollevato + ritaglio nella barra", identico
+// nella meccanica al tentativo di centraggio "per costruzione" (RaisedDiariButton, position:
+// absolute; left:50% — mai un 50% su una riga a più voci, sempre indipendente dal loro peso), ma
+// ora dentro una barra a SOLE 3 voci: Mete, Diari, Navigator. Statistiche esce dalla barra (troverà
+// posto dentro /diari, task separato) e Profilo torna a essere l'icona flottante in alto a destra
+// di FloatingProfileAvatar sotto — non più una voce della barra, come nella primissima versione di
+// questo menù.
+const RAISED_CIRCLE_SIZE = 60
+const RAISE_PX = 17 // bordo superiore del disco, px sopra il filo della barra
+
+function RaisedDiariButton({ href, label, icon: Icon }: (typeof NAV_LINKS)[number]) {
+  return (
+    <Link
+      href={href}
+      className="absolute left-1/2 flex -translate-x-1/2 flex-col items-center gap-1.5"
+      style={{ top: -RAISE_PX }}
+    >
+      <span
+        className="flex items-center justify-center rounded-full bg-botanico-accent text-botanico-bar-active"
+        style={{ width: RAISED_CIRCLE_SIZE, height: RAISED_CIRCLE_SIZE, boxShadow: '0 10px 20px -6px rgba(192,96,61,0.55)' }}
+      >
+        <Icon className="w-7 h-7" strokeWidth={2} />
+      </span>
+      <span className="text-[11px] font-bold leading-none text-botanico-bar-active">{label}</span>
+    </Link>
+  )
+}
+
+// Ritaglio circolare nello sfondo della barra, in corrispondenza del disco Diari: un vero foro
+// nel pannello colorato lascia vedere il contenuto reale che scorre dietro alla barra fissa,
+// invece di indovinare un colore che imiti "quello che c'è sotto". Raggio = metà disco + 5px di
+// margine. Posizione fissa in CSS (non letta a runtime): dato che il disco è sempre esattamente
+// al 50% orizzontale (vedi RaisedDiariButton sopra), il foro si centra sullo stesso 50%.
+const NOTCH_MARGIN = 5
+const NOTCH_RADIUS = RAISED_CIRCLE_SIZE / 2 + NOTCH_MARGIN
+const NOTCH_CENTER_Y = RAISED_CIRCLE_SIZE / 2 - RAISE_PX
+const DIARI_NOTCH_MASK = `radial-gradient(circle ${NOTCH_RADIUS}px at 50% ${NOTCH_CENTER_Y}px, transparent 0 ${NOTCH_RADIUS}px, #000 ${NOTCH_RADIUS + 1}px)`
+
 // ── Mobile: barra unica in fondo ─────────────────────────────────────────────────
-// Tre tentativi di dare rilievo a Diari con un trattamento speciale (pillola sempre accesa,
-// bottone sollevato a sinistra, poi centrato con un ritaglio nella barra) sono stati scartati
-// dall'utente — l'ultimo, per quanto centrato "per costruzione", risultava comunque brutto e
-// asimmetrico nell'insieme reale. Si torna quindi a 5 voci piatte, tutte con lo stesso
-// trattamento grafico (icona 24px, etichetta 11px, stessa pillola su tap) — nessuna eccezione di
-// forma per nessuna. Diari non è più la prima voce ma l'ultima, prima di Profilo: posizionata
-// così di proposito ("dove tende tutto il resto", richiesta esplicita dell'utente) invece che
-// come punto di partenza. Ordine risultante: Mete, Navigator, Statistiche, Profilo, Diari.
+// Tre voci: Mete e Navigator piatte ai due lati, Diari sollevata al centro (RaisedDiariButton,
+// `position:absolute`, fuori dal flusso della riga — vedi sopra). Mete e Navigator sono ciascuna
+// da sola nella propria metà (`flex-1 justify-center`), con un `<div className="w-16" />` vuoto
+// in mezzo che riserva lo spazio sotto al disco: con un solo elemento per lato invece di due, il
+// centraggio "per costruzione" di Diari è più che mai indipendente dal loro peso reciproco.
 // NAV_LINKS resta nell'ordine canonico (Diari, Mete, Navigator, Statistiche) per DesktopNav/
-// MobileNavBar, che restano invariati: solo qui l'ordine visivo viene ricomposto.
+// MobileNavBar, che restano a 4 voci + avatar inline, invariati: solo qui la barra scende a 3.
+// Sfondo e contenuto sono due livelli separati: solo il primo porta il ritaglio
+// (DIARI_NOTCH_MASK), il secondo — icone, etichette, il disco stesso — resta sopra, intatto.
+// Niente backdrop-blur sul primo livello: sfocherebbe anche il contenuto visto attraverso il foro.
 function MobileBottomBar() {
   const path = usePathname()
   const diari = NAV_LINKS.find(l => l.href === '/diari')!
-  const others = NAV_LINKS.filter(l => l.href !== '/diari')
+  const mete = NAV_LINKS.find(l => l.href === '/percorsi')!
+  const navigator_ = NAV_LINKS.find(l => l.href === '/navigatore')!
 
   const renderFlat = ({ href, label, icon: Icon }: (typeof NAV_LINKS)[number]) => {
     const active = isActive(href, path)
@@ -239,15 +280,36 @@ function MobileBottomBar() {
 
   return (
     <nav
-      className="md:hidden fixed z-40 inset-x-0 bottom-0 bg-botanico-bar/95 backdrop-blur-md shadow-[0_-2px_12px_rgba(0,0,0,0.18)]"
+      className="md:hidden fixed z-40 inset-x-0 bottom-0"
       style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
     >
-      <div className="flex items-center justify-around h-20 px-2">
-        {others.map(renderFlat)}
-        <ProfileAvatar size={26} iconSize={13} label="Profilo" labelClassName="px-3 py-2 rounded-2xl" labelTextClassName="text-[11px]" />
-        {renderFlat(diari)}
+      <div
+        className="absolute inset-0 bg-botanico-bar/95 shadow-[0_-2px_12px_rgba(0,0,0,0.18)]"
+        style={{ maskImage: DIARI_NOTCH_MASK, WebkitMaskImage: DIARI_NOTCH_MASK }}
+      />
+      <div className="relative flex items-center h-20 px-2">
+        <div className="flex flex-1 items-center justify-center">{renderFlat(mete)}</div>
+        <div className="w-16 flex-none" aria-hidden />
+        <div className="flex flex-1 items-center justify-center">{renderFlat(navigator_)}</div>
       </div>
+      <RaisedDiariButton key={diari.href} {...diari} />
     </nav>
+  )
+}
+
+// Profilo non è una voce della barra: icona flottante in alto a destra (come nella primissima
+// versione di questo menù, ripristinata su richiesta esplicita dell'utente) — nessuna etichetta
+// (ProfileAvatar senza `label` torna al gioiello Premium incastonato sull'angolo dell'avatar,
+// invece che a fianco di un testo). Sopra la MobileBottomBar (stesso z-40) ma non ci si sovrappone:
+// angoli opposti dello schermo.
+function FloatingProfileAvatar() {
+  return (
+    <div
+      className="md:hidden fixed z-40 right-4 rounded-full bg-white/90 backdrop-blur-sm shadow-[0_2px_8px_rgba(0,0,0,0.18)] p-0.5"
+      style={{ top: 'calc(env(safe-area-inset-top, 0px) + 12px)' }}
+    >
+      <ProfileAvatar size={36} iconSize={16} />
+    </div>
   )
 }
 
@@ -258,6 +320,7 @@ export default function Navbar() {
     <>
       <DesktopNav />
       <MobileBottomBar />
+      <FloatingProfileAvatar />
     </>
   )
 }
