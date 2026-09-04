@@ -197,27 +197,33 @@ export function MobileNavBar({ className = '' }: { className?: string }) {
   )
 }
 
-// Diari non è una voce come le altre: bottone terracotta sollevato di 20px sopra il filo della
-// barra (mockup approvato dall'utente), sempre acceso indipendentemente dalla sezione attiva —
-// è il "torna a casa", non una sezione tra le altre. Icona Notebook (mai BookMarked: scelta
-// esplicita dell'utente dopo revisione delle icone candidate). Niente più alone a tinta piatta
-// attorno al disco (era un tentativo di indovinare il colore di sfondo pagina, sbagliato per
-// costruzione su pagine con sfondo diverso da /diari): la separazione dalla barra ora è un vero
-// ritaglio nello sfondo della barra stessa (vedi MobileBottomBar, notchMask) — qui resta solo
-// un'ombra morbida per dare rilievo al disco, non per crearne il distacco visivo.
+// Diari non è una voce come le altre: disco terracotta sollevato sopra il filo della barra
+// (mockup approvato dall'utente), sempre acceso indipendentemente dalla sezione attiva — è il
+// "torna a casa", non una sezione tra le altre. Icona Notebook (mai BookMarked: scelta esplicita
+// dell'utente dopo revisione delle icone candidate). Niente più alone a tinta piatta attorno al
+// disco (era un tentativo di indovinare il colore di sfondo pagina, sbagliato per costruzione su
+// pagine con sfondo diverso da /diari): la separazione dalla barra ora è un vero ritaglio nello
+// sfondo della barra stessa (vedi MobileBottomBar, useDiariNotchMask) — qui resta solo un'ombra
+// morbida per dare rilievo al disco, non per crearne il distacco visivo.
+// Solo il DISCO è sollevato (position:absolute, staccato dal flusso) — l'etichetta "Diari" resta
+// nel flusso normale del link, alla stessa altezza delle altre quattro etichette (stesso py-1.5,
+// stesso segnaposto invisibile al posto dell'icona piatta w-5 h-5): prima l'intero link (disco +
+// testo) veniva sollevato insieme, e "Diari" finiva a cavallo del ritaglio di trasparenza — senza
+// sfondo verde dietro per contrasto, sembrava tagliato via (segnalato dall'utente su build reale).
 function RaisedDiariButton({
   href, label, icon: Icon, circleRef,
 }: (typeof NAV_LINKS)[number] & { circleRef: React.RefObject<HTMLSpanElement> }) {
   return (
-    <Link href={href} className="relative -top-5 flex flex-none w-[60px] flex-col items-center gap-1.5">
+    <Link href={href} className="relative flex flex-none w-[60px] flex-col items-center gap-1 py-1.5">
+      <span aria-hidden className="h-5 w-5" />
+      <span className="text-[10px] font-bold leading-none text-botanico-bar-active">{label}</span>
       <span
         ref={circleRef}
-        className="flex h-[52px] w-[52px] items-center justify-center rounded-full bg-botanico-accent text-botanico-bar-active"
-        style={{ boxShadow: '0 10px 20px -6px rgba(192,96,61,0.55)' }}
+        className="absolute left-1/2 -translate-x-1/2 flex h-[52px] w-[52px] items-center justify-center rounded-full bg-botanico-accent text-botanico-bar-active"
+        style={{ top: '-31px', boxShadow: '0 10px 20px -6px rgba(192,96,61,0.55)' }}
       >
         <Icon className="w-6 h-6" strokeWidth={2} />
       </span>
-      <span className="text-[10px] font-bold leading-none text-botanico-bar-active">{label}</span>
     </Link>
   )
 }
