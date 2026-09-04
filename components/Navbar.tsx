@@ -224,7 +224,7 @@ function RaisedDiariButton({ href, label, icon: Icon }: (typeof NAV_LINKS)[numbe
   return (
     <Link
       href={href}
-      className="absolute left-1/2 flex -translate-x-1/2 flex-col items-center gap-1.5"
+      className="absolute left-1/2 flex -translate-x-1/2 flex-col items-center gap-2.5"
       style={{ top: -RAISE_PX }}
     >
       <span
@@ -284,7 +284,7 @@ function MobileBottomBar() {
       style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
     >
       <div
-        className="absolute inset-0 bg-botanico-bar/95 shadow-[0_-2px_12px_rgba(0,0,0,0.18)]"
+        className="absolute inset-0 bg-botanico-bar shadow-[0_-2px_12px_rgba(0,0,0,0.18)]"
         style={{ maskImage: DIARI_NOTCH_MASK, WebkitMaskImage: DIARI_NOTCH_MASK }}
       />
       <div className="relative flex items-center h-20 px-2">
