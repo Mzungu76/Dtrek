@@ -3,7 +3,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { MapPin, BookMarked, Navigation2, BarChart3, User } from 'lucide-react'
+import { MapPinned, Notebook, Navigation2, Activity, CircleUser } from 'lucide-react'
 import { getProfile } from '@/lib/userProfile'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
@@ -11,7 +11,7 @@ import GemStatusBadge from '@/components/premium/GemStatusBadge'
 import type { User as SupabaseUser, Session, AuthChangeEvent } from '@supabase/supabase-js'
 
 // Menù inferiore (richiesta esplicita dell'utente, revisione struttura app): cinque voci fisse —
-// Diario, Mete, Navigator, Statistiche, Profilo — un <Link> ciascuna, niente più azione "Nuovo"
+// Diari, Mete, Navigator, Statistiche, Profilo — un <Link> ciascuna, niente più azione "Nuovo"
 // incassata nella barra (era qui prima, apriva NuovoDiarioSheet: la creazione di un Reportage/Meta
 // resta raggiungibile dai punti di ingresso dentro le rispettive pagine, es. il FAB in /diari).
 // Diario > Reportage e Mete restano due alberi paralleli, non più annidati — un Diario contiene
@@ -19,11 +19,15 @@ import type { User as SupabaseUser, Session, AuthChangeEvent } from '@supabase/s
 // solo rinominato in UI) resta senza Diario finché non viene camminata. La voce "Mete" punta ancora
 // a /percorsi (URL tecnico invariato, solo l'etichetta cambia). "Profilo" non è in questa lista:
 // resta <ProfileAvatar/>, montato come quinta voce della barra (vedi DesktopNav/MobileBottomBar).
+// Icone scelte dopo revisione mockup (vedi conversazione): Notebook invece di BookMarked (rimanda
+// a un taccuino, non a un libro generico), MapPinned invece di MapPin (mappa aperta, non solo uno
+// spillo), Activity invece di BarChart3 (linea di andamento, coerente con "Statistiche" come
+// attività fisica più che come tabellone). Navigation2 confermata invariata.
 export const NAV_LINKS = [
-  { href: '/diari',       label: 'Diari',       icon: BookMarked  },
-  { href: '/percorsi',    label: 'Mete',        icon: MapPin      },
+  { href: '/diari',       label: 'Diari',       icon: Notebook    },
+  { href: '/percorsi',    label: 'Mete',        icon: MapPinned   },
   { href: '/navigatore',  label: 'Navigator',   icon: Navigation2 },
-  { href: '/statistiche', label: 'Statistiche', icon: BarChart3   },
+  { href: '/statistiche', label: 'Statistiche', icon: Activity    },
 ]
 
 // Confine di segmento esplicito (non solo startsWith): da quando "Mete" punta a /percorsi, un
@@ -88,7 +92,7 @@ export function ProfileAvatar({ size = 32, iconSize = 16, label, labelClassName 
           ? <img src={faceUrl} alt="Profilo" className="w-full h-full object-cover" />
           : user
             ? <span className="w-full h-full flex items-center justify-center bg-botanico-accent text-white text-xs font-bold">{initials}</span>
-            : <User style={{ width: iconSize, height: iconSize }} className="text-stone-400" />
+            : <CircleUser style={{ width: iconSize, height: iconSize }} className="text-stone-400" />
         }
       </span>
       <GemStatusBadge size={16} className="absolute -bottom-1 -right-1" />
