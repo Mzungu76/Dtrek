@@ -175,8 +175,10 @@ body {
 
 /* ── Taccuino Botanico — foto/mappe "ritagliate a mano" con nastro washi ──
    Calibrata in un mockup dedicato (Artifact, non su file) prima di questo porting: bordo
-   strappato (clip-path), bordino di carta bianco, ombra "sollevata" e occlusione ambientale
-   (entrambe affievolite verso il nastro), nastro che prosegue sullo sfondo. Usata da
+   strappato (clip-path), bordino di carta bianco, sia l'occlusione ambientale (torn-ao) sia
+   l'ombra "sollevata" (torn-cast) assenti lungo tutto il lato superiore — quel lato è incollato
+   dal nastro, non in bilico: niente ombra propria lì, ci pensa il nastro stesso a leggersi come
+   contatto — piena su tutti gli altri lati, nastro che prosegue sullo sfondo. Usata da
    components/TornFrame.tsx — non usare queste classi direttamente altrove senza passare da lì,
    il posizionamento del nastro (--tape-x/--tape-y) deve restare sincronizzato con i preset di
    quel componente.
@@ -270,75 +272,81 @@ body {
    photo/map, resta invariato anche sotto il nastro. */
 .torn-rim-photo, .torn-rim-map, .torn-rim-hero, .torn-rim-card{ position: absolute; inset: 0; filter: drop-shadow(0 0 1.5px #fff) drop-shadow(0 0 6px #fff); }
 
-/* Occlusione ambientale — ombra di contatto stretta, affievolita verso il nastro (dove la carta
-   è comunque incollata allo sfondo, non "sollevata") via mask-image radiale centrata su
-   --tape-x/--tape-y. Riquadro allargato (inset negativo) per contenere lo sfioccamento del
-   filtro senza che mask-repeat:no-repeat lo tagli via. */
+/* Occlusione ambientale — ombra di contatto stretta. Come torn-cast sopra: assente lungo TUTTO
+   il lato superiore (quel lato è incollato dal nastro, non in bilico — niente da "occludere"
+   contro la pagina lì, il nastro stesso fa già da contatto visivo), maschera lineare dall'alto
+   invece del vecchio cerchio localizzato solo sul punto del nastro. Riquadro allargato (inset
+   negativo) per contenere lo sfioccamento del filtro senza che mask-repeat:no-repeat lo tagli via. */
 .torn-ao-photo{
   position: absolute; inset: -18px;
   filter: drop-shadow(0 1.5px 4px rgba(46,42,34,.52)) drop-shadow(0 0 2.5px rgba(46,42,34,.42));
   -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
-  -webkit-mask-image: radial-gradient(circle 55px at calc(var(--tape-x,72px) + 18px) calc(var(--tape-y,0px) + 18px), transparent 0%, transparent 20%, black 100%);
-  mask-image: radial-gradient(circle 55px at calc(var(--tape-x,72px) + 18px) calc(var(--tape-y,0px) + 18px), transparent 0%, transparent 20%, black 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 18px), black calc(var(--tape-y,0px) + 73px));
+  mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 18px), black calc(var(--tape-y,0px) + 73px));
 }
 .torn-ao-photo .torn-filler{ inset: 18px; }
 .torn-ao-map{
   position: absolute; inset: -11px;
   filter: drop-shadow(0 1px 2.5px rgba(46,42,34,.52)) drop-shadow(0 0 1.5px rgba(46,42,34,.42));
   -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
-  -webkit-mask-image: radial-gradient(circle 33px at calc(var(--tape-x,44px) + 11px) calc(var(--tape-y,0px) + 11px), transparent 0%, transparent 20%, black 100%);
-  mask-image: radial-gradient(circle 33px at calc(var(--tape-x,44px) + 11px) calc(var(--tape-y,0px) + 11px), transparent 0%, transparent 20%, black 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 11px), black calc(var(--tape-y,0px) + 44px));
+  mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 11px), black calc(var(--tape-y,0px) + 44px));
 }
 .torn-ao-map .torn-filler{ inset: 11px; }
 .torn-ao-hero{
   position: absolute; inset: -22px;
   filter: drop-shadow(0 2px 5px rgba(46,42,34,.52)) drop-shadow(0 0 3px rgba(46,42,34,.42));
   -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
-  -webkit-mask-image: radial-gradient(circle 66px at calc(var(--tape-x,72px) + 22px) calc(var(--tape-y,0px) + 22px), transparent 0%, transparent 20%, black 100%);
-  mask-image: radial-gradient(circle 66px at calc(var(--tape-x,72px) + 22px) calc(var(--tape-y,0px) + 22px), transparent 0%, transparent 20%, black 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 22px), black calc(var(--tape-y,0px) + 88px));
+  mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 22px), black calc(var(--tape-y,0px) + 88px));
 }
 .torn-ao-hero .torn-filler{ inset: 22px; }
 .torn-ao-card{
   position: absolute; inset: -16px;
   filter: drop-shadow(0 1px 3px rgba(46,42,34,.5)) drop-shadow(0 0 2px rgba(46,42,34,.4));
   -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
-  -webkit-mask-image: radial-gradient(circle 40px at calc(var(--tape-x,50%) + 16px) calc(var(--tape-y,0px) + 16px), transparent 0%, transparent 20%, black 100%);
-  mask-image: radial-gradient(circle 40px at calc(var(--tape-x,50%) + 16px) calc(var(--tape-y,0px) + 16px), transparent 0%, transparent 20%, black 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 16px), black calc(var(--tape-y,0px) + 56px));
+  mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 16px), black calc(var(--tape-y,0px) + 56px));
 }
 .torn-ao-card .torn-filler{ inset: 16px; }
 
-/* Ombra "sollevata" — dipende dalla fisica del nastro come l'AO sopra, stessa tecnica di
-   maschera, riquadro allargato di più (la sfocatura è maggiore). */
+/* Ombra "sollevata" — a differenza dell'AO sopra (che si affievolisce solo in un piccolo
+   cerchio, proprio dove tocca il nastro), questa sparisce lungo TUTTO il lato superiore: quel
+   lato è incollato dal nastro, non sollevato dalla pagina, quindi non può proiettare un'ombra
+   "sospesa" — resta lì solo l'occlusione di contatto (torn-ao). Maschera lineare (non più
+   radiale) dall'alto: trasparente da 0 fino al vero bordo superiore della carta (l'inset
+   negativo del riquadro, allargato per contenere la sfocatura), poi un'ombra piena a piena
+   forza un po' più in basso. */
 .torn-cast-photo{
   position: absolute; inset: -32px;
   filter: drop-shadow(3px 8px 13px rgba(46,42,34,.38)) drop-shadow(0 2px 3px rgba(46,42,34,.26));
   -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
-  -webkit-mask-image: radial-gradient(circle 74px at calc(var(--tape-x,72px) + 32px) calc(var(--tape-y,0px) + 32px), transparent 0%, transparent 25%, black 100%);
-  mask-image: radial-gradient(circle 74px at calc(var(--tape-x,72px) + 32px) calc(var(--tape-y,0px) + 32px), transparent 0%, transparent 25%, black 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 32px), black calc(var(--tape-y,0px) + 106px));
+  mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 32px), black calc(var(--tape-y,0px) + 106px));
 }
 .torn-cast-photo .torn-filler{ inset: 32px; }
 .torn-cast-map{
   position: absolute; inset: -20px;
   filter: drop-shadow(2px 5px 8px rgba(46,42,34,.38)) drop-shadow(0 1.5px 2px rgba(46,42,34,.26));
   -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
-  -webkit-mask-image: radial-gradient(circle 44px at calc(var(--tape-x,44px) + 20px) calc(var(--tape-y,0px) + 20px), transparent 0%, transparent 25%, black 100%);
-  mask-image: radial-gradient(circle 44px at calc(var(--tape-x,44px) + 20px) calc(var(--tape-y,0px) + 20px), transparent 0%, transparent 25%, black 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 20px), black calc(var(--tape-y,0px) + 64px));
+  mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 20px), black calc(var(--tape-y,0px) + 64px));
 }
 .torn-cast-map .torn-filler{ inset: 20px; }
 .torn-cast-hero{
   position: absolute; inset: -40px;
   filter: drop-shadow(4px 10px 16px rgba(46,42,34,.38)) drop-shadow(0 2.5px 4px rgba(46,42,34,.26));
   -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
-  -webkit-mask-image: radial-gradient(circle 90px at calc(var(--tape-x,72px) + 40px) calc(var(--tape-y,0px) + 40px), transparent 0%, transparent 25%, black 100%);
-  mask-image: radial-gradient(circle 90px at calc(var(--tape-x,72px) + 40px) calc(var(--tape-y,0px) + 40px), transparent 0%, transparent 25%, black 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 40px), black calc(var(--tape-y,0px) + 130px));
+  mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 40px), black calc(var(--tape-y,0px) + 130px));
 }
 .torn-cast-hero .torn-filler{ inset: 40px; }
 .torn-cast-card{
   position: absolute; inset: -26px;
   filter: drop-shadow(3px 7px 12px rgba(46,42,34,.35)) drop-shadow(0 2px 3px rgba(46,42,34,.24));
   -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
-  -webkit-mask-image: radial-gradient(circle 56px at calc(var(--tape-x,50%) + 26px) calc(var(--tape-y,0px) + 26px), transparent 0%, transparent 25%, black 100%);
-  mask-image: radial-gradient(circle 56px at calc(var(--tape-x,50%) + 26px) calc(var(--tape-y,0px) + 26px), transparent 0%, transparent 25%, black 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 26px), black calc(var(--tape-y,0px) + 82px));
+  mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 26px), black calc(var(--tape-y,0px) + 82px));
 }
 .torn-cast-card .torn-filler{ inset: 26px; }
 
@@ -395,7 +403,12 @@ body {
    il contenuto restava visibile (specchiato) oltre i 90° invece di sparire. */
 .paper-hinge-face{ position: absolute; inset: 0; backface-visibility: hidden; }
 .paper-hinge-face-back{
-  transform: rotateY(180deg);
+  /* rotateX, non rotateY — deve girare sullo STESSO asse della hinge (.paper-hinge ruota su X,
+     variante verticale) perché le due rotazioni si sommino correttamente (0+180=180 chiusa,
+     nascosta; 180+180=360≡0 aperta, rivolta verso chi guarda). Un asse diverso da quello del
+     genitore non compone linearmente: bug reale introdotto nel porting da questo mockup, dove
+     invece era già corretto. */
+  transform: rotateX(180deg);
   background: linear-gradient(155deg, rgba(61,43,31,.09), transparent 45%), #F9F2E4;
 }
 
