@@ -190,6 +190,14 @@ const PAPER_GRAIN_SIZES = ['auto', 'auto', 'auto']
  * `repeating-linear-gradient` quasi orizzontali ma inclinati in verso opposto e di pochi decimi di
  * grado (stessa tecnica di `PAPER_GRAIN_IMAGES` per le fibre verticali) — mai un angolo esatto di
  * 0deg, per non leggere come una riga stampata a righello.
+ *
+ * Vive in `TaccuinoRuledLines` (sotto), NON in `TaccuinoPaperTexture`: un primo giro l'aveva
+ * incollata lì, ma quel componente è apposta `fixed` al viewport (vignettatura/nuvolato/grana sono
+ * un'atmosfera ambiente, non legata allo scroll) — la rigatura invece deve leggersi come stampata
+ * sul foglio, quindi scorrere CON il testo. Con la rigatura dentro il layer fisso, scorrendo la
+ * pagina il testo scivolava sopra righe che restavano ferme: "sembra che i testi e i foglietti
+ * siano volanti sulla pagina" (segnalazione esplicita dell'utente). Da qui la separazione in due
+ * componenti con comportamento di scroll diverso.
  */
 const PAPER_RULED_LINE_IMAGES = [
   'repeating-linear-gradient(0.6deg, rgba(122,111,82,.05) 0px, rgba(122,111,82,.05) 1px, transparent 1px, transparent 34px)',
@@ -241,9 +249,9 @@ const PAPER_VIGNETTE_IMAGE =
  * Composizione, dal layer più in alto al più in basso (l'ordine conta: in CSS multi-background il
  * primo elencato in `background-image` dipinge sopra gli altri): (1) vignettatura
  * (`PAPER_VIGNETTE_IMAGE`), (2) nuvolato leggero (`PAPER_CLOUD_IMAGES`), (3) fibre verticali
- * sottili (`PAPER_GRAIN_IMAGES`), (4) rigatura orizzontale (`PAPER_RULED_LINE_IMAGES`, in fondo:
- * è "stampata" sulla carta, sotto polvere/grana/vignettatura), (5) il colore piatto di base in
- * fondo a tutto.
+ * sottili (`PAPER_GRAIN_IMAGES`), (4) il colore piatto di base in fondo a tutto. La rigatura
+ * orizzontale NON è qui (vedi `TaccuinoRuledLines` sotto): questo componente resta `fixed` al
+ * viewport apposta, la rigatura deve invece scorrere col contenuto.
  *
  * Fase 24 — **causa reale, finalmente isolata**, del bug "titolo/statistiche invisibili" nelle
  * righe del Sommario: qualunque `<svg>` **vivo che ricopre la pagina** (fisso o assoluto, con o
@@ -272,14 +280,12 @@ export function TaccuinoPaperTexture({ flip = false }: { flip?: boolean }) {
     PAPER_VIGNETTE_IMAGE,
     ...PAPER_CLOUD_IMAGES,
     ...PAPER_GRAIN_IMAGES,
-    ...PAPER_RULED_LINE_IMAGES,
   ]
-  const sizes = ['auto', ...PAPER_CLOUD_IMAGES.map(() => 'auto'), ...PAPER_GRAIN_SIZES, ...PAPER_RULED_LINE_SIZES]
+  const sizes = ['auto', ...PAPER_CLOUD_IMAGES.map(() => 'auto'), ...PAPER_GRAIN_SIZES]
   const repeats = [
     'no-repeat',
     ...PAPER_CLOUD_IMAGES.map(() => 'no-repeat'),
     ...PAPER_GRAIN_IMAGES.map(() => 'no-repeat'),
-    ...PAPER_RULED_LINE_IMAGES.map(() => 'no-repeat'),
   ]
   return (
     <div
@@ -290,6 +296,30 @@ export function TaccuinoPaperTexture({ flip = false }: { flip?: boolean }) {
         backgroundImage: images.join(', '),
         backgroundSize: sizes.join(', '),
         backgroundRepeat: repeats.join(', '),
+      }}
+    />
+  )
+}
+
+/**
+ * Rigatura orizzontale del taccuino — va montata SUBITO DOPO `<TaccuinoPaperTexture />`, come
+ * fratello successivo nel markup (stesso z-index -10: fra due elementi allo stesso livello di
+ * stacking, chi compare dopo nel DOM dipinge sopra — così la rigatura appare sull'atmosfera fissa
+ * sotto, restando comunque dietro al contenuto vero) — e dentro un contenitore antenato con
+ * `position: relative` la cui altezza segue il contenuto (niente `h-screen`/`overflow` che la
+ * tagli): `absolute inset-0` si estende esattamente a quell'altezza, quindi scorre insieme al resto
+ * della pagina invece di restare agganciata al viewport come `TaccuinoPaperTexture`. Vedi il
+ * commento su `PAPER_RULED_LINE_IMAGES` sopra per il perché della separazione.
+ */
+export function TaccuinoRuledLines() {
+  return (
+    <div
+      aria-hidden="true"
+      className="absolute inset-0 -z-10 pointer-events-none"
+      style={{
+        backgroundImage: PAPER_RULED_LINE_IMAGES.join(', '),
+        backgroundSize: PAPER_RULED_LINE_SIZES.join(', '),
+        backgroundRepeat: PAPER_RULED_LINE_IMAGES.map(() => 'no-repeat').join(', '),
       }}
     />
   )

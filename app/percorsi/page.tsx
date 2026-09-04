@@ -7,7 +7,7 @@ import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 import { ctsLabel } from '@/lib/trailScore'
 import { formatDuration } from '@/lib/tcxParser'
 import type { AllPercorsiRow } from '@/app/api/percorsi/route'
-import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, FONT_HAND, HandDrawnFrame, TaccuinoPaperTexture } from '@/lib/taccuinoTokens'
+import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, FONT_HAND, HandDrawnFrame, TaccuinoPaperTexture, TaccuinoRuledLines } from '@/lib/taccuinoTokens'
 import { TornFrame, tornVariant } from '@/components/TornFrame'
 import { FONT } from '@/lib/designTokens'
 import { metaHasHikingMetrics } from '@/lib/metaTypes'
@@ -87,8 +87,9 @@ export default function MetePage() {
   }, [mete, favoritesOnly, query, sortBy, sortDir])
 
   return (
-    <div className={`min-h-screen md:pb-0 ${MOBILE_BOTTOMBAR_SPACER}`}>
+    <div className={`relative min-h-screen md:pb-0 ${MOBILE_BOTTOMBAR_SPACER}`}>
       <TaccuinoPaperTexture />
+      <TaccuinoRuledLines />
       <Navbar />
 
       <div className="relative h-[200px] sm:h-[240px] overflow-hidden" style={{ background: 'linear-gradient(to bottom right, #4A5A3F, #2E3A26)' }}>

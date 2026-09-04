@@ -9,7 +9,7 @@ import RouteThumb from '@/components/RouteThumb'
 import type { DiarySummary } from '@/app/api/diaries/route'
 import type { AllPercorsiRow } from '@/app/api/percorsi/route'
 import { FONT } from '@/lib/designTokens'
-import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, FONT_HAND, INK_ABSORB_STYLE, TaccuinoPaperTexture } from '@/lib/taccuinoTokens'
+import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, FONT_HAND, INK_ABSORB_STYLE, TaccuinoPaperTexture, TaccuinoRuledLines } from '@/lib/taccuinoTokens'
 import { metaHasHikingMetrics } from '@/lib/metaTypes'
 import { ArrowRight, BookMarked, BookOpen, Compass, Loader2, Mountain, Pencil, Plus, Search, X } from 'lucide-react'
 
@@ -298,8 +298,9 @@ function DiariPageLibro() {
   }, [])
 
   return (
-    <div className={`min-h-screen ${MOBILE_BOTTOMBAR_SPACER}`}>
+    <div className={`relative min-h-screen ${MOBILE_BOTTOMBAR_SPACER}`}>
       <TaccuinoPaperTexture />
+      <TaccuinoRuledLines />
       <Navbar />
       <BookSpineShadow variant="light" />
       <div className="max-w-[900px] mx-auto px-4 sm:px-8 pb-14" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 28px)' }}>
