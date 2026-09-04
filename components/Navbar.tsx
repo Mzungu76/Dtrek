@@ -197,33 +197,61 @@ export function MobileNavBar({ className = '' }: { className?: string }) {
   )
 }
 
+// Diari non è una voce come le altre: bottone terracotta sollevato di 20px sopra il filo della
+// barra (mockup approvato dall'utente), sempre acceso indipendentemente dalla sezione attiva —
+// è il "torna a casa", non una sezione tra le altre. Icona Notebook (mai BookMarked: scelta
+// esplicita dell'utente dopo revisione delle icone candidate).
+function RaisedDiariButton({ href, label, icon: Icon }: (typeof NAV_LINKS)[number]) {
+  return (
+    <Link href={href} className="relative -top-5 flex flex-none w-[60px] flex-col items-center gap-1">
+      <span
+        className="flex h-[52px] w-[52px] items-center justify-center rounded-full bg-botanico-accent text-botanico-bar-active"
+        style={{ boxShadow: '0 10px 20px -6px rgba(192,96,61,0.55)' }}
+      >
+        <Icon className="w-6 h-6" strokeWidth={2} />
+      </span>
+      <span className="text-[10px] font-bold leading-none text-botanico-bar-active">{label}</span>
+    </Link>
+  )
+}
+
 // ── Mobile: barra unica in fondo ─────────────────────────────────────────────────
-// Cinque voci raggiungibili col pollice: Diario, Mete, Navigator, Statistiche, Profilo (richiesta
-// esplicita dell'utente) — Profilo torna a vivere dentro la barra invece che come icona fluttuante
-// a sé (FloatingProfileAvatar, rimossa), stessa forma delle altre voci via ProfileAvatar label=.
+// Cinque voci raggiungibili col pollice: Mete, Navigator, Diari, Statistiche, Profilo — Diari
+// (terza posizione, non prima) è il bottone sollevato RaisedDiariButton sopra, le altre quattro
+// restano piatte come sempre. NAV_LINKS resta nell'ordine canonico (Diari, Mete, Navigator,
+// Statistiche) per DesktopNav/MobileNavBar, che non adottano questo trattamento: solo qui
+// l'ordine visivo viene ricomposto attorno al bottone centrale. Profilo vive dentro la barra
+// (ProfileAvatar label=) invece che come icona fluttuante a sé.
 // Non riusa <MobileNavBar/> (quella resta la pillola in alto delle pagine "magazine"
 // Guide/Resoconto, invariata — components/routehub/HubNavBar.tsx): stesse voci (NAV_LINKS),
 // diversa cornice, per non toccare quelle pagine finché non vengono ridisegnate.
 function MobileBottomBar() {
   const path = usePathname()
+  const diari = NAV_LINKS.find(l => l.href === '/diari')!
+  const others = NAV_LINKS.filter(l => l.href !== '/diari')
+
+  const renderFlat = ({ href, label, icon: Icon }: (typeof NAV_LINKS)[number]) => {
+    const active = isActive(href, path)
+    const className = `flex flex-col items-center gap-1 px-3 py-1.5 rounded-2xl transition-colors ${
+      active ? 'text-botanico-bar-active' : 'text-botanico-bar-inactive'
+    }`
+    return (
+      <Link key={href} href={href} className={className}>
+        <Icon className="w-5 h-5" strokeWidth={2} />
+        <span className="text-[10px] font-bold leading-none">{label}</span>
+      </Link>
+    )
+  }
+
   return (
     <nav
       className="md:hidden fixed z-40 inset-x-0 bottom-0 bg-botanico-bar/95 backdrop-blur-md shadow-[0_-2px_12px_rgba(0,0,0,0.18)]"
       style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
     >
       <div className="flex items-center justify-around h-16 px-2">
-        {NAV_LINKS.map(({ href, label, icon: Icon }) => {
-          const active = isActive(href, path)
-          const className = `flex flex-col items-center gap-1 px-3 py-1.5 rounded-2xl transition-colors ${
-            active ? 'text-botanico-bar-active' : 'text-botanico-bar-inactive'
-          }`
-          return (
-            <Link key={href} href={href} className={className}>
-              <Icon className="w-5 h-5" strokeWidth={2} />
-              <span className="text-[10px] font-bold leading-none">{label}</span>
-            </Link>
-          )
-        })}
+        {others.slice(0, 2).map(renderFlat)}
+        <RaisedDiariButton key={diari.href} {...diari} />
+        {others.slice(2).map(renderFlat)}
         <ProfileAvatar size={22} iconSize={11} label="Profilo" labelClassName="px-3 py-1.5 rounded-2xl" />
       </div>
     </nav>
