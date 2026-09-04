@@ -200,15 +200,17 @@ export function MobileNavBar({ className = '' }: { className?: string }) {
 // Diari non è una voce come le altre: bottone terracotta sollevato di 20px sopra il filo della
 // barra (mockup approvato dall'utente), sempre acceso indipendentemente dalla sezione attiva —
 // è il "torna a casa", non una sezione tra le altre. Icona Notebook (mai BookMarked: scelta
-// esplicita dell'utente dopo revisione delle icone candidate). L'alone chiaro (ring 5px, colore
-// botanico.paper #F5EDDD) è quello del mockup: senza, il disco si fonde col verde della barra e
-// perde la separazione netta che lo fa leggere come elemento sollevato invece che piatto.
+// esplicita dell'utente dopo revisione delle icone candidate). Niente più alone a tinta piatta
+// attorno al disco (era un tentativo di indovinare il colore di sfondo pagina, sbagliato per
+// costruzione su pagine con sfondo diverso da /diari): la separazione dalla barra ora è un vero
+// ritaglio nello sfondo della barra stessa (vedi MobileBottomBar, notchMask) — qui resta solo
+// un'ombra morbida per dare rilievo al disco, non per crearne il distacco visivo.
 function RaisedDiariButton({ href, label, icon: Icon }: (typeof NAV_LINKS)[number]) {
   return (
     <Link href={href} className="relative -top-5 flex flex-none w-[60px] flex-col items-center gap-1.5">
       <span
         className="flex h-[52px] w-[52px] items-center justify-center rounded-full bg-botanico-accent text-botanico-bar-active"
-        style={{ boxShadow: '0 0 0 5px #F5EDDD, 0 10px 20px -6px rgba(192,96,61,0.55)' }}
+        style={{ boxShadow: '0 10px 20px -6px rgba(192,96,61,0.55)' }}
       >
         <Icon className="w-6 h-6" strokeWidth={2} />
       </span>
@@ -216,6 +218,15 @@ function RaisedDiariButton({ href, label, icon: Icon }: (typeof NAV_LINKS)[numbe
     </Link>
   )
 }
+
+// Ritaglio circolare nello sfondo della barra, in corrispondenza del disco Diari: invece di
+// indovinare un colore che imiti "quello che c'è sotto" (fragile, sbagliato appena lo sfondo
+// pagina cambia), un vero foro nel pannello colorato lascia vedere il contenuto reale che scorre
+// dietro alla barra fissa — sempre corretto, su qualunque pagina. Cerchio di raggio 34px (26 del
+// disco + 8 di margine) centrato in orizzontale (il bottone è la voce centrale su 5, con lo stesso
+// numero di voci piatte a sinistra e a destra) e a 3px dal bordo superiore della barra — quota a
+// cui il disco (sollevato di 20px, alto 52px) comincia davvero a sovrapporsi al pannello.
+const DIARI_NOTCH_MASK = 'radial-gradient(circle 34px at 50% 3px, transparent 0 34px, #000 35px)'
 
 // ── Mobile: barra unica in fondo ─────────────────────────────────────────────────
 // Cinque voci raggiungibili col pollice: Mete, Navigator, Diari, Statistiche, Profilo — Diari
@@ -227,6 +238,9 @@ function RaisedDiariButton({ href, label, icon: Icon }: (typeof NAV_LINKS)[numbe
 // Non riusa <MobileNavBar/> (quella resta la pillola in alto delle pagine "magazine"
 // Guide/Resoconto, invariata — components/routehub/HubNavBar.tsx): stesse voci (NAV_LINKS),
 // diversa cornice, per non toccare quelle pagine finché non vengono ridisegnate.
+// Sfondo e contenuto sono due livelli separati (non più un unico <nav> colorato): solo il primo
+// porta il ritaglio (DIARI_NOTCH_MASK), il secondo — icone, etichette, il disco stesso — resta
+// sopra, intatto, per non essere anch'esso "bucato" dalla maschera.
 function MobileBottomBar() {
   const path = usePathname()
   const diari = NAV_LINKS.find(l => l.href === '/diari')!
@@ -247,10 +261,14 @@ function MobileBottomBar() {
 
   return (
     <nav
-      className="md:hidden fixed z-40 inset-x-0 bottom-0 bg-botanico-bar/95 backdrop-blur-md shadow-[0_-2px_12px_rgba(0,0,0,0.18)]"
+      className="md:hidden fixed z-40 inset-x-0 bottom-0"
       style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
     >
-      <div className="flex items-center justify-around h-16 px-2">
+      <div
+        className="absolute inset-0 bg-botanico-bar/95 backdrop-blur-md shadow-[0_-2px_12px_rgba(0,0,0,0.18)]"
+        style={{ maskImage: DIARI_NOTCH_MASK, WebkitMaskImage: DIARI_NOTCH_MASK }}
+      />
+      <div className="relative flex items-center justify-around h-16 px-2">
         {others.slice(0, 2).map(renderFlat)}
         <RaisedDiariButton key={diari.href} {...diari} />
         {others.slice(2).map(renderFlat)}
