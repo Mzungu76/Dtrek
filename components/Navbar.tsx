@@ -1,61 +1,35 @@
 'use client'
 import Link from 'next/link'
 import Image from 'next/image'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { Compass, BookMarked, Plus, User } from 'lucide-react'
+import { MapPin, BookMarked, Navigation2, BarChart3, User } from 'lucide-react'
 import { getProfile } from '@/lib/userProfile'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import GemStatusBadge from '@/components/premium/GemStatusBadge'
-import NuovoDiarioSheet from '@/components/nuovo/NuovoDiarioSheet'
 import type { User as SupabaseUser, Session, AuthChangeEvent } from '@supabase/supabase-js'
 
-// Ristrutturazione Diario/Mete (richiesta esplicita dell'utente, dopo il redesign menù globale
-// fase 1-3): Diario > Reportage e Mete sono ora due alberi paralleli, non più annidati — un Diario
-// contiene solo i Reportage delle uscite già fatte; una Meta (ex "Percorso", stesso record
-// planned_hikes, solo rinominato in UI) resta senza Diario finché non viene camminata: il Diario
-// di destinazione si sceglie solo alla creazione del Reportage (vedi NuovoDiarioSheet), mai prima.
-// Niente più voce "Reportage" in questa barra (era app/reportage/page.tsx + app/api/reportage/
-// route.ts, entrambi rimossi): un Reportage si raggiunge solo entrando nel suo Diario. La voce
-// "Mete" punta ancora a /percorsi (URL tecnico invariato, solo l'etichetta cambia) — elenca ora
-// solo le Mete non ancora camminate (reportageCount === 0), vedi app/percorsi/page.tsx.
-// "Nuovo" non è un <Link> come le altre voci (vedi DesktopNav/MobileBottomBar sotto): apre
-// NuovoDiarioSheet — tab contestuale alla sezione attiva (nuovoTabFor), mai un default automatico
-// silenzioso.
+// Menù inferiore (richiesta esplicita dell'utente, revisione struttura app): cinque voci fisse —
+// Diario, Mete, Navigator, Statistiche, Profilo — un <Link> ciascuna, niente più azione "Nuovo"
+// incassata nella barra (era qui prima, apriva NuovoDiarioSheet: la creazione di un Reportage/Meta
+// resta raggiungibile dai punti di ingresso dentro le rispettive pagine, es. il FAB in /diari).
+// Diario > Reportage e Mete restano due alberi paralleli, non più annidati — un Diario contiene
+// solo i Reportage delle uscite già fatte; una Meta (ex "Percorso", stesso record planned_hikes,
+// solo rinominato in UI) resta senza Diario finché non viene camminata. La voce "Mete" punta ancora
+// a /percorsi (URL tecnico invariato, solo l'etichetta cambia). "Profilo" non è in questa lista:
+// resta <ProfileAvatar/>, montato come quinta voce della barra (vedi DesktopNav/MobileBottomBar).
 export const NAV_LINKS = [
-  { href: '/diari',      label: 'Diario', icon: BookMarked },
-  { href: '/percorsi',   label: 'Mete',   icon: Compass    },
-  { href: '/upload',     label: 'Nuovo',  icon: Plus       },
+  { href: '/diari',       label: 'Diario',      icon: BookMarked  },
+  { href: '/percorsi',    label: 'Mete',        icon: MapPin      },
+  { href: '/navigatore',  label: 'Navigator',   icon: Navigation2 },
+  { href: '/statistiche', label: 'Statistiche', icon: BarChart3   },
 ]
 
 // Confine di segmento esplicito (non solo startsWith): da quando "Mete" punta a /percorsi, un
 // semplice startsWith avrebbe acceso il tab anche su /percorsi-per-te, rotta distinta.
 export function isActive(href: string, path: string) {
   return href === '/' ? path === '/' : path === href || path.startsWith(`${href}/`)
-}
-
-// "Nuovo" (fase 3) — contestuale alla sezione attiva: dentro Mete crea una nuova meta da
-// pianificare (tab=gpx, senza Diario), ovunque altrove crea un Reportage/Resoconto (tab=activity,
-// il default di app/upload/page.tsx — lì si sceglie il Diario di destinazione). Stesso confine di
-// segmento di isActive, per lo stesso motivo.
-function nuovoTabFor(path: string): 'activity' | 'gpx' {
-  return path === '/percorsi' || path.startsWith('/percorsi/') ? 'gpx' : 'activity'
-}
-
-// Una Meta (tab='gpx') non appartiene a un Diario finché non viene camminata (ristrutturazione
-// Diario/Mete, richiesta esplicita dell'utente): niente più NuovoDiarioSheet — che esiste apposta
-// per scegliere il Diario di destinazione — per quel caso, si va dritti a /upload?tab=gpx. Un
-// Reportage (tab='activity') continua invece a chiedere sempre il Diario, come prima.
-function useNuovoTrigger(path: string) {
-  const router = useRouter()
-  const [sheetOpen, setSheetOpen] = useState(false)
-  const tab = nuovoTabFor(path)
-  const openNuovo = () => {
-    if (tab === 'gpx') router.push('/upload?tab=gpx')
-    else setSheetOpen(true)
-  }
-  return { sheetOpen, openNuovo, closeNuovo: () => setSheetOpen(false), tab }
 }
 
 // ── Avatar (desktop + tab bar icon) ─────────────────────────────────────────────
@@ -94,19 +68,17 @@ function useAvatar() {
 // stesso invece di un'icona a sé (non una stella, per non richiamare l'AI) — GemStatusBadge
 // legge da solo /api/dtrek-entitlement e sceglie il colore giusto. Un tap sull'avatar porta a
 // /profilo, che mostra lo stato per esteso in cima (SectionAbbonamento).
-export function ProfileAvatar({ size = 32, iconSize = 16 }: { size?: number; iconSize?: number }) {
+// `label` opzionale: montata dentro NAV_LINKS-style bar (mobile top/bottom) mostra "Profilo" sotto
+// l'avatar, stessa forma (flex-col, testo 9/10px bold) delle altre voci — così Profilo è una voce
+// della barra come le altre, non più un'icona fluttuante a sé.
+export function ProfileAvatar({ size = 32, iconSize = 16, label, labelClassName = '', labelTextClassName = 'text-[10px]' }: { size?: number; iconSize?: number; label?: string; labelClassName?: string; labelTextClassName?: string }) {
   const path = usePathname()
   const { user, faceUrl } = useAvatar()
   const initials = (user?.user_metadata?.display_name as string | undefined ?? user?.email ?? '?')[0].toUpperCase()
   const active = isActive('/profilo', path)
 
-  return (
-    <Link
-      href="/profilo"
-      className="relative flex items-center justify-center shrink-0"
-      style={{ width: size, height: size }}
-      title="Profilo"
-    >
+  const avatar = (
+    <span className="relative flex items-center justify-center shrink-0" style={{ width: size, height: size }}>
       <span
         className={`flex items-center justify-center w-full h-full rounded-full border-2 overflow-hidden transition-all ${
           active ? 'border-botanico-accent' : 'border-stone-200 hover:border-botanico-accent-2'
@@ -120,6 +92,19 @@ export function ProfileAvatar({ size = 32, iconSize = 16 }: { size?: number; ico
         }
       </span>
       <GemStatusBadge size={16} className="absolute -bottom-1 -right-1" />
+    </span>
+  )
+
+  if (!label) {
+    return <Link href="/profilo" className="shrink-0" title="Profilo">{avatar}</Link>
+  }
+
+  return (
+    <Link href="/profilo" className={`flex flex-col items-center gap-1 ${labelClassName}`} title="Profilo">
+      {avatar}
+      <span className={`${labelTextClassName} font-bold leading-none ${active ? 'text-botanico-bar-active' : 'text-botanico-bar-inactive'}`}>
+        {label}
+      </span>
     </Link>
   )
 }
@@ -134,7 +119,6 @@ export const MOBILE_BOTTOMBAR_SPACER = 'pb-[calc(env(safe-area-inset-bottom,0px)
 
 function DesktopNav() {
   const path = usePathname()
-  const { sheetOpen, openNuovo, closeNuovo, tab } = useNuovoTrigger(path)
 
   return (
     <nav className="hidden md:block sticky top-0 z-50 bg-white/90 backdrop-blur-sm border-b border-stone-200 shadow-sm">
@@ -152,14 +136,6 @@ function DesktopNav() {
             const className = `flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
               active ? 'bg-botanico-accent-tint text-botanico-accent' : 'text-stone-500 hover:text-stone-800 hover:bg-stone-100'
             }`
-            if (href === '/upload') {
-              return (
-                <button key={href} type="button" onClick={openNuovo} className={className}>
-                  <Icon className="w-4 h-4" />
-                  <span>{label}</span>
-                </button>
-              )
-            }
             return (
               <Link key={href} href={href} className={className}>
                 <Icon className="w-4 h-4" />
@@ -171,7 +147,6 @@ function DesktopNav() {
           <ProfileAvatar />
         </div>
       </div>
-      <NuovoDiarioSheet open={sheetOpen} onClose={closeNuovo} tab={tab} />
     </nav>
   )
 }
@@ -192,7 +167,6 @@ function DesktopNav() {
 // l'antenato è già interattivo di suo.
 export function MobileNavBar({ className = '' }: { className?: string }) {
   const path = usePathname()
-  const { sheetOpen, openNuovo, closeNuovo, tab } = useNuovoTrigger(path)
   return (
     <nav
       className={`pointer-events-auto bg-botanico-bar/95 backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.18)] ${className}`}
@@ -205,14 +179,6 @@ export function MobileNavBar({ className = '' }: { className?: string }) {
             const linkClassName = `flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-2xl transition-colors ${
               active ? 'text-botanico-bar-active' : 'text-botanico-bar-inactive'
             }`
-            if (href === '/upload') {
-              return (
-                <button key={href} type="button" onClick={openNuovo} className={linkClassName}>
-                  <Icon className="w-4 h-4" strokeWidth={2} />
-                  <span className="text-[9px] font-bold leading-none">{label}</span>
-                </button>
-              )
-            }
             return (
               <Link key={href} href={href} className={linkClassName}>
                 <Icon className="w-4 h-4" strokeWidth={2} />
@@ -220,24 +186,22 @@ export function MobileNavBar({ className = '' }: { className?: string }) {
               </Link>
             )
           })}
+          <ProfileAvatar size={20} iconSize={10} label="Profilo" labelClassName="px-2.5 py-1 rounded-2xl" labelTextClassName="text-[9px]" />
         </div>
-        <ProfileAvatar size={32} iconSize={14} />
       </div>
-      <NuovoDiarioSheet open={sheetOpen} onClose={closeNuovo} tab={tab} />
     </nav>
   )
 }
 
-// ── Mobile: barra unica in fondo (redesign fase 1) ──────────────────────────────
-// Sposta la navigazione principale in basso, raggiungibile col pollice — l'avatar Profilo non ci
-// vive più dentro (era l'unico modo per raggiungere Profilo su mobile, ora un'icona a sé,
-// FloatingProfileAvatar sotto): voci pari, nessuna eccezione di forma per l'ultima.
+// ── Mobile: barra unica in fondo ─────────────────────────────────────────────────
+// Cinque voci raggiungibili col pollice: Diario, Mete, Navigator, Statistiche, Profilo (richiesta
+// esplicita dell'utente) — Profilo torna a vivere dentro la barra invece che come icona fluttuante
+// a sé (FloatingProfileAvatar, rimossa), stessa forma delle altre voci via ProfileAvatar label=.
 // Non riusa <MobileNavBar/> (quella resta la pillola in alto delle pagine "magazine"
 // Guide/Resoconto, invariata — components/routehub/HubNavBar.tsx): stesse voci (NAV_LINKS),
 // diversa cornice, per non toccare quelle pagine finché non vengono ridisegnate.
 function MobileBottomBar() {
   const path = usePathname()
-  const { sheetOpen, openNuovo, closeNuovo, tab } = useNuovoTrigger(path)
   return (
     <nav
       className="md:hidden fixed z-40 inset-x-0 bottom-0 bg-botanico-bar/95 backdrop-blur-md shadow-[0_-2px_12px_rgba(0,0,0,0.18)]"
@@ -249,14 +213,6 @@ function MobileBottomBar() {
           const className = `flex flex-col items-center gap-1 px-3 py-1.5 rounded-2xl transition-colors ${
             active ? 'text-botanico-bar-active' : 'text-botanico-bar-inactive'
           }`
-          if (href === '/upload') {
-            return (
-              <button key={href} type="button" onClick={openNuovo} className={className}>
-                <Icon className="w-5 h-5" strokeWidth={2} />
-                <span className="text-[10px] font-bold leading-none">{label}</span>
-              </button>
-            )
-          }
           return (
             <Link key={href} href={href} className={className}>
               <Icon className="w-5 h-5" strokeWidth={2} />
@@ -264,24 +220,9 @@ function MobileBottomBar() {
             </Link>
           )
         })}
+        <ProfileAvatar size={22} iconSize={11} label="Profilo" labelClassName="px-3 py-1.5 rounded-2xl" />
       </div>
-      <NuovoDiarioSheet open={sheetOpen} onClose={closeNuovo} tab={tab} />
     </nav>
-  )
-}
-
-// Profilo non è più una voce della barra (resta un'icona a parte, come sull'avatar desktop) —
-// fluttuante invece che incassata in una barra fissa in alto, perché quella barra non esiste
-// più su mobile: stesso <ProfileAvatar/> di sempre, solo montato qui invece che dentro
-// MobileTopBar. Sopra la MobileBottomBar (z-40) ma non ci si sovrappone: angoli opposti.
-function FloatingProfileAvatar() {
-  return (
-    <div
-      className="md:hidden fixed z-40 right-4 rounded-full bg-white/90 backdrop-blur-sm shadow-[0_2px_8px_rgba(0,0,0,0.18)] p-0.5"
-      style={{ top: 'calc(env(safe-area-inset-top, 0px) + 12px)' }}
-    >
-      <ProfileAvatar size={36} iconSize={16} />
-    </div>
   )
 }
 
@@ -292,7 +233,6 @@ export default function Navbar() {
     <>
       <DesktopNav />
       <MobileBottomBar />
-      <FloatingProfileAvatar />
     </>
   )
 }
