@@ -184,6 +184,20 @@ const PAPER_GRAIN_IMAGES = [
 const PAPER_GRAIN_SIZES = ['auto', 'auto', 'auto']
 
 /**
+ * Rigatura orizzontale, ispirata ai quaderni tipo Moleskine (richiesta esplicita dell'utente:
+ * "vorrei simulare queste righe orizzontali nelle pagine, sullo sfondo"). Calibrata in un mockup
+ * a parte (opacità .07 su una singola riga, passo 34px) prima di essere riportata qui. Due
+ * `repeating-linear-gradient` quasi orizzontali ma inclinati in verso opposto e di pochi decimi di
+ * grado (stessa tecnica di `PAPER_GRAIN_IMAGES` per le fibre verticali) — mai un angolo esatto di
+ * 0deg, per non leggere come una riga stampata a righello.
+ */
+const PAPER_RULED_LINE_IMAGES = [
+  'repeating-linear-gradient(0.6deg, rgba(122,111,82,.05) 0px, rgba(122,111,82,.05) 1px, transparent 1px, transparent 34px)',
+  'repeating-linear-gradient(-0.4deg, rgba(122,111,82,.025) 0px, rgba(122,111,82,.025) 1px, transparent 1px, transparent 34px)',
+]
+const PAPER_RULED_LINE_SIZES = ['auto', 'auto']
+
+/**
  * Nuvolato — variazione di tono diffusa e leggera, non più chiazze marcate (Fase 43: le chiazze
  * grandi e sature testate nei giri precedenti leggevano o come "sporco" o restavano invisibili
  * sotto la sfumatura di luce dell'epoca — calibrata su un secondo riferimento fornito dall'utente:
@@ -227,7 +241,9 @@ const PAPER_VIGNETTE_IMAGE =
  * Composizione, dal layer più in alto al più in basso (l'ordine conta: in CSS multi-background il
  * primo elencato in `background-image` dipinge sopra gli altri): (1) vignettatura
  * (`PAPER_VIGNETTE_IMAGE`), (2) nuvolato leggero (`PAPER_CLOUD_IMAGES`), (3) fibre verticali
- * sottili (`PAPER_GRAIN_IMAGES`), (4) il colore piatto di base in fondo a tutto.
+ * sottili (`PAPER_GRAIN_IMAGES`), (4) rigatura orizzontale (`PAPER_RULED_LINE_IMAGES`, in fondo:
+ * è "stampata" sulla carta, sotto polvere/grana/vignettatura), (5) il colore piatto di base in
+ * fondo a tutto.
  *
  * Fase 24 — **causa reale, finalmente isolata**, del bug "titolo/statistiche invisibili" nelle
  * righe del Sommario: qualunque `<svg>` **vivo che ricopre la pagina** (fisso o assoluto, con o
@@ -256,9 +272,15 @@ export function TaccuinoPaperTexture({ flip = false }: { flip?: boolean }) {
     PAPER_VIGNETTE_IMAGE,
     ...PAPER_CLOUD_IMAGES,
     ...PAPER_GRAIN_IMAGES,
+    ...PAPER_RULED_LINE_IMAGES,
   ]
-  const sizes = ['auto', ...PAPER_CLOUD_IMAGES.map(() => 'auto'), ...PAPER_GRAIN_SIZES]
-  const repeats = ['no-repeat', ...PAPER_CLOUD_IMAGES.map(() => 'no-repeat'), ...PAPER_GRAIN_IMAGES.map(() => 'no-repeat')]
+  const sizes = ['auto', ...PAPER_CLOUD_IMAGES.map(() => 'auto'), ...PAPER_GRAIN_SIZES, ...PAPER_RULED_LINE_SIZES]
+  const repeats = [
+    'no-repeat',
+    ...PAPER_CLOUD_IMAGES.map(() => 'no-repeat'),
+    ...PAPER_GRAIN_IMAGES.map(() => 'no-repeat'),
+    ...PAPER_RULED_LINE_IMAGES.map(() => 'no-repeat'),
+  ]
   return (
     <div
       aria-hidden="true"
