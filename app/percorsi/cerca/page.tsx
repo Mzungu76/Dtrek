@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Navbar, { MOBILE_BOTTOMBAR_SPACER } from '@/components/Navbar'
-import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, FONT_HAND, HandDrawnFrame } from '@/lib/taccuinoTokens'
+import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, TACCUINO_LIST_DIVIDER, FONT_HAND, HandDrawnFrame } from '@/lib/taccuinoTokens'
 import { FONT } from '@/lib/designTokens'
 import { savePlanned } from '@/lib/plannedStore'
 import { metaSearchResultToPlannedHike } from '@/lib/metaToPlannedHike'
@@ -206,7 +206,7 @@ export default function CercaMetaPage() {
                   onClick={() => handleSelect(item)}
                   disabled={!!creatingId}
                   className="flex items-start gap-3.5 py-3.5 px-2 -mx-2 text-left disabled:opacity-60"
-                  style={{ borderBottom: `1px dashed ${TACCUINO_PAPER.cardBorder}80` }}
+                  style={{ borderBottom: TACCUINO_LIST_DIVIDER }}
                 >
                   <div
                     className="w-[64px] h-[64px] shrink-0 rounded-lg overflow-hidden flex items-center justify-center"

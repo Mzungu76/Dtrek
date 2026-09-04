@@ -7,7 +7,7 @@ import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 import { ctsLabel } from '@/lib/trailScore'
 import { formatDuration } from '@/lib/tcxParser'
 import type { AllPercorsiRow } from '@/app/api/percorsi/route'
-import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, FONT_HAND, HandDrawnFrame, TaccuinoPaperTexture, TaccuinoRuledLines } from '@/lib/taccuinoTokens'
+import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, TACCUINO_LIST_DIVIDER, TACCUINO_RULED_TEXT_STYLE, FONT_HAND, HandDrawnFrame, TaccuinoPaperTexture, TaccuinoRuledLines } from '@/lib/taccuinoTokens'
 import { TornFrame, tornVariant } from '@/components/TornFrame'
 import { FONT } from '@/lib/designTokens'
 import { metaHasHikingMetrics } from '@/lib/metaTypes'
@@ -136,7 +136,7 @@ export default function MetePage() {
               <Mountain className="w-10 h-10" style={{ color: TACCUINO_ACCENT[600] }} />
             </div>
             <h2 className="font-display text-2xl font-semibold mb-2" style={{ color: TACCUINO_INK.typed }}>Nessuna meta ancora</h2>
-            <p className="text-sm max-w-sm px-4" style={{ color: TACCUINO_INK.handMuted }}>
+            <p className="text-sm max-w-sm px-4" style={{ color: TACCUINO_INK.handMuted, ...TACCUINO_RULED_TEXT_STYLE }}>
               I percorsi che pianifichi compariranno qui, finché non li cammini — a quel punto diventano un Reportage nel Diario che scegli.
             </p>
           </div>
@@ -211,7 +211,7 @@ export default function MetePage() {
                       // py-5 (invece di py-3.5) — spazio per il nastro e l'ombra "sollevata" che
                       // sporgono oltre il riquadro 87x87 di ogni TornFrame (Taccuino Botanico).
                       className="flex items-center gap-3.5 py-5 px-2 -mx-2"
-                      style={{ borderBottom: `1px dashed ${TACCUINO_PAPER.cardBorder}80` }}
+                      style={{ borderBottom: TACCUINO_LIST_DIVIDER }}
                     >
                       {/* Nastro washi + bordo strappato (Taccuino Botanico) al posto del vecchio bordo
                           bianco spesso + ombra "da card" — calibrato in un mockup dedicato prima di

@@ -87,6 +87,16 @@ export const TACCUINO_ACCENT_SECONDARY = '#7C8F6E'
 export const TACCUINO_ACCENT_TINT = '#E9DAC3'
 
 /**
+ * Divisorio per elenchi verticali su fondo rigato (Mete, Reportage) — sostituisce il tratteggio
+ * chiaro (`${TACCUINO_PAPER.cardBorder}80`) usato in precedenza: segnalato dall'utente su
+ * screenshot reale, si confondeva visivamente con `TaccuinoRuledLines` dietro. Solido (il
+ * tratteggio è la parte che si mimetizzava — i trattini si confondono con le righe ripetute dello
+ * sfondo, una linea continua no) e color terra (`TACCUINO_ACCENT`, lo stesso accento già usato per
+ * titoli/nastro — non un grigio neutro estraneo alla palette). Calibrato in un mockup dedicato.
+ */
+export const TACCUINO_LIST_DIVIDER = `1.5px solid ${TACCUINO_ACCENT[600]}73`
+
+/**
  * Filtro SVG che dà un tratto "disegnato a mano" (leggero tremore organico) a un path/forma —
  * mai su testo o su icone piccole (sotto i ~24px il tremore le rende irriconoscibili invece che
  * "artigianali", verificato nel mockup): mappe, bordi di pagina, separatori, forme grandi.
@@ -199,11 +209,29 @@ const PAPER_GRAIN_SIZES = ['auto', 'auto', 'auto']
  * siano volanti sulla pagina" (segnalazione esplicita dell'utente). Da qui la separazione in due
  * componenti con comportamento di scroll diverso.
  */
+/** Passo della rigatura — unica fonte per i gradienti sotto e per `TACCUINO_RULED_TEXT_STYLE`. */
+const RULE_SPACING_PX = 34
+
 const PAPER_RULED_LINE_IMAGES = [
-  'repeating-linear-gradient(0.6deg, rgba(122,111,82,.05) 0px, rgba(122,111,82,.05) 1px, transparent 1px, transparent 34px)',
-  'repeating-linear-gradient(-0.4deg, rgba(122,111,82,.025) 0px, rgba(122,111,82,.025) 1px, transparent 1px, transparent 34px)',
+  `repeating-linear-gradient(0.6deg, rgba(122,111,82,.05) 0px, rgba(122,111,82,.05) 1px, transparent 1px, transparent ${RULE_SPACING_PX}px)`,
+  `repeating-linear-gradient(-0.4deg, rgba(122,111,82,.025) 0px, rgba(122,111,82,.025) 1px, transparent 1px, transparent ${RULE_SPACING_PX}px)`,
 ]
 const PAPER_RULED_LINE_SIZES = ['auto', 'auto']
+
+/**
+ * Da usare SOLO su testo scritto direttamente sul fondo rigato della pagina (mai dentro una
+ * TornFrame, mai su una riga di elenco: lì il testo ha già la propria tipografia e non deve
+ * agganciarsi alla rigatura — richiesta esplicita dell'utente dopo aver visto il mockup: "devi
+ * centrare solamente il testo scritto direttamente sul sottofondo dell'app, non quello sulle card
+ * o sugli elenchi"). `lineHeight` pari al passo della rigatura fa sì che il testo si appoggi al
+ * rigo come farebbe una persona che scrive, invece di fluttuare senza rapporto con lo sfondo.
+ *
+ * Approssimato, non millimetrico: l'allineamento esatto riga-per-riga dipenderebbe anche
+ * dall'offset verticale del blocco rispetto all'origine della rigatura (varia da pagina a pagina
+ * per header, safe-area, ecc.) — con la rigatura calibrata a un'opacità così tenue (.05/.025),
+ * il ritmo di lettura che dà il `lineHeight` conta più del millimetro esatto.
+ */
+export const TACCUINO_RULED_TEXT_STYLE = { lineHeight: `${RULE_SPACING_PX}px` } as const
 
 /**
  * Nuvolato — variazione di tono diffusa e leggera, non più chiazze marcate (Fase 43: le chiazze
