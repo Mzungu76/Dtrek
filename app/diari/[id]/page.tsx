@@ -11,7 +11,7 @@ import { formatDuration } from '@/lib/tcxParser'
 import type { DiarioDetail } from '@/app/api/diaries/[id]/route'
 import { updateUserSettings } from '@/lib/sync/userSettingsStore'
 import { FONT } from '@/lib/designTokens'
-import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, FONT_HAND, INK_ABSORB_STYLE, TaccuinoPaperTexture, HandDrawnFrame } from '@/lib/taccuinoTokens'
+import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, TACCUINO_LIST_DIVIDER, FONT_HAND, INK_ABSORB_STYLE, TaccuinoPaperTexture, HandDrawnFrame } from '@/lib/taccuinoTokens'
 import { TornFrame, tornVariant } from '@/components/TornFrame'
 import { metaHasHikingMetrics } from '@/lib/metaTypes'
 import {
@@ -346,10 +346,10 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                   // sporgono oltre il riquadro 87x87 di ogni TornFrame (Taccuino Botanico).
                   className="flex items-center gap-3.5 py-5 px-2 -mx-2"
                   style={{
-                    // Fase 31 — separatore con opacità (non più il colore pieno di `cardBorder`):
-                    // "linee tratteggiate stampate, colore molto tenue, opacità 0.4-0.6", non un
-                    // bordo pieno come una card. `80` = ~50% alpha.
-                    borderBottom: `1px dashed ${TACCUINO_PAPER.cardBorder}80`,
+                    // Fase 44 — sostituito il tratteggio chiaro di Fase 31: si confondeva con
+                    // TaccuinoRuledLines dietro (segnalazione dell'utente su screenshot reale).
+                    // Vedi TACCUINO_LIST_DIVIDER.
+                    borderBottom: TACCUINO_LIST_DIVIDER,
                     // "Passata di evidenziatore" per i reportage già raccontati — riconoscibili a
                     // colpo d'occhio senza dover leggere l'etichetta a destra. Colore ripreso dal
                     // mockup (`#e9d4ae66`), non il tinteggio arancio-accento di prima: doveva
