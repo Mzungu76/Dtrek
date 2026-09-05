@@ -76,21 +76,41 @@ Verificato: `tsc --noEmit` pulito, eslint pulito, vitest 389/389 (383 + 6 nuovi)
 **Rimandato ad-hoc, non nel piano originale**: emblema disegnato a mano (skyline/tempio) al posto
 dell'icona lucide di fallback — miglioria estetica, non blocca nulla a valle.
 
-## Fase 3 — La carta espandibile (1-2 giorni)
+## Fase 3 — La carta espandibile (1-2 giorni) ✅ fatta
 
-Nuovo `components/mete/MeteMap.tsx` costruito su **`components/bacheca/TerritoryMap.tsx`**, che ha
-già Leaflet + `markercluster` + overlay tracce e oggi non è usato da nessuna pagina.
+`components/mete/MeteMap.tsx`, nuovo, non costruito direttamente su `TerritoryMap.tsx` (quello
+resta specifico per i POI di Bacheca, badge/colore per `PoiType`) ma sulla stessa **infrastruttura**
+Leaflet+cluster — il loader condiviso è stato estratto in `lib/loadLeafletCluster.ts` (usato ora da
+entrambi i componenti): `leaflet.markercluster` patcha `window.L` una volta sola per processo, due
+copie indipendenti del loader avrebbero rotto silenziosamente il secondo mount (vedi il commento nel
+file).
 
-- Chiusa di default: striscia 70px con pin e legenda; aperta: 314px con "Vicino a me", fumetto sul
-  pin toccato (la stessa riga dell'elenco) e ordinamento per distanza.
-- **Leaflet montata solo all'apertura** (`dynamic(..., { ssr: false })` + mount lazy), mai al
-  caricamento della pagina; la striscia chiusa è un'anteprima statica.
-- Forma del pin per tipologia (goccia / quadrato / cerchio), non solo colore.
-- Se la posizione dell'utente manca: niente colonna "km da te" e ordinamento per data — nessun
-  valore fabbricato.
-- Stato: chiusa a ogni ingresso (deciso), riapribile con un tocco.
-- **Fatto quando**: aprendo la carta i 4 borghi e i sentieri compaiono come pin, i chip filtrano
-  insieme pin ed elenco, e il primo caricamento della pagina non scarica Leaflet.
+- ✅ Chiusa di default: striscia statica 70px (`MapStripPreview`, solo SVG — nessun Leaflet) con un
+  pin colorato per Meta in posizione pseudo-casuale ma stabile (derivata dall'id) e il conteggio;
+  aperta: 260px con la mappa vera, pin per tipologia raggruppati (`markerClusterGroup`), fumetto sul
+  pin toccato con titolo + link alla Meta (non l'intera riga React — popup Leaflet in HTML semplice,
+  scelta di scope: un portale React dentro un popup Leaflet per un guadagno marginale non valeva la
+  complessità in più).
+- ✅ **Leaflet montata solo all'apertura**: `next/dynamic(..., { ssr: false })` in cima al file (mai
+  un `import` statico), e comunque il componente non è nell'albero finché `mapOpen` non è vero.
+- ✅ Forma del pin per tipologia: goccia (sentiero) / quadrato (borgo_città) / cerchio (sito), stessi
+  colori sia nella striscia statica sia nella carta vera.
+- ✅ Ordinamento "Vicinanza": richiede `navigator.geolocation`, chiesta solo al primo tocco sulla
+  carta (mai al caricamento pagina); se negata/assente, chip "Vicinanza" e colonna "km da te" restano
+  assenti — mai un valore fabbricato — e compare un bottone "Vicino a me" per ritentare. Alla prima
+  posizione ottenuta l'ordinamento passa da solo a "Vicinanza" se l'utente non ne aveva già scelto un
+  altro esplicitamente.
+- ✅ I chip di tipologia/ricerca/preferiti filtrano insieme pin della carta ed elenco (stesso array
+  `filtered`, i pin sono solo il sottoinsieme con lat/lon nota).
+- ✅ Stato: chiusa a ogni ingresso (deciso), mai persistita, riapribile con un tocco.
+
+Verificato: `tsc --noEmit` pulito, eslint pulito, vitest 389/389 (nessuna regressione — Fase 3 non
+tocca dati testabili in isolamento, solo UI/Leaflet).
+
+**Fatto quando**: aprendo la carta i pin compaiono raggruppati per vicinanza a schermate strette, i
+chip filtrano insieme pin ed elenco, e il primo caricamento della pagina non scarica Leaflet (verifica
+manuale del bundle/network rimandata — nessun accesso a un browser autenticato in questo ambiente,
+vedi le note di verifica nei commit precedenti).
 
 ## Fase 4 — Borghi/Città: rendere utile il catalogo (1-2 giorni + tempo macchina)
 
