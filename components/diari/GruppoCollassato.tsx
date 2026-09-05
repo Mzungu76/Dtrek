@@ -12,7 +12,13 @@ import type { GruppoDiari } from '@/lib/diari/raggruppaDiari'
 
 const DORSI_MINI = ['#8A6A46', '#5F7355', '#A89A78', '#7A5A3C', '#4A5A3F']
 
-export function GruppoCollassato({ gruppo }: { gruppo: GruppoDiari }) {
+interface Props {
+  gruppo: GruppoDiari
+  /** Titoli delle Raccolte per id di Diario — vedi RegistroRow. */
+  nomiRaccolteByDiaryId?: Map<string, string[]>
+}
+
+export function GruppoCollassato({ gruppo, nomiRaccolteByDiaryId }: Props) {
   const [aperto, setAperto] = useState(false)
 
   const distanzaTotale = gruppo.diari.reduce((s, d) => s + d.distanceMeters, 0)
@@ -29,7 +35,9 @@ export function GruppoCollassato({ gruppo }: { gruppo: GruppoDiari }) {
         >
           <ChevronDown className="w-3.5 h-3.5 rotate-180" /> {gruppo.etichetta}
         </button>
-        {gruppo.diari.map((diario, i) => <RegistroRow key={diario.id} diario={diario} indiceColore={i} />)}
+        {gruppo.diari.map((diario, i) => (
+          <RegistroRow key={diario.id} diario={diario} indiceColore={i} nomiRaccolte={nomiRaccolteByDiaryId?.get(diario.id)} />
+        ))}
       </div>
     )
   }
