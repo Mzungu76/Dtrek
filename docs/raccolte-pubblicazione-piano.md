@@ -165,9 +165,32 @@ qualcuno ha già condiviso, quindi lo decidi tu (vedi sotto).
 
 ## Ordine di lavoro
 
-1. **PR 1 — fondamenta**: 3a (migration), 3b (refactor del core), 3c (API). Nessuna UI: si verifica
-   con i test e con una chiamata diretta agli endpoint.
+1. **PR 1 — fondamenta ✅ implementata**: 3a (migration, eseguita in produzione), 3b (refactor del
+   core), 3c (API). Nessuna UI: verificata con i test e via `tsc`/build — non ancora con una
+   chiamata reale agli endpoint da un client (nessuna pagina li chiama ancora). Deviazione minima
+   dal piano: `combineDateRangeLabels` vive in `lib/raccolte/combineDateRangeLabels.ts` invece che
+   dentro `lib/sharePublicCollection.ts`, per restare testabile senza istanziare il client Supabase
+   (che lancia un'eccezione a import-time senza le variabili d'ambiente — lo stesso vincolo che ha
+   tenuto `lib/diari/*` puri fin dall'inizio).
 2. **PR 2 — la funzione**: 3d (composizione) + 3e (pagina pubblica). È l'unità che rende la cosa
    usabile: separarle lascerebbe a metà o l'una o l'altra.
 3. **PR 3 — privacy**: 3f. Indipendente dalle altre due e può anche andare per prima, se la
    decisione 1 arriva subito.
+
+### Cosa c'è già, per chi riprende da qui
+
+- `supabase/migrations/add_collections_tables.sql` — `collections` + `collection_diaries`, RLS
+  come `diaries`. **Già eseguita sul progetto Supabase in produzione.**
+- `lib/sharePublicDiary.ts` — spezzato: `fetchDiaryContent(userId, diaryId, excluded,
+  photoIdsByActivity)` esportata, `fetchPublicDiary(token)` invariata nel comportamento.
+- `lib/sharePublicCollection.ts` — `fetchPublicCollection(token)`, usa `fetchDiaryContent` per
+  ogni volume nell'ordine di `position`.
+- `lib/raccolte/` — `aggregateCollections.ts`, `normalizeDiaryOrder.ts`, `combineDateRangeLabels.ts`,
+  tutti puri e testati.
+- API: `GET/POST /api/collections`, `GET/PATCH/DELETE /api/collections/[id]`,
+  `PUT /api/collections/[id]/diari`, `GET/PATCH/DELETE /api/collections/[id]/token` — creazione
+  gated dietro `resolveDtrekEntitlement` (decisione 2 del piano, applicata).
+
+Non ancora deciso/fatto: la decisione 1 (privacy retroattiva) resta aperta, 3f non è iniziata; la
+decisione 3 (limite volumi) è stata anticipata in `normalizeDiaryOrder` con un tetto di 20, più
+basso della sola paginazione proposta — da rivedere se stretto.
