@@ -10,8 +10,8 @@ import type { AllPercorsiRow } from '@/app/api/percorsi/route'
 import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, TACCUINO_LIST_DIVIDER, TACCUINO_RULED_TEXT_STYLE, FONT_HAND, HandDrawnFrame, TaccuinoPaperTexture, TaccuinoRuledLines } from '@/lib/taccuinoTokens'
 import { TornFrame, tornVariant } from '@/components/TornFrame'
 import { FONT } from '@/lib/designTokens'
-import { metaHasHikingMetrics } from '@/lib/metaTypes'
-import { ArrowDown, ArrowLeft, ArrowUp, Clock, Loader2, Mountain, Route, Search, Star, TrendingUp, X } from 'lucide-react'
+import { metaHasHikingMetrics, type MetaType } from '@/lib/metaTypes'
+import { ArrowDown, ArrowUp, Building2, Clock, Landmark, Loader2, Mountain, Route, Search, Star, TrendingUp, X } from 'lucide-react'
 
 /**
  * "Mete" (ex "Tutti i Percorsi") — ristrutturazione Diario/Mete richiesta esplicitamente
@@ -49,6 +49,18 @@ function cutoutRotation(id: string): number {
   let hash = 0
   for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0
   return ((Math.abs(hash) % 14) / 10) - 0.7
+}
+
+/** Icona di fallback quando la miniatura non ha una traccia da disegnare — una per tipologia
+ *  (mai la stessa Mountain per un borgo o un sito, la Fase 2 del piano la sostituirà con un
+ *  emblema disegnato; questo resta un tappabuchi minimo ma già type-aware). */
+function metaTypeFallbackIcon(metaType: MetaType | undefined) {
+  const color = TACCUINO_PAPER.cardBorder
+  switch (metaType) {
+    case 'borgo_citta': return <Building2 className="w-5 h-5" style={{ color }} />
+    case 'sito':        return <Landmark className="w-5 h-5" style={{ color }} />
+    default:             return <Mountain className="w-5 h-5" style={{ color }} />
+  }
 }
 
 export default function MetePage() {
@@ -95,9 +107,9 @@ export default function MetePage() {
       <div className="relative h-[200px] sm:h-[240px] overflow-hidden" style={{ background: 'linear-gradient(to bottom right, #4A5A3F, #2E3A26)' }}>
         <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, rgba(46,58,38,.15), rgba(46,58,38,.85))' }} />
         <div className="absolute left-6 right-6 bottom-6 sm:left-10 sm:right-10 sm:bottom-8">
-          <Link href="/diari" className="inline-flex items-center gap-1.5 text-[#E9DAC3] text-[13px] font-semibold mb-1.5 hover:text-white transition-colors">
-            <ArrowLeft className="w-3.5 h-3.5" /> I miei Diari
-          </Link>
+          {/* Niente link "I miei Diari" qui — i Diari sono già l'icona centrale della barra di
+              navigazione inferiore (components/Navbar.tsx), un secondo ingresso allo stesso posto
+              sarebbe ridondante (richiesta esplicita dell'utente dopo il mockup). */}
           <h1 className="font-display text-[24px] sm:text-3xl font-bold text-white leading-tight">
             Mete
           </h1>
@@ -231,10 +243,24 @@ export default function MetePage() {
                               dimTiles={false}
                             />
                           )
-                          : <div className="w-full h-full flex items-center justify-center"><Mountain className="w-5 h-5" style={{ color: TACCUINO_PAPER.cardBorder }} /></div>}
+                          : (
+                            // Fondo carta esplicito (mai lasciato trasparente): senza, il nero di
+                            // .torn-filler nei layer sotto (torn-ao/torn-rim/torn-cast, opachi per
+                            // progetto — vedi app/globals.css) traspare attraverso quest'icona
+                            // centrata, che da sola non copre l'intero riquadro. Icona per
+                            // tipologia — mai la stessa Mountain per un borgo o un sito.
+                            <div className="w-full h-full flex items-center justify-center" style={{ background: TACCUINO_PAPER.card }}>
+                              {metaTypeFallbackIcon(p.metaType)}
+                            </div>
+                          )}
                       </TornFrame>
                       <div className="min-w-0 flex-1">
-                        <p style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 19.5, color: TACCUINO_INK.typed, ...TACCUINO_RULED_TEXT_STYLE }}>{p.title}</p>
+                        <p
+                          className="line-clamp-2"
+                          style={{ fontFamily: FONT.lora, fontWeight: 600, fontSize: 15, lineHeight: 1.25, color: TACCUINO_INK.typed }}
+                        >
+                          {p.title}
+                        </p>
                         {scoreLabel && (
                           <p className="truncate" style={{ fontFamily: FONT_HAND, fontSize: 14, fontWeight: 600, color: TACCUINO_INK.handMuted, ...TACCUINO_RULED_TEXT_STYLE }}>
                             {scoreLabel}
