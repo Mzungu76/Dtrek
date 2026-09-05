@@ -1,0 +1,31 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 390, "h": 844, "title": "Opzione A — Tre scaffali" },
+    { "file": "OptionB.dc.html", "x": 530, "y": 0, "w": 390, "h": 844, "title": "Opzione B — Registro unico" },
+    { "file": "OptionC.dc.html", "x": 1060, "y": 0, "w": 390, "h": 844, "title": "Opzione C — La carta delle Mete" }
+  ],
+  "annotations": [
+    {
+      "id": "stato-dati",
+      "x": 0,
+      "y": -232,
+      "w": 460,
+      "text": "Stato reale dei dati (letto su Supabase, non ipotizzato)\n\ndtrek_places: 425 righe, TUTTE borgo_citta, TUTTE Lazio.\n0 siti. 0 immagini. 0 descrizioni. 0 wikidata. subtype sempre NULL (nessun borgo/città).\ndtrek_place_relations: 0 righe — nessun itinerario possibile oggi.\nplanned_hikes: 59 sentieri + 4 borghi (route_polyline = [], nessuna metrica)."
+    },
+    {
+      "id": "miniature-nere",
+      "x": 530,
+      "y": -232,
+      "w": 460,
+      "text": "Perché le miniature sono nere\n\napp/globals.css: .torn-filler{background:#000} — i tre layer di TornFrame sono neri\nper progetto e devono restare coperti dal contenuto reale in .torn-content.\nUna Meta borgo/sito non ha routePolyline: il fallback è una sola icona senza sfondo,\nquindi il nero passa. Una riga: dare a .torn-content un fondo carta nel caso di fallback."
+    },
+    {
+      "id": "cosa-cambia",
+      "x": 1060,
+      "y": -232,
+      "w": 460,
+      "text": "Costante nelle tre opzioni\n\n1. Titolo riga in Lora 14,5 (non Caveat 19,5 con line-height della rigatura):\n   \"Centro-Officina Arenaro (Muracciole)\" oggi occupa 4 righe.\n2. Miniatura sempre disegnata: traccia per il sentiero, emblema per borgo/sito.\n3. Slot metriche adattivo — mai 0 km / 0 m per un museo.\n4. Un solo ingresso di ricerca (oggi ce ne sono due, uno finto)."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}
