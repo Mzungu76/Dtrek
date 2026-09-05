@@ -7,10 +7,12 @@
 //    ha dimensioni fisse (PDF_PAGE_W×PDF_PAGE_H), qui va quindi ridimensionata via transform,
 //    stesso trucco già usato in /diari/[id]/copertina/page.tsx (ora riusato da lì invece di
 //    duplicato).
-// 2. Senza `title` (scaffale, DiarioCoverCard): solo lo sfondo (foto o il gradiente verde +
-//    profilo di montagne del default reale) — quella card ha già il proprio riquadro di testo
-//    (titolo/sottotitolo/"Taccuino N°"/statistiche), aggiungere qui il testo della copertina vera
-//    lo raddoppierebbe. Riempie il contenitore al 100% (nessun `width` da passare).
+// 2. Senza `title`: solo lo sfondo (foto o il gradiente verde + profilo di montagne del default
+//    reale), per un chiamante che disegna il proprio riquadro di testo intorno — aggiungere qui il
+//    testo della copertina vera lo raddoppierebbe. Riempie il contenitore al 100% (nessun `width`
+//    da passare). Non più usata dalla griglia di /diari (sostituita dal registro a righe della
+//    versione A, docs/diari-restyling-piano.md), ma resta la modalità corretta per un eventuale
+//    futuro chiamante che voglia solo lo sfondo.
 import { DiarioCover } from './DiarioCover'
 import { PDF_PAGE_W, PDF_PAGE_H } from '@/lib/pdfPageGeometry'
 

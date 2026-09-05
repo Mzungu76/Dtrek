@@ -15,6 +15,9 @@ export interface AllPercorsiRow {
   routePolyline?: [number, number][]
   createdAt: string
   firstCompletedAt: string | null
+  /** 'YYYY-MM-DD' (colonna DATE), null se non programmata — usata dalla card "prossima uscita"
+   *  di /diari (lib/diari/prossimaUscita.ts) per scegliere la Meta con la data più vicina. */
+  plannedDate: string | null
   diaryId: string | null
   diaryTitle: string | null
   reportageCount: number
@@ -37,7 +40,7 @@ export async function GET(req: NextRequest) {
 
     const { data: planned, error: plannedErr } = await supabase
       .from('planned_hikes')
-      .select('id, title, distance_meters, elevation_gain, altitude_max, estimated_time_seconds, route_polyline, created_at, first_completed_at, diary_id, archived_at, cached_ts_total, favorite, meta_type')
+      .select('id, title, distance_meters, elevation_gain, altitude_max, estimated_time_seconds, route_polyline, created_at, first_completed_at, planned_date, diary_id, archived_at, cached_ts_total, favorite, meta_type')
       .eq('user_id', user.id)
       .is('archived_at', null)
       .order('created_at', { ascending: false })
@@ -76,6 +79,7 @@ export async function GET(req: NextRequest) {
         routePolyline:         p.route_polyline as [number, number][] | undefined,
         createdAt:             p.created_at as string,
         firstCompletedAt:      p.first_completed_at as string | null,
+        plannedDate:           p.planned_date as string | null,
         diaryId,
         diaryTitle:            diaryId ? (diaryTitleById.get(diaryId) ?? null) : null,
         reportageCount,

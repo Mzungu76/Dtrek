@@ -2,28 +2,17 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { getUserFromRequest } from '@/lib/supabaseAuth'
 import { resolveDtrekEntitlement } from '@/lib/dtrekEntitlement'
+import { aggregateDiaries, type DiaryRow, type PlannedDiaryLinkRow, type ActivityMetricsRow } from '@/lib/diari/aggregateDiaries'
+
+export type { DiarySummary } from '@/lib/diari/aggregateDiaries'
 
 export const dynamic = 'force-dynamic'
 
-export interface DiarySummary {
-  id: string
-  title: string
-  subtitle: string
-  author: string
-  coverUrl: string | null
-  footerText: string
-  isDefault: boolean
-  /** Numero di Reportage (activities collegate, tramite le Mete di questo Diario) che
-   *  appartengono a questo Diario — ristrutturazione Diario/Mete: un Diario contiene solo
-   *  Reportage, non più Mete "in programma" ancora senza uscita. */
-  reportageCount: number
-  /** True se questo Diario ha almeno un Reportage — la regola dei "requisiti minimi": solo un
-   *  Diario così può essere pubblicato/condiviso. */
-  pubblicabile: boolean
-}
-
-// GET /api/diaries → tutti i Diari dell'utente, con conteggio Reportage e idoneità alla
-// pubblicazione. "Il mio Diario" (is_default) sempre per primo.
+// GET /api/diaries → tutti i Diari dell'utente, con conteggio Reportage, metriche aggregate
+// (distanza/dislivello/ultima uscita — restyling pagina /diari, docs/diari-restyling-piano.md
+// Fase 0) e idoneità alla pubblicazione. "Il mio Diario" (is_default) sempre per primo. Il calcolo
+// vero e proprio è in lib/diari/aggregateDiaries.ts (puro, testato): questa route resta un thin
+// wrapper sulle query Supabase.
 export async function GET(req: NextRequest) {
   try {
     const user = await getUserFromRequest(req)
@@ -31,7 +20,7 @@ export async function GET(req: NextRequest) {
 
     const { data: diaries, error: diariesErr } = await supabase
       .from('diaries')
-      .select('id, title, subtitle, author, cover_url, footer_text, is_default')
+      .select('id, title, subtitle, author, cover_url, footer_text, is_default, labels, archived_at')
       .eq('user_id', user.id)
       .order('is_default', { ascending: false })
       .order('created_at', { ascending: true })
@@ -46,36 +35,16 @@ export async function GET(req: NextRequest) {
 
     const { data: activities, error: activitiesErr } = await supabase
       .from('activities')
-      .select('linked_planned_id')
+      .select('linked_planned_id, distance_meters, elevation_gain, start_time')
       .eq('user_id', user.id)
       .not('linked_planned_id', 'is', null)
     if (activitiesErr) throw activitiesErr
 
-    // Una Meta non ha una colonna diary_id "propria" del suo Diario finché non viene camminata
-    // (vedi app/api/planned/route.ts) — quindi il Diario di ogni Reportage si ricava passando
-    // dalla sua Meta collegata, non da una colonna diretta su activities (che non esiste).
-    const diaryIdByPlannedId = new Map((planned ?? []).map(p => [p.id as string, p.diary_id as string]))
-    const reportageCountByDiaryId = new Map<string, number>()
-    for (const a of activities ?? []) {
-      const diaryId = diaryIdByPlannedId.get(a.linked_planned_id as string)
-      if (!diaryId) continue
-      reportageCountByDiaryId.set(diaryId, (reportageCountByDiaryId.get(diaryId) ?? 0) + 1)
-    }
-
-    const summaries: DiarySummary[] = (diaries ?? []).map(d => {
-      const reportageCount = reportageCountByDiaryId.get(d.id as string) ?? 0
-      return {
-        id:             d.id as string,
-        title:          d.title as string,
-        subtitle:       d.subtitle as string,
-        author:         d.author as string,
-        coverUrl:       d.cover_url as string | null,
-        footerText:     d.footer_text as string,
-        isDefault:      d.is_default as boolean,
-        reportageCount,
-        pubblicabile:   reportageCount > 0,
-      }
-    })
+    const summaries = aggregateDiaries(
+      (diaries ?? []) as DiaryRow[],
+      (planned ?? []) as PlannedDiaryLinkRow[],
+      (activities ?? []) as ActivityMetricsRow[],
+    )
 
     return NextResponse.json(summaries)
   } catch (e) {
