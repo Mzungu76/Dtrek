@@ -15,7 +15,7 @@ import { FONT } from '@/lib/designTokens'
 import { META_TYPE_CONFIG, META_TYPES, metaHasHikingMetrics, type MetaType } from '@/lib/metaTypes'
 import { metaRowLocationStats } from '@/lib/metaCard'
 import type { MeteMapPin } from '@/components/mete/MeteMap'
-import { ArrowDown, ArrowRight, ArrowUp, Building2, ChevronDown, ChevronUp, Clock, Landmark, Loader2, LocateFixed, MapPin, Mountain, Route, Search, Star, Tag, TrendingUp, X } from 'lucide-react'
+import { ArrowDown, ArrowRight, ArrowUp, Building2, ChevronDown, ChevronUp, Clock, Loader2, LocateFixed, MapPin, Maximize2, Minimize2, Mountain, Route, Search, Star, Tag, TrendingUp, X } from 'lucide-react'
 
 // Leaflet è pesante (CSS+JS) e non deve entrare nel bundle iniziale della pagina: dynamic import,
 // mai un `import` statico in cima al file — così il codice della mappa si scarica solo quando
@@ -81,22 +81,18 @@ const MAP_THUMB_BASE = 87
 const MAP_THUMB_SIZE = 100
 const MAP_THUMB_SCALE = MAP_THUMB_SIZE / MAP_THUMB_BASE
 
-/** Icona di fallback quando la miniatura non ha una traccia da disegnare — una per tipologia
- *  (mai la stessa Mountain per un borgo o un sito, la Fase 2 del piano la sostituirà con un
- *  emblema disegnato; questo resta un tappabuchi minimo ma già type-aware). */
+/** Icona di fallback quando la miniatura non ha una traccia da disegnare — stessa icona di
+ *  `META_TYPE_CONFIG[metaType].icon` (i chip di filtro, i pin della carta): un solo posto decide
+ *  quale icona rappresenta una tipologia, non tre copie che possono disallinearsi. Prima era
+ *  piccola (20px) e color cardBorder — quasi lo stesso beige dello sfondo dietro, "soffocata" per
+ *  scarso contrasto (segnalazione dell'utente su screenshot reale): ora è grande (36px) e nel
+ *  colore pieno della tipologia, su una tinta leggera dello stesso colore invece del beige
+ *  generico — si vede a colpo d'occhio anche prima di leggere il titolo della riga. */
 function metaTypeFallbackIcon(metaType: MetaType | undefined) {
-  const color = TACCUINO_PAPER.cardBorder
-  switch (metaType) {
-    case 'borgo_citta': return <Building2 className="w-5 h-5" style={{ color }} />
-    case 'sito':        return <Landmark className="w-5 h-5" style={{ color }} />
-    default:             return <Mountain className="w-5 h-5" style={{ color }} />
-  }
+  const resolved = metaType ?? 'sentiero'
+  const Icon = META_TYPE_CONFIG[resolved].icon
+  return <Icon className="w-9 h-9" style={{ color: META_TYPE_CONFIG[resolved].color }} strokeWidth={1.6} />
 }
-
-// Stessi toni dei pin di components/mete/MeteMap.tsx (PIN_COLOR) — la striscia chiusa deve
-// restare leggibile come "anteprima" della stessa carta che si apre al tocco, non un'illustrazione
-// scollegata.
-const STRIP_PIN_COLOR: Record<MetaType, string> = { sentiero: '#7C8F6E', borgo_citta: '#C0603D', sito: '#5F7355' }
 
 /** Posizione pseudo-casuale ma stabile (derivata dall'id, stesso principio di cutoutRotation sopra
  *  — mai Math.random(), la stessa Meta deve occupare sempre lo stesso punto tra un render e
@@ -109,6 +105,48 @@ function hashPosition(id: string): { x: number; y: number } {
   const b = Math.abs((hash * 2654435761) | 0)
   const margin = 0.12
   return { x: margin + (a % 1000) / 1000 * (1 - 2 * margin), y: margin + (b % 1000) / 1000 * (1 - 2 * margin) }
+}
+
+/** Chip di tipologia — usata sia nel corpo della pagina sia nella carta a tutto schermo (stesso
+ *  `typeFilter`, mai due filtri indipendenti che possono disallinearsi tra elenco e carta). */
+function TypeFilterChips({ typeFilter, onChange, counts, total, className }: {
+  typeFilter: MeteTypeFilter
+  onChange: (t: MeteTypeFilter) => void
+  counts: Record<MetaType, number>
+  total: number
+  className?: string
+}) {
+  return (
+    <div className={`flex items-center gap-1.5 overflow-x-auto pb-0.5 ${className ?? ''}`}>
+      <button
+        onClick={() => onChange('all')}
+        className="relative shrink-0 px-3 py-1 rounded-full text-[13px] transition-colors"
+        style={typeFilter === 'all'
+          ? { fontFamily: FONT_HAND, fontWeight: 700, color: TACCUINO_INK.typed }
+          : { fontFamily: FONT_HAND, background: 'transparent', color: TACCUINO_INK.handMuted }}
+      >
+        {typeFilter === 'all' && <HandDrawnFrame stroke={TACCUINO_ACCENT[600]} strokeWidth={1.5} rx={50} />}
+        Tutte <span className="opacity-70">{total}</span>
+      </button>
+      {META_TYPES.map(t => {
+        const Icon = META_TYPE_CONFIG[t].icon
+        const on = typeFilter === t
+        return (
+          <button
+            key={t}
+            onClick={() => onChange(t)}
+            className="relative shrink-0 flex items-center gap-1.5 px-3 py-1 rounded-full text-[13px] transition-colors"
+            style={on
+              ? { fontFamily: FONT_HAND, fontWeight: 700, color: TACCUINO_INK.typed }
+              : { fontFamily: FONT_HAND, background: 'transparent', color: TACCUINO_INK.handMuted }}
+          >
+            {on && <HandDrawnFrame stroke={TACCUINO_ACCENT[600]} strokeWidth={1.5} rx={50} />}
+            <Icon className="w-3 h-3" /> {META_TYPE_CONFIG[t].pluralLabel} <span className="opacity-70">{counts[t]}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
 }
 
 /** Sotto il km, la distanza si legge meglio in metri tondi (es. "450 m") che come "0,5 km". */
@@ -134,7 +172,7 @@ function MapStripPreview({ pins }: { pins: MeteMapPin[] }) {
       </g>
       {pins.map(p => {
         const { x, y } = hashPosition(p.id)
-        return <circle key={p.id} cx={x * 358} cy={y * 70} r={4} fill={STRIP_PIN_COLOR[p.metaType]} stroke="#F5EDDD" strokeWidth={1.3} />
+        return <circle key={p.id} cx={x * 358} cy={y * 70} r={4} fill={META_TYPE_CONFIG[p.metaType].color} stroke="#F5EDDD" strokeWidth={1.3} />
       })}
     </svg>
   )
@@ -152,9 +190,22 @@ export default function MetePage() {
   // si riapre solo al tocco. userLocation resta null finché l'utente non apre la carta almeno una
   // volta — il permesso di geolocalizzazione non si chiede mai al solo caricamento della pagina.
   const [mapOpen, setMapOpen] = useState(false)
+  // A tutto schermo (richiesta esplicita dopo il primo giro di revisione): resta sempre un
+  // sotto-stato di "aperta" — non ha senso a mappa chiusa, e chiudere la carta chiude anche il
+  // pieno schermo (vedi handleToggleMap).
+  const [mapFullscreen, setMapFullscreen] = useState(false)
   const [userLocation, setUserLocation] = useState<{ lat: number; lon: number } | null>(null)
   const [geoDenied, setGeoDenied] = useState(false)
   const autoDistanceSortApplied = useRef(false)
+
+  // A tutto schermo la pagina dietro non deve scorrere insieme alla mappa (stesso principio di un
+  // qualunque overlay a piena pagina: lo scroll del contenuto sotto è solo confusione).
+  useEffect(() => {
+    if (!mapFullscreen) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [mapFullscreen])
 
   function requestLocation() {
     if (typeof navigator === 'undefined' || !navigator.geolocation) { setGeoDenied(true); return }
@@ -172,6 +223,7 @@ export default function MetePage() {
   function handleToggleMap() {
     setMapOpen(open => {
       const next = !open
+      if (!next) setMapFullscreen(false) // chiudere la carta chiude anche il pieno schermo
       if (next && userLocation == null && !geoDenied) requestLocation()
       return next
     })
@@ -322,13 +374,32 @@ export default function MetePage() {
             <div className="relative w-full rounded-xl overflow-hidden mb-3" style={{ border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}>
               {mapOpen ? (
                 <div className="relative">
-                  {mapPins.length > 0 ? (
+                  {/* Mai due mappe montate insieme: a schermo intero l'unica istanza vive
+                      nell'overlay qui sotto (stessi mapPins/userLocation) — questa card resta
+                      solo come sfondo/anteprima dietro l'overlay, senza avviare un secondo
+                      caricamento di Leaflet. */}
+                  {mapFullscreen ? (
+                    <div style={{ height: 260 }} />
+                  ) : mapPins.length > 0 ? (
                     <MeteMap pins={mapPins} height="260px" userLocation={userLocation} />
                   ) : (
                     <div className="flex items-center justify-center py-10 text-sm" style={{ background: '#E7E3D2', color: TACCUINO_INK.handMuted, fontFamily: FONT.lora }}>
                       Nessuna Meta con una posizione nota da mostrare qui.
                     </div>
                   )}
+                  {/* A tutto schermo (punto 2 della richiesta dopo il primo giro di revisione) —
+                      la carta inline resta comunque utilizzabile per un'occhiata rapida, questo
+                      apre la stessa mappa (stessi pin, stesso userLocation) come overlay a piena
+                      pagina, coi filtri di tipologia raggiungibili anche lì (vedi sotto). */}
+                  <button
+                    onClick={() => setMapFullscreen(true)}
+                    title="Schermo intero"
+                    aria-label="Apri la carta a schermo intero"
+                    className="absolute left-2 top-2 flex items-center justify-center w-8 h-8 rounded-full shadow-sm"
+                    style={{ background: 'rgba(245,237,221,.95)', color: TACCUINO_INK.typed, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}
+                  >
+                    <Maximize2 className="w-3.5 h-3.5" />
+                  </button>
                   {geoDenied && (
                     <button
                       onClick={requestLocation}
@@ -362,6 +433,63 @@ export default function MetePage() {
                 {mapOpen ? <ChevronUp className="w-3.5 h-3.5 ml-auto" style={{ color: TACCUINO_INK.handMuted }} /> : <ChevronDown className="w-3.5 h-3.5 ml-auto" style={{ color: TACCUINO_INK.handMuted }} />}
               </button>
             </div>
+
+            {/* Carta a schermo intero — `fixed`, quindi indipendente da dove vive nell'albero:
+                stessi `mapPins`/`userLocation` della carta inline (stesso array filtrato, punto 3
+                della richiesta — "i filtri devono ripercuotersi immediatamente nella mappa e
+                devono essere selezionabili anche nella mappa espansa"), gli stessi chip di
+                tipologia (TypeFilterChips, lo stesso componente della lista sotto, non una copia
+                che potrebbe disallinearsi). */}
+            {mapFullscreen && (
+              <div className="fixed inset-0 z-50 flex flex-col" style={{ background: TACCUINO_PAPER.base }}>
+                <div className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: `1px solid ${TACCUINO_PAPER.cardBorder}` }}>
+                  <button
+                    onClick={() => setMapFullscreen(false)}
+                    aria-label="Riduci la carta"
+                    className="flex items-center justify-center w-8 h-8 rounded-full"
+                    style={{ color: TACCUINO_INK.handMuted }}
+                  >
+                    <Minimize2 className="w-4 h-4" />
+                  </button>
+                  <span style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 19, color: TACCUINO_INK.typed }}>
+                    La carta delle Mete
+                  </span>
+                  {geoDenied && (
+                    <button
+                      onClick={requestLocation}
+                      className="ml-auto flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-semibold"
+                      style={{ background: TACCUINO_PAPER.card, color: TACCUINO_INK.typed, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}
+                    >
+                      <LocateFixed className="w-3 h-3" /> Vicino a me
+                    </button>
+                  )}
+                  <button
+                    onClick={() => { setMapFullscreen(false); setMapOpen(false) }}
+                    aria-label="Chiudi la carta"
+                    className={`flex items-center justify-center w-8 h-8 rounded-full ${geoDenied ? '' : 'ml-auto'}`}
+                    style={{ color: TACCUINO_INK.handMuted }}
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <TypeFilterChips
+                  typeFilter={typeFilter}
+                  onChange={setTypeFilter}
+                  counts={countsByType}
+                  total={mete.length}
+                  className="px-4 py-2"
+                />
+                <div className="flex-1 relative">
+                  {mapPins.length > 0 ? (
+                    <MeteMap pins={mapPins} height="100%" userLocation={userLocation} />
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-sm px-6 text-center" style={{ color: TACCUINO_INK.handMuted, fontFamily: FONT.lora }}>
+                      Nessuna Meta con una posizione nota per questo filtro.
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             <div className="mb-3">
               <div className="flex items-center gap-2 mb-2">
@@ -402,38 +530,17 @@ export default function MetePage() {
                 </Link>
               </div>
 
-              {/* Chip di tipologia — il filtro primario (piano Fase 2): "Tutte" più una per
-                  metaType, ciascuna col proprio conteggio reale. Un ordinamento hiking-only attivo
-                  torna a "Data" quando il filtro esclude i sentieri (vedi l'effect sopra). */}
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 mb-2">
-                <button
-                  onClick={() => setTypeFilter('all')}
-                  className="relative shrink-0 px-3 py-1 rounded-full text-[13px] transition-colors"
-                  style={typeFilter === 'all'
-                    ? { fontFamily: FONT_HAND, fontWeight: 700, color: TACCUINO_INK.typed }
-                    : { fontFamily: FONT_HAND, background: 'transparent', color: TACCUINO_INK.handMuted }}
-                >
-                  {typeFilter === 'all' && <HandDrawnFrame stroke={TACCUINO_ACCENT[600]} strokeWidth={1.5} rx={50} />}
-                  Tutte <span className="opacity-70">{mete.length}</span>
-                </button>
-                {META_TYPES.map(t => {
-                  const Icon = META_TYPE_CONFIG[t].icon
-                  const on = typeFilter === t
-                  return (
-                    <button
-                      key={t}
-                      onClick={() => setTypeFilter(t)}
-                      className="relative shrink-0 flex items-center gap-1.5 px-3 py-1 rounded-full text-[13px] transition-colors"
-                      style={on
-                        ? { fontFamily: FONT_HAND, fontWeight: 700, color: TACCUINO_INK.typed }
-                        : { fontFamily: FONT_HAND, background: 'transparent', color: TACCUINO_INK.handMuted }}
-                    >
-                      {on && <HandDrawnFrame stroke={TACCUINO_ACCENT[600]} strokeWidth={1.5} rx={50} />}
-                      <Icon className="w-3 h-3" /> {META_TYPE_CONFIG[t].pluralLabel} <span className="opacity-70">{countsByType[t]}</span>
-                    </button>
-                  )
-                })}
-              </div>
+              {/* Chip di tipologia — il filtro primario (piano Fase 2), stesso componente riusato
+                  identico nella carta a tutto schermo (punto 3 della richiesta dopo il primo giro
+                  di revisione): un solo filtro condiviso, mai due stati indipendenti che possono
+                  disallinearsi. */}
+              <TypeFilterChips
+                typeFilter={typeFilter}
+                onChange={setTypeFilter}
+                counts={countsByType}
+                total={mete.length}
+                className="mb-2"
+              />
 
               <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
                 <button
@@ -548,6 +655,11 @@ export default function MetePage() {
                                     // attraverso quest'icona centrata, che da sola non copre l'intero
                                     // riquadro. Icona per tipologia — mai la stessa Mountain per un
                                     // borgo o un sito.
+                                    // Fondo carta OPACO (mai un colore con alpha): i tre layer
+                                    // sotto (torn-ao/torn-rim/torn-cast) restano riempiti di nero
+                                    // per progetto — un fondo semi-trasparente qui lascerebbe
+                                    // trasparire quel nero esattamente come il bug originale delle
+                                    // miniature (vedi il commit che l'ha corretto).
                                     <div className="w-full h-full flex items-center justify-center" style={{ background: TACCUINO_PAPER.card }}>
                                       {metaTypeFallbackIcon(p.metaType)}
                                     </div>

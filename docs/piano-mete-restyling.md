@@ -13,6 +13,14 @@ Sentieri (§48.4), mai metriche escursionistiche per le altre tipologie (§48.9)
 `metaType` (§48.11), niente valori fabbricati al posto di un dato assente (§48.8), migration per
 ogni modifica al modello dati (§48.13).
 
+**Correzioni dopo revisione della Fase 3** (pin/carta/miniature): icona del pin sulla carta ora
+identica a quella del chip di filtro (stessa icona lucide, stesso colore — `lib/metaTypes.ts`'s
+`META_TYPE_CONFIG[t].color`, nuovo campo, unica fonte per icona+colore invece di tre costanti
+duplicate); carta espandibile a tutto schermo con gli stessi chip di tipologia selezionabili
+anche lì; i pin sulla carta si aggiornano subito quando cambia il filtro, senza ricreare la mappa;
+miniatura di riga per Borgo/Sito ingrandita (20→36px) e a colore pieno invece di grigio pallido
+quasi invisibile sul fondo carta.
+
 ---
 
 ## Fase 0 — Correzioni immediate (mezza giornata, nessuna dipendenza)
