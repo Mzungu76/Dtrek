@@ -60,14 +60,20 @@ verificare che i props reggano la misura ridotta, altrimenti un SVG dedicato com
 Il raggruppamento per stagione si calcola da `lastActivityAt` in un helper puro
 (`lib/diari/raggruppaDiari.ts`), non nel componente.
 
-## Fase 2 — Etichette e archiviazione
+## Fase 2 — Etichette e archiviazione ✅ implementata
 
-- `PATCH /api/diaries/[id]` accetta `labels` e `archivedAt` (la route esiste già).
-- Modifica delle etichette dentro `/diari/[id]/copertina`, insieme a titolo e sottotitolo: è già
-  la pagina dove si configura il Diario, non serve una schermata nuova.
-- Archiviazione **proposta, mai automatica**: un Diario senza uscite da 12 mesi mostra
-  "archivia" nella riga; l'utente conferma. Un'archiviazione silenziosa che fa sparire roba dalla
-  pagina di atterraggio è esattamente ciò che non vogliamo.
+- `PATCH /api/diaries/[id]` accetta `labels` e/o `archivedAt`, un campo alla volta — non esisteva
+  ancora (questo piano lo dava per scontato, corretto in corso d'opera): aggiunta accanto a
+  GET/DELETE nello stesso file, normalizzazione etichette (trim/doppioni/lunghezza/quante) estratta
+  in `lib/diari/normalizeLabels.ts`, testata. Il Diario di default non è mai archiviabile (stessa
+  regola già in vigore per l'eliminazione).
+- L'editor delle etichette (`EtichetteDiarioEditor`) vive nel **Sommario** (`/diari/[id]`), non nel
+  form di copertina/pubblicazione: sono metadati del registro (come lo si ritrova), non la veste
+  pubblica del Diario (come lo si presenta a chi legge) — deviazione deliberata da questo piano.
+- Archiviazione (`ArchivioDiarioSection`, accanto a `DeleteDiarioSection`): un'azione esplicita con
+  conferma inline, **sempre disponibile**, reversibile (si può riattivare). Non ancora costruita: la
+  *proposta* automatica dopo mesi di inattività menzionata sopra — oggi l'utente deve arrivarci da
+  sé, il pulsante non si mette in evidenza da solo. Prossimo passo naturale se emerge la necessità.
 
 ## Fase 3 — Raccolte pubblicabili
 

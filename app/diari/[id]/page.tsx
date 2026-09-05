@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { GalleryMapThumb } from '@/components/routehub/BottomGallery'
 import BookPage from '@/components/libro/BookPage'
 import { DiarioCoverThumb } from '@/components/diario/DiarioCoverThumb'
+import { EtichetteDiarioEditor } from '@/components/diario/EtichetteDiarioEditor'
+import { ArchivioDiarioSection } from '@/components/diario/ArchivioDiarioSection'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 import { ctsLabel } from '@/lib/trailScore'
 import { formatDuration } from '@/lib/tcxParser'
@@ -231,6 +233,8 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
             </p>
           </div>
         </div>
+
+        <EtichetteDiarioEditor diaryId={diaryId} initialLabels={detail.labels} />
 
         <Link
           href={`/upload?tab=activity&diaryId=${encodeURIComponent(diaryId)}`}
@@ -459,6 +463,11 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
       </BookPage>
       {!detail.isDefault && (
         <div className="max-w-[640px] mx-auto px-5 sm:px-8" style={{ background: TACCUINO_PAPER.base }}>
+          <ArchivioDiarioSection
+            diaryId={diaryId}
+            archivedAt={detail.archivedAt}
+            onChange={archivedAt => setDetail(prev => prev ? { ...prev, archivedAt } : prev)}
+          />
           <DeleteDiarioSection diaryId={diaryId} />
         </div>
       )}
