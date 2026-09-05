@@ -42,3 +42,31 @@ Caveat, JetBrains Mono per i numeri. La barra inferiore riprende le 5 voci reali
 Formato `.dc.html` come `docs/mockup-taccuino-botanico/`: richiedono il runtime del
 canvas editor per essere visualizzati, non sono codice da incollare nell'app. Numeri e
 titoli sono di esempio.
+
+## Pubblicare le raccolte (pagina "Pubblicazione" del canvas)
+
+| File | Schermata |
+|---|---|
+| `PubComponi.dc.html` | Composizione di una raccolta in-app: i tre livelli pubblicabili, i volumi in ordine, i due interruttori di privacy |
+| `PubRaccolta.dc.html` | La raccolta come la vede chi riceve il link: frontespizio, prefazione, indice dei volumi, mappa d'insieme |
+| `PubProfilo.dc.html` | Profilo pubblico dell'autore — l'indice delle opere pubblicate, non l'archivio |
+
+Modello proposto: **percorso = articolo, diario = volume, raccolta = collana**, più una
+vetrina (il profilo) che indicizza ciò che è già pubblico. La raccolta è una *selezione
+ordinata* di Diari, non una cartella: un Diario può stare in più raccolte e non sparisce
+da nessun elenco quando ne entra in una — così le etichette restano il modo di navigare e
+la raccolta diventa un oggetto editoriale.
+
+Consenso a cascata, con il livello più restrittivo che vince: un Reportage escluso resta
+escluso anche dentro una raccolta pubblicata.
+
+Costo: tabelle `collections` e `collection_diaries` (con `position`), `share_token` come
+su `diaries`; la lettura pubblica riusa `lib/sharePublicDiary.ts` un livello più su. Il
+PDF non sale di livello — 18 Reportage non si esportano da telefono — quindi resta su
+percorso e Diario.
+
+**"Pubblica tutto l'archivio" non è previsto**, per tre ragioni in ordine di peso:
+sicurezza (un archivio completo di tracce con date espone abitudini e luogo di partenza
+abituale), valore editoriale (un dump non si legge), costo di rendering. Il profilo
+pubblico copre lo stesso bisogno mostrando i numeri aggregati completi e solo i contenuti
+scelti.

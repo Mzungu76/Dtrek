@@ -1,0 +1,181 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body style="margin:0">
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Lora:ital,wght@0,400;0,600;1,500&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+:root{
+  --paper-base:#F5EDDD; --paper-light:#F9F2E4; --card:#EBE0C8; --card-border:#D9C9A8;
+  --ink-typed:#2E2A22; --ink-hand:#7A6F52; --ink-muted:#95886A;
+  --accent:#C0603D; --accent-2:#7C8F6E; --accent-tint:#E9DAC3;
+  --bar-bg:#5F7355; --bar-active:#F5EDDD; --bar-inactive:#B9C4AE;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+a{color:var(--accent);text-decoration:none}
+a:hover{color:var(--accent-2)}
+.phone{width:390px;height:844px;position:relative;overflow:hidden;background:var(--paper-base);
+  font-family:'DM Sans',system-ui,sans-serif;color:var(--ink-typed);-webkit-font-smoothing:antialiased}
+.paper-grain{position:absolute;inset:0;pointer-events:none;z-index:0;opacity:.9;mix-blend-mode:multiply;
+  background-image:
+    radial-gradient(circle at 20% 18%,rgba(46,42,34,.18) 0,rgba(46,42,34,.18) 1.4px,transparent 3px),
+    radial-gradient(circle at 64% 44%,rgba(46,42,34,.16) 0,rgba(46,42,34,.16) 1.2px,transparent 2.7px),
+    radial-gradient(circle at 84% 76%,rgba(46,42,34,.17) 0,rgba(46,42,34,.17) 1.4px,transparent 3.1px);
+  background-size:52px 49px,63px 57px,44px 71px}
+.eyebrow{font-family:'DM Sans';font-weight:700;text-transform:uppercase;letter-spacing:.2em;
+  font-size:9.5px;color:var(--ink-hand);margin:0}
+.hand{font-family:'Caveat',cursive;font-weight:700}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-weight:700;font-variant-numeric:tabular-nums}
+.stage{position:absolute;inset:0;z-index:1;display:flex;flex-direction:column;padding:52px 18px 0}
+
+/* i tre livelli pubblicabili, con quanti ne hai gia' pubblicati */
+.levels{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.lv{background:var(--card);border:1px solid var(--card-border);border-radius:12px;padding:9px 9px 8px;
+  display:flex;flex-direction:column;gap:5px}
+.lv.on{background:var(--accent-tint);border-color:#dfc4ac}
+.lv .n{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px;line-height:1}
+.lv .t{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;line-height:1.1}
+.lv .s{font-size:9px;color:var(--ink-muted);line-height:1.25}
+
+.card{background:var(--card);border:1px solid var(--card-border);border-radius:14px}
+.vol{display:flex;align-items:center;gap:10px;padding:9px 10px;border-bottom:1px dotted var(--card-border)}
+.vol:last-child{border-bottom:none}
+.mini{width:30px;height:40px;border-radius:3px;flex:none;position:relative;overflow:hidden}
+.vt{font-family:'Lora',Georgia,serif;font-weight:600;font-size:13px;line-height:1.1;margin:0}
+.vs{font-size:9.5px;color:var(--ink-muted);margin:2px 0 0}
+.grip{display:flex;flex-direction:column;gap:2.5px;flex:none;opacity:.55}
+.grip i{display:block;width:12px;height:1.5px;background:var(--ink-muted);border-radius:1px}
+
+.sw{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px dotted var(--card-border)}
+.sw:last-child{border-bottom:none}
+.sw .txt{flex:1;min-width:0}
+.sw .tt{font-size:12px;font-weight:700;line-height:1.2}
+.sw .ss{font-size:10px;color:var(--ink-muted);line-height:1.35;margin-top:2px}
+.toggle{width:38px;height:22px;border-radius:999px;flex:none;position:relative;background:var(--accent);margin-top:2px}
+.toggle i{position:absolute;top:3px;right:3px;width:16px;height:16px;border-radius:999px;background:var(--paper-light);display:block}
+.toggle.off{background:#CFC3A6}
+.toggle.off i{right:auto;left:3px}
+
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;height:46px;border-radius:12px;
+  background:var(--accent);color:var(--paper-light);font-weight:700;font-size:13.5px;border:none}
+.btn-ghost{background:transparent;color:var(--accent);border:1.5px solid var(--accent)}
+</style>
+</helmet>
+
+<div class="phone">
+  <div class="paper-grain"></div>
+  <div class="stage">
+
+    <p class="eyebrow">Dtrek &middot; Pubblicazione</p>
+    <h1 class="hand" style="font-size:32px;margin:1px 0 12px;line-height:1">Cosa pubblichi</h1>
+
+    <div class="levels">
+      <div class="lv">
+        <div class="n">12</div>
+        <div class="t">Percorsi</div>
+        <div class="s">Un reportage, un link</div>
+      </div>
+      <div class="lv">
+        <div class="n">2</div>
+        <div class="t">Diari</div>
+        <div class="s">Un volume intero</div>
+      </div>
+      <div class="lv on">
+        <div class="n" style="color:var(--accent)">1</div>
+        <div class="t" style="color:var(--accent)">Raccolte</div>
+        <div class="s" style="color:var(--accent)">Pi&ugrave; volumi, una collana</div>
+      </div>
+    </div>
+
+    <!-- la raccolta e' una selezione ordinata, non una cartella: un diario puo' stare in piu' raccolte -->
+    <div style="display:flex;align-items:baseline;justify-content:space-between;margin:16px 0 8px">
+      <p class="eyebrow">Raccolta in composizione</p>
+      <span style="font-size:10.5px;font-weight:700;color:var(--accent)">Copertina</span>
+    </div>
+
+    <div class="card" style="padding:12px 12px 10px">
+      <div style="display:flex;gap:11px;align-items:flex-start">
+        <div style="width:52px;height:70px;border-radius:4px;flex:none;background:linear-gradient(165deg,#7A5A3C,#2E2A22);
+          display:flex;align-items:flex-end;padding:6px;box-shadow:0 6px 14px -8px rgba(46,42,34,.7)">
+          <span style="font-family:'Playfair Display',serif;font-weight:700;font-size:9px;color:#FDF8EA;line-height:1.1">Appennino</span>
+        </div>
+        <div style="flex:1;min-width:0">
+          <p style="margin:0;font-family:'Playfair Display',Georgia,serif;font-weight:700;font-size:18px;line-height:1.15">Appennino</p>
+          <p style="margin:3px 0 0;font-family:'Lora',Georgia,serif;font-style:italic;font-size:11.5px;color:var(--ink-hand);line-height:1.35">
+            Tre stagioni sullo stesso crinale
+          </p>
+          <p style="margin:6px 0 0;font-size:10px;color:var(--ink-muted)"><span class="mono">3</span> volumi &middot; <span class="mono">18</span> reportage &middot; <span class="mono">289 km</span></p>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:9px">
+      <div class="vol">
+        <div class="grip"><i></i><i></i><i></i></div>
+        <div class="mini" style="background:linear-gradient(165deg,#C0603D,#6E301E)"></div>
+        <div style="flex:1;min-width:0">
+          <p class="vt">Estate 2026</p>
+          <p class="vs">7 reportage &middot; 138 km &middot; anche in &ldquo;Viaggi&rdquo;</p>
+        </div>
+        <span class="mono" style="font-size:10px;color:var(--ink-muted)">I</span>
+      </div>
+      <div class="vol">
+        <div class="grip"><i></i><i></i><i></i></div>
+        <div class="mini" style="background:linear-gradient(165deg,#4A5A3F,#22271C)"></div>
+        <div style="flex:1;min-width:0">
+          <p class="vt">Crinale 2025</p>
+          <p class="vs">6 reportage &middot; 94 km</p>
+        </div>
+        <span class="mono" style="font-size:10px;color:var(--ink-muted)">II</span>
+      </div>
+      <div class="vol">
+        <div class="grip"><i></i><i></i><i></i></div>
+        <div class="mini" style="background:linear-gradient(165deg,#8A6A46,#3A352B)"></div>
+        <div style="flex:1;min-width:0">
+          <p class="vt">Primi passi 2024</p>
+          <p class="vs">5 reportage &middot; 57 km &middot; <span style="color:var(--accent)">1 reportage escluso</span></p>
+        </div>
+        <span class="mono" style="font-size:10px;color:var(--ink-muted)">III</span>
+      </div>
+      <div class="vol" style="justify-content:center;color:var(--ink-hand)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.09em">Aggiungi un volume</span>
+      </div>
+    </div>
+
+    <!-- pubblicare un archivio di tracce e' un problema di sicurezza, non solo di layout -->
+    <p class="eyebrow" style="margin:15px 0 4px">Prima di pubblicare</p>
+    <div class="card" style="padding:2px 12px">
+      <div class="sw">
+        <div class="txt">
+          <div class="tt">Nascondi le partenze da casa</div>
+          <div class="ss">Le tracce che iniziano entro 1 km dai tuoi luoghi salvati partono dal primo bivio.</div>
+        </div>
+        <span class="toggle"><i></i></span>
+      </div>
+      <div class="sw">
+        <div class="txt">
+          <div class="tt">Mostra le date esatte</div>
+          <div class="ss">Spento, resta solo il mese: 18 uscite non raccontano le tue abitudini.</div>
+        </div>
+        <span class="toggle off"><i></i></span>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn" style="flex:1.5">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"></path><path d="M12 3v13"></path><path d="M7 8l5-5 5 5"></path></svg>
+        Pubblica la raccolta
+      </button>
+      <button class="btn btn-ghost" style="flex:1">Anteprima</button>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>
