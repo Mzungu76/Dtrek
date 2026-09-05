@@ -45,6 +45,15 @@ interface MetaTypeConfig {
   // piano §9/§24 e docs/meta-multitype-audit.md §1 per i call site da rendere condizionali prima
   // di aprire nuovi percorsi di creazione per questa tipologia.
   hikingMetrics: boolean
+  // Colore per tipologia — un solo posto per icona+colore invece di tre costanti duplicate nei
+  // punti che disegnano una tipologia (chip di filtro, pin della carta, miniatura di riga in
+  // app/percorsi/page.tsx e components/mete/MeteMap.tsx): senza un'unica fonte, i tre punti erano
+  // già andati fuori sincrono (pin colorati diversamente dai chip). Stessi valori della palette
+  // "Taccuino Botanico" già in uso altrove (lib/taccuinoTokens.tsx's TACCUINO_ACCENT[600]/
+  // TACCUINO_ACCENT_SECONDARY, tailwind.config.ts's botanico.bar) — hex letterali qui, non un
+  // import da taccuinoTokens.tsx, perché questo modulo resta leggero e senza dipendenze React
+  // (letto anche da route.ts lato server).
+  color: string
 }
 
 interface SiteTypeConfig {
@@ -60,6 +69,7 @@ export const META_TYPE_CONFIG: Record<MetaType, MetaTypeConfig> = {
     icon:              Mountain,
     searchPlaceholder: 'Cerca un sentiero...',
     hikingMetrics:     true,
+    color:             '#7C8F6E',
   },
   borgo_citta: {
     label:             'Borgo / Città',
@@ -68,6 +78,7 @@ export const META_TYPE_CONFIG: Record<MetaType, MetaTypeConfig> = {
     icon:              Building2,
     searchPlaceholder: 'Cerca un borgo o una città...',
     hikingMetrics:     false,
+    color:             '#C0603D',
   },
   sito: {
     label:             'Sito',
@@ -76,6 +87,7 @@ export const META_TYPE_CONFIG: Record<MetaType, MetaTypeConfig> = {
     icon:              Landmark,
     searchPlaceholder: 'Cerca un museo, un castello, un sito...',
     hikingMetrics:     false,
+    color:             '#5F7355',
   },
 }
 
