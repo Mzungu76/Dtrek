@@ -1,0 +1,55 @@
+{
+  "pages": [
+    { "id": "page-1", "name": "Tre opzioni" },
+    { "id": "page-2", "name": "Ingresso dalla pagina Mete" }
+  ],
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 390, "h": 844, "title": "Opzione A — Tre scaffali a fisarmonica", "page": "page-1" },
+    { "file": "OptionB.dc.html", "x": 530, "y": 0, "w": 390, "h": 844, "title": "Opzione B — Segmentata + pannello", "page": "page-1" },
+    { "file": "OptionC.dc.html", "x": 1060, "y": 0, "w": 390, "h": 844, "title": "Opzione C — Indice del taccuino", "page": "page-1" },
+    { "file": "IngressoMete.dc.html", "x": 0, "y": 0, "w": 390, "h": 844, "title": "Pagina Mete — il nuovo ingresso", "page": "page-2" }
+  ],
+  "annotations": [
+    {
+      "id": "premessa",
+      "x": 0,
+      "y": -300,
+      "w": 460,
+      "page": "page-1",
+      "text": "Cosa raccoglie la pagina (ricerche reali oggi in app)\n\nSentieri: Costruisci o trova un percorso (RouteBuilder + Giulia AI, /api/route-build\ne /api/route-search) · Percorsi per te (/api/percorsi-per-te) · import GPX/KML,\nda link, a mano, da un'escursione fatta.\nBorghi e Città + Siti: /percorsi/cerca su /api/meta-search (searchBorghi/searchSiti).\nTrasversali: la ricerca fra le Mete già salvate e le ricerche salvate (max 5).\n\nScelte fissate prima di disegnare: struttura per tipologia di Meta; campo unico\nin cima che risponde subito (Mete salvate + Borghi/Siti, le due ricerche già veloci)\ne schede che rimandano per i flussi lunghi; ingresso dedicato dalla pagina Mete."
+    },
+    {
+      "id": "opzione-a",
+      "x": 0,
+      "y": 880,
+      "w": 460,
+      "page": "page-1",
+      "text": "A — Tre scaffali a fisarmonica\n\nLe tre tipologie sono sempre tutte e tre in pagina, una sola aperta.\nPro: si vede subito che le tipologie sono tre e quante vie ha ciascuna;\nnessun cambio di schermata per confrontarle.\nContro: la sezione aperta spinge le altre due in basso, e le voci dei Sentieri\n(4) sono molte più di quelle delle altre due — la fisarmonica sembra sbilanciata."
+    },
+    {
+      "id": "opzione-b",
+      "x": 530,
+      "y": 880,
+      "w": 460,
+      "page": "page-1",
+      "text": "B — Segmentata + pannello\n\nUna tipologia alla volta, ma per intero: campo, filtri suoi (regione, categoria,\nvicino a me) e risultati veri già nella pagina. Qui è mostrata Borghi e Città —\nl'unica ricerca che oggi ha davvero dati (425 righe, tutte Lazio).\nPro: la ricerca vive dentro l'hub, non è un indice di link; profondità piena.\nContro: le altre due tipologie sono nascoste dietro un tocco, e i Sentieri\n(dove il flusso è lungo) restano comunque un rimando al wizard."
+    },
+    {
+      "id": "opzione-c",
+      "x": 1060,
+      "y": 880,
+      "w": 460,
+      "page": "page-1",
+      "text": "C — Indice del taccuino\n\nNiente da aprire: tutto visibile in una schermata, come l'indice di un quaderno.\nCampo unico grande in testata + ricerche recenti, poi i tre gruppi in righe compatte.\nPro: la mappa completa del sistema in un colpo d'occhio, un tocco per ogni via;\nregge bene la crescita (una voce in più è una riga in più).\nContro: densa; nessuna ricerca si completa qui dentro — è puro smistamento,\nal netto del campo in cima."
+    },
+    {
+      "id": "ingresso",
+      "x": 0,
+      "y": -220,
+      "w": 460,
+      "page": "page-2",
+      "text": "L'ingresso dalla pagina Mete (uguale per tutte e tre le opzioni)\n\nUna card in evidenza sotto la striscia-carta: \"Cerca una Meta\".\nIl campo sotto resta quello che filtra le Mete già salvate; sparisce il bottone\na icona Building2 accanto ad esso (oggi l'unico ingresso a /percorsi/cerca),\nassorbito dalla card. Il link \"Cerca «testo» fra Borghi, Città e Siti\" che\ncompare a ricerca locale vuota punta all'hub invece che a /percorsi/cerca."
+    }
+  ],
+  "launch": { "view": "canvas", "page": "page-1" }
+}
