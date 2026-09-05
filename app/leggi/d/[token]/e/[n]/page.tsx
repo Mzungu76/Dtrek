@@ -69,8 +69,8 @@ export default async function EscursionePage({ params }: { params: { token: stri
         </a>
 
         {hasNarrative(entry.content) && show.racconto
-          ? <EntryArticle entry={entry} n={idx + 1} show={show} />
-          : <EntryCard entry={entry} n={idx + 1} />}
+          ? <EntryArticle entry={entry} n={idx + 1} show={show} hideExactDate={diary.hideExactDates} />
+          : <EntryCard entry={entry} n={idx + 1} hideExactDate={diary.hideExactDates} />}
 
         {/* Navigazione fra escursioni: è ciò che rende il diario un percorso da sfogliare invece
             di una raccolta di pagine slegate. */}

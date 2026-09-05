@@ -16,11 +16,28 @@
 //     pubblica era un guscio attorno a un visualizzatore PDF: chi riceveva il link su WhatsApp
 //     doveva scaricare 21 MB per leggere una riga. Ora il racconto, le foto e la traccia arrivano
 //     con la pagina, che può quindi essere una vera rivista web leggibile da telefono.
+//
+// FASE 3 (docs/raccolte-pubblicazione-piano.md) — questo file è stato spezzato in due metà:
+// "trova il Diario dal token" (`fetchPublicDiary`, invariato nel comportamento) e "costruisci il
+// contenuto pubblico di UN Diario" (`fetchDiaryContent`, esportata). La Raccolta
+// (`lib/sharePublicCollection.ts`) ha bisogno solo della seconda, chiamata una volta per ogni
+// Diario che contiene — così l'esclusione dei Reportage e la selezione delle foto di ciascun
+// Diario si applicano da sole dentro una raccolta, senza essere riscritte lì.
 
 import { supabase } from './supabase'
 import { normalizeDiaryConfig, type DiaryConfig } from './diaryConfig'
+import { trimHomeStart, type HomePoint } from './privacy/trimHomeStart'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** Preferenze di privacy dell'autore (docs/raccolte-pubblicazione-piano.md, Fase 3f) — globali per
+ *  utente (`user_settings`), non per Diario o Raccolta: applicate qui, nel core condiviso da
+ *  entrambi, così proteggono ogni livello di pubblicazione senza essere implementate due volte. */
+export interface PublicPrivacyPrefs {
+  home:           HomePoint | null
+  hideHomeStarts: boolean
+  hideExactDates: boolean
+}
 
 export interface PublicDiaryPhoto {
   /** Serve a rispettare la selezione dell'autore (`photoIdsByActivity`). */
@@ -49,15 +66,24 @@ export interface PublicDiaryEntry {
   polyline:          [number, number][] | null
 }
 
-export interface PublicDiary {
-  ownerName:          string
-  /** `null` finché l'utente non esporta e pubblica un PDF: la pagina funziona lo stesso. */
-  pdfUrl:             string | null
-  config:             DiaryConfig
+/** Il contenuto pubblico di un Diario, senza i campi che appartengono al documento che lo
+ *  contiene (proprietario, PDF, config di presentazione) — quelli restano a `fetchPublicDiary` e,
+ *  per la Raccolta, a `fetchPublicCollection`. */
+export interface DiaryContent {
   entries:            PublicDiaryEntry[]
   totalKm:            number
   totalElevationGain: number
   dateRangeLabel?:    string
+  /** Se true, le pagine di lettura mostrano solo mese/anno di ogni escursione invece della data
+   *  esatta (lib/privacy/formatPublicDate.ts) — preferenza dell'autore, non del singolo Reportage. */
+  hideExactDates:     boolean
+}
+
+export interface PublicDiary extends DiaryContent {
+  ownerName: string
+  /** `null` finché l'utente non esporta e pubblica un PDF: la pagina funziona lo stesso. */
+  pdfUrl:    string | null
+  config:    DiaryConfig
 }
 
 /** Un resoconto le cui sezioni esistono ma sono tutte vuote (`## Titolo` senza testo sotto) non è
@@ -67,87 +93,19 @@ export function hasNarrative(content: string): boolean {
   return content.replace(/^##.*$/gm, '').trim().length > 0
 }
 
-export async function fetchPublicDiary(token: string): Promise<PublicDiary | null> {
-  if (!UUID_RE.test(token)) return null
+type RawHikeReport = { id: string; activity_id: string; title: string; content: string; created_at: string }
 
-  // Prima si cerca tra i Diari multipli (docs/diario-fulcro-piano.md Fase 4): ogni Diario ha il
-  // proprio share_token. Se non trovato, si ricade sul vecchio Diario singolo per utente
-  // (user_settings.diary_token) — non ancora migrato o dietro il vecchio /diario, che resta
-  // invariato finché non viene ritirato (Fase 7).
-  const { data: diary } = await supabase
-    .from('diaries')
-    .select('id, user_id, title, subtitle, author, cover_url, footer_text, config, share_pdf_url')
-    .eq('share_token', token)
-    .maybeSingle()
-
-  let userId: string
-  let config: DiaryConfig
-  let pdfUrl: string | null
-  let percorsoIds: string[] | null = null // null = nessuno scoping per Diario (vecchio percorso)
-
-  if (diary) {
-    userId = diary.user_id as string
-    config = normalizeDiaryConfig({
-      ...(diary.config as object),
-      title: diary.title, subtitle: diary.subtitle, author: diary.author,
-      coverUrl: diary.cover_url, footerText: diary.footer_text,
-    })
-    pdfUrl = (diary.share_pdf_url as string) ?? null
-
-    const { data: percorsi } = await supabase
-      .from('planned_hikes')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('diary_id', diary.id as string)
-    percorsoIds = (percorsi ?? []).map(p => p.id as string)
-  } else {
-    const { data: settings, error } = await supabase
-      .from('user_settings')
-      .select('user_id, diary_pdf_url, diary_config')
-      .eq('diary_token', token)
-      .maybeSingle()
-    if (error || !settings) return null
-    userId = settings.user_id as string
-    config = normalizeDiaryConfig(settings.diary_config)
-    pdfUrl = (settings.diary_pdf_url as string) ?? null
-  }
-
-  const { data: settingsForName } = await supabase
-    .from('user_settings')
-    .select('display_name')
-    .eq('user_id', userId)
-    .maybeSingle()
-
-  const excluded = new Set(config.excludedActivityIds)
-
-  // Percorso genitore assente ⇒ nessun Reportage per questo Diario, senza nemmeno interrogare
-  // hike_reports (Diario appena creato, o senza ancora un solo Percorso — mai pubblicabile finché
-  // non lo è, ma il link stesso resta comunque valido).
-  let reports: { id: string; activity_id: string; title: string; content: string; created_at: string }[] = []
-  if (percorsoIds === null) {
-    // Vecchio Diario singolo per utente: nessuno scoping, tutti i resoconti dell'utente.
-    const { data } = await supabase
-      .from('hike_reports')
-      .select('id, activity_id, title, content, created_at')
-      .eq('user_id', userId)
-    reports = data ?? []
-  } else if (percorsoIds.length > 0) {
-    const { data: scopedActivities } = await supabase
-      .from('activities')
-      .select('id')
-      .eq('user_id', userId)
-      .in('linked_planned_id', percorsoIds)
-    const scopedActivityIds = (scopedActivities ?? []).map(a => a.id as string)
-    if (scopedActivityIds.length > 0) {
-      const { data } = await supabase
-        .from('hike_reports')
-        .select('id, activity_id, title, content, created_at')
-        .eq('user_id', userId)
-        .in('activity_id', scopedActivityIds)
-      reports = data ?? []
-    }
-  }
-
+/** Da un elenco già letto di `hike_reports` (scoped o meno, non importa qui) a `DiaryContent`
+ *  completo: applica l'esclusione, carica attività/foto dei soli Reportage visibili, ordina per
+ *  data e somma i totali. Condivisa dai due modi di trovare quei report (Diario reale scoped per
+ *  `diary_id`, o il vecchio Diario singolo per utente senza scoping) — la parte che segue
+ *  l'esclusione non dipende da come ci si è arrivati. */
+async function buildContentFromReports(
+  reports: RawHikeReport[],
+  excluded: Set<string>,
+  photoIdsByActivity: Record<string, string[]>,
+  privacy: PublicPrivacyPrefs,
+): Promise<DiaryContent> {
   const visibleReports = reports.filter(r => !excluded.has(r.activity_id))
   const activityIds = visibleReports.map(r => r.activity_id as string).filter(Boolean)
 
@@ -189,9 +147,12 @@ export async function fetchPublicDiary(token: string): Promise<PublicDiary | nul
     .map(r => {
       const act = actMap.get(r.activity_id as string)
       const raw = act?.route_polyline
-      const polyline = Array.isArray(raw) && raw.length > 1
+      const fullPolyline = Array.isArray(raw) && raw.length > 1
         ? (raw as [number, number][])
         : null
+      const polyline = fullPolyline && privacy.hideHomeStarts
+        ? trimHomeStart(fullPolyline, privacy.home)
+        : fullPolyline
       return {
         id:               r.id as string,
         title:            (r.title as string) || 'Escursione',
@@ -207,7 +168,7 @@ export async function fetchPublicDiary(token: string): Promise<PublicDiary | nul
         // ha vincoli di impaginazione, le mostra tutte quelle scelte.
         photos:           (() => {
           const all = photosByActivity.get(r.activity_id as string) ?? []
-          const chosen = config.photoIdsByActivity[r.activity_id as string]
+          const chosen = photoIdsByActivity[r.activity_id as string]
           return chosen && chosen.length > 0 ? all.filter(p => chosen.includes(p.id)) : all
         })(),
         polyline,
@@ -225,13 +186,123 @@ export async function fetchPublicDiary(token: string): Promise<PublicDiary | nul
     dateRangeLabel = firstYear === lastYear ? String(firstYear) : `${firstYear}–${lastYear}`
   }
 
+  return { entries, totalKm, totalElevationGain, dateRangeLabel, hideExactDates: privacy.hideExactDates }
+}
+
+/**
+ * Contenuto pubblico di UN Diario reale, scoped per `diary_id` — mai per il vecchio Diario
+ * singolo per utente (quel ramo non ha un `diary_id` da scopare, resta gestito inline in
+ * `fetchPublicDiary`). Nucleo condiviso da Diario e Raccolta: vedi il commento in cima al file.
+ */
+export async function fetchDiaryContent(
+  userId: string,
+  diaryId: string,
+  excluded: Set<string>,
+  photoIdsByActivity: Record<string, string[]>,
+  privacy: PublicPrivacyPrefs,
+): Promise<DiaryContent> {
+  // Una Meta non ha una colonna diary_id "propria" del suo Diario finché non viene camminata
+  // (vedi app/api/planned/route.ts) — quindi il Diario di ogni Reportage si ricava passando dalla
+  // sua Meta collegata, non da una colonna diretta su activities/hike_reports.
+  const { data: percorsi } = await supabase
+    .from('planned_hikes')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('diary_id', diaryId)
+  const percorsoIds = (percorsi ?? []).map(p => p.id as string)
+
+  let reports: RawHikeReport[] = []
+  if (percorsoIds.length > 0) {
+    const { data: scopedActivities } = await supabase
+      .from('activities')
+      .select('id')
+      .eq('user_id', userId)
+      .in('linked_planned_id', percorsoIds)
+    const scopedActivityIds = (scopedActivities ?? []).map(a => a.id as string)
+    if (scopedActivityIds.length > 0) {
+      const { data } = await supabase
+        .from('hike_reports')
+        .select('id, activity_id, title, content, created_at')
+        .eq('user_id', userId)
+        .in('activity_id', scopedActivityIds)
+      reports = data ?? []
+    }
+  }
+
+  return buildContentFromReports(reports, excluded, photoIdsByActivity, privacy)
+}
+
+export async function fetchPublicDiary(token: string): Promise<PublicDiary | null> {
+  if (!UUID_RE.test(token)) return null
+
+  // Prima si cerca tra i Diari multipli (docs/diario-fulcro-piano.md Fase 4): ogni Diario ha il
+  // proprio share_token. Se non trovato, si ricade sul vecchio Diario singolo per utente
+  // (user_settings.diary_token) — non ancora migrato o dietro il vecchio /diario, che resta
+  // invariato finché non viene ritirato (Fase 7).
+  const { data: diary } = await supabase
+    .from('diaries')
+    .select('id, user_id, title, subtitle, author, cover_url, footer_text, config, share_pdf_url')
+    .eq('share_token', token)
+    .maybeSingle()
+
+  let userId: string
+  let config: DiaryConfig
+  let pdfUrl: string | null
+
+  if (diary) {
+    userId = diary.user_id as string
+    config = normalizeDiaryConfig({
+      ...(diary.config as object),
+      title: diary.title, subtitle: diary.subtitle, author: diary.author,
+      coverUrl: diary.cover_url, footerText: diary.footer_text,
+    })
+    pdfUrl = (diary.share_pdf_url as string) ?? null
+  } else {
+    const { data: settings, error } = await supabase
+      .from('user_settings')
+      .select('user_id, diary_pdf_url, diary_config')
+      .eq('diary_token', token)
+      .maybeSingle()
+    if (error || !settings) return null
+    userId = settings.user_id as string
+    config = normalizeDiaryConfig(settings.diary_config)
+    pdfUrl = (settings.diary_pdf_url as string) ?? null
+  }
+
+  // Nome dell'autore + preferenze di privacy, in un'unica lettura di user_settings — le seconde
+  // servono a fetchDiaryContent/buildContentFromReports sotto, quindi vanno risolte prima di loro.
+  const { data: ownerSettings } = await supabase
+    .from('user_settings')
+    .select('display_name, starting_lat, starting_lon, publish_hide_home_starts, publish_hide_exact_dates')
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  const privacy: PublicPrivacyPrefs = {
+    home: (ownerSettings?.starting_lat != null && ownerSettings?.starting_lon != null)
+      ? { lat: ownerSettings.starting_lat as number, lon: ownerSettings.starting_lon as number }
+      : null,
+    hideHomeStarts: (ownerSettings?.publish_hide_home_starts as boolean | null) ?? true,
+    hideExactDates: (ownerSettings?.publish_hide_exact_dates as boolean | null) ?? false,
+  }
+
+  let content: DiaryContent
+  if (diary) {
+    content = await fetchDiaryContent(
+      userId, diary.id as string, new Set(config.excludedActivityIds), config.photoIdsByActivity, privacy,
+    )
+  } else {
+    // Vecchio Diario singolo per utente: nessuno scoping, tutti i resoconti dell'utente.
+    const { data } = await supabase
+      .from('hike_reports')
+      .select('id, activity_id, title, content, created_at')
+      .eq('user_id', userId)
+    content = await buildContentFromReports(data ?? [], new Set(config.excludedActivityIds), config.photoIdsByActivity, privacy)
+  }
+
   return {
-    ownerName: (settingsForName?.display_name as string) || 'Escursionista',
+    ownerName: (ownerSettings?.display_name as string) || 'Escursionista',
     pdfUrl,
     config,
-    entries,
-    totalKm,
-    totalElevationGain,
-    dateRangeLabel,
+    ...content,
   }
 }

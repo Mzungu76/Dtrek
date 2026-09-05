@@ -77,10 +77,10 @@ Il raggruppamento per stagione si calcola da `lastActivityAt` in un helper puro
 
 ## Fase 3 — Raccolte pubblicabili
 
-Fuori da questo piano: dipende dalla pagina finita e vale un piano suo. Le tre schermate sono
-già disegnate (pagina "Pubblicazione" del canvas) e il modello è nel README dei mockup —
-`collections` + `collection_diaries`, `share_token` come su `diaries`, lettura pubblica che riusa
-`lib/sharePublicDiary.ts` un livello più su.
+Ha un piano proprio: **`docs/raccolte-pubblicazione-piano.md`** — non è una schermata in più ma un
+terzo livello di pubblicazione, e tocca il percorso di lettura pubblica già esistente
+(`lib/sharePublicDiary.ts` va spezzato in "trova dal token" + "costruisci il contenuto" prima di
+tutto il resto). Le tre schermate sono già disegnate nella pagina "Pubblicazione" del canvas.
 
 ## Due buchi di dati, con la mia proposta
 

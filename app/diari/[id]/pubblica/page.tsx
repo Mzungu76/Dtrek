@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import HubNavBar from '@/components/routehub/HubNavBar'
 import { RailButton } from '@/components/routehub/SideRails'
+import { PublishPrivacyToggles } from '@/components/PublishPrivacyToggles'
 import { getAllActivities, getActivityById, computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
 import { fetchActivityPhotos, type RoutePhoto } from '@/lib/activityPhotos'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
@@ -782,6 +783,15 @@ export default function DiarioPubblicaPage() {
                         Il PDF allegato si aggiorna quando esporti il Diario.
                       </p>
                     )}
+                  </div>
+
+                  {/* Preferenze globali (vale per ogni Diario e Raccolta, non solo questo) —
+                      docs/raccolte-pubblicazione-piano.md, Fase 3f. */}
+                  <div className="pt-1.5 border-t border-stone-100 space-y-1">
+                    <p className="text-[10px] font-barlow font-bold uppercase tracking-widest text-stone-400 mb-1">
+                      Privacy (vale per tutto quello che pubblichi)
+                    </p>
+                    <PublishPrivacyToggles />
                   </div>
 
                   <button onClick={handleRevokeLink}

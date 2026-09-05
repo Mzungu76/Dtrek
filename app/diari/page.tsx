@@ -17,7 +17,7 @@ import type { AllPercorsiRow } from '@/app/api/percorsi/route'
 import { FONT } from '@/lib/designTokens'
 import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, TACCUINO_RULED_TEXT_STYLE, FONT_HAND, INK_ABSORB_STYLE, TaccuinoPaperTexture, TaccuinoRuledLines } from '@/lib/taccuinoTokens'
 import { metaHasHikingMetrics } from '@/lib/metaTypes'
-import { ArrowRight, Compass, Loader2, Mountain, Search, X } from 'lucide-react'
+import { ArrowRight, BookMarked, Compass, Loader2, Mountain, Search, X } from 'lucide-react'
 
 /**
  * Ricerca testuale su tutti i percorsi (Mete e Reportage), in ogni Diario — Fase 18: risultati
@@ -250,13 +250,25 @@ function DiariPageLibro() {
 
             <GlobalRouteSearch rows={percorsi} error={percorsiError} />
 
-            <Link
-              href="/percorsi"
-              className="inline-flex items-center gap-2 text-[13px] transition-colors"
-              style={{ color: TACCUINO_INK.hand, ...TACCUINO_RULED_TEXT_STYLE }}
-            >
-              <Compass className="w-4 h-4" /> Tutte le Mete <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
+            <div className="flex items-center gap-5 flex-wrap">
+              <Link
+                href="/percorsi"
+                className="inline-flex items-center gap-2 text-[13px] transition-colors"
+                style={{ color: TACCUINO_INK.hand, ...TACCUINO_RULED_TEXT_STYLE }}
+              >
+                <Compass className="w-4 h-4" /> Tutte le Mete <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+              {/* Le raccolte pubblicano più Diari come un'unica collana — docs/raccolte-
+                  pubblicazione-piano.md — un livello sopra il singolo Diario, non un secondo
+                  scaffale: un link, non una sezione a sé in questa pagina. */}
+              <Link
+                href="/raccolte"
+                className="inline-flex items-center gap-2 text-[13px] transition-colors"
+                style={{ color: TACCUINO_INK.hand, ...TACCUINO_RULED_TEXT_STYLE }}
+              >
+                <BookMarked className="w-4 h-4" /> Le mie Raccolte <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
           </>
         )}
       </div>

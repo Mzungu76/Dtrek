@@ -17,7 +17,7 @@ import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, TACCUINO_LIST_DIVIDER, T
 import { TornFrame, tornVariant } from '@/components/TornFrame'
 import { metaHasHikingMetrics } from '@/lib/metaTypes'
 import {
-  ArrowDown, ArrowLeft, ArrowUp, BookOpen, ChevronRight, Clock, Loader2, Mountain,
+  ArrowDown, ArrowLeft, ArrowUp, BookMarked, BookOpen, ChevronRight, Clock, Loader2, Mountain,
   Plus, Route, Search, Share2, Star, Trash2, TrendingUp, X,
 } from 'lucide-react'
 
@@ -457,6 +457,17 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
             style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: 11.5, color: TACCUINO_INK.hand }}
           >
             <span className="inline-flex items-center gap-1.5"><Share2 className="w-3.5 h-3.5" /> Pubblicazione</span>
+            <ChevronRight className="w-3.5 h-3.5" style={{ color: TACCUINO_INK.handMuted }} />
+          </Link>
+          {/* Aggiungere QUESTO Diario a una raccolta si fa da /raccolte/[id] (dove si vede
+              l'intera collana, non solo il singolo volume) — qui solo il punto di ingresso,
+              docs/raccolte-pubblicazione-piano.md. */}
+          <Link
+            href="/raccolte"
+            className="flex items-center justify-between gap-2 py-2.5"
+            style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: 11.5, color: TACCUINO_INK.hand, borderTop: `1px solid ${TACCUINO_PAPER.cardBorder}` }}
+          >
+            <span className="inline-flex items-center gap-1.5"><BookMarked className="w-3.5 h-3.5" /> Aggiungi a una raccolta</span>
             <ChevronRight className="w-3.5 h-3.5" style={{ color: TACCUINO_INK.handMuted }} />
           </Link>
         </div>
