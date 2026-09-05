@@ -172,8 +172,14 @@ qualcuno ha già condiviso, quindi lo decidi tu (vedi sotto).
    dentro `lib/sharePublicCollection.ts`, per restare testabile senza istanziare il client Supabase
    (che lancia un'eccezione a import-time senza le variabili d'ambiente — lo stesso vincolo che ha
    tenuto `lib/diari/*` puri fin dall'inizio).
-2. **PR 2 — la funzione**: 3d (composizione) + 3e (pagina pubblica). È l'unità che rende la cosa
-   usabile: separarle lascerebbe a metà o l'una o l'altra.
+2. **PR 2 — la funzione ✅ implementata**: 3d (composizione, `/raccolte` e `/raccolte/[id]`) + 3e
+   (pagina pubblica, `/leggi/c/[token]`). Deviazioni dal piano: niente upload di copertina (PATCH
+   accetta già `coverUrl`, manca solo la UI — una raccolta senza copertina mostra il gradiente di
+   default, non uno stato rotto); il punto di ingresso nel Sommario di un Diario è un link verso
+   `/raccolte` invece di un selettore inline di appartenenza (comporre l'elenco si fa da dentro la
+   raccolta, dove si vede la collana intera, non da dentro il Diario). La pagina pubblica ha un
+   livello in più del Diario (`/v/[vi]` tra la home e `/e/[n]`): un indice unico di tutte le
+   escursioni di tutti i volumi sarebbe un solo muro di card con più di un paio di Diari dentro.
 3. **PR 3 — privacy**: 3f. Indipendente dalle altre due e può anche andare per prima, se la
    decisione 1 arriva subito.
 
@@ -194,3 +200,14 @@ qualcuno ha già condiviso, quindi lo decidi tu (vedi sotto).
 Non ancora deciso/fatto: la decisione 1 (privacy retroattiva) resta aperta, 3f non è iniziata; la
 decisione 3 (limite volumi) è stata anticipata in `normalizeDiaryOrder` con un tetto di 20, più
 basso della sola paginazione proposta — da rivedere se stretto.
+
+In più, per PR 2: `app/raccolte/page.tsx` (elenco + creazione), `app/raccolte/[id]/page.tsx`
+(composizione: campi editabili, riordino a frecce, aggiungi/rimuovi volume, pubblica/copia/revoca
+link, elimina raccolta), `app/leggi/c/[token]/` (home, `SiteChrome` proprio che riusa
+`DtrekCallout`/`SiteFooter` dal Diario, `v/[vi]` indice di un volume, `v/[vi]/e/[n]` lettura di
+un'escursione, `opengraph-image`). Punti di ingresso: un link in fondo a `/diari` e uno nel
+Sommario di ogni Diario (`/diari/[id]`), accanto a "Pubblicazione".
+
+Verificato come per PR 1: `tsc` e lint puliti, 374/374 test, `next build` pulita con tutte le nuove
+rotte compilate. Non verificato a schermo in un browser — l'ambiente non ha un progetto Supabase
+reale da cui autenticarsi (stesso limite già segnalato nelle fasi precedenti del restyling).

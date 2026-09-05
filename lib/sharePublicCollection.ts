@@ -4,7 +4,7 @@
 // invariata: l'esclusione dei Reportage e la selezione delle foto di ciascun Diario si applicano
 // da sole, "il più restrittivo vince" senza essere riscritto qui.
 import { supabase } from './supabase'
-import { normalizeDiaryConfig } from './diaryConfig'
+import { normalizeDiaryConfig, type DiaryPublicSections } from './diaryConfig'
 import { fetchDiaryContent, type DiaryContent, type PublicDiaryEntry } from './sharePublicDiary'
 import { combineDateRangeLabels } from './raccolte/combineDateRangeLabels'
 
@@ -14,6 +14,11 @@ export interface PublicCollectionVolume extends DiaryContent {
   diaryId:  string
   title:    string
   subtitle: string
+  coverUrl: string | null
+  /** Le sezioni pubbliche scelte dall'autore PER QUESTO Diario (lib/diaryConfig.ts) — una
+   *  raccolta non ha un proprio toggle "mostra il racconto": eredita quello di ciascun volume, lo
+   *  stesso principio del "più restrittivo vince" applicato alle esclusioni. */
+  show:     DiaryPublicSections
 }
 
 export interface PublicCollection {
@@ -70,7 +75,11 @@ export async function fetchPublicCollection(token: string): Promise<PublicCollec
       const content = await fetchDiaryContent(
         userId, diaryId, new Set(config.excludedActivityIds), config.photoIdsByActivity,
       )
-      volumes.push({ diaryId, title: config.title, subtitle: config.subtitle, ...content })
+      volumes.push({
+        diaryId, title: config.title, subtitle: config.subtitle,
+        coverUrl: config.coverUrl, show: config.publicSections,
+        ...content,
+      })
     }
   }
 
