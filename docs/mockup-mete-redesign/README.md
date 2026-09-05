@@ -9,11 +9,15 @@ della versione mobile di `components/Navbar.tsx` (Mete, Diari rialzato, Navigato
 
 Canvas pubblicato: https://claude.ai/code/artifact/5682b210-a754-4200-a823-0efe7abe93c6
 
+**Modifica approvata dopo il mockup, non ridisegnata negli artboard**: nell'intestazione non va il
+link "I miei Diari" (i Diari sono già l'icona centrale della barra inferiore). Il piano di
+implementazione è in `docs/piano-mete-restyling.md`.
+
 ### Direzione scelta — B con la carta della C (pagina 1 del canvas)
 
 | File | Schermata | Cosa mostra |
 |---|---|---|
-| `Main.dc.html` | **Carta chiusa (default)** | Nessun banner verde: intestazione su carta (back ai Diari, titolo, conteggio per tipologia), poi la striscia-carta di 70px con i pin e la legenda, la barra ricerca/ordina/aggiungi, i chip di tipologia, la Meta programmata e il registro |
+| `Main.dc.html` | **Carta chiusa (default)** | Nessun banner verde: intestazione su carta (titolo, conteggio per tipologia, avatar), poi la striscia-carta di 70px con i pin e la legenda, la barra ricerca/ordina/aggiungi, i chip di tipologia, la Meta programmata e il registro |
 | `MappaAperta.dc.html` | **Carta aperta** | La stessa pagina con la carta a 314px: pin di forma diversa per tipologia, fumetto sul pin toccato (la stessa riga dell'elenco), "Vicino a me", elenco sotto ordinato per distanza |
 
 Il banner verde alto 200px è sostituito da un'intestazione su carta alta ~54px; la carta chiusa
