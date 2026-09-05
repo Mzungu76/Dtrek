@@ -71,8 +71,8 @@ export default async function CollectionEntryPage({ params }: { params: { token:
         </a>
 
         {hasNarrative(entry.content) && volume.show.racconto
-          ? <EntryArticle entry={entry} n={eIdx + 1} show={volume.show} />
-          : <EntryCard entry={entry} n={eIdx + 1} />}
+          ? <EntryArticle entry={entry} n={eIdx + 1} show={volume.show} hideExactDate={volume.hideExactDates} />
+          : <EntryCard entry={entry} n={eIdx + 1} hideExactDate={volume.hideExactDates} />}
 
         <nav className="flex items-stretch gap-3">
           {prev !== null ? (

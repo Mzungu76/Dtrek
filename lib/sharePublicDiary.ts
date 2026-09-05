@@ -26,8 +26,18 @@
 
 import { supabase } from './supabase'
 import { normalizeDiaryConfig, type DiaryConfig } from './diaryConfig'
+import { trimHomeStart, type HomePoint } from './privacy/trimHomeStart'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** Preferenze di privacy dell'autore (docs/raccolte-pubblicazione-piano.md, Fase 3f) — globali per
+ *  utente (`user_settings`), non per Diario o Raccolta: applicate qui, nel core condiviso da
+ *  entrambi, così proteggono ogni livello di pubblicazione senza essere implementate due volte. */
+export interface PublicPrivacyPrefs {
+  home:           HomePoint | null
+  hideHomeStarts: boolean
+  hideExactDates: boolean
+}
 
 export interface PublicDiaryPhoto {
   /** Serve a rispettare la selezione dell'autore (`photoIdsByActivity`). */
@@ -64,6 +74,9 @@ export interface DiaryContent {
   totalKm:            number
   totalElevationGain: number
   dateRangeLabel?:    string
+  /** Se true, le pagine di lettura mostrano solo mese/anno di ogni escursione invece della data
+   *  esatta (lib/privacy/formatPublicDate.ts) — preferenza dell'autore, non del singolo Reportage. */
+  hideExactDates:     boolean
 }
 
 export interface PublicDiary extends DiaryContent {
@@ -91,6 +104,7 @@ async function buildContentFromReports(
   reports: RawHikeReport[],
   excluded: Set<string>,
   photoIdsByActivity: Record<string, string[]>,
+  privacy: PublicPrivacyPrefs,
 ): Promise<DiaryContent> {
   const visibleReports = reports.filter(r => !excluded.has(r.activity_id))
   const activityIds = visibleReports.map(r => r.activity_id as string).filter(Boolean)
@@ -133,9 +147,12 @@ async function buildContentFromReports(
     .map(r => {
       const act = actMap.get(r.activity_id as string)
       const raw = act?.route_polyline
-      const polyline = Array.isArray(raw) && raw.length > 1
+      const fullPolyline = Array.isArray(raw) && raw.length > 1
         ? (raw as [number, number][])
         : null
+      const polyline = fullPolyline && privacy.hideHomeStarts
+        ? trimHomeStart(fullPolyline, privacy.home)
+        : fullPolyline
       return {
         id:               r.id as string,
         title:            (r.title as string) || 'Escursione',
@@ -169,7 +186,7 @@ async function buildContentFromReports(
     dateRangeLabel = firstYear === lastYear ? String(firstYear) : `${firstYear}–${lastYear}`
   }
 
-  return { entries, totalKm, totalElevationGain, dateRangeLabel }
+  return { entries, totalKm, totalElevationGain, dateRangeLabel, hideExactDates: privacy.hideExactDates }
 }
 
 /**
@@ -182,6 +199,7 @@ export async function fetchDiaryContent(
   diaryId: string,
   excluded: Set<string>,
   photoIdsByActivity: Record<string, string[]>,
+  privacy: PublicPrivacyPrefs,
 ): Promise<DiaryContent> {
   // Una Meta non ha una colonna diary_id "propria" del suo Diario finché non viene camminata
   // (vedi app/api/planned/route.ts) — quindi il Diario di ogni Reportage si ricava passando dalla
@@ -211,7 +229,7 @@ export async function fetchDiaryContent(
     }
   }
 
-  return buildContentFromReports(reports, excluded, photoIdsByActivity)
+  return buildContentFromReports(reports, excluded, photoIdsByActivity, privacy)
 }
 
 export async function fetchPublicDiary(token: string): Promise<PublicDiary | null> {
@@ -230,7 +248,6 @@ export async function fetchPublicDiary(token: string): Promise<PublicDiary | nul
   let userId: string
   let config: DiaryConfig
   let pdfUrl: string | null
-  let content: DiaryContent
 
   if (diary) {
     userId = diary.user_id as string
@@ -240,9 +257,6 @@ export async function fetchPublicDiary(token: string): Promise<PublicDiary | nul
       coverUrl: diary.cover_url, footerText: diary.footer_text,
     })
     pdfUrl = (diary.share_pdf_url as string) ?? null
-    content = await fetchDiaryContent(
-      userId, diary.id as string, new Set(config.excludedActivityIds), config.photoIdsByActivity,
-    )
   } else {
     const { data: settings, error } = await supabase
       .from('user_settings')
@@ -253,23 +267,40 @@ export async function fetchPublicDiary(token: string): Promise<PublicDiary | nul
     userId = settings.user_id as string
     config = normalizeDiaryConfig(settings.diary_config)
     pdfUrl = (settings.diary_pdf_url as string) ?? null
+  }
 
+  // Nome dell'autore + preferenze di privacy, in un'unica lettura di user_settings — le seconde
+  // servono a fetchDiaryContent/buildContentFromReports sotto, quindi vanno risolte prima di loro.
+  const { data: ownerSettings } = await supabase
+    .from('user_settings')
+    .select('display_name, starting_lat, starting_lon, publish_hide_home_starts, publish_hide_exact_dates')
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  const privacy: PublicPrivacyPrefs = {
+    home: (ownerSettings?.starting_lat != null && ownerSettings?.starting_lon != null)
+      ? { lat: ownerSettings.starting_lat as number, lon: ownerSettings.starting_lon as number }
+      : null,
+    hideHomeStarts: (ownerSettings?.publish_hide_home_starts as boolean | null) ?? true,
+    hideExactDates: (ownerSettings?.publish_hide_exact_dates as boolean | null) ?? false,
+  }
+
+  let content: DiaryContent
+  if (diary) {
+    content = await fetchDiaryContent(
+      userId, diary.id as string, new Set(config.excludedActivityIds), config.photoIdsByActivity, privacy,
+    )
+  } else {
     // Vecchio Diario singolo per utente: nessuno scoping, tutti i resoconti dell'utente.
     const { data } = await supabase
       .from('hike_reports')
       .select('id, activity_id, title, content, created_at')
       .eq('user_id', userId)
-    content = await buildContentFromReports(data ?? [], new Set(config.excludedActivityIds), config.photoIdsByActivity)
+    content = await buildContentFromReports(data ?? [], new Set(config.excludedActivityIds), config.photoIdsByActivity, privacy)
   }
 
-  const { data: settingsForName } = await supabase
-    .from('user_settings')
-    .select('display_name')
-    .eq('user_id', userId)
-    .maybeSingle()
-
   return {
-    ownerName: (settingsForName?.display_name as string) || 'Escursionista',
+    ownerName: (ownerSettings?.display_name as string) || 'Escursionista',
     pdfUrl,
     config,
     ...content,

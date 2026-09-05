@@ -15,6 +15,7 @@ import {
   ArrowLeft, ArrowUp, ArrowDown, Copy, ExternalLink, Link2Off, Loader2, Plus, Share2, Trash2, X,
 } from 'lucide-react'
 import Navbar, { MOBILE_BOTTOMBAR_SPACER } from '@/components/Navbar'
+import { PublishPrivacyToggles } from '@/components/PublishPrivacyToggles'
 import { TaccuinoPaperTexture, TaccuinoRuledLines, TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, TACCUINO_ACCENT_TINT, FONT_HAND, INK_ABSORB_STYLE } from '@/lib/taccuinoTokens'
 import { FONT } from '@/lib/designTokens'
 import type { CollectionDetail, CollectionDetailDiario } from '@/app/api/collections/[id]/route'
@@ -342,6 +343,15 @@ export default function RaccoltaComposerPage() {
                   </button>
                 </>
               )}
+
+              {/* Preferenze globali (vale per ogni Diario e Raccolta, non solo questa) —
+                  docs/raccolte-pubblicazione-piano.md, Fase 3f. */}
+              <div className="pt-2.5 mt-2.5" style={{ borderTop: `1px solid ${TACCUINO_PAPER.cardBorder}` }}>
+                <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 9.5, color: TACCUINO_INK.handMuted }} className="mb-1.5">
+                  Privacy (vale per tutto quello che pubblichi)
+                </p>
+                <PublishPrivacyToggles />
+              </div>
             </div>
 
             <div className="pt-4" style={{ borderTop: `1px solid ${TACCUINO_PAPER.cardBorder}` }}>

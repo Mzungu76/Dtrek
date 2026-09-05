@@ -9,6 +9,7 @@ import { parseSections } from '@/lib/reportStore'
 import { parseMarkupBlocks, parseInlineEmphasis } from '@/lib/guideMarkup'
 import { formatDuration } from '@/lib/tcxParser'
 import { bucketPhotosByChapter } from '@/lib/photoBuckets'
+import { formatPublicDate } from '@/lib/privacy/formatPublicDate'
 import type { PublicDiaryEntry, PublicDiaryPhoto } from '@/lib/sharePublicDiary'
 import type { DiaryPublicSections } from '@/lib/diaryConfig'
 import { RouteSketch } from './RouteSketch'
@@ -104,7 +105,7 @@ function InlineFigure({ photo, side }: { photo: PublicDiaryPhoto; side: 'left' |
 const PARAGRAPHS_PER_PHOTO = 2
 
 /** Escursione con un racconto: articolo completo. */
-export function EntryArticle({ entry, n, show }: { entry: PublicDiaryEntry; n: number; show: DiaryPublicSections }) {
+export function EntryArticle({ entry, n, show, hideExactDate = false }: { entry: PublicDiaryEntry; n: number; show: DiaryPublicSections; hideExactDate?: boolean }) {
   const sections = show.racconto ? parseSections(entry.content).filter(s => s.body.trim()) : []
 
   // La prima foto fa da apertura in cima all'articolo: nel corpo si riparte dalla seconda, per non
@@ -194,7 +195,7 @@ export function EntryArticle({ entry, n, show }: { entry: PublicDiaryEntry; n: n
           {entry.title}
         </h2>
         <p className="text-xs text-stone-400 mt-1.5">
-          {format(new Date(entry.startTime), 'd MMMM yyyy', { locale: it })}
+          {formatPublicDate(entry.startTime, hideExactDate)}
         </p>
 
         <EntryStats entry={entry} />
@@ -236,7 +237,7 @@ export function EntryArticle({ entry, n, show }: { entry: PublicDiaryEntry; n: n
  * fotografica scura vuota e uno spazio narrativo bianco. Qui l'escursione resta nel diario, perché
  * è successa davvero, ma senza fingere un contenuto che non c'è.
  */
-export function EntryCard({ entry, n }: { entry: PublicDiaryEntry; n: number }) {
+export function EntryCard({ entry, n, hideExactDate = false }: { entry: PublicDiaryEntry; n: number; hideExactDate?: boolean }) {
   return (
     <article id={`esc-${n}`} className="bg-white rounded-3xl border border-stone-200 shadow-sm p-5 flex gap-4 items-center scroll-mt-16">
       {entry.photos[0]
@@ -255,7 +256,7 @@ export function EntryCard({ entry, n }: { entry: PublicDiaryEntry; n: number }) 
           {entry.title}
         </h2>
         <p className="text-xs text-stone-400 mt-0.5">
-          {format(new Date(entry.startTime), 'd MMMM yyyy', { locale: it })}
+          {formatPublicDate(entry.startTime, hideExactDate)}
         </p>
         <p className="font-mono text-xs text-stone-500 mt-1.5">
           {(entry.distanceMeters / 1000).toFixed(1)} km · {Math.round(entry.elevationGain)} m D+

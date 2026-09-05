@@ -180,8 +180,15 @@ qualcuno ha già condiviso, quindi lo decidi tu (vedi sotto).
    raccolta, dove si vede la collana intera, non da dentro il Diario). La pagina pubblica ha un
    livello in più del Diario (`/v/[vi]` tra la home e `/e/[n]`): un indice unico di tutte le
    escursioni di tutti i volumi sarebbe un solo muro di card con più di un paio di Diari dentro.
-3. **PR 3 — privacy**: 3f. Indipendente dalle altre due e può anche andare per prima, se la
-   decisione 1 arriva subito.
+3. **PR 3 — privacy ✅ implementata**: 3f. Decisione 1 applicata come proposto — `DEFAULT true`
+   sulla colonna, quindi retroattiva per costruzione (letta live a ogni apertura, mai congelata al
+   momento della pubblicazione). I due toggle vivono in un componente a sé
+   (`components/PublishPrivacyToggles.tsx`) invece che duplicati: sono preferenze globali per
+   utente, mostrate identiche nella schermata di pubblicazione del Diario e in quella della
+   Raccolta. Endpoint dedicato (`/api/user-settings/privacy`) invece di infilarle nel monolite
+   `/api/user-settings` — quel file seleziona già una quarantina di colonne con un fallback per
+   quelle non ancora migrate; due booleani in più lì avrebbero rischiato una regressione
+   sproporzionata al beneficio di evitare un file nuovo.
 
 ### Cosa c'è già, per chi riprende da qui
 
@@ -197,9 +204,19 @@ qualcuno ha già condiviso, quindi lo decidi tu (vedi sotto).
   `PUT /api/collections/[id]/diari`, `GET/PATCH/DELETE /api/collections/[id]/token` — creazione
   gated dietro `resolveDtrekEntitlement` (decisione 2 del piano, applicata).
 
-Non ancora deciso/fatto: la decisione 1 (privacy retroattiva) resta aperta, 3f non è iniziata; la
-decisione 3 (limite volumi) è stata anticipata in `normalizeDiaryOrder` con un tetto di 20, più
-basso della sola paginazione proposta — da rivedere se stretto.
+La decisione 3 (limite volumi) resta anticipata in `normalizeDiaryOrder` con un tetto di 20, più
+basso della sola paginazione proposta nel piano — da rivedere se stretto.
+
+Per PR 3: migration `add_publish_privacy_settings.sql` (eseguita in produzione) —
+`user_settings.publish_hide_home_starts`/`publish_hide_exact_dates`. `lib/privacy/trimHomeStart.ts`
+e `lib/privacy/formatPublicDate.ts`, puri e testati. `lib/sharePublicDiary.ts` e
+`lib/sharePublicCollection.ts` leggono le due preferenze (più `starting_lat/lon` per il punto di
+casa) in un'unica query aggiunta a quella già esistente per `display_name`, e le applicano nel
+core: `buildContentFromReports` accorcia la `polyline` di ogni escursione quando `hideHomeStarts`
+è attivo, e marca `hideExactDates` su `DiaryContent`. `EntryArticle`/`EntryCard`
+(`app/leggi/d/[token]/EntryArticle.tsx`, riusati identici dalla Raccolta) leggono quel flag per
+scegliere tra data esatta e solo mese/anno — l'unica label già coarse (mese/anno nell'occhiello)
+non tocca.
 
 In più, per PR 2: `app/raccolte/page.tsx` (elenco + creazione), `app/raccolte/[id]/page.tsx`
 (composizione: campi editabili, riordino a frecce, aggiungi/rimuovi volume, pubblica/copia/revoca

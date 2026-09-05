@@ -5,7 +5,7 @@
 // da sole, "il più restrittivo vince" senza essere riscritto qui.
 import { supabase } from './supabase'
 import { normalizeDiaryConfig, type DiaryPublicSections } from './diaryConfig'
-import { fetchDiaryContent, type DiaryContent, type PublicDiaryEntry } from './sharePublicDiary'
+import { fetchDiaryContent, type DiaryContent, type PublicDiaryEntry, type PublicPrivacyPrefs } from './sharePublicDiary'
 import { combineDateRangeLabels } from './raccolte/combineDateRangeLabels'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -46,6 +46,23 @@ export async function fetchPublicCollection(token: string): Promise<PublicCollec
 
   const userId = collection.user_id as string
 
+  // Nome dell'autore + preferenze di privacy (docs/raccolte-pubblicazione-piano.md, Fase 3f) —
+  // una sola volta per l'intera raccolta: sono globali per utente, non per Diario, quindi la
+  // stessa preferenza vale identica per ogni volume.
+  const { data: ownerSettings } = await supabase
+    .from('user_settings')
+    .select('display_name, starting_lat, starting_lon, publish_hide_home_starts, publish_hide_exact_dates')
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  const privacy: PublicPrivacyPrefs = {
+    home: (ownerSettings?.starting_lat != null && ownerSettings?.starting_lon != null)
+      ? { lat: ownerSettings.starting_lat as number, lon: ownerSettings.starting_lon as number }
+      : null,
+    hideHomeStarts: (ownerSettings?.publish_hide_home_starts as boolean | null) ?? true,
+    hideExactDates: (ownerSettings?.publish_hide_exact_dates as boolean | null) ?? false,
+  }
+
   const { data: links } = await supabase
     .from('collection_diaries')
     .select('diary_id, position')
@@ -73,7 +90,7 @@ export async function fetchPublicCollection(token: string): Promise<PublicCollec
         coverUrl: d.cover_url, footerText: d.footer_text,
       })
       const content = await fetchDiaryContent(
-        userId, diaryId, new Set(config.excludedActivityIds), config.photoIdsByActivity,
+        userId, diaryId, new Set(config.excludedActivityIds), config.photoIdsByActivity, privacy,
       )
       volumes.push({
         diaryId, title: config.title, subtitle: config.subtitle,
@@ -83,16 +100,10 @@ export async function fetchPublicCollection(token: string): Promise<PublicCollec
     }
   }
 
-  const { data: settingsForName } = await supabase
-    .from('user_settings')
-    .select('display_name')
-    .eq('user_id', userId)
-    .maybeSingle()
-
   const allEntries: PublicDiaryEntry[] = volumes.flatMap(v => v.entries)
 
   return {
-    ownerName:          (settingsForName?.display_name as string) || 'Escursionista',
+    ownerName:          (ownerSettings?.display_name as string) || 'Escursionista',
     title:              collection.title as string,
     subtitle:           collection.subtitle as string,
     preface:            collection.preface as string,
