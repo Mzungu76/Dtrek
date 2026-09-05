@@ -284,7 +284,12 @@ export default function MetePage() {
                           // sfioccia visibilmente sotto il suo bordo inferiore — senza questo
                           // margine il badge la tagliava a metà.
                           <div className="mt-2.5">
-                            <TrailScoreGaugeBadge total={p.trailScore} safety={null} size={34} showLabel={false} dark={false} />
+                            {/* safety (non più null): l'anello esterno del badge prende colore
+                                dalla Sicurezza Oggettiva cachata (planned_hikes.cached_safety_score,
+                                vedi toSafetyPreview in app/api/percorsi/route.ts) — null solo se
+                                quella Meta non ha ancora una Sicurezza calcolata, mai un colore
+                                fabbricato. */}
+                            <TrailScoreGaugeBadge total={p.trailScore} safety={p.safety} size={34} showLabel={false} dark={false} />
                           </div>
                         )}
                       </div>
@@ -295,30 +300,29 @@ export default function MetePage() {
                           {p.title}
                         </p>
                         {scoreLabel && (
-                          <p className="truncate" style={{ fontFamily: FONT_HAND, fontSize: 14, fontWeight: 600, color: TACCUINO_INK.handMuted, ...TACCUINO_RULED_TEXT_STYLE }}>
+                          <p className="truncate" style={{ fontFamily: FONT_HAND, fontSize: 15.5, fontWeight: 600, color: TACCUINO_INK.handMuted, ...TACCUINO_RULED_TEXT_STYLE }}>
                             {scoreLabel}
                           </p>
                         )}
-                        <div className="flex items-center flex-wrap gap-x-2.5 gap-y-1 mt-1.5" style={{ fontFamily: FONT.lora, fontSize: 11, color: TACCUINO_INK.handMuted }}>
+                        {/* Corpo minimo 13px, non più 11: sotto quella soglia il testo "glanceable"
+                            (etichette/didascalie, non paragrafo) smette di essere confortevole su
+                            schermo mobile — indicazione comune a Material Design (12sp è il limite
+                            per le sole "overline") e Apple HIG (footnote 13pt come corpo minimo
+                            leggibile, caption 11pt riservato a testo non primario). Icone allineate
+                            a w-3.5/h-3.5 (14px) per restare in proporzione col nuovo corpo. */}
+                        <div className="flex items-center flex-wrap gap-x-2.5 gap-y-1 mt-1.5" style={{ fontFamily: FONT.lora, fontSize: 13, color: TACCUINO_INK.handMuted }}>
                           {/* Solo per un sentiero (piano §48.9) — una Meta borgo_citta/sito ha
                               sempre queste cifre a 0: mostrarle produrrebbe "0.0 km", non un dato
                               in meno. */}
                           {metaHasHikingMetrics(p.metaType) && (
                             <>
-                              <span className="inline-flex items-center gap-1"><Route className="w-3 h-3" /> {(p.distanceMeters / 1000).toFixed(1)} km</span>
-                              <span className="inline-flex items-center gap-1"><TrendingUp className="w-3 h-3" /> +{Math.round(p.elevationGain)} m</span>
-                              <span className="inline-flex items-center gap-1"><Mountain className="w-3 h-3" /> {Math.round(p.altitudeMax)} m</span>
-                              <span className="inline-flex items-center gap-1"><Clock className="w-3 h-3" /> {formatDuration(p.estimatedTimeSeconds)}</span>
+                              <span className="inline-flex items-center gap-1"><Route className="w-3.5 h-3.5" /> {(p.distanceMeters / 1000).toFixed(1)} km</span>
+                              <span className="inline-flex items-center gap-1"><TrendingUp className="w-3.5 h-3.5" /> +{Math.round(p.elevationGain)} m</span>
+                              <span className="inline-flex items-center gap-1"><Mountain className="w-3.5 h-3.5" /> {Math.round(p.altitudeMax)} m</span>
+                              <span className="inline-flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {formatDuration(p.estimatedTimeSeconds)}</span>
                             </>
                           )}
                         </div>
-                        {/* Stato — ex colonna fissa a destra (94px), tolta di mezzo perché rubava
-                            spazio al titolo: ogni riga di questa pagina è già "in programma" per
-                            definizione (vedi il commento in cima al file), qui resta solo come nota
-                            a margine in calce alla riga, non più come etichetta a fianco. */}
-                        <p className="mt-1" style={{ fontFamily: FONT_HAND, fontSize: 13, color: TACCUINO_INK.handMuted }}>
-                          in programma
-                        </p>
                       </div>
                     </Link>
                   )

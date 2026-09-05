@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { getUserFromRequest } from '@/lib/supabaseAuth'
 import type { MetaType, SiteType } from '@/lib/metaTypes'
+import type { SafetyPreview } from '@/components/TrailScoreGaugeBadge'
+import type { SafetyScore } from '@/lib/safetyScore'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,6 +27,10 @@ export interface AllPercorsiRow {
   /** planned_hikes.cached_ts_total — già cachato, nessun ricalcolo qui (stessa convenzione di
    *  sola lettura di app/api/diaries/[id]/route.ts). */
   trailScore: number | null
+  /** planned_hikes.cached_safety_score — colora l'anello esterno del badge Trail Score
+   *  (TrailScoreGaugeBadge, prop `safety`); già cachato, nessun ricalcolo qui. null quando la
+   *  Meta non ha ancora una Sicurezza Oggettiva calcolata (mai un colore/etichetta fabbricati). */
+  safety: SafetyPreview | null
   favorite: boolean
   metaType: MetaType
   /** Valorizzato solo quando metaType === 'sito' (lib/metaTypes.ts), come su planned_hikes. */
@@ -46,6 +52,14 @@ export interface AllPercorsiRow {
   imageUrl: string | null
 }
 
+/** planned_hikes.cached_safety_score è l'oggetto SafetyScore intero (5 categorie + overall/label/
+ *  color, lib/safetyScore.ts) — il badge in elenco vuole solo il sottoinsieme SafetyPreview
+ *  (overall/color/label) che colora l'anello, non le categorie di dettaglio. */
+function toSafetyPreview(score: SafetyScore | null | undefined): SafetyPreview | null {
+  if (score == null) return null
+  return { overall: score.overall, color: score.color, label: score.label }
+}
+
 // GET /api/percorsi → "Tutti i Percorsi" — Fase 5 di docs/diario-fulcro-piano.md. Vista trasversale
 // di sola consultazione su tutti i Diari dell'utente, ciascun Percorso con l'etichetta del Diario
 // di provenienza — non sostituisce app/diari/[id] (che resta il modo di lavorare dentro UN Diario),
@@ -57,7 +71,7 @@ export async function GET(req: NextRequest) {
 
     const { data: planned, error: plannedErr } = await supabase
       .from('planned_hikes')
-      .select('id, title, distance_meters, elevation_gain, altitude_max, estimated_time_seconds, route_polyline, created_at, first_completed_at, planned_date, diary_id, archived_at, cached_ts_total, favorite, meta_type, site_type, place_id, latitude, longitude')
+      .select('id, title, distance_meters, elevation_gain, altitude_max, estimated_time_seconds, route_polyline, created_at, first_completed_at, planned_date, diary_id, archived_at, cached_ts_total, cached_safety_score, favorite, meta_type, site_type, place_id, latitude, longitude')
       .eq('user_id', user.id)
       .is('archived_at', null)
       .order('created_at', { ascending: false })
@@ -134,6 +148,7 @@ export async function GET(req: NextRequest) {
         reportageCount,
         pubblicabile:          reportageCount > 0,
         trailScore:            (p.cached_ts_total as number | null) ?? null,
+        safety:                toSafetyPreview(p.cached_safety_score as SafetyScore | null | undefined),
         favorite:              (p.favorite as boolean | null) ?? false,
         metaType:              (p.meta_type as MetaType) ?? 'sentiero',
         siteType:              (p.site_type as SiteType | null) ?? null,
