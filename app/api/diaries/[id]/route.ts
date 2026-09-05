@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { getUserFromRequest } from '@/lib/supabaseAuth'
 import { deletePercorsoCascade } from '@/lib/deletePercorsoCascade'
+import { normalizeLabels } from '@/lib/diari/normalizeLabels'
 import type { MetaType } from '@/lib/metaTypes'
 
 export const dynamic = 'force-dynamic'
@@ -41,6 +42,11 @@ export interface DiarioDetail {
   author: string
   isDefault: boolean
   coverUrl: string | null
+  /** Etichette libere (Natura, Urbano, una zona…) — restyling pagina /diari, Fase 2 di
+   *  docs/diari-restyling-piano.md. Modificate da qui (EtichetteDiarioEditor), non dal form di
+   *  copertina/pubblicazione: sono metadati del registro, non della veste pubblica del Diario. */
+  labels: string[]
+  archivedAt: string | null
   reportage: DiarioReportageRow[]
 }
 
@@ -58,7 +64,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
     const { data: diary, error: diaryErr } = await supabase
       .from('diaries')
-      .select('id, title, subtitle, author, is_default, cover_url')
+      .select('id, title, subtitle, author, is_default, cover_url, labels, archived_at')
       .eq('id', params.id)
       .eq('user_id', user.id)
       .single()
@@ -120,9 +126,75 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       author:    diary.author as string,
       isDefault: diary.is_default as boolean,
       coverUrl:  diary.cover_url as string | null,
+      labels:      (diary.labels as string[] | null) ?? [],
+      archivedAt:  diary.archived_at as string | null,
       reportage,
     }
     return NextResponse.json(detail)
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 })
+  }
+}
+
+// PATCH /api/diaries/[id] { labels?: string[], archivedAt?: string | null } → metadati del
+// registro (restyling pagina /diari, Fase 2 di docs/diari-restyling-piano.md) — separato dal
+// contratto "sostituisci l'intera configurazione" di PATCH /api/diaries/[id]/config perché qui i
+// campi si aggiornano uno alla volta (solo quelli presenti nel corpo), come già GET/PATCH
+// /api/diaries/[id]/token per lo stesso motivo.
+export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const user = await getUserFromRequest(req)
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const body = await req.json().catch(() => ({})) as { labels?: unknown; archivedAt?: unknown }
+    const dbPatch: Record<string, unknown> = {}
+
+    if (Object.prototype.hasOwnProperty.call(body, 'labels')) {
+      if (!Array.isArray(body.labels) || !body.labels.every((l): l is string => typeof l === 'string')) {
+        return NextResponse.json({ error: 'labels deve essere un array di stringhe' }, { status: 400 })
+      }
+      dbPatch.labels = normalizeLabels(body.labels)
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, 'archivedAt')) {
+      if (body.archivedAt !== null && typeof body.archivedAt !== 'string') {
+        return NextResponse.json({ error: 'archivedAt deve essere una stringa ISO o null' }, { status: 400 })
+      }
+      dbPatch.archived_at = body.archivedAt
+    }
+
+    if (Object.keys(dbPatch).length === 0) {
+      return NextResponse.json({ error: 'Nessun campo da aggiornare' }, { status: 400 })
+    }
+
+    // Il Diario di default non si archivia mai — stessa regola già in vigore per l'eliminazione
+    // (DELETE sotto): deve sempre comparire nella pagina di atterraggio.
+    if (typeof dbPatch.archived_at === 'string') {
+      const { data: diary, error: diaryErr } = await supabase
+        .from('diaries')
+        .select('is_default')
+        .eq('id', params.id)
+        .eq('user_id', user.id)
+        .maybeSingle()
+      if (diaryErr) throw diaryErr
+      if (!diary) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+      if (diary.is_default) return NextResponse.json({ error: 'Il Diario di default non può essere archiviato' }, { status: 400 })
+    }
+
+    const { data, error } = await supabase
+      .from('diaries')
+      .update({ ...dbPatch, updated_at: new Date().toISOString() })
+      .eq('id', params.id)
+      .eq('user_id', user.id)
+      .select('labels, archived_at')
+      .single()
+    if (error) throw error
+    if (!data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+    return NextResponse.json({
+      labels:     (data.labels as string[] | null) ?? [],
+      archivedAt: data.archived_at as string | null,
+    })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 })
   }
