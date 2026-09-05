@@ -51,6 +51,15 @@ function cutoutRotation(id: string): number {
   return ((Math.abs(hash) % 14) / 10) - 0.7
 }
 
+/** Ingrandimento del riquadro "map" del Taccuino Botanico (87×87, app/globals.css) via
+ *  `transform: scale()` invece di ricalibrare a mano nastro/ombre/strappo per una nuova taglia:
+ *  uno scale uniforme riproduce lo stesso identico disegno calibrato, solo più grande — nessun
+ *  rischio di disallineare il nastro o le ombre (richiesta esplicita dell'utente: "miniature
+ *  leggermente più grandi" mantenendo lo stile esistente, non uno stile nuovo). */
+const MAP_THUMB_BASE = 87
+const MAP_THUMB_SIZE = 100
+const MAP_THUMB_SCALE = MAP_THUMB_SIZE / MAP_THUMB_BASE
+
 /** Icona di fallback quando la miniatura non ha una traccia da disegnare — una per tipologia
  *  (mai la stessa Mountain per un borgo o un sito, la Fase 2 del piano la sostituirà con un
  *  emblema disegnato; questo resta un tappabuchi minimo ma già type-aware). */
@@ -220,45 +229,69 @@ export default function MetePage() {
                     <Link
                       key={p.id}
                       href={`/guida/${encodeURIComponent(p.id)}/prima_di_partire`}
-                      // py-5 (invece di py-3.5) — spazio per il nastro e l'ombra "sollevata" che
-                      // sporgono oltre il riquadro 87x87 di ogni TornFrame (Taccuino Botanico).
-                      className="flex items-center gap-3.5 py-5 px-2 -mx-2"
+                      // items-start (non più items-center): un titolo lungo ora va a capo libero
+                      // su più righe (vedi sotto) e non deve ricentrare l'intera riga sulla sua
+                      // altezza — la miniatura resta ancorata in alto, come nel Sommario del
+                      // Diario (app/diari/[id]/page.tsx, stessa scelta e stessa ragione).
+                      className="flex items-start gap-3.5 py-5 px-2 -mx-2"
                       style={{ borderBottom: TACCUINO_LIST_DIVIDER }}
                     >
-                      {/* Nastro washi + bordo strappato (Taccuino Botanico) al posto del vecchio bordo
-                          bianco spesso + ombra "da card" — calibrato in un mockup dedicato prima di
-                          questo porting, stessa tecnica di app/resoconto/[id]/PhotoGallery.tsx
-                          riscalata (size="map") sul riquadro 87x87. cutoutRotation(p.id) resta
-                          l'inclinazione dell'intero riquadro; tornVariant(p.id) sceglie
-                          indipendentemente taglio e posizione del nastro. */}
-                      <TornFrame size="map" variant={tornVariant(p.id)} rotate={cutoutRotation(p.id)}>
-                        {p.routePolyline && p.routePolyline.length > 1
-                          ? (
-                            <GalleryMapThumb
-                              polyline={p.routePolyline}
-                              lineColor={TACCUINO_INK.typed}
-                              lineWeight={2}
-                              dashArray="3 2.5"
-                              showEndpoints
-                              dimTiles={false}
-                            />
-                          )
-                          : (
-                            // Fondo carta esplicito (mai lasciato trasparente): senza, il nero di
-                            // .torn-filler nei layer sotto (torn-ao/torn-rim/torn-cast, opachi per
-                            // progetto — vedi app/globals.css) traspare attraverso quest'icona
-                            // centrata, che da sola non copre l'intero riquadro. Icona per
-                            // tipologia — mai la stessa Mountain per un borgo o un sito.
-                            <div className="w-full h-full flex items-center justify-center" style={{ background: TACCUINO_PAPER.card }}>
-                              {metaTypeFallbackIcon(p.metaType)}
-                            </div>
-                          )}
-                      </TornFrame>
-                      <div className="min-w-0 flex-1">
-                        <p
-                          className="line-clamp-2"
-                          style={{ fontFamily: FONT.lora, fontWeight: 600, fontSize: 15, lineHeight: 1.25, color: TACCUINO_INK.typed }}
-                        >
+                      {/* Colonna miniatura: il riquadro nastro-e-strappo, con il badge Trail Score
+                          incollato sotto invece che in una sua colonna a destra — libera larghezza
+                          per il titolo, che a sua volta deve restare sempre leggibile per intero
+                          (richiesta esplicita dell'utente, stesso principio già in vigore su
+                          app/diari/[id]/page.tsx: "il titolo deve leggersi sempre per intero, non
+                          tagliato con '...'"). */}
+                      <div className="flex flex-col items-center shrink-0" style={{ width: MAP_THUMB_SIZE }}>
+                        <div style={{ width: MAP_THUMB_SIZE, height: MAP_THUMB_SIZE }}>
+                          {/* Nastro washi + bordo strappato (Taccuino Botanico) al posto del vecchio
+                              bordo bianco spesso + ombra "da card" — calibrato in un mockup dedicato
+                              prima di questo porting, stessa tecnica di
+                              app/resoconto/[id]/PhotoGallery.tsx sul riquadro 87x87 nativo, qui
+                              ingrandito via scale() (vedi MAP_THUMB_SCALE) senza toccare quella
+                              calibrazione. cutoutRotation(p.id) resta l'inclinazione dell'intero
+                              riquadro; tornVariant(p.id) sceglie indipendentemente taglio e
+                              posizione del nastro. */}
+                          <div style={{ width: MAP_THUMB_BASE, height: MAP_THUMB_BASE, transform: `scale(${MAP_THUMB_SCALE})`, transformOrigin: 'top left' }}>
+                            <TornFrame size="map" variant={tornVariant(p.id)} rotate={cutoutRotation(p.id)}>
+                              {p.routePolyline && p.routePolyline.length > 1
+                                ? (
+                                  <GalleryMapThumb
+                                    polyline={p.routePolyline}
+                                    lineColor={TACCUINO_INK.typed}
+                                    lineWeight={2}
+                                    dashArray="3 2.5"
+                                    showEndpoints
+                                    dimTiles={false}
+                                  />
+                                )
+                                : (
+                                  // Fondo carta esplicito (mai lasciato trasparente): senza, il nero
+                                  // di .torn-filler nei layer sotto (torn-ao/torn-rim/torn-cast,
+                                  // opachi per progetto — vedi app/globals.css) traspare attraverso
+                                  // quest'icona centrata, che da sola non copre l'intero riquadro.
+                                  // Icona per tipologia — mai la stessa Mountain per un borgo o un
+                                  // sito.
+                                  <div className="w-full h-full flex items-center justify-center" style={{ background: TACCUINO_PAPER.card }}>
+                                    {metaTypeFallbackIcon(p.metaType)}
+                                  </div>
+                                )}
+                            </TornFrame>
+                          </div>
+                        </div>
+                        {p.trailScore != null && (
+                          // mt-2.5, non mt-1: l'ombra "sollevata" del riquadro (torn-cast-map)
+                          // sfioccia visibilmente sotto il suo bordo inferiore — senza questo
+                          // margine il badge la tagliava a metà.
+                          <div className="mt-2.5">
+                            <TrailScoreGaugeBadge total={p.trailScore} safety={null} size={34} showLabel={false} dark={false} />
+                          </div>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1 pt-0.5">
+                        {/* Mai `truncate`/`line-clamp`: va a capo libero su quante righe servono,
+                            stessa regola già in vigore sul Sommario del Diario. */}
+                        <p style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 19.5, color: TACCUINO_INK.typed, ...TACCUINO_RULED_TEXT_STYLE }}>
                           {p.title}
                         </p>
                         {scoreLabel && (
@@ -279,21 +312,13 @@ export default function MetePage() {
                             </>
                           )}
                         </div>
-                      </div>
-                      <div className="relative shrink-0 w-11 h-11 flex items-center justify-center">
-                        {p.trailScore != null && (
-                          <TrailScoreGaugeBadge total={p.trailScore} safety={null} size={46} showLabel={false} dark={false} />
-                        )}
-                      </div>
-                      {/* Niente TACCUINO_RULED_TEXT_STYLE qui: l'etichetta va a capo su due righe
-                          in questa colonna stretta, e con line-height agganciato al passo della
-                          rigatura le due righe si staccherebbero vistosamente l'una dall'altra —
-                          un'etichetta di stato compatta, non un paragrafo. */}
-                      <div
-                        className="shrink-0 flex items-center justify-end"
-                        style={{ width: 94, fontFamily: FONT_HAND, fontSize: 15, color: TACCUINO_INK.handMuted }}
-                      >
-                        in programma
+                        {/* Stato — ex colonna fissa a destra (94px), tolta di mezzo perché rubava
+                            spazio al titolo: ogni riga di questa pagina è già "in programma" per
+                            definizione (vedi il commento in cima al file), qui resta solo come nota
+                            a margine in calce alla riga, non più come etichetta a fianco. */}
+                        <p className="mt-1" style={{ fontFamily: FONT_HAND, fontSize: 13, color: TACCUINO_INK.handMuted }}>
+                          in programma
+                        </p>
                       </div>
                     </Link>
                   )
