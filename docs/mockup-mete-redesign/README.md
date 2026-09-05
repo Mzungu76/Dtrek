@@ -1,4 +1,4 @@
-# Restyling pagina `/percorsi` ("Mete") — 3 direzioni + stato delle tipologie
+# Restyling pagina `/percorsi` ("Mete") — direzione scelta + stato delle tipologie
 
 Mockup mobile (390×844) per il ridisegno di `app/percorsi/page.tsx`, la pagina che elenca
 le Mete non ancora camminate. Palette e tipografia sono quelle già in codice
@@ -9,11 +9,27 @@ della versione mobile di `components/Navbar.tsx` (Mete, Diari rialzato, Navigato
 
 Canvas pubblicato: https://claude.ai/code/artifact/5682b210-a754-4200-a823-0efe7abe93c6
 
+### Direzione scelta — B con la carta della C (pagina 1 del canvas)
+
+| File | Schermata | Cosa mostra |
+|---|---|---|
+| `Main.dc.html` | **Carta chiusa (default)** | Nessun banner verde: intestazione su carta (back ai Diari, titolo, conteggio per tipologia), poi la striscia-carta di 70px con i pin e la legenda, la barra ricerca/ordina/aggiungi, i chip di tipologia, la Meta programmata e il registro |
+| `MappaAperta.dc.html` | **Carta aperta** | La stessa pagina con la carta a 314px: pin di forma diversa per tipologia, fumetto sul pin toccato (la stessa riga dell'elenco), "Vicino a me", elenco sotto ordinato per distanza |
+
+Il banner verde alto 200px è sostituito da un'intestazione su carta alta ~54px; la carta chiusa
+ne occupa 70px e si apre solo al tocco. Netto: circa **6 righe di elenco visibili** contro le 2
+di oggi. I chip di tipologia filtrano insieme i pin e l'elenco; la forma del pin (goccia =
+sentiero, quadrato = borgo/città, cerchio = sito) distingue la tipologia anche senza colore.
+La carta regge già oggi: `latitude`/`longitude` sono NOT NULL su `dtrek_places` e presenti sulle
+Mete non-sentiero.
+
+### Direzioni precedenti (pagina 2 del canvas)
+
 | File | Direzione | Idea portante |
 |---|---|---|
-| `Main.dc.html` | **A — Tre scaffali** | La tipologia è il filtro primario: segmentata Tutte / Sentieri / Borghi / Siti con i conteggi, elenco raggruppato per tipologia, ordinamenti che cambiano con il filtro attivo |
-| `OptionB.dc.html` | **B — Registro unico** | Una sola lista cronologica: la tipologia è un timbro sulla riga (non una pagina a parte), righe compatte a due linee, colonna destra sempre con un numero — Trail Score, tappe o durata della visita |
-| `OptionC.dc.html` | **C — La carta delle Mete** | La mappa di tutte le Mete in testa, pin di forma diversa per tipologia, foglio che sale con "più vicine a te" e l'elenco — la posizione è l'unico dato che tutte e tre le tipologie possiedono sempre |
+| `OptionA.dc.html` | **A — Tre scaffali** | La tipologia è il filtro primario: segmentata con i conteggi, elenco raggruppato per tipologia |
+| `OptionB.dc.html` | **B — Registro unico** | La versione originale, con il banner verde e senza carta |
+| `OptionC.dc.html` | **C — La carta delle Mete** | Mappa a tutta testata e foglio che sale — da qui viene la carta ora integrata nella B |
 
 Formato `.dc.html` come `docs/mockup-diari-redesign/` e `docs/mockup-taccuino-botanico/`:
 richiedono il runtime del canvas editor, non sono codice da incollare nell'app. I titoli sono
@@ -35,7 +51,7 @@ Osservazioni sul codice, non sul solo screenshot.
    riempimento opaco nel ramo di fallback), non un problema di dati.
 2. **Il titolo di riga usa il font a mano a 19,5px con il line-height agganciato alla
    rigatura**: "Centro-Officina Arenaro (Muracciole)" occupa quattro righe e da solo è alto
-   quanto un'intera riga di elenco. Tutte e tre le opzioni riportano il titolo su Lora 14–14,5
+   quanto un'intera riga di elenco. Tutti i mockup riportano il titolo su Lora 14–14,5
    con clamp a 1–2 righe, e lasciano il corsivo a mano al titolo di pagina.
 3. **La riga di una Meta non-sentiero è vuota per costruzione.** Le pillole dati sono corrette
    nel non mostrare 0 km / 0 m D+ (`metaHasHikingMetrics`, piano §48.9), ma nulla le sostituisce:
@@ -49,8 +65,8 @@ Osservazioni sul codice, non sul solo screenshot.
    salvate. Un solo ingresso, con la tipologia scelta dentro la ricerca.
 6. **Gli ordinamenti sono tutti escursionistici** (Data, Km, D+, TS): tre su quattro non
    significano nulla per due tipologie su tre.
-7. **L'intestazione verde occupa 200px** (un quarto dello schermo) per titolo e conteggio: nei
-   mockup scende a 112px (A, B) o diventa la mappa stessa (C).
+7. **L'intestazione verde occupa 200px** (un quarto dello schermo) per titolo e conteggio:
+   nella direzione scelta sparisce del tutto, sostituita da un'intestazione su carta di ~54px.
 
 ## 2. Cosa manca davvero a Borghi/Città e Siti
 
@@ -95,10 +111,10 @@ Conseguenze dirette, in ordine di peso:
 4. **Borgo e Città non sono distinguibili**: `subtype` è NULL su tutte le 425 righe — l'import
    ISTAT lascia il campo vuoto di proposito (nota in `lib/metaTypes.ts`, la classificazione Dtrek
    è separata dall'anagrafe ISTAT e non è mai stata scritta).
-5. **`/api/percorsi` non porta abbastanza dati per disegnare le tre opzioni**: `AllPercorsiRow`
+5. **`/api/percorsi` non porta abbastanza dati per disegnare i mockup**: `AllPercorsiRow`
    ha `metaType` ma non `siteType`, `placeId`, `imageUrl`, `municipality`/`region`, né lat/lon.
-   Senza queste colonne nessuno dei tre mockup è implementabile (C ha bisogno di lat/lon per i
-   pin, A e B della sottotipologia e del comune per la riga sotto il titolo).
+   Senza queste colonne la direzione scelta non è implementabile: la carta ha bisogno di
+   lat/lon per i pin, la riga sotto il titolo della sottotipologia e del comune.
 
 ## 3. Ordine di lavoro suggerito
 
@@ -108,25 +124,31 @@ Prima i costi bassi che si vedono subito, poi i dati, poi l'esperienza.
 2. Titolo di riga su Lora + clamp → spariscono le righe alte quattro linee.
 3. `/api/percorsi`: aggiungere `siteType`, `placeId`, `latitude`, `longitude`, `municipality`,
    `region`, `imageUrl` (join su `dtrek_places`).
-4. Riscrivere l'elenco secondo l'opzione scelta: emblema per tipologia, timbro, slot metriche
-   adattivo, ordinamenti per tipologia, un solo ingresso di ricerca.
+4. Riscrivere l'elenco: emblema per tipologia, timbro, slot metriche adattivo, ordinamenti per
+   tipologia, un solo ingresso di ricerca — e sostituire il banner verde con l'intestazione su
+   carta più la striscia-carta chiusa.
 5. Lanciare gli import dei Siti (MiC, OSM, PTPR) e l'arricchimento Wikidata (immagini,
    descrizioni), e assegnare `subtype` borgo/città.
 6. Popolare `dtrek_place_relations` (tappe dentro un borgo) e collegare `/api/meta-itinerary` a
    una schermata: è la condizione perché "6 tappe · 2h consigliate" diventi un dato vero.
 
-## 4. Come scegliere fra le tre
+## 4. Perché B con la carta della C
 
-- **A — Tre scaffali** è la più onesta rispetto ai dati di oggi: mostrando i gruppi separati,
-  47 sentieri e 4 borghi non si contendono la stessa griglia, e ogni gruppo può avere le sue
-  colonne. Costo: la tipologia diventa un livello di navigazione in più.
-- **B — Registro unico** è la più vicina al codice attuale (resta una `flex-col` di righe) ed è
-  quella che invecchia meglio quando le Mete diventano centinaia e miste. Costo: con 47 sentieri
-  su 53 Mete, borghi e siti restano sepolti finché non si filtra.
-- **C — La carta delle Mete** è l'unica che dà a Borghi e Siti un dato forte da mostrare oggi —
-  la posizione, che nel database c'è sempre (`latitude`/`longitude` NOT NULL) — e trasforma
-  l'elenco in una scelta di gita. Costo: è la più lontana dall'attuale, richiede lat/lon in API,
-  una mappa in testa alla pagina e prestazioni su 53+ pin.
+**B — Registro unico** è la più vicina al codice attuale (resta una `flex-col` di righe) ed è
+quella che invecchia meglio quando le Mete diventano centinaia e miste; il suo costo — con 47
+sentieri su 53 Mete, borghi e siti restano sepolti finché non si filtra — è coperto dai chip di
+tipologia e dalla carta. **C** portava l'unico dato forte che Borghi e Siti hanno già oggi (la
+posizione), ma a prezzo di una mappa sempre a schermo: chiusa di default, quel prezzo non si
+paga finché non serve.
 
-Nessuna delle tre esclude le altre: la fascia di filtri per tipologia è la stessa in tutte e tre
-e va comunque implementata; A e C possono convivere come due viste dello stesso elenco.
+Costi tecnici in più rispetto alla sola B, da mettere in conto:
+
+- `latitude`/`longitude` in `AllPercorsiRow` (oggi assenti) — per i sentieri basta il primo punto
+  di `route_polyline`, per borghi/siti servono le colonne di `planned_hikes`/`dtrek_places`;
+- una mappa Leaflet montata solo all'apertura della striscia (mai al caricamento della pagina),
+  con clustering oltre ~50 pin;
+- la distanza "da te" richiede la posizione dell'utente: se manca, l'elenco resta ordinato per
+  data e la colonna distanza sparisce — mai un valore fabbricato.
+
+**A — Tre scaffali** resta in archivio (pagina 2 del canvas): il raggruppamento per tipologia può
+tornare utile come opzione di ordinamento, non come navigazione.

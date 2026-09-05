@@ -117,54 +117,84 @@ a:hover{color:var(--accent-2)}
       </div>
     </div>
 
-    <!-- La carta, chiusa: una striscia che si tocca per aprirla -->
-    <div class="mapwrap mapstrip" style="margin-top:12px">
-      <svg viewBox="0 0 358 70" style="width:100%;height:100%;display:block">
-        <rect width="358" height="70" fill="#E7E3D2"></rect>
+    <!-- La stessa carta, aperta: i filtri qui sotto valgono anche per i pin -->
+    <div class="mapwrap mapfull" style="margin-top:12px">
+      <svg viewBox="0 0 358 314" style="width:100%;height:100%;display:block">
+        <rect width="358" height="314" fill="#E7E3D2"></rect>
         <g fill="none" stroke="#C8B99F" stroke-width="1" opacity=".9">
-          <path d="M-10 16 C 60 4, 130 32, 210 16 S 330 -6, 370 12"></path>
-          <path d="M-10 34 C 62 22, 134 50, 214 34 S 330 12, 370 30"></path>
-          <path d="M-10 54 C 64 42, 138 70, 218 54 S 330 32, 370 50"></path>
+          <path d="M-10 42 C 62 20, 130 74, 212 46 S 336 8, 372 40"></path>
+          <path d="M-10 76 C 66 52, 138 108, 218 80 S 336 40, 372 72"></path>
+          <path d="M-10 120 C 70 94, 142 152, 222 124 S 336 82, 372 114"></path>
+          <path d="M-10 176 C 74 148, 146 206, 226 178 S 336 136, 372 168"></path>
+          <path d="M-10 232 C 78 204, 150 262, 230 234 S 336 192, 372 224"></path>
+          <path d="M-10 286 C 82 260, 154 314, 234 288 S 336 248, 372 278"></path>
         </g>
         <g fill="#D8E0D0" opacity=".6">
-          <path d="M52 44 C 82 34, 118 46, 146 38 C 166 52, 132 66, 92 62 C 66 58, 48 52, 52 44 Z"></path>
+          <path d="M36 190 C 82 172, 128 194, 162 178 C 194 164, 226 182, 248 206 C 222 244, 138 262, 88 244 C 52 230, 30 210, 36 190 Z"></path>
         </g>
-        <g fill="none" stroke="#2E2A22" stroke-width="1.6" stroke-dasharray="3.5 2.6" stroke-linecap="round" opacity=".8">
-          <path d="M28 52 L40 40 L38 28 L58 22"></path>
-          <path d="M196 20 L208 30 L204 44 L222 50"></path>
-          <path d="M296 46 L310 34 L306 22 L326 16"></path>
+        <g stroke="#B8C4A8" stroke-width="2.2" fill="none" opacity=".9">
+          <path d="M-10 288 C 56 268, 112 296, 176 280 S 296 256, 372 274"></path>
         </g>
-        <g>
-          <path d="M100 52C100 52 108 43 108 37A8 8 0 1 0 92 37C92 43 100 52 100 52Z" fill="#C0603D" stroke="#F5EDDD" stroke-width="1.6"></path>
-          <path d="M248 44C248 44 256 35 256 29A8 8 0 1 0 240 29C240 35 248 44 248 44Z" fill="#C0603D" stroke="#F5EDDD" stroke-width="1.6"></path>
-          <circle cx="164" cy="30" r="7" fill="#5F7355" stroke="#F5EDDD" stroke-width="1.6"></circle>
-          <circle cx="58" cy="22" r="5" fill="#7C8F6E" stroke="#F5EDDD" stroke-width="1.5"></circle>
-          <circle cx="222" cy="50" r="5" fill="#7C8F6E" stroke="#F5EDDD" stroke-width="1.5"></circle>
-          <circle cx="326" cy="16" r="5" fill="#7C8F6E" stroke="#F5EDDD" stroke-width="1.5"></circle>
+        <g fill="none" stroke="#2E2A22" stroke-width="2" stroke-dasharray="4 3" stroke-linecap="round" opacity=".85">
+          <path d="M74 112 L92 126 L88 152 L114 166 L140 160"></path>
+          <path d="M214 70 L230 88 L224 108 L246 120"></path>
+          <path d="M268 202 L282 220 L274 242 L294 256"></path>
         </g>
       </svg>
-      <div class="maplabel">
+
+      <div class="pin-map" style="left:140px;top:196px">
+        <svg width="26" height="32" viewBox="0 0 28 34"><path d="M14 33C14 33 25 21.5 25 13.5A11 11 0 1 0 3 13.5C3 21.5 14 33 14 33Z" fill="#7C8F6E" stroke="#F5EDDD" stroke-width="2"></path><path d="M8 17l4-6 2.6 3.2L17 11l3.4 6z" fill="#F5EDDD"></path></svg>
+      </div>
+      <div class="pin-map" style="left:246px;top:126px">
+        <svg width="26" height="32" viewBox="0 0 28 34"><path d="M14 33C14 33 25 21.5 25 13.5A11 11 0 1 0 3 13.5C3 21.5 14 33 14 33Z" fill="#7C8F6E" stroke="#F5EDDD" stroke-width="2"></path><path d="M8 17l4-6 2.6 3.2L17 11l3.4 6z" fill="#F5EDDD"></path></svg>
+      </div>
+      <div class="pin-map" style="left:294px;top:262px">
+        <svg width="26" height="32" viewBox="0 0 28 34"><path d="M14 33C14 33 25 21.5 25 13.5A11 11 0 1 0 3 13.5C3 21.5 14 33 14 33Z" fill="#7C8F6E" stroke="#F5EDDD" stroke-width="2"></path><path d="M8 17l4-6 2.6 3.2L17 11l3.4 6z" fill="#F5EDDD"></path></svg>
+      </div>
+      <div class="pin-map" style="left:196px;top:224px">
+        <svg width="28" height="34" viewBox="0 0 30 36"><rect x="3" y="3" width="24" height="24" rx="4" fill="#C0603D" stroke="#F5EDDD" stroke-width="2"></rect><path d="M15 33l-5-7h10z" fill="#C0603D" stroke="#F5EDDD" stroke-width="2" stroke-linejoin="round"></path><g fill="none" stroke="#F9F2E4" stroke-width="1.7" stroke-linejoin="round"><path d="M9 21v-8l4-3 4 3v8"></path><path d="M17 21v-5h4v5"></path></g></svg>
+      </div>
+      <div class="pin-map" style="left:278px;top:176px">
+        <svg width="26" height="32" viewBox="0 0 28 34"><circle cx="14" cy="14" r="11.5" fill="#5F7355" stroke="#F5EDDD" stroke-width="2"></circle><path d="M14 31l-4.5-7h9z" fill="#5F7355" stroke="#F5EDDD" stroke-width="2" stroke-linejoin="round"></path><g fill="none" stroke="#F9F2E4" stroke-width="1.6" stroke-linecap="round"><path d="M8 19h12"></path><path d="M10 19v-6"></path><path d="M14 19v-6"></path><path d="M18 19v-6"></path><path d="M8 13l6-4 6 4"></path></g></svg>
+      </div>
+
+      <!-- Pin toccato: la stessa riga dell'elenco, come fumetto sulla carta -->
+      <div class="pin-map" style="left:86px;top:230px;z-index:2">
+        <div style="display:flex;align-items:center;gap:8px;padding:6px 9px 6px 6px;border-radius:10px;
+             background:var(--paper-light);border:1px solid var(--card-border);box-shadow:0 6px 14px rgba(46,42,34,.2);width:186px">
+          <div class="tb" style="width:38px;height:38px;background:var(--accent-tint);box-shadow:none">
+            <svg viewBox="0 0 52 52" style="width:100%;height:100%;display:block">
+              <path d="M0 42 C 10 37, 18 39, 26 34 S 42 29, 52 32 L52 52 L0 52 Z" fill="#DCC7A6"></path>
+              <g fill="none" stroke="#8A6A4F" stroke-width="1.8" stroke-linejoin="round"><path d="M13 39V25l6-4 6 4v14"></path><path d="M25 39V28h7v11"></path><path d="M32 39V22h4v17"></path></g>
+            </svg>
+          </div>
+          <div style="min-width:0;flex:1">
+            <p class="rt" style="margin:0;font-size:13px">Calcata</p>
+            <p style="margin:1px 0 0;font-size:10px;color:var(--ink-muted)">Borgo &middot; 6 tappe &middot; 34 km da te</p>
+          </div>
+        </div>
+        <svg width="14" height="8" viewBox="0 0 14 8" style="display:block;margin:-1px 0 0 26px"><path d="M0 0h14L7 8z" fill="#F9F2E4" stroke="#D9C9A8" stroke-width="1"></path></svg>
+      </div>
+      <div class="pin-map" style="left:96px;top:250px">
+        <svg width="28" height="34" viewBox="0 0 30 36"><rect x="3" y="3" width="24" height="24" rx="4" fill="#C0603D" stroke="#F5EDDD" stroke-width="2.4"></rect><path d="M15 33l-5-7h10z" fill="#C0603D" stroke="#F5EDDD" stroke-width="2.4" stroke-linejoin="round"></path><g fill="none" stroke="#F9F2E4" stroke-width="1.7" stroke-linejoin="round"><path d="M9 21v-8l4-3 4 3v8"></path><path d="M17 21v-5h4v5"></path></g></svg>
+      </div>
+
+      <span class="glass" style="position:absolute;right:10px;top:10px;z-index:3">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3"></path><path d="M12 19v3"></path><path d="M2 12h3"></path><path d="M19 12h3"></path><circle cx="12" cy="12" r="8.5"></circle></svg>
+        Vicino a me
+      </span>
+
+      <div class="maplabel" style="z-index:3">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4L3 6.5v13L9 17l6 2.5 6-2.5v-13L15 6.5z"></path><path d="M9 4v13"></path><path d="M15 6.5v13"></path></svg>
-        Le 53 mete sulla carta
+        6 mete in questo riquadro
         <span class="legend">
-          <i><span style="width:7px;height:7px;border-radius:2px;background:#C0603D;display:inline-block"></span>4</i>
-          <i><span style="width:7px;height:7px;border-radius:999px;background:#5F7355;display:inline-block"></span>2</i>
-          <i><span style="width:7px;height:7px;border-radius:999px;background:#7C8F6E;display:inline-block"></span>47</i>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          chiudi la carta
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 15 12 9 18 15"></polyline></svg>
         </span>
       </div>
     </div>
 
-    <div class="tools" style="margin-top:11px">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.6" y2="16.6"></line></svg>
-      <span class="ph">cerca per titolo o luogo&hellip;</span>
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="7" x2="20" y2="7"></line><line x1="7" y1="12" x2="17" y2="12"></line><line x1="10" y1="17" x2="14" y2="17"></line></svg>
-      <span style="width:1px;height:18px;background:var(--card-border)"></span>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-    </div>
-
-    <!-- Filtri come timbri: la tipologia è un filtro fra gli altri, non una pagina a parte -->
-    <div class="fchips" style="margin-top:9px">
+    <div class="fchips" style="margin-top:11px">
       <span class="fchip on">Tutte <span class="n">53</span></span>
       <span class="fchip">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 19l6-9 4 5 2.5-3.5L21 19z"></path></svg>
@@ -177,31 +207,8 @@ a:hover{color:var(--accent-2)}
         Siti <span class="n">2</span></span>
     </div>
 
-    <!-- La sola meta con una data: resta in cima, non si perde nell'elenco -->
-    <div class="pin">
-      <span class="lab">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
-        Programmata &middot; sab 12
-      </span>
-      <div style="display:flex;align-items:center;gap:10px;margin-top:6px">
-        <div class="tb" style="border-color:#CBB694">
-          <svg viewBox="0 0 52 52" style="width:100%;height:100%;display:block;background:#E7E3D2">
-            <g fill="none" stroke="#C8B99F" stroke-width="1"><path d="M-2 36 C 12 31, 22 41, 34 34 S 50 26, 56 31"></path><path d="M-2 20 C 14 15, 24 25, 36 18 S 50 11, 56 15"></path></g>
-            <path d="M10 44 L16 34 L14 25 L24 20 L32 22 L42 10" fill="none" stroke="#2E2A22" stroke-width="1.8" stroke-dasharray="3 2.5" stroke-linecap="round"></path>
-            <circle cx="10" cy="44" r="2.6" fill="#F9F2E4" stroke="#2E2A22" stroke-width="1.4"></circle>
-            <circle cx="42" cy="10" r="2.6" fill="#2E2A22"></circle>
-          </svg>
-        </div>
-        <div style="min-width:0;flex:1">
-          <p class="rt" style="margin:0">Camposecco</p>
-          <div class="rm">
-            <i>12,1 km</i><i>+1104 m</i><i>6h 42m</i><i>Trail Score 37</i>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="reg" style="margin-top:4px">
+    <!-- L'elenco resta sotto, ordinato per distanza finché la carta è aperta -->
+    <div class="reg" style="margin-top:8px">
 
       <div class="rrow">
         <div class="stamp" style="color:var(--accent)">
@@ -217,26 +224,7 @@ a:hover{color:var(--accent-2)}
           <p class="rt" style="margin:0">Calcata</p>
           <div class="rm"><i>Borgo &middot; Viterbo</i><i>6 tappe</i><i>2h consigliate</i></div>
         </div>
-        <div class="rr"><span class="v">6</span><span class="k">tappe</span></div>
-      </div>
-
-      <div class="rrow">
-        <div class="stamp" style="color:var(--accent-2)">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 19l6-9 4 5 2.5-3.5L21 19z"></path></svg>
-        </div>
-        <div class="tb">
-          <svg viewBox="0 0 52 52" style="width:100%;height:100%;display:block;background:#E7E3D2">
-            <g fill="none" stroke="#C8B99F" stroke-width="1"><path d="M-2 32 C 12 27, 22 37, 34 30 S 50 22, 56 27"></path></g>
-            <path d="M12 12 L18 18 L16 28 L26 34 L38 36 L44 44" fill="none" stroke="#2E2A22" stroke-width="1.8" stroke-dasharray="3 2.5" stroke-linecap="round"></path>
-            <circle cx="12" cy="12" r="2.6" fill="#F9F2E4" stroke="#2E2A22" stroke-width="1.4"></circle>
-            <circle cx="44" cy="44" r="2.6" fill="#2E2A22"></circle>
-          </svg>
-        </div>
-        <div style="min-width:0;flex:1">
-          <p class="rt" style="margin:0">Rifugio Nordio</p>
-          <div class="rm"><i>14,6 km</i><i>+520 m</i><i>3h 39m</i></div>
-        </div>
-        <div class="rr"><span class="v" style="color:#B9862E">41</span><span class="k">TS</span></div>
+        <div class="rr"><span class="v">34</span><span class="k">km da te</span></div>
       </div>
 
       <div class="rrow">
@@ -255,7 +243,7 @@ a:hover{color:var(--accent-2)}
           <p class="rt" style="margin:0">Villa Adriana</p>
           <div class="rm"><i>Sito archeologico &middot; Tivoli</i><i>aperto 9&ndash;19</i></div>
         </div>
-        <div class="rr"><span class="v">1h30</span><span class="k">visita</span></div>
+        <div class="rr"><span class="v">41</span><span class="k">km da te</span></div>
       </div>
 
       <div class="rrow">
@@ -264,53 +252,17 @@ a:hover{color:var(--accent-2)}
         </div>
         <div class="tb">
           <svg viewBox="0 0 52 52" style="width:100%;height:100%;display:block;background:#E7E3D2">
-            <g fill="none" stroke="#C8B99F" stroke-width="1"><path d="M-2 38 C 12 33, 24 43, 36 36 S 50 28, 56 33"></path></g>
-            <path d="M14 44 L20 34 L30 32 L34 22 L42 14" fill="none" stroke="#2E2A22" stroke-width="1.8" stroke-dasharray="3 2.5" stroke-linecap="round"></path>
-            <circle cx="14" cy="44" r="2.6" fill="#F9F2E4" stroke="#2E2A22" stroke-width="1.4"></circle>
-            <circle cx="42" cy="14" r="2.6" fill="#2E2A22"></circle>
+            <g fill="none" stroke="#C8B99F" stroke-width="1"><path d="M-2 32 C 12 27, 22 37, 34 30 S 50 22, 56 27"></path></g>
+            <path d="M12 12 L18 18 L16 28 L26 34 L38 36 L44 44" fill="none" stroke="#2E2A22" stroke-width="1.8" stroke-dasharray="3 2.5" stroke-linecap="round"></path>
+            <circle cx="12" cy="12" r="2.6" fill="#F9F2E4" stroke="#2E2A22" stroke-width="1.4"></circle>
+            <circle cx="44" cy="44" r="2.6" fill="#2E2A22"></circle>
           </svg>
         </div>
         <div style="min-width:0;flex:1">
-          <p class="rt" style="margin:0">Tappa 5 &mdash; Cammino di San Benedetto</p>
-          <div class="rm"><i>8,6 km</i><i>+175 m</i><i>2h 26m</i></div>
+          <p class="rt" style="margin:0">Rifugio Nordio</p>
+          <div class="rm"><i>14,6 km</i><i>+520 m</i><i>3h 39m</i></div>
         </div>
-        <div class="rr"><span class="v" style="color:#B9862E">49</span><span class="k">TS</span></div>
-      </div>
-
-      <div class="rrow">
-        <div class="stamp" style="color:var(--accent)">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V8l6-4 6 4v13"></path><path d="M16 12h4v9"></path><path d="M8 21v-4h4v4"></path></svg>
-        </div>
-        <div class="tb" style="background:var(--accent-tint)">
-          <svg viewBox="0 0 52 52" style="width:100%;height:100%;display:block">
-            <path d="M0 44 C 12 39, 20 41, 28 36 S 44 32, 52 35 L52 52 L0 52 Z" fill="#DCC7A6"></path>
-            <g fill="none" stroke="#8A6A4F" stroke-width="1.5" stroke-linejoin="round"><path d="M11 40V29h10v11"></path><path d="M21 40V24h9v16"></path><path d="M30 40V32h9v8"></path></g>
-          </svg>
-        </div>
-        <div style="min-width:0;flex:1">
-          <p class="rt" style="margin:0">Centro-Officina Arenaro (Muracciole)</p>
-          <div class="rm"><i>Citt&agrave; &middot; Roma</i><i style="color:var(--accent)">itinerario da generare</i></div>
-        </div>
-        <div class="rr"><span class="v">&mdash;</span><span class="k">tappe</span></div>
-      </div>
-
-      <div class="rrow">
-        <div class="stamp" style="color:var(--accent-2)">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 19l6-9 4 5 2.5-3.5L21 19z"></path></svg>
-        </div>
-        <div class="tb">
-          <svg viewBox="0 0 52 52" style="width:100%;height:100%;display:block;background:#E7E3D2">
-            <g fill="none" stroke="#C8B99F" stroke-width="1"><path d="M-2 26 C 12 21, 24 31, 36 24 S 50 16, 56 21"></path></g>
-            <path d="M8 20 L18 26 L26 20 L36 28 L44 24" fill="none" stroke="#2E2A22" stroke-width="1.8" stroke-dasharray="3 2.5" stroke-linecap="round"></path>
-            <circle cx="8" cy="20" r="2.6" fill="#F9F2E4" stroke="#2E2A22" stroke-width="1.4"></circle>
-            <circle cx="44" cy="24" r="2.6" fill="#2E2A22"></circle>
-          </svg>
-        </div>
-        <div style="min-width:0;flex:1">
-          <p class="rt" style="margin:0">Monte Gennaro dai Prati</p>
-          <div class="rm"><i>11,2 km</i><i>+860 m</i><i>4h 55m</i></div>
-        </div>
-        <div class="rr"><span class="v" style="color:#7C8F6E">62</span><span class="k">TS</span></div>
+        <div class="rr"><span class="v">52</span><span class="k">km da te</span></div>
       </div>
 
     </div>
