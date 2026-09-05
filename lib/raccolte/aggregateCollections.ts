@@ -31,6 +31,9 @@ export interface CollectionSummary {
   reportageCount: number
   distanceMeters: number
   elevationGain: number
+  /** Id dei Diari contenuti (solo quelli ancora esistenti) — usati da /diari per mostrare su ogni
+   *  riga di registro a quale/i raccolta appartiene, senza un'altra chiamata dedicata. */
+  diaryIds: string[]
 }
 
 export function aggregateCollections(
@@ -49,6 +52,7 @@ export function aggregateCollections(
   return collections.map(c => {
     const myLinks = linksByCollection.get(c.id) ?? []
     let volumeCount = 0, reportageCount = 0, distanceMeters = 0, elevationGain = 0
+    const diaryIds: string[] = []
     for (const l of myLinks) {
       const d = diaryById.get(l.diary_id)
       if (!d) continue // Diario eliminato nel frattempo (ON DELETE CASCADE) — non conta più, non è un errore
@@ -56,11 +60,12 @@ export function aggregateCollections(
       reportageCount += d.reportageCount
       distanceMeters += d.distanceMeters
       elevationGain += d.elevationGain
+      diaryIds.push(d.id)
     }
     return {
       id: c.id, title: c.title, subtitle: c.subtitle, coverUrl: c.cover_url,
       isPublished: c.share_token !== null,
-      volumeCount, reportageCount, distanceMeters, elevationGain,
+      volumeCount, reportageCount, distanceMeters, elevationGain, diaryIds,
     }
   })
 }

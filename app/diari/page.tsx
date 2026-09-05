@@ -10,10 +10,12 @@ import { RegistroRow } from '@/components/diari/RegistroRow'
 import { GruppoCollassato } from '@/components/diari/GruppoCollassato'
 import { IndiceChips, FILTRO_TUTTI, FILTRO_ARCHIVIO } from '@/components/diari/IndiceChips'
 import { NuovoDiarioRow } from '@/components/diari/NuovoDiarioRow'
+import { RaccolteStrip } from '@/components/diari/RaccolteStrip'
 import type { DiarySummary } from '@/lib/diari/aggregateDiaries'
 import { raggruppaDiari } from '@/lib/diari/raggruppaDiari'
 import { selezionaProssimaUscita } from '@/lib/diari/prossimaUscita'
 import type { AllPercorsiRow } from '@/app/api/percorsi/route'
+import type { CollectionSummary } from '@/app/api/collections/route'
 import { FONT } from '@/lib/designTokens'
 import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, TACCUINO_RULED_TEXT_STYLE, FONT_HAND, INK_ABSORB_STYLE, TaccuinoPaperTexture, TaccuinoRuledLines } from '@/lib/taccuinoTokens'
 import { metaHasHikingMetrics } from '@/lib/metaTypes'
@@ -135,6 +137,7 @@ function DiariPageLibro() {
   const [diariesError, setDiariesError] = useState<string | null>(null)
   const [percorsi, setPercorsi] = useState<AllPercorsiRow[] | null>(null)
   const [percorsiError, setPercorsiError] = useState<string | null>(null)
+  const [raccolte, setRaccolte] = useState<CollectionSummary[] | null>(null)
   const [filtro, setFiltro] = useState<string>(FILTRO_TUTTI)
 
   useEffect(() => {
@@ -149,6 +152,16 @@ function DiariPageLibro() {
       .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
       .then(setPercorsi)
       .catch(e => setPercorsiError(e instanceof Error ? e.message : String(e)))
+  }, [])
+
+  useEffect(() => {
+    // A parte, senza bloccare il resto della pagina: la striscia delle raccolte e il richiamo di
+    // appartenenza su ogni riga sono un arricchimento, non un dato che il resto della dashboard
+    // aspetta — un 401/500 qui non deve mai far sembrare "rotti" i Diari.
+    fetch('/api/collections')
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
+      .then(setRaccolte)
+      .catch(() => setRaccolte([]))
   }, [])
 
   const metePronteCount = useMemo(() => percorsi?.filter(r => r.reportageCount === 0).length ?? 0, [percorsi])
@@ -171,6 +184,21 @@ function DiariPageLibro() {
   }, [diaries])
 
   const archiviatiCount = useMemo(() => diaries?.filter(d => d.archivedAt).length ?? 0, [diaries])
+
+  // A quali Raccolte appartiene già ogni Diario — un Diario può stare in più di una (vedi
+  // docs/raccolte-pubblicazione-piano.md: la raccolta è una selezione, non una cartella), quindi
+  // il valore è un elenco di titoli, non uno solo.
+  const nomiRaccolteByDiaryId = useMemo(() => {
+    const mappa = new Map<string, string[]>()
+    for (const raccolta of raccolte ?? []) {
+      for (const diaryId of raccolta.diaryIds) {
+        const lista = mappa.get(diaryId) ?? []
+        lista.push(raccolta.title)
+        mappa.set(diaryId, lista)
+      }
+    }
+    return mappa
+  }, [raccolte])
 
   const diariFiltrati = useMemo(() => {
     if (!diaries) return []
@@ -239,14 +267,25 @@ function DiariPageLibro() {
             <div className="flex flex-col gap-2 mb-3">
               {gruppi.map(gruppo => (
                 espandiTutti || gruppo.tipo === 'stagione_corrente'
-                  ? gruppo.diari.map((diario, i) => <RegistroRow key={diario.id} diario={diario} indiceColore={i} />)
-                  : <GruppoCollassato key={gruppo.chiave} gruppo={gruppo} />
+                  ? gruppo.diari.map((diario, i) => (
+                      <RegistroRow key={diario.id} diario={diario} indiceColore={i} nomiRaccolte={nomiRaccolteByDiaryId.get(diario.id)} />
+                    ))
+                  : <GruppoCollassato key={gruppo.chiave} gruppo={gruppo} nomiRaccolteByDiaryId={nomiRaccolteByDiaryId} />
               ))}
             </div>
 
-            <div className="mb-8">
+            <div className="mb-6">
               <NuovoDiarioRow />
             </div>
+
+            {/* Elemento visivo, non un link testuale — le Raccolte sono un livello di
+                pubblicazione al pari dei Diari, non una funzione minore in fondo alla pagina
+                (docs/raccolte-pubblicazione-piano.md). Compare solo se l'utente ne ha già almeno
+                una: un elenco vuoto di card sarebbe peggio del semplice link che resta più sotto
+                per chi non le ha ancora scoperte. */}
+            {raccolte && raccolte.length > 0 && (
+              <RaccolteStrip raccolte={raccolte} />
+            )}
 
             <GlobalRouteSearch rows={percorsi} error={percorsiError} />
 
@@ -258,16 +297,17 @@ function DiariPageLibro() {
               >
                 <Compass className="w-4 h-4" /> Tutte le Mete <ArrowRight className="w-3.5 h-3.5" />
               </Link>
-              {/* Le raccolte pubblicano più Diari come un'unica collana — docs/raccolte-
-                  pubblicazione-piano.md — un livello sopra il singolo Diario, non un secondo
-                  scaffale: un link, non una sezione a sé in questa pagina. */}
-              <Link
-                href="/raccolte"
-                className="inline-flex items-center gap-2 text-[13px] transition-colors"
-                style={{ color: TACCUINO_INK.hand, ...TACCUINO_RULED_TEXT_STYLE }}
-              >
-                <BookMarked className="w-4 h-4" /> Le mie Raccolte <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
+              {/* Solo finché l'utente non ha ancora nessuna Raccolta: da lì in poi il punto di
+                  ingresso è la RaccolteStrip visiva sopra, questo link sarebbe ridondante. */}
+              {raccolte && raccolte.length === 0 && (
+                <Link
+                  href="/raccolte"
+                  className="inline-flex items-center gap-2 text-[13px] transition-colors"
+                  style={{ color: TACCUINO_INK.hand, ...TACCUINO_RULED_TEXT_STYLE }}
+                >
+                  <BookMarked className="w-4 h-4" /> Le mie Raccolte <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              )}
             </div>
           </>
         )}

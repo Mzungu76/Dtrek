@@ -18,7 +18,7 @@ function collezione(overrides: Partial<CollectionRow> & { id: string }): Collect
 describe('aggregateCollections', () => {
   it('una raccolta senza volumi ha tutti i totali a zero', () => {
     const [r] = aggregateCollections([collezione({ id: 'c1' })], [], [])
-    expect(r).toMatchObject({ volumeCount: 0, reportageCount: 0, distanceMeters: 0, elevationGain: 0, isPublished: false })
+    expect(r).toMatchObject({ volumeCount: 0, reportageCount: 0, distanceMeters: 0, elevationGain: 0, isPublished: false, diaryIds: [] })
   })
 
   it('somma le metriche dei Diari collegati, nell\'ordine non conta per i totali', () => {
@@ -35,12 +35,14 @@ describe('aggregateCollections', () => {
     expect(r.reportageCount).toBe(8)
     expect(r.distanceMeters).toBe(30_000)
     expect(r.elevationGain).toBe(1000)
+    expect(r.diaryIds.sort()).toEqual(['d1', 'd2'])
   })
 
   it('un Diario nella giunzione ma non più esistente non viene contato ed è come se non ci fosse', () => {
     const links: CollectionDiaryLinkRow[] = [{ collection_id: 'c1', diary_id: 'd-eliminato', position: 0 }]
     const [r] = aggregateCollections([collezione({ id: 'c1' })], links, [])
     expect(r.volumeCount).toBe(0)
+    expect(r.diaryIds).toEqual([])
   })
 
   it('isPublished riflette solo la presenza di uno share_token', () => {
