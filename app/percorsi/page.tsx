@@ -10,8 +10,9 @@ import type { AllPercorsiRow } from '@/app/api/percorsi/route'
 import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, TACCUINO_LIST_DIVIDER, TACCUINO_RULED_TEXT_STYLE, FONT_HAND, HandDrawnFrame, TaccuinoPaperTexture, TaccuinoRuledLines } from '@/lib/taccuinoTokens'
 import { TornFrame, tornVariant } from '@/components/TornFrame'
 import { FONT } from '@/lib/designTokens'
-import { metaHasHikingMetrics, type MetaType } from '@/lib/metaTypes'
-import { ArrowDown, ArrowUp, Building2, Clock, Landmark, Loader2, Mountain, Route, Search, Star, TrendingUp, X } from 'lucide-react'
+import { META_TYPE_CONFIG, META_TYPES, metaHasHikingMetrics, type MetaType } from '@/lib/metaTypes'
+import { metaRowLocationStats } from '@/lib/metaCard'
+import { ArrowDown, ArrowRight, ArrowUp, Building2, Clock, Landmark, Loader2, MapPin, Mountain, Route, Search, Star, Tag, TrendingUp, X } from 'lucide-react'
 
 /**
  * "Mete" (ex "Tutti i Percorsi") — ristrutturazione Diario/Mete richiesta esplicitamente
@@ -38,8 +39,17 @@ import { ArrowDown, ArrowUp, Building2, Clock, Landmark, Loader2, Mountain, Rout
  * questa pagina.
  */
 type MeteSortKey = 'date' | 'km' | 'dplus' | 'cts'
-const METE_SORT_OPTIONS: { id: MeteSortKey; label: string }[] = [
-  { id: 'date', label: 'Data' }, { id: 'km', label: 'Km' }, { id: 'dplus', label: 'D+' }, { id: 'cts', label: 'TS' },
+type MeteTypeFilter = 'all' | MetaType
+
+// "Km"/"D+"/"TS" hanno senso solo quando l'elenco può contenere un sentiero (piano §48.9 — una
+// Meta borgo_citta/sito ha queste cifre sempre a 0, ordinarci non direbbe nulla): visibili con
+// 'all' o 'sentiero', nascosti con 'borgo_citta'/'sito'. "Data" resta sempre disponibile, unico
+// ordinamento che vale per ogni tipologia.
+const METE_SORT_OPTIONS: { id: MeteSortKey; label: string; hikingOnly?: boolean }[] = [
+  { id: 'date', label: 'Data' },
+  { id: 'km', label: 'Km', hikingOnly: true },
+  { id: 'dplus', label: 'D+', hikingOnly: true },
+  { id: 'cts', label: 'TS', hikingOnly: true },
 ]
 
 /** Rotazione stabile per meta (stesso principio di cutoutRotation in app/diari/[id]/page.tsx —
@@ -77,6 +87,7 @@ export default function MetePage() {
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [favoritesOnly, setFavoritesOnly] = useState(false)
+  const [typeFilter, setTypeFilter] = useState<MeteTypeFilter>('all')
   const [sortBy, setSortBy] = useState<MeteSortKey>('date')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
 
@@ -89,8 +100,24 @@ export default function MetePage() {
 
   const mete = useMemo(() => (rows ?? []).filter(r => r.reportageCount === 0), [rows])
 
+  // Conteggio per tipologia sul totale delle Mete (non sul filtrato) — sono le etichette dei chip,
+  // devono restare stabili mentre l'utente cambia filtro/ricerca, non ricalcolarsi su se stesse.
+  const countsByType = useMemo(() => {
+    const counts: Record<MetaType, number> = { sentiero: 0, borgo_citta: 0, sito: 0 }
+    for (const m of mete) counts[m.metaType]++
+    return counts
+  }, [mete])
+
+  // Un ordinamento "hiking-only" (Km/D+/TS) nascosto dal filtro attivo torna a "Data" invece di
+  // restare selezionato ma invisibile — mai un chip attivo che l'utente non vede più.
+  const hikingSortAllowed = typeFilter === 'all' || typeFilter === 'sentiero'
+  useEffect(() => {
+    if (!hikingSortAllowed && sortBy !== 'date') setSortBy('date')
+  }, [hikingSortAllowed, sortBy])
+
   const filtered = useMemo(() => {
     let out = mete
+    if (typeFilter !== 'all') out = out.filter(r => r.metaType === typeFilter)
     if (favoritesOnly) out = out.filter(r => r.favorite)
     const q = query.trim().toLowerCase()
     if (q) out = out.filter(r => r.title.toLowerCase().includes(q))
@@ -105,7 +132,12 @@ export default function MetePage() {
     // dentro il sort sopra) copre anche quel caso senza bisogno di un comparatore per data.
     if (sortDir === 'asc') out = [...out].reverse()
     return out
-  }, [mete, favoritesOnly, query, sortBy, sortDir])
+  }, [mete, typeFilter, favoritesOnly, query, sortBy, sortDir])
+
+  // Query non vuota ma nessuna Meta già salvata corrisponde: propone l'unico altro posto dove
+  // cercare (piano — "un solo ingresso di ricerca", non due bottoni sovrapposti come prima).
+  const trimmedQuery = query.trim()
+  const showSearchElsewhere = trimmedQuery.length > 0 && filtered.length === 0 && mete.length > 0
 
   return (
     <div className={`relative min-h-screen md:pb-0 ${MOBILE_BOTTOMBAR_SPACER}`}>
@@ -113,34 +145,21 @@ export default function MetePage() {
       <TaccuinoRuledLines />
       <Navbar />
 
-      <div className="relative h-[200px] sm:h-[240px] overflow-hidden" style={{ background: 'linear-gradient(to bottom right, #4A5A3F, #2E3A26)' }}>
-        <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, rgba(46,58,38,.15), rgba(46,58,38,.85))' }} />
-        <div className="absolute left-6 right-6 bottom-6 sm:left-10 sm:right-10 sm:bottom-8">
-          {/* Niente link "I miei Diari" qui — i Diari sono già l'icona centrale della barra di
-              navigazione inferiore (components/Navbar.tsx), un secondo ingresso allo stesso posto
-              sarebbe ridondante (richiesta esplicita dell'utente dopo il mockup). */}
-          <h1 className="font-display text-[24px] sm:text-3xl font-bold text-white leading-tight">
-            Mete
-          </h1>
-          {rows && (
-            <p className="text-white/75 text-[13px] mt-1">
-              {mete.length} {mete.length === 1 ? 'meta' : 'mete'} da camminare
-            </p>
-          )}
-        </div>
+      {/* Intestazione su carta — non più il banner verde a piena larghezza (200px, un quarto
+          dello schermo su mobile solo per titolo e conteggio): stesso trattamento tipografico
+          del resto della pagina, "Mete" resta l'unico titolo scritto a mano di tutta la vista. */}
+      <div className="max-w-[720px] mx-auto px-5 sm:px-8 pt-6 sm:pt-8">
+        <h1 style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 34, color: TACCUINO_INK.typed, ...TACCUINO_RULED_TEXT_STYLE }}>
+          Mete
+        </h1>
+        {rows && (
+          <p className="mt-0.5" style={{ fontFamily: FONT.lora, fontSize: 13, color: TACCUINO_INK.handMuted }}>
+            {countsByType.sentiero} {countsByType.sentiero === 1 ? 'sentiero' : 'sentieri'} &middot; {countsByType.borgo_citta} {countsByType.borgo_citta === 1 ? 'borgo/città' : 'borghi/città'} &middot; {countsByType.sito} {countsByType.sito === 1 ? 'sito' : 'siti'}
+          </p>
+        )}
       </div>
 
-      <main className="max-w-[720px] mx-auto px-5 sm:px-8 py-6 sm:py-8">
-        {/* Borgo/Città/Sito (piano §17/§25) — l'unico punto d'ingresso, oltre a "+ Nuovo" (che
-            resta /upload?tab=gpx, un sentiero), per aggiungere una Meta non escursionistica. */}
-        <Link
-          href="/percorsi/cerca"
-          className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-[14px] font-semibold mb-5 transition-colors"
-          style={{ background: TACCUINO_PAPER.card, color: TACCUINO_INK.typed, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}
-        >
-          <Search className="w-4 h-4" /> Cerca un Borgo, una Città o un Sito
-        </Link>
-
+      <main className="max-w-[720px] mx-auto px-5 sm:px-8 pt-4 pb-6 sm:pb-8">
         {error && (
           <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-4">
             Impossibile caricare le mete: {error}
@@ -160,31 +179,90 @@ export default function MetePage() {
             <p className="text-sm max-w-sm px-4" style={{ color: TACCUINO_INK.handMuted, ...TACCUINO_RULED_TEXT_STYLE }}>
               I percorsi che pianifichi compariranno qui, finché non li cammini — a quel punto diventano un Reportage nel Diario che scegli.
             </p>
+            {/* Unico ingresso di ricerca non-sentiero anche a elenco vuoto — prima era un secondo
+                bottone identico al campo di ricerca sopra, quando l'elenco aveva righe. */}
+            <Link
+              href="/percorsi/cerca"
+              className="inline-flex items-center gap-2 mt-6 px-4 py-2.5 rounded-xl text-[14px] font-semibold transition-colors"
+              style={{ background: TACCUINO_PAPER.card, color: TACCUINO_INK.typed, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}
+            >
+              <Search className="w-4 h-4" /> Cerca un Borgo, una Città o un Sito
+            </Link>
           </div>
         ) : (
           <>
             <div className="mb-3">
-              <div className="relative mb-2">
-                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: TACCUINO_INK.handMuted }} />
-                <input
-                  value={query}
-                  onChange={e => setQuery(e.target.value)}
-                  placeholder="cerca per titolo…"
-                  className="w-full pl-8 pr-8 py-2 rounded-[3px] text-[14px] outline-none placeholder:text-[#8a9bab]"
-                  style={{ background: TACCUINO_PAPER.card, color: TACCUINO_INK.typed, fontFamily: FONT_HAND }}
-                />
-                {query && (
-                  <button
-                    onClick={() => setQuery('')}
-                    className="absolute right-3 top-1/2 -translate-y-1/2"
-                    style={{ color: TACCUINO_INK.handMuted }}
-                    aria-label="Cancella ricerca"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-                <HandDrawnFrame stroke={TACCUINO_PAPER.cardBorder} strokeWidth={1.5} rx={4} />
+              <div className="flex items-center gap-2 mb-2">
+                <div className="relative flex-1 min-w-0">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: TACCUINO_INK.handMuted }} />
+                  <input
+                    value={query}
+                    onChange={e => setQuery(e.target.value)}
+                    placeholder="cerca fra le tue Mete…"
+                    className="w-full pl-8 pr-8 py-2 rounded-[3px] text-[14px] outline-none placeholder:text-[#8a9bab]"
+                    style={{ background: TACCUINO_PAPER.card, color: TACCUINO_INK.typed, fontFamily: FONT_HAND }}
+                  />
+                  {query && (
+                    <button
+                      onClick={() => setQuery('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2"
+                      style={{ color: TACCUINO_INK.handMuted }}
+                      aria-label="Cancella ricerca"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  <HandDrawnFrame stroke={TACCUINO_PAPER.cardBorder} strokeWidth={1.5} rx={4} />
+                </div>
+                {/* Unico altro ingresso di ricerca, non più un secondo campo identico al primo
+                    (piano — "due ricerche sovrapposte"): un bottone compatto, sempre raggiungibile
+                    anche quando l'elenco locale non è vuoto — resta l'unico modo di aggiungere un
+                    Borgo/Città/Sito, non solo il ripiego di una ricerca senza risultati. */}
+                <Link
+                  href="/percorsi/cerca"
+                  title="Cerca un Borgo, una Città o un Sito"
+                  aria-label="Cerca un Borgo, una Città o un Sito"
+                  className="relative shrink-0 flex items-center justify-center w-9 h-9 rounded-[3px]"
+                  style={{ background: TACCUINO_PAPER.card, color: TACCUINO_INK.handMuted }}
+                >
+                  <Building2 className="w-4 h-4" />
+                  <HandDrawnFrame stroke={TACCUINO_PAPER.cardBorder} strokeWidth={1.5} rx={4} />
+                </Link>
               </div>
+
+              {/* Chip di tipologia — il filtro primario (piano Fase 2): "Tutte" più una per
+                  metaType, ciascuna col proprio conteggio reale. Un ordinamento hiking-only attivo
+                  torna a "Data" quando il filtro esclude i sentieri (vedi l'effect sopra). */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 mb-2">
+                <button
+                  onClick={() => setTypeFilter('all')}
+                  className="relative shrink-0 px-3 py-1 rounded-full text-[13px] transition-colors"
+                  style={typeFilter === 'all'
+                    ? { fontFamily: FONT_HAND, fontWeight: 700, color: TACCUINO_INK.typed }
+                    : { fontFamily: FONT_HAND, background: 'transparent', color: TACCUINO_INK.handMuted }}
+                >
+                  {typeFilter === 'all' && <HandDrawnFrame stroke={TACCUINO_ACCENT[600]} strokeWidth={1.5} rx={50} />}
+                  Tutte <span className="opacity-70">{mete.length}</span>
+                </button>
+                {META_TYPES.map(t => {
+                  const Icon = META_TYPE_CONFIG[t].icon
+                  const on = typeFilter === t
+                  return (
+                    <button
+                      key={t}
+                      onClick={() => setTypeFilter(t)}
+                      className="relative shrink-0 flex items-center gap-1.5 px-3 py-1 rounded-full text-[13px] transition-colors"
+                      style={on
+                        ? { fontFamily: FONT_HAND, fontWeight: 700, color: TACCUINO_INK.typed }
+                        : { fontFamily: FONT_HAND, background: 'transparent', color: TACCUINO_INK.handMuted }}
+                    >
+                      {on && <HandDrawnFrame stroke={TACCUINO_ACCENT[600]} strokeWidth={1.5} rx={50} />}
+                      <Icon className="w-3 h-3" /> {META_TYPE_CONFIG[t].pluralLabel} <span className="opacity-70">{countsByType[t]}</span>
+                    </button>
+                  )
+                })}
+              </div>
+
               <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
                 <button
                   onClick={() => setFavoritesOnly(f => !f)}
@@ -203,7 +281,7 @@ export default function MetePage() {
                 >
                   {sortDir === 'desc' ? <ArrowDown className="w-3 h-3" /> : <ArrowUp className="w-3 h-3" />}
                 </button>
-                {METE_SORT_OPTIONS.map(s => (
+                {METE_SORT_OPTIONS.filter(s => !s.hikingOnly || hikingSortAllowed).map(s => (
                   <button
                     key={s.id}
                     onClick={() => setSortBy(s.id)}
@@ -220,7 +298,23 @@ export default function MetePage() {
             </div>
 
             {filtered.length === 0 ? (
-              <p className="text-sm text-center py-12" style={{ color: TACCUINO_INK.handMuted, ...TACCUINO_RULED_TEXT_STYLE }}>Nessuna meta corrisponde ai filtri.</p>
+              <div className="text-center py-12">
+                <p style={{ color: TACCUINO_INK.handMuted, ...TACCUINO_RULED_TEXT_STYLE }} className="text-sm">
+                  Nessuna meta corrisponde ai filtri.
+                </p>
+                {/* Unico ingresso di ricerca: se il testo non trova nulla fra le Mete già salvate,
+                    l'unica alternativa è cercare fra Borghi/Città/Siti — non un secondo campo di
+                    ricerca sempre visibile sopra come prima, solo quando serve davvero. */}
+                {showSearchElsewhere && (
+                  <Link
+                    href={`/percorsi/cerca?q=${encodeURIComponent(trimmedQuery)}`}
+                    className="inline-flex items-center gap-1.5 mt-3 text-[13.5px] font-semibold"
+                    style={{ fontFamily: FONT_HAND, color: TACCUINO_ACCENT[600] }}
+                  >
+                    Cerca &laquo;{trimmedQuery}&raquo; fra Borghi, Città e Siti <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                )}
+              </div>
             ) : (
               <div className="flex flex-col">
                 {filtered.map(p => {
@@ -265,17 +359,27 @@ export default function MetePage() {
                                     dimTiles={false}
                                   />
                                 )
-                                : (
-                                  // Fondo carta esplicito (mai lasciato trasparente): senza, il nero
-                                  // di .torn-filler nei layer sotto (torn-ao/torn-rim/torn-cast,
-                                  // opachi per progetto — vedi app/globals.css) traspare attraverso
-                                  // quest'icona centrata, che da sola non copre l'intero riquadro.
-                                  // Icona per tipologia — mai la stessa Mountain per un borgo o un
-                                  // sito.
-                                  <div className="w-full h-full flex items-center justify-center" style={{ background: TACCUINO_PAPER.card }}>
-                                    {metaTypeFallbackIcon(p.metaType)}
-                                  </div>
-                                )}
+                                : p.imageUrl
+                                  ? (
+                                    // Immagine reale del catalogo (dtrek_places.image_url, piano §11)
+                                    // quando c'è — oggi 0 righe su 425 la valorizzano (vedi docs/
+                                    // mockup-mete-redesign/README.md §2), ma il ramo non deve restare
+                                    // morto quando l'arricchimento Wikidata/Commons (Fase 4 del piano
+                                    // di restyling) la popolerà.
+                                    // eslint-disable-next-line @next/next/no-img-element -- riquadro 87x87 di TornFrame, non un'immagine editoriale
+                                    <img src={p.imageUrl} alt="" className="w-full h-full object-cover" />
+                                  )
+                                  : (
+                                    // Fondo carta esplicito (mai lasciato trasparente): senza, il
+                                    // nero di .torn-filler nei layer sotto (torn-ao/torn-rim/torn-
+                                    // cast, opachi per progetto — vedi app/globals.css) traspare
+                                    // attraverso quest'icona centrata, che da sola non copre l'intero
+                                    // riquadro. Icona per tipologia — mai la stessa Mountain per un
+                                    // borgo o un sito.
+                                    <div className="w-full h-full flex items-center justify-center" style={{ background: TACCUINO_PAPER.card }}>
+                                      {metaTypeFallbackIcon(p.metaType)}
+                                    </div>
+                                  )}
                             </TornFrame>
                           </div>
                         </div>
@@ -284,7 +388,12 @@ export default function MetePage() {
                           // sfioccia visibilmente sotto il suo bordo inferiore — senza questo
                           // margine il badge la tagliava a metà.
                           <div className="mt-2.5">
-                            <TrailScoreGaugeBadge total={p.trailScore} safety={null} size={34} showLabel={false} dark={false} />
+                            {/* safety (non più null): l'anello esterno del badge prende colore
+                                dalla Sicurezza Oggettiva cachata (planned_hikes.cached_safety_score,
+                                vedi toSafetyPreview in app/api/percorsi/route.ts) — null solo se
+                                quella Meta non ha ancora una Sicurezza calcolata, mai un colore
+                                fabbricato. */}
+                            <TrailScoreGaugeBadge total={p.trailScore} safety={p.safety} size={34} showLabel={false} dark={false} />
                           </div>
                         )}
                       </div>
@@ -295,30 +404,42 @@ export default function MetePage() {
                           {p.title}
                         </p>
                         {scoreLabel && (
-                          <p className="truncate" style={{ fontFamily: FONT_HAND, fontSize: 14, fontWeight: 600, color: TACCUINO_INK.handMuted, ...TACCUINO_RULED_TEXT_STYLE }}>
+                          <p className="truncate" style={{ fontFamily: FONT_HAND, fontSize: 15.5, fontWeight: 600, color: TACCUINO_INK.handMuted, ...TACCUINO_RULED_TEXT_STYLE }}>
                             {scoreLabel}
                           </p>
                         )}
-                        <div className="flex items-center flex-wrap gap-x-2.5 gap-y-1 mt-1.5" style={{ fontFamily: FONT.lora, fontSize: 11, color: TACCUINO_INK.handMuted }}>
+                        {/* Corpo minimo 13px, non più 11: sotto quella soglia il testo "glanceable"
+                            (etichette/didascalie, non paragrafo) smette di essere confortevole su
+                            schermo mobile — indicazione comune a Material Design (12sp è il limite
+                            per le sole "overline") e Apple HIG (footnote 13pt come corpo minimo
+                            leggibile, caption 11pt riservato a testo non primario). Icone allineate
+                            a w-3.5/h-3.5 (14px) per restare in proporzione col nuovo corpo. */}
+                        <div className="flex items-center flex-wrap gap-x-2.5 gap-y-1 mt-1.5" style={{ fontFamily: FONT.lora, fontSize: 13, color: TACCUINO_INK.handMuted }}>
                           {/* Solo per un sentiero (piano §48.9) — una Meta borgo_citta/sito ha
                               sempre queste cifre a 0: mostrarle produrrebbe "0.0 km", non un dato
                               in meno. */}
-                          {metaHasHikingMetrics(p.metaType) && (
+                          {metaHasHikingMetrics(p.metaType) ? (
                             <>
-                              <span className="inline-flex items-center gap-1"><Route className="w-3 h-3" /> {(p.distanceMeters / 1000).toFixed(1)} km</span>
-                              <span className="inline-flex items-center gap-1"><TrendingUp className="w-3 h-3" /> +{Math.round(p.elevationGain)} m</span>
-                              <span className="inline-flex items-center gap-1"><Mountain className="w-3 h-3" /> {Math.round(p.altitudeMax)} m</span>
-                              <span className="inline-flex items-center gap-1"><Clock className="w-3 h-3" /> {formatDuration(p.estimatedTimeSeconds)}</span>
+                              <span className="inline-flex items-center gap-1"><Route className="w-3.5 h-3.5" /> {(p.distanceMeters / 1000).toFixed(1)} km</span>
+                              <span className="inline-flex items-center gap-1"><TrendingUp className="w-3.5 h-3.5" /> +{Math.round(p.elevationGain)} m</span>
+                              <span className="inline-flex items-center gap-1"><Mountain className="w-3.5 h-3.5" /> {Math.round(p.altitudeMax)} m</span>
+                              <span className="inline-flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {formatDuration(p.estimatedTimeSeconds)}</span>
                             </>
+                          ) : (
+                            // Slot metriche adattivo per Borgo/Città/Sito (piano Fase 2) — prima
+                            // questo spazio restava sempre vuoto per qualunque Meta non-sentiero.
+                            // Comune/regione e (per un Sito) la categoria sono gli unici dati che
+                            // planned_hikes porta sempre con sé oggi per queste due tipologie
+                            // (lib/metaCard.ts's metaRowLocationStats — mai un valore fabbricato:
+                            // una Meta senza comune/regione noti non mostra semplicemente nulla qui).
+                            metaRowLocationStats(p).map(s => (
+                              <span key={s.key} className="inline-flex items-center gap-1">
+                                {s.key === 'category' ? <Tag className="w-3.5 h-3.5" /> : <MapPin className="w-3.5 h-3.5" />}
+                                {s.value}
+                              </span>
+                            ))
                           )}
                         </div>
-                        {/* Stato — ex colonna fissa a destra (94px), tolta di mezzo perché rubava
-                            spazio al titolo: ogni riga di questa pagina è già "in programma" per
-                            definizione (vedi il commento in cima al file), qui resta solo come nota
-                            a margine in calce alla riga, non più come etichetta a fianco. */}
-                        <p className="mt-1" style={{ fontFamily: FONT_HAND, fontSize: 13, color: TACCUINO_INK.handMuted }}>
-                          in programma
-                        </p>
                       </div>
                     </Link>
                   )

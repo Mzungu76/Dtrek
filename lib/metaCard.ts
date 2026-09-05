@@ -1,5 +1,5 @@
 import { formatDurationSecs } from './trailStats'
-import { SITE_TYPE_CONFIG } from './metaTypes'
+import { SITE_TYPE_CONFIG, type MetaType, type SiteType } from './metaTypes'
 import type { MetaSearchResultItem } from './metaSearch/types'
 
 // Scheda type-aware (piano §24) — ogni tipologia mostra solo le proprie metriche significative,
@@ -51,4 +51,32 @@ export function metaCardStats(item: MetaSearchResultItem): CardStat[] {
     case 'borgo_citta': return borgoCardStats()
     case 'sito':        return sitoCardStats(item)
   }
+}
+
+// Stessa idea di metaCardStats() sopra ma per una Meta già salvata (AllPercorsiRow, app/api/
+// percorsi/route.ts — non importato qui per non far dipendere lib/ da app/api/, vedi la firma
+// strutturale sotto) invece di un risultato di ricerca (MetaSearchResultItem): la pagina Mete
+// (app/percorsi/page.tsx) aveva uno slot metriche vuoto per ogni riga non-sentiero (piano
+// meta-multitype-audit.md §1, "mai 0 km per un museo" ma anche mai un vuoto senza alternativa) —
+// comune/regione e categoria (per un Sito) sono gli unici dati che una Meta borgo_citta/sito porta
+// sempre con sé oggi (municipality/region/siteType, piano §25/§26), quindi sono ciò che va al
+// posto delle pillole escursionistiche. Le metriche di un sentiero restano a carico del chiamante
+// (già rese con le proprie icone in app/percorsi/page.tsx) — qui solo il ramo non-sentiero, che
+// prima non esisteva affatto.
+export interface MetaRowLocation {
+  metaType: MetaType
+  siteType: SiteType | null
+  municipality: string | null
+  region: string | null
+}
+
+export function metaRowLocationStats(row: MetaRowLocation): CardStat[] {
+  if (row.metaType === 'sentiero') return []
+  const stats: CardStat[] = []
+  if (row.metaType === 'sito' && row.siteType) {
+    stats.push({ key: 'category', label: 'Categoria', value: SITE_TYPE_CONFIG[row.siteType].label })
+  }
+  const place = [row.municipality, row.region].filter(Boolean).join(', ')
+  if (place) stats.push({ key: 'location', label: 'Luogo', value: place })
+  return stats
 }
