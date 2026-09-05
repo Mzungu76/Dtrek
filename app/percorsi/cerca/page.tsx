@@ -1,6 +1,6 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState, useCallback, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Navbar, { MOBILE_BOTTOMBAR_SPACER } from '@/components/Navbar'
 import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, TACCUINO_LIST_DIVIDER, FONT_HAND, HandDrawnFrame } from '@/lib/taccuinoTokens'
@@ -26,11 +26,25 @@ const PLACE_CATEGORY_OPTIONS: { id: PlaceCategory; label: string }[] = [
  * lib/metaSearch) per la ricerca e metaSearchResultToPlannedHike + savePlanned per la creazione —
  * nessuna nuova logica di ricerca/creazione qui, solo la UI che mancava. 'sentiero' resta
  * volutamente fuori: quel flusso è /upload?tab=gpx, invariato (piano §48.3/§18).
+ *
+ * `useSearchParams` richiede un confine Suspense (stesso pattern di app/upload/page.tsx) — serve
+ * per l'unico ingresso di ricerca della pagina Mete (app/percorsi/page.tsx): quando una ricerca
+ * lì non trova nulla fra le Mete già salvate, il link "Cerca anche fra Borghi, Città e Siti" porta
+ * qui con `?q=` già valorizzato, invece di far ridigitare il testo.
  */
 export default function CercaMetaPage() {
+  return (
+    <Suspense fallback={null}>
+      <CercaMetaPageInner />
+    </Suspense>
+  )
+}
+
+function CercaMetaPageInner() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [metaType, setMetaType] = useState<SearchMetaType>('borgo_citta')
-  const [queryText, setQueryText] = useState('')
+  const [queryText, setQueryText] = useState(() => searchParams.get('q') ?? '')
   const [region, setRegion] = useState('')
   const [category, setCategory] = useState<string[]>([])
   const [results, setResults] = useState<MetaSearchResultItem[] | null>(null)

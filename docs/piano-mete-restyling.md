@@ -39,29 +39,42 @@ primo punto di `route_polyline` per i sentieri (nessuna colonna nuova); LEFT JOI
   esistenti, e i sentieri restano invariati byte per byte negli altri campi.
 - Test: un caso in `app/api/percorsi/__tests__` (o nuovo) per riga sentiero e riga borgo.
 
-## Fase 2 — Riscrittura dell'elenco (2-3 giorni) — il grosso del mockup
+## Fase 2 — Riscrittura dell'elenco (2-3 giorni) — il grosso del mockup ✅ fatta
 
 Sostituisce il corpo di `app/percorsi/page.tsx` con il "registro unico" approvato:
 
-1. **Intestazione su carta** al posto del banner verde da 200px (titolo, conteggi per tipologia,
-   avatar). Niente link ai Diari.
-2. **Riga tipizzata**: timbro tipologia a sinistra, miniatura 52px, titolo Lora, riga meta,
-   colonna destra con un solo numero (Trail Score / tappe / durata visita).
-3. **Miniatura per tipologia** — nuovo componente `components/mete/MetaThumb.tsx`: traccia reale
-   per `sentiero` (`GalleryMapThumb`, invariato), `imageUrl` quando c'è, altrimenti **emblema
-   disegnato** (skyline per borgo/città, tempio per sito). Mai un riquadro vuoto.
-4. **Slot metriche adattivo** — estendere `lib/metaCard.ts` (non condizioni sparse nei componenti,
-   §48.17) con una funzione per la riga d'elenco che prende una `AllPercorsiRow`.
-5. **Chip di tipologia** con i conteggi (Tutte / Sentieri / Borghi / Siti), che filtrano l'elenco.
-6. **Ordinamenti per tipologia**: Data e Vicinanza sempre; Km / D+ / TS solo con filtro Sentieri
-   attivo (o "Tutte", applicati ai soli sentieri).
-7. **Un solo ingresso di ricerca**: il bottone "Cerca un Borgo, una Città o un Sito" sparisce; il
-   campo di ricerca porta a `/percorsi/cerca` quando non trova nulla fra le Mete salvate — la
-   tipologia si sceglie lì, come oggi.
+1. ✅ **Intestazione su carta** al posto del banner verde da 200px — titolo a mano, conteggio per
+   tipologia. Niente link ai Diari (già l'icona centrale della barra inferiore) né avatar (non
+   nel mockup finale approvato).
+2. ⚠️ **Riga tipizzata** — implementata come miniatura 100px (non 52px: richiesta esplicita
+   dell'utente "miniature più grandi", vedi commit precedenti) + badge Trail Score sotto la
+   miniatura, non un "timbro tipologia" separato a sinistra: l'emblema per tipologia (punto 3) e
+   lo slot metriche adattivo (punto 4) bastano a distinguere la tipologia senza un badge in più.
+3. ⚠️ **Miniatura per tipologia** — niente nuovo componente `MetaThumb.tsx` dedicato (sarebbe
+   stato prematuro estrarlo per un solo punto di utilizzo): traccia reale per `sentiero`
+   (`GalleryMapThumb`, invariato), `imageUrl` quando c'è (ramo scritto e pronto, 0 righe la
+   valorizzano oggi), altrimenti un'icona per tipologia (`Building2`/`Landmark`/`Mountain`) su
+   fondo carta — non ancora l'emblema disegnato a mano (skyline/tempio) dei mockup, rimandato:
+   un'icona chiara è già la correzione del bug (fondo nero), l'emblema è rifinitura estetica.
+4. ✅ **Slot metriche adattivo** — `lib/metaCard.ts`'s `metaRowLocationStats()`: comune/regione
+   per borgo_citta, categoria + comune/regione per sito (mai un valore fabbricato quando mancano).
+   6 test in `lib/__tests__/metaCard.test.ts`.
+5. ✅ **Chip di tipologia** con i conteggi (Tutte/Sentieri/Borghi/Città/Siti), filtrano l'elenco.
+6. ✅ **Ordinamenti per tipologia**: Data sempre; Km/D+/TS solo con filtro Tutte/Sentieri attivo
+   (tornano a "Data" da soli se il filtro li nasconde). "Vicinanza" rimandata alla Fase 3 (richiede
+   la posizione dell'utente, che arriva con la carta).
+7. ✅ **Un solo ingresso di ricerca** — tolto il bottone a piena larghezza identico al campo di
+   ricerca; resta il campo (filtra le Mete già salvate) più un bottone compatto a icona verso
+   `/percorsi/cerca` (Borgo/Città/Sito), sempre raggiungibile — non solo quando la ricerca locale
+   non trova nulla. Quando la ricerca locale non trova nulla ma c'è del testo, compare anche un
+   link diretto "Cerca «testo» fra Borghi, Città e Siti" verso `/percorsi/cerca?q=...` (nuovo
+   supporto per `?q=` in quella pagina, stesso pattern Suspense/`useSearchParams` di
+   `app/upload/page.tsx`).
 
-- **Fatto quando**: con i dati attuali (47 sentieri, 4 borghi, 0 siti) la pagina mostra ~6 righe
-  senza scorrere, nessuna riga vuota e nessun "0 km".
-- Test: `metaCard` (righe per le tre tipologie), più un render dell'elenco con una riga per tipo.
+Verificato: `tsc --noEmit` pulito, eslint pulito, vitest 389/389 (383 + 6 nuovi).
+
+**Rimandato ad-hoc, non nel piano originale**: emblema disegnato a mano (skyline/tempio) al posto
+dell'icona lucide di fallback — miglioria estetica, non blocca nulla a valle.
 
 ## Fase 3 — La carta espandibile (1-2 giorni)
 

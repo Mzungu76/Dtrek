@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { metaCardStats } from '../metaCard'
+import { metaCardStats, metaRowLocationStats, type MetaRowLocation } from '../metaCard'
 import type { MetaSearchResultItem } from '../metaSearch/types'
 
 function item(overrides: Partial<MetaSearchResultItem>): MetaSearchResultItem {
@@ -52,5 +52,44 @@ describe('metaCardStats — sito', () => {
   it('un sito non mostra mai metriche escursionistiche anche se hikeStats fosse presente per errore altrove', () => {
     const stats = metaCardStats(item({ metaType: 'sito', siteType: 'castello', hikeStats: { distanceMeters: 1000 } }))
     expect(stats.map(s => s.key)).not.toContain('distance')
+  })
+})
+
+function row(overrides: Partial<MetaRowLocation>): MetaRowLocation {
+  return { metaType: 'borgo_citta', siteType: null, municipality: null, region: null, ...overrides }
+}
+
+describe('metaRowLocationStats — slot metriche adattivo per la riga elenco Mete', () => {
+  it('un sentiero non mostra mai comune/regione qui: le sue metriche sono quelle escursionistiche, rese altrove', () => {
+    const stats = metaRowLocationStats(row({ metaType: 'sentiero', municipality: 'Viterbo', region: 'Lazio' }))
+    expect(stats).toEqual([])
+  })
+
+  it('borgo_citta con comune e regione → una riga "Luogo" con entrambi', () => {
+    const stats = metaRowLocationStats(row({ metaType: 'borgo_citta', municipality: 'Calcata', region: 'Lazio' }))
+    expect(stats).toEqual([{ key: 'location', label: 'Luogo', value: 'Calcata, Lazio' }])
+  })
+
+  it('borgo_citta senza comune né regione → array vuoto, mai un valore fabbricato', () => {
+    const stats = metaRowLocationStats(row({ metaType: 'borgo_citta' }))
+    expect(stats).toEqual([])
+  })
+
+  it('borgo_citta con solo la regione → una riga "Luogo" col solo valore noto', () => {
+    const stats = metaRowLocationStats(row({ metaType: 'borgo_citta', region: 'Lazio' }))
+    expect(stats).toEqual([{ key: 'location', label: 'Luogo', value: 'Lazio' }])
+  })
+
+  it('sito con categoria e comune → categoria prima, poi luogo', () => {
+    const stats = metaRowLocationStats(row({ metaType: 'sito', siteType: 'museo', municipality: 'Roma' }))
+    expect(stats).toEqual([
+      { key: 'category', label: 'Categoria', value: 'Museo' },
+      { key: 'location', label: 'Luogo', value: 'Roma' },
+    ])
+  })
+
+  it('sito senza siteType né comune/regione → array vuoto', () => {
+    const stats = metaRowLocationStats(row({ metaType: 'sito' }))
+    expect(stats).toEqual([])
   })
 })
