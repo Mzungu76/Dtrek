@@ -42,13 +42,13 @@ a:hover{color:var(--accent-2)}
 .telemetry .u{font-size:9.5px;color:#B9C4AE;margin-left:2px;font-family:'DM Sans';font-weight:600}
 
 /* copertine */
-.cover{position:relative;border-radius:7px;overflow:hidden;aspect-ratio:3/4;
+.cover{position:relative;border-radius:7px;overflow:hidden;height:132px;
   box-shadow:0 14px 26px -14px rgba(61,43,31,.55),0 1px 0 rgba(255,255,255,.08) inset}
 .cover-inner{position:absolute;inset:8px;border:1px solid rgba(255,255,255,.18);border-radius:4px;
   display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:0 10px}
 .cover-eyebrow{font-family:'DM Sans';font-weight:700;text-transform:uppercase;letter-spacing:.2em;
   font-size:8px;color:rgba(255,255,255,.5);margin:0}
-.cover-title{font-family:'Playfair Display',Georgia,serif;font-weight:700;font-size:17px;line-height:1.15;
+.cover-title{font-family:'Playfair Display',Georgia,serif;font-weight:700;font-size:15.5px;line-height:1.15;
   color:#FDF8EA;margin:7px 0 0;text-wrap:balance}
 .pagecut{position:absolute;top:3%;bottom:3%;right:-2px;width:5px;border-radius:0 3px 3px 0;
   background:repeating-linear-gradient(180deg,#efe6cf 0 2px,#e2d6b8 2px 4px);box-shadow:1px 0 3px rgba(0,0,0,.3)}
@@ -60,8 +60,17 @@ a:hover{color:var(--accent-2)}
   letter-spacing:.08em;padding:3px 7px;border-radius:999px}
 .state.ok{background:var(--accent-tint);color:var(--accent)}
 .state.idle{background:var(--card);color:var(--ink-muted);border:1px solid var(--card-border)}
-.newtile{border:1.5px dashed var(--card-border);border-radius:7px;aspect-ratio:3/4;display:flex;
+.newtile{border:1.5px dashed var(--card-border);border-radius:7px;height:132px;display:flex;
   flex-direction:column;align-items:center;justify-content:center;gap:7px;color:var(--ink-muted);background:rgba(235,224,200,.45)}
+
+.seg{display:flex;background:var(--card);border:1px solid var(--card-border);border-radius:10px;padding:2px;gap:2px}
+.seg div{flex:1;height:30px;display:flex;align-items:center;justify-content:center;gap:5px;border-radius:8px;
+  font-size:11px;font-weight:700;color:var(--ink-hand)}
+.seg div.on{background:var(--accent);color:var(--paper-light)}
+.seg .n{font-family:'JetBrains Mono',monospace;font-size:9.5px;opacity:.75}
+.shelf{display:flex;align-items:flex-end;gap:3px;height:54px;padding:0 11px;background:var(--card);
+  border:1px solid var(--card-border);border-radius:11px}
+.shelf i{display:block;width:7px;border-radius:1.5px 1.5px 0 0}
 
 .bottombar{position:absolute;left:0;right:0;bottom:0;height:74px;background:var(--bar-bg);
   display:flex;align-items:flex-start;justify-content:space-around;padding-top:11px;z-index:6}
@@ -126,9 +135,14 @@ a:hover{color:var(--accent-2)}
       </div>
     </div>
 
-    <div style="display:flex;align-items:baseline;justify-content:space-between;margin:15px 0 9px">
-      <p class="eyebrow">3 diari &middot; 12 reportage</p>
-      <span style="font-size:10.5px;font-weight:600;color:var(--accent)">Ordina per attivit&agrave;</span>
+    <div style="display:flex;align-items:baseline;justify-content:space-between;margin:13px 0 7px">
+      <p class="eyebrow">12 diari &middot; 47 reportage</p>
+      <span style="font-size:10.5px;font-weight:600;color:var(--accent)">Etichette &middot; Natura, Urbano</span>
+    </div>
+    <div class="seg" style="margin-bottom:11px">
+      <div class="on">In corso <span class="n">3</span></div>
+      <div>2025 <span class="n">5</span></div>
+      <div>Archivio <span class="n">4</span></div>
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 13px">
@@ -192,9 +206,26 @@ a:hover{color:var(--accent-2)}
           <span class="eyebrow" style="letter-spacing:.11em">Nuovo diario</span>
         </div>
         <div class="cover-foot" style="justify-content:center">
-          <div style="text-align:center"><div class="cf-k" style="letter-spacing:.06em">Raggruppa per stagione,<br>zona o tipo di uscita</div></div>
+          <div style="text-align:center"><div class="cf-k" style="letter-spacing:.06em">Etichetta e stagione,<br>non cartelle da aprire</div></div>
         </div>
       </div>
+    </div>
+
+    <div style="display:flex;align-items:baseline;justify-content:space-between;margin:13px 0 7px">
+      <p class="eyebrow">Scaffale &middot; volumi chiusi</p>
+      <span style="font-size:10.5px;font-weight:600;color:var(--ink-muted)">9 &middot; 612 km</span>
+    </div>
+    <div class="shelf">
+      <i style="height:40px;background:linear-gradient(180deg,#7A5A3C,#3A352B)"></i>
+      <i style="height:46px;background:linear-gradient(180deg,#4A5A3F,#22271C)"></i>
+      <i style="height:34px;background:linear-gradient(180deg,#A89A78,#5E564C)"></i>
+      <i style="height:44px;background:linear-gradient(180deg,#C0603D,#6E301E)"></i>
+      <i style="height:38px;background:linear-gradient(180deg,#5F7355,#2E3A26)"></i>
+      <i style="height:47px;background:linear-gradient(180deg,#8A6A46,#3A352B)"></i>
+      <i style="height:33px;background:linear-gradient(180deg,#7C8F6E,#3A4A32)"></i>
+      <i style="height:42px;background:linear-gradient(180deg,#8A3D26,#542417)"></i>
+      <i style="height:36px;background:linear-gradient(180deg,#95886A,#4D4740)"></i>
+      <span style="margin-left:auto;font-size:10.5px;font-weight:700;color:var(--accent)">Apri lo scaffale</span>
     </div>
   </div>
 

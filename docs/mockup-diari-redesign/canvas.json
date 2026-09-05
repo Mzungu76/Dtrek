@@ -1,14 +1,76 @@
 {
   "artboards": [
-    { "file": "Main.dc.html",    "x": 0,    "y": 0, "w": 390, "h": 844, "title": "Opzione A — Plancia di campo" },
-    { "file": "OptionB.dc.html", "x": 530,  "y": 0, "w": 390, "h": 844, "title": "Opzione B — Archivio strumentale" },
-    { "file": "OptionC.dc.html", "x": 1060, "y": 0, "w": 390, "h": 844, "title": "Opzione C — Il territorio percorso" }
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Opzione A — Plancia di campo"
+    },
+    {
+      "file": "OptionB.dc.html",
+      "x": 530,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Opzione B — Archivio strumentale"
+    },
+    {
+      "file": "OptionC.dc.html",
+      "x": 1060,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Opzione C — Il territorio percorso"
+    },
+    {
+      "file": "Raccolte.dc.html",
+      "x": 1590,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Confronto — Raccolte come cartelle"
+    }
   ],
   "annotations": [
-    { "id": "opt-a", "x": 0, "y": -230, "w": 390, "text": "OPZIONE A — Plancia di campo\n\nLa pagina si apre sul flusso Pianifica → Naviga → Registra con lo stato reale (4 mete pronte, 2 tracce offline, 7 reportage), poi una sola azione primaria: la prossima uscita con profilo altimetrico, km, D+, stima e Trail Score. I diari diventano righe di registro con dorso colorato e metriche.\n\nPro: in tre secondi si capisce che Dtrek è uno strumento tecnico e che il diario è la terza fase, non un album.\nContro: le copertine perdono presenza — meno identità editoriale, più cruscotto." },
-    { "id": "opt-b", "x": 530, "y": -230, "w": 390, "text": "OPZIONE B — Archivio strumentale\n\nMantiene lo scaffale di copertine (identità già riconoscibile) ma lo incornicia con una fascia telemetria scura sulla stagione in corso — km, D+, uscite, ore, istogramma mensile — e dà a ogni copertina un piedino tecnico (reportage, ultima uscita, pubblicabilità).\n\nPro: evoluzione a basso rischio della pagina attuale; il dato sposta la lettura da \"ricordi\" a \"registro misurato\".\nContro: non mostra pianificazione e navigazione — restano solo nel menù." },
-    { "id": "opt-c", "x": 1060, "y": -230, "w": 390, "text": "OPZIONE C — Il territorio percorso\n\nHero: la mappa di tutte le tracce registrate (continue = percorse, tratteggiata = in programma) con i contatori sopra. Sotto, un foglio che sale con i diari in carosello e la striscia \"Come nasce un reportage\", chiusa dall'azione del momento: archiviare l'uscita di ieri.\n\nPro: massimo effetto wow e messaggio immediato — natura e urbano sulla stessa mappa.\nContro: la mappa costa spazio e rendering; su un account nuovo e vuoto va gestito uno stato iniziale dedicato." },
-    { "id": "brief", "x": 0, "y": 940, "w": 920, "text": "Comune alle tre: palette Taccuino Botanico (F5EDDD / EBE0C8 / C0603D / 7C8F6E / 5F7355), Playfair + Lora + DM Sans + Caveat, JetBrains Mono per i numeri, barra inferiore a 5 voci come in Navbar.tsx. Nessun linguaggio da album di ricordi: le uscite sono misurate. Dati di esempio." }
+    {
+      "id": "opt-a",
+      "x": 0,
+      "y": -230,
+      "w": 390,
+      "text": "OPZIONE A — Plancia di campo\n\nApre sul flusso Pianifica → Naviga → Registra con lo stato reale, poi una sola azione primaria: la prossima uscita con profilo altimetrico, km, D+, stima e Trail Score.\n\nCon molti diari: barra di filtri in cima (Tutti 12 / 2026 / Natura / Urbano / Archivio) e righe raggruppate per stagione. Le stagioni chiuse collassano in una riga sola con i dorsi impilati; l'archivio è l'ultima riga. Zero livelli di navigazione in più.\n\nPro: scala meglio di tutte — le righe sono dense e il filtro è sempre a portata di pollice.\nContro: le copertine perdono presenza."
+    },
+    {
+      "id": "opt-b",
+      "x": 530,
+      "y": -230,
+      "w": 390,
+      "text": "OPZIONE B — Archivio strumentale\n\nLo scaffale di copertine incorniciato dalla fascia telemetria della stagione (km, D+, uscite, ore, istogramma mensile) e con piedino tecnico su ogni copertina.\n\nCon molti diari: segmento In corso / 2025 / Archivio sopra la griglia — la griglia mostra solo i diari in corso — e in fondo lo \"scaffale\", i 9 volumi chiusi ridotti a dorsi in fila, visibili senza aprire nulla.\n\nPro: evoluzione a rischio basso della pagina attuale.\nContro: è la griglia che scala peggio; oltre i ~9 diari in corso serve comunque scroll."
+    },
+    {
+      "id": "opt-c",
+      "x": 1060,
+      "y": -230,
+      "w": 390,
+      "text": "OPZIONE C — Il territorio percorso\n\nHero con la mappa di tutte le tracce registrate; sotto un foglio che sale con i diari in carosello e la striscia \"come nasce un reportage\".\n\nCon molti diari: la riga di chip sotto il carosello filtra mappa e diari insieme — tocchi \"Urbano\" e la mappa mostra solo quelle tracce. Il carosello scorre in orizzontale, quindi 12 diari non allungano la pagina.\n\nPro: il filtro qui ha un senso spaziale, non solo di elenco.\nContro: mappa costosa da rendere; su account nuovo serve uno stato iniziale dedicato."
+    },
+    {
+      "id": "brief",
+      "x": 0,
+      "y": 940,
+      "w": 920,
+      "text": "Comune alle quattro: palette Taccuino Botanico (F5EDDD / EBE0C8 / C0603D / 7C8F6E / 5F7355), Playfair + Lora + DM Sans + Caveat, JetBrains Mono per i numeri, barra inferiore a 5 voci come in Navbar.tsx. Nessun linguaggio da album di ricordi: le uscite sono misurate. Dati di esempio.\n\nSCALA — la proposta è etichette + stato, non cartelle: 1) etichette multiple per diario (Natura, Urbano, una zona), 2) stato attivo/archiviato con archiviazione automatica proposta dopo mesi di inattività, 3) raggruppamento per stagione dedotto dalle uscite, 4) ricerca globale già esistente. In DB è una colonna 'labels text[]' e una 'archived_at' su 'diaries' — nessuna tabella nuova, nessuna gerarchia da mantenere."
+    },
+    {
+      "id": "opt-d",
+      "x": 1590,
+      "y": -230,
+      "w": 390,
+      "text": "CONFRONTO — Raccolte come cartelle\n\nCome sarebbe la variante che hai proposto: contenitori veri, con dentro i diari. Disegnata per poterla giudicare, non come raccomandazione.\n\nI tre costi sono in pagina: un livello in più prima del contenuto (raccolta → diario → percorso), un diario in una raccolta sola, e manutenzione manuale di ciò che Dtrek sa già dedurre (stagione, tipo di uscita, inattività).\n\nQuando invece conviene: se un giorno le raccolte diventano l'unità di condivisione/pubblicazione — \"pubblica la raccolta Appennino\" come volume unico."
+    }
   ],
-  "launch": { "view": "canvas" }
+  "launch": {
+    "view": "canvas"
+  }
 }

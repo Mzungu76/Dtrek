@@ -12,6 +12,26 @@ Canvas pubblicato: https://claude.ai/code/artifact/86c5e2f8-3e31-4a92-b9c4-a2248
 | `Main.dc.html` | **A — Plancia di campo** | Rail Pianifica → Naviga → Registra con stato reale, card "prossima uscita" con profilo altimetrico e Trail Score, diari come righe di registro |
 | `OptionB.dc.html` | **B — Archivio strumentale** | Lo scaffale di copertine attuale + fascia telemetria della stagione (km, D+, uscite, ore, istogramma mensile) e piedino tecnico su ogni copertina |
 | `OptionC.dc.html` | **C — Il territorio percorso** | Hero con la mappa di tutte le tracce registrate, foglio che sale con i diari in carosello e la striscia "come nasce un reportage" |
+| `Raccolte.dc.html` | **Confronto — raccolte come cartelle** | La variante a contenitori, disegnata per il confronto, con i suoi tre costi in pagina |
+
+## Quando i Diari diventano molti
+
+La proposta non è una cartella che contiene Diari, ma un livello di **vista** sopra
+l'elenco piatto:
+
+1. **Etichette** multiple per Diario (Natura, Urbano, una zona) — un Diario può stare in
+   più insiemi senza essere spostato;
+2. **Stato** attivo / archiviato, con archiviazione proposta dopo mesi senza uscite;
+3. **Raggruppamento per stagione** dedotto dalle uscite, non mantenuto a mano;
+4. **Ricerca** globale, già in pagina oggi (`GlobalRouteSearch`).
+
+Sul database è una colonna `labels text[]` e una `archived_at timestamptz` su `diaries`
+(`supabase/migrations/add_diaries_table.sql`) — nessuna tabella nuova, nessuna gerarchia
+da mantenere, nessuna migrazione dei Diari esistenti.
+
+Le raccolte come contenitori veri (`Raccolte.dc.html`) restano sul tavolo per un caso
+solo: se diventassero l'unità di **pubblicazione**, cioè "pubblica la raccolta Appennino"
+come volume unico condivisibile.
 
 Palette e tipografia sono quelle già in codice: `lib/taccuinoTokens.tsx` /
 `tailwind.config.ts` (`botanico.*`) — `#F5EDDD` carta, `#EBE0C8` card, `#C0603D`

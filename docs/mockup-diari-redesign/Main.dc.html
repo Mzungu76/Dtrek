@@ -69,6 +69,21 @@ a:hover{color:var(--accent-2)}
 .tag{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;
   padding:2px 6px;border-radius:4px;background:var(--paper-light);border:1px solid var(--card-border);color:var(--ink-hand)}
 
+/* indice: filtri quando i volumi crescono */
+.index{display:flex;gap:6px;align-items:center;overflow:hidden;padding-bottom:1px}
+.fchip{flex:none;display:inline-flex;align-items:center;gap:5px;height:30px;padding:0 11px;border-radius:999px;
+  background:var(--card);border:1px solid var(--card-border);color:var(--ink-hand);font-size:11px;font-weight:700;letter-spacing:.02em}
+.fchip.on{background:var(--accent);border-color:var(--accent);color:var(--paper-light)}
+.fchip .n{font-family:'JetBrains Mono',monospace;font-size:9.5px;opacity:.7}
+.grouphead{display:flex;align-items:center;gap:8px;margin:11px 0 7px}
+.grouphead .t{font-family:'DM Sans';font-weight:700;text-transform:uppercase;letter-spacing:.14em;font-size:9.5px;color:var(--ink-hand)}
+.grouphead .l{flex:1;height:1px;background:var(--card-border)}
+.grouphead .n{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:9.5px;color:var(--ink-muted)}
+.fold{display:flex;align-items:center;gap:10px;height:44px;padding:0 11px;background:transparent;
+  border:1px solid var(--card-border);border-radius:12px}
+.stack{display:flex;gap:2px;flex:none}
+.stack i{display:block;width:4px;height:22px;border-radius:1px}
+
 /* barra inferiore reale (Mete/Navigator/Diari/Statistiche/Profilo) */
 .bottombar{position:absolute;left:0;right:0;bottom:0;height:74px;background:var(--bar-bg);
   display:flex;align-items:flex-start;justify-content:space-around;padding-top:11px;z-index:6}
@@ -98,7 +113,7 @@ a:hover{color:var(--accent-2)}
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
       <div>
         <p class="eyebrow">Dtrek &middot; Registro di campo</p>
-        <h1 class="hand" style="font-size:35px;margin:1px 0 0;line-height:1;color:var(--ink-typed)">I miei Diari</h1>
+        <h1 class="hand" style="font-size:32px;margin:1px 0 0;line-height:1;color:var(--ink-typed)">I miei Diari</h1>
       </div>
       <div style="width:34px;height:34px;border-radius:999px;background:var(--card);border:1px solid var(--card-border);display:flex;align-items:center;justify-content:center;color:var(--ink-hand);flex:none;margin-top:4px">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.6" y2="16.6"></line></svg>
@@ -137,7 +152,7 @@ a:hover{color:var(--accent-2)}
     </div>
 
     <!-- prossima uscita: l'unica azione primaria della pagina -->
-    <div class="card" style="margin-top:12px;padding:13px 13px 12px">
+    <div class="card" style="margin-top:12px;padding:12px 13px 11px">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
         <span class="chip hot">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
@@ -154,7 +169,7 @@ a:hover{color:var(--accent-2)}
       </p>
 
       <!-- profilo altimetrico reale della traccia -->
-      <svg viewBox="0 0 340 46" style="width:100%;height:46px;display:block;margin-top:9px" preserveAspectRatio="none">
+      <svg viewBox="0 0 340 46" style="width:100%;height:38px;display:block;margin-top:8px" preserveAspectRatio="none">
         <defs>
           <linearGradient id="prof-a" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0" stop-color="#C0603D" stop-opacity=".38"></stop>
@@ -184,10 +199,20 @@ a:hover{color:var(--accent-2)}
       </div>
     </div>
 
-    <!-- il registro: diari come volumi indicizzati, non come album -->
-    <div style="display:flex;align-items:baseline;justify-content:space-between;margin:15px 0 8px">
-      <p class="eyebrow">Volumi del registro</p>
-      <span style="font-size:10px;color:var(--ink-muted)" class="mono">3 &middot; 214 km</span>
+    <!-- indice: con 12 volumi la griglia non basta piu, serve un filtro -->
+    <div class="index" style="margin-top:14px">
+      <span class="fchip on">Tutti <span class="n">12</span></span>
+      <span class="fchip">2026 <span class="n">4</span></span>
+      <span class="fchip">Natura <span class="n">8</span></span>
+      <span class="fchip">Urbano <span class="n">4</span></span>
+      <span class="fchip" style="padding:0 9px">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="4" rx="1"></rect><path d="M5 8v11h14V8"></path><path d="M10 12h4"></path></svg>
+        3
+      </span>
+    </div>
+
+    <div class="grouphead">
+      <span class="t">Stagione 2026</span><span class="l"></span><span class="n">4 &middot; 214 km</span>
     </div>
 
     <div style="display:flex;flex-direction:column;gap:8px">
@@ -219,18 +244,27 @@ a:hover{color:var(--accent-2)}
         </svg>
       </div>
 
-      <div class="row">
-        <div class="spine" style="background:linear-gradient(180deg,#A89A78,#5E564C)"></div>
-        <div style="flex:1;min-width:0">
-          <div style="display:flex;align-items:center;gap:6px">
-            <span class="row-title">Vacanze</span>
-            <span class="tag">Vuoto</span>
-          </div>
-          <div class="row-sub">Nessun reportage &mdash; assegna una meta per iniziare</div>
+      <!-- gli anni chiusi restano una riga sola, non una cartella da aprire e richiudere -->
+      <div class="fold">
+        <div class="stack">
+          <i style="background:#8A6A46"></i><i style="background:#5F7355"></i><i style="background:#A89A78"></i><i style="background:#7A5A3C"></i><i style="background:#4A5A3F"></i>
         </div>
-        <svg width="52" height="24" viewBox="0 0 52 24" fill="none" style="flex:none">
-          <path d="M1 20 L51 20" stroke="#D9C9A8" stroke-width="1.6" stroke-dasharray="3 4" stroke-linecap="round"></path>
-        </svg>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12.5px;font-weight:700;color:var(--ink-typed);line-height:1.1">Stagione 2025</div>
+          <div class="row-sub">5 volumi &middot; 289 km &middot; 21 reportage</div>
+        </div>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#95886A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
+      </div>
+
+      <div class="fold" style="border-style:dashed">
+        <div class="stack">
+          <i style="background:#C4BEAD"></i><i style="background:#A9A18E"></i><i style="background:#C4BEAD"></i>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12.5px;font-weight:700;color:var(--ink-hand);line-height:1.1">Archivio</div>
+          <div class="row-sub">3 volumi chiusi &middot; nessuna uscita dal 2024</div>
+        </div>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#95886A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
       </div>
 
       <button style="display:flex;align-items:center;justify-content:center;gap:7px;height:44px;border-radius:12px;
