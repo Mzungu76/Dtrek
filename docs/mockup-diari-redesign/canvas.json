@@ -1,0 +1,14 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html",    "x": 0,    "y": 0, "w": 390, "h": 844, "title": "Opzione A — Plancia di campo" },
+    { "file": "OptionB.dc.html", "x": 530,  "y": 0, "w": 390, "h": 844, "title": "Opzione B — Archivio strumentale" },
+    { "file": "OptionC.dc.html", "x": 1060, "y": 0, "w": 390, "h": 844, "title": "Opzione C — Il territorio percorso" }
+  ],
+  "annotations": [
+    { "id": "opt-a", "x": 0, "y": -230, "w": 390, "text": "OPZIONE A — Plancia di campo\n\nLa pagina si apre sul flusso Pianifica → Naviga → Registra con lo stato reale (4 mete pronte, 2 tracce offline, 7 reportage), poi una sola azione primaria: la prossima uscita con profilo altimetrico, km, D+, stima e Trail Score. I diari diventano righe di registro con dorso colorato e metriche.\n\nPro: in tre secondi si capisce che Dtrek è uno strumento tecnico e che il diario è la terza fase, non un album.\nContro: le copertine perdono presenza — meno identità editoriale, più cruscotto." },
+    { "id": "opt-b", "x": 530, "y": -230, "w": 390, "text": "OPZIONE B — Archivio strumentale\n\nMantiene lo scaffale di copertine (identità già riconoscibile) ma lo incornicia con una fascia telemetria scura sulla stagione in corso — km, D+, uscite, ore, istogramma mensile — e dà a ogni copertina un piedino tecnico (reportage, ultima uscita, pubblicabilità).\n\nPro: evoluzione a basso rischio della pagina attuale; il dato sposta la lettura da \"ricordi\" a \"registro misurato\".\nContro: non mostra pianificazione e navigazione — restano solo nel menù." },
+    { "id": "opt-c", "x": 1060, "y": -230, "w": 390, "text": "OPZIONE C — Il territorio percorso\n\nHero: la mappa di tutte le tracce registrate (continue = percorse, tratteggiata = in programma) con i contatori sopra. Sotto, un foglio che sale con i diari in carosello e la striscia \"Come nasce un reportage\", chiusa dall'azione del momento: archiviare l'uscita di ieri.\n\nPro: massimo effetto wow e messaggio immediato — natura e urbano sulla stessa mappa.\nContro: la mappa costa spazio e rendering; su un account nuovo e vuoto va gestito uno stato iniziale dedicato." },
+    { "id": "brief", "x": 0, "y": 940, "w": 920, "text": "Comune alle tre: palette Taccuino Botanico (F5EDDD / EBE0C8 / C0603D / 7C8F6E / 5F7355), Playfair + Lora + DM Sans + Caveat, JetBrains Mono per i numeri, barra inferiore a 5 voci come in Navbar.tsx. Nessun linguaggio da album di ricordi: le uscite sono misurate. Dati di esempio." }
+  ],
+  "launch": { "view": "canvas" }
+}
