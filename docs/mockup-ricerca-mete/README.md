@@ -43,6 +43,8 @@ Decise con l'utente, valgono per tutti e tre i mockup:
 
 ## 3. Le tre opzioni (pagina 1 del canvas)
 
+**Scelta: A.** Piano di implementazione in `docs/piano-ricerca-mete.md`.
+
 | File | Opzione | Idea portante | Contro |
 |---|---|---|---|
 | `Main.dc.html` | **A — Tre scaffali a fisarmonica** | Le tre tipologie sempre in pagina, una sola aperta; sotto le ricerche salvate | La sezione aperta spinge in basso le altre due; i Sentieri hanno 4 voci contro 1 delle altre → fisarmonica sbilanciata |
@@ -64,3 +66,6 @@ I conteggi vengono dallo stato reale già registrato in `docs/mockup-mete-redesi
 Lazio), 0 Siti. Per questo l'opzione B mostra Borghi e Città come tipologia attiva e l'opzione C
 dichiara esplicitamente che i Siti non hanno ancora dati — nessun risultato inventato per una
 ricerca che oggi tornerebbe vuota (piano §48.8).
+
+I conteggi degli **archivi** ("425 in archivio") sono invece scritti a mano nel mockup: oggi nessun
+endpoint espone il numero di righe di `dtrek_places`. Renderli dinamici è la Fase 0 del piano.
