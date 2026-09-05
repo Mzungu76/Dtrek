@@ -1,0 +1,268 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body style="margin:0">
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Lora:ital,wght@0,400;0,600;1,500&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+:root{
+  --paper-base:#F5EDDD; --paper-light:#F9F2E4; --card:#EBE0C8; --card-border:#D9C9A8;
+  --contour:#A89A78; --ink-typed:#2E2A22; --ink-hand:#7A6F52; --ink-muted:#95886A;
+  --accent:#C0603D; --accent-2:#7C8F6E; --accent-tint:#E9DAC3;
+  --bar-bg:#5F7355; --bar-active:#F5EDDD; --bar-inactive:#B9C4AE;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+a{color:var(--accent);text-decoration:none}
+a:hover{color:var(--accent-2)}
+.phone{width:390px;height:844px;position:relative;overflow:hidden;background:var(--paper-base);
+  font-family:'DM Sans',system-ui,sans-serif;color:var(--ink-typed);-webkit-font-smoothing:antialiased}
+.eyebrow{font-family:'DM Sans';font-weight:700;text-transform:uppercase;letter-spacing:.2em;
+  font-size:9.5px;color:var(--ink-hand);margin:0}
+.hand{font-family:'Caveat',cursive;font-weight:700}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-weight:700;font-variant-numeric:tabular-nums}
+
+/* mappa del percorso — tutte le tracce registrate, sul territorio */
+.hero{position:absolute;left:0;right:0;top:0;height:322px;overflow:hidden;background:#EDE3CE}
+.hero-fade{position:absolute;left:0;right:0;bottom:0;height:120px;
+  background:linear-gradient(180deg,rgba(245,237,221,0),rgba(245,237,221,.92))}
+.hero-copy{position:absolute;left:18px;right:18px;top:52px;z-index:2}
+.readout{position:absolute;left:18px;right:18px;bottom:56px;z-index:2;display:flex;gap:14px;align-items:flex-end}
+.ro-v{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:21px;color:var(--ink-typed);line-height:1}
+.ro-k{font-size:8.5px;text-transform:uppercase;letter-spacing:.12em;color:var(--ink-hand);margin-top:3px}
+
+/* foglio che sale sopra la mappa */
+.sheet{position:absolute;left:0;right:0;top:292px;bottom:0;background:var(--paper-base);
+  border-radius:22px 22px 0 0;box-shadow:0 -12px 26px -18px rgba(46,42,34,.5);z-index:3;padding:0 0 74px}
+.grip{width:38px;height:4px;border-radius:999px;background:var(--card-border);margin:9px auto 0}
+.paper-grain{position:absolute;inset:0;pointer-events:none;opacity:.85;mix-blend-mode:multiply;border-radius:22px 22px 0 0;
+  background-image:
+    radial-gradient(circle at 18% 24%,rgba(46,42,34,.18) 0,rgba(46,42,34,.18) 1.4px,transparent 3px),
+    radial-gradient(circle at 62% 48%,rgba(46,42,34,.16) 0,rgba(46,42,34,.16) 1.2px,transparent 2.7px),
+    radial-gradient(circle at 86% 78%,rgba(46,42,34,.17) 0,rgba(46,42,34,.17) 1.4px,transparent 3.1px);
+  background-size:52px 49px,63px 57px,44px 71px}
+
+/* carosello dei diari */
+.fchip{flex:none;display:inline-flex;align-items:center;gap:5px;height:29px;padding:0 11px;border-radius:999px;
+  background:var(--card);border:1px solid var(--card-border);color:var(--ink-hand);font-size:10.5px;font-weight:700}
+.fchip.on{background:var(--accent);border-color:var(--accent);color:var(--paper-light)}
+.fchip .n{font-family:'JetBrains Mono',monospace;font-size:9px;opacity:.72}
+.strip{display:flex;gap:11px;padding:0 18px 2px;overflow:hidden}
+.vol{width:146px;flex:none;border-radius:11px;overflow:hidden;background:var(--card);
+  border:1px solid var(--card-border);box-shadow:0 10px 20px -14px rgba(61,43,31,.5)}
+.vol-top{height:96px;position:relative;display:flex;align-items:flex-end;padding:9px 10px}
+.vol-title{font-family:'Playfair Display',Georgia,serif;font-weight:700;font-size:15px;color:#FDF8EA;line-height:1.12;margin:0}
+.vol-body{padding:8px 10px 10px;display:flex;flex-direction:column;gap:6px}
+.vol-metrics{display:flex;justify-content:space-between}
+.vm-v{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:11.5px;line-height:1}
+.vm-k{font-size:7.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-muted);margin-top:2px}
+.tag{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;padding:2px 6px;border-radius:4px;
+  background:rgba(245,237,221,.18);color:#F5EDDD}
+
+/* le tre fasi in fondo: cosa fa Dtrek, in tre gesti */
+.flow{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;padding:0 18px}
+.flow-tile{background:var(--card);border:1px solid var(--card-border);border-radius:11px;padding:9px 8px;
+  display:flex;flex-direction:column;gap:5px;min-height:72px}
+.flow-tile.on{background:var(--accent-tint);border-color:#dfc4ac}
+.flow-name{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;line-height:1}
+.flow-meta{font-size:9.5px;color:var(--ink-muted);line-height:1.3}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;height:46px;border-radius:12px;
+  background:var(--accent);color:var(--paper-light);font-weight:700;font-size:13.5px;border:none;width:100%}
+
+.bottombar{position:absolute;left:0;right:0;bottom:0;height:74px;background:var(--bar-bg);
+  display:flex;align-items:flex-start;justify-content:space-around;padding-top:11px;z-index:6}
+.bb{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--bar-inactive);width:64px}
+.bb span{font-size:9px;font-weight:700}
+.raised{position:absolute;left:50%;transform:translateX(-50%);top:-24px;width:60px;height:60px;border-radius:999px;
+  background:var(--accent);color:var(--paper-light);display:flex;align-items:center;justify-content:center;
+  box-shadow:0 8px 18px rgba(46,42,34,.32);border:3px solid var(--bar-bg)}
+</style>
+</helmet>
+
+<div class="phone">
+
+  <div class="hero">
+    <svg viewBox="0 0 390 322" style="position:absolute;inset:0;width:100%;height:100%" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      <rect width="390" height="322" fill="#EDE3CE"></rect>
+      <!-- rilievi -->
+      <g fill="none" stroke="#A89A78" stroke-width="1" opacity=".45">
+        <path d="M-10 92 C 60 66, 128 118, 196 92 S 330 52, 400 84"></path>
+        <path d="M-10 116 C 62 90, 130 142, 198 116 S 332 76, 400 108"></path>
+        <path d="M-10 140 C 64 114, 132 166, 200 140 S 334 100, 400 132"></path>
+        <path d="M-10 198 C 70 176, 140 226, 212 202 S 336 166, 400 194"></path>
+        <path d="M-10 224 C 72 202, 142 252, 214 228 S 338 192, 400 220"></path>
+        <path d="M-10 268 C 74 248, 144 294, 216 272 S 340 238, 400 264"></path>
+      </g>
+      <!-- macchia boschiva -->
+      <path d="M240 40 C 300 30, 356 62, 372 108 C 386 150, 344 176, 300 166 C 254 156, 226 106, 240 40 Z" fill="#7C8F6E" opacity=".14"></path>
+      <!-- reticolo urbano -->
+      <g stroke="#A89A78" stroke-width=".8" opacity=".35">
+        <path d="M28 236 h96 M28 262 h96 M28 288 h96 M46 224 v82 M78 224 v82 M110 224 v82"></path>
+      </g>
+      <!-- corso d'acqua -->
+      <path d="M-10 176 C 70 190, 120 152, 190 168 C 260 184, 300 150, 400 162" fill="none" stroke="#7C8F6E" stroke-width="2.4" opacity=".38"></path>
+
+      <!-- tracce registrate -->
+      <g fill="none" stroke="#C0603D" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M96 268 C 128 240, 150 232, 176 206 C 200 182, 216 158, 250 146 C 282 134, 300 112, 306 86" stroke-width="3"></path>
+        <path d="M60 246 C 84 224, 92 200, 118 186 C 146 170, 158 146, 186 138" stroke-width="2.6" opacity=".8"></path>
+        <path d="M212 250 C 240 244, 258 222, 288 216 C 316 210, 330 190, 342 170" stroke-width="2.6" opacity=".8"></path>
+        <path d="M118 116 C 142 100, 160 106, 184 88 C 206 72, 214 56, 236 48" stroke-width="2.2" opacity=".55" stroke-dasharray="7 5"></path>
+      </g>
+      <!-- punti di partenza -->
+      <g>
+        <circle cx="96" cy="268" r="5.5" fill="#C0603D" stroke="#F5EDDD" stroke-width="2"></circle>
+        <circle cx="306" cy="86" r="5.5" fill="#C0603D" stroke="#F5EDDD" stroke-width="2"></circle>
+        <circle cx="60" cy="246" r="4.5" fill="#7C8F6E" stroke="#F5EDDD" stroke-width="2"></circle>
+        <circle cx="342" cy="170" r="4.5" fill="#7C8F6E" stroke="#F5EDDD" stroke-width="2"></circle>
+        <circle cx="236" cy="48" r="4.5" fill="none" stroke="#C0603D" stroke-width="2.2" stroke-dasharray="3 3"></circle>
+      </g>
+    </svg>
+    <div class="hero-fade"></div>
+
+    <div class="hero-copy">
+      <p class="eyebrow">Dtrek &middot; Il territorio che hai percorso</p>
+      <h1 class="hand" style="font-size:35px;margin:1px 0 0;line-height:1">I miei Diari</h1>
+      <p style="margin:5px 0 0;font-family:'Lora',Georgia,serif;font-size:12.5px;line-height:1.45;color:var(--ink-hand);max-width:250px;text-wrap:pretty">
+        Ogni traccia qui sopra &egrave; un&rsquo;uscita pianificata, navigata e registrata.
+      </p>
+    </div>
+
+    <div class="readout">
+      <div>
+        <div class="ro-v">214<span style="font-size:11px;margin-left:2px">km</span></div>
+        <div class="ro-k">Percorsi</div>
+      </div>
+      <div>
+        <div class="ro-v">12</div>
+        <div class="ro-k">Reportage</div>
+      </div>
+      <div>
+        <div class="ro-v">2</div>
+        <div class="ro-k">In programma</div>
+      </div>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:6px;background:var(--paper-light);
+        border:1px solid var(--card-border);border-radius:999px;padding:6px 11px;height:34px">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7A6F52" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3L3 10.5l7.5 3L14 21l7-18z"></path></svg>
+        <span style="font-size:10.5px;font-weight:700;color:var(--ink-hand)">Mappa intera</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="sheet">
+    <div class="paper-grain"></div>
+    <div class="grip"></div>
+
+    <div style="display:flex;align-items:baseline;justify-content:space-between;padding:12px 18px 8px">
+      <p class="eyebrow">I tuoi diari &middot; 12</p>
+      <span style="font-size:10.5px;font-weight:700;color:var(--accent)">Indice completo</span>
+    </div>
+
+    <!-- il filtro governa mappa e carosello insieme: la raccolta e' una vista, non una cartella -->
+    <div style="display:flex;gap:6px;padding:0 18px 10px;overflow:hidden">
+      <span class="fchip on">In corso <span class="n">3</span></span>
+      <span class="fchip">Natura <span class="n">8</span></span>
+      <span class="fchip">Urbano <span class="n">4</span></span>
+      <span class="fchip">2025 <span class="n">5</span></span>
+      <span class="fchip">Archivio <span class="n">4</span></span>
+    </div>
+
+    <div class="strip">
+      <div class="vol">
+        <div class="vol-top" style="background:linear-gradient(160deg,#7A5A3C,#2E2A22)">
+          <span class="tag" style="position:absolute;top:8px;left:9px;background:var(--accent);color:#FDF8EA">Default</span>
+          <p class="vol-title">Estate 2026</p>
+        </div>
+        <div class="vol-body">
+          <div class="vol-metrics">
+            <div><div class="vm-v">138</div><div class="vm-k">km</div></div>
+            <div><div class="vm-v">+6.240</div><div class="vm-k">D+ m</div></div>
+            <div><div class="vm-v">7</div><div class="vm-k">Report.</div></div>
+          </div>
+          <div style="height:1px;background:var(--card-border)"></div>
+          <p style="margin:0;font-size:9.5px;color:var(--ink-muted)">Ultima uscita 29 ago &middot; Cimino</p>
+        </div>
+      </div>
+
+      <div class="vol">
+        <div class="vol-top" style="background:linear-gradient(160deg,#4A5A3F,#22271C)">
+          <span class="tag" style="position:absolute;top:8px;left:9px">Urbano</span>
+          <p class="vol-title">Vie urbane</p>
+        </div>
+        <div class="vol-body">
+          <div class="vol-metrics">
+            <div><div class="vm-v">61</div><div class="vm-k">km</div></div>
+            <div><div class="vm-v">+820</div><div class="vm-k">D+ m</div></div>
+            <div><div class="vm-v">5</div><div class="vm-k">Report.</div></div>
+          </div>
+          <div style="height:1px;background:var(--card-border)"></div>
+          <p style="margin:0;font-size:9.5px;color:var(--ink-muted)">Ultima uscita 17 ago &middot; Testaccio</p>
+        </div>
+      </div>
+
+      <div class="vol" style="width:96px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+        gap:7px;border-style:dashed;background:transparent;box-shadow:none;color:var(--ink-muted);min-height:172px">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        <span class="eyebrow" style="letter-spacing:.09em;font-size:9px;text-align:center;line-height:1.3">Nuovo<br>diario</span>
+      </div>
+    </div>
+
+    <p class="eyebrow" style="padding:16px 18px 8px">Come nasce un reportage</p>
+    <div class="flow">
+      <div class="flow-tile">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7A6F52" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 20l-5.4 2.3L4 5l5-2 6 3 5.4-2.3L20 20l-5 2-6-3z"></path><path d="M9 3v15"></path><path d="M15 6v15"></path></svg>
+        <div class="flow-name">Pianifica</div>
+        <div class="flow-meta">4 mete pronte, con guida e meteo</div>
+      </div>
+      <div class="flow-tile">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7A6F52" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>
+        <div class="flow-name">Naviga</div>
+        <div class="flow-meta">2 tracce scaricate offline</div>
+      </div>
+      <div class="flow-tile on">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C0603D" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5V6a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"></path><path d="M9 8h6"></path></svg>
+        <div class="flow-name" style="color:var(--accent)">Registra</div>
+        <div class="flow-meta" style="color:var(--accent)">1 uscita da archiviare</div>
+      </div>
+    </div>
+
+    <div style="padding:13px 18px 0">
+      <button class="btn">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v13"></path><path d="M7 11l5 5 5-5"></path><path d="M4 21h16"></path></svg>
+        Archivia l&rsquo;uscita del 3 set
+      </button>
+    </div>
+  </div>
+
+  <div class="bottombar">
+    <div class="bb">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11z"></path><circle cx="12" cy="10" r="2.5"></circle></svg>
+      <span>Mete</span>
+    </div>
+    <div class="bb">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>
+      <span>Navigator</span>
+    </div>
+    <div class="bb" style="color:var(--bar-active);position:relative">
+      <div class="raised">
+        <svg width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5V6a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"></path><path d="M8 4v16"></path></svg>
+      </div>
+      <span style="margin-top:41px">Diari</span>
+    </div>
+    <div class="bb">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3 8 4-16 3 8h4"></path></svg>
+      <span>Statistiche</span>
+    </div>
+    <div class="bb">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 20c0-4 4-6 8-6s8 2 8 6"></path></svg>
+      <span>Profilo</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

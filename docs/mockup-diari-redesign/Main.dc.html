@@ -1,0 +1,306 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body style="margin:0">
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Lora:ital,wght@0,400;0,600;1,500&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+:root{
+  --paper-base:#F5EDDD; --paper-light:#F9F2E4; --card:#EBE0C8; --card-border:#D9C9A8;
+  --contour:#A89A78; --ink-typed:#2E2A22; --ink-hand:#7A6F52; --ink-muted:#95886A;
+  --accent:#C0603D; --accent-2:#7C8F6E; --accent-tint:#E9DAC3;
+  --bar-bg:#5F7355; --bar-active:#F5EDDD; --bar-inactive:#B9C4AE;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+a{color:var(--accent);text-decoration:none}
+a:hover{color:var(--accent-2)}
+.phone{width:390px;height:844px;position:relative;overflow:hidden;background:var(--paper-base);
+  font-family:'DM Sans',system-ui,sans-serif;color:var(--ink-typed);-webkit-font-smoothing:antialiased}
+.paper-grain{position:absolute;inset:0;pointer-events:none;z-index:0;opacity:.9;mix-blend-mode:multiply;
+  background-image:
+    radial-gradient(circle at 12% 22%,rgba(46,42,34,.20) 0,rgba(46,42,34,.20) 1.5px,transparent 3.1px),
+    radial-gradient(circle at 68% 8%,rgba(46,42,34,.16) 0,rgba(46,42,34,.16) 1.2px,transparent 2.7px),
+    radial-gradient(circle at 40% 55%,rgba(46,42,34,.18) 0,rgba(46,42,34,.18) 1.6px,transparent 3.3px),
+    radial-gradient(circle at 85% 40%,rgba(46,42,34,.15) 0,rgba(46,42,34,.15) 1.1px,transparent 2.5px),
+    radial-gradient(circle at 25% 82%,rgba(46,42,34,.18) 0,rgba(46,42,34,.18) 1.4px,transparent 2.9px);
+  background-size:46px 52px,61px 41px,71px 83px,33px 63px,83px 47px}
+.contours{position:absolute;inset:0;pointer-events:none;z-index:0;opacity:.5}
+.eyebrow{font-family:'DM Sans';font-weight:700;text-transform:uppercase;letter-spacing:.2em;
+  font-size:9.5px;color:var(--ink-hand);margin:0}
+.hand{font-family:'Caveat',cursive;font-weight:700}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-weight:700;font-variant-numeric:tabular-nums}
+.stage{position:absolute;inset:0;z-index:1;display:flex;flex-direction:column;padding:52px 18px 0}
+
+/* rail 3 fasi */
+.rail{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;background:var(--card);
+  border:1px solid var(--card-border);border-radius:13px;overflow:hidden}
+.rail-step{display:flex;flex-direction:column;gap:5px;padding:11px 9px 10px;position:relative}
+.rail-step + .rail-step{border-left:1px dotted var(--card-border)}
+.rail-step.on{background:var(--accent-tint)}
+.rail-top{display:flex;align-items:center;gap:6px;color:var(--ink-hand)}
+.rail-step.on .rail-top{color:var(--accent)}
+.rail-n{font-family:'JetBrains Mono',monospace;font-size:8.5px;font-weight:700;letter-spacing:.06em}
+.rail-name{font-size:11px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--ink-typed);line-height:1}
+.rail-meta{font-size:10px;color:var(--ink-muted);line-height:1.25}
+
+/* card prossima uscita */
+.card{background:var(--card);border:1px solid var(--card-border);border-radius:14px;position:relative}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:9.5px;font-weight:700;
+  padding:3px 8px;border-radius:999px;background:var(--paper-light);border:1px solid var(--card-border);color:var(--ink-hand)}
+.chip.hot{background:var(--accent-tint);border-color:#dfc4ac;color:var(--accent)}
+.metric{display:flex;flex-direction:column;gap:1px}
+.metric .v{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:14.5px;color:var(--ink-typed);line-height:1}
+.metric .k{font-size:8.5px;text-transform:uppercase;letter-spacing:.11em;color:var(--ink-muted)}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;height:46px;border-radius:12px;
+  background:var(--accent);color:var(--paper-light);font-weight:700;font-size:13.5px;letter-spacing:.02em;border:none}
+.btn-ghost{background:transparent;color:var(--accent);border:1.5px solid var(--accent)}
+
+/* righe registro */
+.row{display:flex;align-items:center;gap:11px;height:62px;padding:0 11px 0 0;background:var(--card);
+  border:1px solid var(--card-border);border-radius:12px;overflow:hidden}
+.spine{width:9px;align-self:stretch;flex:none}
+.row-title{font-family:'Lora',Georgia,serif;font-weight:600;font-size:14px;line-height:1.15;color:var(--ink-typed)}
+.row-sub{font-size:10px;color:var(--ink-muted);letter-spacing:.02em}
+.tag{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;
+  padding:2px 6px;border-radius:4px;background:var(--paper-light);border:1px solid var(--card-border);color:var(--ink-hand)}
+
+/* indice: filtri quando i volumi crescono */
+.index{display:flex;gap:6px;align-items:center;overflow:hidden;padding-bottom:1px}
+.fchip{flex:none;display:inline-flex;align-items:center;gap:5px;height:30px;padding:0 11px;border-radius:999px;
+  background:var(--card);border:1px solid var(--card-border);color:var(--ink-hand);font-size:11px;font-weight:700;letter-spacing:.02em}
+.fchip.on{background:var(--accent);border-color:var(--accent);color:var(--paper-light)}
+.fchip .n{font-family:'JetBrains Mono',monospace;font-size:9.5px;opacity:.7}
+.grouphead{display:flex;align-items:center;gap:8px;margin:11px 0 7px}
+.grouphead .t{font-family:'DM Sans';font-weight:700;text-transform:uppercase;letter-spacing:.14em;font-size:9.5px;color:var(--ink-hand)}
+.grouphead .l{flex:1;height:1px;background:var(--card-border)}
+.grouphead .n{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:9.5px;color:var(--ink-muted)}
+.fold{display:flex;align-items:center;gap:10px;height:44px;padding:0 11px;background:transparent;
+  border:1px solid var(--card-border);border-radius:12px}
+.stack{display:flex;gap:2px;flex:none}
+.stack i{display:block;width:4px;height:22px;border-radius:1px}
+
+/* barra inferiore reale (Mete/Navigator/Diari/Statistiche/Profilo) */
+.bottombar{position:absolute;left:0;right:0;bottom:0;height:74px;background:var(--bar-bg);
+  display:flex;align-items:flex-start;justify-content:space-around;padding-top:11px;z-index:6}
+.bb{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--bar-inactive);width:64px}
+.bb span{font-size:9px;font-weight:700}
+.raised{position:absolute;left:50%;transform:translateX(-50%);top:-24px;width:60px;height:60px;border-radius:999px;
+  background:var(--accent);color:var(--paper-light);display:flex;align-items:center;justify-content:center;
+  box-shadow:0 8px 18px rgba(46,42,34,.32);border:3px solid var(--bar-bg)}
+</style>
+</helmet>
+
+<div class="phone">
+  <div class="paper-grain"></div>
+  <svg class="contours" viewBox="0 0 390 844" preserveAspectRatio="none" aria-hidden="true">
+    <g fill="none" stroke="#A89A78" stroke-width="1" opacity=".28">
+      <path d="M-20 120 C 90 96, 150 168, 250 140 S 400 96, 430 128"></path>
+      <path d="M-20 152 C 92 128, 156 200, 254 172 S 400 128, 430 160"></path>
+      <path d="M-20 470 C 100 440, 170 520, 268 492 S 400 452, 430 486"></path>
+      <path d="M-20 506 C 104 476, 174 556, 272 528 S 400 488, 430 522"></path>
+      <path d="M-20 700 C 96 674, 168 744, 262 716 S 400 678, 430 710"></path>
+    </g>
+  </svg>
+
+  <div class="stage">
+
+    <!-- intestazione: cosa fa l'app, in una riga -->
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+      <div>
+        <p class="eyebrow">Dtrek &middot; Registro di campo</p>
+        <h1 class="hand" style="font-size:32px;margin:1px 0 0;line-height:1;color:var(--ink-typed)">I miei Diari</h1>
+      </div>
+      <div style="width:34px;height:34px;border-radius:999px;background:var(--card);border:1px solid var(--card-border);display:flex;align-items:center;justify-content:center;color:var(--ink-hand);flex:none;margin-top:4px">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.6" y2="16.6"></line></svg>
+      </div>
+    </div>
+    <p style="margin:7px 0 0;font-family:'Lora',Georgia,serif;font-size:12.5px;line-height:1.45;color:var(--ink-hand);text-wrap:pretty">
+      Pianifichi il percorso, lo cammini con il navigatore, l&rsquo;uscita finisce qui &mdash; misurata, non raccontata.
+    </p>
+
+    <!-- le tre fasi, con lo stato reale dell'utente -->
+    <div class="rail" style="margin-top:13px">
+      <div class="rail-step">
+        <div class="rail-top">
+          <span class="rail-n">01</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 20l-5.4 2.3L4 5l5-2 6 3 5.4-2.3L20 20l-5 2-6-3z"></path><path d="M9 3v15"></path><path d="M15 6v15"></path></svg>
+        </div>
+        <div class="rail-name">Pianifica</div>
+        <div class="rail-meta">4 mete pronte</div>
+      </div>
+      <div class="rail-step">
+        <div class="rail-top">
+          <span class="rail-n">02</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>
+        </div>
+        <div class="rail-name">Naviga</div>
+        <div class="rail-meta">2 tracce offline</div>
+      </div>
+      <div class="rail-step on">
+        <div class="rail-top">
+          <span class="rail-n">03</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5V6a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"></path><path d="M9 8h6"></path><path d="M9 12h6"></path></svg>
+        </div>
+        <div class="rail-name">Registra</div>
+        <div class="rail-meta">7 reportage</div>
+      </div>
+    </div>
+
+    <!-- prossima uscita: l'unica azione primaria della pagina -->
+    <div class="card" style="margin-top:12px;padding:12px 13px 11px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <span class="chip hot">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
+          Prossima uscita &middot; sab 12
+        </span>
+        <span class="chip">Estate 2026</span>
+      </div>
+
+      <p style="margin:9px 0 0;font-family:'Playfair Display',Georgia,serif;font-weight:700;font-size:19px;line-height:1.15;color:var(--ink-typed)">
+        Anello del Monte Cimino
+      </p>
+      <p style="margin:2px 0 0;font-size:10.5px;color:var(--ink-muted);letter-spacing:.03em">
+        Sentiero naturalistico &middot; Viterbo &middot; T2
+      </p>
+
+      <!-- profilo altimetrico reale della traccia -->
+      <svg viewBox="0 0 340 46" style="width:100%;height:38px;display:block;margin-top:8px" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="prof-a" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#C0603D" stop-opacity=".38"></stop>
+            <stop offset="1" stop-color="#C0603D" stop-opacity=".04"></stop>
+          </linearGradient>
+        </defs>
+        <path d="M0 42 L18 38 L40 33 L62 35 L86 24 L108 19 L132 22 L156 11 L182 6 L206 13 L232 10 L256 20 L282 27 L306 24 L330 34 L340 38 L340 46 L0 46 Z" fill="url(#prof-a)"></path>
+        <path d="M0 42 L18 38 L40 33 L62 35 L86 24 L108 19 L132 22 L156 11 L182 6 L206 13 L232 10 L256 20 L282 27 L306 24 L330 34 L340 38" fill="none" stroke="#C0603D" stroke-width="1.8" stroke-linejoin="round"></path>
+      </svg>
+
+      <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:8px">
+        <div class="metric"><span class="v">12,4</span><span class="k">km</span></div>
+        <div class="metric"><span class="v">+740</span><span class="k">D+ m</span></div>
+        <div class="metric"><span class="v">4h20</span><span class="k">stima</span></div>
+        <div class="metric"><span class="v" style="color:var(--accent-2)">78</span><span class="k">trail score</span></div>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:11px">
+        <button class="btn" style="flex:1.4">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>
+          Apri nel Navigator
+        </button>
+        <button class="btn btn-ghost" style="flex:1">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5V6a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"></path></svg>
+          Guida
+        </button>
+      </div>
+    </div>
+
+    <!-- indice: con 12 volumi la griglia non basta piu, serve un filtro -->
+    <div class="index" style="margin-top:14px">
+      <span class="fchip on">Tutti <span class="n">12</span></span>
+      <span class="fchip">2026 <span class="n">4</span></span>
+      <span class="fchip">Natura <span class="n">8</span></span>
+      <span class="fchip">Urbano <span class="n">4</span></span>
+      <span class="fchip" style="padding:0 9px">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="4" rx="1"></rect><path d="M5 8v11h14V8"></path><path d="M10 12h4"></path></svg>
+        3
+      </span>
+    </div>
+
+    <div class="grouphead">
+      <span class="t">Stagione 2026</span><span class="l"></span><span class="n">4 &middot; 214 km</span>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div class="row">
+        <div class="spine" style="background:linear-gradient(180deg,#C0603D,#8A3D26)"></div>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:6px">
+            <span class="row-title">Estate 2026</span>
+            <span class="tag" style="color:var(--accent);border-color:#dfc4ac;background:var(--accent-tint)">Attivo</span>
+          </div>
+          <div class="row-sub">7 reportage &middot; 138 km &middot; +6.240 m &middot; ultima 29 ago</div>
+        </div>
+        <svg width="52" height="24" viewBox="0 0 52 24" fill="none" style="flex:none">
+          <path d="M1 20 L8 15 L15 17 L22 9 L29 12 L36 5 L43 10 L51 4" stroke="#7C8F6E" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"></path>
+        </svg>
+      </div>
+
+      <div class="row">
+        <div class="spine" style="background:linear-gradient(180deg,#7C8F6E,#4A5A3F)"></div>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:6px">
+            <span class="row-title">Vie urbane</span>
+            <span class="tag">Urbano</span>
+          </div>
+          <div class="row-sub">5 reportage &middot; 61 km &middot; +820 m &middot; ultima 17 ago</div>
+        </div>
+        <svg width="52" height="24" viewBox="0 0 52 24" fill="none" style="flex:none">
+          <path d="M1 17 L8 18 L15 14 L22 16 L29 11 L36 13 L43 9 L51 11" stroke="#7C8F6E" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"></path>
+        </svg>
+      </div>
+
+      <!-- gli anni chiusi restano una riga sola, non una cartella da aprire e richiudere -->
+      <div class="fold">
+        <div class="stack">
+          <i style="background:#8A6A46"></i><i style="background:#5F7355"></i><i style="background:#A89A78"></i><i style="background:#7A5A3C"></i><i style="background:#4A5A3F"></i>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12.5px;font-weight:700;color:var(--ink-typed);line-height:1.1">Stagione 2025</div>
+          <div class="row-sub">5 volumi &middot; 289 km &middot; 21 reportage</div>
+        </div>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#95886A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
+      </div>
+
+      <div class="fold" style="border-style:dashed">
+        <div class="stack">
+          <i style="background:#C4BEAD"></i><i style="background:#A9A18E"></i><i style="background:#C4BEAD"></i>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12.5px;font-weight:700;color:var(--ink-hand);line-height:1.1">Archivio</div>
+          <div class="row-sub">3 volumi chiusi &middot; nessuna uscita dal 2024</div>
+        </div>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#95886A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
+      </div>
+
+      <button style="display:flex;align-items:center;justify-content:center;gap:7px;height:44px;border-radius:12px;
+        border:1.5px dashed var(--card-border);background:transparent;color:var(--ink-hand);
+        font-family:'DM Sans';font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.1em">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        Nuovo volume
+      </button>
+    </div>
+  </div>
+
+  <div class="bottombar">
+    <div class="bb">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11z"></path><circle cx="12" cy="10" r="2.5"></circle></svg>
+      <span>Mete</span>
+    </div>
+    <div class="bb">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>
+      <span>Navigator</span>
+    </div>
+    <div class="bb" style="color:var(--bar-active);position:relative">
+      <div class="raised">
+        <svg width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5V6a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"></path><path d="M8 4v16"></path></svg>
+      </div>
+      <span style="margin-top:41px">Diari</span>
+    </div>
+    <div class="bb">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3 8 4-16 3 8h4"></path></svg>
+      <span>Statistiche</span>
+    </div>
+    <div class="bb">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 20c0-4 4-6 8-6s8 2 8 6"></path></svg>
+      <span>Profilo</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

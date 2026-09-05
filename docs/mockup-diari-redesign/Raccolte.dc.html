@@ -1,0 +1,165 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body style="margin:0">
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Lora:ital,wght@0,400;0,600;1,500&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+:root{
+  --paper-base:#F5EDDD; --paper-light:#F9F2E4; --card:#EBE0C8; --card-border:#D9C9A8;
+  --ink-typed:#2E2A22; --ink-hand:#7A6F52; --ink-muted:#95886A;
+  --accent:#C0603D; --accent-2:#7C8F6E; --accent-tint:#E9DAC3;
+  --bar-bg:#5F7355; --bar-active:#F5EDDD; --bar-inactive:#B9C4AE;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+a{color:var(--accent);text-decoration:none}
+a:hover{color:var(--accent-2)}
+.phone{width:390px;height:844px;position:relative;overflow:hidden;background:var(--paper-base);
+  font-family:'DM Sans',system-ui,sans-serif;color:var(--ink-typed);-webkit-font-smoothing:antialiased}
+.paper-grain{position:absolute;inset:0;pointer-events:none;z-index:0;opacity:.9;mix-blend-mode:multiply;
+  background-image:
+    radial-gradient(circle at 20% 18%,rgba(46,42,34,.18) 0,rgba(46,42,34,.18) 1.4px,transparent 3px),
+    radial-gradient(circle at 64% 44%,rgba(46,42,34,.16) 0,rgba(46,42,34,.16) 1.2px,transparent 2.7px),
+    radial-gradient(circle at 84% 76%,rgba(46,42,34,.17) 0,rgba(46,42,34,.17) 1.4px,transparent 3.1px);
+  background-size:52px 49px,63px 57px,44px 71px}
+.eyebrow{font-family:'DM Sans';font-weight:700;text-transform:uppercase;letter-spacing:.2em;
+  font-size:9.5px;color:var(--ink-hand);margin:0}
+.hand{font-family:'Caveat',cursive;font-weight:700}
+.stage{position:absolute;inset:0;z-index:1;display:flex;flex-direction:column;padding:52px 18px 0}
+
+.crumb{display:flex;align-items:center;gap:7px;height:32px;color:var(--ink-hand);font-size:11px;font-weight:700}
+.folder{background:var(--card);border:1px solid var(--card-border);border-radius:13px;padding:11px 11px 10px;
+  display:flex;flex-direction:column;gap:8px;position:relative;overflow:hidden}
+.folder .tab{position:absolute;top:-1px;left:14px;width:46px;height:5px;border-radius:0 0 4px 4px;background:var(--accent)}
+.spines{display:flex;align-items:flex-end;gap:3px;height:42px}
+.spines i{display:block;width:9px;border-radius:2px 2px 0 0}
+.fname{font-family:'Lora',Georgia,serif;font-weight:600;font-size:14.5px;line-height:1.1;margin:0}
+.fmeta{font-size:10px;color:var(--ink-muted);letter-spacing:.02em;line-height:1.35}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-weight:700;font-variant-numeric:tabular-nums}
+.loose{display:flex;align-items:center;gap:11px;height:58px;padding:0 12px;background:transparent;
+  border:1.5px dashed var(--card-border);border-radius:12px}
+.warn{display:flex;gap:9px;background:var(--accent-tint);border:1px solid #dfc4ac;border-radius:12px;padding:10px 11px}
+.warn p{margin:0;font-size:10.5px;line-height:1.45;color:#8A3D26}
+
+.bottombar{position:absolute;left:0;right:0;bottom:0;height:74px;background:var(--bar-bg);
+  display:flex;align-items:flex-start;justify-content:space-around;padding-top:11px;z-index:6}
+.bb{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--bar-inactive);width:64px}
+.bb span{font-size:9px;font-weight:700}
+.raised{position:absolute;left:50%;transform:translateX(-50%);top:-24px;width:60px;height:60px;border-radius:999px;
+  background:var(--accent);color:var(--paper-light);display:flex;align-items:center;justify-content:center;
+  box-shadow:0 8px 18px rgba(46,42,34,.32);border:3px solid var(--bar-bg)}
+</style>
+</helmet>
+
+<div class="phone">
+  <div class="paper-grain"></div>
+  <div class="stage">
+
+    <p class="eyebrow">Dtrek &middot; Variante a contenitori</p>
+    <h1 class="hand" style="font-size:32px;margin:1px 0 0;line-height:1">Le mie Raccolte</h1>
+
+    <div class="crumb">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+      Raccolte <span style="color:var(--ink-muted);font-weight:600">&middot; 4 &middot; 12 diari dentro</span>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px">
+      <div class="folder">
+        <span class="tab"></span>
+        <div class="spines">
+          <i style="height:38px;background:linear-gradient(180deg,#C0603D,#6E301E)"></i>
+          <i style="height:32px;background:linear-gradient(180deg,#7A5A3C,#3A352B)"></i>
+          <i style="height:41px;background:linear-gradient(180deg,#4A5A3F,#22271C)"></i>
+          <i style="height:28px;background:linear-gradient(180deg,#A89A78,#5E564C)"></i>
+        </div>
+        <p class="fname">Appennino</p>
+        <p class="fmeta"><span class="mono">4</span> diari &middot; <span class="mono">18</span> reportage<br><span class="mono">289 km</span> &middot; ultima 29 ago</p>
+      </div>
+
+      <div class="folder">
+        <span class="tab" style="background:var(--accent-2)"></span>
+        <div class="spines">
+          <i style="height:36px;background:linear-gradient(180deg,#5F7355,#2E3A26)"></i>
+          <i style="height:30px;background:linear-gradient(180deg,#7C8F6E,#3A4A32)"></i>
+          <i style="height:39px;background:linear-gradient(180deg,#8A8168,#3A352B)"></i>
+        </div>
+        <p class="fname">Citt&agrave;</p>
+        <p class="fmeta"><span class="mono">3</span> diari &middot; <span class="mono">14</span> reportage<br><span class="mono">146 km</span> &middot; ultima 17 ago</p>
+      </div>
+
+      <div class="folder">
+        <span class="tab" style="background:#8A6A46"></span>
+        <div class="spines">
+          <i style="height:34px;background:linear-gradient(180deg,#8A6A46,#3A352B)"></i>
+          <i style="height:42px;background:linear-gradient(180deg,#C0603D,#8A3D26)"></i>
+          <i style="height:27px;background:linear-gradient(180deg,#95886A,#4D4740)"></i>
+        </div>
+        <p class="fname">Viaggi</p>
+        <p class="fmeta"><span class="mono">3</span> diari &middot; <span class="mono">11</span> reportage<br><span class="mono">204 km</span> &middot; ultima 12 lug</p>
+      </div>
+
+      <div class="folder" style="border-style:dashed;background:transparent;align-items:center;justify-content:center;gap:7px">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#95886A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><line x1="12" y1="11" x2="12" y2="17"></line><line x1="9" y1="14" x2="15" y2="14"></line></svg>
+        <span class="eyebrow" style="letter-spacing:.1em">Nuova raccolta</span>
+      </div>
+    </div>
+
+    <div class="loose" style="margin-top:12px">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#95886A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5V6a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"></path><path d="M8 4v16"></path></svg>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12.5px;font-weight:700;line-height:1.1">Diari fuori da ogni raccolta</div>
+        <div class="fmeta">2, tra cui &ldquo;Estate 2026&rdquo; &mdash; il diario di default</div>
+      </div>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#95886A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
+    </div>
+
+    <p class="eyebrow" style="margin:16px 0 8px">Cosa costa questo modello</p>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div class="warn">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8A3D26" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:1px"><path d="M12 9v5"></path><path d="M12 17.5v.5"></path><path d="M10.3 3.9L1.8 18.4A2 2 0 0 0 3.5 21.4h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
+        <p><strong>Un livello in pi&ugrave; prima del contenuto.</strong> Da qui servono due tocchi per arrivare a un reportage: raccolta &rarr; diario &rarr; percorso. Oggi ne basta uno.</p>
+      </div>
+      <div class="warn" style="background:var(--card);border-color:var(--card-border)">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#7A6F52" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:1px"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v5"></path><path d="M12 16.5v.5"></path></svg>
+        <p style="color:var(--ink-hand)"><strong>Ogni diario sta in una raccolta sola.</strong> &ldquo;Estate 2026&rdquo; &egrave; Appennino o Viaggi? Con le etichette sarebbe entrambe, senza doverlo spostare.</p>
+      </div>
+      <div class="warn" style="background:var(--card);border-color:var(--card-border)">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#7A6F52" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:1px"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M8 2v4"></path><path d="M16 2v4"></path></svg>
+        <p style="color:var(--ink-hand)"><strong>Va mantenuto a mano.</strong> Stagione, tipo di uscita e stato di archiviazione Dtrek li conosce gi&agrave;: pu&ograve; raggrupparli da solo, una cartella no.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="bottombar">
+    <div class="bb">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11z"></path><circle cx="12" cy="10" r="2.5"></circle></svg>
+      <span>Mete</span>
+    </div>
+    <div class="bb">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>
+      <span>Navigator</span>
+    </div>
+    <div class="bb" style="color:var(--bar-active);position:relative">
+      <div class="raised">
+        <svg width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5V6a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"></path><path d="M8 4v16"></path></svg>
+      </div>
+      <span style="margin-top:41px">Diari</span>
+    </div>
+    <div class="bb">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3 8 4-16 3 8h4"></path></svg>
+      <span>Statistiche</span>
+    </div>
+    <div class="bb">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 20c0-4 4-6 8-6s8 2 8 6"></path></svg>
+      <span>Profilo</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>
