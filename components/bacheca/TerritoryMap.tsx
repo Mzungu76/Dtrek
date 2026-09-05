@@ -6,6 +6,7 @@ import type * as L from 'leaflet'
 import { useEffect, useRef } from 'react'
 import { POI_META, type PoiType } from '@/lib/overpass'
 import { poiBadgeMarkup } from '@/components/poiIcons'
+import { loadLeafletWithCluster } from '@/lib/loadLeafletCluster'
 
 export interface TerritoryPoi {
   key: string
@@ -94,37 +95,6 @@ function bindExpandableTooltip(
   }
   attachClickHandler()
   layer.on('tooltipopen', attachClickHandler)
-}
-
-// Caricamento condiviso a livello di modulo, non per-mount: leaflet.markercluster è un side-effect
-// import (patcha `window.L` invece di esportare qualcosa) e un modulo ESM esegue il proprio corpo
-// UNA SOLA VOLTA in tutto il processo, non a ogni `import()`. Se ogni mount di questo componente
-// creasse la propria copia mutabile di L (vedi il commento sotto sul perché serve una copia) e la
-// assegnasse a window.L, solo il PRIMO mount a montare (qui, la mappa compatta in Bacheca)
-// riceverebbe davvero la patch: i mount successivi (qui, la stessa mappa più grande nel foglio a
-// comparsa) rifarebbero la copia ma il plugin non ci girerebbe più sopra una seconda volta, quindi
-// `L.markerClusterGroup` risulterebbe sistematicamente assente su di loro. Una sola copia,
-// riutilizzata da ogni mount presente e futuro, evita il problema alla radice.
-let leafletWithClusterPromise: Promise<typeof import('leaflet')> | null = null
-function loadLeafletWithCluster() {
-  if (!leafletWithClusterPromise) {
-    leafletWithClusterPromise = import('leaflet').then(async leafletModule => {
-      // leaflet.markercluster è un plugin "vecchio stile" che si aspetta L già globale (come da
-      // un tag <script>, non da un import ESM/CJS) e vi assegna direttamente nuove proprietà
-      // (`L.MarkerClusterGroup = L.FeatureGroup.extend(...)`). Il namespace object restituito da
-      // `import('leaflet')` è però non estensibile per specifica ECMAScript — quell'assegnazione
-      // lanciava un TypeError silenzioso (promise mai catturata) che interrompeva l'inizializzazione
-      // della mappa a metà, PRIMA di disegnare i marker POI e di chiamare fitBounds: da fuori
-      // sembrava che i POI fossero spariti e che lo zoom iniziale ignorasse tracciati/POI. Una copia
-      // semplice (mutabile) risolve: le classi/factory di Leaflet restano le stesse, solo il
-      // contenitore cambia.
-      const L = { ...leafletModule } as typeof leafletModule
-      ;(window as unknown as { L: typeof L }).L = L
-      await import('leaflet.markercluster')
-      return L
-    })
-  }
-  return leafletWithClusterPromise
 }
 
 /**

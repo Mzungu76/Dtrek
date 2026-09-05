@@ -1,18 +1,27 @@
 'use client'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import Navbar, { MOBILE_BOTTOMBAR_SPACER } from '@/components/Navbar'
 import { GalleryMapThumb } from '@/components/routehub/BottomGallery'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 import { ctsLabel } from '@/lib/trailScore'
 import { formatDuration } from '@/lib/tcxParser'
+import { haversineM } from '@/lib/geoUtils'
 import type { AllPercorsiRow } from '@/app/api/percorsi/route'
 import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, TACCUINO_LIST_DIVIDER, TACCUINO_RULED_TEXT_STYLE, FONT_HAND, HandDrawnFrame, TaccuinoPaperTexture, TaccuinoRuledLines } from '@/lib/taccuinoTokens'
 import { TornFrame, tornVariant } from '@/components/TornFrame'
 import { FONT } from '@/lib/designTokens'
 import { META_TYPE_CONFIG, META_TYPES, metaHasHikingMetrics, type MetaType } from '@/lib/metaTypes'
 import { metaRowLocationStats } from '@/lib/metaCard'
-import { ArrowDown, ArrowRight, ArrowUp, Building2, Clock, Landmark, Loader2, MapPin, Mountain, Route, Search, Star, Tag, TrendingUp, X } from 'lucide-react'
+import type { MeteMapPin } from '@/components/mete/MeteMap'
+import { ArrowDown, ArrowRight, ArrowUp, Building2, ChevronDown, ChevronUp, Clock, Landmark, Loader2, LocateFixed, MapPin, Mountain, Route, Search, Star, Tag, TrendingUp, X } from 'lucide-react'
+
+// Leaflet è pesante (CSS+JS) e non deve entrare nel bundle iniziale della pagina: dynamic import,
+// mai un `import` statico in cima al file — così il codice della mappa si scarica solo quando
+// l'utente apre davvero la carta (piano di restyling, Fase 3). `ssr: false`: Leaflet legge `window`
+// al modulo, incompatibile col rendering server.
+const MeteMap = dynamic(() => import('@/components/mete/MeteMap'), { ssr: false })
 
 /**
  * "Mete" (ex "Tutti i Percorsi") — ristrutturazione Diario/Mete richiesta esplicitamente
@@ -38,15 +47,17 @@ import { ArrowDown, ArrowRight, ArrowUp, Building2, Clock, Landmark, Loader2, Ma
  * indipendentemente da quante uscite ha già — il filtro "solo non ancora camminate" resta locale a
  * questa pagina.
  */
-type MeteSortKey = 'date' | 'km' | 'dplus' | 'cts'
+type MeteSortKey = 'date' | 'distance' | 'km' | 'dplus' | 'cts'
 type MeteTypeFilter = 'all' | MetaType
 
 // "Km"/"D+"/"TS" hanno senso solo quando l'elenco può contenere un sentiero (piano §48.9 — una
 // Meta borgo_citta/sito ha queste cifre sempre a 0, ordinarci non direbbe nulla): visibili con
 // 'all' o 'sentiero', nascosti con 'borgo_citta'/'sito'. "Data" resta sempre disponibile, unico
-// ordinamento che vale per ogni tipologia.
-const METE_SORT_OPTIONS: { id: MeteSortKey; label: string; hikingOnly?: boolean }[] = [
+// ordinamento che vale per ogni tipologia. "Vicinanza" (Fase 3 del piano di restyling) è nascosta
+// finché la posizione dell'utente non è nota — mai un ordinamento per una distanza che non esiste.
+const METE_SORT_OPTIONS: { id: MeteSortKey; label: string; hikingOnly?: boolean; needsLocation?: boolean }[] = [
   { id: 'date', label: 'Data' },
+  { id: 'distance', label: 'Vicinanza', needsLocation: true },
   { id: 'km', label: 'Km', hikingOnly: true },
   { id: 'dplus', label: 'D+', hikingOnly: true },
   { id: 'cts', label: 'TS', hikingOnly: true },
@@ -82,6 +93,53 @@ function metaTypeFallbackIcon(metaType: MetaType | undefined) {
   }
 }
 
+// Stessi toni dei pin di components/mete/MeteMap.tsx (PIN_COLOR) — la striscia chiusa deve
+// restare leggibile come "anteprima" della stessa carta che si apre al tocco, non un'illustrazione
+// scollegata.
+const STRIP_PIN_COLOR: Record<MetaType, string> = { sentiero: '#7C8F6E', borgo_citta: '#C0603D', sito: '#5F7355' }
+
+/** Posizione pseudo-casuale ma stabile (derivata dall'id, stesso principio di cutoutRotation sopra
+ *  — mai Math.random(), la stessa Meta deve occupare sempre lo stesso punto tra un render e
+ *  l'altro) dentro un riquadro [margin, 1-margin] — mai troppo vicino al bordo, dove il pin
+ *  finirebbe tagliato dalla maschera di sfumatura in fondo alla striscia. */
+function hashPosition(id: string): { x: number; y: number } {
+  let hash = 0
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0
+  const a = Math.abs(hash)
+  const b = Math.abs((hash * 2654435761) | 0)
+  const margin = 0.12
+  return { x: margin + (a % 1000) / 1000 * (1 - 2 * margin), y: margin + (b % 1000) / 1000 * (1 - 2 * margin) }
+}
+
+/** Sotto il km, la distanza si legge meglio in metri tondi (es. "450 m") che come "0,5 km". */
+function formatDistanceKm(meters: number): string {
+  if (meters < 1000) return `${Math.round(meters / 10) * 10} m`
+  return `${(meters / 1000).toFixed(meters < 10000 ? 1 : 0)} km`
+}
+
+/**
+ * Anteprima statica della carta chiusa (piano di restyling, Fase 3) — MAI Leaflet: solo un
+ * riquadro decorativo con linee di livello e un pin per Meta (stessa forma/colore della carta
+ * vera), posizionati in modo deterministico ma non geografico. Costa zero JS di libreria mappa al
+ * caricamento della pagina; la carta vera si monta solo quando l'utente la apre (MeteMap, import
+ * dinamico in cima al file).
+ */
+function MapStripPreview({ pins }: { pins: MeteMapPin[] }) {
+  return (
+    <svg viewBox="0 0 358 70" style={{ width: '100%', height: 70, display: 'block', background: '#E7E3D2' }} aria-hidden="true">
+      <g fill="none" stroke="#C8B99F" strokeWidth={1} opacity={0.9}>
+        <path d="M-10 16 C 60 4, 130 32, 210 16 S 330 -6, 370 12" />
+        <path d="M-10 34 C 62 22, 134 50, 214 34 S 330 12, 370 30" />
+        <path d="M-10 54 C 64 42, 138 70, 218 54 S 330 32, 370 50" />
+      </g>
+      {pins.map(p => {
+        const { x, y } = hashPosition(p.id)
+        return <circle key={p.id} cx={x * 358} cy={y * 70} r={4} fill={STRIP_PIN_COLOR[p.metaType]} stroke="#F5EDDD" strokeWidth={1.3} />
+      })}
+    </svg>
+  )
+}
+
 export default function MetePage() {
   const [rows, setRows] = useState<AllPercorsiRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -90,6 +148,45 @@ export default function MetePage() {
   const [typeFilter, setTypeFilter] = useState<MeteTypeFilter>('all')
   const [sortBy, setSortBy] = useState<MeteSortKey>('date')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  // Carta chiusa a ogni ingresso in pagina (mai persistita — decisione esplicita dopo il mockup):
+  // si riapre solo al tocco. userLocation resta null finché l'utente non apre la carta almeno una
+  // volta — il permesso di geolocalizzazione non si chiede mai al solo caricamento della pagina.
+  const [mapOpen, setMapOpen] = useState(false)
+  const [userLocation, setUserLocation] = useState<{ lat: number; lon: number } | null>(null)
+  const [geoDenied, setGeoDenied] = useState(false)
+  const autoDistanceSortApplied = useRef(false)
+
+  function requestLocation() {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) { setGeoDenied(true); return }
+    navigator.geolocation.getCurrentPosition(
+      pos => { setUserLocation({ lat: pos.coords.latitude, lon: pos.coords.longitude }); setGeoDenied(false) },
+      // Negato o non disponibile: geoDenied evita di richiedere il permesso di nuovo da sola a ogni
+      // apertura/chiusura della carta nella stessa sessione — resta un pulsante esplicito
+      // ("Vicino a me") per ritentare. La carta resta comunque pienamente utilizzabile senza,
+      // semplicemente senza ordinamento per vicinanza (mai un valore fabbricato al suo posto).
+      () => setGeoDenied(true),
+      { timeout: 8000, maximumAge: 5 * 60 * 1000 },
+    )
+  }
+
+  function handleToggleMap() {
+    setMapOpen(open => {
+      const next = !open
+      if (next && userLocation == null && !geoDenied) requestLocation()
+      return next
+    })
+  }
+
+  // La prima volta che la posizione arriva, se l'utente non ha già scelto un altro ordinamento
+  // (sortBy è ancora il default "Data"), passa a "Vicinanza" — coerente col mockup approvato ("con
+  // la carta aperta l'elenco si ordina per distanza da te"), ma solo una volta e mai sopra una
+  // scelta esplicita dell'utente.
+  useEffect(() => {
+    if (userLocation && !autoDistanceSortApplied.current && sortBy === 'date') {
+      autoDistanceSortApplied.current = true
+      setSortBy('distance')
+    }
+  }, [userLocation, sortBy])
 
   useEffect(() => {
     fetch('/api/percorsi')
@@ -115,6 +212,16 @@ export default function MetePage() {
     if (!hikingSortAllowed && sortBy !== 'date') setSortBy('date')
   }, [hikingSortAllowed, sortBy])
 
+  // Metri dall'utente, quando nota — mai fabbricata: Infinity per una riga senza lat/lon nota o
+  // senza userLocation, così finisce in fondo all'ordinamento per vicinanza invece di sparire o
+  // di fingersi "a 0 km". useCallback (non una funzione semplice) perché il memo dell'elenco qui
+  // sotto la usa nel proprio ordinamento e deve poterla dichiarare come dipendenza reale, non
+  // ricrearla identica a ogni render con un `eslint-disable` a coprire la differenza.
+  const distanceFromUserM = useCallback((row: AllPercorsiRow): number => {
+    if (!userLocation || row.latitude == null || row.longitude == null) return Infinity
+    return haversineM(userLocation.lat, userLocation.lon, row.latitude, row.longitude)
+  }, [userLocation])
+
   const filtered = useMemo(() => {
     let out = mete
     if (typeFilter !== 'all') out = out.filter(r => r.metaType === typeFilter)
@@ -125,6 +232,7 @@ export default function MetePage() {
       out = [...out].sort((a, b) => {
         if (sortBy === 'km') return b.distanceMeters - a.distanceMeters
         if (sortBy === 'dplus') return b.elevationGain - a.elevationGain
+        if (sortBy === 'distance') return distanceFromUserM(a) - distanceFromUserM(b)
         return (b.trailScore ?? 0) - (a.trailScore ?? 0)
       })
     }
@@ -132,12 +240,28 @@ export default function MetePage() {
     // dentro il sort sopra) copre anche quel caso senza bisogno di un comparatore per data.
     if (sortDir === 'asc') out = [...out].reverse()
     return out
-  }, [mete, typeFilter, favoritesOnly, query, sortBy, sortDir])
+  }, [mete, typeFilter, favoritesOnly, query, sortBy, sortDir, distanceFromUserM])
 
   // Query non vuota ma nessuna Meta già salvata corrisponde: propone l'unico altro posto dove
   // cercare (piano — "un solo ingresso di ricerca", non due bottoni sovrapposti come prima).
   const trimmedQuery = query.trim()
   const showSearchElsewhere = trimmedQuery.length > 0 && filtered.length === 0 && mete.length > 0
+
+  // Pin della carta (Fase 3): le stesse Mete già filtrate dall'elenco (tipologia/ricerca/
+  // preferiti — "i chip filtrano insieme i pin e l'elenco", mockup approvato), solo quelle con una
+  // posizione nota (vedi Fase 1: lat/lon sempre presenti per un sentiero con traccia, presenti per
+  // borgo_citta/sito solo se la Meta li porta con sé).
+  const mapPins: MeteMapPin[] = useMemo(() => filtered
+    .filter((r): r is AllPercorsiRow & { latitude: number; longitude: number } => r.latitude != null && r.longitude != null)
+    .map(r => ({
+      id: r.id,
+      metaType: r.metaType,
+      title: r.title,
+      latitude: r.latitude,
+      longitude: r.longitude,
+      href: `/guida/${encodeURIComponent(r.id)}/prima_di_partire`,
+    })),
+  [filtered])
 
   return (
     <div className={`relative min-h-screen md:pb-0 ${MOBILE_BOTTOMBAR_SPACER}`}>
@@ -191,6 +315,54 @@ export default function MetePage() {
           </div>
         ) : (
           <>
+            {/* La carta delle Mete (piano di restyling, Fase 3) — chiusa di default a ogni
+                ingresso in pagina: una striscia decorativa statica (nessun Leaflet montato) con la
+                legenda dei conteggi per tipologia; si apre al tocco, e solo allora scarica e monta
+                la mappa reale (import dinamico in cima al file, mai nel bundle iniziale). */}
+            <div className="relative w-full rounded-xl overflow-hidden mb-3" style={{ border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}>
+              {mapOpen ? (
+                <div className="relative">
+                  {mapPins.length > 0 ? (
+                    <MeteMap pins={mapPins} height="260px" userLocation={userLocation} />
+                  ) : (
+                    <div className="flex items-center justify-center py-10 text-sm" style={{ background: '#E7E3D2', color: TACCUINO_INK.handMuted, fontFamily: FONT.lora }}>
+                      Nessuna Meta con una posizione nota da mostrare qui.
+                    </div>
+                  )}
+                  {geoDenied && (
+                    <button
+                      onClick={requestLocation}
+                      className="absolute right-2 top-2 flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-semibold shadow-sm"
+                      style={{ background: 'rgba(245,237,221,.95)', color: TACCUINO_INK.typed, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}
+                    >
+                      <LocateFixed className="w-3 h-3" /> Vicino a me
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <button onClick={handleToggleMap} className="block w-full text-left">
+                  <MapStripPreview pins={mapPins} />
+                </button>
+              )}
+              <button
+                onClick={handleToggleMap}
+                className="flex items-center gap-2 px-3 py-2 w-full text-left"
+                style={{ background: 'linear-gradient(to top, rgba(245,237,221,.97), rgba(245,237,221,.8))', borderTop: `1px solid ${TACCUINO_PAPER.cardBorder}` }}
+                aria-expanded={mapOpen}
+              >
+                <MapPin className="w-3.5 h-3.5" style={{ color: TACCUINO_INK.handMuted }} />
+                <span className="text-[11.5px] font-semibold" style={{ color: TACCUINO_INK.typed }}>
+                  {mapOpen ? 'Chiudi la carta' : `${mapPins.length} ${mapPins.length === 1 ? 'meta' : 'mete'} sulla carta`}
+                </span>
+                {geoDenied && (
+                  <span className="text-[10.5px]" style={{ color: TACCUINO_INK.handMuted, fontFamily: FONT.lora }}>
+                    — posizione non disponibile
+                  </span>
+                )}
+                {mapOpen ? <ChevronUp className="w-3.5 h-3.5 ml-auto" style={{ color: TACCUINO_INK.handMuted }} /> : <ChevronDown className="w-3.5 h-3.5 ml-auto" style={{ color: TACCUINO_INK.handMuted }} />}
+              </button>
+            </div>
+
             <div className="mb-3">
               <div className="flex items-center gap-2 mb-2">
                 <div className="relative flex-1 min-w-0">
@@ -438,6 +610,15 @@ export default function MetePage() {
                                 {s.value}
                               </span>
                             ))
+                          )}
+                          {/* Distanza da te (Fase 3) — solo quando la posizione è nota (la carta è
+                              stata aperta almeno una volta) e questa Meta ha una posizione propria;
+                              mai un valore fabbricato altrimenti, il chip semplicemente non compare. */}
+                          {userLocation && p.latitude != null && p.longitude != null && (
+                            <span className="inline-flex items-center gap-1">
+                              <LocateFixed className="w-3.5 h-3.5" />
+                              {formatDistanceKm(distanceFromUserM(p))}
+                            </span>
                           )}
                         </div>
                       </div>
