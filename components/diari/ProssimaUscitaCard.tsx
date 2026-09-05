@@ -7,6 +7,7 @@ import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { Compass, Navigation2 } from 'lucide-react'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
+import RouteThumb from '@/components/RouteThumb'
 import { FONT } from '@/lib/designTokens'
 import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, TACCUINO_ACCENT_TINT } from '@/lib/taccuinoTokens'
 import { metaHasHikingMetrics } from '@/lib/metaTypes'
@@ -70,6 +71,15 @@ export function ProssimaUscitaCard({ candidata }: Props) {
       <p style={{ fontFamily: FONT.display, fontWeight: 700, fontSize: 18, color: TACCUINO_INK.typed, marginTop: 9 }}>
         {candidata.title}
       </p>
+
+      {candidata.routePolyline && candidata.routePolyline.length > 1 && (
+        <div
+          className="w-full mt-2.5 rounded-xl overflow-hidden"
+          style={{ height: 72, background: TACCUINO_PAPER.light, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}
+        >
+          <RouteThumb polyline={candidata.routePolyline} color={TACCUINO_ACCENT[600]} strokeWidth={2.5} />
+        </div>
+      )}
 
       {conMetriche && (
         <div className="flex items-center gap-4 mt-2.5">
