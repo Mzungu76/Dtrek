@@ -7,7 +7,7 @@ import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { Compass, Navigation2 } from 'lucide-react'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
-import RouteThumb from '@/components/RouteThumb'
+import TrailPreviewMap from '@/components/TrailPreviewMap'
 import { FONT } from '@/lib/designTokens'
 import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, TACCUINO_ACCENT_TINT } from '@/lib/taccuinoTokens'
 import { metaHasHikingMetrics } from '@/lib/metaTypes'
@@ -73,11 +73,13 @@ export function ProssimaUscitaCard({ candidata }: Props) {
       </p>
 
       {candidata.routePolyline && candidata.routePolyline.length > 1 && (
-        <div
-          className="w-full mt-2.5 rounded-xl overflow-hidden"
-          style={{ height: 72, background: TACCUINO_PAPER.light, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}
-        >
-          <RouteThumb polyline={candidata.routePolyline} color={TACCUINO_ACCENT[600]} strokeWidth={2.5} />
+        // Stessa mappa Leaflet/OSM usata in Guida ("Il percorso") e nelle card dei risultati di
+        // ricerca — non RouteMapSection/MapView di Guida, che vogliono i trackPoints completi
+        // (quota, tempo per punto): qui c'è solo la routePolyline già scaricata da
+        // GET /api/percorsi. Stesse tile (/api/tile), stesso tracciato in evidenza con partenza/
+        // arrivo, stesso pulsante per espandere a schermo intero.
+        <div className="mt-2.5">
+          <TrailPreviewMap polyline={candidata.routePolyline} height="150px" expandable />
         </div>
       )}
 
