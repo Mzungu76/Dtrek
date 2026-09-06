@@ -56,16 +56,40 @@ export async function createSyntheticPercorso(
   return synthetic
 }
 
+/** Il minimo che serve a scegliere un Diario in un elenco — l'intero DiarySummary porta con sé
+ *  metriche e copertine che nessun selettore usa. */
+export interface DiaryChoice {
+  id: string
+  title: string
+  isDefault: boolean
+}
+
 /**
- * Id del Diario di default ("Il mio Diario", `is_default` — esiste per ogni utente dal backfill).
- * Best-effort: offline, o con la sessione non ancora ristabilita, torna undefined e chi chiama
- * prosegue senza Diario invece di far fallire il salvataggio di un'escursione appena camminata.
+ * I Diari fra cui si può scegliere una destinazione, quello di default per primo (lo stesso
+ * ordine con cui li restituisce /api/diaries). Esclude gli archiviati: sono fuori dal giro, non
+ * una destinazione per un'uscita appena camminata.
+ *
+ * Best-effort: offline, o con la sessione non ancora ristabilita, torna un elenco vuoto e chi
+ * chiama prosegue senza Diario invece di far fallire il salvataggio di una traccia.
  */
-export async function getDefaultDiaryId(): Promise<string | undefined> {
+export async function listSelectableDiaries(): Promise<DiaryChoice[]> {
   try {
     const diaries = await apiFetch<DiarySummary[]>('/api/diaries')
-    return (diaries.find(d => d.isDefault) ?? diaries[0])?.id
+    return diaries
+      .filter(d => !d.archivedAt)
+      .map(d => ({ id: d.id, title: d.title, isDefault: d.isDefault }))
   } catch {
-    return undefined
+    return []
   }
+}
+
+/**
+ * Id del Diario di default ("Il mio Diario", `is_default` — esiste per ogni utente dal backfill).
+ * Il ripiego di ogni flusso che salva senza chiedere niente all'utente; dove invece la
+ * destinazione è una scelta esplicita (il salvataggio di una traccia in Navigator) si passa
+ * dall'elenco qui sopra. Best-effort allo stesso modo: undefined se non lo si è potuto leggere.
+ */
+export async function getDefaultDiaryId(): Promise<string | undefined> {
+  const diaries = await listSelectableDiaries()
+  return (diaries.find(d => d.isDefault) ?? diaries[0])?.id
 }

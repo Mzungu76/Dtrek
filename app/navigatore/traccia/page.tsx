@@ -200,7 +200,10 @@ export default function TracciaPage() {
     router.push(homePath)
   }
 
-  const handleSave = async (title: string) => {
+  // `chosenDiaryId` è il Diario scelto nel dialogo di salvataggio (FreeTrackSaveDialog) — assente
+  // solo quando l'elenco non si è potuto caricare, tipicamente perché a fine escursione si è
+  // offline: lì si ripiega sul Diario di default, mai su nessun Diario.
+  const handleSave = async (title: string, chosenDiaryId?: string) => {
     if (!pendingActivity) return
     // Un Reportage appartiene a un Diario solo attraverso la sua Meta (activities.
     // linked_planned_id → planned_hikes.diary_id — vedi lib/diari/syntheticPercorso.ts): salvata
@@ -210,7 +213,7 @@ export default function TracciaPage() {
     let linkedPlannedId: string | undefined
     let diaryId: string | undefined
     try {
-      diaryId = await getDefaultDiaryId()
+      diaryId = chosenDiaryId ?? await getDefaultDiaryId()
       const percorso = await createSyntheticPercorso(pendingActivity, { title, diaryId })
       linkedPlannedId = percorso.id
     } catch {
