@@ -11,6 +11,7 @@ import { haptics } from '@/lib/navigation/haptics'
 import type { TcxActivity, TrackPoint } from '@/lib/tcxParser'
 import { getNavigatorSlotStatus, type NavigatorSlotStatus } from '@/lib/navigatorSlot'
 import { deletePlanned } from '@/lib/plannedStore'
+import { createSyntheticPercorso, getDefaultDiaryId } from '@/lib/diari/syntheticPercorso'
 import { deleteActivity, type HikeNote } from '@/lib/blobStore'
 import { requestOrientationPermission, isOrientationSupported, needsOrientationPermissionGesture } from '@/lib/navigation/orientation'
 import { prefetchTilesAroundPoint } from '@/lib/offline/packageManager'
@@ -59,6 +60,11 @@ export default function TracciaPage() {
   const [gpsWarning, setGpsWarning] = useState<string | null>(null)
   const [pendingActivity, setPendingActivity] = useState<TcxActivity | null>(null)
   const [savedActivityId, setSavedActivityId] = useState<string | null>(null)
+  // Percorso (Meta) e Diario a cui la traccia appena salvata è stata agganciata — servono a
+  // mandare "Apri nel Diario" sulla lettura a libro del Reportage invece che sulla vista estesa
+  // /resoconto/[id], che è il vecchio hub (vedi handleSave).
+  const [savedPercorsoId, setSavedPercorsoId] = useState<string | null>(null)
+  const [savedDiaryId, setSavedDiaryId] = useState<string | null>(null)
   const [savedOffline, setSavedOffline] = useState(false)
   const [starting, setStarting] = useState(false)
   // undefined = still checking; Navigator's own import/record actions are capped at
@@ -196,14 +202,39 @@ export default function TracciaPage() {
 
   const handleSave = async (title: string) => {
     if (!pendingActivity) return
+    // Un Reportage appartiene a un Diario solo attraverso la sua Meta (activities.
+    // linked_planned_id → planned_hikes.diary_id — vedi lib/diari/syntheticPercorso.ts): salvata
+    // senza, la traccia non compariva in NESSUN elenco di Dtrek, raggiungibile solo dal link
+    // diretto qui sotto. La Meta sintetica va creata PRIMA del salvataggio, perché è
+    // `linkedPlannedId` a fare l'aggancio.
+    let linkedPlannedId: string | undefined
+    let diaryId: string | undefined
+    try {
+      diaryId = await getDefaultDiaryId()
+      const percorso = await createSyntheticPercorso(pendingActivity, { title, diaryId })
+      linkedPlannedId = percorso.id
+    } catch {
+      // Non blocca il salvataggio dell'escursione: peggio che può andare, resta un Reportage
+      // senza Meta (com'era prima di questa modifica), mai una traccia camminata persa.
+    }
     const saved = await saveActivityWithEnrichment(pendingActivity, {
-      title, sourceApp: 'navigator', hikeNotes,
+      title, sourceApp: 'navigator', hikeNotes, linkedPlannedId,
       onSyncResult: (ok) => setSavedOffline(!ok),
     })
     setSavedActivityId(saved.id)
+    setSavedPercorsoId(linkedPlannedId ?? null)
+    setSavedDiaryId(diaryId ?? null)
     setPendingActivity(null)
     setPhase('saved')
   }
+
+  // Lettura "a libro" del Reportage — la stessa a cui rimanda ogni riga di /diari/[id]. La vista
+  // estesa /resoconto/[id] (ResocontoHub) resta il ripiego per un Reportage senza Meta o senza
+  // Diario, l'unico caso in cui il percorso di lettura non è costruibile.
+  const reportagePath = (activityId: string): string =>
+    savedDiaryId && savedPercorsoId
+      ? `/diari/${encodeURIComponent(savedDiaryId)}/percorsi/${encodeURIComponent(savedPercorsoId)}/reportage/${encodeURIComponent(activityId)}/sezione/1`
+      : `/resoconto/${encodeURIComponent(activityId)}`
 
   const handleDiscard = () => {
     setPendingActivity(null)
@@ -342,7 +373,7 @@ export default function TracciaPage() {
           <div className="flex flex-col gap-2 w-full max-w-xs mt-2">
             {savedActivityId && (
               <button
-                onClick={() => openInMainApp(`/resoconto/${encodeURIComponent(savedActivityId)}`)}
+                onClick={() => openInMainApp(reportagePath(savedActivityId))}
                 className="w-full py-2.5 rounded-xl bg-sky-600 text-white font-semibold text-sm hover:bg-sky-700"
               >
                 Apri nel Diario
