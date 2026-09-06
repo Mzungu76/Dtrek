@@ -99,10 +99,31 @@ e la tipologia già impostata.
 `tsc --noEmit` pulito, eslint pulito, vitest verde. Test nuovi: il conteggio di Fase 0 (riga borgo e
 riga sito), il dedup di Fase 2 (una Meta salvata che è anche in archivio compare una volta sola).
 
-## Decisioni ancora aperte
+## Decisioni chiuse (confermate dall'utente)
 
-1. **Scaffale aperto di default**: Sentieri (proposto: è la tipologia con dati veri e con 4 vie su 6).
-   L'alternativa — ricordare l'ultimo aperto — aggiunge stato persistito per un guadagno dubbio.
-2. **Siti a 0 righe**: lo scaffale resta visibile e dichiara che l'archivio è vuoto (come nel mockup
-   C), oppure resta chiuso e silenzioso finché non ci sono dati. Da decidere insieme alle fasi 4-6
-   del restyling, che riguardano proprio i dati.
+1. **Scaffale aperto di default**: Sentieri, mai persistito — si riapre da capo a ogni ingresso.
+2. **Siti a 0 righe**: lo scaffale resta visibile fin da subito, con la ricerca già funzionante —
+   dichiara semplicemente che l'archivio è vuoto, invece di nascondersi finché non arrivano i dati
+   delle fasi 4-6 del restyling.
+
+## Stato implementazione
+
+Fasi 0-4 implementate su `claude/unified-mete-search-page-5qq64w`:
+
+- **Fase 0**: `GET /api/meta-search/counts` (`app/api/meta-search/counts/route.ts`), `count: 'exact',
+  head: true` per tipologia, `revalidate = 3600`.
+- **Fase 1+2**: `app/percorsi/cerca/page.tsx` riscritta come hub — campo unico (Mete salvate +
+  archivio con debounce/abort, dedup via `lib/metaSearch/mergeArchiveResults.ts`) sopra i tre
+  scaffali. Sentieri aperto di default; ogni voce rimanda alla schermata esistente invariata
+  (`/upload?tab=gpx[&source=manual]`, `/percorsi-per-te`, `/profilo/ricerche-salvate`,
+  `/percorsi/cerca/luoghi?tipo=...`). `?source=manual` è l'unica aggiunta a `app/upload/page.tsx`
+  (comportamento di default invariato per chi non lo passa).
+- **Fase 3**: card "Cerca una Meta" in `app/percorsi/page.tsx`, bottone a icona rimosso.
+- **Fase 4**: form Borghi/Siti spostato invariato in `app/percorsi/cerca/luoghi/page.tsx`, con
+  `?tipo=` e la creazione della Meta estratta nel hook condiviso `lib/useCreateMetaFromSearch.ts`
+  (stessa azione usata anche dal campo unico dell'hub).
+
+Verificato: `tsc --noEmit` pulito, eslint pulito su tutti i file toccati, nuovo test
+`lib/metaSearch/__tests__/mergeArchiveResults.test.ts` (unione + dedup + caso vuoto). Non aggiunto
+un test sull'endpoint conteggi: nessuna rotta API ha oggi un test che tocca Supabase in questo
+repo (solo funzioni pure), introdurre quell'infrastruttura sarebbe fuori scopo per questa fase.
