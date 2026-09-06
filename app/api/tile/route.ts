@@ -56,6 +56,30 @@ export async function GET(req: Request) {
   const isCarto = base.includes('cartocdn.com')
   const url  = `${base}/${zoom}/${x}/${y}${retina ? '@2x' : ''}.png${isCarto && CARTO_API_KEY ? `?key=${encodeURIComponent(CARTO_API_KEY)}` : ''}`
 
+  // Diagnostica temporanea (nessun segreto in risposta, solo booleano/lunghezza) — per capire da
+  // fuori, senza guardare i log di Vercel, se CARTO_API_KEY è visibile al processo che serve
+  // QUESTO deploy e se CARTO la accetta. Da rimuovere una volta chiuso il problema della
+  // filigrana "API KEY REQUIRED".
+  if (searchParams.get('debug') === '1') {
+    try {
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'DTrek/1.0 (personal trekking diary)', 'Accept': 'image/png', 'Referer': 'https://www.openstreetmap.org/' },
+        cache: 'no-store',
+      })
+      return new Response(JSON.stringify({
+        isCarto,
+        cartoKeyConfigured: !!CARTO_API_KEY,
+        cartoKeyLength: CARTO_API_KEY?.length ?? 0,
+        upstreamHost: new URL(url).host,
+        upstreamStatus: res.status,
+        upstreamContentLength: res.headers.get('content-length'),
+        upstreamContentType: res.headers.get('content-type'),
+      }), { headers: { 'Content-Type': 'application/json' } })
+    } catch (e) {
+      return new Response(JSON.stringify({ error: String(e) }), { status: 502, headers: { 'Content-Type': 'application/json' } })
+    }
+  }
+
   try {
     const res = await fetch(url, {
       headers: {
