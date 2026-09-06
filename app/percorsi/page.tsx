@@ -9,13 +9,13 @@ import { ctsLabel } from '@/lib/trailScore'
 import { formatDuration } from '@/lib/tcxParser'
 import { haversineM } from '@/lib/geoUtils'
 import type { AllPercorsiRow } from '@/app/api/percorsi/route'
-import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, TACCUINO_LIST_DIVIDER, TACCUINO_RULED_TEXT_STYLE, FONT_HAND, HandDrawnFrame, TaccuinoPaperTexture, TaccuinoRuledLines } from '@/lib/taccuinoTokens'
+import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, TACCUINO_ACCENT_TINT, TACCUINO_LIST_DIVIDER, TACCUINO_RULED_TEXT_STYLE, FONT_HAND, HandDrawnFrame, TaccuinoPaperTexture, TaccuinoRuledLines } from '@/lib/taccuinoTokens'
 import { TornFrame, tornVariant } from '@/components/TornFrame'
 import { FONT } from '@/lib/designTokens'
 import { META_TYPE_CONFIG, META_TYPES, metaHasHikingMetrics, type MetaType } from '@/lib/metaTypes'
 import { metaRowLocationStats } from '@/lib/metaCard'
 import type { MeteMapPin } from '@/components/mete/MeteMap'
-import { ArrowDown, ArrowRight, ArrowUp, Building2, ChevronDown, ChevronUp, Clock, Loader2, LocateFixed, MapPin, Maximize2, Minimize2, Mountain, Route, Search, Star, Tag, TrendingUp, X } from 'lucide-react'
+import { ArrowDown, ArrowRight, ArrowUp, Building2, ChevronDown, ChevronRight, ChevronUp, Clock, Loader2, LocateFixed, MapPin, Maximize2, Minimize2, Mountain, Route, Search, Star, Tag, TrendingUp, X } from 'lucide-react'
 
 // Leaflet è pesante (CSS+JS) e non deve entrare nel bundle iniziale della pagina: dynamic import,
 // mai un `import` statico in cima al file — così il codice della mappa si scarica solo quando
@@ -491,43 +491,49 @@ export default function MetePage() {
               </div>
             )}
 
+            {/* Ingresso all'hub di ricerca (docs/piano-ricerca-mete.md, Fase 3) — sostituisce il
+                bottone a icona che stava accanto al campo qui sotto: quel bottone era l'unico
+                modo di raggiungere una Meta nuova (Sentiero/Borgo/Città/Sito), ora assorbito da
+                questa card per non tornare a due ingressi sovrapposti. Il campo sotto resta
+                dov'era e filtra solo le Mete già salvate. */}
+            <Link
+              href="/percorsi/cerca"
+              className="relative flex items-center gap-3 mb-3 px-3.5 py-3 rounded-xl"
+              style={{ background: TACCUINO_ACCENT_TINT, border: `1.5px solid ${TACCUINO_ACCENT[600]}80` }}
+            >
+              <span className="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0" style={{ background: TACCUINO_ACCENT[600] }}>
+                <Search className="w-4.5 h-4.5" style={{ color: TACCUINO_PAPER.light }} />
+              </span>
+              <div className="flex-1 min-w-0">
+                <p style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 19, color: TACCUINO_INK.typed, lineHeight: 1.1 }}>Cerca una Meta</p>
+                <p className="text-[11px] mt-0.5" style={{ color: TACCUINO_INK.hand, fontFamily: FONT.lora }}>
+                  Sentieri, Borghi, Città e Siti — tutti i modi in un posto solo
+                </p>
+              </div>
+              <ChevronRight className="w-4 h-4 shrink-0" style={{ color: TACCUINO_ACCENT[600] }} />
+            </Link>
+
             <div className="mb-3">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="relative flex-1 min-w-0">
-                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: TACCUINO_INK.handMuted }} />
-                  <input
-                    value={query}
-                    onChange={e => setQuery(e.target.value)}
-                    placeholder="cerca fra le tue Mete…"
-                    className="w-full pl-8 pr-8 py-2 rounded-[3px] text-[14px] outline-none placeholder:text-[#8a9bab]"
-                    style={{ background: TACCUINO_PAPER.card, color: TACCUINO_INK.typed, fontFamily: FONT_HAND }}
-                  />
-                  {query && (
-                    <button
-                      onClick={() => setQuery('')}
-                      className="absolute right-3 top-1/2 -translate-y-1/2"
-                      style={{ color: TACCUINO_INK.handMuted }}
-                      aria-label="Cancella ricerca"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                  <HandDrawnFrame stroke={TACCUINO_PAPER.cardBorder} strokeWidth={1.5} rx={4} />
-                </div>
-                {/* Unico altro ingresso di ricerca, non più un secondo campo identico al primo
-                    (piano — "due ricerche sovrapposte"): un bottone compatto, sempre raggiungibile
-                    anche quando l'elenco locale non è vuoto — resta l'unico modo di aggiungere un
-                    Borgo/Città/Sito, non solo il ripiego di una ricerca senza risultati. */}
-                <Link
-                  href="/percorsi/cerca"
-                  title="Cerca un Borgo, una Città o un Sito"
-                  aria-label="Cerca un Borgo, una Città o un Sito"
-                  className="relative shrink-0 flex items-center justify-center w-9 h-9 rounded-[3px]"
-                  style={{ background: TACCUINO_PAPER.card, color: TACCUINO_INK.handMuted }}
-                >
-                  <Building2 className="w-4 h-4" />
-                  <HandDrawnFrame stroke={TACCUINO_PAPER.cardBorder} strokeWidth={1.5} rx={4} />
-                </Link>
+              <div className="relative mb-2">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: TACCUINO_INK.handMuted }} />
+                <input
+                  value={query}
+                  onChange={e => setQuery(e.target.value)}
+                  placeholder="cerca fra le tue Mete…"
+                  className="w-full pl-8 pr-8 py-2 rounded-[3px] text-[14px] outline-none placeholder:text-[#8a9bab]"
+                  style={{ background: TACCUINO_PAPER.card, color: TACCUINO_INK.typed, fontFamily: FONT_HAND }}
+                />
+                {query && (
+                  <button
+                    onClick={() => setQuery('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2"
+                    style={{ color: TACCUINO_INK.handMuted }}
+                    aria-label="Cancella ricerca"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                <HandDrawnFrame stroke={TACCUINO_PAPER.cardBorder} strokeWidth={1.5} rx={4} />
               </div>
 
               {/* Chip di tipologia — il filtro primario (piano Fase 2), stesso componente riusato

@@ -1,258 +1,359 @@
 'use client'
-import { useEffect, useState, useCallback, Suspense } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useEffect, useMemo, useRef, useState, Suspense, type ReactNode } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Navbar, { MOBILE_BOTTOMBAR_SPACER } from '@/components/Navbar'
-import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, TACCUINO_LIST_DIVIDER, FONT_HAND, HandDrawnFrame } from '@/lib/taccuinoTokens'
+import BackLink from '@/app/components/BackLink'
+import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, FONT_HAND, HandDrawnFrame } from '@/lib/taccuinoTokens'
 import { FONT } from '@/lib/designTokens'
-import { savePlanned } from '@/lib/plannedStore'
-import { metaSearchResultToPlannedHike } from '@/lib/metaToPlannedHike'
-import { metaCardStats } from '@/lib/metaCard'
+import { useCreateMetaFromSearch } from '@/lib/useCreateMetaFromSearch'
+import { mergeArchiveResults } from '@/lib/metaSearch/mergeArchiveResults'
 import type { MetaSearchResultItem } from '@/lib/metaSearch/types'
-import { SITE_TYPE_CONFIG, SITE_TYPES, type SiteType, type PlaceCategory } from '@/lib/metaTypes'
-import { ITALIAN_REGIONS } from '@/lib/italianRegions'
-import { ArrowLeft, Building2, Landmark, Loader2, MapPin, Search, X } from 'lucide-react'
+import type { AllPercorsiRow } from '@/app/api/percorsi/route'
+import type { MetaSearchCounts } from '@/app/api/meta-search/counts/route'
+import { META_TYPE_CONFIG, type MetaType } from '@/lib/metaTypes'
+import {
+  Building2, ChevronDown, ChevronUp, FolderSearch, Landmark, Loader2,
+  Route as RouteIcon, Search, Sparkles, Upload, X,
+} from 'lucide-react'
 
-type SearchMetaType = 'borgo_citta' | 'sito'
+// Debounce della ricerca d'archivio (Fase 2 — un solo giro di /api/meta-search per pausa di
+// digitazione, non uno per carattere premuto). Sotto due caratteri il campo filtra solo le Mete
+// già salvate (client, gratis): una ricerca d'archivio per una singola lettera tornerebbe
+// centinaia di righe poco utili.
+const ARCHIVE_SEARCH_DEBOUNCE_MS = 350
+const ARCHIVE_SEARCH_MIN_CHARS = 2
+const ARCHIVE_SEARCH_LIMIT = 6
 
-const PLACE_CATEGORY_OPTIONS: { id: PlaceCategory; label: string }[] = [
-  { id: 'borgo', label: 'Borgo' },
-  { id: 'citta', label: 'Città' },
+interface ShelfItem {
+  href: string
+  icon: typeof RouteIcon
+  title: string
+  subtitle: string
+}
+
+const SENTIERI_ITEMS: ShelfItem[] = [
+  {
+    href: '/upload?tab=gpx&source=manual',
+    icon: RouteIcon,
+    title: 'Costruisci o trova un percorso',
+    subtitle: 'Punto di partenza, km e dislivello — oppure lo descrivi a Giulia',
+  },
+  {
+    href: '/percorsi-per-te',
+    icon: Sparkles,
+    title: 'Percorsi per te',
+    subtitle: '5 proposte già pronte, aggiornate ogni settimana',
+  },
+  {
+    href: '/upload?tab=gpx',
+    icon: Upload,
+    title: 'Ce l’ho già',
+    subtitle: 'File GPX · da un link · a mano · da un’escursione fatta',
+  },
 ]
 
 /**
- * Cerca/crea una Meta Borgo-Città o Sito (piano §17/§25 — Blocco C/D già costruiti, mai
- * raggiungibili finora da uno schermo reale). Riusa /api/meta-search (searchBorghi/searchSiti,
- * lib/metaSearch) per la ricerca e metaSearchResultToPlannedHike + savePlanned per la creazione —
- * nessuna nuova logica di ricerca/creazione qui, solo la UI che mancava. 'sentiero' resta
- * volutamente fuori: quel flusso è /upload?tab=gpx, invariato (piano §48.3/§18).
+ * Pagina unica di ricerca delle Mete — docs/piano-ricerca-mete.md, direzione A ("tre scaffali a
+ * fisarmonica") scelta dopo i mockup (docs/mockup-ricerca-mete/, canvas
+ * https://claude.ai/code/artifact/4fac632b-b9a7-451c-b1ae-c40228d3550d). Sostituisce il vecchio
+ * form Borghi/Siti che viveva qui: quel form si è spostato, invariato, su
+ * app/percorsi/cerca/luoghi/page.tsx, ora raggiunto dallo scaffale "Borghi e Città"/"Siti".
  *
- * `useSearchParams` richiede un confine Suspense (stesso pattern di app/upload/page.tsx) — serve
- * per l'unico ingresso di ricerca della pagina Mete (app/percorsi/page.tsx): quando una ricerca
- * lì non trova nulla fra le Mete già salvate, il link "Cerca anche fra Borghi, Città e Siti" porta
- * qui con `?q=` già valorizzato, invece di far ridigitare il testo.
+ * Architettura ibrida (vincolo fissato con l'utente): il campo unico in cima risponde subito con
+ * le due ricerche già veloci (Mete salvate, filtro client su /api/percorsi; archivio Borghi/Siti,
+ * /api/meta-search) — i flussi lunghi (wizard, Giulia, import, Percorsi per te) restano le
+ * schermate esistenti invariate, raggiunte dagli scaffali sotto.
+ *
+ * `useSearchParams` (per `?q=`, arrivo dal campo di ricerca di app/percorsi/page.tsx quando non
+ * trova nulla fra le Mete salvate) richiede un confine Suspense — stesso pattern di
+ * app/upload/page.tsx.
  */
-export default function CercaMetaPage() {
+export default function CercaMetaHubPage() {
   return (
     <Suspense fallback={null}>
-      <CercaMetaPageInner />
+      <CercaMetaHubPageInner />
     </Suspense>
   )
 }
 
-function CercaMetaPageInner() {
-  const router = useRouter()
+function CercaMetaHubPageInner() {
   const searchParams = useSearchParams()
-  const [metaType, setMetaType] = useState<SearchMetaType>('borgo_citta')
-  const [queryText, setQueryText] = useState(() => searchParams.get('q') ?? '')
-  const [region, setRegion] = useState('')
-  const [category, setCategory] = useState<string[]>([])
-  const [results, setResults] = useState<MetaSearchResultItem[] | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [creatingId, setCreatingId] = useState<string | null>(null)
-  const [createError, setCreateError] = useState<string | null>(null)
+  const [query, setQuery] = useState(() => searchParams.get('q') ?? '')
+  // Sentieri aperto di default a ogni ingresso (decisione esplicita — è la tipologia con più vie e
+  // con dati reali oggi): mai persistito, un solo scaffale aperto alla volta.
+  const [openShelf, setOpenShelf] = useState<MetaType>('sentiero')
 
-  const runSearch = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const res = await fetch('/api/meta-search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          metaType,
-          query: queryText.trim() || undefined,
-          region: region || undefined,
-          category: category.length > 0 ? category : undefined,
-          limit: 30,
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data?.message || data?.error || `Errore ${res.status}`)
-      setResults(data.items as MetaSearchResultItem[])
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Ricerca non riuscita')
-      setResults(null)
-    } finally {
-      setLoading(false)
-    }
-  }, [metaType, queryText, region, category])
+  const [rows, setRows] = useState<AllPercorsiRow[] | null>(null)
+  const [archiveCounts, setArchiveCounts] = useState<MetaSearchCounts | null>(null)
+  const [savedSearchCount, setSavedSearchCount] = useState<number | null>(null)
 
-  // Ricerca iniziale (nessun filtro = sfoglia i risultati più rilevanti) e ogni volta che cambia
-  // la tipologia — i filtri restano applicati solo al tap su "Cerca", per non rifare una richiesta
-  // ad ogni tasto premuto nel campo testo.
+  const [archiveResults, setArchiveResults] = useState<MetaSearchResultItem[] | null>(null)
+  const [archiveLoading, setArchiveLoading] = useState(false)
+  const { creatingId, createError, createAndOpen } = useCreateMetaFromSearch()
+
   useEffect(() => {
-    setCategory([])
-    runSearch()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [metaType])
+    fetch('/api/percorsi').then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))).then(setRows).catch(() => setRows([]))
+    fetch('/api/meta-search/counts').then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))).then(setArchiveCounts).catch(() => setArchiveCounts(null))
+    // Best-effort: se non autenticata o la tabella non esiste ancora, il conteggio resta assente
+    // (mai un numero fabbricato al suo posto — la riga "Ricerche salvate" lo omette).
+    fetch('/api/route-build/search-history').then(r => r.ok ? r.json() : Promise.reject()).then(d => setSavedSearchCount((d.searches ?? []).length)).catch(() => setSavedSearchCount(null))
+  }, [])
 
-  async function handleSelect(item: MetaSearchResultItem) {
-    if (creatingId) return
-    setCreatingId(item.id)
-    setCreateError(null)
-    try {
-      const hike = metaSearchResultToPlannedHike(item)
-      await savePlanned(hike)
-      router.push(`/guida/${encodeURIComponent(hike.id)}/prima_di_partire`)
-    } catch (e) {
-      setCreateError(e instanceof Error ? e.message : 'Impossibile creare la Meta — riprova.')
-      setCreatingId(null)
+  const mete = useMemo(() => (rows ?? []).filter(r => r.reportageCount === 0), [rows])
+  const savedPlaceIds = useMemo(() => new Set(mete.map(r => r.placeId).filter((id): id is string => id != null)), [mete])
+
+  const trimmedQuery = query.trim()
+  const localMatches = useMemo(() => {
+    const q = trimmedQuery.toLowerCase()
+    if (!q) return []
+    return mete.filter(r => r.title.toLowerCase().includes(q))
+  }, [mete, trimmedQuery])
+
+  // Ricerca d'archivio debounced con AbortController — una richiesta in volo alla volta, la
+  // precedente viene sempre annullata così una risposta in ritardo non sovrascrive una più
+  // recente (stessa insidia di ogni campo di ricerca live).
+  const abortRef = useRef<AbortController | null>(null)
+  useEffect(() => {
+    abortRef.current?.abort()
+    if (trimmedQuery.length < ARCHIVE_SEARCH_MIN_CHARS) {
+      setArchiveResults(null)
+      setArchiveLoading(false)
+      return
     }
-  }
+    const controller = new AbortController()
+    abortRef.current = controller
+    setArchiveLoading(true)
+    const timer = setTimeout(async () => {
+      try {
+        const [borghi, siti] = await Promise.all(
+          (['borgo_citta', 'sito'] as const).map(metaType =>
+            fetch('/api/meta-search', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ metaType, query: trimmedQuery, limit: ARCHIVE_SEARCH_LIMIT }),
+              signal: controller.signal,
+            }).then(r => r.ok ? r.json() : { items: [] }).then(d => (d.items ?? []) as MetaSearchResultItem[]),
+          ),
+        )
+        if (controller.signal.aborted) return
+        setArchiveResults(mergeArchiveResults([borghi, siti], savedPlaceIds))
+      } catch (e) {
+        if (!(e instanceof DOMException && e.name === 'AbortError')) setArchiveResults([])
+      } finally {
+        if (!controller.signal.aborted) setArchiveLoading(false)
+      }
+    }, ARCHIVE_SEARCH_DEBOUNCE_MS)
+    return () => clearTimeout(timer)
+  }, [trimmedQuery, savedPlaceIds])
 
-  const categoryOptions = metaType === 'sito'
-    ? SITE_TYPES.map(id => ({ id, label: SITE_TYPE_CONFIG[id].label }))
-    : PLACE_CATEGORY_OPTIONS
+  const hasQuery = trimmedQuery.length > 0
+  const showInstantResults = hasQuery && (localMatches.length > 0 || (archiveResults?.length ?? 0) > 0 || archiveLoading || trimmedQuery.length >= ARCHIVE_SEARCH_MIN_CHARS)
 
   return (
     <div className={`min-h-screen md:pb-0 ${MOBILE_BOTTOMBAR_SPACER}`} style={{ background: TACCUINO_PAPER.base }}>
       <Navbar />
 
-      <div className="relative h-[200px] sm:h-[240px] overflow-hidden" style={{ background: 'linear-gradient(to bottom right, #4A5A3F, #2E3A26)' }}>
-        <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, rgba(46,58,38,.15), rgba(46,58,38,.85))' }} />
-        <div className="absolute left-6 right-6 bottom-6 sm:left-10 sm:right-10 sm:bottom-8">
-          <Link href="/percorsi" className="inline-flex items-center gap-1.5 text-[#E9DAC3] text-[13px] font-semibold mb-1.5 hover:text-white transition-colors">
-            <ArrowLeft className="w-3.5 h-3.5" /> Mete
-          </Link>
-          <h1 className="font-display text-[24px] sm:text-3xl font-bold text-white leading-tight">
-            Cerca una Meta
-          </h1>
-          <p className="text-white/75 text-[13px] mt-1">Un borgo, una città o un sito da visitare — senza traccia GPS.</p>
-        </div>
+      <div className="max-w-[720px] mx-auto px-5 sm:px-8 pt-6 sm:pt-8">
+        <BackLink label="Mete" fallbackHref="/percorsi" className="inline-flex items-center gap-1 text-sm text-stone-400 hover:text-stone-600 transition mb-2" />
+        <h1 style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 32, color: TACCUINO_INK.typed }}>Cerca una Meta</h1>
+        <p className="mt-0.5 mb-4" style={{ fontFamily: FONT.lora, fontSize: 12.5, color: TACCUINO_INK.handMuted }}>
+          Tutti i modi per trovarne una nuova, e per ritrovare le tue.
+        </p>
       </div>
 
-      <main className="max-w-[720px] mx-auto px-5 sm:px-8 py-6 sm:py-8">
-        {/* Tipologia — scelta esplicita dell'utente (piano §48.11, mai dedotta). Sentiero non è
-            un'opzione qui: quel flusso resta /upload?tab=gpx, invariato. */}
-        <div className="flex gap-2 mb-4">
-          {([
-            { id: 'borgo_citta' as const, label: 'Borgo / Città', icon: Building2 },
-            { id: 'sito' as const, label: 'Sito', icon: Landmark },
-          ]).map(t => (
-            <button
-              key={t.id}
-              onClick={() => setMetaType(t.id)}
-              className="relative flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[14px] font-semibold transition-colors"
-              style={metaType === t.id
-                ? { background: TACCUINO_ACCENT[600], color: 'white' }
-                : { background: TACCUINO_PAPER.card, color: TACCUINO_INK.handMuted, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}
-            >
-              <t.icon className="w-4 h-4" /> {t.label}
-            </button>
-          ))}
-        </div>
-
+      <main className="max-w-[720px] mx-auto px-5 sm:px-8 pb-8">
+        {/* Campo unico — Fase 2: risponde subito con le due ricerche già veloci (Mete salvate +
+            archivio Borghi/Siti), unite in due gruppi sotto. I flussi lunghi restano negli
+            scaffali più giù, non in questo campo. */}
         <div className="relative mb-2">
           <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: TACCUINO_INK.handMuted }} />
           <input
-            value={queryText}
-            onChange={e => setQueryText(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') runSearch() }}
-            placeholder={metaType === 'sito' ? 'cerca un museo, un castello, un sito…' : 'cerca un borgo o una città…'}
-            className="w-full pl-8 pr-8 py-2 rounded-[3px] text-[14px] outline-none placeholder:text-[#8a9bab]"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Cerca insieme fra le tue Mete e l'archivio…"
+            className="w-full pl-8 pr-8 py-2.5 rounded-[3px] text-[15px] outline-none placeholder:text-[#8a9bab]"
             style={{ background: TACCUINO_PAPER.card, color: TACCUINO_INK.typed, fontFamily: FONT_HAND }}
           />
-          {queryText && (
-            <button onClick={() => setQueryText('')} className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: TACCUINO_INK.handMuted }} aria-label="Cancella ricerca">
+          {hasQuery && (
+            <button onClick={() => setQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: TACCUINO_INK.handMuted }} aria-label="Cancella ricerca">
               <X className="w-3.5 h-3.5" />
             </button>
           )}
           <HandDrawnFrame stroke={TACCUINO_PAPER.cardBorder} strokeWidth={1.5} rx={4} />
         </div>
 
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 mb-2">
-          <select
-            value={region}
-            onChange={e => setRegion(e.target.value)}
-            className="shrink-0 px-3 py-1.5 rounded-full text-[13px] outline-none"
-            style={{ fontFamily: FONT_HAND, background: TACCUINO_PAPER.card, color: TACCUINO_INK.typed, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}
-          >
-            <option value="">Tutte le regioni</option>
-            {ITALIAN_REGIONS.map(r => <option key={r.slug} value={r.name}>{r.name}</option>)}
-          </select>
-          {categoryOptions.map(c => (
-            <button
-              key={c.id}
-              onClick={() => setCategory(prev => prev.includes(c.id) ? prev.filter(x => x !== c.id) : [...prev, c.id])}
-              className="relative shrink-0 px-3 py-1.5 rounded-full text-[13px] transition-colors"
-              style={category.includes(c.id)
-                ? { fontFamily: FONT_HAND, fontWeight: 700, color: TACCUINO_INK.typed }
-                : { fontFamily: FONT_HAND, background: 'transparent', color: TACCUINO_INK.handMuted, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}
-            >
-              {category.includes(c.id) && <HandDrawnFrame stroke={TACCUINO_ACCENT[600]} strokeWidth={1.5} rx={50} />}
-              {c.label}
-            </button>
-          ))}
-        </div>
-
-        <button
-          onClick={runSearch}
-          disabled={loading}
-          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-[14px] font-semibold mb-6 transition-colors disabled:opacity-60"
-          style={{ background: TACCUINO_INK.typed, color: 'white' }}
-        >
-          {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Cerco…</> : <><Search className="w-4 h-4" /> Cerca</>}
-        </button>
-
+        {showInstantResults && (
+          <div className="mb-6 rounded-xl overflow-hidden" style={{ background: TACCUINO_PAPER.light, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}>
+            {rows === null ? (
+              <div className="flex items-center justify-center py-6"><Loader2 className="w-4 h-4 animate-spin" style={{ color: TACCUINO_INK.handMuted }} /></div>
+            ) : localMatches.length === 0 && (archiveResults?.length ?? 0) === 0 && !archiveLoading ? (
+              <p className="text-[13px] text-center py-6 px-4" style={{ color: TACCUINO_INK.handMuted }}>Nessun risultato per &laquo;{trimmedQuery}&raquo;.</p>
+            ) : (
+              <>
+                {localMatches.length > 0 && (
+                  <>
+                    <p className="px-3 pt-2.5 pb-1.5 text-[10px] font-bold uppercase tracking-wide" style={{ color: TACCUINO_INK.handMuted }}>Fra le tue Mete</p>
+                    {localMatches.slice(0, 5).map(m => (
+                      <Link
+                        key={m.id}
+                        href={`/guida/${encodeURIComponent(m.id)}/prima_di_partire`}
+                        className="flex items-center gap-2.5 px-3 py-2"
+                        style={{ borderTop: `1px solid ${TACCUINO_PAPER.cardBorder}80` }}
+                      >
+                        <MetaTypeGlyph metaType={m.metaType} size={22} />
+                        <span className="flex-1 min-w-0 truncate text-[13.5px]" style={{ color: TACCUINO_INK.typed }}>{m.title}</span>
+                      </Link>
+                    ))}
+                  </>
+                )}
+                {(archiveLoading || (archiveResults?.length ?? 0) > 0) && (
+                  <>
+                    <p className="px-3 pt-2.5 pb-1.5 text-[10px] font-bold uppercase tracking-wide flex items-center gap-1.5" style={{ color: TACCUINO_INK.handMuted, borderTop: localMatches.length > 0 ? `1px solid ${TACCUINO_PAPER.cardBorder}` : undefined }}>
+                      Borghi, Città e Siti
+                      {archiveLoading && <Loader2 className="w-3 h-3 animate-spin" />}
+                    </p>
+                    {(archiveResults ?? []).map(item => (
+                      <button
+                        key={item.id}
+                        onClick={() => createAndOpen(item)}
+                        disabled={!!creatingId}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-left disabled:opacity-60"
+                        style={{ borderTop: `1px solid ${TACCUINO_PAPER.cardBorder}80` }}
+                      >
+                        <MetaTypeGlyph metaType={item.metaType} size={22} />
+                        <span className="flex-1 min-w-0 truncate text-[13.5px]" style={{ color: TACCUINO_INK.typed }}>{item.name}</span>
+                        {item.region && <span className="shrink-0 text-[11px]" style={{ color: TACCUINO_INK.handMuted }}>{item.region}</span>}
+                        {creatingId === item.id && <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" style={{ color: TACCUINO_ACCENT[600] }} />}
+                      </button>
+                    ))}
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        )}
         {createError && (
           <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-4">{createError}</p>
         )}
-        {error && (
-          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-4">Impossibile cercare: {error}</p>
-        )}
 
-        {results === null && loading ? (
-          <div className="flex items-center justify-center py-24 gap-3" style={{ color: TACCUINO_INK.handMuted }}>
-            <Loader2 className="w-6 h-6 animate-spin" /><span>Cerco…</span>
-          </div>
-        ) : results !== null && results.length === 0 ? (
-          <p className="text-sm text-center py-12" style={{ color: TACCUINO_INK.handMuted }}>Nessun risultato con questi filtri.</p>
-        ) : results !== null ? (
-          <div className="flex flex-col">
-            {results.map(item => {
-              const stats = metaCardStats(item)
-              const isCreating = creatingId === item.id
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => handleSelect(item)}
-                  disabled={!!creatingId}
-                  className="flex items-start gap-3.5 py-3.5 px-2 -mx-2 text-left disabled:opacity-60"
-                  style={{ borderBottom: TACCUINO_LIST_DIVIDER }}
-                >
-                  <div
-                    className="w-[64px] h-[64px] shrink-0 rounded-lg overflow-hidden flex items-center justify-center"
-                    style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}
-                  >
-                    {item.imageUrl
-                      ? <img src={item.imageUrl} alt="" className="w-full h-full object-cover" />
-                      : (item.metaType === 'sito' ? <Landmark className="w-6 h-6" style={{ color: TACCUINO_PAPER.cardBorder }} /> : <Building2 className="w-6 h-6" style={{ color: TACCUINO_PAPER.cardBorder }} />)}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 18, color: TACCUINO_INK.typed, lineHeight: 1.2 }}>{item.name}</p>
-                    {(item.municipality || item.province || item.region) && (
-                      <p className="flex items-center gap-1 truncate" style={{ fontFamily: FONT.lora, fontSize: 12, color: TACCUINO_INK.handMuted, marginTop: 2 }}>
-                        <MapPin className="w-3 h-3 shrink-0" /> {[item.municipality, item.province, item.region].filter(Boolean).join(', ')}
-                      </p>
-                    )}
-                    {stats.length > 0 && (
-                      <div className="flex items-center flex-wrap gap-x-2.5 gap-y-1 mt-1.5" style={{ fontFamily: FONT.lora, fontSize: 11, color: TACCUINO_INK.handMuted }}>
-                        {stats.map(s => <span key={s.key}>{s.label}: {s.value}</span>)}
-                      </div>
-                    )}
-                    {item.description && (
-                      <p className="line-clamp-2 mt-1" style={{ fontFamily: FONT.lora, fontSize: 12.5, color: TACCUINO_INK.handMuted }}>{item.description}</p>
-                    )}
-                  </div>
-                  {isCreating && <Loader2 className="w-4 h-4 animate-spin shrink-0 mt-1" style={{ color: TACCUINO_ACCENT[600] }} />}
-                </button>
-              )
-            })}
-          </div>
-        ) : null}
+        {/* Tre scaffali — un solo aperto alla volta, ogni voce rimanda alla schermata esistente
+            invariata (piano Fase 1): nessun flusso riscritto qui, solo l'indice che mancava. */}
+        <div className="flex flex-col gap-2.5">
+          <Shelf
+            metaType="sentiero"
+            open={openShelf === 'sentiero'}
+            onToggle={() => setOpenShelf(s => s === 'sentiero' ? 'sito' : 'sentiero')}
+            trailingLabel={`${SENTIERI_ITEMS.length} modi`}
+          >
+            <ShelfLinks items={SENTIERI_ITEMS} />
+            <ShelfLink
+              href="/profilo/ricerche-salvate"
+              icon={FolderSearch}
+              title="Le mie ricerche salvate"
+              subtitle="Riapri una ricerca fatta in precedenza — stessi risultati, senza ricalcolare nulla."
+              trailing={savedSearchCount != null ? `${savedSearchCount} / 5` : undefined}
+            />
+          </Shelf>
+
+          <Shelf
+            metaType="borgo_citta"
+            open={openShelf === 'borgo_citta'}
+            onToggle={() => setOpenShelf(s => s === 'borgo_citta' ? 'sentiero' : 'borgo_citta')}
+            trailingLabel={archiveCounts ? `${archiveCounts.borgo_citta} in archivio` : undefined}
+          >
+            <ShelfLink
+              href="/percorsi/cerca/luoghi?tipo=borgo_citta"
+              icon={Building2}
+              title="Sfoglia i Borghi e le Città"
+              subtitle="Per regione, categoria o vicino a te"
+            />
+          </Shelf>
+
+          <Shelf
+            metaType="sito"
+            open={openShelf === 'sito'}
+            onToggle={() => setOpenShelf(s => s === 'sito' ? 'sentiero' : 'sito')}
+            trailingLabel={archiveCounts ? `${archiveCounts.sito} in archivio` : undefined}
+          >
+            <ShelfLink
+              href="/percorsi/cerca/luoghi?tipo=sito"
+              icon={Landmark}
+              title="Sfoglia i Siti"
+              subtitle="Musei, castelli, aree archeologiche e naturali"
+            />
+            {archiveCounts?.sito === 0 && (
+              <p className="px-3 pb-3 text-[11px] italic" style={{ color: TACCUINO_INK.handMuted }}>
+                Nessun Sito ancora in archivio — la ricerca è pronta, i dati arrivano dopo.
+              </p>
+            )}
+          </Shelf>
+        </div>
       </main>
     </div>
+  )
+}
+
+// ── Scaffale ─────────────────────────────────────────────────────────────────
+
+function MetaTypeGlyph({ metaType, size }: { metaType: MetaType; size: number }) {
+  const config = META_TYPE_CONFIG[metaType]
+  const Icon = config.icon
+  return (
+    <span
+      className="rounded-md flex items-center justify-center shrink-0"
+      style={{ width: size, height: size, background: `${config.color}29` }}
+    >
+      <Icon style={{ width: size * 0.6, height: size * 0.6, color: config.color }} />
+    </span>
+  )
+}
+
+function Shelf({ metaType, open, onToggle, trailingLabel, children }: {
+  metaType: MetaType
+  open: boolean
+  onToggle: () => void
+  trailingLabel?: string
+  children: ReactNode
+}) {
+  const config = META_TYPE_CONFIG[metaType]
+  return (
+    <div className="rounded-[13px] overflow-hidden" style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}>
+      <button onClick={onToggle} className="w-full flex items-center gap-2.5 px-3.5 py-3" aria-expanded={open}>
+        <MetaTypeGlyph metaType={metaType} size={27} />
+        <span style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 21, color: TACCUINO_INK.typed }}>{config.pluralLabel}</span>
+        <span className="flex-1" />
+        {trailingLabel && (
+          <span className="font-mono text-[10.5px]" style={{ color: TACCUINO_INK.handMuted }}>{trailingLabel}</span>
+        )}
+        {open ? <ChevronUp className="w-4 h-4" style={{ color: TACCUINO_INK.handMuted }} /> : <ChevronDown className="w-4 h-4" style={{ color: TACCUINO_INK.handMuted }} />}
+      </button>
+      {open && (
+        <div style={{ background: TACCUINO_PAPER.light, borderTop: `1px solid ${TACCUINO_PAPER.cardBorder}` }}>
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ShelfLinks({ items }: { items: ShelfItem[] }) {
+  return <>{items.map(item => <ShelfLink key={item.href + item.title} {...item} />)}</>
+}
+
+function ShelfLink({ href, icon: Icon, title, subtitle, trailing }: ShelfItem & { trailing?: string }) {
+  return (
+    <Link
+      href={href}
+      className="flex items-center gap-2.5 px-3.5 py-2.5"
+      style={{ borderTop: `1px solid ${TACCUINO_PAPER.cardBorder}80` }}
+    >
+      <Icon className="w-4 h-4 shrink-0" style={{ color: TACCUINO_ACCENT[600] }} />
+      <div className="flex-1 min-w-0">
+        <p className="text-[13.5px] font-semibold" style={{ color: TACCUINO_INK.typed }}>{title}</p>
+        <p className="text-[11px]" style={{ color: TACCUINO_INK.handMuted }}>{subtitle}</p>
+      </div>
+      {trailing && <span className="font-mono text-[11px] shrink-0" style={{ color: TACCUINO_INK.handMuted }}>{trailing}</span>}
+    </Link>
   )
 }

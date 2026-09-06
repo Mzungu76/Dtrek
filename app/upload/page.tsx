@@ -28,7 +28,13 @@ function UploadPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const tab: 'activity' | 'gpx' = searchParams.get('tab') === 'gpx' ? 'gpx' : 'activity'
-  const [gpxSource, setGpxSource] = useState<'file' | 'manual' | 'from-activity'>('file')
+  // `?source=manual` — arrivo dall'hub di ricerca delle Mete (app/percorsi/cerca/page.tsx,
+  // docs/piano-ricerca-mete.md Fase 1): apre direttamente sul tab "Manuale" (ManualImportChoice —
+  // Costruisci o trova/Giulia, link, a mano) invece di far ritoccare il tab a chi arriva già
+  // sapendo di voler costruire/cercare un percorso. Nessun altro chiamante lo passa oggi, quindi
+  // il comportamento di default resta invariato per tutti i link esistenti.
+  const initialGpxSource = searchParams.get('source') === 'manual' ? 'manual' : 'file'
+  const [gpxSource, setGpxSource] = useState<'file' | 'manual' | 'from-activity'>(initialGpxSource)
   // Presente solo quando si arriva dal composer di un Diario (app/diari/[id]/page.tsx, Fase 3 di
   // docs/diario-fulcro-piano.md) — assente altrove, il Percorso finisce nel Diario di default
   // (assegnato lato server, vedi app/api/planned/route.ts).
