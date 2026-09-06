@@ -4,8 +4,8 @@ import { useRouter } from 'next/navigation'
 import { parseTcx, formatDuration, type TcxActivity } from '@/lib/tcxParser'
 import { parseGpxActivity } from '@/lib/gpxActivityParser'
 import { saveActivityWithEnrichment } from '@/lib/activitySave'
-import { getAllPlanned, getPlannedById, savePlanned, updatePlannedMeta, type PlannedHike, type PlannedHikeMeta } from '@/lib/plannedStore'
-import { downsamplePolyline } from '@/lib/downsamplePolyline'
+import { getAllPlanned, getPlannedById, updatePlannedMeta, type PlannedHikeMeta } from '@/lib/plannedStore'
+import { createSyntheticPercorso } from '@/lib/diari/syntheticPercorso'
 import { Upload, CheckCircle, AlertCircle, Mountain, Clock, TrendingUp, Route, Link2, Link2Off, Info } from 'lucide-react'
 
 type ActivityStatus = 'idle' | 'parsing' | 'parsed' | 'analyzing' | 'saving' | 'success' | 'error'
@@ -79,27 +79,14 @@ export default function ActivityUploader({ diaryId }: { diaryId?: string } = {})
         // collega a un Diario, esattamente come già succede per la Meta sintetica creata sotto
         // quando non se ne seleziona una esistente.
         if (diaryId) await updatePlannedMeta(selectedPlanned.id, { diaryId })
-      } else if (diaryId) {
-        // Nessun percorso pianificato selezionato ma siamo dentro un Diario (composer Fase 3,
-        // corsia "Già fatta") — un Reportage ha sempre un Percorso genitore (vedi
-        // docs/diario-fulcro-piano.md), quindi se ne crea uno sintetico da questa stessa
-        // attività, già segnato come vissuto, invece di lasciare l'uscita senza Percorso.
-        const synthetic: PlannedHike = {
-          id: 'synth_' + Date.now().toString(36),
-          title: titleVal.trim() || parsedActivity.notes || 'Percorso',
-          createdAt: new Date().toISOString(),
-          distanceMeters: parsedActivity.distanceMeters,
-          elevationGain: parsedActivity.elevationGain,
-          elevationLoss: parsedActivity.elevationLoss,
-          altitudeMax: parsedActivity.altitudeMax,
-          altitudeMin: parsedActivity.altitudeMin,
-          estimatedTimeSeconds: parsedActivity.totalTimeSeconds,
-          trackPoints: parsedActivity.trackPoints,
-          routePolyline: parsedActivity.trackPoints?.length ? downsamplePolyline(parsedActivity.trackPoints) : undefined,
-          diaryId,
-          firstCompletedAt: parsedActivity.startTime || new Date().toISOString(),
-        }
-        await savePlanned(synthetic)
+      } else {
+        // Nessun percorso pianificato selezionato — un Reportage ha sempre un Percorso genitore
+        // (vedi docs/diario-fulcro-piano.md e lib/diari/syntheticPercorso.ts), quindi se ne crea
+        // uno sintetico da questa stessa attività, già segnato come vissuto, invece di lasciare
+        // l'uscita senza Percorso: senza, non comparirebbe in nessun Diario né fra le Mete.
+        // `diaryId` è assente quando l'import non parte da dentro un Diario (/upload): a quel
+        // punto ci pensa lib/activitySave.ts ad agganciare la Meta al Diario di default.
+        const synthetic = await createSyntheticPercorso(parsedActivity, { title: titleVal, diaryId })
         linkedPlannedId = synthetic.id
       }
 

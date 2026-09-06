@@ -11,6 +11,7 @@ import { computeTrailScore } from './trailScore'
 import { computeBbox } from './geoUtils'
 import { fetchWeatherAtHike, type WeatherAtHike } from './openmeteo'
 import { getUserSettingsCached } from './sync/userSettingsStore'
+import { getDefaultDiaryId } from './diari/syntheticPercorso'
 import { metaHasHikingMetrics, type MetaType, type SiteType } from './metaTypes'
 
 export interface SaveActivityOptions {
@@ -161,10 +162,18 @@ export async function saveActivityWithEnrichment(
   // il salvataggio — mai cancellato: un Percorso resta l'ancora permanente a cui più Reportage
   // (più uscite nel tempo) si collegano via activities.linked_planned_id.
   let plannedNeedsFirstCompletedAt = false
+  // Una Meta senza Diario rende INVISIBILE in Dtrek il Reportage che le si aggancia:
+  // l'appartenenza di un'escursione a un Diario passa solo di lì (activities.linked_planned_id →
+  // planned_hikes.diary_id, vedi app/api/diaries/[id]/route.ts), quindi un Reportage su una Meta
+  // orfana non compare in nessun Diario. Una Meta "nasce camminandola" (stesso principio già
+  // applicato in components/upload/ActivityUploader.tsx): questo è il momento in cui va agganciata
+  // a un Diario, qui una volta sola per ogni flusso di salvataggio invece che in ciascuno.
+  let plannedNeedsDiary = false
   if (opts.linkedPlannedId) {
     try {
       const planned = await getPlannedById(opts.linkedPlannedId)
       if (planned) {
+        plannedNeedsDiary = !planned.diaryId
         guideCarry = {
           guideText:        planned.cachedGuide,
           guideSubtitle:    planned.cachedGuideSubtitle,
@@ -198,8 +207,15 @@ export async function saveActivityWithEnrichment(
   const { ok } = await saveActivity(stored)
   opts.onSyncResult?.(ok)
 
-  if (opts.linkedPlannedId && plannedNeedsFirstCompletedAt) {
-    await updatePlannedMeta(opts.linkedPlannedId, { firstCompletedAt: new Date().toISOString() }).catch(() => {})
+  if (opts.linkedPlannedId && (plannedNeedsFirstCompletedAt || plannedNeedsDiary)) {
+    // getDefaultDiaryId() è best-effort (offline torna undefined): in quel caso si aggiorna solo
+    // firstCompletedAt, e la Meta resterà senza Diario — mai un Diario inventato pur di riempire
+    // il campo.
+    const diaryId = plannedNeedsDiary ? await getDefaultDiaryId() : undefined
+    await updatePlannedMeta(opts.linkedPlannedId, {
+      ...(plannedNeedsFirstCompletedAt ? { firstCompletedAt: new Date().toISOString() } : {}),
+      ...(diaryId ? { diaryId } : {}),
+    }).catch(() => {})
   }
 
   // Aggiorna lo storico aggregato (lib/hikerHistory.ts) usato dalla sezione guida "Su misura per
