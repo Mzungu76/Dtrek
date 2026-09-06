@@ -1,0 +1,186 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body style="margin:0">
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Lora:ital,wght@0,400;0,600;1,500&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+:root{
+  --paper-base:#F5EDDD; --paper-light:#F9F2E4; --card:#EBE0C8; --card-border:#D9C9A8;
+  --contour:#A89A78; --ink-typed:#2E2A22; --ink-hand:#7A6F52; --ink-muted:#95886A;
+  --accent:#C0603D; --accent-2:#7C8F6E; --accent-tint:#E9DAC3;
+  --bar-bg:#5F7355; --bar-active:#F5EDDD; --bar-inactive:#B9C4AE;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+a{color:var(--accent);text-decoration:none}
+a:hover{color:var(--accent-2)}
+.phone{width:390px;height:844px;position:relative;overflow:hidden;background:var(--paper-base);
+  font-family:'DM Sans',system-ui,sans-serif;color:var(--ink-typed);-webkit-font-smoothing:antialiased}
+.paper-grain{position:absolute;inset:0;pointer-events:none;z-index:0;opacity:.9;mix-blend-mode:multiply;
+  background-image:
+    radial-gradient(circle at 12% 22%,rgba(46,42,34,.20) 0,rgba(46,42,34,.20) 1.5px,transparent 3.1px),
+    radial-gradient(circle at 68% 8%,rgba(46,42,34,.16) 0,rgba(46,42,34,.16) 1.2px,transparent 2.7px),
+    radial-gradient(circle at 40% 55%,rgba(46,42,34,.18) 0,rgba(46,42,34,.18) 1.6px,transparent 3.3px),
+    radial-gradient(circle at 85% 40%,rgba(46,42,34,.15) 0,rgba(46,42,34,.15) 1.1px,transparent 2.5px),
+    radial-gradient(circle at 25% 82%,rgba(46,42,34,.18) 0,rgba(46,42,34,.18) 1.4px,transparent 2.9px);
+  background-size:46px 52px,61px 41px,71px 83px,33px 63px,83px 47px}
+.contours{position:absolute;inset:0;pointer-events:none;z-index:0;opacity:.5}
+.eyebrow{font-family:'DM Sans';font-weight:700;text-transform:uppercase;letter-spacing:.2em;
+  font-size:9.5px;color:var(--ink-hand);margin:0}
+.hand{font-family:'Caveat',cursive;font-weight:700}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-weight:700;font-variant-numeric:tabular-nums}
+.stage{position:absolute;inset:0;z-index:1;display:flex;flex-direction:column;padding:52px 18px 0}
+.card{background:var(--card);border:1px solid var(--card-border);border-radius:14px;position:relative}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:9.5px;font-weight:700;
+  padding:3px 8px;border-radius:999px;background:var(--paper-light);border:1px solid var(--card-border);color:var(--ink-hand)}
+.chip.hot{background:var(--accent-tint);border-color:#dfc4ac;color:var(--accent)}
+.metric{display:flex;flex-direction:column;gap:1px}
+.metric .v{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:14.5px;color:var(--ink-typed);line-height:1}
+.metric .k{font-size:8.5px;text-transform:uppercase;letter-spacing:.11em;color:var(--ink-muted)}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;height:46px;border-radius:12px;
+  background:var(--accent);color:var(--paper-light);font-weight:700;font-size:13.5px;letter-spacing:.02em;border:none}
+.btn-ghost{background:transparent;color:var(--accent);border:1.5px solid var(--accent)}
+.row{display:flex;align-items:center;gap:11px;padding:0 11px 0 0;background:var(--card);
+  border:1px solid var(--card-border);border-radius:12px;overflow:hidden}
+.spine{width:9px;align-self:stretch;flex:none}
+.row-title{font-family:'Lora',Georgia,serif;font-weight:600;font-size:14px;line-height:1.15;color:var(--ink-typed)}
+.row-sub{font-size:10px;color:var(--ink-muted);letter-spacing:.02em}
+.tag{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;
+  padding:2px 6px;border-radius:4px;background:var(--paper-light);border:1px solid var(--card-border);color:var(--ink-hand)}
+.grouphead{display:flex;align-items:center;gap:8px}
+.grouphead .t{font-family:'DM Sans';font-weight:700;text-transform:uppercase;letter-spacing:.14em;font-size:9.5px;color:var(--ink-hand)}
+.grouphead .l{flex:1;height:1px;background:var(--card-border)}
+.grouphead .n{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:9.5px;color:var(--ink-muted)}
+.bottombar{position:absolute;left:0;right:0;bottom:0;height:74px;background:var(--bar-bg);
+  display:flex;align-items:flex-start;justify-content:space-around;padding-top:11px;z-index:6}
+.bb{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--bar-inactive);width:64px}
+.bb.on{color:var(--bar-active)}
+.bb span{font-size:9px;font-weight:700}
+/* ── vocabolario "taccuino": indice, linguette, appunti ── */
+.leader{flex:1;height:0;border-bottom:1.5px dotted var(--contour);margin:0 7px;transform:translateY(-4px);opacity:.75}
+.pg{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:10.5px;color:var(--ink-muted);flex:none}
+.mark{width:13px;height:13px;flex:none;display:flex;align-items:center;justify-content:center}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;height:44px;
+  background:var(--card);border:1px solid var(--card-border);border-bottom:none;
+  border-top-left-radius:9px;border-top-right-radius:9px;color:var(--ink-hand)}
+.tab.on{background:var(--paper-light);color:var(--ink-typed);border-color:var(--contour)}
+.tab.off{opacity:.5}
+.tab b{font-size:11.5px;font-weight:700;letter-spacing:.02em}
+.tab i{font-style:normal;font-size:9px;color:var(--ink-muted);font-family:'JetBrains Mono',monospace}
+.sheet-page{background:var(--paper-light);border:1px solid var(--contour);border-radius:0 0 12px 12px;padding:12px}
+.hw{font-family:'Caveat',cursive;font-weight:600;font-size:16.5px;line-height:1.32;color:#3B4A63}
+.pin{width:19px;height:19px;border-radius:999px;background:var(--accent);color:var(--paper-light);
+  display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;
+  font-size:9.5px;font-weight:700;flex:none}
+.stamp{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;color:var(--ink-muted);letter-spacing:.04em}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:10px;height:26px;color:var(--ink-hand)}
+.back{display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700}
+.opt{display:flex;align-items:center;gap:11px;height:46px}
+.opt + .opt{border-top:1px dotted #E0D3B6}
+.box{width:21px;height:21px;border-radius:5px;border:2px solid var(--card-border);flex:none;
+  display:flex;align-items:center;justify-content:center}
+.box.on{background:var(--accent);border-color:var(--accent)}
+.ord{display:flex;align-items:center;gap:11px;height:42px;padding:0 11px 0 9px;background:var(--card);
+  border:1px solid var(--card-border);border-radius:10px}
+</style>
+</helmet>
+<div class="phone">
+  <div class="paper-grain"></div>
+
+  <div class="stage" style="padding-top:48px">
+    <div class="topbar">
+      <span class="back">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+        Libreria
+      </span>
+      <span class="stamp">SISTEMA IL TACCUINO</span>
+      <span style="width:14px"></span>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:12px;margin-top:14px">
+      <div style="width:52px;height:66px;border-radius:3px;overflow:hidden;position:relative;flex:none;box-shadow:0 4px 10px rgba(46,42,34,.22)">
+        <svg viewBox="0 0 52 66" style="width:100%;height:100%;display:block">
+          <rect width="52" height="66" fill="#4A5A52"></rect>
+          <path d="M0 66 L0 46 L12 36 L21 44 L32 30 L42 40 L52 28 L52 66 Z" fill="#3C4A44"></path>
+        </svg>
+        <div style="position:absolute;left:0;top:0;bottom:0;width:4px;background:#C0603D"></div>
+      </div>
+      <div style="min-width:0">
+        <h1 style="font-family:'Playfair Display',Georgia,serif;font-weight:700;font-size:19px;line-height:1.12;margin:0;color:var(--ink-typed)">Appennino centrale</h1>
+        <p class="row-sub" style="margin:3px 0 0"><span class="mono">27</span> voci &middot; <span class="mono">62</span> pagine</p>
+      </div>
+    </div>
+
+    <p class="eyebrow" style="margin:18px 0 2px">Su quali scaffali sta</p>
+    <div style="display:flex;flex-direction:column">
+      <div class="opt">
+        <span class="box on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#F9F2E4" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>
+        <div style="min-width:0;flex:1">
+          <p style="margin:0;font-family:'Lora',Georgia,serif;font-weight:600;font-size:13.5px;color:var(--ink-typed)">In corso</p>
+          <p class="row-sub" style="margin:1px 0 0">2 taccuini</p>
+        </div>
+      </div>
+      <div class="opt">
+        <span class="box on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#F9F2E4" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>
+        <div style="min-width:0;flex:1">
+          <p style="margin:0;font-family:'Lora',Georgia,serif;font-weight:600;font-size:13.5px;color:var(--ink-typed)">Appennino</p>
+          <p class="row-sub" style="margin:1px 0 0">3 taccuini</p>
+        </div>
+      </div>
+      <div class="opt">
+        <span class="box"></span>
+        <div style="min-width:0;flex:1">
+          <p style="margin:0;font-family:'Lora',Georgia,serif;font-weight:600;font-size:13.5px;color:var(--ink-hand)">Con i ragazzi</p>
+          <p class="row-sub" style="margin:1px 0 0">2 taccuini</p>
+        </div>
+      </div>
+      <div class="opt">
+        <span class="box"></span>
+        <div style="min-width:0;flex:1">
+          <p style="margin:0;font-family:'Lora',Georgia,serif;font-weight:600;font-size:13.5px;color:var(--ink-hand)">Chiusi</p>
+          <p class="row-sub" style="margin:1px 0 0">4 taccuini &middot; fuori dallo swipe</p>
+        </div>
+      </div>
+      <div class="opt" style="color:var(--accent)">
+        <span class="box" style="border-style:dashed;border-color:var(--accent)">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        </span>
+        <p style="margin:0;font-size:13px;font-weight:700">Crea uno scaffale</p>
+      </div>
+    </div>
+
+    <p style="margin:12px 0 0;font-family:'Lora',Georgia,serif;font-size:11.5px;line-height:1.45;color:var(--ink-muted);text-wrap:pretty">
+      Un taccuino pu&ograve; stare su pi&ugrave; scaffali: metterlo su uno non lo toglie dagli altri. Non &egrave; una cartella &mdash; &egrave; un&rsquo;etichetta che si vede.
+    </p>
+
+    <p class="eyebrow" style="margin:16px 0 7px">Ordine sullo scaffale &laquo;Appennino&raquo;</p>
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <div class="ord">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#95886A" stroke-width="2" stroke-linecap="round"><line x1="4" y1="9" x2="20" y2="9"></line><line x1="4" y1="15" x2="20" y2="15"></line></svg>
+        <span style="width:6px;height:22px;border-radius:2px;background:#C0603D;flex:none"></span>
+        <p style="margin:0;flex:1;font-family:'Lora',Georgia,serif;font-weight:600;font-size:13px">Appennino centrale</p>
+        <span class="pg">1</span>
+      </div>
+      <div class="ord">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#95886A" stroke-width="2" stroke-linecap="round"><line x1="4" y1="9" x2="20" y2="9"></line><line x1="4" y1="15" x2="20" y2="15"></line></svg>
+        <span style="width:6px;height:22px;border-radius:2px;background:#B08A5A;flex:none"></span>
+        <p style="margin:0;flex:1;font-family:'Lora',Georgia,serif;font-weight:600;font-size:13px">Abruzzo, versante est</p>
+        <span class="pg">2</span>
+      </div>
+      <div class="ord">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#95886A" stroke-width="2" stroke-linecap="round"><line x1="4" y1="9" x2="20" y2="9"></line><line x1="4" y1="15" x2="20" y2="15"></line></svg>
+        <span style="width:6px;height:22px;border-radius:2px;background:#8A7A5C;flex:none"></span>
+        <p style="margin:0;flex:1;font-family:'Lora',Georgia,serif;font-weight:600;font-size:13px">Umbria di confine</p>
+        <span class="pg">3</span>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

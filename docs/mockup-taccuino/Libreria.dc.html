@@ -1,0 +1,206 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body style="margin:0">
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Lora:ital,wght@0,400;0,600;1,500&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+:root{
+  --paper-base:#F5EDDD; --paper-light:#F9F2E4; --card:#EBE0C8; --card-border:#D9C9A8;
+  --contour:#A89A78; --ink-typed:#2E2A22; --ink-hand:#7A6F52; --ink-muted:#95886A;
+  --accent:#C0603D; --accent-2:#7C8F6E; --accent-tint:#E9DAC3;
+  --bar-bg:#5F7355; --bar-active:#F5EDDD; --bar-inactive:#B9C4AE;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+a{color:var(--accent);text-decoration:none}
+a:hover{color:var(--accent-2)}
+.phone{width:390px;height:844px;position:relative;overflow:hidden;background:var(--paper-base);
+  font-family:'DM Sans',system-ui,sans-serif;color:var(--ink-typed);-webkit-font-smoothing:antialiased}
+.paper-grain{position:absolute;inset:0;pointer-events:none;z-index:0;opacity:.9;mix-blend-mode:multiply;
+  background-image:
+    radial-gradient(circle at 12% 22%,rgba(46,42,34,.20) 0,rgba(46,42,34,.20) 1.5px,transparent 3.1px),
+    radial-gradient(circle at 68% 8%,rgba(46,42,34,.16) 0,rgba(46,42,34,.16) 1.2px,transparent 2.7px),
+    radial-gradient(circle at 40% 55%,rgba(46,42,34,.18) 0,rgba(46,42,34,.18) 1.6px,transparent 3.3px),
+    radial-gradient(circle at 85% 40%,rgba(46,42,34,.15) 0,rgba(46,42,34,.15) 1.1px,transparent 2.5px),
+    radial-gradient(circle at 25% 82%,rgba(46,42,34,.18) 0,rgba(46,42,34,.18) 1.4px,transparent 2.9px);
+  background-size:46px 52px,61px 41px,71px 83px,33px 63px,83px 47px}
+.contours{position:absolute;inset:0;pointer-events:none;z-index:0;opacity:.5}
+.eyebrow{font-family:'DM Sans';font-weight:700;text-transform:uppercase;letter-spacing:.2em;
+  font-size:9.5px;color:var(--ink-hand);margin:0}
+.hand{font-family:'Caveat',cursive;font-weight:700}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-weight:700;font-variant-numeric:tabular-nums}
+.stage{position:absolute;inset:0;z-index:1;display:flex;flex-direction:column;padding:52px 18px 0}
+.card{background:var(--card);border:1px solid var(--card-border);border-radius:14px;position:relative}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:9.5px;font-weight:700;
+  padding:3px 8px;border-radius:999px;background:var(--paper-light);border:1px solid var(--card-border);color:var(--ink-hand)}
+.chip.hot{background:var(--accent-tint);border-color:#dfc4ac;color:var(--accent)}
+.metric{display:flex;flex-direction:column;gap:1px}
+.metric .v{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:14.5px;color:var(--ink-typed);line-height:1}
+.metric .k{font-size:8.5px;text-transform:uppercase;letter-spacing:.11em;color:var(--ink-muted)}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;height:46px;border-radius:12px;
+  background:var(--accent);color:var(--paper-light);font-weight:700;font-size:13.5px;letter-spacing:.02em;border:none}
+.btn-ghost{background:transparent;color:var(--accent);border:1.5px solid var(--accent)}
+.row{display:flex;align-items:center;gap:11px;padding:0 11px 0 0;background:var(--card);
+  border:1px solid var(--card-border);border-radius:12px;overflow:hidden}
+.spine{width:9px;align-self:stretch;flex:none}
+.row-title{font-family:'Lora',Georgia,serif;font-weight:600;font-size:14px;line-height:1.15;color:var(--ink-typed)}
+.row-sub{font-size:10px;color:var(--ink-muted);letter-spacing:.02em}
+.tag{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;
+  padding:2px 6px;border-radius:4px;background:var(--paper-light);border:1px solid var(--card-border);color:var(--ink-hand)}
+.grouphead{display:flex;align-items:center;gap:8px}
+.grouphead .t{font-family:'DM Sans';font-weight:700;text-transform:uppercase;letter-spacing:.14em;font-size:9.5px;color:var(--ink-hand)}
+.grouphead .l{flex:1;height:1px;background:var(--card-border)}
+.grouphead .n{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:9.5px;color:var(--ink-muted)}
+.bottombar{position:absolute;left:0;right:0;bottom:0;height:74px;background:var(--bar-bg);
+  display:flex;align-items:flex-start;justify-content:space-around;padding-top:11px;z-index:6}
+.bb{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--bar-inactive);width:64px}
+.bb.on{color:var(--bar-active)}
+.bb span{font-size:9px;font-weight:700}
+/* ── vocabolario "taccuino": indice, linguette, appunti ── */
+.leader{flex:1;height:0;border-bottom:1.5px dotted var(--contour);margin:0 7px;transform:translateY(-4px);opacity:.75}
+.pg{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:10.5px;color:var(--ink-muted);flex:none}
+.mark{width:13px;height:13px;flex:none;display:flex;align-items:center;justify-content:center}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;height:44px;
+  background:var(--card);border:1px solid var(--card-border);border-bottom:none;
+  border-top-left-radius:9px;border-top-right-radius:9px;color:var(--ink-hand)}
+.tab.on{background:var(--paper-light);color:var(--ink-typed);border-color:var(--contour)}
+.tab.off{opacity:.5}
+.tab b{font-size:11.5px;font-weight:700;letter-spacing:.02em}
+.tab i{font-style:normal;font-size:9px;color:var(--ink-muted);font-family:'JetBrains Mono',monospace}
+.sheet-page{background:var(--paper-light);border:1px solid var(--contour);border-radius:0 0 12px 12px;padding:12px}
+.hw{font-family:'Caveat',cursive;font-weight:600;font-size:16.5px;line-height:1.32;color:#3B4A63}
+.pin{width:19px;height:19px;border-radius:999px;background:var(--accent);color:var(--paper-light);
+  display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;
+  font-size:9.5px;font-weight:700;flex:none}
+.stamp{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;color:var(--ink-muted);letter-spacing:.04em}
+.lib-top{display:flex;align-items:center;justify-content:space-between;gap:10px;height:24px;color:var(--ink-hand)}
+.carousel{display:flex;align-items:center;justify-content:center;gap:9px;margin-top:10px}
+.cover{width:284px;height:346px;flex:none;border-radius:5px;overflow:hidden;position:relative;
+  box-shadow:0 12px 26px rgba(46,42,34,.30);border:1px solid rgba(46,42,34,.12)}
+.side{width:22px;height:314px;flex:none;border-radius:3px;opacity:.5;box-shadow:0 8px 16px rgba(46,42,34,.18)}
+.cover-band{position:absolute;left:0;right:0;bottom:0;padding:13px 15px 15px;
+  background:linear-gradient(to top,rgba(28,26,21,.88) 0%,rgba(28,26,21,.62) 60%,rgba(28,26,21,0) 100%)}
+.dots{display:flex;align-items:center;justify-content:center;gap:5px;margin-top:10px}
+.dots i{width:5px;height:5px;border-radius:999px;background:var(--card-border);display:block}
+.dots i.on{background:var(--accent);width:16px;border-radius:3px}
+.datastrip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:11px;
+  padding:10px 12px;background:var(--card);border:1px solid var(--card-border);border-radius:12px}
+.nextline{display:flex;align-items:center;gap:9px;margin-top:8px;padding:9px 12px;border-radius:11px;
+  background:var(--accent-tint);border:1px solid #dfc4ac}
+.banner{position:absolute;left:0;right:0;bottom:74px;z-index:5;background:var(--paper-light);
+  border-top:1px solid var(--card-border);box-shadow:0 -6px 18px rgba(46,42,34,.13);padding:7px 18px 11px}
+.grab{width:34px;height:4px;border-radius:999px;background:var(--card-border);margin:0 auto 8px}
+.mini{display:flex;gap:3px;align-items:flex-end;flex:none}
+.mini i{display:block;width:6px;border-radius:1px}
+</style>
+</helmet>
+<div class="phone">
+  <div class="paper-grain"></div>
+
+  <div class="stage" style="padding:46px 18px 0">
+    <div class="lib-top">
+      <p class="eyebrow" style="letter-spacing:.22em">Libreria</p>
+      <span class="stamp">1 DI 7</span>
+    </div>
+
+    <!-- una copertina alla volta, con i vicini che sporgono: si capisce che si swipa -->
+    <div class="carousel">
+      <div class="side" style="background:linear-gradient(180deg,#8A7A5C,#6E6046)"></div>
+
+      <div class="cover">
+        <svg viewBox="0 0 284 346" style="width:100%;height:100%;display:block" preserveAspectRatio="none">
+          <rect width="284" height="346" fill="#4A5A52"></rect>
+          <path d="M0 346 L0 250 L58 196 L104 232 L158 168 L212 214 L284 152 L284 346 Z" fill="#3C4A44"></path>
+          <path d="M0 346 L0 288 L52 246 L112 282 L166 236 L226 274 L284 238 L284 346 Z" fill="#2E3A35"></path>
+          <circle cx="216" cy="72" r="26" fill="#E6D9BC" opacity=".92"></circle>
+          <g fill="none" stroke="#F5EDDD" stroke-width="1" opacity=".16">
+            <path d="M-10 108 C 70 92, 130 128, 200 112 S 300 88, 320 106"></path>
+            <path d="M-10 130 C 72 114, 132 150, 202 134 S 302 110, 320 128"></path>
+          </g>
+        </svg>
+        <div style="position:absolute;left:0;top:0;bottom:0;width:9px;background:#C0603D"></div>
+        <div class="cover-band">
+          <p style="margin:0;font-family:'DM Sans';font-weight:700;text-transform:uppercase;letter-spacing:.2em;font-size:8.5px;color:rgba(245,237,221,.72)">Taccuino di campo</p>
+          <p style="margin:5px 0 0;font-family:'Playfair Display',Georgia,serif;font-weight:700;font-size:25px;line-height:1.08;color:#F5EDDD">Appennino centrale</p>
+          <p style="margin:5px 0 0;font-family:'Lora',Georgia,serif;font-style:italic;font-size:12px;color:rgba(245,237,221,.82)">Due stagioni fra Terminillo e Gran Sasso</p>
+          <p style="margin:8px 0 0;font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.06em;color:rgba(245,237,221,.62)">MARCO Z. &middot; 2025&ndash;2026</p>
+        </div>
+      </div>
+
+      <div class="side" style="background:linear-gradient(180deg,#7C8F6E,#5F7355)"></div>
+    </div>
+
+    <div class="dots">
+      <i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i>
+    </div>
+
+    <!-- la meta' tecnica: la copertina da' identita', questi dati dicono a che punto e' -->
+    <div class="datastrip">
+      <div class="metric"><span class="v">27</span><span class="k">voci</span></div>
+      <div class="metric"><span class="v">312</span><span class="k">km</span></div>
+      <div class="metric"><span class="v">+18k</span><span class="k">D+ m</span></div>
+      <div class="metric"><span class="v">62</span><span class="k">pagine</span></div>
+    </div>
+
+    <div class="nextline">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#C0603D" stroke-width="2.2" stroke-linecap="round" style="flex:none"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
+      <div style="min-width:0;flex:1">
+        <p style="margin:0;font-size:11.5px;font-weight:700;color:var(--accent)">Monte Cimino &middot; sabato 12</p>
+        <p class="row-sub" style="margin:1px 0 0">1 voce in cammino &middot; 3 in programma</p>
+      </div>
+    </div>
+
+    <button class="btn" style="width:100%;margin-top:10px;height:48px">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5V6a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"></path><path d="M9 8h6"></path><path d="M9 12h6"></path></svg>
+      Apri l&rsquo;indice
+    </button>
+  </div>
+
+  <!-- il banner: chiuso e' un promemoria, aperto e' la vera navigazione -->
+  <div class="banner">
+    <div class="grab"></div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span class="mini">
+        <i style="height:26px;background:#C0603D"></i>
+        <i style="height:22px;background:#7C8F6E"></i>
+        <i style="height:24px;background:#8A7A5C"></i>
+        <i style="height:20px;background:#5F7355"></i>
+        <i style="height:23px;background:#B08A5A"></i>
+        <i style="height:18px;background:#A89A78"></i>
+        <i style="height:21px;background:#A89A78"></i>
+      </span>
+      <div style="min-width:0;flex:1">
+        <p style="margin:0;font-size:11.5px;font-weight:700;color:var(--ink-typed)">4 scaffali &middot; 7 taccuini</p>
+        <p class="row-sub" style="margin:1px 0 0">trascina in su per sistemarli</p>
+      </div>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#95886A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
+    </div>
+  </div>
+
+  <div class="bottombar">
+    <div class="bb on">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3h3v18H4z"></path><path d="M9.5 3h3v18h-3z"></path><path d="m16 3.6 2.9.8L21 20.4l-2.9-.8z"></path></svg>
+      <span>Libreria</span>
+    </div>
+    <div class="bb">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.6" y2="16.6"></line></svg>
+      <span>Cerca</span>
+    </div>
+    <div class="bb">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>
+      <span>Navigator</span>
+    </div>
+    <div class="bb">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M5 21a7 7 0 0 1 14 0"></path></svg>
+      <span>Profilo</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>
