@@ -1,5 +1,5 @@
 'use client'
-import { useState, Suspense } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Navbar, { MOBILE_BOTTOMBAR_SPACER } from '@/components/Navbar'
 import ActivityUploader from '@/components/upload/ActivityUploader'
@@ -28,13 +28,20 @@ function UploadPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const tab: 'activity' | 'gpx' = searchParams.get('tab') === 'gpx' ? 'gpx' : 'activity'
-  // `?source=manual` — arrivo dall'hub di ricerca delle Mete (app/percorsi/cerca/page.tsx,
-  // docs/piano-ricerca-mete.md Fase 1): apre direttamente sul tab "Manuale" (ManualImportChoice —
-  // Costruisci o trova/Giulia, link, a mano) invece di far ritoccare il tab a chi arriva già
-  // sapendo di voler costruire/cercare un percorso. Nessun altro chiamante lo passa oggi, quindi
-  // il comportamento di default resta invariato per tutti i link esistenti.
-  const initialGpxSource = searchParams.get('source') === 'manual' ? 'manual' : 'file'
+  // `?source=` — arrivo dall'hub di ricerca delle Mete (app/percorsi/cerca/page.tsx,
+  // docs/piano-ricerca-mete.md): 'manual' apre sul tab "Manuale" (il menu di ManualImportChoice);
+  // 'build' apre sullo stesso tab ma salta dritto al wizard "Costruisci o trova un percorso" (vedi
+  // initialManualMode sotto) — l'hub non deve mai far ritoccare all'utente una scelta che ha già
+  // fatto tappando una voce precisa. Nessun altro chiamante passa `source` oggi, quindi il
+  // comportamento di default resta invariato per tutti i link esistenti.
+  const sourceParam = searchParams.get('source')
+  const initialGpxSource = sourceParam === 'manual' || sourceParam === 'build' ? 'manual' : 'file'
   const [gpxSource, setGpxSource] = useState<'file' | 'manual' | 'from-activity'>(initialGpxSource)
+  // Next.js non rimonta questa pagina quando l'hub naviga da un `?source=` all'altro (stessa rotta,
+  // solo la query cambia) — senza questo effetto lo stato di un ingresso precedente resterebbe
+  // "incollato" e un secondo tocco su una voce diversa dell'hub mostrerebbe ancora il tab di prima.
+  useEffect(() => { setGpxSource(initialGpxSource) }, [initialGpxSource])
+  const initialManualMode = sourceParam === 'build' ? 'build' : 'choice'
   // Presente solo quando si arriva dal composer di un Diario (app/diari/[id]/page.tsx, Fase 3 di
   // docs/diario-fulcro-piano.md) — assente altrove, il Percorso finisce nel Diario di default
   // (assegnato lato server, vedi app/api/planned/route.ts).
@@ -121,7 +128,9 @@ function UploadPageInner() {
 
         {tab === 'activity' && <ActivityUploader diaryId={diaryId} />}
         {tab === 'gpx' && gpxSource === 'file' && <GpxUploader diaryId={diaryId} />}
-        {tab === 'gpx' && gpxSource === 'manual' && <ManualImportChoice diaryId={diaryId} />}
+        {tab === 'gpx' && gpxSource === 'manual' && (
+          <ManualImportChoice key={initialManualMode} diaryId={diaryId} initialMode={initialManualMode} />
+        )}
         {tab === 'gpx' && gpxSource === 'from-activity' && <FromActivityUploader diaryId={diaryId} />}
       </main>
     </div>

@@ -34,7 +34,10 @@ interface ShelfItem {
 
 const SENTIERI_ITEMS: ShelfItem[] = [
   {
-    href: '/upload?tab=gpx&source=manual',
+    // `source=build` entra dritto nel wizard (components/upload/RouteBuilder.tsx via
+    // ManualImportChoice's `initialMode`), non sul suo stesso menu di scelta — chi tocca questa
+    // voce ha già deciso, non deve rivederla un'altra volta.
+    href: '/upload?tab=gpx&source=build',
     icon: RouteIcon,
     title: 'Costruisci o trova un percorso',
     subtitle: 'Punto di partenza, km e dislivello — oppure lo descrivi a Giulia',
@@ -46,9 +49,11 @@ const SENTIERI_ITEMS: ShelfItem[] = [
     subtitle: '5 proposte già pronte, aggiornate ogni settimana',
   },
   {
+    // File traccia è il tab di default di /upload?tab=gpx (nessun `source`): entra dritto nel
+    // caricamento, mai sul menu "Manuale".
     href: '/upload?tab=gpx',
     icon: Upload,
-    title: 'Ce l’ho già',
+    title: 'Importa',
     subtitle: 'File GPX · da un link · a mano · da un’escursione fatta',
   },
 ]

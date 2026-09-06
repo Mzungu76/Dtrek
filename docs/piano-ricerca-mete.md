@@ -115,15 +115,29 @@ Fasi 0-4 implementate su `claude/unified-mete-search-page-5qq64w`:
 - **Fase 1+2**: `app/percorsi/cerca/page.tsx` riscritta come hub — campo unico (Mete salvate +
   archivio con debounce/abort, dedup via `lib/metaSearch/mergeArchiveResults.ts`) sopra i tre
   scaffali. Sentieri aperto di default; ogni voce rimanda alla schermata esistente invariata
-  (`/upload?tab=gpx[&source=manual]`, `/percorsi-per-te`, `/profilo/ricerche-salvate`,
-  `/percorsi/cerca/luoghi?tipo=...`). `?source=manual` è l'unica aggiunta a `app/upload/page.tsx`
+  (`/upload?tab=gpx[&source=build]`, `/percorsi-per-te`, `/profilo/ricerche-salvate`,
+  `/percorsi/cerca/luoghi?tipo=...`). `?source=` è l'unica aggiunta a `app/upload/page.tsx`
   (comportamento di default invariato per chi non lo passa).
 - **Fase 3**: card "Cerca una Meta" in `app/percorsi/page.tsx`, bottone a icona rimosso.
 - **Fase 4**: form Borghi/Siti spostato invariato in `app/percorsi/cerca/luoghi/page.tsx`, con
   `?tipo=` e la creazione della Meta estratta nel hook condiviso `lib/useCreateMetaFromSearch.ts`
   (stessa azione usata anche dal campo unico dell'hub).
 
-Verificato: `tsc --noEmit` pulito, eslint pulito su tutti i file toccati, nuovo test
-`lib/metaSearch/__tests__/mergeArchiveResults.test.ts` (unione + dedup + caso vuoto). Non aggiunto
-un test sull'endpoint conteggi: nessuna rotta API ha oggi un test che tocca Supabase in questo
-repo (solo funzioni pure), introdurre quell'infrastruttura sarebbe fuori scopo per questa fase.
+**Correzione dopo revisione — nessuna pagina intermedia fra l'hub e il sistema di ricerca vero**:
+"Costruisci o trova un percorso" portava sul menu di `ManualImportChoice` (Le mie ricerche
+salvate/Costruisci o trova/Link/A mano) invece che dritto nel wizard — un tocco in più su una
+scelta già fatta in hub, e "Le mie ricerche salvate" duplicata con la voce già presente nello
+scaffale Sentieri. `ManualImportChoice` accetta ora `initialMode` (`components/upload/
+ManualImportChoice.tsx`); `app/upload/page.tsx`'s `?source=build` lo valorizza a `'build'`, entrando
+dritto in `RouteBuilder`. Corretto anche un bug di stato collegato: Next.js non rimonta `/upload`
+quando l'hub naviga da un `?source=` all'altro (stessa rotta, solo la query cambia), quindi senza
+un `useEffect` che risincronizza `gpxSource` un ingresso precedente restava "incollato" — visibile
+proprio come entrambe le voci dell'hub che finivano sullo stesso schermo. "Ce l'ho già" è ora
+"Importa" (`?tab=gpx` senza `source`, tab "File traccia" di default — diretto, il menu Manuale non
+compare più a meno di scegliere esplicitamente da lì Link/A mano).
+
+Verificato: `tsc --noEmit` pulito, eslint pulito su tutti i file toccati, vitest verde (nessuna
+regressione), nuovo test `lib/metaSearch/__tests__/mergeArchiveResults.test.ts` (unione + dedup +
+caso vuoto). Non aggiunto un test sull'endpoint conteggi: nessuna rotta API ha oggi un test che
+tocca Supabase in questo repo (solo funzioni pure), introdurre quell'infrastruttura sarebbe fuori
+scopo per questa fase.
