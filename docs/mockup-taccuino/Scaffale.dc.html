@@ -1,0 +1,186 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body style="margin:0">
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Lora:ital,wght@0,400;0,600;1,500&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+:root{
+  --paper-base:#F5EDDD; --paper-light:#F9F2E4; --card:#EBE0C8; --card-border:#D9C9A8;
+  --contour:#A89A78; --ink-typed:#2E2A22; --ink-hand:#7A6F52; --ink-muted:#95886A;
+  --accent:#C0603D; --accent-2:#7C8F6E; --accent-tint:#E9DAC3;
+  --bar-bg:#5F7355; --bar-active:#F5EDDD; --bar-inactive:#B9C4AE;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+a{color:var(--accent);text-decoration:none}
+a:hover{color:var(--accent-2)}
+.phone{width:390px;height:844px;position:relative;overflow:hidden;background:var(--paper-base);
+  font-family:'DM Sans',system-ui,sans-serif;color:var(--ink-typed);-webkit-font-smoothing:antialiased}
+.paper-grain{position:absolute;inset:0;pointer-events:none;z-index:0;opacity:.9;mix-blend-mode:multiply;
+  background-image:
+    radial-gradient(circle at 12% 22%,rgba(46,42,34,.20) 0,rgba(46,42,34,.20) 1.5px,transparent 3.1px),
+    radial-gradient(circle at 68% 8%,rgba(46,42,34,.16) 0,rgba(46,42,34,.16) 1.2px,transparent 2.7px),
+    radial-gradient(circle at 40% 55%,rgba(46,42,34,.18) 0,rgba(46,42,34,.18) 1.6px,transparent 3.3px),
+    radial-gradient(circle at 85% 40%,rgba(46,42,34,.15) 0,rgba(46,42,34,.15) 1.1px,transparent 2.5px),
+    radial-gradient(circle at 25% 82%,rgba(46,42,34,.18) 0,rgba(46,42,34,.18) 1.4px,transparent 2.9px);
+  background-size:46px 52px,61px 41px,71px 83px,33px 63px,83px 47px}
+.contours{position:absolute;inset:0;pointer-events:none;z-index:0;opacity:.5}
+.eyebrow{font-family:'DM Sans';font-weight:700;text-transform:uppercase;letter-spacing:.2em;
+  font-size:9.5px;color:var(--ink-hand);margin:0}
+.hand{font-family:'Caveat',cursive;font-weight:700}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-weight:700;font-variant-numeric:tabular-nums}
+.stage{position:absolute;inset:0;z-index:1;display:flex;flex-direction:column;padding:52px 18px 0}
+.card{background:var(--card);border:1px solid var(--card-border);border-radius:14px;position:relative}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:9.5px;font-weight:700;
+  padding:3px 8px;border-radius:999px;background:var(--paper-light);border:1px solid var(--card-border);color:var(--ink-hand)}
+.chip.hot{background:var(--accent-tint);border-color:#dfc4ac;color:var(--accent)}
+.metric{display:flex;flex-direction:column;gap:1px}
+.metric .v{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:14.5px;color:var(--ink-typed);line-height:1}
+.metric .k{font-size:8.5px;text-transform:uppercase;letter-spacing:.11em;color:var(--ink-muted)}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;height:46px;border-radius:12px;
+  background:var(--accent);color:var(--paper-light);font-weight:700;font-size:13.5px;letter-spacing:.02em;border:none}
+.btn-ghost{background:transparent;color:var(--accent);border:1.5px solid var(--accent)}
+.row{display:flex;align-items:center;gap:11px;padding:0 11px 0 0;background:var(--card);
+  border:1px solid var(--card-border);border-radius:12px;overflow:hidden}
+.spine{width:9px;align-self:stretch;flex:none}
+.row-title{font-family:'Lora',Georgia,serif;font-weight:600;font-size:14px;line-height:1.15;color:var(--ink-typed)}
+.row-sub{font-size:10px;color:var(--ink-muted);letter-spacing:.02em}
+.tag{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;
+  padding:2px 6px;border-radius:4px;background:var(--paper-light);border:1px solid var(--card-border);color:var(--ink-hand)}
+.grouphead{display:flex;align-items:center;gap:8px}
+.grouphead .t{font-family:'DM Sans';font-weight:700;text-transform:uppercase;letter-spacing:.14em;font-size:9.5px;color:var(--ink-hand)}
+.grouphead .l{flex:1;height:1px;background:var(--card-border)}
+.grouphead .n{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:9.5px;color:var(--ink-muted)}
+.bottombar{position:absolute;left:0;right:0;bottom:0;height:74px;background:var(--bar-bg);
+  display:flex;align-items:flex-start;justify-content:space-around;padding-top:11px;z-index:6}
+.bb{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--bar-inactive);width:64px}
+.bb.on{color:var(--bar-active)}
+.bb span{font-size:9px;font-weight:700}
+/* ── vocabolario "taccuino": indice, linguette, appunti ── */
+.leader{flex:1;height:0;border-bottom:1.5px dotted var(--contour);margin:0 7px;transform:translateY(-4px);opacity:.75}
+.pg{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:10.5px;color:var(--ink-muted);flex:none}
+.mark{width:13px;height:13px;flex:none;display:flex;align-items:center;justify-content:center}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;height:44px;
+  background:var(--card);border:1px solid var(--card-border);border-bottom:none;
+  border-top-left-radius:9px;border-top-right-radius:9px;color:var(--ink-hand)}
+.tab.on{background:var(--paper-light);color:var(--ink-typed);border-color:var(--contour)}
+.tab.off{opacity:.5}
+.tab b{font-size:11.5px;font-weight:700;letter-spacing:.02em}
+.tab i{font-style:normal;font-size:9px;color:var(--ink-muted);font-family:'JetBrains Mono',monospace}
+.sheet-page{background:var(--paper-light);border:1px solid var(--contour);border-radius:0 0 12px 12px;padding:12px}
+.hw{font-family:'Caveat',cursive;font-weight:600;font-size:16.5px;line-height:1.32;color:#3B4A63}
+.pin{width:19px;height:19px;border-radius:999px;background:var(--accent);color:var(--paper-light);
+  display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;
+  font-size:9.5px;font-weight:700;flex:none}
+.stamp{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;color:var(--ink-muted);letter-spacing:.04em}
+.tRow{display:flex;align-items:center;gap:11px;padding:0 11px 0 0;background:var(--card);
+  border:1px solid var(--card-border);border-radius:12px;overflow:hidden;height:60px}
+.fold{display:flex;align-items:center;gap:10px;height:44px;padding:0 12px;background:transparent;
+  border:1px solid var(--card-border);border-radius:12px;color:var(--ink-hand);font-size:11.5px;font-weight:700}
+.stack{display:flex;gap:2px;flex:none}
+.stack i{display:block;width:4px;height:22px;border-radius:1px}
+</style>
+</helmet>
+<div class="phone">
+  <div class="paper-grain"></div>
+
+  <div class="stage">
+    <p class="eyebrow">Dtrek</p>
+    <h1 class="hand" style="font-size:31px;margin:1px 0 0;line-height:1;color:var(--ink-typed)">I miei taccuini</h1>
+    <p style="margin:7px 0 0;font-family:'Lora',Georgia,serif;font-size:12.5px;line-height:1.4;color:var(--ink-hand)">
+      Ognuno con un nome, ognuno con il suo indice. Se ne tiene aperto uno alla volta.
+    </p>
+
+    <!-- lo scaffale vero e proprio: i dorsi, non le copertine -->
+    <svg viewBox="0 0 354 140" style="width:100%;height:140px;display:block;margin-top:14px" aria-hidden="true">
+      <g font-family="Lora, Georgia, serif" font-size="11" font-weight="600">
+        <rect x="12"  y="16"  width="31" height="112" rx="2" fill="#C0603D"></rect>
+        <text transform="translate(31,122) rotate(-90)" fill="#F9F2E4">Appennino centrale</text>
+        <rect x="49"  y="30"  width="27" height="98"  rx="2" fill="#7C8F6E"></rect>
+        <text transform="translate(66,122) rotate(-90)" fill="#F9F2E4">Ferrate Dolomiti</text>
+        <rect x="82"  y="24"  width="24" height="104" rx="2" fill="#8A7A5C"></rect>
+        <text transform="translate(97,122) rotate(-90)" fill="#F9F2E4">Cammini urbani</text>
+        <rect x="112" y="38"  width="22" height="90"  rx="2" fill="#5F7355"></rect>
+        <text transform="translate(126,122) rotate(-90)" fill="#F9F2E4">Isole minori</text>
+        <rect x="140" y="28"  width="26" height="100" rx="2" fill="#B08A5A"></rect>
+        <text transform="translate(156,122) rotate(-90)" fill="#F9F2E4">Sicilia 2024</text>
+      </g>
+      <g opacity=".45">
+        <rect x="172" y="40" width="20" height="88" rx="2" fill="#A89A78"></rect>
+        <rect x="196" y="46" width="18" height="82" rx="2" fill="#A89A78"></rect>
+      </g>
+      <rect x="0" y="128" width="354" height="5" rx="1.5" fill="#A89A78"></rect>
+      <rect x="0" y="133" width="354" height="4" rx="1.5" fill="#8E8264" opacity=".55"></rect>
+    </svg>
+
+    <div class="grouphead" style="margin:12px 0 8px">
+      <span class="t">In uso</span><span class="l"></span><span class="n">3</span>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:7px">
+      <div class="tRow" style="border-color:var(--accent);border-width:1.5px">
+        <i class="spine" style="background:#C0603D"></i>
+        <div style="min-width:0;flex:1">
+          <p class="row-title" style="margin:0">Appennino centrale</p>
+          <p class="row-sub" style="margin:2px 0 0"><span class="mono">27</span> voci &middot; <span class="mono">62</span> pagine &middot; scritto oggi</p>
+        </div>
+        <span class="tag" style="background:var(--accent-tint);border-color:#dfc4ac;color:var(--accent)">Aperto</span>
+      </div>
+      <div class="tRow">
+        <i class="spine" style="background:#7C8F6E"></i>
+        <div style="min-width:0;flex:1">
+          <p class="row-title" style="margin:0">Ferrate delle Dolomiti</p>
+          <p class="row-sub" style="margin:2px 0 0"><span class="mono">11</span> voci &middot; <span class="mono">34</span> pagine &middot; 2 agosto</p>
+        </div>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#95886A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
+      </div>
+      <div class="tRow">
+        <i class="spine" style="background:#8A7A5C"></i>
+        <div style="min-width:0;flex:1">
+          <p class="row-title" style="margin:0">Cammini urbani</p>
+          <p class="row-sub" style="margin:2px 0 0"><span class="mono">6</span> voci &middot; <span class="mono">19</span> pagine &middot; 4 mesi fa</p>
+        </div>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#95886A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
+      </div>
+
+      <div class="fold">
+        <div class="stack"><i style="background:#A89A78"></i><i style="background:#7C8F6E"></i><i style="background:#B08A5A"></i><i style="background:#A89A78"></i></div>
+        Riposti nello scaffale &mdash; 4 taccuini chiusi
+        <span style="flex:1"></span>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:8px;height:44px;padding:0 12px;border-radius:12px;border:1.5px dashed var(--card-border);color:var(--ink-hand);font-size:12px;font-weight:600">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        Comincia un taccuino nuovo
+      </div>
+    </div>
+  </div>
+
+  <div class="bottombar">
+    <div class="bb on">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5V6a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"></path><path d="M9 8h6"></path><path d="M9 12h6"></path></svg>
+      <span>Diario</span>
+    </div>
+    <div class="bb">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.6" y2="16.6"></line></svg>
+      <span>Cerca</span>
+    </div>
+    <div class="bb">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>
+      <span>Navigator</span>
+    </div>
+    <div class="bb">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M5 21a7 7 0 0 1 14 0"></path></svg>
+      <span>Profilo</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

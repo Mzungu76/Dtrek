@@ -1,0 +1,218 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body style="margin:0">
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Lora:ital,wght@0,400;0,600;1,500&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+:root{
+  --paper-base:#F5EDDD; --paper-light:#F9F2E4; --card:#EBE0C8; --card-border:#D9C9A8;
+  --contour:#A89A78; --ink-typed:#2E2A22; --ink-hand:#7A6F52; --ink-muted:#95886A;
+  --accent:#C0603D; --accent-2:#7C8F6E; --accent-tint:#E9DAC3;
+  --bar-bg:#5F7355; --bar-active:#F5EDDD; --bar-inactive:#B9C4AE;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+a{color:var(--accent);text-decoration:none}
+a:hover{color:var(--accent-2)}
+.phone{width:390px;height:844px;position:relative;overflow:hidden;background:var(--paper-base);
+  font-family:'DM Sans',system-ui,sans-serif;color:var(--ink-typed);-webkit-font-smoothing:antialiased}
+.paper-grain{position:absolute;inset:0;pointer-events:none;z-index:0;opacity:.9;mix-blend-mode:multiply;
+  background-image:
+    radial-gradient(circle at 12% 22%,rgba(46,42,34,.20) 0,rgba(46,42,34,.20) 1.5px,transparent 3.1px),
+    radial-gradient(circle at 68% 8%,rgba(46,42,34,.16) 0,rgba(46,42,34,.16) 1.2px,transparent 2.7px),
+    radial-gradient(circle at 40% 55%,rgba(46,42,34,.18) 0,rgba(46,42,34,.18) 1.6px,transparent 3.3px),
+    radial-gradient(circle at 85% 40%,rgba(46,42,34,.15) 0,rgba(46,42,34,.15) 1.1px,transparent 2.5px),
+    radial-gradient(circle at 25% 82%,rgba(46,42,34,.18) 0,rgba(46,42,34,.18) 1.4px,transparent 2.9px);
+  background-size:46px 52px,61px 41px,71px 83px,33px 63px,83px 47px}
+.contours{position:absolute;inset:0;pointer-events:none;z-index:0;opacity:.5}
+.eyebrow{font-family:'DM Sans';font-weight:700;text-transform:uppercase;letter-spacing:.2em;
+  font-size:9.5px;color:var(--ink-hand);margin:0}
+.hand{font-family:'Caveat',cursive;font-weight:700}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-weight:700;font-variant-numeric:tabular-nums}
+.stage{position:absolute;inset:0;z-index:1;display:flex;flex-direction:column;padding:52px 18px 0}
+.card{background:var(--card);border:1px solid var(--card-border);border-radius:14px;position:relative}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:9.5px;font-weight:700;
+  padding:3px 8px;border-radius:999px;background:var(--paper-light);border:1px solid var(--card-border);color:var(--ink-hand)}
+.chip.hot{background:var(--accent-tint);border-color:#dfc4ac;color:var(--accent)}
+.metric{display:flex;flex-direction:column;gap:1px}
+.metric .v{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:14.5px;color:var(--ink-typed);line-height:1}
+.metric .k{font-size:8.5px;text-transform:uppercase;letter-spacing:.11em;color:var(--ink-muted)}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;height:46px;border-radius:12px;
+  background:var(--accent);color:var(--paper-light);font-weight:700;font-size:13.5px;letter-spacing:.02em;border:none}
+.btn-ghost{background:transparent;color:var(--accent);border:1.5px solid var(--accent)}
+.row{display:flex;align-items:center;gap:11px;padding:0 11px 0 0;background:var(--card);
+  border:1px solid var(--card-border);border-radius:12px;overflow:hidden}
+.spine{width:9px;align-self:stretch;flex:none}
+.row-title{font-family:'Lora',Georgia,serif;font-weight:600;font-size:14px;line-height:1.15;color:var(--ink-typed)}
+.row-sub{font-size:10px;color:var(--ink-muted);letter-spacing:.02em}
+.tag{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;
+  padding:2px 6px;border-radius:4px;background:var(--paper-light);border:1px solid var(--card-border);color:var(--ink-hand)}
+.grouphead{display:flex;align-items:center;gap:8px}
+.grouphead .t{font-family:'DM Sans';font-weight:700;text-transform:uppercase;letter-spacing:.14em;font-size:9.5px;color:var(--ink-hand)}
+.grouphead .l{flex:1;height:1px;background:var(--card-border)}
+.grouphead .n{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:9.5px;color:var(--ink-muted)}
+.bottombar{position:absolute;left:0;right:0;bottom:0;height:74px;background:var(--bar-bg);
+  display:flex;align-items:flex-start;justify-content:space-around;padding-top:11px;z-index:6}
+.bb{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--bar-inactive);width:64px}
+.bb.on{color:var(--bar-active)}
+.bb span{font-size:9px;font-weight:700}
+/* ── vocabolario "taccuino": indice, linguette, appunti ── */
+.leader{flex:1;height:0;border-bottom:1.5px dotted var(--contour);margin:0 7px;transform:translateY(-4px);opacity:.75}
+.pg{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:10.5px;color:var(--ink-muted);flex:none}
+.mark{width:13px;height:13px;flex:none;display:flex;align-items:center;justify-content:center}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;height:44px;
+  background:var(--card);border:1px solid var(--card-border);border-bottom:none;
+  border-top-left-radius:9px;border-top-right-radius:9px;color:var(--ink-hand)}
+.tab.on{background:var(--paper-light);color:var(--ink-typed);border-color:var(--contour)}
+.tab.off{opacity:.5}
+.tab b{font-size:11.5px;font-weight:700;letter-spacing:.02em}
+.tab i{font-style:normal;font-size:9px;color:var(--ink-muted);font-family:'JetBrains Mono',monospace}
+.sheet-page{background:var(--paper-light);border:1px solid var(--contour);border-radius:0 0 12px 12px;padding:12px}
+.hw{font-family:'Caveat',cursive;font-weight:600;font-size:16.5px;line-height:1.32;color:#3B4A63}
+.pin{width:19px;height:19px;border-radius:999px;background:var(--accent);color:var(--paper-light);
+  display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;
+  font-size:9.5px;font-weight:700;flex:none}
+.stamp{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;color:var(--ink-muted);letter-spacing:.04em}
+.ix{display:flex;align-items:center;gap:9px;height:46px;padding:0 4px}
+.ix + .ix{border-top:1px dotted #E0D3B6}
+.ix .t{font-family:'Lora',Georgia,serif;font-weight:600;font-size:14px;color:var(--ink-typed);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:196px}
+.ix .s{font-size:9.5px;color:var(--ink-muted);letter-spacing:.02em;margin-top:2px}
+.srch{display:flex;align-items:center;gap:8px;height:38px;padding:0 12px;border-radius:999px;
+  background:var(--paper-light);border:1px solid var(--card-border);color:var(--ink-muted);font-size:12px}
+.newline{display:flex;align-items:center;gap:9px;height:46px;padding:0 4px;border-top:1px dotted #E0D3B6;color:var(--accent)}
+</style>
+</helmet>
+<div class="phone">
+  <div class="paper-grain"></div>
+  <svg class="contours" viewBox="0 0 390 844" preserveAspectRatio="none" aria-hidden="true">
+    <g fill="none" stroke="#A89A78" stroke-width="1" opacity=".22">
+      <path d="M-20 150 C 90 126, 150 198, 250 170 S 400 126, 430 158"></path>
+      <path d="M-20 640 C 100 610, 170 690, 268 662 S 400 622, 430 656"></path>
+    </g>
+  </svg>
+
+  <div class="stage">
+    <!-- il taccuino aperto: si apre sull'indice, come un taccuino vero -->
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+      <div style="min-width:0">
+        <p class="eyebrow">Taccuino aperto</p>
+        <div style="display:flex;align-items:center;gap:7px;margin-top:1px">
+          <h1 class="hand" style="font-size:30px;margin:0;line-height:1;color:var(--ink-typed)">Appennino centrale</h1>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#7A6F52" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-top:3px;flex:none"><polyline points="6 9 12 15 18 9"></polyline></svg>
+        </div>
+        <p class="stamp" style="margin:5px 0 0">APERTO IL 3 MARZO &middot; 27 VOCI &middot; 62 PAGINE</p>
+      </div>
+      <div style="width:33px;height:33px;border-radius:999px;background:var(--card);border:1px solid var(--card-border);display:flex;align-items:center;justify-content:center;color:var(--ink-hand);flex:none;margin-top:3px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M5 21a7 7 0 0 1 14 0"></path></svg>
+      </div>
+    </div>
+
+    <!-- il vantaggio digitale: non sfogli per trovare, cerchi -->
+    <div class="srch" style="margin-top:12px">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.6" y2="16.6"></line></svg>
+      Cerca fra le voci, gli appunti, i luoghi&hellip;
+    </div>
+
+    <div class="grouphead" style="margin:15px 0 2px">
+      <span class="t">Indice</span><span class="l"></span>
+      <span class="n" style="display:inline-flex;align-items:center;gap:4px;color:var(--ink-hand)">
+        dal fondo
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+      </span>
+    </div>
+
+    <div style="display:flex;flex-direction:column">
+
+      <div class="ix">
+        <span class="mark"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#7A6F52" stroke-width="2.4"><rect x="4" y="4" width="16" height="16" rx="2"></rect></svg></span>
+        <div style="min-width:0">
+          <p class="t" style="margin:0">Anello del Monte Cimino</p>
+          <p class="s" style="margin:0">pianificata &middot; sabato 12 &middot; <span class="mono">12,4</span> km</p>
+        </div>
+        <span class="leader"></span><span class="pg">62</span>
+      </div>
+
+      <div class="ix">
+        <span class="mark"><span style="width:11px;height:11px;border-radius:999px;background:var(--accent);display:block"></span></span>
+        <div style="min-width:0">
+          <p class="t" style="margin:0;color:var(--accent)">La Folgore</p>
+          <p class="s" style="margin:0;color:var(--accent)">in cammino ora &middot; <span class="mono">4</span> appunti presi</p>
+        </div>
+        <span class="leader"></span><span class="pg" style="color:var(--accent)">58</span>
+      </div>
+
+      <div class="ix">
+        <span class="mark"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7C8F6E" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>
+        <div style="min-width:0">
+          <p class="t" style="margin:0">Terminillo, cresta nord</p>
+          <p class="s" style="margin:0">28 ago &middot; <span class="mono">15,2</span> km &middot; reportage scritto</p>
+        </div>
+        <span class="leader"></span><span class="pg">51</span>
+      </div>
+
+      <div class="ix">
+        <span class="mark"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7C8F6E" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>
+        <div style="min-width:0">
+          <p class="t" style="margin:0">Gole del Salinello</p>
+          <p class="s" style="margin:0">14 ago &middot; <span class="mono">9,7</span> km &middot; <span class="mono">11</span> appunti</p>
+        </div>
+        <span class="leader"></span><span class="pg">44</span>
+      </div>
+
+      <div class="ix">
+        <span class="mark"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#A89A78" stroke-width="2.4"><rect x="4" y="4" width="16" height="16" rx="2"></rect></svg></span>
+        <div style="min-width:0">
+          <p class="t" style="margin:0;color:var(--ink-hand)">Cascate del Menotre</p>
+          <p class="s" style="margin:0">voce aperta da 3 mesi &middot; mai camminata</p>
+        </div>
+        <span class="leader"></span><span class="pg">38</span>
+      </div>
+
+      <!-- il gesto della pianificazione: sfogliare fino alla prima pagina libera -->
+      <div class="newline">
+        <span class="mark">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"></path></svg>
+        </span>
+        <div style="min-width:0">
+          <p class="t" style="margin:0;color:var(--accent);font-family:'DM Sans';font-weight:700;font-size:13px">Scrivi una nuova voce</p>
+          <p class="s" style="margin:0">prima pagina libera</p>
+        </div>
+        <span class="leader" style="border-color:var(--accent);opacity:.5"></span><span class="pg" style="color:var(--accent)">63</span>
+      </div>
+    </div>
+
+    <div style="flex:1"></div>
+
+    <p style="margin:0 0 14px;font-family:'Lora',Georgia,serif;font-size:11.5px;line-height:1.45;color:var(--ink-muted);text-wrap:pretty">
+      Le pagine non si riordinano mai: una voce resta dov&rsquo;&egrave; stata scritta. A riordinare &egrave; l&rsquo;indice.
+    </p>
+  </div>
+
+  <div class="bottombar">
+    <div class="bb on">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5V6a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"></path><path d="M9 8h6"></path><path d="M9 12h6"></path></svg>
+      <span>Diario</span>
+    </div>
+    <div class="bb">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.6" y2="16.6"></line></svg>
+      <span>Cerca</span>
+    </div>
+    <div class="bb">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>
+      <span>Navigator</span>
+    </div>
+    <div class="bb">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M5 21a7 7 0 0 1 14 0"></path></svg>
+      <span>Profilo</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

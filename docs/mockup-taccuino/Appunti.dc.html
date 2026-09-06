@@ -1,0 +1,189 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body style="margin:0">
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Lora:ital,wght@0,400;0,600;1,500&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+:root{
+  --paper-base:#F5EDDD; --paper-light:#F9F2E4; --card:#EBE0C8; --card-border:#D9C9A8;
+  --contour:#A89A78; --ink-typed:#2E2A22; --ink-hand:#7A6F52; --ink-muted:#95886A;
+  --accent:#C0603D; --accent-2:#7C8F6E; --accent-tint:#E9DAC3;
+  --bar-bg:#5F7355; --bar-active:#F5EDDD; --bar-inactive:#B9C4AE;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+a{color:var(--accent);text-decoration:none}
+a:hover{color:var(--accent-2)}
+.phone{width:390px;height:844px;position:relative;overflow:hidden;background:var(--paper-base);
+  font-family:'DM Sans',system-ui,sans-serif;color:var(--ink-typed);-webkit-font-smoothing:antialiased}
+.paper-grain{position:absolute;inset:0;pointer-events:none;z-index:0;opacity:.9;mix-blend-mode:multiply;
+  background-image:
+    radial-gradient(circle at 12% 22%,rgba(46,42,34,.20) 0,rgba(46,42,34,.20) 1.5px,transparent 3.1px),
+    radial-gradient(circle at 68% 8%,rgba(46,42,34,.16) 0,rgba(46,42,34,.16) 1.2px,transparent 2.7px),
+    radial-gradient(circle at 40% 55%,rgba(46,42,34,.18) 0,rgba(46,42,34,.18) 1.6px,transparent 3.3px),
+    radial-gradient(circle at 85% 40%,rgba(46,42,34,.15) 0,rgba(46,42,34,.15) 1.1px,transparent 2.5px),
+    radial-gradient(circle at 25% 82%,rgba(46,42,34,.18) 0,rgba(46,42,34,.18) 1.4px,transparent 2.9px);
+  background-size:46px 52px,61px 41px,71px 83px,33px 63px,83px 47px}
+.contours{position:absolute;inset:0;pointer-events:none;z-index:0;opacity:.5}
+.eyebrow{font-family:'DM Sans';font-weight:700;text-transform:uppercase;letter-spacing:.2em;
+  font-size:9.5px;color:var(--ink-hand);margin:0}
+.hand{font-family:'Caveat',cursive;font-weight:700}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-weight:700;font-variant-numeric:tabular-nums}
+.stage{position:absolute;inset:0;z-index:1;display:flex;flex-direction:column;padding:52px 18px 0}
+.card{background:var(--card);border:1px solid var(--card-border);border-radius:14px;position:relative}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:9.5px;font-weight:700;
+  padding:3px 8px;border-radius:999px;background:var(--paper-light);border:1px solid var(--card-border);color:var(--ink-hand)}
+.chip.hot{background:var(--accent-tint);border-color:#dfc4ac;color:var(--accent)}
+.metric{display:flex;flex-direction:column;gap:1px}
+.metric .v{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:14.5px;color:var(--ink-typed);line-height:1}
+.metric .k{font-size:8.5px;text-transform:uppercase;letter-spacing:.11em;color:var(--ink-muted)}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;height:46px;border-radius:12px;
+  background:var(--accent);color:var(--paper-light);font-weight:700;font-size:13.5px;letter-spacing:.02em;border:none}
+.btn-ghost{background:transparent;color:var(--accent);border:1.5px solid var(--accent)}
+.row{display:flex;align-items:center;gap:11px;padding:0 11px 0 0;background:var(--card);
+  border:1px solid var(--card-border);border-radius:12px;overflow:hidden}
+.spine{width:9px;align-self:stretch;flex:none}
+.row-title{font-family:'Lora',Georgia,serif;font-weight:600;font-size:14px;line-height:1.15;color:var(--ink-typed)}
+.row-sub{font-size:10px;color:var(--ink-muted);letter-spacing:.02em}
+.tag{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;
+  padding:2px 6px;border-radius:4px;background:var(--paper-light);border:1px solid var(--card-border);color:var(--ink-hand)}
+.grouphead{display:flex;align-items:center;gap:8px}
+.grouphead .t{font-family:'DM Sans';font-weight:700;text-transform:uppercase;letter-spacing:.14em;font-size:9.5px;color:var(--ink-hand)}
+.grouphead .l{flex:1;height:1px;background:var(--card-border)}
+.grouphead .n{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:9.5px;color:var(--ink-muted)}
+.bottombar{position:absolute;left:0;right:0;bottom:0;height:74px;background:var(--bar-bg);
+  display:flex;align-items:flex-start;justify-content:space-around;padding-top:11px;z-index:6}
+.bb{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--bar-inactive);width:64px}
+.bb.on{color:var(--bar-active)}
+.bb span{font-size:9px;font-weight:700}
+/* ── vocabolario "taccuino": indice, linguette, appunti ── */
+.leader{flex:1;height:0;border-bottom:1.5px dotted var(--contour);margin:0 7px;transform:translateY(-4px);opacity:.75}
+.pg{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:10.5px;color:var(--ink-muted);flex:none}
+.mark{width:13px;height:13px;flex:none;display:flex;align-items:center;justify-content:center}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;height:44px;
+  background:var(--card);border:1px solid var(--card-border);border-bottom:none;
+  border-top-left-radius:9px;border-top-right-radius:9px;color:var(--ink-hand)}
+.tab.on{background:var(--paper-light);color:var(--ink-typed);border-color:var(--contour)}
+.tab.off{opacity:.5}
+.tab b{font-size:11.5px;font-weight:700;letter-spacing:.02em}
+.tab i{font-style:normal;font-size:9px;color:var(--ink-muted);font-family:'JetBrains Mono',monospace}
+.sheet-page{background:var(--paper-light);border:1px solid var(--contour);border-radius:0 0 12px 12px;padding:12px}
+.hw{font-family:'Caveat',cursive;font-weight:600;font-size:16.5px;line-height:1.32;color:#3B4A63}
+.pin{width:19px;height:19px;border-radius:999px;background:var(--accent);color:var(--paper-light);
+  display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;
+  font-size:9.5px;font-weight:700;flex:none}
+.stamp{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;color:var(--ink-muted);letter-spacing:.04em}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:10px;height:26px;color:var(--ink-hand)}
+.back{display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700}
+.note{display:flex;gap:10px;padding:11px 0}
+.note + .note{border-top:1px dotted #E0D3B6}
+.notemeta{display:flex;align-items:center;gap:6px;margin-bottom:3px}
+.polaroid{border:1px solid var(--card-border);background:var(--paper-light);padding:4px 4px 12px;
+  box-shadow:2px 3px 0 rgba(46,42,34,.10);transform:rotate(-1.4deg);width:96px;flex:none}
+</style>
+</helmet>
+<div class="phone">
+  <div class="paper-grain"></div>
+
+  <div class="stage" style="padding-top:48px">
+    <div class="topbar">
+      <span class="back">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+        Indice
+      </span>
+      <span class="stamp">APPENNINO CENTRALE &middot; p. 58&ndash;61</span>
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="5" r="1.4"></circle><circle cx="12" cy="12" r="1.4"></circle><circle cx="12" cy="19" r="1.4"></circle></svg>
+    </div>
+
+    <h1 style="font-family:'Playfair Display',Georgia,serif;font-weight:700;font-size:23px;line-height:1.12;margin:11px 0 0;color:var(--ink-typed)">
+      La Folgore
+    </h1>
+    <p class="stamp" style="margin:5px 0 12px">APPUNTI PRESI IN CAMMINO &middot; 6 SETTEMBRE</p>
+
+    <div style="display:flex;gap:3px">
+      <div class="tab"><b>Pianificazione</b><i>p. 58</i></div>
+      <div class="tab on"><b>Appunti</b><i>4 &middot; p. 60</i></div>
+      <div class="tab off"><b>Reportage</b><i>da scrivere</i></div>
+    </div>
+
+    <div class="sheet-page" style="padding:11px 12px 12px">
+      <svg viewBox="0 0 330 76" style="width:100%;height:74px;display:block;border-radius:8px;background:#EFE6D2" preserveAspectRatio="none">
+        <g fill="none" stroke="#A89A78" stroke-width="1" opacity=".45">
+          <path d="M-10 20 C 70 8, 120 40, 190 24 S 300 4, 340 20"></path>
+          <path d="M-10 50 C 72 38, 122 70, 192 54 S 302 32, 340 50"></path>
+        </g>
+        <path d="M28 62 C 70 48, 92 28, 140 26 S 212 36, 250 14" fill="none" stroke="#C0603D" stroke-width="2.2" stroke-linecap="round" opacity=".55"></path>
+        <g fill="#C0603D" font-family="JetBrains Mono, monospace" font-size="9" font-weight="700">
+          <circle cx="52" cy="55" r="8"></circle><text x="52" y="58.5" fill="#F9F2E4" text-anchor="middle">1</text>
+          <circle cx="124" cy="28" r="8"></circle><text x="124" y="31.5" fill="#F9F2E4" text-anchor="middle">2</text>
+          <circle cx="196" cy="31" r="8"></circle><text x="196" y="34.5" fill="#F9F2E4" text-anchor="middle">3</text>
+          <circle cx="250" cy="14" r="8"></circle><text x="250" y="17.5" fill="#F9F2E4" text-anchor="middle">4</text>
+        </g>
+      </svg>
+
+      <div style="display:flex;flex-direction:column;margin-top:4px">
+
+        <div class="note">
+          <span class="pin">1</span>
+          <div style="min-width:0;flex:1">
+            <div class="notemeta"><span class="stamp">09:14 &middot; KM 1,2 &middot; 780 M</span></div>
+            <p class="hw" style="margin:0">Fonte asciutta. Riempire alla partenza, non contarci.</p>
+          </div>
+        </div>
+
+        <div class="note">
+          <span class="pin">2</span>
+          <div style="min-width:0;flex:1">
+            <div class="notemeta">
+              <span class="stamp">10:02 &middot; KM 4,0 &middot; 1.140 M</span>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#95886A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M5 11a7 7 0 0 0 14 0"></path><line x1="12" y1="18" x2="12" y2="22"></line></svg>
+            </div>
+            <p class="hw" style="margin:0">Bivio senza segnavia dopo il pianoro: tenere la destra, il sentiero a sinistra si perde nel bosco.</p>
+          </div>
+        </div>
+
+        <div class="note">
+          <span class="pin">3</span>
+          <div style="min-width:0;flex:1">
+            <div class="notemeta"><span class="stamp">11:20 &middot; KM 7,6 &middot; 1.510 M</span></div>
+            <div style="display:flex;gap:10px;align-items:flex-start;margin-top:4px">
+              <div class="polaroid">
+                <svg viewBox="0 0 88 60" style="width:100%;height:56px;display:block;background:#D9CFB6">
+                  <path d="M0 60 L22 30 L36 44 L56 18 L88 60 Z" fill="#8E9B84"></path>
+                  <path d="M0 60 L18 44 L34 54 L52 38 L88 60 Z" fill="#6E7C66"></path>
+                  <circle cx="70" cy="15" r="7" fill="#E6D9BC"></circle>
+                </svg>
+              </div>
+              <p class="hw" style="margin:0;flex:1">La cresta nord vista dal canale &mdash; da rifare con la luce del mattino.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="note">
+          <span class="pin">4</span>
+          <div style="min-width:0;flex:1">
+            <div class="notemeta"><span class="stamp">12:05 &middot; KM 9,1 &middot; 1.620 M</span></div>
+            <p class="hw" style="margin:0">Vento fortissimo in cresta. La prossima volta partire alle sei.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- il senso di portarsi il taccuino: gli appunti diventano il reportage -->
+    <button class="btn" style="width:100%;margin-top:12px;height:48px">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"></path></svg>
+      Scrivi il Reportage da questi appunti
+    </button>
+    <p style="margin:9px 0 0;font-family:'Lora',Georgia,serif;font-size:11px;line-height:1.4;color:var(--ink-muted);text-align:center">
+      Gli appunti restano dove li hai presi. Il Reportage nasce dalle pagine accanto.
+    </p>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

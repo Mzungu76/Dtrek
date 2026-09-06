@@ -1,0 +1,173 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body style="margin:0">
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Lora:ital,wght@0,400;0,600;1,500&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+:root{
+  --paper-base:#F5EDDD; --paper-light:#F9F2E4; --card:#EBE0C8; --card-border:#D9C9A8;
+  --contour:#A89A78; --ink-typed:#2E2A22; --ink-hand:#7A6F52; --ink-muted:#95886A;
+  --accent:#C0603D; --accent-2:#7C8F6E; --accent-tint:#E9DAC3;
+  --bar-bg:#5F7355; --bar-active:#F5EDDD; --bar-inactive:#B9C4AE;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+a{color:var(--accent);text-decoration:none}
+a:hover{color:var(--accent-2)}
+.phone{width:390px;height:844px;position:relative;overflow:hidden;background:var(--paper-base);
+  font-family:'DM Sans',system-ui,sans-serif;color:var(--ink-typed);-webkit-font-smoothing:antialiased}
+.paper-grain{position:absolute;inset:0;pointer-events:none;z-index:0;opacity:.9;mix-blend-mode:multiply;
+  background-image:
+    radial-gradient(circle at 12% 22%,rgba(46,42,34,.20) 0,rgba(46,42,34,.20) 1.5px,transparent 3.1px),
+    radial-gradient(circle at 68% 8%,rgba(46,42,34,.16) 0,rgba(46,42,34,.16) 1.2px,transparent 2.7px),
+    radial-gradient(circle at 40% 55%,rgba(46,42,34,.18) 0,rgba(46,42,34,.18) 1.6px,transparent 3.3px),
+    radial-gradient(circle at 85% 40%,rgba(46,42,34,.15) 0,rgba(46,42,34,.15) 1.1px,transparent 2.5px),
+    radial-gradient(circle at 25% 82%,rgba(46,42,34,.18) 0,rgba(46,42,34,.18) 1.4px,transparent 2.9px);
+  background-size:46px 52px,61px 41px,71px 83px,33px 63px,83px 47px}
+.contours{position:absolute;inset:0;pointer-events:none;z-index:0;opacity:.5}
+.eyebrow{font-family:'DM Sans';font-weight:700;text-transform:uppercase;letter-spacing:.2em;
+  font-size:9.5px;color:var(--ink-hand);margin:0}
+.hand{font-family:'Caveat',cursive;font-weight:700}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-weight:700;font-variant-numeric:tabular-nums}
+.stage{position:absolute;inset:0;z-index:1;display:flex;flex-direction:column;padding:52px 18px 0}
+.card{background:var(--card);border:1px solid var(--card-border);border-radius:14px;position:relative}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:9.5px;font-weight:700;
+  padding:3px 8px;border-radius:999px;background:var(--paper-light);border:1px solid var(--card-border);color:var(--ink-hand)}
+.chip.hot{background:var(--accent-tint);border-color:#dfc4ac;color:var(--accent)}
+.metric{display:flex;flex-direction:column;gap:1px}
+.metric .v{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:14.5px;color:var(--ink-typed);line-height:1}
+.metric .k{font-size:8.5px;text-transform:uppercase;letter-spacing:.11em;color:var(--ink-muted)}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;height:46px;border-radius:12px;
+  background:var(--accent);color:var(--paper-light);font-weight:700;font-size:13.5px;letter-spacing:.02em;border:none}
+.btn-ghost{background:transparent;color:var(--accent);border:1.5px solid var(--accent)}
+.row{display:flex;align-items:center;gap:11px;padding:0 11px 0 0;background:var(--card);
+  border:1px solid var(--card-border);border-radius:12px;overflow:hidden}
+.spine{width:9px;align-self:stretch;flex:none}
+.row-title{font-family:'Lora',Georgia,serif;font-weight:600;font-size:14px;line-height:1.15;color:var(--ink-typed)}
+.row-sub{font-size:10px;color:var(--ink-muted);letter-spacing:.02em}
+.tag{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;
+  padding:2px 6px;border-radius:4px;background:var(--paper-light);border:1px solid var(--card-border);color:var(--ink-hand)}
+.grouphead{display:flex;align-items:center;gap:8px}
+.grouphead .t{font-family:'DM Sans';font-weight:700;text-transform:uppercase;letter-spacing:.14em;font-size:9.5px;color:var(--ink-hand)}
+.grouphead .l{flex:1;height:1px;background:var(--card-border)}
+.grouphead .n{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:9.5px;color:var(--ink-muted)}
+.bottombar{position:absolute;left:0;right:0;bottom:0;height:74px;background:var(--bar-bg);
+  display:flex;align-items:flex-start;justify-content:space-around;padding-top:11px;z-index:6}
+.bb{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--bar-inactive);width:64px}
+.bb.on{color:var(--bar-active)}
+.bb span{font-size:9px;font-weight:700}
+/* ── vocabolario "taccuino": indice, linguette, appunti ── */
+.leader{flex:1;height:0;border-bottom:1.5px dotted var(--contour);margin:0 7px;transform:translateY(-4px);opacity:.75}
+.pg{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:10.5px;color:var(--ink-muted);flex:none}
+.mark{width:13px;height:13px;flex:none;display:flex;align-items:center;justify-content:center}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;height:44px;
+  background:var(--card);border:1px solid var(--card-border);border-bottom:none;
+  border-top-left-radius:9px;border-top-right-radius:9px;color:var(--ink-hand)}
+.tab.on{background:var(--paper-light);color:var(--ink-typed);border-color:var(--contour)}
+.tab.off{opacity:.5}
+.tab b{font-size:11.5px;font-weight:700;letter-spacing:.02em}
+.tab i{font-style:normal;font-size:9px;color:var(--ink-muted);font-family:'JetBrains Mono',monospace}
+.sheet-page{background:var(--paper-light);border:1px solid var(--contour);border-radius:0 0 12px 12px;padding:12px}
+.hw{font-family:'Caveat',cursive;font-weight:600;font-size:16.5px;line-height:1.32;color:#3B4A63}
+.pin{width:19px;height:19px;border-radius:999px;background:var(--accent);color:var(--paper-light);
+  display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;
+  font-size:9.5px;font-weight:700;flex:none}
+.stamp{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;color:var(--ink-muted);letter-spacing:.04em}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:10px;height:26px;color:var(--ink-hand)}
+.back{display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700}
+.found{display:flex;align-items:center;gap:11px;padding:0 11px 0 0;background:var(--card);
+  border:1px solid var(--card-border);border-radius:12px;overflow:hidden;height:58px}
+.field{padding:9px 0}
+.field + .field{border-top:1px dotted #E0D3B6}
+.flabel{font-family:'DM Sans';font-weight:700;text-transform:uppercase;letter-spacing:.13em;font-size:9px;color:var(--ink-muted);margin:0 0 3px}
+.auto{display:flex;align-items:flex-start;gap:8px;font-size:11px;line-height:1.4;color:var(--ink-muted);font-family:'Lora',Georgia,serif}
+</style>
+</helmet>
+<div class="phone">
+  <div class="paper-grain"></div>
+
+  <div class="stage" style="padding-top:48px">
+    <div class="topbar">
+      <span class="back">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+        Cerca
+      </span>
+      <span class="stamp">TRASCRIVI NEL TACCUINO</span>
+      <span style="width:14px"></span>
+    </div>
+
+    <!-- cercare si fa fuori dal taccuino: nel fisico apriresti una guida -->
+    <p class="eyebrow" style="margin:14px 0 6px">Trovata nella ricerca</p>
+    <div class="found">
+      <i class="spine" style="background:#7C8F6E"></i>
+      <div style="min-width:0;flex:1">
+        <p class="row-title" style="margin:0">Anello del Monte Cimino</p>
+        <p class="row-sub" style="margin:2px 0 0"><span class="mono">12,4</span> km &middot; <span class="mono">+740</span> m &middot; T2 &middot; Viterbo</p>
+      </div>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:9px;margin:13px 0 11px">
+      <span style="flex:1;height:1px;background:var(--card-border)"></span>
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#C0603D" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="4" x2="12" y2="20"></line><polyline points="6 14 12 20 18 14"></polyline></svg>
+      <span style="flex:1;height:1px;background:var(--card-border)"></span>
+    </div>
+
+    <!-- la pagina bianca: il gesto della pianificazione -->
+    <div style="background:var(--paper-light);border:1px solid var(--contour);border-radius:12px;padding:13px 14px 14px;position:relative">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <p class="eyebrow" style="margin:0">Prima pagina libera</p>
+        <span class="pg" style="font-size:12px">p. 63</span>
+      </div>
+
+      <div style="margin-top:9px">
+        <div class="field">
+          <p class="flabel">Titolo della voce</p>
+          <p class="hw" style="margin:0;font-size:19px">Anello del Monte Cimino</p>
+        </div>
+
+        <div class="field">
+          <p class="flabel">Quando</p>
+          <div style="display:flex;gap:6px;margin-top:5px">
+            <span class="chip hot">sabato 12</span>
+            <span class="chip">domenica 13</span>
+            <span class="chip">senza data</span>
+          </div>
+        </div>
+
+        <div class="field">
+          <p class="flabel">In quale taccuino</p>
+          <div style="display:flex;align-items:center;gap:9px;margin-top:6px">
+            <span style="width:7px;height:26px;border-radius:2px;background:#C0603D;flex:none"></span>
+            <div style="min-width:0;flex:1">
+              <p style="margin:0;font-family:'Lora',Georgia,serif;font-weight:600;font-size:13.5px;color:var(--ink-typed)">Appennino centrale</p>
+              <p class="row-sub" style="margin:1px 0 0">aperto &middot; <span class="mono">27</span> voci</p>
+            </div>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#7A6F52" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </div>
+        </div>
+      </div>
+
+      <div class="auto" style="margin-top:12px">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#7C8F6E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:1px"><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8-5-3.6-5 3.6 1.9-5.8L4 8.8h6.1z"></path></svg>
+        <span>La traccia, il profilo, la Guida in tre pagine e i dati di sicurezza si scrivono da soli. Nel taccuino di carta li avresti copiati a mano.</span>
+      </div>
+
+      <button class="btn" style="width:100%;margin-top:13px;height:48px">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"></path></svg>
+        Scrivi la voce
+      </button>
+    </div>
+
+    <p style="margin:12px 0 0;font-family:'Lora',Georgia,serif;font-size:11.5px;line-height:1.45;color:var(--ink-muted);text-wrap:pretty">
+      Da qui in poi la voce non si sposta pi&ugrave;: gli appunti del cammino e il reportage finiscono nelle pagine subito dopo.
+    </p>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>
