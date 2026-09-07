@@ -78,115 +78,116 @@ a:hover{color:var(--accent-2)}
   display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;
   font-size:9.5px;font-weight:700;flex:none}
 .stamp{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;color:var(--ink-muted);letter-spacing:.04em}
-.lib-top{display:flex;align-items:center;justify-content:space-between;gap:10px;height:26px}
-.shelfchip{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 11px;border-radius:999px;
-  background:var(--card);border:1px solid var(--card-border);color:var(--ink-typed);font-size:11.5px;font-weight:700}
-.carousel{display:flex;align-items:center;justify-content:center;gap:9px;margin-top:11px}
-.cover{width:284px;height:342px;flex:none;border-radius:5px;overflow:hidden;position:relative;
-  box-shadow:0 12px 26px rgba(46,42,34,.30);border:1px solid rgba(46,42,34,.12)}
-.side{width:22px;height:310px;flex:none;border-radius:3px;opacity:.5;box-shadow:0 8px 16px rgba(46,42,34,.18)}
-.cover-band{position:absolute;left:0;right:0;bottom:0;padding:13px 15px 15px;
-  background:linear-gradient(to top,rgba(28,26,21,.88) 0%,rgba(28,26,21,.62) 60%,rgba(28,26,21,0) 100%)}
-.dots{display:flex;align-items:center;justify-content:center;gap:5px;margin-top:9px}
-.dots i{width:5px;height:5px;border-radius:999px;background:var(--card-border);display:block}
-.dots i.on{background:var(--accent);width:16px;border-radius:3px}
-.datastrip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:10px;
-  padding:10px 12px;background:var(--card);border:1px solid var(--card-border);border-radius:12px}
-.nextline{display:flex;align-items:center;gap:9px;margin-top:8px;padding:9px 12px;border-radius:11px;
-  background:var(--accent-tint);border:1px solid #dfc4ac}
-.banner{position:absolute;left:0;right:0;bottom:74px;z-index:5;background:var(--paper-light);
-  border-top:1px solid var(--card-border);box-shadow:0 -6px 18px rgba(46,42,34,.13);padding:7px 18px 11px}
-.grab{width:34px;height:4px;border-radius:999px;background:var(--card-border);margin:0 auto 8px}
-.mini{display:flex;gap:3px;align-items:flex-end;flex:none}
-.mini i{display:block;width:6px;border-radius:1px}
+.atl-ink{color:#3B4A63}
+.srch{display:flex;align-items:center;gap:9px;height:46px;padding:0 14px;border-radius:999px;
+  background:var(--paper-light);border:1.5px solid #B9C2D0;color:var(--ink-muted);font-size:13px}
+.mapbox{height:112px;border-radius:12px;overflow:hidden;border:1px solid var(--card-border);background:#E7E2D4;position:relative;margin-top:11px}
+.tav{display:flex;align-items:center;gap:11px;height:52px}
+.tav + .tav{border-top:1px dotted #D5CDB8}
+.tav .t{font-family:'Lora',Georgia,serif;font-weight:600;font-size:13.5px;color:var(--ink-typed)}
+.tav .s{font-size:10px;color:var(--ink-muted);margin-top:2px}
+.ico{width:30px;height:30px;border-radius:8px;background:#E3E5EA;border:1px solid #C9CFDA;flex:none;
+  display:flex;align-items:center;justify-content:center}
+.tchip{flex:none;display:inline-flex;align-items:center;gap:5px;height:29px;padding:0 12px;border-radius:999px;
+  background:var(--card);border:1px solid var(--card-border);color:var(--ink-hand);font-size:11px;font-weight:700}
 </style>
 </helmet>
 <div class="phone">
   <div class="paper-grain"></div>
 
   <div class="stage" style="padding:46px 18px 0">
-    <!-- lo scaffale in cui ti trovi e' sempre scritto: non ti perdi mai -->
-    <div class="lib-top">
-      <span class="shelfchip">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7A6F52" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h3v14H4z"></path><path d="M9 7h3v11H9z"></path><path d="M14 5h3v13h-3z"></path><line x1="2" y1="20.5" x2="22" y2="20.5"></line></svg>
-        Appennino
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#95886A" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-      </span>
-      <span class="stamp">2 DI 3 SU QUESTO SCAFFALE</span>
-    </div>
-
-    <div class="carousel">
-      <div class="side" style="background:linear-gradient(180deg,#B08A5A,#8E6E44)"></div>
-
-      <div class="cover">
-        <svg viewBox="0 0 284 342" style="width:100%;height:100%;display:block" preserveAspectRatio="none">
-          <rect width="284" height="342" fill="#4A5A52"></rect>
-          <path d="M0 342 L0 248 L58 194 L104 230 L158 166 L212 212 L284 150 L284 342 Z" fill="#3C4A44"></path>
-          <path d="M0 342 L0 286 L52 244 L112 280 L166 234 L226 272 L284 236 L284 342 Z" fill="#2E3A35"></path>
-          <circle cx="216" cy="70" r="26" fill="#E6D9BC" opacity=".92"></circle>
-          <g fill="none" stroke="#F5EDDD" stroke-width="1" opacity=".16">
-            <path d="M-10 106 C 70 90, 130 126, 200 110 S 300 86, 320 104"></path>
-            <path d="M-10 128 C 72 112, 132 148, 202 132 S 302 108, 320 126"></path>
-          </g>
-        </svg>
-        <div style="position:absolute;left:0;top:0;bottom:0;width:9px;background:#C0603D"></div>
-        <div class="cover-band">
-          <p style="margin:0;font-family:'DM Sans';font-weight:700;text-transform:uppercase;letter-spacing:.2em;font-size:8.5px;color:rgba(245,237,221,.72)">Taccuino di campo</p>
-          <p style="margin:5px 0 0;font-family:'Playfair Display',Georgia,serif;font-weight:700;font-size:25px;line-height:1.08;color:#F5EDDD">Appennino centrale</p>
-          <p style="margin:5px 0 0;font-family:'Lora',Georgia,serif;font-style:italic;font-size:12px;color:rgba(245,237,221,.82)">Due stagioni fra Terminillo e Gran Sasso</p>
-          <p style="margin:8px 0 0;font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.06em;color:rgba(245,237,221,.62)">MARCO Z. &middot; 2025&ndash;2026</p>
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+      <div>
+        <p class="eyebrow" style="letter-spacing:.22em">Il libro delle mete</p>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:2px">
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#3B4A63" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="12" cy="12" r="9"></circle><polygon points="15.5 8.5 13 13 8.5 15.5 11 11"></polygon></svg>
+          <h1 style="font-family:'Playfair Display',Georgia,serif;font-weight:700;font-size:27px;line-height:1;margin:0;color:#3B4A63">Atlante</h1>
         </div>
-      </div>
-
-      <div class="side" style="background:linear-gradient(180deg,#8A7A5C,#6E6046)"></div>
-    </div>
-
-    <div class="dots"><i></i><i class="on"></i><i></i></div>
-
-    <div class="datastrip">
-      <div class="metric"><span class="v">27</span><span class="k">voci</span></div>
-      <div class="metric"><span class="v">312</span><span class="k">km</span></div>
-      <div class="metric"><span class="v">+18k</span><span class="k">D+ m</span></div>
-      <div class="metric"><span class="v">62</span><span class="k">pagine</span></div>
-    </div>
-
-    <div class="nextline">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#C0603D" stroke-width="2.2" stroke-linecap="round" style="flex:none"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
-      <div style="min-width:0;flex:1">
-        <p style="margin:0;font-size:11.5px;font-weight:700;color:var(--accent)">Monte Cimino &middot; sabato 12</p>
-        <p class="row-sub" style="margin:1px 0 0">1 voce in cammino &middot; 3 in programma</p>
+        <p class="stamp" style="margin:6px 0 0">12 METE SEGNATE &middot; NESSUNA ANCORA TRASCRITTA</p>
       </div>
     </div>
 
-    <button class="btn" style="width:100%;margin-top:10px;height:48px">
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5V6a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"></path><path d="M9 8h6"></path><path d="M9 12h6"></path></svg>
-      Apri l&rsquo;indice
-    </button>
-  </div>
-
-  <!-- la libreria vive solo qui: nessuna pagina dedicata -->
-  <div class="banner">
-    <div class="grab"></div>
-    <div style="display:flex;align-items:center;gap:10px">
-      <span class="mini">
-        <i style="height:26px;background:#C0603D"></i>
-        <i style="height:22px;background:#B08A5A"></i>
-        <i style="height:24px;background:#8A7A5C"></i>
-      </span>
-      <div style="min-width:0;flex:1">
-        <p style="margin:0;font-size:11.5px;font-weight:700;color:var(--ink-typed)">Scaffale Appennino &middot; 3 taccuini</p>
-        <p class="row-sub" style="margin:1px 0 0">trascina in su per gli altri scaffali</p>
-      </div>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#95886A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
+    <div class="srch" style="margin-top:13px">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#3B4A63" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.6" y2="16.6"></line></svg>
+      Un luogo, una vetta, un borgo, un sito&hellip;
     </div>
+
+    <div class="mapbox">
+      <svg viewBox="0 0 354 112" style="width:100%;height:100%;display:block" preserveAspectRatio="none">
+        <g fill="none" stroke="#A8AEBB" stroke-width="1" opacity=".6">
+          <path d="M-10 26 C 70 12, 130 48, 210 32 S 330 8, 370 28"></path>
+          <path d="M-10 54 C 72 40, 132 76, 212 60 S 332 32, 370 52"></path>
+          <path d="M-10 86 C 74 72, 134 106, 214 90 S 334 64, 370 84"></path>
+        </g>
+        <g>
+          <circle cx="62" cy="78" r="5" fill="#3B4A63"></circle>
+          <circle cx="138" cy="42" r="5" fill="#3B4A63"></circle>
+          <circle cx="206" cy="66" r="5" fill="#C0603D"></circle>
+          <circle cx="278" cy="34" r="5" fill="#3B4A63"></circle>
+          <circle cx="312" cy="82" r="5" fill="#7C8F6E"></circle>
+        </g>
+      </svg>
+      <span class="chip" style="position:absolute;left:9px;bottom:9px">14 mete entro 40 km da te</span>
+    </div>
+
+    <div style="display:flex;gap:6px;margin-top:11px;overflow:hidden">
+      <span class="tchip">Sentieri <span class="mono" style="opacity:.6">31</span></span>
+      <span class="tchip">Borghi <span class="mono" style="opacity:.6">12</span></span>
+      <span class="tchip">Siti <span class="mono" style="opacity:.6">9</span></span>
+    </div>
+
+    <p class="eyebrow" style="margin:17px 0 2px">Le tavole</p>
+    <div style="display:flex;flex-direction:column">
+
+      <div class="tav">
+        <span class="ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3B4A63" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg></span>
+        <div style="min-width:0;flex:1">
+          <p class="t" style="margin:0">Segnate</p>
+          <p class="s" style="margin:0">messe da parte, non ancora trascritte</p>
+        </div>
+        <span class="leader"></span><span class="pg">12</span>
+      </div>
+
+      <div class="tav">
+        <span class="ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3B4A63" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="3"></circle><path d="M12 22s7-6.5 7-12a7 7 0 1 0-14 0c0 5.5 7 12 7 12z"></path></svg></span>
+        <div style="min-width:0;flex:1">
+          <p class="t" style="margin:0">Vicino a te</p>
+          <p class="s" style="margin:0">dedotta dalla posizione, non curata a mano</p>
+        </div>
+        <span class="leader"></span><span class="pg">14</span>
+      </div>
+
+      <div class="tav">
+        <span class="ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3B4A63" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.6" y2="16.6"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg></span>
+        <div style="min-width:0;flex:1">
+          <p class="t" style="margin:0">Ricerche salvate</p>
+          <p class="s" style="margin:0">oggi sepolte nel Profilo</p>
+        </div>
+        <span class="leader"></span><span class="pg">3</span>
+      </div>
+
+      <div class="tav">
+        <span class="ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3B4A63" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8-5-3.6-5 3.6 1.9-5.8L4 8.8h6.1z"></path></svg></span>
+        <div style="min-width:0;flex:1">
+          <p class="t" style="margin:0">Proposte per te</p>
+          <p class="s" style="margin:0">oggi una pagina isolata, /percorsi-per-te</p>
+        </div>
+        <span class="leader"></span><span class="pg">5</span>
+      </div>
+    </div>
+
+    <div style="flex:1"></div>
+    <p style="margin:0 0 14px;font-family:'Lora',Georgia,serif;font-size:11.5px;line-height:1.45;color:var(--ink-muted);text-wrap:pretty">
+      L&rsquo;Atlante contiene ci&ograve; che non &egrave; ancora tuo. Quando decidi di andarci, lo trascrivi in un taccuino &mdash; e da l&igrave; in poi vive l&igrave;.
+    </p>
   </div>
 
   <div class="bottombar">
-    <div class="bb on">
+    <div class="bb">
       <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3h3v18H4z"></path><path d="M9.5 3h3v18h-3z"></path><path d="m16 3.6 2.9.8L21 20.4l-2.9-.8z"></path></svg>
       <span>Libreria</span>
     </div>
-    <div class="bb">
+    <div class="bb on">
       <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><polygon points="15.5 8.5 13 13 8.5 15.5 11 11"></polygon></svg>
       <span>Atlante</span>
     </div>

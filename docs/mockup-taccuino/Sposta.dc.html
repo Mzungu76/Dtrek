@@ -78,108 +78,91 @@ a:hover{color:var(--accent-2)}
   display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;
   font-size:9.5px;font-weight:700;flex:none}
 .stamp{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;color:var(--ink-muted);letter-spacing:.04em}
-.lib-top{display:flex;align-items:center;justify-content:space-between;gap:10px;height:26px}
-.shelfchip{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 11px;border-radius:999px;
-  background:var(--card);border:1px solid var(--card-border);color:var(--ink-typed);font-size:11.5px;font-weight:700}
-.carousel{display:flex;align-items:center;justify-content:center;gap:9px;margin-top:11px}
-.cover{width:284px;height:342px;flex:none;border-radius:5px;overflow:hidden;position:relative;
-  box-shadow:0 12px 26px rgba(46,42,34,.30);border:1px solid rgba(46,42,34,.12)}
-.side{width:22px;height:310px;flex:none;border-radius:3px;opacity:.5;box-shadow:0 8px 16px rgba(46,42,34,.18)}
-.cover-band{position:absolute;left:0;right:0;bottom:0;padding:13px 15px 15px;
-  background:linear-gradient(to top,rgba(28,26,21,.88) 0%,rgba(28,26,21,.62) 60%,rgba(28,26,21,0) 100%)}
-.dots{display:flex;align-items:center;justify-content:center;gap:5px;margin-top:9px}
-.dots i{width:5px;height:5px;border-radius:999px;background:var(--card-border);display:block}
-.dots i.on{background:var(--accent);width:16px;border-radius:3px}
-.datastrip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:10px;
-  padding:10px 12px;background:var(--card);border:1px solid var(--card-border);border-radius:12px}
-.nextline{display:flex;align-items:center;gap:9px;margin-top:8px;padding:9px 12px;border-radius:11px;
-  background:var(--accent-tint);border:1px solid #dfc4ac}
-.banner{position:absolute;left:0;right:0;bottom:74px;z-index:5;background:var(--paper-light);
-  border-top:1px solid var(--card-border);box-shadow:0 -6px 18px rgba(46,42,34,.13);padding:7px 18px 11px}
-.grab{width:34px;height:4px;border-radius:999px;background:var(--card-border);margin:0 auto 8px}
-.mini{display:flex;gap:3px;align-items:flex-end;flex:none}
-.mini i{display:block;width:6px;border-radius:1px}
+.scrim{position:absolute;inset:0;z-index:2;background:rgba(46,42,34,.42)}
+.panel{position:absolute;left:0;right:0;bottom:74px;top:118px;z-index:3;background:var(--paper-light);
+  border-top:1px solid var(--contour);border-top-left-radius:16px;border-top-right-radius:16px;
+  box-shadow:0 -10px 26px rgba(46,42,34,.24);padding:14px 0 0;display:flex;flex-direction:column}
+.shelf{padding:0 18px}
+.shelf-head{display:flex;align-items:center;gap:7px;margin-bottom:5px}
+.shelf-head .n{font-family:'Lora',Georgia,serif;font-weight:600;font-size:13px;color:var(--ink-typed)}
+.shelf-head .c{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:9.5px;color:var(--ink-muted)}
+.books{display:flex;align-items:flex-end;gap:5px;height:66px}
+.bk{width:25px;flex:none;border-radius:2px 2px 0 0;display:flex;align-items:flex-end;justify-content:center;padding-bottom:5px}
+.bk span{font-family:'JetBrains Mono',monospace;font-size:7.5px;font-weight:700;color:rgba(245,237,221,.85)}
+.slot{width:25px;height:56px;flex:none;border:1.5px dashed var(--accent);border-radius:2px;background:rgba(192,96,61,.10)}
+.gap{width:25px;flex:none;height:56px;border-radius:2px;background:repeating-linear-gradient(135deg,#E4D8BC,#E4D8BC 3px,transparent 3px,transparent 6px)}
+.plank{height:5px;border-radius:2px;background:#A89A78}
+.drop{outline:2px solid var(--accent);outline-offset:6px;border-radius:6px}
+.dragged{position:absolute;left:132px;top:392px;z-index:8;width:31px;height:70px;border-radius:2px 2px 0 0;
+  background:#8A7A5C;transform:rotate(6deg);box-shadow:0 14px 26px rgba(46,42,34,.42);
+  display:flex;align-items:flex-end;justify-content:center;padding-bottom:6px}
+.dragged span{font-family:'JetBrains Mono',monospace;font-size:8px;font-weight:700;color:rgba(245,237,221,.9)}
+.newshelf{display:flex;align-items:center;justify-content:center;gap:7px;height:46px;border-radius:12px;
+  border:1.5px dashed var(--card-border);color:var(--ink-hand);font-size:11.5px;font-weight:700;margin:0 18px}
 </style>
 </helmet>
 <div class="phone">
   <div class="paper-grain"></div>
-
   <div class="stage" style="padding:46px 18px 0">
-    <!-- lo scaffale in cui ti trovi e' sempre scritto: non ti perdi mai -->
-    <div class="lib-top">
-      <span class="shelfchip">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7A6F52" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h3v14H4z"></path><path d="M9 7h3v11H9z"></path><path d="M14 5h3v13h-3z"></path><line x1="2" y1="20.5" x2="22" y2="20.5"></line></svg>
-        Appennino
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#95886A" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-      </span>
-      <span class="stamp">2 DI 3 SU QUESTO SCAFFALE</span>
-    </div>
+    <span class="stamp">LIBRERIA</span>
+  </div>
+  <div class="scrim"></div>
 
-    <div class="carousel">
-      <div class="side" style="background:linear-gradient(180deg,#B08A5A,#8E6E44)"></div>
-
-      <div class="cover">
-        <svg viewBox="0 0 284 342" style="width:100%;height:100%;display:block" preserveAspectRatio="none">
-          <rect width="284" height="342" fill="#4A5A52"></rect>
-          <path d="M0 342 L0 248 L58 194 L104 230 L158 166 L212 212 L284 150 L284 342 Z" fill="#3C4A44"></path>
-          <path d="M0 342 L0 286 L52 244 L112 280 L166 234 L226 272 L284 236 L284 342 Z" fill="#2E3A35"></path>
-          <circle cx="216" cy="70" r="26" fill="#E6D9BC" opacity=".92"></circle>
-          <g fill="none" stroke="#F5EDDD" stroke-width="1" opacity=".16">
-            <path d="M-10 106 C 70 90, 130 126, 200 110 S 300 86, 320 104"></path>
-            <path d="M-10 128 C 72 112, 132 148, 202 132 S 302 108, 320 126"></path>
-          </g>
-        </svg>
-        <div style="position:absolute;left:0;top:0;bottom:0;width:9px;background:#C0603D"></div>
-        <div class="cover-band">
-          <p style="margin:0;font-family:'DM Sans';font-weight:700;text-transform:uppercase;letter-spacing:.2em;font-size:8.5px;color:rgba(245,237,221,.72)">Taccuino di campo</p>
-          <p style="margin:5px 0 0;font-family:'Playfair Display',Georgia,serif;font-weight:700;font-size:25px;line-height:1.08;color:#F5EDDD">Appennino centrale</p>
-          <p style="margin:5px 0 0;font-family:'Lora',Georgia,serif;font-style:italic;font-size:12px;color:rgba(245,237,221,.82)">Due stagioni fra Terminillo e Gran Sasso</p>
-          <p style="margin:8px 0 0;font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.06em;color:rgba(245,237,221,.62)">MARCO Z. &middot; 2025&ndash;2026</p>
-        </div>
+  <div class="panel">
+    <div class="shelf" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px">
+      <div>
+        <p class="eyebrow" style="margin:0">Trascina per spostare</p>
+        <h2 class="hand" style="font-size:23px;margin:1px 0 0;line-height:1;color:var(--ink-typed)">Sistema la libreria</h2>
       </div>
-
-      <div class="side" style="background:linear-gradient(180deg,#8A7A5C,#6E6046)"></div>
+      <span style="display:inline-flex;align-items:center;height:32px;padding:0 15px;border-radius:999px;background:var(--accent);color:var(--paper-light);font-size:12px;font-weight:700">Fatto</span>
     </div>
 
-    <div class="dots"><i></i><i class="on"></i><i></i></div>
-
-    <div class="datastrip">
-      <div class="metric"><span class="v">27</span><span class="k">voci</span></div>
-      <div class="metric"><span class="v">312</span><span class="k">km</span></div>
-      <div class="metric"><span class="v">+18k</span><span class="k">D+ m</span></div>
-      <div class="metric"><span class="v">62</span><span class="k">pagine</span></div>
-    </div>
-
-    <div class="nextline">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#C0603D" stroke-width="2.2" stroke-linecap="round" style="flex:none"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
-      <div style="min-width:0;flex:1">
-        <p style="margin:0;font-size:11.5px;font-weight:700;color:var(--accent)">Monte Cimino &middot; sabato 12</p>
-        <p class="row-sub" style="margin:1px 0 0">1 voce in cammino &middot; 3 in programma</p>
+    <!-- lo scaffale di partenza: resta il vuoto da cui il taccuino e' stato sollevato -->
+    <div class="shelf" style="margin-bottom:16px">
+      <div class="shelf-head"><span class="n">Appennino</span><span class="c">3 &rarr; 2</span></div>
+      <div class="books">
+        <div class="bk" style="height:58px;background:#C0603D"><span>APP</span></div>
+        <div class="bk" style="height:48px;background:#B08A5A"><span>ABR</span></div>
+        <div class="gap"></div>
       </div>
+      <div class="plank"></div>
     </div>
 
-    <button class="btn" style="width:100%;margin-top:10px;height:48px">
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5V6a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"></path><path d="M9 8h6"></path><path d="M9 12h6"></path></svg>
-      Apri l&rsquo;indice
-    </button>
+    <!-- lo scaffale di destinazione, evidenziato, con il posto che si apre -->
+    <div class="shelf drop" style="margin-bottom:16px">
+      <div class="shelf-head">
+        <span class="n" style="color:var(--accent)">Con i ragazzi</span><span class="c" style="color:var(--accent)">2 &rarr; 3</span>
+        <span style="flex:1"></span>
+        <span class="stamp" style="color:var(--accent)">RILASCIA QUI</span>
+      </div>
+      <div class="books">
+        <div class="bk" style="height:46px;background:#5F7355"><span>ISO</span></div>
+        <div class="slot"></div>
+        <div class="bk" style="height:52px;background:#7C8F6E"><span>LAG</span></div>
+      </div>
+      <div class="plank" style="background:#C0603D"></div>
+    </div>
+
+    <div class="shelf" style="margin-bottom:16px">
+      <div class="shelf-head"><span class="n">Chiusi</span><span class="c">2</span></div>
+      <div class="books">
+        <div class="bk" style="height:44px;background:#A89A78"><span>SIC</span></div>
+        <div class="bk" style="height:40px;background:#A89A78"><span>FER</span></div>
+      </div>
+      <div class="plank"></div>
+    </div>
+
+    <div class="newshelf">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+      Rilascia qui per creare uno scaffale nuovo
+    </div>
+
+    <p style="margin:14px 18px 0;font-family:'Lora',Georgia,serif;font-size:11.5px;line-height:1.45;color:var(--ink-muted);text-wrap:pretty">
+      Un taccuino sta su un solo scaffale: trascinarlo lo <em>sposta</em>, non lo copia. L&rsquo;Atlante non si sposta e non si archivia.
+    </p>
   </div>
 
-  <!-- la libreria vive solo qui: nessuna pagina dedicata -->
-  <div class="banner">
-    <div class="grab"></div>
-    <div style="display:flex;align-items:center;gap:10px">
-      <span class="mini">
-        <i style="height:26px;background:#C0603D"></i>
-        <i style="height:22px;background:#B08A5A"></i>
-        <i style="height:24px;background:#8A7A5C"></i>
-      </span>
-      <div style="min-width:0;flex:1">
-        <p style="margin:0;font-size:11.5px;font-weight:700;color:var(--ink-typed)">Scaffale Appennino &middot; 3 taccuini</p>
-        <p class="row-sub" style="margin:1px 0 0">trascina in su per gli altri scaffali</p>
-      </div>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#95886A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
-    </div>
-  </div>
+  <div class="dragged"><span>UMB</span></div>
 
   <div class="bottombar">
     <div class="bb on">

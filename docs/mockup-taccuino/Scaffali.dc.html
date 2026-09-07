@@ -79,22 +79,22 @@ a:hover{color:var(--accent-2)}
   font-size:9.5px;font-weight:700;flex:none}
 .stamp{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;color:var(--ink-muted);letter-spacing:.04em}
 .scrim{position:absolute;inset:0;z-index:2;background:rgba(46,42,34,.34)}
-.panel{position:absolute;left:0;right:0;bottom:74px;top:296px;z-index:3;background:var(--paper-light);
+.panel{position:absolute;left:0;right:0;bottom:74px;top:288px;z-index:3;background:var(--paper-light);
   border-top:1px solid var(--contour);box-shadow:0 -10px 26px rgba(46,42,34,.22);padding:8px 0 0;
   display:flex;flex-direction:column}
 .grab{width:34px;height:4px;border-radius:999px;background:var(--card-border);margin:0 auto 10px}
 .shelf{padding:0 18px}
-.shelf-head{display:flex;align-items:baseline;gap:7px;margin-bottom:6px}
-.shelf-head .n{font-family:'Lora',Georgia,serif;font-weight:600;font-size:13.5px;color:var(--ink-typed)}
+.shelf-head{display:flex;align-items:center;gap:7px;margin-bottom:5px}
+.shelf-head .n{font-family:'Lora',Georgia,serif;font-weight:600;font-size:13px;color:var(--ink-typed)}
 .shelf-head .c{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:9.5px;color:var(--ink-muted)}
-.books{display:flex;align-items:flex-end;gap:5px;height:74px;overflow:hidden}
-.bk{width:26px;flex:none;border-radius:2px 2px 0 0;position:relative;display:flex;align-items:flex-end;
-  justify-content:center;padding-bottom:6px}
-.bk span{font-family:'JetBrains Mono',monospace;font-size:8px;font-weight:700;color:rgba(245,237,221,.85)}
-.plank{height:5px;border-radius:2px;background:#A89A78;margin-top:0}
-.plank + .plank{margin-top:0}
-.newshelf{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 13px;border-radius:999px;
-  border:1.5px dashed var(--card-border);color:var(--ink-hand);font-size:11.5px;font-weight:700}
+.books{display:flex;align-items:flex-end;gap:5px;height:62px;overflow:hidden}
+.bk{width:25px;flex:none;border-radius:2px 2px 0 0;display:flex;align-items:flex-end;justify-content:center;padding-bottom:5px}
+.bk span{font-family:'JetBrains Mono',monospace;font-size:7.5px;font-weight:700;color:rgba(245,237,221,.85)}
+.plank{height:5px;border-radius:2px;background:#A89A78}
+.atl{display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:12px;
+  background:#3B4A63;color:#EDE4CE;margin:0 18px 13px}
+.newshelf{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 13px;border-radius:999px;
+  border:1.5px dashed var(--card-border);color:var(--ink-hand);font-size:11.5px;font-weight:700;margin:0 18px}
 .sysbtn{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:999px;
   background:var(--card);border:1px solid var(--card-border);color:var(--ink-hand);font-size:11px;font-weight:700}
 </style>
@@ -103,16 +103,16 @@ a:hover{color:var(--accent-2)}
   <div class="paper-grain"></div>
 
   <div class="stage" style="padding:46px 18px 0">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;height:24px;color:var(--ink-hand)">
-      <p class="eyebrow" style="letter-spacing:.22em">Libreria</p>
-      <span class="stamp">1 DI 7</span>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;height:26px;color:var(--ink-hand)">
+      <span class="stamp">SCAFFALE APPENNINO</span>
+      <span class="stamp">2 DI 3</span>
     </div>
-    <div style="display:flex;align-items:center;justify-content:center;gap:9px;margin-top:10px">
-      <div style="width:284px;height:346px;border-radius:5px;overflow:hidden;position:relative;box-shadow:0 12px 26px rgba(46,42,34,.30)">
-        <svg viewBox="0 0 284 346" style="width:100%;height:100%;display:block" preserveAspectRatio="none">
-          <rect width="284" height="346" fill="#4A5A52"></rect>
-          <path d="M0 346 L0 250 L58 196 L104 232 L158 168 L212 214 L284 152 L284 346 Z" fill="#3C4A44"></path>
-          <circle cx="216" cy="72" r="26" fill="#E6D9BC" opacity=".92"></circle>
+    <div style="display:flex;align-items:center;justify-content:center;margin-top:11px">
+      <div style="width:284px;height:342px;border-radius:5px;overflow:hidden;position:relative;box-shadow:0 12px 26px rgba(46,42,34,.30)">
+        <svg viewBox="0 0 284 342" style="width:100%;height:100%;display:block" preserveAspectRatio="none">
+          <rect width="284" height="342" fill="#4A5A52"></rect>
+          <path d="M0 342 L0 248 L58 194 L104 230 L158 166 L212 212 L284 150 L284 342 Z" fill="#3C4A44"></path>
+          <circle cx="216" cy="70" r="26" fill="#E6D9BC" opacity=".92"></circle>
         </svg>
         <div style="position:absolute;left:0;top:0;bottom:0;width:9px;background:#C0603D"></div>
       </div>
@@ -124,54 +124,63 @@ a:hover{color:var(--accent-2)}
   <div class="panel">
     <div class="grab"></div>
 
-    <div class="shelf" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px">
+    <div class="shelf" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:11px">
       <div>
-        <p class="eyebrow" style="margin:0">I tuoi scaffali</p>
-        <h2 class="hand" style="font-size:23px;margin:1px 0 0;line-height:1;color:var(--ink-typed)">4 scaffali, 7 taccuini</h2>
+        <p class="eyebrow" style="margin:0">La libreria</p>
+        <h2 class="hand" style="font-size:22px;margin:1px 0 0;line-height:1;color:var(--ink-typed)">3 scaffali, 7 taccuini</h2>
       </div>
       <span class="sysbtn">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="8" x2="20" y2="8"></line><line x1="4" y1="16" x2="20" y2="16"></line><circle cx="9" cy="8" r="2.2" fill="#F9F2E4"></circle><circle cx="15" cy="16" r="2.2" fill="#F9F2E4"></circle></svg>
-        Sistema
+        Sposta
       </span>
     </div>
 
-    <div class="shelf" style="margin-bottom:13px">
-      <div class="shelf-head"><span class="n">In corso</span><span class="c">2</span></div>
-      <div class="books">
-        <div class="bk" style="height:70px;background:#C0603D"><span>APP</span></div>
-        <div class="bk" style="height:62px;background:#7C8F6E"><span>FER</span></div>
+    <!-- l'Atlante non e' uno scaffale ne' un taccuino: e' l'altro tipo di libro -->
+    <div class="atl">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#D9C48E" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="12" cy="12" r="9"></circle><polygon points="15.5 8.5 13 13 8.5 15.5 11 11"></polygon></svg>
+      <div style="min-width:0;flex:1">
+        <p style="margin:0;font-family:'Playfair Display',Georgia,serif;font-weight:700;font-size:15px;letter-spacing:.02em">Atlante</p>
+        <p style="margin:2px 0 0;font-size:10px;color:rgba(237,228,206,.68)"><span class="mono">12</span> mete segnate &middot; <span class="mono">3</span> ricerche salvate</p>
       </div>
-      <div class="plank"></div>
+      <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:rgba(237,228,206,.55)">sempre qui</span>
     </div>
 
-    <div class="shelf" style="margin-bottom:13px">
-      <div class="shelf-head"><span class="n">Appennino</span><span class="c">3</span></div>
-      <div class="books">
-        <div class="bk" style="height:70px;background:#C0603D"><span>APP</span></div>
-        <div class="bk" style="height:58px;background:#B08A5A"><span>ABR</span></div>
-        <div class="bk" style="height:66px;background:#8A7A5C"><span>UMB</span></div>
+    <div class="shelf" style="margin-bottom:12px">
+      <div class="shelf-head">
+        <span class="n" style="color:var(--accent)">Appennino</span><span class="c">3</span>
+        <span style="flex:1"></span>
+        <span class="stamp" style="color:var(--accent)">SEI QUI</span>
       </div>
-      <div class="plank"></div>
+      <div class="books">
+        <div class="bk" style="height:58px;background:#C0603D;box-shadow:0 0 0 2px #C0603D, 0 0 0 4px var(--paper-light)"><span>APP</span></div>
+        <div class="bk" style="height:48px;background:#B08A5A"><span>ABR</span></div>
+        <div class="bk" style="height:54px;background:#8A7A5C"><span>UMB</span></div>
+      </div>
+      <div class="plank" style="background:#C0603D"></div>
     </div>
 
-    <div class="shelf" style="margin-bottom:13px">
+    <div class="shelf" style="margin-bottom:12px">
       <div class="shelf-head"><span class="n">Con i ragazzi</span><span class="c">2</span></div>
       <div class="books">
-        <div class="bk" style="height:54px;background:#5F7355"><span>ISO</span></div>
-        <div class="bk" style="height:62px;background:#8A7A5C"><span>UMB</span></div>
+        <div class="bk" style="height:46px;background:#5F7355"><span>ISO</span></div>
+        <div class="bk" style="height:52px;background:#7C8F6E"><span>LAG</span></div>
       </div>
       <div class="plank"></div>
     </div>
 
-    <div class="shelf" style="opacity:.55">
-      <div class="shelf-head"><span class="n">Chiusi</span><span class="c">4</span></div>
+    <div class="shelf" style="margin-bottom:12px">
+      <div class="shelf-head"><span class="n">Chiusi</span><span class="c">2</span></div>
       <div class="books">
-        <div class="bk" style="height:50px;background:#A89A78"></div>
-        <div class="bk" style="height:44px;background:#A89A78"></div>
-        <div class="bk" style="height:48px;background:#A89A78"></div>
-        <div class="bk" style="height:42px;background:#A89A78"></div>
+        <div class="bk" style="height:44px;background:#A89A78"><span>SIC</span></div>
+        <div class="bk" style="height:40px;background:#A89A78"><span>FER</span></div>
       </div>
+      <div class="plank"></div>
     </div>
+
+    <span class="newshelf">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+      Nuovo scaffale
+    </span>
   </div>
 
   <div class="bottombar">
@@ -180,8 +189,8 @@ a:hover{color:var(--accent-2)}
       <span>Libreria</span>
     </div>
     <div class="bb">
-      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.6" y2="16.6"></line></svg>
-      <span>Cerca</span>
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><polygon points="15.5 8.5 13 13 8.5 15.5 11 11"></polygon></svg>
+      <span>Atlante</span>
     </div>
     <div class="bb">
       <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>

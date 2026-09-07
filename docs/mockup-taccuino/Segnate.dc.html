@@ -80,104 +80,125 @@ a:hover{color:var(--accent-2)}
 .stamp{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;color:var(--ink-muted);letter-spacing:.04em}
 .topbar{display:flex;align-items:center;justify-content:space-between;gap:10px;height:26px;color:var(--ink-hand)}
 .back{display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700}
-.opt{display:flex;align-items:center;gap:11px;height:46px}
-.opt + .opt{border-top:1px dotted #E0D3B6}
-.box{width:21px;height:21px;border-radius:5px;border:2px solid var(--card-border);flex:none;
-  display:flex;align-items:center;justify-content:center}
-.box.on{background:var(--accent);border-color:var(--accent)}
-.ord{display:flex;align-items:center;gap:11px;height:42px;padding:0 11px 0 9px;background:var(--card);
-  border:1px solid var(--card-border);border-radius:10px}
+.tchip{flex:none;display:inline-flex;align-items:center;gap:5px;height:29px;padding:0 12px;border-radius:999px;
+  background:var(--card);border:1px solid var(--card-border);color:var(--ink-hand);font-size:11px;font-weight:700}
+.tchip.on{background:#3B4A63;border-color:#3B4A63;color:#EDE4CE}
+.mrow{display:flex;align-items:center;gap:10px;padding:0 11px 0 0;background:var(--card);
+  border:1px solid var(--card-border);border-radius:12px;overflow:hidden;height:60px}
+.thumb{width:48px;height:100%;flex:none;background:#E7E2D4;display:flex;align-items:center;justify-content:center}
+.act{display:inline-flex;align-items:center;gap:5px;height:30px;padding:0 11px;border-radius:999px;
+  background:var(--accent);color:var(--paper-light);font-size:10.5px;font-weight:700;flex:none}
+.done{opacity:.62}
 </style>
 </helmet>
 <div class="phone">
   <div class="paper-grain"></div>
 
-  <div class="stage" style="padding-top:48px">
+  <div class="stage" style="padding:46px 18px 0">
     <div class="topbar">
       <span class="back">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
-        Libreria
+        Atlante
       </span>
-      <span class="stamp">SISTEMA IL TACCUINO</span>
+      <span class="stamp">TAVOLA DELLE SEGNATE</span>
       <span style="width:14px"></span>
     </div>
 
-    <div style="display:flex;align-items:center;gap:12px;margin-top:14px">
-      <div style="width:52px;height:66px;border-radius:3px;overflow:hidden;position:relative;flex:none;box-shadow:0 4px 10px rgba(46,42,34,.22)">
-        <svg viewBox="0 0 52 66" style="width:100%;height:100%;display:block">
-          <rect width="52" height="66" fill="#4A5A52"></rect>
-          <path d="M0 66 L0 46 L12 36 L21 44 L32 30 L42 40 L52 28 L52 66 Z" fill="#3C4A44"></path>
-        </svg>
-        <div style="position:absolute;left:0;top:0;bottom:0;width:4px;background:#C0603D"></div>
-      </div>
-      <div style="min-width:0">
-        <h1 style="font-family:'Playfair Display',Georgia,serif;font-weight:700;font-size:19px;line-height:1.12;margin:0;color:var(--ink-typed)">Appennino centrale</h1>
-        <p class="row-sub" style="margin:3px 0 0"><span class="mono">27</span> voci &middot; <span class="mono">62</span> pagine</p>
-      </div>
-    </div>
-
-    <p class="eyebrow" style="margin:18px 0 2px">Su quali scaffali sta</p>
-    <div style="display:flex;flex-direction:column">
-      <div class="opt">
-        <span class="box on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#F9F2E4" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>
-        <div style="min-width:0;flex:1">
-          <p style="margin:0;font-family:'Lora',Georgia,serif;font-weight:600;font-size:13.5px;color:var(--ink-typed)">In corso</p>
-          <p class="row-sub" style="margin:1px 0 0">2 taccuini</p>
-        </div>
-      </div>
-      <div class="opt">
-        <span class="box on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#F9F2E4" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>
-        <div style="min-width:0;flex:1">
-          <p style="margin:0;font-family:'Lora',Georgia,serif;font-weight:600;font-size:13.5px;color:var(--ink-typed)">Appennino</p>
-          <p class="row-sub" style="margin:1px 0 0">3 taccuini</p>
-        </div>
-      </div>
-      <div class="opt">
-        <span class="box"></span>
-        <div style="min-width:0;flex:1">
-          <p style="margin:0;font-family:'Lora',Georgia,serif;font-weight:600;font-size:13.5px;color:var(--ink-hand)">Con i ragazzi</p>
-          <p class="row-sub" style="margin:1px 0 0">2 taccuini</p>
-        </div>
-      </div>
-      <div class="opt">
-        <span class="box"></span>
-        <div style="min-width:0;flex:1">
-          <p style="margin:0;font-family:'Lora',Georgia,serif;font-weight:600;font-size:13.5px;color:var(--ink-hand)">Chiusi</p>
-          <p class="row-sub" style="margin:1px 0 0">4 taccuini &middot; fuori dallo swipe</p>
-        </div>
-      </div>
-      <div class="opt" style="color:var(--accent)">
-        <span class="box" style="border-style:dashed;border-color:var(--accent)">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-        </span>
-        <p style="margin:0;font-size:13px;font-weight:700">Crea uno scaffale</p>
-      </div>
-    </div>
-
-    <p style="margin:12px 0 0;font-family:'Lora',Georgia,serif;font-size:11.5px;line-height:1.45;color:var(--ink-muted);text-wrap:pretty">
-      Un taccuino pu&ograve; stare su pi&ugrave; scaffali: metterlo su uno non lo toglie dagli altri. Non &egrave; una cartella &mdash; &egrave; un&rsquo;etichetta che si vede.
+    <h1 style="font-family:'Playfair Display',Georgia,serif;font-weight:700;font-size:24px;line-height:1.1;margin:13px 0 0;color:#3B4A63">
+      Segnate
+    </h1>
+    <p style="margin:5px 0 12px;font-family:'Lora',Georgia,serif;font-size:12px;line-height:1.4;color:var(--ink-hand)">
+      Messe da parte mentre cercavi. Nessuna ha ancora una data: appena gliela dai, non stanno pi&ugrave; qui.
     </p>
 
-    <p class="eyebrow" style="margin:16px 0 7px">Ordine sullo scaffale &laquo;Appennino&raquo;</p>
-    <div style="display:flex;flex-direction:column;gap:6px">
-      <div class="ord">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#95886A" stroke-width="2" stroke-linecap="round"><line x1="4" y1="9" x2="20" y2="9"></line><line x1="4" y1="15" x2="20" y2="15"></line></svg>
-        <span style="width:6px;height:22px;border-radius:2px;background:#C0603D;flex:none"></span>
-        <p style="margin:0;flex:1;font-family:'Lora',Georgia,serif;font-weight:600;font-size:13px">Appennino centrale</p>
-        <span class="pg">1</span>
+    <div style="display:flex;gap:6px;overflow:hidden">
+      <span class="tchip on">Tutte <span class="mono" style="opacity:.7">12</span></span>
+      <span class="tchip">Sentieri <span class="mono" style="opacity:.6">8</span></span>
+      <span class="tchip">Borghi <span class="mono" style="opacity:.6">3</span></span>
+      <span class="tchip">Siti <span class="mono" style="opacity:.6">1</span></span>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px">
+
+      <!-- riga aperta: il gesto che porta la meta dentro un taccuino -->
+      <div style="background:var(--card);border:1.5px solid var(--accent);border-radius:12px;overflow:hidden">
+        <div style="display:flex;align-items:center;gap:10px;height:60px;padding-right:11px">
+          <div class="thumb">
+            <svg width="30" height="24" viewBox="0 0 30 24" fill="none"><path d="M2 20 L10 8 L15 14 L21 5 L28 20 Z" fill="#8E9B84"></path></svg>
+          </div>
+          <div style="min-width:0;flex:1">
+            <p class="row-title" style="margin:0">Anello del Monte Cimino</p>
+            <p class="row-sub" style="margin:2px 0 0"><span class="mono">12,4</span> km &middot; <span class="mono">+740</span> m &middot; T2 &middot; segnata il 28 ago</p>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;padding:0 11px 11px">
+          <span class="act">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"></path></svg>
+            Trascrivi in un taccuino
+          </span>
+          <span class="tchip" style="height:30px">Guarda sulla carta</span>
+          <span style="flex:1"></span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#95886A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="M6 6l1 14h10l1-14"></path></svg>
+        </div>
       </div>
-      <div class="ord">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#95886A" stroke-width="2" stroke-linecap="round"><line x1="4" y1="9" x2="20" y2="9"></line><line x1="4" y1="15" x2="20" y2="15"></line></svg>
-        <span style="width:6px;height:22px;border-radius:2px;background:#B08A5A;flex:none"></span>
-        <p style="margin:0;flex:1;font-family:'Lora',Georgia,serif;font-weight:600;font-size:13px">Abruzzo, versante est</p>
-        <span class="pg">2</span>
+
+      <div class="mrow">
+        <div class="thumb">
+          <svg width="30" height="24" viewBox="0 0 30 24" fill="none"><path d="M3 20 L9 11 L14 16 L20 7 L27 20 Z" fill="#A2AC96"></path></svg>
+        </div>
+        <div style="min-width:0;flex:1">
+          <p class="row-title" style="margin:0">Cascate del Menotre</p>
+          <p class="row-sub" style="margin:2px 0 0"><span class="mono">8,1</span> km &middot; <span class="mono">+320</span> m &middot; T1 &middot; segnata il 21 ago</p>
+        </div>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#95886A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
       </div>
-      <div class="ord">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#95886A" stroke-width="2" stroke-linecap="round"><line x1="4" y1="9" x2="20" y2="9"></line><line x1="4" y1="15" x2="20" y2="15"></line></svg>
-        <span style="width:6px;height:22px;border-radius:2px;background:#8A7A5C;flex:none"></span>
-        <p style="margin:0;flex:1;font-family:'Lora',Georgia,serif;font-weight:600;font-size:13px">Umbria di confine</p>
-        <span class="pg">3</span>
+
+      <div class="mrow">
+        <div class="thumb">
+          <svg width="26" height="24" viewBox="0 0 26 24" fill="none"><path d="M4 21V9l9-6 9 6v12z" fill="#B08A5A"></path><rect x="10" y="14" width="6" height="7" fill="#E7E2D4"></rect></svg>
+        </div>
+        <div style="min-width:0;flex:1">
+          <p class="row-title" style="margin:0">Borgo di Calcata</p>
+          <p class="row-sub" style="margin:2px 0 0">Borgo &middot; visita &middot; 34 km &middot; segnata il 12 ago</p>
+        </div>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#95886A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
       </div>
+
+      <!-- gia' trascritta: esce da qui e il rimando dice dove e' finita -->
+      <div class="mrow done">
+        <div class="thumb">
+          <svg width="30" height="24" viewBox="0 0 30 24" fill="none"><path d="M2 20 L11 10 L16 15 L22 6 L28 20 Z" fill="#A89A78"></path></svg>
+        </div>
+        <div style="min-width:0;flex:1">
+          <p class="row-title" style="margin:0;text-decoration:line-through;text-decoration-color:#A89A78">La Folgore</p>
+          <p class="row-sub" style="margin:2px 0 0">trascritta il 2 set &rarr; Appennino centrale, p. 58</p>
+        </div>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7C8F6E" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+      </div>
+    </div>
+
+    <div style="flex:1"></div>
+    <p style="margin:0 0 14px;font-family:'Lora',Georgia,serif;font-size:11.5px;line-height:1.45;color:var(--ink-muted);text-wrap:pretty">
+      Le trascritte restano visibili una settimana, poi spariscono: le ritrovi nel taccuino, non qui.
+    </p>
+  </div>
+
+  <div class="bottombar">
+    <div class="bb">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3h3v18H4z"></path><path d="M9.5 3h3v18h-3z"></path><path d="m16 3.6 2.9.8L21 20.4l-2.9-.8z"></path></svg>
+      <span>Libreria</span>
+    </div>
+    <div class="bb on">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><polygon points="15.5 8.5 13 13 8.5 15.5 11 11"></polygon></svg>
+      <span>Atlante</span>
+    </div>
+    <div class="bb">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>
+      <span>Navigator</span>
+    </div>
+    <div class="bb">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M5 21a7 7 0 0 1 14 0"></path></svg>
+      <span>Profilo</span>
     </div>
   </div>
 </div>
