@@ -75,7 +75,13 @@ function useAvatar() {
 // reale. Con `label` presente il gioiello si sposta quindi a fianco del testo "Profilo" (fuori
 // dall'avatar, dimensione ridotta 10px): resta visibile ma non nasconde più nulla. Senza `label`
 // (avatar desktop, dove c'è spazio) resta come prima, incastonato sull'angolo dell'avatar.
-export function ProfileAvatar({ size = 32, iconSize = 16, label, labelClassName = '', labelTextClassName = 'text-xs' }: { size?: number; iconSize?: number; label?: string; labelClassName?: string; labelTextClassName?: string }) {
+//
+// Fase 2 del riordino UI/UX (docs/diario-valutazione-ux-piano.md): default alzati da 32/16 a
+// 40/18 — il caso senza `label` (DesktopNav, FloatingProfileAvatar) è l'ultimo elemento della sua
+// riga/angolo, isolato, quindi il bersaglio può crescere senza rischio di sovrapporsi a un
+// controllo vicino. I chiamanti con `label` (dentro MobileNavBar) passano le proprie taglie più
+// piccole esplicitamente, dove lo spazio condiviso con le altre voci della barra è più stretto.
+export function ProfileAvatar({ size = 40, iconSize = 18, label, labelClassName = '', labelTextClassName = 'text-xs' }: { size?: number; iconSize?: number; label?: string; labelClassName?: string; labelTextClassName?: string }) {
   const path = usePathname()
   const { user, faceUrl } = useAvatar()
   const initials = (user?.user_metadata?.display_name as string | undefined ?? user?.email ?? '?')[0].toUpperCase()
@@ -141,9 +147,13 @@ function DesktopNav() {
         </Link>
 
         <div className="flex items-center gap-1">
+          {/* Fase 2 del riordino UI/UX: py-1.5→py-2 — un rialzo leggero, non i 44px pieni: questa
+              barra vive solo da md: in su (tablet incluso, dove il tocco è comunque frequente),
+              ma l'audit non ha verifica visiva su schermo per quella fascia (docs/diario-
+              valutazione-ux-piano.md), quindi qui si resta conservativi. */}
           {NAV_LINKS.map(({ href, label, icon: Icon }) => {
             const active = isActive(href, path)
-            const className = `flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+            const className = `flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
               active ? 'bg-botanico-accent-tint text-botanico-accent' : 'text-stone-500 hover:text-stone-800 hover:bg-stone-100'
             }`
             return (
@@ -183,20 +193,25 @@ export function MobileNavBar({ className = '' }: { className?: string }) {
       style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
     >
       <div className="flex items-center gap-1 px-3 h-14">
+        {/* Fase 2 del riordino UI/UX (docs/diario-valutazione-ux-piano.md): icone 16px e avatar
+            20px — le più piccole di tutta l'app — alzate a 20px/22px con più padding verticale,
+            per un bersaglio reale vicino ai 44px pur restando dentro i 56px della barra (h-14).
+            Questa è la barra montata dalle pagine Guida/Resoconto a schermo intero
+            (HubNavBar) — proprio dove capita di doverla toccare camminando. */}
         <div className="flex-1 flex items-center justify-around">
           {NAV_LINKS.map(({ href, label, icon: Icon }) => {
             const active = isActive(href, path)
-            const linkClassName = `flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-2xl transition-colors ${
+            const linkClassName = `flex flex-col items-center gap-0.5 px-2.5 py-1.5 rounded-2xl transition-colors ${
               active ? 'text-botanico-bar-active' : 'text-botanico-bar-inactive'
             }`
             return (
               <Link key={href} href={href} className={linkClassName}>
-                <Icon className="w-4 h-4" strokeWidth={2} />
+                <Icon className="w-5 h-5" strokeWidth={2} />
                 <span className="text-xs font-bold leading-none">{label}</span>
               </Link>
             )
           })}
-          <ProfileAvatar size={20} iconSize={10} label="Profilo" labelClassName="px-2.5 py-1 rounded-2xl" labelTextClassName="text-xs" />
+          <ProfileAvatar size={22} iconSize={12} label="Profilo" labelClassName="px-2.5 py-1.5 rounded-2xl" labelTextClassName="text-xs" />
         </div>
       </div>
     </nav>
@@ -299,13 +314,17 @@ function MobileBottomBar() {
 // (ProfileAvatar senza `label` torna al gioiello Premium incastonato sull'angolo dell'avatar,
 // invece che a fianco di un testo). Sopra la MobileBottomBar (stesso z-40) ma non ci si sovrappone:
 // angoli opposti dello schermo.
+//
+// Fase 2 del riordino UI/UX: 36px (+ 2×1px di padding) alzato a 44px — è l'unico controllo nel suo
+// angolo, senza vicini con cui rischiare di sovrapporsi, quindi può arrivare al bersaglio pieno
+// (TAP_TARGET.md, lib/designTokens.ts) senza compromessi.
 function FloatingProfileAvatar() {
   return (
     <div
       className="md:hidden fixed z-40 right-4 rounded-full bg-white/90 backdrop-blur-sm shadow-[0_2px_8px_rgba(0,0,0,0.18)] p-0.5"
       style={{ top: 'calc(env(safe-area-inset-top, 0px) + 12px)' }}
     >
-      <ProfileAvatar size={36} iconSize={16} />
+      <ProfileAvatar size={44} iconSize={20} />
     </div>
   )
 }
