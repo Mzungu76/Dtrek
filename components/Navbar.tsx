@@ -3,31 +3,26 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { MapPinned, Notebook, Navigation2, Activity, CircleUser } from 'lucide-react'
+import { Library, Compass, Navigation2, CircleUser } from 'lucide-react'
 import { getProfile } from '@/lib/userProfile'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import GemStatusBadge from '@/components/premium/GemStatusBadge'
 import type { User as SupabaseUser, Session, AuthChangeEvent } from '@supabase/supabase-js'
 
-// Menù inferiore (richiesta esplicita dell'utente, revisione struttura app): cinque voci fisse —
-// Diari, Mete, Navigator, Statistiche, Profilo — un <Link> ciascuna, niente più azione "Nuovo"
-// incassata nella barra (era qui prima, apriva NuovoDiarioSheet: la creazione di un Reportage/Meta
-// resta raggiungibile dai punti di ingresso dentro le rispettive pagine, es. il FAB in /diari).
-// Diario > Reportage e Mete restano due alberi paralleli, non più annidati — un Diario contiene
-// solo i Reportage delle uscite già fatte; una Meta (ex "Percorso", stesso record planned_hikes,
-// solo rinominato in UI) resta senza Diario finché non viene camminata. La voce "Mete" punta ancora
-// a /percorsi (URL tecnico invariato, solo l'etichetta cambia). "Profilo" non è in questa lista:
-// resta <ProfileAvatar/>, montato come quinta voce della barra (vedi DesktopNav/MobileBottomBar).
-// Icone scelte dopo revisione mockup (vedi conversazione): Notebook invece di BookMarked (rimanda
-// a un taccuino, non a un libro generico), MapPinned invece di MapPin (mappa aperta, non solo uno
-// spillo), Activity invece di BarChart3 (linea di andamento, coerente con "Statistiche" come
-// attività fisica più che come tabellone). Navigation2 confermata invariata.
+// Menù inferiore — quattro voci fisse: Libreria, Atlante, Navigator, Profilo
+// (docs/libreria-atlante-piano.md, Fase 1). Sostituisce le cinque voci precedenti
+// (Diari/Mete/Navigator/Statistiche/Profilo): "Mete" sparisce come voce autonoma — cercare è
+// quello che si fa dentro l'Atlante, non una sezione a sé — e Statistiche confluisce nel Diario
+// (la sezione aggregata di app/diari/[id]/page.tsx), dove stanno i dati che riassume. "Diari"
+// diventa "Libreria": non più lo scaffale-griglia ma la copertina del Diario in uso, con lo
+// scaffale sempre in testata (vedi app/diari/page.tsx). URL tecnici invariati (/diari, /percorsi
+// resta dietro le quinte per /atlante). "Profilo" non è in questa lista: resta <ProfileAvatar/>,
+// montato come quinta voce della barra (vedi DesktopNav/MobileBottomBar).
 export const NAV_LINKS = [
-  { href: '/diari',       label: 'Diari',       icon: Notebook    },
-  { href: '/percorsi',    label: 'Mete',        icon: MapPinned   },
+  { href: '/diari',       label: 'Libreria',    icon: Library     },
+  { href: '/atlante',     label: 'Atlante',     icon: Compass     },
   { href: '/navigatore',  label: 'Navigator',   icon: Navigation2 },
-  { href: '/statistiche', label: 'Statistiche', icon: Activity    },
 ]
 
 // Confine di segmento esplicito (non solo startsWith): da quando "Mete" punta a /percorsi, un
@@ -208,15 +203,16 @@ export function MobileNavBar({ className = '' }: { className?: string }) {
   )
 }
 
-// Quarto giro sul trattamento di Diari (richiesta esplicita dell'utente, dopo aver scartato
-// pillola sempre accesa, bottone a sinistra, bottone centrato con ritaglio, e infine la barra
-// piatta a 5 voci): si riprende il concetto "disco sollevato + ritaglio nella barra", identico
-// nella meccanica al tentativo di centraggio "per costruzione" (RaisedDiariButton, position:
-// absolute; left:50% — mai un 50% su una riga a più voci, sempre indipendente dal loro peso), ma
-// ora dentro una barra a SOLE 3 voci: Mete, Diari, Navigator. Statistiche esce dalla barra (troverà
-// posto dentro /diari, task separato) e Profilo torna a essere l'icona flottante in alto a destra
-// di FloatingProfileAvatar sotto — non più una voce della barra, come nella primissima versione di
-// questo menù.
+// Quarto giro sul trattamento di Diari/Libreria (richiesta esplicita dell'utente, dopo aver
+// scartato pillola sempre accesa, bottone a sinistra, bottone centrato con ritaglio, e infine la
+// barra piatta a 5 voci): si riprende il concetto "disco sollevato + ritaglio nella barra",
+// identico nella meccanica al tentativo di centraggio "per costruzione" (RaisedDiariButton,
+// position: absolute; left:50% — mai un 50% su una riga a più voci, sempre indipendente dal loro
+// peso), ma ora dentro una barra a SOLE 3 voci: Atlante, Libreria, Navigator (Libreria era
+// "Diari" — il componente sotto resta RaisedDiariButton per non rinominare tutto, ma il link è
+// quello di NAV_LINKS, quindi già "Libreria"). Statistiche è uscita dalla barra (confluisce nel
+// Diario, docs/libreria-atlante-piano.md Fase 5) e Profilo resta l'icona flottante in alto a
+// destra di FloatingProfileAvatar sotto — non una voce della barra.
 const RAISED_CIRCLE_SIZE = 60
 const RAISE_PX = 17 // bordo superiore del disco, px sopra il filo della barra
 
@@ -249,20 +245,21 @@ const NOTCH_CENTER_Y = RAISED_CIRCLE_SIZE / 2 - RAISE_PX
 const DIARI_NOTCH_MASK = `radial-gradient(circle ${NOTCH_RADIUS}px at 50% ${NOTCH_CENTER_Y}px, transparent 0 ${NOTCH_RADIUS}px, #000 ${NOTCH_RADIUS + 1}px)`
 
 // ── Mobile: barra unica in fondo ─────────────────────────────────────────────────
-// Tre voci: Mete e Navigator piatte ai due lati, Diari sollevata al centro (RaisedDiariButton,
-// `position:absolute`, fuori dal flusso della riga — vedi sopra). Mete e Navigator sono ciascuna
-// da sola nella propria metà (`flex-1 justify-center`), con un `<div className="w-16" />` vuoto
-// in mezzo che riserva lo spazio sotto al disco: con un solo elemento per lato invece di due, il
-// centraggio "per costruzione" di Diari è più che mai indipendente dal loro peso reciproco.
-// NAV_LINKS resta nell'ordine canonico (Diari, Mete, Navigator, Statistiche) per DesktopNav/
-// MobileNavBar, che restano a 4 voci + avatar inline, invariati: solo qui la barra scende a 3.
-// Sfondo e contenuto sono due livelli separati: solo il primo porta il ritaglio
-// (DIARI_NOTCH_MASK), il secondo — icone, etichette, il disco stesso — resta sopra, intatto.
-// Niente backdrop-blur sul primo livello: sfocherebbe anche il contenuto visto attraverso il foro.
+// Tre voci: Atlante e Navigator piatte ai due lati, Libreria sollevata al centro
+// (RaisedDiariButton, `position:absolute`, fuori dal flusso della riga — vedi sopra). Atlante e
+// Navigator sono ciascuna da sola nella propria metà (`flex-1 justify-center`), con un
+// `<div className="w-16" />` vuoto in mezzo che riserva lo spazio sotto al disco: con un solo
+// elemento per lato invece di due, il centraggio "per costruzione" di Libreria è più che mai
+// indipendente dal loro peso reciproco. NAV_LINKS resta nell'ordine canonico (Libreria, Atlante,
+// Navigator) per DesktopNav/MobileNavBar, che restano a 3 voci + avatar inline, invariati: solo
+// qui la barra scende a 2 voci piatte + il disco centrale. Sfondo e contenuto sono due livelli
+// separati: solo il primo porta il ritaglio (DIARI_NOTCH_MASK), il secondo — icone, etichette, il
+// disco stesso — resta sopra, intatto. Niente backdrop-blur sul primo livello: sfocherebbe anche
+// il contenuto visto attraverso il foro.
 function MobileBottomBar() {
   const path = usePathname()
   const diari = NAV_LINKS.find(l => l.href === '/diari')!
-  const mete = NAV_LINKS.find(l => l.href === '/percorsi')!
+  const atlante = NAV_LINKS.find(l => l.href === '/atlante')!
   const navigator_ = NAV_LINKS.find(l => l.href === '/navigatore')!
 
   const renderFlat = ({ href, label, icon: Icon }: (typeof NAV_LINKS)[number]) => {
@@ -288,7 +285,7 @@ function MobileBottomBar() {
         style={{ maskImage: DIARI_NOTCH_MASK, WebkitMaskImage: DIARI_NOTCH_MASK }}
       />
       <div className="relative flex items-center h-20 px-2">
-        <div className="flex flex-1 items-center justify-center">{renderFlat(mete)}</div>
+        <div className="flex flex-1 items-center justify-center">{renderFlat(atlante)}</div>
         <div className="w-16 flex-none" aria-hidden />
         <div className="flex flex-1 items-center justify-center">{renderFlat(navigator_)}</div>
       </div>

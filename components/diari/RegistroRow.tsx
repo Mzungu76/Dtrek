@@ -9,18 +9,8 @@ import Link from 'next/link'
 import { BookMarked } from 'lucide-react'
 import { FONT } from '@/lib/designTokens'
 import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, TACCUINO_ACCENT_SECONDARY, TACCUINO_ACCENT_TINT } from '@/lib/taccuinoTokens'
+import { DORSI } from '@/lib/diari/dorsoColore'
 import type { DiarySummary } from '@/lib/diari/aggregateDiaries'
-
-// Palette dei dorsi — stessa direzione "Taccuino Botanico" di lib/taccuinoTokens.tsx, un giro
-// deterministico per indice così lo stesso Diario ha sempre lo stesso colore tra un caricamento e
-// l'altro (nessuno stato da persistere solo per questo).
-const DORSI = [
-  'linear-gradient(180deg,#C0603D,#8A3D26)',
-  'linear-gradient(180deg,#7C8F6E,#4A5A3F)',
-  'linear-gradient(180deg,#A89A78,#5E564C)',
-  'linear-gradient(180deg,#8A6A46,#3A352B)',
-  'linear-gradient(180deg,#5F7355,#2E3A26)',
-]
 
 function formatUltimaUscita(iso: string | null): string {
   if (!iso) return 'nessuna uscita'
