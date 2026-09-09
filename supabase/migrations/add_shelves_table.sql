@@ -51,3 +51,9 @@ BEGIN
     WHERE diaries.id = ord.id;
   END LOOP;
 END $$;
+
+-- Da eseguire SEMPRE dopo un ALTER TABLE su una tabella già in uso (vedi
+-- reload_postgrest_schema_cache.sql: senza questo, PostgREST continua a servire lo schema
+-- vecchio e ogni query che referenzia le colonne appena aggiunte fallisce con PGRST204/500 finché
+-- la cache non si ricarica da sola).
+NOTIFY pgrst, 'reload schema';
