@@ -88,13 +88,13 @@ function PoiCard({ entry, highlighted, dimmed, onTap, hasStreetView }: {
             />
           </div>
           <div className="p-2.5 pb-1" style={{ background: TACCUINO_PAPER.light }}>
-            <p className="font-display font-semibold text-stone-800 text-[14px] leading-tight line-clamp-1 tracking-wide">
+            <p className="font-display font-semibold text-stone-800 text-sm leading-tight line-clamp-1 tracking-wide">
               {entry.title}
             </p>
             {entry.description && (
-              <p className="text-[10px] text-stone-400 mt-0.5 line-clamp-1">{entry.description}</p>
+              <p className="text-xs text-stone-400 mt-0.5 line-clamp-1">{entry.description}</p>
             )}
-            <span className="flex items-center gap-0.5 text-[10px] mt-1 text-terra-800">
+            <span className="flex items-center gap-0.5 text-xs mt-1 text-terra-800">
               <ExternalLink className="w-2.5 h-2.5" /> Wikipedia
             </span>
           </div>

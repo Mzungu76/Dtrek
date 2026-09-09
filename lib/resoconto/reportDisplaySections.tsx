@@ -113,20 +113,20 @@ export function renderReportFixedWidget(key: ReportFixedSectionKey, props: Rende
                 {rated && (
                   <div className="flex flex-col items-center text-center">
                     <RatingGaugeBadge value={activity.userRating!} size={72} showLabel={false} dark={false} />
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-stone-400 mt-2.5">La tua opinione</p>
-                    <p className="text-[12.5px] font-bold text-stone-800 mt-0.5">Voto {activity.userRating}/10</p>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-stone-400 mt-2.5">La tua opinione</p>
+                    <p className="text-xs font-bold text-stone-800 mt-0.5">Voto {activity.userRating}/10</p>
                   </div>
                 )}
                 {ts != null && (
                   <div className="flex flex-col items-center text-center">
                     <TrailScoreGaugeBadge total={Math.round(ts)} safety={null} showLabel={false} size={72} dark={false} />
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-stone-400 mt-2.5">Il dato oggettivo</p>
-                    {scoreLabel && <p className="text-[12.5px] font-bold text-stone-800 mt-0.5">Trail Score · {scoreLabel}</p>}
+                    <p className="text-xs font-semibold uppercase tracking-wide text-stone-400 mt-2.5">Il dato oggettivo</p>
+                    {scoreLabel && <p className="text-xs font-bold text-stone-800 mt-0.5">Trail Score · {scoreLabel}</p>}
                   </div>
                 )}
               </div>
               {activity.userRatingNote && (
-                <p className="text-stone-500 text-[12.5px] italic leading-relaxed text-center mt-4 pt-4 border-t border-stone-100">
+                <p className="text-stone-500 text-xs italic leading-relaxed text-center mt-4 pt-4 border-t border-stone-100">
                   “{activity.userRatingNote}”
                 </p>
               )}

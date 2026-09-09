@@ -83,7 +83,7 @@ export default function ReportGenerationPanel({ activityId, activityTitle, hasCo
                 type="button"
                 disabled={generating}
                 onClick={() => setLength(l.key)}
-                className={`px-3 py-1.5 rounded-full text-[12px] font-semibold transition-colors ${
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
                   length === l.key ? 'bg-forest-600 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
                 }`}
               >
@@ -95,13 +95,13 @@ export default function ReportGenerationPanel({ activityId, activityTitle, hasCo
             type="button"
             disabled={generating}
             onClick={handleGenerate}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-forest-600 text-white text-[13px] font-semibold disabled:opacity-60"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-forest-600 text-white text-sm font-semibold disabled:opacity-60"
           >
             {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <PenLine className="w-4 h-4" />}
             {hasContent ? 'Rigenera il resoconto' : 'Genera il resoconto'}
           </button>
-          {generating && <p className="text-stone-400 text-[12.5px] mt-2">Sto scrivendo il resoconto…</p>}
-          {error && <p className="text-red-600 text-[12.5px] mt-2">{error}</p>}
+          {generating && <p className="text-stone-400 text-xs mt-2">Sto scrivendo il resoconto…</p>}
+          {error && <p className="text-red-600 text-xs mt-2">{error}</p>}
         </div>
       </div>
     </div>

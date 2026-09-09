@@ -67,7 +67,7 @@ export default function SectionBiometria() {
         <>
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <p className="text-[10px] text-stone-400 mb-1 font-medium uppercase tracking-wider">Età</p>
+              <p className="text-xs text-stone-400 mb-1 font-medium uppercase tracking-wider">Età</p>
               <div className="relative">
                 <input
                   type="number" min={10} max={90}
@@ -76,11 +76,11 @@ export default function SectionBiometria() {
                   placeholder="40"
                   className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm font-mono outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 transition"
                 />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-stone-400">anni</span>
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-stone-400">anni</span>
               </div>
             </div>
             <div>
-              <p className="text-[10px] text-stone-400 mb-1 font-medium uppercase tracking-wider">Peso</p>
+              <p className="text-xs text-stone-400 mb-1 font-medium uppercase tracking-wider">Peso</p>
               <div className="relative">
                 <input
                   type="number" min={30} max={250}
@@ -89,11 +89,11 @@ export default function SectionBiometria() {
                   placeholder="70"
                   className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm font-mono outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 transition"
                 />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-stone-400">kg</span>
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-stone-400">kg</span>
               </div>
             </div>
             <div>
-              <p className="text-[10px] text-stone-400 mb-1 font-medium uppercase tracking-wider">Altezza</p>
+              <p className="text-xs text-stone-400 mb-1 font-medium uppercase tracking-wider">Altezza</p>
               <div className="relative">
                 <input
                   type="number" min={100} max={250}
@@ -102,7 +102,7 @@ export default function SectionBiometria() {
                   placeholder="170"
                   className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm font-mono outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 transition"
                 />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-stone-400">cm</span>
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-stone-400">cm</span>
               </div>
             </div>
           </div>
@@ -113,7 +113,7 @@ export default function SectionBiometria() {
           )}
 
           <div>
-            <p className="text-[10px] text-stone-400 mb-1.5 font-medium uppercase tracking-wider">Sesso</p>
+            <p className="text-xs text-stone-400 mb-1.5 font-medium uppercase tracking-wider">Sesso</p>
             <div className="grid grid-cols-2 gap-2">
               {GENDER_OPTS.map(opt => (
                 <button key={opt.key} onClick={() => { setGender(opt.key); setStatus(null) }}
@@ -125,7 +125,7 @@ export default function SectionBiometria() {
                 >{opt.label}</button>
               ))}
             </div>
-            <p className="text-[11px] text-stone-400 mt-1.5 leading-relaxed">
+            <p className="text-xs text-stone-400 mt-1.5 leading-relaxed">
               Usato dalla guida AI per l&apos;accordo grammaticale di genere (es. &quot;pronto/a&quot;, &quot;stanco/a&quot;).
             </p>
           </div>

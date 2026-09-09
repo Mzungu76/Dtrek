@@ -67,7 +67,7 @@ function adviceIcon(s: WeatherAdviceItem['severity']) {
 // indipendentemente da quanti blocchi ha contenuto (piano semplificazione visiva).
 function SectionLabel({ children }: { children: ReactNode }) {
   return (
-    <p className="text-[10px] font-semibold uppercase tracking-wide text-stone-400 mt-3.5 pt-3.5 border-t border-dashed border-stone-200">
+    <p className="text-xs font-semibold uppercase tracking-wide text-stone-400 mt-3.5 pt-3.5 border-t border-dashed border-stone-200">
       {children}
     </p>
   )
@@ -113,12 +113,12 @@ function DayStrip({ daily }: { daily: DailyWeather[] }) {
         const dayLabel = new Date(d.date + 'T12:00:00').toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric' })
         return (
           <div key={d.date} className="flex-shrink-0 text-center min-w-[52px]">
-            <p className="text-[10px] text-stone-400 capitalize">{dayLabel}</p>
+            <p className="text-xs text-stone-400 capitalize">{dayLabel}</p>
             <p className="text-xl my-0.5">{info.emoji}</p>
-            <p className="text-[11px] font-semibold text-stone-700">
+            <p className="text-xs font-semibold text-stone-700">
               {d.tempMax.toFixed(0)}°<span className="text-stone-400 font-normal">/{d.tempMin.toFixed(0)}°</span>
             </p>
-            {d.precipitation > 0 && <p className="text-[10px] text-sky-600">{d.precipitation.toFixed(0)} mm</p>}
+            {d.precipitation > 0 && <p className="text-xs text-sky-600">{d.precipitation.toFixed(0)} mm</p>}
           </div>
         )
       })}
@@ -398,11 +398,11 @@ export default function WeatherWidget(props: Props) {
               const isRainy = h.precipitation > 0.3
               return (
                 <div key={h.time} className="flex-shrink-0 text-center min-w-[44px]">
-                  <p className="text-[10px] text-stone-400">{h.time.slice(11, 16)}</p>
+                  <p className="text-xs text-stone-400">{h.time.slice(11, 16)}</p>
                   <p className="text-xl my-0.5">{inf.emoji}</p>
                   <p className="text-xs font-bold text-stone-800">{h.temperature.toFixed(0)}°</p>
-                  {isRainy && <p className="text-[9px] text-sky-600">{h.precipitation.toFixed(1)}</p>}
-                  {h.windspeed > 20 && <p className="text-[9px] text-stone-400">{h.windspeed.toFixed(0)}</p>}
+                  {isRainy && <p className="text-xs text-sky-600">{h.precipitation.toFixed(1)}</p>}
+                  {h.windspeed > 20 && <p className="text-xs text-stone-400">{h.windspeed.toFixed(0)}</p>}
                 </div>
               )
             })}
@@ -427,7 +427,7 @@ export default function WeatherWidget(props: Props) {
               <div key={i} className="flex items-center gap-3">
                 <span className="text-base w-6 text-center shrink-0">{c.icon}</span>
                 <span className="text-sm text-stone-700 flex-1">{c.item}</span>
-                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${priorityStyle(c.priority)}`}>
+                <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full border ${priorityStyle(c.priority)}`}>
                   {priorityLabel(c.priority)}
                 </span>
               </div>
@@ -442,7 +442,7 @@ export default function WeatherWidget(props: Props) {
                     <div key={i} className="flex items-center gap-3">
                       <span className="text-base w-6 text-center shrink-0">{c.icon}</span>
                       <span className="text-sm text-stone-500 flex-1">{c.item}</span>
-                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${priorityStyle(c.priority)}`}>
+                      <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full border ${priorityStyle(c.priority)}`}>
                         {priorityLabel(c.priority)}
                       </span>
                     </div>

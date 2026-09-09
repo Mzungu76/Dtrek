@@ -51,7 +51,7 @@ export default function VideoPresetPicker({ title, routeHasPhotos, entries, onCh
 
       <div className="shrink-0 flex items-center gap-3 px-4 py-2.5 border-b border-stone-200 bg-white">
         <div className="min-w-0 flex-1">
-          <p className="text-terra-600 text-[9px] font-bold tracking-[0.16em]">STUDIO VIDEO</p>
+          <p className="text-terra-600 text-xs font-bold tracking-[0.16em]">STUDIO VIDEO</p>
           <h2 className="text-stone-900 font-display font-bold text-sm leading-tight truncate">{title}</h2>
         </div>
         <button onClick={onClose} className="shrink-0 text-stone-500 hover:text-stone-900" aria-label="Annulla">
@@ -62,7 +62,7 @@ export default function VideoPresetPicker({ title, routeHasPhotos, entries, onCh
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="max-w-2xl mx-auto px-5 py-6">
           <h1 className="font-display font-bold text-stone-900 text-xl leading-tight">Che video vuoi fare?</h1>
-          <p className="text-stone-500 text-[13px] mt-1.5 mb-6 leading-relaxed">
+          <p className="text-stone-500 text-sm mt-1.5 mb-6 leading-relaxed">
             Ogni preset imposta insieme formato, ritmo, stacchi, dati a schermo ed effetti. Dopo si apre lo studio,
             dove ogni singola voce resta modificabile.
             {!routeHasPhotos && ' Su questo percorso non ci sono ancora foto: si possono aggiungere anche dopo.'}
@@ -80,10 +80,10 @@ export default function VideoPresetPicker({ title, routeHasPhotos, entries, onCh
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="flex items-baseline gap-2 flex-wrap pr-7">
-                        <span className="font-display font-bold text-stone-900 text-[15px]">{e.label}</span>
-                        <span className="text-stone-400 text-[10.5px] font-mono">{e.desc}</span>
+                        <span className="font-display font-bold text-stone-900 text-base">{e.label}</span>
+                        <span className="text-stone-400 text-xs font-mono">{e.desc}</span>
                       </span>
-                      <span className="block text-stone-500 text-[12.5px] leading-relaxed mt-1">{e.long}</span>
+                      <span className="block text-stone-500 text-xs leading-relaxed mt-1">{e.long}</span>
                     </span>
                   </button>
                   {e.removable && onRemove && (

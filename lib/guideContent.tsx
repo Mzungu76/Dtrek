@@ -19,8 +19,8 @@ function Formula({ children }: { children: ReactNode }) {
   const dark = useGuideTheme() === 'dark'
   return (
     <div className={dark
-      ? 'bg-white/10 rounded-lg px-3 py-2 font-mono text-[11px] text-white/90 border-l-2 border-amber-300/70 my-1'
-      : 'bg-stone-100 rounded-lg px-3 py-2 font-mono text-[11px] text-stone-700 border-l-2 border-forest-400 my-1'
+      ? 'bg-white/10 rounded-lg px-3 py-2 font-mono text-xs text-white/90 border-l-2 border-amber-300/70 my-1'
+      : 'bg-stone-100 rounded-lg px-3 py-2 font-mono text-xs text-stone-700 border-l-2 border-forest-400 my-1'
     }>
       {children}
     </div>
@@ -31,8 +31,8 @@ function Tip({ children }: { children: ReactNode }) {
   const dark = useGuideTheme() === 'dark'
   return (
     <div className={dark
-      ? 'bg-amber-400/15 rounded-lg px-3 py-2 text-[11px] text-amber-100 flex items-start gap-2 my-1'
-      : 'bg-sky-50 rounded-lg px-3 py-2 text-[11px] text-sky-700 flex items-start gap-2 my-1'
+      ? 'bg-amber-400/15 rounded-lg px-3 py-2 text-xs text-amber-100 flex items-start gap-2 my-1'
+      : 'bg-sky-50 rounded-lg px-3 py-2 text-xs text-sky-700 flex items-start gap-2 my-1'
     }>
       <span className="shrink-0">💡</span>
       <span>{children}</span>
@@ -42,7 +42,7 @@ function Tip({ children }: { children: ReactNode }) {
 
 function Note({ children }: { children: ReactNode }) {
   const dark = useGuideTheme() === 'dark'
-  return <p className={`text-[10px] italic ${dark ? 'text-white/55' : 'text-stone-400'}`}>{children}</p>
+  return <p className={`text-xs italic ${dark ? 'text-white/55' : 'text-stone-400'}`}>{children}</p>
 }
 
 export const GUIDE_CONTENT: Record<string, GuideEntry> = {

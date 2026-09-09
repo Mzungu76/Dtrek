@@ -30,13 +30,13 @@ export function ProssimaUscitaCard({ candidata }: Props) {
         className="rounded-2xl px-4 py-5 text-center"
         style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}
       >
-        <p style={{ fontSize: 13, color: TACCUINO_INK.hand }} className="mb-3">
+        <p style={{ fontSize: 14, color: TACCUINO_INK.hand }} className="mb-3">
           Nessuna Meta in attesa — pianificane una per vederla qui.
         </p>
         <Link
           href="/atlante"
           className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-white"
-          style={{ background: TACCUINO_ACCENT[600], fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: 12.5 }}
+          style={{ background: TACCUINO_ACCENT[600], fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: 12 }}
         >
           <Compass className="w-3.5 h-3.5" /> Pianifica una Meta
         </Link>
@@ -52,7 +52,7 @@ export function ProssimaUscitaCard({ candidata }: Props) {
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <span
           className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full"
-          style={{ background: TACCUINO_ACCENT_TINT, color: TACCUINO_ACCENT[600], fontSize: 10.5, fontWeight: 700 }}
+          style={{ background: TACCUINO_ACCENT_TINT, color: TACCUINO_ACCENT[600], fontSize: 12, fontWeight: 700 }}
         >
           {candidata.plannedDate
             ? `Prossima uscita · ${format(new Date(candidata.plannedDate), 'EEE d', { locale: it })}`
@@ -61,7 +61,7 @@ export function ProssimaUscitaCard({ candidata }: Props) {
         {candidata.diaryTitle && (
           <span
             className="px-2.5 py-1 rounded-full"
-            style={{ background: TACCUINO_PAPER.light, border: `1px solid ${TACCUINO_PAPER.cardBorder}`, color: TACCUINO_INK.hand, fontSize: 10.5, fontWeight: 600 }}
+            style={{ background: TACCUINO_PAPER.light, border: `1px solid ${TACCUINO_PAPER.cardBorder}`, color: TACCUINO_INK.hand, fontSize: 12, fontWeight: 600 }}
           >
             {candidata.diaryTitle}
           </span>
@@ -91,19 +91,19 @@ export function ProssimaUscitaCard({ candidata }: Props) {
               <p style={{ fontFamily: FONT.mono, fontWeight: 700, fontSize: 14, color: TACCUINO_INK.typed, lineHeight: 1 }}>
                 {(candidata.distanceMeters / 1000).toFixed(1)}
               </p>
-              <p style={{ fontSize: 8.5, textTransform: 'uppercase', letterSpacing: '0.08em', color: TACCUINO_INK.handMuted }}>km</p>
+              <p style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: TACCUINO_INK.handMuted }}>km</p>
             </div>
             <div>
               <p style={{ fontFamily: FONT.mono, fontWeight: 700, fontSize: 14, color: TACCUINO_INK.typed, lineHeight: 1 }}>
                 +{Math.round(candidata.elevationGain)}
               </p>
-              <p style={{ fontSize: 8.5, textTransform: 'uppercase', letterSpacing: '0.08em', color: TACCUINO_INK.handMuted }}>D+ m</p>
+              <p style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: TACCUINO_INK.handMuted }}>D+ m</p>
             </div>
             <div>
               <p style={{ fontFamily: FONT.mono, fontWeight: 700, fontSize: 14, color: TACCUINO_INK.typed, lineHeight: 1 }}>
                 {formatStima(candidata.estimatedTimeSeconds)}
               </p>
-              <p style={{ fontSize: 8.5, textTransform: 'uppercase', letterSpacing: '0.08em', color: TACCUINO_INK.handMuted }}>stima</p>
+              <p style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: TACCUINO_INK.handMuted }}>stima</p>
             </div>
           </div>
         </div>
@@ -116,14 +116,14 @@ export function ProssimaUscitaCard({ candidata }: Props) {
         <Link
           href="/navigatore/percorsi"
           className="flex-1 flex items-center justify-center gap-2 h-11 rounded-xl text-white"
-          style={{ background: TACCUINO_ACCENT[600], fontFamily: FONT.barlow, fontWeight: 700, fontSize: 12.5 }}
+          style={{ background: TACCUINO_ACCENT[600], fontFamily: FONT.barlow, fontWeight: 700, fontSize: 12 }}
         >
           <Navigation2 className="w-4 h-4" /> Apri nel Navigator
         </Link>
         <Link
           href={guidaHref}
           className="flex items-center justify-center gap-2 h-11 px-4 rounded-xl"
-          style={{ border: `1.5px solid ${TACCUINO_ACCENT[600]}`, color: TACCUINO_ACCENT[600], fontFamily: FONT.barlow, fontWeight: 700, fontSize: 12.5 }}
+          style={{ border: `1.5px solid ${TACCUINO_ACCENT[600]}`, color: TACCUINO_ACCENT[600], fontFamily: FONT.barlow, fontWeight: 700, fontSize: 12 }}
         >
           Guida
         </Link>

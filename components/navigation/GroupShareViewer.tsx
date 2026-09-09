@@ -188,7 +188,7 @@ export default function GroupShareViewer({ token, initial }: Props) {
         </div>
       )}
       {group.members.length > 0 && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 text-[11px] text-stone-500 bg-white/90 px-2.5 py-1 rounded-full shadow">
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 text-xs text-stone-500 bg-white/90 px-2.5 py-1 rounded-full shadow">
           Aggiornato {timeAgo(group.members[0].lastUpdateTs)}
         </div>
       )}

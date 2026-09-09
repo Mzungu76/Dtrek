@@ -24,7 +24,7 @@ export default function VoicePlayer({ isPlaying, isPaused, rateIdx, onTogglePlay
     return (
       <button
         onClick={onTogglePlayPause}
-        className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-terra-50 text-terra-700 border border-terra-100 text-[12.5px] font-semibold hover:bg-terra-100 transition-colors"
+        className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-terra-50 text-terra-700 border border-terra-100 text-xs font-semibold hover:bg-terra-100 transition-colors"
       >
         <Volume2 className="w-3.5 h-3.5" /> Ascolta la guida
       </button>
@@ -36,7 +36,7 @@ export default function VoicePlayer({ isPlaying, isPaused, rateIdx, onTogglePlay
       <div className="flex items-center gap-1">
         {RATE_LABELS.map((label, i) => (
           <button key={label} onClick={() => onChangeRate(i)}
-            className={`text-[10px] px-1.5 py-0.5 rounded font-mono transition-colors ${
+            className={`text-xs px-1.5 py-0.5 rounded font-mono transition-colors ${
               rateIdx === i ? 'bg-terra-500 text-white' : 'text-stone-400 hover:text-stone-600'
             }`}
           >{label}</button>

@@ -124,7 +124,7 @@ export default function BookPage({
   const t = THEMES[theme]
   const navButtonStyle = {
     fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase' as const,
-    letterSpacing: '0.04em', fontSize: 9.5, color: t.inkMuted,
+    letterSpacing: '0.04em', fontSize: 12, color: t.inkMuted,
   }
   return (
     <div
@@ -152,7 +152,7 @@ export default function BookPage({
       >
         <span
           className="flex items-center gap-1.5 shrink-0 min-w-0"
-          style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 11, color: t.inkMuted }}
+          style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 12, color: t.inkMuted }}
         >
           <BookMarked className="w-3.5 h-3.5 shrink-0" />
           <span className="truncate">{diarioTitle}</span>
@@ -160,12 +160,12 @@ export default function BookPage({
         <span className="shrink-0 text-right">
           <span
             className="block"
-            style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 11, color: t.inkMuted }}
+            style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 12, color: t.inkMuted }}
           >
             {sectionLabel}
           </span>
           {pageLabel && (
-            <span className="block" style={{ fontFamily: FONT.mono, fontSize: 9, color: t.inkFooter }}>{pageLabel}</span>
+            <span className="block" style={{ fontFamily: FONT.mono, fontSize: 12, color: t.inkFooter }}>{pageLabel}</span>
           )}
         </span>
       </div>
@@ -178,7 +178,7 @@ export default function BookPage({
               <Link
                 key={s.key}
                 href={s.href}
-                className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11.5px] font-semibold whitespace-nowrap transition-colors"
+                className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors"
                 style={on ? { background: t.accent, color: '#fff' } : { background: t.pillBg, color: t.pillText }}
               >
                 {s.icon}{s.label}

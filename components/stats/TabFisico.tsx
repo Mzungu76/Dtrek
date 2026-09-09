@@ -215,10 +215,10 @@ export default function TabFisico({ activities }: Props) {
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
-                    <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false}
+                    <XAxis dataKey="date" tick={{ fontSize: 12 }} tickLine={false}
                       tickFormatter={d => format(new Date(d), 'dd/MM')}
                       type="category" hide />
-                    <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={44}
+                    <YAxis tick={{ fontSize: 12 }} tickLine={false} axisLine={false} width={44}
                       tickFormatter={v => v.toFixed(4)} />
                     <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
                       labelFormatter={d => format(new Date(d as string), 'dd MMM yy', { locale: it })}
@@ -259,10 +259,10 @@ export default function TabFisico({ activities }: Props) {
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
-                    <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false}
+                    <XAxis dataKey="date" tick={{ fontSize: 12 }} tickLine={false}
                       tickFormatter={d => format(new Date(d), 'dd/MM')}
                       type="category" hide />
-                    <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={44}
+                    <YAxis tick={{ fontSize: 12 }} tickLine={false} axisLine={false} width={44}
                       tickFormatter={v => v.toFixed(0)} />
                     <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
                       labelFormatter={d => format(new Date(d as string), 'dd MMM yy', { locale: it })}

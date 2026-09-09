@@ -96,7 +96,7 @@ export default function GuideGenerationPanel({
       ? GUIDE_TEXT_LENGTHS.map(l => ({ key: l.key, label: l.label, description: l.description }))
       : undefined
     return (
-      <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-stone-100 text-[11.5px] text-stone-400">
+      <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-stone-100 text-xs text-stone-400">
         {creditError && <CreditErrorModal message={creditError.message} onClose={() => setCreditError(null)} />}
         {generating ? (
           <span className="flex items-center gap-1.5">
@@ -124,7 +124,7 @@ export default function GuideGenerationPanel({
   // riquadro/bordo proprio: il drawer fornisce già il proprio titolo di sezione sopra.
   if (hasAiAccess === false && aiUnavailable) {
     return (
-      <p className="text-[12.5px] leading-relaxed" style={{ color: '#8a7f52' }}>
+      <p className="text-xs leading-relaxed" style={{ color: '#8a7f52' }}>
         Non riusciamo a verificare la tua chiave AI in questo momento — riprova tra poco.
       </p>
     )
@@ -132,7 +132,7 @@ export default function GuideGenerationPanel({
 
   if (hasAiAccess === false) {
     return (
-      <p className="text-[12.5px] leading-relaxed" style={{ color: '#8a7f52' }}>
+      <p className="text-xs leading-relaxed" style={{ color: '#8a7f52' }}>
         {trialExpired ? 'Il periodo di prova gratuito è terminato — ' : 'Al momento non hai accesso alla generazione AI — '}
         <a href="/prezzi" className="font-semibold underline underline-offset-2" style={{ color: '#c05a17' }}>sblocca Dtrek</a> per far scrivere a Giulia la guida di questo percorso.
       </p>
@@ -149,7 +149,7 @@ export default function GuideGenerationPanel({
             type="button"
             disabled={generating}
             onClick={() => setLength(l.key)}
-            className="px-2.5 py-1 rounded-full text-[10px] font-bold transition-colors"
+            className="px-2.5 py-1 rounded-full text-xs font-bold transition-colors"
             style={length === l.key ? { background: '#c05a17', color: '#fff' } : { background: '#f1e9d2', color: '#8a7f52' }}
           >
             {l.label}
@@ -162,7 +162,7 @@ export default function GuideGenerationPanel({
           disabled={generating}
           onClick={() => run(missingKeys)}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors disabled:opacity-40"
-          style={{ background: '#c05a17', color: '#fff', fontSize: 13.5, fontWeight: 600 }}
+          style={{ background: '#c05a17', color: '#fff', fontSize: 14, fontWeight: 600 }}
         >
           {generating ? <Loader2 className="w-4 h-4 animate-spin shrink-0" /> : <BookOpen className="w-4 h-4 shrink-0" />}
           Genera le sezioni mancanti ({missingKeys.length})
@@ -173,13 +173,13 @@ export default function GuideGenerationPanel({
         disabled={generating}
         onClick={() => run(GUIDE_SECTIONS.map(s => s.key))}
         className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors disabled:opacity-40"
-        style={{ background: '#f1e9d2', color: '#3f3a22', fontSize: 13.5, fontWeight: 600 }}
+        style={{ background: '#f1e9d2', color: '#3f3a22', fontSize: 14, fontWeight: 600 }}
       >
         {generating && <Loader2 className="w-4 h-4 animate-spin shrink-0" />}
         Rigenera tutta la guida
       </button>
-      {generating && <p className="text-[11.5px]" style={{ color: '#8a7f52' }}>Giulia sta scrivendo…</p>}
-      {error && <p className="text-[11.5px]" style={{ color: '#b3413a' }}>{error}</p>}
+      {generating && <p className="text-xs" style={{ color: '#8a7f52' }}>Giulia sta scrivendo…</p>}
+      {error && <p className="text-xs" style={{ color: '#b3413a' }}>{error}</p>}
     </div>
   )
 }

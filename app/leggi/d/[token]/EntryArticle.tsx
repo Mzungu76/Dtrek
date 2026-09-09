@@ -34,7 +34,7 @@ function StatCell({ icon, value, label }: { icon?: React.ReactNode; value: strin
         {icon}
         <span className="font-mono text-base font-bold leading-none">{value}</span>
       </div>
-      <div className="text-[9px] font-semibold text-stone-400 uppercase tracking-wider mt-1">{label}</div>
+      <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider mt-1">{label}</div>
     </div>
   )
 }
@@ -66,7 +66,7 @@ export function PhotoGrid({ photos }: { photos: PublicDiaryPhoto[] }) {
           <img src={p.url} alt={p.caption ?? ''} loading="lazy" decoding="async"
             className="w-full aspect-[4/3] object-cover rounded-xl bg-stone-100" />
           {p.caption && (
-            <figcaption className="text-[11px] font-lora italic text-stone-400 text-center mt-1.5 leading-snug">
+            <figcaption className="text-xs font-lora italic text-stone-400 text-center mt-1.5 leading-snug">
               {p.caption}
             </figcaption>
           )}
@@ -92,7 +92,7 @@ function InlineFigure({ photo, side }: { photo: PublicDiaryPhoto; side: 'left' |
       <img src={photo.url} alt={photo.caption ?? ''} loading="lazy" decoding="async"
         className="w-full aspect-[4/3] object-cover rounded-xl bg-stone-100" />
       {photo.caption && (
-        <figcaption className="text-[11px] font-lora italic text-stone-400 mt-1.5 leading-snug">
+        <figcaption className="text-xs font-lora italic text-stone-400 mt-1.5 leading-snug">
           {photo.caption}
         </figcaption>
       )}
@@ -129,7 +129,7 @@ export function EntryArticle({ entry, n, show, hideExactDate = false }: { entry:
       if (block.type === 'curiosita') {
         nodes.push(
           <aside key={`b${bi}`} className="my-4 rounded-r-xl border-l-[3px] border-terra-500 bg-terra-50/60 px-4 py-3">
-            <p className="font-lora italic text-[15px] leading-relaxed text-stone-600">
+            <p className="font-lora italic text-base leading-relaxed text-stone-600">
               <Inline text={block.text} />
             </p>
           </aside>,
@@ -153,7 +153,7 @@ export function EntryArticle({ entry, n, show, hideExactDate = false }: { entry:
         return
       }
       nodes.push(
-        <p key={`b${bi}`} className="font-lora text-[15px] leading-[1.75] text-stone-600 mb-3.5">
+        <p key={`b${bi}`} className="font-lora text-base leading-[1.75] text-stone-600 mb-3.5">
           <Inline text={block.text} />
         </p>,
       )
@@ -171,7 +171,7 @@ export function EntryArticle({ entry, n, show, hideExactDate = false }: { entry:
     return (
       // `flow-root` contiene i float delle foto dentro la sezione che le ospita.
       <section key={si} className="mt-6 first:mt-0 flow-root">
-        <h3 className="font-barlow font-bold text-[11px] tracking-[0.2em] uppercase text-terra-500 mb-2">
+        <h3 className="font-barlow font-bold text-xs tracking-[0.2em] uppercase text-terra-500 mb-2">
           {section.title}
         </h3>
         {nodes}
@@ -188,7 +188,7 @@ export function EntryArticle({ entry, n, show, hideExactDate = false }: { entry:
       )}
 
       <div className="p-5 sm:p-7">
-        <p className="font-barlow font-bold text-[10px] tracking-[0.2em] uppercase text-terra-500">
+        <p className="font-barlow font-bold text-xs tracking-[0.2em] uppercase text-terra-500">
           Escursione #{String(n).padStart(2, '0')} · {format(new Date(entry.startTime), 'MMMM yyyy', { locale: it })}
         </p>
         <h2 className="font-display text-2xl sm:text-3xl font-bold text-forest-900 leading-tight mt-1.5">
@@ -210,7 +210,7 @@ export function EntryArticle({ entry, n, show, hideExactDate = false }: { entry:
               polyline={entry.polyline}
                 photoProgress={entry.photos.map(p => p.progress).filter((p): p is number => p != null)}
               />
-              <p className="text-[10px] text-stone-400 text-center mt-1.5">
+              <p className="text-xs text-stone-400 text-center mt-1.5">
                 Partenza, arrivo e punti in cui sono state scattate le foto
               </p>
             </div>
@@ -249,7 +249,7 @@ export function EntryCard({ entry, n, hideExactDate = false }: { entry: PublicDi
           : <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl shrink-0 bg-stone-100" />
       }
       <div className="min-w-0 flex-1">
-        <p className="font-barlow font-bold text-[9px] tracking-[0.2em] uppercase text-terra-500">
+        <p className="font-barlow font-bold text-xs tracking-[0.2em] uppercase text-terra-500">
           Escursione #{String(n).padStart(2, '0')}
         </p>
         <h2 className="font-display text-lg font-bold text-forest-900 leading-tight mt-0.5 truncate">

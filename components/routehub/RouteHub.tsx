@@ -406,7 +406,7 @@ export default function RouteHub({
         style={{ opacity: chromeOpacity, pointerEvents: isOpen ? 'none' : 'auto', transitionDuration: `${chromeTransitionMs}ms` }}
       >
         {summary && (
-          <p className="mx-4 font-display text-[15px] font-semibold text-white leading-snug text-left max-w-xl" style={{ textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>
+          <p className="mx-4 font-display text-base font-semibold text-white leading-snug text-left max-w-xl" style={{ textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>
             {summary}
           </p>
         )}

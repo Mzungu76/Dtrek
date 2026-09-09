@@ -851,17 +851,17 @@ export default function GuideReader({
                 <div className="flex items-start gap-3 min-w-0">
                   <Sparkles className="w-4 h-4 text-terra-600 shrink-0 mt-0.5" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-semibold text-stone-800">
+                    <p className="text-sm font-semibold text-stone-800">
                       {missingSectionKeys.length === 1 ? 'Manca ancora una sezione' : `Mancano ancora ${missingSectionKeys.length} sezioni`}
                     </p>
-                    <p className="text-[11.5px] text-stone-500 leading-snug">
+                    <p className="text-xs text-stone-500 leading-snug">
                       Generarle tutte insieme in un&apos;unica richiesta è più efficiente che una alla volta
                     </p>
                   </div>
                 </div>
                 <button
                   onClick={() => generateSections(missingSectionKeys)}
-                  className="w-full sm:w-auto shrink-0 px-4 py-2 rounded-full bg-terra-600 hover:bg-terra-700 text-white text-[12.5px] font-semibold transition-colors"
+                  className="w-full sm:w-auto shrink-0 px-4 py-2 rounded-full bg-terra-600 hover:bg-terra-700 text-white text-xs font-semibold transition-colors"
                 >
                   Genera il resto con Giulia (AI)
                 </button>
@@ -886,7 +886,7 @@ export default function GuideReader({
             {(isPlaying || isPaused) && hasGuide && (
               <div className="sticky top-2 z-10 mt-3 bg-white rounded-xl border px-4 py-2.5 flex items-center gap-3 shadow-sm" style={{ borderColor: '#dcd8cc' }}>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[11px] font-medium text-stone-600 truncate">
+                  <p className="text-xs font-medium text-stone-600 truncate">
                     {isPlaying && activeSection !== null
                       ? `▶ ${displaySections[activeSection]?.title ?? '…'}`
                       : '⏸ In pausa'}
@@ -1022,7 +1022,7 @@ export default function GuideReader({
 
             {hasGuide && !generating && (poiPhotos.length > 0 || guideSources.some(s => s.imageUrl)) && (
               <div className="mt-4 mb-1">
-                <p className="text-[9px] font-bold uppercase tracking-[2.5px] text-stone-400 mb-2">
+                <p className="text-xs font-bold uppercase tracking-[2.5px] text-stone-400 mb-2">
                   Galleria fotografica
                 </p>
                 <div className="flex gap-2.5 overflow-x-auto pb-1" style={{ scrollSnapType: 'x proximity' }}>
@@ -1043,7 +1043,7 @@ export default function GuideReader({
                         loading="lazy"
                         onError={e => { (e.currentTarget.closest('a') as HTMLElement | null)?.style.setProperty('display', 'none') }}
                       />
-                      <p className="px-2.5 py-1.5 text-[10px] text-stone-400 bg-stone-50 truncate">
+                      <p className="px-2.5 py-1.5 text-xs text-stone-400 bg-stone-50 truncate">
                         Luogo: {p.title}
                       </p>
                     </a>
@@ -1065,7 +1065,7 @@ export default function GuideReader({
                         loading="lazy"
                         onError={e => { (e.currentTarget.closest('a') as HTMLElement | null)?.style.setProperty('display', 'none') }}
                       />
-                      <p className="px-2.5 py-1.5 text-[10px] text-stone-400 bg-stone-50 truncate">
+                      <p className="px-2.5 py-1.5 text-xs text-stone-400 bg-stone-50 truncate">
                         Fonte: {s.title}
                       </p>
                     </a>

@@ -95,20 +95,20 @@ export function RatingGaugeBadge({ value, size = 80, showLabel = true, note, dar
       {showLabel && (
         <div className="flex flex-col">
           <span
-            className={`text-[11px] sm:text-xs font-bold uppercase tracking-wide ${dark ? 'text-white' : 'text-stone-800'}`}
+            className={`text-xs sm:text-xs font-bold uppercase tracking-wide ${dark ? 'text-white' : 'text-stone-800'}`}
             style={{ textShadow: dark ? '0 1px 5px rgba(0,0,0,0.6)' : 'none' }}
           >
             {ratingPhrase(value)}
           </span>
           <span
-            className={`text-[10px] sm:text-[11px] ${dark ? 'text-white/70' : 'text-stone-400'}`}
+            className={`text-xs sm:text-xs ${dark ? 'text-white/70' : 'text-stone-400'}`}
             style={{ textShadow: dark ? '0 1px 5px rgba(0,0,0,0.6)' : 'none' }}
           >
             Voto {value}/10
           </span>
           {note && (
             <span
-              className={`text-[10px] sm:text-[11px] italic max-w-[180px] truncate ${dark ? 'text-white/80' : 'text-stone-500'}`}
+              className={`text-xs sm:text-xs italic max-w-[180px] truncate ${dark ? 'text-white/80' : 'text-stone-500'}`}
               style={{ textShadow: dark ? '0 1px 5px rgba(0,0,0,0.6)' : 'none' }}
             >
               “{note}”

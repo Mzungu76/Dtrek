@@ -44,7 +44,7 @@ export default function NavBottomStrip({ summary, timerRunning, onTogglePlayPaus
       >
         <button
           onClick={onExpand}
-          className="pointer-events-auto flex items-center gap-1 text-white/70 text-[10px] font-semibold uppercase tracking-wide"
+          className="pointer-events-auto flex items-center gap-1 text-white/70 text-xs font-semibold uppercase tracking-wide"
         >
           <ChevronUp className="w-3 h-3" /> Dettagli
         </button>
@@ -61,7 +61,7 @@ export default function NavBottomStrip({ summary, timerRunning, onTogglePlayPaus
             // leggibile anche su una mappa molto chiara sotto sole forte.
             className={`pointer-events-auto flex-1 min-w-0 text-center ${summaryBg} rounded-full px-4 py-2`}
           >
-            <span className="font-mono text-[20px] font-bold text-white" style={{ textShadow: TEXT_SHADOW }}>
+            <span className="font-mono text-xl font-bold text-white" style={{ textShadow: TEXT_SHADOW }}>
               {summary}
             </span>
           </button>

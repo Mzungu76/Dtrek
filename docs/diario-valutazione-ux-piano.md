@@ -67,15 +67,24 @@ questa è la scelta più costosa dell'intera interfaccia.
 ### 1.2 Sei famiglie di carattere
 
 `app/layout.tsx` carica **sei** font: Playfair Display, DM Sans, JetBrains Mono, Barlow Condensed,
-Lora, Caveat. Usi: `font-display` 180, `font-body` 90, `font-mono` 82, `font-barlow` 39,
-`font-lora` 13, `font-caveat` 3.
+Lora, Caveat.
 
-Playfair (display) e Lora convivono nello stesso ruolo di serif titolante, su pagine diverse — e
-in `app/atlante/page.tsx` il titolo "Atlante" usa Lora mentre il resto dell'app usa Playfair.
-Caveat (la scrittura a mano, cioè **l'elemento che più dice "diario"**) è usato 3 volte in tutto.
+**Correzione rispetto alla prima stesura di questo documento**: qui era scritto che Lora fosse un
+doppione di Playfair da ritirare. Verificato più a fondo durante l'esecuzione della Fase 1, non è
+così — `lib/taccuinoTokens.tsx` dichiara esplicitamente Lora come il font della **prosa
+narrativa** ("corpo del testo resta su FONT.lora: professionalità e precisione del contenuto"),
+distinto da Playfair (titoli) e da Caveat (annotazioni a mano): una coppia editoriale seria/serif
+da titolo + serif da testo, non un doppione. L'uso reale lo conferma — è il font dei paragrafi di
+Reportage, Guida e Diario, e delle pagine pubbliche di lettura (`/leggi/...`), applicato in modo
+pressoché sistematico lì (~40 punti, non i 13 usi-classe contati nella prima stesura, che
+guardavano solo `font-lora` e non gli altrettanto frequenti `FONT.lora` inline).
 
-Il font che dovrebbe portare l'identità è quello meno usato. È questa, in una riga, la diagnosi
-dello "stile Diario non compiutamente realizzato".
+Il problema reale non è Lora in sé ma due soli punti in cui esce dal proprio ruolo: il titolo h1
+"Atlante" e i titoli di `app/fonti-e-crediti/page.tsx` usavano Lora alla scala di un titolo,
+invece di Playfair — corretto in Fase 1 (§7).
+
+Resta vera la diagnosi su Caveat: la scrittura a mano, **l'elemento che più dice "diario"**, è
+usata solo 3 volte in tutta l'app.
 
 ### 1.3 Proposta — una scala di 7 gradini, e nient'altro
 
@@ -87,7 +96,8 @@ livelli senza leggerli. Proposta, calibrata sull'uso all'aperto:
 | `display` | 30px / 700 | Playfair | Titolo di copertina, nome del Diario |
 | `title` | 22px / 600 | Playfair | Titolo di pagina o di sezione |
 | `heading` | 18px / 600 | Playfair | Testata di card, titolo di voce |
-| `body` | **16px** / 400 | DM Sans | **Corpo del testo — il default nuovo** |
+| `body` | **16px** / 400 | DM Sans | **Corpo dell'interfaccia — il default nuovo** |
+| `reading` | **16px** / 400 | Lora | **Prosa narrativa — paragrafi di Reportage/Guida/Diario** |
 | `secondary` | 14px / 400 | DM Sans | Sottotitoli, descrizioni, metadati |
 | `label` | 12px / 600 uppercase | Barlow Condensed | Etichette, chip, unità di misura |
 | `hand` | 18px | Caveat | Annotazioni, date, note a margine — l'accento "diario" |
@@ -95,11 +105,12 @@ livelli senza leggerli. Proposta, calibrata sull'uso all'aperto:
 **Regole**:
 - **12px è il minimo assoluto**, e solo per `label` (testo breve, maiuscolo, alto contrasto).
   I 544 usi sotto i 12px salgono a 12px o vengono promossi a `secondary`.
-- **Il corpo passa da 14px a 16px.** È il singolo cambiamento con più effetto sulla leggibilità
-  percepita dell'intera app.
-- **Si ritirano Lora e JetBrains Mono.** Lora → Playfair (stesso ruolo, doppione). Mono resta solo
-  dove è semanticamente necessario (coordinate, tracce GPS), non come stile decorativo — oggi
-  gli 82 usi sono in gran parte decorativi.
+- **Il corpo passa da 14px a 16px** — sia in `body` (interfaccia) sia in `reading` (prosa). È il
+  singolo cambiamento con più effetto sulla leggibilità percepita dell'intera app.
+- **Lora non si ritira**: è il ruolo dichiarato di `reading`, non un doppione di Playfair (vedi
+  §1.2, corretto dopo verifica). Va solo tenuto fuori dai titoli, dove il ruolo giusto è
+  `display`/`heading`. **Mono** (JetBrains Mono, 82 usi) è già disciplinato sull'uso semantico
+  (cifre, statistiche, coordinate) — verificato a campione, nessun uso decorativo trovato.
 - **Caveat si estende** a date, titoli di voce del Diario e annotazioni: da 3 usi a presenza
   sistematica. È il portatore dell'identità.
 - **Zero `fontSize` inline e zero `text-[Npx]`**: i 7 ruoli diventano classi/token e le 845
@@ -305,12 +316,34 @@ feature restano — cambia solo la storia che l'interfaccia racconta.
 Ordinato per **rapporto beneficio/rischio**. Le fasi 1–3 danno la maggior parte del guadagno
 percepito e non toccano l'architettura.
 
-### Fase 1 — Tipografia *(impatto altissimo, rischio bassissimo)*
-1. Definire i 7 ruoli tipografici in `lib/designTokens.ts` + classi Tailwind corrispondenti.
-2. Portare il corpo del testo da 14px a **16px**.
-3. Alzare a 12px i **544** usi sotto i 12px.
-4. Sostituire le **845** dichiarazioni arbitrarie (`text-[Npx]` + `fontSize` inline) con i ruoli.
-5. Ritirare Lora (→ Playfair) e ridurre Mono all'uso semantico. Da 6 font a 4.
+### Fase 1 — Tipografia *(impatto altissimo, rischio bassissimo)* — ✅ eseguita
+
+1. ✅ Definiti i 7 ruoli tipografici in `lib/designTokens.ts`, documentati insieme alla famiglia
+   che ciascuno usa in pratica. Nessuna estensione a `tailwind.config.ts`: la scala nominale già
+   presente in Tailwind (xs/sm/base/lg/xl/2xl/3xl/4xl/5xl/6xl/7xl = 12/14/16/18/20/24/30/36/48/
+   60/72px) copriva già tutti i gradini necessari.
+2. ✅ Corpo del testo narrativo (Reportage/Guida — `GuideBookPage.tsx`, `ReportBookPage.tsx`) da
+   14px a **16px**. Le pagine pubbliche di lettura (`EntryArticle.tsx`, `CollectionPublicView.tsx`)
+   e il lettore continuo (`SectionCard.tsx`) erano già a 16px o vi sono arrivate con lo snap del
+   punto 4.
+3. ✅ Le **844** dichiarazioni arbitrarie (`text-[Npx]` + `fontSize` inline) sono state consolidate
+   sulla scala nominale Tailwind con uno script deterministico (snap al gradino più vicino, mai
+   sotto i 12px) — verificato idempotente, zero regressioni a typecheck/lint/test (395 test, tutti
+   verdi).
+4. **Eccezione dichiarata**: i template a pagina fissa per l'export PDF del Diario
+   (`components/diario/DiarioReportPage.tsx`, `DiarioStubPage.tsx`, `DiarioIndice.tsx`,
+   `DiarioStatistiche.tsx`, `DiarioCover.tsx`, `DiarioMappa.tsx`, `DiarioYearDivider.tsx`,
+   `PageHeader.tsx`, `StatCard.tsx` — tutti import `lib/pdfPageGeometry.ts`) sono stati **esclusi**
+   da questo intervento: usano un'altezza di pagina fissa in pixel, e crescere le dimensioni del
+   testo lì rischia di rompere l'impaginazione stampata in un modo verificabile solo rendendo
+   davvero il PDF pagina per pagina — fuori perimetro per un intervento di sola tipografia
+   on-screen. Restano sulle dimensioni precedenti; un intervento dedicato di typography-in-print è
+   un follow-up separato, non ancora fatto.
+5. ✅ Corretti i due usi di Lora fuori dal proprio ruolo (`app/atlante/page.tsx` h1, `app/fonti-e-
+   crediti/page.tsx` h1+h2) → `FONT.display`/`font-display`. **Non ritirato**: verificato che Lora
+   non è un doppione di Playfair ma il ruolo dichiarato per la prosa narrativa (§1.2, corretto).
+   Verificato anche `font-mono` (82 usi): già disciplinato sull'uso semantico (cifre, statistiche,
+   coordinate, nomi di file) — nessuna modifica necessaria.
 
 > Da sola, questa fase risolve la parte maggiore della sensazione di "confusionario".
 

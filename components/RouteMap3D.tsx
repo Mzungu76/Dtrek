@@ -4384,7 +4384,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 <span>{coveredKm}/{totalKm} km</span>
               </div>
               {weatherBadge&&(
-                <div className="flex items-center gap-1 text-[11px] text-white/60 mt-0.5">
+                <div className="flex items-center gap-1 text-xs text-white/60 mt-0.5">
                   <span className="leading-none">{weatherBadge.emoji}</span>
                   <span className="truncate">{weatherBadge.label}</span>
                   <span>{weatherBadge.temp}°</span>
@@ -4424,7 +4424,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               <input type="range" min={0} max={1} step={0.0005} value={progress} onChange={e=>handleScrub(+e.target.value)}
                 className="absolute w-full opacity-0 cursor-pointer" style={{height:'64px',top:'50%',transform:'translateY(-50%)'}}/>
             </div>
-            <div className="flex justify-between mb-4 text-[10px] font-medium px-0.5">
+            <div className="flex justify-between mb-4 text-xs font-medium px-0.5">
               <span className="text-white/50">0 km</span>
               {altitudeSeries.length>0&&<span className="text-[#E9DAC3]">{currentAlt} m slm</span>}
               <span className="text-white/50">{totalKm} km</span>
@@ -4442,16 +4442,16 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 <div className="flex gap-0.5 bg-white/15 rounded-xl p-1 border border-white/10">
                   {SPEEDS.map((s,i)=>(
                     <button key={s.label} onClick={()=>setSpeedIdx(i)}
-                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${speedIdx===i?'bg-white text-stone-900 shadow':'text-white/70 hover:bg-white/20'}`}>
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${speedIdx===i?'bg-white text-stone-900 shadow':'text-white/70 hover:bg-white/20'}`}>
                       {s.label}
                     </button>
                   ))}
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-[11px] text-white/50 whitespace-nowrap font-medium">Rilievo</span>
+                <span className="text-xs text-white/50 whitespace-nowrap font-medium">Rilievo</span>
                 <input type="range" min={1} max={3} step={0.1} value={exaggeration} onChange={e=>setExaggeration(+e.target.value)} className="flex-1 h-1.5 rounded-full accent-[#C0603D] cursor-pointer"/>
-                <span className="text-[11px] text-white font-bold w-8 text-right">{exaggeration.toFixed(1)}×</span>
+                <span className="text-xs text-white font-bold w-8 text-right">{exaggeration.toFixed(1)}×</span>
               </div>
             </div>
           </div>
@@ -4645,7 +4645,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                   carouselTraveledMRef.current = 0; carouselNextPhotoRef.current = 0; carouselStopUntilRef.current = null
                   setPreviewingCarousel(true); setIsPlaying(true)
                 }}
-                  className="w-full flex items-center justify-center gap-2 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 text-[12px] font-semibold transition-colors">
+                  className="w-full flex items-center justify-center gap-2 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-semibold transition-colors">
                   <Play className="w-3.5 h-3.5"/> Anteprima carosello
                 </button>
               )})
@@ -4653,15 +4653,15 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
           }
           controls.push({ kind:'custom', id:'photo-list', label:`Foto del percorso (${routePhotos.length})`, render:()=>(
             <div>
-              <label className={`flex items-center gap-1.5 text-[11px] font-semibold text-botanico-accent hover:opacity-80 cursor-pointer mb-2 ${photoBeingAdded?'opacity-50 pointer-events-none':''}`}>
+              <label className={`flex items-center gap-1.5 text-xs font-semibold text-botanico-accent hover:opacity-80 cursor-pointer mb-2 ${photoBeingAdded?'opacity-50 pointer-events-none':''}`}>
                 {photoBeingAdded?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<ImagePlus className="w-3.5 h-3.5"/>}
                 Aggiungi foto
                 <input type="file" accept="image/*" multiple className="hidden" onChange={handlePhotoUpload}/>
               </label>
               {routePhotos.length===0?(
                 <div className="border border-dashed border-stone-300 rounded-xl p-4 text-center">
-                  <p className="text-stone-500 text-[12px]">Nessuna foto</p>
-                  <p className="text-stone-400 text-[10px] mt-1">GPS automatico da EXIF</p>
+                  <p className="text-stone-500 text-xs">Nessuna foto</p>
+                  <p className="text-stone-400 text-xs mt-1">GPS automatico da EXIF</p>
                 </div>
               ):(
                 <div className="space-y-2">
@@ -4699,7 +4699,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                               })
                             }}
                             placeholder="Testo della polaroid…"
-                            className="w-full bg-transparent text-stone-900 text-[11px] font-medium placeholder:text-stone-400 focus:outline-none border-b border-stone-300 focus:border-stone-500 pb-0.5 mb-1.5"
+                            className="w-full bg-transparent text-stone-900 text-xs font-medium placeholder:text-stone-400 focus:outline-none border-b border-stone-300 focus:border-stone-500 pb-0.5 mb-1.5"
                           />
                           {/* Lucchetto e ripristino: fuori dal flusso di default, compaiono solo per
                               la foto appena toccata — vedi il commento su activePhotoRowId. Bloccare
@@ -4708,7 +4708,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                           {active && (
                             <div className="flex items-center gap-1.5 mb-1.5">
                               <button onClick={()=>togglePhotoLock(photo.id)}
-                                className={`flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-lg transition-colors ${
+                                className={`flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-lg transition-colors ${
                                   locked ? 'bg-stone-200 text-stone-600 hover:bg-stone-300' : 'bg-botanico-accent text-white hover:opacity-90'}`}>
                                 {locked ? <Lock className="w-3 h-3"/> : <LockOpen className="w-3 h-3"/>}
                                 {locked ? 'Bloccata' : 'Sbloccata: trascinala sulla mappa'}
@@ -4723,21 +4723,21 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                           )}
                           {active && pendingResetPhotoId===photo.id && (
                             <div className="mb-1.5 rounded-lg bg-terra-50 border border-terra-200 px-2 py-1.5">
-                              <p className="text-terra-800 text-[10px] leading-relaxed mb-1">Ripristinare questa foto dov’è stata scattata?</p>
+                              <p className="text-terra-800 text-xs leading-relaxed mb-1">Ripristinare questa foto dov’è stata scattata?</p>
                               <div className="flex items-center gap-1">
                                 <button onClick={()=>setPendingResetPhotoId(null)}
-                                  className="text-[10px] font-semibold text-stone-500 hover:text-stone-800 px-1 py-0.5">Annulla</button>
+                                  className="text-xs font-semibold text-stone-500 hover:text-stone-800 px-1 py-0.5">Annulla</button>
                                 <button onClick={()=>{
                                   const id=photo.id
                                   setPendingResetPhotoId(null)
                                   setVideoPhotoAtP(prev=>{ const {[id]:_drop, ...rest}=prev; return rest })
                                 }}
-                                  className="text-[10px] font-bold text-white bg-terra-600 hover:bg-terra-700 rounded-lg px-1.5 py-0.5">Ripristina</button>
+                                  className="text-xs font-bold text-white bg-terra-600 hover:bg-terra-700 rounded-lg px-1.5 py-0.5">Ripristina</button>
                               </div>
                             </div>
                           )}
                           <div className="flex items-center gap-2">
-                            <span className="text-[10px] text-stone-500 flex items-center gap-1">
+                            <span className="text-xs text-stone-500 flex items-center gap-1">
                               {locked && <Lock className="w-2.5 h-2.5 text-stone-400" aria-label="Bloccata"/>}
                               {moved
                                 ? <span className="text-terra-700">spostata al {Math.round(videoPhotoAtP[photo.id]*100)}%</span>
@@ -4746,7 +4746,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                             {pendingDeletePhotoId===photo.id ? (
                               <span className="ml-auto flex items-center gap-1">
                                 <button onClick={()=>setPendingDeletePhotoId(null)}
-                                  className="text-[10px] font-semibold text-stone-500 hover:text-stone-800 px-1 py-0.5">Annulla</button>
+                                  className="text-xs font-semibold text-stone-500 hover:text-stone-800 px-1 py-0.5">Annulla</button>
                                 <button onClick={()=>{
                                   const id=photo.id
                                   setPendingDeletePhotoId(null)
@@ -4756,7 +4756,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                                     setShareToast('Errore: eliminazione foto non riuscita'); setTimeout(()=>setShareToast(''),3000)
                                   })
                                 }}
-                                  className="text-[10px] font-bold text-white bg-red-600 hover:bg-red-500 rounded-lg px-1.5 py-0.5">Elimina</button>
+                                  className="text-xs font-bold text-white bg-red-600 hover:bg-red-500 rounded-lg px-1.5 py-0.5">Elimina</button>
                               </span>
                             ) : (
                               <button onClick={()=>setPendingDeletePhotoId(photo.id)} title="Elimina questa foto"
@@ -4772,7 +4772,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               )}
               {Object.keys(videoPhotoAtP).length > 0 && (
                 <button onClick={()=>setVideoPhotoAtP({})}
-                  className="mt-2 text-terra-700 hover:text-terra-800 text-[10px] font-semibold underline underline-offset-2">
+                  className="mt-2 text-terra-700 hover:text-terra-800 text-xs font-semibold underline underline-offset-2">
                   Rimetti {Object.keys(videoPhotoAtP).length===1?'la foto spostata dov’è stata scattata':'le foto spostate dove sono state scattate'}
                 </button>
               )}
@@ -4806,9 +4806,9 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
               { kind:'custom', id:'captions', label:'Didascalie', render:()=>(
               <div>
                 {videoCaptions.length===0?(
-                  <p className="text-stone-500 text-[11px] leading-relaxed">Nessuna didascalia: questo percorso non ha una guida da cui ricavarle.</p>
+                  <p className="text-stone-500 text-xs leading-relaxed">Nessuna didascalia: questo percorso non ha una guida da cui ricavarle.</p>
                 ):(<>
-                  <p className="text-stone-500 text-[11px] mb-2.5 leading-relaxed">
+                  <p className="text-stone-500 text-xs mb-2.5 leading-relaxed">
                     Frasi prese dalla guida. <span className="text-stone-600">Rileggile prima di pubblicare</span>: le ha scritte l&apos;AI, e finiscono in un video che poi gira.
                   </p>
                   {videoCaptions.map((c, idx) => {
@@ -4819,7 +4819,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                         <label className="flex items-start gap-2 cursor-pointer mb-1">
                           <input type="checkbox" checked={c.enabled}
                             onChange={e=>patch({enabled:e.target.checked})} className="w-4 h-4 accent-forest-500 mt-0.5"/>
-                          <span className="text-stone-500 text-[10px] font-semibold uppercase tracking-wider">
+                          <span className="text-stone-500 text-xs font-semibold uppercase tracking-wider">
                             {c.source==='il_percorso'?'Il percorso':c.source==='luoghi'?'Luoghi':c.source==='natura'?'Natura':'Guida'}
                           </span>
                         </label>
@@ -4827,13 +4827,13 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                           <div className="pl-6">
                             <textarea value={c.text} rows={2} maxLength={110}
                               onChange={e=>patch({text:e.target.value})}
-                              className="w-full bg-stone-100 rounded-xl px-2.5 py-1.5 text-stone-900 text-[11px] font-medium outline-none focus:bg-white border border-stone-200 focus:border-stone-400 resize-none"/>
+                              className="w-full bg-stone-100 rounded-xl px-2.5 py-1.5 text-stone-900 text-xs font-medium outline-none focus:bg-white border border-stone-200 focus:border-stone-400 resize-none"/>
                             <div className="flex items-center gap-2 mt-1">
-                              <span className="text-stone-500 text-[10px] w-12 shrink-0">quando</span>
+                              <span className="text-stone-500 text-xs w-12 shrink-0">quando</span>
                               <input type="range" min={5} max={95} step={1} value={Math.round(c.atP*100)}
                                 onChange={e=>patch({atP:+e.target.value/100})}
                                 className="flex-1 h-1 rounded-full accent-terra-400 cursor-pointer"/>
-                              <span className="text-stone-700 text-[10px] font-bold w-8 text-right">{Math.round(c.atP*100)}%</span>
+                              <span className="text-stone-700 text-xs font-bold w-8 text-right">{Math.round(c.atP*100)}%</span>
                             </div>
                           </div>
                         )}
@@ -4874,11 +4874,11 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             { kind:'custom', id:'preset-current', label:'Preset', render:()=>(
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2 bg-stone-100 rounded-xl px-3 py-2.5">
-                  <span className="text-stone-700 text-[12px] font-semibold">
+                  <span className="text-stone-700 text-xs font-semibold">
                     {videoPreset==='custom' ? 'Personalizzato' : VIDEO_PRESETS[videoPreset as keyof typeof VIDEO_PRESETS].label}
                   </span>
                   <button onClick={()=>{setPresetPickerBack('config');setVideoState('presets')}}
-                    className="text-terra-700 hover:text-terra-800 text-[11px] font-bold underline underline-offset-2 shrink-0">
+                    className="text-terra-700 hover:text-terra-800 text-xs font-bold underline underline-offset-2 shrink-0">
                     Cambia preset
                   </button>
                 </div>
@@ -4890,20 +4890,20 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                         if(e.key==='Escape'){ setSavingPresetOpen(false); setSavingPresetName('') }
                       }}
                       placeholder="Nome del preset…" maxLength={40}
-                      className="flex-1 min-w-0 bg-white border border-stone-300 rounded-lg px-2.5 py-1.5 text-stone-900 text-[12px] outline-none focus:border-forest-400"/>
+                      className="flex-1 min-w-0 bg-white border border-stone-300 rounded-lg px-2.5 py-1.5 text-stone-900 text-xs outline-none focus:border-forest-400"/>
                     <button onClick={()=>{ if(savingPresetName.trim()){ saveCustomPreset(savingPresetName); setSavingPresetOpen(false); setSavingPresetName('') } }}
                       disabled={!savingPresetName.trim()}
-                      className="shrink-0 px-3 py-1.5 rounded-lg bg-forest-500 hover:bg-forest-600 disabled:opacity-40 text-white text-[11px] font-bold">
+                      className="shrink-0 px-3 py-1.5 rounded-lg bg-forest-500 hover:bg-forest-600 disabled:opacity-40 text-white text-xs font-bold">
                       Salva
                     </button>
                     <button onClick={()=>{setSavingPresetOpen(false);setSavingPresetName('')}}
-                      className="shrink-0 px-2 py-1.5 rounded-lg text-stone-400 hover:text-stone-700 text-[11px] font-semibold">
+                      className="shrink-0 px-2 py-1.5 rounded-lg text-stone-400 hover:text-stone-700 text-xs font-semibold">
                       Annulla
                     </button>
                   </div>
                 ) : (
                   <button onClick={()=>{setSavingPresetOpen(true);setSavingPresetName('')}}
-                    className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-[11.5px] font-semibold transition-colors">
+                    className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-semibold transition-colors">
                     <Bookmark className="w-3.5 h-3.5"/> Salva come preset personale
                   </button>
                 )}
@@ -5056,13 +5056,13 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             </div>
 
             <div>
-              <p className="text-stone-500 text-[11px] font-semibold mb-2 tracking-wider">EFFETTI ATTIVI ({effects.length})</p>
+              <p className="text-stone-500 text-xs font-semibold mb-2 tracking-wider">EFFETTI ATTIVI ({effects.length})</p>
               {effects.length===0?(
                 <p className="text-stone-500 text-xs">Nessuno: restano percorso, foto e schermata finale.</p>
               ):(
                 <div className="flex flex-wrap gap-1.5">
                   {effects.map(e=>(
-                    <span key={e} className="text-[10px] font-semibold text-forest-700 bg-forest-50 border border-forest-300 rounded-lg px-2 py-1">{e}</span>
+                    <span key={e} className="text-xs font-semibold text-forest-700 bg-forest-50 border border-forest-300 rounded-lg px-2 py-1">{e}</span>
                   ))}
                 </div>
               )}
@@ -5071,7 +5071,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             {est.total>60&&(
               <div className="rounded-xl px-3.5 py-2.5 bg-terra-50 border border-terra-300">
                 <p className="text-terra-700 text-xs font-semibold">~{est.total}s: oltre il limite dei 60s di Instagram.</p>
-                <p className="text-stone-500 text-[11px] mt-1 leading-relaxed">Si può generare lo stesso: su YouTube non ci sono limiti, su Reels resta pubblicabile.</p>
+                <p className="text-stone-500 text-xs mt-1 leading-relaxed">Si può generare lo stesso: su YouTube non ci sono limiti, su Reels resta pubblicabile.</p>
               </div>
             )}
 
@@ -5085,12 +5085,12 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                 className="w-full py-2.5 rounded-2xl bg-stone-100 hover:bg-stone-200 text-stone-800 text-sm font-semibold flex items-center justify-center gap-2">
                 <Sparkles className="w-3.5 h-3.5"/> Anteprima veloce
               </button>
-              <p className="text-stone-500 text-[11px] text-center leading-relaxed">
+              <p className="text-stone-500 text-xs text-center leading-relaxed">
                 L&apos;anteprima genera i secondi centrali del percorso, per controllare la resa senza attendere il video intero.
               </p>
             </div>
 
-            <p className="text-stone-400 text-[10px] text-center leading-relaxed">
+            <p className="text-stone-400 text-xs text-center leading-relaxed">
               MP4 · H.264/VP9 · {videoFps} fps · rendering fotogramma per fotogramma.<br/>
               Tieni l&apos;app in primo piano fino alla fine.
             </p>
@@ -5219,7 +5219,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                     ? <p className="text-white/55 text-xs">{prepLabel||'Preparazione…'}</p>
                     : <p className="text-white/55 text-xs">Frame {renderFrame}/{renderTotal} · {Math.round(renderProgress*100)}%</p>
               }
-              <p className="text-white/30 text-[10px] mt-0.5">
+              <p className="text-white/30 text-xs mt-0.5">
                 {renderPaused
                   ? 'La generazione si è fermata quando l’app è passata in secondo piano: riprende da dove era rimasta'
                   : videoState==='finalizing'
@@ -5282,7 +5282,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
             {/* ── Copertina ────────────────────────────────────────────── */}
             {routePhotos.length>0&&(
               <div className="border-t border-white/10 pt-4 space-y-2.5">
-                <p className="text-white/45 text-[11px] font-semibold tracking-wider">COPERTINA VIDEO</p>
+                <p className="text-white/45 text-xs font-semibold tracking-wider">COPERTINA VIDEO</p>
                 <div className="flex gap-2 overflow-x-auto pb-0.5 -mx-1 px-1">
                   {routePhotos.map(photo=>(
                     <button key={photo.id} onClick={()=>setCoverPhotoId(prev=>prev===photo.id?null:photo.id)}
@@ -5297,14 +5297,14 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                     <Download className="w-3.5 h-3.5"/>Scarica copertina .jpg
                   </button>
                 ):(
-                  <p className="text-white/30 text-[11px] text-center">Tocca una foto per scaricarla nel formato del video, da usare come copertina.</p>
+                  <p className="text-white/30 text-xs text-center">Tocca una foto per scaricarla nel formato del video, da usare come copertina.</p>
                 )}
               </div>
             )}
 
             {/* ── Didascalia per i social ───────────────────────────────── */}
             <div className="border-t border-white/10 pt-4 space-y-2.5">
-              <p className="text-white/45 text-[11px] font-semibold tracking-wider">DIDASCALIA</p>
+              <p className="text-white/45 text-xs font-semibold tracking-wider">DIDASCALIA</p>
               {!captionData ? (
                 <>
                   <div className="grid grid-cols-2 gap-2">
@@ -5314,7 +5314,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                         ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/>
                         : <Sparkles className="w-4 h-4"/>}
                       <span className="text-sm">Il mio ricordo</span>
-                      <span className="text-white/40 text-[10px] font-normal">personale, in prima persona</span>
+                      <span className="text-white/40 text-xs font-normal">personale, in prima persona</span>
                     </button>
                     <button onClick={()=>generateCaption('percorso')} disabled={captionLoading}
                       className="py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-semibold flex flex-col items-center justify-center gap-1 disabled:opacity-60 transition-colors">
@@ -5322,10 +5322,10 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                         ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/>
                         : <Sparkles className="w-4 h-4"/>}
                       <span className="text-sm">Il percorso</span>
-                      <span className="text-white/40 text-[10px] font-normal">impersonale, da guida</span>
+                      <span className="text-white/40 text-xs font-normal">impersonale, da guida</span>
                     </button>
                   </div>
-                  <p className="text-white/30 text-[11px] leading-relaxed">Una bozza da cui partire, scritta dall&apos;AI sui dati del percorso. Rileggila e cambiala prima di pubblicare.</p>
+                  <p className="text-white/30 text-xs leading-relaxed">Una bozza da cui partire, scritta dall&apos;AI sui dati del percorso. Rileggila e cambiala prima di pubblicare.</p>
                 </>
               ) : (
                 <div className="space-y-2">
@@ -5352,7 +5352,7 @@ export default function RouteMap3D({ trackPoints, title, onClose, plannedDate, p
                       ↺
                     </button>
                   </div>
-                  <p className="text-white/30 text-[11px] leading-relaxed">Rileggila prima di pubblicare: l&apos;ha scritta l&apos;AI sui dati del percorso, non sa com&apos;è andata davvero.</p>
+                  <p className="text-white/30 text-xs leading-relaxed">Rileggila prima di pubblicare: l&apos;ha scritta l&apos;AI sui dati del percorso, non sa com&apos;è andata davvero.</p>
                 </div>
               )}
             </div>

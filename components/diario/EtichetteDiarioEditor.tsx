@@ -63,7 +63,7 @@ export function EtichetteDiarioEditor({ diaryId, initialLabels }: Props) {
         <span
           key={etichetta}
           className="relative inline-flex items-center gap-1 px-2.5 py-1 rounded-full"
-          style={{ fontFamily: FONT_HAND, fontSize: 13, color: TACCUINO_INK.hand }}
+          style={{ fontFamily: FONT_HAND, fontSize: 14, color: TACCUINO_INK.hand }}
         >
           <HandDrawnFrame stroke={TACCUINO_INK.mapContour} strokeWidth={1.3} rx={50} />
           {etichetta}
@@ -88,13 +88,13 @@ export function EtichetteDiarioEditor({ diaryId, initialLabels }: Props) {
           maxLength={MAX_LABEL_LENGTH}
           placeholder="nome etichetta…"
           className="px-2.5 py-1 rounded-full outline-none w-28"
-          style={{ fontFamily: FONT_HAND, fontSize: 13, color: TACCUINO_INK.typed, background: 'transparent', border: `1px solid ${TACCUINO_INK.mapContour}` }}
+          style={{ fontFamily: FONT_HAND, fontSize: 14, color: TACCUINO_INK.typed, background: 'transparent', border: `1px solid ${TACCUINO_INK.mapContour}` }}
         />
       ) : labels.length < MAX_LABELS ? (
         <button
           onClick={() => setAdding(true)}
           className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full"
-          style={{ fontFamily: FONT_HAND, fontSize: 13, color: TACCUINO_INK.handMuted }}
+          style={{ fontFamily: FONT_HAND, fontSize: 14, color: TACCUINO_INK.handMuted }}
         >
           <Plus className="w-3 h-3" /> etichetta
         </button>

@@ -246,7 +246,7 @@ export default function TabConfronto({ activities, preselectId }: Props) {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
                     <p className="text-sm font-medium text-stone-700 truncate">{e.title}</p>
-                    <span className={`shrink-0 text-[9px] uppercase tracking-wide font-semibold px-1.5 py-0.5 rounded-full ${e.type === 'completata' ? 'bg-forest-100 text-forest-700' : 'bg-sky-100 text-sky-700'}`}>
+                    <span className={`shrink-0 text-xs uppercase tracking-wide font-semibold px-1.5 py-0.5 rounded-full ${e.type === 'completata' ? 'bg-forest-100 text-forest-700' : 'bg-sky-100 text-sky-700'}`}>
                       {e.type === 'completata' ? 'Registrata' : 'Pianificata'}
                     </span>
                   </div>
@@ -349,7 +349,7 @@ export default function TabConfronto({ activities, preselectId }: Props) {
                     {selected.map((e, i) => (
                       <th key={e.combinedId} className="px-4 py-3 text-left text-xs font-medium" style={{ color: COMPARISON_COLORS[i] }}>
                         {e.title}
-                        <span className="block text-[9px] uppercase tracking-wide text-stone-400 font-normal mt-0.5">
+                        <span className="block text-xs uppercase tracking-wide text-stone-400 font-normal mt-0.5">
                           {e.type === 'completata' ? 'Registrata' : 'Pianificata'}
                         </span>
                       </th>
@@ -393,7 +393,7 @@ export default function TabConfronto({ activities, preselectId }: Props) {
                 <RadarChart data={radarData}>
                   <PolarGrid />
                   <PolarAngleAxis dataKey="metric" tick={{ fontSize: 12 }} />
-                  <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 10 }} />
+                  <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 12 }} />
                   {selected.map((e, i) => (
                     <Radar key={e.combinedId} name={e.title}
                       dataKey={`a${i}`} stroke={COMPARISON_COLORS[i]}
@@ -432,8 +432,8 @@ export default function TabConfronto({ activities, preselectId }: Props) {
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={elevMerged} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
-                        <XAxis dataKey="pct" unit="%" tick={{ fontSize: 10 }} tickLine={false} />
-                        <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} unit=" m" width={52} />
+                        <XAxis dataKey="pct" unit="%" tick={{ fontSize: 12 }} tickLine={false} />
+                        <YAxis tick={{ fontSize: 12 }} tickLine={false} axisLine={false} unit=" m" width={52} />
                         <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }} />
                         {selected.map((e, i) => (
                           elevProfiles[i].length > 0 && (

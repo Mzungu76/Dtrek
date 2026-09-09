@@ -49,7 +49,7 @@ export const SORT_CMP: Record<SortKey, (a: SortValues, b: SortValues) => number>
 
 function TextBadge({ children }: { children: ReactNode }) {
   return (
-    <span className="px-1.5 py-0.5 rounded-md bg-white/90 text-stone-800 text-[9px] font-bold shadow-sm leading-none">
+    <span className="px-1.5 py-0.5 rounded-md bg-white/90 text-stone-800 text-xs font-bold shadow-sm leading-none">
       {children}
     </span>
   )
@@ -275,7 +275,7 @@ export default function BottomGallery({
             value={searchQuery}
             onChange={e => onSearchQueryChange(e.target.value)}
             placeholder="Cerca per titolo…"
-            className="w-full pl-8 pr-8 py-1.5 rounded-full bg-black/40 backdrop-blur-md border border-white/20 text-[12px] text-white placeholder:text-white/40 outline-none focus:border-white/40"
+            className="w-full pl-8 pr-8 py-1.5 rounded-full bg-black/40 backdrop-blur-md border border-white/20 text-xs text-white placeholder:text-white/40 outline-none focus:border-white/40"
           />
           {searchQuery && (
             <button
@@ -316,7 +316,7 @@ export default function BottomGallery({
             <button
               onClick={onToggleNextOutingFilter}
               title="Solo le uscite già programmate, in ordine di data"
-              className={`shrink-0 flex items-center gap-1 pl-1.5 pr-2 py-1 rounded-full border backdrop-blur-md text-[10px] font-bold transition-colors ${
+              className={`shrink-0 flex items-center gap-1 pl-1.5 pr-2 py-1 rounded-full border backdrop-blur-md text-xs font-bold transition-colors ${
                 nextOutingFilter ? 'bg-sky-400 border-sky-300 text-white' : 'bg-black/40 text-stone-200 border-white/20'
               }`}
             >
@@ -330,7 +330,7 @@ export default function BottomGallery({
             <button
               key={s.id}
               onClick={() => onSortChange(s.id)}
-              className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold border backdrop-blur-md transition-colors ${
+              className={`shrink-0 px-2.5 py-1 rounded-full text-xs font-bold border backdrop-blur-md transition-colors ${
                 sortBy === s.id ? 'bg-white text-stone-800 border-white' : 'bg-black/40 text-stone-200 border-white/20'
               }`}
             >
@@ -356,7 +356,7 @@ export default function BottomGallery({
             style={{ scrollSnapAlign: 'start' }}
           >
             <Upload className="w-5 h-5 text-white/80" />
-            <span className="text-[10px] font-bold text-white/80 leading-tight">{importLabel ?? 'Importa'}</span>
+            <span className="text-xs font-bold text-white/80 leading-tight">{importLabel ?? 'Importa'}</span>
           </button>
         )}
         {items.map((item, i) => {
@@ -404,7 +404,7 @@ export default function BottomGallery({
                     qualitative già usate altrove nell'app (lib/trailScore.ts, lib/safetyScore.ts),
                     non un nuovo testo inventato ad hoc. */}
                 {mode === 'guida' && item.scorePreview && item.safetyPreview && (
-                  <span className="block text-[8px] font-semibold text-white/75 truncate leading-tight mb-0.5">
+                  <span className="block text-xs font-semibold text-white/75 truncate leading-tight mb-0.5">
                     {ctsLabel(item.scorePreview.value).label} · {item.safetyPreview.label}
                   </span>
                 )}
@@ -414,7 +414,7 @@ export default function BottomGallery({
                     risultato di un titolo lungo che si avvolgeva su più righe fino a riempire l'intera
                     miniatura. Il nome per intero resta comunque leggibile: vedi il pulsante "Vedi
                     tutti in elenco" qui sotto, che apre ExpandedGalleryList.tsx senza troncamenti. */}
-                <span className="block text-[10px] font-bold text-white truncate leading-tight">{item.title}</span>
+                <span className="block text-xs font-bold text-white truncate leading-tight">{item.title}</span>
               </div>
             </TornFrame>
           </button>

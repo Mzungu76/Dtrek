@@ -75,7 +75,7 @@ function useAvatar() {
 // reale. Con `label` presente il gioiello si sposta quindi a fianco del testo "Profilo" (fuori
 // dall'avatar, dimensione ridotta 10px): resta visibile ma non nasconde più nulla. Senza `label`
 // (avatar desktop, dove c'è spazio) resta come prima, incastonato sull'angolo dell'avatar.
-export function ProfileAvatar({ size = 32, iconSize = 16, label, labelClassName = '', labelTextClassName = 'text-[10px]' }: { size?: number; iconSize?: number; label?: string; labelClassName?: string; labelTextClassName?: string }) {
+export function ProfileAvatar({ size = 32, iconSize = 16, label, labelClassName = '', labelTextClassName = 'text-xs' }: { size?: number; iconSize?: number; label?: string; labelClassName?: string; labelTextClassName?: string }) {
   const path = usePathname()
   const { user, faceUrl } = useAvatar()
   const initials = (user?.user_metadata?.display_name as string | undefined ?? user?.email ?? '?')[0].toUpperCase()
@@ -192,11 +192,11 @@ export function MobileNavBar({ className = '' }: { className?: string }) {
             return (
               <Link key={href} href={href} className={linkClassName}>
                 <Icon className="w-4 h-4" strokeWidth={2} />
-                <span className="text-[9px] font-bold leading-none">{label}</span>
+                <span className="text-xs font-bold leading-none">{label}</span>
               </Link>
             )
           })}
-          <ProfileAvatar size={20} iconSize={10} label="Profilo" labelClassName="px-2.5 py-1 rounded-2xl" labelTextClassName="text-[9px]" />
+          <ProfileAvatar size={20} iconSize={10} label="Profilo" labelClassName="px-2.5 py-1 rounded-2xl" labelTextClassName="text-xs" />
         </div>
       </div>
     </nav>
@@ -229,7 +229,7 @@ function RaisedDiariButton({ href, label, icon: Icon }: (typeof NAV_LINKS)[numbe
       >
         <Icon className="w-7 h-7" strokeWidth={2} />
       </span>
-      <span className="text-[11px] font-bold leading-none text-botanico-bar-active">{label}</span>
+      <span className="text-xs font-bold leading-none text-botanico-bar-active">{label}</span>
     </Link>
   )
 }
@@ -270,7 +270,7 @@ function MobileBottomBar() {
     return (
       <Link key={href} href={href} className={className}>
         <Icon className="w-6 h-6" strokeWidth={2} />
-        <span className="text-[11px] font-bold leading-none">{label}</span>
+        <span className="text-xs font-bold leading-none">{label}</span>
       </Link>
     )
   }

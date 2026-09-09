@@ -78,7 +78,7 @@ export default async function CollectionEntryPage({ params }: { params: { token:
           {prev !== null ? (
             <a href={`${volumeBase}/e/${prev}`}
               className="flex-1 min-w-0 bg-white rounded-2xl border border-stone-200 shadow-sm px-4 py-3 hover:border-stone-300 transition group">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400 flex items-center gap-1">
+              <p className="text-xs font-semibold uppercase tracking-wider text-stone-400 flex items-center gap-1">
                 <ChevronLeft className="w-3 h-3" /> Precedente
               </p>
               <p className="text-sm font-display font-bold text-forest-900 truncate mt-0.5 group-hover:text-forest-700 transition">
@@ -89,7 +89,7 @@ export default async function CollectionEntryPage({ params }: { params: { token:
           {next !== null ? (
             <a href={`${volumeBase}/e/${next}`}
               className="flex-1 min-w-0 bg-white rounded-2xl border border-stone-200 shadow-sm px-4 py-3 text-right hover:border-stone-300 transition group">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400 flex items-center justify-end gap-1">
+              <p className="text-xs font-semibold uppercase tracking-wider text-stone-400 flex items-center justify-end gap-1">
                 Successiva <ChevronRight className="w-3 h-3" />
               </p>
               <p className="text-sm font-display font-bold text-forest-900 truncate mt-0.5 group-hover:text-forest-700 transition">

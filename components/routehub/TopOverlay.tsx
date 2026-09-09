@@ -57,7 +57,7 @@ export default function TopOverlay({ itemKey, title, statPills, weatherIcon, onO
           <div className="pointer-events-auto mt-3 flex items-center gap-1.5 overflow-x-auto">
             {scoreBadges}
             {statPills.map(({ icon: Icon, label, href }) => {
-              const className = 'pointer-events-auto shrink-0 flex items-center gap-1.5 bg-white text-stone-700 text-[11px] font-semibold whitespace-nowrap px-2.5 py-1.5 rounded-full shadow-sm'
+              const className = 'pointer-events-auto shrink-0 flex items-center gap-1.5 bg-white text-stone-700 text-xs font-semibold whitespace-nowrap px-2.5 py-1.5 rounded-full shadow-sm'
               return href ? (
                 <a
                   key={label}
@@ -110,7 +110,7 @@ export default function TopOverlay({ itemKey, title, statPills, weatherIcon, onO
           </div>
           {variant === 'magazine' && subtitle && (
             <p
-              className="font-body text-[13px] sm:text-sm text-white/85 leading-snug mt-1.5 max-w-md"
+              className="font-body text-sm sm:text-sm text-white/85 leading-snug mt-1.5 max-w-md"
               style={{ textShadow: '0 1px 6px rgba(0,0,0,0.55)' }}
             >
               {subtitle}

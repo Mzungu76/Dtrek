@@ -135,9 +135,9 @@ export default function TabForma({ activities }: Props) {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={weeklyVolumeData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
-                <XAxis dataKey="week" tick={{ fontSize: 10 }} tickLine={false} interval={1} />
-                <YAxis yAxisId="km"   orientation="left"  tick={{ fontSize: 10 }} tickLine={false} axisLine={false} unit=" km" width={44} />
-                <YAxis yAxisId="gain" orientation="right" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} unit=" m"  width={48} />
+                <XAxis dataKey="week" tick={{ fontSize: 12 }} tickLine={false} interval={1} />
+                <YAxis yAxisId="km"   orientation="left"  tick={{ fontSize: 12 }} tickLine={false} axisLine={false} unit=" km" width={44} />
+                <YAxis yAxisId="gain" orientation="right" tick={{ fontSize: 12 }} tickLine={false} axisLine={false} unit=" m"  width={48} />
                 <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
                   formatter={(v: any, name: string) => [name === 'km' ? `${v} km` : `${v} m`, name === 'km' ? 'Distanza' : 'Dislivello D+']} />
                 <Legend formatter={(v: string) => v === 'km' ? 'Distanza (km)' : 'Dislivello D+ (m)'} wrapperStyle={{ fontSize: 12 }} />
@@ -191,9 +191,9 @@ export default function TabForma({ activities }: Props) {
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={trainingLoadData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
-                <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false}
+                <XAxis dataKey="date" tick={{ fontSize: 12 }} tickLine={false}
                   tickFormatter={d => format(new Date(d), 'dd/MM')} interval={13} />
-                <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={36} />
+                <YAxis tick={{ fontSize: 12 }} tickLine={false} axisLine={false} width={36} />
                 <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
                   labelFormatter={d => format(new Date(d as string), 'dd MMM yyyy', { locale: it })}
                   formatter={(v: any, name: string) => {
@@ -221,9 +221,9 @@ export default function TabForma({ activities }: Props) {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={trainingLoadData.filter(d => d.stress > 0)} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
-                <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false}
+                <XAxis dataKey="date" tick={{ fontSize: 12 }} tickLine={false}
                   tickFormatter={d => format(new Date(d), 'dd/MM')} />
-                <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={36} />
+                <YAxis tick={{ fontSize: 12 }} tickLine={false} axisLine={false} width={36} />
                 <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
                   labelFormatter={d => format(new Date(d as string), 'dd MMM', { locale: it })}
                   formatter={(v: any) => [v, 'Stress (TSS)']} />

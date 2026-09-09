@@ -102,13 +102,13 @@ function CercaLuoghiPageInner() {
       <div className="relative h-[200px] sm:h-[240px] overflow-hidden" style={{ background: 'linear-gradient(to bottom right, #4A5A3F, #2E3A26)' }}>
         <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, rgba(46,58,38,.15), rgba(46,58,38,.85))' }} />
         <div className="absolute left-6 right-6 bottom-6 sm:left-10 sm:right-10 sm:bottom-8">
-          <Link href="/atlante" className="inline-flex items-center gap-1.5 text-[#E9DAC3] text-[13px] font-semibold mb-1.5 hover:text-white transition-colors">
+          <Link href="/atlante" className="inline-flex items-center gap-1.5 text-[#E9DAC3] text-sm font-semibold mb-1.5 hover:text-white transition-colors">
             <ArrowLeft className="w-3.5 h-3.5" /> Cerca una Meta
           </Link>
-          <h1 className="font-display text-[24px] sm:text-3xl font-bold text-white leading-tight">
+          <h1 className="font-display text-2xl sm:text-3xl font-bold text-white leading-tight">
             {metaType === 'sito' ? 'Cerca un Sito' : 'Cerca un Borgo o una Città'}
           </h1>
-          <p className="text-white/75 text-[13px] mt-1">Un borgo, una città o un sito da visitare — senza traccia GPS.</p>
+          <p className="text-white/75 text-sm mt-1">Un borgo, una città o un sito da visitare — senza traccia GPS.</p>
         </div>
       </div>
 
@@ -123,7 +123,7 @@ function CercaLuoghiPageInner() {
             <button
               key={t.id}
               onClick={() => setMetaType(t.id)}
-              className="relative flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[14px] font-semibold transition-colors"
+              className="relative flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-colors"
               style={metaType === t.id
                 ? { background: TACCUINO_ACCENT[600], color: 'white' }
                 : { background: TACCUINO_PAPER.card, color: TACCUINO_INK.handMuted, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}
@@ -140,7 +140,7 @@ function CercaLuoghiPageInner() {
             onChange={e => setQueryText(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') runSearch() }}
             placeholder={metaType === 'sito' ? 'cerca un museo, un castello, un sito…' : 'cerca un borgo o una città…'}
-            className="w-full pl-8 pr-8 py-2 rounded-[3px] text-[14px] outline-none placeholder:text-[#8a9bab]"
+            className="w-full pl-8 pr-8 py-2 rounded-[3px] text-sm outline-none placeholder:text-[#8a9bab]"
             style={{ background: TACCUINO_PAPER.card, color: TACCUINO_INK.typed, fontFamily: FONT_HAND }}
           />
           {queryText && (
@@ -155,7 +155,7 @@ function CercaLuoghiPageInner() {
           <select
             value={region}
             onChange={e => setRegion(e.target.value)}
-            className="shrink-0 px-3 py-1.5 rounded-full text-[13px] outline-none"
+            className="shrink-0 px-3 py-1.5 rounded-full text-sm outline-none"
             style={{ fontFamily: FONT_HAND, background: TACCUINO_PAPER.card, color: TACCUINO_INK.typed, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}
           >
             <option value="">Tutte le regioni</option>
@@ -165,7 +165,7 @@ function CercaLuoghiPageInner() {
             <button
               key={c.id}
               onClick={() => setCategory(prev => prev.includes(c.id) ? prev.filter(x => x !== c.id) : [...prev, c.id])}
-              className="relative shrink-0 px-3 py-1.5 rounded-full text-[13px] transition-colors"
+              className="relative shrink-0 px-3 py-1.5 rounded-full text-sm transition-colors"
               style={category.includes(c.id)
                 ? { fontFamily: FONT_HAND, fontWeight: 700, color: TACCUINO_INK.typed }
                 : { fontFamily: FONT_HAND, background: 'transparent', color: TACCUINO_INK.handMuted, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}
@@ -179,7 +179,7 @@ function CercaLuoghiPageInner() {
         <button
           onClick={runSearch}
           disabled={loading}
-          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-[14px] font-semibold mb-6 transition-colors disabled:opacity-60"
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold mb-6 transition-colors disabled:opacity-60"
           style={{ background: TACCUINO_INK.typed, color: 'white' }}
         >
           {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Cerco…</> : <><Search className="w-4 h-4" /> Cerca</>}
@@ -227,12 +227,12 @@ function CercaLuoghiPageInner() {
                       </p>
                     )}
                     {stats.length > 0 && (
-                      <div className="flex items-center flex-wrap gap-x-2.5 gap-y-1 mt-1.5" style={{ fontFamily: FONT.lora, fontSize: 11, color: TACCUINO_INK.handMuted }}>
+                      <div className="flex items-center flex-wrap gap-x-2.5 gap-y-1 mt-1.5" style={{ fontFamily: FONT.lora, fontSize: 12, color: TACCUINO_INK.handMuted }}>
                         {stats.map(s => <span key={s.key}>{s.label}: {s.value}</span>)}
                       </div>
                     )}
                     {item.description && (
-                      <p className="line-clamp-2 mt-1" style={{ fontFamily: FONT.lora, fontSize: 12.5, color: TACCUINO_INK.handMuted }}>{item.description}</p>
+                      <p className="line-clamp-2 mt-1" style={{ fontFamily: FONT.lora, fontSize: 12, color: TACCUINO_INK.handMuted }}>{item.description}</p>
                     )}
                   </div>
                   {isCreating && <Loader2 className="w-4 h-4 animate-spin shrink-0 mt-1" style={{ color: TACCUINO_ACCENT[600] }} />}

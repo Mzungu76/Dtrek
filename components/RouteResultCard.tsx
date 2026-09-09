@@ -100,7 +100,7 @@ export function ScorePendingBadge({ size = 52 }: { size?: number }) {
       style={{ width: size, height: size }}
     >
       <Clock className="w-3.5 h-3.5 text-white/60" />
-      <span className="text-white/60 text-[8px] leading-tight font-medium">dopo l&apos;import</span>
+      <span className="text-white/60 text-xs leading-tight font-medium">dopo l&apos;import</span>
     </div>
   )
 }
@@ -118,8 +118,8 @@ export function ProvisionalScoreBadge({ score, size = 52 }: { score: Provisional
       <div className="rounded-2xl bg-stone-900 p-1.5">
         <TrailScoreGaugeBadge total={score.ts} safety={score.safety} size={size} showLabel={false} />
       </div>
-      <span className="text-[8px] font-semibold leading-none text-center" style={{ color: score.safety.color }}>{score.safety.label}</span>
-      <span className="text-stone-400 text-[7px] leading-none font-medium uppercase tracking-wide">Provvisorio</span>
+      <span className="text-xs font-semibold leading-none text-center" style={{ color: score.safety.color }}>{score.safety.label}</span>
+      <span className="text-stone-400 text-xs leading-none font-medium uppercase tracking-wide">Provvisorio</span>
     </div>
   )
 }
@@ -134,7 +134,7 @@ export function ProvisionalScoreBadge({ score, size = 52 }: { score: Provisional
 export function Map3DChip({ onOpen3D }: { onOpen3D: () => void }) {
   return (
     <button onClick={onOpen3D} title="Vista 3D"
-      className="absolute top-3 right-3 z-10 flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[11px] font-semibold bg-black/50 backdrop-blur-md border border-white/15 text-white/90 hover:bg-black/65 transition-colors">
+      className="absolute top-3 right-3 z-10 flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-semibold bg-black/50 backdrop-blur-md border border-white/15 text-white/90 hover:bg-black/65 transition-colors">
       <Box className="w-3.5 h-3.5" /> 3D
     </button>
   )
@@ -151,7 +151,7 @@ function TipoStat({ label, active, onToggle }: { label: string; active?: boolean
     return (
       <div>
         <span className="font-semibold text-stone-800">{label}</span>
-        <p className="text-[10px] uppercase tracking-wide text-stone-400">Tipo</p>
+        <p className="text-xs uppercase tracking-wide text-stone-400">Tipo</p>
       </div>
     )
   }
@@ -164,7 +164,7 @@ function TipoStat({ label, active, onToggle }: { label: string; active?: boolean
       <span className={`font-semibold flex items-center gap-1 ${active ? 'text-forest-600' : 'text-stone-800'}`}>
         <Repeat className="w-3 h-3" />{label}
       </span>
-      <p className="text-[10px] uppercase tracking-wide text-stone-400">Tipo</p>
+      <p className="text-xs uppercase tracking-wide text-stone-400">Tipo</p>
     </button>
   )
 }
@@ -213,14 +213,14 @@ export function FoundRouteCard({ data, onChoose, feedback, selectable, onOpen3D 
       </div>
       <div className="p-4 space-y-2.5">
         {data.isRevisit ? (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide bg-forest-50 text-forest-700">
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold uppercase tracking-wide bg-forest-50 text-forest-700">
             <Heart className="w-3 h-3" fill="currentColor" /> Uno dei tuoi preferiti
           </span>
         ) : (
           // reasonTag (lib/routeBuilder/generateRecommendations.ts) esiste solo per le card di
           // "Percorsi per te" — un risultato di ricerca normale (wizard, AI, ricerche salvate)
           // non ha un profilo da cui derivarlo, quindi ricade sull'etichetta generica di sempre.
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide bg-terra-50 text-terra-700">
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold uppercase tracking-wide bg-terra-50 text-terra-700">
             <Sparkles className="w-3 h-3" /> {data.reasonTag ?? 'Percorso trovato'}
           </span>
         )}
@@ -234,7 +234,7 @@ export function FoundRouteCard({ data, onChoose, feedback, selectable, onOpen3D 
           <div className="flex gap-4 text-sm">
             <div>
               <span className="font-semibold text-stone-800">{displayKm.toFixed(1)} km</span>
-              <p className="text-[10px] uppercase tracking-wide text-stone-400">Distanza</p>
+              <p className="text-xs uppercase tracking-wide text-stone-400">Distanza</p>
             </div>
             {/* Niente Dislivello qui: a differenza della distanza (dalla sola geometria OSM, immediata),
                 il dislivello richiede un profilo altimetrico reale (DTM) che a questo stadio della
@@ -246,7 +246,7 @@ export function FoundRouteCard({ data, onChoose, feedback, selectable, onOpen3D 
             {data.difficulty && (
               <div>
                 <span className="font-semibold text-stone-800 capitalize">{data.difficulty}</span>
-                <p className="text-[10px] uppercase tracking-wide text-stone-400">Difficoltà</p>
+                <p className="text-xs uppercase tracking-wide text-stone-400">Difficoltà</p>
               </div>
             )}
           </div>
@@ -318,7 +318,7 @@ export function BuiltRouteCard({ data, onChoose, feedback, selectable, onOpen3D 
         </TornBottomEdge>
       </div>
       <div className="p-4 space-y-2.5">
-        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide bg-forest-50 text-forest-700">
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold uppercase tracking-wide bg-forest-50 text-forest-700">
           <Route className="w-3 h-3" /> Su misura per te
         </span>
 
@@ -326,13 +326,13 @@ export function BuiltRouteCard({ data, onChoose, feedback, selectable, onOpen3D 
           <div className="flex gap-4 text-sm">
             <div>
               <span className="font-semibold text-stone-800">{displayKm.toFixed(1)} km</span>
-              <p className="text-[10px] uppercase tracking-wide text-stone-400">Distanza</p>
+              <p className="text-xs uppercase tracking-wide text-stone-400">Distanza</p>
             </div>
             <div>
               <span className="font-semibold text-stone-800 flex items-center gap-0.5">
                 <TrendingUp className="w-3 h-3" />{data.hasElevation ? '' : '~'}{Math.round(displayElevGain)} m
               </span>
-              <p className="text-[10px] uppercase tracking-wide text-stone-400">Dislivello{data.hasElevation ? '' : ' (stima)'}</p>
+              <p className="text-xs uppercase tracking-wide text-stone-400">Dislivello{data.hasElevation ? '' : ' (stima)'}</p>
             </div>
             <TipoStat
               label={showAsRoundTrip ? 'Andata e ritorno' : routeTypeLabel(data.type)}

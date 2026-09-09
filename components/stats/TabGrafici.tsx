@@ -153,8 +153,8 @@ export default function TabGrafici({ activities }: Props) {
                 <BarChart data={annualData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
                   <XAxis dataKey="year" tick={{ fontSize: 12 }} tickLine={false} />
-                  <YAxis yAxisId="km"   orientation="left"  tick={{ fontSize: 11 }} tickLine={false} axisLine={false} unit=" km" width={52} />
-                  <YAxis yAxisId="gain" orientation="right" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} unit=" m"  width={56} />
+                  <YAxis yAxisId="km"   orientation="left"  tick={{ fontSize: 12 }} tickLine={false} axisLine={false} unit=" km" width={52} />
+                  <YAxis yAxisId="gain" orientation="right" tick={{ fontSize: 12 }} tickLine={false} axisLine={false} unit=" m"  width={56} />
                   <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
                     formatter={(v: any, name: string) => [name === 'km' ? `${v} km` : `${v} m`, name === 'km' ? 'Distanza' : 'Dislivello D+']} />
                   <Legend formatter={(v: string) => v === 'km' ? 'Distanza (km)' : 'Dislivello D+ (m)'} wrapperStyle={{ fontSize: 12 }} />
@@ -175,9 +175,9 @@ export default function TabGrafici({ activities }: Props) {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={monthlyData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
-                <XAxis dataKey="month" tick={{ fontSize: 11 }} tickLine={false} />
-                <YAxis yAxisId="km"   orientation="left"  tick={{ fontSize: 11 }} tickLine={false} axisLine={false} unit=" km" width={48} />
-                <YAxis yAxisId="gain" orientation="right" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} unit=" m"  width={52} />
+                <XAxis dataKey="month" tick={{ fontSize: 12 }} tickLine={false} />
+                <YAxis yAxisId="km"   orientation="left"  tick={{ fontSize: 12 }} tickLine={false} axisLine={false} unit=" km" width={48} />
+                <YAxis yAxisId="gain" orientation="right" tick={{ fontSize: 12 }} tickLine={false} axisLine={false} unit=" m"  width={52} />
                 <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
                   formatter={(v: any, name: string) => [name === 'km' ? `${v} km` : `${v} m`, name === 'km' ? 'Distanza' : 'Dislivello']} />
                 <Legend formatter={(v: string) => v === 'km' ? 'Distanza (km)' : 'Dislivello D+ (m)'} wrapperStyle={{ fontSize: 12 }} />
@@ -207,8 +207,8 @@ export default function TabGrafici({ activities }: Props) {
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
-                  <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} hide />
-                  <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={32} />
+                  <XAxis dataKey="date" tick={{ fontSize: 12 }} tickLine={false} hide />
+                  <YAxis domain={[0, 100]} tick={{ fontSize: 12 }} tickLine={false} axisLine={false} width={32} />
                   <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
                     labelFormatter={() => ''}
                     formatter={(v: any, name: string) => {
@@ -227,7 +227,7 @@ export default function TabGrafici({ activities }: Props) {
                     <Line data={scoreEvolution.rating} type="monotone" dataKey="value" name="rating"
                       stroke="#2563eb" strokeWidth={2} dot={false} strokeDasharray="2 3" />
                   )}
-                  <Legend wrapperStyle={{ fontSize: 11 }} formatter={(v: string) => ({ trail: 'Trail Score', sodd: 'Soddisfazione', rating: 'Rating' }[v] ?? v)} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} formatter={(v: string) => ({ trail: 'Trail Score', sodd: 'Soddisfazione', rating: 'Rating' }[v] ?? v)} />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
@@ -267,12 +267,12 @@ export default function TabGrafici({ activities }: Props) {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={seasonalBarData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" vertical={false} />
-                    <XAxis dataKey="name" tick={{ fontSize: 11 }} tickLine={false} />
-                    <YAxis yAxisId="km"   orientation="left"  tick={{ fontSize: 10 }} tickLine={false} axisLine={false} unit=" km" width={44} />
-                    <YAxis yAxisId="gain" orientation="right" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} unit=" m"  width={48} />
+                    <XAxis dataKey="name" tick={{ fontSize: 12 }} tickLine={false} />
+                    <YAxis yAxisId="km"   orientation="left"  tick={{ fontSize: 12 }} tickLine={false} axisLine={false} unit=" km" width={44} />
+                    <YAxis yAxisId="gain" orientation="right" tick={{ fontSize: 12 }} tickLine={false} axisLine={false} unit=" m"  width={48} />
                     <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
                       formatter={(v: any, name: string) => [name === 'km' ? `${v} km` : `${v} m`, name === 'km' ? 'Km medi' : 'D+ medio']} />
-                    <Legend formatter={(v: string) => v === 'km' ? 'Km medi/uscita' : 'D+ medio/uscita'} wrapperStyle={{ fontSize: 11 }} />
+                    <Legend formatter={(v: string) => v === 'km' ? 'Km medi/uscita' : 'D+ medio/uscita'} wrapperStyle={{ fontSize: 12 }} />
                     <Bar yAxisId="km"   dataKey="km"   fill="#378d44" radius={[4,4,0,0]} />
                     <Bar yAxisId="gain" dataKey="gain" fill="#c05a17" radius={[4,4,0,0]} opacity={0.8} />
                   </BarChart>
@@ -293,7 +293,7 @@ export default function TabGrafici({ activities }: Props) {
               <BarChart data={weekdayData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" vertical={false} />
                 <XAxis dataKey="day" tick={{ fontSize: 12, fontWeight: 600 }} tickLine={false} />
-                <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={28} allowDecimals={false} />
+                <YAxis tick={{ fontSize: 12 }} tickLine={false} axisLine={false} width={28} allowDecimals={false} />
                 <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
                   formatter={(v: any) => [v, 'Escursioni']} />
                 <Bar dataKey="count" fill="#378d44" radius={[6,6,0,0]} />
@@ -312,8 +312,8 @@ export default function TabGrafici({ activities }: Props) {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={distHistogram} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" vertical={false} />
-                <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} />
-                <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={28} allowDecimals={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 12 }} tickLine={false} />
+                <YAxis tick={{ fontSize: 12 }} tickLine={false} axisLine={false} width={28} allowDecimals={false} />
                 <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
                   formatter={(v: any) => [v, 'Escursioni']} />
                 <Bar dataKey="count" fill="#c05a17" radius={[6,6,0,0]} opacity={0.85} />
@@ -336,8 +336,8 @@ export default function TabGrafici({ activities }: Props) {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={altBands} layout="vertical" margin={{ top: 4, right: 40, bottom: 0, left: 56 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" horizontal={false} />
-                  <XAxis type="number" tick={{ fontSize: 11 }} tickLine={false} allowDecimals={false} />
-                  <YAxis type="category" dataKey="label" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={64} />
+                  <XAxis type="number" tick={{ fontSize: 12 }} tickLine={false} allowDecimals={false} />
+                  <YAxis type="category" dataKey="label" tick={{ fontSize: 12 }} tickLine={false} axisLine={false} width={64} />
                   <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
                     formatter={(v: any) => [v, 'Escursioni']} />
                   <Bar dataKey="count" fill="#0284c7" radius={[0,4,4,0]} />
@@ -359,8 +359,8 @@ export default function TabGrafici({ activities }: Props) {
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={fcTrend.filter(d => d.fc > 0)} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
-                <XAxis dataKey="data" tick={{ fontSize: 11 }} tickLine={false} />
-                <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} unit=" bpm" width={60} />
+                <XAxis dataKey="data" tick={{ fontSize: 12 }} tickLine={false} />
+                <YAxis tick={{ fontSize: 12 }} tickLine={false} axisLine={false} unit=" bpm" width={60} />
                 <Tooltip formatter={(v: number) => [`${v} bpm`, 'FC media']} contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }} />
                 <Line type="monotone" dataKey="fc" stroke="#C0392B" strokeWidth={2} dot={{ r: 3, fill: '#C0392B' }} />
               </LineChart>
@@ -378,8 +378,8 @@ export default function TabGrafici({ activities }: Props) {
             <ResponsiveContainer width="100%" height="100%">
               <ScatterChart margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
-                <XAxis type="number" dataKey="km" name="Distanza" unit=" km" tick={{ fontSize: 11 }} tickLine={false} />
-                <YAxis type="number" dataKey="gain" name="Dislivello" unit=" m" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={56} />
+                <XAxis type="number" dataKey="km" name="Distanza" unit=" km" tick={{ fontSize: 12 }} tickLine={false} />
+                <YAxis type="number" dataKey="gain" name="Dislivello" unit=" m" tick={{ fontSize: 12 }} tickLine={false} axisLine={false} width={56} />
                 <ZAxis range={[60, 60]} />
                 <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }}
                   content={({ payload }) => {

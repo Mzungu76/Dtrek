@@ -16,14 +16,14 @@ export function PrintPhotoGrid({ photos }: { photos: RoutePhoto[] }) {
                 position: 'absolute', top: 6, left: 6,
                 width: 18, height: 18, background: '#c05a17', color: 'white',
                 borderRadius: '50%', display: 'flex', alignItems: 'center',
-                justifyContent: 'center', fontSize: 8, fontWeight: 'bold',
+                justifyContent: 'center', fontSize: 12, fontWeight: 'bold',
                 border: '2px solid white',
               }}>
                 {i + 1}
               </span>
             </div>
             {ph.caption && (
-              <p style={{ fontSize: 9, color: '#a9a18e', fontStyle: 'italic',
+              <p style={{ fontSize: 12, color: '#a9a18e', fontStyle: 'italic',
                 marginTop: 4, textAlign: 'center', lineHeight: 1.4 }}>
                 {i + 1}. {ph.caption}
               </p>

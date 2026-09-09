@@ -21,7 +21,7 @@ export function InfoToggleButton({ section, open, onToggle, onDark }: ToggleProp
   return (
     <button
       onClick={e => { e.stopPropagation(); onToggle() }}
-      className={`w-4 h-4 rounded-full text-[10px] font-bold transition-colors inline-flex items-center justify-center shrink-0 ${
+      className={`w-4 h-4 rounded-full text-xs font-bold transition-colors inline-flex items-center justify-center shrink-0 ${
         onDark ? 'bg-white/85 text-stone-700 hover:bg-white' : 'bg-stone-200 text-stone-600 hover:bg-forest-100 hover:text-forest-700'
       }`}
       title={open ? 'Nascondi la spiegazione' : 'Scopri di più'}

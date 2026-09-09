@@ -137,11 +137,11 @@ export default function LibreriaPage() {
         ) : (
           <>
             <div className="flex items-center justify-between gap-3 mb-1">
-              <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', fontSize: 10.5, color: TACCUINO_INK.hand, ...TACCUINO_RULED_TEXT_STYLE }}>
+              <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', fontSize: 12, color: TACCUINO_INK.hand, ...TACCUINO_RULED_TEXT_STYLE }}>
                 {shelves.find(s => s.id === currentDiary.shelfId)?.title ?? 'Libreria'}
               </p>
               {shelfDiaries.length > 1 && (
-                <p style={{ fontFamily: FONT.mono, fontSize: 10.5, color: TACCUINO_INK.handMuted }}>
+                <p style={{ fontFamily: FONT.mono, fontSize: 12, color: TACCUINO_INK.handMuted }}>
                   {indexInShelf + 1} di {shelfDiaries.length}
                 </p>
               )}
@@ -178,16 +178,16 @@ export default function LibreriaPage() {
 
             <div className="grid grid-cols-3 gap-2 mt-2 mb-4">
               <div className="rounded-xl px-3 py-2.5 text-center" style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}>
-                <p style={{ fontFamily: FONT.mono, fontWeight: 700, fontSize: 15, color: TACCUINO_INK.typed }}>{currentDiary.reportageCount}</p>
-                <p style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.1em', color: TACCUINO_INK.handMuted }}>reportage</p>
+                <p style={{ fontFamily: FONT.mono, fontWeight: 700, fontSize: 16, color: TACCUINO_INK.typed }}>{currentDiary.reportageCount}</p>
+                <p style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.1em', color: TACCUINO_INK.handMuted }}>reportage</p>
               </div>
               <div className="rounded-xl px-3 py-2.5 text-center" style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}>
-                <p style={{ fontFamily: FONT.mono, fontWeight: 700, fontSize: 15, color: TACCUINO_INK.typed }}>{formatKm(currentDiary.distanceMeters)}</p>
-                <p style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.1em', color: TACCUINO_INK.handMuted }}>km</p>
+                <p style={{ fontFamily: FONT.mono, fontWeight: 700, fontSize: 16, color: TACCUINO_INK.typed }}>{formatKm(currentDiary.distanceMeters)}</p>
+                <p style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.1em', color: TACCUINO_INK.handMuted }}>km</p>
               </div>
               <div className="rounded-xl px-3 py-2.5 text-center" style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}>
-                <p style={{ fontFamily: FONT.mono, fontWeight: 700, fontSize: 15, color: TACCUINO_INK.typed }}>+{Math.round(currentDiary.elevationGain)}</p>
-                <p style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.1em', color: TACCUINO_INK.handMuted }}>D+ m</p>
+                <p style={{ fontFamily: FONT.mono, fontWeight: 700, fontSize: 16, color: TACCUINO_INK.typed }}>+{Math.round(currentDiary.elevationGain)}</p>
+                <p style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.1em', color: TACCUINO_INK.handMuted }}>D+ m</p>
               </div>
             </div>
 
@@ -195,7 +195,7 @@ export default function LibreriaPage() {
 
             <Link
               href={`/diari/${encodeURIComponent(currentDiary.id)}`}
-              className="flex items-center justify-center gap-2 mt-4 mb-2 h-12 rounded-xl font-semibold text-[14px]"
+              className="flex items-center justify-center gap-2 mt-4 mb-2 h-12 rounded-xl font-semibold text-sm"
               style={{ background: TACCUINO_INK.typed, color: TACCUINO_PAPER.light }}
             >
               <BookMarked className="w-4 h-4" /> Apri l&rsquo;indice <ArrowRight className="w-4 h-4" />

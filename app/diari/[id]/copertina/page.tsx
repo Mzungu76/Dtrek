@@ -128,7 +128,7 @@ export default function DiarioCopertinaPage() {
 
             <div className="flex-1 min-w-0 w-full space-y-4">
               <div>
-                <label className="block text-[11px] font-bold uppercase tracking-widest text-stone-400 mb-1">Titolo</label>
+                <label className="block text-xs font-bold uppercase tracking-widest text-stone-400 mb-1">Titolo</label>
                 <input
                   value={config.title}
                   onChange={e => setConfig(c => ({ ...c, title: e.target.value }))}
@@ -137,7 +137,7 @@ export default function DiarioCopertinaPage() {
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-bold uppercase tracking-widest text-stone-400 mb-1">Sottotitolo</label>
+                <label className="block text-xs font-bold uppercase tracking-widest text-stone-400 mb-1">Sottotitolo</label>
                 <input
                   value={config.subtitle}
                   onChange={e => setConfig(c => ({ ...c, subtitle: e.target.value }))}
@@ -146,7 +146,7 @@ export default function DiarioCopertinaPage() {
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-bold uppercase tracking-widest text-stone-400 mb-1">Autore</label>
+                <label className="block text-xs font-bold uppercase tracking-widest text-stone-400 mb-1">Autore</label>
                 <input
                   value={config.author}
                   onChange={e => setConfig(c => ({ ...c, author: e.target.value }))}
@@ -154,7 +154,7 @@ export default function DiarioCopertinaPage() {
                   placeholder="Nome Cognome"
                 />
               </div>
-              <p className="text-[11px] text-stone-400 pt-2">
+              <p className="text-xs text-stone-400 pt-2">
                 Statistiche, escursioni escluse ed esportazione PDF restano su{' '}
                 <Link href={`/diari/${encodeURIComponent(diaryId)}/pubblica`} className="underline hover:text-stone-600">
                   Pubblica il Diario

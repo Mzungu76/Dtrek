@@ -29,7 +29,7 @@ export function NamedPoiIcon({ poi, highlighted, dimmed, onTap }: { poi: PoiItem
       >
         <Icon width={17} height={17} color={meta.color} strokeWidth={2.25} />
       </span>
-      <span className="text-[10px] leading-tight text-center text-stone-700 font-semibold line-clamp-2">
+      <span className="text-xs leading-tight text-center text-stone-700 font-semibold line-clamp-2">
         {poi.name}
       </span>
     </button>
@@ -54,11 +54,11 @@ export function GroupPoiBadge({
         >
           <Icon width={17} height={17} color={meta.color} strokeWidth={2.25} />
         </span>
-        <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-terra-700 text-white text-[10px] font-bold flex items-center justify-center border-2 border-white shadow-sm">
+        <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-terra-700 text-white text-xs font-bold flex items-center justify-center border-2 border-white shadow-sm">
           {pois.length}
         </span>
       </span>
-      <span className="text-[10px] leading-tight text-center text-stone-700 font-semibold line-clamp-2">
+      <span className="text-xs leading-tight text-center text-stone-700 font-semibold line-clamp-2">
         {meta.label}
       </span>
     </button>

@@ -84,7 +84,7 @@ interface Props {
 
 const eyebrowStyle = {
   fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase' as const,
-  letterSpacing: '0.08em', fontSize: 10, color: TACCUINO_INK.handMuted,
+  letterSpacing: '0.08em', fontSize: 12, color: TACCUINO_INK.handMuted,
 }
 
 /** Anteprima statica (non navigabile) del tracciato — RouteThumb disegna la sagoma reale della
@@ -117,7 +117,7 @@ function MapPreview({
         <RouteThumb polyline={polyline} color={TACCUINO_PAPER.light} strokeWidth={2.5} />
       </div>
       <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,.22), transparent 45%, rgba(0,0,0,.35))' }} />
-      <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-semibold text-white" style={{ background: 'rgba(0,0,0,.5)' }}>
+      <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-semibold text-white" style={{ background: 'rgba(0,0,0,.5)' }}>
         3D · Satellite
       </div>
       <button
@@ -130,10 +130,10 @@ function MapPreview({
         <Maximize2 className="w-3.5 h-3.5" style={{ color: TACCUINO_INK.typed }} />
       </button>
       <div className="absolute bottom-2.5 left-2.5 right-2.5 flex gap-1.5 flex-wrap">
-        <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold" style={{ background: 'rgba(255,255,255,.92)', color: TACCUINO_INK.typed }}>
+        <span className="px-2.5 py-1 rounded-full text-xs font-semibold" style={{ background: 'rgba(255,255,255,.92)', color: TACCUINO_INK.typed }}>
           {(distanceMeters / 1000).toFixed(1)} km
         </span>
-        <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold" style={{ background: 'rgba(255,255,255,.92)', color: TACCUINO_INK.typed }}>
+        <span className="px-2.5 py-1 rounded-full text-xs font-semibold" style={{ background: 'rgba(255,255,255,.92)', color: TACCUINO_INK.typed }}>
           {Math.round(elevationGain)} m D+
         </span>
       </div>
@@ -226,7 +226,7 @@ export default function GuideBookPage({ basePath, groupPath, diarioHref, diarioT
           {s.title}
         </h2>
         {s.body?.trim() && (
-          <div style={{ fontFamily: FONT.lora, fontSize: 14.5, color: TACCUINO_INK.typed, marginBottom: 16, ...TACCUINO_RULED_TEXT_STYLE }}>
+          <div style={{ fontFamily: FONT.lora, fontSize: 16, color: TACCUINO_INK.typed, marginBottom: 16, ...TACCUINO_RULED_TEXT_STYLE }}>
             <MagazineBody body={s.body} />
           </div>
         )}
@@ -264,7 +264,7 @@ export default function GuideBookPage({ basePath, groupPath, diarioHref, diarioT
         {weatherWidget}
         <div>
           <p className="mb-1" style={{ ...eyebrowStyle, ...TACCUINO_RULED_TEXT_STYLE }}>Consigli pratici</p>
-          <p style={{ fontFamily: FONT.lora, fontSize: 14, color: TACCUINO_INK.typed, ...TACCUINO_RULED_TEXT_STYLE }}>
+          <p style={{ fontFamily: FONT.lora, fontSize: 16, color: TACCUINO_INK.typed, ...TACCUINO_RULED_TEXT_STYLE }}>
             {practicalSubtitle}
           </p>
         </div>
@@ -272,7 +272,7 @@ export default function GuideBookPage({ basePath, groupPath, diarioHref, diarioT
           <div className="rounded-2xl p-3.5" style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}>
             <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
               <span
-                className="inline-flex items-center gap-1 text-[10.5px] font-bold px-2 py-1 rounded-full"
+                className="inline-flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full"
                 style={{ background: TACCUINO_ACCENT_TINT, color: TACCUINO_ACCENT[600] }}
               >
                 <Sparkles className="w-2.5 h-2.5" /> Giulia · AI
@@ -280,7 +280,7 @@ export default function GuideBookPage({ basePath, groupPath, diarioHref, diarioT
               <span style={eyebrowStyle}>{consigliSection.title}, un ulteriore approfondimento</span>
             </div>
             {consigliSection.body?.trim() ? (
-              <div style={{ fontFamily: FONT.lora, fontSize: 13.5, lineHeight: 1.65, color: TACCUINO_INK.typed }}>
+              <div style={{ fontFamily: FONT.lora, fontSize: 16, lineHeight: 1.65, color: TACCUINO_INK.typed }}>
                 <MagazineBody body={consigliSection.body} />
               </div>
             ) : (

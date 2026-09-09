@@ -69,7 +69,7 @@ export default function QuestionnaireWizard({
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-stone-100 p-6 mb-5">
-        <span className="inline-block text-[11px] font-display font-bold uppercase tracking-wide text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full mb-3">
+        <span className="inline-block text-xs font-display font-bold uppercase tracking-wide text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full mb-3">
           {question.label} · {Math.round(question.progress * 100)}% del percorso
         </span>
 

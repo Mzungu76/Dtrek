@@ -17,7 +17,7 @@ export default function SafetyDisclaimer({ variant, dark }: { variant: 'popup' |
 
   if (variant === 'inline') {
     return (
-      <p className={`text-[10px] leading-snug ${dark ? 'text-white/45' : 'text-stone-400'}`}>
+      <p className={`text-xs leading-snug ${dark ? 'text-white/45' : 'text-stone-400'}`}>
         {SAFETY_DISCLAIMER_TEXT}
       </p>
     )
@@ -36,7 +36,7 @@ export default function SafetyDisclaimer({ variant, dark }: { variant: 'popup' |
         <>
           <div className="fixed inset-0 z-40" onClick={e => { e.stopPropagation(); setOpen(false) }} />
           <div
-            className="absolute z-50 top-full right-0 mt-1.5 w-56 p-2.5 rounded-xl bg-stone-900/95 backdrop-blur-md text-white text-[11px] leading-snug shadow-xl"
+            className="absolute z-50 top-full right-0 mt-1.5 w-56 p-2.5 rounded-xl bg-stone-900/95 backdrop-blur-md text-white text-xs leading-snug shadow-xl"
             onClick={e => e.stopPropagation()}
           >
             {SAFETY_DISCLAIMER_TEXT}

@@ -119,16 +119,16 @@ export default function ReportHero({ id, trackPoints, title, categoryBadge, star
 
       <div className="absolute bottom-0 left-0 right-0 px-5 sm:px-8 md:px-10 pb-5 md:pb-7">
         <div className="flex items-center gap-2 mb-2.5 flex-wrap">
-          <span className="inline-block bg-forest-600 text-white text-[8px] font-bold tracking-[2.5px] px-2.5 py-1 rounded-sm uppercase">
+          <span className="inline-block bg-forest-600 text-white text-xs font-bold tracking-[2.5px] px-2.5 py-1 rounded-sm uppercase">
             {categoryBadge}
           </span>
           {weatherIcon && (
-            <span className="inline-flex items-center gap-1 bg-black/35 backdrop-blur-sm text-white text-[11px] font-semibold px-2 py-1 rounded-sm" title={weatherIcon.label}>
-              <span className="text-[13px] leading-none">{weatherIcon.emoji}</span> {weatherIcon.label}
+            <span className="inline-flex items-center gap-1 bg-black/35 backdrop-blur-sm text-white text-xs font-semibold px-2 py-1 rounded-sm" title={weatherIcon.label}>
+              <span className="text-sm leading-none">{weatherIcon.emoji}</span> {weatherIcon.label}
             </span>
           )}
           {readingMinutes != null && (
-            <span className="inline-flex items-center gap-1 text-white/70 text-[11px] font-medium">
+            <span className="inline-flex items-center gap-1 text-white/70 text-xs font-medium">
               <Clock className="w-3 h-3" /> {readingMinutes} min di lettura
             </span>
           )}
@@ -138,7 +138,7 @@ export default function ReportHero({ id, trackPoints, title, categoryBadge, star
         >
           {title}
         </h1>
-        <p className="text-[12px] italic text-white/70">
+        <p className="text-xs italic text-white/70">
           {format(new Date(startTime), 'EEEE d MMMM yyyy', { locale: it })}
         </p>
         {driving && (
@@ -147,13 +147,13 @@ export default function ReportHero({ id, trackPoints, title, categoryBadge, star
               href={driving.mapsUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 mt-1.5 text-[12px] font-semibold text-white/90 hover:text-white underline decoration-white/40 hover:decoration-white/80 underline-offset-2 transition-colors"
+              className="inline-flex items-center gap-1.5 mt-1.5 text-xs font-semibold text-white/90 hover:text-white underline decoration-white/40 hover:decoration-white/80 underline-offset-2 transition-colors"
             >
               <Car className="w-3.5 h-3.5" />
               {Math.round(driving.distanceMeters / 1000)} km dal tuo punto di partenza
             </a>
           ) : (
-            <p className="inline-flex items-center gap-1.5 mt-1.5 text-[12px] font-semibold text-white/90">
+            <p className="inline-flex items-center gap-1.5 mt-1.5 text-xs font-semibold text-white/90">
               <Car className="w-3.5 h-3.5" />
               {Math.round(driving.distanceMeters / 1000)} km dal tuo punto di partenza
             </p>

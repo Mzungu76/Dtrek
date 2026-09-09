@@ -99,10 +99,10 @@ export default function AggiungiADiarioPage() {
             <Loader2 className="w-5 h-5 animate-spin" /><span style={{ fontSize: 12 }}>Caricamento…</span>
           </div>
         ) : !meta ? (
-          <p className="mt-4" style={{ fontSize: 13, color: TACCUINO_INK.hand }}>Meta non trovata — potrebbe essere già stata trascritta.</p>
+          <p className="mt-4" style={{ fontSize: 14, color: TACCUINO_INK.hand }}>Meta non trovata — potrebbe essere già stata trascritta.</p>
         ) : (
           <>
-            <p className="mt-3 mb-1.5" style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 10, color: TACCUINO_INK.hand }}>
+            <p className="mt-3 mb-1.5" style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 12, color: TACCUINO_INK.hand }}>
               Trovata nell&rsquo;Atlante
             </p>
             <div className="flex items-center gap-3 rounded-2xl px-3 py-2.5 mb-5" style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}>
@@ -112,8 +112,8 @@ export default function AggiungiADiarioPage() {
                   : <div className="w-full h-full flex items-center justify-center"><Mountain className="w-4 h-4" style={{ color: '#c9b98a' }} /></div>}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate" style={{ fontFamily: FONT.lora, fontWeight: 600, fontSize: 13.5, color: TACCUINO_INK.typed }}>{meta.title}</p>
-                <p style={{ fontSize: 10.5, color: TACCUINO_INK.hand }}>
+                <p className="truncate" style={{ fontFamily: FONT.lora, fontWeight: 600, fontSize: 14, color: TACCUINO_INK.typed }}>{meta.title}</p>
+                <p style={{ fontSize: 12, color: TACCUINO_INK.hand }}>
                   {metaHasHikingMetrics(meta.metaType)
                     ? <>{(meta.distanceMeters / 1000).toFixed(1)} km &middot; +{Math.round(meta.elevationGain)} m</>
                     : META_TYPE_CONFIG[meta.metaType].label}
@@ -123,38 +123,38 @@ export default function AggiungiADiarioPage() {
 
             <div className="rounded-2xl px-4 py-4" style={{ background: TACCUINO_PAPER.light, border: `1px solid ${TACCUINO_PAPER.contourLine}` }}>
               <label className="block mb-4">
-                <span className="block mb-1" style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 9, color: TACCUINO_INK.handMuted }}>
+                <span className="block mb-1" style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 12, color: TACCUINO_INK.handMuted }}>
                   Titolo della voce
                 </span>
                 <input
                   value={title}
                   onChange={e => { setTitle(e.target.value); setTitleTouched(true) }}
-                  className="w-full px-3 py-2 rounded-lg text-[15px] outline-none"
+                  className="w-full px-3 py-2 rounded-lg text-base outline-none"
                   style={{ fontFamily: FONT.lora, fontWeight: 600, background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}`, color: TACCUINO_INK.typed }}
                 />
               </label>
 
               <label className="block mb-4">
-                <span className="block mb-1" style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 9, color: TACCUINO_INK.handMuted }}>
+                <span className="block mb-1" style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 12, color: TACCUINO_INK.handMuted }}>
                   Quando (facoltativo)
                 </span>
                 <input
                   type="date"
                   value={data}
                   onChange={e => setData(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg text-[14px] outline-none"
+                  className="w-full px-3 py-2 rounded-lg text-sm outline-none"
                   style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}`, color: TACCUINO_INK.typed }}
                 />
               </label>
 
               <label className="block mb-1">
-                <span className="block mb-1" style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 9, color: TACCUINO_INK.handMuted }}>
+                <span className="block mb-1" style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 12, color: TACCUINO_INK.handMuted }}>
                   In quale Diario
                 </span>
                 <select
                   value={diaryId ?? ''}
                   onChange={e => setDiaryId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg text-[14px] outline-none"
+                  className="w-full px-3 py-2 rounded-lg text-sm outline-none"
                   style={{ fontFamily: FONT.lora, fontWeight: 600, background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}`, color: TACCUINO_INK.typed }}
                 >
                   {diariAttivi.map(d => (
@@ -163,7 +163,7 @@ export default function AggiungiADiarioPage() {
                 </select>
               </label>
 
-              <div className="flex items-start gap-2 mt-4 mb-1" style={{ fontSize: 11, color: TACCUINO_INK.handMuted, fontFamily: FONT.lora }}>
+              <div className="flex items-start gap-2 mt-4 mb-1" style={{ fontSize: 12, color: TACCUINO_INK.handMuted, fontFamily: FONT.lora }}>
                 <Sparkles className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                 <span>La traccia, il profilo, la Guida e i dati di sicurezza si scrivono da soli — nel taccuino di carta li avresti copiati a mano.</span>
               </div>
@@ -175,7 +175,7 @@ export default function AggiungiADiarioPage() {
               <button
                 onClick={salva}
                 disabled={saving || !diaryId}
-                className="w-full flex items-center justify-center gap-2 h-12 rounded-xl font-semibold text-[14px] mt-4 disabled:opacity-60"
+                className="w-full flex items-center justify-center gap-2 h-12 rounded-xl font-semibold text-sm mt-4 disabled:opacity-60"
                 style={{ background: TACCUINO_ACCENT[600], color: TACCUINO_PAPER.light }}
               >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Aggiungi <ArrowRight className="w-4 h-4" /></>}

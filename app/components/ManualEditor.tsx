@@ -293,7 +293,7 @@ export default function ManualEditor({
         <span className="font-display text-xs font-bold uppercase tracking-wide text-stone-600">
           {sorted.length} sezioni · {withText} con testo
         </span>
-        <span className="text-[11px] text-stone-400 font-body italic">
+        <span className="text-xs text-stone-400 font-body italic">
           {dirty ? 'Salvataggio…' : savedAt ? 'Salvato' : ''}
         </span>
         <div className="flex-1" />

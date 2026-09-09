@@ -52,10 +52,10 @@ export function HiddenPdfRoot({ activity, heroPhoto, dateStr, sections, photos, 
         }
         <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(31,22,15,0.7) 0%, transparent 60%)' }} />
         <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '20px 32px' }}>
-          <h1 style={{ fontFamily: FONT.display, fontSize: 28, fontWeight: 700, color: 'white', margin: 0, textTransform: 'uppercase', letterSpacing: 1 }}>
+          <h1 style={{ fontFamily: FONT.display, fontSize: 30, fontWeight: 700, color: 'white', margin: 0, textTransform: 'uppercase', letterSpacing: 1 }}>
             {activity.title ?? activity.notes ?? 'Escursione'}
           </h1>
-          {dateStr && <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)', margin: '4px 0 0', fontStyle: 'italic' }}>{dateStr}</p>}
+          {dateStr && <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', margin: '4px 0 0', fontStyle: 'italic' }}>{dateStr}</p>}
         </div>
       </div>
 
@@ -70,8 +70,8 @@ export function HiddenPdfRoot({ activity, heroPhoto, dateStr, sections, photos, 
               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '12px 4px',
               borderRight: i < statPills.length - 1 ? `0.5px solid ${HAIRLINE}` : 'none',
             }}>
-              <span style={{ fontFamily: FONT.barlow, fontSize: 17, fontWeight: 700, color: INK }}>{s.value}</span>
-              <span style={{ fontFamily: FONT.barlow, fontSize: 7.5, fontWeight: 600, color: STONE[500], letterSpacing: 1.2, textTransform: 'uppercase' }}>{s.label}</span>
+              <span style={{ fontFamily: FONT.barlow, fontSize: 18, fontWeight: 700, color: INK }}>{s.value}</span>
+              <span style={{ fontFamily: FONT.barlow, fontSize: 12, fontWeight: 600, color: STONE[500], letterSpacing: 1.2, textTransform: 'uppercase' }}>{s.label}</span>
             </div>
           ))}
         </div>
@@ -95,7 +95,7 @@ export function HiddenPdfRoot({ activity, heroPhoto, dateStr, sections, photos, 
                 <path d={area} fill="#27713433" />
                 <path d={line} fill="none" stroke="#277134" strokeWidth={2} />
               </svg>
-              <p style={{ fontFamily: FONT.barlow, fontSize: 8, fontWeight: 600, letterSpacing: 1.5, textTransform: 'uppercase', color: STONE[400], textAlign: 'center', margin: '4px 0 0' }}>
+              <p style={{ fontFamily: FONT.barlow, fontSize: 12, fontWeight: 600, letterSpacing: 1.5, textTransform: 'uppercase', color: STONE[400], textAlign: 'center', margin: '4px 0 0' }}>
                 Profilo altimetrico
               </p>
             </div>
@@ -114,7 +114,7 @@ export function HiddenPdfRoot({ activity, heroPhoto, dateStr, sections, photos, 
                   il taglio cadeva volentieri subito sotto di essa e la lasciava orfana in fondo,
                   col testo della sezione che ricominciava sulla pagina dopo. */}
               <div className="pdf-block pdf-keep-next" style={{ background: color, padding: '6px 16px', borderRadius: '6px 6px 0 0', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.7)', fontFamily: FONT.barlow, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase' }}>{String(i + 1).padStart(2, '0')}</span>
+                <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', fontFamily: FONT.barlow, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase' }}>{String(i + 1).padStart(2, '0')}</span>
                 <span style={{ fontSize: 14, fontFamily: FONT.display, fontWeight: 700, color: 'white', textTransform: 'uppercase', letterSpacing: 1 }}>{section.title}</span>
               </div>
               <div style={{ padding: '14px 16px 4px', background: '#fff', border: `1px solid ${HAIRLINE}`, borderTop: 'none', borderRadius: '0 0 6px 6px' }}>
@@ -128,9 +128,9 @@ export function HiddenPdfRoot({ activity, heroPhoto, dateStr, sections, photos, 
                     <div className="pdf-block" style={{ width: 130, flexShrink: 0 }}>
                       <div style={{ position: 'relative' }}>
                         <img src={sectionPhoto.url} alt={sectionPhoto.caption} crossOrigin="anonymous" style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 6 }} />
-                        <span style={{ position: 'absolute', top: 4, left: 4, width: 16, height: 16, background: '#c05a17', color: 'white', borderRadius: '50%', fontSize: 8, fontWeight: 'bold', fontFamily: FONT.barlow, textAlign: 'center', lineHeight: '16px', display: 'block', boxSizing: 'border-box' }}>{slot + 1}</span>
+                        <span style={{ position: 'absolute', top: 4, left: 4, width: 16, height: 16, background: '#c05a17', color: 'white', borderRadius: '50%', fontSize: 12, fontWeight: 'bold', fontFamily: FONT.barlow, textAlign: 'center', lineHeight: '16px', display: 'block', boxSizing: 'border-box' }}>{slot + 1}</span>
                       </div>
-                      {sectionPhoto.caption && <p style={{ fontFamily: FONT.lora, fontSize: 8, lineHeight: 1.5, color: STONE[400], textAlign: 'center', marginTop: 3, fontStyle: 'italic' }}>{sectionPhoto.caption}</p>}
+                      {sectionPhoto.caption && <p style={{ fontFamily: FONT.lora, fontSize: 12, lineHeight: 1.5, color: STONE[400], textAlign: 'center', marginTop: 3, fontStyle: 'italic' }}>{sectionPhoto.caption}</p>}
                     </div>
                   )}
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -142,7 +142,7 @@ export function HiddenPdfRoot({ activity, heroPhoto, dateStr, sections, photos, 
                       // paragrafo ha il proprio blocco, così un racconto lungo scorre su più
                       // pagine senza mai tagliare un paragrafo in due (prima l'intera sezione,
                       // fino a 3000px, era un blocco solo).
-                      <p key={j} className="pdf-block" style={{ fontFamily: FONT.lora, fontSize: 11, lineHeight: 1.7, color: STONE[700], margin: '0 0 8px' }}>
+                      <p key={j} className="pdf-block" style={{ fontFamily: FONT.lora, fontSize: 12, lineHeight: 1.7, color: STONE[700], margin: '0 0 8px' }}>
                         {/* Il corpo è markdown: gli asterischi dell'enfasi vanno resi, non
                             stampati (nel PDF si leggeva `****9 chilometri****`). */}
                         {parseInlineEmphasis(p).map((seg, k) =>
@@ -162,7 +162,7 @@ export function HiddenPdfRoot({ activity, heroPhoto, dateStr, sections, photos, 
         {/* Punti di interesse — prima assenti dal PDF */}
         {poiWikiEntries && poiWikiEntries.length > 0 && (
           <div className="pdf-block" style={{ borderTop: `1px solid ${HAIRLINE}`, paddingTop: 16, marginTop: 8, marginBottom: 8 }}>
-            <h3 style={{ fontFamily: FONT.barlow, fontSize: 9, fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', color: STONE[400], marginBottom: 12 }}>Punti di interesse</h3>
+            <h3 style={{ fontFamily: FONT.barlow, fontSize: 12, fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', color: STONE[400], marginBottom: 12 }}>Punti di interesse</h3>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
               {poiWikiEntries.slice(0, 8).map(({ poi, wiki }, i) => (
                 <div key={i} className="pdf-block" style={{ display: 'flex', gap: 8, border: `0.5px solid ${HAIRLINE}`, borderRadius: 6, padding: 8, alignItems: 'center' }}>
@@ -174,8 +174,8 @@ export function HiddenPdfRoot({ activity, heroPhoto, dateStr, sections, photos, 
                     {/* `lineHeight` esplicito: con `overflow:hidden` html2canvas ritaglia al box
                         del contenuto, e un serif senza interlinea dichiarata sporge sotto — nel
                         PDF i nomi dei luoghi uscivano tagliati a metà altezza. */}
-                    <p style={{ fontFamily: FONT.display, fontSize: 11, lineHeight: 1.45, fontWeight: 700, color: INK, margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{wiki.title}</p>
-                    <p style={{ fontFamily: FONT.body, fontSize: 8.5, color: STONE[500], margin: '2px 0 0' }}>{POI_META[poi.type]?.label ?? poi.type} · {distLabel(poi.distFromTrack)}</p>
+                    <p style={{ fontFamily: FONT.display, fontSize: 12, lineHeight: 1.45, fontWeight: 700, color: INK, margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{wiki.title}</p>
+                    <p style={{ fontFamily: FONT.body, fontSize: 12, color: STONE[500], margin: '2px 0 0' }}>{POI_META[poi.type]?.label ?? poi.type} · {distLabel(poi.distFromTrack)}</p>
                   </div>
                 </div>
               ))}
@@ -186,15 +186,15 @@ export function HiddenPdfRoot({ activity, heroPhoto, dateStr, sections, photos, 
         {/* Photo grid */}
         {photos.length > 0 && (
           <div className="pdf-block" style={{ borderTop: `1px solid ${HAIRLINE}`, paddingTop: 16, marginTop: 8 }}>
-            <h3 style={{ fontFamily: FONT.barlow, fontSize: 9, fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', color: STONE[400], marginBottom: 12 }}>Documentazione fotografica</h3>
+            <h3 style={{ fontFamily: FONT.barlow, fontSize: 12, fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', color: STONE[400], marginBottom: 12 }}>Documentazione fotografica</h3>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
               {photos.map((ph, i) => (
                 <div key={ph.id} className="pdf-block">
                   <div style={{ position: 'relative' }}>
                     <img src={ph.url} alt={ph.caption} crossOrigin="anonymous" style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 6 }} />
-                    <span style={{ position: 'absolute', top: 4, left: 4, width: 16, height: 16, background: '#c05a17', color: 'white', borderRadius: '50%', fontSize: 7, fontWeight: 'bold', fontFamily: FONT.barlow, textAlign: 'center', lineHeight: '16px', display: 'block', boxSizing: 'border-box', border: '1px solid white' }}>{i + 1}</span>
+                    <span style={{ position: 'absolute', top: 4, left: 4, width: 16, height: 16, background: '#c05a17', color: 'white', borderRadius: '50%', fontSize: 12, fontWeight: 'bold', fontFamily: FONT.barlow, textAlign: 'center', lineHeight: '16px', display: 'block', boxSizing: 'border-box', border: '1px solid white' }}>{i + 1}</span>
                   </div>
-                  {ph.caption && <p style={{ fontFamily: FONT.lora, fontSize: 8, lineHeight: 1.5, color: STONE[400], textAlign: 'center', marginTop: 3, fontStyle: 'italic' }}>{i + 1}. {ph.caption}</p>}
+                  {ph.caption && <p style={{ fontFamily: FONT.lora, fontSize: 12, lineHeight: 1.5, color: STONE[400], textAlign: 'center', marginTop: 3, fontStyle: 'italic' }}>{i + 1}. {ph.caption}</p>}
                 </div>
               ))}
             </div>

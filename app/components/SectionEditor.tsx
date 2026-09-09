@@ -127,7 +127,7 @@ export default function SectionEditor({
         >
           <GripVertical className="w-4 h-4 text-stone-300 shrink-0" />
         </span>
-        <span className="text-[10px] font-display font-bold uppercase tracking-wide text-stone-400 shrink-0">
+        <span className="text-xs font-display font-bold uppercase tracking-wide text-stone-400 shrink-0">
           Sezione {sectionIndex + 1}
         </span>
         {editingTitle ? (
@@ -207,7 +207,7 @@ export default function SectionEditor({
             )}
           </div>
           {wordCount > 0 && (
-            <p className="mt-1 text-[11px] text-stone-400 font-body">
+            <p className="mt-1 text-xs text-stone-400 font-body">
               {wordCount} parole · ~{Math.max(1, Math.round(wordCount / 200))} min di lettura
             </p>
           )}
@@ -259,7 +259,7 @@ export default function SectionEditor({
           <p className="font-display text-xs font-bold uppercase tracking-wide text-stone-500 mb-2">
             Foto della sezione
           </p>
-          <p className="text-[10.5px] text-stone-400 italic mb-2 leading-snug">
+          <p className="text-xs text-stone-400 italic mb-2 leading-snug">
             Tocca per aggiungere/togliere · la stella la rende la foto principale
           </p>
 
@@ -284,7 +284,7 @@ export default function SectionEditor({
                       {included && (
                         <div className="absolute inset-0 bg-forest-900/10" />
                       )}
-                      <span className="absolute bottom-0.5 left-0.5 w-4 h-4 bg-black/50 text-white text-[8px] font-bold flex items-center justify-center rounded-full">
+                      <span className="absolute bottom-0.5 left-0.5 w-4 h-4 bg-black/50 text-white text-xs font-bold flex items-center justify-center rounded-full">
                         {i + 1}
                       </span>
                     </button>
@@ -307,11 +307,11 @@ export default function SectionEditor({
 
           {primaryPhoto && (
             <div className="mt-2 flex items-center justify-between gap-2">
-              <span className="text-[10px] text-stone-400 truncate">📍 {progressLabel(primaryPhoto)}</span>
+              <span className="text-xs text-stone-400 truncate">📍 {progressLabel(primaryPhoto)}</span>
               {!primaryPhoto.hasExifGps && (
                 <button
                   onClick={() => window.dispatchEvent(new CustomEvent('dtrek:open-photo-manager'))}
-                  className="text-[11px] text-forest-600 hover:underline shrink-0">Riposiziona</button>
+                  className="text-xs text-forest-600 hover:underline shrink-0">Riposiziona</button>
               )}
             </div>
           )}

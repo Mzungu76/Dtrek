@@ -264,7 +264,7 @@ export default function TracciaPage() {
               <ArrowLeft className="w-4 h-4" />
             </button>
             <h1
-              className="flex-1 min-w-0 truncate text-white font-display font-bold text-[15px]"
+              className="flex-1 min-w-0 truncate text-white font-display font-bold text-base"
               style={{ textShadow: '0 1px 3px rgba(0,0,0,0.75), 0 1px 8px rgba(0,0,0,0.5)' }}
             >
               Traccia libera
@@ -277,7 +277,7 @@ export default function TracciaPage() {
             >
               <NotebookPen className="w-4 h-4" />
               {hikeNotes.length > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-terra-500 text-[10px] font-bold flex items-center justify-center">{hikeNotes.length}</span>
+                <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-terra-500 text-xs font-bold flex items-center justify-center">{hikeNotes.length}</span>
               )}
             </button>
           </div>
