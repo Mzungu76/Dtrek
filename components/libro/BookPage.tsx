@@ -30,31 +30,29 @@
 // per intero. Il Sommario passa `indexLabel="Diari"` (etichetta diversa, stessa meccanica di
 // sempre) invece di intercettare il click.
 //
-// Fase 20 — prop `theme` opzionale ("pergamena", default, invariato per i chiamanti esistenti, o
-// "taccuino"): il guscio resta lo stesso componente/markup, cambiano solo i toni. Alternativa
-// scartata: duplicare BookPage per il Sommario in stile taccuino avrebbe biforcato la struttura
-// (barra inferiore, spacer, sticky header) che invece deve restare identica su ogni pagina del
-// libro — qui cambia solo la palette, non il comportamento.
+// Fase 20 — prop `theme` con due varianti, "pergamena" (il vecchio look, default) e "taccuino":
+// il guscio restava lo stesso componente/markup, cambiavano solo i toni. Alternativa scartata:
+// duplicare BookPage per il Sommario in stile taccuino avrebbe biforcato la struttura (barra
+// inferiore, spacer, sticky header) che invece deve restare identica su ogni pagina del libro.
 //
 // Fase 21 — la Fase 20 cambiava solo i colori: verificata a schermo contro il mockup
 // (`taccuino-canvas/SommarioTaccuino.dc.html`, non nel repo), il risultato non gli assomigliava
-// affatto ("sembra che hai cambiato semplicemente il font del titolo"). Il tema "taccuino" ora
-// monta anche `TaccuinoPaperTexture`/`TaccuinoSpineShadow` (texture di carta + piega disegnata a
-// mano) al posto del flat `BookSpineShadow` — la parte del mockup che dava davvero l'identità
-// "taccuino", non solo la palette.
+// affatto ("sembra che hai cambiato semplicemente il font del titolo"). Il tema "taccuino" ha preso
+// anche `TaccuinoPaperTexture`/`TaccuinoSpineShadow` (texture di carta + piega disegnata a mano) al
+// posto del flat `BookSpineShadow` — la parte del mockup che dava davvero l'identità "taccuino".
+//
+// Fase 3 del riordino UI/UX (docs/diario-valutazione-ux-piano.md) — "pergamena" rimossa: verificato
+// che ogni chiamante del componente (i soli tre reali: app/diari/[id]/page.tsx, ReportBookPage.tsx,
+// GuideBookPage.tsx) passava già esplicitamente `theme="taccuino"`. Nessuno leggeva più il default
+// "pergamena" — era codice morto, non un tema ancora in uso da qualche pagina dimenticata.
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { ChevronLeft, ChevronRight, BookMarked, Wrench } from 'lucide-react'
-import { FONT, TERRA } from '@/lib/designTokens'
+import { FONT } from '@/lib/designTokens'
 import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, TaccuinoPaperTexture, TaccuinoRuledLines, TaccuinoSpineShadow } from '@/lib/taccuinoTokens'
-import BookSpineShadow from './BookSpineShadow'
 import Navbar, { MOBILE_BOTTOMBAR_SPACER } from '@/components/Navbar'
 
 const THEMES = {
-  pergamena: {
-    paperBg: '#fbf6e8', hairline: '#e4d9bd', inkMuted: '#a9915f', inkFooter: '#b5a677',
-    pillBg: '#f1e9d2', pillText: '#6b6142', accent: TERRA[600],
-  },
   taccuino: {
     // Fase 31 — `hairline` con opacità (non il colore pieno di `cardBorder`): la specifica chiede
     // separatori "marrone/beige molto tenue, opacità 0.4-0.6", non una linea piena come un bordo
@@ -62,7 +60,7 @@ const THEMES = {
     paperBg: TACCUINO_PAPER.base, hairline: `${TACCUINO_PAPER.cardBorder}80`, inkMuted: TACCUINO_INK.handMuted,
     inkFooter: TACCUINO_INK.handMuted, pillBg: TACCUINO_PAPER.card, pillText: TACCUINO_INK.hand,
     // "Taccuino Botanico" (docs/taccuino-botanico-piano.md) — accento primario del tema (pillola
-    // sezione attiva, icona "Strumenti"): duo salvia/terracotta, non più TERRA (terra pura).
+    // sezione attiva, icona "Strumenti"): duo salvia/terracotta.
     accent: TACCUINO_ACCENT[600],
   },
 } as const
@@ -103,8 +101,8 @@ interface BookPageProps {
   currentSectionKey?: string
   /** Es. "3 di 9" — numero di pagina stile libro, non un contatore tecnico. */
   pageLabel?: string
-  /** Palette del guscio — "pergamena" (default, invariata) o "taccuino" (Fase 20). Il markup e il
-   *  comportamento restano identici, cambiano solo i toni. */
+  /** Palette del guscio — un solo tema oggi ("taccuino"); il prop resta per non rompere la forma
+   *  della chiamata nei tre punti che lo passano esplicitamente (vedi nota Fase 3 sopra). */
   theme?: keyof typeof THEMES
   /** Barra di navigazione in fondo alla pagina — "pageTurn" (default, invariato: Indietro/Indice/
    *  Strumenti/Avanti per sfogliare le pagine sorelle di questo libro) o "global" (il menù
@@ -119,7 +117,7 @@ interface BookPageProps {
 
 export default function BookPage({
   diarioTitle, indexHref, indexLabel = 'Indice', onToolsClick, sectionLabel, prevHref, nextHref,
-  sections, currentSectionKey, pageLabel, theme = 'pergamena', bottomBar = 'pageTurn', children,
+  sections, currentSectionKey, pageLabel, theme = 'taccuino', bottomBar = 'pageTurn', children,
 }: BookPageProps) {
   const t = THEMES[theme]
   const navButtonStyle = {
@@ -129,23 +127,16 @@ export default function BookPage({
   return (
     <div
       className={`relative min-h-screen flex flex-col ${bottomBar === 'global' ? MOBILE_BOTTOMBAR_SPACER : ''}`}
-      // Solo "pergamena" porta il proprio background qui: "taccuino" lo fornisce già
-      // TaccuinoPaperTexture (montata sotto, come figlio) — un background anche qui lo
-      // nasconderebbe, stesso bug di stacking corretto in app/diari/page.tsx e app/profilo/page.tsx
-      // (CSS2.1 §E.2: questo contenitore, non posizionato, dipingerebbe sopra il `<div fixed>` a
-      // z-index negativo della texture). `relative` (per la rigatura, vedi sotto) non cambia
-      // questo discorso: senza z-index proprio non apre un nuovo contesto di stacking.
-      style={{ background: theme === 'taccuino' ? undefined : t.paperBg }}
+      // Niente background qui: lo fornisce già TaccuinoPaperTexture (montata sotto, come figlio) —
+      // un background anche qui la nasconderebbe, stesso bug di stacking corretto in
+      // app/diari/page.tsx e app/profilo/page.tsx (CSS2.1 §E.2: questo contenitore, non
+      // posizionato, dipingerebbe sopra il `<div fixed>` a z-index negativo della texture).
+      // `relative` (per la rigatura, vedi sotto) non cambia questo discorso: senza z-index proprio
+      // non apre un nuovo contesto di stacking.
     >
-      {theme === 'taccuino' ? (
-        <>
-          <TaccuinoPaperTexture />
-          <TaccuinoRuledLines />
-          <TaccuinoSpineShadow />
-        </>
-      ) : (
-        <BookSpineShadow variant="light" />
-      )}
+      <TaccuinoPaperTexture />
+      <TaccuinoRuledLines />
+      <TaccuinoSpineShadow />
       <div
         className="flex items-center justify-between gap-3 px-5 sm:px-8 pt-5 pb-3 border-b sticky top-0 z-10"
         style={{ borderColor: t.hairline, background: t.paperBg }}
@@ -202,9 +193,8 @@ export default function BookPage({
             className="fixed inset-x-0 bottom-0 z-10 flex items-stretch justify-around"
             style={{
               background: t.pillBg, borderTop: `1px solid ${t.hairline}`, paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-              // Fase 31 — solo il taccuino: "una fascia di carta sovrapposta alla pagina", un'ombra
-              // morbida verso l'alto invece del confine piatto di prima (la pergamena resta invariata).
-              boxShadow: theme === 'taccuino' ? '0 -3px 10px rgba(41,35,30,0.06)' : undefined,
+              // Fase 31 — "una fascia di carta sovrapposta alla pagina": un'ombra morbida verso l'alto.
+              boxShadow: '0 -3px 10px rgba(41,35,30,0.06)',
             }}
           >
             {prevHref ? (
