@@ -1,6 +1,7 @@
 'use client'
 // Lettura "a libro" di una Meta senza Diario — richiesta esplicita dell'utente: il click su una
-// Meta nell'elenco (app/percorsi/page.tsx) deve aprire lo stesso layout "a libro" già usato per un
+// Meta nell'elenco (app/atlante/salvate/page.tsx, ex app/percorsi/page.tsx) deve aprire lo stesso
+// layout "a libro" già usato per un
 // Percorso dentro un Diario (.../percorsi/[percorsoId]/guida/[groupKey]/page.tsx, GuideBookPage),
 // non più GuidaHub (/guida/[id], la vecchia galleria a stage — resta "vista estesa", raggiungibile
 // dal drawer "Strumenti" di questa lettura). Variante diary-agnostic della stessa rotta: una Meta
@@ -29,8 +30,8 @@ function GuideGroupPageInner() {
       // le pillole "Percorso"/"Luoghi e Natura" (mai esercitato finché nessuna Meta arrivava qui
       // senza passare da un Diario).
       groupPath={`/guida/${encodeURIComponent(percorsoId)}`}
-      diarioHref="/percorsi"
-      diarioTitle="Mete"
+      diarioHref="/atlante/salvate"
+      diarioTitle="Salvate"
       percorsoId={percorsoId}
       groupKey={groupKey}
     />
