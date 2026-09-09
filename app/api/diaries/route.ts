@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { getUserFromRequest } from '@/lib/supabaseAuth'
 import { resolveDtrekEntitlement } from '@/lib/dtrekEntitlement'
-import { aggregateDiaries, type DiaryRow, type PlannedDiaryLinkRow, type ActivityMetricsRow } from '@/lib/diari/aggregateDiaries'
+import { aggregateDiaries, type DiaryRow, type PlannedDiaryLinkRow, type ActivityMetricsRow, type DiaryCollectionLinkRow } from '@/lib/diari/aggregateDiaries'
 
 export type { DiarySummary } from '@/lib/diari/aggregateDiaries'
 
@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
 
     const { data: diaries, error: diariesErr } = await supabase
       .from('diaries')
-      .select('id, title, subtitle, author, cover_url, footer_text, is_default, labels, archived_at, shelf_id, shelf_position')
+      .select('id, title, subtitle, author, cover_url, footer_text, is_default, labels, archived_at')
       .eq('user_id', user.id)
       .order('is_default', { ascending: false })
       .order('created_at', { ascending: true })
@@ -40,10 +40,20 @@ export async function GET(req: NextRequest) {
       .not('linked_planned_id', 'is', null)
     if (activitiesErr) throw activitiesErr
 
+    // Lo scaffale di ogni Diario — supabase/migrations/merge_shelves_into_collections.sql: non è
+    // più una colonna propria di `diaries`, ma una riga in `collection_diaries` (al più una per
+    // Diario, garantito da un UNIQUE(diary_id) lì).
+    const { data: collectionLinks, error: collectionLinksErr } = await supabase
+      .from('collection_diaries')
+      .select('diary_id, collection_id, position')
+      .eq('user_id', user.id)
+    if (collectionLinksErr) throw collectionLinksErr
+
     const summaries = aggregateDiaries(
       (diaries ?? []) as DiaryRow[],
       (planned ?? []) as PlannedDiaryLinkRow[],
       (activities ?? []) as ActivityMetricsRow[],
+      (collectionLinks ?? []) as DiaryCollectionLinkRow[],
     )
 
     return NextResponse.json(summaries)
@@ -81,14 +91,15 @@ export async function POST(req: NextRequest) {
     }
 
     // Un Diario sta sempre su uno scaffale (genitore unico, mai uno stato transitorio "senza
-    // scaffale" — docs/libreria-atlante-piano.md, Fase 0): shelfId esplicito dal chiamante (la
-    // Libreria lo passa sempre, è nato dentro lo scaffale aperto), altrimenti il primo scaffale
-    // dell'utente per posizione.
+    // scaffale" — docs/libreria-atlante-piano.md, Fase 0, ora una riga di collection_diaries
+    // invece di una colonna su diaries, vedi supabase/migrations/merge_shelves_into_collections.sql):
+    // shelfId esplicito dal chiamante (la Libreria lo passa sempre, è nato dentro lo scaffale
+    // aperto), altrimenti il primo scaffale dell'utente per posizione.
     const body = await req.json().catch(() => ({})) as { shelfId?: unknown }
     let shelfId = typeof body.shelfId === 'string' ? body.shelfId : null
     if (!shelfId) {
       const { data: shelf, error: shelfErr } = await supabase
-        .from('shelves')
+        .from('collections')
         .select('id')
         .eq('user_id', user.id)
         .order('position', { ascending: true })
@@ -100,10 +111,23 @@ export async function POST(req: NextRequest) {
 
     const { data, error } = await supabase
       .from('diaries')
-      .insert({ user_id: user.id, title: 'Nuovo Diario', subtitle: '', author: '', is_default: false, shelf_id: shelfId })
+      .insert({ user_id: user.id, title: 'Nuovo Diario', subtitle: '', author: '', is_default: false })
       .select('id')
       .single()
     if (error) throw error
+
+    if (shelfId) {
+      const { count: shelfCount, error: shelfCountErr } = await supabase
+        .from('collection_diaries')
+        .select('diary_id', { count: 'exact', head: true })
+        .eq('collection_id', shelfId)
+      if (shelfCountErr) throw shelfCountErr
+
+      const { error: linkErr } = await supabase
+        .from('collection_diaries')
+        .insert({ collection_id: shelfId, diary_id: data.id, user_id: user.id, position: shelfCount ?? 0 })
+      if (linkErr) throw linkErr
+    }
 
     return NextResponse.json({ id: data.id as string })
   } catch (e) {

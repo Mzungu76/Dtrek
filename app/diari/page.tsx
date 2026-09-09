@@ -5,17 +5,15 @@ import Navbar, { MOBILE_BOTTOMBAR_SPACER } from '@/components/Navbar'
 import BookSpineShadow from '@/components/libro/BookSpineShadow'
 import { DiarioCoverThumb } from '@/components/diario/DiarioCoverThumb'
 import { ProssimaUscitaCard } from '@/components/diari/ProssimaUscitaCard'
-import { RaccolteStrip } from '@/components/diari/RaccolteStrip'
 import { ScaffaliBanner } from '@/components/libreria/ScaffaliBanner'
 import type { DiarySummary } from '@/lib/diari/aggregateDiaries'
 import { selezionaProssimaUscita } from '@/lib/diari/prossimaUscita'
 import type { AllPercorsiRow } from '@/app/api/percorsi/route'
 import type { CollectionSummary } from '@/app/api/collections/route'
-import type { ShelfSummary } from '@/app/api/shelves/route'
 import { getUserSettingsCached, updateUserSettings } from '@/lib/sync/userSettingsStore'
 import { FONT } from '@/lib/designTokens'
 import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_RULED_TEXT_STYLE, TaccuinoPaperTexture, TaccuinoRuledLines } from '@/lib/taccuinoTokens'
-import { ArrowRight, BookMarked, Loader2, Plus } from 'lucide-react'
+import { ArrowRight, BookMarked, Loader2 } from 'lucide-react'
 
 const HERO_COVER_WIDTH = 236
 
@@ -35,9 +33,10 @@ function formatKm(distanceMeters: number): string {
 export default function LibreriaPage() {
   const [diaries, setDiaries] = useState<DiarySummary[] | null>(null)
   const [diariesError, setDiariesError] = useState<string | null>(null)
-  const [shelves, setShelves] = useState<ShelfSummary[] | null>(null)
+  // Gli scaffali sono le Raccolte (supabase/migrations/merge_shelves_into_collections.sql) — un
+  // solo fetch, non più due stati separati per due concetti che ora sono lo stesso.
+  const [shelves, setShelves] = useState<CollectionSummary[] | null>(null)
   const [percorsi, setPercorsi] = useState<AllPercorsiRow[] | null>(null)
-  const [raccolte, setRaccolte] = useState<CollectionSummary[] | null>(null)
   const [currentDiaryId, setCurrentDiaryId] = useState<string | null>(null)
 
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -51,7 +50,7 @@ export default function LibreriaPage() {
   }, [])
 
   useEffect(() => {
-    fetch('/api/shelves')
+    fetch('/api/collections')
       .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
       .then(setShelves)
       .catch(() => setShelves([]))
@@ -62,15 +61,6 @@ export default function LibreriaPage() {
       .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
       .then(setPercorsi)
       .catch(() => setPercorsi(null))
-  }, [])
-
-  useEffect(() => {
-    // A parte, senza bloccare il resto — vedi lo stesso principio già in app/diari/page.tsx prima
-    // di questo restyling: un 401/500 qui non deve mai far sembrare "rotta" la Libreria.
-    fetch('/api/collections')
-      .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
-      .then(setRaccolte)
-      .catch(() => setRaccolte([]))
   }, [])
 
   // Risolve l'ultimo Diario aperto — stessa logica che prima viveva in app/page.tsx (Fase 11 di
@@ -148,7 +138,7 @@ export default function LibreriaPage() {
           <>
             <div className="flex items-center justify-between gap-3 mb-1">
               <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', fontSize: 10.5, color: TACCUINO_INK.hand, ...TACCUINO_RULED_TEXT_STYLE }}>
-                {shelves.find(s => s.id === currentDiary.shelfId)?.name ?? 'Libreria'}
+                {shelves.find(s => s.id === currentDiary.shelfId)?.title ?? 'Libreria'}
               </p>
               {shelfDiaries.length > 1 && (
                 <p style={{ fontFamily: FONT.mono, fontSize: 10.5, color: TACCUINO_INK.handMuted }}>
@@ -210,14 +200,6 @@ export default function LibreriaPage() {
             >
               <BookMarked className="w-4 h-4" /> Apri l&rsquo;indice <ArrowRight className="w-4 h-4" />
             </Link>
-
-            {raccolte && raccolte.length > 0 ? (
-              <div className="mt-4"><RaccolteStrip raccolte={raccolte} /></div>
-            ) : (
-              <Link href="/raccolte" className="inline-flex items-center gap-2 mt-4 text-[13px]" style={{ color: TACCUINO_INK.hand }}>
-                <Plus className="w-3.5 h-3.5" /> Le mie Raccolte
-              </Link>
-            )}
           </>
         )}
       </div>

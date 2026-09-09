@@ -424,25 +424,6 @@ export default function SalvatePage() {
               </div>
             )}
 
-            {/* Ingresso al campo di ricerca vero, che vive ora nell'hub Atlante — non più una
-                pagina "cerca" separata (docs/allineamento-mockup-piano.md, intervento B). */}
-            <Link
-              href="/atlante"
-              className="relative flex items-center gap-3 mb-3 px-3.5 py-3 rounded-xl"
-              style={{ background: TACCUINO_ACCENT_TINT, border: `1.5px solid ${TACCUINO_ACCENT[600]}80` }}
-            >
-              <span className="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0" style={{ background: TACCUINO_ACCENT[600] }}>
-                <Search className="w-4.5 h-4.5" style={{ color: TACCUINO_PAPER.light }} />
-              </span>
-              <div className="flex-1 min-w-0">
-                <p style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 19, color: TACCUINO_INK.typed, lineHeight: 1.1 }}>Cerca una Meta</p>
-                <p className="text-[11px] mt-0.5" style={{ color: TACCUINO_INK.hand, fontFamily: FONT.lora }}>
-                  Sentieri, Borghi, Città e Siti — tutti i modi in un posto solo
-                </p>
-              </div>
-              <ChevronRight className="w-4 h-4 shrink-0" style={{ color: TACCUINO_ACCENT[600] }} />
-            </Link>
-
             <div className="mb-3">
               <div className="relative mb-2">
                 <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: TACCUINO_INK.handMuted }} />

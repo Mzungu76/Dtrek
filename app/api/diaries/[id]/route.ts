@@ -49,6 +49,9 @@ export interface DiarioInProgrammaRow {
   plannedDate: string | null
   createdAt: string
   trailScore: number | null
+  /** planned_hikes.favorite — stesso filtro "solo preferiti" del tab Concluse, ora anche qui
+   *  (tab "Programmate" del Sommario, richiesta esplicita dell'utente). */
+  favorite: boolean
 }
 
 export interface DiarioDetail {
@@ -94,7 +97,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
     const { data: planned, error: plannedErr } = await supabase
       .from('planned_hikes')
-      .select('id, title, distance_meters, elevation_gain, route_polyline, meta_type, planned_date, created_at, cached_trail_score')
+      .select('id, title, distance_meters, elevation_gain, route_polyline, meta_type, planned_date, created_at, cached_trail_score, favorite')
       .eq('user_id', user.id)
       .eq('diary_id', params.id)
     if (plannedErr) throw plannedErr
@@ -160,6 +163,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         plannedDate:    p.planned_date as string | null,
         createdAt:      p.created_at as string,
         trailScore:     (p.cached_trail_score as number | null) ?? null,
+        favorite:       (p.favorite as boolean | null) ?? false,
       }))
       .sort((a, b) => (a.plannedDate ?? '9999-99-99').localeCompare(b.plannedDate ?? '9999-99-99') || a.createdAt.localeCompare(b.createdAt))
 
@@ -195,6 +199,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       labels?: unknown; archivedAt?: unknown; shelfId?: unknown; shelfPosition?: unknown
     }
     const dbPatch: Record<string, unknown> = {}
+    const hasShelfId = Object.prototype.hasOwnProperty.call(body, 'shelfId')
+    const hasShelfPosition = Object.prototype.hasOwnProperty.call(body, 'shelfPosition')
 
     if (Object.prototype.hasOwnProperty.call(body, 'labels')) {
       if (!Array.isArray(body.labels) || !body.labels.every((l): l is string => typeof l === 'string')) {
@@ -210,31 +216,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       dbPatch.archived_at = body.archivedAt
     }
 
-    // Sposta il Diario su un altro scaffale — drag & drop nel banner della Libreria
-    // (docs/libreria-atlante-piano.md, Fase 1). Mai null: un Diario sta sempre su uno scaffale.
-    if (Object.prototype.hasOwnProperty.call(body, 'shelfId')) {
-      if (typeof body.shelfId !== 'string') {
-        return NextResponse.json({ error: 'shelfId deve essere una stringa' }, { status: 400 })
-      }
-      const { data: shelf, error: shelfErr } = await supabase
-        .from('shelves')
-        .select('id')
-        .eq('id', body.shelfId)
-        .eq('user_id', user.id)
-        .maybeSingle()
-      if (shelfErr) throw shelfErr
-      if (!shelf) return NextResponse.json({ error: 'Scaffale non trovato' }, { status: 404 })
-      dbPatch.shelf_id = body.shelfId
-    }
-
-    if (Object.prototype.hasOwnProperty.call(body, 'shelfPosition')) {
-      if (typeof body.shelfPosition !== 'number' || !Number.isFinite(body.shelfPosition)) {
-        return NextResponse.json({ error: 'shelfPosition deve essere un numero' }, { status: 400 })
-      }
-      dbPatch.shelf_position = body.shelfPosition
-    }
-
-    if (Object.keys(dbPatch).length === 0) {
+    if (Object.keys(dbPatch).length === 0 && !hasShelfId && !hasShelfPosition) {
       return NextResponse.json({ error: 'Nessun campo da aggiornare' }, { status: 400 })
     }
 
@@ -252,21 +234,80 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       if (diary.is_default) return NextResponse.json({ error: 'Il Diario di default non può essere archiviato' }, { status: 400 })
     }
 
-    const { data, error } = await supabase
-      .from('diaries')
-      .update({ ...dbPatch, updated_at: new Date().toISOString() })
-      .eq('id', params.id)
-      .eq('user_id', user.id)
-      .select('labels, archived_at, shelf_id, shelf_position')
-      .single()
-    if (error) throw error
-    if (!data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    if (Object.keys(dbPatch).length > 0) {
+      const { data, error } = await supabase
+        .from('diaries')
+        .update({ ...dbPatch, updated_at: new Date().toISOString() })
+        .eq('id', params.id)
+        .eq('user_id', user.id)
+        .select('id')
+        .maybeSingle()
+      if (error) throw error
+      if (!data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    }
+
+    // Sposta il Diario su un altro scaffale — drag & drop nel banner della Libreria
+    // (docs/libreria-atlante-piano.md, Fase 1; ora una riga di collection_diaries invece di una
+    // colonna su diaries, vedi supabase/migrations/merge_shelves_into_collections.sql). Un
+    // Diario sta su un solo scaffale alla volta (UNIQUE(diary_id) sulla tabella): tolgo
+    // l'eventuale riga precedente, qualunque fosse lo scaffale, prima di scrivere la nuova.
+    if (hasShelfId) {
+      if (typeof body.shelfId !== 'string') {
+        return NextResponse.json({ error: 'shelfId deve essere una stringa' }, { status: 400 })
+      }
+      const { data: shelf, error: shelfErr } = await supabase
+        .from('collections')
+        .select('id')
+        .eq('id', body.shelfId)
+        .eq('user_id', user.id)
+        .maybeSingle()
+      if (shelfErr) throw shelfErr
+      if (!shelf) return NextResponse.json({ error: 'Scaffale non trovato' }, { status: 404 })
+
+      const position = hasShelfPosition && typeof body.shelfPosition === 'number' && Number.isFinite(body.shelfPosition)
+        ? body.shelfPosition
+        : 0
+
+      const { error: delErr } = await supabase
+        .from('collection_diaries')
+        .delete()
+        .eq('diary_id', params.id)
+        .eq('user_id', user.id)
+      if (delErr) throw delErr
+
+      const { error: insErr } = await supabase
+        .from('collection_diaries')
+        .insert({ collection_id: body.shelfId, diary_id: params.id, user_id: user.id, position })
+      if (insErr) throw insErr
+    } else if (hasShelfPosition) {
+      // Riordino dentro lo stesso scaffale, senza cambiarlo (drag&drop fra due Diari già vicini).
+      if (typeof body.shelfPosition !== 'number' || !Number.isFinite(body.shelfPosition)) {
+        return NextResponse.json({ error: 'shelfPosition deve essere un numero' }, { status: 400 })
+      }
+      const { data, error } = await supabase
+        .from('collection_diaries')
+        .update({ position: body.shelfPosition })
+        .eq('diary_id', params.id)
+        .eq('user_id', user.id)
+        .select('diary_id')
+        .maybeSingle()
+      if (error) throw error
+      if (!data) return NextResponse.json({ error: 'Questo Diario non è ancora su nessuno scaffale' }, { status: 404 })
+    }
+
+    const [{ data: diaryRow, error: diaryReadErr }, { data: shelfRow, error: shelfReadErr }] = await Promise.all([
+      supabase.from('diaries').select('labels, archived_at').eq('id', params.id).eq('user_id', user.id).maybeSingle(),
+      supabase.from('collection_diaries').select('collection_id, position').eq('diary_id', params.id).eq('user_id', user.id).maybeSingle(),
+    ])
+    if (diaryReadErr) throw diaryReadErr
+    if (shelfReadErr) throw shelfReadErr
+    if (!diaryRow) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     return NextResponse.json({
-      labels:        (data.labels as string[] | null) ?? [],
-      archivedAt:    data.archived_at as string | null,
-      shelfId:       data.shelf_id as string | null,
-      shelfPosition: data.shelf_position as number,
+      labels:        (diaryRow.labels as string[] | null) ?? [],
+      archivedAt:    diaryRow.archived_at as string | null,
+      shelfId:       (shelfRow?.collection_id as string | undefined) ?? null,
+      shelfPosition: (shelfRow?.position as number | undefined) ?? 0,
     })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 })

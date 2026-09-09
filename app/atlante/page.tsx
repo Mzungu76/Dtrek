@@ -13,7 +13,7 @@ import type { MetaSearchCounts } from '@/app/api/meta-search/counts/route'
 import { META_TYPE_CONFIG, type MetaType } from '@/lib/metaTypes'
 import {
   BookMarked, Building2, ChevronDown, ChevronRight, ChevronUp, Compass, FolderSearch, Landmark,
-  Loader2, MapPin, Route as RouteIcon, Search, Sparkles, Upload, X,
+  Loader2, Route as RouteIcon, Search, Sparkles, Upload, X,
 } from 'lucide-react'
 
 // Debounce della ricerca d'archivio — un solo giro di /api/meta-search per pausa di digitazione,
@@ -155,9 +155,13 @@ function ShelfLink({ href, icon: Icon, title, subtitle, trailing }: ShelfItem & 
  * mie ricerche salvate" vivono solo nello scaffale Sentieri, non anche come tavola a parte: due
  * ingressi alla stessa cosa sarebbero il doppione che questo intervento doveva togliere.
  *
- * Due tavole restano invece a sé, sotto la ricerca: "Salvate" (le Mete già trovate e messe da
- * parte — ex app/percorsi/page.tsx) e "Vicino a te" (la carta geolocalizzata, /percorsi/cerca/
- * luoghi) — un asse diverso da quello degli scaffali (stato invece di tipologia), non ridondante.
+ * Le tavole (docs/allineamento-mockup-piano.md, seguito richiesto dall'utente dopo l'intervento B):
+ * "Cerca una meta" in cima non è una pagina a sé — porta il fuoco sul campo di ricerca già qui
+ * sopra (utile quando si arriva dalle tavole senza aver notato il campo). "Salvate" resta (le Mete
+ * già trovate e messe da parte — ex app/percorsi/page.tsx). "Vicino a te" è stata tolta come tavola
+ * a sé (la carta geolocalizzata resta raggiungibile da dentro gli scaffali Borgo e Città/Sito, con
+ * `?tipo=`) e sostituita da "Suggerite" verso /percorsi-per-te, i suggerimenti settimanali già
+ * esistenti — stesso conteggio già caricato per lo scaffale Sentieri, nessuna chiamata in più.
  */
 export default function AtlantePage() {
   return (
@@ -171,6 +175,12 @@ function AtlantePageInner() {
   const searchParams = useSearchParams()
   const [query, setQuery] = useState(() => searchParams.get('q') ?? '')
   const [openShelf, setOpenShelf] = useState<MetaType>('sentiero')
+  const searchInputRef = useRef<HTMLInputElement>(null)
+
+  function focusSearch() {
+    searchInputRef.current?.focus()
+    searchInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
 
   const [rows, setRows] = useState<AllPercorsiRow[] | null>(null)
   const [archiveCounts, setArchiveCounts] = useState<MetaSearchCounts | null>(null)
@@ -266,6 +276,7 @@ function AtlantePageInner() {
         <div className="relative mb-2">
           <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: TACCUINO_INK.handMuted }} />
           <input
+            ref={searchInputRef}
             value={query}
             onChange={e => setQuery(e.target.value)}
             placeholder="Cerca insieme fra le tue Mete e l'archivio…"
@@ -338,8 +349,24 @@ function AtlantePageInner() {
           Le tavole
         </p>
         <div className="flex flex-col mb-6">
+          {/* Non un Link: porta il fuoco sul campo di ricerca già in cima alla pagina invece di
+              aprire un'altra schermata — la ricerca vera vive qui, non altrove. */}
+          <button
+            onClick={focusSearch}
+            className="flex items-center gap-3 py-3 w-full text-left"
+            style={{ borderBottom: `1px dotted ${TACCUINO_PAPER.cardBorder}` }}
+          >
+            <span className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}>
+              <Search className="w-4 h-4" style={{ color: TACCUINO_INK.hand }} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p style={{ fontFamily: FONT.lora, fontWeight: 600, fontSize: 14, color: TACCUINO_INK.typed }}>Cerca una meta</p>
+              <p style={{ fontSize: 11, color: TACCUINO_INK.handMuted }}>Sentieri, Borghi, Città e Siti — tutti i modi in un posto solo</p>
+            </div>
+            <ChevronRight className="w-4 h-4 shrink-0" style={{ color: TACCUINO_INK.handMuted }} />
+          </button>
           <Tavola href="/atlante/salvate" icon={BookMarked} title="Salvate" subtitle="Messe da parte mentre cercavi" count={salvateCount} />
-          <Tavola href="/percorsi/cerca/luoghi" icon={MapPin} title="Vicino a te" subtitle="Cerca sulla carta, dalla tua posizione" count={null} />
+          <Tavola href="/percorsi-per-te" icon={Sparkles} title="Suggerite" subtitle="5 proposte già pronte, aggiornate ogni settimana" count={proposteCount} />
         </div>
 
         {/* Tre scaffali — un solo aperto alla volta, ogni voce rimanda alla schermata esistente

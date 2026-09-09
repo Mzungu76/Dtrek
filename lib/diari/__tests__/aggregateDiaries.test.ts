@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { aggregateDiaries, type DiaryRow, type PlannedDiaryLinkRow, type ActivityMetricsRow } from '../aggregateDiaries'
+import { aggregateDiaries, type DiaryRow, type PlannedDiaryLinkRow, type ActivityMetricsRow, type DiaryCollectionLinkRow } from '../aggregateDiaries'
 
 function diario(overrides: Partial<DiaryRow> & { id: string }): DiaryRow {
   return {
     title: 'Diario', subtitle: '', author: '', cover_url: null, footer_text: '',
-    is_default: false, labels: [], archived_at: null, shelf_id: null, shelf_position: 0,
+    is_default: false, labels: [], archived_at: null,
     ...overrides,
   }
 }
@@ -71,5 +71,18 @@ describe('aggregateDiaries', () => {
     )
     expect(conEtichette.labels).toEqual(['Natura', 'Urbano'])
     expect(conEtichette.archivedAt).toBeNull()
+  })
+
+  it('shelfId/shelfPosition arrivano da collection_diaries, non da una colonna propria del Diario', () => {
+    const diaries: DiaryRow[] = [diario({ id: 'd1' }), diario({ id: 'd2' })]
+    const collectionLinks: DiaryCollectionLinkRow[] = [
+      { diary_id: 'd1', collection_id: 'c1', position: 2 },
+    ]
+    const [d1, d2] = aggregateDiaries(diaries, [], [], collectionLinks)
+    expect(d1.shelfId).toBe('c1')
+    expect(d1.shelfPosition).toBe(2)
+    // d2 non ha ancora una riga in collection_diaries (mai un caso a regime, ma non deve esplodere).
+    expect(d2.shelfId).toBeNull()
+    expect(d2.shelfPosition).toBe(0)
   })
 })
