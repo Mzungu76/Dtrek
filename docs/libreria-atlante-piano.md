@@ -33,11 +33,23 @@ ALTER TABLE diaries ADD COLUMN IF NOT EXISTS shelf_id UUID REFERENCES shelves(id
 ALTER TABLE diaries ADD COLUMN IF NOT EXISTS shelf_position INT NOT NULL DEFAULT 0;
 ```
 
-Backfill: uno scaffale "I miei taccuini" per utente, tutti i Diari esistenti assegnati lì
-(genitore unico da subito, nessuno stato transitorio "senza scaffale" da gestire in UI).
+Backfill (utenti esistenti): uno scaffale per utente con nome segnaposto (stesso pattern già in
+uso per "Nuovo Diario" — un valore neutro, non una proposta: l'utente lo rinomina quando vuole),
+tutti i Diari esistenti assegnati lì. Genitore unico da subito, nessuno stato transitorio
+"senza scaffale" da gestire in UI. **Nessuna logica di suggerimento del nome** — né per gli
+scaffali né, come già oggi, per i Diari: l'app non propone, l'utente nomina.
 
 `GET/POST/PATCH /api/shelves` (CRUD + riordino) e `PATCH /api/diaries/[id]` esteso con
 `shelfId`/`shelfPosition` (stesso file, stesso pattern di `labels`/`archivedAt`).
+
+**Account nuovo**: uno scaffale, un Diario dentro — entrambi con nome segnaposto, liberamente
+rinominabili, nessuna proposta. Nel Diario nasce già una prima voce "in programma": un percorso
+suggerito per vicinanza alla posizione dell'utente (stesso motore di
+`lib/routeBuilder/generateRecommendations.ts`, che già cerca per prossimità nella cache
+`trails.ts`/Overpass — qui basta il primo risultato, non le 5 card). Da individuare: il punto in
+cui oggi nasce "Il mio Diario" per un account nuovo (nessun insert o trigger trovato nel
+repository — probabilmente configurato lato Supabase Auth/dashboard, non nel codice) — è lì che
+va agganciata anche la creazione dello scaffale e di questa prima voce.
 
 ## Fase 1 — Libreria: barra e home
 
@@ -143,6 +155,7 @@ usa in generazione; se no, è l'unico pezzo di logica di prodotto genuinamente n
 ## Decisioni prese
 
 - **Atlante unico e solo** — un'unica voce fissa in cima al banner, nessun `shelf_id` proprio,
-  nessuna collezione di Atlanti. Confermato.
-- **Asse degli scaffali**: non ancora scelto — determina solo i nomi di default nel backfill
-  (Fase 0), non il codice. Vedi spiegazione a parte prima di procedere.
+  nessuna collezione di Atlanti.
+- **Nessun asse degli scaffali da scegliere** — l'app non propone nomi né per scaffali né per
+  Diari (mai lo ha fatto), quindi non c'è un criterio da codificare: il primo scaffale/Diario di
+  un account nasce con un nome segnaposto qualunque, e l'utente organizza come preferisce.
