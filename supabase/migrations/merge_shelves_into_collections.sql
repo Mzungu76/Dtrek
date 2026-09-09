@@ -9,10 +9,25 @@
 -- Esegui nel Supabase SQL Editor DOPO aver letto le note in fondo: questa migration è distruttiva
 -- (droppa `shelves` e le colonne `diaries.shelf_id`/`shelf_position`) — a differenza delle altre
 -- migration di questo repo, non va lanciata automaticamente senza conferma.
+--
+-- ✅ Già eseguita in produzione (progetto Supabase sdxlcpxgbkagbxhukehd). Verificato sui dati
+-- reali: un utente aveva già una Raccolta editoriale pre-esistente con 2 Diari dentro, entrambi
+-- anche sul proprio scaffale — il passo 5a sotto garantisce che lo scaffale vinca sempre (quei 2
+-- Diari sono rimasti sul loro scaffale, la vecchia raccolta è restata com'era ma vuota), non un
+-- confronto arbitrario per data che li avrebbe fatti sparire dal banner della Libreria.
 
 -- 1. Le Raccolte hanno bisogno di un ordine proprio (prima erano poche, mostrate senza un ordine
 --    scelto dall'utente — gli Scaffali invece si riordinano, o almeno lo faranno).
 ALTER TABLE collections ADD COLUMN IF NOT EXISTS position INT NOT NULL DEFAULT 0;
+
+-- Tiene traccia di quali collection_diaries nascono da QUESTA migration (dallo scaffale reale di
+-- un Diario) — serve al passo 5: un Diario che risultasse anche in una vecchia raccolta editoriale
+-- creata a mano (possibile: le Raccolte esistevano già, indipendenti dagli Scaffali, prima di
+-- questa fusione) deve restare sul suo scaffale, non sparire da lì perché la vecchia raccolta
+-- vince un confronto arbitrario per data. Verificato sui dati reali di produzione: un utente ha
+-- già una raccolta di test con 2 Diari dentro, entrambi anche sul proprio scaffale — senza questa
+-- precedenza esplicita quei 2 Diari sarebbero scomparsi dal banner della Libreria.
+CREATE TEMP TABLE migrated_from_shelf (diary_id UUID PRIMARY KEY, collection_id UUID NOT NULL) ON COMMIT DROP;
 
 -- 2. Ogni scaffale esistente diventa una raccolta — stesso nome, stessa posizione. Idempotente:
 --    salta gli utenti che hanno già una raccolta con lo stesso titolo E la stessa posizione creata
@@ -38,6 +53,10 @@ BEGIN
       SELECT new_collection_id, d.id, d.user_id, d.shelf_position
       FROM diaries d
       WHERE d.shelf_id = s.id;
+
+      INSERT INTO migrated_from_shelf (diary_id, collection_id)
+      SELECT d.id, new_collection_id FROM diaries d WHERE d.shelf_id = s.id
+      ON CONFLICT DO NOTHING;
     END IF;
   END LOOP;
 END $$;
@@ -62,12 +81,22 @@ BEGIN
 
     INSERT INTO collection_diaries (collection_id, diary_id, user_id, position)
     VALUES (new_collection_id, d.id, d.user_id, 0);
+
+    INSERT INTO migrated_from_shelf (diary_id, collection_id) VALUES (d.id, new_collection_id) ON CONFLICT DO NOTHING;
   END LOOP;
 END $$;
 
--- 5. Un Diario su un solo scaffale: se lo stesso diary_id compare in più righe (poteva succedere
---    solo per una raccolta pubblicabile composta a mano prima di questa fusione), tiene solo la
---    prima (posizione più bassa, poi raccolta più vecchia) e scarta le altre.
+-- 5a. Un Diario appena migrato dal suo scaffale reale (collection_id registrato in
+--     migrated_from_shelf) vince su qualunque vecchia raccolta editoriale lo contenesse già:
+--     tolgo quelle righe, non quella nuova.
+DELETE FROM collection_diaries cd
+USING migrated_from_shelf m
+WHERE cd.diary_id = m.diary_id
+  AND cd.collection_id <> m.collection_id;
+
+-- 5b. Caso residuo, non toccato da 5a (un Diario in due vecchie raccolte editoriali, mai passato
+--     da uno scaffale in questa migration — non osservato sui dati reali, ma non impossibile):
+--     tiene solo la prima (posizione più bassa, poi raccolta più vecchia) e scarta le altre.
 DELETE FROM collection_diaries cd
 WHERE cd.ctid NOT IN (
   SELECT DISTINCT ON (cd2.diary_id) cd2.ctid
