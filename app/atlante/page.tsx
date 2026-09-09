@@ -31,18 +31,18 @@ interface ShelfItem {
   subtitle: string
 }
 
+// Fase 5 del riordino UI/UX (docs/diario-valutazione-ux-piano.md): tolta "Percorsi per te" da
+// questa lista — duplicava la tavola "Suggerite" qui sopra (stessa destinazione /percorsi-per-te,
+// stesso identico sottotitolo), visibile nella stessa schermata a uno scroll di distanza. Un
+// intervento precedente (vedi il commento sopra AtlantePageInner) aveva già lo scopo esplicito di
+// eliminare i doppioni verso /percorsi-per-te, ma si era fermato a "Vicino a te" senza notare
+// questo secondo punto d'ingresso identico dentro lo scaffale Sentieri.
 const SENTIERI_ITEMS: ShelfItem[] = [
   {
     href: '/upload?tab=gpx&source=build',
     icon: RouteIcon,
     title: 'Costruisci o trova un percorso',
     subtitle: 'Punto di partenza, km e dislivello — oppure lo descrivi a Giulia',
-  },
-  {
-    href: '/percorsi-per-te',
-    icon: Sparkles,
-    title: 'Percorsi per te',
-    subtitle: '5 proposte già pronte, aggiornate ogni settimana',
   },
   {
     href: '/upload?tab=gpx',

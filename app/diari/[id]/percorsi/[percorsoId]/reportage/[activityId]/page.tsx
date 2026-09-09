@@ -7,29 +7,19 @@
  * "Strumenti" della lettura a pagine (ReportageToolsDrawer, raggiungibile da ogni pagina di
  * .../sezione/[n]), non in una pagina di riepilogo a sé. Un link vecchio (bookmark, storico del
  * browser) rimanda quindi dritto alla prima pagina del libro invece di mostrare una pagina ormai
- * vuota.
+ * vuota. Elenco completo delle 8 pagine-lapide in docs/diario-valutazione-ux-piano.md §5.4.
  */
-import { Suspense, useEffect } from 'react'
-import { useParams, useRouter } from 'next/navigation'
-import { Loader2 } from 'lucide-react'
+import { Suspense } from 'react'
+import { useParams } from 'next/navigation'
+import RedirectTo from '@/app/components/RedirectTo'
 
 function ReportageRedirectInner() {
-  const router = useRouter()
   const params = useParams<{ id: string; percorsoId: string; activityId: string }>()
   const diarioId = decodeURIComponent(params.id)
   const percorsoId = decodeURIComponent(params.percorsoId)
   const activityId = decodeURIComponent(params.activityId)
   const basePath = `/diari/${encodeURIComponent(diarioId)}/percorsi/${encodeURIComponent(percorsoId)}/reportage/${encodeURIComponent(activityId)}`
-
-  useEffect(() => {
-    router.replace(`${basePath}/sezione/1`)
-  }, [basePath, router])
-
-  return (
-    <div className="flex items-center justify-center py-24 text-stone-400">
-      <Loader2 className="w-6 h-6 animate-spin" />
-    </div>
-  )
+  return <RedirectTo href={`${basePath}/sezione/1`} />
 }
 
 export default function ReportageSummaryPage() {

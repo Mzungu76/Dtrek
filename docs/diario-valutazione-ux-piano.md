@@ -444,12 +444,40 @@ fotografici e più livelli di z-index — esattamente la categoria di rischio gi
 resto dei 655 bottoni in Fase 2. Il punto 12 era sicuro perché contenuto in un solo componente,
 già letto per intero, senza altri elementi `fixed` nelle vicinanze. I punti 11 e 13 non lo sono.
 
-### Fase 5 — Pulizia dell'architettura informativa *(impatto medio, rischio basso)*
-14. Eliminare il doppione `/percorsi-per-te` nell'Atlante: **un solo ingresso, un solo nome**.
-15. Dare un ingresso vero a `/vette` (dentro le Statistiche del Diario, dove stanno i dati che riassume).
-16. Decidere su `/profilo/log-ricerche`: esporlo in Impostazioni o rimuoverlo.
-17. Le 8 pagine-lapide restano come redirect, ma vanno **elencate in un solo punto** invece di
-    essere 8 file con 8 commenti.
+### Fase 5 — Pulizia dell'architettura informativa *(impatto medio, rischio basso)* — ✅ eseguita
+
+14. ✅ **Fatto**: rimossa da `SENTIERI_ITEMS` (`app/atlante/page.tsx`) la voce "Percorsi per te" —
+    duplicava la tavola "Suggerite" poco più in alto nella stessa schermata, stessa destinazione
+    `/percorsi-per-te`, stesso identico sottotitolo. Un intervento precedente (documentato nel
+    codice) aveva già lo scopo esplicito di eliminare questi doppioni ma si era fermato prima di
+    notare questo secondo punto d'ingresso — completato ora.
+15. ✅ **Fatto, ma non dove previsto**: `/vette` ("Vette Conquistate", l'elenco delle cime raggiunte
+    rilevate dai tracciati GPS) ora ha un link dalla tab **Traguardi** delle Statistiche, sotto la
+    categoria di badge "Quota" — non dentro il Diario come scritto nella prima stesura: verificato
+    che le Statistiche del Diario sono in realtà la pagina `/statistiche` autonoma (con le sue
+    quattro tab, Traguardi inclusa), non una sezione dentro `app/diari/[id]/page.tsx`. "Quota" è la
+    categoria tematica giusta — un traguardo di altitudine — non una voce di menu a sé.
+16. ✅ **Fatto, con una correzione**: `/profilo/log-ricerche` non è stato esposto genericamente in
+    Impostazioni come proponeva la prima stesura — verificato che è dichiaratamente un log
+    **diagnostico** ("per capire... senza dover leggere i log Vercel", commento del componente
+    stesso), pensato per chi sviluppa l'app, non per l'uso quotidiano. Aggiunto un link discreto
+    dentro `SectionAvanzate` (Impostazioni → Avanzate), già la sezione collassata di default che
+    raccoglie gli altri strumenti di manutenzione — non uno nuovo, lo stesso posto giusto.
+17. ✅ **Fatto**: introdotto `app/components/RedirectTo.tsx`, un componente condiviso per il corpo
+    meccanico (spinner + `router.replace`) ripetuto identico negli 8 file — ciascuno mantiene solo
+    il proprio commento sul *perché* e, dove serve, il calcolo della destinazione da parametri di
+    rotta o di ricerca. L'elenco completo, in un solo punto:
+
+    | Rotta ritirata | Reindirizza a | Perché |
+    |---|---|---|
+    | `/resoconto` | `/diari` | Nessun link in entrata; ogni Resoconto si apre dal proprio Diario |
+    | `/guida` | `/atlante` | Nessun link in entrata; una Guida si apre solo dal libro |
+    | `/raccolte` | `/diari` | Elenco confluito nel banner scaffali di `/diari` |
+    | `/reportage` | `/diari` | Un Reportage si apre solo dal proprio Diario |
+    | `/percorsi` | `/atlante/salvate` | Confluita nella tavola "Salvate" dell'Atlante |
+    | `/percorsi/cerca` | `/atlante` (preserva `?q=`) | Campo di ricerca confluito nell'Atlante unico |
+    | `/diari/[id]/percorsi/[percorsoId]` | `.../guida/prima_di_partire` | Riepilogo confluito nel drawer Strumenti della Guida |
+    | `/diari/[id]/percorsi/[percorsoId]/reportage/[activityId]` | `.../sezione/1` | Riepilogo confluito nel drawer Strumenti del Reportage |
 
 ### Fase 6 — Densità *(impatto alto sul momento critico, rischio medio)*
 18. Navigazione attiva a 3 livelli; avvisi in coda, mai sovrapposti.
