@@ -140,10 +140,9 @@ usa in generazione; se no, è l'unico pezzo di logica di prodotto genuinamente n
 3. **Fase 4 + Fase 5** insieme: l'indice esteso e i tab della voce sono la stessa vista.
 4. **Fase 6** per ultima, isolata: dipende solo da dati già esistenti, nessuna altra fase la blocca.
 
-## Decisioni ancora aperte (bloccano l'inizio, non l'intero piano)
+## Decisioni prese
 
-1. **Asse degli scaffali** — geografico, temporale, per compagnia: determina solo i nomi di
-   default nel backfill, non il codice.
-2. **Atlante singolo o multiplo** — il piano assume *uno solo* (voce fissa in cima al banner,
-   nessun `shelf_id` proprio). Se diventa plurale, la Fase 2 cambia da pagina a piccola
-   collezione e va deciso prima di costruirla.
+- **Atlante unico e solo** — un'unica voce fissa in cima al banner, nessun `shelf_id` proprio,
+  nessuna collezione di Atlanti. Confermato.
+- **Asse degli scaffali**: non ancora scelto — determina solo i nomi di default nel backfill
+  (Fase 0), non il codice. Vedi spiegazione a parte prima di procedere.
