@@ -122,6 +122,18 @@ function cutoutRotation(id: string): number {
   return ((Math.abs(hash) % 14) / 10) - 0.7
 }
 
+/** Una cifra della sezione Statistiche del Diario — stesso trattamento (font mono per il numero,
+ *  etichetta minuscola sopra) delle tre pillole di ProssimaUscitaCard, qui in una riga di quattro
+ *  invece di tre perché include anche il numero di reportage. */
+function StatCell({ value, label }: { value: string; label: string }) {
+  return (
+    <div className="text-center">
+      <p style={{ fontFamily: FONT.mono, fontWeight: 700, fontSize: 16, color: TACCUINO_INK.typed, lineHeight: 1 }}>{value}</p>
+      <p style={{ fontSize: 8.5, textTransform: 'uppercase', letterSpacing: '0.08em', color: TACCUINO_INK.handMuted, marginTop: 3 }}>{label}</p>
+    </div>
+  )
+}
+
 function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
   const [detail, setDetail] = useState<DiarioDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -170,6 +182,22 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
     if (sortDir === 'asc') rows = [...rows].reverse()
     return rows
   }, [detail, favoritesOnly, statusFilter, searchQuery, sortBy, sortDir])
+
+  // Statistiche locali a questo Diario — richiesta esplicita dell'utente (in aggiunta, non in
+  // sostituzione, alle Statistiche globali di /statistiche raggiungibili da Profilo): sommate solo
+  // sui Reportage di QUESTO Diario, non su tutte le attività dell'utente. Un borgo_citta/sito non
+  // ha metriche escursionistiche reali (sempre 0, vedi lib/visitCompletion.ts) — escluso dalla
+  // somma con lo stesso filtro `metaHasHikingMetrics` già usato riga per riga più sotto, altrimenti
+  // "0.0 km" comparirebbe come cifra aggregata pur non essendo un dato mancante ma inapplicabile.
+  const stats = useMemo(() => {
+    const rows = (detail?.reportage ?? []).filter(r => metaHasHikingMetrics(r.metaType))
+    return {
+      count: rows.length,
+      distanceKm: rows.reduce((s, r) => s + r.distanceMeters / 1000, 0),
+      elevationGain: rows.reduce((s, r) => s + r.elevationGain, 0),
+      totalTimeSeconds: rows.reduce((s, r) => s + r.totalTimeSeconds, 0),
+    }
+  }, [detail])
 
   if (error) {
     return (
@@ -235,6 +263,18 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
             </p>
           </div>
         </div>
+
+        {stats.count > 0 && (
+          <div
+            className="grid grid-cols-4 gap-2 mb-3 py-2.5 rounded-xl"
+            style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}
+          >
+            <StatCell value={String(stats.count)} label="reportage" />
+            <StatCell value={stats.distanceKm.toFixed(1)} label="km" />
+            <StatCell value={`+${Math.round(stats.elevationGain)}`} label="D+ m" />
+            <StatCell value={formatDuration(stats.totalTimeSeconds)} label="tempo" />
+          </div>
+        )}
 
         <EtichetteDiarioEditor diaryId={diaryId} initialLabels={detail.labels} />
 

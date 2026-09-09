@@ -34,7 +34,7 @@ export function ProssimaUscitaCard({ candidata }: Props) {
           Nessuna Meta in attesa — pianificane una per vederla qui.
         </p>
         <Link
-          href="/percorsi"
+          href="/atlante"
           className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-white"
           style={{ background: TACCUINO_ACCENT[600], fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: 12.5 }}
         >

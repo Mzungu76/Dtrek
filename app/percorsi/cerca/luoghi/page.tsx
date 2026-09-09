@@ -102,7 +102,7 @@ function CercaLuoghiPageInner() {
       <div className="relative h-[200px] sm:h-[240px] overflow-hidden" style={{ background: 'linear-gradient(to bottom right, #4A5A3F, #2E3A26)' }}>
         <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, rgba(46,58,38,.15), rgba(46,58,38,.85))' }} />
         <div className="absolute left-6 right-6 bottom-6 sm:left-10 sm:right-10 sm:bottom-8">
-          <Link href="/percorsi/cerca" className="inline-flex items-center gap-1.5 text-[#E9DAC3] text-[13px] font-semibold mb-1.5 hover:text-white transition-colors">
+          <Link href="/atlante" className="inline-flex items-center gap-1.5 text-[#E9DAC3] text-[13px] font-semibold mb-1.5 hover:text-white transition-colors">
             <ArrowLeft className="w-3.5 h-3.5" /> Cerca una Meta
           </Link>
           <h1 className="font-display text-[24px] sm:text-3xl font-bold text-white leading-tight">
