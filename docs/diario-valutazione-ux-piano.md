@@ -347,9 +347,32 @@ percepito e non toccano l'architettura.
 
 > Da sola, questa fase risolve la parte maggiore della sensazione di "confusionario".
 
-### Fase 2 — Bersagli tattili *(impatto alto, rischio basso)*
-6. Tre taglie di controllo (36/44/52px); `md` = 44px come default sui 655 bottoni.
-7. Icone: minimo 18px; `h-3.5`/`h-4` solo come ornamento non interattivo.
+### Fase 2 — Bersagli tattili *(impatto alto, rischio basso solo dove verificabile)* — 🟡 avviata
+
+A differenza della tipografia, la dimensione di un bottone è legata al layout circostante (righe
+dense, toolbar, spazio fra controlli adiacenti) — crescerla non è un'operazione sempre sicura come
+lo era lo snap dei caratteri, e questo ambiente non ha un modo di rendere l'app con dati reali per
+una verifica visiva. Eseguita quindi solo la parte verificabile per lettura diretta del codice:
+
+6. ✅ Tre taglie definite: `components/ui/IconButton.tsx` (componente riutilizzabile, sm/md/lg =
+   36/44/52px) + `TAP_TARGET` in `lib/designTokens.ts`. Adozione incrementale, non un cambio dei
+   655 bottoni esistenti in un colpo solo.
+7. ✅ Applicate al punto a più alto traffico: `components/Navbar.tsx`. La `MobileNavBar` (barra in
+   alto, montata da `HubNavBar` sulle pagine Guida/Resoconto — cioè proprio dove capita di doverla
+   toccare camminando) aveva le icone più piccole di tutta l'app, 16px, e un avatar da 20px:
+   alzate a 20px/22px con più padding verticale. `FloatingProfileAvatar`, isolato nel suo angolo
+   senza vicini con cui sovrapporsi, portato al bersaglio pieno di 44px. `ProfileAvatar` di
+   `DesktopNav` idem (40px di default). La `MobileBottomBar` (icona+etichetta impilate, Atlante/
+   Navigator/il disco Libreria) era già ampia a sufficienza — nessuna modifica necessaria lì.
+   `DesktopNav` (solo da tablet in su, fascia che l'audit stesso non ha verificato a schermo)
+   alzata con un rialzo leggero, non il pieno 44px, per restare conservativi.
+8. ⏳ **Non fatto**: il resto dei 655 bottoni dell'app. Serve una verifica visiva reale (l'app è
+   autenticata, con dati Supabase — non riproducibile in questo ambiente) prima di toccare bottoni
+   dentro toolbar dense, righe di tabella o cassetti di strumenti, dove crescere un controllo può
+   causare sovrapposizioni o troncamenti che un mero controllo statico del codice non intercetta.
+   Follow-up naturale: applicare `IconButton` schermata per schermata, verificando ciascuna a
+   schermo (locale o con `run`), a partire dalle pagine a più alto traffico (Diario, Atlante,
+   navigazione attiva).
 
 ### Fase 3 — Unificazione cromatica *(impatto alto, rischio basso)*
 8. `lib/designTokens.ts` unica fonte di verità; `tailwind.config.ts` legge da lì. Fine dei due
