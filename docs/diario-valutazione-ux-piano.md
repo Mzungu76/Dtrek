@@ -412,10 +412,37 @@ mecchanizzare un intervento.
     d'uso diversi (sfogliare un libro / la copertina a schermo intero di un percorso), non un
     errore da correggere.
 
-### Fase 4 — Navigazione globale *(impatto alto, rischio medio)*
-11. **Una sola barra**, in basso, 4 voci (Libreria · Atlante · Navigator · Profilo), su ogni pagina.
-12. Ritiro del disco sollevato, del ritaglio radiale e dell'avatar flottante.
-13. `MobileNavBar` (barra in alto) rimossa; `HubNavBar` usa la barra unica.
+### Fase 4 — Navigazione globale *(rischio confermato medio-alto — un punto su tre fatto, due rimandati con motivo)* — 🟡 avviata
+
+12. ✅ **Fatto**: `MobileBottomBar` (componente contenuto, verificato per intero) — rimossi il disco
+    sollevato per Libreria, il ritaglio circolare nello sfondo e l'avatar Profilo flottante in un
+    angolo a sé. Quattro voci piatte con lo stesso trattamento (Libreria · Atlante · Navigator ·
+    Profilo), coerenti con `MobileNavBar`. Chiesto esplicitamente conferma prima di procedere,
+    perché il codice registra che questa barra è già stata rifatta quattro volte su richiesta
+    dell'utente — non un errore da correggere senza chiedere, ma nemmeno un motivo per non
+    completare l'uniformità voluta dall'audit una volta confermato.
+11. ⏳ **Investigato, rimandato**: l'idea di far convivere la barra globale con la barra voltapagina
+    di `BookPage.tsx` (`bottomBar="pageTurn"`) tocca più del previsto — quella barra oggi appare su
+    **tutti i breakpoint**, non solo mobile (a differenza di `MobileBottomBar`, che è `md:hidden`).
+    Aggiungerci la barra globale accanto introdurrebbe anche `DesktopNav` (sticky in alto) sulle
+    pagine-libro desktop, che oggi non ce l'hanno affatto — non un semplice impilamento su mobile,
+    un cambio di layout anche su desktop, non verificabile a schermo in questo ambiente.
+13. ⏳ **Investigato, rimandato**: ritirare `MobileNavBar` (la barra in alto usata da `HubNavBar` su
+    Guida/Resoconto) e spostare quelle pagine sulla barra unica in basso richiede più di un
+    cambio di posizione. Verificato: `RouteHub.tsx` ha già un pannello fisso in basso
+    (`absolute bottom-0 z-20`) e `RoutePage.tsx` un pulsante flottante "Strumenti"
+    (`fixed bottom-right z-30`) più un dialog a schermo intero (`z-40`) — una barra di navigazione
+    piena larghezza in fondo ci si sovrapporrebbe, in un modo che si vede solo rendendo davvero la
+    pagina (foto di copertina, gradiente, overlay). Servono screenshot reali (`run`/Playwright con
+    un account autenticato) prima di toccare questi 6-7 file coordinati — non disponibili in questo
+    ambiente.
+
+**Perché fermarsi qui invece di procedere comunque**: a differenza della tipografia (Fase 1, dove
+crescere un testo non rompe quasi mai un layout) o dei colori (Fase 3, sola sostituzione di
+valori), qui il cambio è nella *posizione* di elementi `fixed`/`absolute` su pagine con overlay
+fotografici e più livelli di z-index — esattamente la categoria di rischio già segnalata per il
+resto dei 655 bottoni in Fase 2. Il punto 12 era sicuro perché contenuto in un solo componente,
+già letto per intero, senza altri elementi `fixed` nelle vicinanze. I punti 11 e 13 non lo sono.
 
 ### Fase 5 — Pulizia dell'architettura informativa *(impatto medio, rischio basso)*
 14. Eliminare il doppione `/percorsi-per-te` nell'Atlante: **un solo ingresso, un solo nome**.
