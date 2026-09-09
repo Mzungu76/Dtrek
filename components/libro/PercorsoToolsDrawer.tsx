@@ -261,22 +261,24 @@ export default function PercorsoToolsDrawer({
             />
           </div>
 
-          {hasGps && (
-            <>
-              <SectionLabel>Visualizza</SectionLabel>
+          {/* Fase 6 del riordino UI/UX (docs/diario-valutazione-ux-piano.md): "Altro" (un'unica
+              voce, "Apri vista estesa") è confluita qui — è la stessa cosa di cui parla questa
+              sezione, mappa e 3D, non una categoria a sé. Una sola voce non merita un titolo
+              proprio, tantomeno uno che segnala solo "non sapevo dove metterla". */}
+          <SectionLabel>Visualizza</SectionLabel>
+          <div className="flex flex-col gap-1.5">
+            {hasGps && (
               <ToolButton icon={<View className="w-4 h-4 shrink-0" />} label="Video 3D del percorso" onClick={onOpen3D} />
-            </>
-          )}
-
-          <SectionLabel>Altro</SectionLabel>
-          <Link
-            href={`/guida/${encodeURIComponent(percorsoId)}`}
-            className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg"
-            style={{ background: PILL_BG, color: INK_TEXT, fontSize: 14, fontWeight: 600 }}
-          >
-            <span className="inline-flex items-center gap-2"><BookOpen className="w-4 h-4" /> Apri vista estesa (mappa, 3D)</span>
-            <ChevronRight className="w-3.5 h-3.5" style={{ color: INK_MUTED }} />
-          </Link>
+            )}
+            <Link
+              href={`/guida/${encodeURIComponent(percorsoId)}`}
+              className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg"
+              style={{ background: PILL_BG, color: INK_TEXT, fontSize: 14, fontWeight: 600 }}
+            >
+              <span className="inline-flex items-center gap-2"><BookOpen className="w-4 h-4" /> Apri vista estesa (mappa, 3D)</span>
+              <ChevronRight className="w-3.5 h-3.5" style={{ color: INK_MUTED }} />
+            </Link>
+          </div>
         </div>
       </div>
     </div>

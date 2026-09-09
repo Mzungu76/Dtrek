@@ -83,8 +83,15 @@ Il problema reale non è Lora in sé ma due soli punti in cui esce dal proprio r
 "Atlante" e i titoli di `app/fonti-e-crediti/page.tsx` usavano Lora alla scala di un titolo,
 invece di Playfair — corretto in Fase 1 (§7).
 
-Resta vera la diagnosi su Caveat: la scrittura a mano, **l'elemento che più dice "diario"**, è
-usata solo 3 volte in tutta l'app.
+**Seconda correzione, stesso errore di metodo**: qui era scritto che Caveat fosse usato solo 3
+volte — falso, verificato durante la Fase 7. Il conteggio originale cercava solo la classe
+Tailwind `font-caveat` (rara), ripetendo esattamente lo stesso errore fatto per Lora: la
+scrittura a mano si applica quasi sempre come stile inline (`fontFamily: FONT_HAND`,
+`lib/taccuinoTokens.tsx`), non come classe. Cercando quello, sono oltre 40 punti — e sono già
+esattamente i titoli di voce e le date proposte più sotto: il titolo del Diario e dei suoi
+Reportage (`app/diari/[id]/page.tsx`), i titoli dell'Atlante e delle Mete salvate, le etichette
+delle tab. Caveat non era "tenuto in riserva": era già la scelta sistematica per i titoli
+dell'interfaccia botanica. Nessuna estensione necessaria (Fase 7, §7).
 
 ### 1.3 Proposta — una scala di 7 gradini, e nient'altro
 
@@ -111,8 +118,10 @@ livelli senza leggerli. Proposta, calibrata sull'uso all'aperto:
   §1.2, corretto dopo verifica). Va solo tenuto fuori dai titoli, dove il ruolo giusto è
   `display`/`heading`. **Mono** (JetBrains Mono, 82 usi) è già disciplinato sull'uso semantico
   (cifre, statistiche, coordinate) — verificato a campione, nessun uso decorativo trovato.
-- **Caveat si estende** a date, titoli di voce del Diario e annotazioni: da 3 usi a presenza
-  sistematica. È il portatore dell'identità.
+- **Caveat non si estende, perché lo è già**: oltre 40 usi (via `FONT_HAND`, stile inline — il
+  conteggio "3 volte" della prima stesura cercava solo la classe Tailwind, ripetendo l'errore già
+  fatto per Lora), già sui titoli di voce del Diario e dei Reportage, le date, le tab. Verificato
+  in Fase 7 (§7).
 - **Zero `fontSize` inline e zero `text-[Npx]`**: i 7 ruoli diventano classi/token e le 845
   dichiarazioni arbitrarie si mappano su di essi.
 
@@ -304,8 +313,9 @@ proprietà che l'app oggi non sfrutta:
 
 1. **È cronologico.** Si scorre nel tempo. L'app organizza invece per *tipo di oggetto*
    (Percorsi, Reportage, Guide, Raccolte) — una tassonomia da database, non da diario.
-2. **È scritto a mano.** L'annotazione personale è la cosa che lo distingue da un archivio.
-   `Caveat` va usato per date, titoli di voce e note — non tenuto in riserva.
+2. **È scritto a mano.** L'annotazione personale è la cosa che lo distingue da un archivio —
+   e `Caveat`, verificato in Fase 7, è già la scelta sistematica per titoli, date e tab. Su
+   questo punto specifico l'app fa già quello che qui si chiedeva; il resto della diagnosi resta.
 3. **Ha un ciclo.** *Progetto → cammino → racconto.* L'app ha tutte e tre le fasi (Atlante →
    Navigator → Reportage) ma le presenta come tre sezioni parallele, non come tre momenti di una
    stessa storia.
@@ -479,14 +489,63 @@ già letto per intero, senza altri elementi `fixed` nelle vicinanze. I punti 11 
     | `/diari/[id]/percorsi/[percorsoId]` | `.../guida/prima_di_partire` | Riepilogo confluito nel drawer Strumenti della Guida |
     | `/diari/[id]/percorsi/[percorsoId]/reportage/[activityId]` | `.../sezione/1` | Riepilogo confluito nel drawer Strumenti del Reportage |
 
-### Fase 6 — Densità *(impatto alto sul momento critico, rischio medio)*
-18. Navigazione attiva a 3 livelli; avvisi in coda, mai sovrapposti.
-19. Cassetto strumenti riorganizzato per compito; "Altro" eliminato.
+### Fase 6 — Densità *(un punto era già risolto, l'altro fatto in forma più mirata)* — ✅ eseguita
 
-### Fase 7 — Il Diario come contenitore *(impatto strutturale, rischio alto — da valutare a parte)*
-20. Vista cronologica unica come pagina di apertura del Diario.
-21. `Caveat` esteso a date e titoli di voce.
-22. Ciclo *progetto → cammino → racconto* reso esplicito nell'interfaccia.
+18. ❌→✅ **Non fatto, e giustamente**: la ricostruzione a 3 livelli della navigazione attiva NON
+    serviva. Letto per intero il render di `ActiveNavigationView.tsx` (1514 righe): esiste già un
+    passaggio di redesign esplicito in codice ("Soluzione B", con riferimenti a voci passate di
+    `DTREK-AUDIT.md`) che risolve esattamente il problema descritto nella prima stesura di questo
+    documento. Gli avvisi "morbidi" (meteo, mappa offline, fauna) si impilano in un'unica colonna
+    in flusso che, per commento esplicito nel codice, "non si sovrappone mai, qualunque
+    combinazione sia attiva". Gli avvisi critici (rientro per il buio, GPS perso, chiusura sentiero,
+    fuori percorso, batteria scarica) passano per una coda di priorità separata: **solo il più
+    urgente è sempre visibile**, gli altri restano dietro un "+N altri avvisi" invece di impilarsi
+    tutti insieme. L'esempio specifico della prima stesura — fauna selvatica e luce insufficiente
+    mostrati sovrapposti nello stesso istante — non è più riproducibile: sono in due contenitori
+    separati (uno in alto, uno in basso), non nello stesso punto dello schermo. I controlli sono
+    già raggruppati in due rotaie laterali (sinistra: livelli mappa; destra: SOS e il resto) invece
+    che sparsi. Nessuna modifica fatta — non c'era un problema reale da correggere, e toccare
+    ulteriormente un'interfaccia di sicurezza già accuratamente tarata, senza modo di vederla
+    rendere, sarebbe stato il rischio sbagliato da correre.
+19. ✅ **Fatto, in forma più mirata**: in entrambi i cassetti Strumenti (`PercorsoToolsDrawer.tsx`
+    per la Guida, `ReportageToolsDrawer.tsx` per il Reportage) "Altro" conteneva **una sola voce**,
+    non un gruppo eterogeneo — non serviva una tassonomia intera a tre categorie (Scrivere/
+    Consultare/Condividere) come proposto nella prima stesura, sarebbe stata una forzatura per un
+    solo elemento. In `PercorsoToolsDrawer.tsx` "Apri vista estesa (mappa, 3D)" è confluita nella
+    sezione "Visualizza" già esistente subito sopra — è la stessa cosa di cui parla. In
+    `ReportageToolsDrawer.tsx`, dove non esisteva una sezione gemella, l'etichetta è diventata
+    "Vista estesa" — il nome che quella voce aveva già nel commento in testa al file, solo non
+    ancora usato nell'interfaccia. Nessuno strumento rimosso o spostato di posizione, solo
+    rietichettato.
+
+### Fase 7 — Il Diario come contenitore — 🟡 un punto fatto (già lo era), due confermati e rimandati
+
+20. ⏳ **Confermato, non eseguito**: una vista cronologica unica come pagina di apertura del Diario
+    resta un cambio reale da fare. Verificato che il Sommario live (`app/diari/[id]/page.tsx`) è
+    ancora organizzato per tipo (tab Concluse/Programmate), non per tempo — la vista a bande
+    d'anno (`DiarioYearDivider.tsx`) esiste solo nel template PDF a pagina fissa, non nella pagina
+    che l'utente vede aprendo l'app. Questo però è esattamente il tipo di decisione — cosa vede
+    per primo chi apre il Diario — che questo stesso documento, fin dalla prima stesura, segnava
+    come **da valutare a parte**: non un fix tecnico da eseguire alla cieca, ma una direzione di
+    prodotto che merita un mockup e una decisione esplicita di chi usa l'app, non un'interpretazione
+    unilaterale in mezzo a una sessione di correzioni tecniche.
+21. ✅ **Già fatto — nessuna estensione necessaria**: verificato che Caveat è già usato in oltre 40
+    punti (§1.2, corretto), sistematicamente sui titoli di voce e le date. La prima stesura di
+    questo documento aveva lo stesso errore di metodo già trovato per Lora in Fase 1 (cercava solo
+    la classe Tailwind, non lo stile inline) — corretto qui, non nel codice, perché nel codice non
+    c'era nulla da correggere.
+22. ⏳ **Confermato, non eseguito**: rendere esplicito il ciclo *progetto → cammino → racconto* è
+    una richiesta di narrazione dell'interfaccia (Atlante → Navigator → Reportage raccontati come
+    tre momenti di una storia, non tre sezioni parallele), non un difetto puntuale con una
+    correzione univoca — stessa natura del punto 20, stesso motivo per restare "da valutare a
+    parte" invece che eseguita in autonomia in questa sessione.
+
+    **Che cosa serve per sbloccare 20 e 22**: non altro codice da leggere — un mockup (anche
+    approssimativo) della nuova Home del Diario da discutere con chi userà l'app, e una decisione
+    esplicita su cosa succede alle viste attuali (tab Concluse/Programmate, le tre sezioni
+    parallele) quando la nuova entra in scena. È lavoro di design del prodotto, il tipo di
+    decisione che in questa sessione è stato deliberatamente tenuto fuori da ogni fase eseguita —
+    anche quando, come qui, il codice stesso non oppone resistenza tecnica.
 
 ---
 

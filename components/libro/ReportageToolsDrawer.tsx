@@ -116,7 +116,10 @@ export default function ReportageToolsDrawer({
             </>
           )}
 
-          <SectionLabel>Altro</SectionLabel>
+          {/* Fase 6 del riordino UI/UX (docs/diario-valutazione-ux-piano.md): "Altro" → "Vista
+              estesa", il nome che questa voce ha già nel commento in testa al file — un'etichetta
+              onesta invece di una che segnala solo "non sapevo dove metterla". */}
+          <SectionLabel>Vista estesa</SectionLabel>
           <Link
             href={`/resoconto/${encodeURIComponent(activityId)}`}
             className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg"
