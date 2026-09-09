@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { getUserFromRequest } from '@/lib/supabaseAuth'
+import type { HikeNote } from '@/lib/blobStore'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,6 +13,10 @@ export interface ReportageRow {
   /** True se esiste già un hike_reports (narrativa scritta) per questa uscita — "da raccontare"
    *  altrimenti: l'uscita c'è, il racconto no. */
   hasWrittenReport: boolean
+  /** Appunti di campo presi durante questa uscita (testo, ora, coordinate, foto — vedi
+   *  components/navigation/FieldNoteSheet.tsx) — Fase 6 di docs/libreria-atlante-piano.md. Vuoto
+   *  per la quasi totalità delle uscite più vecchie di questa funzione. */
+  hikeNotes: HikeNote[]
 }
 
 // GET /api/percorsi/[id]/reportage → tutte le uscite (activities) collegate a questo Percorso,
@@ -23,7 +28,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
     const { data: activities, error: actErr } = await supabase
       .from('activities')
-      .select('id, title, start_time, distance_meters')
+      .select('id, title, start_time, distance_meters, hike_notes')
       .eq('user_id', user.id)
       .eq('linked_planned_id', params.id)
       .order('start_time', { ascending: false })
@@ -47,6 +52,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       startTime:        a.start_time as string,
       distanceMeters:   a.distance_meters as number,
       hasWrittenReport: reportedIds.has(a.id as string),
+      hikeNotes:        (a.hike_notes as HikeNote[] | null) ?? [],
     }))
 
     return NextResponse.json(rows)
