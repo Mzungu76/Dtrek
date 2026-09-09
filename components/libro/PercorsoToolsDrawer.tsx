@@ -25,8 +25,8 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
-import { BookOpen, ChevronRight, Download, FileDown, Loader2, PenLine, View, X } from 'lucide-react'
-import type { PlannedHike } from '@/lib/plannedStore'
+import { BookOpen, Camera, ChevronRight, Download, FileDown, Loader2, MapPin, PenLine, View, X } from 'lucide-react'
+import type { PlannedHike, HikeNote } from '@/lib/plannedStore'
 import type { ReportageRow } from '@/app/api/percorsi/[id]/reportage/route'
 import { exportPlannedHikeToGpx } from '@/utils/exportGpx'
 import GuideGenerationPanel from './GuideGenerationPanel'
@@ -69,17 +69,9 @@ function ToolButton({ icon, label, onClick, disabled, busy }: {
   )
 }
 
-function ReportageList({ percorsoId, basePath }: { percorsoId: string; basePath: string }) {
-  const [rows, setRows] = useState<ReportageRow[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    fetch(`/api/percorsi/${encodeURIComponent(percorsoId)}/reportage`)
-      .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
-      .then(setRows)
-      .catch(e => setError(e instanceof Error ? e.message : String(e)))
-  }, [percorsoId])
-
+/** Presentazionale — le righe arrivano dal genitore (fetch unico condiviso con AppuntiSection,
+ *  che legge dagli stessi Reportage: nessun secondo giro su /api/percorsi/[id]/reportage). */
+function ReportageList({ rows, error, basePath }: { rows: ReportageRow[] | null; error: string | null; basePath: string }) {
   if (error) return <p className="text-[12.5px]" style={{ color: '#b3413a' }}>Impossibile caricare i Reportage: {error}</p>
   if (rows === null) {
     return (
@@ -123,6 +115,60 @@ function ReportageList({ percorsoId, basePath }: { percorsoId: string; basePath:
   )
 }
 
+/**
+ * Appunti di campo — Fase 6 di docs/libreria-atlante-piano.md. In sola lettura: si prendono solo
+ * in cammino, in Navigator (FieldNoteSheet.tsx), mai da qui. Due fonti, unite:
+ * - `hike.hikeNotes` — presi mentre si segue il Percorso ma la sessione non è (ancora) diventata
+ *   un Reportage (ActiveNavigationView.tsx scrive lì durante la navigazione).
+ * - `hikeNotes` di ogni Reportage — travasati dalla Meta al salvataggio (lib/activitySave.ts).
+ * Deduplicati per id (una nota appena salvata può comparire per un istante su entrambe le fonti)
+ * e ordinati dal più recente.
+ */
+function AppuntiSection({ hike, rows }: { hike: PlannedHike; rows: ReportageRow[] | null }) {
+  if (rows === null) {
+    return (
+      <div className="flex items-center gap-2 py-2" style={{ color: INK_MUTED }}>
+        <Loader2 className="w-4 h-4 animate-spin" /><span className="text-[12.5px]">Caricamento…</span>
+      </div>
+    )
+  }
+
+  const byId = new Map<string, HikeNote>()
+  for (const n of hike.hikeNotes ?? []) byId.set(n.id, n)
+  for (const r of rows) for (const n of r.hikeNotes) byId.set(n.id, n)
+  const note = Array.from(byId.values()).sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+
+  if (note.length === 0) {
+    return (
+      <p className="text-[12.5px] leading-relaxed" style={{ color: INK_MUTED }}>
+        Nessun appunto ancora — si prendono in cammino, dal Navigator.
+      </p>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      {note.map(n => (
+        <div key={n.id} className="flex gap-2.5 px-3 py-2.5 rounded-lg" style={{ background: PILL_BG }}>
+          {n.photoUrl ? (
+            <img src={n.photoUrl} alt="" className="w-10 h-10 rounded-md object-cover shrink-0" />
+          ) : (
+            <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0" style={{ background: '#e9dcb8' }}>
+              {n.lat != null ? <MapPin className="w-3.5 h-3.5" style={{ color: '#8a7f52' }} /> : <Camera className="w-3.5 h-3.5" style={{ color: '#8a7f52' }} />}
+            </div>
+          )}
+          <div className="min-w-0 flex-1">
+            <p style={{ fontSize: 10.5, color: INK_MUTED }}>
+              {format(new Date(n.timestamp), 'd MMM · HH:mm', { locale: it })}
+            </p>
+            {n.text && <p style={{ fontSize: 13, color: INK_TEXT, lineHeight: 1.4 }}>{n.text}</p>}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <p
@@ -139,6 +185,19 @@ export default function PercorsoToolsDrawer({
 }: Props) {
   const [exportingPdf, setExportingPdf] = useState(false)
   const [pdfError, setPdfError] = useState<string | null>(null)
+  const [reportageRows, setReportageRows] = useState<ReportageRow[] | null>(null)
+  const [reportageError, setReportageError] = useState<string | null>(null)
+
+  // Un solo fetch, condiviso da ReportageList e AppuntiSection sotto (gli appunti di un
+  // Reportage arrivano dalla stessa riga). Solo quando il drawer è aperto — le stesse "Strumenti"
+  // di prima non facevano nulla finché l'utente non lo apriva.
+  useEffect(() => {
+    if (!open) return
+    fetch(`/api/percorsi/${encodeURIComponent(percorsoId)}/reportage`)
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
+      .then(setReportageRows)
+      .catch(e => setReportageError(e instanceof Error ? e.message : String(e)))
+  }, [open, percorsoId])
 
   async function handleExportPdf() {
     if (exportingPdf) return
@@ -175,7 +234,10 @@ export default function PercorsoToolsDrawer({
 
         <div className="flex-1 px-5 py-4">
           <SectionLabel>Reportage</SectionLabel>
-          <ReportageList percorsoId={percorsoId} basePath={basePath} />
+          <ReportageList rows={reportageRows} error={reportageError} basePath={basePath} />
+
+          <SectionLabel>Appunti di campo</SectionLabel>
+          <AppuntiSection hike={hike} rows={reportageRows} />
 
           <SectionLabel>Genera tutta la guida</SectionLabel>
           <GuideGenerationPanel

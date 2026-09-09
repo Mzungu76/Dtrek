@@ -1,0 +1,169 @@
+{
+  "pages": [
+    {
+      "id": "page-1",
+      "name": "La libreria"
+    },
+    {
+      "id": "page-2",
+      "name": "L'Atlante"
+    },
+    {
+      "id": "page-3",
+      "name": "Il taccuino aperto"
+    }
+  ],
+  "artboards": [
+    {
+      "file": "Libreria.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "page": "page-1",
+      "title": "1 · L'app si apre qui"
+    },
+    {
+      "file": "Scaffali.dc.html",
+      "x": 530,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "page": "page-1",
+      "title": "2 · Il banner aperto"
+    },
+    {
+      "file": "Sposta.dc.html",
+      "x": 1060,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "page": "page-1",
+      "title": "3 · Drag & drop"
+    },
+    {
+      "file": "Atlante.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "page": "page-2",
+      "title": "4 · L'Atlante"
+    },
+    {
+      "file": "Segnate.dc.html",
+      "x": 530,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "page": "page-2",
+      "title": "5 · Una tavola: le Segnate"
+    },
+    {
+      "file": "Nuova.dc.html",
+      "x": 1060,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "page": "page-2",
+      "title": "6 · Trascrivere nel taccuino"
+    },
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "page": "page-3",
+      "title": "7 · L'indice"
+    },
+    {
+      "file": "Voce.dc.html",
+      "x": 530,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "page": "page-3",
+      "title": "8 · Una voce, le sue pagine"
+    },
+    {
+      "file": "Appunti.dc.html",
+      "x": 1060,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "page": "page-3",
+      "title": "9 · Gli appunti di campo"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "lib-testa",
+      "x": 0,
+      "y": -330,
+      "w": 920,
+      "page": "page-1",
+      "text": "LA LIBRERIA — i tuoi quattro punti, applicati\n\n1. L'app apre sull'ultimo Diario aperto (è già così oggi in app/page.tsx, quindi niente di nuovo da costruire). Lo swipe resta dentro lo scaffale corrente, e il nome dello scaffale è sempre scritto in alto insieme alla posizione (2 di 3): non ti perdi mai.\n\n2. Un Diario sta su un solo scaffale. Questo cambia il modello dati rispetto a prima: non più le labels esistenti (che sono multi-valore) ma uno shelf_id su diaries più una tabella shelves (id, user_id, nome, posizione). Il guadagno è che il drag&drop diventa non ambiguo — trascinare SPOSTA, non copia — e che la libreria è una mappa vera, ogni libro in un posto solo.\n\n3. Drag & drop nel banner, con lo scaffale di destinazione evidenziato e il posto che si apre.\n\n4. Nessuna pagina dedicata: la libreria è il banner, chiuso o aperto.\n\nMigrazione: i Diari esistenti finiscono tutti in uno scaffale \"I miei taccuini\", che l'utente poi smonta come vuole."
+    },
+    {
+      "id": "lib-costo",
+      "x": 0,
+      "y": 950,
+      "w": 920,
+      "page": "page-1",
+      "text": "IL COSTO DA METTERE IN CONTO — e come lo pago\n\nUn Diario su un solo scaffale significa che devi scegliere UN asse di organizzazione: geografico (Appennino, Dolomiti), oppure temporale (2025, 2026), oppure per compagnia (con i ragazzi, da solo). Non puoi avere \"Appennino\" e \"Con i ragazzi\" insieme: un taccuino di una gita in Appennino coi figli dovrà stare da una parte sola.\n\nÈ un prezzo accettabile — le cartelle funzionano così da sempre e nessuno si lamenta — ma va detto adesso, perché è irreversibile nella percezione: una volta che l'utente ha sistemato 12 taccuini, cambiare asse significa risistemarli tutti.\n\nUna mitigazione che non costa quasi nulla: le labels esistenti (già in produzione dalla Fase 2) restano come FILTRO trasversale, non come contenitore. Lo scaffale dice DOVE sta un taccuino; l'etichetta dice COM'È. Due domande diverse, nessuna sovrapposizione.\n\nE il tap in più prima dell'indice resta: ho messo \"Apri l'indice\" come unico bottone primario, grande, sempre nello stesso punto."
+    },
+    {
+      "id": "atl-testa",
+      "x": 0,
+      "y": -330,
+      "w": 920,
+      "page": "page-2",
+      "text": "PUNTO 5 CONTRO PUNTO 6 — l'Atlante vince, e non di poco\n\nIl punto 5 (uno scaffale di ricerca con dentro Diari \"programmate\", \"da fare\") rompe la regola che abbiamo appena costruito: un Diario è un taccuino con voci e un indice. Se \"da fare\" diventa un Diario, la parola Diario significa due cose — a volte un taccuino di uscite, a volte una cartella di ricerche. È esattamente il collasso di categorie che ha reso l'app confusionaria. E peggio: se segno una meta in \"da fare\" e poi la cammino, la voce dovrebbe migrare in un altro Diario — cioè torna il problema dell'oggetto che cambia casa, che è il problema originale.\n\nIl punto 6 invece si incastra con tutto il resto. In una biblioteca da campo ci sono due tipi di libro: i TUOI TACCUINI (quello che hai fatto) e l'ATLANTE (dove potresti andare). L'Atlante non è uno scaffale né un taccuino: è l'altro tipo di libro, uno solo, sempre presente, che non si sposta e non si archivia.\n\nIl confine che rende tutto comprensibile, in una riga: L'ATLANTE CONTIENE CIÒ CHE NON È ANCORA TUO; IL TACCUINO CIÒ CHE LO È. Appena una meta ha una data, ha già una voce in un taccuino — e quindi non sta più nell'Atlante."
+    },
+    {
+      "id": "atl-tavole",
+      "x": 58,
+      "y": -800,
+      "w": 390,
+      "page": "page-2",
+      "text": "4 · LE TAVOLE — la struttura di default che mi hai chiesto\n\nNon \"Diari\" ma TAVOLE, quattro, e tre delle quattro esistono già nel codice e oggi sono orfane:\n\n· SEGNATE — messe da parte mentre cercavi, senza data. È l'unica tavola davvero nuova, e sostituisce il tuo \"da fare\".\n· VICINO A TE — dedotta dalla posizione, non curata a mano: non richiede disciplina all'utente.\n· RICERCHE SALVATE — esistono già, sepolte in /profilo/ricerche-salvate. Qui hanno finalmente un posto sensato.\n· PROPOSTE PER TE — è /percorsi-per-te, oggi una pagina isolata raggiungibile da nessun posto ovvio.\n\nNOTA SU \"PROGRAMMATE\": l'ho tolta di proposito. Una meta programmata ha una data, quindi è già una voce di un taccuino — metterla anche qui creerebbe due posti per la stessa cosa. È il confine che tiene in piedi il modello."
+    },
+    {
+      "id": "atl-5",
+      "x": 557,
+      "y": -800,
+      "w": 390,
+      "page": "page-2",
+      "text": "5 · LE SEGNATE\n\nOgni riga ha un solo gesto che conta: \"Trascrivi in un taccuino\". Da lì si va alla schermata 6.\n\nIn fondo, una già trascritta (La Folgore): barrata, con il rimando a dove è finita — Appennino centrale, p. 58. Resta visibile una settimana e poi sparisce: senza una scadenza, questa tavola diventerebbe un secondo archivio parallelo, cioè il problema di partenza.\n\nI filtri sono le tipologie vere di lib/metaTypes.ts: Sentieri, Borghi, Siti."
+    },
+    {
+      "id": "atl-6",
+      "x": 991,
+      "y": -800,
+      "w": 390,
+      "page": "page-2",
+      "text": "6 · LA TRASCRIZIONE\n\nÈ il ponte fra i due libri, e le decisioni umane restano tre: come la chiami, quando, in quale taccuino.\n\nTraccia, profilo, le tre pagine di Guida e i dati di sicurezza si scrivono da soli — è ciò che sulla carta avresti copiato a mano dall'atlante."
+    },
+    {
+      "id": "tac-testa",
+      "x": 0,
+      "y": -300,
+      "w": 920,
+      "page": "page-3",
+      "text": "IL TACCUINO APERTO — invariato rispetto a prima\n\nOgni VOCE è un'uscita e occupa PAGINE CONTIGUE: pianificazione, appunti presi in cammino, reportage. La voce non cambia nome e non cambia casa.\n\nGli appigli nel codice: gli URL dicono già /diari/[id]/percorsi/[percorsoId]/guida/[groupKey] e .../reportage/[activityId]/sezione/[n]; e HikeNote (testo, ora, lat/lon, foto, dettatura) sta su StoredActivity insieme a linkedPlannedId.\n\nDue regole: le pagine non si riordinano MAI (l'indice sì), e la carta è come l'app si organizza, non come ci si muove."
+    },
+    {
+      "id": "mappa",
+      "x": 0,
+      "y": 950,
+      "w": 1450,
+      "page": "page-3",
+      "text": "LA MAPPA MENTALE CHE NE ESCE — quattro parole, e si tiene\n\nDUE LIBRI, UNO STRUMENTO, TE.\n\n· LIBRERIA — i tuoi taccuini, su scaffali che decidi tu. Uno aperto alla volta.\n· ATLANTE — dove potresti andare. Uno solo, sempre lì, non si sposta e non si archivia.\n· NAVIGATOR — lo strumento che porti in tasca.\n· PROFILO — te.\n\nÈ anche la barra in basso, e sostituisce le cinque voci di oggi (Diari, Mete, Navigator, Statistiche, Profilo). \"Mete\" sparisce come voce autonoma: cercare è quello che fai DENTRO l'Atlante, non una sezione a sé. Statistiche entra nel taccuino, dove stanno i dati che riassume.\n\nDA DECIDERE ANCORA (nelle mie risposte in chat): se l'Atlante è uno solo o se ne possono creare altri (io dico uno solo), e quale asse scegli per gli scaffali.\n\nPalette, tipografia, sezioni e tipologie vengono dal codice reale. Numeri, titoli e appunti sono di esempio."
+    }
+  ],
+  "launch": {
+    "view": "canvas",
+    "page": "page-1"
+  }
+}

@@ -27,6 +27,12 @@ export const ROUTE_HIERARCHY: RouteEntry[] = [
   { pattern: '/diari/[id]/pubblica', parent: (p) => `/diari/${p.id}` },
   { pattern: '/percorsi', parent: '/diari' },
 
+  // Atlante — secondo libro di primo livello (docs/libreria-atlante-piano.md, Fase 2): torna a
+  // Libreria come ogni altra tab, mai annidato dentro un'altra.
+  { pattern: '/atlante', parent: '/diari' },
+  { pattern: '/atlante/salvate', parent: '/atlante' },
+  { pattern: '/atlante/salvate/[id]/aggiungi', parent: '/atlante/salvate' },
+
   { pattern: '/guida', parent: '/diari' },
   { pattern: '/guida/[id]', parent: '/guida' },
   { pattern: '/guida/[id]/percorso', parent: (p) => `/guida/${p.id}` },
@@ -62,6 +68,8 @@ export const ROUTE_HIERARCHY: RouteEntry[] = [
 
 export const ROUTE_LABELS: Record<string, string> = {
   '/diari': 'Diario',
+  '/atlante': 'Atlante',
+  '/atlante/salvate': 'Salvate',
   '/guida': 'Guida',
   '/resoconto': 'Resoconto',
   '/statistiche': 'Statistiche',

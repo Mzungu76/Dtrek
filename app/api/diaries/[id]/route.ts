@@ -33,6 +33,24 @@ export interface DiarioReportageRow {
   metaType: MetaType
 }
 
+/** Una Meta di questo Diario senza ancora un Reportage — "in programma", la prima delle tre parti
+ *  di una voce (docs/libreria-atlante-piano.md, Fase 4). Diverso da una riga dell'Atlante: qui
+ *  `diaryId` è già valorizzato, la Meta è già "a casa" — l'Atlante non la mostra più (vedi il
+ *  filtro `!diaryId` di app/atlante/salvate/page.tsx). */
+export interface DiarioInProgrammaRow {
+  /** planned_hikes.id */
+  id: string
+  title: string
+  distanceMeters: number
+  elevationGain: number
+  routePolyline?: [number, number][]
+  metaType: MetaType
+  /** 'YYYY-MM-DD', null se non ancora data una data. */
+  plannedDate: string | null
+  createdAt: string
+  trailScore: number | null
+}
+
 export interface DiarioDetail {
   id: string
   title: string
@@ -48,6 +66,10 @@ export interface DiarioDetail {
   labels: string[]
   archivedAt: string | null
   reportage: DiarioReportageRow[]
+  /** Le voci "in programma" di questo Diario — Fase 4 di docs/libreria-atlante-piano.md. Ordinate
+   *  per plannedDate (le senza data in coda), poi per createdAt: le pagine di un Diario non si
+   *  riordinano mai a mano, questo è l'unico ordine che esiste. */
+  inProgramma: DiarioInProgrammaRow[]
 }
 
 // GET /api/diaries/[id] → il Diario e l'elenco dei suoi Reportage — ristrutturazione Diario/Mete
@@ -72,7 +94,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
     const { data: planned, error: plannedErr } = await supabase
       .from('planned_hikes')
-      .select('id')
+      .select('id, title, distance_meters, elevation_gain, route_polyline, meta_type, planned_date, created_at, cached_trail_score')
       .eq('user_id', user.id)
       .eq('diary_id', params.id)
     if (plannedErr) throw plannedErr
@@ -80,6 +102,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const plannedIds = (planned ?? []).map(p => p.id as string)
 
     let reportage: DiarioReportageRow[] = []
+    // Le Mete di questo Diario già "camminate" (hanno un'activity collegata) — usato sotto per
+    // separare inProgramma da reportage senza una seconda query: la stessa Meta non può stare in
+    // entrambi gli elenchi.
+    const walkedPlannedIds = new Set<string>()
     if (plannedIds.length > 0) {
       const { data: activities, error: activitiesErr } = await supabase
         .from('activities')
@@ -117,7 +143,25 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         favorite:         (a.favorite as boolean | null) ?? false,
         metaType:         (a.meta_type as MetaType) ?? 'sentiero',
       }))
+      for (const a of activities ?? []) {
+        if (a.linked_planned_id) walkedPlannedIds.add(a.linked_planned_id as string)
+      }
     }
+
+    const inProgramma: DiarioInProgrammaRow[] = (planned ?? [])
+      .filter(p => !walkedPlannedIds.has(p.id as string))
+      .map(p => ({
+        id:             p.id as string,
+        title:          p.title as string,
+        distanceMeters: p.distance_meters as number,
+        elevationGain:  p.elevation_gain as number,
+        routePolyline:  p.route_polyline as [number, number][] | undefined,
+        metaType:       (p.meta_type as MetaType) ?? 'sentiero',
+        plannedDate:    p.planned_date as string | null,
+        createdAt:      p.created_at as string,
+        trailScore:     (p.cached_trail_score as number | null) ?? null,
+      }))
+      .sort((a, b) => (a.plannedDate ?? '9999-99-99').localeCompare(b.plannedDate ?? '9999-99-99') || a.createdAt.localeCompare(b.createdAt))
 
     const detail: DiarioDetail = {
       id:        diary.id as string,
@@ -129,6 +173,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       labels:      (diary.labels as string[] | null) ?? [],
       archivedAt:  diary.archived_at as string | null,
       reportage,
+      inProgramma,
     }
     return NextResponse.json(detail)
   } catch (e) {
@@ -146,7 +191,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const user = await getUserFromRequest(req)
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const body = await req.json().catch(() => ({})) as { labels?: unknown; archivedAt?: unknown }
+    const body = await req.json().catch(() => ({})) as {
+      labels?: unknown; archivedAt?: unknown; shelfId?: unknown; shelfPosition?: unknown
+    }
     const dbPatch: Record<string, unknown> = {}
 
     if (Object.prototype.hasOwnProperty.call(body, 'labels')) {
@@ -161,6 +208,30 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         return NextResponse.json({ error: 'archivedAt deve essere una stringa ISO o null' }, { status: 400 })
       }
       dbPatch.archived_at = body.archivedAt
+    }
+
+    // Sposta il Diario su un altro scaffale — drag & drop nel banner della Libreria
+    // (docs/libreria-atlante-piano.md, Fase 1). Mai null: un Diario sta sempre su uno scaffale.
+    if (Object.prototype.hasOwnProperty.call(body, 'shelfId')) {
+      if (typeof body.shelfId !== 'string') {
+        return NextResponse.json({ error: 'shelfId deve essere una stringa' }, { status: 400 })
+      }
+      const { data: shelf, error: shelfErr } = await supabase
+        .from('shelves')
+        .select('id')
+        .eq('id', body.shelfId)
+        .eq('user_id', user.id)
+        .maybeSingle()
+      if (shelfErr) throw shelfErr
+      if (!shelf) return NextResponse.json({ error: 'Scaffale non trovato' }, { status: 404 })
+      dbPatch.shelf_id = body.shelfId
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, 'shelfPosition')) {
+      if (typeof body.shelfPosition !== 'number' || !Number.isFinite(body.shelfPosition)) {
+        return NextResponse.json({ error: 'shelfPosition deve essere un numero' }, { status: 400 })
+      }
+      dbPatch.shelf_position = body.shelfPosition
     }
 
     if (Object.keys(dbPatch).length === 0) {
@@ -186,14 +257,16 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       .update({ ...dbPatch, updated_at: new Date().toISOString() })
       .eq('id', params.id)
       .eq('user_id', user.id)
-      .select('labels, archived_at')
+      .select('labels, archived_at, shelf_id, shelf_position')
       .single()
     if (error) throw error
     if (!data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     return NextResponse.json({
-      labels:     (data.labels as string[] | null) ?? [],
-      archivedAt: data.archived_at as string | null,
+      labels:        (data.labels as string[] | null) ?? [],
+      archivedAt:    data.archived_at as string | null,
+      shelfId:       data.shelf_id as string | null,
+      shelfPosition: data.shelf_position as number,
     })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 })

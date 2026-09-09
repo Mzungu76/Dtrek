@@ -438,3 +438,10 @@ body {
     rgba(252,246,234,.85) 48%, rgba(252,246,234,.25) 72%, transparent 100%);
   pointer-events: none;
 }
+
+/* Carosello della Libreria (app/diari/page.tsx) — nasconde la scrollbar dello swipe orizzontale
+   fra copertine: lo scroll-snap resta interamente nativo (touch/wheel), qui si toglie solo il
+   filo di scrollbar che altrimenti comparirebbe sotto le copertine. `scrollbar-width` (Firefox)
+   è già inline sull'elemento; le WebKit-only pseudo-classi non sono esprimibili come style React,
+   da qui la classe globale. */
+.no-scrollbar::-webkit-scrollbar{ display: none; }

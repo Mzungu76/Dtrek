@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { GalleryMapThumb } from '@/components/routehub/BottomGallery'
+import RouteThumb from '@/components/RouteThumb'
 import BookPage from '@/components/libro/BookPage'
 import { DiarioCoverThumb } from '@/components/diario/DiarioCoverThumb'
 import { EtichetteDiarioEditor } from '@/components/diario/EtichetteDiarioEditor'
@@ -230,6 +231,7 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
             </h1>
             <p style={{ fontFamily: FONT_HAND, fontSize: 14, color: TACCUINO_INK.handMuted, margin: '3px 0 0', ...TACCUINO_RULED_TEXT_STYLE }}>
               {detail.subtitle ? `"${detail.subtitle}" — ` : ''}{detail.reportage.length} reportage
+              {detail.inProgramma.length > 0 && ` · ${detail.inProgramma.length} in programma`}
             </p>
           </div>
         </div>
@@ -247,6 +249,49 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
           <HandDrawnFrame stroke={TACCUINO_PAPER.contourLine} strokeWidth={2} rx={6} dashed />
           <Plus className="w-4 h-4" /> nuovo reportage
         </Link>
+
+        {/* Le voci "in programma" — prima parte del ciclo di una voce, prima ancora del
+            Reportage (docs/libreria-atlante-piano.md, Fase 4). Vengono dall'Atlante ("Aggiungi ad
+            un Diario") o da qui stesso ("nuova voce", sopra): appena una Meta ha un diaryId sta
+            già in questo elenco, non serve camminarla per vederla nel suo Diario. Ordine fisso
+            (plannedDate poi createdAt, mai a mano) — un elenco corto e denso, non la lettura "a
+            libro" completa del Reportage: qui basta sapere cosa c'è, il tocco porta alla Guida. */}
+        {detail.inProgramma.length > 0 && (
+          <div className="flex flex-col mb-4">
+            <p className="mb-1.5" style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 10, color: TACCUINO_INK.hand, ...TACCUINO_RULED_TEXT_STYLE }}>
+              In programma
+            </p>
+            {detail.inProgramma.map(p => (
+              <Link
+                key={p.id}
+                href={`/diari/${encodeURIComponent(diaryId)}/percorsi/${encodeURIComponent(p.id)}/guida/prima_di_partire`}
+                className="flex items-center gap-3 py-2"
+                style={{ borderBottom: TACCUINO_LIST_DIVIDER }}
+              >
+                <div className="w-10 h-10 rounded-lg shrink-0 overflow-hidden relative" style={{ background: TACCUINO_PAPER.card }}>
+                  {p.routePolyline && p.routePolyline.length > 1
+                    ? <RouteThumb polyline={p.routePolyline} color={TACCUINO_ACCENT[600]} strokeWidth={2.5} />
+                    : <div className="w-full h-full flex items-center justify-center"><Mountain className="w-4 h-4" style={{ color: TACCUINO_PAPER.cardBorder }} /></div>}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate" style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 16, color: TACCUINO_INK.typed }}>{p.title}</p>
+                  {metaHasHikingMetrics(p.metaType) && (
+                    <p style={{ fontSize: 10.5, color: TACCUINO_INK.handMuted }}>
+                      {(p.distanceMeters / 1000).toFixed(1)} km &middot; +{Math.round(p.elevationGain)} m
+                      {p.plannedDate && ` · ${new Date(p.plannedDate).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })}`}
+                    </p>
+                  )}
+                </div>
+                <span
+                  className="shrink-0 text-[10px] font-semibold uppercase tracking-wide px-2 py-1 rounded-full"
+                  style={{ color: TACCUINO_INK.hand, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}
+                >
+                  in programma
+                </span>
+              </Link>
+            ))}
+          </div>
+        )}
 
         {detail.reportage.length > 0 && (
           <div className="mb-3">

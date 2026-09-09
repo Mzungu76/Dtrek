@@ -4,7 +4,7 @@ import { aggregateDiaries, type DiaryRow, type PlannedDiaryLinkRow, type Activit
 function diario(overrides: Partial<DiaryRow> & { id: string }): DiaryRow {
   return {
     title: 'Diario', subtitle: '', author: '', cover_url: null, footer_text: '',
-    is_default: false, labels: [], archived_at: null,
+    is_default: false, labels: [], archived_at: null, shelf_id: null, shelf_position: 0,
     ...overrides,
   }
 }
@@ -16,6 +16,7 @@ describe('aggregateDiaries', () => {
       id: 'd1', title: 'Diario', subtitle: '', author: '', coverUrl: null, footerText: '',
       isDefault: true, reportageCount: 0, pubblicabile: false,
       distanceMeters: 0, elevationGain: 0, lastActivityAt: null, labels: [], archivedAt: null,
+      shelfId: null, shelfPosition: 0,
     }])
   })
 

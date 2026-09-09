@@ -1,144 +1,47 @@
 'use client'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import Navbar, { MOBILE_BOTTOMBAR_SPACER } from '@/components/Navbar'
 import BookSpineShadow from '@/components/libro/BookSpineShadow'
-import RouteThumb from '@/components/RouteThumb'
-import { FasiRail } from '@/components/diari/FasiRail'
+import { DiarioCoverThumb } from '@/components/diario/DiarioCoverThumb'
 import { ProssimaUscitaCard } from '@/components/diari/ProssimaUscitaCard'
-import { RegistroRow } from '@/components/diari/RegistroRow'
-import { GruppoCollassato } from '@/components/diari/GruppoCollassato'
-import { IndiceChips, FILTRO_TUTTI, FILTRO_ARCHIVIO } from '@/components/diari/IndiceChips'
-import { NuovoDiarioRow } from '@/components/diari/NuovoDiarioRow'
 import { RaccolteStrip } from '@/components/diari/RaccolteStrip'
+import { ScaffaliBanner } from '@/components/libreria/ScaffaliBanner'
 import type { DiarySummary } from '@/lib/diari/aggregateDiaries'
-import { raggruppaDiari } from '@/lib/diari/raggruppaDiari'
 import { selezionaProssimaUscita } from '@/lib/diari/prossimaUscita'
 import type { AllPercorsiRow } from '@/app/api/percorsi/route'
 import type { CollectionSummary } from '@/app/api/collections/route'
+import type { ShelfSummary } from '@/app/api/shelves/route'
+import { getUserSettingsCached, updateUserSettings } from '@/lib/sync/userSettingsStore'
 import { FONT } from '@/lib/designTokens'
-import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_ACCENT, TACCUINO_RULED_TEXT_STYLE, FONT_HAND, INK_ABSORB_STYLE, TaccuinoPaperTexture, TaccuinoRuledLines } from '@/lib/taccuinoTokens'
-import { metaHasHikingMetrics } from '@/lib/metaTypes'
-import { ArrowRight, BookMarked, Compass, Loader2, Mountain, Search, X } from 'lucide-react'
+import { TACCUINO_PAPER, TACCUINO_INK, TACCUINO_RULED_TEXT_STYLE, TaccuinoPaperTexture, TaccuinoRuledLines } from '@/lib/taccuinoTokens'
+import { ArrowRight, BookMarked, Loader2, Plus } from 'lucide-react'
 
-/**
- * Ricerca testuale su tutti i percorsi (Mete e Reportage), in ogni Diario — Fase 18: risultati
- * senza lasciare lo scaffale. Non fa più il proprio fetch: le righe arrivano dal genitore
- * (`DiariPageLibro`), che le carica comunque per il rail delle fasi e la card "prossima uscita"
- * (docs/diari-restyling-piano.md, Fase 1) — un solo GET /api/percorsi per l'intera pagina invece
- * di due identici. Ogni riga rimanda alla stessa lettura "a libro" di app/percorsi/page.tsx:
- * annidata nel Diario quando lo conosciamo già (`diaryId` presente — un percorso con almeno un
- * Reportage, che quindi appartiene già a un Diario), altrimenti nella variante diary-agnostic
- * (app/guida/[id]/[groupKey]/page.tsx — sempre il caso per una Meta, che non ha ancora un Diario).
- */
-function GlobalRouteSearch({ rows, error }: { rows: AllPercorsiRow[] | null; error: string | null }) {
-  const [query, setQuery] = useState('')
+const HERO_COVER_WIDTH = 236
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    if (!q || !rows) return []
-    return rows.filter(r => r.title.toLowerCase().includes(q) || (r.diaryTitle ?? '').toLowerCase().includes(q))
-  }, [rows, query])
-
-  const hasQuery = query.trim().length > 0
-
-  return (
-    <div className="mb-8">
-      <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 11, color: TACCUINO_INK.hand, ...TACCUINO_RULED_TEXT_STYLE }} className="mb-2">
-        Cerca un percorso
-      </p>
-      <div className="relative">
-        <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: TACCUINO_INK.handMuted }} />
-        <input
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          placeholder="Titolo della meta, del reportage o del Diario…"
-          className="w-full pl-8 pr-8 py-2.5 rounded-full text-[13px] outline-none"
-          style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}`, color: TACCUINO_INK.typed }}
-        />
-        {hasQuery && (
-          <button
-            onClick={() => setQuery('')}
-            className="absolute right-3 top-1/2 -translate-y-1/2"
-            style={{ color: TACCUINO_INK.handMuted }}
-            aria-label="Cancella ricerca"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        )}
-      </div>
-
-      {hasQuery && (
-        rows === null && !error ? (
-          <div className="flex items-center justify-center py-6">
-            <Loader2 className="w-4 h-4 animate-spin" style={{ color: TACCUINO_INK.handMuted }} />
-          </div>
-        ) : filtered.length === 0 ? (
-          <p className="text-[13px] py-4" style={{ color: TACCUINO_INK.hand, ...TACCUINO_RULED_TEXT_STYLE }}>Nessun percorso corrisponde alla ricerca.</p>
-        ) : (
-          <div className="mt-2 flex flex-col rounded-2xl overflow-hidden" style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}>
-            {filtered.slice(0, 8).map(p => (
-              <Link
-                key={p.id}
-                href={p.diaryId
-                  ? `/diari/${encodeURIComponent(p.diaryId)}/percorsi/${encodeURIComponent(p.id)}/guida/prima_di_partire`
-                  : `/guida/${encodeURIComponent(p.id)}/prima_di_partire`}
-                className="flex items-center gap-3 px-3 py-2.5"
-                style={{ borderBottom: `1px dotted ${TACCUINO_PAPER.cardBorder}` }}
-              >
-                <div className="w-11 h-11 rounded-lg shrink-0 overflow-hidden relative" style={{ background: TACCUINO_PAPER.base }}>
-                  {p.routePolyline && p.routePolyline.length > 1
-                    ? <RouteThumb polyline={p.routePolyline} color={TACCUINO_ACCENT[600]} strokeWidth={2.5} />
-                    : <div className="w-full h-full flex items-center justify-center"><Mountain className="w-4 h-4" style={{ color: '#c9b98a' }} /></div>}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate" style={{ fontSize: 13.5, fontWeight: 600, color: TACCUINO_INK.typed }}>{p.title}</p>
-                  <div className="flex items-center gap-2 flex-wrap" style={{ fontSize: 10.5, color: TACCUINO_INK.hand }}>
-                    {p.diaryTitle && <span className="truncate">{p.diaryTitle}</span>}
-                    {metaHasHikingMetrics(p.metaType) && (
-                      <>
-                        <span>{(p.distanceMeters / 1000).toFixed(1)} km</span>
-                        <span>+{Math.round(p.elevationGain)} m</span>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </Link>
-            ))}
-            {filtered.length > 8 && (
-              <p className="px-3 py-2.5 text-[12px] font-semibold text-center" style={{ color: TACCUINO_INK.hand }}>
-                +{filtered.length - 8} altri risultati — affina la ricerca
-              </p>
-            )}
-          </div>
-        )
-      )}
-    </div>
-  )
+function formatKm(distanceMeters: number): string {
+  return (distanceMeters / 1000).toLocaleString('it-IT', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 }
 
-/** Soglia sotto la quale l'indice a chip è solo rumore — l'elenco intero ci sta già in una
- *  schermata (docs/diari-restyling-piano.md, Fase 1). */
-const SOGLIA_INDICE = 6
-
 /**
- * "I miei Diari", versione A ("Plancia di campo") del restyling — docs/diari-restyling-piano.md.
- * Sostituisce lo scaffale di copertine con: il rail delle tre fasi (Pianifica/Naviga/Registra, con
- * lo stato reale dell'utente), un'unica azione primaria (la prossima uscita) e un registro a righe
- * che raggruppa i Diari per stagione invece di impilarli tutti in una griglia — la parte pensata
- * per reggere la crescita del numero di Diari senza introdurre cartelle (vedi il confronto in
- * docs/mockup-diari-redesign/README.md).
+ * "Libreria" — la nuova prima pagina: la copertina del Diario in uso, una alla volta, con lo
+ * scaffale sempre indicato in testata e il banner degli scaffali sotto (docs/libreria-atlante-
+ * piano.md, Fase 1). Sostituisce lo scaffale-griglia precedente. Lo swipe passa fra i Diari dello
+ * STESSO scaffale — per cambiare scaffale si apre il banner, non si continua a scorrere.
  *
- * Un solo fetch di /api/percorsi per l'intera pagina (rail, card, ricerca) — vedi il commento su
- * GlobalRouteSearch sopra.
+ * L'app si apre sempre qui (vedi app/page.tsx, ora un semplice redirect): questa pagina risolve
+ * da sola l'ultimo Diario aperto (lastDiaryId), la stessa risoluzione che prima viveva lì.
  */
-function DiariPageLibro() {
+export default function LibreriaPage() {
   const [diaries, setDiaries] = useState<DiarySummary[] | null>(null)
   const [diariesError, setDiariesError] = useState<string | null>(null)
+  const [shelves, setShelves] = useState<ShelfSummary[] | null>(null)
   const [percorsi, setPercorsi] = useState<AllPercorsiRow[] | null>(null)
-  const [percorsiError, setPercorsiError] = useState<string | null>(null)
   const [raccolte, setRaccolte] = useState<CollectionSummary[] | null>(null)
-  const [filtro, setFiltro] = useState<string>(FILTRO_TUTTI)
+  const [currentDiaryId, setCurrentDiaryId] = useState<string | null>(null)
+
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const scrollTimer = useRef<ReturnType<typeof setTimeout>>()
 
   useEffect(() => {
     fetch('/api/diaries')
@@ -148,70 +51,80 @@ function DiariPageLibro() {
   }, [])
 
   useEffect(() => {
-    fetch('/api/percorsi')
+    fetch('/api/shelves')
       .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
-      .then(setPercorsi)
-      .catch(e => setPercorsiError(e instanceof Error ? e.message : String(e)))
+      .then(setShelves)
+      .catch(() => setShelves([]))
   }, [])
 
   useEffect(() => {
-    // A parte, senza bloccare il resto della pagina: la striscia delle raccolte e il richiamo di
-    // appartenenza su ogni riga sono un arricchimento, non un dato che il resto della dashboard
-    // aspetta — un 401/500 qui non deve mai far sembrare "rotti" i Diari.
+    fetch('/api/percorsi')
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
+      .then(setPercorsi)
+      .catch(() => setPercorsi(null))
+  }, [])
+
+  useEffect(() => {
+    // A parte, senza bloccare il resto — vedi lo stesso principio già in app/diari/page.tsx prima
+    // di questo restyling: un 401/500 qui non deve mai far sembrare "rotta" la Libreria.
     fetch('/api/collections')
       .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
       .then(setRaccolte)
       .catch(() => setRaccolte([]))
   }, [])
 
-  const metePronteCount = useMemo(() => percorsi?.filter(r => r.reportageCount === 0).length ?? 0, [percorsi])
-  const percorsiConTracciaCount = useMemo(
-    () => percorsi?.filter(r => (r.routePolyline?.length ?? 0) > 1).length ?? 0,
-    [percorsi],
+  // Risolve l'ultimo Diario aperto — stessa logica che prima viveva in app/page.tsx (Fase 11 di
+  // docs/diario-a-libro-piano.md): il Diario ricordato potrebbe non esistere più o essere stato
+  // archiviato nel frattempo, verificato contro l'elenco vero.
+  useEffect(() => {
+    if (!diaries || currentDiaryId) return
+    let cancelled = false
+    getUserSettingsCached().then(settings => {
+      if (cancelled) return
+      const attivi = diaries.filter(d => !d.archivedAt)
+      const target = attivi.find(d => d.id === settings.lastDiaryId) ?? attivi.find(d => d.isDefault) ?? attivi[0] ?? diaries[0]
+      if (target) setCurrentDiaryId(target.id)
+    })
+    return () => { cancelled = true }
+  }, [diaries, currentDiaryId])
+
+  const diariAttivi = useMemo(() => (diaries ?? []).filter(d => !d.archivedAt), [diaries])
+  const currentDiary = useMemo(() => diariAttivi.find(d => d.id === currentDiaryId) ?? null, [diariAttivi, currentDiaryId])
+  const shelfDiaries = useMemo(
+    () => diariAttivi.filter(d => d.shelfId === currentDiary?.shelfId).sort((a, b) => a.shelfPosition - b.shelfPosition),
+    [diariAttivi, currentDiary],
   )
-  const reportageTotali = useMemo(() => diaries?.reduce((s, d) => s + d.reportageCount, 0) ?? 0, [diaries])
+  const indexInShelf = shelfDiaries.findIndex(d => d.id === currentDiaryId)
+
+  function selectDiary(id: string) {
+    setCurrentDiaryId(id)
+    updateUserSettings({ lastDiaryId: id }).catch(() => {})
+  }
+
+  // Scorre il carosello sul Diario corrente quando cambia da fuori (banner, o il primo Diario
+  // risolto) — se lo scroll è già lì (l'utente ha appena swipato lui stesso) non fa nulla, per
+  // non litigare con lo scroll momentum del touch.
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el || indexInShelf < 0 || el.clientWidth === 0) return
+    const target = indexInShelf * el.clientWidth
+    if (Math.abs(el.scrollLeft - target) > 4) el.scrollTo({ left: target })
+  }, [indexInShelf])
+
+  function onCarouselScroll() {
+    clearTimeout(scrollTimer.current)
+    scrollTimer.current = setTimeout(() => {
+      const el = scrollRef.current
+      if (!el || el.clientWidth === 0) return
+      const idx = Math.round(el.scrollLeft / el.clientWidth)
+      const d = shelfDiaries[idx]
+      if (d && d.id !== currentDiaryId) selectDiary(d.id)
+    }, 80)
+  }
+
   const prossimaUscita = useMemo(() => percorsi ? selezionaProssimaUscita(percorsi) : null, [percorsi])
 
-  const etichetteUniche = useMemo(() => {
-    const conteggi = new Map<string, number>()
-    for (const d of diaries ?? []) {
-      if (d.archivedAt) continue
-      for (const etichetta of d.labels) conteggi.set(etichetta, (conteggi.get(etichetta) ?? 0) + 1)
-    }
-    return Array.from(conteggi.entries())
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([valore, conteggio]) => ({ valore, conteggio }))
-  }, [diaries])
-
-  const archiviatiCount = useMemo(() => diaries?.filter(d => d.archivedAt).length ?? 0, [diaries])
-
-  // A quali Raccolte appartiene già ogni Diario — un Diario può stare in più di una (vedi
-  // docs/raccolte-pubblicazione-piano.md: la raccolta è una selezione, non una cartella), quindi
-  // il valore è un elenco di titoli, non uno solo.
-  const nomiRaccolteByDiaryId = useMemo(() => {
-    const mappa = new Map<string, string[]>()
-    for (const raccolta of raccolte ?? []) {
-      for (const diaryId of raccolta.diaryIds) {
-        const lista = mappa.get(diaryId) ?? []
-        lista.push(raccolta.title)
-        mappa.set(diaryId, lista)
-      }
-    }
-    return mappa
-  }, [raccolte])
-
-  const diariFiltrati = useMemo(() => {
-    if (!diaries) return []
-    if (filtro === FILTRO_TUTTI) return diaries
-    if (filtro === FILTRO_ARCHIVIO) return diaries.filter(d => d.archivedAt)
-    return diaries.filter(d => !d.archivedAt && d.labels.includes(filtro))
-  }, [diaries, filtro])
-
-  const gruppi = useMemo(() => raggruppaDiari(diariFiltrati), [diariFiltrati])
-  // Un solo gruppo (un account nuovo, o un filtro che riduce l'elenco a una sola stagione/
-  // all'archivio) va mostrato espanso: un fold sarebbe un click in più per vedere l'unica cosa che
-  // c'è, e per l'Archivio filtrato esplicitamente l'utente vuole proprio guardarci dentro.
-  const espandiTutti = gruppi.length <= 1
+  const loading = diaries === null || shelves === null || !currentDiary
 
   return (
     <div className={`relative min-h-screen ${MOBILE_BOTTOMBAR_SPACER}`}>
@@ -219,103 +132,109 @@ function DiariPageLibro() {
       <TaccuinoRuledLines />
       <Navbar />
       <BookSpineShadow variant="light" />
-      <div className="max-w-[900px] mx-auto px-4 sm:px-8 pb-14" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 28px)' }}>
-        <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', fontSize: 11, color: TACCUINO_INK.hand, ...TACCUINO_RULED_TEXT_STYLE }} className="mb-1.5">
-          Diario
-        </p>
-        <h1 style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 34, ...INK_ABSORB_STYLE, ...TACCUINO_RULED_TEXT_STYLE }} className="mb-1.5">
-          I miei Diari
-        </h1>
-        <p style={{ fontFamily: FONT.lora, fontSize: 12.5, color: TACCUINO_INK.hand, ...TACCUINO_RULED_TEXT_STYLE }} className="mb-6 max-w-[46ch]">
-          Pianifichi il percorso, lo cammini con il navigatore, l&rsquo;uscita finisce qui — misurata, non raccontata.
-        </p>
 
-        {(diariesError || percorsiError) && (
-          <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-6">
-            Impossibile caricare i tuoi Diari: {diariesError ?? percorsiError}
+      <div className="max-w-[520px] mx-auto px-4 sm:px-8" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 24px)', paddingBottom: 168 }}>
+        {diariesError && (
+          <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-4">
+            Impossibile caricare la Libreria: {diariesError}
           </p>
         )}
 
-        {diaries === null && !diariesError ? (
+        {loading ? (
           <div className="flex items-center justify-center py-24 gap-3" style={{ color: TACCUINO_INK.handMuted }}>
             <Loader2 className="w-6 h-6 animate-spin" /><span style={TACCUINO_RULED_TEXT_STYLE}>Caricamento…</span>
           </div>
         ) : (
           <>
-            <FasiRail
-              metePronteCount={metePronteCount}
-              percorsiConTracciaCount={percorsiConTracciaCount}
-              reportageTotali={reportageTotali}
-            />
-
-            <div className="mt-4 mb-6">
-              <ProssimaUscitaCard candidata={prossimaUscita} />
+            <div className="flex items-center justify-between gap-3 mb-1">
+              <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', fontSize: 10.5, color: TACCUINO_INK.hand, ...TACCUINO_RULED_TEXT_STYLE }}>
+                {shelves.find(s => s.id === currentDiary.shelfId)?.name ?? 'Libreria'}
+              </p>
+              {shelfDiaries.length > 1 && (
+                <p style={{ fontFamily: FONT.mono, fontSize: 10.5, color: TACCUINO_INK.handMuted }}>
+                  {indexInShelf + 1} di {shelfDiaries.length}
+                </p>
+              )}
             </div>
 
-            {(diaries?.length ?? 0) > SOGLIA_INDICE && (
-              <div className="mb-3">
-                <IndiceChips
-                  etichette={etichetteUniche}
-                  totale={diaries?.length ?? 0}
-                  archiviati={archiviatiCount}
-                  selezionato={filtro}
-                  onSelect={setFiltro}
-                />
-              </div>
-            )}
-
-            <div className="flex flex-col gap-2 mb-3">
-              {gruppi.map(gruppo => (
-                espandiTutti || gruppo.tipo === 'stagione_corrente'
-                  ? gruppo.diari.map((diario, i) => (
-                      <RegistroRow key={diario.id} diario={diario} indiceColore={i} nomiRaccolte={nomiRaccolteByDiaryId.get(diario.id)} />
-                    ))
-                  : <GruppoCollassato key={gruppo.chiave} gruppo={gruppo} nomiRaccolteByDiaryId={nomiRaccolteByDiaryId} />
+            <div
+              ref={scrollRef}
+              onScroll={onCarouselScroll}
+              className="flex overflow-x-auto snap-x snap-mandatory no-scrollbar -mx-4 sm:-mx-8 px-4 sm:px-8"
+              style={{ scrollbarWidth: 'none' }}
+            >
+              {shelfDiaries.map(d => (
+                <div key={d.id} className="snap-center shrink-0 w-full flex flex-col items-center py-3">
+                  <div className="rounded shadow-lg overflow-hidden" style={{ boxShadow: '0 12px 26px rgba(46,42,34,.30)' }}>
+                    <Link href={`/diari/${encodeURIComponent(d.id)}`}>
+                      <DiarioCoverThumb coverUrl={d.coverUrl} width={HERO_COVER_WIDTH} title={d.title} subtitle={d.subtitle} author={d.author} />
+                    </Link>
+                  </div>
+                </div>
               ))}
             </div>
 
-            <div className="mb-6">
-              <NuovoDiarioRow />
-            </div>
-
-            {/* Elemento visivo, non un link testuale — le Raccolte sono un livello di
-                pubblicazione al pari dei Diari, non una funzione minore in fondo alla pagina
-                (docs/raccolte-pubblicazione-piano.md). Compare solo se l'utente ne ha già almeno
-                una: un elenco vuoto di card sarebbe peggio del semplice link che resta più sotto
-                per chi non le ha ancora scoperte. */}
-            {raccolte && raccolte.length > 0 && (
-              <RaccolteStrip raccolte={raccolte} />
+            {shelfDiaries.length > 1 && (
+              <div className="flex items-center justify-center gap-1.5 mb-3">
+                {shelfDiaries.map((d, i) => (
+                  <span
+                    key={d.id}
+                    className="block rounded-full transition-all"
+                    style={{ width: i === indexInShelf ? 16 : 5, height: 5, background: i === indexInShelf ? TACCUINO_INK.hand : TACCUINO_PAPER.cardBorder }}
+                  />
+                ))}
+              </div>
             )}
 
-            <GlobalRouteSearch rows={percorsi} error={percorsiError} />
-
-            <div className="flex items-center gap-5 flex-wrap">
-              <Link
-                href="/percorsi"
-                className="inline-flex items-center gap-2 text-[13px] transition-colors"
-                style={{ color: TACCUINO_INK.hand, ...TACCUINO_RULED_TEXT_STYLE }}
-              >
-                <Compass className="w-4 h-4" /> Tutte le Mete <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-              {/* Solo finché l'utente non ha ancora nessuna Raccolta: da lì in poi il punto di
-                  ingresso è la RaccolteStrip visiva sopra, questo link sarebbe ridondante. */}
-              {raccolte && raccolte.length === 0 && (
-                <Link
-                  href="/raccolte"
-                  className="inline-flex items-center gap-2 text-[13px] transition-colors"
-                  style={{ color: TACCUINO_INK.hand, ...TACCUINO_RULED_TEXT_STYLE }}
-                >
-                  <BookMarked className="w-4 h-4" /> Le mie Raccolte <ArrowRight className="w-3.5 h-3.5" />
-                </Link>
-              )}
+            <div className="grid grid-cols-3 gap-2 mt-2 mb-4">
+              <div className="rounded-xl px-3 py-2.5 text-center" style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}>
+                <p style={{ fontFamily: FONT.mono, fontWeight: 700, fontSize: 15, color: TACCUINO_INK.typed }}>{currentDiary.reportageCount}</p>
+                <p style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.1em', color: TACCUINO_INK.handMuted }}>reportage</p>
+              </div>
+              <div className="rounded-xl px-3 py-2.5 text-center" style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}>
+                <p style={{ fontFamily: FONT.mono, fontWeight: 700, fontSize: 15, color: TACCUINO_INK.typed }}>{formatKm(currentDiary.distanceMeters)}</p>
+                <p style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.1em', color: TACCUINO_INK.handMuted }}>km</p>
+              </div>
+              <div className="rounded-xl px-3 py-2.5 text-center" style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}>
+                <p style={{ fontFamily: FONT.mono, fontWeight: 700, fontSize: 15, color: TACCUINO_INK.typed }}>+{Math.round(currentDiary.elevationGain)}</p>
+                <p style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.1em', color: TACCUINO_INK.handMuted }}>D+ m</p>
+              </div>
             </div>
+
+            <ProssimaUscitaCard candidata={prossimaUscita} />
+
+            <Link
+              href={`/diari/${encodeURIComponent(currentDiary.id)}`}
+              className="flex items-center justify-center gap-2 mt-4 mb-2 h-12 rounded-xl font-semibold text-[14px]"
+              style={{ background: TACCUINO_INK.typed, color: TACCUINO_PAPER.light }}
+            >
+              <BookMarked className="w-4 h-4" /> Apri l&rsquo;indice <ArrowRight className="w-4 h-4" />
+            </Link>
+
+            {raccolte && raccolte.length > 0 ? (
+              <div className="mt-4"><RaccolteStrip raccolte={raccolte} /></div>
+            ) : (
+              <Link href="/raccolte" className="inline-flex items-center gap-2 mt-4 text-[13px]" style={{ color: TACCUINO_INK.hand }}>
+                <Plus className="w-3.5 h-3.5" /> Le mie Raccolte
+              </Link>
+            )}
           </>
         )}
       </div>
+
+      {!loading && (
+        <ScaffaliBanner
+          shelves={shelves}
+          diaries={diariAttivi}
+          currentShelfId={currentDiary.shelfId}
+          currentDiaryId={currentDiary.id}
+          onSelectDiary={selectDiary}
+          onDiaryMoved={(diaryId, shelfId, shelfPosition) => {
+            setDiaries(prev => prev ? prev.map(d => d.id === diaryId ? { ...d, shelfId, shelfPosition } : d) : prev)
+          }}
+          onShelfCreated={shelf => setShelves(prev => prev ? [...prev, shelf] : [shelf])}
+        />
+      )}
     </div>
   )
-}
-
-export default function DiariPage() {
-  return <DiariPageLibro />
 }

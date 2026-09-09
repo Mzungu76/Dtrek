@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
 
     const { data: diaries, error: diariesErr } = await supabase
       .from('diaries')
-      .select('id, title, subtitle, author, cover_url, footer_text, is_default, labels, archived_at')
+      .select('id, title, subtitle, author, cover_url, footer_text, is_default, labels, archived_at, shelf_id, shelf_position')
       .eq('user_id', user.id)
       .order('is_default', { ascending: false })
       .order('created_at', { ascending: true })
@@ -80,9 +80,27 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Un Diario sta sempre su uno scaffale (genitore unico, mai uno stato transitorio "senza
+    // scaffale" — docs/libreria-atlante-piano.md, Fase 0): shelfId esplicito dal chiamante (la
+    // Libreria lo passa sempre, è nato dentro lo scaffale aperto), altrimenti il primo scaffale
+    // dell'utente per posizione.
+    const body = await req.json().catch(() => ({})) as { shelfId?: unknown }
+    let shelfId = typeof body.shelfId === 'string' ? body.shelfId : null
+    if (!shelfId) {
+      const { data: shelf, error: shelfErr } = await supabase
+        .from('shelves')
+        .select('id')
+        .eq('user_id', user.id)
+        .order('position', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+      if (shelfErr) throw shelfErr
+      shelfId = shelf?.id ?? null
+    }
+
     const { data, error } = await supabase
       .from('diaries')
-      .insert({ user_id: user.id, title: 'Nuovo Diario', subtitle: '', author: '', is_default: false })
+      .insert({ user_id: user.id, title: 'Nuovo Diario', subtitle: '', author: '', is_default: false, shelf_id: shelfId })
       .select('id')
       .single()
     if (error) throw error
