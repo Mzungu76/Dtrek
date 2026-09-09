@@ -1,5 +1,12 @@
 # Allineamento ai mockup approvati — censimento e piano
 
+> **Stato: interventi A–E completati.** Commit `8ac24df`/`d8dce25` (A+B) e `c4d66aa` (C+D+E) sul
+> branch `claude/diari-page-redesign-h1nxtn`. Il censimento sotto resta come riferimento storico di
+> *cosa c'era* prima; l'unica differenza reale rispetto alla lista degli interventi è che **GuideQA**
+> e **TourControls**, inclusi nella bozza iniziale della lista dead-code dell'intervento E, si sono
+> rivelati falsi positivi in fase di verifica (montati rispettivamente da `GuideReader.tsx` e
+> `MapView.tsx`) e sono stati esclusi dalla cancellazione.
+
 Stato rilevato dopo il merge della PR #890 (Libreria + Atlante, fasi 0–6). L'impianto nuovo è in
 piedi, ma convive con quello vecchio: nessuna pagina è stata ritirata, quindi diverse funzioni
 esistono ora in **due posti** e diverse pagine sono rimaste **senza un ingresso**. Questo documento
