@@ -232,21 +232,28 @@ a sinistra, bottone centrato con ritaglio, e infine la barra piatta a 5 voci)"*.
 (`glassTile`, `glassChip`, `bigNumber`, `sectionHeading`) che **non ha alcun rapporto** con
 `taccuinoTokens.tsx`. Sono due design system paralleli nello stesso prodotto.
 
-### 4.1 Due palette con lo stesso nome
+### 4.1 Due palette con lo stesso nome — nome giusto, non un difetto
 
-Questo è un difetto concreto, non stilistico:
+- `tailwind.config.ts` → `terra.500 = #C0603D` (terracotta), `forest.500 = #7C8F6E` (salvia) — la
+  palette del chrome UI, direzione "Taccuino Botanico"
+- `lib/designTokens.ts` → `TERRA[500] = #d97220` (arancione acceso), `FOREST[500] = #378d44` (verde
+  acceso) — usati SOLO per la mappa (marker foto/POI in `lib/mapSnapshot.ts`, `ROUTE_COLORS` per i
+  tracciati)
 
-- `tailwind.config.ts` → `terra.500 = #C0603D` (terracotta), `forest.500 = #7C8F6E` (salvia)
-- `lib/designTokens.ts` → `TERRA[500] = #d97220` (arancione acceso), `FOREST[500] = #378d44` (verde acceso)
+**Correzione rispetto alla prima stesura di questo documento**: qui era scritto che fosse un
+difetto da unificare. Verificato più a fondo durante l'esecuzione della Fase 3, non lo è —
+`tailwind.config.ts` lo dichiara esplicitamente in un commento: *"il colore delle tracce sulle
+mappe non passa da qui... quel verde resta quello originale apposta (già ripristinato più volte in
+sessioni precedenti)"*. È una scelta intenzionale e già difesa contro tentativi precedenti di
+"correggerla": i colori di una mappa (tracciato, marker) restano un sistema a parte dal chrome
+dell'interfaccia, per leggibilità sopra foto satellitari e sfondi vari — non per coerenza col resto
+dello schermo.
 
-**Lo stesso nome semantico restituisce due colori diversi** a seconda che si usi la classe Tailwind
-(815 usi) o l'oggetto JS (importato in 27 file). La direzione "Taccuino Botanico" è stata applicata
-ridefinendo la rampa Tailwind, ma l'oggetto JS è rimasto ai valori vecchi. `BookPage.tsx` importa
-`TERRA` e lo usa come accento del tema "pergamena": quell'arancione acceso è, letteralmente, il
-brand precedente sopravvissuto dentro il tema del libro.
-
-**Proposta**: `lib/designTokens.ts` diventa la **sola** fonte di verità e `tailwind.config.ts` legge
-da lì. Un colore, un nome, un valore.
+Il problema reale era uno solo, non l'intera palette: `BookPage.tsx` importava `TERRA[600]`
+(l'arancione acceso, pensato per la mappa) come accento del tema "pergamena" — quello sì un leak
+del brand precedente dentro il chrome. Risolto insieme al resto di **§4.2**, rimuovendo
+"pergamena": una volta tolto quell'unico punto, `TERRA`/`FOREST` in `designTokens.ts` restano
+usati esclusivamente per le mappe, dove è corretto che stiano. Nessuna unificazione necessaria.
 
 ### 4.2 Il tema "pergamena" residuo
 
@@ -374,12 +381,36 @@ una verifica visiva. Eseguita quindi solo la parte verificabile per lettura dire
    schermo (locale o con `run`), a partire dalle pagine a più alto traffico (Diario, Atlante,
    navigazione attiva).
 
-### Fase 3 — Unificazione cromatica *(impatto alto, rischio basso)*
-8. `lib/designTokens.ts` unica fonte di verità; `tailwind.config.ts` legge da lì. Fine dei due
-   `TERRA` diversi.
-9. `taccuino` default in `BookPage`, rimozione di `pergamena`.
-10. Riscrivere `routehub/overlayTheme.ts` sui token del taccuino: il RouteHub smette di essere
-    un'app diversa.
+### Fase 3 — Unificazione cromatica *(rischio molto più basso di quanto temuto — due dei tre punti erano falsi allarmi)* — ✅ eseguita
+
+Come per Lora in Fase 1, verificare più a fondo prima di editare ha cambiato il giudizio su due dei
+tre punti previsti. Non un fallimento del piano: è il motivo per cui si verifica prima di
+mecchanizzare un intervento.
+
+8. ❌→✅ **Non fatto, e giustamente**: `TERRA`/`FOREST` di `lib/designTokens.ts` NON vanno unificati
+   con `tailwind.config.ts`. `tailwind.config.ts` lo dichiara esplicitamente in un commento — sono i
+   colori delle MAPPE (marker, tracciati in `lib/mapSnapshot.ts`/`ROUTE_COLORS`), tenuti apposta
+   distinti dal chrome dell'interfaccia, "già ripristinati più volte in sessioni precedenti" dopo
+   tentativi di unificarli. L'unico leak reale nel chrome era `TERRA[600]` dentro il tema
+   "pergamena" di `BookPage.tsx` — risolto al punto 9. Corretta anche la relativa sezione
+   dell'audit (§4.1).
+9. ✅ **Fatto**: tema "pergamena" rimosso da `BookPage.tsx`. Verificato che i tre chiamanti reali del
+   componente passassero già tutti `theme="taccuino"` esplicitamente — "pergamena" non era un tema
+   ancora in uso da qualche pagina dimenticata, era irraggiungibile: il default di una prop che
+   nessuno leggeva più. Rimossi insieme i due rami morti che vi si condizionavano (background e
+   ombra della barra) e l'import ora inutile di `TERRA`.
+10. 🟡 **Ridimensionato**: `routehub/overlayTheme.ts` non è il "sistema di stile parallelo" descritto
+    nella prima stesura dell'audit. Verificati i 10 file che lo importano: `glassTile`,
+    `glassTileHover`, `glassChip`, `textFaint` — i quattro token davvero "vetro scuro" — risultano
+    **codice morto, zero usi in tutto il repo** (rimossi). I quattro token vivi (`textPrimary`,
+    `textMuted`, `bigNumber`, `sectionHeading`) usano già lo stesso font (`font-display`) e la
+    stessa scala neutra (`stone-*`) del resto dell'app: non sono un sistema a parte, solo alias
+    brevi per classi Tailwind ripetute in piccoli menu/popover. La copertina a foto piena di
+    GuidaHub/ResocontoHub resta invece deliberatamente un modo visivo distinto dalla carta del
+    taccuino — dichiarato esplicitamente nel commento in testa a `BookPage.tsx` ("pergamena calda,
+    NON lo sfondo scuro immersivo di GuidaHub/ResocontoHub") — e non va uniformata: due modi
+    d'uso diversi (sfogliare un libro / la copertina a schermo intero di un percorso), non un
+    errore da correggere.
 
 ### Fase 4 — Navigazione globale *(impatto alto, rischio medio)*
 11. **Una sola barra**, in basso, 4 voci (Libreria · Atlante · Navigator · Profilo), su ogni pagina.
