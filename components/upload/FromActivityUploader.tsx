@@ -59,11 +59,11 @@ export default function FromActivityUploader({ diaryId }: { diaryId?: string } =
           >
             <div className="flex items-center justify-between gap-2">
               <span className="font-medium text-stone-800 truncate">{a.title ?? 'Escursione'}</span>
-              <span className="text-[10px] text-stone-400 shrink-0">
+              <span className="text-xs text-stone-400 shrink-0">
                 {new Date(a.startTime).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' })}
               </span>
             </div>
-            <div className="flex gap-3 text-[10px] text-stone-400 mt-0.5">
+            <div className="flex gap-3 text-xs text-stone-400 mt-0.5">
               <span>{(a.distanceMeters / 1000).toFixed(1)} km</span>
               <span>{Math.round(a.elevationGain)} m D+</span>
             </div>

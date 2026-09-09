@@ -87,7 +87,7 @@ export default function GuideHero({ id, trackPoints, routePolyline, title, categ
       }} />
 
       <div className="absolute bottom-0 left-0 right-0 px-5 sm:px-8 md:px-10 pb-5 md:pb-7">
-        <span className="inline-block bg-terra-500 text-white text-[8px] font-bold tracking-[2.5px] px-2.5 py-1 rounded-sm mb-2.5 uppercase">
+        <span className="inline-block bg-terra-500 text-white text-xs font-bold tracking-[2.5px] px-2.5 py-1 rounded-sm mb-2.5 uppercase">
           {categoryBadge}
         </span>
         <h1 className="font-display text-xl sm:text-3xl md:text-4xl font-black text-white leading-tight mb-1 max-w-2xl uppercase tracking-tight"
@@ -96,7 +96,7 @@ export default function GuideHero({ id, trackPoints, routePolyline, title, categ
           {title}
         </h1>
         {plannedDate && (
-          <p className="text-[12px] italic text-white/70">
+          <p className="text-xs italic text-white/70">
             {format(new Date(plannedDate + 'T12:00'), 'EEEE d MMMM yyyy', { locale: it })}
           </p>
         )}
@@ -106,13 +106,13 @@ export default function GuideHero({ id, trackPoints, routePolyline, title, categ
               href={driving.mapsUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 mt-1.5 text-[12px] font-semibold text-white/90 hover:text-white underline decoration-white/40 hover:decoration-white/80 underline-offset-2 transition-colors"
+              className="inline-flex items-center gap-1.5 mt-1.5 text-xs font-semibold text-white/90 hover:text-white underline decoration-white/40 hover:decoration-white/80 underline-offset-2 transition-colors"
             >
               <Car className="w-3.5 h-3.5" />
               {Math.round(driving.distanceMeters / 1000)} km dal tuo punto di partenza
             </a>
           ) : (
-            <p className="inline-flex items-center gap-1.5 mt-1.5 text-[12px] font-semibold text-white/90">
+            <p className="inline-flex items-center gap-1.5 mt-1.5 text-xs font-semibold text-white/90">
               <Car className="w-3.5 h-3.5" />
               {Math.round(driving.distanceMeters / 1000)} km dal tuo punto di partenza
             </p>
@@ -121,7 +121,7 @@ export default function GuideHero({ id, trackPoints, routePolyline, title, categ
         {startPoint && (() => {
           const Icon = START_POINT_ICON[startPoint.kind]
           return (
-            <p className="inline-flex items-center gap-1.5 mt-1.5 text-[12px] font-semibold text-white/90">
+            <p className="inline-flex items-center gap-1.5 mt-1.5 text-xs font-semibold text-white/90">
               <Icon className="w-3.5 h-3.5" />
               {startPoint.label}{startPoint.name ? ` — ${startPoint.name}` : ''}
             </p>

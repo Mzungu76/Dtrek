@@ -141,13 +141,13 @@ export function renderGuideWidget(key: DisplaySection['key'], body: string | und
                   <div key={i} className={`flex items-start gap-2.5 rounded-xl border px-4 py-3 ${style.box}`}>
                     <AlertTriangle className={`w-4 h-4 shrink-0 mt-0.5 ${style.icon}`} />
                     <div className="min-w-0">
-                      <p className={`text-[13px] leading-relaxed ${style.text}`}>{text}</p>
+                      <p className={`text-sm leading-relaxed ${style.text}`}>{text}</p>
                       {url && (
                         <a
                           href={url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className={`mt-1.5 inline-flex items-center gap-1.5 max-w-full px-2.5 py-1 rounded-full transition-colors text-[11px] ${style.link}`}
+                          className={`mt-1.5 inline-flex items-center gap-1.5 max-w-full px-2.5 py-1 rounded-full transition-colors text-xs ${style.link}`}
                           title={url}
                         >
                           <Link2 className={`w-3 h-3 shrink-0 ${style.icon}`} />
@@ -168,7 +168,7 @@ export function renderGuideWidget(key: DisplaySection['key'], body: string | und
                   href={s.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 max-w-full px-3 py-1.5 rounded-full bg-stone-100 hover:bg-stone-200 transition-colors text-[11px] text-stone-600"
+                  className="flex items-center gap-1.5 max-w-full px-3 py-1.5 rounded-full bg-stone-100 hover:bg-stone-200 transition-colors text-xs text-stone-600"
                   title={s.url}
                 >
                   <Link2 className="w-3 h-3 shrink-0 text-stone-400" />
@@ -179,7 +179,7 @@ export function renderGuideWidget(key: DisplaySection['key'], body: string | und
           )}
           <div className="flex items-start gap-2 rounded-xl bg-stone-50 border border-stone-100 px-3.5 py-2.5">
             <Info className="w-3.5 h-3.5 shrink-0 text-stone-400 mt-0.5" />
-            <p className="text-[11px] text-stone-400 leading-relaxed">
+            <p className="text-xs text-stone-400 leading-relaxed">
               Verifica condotta da un&apos;intelligenza artificiale tramite ricerche automatiche sul web: può contenere errori o non cogliere tutte le criticità reali. Non sostituisce la prudenza sul campo — controlla sempre le condizioni aggiornate prima di partire.
             </p>
           </div>

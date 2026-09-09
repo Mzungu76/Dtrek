@@ -42,10 +42,10 @@ export default async function OgImage({ params }: { params: { token: string } })
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <div style={{ fontSize: 58, fontWeight: 800, lineHeight: 1.05, maxWidth: 900, display: 'flex' }}>
+            <div style={{ fontSize: 60, fontWeight: 800, lineHeight: 1.05, maxWidth: 900, display: 'flex' }}>
               {collection.title.length > 46 ? collection.title.slice(0, 44) + '…' : collection.title}
             </div>
-            <div style={{ display: 'flex', fontSize: 26, color: 'rgba(255,255,255,0.6)', marginTop: 14 }}>
+            <div style={{ display: 'flex', fontSize: 24, color: 'rgba(255,255,255,0.6)', marginTop: 14 }}>
               di {collection.ownerName}
             </div>
           </div>
@@ -53,8 +53,8 @@ export default async function OgImage({ params }: { params: { token: string } })
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 48 }}>
             {stats.map(s => (
               <div key={s.l} style={{ display: 'flex', flexDirection: 'column' }}>
-                <div style={{ fontSize: 46, fontWeight: 800 }}>{s.v}</div>
-                <div style={{ fontSize: 17, color: 'rgba(255,255,255,0.5)', letterSpacing: 1 }}>{s.l}</div>
+                <div style={{ fontSize: 48, fontWeight: 800 }}>{s.v}</div>
+                <div style={{ fontSize: 18, color: 'rgba(255,255,255,0.5)', letterSpacing: 1 }}>{s.l}</div>
               </div>
             ))}
           </div>

@@ -76,7 +76,7 @@ function Spine({ diary, index, sposta, isCurrent, onTap }: {
         zIndex: isDragging ? 10 : undefined,
       }}
     >
-      <span style={{ fontFamily: FONT.mono, fontSize: 7.5, fontWeight: 700, color: 'rgba(245,237,221,.85)' }}>
+      <span style={{ fontFamily: FONT.mono, fontSize: 12, fontWeight: 700, color: 'rgba(245,237,221,.85)' }}>
         {spineAbbr(diary.title)}
       </span>
     </button>
@@ -98,20 +98,20 @@ function ScaffaleRow({ shelf, shelfDiaries, sposta, currentShelfId, currentDiary
   return (
     <div className="mt-3">
       <div className="flex items-center gap-2 mb-1.5">
-        <span style={{ fontFamily: FONT.lora, fontWeight: 600, fontSize: 13, color: isCurrentShelf ? TACCUINO_ACCENT[600] : TACCUINO_INK.typed }}>
+        <span style={{ fontFamily: FONT.lora, fontWeight: 600, fontSize: 14, color: isCurrentShelf ? TACCUINO_ACCENT[600] : TACCUINO_INK.typed }}>
           {shelf.title}
         </span>
-        <span style={{ fontFamily: FONT.mono, fontWeight: 700, fontSize: 9.5, color: TACCUINO_INK.handMuted }}>{shelfDiaries.length}</span>
+        <span style={{ fontFamily: FONT.mono, fontWeight: 700, fontSize: 12, color: TACCUINO_INK.handMuted }}>{shelfDiaries.length}</span>
         <Link
           href={`/raccolte/${encodeURIComponent(shelf.id)}`}
           className="ml-auto shrink-0 flex items-center gap-1 rounded-full px-2 py-0.5"
-          style={{ color: TACCUINO_INK.handMuted, fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}
+          style={{ color: TACCUINO_INK.handMuted, fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}
           title="Componi e pubblica questo scaffale come Raccolta"
         >
           <Share2 className="w-2.5 h-2.5" /> Pubblica
         </Link>
         {isCurrentShelf && (
-          <span style={{ fontFamily: FONT.mono, fontSize: 9, fontWeight: 700, color: TACCUINO_ACCENT[600], textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          <span style={{ fontFamily: FONT.mono, fontSize: 12, fontWeight: 700, color: TACCUINO_ACCENT[600], textTransform: 'uppercase', letterSpacing: '0.08em' }}>
             sei qui
           </span>
         )}
@@ -122,7 +122,7 @@ function ScaffaleRow({ shelf, shelfDiaries, sposta, currentShelfId, currentDiary
         style={{ background: isOver ? `${TACCUINO_ACCENT[600]}14` : 'transparent', outline: isOver ? `1.5px dashed ${TACCUINO_ACCENT[600]}` : 'none' }}
       >
         {shelfDiaries.length === 0 ? (
-          <p className="pb-2" style={{ fontSize: 10.5, color: TACCUINO_INK.handMuted, fontStyle: 'italic' }}>
+          <p className="pb-2" style={{ fontSize: 12, color: TACCUINO_INK.handMuted, fontStyle: 'italic' }}>
             {sposta ? 'trascina qui un Diario' : 'vuoto'}
           </p>
         ) : (
@@ -236,10 +236,10 @@ export function ScaffaliBanner({ shelves, diaries, currentShelfId, currentDiaryI
           ))}
         </span>
         <span className="min-w-0 flex-1 text-left">
-          <p className="truncate" style={{ fontFamily: FONT.lora, fontWeight: 600, fontSize: 12.5, color: TACCUINO_INK.typed }}>
+          <p className="truncate" style={{ fontFamily: FONT.lora, fontWeight: 600, fontSize: 12, color: TACCUINO_INK.typed }}>
             {currentShelf?.title ?? 'Scaffale'} &middot; {diariesByShelf.get(currentShelfId ?? '')?.length ?? 0} Diari
           </p>
-          <p style={{ fontSize: 10.5, color: TACCUINO_INK.handMuted, ...TACCUINO_RULED_TEXT_STYLE }}>
+          <p style={{ fontSize: 12, color: TACCUINO_INK.handMuted, ...TACCUINO_RULED_TEXT_STYLE }}>
             {open ? 'tocca per chiudere' : 'tocca per vedere tutti gli scaffali'}
           </p>
         </span>
@@ -250,7 +250,7 @@ export function ScaffaliBanner({ shelves, diaries, currentShelfId, currentDiaryI
         <div className="max-h-[58vh] overflow-y-auto px-4 pb-4" style={{ borderTop: `1px dotted ${TACCUINO_PAPER.cardBorder}` }}>
           <div className="flex items-center justify-between gap-2 pt-3">
             <div>
-              <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.14em', fontSize: 9.5, color: TACCUINO_INK.hand }}>
+              <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.14em', fontSize: 12, color: TACCUINO_INK.hand }}>
                 La libreria
               </p>
               <p style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 20, color: TACCUINO_INK.typed, marginTop: 1 }}>
@@ -265,12 +265,12 @@ export function ScaffaliBanner({ shelves, diaries, currentShelfId, currentDiaryI
                 : { background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}`, color: TACCUINO_INK.hand }}
             >
               <Move className="w-3.5 h-3.5" />
-              <span style={{ fontSize: 11, fontWeight: 700 }}>{sposta ? 'Fatto' : 'Sposta'}</span>
+              <span style={{ fontSize: 12, fontWeight: 700 }}>{sposta ? 'Fatto' : 'Sposta'}</span>
             </button>
           </div>
 
           {sposta && (
-            <p className="mt-1.5" style={{ fontSize: 10.5, color: TACCUINO_INK.handMuted, fontStyle: 'italic' }}>
+            <p className="mt-1.5" style={{ fontSize: 12, color: TACCUINO_INK.handMuted, fontStyle: 'italic' }}>
               Trascina un dorso su un altro scaffale per spostarlo.
             </p>
           )}
@@ -292,7 +292,7 @@ export function ScaffaliBanner({ shelves, diaries, currentShelfId, currentDiaryI
 
           <div className="mt-4">
             {createError && (
-              <p className="text-[11.5px] mb-2 px-3 py-2 rounded-lg" style={{ background: '#fbe9e7', color: '#b3413a' }}>{createError}</p>
+              <p className="text-xs mb-2 px-3 py-2 rounded-lg" style={{ background: '#fbe9e7', color: '#b3413a' }}>{createError}</p>
             )}
             {creatingShelf ? (
               <div className="flex items-center gap-2">
@@ -302,10 +302,10 @@ export function ScaffaliBanner({ shelves, diaries, currentShelfId, currentDiaryI
                   onChange={e => setNewShelfName(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') creaScaffale() }}
                   placeholder="Nome dello scaffale"
-                  className="flex-1 px-3 py-2 rounded-full text-[13px] outline-none"
+                  className="flex-1 px-3 py-2 rounded-full text-sm outline-none"
                   style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}`, color: TACCUINO_INK.typed }}
                 />
-                <button onClick={creaScaffale} disabled={busy || !newShelfName.trim()} className="shrink-0 rounded-full px-3 py-2 text-[12px] font-semibold" style={{ background: TACCUINO_ACCENT[600], color: TACCUINO_PAPER.light }}>
+                <button onClick={creaScaffale} disabled={busy || !newShelfName.trim()} className="shrink-0 rounded-full px-3 py-2 text-xs font-semibold" style={{ background: TACCUINO_ACCENT[600], color: TACCUINO_PAPER.light }}>
                   {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Crea'}
                 </button>
                 <button onClick={() => { setCreatingShelf(false); setCreateError(null) }} aria-label="Annulla" style={{ color: TACCUINO_INK.handMuted }}><X className="w-4 h-4" /></button>
@@ -314,7 +314,7 @@ export function ScaffaliBanner({ shelves, diaries, currentShelfId, currentDiaryI
               <button
                 onClick={() => setCreatingShelf(true)}
                 className="inline-flex items-center gap-2 rounded-full px-3.5 py-1.5"
-                style={{ border: `1.5px dashed ${TACCUINO_PAPER.cardBorder}`, color: TACCUINO_INK.hand, fontSize: 11.5, fontWeight: 700 }}
+                style={{ border: `1.5px dashed ${TACCUINO_PAPER.cardBorder}`, color: TACCUINO_INK.hand, fontSize: 12, fontWeight: 700 }}
               >
                 <Plus className="w-3.5 h-3.5" /> Nuovo scaffale
               </button>

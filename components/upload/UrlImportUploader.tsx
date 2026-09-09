@@ -201,7 +201,7 @@ export default function UrlImportUploader({ onBack, diaryId }: { onBack: () => v
               <div key={s.label} className="bg-white rounded-xl border border-sky-100 p-3 flex items-center gap-2">
                 {s.icon}
                 <div>
-                  <p className="text-[10px] text-stone-400">{s.label}</p>
+                  <p className="text-xs text-stone-400">{s.label}</p>
                   <p className="text-sm font-semibold text-stone-800">{s.val}</p>
                 </div>
               </div>

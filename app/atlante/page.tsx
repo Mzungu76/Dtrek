@@ -72,7 +72,7 @@ function Tavola({ href, icon: Icon, title, subtitle, count }: TavolaProps) {
       </span>
       <div className="min-w-0 flex-1">
         <p style={{ fontFamily: FONT.lora, fontWeight: 600, fontSize: 14, color: TACCUINO_INK.typed }}>{title}</p>
-        <p style={{ fontSize: 11, color: TACCUINO_INK.handMuted }}>{subtitle}</p>
+        <p style={{ fontSize: 12, color: TACCUINO_INK.handMuted }}>{subtitle}</p>
       </div>
       {count !== null && (
         <span style={{ fontFamily: FONT.mono, fontSize: 12, fontWeight: 700, color: TACCUINO_INK.hand }}>{count}</span>
@@ -107,10 +107,10 @@ function Shelf({ metaType, open, onToggle, trailingLabel, children }: {
     <div className="rounded-[13px] overflow-hidden" style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}>
       <button onClick={onToggle} className="w-full flex items-center gap-2.5 px-3.5 py-3" aria-expanded={open}>
         <MetaTypeGlyph metaType={metaType} size={27} />
-        <span style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 21, color: TACCUINO_INK.typed }}>{config.pluralLabel}</span>
+        <span style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 20, color: TACCUINO_INK.typed }}>{config.pluralLabel}</span>
         <span className="flex-1" />
         {trailingLabel && (
-          <span className="font-mono text-[10.5px]" style={{ color: TACCUINO_INK.handMuted }}>{trailingLabel}</span>
+          <span className="font-mono text-xs" style={{ color: TACCUINO_INK.handMuted }}>{trailingLabel}</span>
         )}
         {open ? <ChevronUp className="w-4 h-4" style={{ color: TACCUINO_INK.handMuted }} /> : <ChevronDown className="w-4 h-4" style={{ color: TACCUINO_INK.handMuted }} />}
       </button>
@@ -136,10 +136,10 @@ function ShelfLink({ href, icon: Icon, title, subtitle, trailing }: ShelfItem & 
     >
       <Icon className="w-4 h-4 shrink-0" style={{ color: TACCUINO_ACCENT[600] }} />
       <div className="flex-1 min-w-0">
-        <p className="text-[13.5px] font-semibold" style={{ color: TACCUINO_INK.typed }}>{title}</p>
-        <p className="text-[11px]" style={{ color: TACCUINO_INK.handMuted }}>{subtitle}</p>
+        <p className="text-sm font-semibold" style={{ color: TACCUINO_INK.typed }}>{title}</p>
+        <p className="text-xs" style={{ color: TACCUINO_INK.handMuted }}>{subtitle}</p>
       </div>
-      {trailing && <span className="font-mono text-[11px] shrink-0" style={{ color: TACCUINO_INK.handMuted }}>{trailing}</span>}
+      {trailing && <span className="font-mono text-xs shrink-0" style={{ color: TACCUINO_INK.handMuted }}>{trailing}</span>}
     </Link>
   )
 }
@@ -258,14 +258,14 @@ function AtlantePageInner() {
       <Navbar />
 
       <div className="max-w-[720px] mx-auto px-5 sm:px-8" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 28px)' }}>
-        <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', fontSize: 10.5, color: TACCUINO_INK.hand, ...TACCUINO_RULED_TEXT_STYLE }}>
+        <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', fontSize: 12, color: TACCUINO_INK.hand, ...TACCUINO_RULED_TEXT_STYLE }}>
           Il libro delle mete
         </p>
         <div className="flex items-center gap-2 mt-1 mb-1.5">
           <Compass className="w-6 h-6" style={{ color: TACCUINO_INK.typed }} />
-          <h1 style={{ fontFamily: FONT.lora, fontWeight: 700, fontSize: 26, color: TACCUINO_INK.typed }}>Atlante</h1>
+          <h1 style={{ fontFamily: FONT.display, fontWeight: 700, fontSize: 24, color: TACCUINO_INK.typed }}>Atlante</h1>
         </div>
-        <p style={{ fontSize: 12.5, color: TACCUINO_INK.hand, ...TACCUINO_RULED_TEXT_STYLE }} className="mb-4 max-w-[42ch]">
+        <p style={{ fontSize: 12, color: TACCUINO_INK.hand, ...TACCUINO_RULED_TEXT_STYLE }} className="mb-4 max-w-[42ch]">
           Contiene ciò che non è ancora tuo. Quando decidi di andarci, lo trascrivi in un Diario — e da lì in poi vive lì.
         </p>
       </div>
@@ -280,7 +280,7 @@ function AtlantePageInner() {
             value={query}
             onChange={e => setQuery(e.target.value)}
             placeholder="Cerca insieme fra le tue Mete e l'archivio…"
-            className="w-full pl-8 pr-8 py-2.5 rounded-[3px] text-[15px] outline-none placeholder:text-[#8a9bab]"
+            className="w-full pl-8 pr-8 py-2.5 rounded-[3px] text-base outline-none placeholder:text-[#8a9bab]"
             style={{ background: TACCUINO_PAPER.card, color: TACCUINO_INK.typed, fontFamily: FONT_HAND }}
           />
           {hasQuery && (
@@ -296,12 +296,12 @@ function AtlantePageInner() {
             {rows === null ? (
               <div className="flex items-center justify-center py-6"><Loader2 className="w-4 h-4 animate-spin" style={{ color: TACCUINO_INK.handMuted }} /></div>
             ) : localMatches.length === 0 && (archiveResults?.length ?? 0) === 0 && !archiveLoading ? (
-              <p className="text-[13px] text-center py-6 px-4" style={{ color: TACCUINO_INK.handMuted }}>Nessun risultato per &laquo;{trimmedQuery}&raquo;.</p>
+              <p className="text-sm text-center py-6 px-4" style={{ color: TACCUINO_INK.handMuted }}>Nessun risultato per &laquo;{trimmedQuery}&raquo;.</p>
             ) : (
               <>
                 {localMatches.length > 0 && (
                   <>
-                    <p className="px-3 pt-2.5 pb-1.5 text-[10px] font-bold uppercase tracking-wide" style={{ color: TACCUINO_INK.handMuted }}>Fra le tue Salvate</p>
+                    <p className="px-3 pt-2.5 pb-1.5 text-xs font-bold uppercase tracking-wide" style={{ color: TACCUINO_INK.handMuted }}>Fra le tue Salvate</p>
                     {localMatches.slice(0, 5).map(m => (
                       <Link
                         key={m.id}
@@ -310,14 +310,14 @@ function AtlantePageInner() {
                         style={{ borderTop: `1px solid ${TACCUINO_PAPER.cardBorder}80` }}
                       >
                         <MetaTypeGlyph metaType={m.metaType} size={22} />
-                        <span className="flex-1 min-w-0 truncate text-[13.5px]" style={{ color: TACCUINO_INK.typed }}>{m.title}</span>
+                        <span className="flex-1 min-w-0 truncate text-sm" style={{ color: TACCUINO_INK.typed }}>{m.title}</span>
                       </Link>
                     ))}
                   </>
                 )}
                 {(archiveLoading || (archiveResults?.length ?? 0) > 0) && (
                   <>
-                    <p className="px-3 pt-2.5 pb-1.5 text-[10px] font-bold uppercase tracking-wide flex items-center gap-1.5" style={{ color: TACCUINO_INK.handMuted, borderTop: localMatches.length > 0 ? `1px solid ${TACCUINO_PAPER.cardBorder}` : undefined }}>
+                    <p className="px-3 pt-2.5 pb-1.5 text-xs font-bold uppercase tracking-wide flex items-center gap-1.5" style={{ color: TACCUINO_INK.handMuted, borderTop: localMatches.length > 0 ? `1px solid ${TACCUINO_PAPER.cardBorder}` : undefined }}>
                       Borghi, Città e Siti
                       {archiveLoading && <Loader2 className="w-3 h-3 animate-spin" />}
                     </p>
@@ -330,8 +330,8 @@ function AtlantePageInner() {
                         style={{ borderTop: `1px solid ${TACCUINO_PAPER.cardBorder}80` }}
                       >
                         <MetaTypeGlyph metaType={item.metaType} size={22} />
-                        <span className="flex-1 min-w-0 truncate text-[13.5px]" style={{ color: TACCUINO_INK.typed }}>{item.name}</span>
-                        {item.region && <span className="shrink-0 text-[11px]" style={{ color: TACCUINO_INK.handMuted }}>{item.region}</span>}
+                        <span className="flex-1 min-w-0 truncate text-sm" style={{ color: TACCUINO_INK.typed }}>{item.name}</span>
+                        {item.region && <span className="shrink-0 text-xs" style={{ color: TACCUINO_INK.handMuted }}>{item.region}</span>}
                         {creatingId === item.id && <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" style={{ color: TACCUINO_ACCENT[600] }} />}
                       </button>
                     ))}
@@ -345,7 +345,7 @@ function AtlantePageInner() {
           <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-4">{createError}</p>
         )}
 
-        <p className="mb-1" style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 10, color: TACCUINO_INK.hand }}>
+        <p className="mb-1" style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 12, color: TACCUINO_INK.hand }}>
           Le tavole
         </p>
         <div className="flex flex-col mb-6">
@@ -361,7 +361,7 @@ function AtlantePageInner() {
             </span>
             <div className="min-w-0 flex-1">
               <p style={{ fontFamily: FONT.lora, fontWeight: 600, fontSize: 14, color: TACCUINO_INK.typed }}>Cerca una meta</p>
-              <p style={{ fontSize: 11, color: TACCUINO_INK.handMuted }}>Sentieri, Borghi, Città e Siti — tutti i modi in un posto solo</p>
+              <p style={{ fontSize: 12, color: TACCUINO_INK.handMuted }}>Sentieri, Borghi, Città e Siti — tutti i modi in un posto solo</p>
             </div>
             <ChevronRight className="w-4 h-4 shrink-0" style={{ color: TACCUINO_INK.handMuted }} />
           </button>
@@ -415,7 +415,7 @@ function AtlantePageInner() {
               subtitle="Musei, castelli, aree archeologiche e naturali"
             />
             {archiveCounts?.sito === 0 && (
-              <p className="px-3 pb-3 text-[11px] italic" style={{ color: TACCUINO_INK.handMuted }}>
+              <p className="px-3 pb-3 text-xs italic" style={{ color: TACCUINO_INK.handMuted }}>
                 Nessun Sito ancora in archivio — la ricerca è pronta, i dati arrivano dopo.
               </p>
             )}

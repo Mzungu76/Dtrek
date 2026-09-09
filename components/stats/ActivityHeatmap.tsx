@@ -54,13 +54,13 @@ export default function ActivityHeatmap({ activities, year }: { activities: Acti
       <div style={{ display: 'grid', gridTemplateColumns: `repeat(${weeks}, 12px)`, gap: '2px', marginBottom: '4px' }}>
         {Array.from({ length: weeks }, (_, col) => {
           const lbl = monthLabels.find(l => l.col === col)
-          return <div key={col} className="text-[10px] text-stone-400">{lbl?.label ?? ''}</div>
+          return <div key={col} className="text-xs text-stone-400">{lbl?.label ?? ''}</div>
         })}
       </div>
       <div className="flex gap-1">
         <div className="flex flex-col gap-0.5 mr-1">
           {['L', '', 'M', '', 'G', '', 'S'].map((d, i) => (
-            <div key={i} className="text-[10px] text-stone-400 w-3 h-3 flex items-center justify-center">{d}</div>
+            <div key={i} className="text-xs text-stone-400 w-3 h-3 flex items-center justify-center">{d}</div>
           ))}
         </div>
         <div style={{
@@ -85,11 +85,11 @@ export default function ActivityHeatmap({ activities, year }: { activities: Acti
         </div>
       </div>
       <div className="flex items-center gap-1.5 mt-2">
-        <span className="text-[10px] text-stone-400">Meno</span>
+        <span className="text-xs text-stone-400">Meno</span>
         {['bg-stone-100', 'bg-forest-200', 'bg-forest-400', 'bg-forest-600'].map(c => (
           <div key={c} className={`w-3 h-3 rounded-sm ${c}`} />
         ))}
-        <span className="text-[10px] text-stone-400">Di più</span>
+        <span className="text-xs text-stone-400">Di più</span>
       </div>
     </div>
   )

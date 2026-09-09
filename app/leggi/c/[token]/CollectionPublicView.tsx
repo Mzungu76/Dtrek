@@ -29,7 +29,7 @@ export function CollectionPublicView({ collection, token }: { collection: Public
               </>
             )}
             <div className="relative">
-              <p className="font-barlow font-bold text-[11px] tracking-[0.25em] uppercase text-terra-300 mb-3">
+              <p className="font-barlow font-bold text-xs tracking-[0.25em] uppercase text-terra-300 mb-3">
                 Una collana in {collection.volumes.length} {collection.volumes.length === 1 ? 'volume' : 'volumi'}
                 {collection.dateRangeLabel && ` · ${collection.dateRangeLabel}`}
               </p>
@@ -49,7 +49,7 @@ export function CollectionPublicView({ collection, token }: { collection: Public
           ].map(s => (
             <div key={s.label} className="bg-white rounded-2xl border border-stone-200 px-3 py-4 text-center shadow-sm">
               <div className="font-mono text-xl sm:text-2xl font-bold text-forest-800 leading-tight">{s.value}</div>
-              <div className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider mt-1">{s.label}</div>
+              <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider mt-1">{s.label}</div>
             </div>
           ))}
         </section>
@@ -57,7 +57,7 @@ export function CollectionPublicView({ collection, token }: { collection: Public
         {/* Prefazione */}
         {collection.preface && (
           <section className="bg-white rounded-2xl border border-stone-200 shadow-sm px-6 py-6 sm:px-8 sm:py-7">
-            <p className="font-lora text-[15px] leading-relaxed text-stone-700 whitespace-pre-line">
+            <p className="font-lora text-base leading-relaxed text-stone-700 whitespace-pre-line">
               {collection.preface}
             </p>
           </section>
@@ -78,7 +78,7 @@ export function CollectionPublicView({ collection, token }: { collection: Public
                   )}
                 </div>
                 <div className="flex-1 min-w-0 p-4 flex flex-col justify-center">
-                  <p className="font-barlow font-bold text-[9px] tracking-[0.2em] uppercase text-terra-500">
+                  <p className="font-barlow font-bold text-xs tracking-[0.2em] uppercase text-terra-500">
                     Volume {i + 1}
                   </p>
                   <h3 className="font-display text-lg font-bold text-forest-900 leading-tight mt-0.5 group-hover:text-forest-700 transition truncate">

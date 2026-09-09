@@ -95,7 +95,7 @@ export function LocatorMap({ lat, lon, label, eager = false }: {
         )}
       </svg>
 
-      <figcaption className="absolute bottom-0 left-0 right-0 bg-white/80 text-stone-500 text-[9px] leading-none px-1.5 py-1 text-center">
+      <figcaption className="absolute bottom-0 left-0 right-0 bg-white/80 text-stone-500 text-xs leading-none px-1.5 py-1 text-center">
         Dove si cammina
       </figcaption>
     </figure>

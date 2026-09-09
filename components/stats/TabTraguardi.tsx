@@ -116,7 +116,7 @@ function BadgeCard({ badge, isNew }: { badge: ComputedBadge; isNew: boolean }) {
                 <div className="h-1.5 bg-stone-200 rounded-full overflow-hidden">
                   <div className="h-1.5 bg-forest-400 rounded-full transition-all" style={{ width: `${pct}%` }} />
                 </div>
-                <p className="text-[10px] text-stone-400 mt-0.5">
+                <p className="text-xs text-stone-400 mt-0.5">
                   {badge.progressCurrent?.toLocaleString('it')}{badge.progressUnit ? ` ${badge.progressUnit}` : ''} / {badge.progressTarget?.toLocaleString('it')}{badge.progressUnit ? ` ${badge.progressUnit}` : ''} ({pct}%)
                 </p>
               </div>

@@ -517,7 +517,7 @@ export default function DiarioPubblicaPage() {
         <HubNavBar />
       </div>
 
-      <p className="text-center text-[12px] text-stone-400 py-2 px-4 print:hidden">
+      <p className="text-center text-xs text-stone-400 py-2 px-4 print:hidden">
         <Link href={`/diari/${encodeURIComponent(diaryId)}`} className="inline-flex items-center gap-1 underline decoration-stone-300 hover:decoration-stone-500 text-stone-500">
           <ArrowLeft className="w-3 h-3" /> Torna al Diario
         </Link>
@@ -543,26 +543,26 @@ export default function DiarioPubblicaPage() {
           {showTextMenu && (
             <div className="absolute left-full ml-3 top-0 w-72 bg-white rounded-xl border border-stone-200 shadow-lg z-50 p-3">
               <div className="flex items-center justify-between mb-2">
-                <p className="text-[10px] font-barlow font-bold uppercase tracking-widest text-stone-400">Testi copertina</p>
+                <p className="text-xs font-barlow font-bold uppercase tracking-widest text-stone-400">Testi copertina</p>
                 <button onClick={() => setShowTextMenu(false)} className="text-stone-400 hover:text-stone-600">
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
-              <label className="block text-[10px] font-barlow font-bold uppercase tracking-widest text-stone-400 mb-0.5">Titolo</label>
+              <label className="block text-xs font-barlow font-bold uppercase tracking-widest text-stone-400 mb-0.5">Titolo</label>
               <input
                 value={config.title}
                 onChange={e => setConfig(c => ({ ...c, title: e.target.value }))}
                 className="w-full text-xs border border-stone-200 rounded-lg px-2.5 py-1.5 mb-2 focus:outline-none focus:ring-1 focus:ring-forest-400"
                 placeholder="DIARIO di VIAGGIO"
               />
-              <label className="block text-[10px] font-barlow font-bold uppercase tracking-widest text-stone-400 mb-0.5">Sottotitolo</label>
+              <label className="block text-xs font-barlow font-bold uppercase tracking-widest text-stone-400 mb-0.5">Sottotitolo</label>
               <input
                 value={config.subtitle}
                 onChange={e => setConfig(c => ({ ...c, subtitle: e.target.value }))}
                 className="w-full text-xs border border-stone-200 rounded-lg px-2.5 py-1.5 mb-2 focus:outline-none focus:ring-1 focus:ring-forest-400"
                 placeholder="I miei percorsi"
               />
-              <label className="block text-[10px] font-barlow font-bold uppercase tracking-widest text-stone-400 mb-0.5">Autore</label>
+              <label className="block text-xs font-barlow font-bold uppercase tracking-widest text-stone-400 mb-0.5">Autore</label>
               <input
                 value={config.author}
                 onChange={e => setConfig(c => ({ ...c, author: e.target.value }))}
@@ -582,7 +582,7 @@ export default function DiarioPubblicaPage() {
               <button className="absolute top-2 right-2 text-stone-400 hover:text-stone-600" onClick={() => setShowStatsMenu(false)}>
                 <X className="w-3.5 h-3.5" />
               </button>
-              <p className="px-3 pt-2 pb-1 text-[10px] font-barlow font-bold uppercase tracking-widest text-stone-400">Sezioni</p>
+              <p className="px-3 pt-2 pb-1 text-xs font-barlow font-bold uppercase tracking-widest text-stone-400">Sezioni</p>
               {([
                 ['totali', 'Totali'],
                 ['record', 'Record personali'],
@@ -597,7 +597,7 @@ export default function DiarioPubblicaPage() {
                   {l}
                 </button>
               ))}
-              <p className="px-3 pt-2 pb-1 text-[10px] font-barlow font-bold uppercase tracking-widest text-stone-400 border-t border-stone-100 mt-1">Per ogni percorso</p>
+              <p className="px-3 pt-2 pb-1 text-xs font-barlow font-bold uppercase tracking-widest text-stone-400 border-t border-stone-100 mt-1">Per ogni percorso</p>
               {([
                 ['mappa', 'Mappa percorso'],
                 ['statistiche', 'Statistiche dettagliate'],
@@ -613,7 +613,7 @@ export default function DiarioPubblicaPage() {
                   {l}
                 </button>
               ))}
-              <p className="px-3 pt-2 text-[10px] text-stone-400 leading-relaxed">
+              <p className="px-3 pt-2 text-xs text-stone-400 leading-relaxed">
                 Ogni pagina ha anche un pulsante «Personalizza» per uno scostamento valido solo lì.
               </p>
             </div>
@@ -651,7 +651,7 @@ export default function DiarioPubblicaPage() {
           {showExcludedMenu && (
             <div className="absolute right-full mr-3 top-0 w-72 max-h-[70vh] overflow-y-auto bg-white rounded-xl border border-stone-200 shadow-lg z-50 p-3">
               <div className="flex items-center justify-between mb-2">
-                <p className="text-[10px] font-barlow font-bold uppercase tracking-widest text-stone-400">Escluse dal diario</p>
+                <p className="text-xs font-barlow font-bold uppercase tracking-widest text-stone-400">Escluse dal diario</p>
                 <button onClick={() => setShowExcludedMenu(false)} className="text-stone-400 hover:text-stone-600">
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -668,11 +668,11 @@ export default function DiarioPubblicaPage() {
                       <div key={activityId} className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg bg-stone-50">
                         <div className="min-w-0">
                           <p className="text-xs font-medium text-stone-700 truncate">{title}</p>
-                          <p className="text-[10px] text-stone-400">{dateStr}</p>
+                          <p className="text-xs text-stone-400">{dateStr}</p>
                         </div>
                         <button onClick={() => toggleExcludeActivity(activityId)}
                           title="Includi di nuovo nel diario"
-                          className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg bg-forest-50 text-forest-700 text-[10px] font-bold uppercase tracking-wide hover:bg-forest-100 transition-colors">
+                          className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg bg-forest-50 text-forest-700 text-xs font-bold uppercase tracking-wide hover:bg-forest-100 transition-colors">
                           <RotateCcw className="w-3 h-3" /> Includi
                         </button>
                       </div>
@@ -693,12 +693,12 @@ export default function DiarioPubblicaPage() {
           {showExportMenu && !downloading && (
             <div className="absolute right-full mr-3 top-0 w-56 bg-white rounded-xl border border-stone-200 shadow-lg z-50 p-3 space-y-2">
               <div className="flex items-center justify-between mb-1">
-                <p className="text-[10px] font-barlow font-bold uppercase tracking-widest text-stone-400">Esporta PDF</p>
+                <p className="text-xs font-barlow font-bold uppercase tracking-widest text-stone-400">Esporta PDF</p>
                 <button onClick={() => setShowExportMenu(false)} className="text-stone-400 hover:text-stone-600">
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
-              <p className="text-[10px] text-stone-400 leading-snug">Quali escursioni includere</p>
+              <p className="text-xs text-stone-400 leading-snug">Quali escursioni includere</p>
               <div className="space-y-1">
                 <button onClick={() => { setExportYear(null); setShowExportMenu(false); generateAndUploadPdf(true) }}
                   className="w-full text-left px-3 py-1.5 rounded-lg text-xs font-barlow font-bold uppercase tracking-wide bg-forest-600 text-white hover:bg-forest-700 transition-colors">
@@ -726,7 +726,7 @@ export default function DiarioPubblicaPage() {
           {showShareMenu && (
             <div className="absolute right-full mr-3 top-0 w-64 bg-white rounded-xl border border-stone-200 shadow-lg z-50 p-3 space-y-2">
               <div className="flex items-center justify-between mb-1">
-                <p className="text-[10px] font-barlow font-bold uppercase tracking-widest text-stone-400">Condividi diario</p>
+                <p className="text-xs font-barlow font-bold uppercase tracking-widest text-stone-400">Condividi diario</p>
                 <button onClick={() => setShowShareMenu(false)} className="text-stone-400 hover:text-stone-600">
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -738,7 +738,7 @@ export default function DiarioPubblicaPage() {
                     <div className="h-full bg-forest-500 transition-all"
                       style={{ width: `${Math.round(100 * publishProgress.done / publishProgress.total)}%` }} />
                   </div>
-                  <p className="text-[10px] text-stone-400 text-center">
+                  <p className="text-xs text-stone-400 text-center">
                     Pagina {publishProgress.done} di {publishProgress.total}
                   </p>
                 </div>
@@ -761,7 +761,7 @@ export default function DiarioPubblicaPage() {
                   </button>
 
                   <div className="pt-1.5 border-t border-stone-100 space-y-1">
-                    <p className="text-[10px] font-barlow font-bold uppercase tracking-widest text-stone-400 mb-1">
+                    <p className="text-xs font-barlow font-bold uppercase tracking-widest text-stone-400 mb-1">
                       Mostra sul sito
                     </p>
                     {([
@@ -779,7 +779,7 @@ export default function DiarioPubblicaPage() {
                       </label>
                     ))}
                     {diaryPdfUrl && (
-                      <p className="text-[10px] text-stone-400 leading-snug pt-1">
+                      <p className="text-xs text-stone-400 leading-snug pt-1">
                         Il PDF allegato si aggiorna quando esporti il Diario.
                       </p>
                     )}
@@ -788,7 +788,7 @@ export default function DiarioPubblicaPage() {
                   {/* Preferenze globali (vale per ogni Diario e Raccolta, non solo questo) —
                       docs/raccolte-pubblicazione-piano.md, Fase 3f. */}
                   <div className="pt-1.5 border-t border-stone-100 space-y-1">
-                    <p className="text-[10px] font-barlow font-bold uppercase tracking-widest text-stone-400 mb-1">
+                    <p className="text-xs font-barlow font-bold uppercase tracking-widest text-stone-400 mb-1">
                       Privacy (vale per tutto quello che pubblichi)
                     </p>
                     <PublishPrivacyToggles />
@@ -801,7 +801,7 @@ export default function DiarioPubblicaPage() {
                 </div>
               ) : (
                 <>
-                  <p className="text-[10px] text-stone-400 leading-snug">
+                  <p className="text-xs text-stone-400 leading-snug">
                     Crea una pagina pubblica del diario, leggibile da telefono senza scaricare nulla.
                   </p>
                   <button onClick={publishLink} disabled={linkPublishing || loading}

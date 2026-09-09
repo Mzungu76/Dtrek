@@ -41,7 +41,7 @@ function Stat({ value, label }: { value: string; label: string }) {
   return (
     <div className="bg-white rounded-2xl border border-stone-200 px-4 py-3.5 text-center shadow-sm">
       <div className="text-xl font-bold text-stone-800 leading-tight">{value}</div>
-      <div className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider mt-0.5">{label}</div>
+      <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider mt-0.5">{label}</div>
     </div>
   )
 }
@@ -130,7 +130,7 @@ export default async function PublicSharePage({ params }: { params: { token: str
           </a>
         </section>
 
-        <p className="text-center text-[11px] text-stone-400 pb-4">
+        <p className="text-center text-xs text-stone-400 pb-4">
           Condiviso tramite DTrek · Mappa © OpenStreetMap contributors
         </p>
       </main>

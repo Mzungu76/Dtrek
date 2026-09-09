@@ -46,7 +46,7 @@ function ToolButton({ icon, label, onClick }: { icon: React.ReactNode; label: st
       type="button"
       onClick={onClick}
       className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors"
-      style={{ background: PILL_BG, color: INK_TEXT, fontSize: 13.5, fontWeight: 600 }}
+      style={{ background: PILL_BG, color: INK_TEXT, fontSize: 14, fontWeight: 600 }}
     >
       {icon}
       {label}
@@ -58,7 +58,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <p
       className="mb-2 mt-5 first:mt-0"
-      style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 10, color: '#8a7f52' }}
+      style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 12, color: '#8a7f52' }}
     >
       {children}
     </p>
@@ -78,7 +78,7 @@ export default function ReportageToolsDrawer({
         style={{ background: PAPER_BG, fontFamily: FONT.body }}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b sticky top-0 z-10" style={{ borderColor: PAPER_HAIRLINE, background: PAPER_BG }}>
-          <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 11, color: INK_MUTED }}>
+          <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 12, color: INK_MUTED }}>
             Strumenti del Reportage
           </p>
           <button onClick={onClose} aria-label="Chiudi" style={{ color: INK_MUTED }}>
@@ -109,7 +109,7 @@ export default function ReportageToolsDrawer({
               <Link
                 href={`/resoconto/${encodeURIComponent(activityId)}/racconta`}
                 className="flex items-center gap-3 px-3 py-2.5 rounded-lg"
-                style={{ background: PILL_BG, color: INK_TEXT, fontSize: 13.5, fontWeight: 600 }}
+                style={{ background: PILL_BG, color: INK_TEXT, fontSize: 14, fontWeight: 600 }}
               >
                 <MessageCircleQuestion className="w-4 h-4 shrink-0" /> Racconta il percorso a domande
               </Link>
@@ -120,7 +120,7 @@ export default function ReportageToolsDrawer({
           <Link
             href={`/resoconto/${encodeURIComponent(activityId)}`}
             className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg"
-            style={{ background: PILL_BG, color: INK_TEXT, fontSize: 13.5, fontWeight: 600 }}
+            style={{ background: PILL_BG, color: INK_TEXT, fontSize: 14, fontWeight: 600 }}
           >
             <span className="inline-flex items-center gap-2"><BookOpen className="w-4 h-4" /> Apri vista estesa (pubblica, PDF)</span>
             <ChevronRight className="w-3.5 h-3.5" style={{ color: INK_MUTED }} />

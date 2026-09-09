@@ -102,7 +102,7 @@ function TypeFilterChips({ typeFilter, onChange, counts, total, className }: {
     <div className={`flex items-center gap-1.5 overflow-x-auto pb-0.5 ${className ?? ''}`}>
       <button
         onClick={() => onChange('all')}
-        className="relative shrink-0 px-3 py-1 rounded-full text-[13px] transition-colors"
+        className="relative shrink-0 px-3 py-1 rounded-full text-sm transition-colors"
         style={typeFilter === 'all'
           ? { fontFamily: FONT_HAND, fontWeight: 700, color: TACCUINO_INK.typed }
           : { fontFamily: FONT_HAND, background: 'transparent', color: TACCUINO_INK.handMuted }}
@@ -117,7 +117,7 @@ function TypeFilterChips({ typeFilter, onChange, counts, total, className }: {
           <button
             key={t}
             onClick={() => onChange(t)}
-            className="relative shrink-0 flex items-center gap-1.5 px-3 py-1 rounded-full text-[13px] transition-colors"
+            className="relative shrink-0 flex items-center gap-1.5 px-3 py-1 rounded-full text-sm transition-colors"
             style={on
               ? { fontFamily: FONT_HAND, fontWeight: 700, color: TACCUINO_INK.typed }
               : { fontFamily: FONT_HAND, background: 'transparent', color: TACCUINO_INK.handMuted }}
@@ -278,11 +278,11 @@ export default function SalvatePage() {
 
       <div className="max-w-[720px] mx-auto px-5 sm:px-8 pt-6 sm:pt-8">
         <BackLink className="inline-flex items-center gap-1 text-sm text-stone-400 hover:text-stone-600 transition mb-2" />
-        <h1 style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 34, color: TACCUINO_INK.typed, ...TACCUINO_RULED_TEXT_STYLE }}>
+        <h1 style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 36, color: TACCUINO_INK.typed, ...TACCUINO_RULED_TEXT_STYLE }}>
           Salvate
         </h1>
         {rows && (
-          <p className="mt-0.5" style={{ fontFamily: FONT.lora, fontSize: 13, color: TACCUINO_INK.handMuted }}>
+          <p className="mt-0.5" style={{ fontFamily: FONT.lora, fontSize: 14, color: TACCUINO_INK.handMuted }}>
             {countsByType.sentiero} {countsByType.sentiero === 1 ? 'sentiero' : 'sentieri'} &middot; {countsByType.borgo_citta} {countsByType.borgo_citta === 1 ? 'borgo/città' : 'borghi/città'} &middot; {countsByType.sito} {countsByType.sito === 1 ? 'sito' : 'siti'}
           </p>
         )}
@@ -310,7 +310,7 @@ export default function SalvatePage() {
             </p>
             <Link
               href="/atlante"
-              className="inline-flex items-center gap-2 mt-6 px-4 py-2.5 rounded-xl text-[14px] font-semibold transition-colors"
+              className="inline-flex items-center gap-2 mt-6 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors"
               style={{ background: TACCUINO_PAPER.card, color: TACCUINO_INK.typed, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}
             >
               <Search className="w-4 h-4" /> Cerca un Borgo, una Città o un Sito
@@ -342,7 +342,7 @@ export default function SalvatePage() {
                   {geoDenied && (
                     <button
                       onClick={requestLocation}
-                      className="absolute right-2 top-2 flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-semibold shadow-sm"
+                      className="absolute right-2 top-2 flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-semibold shadow-sm"
                       style={{ background: 'rgba(245,237,221,.95)', color: TACCUINO_INK.typed, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}
                     >
                       <LocateFixed className="w-3 h-3" /> Vicino a me
@@ -361,11 +361,11 @@ export default function SalvatePage() {
                 aria-expanded={mapOpen}
               >
                 <MapPin className="w-3.5 h-3.5" style={{ color: TACCUINO_INK.handMuted }} />
-                <span className="text-[11.5px] font-semibold" style={{ color: TACCUINO_INK.typed }}>
+                <span className="text-xs font-semibold" style={{ color: TACCUINO_INK.typed }}>
                   {mapOpen ? 'Chiudi la carta' : `${mapPins.length} ${mapPins.length === 1 ? 'meta' : 'mete'} sulla carta`}
                 </span>
                 {geoDenied && (
-                  <span className="text-[10.5px]" style={{ color: TACCUINO_INK.handMuted, fontFamily: FONT.lora }}>
+                  <span className="text-xs" style={{ color: TACCUINO_INK.handMuted, fontFamily: FONT.lora }}>
                     — posizione non disponibile
                   </span>
                 )}
@@ -384,13 +384,13 @@ export default function SalvatePage() {
                   >
                     <Minimize2 className="w-4 h-4" />
                   </button>
-                  <span style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 19, color: TACCUINO_INK.typed }}>
+                  <span style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 20, color: TACCUINO_INK.typed }}>
                     La carta delle Salvate
                   </span>
                   {geoDenied && (
                     <button
                       onClick={requestLocation}
-                      className="ml-auto flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-semibold"
+                      className="ml-auto flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-semibold"
                       style={{ background: TACCUINO_PAPER.card, color: TACCUINO_INK.typed, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}
                     >
                       <LocateFixed className="w-3 h-3" /> Vicino a me
@@ -431,7 +431,7 @@ export default function SalvatePage() {
                   value={query}
                   onChange={e => setQuery(e.target.value)}
                   placeholder="cerca fra le tue Salvate…"
-                  className="w-full pl-8 pr-8 py-2 rounded-[3px] text-[14px] outline-none placeholder:text-[#8a9bab]"
+                  className="w-full pl-8 pr-8 py-2 rounded-[3px] text-sm outline-none placeholder:text-[#8a9bab]"
                   style={{ background: TACCUINO_PAPER.card, color: TACCUINO_INK.typed, fontFamily: FONT_HAND }}
                 />
                 {query && (
@@ -477,7 +477,7 @@ export default function SalvatePage() {
                   <button
                     key={s.id}
                     onClick={() => setSortBy(s.id)}
-                    className="relative shrink-0 px-3 py-1 rounded-full text-[13px] transition-colors"
+                    className="relative shrink-0 px-3 py-1 rounded-full text-sm transition-colors"
                     style={sortBy === s.id
                       ? { fontFamily: FONT_HAND, fontWeight: 700, color: TACCUINO_INK.typed }
                       : { fontFamily: FONT_HAND, background: 'transparent', color: TACCUINO_INK.handMuted }}
@@ -497,7 +497,7 @@ export default function SalvatePage() {
                 {showSearchElsewhere && (
                   <Link
                     href={`/atlante?q=${encodeURIComponent(trimmedQuery)}`}
-                    className="inline-flex items-center gap-1.5 mt-3 text-[13.5px] font-semibold"
+                    className="inline-flex items-center gap-1.5 mt-3 text-sm font-semibold"
                     style={{ fontFamily: FONT_HAND, color: TACCUINO_ACCENT[600] }}
                   >
                     Cerca &laquo;{trimmedQuery}&raquo; fra Borghi, Città e Siti <ArrowRight className="w-3.5 h-3.5" />
@@ -550,15 +550,15 @@ export default function SalvatePage() {
                         )}
                       </div>
                       <div className="min-w-0 flex-1 pt-0.5">
-                        <p style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 19.5, color: TACCUINO_INK.typed, ...TACCUINO_RULED_TEXT_STYLE }}>
+                        <p style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 20, color: TACCUINO_INK.typed, ...TACCUINO_RULED_TEXT_STYLE }}>
                           {p.title}
                         </p>
                         {scoreLabel && (
-                          <p className="truncate" style={{ fontFamily: FONT_HAND, fontSize: 15.5, fontWeight: 600, color: TACCUINO_INK.handMuted, ...TACCUINO_RULED_TEXT_STYLE }}>
+                          <p className="truncate" style={{ fontFamily: FONT_HAND, fontSize: 16, fontWeight: 600, color: TACCUINO_INK.handMuted, ...TACCUINO_RULED_TEXT_STYLE }}>
                             {scoreLabel}
                           </p>
                         )}
-                        <div className="flex items-center flex-wrap gap-x-2.5 gap-y-1 mt-1.5" style={{ fontFamily: FONT.lora, fontSize: 13, color: TACCUINO_INK.handMuted }}>
+                        <div className="flex items-center flex-wrap gap-x-2.5 gap-y-1 mt-1.5" style={{ fontFamily: FONT.lora, fontSize: 14, color: TACCUINO_INK.handMuted }}>
                           {metaHasHikingMetrics(p.metaType) ? (
                             <>
                               <span className="inline-flex items-center gap-1"><Route className="w-3.5 h-3.5" /> {(p.distanceMeters / 1000).toFixed(1)} km</span>

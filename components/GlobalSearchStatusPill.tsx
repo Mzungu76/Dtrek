@@ -44,7 +44,7 @@ export default function GlobalSearchStatusPill() {
           <Loader2 className="w-4 h-4 animate-spin text-terra-400 shrink-0" />
           <div className="min-w-0">
             <p className="text-xs font-semibold truncate">{state.stage || `Genero (${modeLabel})…`}</p>
-            <p className="text-[10px] text-white/50 font-mono tabular-nums">{formatElapsed(elapsed)}</p>
+            <p className="text-xs text-white/50 font-mono tabular-nums">{formatElapsed(elapsed)}</p>
           </div>
         </>
       )}

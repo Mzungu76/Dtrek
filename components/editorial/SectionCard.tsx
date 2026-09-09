@@ -42,7 +42,7 @@ export function ApprofondisciTrigger({ onApprofondisci, lengthOptions }: {
       <button
         type="button"
         onClick={() => (hasOptions ? setOpen(o => !o) : onApprofondisci())}
-        className="inline-flex items-center gap-1 text-[12px] font-bold text-stone-700 hover:text-stone-900 underline underline-offset-2 whitespace-nowrap"
+        className="inline-flex items-center gap-1 text-xs font-bold text-stone-700 hover:text-stone-900 underline underline-offset-2 whitespace-nowrap"
       >
         Approfondisci con Giulia <ChevronDown className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
@@ -51,7 +51,7 @@ export function ApprofondisciTrigger({ onApprofondisci, lengthOptions }: {
         // una card con `overflow-hidden` (per gli angoli arrotondati delle foto), quindi un menu
         // che si apre verso il basso verrebbe tagliato dal bordo della card.
         <div className="absolute right-0 bottom-full mb-1.5 w-64 bg-white rounded-2xl border border-stone-200 shadow-xl z-20 overflow-hidden text-left">
-          <p className="font-barlow font-semibold text-[10px] uppercase tracking-wide text-stone-400 px-3.5 pt-3 pb-1.5">Scegli la lunghezza</p>
+          <p className="font-barlow font-semibold text-xs uppercase tracking-wide text-stone-400 px-3.5 pt-3 pb-1.5">Scegli la lunghezza</p>
           {lengthOptions!.map(opt => (
             <button
               key={opt.key}
@@ -61,8 +61,8 @@ export function ApprofondisciTrigger({ onApprofondisci, lengthOptions }: {
               onClick={() => { setOpen(false); onApprofondisci(opt.key) }}
               className="block w-full text-left px-3.5 py-2.5 border-t border-stone-100 first:border-t-0 hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
-              <p className="text-[12.5px] font-bold text-stone-800">{opt.label}</p>
-              <p className="text-[11px] text-stone-500 mt-0.5 leading-snug">{opt.description}</p>
+              <p className="text-xs font-bold text-stone-800">{opt.label}</p>
+              <p className="text-xs text-stone-500 mt-0.5 leading-snug">{opt.description}</p>
             </button>
           ))}
         </div>
@@ -140,9 +140,9 @@ const SectionCard = forwardRef<HTMLElement, Props>(function SectionCard(
       <article ref={ref} className="scroll-mt-16 flex flex-col gap-2 px-4 py-3 border border-stone-200 rounded-xl bg-white mb-2.5">
         <div className="flex items-center gap-3">
           <span className="[&>svg]:w-4 [&>svg]:h-4 shrink-0" style={{ color }}>{icon}</span>
-          <span className="flex-1 min-w-0 truncate text-[13px] font-semibold text-stone-800">{title}</span>
+          <span className="flex-1 min-w-0 truncate text-sm font-semibold text-stone-800">{title}</span>
           {approfondendo && (
-            <span className="flex items-center gap-1 text-[11.5px] font-medium text-stone-400 shrink-0">
+            <span className="flex items-center gap-1 text-xs font-medium text-stone-400 shrink-0">
               <Loader2 className="w-3 h-3 animate-spin" /> Approfondimento…
             </span>
           )}
@@ -176,7 +176,7 @@ const SectionCard = forwardRef<HTMLElement, Props>(function SectionCard(
           </span>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <p className="font-barlow font-semibold uppercase tracking-wide text-[11px] text-stone-400">{title}</p>
+              <p className="font-barlow font-semibold uppercase tracking-wide text-xs text-stone-400">{title}</p>
               <div className="flex-1" />
               {hasBody && onSpeak && (
                 <button onClick={onSpeak} className="text-stone-300 hover:text-stone-500 transition-colors shrink-0" title="Ascolta questa sezione">
@@ -184,11 +184,11 @@ const SectionCard = forwardRef<HTMLElement, Props>(function SectionCard(
                 </button>
               )}
             </div>
-            <h2 className="font-display text-[22px] sm:text-[26px] font-semibold text-stone-800 mt-1 leading-tight" style={{ textWrap: 'balance' as const }}>
+            <h2 className="font-display text-2xl sm:text-2xl font-semibold text-stone-800 mt-1 leading-tight" style={{ textWrap: 'balance' as const }}>
               {title}
             </h2>
             {subtitle && (
-              <p className="text-[12.5px] text-stone-400 mt-1 leading-snug">{subtitle}</p>
+              <p className="text-xs text-stone-400 mt-1 leading-snug">{subtitle}</p>
             )}
           </div>
         </div>
@@ -200,12 +200,12 @@ const SectionCard = forwardRef<HTMLElement, Props>(function SectionCard(
           <div className={hasWidget ? 'mt-5 pt-5 border-t' : ''} style={hasWidget ? { borderColor: '#dcd8cc' } : undefined}>
             {showCollapsedPreview ? (
               <div>
-                <p className="text-[15px] sm:text-[16px] leading-7 text-stone-600">
+                <p className="text-base sm:text-base leading-7 text-stone-600">
                   {preview}{' '}
                   {isTruncated && (
                     <button
                       onClick={() => setExpanded(true)}
-                      className="inline-flex items-center gap-0.5 font-bold text-[13px] align-baseline whitespace-nowrap text-stone-700 hover:text-stone-900 underline underline-offset-2"
+                      className="inline-flex items-center gap-0.5 font-bold text-sm align-baseline whitespace-nowrap text-stone-700 hover:text-stone-900 underline underline-offset-2"
                     >
                       Leggi tutto <ChevronDown className="w-3 h-3" />
                     </button>
@@ -222,7 +222,7 @@ const SectionCard = forwardRef<HTMLElement, Props>(function SectionCard(
                 {collapsible && isTruncated && (
                   <button
                     onClick={() => setExpanded(false)}
-                    className="mt-3 inline-flex items-center gap-1 text-[12px] font-bold text-stone-400 hover:text-stone-600 transition-colors"
+                    className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-stone-400 hover:text-stone-600 transition-colors"
                   >
                     <ChevronUp className="w-3.5 h-3.5" /> Riduci
                   </button>
@@ -232,13 +232,13 @@ const SectionCard = forwardRef<HTMLElement, Props>(function SectionCard(
           </div>
         )}
         {!hasBody && approfondendo && (
-          <div className="flex items-center gap-2 mt-4 pt-4 border-t border-stone-100 text-[11.5px] text-stone-400">
+          <div className="flex items-center gap-2 mt-4 pt-4 border-t border-stone-100 text-xs text-stone-400">
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
             Giulia sta approfondendo questa sezione…
           </div>
         )}
         {!hasBody && !approfondendo && showApprofondisciHint && (
-          <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-stone-100 text-[11.5px] text-stone-400">
+          <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-stone-100 text-xs text-stone-400">
             <Sparkles className="w-3.5 h-3.5 shrink-0" />
             <span>Testo narrato non ancora generato —</span>
             <ApprofondisciTrigger onApprofondisci={onApprofondisci} lengthOptions={lengthOptions} />

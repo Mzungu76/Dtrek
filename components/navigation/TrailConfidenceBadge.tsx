@@ -81,7 +81,7 @@ export default function TrailConfidenceBadge({ confidence }: Props) {
                   ))}
                 </ul>
               </div>
-              <p className="text-[11px] text-stone-400 leading-relaxed">
+              <p className="text-xs text-stone-400 leading-relaxed">
                 Combina il Trail Score calcolato in pianificazione (fatica/bellezza per il tuo
                 profilo), le condizioni meteo/clima recenti e — quando disponibili — le conferme di
                 altri escursionisti. Non è un giudizio di sicurezza: quello resta il Punteggio

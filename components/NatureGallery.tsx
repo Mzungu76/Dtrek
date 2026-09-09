@@ -55,7 +55,7 @@ function NatureChip({ item, color, onTap }: { item: NatureItem; color: string; o
       <span className="flex items-center justify-center w-[38px] h-[38px] rounded-full bg-stone-100 shrink-0 transition-transform group-hover:scale-105">
         <Leaf width={17} height={17} color={color} strokeWidth={2.25} />
       </span>
-      <span className="text-[10px] leading-tight text-center text-stone-700 font-semibold line-clamp-2">{displayName}</span>
+      <span className="text-xs leading-tight text-center text-stone-700 font-semibold line-clamp-2">{displayName}</span>
     </button>
   )
 }
@@ -95,9 +95,9 @@ function NaturePhotoCard({ item, layerIcon, onTap }: { item: NatureItem; layerIc
         {danger && <span className="absolute top-1.5 left-1.5 w-2.5 h-2.5 rounded-full border-2 border-white shadow-sm" style={{ background: danger }} />}
       </div>
       <div className="p-2.5 pb-1">
-        <p className="font-display font-semibold text-stone-800 text-[14px] leading-tight line-clamp-1 tracking-wide">{displayName}</p>
-        <p className="text-[10px] text-stone-400 mt-0.5 italic line-clamp-1">{item.scientificName}</p>
-        <span className="flex items-center gap-0.5 text-[10px] mt-1 text-terra-800">
+        <p className="font-display font-semibold text-stone-800 text-sm leading-tight line-clamp-1 tracking-wide">{displayName}</p>
+        <p className="text-xs text-stone-400 mt-0.5 italic line-clamp-1">{item.scientificName}</p>
+        <span className="flex items-center gap-0.5 text-xs mt-1 text-terra-800">
           <ExternalLink className="w-2.5 h-2.5" /> {sourceLabel(item.gbifUrl)}
         </span>
       </div>
@@ -238,7 +238,7 @@ export function NatureGalleryContent({ trackPoints, month, loadingTrack, initial
           <button
             key={l}
             onClick={() => setLayer(l)}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-[13px] font-semibold transition-colors ${
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-semibold transition-colors ${
               layer === l ? 'bg-white shadow-sm text-stone-800' : 'text-stone-500 hover:text-stone-700'
             }`}
           >
@@ -323,7 +323,7 @@ export function NatureGalleryContent({ trackPoints, month, loadingTrack, initial
 
               {withoutPhoto.length > 0 && (
                 <>
-                  <p className="font-barlow font-semibold text-[11px] uppercase tracking-wide text-stone-400 mb-2">Senza foto</p>
+                  <p className="font-barlow font-semibold text-xs uppercase tracking-wide text-stone-400 mb-2">Senza foto</p>
                   <div className="flex gap-2.5 overflow-x-auto pb-1 mb-4">
                     {withoutPhoto.map(item => (
                       <NatureChip key={item.scientificName} item={item} color={meta.color} onTap={() => setSelected(item)} />
@@ -334,7 +334,7 @@ export function NatureGalleryContent({ trackPoints, month, loadingTrack, initial
 
               {withPhoto.length > 0 && (
                 <>
-                  <p className="font-barlow font-semibold text-[11px] uppercase tracking-wide text-stone-400 mb-2">Con foto</p>
+                  <p className="font-barlow font-semibold text-xs uppercase tracking-wide text-stone-400 mb-2">Con foto</p>
                   <div className="flex gap-3 overflow-x-auto pb-1">
                     {withPhoto.map(item => (
                       <NaturePhotoCard key={item.scientificName} item={item} layerIcon={meta.icon} onTap={() => setSelected(item)} />

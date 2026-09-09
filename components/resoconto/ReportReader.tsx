@@ -445,7 +445,7 @@ export default function ReportReader({
 
   const materialBadge = (
     <div className="flex items-center gap-2 flex-wrap">
-      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-display font-bold uppercase tracking-wide ${
+      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-display font-bold uppercase tracking-wide ${
         materialScore.label === 'ottimo' ? 'bg-forest-50 text-forest-700'
         : materialScore.label === 'buono' ? 'bg-amber-50 text-amber-700'
         : 'bg-stone-100 text-stone-500'
@@ -453,7 +453,7 @@ export default function ReportReader({
         {materialScore.score}% materiale {materialScore.label}
       </span>
       {writingStyleReady && (
-        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-display font-bold uppercase tracking-wide bg-forest-50 text-forest-700">
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-display font-bold uppercase tracking-wide bg-forest-50 text-forest-700">
           Stile riconosciuto
         </span>
       )}
@@ -767,7 +767,7 @@ export default function ReportReader({
                               <blockquote
                                 ref={el => { if (el) gapRefs.current.push({ node: el, idx: i }) }}
                                 className="my-6 px-2 sm:px-8 text-center">
-                                <p className="font-display italic text-[22px] sm:text-[28px] leading-snug text-stone-700">
+                                <p className="font-display italic text-2xl sm:text-3xl leading-snug text-stone-700">
                                   “{pullQuote}”
                                 </p>
                               </blockquote>

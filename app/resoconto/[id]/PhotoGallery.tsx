@@ -20,7 +20,7 @@ export function PhotoGallery({ photos, onPhotoClick }: { photos: RoutePhoto[]; o
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
             </TornFrame>
             {ph.caption && (
-              <p className="mt-2.5 font-body text-[11px] italic leading-snug" style={{ color: TACCUINO_INK.handMuted }}>
+              <p className="mt-2.5 font-body text-xs italic leading-snug" style={{ color: TACCUINO_INK.handMuted }}>
                 {i + 1}. {ph.caption}
               </p>
             )}

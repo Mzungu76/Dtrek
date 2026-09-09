@@ -218,11 +218,11 @@ export default function ReportBookPage({ basePath, diarioHref, diarioTitle, acti
         pageLabel={`${idx + 1} di ${present.length}`}
         theme="taccuino"
       >
-        <h1 style={{ fontFamily: FONT.display, fontWeight: 600, fontSize: 22, color: TACCUINO_INK.typed, margin: '0 0 14px', ...TACCUINO_RULED_TEXT_STYLE }}>
+        <h1 style={{ fontFamily: FONT.display, fontWeight: 600, fontSize: 24, color: TACCUINO_INK.typed, margin: '0 0 14px', ...TACCUINO_RULED_TEXT_STYLE }}>
           {current.title}
         </h1>
         {chapterBody?.trim() && (
-          <div style={{ fontFamily: FONT.lora, fontSize: 14.5, color: TACCUINO_INK.hand, marginBottom: 16, ...TACCUINO_RULED_TEXT_STYLE }}>
+          <div style={{ fontFamily: FONT.lora, fontSize: 16, color: TACCUINO_INK.hand, marginBottom: 16, ...TACCUINO_RULED_TEXT_STYLE }}>
             <MagazineBody body={chapterBody} />
           </div>
         )}

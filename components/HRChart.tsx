@@ -66,7 +66,7 @@ export default function HRChart({ trackPoints, avgHR, maxHR, syncId, onHover }: 
           <span className={`text-sm font-semibold ${textMuted}`}>bpm {hovered ? '' : `· media (max ${maxHR})`}</span>
         </div>
         <button onClick={toggleAlt} title="Mostra/nascondi profilo altimetrico"
-          className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] transition-colors ${
+          className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-colors ${
             showAlt ? 'bg-stone-800 text-white' : 'bg-stone-100 text-stone-400'
           }`}>
           <Layers className="w-3 h-3" /> Quota
@@ -92,11 +92,11 @@ export default function HRChart({ trackPoints, avgHR, maxHR, syncId, onHover }: 
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#e7e5e4" />
-            <XAxis dataKey="time" tick={{ fontSize: 11, fill: '#78716c' }} tickLine={false} axisLine={{ stroke: '#d6d3d1' }} />
+            <XAxis dataKey="time" tick={{ fontSize: 12, fill: '#78716c' }} tickLine={false} axisLine={{ stroke: '#d6d3d1' }} />
             <YAxis
               yAxisId="hr"
               domain={['auto', 'auto']}
-              tick={{ fontSize: 11, fill: '#78716c' }}
+              tick={{ fontSize: 12, fill: '#78716c' }}
               tickLine={false}
               axisLine={false}
               unit=" bpm"
@@ -117,10 +117,10 @@ export default function HRChart({ trackPoints, avgHR, maxHR, syncId, onHover }: 
               formatter={(v: number, name: string) => name === 'alt' ? [`${v} m`, 'Quota'] : [`${v} bpm`, 'FC']}
               labelStyle={{ fontSize: 12, color: '#57534e' }}
               itemStyle={{ color: '#1c1917' }}
-              contentStyle={{ background: '#ffffff', borderRadius: 10, border: '1px solid #e7e5e4', fontSize: 13 }}
+              contentStyle={{ background: '#ffffff', borderRadius: 10, border: '1px solid #e7e5e4', fontSize: 14 }}
             />
             <ReferenceLine yAxisId="hr" y={avgHR} stroke="#f87171" strokeDasharray="4 4" strokeOpacity={0.7}
-              label={{ value: `Media ${avgHR}`, position: 'right', fontSize: 11, fill: '#f87171' }} />
+              label={{ value: `Media ${avgHR}`, position: 'right', fontSize: 12, fill: '#f87171' }} />
             {showAlt && (
               <Area
                 yAxisId="alt"

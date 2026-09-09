@@ -123,7 +123,7 @@ export default function NavigatorePage() {
           >
             <Navigation2 className="w-5 h-5 shrink-0" />
             <div className="flex-1 min-w-0">
-              <p className="text-[11px] text-white/80 uppercase tracking-wide font-semibold">Pronto per la navigazione</p>
+              <p className="text-xs text-white/80 uppercase tracking-wide font-semibold">Pronto per la navigazione</p>
               <p className="font-semibold text-sm truncate">{readyHike.title}</p>
             </div>
           </Link>

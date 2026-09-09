@@ -61,7 +61,7 @@ function ToolButton({ icon, label, onClick, disabled, busy }: {
       onClick={onClick}
       disabled={disabled}
       className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors disabled:opacity-40"
-      style={{ background: PILL_BG, color: INK_TEXT, fontSize: 13.5, fontWeight: 600 }}
+      style={{ background: PILL_BG, color: INK_TEXT, fontSize: 14, fontWeight: 600 }}
     >
       {busy ? <Loader2 className="w-4 h-4 animate-spin shrink-0" /> : icon}
       {label}
@@ -72,17 +72,17 @@ function ToolButton({ icon, label, onClick, disabled, busy }: {
 /** Presentazionale — le righe arrivano dal genitore (fetch unico condiviso con AppuntiSection,
  *  che legge dagli stessi Reportage: nessun secondo giro su /api/percorsi/[id]/reportage). */
 function ReportageList({ rows, error, basePath }: { rows: ReportageRow[] | null; error: string | null; basePath: string }) {
-  if (error) return <p className="text-[12.5px]" style={{ color: '#b3413a' }}>Impossibile caricare i Reportage: {error}</p>
+  if (error) return <p className="text-xs" style={{ color: '#b3413a' }}>Impossibile caricare i Reportage: {error}</p>
   if (rows === null) {
     return (
       <div className="flex items-center gap-2 py-2" style={{ color: INK_MUTED }}>
-        <Loader2 className="w-4 h-4 animate-spin" /><span className="text-[12.5px]">Caricamento…</span>
+        <Loader2 className="w-4 h-4 animate-spin" /><span className="text-xs">Caricamento…</span>
       </div>
     )
   }
   if (rows.length === 0) {
     return (
-      <p className="text-[12.5px] leading-relaxed" style={{ color: INK_MUTED }}>
+      <p className="text-xs leading-relaxed" style={{ color: INK_MUTED }}>
         Nessun Reportage ancora — quando cammini questo percorso, comparirà qui.
       </p>
     )
@@ -100,10 +100,10 @@ function ReportageList({ rows, error, basePath }: { rows: ReportageRow[] | null;
             <PenLine className="w-3.5 h-3.5" style={{ color: '#8a7f52' }} />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate" style={{ fontSize: 13, fontWeight: 600, color: INK_TEXT }}>
+            <p className="truncate" style={{ fontSize: 14, fontWeight: 600, color: INK_TEXT }}>
               {format(new Date(r.startTime), 'd MMMM yyyy', { locale: it })}
             </p>
-            <p style={{ fontSize: 11, color: INK_MUTED }}>
+            <p style={{ fontSize: 12, color: INK_MUTED }}>
               {(r.distanceMeters / 1000).toFixed(1)} km
               {!r.hasWrittenReport && <span style={{ color: '#c05a17', fontWeight: 600 }}> · Da raccontare</span>}
             </p>
@@ -128,7 +128,7 @@ function AppuntiSection({ hike, rows }: { hike: PlannedHike; rows: ReportageRow[
   if (rows === null) {
     return (
       <div className="flex items-center gap-2 py-2" style={{ color: INK_MUTED }}>
-        <Loader2 className="w-4 h-4 animate-spin" /><span className="text-[12.5px]">Caricamento…</span>
+        <Loader2 className="w-4 h-4 animate-spin" /><span className="text-xs">Caricamento…</span>
       </div>
     )
   }
@@ -140,7 +140,7 @@ function AppuntiSection({ hike, rows }: { hike: PlannedHike; rows: ReportageRow[
 
   if (note.length === 0) {
     return (
-      <p className="text-[12.5px] leading-relaxed" style={{ color: INK_MUTED }}>
+      <p className="text-xs leading-relaxed" style={{ color: INK_MUTED }}>
         Nessun appunto ancora — si prendono in cammino, dal Navigator.
       </p>
     )
@@ -158,10 +158,10 @@ function AppuntiSection({ hike, rows }: { hike: PlannedHike; rows: ReportageRow[
             </div>
           )}
           <div className="min-w-0 flex-1">
-            <p style={{ fontSize: 10.5, color: INK_MUTED }}>
+            <p style={{ fontSize: 12, color: INK_MUTED }}>
               {format(new Date(n.timestamp), 'd MMM · HH:mm', { locale: it })}
             </p>
-            {n.text && <p style={{ fontSize: 13, color: INK_TEXT, lineHeight: 1.4 }}>{n.text}</p>}
+            {n.text && <p style={{ fontSize: 14, color: INK_TEXT, lineHeight: 1.4 }}>{n.text}</p>}
           </div>
         </div>
       ))}
@@ -173,7 +173,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <p
       className="mb-2 mt-5 first:mt-0"
-      style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 10, color: '#8a7f52' }}
+      style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 12, color: '#8a7f52' }}
     >
       {children}
     </p>
@@ -224,7 +224,7 @@ export default function PercorsoToolsDrawer({
         style={{ background: PAPER_BG, fontFamily: FONT.body }}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b sticky top-0 z-10" style={{ borderColor: PAPER_HAIRLINE, background: PAPER_BG }}>
-          <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 11, color: INK_MUTED }}>
+          <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 12, color: INK_MUTED }}>
             Strumenti del Percorso
           </p>
           <button onClick={onClose} aria-label="Chiudi" style={{ color: INK_MUTED }}>
@@ -252,7 +252,7 @@ export default function PercorsoToolsDrawer({
           <SectionLabel>Esporta</SectionLabel>
           <div className="flex flex-col gap-1.5">
             <ToolButton icon={<FileDown className="w-4 h-4 shrink-0" />} label="Esporta PDF" onClick={handleExportPdf} busy={exportingPdf} />
-            {pdfError && <p className="text-[11.5px]" style={{ color: '#b3413a' }}>{pdfError}</p>}
+            {pdfError && <p className="text-xs" style={{ color: '#b3413a' }}>{pdfError}</p>}
             <ToolButton
               icon={<Download className="w-4 h-4 shrink-0" />}
               label="Esporta GPX"
@@ -272,7 +272,7 @@ export default function PercorsoToolsDrawer({
           <Link
             href={`/guida/${encodeURIComponent(percorsoId)}`}
             className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg"
-            style={{ background: PILL_BG, color: INK_TEXT, fontSize: 13.5, fontWeight: 600 }}
+            style={{ background: PILL_BG, color: INK_TEXT, fontSize: 14, fontWeight: 600 }}
           >
             <span className="inline-flex items-center gap-2"><BookOpen className="w-4 h-4" /> Apri vista estesa (mappa, 3D)</span>
             <ChevronRight className="w-3.5 h-3.5" style={{ color: INK_MUTED }} />

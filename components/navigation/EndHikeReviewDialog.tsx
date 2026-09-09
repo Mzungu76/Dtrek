@@ -106,7 +106,7 @@ export default function EndHikeReviewDialog({ activity, defaultTitle, onSave, on
                 rows={2}
                 className="w-full px-3 py-2 rounded-lg border border-stone-200 text-sm text-stone-800 font-body resize-none focus:outline-none focus:ring-2 focus:ring-forest-400"
               />
-              <p className="text-[11px] text-stone-400 font-body text-right mt-0.5">
+              <p className="text-xs text-stone-400 font-body text-right mt-0.5">
                 {completionNote.length}/{MAX_NOTE_LENGTH}
               </p>
             </div>

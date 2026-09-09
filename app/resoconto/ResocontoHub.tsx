@@ -438,8 +438,8 @@ export default function ResocontoHub({ id }: { id?: string }) {
     if (!activity || item.id !== activity.id || !rated) return null
     return (
       <span className="flex flex-col items-center justify-center text-white leading-none">
-        <span className="text-[15px] font-bold">{activity.userRating}</span>
-        <span className="text-[7px] font-medium opacity-70">/10</span>
+        <span className="text-base font-bold">{activity.userRating}</span>
+        <span className="text-xs font-medium opacity-70">/10</span>
       </span>
     )
   }

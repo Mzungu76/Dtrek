@@ -66,7 +66,7 @@ export default function SplashScreen() {
       </div>
       <div className="text-center">
         <p className="font-display text-lg font-bold text-white tracking-wide">{isNavigator ? 'DTrek Navigator' : 'DTrek'}</p>
-        <p className="text-[11px] text-stone-400 mt-0.5">{isNavigator ? 'Naviga il tuo percorso' : 'Il tuo diario di trekking'}</p>
+        <p className="text-xs text-stone-400 mt-0.5">{isNavigator ? 'Naviga il tuo percorso' : 'Il tuo diario di trekking'}</p>
       </div>
       <div className="mt-2 w-8 h-8 rounded-full border-2 border-white/15 border-t-forest-400 animate-spin" />
     </div>

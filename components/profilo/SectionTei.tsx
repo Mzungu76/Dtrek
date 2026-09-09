@@ -91,7 +91,7 @@ export default function SectionTei() {
               <input type="range" min={0} max={100} value={weights[row.key]}
                 onChange={e => setWeights(w => ({ ...w, [row.key]: Number(e.target.value) }))}
                 className="w-full accent-forest-600" />
-              <p className="text-[10px] text-stone-400 mt-0.5">{row.hint}</p>
+              <p className="text-xs text-stone-400 mt-0.5">{row.hint}</p>
             </div>
           ))}
 

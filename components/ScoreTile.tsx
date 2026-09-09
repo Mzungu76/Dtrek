@@ -33,13 +33,13 @@ export function ScoreTile({ title, score, label, color, badge, open, onToggle, h
           style={{ background: `${color}10` }}
         >
           <div className="flex-1 min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: TACCUINO_PAPER.contourLine }}>{title}</p>
+            <p className="text-xs font-bold uppercase tracking-widest" style={{ color: TACCUINO_PAPER.contourLine }}>{title}</p>
             <div className="flex items-baseline gap-2 flex-wrap">
               <span className="text-2xl font-black" style={{ color }}>{score}</span>
               <span className="text-xs font-semibold" style={{ color }}>{label}</span>
             </div>
           </div>
-          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md text-white shrink-0" style={{ backgroundColor: color }}>{badge}</span>
+          <span className="text-xs font-bold px-1.5 py-0.5 rounded-md text-white shrink-0" style={{ backgroundColor: color }}>{badge}</span>
           {hasDetail && (open ? <ChevronUp className="w-4 h-4 shrink-0" style={{ color: TACCUINO_PAPER.contourLine }} /> : <ChevronDown className="w-4 h-4 shrink-0" style={{ color: TACCUINO_PAPER.contourLine }} />)}
         </button>
 

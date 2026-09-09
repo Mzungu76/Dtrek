@@ -147,8 +147,8 @@ export default function ProfiloPage() {
           </div>
           <GemStatusBadge size={24} className="absolute bottom-0 right-0" />
         </div>
-        <h1 className="font-display text-[21px] font-bold mb-1" style={{ color: TACCUINO_INK.typed, ...TACCUINO_RULED_TEXT_STYLE }}>{displayName}</h1>
-        <p className="text-[13px]" style={{ color: TACCUINO_INK.handMuted, ...TACCUINO_RULED_TEXT_STYLE }}>
+        <h1 className="font-display text-xl font-bold mb-1" style={{ color: TACCUINO_INK.typed, ...TACCUINO_RULED_TEXT_STYLE }}>{displayName}</h1>
+        <p className="text-sm" style={{ color: TACCUINO_INK.handMuted, ...TACCUINO_RULED_TEXT_STYLE }}>
           {streakWeeks > 0 ? `${streakWeeks} settiman${streakWeeks === 1 ? 'a' : 'e'} di streak` : 'Inizia la tua streak'}
           {badgeCount > 0 && ` · ${badgeCount} traguardi`}
         </p>

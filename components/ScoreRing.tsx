@@ -174,7 +174,7 @@ export function ScoreRing({ safety, cts }: { safety: SafetyScore | null; cts: Ct
             <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: s.color, boxShadow: `0 0 0 3px ${s.color}33` }} />
             <span className="flex-1 min-w-0">
               <span className="block text-xs text-stone-700 truncate">{s.title}</span>
-              {s.sublabel && <span className="block text-[10px] text-stone-400 truncate">{s.sublabel}</span>}
+              {s.sublabel && <span className="block text-xs text-stone-400 truncate">{s.sublabel}</span>}
             </span>
             <span className="text-sm font-bold shrink-0" style={{ color: s.value != null ? s.color : '#78716c' }}>{s.value != null ? Math.round(s.value) : '—'}</span>
           </button>

@@ -137,7 +137,7 @@ function StatCell({ value, label }: { value: string; label: string }) {
   return (
     <div className="text-center">
       <p style={{ fontFamily: FONT.mono, fontWeight: 700, fontSize: 16, color: TACCUINO_INK.typed, lineHeight: 1 }}>{value}</p>
-      <p style={{ fontSize: 8.5, textTransform: 'uppercase', letterSpacing: '0.08em', color: TACCUINO_INK.handMuted, marginTop: 3 }}>{label}</p>
+      <p style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: TACCUINO_INK.handMuted, marginTop: 3 }}>{label}</p>
     </div>
   )
 }
@@ -294,10 +294,10 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
             />
           </div>
           <div className="min-w-0 flex-1">
-            <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 10, color: TACCUINO_INK.handMuted, margin: '0 0 3px', ...TACCUINO_RULED_TEXT_STYLE }}>
+            <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 12, color: TACCUINO_INK.handMuted, margin: '0 0 3px', ...TACCUINO_RULED_TEXT_STYLE }}>
               Sommario
             </p>
-            <h1 style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 27, margin: 0, transform: 'rotate(-0.5deg)', ...INK_ABSORB_STYLE, ...TACCUINO_RULED_TEXT_STYLE }}>
+            <h1 style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 30, margin: 0, transform: 'rotate(-0.5deg)', ...INK_ABSORB_STYLE, ...TACCUINO_RULED_TEXT_STYLE }}>
               {detail.title}
             </h1>
             <p style={{ fontFamily: FONT_HAND, fontSize: 14, color: TACCUINO_INK.handMuted, margin: '3px 0 0', ...TACCUINO_RULED_TEXT_STYLE }}>
@@ -325,7 +325,7 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
           href={`/upload?tab=activity&diaryId=${encodeURIComponent(diaryId)}`}
           className="relative flex items-center gap-2 mb-3 px-3.5 py-2.5 rounded"
           style={{
-            color: TACCUINO_ACCENT[600], fontFamily: FONT_HAND, fontWeight: 700, fontSize: 15,
+            color: TACCUINO_ACCENT[600], fontFamily: FONT_HAND, fontWeight: 700, fontSize: 16,
             transform: 'rotate(-0.3deg)',
           }}
         >
@@ -347,10 +347,10 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                   ? { background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_ACCENT[600]}` }
                   : { background: 'transparent', border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}
               >
-                <span style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 15, color: tab === t ? TACCUINO_INK.typed : TACCUINO_INK.handMuted }}>
+                <span style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 16, color: tab === t ? TACCUINO_INK.typed : TACCUINO_INK.handMuted }}>
                   {t === 'concluse' ? 'Concluse' : 'Programmate'}
                 </span>
-                <span style={{ fontFamily: FONT.mono, fontSize: 10.5, color: TACCUINO_INK.handMuted, marginLeft: 5 }}>
+                <span style={{ fontFamily: FONT.mono, fontSize: 12, color: TACCUINO_INK.handMuted, marginLeft: 5 }}>
                   {t === 'concluse' ? detail.reportage.length : detail.inProgramma.length}
                 </span>
               </button>
@@ -369,7 +369,7 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 placeholder="cerca per titolo…"
-                className="w-full pl-8 pr-8 py-2 rounded-[3px] text-[14px] outline-none placeholder:text-[#8a9bab]"
+                className="w-full pl-8 pr-8 py-2 rounded-[3px] text-sm outline-none placeholder:text-[#8a9bab]"
                 style={{ background: TACCUINO_PAPER.card, color: TACCUINO_INK.typed, fontFamily: FONT_HAND }}
               />
               {searchQuery && (
@@ -408,7 +408,7 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                 <button
                   key={s.id}
                   onClick={() => setSortBy(s.id)}
-                  className="relative shrink-0 px-3 py-1 rounded-full text-[13px] transition-colors"
+                  className="relative shrink-0 px-3 py-1 rounded-full text-sm transition-colors"
                   style={sortBy === s.id
                     ? { fontFamily: FONT_HAND, fontWeight: 700, color: TACCUINO_INK.typed }
                     : { fontFamily: FONT_HAND, background: 'transparent', color: TACCUINO_INK.handMuted }}
@@ -424,7 +424,7 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                   <button
                     key={s.id}
                     onClick={() => setStatusFilter(s.id)}
-                    className="relative shrink-0 px-3 py-1 rounded-full text-[13px] transition-colors"
+                    className="relative shrink-0 px-3 py-1 rounded-full text-sm transition-colors"
                     style={statusFilter === s.id
                       ? { fontFamily: FONT_HAND, fontWeight: 700, color: TACCUINO_INK.typed }
                       : { fontFamily: FONT_HAND, background: 'transparent', color: TACCUINO_INK.handMuted }}
@@ -440,9 +440,9 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
 
         {tab === 'programmate' && (
           detail.inProgramma.length === 0 ? (
-            <p style={{ fontFamily: FONT.body, fontSize: 13, color: TACCUINO_INK.handMuted, ...TACCUINO_RULED_TEXT_STYLE }}>Nessuna Meta in programma — aggiungine una dall&rsquo;Atlante.</p>
+            <p style={{ fontFamily: FONT.body, fontSize: 14, color: TACCUINO_INK.handMuted, ...TACCUINO_RULED_TEXT_STYLE }}>Nessuna Meta in programma — aggiungine una dall&rsquo;Atlante.</p>
           ) : visibleInProgramma.length === 0 ? (
-            <p style={{ fontFamily: FONT.body, fontSize: 13, color: TACCUINO_INK.handMuted, ...TACCUINO_RULED_TEXT_STYLE }}>Nessuna voce corrisponde ai filtri.</p>
+            <p style={{ fontFamily: FONT.body, fontSize: 14, color: TACCUINO_INK.handMuted, ...TACCUINO_RULED_TEXT_STYLE }}>Nessuna voce corrisponde ai filtri.</p>
           ) : (
             <div className="flex flex-col">
               {visibleInProgramma.map(p => (
@@ -460,7 +460,7 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                   <div className="min-w-0 flex-1">
                     <p className="truncate" style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 16, color: TACCUINO_INK.typed }}>{p.title}</p>
                     {metaHasHikingMetrics(p.metaType) && (
-                      <p style={{ fontSize: 10.5, color: TACCUINO_INK.handMuted }}>
+                      <p style={{ fontSize: 12, color: TACCUINO_INK.handMuted }}>
                         {(p.distanceMeters / 1000).toFixed(1)} km &middot; +{Math.round(p.elevationGain)} m
                         {p.plannedDate && ` · ${new Date(p.plannedDate).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })}`}
                       </p>
@@ -474,9 +474,9 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
         )}
 
         {tab === 'concluse' && (detail.reportage.length === 0 ? (
-          <p style={{ fontFamily: FONT.body, fontSize: 13, color: TACCUINO_INK.handMuted, ...TACCUINO_RULED_TEXT_STYLE }}>Nessun reportage ancora — comincia da qui.</p>
+          <p style={{ fontFamily: FONT.body, fontSize: 14, color: TACCUINO_INK.handMuted, ...TACCUINO_RULED_TEXT_STYLE }}>Nessun reportage ancora — comincia da qui.</p>
         ) : visibleReportage.length === 0 ? (
-          <p style={{ fontFamily: FONT.body, fontSize: 13, color: TACCUINO_INK.handMuted, ...TACCUINO_RULED_TEXT_STYLE }}>Nessun reportage corrisponde ai filtri.</p>
+          <p style={{ fontFamily: FONT.body, fontSize: 14, color: TACCUINO_INK.handMuted, ...TACCUINO_RULED_TEXT_STYLE }}>Nessun reportage corrisponde ai filtri.</p>
         ) : (
           <div className="flex flex-col">
             {visibleReportage.map(r => {
@@ -541,7 +541,7 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                       {/* Fase 32 — non più `truncate` (richiesta esplicita: il titolo deve leggersi
                           sempre per intero, non tagliato con "..."): va a capo libero invece di
                           troncare su una riga sola. */}
-                      <p style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 19.5, color: TACCUINO_INK.typed, ...TACCUINO_RULED_TEXT_STYLE }}>{r.title}</p>
+                      <p style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 20, color: TACCUINO_INK.typed, ...TACCUINO_RULED_TEXT_STYLE }}>{r.title}</p>
                       {scoreLabel && (
                         // Fase 31 — font a mano anche qui ("sottotitoli personali" nella specifica
                         // tipografica, non più il sans di default): resta comunque un gradino sotto
@@ -554,7 +554,7 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                           grigio-marrone tenue delle icone invece del marrone più scuro di prima,
                           icone rimpicciolite — restano leggibili ma non competono col titolo per
                           attenzione. */}
-                      <div className="flex items-center flex-wrap gap-x-2.5 gap-y-1 mt-1.5" style={{ fontFamily: FONT.lora, fontSize: 11, color: TACCUINO_INK.handMuted }}>
+                      <div className="flex items-center flex-wrap gap-x-2.5 gap-y-1 mt-1.5" style={{ fontFamily: FONT.lora, fontSize: 12, color: TACCUINO_INK.handMuted }}>
                         {/* Solo per un sentiero (piano §48.9) — una Meta borgo_citta/sito ha sempre
                             queste cifre a 0 (nessuna traccia GPS, vedi lib/visitCompletion.ts):
                             mostrarle produrrebbe "0.0 km" invece di semplicemente ometterle. */}
@@ -587,7 +587,7 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                         un'etichetta di stato compatta, non un paragrafo. */}
                     <div
                       className="shrink-0 flex items-center justify-end gap-1"
-                      style={{ width: 94, fontFamily: FONT_HAND, fontSize: 15, color: r.hasWrittenReport ? TACCUINO_ACCENT[600] : TACCUINO_INK.handMuted, fontWeight: r.hasWrittenReport ? 700 : 400 }}
+                      style={{ width: 94, fontFamily: FONT_HAND, fontSize: 16, color: r.hasWrittenReport ? TACCUINO_ACCENT[600] : TACCUINO_INK.handMuted, fontWeight: r.hasWrittenReport ? 700 : 400 }}
                     >
                       {r.hasWrittenReport
                         ? <><BookOpen className="w-3.5 h-3.5 shrink-0" strokeWidth={2.5} /> raccontato</>
@@ -604,7 +604,7 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
           <Link
             href={`/diari/${encodeURIComponent(diaryId)}/pubblica`}
             className="flex items-center justify-between gap-2 py-2.5"
-            style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: 11.5, color: TACCUINO_INK.hand }}
+            style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: 12, color: TACCUINO_INK.hand }}
           >
             <span className="inline-flex items-center gap-1.5"><Share2 className="w-3.5 h-3.5" /> Pubblicazione</span>
             <ChevronRight className="w-3.5 h-3.5" style={{ color: TACCUINO_INK.handMuted }} />
@@ -616,7 +616,7 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
           <Link
             href="/diari"
             className="flex items-center justify-between gap-2 py-2.5"
-            style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: 11.5, color: TACCUINO_INK.hand, borderTop: `1px solid ${TACCUINO_PAPER.cardBorder}` }}
+            style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: 12, color: TACCUINO_INK.hand, borderTop: `1px solid ${TACCUINO_PAPER.cardBorder}` }}
           >
             <span className="inline-flex items-center gap-1.5"><BookMarked className="w-3.5 h-3.5" /> Sposta su un altro scaffale</span>
             <ChevronRight className="w-3.5 h-3.5" style={{ color: TACCUINO_INK.handMuted }} />

@@ -308,7 +308,7 @@ export function TrailScoreGaugeBadge({
                 return (
                   <div key={line.key} className="min-w-0" style={{ marginLeft }}>
                     <span
-                      className="block whitespace-nowrap overflow-hidden text-ellipsis text-white text-[11px] sm:text-xs font-bold leading-tight"
+                      className="block whitespace-nowrap overflow-hidden text-ellipsis text-white text-xs sm:text-xs font-bold leading-tight"
                       style={{ color: line.color, textShadow: '0 1px 5px rgba(0,0,0,0.6)' }}
                     >
                       <span className="text-white/55 font-semibold uppercase tracking-wide mr-1.5">{line.label}</span>
@@ -323,10 +323,10 @@ export function TrailScoreGaugeBadge({
               // frase sola, col Trail Score come sottotitolo. Il resto sta dietro "Vedi il
               // dettaglio" più sotto, non impilato qui.
               <div className="min-w-0">
-                <p className="text-stone-400 text-[10px] font-semibold uppercase tracking-wide leading-tight">
+                <p className="text-stone-400 text-xs font-semibold uppercase tracking-wide leading-tight">
                   {subtitleLine ? `Trail Score · ${subtitleLine.value}` : primaryLine!.label}
                 </p>
-                <p className="text-[15px] font-bold leading-snug mt-1" style={{ color: primaryLine!.color ?? '#2b2419' }}>
+                <p className="text-base font-bold leading-snug mt-1" style={{ color: primaryLine!.color ?? '#2b2419' }}>
                   {primaryLine!.value}
                   {primaryLine!.extra}
                 </p>
@@ -337,7 +337,7 @@ export function TrailScoreGaugeBadge({
               // sotto la propria etichetta invece di spezzarsi a metà parola accanto ad essa.
               scoreLines.map(line => (
                 <div key={line.key} className="min-w-0">
-                  <p className="flex items-center gap-1 text-stone-400 text-[10px] font-semibold uppercase tracking-wide leading-tight">
+                  <p className="flex items-center gap-1 text-stone-400 text-xs font-semibold uppercase tracking-wide leading-tight">
                     {line.label}
                     {line.infoSection && <InfoButton section={line.infoSection} />}
                   </p>
@@ -357,7 +357,7 @@ export function TrailScoreGaugeBadge({
           <button
             type="button"
             onClick={() => setDetailOpen(o => !o)}
-            className="mt-3 inline-flex items-center gap-1 text-stone-800 text-[12.5px] font-bold"
+            className="mt-3 inline-flex items-center gap-1 text-stone-800 text-xs font-bold"
           >
             Vedi il dettaglio
             <ChevronDown className={`w-3.5 h-3.5 transition-transform ${detailOpen ? 'rotate-180' : ''}`} />
@@ -366,7 +366,7 @@ export function TrailScoreGaugeBadge({
             <div className="mt-3 pt-3 border-t border-dashed border-stone-200 space-y-2.5 text-left">
               {secondaryLines.map(line => (
                 <div key={line.key} className="min-w-0">
-                  <p className="flex items-center gap-1 text-stone-400 text-[10px] font-semibold uppercase tracking-wide leading-tight">
+                  <p className="flex items-center gap-1 text-stone-400 text-xs font-semibold uppercase tracking-wide leading-tight">
                     {line.label}
                     {line.infoSection && <InfoButton section={line.infoSection} />}
                   </p>

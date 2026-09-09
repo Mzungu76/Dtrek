@@ -42,7 +42,7 @@ function EditableField({ label, value, onSave, multiline, placeholder }: {
 
   return (
     <div className="mb-4">
-      <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 10, color: TACCUINO_INK.handMuted }} className="mb-1.5">
+      <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 12, color: TACCUINO_INK.handMuted }} className="mb-1.5">
         {label}
       </p>
       {multiline
@@ -65,10 +65,10 @@ function VolumeRow({ volume, index, total, onMoveUp, onMoveDown }: {
 }) {
   return (
     <div className="flex items-center gap-2.5 rounded-xl px-3 py-2.5" style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}>
-      <span style={{ fontFamily: FONT.mono, fontWeight: 700, fontSize: 11, color: TACCUINO_INK.handMuted, width: 18 }}>{index + 1}</span>
+      <span style={{ fontFamily: FONT.mono, fontWeight: 700, fontSize: 12, color: TACCUINO_INK.handMuted, width: 18 }}>{index + 1}</span>
       <div className="min-w-0 flex-1">
-        <p className="truncate" style={{ fontFamily: FONT.lora, fontWeight: 600, fontSize: 13.5, color: TACCUINO_INK.typed }}>{volume.title}</p>
-        <p style={{ fontSize: 10, color: TACCUINO_INK.handMuted }}>
+        <p className="truncate" style={{ fontFamily: FONT.lora, fontWeight: 600, fontSize: 14, color: TACCUINO_INK.typed }}>{volume.title}</p>
+        <p style={{ fontSize: 12, color: TACCUINO_INK.handMuted }}>
           {volume.reportageCount} reportage · {(volume.distanceMeters / 1000).toFixed(0)} km
         </p>
       </div>
@@ -232,7 +232,7 @@ export default function RaccoltaComposerPage() {
       <TaccuinoRuledLines />
       <Navbar />
       <div className="max-w-[640px] mx-auto px-4 sm:px-8 pb-14" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 28px)' }}>
-        <Link href="/diari" className="inline-flex items-center gap-1.5 mb-4" style={{ color: TACCUINO_INK.hand, fontSize: 12.5 }}>
+        <Link href="/diari" className="inline-flex items-center gap-1.5 mb-4" style={{ color: TACCUINO_INK.hand, fontSize: 12 }}>
           <ArrowLeft className="w-3.5 h-3.5" /> Diari
         </Link>
 
@@ -251,7 +251,7 @@ export default function RaccoltaComposerPage() {
             <EditableField label="Prefazione" value={collection.preface} onSave={v => patchField('preface', v)} multiline placeholder="Qualche riga per introdurre la collana…" />
 
             <div className="flex items-center justify-between mt-7 mb-2.5">
-              <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 11, color: TACCUINO_INK.hand }}>
+              <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 12, color: TACCUINO_INK.hand }}>
                 Volumi ({collection.diari.length})
               </p>
               {reordering && <Loader2 className="w-3.5 h-3.5 animate-spin" style={{ color: TACCUINO_ACCENT[600] }} />}
@@ -265,20 +265,20 @@ export default function RaccoltaComposerPage() {
                 />
               ))}
               {collection.diari.length === 0 && (
-                <p style={{ fontSize: 13, color: TACCUINO_INK.hand }}>Ancora nessun volume — aggiungine uno qui sotto.</p>
+                <p style={{ fontSize: 14, color: TACCUINO_INK.hand }}>Ancora nessun volume — aggiungine uno qui sotto.</p>
               )}
             </div>
 
             {showPicker ? (
               <div className="rounded-xl mb-6" style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}>
                 <div className="flex items-center justify-between px-3 py-2" style={{ borderBottom: `1px solid ${TACCUINO_PAPER.cardBorder}` }}>
-                  <p style={{ fontSize: 11, fontWeight: 700, color: TACCUINO_INK.hand, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Aggiungi un volume</p>
+                  <p style={{ fontSize: 12, fontWeight: 700, color: TACCUINO_INK.hand, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Aggiungi un volume</p>
                   <button type="button" onClick={() => setShowPicker(false)} style={{ color: TACCUINO_INK.handMuted }}><X className="w-4 h-4" /></button>
                 </div>
                 {allDiari === null ? (
                   <div className="flex justify-center py-4"><Loader2 className="w-4 h-4 animate-spin" style={{ color: TACCUINO_INK.handMuted }} /></div>
                 ) : pickerOptions.length === 0 ? (
-                  <p className="px-3 py-3 text-center" style={{ fontSize: 12.5, color: TACCUINO_INK.handMuted }}>
+                  <p className="px-3 py-3 text-center" style={{ fontSize: 12, color: TACCUINO_INK.handMuted }}>
                     Nessun altro Diario disponibile — o sono già tutti in questa raccolta.
                   </p>
                 ) : (
@@ -288,8 +288,8 @@ export default function RaccoltaComposerPage() {
                       className="w-full flex items-center justify-between px-3 py-2.5 text-left"
                       style={{ borderBottom: `1px dotted ${TACCUINO_PAPER.cardBorder}` }}
                     >
-                      <span style={{ fontFamily: FONT.lora, fontWeight: 600, fontSize: 13.5, color: TACCUINO_INK.typed }}>{d.title}</span>
-                      <span style={{ fontSize: 10.5, color: TACCUINO_INK.handMuted, textAlign: 'right' }}>
+                      <span style={{ fontFamily: FONT.lora, fontWeight: 600, fontSize: 14, color: TACCUINO_INK.typed }}>{d.title}</span>
+                      <span style={{ fontSize: 12, color: TACCUINO_INK.handMuted, textAlign: 'right' }}>
                         {d.reportageCount} reportage
                         {/* Un Diario sta su un solo scaffale (UNIQUE(diary_id) su collection_diaries) —
                             se ne ha già uno, sceglierlo qui lo sposta invece di duplicarlo. */}
@@ -303,14 +303,14 @@ export default function RaccoltaComposerPage() {
               <button
                 type="button" onClick={openPicker}
                 className="flex items-center justify-center gap-2 h-11 rounded-xl w-full mb-6"
-                style={{ border: `1.5px dashed ${TACCUINO_PAPER.cardBorder}`, color: TACCUINO_INK.hand, fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 11 }}
+                style={{ border: `1.5px dashed ${TACCUINO_PAPER.cardBorder}`, color: TACCUINO_INK.hand, fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 12 }}
               >
                 <Plus className="w-4 h-4" /> Aggiungi un volume
               </button>
             )}
 
             <div className="rounded-2xl px-4 py-4 mb-6" style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}>
-              <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 11, color: TACCUINO_INK.hand }} className="mb-2.5">
+              <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 12, color: TACCUINO_INK.hand }} className="mb-2.5">
                 Pubblicazione
               </p>
               {publishError && <p className="text-xs text-red-600 mb-2">{publishError}</p>}
@@ -353,7 +353,7 @@ export default function RaccoltaComposerPage() {
               {/* Preferenze globali (vale per ogni Diario e Raccolta, non solo questa) —
                   docs/raccolte-pubblicazione-piano.md, Fase 3f. */}
               <div className="pt-2.5 mt-2.5" style={{ borderTop: `1px solid ${TACCUINO_PAPER.cardBorder}` }}>
-                <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 9.5, color: TACCUINO_INK.handMuted }} className="mb-1.5">
+                <p style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 12, color: TACCUINO_INK.handMuted }} className="mb-1.5">
                   Privacy (vale per tutto quello che pubblichi)
                 </p>
                 <PublishPrivacyToggles />
@@ -367,7 +367,7 @@ export default function RaccoltaComposerPage() {
                 </button>
               ) : (
                 <div className="rounded-xl px-4 py-3 space-y-2" style={{ background: '#fdf2f0', border: '1px solid #f3d3cc' }}>
-                  <p style={{ fontSize: 12.5, color: '#8a2f22' }}>
+                  <p style={{ fontSize: 12, color: '#8a2f22' }}>
                     Uno scaffale (questa raccolta) si elimina solo se è vuoto — sposta prima i Diari
                     contenuti su un altro scaffale dal banner della Libreria.
                   </p>
@@ -378,7 +378,7 @@ export default function RaccoltaComposerPage() {
                       style={{ background: '#b3413a' }}>
                       {deleting ? 'Elimino…' : 'Elimina'}
                     </button>
-                    <button onClick={() => { setDeleteConfirming(false); setDeleteError(null) }} disabled={deleting} style={{ fontSize: 12.5, color: TACCUINO_INK.handMuted }}>
+                    <button onClick={() => { setDeleteConfirming(false); setDeleteError(null) }} disabled={deleting} style={{ fontSize: 12, color: TACCUINO_INK.handMuted }}>
                       Annulla
                     </button>
                   </div>

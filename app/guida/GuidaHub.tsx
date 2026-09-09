@@ -562,7 +562,7 @@ export default function GuidaHub({ id, startClosed }: { id?: string; startClosed
   }, [items, hike, driving, userOrigin, driveCache, ctsSettled])
 
   const deletedToastNode = showDeletedToast ? (
-    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-2 bg-stone-900 text-white text-[13px] font-semibold px-4 py-2.5 rounded-full shadow-lg animate-in fade-in slide-in-from-top-2">
+    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-2 bg-stone-900 text-white text-sm font-semibold px-4 py-2.5 rounded-full shadow-lg animate-in fade-in slide-in-from-top-2">
       <Check className="w-4 h-4 text-forest-400 shrink-0" /> Percorso eliminato
     </div>
   ) : null
@@ -741,7 +741,7 @@ export default function GuidaHub({ id, startClosed }: { id?: string; startClosed
         <>
           <div className="fixed inset-0 z-10" onClick={() => setShowDatePicker(false)} />
           <div className="absolute right-0 top-11 z-20 p-3 rounded-xl bg-white shadow-2xl border border-stone-200">
-            <label className="block text-[10px] font-semibold uppercase tracking-wide text-stone-400 mb-1.5">Data di uscita</label>
+            <label className="block text-xs font-semibold uppercase tracking-wide text-stone-400 mb-1.5">Data di uscita</label>
             <input
               type="date"
               defaultValue={hike?.plannedDate ?? ''}

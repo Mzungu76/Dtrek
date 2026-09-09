@@ -37,7 +37,7 @@ export default function PercorsiPage() {
         </button>
         <div>
           <h1 className="font-display text-lg font-bold text-white">Percorsi pianificati</h1>
-          <p className="text-sky-200 text-[13px]">Scegli un percorso per avviare la navigazione GPS.</p>
+          <p className="text-sky-200 text-sm">Scegli un percorso per avviare la navigazione GPS.</p>
         </div>
       </div>
 
@@ -99,8 +99,8 @@ export default function PercorsiPage() {
                   </div>
                 </div>
                 <div className="px-[18px] pt-4 pb-[18px]">
-                  <p className="text-[16px] font-bold text-sky-900 mb-2 truncate">{hike.title}</p>
-                  <div className="flex items-center gap-4 text-[13px] text-stone-500 flex-wrap">
+                  <p className="text-base font-bold text-sky-900 mb-2 truncate">{hike.title}</p>
+                  <div className="flex items-center gap-4 text-sm text-stone-500 flex-wrap">
                     <span>{(hike.distanceMeters / 1000).toFixed(1)} km</span>
                     <span>{Math.round(hike.elevationGain)} m D+</span>
                     <span>{formatDuration(hike.estimatedTimeSeconds)} stim.</span>

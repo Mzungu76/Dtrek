@@ -162,7 +162,7 @@ export default function ActivityUploader({ diaryId }: { diaryId?: string } = {})
             { ext: 'GPX', color: 'text-sky-700 bg-sky-50 border-sky-200', note: 'Standard universale · Solo tracciato GPS e altimetria — senza FC né calorie' },
           ].map(({ ext, color, note }) => (
             <div key={ext} className="flex items-start gap-2.5">
-              <span className={`shrink-0 font-mono text-[11px] font-bold px-1.5 py-0.5 rounded border ${color}`}>{ext}</span>
+              <span className={`shrink-0 font-mono text-xs font-bold px-1.5 py-0.5 rounded border ${color}`}>{ext}</span>
               <p className="text-xs text-stone-500 leading-relaxed">{note}</p>
             </div>
           ))}
@@ -225,7 +225,7 @@ export default function ActivityUploader({ diaryId }: { diaryId?: string } = {})
             <div key={s.label} className="bg-white rounded-xl border border-forest-100 p-3 flex items-center gap-2">
               {s.icon}
               <div>
-                <p className="text-[10px] text-stone-400">{s.label}</p>
+                <p className="text-xs text-stone-400">{s.label}</p>
                 <p className="text-sm font-semibold text-stone-800">{s.val}</p>
               </div>
             </div>
@@ -285,12 +285,12 @@ export default function ActivityUploader({ diaryId }: { diaryId?: string } = {})
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-medium text-stone-800 truncate">{h.title}</span>
                   {h.plannedDate && (
-                    <span className="text-[10px] text-stone-400 shrink-0">
+                    <span className="text-xs text-stone-400 shrink-0">
                       {new Date(h.plannedDate).toLocaleDateString('it-IT', { day: '2-digit', month: 'short' })}
                     </span>
                   )}
                 </div>
-                <div className="flex gap-3 text-[10px] text-stone-400 mt-0.5">
+                <div className="flex gap-3 text-xs text-stone-400 mt-0.5">
                   <span>{(h.distanceMeters/1000).toFixed(1)} km</span>
                   <span>{Math.round(h.elevationGain)} m D+</span>
                 </div>

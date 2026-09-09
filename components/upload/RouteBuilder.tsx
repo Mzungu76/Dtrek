@@ -1125,7 +1125,7 @@ export default function RouteBuilder({ onBack, diaryId }: { onBack: () => void; 
                     setQueryMapConfirmed(false)
                     setPoiBridge(null); setErrorMsg('')
                   }}
-                  className="shrink-0 flex items-center gap-1 bg-white/85 backdrop-blur shadow-sm rounded-full px-3 py-1.5 text-[11px] font-medium text-stone-600 hover:bg-white whitespace-nowrap"
+                  className="shrink-0 flex items-center gap-1 bg-white/85 backdrop-blur shadow-sm rounded-full px-3 py-1.5 text-xs font-medium text-stone-600 hover:bg-white whitespace-nowrap"
                 >
                   <SearchIcon className="w-3 h-3 text-stone-400 shrink-0" />
                   {(s.query || s.place_name || '').slice(0, 28)}
@@ -1146,7 +1146,7 @@ export default function RouteBuilder({ onBack, diaryId }: { onBack: () => void; 
             </div>
           </div>
           {mapTapTarget === 'destinazione' && (
-            <p className="text-center text-[11px] font-medium text-terra-700 bg-terra-50 border border-terra-200 rounded-full py-1.5 px-3 mx-auto w-fit shadow-sm">
+            <p className="text-center text-xs font-medium text-terra-700 bg-terra-50 border border-terra-200 rounded-full py-1.5 px-3 mx-auto w-fit shadow-sm">
               Tocca la mappa per la destinazione
             </p>
           )}
@@ -1225,7 +1225,7 @@ export default function RouteBuilder({ onBack, diaryId }: { onBack: () => void; 
         <button onClick={handlePrimaryAction} disabled={!canGo}
           className="absolute right-4 bottom-5 z-20 w-16 h-16 rounded-full bg-terra-500 hover:bg-terra-600 disabled:opacity-40 text-white shadow-lg flex items-center justify-center transition-colors">
           {activeFilterCount > 0 && !searching && !generating && (
-            <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-forest-600 text-white text-[10px] font-bold flex items-center justify-center border-2 border-stone-100">
+            <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-forest-600 text-white text-xs font-bold flex items-center justify-center border-2 border-stone-100">
               {activeFilterCount}
             </span>
           )}
@@ -1235,7 +1235,7 @@ export default function RouteBuilder({ onBack, diaryId }: { onBack: () => void; 
             : searchMode === 'esistenti' ? <SearchIcon className="w-5 h-5" /> : <RefreshCw className="w-5 h-5" />}
         </button>
         {!searching && !generating && pendingMapConfirm && (
-          <p className="absolute right-3 top-[124px] z-20 text-[11px] font-medium text-forest-700 bg-white/95 backdrop-blur rounded-full px-3 py-1.5 shadow-md whitespace-nowrap">
+          <p className="absolute right-3 top-[124px] z-20 text-xs font-medium text-forest-700 bg-white/95 backdrop-blur rounded-full px-3 py-1.5 shadow-md whitespace-nowrap">
             Tocca per centrare la mappa qui
           </p>
         )}
@@ -1566,7 +1566,7 @@ export default function RouteBuilder({ onBack, diaryId }: { onBack: () => void; 
                     { label: 'Tipo', val: routeTypeLabel(builtData.type) },
                   ].map(s => (
                     <div key={s.label} className="bg-stone-50 rounded-xl border border-stone-150 p-3">
-                      <p className="text-[10px] text-stone-400">{s.label}</p>
+                      <p className="text-xs text-stone-400">{s.label}</p>
                       <p className="text-sm font-semibold text-stone-800">{s.val}</p>
                     </div>
                   ))}
@@ -1602,7 +1602,7 @@ export default function RouteBuilder({ onBack, diaryId }: { onBack: () => void; 
                     { label: 'Difficoltà', val: foundData.difficulty ?? '—' },
                   ].map(s => (
                     <div key={s.label} className="bg-stone-50 rounded-xl border border-stone-150 p-3">
-                      <p className="text-[10px] text-stone-400">{s.label}</p>
+                      <p className="text-xs text-stone-400">{s.label}</p>
                       <p className="text-sm font-semibold text-stone-800">{s.val}</p>
                     </div>
                   ))}
