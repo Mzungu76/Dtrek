@@ -17,6 +17,11 @@ export interface DiaryRow {
   is_default: boolean
   labels: string[] | null
   archived_at: string | null
+  /** Scaffale a cui appartiene — Fase 0 di docs/libreria-atlante-piano.md. Genitore unico (a
+   *  differenza di `labels`): un Diario sta su un solo scaffale. Null solo per una riga letta
+   *  prima del backfill della migrazione, mai un caso a regime. */
+  shelf_id: string | null
+  shelf_position: number
 }
 
 export interface PlannedDiaryLinkRow {
@@ -56,6 +61,8 @@ export interface DiarySummary {
    *  può averne più di una. */
   labels: string[]
   archivedAt: string | null
+  shelfId: string | null
+  shelfPosition: number
 }
 
 export function aggregateDiaries(
@@ -97,6 +104,8 @@ export function aggregateDiaries(
       lastActivityAt: lastActivityByDiaryId.get(d.id) ?? null,
       labels:         d.labels ?? [],
       archivedAt:     d.archived_at,
+      shelfId:        d.shelf_id,
+      shelfPosition:  d.shelf_position,
     }
   })
 }

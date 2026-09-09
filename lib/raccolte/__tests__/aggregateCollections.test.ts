@@ -7,6 +7,7 @@ function diario(overrides: Partial<DiarySummary> & { id: string }): DiarySummary
     title: overrides.id, subtitle: '', author: '', coverUrl: null, footerText: '',
     isDefault: false, reportageCount: 0, pubblicabile: false,
     distanceMeters: 0, elevationGain: 0, lastActivityAt: null, labels: [], archivedAt: null,
+    shelfId: null, shelfPosition: 0,
     ...overrides,
   }
 }

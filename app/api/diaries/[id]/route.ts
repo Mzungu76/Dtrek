@@ -146,7 +146,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const user = await getUserFromRequest(req)
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const body = await req.json().catch(() => ({})) as { labels?: unknown; archivedAt?: unknown }
+    const body = await req.json().catch(() => ({})) as {
+      labels?: unknown; archivedAt?: unknown; shelfId?: unknown; shelfPosition?: unknown
+    }
     const dbPatch: Record<string, unknown> = {}
 
     if (Object.prototype.hasOwnProperty.call(body, 'labels')) {
@@ -161,6 +163,30 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         return NextResponse.json({ error: 'archivedAt deve essere una stringa ISO o null' }, { status: 400 })
       }
       dbPatch.archived_at = body.archivedAt
+    }
+
+    // Sposta il Diario su un altro scaffale — drag & drop nel banner della Libreria
+    // (docs/libreria-atlante-piano.md, Fase 1). Mai null: un Diario sta sempre su uno scaffale.
+    if (Object.prototype.hasOwnProperty.call(body, 'shelfId')) {
+      if (typeof body.shelfId !== 'string') {
+        return NextResponse.json({ error: 'shelfId deve essere una stringa' }, { status: 400 })
+      }
+      const { data: shelf, error: shelfErr } = await supabase
+        .from('shelves')
+        .select('id')
+        .eq('id', body.shelfId)
+        .eq('user_id', user.id)
+        .maybeSingle()
+      if (shelfErr) throw shelfErr
+      if (!shelf) return NextResponse.json({ error: 'Scaffale non trovato' }, { status: 404 })
+      dbPatch.shelf_id = body.shelfId
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, 'shelfPosition')) {
+      if (typeof body.shelfPosition !== 'number' || !Number.isFinite(body.shelfPosition)) {
+        return NextResponse.json({ error: 'shelfPosition deve essere un numero' }, { status: 400 })
+      }
+      dbPatch.shelf_position = body.shelfPosition
     }
 
     if (Object.keys(dbPatch).length === 0) {
@@ -186,14 +212,16 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       .update({ ...dbPatch, updated_at: new Date().toISOString() })
       .eq('id', params.id)
       .eq('user_id', user.id)
-      .select('labels, archived_at')
+      .select('labels, archived_at, shelf_id, shelf_position')
       .single()
     if (error) throw error
     if (!data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     return NextResponse.json({
-      labels:     (data.labels as string[] | null) ?? [],
-      archivedAt: data.archived_at as string | null,
+      labels:        (data.labels as string[] | null) ?? [],
+      archivedAt:    data.archived_at as string | null,
+      shelfId:       data.shelf_id as string | null,
+      shelfPosition: data.shelf_position as number,
     })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 })
