@@ -9,6 +9,10 @@ export interface CollectionRow {
   subtitle: string
   cover_url: string | null
   share_token: string | null
+  /** Ordine fra gli scaffali della Libreria — supabase/migrations/merge_shelves_into_collections.sql.
+   *  Non ha peso editoriale (non è l'ordine dei volumi dentro una raccolta, quello resta
+   *  `collection_diaries.position`): è solo "in che ordine appare questo scaffale nel banner". */
+  position: number
 }
 
 export interface CollectionDiaryLinkRow {
@@ -31,9 +35,11 @@ export interface CollectionSummary {
   reportageCount: number
   distanceMeters: number
   elevationGain: number
-  /** Id dei Diari contenuti (solo quelli ancora esistenti) — usati da /diari per mostrare su ogni
-   *  riga di registro a quale/i raccolta appartiene, senza un'altra chiamata dedicata. */
+  /** Id dei Diari contenuti (solo quelli ancora esistenti), nell'ordine di `collection_diaries.
+   *  position` — usati da /diari per mostrare su ogni riga di registro a quale raccolta
+   *  appartiene, senza un'altra chiamata dedicata. */
   diaryIds: string[]
+  position: number
 }
 
 export function aggregateCollections(
@@ -48,6 +54,7 @@ export function aggregateCollections(
     list.push(l)
     linksByCollection.set(l.collection_id, list)
   }
+  for (const list of Array.from(linksByCollection.values())) list.sort((a, b) => a.position - b.position)
 
   return collections.map(c => {
     const myLinks = linksByCollection.get(c.id) ?? []
@@ -66,6 +73,7 @@ export function aggregateCollections(
       id: c.id, title: c.title, subtitle: c.subtitle, coverUrl: c.cover_url,
       isPublished: c.share_token !== null,
       volumeCount, reportageCount, distanceMeters, elevationGain, diaryIds,
+      position: c.position,
     }
   })
 }

@@ -17,11 +17,6 @@ export interface DiaryRow {
   is_default: boolean
   labels: string[] | null
   archived_at: string | null
-  /** Scaffale a cui appartiene — Fase 0 di docs/libreria-atlante-piano.md. Genitore unico (a
-   *  differenza di `labels`): un Diario sta su un solo scaffale. Null solo per una riga letta
-   *  prima del backfill della migrazione, mai un caso a regime. */
-  shelf_id: string | null
-  shelf_position: number
 }
 
 export interface PlannedDiaryLinkRow {
@@ -34,6 +29,17 @@ export interface ActivityMetricsRow {
   distance_meters: number | null
   elevation_gain: number | null
   start_time: string
+}
+
+/** Riga di `collection_diaries` — lo scaffale (ora una Raccolta, vedi
+ *  supabase/migrations/merge_shelves_into_collections.sql) a cui appartiene un Diario. Genitore
+ *  unico: un Diario sta su un solo scaffale, imposto da un UNIQUE(diary_id) sulla tabella — al
+ *  più una riga per Diario in questo array. Mancante solo per una riga letta prima del backfill
+ *  della migrazione, mai un caso a regime. */
+export interface DiaryCollectionLinkRow {
+  diary_id: string
+  collection_id: string
+  position: number
 }
 
 export interface DiarySummary {
@@ -61,6 +67,10 @@ export interface DiarySummary {
    *  può averne più di una. */
   labels: string[]
   archivedAt: string | null
+  /** Id della raccolta (`collections.id`) che fa da scaffale a questo Diario — ricavato da
+   *  `collection_diaries`, non più da una colonna propria di `diaries` (vedi
+   *  supabase/migrations/merge_shelves_into_collections.sql). Null solo per una riga letta prima
+   *  del backfill, mai un caso a regime. */
   shelfId: string | null
   shelfPosition: number
 }
@@ -69,8 +79,10 @@ export function aggregateDiaries(
   diaries: DiaryRow[],
   planned: PlannedDiaryLinkRow[],
   activities: ActivityMetricsRow[],
+  collectionLinks: DiaryCollectionLinkRow[] = [],
 ): DiarySummary[] {
   const diaryIdByPlannedId = new Map(planned.map(p => [p.id, p.diary_id]))
+  const collectionLinkByDiaryId = new Map(collectionLinks.map(l => [l.diary_id, l]))
 
   const reportageCountByDiaryId = new Map<string, number>()
   const distanceByDiaryId = new Map<string, number>()
@@ -89,6 +101,7 @@ export function aggregateDiaries(
 
   return diaries.map(d => {
     const reportageCount = reportageCountByDiaryId.get(d.id) ?? 0
+    const collectionLink = collectionLinkByDiaryId.get(d.id)
     return {
       id:             d.id,
       title:          d.title,
@@ -104,8 +117,8 @@ export function aggregateDiaries(
       lastActivityAt: lastActivityByDiaryId.get(d.id) ?? null,
       labels:         d.labels ?? [],
       archivedAt:     d.archived_at,
-      shelfId:        d.shelf_id,
-      shelfPosition:  d.shelf_position,
+      shelfId:        collectionLink?.collection_id ?? null,
+      shelfPosition:  collectionLink?.position ?? 0,
     }
   })
 }

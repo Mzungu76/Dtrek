@@ -118,6 +118,15 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       dbPatch[dbKey] = value
     }
 
+    // Ordine fra gli scaffali nel banner della Libreria — ex PATCH /api/shelves/[id], vedi
+    // supabase/migrations/merge_shelves_into_collections.sql.
+    if (Object.prototype.hasOwnProperty.call(body, 'position')) {
+      if (typeof body.position !== 'number' || !Number.isFinite(body.position)) {
+        return NextResponse.json({ error: 'position deve essere un numero' }, { status: 400 })
+      }
+      dbPatch.position = body.position
+    }
+
     if (Object.keys(dbPatch).length === 0) {
       return NextResponse.json({ error: 'Nessun campo da aggiornare' }, { status: 400 })
     }
@@ -127,30 +136,44 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       .update({ ...dbPatch, updated_at: new Date().toISOString() })
       .eq('id', params.id)
       .eq('user_id', user.id)
-      .select('id, title, subtitle, preface, cover_url')
+      .select('id, title, subtitle, preface, cover_url, position')
       .maybeSingle()
     if (error) throw error
     if (!data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     return NextResponse.json({
       id: data.id, title: data.title, subtitle: data.subtitle, preface: data.preface,
-      coverUrl: (data.cover_url as string) ?? null,
+      coverUrl: (data.cover_url as string) ?? null, position: data.position as number,
     })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 })
   }
 }
 
-// DELETE /api/collections/[id] → elimina la Raccolta. `ON DELETE CASCADE` su collection_diaries
-// rimuove da sé i legami: i Diari contenuti NON vengono toccati, restano dove sono — coerente con
-// "la raccolta è una selezione, non una cartella" (nessuna migrazione da chiedere, a differenza di
-// DELETE /api/diaries/[id]). Nessuna pulizia di Storage: la copertina della raccolta non è ancora
-// caricabile da nessuna UI in questa fase (Fase 3c, solo API) — quando lo sarà, questa route andrà
-// estesa come app/api/diaries/[id] fa per la propria.
+// DELETE /api/collections/[id] → elimina la Raccolta/scaffale, solo se vuoto — ex DELETE
+// /api/shelves/[id] (supabase/migrations/merge_shelves_into_collections.sql): un Diario sta
+// sempre su uno scaffale (UNIQUE(diary_id) su collection_diaries, nessun fallback), quindi non
+// c'è un "Diario di default" su cui farlo ricadere come per DELETE /api/diaries/[id] — l'utente
+// deve prima spostare via i Diari contenuti. Nessuna pulizia di Storage: la copertina della
+// raccolta non è ancora caricabile da nessuna UI in questa fase (Fase 3c, solo API) — quando lo
+// sarà, questa route andrà estesa come app/api/diaries/[id] fa per la propria.
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const user = await getUserFromRequest(req)
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const { count: diariCount, error: diariCountErr } = await supabase
+      .from('collection_diaries')
+      .select('diary_id', { count: 'exact', head: true })
+      .eq('collection_id', params.id)
+      .eq('user_id', user.id)
+    if (diariCountErr) throw diariCountErr
+    if ((diariCount ?? 0) > 0) {
+      return NextResponse.json(
+        { error: 'Questo scaffale contiene ancora dei Diari — spostali prima di eliminarlo.' },
+        { status: 400 },
+      )
+    }
 
     const { error, count } = await supabase
       .from('collections')

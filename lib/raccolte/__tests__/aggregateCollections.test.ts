@@ -13,7 +13,7 @@ function diario(overrides: Partial<DiarySummary> & { id: string }): DiarySummary
 }
 
 function collezione(overrides: Partial<CollectionRow> & { id: string }): CollectionRow {
-  return { title: 'Raccolta', subtitle: '', cover_url: null, share_token: null, ...overrides }
+  return { title: 'Raccolta', subtitle: '', cover_url: null, share_token: null, position: 0, ...overrides }
 }
 
 describe('aggregateCollections', () => {
@@ -59,5 +59,21 @@ describe('aggregateCollections', () => {
     const [r] = aggregateCollections([collezione({ id: 'c1' })], links, diari)
     expect(r.volumeCount).toBe(0)
     expect(r.reportageCount).toBe(0)
+  })
+
+  it('diaryIds segue l\'ordine di collection_diaries.position, non l\'ordine di arrivo dei link', () => {
+    const diari = [diario({ id: 'd1' }), diario({ id: 'd2' }), diario({ id: 'd3' })]
+    const links: CollectionDiaryLinkRow[] = [
+      { collection_id: 'c1', diary_id: 'd3', position: 2 },
+      { collection_id: 'c1', diary_id: 'd1', position: 0 },
+      { collection_id: 'c1', diary_id: 'd2', position: 1 },
+    ]
+    const [r] = aggregateCollections([collezione({ id: 'c1' })], links, diari)
+    expect(r.diaryIds).toEqual(['d1', 'd2', 'd3'])
+  })
+
+  it('position della raccolta passa invariata nel risultato — è l\'ordine degli scaffali nel banner, non dei volumi', () => {
+    const [r] = aggregateCollections([collezione({ id: 'c1', position: 3 })], [], [])
+    expect(r.position).toBe(3)
   })
 })

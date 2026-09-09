@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { GalleryMapThumb } from '@/components/routehub/BottomGallery'
@@ -97,6 +97,14 @@ function DeleteDiarioSection({ diaryId }: { diaryId: string }) {
   )
 }
 
+/** I due tab del Sommario — Fase richiesta esplicitamente dall'utente: prima "in programma" e
+ *  "reportage" convivevano in due sezioni sempre visibili una sopra l'altra, senza filtri sulla
+ *  prima. Ora sono due schede separate, con lo stesso corredo di ricerca/preferiti/ordinamento su
+ *  entrambe (vedi SommarioFilters più sotto) — solo lo stato "raccontato/senza racconto" resta
+ *  specifico di Concluse, dove ha senso (una Meta in programma non ha ancora un racconto per
+ *  definizione). */
+type SommarioTab = 'concluse' | 'programmate'
+
 type SommarioSortKey = 'date' | 'km' | 'dplus' | 'cts'
 const SOMMARIO_SORT_OPTIONS: { id: SommarioSortKey; label: string }[] = [
   { id: 'date', label: 'Data' }, { id: 'km', label: 'Km' }, { id: 'dplus', label: 'D+' }, { id: 'cts', label: 'TS' },
@@ -137,6 +145,7 @@ function StatCell({ value, label }: { value: string; label: string }) {
 function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
   const [detail, setDetail] = useState<DiarioDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [tab, setTab] = useState<SommarioTab>('concluse')
   const [searchQuery, setSearchQuery] = useState('')
   const [favoritesOnly, setFavoritesOnly] = useState(false)
   const [statusFilter, setStatusFilter] = useState<SommarioStatusFilter>('all')
@@ -156,6 +165,18 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
   useEffect(() => {
     if (detail) updateUserSettings({ lastDiaryId: diaryId })
   }, [detail, diaryId])
+
+  // Tab di apertura: Concluse se il Diario ne ha almeno una (il caso più comune, un Diario nasce
+  // dal camminare), altrimenti Programmate se c'è qualcosa lì — mai un tab vuoto quando l'altro
+  // ha contenuto. Un solo scatto al primo caricamento, non ad ogni variazione dei dati (altrimenti
+  // salterebbe via da sotto le dita dell'utente se una Meta in programma viene camminata mentre è
+  // sul tab Programmate).
+  const tabInitialized = useRef(false)
+  useEffect(() => {
+    if (!detail || tabInitialized.current) return
+    tabInitialized.current = true
+    if (detail.reportage.length === 0 && detail.inProgramma.length > 0) setTab('programmate')
+  }, [detail])
 
   // Stessi filtri/ricerca/ordinamento di components/routehub/ExpandedGalleryList.tsx ("Tutti i
   // percorsi") — qui senza "Distanza" (richiede l'indirizzo di partenza + una chiamata Google
@@ -182,6 +203,28 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
     if (sortDir === 'asc') rows = [...rows].reverse()
     return rows
   }, [detail, favoritesOnly, statusFilter, searchQuery, sortBy, sortDir])
+
+  // Stesso corredo di ricerca/preferiti/ordinamento del tab Concluse, applicato alle voci "in
+  // programma" — richiesta esplicita dell'utente, prima erano un elenco fisso senza filtri. Niente
+  // statusFilter qui: una Meta in programma non ha ancora un racconto, "raccontati/senza racconto"
+  // non si applica. Ordine "Data" di partenza dall'API: plannedDate crescente (le senza data in
+  // coda) poi createdAt — l'ordine più utile per "cosa manca ancora da fare", non invertito per
+  // default come in Concluse (lì "recente" è il reportage appena registrato).
+  const visibleInProgramma = useMemo(() => {
+    let rows = detail?.inProgramma ?? []
+    if (favoritesOnly) rows = rows.filter(r => r.favorite)
+    const q = searchQuery.trim().toLowerCase()
+    if (q) rows = rows.filter(r => r.title.toLowerCase().includes(q))
+    if (sortBy !== 'date') {
+      rows = [...rows].sort((a, b) => {
+        if (sortBy === 'km') return b.distanceMeters - a.distanceMeters
+        if (sortBy === 'dplus') return b.elevationGain - a.elevationGain
+        return (b.trailScore ?? 0) - (a.trailScore ?? 0)
+      })
+    }
+    if (sortDir === 'desc') rows = [...rows].reverse()
+    return rows
+  }, [detail, favoritesOnly, searchQuery, sortBy, sortDir])
 
   // Statistiche locali a questo Diario — richiesta esplicita dell'utente (in aggiunta, non in
   // sostituzione, alle Statistiche globali di /statistiche raggiungibili da Profilo): sommate solo
@@ -290,50 +333,35 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
           <Plus className="w-4 h-4" /> nuovo reportage
         </Link>
 
-        {/* Le voci "in programma" — prima parte del ciclo di una voce, prima ancora del
-            Reportage (docs/libreria-atlante-piano.md, Fase 4). Vengono dall'Atlante ("Aggiungi ad
-            un Diario") o da qui stesso ("nuova voce", sopra): appena una Meta ha un diaryId sta
-            già in questo elenco, non serve camminarla per vederla nel suo Diario. Ordine fisso
-            (plannedDate poi createdAt, mai a mano) — un elenco corto e denso, non la lettura "a
-            libro" completa del Reportage: qui basta sapere cosa c'è, il tocco porta alla Guida. */}
-        {detail.inProgramma.length > 0 && (
-          <div className="flex flex-col mb-4">
-            <p className="mb-1.5" style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: 10, color: TACCUINO_INK.hand, ...TACCUINO_RULED_TEXT_STYLE }}>
-              In programma
-            </p>
-            {detail.inProgramma.map(p => (
-              <Link
-                key={p.id}
-                href={`/diari/${encodeURIComponent(diaryId)}/percorsi/${encodeURIComponent(p.id)}/guida/prima_di_partire`}
-                className="flex items-center gap-3 py-2"
-                style={{ borderBottom: TACCUINO_LIST_DIVIDER }}
+        {/* Due tab — Programmate (voci con una Meta ma non ancora camminate) e Concluse (i
+            Reportage veri e propri) — richiesta esplicita dell'utente: prima convivevano come due
+            sezioni sempre visibili una sopra l'altra, la prima senza alcun filtro. */}
+        {(detail.reportage.length > 0 || detail.inProgramma.length > 0) && (
+          <div className="flex gap-1.5 mb-3">
+            {(['concluse', 'programmate'] as const).map(t => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className="relative flex-1 py-2 rounded-xl text-center transition-colors"
+                style={tab === t
+                  ? { background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_ACCENT[600]}` }
+                  : { background: 'transparent', border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}
               >
-                <div className="w-10 h-10 rounded-lg shrink-0 overflow-hidden relative" style={{ background: TACCUINO_PAPER.card }}>
-                  {p.routePolyline && p.routePolyline.length > 1
-                    ? <RouteThumb polyline={p.routePolyline} color={TACCUINO_ACCENT[600]} strokeWidth={2.5} />
-                    : <div className="w-full h-full flex items-center justify-center"><Mountain className="w-4 h-4" style={{ color: TACCUINO_PAPER.cardBorder }} /></div>}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate" style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 16, color: TACCUINO_INK.typed }}>{p.title}</p>
-                  {metaHasHikingMetrics(p.metaType) && (
-                    <p style={{ fontSize: 10.5, color: TACCUINO_INK.handMuted }}>
-                      {(p.distanceMeters / 1000).toFixed(1)} km &middot; +{Math.round(p.elevationGain)} m
-                      {p.plannedDate && ` · ${new Date(p.plannedDate).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })}`}
-                    </p>
-                  )}
-                </div>
-                <span
-                  className="shrink-0 text-[10px] font-semibold uppercase tracking-wide px-2 py-1 rounded-full"
-                  style={{ color: TACCUINO_INK.hand, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}
-                >
-                  in programma
+                <span style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 15, color: tab === t ? TACCUINO_INK.typed : TACCUINO_INK.handMuted }}>
+                  {t === 'concluse' ? 'Concluse' : 'Programmate'}
                 </span>
-              </Link>
+                <span style={{ fontFamily: FONT.mono, fontSize: 10.5, color: TACCUINO_INK.handMuted, marginLeft: 5 }}>
+                  {t === 'concluse' ? detail.reportage.length : detail.inProgramma.length}
+                </span>
+              </button>
             ))}
           </div>
         )}
 
-        {detail.reportage.length > 0 && (
+        {/* Stesso corredo di ricerca/preferiti/ordinamento su entrambi i tab — solo lo stato
+            raccontato/senza racconto resta specifico di Concluse (una voce Programmata non ha
+            ancora un racconto per definizione). */}
+        {((tab === 'concluse' && detail.reportage.length > 0) || (tab === 'programmate' && detail.inProgramma.length > 0)) && (
           <div className="mb-3">
             <div className="relative mb-2">
               <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: TACCUINO_INK.handMuted }} />
@@ -390,25 +418,62 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
                 </button>
               ))}
             </div>
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
-              {SOMMARIO_STATUS_OPTIONS.map(s => (
-                <button
-                  key={s.id}
-                  onClick={() => setStatusFilter(s.id)}
-                  className="relative shrink-0 px-3 py-1 rounded-full text-[13px] transition-colors"
-                  style={statusFilter === s.id
-                    ? { fontFamily: FONT_HAND, fontWeight: 700, color: TACCUINO_INK.typed }
-                    : { fontFamily: FONT_HAND, background: 'transparent', color: TACCUINO_INK.handMuted }}
-                >
-                  {statusFilter === s.id && <HandDrawnFrame stroke={TACCUINO_ACCENT[600]} strokeWidth={1.5} rx={50} />}
-                  {s.label.toLowerCase()}
-                </button>
-              ))}
-            </div>
+            {tab === 'concluse' && (
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+                {SOMMARIO_STATUS_OPTIONS.map(s => (
+                  <button
+                    key={s.id}
+                    onClick={() => setStatusFilter(s.id)}
+                    className="relative shrink-0 px-3 py-1 rounded-full text-[13px] transition-colors"
+                    style={statusFilter === s.id
+                      ? { fontFamily: FONT_HAND, fontWeight: 700, color: TACCUINO_INK.typed }
+                      : { fontFamily: FONT_HAND, background: 'transparent', color: TACCUINO_INK.handMuted }}
+                  >
+                    {statusFilter === s.id && <HandDrawnFrame stroke={TACCUINO_ACCENT[600]} strokeWidth={1.5} rx={50} />}
+                    {s.label.toLowerCase()}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
-        {detail.reportage.length === 0 ? (
+        {tab === 'programmate' && (
+          detail.inProgramma.length === 0 ? (
+            <p style={{ fontFamily: FONT.body, fontSize: 13, color: TACCUINO_INK.handMuted, ...TACCUINO_RULED_TEXT_STYLE }}>Nessuna Meta in programma — aggiungine una dall&rsquo;Atlante.</p>
+          ) : visibleInProgramma.length === 0 ? (
+            <p style={{ fontFamily: FONT.body, fontSize: 13, color: TACCUINO_INK.handMuted, ...TACCUINO_RULED_TEXT_STYLE }}>Nessuna voce corrisponde ai filtri.</p>
+          ) : (
+            <div className="flex flex-col">
+              {visibleInProgramma.map(p => (
+                <Link
+                  key={p.id}
+                  href={`/diari/${encodeURIComponent(diaryId)}/percorsi/${encodeURIComponent(p.id)}/guida/prima_di_partire`}
+                  className="flex items-center gap-3 py-2"
+                  style={{ borderBottom: TACCUINO_LIST_DIVIDER }}
+                >
+                  <div className="w-10 h-10 rounded-lg shrink-0 overflow-hidden relative" style={{ background: TACCUINO_PAPER.card }}>
+                    {p.routePolyline && p.routePolyline.length > 1
+                      ? <RouteThumb polyline={p.routePolyline} color={TACCUINO_ACCENT[600]} strokeWidth={2.5} />
+                      : <div className="w-full h-full flex items-center justify-center"><Mountain className="w-4 h-4" style={{ color: TACCUINO_PAPER.cardBorder }} /></div>}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate" style={{ fontFamily: FONT_HAND, fontWeight: 700, fontSize: 16, color: TACCUINO_INK.typed }}>{p.title}</p>
+                    {metaHasHikingMetrics(p.metaType) && (
+                      <p style={{ fontSize: 10.5, color: TACCUINO_INK.handMuted }}>
+                        {(p.distanceMeters / 1000).toFixed(1)} km &middot; +{Math.round(p.elevationGain)} m
+                        {p.plannedDate && ` · ${new Date(p.plannedDate).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })}`}
+                      </p>
+                    )}
+                  </div>
+                  {p.favorite && <Star className="w-3.5 h-3.5 shrink-0" style={{ color: TACCUINO_ACCENT[600] }} fill="currentColor" />}
+                </Link>
+              ))}
+            </div>
+          )
+        )}
+
+        {tab === 'concluse' && (detail.reportage.length === 0 ? (
           <p style={{ fontFamily: FONT.body, fontSize: 13, color: TACCUINO_INK.handMuted, ...TACCUINO_RULED_TEXT_STYLE }}>Nessun reportage ancora — comincia da qui.</p>
         ) : visibleReportage.length === 0 ? (
           <p style={{ fontFamily: FONT.body, fontSize: 13, color: TACCUINO_INK.handMuted, ...TACCUINO_RULED_TEXT_STYLE }}>Nessun reportage corrisponde ai filtri.</p>
@@ -533,7 +598,7 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
               )
             })}
           </div>
-        )}
+        ))}
 
         <div className="flex flex-col mt-2 pt-1" style={{ borderTop: `1px solid ${TACCUINO_PAPER.cardBorder}` }}>
           <Link
@@ -544,15 +609,16 @@ function DiarioIndexLibro({ diaryId }: { diaryId: string }) {
             <span className="inline-flex items-center gap-1.5"><Share2 className="w-3.5 h-3.5" /> Pubblicazione</span>
             <ChevronRight className="w-3.5 h-3.5" style={{ color: TACCUINO_INK.handMuted }} />
           </Link>
-          {/* Aggiungere QUESTO Diario a una raccolta si fa da /raccolte/[id] (dove si vede
-              l'intera collana, non solo il singolo volume) — qui solo il punto di ingresso,
-              docs/raccolte-pubblicazione-piano.md. */}
+          {/* Spostare QUESTO Diario su un altro scaffale si fa dal banner della Libreria
+              (drag&drop, componenti/libreria/ScaffaliBanner.tsx) — gli scaffali sono ora le
+              Raccolte (supabase/migrations/merge_shelves_into_collections.sql), qui solo il
+              punto di ingresso. */}
           <Link
-            href="/raccolte"
+            href="/diari"
             className="flex items-center justify-between gap-2 py-2.5"
             style={{ fontFamily: FONT.barlow, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: 11.5, color: TACCUINO_INK.hand, borderTop: `1px solid ${TACCUINO_PAPER.cardBorder}` }}
           >
-            <span className="inline-flex items-center gap-1.5"><BookMarked className="w-3.5 h-3.5" /> Aggiungi a una raccolta</span>
+            <span className="inline-flex items-center gap-1.5"><BookMarked className="w-3.5 h-3.5" /> Sposta su un altro scaffale</span>
             <ChevronRight className="w-3.5 h-3.5" style={{ color: TACCUINO_INK.handMuted }} />
           </Link>
         </div>

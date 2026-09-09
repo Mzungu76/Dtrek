@@ -52,13 +52,16 @@ function EditableField({ label, value, onSave, multiline, placeholder }: {
   )
 }
 
-function VolumeRow({ volume, index, total, onMoveUp, onMoveDown, onRemove }: {
+// Niente bottone "rimuovi" — un Diario sta sempre su uno scaffale (UNIQUE(diary_id) su
+// collection_diaries): toglierlo da qui senza metterlo altrove lo lascerebbe senza scaffale, e il
+// server rifiuta l'operazione (vedi PUT /api/collections/[id]/diari). Si sposta scegliendolo dal
+// picker di un'altra raccolta, o trascinandolo nel banner della Libreria.
+function VolumeRow({ volume, index, total, onMoveUp, onMoveDown }: {
   volume: CollectionDetailDiario
   index: number
   total: number
   onMoveUp: () => void
   onMoveDown: () => void
-  onRemove: () => void
 }) {
   return (
     <div className="flex items-center gap-2.5 rounded-xl px-3 py-2.5" style={{ background: TACCUINO_PAPER.card, border: `1px solid ${TACCUINO_PAPER.cardBorder}` }}>
@@ -75,9 +78,6 @@ function VolumeRow({ volume, index, total, onMoveUp, onMoveDown, onRemove }: {
         </button>
         <button type="button" onClick={onMoveDown} disabled={index === total - 1} className="p-1.5 rounded disabled:opacity-30" style={{ color: TACCUINO_INK.handMuted }} aria-label="Sposta giù">
           <ArrowDown className="w-3.5 h-3.5" />
-        </button>
-        <button type="button" onClick={onRemove} className="p-1.5 rounded" style={{ color: TACCUINO_INK.handMuted }} aria-label="Rimuovi dalla raccolta">
-          <X className="w-3.5 h-3.5" />
         </button>
       </div>
     </div>
@@ -97,6 +97,7 @@ export default function RaccoltaComposerPage() {
   const [copyOk, setCopyOk] = useState(false)
   const [reordering, setReordering] = useState(false)
   const [showPicker, setShowPicker] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const [allDiari, setAllDiari] = useState<DiarySummary[] | null>(null)
   const [deleteConfirming, setDeleteConfirming] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -153,11 +154,6 @@ export default function RaccoltaComposerPage() {
     saveOrder(ids)
   }
 
-  function removeVolume(diaryId: string) {
-    if (!collection) return
-    saveOrder(collection.diari.filter(d => d.id !== diaryId).map(d => d.id))
-  }
-
   function addVolume(diaryId: string) {
     if (!collection) return
     setShowPicker(false)
@@ -203,12 +199,18 @@ export default function RaccoltaComposerPage() {
 
   async function deleteCollection() {
     setDeleting(true)
+    setDeleteError(null)
     try {
       const res = await fetch(`/api/collections/${encodeURIComponent(collectionId)}`, { method: 'DELETE' })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      router.push('/raccolte')
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setDeleteError(typeof data.error === 'string' ? data.error : `HTTP ${res.status}`)
+        setDeleting(false)
+        return
+      }
+      router.push('/diari')
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      setDeleteError(e instanceof Error ? e.message : String(e))
       setDeleting(false)
     }
   }
@@ -230,8 +232,8 @@ export default function RaccoltaComposerPage() {
       <TaccuinoRuledLines />
       <Navbar />
       <div className="max-w-[640px] mx-auto px-4 sm:px-8 pb-14" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 28px)' }}>
-        <Link href="/raccolte" className="inline-flex items-center gap-1.5 mb-4" style={{ color: TACCUINO_INK.hand, fontSize: 12.5 }}>
-          <ArrowLeft className="w-3.5 h-3.5" /> Le mie Raccolte
+        <Link href="/diari" className="inline-flex items-center gap-1.5 mb-4" style={{ color: TACCUINO_INK.hand, fontSize: 12.5 }}>
+          <ArrowLeft className="w-3.5 h-3.5" /> Diari
         </Link>
 
         {!collection ? (
@@ -260,7 +262,6 @@ export default function RaccoltaComposerPage() {
                 <VolumeRow
                   key={d.id} volume={d} index={i} total={collection.diari.length}
                   onMoveUp={() => moveVolume(i, -1)} onMoveDown={() => moveVolume(i, 1)}
-                  onRemove={() => removeVolume(d.id)}
                 />
               ))}
               {collection.diari.length === 0 && (
@@ -288,7 +289,12 @@ export default function RaccoltaComposerPage() {
                       style={{ borderBottom: `1px dotted ${TACCUINO_PAPER.cardBorder}` }}
                     >
                       <span style={{ fontFamily: FONT.lora, fontWeight: 600, fontSize: 13.5, color: TACCUINO_INK.typed }}>{d.title}</span>
-                      <span style={{ fontSize: 10.5, color: TACCUINO_INK.handMuted }}>{d.reportageCount} reportage</span>
+                      <span style={{ fontSize: 10.5, color: TACCUINO_INK.handMuted, textAlign: 'right' }}>
+                        {d.reportageCount} reportage
+                        {/* Un Diario sta su un solo scaffale (UNIQUE(diary_id) su collection_diaries) —
+                            se ne ha già uno, sceglierlo qui lo sposta invece di duplicarlo. */}
+                        {d.shelfId && d.shelfId !== collectionId && <><br />sposta qui dal suo scaffale</>}
+                      </span>
                     </button>
                   ))
                 )}
@@ -362,15 +368,17 @@ export default function RaccoltaComposerPage() {
               ) : (
                 <div className="rounded-xl px-4 py-3 space-y-2" style={{ background: '#fdf2f0', border: '1px solid #f3d3cc' }}>
                   <p style={{ fontSize: 12.5, color: '#8a2f22' }}>
-                    I Diari contenuti non vengono toccati — restano dove sono, esce solo la raccolta.
+                    Uno scaffale (questa raccolta) si elimina solo se è vuoto — sposta prima i Diari
+                    contenuti su un altro scaffale dal banner della Libreria.
                   </p>
+                  {deleteError && <p style={{ fontSize: 12, fontWeight: 700, color: '#8a2f22' }}>{deleteError}</p>}
                   <div className="flex items-center gap-3">
                     <button onClick={deleteCollection} disabled={deleting}
                       className="px-3.5 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide text-white disabled:opacity-60"
                       style={{ background: '#b3413a' }}>
                       {deleting ? 'Elimino…' : 'Elimina'}
                     </button>
-                    <button onClick={() => setDeleteConfirming(false)} disabled={deleting} style={{ fontSize: 12.5, color: TACCUINO_INK.handMuted }}>
+                    <button onClick={() => { setDeleteConfirming(false); setDeleteError(null) }} disabled={deleting} style={{ fontSize: 12.5, color: TACCUINO_INK.handMuted }}>
                       Annulla
                     </button>
                   </div>

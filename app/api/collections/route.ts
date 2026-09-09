@@ -21,9 +21,9 @@ export async function GET(req: NextRequest) {
 
     const { data: collections, error: collectionsErr } = await supabase
       .from('collections')
-      .select('id, title, subtitle, cover_url, share_token')
+      .select('id, title, subtitle, cover_url, share_token, position')
       .eq('user_id', user.id)
-      .order('created_at', { ascending: true })
+      .order('position', { ascending: true })
     if (collectionsErr) throw collectionsErr
 
     const collectionIds = (collections ?? []).map(c => c.id as string)
@@ -65,9 +65,13 @@ export async function GET(req: NextRequest) {
 }
 
 // POST /api/collections → crea una Raccolta vuota — titolo segnaposto, l'utente la compone da
-// /raccolte/[id]. A differenza dei Diari (il primo, di default, è sempre gratuito), le Raccolte non
-// hanno un equivalente "gratis di base": sono per intero dietro lo sblocco di Dtrek, come i Diari
-// AGGIUNTIVI oltre al primo (stessa risoluzione centrale, lib/dtrekEntitlement.ts).
+// /raccolte/[id]. È anche "Nuovo scaffale" nel banner della Libreria (le Raccolte SONO gli
+// scaffali dopo supabase/migrations/merge_shelves_into_collections.sql, rappresentati solo in
+// modo diverso a seconda di dove si guardano): stessa route, stesso gate. A differenza dei Diari
+// (il primo, di default, è sempre gratuito), le Raccolte non hanno un equivalente "gratis di
+// base" — sono per intero dietro lo sblocco di Dtrek, come i Diari AGGIUNTIVI oltre al primo
+// (stessa risoluzione centrale, lib/dtrekEntitlement.ts) — decisione esplicita dell'utente anche
+// per gli scaffali, non un limite ereditato per caso dal riuso della tabella.
 export async function POST(req: NextRequest) {
   try {
     const user = await getUserFromRequest(req)
@@ -76,14 +80,23 @@ export async function POST(req: NextRequest) {
     const entitlement = await resolveDtrekEntitlement(user.id)
     if (!entitlement.unlocked) {
       return NextResponse.json(
-        { error: 'trial_limit_reached', message: 'Le raccolte sono una funzione di Dtrek — sbloccalo per crearne una.' },
+        { error: 'trial_limit_reached', message: 'Le raccolte (scaffali inclusi) sono una funzione di Dtrek — sbloccalo per crearne una.' },
         { status: 403 },
       )
     }
 
+    const body = await req.json().catch(() => ({})) as { title?: unknown }
+    const title = typeof body.title === 'string' && body.title.trim() ? body.title.trim() : 'Nuova raccolta'
+
+    const { count, error: countErr } = await supabase
+      .from('collections')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+    if (countErr) throw countErr
+
     const { data, error } = await supabase
       .from('collections')
-      .insert({ user_id: user.id, title: 'Nuova raccolta', subtitle: '', preface: '' })
+      .insert({ user_id: user.id, title, subtitle: '', preface: '', position: count ?? 0 })
       .select('id')
       .single()
     if (error) throw error

@@ -14,6 +14,11 @@ export const dynamic = 'force-dynamic'
 // riordina o aggiunge un volume da un piccolo elenco — non ha bisogno di un merge fine. Un
 // fallimento a metà lascia la raccolta con meno volumi, mai con dati incoerenti (nessun vincolo
 // figlio dipende da collection_diaries).
+//
+// Un Diario sta su un solo scaffale alla volta (UNIQUE(diary_id) su collection_diaries, vedi
+// supabase/migrations/merge_shelves_into_collections.sql): aggiungerlo qui lo TOGLIE da qualunque
+// altro scaffale/raccolta lo contenesse — coerente con il drag&drop del banner della Libreria, non
+// un effetto collaterale a sorpresa.
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const user = await getUserFromRequest(req)
@@ -34,6 +39,25 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     }
     const diaryIds = normalizeDiaryOrder(body.diaryIds)
 
+    // Un Diario sta sempre su uno scaffale (UNIQUE(diary_id) su collection_diaries, vedi
+    // supabase/migrations/merge_shelves_into_collections.sql): toglierlo da QUESTA raccolta senza
+    // metterlo da nessun'altra parte lo lascerebbe senza scaffale, uno stato che l'app non prevede
+    // più da nessun'altra strada. Spostarlo (drag&drop nel banner della Libreria, o sceglierlo dal
+    // picker di un'altra raccolta) resta l'unico modo — qui si può solo riordinare o aggiungere.
+    const { data: currentLinks, error: currentLinksErr } = await supabase
+      .from('collection_diaries')
+      .select('diary_id')
+      .eq('collection_id', params.id)
+    if (currentLinksErr) throw currentLinksErr
+    const currentIds = new Set((currentLinks ?? []).map(l => l.diary_id as string))
+    const removed = Array.from(currentIds).filter(id => !diaryIds.includes(id))
+    if (removed.length > 0) {
+      return NextResponse.json(
+        { error: 'Un Diario deve restare sempre su uno scaffale — spostalo su un altro invece di toglierlo soltanto.' },
+        { status: 400 },
+      )
+    }
+
     if (diaryIds.length > 0) {
       const { data: owned, error: ownedErr } = await supabase
         .from('diaries')
@@ -53,6 +77,20 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
       .delete()
       .eq('collection_id', params.id)
     if (deleteErr) throw deleteErr
+
+    // Un Diario sta su un solo scaffale alla volta (UNIQUE(diary_id) su collection_diaries, vedi
+    // supabase/migrations/merge_shelves_into_collections.sql): un Diario scelto qui che oggi vive
+    // su UN ALTRO scaffale va tolto da lì prima di reinserirlo qui sotto, altrimenti l'insert
+    // sotto violerebbe il vincolo. Non tocca nessuna riga già cancellata sopra (stesso
+    // collection_id), quindi resta corretto anche a `diaryIds` invariato.
+    if (diaryIds.length > 0) {
+      const { error: stealErr } = await supabase
+        .from('collection_diaries')
+        .delete()
+        .eq('user_id', user.id)
+        .in('diary_id', diaryIds)
+      if (stealErr) throw stealErr
+    }
 
     if (diaryIds.length > 0) {
       const rows = diaryIds.map((diary_id, position) => ({
