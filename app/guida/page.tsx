@@ -1,7 +1,6 @@
 'use client'
-import { Suspense, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { Loader2 } from 'lucide-react'
+import { Suspense } from 'react'
+import RedirectTo from '@/app/components/RedirectTo'
 
 /**
  * Questa pagina non esiste più — docs/allineamento-mockup-piano.md, intervento D: GuidaHub (la
@@ -9,25 +8,12 @@ import { Loader2 } from 'lucide-react'
  * navigazione portava qui. L'unico modo per leggere una Guida resta il libro (GuideBookPage, da
  * un Percorso dentro un Diario o da una Meta senza Diario in /guida/[id]/[groupKey], entrambe
  * pagine figlie non toccate). Redirect verso l'Atlante, il punto di partenza per trovare una Meta.
+ * Elenco completo delle 8 pagine-lapide in docs/diario-valutazione-ux-piano.md §5.4.
  */
-function GuidaIndexPageInner() {
-  const router = useRouter()
-
-  useEffect(() => {
-    router.replace('/atlante')
-  }, [router])
-
-  return (
-    <div className="flex items-center justify-center py-24 text-stone-400">
-      <Loader2 className="w-6 h-6 animate-spin" />
-    </div>
-  )
-}
-
 export default function GuidaIndexPage() {
   return (
     <Suspense>
-      <GuidaIndexPageInner />
+      <RedirectTo href="/atlante" />
     </Suspense>
   )
 }

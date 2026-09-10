@@ -1,7 +1,6 @@
 'use client'
-import { Suspense, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { Loader2 } from 'lucide-react'
+import { Suspense } from 'react'
+import RedirectTo from '@/app/components/RedirectTo'
 
 /**
  * Questa pagina non esiste più — su richiesta esplicita dell'utente, "Tutti i Reportage" è stata
@@ -11,25 +10,12 @@ import { Loader2 } from 'lucide-react'
  * Percorso, ritirato in Fase 15 di docs/diario-a-libro-piano.md): un link vecchio (bookmark,
  * storico del browser, la voce di menu appena rimossa da una PWA non ancora aggiornata sul
  * dispositivo dell'utente) rimanda quindi allo scaffale dei Diari invece di mostrare un 404.
+ * Elenco completo delle 8 pagine-lapide in docs/diario-valutazione-ux-piano.md §5.4.
  */
-function ReportagePageInner() {
-  const router = useRouter()
-
-  useEffect(() => {
-    router.replace('/diari')
-  }, [router])
-
-  return (
-    <div className="flex items-center justify-center py-24 text-stone-400">
-      <Loader2 className="w-6 h-6 animate-spin" />
-    </div>
-  )
-}
-
 export default function ReportagePage() {
   return (
     <Suspense>
-      <ReportagePageInner />
+      <RedirectTo href="/diari" />
     </Suspense>
   )
 }

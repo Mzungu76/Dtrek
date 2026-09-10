@@ -77,9 +77,9 @@ function useAvatar() {
 // (avatar desktop, dove c'è spazio) resta come prima, incastonato sull'angolo dell'avatar.
 //
 // Fase 2 del riordino UI/UX (docs/diario-valutazione-ux-piano.md): default alzati da 32/16 a
-// 40/18 — il caso senza `label` (DesktopNav, FloatingProfileAvatar) è l'ultimo elemento della sua
-// riga/angolo, isolato, quindi il bersaglio può crescere senza rischio di sovrapporsi a un
-// controllo vicino. I chiamanti con `label` (dentro MobileNavBar) passano le proprie taglie più
+// 40/18 — il caso senza `label` (solo DesktopNav, ora l'unico) è l'ultimo elemento della sua riga,
+// isolato, quindi il bersaglio può crescere senza rischio di sovrapporsi a un controllo vicino.
+// I chiamanti con `label` (MobileNavBar, MobileBottomBar — Fase 4) passano le proprie taglie più
 // piccole esplicitamente, dove lo spazio condiviso con le altre voci della barra è più stretto.
 export function ProfileAvatar({ size = 40, iconSize = 18, label, labelClassName = '', labelTextClassName = 'text-xs' }: { size?: number; iconSize?: number; label?: string; labelClassName?: string; labelTextClassName?: string }) {
   const path = usePathname()
@@ -218,64 +218,19 @@ export function MobileNavBar({ className = '' }: { className?: string }) {
   )
 }
 
-// Quarto giro sul trattamento di Diari/Libreria (richiesta esplicita dell'utente, dopo aver
-// scartato pillola sempre accesa, bottone a sinistra, bottone centrato con ritaglio, e infine la
-// barra piatta a 5 voci): si riprende il concetto "disco sollevato + ritaglio nella barra",
-// identico nella meccanica al tentativo di centraggio "per costruzione" (RaisedDiariButton,
-// position: absolute; left:50% — mai un 50% su una riga a più voci, sempre indipendente dal loro
-// peso), ma ora dentro una barra a SOLE 3 voci: Atlante, Libreria, Navigator (Libreria era
-// "Diari" — il componente sotto resta RaisedDiariButton per non rinominare tutto, ma il link è
-// quello di NAV_LINKS, quindi già "Libreria"). Statistiche è uscita dalla barra (confluisce nel
-// Diario, docs/libreria-atlante-piano.md Fase 5) e Profilo resta l'icona flottante in alto a
-// destra di FloatingProfileAvatar sotto — non una voce della barra.
-const RAISED_CIRCLE_SIZE = 60
-const RAISE_PX = 17 // bordo superiore del disco, px sopra il filo della barra
-
-function RaisedDiariButton({ href, label, icon: Icon }: (typeof NAV_LINKS)[number]) {
-  return (
-    <Link
-      href={href}
-      className="absolute left-1/2 flex -translate-x-1/2 flex-col items-center gap-2.5"
-      style={{ top: -RAISE_PX }}
-    >
-      <span
-        className="flex items-center justify-center rounded-full bg-botanico-accent text-botanico-bar-active"
-        style={{ width: RAISED_CIRCLE_SIZE, height: RAISED_CIRCLE_SIZE, boxShadow: '0 10px 20px -6px rgba(192,96,61,0.55)' }}
-      >
-        <Icon className="w-7 h-7" strokeWidth={2} />
-      </span>
-      <span className="text-xs font-bold leading-none text-botanico-bar-active">{label}</span>
-    </Link>
-  )
-}
-
-// Ritaglio circolare nello sfondo della barra, in corrispondenza del disco Diari: un vero foro
-// nel pannello colorato lascia vedere il contenuto reale che scorre dietro alla barra fissa,
-// invece di indovinare un colore che imiti "quello che c'è sotto". Raggio = metà disco + 5px di
-// margine. Posizione fissa in CSS (non letta a runtime): dato che il disco è sempre esattamente
-// al 50% orizzontale (vedi RaisedDiariButton sopra), il foro si centra sullo stesso 50%.
-const NOTCH_MARGIN = 5
-const NOTCH_RADIUS = RAISED_CIRCLE_SIZE / 2 + NOTCH_MARGIN
-const NOTCH_CENTER_Y = RAISED_CIRCLE_SIZE / 2 - RAISE_PX
-const DIARI_NOTCH_MASK = `radial-gradient(circle ${NOTCH_RADIUS}px at 50% ${NOTCH_CENTER_Y}px, transparent 0 ${NOTCH_RADIUS}px, #000 ${NOTCH_RADIUS + 1}px)`
-
-// ── Mobile: barra unica in fondo ─────────────────────────────────────────────────
-// Tre voci: Atlante e Navigator piatte ai due lati, Libreria sollevata al centro
-// (RaisedDiariButton, `position:absolute`, fuori dal flusso della riga — vedi sopra). Atlante e
-// Navigator sono ciascuna da sola nella propria metà (`flex-1 justify-center`), con un
-// `<div className="w-16" />` vuoto in mezzo che riserva lo spazio sotto al disco: con un solo
-// elemento per lato invece di due, il centraggio "per costruzione" di Libreria è più che mai
-// indipendente dal loro peso reciproco. NAV_LINKS resta nell'ordine canonico (Libreria, Atlante,
-// Navigator) per DesktopNav/MobileNavBar, che restano a 3 voci + avatar inline, invariati: solo
-// qui la barra scende a 2 voci piatte + il disco centrale. Sfondo e contenuto sono due livelli
-// separati: solo il primo porta il ritaglio (DIARI_NOTCH_MASK), il secondo — icone, etichette, il
-// disco stesso — resta sopra, intatto. Niente backdrop-blur sul primo livello: sfocherebbe anche
-// il contenuto visto attraverso il foro.
+// Fase 4 del riordino UI/UX (docs/diario-valutazione-ux-piano.md): barra piatta a 4 voci — fine
+// del disco sollevato per Libreria (RaisedDiariButton), del ritaglio circolare nello sfondo
+// (DIARI_NOTCH_MASK) e dell'avatar Profilo flottante in un angolo a sé (FloatingProfileAvatar).
+// Erano il quarto trattamento diverso provato per questa barra (pillola sempre accesa → bottone a
+// sinistra → bottone centrato con ritaglio → barra piatta a 5 voci → disco sollevato): non un
+// errore di questo giro, un disegno scelto e rifatto più volte — ma il risultato, verificato ora
+// contro l'intera navigazione dell'app (docs/diario-valutazione-ux-piano.md §3.4), era comunque
+// una terza forma di barra diversa da MobileNavBar/DesktopNav, con Profilo mai nello stesso posto
+// due pagine di fila. Le quattro voci (Libreria, Atlante, Navigator, Profilo) hanno ora lo stesso
+// trattamento — nessuna "sollevata" più delle altre — coerente con MobileNavBar qui sotto, che già
+// tratta Profilo come quarta voce della barra invece che come icona a sé.
 function MobileBottomBar() {
   const path = usePathname()
-  const diari = NAV_LINKS.find(l => l.href === '/diari')!
-  const atlante = NAV_LINKS.find(l => l.href === '/atlante')!
-  const navigator_ = NAV_LINKS.find(l => l.href === '/navigatore')!
 
   const renderFlat = ({ href, label, icon: Icon }: (typeof NAV_LINKS)[number]) => {
     const active = isActive(href, path)
@@ -292,40 +247,14 @@ function MobileBottomBar() {
 
   return (
     <nav
-      className="md:hidden fixed z-40 inset-x-0 bottom-0"
+      className="md:hidden fixed z-40 inset-x-0 bottom-0 bg-botanico-bar shadow-[0_-2px_12px_rgba(0,0,0,0.18)]"
       style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
     >
-      <div
-        className="absolute inset-0 bg-botanico-bar shadow-[0_-2px_12px_rgba(0,0,0,0.18)]"
-        style={{ maskImage: DIARI_NOTCH_MASK, WebkitMaskImage: DIARI_NOTCH_MASK }}
-      />
-      <div className="relative flex items-center h-20 px-2">
-        <div className="flex flex-1 items-center justify-center">{renderFlat(atlante)}</div>
-        <div className="w-16 flex-none" aria-hidden />
-        <div className="flex flex-1 items-center justify-center">{renderFlat(navigator_)}</div>
+      <div className="flex items-center justify-around h-20 px-2">
+        {NAV_LINKS.map(renderFlat)}
+        <ProfileAvatar size={24} iconSize={14} label="Profilo" labelClassName="px-3 py-2 rounded-2xl" labelTextClassName="text-xs" />
       </div>
-      <RaisedDiariButton key={diari.href} {...diari} />
     </nav>
-  )
-}
-
-// Profilo non è una voce della barra: icona flottante in alto a destra (come nella primissima
-// versione di questo menù, ripristinata su richiesta esplicita dell'utente) — nessuna etichetta
-// (ProfileAvatar senza `label` torna al gioiello Premium incastonato sull'angolo dell'avatar,
-// invece che a fianco di un testo). Sopra la MobileBottomBar (stesso z-40) ma non ci si sovrappone:
-// angoli opposti dello schermo.
-//
-// Fase 2 del riordino UI/UX: 36px (+ 2×1px di padding) alzato a 44px — è l'unico controllo nel suo
-// angolo, senza vicini con cui rischiare di sovrapporsi, quindi può arrivare al bersaglio pieno
-// (TAP_TARGET.md, lib/designTokens.ts) senza compromessi.
-function FloatingProfileAvatar() {
-  return (
-    <div
-      className="md:hidden fixed z-40 right-4 rounded-full bg-white/90 backdrop-blur-sm shadow-[0_2px_8px_rgba(0,0,0,0.18)] p-0.5"
-      style={{ top: 'calc(env(safe-area-inset-top, 0px) + 12px)' }}
-    >
-      <ProfileAvatar size={44} iconSize={20} />
-    </div>
   )
 }
 
@@ -336,7 +265,6 @@ export default function Navbar() {
     <>
       <DesktopNav />
       <MobileBottomBar />
-      <FloatingProfileAvatar />
     </>
   )
 }

@@ -1,10 +1,11 @@
 'use client'
 import { useMemo, useEffect, useState } from 'react'
+import Link from 'next/link'
 import { ActivityMeta } from '@/lib/blobStore'
 import { Streaks } from '@/lib/stats'
 import { computeBadges, BADGE_CATEGORY_LABELS, type BadgeCategory, type ComputedBadge } from '@/lib/badges'
 import { getSeenBadgeIds, markBadgesSeen } from '@/lib/badgesSeen'
-import { Trophy, Lock } from 'lucide-react'
+import { Trophy, Lock, Mountain, ChevronRight } from 'lucide-react'
 import InfoButton from './InfoButton'
 import { TornFrame, tornVariant } from '@/components/TornFrame'
 import { TACCUINO_PAPER, HandDrawnFrame } from '@/lib/taccuinoTokens'
@@ -85,6 +86,26 @@ export default function TabTraguardi({ activities, streaks }: Props) {
                 <BadgeCard key={badge.id} badge={badge} isNew={newlyUnlocked.has(badge.id)} />
               ))}
             </div>
+            {/* Fase 5 del riordino UI/UX (docs/diario-valutazione-ux-piano.md): /vette aveva un
+                solo link entrante in tutto il repo — un'intera pagina (l'elenco delle cime
+                raggiunte, rilevate dai tracciati GPS) di fatto irraggiungibile. "Quota" è la
+                categoria di badge sui traguardi di altitudine: il punto giusto per portarci, non
+                una voce di menu a sé. */}
+            {cat === 'quota' && (
+              <Link
+                href="/vette"
+                className="mt-3 flex items-center gap-3 px-4 py-3 bg-white border border-stone-200 rounded-xl hover:border-forest-300 transition-colors group"
+              >
+                <span className="w-9 h-9 rounded-lg bg-forest-50 flex items-center justify-center shrink-0">
+                  <Mountain className="w-4 h-4 text-forest-600" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold text-stone-800">Vette conquistate</span>
+                  <span className="block text-xs text-stone-400">Ogni cima raggiunta, rilevata dai tracciati GPS</span>
+                </span>
+                <ChevronRight className="w-4 h-4 text-stone-300 group-hover:text-forest-500 transition-colors shrink-0" />
+              </Link>
+            )}
           </div>
         )
       })}
