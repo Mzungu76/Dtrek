@@ -78,10 +78,10 @@ export default function ParkingSpotControl({ spot, position, distanceM, bearingT
                     <p className="text-base font-bold text-stone-900 font-mono leading-none">
                       {distanceM != null ? formatDist(distanceM) : '—'}
                     </p>
-                    <p className="text-xs text-stone-400 mt-0.5">in linea d&apos;aria dall&apos;auto</p>
+                    <p className="text-[11px] text-stone-400 mt-0.5">in linea d&apos;aria dall&apos;auto</p>
                   </div>
                 </div>
-                <p className="text-xs text-stone-400 font-mono mb-3">
+                <p className="text-[10.5px] text-stone-400 font-mono mb-3">
                   {spot.lat.toFixed(5)}, {spot.lon.toFixed(5)}
                 </p>
                 <div className="flex gap-2">

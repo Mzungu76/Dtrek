@@ -59,12 +59,12 @@ function reducer(state: RouteHubState, action: RouteHubAction): RouteHubState {
   }
 }
 
-export function useRouteHubState(initialIndex: number, initialOpenSection: SectionKind | null = null) {
+export function useRouteHubState(initialIndex: number) {
   return useReducer(reducer, {
     index: initialIndex,
     dragging: false,
     dragDeltaPx: 0,
-    openSection: initialOpenSection,
+    openSection: null,
     instant: false,
   })
 }

@@ -1,7 +1,6 @@
 import type { ReactNode, Ref } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import type { SafetyPreview } from '@/components/TrailScoreGaugeBadge'
-import type { MetaType } from '@/lib/metaTypes'
 
 export type HubMode = 'guida' | 'resoconto'
 
@@ -58,15 +57,6 @@ export interface RouteHubItem {
    *  app/guida/GuidaHub.tsx. È ciò che distingue un preferito qualsiasi da una "prossima uscita"
    *  (sottosezione dei preferiti: quelli con una data da qui in avanti, in ordine di calendario). */
   plannedDate?: string
-  /** Guida-only — piano mete multi-tipologia, Blocco F. Assente per Resoconto (dove il concetto
-   *  non serve: un'Attività esiste già, non c'è un "tipo di Meta da creare" da distinguere qui).
-   *  Determina se il CTA primario è "Naviga" (sentiero) o "Segna come visitata" (Borgo/Città/Sito,
-   *  vedi lib/visitCompletion.ts) — piano §48.9, mai richiedere una traccia GPS per una Meta senza
-   *  cammino. */
-  metaType?: MetaType
-  /** Guida-only — presente quando questa Meta ha già una prima visita/attività registrata (piano
-   *  Blocco D §27), per distinguere "Segna come visitata" da "Visitata" nel CTA primario. */
-  firstCompletedAt?: string
 }
 
 /** One tab of the Screen 2 page's pill tab-bar — only meaningful when bodyMode === 'tabbed'. */
@@ -77,10 +67,8 @@ export interface TabDef {
   badge?: ReactNode
 }
 
-/** The page's pinned primary CTA (e.g. "Naviga"/"Vota bellezza") — reachable at any scroll
- *  position (fixed bottom-right), but faded out while the content actively scrolls and back in
- *  once it settles (RoutePage.tsx), so it never sits opaque over a paragraph/photo/chart passing
- *  underneath mid-scroll — UX-AUDIT.md P-H6, the "Voto X/10" chip confirmed doing exactly that. */
+/** The page's pinned primary CTA (e.g. "Naviga"/"Vota bellezza") — always visible regardless of
+ *  scroll position, never covered by the page's own scrollable content. */
 export interface PrimaryAction {
   label: string
   icon: LucideIcon
@@ -93,12 +81,6 @@ export interface RouteHubProps {
   mode: HubMode
   items: RouteHubItem[]
   initialIndex: number
-  /** Se presente, Screen 2 (RoutePage) parte già aperta su questa sezione invece della copertina
-   *  chiusa di default — per un arrivo da un link diretto a UN percorso preciso (es. il CTA "Vai al
-   *  percorso"/"Naviga" della Home), dove l'intento è già chiaro e passare comunque dalla copertina
-   *  chiusa sarebbe un tap in più senza motivo. Assente/undefined per la navigazione a lista (es.
-   *  `/guida` senza id), dove la copertina chiusa resta il punto di partenza corretto. */
-  autoOpenSection?: SectionKind
   /** Called (debounced) whenever the current route settles on a new index — used to sync the URL. */
   onIndexChange?: (item: RouteHubItem, index: number) => void
   /** 'continuous': Screen 2 is a single scroll hosting renderSection('featured', ...) (Guida's

@@ -5,7 +5,6 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import Image from 'next/image'
 import { Mountain, ArrowUpDown, Upload, Star, Search, X, Rows3, CalendarClock } from 'lucide-react'
 import RouteThumb from '@/components/RouteThumb'
-import { TornFrame, tornVariant } from '@/components/TornFrame'
 import { MiniScoreRing } from '@/components/ScoreRing'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 import { ctsLabel } from '@/lib/trailScore'
@@ -49,7 +48,7 @@ export const SORT_CMP: Record<SortKey, (a: SortValues, b: SortValues) => number>
 
 function TextBadge({ children }: { children: ReactNode }) {
   return (
-    <span className="px-1.5 py-0.5 rounded-md bg-white/90 text-stone-800 text-xs font-bold shadow-sm leading-none">
+    <span className="px-1.5 py-0.5 rounded-md bg-white/90 text-stone-800 text-[9px] font-bold shadow-sm leading-none">
       {children}
     </span>
   )
@@ -97,35 +96,7 @@ function ThumbBadge({ sortBy, item, showPlannedDate }: { sortBy: SortKey; item: 
 // (quasi) in vista per non creare troppe istanze Leaflet in una lista lunga.
 // Esportata: riusata identica dalle righe di ExpandedGalleryList.tsx, stessa miniatura-mappa
 // invece di duplicarne la logica IntersectionObserver/Leaflet.
-export function GalleryMapThumb({
-  polyline, lineColor = '#7dd3fc', lineWeight = 4, dashArray, showEndpoints = false, dimTiles = true,
-  tileStyle = 'light',
-}: {
-  polyline?: [number, number][]
-  /** Colore del tracciato — di default il ciano della galleria (sfondo scuro). Il Sommario del
-   *  taccuino (Fase 29) passa un inchiostro quasi nero: entrambi gli altri due chiamanti
-   *  (BottomGallery, ExpandedGalleryList) non lo passano e restano invariati. */
-  lineColor?: string
-  lineWeight?: number
-  /** `dashArray` di Leaflet (nativo, non un filtro SVG) — dà l'aria "tracciata a china" richiesta
-   *  per il Sommario senza toccare il rendering interno di Leaflet: la stessa combinazione
-   *  filtro-SVG-dentro-Leaflet già scartata in Fase 21 (testo corrotto nelle righe vicine) qui
-   *  non serve, il tratteggio da solo basta a leggersi come "disegnato a mano" mantenendo intatta
-   *  la precisione del percorso (stessi punti GPS, nessuna deformazione). */
-  dashArray?: string
-  /** Pallino pieno alla partenza, quadratino vuoto all'arrivo — solo quando richiesto (Sommario):
-   *  gli altri due chiamanti mostrano già altre indicazioni proprie, non serve raddoppiarle qui. */
-  showEndpoints?: boolean
-  /** Il velo scuro sotto era pensato per far risaltare il ciano acceso su sfondo scuro (gli altri
-   *  due chiamanti) — l'utente ha chiesto esplicitamente "il colore originale" per il Sommario, un
-   *  velo qui andrebbe contro quella richiesta. `false` lo toglie senza cambiare nulla altrove. */
-  dimTiles?: boolean
-  /** `style` inoltrato a `/api/tile` (vedi `PROVIDERS` lì) — di default OSM "light", i colori
-   *  nativi di una mappa OSM/Leaflet standard: il Sommario del taccuino aveva provato `'topo'`
-   *  (OpenTopoMap) per un'aria "da reperto cartaceo", ma non è quello che l'utente intende per
-   *  "colore originale" — tolto, nessun chiamante lo passa più. */
-  tileStyle?: string
-}) {
+export function GalleryMapThumb({ polyline }: { polyline?: [number, number][] }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<HTMLDivElement>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -153,22 +124,8 @@ export function GalleryMapThumb({
         doubleClickZoom: false, boxZoom: false, keyboard: false, touchZoom: false, attributionControl: false,
       })
       mapInstance.current = map
-      // OpenTopoMap non copre gli zoom più alti ovunque (a differenza di CARTO/OSM standard) —
-      // `maxNativeZoom` ferma le richieste di tile a 17 e lascia che Leaflet ingrandisca l'ultimo
-      // livello disponibile invece di richiedere tile che darebbero 404.
-      const isTopo = tileStyle === 'topo'
-      L.tileLayer(`/api/tile?z={z}&x={x}&y={y}&style=${tileStyle}`, { maxZoom: 19, maxNativeZoom: isTopo ? 17 : 19 }).addTo(map)
-      const line = L.polyline(polyline, { color: lineColor, weight: lineWeight, opacity: 0.95, dashArray }).addTo(map)
-      if (showEndpoints) {
-        const start = polyline[0]
-        const end = polyline[polyline.length - 1]
-        // Pallino pieno = partenza, cerchio vuoto = arrivo — due simboli soli (non uno per ogni
-        // tappa intermedia): bastano a leggere "dove si comincia, dove si finisce" senza
-        // affollare una miniatura di 87px. Fase 30 — rimpiccioliti e assottigliati (l'utente li
-        // ha trovati "troppo marker di Leaflet"): un punto e un cerchio minimi, non un pittogramma.
-        L.circleMarker(start, { radius: 2.2, color: lineColor, weight: 1, fillColor: lineColor, fillOpacity: 1 }).addTo(map)
-        L.circleMarker(end, { radius: 2.2, color: lineColor, weight: 1, fillColor: '#fff', fillOpacity: 1 }).addTo(map)
-      }
+      L.tileLayer('/api/tile?z={z}&x={x}&y={y}&style=light', { maxZoom: 19 }).addTo(map)
+      const line = L.polyline(polyline, { color: '#7dd3fc', weight: 4, opacity: 0.95 }).addTo(map)
       const fit = () => map.fitBounds(line.getBounds(), { padding: [4, 4] })
 
       // Stessa correzione di CoverMap.tsx: appena montata via IntersectionObserver (vedi sopra),
@@ -189,19 +146,19 @@ export function GalleryMapThumb({
       observer?.disconnect()
       if (mapInstance.current) { mapInstance.current.remove(); mapInstance.current = null }
     }
-  }, [nearView, polyline, lineColor, lineWeight, dashArray, showEndpoints, tileStyle])
+  }, [nearView, polyline])
 
   const hasRoute = polyline && polyline.length > 1
 
   return (
-    <div ref={wrapRef} className="absolute inset-0 bg-gradient-to-br from-[#4A5A3F] to-[#2E3A26]">
+    <div ref={wrapRef} className="absolute inset-0 bg-gradient-to-br from-[#123448] to-[#071824]">
       {!hasRoute && (
         <div className="w-full h-full flex items-center justify-center"><Mountain className="w-5 h-5 text-sky-300/60" /></div>
       )}
-      {hasRoute && !nearView && <RouteThumb polyline={polyline!} color={lineColor} strokeWidth={3} strokeDasharray={dashArray} />}
+      {hasRoute && !nearView && <RouteThumb polyline={polyline!} color="#7dd3fc" strokeWidth={3} />}
       {hasRoute && nearView && <div ref={mapRef} className="absolute inset-0" />}
       {/* Darkens the tile so the colored route stands out more clearly than the raw raster tiles. */}
-      {dimTiles && <div className="absolute inset-0 bg-black/20 pointer-events-none" />}
+      <div className="absolute inset-0 bg-black/20 pointer-events-none" />
     </div>
   )
 }
@@ -275,7 +232,7 @@ export default function BottomGallery({
             value={searchQuery}
             onChange={e => onSearchQueryChange(e.target.value)}
             placeholder="Cerca per titolo…"
-            className="w-full pl-8 pr-8 py-1.5 rounded-full bg-black/40 backdrop-blur-md border border-white/20 text-xs text-white placeholder:text-white/40 outline-none focus:border-white/40"
+            className="w-full pl-8 pr-8 py-1.5 rounded-full bg-black/40 backdrop-blur-md border border-white/20 text-[12px] text-white placeholder:text-white/40 outline-none focus:border-white/40"
           />
           {searchQuery && (
             <button
@@ -316,7 +273,7 @@ export default function BottomGallery({
             <button
               onClick={onToggleNextOutingFilter}
               title="Solo le uscite già programmate, in ordine di data"
-              className={`shrink-0 flex items-center gap-1 pl-1.5 pr-2 py-1 rounded-full border backdrop-blur-md text-xs font-bold transition-colors ${
+              className={`shrink-0 flex items-center gap-1 pl-1.5 pr-2 py-1 rounded-full border backdrop-blur-md text-[10px] font-bold transition-colors ${
                 nextOutingFilter ? 'bg-sky-400 border-sky-300 text-white' : 'bg-black/40 text-stone-200 border-white/20'
               }`}
             >
@@ -330,7 +287,7 @@ export default function BottomGallery({
             <button
               key={s.id}
               onClick={() => onSortChange(s.id)}
-              className={`shrink-0 px-2.5 py-1 rounded-full text-xs font-bold border backdrop-blur-md transition-colors ${
+              className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-bold border backdrop-blur-md transition-colors ${
                 sortBy === s.id ? 'bg-white text-stone-800 border-white' : 'bg-black/40 text-stone-200 border-white/20'
               }`}
             >
@@ -356,7 +313,7 @@ export default function BottomGallery({
             style={{ scrollSnapAlign: 'start' }}
           >
             <Upload className="w-5 h-5 text-white/80" />
-            <span className="text-xs font-bold text-white/80 leading-tight">{importLabel ?? 'Importa'}</span>
+            <span className="text-[10px] font-bold text-white/80 leading-tight">{importLabel ?? 'Importa'}</span>
           </button>
         )}
         {items.map((item, i) => {
@@ -366,57 +323,46 @@ export default function BottomGallery({
             key={item.id}
             data-route-id={item.id}
             onClick={() => onSelect(i)}
-            className="shrink-0"
-            style={{
-              scrollSnapAlign: 'start',
-              // Bagliore azzurro al posto del vecchio bordo/anello: un bordo rotondo non ha più
-              // senso sopra un bordo strappato. filter:drop-shadow segue la sagoma reale (alpha)
-              // del composito sottostante, quindi il bagliore abbraccia lo strappo invece di un
-              // rettangolo. Non sul frame stesso (già impegnato in tre drop-shadow propri):
-              // sarebbe un quarto filtro sullo stesso elemento, sequenziale come gli altri —
-              // qui va sul wrapper esterno apposta per restare indipendente.
-              filter: isCurrent ? 'drop-shadow(0 0 2px #38bdf8) drop-shadow(0 0 5px #38bdf8)' : undefined,
-            }}
+            className={`shrink-0 w-20 h-20 rounded-2xl overflow-hidden relative ${
+              isCurrent ? 'border-[3px] border-sky-400 shadow-[0_0_0_2px_rgba(56,189,248,0.35)]' : 'border-[1.5px] border-white/35'
+            }`}
+            style={{ scrollSnapAlign: 'start' }}
           >
-            {/* Nastro washi + bordo strappato (Taccuino Botanico, components/TornFrame.tsx) al
-                posto del vecchio riquadro arrotondato bordato. */}
-            <TornFrame size="map" variant={tornVariant(item.id)}>
-              {item.coverPhotoUrl ? (
-                <>
-                  <Image src={item.coverPhotoUrl} alt={item.title} fill sizes="87px" className="object-cover" loading="lazy" />
-                  <div className="absolute inset-0 bg-black/20 pointer-events-none" />
-                </>
-              ) : (
-                // Nessuna foto ⇒ mappa del percorso, non un placeholder generico — stessa priorità
-                // usata per la copertina grande a percorso aperto (vedi cover() in ResocontoHub.tsx e
-                // CoverMap in RouteHub.tsx). Guida non ha mai coverPhotoUrl, quindi qui vede sempre
-                // la mappa, come prima.
-                <GalleryMapThumb polyline={item.polyline} />
-              )}
-              {(hasSortData || (favoritesFilter && nextOutingFilter)) && (
-                <div className="absolute top-1 left-1">
-                  <ThumbBadge sortBy={sortBy} item={item} showPlannedDate={favoritesFilter && nextOutingFilter} />
-                </div>
-              )}
-              <div className="absolute bottom-0 inset-x-0 px-1.5 pb-1 pt-5 bg-gradient-to-t from-black/75 to-transparent">
-                {/* Frase sintetica TS+Sicurezza — sulla scheda chiusa i due numeri nell'anello (in
-                    alto) non si capiscono da soli: qui si traduce il punteggio nelle stesse etichette
-                    qualitative già usate altrove nell'app (lib/trailScore.ts, lib/safetyScore.ts),
-                    non un nuovo testo inventato ad hoc. */}
-                {mode === 'guida' && item.scorePreview && item.safetyPreview && (
-                  <span className="block text-xs font-semibold text-white/75 truncate leading-tight mb-0.5">
-                    {ctsLabel(item.scorePreview.value).label} · {item.safetyPreview.label}
-                  </span>
-                )}
-                {/* Una riga sola con ellissi — il tentativo precedente (line-clamp-2) restava senza
-                    effetto in produzione (line-clamp e `block` si contendono la proprietà `display`
-                    nel CSS generato da Tailwind: `block` può vincere e disattivare il clamp), col
-                    risultato di un titolo lungo che si avvolgeva su più righe fino a riempire l'intera
-                    miniatura. Il nome per intero resta comunque leggibile: vedi il pulsante "Vedi
-                    tutti in elenco" qui sotto, che apre ExpandedGalleryList.tsx senza troncamenti. */}
-                <span className="block text-xs font-bold text-white truncate leading-tight">{item.title}</span>
+            {item.coverPhotoUrl ? (
+              <>
+                <Image src={item.coverPhotoUrl} alt={item.title} fill sizes="80px" className="object-cover" loading="lazy" />
+                <div className="absolute inset-0 bg-black/20 pointer-events-none" />
+              </>
+            ) : (
+              // Nessuna foto ⇒ mappa del percorso, non un placeholder generico — stessa priorità
+              // usata per la copertina grande a percorso aperto (vedi cover() in ResocontoHub.tsx e
+              // CoverMap in RouteHub.tsx). Guida non ha mai coverPhotoUrl, quindi qui vede sempre
+              // la mappa, come prima.
+              <GalleryMapThumb polyline={item.polyline} />
+            )}
+            {(hasSortData || (favoritesFilter && nextOutingFilter)) && (
+              <div className="absolute top-1 left-1">
+                <ThumbBadge sortBy={sortBy} item={item} showPlannedDate={favoritesFilter && nextOutingFilter} />
               </div>
-            </TornFrame>
+            )}
+            <div className="absolute bottom-0 inset-x-0 px-1.5 pb-1 pt-5 bg-gradient-to-t from-black/75 to-transparent">
+              {/* Frase sintetica TS+Sicurezza — sulla scheda chiusa i due numeri nell'anello (in
+                  alto) non si capiscono da soli: qui si traduce il punteggio nelle stesse etichette
+                  qualitative già usate altrove nell'app (lib/trailScore.ts, lib/safetyScore.ts),
+                  non un nuovo testo inventato ad hoc. */}
+              {mode === 'guida' && item.scorePreview && item.safetyPreview && (
+                <span className="block text-[8px] font-semibold text-white/75 truncate leading-tight mb-0.5">
+                  {ctsLabel(item.scorePreview.value).label} · {item.safetyPreview.label}
+                </span>
+              )}
+              {/* Una riga sola con ellissi — il tentativo precedente (line-clamp-2) restava senza
+                  effetto in produzione (line-clamp e `block` si contendono la proprietà `display`
+                  nel CSS generato da Tailwind: `block` può vincere e disattivare il clamp), col
+                  risultato di un titolo lungo che si avvolgeva su più righe fino a riempire l'intera
+                  miniatura. Il nome per intero resta comunque leggibile: vedi il pulsante "Vedi
+                  tutti in elenco" qui sotto, che apre ExpandedGalleryList.tsx senza troncamenti. */}
+              <span className="block text-[10px] font-bold text-white truncate leading-tight">{item.title}</span>
+            </div>
           </button>
           )
         })}

@@ -131,7 +131,7 @@ export default function SectionClaudeKey() {
           <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-forest-50 border border-forest-200">
             <ShieldCheck className="w-4 h-4 text-forest-600 shrink-0" />
             <span className="text-xs font-mono text-forest-800 flex-1">{keyHint}</span>
-            <span className="text-xs font-medium text-forest-600 bg-forest-100 px-1.5 py-0.5 rounded-full">attiva</span>
+            <span className="text-[10px] font-medium text-forest-600 bg-forest-100 px-1.5 py-0.5 rounded-full">attiva</span>
           </div>
           <div className="flex gap-2">
             <button

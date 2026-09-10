@@ -50,7 +50,7 @@ export function DtrekCallout() {
   return (
     <section className="rounded-3xl overflow-hidden border border-stone-200 shadow-sm bg-white">
       <div className="bg-gradient-to-br from-forest-700 to-forest-900 p-7 sm:p-9 text-center text-white">
-        <p className="font-barlow font-bold text-xs tracking-[0.25em] uppercase text-terra-300">
+        <p className="font-barlow font-bold text-[10px] tracking-[0.25em] uppercase text-terra-300">
           Questo diario è fatto con
         </p>
         <p className="font-display text-2xl sm:text-3xl font-bold mt-2 flex items-center justify-center gap-2">
@@ -73,14 +73,14 @@ export function DtrekCallout() {
 export function SiteFooter() {
   return (
     <footer className="mt-2 pb-8 text-center space-y-1.5">
-      <p className="text-xs text-stone-400">
+      <p className="text-[11px] text-stone-400">
         Pubblicato con{' '}
         <a href={DTREK_URL} target="_blank" rel="noopener noreferrer"
           className="font-semibold text-forest-700 hover:text-forest-600 transition">
           DTrek
         </a>
       </p>
-      <p className="text-xs text-stone-300">Mappe © OpenStreetMap contributors · © CARTO</p>
+      <p className="text-[10px] text-stone-300">Mappe © OpenStreetMap contributors · © CARTO</p>
     </footer>
   )
 }

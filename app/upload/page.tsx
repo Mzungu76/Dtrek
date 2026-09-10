@@ -1,7 +1,7 @@
 'use client'
-import { useState, useEffect, Suspense } from 'react'
+import { useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import Navbar, { MOBILE_BOTTOMBAR_SPACER } from '@/components/Navbar'
+import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import ActivityUploader from '@/components/upload/ActivityUploader'
 import GpxUploader from '@/components/upload/GpxUploader'
 import ManualImportChoice from '@/components/upload/ManualImportChoice'
@@ -20,32 +20,15 @@ export default function UploadPage() {
   )
 }
 
-// Due punti d'ingresso distinti (bottoni "Crea un percorso" in Percorsi, "Importa o Naviga" in
+// Due punti d'ingresso distinti (bottoni "Crea una guida" in Guide, "Importa o Naviga" in
 // Resoconti — GuidaHub.tsx/ResocontoHub.tsx e i rispettivi elenco/page.tsx), non più uno
-// switcher dentro la pagina: chi arriva da Resoconti non ha motivo di vedere l'opzione "per i
-// Percorsi" e viceversa, erano due percorsi mentali diversi mascherati da un'unica pagina.
+// switcher dentro la pagina: chi arriva da Resoconti non ha motivo di vedere l'opzione "per la
+// Guida" e viceversa, erano due percorsi mentali diversi mascherati da un'unica pagina.
 function UploadPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const tab: 'activity' | 'gpx' = searchParams.get('tab') === 'gpx' ? 'gpx' : 'activity'
-  // `?source=` — arrivo dall'hub di ricerca delle Mete (app/percorsi/cerca/page.tsx,
-  // docs/piano-ricerca-mete.md): 'manual' apre sul tab "Manuale" (il menu di ManualImportChoice);
-  // 'build' apre sullo stesso tab ma salta dritto al wizard "Costruisci o trova un percorso" (vedi
-  // initialManualMode sotto) — l'hub non deve mai far ritoccare all'utente una scelta che ha già
-  // fatto tappando una voce precisa. Nessun altro chiamante passa `source` oggi, quindi il
-  // comportamento di default resta invariato per tutti i link esistenti.
-  const sourceParam = searchParams.get('source')
-  const initialGpxSource = sourceParam === 'manual' || sourceParam === 'build' ? 'manual' : 'file'
-  const [gpxSource, setGpxSource] = useState<'file' | 'manual' | 'from-activity'>(initialGpxSource)
-  // Next.js non rimonta questa pagina quando l'hub naviga da un `?source=` all'altro (stessa rotta,
-  // solo la query cambia) — senza questo effetto lo stato di un ingresso precedente resterebbe
-  // "incollato" e un secondo tocco su una voce diversa dell'hub mostrerebbe ancora il tab di prima.
-  useEffect(() => { setGpxSource(initialGpxSource) }, [initialGpxSource])
-  const initialManualMode = sourceParam === 'build' ? 'build' : 'choice'
-  // Presente solo quando si arriva dal composer di un Diario (app/diari/[id]/page.tsx, Fase 3 di
-  // docs/diario-fulcro-piano.md) — assente altrove, il Percorso finisce nel Diario di default
-  // (assegnato lato server, vedi app/api/planned/route.ts).
-  const diaryId = searchParams.get('diaryId') ?? undefined
+  const [gpxSource, setGpxSource] = useState<'file' | 'manual' | 'from-activity'>('file')
 
   // "Naviga adesso" prova prima l'app nativa (se il device può averla), altrimenti ricade sul
   // navigatore libero via web già esistente (app/navigatore/traccia) — vedi lib/navigatorHandoff.ts.
@@ -54,7 +37,7 @@ function UploadPageInner() {
   }
 
   return (
-    <div className={`min-h-screen bg-stone-50 md:pb-0 ${MOBILE_BOTTOMBAR_SPACER}`}>
+    <div className={`min-h-screen bg-stone-50 md:pb-0 ${MOBILE_TOPBAR_SPACER}`}>
       <Navbar />
       <TrialStatusBanner />
       <main className="max-w-2xl mx-auto px-4 py-8 sm:py-12 fade-up">
@@ -63,7 +46,7 @@ function UploadPageInner() {
             <Mountain className="w-8 h-8 text-forest-600" />
           </div>
           <h1 className="font-display text-3xl font-semibold text-stone-800 mb-2">
-            {tab === 'activity' ? 'Crea un Resoconto' : 'Crea un percorso'}
+            {tab === 'activity' ? 'Crea un Resoconto' : 'Crea una guida'}
           </h1>
           <p className="text-stone-500 text-sm">
             {tab === 'activity'
@@ -82,7 +65,7 @@ function UploadPageInner() {
               <Compass className="w-4.5 h-4.5" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-semibold text-sm text-stone-800">Traccia libera</p>
+              <p className="font-semibold text-sm text-stone-800">Avvia navigazione ora</p>
               <p className="text-xs text-stone-500">Traccia GPS libera, senza pianificazione — invece di caricare un file già pronto</p>
             </div>
           </button>
@@ -114,24 +97,10 @@ function UploadPageInner() {
           </div>
         )}
 
-        {/* UX-AUDIT.md P-M3 — tre modi di creare lo stesso tipo di oggetto (un percorso
-            pianificato), nessun consiglio su quale scegliere finché non se ne apre uno. Una riga
-            sola, per l'opzione attiva, invece di tre sottotitoli fissi che affollerebbero i tab
-            compatti a tre colonne. */}
-        {tab === 'gpx' && (
-          <p className="text-stone-400 text-xs -mt-4 mb-6 px-1">
-            {gpxSource === 'file' && 'Hai già una traccia (GPX/KML/KMZ/GeoJSON) di un percorso trovato altrove — la carichi e basta.'}
-            {gpxSource === 'manual' && 'Non hai un file pronto: cerca un percorso già documentato, costruiscine uno nuovo sui sentieri della zona, o inserisci i dati a mano.'}
-            {gpxSource === 'from-activity' && 'Vuoi ripianificare un’escursione che hai già fatto — riusa la traccia di un’attività registrata in precedenza.'}
-          </p>
-        )}
-
-        {tab === 'activity' && <ActivityUploader diaryId={diaryId} />}
-        {tab === 'gpx' && gpxSource === 'file' && <GpxUploader diaryId={diaryId} />}
-        {tab === 'gpx' && gpxSource === 'manual' && (
-          <ManualImportChoice key={initialManualMode} diaryId={diaryId} initialMode={initialManualMode} />
-        )}
-        {tab === 'gpx' && gpxSource === 'from-activity' && <FromActivityUploader diaryId={diaryId} />}
+        {tab === 'activity' && <ActivityUploader />}
+        {tab === 'gpx' && gpxSource === 'file' && <GpxUploader />}
+        {tab === 'gpx' && gpxSource === 'manual' && <ManualImportChoice />}
+        {tab === 'gpx' && gpxSource === 'from-activity' && <FromActivityUploader />}
       </main>
     </div>
   )

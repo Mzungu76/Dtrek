@@ -27,9 +27,9 @@ export default function RouteHub({
   tabScrollRef, primaryAction, summaryBanner, weatherIcon, onSectionChange,
   scoreBadges, scoreGaugeBadge, scoreBadgesTargetSection, heroPhotos, headerActions, importLabel, onImport,
   subtitle, topOverlayVariant, favoritesFilter, onToggleFavoritesFilter, onToggleFavorite, onCompare,
-  nextOutingFilter, onToggleNextOutingFilter, autoOpenSection,
+  nextOutingFilter, onToggleNextOutingFilter,
 }: RouteHubProps) {
-  const [state, dispatch] = useRouteHubState(initialIndex, autoOpenSection ?? null)
+  const [state, dispatch] = useRouteHubState(initialIndex)
   const [sortBy, setSortBy] = useState<SortKey>('date')
   const [searchQuery, setSearchQuery] = useState('')
   // Vista alternativa alla striscia orizzontale (ExpandedGalleryList.tsx, punto 2 Sezione 3) — un
@@ -44,10 +44,8 @@ export default function RouteHub({
   // Continuous "how open is Screen 2" value (0 closed → 1 fully open), driven live by whichever
   // drag is in progress (open-drag on the closed card, close-drag on the open page's header) and
   // settled by CSS transition otherwise — this is what makes the open/close dissolve smoothly
-  // instead of cutting or sliding abruptly. Starts at 1 (not 0) when autoOpenSection is set, so a
-  // deep link to one specific route renders already-open on the very first paint — no flash of the
-  // closed cover followed by an animated open the user never asked for.
-  const [openProgress, setOpenProgress] = useState(autoOpenSection ? 1 : 0)
+  // instead of cutting or sliding abruptly.
+  const [openProgress, setOpenProgress] = useState(0)
   const [dragLive, setDragLive] = useState(false)
 
   // Keeps openProgress in sync whenever openSection flips through a path that doesn't go through
@@ -89,9 +87,8 @@ export default function RouteHub({
   }
 
   // Keeps RoutePage mounted while any part of the open animation is live (including the tail end
-  // of a close fade-out) instead of vanishing the instant openSection goes null. Starts true when
-  // autoOpenSection is set — same reasoning as openProgress above.
-  const [pageMounted, setPageMounted] = useState(!!autoOpenSection)
+  // of a close fade-out) instead of vanishing the instant openSection goes null.
+  const [pageMounted, setPageMounted] = useState(false)
   useEffect(() => {
     if (isOpen || openProgress > 0) { setPageMounted(true); return }
     const t = setTimeout(() => setPageMounted(false), SHEET_TRANSITION_MS)
@@ -246,7 +243,7 @@ export default function RouteHub({
 
   if (items.length === 0) {
     return (
-      <div className="fixed inset-0 bg-[#2E3A26] flex items-center justify-center text-stone-400 text-sm">
+      <div className="fixed inset-0 bg-[#0b1a24] flex items-center justify-center text-stone-400 text-sm">
         Nessun percorso disponibile.
       </div>
     )
@@ -254,7 +251,7 @@ export default function RouteHub({
 
   if (visibleItems.length === 0) {
     return (
-      <div className="fixed inset-0 bg-[#2E3A26] flex flex-col items-center justify-center gap-3 text-stone-400 text-sm px-6 text-center">
+      <div className="fixed inset-0 bg-[#0b1a24] flex flex-col items-center justify-center gap-3 text-stone-400 text-sm px-6 text-center">
         {favoritesFilter && nextOutingFilter && !searchQueryNorm
           ? <CalendarClock className="w-8 h-8 text-stone-600" />
           : <Star className="w-8 h-8 text-stone-600" />}
@@ -299,7 +296,7 @@ export default function RouteHub({
     // it previously broke the bottom gallery's native horizontal scroll, since that strip lives
     // inside this same wrapper. Each element that actually needs to own a gesture sets its own
     // touch-action directly (RouteCarousel, RoutePage's header handle).
-    <div className="fixed inset-0 overflow-hidden bg-[#2E3A26] select-none">
+    <div className="fixed inset-0 overflow-hidden bg-[#0b1a24] select-none">
       {/* STAGE — the closed-card "magazine cover": a real photo when available (Resoconto), else
           a stylized non-interactive route map (CoverMap) — never a live/interactive map anymore. */}
       <div className="absolute inset-0">
@@ -327,7 +324,7 @@ export default function RouteHub({
                 />
                 <div
                   className="absolute inset-0 pointer-events-none mix-blend-multiply"
-                  style={{ background: 'linear-gradient(160deg, rgba(110,48,30,0.35) 0%, rgba(58,74,50,0.3) 55%, rgba(46,58,38,0.45) 100%)' }}
+                  style={{ background: 'linear-gradient(160deg, rgba(129,54,25,0.35) 0%, rgba(28,71,36,0.3) 55%, rgba(7,24,36,0.45) 100%)' }}
                 />
               </div>
             ) : inWindow ? (
@@ -380,8 +377,8 @@ export default function RouteHub({
             >
               <Star
                 className="w-6 h-6"
-                color={item.favorite ? '#DDA476' : '#fff'}
-                fill={item.favorite ? '#DDA476' : 'none'}
+                color={item.favorite ? '#e9ab64' : '#fff'}
+                fill={item.favorite ? '#e9ab64' : 'none'}
                 style={{ filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.5))' }}
               />
             </button>
@@ -406,7 +403,7 @@ export default function RouteHub({
         style={{ opacity: chromeOpacity, pointerEvents: isOpen ? 'none' : 'auto', transitionDuration: `${chromeTransitionMs}ms` }}
       >
         {summary && (
-          <p className="mx-4 font-display text-base font-semibold text-white leading-snug text-left max-w-xl" style={{ textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>
+          <p className="mx-4 font-display text-[15px] font-semibold text-white leading-snug text-left max-w-xl" style={{ textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>
             {summary}
           </p>
         )}

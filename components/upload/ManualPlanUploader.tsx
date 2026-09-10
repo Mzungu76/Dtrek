@@ -7,7 +7,7 @@ import { defaultPendingExpiresAt } from './sharedHelpers'
 
 // ── Manuale (senza file) ──────────────────────────────────────────────────────
 
-export default function ManualPlanUploader({ diaryId }: { diaryId?: string } = {}) {
+export default function ManualPlanUploader() {
   const router = useRouter()
   const [title,     setTitle]     = useState('')
   const [distanceKm, setDistanceKm] = useState('')
@@ -37,7 +37,6 @@ export default function ManualPlanUploader({ diaryId }: { diaryId?: string } = {
         altitudeMin: 0,
         estimatedTimeSeconds: (parseInt(durationH) || 0) * 3600 + (parseInt(durationM) || 0) * 60,
         pendingExpiresAt,
-        diaryId,
       }
       await savePlanned(hike)
       router.push(`/guida/${encodeURIComponent(hike.id)}`)

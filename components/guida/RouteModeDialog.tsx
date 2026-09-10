@@ -32,7 +32,7 @@ function Option({
       <span className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${accent}`}>{icon}</span>
       <span className="min-w-0 flex-1">
         <span className="block text-sm font-semibold text-stone-800">{title}</span>
-        <span className="block text-xs text-stone-500 font-mono">{distance} · {elevation} · {duration}</span>
+        <span className="block text-[11.5px] text-stone-500 font-mono">{distance} · {elevation} · {duration}</span>
       </span>
     </button>
   )
@@ -58,7 +58,7 @@ export default function RouteModeDialog({
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
         <div className="px-6 pt-5 pb-3">
           <h2 className="font-display font-bold text-stone-800 text-lg">Come percorri questo itinerario?</h2>
-          <p className="text-sm text-stone-500 leading-snug mt-1">
+          <p className="text-[13px] text-stone-500 leading-snug mt-1">
             La traccia importata è a tratta unica: parte e arriva in due punti diversi. Dicci se torni
             sui tuoi passi — è il dato da cui dipendono tutte le cifre di questa guida.
           </p>
@@ -89,7 +89,7 @@ export default function RouteModeDialog({
 
         <div className="mx-6 mb-6 flex items-start gap-2 px-3 py-2.5 rounded-xl bg-stone-50 border border-stone-200">
           <Info className="w-3.5 h-3.5 text-stone-400 shrink-0 mt-0.5" />
-          <p className="text-xs text-stone-500 leading-snug">
+          <p className="text-[11.5px] text-stone-500 leading-snug">
             Potrai cambiare idea in qualsiasi momento dalla striscia dei dati, e i punteggi
             (Trail Score, Sicurezza, TEI) si ricalcoleranno da soli. <strong className="font-semibold text-stone-600">I
             testi già scritti da Giulia no</strong>: restano quelli generati con la tipologia scelta ora,
@@ -98,7 +98,7 @@ export default function RouteModeDialog({
         </div>
 
         {saving && (
-          <div className="px-6 pb-5 -mt-3 flex items-center gap-2 text-xs text-stone-500">
+          <div className="px-6 pb-5 -mt-3 flex items-center gap-2 text-[12px] text-stone-500">
             <Loader2 className="w-3.5 h-3.5 animate-spin" /> Aggiorno i punteggi…
           </div>
         )}

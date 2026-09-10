@@ -81,7 +81,7 @@ function Hint({ text, accent }: { text: string; accent: Rail }) {
         <HelpCircle className="w-3.5 h-3.5" />
       </button>
       {open && (
-        <p className="basis-full mt-1 text-stone-600 text-xs leading-relaxed bg-stone-100 rounded-lg px-2.5 py-1.5">
+        <p className="basis-full mt-1 text-stone-600 text-[11px] leading-relaxed bg-stone-100 rounded-lg px-2.5 py-1.5">
           {text}
         </p>
       )}
@@ -93,7 +93,7 @@ function Hint({ text, accent }: { text: string; accent: Rail }) {
 function LabelRow({ label, hint, accent }: { label: string; hint?: string; accent: Rail }) {
   return (
     <div className="flex flex-wrap items-center gap-1.5 mb-2">
-      <p className="text-stone-500 text-xs font-bold tracking-[0.12em]">{label.toUpperCase()}</p>
+      <p className="text-stone-500 text-[10px] font-bold tracking-[0.12em]">{label.toUpperCase()}</p>
       {hint && <Hint text={hint} accent={accent} />}
     </div>
   )
@@ -109,7 +109,7 @@ function ControlView({ c, accent }: { c: StudioControl; accent: Rail }) {
   switch (c.kind) {
     case 'note':
       return (
-        <p className={`text-xs leading-relaxed ${
+        <p className={`text-[11px] leading-relaxed ${
           c.tone === 'warn'
             ? 'text-terra-800 bg-terra-50 border border-terra-200 rounded-lg px-2.5 py-1.5'
             : 'text-stone-500'}`}>
@@ -126,8 +126,8 @@ function ControlView({ c, accent }: { c: StudioControl; accent: Rail }) {
               <button key={o.value} onClick={() => c.onPick(o.value)} disabled={o.disabled}
                 className={`w-full text-left rounded-xl px-3 py-2.5 border transition-colors disabled:opacity-40 ${
                   c.value === o.value ? onRing : 'bg-stone-100 border-transparent hover:bg-stone-200'}`}>
-                <p className={`text-sm font-bold ${c.value === o.value ? onText : 'text-stone-900'}`}>{o.label}</p>
-                {o.sub && <p className="text-stone-500 text-xs mt-0.5 leading-snug">{o.sub}</p>}
+                <p className={`text-[13px] font-bold ${c.value === o.value ? onText : 'text-stone-900'}`}>{o.label}</p>
+                {o.sub && <p className="text-stone-500 text-[11px] mt-0.5 leading-snug">{o.sub}</p>}
               </button>
             ))}
           </div>
@@ -147,8 +147,8 @@ function ControlView({ c, accent }: { c: StudioControl; accent: Rail }) {
                 className={`py-2 px-1.5 rounded-lg flex flex-col items-center gap-0.5 transition-colors disabled:opacity-30 ${
                   c.value === o.value ? `${onColor} text-white` : 'bg-stone-100 text-stone-700 hover:bg-stone-200'}`}>
                 {o.color && <span className="w-3.5 h-3.5 rounded-full mb-0.5 ring-1 ring-black/10" style={{ background: o.color }} />}
-                <span className="text-xs font-bold leading-none">{o.label}</span>
-                {o.sub && <span className="text-xs opacity-70 leading-none mt-0.5">{o.sub}</span>}
+                <span className="text-[11px] font-bold leading-none">{o.label}</span>
+                {o.sub && <span className="text-[9px] opacity-70 leading-none mt-0.5">{o.sub}</span>}
               </button>
             ))}
           </div>
@@ -166,10 +166,10 @@ function ControlView({ c, accent }: { c: StudioControl; accent: Rail }) {
               <input type="checkbox" checked={c.value} disabled={c.disabled}
                 onChange={e => c.onToggle(e.target.checked)}
                 className={`w-4 h-4 mt-0.5 shrink-0 ${accent === 'route' ? 'accent-forest-600' : 'accent-terra-600'}`} />
-              <span className="text-stone-900 text-xs font-semibold leading-snug min-w-0">{c.label}</span>
+              <span className="text-stone-900 text-[12px] font-semibold leading-snug min-w-0">{c.label}</span>
             </label>
             {(c.disabled && c.disabledReason)
-              ? <span className="basis-full text-stone-500 text-xs pl-6 mt-0.5">{c.disabledReason}</span>
+              ? <span className="basis-full text-stone-500 text-[10px] pl-6 mt-0.5">{c.disabledReason}</span>
               : c.hint && <Hint text={c.hint} accent={accent} />}
           </div>
         </div>
@@ -178,11 +178,11 @@ function ControlView({ c, accent }: { c: StudioControl; accent: Rail }) {
     case 'slider':
       return (
         <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-          <span className="text-stone-500 text-xs shrink-0 min-w-[4.5rem]">{c.label}</span>
+          <span className="text-stone-500 text-[11px] shrink-0 min-w-[4.5rem]">{c.label}</span>
           <input type="range" min={c.min} max={c.max} step={c.step} value={c.value}
             onChange={e => c.onChange(+e.target.value)}
             className={`flex-1 min-w-[6rem] h-1 rounded-full cursor-pointer ${accent === 'route' ? 'accent-forest-600' : 'accent-terra-600'}`} />
-          <span className="text-stone-900 text-xs font-bold font-mono tabular-nums shrink-0 text-right min-w-[3.4rem]">{c.display}</span>
+          <span className="text-stone-900 text-[11px] font-bold font-mono tabular-nums shrink-0 text-right min-w-[3.4rem]">{c.display}</span>
           {c.hint && <Hint text={c.hint} accent={accent} />}
         </div>
       )
@@ -194,7 +194,7 @@ function ControlView({ c, accent }: { c: StudioControl; accent: Rail }) {
           <div className="flex flex-wrap items-center gap-1.5">
             {c.options.map(o => (
               <button key={o.id} onClick={() => o.onToggle(!o.value)} disabled={o.disabled}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors disabled:opacity-35 ${
+                className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-colors disabled:opacity-35 ${
                   o.value ? `${onColor} text-white` : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}>
                 {o.label}
               </button>
@@ -258,7 +258,7 @@ export default function VideoStudio({
         </div>
         <div className="mt-1 flex flex-wrap gap-x-2.5 gap-y-0.5">
           {budget.parts.map(p => (
-            <span key={p.key} className="flex items-center gap-1 text-xs text-stone-500">
+            <span key={p.key} className="flex items-center gap-1 text-[9.5px] text-stone-500">
               <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: p.color }} />
               {p.label} <span className="font-mono tabular-nums">{Math.round(p.sec)}s</span>
             </span>
@@ -266,7 +266,7 @@ export default function VideoStudio({
         </div>
       </div>
       <div className="text-right shrink-0">
-        <p className="text-stone-500 text-xs font-bold tracking-[0.12em] leading-none">DURATA</p>
+        <p className="text-stone-500 text-[9px] font-bold tracking-[0.12em] leading-none">DURATA</p>
         <p className={`text-lg font-black font-mono tabular-nums leading-none mt-0.5 ${budget.over ? 'text-terra-600' : 'text-stone-900'}`}>
           {budget.totalLabel}
         </p>
@@ -277,7 +277,7 @@ export default function VideoStudio({
   const RailHeader = ({ rail }: { rail: Rail }) => (
     <div className="flex items-center gap-2 mb-3">
       <span className={`w-2 h-2 rounded-full ${rail === 'route' ? 'bg-forest-600' : 'bg-terra-600'}`} />
-      <p className={`text-xs font-bold tracking-[0.14em] ${rail === 'route' ? 'text-forest-700' : 'text-terra-700'}`}>
+      <p className={`text-[10px] font-bold tracking-[0.14em] ${rail === 'route' ? 'text-forest-700' : 'text-terra-700'}`}>
         {rail === 'route' ? 'SUL PERCORSO' : 'TUTTO IL VIDEO'}
       </p>
     </div>
@@ -289,11 +289,11 @@ export default function VideoStudio({
       {/* Intestazione */}
       <div className="shrink-0 flex items-center gap-3 px-4 py-2.5 border-b border-stone-200 bg-white">
         <div className="min-w-0 flex-1">
-          <p className="text-terra-600 text-xs font-bold tracking-[0.16em]">STUDIO VIDEO</p>
+          <p className="text-terra-600 text-[9px] font-bold tracking-[0.16em]">STUDIO VIDEO</p>
           <h2 className="text-stone-900 font-display font-bold text-sm leading-tight truncate">{title}</h2>
         </div>
         <button onClick={() => setShowGenerate(true)}
-          className="shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-forest-600 hover:bg-forest-700 text-white text-xs font-bold transition-colors">
+          className="shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-forest-600 hover:bg-forest-700 text-white text-[12px] font-bold transition-colors">
           <Play className="w-3.5 h-3.5" /> Genera
         </button>
         <button onClick={onClose} className="shrink-0 text-stone-500 hover:text-stone-900" aria-label="Chiudi lo studio">
@@ -304,7 +304,7 @@ export default function VideoStudio({
       {error && (
         <div className="shrink-0 mx-4 mt-2.5 rounded-xl bg-red-50 border border-red-300 px-3.5 py-2.5 flex items-start gap-2.5">
           <span className="text-red-600 text-sm leading-none mt-0.5">⚠</span>
-          <p className="text-red-800 text-xs leading-relaxed flex-1">{error}</p>
+          <p className="text-red-800 text-[12px] leading-relaxed flex-1">{error}</p>
           {onDismissError && <button onClick={onDismissError} className="text-red-400 hover:text-red-700 shrink-0"><X className="w-4 h-4" /></button>}
         </div>
       )}
@@ -316,7 +316,7 @@ export default function VideoStudio({
           <div className="sticky -top-4 -mt-4 pt-4 pb-1 bg-white z-10"><RailHeader rail="route" /></div>
           {routeGroups.map(g => (
             <section key={g.id}>
-              <p className="text-stone-700 text-xs font-bold mb-2.5 flex items-center gap-1.5">
+              <p className="text-stone-700 text-[11px] font-bold mb-2.5 flex items-center gap-1.5">
                 <GroupIcon id={g.id} className="w-3.5 h-3.5 text-stone-400" />{g.label}
               </p>
               <GroupView g={g} accent="route" />
@@ -333,7 +333,7 @@ export default function VideoStudio({
           <div className="sticky -top-4 -mt-4 pt-4 pb-1 bg-white z-10"><RailHeader rail="global" /></div>
           {settingGroups.map(g => (
             <section key={g.id}>
-              <p className="text-stone-700 text-xs font-bold mb-2.5 flex items-center gap-1.5">
+              <p className="text-stone-700 text-[11px] font-bold mb-2.5 flex items-center gap-1.5">
                 <GroupIcon id={g.id} className="w-3.5 h-3.5 text-stone-400" />{g.label}
               </p>
               <GroupView g={g} accent="global" />
@@ -374,7 +374,7 @@ export default function VideoStudio({
                           bg-white rounded-2xl border border-stone-200 shadow-xl overflow-hidden">
             <div className="shrink-0 flex items-center gap-2 px-3.5 py-2.5 border-b border-stone-200">
               <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${openTool.rail === 'route' ? 'bg-forest-600' : 'bg-terra-600'}`} />
-              <p className="text-stone-900 text-xs font-bold flex-1 min-w-0 truncate">{openTool.group.label}</p>
+              <p className="text-stone-900 text-[12px] font-bold flex-1 min-w-0 truncate">{openTool.group.label}</p>
               <button onClick={() => setOpenToolId(null)} className="text-stone-400 hover:text-stone-800 shrink-0" aria-label="Chiudi la scheda">
                 <X className="w-4 h-4" />
               </button>
@@ -400,7 +400,7 @@ export default function VideoStudio({
             onClick={e => e.stopPropagation()}>
             <div className="shrink-0 flex items-center justify-between px-5 pt-4 pb-3 border-b border-stone-200">
               <div>
-                <p className="text-terra-600 text-xs font-bold tracking-[0.16em]">PRIMA DI GENERARE</p>
+                <p className="text-terra-600 text-[9px] font-bold tracking-[0.16em]">PRIMA DI GENERARE</p>
                 <h3 className="text-stone-900 font-display font-bold text-base leading-tight">Riepilogo</h3>
               </div>
               <button onClick={() => setShowGenerate(false)} className="text-stone-400 hover:text-stone-900"><X className="w-5 h-5" /></button>

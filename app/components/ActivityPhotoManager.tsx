@@ -217,14 +217,14 @@ export default function ActivityPhotoManager({
       {error && (
         <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-5">
           <AlertTriangle className="w-3.5 h-3.5 text-red-500 shrink-0 mt-0.5" />
-          <p className="text-xs text-red-600 leading-snug">{error}</p>
+          <p className="text-[11px] text-red-600 leading-snug">{error}</p>
         </div>
       )}
 
       {placementNotice && (
         <div className="flex items-start gap-2 bg-sky-50 border border-sky-200 rounded-lg px-3 py-2 mb-5">
           <MapPin className="w-3.5 h-3.5 text-sky-500 shrink-0 mt-0.5" />
-          <p className="text-xs text-sky-800 leading-snug flex-1">{placementNotice}</p>
+          <p className="text-[11px] text-sky-800 leading-snug flex-1">{placementNotice}</p>
           <button onClick={() => setPlacementNotice(null)} className="text-sky-400 hover:text-sky-700 shrink-0" aria-label="Chiudi">
             <Check className="w-3.5 h-3.5" />
           </button>
@@ -275,11 +275,11 @@ export default function ActivityPhotoManager({
                   className="w-full aspect-square object-cover group-hover:opacity-90 transition-opacity" />
                 {/* GPS / position badge */}
                 {photo.hasExifGps
-                  ? <div className="absolute bottom-1 left-1 flex items-center gap-0.5 bg-forest-600/85 text-white text-xs font-mono rounded-full px-1.5 py-0.5">
+                  ? <div className="absolute bottom-1 left-1 flex items-center gap-0.5 bg-forest-600/85 text-white text-[9px] font-mono rounded-full px-1.5 py-0.5">
                       <MapPin className="w-2.5 h-2.5" /> GPS
                     </div>
                   : <div className="absolute inset-0 flex items-end justify-center pb-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <span className="flex items-center gap-1 bg-black/60 text-white text-xs rounded-full px-2 py-0.5">
+                      <span className="flex items-center gap-1 bg-black/60 text-white text-[9px] rounded-full px-2 py-0.5">
                         <Map className="w-2.5 h-2.5" /> Posiziona
                       </span>
                     </div>
@@ -296,14 +296,14 @@ export default function ActivityPhotoManager({
                       value={editCaption}
                       onChange={e => setEditCaption(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter') saveCaption(); if (e.key === 'Escape') setEditingId(null) }}
-                      className="flex-1 text-xs border-b border-forest-400 outline-none text-stone-700 bg-transparent"
+                      className="flex-1 text-[11px] border-b border-forest-400 outline-none text-stone-700 bg-transparent"
                     />
                     <button onClick={saveCaption}><Check className="w-3 h-3 text-forest-600" /></button>
                   </div>
                 ) : (
                   <button onClick={() => startEdit(photo)}
                     className="w-full flex items-center justify-between gap-1 py-1 group/cap">
-                    <span className="text-xs text-stone-600 truncate leading-snug text-left">
+                    <span className="text-[11px] text-stone-600 truncate leading-snug text-left">
                       {photo.caption || <span className="italic text-stone-400">senza nome</span>}
                     </span>
                     <Pencil className="w-3 h-3 text-stone-300 group-hover/cap:text-forest-500 shrink-0" />
@@ -317,7 +317,7 @@ export default function ActivityPhotoManager({
                   quando lo si centrava la foto spariva senza chiedere nulla. Qui il bersaglio è
                   un'intera metà della riga (~36 px di altezza, ben oltre la soglia tattile) ed è
                   etichettato, e l'eliminazione passa comunque da una conferma. */}
-              <div className="flex border-t border-stone-100 text-xs font-semibold">
+              <div className="flex border-t border-stone-100 text-[10.5px] font-semibold">
                 <button
                   onClick={() => setShowPlacementMap(true)}
                   className="flex-1 flex items-center justify-center gap-1 py-2 text-stone-500 hover:bg-stone-50 transition-colors"
@@ -347,8 +347,8 @@ export default function ActivityPhotoManager({
             <div className="flex items-start gap-3 px-5 pt-5 pb-4">
               <img src={pendingDelete.thumbUrl ?? pendingDelete.url} alt="" className="w-16 h-16 rounded-xl object-cover shrink-0 border border-stone-200" />
               <div className="min-w-0">
-                <h3 className="font-display font-bold text-stone-800 text-base leading-snug">Eliminare questa foto?</h3>
-                <p className="text-xs text-stone-500 leading-snug mt-1">
+                <h3 className="font-display font-bold text-stone-800 text-[15px] leading-snug">Eliminare questa foto?</h3>
+                <p className="text-[11.5px] text-stone-500 leading-snug mt-1">
                   {pendingDelete.caption
                     ? `«${pendingDelete.caption}» sparirà dal resoconto, dalla galleria e dalla mappa. Non si può annullare.`
                     : 'Sparirà dal resoconto, dalla galleria e dalla mappa. Non si può annullare.'}
@@ -359,14 +359,14 @@ export default function ActivityPhotoManager({
               <button
                 onClick={() => setPendingDelete(null)}
                 disabled={deleting}
-                className="flex-1 py-2.5 rounded-xl border border-stone-200 text-stone-600 text-sm font-semibold hover:bg-stone-50 transition-colors disabled:opacity-50"
+                className="flex-1 py-2.5 rounded-xl border border-stone-200 text-stone-600 text-[13px] font-semibold hover:bg-stone-50 transition-colors disabled:opacity-50"
               >
                 Annulla
               </button>
               <button
                 onClick={confirmRemovePhoto}
                 disabled={deleting}
-                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition-colors disabled:opacity-60"
+                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-[13px] font-semibold transition-colors disabled:opacity-60"
               >
                 {deleting && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Elimina
               </button>

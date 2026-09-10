@@ -11,13 +11,6 @@ interface Props {
    *  anteprima viva in un riquadro piccolo (card dei risultati di ricerca, dettaglio di una ricerca
    *  salvata) e l'utente voglia leggerla meglio senza dover aprire la vista 3D. */
   expandable?: boolean
-  /** Angoli arrotondati propri — `false` quando il chiamante avvolge già questa mappa in un
-   *  bordo strappato (components/TornFrame.tsx, TornBottomEdge): un angolo arrotondato non
-   *  allineato allo strappo lascerebbe scoperto un pezzetto di riquadro, rivelando dietro il
-   *  riempimento invisibile dell'ombra (stesso bug corretto in RouteMapSection/PoiMap/
-   *  NatureGallery passando `bare` a MapView — qui non c'è un `bare` da passare, la rotondità
-   *  vive direttamente su questo componente). Default `true`, invariato per gli altri chiamanti. */
-  roundedCorners?: boolean
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -87,7 +80,7 @@ function ExpandedMap({ polyline, onClose }: { polyline: [number, number][]; onCl
   )
 }
 
-export default function TrailPreviewMap({ polyline, height = '220px', expandable = false, roundedCorners = true }: Props) {
+export default function TrailPreviewMap({ polyline, height = '220px', expandable = false }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef       = useRef<unknown>(null)
   const [expanded, setExpanded] = useState(false)
@@ -118,14 +111,11 @@ export default function TrailPreviewMap({ polyline, height = '220px', expandable
   }, [polyline])
 
   return (
-    // h-full — quando `height` è "100%" (dentro un riquadro già alto un tot, es. TornBottomEdge)
-    // serve un antenato con altezza definita da cui ereditarla; se il genitore non ne ha una
-    // (i chiamanti esistenti con un px fisso, es. "180px"), resta "auto" come prima, invariato.
-    <div className="relative h-full">
+    <div className="relative">
       <div
         ref={containerRef}
         style={{ height }}
-        className={`w-full overflow-hidden bg-stone-100 ${roundedCorners ? 'rounded-xl' : ''}`}
+        className="w-full rounded-xl overflow-hidden bg-stone-100"
       />
       {expandable && polyline.length >= 2 && (
         <button

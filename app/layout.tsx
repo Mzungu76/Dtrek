@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next'
-import { Playfair_Display, DM_Sans, JetBrains_Mono, Barlow_Condensed, Lora, Caveat } from 'next/font/google'
+import { Playfair_Display, DM_Sans, JetBrains_Mono, Barlow_Condensed, Lora } from 'next/font/google'
 import './globals.css'
 import AppChrome from '@/components/AppChrome'
 
@@ -27,13 +27,6 @@ const lora = Lora({
   subsets: ['latin'], style: ['normal', 'italic'], weight: ['400', '600'],
   variable: '--font-lora', display: 'swap',
 })
-// Direzione "taccuino topografico" (docs/diario-a-libro-piano.md, Fase 17 — variante approvata,
-// integrazione graduale) — annotazioni e titoli scritti a mano, vedi lib/taccuinoTokens.tsx.
-// Caveat sostituisce Kalam (Fase 19, ancora in prova): stesso ruolo, tratto diverso.
-const caveat = Caveat({
-  subsets: ['latin'], weight: ['400', '700'],
-  variable: '--font-caveat', display: 'swap',
-})
 
 export const metadata: Metadata = {
   title: 'Diario Trekking',
@@ -54,15 +47,15 @@ export const metadata: Metadata = {
   },
   other: {
     'mobile-web-app-capable':  'yes',
-    'msapplication-TileColor': '#5F7355',
+    'msapplication-TileColor': '#277134',
     'msapplication-TileImage': '/icon-192.png',
   },
 }
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#5F7355' },
-    { media: '(prefers-color-scheme: dark)',  color: '#4A5A3F' },
+    { media: '(prefers-color-scheme: light)', color: '#277134' },
+    { media: '(prefers-color-scheme: dark)',  color: '#193b20' },
   ],
   width: 'device-width',
   initialScale: 1,
@@ -72,7 +65,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="it" className={`${playfairDisplay.variable} ${dmSans.variable} ${jetBrainsMono.variable} ${barlowCondensed.variable} ${lora.variable} ${caveat.variable}`}>
+    <html lang="it" className={`${playfairDisplay.variable} ${dmSans.variable} ${jetBrainsMono.variable} ${barlowCondensed.variable} ${lora.variable}`}>
       <body className="antialiased">
         <AppChrome>{children}</AppChrome>
       </body>

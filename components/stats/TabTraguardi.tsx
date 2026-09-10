@@ -1,14 +1,23 @@
 'use client'
 import { useMemo, useEffect, useState } from 'react'
-import Link from 'next/link'
 import { ActivityMeta } from '@/lib/blobStore'
 import { Streaks } from '@/lib/stats'
 import { computeBadges, BADGE_CATEGORY_LABELS, type BadgeCategory, type ComputedBadge } from '@/lib/badges'
-import { getSeenBadgeIds, markBadgesSeen } from '@/lib/badgesSeen'
-import { Trophy, Lock, Mountain, ChevronRight } from 'lucide-react'
+import { Trophy, Lock } from 'lucide-react'
 import InfoButton from './InfoButton'
-import { TornFrame, tornVariant } from '@/components/TornFrame'
-import { TACCUINO_PAPER, HandDrawnFrame } from '@/lib/taccuinoTokens'
+
+const LS_KEY = 'dtrek_badges_seen'
+
+function getSeen(): Set<string> {
+  try { return new Set(JSON.parse(localStorage.getItem(LS_KEY) ?? '[]')) } catch { return new Set() }
+}
+function markSeen(ids: string[]) {
+  try {
+    const current = getSeen()
+    ids.forEach(id => current.add(id))
+    localStorage.setItem(LS_KEY, JSON.stringify(Array.from(current)))
+  } catch {}
+}
 
 const CATEGORY_ORDER: BadgeCategory[] = ['distanza', 'dislivello', 'quota', 'frequenza', 'speciale']
 
@@ -22,11 +31,11 @@ export default function TabTraguardi({ activities, streaks }: Props) {
   const [newlyUnlocked, setNewlyUnlocked] = useState<Set<string>>(new Set())
 
   useEffect(() => {
-    const seen = getSeenBadgeIds()
+    const seen = getSeen()
     const fresh = badges.filter(b => b.unlocked && !seen.has(b.id)).map(b => b.id)
     if (fresh.length > 0) {
       setNewlyUnlocked(new Set(fresh))
-      markBadgesSeen(badges.filter(b => b.unlocked).map(b => b.id))
+      markSeen(badges.filter(b => b.unlocked).map(b => b.id))
     }
   }, [badges])
 
@@ -42,35 +51,33 @@ export default function TabTraguardi({ activities, streaks }: Props) {
   return (
     <div className="space-y-6">
       {/* Summary */}
-      <TornFrame size="card" variant={tornVariant('traguardi-summary')}>
-        <div className="p-5" style={{ background: TACCUINO_PAPER.light }}>
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 bg-amber-100 rounded-2xl flex items-center justify-center">
-              <Trophy className="w-7 h-7 text-amber-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold font-display text-stone-800">{unlocked} <span className="text-stone-400 font-normal text-lg">/ {total}</span></p>
-              <p className="text-sm text-stone-500 flex items-center gap-1.5 flex-wrap">
-                badge sbloccati
-                <InfoButton section="badge" />
-              </p>
-            </div>
-            <div className="ml-auto hidden sm:block">
-              <div className="h-3 w-48 bg-stone-100 rounded-full overflow-hidden">
-                <div className="h-3 bg-amber-400 rounded-full transition-all" style={{ width: `${Math.round(unlocked / total * 100)}%` }} />
-              </div>
-              <p className="text-xs text-stone-400 mt-1 text-right">{Math.round(unlocked / total * 100)}% completato</p>
-            </div>
+      <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
+        <div className="flex items-center gap-4">
+          <div className="w-14 h-14 bg-amber-100 rounded-2xl flex items-center justify-center">
+            <Trophy className="w-7 h-7 text-amber-600" />
           </div>
-          {newlyUnlocked.size > 0 && (
-            <div className="mt-4 p-3 bg-amber-50 rounded-xl border border-amber-200">
-              <p className="text-sm font-medium text-amber-800">
-                🎉 Hai sbloccato {newlyUnlocked.size} nuovo{newlyUnlocked.size > 1 ? 'i' : ''} badge!
-              </p>
+          <div>
+            <p className="text-2xl font-bold font-display text-stone-800">{unlocked} <span className="text-stone-400 font-normal text-lg">/ {total}</span></p>
+            <p className="text-sm text-stone-500 flex items-center gap-1.5 flex-wrap">
+              badge sbloccati
+              <InfoButton section="badge" />
+            </p>
+          </div>
+          <div className="ml-auto hidden sm:block">
+            <div className="h-3 w-48 bg-stone-100 rounded-full overflow-hidden">
+              <div className="h-3 bg-amber-400 rounded-full transition-all" style={{ width: `${Math.round(unlocked / total * 100)}%` }} />
             </div>
-          )}
+            <p className="text-xs text-stone-400 mt-1 text-right">{Math.round(unlocked / total * 100)}% completato</p>
+          </div>
         </div>
-      </TornFrame>
+        {newlyUnlocked.size > 0 && (
+          <div className="mt-4 p-3 bg-amber-50 rounded-xl border border-amber-200">
+            <p className="text-sm font-medium text-amber-800">
+              🎉 Hai sbloccato {newlyUnlocked.size} nuovo{newlyUnlocked.size > 1 ? 'i' : ''} badge!
+            </p>
+          </div>
+        )}
+      </div>
 
       {/* Categories */}
       {byCategory.map(({ cat, label, badges: catBadges }) => {
@@ -86,26 +93,6 @@ export default function TabTraguardi({ activities, streaks }: Props) {
                 <BadgeCard key={badge.id} badge={badge} isNew={newlyUnlocked.has(badge.id)} />
               ))}
             </div>
-            {/* Fase 5 del riordino UI/UX (docs/diario-valutazione-ux-piano.md): /vette aveva un
-                solo link entrante in tutto il repo — un'intera pagina (l'elenco delle cime
-                raggiunte, rilevate dai tracciati GPS) di fatto irraggiungibile. "Quota" è la
-                categoria di badge sui traguardi di altitudine: il punto giusto per portarci, non
-                una voce di menu a sé. */}
-            {cat === 'quota' && (
-              <Link
-                href="/vette"
-                className="mt-3 flex items-center gap-3 px-4 py-3 bg-white border border-stone-200 rounded-xl hover:border-forest-300 transition-colors group"
-              >
-                <span className="w-9 h-9 rounded-lg bg-forest-50 flex items-center justify-center shrink-0">
-                  <Mountain className="w-4 h-4 text-forest-600" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-semibold text-stone-800">Vette conquistate</span>
-                  <span className="block text-xs text-stone-400">Ogni cima raggiunta, rilevata dai tracciati GPS</span>
-                </span>
-                <ChevronRight className="w-4 h-4 text-stone-300 group-hover:text-forest-500 transition-colors shrink-0" />
-              </Link>
-            )}
           </div>
         )
       })}
@@ -116,56 +103,38 @@ export default function TabTraguardi({ activities, streaks }: Props) {
 function BadgeCard({ badge, isNew }: { badge: ComputedBadge; isNew: boolean }) {
   const pct = badge.progressPct
 
-  // Non sbloccato: niente foglietto incollato (TornFrame/nastro) — uno "slot" ancora vuoto,
-  // stampato direttamente sullo sfondo pagina (stesso colore, TACCUINO_PAPER.base) con contorno
-  // tratteggiato disegnato a mano, in attesa che ci si incolli sopra il foglietto una volta
-  // sbloccato il badge.
-  if (!badge.unlocked) {
-    return (
-      <div className="relative p-4">
-        <HandDrawnFrame stroke={TACCUINO_PAPER.contourLine} dashed rx={10} />
-        <div className="flex items-start gap-3">
-          <span className="text-2xl shrink-0 grayscale opacity-40">{badge.icon}</span>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5">
-              <p className="text-sm font-semibold text-stone-400">{badge.name}</p>
-              <Lock className="w-3 h-3 text-stone-300 shrink-0" />
-            </div>
-            <p className="text-xs text-stone-400 mt-0.5 leading-tight">{badge.description}</p>
-            {typeof pct !== 'undefined' && (
-              <div className="mt-2">
-                <div className="h-1.5 bg-stone-200 rounded-full overflow-hidden">
-                  <div className="h-1.5 bg-forest-400 rounded-full transition-all" style={{ width: `${pct}%` }} />
-                </div>
-                <p className="text-xs text-stone-400 mt-0.5">
-                  {badge.progressCurrent?.toLocaleString('it')}{badge.progressUnit ? ` ${badge.progressUnit}` : ''} / {badge.progressTarget?.toLocaleString('it')}{badge.progressUnit ? ` ${badge.progressUnit}` : ''} ({pct}%)
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   return (
-    <TornFrame size="card" variant={tornVariant(badge.id)} className="h-full">
-      <div
-        className={`relative p-4 h-full transition-all ${isNew ? 'ring-2 ring-amber-400 animate-pulse' : ''}`}
-        style={{ background: TACCUINO_PAPER.light }}
-      >
-        {isNew && (
-          <span className="absolute top-2 right-2 text-xs bg-amber-400 text-white px-1.5 py-0.5 rounded-full font-medium">NEW</span>
-        )}
-        <div className="flex items-start gap-3">
-          <span className="text-2xl shrink-0">{badge.icon}</span>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-stone-800">{badge.name}</p>
-            <p className="text-xs text-stone-400 mt-0.5 leading-tight">{badge.description}</p>
-            <p className="text-xs text-amber-600 mt-1 font-medium">✓ Sbloccato</p>
+    <div className={`relative rounded-2xl border p-4 transition-all ${
+      badge.unlocked
+        ? `bg-white border-amber-200 shadow-sm ${isNew ? 'ring-2 ring-amber-400 animate-pulse' : ''}`
+        : 'bg-stone-50 border-stone-200 opacity-60'
+    }`}>
+      {badge.unlocked && isNew && (
+        <span className="absolute top-2 right-2 text-xs bg-amber-400 text-white px-1.5 py-0.5 rounded-full font-medium">NEW</span>
+      )}
+      <div className="flex items-start gap-3">
+        <span className={`text-2xl shrink-0 ${badge.unlocked ? '' : 'grayscale opacity-40'}`}>{badge.icon}</span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <p className={`text-sm font-semibold ${badge.unlocked ? 'text-stone-800' : 'text-stone-400'}`}>{badge.name}</p>
+            {!badge.unlocked && <Lock className="w-3 h-3 text-stone-300 shrink-0" />}
           </div>
+          <p className="text-xs text-stone-400 mt-0.5 leading-tight">{badge.description}</p>
+          {typeof pct !== 'undefined' && !badge.unlocked && (
+            <div className="mt-2">
+              <div className="h-1.5 bg-stone-200 rounded-full overflow-hidden">
+                <div className="h-1.5 bg-forest-400 rounded-full transition-all" style={{ width: `${pct}%` }} />
+              </div>
+              <p className="text-[10px] text-stone-400 mt-0.5">
+                {badge.progressCurrent?.toLocaleString('it')}{badge.progressUnit ? ` ${badge.progressUnit}` : ''} / {badge.progressTarget?.toLocaleString('it')}{badge.progressUnit ? ` ${badge.progressUnit}` : ''} ({pct}%)
+              </p>
+            </div>
+          )}
+          {badge.unlocked && (
+            <p className="text-xs text-amber-600 mt-1 font-medium">✓ Sbloccato</p>
+          )}
         </div>
       </div>
-    </TornFrame>
+    </div>
   )
 }

@@ -54,9 +54,9 @@ export default function SearchWaitingCard({ stageLabel }: { stageLabel: string }
       <div className="flex items-center gap-2">
         <Loader2 className="w-4 h-4 animate-spin text-terra-600 shrink-0" />
         <p className="flex-1 text-xs font-semibold text-stone-700 truncate">{stageLabel}</p>
-        <span className="shrink-0 text-xs font-mono text-stone-400 tabular-nums">{formatElapsed(elapsed)}</span>
+        <span className="shrink-0 text-[10px] font-mono text-stone-400 tabular-nums">{formatElapsed(elapsed)}</span>
       </div>
-      <p key={tipIndex} className="mt-1.5 text-xs text-stone-500 leading-snug">
+      <p key={tipIndex} className="mt-1.5 text-[11px] text-stone-500 leading-snug">
         {WAITING_TIPS[tipIndex]}
       </p>
     </div>

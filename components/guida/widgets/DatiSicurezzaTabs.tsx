@@ -65,7 +65,7 @@ export default function DatiSicurezzaTabs({ scores, safetyDetails }: Props) {
             }`}
           >
             <t.icon className="w-3.5 h-3.5 shrink-0" strokeWidth={2.25} />
-            <span className="font-barlow font-bold text-xs leading-tight text-center break-words">{t.label}</span>
+            <span className="font-barlow font-bold text-[10px] leading-tight text-center break-words">{t.label}</span>
             {t.dot && <span className="absolute top-1.5 right-[18%] w-1.5 h-1.5 rounded-full bg-terra-500" />}
           </button>
         ))}

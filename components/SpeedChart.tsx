@@ -67,13 +67,13 @@ export default function SpeedChart({ trackPoints, avgSpeedMs, syncId, onHover }:
           <span className={`text-sm font-semibold ${textMuted}`}>km/h {hovered ? '' : '· media'}</span>
         </div>
         <button onClick={toggleAlt} title="Mostra/nascondi profilo altimetrico"
-          className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-colors ${
+          className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] transition-colors ${
             showAlt ? 'bg-stone-800 text-white' : 'bg-stone-100 text-stone-400'
           }`}>
           <Layers className="w-3 h-3" /> Quota
         </button>
       </div>
-      <div className="h-52 overflow-hidden">
+      <div className="h-52">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }} syncId={syncId}
             onMouseMove={(e: any) => {
@@ -89,11 +89,11 @@ export default function SpeedChart({ trackPoints, avgSpeedMs, syncId, onHover }:
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#e7e5e4" />
-            <XAxis dataKey="time" tick={{ fontSize: 12, fill: '#78716c' }} tickLine={false} axisLine={{ stroke: '#d6d3d1' }} />
+            <XAxis dataKey="time" tick={{ fontSize: 11, fill: '#78716c' }} tickLine={false} axisLine={{ stroke: '#d6d3d1' }} />
             <YAxis
               yAxisId="spd"
               domain={[0, 'auto']}
-              tick={{ fontSize: 12, fill: '#78716c' }}
+              tick={{ fontSize: 11, fill: '#78716c' }}
               tickLine={false}
               axisLine={false}
               unit=" km/h"
@@ -114,10 +114,10 @@ export default function SpeedChart({ trackPoints, avgSpeedMs, syncId, onHover }:
               formatter={(v: number, name: string) => name === 'alt' ? [`${v} m`, 'Quota'] : [`${v} km/h`, 'Velocità']}
               labelStyle={{ fontSize: 12, color: '#57534e' }}
               itemStyle={{ color: '#1c1917' }}
-              contentStyle={{ background: '#ffffff', borderRadius: 10, border: '1px solid #e7e5e4', fontSize: 14 }}
+              contentStyle={{ background: '#ffffff', borderRadius: 10, border: '1px solid #e7e5e4', fontSize: 13 }}
             />
             <ReferenceLine yAxisId="spd" y={avgKmh} stroke="#38bdf8" strokeDasharray="4 4" strokeOpacity={0.8}
-              label={{ value: `Media ${avgKmh}`, position: 'right', fontSize: 12, fill: '#38bdf8' }} />
+              label={{ value: `Media ${avgKmh}`, position: 'right', fontSize: 11, fill: '#38bdf8' }} />
             {showAlt && (
               <Area
                 yAxisId="alt"

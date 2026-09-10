@@ -110,10 +110,10 @@ export default function ElevationProfileChart({ trackPoints, syncId, onHover, cu
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#e7e5e4" />
-            <XAxis dataKey="km" tick={{ fontSize: 12, fill: '#78716c' }} tickLine={false} axisLine={{ stroke: '#d6d3d1' }} unit=" km" />
+            <XAxis dataKey="km" tick={{ fontSize: 11, fill: '#78716c' }} tickLine={false} axisLine={{ stroke: '#d6d3d1' }} unit=" km" />
             <YAxis
               domain={['auto', 'auto']}
-              tick={{ fontSize: 12, fill: '#78716c' }}
+              tick={{ fontSize: 11, fill: '#78716c' }}
               tickLine={false} axisLine={false}
               unit=" m" width={48}
             />
@@ -122,7 +122,7 @@ export default function ElevationProfileChart({ trackPoints, syncId, onHover, cu
               labelFormatter={l => `${l} km`}
               labelStyle={{ fontSize: 12, color: '#57534e' }}
               itemStyle={{ color: '#1c1917' }}
-              contentStyle={{ background: '#ffffff', borderRadius: 10, border: '1px solid #e7e5e4', fontSize: 14 }}
+              contentStyle={{ background: '#ffffff', borderRadius: 10, border: '1px solid #e7e5e4', fontSize: 13 }}
             />
             <Area
               type="monotone" dataKey="alt"
@@ -134,16 +134,16 @@ export default function ElevationProfileChart({ trackPoints, syncId, onHover, cu
                 x={currentPoint.km} y={currentPoint.alt}
                 r={6} fill="#44403c" stroke="#fff" strokeWidth={2}
                 isFront
-                label={{ value: 'Sei qui', position: 'top', fontSize: 12, fontWeight: 600, fill: '#44403c' }}
+                label={{ value: 'Sei qui', position: 'top', fontSize: 11, fontWeight: 600, fill: '#44403c' }}
               />
             )}
           </AreaChart>
         </ResponsiveContainer>
       </div>
       <div className="flex items-center gap-2 mt-1.5 px-1">
-        <span className="text-xs font-semibold uppercase tracking-wide text-sky-600">Discesa</span>
+        <span className="text-[9px] font-semibold uppercase tracking-wide text-sky-600">Discesa</span>
         <div className="flex-1 h-1 rounded-full" style={{ background: 'linear-gradient(90deg,#1d4ed8,#5eead4,#a8a29e,#fbbf24,#b91c1c)' }} />
-        <span className="text-xs font-semibold uppercase tracking-wide text-red-700">Salita</span>
+        <span className="text-[9px] font-semibold uppercase tracking-wide text-red-700">Salita</span>
       </div>
     </div>
   )

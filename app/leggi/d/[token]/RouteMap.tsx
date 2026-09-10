@@ -128,7 +128,7 @@ export function RouteMap({ polyline, photoProgress = [], color = '#1d5e2a' }: {
       </svg>
 
       {/* Attribuzione: è un requisito di licenza ODbL su un documento pubblicato, non un vezzo. */}
-      <figcaption className="absolute bottom-0 right-0 bg-white/75 text-stone-500 text-xs leading-none px-1.5 py-1 rounded-tl">
+      <figcaption className="absolute bottom-0 right-0 bg-white/75 text-stone-500 text-[9px] leading-none px-1.5 py-1 rounded-tl">
         © OpenStreetMap contributors · © CARTO
       </figcaption>
     </figure>

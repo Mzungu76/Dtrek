@@ -144,6 +144,9 @@ export function buildGuideContent(
       datiSicurezza:  findSection(sections, 'sicurezza')
         ? { text: findSection(sections, 'sicurezza') }
         : undefined,
+      suMisura:       findSection(sections, 'su misura')
+        ? { text: findSection(sections, 'su misura') }
+        : undefined,
       iLuoghi:        findSection(sections, 'i luoghi')
         ? { text: findSection(sections, 'i luoghi') }
         : undefined,

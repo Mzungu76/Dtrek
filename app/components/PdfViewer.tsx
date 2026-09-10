@@ -166,7 +166,7 @@ export default function PdfViewer({ pdfUrl, title }: Props) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
         <BookOpen style={{ color: 'rgba(255,255,255,0.55)', width: 18, height: 18 }} />
         <span style={{
-          color: 'rgba(255,255,255,0.6)', fontSize: 14,
+          color: 'rgba(255,255,255,0.6)', fontSize: 13,
           fontFamily: FONT.lora,
           letterSpacing: 1.5, textTransform: 'uppercase',
         }}>
@@ -178,7 +178,7 @@ export default function PdfViewer({ pdfUrl, title }: Props) {
       {isLoading && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, padding: '60px 20px' }}>
           <Loader2 style={{ color: '#58aa63', width: 36, height: 36, animation: 'spin 1s linear infinite' }} />
-          <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, fontFamily: FONT.lora, margin: 0 }}>
+          <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, fontFamily: FONT.lora, margin: 0 }}>
             {totalPages > 0
               ? `Preparazione pagina ${pageIdx + 1} di ${totalPages}…`
               : 'Apertura documento…'}
@@ -230,12 +230,12 @@ export default function PdfViewer({ pdfUrl, title }: Props) {
                 background: pageIdx <= 0 ? '#2a3327' : '#3a4a37',
                 color: pageIdx <= 0 ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.85)',
                 display: 'flex', alignItems: 'center', gap: 4,
-                fontSize: 14, fontFamily: FONT.body, transition: 'background 0.15s',
+                fontSize: 13, fontFamily: FONT.body, transition: 'background 0.15s',
               }}>
               <ChevronLeft style={{ width: 16, height: 16 }} /> Indietro
             </button>
 
-            <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, fontFamily: FONT.body, letterSpacing: 1, minWidth: 80, textAlign: 'center' }}>
+            <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 11, fontFamily: FONT.body, letterSpacing: 1, minWidth: 80, textAlign: 'center' }}>
               {pageIdx + 1} di {totalPages}
             </span>
 
@@ -248,7 +248,7 @@ export default function PdfViewer({ pdfUrl, title }: Props) {
                 background: pageIdx >= totalPages - 1 ? '#2a3327' : '#3a4a37',
                 color: pageIdx >= totalPages - 1 ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.85)',
                 display: 'flex', alignItems: 'center', gap: 4,
-                fontSize: 14, fontFamily: FONT.body, transition: 'background 0.15s',
+                fontSize: 13, fontFamily: FONT.body, transition: 'background 0.15s',
               }}>
               Avanti <ChevronRight style={{ width: 16, height: 16 }} />
             </button>
@@ -284,7 +284,7 @@ export default function PdfViewer({ pdfUrl, title }: Props) {
           </div>
 
           {actualSize && (
-            <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, fontFamily: FONT.lora, fontStyle: 'italic', margin: 0 }}>
+            <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, fontFamily: FONT.lora, fontStyle: 'italic', margin: 0 }}>
               Scorri la pagina per leggerla tutta
             </p>
           )}

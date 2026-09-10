@@ -38,14 +38,7 @@ export function DiarioIndice({ pages }: { pages: BookPage[] }) {
                     {String(i + 1).padStart(2, '0')}
                   </span>
                   <div style={{ minWidth: 0 }}>
-                    {/* UX-AUDIT.md P-M6 — un titolo GPX grezzo (es. il nome del file importato)
-                        senza troncamento spezza l'altezza uniforme di questa riga rispetto alle
-                        altre voci dell'indice — nowrap/ellipsis invece di andare a capo, il titolo
-                        completo resta comunque leggibile aprendo il resoconto/la guida. */}
-                    <div style={{
-                      fontSize: 15, fontFamily: FONT.display, fontWeight: 700, color: isStub ? '#a9a18e' : '#193b20', letterSpacing: -0.2,
-                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                    }} title={title}>
+                    <div style={{ fontSize: 15, fontFamily: FONT.display, fontWeight: 700, color: isStub ? '#a9a18e' : '#193b20', letterSpacing: -0.2 }}>
                       {title} {isStub && <span style={{ fontSize: 9, fontFamily: FONT.barlow, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase' }}>· da narrare</span>}
                     </div>
                     {dateStr && (

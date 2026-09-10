@@ -57,7 +57,7 @@ export default function TopOverlay({ itemKey, title, statPills, weatherIcon, onO
           <div className="pointer-events-auto mt-3 flex items-center gap-1.5 overflow-x-auto">
             {scoreBadges}
             {statPills.map(({ icon: Icon, label, href }) => {
-              const className = 'pointer-events-auto shrink-0 flex items-center gap-1.5 bg-white text-stone-700 text-xs font-semibold whitespace-nowrap px-2.5 py-1.5 rounded-full shadow-sm'
+              const className = 'pointer-events-auto shrink-0 flex items-center gap-1.5 bg-white text-stone-700 text-[11px] font-semibold whitespace-nowrap px-2.5 py-1.5 rounded-full shadow-sm'
               return href ? (
                 <a
                   key={label}
@@ -78,20 +78,13 @@ export default function TopOverlay({ itemKey, title, statPills, weatherIcon, onO
           </div>
 
           <div className="mt-3 flex items-start gap-2.5">
-            {/* UX-AUDIT.md P-M6 — un titolo GPX grezzo (es. il nome del file importato) può
-                estendersi su 5+ righe, riempiendo l'hero e sovrapponendosi a meteo/preferito/
-                confronto qui accanto. line-clamp-N tronca senza troncare il dato (il titolo
-                completo resta modificabile da "Rinomina", raggiungibile dal pannello Strumenti) —
-                niente altra utility `display` nella stessa classe (vedi il bug noto e già
-                documentato in BottomGallery.tsx, dove `block` disattivava silenziosamente il clamp). */}
             <p
               className={
                 variant === 'magazine'
-                  ? 'flex-1 line-clamp-3 font-display text-2xl sm:text-4xl font-black uppercase tracking-tight text-white leading-[1.05]'
-                  : 'flex-1 line-clamp-2 font-display text-xl sm:text-2xl font-bold text-white'
+                  ? 'flex-1 font-display text-2xl sm:text-4xl font-black uppercase tracking-tight text-white leading-[1.05]'
+                  : 'flex-1 font-display text-xl sm:text-2xl font-bold text-white'
               }
               style={{ textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}
-              title={title}
             >
               {title}
             </p>
@@ -110,7 +103,7 @@ export default function TopOverlay({ itemKey, title, statPills, weatherIcon, onO
           </div>
           {variant === 'magazine' && subtitle && (
             <p
-              className="font-body text-sm sm:text-sm text-white/85 leading-snug mt-1.5 max-w-md"
+              className="font-body text-[13px] sm:text-sm text-white/85 leading-snug mt-1.5 max-w-md"
               style={{ textShadow: '0 1px 6px rgba(0,0,0,0.55)' }}
             >
               {subtitle}
