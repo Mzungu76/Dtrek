@@ -47,8 +47,6 @@ import { useCtsRecompute } from '@/lib/useCtsRecompute'
 
 const RouteMap3D      = dynamic(() => import('@/components/RouteMap3D'),      { ssr: false })
 const StreetViewPanel = dynamic(() => import('@/components/StreetViewPanel'), { ssr: false })
-const FloraGallery    = dynamic(() => import('@/components/FloraGallery'),    { ssr: false })
-const AnimalGallery   = dynamic(() => import('@/components/AnimalGallery'),   { ssr: false })
 
 const COVER_FETCH_CAP = 40
 
@@ -90,6 +88,10 @@ export default function ResocontoHub({ id }: { id?: string }) {
   const [editNotes,  setEditNotes]  = useState(false)
   const [titleVal,   setTitleVal]   = useState('')
   const [editTitle,  setEditTitle]  = useState(false)
+  // UX-AUDIT.md P-M4 — confirm() nativo del browser stonava con il resto dell'app (nessun'altra
+  // conferma qui usa il dialog nativo): stesso pattern a due passi già usato per editTitle/
+  // editNotes in questo stesso pannello, non un nuovo Sheet sopra il pannello "Strumenti" già aperto.
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const [showGradient, setShowGradient] = useState(false)
   const [showAspect,   setShowAspect]   = useState(false)
   const [pois,            setPois]           = useState<PoiItem[]>([])
@@ -144,8 +146,6 @@ export default function ResocontoHub({ id }: { id?: string }) {
   }, [activity])
 
   const flora = useFlora(heroPolyline, activity?.altitudeMax)
-  const [showFloraGallery, setShowFloraGallery] = useState(false)
-  const [showAnimalGallery, setShowAnimalGallery] = useState(false)
 
   // Lightweight list of all completed hikes, most recent first — backs the carousel/gallery.
   // getAllActivities() is stale-while-revalidate: it resolves instantly with last visit's
@@ -334,7 +334,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
   if (!currentId) {
     if (items.length > 0) return <HubSkeleton />
     return (
-      <div className="fixed inset-0 bg-forest-950 flex flex-col items-center justify-center gap-4 text-center px-6">
+      <div className="fixed inset-0 bg-forest-900 flex flex-col items-center justify-center gap-4 text-center px-6">
         <p className="text-stone-300 text-sm">Nessuna escursione conclusa.</p>
         <button onClick={() => router.push('/upload?tab=activity')} className="px-5 py-2.5 bg-forest-600 hover:bg-forest-700 text-white rounded-xl text-sm font-semibold transition-colors">
           Importa o Naviga
@@ -377,7 +377,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
     setShowCoverPicker(false)
   }
   const handleDelete = async () => {
-    if (!activity || !confirm('Eliminare questa escursione dal diario?')) return
+    if (!activity) return
     setSaving(true)
     await deleteActivity(activity.id)
     router.push('/resoconto')
@@ -438,8 +438,8 @@ export default function ResocontoHub({ id }: { id?: string }) {
     if (!activity || item.id !== activity.id || !rated) return null
     return (
       <span className="flex flex-col items-center justify-center text-white leading-none">
-        <span className="text-[15px] font-bold">{activity.userRating}</span>
-        <span className="text-[7px] font-medium opacity-70">/10</span>
+        <span className="text-base font-bold">{activity.userRating}</span>
+        <span className="text-xs font-medium opacity-70">/10</span>
       </span>
     )
   }
@@ -476,7 +476,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
           }}
           natura={{
             hasGps: hasGps && heroPolyline.length > 1, flora: flora.data, floraLoading: flora.loading,
-            onOpenFloraGallery: () => setShowFloraGallery(true), onOpenAnimalGallery: () => setShowAnimalGallery(true),
+            trackPoints: activity.trackPoints, month: new Date(activity.startTime).getMonth() + 1,
           }}
           onOpenMap3D={() => setShow3D(true)}
           onOpenVideoWizard={() => { setOpenVideoWizard(true); setShow3D(true) }}
@@ -567,10 +567,22 @@ export default function ResocontoHub({ id }: { id?: string }) {
         </div>
 
         <div className="pt-1 mt-1 border-t border-stone-200">
-          <button onClick={handleDelete} disabled={saving} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-red-50 transition-colors text-left text-red-600">
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-            <span className="text-sm font-medium">Elimina escursione</span>
-          </button>
+          {confirmDelete ? (
+            <div className="px-2 py-2 space-y-2">
+              <p className="text-sm text-stone-500">Eliminare questa escursione dal diario? Non si può annullare.</p>
+              <div className="flex gap-2">
+                <button onClick={handleDelete} disabled={saving} className="flex items-center gap-1.5 px-4 py-1.5 bg-red-600 text-white rounded-lg text-sm hover:bg-red-500 transition-colors disabled:opacity-60">
+                  {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Conferma eliminazione
+                </button>
+                <button onClick={() => setConfirmDelete(false)} disabled={saving} className={`px-4 py-1.5 text-sm transition-colors ${textMuted}`}>Annulla</button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => setConfirmDelete(true)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-red-50 transition-colors text-left text-red-600">
+              <Trash2 className="w-4 h-4" />
+              <span className="text-sm font-medium">Elimina escursione</span>
+            </button>
+          )}
         </div>
       </div>
     )
@@ -593,6 +605,12 @@ export default function ResocontoHub({ id }: { id?: string }) {
         mode="resoconto"
         items={displayItems}
         initialIndex={initialIndex}
+        // Un `id` esplicito (rotta /resoconto/[id], es. da un Diario) apre direttamente la
+        // lettura invece della copertina chiusa dello stage — stesso pattern già usato da
+        // GuidaHub.tsx (`autoOpenSection`). Prima di questa riga /resoconto/[id] mostrava sempre
+        // la copertina chiusa, indipendentemente dall'id: comportamento pensato per sfogliare la
+        // galleria, non per arrivare già su UN Reportage preciso.
+        autoOpenSection={id ? 'featured' : undefined}
         favoritesFilter={favoritesFilter}
         onToggleFavoritesFilter={() => setFavoritesFilter(v => !v)}
         onToggleFavorite={handleToggleFavorite}
@@ -709,22 +727,6 @@ export default function ResocontoHub({ id }: { id?: string }) {
         <StreetViewPanel lat={centerPt.lat} lon={centerPt.lon} title={activity?.title ?? undefined} onClose={() => setShowStreetView(false)} />
       )}
 
-      {showFloraGallery && activity && (
-        <FloraGallery
-          trackPoints={activity.trackPoints}
-          month={new Date(activity.startTime).getMonth() + 1}
-          loadingTrack={false}
-          onClose={() => setShowFloraGallery(false)}
-        />
-      )}
-      {showAnimalGallery && activity && (
-        <AnimalGallery
-          trackPoints={activity.trackPoints}
-          month={new Date(activity.startTime).getMonth() + 1}
-          loadingTrack={false}
-          onClose={() => setShowAnimalGallery(false)}
-        />
-      )}
     </>
   )
 }

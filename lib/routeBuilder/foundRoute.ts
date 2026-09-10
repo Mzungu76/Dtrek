@@ -31,6 +31,12 @@ export interface FoundRouteItem {
   zone?: string
   difficulty?: string
   description?: string
+  // Etichetta breve del motivo per cui questo percorso è stato proposto (es. "Vicino a te",
+  // "Stessa lunghezza delle tue uscite") — solo per le card di "Percorsi per te"
+  // (lib/routeBuilder/generateRecommendations.ts), assente per un risultato di ricerca normale
+  // (wizard, AI, ricerche salvate), dove non ha senso: lì il percorso è stato cercato esplicitamente
+  // dall'utente, non proposto sulla base di un suo profilo.
+  reasonTag?: string
   sourceUrl?: string
   comfortVerdict?: SearchResultCandidate['comfortVerdict']
   comfortNote?: string
@@ -49,6 +55,10 @@ export interface FoundRouteItem {
   // isComfortVerdictStale sotto, mai mostrati direttamente all'utente.
   estimatedDistanceKm?: number | null
   estimatedElevationGainM?: number | null
+  // Vero solo per una card di "Percorsi per te" ripescata tra i preferiti dell'utente perché la
+  // raggiera di percorsi freschi non bastava a riempire il batch (vedi generateRecommendations.ts's
+  // gatherRevisitCandidates) — mai per un risultato di ricerca normale (wizard, AI).
+  isRevisit?: boolean
 }
 
 // Sopra questa soglia relativa, il verdetto/nota dell'LLM (basato sui numeri stimati dal web) è

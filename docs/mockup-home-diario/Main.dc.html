@@ -1,0 +1,237 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body style="margin:0">
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Lora:ital,wght@0,400;0,600;1,500&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+:root{
+  --paper-base:#F5EDDD; --paper-light:#F9F2E4; --card:#EBE0C8; --card-border:#D9C9A8;
+  --contour:#A89A78; --ink-typed:#2E2A22; --ink-hand:#7A6F52; --ink-muted:#95886A;
+  --accent:#C0603D; --accent-2:#7C8F6E; --accent-tint:#E9DAC3;
+  --bar-bg:#5F7355; --bar-active:#F5EDDD; --bar-inactive:#B9C4AE;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+a{color:var(--accent);text-decoration:none}
+a:hover{color:var(--accent-2)}
+.phone{width:390px;height:844px;position:relative;overflow:hidden;background:var(--paper-base);
+  font-family:'DM Sans',system-ui,sans-serif;color:var(--ink-typed);-webkit-font-smoothing:antialiased}
+.paper-grain{position:absolute;inset:0;pointer-events:none;z-index:0;opacity:.9;mix-blend-mode:multiply;
+  background-image:
+    radial-gradient(circle at 12% 22%,rgba(46,42,34,.20) 0,rgba(46,42,34,.20) 1.5px,transparent 3.1px),
+    radial-gradient(circle at 68% 8%,rgba(46,42,34,.16) 0,rgba(46,42,34,.16) 1.2px,transparent 2.7px),
+    radial-gradient(circle at 40% 55%,rgba(46,42,34,.18) 0,rgba(46,42,34,.18) 1.6px,transparent 3.3px),
+    radial-gradient(circle at 85% 40%,rgba(46,42,34,.15) 0,rgba(46,42,34,.15) 1.1px,transparent 2.5px),
+    radial-gradient(circle at 25% 82%,rgba(46,42,34,.18) 0,rgba(46,42,34,.18) 1.4px,transparent 2.9px);
+  background-size:46px 52px,61px 41px,71px 83px,33px 63px,83px 47px}
+.contours{position:absolute;inset:0;pointer-events:none;z-index:0;opacity:.5}
+.eyebrow{font-family:'DM Sans';font-weight:700;text-transform:uppercase;letter-spacing:.2em;
+  font-size:9.5px;color:var(--ink-hand);margin:0}
+.hand{font-family:'Caveat',cursive;font-weight:700}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-weight:700;font-variant-numeric:tabular-nums}
+.stage{position:absolute;inset:0;z-index:1;display:flex;flex-direction:column;padding:52px 18px 0}
+.card{background:var(--card);border:1px solid var(--card-border);border-radius:14px;position:relative}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:9.5px;font-weight:700;
+  padding:3px 8px;border-radius:999px;background:var(--paper-light);border:1px solid var(--card-border);color:var(--ink-hand)}
+.chip.hot{background:var(--accent-tint);border-color:#dfc4ac;color:var(--accent)}
+.metric{display:flex;flex-direction:column;gap:1px}
+.metric .v{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:14.5px;color:var(--ink-typed);line-height:1}
+.metric .k{font-size:8.5px;text-transform:uppercase;letter-spacing:.11em;color:var(--ink-muted)}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;height:46px;border-radius:12px;
+  background:var(--accent);color:var(--paper-light);font-weight:700;font-size:13.5px;letter-spacing:.02em;border:none}
+.btn-ghost{background:transparent;color:var(--accent);border:1.5px solid var(--accent)}
+.row{display:flex;align-items:center;gap:11px;padding:0 11px 0 0;background:var(--card);
+  border:1px solid var(--card-border);border-radius:12px;overflow:hidden}
+.spine{width:9px;align-self:stretch;flex:none}
+.row-title{font-family:'Lora',Georgia,serif;font-weight:600;font-size:14px;line-height:1.15;color:var(--ink-typed)}
+.row-sub{font-size:10px;color:var(--ink-muted);letter-spacing:.02em}
+.tag{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;
+  padding:2px 6px;border-radius:4px;background:var(--paper-light);border:1px solid var(--card-border);color:var(--ink-hand)}
+.grouphead{display:flex;align-items:center;gap:8px}
+.grouphead .t{font-family:'DM Sans';font-weight:700;text-transform:uppercase;letter-spacing:.14em;font-size:9.5px;color:var(--ink-hand)}
+.grouphead .l{flex:1;height:1px;background:var(--card-border)}
+.grouphead .n{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:9.5px;color:var(--ink-muted)}
+.bottombar{position:absolute;left:0;right:0;bottom:0;height:74px;background:var(--bar-bg);
+  display:flex;align-items:flex-start;justify-content:space-around;padding-top:11px;z-index:6}
+.bb{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--bar-inactive);width:64px}
+.bb.on{color:var(--bar-active)}
+.bb span{font-size:9px;font-weight:700}
+/* il filo che lega le tre fasi: un solo oggetto che scende nel tempo */
+.phase{border-left:1.5px dotted var(--contour);padding:0 0 13px 14px;position:relative}
+.phase.last{border-left-color:transparent}
+.dot{position:absolute;left:-6.5px;top:1px;width:11px;height:11px;border-radius:999px;
+  background:var(--paper-base);border:2px solid var(--contour)}
+.dot.now{background:var(--accent);border-color:var(--accent)}
+.dot.done{background:var(--contour)}
+.ph-head{display:flex;align-items:center;gap:7px;height:13px;margin-bottom:9px}
+.ph-head .t{font-weight:700;text-transform:uppercase;letter-spacing:.14em;font-size:9.5px;color:var(--ink-hand)}
+.ph-head .n{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:9.5px;color:var(--ink-muted)}
+.add{display:flex;align-items:center;gap:8px;height:40px;padding:0 12px;border-radius:12px;
+  border:1.5px dashed var(--card-border);color:var(--ink-hand);font-size:12px;font-weight:600;background:transparent}
+.live{border:1.5px solid var(--accent);background:var(--accent-tint)}
+.pulse{width:9px;height:9px;border-radius:999px;background:var(--accent);flex:none;
+  box-shadow:0 0 0 0 rgba(192,96,61,.55);animation:pl 1.9s ease-out infinite}
+@keyframes pl{70%{box-shadow:0 0 0 9px rgba(192,96,61,0)}100%{box-shadow:0 0 0 0 rgba(192,96,61,0)}}
+.seeall{display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;color:var(--accent);margin-top:9px}
+</style>
+</helmet>
+<div class="phone">
+  <div class="paper-grain"></div>
+  <svg class="contours" viewBox="0 0 390 844" preserveAspectRatio="none" aria-hidden="true">
+    <g fill="none" stroke="#A89A78" stroke-width="1" opacity=".28">
+      <path d="M-20 140 C 90 116, 150 188, 250 160 S 400 116, 430 148"></path>
+      <path d="M-20 172 C 92 148, 156 220, 254 192 S 400 148, 430 180"></path>
+      <path d="M-20 560 C 100 530, 170 610, 268 582 S 400 542, 430 576"></path>
+      <path d="M-20 596 C 104 566, 174 646, 272 618 S 400 578, 430 612"></path>
+    </g>
+  </svg>
+
+  <div class="stage">
+
+    <!-- La casa e' UN Diario aperto, non lo scaffale. Il titolo e' il selettore. -->
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+      <div style="min-width:0">
+        <p class="eyebrow">Diario in corso</p>
+        <div style="display:flex;align-items:center;gap:7px;margin-top:1px">
+          <h1 class="hand" style="font-size:31px;margin:0;line-height:1;color:var(--ink-typed)">Appennino centrale</h1>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#7A6F52" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-top:3px;flex:none"><polyline points="6 9 12 15 18 9"></polyline></svg>
+        </div>
+      </div>
+      <div style="width:34px;height:34px;border-radius:999px;background:var(--card);border:1px solid var(--card-border);display:flex;align-items:center;justify-content:center;color:var(--ink-hand);flex:none;margin-top:4px">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M5 21a7 7 0 0 1 14 0"></path></svg>
+      </div>
+    </div>
+    <p style="margin:7px 0 13px;font-family:'Lora',Georgia,serif;font-size:12.5px;line-height:1.4;color:var(--ink-hand);text-wrap:pretty">
+      Quello che farai, quello che stai facendo, quello che hai fatto &mdash; nello stesso posto.
+    </p>
+
+    <!-- FASE 1 -->
+    <div class="phase">
+      <div class="dot"></div>
+      <div class="ph-head"><span class="t">In programma</span><span class="n">3</span></div>
+
+      <div class="card" style="padding:11px 12px 10px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <span class="chip hot">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
+            Prossima &middot; sab 12
+          </span>
+          <span class="chip">T2 &middot; Viterbo</span>
+        </div>
+        <p style="margin:8px 0 0;font-family:'Playfair Display',Georgia,serif;font-weight:700;font-size:18px;line-height:1.15;color:var(--ink-typed)">
+          Anello del Monte Cimino
+        </p>
+        <svg viewBox="0 0 340 40" style="width:100%;height:32px;display:block;margin-top:7px" preserveAspectRatio="none">
+          <defs><linearGradient id="pf" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#C0603D" stop-opacity=".38"></stop>
+            <stop offset="1" stop-color="#C0603D" stop-opacity=".04"></stop>
+          </linearGradient></defs>
+          <path d="M0 36 L18 32 L40 28 L62 30 L86 20 L108 16 L132 19 L156 9 L182 5 L206 11 L232 8 L256 17 L282 23 L306 20 L330 29 L340 33 L340 40 L0 40 Z" fill="url(#pf)"></path>
+          <path d="M0 36 L18 32 L40 28 L62 30 L86 20 L108 16 L132 19 L156 9 L182 5 L206 11 L232 8 L256 17 L282 23 L306 20 L330 29 L340 33" fill="none" stroke="#C0603D" stroke-width="1.8" stroke-linejoin="round"></path>
+        </svg>
+        <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:7px">
+          <div class="metric"><span class="v">12,4</span><span class="k">km</span></div>
+          <div class="metric"><span class="v">+740</span><span class="k">D+ m</span></div>
+          <div class="metric"><span class="v">4h20</span><span class="k">stima</span></div>
+          <div class="metric"><span class="v" style="color:var(--accent-2)">78</span><span class="k">trail score</span></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="btn" style="flex:1.5;height:44px">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>
+            Apri nel Navigator
+          </button>
+          <button class="btn btn-ghost" style="flex:1;height:44px">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5V6a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"></path></svg>
+            Guida
+          </button>
+        </div>
+      </div>
+
+      <div class="row" style="height:52px;margin-top:7px">
+        <i class="spine" style="background:#7C8F6E"></i>
+        <div style="min-width:0;flex:1">
+          <p class="row-title" style="margin:0">Cascate del Menotre</p>
+          <p class="row-sub" style="margin:2px 0 0"><span class="mono">8,1</span> km &middot; <span class="mono">+320</span> m &middot; aggiunta 3 giorni fa</p>
+        </div>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#95886A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
+      </div>
+
+      <div class="add" style="margin-top:7px">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        Cerca una meta da aggiungere
+      </div>
+    </div>
+
+    <!-- FASE 2 -->
+    <div class="phase">
+      <div class="dot now"></div>
+      <div class="ph-head"><span class="t" style="color:var(--accent)">In cammino</span></div>
+      <div class="row live" style="height:54px">
+        <i class="spine" style="background:#C0603D"></i>
+        <div style="min-width:0;flex:1;display:flex;align-items:center;gap:8px">
+          <span class="pulse"></span>
+          <div style="min-width:0">
+            <p class="row-title" style="margin:0">La Folgore</p>
+            <p class="row-sub" style="margin:2px 0 0;color:var(--accent)"><span class="mono">1h12</span> &middot; <span class="mono">4,2</span> km &middot; <span class="mono">+310</span> m</p>
+          </div>
+        </div>
+        <span class="chip hot" style="background:var(--paper-light)">Riprendi</span>
+      </div>
+    </div>
+
+    <!-- FASE 3 -->
+    <div class="phase last">
+      <div class="dot done"></div>
+      <div class="ph-head"><span class="t">Registrate</span><span class="n">24</span></div>
+      <div style="display:flex;flex-direction:column;gap:7px">
+        <div class="row" style="height:50px">
+          <i class="spine" style="background:#A89A78"></i>
+          <div style="min-width:0;flex:1">
+            <p class="row-title" style="margin:0">Monte Terminillo, cresta nord</p>
+            <p class="row-sub" style="margin:2px 0 0">28 ago &middot; <span class="mono">15,2</span> km &middot; <span class="mono">+1.140</span> m</p>
+          </div>
+          <span class="tag">Raccontata</span>
+        </div>
+        <div class="row" style="height:50px">
+          <i class="spine" style="background:#A89A78"></i>
+          <div style="min-width:0;flex:1">
+            <p class="row-title" style="margin:0">Gole del Salinello</p>
+            <p class="row-sub" style="margin:2px 0 0">14 ago &middot; <span class="mono">9,7</span> km &middot; <span class="mono">+480</span> m</p>
+          </div>
+        </div>
+      </div>
+      <div class="seeall">
+        Tutte le 24 uscite registrate
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="13 6 19 12 13 18"></polyline></svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- quattro voci: il Diario e' il contenitore, le altre sono strumenti -->
+  <div class="bottombar">
+    <div class="bb on">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5V6a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"></path><path d="M9 8h6"></path><path d="M9 12h6"></path></svg>
+      <span>Diario</span>
+    </div>
+    <div class="bb">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.6" y2="16.6"></line></svg>
+      <span>Cerca</span>
+    </div>
+    <div class="bb">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>
+      <span>Navigator</span>
+    </div>
+    <div class="bb">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M5 21a7 7 0 0 1 14 0"></path></svg>
+      <span>Profilo</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

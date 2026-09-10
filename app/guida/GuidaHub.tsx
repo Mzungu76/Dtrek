@@ -52,11 +52,11 @@ import { useDrivingDistance } from './useDrivingDistance'
 import { useSafetyScore } from './useSafetyScore'
 import { useCtsRecompute } from '@/lib/useCtsRecompute'
 import { tryOpenNavigatorApp } from '@/lib/navigatorHandoff'
+import { metaHasHikingMetrics } from '@/lib/metaTypes'
+import { markMetaVisited } from '@/lib/visitCompletion'
 
 const StreetViewPanel = dynamic(() => import('@/components/StreetViewPanel'), { ssr: false })
 const RouteMap3D       = dynamic(() => import('@/components/RouteMap3D'),      { ssr: false })
-const FloraGallery     = dynamic(() => import('@/components/FloraGallery'),    { ssr: false })
-const AnimalGallery    = dynamic(() => import('@/components/AnimalGallery'),   { ssr: false })
 
 /** cachedTsTotal is the Trail Score v2 (0-100, see lib/trailScoreV2.ts) persisted to Supabase once
  *  computed live for this hike (see the sync effect in GuidaHub) — reading it back is instant.
@@ -75,12 +75,14 @@ function metaToItem(h: PlannedHikeMeta): RouteHubItem {
     id: h.id,
     title: h.title,
     polyline: h.routePolyline,
-    statPills: [
+    // Solo per un sentiero (piano §48.9) — un Borgo/Città/Sito non ha mai queste cifre
+    // (nessuna traccia GPS, vedi lib/visitCompletion.ts): mai "0.0 km" nella galleria.
+    statPills: metaHasHikingMetrics(h.metaType) ? [
       { icon: Route,       label: `${(h.distanceMeters / 1000).toFixed(1)} km` },
       { icon: TrendingUp,  label: `+${Math.round(h.elevationGain)} m` },
       { icon: Mountain,    label: `${Math.round(h.altitudeMax)} m` },
       { icon: Clock,       label: formatDuration(h.estimatedTimeSeconds) },
-    ],
+    ] : [],
     sortValues: {
       date: new Date(h.createdAt).getTime(),
       km: h.distanceMeters,
@@ -101,10 +103,12 @@ function metaToItem(h: PlannedHikeMeta): RouteHubItem {
     safetyPreview: h.cachedSafetyScore ? { overall: h.cachedSafetyScore.overall, color: h.cachedSafetyScore.color, label: h.cachedSafetyScore.label } : undefined,
     favorite: h.favorite,
     plannedDate: h.plannedDate,
+    metaType: h.metaType,
+    firstCompletedAt: h.firstCompletedAt,
   }
 }
 
-export default function GuidaHub({ id }: { id?: string }) {
+export default function GuidaHub({ id, startClosed }: { id?: string; startClosed?: boolean }) {
   const router = useRouter()
 
   const [items,   setItems]   = useState<RouteHubItem[]>([])
@@ -116,6 +120,13 @@ export default function GuidaHub({ id }: { id?: string }) {
   const [editNotes, setEditNotes] = useState(false)
   const [titleVal, setTitleVal] = useState('')
   const [editTitle, setEditTitle] = useState(false)
+  // "Segna come visitata" (piano Blocco D §27/Blocco F, vedi handleMarkVisited/primaryAction più
+  // sotto) — id della Meta per cui la chiamata è in corso, per disabilitare doppi tap.
+  const [markingVisitedId, setMarkingVisitedId] = useState<string | null>(null)
+  // UX-AUDIT.md P-M4 — confirm() nativo del browser stonava con il resto dell'app: stesso pattern
+  // a due passi già usato per editTitle/editNotes qui sotto, non un nuovo Sheet sopra il pannello
+  // "Strumenti" già aperto.
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const [showGradient, setShowGradient] = useState(false)
   const [showAspect,   setShowAspect]   = useState(false)
   const [showStreetView, setShowStreetView] = useState(false)
@@ -126,8 +137,6 @@ export default function GuidaHub({ id }: { id?: string }) {
   const [ctsResult,      setCtsResult]     = useState<TrailScoreResult | null>(null)
   const [ctsComputing,   setCtsComputing]  = useState(false)
   const [show3D, setShow3D] = useState(false)
-  const [showFloraGallery, setShowFloraGallery] = useState(false)
-  const [showAnimalGallery, setShowAnimalGallery] = useState(false)
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [exportingGuidePdf, setExportingGuidePdf] = useState(false)
   const [guidePdfError, setGuidePdfError] = useState<string | null>(null)
@@ -167,26 +176,33 @@ export default function GuidaHub({ id }: { id?: string }) {
   // auto mostrata tra i dati principali di ogni scheda e come filtro di ordinamento.
   useEffect(() => { getUserStartingPoint().then(setUserOrigin).catch(() => {}) }, [])
 
+  // Le metriche escursionistiche (Trail/Safety Score, DTM, terreno, area protetta, flora,
+  // distanza in auto) hanno senso solo per un sentiero (piano §9/§48.9, docs/meta-multitype-audit.md
+  // §1 punto 2) — passare `null` invece di `hike` a questi hook per una Meta Borgo/Città o Sito
+  // evita ogni chiamata DTM/Overpass/flora incondizionata, non solo per assenza tecnica di
+  // trackPoints ma come scelta esplicita di dominio.
+  const hikingMetricsHike = hike && metaHasHikingMetrics(hike.metaType) ? hike : null
+
   const flora = useFlora(
-    hike?.routePolyline, hike?.altitudeMax,
-    hike ? { plannedId: hike.id, data: hike.floraResult, trackHash: hike.floraTrackHash } : undefined,
+    hikingMetricsHike?.routePolyline, hikingMetricsHike?.altitudeMax,
+    hikingMetricsHike ? { plannedId: hikingMetricsHike.id, data: hikingMetricsHike.floraResult, trackHash: hikingMetricsHike.floraTrackHash } : undefined,
   )
 
   const { hasAiAccess, aiUnavailable, trialExpired } = useHasAiAccess()
   const enrichmentTimedOut = useEnrichmentTimeout(hike?.id)
-  const dtmProfile = useDtmProfile(hike)
-  const terrainProfile = useTerrainProfile(hike)
-  const inProtectedArea = useProtectedAreaCheck(hike)
-  const driving = useDrivingDistance(hike)
+  const dtmProfile = useDtmProfile(hikingMetricsHike)
+  const terrainProfile = useTerrainProfile(hikingMetricsHike)
+  const inProtectedArea = useProtectedAreaCheck(hikingMetricsHike)
+  const driving = useDrivingDistance(hikingMetricsHike)
   const drivingWithMaps = useMemo(() => {
     if (!driving) return driving
-    const trailStart = hike?.routePolyline?.[0]
+    const trailStart = hikingMetricsHike?.routePolyline?.[0]
     const mapsUrl = userOrigin && trailStart
       ? googleMapsDirectionsUrl(userOrigin.lat, userOrigin.lon, trailStart[0], trailStart[1])
       : undefined
     return { ...driving, mapsUrl }
-  }, [driving, userOrigin, hike?.routePolyline])
-  const { safetyScore, setSafetyScore } = useSafetyScore(hike, setHike)
+  }, [driving, userOrigin, hikingMetricsHike?.routePolyline])
+  const { safetyScore, setSafetyScore } = useSafetyScore(hikingMetricsHike, setHike)
   const { prefsLoaded, prefSforzo, prefDurata, hrRest, hrMax } = useUserPrefs()
 
   // Sicurezza "per te" (Oggettiva + Idoneità per Te, vedi lib/personalSafetyFit.ts) — la Sicurezza
@@ -234,6 +250,7 @@ export default function GuidaHub({ id }: { id?: string }) {
   // flora, Safety and CTS scores. True once every source has settled (resolved or deliberately
   // skipped, e.g. no GPS) — or once the 90s watchdog above fires regardless.
   const enrichmentReady = enrichmentTimedOut ||
+    !hikingMetricsHike || // Borgo/Città o Sito: nessuna Sicurezza/CTS da attendere, mai bloccato
     (poisFullyLoaded && !flora.loading && safetyScore != null && ctsSettled)
 
   // Lightweight list of every active (non-archived) planned hike, sorted by import
@@ -245,7 +262,9 @@ export default function GuidaHub({ id }: { id?: string }) {
   // cachedSafetyScore) is written to the local cache for next time but never reaches this
   // session's `items` — so the gallery's TS ring stays pinned to whatever it was a visit ago.
   const applyList = useCallback((list: PlannedHikeMeta[]) => {
-    const active = list.filter(h => !h.archivedAt)
+    // firstCompletedAt: già camminato — prima la riga spariva (cancellata al completamento), ora
+    // resta come ancora per Reportage futuri ma non è più "in attesa" qui.
+    const active = list.filter(h => !h.archivedAt && !h.firstCompletedAt)
     const sorted = active.slice().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     setItems(prev => {
       const prevById = new Map(prev.map(it => [it.id, it]))
@@ -392,15 +411,15 @@ export default function GuidaHub({ id }: { id?: string }) {
   }, [poisFullyLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    const bs = hike?.cachedBeautyScore
-    if (!bs?.categories?.length || !prefsLoaded || !hike) return
+    const bs = hikingMetricsHike?.cachedBeautyScore
+    if (!bs?.categories?.length || !prefsLoaded || !hikingMetricsHike) return
     const computed = computeTrailScore(bs, {
-      distanceMeters: hike.distanceMeters, elevationGain: hike.elevationGain,
-      elevationLoss: hike.elevationLoss, altitudeMax: hike.altitudeMax,
+      distanceMeters: hikingMetricsHike.distanceMeters, elevationGain: hikingMetricsHike.elevationGain,
+      elevationLoss: hikingMetricsHike.elevationLoss, altitudeMax: hikingMetricsHike.altitudeMax,
       prefSforzo, prefDurata,
     })
-    setCtsResult({ ...computed, ts: hike.cachedTrailScore ?? computed.ts })
-  }, [hike?.id, hike?.cachedBeautyScore, hike?.cachedTrailScore, prefsLoaded, prefSforzo, prefDurata]) // eslint-disable-line react-hooks/exhaustive-deps
+    setCtsResult({ ...computed, ts: hikingMetricsHike.cachedTrailScore ?? computed.ts })
+  }, [hikingMetricsHike?.id, hikingMetricsHike?.cachedBeautyScore, hikingMetricsHike?.cachedTrailScore, prefsLoaded, prefSforzo, prefDurata]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // CTS+Beauty: same policy as Safety above — computed once at import, and re-verified here
   // only if missing (an older hike, imported before this policy existed) or stale. Reuses the
@@ -411,11 +430,15 @@ export default function GuidaHub({ id }: { id?: string }) {
   // it can hand their results to computeCtsForHike as `prefetched` instead of having it repeat
   // the exact same /api/pois, /api/tei-dtm, /api/tei-terrain and /api/natura2000 calls this
   // component is already making for its own map/UI state.
-  useEffect(() => { setCtsSettled(false) }, [hike?.id])
+  // Nessuna metrica escursionistica da attendere per un Borgo/Città o Sito (hikingMetricsHike
+  // null) — "settled" da subito, altrimenti resterebbe bloccato per sempre: useCtsRecompute sotto
+  // non chiama mai onSettled quando entity è null (piano §48.9, mai una metrica per una Meta
+  // senza tracciato).
+  useEffect(() => { setCtsSettled(!hikingMetricsHike) }, [hike?.id, hikingMetricsHike])
 
   useCtsRecompute({
-    entity: hike,
-    entityId: hike?.id,
+    entity: hikingMetricsHike,
+    entityId: hikingMetricsHike?.id,
     isFresh: (h) => h.cachedTrailScore != null && isScoreFresh(h.cachedScoresComputedAt),
     hasEnoughGps: (h) => (h.trackPoints ?? []).filter(p => p.lat && p.lon).length >= 2,
     poisReady: poisFullyLoaded,
@@ -539,7 +562,7 @@ export default function GuidaHub({ id }: { id?: string }) {
   }, [items, hike, driving, userOrigin, driveCache, ctsSettled])
 
   const deletedToastNode = showDeletedToast ? (
-    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-2 bg-stone-900 text-white text-[13px] font-semibold px-4 py-2.5 rounded-full shadow-lg animate-in fade-in slide-in-from-top-2">
+    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-2 bg-stone-900 text-white text-sm font-semibold px-4 py-2.5 rounded-full shadow-lg animate-in fade-in slide-in-from-top-2">
       <Check className="w-4 h-4 text-forest-400 shrink-0" /> Percorso eliminato
     </div>
   ) : null
@@ -555,10 +578,10 @@ export default function GuidaHub({ id }: { id?: string }) {
     return (
       <>
         {deletedToastNode}
-        <div className="fixed inset-0 bg-[#0b1a24] flex flex-col items-center justify-center gap-4 text-center px-6">
+        <div className="fixed inset-0 bg-[#2E3A26] flex flex-col items-center justify-center gap-4 text-center px-6">
           <p className="text-stone-300 text-sm">Nessun percorso in attesa.</p>
           <button onClick={() => router.push('/upload?tab=gpx')} className="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-sm font-semibold transition-colors">
-            Crea una guida
+            Crea un percorso
           </button>
         </div>
       </>
@@ -615,7 +638,7 @@ export default function GuidaHub({ id }: { id?: string }) {
   }
 
   const handleDelete = async () => {
-    if (!hike || !confirm('Eliminare questa escursione pianificata?')) return
+    if (!hike) return
     setSaving(true)
     try {
       await deletePlanned(hike.id)
@@ -718,7 +741,7 @@ export default function GuidaHub({ id }: { id?: string }) {
         <>
           <div className="fixed inset-0 z-10" onClick={() => setShowDatePicker(false)} />
           <div className="absolute right-0 top-11 z-20 p-3 rounded-xl bg-white shadow-2xl border border-stone-200">
-            <label className="block text-[10px] font-semibold uppercase tracking-wide text-stone-400 mb-1.5">Data di uscita</label>
+            <label className="block text-xs font-semibold uppercase tracking-wide text-stone-400 mb-1.5">Data di uscita</label>
             <input
               type="date"
               defaultValue={hike?.plannedDate ?? ''}
@@ -889,7 +912,10 @@ export default function GuidaHub({ id }: { id?: string }) {
           }}
           safetyDetails={{ assessment: hike.assessment, hasGps, osmId: hike.osmId, polyline: hike.routePolyline, plannedId: hike.id, markers, highlightedMarkerIndex: null }}
           poiList={{ pois, poiWikiEntries, hasGps, centerLat: centerPt?.lat, centerLon: centerPt?.lon, onWikiLoaded: setWikiPages }}
-          natura={{ hasGps: hasGps && !!hike.routePolyline && hike.routePolyline.length >= 2, flora: flora.data, floraLoading: flora.loading, onOpenFloraGallery: () => setShowFloraGallery(true), onOpenAnimalGallery: () => setShowAnimalGallery(true) }}
+          natura={{
+            hasGps: hasGps && !!hike.routePolyline && hike.routePolyline.length >= 2, flora: flora.data, floraLoading: flora.loading,
+            trackPoints: hike.trackPoints ?? [], month: hike.plannedDate ? new Date(hike.plannedDate).getMonth() + 1 : new Date().getMonth() + 1,
+          }}
         />
       )
     }
@@ -958,23 +984,73 @@ export default function GuidaHub({ id }: { id?: string }) {
           )}
         </div>
         <div className="pt-1 mt-1 border-t border-stone-200">
-          <button onClick={handleDelete} disabled={saving} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-red-50 transition-colors text-left text-red-600">
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-            <span className="text-sm font-medium">Elimina guida</span>
-          </button>
+          {confirmDelete ? (
+            <div className="px-2 py-2 space-y-2">
+              <p className={`text-sm ${textMuted}`}>
+                {hike.firstCompletedAt
+                  ? 'Eliminare questo percorso? Con lui vengono eliminati anche tutti i Reportage collegati (foto, video, racconti inclusi). Non si può annullare.'
+                  : 'Eliminare questa escursione pianificata? Non si può annullare.'}
+              </p>
+              <div className="flex gap-2">
+                <button onClick={handleDelete} disabled={saving} className="flex items-center gap-1.5 px-4 py-1.5 bg-red-600 text-white rounded-lg text-sm hover:bg-red-500 transition-colors disabled:opacity-60">
+                  {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Conferma eliminazione
+                </button>
+                <button onClick={() => setConfirmDelete(false)} disabled={saving} className={`px-4 py-1.5 text-sm transition-colors ${textMuted}`}>Annulla</button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => setConfirmDelete(true)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-red-50 transition-colors text-left text-red-600">
+              <Trash2 className="w-4 h-4" />
+              <span className="text-sm font-medium">Elimina guida</span>
+            </button>
+          )}
         </div>
       </div>
     )
   }
 
-  const primaryAction = (routeItem: RouteHubItem): PrimaryAction => ({
-    label: 'Naviga',
-    icon: Navigation,
-    // Prova prima l'app nativa Navigator (se il device può averla), altrimenti ricade sulla
-    // stessa pagina di navigazione via web che serviva già da sola (lib/navigatorHandoff.ts).
-    onClick: () => tryOpenNavigatorApp(router, `/guida/${encodeURIComponent(routeItem.id)}/naviga`),
-    variant: 'terra',
-  })
+  // "Segna come visitata" (piano Blocco D §27/Blocco F) — il CTA primario equivalente a "Naviga"
+  // per una Meta senza traccia GPS: un Borgo/Città/Sito non ha un percorso da navigare, quindi
+  // completarla è un tocco, non un arrivo a un GPX (piano §48.10, mai richiedere GPS). Fetcha il
+  // PlannedHike completo (RouteHubItem non porta siteType) invece di allargare RouteHubItem con
+  // altri campi hike-specifici solo per questo singolo utilizzo.
+  async function handleMarkVisited(itemId: string) {
+    if (markingVisitedId) return
+    setMarkingVisitedId(itemId)
+    try {
+      const full = await getPlannedById(itemId)
+      if (!full || full.firstCompletedAt) return
+      await markMetaVisited(full)
+      // Riflette subito firstCompletedAt sulla lista locale (galleria) e, se è la Meta aperta,
+      // anche su `hike` — senza aspettare il refetch in background della lista.
+      const now = new Date().toISOString()
+      setItems(prev => prev.map(it => it.id === itemId ? { ...it, firstCompletedAt: now } : it))
+      setHike(prev => prev && prev.id === itemId ? { ...prev, firstCompletedAt: now } : prev)
+    } catch (e) {
+      console.error('[GuidaHub] markMetaVisited fallito:', e)
+    } finally {
+      setMarkingVisitedId(null)
+    }
+  }
+
+  const primaryAction = (routeItem: RouteHubItem): PrimaryAction => {
+    if (!metaHasHikingMetrics(routeItem.metaType)) {
+      return {
+        label: routeItem.firstCompletedAt ? 'Visitata' : 'Segna come visitata',
+        icon: Check,
+        onClick: () => handleMarkVisited(routeItem.id),
+        variant: 'terra',
+      }
+    }
+    return {
+      label: 'Naviga',
+      icon: Navigation,
+      // Prova prima l'app nativa Navigator (se il device può averla), altrimenti ricade sulla
+      // stessa pagina di navigazione via web che serviva già da sola (lib/navigatorHandoff.ts).
+      onClick: () => tryOpenNavigatorApp(router, `/guida/${encodeURIComponent(routeItem.id)}/naviga`),
+      variant: 'terra',
+    }
+  }
 
   const currentItem = displayItems.find(i => i.id === currentId) ?? displayItems[0]
   const initialIndex = Math.max(0, displayItems.findIndex(i => i.id === currentItem.id))
@@ -986,6 +1062,12 @@ export default function GuidaHub({ id }: { id?: string }) {
         mode="guida"
         items={displayItems}
         initialIndex={initialIndex}
+        // Default per un arrivo da link diretto a UN percorso preciso (id passato dal chiamante,
+        // es. /guida/[id] raggiunto dal CTA "Naviga"/"Vai al percorso" della Home) — mai per la
+        // lista generica /guida (id assente), dove la copertina chiusa resta il punto di partenza
+        // giusto. startClosed (da /guida/[id]/page.tsx's ?scheda=1, il bottone "Apri scheda" della
+        // Home) disattiva esplicitamente l'auto-apertura per chi vuole vedere prima la copertina.
+        autoOpenSection={id && !startClosed ? 'featured' : undefined}
         favoritesFilter={favoritesFilter}
         nextOutingFilter={nextOutingFilter}
         onToggleNextOutingFilter={() => setNextOutingFilter(v => !v)}
@@ -1032,23 +1114,6 @@ export default function GuidaHub({ id }: { id?: string }) {
         importLabel="Crea guida"
         onImport={() => router.push('/upload?tab=gpx')}
       />
-
-      {showFloraGallery && hike && (
-        <FloraGallery
-          trackPoints={hike.trackPoints ?? []}
-          month={hike.plannedDate ? new Date(hike.plannedDate).getMonth() + 1 : new Date().getMonth() + 1}
-          loadingTrack={false}
-          onClose={() => setShowFloraGallery(false)}
-        />
-      )}
-      {showAnimalGallery && hike && (
-        <AnimalGallery
-          trackPoints={hike.trackPoints ?? []}
-          month={hike.plannedDate ? new Date(hike.plannedDate).getMonth() + 1 : new Date().getMonth() + 1}
-          loadingTrack={false}
-          onClose={() => setShowAnimalGallery(false)}
-        />
-      )}
 
       {show3D && hike && hasGps && (
         <RouteMap3D

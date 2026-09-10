@@ -6,9 +6,15 @@ interface Props {
   color?: string
   strokeWidth?: number
   className?: string
+  /** Tratteggio del percorso — es. "1 5" per l'effetto "ricalcato a mano" del tema taccuino
+   *  (components/libro/BookPage.tsx); assente per il tratto continuo di default. */
+  strokeDasharray?: string
+  /** `url(#id)` di un filtro SVG montato dal chiamante (es. `HandWobbleFilter` di
+   *  lib/taccuinoTokens.tsx) — assente per il tratto pulito di default. */
+  filter?: string
 }
 
-export default function RouteThumb({ polyline, color = '#2d7a3d', strokeWidth = 3, className = '' }: Props) {
+export default function RouteThumb({ polyline, color = '#2d7a3d', strokeWidth = 3, className = '', strokeDasharray, filter }: Props) {
   const d = useMemo(() => {
     if (polyline.length < 2) return ''
     const lats = polyline.map(p => p[0])
@@ -49,6 +55,8 @@ export default function RouteThumb({ polyline, color = '#2d7a3d', strokeWidth = 
         strokeWidth={strokeWidth}
         strokeLinecap="round"
         strokeLinejoin="round"
+        strokeDasharray={strokeDasharray}
+        filter={filter}
         vectorEffect="non-scaling-stroke"
       />
     </svg>

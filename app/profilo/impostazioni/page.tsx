@@ -1,5 +1,5 @@
 'use client'
-import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
+import Navbar, { MOBILE_BOTTOMBAR_SPACER } from '@/components/Navbar'
 import BackLink from '@/app/components/BackLink'
 import Kicker from '@/components/ui/Kicker'
 import SectionIdentita from '@/components/profilo/SectionIdentita'
@@ -14,7 +14,7 @@ import SectionEliminaAccount from '@/components/profilo/SectionEliminaAccount'
 
 export default function ImpostazioniPage() {
   return (
-    <div className={`min-h-screen bg-stone-50 md:pb-8 ${MOBILE_TOPBAR_SPACER}`}>
+    <div className={`min-h-screen bg-stone-50 md:pb-8 ${MOBILE_BOTTOMBAR_SPACER}`}>
       <Navbar />
       <div className="max-w-lg mx-auto px-4 py-6 space-y-4">
         <BackLink className="inline-flex items-center gap-1 text-sm text-stone-400 hover:text-stone-600 transition mb-1" />

@@ -1,0 +1,139 @@
+{
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Opzione A — Plancia di campo",
+      "page": "page-1"
+    },
+    {
+      "file": "OptionB.dc.html",
+      "x": 530,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Opzione B — Archivio strumentale",
+      "page": "page-1"
+    },
+    {
+      "file": "OptionC.dc.html",
+      "x": 1060,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Opzione C — Il territorio percorso",
+      "page": "page-1"
+    },
+    {
+      "file": "Raccolte.dc.html",
+      "x": 1590,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Confronto — Raccolte come cartelle",
+      "page": "page-1"
+    },
+    {
+      "file": "PubComponi.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "page": "page-2",
+      "title": "Componi una raccolta"
+    },
+    {
+      "file": "PubRaccolta.dc.html",
+      "x": 530,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "page": "page-2",
+      "title": "La raccolta pubblicata"
+    },
+    {
+      "file": "PubProfilo.dc.html",
+      "x": 1060,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "page": "page-2",
+      "title": "Profilo pubblico"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "opt-a",
+      "x": 0,
+      "y": -230,
+      "w": 390,
+      "text": "OPZIONE A — Plancia di campo\n\nApre sul flusso Pianifica → Naviga → Registra con lo stato reale, poi una sola azione primaria: la prossima uscita con profilo altimetrico, km, D+, stima e Trail Score.\n\nCon molti diari: barra di filtri in cima (Tutti 12 / 2026 / Natura / Urbano / Archivio) e righe raggruppate per stagione. Le stagioni chiuse collassano in una riga sola con i dorsi impilati; l'archivio è l'ultima riga. Zero livelli di navigazione in più.\n\nPro: scala meglio di tutte — le righe sono dense e il filtro è sempre a portata di pollice.\nContro: le copertine perdono presenza.",
+      "page": "page-1"
+    },
+    {
+      "id": "opt-b",
+      "x": 530,
+      "y": -230,
+      "w": 390,
+      "text": "OPZIONE B — Archivio strumentale\n\nLo scaffale di copertine incorniciato dalla fascia telemetria della stagione (km, D+, uscite, ore, istogramma mensile) e con piedino tecnico su ogni copertina.\n\nCon molti diari: segmento In corso / 2025 / Archivio sopra la griglia — la griglia mostra solo i diari in corso — e in fondo lo \"scaffale\", i 9 volumi chiusi ridotti a dorsi in fila, visibili senza aprire nulla.\n\nPro: evoluzione a rischio basso della pagina attuale.\nContro: è la griglia che scala peggio; oltre i ~9 diari in corso serve comunque scroll.",
+      "page": "page-1"
+    },
+    {
+      "id": "opt-c",
+      "x": 1060,
+      "y": -230,
+      "w": 390,
+      "text": "OPZIONE C — Il territorio percorso\n\nHero con la mappa di tutte le tracce registrate; sotto un foglio che sale con i diari in carosello e la striscia \"come nasce un reportage\".\n\nCon molti diari: la riga di chip sotto il carosello filtra mappa e diari insieme — tocchi \"Urbano\" e la mappa mostra solo quelle tracce. Il carosello scorre in orizzontale, quindi 12 diari non allungano la pagina.\n\nPro: il filtro qui ha un senso spaziale, non solo di elenco.\nContro: mappa costosa da rendere; su account nuovo serve uno stato iniziale dedicato.",
+      "page": "page-1"
+    },
+    {
+      "id": "brief",
+      "x": 0,
+      "y": 940,
+      "w": 920,
+      "text": "Comune alle quattro: palette Taccuino Botanico (F5EDDD / EBE0C8 / C0603D / 7C8F6E / 5F7355), Playfair + Lora + DM Sans + Caveat, JetBrains Mono per i numeri, barra inferiore a 5 voci come in Navbar.tsx. Nessun linguaggio da album di ricordi: le uscite sono misurate. Dati di esempio.\n\nSCALA — la proposta è etichette + stato, non cartelle: 1) etichette multiple per diario (Natura, Urbano, una zona), 2) stato attivo/archiviato con archiviazione automatica proposta dopo mesi di inattività, 3) raggruppamento per stagione dedotto dalle uscite, 4) ricerca globale già esistente. In DB è una colonna 'labels text[]' e una 'archived_at' su 'diaries' — nessuna tabella nuova, nessuna gerarchia da mantenere.",
+      "page": "page-1"
+    },
+    {
+      "id": "opt-d",
+      "x": 1590,
+      "y": -230,
+      "w": 390,
+      "text": "CONFRONTO — Raccolte come cartelle\n\nCome sarebbe la variante che hai proposto: contenitori veri, con dentro i diari. Disegnata per poterla giudicare, non come raccomandazione.\n\nI tre costi sono in pagina: un livello in più prima del contenuto (raccolta → diario → percorso), un diario in una raccolta sola, e manutenzione manuale di ciò che Dtrek sa già dedurre (stagione, tipo di uscita, inattività).\n\nQuando invece conviene: se un giorno le raccolte diventano l'unità di condivisione/pubblicazione — \"pubblica la raccolta Appennino\" come volume unico.",
+      "page": "page-1"
+    },
+    {
+      "id": "pub-model",
+      "x": 0,
+      "y": -330,
+      "w": 920,
+      "page": "page-2",
+      "text": "MODELLO DI PUBBLICAZIONE A TRE LIVELLI + UNA VETRINA\n\nPercorso = un articolo. Diario = un volume. Raccolta = una collana. Il profilo pubblico NON è un quarto documento: è l'indice di ciò che hai già pubblicato.\n\nLa mossa che scioglie il nodo delle cartelle: la raccolta è una SELEZIONE ORDINATA di diari, non un contenitore. Un diario può stare in più raccolte, e non sparisce da nessuna parte quando ne entra in una. Dentro l'app navighi con etichette e archivio; per pubblicare componi una raccolta.\n\nConsenso: ogni livello ha il suo token; vince sempre il più restrittivo. Un reportage escluso resta escluso anche dentro una raccolta pubblicata (volume III, un reportage escluso).\n\nCosto tecnico: 'collections' + 'collection_diaries' (ordine), share_token come su diaries — la lettura pubblica riusa lib/sharePublicDiary.ts un livello più su. Il PDF invece non sale: 18 reportage non si esportano da telefono, quindi PDF resta su percorso e diario, la raccolta è solo web."
+    },
+    {
+      "id": "pub-archivio",
+      "x": 1060,
+      "y": -330,
+      "w": 390,
+      "page": "page-2",
+      "text": "PERCHÉ NON \"PUBBLICA TUTTO L'ARCHIVIO\"\n\nTre ragioni, in ordine di peso:\n\n1. Sicurezza. Un archivio completo di tracce con date è una mappa delle tue abitudini e di dove abiti: ora di partenza ricorrente, stesso punto di inizio, giorni della settimana. È il rischio specifico di un'app che registra uscite reali, non una preoccupazione teorica — da qui i due interruttori nella schermata di composizione.\n\n2. Editoriale. Un dump di 47 uscite non si legge. Il valore di Dtrek è il volume curato, e \"pubblica tutto\" lo svaluta.\n\n3. Tecnico. Rendering e PDF non reggono l'intero archivio da telefono.\n\nLa vetrina risolve lo stesso bisogno — \"fammi vedere chi sono\" — senza esporre l'archivio: numeri aggregati completi, contenuti solo scelti."
+    }
+  ],
+  "launch": {
+    "view": "canvas",
+    "page": "page-2"
+  },
+  "pages": [
+    {
+      "id": "page-1",
+      "name": "Pagina Diari"
+    },
+    {
+      "id": "page-2",
+      "name": "Pubblicazione"
+    }
+  ]
+}

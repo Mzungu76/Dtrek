@@ -11,6 +11,17 @@
 
 * { box-sizing: border-box; }
 
+/* Alcuni elementi (miniature/titoli/chip ruotati con `transform: rotate(...)`, righe con margine
+   negativo per il "full-bleed" dell'evidenziatore) possono sporgere di qualche pixel oltre il
+   bordo della pagina — su mobile questo basta a rendere l'intero documento scorrevole in
+   orizzontale, e uno swipe su una lista interna a scorrimento (es. i filtri) può "incastrare" lo
+   scroll della pagina qualche pixel a destra invece di tornare a zero. `overflow-x: hidden` qui
+   non blocca lo scroll orizzontale voluto internamente (le liste con `overflow-x-auto` restano
+   scorrevoli sul proprio asse, indipendenti dall'antenato) — impedisce solo che il DOCUMENTO
+   stesso possa scorrere. Va su entrambi `html` e `body`: alcuni browser mobili trattano `html`
+   come l'elemento di scroll effettivo, altri `body`. */
+html, body { overflow-x: hidden; }
+
 body {
   font-family: var(--font-body), sans-serif;
   background-color: #f8f7f4;
@@ -45,6 +56,47 @@ body {
 
 /* Leaflet override z-index */
 .leaflet-container { z-index: 0; }
+
+/* Etichetta col nome del luogo/percorso, sempre visibile (non solo al tocco), di
+   components/bacheca/TerritoryMap.tsx — a differenza degli altri usi di poiBadgeMarkup nell'app,
+   qui i luoghi non sono su un unico tracciato con cui l'utente possa già orientarsi. Troncata di
+   default (una riga), espandibile al tocco solo se più lunga della soglia — vedi
+   bindExpandableTooltip in TerritoryMap.tsx. */
+/* !important su ogni proprietà già impostata da .leaflet-tooltip (leaflet/dist/leaflet.css):
+   quella regola ha la stessa specificità di questa (una sola classe), quindi chi vince dipende
+   dall'ordine con cui webpack/Next concatenano i due fogli di stile nel bundle finale — non
+   dall'ordine con cui appaiono nel codice sorgente. Verificato dal vivo: senza !important
+   white-space restava "nowrap" (il default di Leaflet), il testo lungo continuava a uscire dal
+   riquadro invece di andare a capo. */
+.territory-map-label {
+  background: white !important;
+  border: none !important;
+  border-radius: 6px !important;
+  padding: 2px 6px !important;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #44403c !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+}
+.territory-map-label.territory-label-expandable { cursor: pointer; }
+/* Solo qui va a capo — il testo troncato di default è già corto abbastanza per stare su una riga
+   sola, wrapparlo comunque avrebbe solo reintrodotto le colonne altissime da una parola a riga
+   viste prima di aggiungere il troncamento. */
+.territory-map-label.territory-label-expanded {
+  white-space: normal !important;
+  max-width: 160px;
+  line-height: 1.3;
+}
+
+/* Colore del percorso riportato sull'etichetta stessa (non solo sul pallino/tracciato sotto),
+   testo bianco per il contrasto — stessa lettura cromatica della legenda "In programma"/
+   "Suggeriti" più sotto sulla mappa. Il triangolino di Leaflet (.leaflet-tooltip-top::before,
+   qui riabilitato togliendo il vecchio "display:none") punta verso il pallino: colorato uguale
+   allo sfondo dell'etichetta, non resta un residuo bianco scollegato dal resto del fumetto. */
+.territory-map-label.territory-label-planned { background: #2d7a3d !important; color: #fff !important; }
+.territory-map-label.territory-label-suggested { background: #d97220 !important; color: #fff !important; }
+.territory-label-planned.leaflet-tooltip-top::before { border-top-color: #2d7a3d !important; }
+.territory-label-suggested.leaflet-tooltip-top::before { border-top-color: #d97220 !important; }
 
 /* Mobile: nascondi la scrollbar orizzontale su gallerie/filmstrip/tab a scorrimento —
    lo scroll resta attivo, solo l'indicatore visivo sparisce (coerente col resto dell'app). */
@@ -120,3 +172,276 @@ body {
    HiddenPdfRoot.tsx resta un percorso separato, non tocca questa regola). */
 .diario-page { page: diario; }
 @page diario { size: A4; margin: 0; }
+
+/* ── Taccuino Botanico — foto/mappe "ritagliate a mano" con nastro washi ──
+   Calibrata in un mockup dedicato (Artifact, non su file) prima di questo porting: bordo
+   strappato (clip-path), bordino di carta bianco, sia l'occlusione ambientale (torn-ao) sia
+   l'ombra "sollevata" (torn-cast) assenti lungo tutto il lato superiore — quel lato è incollato
+   dal nastro, non in bilico: niente ombra propria lì, ci pensa il nastro stesso a leggersi come
+   contatto — piena su tutti gli altri lati, nastro che prosegue sullo sfondo. Usata da
+   components/TornFrame.tsx — non usare queste classi direttamente altrove senza passare da lì,
+   il posizionamento del nastro (--tape-x/--tape-y) deve restare sincronizzato con i preset di
+   quel componente.
+
+   clip-path e filter:drop-shadow non possono stare sullo STESSO elemento — clip-path ritaglia
+   tutto ciò che l'elemento disegna, filtro incluso. Ogni "ruolo" (ao/rim/cast) è quindi diviso
+   in due: un contenitore SENZA clip-path che porta il filtro (ombra), e un figlio interno CON
+   clip-path (.torn-filler o .torn-content) che gli dà la sagoma strappata da cui il filtro
+   calcola l'alpha. .torn-ao e .torn-rim non sono mai visibili di per sé (coperti dal contenuto
+   reale in .torn-cast, disegnato sopra): il loro .torn-filler è un riempimento opaco qualunque,
+   serve solo a dare al filtro una sagoma su cui calcolare l'ombra — non ha bisogno di essere
+   una copia della foto/mappa reale, quel contenuto vive UNA sola volta, dentro .torn-cast. */
+.torn-frame{ position: relative; }
+.torn-frame-photo{ width: 144px; height: 112px; }
+.torn-frame-map{ width: 87px; height: 87px; flex-shrink: 0; }
+/* Riquadro grande e responsivo (mappa "Il percorso" della guida, components/RouteMapSection.tsx)
+   — a differenza di photo/map (dimensione fissa, ripetuta in un elenco), riempie il contenitore
+   del chiamante: la larghezza reale non è nota qui, ma il clip-path resta corretto a qualunque
+   dimensione (percentuali) — solo ombra/maschera/nastro restano valori fissi in px, tarati "a
+   occhio" su questa scala più grande (test, non ancora ricalibrati in un mockup dedicato). */
+.torn-frame-hero{ width: 100%; height: 100%; }
+/* Riquadro "carta" generico — grafici, tessere statistiche, righe elenco: niente foto/mappa
+   dentro, larghezza E altezza intrinseche (non impostate qui, si adattano al contenuto reale
+   come una card normale) invece di riempire un contenitore già dimensionato come "hero". Per
+   questo .torn-content qui NON è assoluto (vedi sotto): resta l'unico figlio in flusso normale
+   di .torn-frame, così la sua altezza naturale (quella del contenuto vero: testo, grafico...)
+   diventa l'altezza del riquadro — gli altri layer (ao/rim/cast), assoluti, si dimensionano di
+   conseguenza contro quel riquadro ormai stabilito. */
+/* height:100% oltre a position:static — se il chiamante forza un'altezza sul riquadro (es. una
+   griglia con celle di altezza uniforme, RecordCard.tsx), il contenuto la eredita invece di
+   restare più corto e lasciare "strappo ma vuoto" sotto (senza un'altezza esplicita sull'antenato
+   una percentuale non ha comunque effetto, resta "auto" come se non ci fosse — nessun problema
+   per il caso normale, contenuto libero). */
+.torn-frame-card > .torn-content{ position: static; height: 100%; overflow: hidden; }
+
+.torn-content, .torn-filler{ position: absolute; inset: 0; }
+.torn-filler{ background: #000; }
+/* .torn-content è SEMPRE l'ultimo layer, sopra ao/rim/cast — mai mascherato, mai un filtro
+   proprio: se ricevesse la maschera "affievolisci vicino al nastro" di .torn-cast, vicino al
+   nastro sparirebbe anche la foto vera (non solo l'ombra), rivelando il riempimento invisibile
+   del layer sotto invece della foto stessa (bug reale riscontrato nel porting: vicino al nastro
+   comparivano chiazze nere/chiare al posto della foto). Restando un layer a parte, sempre
+   opaco al 100%, copre sempre per intero i riempimenti invisibile di ao/rim/cast qualunque sia
+   il loro stato di maschera — solo i LORO aloni di ombra, che sporgono oltre il riquadro
+   originale nella zona di padding, restano visibili. */
+.torn-content{ overflow: hidden; }
+
+.torn-cut-1{ clip-path: polygon(0.0% 0.1%, 6.2% 0.0%, 12.5% 0.8%, 18.8% 0.7%, 25.0% 0.0%, 31.2% 0.3%, 37.5% 0.0%, 43.8% 0.0%, 50.0% 0.0%, 56.2% 0.3%, 62.5% 0.0%, 68.8% 0.8%, 75.0% 0.0%, 81.2% 0.0%, 87.5% 0.0%, 93.8% 0.5%, 100.0% 0.0%, 99.8% 6.2%, 100.0% 12.5%, 99.6% 18.8%, 99.8% 25.0%, 100.0% 31.2%, 99.8% 37.5%, 99.9% 43.8%, 100.0% 50.0%, 99.9% 56.2%, 99.8% 62.5%, 100.0% 68.8%, 99.4% 75.0%, 99.6% 81.2%, 100.0% 87.5%, 100.0% 93.8%, 100.0% 100.0%, 93.8% 100.0%, 87.5% 99.6%, 81.2% 99.6%, 75.0% 100.0%, 68.8% 100.0%, 62.5% 99.8%, 56.2% 100.0%, 50.0% 100.0%, 43.8% 99.3%, 37.5% 99.4%, 31.2% 100.0%, 25.0% 100.0%, 18.8% 100.0%, 12.5% 99.4%, 6.2% 100.0%, 0.0% 100.0%, 0.6% 93.8%, 0.4% 87.5%, 0.0% 81.2%, 0.0% 75.0%, 0.4% 68.8%, 0.5% 62.5%, 0.0% 56.2%, 0.0% 50.0%, 0.7% 43.8%, 0.0% 37.5%, 0.3% 31.2%, 0.0% 25.0%, 0.2% 18.8%, 0.6% 12.5%, 0.1% 6.2%); }
+.torn-cut-2{ clip-path: polygon(0.0% 0.4%, 6.2% 0.2%, 12.5% 0.0%, 18.8% 0.0%, 25.0% 0.3%, 31.2% 0.8%, 37.5% 0.0%, 43.8% 0.6%, 50.0% 0.0%, 56.2% 0.0%, 62.5% 0.0%, 68.8% 0.0%, 75.0% 0.2%, 81.2% 0.6%, 87.5% 0.0%, 93.8% 0.6%, 100.0% 0.0%, 99.4% 6.2%, 99.8% 12.5%, 100.0% 18.8%, 99.5% 25.0%, 99.8% 31.2%, 99.4% 37.5%, 99.8% 43.8%, 99.6% 50.0%, 99.5% 56.2%, 100.0% 62.5%, 100.0% 68.8%, 99.3% 75.0%, 100.0% 81.2%, 99.9% 87.5%, 99.2% 93.8%, 100.0% 100.0%, 93.8% 100.0%, 87.5% 99.9%, 81.2% 100.0%, 75.0% 100.0%, 68.8% 100.0%, 62.5% 99.7%, 56.2% 100.0%, 50.0% 99.2%, 43.8% 100.0%, 37.5% 100.0%, 31.2% 99.7%, 25.0% 99.2%, 18.8% 99.4%, 12.5% 99.4%, 6.2% 100.0%, 0.0% 100.0%, 0.4% 93.8%, 0.1% 87.5%, 0.0% 81.2%, 0.6% 75.0%, 0.0% 68.8%, 0.8% 62.5%, 0.0% 56.2%, 0.0% 50.0%, 0.4% 43.8%, 0.0% 37.5%, 0.8% 31.2%, 0.3% 25.0%, 0.0% 18.8%, 0.8% 12.5%, 0.0% 6.2%); }
+.torn-cut-3{ clip-path: polygon(0.0% 0.0%, 6.2% 0.8%, 12.5% 0.0%, 18.8% 0.8%, 25.0% 0.8%, 31.2% 0.0%, 37.5% 0.0%, 43.8% 0.0%, 50.0% 0.0%, 56.2% 0.5%, 62.5% 0.6%, 68.8% 0.0%, 75.0% 0.1%, 81.2% 0.3%, 87.5% 0.2%, 93.8% 0.0%, 100.0% 0.0%, 100.0% 6.2%, 99.4% 12.5%, 100.0% 18.8%, 100.0% 25.0%, 99.7% 31.2%, 100.0% 37.5%, 99.9% 43.8%, 100.0% 50.0%, 99.6% 56.2%, 100.0% 62.5%, 100.0% 68.8%, 99.3% 75.0%, 100.0% 81.2%, 100.0% 87.5%, 100.0% 93.8%, 100.0% 100.0%, 93.8% 99.9%, 87.5% 99.8%, 81.2% 100.0%, 75.0% 100.0%, 68.8% 99.5%, 62.5% 99.8%, 56.2% 100.0%, 50.0% 99.9%, 43.8% 99.7%, 37.5% 99.7%, 31.2% 99.5%, 25.0% 99.2%, 18.8% 99.7%, 12.5% 99.2%, 6.2% 100.0%, 0.0% 100.0%, 0.0% 93.8%, 0.0% 87.5%, 0.4% 81.2%, 0.0% 75.0%, 0.4% 68.8%, 0.0% 62.5%, 0.3% 56.2%, 0.5% 50.0%, 0.0% 43.8%, 0.8% 37.5%, 0.0% 31.2%, 0.7% 25.0%, 0.0% 18.8%, 0.6% 12.5%, 0.1% 6.2%); }
+.torn-cut-4{ clip-path: polygon(0.0% 0.0%, 6.2% 0.0%, 12.5% 0.0%, 18.8% 0.0%, 25.0% 0.2%, 31.2% 0.0%, 37.5% 0.0%, 43.8% 0.0%, 50.0% 0.7%, 56.2% 0.3%, 62.5% 0.0%, 68.8% 0.1%, 75.0% 0.0%, 81.2% 0.1%, 87.5% 0.4%, 93.8% 0.0%, 100.0% 0.0%, 99.2% 6.2%, 99.6% 12.5%, 99.4% 18.8%, 99.4% 25.0%, 99.8% 31.2%, 99.7% 37.5%, 100.0% 43.8%, 100.0% 50.0%, 99.8% 56.2%, 100.0% 62.5%, 100.0% 68.8%, 100.0% 75.0%, 100.0% 81.2%, 100.0% 87.5%, 99.9% 93.8%, 100.0% 100.0%, 93.8% 100.0%, 87.5% 100.0%, 81.2% 100.0%, 75.0% 100.0%, 68.8% 100.0%, 62.5% 100.0%, 56.2% 99.3%, 50.0% 100.0%, 43.8% 100.0%, 37.5% 99.2%, 31.2% 99.8%, 25.0% 100.0%, 18.8% 100.0%, 12.5% 99.2%, 6.2% 99.7%, 0.0% 99.3%, 0.0% 93.8%, 0.5% 87.5%, 0.1% 81.2%, 0.0% 75.0%, 0.4% 68.8%, 0.3% 62.5%, 0.0% 56.2%, 0.0% 50.0%, 0.1% 43.8%, 0.5% 37.5%, 0.7% 31.2%, 0.7% 25.0%, 0.0% 18.8%, 0.0% 12.5%, 0.0% 6.2%); }
+
+/* Varianti "carta" a 4 lati strappati, jitter in px fissi (come .torn-cut-bottom-N sopra:
+   una card puo' essere larga quanto la colonna di contenuto, il vecchio jitter percentuale
+   di .torn-cut-1..4 [tarato sui riquadri piccoli 144x112/87x87] risulterebbe impercettibile).
+   Denso (34 punti per lato, 132 in tutto) per restare fine a qualunque dimensione di card. */
+.torn-cut-card-1{ clip-path: polygon(0.00% calc(0.00% - 0.28px), 3.03% calc(0.00% - 0.82px), 6.06% calc(0.00% + 0.33px), 9.09% calc(0.00% - 0.46px), 12.12% calc(0.00% + 1.04px), 15.15% calc(0.00% - 0.94px), 18.18% calc(0.00% + 0.85px), 21.21% calc(0.00% + 1.88px), 24.24% calc(0.00% - 0.72px), 27.27% calc(0.00% + 0.56px), 30.30% calc(0.00% - 0.45px), 33.33% calc(0.00% - 0.36px), 36.36% calc(0.00% + 0.61px), 39.39% calc(0.00% + 0.27px), 42.42% calc(0.00% + 0.77px), 45.45% calc(0.00% + 0.02px), 48.48% calc(0.00% - 1.53px), 51.52% calc(0.00% - 0.50px), 54.55% calc(0.00% - 1.57px), 57.58% calc(0.00% - 0.58px), 60.61% calc(0.00% - 1.58px), 63.64% calc(0.00% - 1.93px), 66.67% calc(0.00% + 1.34px), 69.70% calc(0.00% + 0.19px), 72.73% calc(0.00% + 0.13px), 75.76% calc(0.00% - 0.81px), 78.79% calc(0.00% + 0.85px), 81.82% calc(0.00% - 0.26px), 84.85% calc(0.00% + 1.72px), 87.88% calc(0.00% - 0.47px), 90.91% calc(0.00% + 1.45px), 93.94% calc(0.00% - 1.98px), 96.97% calc(0.00% + 0.42px), 100.00% calc(0.00% + 0.53px), calc(100.00% + 0.57px) 3.03%, calc(100.00% - 1.57px) 6.06%, calc(100.00% + 0.92px) 9.09%, calc(100.00% + 1.96px) 12.12%, calc(100.00% + 0.95px) 15.15%, calc(100.00% + 0.07px) 18.18%, calc(100.00% - 0.58px) 21.21%, calc(100.00% + 0.79px) 24.24%, calc(100.00% - 0.27px) 27.27%, calc(100.00% + 1.84px) 30.30%, calc(100.00% - 0.73px) 33.33%, 100.00% 36.36%, calc(100.00% + 0.94px) 39.39%, calc(100.00% + 1.81px) 42.42%, calc(100.00% - 0.03px) 45.45%, calc(100.00% + 0.64px) 48.48%, calc(100.00% + 1.07px) 51.52%, calc(100.00% + 1.32px) 54.55%, calc(100.00% + 0.85px) 57.58%, calc(100.00% + 0.77px) 60.61%, calc(100.00% - 1.74px) 63.64%, calc(100.00% - 1.17px) 66.67%, calc(100.00% - 0.49px) 69.70%, calc(100.00% - 1.97px) 72.73%, calc(100.00% + 0.10px) 75.76%, calc(100.00% - 1.45px) 78.79%, calc(100.00% + 0.19px) 81.82%, calc(100.00% + 1.02px) 84.85%, calc(100.00% + 1.25px) 87.88%, calc(100.00% - 1.10px) 90.91%, calc(100.00% - 1.75px) 93.94%, calc(100.00% + 1.93px) 96.97%, calc(100.00% - 0.93px) 100.00%, 96.97% calc(100.00% + 0.49px), 93.94% calc(100.00% - 1.82px), 90.91% calc(100.00% + 1.70px), 87.88% calc(100.00% - 0.50px), 84.85% calc(100.00% + 0.93px), 81.82% calc(100.00% + 0.34px), 78.79% calc(100.00% + 1.07px), 75.76% calc(100.00% + 1.91px), 72.73% calc(100.00% + 0.38px), 69.70% calc(100.00% + 0.30px), 66.67% calc(100.00% + 0.08px), 63.64% calc(100.00% - 0.57px), 60.61% calc(100.00% + 0.95px), 57.58% calc(100.00% + 0.32px), 54.55% calc(100.00% - 1.12px), 51.52% calc(100.00% - 0.28px), 48.48% calc(100.00% + 1.05px), 45.45% calc(100.00% + 1.63px), 42.42% calc(100.00% + 0.04px), 39.39% calc(100.00% + 1.47px), 36.36% calc(100.00% + 0.09px), 33.33% calc(100.00% - 0.16px), 30.30% calc(100.00% - 1.81px), 27.27% calc(100.00% - 1.59px), 24.24% calc(100.00% + 0.44px), 21.21% calc(100.00% - 0.27px), 18.18% calc(100.00% - 1.44px), 15.15% calc(100.00% - 1.84px), 12.12% calc(100.00% - 0.68px), 9.09% calc(100.00% - 0.43px), 6.06% calc(100.00% - 0.79px), 3.03% calc(100.00% + 1.94px), 0.00% calc(100.00% - 0.84px), calc(0.00% + 1.81px) 96.97%, calc(0.00% + 1.07px) 93.94%, 0.00% 90.91%, calc(0.00% + 0.46px) 87.88%, calc(0.00% - 0.27px) 84.85%, calc(0.00% - 0.24px) 81.82%, calc(0.00% + 0.28px) 78.79%, calc(0.00% + 1.04px) 75.76%, calc(0.00% + 1.38px) 72.73%, calc(0.00% - 1.26px) 69.70%, calc(0.00% - 0.89px) 66.67%, calc(0.00% - 0.55px) 63.64%, calc(0.00% + 1.47px) 60.61%, calc(0.00% - 1.87px) 57.58%, calc(0.00% + 1.94px) 54.55%, calc(0.00% + 1.79px) 51.52%, calc(0.00% + 1.39px) 48.48%, calc(0.00% + 1.00px) 45.45%, calc(0.00% + 1.37px) 42.42%, calc(0.00% + 0.66px) 39.39%, calc(0.00% - 1.81px) 36.36%, calc(0.00% + 0.02px) 33.33%, calc(0.00% + 1.58px) 30.30%, calc(0.00% - 1.29px) 27.27%, calc(0.00% + 0.61px) 24.24%, calc(0.00% - 0.30px) 21.21%, calc(0.00% - 0.62px) 18.18%, calc(0.00% - 1.44px) 15.15%, calc(0.00% - 1.27px) 12.12%, calc(0.00% - 1.22px) 9.09%, calc(0.00% - 1.00px) 6.06%, calc(0.00% + 0.43px) 3.03%); }
+.torn-cut-card-2{ clip-path: polygon(0.00% calc(0.00% + 1.94px), 3.03% calc(0.00% + 0.59px), 6.06% calc(0.00% - 0.40px), 9.09% calc(0.00% - 1.74px), 12.12% calc(0.00% + 1.69px), 15.15% calc(0.00% + 0.72px), 18.18% calc(0.00% + 0.13px), 21.21% calc(0.00% - 1.21px), 24.24% calc(0.00% + 0.08px), 27.27% calc(0.00% + 0.05px), 30.30% calc(0.00% + 1.04px), 33.33% calc(0.00% + 0.39px), 36.36% calc(0.00% + 0.74px), 39.39% calc(0.00% - 0.14px), 42.42% calc(0.00% + 1.21px), 45.45% calc(0.00% + 0.65px), 48.48% calc(0.00% - 1.31px), 51.52% calc(0.00% - 0.79px), 54.55% calc(0.00% + 0.90px), 57.58% calc(0.00% + 1.02px), 60.61% calc(0.00% - 0.91px), 63.64% calc(0.00% - 1.16px), 66.67% calc(0.00% + 1.36px), 69.70% calc(0.00% - 1.25px), 72.73% calc(0.00% + 1.44px), 75.76% calc(0.00% - 0.17px), 78.79% calc(0.00% - 1.37px), 81.82% calc(0.00% - 0.16px), 84.85% calc(0.00% - 0.81px), 87.88% calc(0.00% + 0.42px), 90.91% calc(0.00% + 0.30px), 93.94% calc(0.00% - 0.57px), 96.97% calc(0.00% + 0.57px), 100.00% calc(0.00% - 0.40px), calc(100.00% - 0.94px) 3.03%, calc(100.00% - 1.74px) 6.06%, calc(100.00% + 0.20px) 9.09%, calc(100.00% - 1.91px) 12.12%, calc(100.00% + 0.72px) 15.15%, calc(100.00% + 1.86px) 18.18%, calc(100.00% - 1.08px) 21.21%, calc(100.00% - 1.94px) 24.24%, calc(100.00% + 1.92px) 27.27%, calc(100.00% - 1.23px) 30.30%, calc(100.00% + 1.02px) 33.33%, calc(100.00% - 0.55px) 36.36%, calc(100.00% + 0.48px) 39.39%, calc(100.00% - 0.11px) 42.42%, calc(100.00% + 0.12px) 45.45%, calc(100.00% - 0.89px) 48.48%, calc(100.00% - 1.65px) 51.52%, calc(100.00% - 1.75px) 54.55%, calc(100.00% - 0.97px) 57.58%, calc(100.00% - 1.86px) 60.61%, calc(100.00% + 1.68px) 63.64%, calc(100.00% + 0.36px) 66.67%, calc(100.00% + 0.80px) 69.70%, calc(100.00% - 0.95px) 72.73%, calc(100.00% + 0.58px) 75.76%, calc(100.00% - 1.59px) 78.79%, calc(100.00% - 0.59px) 81.82%, calc(100.00% + 1.58px) 84.85%, calc(100.00% + 1.88px) 87.88%, calc(100.00% + 0.25px) 90.91%, calc(100.00% + 0.23px) 93.94%, calc(100.00% - 1.47px) 96.97%, calc(100.00% + 0.68px) 100.00%, 96.97% calc(100.00% + 0.53px), 93.94% calc(100.00% - 1.69px), 90.91% calc(100.00% + 1.89px), 87.88% calc(100.00% + 0.42px), 84.85% calc(100.00% + 1.90px), 81.82% calc(100.00% + 1.90px), 78.79% calc(100.00% - 0.45px), 75.76% calc(100.00% - 1.89px), 72.73% calc(100.00% - 1.48px), 69.70% calc(100.00% + 1.30px), 66.67% calc(100.00% - 1.48px), 63.64% calc(100.00% - 1.05px), 60.61% calc(100.00% - 1.10px), 57.58% calc(100.00% - 0.55px), 54.55% calc(100.00% - 1.99px), 51.52% calc(100.00% + 0.72px), 48.48% calc(100.00% + 0.89px), 45.45% calc(100.00% - 0.23px), 42.42% calc(100.00% - 1.93px), 39.39% calc(100.00% - 1.86px), 36.36% calc(100.00% - 0.04px), 33.33% calc(100.00% - 1.72px), 30.30% calc(100.00% + 1.74px), 27.27% calc(100.00% - 1.94px), 24.24% calc(100.00% - 1.71px), 21.21% calc(100.00% + 1.55px), 18.18% calc(100.00% - 0.80px), 15.15% calc(100.00% - 1.09px), 12.12% calc(100.00% - 1.98px), 9.09% calc(100.00% + 0.11px), 6.06% calc(100.00% - 0.20px), 3.03% calc(100.00% + 1.16px), 0.00% calc(100.00% - 1.92px), calc(0.00% + 1.92px) 96.97%, calc(0.00% - 0.03px) 93.94%, calc(0.00% + 1.35px) 90.91%, calc(0.00% - 1.31px) 87.88%, calc(0.00% - 1.13px) 84.85%, calc(0.00% + 0.54px) 81.82%, calc(0.00% + 1.39px) 78.79%, calc(0.00% + 1.17px) 75.76%, calc(0.00% + 1.72px) 72.73%, calc(0.00% + 0.18px) 69.70%, calc(0.00% + 0.04px) 66.67%, calc(0.00% + 0.34px) 63.64%, calc(0.00% + 1.13px) 60.61%, calc(0.00% + 0.52px) 57.58%, calc(0.00% - 0.29px) 54.55%, calc(0.00% - 0.58px) 51.52%, calc(0.00% - 1.34px) 48.48%, calc(0.00% - 1.86px) 45.45%, calc(0.00% - 0.22px) 42.42%, calc(0.00% + 0.30px) 39.39%, calc(0.00% + 1.12px) 36.36%, calc(0.00% - 1.01px) 33.33%, calc(0.00% + 0.06px) 30.30%, calc(0.00% - 0.55px) 27.27%, calc(0.00% + 1.16px) 24.24%, calc(0.00% - 0.51px) 21.21%, calc(0.00% - 0.80px) 18.18%, calc(0.00% + 0.97px) 15.15%, calc(0.00% - 1.86px) 12.12%, calc(0.00% + 1.53px) 9.09%, calc(0.00% - 1.48px) 6.06%, calc(0.00% - 1.77px) 3.03%); }
+.torn-cut-card-3{ clip-path: polygon(0.00% calc(0.00% - 1.83px), 3.03% calc(0.00% + 0.61px), 6.06% calc(0.00% - 0.84px), 9.09% calc(0.00% - 1.26px), 12.12% calc(0.00% - 1.23px), 15.15% calc(0.00% - 0.40px), 18.18% calc(0.00% - 1.67px), 21.21% calc(0.00% - 1.00px), 24.24% calc(0.00% - 0.99px), 27.27% calc(0.00% + 1.56px), 30.30% calc(0.00% - 0.54px), 33.33% calc(0.00% - 1.64px), 36.36% calc(0.00% + 0.96px), 39.39% calc(0.00% - 0.80px), 42.42% calc(0.00% + 1.94px), 45.45% calc(0.00% - 1.75px), 48.48% calc(0.00% + 1.43px), 51.52% calc(0.00% - 1.69px), 54.55% calc(0.00% + 1.19px), 57.58% calc(0.00% - 0.12px), 60.61% calc(0.00% + 0.59px), 63.64% calc(0.00% + 1.54px), 66.67% calc(0.00% + 0.90px), 69.70% calc(0.00% + 1.05px), 72.73% calc(0.00% + 1.76px), 75.76% calc(0.00% + 1.81px), 78.79% calc(0.00% - 0.62px), 81.82% calc(0.00% - 1.14px), 84.85% calc(0.00% + 0.22px), 87.88% calc(0.00% + 1.00px), 90.91% calc(0.00% + 1.57px), 93.94% calc(0.00% - 1.04px), 96.97% calc(0.00% - 1.39px), 100.00% calc(0.00% + 1.77px), calc(100.00% - 0.42px) 3.03%, calc(100.00% - 0.89px) 6.06%, calc(100.00% - 0.75px) 9.09%, calc(100.00% + 0.66px) 12.12%, calc(100.00% - 0.32px) 15.15%, calc(100.00% - 0.63px) 18.18%, calc(100.00% + 1.29px) 21.21%, calc(100.00% - 1.84px) 24.24%, calc(100.00% - 1.13px) 27.27%, calc(100.00% + 1.81px) 30.30%, calc(100.00% - 1.90px) 33.33%, calc(100.00% + 0.17px) 36.36%, calc(100.00% - 1.72px) 39.39%, calc(100.00% + 0.59px) 42.42%, calc(100.00% + 0.95px) 45.45%, calc(100.00% + 1.88px) 48.48%, calc(100.00% - 0.12px) 51.52%, calc(100.00% + 0.94px) 54.55%, calc(100.00% + 0.51px) 57.58%, calc(100.00% + 0.99px) 60.61%, calc(100.00% - 0.33px) 63.64%, calc(100.00% - 0.12px) 66.67%, calc(100.00% + 0.56px) 69.70%, calc(100.00% + 0.58px) 72.73%, calc(100.00% + 1.86px) 75.76%, calc(100.00% + 1.81px) 78.79%, calc(100.00% + 1.74px) 81.82%, calc(100.00% + 1.40px) 84.85%, calc(100.00% - 0.03px) 87.88%, calc(100.00% + 0.98px) 90.91%, calc(100.00% + 1.81px) 93.94%, calc(100.00% + 1.08px) 96.97%, calc(100.00% - 1.83px) 100.00%, 96.97% calc(100.00% - 1.25px), 93.94% calc(100.00% - 1.87px), 90.91% calc(100.00% - 0.99px), 87.88% calc(100.00% + 1.03px), 84.85% calc(100.00% - 0.88px), 81.82% calc(100.00% - 1.51px), 78.79% calc(100.00% - 0.09px), 75.76% calc(100.00% + 1.36px), 72.73% calc(100.00% - 1.71px), 69.70% calc(100.00% + 1.25px), 66.67% calc(100.00% - 1.74px), 63.64% calc(100.00% - 0.36px), 60.61% calc(100.00% + 1.27px), 57.58% calc(100.00% + 0.61px), 54.55% calc(100.00% + 1.68px), 51.52% calc(100.00% + 0.51px), 48.48% calc(100.00% - 0.99px), 45.45% calc(100.00% - 1.35px), 42.42% calc(100.00% + 0.70px), 39.39% calc(100.00% - 0.92px), 36.36% calc(100.00% + 1.95px), 33.33% calc(100.00% - 0.42px), 30.30% calc(100.00% - 1.90px), 27.27% calc(100.00% + 1.72px), 24.24% calc(100.00% - 0.50px), 21.21% calc(100.00% + 0.98px), 18.18% calc(100.00% - 1.83px), 15.15% calc(100.00% + 0.30px), 12.12% calc(100.00% + 1.54px), 9.09% calc(100.00% + 0.24px), 6.06% calc(100.00% + 0.02px), 3.03% calc(100.00% + 0.48px), 0.00% calc(100.00% + 1.50px), calc(0.00% - 1.17px) 96.97%, calc(0.00% - 1.36px) 93.94%, calc(0.00% - 1.91px) 90.91%, calc(0.00% + 1.52px) 87.88%, calc(0.00% + 0.16px) 84.85%, calc(0.00% - 0.61px) 81.82%, calc(0.00% + 1.43px) 78.79%, calc(0.00% - 0.03px) 75.76%, calc(0.00% + 1.12px) 72.73%, calc(0.00% - 1.76px) 69.70%, calc(0.00% + 1.79px) 66.67%, calc(0.00% + 0.63px) 63.64%, calc(0.00% + 0.53px) 60.61%, calc(0.00% - 1.66px) 57.58%, calc(0.00% + 0.18px) 54.55%, calc(0.00% - 1.59px) 51.52%, calc(0.00% - 0.89px) 48.48%, calc(0.00% - 0.97px) 45.45%, calc(0.00% + 0.63px) 42.42%, calc(0.00% - 1.01px) 39.39%, calc(0.00% - 1.68px) 36.36%, calc(0.00% + 1.54px) 33.33%, calc(0.00% + 0.25px) 30.30%, calc(0.00% - 1.32px) 27.27%, calc(0.00% - 0.99px) 24.24%, calc(0.00% + 0.05px) 21.21%, calc(0.00% + 0.85px) 18.18%, calc(0.00% + 1.00px) 15.15%, calc(0.00% - 1.95px) 12.12%, calc(0.00% - 0.35px) 9.09%, calc(0.00% - 0.86px) 6.06%, calc(0.00% - 1.43px) 3.03%); }
+.torn-cut-card-4{ clip-path: polygon(0.00% calc(0.00% + 0.85px), 3.03% calc(0.00% + 1.61px), 6.06% calc(0.00% - 0.87px), 9.09% calc(0.00% - 0.41px), 12.12% calc(0.00% + 1.61px), 15.15% calc(0.00% + 1.97px), 18.18% calc(0.00% + 1.31px), 21.21% calc(0.00% - 1.78px), 24.24% calc(0.00% - 0.04px), 27.27% calc(0.00% + 1.90px), 30.30% calc(0.00% + 0.04px), 33.33% calc(0.00% - 0.03px), 36.36% calc(0.00% - 0.48px), 39.39% calc(0.00% - 0.08px), 42.42% calc(0.00% - 0.73px), 45.45% calc(0.00% + 1.04px), 48.48% calc(0.00% - 0.05px), 51.52% calc(0.00% - 1.46px), 54.55% calc(0.00% + 1.59px), 57.58% calc(0.00% - 0.98px), 60.61% calc(0.00% - 1.23px), 63.64% calc(0.00% + 0.39px), 66.67% calc(0.00% + 1.49px), 69.70% calc(0.00% - 1.70px), 72.73% calc(0.00% + 1.30px), 75.76% calc(0.00% + 0.63px), 78.79% calc(0.00% - 1.79px), 81.82% calc(0.00% - 1.16px), 84.85% calc(0.00% - 1.53px), 87.88% calc(0.00% - 1.96px), 90.91% calc(0.00% + 0.28px), 93.94% calc(0.00% + 0.30px), 96.97% calc(0.00% - 0.88px), 100.00% calc(0.00% - 0.71px), calc(100.00% - 0.77px) 3.03%, calc(100.00% - 1.92px) 6.06%, calc(100.00% - 0.96px) 9.09%, calc(100.00% + 0.45px) 12.12%, calc(100.00% + 1.55px) 15.15%, calc(100.00% - 0.36px) 18.18%, calc(100.00% - 0.52px) 21.21%, calc(100.00% + 0.06px) 24.24%, calc(100.00% - 0.16px) 27.27%, calc(100.00% - 0.67px) 30.30%, calc(100.00% + 0.04px) 33.33%, calc(100.00% + 1.15px) 36.36%, calc(100.00% - 0.65px) 39.39%, calc(100.00% - 0.25px) 42.42%, calc(100.00% + 2.00px) 45.45%, calc(100.00% + 1.39px) 48.48%, calc(100.00% - 0.95px) 51.52%, calc(100.00% + 1.45px) 54.55%, calc(100.00% - 0.69px) 57.58%, calc(100.00% + 1.39px) 60.61%, calc(100.00% - 1.20px) 63.64%, calc(100.00% + 0.51px) 66.67%, calc(100.00% - 1.66px) 69.70%, calc(100.00% - 1.38px) 72.73%, calc(100.00% - 0.53px) 75.76%, calc(100.00% + 0.59px) 78.79%, calc(100.00% - 1.92px) 81.82%, calc(100.00% - 0.70px) 84.85%, calc(100.00% - 1.84px) 87.88%, calc(100.00% - 0.66px) 90.91%, calc(100.00% + 0.67px) 93.94%, calc(100.00% - 0.87px) 96.97%, calc(100.00% - 1.31px) 100.00%, 96.97% calc(100.00% - 1.09px), 93.94% calc(100.00% - 1.42px), 90.91% calc(100.00% + 1.38px), 87.88% calc(100.00% + 1.71px), 84.85% calc(100.00% - 1.55px), 81.82% calc(100.00% + 1.10px), 78.79% calc(100.00% + 1.30px), 75.76% calc(100.00% - 0.49px), 72.73% calc(100.00% + 0.94px), 69.70% calc(100.00% - 0.27px), 66.67% calc(100.00% - 0.34px), 63.64% calc(100.00% + 1.73px), 60.61% calc(100.00% - 0.53px), 57.58% calc(100.00% + 1.73px), 54.55% calc(100.00% + 0.71px), 51.52% calc(100.00% - 0.19px), 48.48% calc(100.00% + 1.64px), 45.45% calc(100.00% - 1.47px), 42.42% calc(100.00% + 1.33px), 39.39% calc(100.00% + 1.94px), 36.36% calc(100.00% + 1.54px), 33.33% calc(100.00% + 1.55px), 30.30% calc(100.00% + 0.94px), 27.27% calc(100.00% - 1.94px), 24.24% calc(100.00% - 0.25px), 21.21% calc(100.00% + 1.09px), 18.18% calc(100.00% + 0.39px), 15.15% calc(100.00% - 1.51px), 12.12% calc(100.00% + 1.74px), 9.09% calc(100.00% + 1.86px), 6.06% calc(100.00% - 0.14px), 3.03% calc(100.00% + 1.27px), 0.00% calc(100.00% - 0.55px), calc(0.00% + 0.79px) 96.97%, calc(0.00% - 0.83px) 93.94%, calc(0.00% + 1.37px) 90.91%, calc(0.00% - 1.72px) 87.88%, calc(0.00% + 0.05px) 84.85%, calc(0.00% + 0.57px) 81.82%, calc(0.00% + 0.14px) 78.79%, calc(0.00% + 0.50px) 75.76%, calc(0.00% + 0.70px) 72.73%, calc(0.00% - 1.00px) 69.70%, calc(0.00% + 1.97px) 66.67%, calc(0.00% - 1.94px) 63.64%, calc(0.00% - 0.51px) 60.61%, calc(0.00% + 1.85px) 57.58%, calc(0.00% - 0.19px) 54.55%, calc(0.00% + 1.69px) 51.52%, calc(0.00% + 0.65px) 48.48%, calc(0.00% - 1.24px) 45.45%, calc(0.00% + 0.36px) 42.42%, calc(0.00% - 0.63px) 39.39%, calc(0.00% + 0.13px) 36.36%, calc(0.00% - 1.51px) 33.33%, calc(0.00% - 1.31px) 30.30%, calc(0.00% + 0.71px) 27.27%, calc(0.00% - 1.20px) 24.24%, calc(0.00% - 1.64px) 21.21%, calc(0.00% + 0.20px) 18.18%, calc(0.00% + 1.52px) 15.15%, calc(0.00% + 0.16px) 12.12%, calc(0.00% - 1.30px) 9.09%, calc(0.00% + 0.91px) 6.06%, calc(0.00% + 0.96px) 3.03%); }
+
+
+/* Varianti "solo bordo inferiore" — per i banner a piena pagina (GuideHero/ReportHero) che non
+   hanno un margine/pagina intorno su cui far proseguire il nastro: alto/sinistra/destra restano
+   dritti (flush con lo schermo, dove uno strappo non si vedrebbe comunque), solo il fondo — il
+   lato che tocca davvero il resto del contenuto sotto — è strappato. Niente nastro qui: senza un
+   margine dietro cui infilarlo non avrebbe nulla a cui "attaccarsi".
+
+   Jitter in px via calc(), non in % come .torn-cut-1..4: un banner è largo centinaia di px e
+   responsivo — con lo stesso jitter percentuale usato per i riquadri piccoli (144x112/87x87) i
+   punti finiscono troppo distanti tra loro e lo scarto verticale (percentuale di un'altezza
+   comunque piccola, ~250-350px) diventa pochi px su una larghezza enorme: risultato, un bordo che
+   sembra praticamente dritto. Qui il jitter resta un valore fisso (±2.5px) indipendente
+   dall'altezza, con molti più punti (60, non ~17) per restare "fitto" a qualunque larghezza. */
+.torn-cut-bottom-1{ clip-path: polygon(0% 0%, 100% 0%, 100.00% calc(100% - 2.23px), 98.31% calc(100% - 0.31px), 96.61% calc(100% - 0.73px), 94.92% calc(100% - 2.31px), 93.22% calc(100% + 2.31px), 91.53% calc(100% - 1.23px), 89.83% calc(100% + 2.12px), 88.14% calc(100% - 0.66px), 86.44% calc(100% + 2.42px), 84.75% calc(100% - 1.16px), 83.05% calc(100% - 0.75px), 81.36% calc(100% + 2.00px), 79.66% calc(100% + 1.07px), 77.97% calc(100% - 0.58px), 76.27% calc(100% + 1.71px), 74.58% calc(100% + 1.83px), 72.88% calc(100% - 1.46px), 71.19% calc(100% - 2.09px), 69.49% calc(100% - 0.57px), 67.80% calc(100% + 2.36px), 66.10% calc(100% + 0.62px), 64.41% calc(100% + 2.34px), 62.71% calc(100% + 1.10px), 61.02% calc(100% + 2.38px), 59.32% calc(100% + 2.30px), 57.63% calc(100% - 1.65px), 55.93% calc(100% + 1.55px), 54.24% calc(100% - 0.17px), 52.54% calc(100% + 2.24px), 50.85% calc(100% + 2.17px), 49.15% calc(100% + 1.38px), 47.46% calc(100% - 2.32px), 45.76% calc(100% + 1.47px), 44.07% calc(100% - 1.75px), 42.37% calc(100% - 0.00px), 40.68% calc(100% - 1.92px), 38.98% calc(100% + 0.36px), 37.29% calc(100% - 1.91px), 35.59% calc(100% - 2.36px), 33.90% calc(100% - 1.98px), 32.20% calc(100% - 0.71px), 30.51% calc(100% - 0.53px), 28.81% calc(100% + 2.26px), 27.12% calc(100% - 0.17px), 25.42% calc(100% + 0.88px), 23.73% calc(100% - 0.22px), 22.03% calc(100% - 1.43px), 20.34% calc(100% + 1.29px), 18.64% calc(100% - 2.40px), 16.95% calc(100% - 0.64px), 15.25% calc(100% - 0.20px), 13.56% calc(100% + 2.23px), 11.86% calc(100% - 0.74px), 10.17% calc(100% + 1.09px), 8.47% calc(100% - 0.68px), 6.78% calc(100% - 0.82px), 5.08% calc(100% + 1.53px), 3.39% calc(100% - 1.30px), 1.69% calc(100% + 0.64px), 0.00% calc(100% + 0.70px)); }
+.torn-cut-bottom-2{ clip-path: polygon(0% 0%, 100% 0%, 100.00% calc(100% - 2.46px), 98.31% calc(100% - 0.76px), 96.61% calc(100% + 0.88px), 94.92% calc(100% + 1.67px), 93.22% calc(100% + 0.71px), 91.53% calc(100% + 0.63px), 89.83% calc(100% + 2.20px), 88.14% calc(100% - 0.33px), 86.44% calc(100% - 0.85px), 84.75% calc(100% + 1.22px), 83.05% calc(100% + 2.21px), 81.36% calc(100% - 0.03px), 79.66% calc(100% + 1.17px), 77.97% calc(100% - 1.72px), 76.27% calc(100% + 0.98px), 74.58% calc(100% + 0.66px), 72.88% calc(100% - 0.24px), 71.19% calc(100% - 2.45px), 69.49% calc(100% + 1.70px), 67.80% calc(100% + 1.90px), 66.10% calc(100% + 1.17px), 64.41% calc(100% - 2.03px), 62.71% calc(100% - 0.37px), 61.02% calc(100% + 2.20px), 59.32% calc(100% + 1.30px), 57.63% calc(100% - 0.78px), 55.93% calc(100% + 0.79px), 54.24% calc(100% + 2.32px), 52.54% calc(100% - 1.58px), 50.85% calc(100% - 2.16px), 49.15% calc(100% + 0.75px), 47.46% calc(100% + 1.03px), 45.76% calc(100% - 2.32px), 44.07% calc(100% + 1.87px), 42.37% calc(100% - 2.03px), 40.68% calc(100% - 0.71px), 38.98% calc(100% - 1.77px), 37.29% calc(100% + 1.30px), 35.59% calc(100% - 2.07px), 33.90% calc(100% + 1.03px), 32.20% calc(100% - 1.65px), 30.51% calc(100% - 1.26px), 28.81% calc(100% - 2.19px), 27.12% calc(100% - 1.83px), 25.42% calc(100% - 1.80px), 23.73% calc(100% - 1.32px), 22.03% calc(100% - 0.92px), 20.34% calc(100% + 1.20px), 18.64% calc(100% - 0.31px), 16.95% calc(100% - 0.24px), 15.25% calc(100% - 0.73px), 13.56% calc(100% + 2.41px), 11.86% calc(100% + 0.21px), 10.17% calc(100% + 1.43px), 8.47% calc(100% - 0.60px), 6.78% calc(100% + 0.51px), 5.08% calc(100% - 0.19px), 3.39% calc(100% + 1.18px), 1.69% calc(100% - 0.83px), 0.00% calc(100% - 0.49px)); }
+.torn-cut-bottom-3{ clip-path: polygon(0% 0%, 100% 0%, 100.00% calc(100% - 1.66px), 98.31% calc(100% + 1.39px), 96.61% calc(100% + 0.47px), 94.92% calc(100% - 0.02px), 93.22% calc(100% + 2.11px), 91.53% calc(100% + 1.88px), 89.83% calc(100% - 0.97px), 88.14% calc(100% - 0.60px), 86.44% calc(100% - 0.29px), 84.75% calc(100% - 0.14px), 83.05% calc(100% + 0.23px), 81.36% calc(100% - 1.60px), 79.66% calc(100% - 0.48px), 77.97% calc(100% + 0.93px), 76.27% calc(100% - 0.63px), 74.58% calc(100% - 0.45px), 72.88% calc(100% - 0.41px), 71.19% calc(100% - 1.69px), 69.49% calc(100% + 1.28px), 67.80% calc(100% - 0.95px), 66.10% calc(100% + 1.01px), 64.41% calc(100% + 1.08px), 62.71% calc(100% - 1.67px), 61.02% calc(100% + 0.95px), 59.32% calc(100% - 2.49px), 57.63% calc(100% - 0.04px), 55.93% calc(100% + 2.32px), 54.24% calc(100% - 1.41px), 52.54% calc(100% - 0.64px), 50.85% calc(100% - 0.75px), 49.15% calc(100% + 0.03px), 47.46% calc(100% + 0.85px), 45.76% calc(100% - 0.62px), 44.07% calc(100% + 0.50px), 42.37% calc(100% + 2.18px), 40.68% calc(100% - 1.94px), 38.98% calc(100% + 0.17px), 37.29% calc(100% - 2.27px), 35.59% calc(100% + 1.74px), 33.90% calc(100% + 0.42px), 32.20% calc(100% + 0.62px), 30.51% calc(100% - 1.90px), 28.81% calc(100% - 0.46px), 27.12% calc(100% - 1.49px), 25.42% calc(100% - 1.29px), 23.73% calc(100% + 1.41px), 22.03% calc(100% + 0.34px), 20.34% calc(100% - 1.78px), 18.64% calc(100% + 1.37px), 16.95% calc(100% - 1.69px), 15.25% calc(100% - 0.80px), 13.56% calc(100% + 1.12px), 11.86% calc(100% - 0.53px), 10.17% calc(100% + 0.13px), 8.47% calc(100% - 1.98px), 6.78% calc(100% - 2.11px), 5.08% calc(100% - 1.25px), 3.39% calc(100% + 2.36px), 1.69% calc(100% - 1.73px), 0.00% calc(100% - 2.25px)); }
+.torn-cut-bottom-4{ clip-path: polygon(0% 0%, 100% 0%, 100.00% calc(100% - 1.37px), 98.31% calc(100% + 1.55px), 96.61% calc(100% + 1.16px), 94.92% calc(100% + 1.74px), 93.22% calc(100% - 0.24px), 91.53% calc(100% - 0.83px), 89.83% calc(100% + 1.26px), 88.14% calc(100% - 1.06px), 86.44% calc(100% + 2.20px), 84.75% calc(100% + 2.40px), 83.05% calc(100% - 1.83px), 81.36% calc(100% - 2.40px), 79.66% calc(100% + 1.32px), 77.97% calc(100% - 0.12px), 76.27% calc(100% + 0.31px), 74.58% calc(100% - 0.86px), 72.88% calc(100% - 1.37px), 71.19% calc(100% - 0.19px), 69.49% calc(100% + 0.67px), 67.80% calc(100% - 0.81px), 66.10% calc(100% - 1.06px), 64.41% calc(100% + 2.07px), 62.71% calc(100% + 2.41px), 61.02% calc(100% - 0.76px), 59.32% calc(100% - 1.51px), 57.63% calc(100% + 1.72px), 55.93% calc(100% + 0.99px), 54.24% calc(100% - 0.87px), 52.54% calc(100% + 1.14px), 50.85% calc(100% + 0.91px), 49.15% calc(100% + 1.08px), 47.46% calc(100% - 2.38px), 45.76% calc(100% + 0.62px), 44.07% calc(100% + 1.62px), 42.37% calc(100% - 0.65px), 40.68% calc(100% - 0.72px), 38.98% calc(100% - 2.31px), 37.29% calc(100% + 1.81px), 35.59% calc(100% - 2.31px), 33.90% calc(100% + 1.03px), 32.20% calc(100% + 1.84px), 30.51% calc(100% + 0.72px), 28.81% calc(100% - 2.15px), 27.12% calc(100% - 1.80px), 25.42% calc(100% + 0.38px), 23.73% calc(100% + 0.09px), 22.03% calc(100% - 1.54px), 20.34% calc(100% + 0.87px), 18.64% calc(100% - 0.69px), 16.95% calc(100% + 0.51px), 15.25% calc(100% + 1.31px), 13.56% calc(100% + 1.66px), 11.86% calc(100% - 0.64px), 10.17% calc(100% + 1.38px), 8.47% calc(100% + 1.68px), 6.78% calc(100% - 2.18px), 5.08% calc(100% + 1.68px), 3.39% calc(100% + 2.29px), 1.69% calc(100% - 0.20px), 0.00% calc(100% - 0.11px)); }
+
+/* Ombra sotto il bordo strappato del banner — nessuna maschera (niente nastro da cui affievolirsi
+   verso), un solo drop-shadow uniforme sul lato che conta: gli altri tre lati sono flush con lo
+   schermo (o off-canvas), quindi il loro sfioccamento resta comunque invisibile senza doverlo
+   mascherare via. */
+.torn-banner-shadow{
+  position: absolute; inset: -50px;
+  filter: drop-shadow(0 10px 18px rgba(46,42,34,.4)) drop-shadow(0 3px 6px rgba(46,42,34,.25));
+}
+.torn-banner-shadow .torn-filler{ inset: 50px; }
+
+/* Bordino di carta — bagliore bianco che segna il taglio del foglio. Stesso valore su tutti e
+   quattro i lati per tre lati su quattro: sul lato superiore, dove il nastro tiene la carta
+   incollata al fondo, niente bagliore — con cast e AO già assenti lì (vedi sopra), un bordino
+   bianco rimasto acceso da solo avrebbe fatto un alone innaturale, l'unica traccia rimasta
+   sarebbe dovuta essere il profilo irregolare dello strappo stesso. Stessa maschera lineare
+   dall'alto delle altre due, distanza di sfumatura più corta (il bagliore è già stretto, 6px di
+   raggio) — condivisa fra le quattro taglie come lo era la regola originale. */
+.torn-rim-photo, .torn-rim-map, .torn-rim-hero, .torn-rim-card{
+  position: absolute; inset: 0;
+  filter: drop-shadow(0 0 1.5px #fff) drop-shadow(0 0 6px #fff);
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 2px), black calc(var(--tape-y,0px) + 18px));
+  mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 2px), black calc(var(--tape-y,0px) + 18px));
+}
+
+/* Occlusione ambientale — ombra di contatto stretta. Come torn-cast sopra: assente lungo TUTTO
+   il lato superiore (quel lato è incollato dal nastro, non in bilico — niente da "occludere"
+   contro la pagina lì, il nastro stesso fa già da contatto visivo), maschera lineare dall'alto
+   invece del vecchio cerchio localizzato solo sul punto del nastro. Riquadro allargato (inset
+   negativo) per contenere lo sfioccamento del filtro senza che mask-repeat:no-repeat lo tagli via. */
+.torn-ao-photo{
+  position: absolute; inset: -18px;
+  filter: drop-shadow(0 1.5px 4px rgba(46,42,34,.52)) drop-shadow(0 0 2.5px rgba(46,42,34,.42));
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 18px), black calc(var(--tape-y,0px) + 73px));
+  mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 18px), black calc(var(--tape-y,0px) + 73px));
+}
+.torn-ao-photo .torn-filler{ inset: 18px; }
+.torn-ao-map{
+  position: absolute; inset: -11px;
+  filter: drop-shadow(0 1px 2.5px rgba(46,42,34,.52)) drop-shadow(0 0 1.5px rgba(46,42,34,.42));
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 11px), black calc(var(--tape-y,0px) + 44px));
+  mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 11px), black calc(var(--tape-y,0px) + 44px));
+}
+.torn-ao-map .torn-filler{ inset: 11px; }
+.torn-ao-hero{
+  position: absolute; inset: -22px;
+  filter: drop-shadow(0 2px 5px rgba(46,42,34,.52)) drop-shadow(0 0 3px rgba(46,42,34,.42));
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 22px), black calc(var(--tape-y,0px) + 88px));
+  mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 22px), black calc(var(--tape-y,0px) + 88px));
+}
+.torn-ao-hero .torn-filler{ inset: 22px; }
+.torn-ao-card{
+  position: absolute; inset: -16px;
+  filter: drop-shadow(0 1px 3px rgba(46,42,34,.5)) drop-shadow(0 0 2px rgba(46,42,34,.4));
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 16px), black calc(var(--tape-y,0px) + 56px));
+  mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 16px), black calc(var(--tape-y,0px) + 56px));
+}
+.torn-ao-card .torn-filler{ inset: 16px; }
+
+/* Ombra "sollevata" — a differenza dell'AO sopra (che si affievolisce solo in un piccolo
+   cerchio, proprio dove tocca il nastro), questa sparisce lungo TUTTO il lato superiore: quel
+   lato è incollato dal nastro, non sollevato dalla pagina, quindi non può proiettare un'ombra
+   "sospesa" — resta lì solo l'occlusione di contatto (torn-ao). Maschera lineare (non più
+   radiale) dall'alto: trasparente da 0 fino al vero bordo superiore della carta (l'inset
+   negativo del riquadro, allargato per contenere la sfocatura), poi un'ombra piena a piena
+   forza un po' più in basso. */
+.torn-cast-photo{
+  position: absolute; inset: -32px;
+  filter: drop-shadow(3px 8px 13px rgba(46,42,34,.38)) drop-shadow(0 2px 3px rgba(46,42,34,.26));
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 32px), black calc(var(--tape-y,0px) + 106px));
+  mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 32px), black calc(var(--tape-y,0px) + 106px));
+}
+.torn-cast-photo .torn-filler{ inset: 32px; }
+.torn-cast-map{
+  position: absolute; inset: -20px;
+  filter: drop-shadow(2px 5px 8px rgba(46,42,34,.38)) drop-shadow(0 1.5px 2px rgba(46,42,34,.26));
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 20px), black calc(var(--tape-y,0px) + 64px));
+  mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 20px), black calc(var(--tape-y,0px) + 64px));
+}
+.torn-cast-map .torn-filler{ inset: 20px; }
+.torn-cast-hero{
+  position: absolute; inset: -40px;
+  filter: drop-shadow(4px 10px 16px rgba(46,42,34,.38)) drop-shadow(0 2.5px 4px rgba(46,42,34,.26));
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 40px), black calc(var(--tape-y,0px) + 130px));
+  mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 40px), black calc(var(--tape-y,0px) + 130px));
+}
+.torn-cast-hero .torn-filler{ inset: 40px; }
+.torn-cast-card{
+  position: absolute; inset: -26px;
+  filter: drop-shadow(3px 7px 12px rgba(46,42,34,.35)) drop-shadow(0 2px 3px rgba(46,42,34,.24));
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 26px), black calc(var(--tape-y,0px) + 82px));
+  mask-image: linear-gradient(to bottom, transparent 0, transparent calc(var(--tape-y,0px) + 26px), black calc(var(--tape-y,0px) + 82px));
+}
+.torn-cast-card .torn-filler{ inset: 26px; }
+
+/* Nastro — fratello, non figlio, degli elementi con clip-path sopra (altrimenti verrebbe
+   tagliato insieme al resto): prosegue chiaramente oltre il bordo, sulla carta dietro. Colore
+   pieno TACCUINO_ACCENT_TINT (lib/taccuinoTokens.tsx) — se quel token cambia, aggiornare anche
+   qui. */
+/* Niente box-shadow: anche il nastro è incollato, non sollevato — coerente con l'aderenza già
+   tolta al resto del lato superiore (torn-cast/torn-ao/torn-rim sopra). Resta solo un contorno
+   sottile (non un'ombra) per leggerlo comunque contro la carta, molto simile di tono. */
+.torn-tape-photo{ position: absolute; width: 58px; height: 20px; border-radius: 1px; background: #E9DAC3; border: 1px solid rgba(61,43,31,.16); opacity: .9; z-index: 3; }
+.torn-tape-map{ position: absolute; width: 40px; height: 14px; border-radius: 1px; background: #E9DAC3; border: 1px solid rgba(61,43,31,.16); opacity: .9; z-index: 3; }
+.torn-tape-hero{ position: absolute; width: 76px; height: 26px; border-radius: 1px; background: #E9DAC3; border: 1px solid rgba(61,43,31,.16); opacity: .9; z-index: 3; }
+.torn-tape-card{ position: absolute; width: 56px; height: 20px; border-radius: 1px; background: #E9DAC3; border: 1px solid rgba(61,43,31,.16); opacity: .9; z-index: 3; }
+
+/* Numero di galleria — sostituisce bg-amber-500 (colore fuori palette taccuino) col terracotta
+   TACCUINO_ACCENT[600], sporgente sull'angolo come un'etichetta appuntata invece che incassato. */
+.torn-badge{
+  position: absolute; top: -9px; left: -9px; width: 22px; height: 22px; border-radius: 50%;
+  background: #C0603D; color: #fff; display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 11px; box-shadow: 0 2px 4px rgba(46,42,34,.3); z-index: 3;
+}
+
+/* ── Fisarmonica di carta — components/PaperAccordion.tsx ──
+   Meccanica di apertura per le card espandibili: non un accordion (niente height:auto/
+   max-height/scaleY sul contenuto), un vero foglio incernierato che si apre ruotando. Calibrata
+   in un mockup dedicato (Artifact, non su file) prima di questo porting — stessa tecnica lì
+   validata: ogni "foglio" aggiuntivo è annidato dentro il precedente (mai posizionato in
+   assoluto rispetto alla card), l'unico modo per cui le rotazioni si compongono fisicamente
+   come farebbe una vera catena di cerniere di carta. A riposo ogni cerniera sta a
+   rotateX(180deg) (ripiegata all'indietro esattamente sul foglio precedente, invisibile dietro
+   il foglio 0 — la card così com'è oggi); aperta, rotateX(0deg), in sequenza. Il primo foglio
+   (l'intestazione, sempre presente) resta un <TornFrame> invariato — il bordo strappato non
+   cambia; i fogli aggiuntivi hanno solo una piega (.paper-crease-line), mai lo strappo. */
+.paper-accordion{ position: relative; perspective: 1800px; }
+
+.paper-hinge{
+  position: absolute; left: 0; top: 100%; width: 100%;
+  transform-origin: top center;
+  transform-style: preserve-3d;
+  transform: rotateX(180deg);
+  transition: transform .68s cubic-bezier(.5,0,.2,1);
+  /* Ripiegata a 180° la cerniera proietta il proprio riquadro ALL'INDIETRO, esattamente sopra
+     il foglio 0 (l'intestazione) — invisibile per via di backface-visibility su .paper-hinge-face,
+     ma backface-visibility nasconde solo la resa grafica, non la partecipazione all'hit-testing:
+     senza pointer-events:none qui, il riquadro chiuso intercetta comunque i tap destinati al
+     bottone dell'intestazione sotto di lui (bug reale, riscontrato aprendo "Altri totali"). */
+  pointer-events: none;
+}
+.paper-accordion.open .paper-hinge{ transform: rotateX(0deg); pointer-events: auto; }
+
+/* Due facce per foglio, come una vera pagina di carta — quella con il contenuto e il suo verso
+   (carta liscia, nessun contenuto specchiato). Funziona perché la rotazione sta sulla hinge
+   (transform-style:preserve-3d) e le facce sono figlie dirette senza una propria trasformazione
+   locale: l'orientamento 3D passa correttamente a loro. Mettere backface-visibility su un figlio
+   di un elemento con transform-style:flat (il default) NON funziona — verificato nel mockup,
+   il contenuto restava visibile (specchiato) oltre i 90° invece di sparire. */
+.paper-hinge-face{ position: absolute; inset: 0; backface-visibility: hidden; }
+.paper-hinge-face-back{
+  /* rotateX, non rotateY — deve girare sullo STESSO asse della hinge (.paper-hinge ruota su X,
+     variante verticale) perché le due rotazioni si sommino correttamente (0+180=180 chiusa,
+     nascosta; 180+180=360≡0 aperta, rivolta verso chi guarda). Un asse diverso da quello del
+     genitore non compone linearmente: bug reale introdotto nel porting da questo mockup, dove
+     invece era già corretto. */
+  transform: rotateX(180deg);
+  background: linear-gradient(155deg, rgba(61,43,31,.09), transparent 45%), #F9F2E4;
+}
+
+/* Bordo superiore dei fogli aggiuntivi: mai lo strappo (quello resta solo sul bordo ESTERNO
+   della card, foglio 0) — è una PIEGA, lo stesso foglio ripiegato, non un foglio a parte
+   strappato via. Un'ombra scura netta sulla cerniera (dove la carta si incassa) seguita da una
+   cresta chiara nello STESSO tono caldo della carta — mai bianco, altrimenti legge come una riga
+   incollata sopra invece che un'indentatura nella carta. */
+.paper-crease-line{
+  position: absolute; left: 0; right: 0; top: 0; height: 9px;
+  background: linear-gradient(180deg,
+    rgba(61,43,31,.32) 0%, rgba(61,43,31,.32) 38%,
+    rgba(252,246,234,.85) 48%, rgba(252,246,234,.25) 72%, transparent 100%);
+  pointer-events: none;
+}
+
+/* Carosello della Libreria (app/diari/page.tsx) — nasconde la scrollbar dello swipe orizzontale
+   fra copertine: lo scroll-snap resta interamente nativo (touch/wheel), qui si toglie solo il
+   filo di scrollbar che altrimenti comparirebbe sotto le copertine. `scrollbar-width` (Firefox)
+   è già inline sull'elemento; le WebKit-only pseudo-classi non sono esprimibili come style React,
+   da qui la classe globale. */
+.no-scrollbar::-webkit-scrollbar{ display: none; }

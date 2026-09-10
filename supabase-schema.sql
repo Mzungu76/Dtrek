@@ -41,6 +41,18 @@ CREATE INDEX IF NOT EXISTS idx_activities_start_time  ON activities (start_time 
 CREATE INDEX IF NOT EXISTS idx_activities_user_rating ON activities (user_rating DESC NULLS LAST);
 CREATE INDEX IF NOT EXISTS idx_activities_user_id     ON activities (user_id);
 
+-- Piano mete multi-tipologia, Blocco E — vedi supabase/migrations/add_activities_meta_type_columns.sql
+-- per i commenti completi. "Travasati" dalla Meta al salvataggio (lib/activitySave.ts), come già
+-- fatto per guide_text/poi_wiki — mai una dipendenza runtime dal join a planned_hikes.
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS meta_type TEXT NOT NULL DEFAULT 'sentiero'
+  CHECK (meta_type IN ('sentiero', 'borgo_citta', 'sito'));
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS site_type TEXT
+  CHECK (site_type IS NULL OR site_type IN (
+    'museo', 'castello', 'abbazia', 'chiesa', 'sito_archeologico', 'monumento',
+    'palazzo', 'teatro', 'cascata', 'grotta', 'belvedere', 'area_naturale', 'altro'
+  ));
+CREATE INDEX IF NOT EXISTS idx_activities_meta_type ON activities (meta_type);
+
 -- ── Escursioni pianificate ───────────────────────────────────
 CREATE TABLE IF NOT EXISTS planned_hikes (
   id                      TEXT PRIMARY KEY,
@@ -559,6 +571,7 @@ CREATE TABLE IF NOT EXISTS route_recommendations (
   status        TEXT NOT NULL DEFAULT 'pending', -- 'pending' | 'ok' | 'empty_no_location' | 'error'
   cards         JSONB NOT NULL DEFAULT '[]',     -- [{id, kind:'built'|'found', data}]
   feedback      JSONB NOT NULL DEFAULT '{}',     -- { [cardId]: { value:'like'|'dislike', at } }
+  shown_history JSONB NOT NULL DEFAULT '{}',     -- { [osmId]: { lastShownAt, timesShown } }, per la rotazione
   centroid_lat  DOUBLE PRECISION,
   centroid_lon  DOUBLE PRECISION,
   generated_at  TIMESTAMPTZ,
@@ -601,6 +614,111 @@ CREATE TABLE IF NOT EXISTS ptpr_pois (
 );
 
 CREATE INDEX IF NOT EXISTS idx_ptpr_pois_lat_lon ON ptpr_pois (lat, lon);
+
+
+-- ═══════════════════════════════════════════════════════════
+-- Piano mete multi-tipologia — Places Engine (Blocco B). Stesso blocco anche
+-- in supabase/migrations/add_places_catalog.sql, con i commenti completi.
+-- ═══════════════════════════════════════════════════════════
+
+CREATE EXTENSION IF NOT EXISTS postgis;
+
+CREATE TABLE IF NOT EXISTS dtrek_places (
+  id                      uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name                    text NOT NULL,
+  meta_type               text NOT NULL CHECK (meta_type IN ('sentiero', 'borgo_citta', 'sito')),
+  subtype                 text,
+  description             text,
+  latitude                double precision NOT NULL,
+  longitude               double precision NOT NULL,
+  geometry                geometry(Geometry, 4326),
+  region                  text,
+  province                text,
+  municipality            text,
+  municipality_istat_code text,
+  address                 text,
+  image_url               text,
+  official_url            text,
+  website                 text,
+  opening_hours           jsonb,
+  source                  text NOT NULL,
+  source_id               text NOT NULL,
+  confidence               double precision NOT NULL DEFAULT 1.0 CHECK (confidence BETWEEN 0 AND 1),
+  wikidata_id              text,
+  metadata                 jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at               timestamptz NOT NULL DEFAULT now(),
+  updated_at                timestamptz NOT NULL DEFAULT now(),
+  last_verified_at          timestamptz,
+  UNIQUE (source, source_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_dtrek_places_geometry     ON dtrek_places USING GIST (geometry);
+CREATE INDEX IF NOT EXISTS idx_dtrek_places_meta_type    ON dtrek_places (meta_type);
+CREATE INDEX IF NOT EXISTS idx_dtrek_places_subtype      ON dtrek_places (subtype);
+CREATE INDEX IF NOT EXISTS idx_dtrek_places_municipality_istat_code ON dtrek_places (municipality_istat_code);
+CREATE INDEX IF NOT EXISTS idx_dtrek_places_region        ON dtrek_places (region);
+CREATE INDEX IF NOT EXISTS idx_dtrek_places_lat_lon        ON dtrek_places (latitude, longitude);
+
+CREATE OR REPLACE FUNCTION dtrek_places_set_geometry_from_latlon() RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = public, pg_temp
+AS $$
+BEGIN
+  IF NEW.geometry IS NULL THEN
+    NEW.geometry := ST_SetSRID(ST_MakePoint(NEW.longitude, NEW.latitude), 4326);
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_dtrek_places_set_geometry ON dtrek_places;
+CREATE TRIGGER trg_dtrek_places_set_geometry
+  BEFORE INSERT OR UPDATE ON dtrek_places
+  FOR EACH ROW EXECUTE FUNCTION dtrek_places_set_geometry_from_latlon();
+
+-- trg_dtrek_places_updated_at è creato più avanti in questo file, subito dopo la definizione di
+-- set_updated_at() (§ "Timestamp di aggiornamento") — questa CREATE TABLE viene eseguita prima
+-- che quella funzione esista in un progetto nuovo che lancia lo script dall'inizio.
+
+ALTER TABLE dtrek_places ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "dtrek_places_public_read" ON dtrek_places;
+CREATE POLICY "dtrek_places_public_read" ON dtrek_places FOR SELECT USING (true);
+
+CREATE TABLE IF NOT EXISTS dtrek_place_sources (
+  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  place_id       uuid NOT NULL REFERENCES dtrek_places(id) ON DELETE CASCADE,
+  source         text NOT NULL,
+  source_id      text NOT NULL,
+  source_url     text,
+  raw_type       text,
+  confidence     double precision NOT NULL DEFAULT 1.0 CHECK (confidence BETWEEN 0 AND 1),
+  last_synced_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (source, source_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_dtrek_place_sources_place_id ON dtrek_place_sources (place_id);
+
+ALTER TABLE dtrek_place_sources ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "dtrek_place_sources_public_read" ON dtrek_place_sources;
+CREATE POLICY "dtrek_place_sources_public_read" ON dtrek_place_sources FOR SELECT USING (true);
+
+CREATE TABLE IF NOT EXISTS dtrek_place_relations (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  from_place_id uuid NOT NULL REFERENCES dtrek_places(id) ON DELETE CASCADE,
+  to_place_id   uuid NOT NULL REFERENCES dtrek_places(id) ON DELETE CASCADE,
+  relation_type text NOT NULL CHECK (relation_type IN ('contains', 'located_in', 'part_of', 'near', 'associated_with')),
+  metadata      jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (from_place_id, to_place_id, relation_type),
+  CHECK (from_place_id <> to_place_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_dtrek_place_relations_from ON dtrek_place_relations (from_place_id);
+CREATE INDEX IF NOT EXISTS idx_dtrek_place_relations_to   ON dtrek_place_relations (to_place_id);
+
+ALTER TABLE dtrek_place_relations ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "dtrek_place_relations_public_read" ON dtrek_place_relations;
+CREATE POLICY "dtrek_place_relations_public_read" ON dtrek_place_relations FOR SELECT USING (true);
 
 
 -- ═══════════════════════════════════════════════════════════
@@ -1030,6 +1148,14 @@ CREATE TRIGGER trg_hike_questionnaires_updated_at
   BEFORE UPDATE ON hike_questionnaires
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
+-- dtrek_places (Places Engine, creata più sopra in questo file) — il trigger va qui, non alla
+-- CREATE TABLE, perché set_updated_at() non esiste ancora a quel punto in uno script eseguito
+-- dall'inizio su un progetto nuovo.
+DROP TRIGGER IF EXISTS trg_dtrek_places_updated_at ON dtrek_places;
+CREATE TRIGGER trg_dtrek_places_updated_at
+  BEFORE UPDATE ON dtrek_places
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
 
 -- ═══════════════════════════════════════════════════════════
 -- Preferito nella galleria Resoconto — stesso blocco anche in
@@ -1116,6 +1242,36 @@ ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS paddle_subscription_id TEXT;
 
 -- Flag indipendente da onboarding_completed_at — vedi add_gift_route_offered_at.sql per il perché.
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS gift_route_offered_at TIMESTAMPTZ;
+
+-- Piano mete multi-tipologia — vedi supabase/migrations/add_meta_type_columns.sql per i commenti
+-- completi. DEFAULT 'sentiero' così ogni riga esistente resta invariata; site_type valorizzato
+-- solo quando meta_type = 'sito'. Mai dedotto da geometria/GPX — sempre scelto esplicitamente.
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS meta_type TEXT NOT NULL DEFAULT 'sentiero'
+  CHECK (meta_type IN ('sentiero', 'borgo_citta', 'sito'));
+
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS site_type TEXT
+  CHECK (site_type IS NULL OR site_type IN (
+    'museo', 'castello', 'abbazia', 'chiesa', 'sito_archeologico', 'monumento',
+    'palazzo', 'teatro', 'cascata', 'grotta', 'belvedere', 'area_naturale', 'altro'
+  ));
+
+CREATE INDEX IF NOT EXISTS idx_planned_hikes_meta_type ON planned_hikes (meta_type);
+CREATE INDEX IF NOT EXISTS idx_planned_hikes_site_type ON planned_hikes (site_type);
+
+-- Piano mete multi-tipologia, Blocco D — vedi supabase/migrations/add_planned_hikes_place_link.sql
+-- per i commenti completi. Un Percorso 'borgo_citta'/'sito' non ha una traccia GPX da cui
+-- derivare la posizione: place_id collega alla riga dtrek_places (SET NULL se la riga di
+-- catalogo viene rimossa — la Meta salvata dall'utente sopravvive comunque), latitude/longitude
+-- restano popolate indipendentemente. Sempre NULL per un sentiero.
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS place_id UUID REFERENCES dtrek_places(id) ON DELETE SET NULL;
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION;
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION;
+
+CREATE INDEX IF NOT EXISTS idx_planned_hikes_place_id ON planned_hikes (place_id);
+
+-- Slug di lib/italianRegions.ts (es. 'lazio'), NULL se l'utente ha scelto esplicitamente di non
+-- specificarla — vedi add_home_region.sql per il perché.
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS home_region TEXT;
 
 -- Confine Navigator/Dtrek, modello "un'icona sola" — vedi
 -- supabase/migrations/add_dtrek_activated_at.sql per i commenti completi. NULL finché l'utente

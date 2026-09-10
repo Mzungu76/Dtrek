@@ -220,6 +220,111 @@ export async function fetchWikiForNamedPois(
 }
 
 
+// Etichetta leggibile della fonte di un WikiPage, per la citazione nel popup "Leggi tutto" della
+// Home (app/bacheca/page.tsx) — un'entry senza `source` viene da una cache scritta prima
+// dell'introduzione di quel campo, l'unico caso in cui il fallback generico va usato.
+export function wikiSourceLabel(source?: WikiPage['source']): string {
+  if (source === 'wikivoyage-it') return 'Wikivoyage'
+  if (source === 'wikipedia-en') return 'Wikipedia (EN)'
+  return 'Wikipedia'
+}
+
+export interface WikiFullDetails {
+  /** Testo più lungo del breve incipit già in WikiPage.extract — non l'intero articolo, tagliato a
+   *  un numero di caratteri ragionevole per un popup mobile. */
+  extract: string
+  /** Foto aggiuntive dell'articolo oltre a WikiPage.thumbnail, quando presenti — best-effort. */
+  images: string[]
+}
+
+interface WikiExtractsApiResponse {
+  query?: { pages?: Record<string, { extract?: string }> }
+}
+
+interface WikiMediaListResponse {
+  items?: { type: string; srcset?: { src: string }[] }[]
+}
+
+function projectAndLangFromSource(source?: WikiPage['source']): { lang: string; project: 'wikipedia' | 'wikivoyage' } {
+  if (source === 'wikivoyage-it') return { lang: 'it', project: 'wikivoyage' }
+  if (source === 'wikipedia-en') return { lang: 'en', project: 'wikipedia' }
+  return { lang: 'it', project: 'wikipedia' }
+}
+
+// L'API extracts (explaintext=1, senza exintro) restituisce le intestazioni di sezione come testo
+// letterale "== Titolo ==" (a qualunque livello, fino a "======") — explaintext toglie il markup
+// inline ma non quello di sezione. Rumore visivo puro per un popup pensato come prosa continua, non
+// un indice — tolte riga per riga. Il testo originale ha tipicamente una riga vuota prima e dopo
+// ogni intestazione (per separarla dai paragrafi); tolta la riga dell'intestazione stessa restano
+// 2+ righe vuote consecutive una accanto all'altra, che con `whitespace-pre-line` (CuriosityModal)
+// diventano un salto visivo enorme tra un paragrafo e il successivo — collassate a una sola riga
+// vuota (un normale a-capo di paragrafo), mai più.
+function stripHeadingMarkup(text: string): string {
+  return text
+    .split('\n')
+    .filter(line => !/^\s*={2,}[^=]*={2,}\s*$/.test(line))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+}
+
+// `exchars` sotto è un taglio duro a un numero di caratteri, non a un confine di frase. Quando
+// tronca, l'API stessa aggiunge "..."/"…" in coda — trattarlo come una fine-frase valida (l'ultimo
+// dei tre punti è comunque seguito da fine stringa) vanificherebbe il trim sotto, lasciando il testo
+// troncato esattamente come prima di questa funzione: va rimosso PRIMA di cercare l'ultima frase
+// compiuta nel testo restante. Poi si arretra fino all'ultima punteggiatura di fine frase (., !, ?)
+// seguita da spazio/a-capo/fine stringa, così il testo mostrato finisce sempre su una frase completa
+// invece che su una parola tronca — un costo minimo di caratteri persi (quasi sempre l'ultima frase
+// incompleta) contro un testo che legge sempre come compiuto. Se non si trova nessuna punteggiatura
+// del genere (testo molto breve o senza punti), il testo (senza l'eventuale ellissi finale) resta
+// invariato: meglio mostrarlo per intero che tagliarlo alla cieca.
+function trimToCompleteSentence(text: string): string {
+  const withoutTrailingEllipsis = text.replace(/(\s*(\.{3}|…))+\s*$/, '').trimEnd()
+  const matches = Array.from(withoutTrailingEllipsis.matchAll(/[.!?](?=\s|$)/g))
+  if (matches.length === 0) return withoutTrailingEllipsis || text
+  const last = matches[matches.length - 1]
+  const cutIndex = (last.index ?? withoutTrailingEllipsis.length - 1) + 1
+  return withoutTrailingEllipsis.slice(0, cutIndex).trimEnd()
+}
+
+/**
+ * Testo esteso + eventuali altre foto dell'articolo di un WikiPage già noto (POI arricchito su un
+ * percorso) — per il popup "Leggi tutto" della Home, chiamata solo quando l'utente lo apre
+ * esplicitamente, non insieme a fetchWikiForNamedPois sopra (che gira su ogni POI del percorso).
+ * Nessuna nuova fonte oltre a Wikipedia/Wikivoyage (le uniche già integrate in questo modulo):
+ * qui ci limitiamo a chiedere più contenuto alla stessa pagina già trovata, non a cercarne altre.
+ */
+export async function fetchWikiFullDetails(wiki: WikiPage): Promise<WikiFullDetails> {
+  const { lang, project } = projectAndLangFromSource(wiki.source)
+  const titleSlug = encodeURIComponent(wiki.title.replace(/ /g, '_'))
+
+  const [extract, images] = await Promise.all([
+    fetch(`https://${lang}.${project}.org/w/api.php?` + new URLSearchParams({
+      action: 'query', prop: 'extracts', explaintext: '1', exchars: '2000',
+      titles: wiki.title, format: 'json', origin: '*',
+    }))
+      .then(r => (r.ok ? r.json() as Promise<WikiExtractsApiResponse> : null))
+      .then(data => {
+        const page = Object.values(data?.query?.pages ?? {})[0]
+        const raw = page?.extract?.trim() || wiki.extract
+        return trimToCompleteSentence(stripHeadingMarkup(raw))
+      })
+      .catch(() => wiki.extract),
+    fetch(`https://${lang}.${project}.org/api/rest_v1/page/media-list/${titleSlug}`)
+      .then(r => (r.ok ? r.json() as Promise<WikiMediaListResponse> : null))
+      .then(data => (data?.items ?? [])
+        .filter(it => it.type === 'image' && it.srcset?.length)
+        .map(it => {
+          const src = it.srcset![it.srcset!.length - 1].src
+          return src.startsWith('//') ? `https:${src}` : src
+        })
+        .filter(src => !/\.svg(\?|$)/i.test(src))
+        .slice(0, 8))
+      .catch(() => [] as string[]),
+  ])
+
+  return { extract, images }
+}
+
 export async function fetchNearbyWiki(
   lat: number,
   lon: number,

@@ -29,6 +29,12 @@ interface Props {
   wikiPages?: WikiPage[]
   difficultyMarkers?: ClassifiedDifficultyMarker[]
   floraMarkers?: { lat: number; lon: number; label: string }[]
+  /** Sfondo del badge colorato per `floraMarkers` — un solo colore per l'intera galleria attiva
+   *  (Flora o Fauna), non uno diverso per specie a differenza dei pin POI. Default verde,
+   *  invariato per i chiamanti esistenti. */
+  floraMarkerColor?: string
+  /** Emoji mostrata nel badge — 🌿 di default (Galleria Verde), 🐾 per la Galleria Animali. */
+  floraMarkerEmoji?: string
   /** Servizi di trasporto per il ritorno (bus/treno/taxi entro un raggio dal punto di arrivo di un
    *  percorso a sola andata, vedi lib/routeBuilder/returnOptions.ts) — un layer a parte, non
    *  incluso in `pois`: NON deve mai influenzare il fitBounds iniziale/di "inquadra tutto il
@@ -144,6 +150,8 @@ export default function MapView({
   wikiPages = [],
   difficultyMarkers = [],
   floraMarkers = [],
+  floraMarkerColor = '#378d44',
+  floraMarkerEmoji = '🌿',
   returnMarkers = [],
   planned = false,
   activeIndex = null,
@@ -670,9 +678,9 @@ export default function MapView({
 
       for (const marker of floraMarkers) {
         const icon = L.divIcon({
-          html: `<div style="font-size:20px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.4))">🌿</div>`,
-          iconSize: [26, 26],
-          iconAnchor: [13, 13],
+          html: `<div style="width:28px;height:28px;border-radius:50%;background:${floraMarkerColor};display:flex;align-items:center;justify-content:center;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4)"><span style="font-size:14px;line-height:1">${floraMarkerEmoji}</span></div>`,
+          iconSize: [28, 28],
+          iconAnchor: [14, 14],
           className: '',
         })
         const m = L.marker([marker.lat, marker.lon], { icon })
@@ -681,7 +689,7 @@ export default function MapView({
         floraLayer.current.push(m)
       }
     })
-  }, [floraMarkers, mapReady])
+  }, [floraMarkers, floraMarkerColor, floraMarkerEmoji, mapReady])
 
   // Layer servizi di trasporto per il ritorno (vedi il commento su `returnMarkers` nei Props) —
   // MAI incluso in boundsRef/fitBounds: questi pin possono cadere ben fuori dal percorso, il

@@ -110,22 +110,32 @@ export default function GuideQA({ hikeId, hikeFallback }: { hikeId: string; hike
   }
 
   return (
-    <div className="bg-white rounded-2xl mb-4 overflow-hidden shadow-sm">
-      <div className="flex items-center gap-3 px-5 py-3" style={{ background: '#813619' }}>
-        <div className="w-1.5 h-6 rounded-full bg-white/25 shrink-0" />
-        <div className="flex items-center gap-2 text-white">
-          <MessageCircleQuestion className="w-4 h-4 opacity-80" />
-          <h2 className="font-display text-[12px] font-bold tracking-[2px] uppercase">Chiedi a Giulia</h2>
+    <div className="bg-white rounded-2xl border border-stone-100 mb-6 overflow-hidden shadow-[0_5px_16px_-6px_rgba(43,36,25,0.14)]">
+      {/* Stesso header C1 delle sezioni della guida (vedi editorial/SectionCard.tsx): badge tondo
+          colorato + eyebrow/titolo a inchiostro neutro, non più una fascia piena colorata — questo
+          era l'unico widget della Guida a uscire da quel linguaggio. */}
+      <div className="flex items-start gap-3 px-5 pt-5 pb-3 sm:px-7 sm:pt-6 md:px-8 md:pt-7">
+        <span
+          className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-white [&>svg]:w-[18px] [&>svg]:h-[18px]"
+          style={{ background: '#6E301E' /* terra-800 */ }}
+        >
+          <MessageCircleQuestion />
+        </span>
+        <div className="flex-1 min-w-0">
+          <p className="font-barlow font-semibold uppercase tracking-wide text-xs text-stone-400">Chiedi a Giulia</p>
+          <h2 className="font-display text-2xl sm:text-2xl font-semibold text-stone-800 mt-1 leading-tight" style={{ textWrap: 'balance' as const }}>
+            Chiedi a Giulia
+          </h2>
         </div>
       </div>
 
-      <div className="px-5 py-5 sm:px-6">
-        <p className="text-[13px] text-stone-500 mb-4">
+      <div className="px-5 py-5 sm:px-7 md:px-8 md:pb-7">
+        <p className="text-sm text-stone-500 mb-4">
           Hai un dubbio su questo percorso? Chiedi pure — Giulia risponde solo a domande pertinenti a questa escursione.
         </p>
 
         {loadingHistory && entries.length === 0 && (
-          <p className="flex items-center gap-1.5 text-[13px] text-stone-400 italic mb-4">
+          <p className="flex items-center gap-1.5 text-sm text-stone-400 italic mb-4">
             <Loader2 className="w-3 h-3 animate-spin" /> Carico le domande già poste su questo percorso…
           </p>
         )}
@@ -134,22 +144,22 @@ export default function GuideQA({ hikeId, hikeFallback }: { hikeId: string; hike
           <div className="space-y-4 mb-4">
             {entries.map((entry, i) => (
               <div key={i} className="space-y-1.5">
-                <p className="text-[14px] font-semibold text-stone-700">{entry.question}</p>
+                <p className="text-sm font-semibold text-stone-700">{entry.question}</p>
                 {entry.error && (
-                  <p className="text-[13px] text-red-500">{entry.error}</p>
+                  <p className="text-sm text-red-500">{entry.error}</p>
                 )}
                 {!entry.error && entry.status && (
-                  <p className="flex items-center gap-1.5 text-[13px] text-stone-400 italic">
+                  <p className="flex items-center gap-1.5 text-sm text-stone-400 italic">
                     <Loader2 className="w-3 h-3 animate-spin" /> {entry.status}
                   </p>
                 )}
                 {!entry.error && !entry.status && entry.answer === undefined && (
-                  <p className="flex items-center gap-1.5 text-[13px] text-stone-400 italic">
+                  <p className="flex items-center gap-1.5 text-sm text-stone-400 italic">
                     <Loader2 className="w-3 h-3 animate-spin" /> Giulia sta pensando…
                   </p>
                 )}
                 {entry.answer !== undefined && (
-                  <p className={`text-[14px] leading-relaxed ${entry.pertinent === false ? 'italic text-stone-400' : 'text-stone-600'}`}>
+                  <p className={`text-sm leading-relaxed ${entry.pertinent === false ? 'italic text-stone-400' : 'text-stone-600'}`}>
                     {entry.answer}
                   </p>
                 )}
@@ -161,7 +171,7 @@ export default function GuideQA({ hikeId, hikeFallback }: { hikeId: string; hike
                         href={s.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-1 max-w-full px-2.5 py-1 rounded-full bg-stone-100 hover:bg-stone-200 transition-colors text-[10px] text-stone-500"
+                        className="flex items-center gap-1 max-w-full px-2.5 py-1 rounded-full bg-stone-100 hover:bg-stone-200 transition-colors text-xs text-stone-500"
                         title={s.url}
                       >
                         <Link2 className="w-2.5 h-2.5 shrink-0 text-stone-400" />
@@ -183,7 +193,7 @@ export default function GuideQA({ hikeId, hikeFallback }: { hikeId: string; hike
             onChange={e => setQuestion(e.target.value.slice(0, MAX_QUESTION_LENGTH))}
             placeholder="Es. dove trovo l'acqua lungo il percorso?"
             disabled={asking}
-            className="flex-1 min-w-0 px-4 py-2.5 rounded-full border border-stone-200 text-[14px] text-stone-700 placeholder:text-stone-400 focus:outline-none focus:border-terra-400 disabled:opacity-60"
+            className="flex-1 min-w-0 px-4 py-2.5 rounded-full border border-stone-200 text-sm text-stone-700 placeholder:text-stone-400 focus:outline-none focus:border-terra-400 disabled:opacity-60"
           />
           <button
             type="submit"

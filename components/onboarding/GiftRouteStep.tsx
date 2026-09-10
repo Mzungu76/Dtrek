@@ -15,9 +15,14 @@ type Phase = 'locating' | 'manual' | 'claiming' | 'done'
 /**
  * Ultimo passo dopo OnboardingWizard (docs/navigator-dtrek-boundary.md) — prova a geolocalizzare
  * l'utente per regalargli il percorso pianificato della sua regione (solo dati calcolati, niente
- * testo AI, vedi lib/giftRoute.ts); se il permesso viene negato o il browser non risponde entro
- * pochi secondi, mostra un picker manuale delle regioni. Sempre saltabile. Segna
- * gift_route_offered_at indipendentemente dall'esito, così non si ripropone ad ogni accesso.
+ * testo AI, vedi lib/giftRoute.ts) e, contestualmente, a raccogliere la sua regione di casa
+ * (home_region su user_settings, P-O5 in UX-AUDIT.md) — il primo segnale geografico usato per
+ * mostrare percorsi e POI pertinenti fin dal primo giorno, prima che ci sia uno storico personale.
+ * Se il permesso di geolocalizzazione viene negato o il browser non risponde entro pochi secondi,
+ * il picker manuale delle regioni diventa la sola via avanti — niente più "Salta" in quella fase,
+ * per non perdere il segnale quando è più prezioso — ma resta sempre presente un'opzione neutra
+ * ("Preferisco non specificare ora") che non blocca comunque l'utente. Segna gift_route_offered_at
+ * indipendentemente dall'esito, così non si ripropone ad ogni accesso.
  */
 export default function GiftRouteStep({ onDone }: Props) {
   const [phase, setPhase] = useState<Phase>('locating')
@@ -59,7 +64,34 @@ export default function GiftRouteStep({ onDone }: Props) {
     }
     setResult(data)
     setPhase('done')
+    // homeRegion persiste anche quando non c'è (ancora) un percorso omaggio da regalare per quella
+    // regione (data.region è comunque la regione risolta, geo o manuale — vedi claimGiftRoute in
+    // lib/giftRoute.ts) — è un dato utile di per sé, non solo un mezzo per il regalo.
+    void updateUserSettings({
+      giftRouteOfferedAt: new Date().toISOString(),
+      ...(data.region ? { homeRegion: data.region } : {}),
+    })
+  }
+
+  // Unica via per proseguire senza scegliere una regione, quando la geolocalizzazione non l'ha
+  // già risolta — una scelta esplicita ("preferisco non specificare"), non un "Salta" a costo
+  // zero: il picker manuale (sotto) non ha più un bottone Salta a parte, così il segnale geografico
+  // non si perde per semplice disattenzione proprio quando è più prezioso (P-O5 in UX-AUDIT.md).
+  function declineRegion() {
     void updateUserSettings({ giftRouteOfferedAt: new Date().toISOString() })
+    onDone()
+  }
+
+  // "Salta" in alto (visibile solo in 'locating'/'done', mai in 'manual' — vedi sopra) chiamava
+  // onDone() direttamente, SENZA mai marcare gift_route_offered_at: se l'utente lo toccava mentre
+  // il passo era ancora 'locating' (prima che claim() lo facesse da solo), il flag non veniva mai
+  // scritto — OnboardingGate.tsx lo rilegge da user_settings a ogni accesso, quindi il passo si
+  // ripresentava a ogni apertura dell'app invece che una sola volta, contraddicendo il commento
+  // sopra ("Segna gift_route_offered_at indipendentemente dall'esito"). Nessun effetto quando
+  // toccato in fase 'done' (claim() l'ha già scritto lì), solo idempotente.
+  function skip() {
+    void updateUserSettings({ giftRouteOfferedAt: new Date().toISOString() })
+    onDone()
   }
 
   return (
@@ -71,8 +103,8 @@ export default function GiftRouteStep({ onDone }: Props) {
             <Gift className="w-4.5 h-4.5 text-forest-600" />
           </div>
           <div className="flex-1" />
-          {phase !== 'claiming' && (
-            <button onClick={onDone} className="text-xs font-medium text-stone-400 hover:text-stone-600 transition-colors uppercase tracking-wide">
+          {phase !== 'claiming' && phase !== 'manual' && (
+            <button onClick={skip} className="text-xs font-medium text-stone-400 hover:text-stone-600 transition-colors uppercase tracking-wide">
               Salta
             </button>
           )}
@@ -92,7 +124,10 @@ export default function GiftRouteStep({ onDone }: Props) {
             <>
               <div>
                 <h2 className="font-display text-lg font-semibold text-stone-800 mb-1">Da dove parti?</h2>
-                <p className="text-sm text-stone-500">Ti regaliamo un percorso già pronto della tua regione, per iniziare subito a esplorare.</p>
+                <p className="text-sm text-stone-500">
+                  Ci serve per mostrarti fin da subito percorsi e punti d&apos;interesse della tua zona — e,
+                  se disponibile, per regalarti un percorso già pronto della tua regione.
+                </p>
               </div>
               <div className="grid grid-cols-2 gap-2 max-h-[45vh] overflow-y-auto pr-1">
                 {ITALIAN_REGIONS.map(r => (
@@ -106,6 +141,12 @@ export default function GiftRouteStep({ onDone }: Props) {
                   </button>
                 ))}
               </div>
+              <button
+                onClick={declineRegion}
+                className="w-full text-center text-xs font-medium text-stone-400 hover:text-stone-600 transition-colors py-1"
+              >
+                Preferisco non specificare ora
+              </button>
             </>
           )}
 

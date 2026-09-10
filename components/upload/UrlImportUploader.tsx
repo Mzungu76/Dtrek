@@ -36,7 +36,7 @@ const REASON_MESSAGES: Record<string, string> = {
   invalid_url: 'Questo non sembra un indirizzo web valido.',
 }
 
-export default function UrlImportUploader({ onBack }: { onBack: () => void }) {
+export default function UrlImportUploader({ onBack, diaryId }: { onBack: () => void; diaryId?: string }) {
   const router = useRouter()
   const [status, setStatus] = useState<Status>('idle')
   const [url, setUrl] = useState('')
@@ -91,6 +91,7 @@ export default function UrlImportUploader({ onBack }: { onBack: () => void }) {
         trackPoints: resolved.trackPoints?.length ? resolved.trackPoints : undefined,
         routePolyline: resolved.trackPoints?.length ? downsamplePolyline(resolved.trackPoints) : undefined,
         pendingExpiresAt,
+        diaryId,
       }
 
       if (hike.trackPoints?.length) {
@@ -200,7 +201,7 @@ export default function UrlImportUploader({ onBack }: { onBack: () => void }) {
               <div key={s.label} className="bg-white rounded-xl border border-sky-100 p-3 flex items-center gap-2">
                 {s.icon}
                 <div>
-                  <p className="text-[10px] text-stone-400">{s.label}</p>
+                  <p className="text-xs text-stone-400">{s.label}</p>
                   <p className="text-sm font-semibold text-stone-800">{s.val}</p>
                 </div>
               </div>

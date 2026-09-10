@@ -1,0 +1,1620 @@
+# Diario a libro — Guida e Resoconto come pagine sfogliabili
+
+> Il piano originale "Diario come fulcro" (Diario→Percorso→Reportage, schema `diaries`/`diary_id`,
+> le route `/diari`, composer, pubblicazione, ricerca unificata, gestione, cutover nav) è stato
+> **completato e già in produzione** — vedi git log (Fase 0→7, commit "Fase N: ..."). Questo piano
+> ne è il seguito diretto: restilizza Guida e Resoconto, oggi ancora invariati dentro `/diari`,
+> nel modello "a libro" validato in sei revisioni di mockup.
+
+## Contesto
+
+Dentro il Diario, aprire un Percorso mostra oggi la Guida esattamente come su `/guida/[id]` — stessa
+galleria, stessa schermata scura immersiva — e un Reportage rimanda del tutto fuori, a `/resoconto/[id]`.
+È lo stacco visivo che l'utente ha segnalato: il Diario è già stato ristrutturato concettualmente,
+ma quando lo si legge davvero si cade ancora nella vecchia interfaccia.
+
+Abbiamo validato in un mockup HTML (artifact `2e1f7d0a-5d69-4e17-9c8b-038aa651e13b`, non nel repo —
+copia locale in `/tmp/claude-0/.../scratchpad/diario-swipe-mockup.html` nella sessione che l'ha
+creato, non garantita persistente) un modello alternativo: il Diario si sfoglia come un libro vero —
+copertina, indice, una pagina per Percorso, e da lì Guida e Resoconto diventano **pagine del libro**,
+una per sezione, nello stesso ordine e con **tutti** i dati che hanno oggi (punteggi, categorie di
+sicurezza, fauna, POI, meteo, assessment, grafici, foto) — non una versione riassunta. L'utente ha
+approvato ed esplicitamente richiesto: nessun dato o funzione perso, solo restilizzato.
+
+## Decisione architetturale chiave
+
+Ho fatto verificare l'architettura da un'analisi dedicata del codice reale prima di scrivere questo
+piano. Conclusione più importante: **`GuidaHub`/`ResocontoHub` sono gallerie a carosello di *tutti*
+i percorsi/attività dell'utente** (`RouteHub`, `mode="guida"`/`"resoconto"`), non viste di un singolo
+elemento — `/diari/[id]/percorsi/[percorsoId]/page.tsx` oggi monta `<GuidaHub id={percorsoId} />`
+per intero, quindi eredita anche lo swipe verso un percorso completamente diverso. Riusarle dentro
+il nuovo flusso a libro (Diario→Percorso→Guida→...→torna all'indice) porterebbe dentro quella
+semantica da carosello, che lo contraddice.
+
+**Decisione: non tocco `GuidaHub.tsx`, `ResocontoHub.tsx`, `RouteHub.tsx`, `GuideReader.tsx`,
+`ReportReader.tsx`.** Restano esattamente come sono — sono file lunghi, pieni di commenti su bug
+sottili già chiusi (sfarfallii, race condition, doppio calcolo CTS), e `/guida/[id]`/`/resoconto/[id]`
+continuano a passarci invariate: rischio zero sulle route standalone, che restano il "modo classico"
+sempre raggiungibile (link esplicito, mai rimosso) da ogni pagina del libro.
+
+Il libro nasce invece da **estrazione, non riscrittura**:
+- `GuideReader.tsx` (righe ~280-291, ~741-848) e `ReportReader.tsx` (righe ~339-347, ~564-741)
+  costruiscono già, internamente, un unico array piatto di sezioni (`displaySections`) e un
+  dispatcher puro che sceglie il widget per ciascuna (`renderWidget(key, body)` /
+  `renderFixedWidget(key)`). Estraggo queste due funzioni pure in moduli condivisi
+  (`lib/guida/guideDisplaySections.tsx`, `lib/resoconto/reportDisplaySections.tsx`) con argomenti
+  espliciti al posto della closure. GuideReader/ReportReader continuano a chiamarle internamente,
+  comportamento identico — è un'estrazione meccanica, verificabile con un diff visivo prima/dopo.
+  Questo è ciò che garantisce "nessun widget riscritto": la logica di dispatch resta la stessa
+  funzione, chiamata sia dal reader continuo sia dalle nuove pagine a libro.
+- Il libro monta **una sola sezione per volta, mount/unmount reale** (non `display:none`): è anche
+  la scelta più sicura per le mappe (MapLibre/PoiMap) e i grafici (Recharts/HRChart/SpeedChart), che
+  misurano il proprio contenitore al mount e restituiscono spesso un box 0×0 se nascosti via CSS.
+  Il pan/zoom si resetta cambiando pagina — coerente con un libro fisico, non uno stato che oggi è
+  comunque persistito.
+- Caricamento dati: due loader nuovi e magri (`useGuidaBookData`, `useReportageBookData`) che
+  riusano gli hook già estratti come moduli standalone (`useDtmProfile`, `useTerrainProfile`,
+  `useProtectedAreaCheck`, `useDrivingDistance`, `useSafetyScore`, `useHasAiAccess`,
+  `useEnrichmentTimeout`, `useCtsRecompute`, `useFlora`, in `app/guida/use*.ts`/`app/resoconto/use*.ts`/
+  `lib/`) e duplicano — deliberatamente, con commento esplicito — solo la colla residua che oggi vive
+  inline dentro GuidaHub/ResocontoHub (~150-200 righe: effetto POI/wiki, memo `personalSafety`,
+  handler `routeMode`, guardia di auto-generazione della guida Breve). Un refactor di quei due hub
+  per estrarne un hook condiviso è lavoro rischioso e ortogonale a questa fase; la duplicazione
+  temporanea è il compromesso giusto, con un ticket di follow-up per unificare dopo la validazione.
+
+### Chrome che vive fuori dal loop delle sezioni — dove va
+
+GuideReader/ReportReader hanno ~15 pezzi di UI che oggi compaiono una sola volta per lettura, non
+per sezione: hero, stat strip, pannello generazione/rigenerazione AI + selezione lunghezza,
+`VoicePlayer` (solo Guida), galleria foto finale, `GuideQA`, export PDF, editor manuale
+(`editorMode==='manual'`), pubblica/scarica PDF, `NextStepBanner`, `PhotoLightbox`,
+`RouteModeDialog`/`CreditErrorModal`, i modali `RouteMap3D`/Street View (passati a GuideReader solo
+via callback `onOpenMap3D` da GuidaHub). Nessuno di questi è "una sezione" — vanno assegnati
+esplicitamente, non lasciati impliciti:
+- **Pagina di riepilogo Percorso/Reportage** (nuova, vedi Fase 3): pannello generazione/rigenerazione,
+  selezione lunghezza, `NextStepBanner`, pubblica/scarica PDF, editor manuale come azione esplicita
+  che esce dal libro (`editorMode==='manual'` non è paginabile).
+- **Link "Apri in modalità classica"** (sempre presente, mai rimosso, su ogni pagina di riepilogo):
+  `VoicePlayer` (lettura vocale multi-sezione con auto-scroll non ha equivalente diretto in
+  paginazione — funzionalità dichiaratamente non riportata nel libro v1), `GuideQA`, `RouteMap3D`,
+  Street View, editor manuale se non ricollocato in Fase 3.
+- **Deep-link a sezione** (tap sul badge Trail Score → "Dati e sicurezza", tap su un pin POI →
+  "Luoghi") oggi fanno `scrollIntoView`; nel libro diventano "vai alla pagina N" — vanno
+  esplicitamente ricollegati nella Fase 2/3, altrimenti spariscono in silenzio insieme a GuidaHub.
+- **Pull quote del Resoconto** (frase a effetto tra due capitoli, tracciata a parte via `gapRefs`,
+  non è una voce di `displaySections`): decisione presa in Fase 0 — resta dov'era (in fondo alla
+  pagina del capitolo narrativo precedente), non richiede trattamento speciale nell'estrazione.
+- **Auto-generazione guida Breve**: la stessa guardia (`enrichmentReady && hasAiAccess &&
+  autoGenSections.length>0`) va replicata nel nuovo loader, altrimenti rischio di doppia
+  generazione (costo AI) se lo stesso percorso si apre sia da `/guida/[id]` sia dal libro.
+
+## Fasi (ognuna verificabile da sola)
+
+**Fase 0 — Estrazione pura (rischio minimo, meccanica)** ✅ **COMPLETATA** (commit `2b470b2`)
+- `lib/guida/guideDisplaySections.tsx`: estrarre `buildGuideDisplaySections(guideText)` e
+  `renderGuideWidget(key, body, props)` da `GuideReader.tsx`.
+- `lib/resoconto/reportDisplaySections.tsx`: stesso trattamento per `ReportReader.tsx`
+  (`buildReportDisplaySections`, `renderReportFixedWidget`).
+- Verifica: `tsc --noEmit` ed `eslint` puliti sull'intero progetto. Non è stato possibile fare un
+  diff visivo screenshot-based di `/guida/[id]`/`/resoconto/[id]` in questo ambiente (nessuna
+  credenziale Supabase disponibile nella sandbox) — l'estrazione è comunque meccanica (stesso
+  switch/JSX spostato, non riscritto) e verificata riga per riga.
+
+**Fase 1 — Loader magri per singolo elemento** ✅ **COMPLETATA** (commit `5dbf5e7`, con due fix in `f964924`)
+- `app/diari/[id]/percorsi/[percorsoId]/useGuidaBookData.ts`
+- `app/diari/[id]/percorsi/[percorsoId]/reportage/[activityId]/useReportageBookData.ts`
+- Riusano gli hook già estratti; duplicano solo la colla (commentata esplicitamente sul perché);
+  replicano la guardia di auto-generazione.
+- **Non ancora fatto**: `/api/percorsi/[id]/reportage` (`ReportageRow`) espone ancora solo
+  id/title/startTime/distanceMeters/hasWrittenReport — da estendere in Fase 3 se la card di
+  riepilogo Reportage ne ha bisogno (foto, dislivello, voto).
+
+**Fase 2 — Guscio "libro" (componenti nuovi)** ✅ **COMPLETATA** (commit `f964924`)
+- `components/libro/BookPage.tsx`: pergamena, palette TERRA/FOREST/STONE e font
+  Playfair/Lora/Barlow Condensed da `lib/designTokens.ts`. Adattamento deliberato rispetto al
+  mockup: frecce/pillole sono `<Link>` reali (URL vere, Fase 3), non zone invisibili ai bordi né
+  stato JS di un simulatore — più utilizzabile su desktop e coerente con URL condivisibili/back
+  button.
+- `components/libro/GuideBookPage.tsx` / `components/libro/ReportBookPage.tsx`: montano una sola
+  sezione alla volta, usando l'estrazione di Fase 0 + i loader di Fase 1.
+- **Non ancora verificato a schermo** (nessun ambiente Supabase/dati reali in questa sandbox):
+  dimensionamento di RouteMapSection/HRChart/SpeedChart/PoiMap dentro il nuovo contenitore a piena
+  pagina (oggi vivono in una colonna `max-w-3xl`/`lg:max-w-[52rem]` dentro GuideReader/ReportReader).
+
+**Fase 3 — Routing** ✅ **COMPLETATA** (non ancora committata come commit a sé — vedi stato sotto)
+- **Decisione presa con l'utente** (non riusare/estrarre `generateSections` di GuideReader): pannello
+  di generazione nuovo e isolato, `components/libro/GuideGenerationPanel.tsx` /
+  `components/libro/ReportGenerationPanel.tsx` — chiamano `/api/guide`/`/api/resoconto` direttamente
+  via `streamFetchText` (nessuna anteprima live carattere-per-carattere, solo spinner fino al
+  completamento). Il server persiste già lui stesso il risultato (`cached_guide` lato
+  `/api/guide`, `hike_reports` lato `/api/resoconto`) — il pannello Guida rilegge il percorso con
+  `getPlannedById` a fine stream invece di rifare il merge lato client; il pannello Reportage riceve
+  il testo finale direttamente dallo stream e lo passa su via callback (`onGenerated`).
+- `app/diari/[id]/percorsi/[percorsoId]/page.tsx`: da embed diretto di GuidaHub a vera pagina di
+  riepilogo (copertina, statistiche chiave, CTA "Apri la Guida", link "Apri in modalità classica",
+  elenco Reportage restilizzato, `GuideGenerationPanel`).
+- `.../percorsi/[percorsoId]/guida/[sectionKey]/page.tsx`: slug stabile (`GuideSectionKey`), monta
+  `<GuideBookPage>`; `sectionKey` non valida → `notFound()`.
+- `.../percorsi/[percorsoId]/reportage/[activityId]/page.tsx`: riepilogo Reportage (nuovo — prima si
+  rimandava sempre a `/resoconto/[id]`): copertina, statistiche, CTA "Apri il Reportage",
+  `ReportGenerationPanel`, `NextStepBanner`.
+- `.../reportage/[activityId]/sezione/[n]/page.tsx`: indice numerico 1-based, monta
+  `<ReportBookPage>`. Clamp/redirect implementato con un prop nuovo, additivo, su
+  `ReportBookPage` — `onInvalidPageIndex?: (presentCount: number) => void`, chiamato in un
+  `useEffect` quando `pageIndex` cade fuori da `[1, sezioni presenti]` — la route lo usa per un
+  `router.replace` a `sezione/1` (se esistono sezioni) o alla pagina di riepilogo (se zero).
+  `ReportBookPage` non conosce l'URL della pagina di riepilogo (il suo `basePath` è quello del
+  Reportage, non del suo indice), quindi la decisione resta al chiamante.
+- `lib/diario/useDiarioTitle.ts` (nuovo, piccolo): le pagine di sezione conoscono solo l'id del
+  Diario dall'URL — fetch minimo di `/api/diaries/[id]` per il titolo vero nella running head di
+  `BookPage`, invece del placeholder `"Diario"`.
+- **Deliberatamente rimandato "Apri in modalità classica"** (non ricollocato in questa fase — resta
+  sempre raggiungibile, mai rimosso, come da principio del piano):
+  - Pubblica/scarica PDF ed editor manuale (`editorMode==='manual'`), sia per Guida che per
+    Reportage: costruirli dentro la pagina di riepilogo è un lavoro a sé (export jsPDF, ShareModal,
+    editor a due colonne) sproporzionato rispetto alla portata di "routing" di questa fase.
+  - `VoicePlayer`, `GuideQA`, `RouteMap3D`/Street View — come già previsto dal piano originale.
+  - **Scorciatoia one-tap "tocca il badge Trail Score / avviso → vai a Dati e sicurezza /
+    Verificato online"**: nella galleria a carosello (`GuidaHub.scoreGaugeBadge`,
+    `pendingScrollSection`) è un tap su `TrailScoreGaugeBadge`/`CoverNoticesChip` nella card di
+    copertina. Riprodurlo identico nella pagina di riepilogo del libro richiede portare lì anche
+    `computeTrailScoreBreakdown`/`isTrailScoreVetoed` e verificare che i due componenti non
+    annidino elementi interattivi in un contesto diverso (card scura immersiva vs. riepilogo
+    pergamena) — non fatto in questa fase. La sezione "Dati e sicurezza" resta comunque
+    raggiungibile in due tap (CTA "Apri la Guida" → pillola di navigazione), non sparisce: si perde
+    solo la scorciatoia a un tap, non l'accesso. Da rivalutare se/quando GuidaHub verrà davvero
+    ritirato per questo flusso (Fase 4).
+  - Scaffale `/diari` (lista/grid) e indice del Diario: nessun link da correggere (già puntavano a
+    `/diari/[id]/percorsi/[percorsoId]`, path invariato — la nuova pagina di riepilogo ci vive
+    sopra senza bisogno di toccare chi ci rimanda). Un restyling visivo del scaffale stesso (una
+    "copertina" del Diario come card, oggi assente) resta non fatto — pura rifinitura estetica, non
+    bloccante per il flusso.
+- Presence-gating di Fase 2 (`isSectionPresent` in `GuideBookPage.tsx`/`ReportBookPage.tsx`) non
+  toccato in questa fase — resta un giudizio "ragionevole ma non confermato dall'utente".
+
+**Fase 4 — Flag di rollout** ✅ **COMPLETATA**
+- Nuova colonna `diario_libro_enabled` su `user_settings` (booleano, default `false`) — migrazione
+  `supabase/migrations/add_diario_libro_enabled.sql`, non ancora eseguita in nessun ambiente reale
+  (nessuna credenziale Supabase in questa sandbox — va lanciata a mano nello SQL Editor, stesso
+  flusso già seguito per ogni altra migrazione di questo progetto). Finché non è eseguita, la
+  colonna semplicemente non esiste: il fallback automatico già presente in
+  `app/api/user-settings/route.ts` (droppa dalla `upsert` la colonna che Postgres segnala mancante)
+  copre la scrittura, e la lettura torna comunque al default `false` via `?? false` — nessun errore
+  visibile all'utente nel frattempo, solo il comportamento classico finché la colonna non c'è.
+- `lib/sync/userSettingsStore.ts` (`diarioLibroEnabled`), `app/api/user-settings/route.ts` (GET/POST)
+  seguono lo stesso pattern di `guideBreveSections`/`aiUseBiometricData`.
+- `app/diari/[id]/percorsi/[percorsoId]/page.tsx`: unico punto di gating, come da scope della
+  Fase 4 — a flag spento monta esattamente il vecchio `<GuidaHub id={percorsoId} />` +
+  `<ReportageSection>` con link a `/resoconto/[id]` (contenuto recuperato dalla history git,
+  `git show c8a0c39^:...`, non riscritto a mano); a flag acceso monta la pagina di riepilogo di
+  Fase 3. Le route nuove sotto (`guida/[sectionKey]`, `reportage/[activityId]`,
+  `reportage/[activityId]/sezione/[n]`) non hanno un proprio gate: a flag spento restano
+  semplicemente prive di link in ingresso (nessuna UI ci rimanda), non disabilitate — raggiungibili
+  solo digitando l'URL a mano, coerente con "scoped solo al punto d'ingresso Percorso".
+  `/guida/[id]` e `/resoconto/[id]` standalone non sono mai stati toccati, a prescindere dal flag.
+- Toggle per accendere il flag sul proprio account durante la validazione:
+  `components/profilo/SectionAvanzate.tsx` → "Diario a libro (beta)" (sezione "Impostazioni
+  avanzate", collassata di default) — non pensato per un rollout diffuso via impostazioni utente,
+  solo per poterlo verificare a schermo prima del cutover del default.
+- **Non fatto** (resta il passo successivo, fuori da questo piano): eseguire davvero la migrazione
+  su Supabase, accendere il flag sul proprio account, verificare a schermo l'intero flusso
+  Diario→Percorso→Guida/Reportage a pagine con dati reali, e solo dopo decidere se/quando flippare
+  il default a `true` per tutti.
+
+**Fase 5 — Feedback dopo la prima verifica a schermo** ✅ **COMPLETATA**
+
+L'utente ha eseguito la migrazione, acceso il flag e verificato il flusso su dati reali. Due
+richieste emerse da quella verifica:
+
+- **"Approfondisci con Giulia" dentro le sezioni, non solo nel riepilogo** — `GuideGenerationPanel`
+  accetta ora un `sectionKey` opzionale: con `sectionKey` si comporta da trigger inline identico a
+  quello del lettore classico (`ApprofondisciTrigger`, riesportato — non duplicato — da
+  `components/editorial/SectionCard.tsx`), montato da `GuideBookPage.tsx` sotto ogni sezione priva
+  di testo. Cambia di conseguenza il gate di presenza: verificato/comfort/sapori/consigli sono ora
+  SEMPRE pagine raggiungibili (prima sparivano senza testo AI — la versione originale, coerente col
+  mockup ma incompatibile con l'idea di generarle da lì). Per il Reportage — che si genera per
+  intero, non per capitolo, quindi non esiste un "approfondisci questa sezione" vero — `ReportBookPage`
+  monta `ReportGenerationPanel` quando il Reportage non ha ancora contenuto, qualunque pagina si
+  stia guardando.
+- **Layout dello scaffale `/diari` e dell'indice del Diario** — rimasti nello stile "app moderna"
+  (card bianche, palette forest/stone) mentre Guida/Reportage erano già a pergamena: lo scarto
+  visivo segnalato. Il mockup validato (`2e1f7d0a-5d69-4e17-9c8b-038aa651e13b`, "Diario a schermo
+  intero" — ancora accessibile come artifact pubblicato, non nel repo) aveva già uno scaffale
+  (`renderShelf`/`.bk-cover`) e un indice (`renderIndexPage`/`.bk-index-*`) per il "Modello B"
+  scelto: entrambi ora portati nell'app reale, dietro lo stesso flag `diarioLibroEnabled` di Fase 4
+  (a flag spento restano `app/diari/page.tsx` e `app/diari/[id]/page.tsx` esattamente come prima —
+  rinominate `*Classico`, non riscritte).
+  - Scaffale: copertine verticali (rapporto 3:4, gradiente caldo o `coverUrl` reale, taglio pagine
+    sul bordo) — adattamento deliberato: riga scorrevole di link invece del carosello
+    drag/swipe a una copertina alla volta del mockup, perché una gestura del genere non si può
+    verificare a schermo in questa sandbox e un errore lì sarebbe silenzioso finché qualcuno non ci
+    prova sul serio. Nessun campo "tema colore" nello schema reale (solo `cover_url`, una foto): il
+    gradiente cicla per indice invece di essere una scelta salvata.
+  - Indice: **riusa `components/libro/BookPage.tsx`** (stessa running head/chrome di ogni altra
+    pagina del libro) con dentro l'elenco Percorsi in stile "Sommario" del mockup (anteprima
+    tracciato, stato uscite, tap → pagina di riepilogo del Percorso). "+ Nuovo percorso" collegato
+    a `/upload?diaryId=...` (una sola scelta invece del composer a due corsie della versione
+    classica — quello resta raggiungibile spegnendo il flag). **Differenza strutturale importante**
+    dal resto del piano: qui non esiste un "Apri in modalità classica" a cui rimandare, perché
+    l'indice condivide la STESSA URL della versione classica (scelta solo dal flag), non una route
+    a sé come `/guida/[id]`/`/resoconto/[id]` — funzioni più pesanti ("Percorsi per te", il composer
+    a due corsie) restano quindi raggiungibili solo spegnendo il flag. L'eliminazione del Diario
+    (distruttiva, rara) resta invece un'eccezione voluta: montata anche nella versione a libro,
+    sotto la pagina, perché è l'unica azione della vecchia pagina che non doveva sparire nemmeno a
+    flag acceso.
+  - **Non fatto**: la scorciatoia one-tap "Statistiche del Diario" del mockup non esiste nell'app
+    reale (nessuna vista statistiche filtrata per Diario, solo `/statistiche` globale) — non
+    riprodotta per non promettere una vista che non esiste; l'indice qui non ha quel link.
+
+**Fase 6 — Feedback dopo la seconda verifica a schermo (screenshot reali)** ✅ **COMPLETATA (parziale — vedi non fatto)**
+
+L'utente ha mandato screenshot reali del flusso (Sommario, riepilogo Percorso, pagine Guida,
+scaffale) con sei osservazioni puntuali:
+
+- **Righe del Sommario troppo povere** — mancavano le statistiche essenziali, il Trail Score e
+  un'anteprima del tracciato che c'erano nella vecchia griglia (`app/percorsi/page.tsx`, la stessa
+  card riusata anche dal vecchio `/diari/[id]`). Righe riscritte: miniatura 56×56 con
+  `RouteThumb`, km/dislivello, badge Trail Score. Il Trail Score non era esposto da
+  `/api/diaries/[id]` — aggiunta `trailScore` a `DiarioPercorsoRow` (colonna già esistente,
+  `planned_hikes.cached_ts_total`, nessun ricalcolo nuovo).
+- **La pagina di riepilogo del Percorso con "Apri la Guida" è un tap in più inutile** — il tap
+  dalla riga del Sommario va ora dritto a `.../guida/il_percorso`, non più alla pagina di
+  riepilogo. Quella pagina non sparisce (ci vive ancora il pannello di generazione bulk e "Le tue
+  uscite"): il CTA "Apri la Guida" è stato ridotto da pulsante pieno a link secondario, e resta
+  raggiungibile da ogni pagina di Guida tramite un pallino extra "Reportage" aggiunto in coda ai
+  pallini di sezione (`GuideBookPage.tsx`) — così un Percorso con 0 uscite non perde comunque
+  l'accesso a quella pagina. Riga del Sommario ridisegnata di conseguenza: l'area principale
+  (miniatura+titolo+dati) è un `<Link>` verso la Guida, il badge "N uscite"/"in programma" è un
+  `<Link>` **sorella** separata verso il riepilogo (non annidata — due `<a>` nello stesso HTML
+  sarebbero non validi).
+- **"Muri di testo" nelle sezioni della Guida** — il corpo era un singolo `<p>` con
+  `whiteSpace:'pre-wrap'`. Sostituito con `components/editorial/MagazineBody.tsx`, lo stesso
+  componente già usato dal lettore classico (via `SectionCard.tsx`): paragrafo di apertura in
+  corsivo, resto diviso in `<p>` veri, callout `[curiosita]`/`[avviso]` riconosciuti — riuso, non
+  una riscrittura. Stesso trattamento anche per i capitoli narrativi del Reportage
+  (`ReportBookPage.tsx`), stesso difetto.
+- **Banner Meteo a sfondo bianco stonava sulla pergamena** — l'utente ha indicato esplicitamente
+  la preferenza: un tono più scuro della pergamena, non lo stesso bianco del lettore classico.
+  Aggiunto un prop opzionale `panelClassName` a `WeatherWidget.tsx` (tutti e tre i suoi modi:
+  historical/forecast/planned) che sovrascrive lo sfondo bianco di default — additivo, il lettore
+  classico (GuideReader/ResocontoHub) non lo passa e resta bianco com'era. `GuideBookPage.tsx` lo
+  valorizza a un tono pergamena più scuro (`#f1e9d2` su bordo `#e4d9bd`, stessi toni di
+  `BookPage.tsx`).
+- **Copertine dei Diari: foto e testi personalizzabili, "riviste di settore"** — la personalizzazione
+  **esiste già**: `/diari/[id]/pubblica` ha da tempo l'upload della foto di copertina e l'editing di
+  titolo/sottotitolo/autore (`app/diari/[id]/pubblica/page.tsx`, righe ~527-570), e scrive nelle
+  stesse colonne (`diaries.title/subtitle/author/cover_url`) che lo scaffale e l'indice già
+  leggono — non serviva un editor nuovo, solo renderla raggiungibile da dove si vede la copertina.
+  Aggiunto un link discreto "Personalizza copertina" su ogni copertina dello scaffale, verso quella
+  stessa pagina (un `<Link>` sorella di "Apri Diario", non annidata).
+- **Creare un nuovo Diario** — non esisteva da nessuna parte nell'app reale (nessun `POST
+  /api/diaries`, nessuna UI). Decisione dell'utente: il Diario di default resta incluso per tutti
+  (non passa da questa route — esiste già dal backfill), Diari aggiuntivi solo per chi ha
+  sbloccato Dtrek. `POST /api/diaries` (nuovo) conta i Diari esistenti e, se ≥1, verifica
+  `resolveDtrekEntitlement(user.id).unlocked` (stessa risoluzione centrale di ogni altro gate —
+  Premium, BYOK o owner — non un controllo nuovo inventato qui) prima di creare la riga; risponde
+  403 con un messaggio se non sbloccato. Il nuovo Diario nasce con un titolo segnaposto ("Nuovo
+  Diario") — l'utente lo rinomina da "Personalizza copertina" sulla copertina appena creata,
+  riusando l'editor di `/pubblica` già esistente invece di costruirne uno per la creazione. Tessera
+  "+ Nuovo Diario" (`NewDiarioTile` in `app/diari/page.tsx`) solo nello scaffale a libro — quello
+  classico resta esattamente com'era, mai avendo avuto questa funzione.
+
+**Fase 7 — Riga del Sommario: riuso della vera card di "Tutti i percorsi"** ✅ **COMPLETATA**
+
+L'utente ha allegato due screenshot: la riga del Sommario (Fase 6) contro la card di
+`ExpandedGalleryList.tsx` ("Tutti i percorsi", il pannello a comparsa scuro di GuidaHub/RouteHub)
+— chiedendo la stessa ricchezza dati, ricolorata per la pergamena invece del suo sfondo scuro.
+Confrontando i due componenti: quella card usa `GalleryMapThumb` (vera mappa Leaflet, lazy via
+IntersectionObserver — non l'anteprima SVG astratta di `RouteThumb` usata finora qui),
+`TrailScoreGaugeBadge` (anello Trail Score+Sicurezza) ed etichetta idoneità/rischio da
+`ctsLabel()` — tutti dati già cachati su `planned_hikes` (nessuna chiamata live nuova, la stessa
+euristica "solo colonne già in tabella" del resto del piano):
+- `/api/diaries/[id]` ora seleziona anche `altitude_max`, `estimated_time_seconds`,
+  `cached_safety_score` — `DiarioPercorsoRow` guadagna `altitudeMax`, `estimatedTimeSeconds`,
+  `safety: SafetyPreview | null` (stesso sottoinsieme overall/color/label già usato da
+  `RouteHubItem.safetyPreview` in `app/guida/GuidaHub.tsx`, non un tipo nuovo).
+- La riga in `app/diari/[id]/page.tsx` riusa `GalleryMapThumb` e `TrailScoreGaugeBadge`
+  (`dark={false}`, per la card chiara — lo stesso prop già usato da "Dati e sicurezza"/"Dati e
+  punteggi") direttamente, non li reimplementa; solo i colori/testo intorno sono pergamena.
+- **Non incluso**: la distanza "in auto" mostrata da quella card viene da `useDrivingDistance`,
+  calcolata dal vivo (geocoding+indicazioni) — fattibile per un solo percorso aperto, non per un
+  elenco di 56 senza N chiamate live per pagina. Omessa, non finta.
+
+**Fase 8 — Ricerca e filtri nel Sommario** ✅ **COMPLETATA**
+
+Richiesta esplicita: "tutti i filtri e la ricerca come nell'elenco precedente" — stessi controlli
+di `ExpandedGalleryList.tsx`, non solo la card della riga (Fase 7). Aggiunti alla pagina Sommario
+(`DiarioIndexLibro`), client-side su `detail.percorsi` già caricato per intero (nessuna nuova
+chiamata di rete per filtrare/ordinare):
+- Campo di ricerca per titolo (stesso comportamento di `app/percorsi/page.tsx`: sottostringa,
+  case-insensitive).
+- Filtro "solo preferiti" (stella) — nuovo campo `favorite` su `DiarioPercorsoRow`
+  (`planned_hikes.favorite`, colonna già esistente, stesso concetto del filtro a stella di
+  GuidaHub).
+- Ordinamento Data/Km/D+/TS, stessa etichetta e stesso significato di
+  `SORT_OPTIONS_BY_MODE.guida` in `components/routehub/BottomGallery.tsx` — non riesportate da lì
+  perché quell'array include anche `rating` (Resoconto) e `distance`, entrambi non pertinenti o
+  non disponibili qui; "Data" è l'ordine con cui l'API restituisce già i percorsi
+  (`created_at desc`), non un ordinamento aggiuntivo.
+- **Non incluso** (deliberatamente, stesso principio di Fase 7): l'opzione di ordinamento
+  "Distanza" (richiede `useDrivingDistance`, dal vivo) e la sotto-sezione "Prossima uscita" dei
+  preferiti (specifica del carosello a swipe, non richiesta per il Sommario).
+
+**Fase 9 — Sommario: allineamento CTS, filtro di stato, evidenza uscite, ordine invertibile** ✅ **COMPLETATA**
+
+Feedback dopo altri screenshot: l'anello Trail Score non era allineato in verticale da una riga
+all'altra (dipendeva da quanto testo aveva l'etichetta di stato a destra, "N uscite" vs "in
+programma", entrambe a larghezza libera dentro lo stesso flexbox). In `app/diari/[id]/page.tsx`:
+- Sia la colonna dell'anello TS sia quella dello stato a destra hanno ora una larghezza fissa
+  (`w-10` / `width: 82`), non più "shrink-to-content" — l'anello resta quindi alla stessa distanza
+  dal bordo destro su ogni riga, con o senza uscite.
+- Nuovo filtro di stato (Tutti / In programma / Con uscita), stesso stile a pillola dei chip di
+  ordinamento già presenti.
+- Le righe con almeno un'uscita hanno ora uno sfondo tinteggiato (terra molto tenue,
+  `rgba(192,90,23,0.07)`) — riconoscibili a colpo d'occhio, non solo dall'etichetta testuale.
+- Ordinamento invertibile: nuovo toggle (icona freccia su/giù) applicato a qualunque criterio
+  scelto, "Data" incluso — inverte l'array già filtrato/ordinato invece di aggiungere un
+  comparatore per data (l'API lo restituisce già in `created_at desc`).
+
+**Fase 10 — "Piega" del libro sul bordo sinistro** ✅ **COMPLETATA**
+
+Richiesta: far percepire ogni schermata del Diario a libro come parte di un taccuino rilegato,
+con una piega elegante sul bordo sinistro. Nuovo `components/libro/BookSpineShadow.tsx`: un
+`<div>` fisso, largo 24px, con un gradiente statico (nessuna animazione, costo zero) che
+scurisce verso il bordo sinistro — due varianti di colore (`light` per la pergamena, `dark` per
+lo sfondo scuro dello scaffale), `pointer-events: none` per non intercettare mai tap/click.
+Montato in `BookPage.tsx` (quindi automaticamente su Sommario/Guida/Reportage/`/pubblica`, tutte
+le pagine che già usano quel guscio) e in `DiariPageLibro` (lo scaffale).
+
+**Scoped deliberatamente alle sole schermate del Diario a libro**, non a tutta l'app: le altre
+schermate (GuidaHub/ResocontoHub/RouteHub e il resto) restano fuori dal perimetro di questo piano
+per la stessa decisione architetturale di sempre (vedi sopra) — hanno palette/sfondi propri con
+cui una piega pensata per la pergamena o per lo scaffale scuro non è stata verificata. La pagina
+di riepilogo del Percorso (`PercorsoPageLibro` in
+`app/diari/[id]/percorsi/[percorsoId]/page.tsx`) non la riceve per lo stesso motivo: non usa
+ancora la palette pergamena (è rimasta nello stile "app moderna" fin dalla Fase 6, un gap
+preesistente non segnalato in questo giro di feedback).
+
+**Fase 11 — Home dell'app: apertura sull'ultimo Diario, drawer per cambiarlo** ✅ **COMPLETATA**
+
+Richiesta esplicita: rendere il Sommario (elenco Percorsi) la home dell'app, aprendo sull'ultimo
+Diario visualizzato prima della chiusura precedente, con lo scaffale "I miei Diari" sempre
+raggiungibile (non più il primo schermo, ma mai nascosto).
+
+- Nuova colonna `user_settings.last_diary_id` (`supabase/migrations/add_last_diary_id.sql`, UUID,
+  `ON DELETE SET NULL`, stesso pattern di `diario_libro_enabled`) — segue l'utente su ogni
+  dispositivo invece di restare legato al browser (localStorage, l'alternativa scartata).
+  `app/api/user-settings/route.ts` e `lib/sync/userSettingsStore.ts` esposti/aggiornati di
+  conseguenza (`lastDiaryId`).
+- `DiarioIndexLibro` (`app/diari/[id]/page.tsx`) scrive `lastDiaryId` a ogni caricamento riuscito
+  del Sommario — solo dopo il caricamento, mai dall'id grezzo nell'URL, così un link vecchio o non
+  più accessibile non può mai diventare il prossimo punto di apertura.
+- `app/page.tsx` (`/`, la home) non fa più un redirect fisso lato server a `/diari`: a flag spento
+  il comportamento resta identico a prima; a flag acceso legge `diarioLibroEnabled`+`lastDiaryId`
+  (client-side, stesso pattern `getUserSettingsCached()` di ogni altra pagina gated di questo
+  piano) e apre direttamente `/diari/[lastDiaryId]` — verificato contro l'elenco vero dei Diari
+  (non fidandosi ciecamente del valore salvato: un Diario eliminato nel frattempo farebbe aprire
+  un Sommario 404), con ricaduta sul Diario di default. `/diari` stesso (lo scaffale) resta
+  invariato e sempre raggiungibile con la stessa URL di sempre — nessun redirect-loop possibile.
+- Nuovo `components/libro/DiarioSwitcherDrawer.tsx` — drawer laterale (preferenza esplicita tra le
+  opzioni proposte, invece di una bottom sheet) con l'elenco compatto di tutti i Diari (non le
+  copertine ricche dello scaffale, quelle restano lì) e un link in fondo verso lo scaffale per la
+  gestione completa (copertine, nuovo Diario). Aperto dal titolo in cima al Sommario: `BookPage.tsx`
+  guadagna un prop opzionale `onTitleClick` che trasforma quel link in un bottone — usato solo da
+  `DiarioIndexLibro` (dove `indexHref` punterebbe allo scaffale, ora raggiungibile solo da qui in
+  poi); ogni altra pagina del libro (Guida/Reportage/pubblica) continua a navigare normalmente,
+  invariata.
+
+**Fase 12 — Copertine reali nel drawer, nello scaffale e in cima al Sommario** ✅ **COMPLETATA**
+
+Richiesta dopo aver visto il drawer di Fase 11 con copertine vuote (icona segnalibro) anche per
+"Il mio Diario" (56 percorsi, non certo un Diario nuovo). Causa reale, non un bug di questa
+sessione: `diaries.cover_url` (letto da scaffale/drawer/Sommario) è sempre stato NULL per il
+Diario di default di ogni utente — il backfill che l'ha creato (Fase 0 di "Diario come fulcro")
+è avvenuto prima che esistesse `diaries` come tabella, quando l'unica copertina possibile era
+quella del vecchio Diario singolo per utente, `user_settings.diary_config->>'coverUrl'`
+(`add_diary_config.sql`) — mai migrata sul nuovo campo.
+
+- Nuovo `supabase/migrations/backfill_default_diary_cover.sql`: copia quella foto (se esiste) su
+  `diaries.cover_url` del Diario di default, solo dove `cover_url` è ancora NULL — idempotente,
+  non tocca titolo/sottotitolo/autore (non richiesti), non sovrascrive mai una copertina già
+  impostata dopo. Nessuna riga di codice applicativo cambiata per questo: `/api/diaries` e
+  `/api/diaries/[id]` leggono già `cover_url` direttamente, il gap era solo nei dati.
+- `DiarioSwitcherDrawer.tsx`: ogni riga guadagna un'icona a matita (link a
+  `/diari/[id]/pubblica`, sibling del link che apre il Sommario — non annidato, stesso principio
+  di `DiarioCoverCard` in `app/diari/page.tsx`). Non serve toccare la resa della copertina stessa
+  (`d.coverUrl`): il codice la mostrava già correttamente, mancavano solo i dati (vedi sopra).
+- `DiarioIndexLibro` (`app/diari/[id]/page.tsx`): la copertina del Diario (stesso
+  `detail.coverUrl` di scaffale/drawer) compare ora accanto al titolo in cima al Sommario.
+- Il titolo in cima alla pagina (il bottone che apre il drawer) mostra ora sempre "I miei Diari"
+  invece del nome di questo Diario specifico — da quando apre un drawer con TUTTI i Diari,
+  ripetere il nome di uno solo era fuorviante; il vero titolo del Diario resta subito sotto,
+  nell'h1 della pagina, invariato.
+- **Decisione deliberata, non una nuova pagina**: "Personalizza copertina" (matita nel drawer,
+  già anche nello scaffale da Fase 6) continua a puntare a `/diari/[id]/pubblica` — quella pagina
+  ha già, sempre visibili in una barra laterale fissa, sia il caricamento foto sia i testi
+  (titolo/sottotitolo/autore): "ogni aspetto della copertina" richiesto è già interamente
+  editabile lì, e infatti è la STESSA colonna `diaries.cover_url` che questo giro di feedback
+  riguarda — costruire un editor dedicato più leggero avrebbe duplicato una funzione che esiste
+  già e scrive esattamente nel campo giusto.
+
+**Fase 13 — Pagina dedicata per la copertina, default coerente ovunque** ✅ **COMPLETATA**
+
+Due correzioni dopo aver visto Fase 12 in uso: (1) la matita apriva `/pubblica`, l'intera console
+di pubblicazione del libro (esportazione PDF, condivisione, statistiche, escursioni escluse) — non
+quello che l'utente intendeva per "modificare la copertina"; (2) i placeholder senza foto erano
+diversi da elenco a elenco (icona su panna nel drawer/Sommario, gradienti ciclici nello scaffale)
+e nessuno dei due era "quella di default" che l'utente vede davvero — il verde con profilo di
+montagne di `DiarioCover.tsx`, usato sulla copertina stampabile.
+
+- Nuova pagina `/diari/[id]/copertina` (`app/diari/[id]/copertina/page.tsx`): foto, titolo,
+  sottotitolo, autore — nient'altro. Stessa fonte dati di `/pubblica` (GET/PATCH
+  `/api/diaries/[id]/config`, che legge/scrive le colonne di `diaries` — nessuna duplicazione di
+  logica di salvataggio, "corpo sempre completo" mantenuto anche qui per non perdere le
+  impostazioni di pubblicazione che questa pagina non tocca). Anteprima dal vivo con lo stesso
+  componente `DiarioCover` della copertina stampabile (scalato, non un componente a sé), pulsanti
+  "Cambia foto" e "Rimuovi foto" (torna al verde di default). `/pubblica` resta invariata (i suoi
+  stessi controlli restano lì, un utente potrebbe già averci fatto l'abitudine) — solo i link da
+  scaffale e drawer puntano ora qui.
+- Nuovo `components/diario/DiarioCoverThumb.tsx`: la stessa miniatura (foto se presente, altrimenti
+  il gradiente verde + profilo di montagne del default reale, semplificato per leggibilità a
+  dimensioni piccole) riusata da scaffale (`DiarioCoverCard`), drawer (`DiarioSwitcherDrawer`) e
+  cima del Sommario (`DiarioIndexLibro`) — prima ciascuno aveva il proprio placeholder, ora ce n'è
+  uno solo, coerente con quanto stampato.
+
+**Fase 14 — Riepilogo del Percorso eliminato, copertine con testo nel drawer e nel Sommario** ✅ **COMPLETATA**
+
+Due richieste dopo aver visto Fase 13 in uso.
+
+*Riepilogo del Percorso eliminato.* La pagina (copertina verde, "Apri la Guida"/"Apri in
+modalità classica", pannello di generazione in blocco) non doveva più esistere. Decisioni prese
+con l'utente per non perdere le due funzioni che ci vivevano:
+- **"Le tue uscite" resta**, ma la pagina (`app/diari/[id]/percorsi/[percorsoId]/page.tsx`,
+  `PercorsoPageLibro`) è ridotta a un titolo minimo (solo testo, niente riquadro) più l'elenco —
+  niente CTA verso la Guida (già raggiunta da lì quando si arriva dal Sommario o dal pallino
+  "Reportage" di una pagina di Guida, i due soli punti d'ingresso qui). Stessa URL di prima:
+  badge "N uscite" del Sommario e pallino "Reportage" non sono cambiati.
+- **La generazione in blocco non è stata eliminata** — spostata sulla prima pagina della Guida
+  ("Il percorso", `components/libro/GuideBookPage.tsx`), l'unico punto sempre raggiungibile prima
+  di aver letto qualunque sezione. `GuideGenerationPanel` guadagna un prop opzionale
+  `panelClassName` (stesso pattern di `WeatherWidget` in Fase 6) per il tono pergamena invece del
+  bianco/stone pensato per la pagina ora rimossa.
+
+*Copertine con testo nel drawer e in cima al Sommario.* L'utente ha chiarito: quei due punti
+devono mostrare "la riproduzione in piccolo dell'effettiva copertina" — non solo lo sfondo
+(foto/gradiente) ma anche titolo/sottotitolo/autore, come la copertina vera. `DiarioCoverThumb`
+guadagna una modalità con testo: quando riceve `width` + `title`, renderizza la stessa
+`<DiarioCover>` scalata (stesso trucco già usato in `/diari/[id]/copertina`, ora centralizzato
+qui e riusato anche da quella pagina invece di duplicato); senza `title` resta il comportamento
+di Fase 13 (solo sfondo, 100% del contenitore) — usato ancora dallo scaffale (`DiarioCoverCard`),
+che ha già il proprio riquadro di testo e raddoppierebbe altrimenti. `DiarioDetail` guadagna
+`author` (colonna già esistente su `diaries`, non selezionata finora) per poter riprodurre
+l'autore anche nella miniatura del Sommario.
+
+**Fase 15 — Un solo link per riga nel Sommario, drawer "Strumenti del Percorso"** ✅ **COMPLETATA**
+
+Tre richieste, la seconda e la terza legate insieme (il drawer è dove finisce l'elenco Reportage
+che prima viveva sulla pagina eliminata).
+
+*Sommario.* Miniatura mappa più grande (64→76px, l'altezza della riga segue), e un solo `<Link>`
+per riga invece di due — prima la riga andava alla Guida ma l'etichetta di stato a destra era un
+secondo link separato verso l'elenco Reportage. Ora tutta la riga va sempre alla Guida; l'etichetta
+resta solo informativa ("N Reportage" invece di "N uscite" — la terminologia "uscita" non era mai
+stata usata altrove nel libro, "Reportage" sì).
+
+*Pagina di riepilogo del Percorso eliminata per davvero.* Dopo Fase 14 restava una pagina minima
+("solo uscite"); ora non esiste più affatto in modalità libro — `PercorsoPageInner`
+(`app/diari/[id]/percorsi/[percorsoId]/page.tsx`) fa un redirect immediato a
+`{basePath}/guida/il_percorso` quando il flag è acceso, così un link vecchio (bookmark, storico
+del browser) non mostra una pagina ormai vuota. La modalità classica (flag spento) non è toccata:
+`PercorsoPageClassico`/`ReportageSection` restano esattamente come sempre stati.
+
+*Nuovo drawer "Strumenti del Percorso"* (`components/libro/PercorsoToolsDrawer.tsx`), aperto dalla
+pillola "Strumenti" (prima "Reportage") in ogni pagina di Guida — slide da destra, non da sinistra
+come `DiarioSwitcherDrawer` (quello è navigazione tra Diari, questo sono azioni sul Percorso
+corrente, meglio non confonderli visivamente). Contiene, tutti riusi diretti di funzioni già
+esistenti altrove, **mai raggiungibili dal libro prima d'ora**:
+- **Elenco Reportage** — stessa `/api/percorsi/[id]/reportage`, righe proprie in tono pergamena
+  (non la stessa `ReportageSection`, rimasta bianco/stone per il lettore classico — duplicarne la
+  resa qui è stato più semplice che parametrizzarne il tono).
+- **Generazione in blocco** — lo stesso `<GuideGenerationPanel>` bulk. Fase 14 lo aveva messo solo
+  sulla pagina "Il percorso"; qui è raggiungibile da qualunque sezione, quindi quel montaggio
+  dedicato è stato rimosso (il drawer lo sostituisce, non lo affianca).
+- **Esporta PDF/GPX** — stesse `exportGuidePdf`/`exportPlannedHikeToGpx` di `app/guida/GuidaHub.tsx`,
+  mai passate dal libro.
+- **Video 3D** — stesso `<RouteMap3D>` di GuidaHub. Scoperta scrivendo questa fase: il prop
+  `onOpenMap3D` di `GuideBookPage.tsx` esisteva già (passato ai widget) ma nessuna route lo
+  valorizzava mai — restava sempre `undefined`, quindi il bottone 3D dentro "Il percorso" non ha
+  mai funzionato nel libro. Ora `GuideBookPage` tiene lo stato e monta `RouteMap3D` lei stessa
+  (stesso import dinamico `ssr:false` di GuidaHub — MapLibre non è compatibile col rendering
+  server), il drawer si limita ad aprirlo.
+- **"Apri in modalità classica"** — esisteva sulla pagina di riepilogo ora eliminata, ricollocato
+  qui.
+- **Non incluso** (deciso con l'utente): la condivisione di un singolo Percorso non esiste da
+  nessuna parte nell'app (solo Reportage/statistiche hanno un "Condividi", `ShareModal.tsx`) — è
+  una funzione nuova da progettare a sé, rimandata.
+
+`BookPage.tsx`'s `BookPageSection` accetta ora `onClick` in alternativa a `href` (mai entrambi) —
+la pillola "Strumenti" apre il drawer sul posto invece di navigare. `GuideBookPage` guadagna un
+prop `diarioHref` esplicito: il titolo in testata portava alla pagina di riepilogo ora eliminata,
+ora va al Sommario del Diario (non esiste più un "indice" a livello di Percorso). Il riepilogo del
+Reportage (`.../reportage/[activityId]/page.tsx`, pagina diversa e ancora esistente — mostra le
+statistiche di UNA uscita, non l'elenco) aveva anch'esso un link "Torna al Percorso" verso la
+pagina eliminata: ora porta alla Guida, rietichettato "Torna alla Guida".
+
+**Fase 16 — Pannello di generazione in blocco ripulito, copertine in miniatura corrette** ✅ **COMPLETATA**
+
+Due difetti visivi segnalati dopo aver visto il drawer "Strumenti" (Fase 15) e le copertine con
+testo (Fase 14) in uso.
+
+*Pannello "Genera tutta la guida".* Da quando la pagina di riepilogo del Percorso non esiste più,
+`GuideGenerationPanel` in modalità bulk (senza `sectionKey`) è montato SOLO dentro
+`PercorsoToolsDrawer.tsx` — verificato con una ricerca mirata prima di toccare nulla, per essere
+sicuri di non rompere un altro chiamante. La card bianca con icona a cerchio (`PanelShell`,
+pensata per il vecchio riepilogo in stile "app moderna") stonava nel drawer pergamena, l'utente
+l'ha trovata "non conforme al layout attuale". Riscritto senza riquadro proprio: chip di lunghezza
+testo nello stesso stile a pillola dei filtri del Sommario (terra attivo/pergamena chiaro
+inattivo), pulsanti "Genera"/"Rigenera" nello stesso stile piatto (`ToolButton`) delle altre righe
+del drawer (Esporta PDF, Esporta GPX, Video 3D) — nessun elemento visivo nuovo, solo pattern già
+in uso altrove nello stesso drawer/Sommario. `panelClassName` (nato apposta in Fase 15 per questo
+tono) rimosso: con un solo chiamante rimasto e senza più un riquadro da colorare, non serviva più.
+
+*Copertine in miniatura spostate verso il basso.* `DiarioCoverThumb` in modalità "con testo"
+(drawer, cima del Sommario) riproduce `<DiarioCover>` scalata — quel componente ha però un
+`margin: '24px auto'` proprio, pensato per la sua vetrina a schermo intero su `/pubblica` e
+`/diari/[id]/copertina` (dove c'è spazio intorno). Ritagliata in una miniatura con
+`overflow:hidden`, quel margine spingeva la copertina verso il basso lasciando un vuoto vuoto in
+cima e tagliando il fondo. Corretto con un `translateY(-24px)` nella stessa `transform` di scala
+(le unità sono quelle vere del contenuto non ancora scalato, si annulla esattamente indipendentemente
+dalla dimensione della miniatura). Stesso fix per tutti e tre i punti che usano quella modalità
+(drawer, Sommario, e l'anteprima di `/diari/[id]/copertina`, che riusa lo stesso componente).
+
+**Fase 17 — Menù inferiore, prime fondamenta della direzione "taccuino topografico"** ✅ **COMPLETATA**
+
+Prima di questa fase l'utente ha chiesto un mockup (non nel repo — canvas Claude Design pubblicato
+a parte) per due proposte: un menù di navigazione fisso in basso al posto dei collegamenti sparsi
+di oggi, e una variante di stile "taccuino da campo disegnato a mano" per l'intera estetica del
+libro. Approvate entrambe: il menù inferiore va costruito subito nello stile pergamena attuale
+(questa fase); il taccuino è una direzione futura da integrare gradualmente, non un redesign
+immediato — qui nasce solo il file di token su cui si costruirà.
+
+*Menù inferiore.* L'utente aveva segnalato incoerenza: il titolo in testata faceva doppio uso
+(link o apertura del drawer Diari a seconda della pagina), la pillola "Strumenti" viveva in mezzo
+alle sezioni della Guida, prev/next stavano in un footer a sé — tre paradigmi diversi per spostarsi.
+`BookPage.tsx` ha ora una barra fissa in fondo, uguale su ogni pagina del libro: **Indietro /
+Indice / Strumenti / Avanti**.
+- La testata in cima è ora **solo informativa** (titolo del Diario, sezione, numero di pagina) —
+  non più cliccabile. `onTitleClick` è diventato `onIndexClick`, spostato dal titolo al nuovo
+  bottone "Indice"; sul Sommario continua ad aprire `DiarioSwitcherDrawer` (Fase 11), altrove
+  naviga a `indexHref` come prima.
+- "Strumenti" è un bottone opzionale (prop `onToolsClick`) — presente solo dove esiste
+  `PercorsoToolsDrawer.tsx` (le pagine di Guida), assente su Sommario/Reportage.
+- La striscia di pillole per le sezioni della Guida **resta invariata** — indice dei contenuti
+  della pagina corrente, non navigazione dell'app: non c'entra con l'incoerenza segnalata.
+- `BookPageSection.onClick` (aggiunto in Fase 15 solo per la pillola "Strumenti", ora rimossa da
+  lì) è stato tolto: nessun altro chiamante lo usava, tenerlo sarebbe stata capacità morta.
+
+*Prime fondamenta del taccuino.* Nuovo `lib/taccuinoTokens.tsx` — palette carta/inchiostro,
+l'accento riusa la scala `TERRA` esistente (non un colore nuovo), il font `Kalam` (self-hosted in
+`app/layout.tsx` come gli altri, variabile `--font-kalam`) per titoli/annotazioni scritte a mano,
+il testo narrativo resta su `FONT.lora` esistente — un vero taccuino ha contenuto preciso e note a
+margine personali, non tutto scritto a mano allo stesso modo. Include anche `HandWobbleFilter` +
+`useHandWobbleId` (il filtro SVG per il tratto "a mano" validato nel mockup, con id univoco per
+evitare collisioni tra istanze sulla stessa pagina). **Deliberatamente non ancora usato da nessun
+componente reale** — è la base su cui costruire, schermata per schermata, nelle prossime fasi;
+tenerlo separato da `lib/designTokens.ts` (che serve l'intera app nell'estetica attuale) evita di
+mescolare una direzione non ancora applicata da nessuna parte con quella in produzione.
+
+**Fase 18 — Il bottone "Diari" sostituisce il drawer, scaffale ridisegnato in taccuino** ✅ **COMPLETATA**
+
+L'utente ha segnalato, guardando il Sommario a schermo: il bottone "Indice" della barra inferiore
+apriva `DiarioSwitcherDrawer` (Fase 11) invece di portare davvero allo scaffale — ma con lo
+scaffale stesso migliorato (griglia, ricerca), quel drawer duplica una destinazione che ora vale la
+pena raggiungere per intero. "In questo contesto il Tab laterale non ha più molto senso."
+
+*Bottone "Diari".* `BookPage.tsx`: `onIndexClick` rimosso (un solo chiamante, il Sommario), il
+bottone "Indice"/"Diari" torna a essere sempre un `<Link href={indexHref}>` semplice; nuova prop
+opzionale `indexLabel` (default `"Indice"`) per l'etichetta — il Sommario passa `indexLabel="Diari"`
+perché lì porta allo scaffale, non al proprio stesso indice. `DiarioSwitcherDrawer.tsx` eliminato
+(zero chiamanti rimasti dopo questo cambio, non teneva capacità morta).
+
+*Scaffale in stile taccuino* (`app/diari/page.tsx`, `DiariPageLibro`) — primo uso reale di
+`lib/taccuinoTokens.tsx`, finora solo fondamenta inutilizzate (Fase 17):
+- Sfondo scuro immersivo → carta invecchiata (`TACCUINO_PAPER`, due macchie sfumate agli angoli),
+  `BookSpineShadow` da `dark` a `light`. I dorsi lucidi delle copertine restano invariati — libri
+  scuri su un tavolo di carta chiara invece che su uno scaffale in penombra, solo l'ombra di ogni
+  copertina è stata scaldata (era pensata per un fondo scuro).
+- Titolo "I miei Diari" sul font `Kalam` (`FONT_KALAM`) — prima annotazione a mano reale nell'app,
+  il resto dei testi (eyebrow, corpo) resta sui font esistenti.
+- Riga scorrevole orizzontale → griglia verticale `grid-cols-2`, più righe: la larghezza di ogni
+  cella (~165px su mobile con questo padding/gap) è praticamente identica ai 168px fissi di prima,
+  nessun ridimensionamento interno alle card necessario.
+- Nuovo `GlobalRouteSearch`: ricerca testuale su tutti i Percorsi (stessa `/api/percorsi` di
+  "Tutti i Percorsi"), risultati (max 8, per titolo o Diario) mostrati senza lasciare lo scaffale —
+  prima l'unico modo era uscire verso quella pagina a sé. Il link a quella pagina resta, spostato
+  sotto la ricerca (era subito sotto la riga di copertine).
+- `<Navbar/>` (tab Diario/Percorsi/Resoconti) **non toccata** — la richiesta di rimuovere "il Tab
+  laterale" riguardava il drawer (`DiarioSwitcherDrawer`, il pannello che scorre lateralmente), non
+  la barra di navigazione classica in cima, che resta come sempre.
+
+**Fase 19 — Via anche la Navbar classica dallo scaffale; Caveat al posto di Kalam** ✅ **COMPLETATA**
+
+Vista la Fase 18 a schermo, l'utente ha chiesto di andare oltre: niente più `<Navbar/>` (le tab
+Diario/Percorsi/Resoconti in cima) nemmeno sullo scaffale — "voglio passare definitivamente al
+nuovo layout e abbandonare quello precedente". Rimozione **solo su questa pagina** (`DiariPageLibro`
+in `app/diari/page.tsx`): `DiariPageClassico` e le altre pagine ancora nel vecchio chrome (es.
+`/percorsi`) non sono toccate, non è un cambio del componente `Navbar` condiviso. `MOBILE_TOPBAR_SPACER`
+(il padding-top pensato per compensare la Navbar fissa) va via con lei; al suo posto un
+padding-top minimo con `env(safe-area-inset-top)` per il notch, stesso principio già usato in
+fondo da `BOTTOM_BAR_SPACER` in `BookPage.tsx`.
+
+Contestualmente, richiesta di provare `Caveat` al posto di `Kalam` per il tratto a mano (font
+ancora in valutazione, non una scelta finale). Rinominati i token da `FONT_KALAM`/`FONT_VAR_KALAM`
+a `FONT_HAND`/`FONT_VAR_HAND` in `lib/taccuinoTokens.tsx` — nome legato al ruolo (il font scritto a
+mano) non al font specifico dietro, per non dover rinominare di nuovo a un prossimo cambio.
+`app/layout.tsx`: `Kalam` → `Caveat` da `next/font/google`, variabile `--font-kalam` →
+`--font-caveat`.
+
+**Fase 20 — Il Sommario (elenco Percorsi di un Diario) in stile taccuino** ✅ **COMPLETATA**
+
+Continuazione dell'integrazione graduale: dopo lo scaffale (Fase 18), il Sommario di un singolo
+Diario (`app/diari/[id]/page.tsx`, `DiarioIndexLibro`) — richiesto esplicitamente dall'utente come
+prossimo passo.
+
+*`BookPage.tsx` guadagna una prop `theme`.* Invece di duplicare il guscio (header sticky, striscia
+sezioni, barra inferiore, spacer) in una seconda versione taccuino, `BookPage` accetta ora
+`theme?: 'pergamena' | 'taccuino'` (default `'pergamena'`, invariato per tutti i chiamanti
+esistenti — `GuideBookPage.tsx`, `ReportBookPage.tsx` non lo passano, restano pergamena). I sei
+colori locali (sfondo pagina, hairline, due toni di inchiostro muto, sfondo/testo delle pillole)
+diventano un oggetto per tema; il markup non cambia, cambiano solo i valori.
+
+*Il Sommario stesso* passa `theme="taccuino"` e sostituisce tutti i toni pergamena hardcoded nel
+proprio contenuto (ricerca, filtri, righe dei Percorsi, link pubblicazione, schermate di
+caricamento/errore) con `TACCUINO_PAPER`/`TACCUINO_INK` — alcune coppie di toni pergamena molto
+vicini (es. due sfumature di hairline, due di inchiostro muto) sono confluite nello stesso token
+taccuino, una consolidazione deliberata: il taccuino ha una palette più contenuta della pergamena.
+Il titolo del Diario passa a `FONT_HAND` (come "I miei Diari" sullo scaffale) — stesso principio,
+titoli a mano/corpo tipografico, applicato qui alla seconda pagina reale.
+
+**Fase 21 — Fedeltà al mockup: texture, piega, rotazioni, non solo la palette** ✅ **COMPLETATA**
+
+Verificata a schermo, la Fase 20 non assomigliava al mockup (`taccuino-canvas/SommarioTaccuino.dc.html`,
+non nel repo) — solo la palette era cambiata, non la texture di carta, la piega disegnata a mano, le
+rotazioni "imperfette" o l'uso diffuso del font a mano che danno al mockup la sua identità. Corretto
+punto per punto contro il mockup:
+
+- **`lib/taccuinoTokens.tsx`** — `HandWobbleFilter` guadagna `baseFrequency`/`scale` opzionali (prima
+  fissi, pensati per un solo caso d'uso); nuovi `TaccuinoPaperTexture` (macchie sfumate + linee di
+  livello disegnate a mano, `fixed`, dietro al contenuto, z-index negativo) e `TaccuinoSpineShadow`
+  (piega con lo stesso tremore invece del gradiente lineare piatto di `BookSpineShadow`, un lato
+  `left`/`right` per la futura alternanza sfogliando). Nuovo token `TACCUINO_PAPER.highlight`
+  (evidenziatore caldo per righe importanti, sempre con opacità in coda — mai a piena tinta).
+- **`BookPage.tsx`** — col tema "taccuino" monta `TaccuinoPaperTexture`/`TaccuinoSpineShadow` al
+  posto di `BookSpineShadow`; il tema "pergamena" resta identico a prima.
+- **`components/RouteThumb.tsx`** — `strokeDasharray`/`filter` opzionali (default assenti, nessun
+  chiamante esistente cambia aspetto): permettono di ricalcare a mano la traccia REALE di un
+  percorso invece di disegnarne una finta, riusando la stessa normalizzazione delle coordinate.
+- **`app/diari/[id]/page.tsx`** — copertina come tassello incollato (bordo + ombra sfalsata 2px/3px
+  + rotazione); titolo, sottotitolo, pulsante "nuovo percorso", chip di filtro/ordinamento e righe
+  dei Percorsi passano al font a mano (prima solo il titolo); chip da "pillola piena" a "contorno
+  attivo/testo semplice inattivo" (mockup); miniatura di ogni percorso da `GalleryMapThumb` (mappa
+  pulita) a `RouteThumb` con tratteggio e tremore condiviso (un solo filtro montato in cima alla
+  pagina, referenziato da ogni riga — mai un filtro duplicato per riga); divisore riga da punteggiato
+  a tratteggiato; evidenziazione dei percorsi con un Reportage passata dal tinteggio arancio-accento
+  al colore "evidenziatore" del mockup; spunta disegnata (icona `Check`) prima di "N reportage".
+  Rotazioni tenute solo su titolo/pulsante/copertina, non sulle righe dell'elenco (a quella densità
+  avrebbe reso illeggibile invece che artigianale).
+
+**Fase 22 — Torna la vera mappa OSM nelle righe, ricolorata invece che astratta** ✅ **COMPLETATA**
+
+Verificata a schermo la Fase 21, due segnalazioni sulla stessa riga dell'elenco Percorsi:
+
+1. Titolo, statistiche ed etichetta di stato di ogni riga non si vedevano più — presenti nel DOM
+   (verificato con un rendering isolato della riga fuori dall'app, bypassando l'autenticazione via
+   `isSharedContentPath`/`isPublicPath`, `lib/publicPaths.ts`), ma non a schermo. La causa più
+   probabile individuata: `RouteThumb` con `filter="url(#...)"` (Fase 21, `feTurbulence`/
+   `feDisplacementMap`) dentro un contenitore `overflow:hidden` adiacente al testo — un bug di
+   compositing GPU non raro su Android/Chromium con filtri SVG in questa combinazione, che può
+   corrompere il rendering di contenuto adiacente invece che solo dell'elemento filtrato. Non
+   riprodotto con certezza assoluta (serve un dispositivo Android reale per confermarlo), ma
+   sufficientemente verosimile da giustificare la rimozione preventiva del filtro SVG da un
+   elemento di lista ripetuto N volte per pagina.
+2. Richiesta esplicita: la miniatura di ogni percorso deve tornare a essere la vera mappa OSM
+   (roads, terreno — un'informazione reale, dove si trova il percorso), non un disegno astratto,
+   ma con i toni scaldati verso la palette taccuino invece del blu/verde standard della mappa.
+
+Le due correzioni convergono sulla stessa modifica: `GalleryMapThumb` (mappa Leaflet reale, invariata
+— stessa usata dalla galleria Guida/Resoconto, `components/routehub/BottomGallery.tsx`) torna al
+posto di `RouteThumb`+filtro SVG. La ricolorazione usa un `filter` **CSS** (`sepia() saturate()
+hue-rotate() brightness() contrast()`) sul contenitore della miniatura, non un filtro SVG — stesso
+risultato (le tile prendono i toni caldi del taccuino), ma un meccanismo di rendering completamente
+diverso (raster, non SVG `feDisplacementMap`) e non applicato al componente `GalleryMapThumb` stesso
+(che resta neutro per i suoi altri usi, es. la galleria non-taccuino). `RouteThumb`, `useHandWobbleId`
+e `HandWobbleFilter` restano nel repo (altri usi legittimi, es. la ricerca globale dello scaffale non
+usa filtri SVG) — solo questa riga smette di combinarli nel modo sospetto.
+
+**Fase 23 — Trovata e corretta la causa reale: il filtro sullo sfondo, non sulle miniature** ✅ **COMPLETATA**
+
+La Fase 22 non ha risolto: l'utente ha rimandato lo stesso schermo, testo ancora invisibile. Questa
+volta isolato con certezza, non per ipotesi: una pagina fuori dall'app sotto `/s/…` (bypassa
+l'autenticazione via `isSharedContentPath`) con l'esatta struttura della riga del Sommario, prima
+senza `TaccuinoPaperTexture`/`TaccuinoSpineShadow` (testo visibile, sia con `RouteThumb`+filtro SVG
+sia con `GalleryMapThumb`) poi CON quei due componenti montati (testo invisibile, riprodotto in modo
+deterministico in Chromium headless su desktop — non serviva un dispositivo Android reale). Rimosso
+selettivamente il filtro da dentro `TaccuinoPaperTexture` soltanto (lasciando texture/piega/`GalleryMapThumb`
+tutti montati insieme): testo di nuovo visibile su tutte le righe testate.
+
+**Causa reale**: `HandWobbleFilter` (`feTurbulence`+`feDisplacementMap`) applicato dentro
+`TaccuinoPaperTexture` e `TaccuinoSpineShadow` — entrambi elementi `fixed`, a piena pagina/altezza,
+montati stabilmente su OGNI pagina in tema taccuino (non solo il Sommario: anche lo scaffale, Fase 18,
+li usa — segno che il problema era probabilmente presente anche lì, solo non segnalato perché quella
+pagina non ha un elenco di righe con altro testo sotto lo stesso schermo). Il filtro, così applicato,
+corrompe il rendering del testo in elementi **fratelli sottostanti nel DOM**, non solo dell'elemento
+filtrato — un comportamento non specifico ad Android, riprodotto anche in Chromium desktop.
+
+Le due fasi precedenti (21→22) avevano cambiato la miniatura del percorso pensando che il filtro lì
+fosse la causa — coincidenza di tempistica (introdotto nella stessa PR di Fase 21 in cui è arrivato
+anche `TaccuinoPaperTexture`), non la causa vera. `lib/taccuinoTokens.tsx`: le linee di livello di
+`TaccuinoPaperTexture` e la piega di `TaccuinoSpineShadow` restano curve di Bézier organiche (nessun
+cambiamento visivo di rilievo — il tremore aggiuntivo del filtro era comunque sottile), solo senza
+più il filtro. `HandWobbleFilter`/`useHandWobbleId` restano esportati con un avviso esplicito nel
+commento: sicuri su una forma piccola/contenuta nel proprio riquadro, mai su un elemento `fixed` a
+piena pagina montato stabilmente.
+
+**Fase 24 — La Fase 23 aveva diagnosticato male: causa reale isolata con un A/B/C rigoroso** ✅ **COMPLETATA**
+
+La Fase 23 non ha risolto: l'utente ha disinstallato l'app, si è collegato direttamente all'URL
+Vercel (escludendo con certezza qualunque cache — service worker o altro) e ha rimandato lo stesso
+identico schermo. La diagnosi della Fase 23 (il filtro `HandWobbleFilter`) era quindi **sbagliata**
+— il filtro era già stato rimosso e il bug persisteva.
+
+Isolato questa volta con un metodo diverso, molto più rigoroso: invece di confrontare screenshot da
+caricamenti di pagina separati (soggetti a differenze di timing/ambiente che avevano già portato a
+una falsa conferma in Fase 23), un **A/B/C sulla STESSA pagina, stesso caricamento** — colonne
+affiancate, alcune con `TaccuinoPaperTexture`/`TaccuinoSpineShadow` montati, altre no. Risultato
+netto: `TaccuinoSpineShadow` da solo — nessun problema, testo sempre visibile. `TaccuinoPaperTexture`
+da solo — testo sparito ovunque nella stessa colonna, **comprese etichette di prova senza alcun
+font/colore taccuino** (mentre immagini e icone nella stessa riga restavano visibili). Esclusi uno
+per uno, con lo stesso metodo A/B: lo z-index (negativo, zero, o assente — stesso risultato),
+`position:fixed` in sé (`position:absolute` stesso risultato). L'unica variabile che faceva la
+differenza: **un `<svg>` live che ricopre la pagina** (qualunque combinazione fixed/absolute,
+con o senza filtro, con o senza z-index) corrompe il rendering del testo altrove nel DOM. Lo stesso
+contenuto come `<svg>` **statico**, in flusso normale (non sovrapposto ad altro contenuto), non
+causa alcun problema — conferma che è la sovrapposizione via SVG live, non l'SVG in sé né i suoi
+contenuti (gradienti, `feTurbulence`, o altro).
+
+**Correzione**: `TaccuinoPaperTexture` riscritta senza alcun elemento `<svg>` — un `<div>` con
+`background: radial-gradient(...), radial-gradient(...), colore-base` (CSS puro), stesso principio
+già in uso altrove nell'app per evitare esattamente questa classe di problema (l'utility Tailwind
+`bg-topography`, un'immagine di sfondo invece di un SVG vivo nel DOM). Le quattro linee di livello
+disegnate sono state tolte in questo passaggio — non riportate nemmeno come immagine di sfondo:
+prima la stabilità del testo, un'eventuale reintroduzione come `background-image` (mai un altro
+`<svg>` overlay) resta possibile in un secondo momento. Verificato con lo stesso componente
+`BookPage` reale (non una ricostruzione a mano) e l'intera pagina Sommario: titolo, sottotitolo,
+pulsante, chip, tutte le righe (titolo/statistiche/stato) visibili.
+
+`TaccuinoSpineShadow` non è stata toccata in questa fase (verificata innocente dal test A/B) — resta
+un `<svg>` `fixed`, ma è una striscia stretta (22-26px), non un overlay a piena pagina.
+
+**Fase 25 — Anche la Fase 24 non bastava: rimosso il `filter` CSS sulla miniatura mappa** ✅ **COMPLETATA**
+
+La Fase 24 non ha risolto: l'utente ha rimandato lo stesso identico schermo (mappe reali visibili,
+titolo/statistiche/stato di ogni riga ancora del tutto assenti), questa volta con un'indicazione
+precisa — il difetto è comparso "probabilmente dopo la modifica dei font e dei colori delle
+miniature delle mappe". Indica il `filter` **CSS** (`sepia() saturate() hue-rotate() brightness()
+contrast()`) applicato al contenitore di `GalleryMapThumb` in ogni riga del Sommario, introdotto in
+Fase 22 e mai più toccato da allora — quindi presente, identico, in tutti e tre i tentativi falliti
+(22, 23, 24).
+
+Non riprodotto in locale con certezza: un test A/B sulla stessa pagina (stessa riga, con e senza
+`filter`) non mostra differenze in Chromium headless desktop con dati di prova, ma qui mancano le
+tile reali (`/api/tile` non raggiungibile in questo ambiente) — la stessa limitazione che ha reso
+inaffidabili le verifiche isolate delle fasi precedenti. Circostanza comunque concreta: `filter`
+promuove il suo contenitore a un layer compositato dalla GPU, e Leaflet (`GalleryMapThumb`) ci
+disegna dentro decine di tile ciascuna con la propria trasformazione — la stessa famiglia di bug
+già isolata in Fase 24 (un elemento che forza un compositing complesso adiacente al testo di riga
+corrompe quel testo su certi dispositivi/driver Android), qui innescata da `filter` invece che da un
+`<svg>` overlay a piena pagina.
+
+**Correzione**: tolto il `filter` CSS dal contenitore della miniatura in `app/diari/[id]/page.tsx`
+(Sommario) — stesso principio già seguito in Fase 24 (rimuovere il meccanismo sospetto invece di
+un'ennesima "verifica" non affidabile in questo ambiente): la mappa resta quella vera (Leaflet,
+tile OSM), solo senza la ricolorazione verso la palette taccuino. `GalleryMapThumb` stesso non è
+stato toccato (nessun filtro applicato al componente, solo al contenitore chiamante — resta neutro
+per gli altri suoi usi). I filtri CSS analoghi su `GuideHero`/`ReportHero` (immagine hero singola,
+non una mappa Leaflet con decine di tile in un elenco ripetuto) non sono stati toccati — combinazione
+diversa, nessuna segnalazione su quelle pagine.
+
+Questa correzione **non è verificata con la stessa certezza** della Fase 24 (lì l'A/B aveva isolato
+la causa in modo riproducibile): qui si rimuove il sospetto più concreto rimasto sul tavolo dopo tre
+tentativi falliti, in attesa di conferma dell'utente sul dispositivo reale.
+
+**Fase 26 — La causa reale, per la prima volta verificata su una build di produzione vera**
+✅ **COMPLETATA**
+
+La Fase 25 non ha risolto: l'utente ha rimandato lo stesso identico schermo (mappe reali, stavolta
+nei loro colori naturali — coerente con la rimozione del `filter`, ma titolo/statistiche/stato
+ancora del tutto assenti su ogni riga), con un'osservazione decisiva: *"non è che hai applicato un
+layer sopra i testi?"*.
+
+**Il vero errore metodologico di tutte le fasi 22-25**: ogni singola verifica di questa saga — inclusa
+quella (falsamente) "rigorosa" A/B/C della Fase 24 — è stata condotta con `npm run dev`. Mai una
+volta con una build di produzione reale (`next build && next start`), l'unico artefatto che riflette
+davvero cosa gira su Vercel. Ricostruita la pagina del Sommario (con dati finti, stessa identica
+struttura: `BookPage`, `GalleryMapThumb`, `TrailScoreGaugeBadge`) e servita con `next build && next
+start` invece di `next dev`: **il bug si riproduce immediatamente e in modo deterministico**, prima
+volta in questa sessione. Bisezione sistematica (con lo stesso metodo A/B, stavolta su una build di
+produzione vera, unica differenza rispetto alle fasi precedenti): righe senza `<BookPage>` — testo
+visibile; con `<BookPage theme="pergamena">` (il tema originale, mai toccato in questa saga) — testo
+visibile; con `<BookPage theme="taccuino">` — testo invisibile. Isolato ulteriormente dentro il
+guscio: `TaccuinoSpineShadow` da solo — innocuo; **`TaccuinoPaperTexture` da sola (il `<div>` con
+`background: radial-gradient(...)` scritto in Fase 24, senza alcun `<svg>`) — testo invisibile**,
+riprodotto con un singolo elemento, nessuna mappa, nessun filtro, nessuna delle cause sospettate
+nelle fasi precedenti.
+
+**Causa reale**, confermata via `getComputedStyle` nel browser: l'elemento ha `className="fixed
+inset-0 -z-10 pointer-events-none"` ma `z-index` calcolato risultava **`auto`**, non `-10` — la
+regola CSS `.-z-10{z-index:-10}` era del tutto assente dal foglio di stile generato in produzione
+(verificato leggendo direttamente i file `.next/static/css/*.css`). Motivo: `tailwind.config.ts`
+scansiona solo `./pages/**`, `./components/**`, `./app/**` per generare le classi usate — **mai
+`./lib/**`**, la cartella dove vive `lib/taccuinoTokens.tsx`. La stringa `-z-10` non compare in
+nessun altro file del repo dentro quei tre glob (verificato con una ricerca globale), quindi Tailwind
+non l'ha mai generata per una build pulita. Un elemento `position: fixed` con `z-index: auto`
+(invece di un valore negativo esplicito) dipinge, per le regole di stacking del CSS, **dopo** il
+contenuto normale di flusso della pagina — cioè sopra il testo di ogni riga, non sotto — anche se
+appare per primo nel DOM: esattamente il "layer sopra i testi" descritto dall'utente. Non un bug di
+compositing GPU, non Android-specifico, non legato a mappe/filtri/SVG: una classe Tailwind
+silenziosamente non generata in produzione.
+
+Perché non si è mai visto con `npm run dev`: la cache JIT di Tailwind di un processo `next dev` di
+lunga durata accumula le classi già viste (anche da usi altrove nel repo nel frattempo rimossi) senza
+mai ripartire da una scansione pulita — a differenza di una build di produzione da zero, che
+ri-scansiona i glob di `content` da capo. Questo spiega perché ogni "verifica" di questa saga,
+comprese quelle che sembravano più rigorose (Fase 24), abbia sempre mostrato il testo visibile in
+sviluppo pur non correggendo il difetto reale in produzione.
+
+**Correzione**: aggiunto `'./lib/**/*.{js,ts,jsx,tsx,mdx}'` ai `content` di `tailwind.config.ts`.
+Verificato che altri tre file sotto `lib/` (`resoconto/reportDisplaySections.tsx`,
+`guideContent.tsx`, `guida/guideDisplaySections.tsx`) usano `className` ed erano quindi ugualmente
+esposti allo stesso rischio silenzioso, non ancora segnalato — coperti dalla stessa correzione.
+Verificato con `getComputedStyle` (`z-index` ora `-10`) e visivamente, sempre su una build di
+produzione vera: testo visibile in ogni combinazione testata (texture da sola, texture+piega,
+texture+header sticky+barra fissa, tutto insieme) e sulla pagina reale del Sommario ricostruita con
+`GalleryMapThumb`/`TrailScoreGaugeBadge`.
+
+La Fase 25 (rimozione del `filter` CSS dalla miniatura mappa) non era necessaria per questo bug —
+non ne era la causa — ma resta comunque innocua: non reintrodotta in questa fase, la mappa continua
+a mostrarsi nei suoi colori naturali. Un'eventuale ricolorazione verso la palette taccuino potrà
+tornare in un secondo momento, ora su basi solide.
+
+**Conferma finale**: dopo il merge, l'utente ha rimandato lo stesso schermo ancora rotto sul
+dispositivo reale — a quel punto è stato letto direttamente il CSS del deploy live di Vercel
+(`mcp__Vercel__web_fetch_vercel_url`, bypassando il blocco di rete di questo ambiente) confermando
+byte-per-byte che la regola `z-index:-10` era davvero presente in produzione: il server serviva già
+la correzione. La discrepanza era quindi lato client — coerente con l'avviso già documentato in
+`components/ServiceWorkerRegister.tsx` (un service worker può restare "vecchio" più a lungo di quanto
+un reload da solo risolva). Testato in una scheda in incognito (nessuna cache/service worker
+pregressi): **testo visibile, bug risolto**. La Fase 26 è quindi la causa reale e definitiva; la
+persistenza del sintomo sul browser normale dell'utente era un service worker/cache non aggiornati
+sul dispositivo, non un difetto di codice residuo.
+
+**Fase 27 — Bordi disegnati a mano su miniature e pulsanti, ombra della piega più ricca, mappa
+ricolorata di nuovo** ✅ **COMPLETATA**
+
+Col Sommario finalmente funzionante, l'utente ha allegato due screenshot (uno del Sommario reale
+funzionante, uno di una mappa d'esempio in stile acquerello) chiedendo tre cose: (1) i colori/stile
+della mappa più vicini a quel riferimento, (2) i contorni di miniature e pulsanti "non geometrici
+regolari" ma "leggermente allungati come se fossero cerchiati a mano", (3) l'ombra al centro pagina
+migliorata. L'illustrazione ad acquerello vera e propria (vegetazione dipinta, etichette a mano,
+quote) non è riproducibile per un percorso GPS reale dell'utente senza un motore cartografico
+personalizzato (discusso e scartato per ora, vedi la risposta a questo messaggio) — qui si è preso
+solo l'aspetto ottenibile con la mappa reale: colori e contorni.
+
+**`HandDrawnFrame`** (nuovo, `lib/taccuinoTokens.tsx`) — un `<rect>` con `HandWobbleFilter`
+all'interno di un `<svg absolute inset-0>` dentro l'elemento chiamante (che deve essere
+`position: relative`), mai un overlay a piena pagina: la stessa distinzione già isolata in Fase 24
+("un `<svg>` che ricopre la pagina" vs "una forma piccola contenuta nel proprio riquadro", quest'
+ultima già documentata sicura) — qui finalmente sfruttata invece di uno stub non usato.
+`viewBox="0 0 100 100"` con `preserveAspectRatio="none"` scala il rettangolo alle dimensioni reali
+dell'elemento (anche non quadrato) senza calcoli manuali; `vectorEffect="non-scaling-stroke"` (già
+usato in `RouteThumb.tsx`) mantiene lo spessore del tratto in pixel veri. Un `rx` alto (50) su un
+riquadro non quadrato produce una pillola con angoli leggermente ellittici — l'imperfezione voluta,
+non un difetto. Applicato a: miniatura mappa di ogni riga, pulsante "nuovo percorso" (con
+`strokeDasharray`), casella di ricerca, chip attivi (ordinamento/stato/preferiti) — sempre al posto
+di un `border` CSS piatto, mai in aggiunta (un bordo doppio avrebbe vanificato l'effetto).
+
+Attenzione all'ordine di montaggio quando l'elemento con sfondo opaco (es. l'`<input>` della
+ricerca) è un **fratello** di `HandDrawnFrame` (non un genitore) — un fratello dipinto dopo copre
+uno dipinto prima: `HandDrawnFrame` va per ultimo nel JSX in quel caso, così il suo bordo (che ha
+`fill="none"`, quindi non nasconde nulla sotto) si dipinge sopra lo sfondo dell'input invece di
+sparire dietro. Quando invece `HandDrawnFrame` è figlio diretto dell'elemento con lo sfondo (es. i
+pulsanti, dove lo sfondo è sul `<button>` stesso), l'ordine tra fratelli non conta — lo sfondo del
+genitore si dipinge sempre prima dei suoi figli, in qualunque ordine siano scritti.
+
+**Mappa ricolorata di nuovo** — il `filter` CSS tolto in Fase 25 per sospetto (rivelatosi innocente
+in Fase 26) torna sul contenitore della miniatura, con toni spostati verso il verde
+(`hue-rotate(60deg)` invece di `-10deg`) per avvicinarsi alla palette del riferimento invece del
+seppia caldo di prima.
+
+**`TaccuinoSpineShadow`** allargata (22→34px sinistra, 26→38px destra) con un `<div>` a
+`background: linear-gradient(...)` (CSS puro) dietro la linea organica per la caduta d'ombra morbida
+verso il centro pagina vista nel riferimento — la linea a tremore sopra riguadagna il
+`HandWobbleFilter` (verificato innocuo in Fase 24, questa striscia stretta non ne era mai stata la
+causa) invece di restare una curva rigida.
+
+Verificato con una build di produzione vera (lezione della Fase 26: mai fidarsi solo di `npm run
+dev`): tutti i testi restano visibili, tutti i bordi a tremore renderizzano correttamente sulla
+pagina reale ricostruita con `GalleryMapThumb`/`TrailScoreGaugeBadge`.
+
+**Fase 28 — Colore mappa bocciato, un vero bug nella copertina in miniatura, primo accenno
+"acquerello" al badge del punteggio** ✅ **COMPLETATA**
+
+L'utente ha rimandato uno screenshot del Sommario reale (Fase 27 già in produzione) con tre
+segnalazioni: (1) il verde della Fase 27 non piace, tornare al seppia di prima ma "più marroncino";
+(2) le miniature delle copertine dei Diari (l'anteprima in cima al Sommario) sono "spostate verso il
+basso"; (3) i badge del punteggio dovrebbero sembrare "fatti ad acquerello".
+
+**Copertina in miniatura — bug reale, non estetico.** `DiarioCoverThumb` (con `title`+`width`, usata
+in cima al Sommario) applicava già un `translateY(-24px)` per compensare il `margin: 24px auto`
+proprio di `<DiarioCover>` (fix di una fase precedente) — ma quel margine, senza nulla che lo
+contenga, **collassa fuori** dal `<div>` che porta la trasformazione durante il layout: diventa
+spazio reale PRIMA che il `<div>` inizi, non più al suo interno, e una trasformazione applicata AL
+`<div>` non può annullare uno spazio già "scappato" fuori dal suo perimetro. Isolato empiricamente
+misurando `getBoundingClientRect()` a ogni livello dell'albero (non deducibile dalla sola lettura del
+codice) — la copertina reale iniziava ~22px più in basso del suo contenitore invece di ~0.
+**Correzione**: `overflow: hidden` sul `<div>` della trasformazione blocca il collasso, contenendo il
+margine dove `translateY(-24px)` può davvero annullarlo — ma questo da solo introduceva un secondo
+problema (quel `<div>`, largo "auto", eredita la larghezza già scalata del suo genitore, molto più
+stretta di `PDF_PAGE_W`: con `overflow: hidden` quello ritagliava `DiarioCover` a una fetta verticale
+invece di lasciarla sporgere invisibilmente) — richiesta anche una `width: PDF_PAGE_W` esplicita sullo
+stesso `<div>`. Verificato con `getBoundingClientRect()`: la copertina ora coincide esattamente col
+suo contenitore, nessun vuoto, nessun taglio.
+
+**Mappa**: tolto il verde della Fase 27, tornato al seppia caldo di Fase 22 con toni leggermente più
+intensi (`sepia(0.6) saturate(1.4) hue-rotate(-5deg) brightness(0.93) contrast(1.05)`).
+
+**Badge del punteggio — un primo passo, non una riscrittura.** `TrailScoreGaugeBadge` è condiviso
+con Guida, Resoconto e le gallerie (sfondi scuri, animato, 395 righe) — ritoccarne il rendering
+interno per un look "ad acquerello" si vedrebbe ovunque nell'app, non solo qui, un cambiamento
+architetturale che il componente stesso non è stato pensato per accogliere (nessun concetto di
+variante per tema). Invece di riscriverlo, aggiunto un `HandDrawnFrame` esterno (stessa tecnica di
+Fase 27, contenuto nel proprio riquadro) intorno all'istanza del Sommario soltanto — un anello a
+tremore leggermente più grande del badge reale, che dà un accenno "cerchiato a penna" senza toccare
+il componente condiviso. Non è ancora l'acquerello vero e proprio del riferimento — un passo
+concreto e sicuro, non l'ultima parola sull'argomento.
+
+Verificato tutto su una build di produzione vera: copertina, mappa e badge corretti, testo sempre
+visibile.
+
+**Fase 29 — Righe ingrandite del 15%, mappe nei colori originali come ritagli incollati, tracciato
+a china nera, piega semplificata** ✅ **COMPLETATA**
+
+Idea dell'utente, non un bug da correggere: quattro richieste esplicite sull'elenco Percorsi, con
+invito a fare domande in caso di dubbio — nessuna posta, le indicazioni erano sufficienti per
+decidere con margine ragionevole (i simboli aggiuntivi erano esplicitamente lasciati alla mia
+scelta, "vedi tu quali").
+
+1. **Righe ingrandite del 15%**: miniatura 76→87px, e con essa (non isolatamente) i font
+   (titolo 17→19.5, sottotitolo/statistiche 10.5→12, stato 13→15), le icone (12→14px), l'anello
+   del punteggio (40→46px), gli spazi (`gap`/`padding` della riga) e la larghezza fissa della
+   colonna di stato (82→94px) — "di conseguenza" come richiesto, non solo la mappa da sola.
+2. **Colori originali della mappa**: tolto ogni `filter` CSS di ricolorazione (seppia di Fase 22,
+   verde di Fase 27, marrone di Fase 28) — tre tentativi di ricolorare la stessa mappa, mai quello
+   che l'utente voleva davvero. La vera mappa OSM ora nei suoi colori nativi.
+3. **"Ritaglio incollato"**: la miniatura non ha più `HandDrawnFrame` (un bordo "disegnato", non
+   più coerente con "una foto incollata sulla pagina") — bordo bianco spesso (3px, colore carta
+   chiara) + ombra sfalsata + una rotazione lieve e STABILE per percorso (`cutoutRotation`, hash
+   dell'id — mai `Math.random()`, che risalterebbe a ogni render), stesso principio già validato
+   per la copertina in `DiarioCoverThumb`.
+4. **Tracciato a china nera tratteggiata + simboli**: `GalleryMapThumb` (condiviso con le gallerie
+   Guida/Resoconto — **non toccato nel comportamento di default**, solo esteso) riceve quattro
+   nuove prop opzionali — `lineColor`, `lineWeight`, `dashArray`, `showEndpoints` — tutte
+   `undefined`/`false` di default, quindi invisibili agli altri due chiamanti esistenti
+   (`BottomGallery`, `ExpandedGalleryList`). Il Sommario passa un inchiostro quasi nero, tratteggio
+   Leaflet **nativo** (`dashArray`, non un filtro SVG applicato al rendering interno di Leaflet —
+   la stessa combinazione già scartata in Fase 21 per il rischio di corrompere il testo delle righe
+   vicine) e `showEndpoints` per due soli simboli, un pallino pieno alla partenza e uno vuoto
+   all'arrivo (`L.circleMarker`, nessuna icona personalizzata) — "senza intasare troppo" come
+   richiesto, niente per ogni tappa intermedia. La precisione del percorso resta intatta: stessi
+   punti GPS, cambia solo lo stile del tratto. Aggiunta anche una prop `dimTiles` (default `true`,
+   comportamento invariato altrove): il velo scuro esistente serviva a far risaltare il ciano
+   acceso su sfondo nero delle gallerie, in contrasto coi "colori originali" richiesti qui — tolto
+   solo per questa istanza (`dimTiles={false}`).
+5. **Piega del taccuino semplificata**: la linea organica a tremore (introdotta in Fase 21,
+   ritoccata più volte) bocciata a schermo ("la grafica... non mi piace... più una sfumatura
+   scura per simulare la rilegatura") — tolta del tutto. `TaccuinoSpineShadow` è ora un solo
+   `linear-gradient` CSS, allargato (34/38→40/44px) e con una caduta a più tappe invece di due soli
+   stop (più scura e netta subito accanto al bordo, più lunga e morbida dopo) — l'ombra vera di un
+   avvallamento, non il tratto di una piega disegnata a matita.
+
+Verificato tutto su una build di produzione vera: righe visibilmente più grandi, bordo/ombra/rotazione
+della miniatura confermati via `getComputedStyle` (matrice di rotazione ≈2.4°, box-shadow presente),
+tracciato tratteggiato e simboli di partenza/arrivo visibili, testo sempre leggibile, nessun nuovo
+warning ESLint (l'`useEffect` di `GalleryMapThumb` ha guadagnato le nuove prop nell'array di
+dipendenze, altrimenti segnalate come mancanti).
+
+**Fase 30 — Cartografia escursionistica reale al posto di un filtro, simboli affinati, gerarchia
+del Diario come principio guida** ✅ **COMPLETATA**
+
+Riscontro dettagliato dell'utente sulla Fase 29, con una lettura di design che va oltre le singole
+miniature — merita di essere riportata perché guiderà scelte future, non solo questa fase:
+
+> Hai quasi creato una gerarchia: **Diario → pagina**, **Percorsi → schede**, **Mappa → piccolo
+> documento fisico**, **Traccia → annotazione personale**, **Reportage → testimonianza**. [...]
+> Deve sembrare un reperto del viaggio, non un elemento grafico che compete con il titolo del
+> percorso.
+
+Tre correzioni concrete emerse da questa lettura:
+
+1. **La mappa era ancora "troppo digitale"** — dopo tre fasi passate a inseguire il colore giusto
+   con un `filter` CSS su una mappa CartoDB (seppia in Fase 22, verde in Fase 27, marrone in Fase
+   28, poi tolto del tutto in Fase 29 per i "colori originali"), il vero problema non era il colore
+   ma la *cartografia stessa*: verde acceso, POI commerciali, testi da app di navigazione — nessun
+   filtro può togliere elementi che il tile non ha mai smesso di avere. Cambiato il **tile
+   provider**: `GalleryMapThumb` guadagna una prop `tileStyle` (default `'light'`, invariato per
+   gli altri due chiamanti) inoltrata a `/api/tile` (nuova voce `topo` in `PROVIDERS`, OpenTopoMap
+   — curve di livello, boschi desaturati, cartografia pensata per il trekking, licenza CC-BY-SA
+   come i tile OSM già in uso). `maxNativeZoom` limitato a 17 per questo provider (non copre zoom
+   più alti ovunque come CARTO/OSM standard) — Leaflet ingrandisce l'ultimo livello disponibile
+   invece di richiedere tile inesistenti. Non riproducibile in locale (stesso limite di rete già
+   noto: anche i provider esistenti restituiscono 404 in questo ambiente sandboxato, confermato
+   confrontando `style=light`/`voyager`/`topo` — tutti e tre 404 identici, non un problema del
+   nuovo provider) — il codice segue esattamente lo stesso pattern (aggiunta additiva a `PROVIDERS`,
+   già usato tre volte prima) di provider già in produzione.
+2. **Simboli di partenza/arrivo troppo "da app"** — "sembrano marker di Leaflet". Rimpiccioliti
+   (raggio 3.5→2.2, spessore 1.5→1): un punto e un cerchio minimi, non un pittogramma. Il tracciato
+   nero tratteggiato (Fase 29) è stato invece validato esplicitamente ("funziona sorprendentemente
+   bene... il nero/marrone fa pensare a *questo percorso è stato segnato su una carta*") — non
+   toccato.
+3. **Le statistiche numeriche pesavano quanto il titolo** — richiesta esplicita di far emergere
+   "nome + giudizio + fotografia/mappa", lasciando km/D+/quota/tempo come annotazioni secondarie:
+   font ridotto (12→11), colore portato allo stesso grigio-marrone tenue delle icone (prima un
+   marrone più scuro, stessa forza del testo principale), icone rimpicciolite (14→12px).
+
+La rotazione già stabile per percorso (Fase 29) e il bordo bianco spesso restano invariati —
+espressamente lodati ("una delle cose che mi piace di più... foto della mappa → attaccata al
+diario"). Suggerita anche una lieve variazione dell'ombra oltre alla rotazione, ma con l'esplicito
+avviso "con estrema moderazione, se esageri diventa scrapbook" — non aggiunta in questa fase: la
+sola rotazione già dà la varietà percepita e cercata, un'ombra variabile aggiungerebbe un secondo
+grado di libertà per un guadagno visivo marginale.
+
+Non richiesta né tentata in questa fase: la mappa "acquerello" illustrata generata dall'utente come
+riferimento iniziale — esplicitamente giudicata "troppo illustrata per Dtrek". La direzione
+confermata resta cartografia reale (dati/geometria veri) trattata con misura, non un'illustrazione.
+
+**Fase 31 — "Travel Journal contemporaneo": nuova palette esatta, texture quasi impercettibile,
+rilegatura fisica a più livelli** ✅ **COMPLETATA (Fase 1 di 4)**
+
+Specifica dettagliata dell'utente (30 sezioni, palette esadecimale esatta, principi di design
+espliciti — "70% UI moderna, 30% diario fisico", "REALISMO > DECORAZIONE", "la casualità è
+decorativa, non funzionale") per evolvere lo stile taccuino verso un vero "Travel Journal /
+Field Notebook" contemporaneo, con un piano di lavoro in 4 fasi proprio (carta/tipografia/
+rilegatura/separatori/barra inferiore → miniature mappa → tracciato → rifiniture). Questa fase
+copre la prima, più qualche anticipo della seconda (i token della miniatura, non ancora la
+cartografia).
+
+**Due correzioni rispetto al lavoro precedente**, non nuove aggiunte:
+1. **Trail Score**: tolto l'anello a tremore aggiunto in Fase 28 — la nuova specifica dice
+   l'esatto contrario ("uno degli elementi più moderni... non trasformarlo in vintage, il
+   contrasto diario/mappa vs score/dati è voluto, crea il carattere di Dtrek").
+2. **Palette cartografica per-elemento** (sezione 13 della specifica, boschi/strade/acqua
+   ciascuno con un colore proprio): non ottenibile da un filtro CSS su una tile raster già
+   renderizzata (agisce sull'immagine intera, non sui singoli livelli) — la specifica stessa lo
+   prevede ("se le tile non possono essere sostituite, applica un filtro CSS"), quindi rimandato
+   alla Fase 2 (OpenTopoMap, già in uso dalla Fase 30, più un filtro di desaturazione mirato).
+
+**Palette** (`lib/taccuinoTokens.tsx`) — sostituita con i valori esadecimali esatti forniti:
+`TACCUINO_PAPER.base` `#F2E8D2` (prima `#f2e8d5`, tono quasi identico ma ora la fonte è la
+specifica, non un tentativo a occhio), nuovo `light` `#F6EEDC` (zone "in luce"), `card`/
+`cardBorder` diventano `#E9DDBF`/`#D8C7A3`. `TACCUINO_INK.typed` `#29231E` — mai nero puro, un
+quasi-nero caldo (richiesta esplicita). Tolte `stain1`/`stain2` (le "macchie" visibili delle fasi
+precedenti, l'opposto di "leggerissima variazione di tonalità") — `app/diari/page.tsx` (lo
+scaffale, fuori dallo scopo di questa fase) le usava anche lui: portato a uno sfondo piatto
+provvisorio, la stessa texture non gli è ancora arrivata.
+
+**Texture di carta** — `TaccuinoPaperTexture` riscritta da capo: non più due macchie sfumate
+riconoscibili, ma UNA sola sfumatura di luce ampia a opacità bassissima più un rumore
+`feTurbulence` piastrellato, codificato come `background-image` (`data:image/svg+xml,...` via
+`encodeURIComponent` — non un `<svg>` vivo nel DOM: la classe di bug isolata in Fase 24 riguardava
+solo un `<svg>` che ricopre la pagina, qui è comunque una semplice immagine di sfondo). "L'utente
+deve percepire carta senza vedere chiaramente una texture" — verificato a schermo, il rumore è
+sotto la soglia di percezione a distanza normale, resta leggibile solo ingrandendo molto.
+
+**Rilegatura** (`TaccuinoSpineShadow`) — riscritta da capo su una specifica di composizione precisa:
+non più una sfumatura nera uniforme dall'alto al basso (Fase 29), ma più livelli orizzontali
+(ombra interna → linea di piega → piccola zona di luce → ombra esterna morbida, tutti in un
+marrone caldo trasparente, mai nero) combinati con un `mask-image` verticale che sfuma l'intera
+composizione a `transparent` in cima e in fondo (più intensa al centro della pagina, come
+richiesto) — le due dimensioni restano indipendenti invece di dover ricalcolare i gradienti
+orizzontali per l'altezza. Niente anelli/punti di cucitura (discussi nella specifica stessa e
+scartati se "risultano troppo decorativi" — con la sola ombra già leggibile come rilegatura,
+aggiungerli sarebbe stata decorazione sopra un effetto già chiaro). Verificato via screenshot
+ravvicinato (`deviceScaleFactor` alto): visibile e riconoscibile come piega fisica, non un'ombra
+piatta, ma non appariscente alla scala normale di uno schermo di telefono.
+
+**Il resto della pagina**: separatori con opacità ~50% (non più il colore pieno di `cardBorder`);
+pulsante "nuovo percorso" e casella di ricerca invariati nella struttura (già coerenti con la
+specifica: bordo `HandDrawnFrame`, sfondo quasi trasparente/leggermente più scuro) solo ricolorati
+con i nuovi token; chip di ordinamento/stato/preferiti — tolto lo sfondo pieno dallo stato attivo
+(restava solo il contorno arancione `HandDrawnFrame`, la specifica lo chiede esplicitamente:
+"nessun background pieno molto forte"); sottotitolo di riga (giudizio/rischio) passato al font a
+mano (prima l'unico testo "personale" ancora in un sans di default); rotazione della miniatura
+ridotta da ±2.5° a ±0.7° (Fase 29 l'aveva impostata troppo ampia — "NON usare rotazioni troppo
+evidenti"); ombra della miniatura ammorbidita (più diffusa, più bassa opacità, tinta calda invece
+di nero); barra inferiore con una leggerissima ombra verso l'alto invece del confine piatto di
+prima (solo per il tema taccuino, la pergamena resta invariata).
+
+Verificato tutto su una build di produzione vera: testo sempre leggibile, nessuna regressione,
+gerarchia tipografica coerente (titolo protagonista, sottotitolo/dati via via più tenui).
+
+**Fase 32 — Il titolo del percorso non va più troncato** ✅ **COMPLETATA**
+
+Richiesta: il titolo di ogni riga del Sommario deve sempre leggersi per intero — o tutto già
+visibile, o rivelabile per intero al tocco. In `app/diari/[id]/page.tsx`, il `<p>` del titolo
+perde la classe `truncate` (niente più taglio a una riga con `...`): va a capo su più righe quanto
+serve, senza limite (`lineHeight: 1.15` per tenere compatte le righe multiple). Scartata l'opzione
+"tocca per espandere": l'intera riga è già un `<Link>` verso la Guida (Fase 15) — un'area cliccabile
+separata solo sul titolo per mostrarlo esteso avrebbe richiesto intercettare quel click
+(`preventDefault`/`stopPropagation`) dentro l'unico link della riga, un secondo target interattivo
+annidato in quello esistente invece di una singola area cliccabile chiara. Verificato su una build
+di produzione vera con un titolo volutamente molto lungo (oltre 100 caratteri): la riga si allunga
+in verticale, miniatura mappa e badge Trail Score restano centrati rispetto al blocco titolo grazie
+a `items-center` già presente sul contenitore flex, nessuna sovrapposizione o rottura del layout.
+
+**Fase 33 — Stile cartografico delle miniature ("Fase 2 di 4" del piano taccuino)** ✅ **COMPLETATA**
+
+Sezione 13/14 della specifica di Fase 31: le miniature mappa devono avere l'aria di una piccola
+carta escursionistica vintage (fondo avorio, verdi desaturati, contrasto basso, colori caldi)
+invece della cartografia digitale a piena saturazione di OpenTopoMap. La palette per-elemento
+esatta della specifica (boschi/strade/acqua ciascuno con un colore proprio) richiederebbe tile
+vettoriali — non disponibili qui (si resta su tile raster già renderizzate, vedi `PROVIDERS` in
+`app/api/tile/route.ts`) — quindi si applica il fallback esplicitamente previsto dalla specifica
+stessa ("se le tile non possono essere sostituite, applica un filtro CSS").
+
+- `components/routehub/BottomGallery.tsx` (`GalleryMapThumb`): due nuovi prop opzionali, entrambi
+  `false` di default (nessun cambiamento per gli altri due chiamanti, `BottomGallery.tsx` e
+  `ExpandedGalleryList.tsx`).
+  - `vintageTiles` — applica `filter: grayscale(15%) sepia(30%) saturate(70%) contrast(85%)
+    brightness(105%)` (desatura, abbassa il contrasto, scalda leggermente — la stessa famiglia di
+    funzioni CSS suggerita dalla specifica) **solo** al pannello `tilePane` di Leaflet
+    (`map.getPane('tilePane')`), non all'intero contenitore: `tilePane` e `overlayPane` (dove
+    vivono tracciato e marker, resi come SVG) sono pannelli fratelli nella stessa mappa, quindi il
+    filtro non scolorisce il tracciato nero/i marker di partenza-arrivo. Verificato via
+    `getComputedStyle` su una build di produzione (il fetch reale delle tile OpenTopoMap non è
+    raggiungibile da questa sandbox, stessa restrizione di rete già incontrata per Supabase — la
+    resa a colori va quindi confermata sul dispositivo dell'utente o sull'anteprima Vercel, non
+    verificabile qui): `tilePane` della miniatura con `vintageTiles` porta esattamente quel
+    filtro, `overlayPane` della stessa miniatura e l'intera mappa dell'altra (senza il prop)
+    restano `none`.
+  - `paperOverlay` — un velo `rgba(242,232,210,0.15)` sopra l'intera miniatura (tile e tracciato
+    insieme), la stessa tinta "paper" della specifica (sezione 18), per fondere la miniatura con
+    la pagina invece di farla sembrare una finestra ritagliata su un'app di mappe. Distinto da
+    `dimTiles` (velo nero, pensato per il tracciato ciano su sfondo scuro della galleria — l'uso
+    opposto).
+- `app/diari/[id]/page.tsx`: la riga del Sommario passa ora `vintageTiles` e `paperOverlay` a
+  `GalleryMapThumb`.
+- **Non incluso** (sezione 17 della specifica, "ridurre POI/etichette"): non ottenibile su tile
+  raster già renderizzate — le etichette sono già "cotte" nell'immagine, un filtro CSS non può
+  rimuoverle selettivamente. Resterebbe possibile solo cambiando fornitore di tile (nessuna
+  variante "senza POI" nota per la cartografia escursionistica) o passando a tile vettoriali,
+  entrambi fuori scopo per questa fase — non fatto, non promesso.
+- **Verifica**: `tsc --noEmit` ed `eslint` puliti (65 warning invariati, 0 errori); build di
+  produzione (`next build && next start`) su una route di debug temporanea con due righe (una con
+  `vintageTiles`/`paperOverlay`, una senza) — layout e testo confermati intatti, il filtro applicato
+  correttamente solo dove atteso. La resa cromatica finale (quanto "vintage" appare davvero il
+  colore) resta da confermare sul dispositivo reale dell'utente, dove le tile OpenTopoMap si
+  caricano per davvero.
+
+**Fase 34 — Bug responsive: la pagina scorreva leggermente in orizzontale** ✅ **COMPLETATA**
+
+Segnalato dall'utente su dispositivo reale (screenshot): il Sommario in taccuino, in alcuni casi,
+restava scorso di qualche decina di pixel a destra in orizzontale, tagliando il bordo sinistro
+della pagina (copertina, prima colonna di ogni riga, chip "tutti"). Causa più probabile: diversi
+elementi del tema taccuino usano `transform: rotate(...)` vicino al bordo (miniature, titolo del
+Diario, copertina, "+ nuovo percorso", chip attivi) — un `transform` può far dipingere un elemento
+qualche pixel oltre il proprio box di layout senza generare un vero overflow "misurabile", e su
+mobile basta che il DOCUMENTO risulti anche solo leggermente più largo del viewport perché l'intera
+pagina diventi scorrevole in orizzontale; uno swipe su una delle liste interne a scorrimento (i due
+filtri a chip) può allora "incastrare" lo scroll della pagina invece di quello della sola lista.
+
+Corretto in `app/globals.css` con `html, body { overflow-x: hidden; }` — impedisce che il
+DOCUMENTO scorra in orizzontale, senza toccare lo scroll orizzontale voluto delle liste interne
+(`overflow-x-auto` su un discendente resta scorrevole sul proprio asse, indipendente dall'overflow
+dell'antenato). Fix globale (non scoped al solo taccuino) perché la stessa classe di bug può
+capitare ovunque nell'app abbia elementi ruotati o margini negativi vicino al bordo. Verificato:
+`tsc --noEmit` ed `eslint` puliti, build di produzione pulita. Non riproducibile a schermo in
+questa sandbox (serve un vero touch-scroll su dispositivo mobile) — la correzione è la mitigazione
+standard per questa classe di bug, non richiede di isolare l'esatto elemento che sporgeva.
+
+**Tre mockup per la direzione mappe/rilegatura** — l'utente ha anche chiesto di allontanarsi
+dall'attuale resa delle miniature mappa e avvicinarsi a un riferimento visivo condiviso (rilegatura
+a fori, mappe cartografiche più illustrate). Prodotti 3 mockup a confronto in un artifact HTML a sé
+(non nel repo — solo un confronto visivo prima di scegliere una direzione da implementare), con
+mappe disegnate via `<canvas>` (curve di livello/boschi/acqua generati proceduralmente da un seme
+fisso) al posto di tile reali — questa sandbox non riesce a raggiungere i server di mappe (stessa
+restrizione di rete di sempre). In attesa del riscontro dell'utente su quale direzione (o mix)
+implementare nell'app reale.
+
+**Fase 35 — Piega rinforzata e alternata, effetto "pagina girata"** ✅ **COMPLETATA**
+
+Dopo aver visto i mockup di Fase 34: la piega rinforzata (più larga, più scura) va bene — approvata
+così com'è. L'"inchiostro assorbito dalla carta" applicato alle mappe nel primo giro di mockup era
+un fraintendimento mio: l'utente lo intendeva per i **contorni di bottoni e caselle di testo**, non
+per le mappe; visto un secondo mockup corretto in quel senso, l'effetto è stato comunque giudicato
+"molto brutto" e scartato del tutto — non implementato da nessuna parte nell'app (i mockup restano
+solo artifact esterni, mai stati nel repo).
+
+Due richieste nuove, implementate direttamente (non più mockup):
+
+1. **Piega rinforzata ovunque, alternata su Guida/Resoconto, fissa a sinistra sul Sommario.**
+   `TaccuinoSpineShadow` (`lib/taccuinoTokens.tsx`) e `BookSpineShadow` (il gradiente più semplice
+   usato dal tema pergamena di Guida/Resoconto/scaffale) sono stati rinforzati allo stesso modo
+   (larghezza maggiore, alpha quasi raddoppiata agli estremi) — lo stesso ritocco validato nel
+   mockup, applicato a entrambi i componenti per coerenza invece che al solo taccuino. Entrambi
+   accettano già (`TaccuinoSpineShadow`) o hanno guadagnato ora (`BookSpineShadow`) un prop `side`.
+   `BookPage.tsx` guadagna un nuovo prop `spineSide?: 'left' | 'right'` (default `'left'`) che
+   sceglie quale dei due componenti-piega riceve quel lato. `GuideBookPage.tsx`/`ReportBookPage.tsx`
+   lo calcolano dall'indice di pagina già disponibile (`idx % 2 === 0 ? 'left' : 'right'`) — pari a
+   sinistra, dispari a destra, per leggersi come pagine recto/verso di un libro vero sfogliandolo.
+   Il Sommario (`DiarioIndexLibro`) non passa questo prop: resta sempre a sinistra come richiesto
+   esplicitamente ("l'elenco Percorsi non è una pagina in una sequenza").
+2. **Effetto "pagina girata" a ogni cambio pagina.** Nuova animazione CSS (`app/globals.css`,
+   `.book-page-turn`/`@keyframes page-turn-in`): una leggera rotazione 3D (`rotateY`, ~6°) con
+   cardine sul lato della piega che si assesta a `rotateY(0)`, non un flip a 90° drammatico — coerente
+   con "70% UI moderna, 30% diario fisico" dello stesso principio guida di Fase 31, non un effetto
+   vistoso. Applicata al contenitore del contenuto in `BookPage.tsx`, con `key={pathname}`
+   (`usePathname()` di `next/navigation`) per forzare React a rimontarlo a ogni navigazione: senza
+   quella key l'animazione non ripartirebbe mai dopo il primo mount, perché cambiare sezione/pagina
+   dentro Guida o Resoconto naviga verso un parametro dinamico diverso ma **non** rimonta da solo il
+   componente pagina (stesso componente React, stessa posizione nell'albero — una sottigliezza nota
+   di Next.js App Router). Disattivata sotto `prefers-reduced-motion: reduce`. Nota storica: la
+   Fase 10 aveva scartato esplicitamente un'animazione di svolta pagina a favore di un'ombra
+   statica, su preferenza dell'utente di allora — questa fase la reintroduce su nuova richiesta
+   esplicita, senza toccare la scelta "statica" della sola ombra di piega in sé.
+   - **Verificato** (route di debug temporanea, rimossa prima del commit, build di produzione
+     vera): la piega compare rispettivamente a sinistra/destra sulle due pagine di prova con
+     `spineSide` opposto; cliccando "Avanti" il `transform` dell'elemento passa da un
+     `matrix3d`/`rotateY` non-identità (~80ms dopo il click, animazione in corso) a un'identità
+     assestata (a fine animazione) — l'animazione si rigioca a ogni navigazione com'era richiesto,
+     non solo al primo caricamento della pagina.
+- **Non toccato**: la pagina di riepilogo Reportage/percorso, `/pubblica`, `/copertina` — usano
+  `BookPage` in tema pergamena ma non fanno parte di una sequenza Guida/Resoconto sfogliabile,
+  restano su `spineSide` di default (sinistra), coerente con "il Sommario non è una pagina in
+  sequenza" applicato per estensione a ogni pagina non numerata di quel tipo.
+
+**Fase 36 — Pagina girata più memorabile, via il riflesso bianco, filtro mappa rinforzato** ✅ **COMPLETATA**
+
+Tre correzioni dopo la prima verifica della Fase 35.
+
+1. **Via il "riflesso bianco" della piega statica.** `TaccuinoSpineShadow` (`lib/taccuinoTokens.tsx`)
+   aveva una `light` (`rgba(246,238,220,0.42)`, un caldo quasi-bianco) come "piccola zona di luce
+   appena oltre la piega" — segnalata esplicitamente come indesiderata. Rimossa: la composizione
+   resta a più livelli (ombra interna → linea di piega → ombra esterna più morbida →
+   trasparente), solo senza lo schiarimento. `BookSpineShadow` (pergamena) non aveva mai avuto
+   questo stop, non toccata.
+2. **Effetto "pagina girata" più memorabile**, ispirato a turn.js (l'utente ha condiviso
+   html.it/articoli/turnjs-ottenere-un-effetto-page-flip-dimpatto — non raggiungibile da questa
+   sandbox per lo stesso blocco di rete di sempre, letto tramite ricerca web indiretta: la tecnica
+   di turn.js combina trasformazioni 3D, gradienti per profondità/ombreggiatura e ombre che
+   simulano la piega). Riprodurre la vera curvatura a mesh di turn.js (canvas, pagina che si
+   flette fisicamente) è fuori scala per una micro-interazione di cambio pagina — replicati invece
+   i due ingredienti che davano l'impatto percepito, in puro CSS:
+   - **Rotazione con un piccolo rimbalzo** invece di fermarsi di scatto: un keyframe intermedio al
+     65% supera leggermente lo zero nella direzione opposta prima di assestarsi (`rotateY(var(...)
+     * -0.07)`) — una pagina vera non si ferma di colpo. Angolo aumentato da 6° a 11°, durata da
+     420 a 560ms.
+   - **Ombra che si muove e si affievolisce in sincrono** (`.book-page-turn::before`, nuovo):
+     gradiente scuro (mai bianco) dal lato della piega verso il centro pagina, che parte quasi
+     opaco e sfuma a trasparente sulla stessa durata dell'animazione — non un'ombra statica, una
+     che "passa" sopra la pagina mentre si gira. Verificato via `getComputedStyle` a metà
+     animazione: `transform` un `rotateY` non-identità, opacità dell'ombra a metà strada tra
+     l'iniziale e lo zero finale, entrambi confermano che l'animazione procede come progettato
+     (non solo che parte/arriva).
+3. **Filtro cartografico delle miniature rinforzato** (`components/routehub/BottomGallery.tsx`).
+   I valori della Fase 33 (`grayscale 15% sepia 30% saturate 70% contrast 85% brightness 105%`)
+   restavano troppo vicini ai colori originali di OpenTopoMap per essere notati sul dispositivo
+   reale ("mi sembra siano rimasti invariati dalla precedente") — OpenTopoMap ha già una palette
+   escursionistica relativamente tenue, quindi un filtro leggero sopra non produceva una
+   differenza percepibile. Rinforzato a `grayscale 30% sepia 45% saturate 45% contrast 78%
+   brightness 110% hue-rotate(-6deg)` — desaturazione e calo di contrasto più marcati, più un
+   lieve `hue-rotate` verso il caldo invece del solo seppia. `paperOverlay` alzato da 0.15 a 0.22
+   di opacità per lo stesso motivo. **Non verificabile a schermo in questa sandbox** (il fetch
+   reale delle tile resta bloccato) — la resa finale va confermata sul dispositivo dell'utente;
+   se ancora insufficiente, il prossimo passo naturale non è un altro giro di filtro CSS ma le
+   tile vettoriali/uno stile dedicato (fuori scala per questa fase).
+
+**Fase 37 — Angolo che si "srotola" nel punto opposto alla piega** ✅ **COMPLETATA**
+
+Richiesta esplicita: rinforzare la sensazione fisica dell'assestamento con un piccolo
+arricciamento nell'angolo inferiore OPPOSTO alla piega, che si "srotola" mentre la pagina si
+adagia — non un dettaglio isolato, ma sincronizzato con la stessa animazione di Fase 35/36.
+
+- Nuovo `::after` su `.book-page-turn` (`app/globals.css`): un piccolo triangolo (48×48px)
+  ancorato all'angolo giusto — `.curl-right`/`.curl-left`, classe scelta da `BookPage.tsx` in base
+  a `spineSide` (piega a sinistra → arricciamento in basso a destra, e viceversa: sempre l'angolo
+  diagonalmente opposto al cardine). Un gradiente di sola ombra calda (`rgba(41,35,30,...)`, mai
+  bianco — stesso principio della Fase 36) va da quasi trasparente sulla linea di piega teorica a
+  più scuro sulla punta dell'angolo vero.
+- Animato con `transform-origin` sull'angolo stesso (non sul centro del triangolo): parte più
+  grande (`scale(1.4)`, ben visibile, "arricciato") e si restringe verso l'angolo vero mentre
+  sfuma a trasparente (`scale(0.3)`, opacità 0) — la punta resta ancorata, il resto si "appiattisce"
+  verso di essa, invece di sembrare un elemento che semplicemente scompare. Stessa durata/easing
+  delle altre due animazioni della pagina (560ms, `cubic-bezier(0.22,0.61,0.36,1)`) per restare
+  sincronizzato con rotazione e ombra della piega.
+- **Verificato** (route di debug temporanea, rimossa, build di produzione vera): congelando
+  l'animazione a `currentTime = 0` via `Animation.pause()`/`currentTime` (per catturare lo stato
+  iniziale altrimenti troppo rapido da fermare con uno screenshot temporizzato), lo screenshot
+  ravvicinato mostra il triangolo d'ombra nell'angolo corretto, sfumato ai bordi, mai un blocco
+  netto o bianco; la classe `curl-left`/`curl-right` risulta sempre quella opposta a `spineSide`
+  per entrambe le pagine di prova.
+- Disattivato sotto `prefers-reduced-motion`, come le altre due animazioni dello stesso elemento.
+
+**Fase 38 — Filtro mappa corretto su prova reale: sbiadiva invece di scaldare** ✅ **COMPLETATA**
+
+L'utente ha confermato (anche in incognito, escludendo la cache) che il filtro della Fase 36 era
+davvero live in produzione — verificato anche da qui via `mcp__Vercel__web_fetch_vercel_url`
+sul CSS pubblicato — ma mandando uno screenshot reale delle miniature del Sommario si è vista la
+causa: le mappe apparivano sbiadite verso il grigio/bianco (specialmente sul terreno già
+grigio-roccioso delle uscite in montagna), non scaldate verso l'ivory "carta da campo" voluto.
+
+**Causa**: `grayscale(30%)` **e** `saturate(45%)` insieme desaturano due volte (l'uno rimuove
+colore in modo uniforme, l'altro riduce ulteriormente la crominanza rimasta), e
+`brightness(110%)` sopra un risultato già desaturato spinge tutto verso il bianco anziché verso
+un tono caldo. `hue-rotate(-6deg)` sommato al viraggio di tonalità già dato da `sepia` rendeva
+l'esito imprevedibile a seconda del colore di partenza della tile.
+
+**Correzione** (`components/routehub/BottomGallery.tsx`): tolti `grayscale` e `hue-rotate` —
+resta solo `sepia`+`saturate` a fare il lavoro di scaldare/desaturare (una desaturazione sola,
+non tre sommate); `brightness` riportato a 100% (nessuno schiarimento aggiuntivo);
+`contrast` meno drastico (90% invece di 78%, non schiaccia tutto verso il grigio medio). Filtro
+finale: `sepia(38%) saturate(65%) contrast(90%) brightness(100%)`.
+
+Questa è la prima correzione al filtro mappa basata su una prova reale (screenshot del
+dispositivo dell'utente) invece che su un ragionamento "alla cieca" sui valori — le due fasi
+precedenti (33, 36) erano state scritte senza poter verificare il risultato su tile vere da questa
+sandbox. Ancora da confermare sul dispositivo dopo questo giro.
+
+### Fase 39 — Mappe senza filtro + volta pagina riscritta con la View Transitions API ✅
+Due richieste esplicite dell'utente, indipendenti tra loro.
+
+**1. Mappe: tolto ogni filtro, colore originale.** Le fasi 32/33/36/38 avevano provato a
+ricolorare le tile di `GalleryMapThumb` (`vintageTiles` + `sepia/saturate/contrast/brightness`,
+più un velo `paperOverlay`) per farle sembrare "carta da campo" invece di una mappa online. Anche
+dopo la correzione della Fase 38, il risultato non ha convinto su prova reale — troppo simile
+all'originale in alcuni casi, sbiadito verso il bianco in altri. L'utente ha chiesto di tornare
+puliti: "togli qualsiasi effetto dalle mappe, rivoglio il colore originale". Rimossi del tutto,
+non solo disattivati: le prop `vintageTiles`/`paperOverlay` (con relativa logica su `tilePane` e
+il `<div>` di overlay) sono sparite da `GalleryMapThumb`
+(`components/routehub/BottomGallery.tsx`) e dalla sua unica chiamata nel Sommario
+(`app/diari/[id]/page.tsx`) — nessuna prop morta lasciata per compatibilità. Le tile OpenTopoMap
+tornano a renderizzare esattamente come le serve il tile server, senza alcuna manipolazione
+CSS. Non verificabile visivamente da questa sandbox (il proxy di rete blocca le richieste verso
+`opentopomap.org`), ma essendo una pura rimozione di codice il risultato — "colore originale" — è
+garantito dalla stessa assenza di filtro, non da un valore da tarare a occhio come nelle fasi
+precedenti.
+
+**2. Volta pagina: dalla CSS-only alla View Transitions API.** Le Fasi 35-37 animavano solo la
+pagina "in arrivo" (un `key` di React sul contenuto forzava il remount, un keyframe CSS la faceva
+ruotare dentro con un'ombra e un arricciamento d'angolo) — la pagina lasciata spariva di scatto,
+senza animazione propria: da qui il giudizio dell'utente ("non belli o sufficienti") e la
+richiesta esplicita di una ricerca online sulla tecnica migliore possibile. La ricerca (via
+`WebSearch`, dato che il fetch diretto di terzi è bloccato da questa sandbox) ha indicato la
+**View Transitions API** del browser (`document.startViewTransition`) come lo strumento nativo
+pensato proprio per questo: cattura automaticamente uno screenshot del DOM prima e dopo un
+cambiamento di stato, ed espone due pseudo-elementi — `::view-transition-old(root)` (l'istantanea
+vecchia) e `::view-transition-new(root)` (quella nuova) — entrambi animabili in CSS in modo
+indipendente. Per la prima volta la pagina che si lascia ha una sua animazione di uscita, non solo
+quella in arrivo.
+
+Implementazione (`components/libro/BookPage.tsx`, funzione `navigateWithPageTurn`): l'`onClick`
+dei link di navigazione (pillole di sezione, Indietro/Indice/Avanti) intercetta il click, imposta
+quattro custom property CSS (angolo e cardine di rotazione per l'uscita e per l'ingresso, in base
+a `spineSide` della pagina lasciata e al suo opposto) e avvia
+`document.startViewTransition(() => flushSync(() => router.push(href)))` — `flushSync` (da
+`react-dom`) è necessario perché altrimenti l'aggiornamento del DOM di Next.js, essendo
+asincrono, arriverebbe dopo che l'API ha già catturato la sua istantanea "dopo", vanificando la
+transizione. In `app/globals.css`, `::view-transition-old(root)` ruota via con
+`perspective+rotateY` scurendosi (`filter: brightness`) e sfumando in opacità, mentre
+`::view-transition-new(root)` ruota dentro con un piccolo rimbalzo elastico — lo stesso principio
+delle fasi precedenti, ma ora su entrambi i lati del cambio pagina, un volta pagina vero. Il
+`filter: brightness()` sostituisce l'ombra direzionale: questi pseudo-elementi sono trattati dal
+browser come un'unica immagine sostituita, non si può aggiungere un layer `::before`/`::after`
+separato sopra.
+
+Compatibilità: se il browser non supporta l'API (rilevato con `'startViewTransition' in
+document`) o l'utente ha `prefers-reduced-motion: reduce`, `navigateWithPageTurn` non intercetta
+affatto il click — la navigazione resta quella normale di `<Link>`, senza bisogno di una media
+query CSS dedicata (le regole in `globals.css` semplicemente non vengono mai innescate in quel
+caso). Preservato anche il comportamento standard su click con modificatori (Ctrl/Cmd/Shift/Alt,
+tasto centrale) per aprire in nuova scheda.
+
+Verificato in sandbox via Playwright/Chromium (a differenza del filtro mappa, questa è pura logica
+DOM/CSS, non dipende da fetch di rete esterni bloccati): (a) `document.startViewTransition` viene
+davvero invocato al click; (b) gli stili calcolati a metà transizione sui due pseudo-elementi
+mostrano transform/opacity/filter realmente in movimento; (c) uno screenshot a metà transizione
+mostra entrambe le pagine — vecchia e nuova — sovrapposte in rotazione, confermando un volta
+pagina a due lati e non un solo ingresso; (d) lo stato finale si assesta correttamente con la
+piega nella posizione giusta; (e) con `prefers-reduced-motion: reduce` l'API non viene invocata
+ma la navigazione avviene comunque. Il giudizio estetico ("il miglior effetto possibile") resta
+comunque da confermare su dispositivo reale, essendo intrinsecamente visivo/soggettivo.
+
+## File critici
+- `components/guida/GuideReader.tsx`, `components/resoconto/ReportReader.tsx` — sorgente da cui
+  estratto in Fase 0, non riscritti.
+- `app/guida/GuidaHub.tsx`, `app/resoconto/ResocontoHub.tsx`, `components/routehub/RouteHub.tsx` —
+  riferimento per Fase 1, non toccati (semantica da carosello incompatibile col libro).
+- `app/diari/[id]/percorsi/[percorsoId]/page.tsx` — punto di ingresso da riprogettare in Fase 3
+  (oggi ancora `<GuidaHub id={percorsoId} />` + `<ReportageSection>`, invariato).
+- `lib/designTokens.ts` — fonte dei token font/palette riusata in `BookPage.tsx`.
+- `lib/guida/guideDisplaySections.tsx`, `lib/resoconto/reportDisplaySections.tsx` — l'estrazione di
+  Fase 0, punto unico di verità per il dispatch dei widget.
+- `app/diari/[id]/percorsi/[percorsoId]/useGuidaBookData.ts`,
+  `.../reportage/[activityId]/useReportageBookData.ts` — i loader di Fase 1.
+- `components/libro/BookPage.tsx`, `GuideBookPage.tsx`, `ReportBookPage.tsx` — il guscio di Fase 2;
+  `ReportBookPage.tsx` ha in più il prop `onInvalidPageIndex` aggiunto in Fase 3.
+- `components/libro/GuideGenerationPanel.tsx`, `ReportGenerationPanel.tsx` — i pannelli di Fase 3.
+- `app/diari/[id]/percorsi/[percorsoId]/page.tsx`,
+  `.../guida/[sectionKey]/page.tsx`, `.../reportage/[activityId]/page.tsx`,
+  `.../reportage/[activityId]/sezione/[n]/page.tsx` — il routing di Fase 3.
+- `lib/diario/useDiarioTitle.ts` — titolo del Diario per la running head, Fase 3.
+- `components/editorial/SectionCard.tsx` — `ApprofondisciTrigger` riesportato per Fase 5, non
+  duplicato.
+- `app/diari/page.tsx`, `app/diari/[id]/page.tsx` — scaffale e indice, Fase 5: contengono sia la
+  versione `*Classico` (invariata, a flag spento) sia quella a libro (`DiariPageLibro`/
+  `DiarioIndexLibro`); Fase 6 ha riscritto le righe del Sommario (stats/CTS/link doppio) e aggiunto
+  "Personalizza copertina" allo scaffale.
+- `components/editorial/MagazineBody.tsx` — riusato in Fase 6 da `GuideBookPage.tsx`/
+  `ReportBookPage.tsx` per la suddivisione in paragrafi, non toccato.
+- `components/WeatherWidget.tsx` — nuovo prop opzionale `panelClassName` (Fase 6), additivo, non
+  usato dal lettore classico.
+- `app/api/diaries/[id]/route.ts` — `DiarioPercorsoRow.trailScore` aggiunto in Fase 6,
+  `altitudeMax`/`estimatedTimeSeconds`/`safety` in Fase 7.
+- `components/routehub/BottomGallery.tsx` (`GalleryMapThumb`), `components/TrailScoreGaugeBadge.tsx`,
+  `lib/trailScore.ts` (`ctsLabel`) — non toccati, riusati direttamente da Fase 7 nella riga del
+  Sommario.
+- `app/diari/[id]/pubblica/page.tsx` — non toccato in Fase 6, solo scoperto: già ha l'editing di
+  foto/titolo/sottotitolo/autore del Diario che la Fase 6 rende raggiungibile dallo scaffale.
+- `app/api/diaries/route.ts` — nuovo `POST` (Fase 6): crea un Diario aggiuntivo, gated su
+  `resolveDtrekEntitlement`.
+- `lib/dtrekEntitlement.ts` — non toccato, riusato per il gate di creazione Diario.
+- `app/diari/[id]/page.tsx` — Fase 9 (allineamento colonne fisse, filtro di stato, sfondo
+  tinteggiato, ordine invertibile del Sommario) e Fase 11 (scrittura `lastDiaryId`, drawer).
+- `components/libro/BookSpineShadow.tsx` — nuovo in Fase 10, montato in `BookPage.tsx` e in
+  `DiariPageLibro` (`app/diari/page.tsx`).
+- `components/libro/DiarioSwitcherDrawer.tsx` — nuovo in Fase 11, montato solo da
+  `DiarioIndexLibro`; `BookPage.tsx`'s prop opzionale `onTitleClick` è il suo unico punto
+  d'aggancio.
+- `app/page.tsx` — riscritto in Fase 11 (redirect condizionale invece che fisso a `/diari`).
+- `supabase/migrations/add_last_diary_id.sql`, `app/api/user-settings/route.ts`,
+  `lib/sync/userSettingsStore.ts` — `lastDiaryId`, Fase 11, stesso pattern di
+  `diario_libro_enabled`.
+- `supabase/migrations/backfill_default_diary_cover.sql` — Fase 12, backfill una tantum di
+  `diaries.cover_url` dal vecchio `user_settings.diary_config->>'coverUrl'`.
+- `app/api/diaries/[id]/config/route.ts`, `lib/diaryConfig.ts` — non toccati in Fase 12, solo
+  scoperti: `diaries.cover_url` è la STESSA colonna che `/pubblica` legge/scrive come
+  `config.coverUrl` (non due campi distinti) — il gap era solo nei dati storici del Diario di
+  default, colmato dal backfill sopra.
+- `app/diari/[id]/copertina/page.tsx` — nuova in Fase 13, riusa `/api/diaries/[id]/config` e
+  `components/diario/DiarioCover.tsx` (stessa anteprima della copertina stampabile, scalata).
+- `components/diario/DiarioCoverThumb.tsx` — nuovo in Fase 13, riusato da `app/diari/page.tsx`
+  (`DiarioCoverCard`), `components/libro/DiarioSwitcherDrawer.tsx` e `app/diari/[id]/page.tsx`
+  (cima del Sommario) al posto di tre placeholder diversi.
+- `app/diari/[id]/pubblica/page.tsx` — invariata in Fase 13: i suoi controlli foto/testi copertina
+  restano (un utente potrebbe già averci fatto l'abitudine), solo i link da scaffale/drawer non
+  puntano più qui per personalizzare la copertina.
+- `app/diari/[id]/percorsi/[percorsoId]/page.tsx` — Fase 14: `PercorsoPageLibro` ridotta a titolo
+  + `ReportageSection`, niente altro (era il riepilogo completo di Fase 3).
+- `components/libro/GuideBookPage.tsx`, `GuideGenerationPanel.tsx` — Fase 14: il pannello di
+  generazione in blocco (rimosso dal riepilogo) vive ora qui, solo sulla sezione `il_percorso`;
+  `panelClassName` nuovo prop opzionale per il tono pergamena.
+- `components/diario/DiarioCoverThumb.tsx` — Fase 14: nuova modalità con testo (`width`+`title`),
+  usata da `DiarioSwitcherDrawer.tsx` e dal Sommario; `/diari/[id]/copertina/page.tsx` riusa la
+  stessa invece della propria copia locale del trucco di scala.
+- `app/api/diaries/[id]/route.ts` — `DiarioDetail.author` aggiunto in Fase 14.
+- `components/libro/BookPage.tsx` — Fase 17: barra inferiore fissa (Indietro/Indice/Strumenti/
+  Avanti), titolo in testata non più cliccabile, `onTitleClick`→`onIndexClick`, `onToolsClick`
+  nuovo, `BookPageSection.onClick` rimosso (nessun chiamante rimasto).
+- `lib/taccuinoTokens.tsx`, `app/layout.tsx` (font `Kalam`) — nuovi in Fase 17: fondamenta della
+  direzione "taccuino topografico" (approvata, integrazione graduale) — non ancora usati da
+  nessun componente reale.
+- `components/libro/BookPage.tsx` — Fase 18: `onIndexClick` rimosso, nuova prop `indexLabel`
+  (default `"Indice"`) per l'etichetta del bottone che porta a `indexHref`.
+- `components/libro/DiarioSwitcherDrawer.tsx` — eliminato in Fase 18 (zero chiamanti rimasti: il
+  Sommario naviga ora direttamente allo scaffale via `indexHref="/diari"`, `indexLabel="Diari"`).
+- `app/diari/page.tsx` (`DiariPageLibro`) — Fase 18: primo uso reale di `lib/taccuinoTokens.tsx`
+  (carta invecchiata, font sul titolo); griglia `grid-cols-2` al posto della riga scorrevole;
+  nuovo `GlobalRouteSearch` (ricerca su `/api/percorsi` senza lasciare lo scaffale); link "Tutti i
+  Percorsi" spostato sotto la ricerca. Fase 19: `<Navbar/>`/`MOBILE_TOPBAR_SPACER` rimossi da
+  questa funzione (non dal componente condiviso), sostituiti da un padding-top minimo con
+  `env(safe-area-inset-top)`.
+- `lib/taccuinoTokens.tsx`, `app/layout.tsx` — Fase 19: font a mano `Kalam` → `Caveat` (ancora in
+  prova), token rinominati `FONT_KALAM`/`FONT_VAR_KALAM` → `FONT_HAND`/`FONT_VAR_HAND` (nome legato
+  al ruolo, non al font specifico), variabile CSS `--font-kalam` → `--font-caveat`.
+- `components/libro/BookPage.tsx` — Fase 20: nuova prop `theme` (`'pergamena'` default o
+  `'taccuino'`), i colori locali diventano un oggetto per tema; nessun chiamante esistente la passa
+  ancora, restano tutti su pergamena finché non convertiti.
+- `app/diari/[id]/page.tsx` (`DiarioIndexLibro`) — Fase 20: `theme="taccuino"` su `BookPage`, toni
+  pergamena hardcoded sostituiti da `TACCUINO_PAPER`/`TACCUINO_INK`, titolo del Diario su
+  `FONT_HAND`. Fase 21: vedi sopra — copertina a tassello, font a mano diffuso, chip a contorno,
+  miniature `RouteThumb` ricalcate a mano, divisore tratteggiato, evidenziatore, spunta `Check`.
+  Fase 22: miniatura tornata a `GalleryMapThumb` (mappa OSM reale) con un `filter` CSS di
+  ricolorazione sul contenitore, al posto di `RouteThumb`+filtro SVG (sospettato di un bug di
+  compositing che rendeva invisibili titolo/statistiche della riga).
+- `lib/taccuinoTokens.tsx` — Fase 21: `HandWobbleFilter` con `baseFrequency`/`scale` opzionali;
+  nuovi `TaccuinoPaperTexture`, `TaccuinoSpineShadow`, token `TACCUINO_PAPER.highlight`. Fase 23
+  (diagnosi poi corretta in Fase 24): `HandWobbleFilter` rimosso da entrambi, sospettato causa del
+  bug testo-invisibile — non lo era. **Fase 24 (causa reale)**: `TaccuinoPaperTexture` riscritta
+  senza alcun `<svg>` — un `<div>` con `background: radial-gradient(...)` CSS puro; le linee di
+  livello disegnate tolte (non reintrodotte come immagine di sfondo in questo passaggio).
+  `TaccuinoSpineShadow` invariata (verificata innocente).
+- `components/RouteThumb.tsx` — Fase 21: `strokeDasharray`/`filter` opzionali (default assenti,
+  nessuna modifica per i chiamanti esistenti). Non più usato dal Sommario dopo la Fase 22, restano
+  validi per altri chiamanti futuri.
+- `app/diari/[id]/percorsi/[percorsoId]/page.tsx` — Fase 15: `PercorsoPageLibro` rimossa del tutto,
+  redirect immediato alla Guida a flag acceso. `PercorsoPageClassico`/`ReportageSection`
+  invariate.
+- `components/libro/PercorsoToolsDrawer.tsx` — nuovo in Fase 15, montato solo da
+  `GuideBookPage.tsx`; riusa `GuideGenerationPanel` (bulk), `exportGuidePdf`,
+  `exportPlannedHikeToGpx`, `/api/percorsi/[id]/reportage`.
+- `components/RouteMap3D.tsx` — non toccato, montato per la prima volta dal libro in Fase 15
+  (`GuideBookPage.tsx`, stesso import dinamico `ssr:false` di `app/guida/GuidaHub.tsx`).
+- `components/libro/BookPage.tsx` — `BookPageSection.onClick` aggiunto in Fase 15 (alternativa a
+  `href`, usato dalla pillola "Strumenti").
+- `app/diari/[id]/percorsi/[percorsoId]/reportage/[activityId]/page.tsx` — riepilogo di UN
+  Reportage (pagina diversa dall'elenco eliminato in Fase 15, ancora esistente): solo il link
+  "Torna al Percorso" aggiornato per puntare alla Guida invece della pagina eliminata.
+
+## Verifica
+- Fase 0-2: `tsc --noEmit`, `eslint`, `npm run build` (la build fallisce nella sandbox corrente per
+  variabili d'ambiente Supabase assenti — stesso fallimento anche sul branch non modificato,
+  confermato con uno stash-and-rebuild — non è un errore introdotto da questo lavoro).
+- Fase 3+: da fare in un ambiente con credenziali Supabase reali — Playwright end-to-end sul flusso
+  completo: apri un Diario → apri un Percorso → sfoglia tutte le sezioni Guida presenti (gate di
+  presenza identico a quello validato nel mockup) → apri un Reportage → sfoglia le sue sezioni →
+  verifica che ogni link "Apri in modalità classica" porti alla schermata classica invariata.
+- Confronto visivo con l'artifact del mockup (`2e1f7d0a-5d69-4e17-9c8b-038aa651e13b`) come
+  riferimento di accettazione per ogni schermata — include il Diario "Dati reali dal database" già
+  nel mockup (Faggeta del Cimino / Sentiero Valloni), utile anche come fixture di test con contenuto
+  vero invece che fittizio.
+- Prima del cutover del flag (Fase 4): verifica manuale della tabella "chrome extra-loop" — ogni
+  voce elencata sopra deve avere una casella assegnata (riepilogo pagina, ogni pagina del libro, o
+  link modalità classica), nessuna lasciata cadere in silenzio.
+
+## Stato di avanzamento e continuazione
+
+Vedi la history di questo branch per il dettaglio commit-per-commit. In sintesi, al momento in cui
+questo file è stato scritto:
+
+- **Fatto e pushato** su `claude/dtrek-diary-focal-point-sziwkj`: Fase 0 (`2b470b2`), Fase 1
+  (`5dbf5e7`), Fase 2 (`f964924`, include due correzioni a Fase 1 trovate scrivendo Fase 2:
+  `useGuidaBookData` non esponeva `isLinearRoute`/`endPoint`/`returnOptions` — calcolati
+  internamente da `GuideReader.tsx`, non passati da `GuidaHub` — e `useReportageBookData` non
+  recuperava affatto il testo del Resoconto, `hike_reports.content`, un fetch a sé rispetto a
+  `StoredActivity`).
+- Quei quattro commit non erano mai stati portati oltre `claude/dtrek-diary-focal-point-sziwkj`
+  (né in `main`, né sul branch di routing `claude/dtrek-diary-routing-p1b5ou` da cui questa sessione
+  è ripartita) — recuperati con un merge all'inizio di questa sessione prima di riprendere il piano.
+- **Fatto in questa sessione** (branch `claude/dtrek-diary-routing-p1b5ou`, poi ripartito da `main`
+  due volte dopo ogni merge — vedi nota sotto): Fase 3 (routing), Fase 4 (flag di rollout) e Fase 5
+  (feedback dopo la prima verifica a schermo: "Approfondisci con Giulia" nelle sezioni, layout di
+  scaffale/indice) — vedi le rispettive sezioni sopra per il dettaglio completo di cosa è stato
+  costruito e cosa deliberatamente rimandato.
+- **Merge**: Fase 3+4 → PR #786, "Approfondisci con Giulia" nelle sezioni → PR #787, entrambe
+  mergiate in `main` (CI verde: `lint-typecheck-test` + Vercel). Dopo ogni merge il branch è stato
+  riavviato da `main` (`git checkout -B` + stash) invece di continuare sul branch già mergiato, per
+  seguire la convenzione di questo progetto (una PR già mergiata non va più allungata).
+- **Verifica fatta in questa sessione**: `tsc --noEmit` ed `eslint` puliti sull'intero progetto dopo
+  ogni fase (0 errori in tutti i casi; solo warning preesistenti non introdotti da questo lavoro —
+  65 al momento, uno in più delle 64 di partenza per il nuovo `<img>` di copertina nello scaffale,
+  stessa convenzione già in uso altrove nell'app).
+- **Trovato durante Fase 5**: il mockup validato (`2e1f7d0a-5d69-4e17-9c8b-038aa651e13b`) esiste
+  ancora come artifact pubblicato — non serve ricostruire lo scaffale/indice a memoria, la specifica
+  visiva completa (classi CSS, struttura HTML) è lì.
+- **Mai verificato a schermo**: nessuna delle pagine scritte in questa sessione (Fase 3-5) è stata
+  vista renderizzata con dati reali in QUESTA sandbox (nessuna credenziale Supabase). L'utente ha
+  però eseguito la migrazione di Fase 4 e verificato il flusso Fase 3-4 sul proprio ambiente reale
+  prima di chiedere i due ritocchi di Fase 5 — quei due ritocchi stessi non sono stati ancora
+  riverificati a schermo dopo essere stati scritti.
+- **Prossimo passo — sull'ambiente reale**: verificare a schermo i due cambi di Fase 5 (trigger
+  inline nelle sezioni, nuovo scaffale/indice a libro) sullo stesso account con il flag già acceso,
+  poi decidere se/quando flippare il default del flag a `true` per tutti.

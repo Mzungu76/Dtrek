@@ -1,6 +1,6 @@
 import {
   GBIF_BASE, canonicalSpeciesName, imageApiUrl, licenseLabel, fetchWithTimeout,
-  fetchVernacularIta, fetchSpeciesDescription,
+  enrichSpeciesItems,
   type GbifOccurrence, type GbifSearchResponse,
 } from '@/lib/gbifShared'
 import { fetchInatObservations, inatPhotoUrl, inatLicenseLabel } from '@/lib/inatShared'
@@ -146,41 +146,29 @@ export async function GET(req: Request) {
   }
 
   const deduped = cascade.items.slice(0, 20)
+  const { vernacular, description } = await enrichSpeciesItems(deduped)
 
-  const [vernacularResults, descriptionResults] = await Promise.all([
-    Promise.allSettled(deduped.map(item =>
-      item.vernacularNameIt
-        ? Promise.resolve(item.vernacularNameIt)
-        : item.gbifUsageKey ? fetchVernacularIta(item.gbifUsageKey) : Promise.resolve(null),
-    )),
-    Promise.allSettled(deduped.map(item => item.description ? Promise.resolve(item.description) : fetchSpeciesDescription(item.scientificName))),
-  ])
-
-  const items: AnimalItem[] = deduped.map((item, i) => {
-    const vernacular = vernacularResults[i]
-    const description = descriptionResults[i]
-    return {
+  const items: AnimalItem[] = deduped.map((item, i) => ({
+    scientificName: item.scientificName,
+    family: item.family,
+    vernacularIta: vernacular[i],
+    vernacularEn: null,
+    thumbUrl: item.thumbUrl,
+    imageUrl: item.imageUrl,
+    attribution: item.attribution,
+    license: item.license,
+    gbifUrl: item.sourceUrl,
+    lat: item.lat,
+    lon: item.lon,
+    description: description[i],
+    dangerLevel: classifyDanger({
       scientificName: item.scientificName,
       family: item.family,
-      vernacularIta: vernacular.status === 'fulfilled' ? vernacular.value : null,
-      vernacularEn: null,
-      thumbUrl: item.thumbUrl,
-      imageUrl: item.imageUrl,
-      attribution: item.attribution,
-      license: item.license,
-      gbifUrl: item.sourceUrl,
-      lat: item.lat,
-      lon: item.lon,
-      description: description.status === 'fulfilled' ? description.value : null,
-      dangerLevel: classifyDanger({
-        scientificName: item.scientificName,
-        family: item.family,
-        order: item.taxonOrder,
-        class: item.taxonClass,
-      }),
-      fallbackLevel: cascade.fallbackLevel,
-    }
-  })
+      order: item.taxonOrder,
+      class: item.taxonClass,
+    }),
+    fallbackLevel: cascade.fallbackLevel,
+  }))
 
   return Response.json({ items, total: items.length, fallbackLevel: cascade.fallbackLevel })
 }

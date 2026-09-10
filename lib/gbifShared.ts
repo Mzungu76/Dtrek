@@ -1,4 +1,5 @@
 import crypto from 'crypto'
+import { runWithConcurrency } from '@/lib/promisePool'
 
 export const GBIF_BASE = 'https://api.gbif.org/v1'
 export const GBIF_USER_AGENT = 'DTrek/1.0 (mzulpt@gmail.com)'
@@ -104,4 +105,33 @@ export async function fetchSpeciesDescription(scientificName: string): Promise<s
   const it = await fetchWikiSummary(scientificName, 'it')
   if (it) return it
   return fetchWikiSummary(scientificName, 'en')
+}
+
+// Quanti item vengono arricchiti in parallelo — stesso numero totale di chiamate a
+// GBIF/Wikipedia di prima, solo spalmate nel tempo invece che tutte insieme: così anche più
+// utenti che aprono zone mai viste nello stesso istante non generano un unico picco di
+// richieste verso quelle API pubbliche (vedi lib/galleryCascade.ts per lo stesso principio
+// applicato alle celle di cache).
+const ENRICH_CONCURRENCY = 5
+
+/** Nome italiano (solo per specie con gbifUsageKey, cioè da GBIF) + descrizione (Wikipedia IT
+ *  poi EN) per ogni item di app/api/flora e app/api/animals — condiviso perché identico nelle
+ *  due route. */
+export async function enrichSpeciesItems<T extends { vernacularNameIt: string | null; gbifUsageKey: number | null; scientificName: string; description: string | null }>(
+  items: T[],
+): Promise<{ vernacular: (string | null)[]; description: (string | null)[] }> {
+  const indexed = items.map((item, idx) => ({ item, idx }))
+  const vernacular: (string | null)[] = new Array(items.length).fill(null)
+  const description: (string | null)[] = new Array(items.length).fill(null)
+
+  await Promise.all([
+    runWithConcurrency(indexed, ENRICH_CONCURRENCY,
+      ({ item }) => item.vernacularNameIt ? Promise.resolve(item.vernacularNameIt) : item.gbifUsageKey ? fetchVernacularIta(item.gbifUsageKey) : Promise.resolve(null),
+      ({ idx }, result) => { vernacular[idx] = result }),
+    runWithConcurrency(indexed, ENRICH_CONCURRENCY,
+      ({ item }) => item.description ? Promise.resolve(item.description) : fetchSpeciesDescription(item.scientificName),
+      ({ idx }, result) => { description[idx] = result }),
+  ])
+
+  return { vernacular, description }
 }

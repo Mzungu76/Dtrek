@@ -329,7 +329,7 @@ export default function ShareModal(props: ShareModalProps) {
                         title={included ? 'Escludi dal carosello' : 'Includi nel carosello'}
                       >
                         <img src={p.url} alt="" className="w-full h-full object-cover" />
-                        {!included && <span className="absolute inset-0 bg-black/50 flex items-center justify-center text-white text-[10px] font-semibold">Escl.</span>}
+                        {!included && <span className="absolute inset-0 bg-black/50 flex items-center justify-center text-white text-xs font-semibold">Escl.</span>}
                       </button>
                       <input
                         value={captionOverrides[p.id] ?? p.caption ?? ''}
@@ -489,11 +489,11 @@ export default function ShareModal(props: ShareModalProps) {
                           : 'bg-white border-stone-200 text-stone-500 hover:border-stone-300'}`}
                     >
                       <span className="text-sm font-semibold">{main}</span>
-                      <span className="text-[10px] opacity-70">{sub}</span>
+                      <span className="text-xs opacity-70">{sub}</span>
                     </button>
                   ))}
                 </div>
-                <p className="text-[10px] text-stone-400 mt-1.5">
+                <p className="text-xs text-stone-400 mt-1.5">
                   Storia per Instagram / TikTok / WhatsApp Status · Post quadrato · Feed è il formato più efficiente per il carosello Instagram · Orizzontale per Facebook
                 </p>
               </div>

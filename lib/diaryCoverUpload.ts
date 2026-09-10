@@ -36,7 +36,9 @@ function readAsDataUrl(file: File): Promise<string> {
   })
 }
 
-export async function uploadDiaryCover(userId: string, file: File): Promise<string> {
+// diaryId presente = uno dei Diari multipli dell'utente (docs/diario-fulcro-piano.md Fase 4),
+// stesso motivo del parametro gemello in lib/pdfUpload.ts. Assente = il vecchio Diario singolo.
+export async function uploadDiaryCover(userId: string, file: File, diaryId?: string): Promise<string> {
   const dataUrl = await readAsDataUrl(file)
   const img = await loadImage(dataUrl)
 
@@ -56,7 +58,7 @@ export async function uploadDiaryCover(userId: string, file: File): Promise<stri
   })
 
   const supabase = getBrowserSupabase()
-  const path = `${userId}/diary-cover.jpg`
+  const path = diaryId ? `${userId}/diaries/${diaryId}/diary-cover.jpg` : `${userId}/diary-cover.jpg`
   const { error } = await supabase.storage.from(BUCKET).upload(path, blob, {
     contentType: 'image/jpeg',
     upsert: true,

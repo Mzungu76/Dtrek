@@ -2,7 +2,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useParams } from 'next/navigation'
 import { getPlannedById, type PlannedHike } from '@/lib/plannedStore'
-import AnimalGallery from '@/components/AnimalGallery'
+import NatureGallery from '@/components/NatureGallery'
 
 export default function PlannedAnimalsPage() {
   const params = useParams()
@@ -26,11 +26,12 @@ export default function PlannedAnimalsPage() {
   }, [hike])
 
   return (
-    <AnimalGallery
+    <NatureGallery
       trackPoints={trackPoints}
       month={month}
       loadingTrack={loadingHike}
       backLabel={hike?.title ?? 'Pianificata'}
+      initialLayer="fauna"
     />
   )
 }

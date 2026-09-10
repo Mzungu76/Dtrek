@@ -8,7 +8,6 @@ export interface ExtraPhoto { url: string; caption?: string }
 
 interface Props {
   body: string
-  color: string
   sectionPhoto?: string
   twoColumns?: boolean
   /** Didascalia sotto la foto — quando assente (Guida) resta "© Wikimedia Commons"; il
@@ -34,7 +33,7 @@ interface Props {
  * callout `[curiosita]`/`[avviso]` e sottotitoli per-POI (usati dallo scroll-to-POI della mappa).
  * Condiviso tra Guida (GuideReader) e Resoconto (ReportReader).
  */
-export default function MagazineBody({ body, color, sectionPhoto, twoColumns, photoCaption, extraFloatNode, photoIndexBadge, extraPhotos }: Props) {
+export default function MagazineBody({ body, sectionPhoto, twoColumns, photoCaption, extraFloatNode, photoIndexBadge, extraPhotos }: Props) {
   const blocks = useMemo(() => parseMarkupBlocks(body), [body])
 
   // First paragraph (lead) stands alone full-width; rest flow in columns
@@ -50,7 +49,7 @@ export default function MagazineBody({ body, color, sectionPhoto, twoColumns, ph
   return (
     <div>
       {lead && (
-        <p className="text-[17px] sm:text-[19px] leading-[1.75] italic text-stone-700 mb-6">
+        <p className="text-lg sm:text-xl leading-[1.75] italic text-stone-700 mb-6">
           {lead.text}
         </p>
       )}
@@ -61,26 +60,28 @@ export default function MagazineBody({ body, color, sectionPhoto, twoColumns, ph
             <div className="relative w-full h-40 rounded-sm shadow-sm overflow-hidden">
               <Image src={sectionPhoto} alt="" fill sizes="(max-width: 640px) 42vw, 38vw" className="object-cover" />
               {photoIndexBadge != null && (
-                <span className="absolute top-1.5 left-1.5 w-5 h-5 bg-amber-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                <span className="absolute top-1.5 left-1.5 w-5 h-5 bg-amber-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
                   {photoIndexBadge}
                 </span>
               )}
             </div>
-            <p className="text-[9px] italic text-stone-400 mt-1">{photoCaption ?? '© Wikimedia Commons'}</p>
+            <p className="text-xs italic text-stone-400 mt-1">{photoCaption ?? '© Wikimedia Commons'}</p>
           </div>
         )}
         {rest.flatMap((b, i) => {
           if (b.type === 'curiosita') {
+            // Neutro, non più nel colore di sezione — un "Lo sapevi?" acceso quanto l'header
+            // competeva con la sezione stessa per l'attenzione (piano semplificazione visiva).
             return [(
               <div
                 key={i}
-                className="my-5 rounded-xl bg-stone-50 border-l-2 pl-4 pr-4 py-3"
-                style={{ borderColor: color, columnSpan: 'all' as const, breakInside: 'avoid' }}
+                className="my-5 rounded-xl bg-stone-50 border-l-2 border-stone-200 pl-4 pr-4 py-3"
+                style={{ columnSpan: 'all' as const, breakInside: 'avoid' }}
               >
-                <p className="text-[9px] font-bold tracking-[2.5px] uppercase mb-1.5" style={{ color }}>
+                <p className="text-xs font-semibold tracking-[2px] uppercase mb-1.5 text-stone-400">
                   ◆ Lo sapevi?
                 </p>
-                <p className="italic text-[14px] leading-relaxed text-stone-700">
+                <p className="italic text-sm leading-relaxed text-stone-700">
                   {b.text}
                 </p>
               </div>
@@ -96,10 +97,10 @@ export default function MagazineBody({ body, color, sectionPhoto, twoColumns, ph
                 <div className="flex">
                   <div className="w-1 flex-shrink-0 bg-amber-500" />
                   <div className="flex-1 px-4 py-3 bg-amber-50">
-                    <p className="text-[9px] font-bold tracking-[2.5px] uppercase mb-1.5 text-amber-700">
+                    <p className="text-xs font-bold tracking-[2.5px] uppercase mb-1.5 text-amber-700">
                       ⚠ Stato del percorso
                     </p>
-                    <p className="text-[14px] leading-relaxed text-amber-900">
+                    <p className="text-sm leading-relaxed text-amber-900">
                       {b.text}
                     </p>
                   </div>
@@ -112,8 +113,8 @@ export default function MagazineBody({ body, color, sectionPhoto, twoColumns, ph
               <h3
                 key={i}
                 id={slugifyHeading(b.text)}
-                className="font-display text-[11px] font-bold tracking-[1.5px] uppercase mt-6 mb-2 scroll-mt-24"
-                style={{ color, breakAfter: 'avoid' }}
+                className="font-display text-xs font-semibold tracking-[1.5px] uppercase mt-6 mb-2 scroll-mt-24 text-stone-500"
+                style={{ breakAfter: 'avoid' }}
               >
                 {b.text}
               </h3>
@@ -121,7 +122,7 @@ export default function MagazineBody({ body, color, sectionPhoto, twoColumns, ph
           }
           paraCount++
           const paragraph = (
-            <p key={i} className="text-[15px] leading-7 text-stone-600 mb-4">
+            <p key={i} className="text-base leading-7 text-stone-600 mb-4">
               {b.text}
             </p>
           )
@@ -140,7 +141,7 @@ export default function MagazineBody({ body, color, sectionPhoto, twoColumns, ph
                   <Image src={photo.url} alt="" fill sizes="(max-width: 1024px) 100vw, 52rem" className="object-cover" />
                 </div>
                 {photo.caption && (
-                  <figcaption className="text-[10px] italic text-stone-400 mt-1.5 text-center px-2">{photo.caption}</figcaption>
+                  <figcaption className="text-xs italic text-stone-400 mt-1.5 text-center px-2">{photo.caption}</figcaption>
                 )}
               </figure>
             )

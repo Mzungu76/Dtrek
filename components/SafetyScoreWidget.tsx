@@ -48,7 +48,7 @@ function WildlifeLegend({ risks }: { risks: WildlifeRisk[] }) {
 
   return (
     <div className="space-y-2.5">
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">
+      <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">
         🦁 Fauna locale
       </p>
       <div className="space-y-2">
@@ -79,7 +79,7 @@ function WildlifeLegend({ risks }: { risks: WildlifeRisk[] }) {
                       {probLabel}
                     </span>
                   </p>
-                  <p className="text-[11px] text-stone-500 mt-1">{risk.tip}</p>
+                  <p className="text-xs text-stone-500 mt-1">{risk.tip}</p>
                 </div>
               </div>
             </div>
@@ -110,7 +110,7 @@ function RisksLegend({ risks }: { risks: SafetyRiskItem[] }) {
     <div className="space-y-3">
       {dangers.length > 0 && (
         <div className="space-y-1.5">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-red-600 flex items-center gap-1">
+          <p className="text-xs font-semibold uppercase tracking-wider text-red-600 flex items-center gap-1">
             <AlertTriangle className="w-3.5 h-3.5" />
             Pericoli
           </p>
@@ -124,7 +124,7 @@ function RisksLegend({ risks }: { risks: SafetyRiskItem[] }) {
 
       {warnings.length > 0 && (
         <div className="space-y-1.5">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-600 flex items-center gap-1">
+          <p className="text-xs font-semibold uppercase tracking-wider text-amber-600 flex items-center gap-1">
             <Zap className="w-3.5 h-3.5" />
             Avvertenze
           </p>
@@ -138,7 +138,7 @@ function RisksLegend({ risks }: { risks: SafetyRiskItem[] }) {
 
       {infos.length > 0 && (
         <div className="space-y-1.5">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-blue-600 flex items-center gap-1">
+          <p className="text-xs font-semibold uppercase tracking-wider text-blue-600 flex items-center gap-1">
             <Info className="w-3.5 h-3.5" />
             Informazioni
           </p>
@@ -180,7 +180,7 @@ export function SafetyScoreWidget({ safety, defaultOpen }: { safety: SafetyScore
         <WildlifeLegend risks={safety.wildlifeRisks} />
 
         <div className="space-y-2.5">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">
+          <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">
             ⚠️ Analisi rischi
           </p>
           <RisksLegend risks={safety.allRisks} />

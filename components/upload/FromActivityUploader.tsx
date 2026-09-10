@@ -9,7 +9,7 @@ import { defaultPendingExpiresAt } from './sharedHelpers'
 
 // ── Da diario esistente (clona un'attività conclusa) ──────────────────────────
 
-export default function FromActivityUploader() {
+export default function FromActivityUploader({ diaryId }: { diaryId?: string } = {}) {
   const router = useRouter()
   const [activities, setActivities] = useState<ActivityMeta[] | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -26,6 +26,7 @@ export default function FromActivityUploader() {
       if (!activity) throw new Error('Attività non trovata')
       const pendingExpiresAt = await defaultPendingExpiresAt()
       const hike = plannedFromActivity(activity, pendingExpiresAt)
+      if (diaryId) hike.diaryId = diaryId
       await savePlanned(hike)
       router.push(`/guida/${encodeURIComponent(hike.id)}`)
     } catch (e) {
@@ -58,11 +59,11 @@ export default function FromActivityUploader() {
           >
             <div className="flex items-center justify-between gap-2">
               <span className="font-medium text-stone-800 truncate">{a.title ?? 'Escursione'}</span>
-              <span className="text-[10px] text-stone-400 shrink-0">
+              <span className="text-xs text-stone-400 shrink-0">
                 {new Date(a.startTime).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' })}
               </span>
             </div>
-            <div className="flex gap-3 text-[10px] text-stone-400 mt-0.5">
+            <div className="flex gap-3 text-xs text-stone-400 mt-0.5">
               <span>{(a.distanceMeters / 1000).toFixed(1)} km</span>
               <span>{Math.round(a.elevationGain)} m D+</span>
             </div>

@@ -1,11 +1,11 @@
-import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
+import Navbar, { MOBILE_BOTTOMBAR_SPACER } from '@/components/Navbar'
 import UpgradeChoicePanel from '@/components/premium/UpgradeChoicePanel'
 
 export const dynamic = 'force-dynamic'
 
 export default function PrezziPage() {
   return (
-    <div className={`min-h-screen bg-stone-50 md:pb-8 ${MOBILE_TOPBAR_SPACER}`}>
+    <div className={`min-h-screen bg-stone-50 md:pb-8 ${MOBILE_BOTTOMBAR_SPACER}`}>
       <Navbar />
       <main className="max-w-3xl mx-auto px-4 py-10">
         <div className="text-center mb-10">

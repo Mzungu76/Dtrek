@@ -4,6 +4,8 @@ import Link from 'next/link'
 import { Menu, Compass, Navigation2, Upload, ExternalLink, TriangleAlert, Locate } from 'lucide-react'
 import FreeTrackMap, { type FreeTrackMapHandle } from '@/components/navigation/FreeTrackMap'
 import NavigatorMenu from '@/components/navigation/NavigatorMenu'
+import AppBoundaryInfoStep from '@/components/onboarding/AppBoundaryInfoStep'
+import { hasSeenNavigatorAppBoundaryInfo, markNavigatorAppBoundaryInfoSeen } from '@/lib/onboarding/appBoundaryPref'
 import { LocationSource, type LocationSourceError } from '@/lib/native/locationSource'
 import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { openMainApp } from '@/lib/native/mainAppLinks'
@@ -34,6 +36,10 @@ export default function NavigatorePage() {
   const [followMode, setFollowMode] = useState(true)
   const sourceRef = useRef<LocationSource | null>(null)
   const mapHandleRef = useRef<FreeTrackMapHandle | null>(null)
+  // UX-AUDIT.md P-C1/P0-2 — spiega la relazione Navigator/Dtrek alla primissima apertura di questa
+  // shell, prima che l'utente incontri "Apri Dtrek" senza contesto pregresso.
+  const [showBoundaryInfo, setShowBoundaryInfo] = useState(false)
+  useEffect(() => { if (!hasSeenNavigatorAppBoundaryInfo()) setShowBoundaryInfo(true) }, [])
 
   useEffect(() => {
     const source = new LocationSource(
@@ -69,7 +75,7 @@ export default function NavigatorePage() {
         onClick={() => mapHandleRef.current?.recenter()}
         aria-label="Centra sulla mia posizione"
         className={`absolute right-3 top-1/2 -translate-y-1/2 z-10 w-11 h-11 rounded-full shadow-lg flex items-center justify-center ${
-          followMode ? 'bg-terra-500 text-white' : 'bg-white text-stone-700'
+          followMode ? 'bg-botanico-accent text-white' : 'bg-white text-stone-700'
         }`}
       >
         <Locate className="w-5 h-5" />
@@ -113,11 +119,11 @@ export default function NavigatorePage() {
         ) : readyHike ? (
           <Link
             href={`/guida/${encodeURIComponent(readyHike.id)}/naviga`}
-            className="flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-forest-500 text-white shadow-sm hover:bg-forest-600 transition-colors"
+            className="flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-botanico-accent text-white shadow-sm hover:opacity-90 transition-colors"
           >
             <Navigation2 className="w-5 h-5 shrink-0" />
             <div className="flex-1 min-w-0">
-              <p className="text-[11px] text-white/80 uppercase tracking-wide font-semibold">Pronto per la navigazione</p>
+              <p className="text-xs text-white/80 uppercase tracking-wide font-semibold">Pronto per la navigazione</p>
               <p className="font-semibold text-sm truncate">{readyHike.title}</p>
             </div>
           </Link>
@@ -135,6 +141,13 @@ export default function NavigatorePage() {
       </div>
 
       <NavigatorMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
+
+      {showBoundaryInfo && (
+        <AppBoundaryInfoStep
+          variant="navigator"
+          onDone={() => { markNavigatorAppBoundaryInfoSeen(); setShowBoundaryInfo(false) }}
+        />
+      )}
     </div>
   )
 }

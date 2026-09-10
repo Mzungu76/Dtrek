@@ -69,7 +69,7 @@ export default function EscapeOptionsSheet({ open, onClose, loading, options, on
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-semibold text-stone-800 text-sm">{i + 1}. {opt.label}</p>
-                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${safety.className}`}>{safety.label}</span>
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${safety.className}`}>{safety.label}</span>
                     </div>
                     <p className="text-xs text-stone-500 mt-0.5">{formatDistance(opt.distanceM)}</p>
                     <p className="text-xs text-stone-500 mt-1.5 leading-snug">{opt.reason}</p>

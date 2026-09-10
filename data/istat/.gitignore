@@ -1,0 +1,10 @@
+# Shapefile e tabella di codifica — file grandi, importare localmente, non via git
+*.shp
+*.shx
+*.dbf
+*.prj
+*.cpg
+*.qpj
+*.sbn
+*.sbx
+*.xlsx

@@ -69,8 +69,8 @@ export default async function EscursionePage({ params }: { params: { token: stri
         </a>
 
         {hasNarrative(entry.content) && show.racconto
-          ? <EntryArticle entry={entry} n={idx + 1} show={show} />
-          : <EntryCard entry={entry} n={idx + 1} />}
+          ? <EntryArticle entry={entry} n={idx + 1} show={show} hideExactDate={diary.hideExactDates} />
+          : <EntryCard entry={entry} n={idx + 1} hideExactDate={diary.hideExactDates} />}
 
         {/* Navigazione fra escursioni: è ciò che rende il diario un percorso da sfogliare invece
             di una raccolta di pagine slegate. */}
@@ -78,7 +78,7 @@ export default async function EscursionePage({ params }: { params: { token: stri
           {prev !== null ? (
             <a href={`/leggi/d/${params.token}/e/${prev}`}
               className="flex-1 min-w-0 bg-white rounded-2xl border border-stone-200 shadow-sm px-4 py-3 hover:border-stone-300 transition group">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400 flex items-center gap-1">
+              <p className="text-xs font-semibold uppercase tracking-wider text-stone-400 flex items-center gap-1">
                 <ChevronLeft className="w-3 h-3" /> Precedente
               </p>
               <p className="text-sm font-display font-bold text-forest-900 truncate mt-0.5 group-hover:text-forest-700 transition">
@@ -89,7 +89,7 @@ export default async function EscursionePage({ params }: { params: { token: stri
           {next !== null ? (
             <a href={`/leggi/d/${params.token}/e/${next}`}
               className="flex-1 min-w-0 bg-white rounded-2xl border border-stone-200 shadow-sm px-4 py-3 text-right hover:border-stone-300 transition group">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400 flex items-center justify-end gap-1">
+              <p className="text-xs font-semibold uppercase tracking-wider text-stone-400 flex items-center justify-end gap-1">
                 Successiva <ChevronRight className="w-3 h-3" />
               </p>
               <p className="text-sm font-display font-bold text-forest-900 truncate mt-0.5 group-hover:text-forest-700 transition">

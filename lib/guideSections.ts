@@ -44,9 +44,34 @@ export const GUIDE_SECTIONS: GuideSectionDef[] = [
     subtitle: 'Flora, fauna e geologia che potresti incontrare, in base alla stagione.' },
   { key: 'sapori',           title: 'Sapori e tradizioni',        match: ['sapori'],
     subtitle: 'Gastronomia locale, tradizioni e prodotti tipici della zona.' },
-  { key: 'consigli',         title: 'Consigli finali',            match: ['consigli'],
+  { key: 'consigli',         title: 'Consigli',                   match: ['consigli finali', 'consigli'],
     subtitle: 'Sicurezza, segnaletica, varianti e contatti utili per l\'escursione.' },
 ]
+
+// ── Raggruppamento a 3 sezioni per la navigazione della Guida-libro ────────────
+//
+// Direzione "Taccuino Botanico" (docs/taccuino-botanico-piano.md) — SOLO per la striscia pillole
+// di GuideBookPage.tsx/PercorsoToolsDrawer.tsx: le 8 sotto-sezioni sopra restano lo scheletro reale
+// (generazione AI in app/api/guide/route.ts, parsing, impostazioni "Breve" per sezione) — qui si
+// raggruppano solo visivamente, così la navigazione mostra 3 pillole invece di 8. Nessun impatto
+// sul prompt/output AI.
+export type GuideNavGroupKey = 'prima_di_partire' | 'percorso' | 'luoghi_natura'
+
+export interface GuideNavGroupDef {
+  key: GuideNavGroupKey
+  label: string
+  sections: GuideSectionKey[]
+}
+
+export const GUIDE_NAV_GROUPS: GuideNavGroupDef[] = [
+  { key: 'prima_di_partire', label: 'Prima di partire', sections: ['prima_di_partire', 'consigli'] },
+  { key: 'percorso',         label: 'Percorso',         sections: ['il_percorso', 'dati_sicurezza', 'verificato'] },
+  { key: 'luoghi_natura',    label: 'Luoghi e Natura',  sections: ['luoghi', 'natura', 'sapori'] },
+]
+
+export function isGuideNavGroupKey(v: unknown): v is GuideNavGroupKey {
+  return typeof v === 'string' && GUIDE_NAV_GROUPS.some(g => g.key === v)
+}
 
 /** Applicata quando l'utente non ha ancora scelto le sezioni della guida Breve in Impostazioni —
  *  solo le tre sezioni essenziali (racconto del tracciato + verifica di sicurezza online + consigli

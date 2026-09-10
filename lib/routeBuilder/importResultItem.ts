@@ -21,7 +21,7 @@ export function defaultTitleForResultItem(item: ResultItem, i: number): string {
 }
 
 export async function saveResultItemToGuide(
-  item: ResultItem, title: string, date: string, pendingExpiresAt: string,
+  item: ResultItem, title: string, date: string, pendingExpiresAt: string, diaryId?: string,
 ): Promise<PlannedHike> {
   // Entrambi i tipi di candidato arrivano dalla ricerca con quota stimata (nessuna chiamata DTM in
   // quella fase, vedi searchSteps.ts's resolveOneCandidate) — qui, una sola volta per il solo
@@ -31,6 +31,7 @@ export async function saveResultItemToGuide(
   const hike: PlannedHike = item.kind === 'built'
     ? buildHikeFromBuilt(await enrichBuiltCandidateForImport(item.data), title, date, pendingExpiresAt)
     : buildHikeFromFound(await enrichFoundCandidateForImport(item.data), title, date, pendingExpiresAt)
+  if (diaryId) hike.diaryId = diaryId
 
   await enrichWithPois(hike)
   await savePlanned(hike)

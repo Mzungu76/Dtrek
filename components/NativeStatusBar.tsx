@@ -3,14 +3,15 @@ import { useEffect, useState } from 'react'
 import { Capacitor } from '@capacitor/core'
 import { StatusBar, Style } from '@capacitor/status-bar'
 
-// Stesso verde della PWA Dtrek (tema chiaro) — app/layout.tsx: viewport.themeColor e
-// public/manifest.json usano già #277134 (forest-600 di tailwind.config.ts). Dtrek "vede" quel
+// Stesso colore della PWA Dtrek (tema chiaro) — app/layout.tsx: viewport.themeColor e
+// public/manifest.json usano già #5F7355 (salvia scura, direzione "Taccuino Botanico" —
+// docs/taccuino-botanico-piano.md, botanico.bar di tailwind.config.ts). Dtrek "vede" quel
 // colore gratis perché Android tinge la barra di stato col theme-color quando la PWA è
 // installata/aperta nel browser; Navigator invece gira dentro una WebView Capacitor nativa, che
 // il browser non gestisce affatto — senza questo componente la barra resta trasparente sul
 // colore di qualunque schermata ci sia sotto in quel momento (nero sulle mappe, bianco sulle
-// schermate chiare), non un verde coerente in tutta l'app.
-const STATUS_BAR_COLOR = '#277134'
+// schermate chiare), non un colore coerente in tutta l'app.
+const STATUS_BAR_COLOR = '#5F7355'
 
 /**
  * Verde Dtrek sulla barra di stato di TUTTO Navigator — montato in AppChrome.tsx, quindi attivo

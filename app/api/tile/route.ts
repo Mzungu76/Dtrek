@@ -10,6 +10,12 @@ const PROVIDERS: Record<string, string> = {
   positron: 'https://a.basemaps.cartocdn.com/light_all',
   // OSM standard — fallback
   light:   'https://tile.openstreetmap.org',
+  // OpenTopoMap — cartografia escursionistica reale (curve di livello, boschi in verde
+  // desaturato, sentieri, niente POI commerciali) invece di uno stile "app di navigazione"
+  // ricolorato via CSS: la miniatura del Sommario del taccuino (Fase 30) la usa per sembrare un
+  // reperto cartaceo del percorso invece di uno screenshot di una mappa digitale. Licenza
+  // CC-BY-SA (dati OSM + SRTM) — stessa famiglia di licenza dei tile OSM già in uso qui sopra.
+  topo:    'https://a.tile.opentopomap.org',
 }
 
 export async function GET(req: Request) {
@@ -21,7 +27,7 @@ export async function GET(req: Request) {
   // Le tile @2x servono a chi compone immagini grandi (condivisione, PDF): senza, una griglia di
   // tile da 256px va ingrandita e i toponimi diventano illeggibili. Solo CARTO le offre; OSM
   // standard no, quindi per 'light' la richiesta viene ignorata invece di produrre un 404.
-  const retina = searchParams.get('retina') === '1' && style !== 'light'
+  const retina = searchParams.get('retina') === '1' && style !== 'light' && style !== 'topo'
 
   if (!zRaw || !xRaw || !yRaw) return new Response('Missing z/x/y', { status: 400 })
   const zoom = Number(zRaw), x = Number(xRaw), y = Number(yRaw)

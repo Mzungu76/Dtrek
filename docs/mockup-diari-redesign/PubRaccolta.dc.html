@@ -1,0 +1,157 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body style="margin:0">
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Lora:ital,wght@0,400;0,600;1,500&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+:root{
+  --paper-base:#F5EDDD; --paper-light:#F9F2E4; --card:#EBE0C8; --card-border:#D9C9A8;
+  --ink-typed:#2E2A22; --ink-hand:#7A6F52; --ink-muted:#95886A;
+  --accent:#C0603D; --accent-2:#7C8F6E; --accent-tint:#E9DAC3;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+a{color:var(--accent);text-decoration:none}
+a:hover{color:var(--accent-2)}
+.phone{width:390px;height:844px;position:relative;overflow:hidden;background:var(--paper-base);
+  font-family:'DM Sans',system-ui,sans-serif;color:var(--ink-typed);-webkit-font-smoothing:antialiased}
+.eyebrow{font-family:'DM Sans';font-weight:700;text-transform:uppercase;letter-spacing:.2em;
+  font-size:9.5px;color:var(--ink-hand);margin:0}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-weight:700;font-variant-numeric:tabular-nums}
+
+/* frontespizio della collana */
+.hero{position:relative;height:326px;overflow:hidden;background:#2E2A22;
+  display:flex;flex-direction:column;justify-content:flex-end;padding:0 22px 20px}
+.hero .wash{position:absolute;inset:0;background:linear-gradient(165deg,#6E4A2E 0%,#2E2A22 62%,#1E1B16 100%)}
+.hero .veil{position:absolute;inset:0;background:linear-gradient(180deg,rgba(30,27,22,.15) 0%,rgba(30,27,22,.72) 100%)}
+.hero .frame{position:absolute;inset:14px;border:1px solid rgba(245,237,221,.22);border-radius:3px}
+.hero > *{position:relative;z-index:2}
+.h-eyebrow{font-family:'DM Sans';font-weight:700;text-transform:uppercase;letter-spacing:.24em;
+  font-size:9px;color:rgba(245,237,221,.62);margin:0}
+.h-title{font-family:'Playfair Display',Georgia,serif;font-weight:900;font-size:44px;line-height:.98;
+  color:#FDF8EA;margin:8px 0 0;letter-spacing:-.01em}
+.h-sub{font-family:'Lora',Georgia,serif;font-style:italic;font-size:14px;color:rgba(245,237,221,.8);margin:9px 0 0}
+.h-stats{display:flex;gap:18px;margin-top:16px}
+.h-v{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:16px;color:#FDF8EA;line-height:1}
+.h-k{font-size:8px;text-transform:uppercase;letter-spacing:.14em;color:rgba(245,237,221,.55);margin-top:4px}
+
+.body{padding:18px 22px 0}
+.prefazione{font-family:'Lora',Georgia,serif;font-size:13px;line-height:1.62;color:var(--ink-typed);margin:0;text-wrap:pretty}
+.prefazione::first-letter{font-family:'Playfair Display',serif;font-weight:700;font-size:34px;float:left;
+  line-height:.85;padding:3px 7px 0 0;color:var(--accent)}
+.rule{display:flex;align-items:center;gap:9px;margin:16px 0 10px}
+.rule .l{flex:1;height:1px;background:var(--card-border)}
+.rule .t{font-family:'DM Sans';font-weight:700;text-transform:uppercase;letter-spacing:.16em;font-size:9.5px;color:var(--ink-hand)}
+
+.idx{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px dotted var(--card-border)}
+.idx .num{font-family:'Playfair Display',serif;font-weight:700;font-size:15px;color:var(--accent);width:22px;flex:none}
+.idx .t{font-family:'Lora',Georgia,serif;font-weight:600;font-size:14px;line-height:1.15;margin:0}
+.idx .s{font-size:10px;color:var(--ink-muted);margin:2px 0 0}
+.foot{display:flex;align-items:center;justify-content:space-between;padding:14px 22px 18px;margin-top:6px;
+  border-top:1px solid var(--card-border)}
+</style>
+</helmet>
+
+<div class="phone">
+
+  <div class="hero">
+    <div class="wash"></div>
+    <svg style="position:absolute;inset:0;width:100%;height:100%" viewBox="0 0 390 326" preserveAspectRatio="none" aria-hidden="true">
+      <g fill="none" stroke="#F5EDDD" stroke-width="1" opacity=".13">
+        <path d="M-10 214 C 70 186, 140 232, 212 204 S 336 168, 400 196"></path>
+        <path d="M-10 240 C 72 212, 142 258, 214 230 S 338 194, 400 222"></path>
+        <path d="M-10 266 C 74 240, 144 284, 216 258 S 340 222, 400 248"></path>
+        <path d="M-10 292 C 76 268, 146 310, 218 286 S 342 250, 400 274"></path>
+      </g>
+      <path d="M-10 250 C 60 214, 118 236, 170 196 C 220 158, 262 176, 320 140 C 356 118, 380 122, 400 112"
+            fill="none" stroke="#C0603D" stroke-width="2.6" opacity=".9"></path>
+    </svg>
+    <div class="veil"></div>
+    <div class="frame"></div>
+
+    <p class="h-eyebrow">Una collana in tre volumi</p>
+    <h1 class="h-title">Appennino</h1>
+    <p class="h-sub">Tre stagioni sullo stesso crinale</p>
+    <div class="h-stats">
+      <div><div class="h-v">289 km</div><div class="h-k">Percorsi</div></div>
+      <div><div class="h-v">+12.400</div><div class="h-k">Dislivello</div></div>
+      <div><div class="h-v">18</div><div class="h-k">Uscite</div></div>
+    </div>
+  </div>
+
+  <div class="body">
+    <p class="prefazione">
+      Lo stesso crinale, tre stagioni di fila. Il primo anno lo salivo per allenarmi; dal secondo ho
+      cominciato a segnarmi dove finisce il faggio e dove comincia il vento.
+    </p>
+
+    <div class="rule"><span class="t">I volumi</span><span class="l"></span><span class="mono" style="font-size:9.5px;color:var(--ink-muted)">18 reportage</span></div>
+
+    <div class="idx">
+      <span class="num">I</span>
+      <div style="flex:1;min-width:0">
+        <p class="t">Estate 2026</p>
+        <p class="s">7 reportage &middot; 138 km &middot; giu &ndash; set 2026</p>
+      </div>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#95886A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
+    </div>
+    <div class="idx">
+      <span class="num">II</span>
+      <div style="flex:1;min-width:0">
+        <p class="t">Crinale 2025</p>
+        <p class="s">6 reportage &middot; 94 km &middot; mag &ndash; ott 2025</p>
+      </div>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#95886A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
+    </div>
+    <div class="idx" style="border-bottom:none">
+      <span class="num">III</span>
+      <div style="flex:1;min-width:0">
+        <p class="t">Primi passi 2024</p>
+        <p class="s">5 reportage &middot; 57 km &middot; apr &ndash; nov 2024</p>
+      </div>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#95886A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
+    </div>
+
+    <div style="margin-top:12px;border:1px solid var(--card-border);border-radius:12px;overflow:hidden;background:var(--card)">
+      <svg viewBox="0 0 344 92" style="width:100%;height:92px;display:block" preserveAspectRatio="xMidYMid slice">
+        <rect width="344" height="92" fill="#EBE0C8"></rect>
+        <g fill="none" stroke="#A89A78" stroke-width=".9" opacity=".5">
+          <path d="M-5 30 C 60 16, 120 44, 186 28 S 300 6, 350 24"></path>
+          <path d="M-5 52 C 62 38, 122 66, 188 50 S 302 28, 350 46"></path>
+          <path d="M-5 74 C 64 60, 124 88, 190 72 S 304 50, 350 68"></path>
+        </g>
+        <g fill="none" stroke="#C0603D" stroke-width="2.2" stroke-linecap="round">
+          <path d="M42 74 C 78 56, 104 60, 140 40 C 172 22, 206 34, 246 22"></path>
+          <path d="M60 80 C 96 70, 118 48, 156 44"></path>
+          <path d="M188 76 C 220 66, 244 48, 288 42"></path>
+        </g>
+        <circle cx="42" cy="74" r="4" fill="#C0603D" stroke="#F5EDDD" stroke-width="1.6"></circle>
+        <circle cx="246" cy="22" r="4" fill="#C0603D" stroke="#F5EDDD" stroke-width="1.6"></circle>
+        <circle cx="288" cy="42" r="3.4" fill="#7C8F6E" stroke="#F5EDDD" stroke-width="1.6"></circle>
+      </svg>
+      <p style="margin:0;padding:8px 11px;font-size:10px;color:var(--ink-muted)">
+        Le tracce della collana &middot; <span style="color:var(--accent);font-weight:700">partenze da casa nascoste</span>
+      </p>
+    </div>
+  </div>
+
+  <div class="foot">
+    <div>
+      <p style="margin:0;font-size:11.5px;font-weight:700">Marco B.</p>
+      <p style="margin:2px 0 0;font-size:9.5px;color:var(--ink-muted)">Altre 2 opere pubblicate</p>
+    </div>
+    <span style="display:inline-flex;align-items:center;gap:6px;font-size:10px;font-weight:700;color:var(--ink-hand);
+      border:1px solid var(--card-border);border-radius:999px;padding:7px 12px">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5V6a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"></path><path d="M8 4v16"></path></svg>
+      Creato con Dtrek
+    </span>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

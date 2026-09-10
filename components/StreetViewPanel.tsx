@@ -88,7 +88,7 @@ export default function StreetViewPanel({ lat, lon, title, onClose }: Props) {
             </a>
             <p className="text-xs text-stone-400">
               Poi aggiungi{' '}
-              <code className="bg-stone-100 px-1 py-0.5 rounded text-[11px]">NEXT_PUBLIC_MAPILLARY_KEY=…</code>{' '}
+              <code className="bg-stone-100 px-1 py-0.5 rounded text-xs">NEXT_PUBLIC_MAPILLARY_KEY=…</code>{' '}
               nelle variabili d&apos;ambiente Vercel
             </p>
           </div>
@@ -137,13 +137,13 @@ export default function StreetViewPanel({ lat, lon, title, onClose }: Props) {
               )}
 
               <div className="absolute bottom-2 left-2 right-2 flex items-end justify-between pointer-events-none">
-                <span className="text-[10px] text-white/80 bg-black/45 px-2 py-0.5 rounded-full">
+                <span className="text-xs text-white/80 bg-black/45 px-2 py-0.5 rounded-full">
                   {selected + 1} / {images.length}
                 </span>
                 <a
                   href={`https://www.mapillary.com/app/?pKey=${img.id}`}
                   target="_blank" rel="noopener noreferrer"
-                  className="pointer-events-auto flex items-center gap-1 px-2.5 py-1 bg-black/50 hover:bg-black/70 rounded-full text-white text-[10px] font-medium transition-colors"
+                  className="pointer-events-auto flex items-center gap-1 px-2.5 py-1 bg-black/50 hover:bg-black/70 rounded-full text-white text-xs font-medium transition-colors"
                 >
                   <ExternalLink className="w-3 h-3" /> Apri 360°
                 </a>

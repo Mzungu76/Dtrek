@@ -1,0 +1,139 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body style="margin:0">
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Lora:ital,wght@0,400;0,600;1,500&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+:root{
+  --paper-base:#F5EDDD; --paper-light:#F9F2E4; --card:#EBE0C8; --card-border:#D9C9A8;
+  --ink-typed:#2E2A22; --ink-hand:#7A6F52; --ink-muted:#95886A;
+  --accent:#C0603D; --accent-2:#7C8F6E; --accent-tint:#E9DAC3;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+a{color:var(--accent);text-decoration:none}
+a:hover{color:var(--accent-2)}
+.phone{width:390px;height:844px;position:relative;overflow:hidden;background:var(--paper-base);
+  font-family:'DM Sans',system-ui,sans-serif;color:var(--ink-typed);-webkit-font-smoothing:antialiased}
+.paper-grain{position:absolute;inset:0;pointer-events:none;z-index:0;opacity:.85;mix-blend-mode:multiply;
+  background-image:
+    radial-gradient(circle at 22% 20%,rgba(46,42,34,.17) 0,rgba(46,42,34,.17) 1.3px,transparent 2.9px),
+    radial-gradient(circle at 70% 52%,rgba(46,42,34,.15) 0,rgba(46,42,34,.15) 1.2px,transparent 2.6px),
+    radial-gradient(circle at 40% 84%,rgba(46,42,34,.16) 0,rgba(46,42,34,.16) 1.3px,transparent 3px);
+  background-size:55px 51px,66px 59px,47px 73px}
+.eyebrow{font-family:'DM Sans';font-weight:700;text-transform:uppercase;letter-spacing:.2em;
+  font-size:9.5px;color:var(--ink-hand);margin:0}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-weight:700;font-variant-numeric:tabular-nums}
+.stage{position:absolute;inset:0;z-index:1;padding:52px 20px 0}
+
+.who{display:flex;align-items:center;gap:13px}
+.ava{width:58px;height:58px;border-radius:999px;flex:none;background:linear-gradient(150deg,#7C8F6E,#4A5A3F);
+  border:2px solid var(--paper-light);box-shadow:0 6px 14px -8px rgba(46,42,34,.6);
+  display:flex;align-items:center;justify-content:center;color:#F5EDDD}
+.name{font-family:'Playfair Display',Georgia,serif;font-weight:700;font-size:24px;line-height:1.05;margin:0}
+.bio{font-family:'Lora',Georgia,serif;font-style:italic;font-size:12px;color:var(--ink-hand);margin:4px 0 0;line-height:1.4}
+
+.numbers{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:15px;
+  background:var(--card);border:1px solid var(--card-border);border-radius:13px;padding:12px 13px}
+.numbers .v{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:16px;line-height:1}
+.numbers .k{font-size:8px;text-transform:uppercase;letter-spacing:.11em;color:var(--ink-muted);margin-top:4px}
+
+.rule{display:flex;align-items:center;gap:9px;margin:18px 0 10px}
+.rule .l{flex:1;height:1px;background:var(--card-border)}
+.rule .t{font-family:'DM Sans';font-weight:700;text-transform:uppercase;letter-spacing:.16em;font-size:9.5px;color:var(--ink-hand)}
+
+.opera{display:flex;gap:12px;align-items:center;background:var(--card);border:1px solid var(--card-border);
+  border-radius:13px;padding:11px 12px}
+.op-cover{width:44px;height:58px;border-radius:4px;flex:none;box-shadow:0 6px 13px -8px rgba(46,42,34,.7);position:relative;overflow:hidden}
+.op-kind{display:inline-block;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.11em;
+  padding:2px 6px;border-radius:4px;background:var(--accent-tint);color:var(--accent)}
+.op-kind.d{background:var(--paper-light);color:var(--ink-hand);border:1px solid var(--card-border)}
+.op-t{font-family:'Playfair Display',Georgia,serif;font-weight:700;font-size:16px;line-height:1.12;margin:5px 0 0}
+.op-s{font-size:10px;color:var(--ink-muted);margin:3px 0 0}
+
+.tracks{display:flex;gap:8px;margin-top:10px}
+.track{flex:1;background:var(--card);border:1px solid var(--card-border);border-radius:11px;padding:8px 9px}
+.track .t{font-size:11px;font-weight:700;line-height:1.15}
+.track .s{font-size:9px;color:var(--ink-muted);margin-top:3px}
+
+.note{display:flex;gap:9px;margin-top:16px;padding:11px 12px;border:1px dashed var(--card-border);border-radius:12px}
+.note p{margin:0;font-size:10.5px;line-height:1.5;color:var(--ink-hand)}
+</style>
+</helmet>
+
+<div class="phone">
+  <div class="paper-grain"></div>
+  <div class="stage">
+
+    <p class="eyebrow">Dtrek &middot; Profilo pubblico</p>
+
+    <div class="who" style="margin-top:12px">
+      <div class="ava">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 20c0-4 4-6 8-6s8 2 8 6"></path></svg>
+      </div>
+      <div style="flex:1;min-width:0">
+        <p class="name">Marco B.</p>
+        <p class="bio">Appennino centrale, sentieri e periferie &mdash; a piedi da sette anni.</p>
+      </div>
+    </div>
+
+    <div class="numbers">
+      <div><div class="v">1.284</div><div class="k">km</div></div>
+      <div><div class="v">47</div><div class="k">Uscite</div></div>
+      <div><div class="v">38k</div><div class="k">D+ m</div></div>
+      <div><div class="v">6</div><div class="k">Regioni</div></div>
+    </div>
+
+    <div class="rule"><span class="t">Opere pubblicate</span><span class="l"></span><span class="mono" style="font-size:9.5px;color:var(--ink-muted)">3</span></div>
+
+    <div style="display:flex;flex-direction:column;gap:9px">
+      <div class="opera">
+        <div class="op-cover" style="background:linear-gradient(165deg,#7A5A3C,#2E2A22)"></div>
+        <div style="flex:1;min-width:0">
+          <span class="op-kind">Raccolta &middot; 3 volumi</span>
+          <p class="op-t">Appennino</p>
+          <p class="op-s">18 reportage &middot; 289 km &middot; 2024&ndash;2026</p>
+        </div>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#95886A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
+      </div>
+
+      <div class="opera">
+        <div class="op-cover" style="background:linear-gradient(165deg,#4A5A3F,#22271C)"></div>
+        <div style="flex:1;min-width:0">
+          <span class="op-kind d">Diario</span>
+          <p class="op-t">Vie urbane</p>
+          <p class="op-s">5 reportage &middot; 61 km &middot; 2026</p>
+        </div>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#95886A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
+      </div>
+    </div>
+
+    <div class="rule"><span class="t">Percorsi in evidenza</span><span class="l"></span></div>
+    <div class="tracks">
+      <div class="track">
+        <div class="t">Anello del Cimino</div>
+        <div class="s"><span class="mono">12,4 km</span> &middot; +740 m</div>
+      </div>
+      <div class="track">
+        <div class="t">Cresta di Cetona</div>
+        <div class="s"><span class="mono">9,8 km</span> &middot; +610 m</div>
+      </div>
+    </div>
+
+    <!-- il punto che risponde a "pubblichiamo tutto l'archivio?" -->
+    <div class="note">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#7A6F52" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:1px"><rect x="4" y="10" width="16" height="10" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg>
+      <p>Di 47 uscite ne sono pubbliche 23. L&rsquo;archivio non si pubblica in blocco: questa pagina raccoglie
+      solo le opere che l&rsquo;autore ha scelto di rendere leggibili, e i numeri in cima contano tutto senza
+      mostrare nulla.</p>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

@@ -6,6 +6,7 @@ import { writeCachedAiSettings, deleteCachedAiSettings } from '@/lib/aiKeyCache'
 import { isHikerExperienceLevel, sanitizeHikerConcerns, sanitizeHikerEnvironmentPrefs } from '@/lib/hikerProfile'
 import { isValidClaudeModelId } from '@/lib/claudeModels'
 import { isProfileReady, type WritingStyleProfile } from '@/lib/writingStyleProfile'
+import { isItalianRegionSlug } from '@/lib/italianRegions'
 
 /** Tanaka formula for max heart rate: 211 − 0.64 × age */
 function deriveFCmax(age: number): number {
@@ -37,7 +38,7 @@ export async function GET(req: NextRequest) {
 
   const { data: d1, error: e1 } = await supabase
     .from('user_settings')
-    .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, user_gender, beauty_natura_weight, beauty_paesaggio_weight, beauty_archeologia_weight, beauty_architettura_weight, beauty_interesse_weight, beauty_natura_cultura, beauty_natura_type, beauty_cultura_type, pref_sforzo, pref_durata, tei_peso_cultura, tei_peso_topografia, tei_peso_idrografia, tei_peso_fondo, tei_peso_geodiversita, tei_f_antr_sensitivity, hiker_face_data_url, display_name, personal_delta, hr_hike_count, hr_rest, hr_max, starting_address, starting_lat, starting_lon, guide_pending_days, guide_breve_sections, hiker_experience_level, hiker_concerns, hiker_environment_prefs, onboarding_completed_at, gift_route_offered_at, claude_model, updated_at, ai_use_biometric_data, ai_use_history_data, ai_web_search, route_build_ai_place_search, guide_section_lengths, writing_style_profile')
+    .select('claude_api_key, subscription_tier, user_age, user_weight_kg, user_height_cm, user_gender, beauty_natura_weight, beauty_paesaggio_weight, beauty_archeologia_weight, beauty_architettura_weight, beauty_interesse_weight, beauty_natura_cultura, beauty_natura_type, beauty_cultura_type, pref_sforzo, pref_durata, tei_peso_cultura, tei_peso_topografia, tei_peso_idrografia, tei_peso_fondo, tei_peso_geodiversita, tei_f_antr_sensitivity, hiker_face_data_url, display_name, personal_delta, hr_hike_count, hr_rest, hr_max, starting_address, starting_lat, starting_lon, guide_pending_days, guide_breve_sections, hiker_experience_level, hiker_concerns, hiker_environment_prefs, onboarding_completed_at, gift_route_offered_at, home_region, claude_model, updated_at, ai_use_biometric_data, ai_use_history_data, ai_web_search, route_build_ai_place_search, guide_section_lengths, writing_style_profile, diario_libro_enabled, last_diary_id')
     .eq('user_id', user.id)
     .single()
 
@@ -102,6 +103,7 @@ export async function GET(req: NextRequest) {
     hikerEnvironmentPrefs:    sanitizeHikerEnvironmentPrefs(data?.hiker_environment_prefs),
     onboardingCompletedAt:    (data?.onboarding_completed_at    as string) ?? null,
     giftRouteOfferedAt:       (data?.gift_route_offered_at      as string) ?? null,
+    homeRegion:               (data?.home_region                as string) ?? null,
     // null = "Automatico" (nessuna scelta esplicita, vedi components/profilo/SectionClaudeKey.tsx)
     // — non risolto qui a un default fisso perché il default vero dipende dalla funzionalità
     // (guida/resoconto/... vs caption/questionario/...), calcolato solo in
@@ -121,6 +123,9 @@ export async function GET(req: NextRequest) {
     // Pronto quando ci sono abbastanza risposte al questionario per un segnale di stile affidabile
     // (lib/writingStyleProfile.ts) — usato per il badge "nel tuo stile" nel resoconto.
     writingStyleReady:        isProfileReady((data?.writing_style_profile as WritingStyleProfile | null) ?? null),
+    // Ultimo Diario aperto, Fase 11 — null finché l'utente non ha ancora aperto un Sommario (app/
+    // page.tsx ricade sul Diario di default in quel caso).
+    lastDiaryId:              (data?.last_diary_id as string | null) ?? null,
   })
 }
 
@@ -170,11 +175,13 @@ export async function POST(req: NextRequest) {
     hikerEnvironmentPrefs?: string[]
     onboardingCompletedAt?: string | null
     giftRouteOfferedAt?: string | null
+    homeRegion?: string | null
     claudeModel?: string | null
     aiUseBiometricData?: boolean
     aiUseHistoryData?: boolean
     aiUseWebSearch?: boolean
     routeBuildAiPlaceSearch?: boolean
+    lastDiaryId?: string | null
   }
 
   const upsertData: Record<string, unknown> = {
@@ -358,6 +365,12 @@ export async function POST(req: NextRequest) {
   if (body.giftRouteOfferedAt !== undefined) {
     upsertData.gift_route_offered_at = body.giftRouteOfferedAt
   }
+  if (body.homeRegion !== undefined) {
+    if (body.homeRegion !== null && !isItalianRegionSlug(body.homeRegion)) {
+      return NextResponse.json({ error: 'homeRegion non valida' }, { status: 400 })
+    }
+    upsertData.home_region = body.homeRegion
+  }
 
   // Consenso all'uso di dati personali nei prompt AI — vedi resolveApiKeyAndSettings.ts.
   if (body.aiUseBiometricData !== undefined) {
@@ -371,6 +384,14 @@ export async function POST(req: NextRequest) {
   }
   if (body.routeBuildAiPlaceSearch !== undefined) {
     upsertData.route_build_ai_place_search = !!body.routeBuildAiPlaceSearch
+  }
+
+  // Ultimo Diario aperto, Fase 11 — scritto da DiarioIndexLibro ogni volta che il Sommario carica
+  // con successo. null è un valore legittimo (mai scritto dalla route POST /api/diaries/[id] con
+  // action=deleteAll/migrate: qui arriva solo dal client, che non lo azzera mai esplicitamente —
+  // ON DELETE SET NULL sulla colonna se il Diario viene eliminato basta da solo).
+  if (body.lastDiaryId !== undefined) {
+    upsertData.last_diary_id = body.lastDiaryId
   }
 
   let { error } = await supabase

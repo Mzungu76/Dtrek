@@ -3,6 +3,8 @@ import { useState } from 'react'
 import dynamic from 'next/dynamic'
 import { Lock, LockOpen, Maximize2, Minimize2, Box, LocateFixed, Compass, Navigation } from 'lucide-react'
 import ElevationProfileChart from '@/components/ElevationProfileChart'
+import { TornFrame, tornVariant } from '@/components/TornFrame'
+import { TACCUINO_PAPER } from '@/lib/taccuinoTokens'
 import type { TrackPoint } from '@/lib/tcxParser'
 import type { PoiItem } from '@/lib/overpass'
 import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
@@ -32,7 +34,13 @@ interface Props {
 
 const chipBase = 'flex items-center justify-center w-9 h-9 rounded-full backdrop-blur-md border transition-colors shrink-0'
 const chipIdle = `${chipBase} bg-black/50 border-white/15 text-white/90`
-const chipActive = `${chipBase} bg-terra-500 border-terra-300/40 text-white`
+// Pulsanti dentro la pillola raggruppata: niente più sfondo/bordo propri (li porta la pillola,
+// vedi sotto), così cinque comandi identici smettono di leggersi come cinque bottoni indipendenti
+// in competizione e diventano "i comandi della mappa" — resta isolato solo lo schermo intero,
+// l'azione che ci si aspetta di trovare da sola.
+const pillChipBase = 'flex items-center justify-center w-8 h-8 rounded-full transition-colors shrink-0'
+const pillChipIdle = `${pillChipBase} text-white/90 hover:bg-white/10`
+const pillChipActive = `${pillChipBase} bg-terra-500 text-white`
 
 /**
  * Mappa del percorso condivisa da Guida ("Il percorso") e Resoconto (tab "Andamento") — sostituisce
@@ -74,33 +82,37 @@ export default function RouteMapSection({
   // altimetrico (activeIndex valorizzato) — non un secondo toggle persistente come showGradient.
   const transientGradient = !showGradient && activeIndex != null
 
-  return (
-    <div className="space-y-4">
+  const mapContent = (
+    <>
+      <MapView
+        trackPoints={trackPoints ?? []} height="100%" interactive={!locked}
+        // bare — toglie il bordo/ombra/angoli arrotondati propri di MapView: da chiusa il
+        // "riquadro" lo dà ormai TornFrame (strappo, non stondatura), non più questo componente;
+        // a schermo intero non deve comunque avere una propria card interna. Senza `bare`,
+        // l'angolo arrotondato di MapView (non allineato allo strappo) lasciava scoperto un
+        // pezzetto di riquadro — dietro, invisibile ma opaco, il riempimento nero di .torn-cast,
+        // visto come artefatto nero proprio in prossimità di quegli angoli.
+        bare
+        pois={pois} planned={planned} showPoiLayer={showPois}
+        highlightedPoiIndices={highlightedPoiIndices}
+        onPoiTap={poi => onPoiTap?.(poi)}
+        activeIndex={activeIndex}
+        showGradient={showGradient} showAspect={showAspect} dtmProfile={dtmProfile}
+        transientGradient={transientGradient}
+        fitSignal={fitTick}
+        showDirectionArrows={showArrows}
+        resizeSignal={resizeTick}
+      />
       <div
-        className={fullscreen ? 'fixed inset-0 z-[70] bg-black isolate' : 'relative isolate rounded-2xl overflow-hidden border'}
-        style={fullscreen ? undefined : { height: 260, borderColor: '#dcd8cc' }}
+        className="absolute inset-x-3 z-[1000] flex items-center justify-between"
+        style={{ top: fullscreen ? 'calc(env(safe-area-inset-top, 0px) + 12px)' : '12px' }}
       >
-        <MapView
-          trackPoints={trackPoints ?? []} height="100%" interactive={!locked}
-          pois={pois} planned={planned} showPoiLayer={showPois}
-          highlightedPoiIndices={highlightedPoiIndices}
-          onPoiTap={poi => onPoiTap?.(poi)}
-          activeIndex={activeIndex}
-          showGradient={showGradient} showAspect={showAspect} dtmProfile={dtmProfile}
-          transientGradient={transientGradient}
-          fitSignal={fitTick}
-          showDirectionArrows={showArrows}
-          resizeSignal={resizeTick}
-        />
-        <div
-          className="absolute inset-x-3 z-[1000] flex items-center justify-end gap-2"
-          style={{ top: fullscreen ? 'calc(env(safe-area-inset-top, 0px) + 12px)' : '12px' }}
-        >
+        <div className="flex items-center gap-0.5 bg-black/50 backdrop-blur-md border border-white/15 rounded-full p-1">
           {showAspectToggle && (
             <button
               onClick={onToggleAspect}
               title="Esposizione dei versanti"
-              className={showAspect ? chipActive : chipIdle}
+              className={showAspect ? pillChipActive : pillChipIdle}
             >
               <Compass className="w-4 h-4" />
             </button>
@@ -108,35 +120,54 @@ export default function RouteMapSection({
           <button
             onClick={() => setShowArrows(v => !v)}
             title={showArrows ? 'Nascondi le frecce di direzione' : 'Mostra le frecce di direzione'}
-            className={showArrows ? chipActive : chipIdle}
+            className={showArrows ? pillChipActive : pillChipIdle}
           >
             <Navigation className="w-4 h-4" />
           </button>
           {onOpenMap3D && (
-            <button onClick={onOpenMap3D} title="Vista 3D" className={chipIdle}>
+            <button onClick={onOpenMap3D} title="Vista 3D" className={pillChipIdle}>
               <Box className="w-4 h-4" />
             </button>
           )}
-          <button onClick={() => setFitTick(t => t + 1)} title="Inquadra tutto il percorso" className={chipIdle}>
+          <button onClick={() => setFitTick(t => t + 1)} title="Inquadra tutto il percorso" className={pillChipIdle}>
             <LocateFixed className="w-4 h-4" />
-          </button>
-          <button
-            onClick={toggleFullscreen}
-            title={fullscreen ? 'Esci da schermo intero' : 'Schermo intero'}
-            className={chipIdle}
-          >
-            {fullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
           </button>
           <button
             onClick={() => setLocked(v => !v)}
             title={locked ? 'Sblocca la mappa per navigarla' : 'Blocca la mappa (evita spostamenti involontari)'}
-            className={locked ? chipIdle : chipActive}
+            className={locked ? pillChipIdle : pillChipActive}
           >
             {locked ? <Lock className="w-4 h-4" /> : <LockOpen className="w-4 h-4" />}
           </button>
         </div>
+        <button
+          onClick={toggleFullscreen}
+          title={fullscreen ? 'Esci da schermo intero' : 'Schermo intero'}
+          className={chipIdle}
+        >
+          {fullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+        </button>
       </div>
-      <ElevationProfileChart trackPoints={trackPoints ?? []} onHover={setActiveIndex} />
+    </>
+  )
+
+  return (
+    <div className="space-y-4">
+      {/* Test: nastro washi + bordo strappato (Taccuino Botanico, components/TornFrame.tsx) al
+          posto del vecchio riquadro arrotondato bordato — solo da chiuso. Lo schermo intero resta
+          il vecchio riquadro edge-to-edge invariato: non ha senso "nastrare" tutto lo schermo, e
+          serve comunque il massimo spazio utile per navigare la mappa. */}
+      <div
+        className={fullscreen ? 'fixed inset-0 z-[70] bg-black isolate' : 'relative isolate'}
+        style={fullscreen ? undefined : { height: 260 }}
+      >
+        {fullscreen ? mapContent : <TornFrame size="hero" variant={0}>{mapContent}</TornFrame>}
+      </div>
+      <TornFrame size="card" variant={tornVariant('profilo-altimetrico')}>
+        <div className="p-4" style={{ background: TACCUINO_PAPER.light }}>
+          <ElevationProfileChart trackPoints={trackPoints ?? []} onHover={setActiveIndex} />
+        </div>
+      </TornFrame>
     </div>
   )
 }

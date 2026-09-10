@@ -4,14 +4,15 @@ import { useRouter } from 'next/navigation'
 import { parseTcx, formatDuration, type TcxActivity } from '@/lib/tcxParser'
 import { parseGpxActivity } from '@/lib/gpxActivityParser'
 import { saveActivityWithEnrichment } from '@/lib/activitySave'
-import { getAllPlanned, getPlannedById, type PlannedHikeMeta } from '@/lib/plannedStore'
+import { getAllPlanned, getPlannedById, updatePlannedMeta, type PlannedHikeMeta } from '@/lib/plannedStore'
+import { createSyntheticPercorso } from '@/lib/diari/syntheticPercorso'
 import { Upload, CheckCircle, AlertCircle, Mountain, Clock, TrendingUp, Route, Link2, Link2Off, Info } from 'lucide-react'
 
 type ActivityStatus = 'idle' | 'parsing' | 'parsed' | 'analyzing' | 'saving' | 'success' | 'error'
 
 // ── Activity uploader (TCX / GPX / FIT) ───────────────────────────────────────
 
-export default function ActivityUploader() {
+export default function ActivityUploader({ diaryId }: { diaryId?: string } = {}) {
   const router   = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
   const [dragging,         setDragging]         = useState(false)
@@ -65,6 +66,7 @@ export default function ActivityUploader() {
       // ── Resolve linked planned hike track points ──────────────────
       let linkedPlannedTrackPoints: import('@/lib/tcxParser').TrackPoint[] | undefined
       let linkedPlannedNotes: import('@/lib/blobStore').HikeNote[] | undefined
+      let linkedPlannedId = selectedPlanned?.id
       if (selectedPlanned) {
         try {
           const full = await getPlannedById(selectedPlanned.id)
@@ -72,6 +74,20 @@ export default function ActivityUploader() {
           if (validPts.length >= 2) linkedPlannedTrackPoints = validPts
           if (full?.hikeNotes?.length) linkedPlannedNotes = full.hikeNotes
         } catch {}
+        // Una Meta pianificata non ha ancora un Diario (ristrutturazione Diario/Mete, richiesta
+        // esplicita dell'utente) — nasce camminandola: qui è il momento in cui il Reportage la
+        // collega a un Diario, esattamente come già succede per la Meta sintetica creata sotto
+        // quando non se ne seleziona una esistente.
+        if (diaryId) await updatePlannedMeta(selectedPlanned.id, { diaryId })
+      } else {
+        // Nessun percorso pianificato selezionato — un Reportage ha sempre un Percorso genitore
+        // (vedi docs/diario-fulcro-piano.md e lib/diari/syntheticPercorso.ts), quindi se ne crea
+        // uno sintetico da questa stessa attività, già segnato come vissuto, invece di lasciare
+        // l'uscita senza Percorso: senza, non comparirebbe in nessun Diario né fra le Mete.
+        // `diaryId` è assente quando l'import non parte da dentro un Diario (/upload): a quel
+        // punto ci pensa lib/activitySave.ts ad agganciare la Meta al Diario di default.
+        const synthetic = await createSyntheticPercorso(parsedActivity, { title: titleVal, diaryId })
+        linkedPlannedId = synthetic.id
       }
 
       setStatus('analyzing')
@@ -79,7 +95,7 @@ export default function ActivityUploader() {
       const saved = await saveActivityWithEnrichment(parsedActivity, {
         title: titleVal,
         fileName,
-        linkedPlannedId: selectedPlanned?.id,
+        linkedPlannedId,
         linkedPlannedTrackPoints,
         hikeNotes: linkedPlannedNotes,
       })
@@ -146,7 +162,7 @@ export default function ActivityUploader() {
             { ext: 'GPX', color: 'text-sky-700 bg-sky-50 border-sky-200', note: 'Standard universale · Solo tracciato GPS e altimetria — senza FC né calorie' },
           ].map(({ ext, color, note }) => (
             <div key={ext} className="flex items-start gap-2.5">
-              <span className={`shrink-0 font-mono text-[11px] font-bold px-1.5 py-0.5 rounded border ${color}`}>{ext}</span>
+              <span className={`shrink-0 font-mono text-xs font-bold px-1.5 py-0.5 rounded border ${color}`}>{ext}</span>
               <p className="text-xs text-stone-500 leading-relaxed">{note}</p>
             </div>
           ))}
@@ -209,7 +225,7 @@ export default function ActivityUploader() {
             <div key={s.label} className="bg-white rounded-xl border border-forest-100 p-3 flex items-center gap-2">
               {s.icon}
               <div>
-                <p className="text-[10px] text-stone-400">{s.label}</p>
+                <p className="text-xs text-stone-400">{s.label}</p>
                 <p className="text-sm font-semibold text-stone-800">{s.val}</p>
               </div>
             </div>
@@ -269,12 +285,12 @@ export default function ActivityUploader() {
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-medium text-stone-800 truncate">{h.title}</span>
                   {h.plannedDate && (
-                    <span className="text-[10px] text-stone-400 shrink-0">
+                    <span className="text-xs text-stone-400 shrink-0">
                       {new Date(h.plannedDate).toLocaleDateString('it-IT', { day: '2-digit', month: 'short' })}
                     </span>
                   )}
                 </div>
-                <div className="flex gap-3 text-[10px] text-stone-400 mt-0.5">
+                <div className="flex gap-3 text-xs text-stone-400 mt-0.5">
                   <span>{(h.distanceMeters/1000).toFixed(1)} km</span>
                   <span>{Math.round(h.elevationGain)} m D+</span>
                 </div>
@@ -285,7 +301,7 @@ export default function ActivityUploader() {
 
         {selectedPlanned && (
           <p className="mt-3 text-xs text-sky-700 bg-sky-50 rounded-lg px-3 py-2">
-            Il percorso pianificato <strong>«{selectedPlanned.title}»</strong> verrà eliminato dalla lista programma dopo il salvataggio.
+            Il percorso pianificato <strong>«{selectedPlanned.title}»</strong> verrà collegato a questa escursione — resta comunque disponibile per essere ricamminato in futuro.
           </p>
         )}
       </div>

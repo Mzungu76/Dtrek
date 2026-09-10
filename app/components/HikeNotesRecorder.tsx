@@ -90,7 +90,7 @@ export default function HikeNotesRecorder({ notes, onChange }: Props) {
               )}
               <div className="min-w-0 flex-1">
                 {note.text && <p className="text-sm text-stone-700 break-words">{note.text}</p>}
-                <p className="text-[11px] text-stone-400 mt-0.5">
+                <p className="text-xs text-stone-400 mt-0.5">
                   {new Date(note.timestamp).toLocaleString('it-IT')}
                 </p>
               </div>

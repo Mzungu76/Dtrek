@@ -9,12 +9,14 @@ export type ReportFixedSectionKey = 'dati_punteggi' | 'andamento' | 'natura' | '
  *  anche senza testo). Palette forest/stone dell'app, non terra (quella resta la firma di Guida).
  *  "galleria_foto" è l'eccezione (ambra, come i pin numerati) — riunisce mappa foto + "le tue
  *  foto" + gestione foto (ex-Strumenti); inclusa in ReportReader solo se ci sono foto caricate,
- *  a differenza delle altre quattro sempre presenti. */
+ *  a differenza delle altre quattro sempre presenti. Hex letterali (style={{color}}, non
+ *  className): NON seguono da soli un cambio della scala forest in tailwind.config.ts, vanno
+ *  aggiornati qui a mano (Fase 40, direzione "Taccuino Botanico"). */
 export const REPORT_SECTION_STYLE: Record<ReportFixedSectionKey, { icon: ReactNode; color: string }> = {
   dati_punteggi: { icon: createElement(BarChart2, { className: 'w-4 h-4' }), color: '#57534e' }, // stone-700
-  andamento:     { icon: createElement(Mountain,  { className: 'w-4 h-4' }), color: '#277134' }, // forest-600
-  natura:        { icon: createElement(Leaf,      { className: 'w-4 h-4' }), color: '#378d44' }, // forest-500
-  poi:           { icon: createElement(MapPin,    { className: 'w-4 h-4' }), color: '#1c4724' }, // forest-800
+  andamento:     { icon: createElement(Mountain,  { className: 'w-4 h-4' }), color: '#5F7355' }, // forest-600
+  natura:        { icon: createElement(Leaf,      { className: 'w-4 h-4' }), color: '#7C8F6E' }, // forest-500
+  poi:           { icon: createElement(MapPin,    { className: 'w-4 h-4' }), color: '#3A4A32' }, // forest-800
   galleria_foto: { icon: createElement(Camera,    { className: 'w-4 h-4' }), color: '#b45309' }, // amber-700
 }
 

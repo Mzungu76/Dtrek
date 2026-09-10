@@ -34,6 +34,40 @@ export const FONT = {
 
 export type FontRole = keyof typeof FONT
 
+// ── Scala tipografica ───────────────────────────────────────────────────────
+//
+// Fase 1 del riordino UI/UX (docs/diario-valutazione-ux-piano.md): prima di questa scala
+// convivevano 42 gradini di dimensione distinti (da 7px a 70px, spesso a mezzo pixel di distanza
+// l'uno dall'altro) fra classi Tailwind arbitrarie (`text-[11px]`) e `fontSize` inline — differenze
+// troppo piccole per essere percepite come gerarchia, solo rumore. Sono stati consolidati sulla
+// scala NOMINALE di Tailwind, già presente di default e quindi senza bisogno di un'estensione in
+// tailwind.config.ts: xs=12 · sm=14 · base=16 · lg=18 · xl=20 · 2xl=24 · 3xl=30 · 4xl=36 · 5xl=48 ·
+// 6xl=60 · 7xl=72. Sotto i 12px non si scende più (floor di leggibilità: l'app si usa spesso
+// all'aperto, in movimento, con luce forte).
+//
+// I sette ruoli, con la famiglia che ciascuno usa in pratica nel codice esistente:
+//
+//   display   Playfair (FONT.display) — copertina, nome del Diario, titolo di pagina (h1)
+//   heading   Playfair (FONT.display) — titolo di sezione o di card (h2/h3)
+//   body      DM Sans  (FONT.body)    — interfaccia: bottoni, liste, controlli — il default
+//   reading   Lora     (FONT.lora)    — prosa narrativa: i paragrafi di Reportage/Guida/Diario e
+//                                        delle pagine pubbliche di lettura (`/leggi/...`). NON un
+//                                        doppione di `display`: è la seconda voce di una coppia
+//                                        editoriale deliberata (serif da titolo + serif da testo),
+//                                        vedi lib/taccuinoTokens.tsx — "corpo del testo resta su
+//                                        FONT.lora: professionalità e precisione del contenuto".
+//   secondary DM Sans  (FONT.body)    — metadati, sottotitoli, didascalie (14px)
+//   label     Barlow   (FONT.barlow)  — etichette maiuscole, chip, unità di misura (12px)
+//   hand      Caveat   (FONT_HAND, lib/taccuinoTokens.tsx) — annotazioni e date scritte a mano
+//
+// La prosa narrativa (`reading`) usa 16px (`text-base`), non 14px: è la dimensione confortevole
+// per un paragrafo lungo, distinta dai 14px di `secondary` che restano adatti a un metadato breve.
+// Eccezione dichiarata: i template a pagina fissa per l'export PDF del Diario
+// (components/diario/*, che importano lib/pdfPageGeometry.ts) NON sono coperti da questo riordino
+// — un aumento di corpo lì rischia di rompere l'impaginazione a altezza fissa della pagina
+// stampata, verificabile solo rendendo davvero il PDF pagina per pagina. Restano sulle dimensioni
+// precedenti finché non si fa un intervento dedicato con quella verifica.
+
 /**
  * Famiglia effettivamente risolta dal browser per un ruolo, come stringa utilizzabile in
  * `ctx.font` su canvas.
@@ -59,6 +93,25 @@ export async function waitForBrandFonts(): Promise<void> {
   if (typeof document === 'undefined' || !document.fonts) return
   try { await document.fonts.ready } catch { /* non bloccare mai il disegno per questo */ }
 }
+
+// ── Bersagli tattili ─────────────────────────────────────────────────────────
+//
+// Fase 2 del riordino UI/UX (docs/diario-valutazione-ux-piano.md): prima di questa scala i 655
+// bottoni dell'app erano dimensionati a mano, spesso con icone da 14-16px dentro padding minimi —
+// un'area cliccabile reale intorno ai 22×22px, la metà del minimo Apple HIG (44pt) e Material
+// (48dp), su un'app usata camminando. Tre taglie, non una sola: un'app con centinaia di controlli
+// densi (chip, azioni di riga in una lista) non può permettersi 44px ovunque senza perdere densità
+// informativa — ma il default per un bottone isolato è sempre `md`.
+//
+// Implementazione: components/ui/IconButton.tsx per il codice nuovo. Adozione incrementale sui
+// punti a più alto traffico (a partire da components/Navbar.tsx) — vedi la nota su scope e rischio
+// nel documento sopra: crescere un bottone è un cambio di LAYOUT, non solo di stile, e va verificato
+// punto per punto contro lo spazio circostante (rischio di sovrapposizione fra bersagli adiacenti).
+export const TAP_TARGET = {
+  sm: 36, // controlli densi: chip di filtro, azioni dentro una riga di lista
+  md: 44, // il default — qualunque bottone isolato
+  lg: 52, // azione primaria di schermata, controlli di navigazione attiva
+} as const
 
 // ── Palette ───────────────────────────────────────────────────────────────────
 // Le tre scale custom di `tailwind.config.ts`. Attenzione a `stone`: sovrascrive quella di

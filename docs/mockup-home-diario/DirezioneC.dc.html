@@ -1,0 +1,180 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body style="margin:0">
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Lora:ital,wght@0,400;0,600;1,500&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+:root{
+  --paper-base:#F5EDDD; --paper-light:#F9F2E4; --card:#EBE0C8; --card-border:#D9C9A8;
+  --contour:#A89A78; --ink-typed:#2E2A22; --ink-hand:#7A6F52; --ink-muted:#95886A;
+  --accent:#C0603D; --accent-2:#7C8F6E; --accent-tint:#E9DAC3;
+  --bar-bg:#5F7355; --bar-active:#F5EDDD; --bar-inactive:#B9C4AE;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+a{color:var(--accent);text-decoration:none}
+a:hover{color:var(--accent-2)}
+.phone{width:390px;height:844px;position:relative;overflow:hidden;background:var(--paper-base);
+  font-family:'DM Sans',system-ui,sans-serif;color:var(--ink-typed);-webkit-font-smoothing:antialiased}
+.paper-grain{position:absolute;inset:0;pointer-events:none;z-index:0;opacity:.9;mix-blend-mode:multiply;
+  background-image:
+    radial-gradient(circle at 12% 22%,rgba(46,42,34,.20) 0,rgba(46,42,34,.20) 1.5px,transparent 3.1px),
+    radial-gradient(circle at 68% 8%,rgba(46,42,34,.16) 0,rgba(46,42,34,.16) 1.2px,transparent 2.7px),
+    radial-gradient(circle at 40% 55%,rgba(46,42,34,.18) 0,rgba(46,42,34,.18) 1.6px,transparent 3.3px),
+    radial-gradient(circle at 85% 40%,rgba(46,42,34,.15) 0,rgba(46,42,34,.15) 1.1px,transparent 2.5px),
+    radial-gradient(circle at 25% 82%,rgba(46,42,34,.18) 0,rgba(46,42,34,.18) 1.4px,transparent 2.9px);
+  background-size:46px 52px,61px 41px,71px 83px,33px 63px,83px 47px}
+.contours{position:absolute;inset:0;pointer-events:none;z-index:0;opacity:.5}
+.eyebrow{font-family:'DM Sans';font-weight:700;text-transform:uppercase;letter-spacing:.2em;
+  font-size:9.5px;color:var(--ink-hand);margin:0}
+.hand{font-family:'Caveat',cursive;font-weight:700}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-weight:700;font-variant-numeric:tabular-nums}
+.stage{position:absolute;inset:0;z-index:1;display:flex;flex-direction:column;padding:52px 18px 0}
+.card{background:var(--card);border:1px solid var(--card-border);border-radius:14px;position:relative}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:9.5px;font-weight:700;
+  padding:3px 8px;border-radius:999px;background:var(--paper-light);border:1px solid var(--card-border);color:var(--ink-hand)}
+.chip.hot{background:var(--accent-tint);border-color:#dfc4ac;color:var(--accent)}
+.metric{display:flex;flex-direction:column;gap:1px}
+.metric .v{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:14.5px;color:var(--ink-typed);line-height:1}
+.metric .k{font-size:8.5px;text-transform:uppercase;letter-spacing:.11em;color:var(--ink-muted)}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;height:46px;border-radius:12px;
+  background:var(--accent);color:var(--paper-light);font-weight:700;font-size:13.5px;letter-spacing:.02em;border:none}
+.btn-ghost{background:transparent;color:var(--accent);border:1.5px solid var(--accent)}
+.row{display:flex;align-items:center;gap:11px;padding:0 11px 0 0;background:var(--card);
+  border:1px solid var(--card-border);border-radius:12px;overflow:hidden}
+.spine{width:9px;align-self:stretch;flex:none}
+.row-title{font-family:'Lora',Georgia,serif;font-weight:600;font-size:14px;line-height:1.15;color:var(--ink-typed)}
+.row-sub{font-size:10px;color:var(--ink-muted);letter-spacing:.02em}
+.tag{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;
+  padding:2px 6px;border-radius:4px;background:var(--paper-light);border:1px solid var(--card-border);color:var(--ink-hand)}
+.grouphead{display:flex;align-items:center;gap:8px}
+.grouphead .t{font-family:'DM Sans';font-weight:700;text-transform:uppercase;letter-spacing:.14em;font-size:9.5px;color:var(--ink-hand)}
+.grouphead .l{flex:1;height:1px;background:var(--card-border)}
+.grouphead .n{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:9.5px;color:var(--ink-muted)}
+.bottombar{position:absolute;left:0;right:0;bottom:0;height:74px;background:var(--bar-bg);
+  display:flex;align-items:flex-start;justify-content:space-around;padding-top:11px;z-index:6}
+.bb{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--bar-inactive);width:64px}
+.bb.on{color:var(--bar-active)}
+.bb span{font-size:9px;font-weight:700}
+.search{display:flex;align-items:center;gap:9px;height:48px;padding:0 14px;border-radius:999px;
+  background:var(--paper-light);border:1.5px solid var(--card-border);color:var(--ink-muted);font-size:13.5px}
+.tchip{flex:none;display:inline-flex;align-items:center;gap:5px;height:31px;padding:0 12px;border-radius:999px;
+  background:var(--card);border:1px solid var(--card-border);color:var(--ink-hand);font-size:11.5px;font-weight:700}
+.tchip.on{background:var(--accent);border-color:var(--accent);color:var(--paper-light)}
+.mapbox{height:132px;border-radius:14px;overflow:hidden;border:1px solid var(--card-border);background:#EFE6D2;position:relative}
+.archive{display:flex;align-items:center;gap:10px;height:56px;padding:0 12px;border-radius:12px;
+  background:transparent;border:1.5px solid var(--card-border)}
+</style>
+</helmet>
+<div class="phone">
+  <div class="paper-grain"></div>
+
+  <div class="stage">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+      <div>
+        <p class="eyebrow">Dtrek &middot; Ricerca</p>
+        <h1 class="hand" style="font-size:31px;margin:1px 0 0;line-height:1;color:var(--ink-typed)">Dove andiamo?</h1>
+      </div>
+      <div style="width:34px;height:34px;border-radius:999px;background:var(--card);border:1px solid var(--card-border);display:flex;align-items:center;justify-content:center;color:var(--ink-hand);flex:none;margin-top:4px">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M5 21a7 7 0 0 1 14 0"></path></svg>
+      </div>
+    </div>
+
+    <div class="search" style="margin-top:13px">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.6" y2="16.6"></line></svg>
+      Cerca una meta, una vetta, un borgo&hellip;
+    </div>
+
+    <div style="display:flex;gap:6px;margin-top:11px;overflow:hidden">
+      <span class="tchip on">Sentieri</span>
+      <span class="tchip">Vette</span>
+      <span class="tchip">Borghi</span>
+      <span class="tchip">Siti</span>
+    </div>
+
+    <div class="mapbox" style="margin-top:11px">
+      <svg viewBox="0 0 354 132" style="width:100%;height:100%;display:block" preserveAspectRatio="none">
+        <g fill="none" stroke="#A89A78" stroke-width="1" opacity=".55">
+          <path d="M-10 34 C 70 16, 130 60, 210 40 S 330 12, 370 36"></path>
+          <path d="M-10 58 C 72 40, 132 84, 212 64 S 332 36, 370 60"></path>
+          <path d="M-10 96 C 74 78, 134 118, 214 98 S 334 72, 370 96"></path>
+        </g>
+        <path d="M40 104 C 86 88, 104 60, 150 54 S 232 60, 268 36" fill="none" stroke="#C0603D" stroke-width="2.2" stroke-linecap="round"></path>
+        <g fill="#C0603D">
+          <circle cx="40" cy="104" r="4.5"></circle>
+          <circle cx="268" cy="36" r="4.5"></circle>
+        </g>
+        <g fill="#7C8F6E"><circle cx="176" cy="92" r="4"></circle><circle cx="300" cy="80" r="4"></circle></g>
+      </svg>
+      <span class="chip" style="position:absolute;left:9px;bottom:9px">14 mete nel raggio di 40 km</span>
+    </div>
+
+    <div class="grouphead" style="margin:14px 0 8px">
+      <span class="t">Vicino a te</span><span class="l"></span><span class="n">14</span>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:7px">
+      <div class="row" style="height:56px">
+        <i class="spine" style="background:#C0603D"></i>
+        <div style="min-width:0;flex:1">
+          <p class="row-title" style="margin:0">Anello del Monte Cimino</p>
+          <p class="row-sub" style="margin:2px 0 0"><span class="mono">12,4</span> km &middot; <span class="mono">+740</span> m &middot; T2 &middot; 28 km da te</p>
+        </div>
+        <span class="tag">Salva</span>
+      </div>
+      <div class="row" style="height:56px">
+        <i class="spine" style="background:#7C8F6E"></i>
+        <div style="min-width:0;flex:1">
+          <p class="row-title" style="margin:0">Cascate del Menotre</p>
+          <p class="row-sub" style="margin:2px 0 0"><span class="mono">8,1</span> km &middot; <span class="mono">+320</span> m &middot; T1 &middot; 46 km da te</p>
+        </div>
+        <span class="tag">Salva</span>
+      </div>
+      <div class="row" style="height:56px">
+        <i class="spine" style="background:#A89A78"></i>
+        <div style="min-width:0;flex:1">
+          <p class="row-title" style="margin:0">Borgo di Calcata</p>
+          <p class="row-sub" style="margin:2px 0 0">Borgo &middot; visita &middot; 34 km da te</p>
+        </div>
+        <span class="tag">Salva</span>
+      </div>
+    </div>
+
+    <!-- il Diario non promette di essere il centro: e' dichiaratamente il magazzino -->
+    <div class="archive" style="margin-top:14px">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#7A6F52" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M4 19.5V6a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"></path><path d="M9 8h6"></path></svg>
+      <div style="min-width:0;flex:1">
+        <p style="margin:0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--ink-hand)">I tuoi Diari</p>
+        <p class="row-sub" style="margin:2px 0 0"><span class="mono">7</span> volumi &middot; <span class="mono">39</span> uscite registrate</p>
+      </div>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#95886A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
+    </div>
+  </div>
+
+  <div class="bottombar">
+    <div class="bb on">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.6" y2="16.6"></line></svg>
+      <span>Cerca</span>
+    </div>
+    <div class="bb">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>
+      <span>Navigator</span>
+    </div>
+    <div class="bb">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5V6a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"></path><path d="M9 8h6"></path><path d="M9 12h6"></path></svg>
+      <span>Diari</span>
+    </div>
+    <div class="bb">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M5 21a7 7 0 0 1 14 0"></path></svg>
+      <span>Profilo</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

@@ -1,0 +1,290 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body style="margin:0">
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Lora:ital,wght@0,400;0,600;1,500&family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+:root{
+  --paper-base:#F5EDDD; --paper-light:#F9F2E4; --card:#EBE0C8; --card-border:#D9C9A8;
+  --contour:#A89A78; --ink-typed:#2E2A22; --ink-hand:#7A6F52; --ink-muted:#95886A;
+  --accent:#C0603D; --accent-2:#7C8F6E; --accent-tint:#E9DAC3;
+  --bar-bg:#5F7355; --bar-active:#F5EDDD; --bar-inactive:#B9C4AE;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+a{color:var(--accent);text-decoration:none}
+a:hover{color:var(--accent-2)}
+.phone{width:390px;height:844px;position:relative;overflow:hidden;background:var(--paper-base);
+  font-family:'DM Sans',system-ui,sans-serif;color:var(--ink-typed);-webkit-font-smoothing:antialiased}
+.paper-grain{position:absolute;inset:0;pointer-events:none;z-index:0;opacity:.9;mix-blend-mode:multiply;
+  background-image:
+    radial-gradient(circle at 12% 22%,rgba(46,42,34,.20) 0,rgba(46,42,34,.20) 1.5px,transparent 3.1px),
+    radial-gradient(circle at 68% 8%,rgba(46,42,34,.16) 0,rgba(46,42,34,.16) 1.2px,transparent 2.7px),
+    radial-gradient(circle at 40% 55%,rgba(46,42,34,.18) 0,rgba(46,42,34,.18) 1.6px,transparent 3.3px),
+    radial-gradient(circle at 85% 40%,rgba(46,42,34,.15) 0,rgba(46,42,34,.15) 1.1px,transparent 2.5px),
+    radial-gradient(circle at 25% 82%,rgba(46,42,34,.18) 0,rgba(46,42,34,.18) 1.4px,transparent 2.9px);
+  background-size:46px 52px,61px 41px,71px 83px,33px 63px,83px 47px}
+.back{display:inline-flex;align-items:center;gap:5px;color:#E9DAC3;font-size:11.5px;font-weight:700}
+.hand{font-family:'Caveat',cursive;font-weight:700}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-weight:700;font-variant-numeric:tabular-nums}
+.eyebrow{font-family:'DM Sans';font-weight:700;text-transform:uppercase;letter-spacing:.18em;
+  font-size:9px;color:var(--ink-hand);margin:0}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;
+  padding:3px 8px;border-radius:999px;background:var(--paper-light);border:1px solid var(--card-border);color:var(--ink-hand)}
+.divider{height:1px;background:var(--card-border);opacity:.75}
+.bottombar{position:absolute;left:0;right:0;bottom:0;height:74px;background:var(--bar-bg);
+  display:flex;align-items:flex-start;justify-content:space-around;padding-top:11px;z-index:6}
+.bb{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--bar-inactive);width:64px}
+.bb.on{color:var(--bar-active)}
+.bb span{font-size:9.5px;font-weight:700}
+.raised{position:absolute;left:50%;transform:translateX(-50%);top:-24px;width:60px;height:60px;border-radius:999px;
+  background:var(--accent);color:var(--paper-light);display:flex;align-items:center;justify-content:center;
+  box-shadow:0 8px 18px rgba(46,42,34,.32);border:3px solid var(--bar-bg)}
+/* Opzione B — Registro unico: una sola lista, la tipologia è un timbro sulla riga */
+.tools{display:flex;align-items:center;gap:8px;height:38px;padding:0 10px;background:var(--card);
+  border:1px solid var(--card-border);border-radius:10px;color:var(--ink-muted)}
+.tools .ph{font-family:'Caveat',cursive;font-weight:700;font-size:15px;flex:1}
+.fchips{display:flex;gap:6px;align-items:center}
+.fchip{display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 10px;border-radius:999px;
+  background:transparent;border:1px solid var(--card-border);color:var(--ink-hand);font-size:11px;font-weight:700}
+.fchip.on{background:var(--accent);border-color:var(--accent);color:var(--paper-light)}
+.fchip .n{font-family:'JetBrains Mono',monospace;font-size:9.5px;opacity:.75}
+.strip{display:flex;align-items:center;gap:10px;margin-top:10px;padding:7px 10px;border-radius:9px;
+  background:var(--paper-light);border:1px dashed var(--card-border)}
+.strip .k{font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:var(--ink-muted)}
+.strip .v{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:13px;color:var(--ink-typed);line-height:1}
+.reg{margin-top:6px}
+.rrow{display:flex;align-items:center;gap:10px;padding:8px 0}
+.rrow + .rrow{border-top:1px solid var(--card-border)}
+.stamp{width:26px;height:26px;border-radius:4px;flex:none;display:flex;align-items:center;justify-content:center;
+  border:1px solid var(--card-border);background:var(--paper-light)}
+.tb{width:52px;height:52px;flex:none;border-radius:3px;overflow:hidden;position:relative;
+  background:var(--paper-light);border:1px solid var(--card-border);box-shadow:1.2px 1.6px 0 rgba(46,42,34,.10)}
+.rt{font-family:'Lora',Georgia,serif;font-weight:600;font-size:14px;line-height:1.2;color:var(--ink-typed);
+  overflow:hidden;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical}
+.rm{display:flex;flex-wrap:wrap;gap:2px 8px;margin-top:3px;font-family:'Lora',Georgia,serif;font-size:10.5px;color:var(--ink-hand)}
+.rm i{font-style:normal;display:inline-flex;align-items:center;gap:3px}
+.rr{width:52px;flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:1px}
+.rr .v{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:14px;line-height:1;color:var(--ink-typed)}
+.rr .k{font-size:8px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-muted)}
+.pin{background:var(--accent-tint);border-radius:10px;padding:8px 10px;margin-top:8px;position:relative}
+.pin .lab{display:inline-flex;align-items:center;gap:5px;font-size:9px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.12em;color:var(--accent)}
+
+/* Intestazione su carta — al posto del banner verde */
+.page{position:absolute;left:0;right:0;top:0;bottom:74px;z-index:1;padding:16px 16px 0;overflow:hidden}
+.head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.head .back{color:var(--ink-hand)}
+.avatar{width:34px;height:34px;border-radius:999px;background:var(--card);border:1px solid var(--card-border);
+  display:flex;align-items:center;justify-content:center;color:var(--ink-hand);flex:none;margin-top:2px}
+
+/* Carta delle Mete — chiusa: una striscia; aperta: la mappa piena */
+.mapwrap{position:relative;border-radius:12px;overflow:hidden;border:1px solid var(--card-border);background:#E7E3D2}
+.mapstrip{height:70px}
+.mapfull{height:314px}
+.maplabel{position:absolute;left:0;right:0;bottom:0;display:flex;align-items:center;gap:8px;
+  padding:7px 10px;background:linear-gradient(to top,rgba(245,237,221,.96),rgba(245,237,221,.72) 70%,rgba(245,237,221,0));
+  font-size:11.5px;font-weight:700;color:var(--ink-typed)}
+.maplabel .legend{display:flex;align-items:center;gap:9px;margin-left:auto;font-size:10px;color:var(--ink-hand);font-weight:600}
+.maplabel .legend i{font-style:normal;display:inline-flex;align-items:center;gap:4px}
+.glass{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 11px;border-radius:999px;
+  background:rgba(245,237,221,.94);border:1px solid var(--card-border);color:var(--ink-typed);font-size:11px;font-weight:700}
+.pin-map{position:absolute;transform:translate(-50%,-100%);z-index:1}
+</style>
+</helmet>
+
+<div class="phone">
+  <div class="paper-grain"></div>
+
+  <div class="page">
+
+    <div class="head">
+      <div>
+        <div class="back">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+          I miei Diari
+        </div>
+        <h1 class="hand" style="font-size:30px;margin:1px 0 0;line-height:1;color:var(--ink-typed)">Mete</h1>
+        <p style="margin:1px 0 0;font-size:11px;color:var(--ink-muted)">47 da camminare &middot; 4 da esplorare &middot; 2 da visitare</p>
+      </div>
+      <div class="avatar">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.5" r="3.6"></circle><path d="M5 20c1.2-3.6 4-5.4 7-5.4s5.8 1.8 7 5.4"></path></svg>
+      </div>
+    </div>
+
+    <!-- La stessa carta, aperta: i filtri qui sotto valgono anche per i pin -->
+    <div class="mapwrap mapfull" style="margin-top:12px">
+      <svg viewBox="0 0 358 314" style="width:100%;height:100%;display:block">
+        <rect width="358" height="314" fill="#E7E3D2"></rect>
+        <g fill="none" stroke="#C8B99F" stroke-width="1" opacity=".9">
+          <path d="M-10 42 C 62 20, 130 74, 212 46 S 336 8, 372 40"></path>
+          <path d="M-10 76 C 66 52, 138 108, 218 80 S 336 40, 372 72"></path>
+          <path d="M-10 120 C 70 94, 142 152, 222 124 S 336 82, 372 114"></path>
+          <path d="M-10 176 C 74 148, 146 206, 226 178 S 336 136, 372 168"></path>
+          <path d="M-10 232 C 78 204, 150 262, 230 234 S 336 192, 372 224"></path>
+          <path d="M-10 286 C 82 260, 154 314, 234 288 S 336 248, 372 278"></path>
+        </g>
+        <g fill="#D8E0D0" opacity=".6">
+          <path d="M36 190 C 82 172, 128 194, 162 178 C 194 164, 226 182, 248 206 C 222 244, 138 262, 88 244 C 52 230, 30 210, 36 190 Z"></path>
+        </g>
+        <g stroke="#B8C4A8" stroke-width="2.2" fill="none" opacity=".9">
+          <path d="M-10 288 C 56 268, 112 296, 176 280 S 296 256, 372 274"></path>
+        </g>
+        <g fill="none" stroke="#2E2A22" stroke-width="2" stroke-dasharray="4 3" stroke-linecap="round" opacity=".85">
+          <path d="M74 112 L92 126 L88 152 L114 166 L140 160"></path>
+          <path d="M214 70 L230 88 L224 108 L246 120"></path>
+          <path d="M268 202 L282 220 L274 242 L294 256"></path>
+        </g>
+      </svg>
+
+      <div class="pin-map" style="left:140px;top:196px">
+        <svg width="26" height="32" viewBox="0 0 28 34"><path d="M14 33C14 33 25 21.5 25 13.5A11 11 0 1 0 3 13.5C3 21.5 14 33 14 33Z" fill="#7C8F6E" stroke="#F5EDDD" stroke-width="2"></path><path d="M8 17l4-6 2.6 3.2L17 11l3.4 6z" fill="#F5EDDD"></path></svg>
+      </div>
+      <div class="pin-map" style="left:246px;top:126px">
+        <svg width="26" height="32" viewBox="0 0 28 34"><path d="M14 33C14 33 25 21.5 25 13.5A11 11 0 1 0 3 13.5C3 21.5 14 33 14 33Z" fill="#7C8F6E" stroke="#F5EDDD" stroke-width="2"></path><path d="M8 17l4-6 2.6 3.2L17 11l3.4 6z" fill="#F5EDDD"></path></svg>
+      </div>
+      <div class="pin-map" style="left:294px;top:262px">
+        <svg width="26" height="32" viewBox="0 0 28 34"><path d="M14 33C14 33 25 21.5 25 13.5A11 11 0 1 0 3 13.5C3 21.5 14 33 14 33Z" fill="#7C8F6E" stroke="#F5EDDD" stroke-width="2"></path><path d="M8 17l4-6 2.6 3.2L17 11l3.4 6z" fill="#F5EDDD"></path></svg>
+      </div>
+      <div class="pin-map" style="left:196px;top:224px">
+        <svg width="28" height="34" viewBox="0 0 30 36"><rect x="3" y="3" width="24" height="24" rx="4" fill="#C0603D" stroke="#F5EDDD" stroke-width="2"></rect><path d="M15 33l-5-7h10z" fill="#C0603D" stroke="#F5EDDD" stroke-width="2" stroke-linejoin="round"></path><g fill="none" stroke="#F9F2E4" stroke-width="1.7" stroke-linejoin="round"><path d="M9 21v-8l4-3 4 3v8"></path><path d="M17 21v-5h4v5"></path></g></svg>
+      </div>
+      <div class="pin-map" style="left:278px;top:176px">
+        <svg width="26" height="32" viewBox="0 0 28 34"><circle cx="14" cy="14" r="11.5" fill="#5F7355" stroke="#F5EDDD" stroke-width="2"></circle><path d="M14 31l-4.5-7h9z" fill="#5F7355" stroke="#F5EDDD" stroke-width="2" stroke-linejoin="round"></path><g fill="none" stroke="#F9F2E4" stroke-width="1.6" stroke-linecap="round"><path d="M8 19h12"></path><path d="M10 19v-6"></path><path d="M14 19v-6"></path><path d="M18 19v-6"></path><path d="M8 13l6-4 6 4"></path></g></svg>
+      </div>
+
+      <!-- Pin toccato: la stessa riga dell'elenco, come fumetto sulla carta -->
+      <div class="pin-map" style="left:86px;top:230px;z-index:2">
+        <div style="display:flex;align-items:center;gap:8px;padding:6px 9px 6px 6px;border-radius:10px;
+             background:var(--paper-light);border:1px solid var(--card-border);box-shadow:0 6px 14px rgba(46,42,34,.2);width:186px">
+          <div class="tb" style="width:38px;height:38px;background:var(--accent-tint);box-shadow:none">
+            <svg viewBox="0 0 52 52" style="width:100%;height:100%;display:block">
+              <path d="M0 42 C 10 37, 18 39, 26 34 S 42 29, 52 32 L52 52 L0 52 Z" fill="#DCC7A6"></path>
+              <g fill="none" stroke="#8A6A4F" stroke-width="1.8" stroke-linejoin="round"><path d="M13 39V25l6-4 6 4v14"></path><path d="M25 39V28h7v11"></path><path d="M32 39V22h4v17"></path></g>
+            </svg>
+          </div>
+          <div style="min-width:0;flex:1">
+            <p class="rt" style="margin:0;font-size:13px">Calcata</p>
+            <p style="margin:1px 0 0;font-size:10px;color:var(--ink-muted)">Borgo &middot; 6 tappe &middot; 34 km da te</p>
+          </div>
+        </div>
+        <svg width="14" height="8" viewBox="0 0 14 8" style="display:block;margin:-1px 0 0 26px"><path d="M0 0h14L7 8z" fill="#F9F2E4" stroke="#D9C9A8" stroke-width="1"></path></svg>
+      </div>
+      <div class="pin-map" style="left:96px;top:250px">
+        <svg width="28" height="34" viewBox="0 0 30 36"><rect x="3" y="3" width="24" height="24" rx="4" fill="#C0603D" stroke="#F5EDDD" stroke-width="2.4"></rect><path d="M15 33l-5-7h10z" fill="#C0603D" stroke="#F5EDDD" stroke-width="2.4" stroke-linejoin="round"></path><g fill="none" stroke="#F9F2E4" stroke-width="1.7" stroke-linejoin="round"><path d="M9 21v-8l4-3 4 3v8"></path><path d="M17 21v-5h4v5"></path></g></svg>
+      </div>
+
+      <span class="glass" style="position:absolute;right:10px;top:10px;z-index:3">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3"></path><path d="M12 19v3"></path><path d="M2 12h3"></path><path d="M19 12h3"></path><circle cx="12" cy="12" r="8.5"></circle></svg>
+        Vicino a me
+      </span>
+
+      <div class="maplabel" style="z-index:3">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4L3 6.5v13L9 17l6 2.5 6-2.5v-13L15 6.5z"></path><path d="M9 4v13"></path><path d="M15 6.5v13"></path></svg>
+        6 mete in questo riquadro
+        <span class="legend">
+          chiudi la carta
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 15 12 9 18 15"></polyline></svg>
+        </span>
+      </div>
+    </div>
+
+    <div class="fchips" style="margin-top:11px">
+      <span class="fchip on">Tutte <span class="n">53</span></span>
+      <span class="fchip">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 19l6-9 4 5 2.5-3.5L21 19z"></path></svg>
+        Sentieri <span class="n">47</span></span>
+      <span class="fchip">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V8l6-4 6 4v13"></path><path d="M16 12h4v9"></path></svg>
+        Borghi <span class="n">4</span></span>
+      <span class="fchip">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"></path><path d="M5 21V9l7-5 7 5v12"></path></svg>
+        Siti <span class="n">2</span></span>
+    </div>
+
+    <!-- L'elenco resta sotto, ordinato per distanza finché la carta è aperta -->
+    <div class="reg" style="margin-top:8px">
+
+      <div class="rrow">
+        <div class="stamp" style="color:var(--accent)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V8l6-4 6 4v13"></path><path d="M16 12h4v9"></path><path d="M8 21v-4h4v4"></path></svg>
+        </div>
+        <div class="tb" style="background:var(--accent-tint)">
+          <svg viewBox="0 0 52 52" style="width:100%;height:100%;display:block">
+            <path d="M0 42 C 10 37, 18 39, 26 34 S 42 29, 52 32 L52 52 L0 52 Z" fill="#DCC7A6"></path>
+            <g fill="none" stroke="#8A6A4F" stroke-width="1.5" stroke-linejoin="round"><path d="M13 39V25l6-4 6 4v14"></path><path d="M25 39V28h7v11"></path><path d="M32 39V22h4v17"></path></g>
+          </svg>
+        </div>
+        <div style="min-width:0;flex:1">
+          <p class="rt" style="margin:0">Calcata</p>
+          <div class="rm"><i>Borgo &middot; Viterbo</i><i>6 tappe</i><i>2h consigliate</i></div>
+        </div>
+        <div class="rr"><span class="v">34</span><span class="k">km da te</span></div>
+      </div>
+
+      <div class="rrow">
+        <div class="stamp" style="color:var(--ink-hand)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"></path><path d="M5 21V9l7-5 7 5v12"></path><path d="M9 21v-6h6v6"></path></svg>
+        </div>
+        <div class="tb" style="background:#E4E7DC">
+          <svg viewBox="0 0 52 52" style="width:100%;height:100%;display:block">
+            <g fill="none" stroke="#5F7355" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round">
+              <path d="M10 39h32"></path><path d="M14 39V22"></path><path d="M21 39V22"></path><path d="M28 39V22"></path><path d="M35 39V22"></path><path d="M40 39V22"></path>
+              <path d="M10 22h32"></path><path d="M26 10l16 12H10z"></path>
+            </g>
+          </svg>
+        </div>
+        <div style="min-width:0;flex:1">
+          <p class="rt" style="margin:0">Villa Adriana</p>
+          <div class="rm"><i>Sito archeologico &middot; Tivoli</i><i>aperto 9&ndash;19</i></div>
+        </div>
+        <div class="rr"><span class="v">41</span><span class="k">km da te</span></div>
+      </div>
+
+      <div class="rrow">
+        <div class="stamp" style="color:var(--accent-2)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 19l6-9 4 5 2.5-3.5L21 19z"></path></svg>
+        </div>
+        <div class="tb">
+          <svg viewBox="0 0 52 52" style="width:100%;height:100%;display:block;background:#E7E3D2">
+            <g fill="none" stroke="#C8B99F" stroke-width="1"><path d="M-2 32 C 12 27, 22 37, 34 30 S 50 22, 56 27"></path></g>
+            <path d="M12 12 L18 18 L16 28 L26 34 L38 36 L44 44" fill="none" stroke="#2E2A22" stroke-width="1.8" stroke-dasharray="3 2.5" stroke-linecap="round"></path>
+            <circle cx="12" cy="12" r="2.6" fill="#F9F2E4" stroke="#2E2A22" stroke-width="1.4"></circle>
+            <circle cx="44" cy="44" r="2.6" fill="#2E2A22"></circle>
+          </svg>
+        </div>
+        <div style="min-width:0;flex:1">
+          <p class="rt" style="margin:0">Rifugio Nordio</p>
+          <div class="rm"><i>14,6 km</i><i>+520 m</i><i>3h 39m</i></div>
+        </div>
+        <div class="rr"><span class="v">52</span><span class="k">km da te</span></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="bottombar">
+    <div class="bb on">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"></path><circle cx="12" cy="10" r="2.6"></circle></svg>
+      <span>Mete</span>
+    </div>
+    <div class="bb" style="position:relative">
+      <div class="raised">
+        <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5V6a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"></path><path d="M9 4v16"></path></svg>
+      </div>
+      <span style="margin-top:40px">Diari</span>
+    </div>
+    <div class="bb">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>
+      <span>Navigator</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

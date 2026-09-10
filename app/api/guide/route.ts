@@ -36,12 +36,12 @@ import { extractEpochPois } from '@/lib/epochPois'
 import { logAiUsage } from '@/lib/aiUsageLog'
 import { extractPoiNotes } from '@/lib/poiNotes'
 import { effectiveHikeMetrics } from '@/lib/routeMode'
-import { readOrBackfillHistoryStats, formatHistoryStatsBlock } from '@/lib/hikerHistory'
 import { findAllSourceImages } from '@/lib/sourceImageFetch'
-import { concernLabel, environmentPrefLabel } from '@/lib/hikerProfile'
 import { resolveComuneFromLatLon } from '@/lib/overpassTrails'
 import { guideProfileFor, type GuideProfile } from '@/lib/guideProfiles'
 import { metaHasHikingMetrics } from '@/lib/metaTypes'
+import { readOrBackfillHistoryStats, formatHistoryStatsBlock } from '@/lib/hikerHistory'
+import { concernLabel, environmentPrefLabel } from '@/lib/hikerProfile'
 
 export const dynamic = 'force-dynamic'
 
@@ -287,7 +287,7 @@ const SECTION_WORD_CEILING: Record<GuideSectionKey, Record<GuideTextLength, numb
 // Sezioni dove, a "Molto approfondita", è utile poter distendere la narrazione su più paragrafi
 // tematici invece di un unico blocco — non "luoghi" (già strutturata per singolo luogo con ### ,
 // vedi SYSTEM_CORE) né le sezioni pratiche/brevi per natura (prima_di_partire, dati_sicurezza,
-// comfort, consigli), che restano un blocco unico anche al livello massimo: più ricche di dettaglio,
+// consigli), che restano un blocco unico anche al livello massimo: più ricche di dettaglio,
 // non spezzettate.
 const SECTIONS_ALLOWING_SUBPARAGRAPHS = new Set<GuideSectionKey>(['il_percorso', 'luoghi', 'natura', 'sapori'])
 
@@ -383,7 +383,7 @@ Aggiungi curiosità naturalistiche legate alla stagione.`,
   sapori: `## Sapori e tradizioni
 Gastronomia locale, prodotti tipici del territorio, piatti da assaggiare dopo l'escursione.
 Tradizioni e feste locali, artigianato, cultura popolare della zona.`,
-  consigli: `## Consigli finali
+  consigli: `## Consigli
 Sicurezza, segnaletica, varianti del percorso, cosa fare in caso di maltempo,
 contatti utili (soccorso alpino, rifugi). Non nominare app specifiche (vale come per ogni altra sezione,
 vedi istruzione generale più sopra): se serve, parla genericamente di "un'app di navigazione".`,
@@ -465,14 +465,13 @@ function buildPrompt(
   /** Profilo + storico dell'escursionista (lib/hikerProfile.ts + lib/hikerHistory.ts), già
    *  formattato — solo per la sezione 'comfort' ("Su misura per te"), undefined quando quella
    *  sezione non viene scritta in questa richiesta (risparmia la lettura Supabase altrimenti). */
-  comfortContext?: string,
+  comfortContext: string | undefined,
   /** Lunghezza scelta per ciascuna sezione (default utente, sovrascrivibile per questa singola
    *  generazione — vedi requestedSectionLengths in generateGuide). Sempre completa. */
   sectionLengths: SectionLengthMap = sanitizeSectionLengths(undefined),
-  /** Profilo di tipologia (lib/guideProfiles.ts, piano mete multi-tipologia) — sentiero di default
-   *  per compatibilità con ogni chiamata esistente. Determina sia le istruzioni/titolo di alcune
-   *  sezioni sia se includere il blocco di metriche escursionistiche (distanza/dislivello/quota/
-   *  punteggi), assente per una Meta borgo_citta/sito che non ha una traccia GPS. */
+  /** Profilo di tipologia (lib/guideProfiles.ts, Blocco E) — sentiero di default per compatibilità
+   *  con ogni chiamata esistente. Determina sia le istruzioni/titolo di alcune sezioni sia se
+   *  includere il blocco di metriche escursionistiche (distanza/dislivello/quota/punteggi). */
   profile: GuideProfile = guideProfileFor('sentiero'),
 ): string {
   const wiki = (hike.cachedPoiWiki ?? []) as { poi: PoiItem; wiki: WikiPage }[]
@@ -540,9 +539,10 @@ function buildPrompt(
     .map(k => profile.sectionOverrides?.[k]?.title ?? GUIDE_SECTIONS.find(s => s.key === k)!.title)
     .join(', ')
 
-  // Il blocco distanza/dislivello/quota/punteggi ha senso solo per un sentiero (piano mete
-  // multi-tipologia §48.9) — per una Meta borgo_citta/sito queste cifre sono spesso 0 o assenti e
-  // commentarle produrrebbe un dato fuorviante, non semplicemente vuoto.
+  // Il blocco distanza/dislivello/quota/punteggi ha senso solo per un sentiero (piano §48.9) — per
+  // una Meta borgo_citta/sito queste cifre sono spesso 0 o assenti e commentarle produrrebbe un
+  // dato fuorviante, non semplicemente vuoto (stesso principio già applicato all'assessment lato
+  // app/api/planned/route.ts).
   const hikingMetrics = metaHasHikingMetrics(hike.metaType)
 
   // Cifre effettive, non quelle grezze della traccia: su un percorso lineare dichiarato "andata e
@@ -801,7 +801,7 @@ async function generateGuide(req: NextRequest): Promise<Response> {
     ? (Object.fromEntries(GUIDE_SECTIONS.map(s => [s.key, 'essenziale'])) as SectionLengthMap)
     : clampMoltoApprofondita({ ...sectionLengths, ...sectionLengthOverrides })
 
-  const sectionKeys = requestedSections.length > 0 ? requestedSections : breveSections
+  let sectionKeys = requestedSections.length > 0 ? requestedSections : breveSections
   if (sectionKeys.length === 0) {
     return new Response(JSON.stringify({ error: 'Nessuna sezione da generare' }), {
       status: 400, headers: { 'Content-Type': 'application/json' },
@@ -945,6 +945,19 @@ async function generateGuide(req: NextRequest): Promise<Response> {
     trackPoints = hikeFallback.trackPoints ?? []
   }
 
+  // Non ogni sezione ha senso per ogni tipologia di Meta (piano Blocco E §28, lib/guideProfiles.ts)
+  // — "Dati e sicurezza" commenta punteggi/rischi che esistono solo per un sentiero. Filtrata solo
+  // ora, non prima: la tipologia della Meta è nota solo dopo averla letta da Supabase/fallback.
+  // "verificato" non passa mai da questo filtro/profilo: resta gestita separatamente più sotto
+  // (unica chiamata a SYSTEM_VERIFICATO, indipendente dalla tipologia).
+  const guideProfile = guideProfileFor(hike.metaType)
+  sectionKeys = sectionKeys.filter(k => k === 'verificato' || guideProfile.availableSections.includes(k))
+  if (sectionKeys.length === 0) {
+    return new Response(JSON.stringify({ error: 'Nessuna sezione da generare per questa tipologia di Meta' }), {
+      status: 400, headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
   const nature = await fetchNatureContext({
     trackPoints,
     altitudeMax: hike.altitudeMax,
@@ -957,22 +970,8 @@ async function generateGuide(req: NextRequest): Promise<Response> {
   // nessuna dipendenza dalla narrazione (né viceversa): "Il percorso" è tornata pura narrazione,
   // non scrive più avvisi/fonti. Il consenso dell'utente (SectionAiPrivacy.tsx) la disattiva del
   // tutto, indipendentemente da cosa è stato richiesto.
-  // Non ogni sezione ha senso per ogni tipologia di Meta (piano mete multi-tipologia, Blocco E,
-  // lib/guideProfiles.ts) — "Dati e sicurezza" e "Su misura per te" commentano punteggi/storico
-  // escursionistico che esistono solo per un sentiero. Filtrata solo ora, non prima: la tipologia
-  // della Meta è nota solo dopo averla letta da Supabase/fallback. "verificato" non passa mai da
-  // questo filtro/profilo: resta gestita separatamente più sotto (unica chiamata a
-  // SYSTEM_VERIFICATO, indipendente dalla tipologia).
-  const guideProfile = guideProfileFor(hike.metaType)
-  const availableSectionKeys = sectionKeys.filter(k => k === 'verificato' || guideProfile.availableSections.includes(k))
-  if (availableSectionKeys.length === 0) {
-    return new Response(JSON.stringify({ error: 'Nessuna sezione da generare per questa tipologia di Meta' }), {
-      status: 400, headers: { 'Content-Type': 'application/json' },
-    })
-  }
-
-  const needsVerificato = availableSectionKeys.includes('verificato') && aiUseWebSearch
-  const narrativeSectionKeys = availableSectionKeys.filter(k => k !== 'verificato')
+  const needsVerificato = sectionKeys.includes('verificato') && aiUseWebSearch
+  const narrativeSectionKeys = sectionKeys.filter(k => k !== 'verificato')
 
   const client = new Anthropic({ apiKey })
   // Comune/provincia/regione del punto di partenza: passati a generateVerificatoText come ancoraggio

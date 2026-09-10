@@ -48,7 +48,7 @@ function BeautyLegend({ beauty, b }: { beauty: BeautyScore; b: number }) {
 
   return (
     <div className="space-y-2.5">
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">
+      <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">
         {isTei ? 'Dettaglio TEI' : 'Dettaglio Bellezza'}
       </p>
       {mainCats.map(cat => (
@@ -57,13 +57,13 @@ function BeautyLegend({ beauty, b }: { beauty: BeautyScore; b: number }) {
             <span className="w-4 flex justify-center"><CatIcon catKey={cat.key} /></span>
             <span className="text-xs text-stone-600 flex-1">{cat.label}</span>
             <InfoTooltip text={CTS_PARAM_DESCRIPTIONS[cat.key] ?? CTS_PARAM_DESCRIPTIONS.beautyCategory} />
-            <span className="text-[11px] font-semibold" style={{ color: cat.color }}>{cat.score.toFixed(1)}</span>
+            <span className="text-xs font-semibold" style={{ color: cat.color }}>{cat.score.toFixed(1)}</span>
           </div>
           <div className="flex items-center gap-2 pl-6">
             <MiniBar value={cat.score} color={cat.color} />
           </div>
           {cat.reasons.length > 0 && (
-            <p className="pl-6 text-[10px] text-stone-400 mt-0.5 leading-tight">
+            <p className="pl-6 text-xs text-stone-400 mt-0.5 leading-tight">
               {cat.reasons.slice(0, 2).join(' · ')}
             </p>
           )}
@@ -73,18 +73,18 @@ function BeautyLegend({ beauty, b }: { beauty: BeautyScore; b: number }) {
       {/* Anthropic penalty explanation — shown only when f_antr > 0 */}
       {rawCat && antrCat && (
         <div className="mt-1 pt-2 border-t border-stone-100 space-y-1">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">Penalità ambiente</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">Penalità ambiente</p>
           <div className="flex items-center gap-2">
             <span className="w-4 flex justify-center"><CatIcon catKey={rawCat.key} /></span>
             <span className="text-xs text-stone-500 flex-1">{rawCat.label}</span>
             <InfoTooltip text={CTS_PARAM_DESCRIPTIONS.anthropicRaw} />
-            <span className="text-[11px] text-stone-600">{rawCat.score.toFixed(1)} / 10</span>
+            <span className="text-xs text-stone-600">{rawCat.score.toFixed(1)} / 10</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-4 flex justify-center"><CatIcon catKey={antrCat.key} /></span>
             <span className="text-xs text-stone-500 flex-1">{antrCat.label}</span>
             <InfoTooltip text={CTS_PARAM_DESCRIPTIONS.anthropicPenalty} />
-            <span className="text-[11px] font-semibold" style={{ color: antrCat.color }}>{antrCat.gradeLabel}</span>
+            <span className="text-xs font-semibold" style={{ color: antrCat.color }}>{antrCat.gradeLabel}</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs text-stone-500 flex-1 pl-6">Punteggio finale</span>
@@ -128,7 +128,7 @@ function EffortLegend({ bd }: { bd: TrailScoreResult['breakdown'] }) {
 
   return (
     <div className="space-y-2.5">
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">Dettaglio Fatica</p>
+      <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">Dettaglio Fatica</p>
 
       <div className="space-y-1.5">
         {rows.map(([Icon, label, val, kind]) => (
@@ -136,7 +136,7 @@ function EffortLegend({ bd }: { bd: TrailScoreResult['breakdown'] }) {
             <span className="w-4 flex justify-center"><Icon className="w-3.5 h-3.5 text-stone-500 shrink-0" strokeWidth={2.25} /></span>
             <span className="text-xs text-stone-600 flex-1">{label}</span>
             <InfoTooltip text={CTS_PARAM_DESCRIPTIONS[kind]} />
-            {val && <span className="text-[11px] text-stone-500">{val}</span>}
+            {val && <span className="text-xs text-stone-500">{val}</span>}
           </div>
         ))}
       </div>
@@ -144,12 +144,12 @@ function EffortLegend({ bd }: { bd: TrailScoreResult['breakdown'] }) {
       <div className="pt-1.5 border-t border-stone-100 space-y-1">
         <div className="flex items-center gap-2">
           <span className="text-xs text-stone-500 flex-1">Tempo stimato</span>
-          <span className="text-[11px] text-stone-600">{fmtH(tTotAlt)}</span>
+          <span className="text-xs text-stone-600">{fmtH(tTotAlt)}</span>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs text-stone-500 flex-1">Fatica standard</span>
           <InfoTooltip text={CTS_PARAM_DESCRIPTIONS.effortStandard} />
-          <span className="text-[11px] font-semibold text-orange-600">{bd.fStd.toFixed(1)} / 10</span>
+          <span className="text-xs font-semibold text-orange-600">{bd.fStd.toFixed(1)} / 10</span>
         </div>
         {deltaLabel && DeltaIcon && (
           <div className="flex items-center gap-2">
@@ -157,7 +157,7 @@ function EffortLegend({ bd }: { bd: TrailScoreResult['breakdown'] }) {
               Correzione <DeltaIcon className="w-3 h-3 shrink-0" strokeWidth={2.25} /> {deltaLabel}
             </span>
             <InfoTooltip text={CTS_PARAM_DESCRIPTIONS.effortDelta} />
-            <span className="text-[11px] font-semibold" style={{ color: bd.delta >= 0 ? '#dc2626' : '#16a34a' }}>
+            <span className="text-xs font-semibold" style={{ color: bd.delta >= 0 ? '#dc2626' : '#16a34a' }}>
               {bd.delta >= 0 ? '+' : ''}{(bd.delta * 100).toFixed(0)}%
             </span>
           </div>
@@ -171,12 +171,12 @@ function EffortLegend({ bd }: { bd: TrailScoreResult['breakdown'] }) {
 
       {(bd.sfidaBonus !== 0 || bd.duraBonus !== 0) && (
         <div className="pt-1.5 border-t border-stone-100 space-y-1">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">Bonus preferenze</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">Bonus preferenze</p>
           {bd.sfidaBonus !== 0 && (
             <div className="flex items-center gap-2">
               <span className="text-xs text-stone-500 flex-1 flex items-center gap-1.5"><Dumbbell className="w-3.5 h-3.5 shrink-0" strokeWidth={2.25} /> Sfida</span>
               <InfoTooltip text={CTS_PARAM_DESCRIPTIONS.bonusSfida} />
-              <span className="text-[11px]" style={{ color: bd.sfidaBonus >= 0 ? '#059669' : '#dc2626' }}>
+              <span className="text-xs" style={{ color: bd.sfidaBonus >= 0 ? '#059669' : '#dc2626' }}>
                 {bd.sfidaBonus >= 0 ? '+' : ''}{Math.round(bd.sfidaBonus)} pt
               </span>
             </div>
@@ -185,7 +185,7 @@ function EffortLegend({ bd }: { bd: TrailScoreResult['breakdown'] }) {
             <div className="flex items-center gap-2">
               <span className="text-xs text-stone-500 flex-1 flex items-center gap-1.5"><Timer className="w-3.5 h-3.5 shrink-0" strokeWidth={2.25} /> Durata</span>
               <InfoTooltip text={CTS_PARAM_DESCRIPTIONS.bonusDurata} />
-              <span className="text-[11px]" style={{ color: bd.duraBonus >= 0 ? '#059669' : '#dc2626' }}>
+              <span className="text-xs" style={{ color: bd.duraBonus >= 0 ? '#059669' : '#dc2626' }}>
                 {bd.duraBonus >= 0 ? '+' : ''}{Math.round(bd.duraBonus)} pt
               </span>
             </div>
@@ -252,7 +252,7 @@ export function ComfortTrailScoreWidget({
             </div>
             {/* Delta source note */}
             {bd.deltaSource !== 'none' && (
-              <p className="text-[10px] text-stone-400 italic flex items-center gap-1">
+              <p className="text-xs text-stone-400 italic flex items-center gap-1">
                 {bd.deltaSource === 'hr' ? <Watch className="w-3 h-3 shrink-0" strokeWidth={2.25} /> : <BarChart3 className="w-3 h-3 shrink-0" strokeWidth={2.25} />}
                 {bd.deltaSource === 'hr' ? 'Corretto con FC attività' : 'Corretto con profilo storico'}
               </p>

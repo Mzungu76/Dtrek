@@ -1,12 +1,15 @@
 'use client'
-import { useState } from 'react'
-import { CheckCircle2, Loader2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { BookMarked, CheckCircle2, Loader2 } from 'lucide-react'
 import type { TcxActivity } from '@/lib/tcxParser'
+import { listSelectableDiaries, type DiaryChoice } from '@/lib/diari/syntheticPercorso'
 
 interface Props {
   activity: TcxActivity
   defaultTitle: string
-  onSave: (title: string) => Promise<void>
+  /** `diaryId` assente = nessun Diario scelto (elenco non caricato: offline o sessione non ancora
+   *  ristabilita) — chi salva ripiega sul Diario di default, vedi lib/activitySave.ts. */
+  onSave: (title: string, diaryId?: string) => Promise<void>
   onDiscard: () => void
 }
 
@@ -32,12 +35,28 @@ export default function FreeTrackSaveDialog({ activity, defaultTitle, onSave, on
   const [title, setTitle] = useState(defaultTitle)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Diario di destinazione — la traccia diventa un Reportage, e un Reportage sta in un Diario
+  // (app/navigatore/traccia/page.tsx). L'elenco si carica mentre l'utente rilegge le sue
+  // statistiche: null = ancora in caricamento, [] = non disponibile (tipicamente offline a fine
+  // escursione), nel qual caso il selettore sparisce del tutto invece di mostrarsi vuoto.
+  const [diaries, setDiaries] = useState<DiaryChoice[] | null>(null)
+  const [diaryId, setDiaryId] = useState<string | undefined>(undefined)
+
+  useEffect(() => {
+    let cancelled = false
+    listSelectableDiaries().then((list) => {
+      if (cancelled) return
+      setDiaries(list)
+      setDiaryId((list.find(d => d.isDefault) ?? list[0])?.id)
+    })
+    return () => { cancelled = true }
+  }, [])
 
   const handleSave = async () => {
     setSaving(true)
     setError(null)
     try {
-      await onSave(title)
+      await onSave(title, diaryId)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Errore nel salvataggio')
       setSaving(false)
@@ -78,6 +97,32 @@ export default function FreeTrackSaveDialog({ activity, defaultTitle, onSave, on
           className="w-full px-3 py-2.5 rounded-xl border border-stone-200 text-stone-900 font-body mb-5 focus:outline-none focus:ring-2 focus:ring-forest-400"
           placeholder="Nome della traccia"
         />
+
+        {/* Un solo Diario non è una scelta: si dice solo dove finisce, senza un menu a tendina da
+            aprire per forza a fine escursione. Assente del tutto finché l'elenco non è arrivato
+            (o se non è arrivato affatto): meglio nessuna riga che una destinazione dichiarata e
+            poi diversa da quella vera. */}
+        {diaries && diaries.length > 0 && (
+          <>
+            <label htmlFor="freetrack-diary" className="block text-xs font-semibold text-stone-500 font-body uppercase tracking-wide mb-1.5">Diario</label>
+            {diaries.length === 1 ? (
+              <p className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-stone-100 text-stone-700 font-body text-sm mb-5">
+                <BookMarked className="w-4 h-4 shrink-0 text-stone-400" /> {diaries[0].title}
+              </p>
+            ) : (
+              <select
+                id="freetrack-diary"
+                value={diaryId ?? ''}
+                onChange={(e) => setDiaryId(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl border border-stone-200 bg-white text-stone-900 font-body text-sm mb-5 focus:outline-none focus:ring-2 focus:ring-forest-400"
+              >
+                {diaries.map(d => (
+                  <option key={d.id} value={d.id}>{d.title}</option>
+                ))}
+              </select>
+            )}
+          </>
+        )}
 
         {error && <p className="text-sm text-red-600 font-body mb-3">{error}</p>}
 
