@@ -36,7 +36,7 @@ export default function TourControls({ isPlaying, progress, speedIdx, speeds, on
             <button
               key={s.label}
               onClick={() => onSpeedChange(i)}
-              className={`px-2 py-1 rounded-full text-xs font-semibold transition-colors ${i === speedIdx ? 'bg-white text-stone-900' : 'text-white/70'}`}
+              className={`px-2 py-1 rounded-full text-[11px] font-semibold transition-colors ${i === speedIdx ? 'bg-white text-stone-900' : 'text-white/70'}`}
             >
               {s.label}
             </button>

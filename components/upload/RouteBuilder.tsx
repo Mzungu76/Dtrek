@@ -108,7 +108,7 @@ export type ResultItem =
  * ("Esistenti" / "Su misura") — e ogni risultato mostrato ha sempre una traccia reale su mappa,
  * mai solo statistiche testuali.
  */
-export default function RouteBuilder({ onBack, diaryId }: { onBack: () => void; diaryId?: string }) {
+export default function RouteBuilder({ onBack }: { onBack: () => void }) {
   const router = useRouter()
   const [step, setStep] = useState<Step>('start')
   // Tab dello step "Risultati": percorsi già esistenti (trovati) vs generati su misura
@@ -137,18 +137,6 @@ export default function RouteBuilder({ onBack, diaryId }: { onBack: () => void; 
   // luogo generico come una città, o un POI senza sentieri esattamente addosso, es. "Cascata del
   // Picchio") — vedi startMode in app/api/route-build/route.ts.
   const [startMode, setStartMode] = useState<'esatto' | 'dintorni'>('esatto')
-  // Chip di richiamo rapido delle ultime ricerche (route_search_history, già esistente — vedi
-  // app/api/route-build/search-history/route.ts) — Fase 5 di docs/diario-fulcro-piano.md, al posto
-  // di dover andare fino a Profilo → Ricerche salvate per riusare una query già fatta. Solo le
-  // righe leggere (senza i risultati completi): un tap compila di nuovo testo+modalità, la ricerca
-  // vera parte comunque dal normale invio (Invio o il pulsante), non in automatico.
-  const [recentSearches, setRecentSearches] = useState<{ id: string; query: string | null; place_name: string | null; mode: 'esistenti' | 'su_misura' }[]>([])
-  useEffect(() => {
-    fetch('/api/route-build/search-history')
-      .then(r => r.ok ? r.json() : { searches: [] })
-      .then(data => setRecentSearches((data.searches ?? []).slice(0, 6)))
-      .catch(() => {})
-  }, [])
   // Rivelato automaticamente solo quando i livelli 0/1 (gratuito/economico) non trovano nulla — mai
   // un'apertura manuale che implicherebbe di dover scegliere a priori se "cercare con l'AI".
   const [showGiulia, setShowGiulia] = useState(false)
@@ -964,7 +952,7 @@ export default function RouteBuilder({ onBack, diaryId }: { onBack: () => void; 
     setSaving(true)
     try {
       const pendingExpiresAt = await defaultPendingExpiresAt()
-      const hike = await saveResultItemToGuide(selected, title, date, pendingExpiresAt, diaryId)
+      const hike = await saveResultItemToGuide(selected, title, date, pendingExpiresAt)
       router.push(`/guida/${encodeURIComponent(hike.id)}`)
     } catch (e) {
       setErrorMsg(`Errore nel salvataggio: ${e instanceof Error ? e.message : String(e)}`)
@@ -986,9 +974,7 @@ export default function RouteBuilder({ onBack, diaryId }: { onBack: () => void; 
   // sequenziale, non in parallelo, perché ciascun salvataggio arricchisce già con DTM/POI (vedi
   // saveResultItemToGuide) — N richieste pesanti insieme sovraccaricherebbero inutilmente le stesse API
   // esterne. Al termine porta all'elenco dei percorsi in attesa (non a una singola guida: con più
-  // percorsi importati insieme non ce n'è uno "principale" verso cui navigare) — dentro il Diario
-  // corrente se importati da lì (Fase 3 di docs/diario-fulcro-piano.md), altrimenti la Guida
-  // (app/guida/elenco è stata ritirata in Fase 7).
+  // percorsi importati insieme non ce n'è uno "principale" verso cui navigare).
   async function handleBulkImport() {
     const items = results
       .map((item, i) => ({ item, i }))
@@ -1001,13 +987,13 @@ export default function RouteBuilder({ onBack, diaryId }: { onBack: () => void; 
       const pendingExpiresAt = await defaultPendingExpiresAt()
       let done = 0
       for (const { item, i } of items) {
-        await saveResultItemToGuide(item, defaultTitleFor(item, i), '', pendingExpiresAt, diaryId)
+        await saveResultItemToGuide(item, defaultTitleFor(item, i), '', pendingExpiresAt)
         done += 1
         setBulkProgress({ done, total: items.length })
       }
       setSelectedIds(new Set())
       setSelectMode(false)
-      router.push(diaryId ? `/diari/${encodeURIComponent(diaryId)}` : '/guida')
+      router.push('/guida/elenco')
     } catch (e) {
       setErrorMsg(`Errore nell'importazione: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
@@ -1113,26 +1099,6 @@ export default function RouteBuilder({ onBack, diaryId }: { onBack: () => void; 
               />
             </div>
           </div>
-          {query.trim() === '' && recentSearches.length > 0 && (
-            <div className="flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {recentSearches.map(s => (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => {
-                    setSearchMode(s.mode)
-                    setQuery(s.query || s.place_name || '')
-                    setQueryMapConfirmed(false)
-                    setPoiBridge(null); setErrorMsg('')
-                  }}
-                  className="shrink-0 flex items-center gap-1 bg-white/85 backdrop-blur shadow-sm rounded-full px-3 py-1.5 text-xs font-medium text-stone-600 hover:bg-white whitespace-nowrap"
-                >
-                  <SearchIcon className="w-3 h-3 text-stone-400 shrink-0" />
-                  {(s.query || s.place_name || '').slice(0, 28)}
-                </button>
-              ))}
-            </div>
-          )}
           <div className="flex justify-center">
             <div className="inline-flex bg-white/95 backdrop-blur rounded-full shadow-md p-1 gap-1">
               <button type="button" onClick={() => { setSearchMode('esistenti'); setPoiBridge(null); setErrorMsg('') }}
@@ -1146,7 +1112,7 @@ export default function RouteBuilder({ onBack, diaryId }: { onBack: () => void; 
             </div>
           </div>
           {mapTapTarget === 'destinazione' && (
-            <p className="text-center text-xs font-medium text-terra-700 bg-terra-50 border border-terra-200 rounded-full py-1.5 px-3 mx-auto w-fit shadow-sm">
+            <p className="text-center text-[11px] font-medium text-terra-700 bg-terra-50 border border-terra-200 rounded-full py-1.5 px-3 mx-auto w-fit shadow-sm">
               Tocca la mappa per la destinazione
             </p>
           )}
@@ -1225,7 +1191,7 @@ export default function RouteBuilder({ onBack, diaryId }: { onBack: () => void; 
         <button onClick={handlePrimaryAction} disabled={!canGo}
           className="absolute right-4 bottom-5 z-20 w-16 h-16 rounded-full bg-terra-500 hover:bg-terra-600 disabled:opacity-40 text-white shadow-lg flex items-center justify-center transition-colors">
           {activeFilterCount > 0 && !searching && !generating && (
-            <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-forest-600 text-white text-xs font-bold flex items-center justify-center border-2 border-stone-100">
+            <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-forest-600 text-white text-[10px] font-bold flex items-center justify-center border-2 border-stone-100">
               {activeFilterCount}
             </span>
           )}
@@ -1235,7 +1201,7 @@ export default function RouteBuilder({ onBack, diaryId }: { onBack: () => void; 
             : searchMode === 'esistenti' ? <SearchIcon className="w-5 h-5" /> : <RefreshCw className="w-5 h-5" />}
         </button>
         {!searching && !generating && pendingMapConfirm && (
-          <p className="absolute right-3 top-[124px] z-20 text-xs font-medium text-forest-700 bg-white/95 backdrop-blur rounded-full px-3 py-1.5 shadow-md whitespace-nowrap">
+          <p className="absolute right-3 top-[124px] z-20 text-[11px] font-medium text-forest-700 bg-white/95 backdrop-blur rounded-full px-3 py-1.5 shadow-md whitespace-nowrap">
             Tocca per centrare la mappa qui
           </p>
         )}
@@ -1566,7 +1532,7 @@ export default function RouteBuilder({ onBack, diaryId }: { onBack: () => void; 
                     { label: 'Tipo', val: routeTypeLabel(builtData.type) },
                   ].map(s => (
                     <div key={s.label} className="bg-stone-50 rounded-xl border border-stone-150 p-3">
-                      <p className="text-xs text-stone-400">{s.label}</p>
+                      <p className="text-[10px] text-stone-400">{s.label}</p>
                       <p className="text-sm font-semibold text-stone-800">{s.val}</p>
                     </div>
                   ))}
@@ -1602,7 +1568,7 @@ export default function RouteBuilder({ onBack, diaryId }: { onBack: () => void; 
                     { label: 'Difficoltà', val: foundData.difficulty ?? '—' },
                   ].map(s => (
                     <div key={s.label} className="bg-stone-50 rounded-xl border border-stone-150 p-3">
-                      <p className="text-xs text-stone-400">{s.label}</p>
+                      <p className="text-[10px] text-stone-400">{s.label}</p>
                       <p className="text-sm font-semibold text-stone-800">{s.val}</p>
                     </div>
                   ))}

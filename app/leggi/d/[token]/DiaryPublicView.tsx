@@ -37,7 +37,7 @@ export function DiaryPublicView({ diary, token }: { diary: PublicDiary; token: s
             )}
             <div className="relative">
               {diary.dateRangeLabel && (
-                <p className="font-barlow font-bold text-xs tracking-[0.25em] uppercase text-terra-300 mb-3">
+                <p className="font-barlow font-bold text-[11px] tracking-[0.25em] uppercase text-terra-300 mb-3">
                   {diary.dateRangeLabel}
                 </p>
               )}
@@ -58,7 +58,7 @@ export function DiaryPublicView({ diary, token }: { diary: PublicDiary; token: s
             ].map(s => (
               <div key={s.label} className="bg-white rounded-2xl border border-stone-200 px-3 py-4 text-center shadow-sm">
                 <div className="font-mono text-xl sm:text-2xl font-bold text-forest-800 leading-tight">{s.value}</div>
-                <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider mt-1">{s.label}</div>
+                <div className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider mt-1">{s.label}</div>
               </div>
             ))}
           </section>
@@ -78,7 +78,7 @@ export function DiaryPublicView({ diary, token }: { diary: PublicDiary; token: s
         <section key={year} className="space-y-3">
           <h2 className="flex items-baseline gap-3 px-1">
             <span className="font-display text-2xl font-bold text-forest-900">{year}</span>
-            <span className="font-barlow font-bold text-xs tracking-[0.2em] uppercase text-stone-400">
+            <span className="font-barlow font-bold text-[10px] tracking-[0.2em] uppercase text-stone-400">
               {items.length} {items.length === 1 ? 'escursione' : 'escursioni'} ·{' '}
               {(items.reduce((s, x) => s + x.e.distanceMeters, 0) / 1000).toFixed(0)} km
             </span>
@@ -95,7 +95,7 @@ export function DiaryPublicView({ diary, token }: { diary: PublicDiary; token: s
                         className="w-full aspect-[16/9] object-cover bg-stone-100" />
                     : <div className="w-full aspect-[16/9] bg-gradient-to-br from-forest-800 to-forest-950" />}
                   <div className="p-4 flex-1 flex flex-col">
-                    <p className="font-barlow font-bold text-xs tracking-[0.2em] uppercase text-terra-500">
+                    <p className="font-barlow font-bold text-[9px] tracking-[0.2em] uppercase text-terra-500">
                       #{String(i + 1).padStart(2, '0')} · {format(new Date(e.startTime), 'MMMM yyyy', { locale: it })}
                     </p>
                     <h3 className="font-display text-lg font-bold text-forest-900 leading-tight mt-1 group-hover:text-forest-700 transition">

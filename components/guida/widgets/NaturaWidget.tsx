@@ -1,52 +1,33 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
+import { Leaf, PawPrint } from 'lucide-react'
 import { FloraPanel } from '@/components/FloraPanel'
-import { NatureGalleryContent } from '@/components/NatureGallery'
 import type { FloraResult } from '@/lib/floraTypes'
-import type { TrackPoint } from '@/lib/tcxParser'
+import { glassTile, glassTileHover, textPrimary } from '@/components/routehub/overlayTheme'
 
 interface Props {
   hasGps: boolean
   flora?: FloraResult | null
   floraLoading: boolean
-  trackPoints: TrackPoint[]
-  /** 1-12 — month to use for the seasonal GBIF query (mese pianificato/di svolgimento). */
-  month: number
+  onOpenFloraGallery: () => void
+  onOpenAnimalGallery: () => void
 }
 
-// Quanto prima che la sezione entri davvero nello schermo si può iniziare a caricare — un piccolo
-// margine così la mappa/galleria è già pronta (o quasi) quando l'utente ci arriva scrollando,
-// invece di uno spinner che parte solo a sezione già visibile.
-const OBSERVER_ROOT_MARGIN = '200px'
-
-/** Flora (frase, sempre visibile) + mappa/selettore Flora-Fauna/galleria in linea (prima erano due
- *  link che aprivano un popup a parte, components/NatureGallery.tsx) — stesso trattamento di "I
- *  luoghi da non perdere" per i POI. La galleria non genera nessuna chiamata GBIF/iNaturalist
- *  finché questa sezione non entra davvero nello schermo (IntersectionObserver): chi non scrolla
- *  fin qui non fa scattare nulla, esattamente come col vecchio tap sul popup — solo senza il tap
- *  in mezzo. Una volta montata resta tale anche se si esce dallo schermo (niente smontaggio/
- *  rimontaggio che rifarebbe la richiesta). */
-export default function NaturaWidget({ hasGps, flora, floraLoading, trackPoints, month }: Props) {
-  const sectionRef = useRef<HTMLDivElement>(null)
-  const [visible, setVisible] = useState(false)
-
-  useEffect(() => {
-    if (visible || !hasGps) return
-    const el = sectionRef.current
-    if (!el) return
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) { setVisible(true); observer.disconnect() }
-    }, { rootMargin: OBSERVER_ROOT_MARGIN })
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [visible, hasGps])
-
+/** Flora + gallerie verde/animali — spostati dalla vecchia tab "Natura" nella
+ *  sezione "La natura intorno a te" della guida magazine. */
+export default function NaturaWidget({
+  hasGps, flora, floraLoading, onOpenFloraGallery, onOpenAnimalGallery,
+}: Props) {
   return (
-    <div className="space-y-4" ref={sectionRef}>
+    <div className="space-y-5">
       {hasGps && <FloraPanel flora={flora ?? null} floraLoading={floraLoading} />}
-      {hasGps && visible && (
-        <NatureGalleryContent trackPoints={trackPoints} month={month} loadingTrack={false} initialLayer="flora" />
-      )}
+      <div className="flex gap-2">
+        <button onClick={onOpenFloraGallery} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-colors ${glassTile} ${glassTileHover} ${textPrimary}`}>
+          <Leaf className="w-4 h-4 text-emerald-400" /> Galleria Verde
+        </button>
+        <button onClick={onOpenAnimalGallery} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-colors ${glassTile} ${glassTileHover} ${textPrimary}`}>
+          <PawPrint className="w-4 h-4 text-amber-500" /> Galleria Animali
+        </button>
+      </div>
     </div>
   )
 }

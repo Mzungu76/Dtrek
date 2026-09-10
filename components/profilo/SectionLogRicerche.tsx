@@ -32,7 +32,7 @@ function Badge({ children, tone = 'stone' }: { children: React.ReactNode; tone?:
     amber: 'bg-amber-100 text-amber-700',
     red: 'bg-red-100 text-red-700',
   }
-  return <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${tones[tone]}`}>{children}</span>
+  return <span className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${tones[tone]}`}>{children}</span>
 }
 
 /** Log privato (solo il proprio account, vedi app/api/route-build/logs/route.ts) delle ricerche e

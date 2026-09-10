@@ -15,18 +15,13 @@ type Mode = 'choice' | 'manual' | 'url' | 'build'
  * l'import da link e il form manuale esistente (invariato, ManualPlanUploader). La ricerca diretta
  * su OpenStreetMap senza AI (ex "Cerca senza AI", PlainSearchUploader) è stata rimossa: chi conosce
  * già il percorso ha "Importa da un link" o "Inserisci a mano" per arrivarci senza l'AI.
- *
- * `initialMode` — arrivo dall'hub di ricerca delle Mete (app/upload/page.tsx's `?source=build`,
- * docs/piano-ricerca-mete.md): la voce "Costruisci o trova un percorso" dell'hub deve entrare
- * direttamente nel wizard, non fermarsi su questo stesso menu per farsi ritoccare una scelta già
- * fatta. Nessun altro chiamante lo passa oggi, quindi il default resta 'choice'.
  */
-export default function ManualImportChoice({ diaryId, initialMode = 'choice' }: { diaryId?: string; initialMode?: Mode } = {}) {
-  const [mode, setMode] = useState<Mode>(initialMode)
+export default function ManualImportChoice() {
+  const [mode, setMode] = useState<Mode>('choice')
 
-  if (mode === 'manual') return <ManualPlanUploader diaryId={diaryId} />
-  if (mode === 'url') return <UrlImportUploader onBack={() => setMode('choice')} diaryId={diaryId} />
-  if (mode === 'build') return <RouteBuilder onBack={() => setMode('choice')} diaryId={diaryId} />
+  if (mode === 'manual') return <ManualPlanUploader />
+  if (mode === 'url') return <UrlImportUploader onBack={() => setMode('choice')} />
+  if (mode === 'build') return <RouteBuilder onBack={() => setMode('choice')} />
 
   return (
     <div className="space-y-3">

@@ -6,7 +6,6 @@ import { it } from 'date-fns/locale'
 import { Car, SquareParking, Milestone, MapPinned } from 'lucide-react'
 import type { TrackPoint } from '@/lib/tcxParser'
 import type { StartPointInfo } from '@/lib/routeBuilder/startPointInfo'
-import { TornBottomEdge, tornVariant } from '@/components/TornFrame'
 
 const MapView = dynamic(() => import('@/components/MapView'), { ssr: false })
 
@@ -17,9 +16,6 @@ const START_POINT_ICON = {
 } as const
 
 interface Props {
-  /** Sceglie lo strappo del bordo inferiore (tornVariant) — assente ⇒ ricade sul titolo, così
-   *  resta comunque deterministico invece di un valore fisso per ogni guida. */
-  id?: string
   trackPoints?: TrackPoint[]
   routePolyline?: [number, number][]
   title: string
@@ -41,7 +37,7 @@ interface Props {
  * TUO percorso, non una foto generica trovata online, e non dipende dalla disponibilità di foto.
  * Le foto Wikimedia restano usate più sotto (mosaico e foto per-sezione), solo non più qui.
  */
-export default function GuideHero({ id, trackPoints, routePolyline, title, categoryBadge, plannedDate, driving, startPoint }: Props) {
+export default function GuideHero({ trackPoints, routePolyline, title, categoryBadge, plannedDate, driving, startPoint }: Props) {
   const points = useMemo(() => {
     const fromTrack = (trackPoints ?? []).filter(p => p.lat !== undefined && p.lon !== undefined)
     if (fromTrack.length > 1) return fromTrack
@@ -52,12 +48,9 @@ export default function GuideHero({ id, trackPoints, routePolyline, title, categ
 
   return (
     <div
-      className="relative w-full [--hero-h:clamp(200px,50vw,300px)] md:[--hero-h:clamp(240px,32vw,380px)] lg:[--hero-h:clamp(280px,26vw,460px)]"
+      className="relative w-full overflow-hidden [--hero-h:clamp(200px,50vw,300px)] md:[--hero-h:clamp(240px,32vw,380px)] lg:[--hero-h:clamp(280px,26vw,460px)]"
       style={{ height: 'var(--hero-h)' }}
     >
-      {/* Strappo sul solo bordo inferiore, senza nastro (Taccuino Botanico, test) — banner a piena
-          pagina, senza un margine/pagina intorno su cui il nastro possa proseguire. */}
-      <TornBottomEdge variant={tornVariant(id ?? title)}>
       {hasGps ? (
         <div
           className="absolute inset-0 pointer-events-none"
@@ -73,21 +66,21 @@ export default function GuideHero({ id, trackPoints, routePolyline, title, categ
             interactive={false}
             bare
             showEndpointMarkers={false}
-            routeColor="#6E301E"
+            routeColor="#813619"
             routeWeight={2.5}
             routeOpacity={0.7}
           />
         </div>
       ) : (
-        <div className="absolute inset-0" style={{ background: 'linear-gradient(160deg, #F6E2CE 0%, #E9EEE3 100%)' }} />
+        <div className="absolute inset-0" style={{ background: 'linear-gradient(160deg, #f9e8d0 0%, #dcf0de 100%)' }} />
       )}
 
       <div className="absolute inset-0" style={{
-        background: 'linear-gradient(to top, rgba(46,42,34,0.88) 0%, rgba(46,42,34,0.4) 42%, rgba(46,42,34,0.08) 78%, transparent 100%)',
+        background: 'linear-gradient(to top, rgba(31,22,15,0.88) 0%, rgba(31,22,15,0.4) 42%, rgba(31,22,15,0.08) 78%, transparent 100%)',
       }} />
 
       <div className="absolute bottom-0 left-0 right-0 px-5 sm:px-8 md:px-10 pb-5 md:pb-7">
-        <span className="inline-block bg-terra-500 text-white text-xs font-bold tracking-[2.5px] px-2.5 py-1 rounded-sm mb-2.5 uppercase">
+        <span className="inline-block bg-terra-500 text-white text-[8px] font-bold tracking-[2.5px] px-2.5 py-1 rounded-sm mb-2.5 uppercase">
           {categoryBadge}
         </span>
         <h1 className="font-display text-xl sm:text-3xl md:text-4xl font-black text-white leading-tight mb-1 max-w-2xl uppercase tracking-tight"
@@ -96,7 +89,7 @@ export default function GuideHero({ id, trackPoints, routePolyline, title, categ
           {title}
         </h1>
         {plannedDate && (
-          <p className="text-xs italic text-white/70">
+          <p className="text-[12px] italic text-white/70">
             {format(new Date(plannedDate + 'T12:00'), 'EEEE d MMMM yyyy', { locale: it })}
           </p>
         )}
@@ -106,13 +99,13 @@ export default function GuideHero({ id, trackPoints, routePolyline, title, categ
               href={driving.mapsUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 mt-1.5 text-xs font-semibold text-white/90 hover:text-white underline decoration-white/40 hover:decoration-white/80 underline-offset-2 transition-colors"
+              className="inline-flex items-center gap-1.5 mt-1.5 text-[12px] font-semibold text-white/90 hover:text-white underline decoration-white/40 hover:decoration-white/80 underline-offset-2 transition-colors"
             >
               <Car className="w-3.5 h-3.5" />
               {Math.round(driving.distanceMeters / 1000)} km dal tuo punto di partenza
             </a>
           ) : (
-            <p className="inline-flex items-center gap-1.5 mt-1.5 text-xs font-semibold text-white/90">
+            <p className="inline-flex items-center gap-1.5 mt-1.5 text-[12px] font-semibold text-white/90">
               <Car className="w-3.5 h-3.5" />
               {Math.round(driving.distanceMeters / 1000)} km dal tuo punto di partenza
             </p>
@@ -121,14 +114,13 @@ export default function GuideHero({ id, trackPoints, routePolyline, title, categ
         {startPoint && (() => {
           const Icon = START_POINT_ICON[startPoint.kind]
           return (
-            <p className="inline-flex items-center gap-1.5 mt-1.5 text-xs font-semibold text-white/90">
+            <p className="inline-flex items-center gap-1.5 mt-1.5 text-[12px] font-semibold text-white/90">
               <Icon className="w-3.5 h-3.5" />
               {startPoint.label}{startPoint.name ? ` — ${startPoint.name}` : ''}
             </p>
           )
         })()}
       </div>
-      </TornBottomEdge>
     </div>
   )
 }

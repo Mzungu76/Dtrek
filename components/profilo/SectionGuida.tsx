@@ -169,7 +169,7 @@ export default function SectionGuida() {
                               onClick={() => setSectionLength(s.key, l.key)}
                               disabled={savingLengths || atLimit}
                               title={atLimit ? `Massimo ${MAX_MOLTO_APPROFONDITA_SECTIONS} sezioni in "Molto approfondita" — riduci un'altra sezione prima` : l.description}
-                              className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                              className={`px-2.5 py-1 rounded-full text-[11.5px] font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                                 isCurrent
                                   ? 'bg-stone-700 text-white'
                                   : 'text-stone-500 hover:bg-stone-100'

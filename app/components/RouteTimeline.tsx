@@ -100,11 +100,11 @@ export default function RouteTimeline({
                 {/* DTREK-AUDIT.md P3 #35 */}
                 <img src={photo.thumbUrl ?? photo.url} alt={photo.caption}
                   className="w-14 h-14 object-cover rounded-lg shadow border-2 border-white" />
-                <span className="absolute -top-1.5 -left-1.5 w-4 h-4 bg-amber-500 text-white text-xs font-bold rounded-full flex items-center justify-center font-display">
+                <span className="absolute -top-1.5 -left-1.5 w-4 h-4 bg-amber-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center font-display">
                   {number}
                 </span>
               </div>
-              <p className="text-xs text-stone-500 font-body mt-0.5 max-w-[60px] text-center leading-tight">
+              <p className="text-[8px] text-stone-500 font-body mt-0.5 max-w-[60px] text-center leading-tight">
                 {photo.caption}
               </p>
               {row > 0 && (
@@ -171,11 +171,11 @@ export default function RouteTimeline({
                 {/* DTREK-AUDIT.md P3 #35 */}
                 <img src={photo.thumbUrl ?? photo.url} alt={photo.caption}
                   className="w-14 h-14 object-cover rounded-lg shadow border-2 border-white" />
-                <span className="absolute -top-1.5 -left-1.5 w-4 h-4 bg-amber-500 text-white text-xs font-bold rounded-full flex items-center justify-center font-display">
+                <span className="absolute -top-1.5 -left-1.5 w-4 h-4 bg-amber-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center font-display">
                   {number}
                 </span>
               </div>
-              <p className="text-xs text-stone-500 font-body mt-0.5 max-w-[60px] text-center leading-tight">
+              <p className="text-[8px] text-stone-500 font-body mt-0.5 max-w-[60px] text-center leading-tight">
                 {photo.caption}
               </p>
             </div>
@@ -185,8 +185,8 @@ export default function RouteTimeline({
 
       {/* Min/max altitude labels */}
       <div className="flex justify-between mt-1 px-0.5">
-        <span className="text-xs text-stone-400 font-mono">↑ {Math.round(minAlt)} m</span>
-        <span className="text-xs text-stone-400 font-mono">{Math.round(maxAlt)} m ↑</span>
+        <span className="text-[9px] text-stone-400 font-mono">↑ {Math.round(minAlt)} m</span>
+        <span className="text-[9px] text-stone-400 font-mono">{Math.round(maxAlt)} m ↑</span>
       </div>
     </div>
   )

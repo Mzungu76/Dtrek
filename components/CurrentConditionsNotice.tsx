@@ -160,7 +160,7 @@ function ClosureReportForm({ osmId, polyline, onSubmitted }: { osmId?: number; p
           {submitting === 'reopened' ? <Loader2 className="w-3.5 h-3.5 animate-spin mx-auto" /> : '✅ Segnala riaperto'}
         </button>
       </div>
-      {error && <p className="text-xs text-red-500 leading-tight">{error}</p>}
+      {error && <p className="text-[11px] text-red-500 leading-tight">{error}</p>}
     </div>
   )
 }

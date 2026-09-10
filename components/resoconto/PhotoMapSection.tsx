@@ -116,7 +116,7 @@ export default function PhotoMapSection({ trackPoints, photos, onPhotoTap, onOpe
                 style={{ borderColor: highlightedId === ph.id ? '#f59e0b' : 'rgba(255,255,255,0.25)' }}
               >
                 <img src={ph.url} alt={ph.caption} className="w-full h-full object-cover" />
-                <span className="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-amber-500 text-white text-xs font-bold flex items-center justify-center">{i + 1}</span>
+                <span className="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center">{i + 1}</span>
               </button>
             ))}
           </div>

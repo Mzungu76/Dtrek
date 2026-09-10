@@ -57,10 +57,10 @@ export default function FreeTrackStatsSheet({
 
       <div className="px-4 pt-3">
         <div className="flex gap-2">
-          <button onClick={onOpenFoto} className="flex-1 flex flex-col items-center gap-1 py-2.5 rounded-2xl bg-stone-100 text-stone-600 text-xs font-semibold">
+          <button onClick={onOpenFoto} className="flex-1 flex flex-col items-center gap-1 py-2.5 rounded-2xl bg-stone-100 text-stone-600 text-[10px] font-semibold">
             <Camera className="w-[18px] h-[18px]" /> Foto
           </button>
-          <button onClick={onOpenNota} className="flex-1 flex flex-col items-center gap-1 py-2.5 rounded-2xl bg-stone-100 text-stone-600 text-xs font-semibold">
+          <button onClick={onOpenNota} className="flex-1 flex flex-col items-center gap-1 py-2.5 rounded-2xl bg-stone-100 text-stone-600 text-[10px] font-semibold">
             <NotebookPen className="w-[18px] h-[18px]" /> Nota
           </button>
         </div>

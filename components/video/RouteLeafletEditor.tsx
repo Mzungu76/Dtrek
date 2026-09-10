@@ -435,7 +435,7 @@ export default function RouteLeafletEditor({
 
   if (gpsPoints.length < 2) {
     return (
-      <p className="text-stone-500 text-xs leading-relaxed p-3">
+      <p className="text-stone-500 text-[11px] leading-relaxed p-3">
         Il tracciato non ha abbastanza punti con coordinate per disegnare la mappa.
       </p>
     )
@@ -471,7 +471,7 @@ export default function RouteLeafletEditor({
         <div className="flex items-center gap-1.5">
           <button onClick={() => { setShowHelp(h => !h); setShowCrowdDetail(false) }}
             aria-label="Come si usa la mappa" aria-expanded={showHelp}
-            className={`w-8 h-8 rounded-full shadow-sm border flex items-center justify-center text-sm font-bold transition-colors ${
+            className={`w-8 h-8 rounded-full shadow-sm border flex items-center justify-center text-[13px] font-bold transition-colors ${
               showHelp ? 'bg-forest-600 border-forest-700 text-white' : 'bg-white/95 border-stone-200 text-stone-600 hover:bg-white'}`}>
             ?
           </button>
@@ -481,7 +481,7 @@ export default function RouteLeafletEditor({
               aria-expanded={showCrowdDetail}
               className="flex items-center gap-1.5 h-8 pl-2 pr-2.5 rounded-full bg-terra-600 text-white shadow-sm border border-terra-700">
               <span className="w-2 h-2 rounded-full bg-white/90 shrink-0" />
-              <span className="text-xs font-bold whitespace-nowrap">
+              <span className="text-[11px] font-bold whitespace-nowrap">
                 <span className="font-mono">{crowdedCount}</span> troppo vicini
               </span>
             </button>
@@ -490,7 +490,7 @@ export default function RouteLeafletEditor({
           {items.length > 1 && (
             <button onClick={handleOptimize}
               title="Allontana automaticamente gli elementi troppo vicini fra loro"
-              className="flex items-center gap-1.5 h-8 pl-2.5 pr-3 rounded-full bg-white/95 border border-stone-200 text-stone-600 shadow-sm hover:bg-white text-xs font-bold whitespace-nowrap">
+              className="flex items-center gap-1.5 h-8 pl-2.5 pr-3 rounded-full bg-white/95 border border-stone-200 text-stone-600 shadow-sm hover:bg-white text-[11px] font-bold whitespace-nowrap">
               ↔ Ottimizza distanze
             </button>
           )}
@@ -498,7 +498,7 @@ export default function RouteLeafletEditor({
 
         {showCrowdDetail && (
           <div className="rounded-xl bg-white/97 border border-terra-200 shadow-lg px-3 py-2.5">
-            <p className="text-stone-700 text-xs leading-relaxed">
+            <p className="text-stone-700 text-[11px] leading-relaxed">
               {crowding.pairs.length === 1
                 ? `Due elementi cadono a ${crowding.pairs[0].apartSec.toFixed(1)}s l'uno dall'altro`
                 : `${crowding.pairs.length} coppie cadono a meno di ${MIN_ITEM_GAP_SEC}s l'una dall'altra`}
@@ -510,7 +510,7 @@ export default function RouteLeafletEditor({
 
         {showHelp && (
           <div className="rounded-xl bg-white/97 border border-stone-200 shadow-lg px-3 py-2.5 space-y-2">
-            <p className="text-stone-700 text-xs leading-relaxed">
+            <p className="text-stone-700 text-[11px] leading-relaxed">
               Trascina i pallini per scegliere dove cadono foto e stacchi: si agganciano al punto del percorso
               più vicino. Il lucchetto su una foto la blocca o la sblocca. Il pallino ↺ compare quando la foto
               non è più dove è stata scattata e la riporta al punto originale.
@@ -518,7 +518,7 @@ export default function RouteLeafletEditor({
             </p>
             {interludeItems.length > 0 && (
               <div className="flex flex-wrap gap-x-3 gap-y-1 pt-0.5 border-t border-stone-200">
-                <span className="flex items-center gap-1.5 text-xs text-stone-500 mt-1.5">
+                <span className="flex items-center gap-1.5 text-[10px] text-stone-500 mt-1.5">
                   <span className="w-4 h-4 rounded-[4px] bg-white border border-stone-300 flex items-center justify-center shrink-0">
                     <ImageIcon className="w-2.5 h-2.5 text-stone-600" />
                   </span>
@@ -527,7 +527,7 @@ export default function RouteLeafletEditor({
                 {interludeItems.map(i => {
                   const Icon = INTERLUDE_ICON[i.interludeKind ?? 'numeri']
                   return (
-                    <span key={i.id} className="flex items-center gap-1.5 text-xs text-stone-500 mt-1.5">
+                    <span key={i.id} className="flex items-center gap-1.5 text-[10px] text-stone-500 mt-1.5">
                       <span className="w-4 h-4 rounded-full flex items-center justify-center shrink-0"
                         style={{ background: INTERLUDE_TINT[i.interludeKind ?? 'numeri'] }}>
                         <Icon className="w-2.5 h-2.5" style={{ color: 'rgba(20,18,15,0.92)' }} strokeWidth={2.5} />

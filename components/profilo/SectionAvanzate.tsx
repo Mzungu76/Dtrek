@@ -1,9 +1,8 @@
 'use client'
 import { useState } from 'react'
-import Link from 'next/link'
 import { recalcAllCts, recalcAllSafety } from '@/lib/recalcScores'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
-import { Loader2, RefreshCw, ChevronDown, ChevronRight, Wrench, ScrollText } from 'lucide-react'
+import { Loader2, RefreshCw, ChevronDown, Wrench } from 'lucide-react'
 
 /**
  * Strumenti di manutenzione dati — ricalcolo massivo dei punteggi (CTS,
@@ -121,21 +120,6 @@ export default function SectionAvanzate() {
           {!allRunning && allProgress && (
             <p className="text-xs text-forest-600 font-medium mt-2">✓ {allProgress}</p>
           )}
-        </div>
-
-        {/* Fase 5 del riordino UI/UX (docs/diario-valutazione-ux-piano.md): /profilo/log-ricerche
-            non aveva alcun link entrante — una pagina di diagnostica tecnica (livello di ricerca
-            che ha risolto ogni query, tempi, ritentativi) irraggiungibile senza conoscerne l'URL a
-            memoria. Non è per l'uso quotidiano, quindi qui e non altrove in Profilo — stessa
-            filosofia del resto di questa sezione, collassata di default. */}
-        <div className="border-t border-stone-100 pt-2 mt-1">
-          <Link
-            href="/profilo/log-ricerche"
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 text-sm font-medium border border-stone-200 transition"
-          >
-            <ScrollText className="w-3.5 h-3.5" /> Log ricerche percorsi
-            <ChevronRight className="w-3.5 h-3.5 ml-auto text-stone-400" />
-          </Link>
         </div>
       </div>
     </details>

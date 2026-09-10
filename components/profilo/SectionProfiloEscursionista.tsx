@@ -64,7 +64,7 @@ export default function SectionProfiloEscursionista() {
       ) : (
         <div className="space-y-5">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-stone-400 mb-2">Esperienza</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400 mb-2">Esperienza</p>
             <div className="flex flex-wrap gap-2">
               {EXPERIENCE_LEVELS.map(lvl => (
                 <button
@@ -81,7 +81,7 @@ export default function SectionProfiloEscursionista() {
           </div>
 
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-stone-400 mb-2">Attenzioni</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400 mb-2">Attenzioni</p>
             <div className="flex flex-wrap gap-2">
               {HIKER_CONCERNS.map(c => (
                 <button
@@ -97,7 +97,7 @@ export default function SectionProfiloEscursionista() {
           </div>
 
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-stone-400 mb-2">Preferenze ambientali</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400 mb-2">Preferenze ambientali</p>
             <div className="flex flex-wrap gap-2">
               {HIKER_ENVIRONMENT_PREFS.map(p => (
                 <button

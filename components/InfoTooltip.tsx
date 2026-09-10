@@ -55,7 +55,7 @@ export function InfoTooltip({ text }: { text: string }) {
         <div
           ref={popupRef}
           style={{ position: 'fixed', top: pos.top, left: pos.left, width: 224, transform: 'translateY(-100%)' }}
-          className="z-[1000] rounded-lg bg-stone-800 text-white text-xs leading-snug px-2.5 py-2 shadow-lg"
+          className="z-[1000] rounded-lg bg-stone-800 text-white text-[11px] leading-snug px-2.5 py-2 shadow-lg"
         >
           {text}
         </div>,

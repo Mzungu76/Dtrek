@@ -182,7 +182,7 @@ export default function PhotoPlacementMap({
         {error && (
           <div className="flex items-start gap-2 bg-red-50 border-b border-red-200 px-5 py-2 shrink-0">
             <AlertTriangle className="w-3.5 h-3.5 text-red-500 shrink-0 mt-0.5" />
-            <p className="text-xs text-red-600 leading-snug">{error}</p>
+            <p className="text-[11px] text-red-600 leading-snug">{error}</p>
           </div>
         )}
 
@@ -210,7 +210,7 @@ export default function PhotoPlacementMap({
                       {/* DTREK-AUDIT.md P3 #35 */}
                       <img src={ph.thumbUrl ?? ph.url} alt={ph.caption}
                         className="w-16 h-16 object-cover rounded-lg" />
-                      <span className="absolute -top-1.5 -left-1.5 w-5 h-5 bg-amber-500 text-white text-xs font-bold rounded-full flex items-center justify-center font-display">
+                      <span className="absolute -top-1.5 -left-1.5 w-5 h-5 bg-amber-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center font-display">
                         {i + 1}
                       </span>
                       {positioned && (
@@ -219,7 +219,7 @@ export default function PhotoPlacementMap({
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-stone-500 font-body max-w-[68px] text-center truncate leading-tight">
+                    <p className="text-[9px] text-stone-500 font-body max-w-[68px] text-center truncate leading-tight">
                       {ph.caption}
                     </p>
                   </button>

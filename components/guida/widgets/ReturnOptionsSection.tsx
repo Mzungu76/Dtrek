@@ -23,18 +23,18 @@ export default function ReturnOptionsSection({ options, origin }: {
   return (
     <div className="space-y-2.5">
       <p className={`${sectionHeading} pt-1`}>Tornare al punto di partenza</p>
-      <p className="text-sm text-stone-500 -mt-1.5">
+      <p className="text-[13px] text-stone-500 -mt-1.5">
         Percorso a sola andata — servizi entro {RADIUS_KM.toFixed(1)} km dal punto di arrivo, per chi non vuole tornare a piedi sui propri passi.
       </p>
 
       {options === null && (
-        <p className="flex items-center gap-1.5 text-sm text-stone-400 italic">
+        <p className="flex items-center gap-1.5 text-[13px] text-stone-400 italic">
           <Loader2 className="w-3 h-3 animate-spin" /> Cerco fermate e stazioni nei dintorni…
         </p>
       )}
 
       {options !== null && options.length === 0 && (
-        <p className="text-sm text-stone-500">
+        <p className="text-[13px] text-stone-500">
           Nessuna fermata bus, stazione o posteggio taxi mappato entro {RADIUS_KM.toFixed(1)} km dal punto di arrivo.
         </p>
       )}
@@ -49,15 +49,15 @@ export default function ReturnOptionsSection({ options, origin }: {
                   <Icon className="w-4 h-4" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-stone-700 truncate">{opt.name || opt.label}</p>
-                  <p className="text-xs text-stone-400">{opt.name ? opt.label : null}{opt.name ? ' · ' : ''}{opt.distanceMeters} m</p>
+                  <p className="text-[14px] font-semibold text-stone-700 truncate">{opt.name || opt.label}</p>
+                  <p className="text-[12px] text-stone-400">{opt.name ? opt.label : null}{opt.name ? ' · ' : ''}{opt.distanceMeters} m</p>
                 </div>
                 <a
                   href={buildReturnOptionMapsUrl(origin, opt)}
                   target="_blank"
                   rel="noopener noreferrer"
                   title="Indicazioni sulla mappa"
-                  className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-white border border-stone-200 hover:border-sky-300 text-xs font-semibold text-sky-700 transition-colors"
+                  className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-white border border-stone-200 hover:border-sky-300 text-[11px] font-semibold text-sky-700 transition-colors"
                 >
                   <ExternalLink className="w-3 h-3" /> Indicazioni
                 </a>

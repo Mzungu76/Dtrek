@@ -138,7 +138,7 @@ export default function SyncDebugPanel() {
       position: 'fixed', bottom: 8, left: 8, right: 8, zIndex: 99999,
       maxHeight: '45vh', overflowY: 'auto',
       background: 'rgba(10,10,10,0.92)', color: '#eee',
-      fontFamily: 'monospace', fontSize: 12, lineHeight: 1.4,
+      fontFamily: 'monospace', fontSize: 11, lineHeight: 1.4,
       padding: 10, borderRadius: 8, border: '1px solid #444',
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
@@ -147,14 +147,14 @@ export default function SyncDebugPanel() {
           <button
             onClick={testDigest}
             disabled={testing}
-            style={{ background: '#26a', color: '#fff', border: 'none', borderRadius: 4, padding: '3px 8px', fontSize: 12 }}
+            style={{ background: '#26a', color: '#fff', border: 'none', borderRadius: 4, padding: '3px 8px', fontSize: 11 }}
           >
             {testing ? 'Test…' : 'Test digest'}
           </button>
           <button
             onClick={async () => { setPulling(true); await pullAll(); await refresh(); setPulling(false) }}
             disabled={pulling}
-            style={{ background: '#2a6', color: '#fff', border: 'none', borderRadius: 4, padding: '3px 8px', fontSize: 12 }}
+            style={{ background: '#2a6', color: '#fff', border: 'none', borderRadius: 4, padding: '3px 8px', fontSize: 11 }}
           >
             {pulling ? 'Aggiorno…' : 'Aggiorna ora'}
           </button>

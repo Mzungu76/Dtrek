@@ -83,7 +83,7 @@ export default function CoverNoticesChip({ notices, onOpenVerificato }: Props) {
         </div>
 
         <div className="flex items-center justify-between px-5 py-3 border-b border-stone-100 shrink-0">
-          <p className="text-sm font-bold text-stone-700">
+          <p className="text-[13px] font-bold text-stone-700">
             {notices.length === 1 ? 'Avviso sul percorso' : `Avvisi sul percorso (${notices.length})`}
           </p>
           <button onClick={() => setOpen(false)} className="text-stone-400 hover:text-stone-700 p-1 -m-1" aria-label="Chiudi">
@@ -97,17 +97,17 @@ export default function CoverNoticesChip({ notices, onOpenVerificato }: Props) {
             const { text, url } = parseNoticeSource(notice.text)
             return (
               <div key={i} className={`rounded-xl border px-3.5 py-3 ${st.box}`}>
-                <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide mb-1.5" style={{ color: st.dot }}>
+                <p className="flex items-center gap-1.5 text-[9.5px] font-bold uppercase tracking-wide mb-1.5" style={{ color: st.dot }}>
                   <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: st.dot }} />
                   {st.label}
                 </p>
-                <p className={`text-xs leading-snug ${st.text}`}>{text}</p>
+                <p className={`text-[12.5px] leading-snug ${st.text}`}>{text}</p>
                 {url && (
                   <a
                     href={url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-stone-500 hover:text-stone-800 transition-colors"
+                    className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-stone-500 hover:text-stone-800 transition-colors"
                   >
                     <ExternalLink className="w-3 h-3" /> Fonte
                   </a>
@@ -120,7 +120,7 @@ export default function CoverNoticesChip({ notices, onOpenVerificato }: Props) {
         {onOpenVerificato && (
           <button
             onClick={() => { setOpen(false); onOpenVerificato() }}
-            className="shrink-0 w-full flex items-center justify-center gap-1.5 px-5 py-3.5 border-t border-stone-100 text-xs font-semibold text-stone-600 hover:bg-stone-50 transition-colors pb-[calc(0.875rem+env(safe-area-inset-bottom,0px))] sm:pb-3.5"
+            className="shrink-0 w-full flex items-center justify-center gap-1.5 px-5 py-3.5 border-t border-stone-100 text-[12px] font-semibold text-stone-600 hover:bg-stone-50 transition-colors pb-[calc(0.875rem+env(safe-area-inset-bottom,0px))] sm:pb-3.5"
           >
             <BookOpen className="w-3.5 h-3.5" /> Leggi tutto in &ldquo;Verificato online&rdquo;
           </button>
@@ -134,7 +134,7 @@ export default function CoverNoticesChip({ notices, onOpenVerificato }: Props) {
       <button
         onClick={() => setOpen(true)}
         title="Avvisi trovati online su questo percorso"
-        className={`pointer-events-auto flex items-center gap-1.5 px-2.5 py-1 rounded-full border backdrop-blur-md text-xs font-bold text-white shadow-sm transition-colors ${style.chip}`}
+        className={`pointer-events-auto flex items-center gap-1.5 px-2.5 py-1 rounded-full border backdrop-blur-md text-[11px] font-bold text-white shadow-sm transition-colors ${style.chip}`}
       >
         <AlertTriangle className="w-3 h-3 shrink-0" />
         {notices.length === 1 ? '1 avviso sul percorso' : `${notices.length} avvisi sul percorso`}

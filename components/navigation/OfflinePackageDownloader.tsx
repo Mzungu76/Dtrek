@@ -87,7 +87,7 @@ export default function OfflinePackageDownloader({ hikeId, routePolyline, hikeDa
     const pct = manifest && manifest.tileCount > 0 ? Math.round((manifest.downloadedCount / manifest.tileCount) * 100) : 0
     if (compact) {
       return (
-        <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-white/95 shadow-md text-sky-700 text-xs font-semibold" title={`Download offline: ${pct}%`}>
+        <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-white/95 shadow-md text-sky-700 text-[11px] font-semibold" title={`Download offline: ${pct}%`}>
           {pct}%
           {downloading ? (
             <button onClick={handlePause} title="Metti in pausa"><Pause className="w-3 h-3" /></button>

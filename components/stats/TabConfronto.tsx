@@ -14,8 +14,6 @@ import {
 import ShareModal from '@/components/ShareModal'
 import { Check, GitCommitHorizontal, Mountain, Loader2, Share2, Shuffle, Sparkles, Trophy } from 'lucide-react'
 import InfoButton from './InfoButton'
-import { TornFrame, tornVariant } from '@/components/TornFrame'
-import { TACCUINO_PAPER } from '@/lib/taccuinoTokens'
 
 interface CompareRanking { id: string; title: string; type: 'completata' | 'pianificata'; position: number; reason: string }
 interface CompareAiResult { narrative: string; ranking: CompareRanking[] }
@@ -246,7 +244,7 @@ export default function TabConfronto({ activities, preselectId }: Props) {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
                     <p className="text-sm font-medium text-stone-700 truncate">{e.title}</p>
-                    <span className={`shrink-0 text-xs uppercase tracking-wide font-semibold px-1.5 py-0.5 rounded-full ${e.type === 'completata' ? 'bg-forest-100 text-forest-700' : 'bg-sky-100 text-sky-700'}`}>
+                    <span className={`shrink-0 text-[9px] uppercase tracking-wide font-semibold px-1.5 py-0.5 rounded-full ${e.type === 'completata' ? 'bg-forest-100 text-forest-700' : 'bg-sky-100 text-sky-700'}`}>
                       {e.type === 'completata' ? 'Registrata' : 'Pianificata'}
                     </span>
                   </div>
@@ -264,8 +262,7 @@ export default function TabConfronto({ activities, preselectId }: Props) {
       {selected.length >= 2 && (
         <div className="space-y-6">
           {/* Resoconto AI */}
-          <TornFrame size="card" variant={tornVariant('confronto-resoconto-ai')}>
-          <div className="p-5" style={{ background: TACCUINO_PAPER.light }}>
+          <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5">
             {!aiResult && !aiLoading && (
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div className="flex items-start gap-3">
@@ -327,11 +324,9 @@ export default function TabConfronto({ activities, preselectId }: Props) {
               </div>
             )}
           </div>
-          </TornFrame>
 
           {/* Stats table */}
-          <TornFrame size="card" variant={tornVariant('confronto-tabella-statistiche')}>
-          <div className="overflow-hidden" style={{ background: TACCUINO_PAPER.light }}>
+          <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
             <div className="px-5 py-4 border-b border-stone-100 flex items-center justify-between">
               <h3 className="font-medium text-stone-700">Confronto statistiche</h3>
               {shareActivities.length >= 2 && (
@@ -349,7 +344,7 @@ export default function TabConfronto({ activities, preselectId }: Props) {
                     {selected.map((e, i) => (
                       <th key={e.combinedId} className="px-4 py-3 text-left text-xs font-medium" style={{ color: COMPARISON_COLORS[i] }}>
                         {e.title}
-                        <span className="block text-xs uppercase tracking-wide text-stone-400 font-normal mt-0.5">
+                        <span className="block text-[9px] uppercase tracking-wide text-stone-400 font-normal mt-0.5">
                           {e.type === 'completata' ? 'Registrata' : 'Pianificata'}
                         </span>
                       </th>
@@ -382,18 +377,16 @@ export default function TabConfronto({ activities, preselectId }: Props) {
               </table>
             </div>
           </div>
-          </TornFrame>
 
           {/* Radar */}
-          <TornFrame size="card" variant={tornVariant('confronto-radar')}>
-          <div className="p-5" style={{ background: TACCUINO_PAPER.light }}>
+          <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
             <h3 className="font-medium text-stone-700 mb-4">Radar confronto (normalizzato 0-100)</h3>
-            <div className="h-80 overflow-hidden">
+            <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <RadarChart data={radarData}>
                   <PolarGrid />
                   <PolarAngleAxis dataKey="metric" tick={{ fontSize: 12 }} />
-                  <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 12 }} />
+                  <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 10 }} />
                   {selected.map((e, i) => (
                     <Radar key={e.combinedId} name={e.title}
                       dataKey={`a${i}`} stroke={COMPARISON_COLORS[i]}
@@ -404,11 +397,9 @@ export default function TabConfronto({ activities, preselectId }: Props) {
               </ResponsiveContainer>
             </div>
           </div>
-          </TornFrame>
 
           {/* Elevation profiles + HR zones */}
-          <TornFrame size="card" variant={tornVariant('confronto-profili-altimetrici')}>
-          <div className="p-5" style={{ background: TACCUINO_PAPER.light }}>
+          <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-medium text-stone-700 flex items-center gap-1.5 flex-wrap">
                 Profili altimetrici sovrapposti + Zone FC
@@ -432,8 +423,8 @@ export default function TabConfronto({ activities, preselectId }: Props) {
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={elevMerged} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#e8e4dc" />
-                        <XAxis dataKey="pct" unit="%" tick={{ fontSize: 12 }} tickLine={false} />
-                        <YAxis tick={{ fontSize: 12 }} tickLine={false} axisLine={false} unit=" m" width={52} />
+                        <XAxis dataKey="pct" unit="%" tick={{ fontSize: 10 }} tickLine={false} />
+                        <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} unit=" m" width={52} />
                         <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e8e4dc', fontSize: 12 }} />
                         {selected.map((e, i) => (
                           elevProfiles[i].length > 0 && (
@@ -475,7 +466,6 @@ export default function TabConfronto({ activities, preselectId }: Props) {
               </div>
             )}
           </div>
-          </TornFrame>
         </div>
       )}
 

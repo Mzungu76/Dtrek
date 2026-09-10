@@ -5,8 +5,6 @@ import type { SafetyScore } from '@/lib/safetyScore'
 import type { PersonalSafety } from '@/lib/personalSafetyFit'
 import type { GuideNotice } from '@/lib/guideNotices'
 import Kicker from '@/components/ui/Kicker'
-import { TornFrame, tornVariant } from '@/components/TornFrame'
-import { TACCUINO_PAPER } from '@/lib/taccuinoTokens'
 
 interface Props {
   safety: SafetyScore | null
@@ -18,12 +16,10 @@ interface Props {
 }
 
 /** Punteggi (Sicurezza/Comfort TrailScore) — spostati dalla vecchia tab "Dati & punteggi" nella
- *  sezione "Dati e sicurezza" della guida magazine. Il badge a doppio anello dà il colpo d'occhio;
- *  di default mostra solo il Consiglio (già una sintesi di Sicurezza+Idoneità) — il resto,
- *  ScoreRing incluso, sta dietro "Vedi il dettaglio" invece di restare sempre impilato sotto come
- *  un secondo pannello a parte. Il toggle "Pendenza" (mostra il gradiente sul tracciato) è già
- *  raggiungibile dai controlli della mappa in "Il percorso" (components/RouteMapSection.tsx) —
- *  non serve ripeterlo qui. */
+ *  sezione "Dati e sicurezza" della guida magazine. Il badge a doppio anello dà il colpo d'occhio,
+ *  la lista sotto apre il dettaglio di ciascun punteggio in un foglio a comparsa. Il toggle
+ *  "Pendenza" (mostra il gradiente sul tracciato) è già raggiungibile dai controlli della mappa in
+ *  "Il percorso" (components/RouteMapSection.tsx) — non serve ripeterlo qui. */
 export default function ScoresWidget({ safety, personalSafety, cts, guideNotices }: Props) {
   const breakdown = computeTrailScoreBreakdown(safety, cts)
 
@@ -31,23 +27,21 @@ export default function ScoresWidget({ safety, personalSafety, cts, guideNotices
     <div className="space-y-3">
       <Kicker>Punteggio complessivo</Kicker>
 
-      <TornFrame size="card" variant={tornVariant('punteggio-complessivo')}>
-        <div className="px-5 py-6" style={{ background: TACCUINO_PAPER.light }}>
-          <TrailScoreGaugeBadge
-            total={breakdown.total > 0 ? breakdown.total : null}
-            value={breakdown.value}
-            safety={safety}
-            personalSafety={personalSafety}
-            disclaimer="inline"
-            captionLayout="stacked"
-            dark={false}
-            vetoed={isTrailScoreVetoed(safety)}
-            notices={guideNotices}
-            size={128}
-            detailExtra={<ScoreRing safety={safety} cts={cts} />}
-          />
-        </div>
-      </TornFrame>
+      <div className="rounded-2xl bg-gradient-to-br from-stone-900 to-stone-800 px-5 py-7 flex items-center justify-center">
+        <TrailScoreGaugeBadge
+          total={breakdown.total > 0 ? breakdown.total : null}
+          value={breakdown.value}
+          safety={safety}
+          personalSafety={personalSafety}
+          disclaimer="inline"
+          captionLayout="stacked"
+          vetoed={isTrailScoreVetoed(safety)}
+          notices={guideNotices}
+          size={128}
+        />
+      </div>
+
+      <ScoreRing safety={safety} cts={cts} />
     </div>
   )
 }

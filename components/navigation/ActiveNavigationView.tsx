@@ -887,7 +887,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
     }
   }
 
-  const handleSaveRecordedActivity = async (title: string, reportCompletion: boolean, completionNote: string) => {
+  const handleSaveRecordedActivity = async (title: string, mode: 'overwrite' | 'new', reportCompletion: boolean, completionNote: string) => {
     if (!pendingActivity) return
     let offline = false
     const saved = await saveActivityWithEnrichment(pendingActivity, {
@@ -895,6 +895,9 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       linkedPlannedId: hike.id,
       linkedPlannedTrackPoints: (hike.trackPoints ?? []).filter((p) => p.lat && p.lon),
       hikeNotes,
+      // Un Percorso non viene più cancellato al completamento (lib/activitySave.ts: resta
+      // un'ancora ripetibile, marcata firstCompletedAt) — 'overwrite' vs 'new' non pilota più
+      // una cancellazione.
       onSyncResult: (ok) => { offline = !ok },
     })
     clearRecordedTrack(hike.id).catch(() => {})

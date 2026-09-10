@@ -79,7 +79,7 @@ export default function InstructionBanner({
                 <ArrowUp className="w-4 h-4" style={{ transform: `rotate(${TURN_ROTATION[current.turn]}deg)` }} />
               )}
             </span>
-            <span className="min-w-0 truncate text-white font-display font-bold text-xl leading-tight" style={{ textShadow: TEXT_SHADOW }}>
+            <span className="min-w-0 truncate text-white font-display font-bold text-[20px] leading-tight" style={{ textShadow: TEXT_SHADOW }}>
               {current.text}
             </span>
             {next && (

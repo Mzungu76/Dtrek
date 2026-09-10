@@ -1,4 +1,4 @@
-import Navbar, { MOBILE_BOTTOMBAR_SPACER } from '@/components/Navbar'
+import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 
 interface CreditSource {
   name: string
@@ -36,10 +36,10 @@ const SOURCES: CreditSource[] = [
 
 export default function FontiECreditiPage() {
   return (
-    <div className={`min-h-screen bg-stone-50 ${MOBILE_BOTTOMBAR_SPACER}`}>
+    <div className={`min-h-screen bg-stone-50 ${MOBILE_TOPBAR_SPACER}`}>
       <Navbar />
       <div className="max-w-3xl mx-auto px-4 py-10">
-        <h1 className="font-display text-2xl font-semibold text-stone-800 mb-2">Fonti e crediti</h1>
+        <h1 className="font-lora text-2xl text-stone-800 mb-2">Fonti e crediti</h1>
         <p className="text-sm text-stone-500 mb-8">
           Le Gallerie Verde e Selvatica di DTrek mostrano dati di biodiversità raccolti da fonti
           aperte. Di seguito l’attribuzione richiesta da ciascuna licenza.
@@ -47,7 +47,7 @@ export default function FontiECreditiPage() {
         <div className="space-y-6">
           {SOURCES.map(s => (
             <div key={s.name} className="bg-white rounded-xl border border-stone-200 p-4">
-              <h2 className="font-display text-lg font-semibold text-stone-800">
+              <h2 className="font-lora text-lg text-stone-800">
                 <a href={s.url} target="_blank" rel="noopener noreferrer" className="hover:underline">
                   {s.name} ↗
                 </a>

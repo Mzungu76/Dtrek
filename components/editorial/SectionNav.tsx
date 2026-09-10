@@ -40,7 +40,7 @@ export default function SectionNav({ sections, activeIndex, onSelect, stickyExtr
       >
         {sections.map((s, i) => (
           <button key={s.key} onClick={() => onSelect(i)}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition-all whitespace-nowrap shrink-0"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold transition-all whitespace-nowrap shrink-0"
             style={activeIndex === i
               ? { background: s.color, color: 'white' }
               : { background: '#eeece5', color: '#8a7f6e' }
@@ -62,7 +62,7 @@ export default function SectionNav({ sections, activeIndex, onSelect, stickyExtr
               key={s.key}
               onClick={() => onSelect(i)}
               title={s.title}
-              className="flex items-center md:justify-center lg:justify-start gap-2.5 px-2.5 lg:px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all text-left"
+              className="flex items-center md:justify-center lg:justify-start gap-2.5 px-2.5 lg:px-3.5 py-2.5 rounded-xl text-[13px] font-semibold transition-all text-left"
               style={active ? { background: s.color, color: 'white' } : { background: 'transparent', color: '#8a7f6e' }}
             >
               <span className="relative [&>svg]:w-4 [&>svg]:h-4 shrink-0">

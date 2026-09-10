@@ -100,10 +100,10 @@ export default function NavStatsSheet({
 
       <div className="px-4 pt-3">
         <div className="flex gap-2">
-          <button onClick={onOpenFoto} className="flex-1 flex flex-col items-center gap-1 py-2.5 rounded-2xl bg-stone-100 text-stone-600 text-xs font-semibold">
+          <button onClick={onOpenFoto} className="flex-1 flex flex-col items-center gap-1 py-2.5 rounded-2xl bg-stone-100 text-stone-600 text-[10px] font-semibold">
             <Camera className="w-[18px] h-[18px]" /> Foto
           </button>
-          <button onClick={onOpenNota} className="flex-1 flex flex-col items-center gap-1 py-2.5 rounded-2xl bg-stone-100 text-stone-600 text-xs font-semibold">
+          <button onClick={onOpenNota} className="flex-1 flex flex-col items-center gap-1 py-2.5 rounded-2xl bg-stone-100 text-stone-600 text-[10px] font-semibold">
             <NotebookPen className="w-[18px] h-[18px]" /> Nota
           </button>
           {/* Riconoscimento specie in stand-by (dipende da un endpoint iNaturalist non
@@ -111,7 +111,7 @@ export default function NavStatsSheet({
               SpeciesIdentifySheet.tsx e app/api/flora-fauna-identify/route.ts, lasciati intatti
               e già pronti alla coda offline: basta reintrodurre questo bottone quando/se si
               deciderà come gestire l'autenticazione OAuth e i limiti di traffico). */}
-          <button onClick={onStop} className="flex-1 flex flex-col items-center gap-1 py-2.5 rounded-2xl bg-terra-500 text-white text-xs font-bold">
+          <button onClick={onStop} className="flex-1 flex flex-col items-center gap-1 py-2.5 rounded-2xl bg-terra-500 text-white text-[10px] font-bold">
             <Square className="w-[18px] h-[18px]" /> Termina
           </button>
         </div>
@@ -163,7 +163,7 @@ export default function NavStatsSheet({
                 {etaDate && (
                   <div className="flex items-center gap-1.5 mt-0.5">
                     <span className="text-xs text-terra-600 font-body font-semibold">Arrivo stimato {formatEta(etaDate)}</span>
-                    <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full font-body ${PACE_STATUS_STYLE[paceStatus].className}`}>
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full font-body ${PACE_STATUS_STYLE[paceStatus].className}`}>
                       {PACE_STATUS_STYLE[paceStatus].label}
                     </span>
                   </div>
