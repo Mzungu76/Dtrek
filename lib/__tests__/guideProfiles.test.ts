@@ -14,13 +14,15 @@ describe('guideProfileFor', () => {
     expect(profile.personaAddendum).toBeUndefined()
   })
 
-  it('borgo_citta e sito escludono "dati_sicurezza" — nessuna metrica escursionistica fabbricata', () => {
+  it('borgo_citta e sito escludono "dati_sicurezza" e "comfort" — nessuna metrica/confronto escursionistico fabbricato', () => {
     expect(guideProfileFor('borgo_citta').availableSections).not.toContain('dati_sicurezza')
     expect(guideProfileFor('sito').availableSections).not.toContain('dati_sicurezza')
+    expect(guideProfileFor('borgo_citta').availableSections).not.toContain('comfort')
+    expect(guideProfileFor('sito').availableSections).not.toContain('comfort')
   })
 
   it('borgo_citta e sito mantengono tutte le altre sezioni del sentiero', () => {
-    const nonHiking = GUIDE_SECTIONS.map(s => s.key).filter(k => k !== 'dati_sicurezza')
+    const nonHiking = GUIDE_SECTIONS.map(s => s.key).filter(k => k !== 'dati_sicurezza' && k !== 'comfort')
     expect(guideProfileFor('borgo_citta').availableSections).toEqual(nonHiking)
     expect(guideProfileFor('sito').availableSections).toEqual(nonHiking)
   })

@@ -30,9 +30,12 @@ export interface GuideProfile {
 
 // "Dati e sicurezza" commenta punteggi/rischi (Trail Score, Sicurezza, dislivello, quota) che
 // esistono solo per un sentiero — nessuna metrica fabbricata per una Meta che non ne ha mai avute
-// (piano §48.9). Nessun'altra sezione (luoghi/natura/sapori/consigli) è specifica al camminare in
-// sé: restano valide così come sono anche per un borgo o un sito.
-const HIKING_ONLY_SECTIONS: GuideSectionKey[] = ['dati_sicurezza']
+// (piano §48.9). "Su misura per te" confronta il percorso con lo storico/profilo escursionistico
+// dell'utente (lib/hikerHistory.ts, lib/hikerProfile.ts) — stesso principio, non ha un
+// equivalente per la visita di un borgo o di un sito. Nessun'altra sezione (luoghi/natura/sapori/
+// consigli) è specifica al camminare in sé: restano valide così come sono anche per un borgo o
+// un sito.
+const HIKING_ONLY_SECTIONS: GuideSectionKey[] = ['dati_sicurezza', 'comfort']
 
 function availableSectionsFor(exclude: GuideSectionKey[]): GuideSectionKey[] {
   return GUIDE_SECTIONS.map(s => s.key).filter(k => !exclude.includes(k))

@@ -8,6 +8,7 @@ export type GuideSectionKey =
   | 'il_percorso'
   | 'verificato'
   | 'dati_sicurezza'
+  | 'comfort'
   | 'luoghi'
   | 'natura'
   | 'sapori'
@@ -35,6 +36,8 @@ export const GUIDE_SECTIONS: GuideSectionDef[] = [
     subtitle: 'Chiusure, allerte e aggiornamenti trovati online per questo percorso, con le fonti consultate.' },
   { key: 'dati_sicurezza',   title: 'Dati e sicurezza',           match: ['dati e sicurezza', 'sicurezza e dati'],
     subtitle: 'Un commento a voce su rischi, difficoltà e punteggi di sicurezza già mostrati sopra.' },
+  { key: 'comfort',          title: 'Su misura per te',           match: ['su misura per te', 'su misura'],
+    subtitle: 'Quanto questo percorso è in linea con le tue capacità e preferenze personali.' },
   { key: 'luoghi',           title: 'I luoghi da non perdere',    match: ['i luoghi', 'luoghi da non perdere'],
     subtitle: 'Storia, leggende e curiosità dei punti di interesse lungo il tracciato.' },
   { key: 'natura',           title: 'La natura intorno a te',     match: ['la natura'],
