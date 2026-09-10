@@ -895,10 +895,10 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       linkedPlannedId: hike.id,
       linkedPlannedTrackPoints: (hike.trackPoints ?? []).filter((p) => p.lat && p.lon),
       hikeNotes,
-      // 'overwrite' consumes the plan into this activity (as before); 'new' keeps the linkage
-      // for reference (comparison chart, "generato da") but leaves the planned hike untouched
-      // so it can be hiked again later instead of being deleted.
-      deleteLinkedPlanned: mode === 'overwrite',
+      // Un Percorso non viene più cancellato al completamento (lib/activitySave.ts: resta
+      // un'ancora ripetibile, marcata firstCompletedAt) — 'overwrite' vs 'new' non ha più
+      // bisogno di pilotare una cancellazione, la distinzione resta solo per un'eventuale UI
+      // futura di scelta del Diario di destinazione.
       onSyncResult: (ok) => { offline = !ok },
     })
     clearRecordedTrack(hike.id).catch(() => {})

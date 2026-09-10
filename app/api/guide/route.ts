@@ -40,6 +40,8 @@ import { readOrBackfillHistoryStats, formatHistoryStatsBlock } from '@/lib/hiker
 import { findAllSourceImages } from '@/lib/sourceImageFetch'
 import { concernLabel, environmentPrefLabel } from '@/lib/hikerProfile'
 import { resolveComuneFromLatLon } from '@/lib/overpassTrails'
+import { guideProfileFor, type GuideProfile } from '@/lib/guideProfiles'
+import { metaHasHikingMetrics } from '@/lib/metaTypes'
 
 export const dynamic = 'force-dynamic'
 
@@ -414,6 +416,8 @@ interface GuideHikeFallback {
   cachedPois?: PlannedHike['cachedPois']
   cachedPoiWiki?: PlannedHike['cachedPoiWiki']
   trackPoints?: TrackPoint[]
+  metaType?: PlannedHike['metaType']
+  siteType?: PlannedHike['siteType']
 }
 
 /**
@@ -441,6 +445,8 @@ function hikeFromFallback(hikeId: string, hikeFallback: GuideHikeFallback): Plan
     assessment:           hikeFallback.assessment,
     cachedPois:           hikeFallback.cachedPois,
     cachedPoiWiki:        hikeFallback.cachedPoiWiki,
+    metaType:             hikeFallback.metaType,
+    siteType:             hikeFallback.siteType,
   }
 }
 
@@ -463,6 +469,11 @@ function buildPrompt(
   /** Lunghezza scelta per ciascuna sezione (default utente, sovrascrivibile per questa singola
    *  generazione — vedi requestedSectionLengths in generateGuide). Sempre completa. */
   sectionLengths: SectionLengthMap = sanitizeSectionLengths(undefined),
+  /** Profilo di tipologia (lib/guideProfiles.ts, piano mete multi-tipologia) — sentiero di default
+   *  per compatibilità con ogni chiamata esistente. Determina sia le istruzioni/titolo di alcune
+   *  sezioni sia se includere il blocco di metriche escursionistiche (distanza/dislivello/quota/
+   *  punteggi), assente per una Meta borgo_citta/sito che non ha una traccia GPS. */
+  profile: GuideProfile = guideProfileFor('sentiero'),
 ): string {
   const wiki = (hike.cachedPoiWiki ?? []) as { poi: PoiItem; wiki: WikiPage }[]
   const raw  = (hike.cachedPois   ?? []) as PoiItem[]
@@ -521,10 +532,18 @@ function buildPrompt(
   const sectionsBlock = sectionsToWrite
     .map(k => {
       const level = sectionLengths[k]
-      return `${SECTION_BRIEF[k]}${lengthGuidance(k, level)}\n(LUNGHEZZA per questa sezione: ${SECTION_LENGTH_BY_LEVEL[k][level]})`
+      const brief = profile.sectionOverrides?.[k]?.brief ?? SECTION_BRIEF[k]
+      return `${brief}${lengthGuidance(k, level)}\n(LUNGHEZZA per questa sezione: ${SECTION_LENGTH_BY_LEVEL[k][level]})`
     })
     .join('\n\n')
-  const sectionTitles = sectionsToWrite.map(k => GUIDE_SECTIONS.find(s => s.key === k)!.title).join(', ')
+  const sectionTitles = sectionsToWrite
+    .map(k => profile.sectionOverrides?.[k]?.title ?? GUIDE_SECTIONS.find(s => s.key === k)!.title)
+    .join(', ')
+
+  // Il blocco distanza/dislivello/quota/punteggi ha senso solo per un sentiero (piano mete
+  // multi-tipologia §48.9) — per una Meta borgo_citta/sito queste cifre sono spesso 0 o assenti e
+  // commentarle produrrebbe un dato fuorviante, non semplicemente vuoto.
+  const hikingMetrics = metaHasHikingMetrics(hike.metaType)
 
   // Cifre effettive, non quelle grezze della traccia: su un percorso lineare dichiarato "andata e
   // ritorno" (lib/routeMode.ts) sono il doppio, ed è quello che l'escursionista camminerà davvero.
@@ -537,13 +556,8 @@ function buildPrompt(
       ? 'TIPOLOGIA: sola andata (punto di partenza e punto di arrivo sono diversi; chi cammina non torna sui propri passi)\n'
       : ''
 
-  return `${isFirstGeneration
-    ? `Crea una guida escursionistica per questo percorso, analizzando tutti i dati disponibili qui sotto:`
-    : `Scrivi una o più sezioni, finora senza testo, di una guida escursionistica già esistente per questo percorso (le altre sezioni sono già scritte e non vanno toccate), analizzando tutti i dati disponibili qui sotto:`}
-
-NOME: ${hike.title}
-${dateStr ? `DATA: ${dateStr}` : ''}
-${routeModeLine}DISTANZA: ${(effective.distanceMeters / 1000).toFixed(1)} km
+  const hikingMetricsBlock = hikingMetrics
+    ? `${routeModeLine}DISTANZA: ${(effective.distanceMeters / 1000).toFixed(1)} km
 DISLIVELLO POSITIVO: ${Math.round(effective.elevationGain)} m
 DISLIVELLO NEGATIVO: ${Math.round(effective.elevationLoss)} m
 QUOTA MASSIMA: ${Math.round(hike.altitudeMax)} m slm
@@ -555,7 +569,16 @@ ${assessment?.suitabilityScore ? `ADATTA A: ${assessment.suitabilityScore}% degl
 ${assessmentBlock}
 
 ${scoresBlock ? `PUNTEGGI E SEGNALAZIONI (già mostrati graficamente nell'app, usali solo per commentare):\n${scoresBlock}` : ''}
+`
+    : ''
 
+  return `${isFirstGeneration
+    ? `Crea una guida per questa Meta, analizzando tutti i dati disponibili qui sotto:`
+    : `Scrivi una o più sezioni, finora senza testo, di una guida già esistente per questa Meta (le altre sezioni sono già scritte e non vanno toccate), analizzando tutti i dati disponibili qui sotto:`}
+
+NOME: ${hike.title}
+${dateStr ? `DATA: ${dateStr}` : ''}
+${hikingMetricsBlock}
 ${comfortContext ? `PROFILO E STORICO DI QUESTO ESCURSIONISTA (usali SOLO per la sezione "Su misura per te"):\n${comfortContext}` : ''}
 
 LUOGHI CON VOCE WIKIPEDIA (usa questi come base per la narrazione storico-culturale):
@@ -888,6 +911,8 @@ async function generateGuide(req: NextRequest): Promise<Response> {
         assessment:           data.assessment           ?? undefined,
         cachedPois:           data.cached_pois          ?? undefined,
         cachedPoiWiki:        data.cached_poi_wiki      ?? undefined,
+        metaType:             data.meta_type            ?? 'sentiero',
+        siteType:             data.site_type            ?? undefined,
       }
 
       scores = {
@@ -932,8 +957,22 @@ async function generateGuide(req: NextRequest): Promise<Response> {
   // nessuna dipendenza dalla narrazione (né viceversa): "Il percorso" è tornata pura narrazione,
   // non scrive più avvisi/fonti. Il consenso dell'utente (SectionAiPrivacy.tsx) la disattiva del
   // tutto, indipendentemente da cosa è stato richiesto.
-  const needsVerificato = sectionKeys.includes('verificato') && aiUseWebSearch
-  const narrativeSectionKeys = sectionKeys.filter(k => k !== 'verificato')
+  // Non ogni sezione ha senso per ogni tipologia di Meta (piano mete multi-tipologia, Blocco E,
+  // lib/guideProfiles.ts) — "Dati e sicurezza" e "Su misura per te" commentano punteggi/storico
+  // escursionistico che esistono solo per un sentiero. Filtrata solo ora, non prima: la tipologia
+  // della Meta è nota solo dopo averla letta da Supabase/fallback. "verificato" non passa mai da
+  // questo filtro/profilo: resta gestita separatamente più sotto (unica chiamata a
+  // SYSTEM_VERIFICATO, indipendente dalla tipologia).
+  const guideProfile = guideProfileFor(hike.metaType)
+  const availableSectionKeys = sectionKeys.filter(k => k === 'verificato' || guideProfile.availableSections.includes(k))
+  if (availableSectionKeys.length === 0) {
+    return new Response(JSON.stringify({ error: 'Nessuna sezione da generare per questa tipologia di Meta' }), {
+      status: 400, headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
+  const needsVerificato = availableSectionKeys.includes('verificato') && aiUseWebSearch
+  const narrativeSectionKeys = availableSectionKeys.filter(k => k !== 'verificato')
 
   const client = new Anthropic({ apiKey })
   // Comune/provincia/regione del punto di partenza: passati a generateVerificatoText come ancoraggio
@@ -991,7 +1030,7 @@ async function generateGuide(req: NextRequest): Promise<Response> {
     })
   }
 
-  const prompt = buildPrompt(hike, nature, narrativeSectionKeys, scores, isFirstGeneration, comfortContext, effectiveSectionLengths)
+  const prompt = buildPrompt(hike, nature, narrativeSectionKeys, scores, isFirstGeneration, comfortContext, effectiveSectionLengths, guideProfile)
 
   // SYSTEM_CORE (+ SYSTEM_SUBTITLE quando applicabile) è testo fisso, identico per ogni utente e
   // ogni percorso nella stessa combinazione (~1700-1900 token) — niente cache_control (rimosso
@@ -1000,7 +1039,7 @@ async function generateGuide(req: NextRequest): Promise<Response> {
   // 25% di sovrapprezzo di scrittura (pochi millesimi di centesimo qui) non vale il rischio residuo.
   // Questa chiamata non fa mai ricerca web (vedi SYSTEM_VERIFICATO/generateVerificatoText sopra per
   // quella, isolata apposta in una chiamata separata).
-  const systemText = SYSTEM_CORE + (isFirstGeneration ? SYSTEM_SUBTITLE : '')
+  const systemText = SYSTEM_CORE + (isFirstGeneration ? SYSTEM_SUBTITLE : '') + (guideProfile.personaAddendum ?? '')
   const system = [
     { type: 'text' as const, text: systemText },
     // Il genere è un dato biometrico/anagrafico — rispetta il consenso dell'utente (vedi

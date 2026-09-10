@@ -15,6 +15,7 @@ import type { TrailTerrainProfile } from './terrain/trailTerrainProfile'
 import type { FloraResult } from './floraTypes'
 import type { GuideNotice } from './guideNotices'
 import type { RouteMode } from './routeMode'
+import { metaHasHikingMetrics, type MetaType, type SiteType } from './metaTypes'
 
 export type { HikeAssessment, AssessmentItem } from './hikeAssessment'
 export type { HikeNote } from './blobStore'
@@ -95,6 +96,14 @@ export interface PlannedHike {
   // Preferito nella galleria Guida — vedi components/routehub/BottomGallery.tsx (stella sulla
   // scheda chiusa) e app/guida/GuidaHub.tsx (filtro "Preferiti", additivo rispetto all'ordinamento).
   favorite?:                     boolean
+  // Impostato la prima volta che un'attività viene collegata a questo percorso (lib/activitySave.ts)
+  // — mai più cancellato: un percorso è un sentiero ripetibile, non consumato dalla prima uscita.
+  // Assente = "in programma", mai camminato.
+  firstCompletedAt?:             string
+  // Il Diario (supabase/migrations/add_diaries_table.sql) a cui appartiene questo Percorso — un
+  // solo Diario per Percorso. Assente solo su righe create prima della migrazione e non ancora
+  // sanate dal backfill.
+  diaryId?:                      string
   // Sola andata o andata e ritorno, per i soli percorsi lineari — vedi lib/routeMode.ts.
   // Assente su un percorso non lineare (la domanda non si pone) e su un percorso lineare appena
   // importato, dove è proprio l'assenza a far comparire il popup di scelta obbligatoria prima
@@ -138,6 +147,21 @@ export interface PlannedHike {
    *  (lib/italianRegions.ts) solo quando isSample è true. */
   isSample?:                     boolean
   sampleRegion?:                 string
+  // Tipologia della Meta (docs/piano-mete-multitipologia.md) — assente solo lato client prima del
+  // round-trip col server, che valorizza sempre 'sentiero' per default di colonna (vedi
+  // supabase/migrations/add_meta_type_columns.sql). Usare metaHasHikingMetrics()/isMetaType() da
+  // lib/metaTypes.ts invece di confrontare la stringa direttamente. Mai dedotto da trackPoints o
+  // altra euristica: scelto esplicitamente dall'utente alla creazione della Meta.
+  metaType?:                     MetaType
+  // Valorizzato solo quando metaType === 'sito'; assente per sentiero/borgo_citta.
+  siteType?:                     SiteType
+  // Posizione + collegamento a dtrek_places per Mete 'borgo_citta'/'sito' (piano Blocco D §25/§26,
+  // supabase/migrations/add_planned_hikes_place_link.sql) — un sentiero ricava la sua posizione
+  // da trackPoints/routePolyline e non usa mai questi campi. placeId può azzerarsi (SET NULL) se
+  // la riga di catalogo viene rimossa; latitude/longitude restano comunque valorizzate.
+  placeId?:                      string
+  latitude?:                     number
+  longitude?:                    number
 }
 
 // Index entry — no trackPoints (kept lightweight for the list)
@@ -169,7 +193,24 @@ export async function getAllPlanned(onRefresh?: (data: PlannedHikeMeta[]) => voi
     // only re-fetches when the server's updatedAt is newer, which a missing-field cache doesn't
     // trigger). The list is still fully usable for display in the meantime, so this repairs in the
     // background instead of blocking the return.
-    const needsRepair = local.some((h) => !h.archivedAt && !h.routePolyline?.length && h.osmId == null)
+    //
+    // Second condition: app/api/planned/route.ts's META_COLS omitted cached_pois/cached_poi_wiki
+    // from its SELECT since this list endpoint was first written — every plannedList cached before
+    // that fix has BOTH fields undefined on every entry, regardless of how many POI/Wikipedia the
+    // route actually has (the real bug behind the Home hero/card photos and "Curiosità" silently
+    // missing on a cold login: only a route opened individually this session, via getPlannedById's
+    // own full select('*'), ever got these fields — see that self-heal below). Both-undefined is a
+    // reasonable enough signal of "pre-fix cache" to also trigger a refetch here — a route that
+    // genuinely has neither (plenty do) just costs one harmless extra background refresh per page
+    // load, not a wrong result.
+    // Il ramo routePolyline/osmId ha senso solo per un sentiero (piano §48.9, docs/
+    // meta-multitype-audit.md §6): una Meta borgo_citta/sito non ha mai né l'uno né l'altro per
+    // definizione, quindi senza questo gate la condizione sarebbe sempre vera e scatenerebbe un
+    // refetch di sfondo permanente e inutile a ogni lettura della cache.
+    const needsRepair = local.some((h) => !h.archivedAt && (
+      (metaHasHikingMetrics(h.metaType) && !h.routePolyline?.length && h.osmId == null)
+      || (h.cachedPois === undefined && h.cachedPoiWiki === undefined)
+    ))
     if (needsRepair) {
       apiFetch<PlannedHikeMeta[]>('/api/planned')
         .then(async (data) => { await lsSet(LS_KEYS.plannedList, data); onRefresh?.(data) })
@@ -284,7 +325,7 @@ export async function savePlanned(hike: PlannedHike): Promise<{ assessment?: Hik
 /** Applies a partial update to the local cache immediately and queues it for background sync. */
 export async function updatePlannedMeta(
   id: string,
-  meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'hikeNotes' | 'tags' | 'plannedDate' | 'cachedPois' | 'cachedPoiWiki' | 'cachedGuide' | 'cachedGuideSubtitle' | 'cachedGuideNotices' | 'cachedGuideSources' | 'guideTier' | 'guideGeneratedAt' | 'cachedEpochPois' | 'cachedBeautyScore' | 'cachedTrailScore' | 'cachedTrailScoreConfidence' | 'cachedScoresComputedAt' | 'cachedSafetyScore' | 'cachedSafetyComputedAt' | 'cachedTsTotal' | 'cachedDrivingDistanceMeters' | 'cachedDrivingDurationSeconds' | 'cachedDrivingOriginLat' | 'cachedDrivingOriginLon' | 'pendingExpiresAt' | 'archivedAt' | 'favorite' | 'routeMode' | 'dtmProfile' | 'dtmTrackHash' | 'dtmComputedAt' | 'terrainProfile' | 'terrainTrackHash' | 'terrainComputedAt' | 'cachedInProtectedArea' | 'cachedProtectedAreaTrackHash' | 'cachedProtectedAreaComputedAt' | 'floraResult' | 'floraTrackHash' | 'floraComputedAt'>>,
+  meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'hikeNotes' | 'tags' | 'plannedDate' | 'cachedPois' | 'cachedPoiWiki' | 'cachedGuide' | 'cachedGuideSubtitle' | 'cachedGuideNotices' | 'cachedGuideSources' | 'guideTier' | 'guideGeneratedAt' | 'cachedEpochPois' | 'cachedBeautyScore' | 'cachedTrailScore' | 'cachedTrailScoreConfidence' | 'cachedScoresComputedAt' | 'cachedSafetyScore' | 'cachedSafetyComputedAt' | 'cachedTsTotal' | 'cachedDrivingDistanceMeters' | 'cachedDrivingDurationSeconds' | 'cachedDrivingOriginLat' | 'cachedDrivingOriginLon' | 'pendingExpiresAt' | 'archivedAt' | 'favorite' | 'firstCompletedAt' | 'diaryId' | 'routeMode' | 'dtmProfile' | 'dtmTrackHash' | 'dtmComputedAt' | 'terrainProfile' | 'terrainTrackHash' | 'terrainComputedAt' | 'cachedInProtectedArea' | 'cachedProtectedAreaTrackHash' | 'cachedProtectedAreaComputedAt' | 'floraResult' | 'floraTrackHash' | 'floraComputedAt'>>,
 ): Promise<void> {
   const local = await lsGet<PlannedHike>(LS_KEYS.planned(id))
   if (local) await lsSet(LS_KEYS.planned(id), { ...local, ...meta })

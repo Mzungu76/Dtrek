@@ -8,6 +8,7 @@ import { assessHike } from '@/lib/hikeAssessment'
 import type { SafetyScore } from '@/lib/safetyScore'
 import { downsamplePolyline } from '@/lib/downsamplePolyline'
 import { resolveDtrekEntitlement } from '@/lib/dtrekEntitlement'
+import { deletePercorsoCascade } from '@/lib/deletePercorsoCascade'
 
 export const dynamic = 'force-dynamic'
 
@@ -62,6 +63,8 @@ function rowToHike(row: Record<string, unknown>, includeTracks = true): PlannedH
     pendingExpiresAt:             row.pending_expires_at             as string | undefined,
     archivedAt:                   row.archived_at                    as string | undefined,
     favorite:                     row.favorite                       as boolean | undefined,
+    firstCompletedAt:             row.first_completed_at             as string | undefined,
+    diaryId:                      row.diary_id                       as string | undefined,
     routeMode:                    row.route_mode                     as PlannedHike['routeMode'],
     dtmProfile:                   row.dtm_profile                    as PlannedHike['dtmProfile'],
     dtmTrackHash:                 row.dtm_track_hash                 as string | undefined,
@@ -84,6 +87,14 @@ function rowToHike(row: Record<string, unknown>, includeTracks = true): PlannedH
     sourceApp:                     row.source_app                      as PlannedHike['sourceApp'],
     isSample:                      row.is_sample                       as boolean | undefined,
     sampleRegion:                  row.sample_region                   as string | undefined,
+    // meta_type ha DEFAULT 'sentiero' a livello di colonna, ma una riga letta con META_COLS_CORE
+    // (fallback pre-migrazione) non seleziona affatto la colonna — da cui il fallback esplicito
+    // qui, per non lasciare mai metaType undefined su una riga realmente esistente.
+    metaType:                      (row.meta_type as PlannedHike['metaType']) ?? 'sentiero',
+    siteType:                      row.site_type as PlannedHike['siteType'] | undefined,
+    placeId:                       row.place_id as string | undefined,
+    latitude:                      row.latitude as number | undefined,
+    longitude:                     row.longitude as number | undefined,
   }
 }
 
@@ -129,6 +140,8 @@ function hikeToRow(h: PlannedHike) {
     cached_driving_origin_lon:        h.cachedDrivingOriginLon ?? null,
     pending_expires_at:               h.pendingExpiresAt ?? null,
     archived_at:                      h.archivedAt ?? null,
+    first_completed_at:               h.firstCompletedAt ?? null,
+    diary_id:                         h.diaryId ?? null,
     favorite:                         h.favorite ?? false,
     route_mode:                       h.routeMode ?? null,
     source_url:                       h.sourceUrl ?? null,
@@ -137,33 +150,50 @@ function hikeToRow(h: PlannedHike) {
     zone:                             h.zone ?? null,
     difficulty:                       h.difficulty ?? null,
     source_app:                       h.sourceApp ?? null,
+    meta_type:                        h.metaType ?? 'sentiero',
+    site_type:                        h.siteType ?? null,
+    place_id:                         h.placeId ?? null,
+    latitude:                         h.latitude ?? null,
+    longitude:                        h.longitude ?? null,
   }
 }
 
-// Columns for list view — excludes track_points
+// Columns for list view — excludes track_points. cached_pois/cached_poi_wiki erano assenti da
+// sempre: la Home (app/bacheca/page.tsx, foto POI dell'hero e delle card "Altre uscite in
+// programma") e la riga "Curiosità" leggono questi campi da QUESTA lista (`planned`), non dal
+// singolo percorso — con la colonna mai selezionata qui, quei campi erano sempre `undefined` per
+// ogni voce fresca dalla lista, indipendentemente da quanti POI/Wikipedia il percorso avesse
+// davvero. Il motivo per cui a volte "funzionava" durante una sessione già in corso: aprire
+// /guida/[id] fa un fetch pieno (select('*') sotto) di QUEL SOLO percorso, che
+// lib/plannedStore.ts poi rimescola anche dentro la cache locale della lista (vedi i suoi
+// commenti "self-heal") — corretto solo per i percorsi aperti individualmente in quella sessione,
+// mai per un accesso a freddo (login pulito, cache locale vuota) né per un percorso mai aperto.
 const META_COLS = [
   'id', 'title', 'planned_date', 'file_name', 'user_notes', 'hike_notes', 'tags',
   'created_at', 'distance_meters', 'elevation_gain', 'elevation_loss',
   'altitude_max', 'altitude_min', 'estimated_time_seconds',
-  'route_polyline', 'assessment', 'cached_guide', 'cached_guide_subtitle', 'cached_guide_notices', 'cached_guide_sources', 'guide_tier', 'guide_generated_at', 'osm_relation_id',
+  'route_polyline', 'assessment', 'cached_pois', 'cached_poi_wiki',
+  'cached_guide', 'cached_guide_subtitle', 'cached_guide_notices', 'cached_guide_sources', 'guide_tier', 'guide_generated_at', 'osm_relation_id',
   'cached_beauty_score', 'cached_trail_score', 'cached_trail_score_confidence', 'cached_scores_computed_at',
   'cached_safety_score', 'cached_safety_computed_at', 'cached_ts_total', 'cached_epoch_pois',
   'cached_driving_distance_m', 'cached_driving_duration_s',
   'cached_driving_origin_lat', 'cached_driving_origin_lon',
-  'pending_expires_at', 'archived_at', 'favorite', 'route_mode', 'updated_at',
+  'pending_expires_at', 'archived_at', 'favorite', 'first_completed_at', 'diary_id', 'route_mode', 'updated_at',
   'source_url', 'comfort_verdict', 'comfort_note', 'zone', 'difficulty', 'source_app',
-  'is_sample', 'sample_region',
+  'is_sample', 'sample_region', 'meta_type', 'site_type', 'place_id', 'latitude', 'longitude',
 ].join(', ')
 
 // Guaranteed-to-exist columns (base schema, no ALTER TABLE additions — updated_at
 // deliberately excluded here too: it's itself an ALTER TABLE addition, see
 // supabase/migrations/add_updated_at_tracking.sql, so an environment that hasn't
-// run that migration yet must still be able to fall back to this list)
+// run that migration yet must still be able to fall back to this list). cached_pois/
+// cached_poi_wiki sono anche loro nello schema base (supabase-schema.sql), non un'aggiunta
+// successiva — inclusi qui per lo stesso motivo per cui sono ora in META_COLS sopra.
 const META_COLS_CORE = [
   'id', 'title', 'planned_date', 'file_name', 'user_notes', 'tags',
   'created_at', 'distance_meters', 'elevation_gain', 'elevation_loss',
   'altitude_max', 'altitude_min', 'estimated_time_seconds',
-  'route_polyline', 'assessment',
+  'route_polyline', 'assessment', 'cached_pois', 'cached_poi_wiki',
 ].join(', ')
 
 // ── GET /api/planned          → PlannedHikeMeta[] ────────────────────────────
@@ -279,6 +309,15 @@ export async function POST(req: NextRequest) {
       hike.routePolyline = downsamplePolyline(hike.trackPoints)
     }
 
+    // Ristrutturazione Diario/Mete (richiesta esplicita dell'utente): una Meta (questo Percorso)
+    // NON appartiene più a un Diario per default — resta diary_id NULL finché non viene camminata.
+    // Prima di questo cambio, un nuovo percorso senza diaryId esplicito finiva silenziosamente nel
+    // Diario di default; ora il Diario si sceglie solo alla creazione del Reportage (vedi
+    // components/upload/ActivityUploader.tsx, che scrive diaryId sul Percorso collegato in quel
+    // momento). Un diaryId esplicito passato dal chiamante (raro ora, restava per compatibilità
+    // con flussi non ancora aggiornati) viene comunque rispettato, semplicemente non c'è più un
+    // fallback silenzioso quando manca.
+
     // Personalised assessment using completed activities as context
     // Falls back to Supabase if blob is gone
     let activities: Parameters<typeof assessHike>[3] = []
@@ -307,12 +346,17 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    hike.assessment = assessHike(
-      hike.distanceMeters,
-      hike.elevationGain,
-      hike.altitudeMax,
-      activities,
-    )
+    // assessHike produce un giudizio (facile/moderata/impegnativa/estrema) su distanza/dislivello —
+    // ha senso solo per un sentiero (piano §9); per un Borgo/Città o un Sito, dove queste metriche
+    // sono spesso 0, resta undefined invece di produrre un giudizio fuorviante.
+    if ((hike.metaType ?? 'sentiero') === 'sentiero') {
+      hike.assessment = assessHike(
+        hike.distanceMeters,
+        hike.elevationGain,
+        hike.altitudeMax,
+        activities,
+      )
+    }
 
     const { error } = await supabase
       .from('planned_hikes')
@@ -397,6 +441,8 @@ export async function PATCH(req: NextRequest) {
       pendingExpiresAt?: string | null
       archivedAt?: string | null
       favorite?: boolean
+      firstCompletedAt?: string | null
+      diaryId?: string | null
       routeMode?: PlannedHike['routeMode']
       dtmProfile?: PlannedHike['dtmProfile']
       dtmTrackHash?: string
@@ -441,6 +487,8 @@ export async function PATCH(req: NextRequest) {
     if (patch.pendingExpiresAt             !== undefined) dbPatch.pending_expires_at             = patch.pendingExpiresAt
     if (patch.archivedAt                   !== undefined) dbPatch.archived_at                    = patch.archivedAt
     if (patch.favorite                     !== undefined) dbPatch.favorite                       = patch.favorite
+    if (patch.firstCompletedAt             !== undefined) dbPatch.first_completed_at             = patch.firstCompletedAt
+    if (patch.diaryId                      !== undefined) dbPatch.diary_id                       = patch.diaryId
     if (patch.routeMode                    !== undefined) dbPatch.route_mode                     = patch.routeMode
     if (patch.dtmProfile                   !== undefined) dbPatch.dtm_profile                    = patch.dtmProfile
     if (patch.dtmTrackHash                 !== undefined) dbPatch.dtm_track_hash                 = patch.dtmTrackHash
@@ -478,13 +526,12 @@ export async function DELETE(req: NextRequest) {
     const id = req.nextUrl.searchParams.get('id')
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
-    const { error } = await supabase
-      .from('planned_hikes')
-      .delete()
-      .eq('id', id)
-      .eq('user_id', user.id)
+    // Un Percorso è un sentiero ripetibile (Fase 0 di docs/diario-fulcro-piano.md): può avere più
+    // Reportage collegati (activities.linked_planned_id, mai un vincolo FK). Cancellarlo deve
+    // sempre portarli via con sé — vedi lib/deletePercorsoCascade.ts — altrimenti restano orfani
+    // con un riferimento ormai inesistente.
+    await deletePercorsoCascade(user.id, id)
 
-    if (error) throw error
     return NextResponse.json({ ok: true })
   } catch (e) {
     console.error('DELETE /api/planned:', e)

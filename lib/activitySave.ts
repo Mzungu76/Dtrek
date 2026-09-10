@@ -1,6 +1,6 @@
 import type { TcxActivity, TrackPoint } from './tcxParser'
 import { saveActivity, type StoredActivity, type HikeNote } from './blobStore'
-import { deletePlanned, getPlannedById } from './plannedStore'
+import { getPlannedById, updatePlannedMeta } from './plannedStore'
 import { fetchPoisNearTrack } from './poisProxy'
 import { type PoiItem } from './overpass'
 import { computeTEI, teiToBeautyScore, type OsmTeiData } from './tei'
@@ -11,6 +11,8 @@ import { computeTrailScore } from './trailScore'
 import { computeBbox } from './geoUtils'
 import { fetchWeatherAtHike, type WeatherAtHike } from './openmeteo'
 import { getUserSettingsCached } from './sync/userSettingsStore'
+import { getDefaultDiaryId } from './diari/syntheticPercorso'
+import { metaHasHikingMetrics, type MetaType, type SiteType } from './metaTypes'
 
 export interface SaveActivityOptions {
   title?: string
@@ -18,8 +20,11 @@ export interface SaveActivityOptions {
   linkedPlannedId?: string
   linkedPlannedTrackPoints?: TrackPoint[]
   hikeNotes?: HikeNote[]
-  /** Deletes the planned_hikes row at linkedPlannedId after a successful save — the plan is "consumed" into the completed activity, same behavior as linking an imported GPX to a plan. */
-  deleteLinkedPlanned?: boolean
+  // Travasati dalla Meta collegata (piano Blocco E §30, lib/visitCompletion.ts) — assenti su ogni
+  // chiamata esistente (import GPX/registrazione Navigator), che continua a lasciare 'sentiero'
+  // come default di colonna via activityToRow (app/api/activity/route.ts).
+  metaType?: MetaType
+  siteType?: SiteType
   /** Set only by the standalone Navigator app's free-track recording flow (app/navigatore/traccia) — see lib/navigatorSlot.ts. Never set by the main app's own upload/save flows. */
   sourceApp?: 'navigator'
   /**
@@ -153,10 +158,22 @@ export async function saveActivityWithEnrichment(
   // volta sola e altrimenti perso per sempre nel momento in cui il piano viene consumato in questa
   // attività. Il resoconto e il video ne hanno bisogno per raccontare il percorso, non solo mostrarlo.
   let guideCarry: Pick<StoredActivity, 'guideText'|'guideSubtitle'|'guideNotices'|'guideGeneratedAt'|'poiWiki'> = {}
+  // Se questo percorso non è mai stato camminato prima (nessun firstCompletedAt), va marcato dopo
+  // il salvataggio — mai cancellato: un Percorso resta l'ancora permanente a cui più Reportage
+  // (più uscite nel tempo) si collegano via activities.linked_planned_id.
+  let plannedNeedsFirstCompletedAt = false
+  // Una Meta senza Diario rende INVISIBILE in Dtrek il Reportage che le si aggancia:
+  // l'appartenenza di un'escursione a un Diario passa solo di lì (activities.linked_planned_id →
+  // planned_hikes.diary_id, vedi app/api/diaries/[id]/route.ts), quindi un Reportage su una Meta
+  // orfana non compare in nessun Diario. Una Meta "nasce camminandola" (stesso principio già
+  // applicato in components/upload/ActivityUploader.tsx): questo è il momento in cui va agganciata
+  // a un Diario, qui una volta sola per ogni flusso di salvataggio invece che in ciascuno.
+  let plannedNeedsDiary = false
   if (opts.linkedPlannedId) {
     try {
       const planned = await getPlannedById(opts.linkedPlannedId)
       if (planned) {
+        plannedNeedsDiary = !planned.diaryId
         guideCarry = {
           guideText:        planned.cachedGuide,
           guideSubtitle:    planned.cachedGuideSubtitle,
@@ -164,6 +181,7 @@ export async function saveActivityWithEnrichment(
           guideGeneratedAt: planned.guideGeneratedAt,
           poiWiki:          planned.cachedPoiWiki as StoredActivity['poiWiki'],
         }
+        plannedNeedsFirstCompletedAt = !planned.firstCompletedAt
       }
     } catch {} // non-blocking — un'escursione non deve fallire il salvataggio per la sua guida
   }
@@ -182,29 +200,43 @@ export async function saveActivityWithEnrichment(
     trailScoreComputedAt,
     weatherAtHike,
     sourceApp: opts.sourceApp,
+    metaType: opts.metaType,
+    siteType: opts.siteType,
     ...guideCarry,
   }
   const { ok } = await saveActivity(stored)
   opts.onSyncResult?.(ok)
 
-  if (opts.deleteLinkedPlanned && opts.linkedPlannedId) {
-    await deletePlanned(opts.linkedPlannedId).catch(() => {})
+  if (opts.linkedPlannedId && (plannedNeedsFirstCompletedAt || plannedNeedsDiary)) {
+    // getDefaultDiaryId() è best-effort (offline torna undefined): in quel caso si aggiorna solo
+    // firstCompletedAt, e la Meta resterà senza Diario — mai un Diario inventato pur di riempire
+    // il campo.
+    const diaryId = plannedNeedsDiary ? await getDefaultDiaryId() : undefined
+    await updatePlannedMeta(opts.linkedPlannedId, {
+      ...(plannedNeedsFirstCompletedAt ? { firstCompletedAt: new Date().toISOString() } : {}),
+      ...(diaryId ? { diaryId } : {}),
+    }).catch(() => {})
   }
 
   // Aggiorna lo storico aggregato (lib/hikerHistory.ts) usato dalla sezione guida "Su misura per
   // te" — fire-and-forget, non deve mai bloccare o far fallire il salvataggio dell'escursione.
   // Unico punto in cui una NUOVA escursione completata viene salvata (vedi commento sopra sulla
   // funzione condivisa), quindi il posto giusto per incrementare, non un'edit successiva.
-  fetch('/api/user-settings/history', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      distanceMeters: stored.distanceMeters,
-      elevationGain: stored.elevationGain,
-      totalTimeSeconds: stored.totalTimeSeconds,
-      completedAt: stored.startTime,
-    }),
-  }).catch(() => {})
+  // Solo per un sentiero (piano §48.9): una "visita" senza traccia (Borgo/Città/Sito, vedi
+  // lib/visitCompletion.ts) ha sempre distanza/dislivello/durata a 0 — sommarla allo storico
+  // escursionistico ne falserebbe le medie, non semplicemente un valore in più.
+  if (metaHasHikingMetrics(opts.metaType)) {
+    fetch('/api/user-settings/history', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        distanceMeters: stored.distanceMeters,
+        elevationGain: stored.elevationGain,
+        totalTimeSeconds: stored.totalTimeSeconds,
+        completedAt: stored.startTime,
+      }),
+    }).catch(() => {})
+  }
 
   return stored
 }

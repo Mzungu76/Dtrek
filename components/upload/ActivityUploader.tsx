@@ -82,7 +82,6 @@ export default function ActivityUploader() {
         linkedPlannedId: selectedPlanned?.id,
         linkedPlannedTrackPoints,
         hikeNotes: linkedPlannedNotes,
-        deleteLinkedPlanned: !!selectedPlanned,
       })
       setStatus('success')
       setTimeout(() => router.push(`/resoconto/${encodeURIComponent(saved.id)}`), 1200)

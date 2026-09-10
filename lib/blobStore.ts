@@ -11,6 +11,7 @@ import type { PoiItem } from './overpass'
 import type { WikiPage } from './wikipedia'
 import { computeDEP } from './stats'
 import { downsamplePolyline } from './downsamplePolyline'
+import type { MetaType, SiteType } from './metaTypes'
 
 const ENTITY_TYPE = 'activity'
 
@@ -72,6 +73,12 @@ export interface StoredActivity extends TcxActivity {
   /** Set only when this activity was recorded through the standalone Navigator app's free-track
    *  flow (lib/navigatorSlot.ts) — same convention/purpose as PlannedHike.sourceApp. */
   sourceApp?: 'navigator'
+  // Travasati dalla Meta al salvataggio (lib/activitySave.ts), stesso principio di guideText sopra
+  // — vedi supabase/migrations/add_activities_meta_type_columns.sql. Assenti su ogni attività
+  // salvata prima di questa colonna: chi li legge deve trattarli come 'sentiero' (il default di
+  // colonna), mai come "tipologia sconosciuta".
+  metaType?: MetaType
+  siteType?: SiteType
 }
 
 export interface ActivityMeta {
@@ -105,6 +112,8 @@ export interface ActivityMeta {
   iev?: number
   favorite?: boolean
   sourceApp?: 'navigator'
+  metaType?: MetaType
+  siteType?: SiteType
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -140,6 +149,8 @@ function toMeta(a: StoredActivity): ActivityMeta {
     depKm:           computeDEP(a.distanceMeters, a.elevationGain),
     iev:             a.iev ?? undefined,  // a.iev is number | null | undefined (TcxActivity)
     favorite:        a.favorite,
+    metaType:        a.metaType,
+    siteType:        a.siteType,
   }
 }
 
