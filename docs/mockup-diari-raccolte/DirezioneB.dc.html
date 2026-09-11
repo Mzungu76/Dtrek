@@ -1,0 +1,140 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,400&family=DM+Sans:ital,wght@0,400;0,500;1,400&family=Barlow+Condensed:wght@600;700;900&family=Lora:ital,wght@0,400;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin: 0; }
+    * { box-sizing: border-box; }
+    a { color: #8cc894; text-decoration: none; }
+    a:hover { color: #dcf0de; }
+    .barlow { font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif; }
+    .display { font-family: 'Playfair Display', Georgia, serif; }
+    .body-f { font-family: 'DM Sans', system-ui, sans-serif; }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+    .scrollx::-webkit-scrollbar, .scrolly::-webkit-scrollbar { display: none; }
+  </style>
+</helmet>
+<div class="body-f" style="width:390px;height:844px;position:relative;overflow:hidden;background:#193b20;box-shadow:0 0 0 1px #dcd8cc;">
+
+  <!-- Hero: copertina del diario attivo (segnaposto foto = gradiente + trame) -->
+  <div style="position:absolute;inset:0;height:452px;background:radial-gradient(120% 90% at 25% 0%, #3a6b3f 0%, #1c4724 45%, #0f2415 100%);"></div>
+  <div style="position:absolute;inset:0;height:452px;background:linear-gradient(160deg, rgba(217,114,32,0.22) 0%, rgba(28,71,36,0.18) 55%, rgba(7,24,36,0.5) 100%);mix-blend-mode:multiply;"></div>
+  <div style="position:absolute;inset:0;height:452px;background:linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, transparent 24%, transparent 62%, rgba(11,26,20,0.95) 100%);"></div>
+
+  <!-- Top nav sovrapposta -->
+  <div style="position:absolute;top:0;left:0;right:0;display:flex;align-items:center;gap:6px;padding:14px 12px 10px;z-index:5;">
+    <div style="flex:1;display:flex;align-items:center;justify-content:space-around;">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:2px;color:rgba(255,255,255,0.55);">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
+        <span class="barlow" style="font-size:9px;font-weight:700;">Bacheca</span>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:2px;color:rgba(255,255,255,0.55);">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polygon points="16 8 13 13 8 16 11 11"/></svg>
+        <span class="barlow" style="font-size:9px;font-weight:700;">Guide</span>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:2px;color:rgba(255,255,255,0.55);">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6c-1.6-1.1-4.2-1.6-6.2-1v13c2 0 4.7.5 6.2 1.6"/><path d="M12 6c1.6-1.1 4.2-1.6 6.2-1v13c-2 0-4.7.5-6.2 1.6z"/></svg>
+        <span class="barlow" style="font-size:9px;font-weight:700;">Resoconti</span>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:2px;color:#ffffff;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12a1 1 0 0 1 1 1v16l-7-4-7 4V4a1 1 0 0 1 1-1z"/></svg>
+        <span class="barlow" style="font-size:9px;font-weight:700;">Diari</span>
+      </div>
+    </div>
+    <div style="width:30px;height:30px;border-radius:999px;background:#20592b;border:2px solid rgba(255,255,255,0.5);display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700;flex-shrink:0;">M</div>
+  </div>
+
+  <!-- Contenuto hero -->
+  <div style="position:absolute;top:210px;left:20px;right:20px;z-index:5;">
+    <span class="barlow" style="font-size:11px;font-weight:800;letter-spacing:2.5px;text-transform:uppercase;color:#e9ab64;">Diario attivo</span>
+    <h1 class="display" style="margin:6px 0 0;font-weight:700;font-size:30px;color:#fff;line-height:1.05;text-shadow:0 2px 10px rgba(0,0,0,0.5);">Appennino 2024</h1>
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
+      <span style="background:rgba(255,255,255,0.14);backdrop-filter:blur(4px);color:#fff;font-size:11px;font-weight:600;padding:5px 10px;border-radius:999px;">12 resoconti</span>
+      <span style="background:rgba(255,255,255,0.14);backdrop-filter:blur(4px);color:#fff;font-size:11px;font-weight:600;padding:5px 10px;border-radius:999px;">184 km</span>
+      <span style="background:rgba(255,255,255,0.14);backdrop-filter:blur(4px);color:#fff;font-size:11px;font-weight:600;padding:5px 10px;border-radius:999px;">6.400 m D+</span>
+    </div>
+    <button style="margin-top:16px;display:inline-flex;align-items:center;gap:7px;background:#fff;color:#1c4724;border:none;border-radius:999px;padding:10px 18px;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:13px;letter-spacing:0.5px;text-transform:uppercase;">
+      Apri il diario
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="12" x2="20" y2="12"/><polyline points="14 6 20 12 14 18"/></svg>
+    </button>
+  </div>
+
+  <!-- Foglio inferiore: tutti i Diari + Raccolte -->
+  <div class="scrolly" style="position:absolute;top:452px;left:0;right:0;bottom:0;background:#eeece5;border-radius:22px 22px 0 0;overflow-y:auto;padding:18px 18px 24px;box-shadow:0 -8px 24px rgba(0,0,0,0.25);">
+    <div style="width:36px;height:4px;border-radius:2px;background:#dcd8cc;margin:0 auto 14px;"></div>
+
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <span class="barlow" style="font-weight:700;font-size:11px;letter-spacing:2.5px;text-transform:uppercase;color:#a9a18e;">I tuoi diari</span>
+      <span class="mono" style="font-size:11px;color:#a9a18e;">4</span>
+    </div>
+    <div class="scrollx" style="display:flex;gap:10px;overflow-x:auto;padding-bottom:4px;margin-bottom:22px;">
+      <div style="flex:0 0 auto;width:96px;height:128px;border-radius:14px;position:relative;overflow:hidden;background:linear-gradient(160deg,#378d44,#1c4724);box-shadow:0 0 0 3px #e9ab64;">
+        <div style="position:absolute;bottom:0;left:0;right:0;padding:8px;background:linear-gradient(to top, rgba(0,0,0,0.75), transparent);">
+          <span style="color:#fff;font-size:11px;font-weight:700;display:block;line-height:1.2;">Appennino<br>2024</span>
+        </div>
+      </div>
+      <div style="flex:0 0 auto;width:96px;height:128px;border-radius:14px;position:relative;overflow:hidden;background:linear-gradient(160deg,#e9ab64,#9f4315);">
+        <div style="position:absolute;bottom:0;left:0;right:0;padding:8px;background:linear-gradient(to top, rgba(0,0,0,0.75), transparent);">
+          <span style="color:#fff;font-size:11px;font-weight:700;display:block;line-height:1.2;">Alpi<br>2023</span>
+        </div>
+      </div>
+      <div style="flex:0 0 auto;width:96px;height:128px;border-radius:14px;position:relative;overflow:hidden;background:linear-gradient(160deg,#8cc894,#277134);">
+        <div style="position:absolute;bottom:0;left:0;right:0;padding:8px;background:linear-gradient(to top, rgba(0,0,0,0.75), transparent);">
+          <span style="color:#fff;font-size:11px;font-weight:700;display:block;line-height:1.2;">Weekend<br>Toscana</span>
+        </div>
+      </div>
+      <div style="flex:0 0 auto;width:96px;height:128px;border-radius:14px;position:relative;overflow:hidden;background:linear-gradient(160deg,#c4bead,#8a7f6e);opacity:0.55;">
+        <div style="position:absolute;bottom:0;left:0;right:0;padding:8px;background:linear-gradient(to top, rgba(0,0,0,0.75), transparent);">
+          <span style="color:#fff;font-size:11px;font-weight:700;display:block;line-height:1.2;">Prime<br>uscite</span>
+        </div>
+      </div>
+      <div style="flex:0 0 auto;width:80px;height:128px;border-radius:14px;border:1.5px dashed #c4bead;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:#a9a18e;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="4" x2="12" y2="20"/><line x1="4" y1="12" x2="20" y2="12"/></svg>
+        <span class="barlow" style="font-size:9px;font-weight:700;text-align:center;">Nuovo</span>
+      </div>
+    </div>
+
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <span class="barlow" style="font-weight:700;font-size:11px;letter-spacing:2.5px;text-transform:uppercase;color:#a9a18e;">Raccolte</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <div style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #dcd8cc;border-radius:14px;padding:11px 12px;">
+        <div style="display:flex;flex-shrink:0;">
+          <div style="width:26px;height:34px;border-radius:4px;background:linear-gradient(160deg,#8cc894,#277134);margin-right:-10px;transform:rotate(-6deg);"></div>
+          <div style="width:26px;height:34px;border-radius:4px;background:linear-gradient(160deg,#e9ab64,#9f4315);margin-right:-10px;transform:rotate(4deg);"></div>
+          <div style="width:26px;height:34px;border-radius:4px;background:linear-gradient(160deg,#378d44,#1c4724);transform:rotate(-2deg);"></div>
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div class="display" style="font-weight:600;font-size:14px;color:#4d4740;">Le mie stagioni 2024</div>
+          <div style="font-size:11px;color:#978e7a;margin-top:2px;">2 diari · pubblicata</div>
+        </div>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#c4bead" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #dcd8cc;border-radius:14px;padding:11px 12px;">
+        <div style="display:flex;flex-shrink:0;">
+          <div style="width:26px;height:34px;border-radius:4px;background:linear-gradient(160deg,#e08d3c,#813619);margin-right:-10px;transform:rotate(-5deg);"></div>
+          <div style="width:26px;height:34px;border-radius:4px;background:linear-gradient(160deg,#58aa63,#20592b);transform:rotate(5deg);"></div>
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div class="display" style="font-weight:600;font-size:14px;color:#4d4740;">Sentieri di casa</div>
+          <div style="font-size:11px;color:#978e7a;margin-top:2px;">2 diari · bozza</div>
+        </div>
+        <button style="flex-shrink:0;background:#f1f8f2;color:#277134;border:none;border-radius:999px;padding:6px 10px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:10px;letter-spacing:0.5px;text-transform:uppercase;">Pubblica</button>
+      </div>
+    </div>
+
+    <a href="#" style="display:block;text-align:center;margin-top:16px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;">Tutte le raccolte →</a>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script>
+class Component extends DCLogic {}
+</script>
+</body>
+</html>

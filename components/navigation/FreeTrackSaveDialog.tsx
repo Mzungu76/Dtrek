@@ -1,12 +1,15 @@
 'use client'
-import { useState } from 'react'
-import { CheckCircle2, Loader2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { BookOpen, CheckCircle2, Loader2 } from 'lucide-react'
 import type { TcxActivity } from '@/lib/tcxParser'
+import { listSelectableDiaries, type DiaryChoice } from '@/lib/diari/syntheticPercorso'
 
 interface Props {
   activity: TcxActivity
   defaultTitle: string
-  onSave: (title: string) => Promise<void>
+  /** diaryId è il Diario scelto qui sotto, per la Meta sintetica creata per questa traccia
+   *  (nessun percorso pianificato esiste già, a differenza di EndHikeReviewDialog). */
+  onSave: (title: string, diaryId: string | undefined) => Promise<void>
   onDiscard: () => void
 }
 
@@ -32,12 +35,21 @@ export default function FreeTrackSaveDialog({ activity, defaultTitle, onSave, on
   const [title, setTitle] = useState(defaultTitle)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [diaryChoices, setDiaryChoices] = useState<DiaryChoice[]>([])
+  const [selectedDiaryId, setSelectedDiaryId] = useState<string | null>(null)
+
+  useEffect(() => {
+    listSelectableDiaries().then(choices => {
+      setDiaryChoices(choices)
+      setSelectedDiaryId(prev => prev ?? (choices.find(d => d.isDefault) ?? choices[0])?.id ?? null)
+    }).catch(() => {})
+  }, [])
 
   const handleSave = async () => {
     setSaving(true)
     setError(null)
     try {
-      await onSave(title)
+      await onSave(title, selectedDiaryId ?? undefined)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Errore nel salvataggio')
       setSaving(false)
@@ -78,6 +90,29 @@ export default function FreeTrackSaveDialog({ activity, defaultTitle, onSave, on
           className="w-full px-3 py-2.5 rounded-xl border border-stone-200 text-stone-900 font-body mb-5 focus:outline-none focus:ring-2 focus:ring-forest-400"
           placeholder="Nome della traccia"
         />
+
+        {diaryChoices.length > 0 && (
+          <div className="mb-5">
+            <label className="flex items-center gap-1.5 text-xs font-semibold text-stone-500 font-body uppercase tracking-wide mb-1.5">
+              <BookOpen className="w-3.5 h-3.5 text-forest-500" /> In quale Diario?
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {diaryChoices.map(d => (
+                <button
+                  key={d.id}
+                  type="button"
+                  onClick={() => setSelectedDiaryId(d.id)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all
+                    ${selectedDiaryId === d.id
+                      ? 'bg-forest-500 text-white border-forest-500'
+                      : 'bg-white text-stone-600 border-stone-200 hover:border-forest-300'}`}
+                >
+                  {d.title}{d.isDefault ? ' (predefinito)' : ''}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {error && <p className="text-sm text-red-600 font-body mb-3">{error}</p>}
 

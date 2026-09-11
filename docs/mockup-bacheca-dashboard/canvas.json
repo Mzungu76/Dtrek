@@ -1,0 +1,14 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 390, "h": 844 },
+    { "file": "DirezioneB.dc.html", "x": 470, "y": 0, "w": 390, "h": 844 },
+    { "file": "DirezioneC.dc.html", "x": 940, "y": 0, "w": 390, "h": 844 }
+  ],
+  "annotations": [
+    { "id": "note-main", "x": 0, "y": -170, "w": 390, "text": "A — Griglia modulare\nKPI in cima, poi una griglia a 2 colonne di widget (Recovery, Prossima uscita, Volume, Streak, Traguardo, Diario, Percorsi per te). La matita apre la modifica: maniglia di trascinamento + X su ogni card, tessera 'Aggiungi widget' in fondo." },
+    { "id": "note-b", "x": 470, "y": -170, "w": 390, "text": "B — Fasce impilate\nOgni sezione è larga quanto lo schermo, con frecce su/giù per riordinarla (stessa scelta già fatta per le Raccolte, niente drag-and-drop) e un interruttore per nasconderla. Più leggibile su schermi piccoli, meno densa di A." },
+    { "id": "note-c", "x": 940, "y": -170, "w": 390, "text": "C — Schede personalizzabili\nL'utente crea le proprie schede (Oggi, Allenamento, Traguardi, Community, +) e sceglie quali widget mettere in ciascuna — la personalizzazione più profonda, pensata per chi vuole viste diverse per scopi diversi." },
+    { "id": "note-data", "x": 0, "y": 970, "w": 860, "text": "Dati ipotizzati per il mockup: Recovery Score, Bilancio fisico/forma, volume settimanale, streak, TSS/storico, traguardi e record personali, Diario attivo e Percorsi per te sono già calcolati oggi in Bacheca — 'Prossima uscita' (con meteo) è una nuova fonte, dalle Mete/Percorsi pianificati. Numeri e nomi sono d'esempio." }
+  ],
+  "launch": { "view": "canvas" }
+}

@@ -1,0 +1,14 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 390, "h": 844 },
+    { "file": "DirezioneB.dc.html", "x": 470, "y": 0, "w": 390, "h": 844 },
+    { "file": "DirezioneC.dc.html", "x": 940, "y": 0, "w": 390, "h": 844 }
+  ],
+  "annotations": [
+    { "id": "note-main", "x": 0, "y": -150, "w": 390, "text": "A — Archivio a scaffale\nRaccolte in strip orizzontale in cima, Diari come righe di registro sotto (copertina, resoconti, km, stato pubblicazione). La più vicina all'oggi: lettura veloce, poco scroll." },
+    { "id": "note-b", "x": 470, "y": -150, "w": 390, "text": "B — Diario in copertina\nHero fotografico sul Diario più recente (come Bacheca), poi un foglio con filmstrip dei Diari e le Raccolte come card. Coerente con le altre pagine hub, più immersiva." },
+    { "id": "note-c", "x": 940, "y": -150, "w": 390, "text": "C — Struttura a strati\nLe Raccolte sono filtri/chip che accendono i Diari che contengono (barra laterale colorata); ogni Diario si apre ad accordion e mostra i suoi Resoconti — Raccolta→Diario→Resoconto visibili insieme, su una sola schermata." },
+    { "id": "note-keep", "x": 0, "y": 970, "w": 860, "text": "In tutte e tre: toccare un Diario apre l'attuale vista \"a libro\" (app/diario/page.tsx), lasciata invariata. Numeri e nomi sono d'esempio." }
+  ],
+  "launch": { "view": "canvas" }
+}

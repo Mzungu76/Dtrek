@@ -6,6 +6,7 @@ import RouteCarousel from './RouteCarousel'
 import RoutePage from './RoutePage'
 import CoverMap from './CoverMap'
 import TopOverlay from './TopOverlay'
+import HubNavBar from './HubNavBar'
 import BottomGallery, { SORT_CMP, type SortKey } from './BottomGallery'
 import ExpandedGalleryList from './ExpandedGalleryList'
 import type { RouteHubProps, SectionKind } from './types'
@@ -27,7 +28,8 @@ export default function RouteHub({
   tabScrollRef, primaryAction, summaryBanner, weatherIcon, onSectionChange,
   scoreBadges, scoreGaugeBadge, scoreBadgesTargetSection, heroPhotos, headerActions, importLabel, onImport,
   subtitle, topOverlayVariant, favoritesFilter, onToggleFavoritesFilter, onToggleFavorite, onCompare,
-  nextOutingFilter, onToggleNextOutingFilter,
+  nextOutingFilter, onToggleNextOutingFilter, emptyNoun = 'percorso', emptyAction, contextBadge, titleAction, showToolsMenu,
+  onBeforeOpen,
 }: RouteHubProps) {
   const [state, dispatch] = useRouteHubState(initialIndex)
   const [sortBy, setSortBy] = useState<SortKey>('date')
@@ -55,7 +57,13 @@ export default function RouteHub({
     setOpenProgress(isOpen ? 1 : 0)
   }, [isOpen]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // onBeforeOpen (Diario-only, vedi types.ts): un modo di "aprire" alternativo a Screen 2 per
+  // certi item — restituendo false, il chiamante ha già gestito l'apertura per conto suo (una
+  // navigazione esterna) e questa non deve procedere. `item` è definito più sotto in questo
+  // stesso componente: una closure su un `const` dichiarato dopo è sicura finché, come qui, viene
+  // eseguita solo da un evento futuro (drag/tap dell'utente), mai durante il render che la crea.
   const openWithAnimation = (section: SectionKind) => {
+    if (onBeforeOpen && onBeforeOpen(item) === false) return
     setDragLive(false)
     setOpenProgress(1)
     dispatch({ type: 'OPEN_SECTION', section })
@@ -64,6 +72,7 @@ export default function RouteHub({
   const handleOpenDragEnd = (progress: number, velocityPxPerMs: number) => {
     setDragLive(false)
     if (progress >= COMMIT_THRESHOLD || velocityPxPerMs >= FLING_VELOCITY) {
+      if (onBeforeOpen && onBeforeOpen(item) === false) { setOpenProgress(0); return }
       setOpenProgress(1)
       dispatch({ type: 'OPEN_SECTION', section: defaultSection })
     } else {
@@ -243,8 +252,12 @@ export default function RouteHub({
 
   if (items.length === 0) {
     return (
-      <div className="fixed inset-0 bg-[#0b1a24] flex items-center justify-center text-stone-400 text-sm">
-        Nessun percorso disponibile.
+      <div className="fixed inset-0 bg-[#0b1a24] flex flex-col items-center justify-center gap-3 text-stone-400 text-sm">
+        <div className="absolute inset-x-0 top-0 z-20">
+          <HubNavBar />
+        </div>
+        Nessun {emptyNoun} disponibile.
+        {emptyAction}
       </div>
     )
   }
@@ -252,12 +265,15 @@ export default function RouteHub({
   if (visibleItems.length === 0) {
     return (
       <div className="fixed inset-0 bg-[#0b1a24] flex flex-col items-center justify-center gap-3 text-stone-400 text-sm px-6 text-center">
+        <div className="absolute inset-x-0 top-0 z-20">
+          <HubNavBar />
+        </div>
         {favoritesFilter && nextOutingFilter && !searchQueryNorm
           ? <CalendarClock className="w-8 h-8 text-stone-600" />
           : <Star className="w-8 h-8 text-stone-600" />}
         <p>
           {searchQueryNorm
-            ? `Nessun percorso trovato per «${searchQuery.trim()}».`
+            ? `Nessun ${emptyNoun} trovato per «${searchQuery.trim()}».`
             : favoritesFilter && nextOutingFilter
               // Vuoto qui non vuol dire "non hai preferiti", ma "nessuno di essi ha una data" —
               // e la via d'uscita è programmarne una col chip calendario, non togliere il filtro.
@@ -369,6 +385,8 @@ export default function RouteHub({
           scoreGaugeBadge={scoreGaugeBadge?.(item, () => openWithAnimation(scoreBadgesTargetSection ?? defaultSection))}
           subtitle={subtitle?.(item)}
           variant={topOverlayVariant}
+          contextBadge={contextBadge?.(item)}
+          titleAction={titleAction?.(item)}
           favoriteButton={onToggleFavorite && (
             <button
               onClick={() => onToggleFavorite(item)}
@@ -422,7 +440,7 @@ export default function RouteHub({
         <div className="flex justify-center">
           <button
             onClick={() => openWithAnimation(defaultSection)}
-            aria-label="Apri il percorso"
+            aria-label={`Apri il ${emptyNoun}`}
             className="p-1.5 -m-1.5 rounded-full"
           >
             <ChevronUp className="w-5 h-5 text-white/60 animate-bounce" strokeWidth={2.5} />
@@ -466,6 +484,7 @@ export default function RouteHub({
             primaryAction={primaryAction(item)}
             headerActions={headerActions}
             heroPhotos={heroPhotos}
+            showToolsMenu={showToolsMenu}
           />
         </div>
       )}
