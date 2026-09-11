@@ -277,13 +277,13 @@ export default function DiarioHubPage() {
             onChanged={() => loadAll()}
           />
         )}
-        // "Aprire" il Diario di default è aprire il libro impaginato (/diario/libro, una rotta a
-        // sé — nessun'altra pagina sa mostrare TUTTE le attività dell'utente come lui): il drag
-        // verso l'alto (e il suo tap-equivalente, la freccia in basso) ci naviga direttamente
-        // invece di aprire il Sommario di Screen 2, che per gli altri Diari resta il contenuto.
+        // "Aprire" un Diario è sempre aprire il suo libro impaginato (/diario/libro/[id], scoped ai
+        // soli Resoconti di QUESTO Diario) — il drag verso l'alto (e il suo tap-equivalente, la
+        // freccia in basso) ci naviga direttamente invece di aprire il Sommario di Screen 2, che
+        // resta comunque raggiungibile per la gestione tramite l'icona dedicata sul titolo.
         onBeforeOpen={item => {
-          if ((item as DiarioHubItem).diary.isDefault) { router.push('/diario/libro'); return false }
-          return true
+          router.push(`/diario/libro/${encodeURIComponent(item.id)}`)
+          return false
         }}
         primaryAction={() => null}
         titleAction={item => (

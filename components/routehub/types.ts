@@ -174,8 +174,8 @@ export interface RouteHubProps {
   /** Controllo prima di aprire Screen 2 (drag verso l'alto o suo tap-equivalente) — restituendo
    *  false ANNULLA l'apertura: il chiamante ha già gestito l'azione per conto proprio (tipicamente
    *  una navigazione esterna), invece di lasciar aprire RoutePage per questo item. Diario lo usa
-   *  per il Diario di default: "aprirlo" è il libro impaginato (/diario/libro, una rotta a sé),
-   *  non il Sommario che Screen 2 mostra per gli altri Diari. Assente ⇒ apre sempre (comportamento
-   *  invariato per Guida/Resoconto). */
+   *  per ogni Diario: "aprirlo" è sempre il proprio libro impaginato (/diario/libro/[id], scoped ai
+   *  suoi Resoconti), mai il Sommario di Screen 2 — che resta comunque raggiungibile dall'icona
+   *  dedicata di gestione. Assente ⇒ apre sempre (comportamento invariato per Guida/Resoconto). */
   onBeforeOpen?: (item: RouteHubItem) => boolean
 }
