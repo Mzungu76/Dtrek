@@ -4,8 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
-  Archive, ArchiveRestore, ArrowLeft, ArrowRightLeft, BookMarked, Camera, ChevronDown, Clock,
-  Layers, Loader2, Mountain, Route, Trash2, TrendingUp, X,
+  Archive, ArchiveRestore, ArrowLeft, ArrowRightLeft, Camera, ChevronDown, Clock,
+  Image as ImageIcon, Layers, Loader2, Mountain, Pencil, Route, Trash2, TrendingUp, X,
 } from 'lucide-react'
 import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import RouteThumb from '@/components/RouteThumb'
@@ -14,6 +14,8 @@ import { ctsLabel } from '@/lib/trailScore'
 import { formatDuration } from '@/lib/tcxParser'
 import { metaHasHikingMetrics } from '@/lib/metaTypes'
 import { normalizeDiaryConfig, type DiaryConfig } from '@/lib/diaryConfig'
+import { uploadDiaryCover } from '@/lib/diaryCoverUpload'
+import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import type { DiarioDetail, DiarioReportageRow } from '@/app/api/diaries/[id]/route'
 import type { DiarySummary } from '@/app/api/diaries/route'
 import type { CollectionSummary } from '@/app/api/collections/route'
@@ -54,6 +56,11 @@ export default function DiarioSommarioPage() {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleteBusy, setDeleteBusy] = useState<'migrate' | 'deleteAll' | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  const [editOpen, setEditOpen] = useState(false)
+  const [coverUploading, setCoverUploading] = useState(false)
+  const [coverError, setCoverError] = useState<string | null>(null)
+  const coverInputRef = useRef<HTMLInputElement>(null)
 
   function load() {
     Promise.all([
@@ -187,6 +194,22 @@ export default function DiarioSommarioPage() {
     }
   }
 
+  async function handleCoverUpload(file: File) {
+    setCoverUploading(true); setCoverError(null)
+    try {
+      const supabase = getBrowserSupabase()
+      await supabase.auth.getSession()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Non autenticato')
+      const url = await uploadDiaryCover(user.id, file, diaryId)
+      setConfig(c => c ? { ...c, coverUrl: url } : c)
+    } catch (e) {
+      setCoverError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setCoverUploading(false)
+    }
+  }
+
   if (loadError) {
     return (
       <div className={`min-h-screen bg-stone-50 flex items-center justify-center px-6 text-center ${MOBILE_TOPBAR_SPACER}`}>
@@ -209,41 +232,81 @@ export default function DiarioSommarioPage() {
     <div className={`min-h-screen bg-stone-50 ${MOBILE_TOPBAR_SPACER}`}>
       <Navbar />
       <div className="max-w-2xl mx-auto px-4 sm:px-8 pb-16">
-        <Link href="/diario" className="inline-flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-700 mt-2 mb-4 transition-colors">
+        <Link href="/diario" className="inline-flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-700 mt-3 mb-4 transition-colors">
           <ArrowLeft className="w-3.5 h-3.5" /> Diari
         </Link>
 
-        {/* Copertina + titolo/sottotitolo, modificabili sul posto */}
-        <div className="flex items-start gap-3.5 mb-5">
-          <div className="relative w-14 h-[76px] rounded-xl overflow-hidden shrink-0"
-            style={{ background: config.coverUrl ? undefined : 'linear-gradient(160deg,#378d44,#1c4724)' }}>
-            {config.coverUrl
-              ? <img src={config.coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
-              : <div className="absolute inset-0 flex items-center justify-center"><BookMarked className="w-5 h-5 text-white/80" /></div>}
-          </div>
-          <div className="min-w-0 flex-1">
-            {detail.isDefault && (
-              <span className="inline-block mb-1 text-[10px] font-barlow font-bold uppercase tracking-wide text-forest-700 bg-forest-50 px-2 py-0.5 rounded-full">
-                Diario di default
-              </span>
+        {/* Copertina — hero fotografico, come /diario, con titolo e sottotitolo in sovraimpressione */}
+        <div className="relative h-56 sm:h-64 rounded-3xl overflow-hidden mb-6 shadow-md shadow-black/10">
+          {config.coverUrl ? (
+            <img src={config.coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
+          ) : (
+            <div className="absolute inset-0" style={{ background: 'linear-gradient(158deg,#193b20 0%,#1c4724 45%,#20592b 100%)' }} />
+          )}
+          <div className="absolute inset-0 bg-topography opacity-50" />
+          <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.15) 55%, transparent 75%)' }} />
+
+          {detail.isDefault && (
+            <span className="absolute top-3.5 left-3.5 text-[10px] font-barlow font-bold uppercase tracking-wide text-forest-800 bg-white/90 px-2.5 py-1 rounded-full">
+              Diario di default
+            </span>
+          )}
+          <button
+            onClick={() => setEditOpen(v => !v)}
+            title="Modifica titolo, sottotitolo e copertina"
+            className="absolute top-3.5 right-3.5 w-9 h-9 rounded-full bg-white/20 backdrop-blur-sm hover:bg-white/30 flex items-center justify-center text-white transition-colors"
+          >
+            <Pencil className="w-4 h-4" />
+          </button>
+
+          <div className="absolute inset-x-0 bottom-0 p-5 sm:p-6">
+            <h1 className="font-display text-3xl sm:text-4xl font-bold text-white leading-[1.05]" style={{ textShadow: '0 2px 12px rgba(0,0,0,0.5)' }}>
+              {config.title || 'Diario senza titolo'}
+            </h1>
+            {config.subtitle && (
+              <p className="font-lora italic text-white/80 text-base mt-1.5" style={{ textShadow: '0 1px 8px rgba(0,0,0,0.5)' }}>
+                {config.subtitle}
+              </p>
             )}
-            <input
-              value={config.title}
-              onChange={e => setConfig(c => c ? { ...c, title: e.target.value } : c)}
-              placeholder="Titolo del Diario"
-              className="block w-full font-display text-2xl font-bold text-stone-800 bg-transparent outline-none border-b border-transparent focus:border-stone-300 transition-colors"
-            />
-            <input
-              value={config.subtitle}
-              onChange={e => setConfig(c => c ? { ...c, subtitle: e.target.value } : c)}
-              placeholder="Sottotitolo"
-              className="block w-full font-lora italic text-sm text-stone-500 bg-transparent outline-none border-b border-transparent focus:border-stone-300 transition-colors mt-1"
-            />
           </div>
+
+          {editOpen && (
+            <div className="absolute z-10 top-14 right-3.5 w-72 bg-white rounded-2xl shadow-xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[10px] font-barlow font-bold uppercase tracking-widest text-stone-400">Modifica Diario</span>
+                <button onClick={() => setEditOpen(false)} className="text-stone-400 hover:text-stone-600"><X className="w-3.5 h-3.5" /></button>
+              </div>
+              <label className="block text-[10px] font-barlow font-bold uppercase tracking-widest text-stone-400 mb-1">Titolo</label>
+              <input
+                value={config.title}
+                onChange={e => setConfig(c => c ? { ...c, title: e.target.value } : c)}
+                placeholder="Titolo del Diario"
+                className="w-full text-sm border border-stone-200 rounded-lg px-2.5 py-1.5 mb-2.5 outline-none focus:ring-1 focus:ring-forest-400"
+              />
+              <label className="block text-[10px] font-barlow font-bold uppercase tracking-widest text-stone-400 mb-1">Sottotitolo</label>
+              <input
+                value={config.subtitle}
+                onChange={e => setConfig(c => c ? { ...c, subtitle: e.target.value } : c)}
+                placeholder="Sottotitolo"
+                className="w-full text-sm border border-stone-200 rounded-lg px-2.5 py-1.5 mb-3 outline-none focus:ring-1 focus:ring-forest-400"
+              />
+              <button
+                onClick={() => coverInputRef.current?.click()}
+                disabled={coverUploading}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-semibold transition-colors disabled:opacity-60"
+              >
+                {coverUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ImageIcon className="w-3.5 h-3.5" />}
+                Cambia copertina
+              </button>
+              <input ref={coverInputRef} type="file" accept="image/*" className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) { handleCoverUpload(f); e.target.value = '' } }} />
+              {coverError && <p className="text-xs text-red-600 mt-2">{coverError}</p>}
+            </div>
+          )}
         </div>
 
         {stats.count > 0 && (
-          <div className="grid grid-cols-4 gap-2 mb-5 py-3 rounded-2xl bg-white border border-stone-200">
+          <div className="grid grid-cols-4 gap-2 mb-6 py-4 rounded-2xl bg-white border border-stone-200 shadow-sm">
             <StatCell value={String(stats.count)} label="resoconti" />
             <StatCell value={stats.distanceKm.toFixed(1)} label="km" />
             <StatCell value={`+${Math.round(stats.elevationGain)}`} label="D+ m" />
@@ -252,12 +315,14 @@ export default function DiarioSommarioPage() {
         )}
 
         {/* Raccolta — ogni Diario ne ha sempre una (è il suo scaffale), qui si cambia */}
-        <div className="relative mb-6">
+        <div className="relative mb-8">
           <button
             onClick={() => setShelfPickerOpen(v => !v)}
-            className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-white border border-stone-200 hover:border-stone-300 transition-colors text-left"
+            className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-white border border-stone-200 hover:border-stone-300 shadow-sm transition-colors text-left"
           >
-            <Layers className="w-4 h-4 text-stone-400 shrink-0" />
+            <div className="w-9 h-9 rounded-xl bg-forest-50 flex items-center justify-center shrink-0">
+              <Layers className="w-4 h-4 text-forest-600" />
+            </div>
             <span className="flex-1 min-w-0 text-sm text-stone-600 truncate">
               {currentCollection ? <>In <b className="text-stone-800">{currentCollection.title}</b></> : 'Nessuna raccolta'}
             </span>
@@ -280,29 +345,29 @@ export default function DiarioSommarioPage() {
         </div>
 
         {/* Resoconti */}
-        <div className="flex items-center justify-between mb-2.5">
-          <span className="font-barlow font-bold text-[11px] tracking-[2px] uppercase text-stone-400">Resoconti</span>
-          <span className="font-mono text-[11px] text-stone-400">{detail.reportage.length}</span>
+        <div className="flex items-center justify-between mb-3.5">
+          <span className="font-barlow font-bold text-xs tracking-[2px] uppercase text-stone-400">Resoconti</span>
+          <span className="font-mono text-xs text-stone-400">{detail.reportage.length}</span>
         </div>
         {moveError && <p className="text-xs text-red-600 mb-2">{moveError}</p>}
 
         {detail.reportage.length === 0 ? (
-          <p className="text-sm text-stone-400 italic py-6 text-center">Nessun resoconto ancora in questo Diario.</p>
+          <p className="font-lora italic text-sm text-stone-400 py-8 text-center">Nessun resoconto ancora in questo Diario.</p>
         ) : (
-          <div className="flex flex-col gap-2 mb-8">
+          <div className="flex flex-col gap-2.5 mb-10">
             {detail.reportage.map(r => {
               const scoreLabel = r.trailScore != null ? ctsLabel(r.trailScore).label : null
               return (
-                <div key={r.id} className="relative flex items-center gap-3 bg-white border border-stone-200 rounded-xl px-3 py-2.5">
-                  <Link href={`/resoconto/${encodeURIComponent(r.id)}`} className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="w-11 h-11 rounded-lg shrink-0 overflow-hidden bg-stone-50 flex items-center justify-center">
+                <div key={r.id} className="relative flex items-center gap-3.5 bg-white border border-stone-200 rounded-2xl px-4 py-3.5 shadow-sm hover:shadow-md transition-shadow">
+                  <Link href={`/resoconto/${encodeURIComponent(r.id)}`} className="flex items-center gap-3.5 flex-1 min-w-0">
+                    <div className="w-14 h-14 rounded-xl shrink-0 overflow-hidden bg-stone-50 flex items-center justify-center">
                       {r.routePolyline && r.routePolyline.length > 1
                         ? <RouteThumb polyline={r.routePolyline} color="#2d7a3d" strokeWidth={2.5} />
-                        : <Mountain className="w-4 h-4 text-stone-300" />}
+                        : <Mountain className="w-5 h-5 text-stone-300" />}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="font-medium text-sm text-stone-800 truncate">{r.title}</p>
-                      <div className="flex items-center flex-wrap gap-x-2.5 gap-y-0.5 mt-1 text-[11px] text-stone-400">
+                      <p className="font-display font-semibold text-[15px] text-stone-800 truncate">{r.title}</p>
+                      <div className="flex items-center flex-wrap gap-x-2.5 gap-y-0.5 mt-1.5 text-[11px] text-stone-400">
                         {metaHasHikingMetrics(r.metaType) && (
                           <>
                             <span className="inline-flex items-center gap-1"><Route className="w-3 h-3" /> {(r.distanceMeters / 1000).toFixed(1)} km</span>
@@ -355,7 +420,7 @@ export default function DiarioSommarioPage() {
         {/* Un Diario di default non si archivia né si elimina mai (stesso vincolo lato server) —
             deve sempre esistere come punto di atterraggio. */}
         {!detail.isDefault && (
-          <div className="pt-5 border-t border-stone-200 space-y-5">
+          <div className="pt-7 border-t border-stone-200 space-y-5">
             <div>
               {detail.archivedAt ? (
                 <button onClick={() => setArchived(null)} disabled={archiveBusy}
@@ -427,8 +492,8 @@ export default function DiarioSommarioPage() {
 function StatCell({ value, label }: { value: string; label: string }) {
   return (
     <div className="text-center">
-      <p className="font-mono text-base font-bold text-stone-800 leading-none">{value}</p>
-      <p className="text-[10px] uppercase tracking-wide text-stone-400 mt-1">{label}</p>
+      <p className="font-mono text-lg font-bold text-stone-800 leading-none">{value}</p>
+      <p className="text-[10px] uppercase tracking-wide text-stone-400 mt-1.5">{label}</p>
     </div>
   )
 }

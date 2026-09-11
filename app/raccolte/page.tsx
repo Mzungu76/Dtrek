@@ -45,15 +45,18 @@ export default function RaccolteListPage() {
     <div className={`min-h-screen bg-stone-50 ${MOBILE_TOPBAR_SPACER}`}>
       <Navbar />
       <div className="max-w-2xl mx-auto px-4 sm:px-8 pb-16">
-        <Link href="/diario" className="inline-flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-700 mt-2 mb-4 transition-colors">
+        <Link href="/diario" className="inline-flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-700 mt-3 mb-5 transition-colors">
           <ArrowLeft className="w-3.5 h-3.5" /> Diari
         </Link>
 
-        <div className="flex items-center justify-between mb-5">
-          <h1 className="font-display text-2xl font-bold text-stone-800">Raccolte</h1>
+        <div className="flex items-start justify-between gap-4 mb-8">
+          <div>
+            <h1 className="font-display text-3xl font-bold text-stone-800">Raccolte</h1>
+            <p className="font-lora italic text-sm text-stone-500 mt-1.5">Più Diari insieme, pubblicabili come un unico volume.</p>
+          </div>
           <button onClick={createCollection} disabled={creating}
-            className="inline-flex items-center gap-1.5 bg-forest-600 hover:bg-forest-700 text-white text-sm font-medium px-3.5 py-2 rounded-xl transition-colors disabled:opacity-60">
-            {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Nuova raccolta
+            className="shrink-0 inline-flex items-center gap-1.5 bg-forest-600 hover:bg-forest-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors disabled:opacity-60 shadow-sm">
+            {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Nuova
           </button>
         </div>
 
@@ -62,27 +65,27 @@ export default function RaccolteListPage() {
         {collections === null ? (
           <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-stone-400" /></div>
         ) : collections.length === 0 ? (
-          <p className="text-sm text-stone-400 italic py-6 text-center">Nessuna raccolta ancora.</p>
+          <p className="font-lora italic text-sm text-stone-400 py-10 text-center">Nessuna raccolta ancora.</p>
         ) : (
-          <div className="flex flex-col gap-2.5">
+          <div className="flex flex-col gap-3">
             {collections.map(c => (
               <Link key={c.id} href={`/raccolte/${encodeURIComponent(c.id)}`}
-                className="flex items-center gap-3 bg-white border border-stone-200 hover:border-stone-300 rounded-2xl px-4 py-3.5 transition-colors">
-                <div className="flex shrink-0">
+                className="flex items-center gap-4 bg-white border border-stone-200 hover:border-stone-300 hover:shadow-md rounded-2xl px-4 py-4 shadow-sm transition-all">
+                <div className="flex shrink-0 w-11 justify-center">
                   {Array.from({ length: Math.min(3, Math.max(1, c.volumeCount)) }).map((_, i) => (
-                    <div key={i} className="w-6 h-8 rounded-[4px] -mr-2.5 last:mr-0"
+                    <div key={i} className="w-7 h-10 rounded-[5px] -mr-3 first:ml-0 shadow-sm ring-1 ring-black/5"
                       style={{
                         background: i % 2 === 0 ? 'linear-gradient(160deg,#8cc894,#277134)' : 'linear-gradient(160deg,#e9ab64,#9f4315)',
-                        transform: `rotate(${i % 2 === 0 ? -6 : 4}deg)`,
+                        transform: `rotate(${i % 2 === 0 ? -7 : 5}deg)`,
                       }} />
                   ))}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-display font-semibold text-stone-800 truncate">{c.title}</p>
-                  <p className="text-xs text-stone-400 mt-0.5 flex items-center gap-1.5">
-                    <span>{c.volumeCount} diari</span> · <span>{c.reportageCount} resoconti</span>
+                  <p className="font-display font-semibold text-base text-stone-800 truncate">{c.title}</p>
+                  <p className="text-xs text-stone-400 mt-1 flex items-center gap-1.5">
+                    <span>{c.volumeCount} diari</span> · <span>{c.reportageCount} resoconti</span> ·{' '}
                     {c.isPublished
-                      ? <span className="inline-flex items-center gap-1 text-forest-600"><Globe2 className="w-3 h-3" /> pubblicata</span>
+                      ? <span className="inline-flex items-center gap-1 text-forest-600 font-medium"><Globe2 className="w-3 h-3" /> pubblicata</span>
                       : <span className="inline-flex items-center gap-1"><Lock className="w-3 h-3" /> bozza</span>}
                   </p>
                 </div>

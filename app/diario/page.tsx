@@ -33,14 +33,21 @@ export default function DiarioHubPage() {
   useEffect(() => {
     Promise.all([
       getAllActivities(),
-      fetch('/api/diary-config').then(r => r.ok ? r.json() : DEFAULT_DIARY_CONFIG),
       fetch('/api/diaries').then(r => r.ok ? r.json() : []),
       fetch('/api/collections').then(r => r.ok ? r.json() : []),
-    ]).then(([acts, dc, ds, cs]) => {
+    ]).then(async ([acts, ds, cs]) => {
       setActivities(acts as ActivityMeta[])
-      setConfig(normalizeDiaryConfig(dc))
       setDiaries(ds as DiarySummary[])
       setCollections(cs as CollectionSummary[])
+      // Titolo/sottotitolo dell'hero vengono dal Diario di default vero e proprio (tabella
+      // `diaries`, la stessa che alimenta il Sommario in /diario/[id]) — non più dal vecchio
+      // `user_settings.diary_config` a sé stante: le due configurazioni non erano la stessa cosa,
+      // e mostrare qui il valore sbagliato faceva sembrare persa una modifica fatta nel Sommario.
+      const def = (ds as DiarySummary[]).find(d => d.isDefault)
+      if (def) {
+        const dc = await fetch(`/api/diaries/${encodeURIComponent(def.id)}/config`).then(r => r.ok ? r.json() : DEFAULT_DIARY_CONFIG)
+        setConfig(normalizeDiaryConfig(dc))
+      }
     }).finally(() => setLoading(false))
   }, [])
 
@@ -104,24 +111,30 @@ export default function DiarioHubPage() {
   return (
     <div className="min-h-screen bg-stone-100">
       {/* Hero — copertina del Diario di default */}
-      <div className="relative h-[300px] sm:h-[380px] overflow-hidden">
+      <div className="relative h-[340px] sm:h-[420px] overflow-hidden">
         {config.coverUrl ? (
           <img src={config.coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
         ) : (
           <div className="absolute inset-0" style={{ background: 'linear-gradient(158deg,#193b20 0%,#1c4724 45%,#20592b 100%)' }} />
         )}
         <div className="absolute inset-0 bg-topography opacity-60" />
-        <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.5) 0%, transparent 32%, transparent 55%, rgba(11,26,20,0.92) 100%)' }} />
+        <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, transparent 30%, transparent 55%, rgba(11,26,20,0.94) 100%)' }} />
 
         <div className="absolute inset-x-0 top-0 z-20"><HubNavBar /></div>
 
-        <div className="absolute inset-x-0 bottom-0 z-10 p-5 sm:px-10 sm:pb-8">
+        <div className="absolute inset-x-0 bottom-0 z-10 p-6 sm:px-10 sm:pb-10">
           <span className="font-barlow text-[11px] font-extrabold uppercase tracking-[3px] text-amber-300">Diario attivo</span>
-          <h1 className="font-display text-3xl sm:text-4xl font-bold text-white mt-1.5 leading-tight"
-            style={{ textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>
+          <h1 className="font-display text-4xl sm:text-5xl font-bold text-white mt-2 leading-[1.05]"
+            style={{ textShadow: '0 2px 14px rgba(0,0,0,0.55)' }}>
             {config.title}
           </h1>
-          <div className="flex flex-wrap gap-2 mt-3">
+          {config.subtitle && (
+            <p className="font-lora italic text-base sm:text-lg text-white/80 mt-1.5"
+              style={{ textShadow: '0 1px 8px rgba(0,0,0,0.5)' }}>
+              {config.subtitle}
+            </p>
+          )}
+          <div className="flex flex-wrap gap-2 mt-4">
             <span className="inline-flex items-center gap-1.5 bg-white/15 backdrop-blur-sm text-white text-[11px] font-semibold px-2.5 py-1.5 rounded-full">
               <Camera className="w-3 h-3" /> {globalStats.totalActivities} resoconti
             </span>
@@ -133,32 +146,32 @@ export default function DiarioHubPage() {
             </span>
           </div>
           <Link href="/diario/libro"
-            className="inline-flex items-center gap-2 mt-4 bg-white text-forest-800 rounded-full px-5 py-2.5 font-barlow font-extrabold uppercase text-sm tracking-wide hover:bg-forest-50 transition-colors">
+            className="inline-flex items-center gap-2 mt-5 bg-white text-forest-800 rounded-full px-5 py-2.5 font-barlow font-extrabold uppercase text-sm tracking-wide hover:bg-forest-50 transition-colors shadow-lg shadow-black/20">
             Apri il diario <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
       </div>
 
       {/* Foglio inferiore — Diari e Raccolte */}
-      <div className="relative -mt-5 bg-stone-100 rounded-t-[22px] px-4 sm:px-10 pt-5 pb-12">
-        <div className="w-9 h-1 rounded-full bg-stone-300 mx-auto mb-5" />
+      <div className="relative -mt-6 bg-stone-100 rounded-t-[26px] px-4 sm:px-10 pt-6 pb-14 shadow-[0_-8px_20px_rgba(0,0,0,0.06)]">
+        <div className="w-10 h-1 rounded-full bg-stone-300 mx-auto mb-7" />
 
         {/* I tuoi Diari */}
-        <section className="mb-7">
-          <div className="flex items-center justify-between mb-2.5">
-            <span className="font-barlow font-bold text-[11px] tracking-[2.5px] uppercase text-stone-400">I tuoi diari</span>
-            <span className="font-mono text-[11px] text-stone-400">{visibleDiaries.length}</span>
+        <section className="mb-10">
+          <div className="flex items-center justify-between mb-3.5">
+            <span className="font-barlow font-bold text-xs tracking-[2.5px] uppercase text-stone-400">I tuoi diari</span>
+            <span className="font-mono text-xs text-stone-400">{visibleDiaries.length}</span>
           </div>
-          <div className="flex gap-2.5 overflow-x-auto pb-1 -mx-4 px-4 sm:-mx-10 sm:px-10">
+          <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 sm:-mx-10 sm:px-10">
             {defaultDiary && <DiaryTile diary={defaultDiary} />}
             {otherDiaries.map(d => <DiaryTile key={d.id} diary={d} />)}
             <button
               onClick={createDiary}
               disabled={creatingDiary}
-              className="shrink-0 w-20 h-32 rounded-2xl border-[1.5px] border-dashed border-stone-300 flex flex-col items-center justify-center gap-1.5 text-stone-400 hover:border-stone-400 hover:text-stone-500 transition-colors disabled:opacity-60"
+              className="shrink-0 w-24 h-36 rounded-2xl border-[1.5px] border-dashed border-stone-300 flex flex-col items-center justify-center gap-2 text-stone-400 hover:border-stone-400 hover:text-stone-500 hover:bg-white/60 transition-colors disabled:opacity-60"
             >
-              {creatingDiary ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-              <span className="font-barlow text-[10px] font-bold">Nuovo</span>
+              {creatingDiary ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
+              <span className="font-barlow text-[11px] font-bold uppercase tracking-wide">Nuovo</span>
             </button>
           </div>
           {createError && <p className="text-xs text-red-600 mt-2">{createError}</p>}
@@ -166,24 +179,26 @@ export default function DiarioHubPage() {
 
         {/* Raccolte */}
         <section>
-          <div className="flex items-center justify-between mb-2.5">
-            <span className="font-barlow font-bold text-[11px] tracking-[2.5px] uppercase text-stone-400">Raccolte</span>
+          <div className="flex items-center justify-between mb-3.5">
+            <span className="font-barlow font-bold text-xs tracking-[2.5px] uppercase text-stone-400">Raccolte</span>
             {collections.length > 0 && (
-              <Link href="/raccolte" className="font-barlow font-bold text-[11px] tracking-wide uppercase text-forest-600">Vedi tutte</Link>
+              <Link href="/raccolte" className="font-barlow font-bold text-xs tracking-wide uppercase text-forest-600 hover:text-forest-700 transition-colors">Vedi tutte</Link>
             )}
           </div>
 
           {collections.length === 0 ? (
-            <Link href="/raccolte" className="mt-2.5 rounded-2xl border border-dashed border-stone-300 p-4 flex items-center gap-3 hover:border-stone-400 transition-colors">
-              <Layers className="w-5 h-5 text-stone-400 shrink-0" />
+            <Link href="/raccolte" className="rounded-2xl border border-dashed border-stone-300 bg-white/50 p-5 flex items-center gap-4 hover:border-stone-400 hover:bg-white transition-colors">
+              <div className="w-11 h-11 rounded-xl bg-stone-100 flex items-center justify-center shrink-0">
+                <Layers className="w-5 h-5 text-stone-400" />
+              </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-stone-600">Nessuna raccolta ancora</p>
+                <p className="font-display text-sm font-semibold text-stone-700">Nessuna raccolta ancora</p>
                 <p className="text-xs text-stone-400 mt-0.5">Raggruppano più Diari, pubblicabili come un unico volume.</p>
               </div>
               <Plus className="w-4 h-4 text-stone-400 shrink-0" />
             </Link>
           ) : (
-            <div className="mt-2.5 flex flex-col gap-2.5">
+            <div className="flex flex-col gap-3">
               {collections.map(c => <CollectionRow key={c.id} collection={c} />)}
             </div>
           )}
@@ -195,18 +210,19 @@ export default function DiarioHubPage() {
 
 function DiaryTile({ diary }: { diary: DiarySummary }) {
   return (
-    <Link href={`/diario/${encodeURIComponent(diary.id)}`} className="relative w-20 h-32 rounded-2xl overflow-hidden shrink-0"
+    <Link href={`/diario/${encodeURIComponent(diary.id)}`}
+      className="relative w-24 h-36 rounded-2xl overflow-hidden shrink-0 shadow-md shadow-black/10 transition-transform hover:-translate-y-0.5"
       style={{ background: diary.isDefault ? 'linear-gradient(160deg,#378d44,#1c4724)' : 'linear-gradient(160deg,#8cc894,#277134)' }}>
       <div className="absolute inset-0 bg-topography opacity-50" />
       <div className="absolute inset-0 flex items-center justify-center">
-        <BookMarked className="w-6 h-6 text-white/80" />
+        <BookMarked className="w-7 h-7 text-white/70" />
       </div>
-      <div className="absolute bottom-0 inset-x-0 px-2 pb-1.5 pt-5 bg-gradient-to-t from-black/75 to-transparent">
-        <span className="block text-[10px] font-bold text-white truncate leading-tight">{diary.title}</span>
-        <span className="block text-[9px] text-white/70 leading-tight mt-0.5">{diary.reportageCount} resoconti</span>
+      <div className="absolute bottom-0 inset-x-0 px-2.5 pb-2 pt-7 bg-gradient-to-t from-black/80 to-transparent">
+        <span className="block text-[11px] font-bold text-white truncate leading-tight">{diary.title}</span>
+        <span className="block text-[9.5px] text-white/70 leading-tight mt-0.5">{diary.reportageCount} resoconti</span>
       </div>
       {diary.isDefault && (
-        <span className="absolute top-1.5 right-1.5 text-[8px] font-barlow font-bold uppercase tracking-wide bg-white/90 text-forest-700 px-1.5 py-0.5 rounded-full">
+        <span className="absolute top-2 right-2 text-[8px] font-barlow font-bold uppercase tracking-wide bg-white/90 text-forest-700 px-1.5 py-0.5 rounded-full">
           Default
         </span>
       )}
@@ -216,21 +232,23 @@ function DiaryTile({ diary }: { diary: DiarySummary }) {
 
 function CollectionRow({ collection }: { collection: CollectionSummary }) {
   return (
-    <Link href={`/raccolte/${encodeURIComponent(collection.id)}`} className="flex items-center gap-3 bg-white border border-stone-200 hover:border-stone-300 rounded-2xl px-3.5 py-3 transition-colors">
-      <div className="flex shrink-0">
+    <Link href={`/raccolte/${encodeURIComponent(collection.id)}`}
+      className="flex items-center gap-4 bg-white border border-stone-200 hover:border-stone-300 hover:shadow-md rounded-2xl px-4 py-4 shadow-sm transition-all">
+      <div className="flex shrink-0 w-11 justify-center">
         {Array.from({ length: Math.min(3, Math.max(1, collection.volumeCount)) }).map((_, i) => (
-          <div key={i} className="w-6 h-8 rounded-[4px] -mr-2.5 first:ml-0"
+          <div key={i} className="w-7 h-10 rounded-[5px] -mr-3 first:ml-0 shadow-sm ring-1 ring-black/5"
             style={{
               background: i % 2 === 0 ? 'linear-gradient(160deg,#8cc894,#277134)' : 'linear-gradient(160deg,#e9ab64,#9f4315)',
-              transform: `rotate(${i % 2 === 0 ? -6 : 4}deg)`,
+              transform: `rotate(${i % 2 === 0 ? -7 : 5}deg)`,
             }} />
         ))}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="font-display font-semibold text-sm text-stone-700 truncate">{collection.title}</p>
-        <p className="text-[11px] text-stone-400 mt-0.5 flex items-center gap-1">
-          {collection.volumeCount} diari · {collection.isPublished
-            ? <span className="inline-flex items-center gap-1"><Globe2 className="w-3 h-3" /> pubblicata</span>
+        <p className="font-display font-semibold text-base text-stone-800 truncate">{collection.title}</p>
+        <p className="text-xs text-stone-400 mt-1 flex items-center gap-1.5">
+          {collection.volumeCount} diari · {collection.reportageCount} resoconti ·{' '}
+          {collection.isPublished
+            ? <span className="inline-flex items-center gap-1 text-forest-600 font-medium"><Globe2 className="w-3 h-3" /> pubblicata</span>
             : <span className="inline-flex items-center gap-1"><Lock className="w-3 h-3" /> bozza</span>}
         </p>
       </div>
