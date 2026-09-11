@@ -1,0 +1,187 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,400&family=DM+Sans:ital,wght@0,400;0,500;1,400&family=Barlow+Condensed:wght@600;700;900&family=Lora:ital,wght@0,400;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin: 0; }
+    * { box-sizing: border-box; }
+    a { color: #277134; text-decoration: none; }
+    .barlow { font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif; }
+    .display { font-family: 'Playfair Display', Georgia, serif; }
+    .body-f { font-family: 'DM Sans', system-ui, sans-serif; }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+    .lora { font-family: 'Lora', Georgia, serif; }
+    .scrolly::-webkit-scrollbar { display: none; }
+    .fascia { background:#fff; border:1px solid #dcd8cc; border-radius:16px; padding:14px; }
+    .reorder { display:flex; flex-direction:column; gap:1px; flex-shrink:0; }
+  </style>
+</helmet>
+<div class="body-f" style="width:390px;height:844px;background:#eeece5;position:relative;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 0 0 1px #dcd8cc;">
+
+  <!-- Top nav -->
+  <div style="background:rgba(39,113,52,0.95);display:flex;align-items:center;gap:6px;padding:14px 12px 10px;flex-shrink:0;">
+    <div style="flex:1;display:flex;align-items:center;justify-content:space-around;">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:2px;color:#ffffff;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
+        <span class="barlow" style="font-size:9px;font-weight:700;">Bacheca</span>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:2px;color:#8cc894;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polygon points="16 8 13 13 8 16 11 11"/></svg>
+        <span class="barlow" style="font-size:9px;font-weight:700;">Guide</span>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:2px;color:#8cc894;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6c-1.6-1.1-4.2-1.6-6.2-1v13c2 0 4.7.5 6.2 1.6"/><path d="M12 6c1.6-1.1 4.2-1.6 6.2-1v13c-2 0-4.7.5-6.2 1.6z"/></svg>
+        <span class="barlow" style="font-size:9px;font-weight:700;">Resoconti</span>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:2px;color:#8cc894;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12a1 1 0 0 1 1 1v16l-7-4-7 4V4a1 1 0 0 1 1-1z"/></svg>
+        <span class="barlow" style="font-size:9px;font-weight:700;">Diari</span>
+      </div>
+    </div>
+    <div style="width:30px;height:30px;border-radius:999px;background:#20592b;border:2px solid rgba(255,255,255,0.5);display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700;flex-shrink:0;">M</div>
+  </div>
+
+  <div class="scrolly" style="flex:1;overflow-y:auto;padding:18px 16px 26px;display:flex;flex-direction:column;gap:12px;">
+
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <h1 class="display" style="margin:0;font-weight:700;font-size:22px;color:#4d4740;">Bacheca</h1>
+      <button style="display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid #dcd8cc;border-radius:999px;padding:7px 12px;color:#277134;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="14" y2="18"/></svg>
+        <span class="barlow" style="font-size:10.5px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;">Modifica</span>
+      </button>
+    </div>
+
+    <!-- Fascia 1: Allenamento -->
+    <div class="fascia">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:11px;">
+        <div class="reorder">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#c4bead" stroke-width="2.4" stroke-linecap="round"><polyline points="18 15 12 9 6 15"/></svg>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#c4bead" stroke-width="2.4" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <span class="barlow" style="font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#4d4740;flex:1;">Allenamento</span>
+        <span style="width:34px;height:19px;border-radius:999px;background:#377134;position:relative;flex-shrink:0;">
+          <span style="position:absolute;top:2px;right:2px;width:15px;height:15px;border-radius:999px;background:#fff;"></span>
+        </span>
+      </div>
+      <div style="display:flex;gap:14px;align-items:center;">
+        <div style="width:52px;height:52px;border-radius:999px;background:conic-gradient(#377134 0% 78%, #dcd8cc 78% 100%);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <div style="width:40px;height:40px;border-radius:999px;background:#fff;display:flex;align-items:center;justify-content:center;">
+            <span class="display" style="font-weight:700;font-size:15px;color:#277134;">78</span>
+          </div>
+        </div>
+        <svg width="150" height="40" viewBox="0 0 150 40">
+          <polyline points="0,20 25,24 50,16 75,22 100,12 125,18 150,8" fill="none" stroke="#8cc894" stroke-width="2" stroke-dasharray="3 3"/>
+          <polyline points="0,30 25,26 50,28 75,20 100,24 125,14 150,18" fill="none" stroke="#e9ab64" stroke-width="2.5"/>
+        </svg>
+      </div>
+      <div style="font-size:10.5px;color:#8a7f6e;margin-top:8px;">Recovery 78 · Fitness (CTL) in crescita, fatica (ATL) stabile.</div>
+    </div>
+
+    <!-- Fascia 2: Prossima uscita -->
+    <div class="fascia">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:11px;">
+        <div class="reorder">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#c4bead" stroke-width="2.4" stroke-linecap="round"><polyline points="18 15 12 9 6 15"/></svg>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#c4bead" stroke-width="2.4" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <span class="barlow" style="font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#4d4740;flex:1;">Prossima uscita</span>
+        <span style="width:34px;height:19px;border-radius:999px;background:#377134;position:relative;flex-shrink:0;">
+          <span style="position:absolute;top:2px;right:2px;width:15px;height:15px;border-radius:999px;background:#fff;"></span>
+        </span>
+      </div>
+      <div style="display:flex;gap:12px;align-items:center;">
+        <div style="width:48px;height:64px;border-radius:9px;flex-shrink:0;background:linear-gradient(160deg,#e9ab64,#9f4315);display:flex;align-items:center;justify-content:center;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20l6-11 4 6 3-4 5 9H3z"/></svg>
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div class="display" style="font-weight:600;font-size:15px;color:#4d4740;">Monte Terminillo</div>
+          <div style="font-size:10.5px;color:#8a7f6e;margin-top:3px;">Dom 15 set · 14,2 km · 980 m D+ · 18°C sereno</div>
+        </div>
+        <a href="#" style="flex-shrink:0;font-size:11px;font-weight:700;">Apri →</a>
+      </div>
+    </div>
+
+    <!-- Fascia 3: Storico -->
+    <div class="fascia">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:11px;">
+        <div class="reorder">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#c4bead" stroke-width="2.4" stroke-linecap="round"><polyline points="18 15 12 9 6 15"/></svg>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#c4bead" stroke-width="2.4" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <span class="barlow" style="font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#4d4740;flex:1;">Storico</span>
+        <span style="width:34px;height:19px;border-radius:999px;background:#377134;position:relative;flex-shrink:0;">
+          <span style="position:absolute;top:2px;right:2px;width:15px;height:15px;border-radius:999px;background:#fff;"></span>
+        </span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(18, 1fr);gap:2.5px;">
+        <div style="width:100%;aspect-ratio:1;border-radius:2px;background:#eeece5;"></div><div style="width:100%;aspect-ratio:1;border-radius:2px;background:#bbe0bf;"></div><div style="width:100%;aspect-ratio:1;border-radius:2px;background:#eeece5;"></div><div style="width:100%;aspect-ratio:1;border-radius:2px;background:#377134;"></div><div style="width:100%;aspect-ratio:1;border-radius:2px;background:#eeece5;"></div><div style="width:100%;aspect-ratio:1;border-radius:2px;background:#eeece5;"></div><div style="width:100%;aspect-ratio:1;border-radius:2px;background:#8cc894;"></div><div style="width:100%;aspect-ratio:1;border-radius:2px;background:#eeece5;"></div><div style="width:100%;aspect-ratio:1;border-radius:2px;background:#eeece5;"></div><div style="width:100%;aspect-ratio:1;border-radius:2px;background:#377134;"></div><div style="width:100%;aspect-ratio:1;border-radius:2px;background:#bbe0bf;"></div><div style="width:100%;aspect-ratio:1;border-radius:2px;background:#eeece5;"></div><div style="width:100%;aspect-ratio:1;border-radius:2px;background:#eeece5;"></div><div style="width:100%;aspect-ratio:1;border-radius:2px;background:#8cc894;"></div><div style="width:100%;aspect-ratio:1;border-radius:2px;background:#377134;"></div><div style="width:100%;aspect-ratio:1;border-radius:2px;background:#eeece5;"></div><div style="width:100%;aspect-ratio:1;border-radius:2px;background:#bbe0bf;"></div><div style="width:100%;aspect-ratio:1;border-radius:2px;background:#377134;"></div>
+      </div>
+      <div style="font-size:10.5px;color:#8a7f6e;margin-top:8px;">Ultime 18 settimane · streak attuale 4 settimane.</div>
+    </div>
+
+    <!-- Fascia 4: Traguardi -->
+    <div class="fascia">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:11px;">
+        <div class="reorder">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#c4bead" stroke-width="2.4" stroke-linecap="round"><polyline points="18 15 12 9 6 15"/></svg>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#c4bead" stroke-width="2.4" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <span class="barlow" style="font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#4d4740;flex:1;">Traguardi</span>
+        <span style="width:34px;height:19px;border-radius:999px;background:#dcd8cc;position:relative;flex-shrink:0;">
+          <span style="position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:999px;background:#fff;"></span>
+        </span>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <div style="flex:1;text-align:center;">
+          <div style="width:44px;height:44px;margin:0 auto;border-radius:999px;background:conic-gradient(#e08d3c 0% 82%, #eeece5 82% 100%);display:flex;align-items:center;justify-content:center;">
+            <div style="width:34px;height:34px;border-radius:999px;background:#fff;"></div>
+          </div>
+          <div style="font-size:9.5px;color:#8a7f6e;margin-top:5px;">500 km</div>
+        </div>
+        <div style="flex:1;text-align:center;">
+          <div style="width:44px;height:44px;margin:0 auto;border-radius:999px;background:conic-gradient(#377134 0% 45%, #eeece5 45% 100%);display:flex;align-items:center;justify-content:center;">
+            <div style="width:34px;height:34px;border-radius:999px;background:#fff;"></div>
+          </div>
+          <div style="font-size:9.5px;color:#8a7f6e;margin-top:5px;">10.000 D+</div>
+        </div>
+        <div style="flex:1;text-align:center;">
+          <div style="width:44px;height:44px;margin:0 auto;border-radius:999px;background:conic-gradient(#c05a17 0% 100%, #eeece5 100% 100%);display:flex;align-items:center;justify-content:center;">
+            <div style="width:34px;height:34px;border-radius:999px;background:#fff;"></div>
+          </div>
+          <div style="font-size:9.5px;color:#8a7f6e;margin-top:5px;">50 uscite</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fascia disattivata (esempio) -->
+    <div class="fascia" style="opacity:0.5;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div class="reorder">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#c4bead" stroke-width="2.4" stroke-linecap="round"><polyline points="18 15 12 9 6 15"/></svg>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#c4bead" stroke-width="2.4" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <span class="barlow" style="font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#a9a18e;flex:1;">Percorsi per te — nascosta</span>
+        <span style="width:34px;height:19px;border-radius:999px;background:#dcd8cc;position:relative;flex-shrink:0;">
+          <span style="position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:999px;background:#fff;"></span>
+        </span>
+      </div>
+    </div>
+
+    <button style="align-self:center;display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid #dcd8cc;color:#277134;border-radius:999px;padding:9px 16px;margin-top:2px;">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="4" x2="12" y2="20"/><line x1="4" y1="12" x2="20" y2="12"/></svg>
+      <span class="barlow" style="font-size:11px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;">Aggiungi una fascia</span>
+    </button>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script>
+class Component extends DCLogic {}
+</script>
+</body>
+</html>

@@ -1,0 +1,146 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,400&family=DM+Sans:ital,wght@0,400;0,500;1,400&family=Barlow+Condensed:wght@600;700;900&family=Lora:ital,wght@0,400;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin: 0; }
+    * { box-sizing: border-box; }
+    a { color: #277134; text-decoration: none; }
+    .barlow { font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif; }
+    .display { font-family: 'Playfair Display', Georgia, serif; }
+    .body-f { font-family: 'DM Sans', system-ui, sans-serif; }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+    .lora { font-family: 'Lora', Georgia, serif; }
+    .scrollx::-webkit-scrollbar, .scrolly::-webkit-scrollbar { display: none; }
+    .card { background:#fff; border:1px solid #dcd8cc; border-radius:16px; padding:14px; }
+  </style>
+</helmet>
+<div class="body-f" style="width:390px;height:844px;background:#eeece5;position:relative;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 0 0 1px #dcd8cc;">
+
+  <!-- Top nav -->
+  <div style="background:rgba(39,113,52,0.95);display:flex;align-items:center;gap:6px;padding:14px 12px 10px;flex-shrink:0;">
+    <div style="flex:1;display:flex;align-items:center;justify-content:space-around;">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:2px;color:#ffffff;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
+        <span class="barlow" style="font-size:9px;font-weight:700;">Bacheca</span>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:2px;color:#8cc894;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polygon points="16 8 13 13 8 16 11 11"/></svg>
+        <span class="barlow" style="font-size:9px;font-weight:700;">Guide</span>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:2px;color:#8cc894;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6c-1.6-1.1-4.2-1.6-6.2-1v13c2 0 4.7.5 6.2 1.6"/><path d="M12 6c1.6-1.1 4.2-1.6 6.2-1v13c-2 0-4.7.5-6.2 1.6z"/></svg>
+        <span class="barlow" style="font-size:9px;font-weight:700;">Resoconti</span>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:2px;color:#8cc894;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12a1 1 0 0 1 1 1v16l-7-4-7 4V4a1 1 0 0 1 1-1z"/></svg>
+        <span class="barlow" style="font-size:9px;font-weight:700;">Diari</span>
+      </div>
+    </div>
+    <div style="width:30px;height:30px;border-radius:999px;background:#20592b;border:2px solid rgba(255,255,255,0.5);display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700;flex-shrink:0;">M</div>
+  </div>
+
+  <div style="flex-shrink:0;padding:16px 16px 0;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <h1 class="display" style="margin:0;font-weight:700;font-size:22px;color:#4d4740;">Bacheca</h1>
+      <button style="width:32px;height:32px;border-radius:999px;background:#fff;border:1px solid #dcd8cc;display:flex;align-items:center;justify-content:center;color:#277134;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+      </button>
+    </div>
+
+    <!-- Schede personalizzabili -->
+    <div class="scrollx" style="display:flex;gap:8px;overflow-x:auto;margin:0 -16px;padding:0 16px 14px;">
+      <span style="flex:0 0 auto;background:#277134;color:#fff;border-radius:999px;padding:8px 16px;box-shadow:0 2px 6px rgba(39,113,52,0.3);">
+        <span class="barlow" style="font-size:12px;font-weight:700;letter-spacing:0.5px;">Oggi</span>
+      </span>
+      <span style="flex:0 0 auto;background:#fff;border:1px solid #dcd8cc;color:#73695c;border-radius:999px;padding:8px 16px;">
+        <span class="barlow" style="font-size:12px;font-weight:700;letter-spacing:0.5px;">Allenamento</span>
+      </span>
+      <span style="flex:0 0 auto;background:#fff;border:1px solid #dcd8cc;color:#73695c;border-radius:999px;padding:8px 16px;">
+        <span class="barlow" style="font-size:12px;font-weight:700;letter-spacing:0.5px;">Traguardi</span>
+      </span>
+      <span style="flex:0 0 auto;background:#fff;border:1px solid #dcd8cc;color:#73695c;border-radius:999px;padding:8px 16px;">
+        <span class="barlow" style="font-size:12px;font-weight:700;letter-spacing:0.5px;">Community</span>
+      </span>
+      <span style="flex:0 0 auto;border:1.5px dashed #c4bead;color:#a9a18e;border-radius:999px;padding:8px 14px;display:flex;align-items:center;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="4" x2="12" y2="20"/><line x1="4" y1="12" x2="20" y2="12"/></svg>
+      </span>
+    </div>
+  </div>
+
+  <div class="scrolly" style="flex:1;overflow-y:auto;padding:0 16px 26px;display:flex;flex-direction:column;gap:12px;">
+
+    <!-- Riepilogo del giorno -->
+    <div class="card" style="background:linear-gradient(150deg,#f1f8f2,#fff);">
+      <p class="lora" style="margin:0;font-style:italic;font-size:13px;color:#4d4740;line-height:1.5;">«Recupero ottimo e una settimana in crescita: è il momento buono per l'uscita lunga che hai in programma domenica.»</p>
+    </div>
+
+    <!-- Prossima uscita -->
+    <div class="card" style="display:flex;gap:12px;align-items:center;">
+      <div style="width:48px;height:64px;border-radius:9px;flex-shrink:0;background:linear-gradient(160deg,#e9ab64,#9f4315);display:flex;align-items:center;justify-content:center;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20l6-11 4 6 3-4 5 9H3z"/></svg>
+      </div>
+      <div style="flex:1;min-width:0;">
+        <div class="barlow" style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#a9a18e;">Dom 15 set</div>
+        <div class="display" style="font-weight:600;font-size:15px;color:#4d4740;margin-top:1px;">Monte Terminillo</div>
+        <div style="font-size:10.5px;color:#8a7f6e;margin-top:3px;">14,2 km · 980 m D+ · 18°C sereno</div>
+      </div>
+      <a href="#" style="font-size:11px;font-weight:700;flex-shrink:0;">Apri →</a>
+    </div>
+
+    <!-- Recovery + volume affiancati -->
+    <div style="display:flex;gap:12px;">
+      <div class="card" style="flex:1;">
+        <div class="barlow" style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#a9a18e;margin-bottom:8px;">Recovery</div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="width:44px;height:44px;border-radius:999px;background:conic-gradient(#377134 0% 78%, #dcd8cc 78% 100%);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+            <div style="width:34px;height:34px;border-radius:999px;background:#fff;display:flex;align-items:center;justify-content:center;">
+              <span class="display" style="font-weight:700;font-size:13px;color:#277134;">78</span>
+            </div>
+          </div>
+          <span style="font-size:10px;color:#8a7f6e;line-height:1.3;">Ben<br>recuperato</span>
+        </div>
+      </div>
+      <div class="card" style="flex:1;">
+        <div class="barlow" style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#a9a18e;margin-bottom:8px;">Volume</div>
+        <div class="display" style="font-weight:700;font-size:18px;color:#4d4740;">18 km</div>
+        <div style="font-size:10px;color:#277134;font-weight:700;margin-top:2px;">+12% media</div>
+      </div>
+    </div>
+
+    <!-- Collegamenti rapidi -->
+    <div>
+      <div class="barlow" style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#a9a18e;margin-bottom:8px;">Accesso rapido</div>
+      <div style="display:flex;gap:10px;">
+        <a href="#" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;background:#fff;border:1px solid #dcd8cc;border-radius:14px;padding:12px 6px;color:#4d4740;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#377134" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12a1 1 0 0 1 1 1v16l-7-4-7 4V4a1 1 0 0 1 1-1z"/></svg>
+          <span style="font-size:10px;font-weight:600;">Diario</span>
+        </a>
+        <a href="#" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;background:#fff;border:1px solid #dcd8cc;border-radius:14px;padding:12px 6px;color:#4d4740;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c05a17" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 3 3 8 12 13 21 8 12 3"/><polyline points="3 13 12 18 21 13"/></svg>
+          <span style="font-size:10px;font-weight:600;">Raccolte</span>
+        </a>
+        <a href="#" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;background:#fff;border:1px solid #dcd8cc;border-radius:14px;padding:12px 6px;color:#4d4740;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9f4315" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-7.5 7-12a7 7 0 0 0-14 0c0 4.5 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>
+          <span style="font-size:10px;font-weight:600;">Percorsi</span>
+        </a>
+      </div>
+    </div>
+
+    <div style="border-top:1px dashed #dcd8cc;padding-top:12px;text-align:center;">
+      <span class="lora" style="font-style:italic;font-size:11px;color:#a9a18e;">«Allenamento» raggruppa Recovery, Forma e TSS · «Traguardi» badge e record · «Community» Percorsi per te e Raccolte pubblicate.</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script>
+class Component extends DCLogic {}
+</script>
+</body>
+</html>
