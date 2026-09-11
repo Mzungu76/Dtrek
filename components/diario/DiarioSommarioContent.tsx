@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   Archive, ArchiveRestore, ArrowRightLeft, Camera, ChevronDown, Clock,
-  Layers, Loader2, Mountain, Route, Trash2, TrendingUp, X,
+  Layers, Loader2, Mountain, Plus, Route, Trash2, TrendingUp, X,
 } from 'lucide-react'
 import RouteThumb from '@/components/RouteThumb'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
@@ -61,6 +61,12 @@ export default function DiarioSommarioContent({ diaryId, onDeleted, onChanged }:
   const [deleteBusy, setDeleteBusy] = useState<'migrate' | 'deleteAll' | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
+  const [addPickerOpen, setAddPickerOpen] = useState(false)
+  const [addCandidates, setAddCandidates] = useState<DiarioReportageRow[] | null>(null)
+  const [addLoading, setAddLoading] = useState(false)
+  const [addBusy, setAddBusy] = useState<string | null>(null)
+  const [addError, setAddError] = useState<string | null>(null)
+
   const onChangedRef = useRef(onChanged)
   onChangedRef.current = onChanged
 
@@ -100,6 +106,10 @@ export default function DiarioSommarioContent({ diaryId, onDeleted, onChanged }:
     () => diaries.filter(d => d.id !== diaryId && !d.archivedAt),
     [diaries, diaryId],
   )
+  // Il Diario di default è dove ogni upload atterra finché l'utente non lo sposta altrove
+  // (lib/activitySave.ts, getDefaultDiaryId) — di fatto la "casella d'ingresso" dei Resoconti non
+  // ancora organizzati in un Diario specifico, quindi è la fonte da cui pescare qui.
+  const defaultDiary = useMemo(() => diaries.find(d => d.isDefault) ?? null, [diaries])
 
   // Sposta un Reportage in un altro Diario — l'appartenenza passa dal suo Percorso (Meta), non da
   // una colonna propria dell'attività (stessa indirezione di GET /api/diaries/[id]): si sposta la
@@ -124,6 +134,43 @@ export default function DiarioSommarioContent({ diaryId, onDeleted, onChanged }:
       setMoveError(e instanceof Error ? e.message : String(e))
     } finally {
       setMovingId(null)
+    }
+  }
+
+  function openAddPicker() {
+    if (!defaultDiary) return
+    setAddPickerOpen(true)
+    setAddError(null)
+    setAddLoading(true)
+    fetch(`/api/diaries/${encodeURIComponent(defaultDiary.id)}`)
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
+      .then((d: DiarioDetail) => setAddCandidates(d.reportage))
+      .catch(e => setAddError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setAddLoading(false))
+  }
+
+  // Stesso meccanismo di moveReportage (sposta la Meta, non il Reportage) — qui la direzione è
+  // "verso" invece che "da" questo Diario.
+  async function addReportage(row: DiarioReportageRow) {
+    if (!row.percorsoId) {
+      setAddError('Questo Reportage è antecedente ai Diari e non ha una Meta da spostare.')
+      return
+    }
+    setAddBusy(row.id); setAddError(null)
+    try {
+      const res = await fetch('/api/planned', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: row.percorsoId, diaryId }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error ?? data.message ?? `HTTP ${res.status}`)
+      setDetail(d => d ? { ...d, reportage: [row, ...d.reportage] } : d)
+      setAddCandidates(c => c ? c.filter(r => r.id !== row.id) : c)
+      onChangedRef.current?.()
+    } catch (e) {
+      setAddError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setAddBusy(null)
     }
   }
 
@@ -232,12 +279,32 @@ export default function DiarioSommarioContent({ diaryId, onDeleted, onChanged }:
       {/* Resoconti */}
       <div className="flex items-center justify-between mb-3.5">
         <span className="font-barlow font-bold text-xs tracking-[2px] uppercase text-stone-400">Resoconti</span>
-        <span className="font-mono text-xs text-stone-400">{detail.reportage.length}</span>
+        <div className="flex items-center gap-3">
+          {!detail.isDefault && defaultDiary && (
+            <button
+              onClick={openAddPicker}
+              className="flex items-center gap-1 text-xs font-semibold text-forest-700 hover:text-forest-800 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" /> Aggiungi
+            </button>
+          )}
+          <span className="font-mono text-xs text-stone-400">{detail.reportage.length}</span>
+        </div>
       </div>
       {moveError && <p className="text-xs text-red-600 mb-2">{moveError}</p>}
 
       {detail.reportage.length === 0 ? (
-        <p className="font-lora italic text-sm text-stone-400 py-8 text-center">Nessun resoconto ancora in questo Diario.</p>
+        <div className="py-8 text-center">
+          <p className="font-lora italic text-sm text-stone-400">Nessun resoconto ancora in questo Diario.</p>
+          {!detail.isDefault && defaultDiary && (
+            <button
+              onClick={openAddPicker}
+              className="inline-flex items-center gap-1.5 mt-3 px-3.5 py-1.5 rounded-full bg-forest-50 text-forest-700 hover:bg-forest-100 transition-colors text-xs font-semibold"
+            >
+              <Plus className="w-3.5 h-3.5" /> Aggiungi un resoconto
+            </button>
+          )}
+        </div>
       ) : (
         <div className="flex flex-col gap-2.5 mb-10">
           {detail.reportage.map(r => {
@@ -366,6 +433,56 @@ export default function DiarioSommarioContent({ diaryId, onDeleted, onChanged }:
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {addPickerOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/40 flex items-end sm:items-center justify-center"
+          onClick={() => setAddPickerOpen(false)}
+        >
+          <div
+            className="bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md max-h-[80vh] flex flex-col"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-stone-100 shrink-0">
+              <span className="font-display font-bold text-sm text-stone-800">
+                Aggiungi da &ldquo;{defaultDiary?.title}&rdquo;
+              </span>
+              <button onClick={() => setAddPickerOpen(false)} className="text-stone-400 hover:text-stone-600">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            {addError && <p className="text-xs text-red-600 px-5 pt-3">{addError}</p>}
+            <div className="flex-1 overflow-y-auto px-5 py-3">
+              {addLoading ? (
+                <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-stone-400" /></div>
+              ) : !addCandidates || addCandidates.length === 0 ? (
+                <p className="font-lora italic text-sm text-stone-400 py-8 text-center">
+                  Nessun resoconto ancora disponibile nel Diario di default.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-2 pb-4">
+                  {addCandidates.map(r => (
+                    <button
+                      key={r.id}
+                      onClick={() => addReportage(r)}
+                      disabled={addBusy === r.id}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border border-stone-200 hover:border-forest-300 hover:bg-forest-50/40 transition-colors text-left disabled:opacity-60"
+                    >
+                      <div className="w-10 h-10 rounded-lg shrink-0 overflow-hidden bg-stone-50 flex items-center justify-center">
+                        {r.routePolyline && r.routePolyline.length > 1
+                          ? <RouteThumb polyline={r.routePolyline} color="#2d7a3d" strokeWidth={2} />
+                          : <Mountain className="w-4 h-4 text-stone-300" />}
+                      </div>
+                      <span className="flex-1 min-w-0 text-sm text-stone-700 truncate">{r.title}</span>
+                      {addBusy === r.id ? <Loader2 className="w-4 h-4 animate-spin text-forest-600" /> : <Plus className="w-4 h-4 text-forest-600" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

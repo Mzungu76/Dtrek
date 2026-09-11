@@ -6,6 +6,7 @@ import RouteCarousel from './RouteCarousel'
 import RoutePage from './RoutePage'
 import CoverMap from './CoverMap'
 import TopOverlay from './TopOverlay'
+import HubNavBar from './HubNavBar'
 import BottomGallery, { SORT_CMP, type SortKey } from './BottomGallery'
 import ExpandedGalleryList from './ExpandedGalleryList'
 import type { RouteHubProps, SectionKind } from './types'
@@ -252,6 +253,9 @@ export default function RouteHub({
   if (items.length === 0) {
     return (
       <div className="fixed inset-0 bg-[#0b1a24] flex flex-col items-center justify-center gap-3 text-stone-400 text-sm">
+        <div className="absolute inset-x-0 top-0 z-20">
+          <HubNavBar />
+        </div>
         Nessun {emptyNoun} disponibile.
         {emptyAction}
       </div>
@@ -261,6 +265,9 @@ export default function RouteHub({
   if (visibleItems.length === 0) {
     return (
       <div className="fixed inset-0 bg-[#0b1a24] flex flex-col items-center justify-center gap-3 text-stone-400 text-sm px-6 text-center">
+        <div className="absolute inset-x-0 top-0 z-20">
+          <HubNavBar />
+        </div>
         {favoritesFilter && nextOutingFilter && !searchQueryNorm
           ? <CalendarClock className="w-8 h-8 text-stone-600" />
           : <Star className="w-8 h-8 text-stone-600" />}

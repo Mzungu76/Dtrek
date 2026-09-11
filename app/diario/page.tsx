@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  Camera, ChevronDown, Globe2, Image as ImageIcon, Layers, ListChecks, Loader2, Lock, Pencil,
+  Camera, ChevronDown, Globe2, Image as ImageIcon, Layers, Library, ListChecks, Loader2, Lock, Pencil,
   Plus, Route, TrendingUp, X,
 } from 'lucide-react'
 import RouteHub from '@/components/routehub/RouteHub'
@@ -252,11 +252,20 @@ export default function DiarioHubPage() {
         topOverlayVariant="magazine"
         emptyNoun="Diario"
         emptyAction={
-          <button onClick={createDiary} disabled={creatingDiary}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-white text-stone-800 text-sm font-semibold">
-            {creatingDiary ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-            Nuovo Diario in questa Raccolta
-          </button>
+          <div className="flex flex-col items-center gap-2">
+            <button onClick={createDiary} disabled={creatingDiary}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-white text-stone-800 text-sm font-semibold">
+              {creatingDiary ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+              Nuovo Diario in questa Raccolta
+            </button>
+            {collections.length > 1 && (
+              <button onClick={() => setCollectionSwitcherOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 text-white text-sm font-semibold">
+                <Library className="w-4 h-4" />
+                Cambia raccolta
+              </button>
+            )}
+          </div>
         }
         subtitle={item => (item as DiarioHubItem).diary.subtitle}
         importLabel="Nuovo diario"
@@ -407,12 +416,51 @@ export default function DiarioHubPage() {
   )
 }
 
+// Fallback per le Raccolte senza copertina propria — un motivo a "dorsi di libri" invece del
+// semplice sfondo sfumato piatto di prima, per far leggere a colpo d'occhio che una tessera è
+// una Raccolta (uno scaffale) anche senza foto.
+function CollectionSpineFallback() {
+  return (
+    <div className="absolute inset-0 flex" style={{ background: 'linear-gradient(158deg,#132b19 0%,#1c4724 45%,#20592b 100%)' }}>
+      {[18, 12, 22, 15, 10, 23].map((w, i) => (
+        <div
+          key={i}
+          className="h-full border-r border-black/25"
+          style={{ width: `${w}%`, background: i % 2 === 0 ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.14)' }}
+        />
+      ))}
+      <div className="absolute inset-0 flex items-center justify-center opacity-20">
+        <Library className="w-10 h-10 text-white" />
+      </div>
+    </div>
+  )
+}
+
 function CollectionSwitcherOverlay({ collections, currentId, onSelect, onClose }: {
   collections: CollectionSummary[]
   currentId: string | null
   onSelect: (id: string) => void
   onClose: () => void
 }) {
+  const router = useRouter()
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
+
+  // Crea subito una Raccolta vuota e porta alla sua pagina di composizione (/raccolte/[id]), che
+  // ha già rinomina/riordino/eliminazione — niente da duplicare qui dentro.
+  async function createCollection() {
+    setCreating(true); setCreateError(null)
+    try {
+      const res = await fetch('/api/collections', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.message ?? data.error ?? `HTTP ${res.status}`)
+      router.push(`/raccolte/${encodeURIComponent(data.id)}`)
+    } catch (e) {
+      setCreateError(e instanceof Error ? e.message : String(e))
+      setCreating(false)
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 bg-[#0b1a24] flex flex-col">
       <div className="shrink-0 flex items-center justify-between px-4 pt-[calc(env(safe-area-inset-top,0px)+14px)] pb-3">
@@ -422,26 +470,24 @@ function CollectionSwitcherOverlay({ collections, currentId, onSelect, onClose }
         </button>
       </div>
       <div className="flex-1 overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+16px)]">
-        {collections.length === 0 ? (
-          <p className="text-center text-white/50 text-sm mt-10">Nessuna raccolta ancora.</p>
-        ) : (
-          <div className="grid grid-cols-2 gap-3">
-            {collections.map(c => (
-              <button
-                key={c.id}
-                onClick={() => onSelect(c.id)}
-                className={`aspect-square rounded-2xl overflow-hidden relative text-left ${c.id === currentId ? 'ring-2 ring-sky-400' : 'ring-1 ring-white/10'}`}
-              >
+        {createError && <p className="text-xs text-red-400 mb-3">{createError}</p>}
+        <div className="grid grid-cols-2 gap-3">
+          {collections.map(c => (
+            <div
+              key={c.id}
+              className={`aspect-square rounded-2xl overflow-hidden relative ${c.id === currentId ? 'ring-2 ring-sky-400' : 'ring-1 ring-white/10'}`}
+            >
+              <button onClick={() => onSelect(c.id)} className="absolute inset-0 w-full h-full text-left">
                 {c.coverUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={c.coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
                 ) : (
-                  <div className="absolute inset-0" style={{ background: 'linear-gradient(158deg,#193b20 0%,#1c4724 45%,#20592b 100%)' }} />
+                  <CollectionSpineFallback />
                 )}
                 <div className="absolute inset-0 bg-topography opacity-40" />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/85 to-black/10" />
                 <div className="absolute bottom-0 inset-x-0 p-3">
-                  <p className="font-display font-bold text-white text-sm leading-tight truncate">{c.title}</p>
+                  <p className="font-display font-bold text-white text-sm leading-tight truncate pr-6">{c.title}</p>
                   <p className="text-white/70 text-[11px] mt-1 flex items-center gap-1.5">
                     {c.volumeCount} diari · {c.reportageCount} resoconti
                     {c.isPublished
@@ -450,9 +496,24 @@ function CollectionSwitcherOverlay({ collections, currentId, onSelect, onClose }
                   </p>
                 </div>
               </button>
-            ))}
-          </div>
-        )}
+              <button
+                onClick={() => router.push(`/raccolte/${encodeURIComponent(c.id)}`)}
+                title="Modifica questa Raccolta"
+                className="absolute top-2 right-2 z-10 w-7 h-7 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white hover:bg-black/60 transition-colors"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+          <button
+            onClick={createCollection}
+            disabled={creating}
+            className="aspect-square rounded-2xl border-2 border-dashed border-white/25 hover:border-white/40 flex flex-col items-center justify-center gap-2 text-white/60 hover:text-white/90 transition-colors disabled:opacity-60"
+          >
+            {creating ? <Loader2 className="w-6 h-6 animate-spin" /> : <Plus className="w-6 h-6" />}
+            <span className="text-xs font-semibold">Nuova raccolta</span>
+          </button>
+        </div>
       </div>
     </div>
   )
