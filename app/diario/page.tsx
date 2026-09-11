@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  ArrowRightLeft, Camera, ChevronDown, Globe2, Image as ImageIcon, Layers, Library, Loader2, Lock, Pencil,
+  Camera, ChevronDown, Globe2, Image as ImageIcon, Layers, Library, Loader2, Lock, Pencil, Settings,
   Plus, Route, TrendingUp, X,
 } from 'lucide-react'
 import RouteHub from '@/components/routehub/RouteHub'
@@ -293,7 +293,7 @@ export default function DiarioHubPage() {
               title="Gestisci questo Diario"
               className="pointer-events-auto p-1"
             >
-              <ArrowRightLeft className="w-5 h-5 text-white" style={{ filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.5))' }} />
+              <Settings className="w-5 h-5 text-white" style={{ filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.5))' }} />
             </button>
             <button onClick={() => openDiaryEdit((item as DiarioHubItem).diary)} title="Modifica questo Diario" className="pointer-events-auto p-1">
               <Pencil className="w-5 h-5 text-white" style={{ filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.5))' }} />
