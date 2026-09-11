@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
   BookMarked, Layers, Plus, Globe2, Lock, Loader2, ArrowRight, Camera, Upload,
 } from 'lucide-react'
@@ -16,18 +17,18 @@ import type { CollectionSummary } from '@/app/api/collections/route'
 // Raccolte→Diari→Resoconti; il libro impaginato di un Diario resta quello di sempre.
 //
 // Diari aggiuntivi (oltre a quello di default, creato dal backfill per ogni utente) e Raccolte
-// hanno già API e tabelle (app/api/diaries, app/api/collections — costruite prima del ripristino
-// al layout PR #741, vedi commit 73b2efa) ma nessun editor/viewer in app: quella UI è stata
-// rimossa insieme al resto. Mostrarli con un link che porta a una pagina inesistente sarebbe
-// peggio che non mostrarli — qui compaiono con i conteggi reali ma etichettati "In arrivo" finché
-// quell'editor non esiste.
+// hanno API e tabelle costruite prima del ripristino al layout PR #741 (vedi commit 73b2efa) —
+// l'editor/viewer che le apre (Sommario in /diario/[id], composizione in /raccolte/[id]) è stato
+// ricostruito nei token attuali per poterle aprire, creare, spostare ed eliminare da qui.
 export default function DiarioHubPage() {
+  const router = useRouter()
   const [activities, setActivities] = useState<ActivityMeta[]>([])
   const [config, setConfig] = useState<DiaryConfig>(DEFAULT_DIARY_CONFIG)
   const [diaries, setDiaries] = useState<DiarySummary[]>([])
   const [collections, setCollections] = useState<CollectionSummary[]>([])
   const [loading, setLoading] = useState(true)
-  const [newDiaryHint, setNewDiaryHint] = useState(false)
+  const [creatingDiary, setCreatingDiary] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
 
   useEffect(() => {
     Promise.all([
@@ -53,6 +54,19 @@ export default function DiarioHubPage() {
   const visibleDiaries = useMemo(() => diaries.filter(d => !d.archivedAt), [diaries])
   const defaultDiary = visibleDiaries.find(d => d.isDefault)
   const otherDiaries = visibleDiaries.filter(d => !d.isDefault)
+
+  async function createDiary() {
+    setCreatingDiary(true); setCreateError(null)
+    try {
+      const res = await fetch('/api/diaries', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.message ?? data.error ?? `HTTP ${res.status}`)
+      router.push(`/diario/${encodeURIComponent(data.id)}`)
+    } catch (e) {
+      setCreateError(e instanceof Error ? e.message : String(e))
+      setCreatingDiary(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -138,36 +152,36 @@ export default function DiarioHubPage() {
           <div className="flex gap-2.5 overflow-x-auto pb-1 -mx-4 px-4 sm:-mx-10 sm:px-10">
             {defaultDiary && <DiaryTile diary={defaultDiary} />}
             {otherDiaries.map(d => <DiaryTile key={d.id} diary={d} />)}
-            <div className="relative shrink-0">
-              <button
-                onClick={() => setNewDiaryHint(v => !v)}
-                className="w-20 h-32 rounded-2xl border-[1.5px] border-dashed border-stone-300 flex flex-col items-center justify-center gap-1.5 text-stone-400 hover:border-stone-400 hover:text-stone-500 transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                <span className="font-barlow text-[10px] font-bold">Nuovo</span>
-              </button>
-              {newDiaryHint && (
-                <div className="absolute z-10 top-full mt-2 left-1/2 -translate-x-1/2 w-48 bg-stone-800 text-white text-[11px] leading-snug rounded-lg px-3 py-2 shadow-lg">
-                  Più Diari, ciascuno con il suo libro, arrivano presto.
-                </div>
-              )}
-            </div>
+            <button
+              onClick={createDiary}
+              disabled={creatingDiary}
+              className="shrink-0 w-20 h-32 rounded-2xl border-[1.5px] border-dashed border-stone-300 flex flex-col items-center justify-center gap-1.5 text-stone-400 hover:border-stone-400 hover:text-stone-500 transition-colors disabled:opacity-60"
+            >
+              {creatingDiary ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+              <span className="font-barlow text-[10px] font-bold">Nuovo</span>
+            </button>
           </div>
+          {createError && <p className="text-xs text-red-600 mt-2">{createError}</p>}
         </section>
 
         {/* Raccolte */}
         <section>
-          <span className="font-barlow font-bold text-[11px] tracking-[2.5px] uppercase text-stone-400">Raccolte</span>
+          <div className="flex items-center justify-between mb-2.5">
+            <span className="font-barlow font-bold text-[11px] tracking-[2.5px] uppercase text-stone-400">Raccolte</span>
+            {collections.length > 0 && (
+              <Link href="/raccolte" className="font-barlow font-bold text-[11px] tracking-wide uppercase text-forest-600">Vedi tutte</Link>
+            )}
+          </div>
 
           {collections.length === 0 ? (
-            <div className="mt-2.5 rounded-2xl border border-dashed border-stone-300 p-4 flex items-center gap-3">
+            <Link href="/raccolte" className="mt-2.5 rounded-2xl border border-dashed border-stone-300 p-4 flex items-center gap-3 hover:border-stone-400 transition-colors">
               <Layers className="w-5 h-5 text-stone-400 shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-stone-600">Nessuna raccolta ancora</p>
-                <p className="text-xs text-stone-400 mt-0.5">Raggrupperanno più Diari, pubblicabili come un unico volume.</p>
+                <p className="text-xs text-stone-400 mt-0.5">Raggruppano più Diari, pubblicabili come un unico volume.</p>
               </div>
-              <span className="shrink-0 text-[10px] font-barlow font-bold uppercase tracking-wide text-stone-500 bg-stone-200 px-2 py-1 rounded-full">In arrivo</span>
-            </div>
+              <Plus className="w-4 h-4 text-stone-400 shrink-0" />
+            </Link>
           ) : (
             <div className="mt-2.5 flex flex-col gap-2.5">
               {collections.map(c => <CollectionRow key={c.id} collection={c} />)}
@@ -180,8 +194,8 @@ export default function DiarioHubPage() {
 }
 
 function DiaryTile({ diary }: { diary: DiarySummary }) {
-  const cover = (
-    <div className="relative w-20 h-32 rounded-2xl overflow-hidden shrink-0"
+  return (
+    <Link href={`/diario/${encodeURIComponent(diary.id)}`} className="relative w-20 h-32 rounded-2xl overflow-hidden shrink-0"
       style={{ background: diary.isDefault ? 'linear-gradient(160deg,#378d44,#1c4724)' : 'linear-gradient(160deg,#8cc894,#277134)' }}>
       <div className="absolute inset-0 bg-topography opacity-50" />
       <div className="absolute inset-0 flex items-center justify-center">
@@ -191,22 +205,18 @@ function DiaryTile({ diary }: { diary: DiarySummary }) {
         <span className="block text-[10px] font-bold text-white truncate leading-tight">{diary.title}</span>
         <span className="block text-[9px] text-white/70 leading-tight mt-0.5">{diary.reportageCount} resoconti</span>
       </div>
-      {!diary.isDefault && (
-        <span className="absolute top-1.5 right-1.5 text-[8px] font-barlow font-bold uppercase tracking-wide bg-white/90 text-stone-600 px-1.5 py-0.5 rounded-full">
-          In arrivo
+      {diary.isDefault && (
+        <span className="absolute top-1.5 right-1.5 text-[8px] font-barlow font-bold uppercase tracking-wide bg-white/90 text-forest-700 px-1.5 py-0.5 rounded-full">
+          Default
         </span>
       )}
-    </div>
+    </Link>
   )
-
-  return diary.isDefault
-    ? <Link href="/diario/libro">{cover}</Link>
-    : <div className="opacity-70 cursor-default">{cover}</div>
 }
 
 function CollectionRow({ collection }: { collection: CollectionSummary }) {
   return (
-    <div className="flex items-center gap-3 bg-white border border-stone-200 rounded-2xl px-3.5 py-3 opacity-80">
+    <Link href={`/raccolte/${encodeURIComponent(collection.id)}`} className="flex items-center gap-3 bg-white border border-stone-200 hover:border-stone-300 rounded-2xl px-3.5 py-3 transition-colors">
       <div className="flex shrink-0">
         {Array.from({ length: Math.min(3, Math.max(1, collection.volumeCount)) }).map((_, i) => (
           <div key={i} className="w-6 h-8 rounded-[4px] -mr-2.5 first:ml-0"
@@ -224,7 +234,6 @@ function CollectionRow({ collection }: { collection: CollectionSummary }) {
             : <span className="inline-flex items-center gap-1"><Lock className="w-3 h-3" /> bozza</span>}
         </p>
       </div>
-      <span className="shrink-0 text-[10px] font-barlow font-bold uppercase tracking-wide text-stone-500 bg-stone-100 px-2 py-1 rounded-full">In arrivo</span>
-    </div>
+    </Link>
   )
 }
