@@ -15,6 +15,7 @@ import {
   getActivityById, updateActivityMeta, deleteActivity, getAllActivities,
   type StoredActivity, type ActivityMeta,
 } from '@/lib/blobStore'
+import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { computeTrailScore, type TrailScoreResult } from '@/lib/trailScore'
 import { formatDuration } from '@/lib/tcxParser'
 import { exportActivityToExcel } from '@/utils/exportExcel'
@@ -29,7 +30,7 @@ import { computeCtsForActivity } from '@/lib/computeCtsForActivity'
 import { isScoreFresh } from '@/lib/scoreFreshness'
 import { useCtsUpdated } from '@/lib/sync/useCtsUpdated'
 import {
-  FileSpreadsheet, FileText, Map,
+  FileSpreadsheet, FileText, Map as MapIcon,
   Route, TrendingUp, Clock, Flame,
   Pencil, Trash2, Loader2, Share2, Box, Images, Film, Camera, X,
   Star, Car, ArrowRightLeft, BookOpen,
@@ -117,11 +118,13 @@ export default function ResocontoHub({ id }: { id?: string }) {
   const [favoritesFilter, setFavoritesFilter] = useState(false)
   const [pendingScrollSection, setPendingScrollSection] = useState<'dati_punteggi' | null>(null)
 
-  // A quale Diario appartiene il resoconto aperto — indiretto (activities.linked_planned_id →
-  // planned_hikes.diary_id, mai una colonna diretta), quindi noto solo per QUELLO aperto, mai per
-  // gli altri della galleria (stesso limite già accettato da scoreGaugeBadge/ratingBadge sopra).
+  // A quale Diario appartiene ogni Meta (planned_hikes.diary_id) — indiretto: activities non ha
+  // una colonna propria, l'appartenenza passa dal suo Percorso collegato. Caricato una volta sola
+  // da getAllPlanned() (cache-first, senza trackPoints — leggero) invece di una fetch dedicata per
+  // ogni resoconto aperto: quella richiedeva un giro di rete in più a ogni swipe, con l'etichetta
+  // del Diario visibilmente in ritardo rispetto al resto della copertina.
   const [diaries,         setDiaries]         = useState<DiarySummary[]>([])
-  const [currentDiaryId,  setCurrentDiaryId]  = useState<string | null>(null)
+  const [plannedDiaryById, setPlannedDiaryById] = useState<Map<string, string | null>>(new Map())
   const [moverOpen,       setMoverOpen]       = useState(false)
   const [moveBusy,        setMoveBusy]        = useState(false)
   const [moveError,       setMoveError]       = useState<string | null>(null)
@@ -244,22 +247,30 @@ export default function ResocontoHub({ id }: { id?: string }) {
     fetch('/api/diaries').then(r => r.ok ? r.json() : []).then(setDiaries).catch(() => {})
   }, [])
 
+  // Elenco leggero di tutte le Mete (senza trackPoints), da cui si ricava il Diario di ogni
+  // resoconto per id — una sola volta (più un refresh in background se la cache locale era
+  // stale), non una fetch per ogni resoconto aperto.
+  const applyPlannedDiaryMap = useCallback((list: PlannedHikeMeta[]) => {
+    setPlannedDiaryById(new Map(list.map(h => [h.id, h.diaryId ?? null])))
+  }, [])
+  useEffect(() => {
+    getAllPlanned(applyPlannedDiaryMap).then(applyPlannedDiaryMap).catch(() => {})
+  }, [applyPlannedDiaryMap])
+  // Un Diario spostato altrove (da qui, da /diario, o da un'altra scheda/dispositivo) aggiorna la
+  // cache locale delle Mete e spedisce lo stesso evento delle activities sopra — senza
+  // sottoscriverlo, l'etichetta del Diario resterebbe quella con cui questa pagina si è aperta.
+  useCtsUpdated(() => { getAllPlanned().then(applyPlannedDiaryMap).catch(() => {}) })
+
   // Chiude il selettore "sposta in un altro Diario" se cambia il resoconto in copertina (swipe) —
   // evita di spostare per sbaglio quello sbagliato se restasse aperto.
   useEffect(() => { setMoverOpen(false); setMoveError(null) }, [currentId])
 
   // Il Diario del resoconto aperto passa dalla sua Meta (activities.linked_planned_id →
-  // planned_hikes.diary_id) — non c'è una colonna diretta, quindi serve questa chiamata in più.
-  useEffect(() => {
-    const plannedId = activity?.linkedPlannedId
-    if (!plannedId) { setCurrentDiaryId(null); return }
-    let cancelled = false
-    fetch(`/api/planned?id=${encodeURIComponent(plannedId)}`)
-      .then(r => r.ok ? r.json() : null)
-      .then((h: { diaryId?: string | null } | null) => { if (!cancelled) setCurrentDiaryId(h?.diaryId ?? null) })
-      .catch(() => { if (!cancelled) setCurrentDiaryId(null) })
-    return () => { cancelled = true }
-  }, [activity?.linkedPlannedId])
+  // planned_hikes.diary_id) — non c'è una colonna diretta, quindi un lookup nella mappa sopra
+  // invece di una colonna propria dell'attività.
+  const currentDiaryId = activity?.linkedPlannedId != null
+    ? plannedDiaryById.get(activity.linkedPlannedId) ?? null
+    : null
 
   // Sposta il resoconto aperto in un altro Diario — l'appartenenza passa dalla sua Meta, non da una
   // colonna propria dell'attività (stesso meccanismo di components/diario/DiarioSommarioContent.tsx).
@@ -274,7 +285,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error ?? data.message ?? `HTTP ${res.status}`)
-      setCurrentDiaryId(targetDiaryId)
+      setPlannedDiaryById(prev => new Map(prev).set(plannedId, targetDiaryId))
       setMoverOpen(false)
     } catch (e) {
       setMoveError(e instanceof Error ? e.message : String(e))
@@ -483,7 +494,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
 
   // Nome del Diario a cui appartiene il resoconto aperto, sopra il titolo (stessa modalità della
   // Raccolta in app/diario/page.tsx) — tap per spostarlo in un altro. Solo per la scheda aperta:
-  // vedi il commento sull'effetto che risolve currentDiaryId sopra.
+  // vedi il lookup di currentDiaryId sopra.
   const contextBadge = (routeItem: RouteHubItem) => {
     if (!activity || routeItem.id !== activity.id) return null
     const diary = diaries.find(d => d.id === currentDiaryId)
@@ -596,7 +607,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
             <FileText className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Esporta Word</span>
           </button>
           <button onClick={() => exportActivityToGpx(activity)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left">
-            <Map className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Esporta GPX</span>
+            <MapIcon className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Esporta GPX</span>
           </button>
           {/* "Esporta PDF" (jsPDF, utils/pdfExport/activity.ts) ritirato in Fase 4: duplicava, con
               uno stile diverso, il PDF già ottenibile da "Pubblica"/"Scarica PDF" dentro il
