@@ -26,8 +26,7 @@ interface Props {
   /** "Confronta" shortcut into Statistiche → Confronto, shown next to the favorite star —
    *  undefined unless the caller passes RouteHubProps.onCompare (both Guida and Resoconto do). */
   compareButton?: ReactNode
-  /** Diario-only: chip "in quale Raccolta sei", shown under the subtitle line (magazine variant),
-   *  same slot/gate as scoreGaugeBadge — the two are mutually exclusive by mode. */
+  /** Diario-only: chip "in quale Raccolta sei", shown above the title row (magazine variant only). */
   contextBadge?: ReactNode
   /** Diario-only: "modifica questo Diario", shown on the title row next to weatherIcon/favorite/compare. */
   titleAction?: ReactNode
@@ -82,7 +81,12 @@ export default function TopOverlay({ itemKey, title, statPills, weatherIcon, onO
             })}
           </div>
 
-          <div className="mt-3 flex items-start gap-2.5">
+          {variant === 'magazine' && contextBadge && (
+            <div className="pointer-events-auto mt-3">
+              {contextBadge}
+            </div>
+          )}
+          <div className={`flex items-start gap-2.5 ${variant === 'magazine' && contextBadge ? 'mt-2.5' : 'mt-3'}`}>
             <p
               className={
                 variant === 'magazine'
@@ -114,11 +118,6 @@ export default function TopOverlay({ itemKey, title, statPills, weatherIcon, onO
             >
               {subtitle}
             </p>
-          )}
-          {variant === 'magazine' && contextBadge && (
-            <div className="pointer-events-auto mt-2.5">
-              {contextBadge}
-            </div>
           )}
           {variant === 'magazine' && scoreGaugeBadge && (
             <div className="pointer-events-auto mt-2.5">

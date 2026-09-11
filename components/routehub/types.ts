@@ -158,11 +158,11 @@ export interface RouteHubProps {
    *  la usa per creare il primo Diario di una Raccolta appena creata, che altrimenti non avrebbe
    *  nessuna galleria/tessera "+" da cui farlo (quello stato sostituisce l'intera UI di Screen 1). */
   emptyAction?: ReactNode
-  /** Chip persistente sopra la copertina (Screen 1), sotto il sottotitolo — non un badge di
+  /** Chip persistente sopra la copertina (Screen 1), sopra il titolo — non un badge di
    *  punteggio: Diario lo usa per "in quale Raccolta sei" con l'azione per cambiarla. Funzione
    *  dell'item corrente (come subtitle/weatherIcon) così segue lo swipe senza ritardo — un
    *  ReactNode statico resterebbe legato all'item con cui il chiamante l'ha costruito la prima
-   *  volta. Renderizzato solo in variant="magazine", come scoreGaugeBadge. */
+   *  volta. Renderizzato solo in variant="magazine". */
   contextBadge?: (item: RouteHubItem) => ReactNode
   /** Azione accanto al titolo, sulla stessa riga di weatherIcon/favoriteButton/compareButton —
    *  Diario la usa per "modifica questo Diario" (titolo/sottotitolo/copertina). Stesso motivo di

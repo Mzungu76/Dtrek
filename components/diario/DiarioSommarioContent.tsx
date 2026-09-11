@@ -29,13 +29,21 @@ interface Props {
   onChanged?: () => void
 }
 
-/** Il contenuto del Sommario di un Diario — apribile anche vuoto (nessun Reportage). Non disegna
- *  una propria copertina/testata: quella vive ora sulla copertina a schermo intero di /diario
- *  (RouteHub, Screen 1) o nell'intestazione minima della rotta standalone /diario/[id] — questo
- *  componente è il corpo condiviso da entrambe. Niente ricerca/ordinamento/Mete in programma:
- *  nessuna pagina in app crea o sceglie ancora una Meta non ancora camminata (l'upload attribuisce
- *  sempre al Diario di default, lib/activitySave.ts), quindi quella lista sarebbe quasi sempre
- *  vuota e non avrebbe dove atterrare un tap.
+// Colore delle tracce nelle miniature — non più il verde forest delle card chiare di prima: su uno
+// sfondo scuro (vedi sotto) un verde scuro sparirebbe, qui serve un tratto chiaro che si veda sulla
+// stessa base #0b1a24 usata dall'elenco verticale di Guida/Resoconto/Diari.
+const THUMB_TRACK_COLOR = '#7dd3fc'
+
+/** Il contenuto del Sommario di un Diario — apribile anche vuoto (nessun Reportage). Stesso sfondo
+ *  blu scuro ed elenco verticale a righe (non più card chiare) dell'elenco "Tutti i ___" di
+ *  Guida/Resoconto/Diari (ExpandedGalleryList) e della copertina di /diario — un'unica identità
+ *  visiva invece di una pagina chiara isolata in mezzo a pagine scure. Non disegna una propria
+ *  copertina/testata: quella vive ora sulla copertina a schermo intero di /diario (RouteHub,
+ *  Screen 1) o nell'intestazione minima della rotta standalone /diario/[id] — questo componente è
+ *  il corpo condiviso da entrambe. Niente ricerca/ordinamento/Mete in programma: nessuna pagina in
+ *  app crea o sceglie ancora una Meta non ancora camminata (l'upload attribuisce sempre al Diario
+ *  di default, lib/activitySave.ts), quindi quella lista sarebbe quasi sempre vuota e non avrebbe
+ *  dove atterrare un tap.
  */
 export default function DiarioSommarioContent({ diaryId, onDeleted, onChanged }: Props) {
   const router = useRouter()
@@ -228,214 +236,224 @@ export default function DiarioSommarioContent({ diaryId, onDeleted, onChanged }:
   }
 
   if (loadError) {
-    return <p className="text-sm text-red-600 px-4 py-8 text-center">Impossibile caricare questo Diario: {loadError}</p>
+    return (
+      <div className="min-h-full bg-[#0b1a24] flex items-center justify-center px-4 py-16">
+        <p className="text-sm text-red-400 text-center">Impossibile caricare questo Diario: {loadError}</p>
+      </div>
+    )
   }
 
   if (!detail) {
-    return <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-stone-400" /></div>
+    return (
+      <div className="min-h-full bg-[#0b1a24] flex items-center justify-center py-16">
+        <Loader2 className="w-6 h-6 animate-spin text-white/40" />
+      </div>
+    )
   }
 
   return (
-    <div className="max-w-2xl mx-auto px-4 sm:px-8 py-5">
-      {stats.count > 0 && (
-        <div className="grid grid-cols-4 gap-2 mb-6 py-4 rounded-2xl bg-white border border-stone-200 shadow-sm">
-          <StatCell value={String(stats.count)} label="resoconti" />
-          <StatCell value={stats.distanceKm.toFixed(1)} label="km" />
-          <StatCell value={`+${Math.round(stats.elevationGain)}`} label="D+ m" />
-          <StatCell value={formatDuration(stats.totalTimeSeconds)} label="tempo" />
-        </div>
-      )}
-
-      {/* Raccolta — ogni Diario ne ha sempre una (è il suo scaffale), qui si cambia */}
-      <div className="relative mb-8">
-        <button
-          onClick={() => setShelfPickerOpen(v => !v)}
-          className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-white border border-stone-200 hover:border-stone-300 shadow-sm transition-colors text-left"
-        >
-          <div className="w-9 h-9 rounded-xl bg-forest-50 flex items-center justify-center shrink-0">
-            <Layers className="w-4 h-4 text-forest-600" />
+    <div className="min-h-full bg-[#0b1a24]">
+      <div className="max-w-2xl mx-auto px-4 sm:px-8 py-5">
+        {stats.count > 0 && (
+          <div className="grid grid-cols-4 gap-2 mb-6 py-4 rounded-2xl bg-white/5 border border-white/10">
+            <StatCell value={String(stats.count)} label="resoconti" />
+            <StatCell value={stats.distanceKm.toFixed(1)} label="km" />
+            <StatCell value={`+${Math.round(stats.elevationGain)}`} label="D+ m" />
+            <StatCell value={formatDuration(stats.totalTimeSeconds)} label="tempo" />
           </div>
-          <span className="flex-1 min-w-0 text-sm text-stone-600 truncate">
-            {currentCollection ? <>In <b className="text-stone-800">{currentCollection.title}</b></> : 'Nessuna raccolta'}
-          </span>
-          {shelfBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin text-stone-400" /> : <ChevronDown className="w-3.5 h-3.5 text-stone-400" />}
-        </button>
-        {shelfError && <p className="text-xs text-red-600 mt-1">{shelfError}</p>}
-        {shelfPickerOpen && (
-          <div className="absolute z-10 top-full mt-1.5 left-0 right-0 bg-white rounded-xl border border-stone-200 shadow-lg overflow-hidden">
-            {otherCollections.length === 0 ? (
-              <p className="px-3.5 py-3 text-xs text-stone-400">Nessun&apos;altra raccolta — creane una da &ldquo;Diari&rdquo;.</p>
-            ) : otherCollections.map(c => (
-              <button key={c.id} onClick={() => moveToCollection(c.id)}
-                className="w-full flex items-center justify-between gap-2 px-3.5 py-2.5 text-sm text-stone-700 hover:bg-stone-50 transition-colors border-b border-stone-100 last:border-b-0">
-                {c.title}
-                <span className="text-xs text-stone-400">{c.volumeCount} diari</span>
+        )}
+
+        {/* Raccolta — ogni Diario ne ha sempre una (è il suo scaffale), qui si cambia */}
+        <div className="relative mb-8">
+          <button
+            onClick={() => setShelfPickerOpen(v => !v)}
+            className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-white/5 border border-white/10 hover:border-white/25 transition-colors text-left"
+          >
+            <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
+              <Layers className="w-4 h-4 text-white/70" />
+            </div>
+            <span className="flex-1 min-w-0 text-sm text-white/60 truncate">
+              {currentCollection ? <>In <b className="text-white">{currentCollection.title}</b></> : 'Nessuna raccolta'}
+            </span>
+            {shelfBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin text-white/40" /> : <ChevronDown className="w-3.5 h-3.5 text-white/40" />}
+          </button>
+          {shelfError && <p className="text-xs text-red-400 mt-1">{shelfError}</p>}
+          {shelfPickerOpen && (
+            <div className="absolute z-10 top-full mt-1.5 left-0 right-0 bg-white rounded-xl border border-stone-200 shadow-lg overflow-hidden">
+              {otherCollections.length === 0 ? (
+                <p className="px-3.5 py-3 text-xs text-stone-400">Nessun&apos;altra raccolta — creane una da &ldquo;Diari&rdquo;.</p>
+              ) : otherCollections.map(c => (
+                <button key={c.id} onClick={() => moveToCollection(c.id)}
+                  className="w-full flex items-center justify-between gap-2 px-3.5 py-2.5 text-sm text-stone-700 hover:bg-stone-50 transition-colors border-b border-stone-100 last:border-b-0">
+                  {c.title}
+                  <span className="text-xs text-stone-400">{c.volumeCount} diari</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Resoconti */}
+        <div className="flex items-center justify-between mb-1">
+          <span className="font-barlow font-bold text-xs tracking-[2px] uppercase text-white/40">Resoconti</span>
+          <div className="flex items-center gap-3">
+            {!detail.isDefault && defaultDiary && (
+              <button
+                onClick={openAddPicker}
+                className="flex items-center gap-1 text-xs font-semibold text-sky-400 hover:text-sky-300 transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" /> Aggiungi
               </button>
-            ))}
+            )}
+            <span className="font-mono text-xs text-white/40">{detail.reportage.length}</span>
+          </div>
+        </div>
+        {moveError && <p className="text-xs text-red-400 mb-2">{moveError}</p>}
+
+        {detail.reportage.length === 0 ? (
+          <div className="py-8 text-center">
+            <p className="font-lora italic text-sm text-white/40">Nessun resoconto ancora in questo Diario.</p>
+            {!detail.isDefault && defaultDiary && (
+              <button
+                onClick={openAddPicker}
+                className="inline-flex items-center gap-1.5 mt-3 px-3.5 py-1.5 rounded-full bg-white/10 text-sky-300 hover:bg-white/15 transition-colors text-xs font-semibold"
+              >
+                <Plus className="w-3.5 h-3.5" /> Aggiungi un resoconto
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="mb-10">
+            {detail.reportage.map(r => {
+              const scoreLabel = r.trailScore != null ? ctsLabel(r.trailScore).label : null
+              return (
+                <div key={r.id} className="relative flex items-center gap-3.5 py-3 border-b border-white/10">
+                  <Link href={`/resoconto/${encodeURIComponent(r.id)}`} className="flex items-center gap-3.5 flex-1 min-w-0">
+                    <div className="w-14 h-14 rounded-xl shrink-0 overflow-hidden bg-white/5 flex items-center justify-center">
+                      {r.routePolyline && r.routePolyline.length > 1
+                        ? <RouteThumb polyline={r.routePolyline} color={THUMB_TRACK_COLOR} strokeWidth={2.5} />
+                        : <Mountain className="w-5 h-5 text-white/25" />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-display font-semibold text-[15px] text-white truncate">{r.title}</p>
+                      <div className="flex items-center flex-wrap gap-x-2.5 gap-y-0.5 mt-1.5 text-[11px] text-white/50">
+                        {metaHasHikingMetrics(r.metaType) && (
+                          <>
+                            <span className="inline-flex items-center gap-1"><Route className="w-3 h-3" /> {(r.distanceMeters / 1000).toFixed(1)} km</span>
+                            <span className="inline-flex items-center gap-1"><TrendingUp className="w-3 h-3" /> +{Math.round(r.elevationGain)} m</span>
+                            <span className="inline-flex items-center gap-1"><Clock className="w-3 h-3" /> {formatDuration(r.totalTimeSeconds)}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    {r.trailScore != null && (
+                      <div className="shrink-0" title={scoreLabel ?? undefined}>
+                        <TrailScoreGaugeBadge total={r.trailScore} safety={null} showLabel={false} size={38} />
+                      </div>
+                    )}
+                    {!r.hasWrittenReport && (
+                      <span className="shrink-0 inline-flex items-center gap-1 text-[10px] text-white/35">
+                        <Camera className="w-3 h-3" /> senza racconto
+                      </span>
+                    )}
+                  </Link>
+                  <button
+                    onClick={() => setMoveOpenFor(v => v === r.id ? null : r.id)}
+                    title="Sposta in un altro Diario"
+                    className="shrink-0 p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
+                  >
+                    {movingId === r.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRightLeft className="w-4 h-4" />}
+                  </button>
+                  {moveOpenFor === r.id && (
+                    <div className="absolute z-10 top-full right-0 mt-1.5 w-56 bg-white rounded-xl border border-stone-200 shadow-lg overflow-hidden">
+                      <div className="flex items-center justify-between px-3 py-2 border-b border-stone-100">
+                        <span className="text-[10px] font-barlow font-bold uppercase tracking-wide text-stone-400">Sposta in</span>
+                        <button onClick={() => setMoveOpenFor(null)} className="text-stone-400 hover:text-stone-600"><X className="w-3.5 h-3.5" /></button>
+                      </div>
+                      {otherDiaries.length === 0 ? (
+                        <p className="px-3 py-3 text-xs text-stone-400">Nessun altro Diario disponibile.</p>
+                      ) : otherDiaries.map(d => (
+                        <button key={d.id} onClick={() => moveReportage(r, d.id)}
+                          className="w-full text-left px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 transition-colors border-b border-stone-50 last:border-b-0">
+                          {d.title}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Un Diario di default non si archivia né si elimina mai (stesso vincolo lato server) —
+            deve sempre esistere come punto di atterraggio. */}
+        {!detail.isDefault && (
+          <div className="pt-7 border-t border-white/10 space-y-5">
+            <div>
+              {detail.archivedAt ? (
+                <button onClick={() => setArchived(null)} disabled={archiveBusy}
+                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-white/70 hover:bg-white/10 transition-colors text-sm font-medium disabled:opacity-60">
+                  {archiveBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArchiveRestore className="w-4 h-4" />}
+                  Riattiva questo Diario
+                </button>
+              ) : !archiveConfirming ? (
+                <button onClick={() => setArchiveConfirming(true)}
+                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-white/70 hover:bg-white/10 transition-colors text-sm font-medium">
+                  <Archive className="w-4 h-4" /> Archivia questo Diario
+                </button>
+              ) : (
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-4 max-w-lg space-y-3">
+                  <p className="text-sm text-white/80">
+                    Il Diario esce dall&apos;elenco principale di &ldquo;Diari&rdquo; — resta comunque
+                    raggiungibile da qui e da qualunque raccolta lo contenga, e si può riattivare in
+                    qualsiasi momento.
+                  </p>
+                  {archiveError && <p className="text-sm text-red-400">{archiveError}</p>}
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setArchived(new Date().toISOString())} disabled={archiveBusy}
+                      className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-sm font-medium text-white transition-colors disabled:opacity-60">
+                      {archiveBusy && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Archivia
+                    </button>
+                    <button onClick={() => setArchiveConfirming(false)} disabled={archiveBusy} className="text-sm text-white/50 hover:text-white/80 transition-colors">
+                      Annulla
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div>
+              {!deleteOpen ? (
+                <button onClick={() => setDeleteOpen(true)}
+                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-red-400 hover:bg-red-500/10 transition-colors text-sm font-medium">
+                  <Trash2 className="w-4 h-4" /> Elimina questo Diario
+                </button>
+              ) : (
+                <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-4 max-w-lg space-y-3">
+                  <p className="text-sm text-red-300 font-medium">Cosa succede ai Resoconti di questo Diario?</p>
+                  {deleteError && <p className="text-sm text-red-400">{deleteError}</p>}
+                  <div className="flex flex-col gap-2">
+                    <button onClick={() => runDelete('migrate')} disabled={deleteBusy !== null}
+                      className="flex items-center justify-center gap-2 px-4 py-2.5 bg-white/5 border border-red-400/30 hover:border-red-400/60 rounded-xl text-sm font-medium text-white transition-colors disabled:opacity-60">
+                      {deleteBusy === 'migrate' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                      Sposta i Resoconti nel Diario di default, poi elimina questo Diario
+                    </button>
+                    <button onClick={() => runDelete('deleteAll')} disabled={deleteBusy !== null}
+                      className="flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-700 rounded-xl text-sm font-medium text-white transition-colors disabled:opacity-60">
+                      {deleteBusy === 'deleteAll' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                      Elimina tutto — Resoconti inclusi (foto, video, racconti)
+                    </button>
+                    <button onClick={() => setDeleteOpen(false)} disabled={deleteBusy !== null} className="text-sm text-white/50 hover:text-white/80 transition-colors">
+                      Annulla
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
-
-      {/* Resoconti */}
-      <div className="flex items-center justify-between mb-3.5">
-        <span className="font-barlow font-bold text-xs tracking-[2px] uppercase text-stone-400">Resoconti</span>
-        <div className="flex items-center gap-3">
-          {!detail.isDefault && defaultDiary && (
-            <button
-              onClick={openAddPicker}
-              className="flex items-center gap-1 text-xs font-semibold text-forest-700 hover:text-forest-800 transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" /> Aggiungi
-            </button>
-          )}
-          <span className="font-mono text-xs text-stone-400">{detail.reportage.length}</span>
-        </div>
-      </div>
-      {moveError && <p className="text-xs text-red-600 mb-2">{moveError}</p>}
-
-      {detail.reportage.length === 0 ? (
-        <div className="py-8 text-center">
-          <p className="font-lora italic text-sm text-stone-400">Nessun resoconto ancora in questo Diario.</p>
-          {!detail.isDefault && defaultDiary && (
-            <button
-              onClick={openAddPicker}
-              className="inline-flex items-center gap-1.5 mt-3 px-3.5 py-1.5 rounded-full bg-forest-50 text-forest-700 hover:bg-forest-100 transition-colors text-xs font-semibold"
-            >
-              <Plus className="w-3.5 h-3.5" /> Aggiungi un resoconto
-            </button>
-          )}
-        </div>
-      ) : (
-        <div className="flex flex-col gap-2.5 mb-10">
-          {detail.reportage.map(r => {
-            const scoreLabel = r.trailScore != null ? ctsLabel(r.trailScore).label : null
-            return (
-              <div key={r.id} className="relative flex items-center gap-3.5 bg-white border border-stone-200 rounded-2xl px-4 py-3.5 shadow-sm hover:shadow-md transition-shadow">
-                <Link href={`/resoconto/${encodeURIComponent(r.id)}`} className="flex items-center gap-3.5 flex-1 min-w-0">
-                  <div className="w-14 h-14 rounded-xl shrink-0 overflow-hidden bg-stone-50 flex items-center justify-center">
-                    {r.routePolyline && r.routePolyline.length > 1
-                      ? <RouteThumb polyline={r.routePolyline} color="#2d7a3d" strokeWidth={2.5} />
-                      : <Mountain className="w-5 h-5 text-stone-300" />}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-display font-semibold text-[15px] text-stone-800 truncate">{r.title}</p>
-                    <div className="flex items-center flex-wrap gap-x-2.5 gap-y-0.5 mt-1.5 text-[11px] text-stone-400">
-                      {metaHasHikingMetrics(r.metaType) && (
-                        <>
-                          <span className="inline-flex items-center gap-1"><Route className="w-3 h-3" /> {(r.distanceMeters / 1000).toFixed(1)} km</span>
-                          <span className="inline-flex items-center gap-1"><TrendingUp className="w-3 h-3" /> +{Math.round(r.elevationGain)} m</span>
-                          <span className="inline-flex items-center gap-1"><Clock className="w-3 h-3" /> {formatDuration(r.totalTimeSeconds)}</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  {r.trailScore != null && (
-                    <div className="shrink-0" title={scoreLabel ?? undefined}>
-                      <TrailScoreGaugeBadge total={r.trailScore} safety={null} showLabel={false} size={38} />
-                    </div>
-                  )}
-                  {!r.hasWrittenReport && (
-                    <span className="shrink-0 inline-flex items-center gap-1 text-[10px] text-stone-400">
-                      <Camera className="w-3 h-3" /> senza racconto
-                    </span>
-                  )}
-                </Link>
-                <button
-                  onClick={() => setMoveOpenFor(v => v === r.id ? null : r.id)}
-                  title="Sposta in un altro Diario"
-                  className="shrink-0 p-1.5 rounded-lg text-stone-400 hover:text-forest-700 hover:bg-forest-50 transition-colors"
-                >
-                  {movingId === r.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRightLeft className="w-4 h-4" />}
-                </button>
-                {moveOpenFor === r.id && (
-                  <div className="absolute z-10 top-full right-0 mt-1.5 w-56 bg-white rounded-xl border border-stone-200 shadow-lg overflow-hidden">
-                    <div className="flex items-center justify-between px-3 py-2 border-b border-stone-100">
-                      <span className="text-[10px] font-barlow font-bold uppercase tracking-wide text-stone-400">Sposta in</span>
-                      <button onClick={() => setMoveOpenFor(null)} className="text-stone-400 hover:text-stone-600"><X className="w-3.5 h-3.5" /></button>
-                    </div>
-                    {otherDiaries.length === 0 ? (
-                      <p className="px-3 py-3 text-xs text-stone-400">Nessun altro Diario disponibile.</p>
-                    ) : otherDiaries.map(d => (
-                      <button key={d.id} onClick={() => moveReportage(r, d.id)}
-                        className="w-full text-left px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 transition-colors border-b border-stone-50 last:border-b-0">
-                        {d.title}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      )}
-
-      {/* Un Diario di default non si archivia né si elimina mai (stesso vincolo lato server) —
-          deve sempre esistere come punto di atterraggio. */}
-      {!detail.isDefault && (
-        <div className="pt-7 border-t border-stone-200 space-y-5">
-          <div>
-            {detail.archivedAt ? (
-              <button onClick={() => setArchived(null)} disabled={archiveBusy}
-                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-stone-600 hover:bg-stone-100 transition-colors text-sm font-medium disabled:opacity-60">
-                {archiveBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArchiveRestore className="w-4 h-4" />}
-                Riattiva questo Diario
-              </button>
-            ) : !archiveConfirming ? (
-              <button onClick={() => setArchiveConfirming(true)}
-                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-stone-600 hover:bg-stone-100 transition-colors text-sm font-medium">
-                <Archive className="w-4 h-4" /> Archivia questo Diario
-              </button>
-            ) : (
-              <div className="bg-stone-100 border border-stone-200 rounded-2xl p-4 max-w-lg space-y-3">
-                <p className="text-sm text-stone-700">
-                  Il Diario esce dall&apos;elenco principale di &ldquo;Diari&rdquo; — resta comunque
-                  raggiungibile da qui e da qualunque raccolta lo contenga, e si può riattivare in
-                  qualsiasi momento.
-                </p>
-                {archiveError && <p className="text-sm text-red-600">{archiveError}</p>}
-                <div className="flex items-center gap-2">
-                  <button onClick={() => setArchived(new Date().toISOString())} disabled={archiveBusy}
-                    className="flex items-center gap-2 px-4 py-2 bg-stone-700 hover:bg-stone-800 rounded-xl text-sm font-medium text-white transition-colors disabled:opacity-60">
-                    {archiveBusy && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Archivia
-                  </button>
-                  <button onClick={() => setArchiveConfirming(false)} disabled={archiveBusy} className="text-sm text-stone-500 hover:text-stone-700 transition-colors">
-                    Annulla
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div>
-            {!deleteOpen ? (
-              <button onClick={() => setDeleteOpen(true)}
-                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-red-600 hover:bg-red-50 transition-colors text-sm font-medium">
-                <Trash2 className="w-4 h-4" /> Elimina questo Diario
-              </button>
-            ) : (
-              <div className="bg-red-50 border border-red-200 rounded-2xl p-4 max-w-lg space-y-3">
-                <p className="text-sm text-red-800 font-medium">Cosa succede ai Resoconti di questo Diario?</p>
-                {deleteError && <p className="text-sm text-red-600">{deleteError}</p>}
-                <div className="flex flex-col gap-2">
-                  <button onClick={() => runDelete('migrate')} disabled={deleteBusy !== null}
-                    className="flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-red-200 hover:border-red-300 rounded-xl text-sm font-medium text-stone-700 transition-colors disabled:opacity-60">
-                    {deleteBusy === 'migrate' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                    Sposta i Resoconti nel Diario di default, poi elimina questo Diario
-                  </button>
-                  <button onClick={() => runDelete('deleteAll')} disabled={deleteBusy !== null}
-                    className="flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-700 rounded-xl text-sm font-medium text-white transition-colors disabled:opacity-60">
-                    {deleteBusy === 'deleteAll' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                    Elimina tutto — Resoconti inclusi (foto, video, racconti)
-                  </button>
-                  <button onClick={() => setDeleteOpen(false)} disabled={deleteBusy !== null} className="text-sm text-stone-500 hover:text-stone-700 transition-colors">
-                    Annulla
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       {addPickerOpen && (
         <div
@@ -493,8 +511,8 @@ export default function DiarioSommarioContent({ diaryId, onDeleted, onChanged }:
 function StatCell({ value, label }: { value: string; label: string }) {
   return (
     <div className="text-center">
-      <p className="font-mono text-lg font-bold text-stone-800 leading-none">{value}</p>
-      <p className="text-[10px] uppercase tracking-wide text-stone-400 mt-1.5">{label}</p>
+      <p className="font-mono text-lg font-bold text-white leading-none">{value}</p>
+      <p className="text-[10px] uppercase tracking-wide text-white/40 mt-1.5">{label}</p>
     </div>
   )
 }

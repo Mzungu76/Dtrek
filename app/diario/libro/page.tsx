@@ -31,6 +31,7 @@ import {
   DEFAULT_DIARY_CONFIG, LEGACY_LOCALSTORAGE_KEYS,
 } from '@/lib/diaryConfig'
 import { uploadDiaryCover } from '@/lib/diaryCoverUpload'
+import type { DiarySummary } from '@/app/api/diaries/route'
 
 // ── Migrazione una tantum da localStorage (vedi lib/diaryConfig.ts) ────────────────────────────
 //
@@ -56,7 +57,7 @@ function isConfigDefault(c: DiaryConfig): boolean {
   )
 }
 
-async function migrateLegacyConfigIfNeeded(serverConfig: DiaryConfig): Promise<DiaryConfig> {
+async function migrateLegacyConfigIfNeeded(serverConfig: DiaryConfig, diaryId: string | null): Promise<DiaryConfig> {
   try {
     if (localStorage.getItem(MIGRATED_FLAG) === '1') return serverConfig
     if (!isConfigDefault(serverConfig)) { localStorage.setItem(MIGRATED_FLAG, '1'); return serverConfig }
@@ -82,7 +83,8 @@ async function migrateLegacyConfigIfNeeded(serverConfig: DiaryConfig): Promise<D
       reportExtrasDefault: reportExtras ?? serverConfig.reportExtrasDefault,
     })
 
-    const res = await fetch('/api/diary-config', {
+    if (!diaryId) { localStorage.setItem(MIGRATED_FLAG, '1'); return serverConfig }
+    const res = await fetch(`/api/diaries/${encodeURIComponent(diaryId)}/config`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(merged),
     })
     localStorage.setItem(MIGRATED_FLAG, '1')
@@ -135,11 +137,14 @@ export default function DiarioPage() {
   const [showExportMenu, setShowExportMenu] = useState(false)
 
   // Configurazione del diario — titolo, sottotitolo, autore, copertina, toggle, escursioni
-  // escluse. Caricata da /api/diary-config (Supabase), non più da localStorage: segue l'utente
-  // tra dispositivi, e il PDF pubblicato riflette sempre la stessa configurazione ovunque lo si
-  // pubblichi da.
+  // escluse. Caricata da /api/diaries/[id]/config (Supabase, colonne di `diaries`) — la STESSA
+  // riga che il Sommario e la copertina di /diario (RouteHub) leggono e scrivono, non più il
+  // vecchio singleton /api/diary-config (user_settings.diary_config): prima le due viste potevano
+  // divergere (titolo/sottotitolo/copertina modificati da una parte non comparivano nell'altra).
+  // Questa pagina apre sempre e solo il Diario di default (vedi onBeforeOpen in app/diario/page.tsx).
   const [config, setConfig] = useState<DiaryConfig>(DEFAULT_DIARY_CONFIG)
   const [configLoaded, setConfigLoaded] = useState(false)
+  const [defaultDiaryId, setDefaultDiaryId] = useState<string | null>(null)
   const configSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const bookOuterRef = useRef<HTMLDivElement>(null)
@@ -153,9 +158,14 @@ export default function DiarioPage() {
       getAllActivities(),
       fetch('/api/resoconto?all=true').then(r => r.ok ? r.json() : []),
       fetch('/api/diary-token').then(r => r.ok ? r.json() : {}),
-      fetch('/api/diary-config').then(r => r.ok ? r.json() : DEFAULT_DIARY_CONFIG),
+      fetch('/api/diaries').then(r => r.ok ? r.json() : []),
       getUserSettingsCached(),
-    ]).then(async ([acts, reps, dt, dc, us]) => {
+    ]).then(async ([acts, reps, dt, diaries, us]) => {
+      const defaultDiary = (diaries as DiarySummary[]).find(d => d.isDefault) ?? null
+      setDefaultDiaryId(defaultDiary?.id ?? null)
+      const dc = defaultDiary
+        ? await fetch(`/api/diaries/${encodeURIComponent(defaultDiary.id)}/config`).then(r => r.ok ? r.json() : DEFAULT_DIARY_CONFIG)
+        : DEFAULT_DIARY_CONFIG
       const sortedActs = (acts as ActivityMeta[]).sort((a, b) =>
         new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
       setActivities(sortedActs)
@@ -189,7 +199,7 @@ export default function DiarioPage() {
       const usData = us as { display_name?: string; name?: string }
       const profileName = usData.display_name ?? usData.name ?? ''
       let cfg = normalizeDiaryConfig(dc)
-      cfg = await migrateLegacyConfigIfNeeded(cfg)
+      cfg = await migrateLegacyConfigIfNeeded(cfg, defaultDiary?.id ?? null)
       if (!cfg.author && profileName) cfg = { ...cfg, author: profileName }
       setConfig(cfg)
       setConfigLoaded(true)
@@ -245,15 +255,15 @@ export default function DiarioPage() {
   // riscrive l'intero oggetto sul server 800ms dopo l'ultima modifica, invece di un round-trip
   // per ogni tasto premuto o ogni singolo toggle.
   useEffect(() => {
-    if (!configLoaded) return
+    if (!configLoaded || !defaultDiaryId) return
     if (configSaveTimer.current) clearTimeout(configSaveTimer.current)
     configSaveTimer.current = setTimeout(() => {
-      fetch('/api/diary-config', {
+      fetch(`/api/diaries/${encodeURIComponent(defaultDiaryId)}/config`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(config),
       }).catch(() => { /* riprovato al prossimo cambiamento */ })
     }, 800)
     return () => { if (configSaveTimer.current) clearTimeout(configSaveTimer.current) }
-  }, [config, configLoaded])
+  }, [config, configLoaded, defaultDiaryId])
 
   function toggleStat(key: keyof DiaryConfig['statsToggles']) {
     setConfig(c => ({ ...c, statsToggles: { ...c.statsToggles, [key]: !c.statsToggles[key] } }))
@@ -345,7 +355,7 @@ export default function DiarioPage() {
       await supabase.auth.getSession()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Non autenticato')
-      const url = await uploadDiaryCover(user.id, file)
+      const url = await uploadDiaryCover(user.id, file, defaultDiaryId ?? undefined)
       setConfig(c => ({ ...c, coverUrl: url }))
     } catch (e) {
       setCoverError(e instanceof Error ? e.message : String(e))

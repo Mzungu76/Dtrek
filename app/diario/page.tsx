@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  Camera, ChevronDown, Globe2, Image as ImageIcon, Layers, Library, ListChecks, Loader2, Lock, Pencil,
+  ArrowRightLeft, Camera, ChevronDown, Globe2, Image as ImageIcon, Layers, Library, Loader2, Lock, Pencil,
   Plus, Route, TrendingUp, X,
 } from 'lucide-react'
 import RouteHub from '@/components/routehub/RouteHub'
@@ -293,7 +293,7 @@ export default function DiarioHubPage() {
               title="Gestisci questo Diario"
               className="pointer-events-auto p-1"
             >
-              <ListChecks className="w-5 h-5 text-white" style={{ filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.5))' }} />
+              <ArrowRightLeft className="w-5 h-5 text-white" style={{ filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.5))' }} />
             </button>
             <button onClick={() => openDiaryEdit((item as DiarioHubItem).diary)} title="Modifica questo Diario" className="pointer-events-auto p-1">
               <Pencil className="w-5 h-5 text-white" style={{ filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.5))' }} />
@@ -463,57 +463,54 @@ function CollectionSwitcherOverlay({ collections, currentId, onSelect, onClose }
 
   return (
     <div className="fixed inset-0 z-50 bg-[#0b1a24] flex flex-col">
-      <div className="shrink-0 flex items-center justify-between px-4 pt-[calc(env(safe-area-inset-top,0px)+14px)] pb-3">
+      <div className="shrink-0 flex items-center justify-between px-4 pt-[calc(env(safe-area-inset-top,0px)+14px)] pb-3 border-b border-white/10">
         <h2 className="font-display text-base font-bold text-white">Raccolte</h2>
         <button onClick={onClose} aria-label="Chiudi" className="shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors">
           <X className="w-4 h-4" />
         </button>
       </div>
       <div className="flex-1 overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+16px)]">
-        {createError && <p className="text-xs text-red-400 mb-3">{createError}</p>}
-        <div className="grid grid-cols-2 gap-3">
-          {collections.map(c => (
-            <div
-              key={c.id}
-              className={`aspect-square rounded-2xl overflow-hidden relative ${c.id === currentId ? 'ring-2 ring-sky-400' : 'ring-1 ring-white/10'}`}
-            >
-              <button onClick={() => onSelect(c.id)} className="absolute inset-0 w-full h-full text-left">
+        {createError && <p className="text-xs text-red-400 my-3">{createError}</p>}
+        {collections.map(c => (
+          <div key={c.id} className="relative flex items-center gap-3.5 py-3 border-b border-white/10">
+            <button onClick={() => onSelect(c.id)} className="flex items-center gap-3.5 flex-1 min-w-0 text-left">
+              <div className={`w-16 h-16 rounded-xl shrink-0 overflow-hidden relative ${c.id === currentId ? 'ring-2 ring-sky-400' : ''}`}>
                 {c.coverUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={c.coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
                 ) : (
                   <CollectionSpineFallback />
                 )}
-                <div className="absolute inset-0 bg-topography opacity-40" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/85 to-black/10" />
-                <div className="absolute bottom-0 inset-x-0 p-3">
-                  <p className="font-display font-bold text-white text-sm leading-tight truncate pr-6">{c.title}</p>
-                  <p className="text-white/70 text-[11px] mt-1 flex items-center gap-1.5">
-                    {c.volumeCount} diari · {c.reportageCount} resoconti
-                    {c.isPublished
-                      ? <span className="inline-flex items-center gap-1"><Globe2 className="w-3 h-3" /></span>
-                      : <span className="inline-flex items-center gap-1"><Lock className="w-3 h-3" /></span>}
-                  </p>
-                </div>
-              </button>
-              <button
-                onClick={() => router.push(`/raccolte/${encodeURIComponent(c.id)}`)}
-                title="Modifica questa Raccolta"
-                className="absolute top-2 right-2 z-10 w-7 h-7 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white hover:bg-black/60 transition-colors"
-              >
-                <Pencil className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          ))}
-          <button
-            onClick={createCollection}
-            disabled={creating}
-            className="aspect-square rounded-2xl border-2 border-dashed border-white/25 hover:border-white/40 flex flex-col items-center justify-center gap-2 text-white/60 hover:text-white/90 transition-colors disabled:opacity-60"
-          >
-            {creating ? <Loader2 className="w-6 h-6 animate-spin" /> : <Plus className="w-6 h-6" />}
-            <span className="text-xs font-semibold">Nuova raccolta</span>
-          </button>
-        </div>
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="font-display font-semibold text-[15px] text-white truncate">{c.title}</p>
+                <p className="text-[11px] text-white/50 mt-1.5 flex items-center gap-1.5">
+                  {c.volumeCount} diari · {c.reportageCount} resoconti
+                  {c.isPublished
+                    ? <span className="inline-flex items-center gap-1"><Globe2 className="w-3 h-3" /></span>
+                    : <span className="inline-flex items-center gap-1"><Lock className="w-3 h-3" /></span>}
+                </p>
+              </div>
+            </button>
+            <button
+              onClick={() => router.push(`/raccolte/${encodeURIComponent(c.id)}`)}
+              title="Modifica questa Raccolta"
+              className="shrink-0 p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
+            >
+              <Pencil className="w-4 h-4" />
+            </button>
+          </div>
+        ))}
+        <button
+          onClick={createCollection}
+          disabled={creating}
+          className="w-full flex items-center gap-3.5 py-3 text-left text-white/60 hover:text-white transition-colors disabled:opacity-60"
+        >
+          <div className="w-16 h-16 rounded-xl shrink-0 border-2 border-dashed border-white/25 flex items-center justify-center">
+            {creating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
+          </div>
+          <span className="text-sm font-semibold">Nuova raccolta</span>
+        </button>
       </div>
     </div>
   )
