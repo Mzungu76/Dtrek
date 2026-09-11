@@ -19,7 +19,7 @@ export const NAV_LINKS = [
   { href: '/bacheca',    label: 'Bacheca',    icon: Home       },
   { href: '/guida',      label: 'Guide',      icon: Compass    },
   { href: '/resoconto',  label: 'Resoconti',  icon: BookOpen   },
-  { href: '/diario',     label: 'Diario',     icon: BookMarked },
+  { href: '/diario',     label: 'Diari',      icon: BookMarked },
 ]
 
 export function isActive(href: string, path: string) {
