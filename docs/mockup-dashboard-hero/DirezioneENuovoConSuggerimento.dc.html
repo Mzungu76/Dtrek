@@ -21,26 +21,34 @@
 </helmet>
 <div class="body-f" style="width:390px;height:844px;background:#dfd8bf;position:relative;overflow:hidden;box-shadow:0 0 0 1px #dcd8cc;">
 
-  <!-- ── Utente nuovo, NESSUNA Guida/Resoconto e nessun suggerimento ancora pronto (percorsi-per-te
-       non ha trovato nulla, o è ancora in generazione). A differenza del fallback scuro decorativo
-       usato altrove nell'app quando manca una copertina puntuale (CoverMap.tsx/HubSkeleton.tsx —
-       lì non esiste NESSUNA coordinata da mostrare), qui una mappa di base a zoom regionale può
-       comunque essere disegnata senza dati dell'utente: stessa ambientazione "mappa" delle altre
-       viste di Direzione E, solo senza tracce né pin — a segnalare "qui apparirà quello che farai". ── -->
+  <!-- ── Utente NUOVO (nessun percorso/Guida/Resoconto proprio) ma "Percorsi per te" ha già un
+       suggerimento pronto (app/api/percorsi-per-te — generato al primo accesso). Niente selettore
+       a due mappe qui: non c'è ancora nulla di "suo" da mostrare in due viste, solo il consiglio.
+       Zoom volutamente più ampio ("regionale") della vista 1/2 di un utente con storico: un solo
+       punto non giustifica uno zoom stretto, e un contesto più ampio comunica meglio "esplora qui
+       vicino". ── -->
   <div style="position:absolute;inset:0;background:linear-gradient(160deg,#e4dec8 0%,#cdc4a6 55%,#b9ae8c 100%);">
-    <svg width="400" height="400" style="position:absolute;inset:0;opacity:0.35;mix-blend-mode:multiply;"><filter id="evGrain"><feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch"/></filter><rect width="400" height="400" filter="url(#evGrain)"/></svg>
+    <svg width="400" height="400" style="position:absolute;inset:0;opacity:0.35;mix-blend-mode:multiply;"><filter id="esGrain"><feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch"/></filter><rect width="400" height="400" filter="url(#esGrain)"/></svg>
     <svg viewBox="0 0 390 700" width="390" height="700" style="position:absolute;top:0;left:0;">
+      <!-- rilievo/contesto regionale generico: nessuna traccia dell'utente, solo la mappa di base -->
       <circle cx="60" cy="100" r="2" fill="#a89f83"/><circle cx="180" cy="60" r="1.8" fill="#a89f83"/><circle cx="320" cy="150" r="2.2" fill="#a89f83"/>
       <circle cx="40" cy="300" r="1.8" fill="#a89f83"/><circle cx="200" cy="260" r="2" fill="#a89f83"/><circle cx="340" cy="380" r="1.8" fill="#a89f83"/>
       <circle cx="100" cy="480" r="2" fill="#a89f83"/><circle cx="280" cy="560" r="1.8" fill="#a89f83"/><circle cx="150" cy="640" r="2.2" fill="#a89f83"/>
       <path d="M0 200 Q90 180 130 230 T260 210 Q340 200 390 240" fill="none" stroke="#a89f83" stroke-width="1.4" opacity="0.55"/>
       <path d="M0 420 Q100 440 170 400 T330 430" fill="none" stroke="#a89f83" stroke-width="1.4" opacity="0.55"/>
-      <path d="M20 560 Q120 590 200 550 T380 580" fill="none" stroke="#a89f83" stroke-width="1.4" opacity="0.55"/>
+
+      <!-- l'UNICO percorso suggerito: stessa resa grafica di una traccia utente, per far capire che
+           diventerà "sua" appena la percorre — start bianco, end pieno, come nelle viste con storico -->
+      <path d="M120 130 Q210 190 195 300 Q185 390 260 440"
+        fill="none" stroke="#c05a17" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"
+        style="filter:drop-shadow(0 3px 6px rgba(0,0,0,0.25));"/>
+      <circle cx="120" cy="130" r="7" fill="#fff" stroke="#c05a17" stroke-width="3"/>
+      <circle cx="260" cy="440" r="7" fill="#c05a17" stroke="#fff" stroke-width="3"/>
     </svg>
   </div>
-  <div style="position:absolute;inset:0;background:linear-gradient(160deg,rgba(129,54,25,0.1) 0%,rgba(28,71,36,0.08) 55%,rgba(7,24,36,0.14) 100%);pointer-events:none;"></div>
+  <div style="position:absolute;inset:0;background:linear-gradient(160deg,rgba(129,54,25,0.14) 0%,rgba(28,71,36,0.1) 55%,rgba(7,24,36,0.16) 100%);pointer-events:none;"></div>
   <div style="position:absolute;inset-x:0;top:0;height:200px;background:linear-gradient(to bottom, rgba(0,0,0,0.62), transparent);pointer-events:none;"></div>
-  <div style="position:absolute;inset-x:0;bottom:0;height:56%;background:linear-gradient(to top, rgba(11,26,36,0.9) 22%, rgba(11,26,36,0.42) 55%, transparent);pointer-events:none;"></div>
+  <div style="position:absolute;inset-x:0;bottom:0;height:52%;background:linear-gradient(to top, rgba(11,26,36,0.9) 20%, rgba(11,26,36,0.4) 55%, transparent);pointer-events:none;"></div>
 
   <!-- ── HubNavBar ── -->
   <div style="position:relative;z-index:10;background:rgba(39,113,52,0.95);display:flex;align-items:center;gap:6px;padding:14px 12px 10px;">
@@ -65,15 +73,22 @@
     <div style="width:30px;height:30px;border-radius:999px;background:#20592b;border:2px solid rgba(255,255,255,0.5);display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700;flex-shrink:0;">M</div>
   </div>
 
+  <!-- ── Chip "Percorso consigliato" al posto del selettore a due mappe + titolo ── -->
   <div style="position:relative;z-index:10;padding:20px 16px 0;">
-    <h1 class="display" style="margin:0;font-weight:900;font-size:24px;text-transform:uppercase;color:#fff;text-shadow:0 2px 10px rgba(0,0,0,0.55);line-height:1.05;">Nessuna uscita ancora</h1>
-    <p class="lora" style="font-style:italic;font-size:13.5px;color:rgba(255,255,255,0.85);margin:6px 0 0;text-shadow:0 1px 6px rgba(0,0,0,0.5);">Le tue tracce, le tue Guide e i tuoi Resoconti compariranno su questa mappa.</p>
+    <span class="glass" style="display:inline-flex;align-items:center;gap:6px;color:#fff;font-size:11px;font-weight:700;padding:6px 13px;border-radius:999px;margin-bottom:10px;">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><polygon points="16 8 13 13 8 16 11 11"/></svg>
+      Percorso consigliato per te
+    </span>
+    <h1 class="display" style="margin:0;font-weight:900;font-size:24px;text-transform:uppercase;color:#fff;text-shadow:0 2px 10px rgba(0,0,0,0.55);line-height:1.05;">Il tuo primo percorso</h1>
+    <p class="lora" style="font-style:italic;font-size:13.5px;color:rgba(255,255,255,0.92);margin:5px 0 0;text-shadow:0 1px 6px rgba(0,0,0,0.5);">Anello di Calcata — 9,4 km, +410 m · a 22 min da te</p>
   </div>
 
+  <!-- ── In basso: CTA sul suggerimento (non ancora Recovery/Prossima uscita — non esistono per un
+       utente senza storico) + lo stesso accesso rapido già usato nell'empty state completo. ── -->
   <div style="position:absolute;left:0;right:0;bottom:0;z-index:10;padding:0 16px calc(env(safe-area-inset-bottom,0px) + 20px);">
     <a href="#" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:13px 26px;background:#377134;border-radius:14px;font-weight:600;font-size:14px;margin-bottom:12px;">
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-      Crea un Resoconto
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 3 3 8 12 13 21 8 12 3"/><polyline points="3 13 12 18 21 13"/></svg>
+      Scopri il percorso
     </a>
     <div class="glass" style="border-radius:18px;padding:13px;display:flex;gap:10px;">
       <a href="#" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;">

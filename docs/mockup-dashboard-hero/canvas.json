@@ -3,14 +3,16 @@
     { "file": "Main.dc.html", "x": 0, "y": 0, "w": 390, "h": 844 },
     { "file": "DirezioneDVuoto.dc.html", "x": 470, "y": 0, "w": 390, "h": 844 },
     { "file": "DirezioneE.dc.html", "x": 940, "y": 0, "w": 390, "h": 844 },
-    { "file": "DirezioneEVuoto.dc.html", "x": 1410, "y": 0, "w": 390, "h": 844 },
-    { "file": "DirezioneF.dc.html", "x": 1880, "y": 0, "w": 390, "h": 844 },
-    { "file": "DirezioneFVuoto.dc.html", "x": 2350, "y": 0, "w": 390, "h": 844 }
+    { "file": "DirezioneEGuide.dc.html", "x": 1410, "y": 0, "w": 390, "h": 844 },
+    { "file": "DirezioneENuovoConSuggerimento.dc.html", "x": 1880, "y": 0, "w": 390, "h": 844 },
+    { "file": "DirezioneEVuoto.dc.html", "x": 2350, "y": 0, "w": 390, "h": 844 },
+    { "file": "DirezioneF.dc.html", "x": 2820, "y": 0, "w": 390, "h": 844 },
+    { "file": "DirezioneFVuoto.dc.html", "x": 3290, "y": 0, "w": 390, "h": 844 }
   ],
   "annotations": [
     { "id": "note-d", "x": 0, "y": -110, "w": 390, "text": "D — Mappa viva\nTutti i percorsi a piena pagina, fissa; i widget scorrono in un pannello di vetro sopra." },
-    { "id": "note-e", "x": 940, "y": -110, "w": 390, "text": "E — Traccia in evidenza\nUna sola uscita alla volta come hero (ruota come le vecchie foto ambient); trascina verso l'alto per tutti i widget, stesso gesto di Guida/Resoconto/Diari." },
-    { "id": "note-f", "x": 1880, "y": -110, "w": 390, "text": "F — Pannello ibrido\nMappa aggregata solo in una fascia superiore; sotto, un pannello chiaro con gli stessi widget già implementati." }
+    { "id": "note-e", "x": 940, "y": -110, "w": 850, "text": "E — Traccia in evidenza (aggiornata)\n2 mappe intercambiabili (tocca/scorri la pillola in alto): tutti i percorsi, oppure le posizioni di Guide e Resoconti. Utente nuovo con un suggerimento pronto → zoom regionale sull'unico percorso consigliato. Nessun dato → stessa mappa vuota a zoom regionale con le indicazioni per iniziare." },
+    { "id": "note-f", "x": 2820, "y": -110, "w": 390, "text": "F — Pannello ibrido\nMappa aggregata solo in una fascia superiore; sotto, un pannello chiaro con gli stessi widget già implementati." }
   ],
   "launch": { "view": "canvas" }
 }
