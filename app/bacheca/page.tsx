@@ -105,7 +105,7 @@ export default function BachecaPage() {
 
       <div className="max-w-2xl mx-auto px-4 sm:px-8 pt-5">
         <div className="flex items-center justify-between mb-4">
-          <h1 className="font-display text-2xl font-bold text-stone-800">Bacheca</h1>
+          <h1 className="font-display text-2xl font-bold text-stone-800">Dashboard</h1>
           <button
             onClick={() => setEditMode(v => !v)}
             title={editMode ? 'Fine modifica' : 'Personalizza questa scheda'}

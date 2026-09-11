@@ -3,7 +3,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { Compass, BookMarked, BookOpen, User, Home } from 'lucide-react'
+import { Compass, BookMarked, BookOpen, User, LayoutDashboard } from 'lucide-react'
 import { getProfile } from '@/lib/userProfile'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
@@ -16,7 +16,7 @@ import type { User as SupabaseUser, Session, AuthChangeEvent } from '@supabase/s
 // racconto), Diario (libro impaginato).
 // Il Profilo non è un tab alla pari ma un'icona persistente (vedi ProfileAvatar).
 export const NAV_LINKS = [
-  { href: '/bacheca',    label: 'Bacheca',    icon: Home       },
+  { href: '/bacheca',    label: 'Dashboard',  icon: LayoutDashboard },
   { href: '/guida',      label: 'Guide',      icon: Compass    },
   { href: '/resoconto',  label: 'Resoconti',  icon: BookOpen   },
   { href: '/diario',     label: 'Diari',      icon: BookMarked },
