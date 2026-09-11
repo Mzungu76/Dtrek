@@ -16,11 +16,12 @@ import type { HubMode, RouteHubItem, SortValues } from './types'
 // a 30 il numero al centro risultava poco leggibile anche col font-size aumentato nel componente.
 const GALLERY_GAUGE_SIZE = 36
 
-export type SortKey = 'date' | 'km' | 'dplus' | 'cts' | 'rating' | 'distance'
+export type SortKey = 'date' | 'km' | 'dplus' | 'cts' | 'rating' | 'distance' | 'count'
 
 // Guida can sort/preview by Trail Score (a route not yet hiked has no personal vote); Resoconto
 // by the user's own vote (a computed score matters less once the hike is already done). Both
-// modes offer "Distanza" (dall'indirizzo salvato nelle impostazioni) once it's known.
+// modes offer "Distanza" (dall'indirizzo salvato nelle impostazioni) once it's known. Diario has
+// neither concept — "Resoconti" (quanti ne contiene) prende il loro posto.
 export const SORT_OPTIONS_BY_MODE: Record<HubMode, { id: SortKey; label: string }[]> = {
   guida: [
     { id: 'date', label: 'Data' }, { id: 'km', label: 'Km' }, { id: 'dplus', label: 'D+' }, { id: 'cts', label: 'TS' },
@@ -29,6 +30,9 @@ export const SORT_OPTIONS_BY_MODE: Record<HubMode, { id: SortKey; label: string 
   resoconto: [
     { id: 'date', label: 'Data' }, { id: 'km', label: 'Km' }, { id: 'dplus', label: 'D+' }, { id: 'rating', label: 'Voto' },
     { id: 'distance', label: 'Distanza' },
+  ],
+  diario: [
+    { id: 'date', label: 'Data' }, { id: 'km', label: 'Km' }, { id: 'dplus', label: 'D+' }, { id: 'count', label: 'Resoconti' },
   ],
 }
 
@@ -44,6 +48,7 @@ export const SORT_CMP: Record<SortKey, (a: SortValues, b: SortValues) => number>
   // Ascending (nearest first) rather than the descending convention above — for a distance,
   // "closest to home" is the useful default, unlike km/dplus/cts where "most" ranks first.
   distance: (a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity),
+  count:    (a, b) => (b.count ?? 0) - (a.count ?? 0),
 }
 
 function TextBadge({ children }: { children: ReactNode }) {
@@ -86,6 +91,8 @@ function ThumbBadge({ sortBy, item, showPlannedDate }: { sortBy: SortKey; item: 
       return <TextBadge>+{Math.round(sv.dplus)} m</TextBadge>
     case 'distance':
       return sv.distance != null ? <TextBadge>~{(sv.distance / 1000).toFixed(0)} km</TextBadge> : null
+    case 'count':
+      return sv.count != null ? <TextBadge>{sv.count} resoc.</TextBadge> : null
     default:
       return null
   }

@@ -43,6 +43,9 @@ interface Props {
   primaryAction: PrimaryAction | null
   headerActions?: ReactNode
   heroPhotos?: ReactNode
+  /** Hides the "Strumenti" (⋮) button in bodyMode 'continuous' when the caller has nothing to show
+   *  there (Guida always does — its drawer). Default true, so existing callers are unaffected. */
+  showToolsMenu?: boolean
 }
 
 /**
@@ -54,7 +57,7 @@ interface Props {
  */
 export default function RoutePage({
   item, onRequestClose, onCloseDragMove, onCloseDragEnd, bodyMode, tabs = [], activeTab, onTabChange,
-  renderSection, tabScrollRef, primaryAction, headerActions, heroPhotos,
+  renderSection, tabScrollRef, primaryAction, headerActions, heroPhotos, showToolsMenu = true,
 }: Props) {
   const [toolsOpen, setToolsOpen] = useState(false)
 
@@ -179,7 +182,7 @@ export default function RoutePage({
         <p className="flex-1 min-w-0 truncate font-display text-base font-bold text-stone-900">{item.title}</p>
         <div className="flex items-center gap-2 shrink-0">
           {headerActions}
-          {bodyMode === 'continuous' && (
+          {bodyMode === 'continuous' && showToolsMenu && (
             <button
               onClick={() => setToolsOpen(true)}
               aria-label="Strumenti"

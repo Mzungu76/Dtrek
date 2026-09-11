@@ -1,257 +1,446 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import Link from 'next/link'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  BookMarked, Layers, Plus, Globe2, Lock, Loader2, ArrowRight, Camera, Upload,
+  BookOpen, Camera, ChevronDown, Globe2, Image as ImageIcon, Layers, Loader2, Lock, Pencil,
+  Plus, Route, TrendingUp, X,
 } from 'lucide-react'
-import HubNavBar from '@/components/routehub/HubNavBar'
-import { getAllActivities, computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
+import RouteHub from '@/components/routehub/RouteHub'
+import type { RouteHubItem, SectionKind } from '@/components/routehub/types'
+import DiarioSommarioContent from '@/components/diario/DiarioSommarioContent'
 import { normalizeDiaryConfig, DEFAULT_DIARY_CONFIG, type DiaryConfig } from '@/lib/diaryConfig'
+import { uploadDiaryCover } from '@/lib/diaryCoverUpload'
+import { uploadCollectionCover } from '@/lib/collectionCoverUpload'
+import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import type { DiarySummary } from '@/app/api/diaries/route'
 import type { CollectionSummary } from '@/app/api/collections/route'
 
-// Hub "Diari" (Direzione B del mockup, docs/mockup-diari-raccolte) — sostituisce l'ex prima pagina
-// di /diario, che ORA vive invariata su /diario/libro. Qui si arriva alla struttura
-// Raccolte→Diari→Resoconti; il libro impaginato di un Diario resta quello di sempre.
-//
-// Diari aggiuntivi (oltre a quello di default, creato dal backfill per ogni utente) e Raccolte
-// hanno API e tabelle costruite prima del ripristino al layout PR #741 (vedi commit 73b2efa) —
-// l'editor/viewer che le apre (Sommario in /diario/[id], composizione in /raccolte/[id]) è stato
-// ricostruito nei token attuali per poterle aprire, creare, spostare ed eliminare da qui.
+interface DiarioHubItem extends RouteHubItem {
+  diary: DiarySummary
+}
+
+function toHubItem(d: DiarySummary): DiarioHubItem {
+  return {
+    id: d.id,
+    title: d.title,
+    coverPhotoUrl: d.coverUrl ?? undefined,
+    statPills: [
+      { icon: Camera, label: `${d.reportageCount} resoconti` },
+      { icon: Route, label: `${(d.distanceMeters / 1000).toFixed(0)} km` },
+      { icon: TrendingUp, label: `${Math.round(d.elevationGain)} m D+` },
+    ],
+    sortValues: {
+      date: d.lastActivityAt ? new Date(d.lastActivityAt).getTime() : 0,
+      km: d.distanceMeters,
+      dplus: d.elevationGain,
+      count: d.reportageCount,
+    },
+    diary: d,
+  }
+}
+
+// Hub "Diari" — copertina a schermo intero come /guida e /resoconto (stesso RouteHub, mode
+// 'diario'): trascinamento verso l'alto per aprire il Sommario del Diario in copertina, swipe
+// orizzontale per scorrere i Diari della stessa Raccolta. Il Diario in copertina è l'ultimo su cui
+// l'utente ha lavorato (user_settings.last_diary_id — un campo che esisteva già, scritto da
+// nessuno e letto da nessuno: lo aggancio qui), altrimenti il Diario di default.
 export default function DiarioHubPage() {
   const router = useRouter()
-  const [activities, setActivities] = useState<ActivityMeta[]>([])
-  const [config, setConfig] = useState<DiaryConfig>(DEFAULT_DIARY_CONFIG)
-  const [diaries, setDiaries] = useState<DiarySummary[]>([])
+
+  const [diaries, setDiaries] = useState<DiarySummary[] | null>(null)
   const [collections, setCollections] = useState<CollectionSummary[]>([])
-  const [loading, setLoading] = useState(true)
+  const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null)
+  const [currentItemId, setCurrentItemId] = useState<string | null>(null)
+  const initializedRef = useRef(false)
+
+  const [collectionSwitcherOpen, setCollectionSwitcherOpen] = useState(false)
+
   const [creatingDiary, setCreatingDiary] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
 
-  useEffect(() => {
-    Promise.all([
-      getAllActivities(),
+  const [diaryEditOpen, setDiaryEditOpen] = useState(false)
+  // L'item "live" passato da RouteHub a titleAction/contextBadge, non lo stato (debounced) di
+  // currentItemId — altrimenti uno swipe seguito subito da un tap sulla matita potrebbe salvare
+  // sul Diario/Raccolta appena lasciato invece di quello mostrato.
+  const [diaryEditTarget, setDiaryEditTarget] = useState<DiarySummary | null>(null)
+  const [diaryEditConfig, setDiaryEditConfig] = useState<DiaryConfig | null>(null)
+  const [diaryEditLoading, setDiaryEditLoading] = useState(false)
+  const [diaryCoverUploading, setDiaryCoverUploading] = useState(false)
+  const [diaryCoverError, setDiaryCoverError] = useState<string | null>(null)
+  const diaryCoverInputRef = useRef<HTMLInputElement>(null)
+
+  const [collectionEditOpen, setCollectionEditOpen] = useState(false)
+  const [collectionEditTarget, setCollectionEditTarget] = useState<CollectionSummary | null>(null)
+  const [collectionCoverUploading, setCollectionCoverUploading] = useState(false)
+  const [collectionCoverError, setCollectionCoverError] = useState<string | null>(null)
+  const collectionCoverInputRef = useRef<HTMLInputElement>(null)
+
+  function loadAll() {
+    return Promise.all([
       fetch('/api/diaries').then(r => r.ok ? r.json() : []),
       fetch('/api/collections').then(r => r.ok ? r.json() : []),
-    ]).then(async ([acts, ds, cs]) => {
-      setActivities(acts as ActivityMeta[])
-      setDiaries(ds as DiarySummary[])
-      setCollections(cs as CollectionSummary[])
-      // Titolo/sottotitolo dell'hero vengono dal Diario di default vero e proprio (tabella
-      // `diaries`, la stessa che alimenta il Sommario in /diario/[id]) — non più dal vecchio
-      // `user_settings.diary_config` a sé stante: le due configurazioni non erano la stessa cosa,
-      // e mostrare qui il valore sbagliato faceva sembrare persa una modifica fatta nel Sommario.
-      const def = (ds as DiarySummary[]).find(d => d.isDefault)
-      if (def) {
-        const dc = await fetch(`/api/diaries/${encodeURIComponent(def.id)}/config`).then(r => r.ok ? r.json() : DEFAULT_DIARY_CONFIG)
-        setConfig(normalizeDiaryConfig(dc))
-      }
-    }).finally(() => setLoading(false))
+    ]).then(([ds, cs]: [DiarySummary[], CollectionSummary[]]) => {
+      setDiaries(ds)
+      setCollections(cs)
+      return { ds, cs }
+    })
+  }
+
+  useEffect(() => {
+    Promise.all([loadAll(), fetch('/api/user-settings').then(r => r.ok ? r.json() : {})])
+      .then(([{ ds, cs }, us]: [{ ds: DiarySummary[]; cs: CollectionSummary[] }, { lastDiaryId?: string | null }]) => {
+        if (initializedRef.current) return
+        initializedRef.current = true
+        const visible = ds.filter(d => !d.archivedAt)
+        const featured = visible.find(d => d.id === us.lastDiaryId) ?? visible.find(d => d.isDefault) ?? visible[0]
+        if (!featured) return
+        const map = new Map<string, string>()
+        for (const c of cs) for (const id of c.diaryIds) map.set(id, c.id)
+        setSelectedCollectionId(map.get(featured.id) ?? null)
+        setCurrentItemId(featured.id)
+      })
   }, [])
 
-  const globalStats = useMemo(() => computeGlobalStats(activities), [activities])
+  // Chiude il popover "modifica Diario" se cambia il Diario in copertina (swipe, o cambio
+  // Raccolta) — evita di salvare per sbaglio sul Diario sbagliato se restasse aperto.
+  useEffect(() => { setDiaryEditOpen(false); setDiaryEditConfig(null); setDiaryEditTarget(null) }, [currentItemId])
+  useEffect(() => { setCollectionEditOpen(false); setCollectionEditTarget(null) }, [selectedCollectionId])
 
-  // Il Diario di default (garantito dal backfill, sempre primo nell'ordinamento di GET
-  // /api/diaries) è lo stesso Diario che /diario/libro rende per intero — le sue statistiche qui
-  // sono quelle di TUTTE le attività, non la somma dei soli Reportage collegati a una Meta
-  // (aggregateDiaries conta solo quelli): i due numeri possono differire finché quel collegamento
-  // non è la norma, ed è la vista del libro — non questa — a restare la fonte di verità.
-  const visibleDiaries = useMemo(() => diaries.filter(d => !d.archivedAt), [diaries])
-  const defaultDiary = visibleDiaries.find(d => d.isDefault)
-  const otherDiaries = visibleDiaries.filter(d => !d.isDefault)
+  const diaryToCollectionId = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const c of collections) for (const id of c.diaryIds) map.set(id, c.id)
+    return map
+  }, [collections])
+
+  const visibleDiaries = useMemo(() => (diaries ?? []).filter(d => !d.archivedAt), [diaries])
+
+  const itemsForCollection = useMemo(() => visibleDiaries
+    .filter(d => diaryToCollectionId.get(d.id) === selectedCollectionId)
+    .sort((a, b) => a.shelfPosition - b.shelfPosition)
+    .map(toHubItem),
+  [visibleDiaries, diaryToCollectionId, selectedCollectionId])
+
+  const currentDiary = itemsForCollection.find(i => i.id === currentItemId)?.diary ?? itemsForCollection[0]?.diary ?? null
+  const initialIndex = Math.max(0, itemsForCollection.findIndex(i => i.id === currentItemId))
 
   async function createDiary() {
     setCreatingDiary(true); setCreateError(null)
     try {
-      const res = await fetch('/api/diaries', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+      const res = await fetch('/api/diaries', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(selectedCollectionId ? { shelfId: selectedCollectionId } : {}),
+      })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.message ?? data.error ?? `HTTP ${res.status}`)
-      router.push(`/diario/${encodeURIComponent(data.id)}`)
+      await loadAll()
     } catch (e) {
       setCreateError(e instanceof Error ? e.message : String(e))
+    } finally {
       setCreatingDiary(false)
     }
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-stone-100">
-        <div className="sticky top-0 z-40"><HubNavBar /></div>
-        <div className="flex items-center justify-center py-32 text-stone-400 gap-3">
-          <Loader2 className="w-6 h-6 animate-spin" />
-          <span className="font-lora italic">Caricamento diari…</span>
-        </div>
-      </div>
-    )
+  function openDiaryEdit(diary: DiarySummary) {
+    setDiaryEditTarget(diary)
+    setDiaryEditOpen(true)
+    setDiaryEditLoading(true)
+    fetch(`/api/diaries/${encodeURIComponent(diary.id)}/config`)
+      .then(r => r.ok ? r.json() : DEFAULT_DIARY_CONFIG)
+      .then(c => setDiaryEditConfig(normalizeDiaryConfig(c)))
+      .finally(() => setDiaryEditLoading(false))
   }
 
-  if (activities.length === 0) {
+  async function saveDiaryField(field: 'title' | 'subtitle' | 'coverUrl', value: string) {
+    if (!diaryEditTarget || !diaryEditConfig) return
+    const id = diaryEditTarget.id
+    const merged = { ...diaryEditConfig, [field]: value }
+    setDiaryEditConfig(merged)
+    try {
+      const res = await fetch(`/api/diaries/${encodeURIComponent(id)}/config`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(merged),
+      })
+      if (!res.ok) throw new Error()
+      setDiaries(ds => ds?.map(d => d.id === id ? { ...d, [field]: value } : d) ?? ds)
+    } catch { /* un refresh manuale mostrerà lo stato reale */ }
+  }
+
+  async function handleDiaryCoverUpload(file: File) {
+    if (!diaryEditTarget) return
+    setDiaryCoverUploading(true); setDiaryCoverError(null)
+    try {
+      const supabase = getBrowserSupabase()
+      await supabase.auth.getSession()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Non autenticato')
+      const url = await uploadDiaryCover(user.id, file, diaryEditTarget.id)
+      await saveDiaryField('coverUrl', url)
+    } catch (e) {
+      setDiaryCoverError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setDiaryCoverUploading(false)
+    }
+  }
+
+  function openCollectionEdit(collection: CollectionSummary) {
+    setCollectionEditTarget(collection)
+    setCollectionEditOpen(true)
+  }
+
+  async function patchCollectionField(field: 'title' | 'subtitle', value: string) {
+    if (!collectionEditTarget) return
+    const id = collectionEditTarget.id
+    setCollections(cs => cs.map(c => c.id === id ? { ...c, [field]: value } : c))
+    try {
+      const res = await fetch(`/api/collections/${encodeURIComponent(id)}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ [field]: value }),
+      })
+      if (!res.ok) throw new Error()
+    } catch { loadAll() }
+  }
+
+  async function handleCollectionCoverUpload(file: File) {
+    if (!collectionEditTarget) return
+    setCollectionCoverUploading(true); setCollectionCoverError(null)
+    try {
+      const supabase = getBrowserSupabase()
+      await supabase.auth.getSession()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Non autenticato')
+      const url = await uploadCollectionCover(user.id, file, collectionEditTarget.id)
+      const id = collectionEditTarget.id
+      const res = await fetch(`/api/collections/${encodeURIComponent(id)}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ coverUrl: url }),
+      })
+      if (!res.ok) throw new Error()
+      setCollections(cs => cs.map(c => c.id === id ? { ...c, coverUrl: url } : c))
+    } catch (e) {
+      setCollectionCoverError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setCollectionCoverUploading(false)
+    }
+  }
+
+  function handleSectionChange(section: SectionKind | null) {
+    if (!section || !currentDiary) return
+    // "L'ultimo Diario su cui l'utente ha lavorato" — il momento in cui apre davvero il Sommario,
+    // non ogni fotogramma di uno swipe di passaggio (vedi RouteHub.onIndexChange, debounced per lo
+    // stesso motivo).
+    fetch('/api/user-settings', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lastDiaryId: currentDiary.id }),
+    }).catch(() => {})
+  }
+
+  if (diaries === null) {
     return (
-      <div className="min-h-screen bg-stone-100">
-        <div className="sticky top-0 z-40"><HubNavBar /></div>
-        <div className="flex flex-col items-center justify-center text-center px-6 py-24">
-          <div className="w-16 h-16 rounded-full bg-forest-50 flex items-center justify-center mb-5">
-            <BookMarked className="w-7 h-7 text-forest-600" />
-          </div>
-          <h2 className="font-display text-xl font-semibold text-stone-700 mb-2">Il tuo Diario comincia qui</h2>
-          <p className="text-stone-500 text-sm max-w-sm mb-6">
-            Carica la tua prima escursione per iniziare a riempirlo.
-          </p>
-          <Link href="/upload?tab=activity"
-            className="flex items-center gap-2 px-6 py-3 bg-forest-600 hover:bg-forest-700 text-white rounded-xl font-medium transition-colors">
-            <Upload className="w-5 h-5" /> Carica un&apos;attività
-          </Link>
-        </div>
+      <div className="fixed inset-0 bg-[#0b1a24] flex items-center justify-center text-stone-400">
+        <Loader2 className="w-6 h-6 animate-spin" />
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-stone-100">
-      {/* Hero — copertina del Diario di default */}
-      <div className="relative h-[340px] sm:h-[420px] overflow-hidden">
-        {config.coverUrl ? (
-          <img src={config.coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
-        ) : (
-          <div className="absolute inset-0" style={{ background: 'linear-gradient(158deg,#193b20 0%,#1c4724 45%,#20592b 100%)' }} />
+    <>
+      <RouteHub
+        mode="diario"
+        items={itemsForCollection}
+        initialIndex={initialIndex}
+        onIndexChange={item => setCurrentItemId(item.id)}
+        onSectionChange={handleSectionChange}
+        bodyMode="continuous"
+        showToolsMenu={false}
+        topOverlayVariant="magazine"
+        emptyNoun="Diario"
+        emptyAction={
+          <button onClick={createDiary} disabled={creatingDiary}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-white text-stone-800 text-sm font-semibold">
+            {creatingDiary ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+            Nuovo Diario in questa Raccolta
+          </button>
+        }
+        subtitle={item => (item as DiarioHubItem).diary.subtitle}
+        importLabel="Nuovo diario"
+        onImport={createDiary}
+        renderSection={(_section, item) => (
+          <DiarioSommarioContent
+            diaryId={item.id}
+            onDeleted={() => loadAll()}
+            onChanged={() => loadAll()}
+          />
         )}
-        <div className="absolute inset-0 bg-topography opacity-60" />
-        <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, transparent 30%, transparent 55%, rgba(11,26,20,0.94) 100%)' }} />
-
-        <div className="absolute inset-x-0 top-0 z-20"><HubNavBar /></div>
-
-        <div className="absolute inset-x-0 bottom-0 z-10 p-6 sm:px-10 sm:pb-10">
-          <span className="font-barlow text-[11px] font-extrabold uppercase tracking-[3px] text-amber-300">Diario attivo</span>
-          <h1 className="font-display text-4xl sm:text-5xl font-bold text-white mt-2 leading-[1.05]"
-            style={{ textShadow: '0 2px 14px rgba(0,0,0,0.55)' }}>
-            {config.title}
-          </h1>
-          {config.subtitle && (
-            <p className="font-lora italic text-base sm:text-lg text-white/80 mt-1.5"
-              style={{ textShadow: '0 1px 8px rgba(0,0,0,0.5)' }}>
-              {config.subtitle}
-            </p>
-          )}
-          <div className="flex flex-wrap gap-2 mt-4">
-            <span className="inline-flex items-center gap-1.5 bg-white/15 backdrop-blur-sm text-white text-[11px] font-semibold px-2.5 py-1.5 rounded-full">
-              <Camera className="w-3 h-3" /> {globalStats.totalActivities} resoconti
-            </span>
-            <span className="bg-white/15 backdrop-blur-sm text-white text-[11px] font-semibold px-2.5 py-1.5 rounded-full">
-              {globalStats.totalDistanceKm.toFixed(0)} km
-            </span>
-            <span className="bg-white/15 backdrop-blur-sm text-white text-[11px] font-semibold px-2.5 py-1.5 rounded-full">
-              {Math.round(globalStats.totalElevationGain).toLocaleString('it')} m D+
-            </span>
-          </div>
-          <Link href="/diario/libro"
-            className="inline-flex items-center gap-2 mt-5 bg-white text-forest-800 rounded-full px-5 py-2.5 font-barlow font-extrabold uppercase text-sm tracking-wide hover:bg-forest-50 transition-colors shadow-lg shadow-black/20">
-            Apri il diario <ArrowRight className="w-4 h-4" />
-          </Link>
-        </div>
-      </div>
-
-      {/* Foglio inferiore — Diari e Raccolte */}
-      <div className="relative -mt-6 bg-stone-100 rounded-t-[26px] px-4 sm:px-10 pt-6 pb-14 shadow-[0_-8px_20px_rgba(0,0,0,0.06)]">
-        <div className="w-10 h-1 rounded-full bg-stone-300 mx-auto mb-7" />
-
-        {/* I tuoi Diari */}
-        <section className="mb-10">
-          <div className="flex items-center justify-between mb-3.5">
-            <span className="font-barlow font-bold text-xs tracking-[2.5px] uppercase text-stone-400">I tuoi diari</span>
-            <span className="font-mono text-xs text-stone-400">{visibleDiaries.length}</span>
-          </div>
-          <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 sm:-mx-10 sm:px-10">
-            {defaultDiary && <DiaryTile diary={defaultDiary} />}
-            {otherDiaries.map(d => <DiaryTile key={d.id} diary={d} />)}
-            <button
-              onClick={createDiary}
-              disabled={creatingDiary}
-              className="shrink-0 w-24 h-36 rounded-2xl border-[1.5px] border-dashed border-stone-300 flex flex-col items-center justify-center gap-2 text-stone-400 hover:border-stone-400 hover:text-stone-500 hover:bg-white/60 transition-colors disabled:opacity-60"
-            >
-              {creatingDiary ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
-              <span className="font-barlow text-[11px] font-bold uppercase tracking-wide">Nuovo</span>
+        primaryAction={item => (item as DiarioHubItem).diary.isDefault ? {
+          label: 'Apri il libro', icon: BookOpen, variant: 'glass', onClick: () => router.push('/diario/libro'),
+        } : null}
+        titleAction={item => (
+          <div className="relative shrink-0">
+            <button onClick={() => openDiaryEdit((item as DiarioHubItem).diary)} title="Modifica questo Diario" className="pointer-events-auto p-1">
+              <Pencil className="w-5 h-5 text-white" style={{ filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.5))' }} />
             </button>
-          </div>
-          {createError && <p className="text-xs text-red-600 mt-2">{createError}</p>}
-        </section>
-
-        {/* Raccolte */}
-        <section>
-          <div className="flex items-center justify-between mb-3.5">
-            <span className="font-barlow font-bold text-xs tracking-[2.5px] uppercase text-stone-400">Raccolte</span>
-            {collections.length > 0 && (
-              <Link href="/raccolte" className="font-barlow font-bold text-xs tracking-wide uppercase text-forest-600 hover:text-forest-700 transition-colors">Vedi tutte</Link>
+            {diaryEditOpen && (
+              <div className="absolute z-30 top-full right-0 mt-2 w-72 bg-white rounded-2xl shadow-xl p-4 text-left">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-[10px] font-barlow font-bold uppercase tracking-widest text-stone-400">Modifica Diario</span>
+                  <button onClick={() => setDiaryEditOpen(false)} className="text-stone-400 hover:text-stone-600"><X className="w-3.5 h-3.5" /></button>
+                </div>
+                {diaryEditLoading || !diaryEditConfig ? (
+                  <div className="flex justify-center py-4"><Loader2 className="w-4 h-4 animate-spin text-stone-400" /></div>
+                ) : (
+                  <>
+                    <label className="block text-[10px] font-barlow font-bold uppercase tracking-widest text-stone-400 mb-1">Titolo</label>
+                    <input
+                      defaultValue={diaryEditConfig.title}
+                      onBlur={e => saveDiaryField('title', e.target.value)}
+                      placeholder="Titolo del Diario"
+                      className="w-full text-sm border border-stone-200 rounded-lg px-2.5 py-1.5 mb-2.5 outline-none focus:ring-1 focus:ring-forest-400"
+                    />
+                    <label className="block text-[10px] font-barlow font-bold uppercase tracking-widest text-stone-400 mb-1">Sottotitolo</label>
+                    <input
+                      defaultValue={diaryEditConfig.subtitle}
+                      onBlur={e => saveDiaryField('subtitle', e.target.value)}
+                      placeholder="Sottotitolo"
+                      className="w-full text-sm border border-stone-200 rounded-lg px-2.5 py-1.5 mb-3 outline-none focus:ring-1 focus:ring-forest-400"
+                    />
+                    <button
+                      onClick={() => diaryCoverInputRef.current?.click()}
+                      disabled={diaryCoverUploading}
+                      className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-semibold transition-colors disabled:opacity-60"
+                    >
+                      {diaryCoverUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ImageIcon className="w-3.5 h-3.5" />}
+                      Cambia copertina
+                    </button>
+                    <input ref={diaryCoverInputRef} type="file" accept="image/*" className="hidden"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) { handleDiaryCoverUpload(f); e.target.value = '' } }} />
+                    {diaryCoverError && <p className="text-xs text-red-600 mt-2">{diaryCoverError}</p>}
+                  </>
+                )}
+              </div>
             )}
           </div>
+        )}
+        contextBadge={item => {
+          const diaryId = (item as DiarioHubItem).diary.id
+          const collectionForItem = collections.find(c => c.diaryIds.includes(diaryId)) ?? null
+          return (
+          <div className="relative flex items-center gap-2">
+            <button
+              onClick={() => setCollectionSwitcherOpen(true)}
+              className="pointer-events-auto inline-flex items-center gap-1.5 bg-white/15 backdrop-blur-sm text-white text-xs font-semibold px-3 py-1.5 rounded-full"
+            >
+              <Layers className="w-3.5 h-3.5" />
+              {collectionForItem ? collectionForItem.title : 'Nessuna raccolta'}
+              <ChevronDown className="w-3 h-3" />
+            </button>
+            {collectionForItem && (
+              <button
+                onClick={() => openCollectionEdit(collectionForItem)}
+                title="Modifica questa Raccolta"
+                className="pointer-events-auto w-7 h-7 rounded-full bg-white/15 backdrop-blur-sm flex items-center justify-center"
+              >
+                <Pencil className="w-3.5 h-3.5 text-white" />
+              </button>
+            )}
+            {collectionEditOpen && collectionEditTarget && (
+              <div className="absolute z-30 top-full left-0 mt-2 w-72 bg-white rounded-2xl shadow-xl p-4 text-left">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-[10px] font-barlow font-bold uppercase tracking-widest text-stone-400">Modifica Raccolta</span>
+                  <button onClick={() => setCollectionEditOpen(false)} className="text-stone-400 hover:text-stone-600"><X className="w-3.5 h-3.5" /></button>
+                </div>
+                <label className="block text-[10px] font-barlow font-bold uppercase tracking-widest text-stone-400 mb-1">Titolo</label>
+                <input
+                  defaultValue={collectionEditTarget.title}
+                  onBlur={e => patchCollectionField('title', e.target.value)}
+                  className="w-full text-sm border border-stone-200 rounded-lg px-2.5 py-1.5 mb-2.5 outline-none focus:ring-1 focus:ring-forest-400"
+                />
+                <label className="block text-[10px] font-barlow font-bold uppercase tracking-widest text-stone-400 mb-1">Sottotitolo</label>
+                <input
+                  defaultValue={collectionEditTarget.subtitle}
+                  onBlur={e => patchCollectionField('subtitle', e.target.value)}
+                  placeholder="es. Tre stagioni sullo stesso crinale"
+                  className="w-full text-sm border border-stone-200 rounded-lg px-2.5 py-1.5 mb-3 outline-none focus:ring-1 focus:ring-forest-400"
+                />
+                <button
+                  onClick={() => collectionCoverInputRef.current?.click()}
+                  disabled={collectionCoverUploading}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-semibold transition-colors disabled:opacity-60"
+                >
+                  {collectionCoverUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ImageIcon className="w-3.5 h-3.5" />}
+                  Cambia copertina
+                </button>
+                <input ref={collectionCoverInputRef} type="file" accept="image/*" className="hidden"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) { handleCollectionCoverUpload(f); e.target.value = '' } }} />
+                {collectionCoverError && <p className="text-xs text-red-600 mt-2">{collectionCoverError}</p>}
+              </div>
+            )}
+          </div>
+          )
+        }}
+      />
 
-          {collections.length === 0 ? (
-            <Link href="/raccolte" className="rounded-2xl border border-dashed border-stone-300 bg-white/50 p-5 flex items-center gap-4 hover:border-stone-400 hover:bg-white transition-colors">
-              <div className="w-11 h-11 rounded-xl bg-stone-100 flex items-center justify-center shrink-0">
-                <Layers className="w-5 h-5 text-stone-400" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-display text-sm font-semibold text-stone-700">Nessuna raccolta ancora</p>
-                <p className="text-xs text-stone-400 mt-0.5">Raggruppano più Diari, pubblicabili come un unico volume.</p>
-              </div>
-              <Plus className="w-4 h-4 text-stone-400 shrink-0" />
-            </Link>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {collections.map(c => <CollectionRow key={c.id} collection={c} />)}
-            </div>
-          )}
-        </section>
+      {createError && (
+        <div className="fixed bottom-24 inset-x-4 z-50 bg-red-600 text-white text-sm px-4 py-2.5 rounded-xl shadow-lg">
+          {createError}
+        </div>
+      )}
+
+      {collectionSwitcherOpen && (
+        <CollectionSwitcherOverlay
+          collections={collections}
+          currentId={selectedCollectionId}
+          onSelect={id => { setSelectedCollectionId(id); setCollectionSwitcherOpen(false) }}
+          onClose={() => setCollectionSwitcherOpen(false)}
+        />
+      )}
+    </>
+  )
+}
+
+function CollectionSwitcherOverlay({ collections, currentId, onSelect, onClose }: {
+  collections: CollectionSummary[]
+  currentId: string | null
+  onSelect: (id: string) => void
+  onClose: () => void
+}) {
+  return (
+    <div className="fixed inset-0 z-50 bg-[#0b1a24] flex flex-col">
+      <div className="shrink-0 flex items-center justify-between px-4 pt-[calc(env(safe-area-inset-top,0px)+14px)] pb-3">
+        <h2 className="font-display text-base font-bold text-white">Raccolte</h2>
+        <button onClick={onClose} aria-label="Chiudi" className="shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+16px)]">
+        {collections.length === 0 ? (
+          <p className="text-center text-white/50 text-sm mt-10">Nessuna raccolta ancora.</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            {collections.map(c => (
+              <button
+                key={c.id}
+                onClick={() => onSelect(c.id)}
+                className={`aspect-square rounded-2xl overflow-hidden relative text-left ${c.id === currentId ? 'ring-2 ring-sky-400' : 'ring-1 ring-white/10'}`}
+              >
+                {c.coverUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={c.coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                ) : (
+                  <div className="absolute inset-0" style={{ background: 'linear-gradient(158deg,#193b20 0%,#1c4724 45%,#20592b 100%)' }} />
+                )}
+                <div className="absolute inset-0 bg-topography opacity-40" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/85 to-black/10" />
+                <div className="absolute bottom-0 inset-x-0 p-3">
+                  <p className="font-display font-bold text-white text-sm leading-tight truncate">{c.title}</p>
+                  <p className="text-white/70 text-[11px] mt-1 flex items-center gap-1.5">
+                    {c.volumeCount} diari · {c.reportageCount} resoconti
+                    {c.isPublished
+                      ? <span className="inline-flex items-center gap-1"><Globe2 className="w-3 h-3" /></span>
+                      : <span className="inline-flex items-center gap-1"><Lock className="w-3 h-3" /></span>}
+                  </p>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
-  )
-}
-
-function DiaryTile({ diary }: { diary: DiarySummary }) {
-  return (
-    <Link href={`/diario/${encodeURIComponent(diary.id)}`}
-      className="relative w-24 h-36 rounded-2xl overflow-hidden shrink-0 shadow-md shadow-black/10 transition-transform hover:-translate-y-0.5"
-      style={{ background: diary.isDefault ? 'linear-gradient(160deg,#378d44,#1c4724)' : 'linear-gradient(160deg,#8cc894,#277134)' }}>
-      <div className="absolute inset-0 bg-topography opacity-50" />
-      <div className="absolute inset-0 flex items-center justify-center">
-        <BookMarked className="w-7 h-7 text-white/70" />
-      </div>
-      <div className="absolute bottom-0 inset-x-0 px-2.5 pb-2 pt-7 bg-gradient-to-t from-black/80 to-transparent">
-        <span className="block text-[11px] font-bold text-white truncate leading-tight">{diary.title}</span>
-        <span className="block text-[9.5px] text-white/70 leading-tight mt-0.5">{diary.reportageCount} resoconti</span>
-      </div>
-      {diary.isDefault && (
-        <span className="absolute top-2 right-2 text-[8px] font-barlow font-bold uppercase tracking-wide bg-white/90 text-forest-700 px-1.5 py-0.5 rounded-full">
-          Default
-        </span>
-      )}
-    </Link>
-  )
-}
-
-function CollectionRow({ collection }: { collection: CollectionSummary }) {
-  return (
-    <Link href={`/raccolte/${encodeURIComponent(collection.id)}`}
-      className="flex items-center gap-4 bg-white border border-stone-200 hover:border-stone-300 hover:shadow-md rounded-2xl px-4 py-4 shadow-sm transition-all">
-      <div className="flex shrink-0 w-11 justify-center">
-        {Array.from({ length: Math.min(3, Math.max(1, collection.volumeCount)) }).map((_, i) => (
-          <div key={i} className="w-7 h-10 rounded-[5px] -mr-3 first:ml-0 shadow-sm ring-1 ring-black/5"
-            style={{
-              background: i % 2 === 0 ? 'linear-gradient(160deg,#8cc894,#277134)' : 'linear-gradient(160deg,#e9ab64,#9f4315)',
-              transform: `rotate(${i % 2 === 0 ? -7 : 5}deg)`,
-            }} />
-        ))}
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="font-display font-semibold text-base text-stone-800 truncate">{collection.title}</p>
-        <p className="text-xs text-stone-400 mt-1 flex items-center gap-1.5">
-          {collection.volumeCount} diari · {collection.reportageCount} resoconti ·{' '}
-          {collection.isPublished
-            ? <span className="inline-flex items-center gap-1 text-forest-600 font-medium"><Globe2 className="w-3 h-3" /> pubblicata</span>
-            : <span className="inline-flex items-center gap-1"><Lock className="w-3 h-3" /> bozza</span>}
-        </p>
-      </div>
-    </Link>
   )
 }

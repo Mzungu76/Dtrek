@@ -26,12 +26,17 @@ interface Props {
   /** "Confronta" shortcut into Statistiche → Confronto, shown next to the favorite star —
    *  undefined unless the caller passes RouteHubProps.onCompare (both Guida and Resoconto do). */
   compareButton?: ReactNode
+  /** Diario-only: chip "in quale Raccolta sei", shown under the subtitle line (magazine variant),
+   *  same slot/gate as scoreGaugeBadge — the two are mutually exclusive by mode. */
+  contextBadge?: ReactNode
+  /** Diario-only: "modifica questo Diario", shown on the title row next to weatherIcon/favorite/compare. */
+  titleAction?: ReactNode
 }
 
 const FADE_OUT_MS = 120
 const FADE_IN_MS = 150
 
-export default function TopOverlay({ itemKey, title, statPills, weatherIcon, onOpenWeather, scoreBadges, scoreGaugeBadge, subtitle, variant = 'default', favoriteButton, compareButton }: Props) {
+export default function TopOverlay({ itemKey, title, statPills, weatherIcon, onOpenWeather, scoreBadges, scoreGaugeBadge, subtitle, variant = 'default', favoriteButton, compareButton, contextBadge, titleAction }: Props) {
   const [visible, setVisible] = useState(true)
   const prevKey = useRef(itemKey)
 
@@ -98,6 +103,7 @@ export default function TopOverlay({ itemKey, title, statPills, weatherIcon, onO
                 {weatherIcon.emoji}
               </button>
             )}
+            {titleAction}
             {favoriteButton}
             {compareButton}
           </div>
@@ -108,6 +114,11 @@ export default function TopOverlay({ itemKey, title, statPills, weatherIcon, onO
             >
               {subtitle}
             </p>
+          )}
+          {variant === 'magazine' && contextBadge && (
+            <div className="pointer-events-auto mt-2.5">
+              {contextBadge}
+            </div>
           )}
           {variant === 'magazine' && scoreGaugeBadge && (
             <div className="pointer-events-auto mt-2.5">

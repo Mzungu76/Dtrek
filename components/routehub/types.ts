@@ -2,7 +2,7 @@ import type { ReactNode, Ref } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import type { SafetyPreview } from '@/components/TrailScoreGaugeBadge'
 
-export type HubMode = 'guida' | 'resoconto'
+export type HubMode = 'guida' | 'resoconto' | 'diario'
 
 export type SectionKind = 'dati' | 'natura' | 'poi' | 'sicurezza' | 'strumenti' | 'meteo' | 'featured' | 'profilo'
 
@@ -29,6 +29,8 @@ export interface SortValues {
    *  address to the trailhead — undefined until known, which just hides the "Distanza" sort
    *  option for that item (it sorts last, and the option itself stays hidden if no item has it). */
   distance?: number
+  /** Diario-only: numero di Resoconti contenuti — abilita l'opzione di ordinamento "Resoconti". */
+  count?: number
 }
 
 /** Mode-agnostic normalized item RouteHub operates on — one per route in the carousel/gallery. */
@@ -149,4 +151,24 @@ export interface RouteHubProps {
    *  navigates to /statistiche?tab=confronta&pre=<combinedId> (Guida: `p:${item.id}`, Resoconto:
    *  `c:${item.id}`). Optional so any future RouteHub caller keeps today's look by omitting it. */
   onCompare?: (item: RouteHubItem) => void
+  /** Nome generico dell'elemento, usato nei messaggi di stato vuoto ("Nessun ‹noun› disponibile.",
+   *  "Nessun ‹noun› trovato per «…»") — default 'percorso' (Guida/Resoconto). Diario passa 'Diario'. */
+  emptyNoun?: string
+  /** Azione mostrata sotto il messaggio "Nessun ‹noun› disponibile." (items.length === 0) — Diario
+   *  la usa per creare il primo Diario di una Raccolta appena creata, che altrimenti non avrebbe
+   *  nessuna galleria/tessera "+" da cui farlo (quello stato sostituisce l'intera UI di Screen 1). */
+  emptyAction?: ReactNode
+  /** Chip persistente sopra la copertina (Screen 1), sotto il sottotitolo — non un badge di
+   *  punteggio: Diario lo usa per "in quale Raccolta sei" con l'azione per cambiarla. Funzione
+   *  dell'item corrente (come subtitle/weatherIcon) così segue lo swipe senza ritardo — un
+   *  ReactNode statico resterebbe legato all'item con cui il chiamante l'ha costruito la prima
+   *  volta. Renderizzato solo in variant="magazine", come scoreGaugeBadge. */
+  contextBadge?: (item: RouteHubItem) => ReactNode
+  /** Azione accanto al titolo, sulla stessa riga di weatherIcon/favoriteButton/compareButton —
+   *  Diario la usa per "modifica questo Diario" (titolo/sottotitolo/copertina). Stesso motivo di
+   *  contextBadge per cui è una funzione dell'item, non un ReactNode statico. */
+  titleAction?: (item: RouteHubItem) => ReactNode
+  /** Nasconde il pulsante "Strumenti" (menu ⋮) di Screen 2 in bodyMode 'continuous' quando il
+   *  chiamante non ha nulla da mostrarci — default true (comportamento invariato per Guida). */
+  showToolsMenu?: boolean
 }
