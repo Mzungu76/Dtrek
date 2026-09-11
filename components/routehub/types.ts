@@ -171,4 +171,11 @@ export interface RouteHubProps {
   /** Nasconde il pulsante "Strumenti" (menu ⋮) di Screen 2 in bodyMode 'continuous' quando il
    *  chiamante non ha nulla da mostrarci — default true (comportamento invariato per Guida). */
   showToolsMenu?: boolean
+  /** Controllo prima di aprire Screen 2 (drag verso l'alto o suo tap-equivalente) — restituendo
+   *  false ANNULLA l'apertura: il chiamante ha già gestito l'azione per conto proprio (tipicamente
+   *  una navigazione esterna), invece di lasciar aprire RoutePage per questo item. Diario lo usa
+   *  per il Diario di default: "aprirlo" è il libro impaginato (/diario/libro, una rotta a sé),
+   *  non il Sommario che Screen 2 mostra per gli altri Diari. Assente ⇒ apre sempre (comportamento
+   *  invariato per Guida/Resoconto). */
+  onBeforeOpen?: (item: RouteHubItem) => boolean
 }

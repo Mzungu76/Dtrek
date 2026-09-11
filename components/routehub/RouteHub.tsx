@@ -28,6 +28,7 @@ export default function RouteHub({
   scoreBadges, scoreGaugeBadge, scoreBadgesTargetSection, heroPhotos, headerActions, importLabel, onImport,
   subtitle, topOverlayVariant, favoritesFilter, onToggleFavoritesFilter, onToggleFavorite, onCompare,
   nextOutingFilter, onToggleNextOutingFilter, emptyNoun = 'percorso', emptyAction, contextBadge, titleAction, showToolsMenu,
+  onBeforeOpen,
 }: RouteHubProps) {
   const [state, dispatch] = useRouteHubState(initialIndex)
   const [sortBy, setSortBy] = useState<SortKey>('date')
@@ -55,7 +56,13 @@ export default function RouteHub({
     setOpenProgress(isOpen ? 1 : 0)
   }, [isOpen]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // onBeforeOpen (Diario-only, vedi types.ts): un modo di "aprire" alternativo a Screen 2 per
+  // certi item — restituendo false, il chiamante ha già gestito l'apertura per conto suo (una
+  // navigazione esterna) e questa non deve procedere. `item` è definito più sotto in questo
+  // stesso componente: una closure su un `const` dichiarato dopo è sicura finché, come qui, viene
+  // eseguita solo da un evento futuro (drag/tap dell'utente), mai durante il render che la crea.
   const openWithAnimation = (section: SectionKind) => {
+    if (onBeforeOpen && onBeforeOpen(item) === false) return
     setDragLive(false)
     setOpenProgress(1)
     dispatch({ type: 'OPEN_SECTION', section })
@@ -64,6 +71,7 @@ export default function RouteHub({
   const handleOpenDragEnd = (progress: number, velocityPxPerMs: number) => {
     setDragLive(false)
     if (progress >= COMMIT_THRESHOLD || velocityPxPerMs >= FLING_VELOCITY) {
+      if (onBeforeOpen && onBeforeOpen(item) === false) { setOpenProgress(0); return }
       setOpenProgress(1)
       dispatch({ type: 'OPEN_SECTION', section: defaultSection })
     } else {

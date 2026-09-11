@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  BookOpen, Camera, ChevronDown, Globe2, Image as ImageIcon, Layers, Loader2, Lock, Pencil,
+  Camera, ChevronDown, Globe2, Image as ImageIcon, Layers, ListChecks, Loader2, Lock, Pencil,
   Plus, Route, TrendingUp, X,
 } from 'lucide-react'
 import RouteHub from '@/components/routehub/RouteHub'
@@ -268,11 +268,24 @@ export default function DiarioHubPage() {
             onChanged={() => loadAll()}
           />
         )}
-        primaryAction={item => (item as DiarioHubItem).diary.isDefault ? {
-          label: 'Apri il libro', icon: BookOpen, variant: 'glass', onClick: () => router.push('/diario/libro'),
-        } : null}
+        // "Aprire" il Diario di default è aprire il libro impaginato (/diario/libro, una rotta a
+        // sé — nessun'altra pagina sa mostrare TUTTE le attività dell'utente come lui): il drag
+        // verso l'alto (e il suo tap-equivalente, la freccia in basso) ci naviga direttamente
+        // invece di aprire il Sommario di Screen 2, che per gli altri Diari resta il contenuto.
+        onBeforeOpen={item => {
+          if ((item as DiarioHubItem).diary.isDefault) { router.push('/diario/libro'); return false }
+          return true
+        }}
+        primaryAction={() => null}
         titleAction={item => (
-          <div className="relative shrink-0">
+          <div className="relative shrink-0 flex items-center gap-1">
+            <button
+              onClick={() => router.push(`/diario/${encodeURIComponent(item.id)}`)}
+              title="Gestisci questo Diario"
+              className="pointer-events-auto p-1"
+            >
+              <ListChecks className="w-5 h-5 text-white" style={{ filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.5))' }} />
+            </button>
             <button onClick={() => openDiaryEdit((item as DiarioHubItem).diary)} title="Modifica questo Diario" className="pointer-events-auto p-1">
               <Pencil className="w-5 h-5 text-white" style={{ filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.5))' }} />
             </button>

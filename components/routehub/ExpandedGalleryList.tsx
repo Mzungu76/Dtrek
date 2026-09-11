@@ -39,6 +39,8 @@ export default function ExpandedGalleryList({
   const hasSortData = items.some(i => i.sortValues)
   const hasDistance = items.some(i => i.sortValues?.distance != null)
   const sortOptions = SORT_OPTIONS_BY_MODE[mode].filter(o => o.id !== 'distance' || hasDistance)
+  const listTitle = mode === 'diario' ? 'Tutti i Diari' : 'Tutti i percorsi'
+  const emptyText = mode === 'diario' ? 'Nessun Diario trovato.' : 'Nessun percorso trovato.'
   // Trascina verso il basso per chiudere — stessa soglia fissa (60px) usata altrove nell'app per
   // gesti di dismissione a singolo asse (vedi PhotoLightbox.tsx, soglia 50px sull'asse orizzontale).
   const touchStartY = useRef<number | null>(null)
@@ -57,7 +59,7 @@ export default function ExpandedGalleryList({
       >
         <div className="mx-auto w-10 h-1 rounded-full bg-white/25 mb-3" />
         <div className="flex items-center justify-between gap-3 mb-3">
-          <h2 className="font-display text-base font-bold text-white">Tutti i percorsi</h2>
+          <h2 className="font-display text-base font-bold text-white">{listTitle}</h2>
           <button
             onClick={onClose}
             aria-label="Chiudi elenco"
@@ -126,7 +128,7 @@ export default function ExpandedGalleryList({
 
       <div className="flex-1 overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+16px)]">
         {items.length === 0 ? (
-          <p className="text-center text-white/50 text-sm mt-10">Nessun percorso trovato.</p>
+          <p className="text-center text-white/50 text-sm mt-10">{emptyText}</p>
         ) : items.map((item, i) => (
           <ListRow key={item.id} item={item} mode={mode} isCurrent={item.id === currentId} onSelect={() => onSelect(i)} />
         ))}
