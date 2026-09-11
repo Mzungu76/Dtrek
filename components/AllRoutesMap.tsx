@@ -15,6 +15,16 @@ interface Props {
   routes: RouteEntry[]
   height?: string
   interactive?: boolean
+  /** Quando `routes` è vuoto, disegna comunque una mappa di base centrata/zoomata qui invece del
+   *  placeholder testuale — usato dall'hero della Dashboard (Direzione E, docs/mockup-dashboard-
+   *  hero/) per un utente nuovo: a zoom regionale la mappa non ha bisogno di nessuna coordinata
+   *  dell'utente per esistere, a differenza di una cover-map puntuale su un singolo percorso.
+   *  Omesso (comportamento di sempre) per /statistiche, dove "nessun percorso" resta un placeholder. */
+  emptyFallback?: { center: [number, number]; zoom: number }
+  /** Sovrascrive lo stile del contenitore — di norma una card arrotondata con bordo (uso in
+   *  /statistiche), ma l'hero della Dashboard (Direzione E) la vuole a piena pagina, senza bordi
+   *  né angoli arrotondati. */
+  className?: string
 }
 
 // Palette condivisa (lib/designTokens.ts), non più una copia locale: prima questo file, la
@@ -23,7 +33,7 @@ interface Props {
 // nella legenda o nel PDF.
 const PALETTE = ROUTE_COLORS
 
-export default function AllRoutesMap({ routes, height = '500px', interactive = true }: Props) {
+export default function AllRoutesMap({ routes, height = '500px', interactive = true, emptyFallback, className = 'rounded-xl overflow-hidden border border-stone-200 shadow-sm' }: Props) {
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstance = useRef<L.Map | null>(null)
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
@@ -34,7 +44,7 @@ export default function AllRoutesMap({ routes, height = '500px', interactive = t
 
   useEffect(() => {
     if (!mapRef.current || mapInstance.current) return
-    if (validRoutes.length === 0) return
+    if (validRoutes.length === 0 && !emptyFallback) return
 
     import('leaflet').then(L => {
       if (!mapRef.current || mapInstance.current) return
@@ -47,6 +57,7 @@ export default function AllRoutesMap({ routes, height = '500px', interactive = t
         shadowUrl: '/leaflet/marker-shadow.png',
       })
 
+      const initialView = validRoutes.length === 0 && emptyFallback ? emptyFallback : { center: [44, 11] as [number, number], zoom: 7 }
       const map = L.map(mapRef.current!, {
         dragging: interactiveRef.current,
         scrollWheelZoom: interactiveRef.current,
@@ -54,7 +65,7 @@ export default function AllRoutesMap({ routes, height = '500px', interactive = t
         touchZoom: interactiveRef.current,
         boxZoom: interactiveRef.current,
         keyboard: interactiveRef.current,
-      }).setView([44, 11], 7)
+      }).setView(initialView.center, initialView.zoom)
       mapInstance.current = map
 
       L.tileLayer('/api/tile?z={z}&x={x}&y={y}&style=light', {
@@ -128,7 +139,7 @@ export default function AllRoutesMap({ routes, height = '500px', interactive = t
     handlers.forEach(h => { if (h) interactive ? h.enable() : h.disable() })
   }, [interactive])
 
-  if (validRoutes.length === 0) {
+  if (validRoutes.length === 0 && !emptyFallback) {
     return (
       <div
         className="flex items-center justify-center rounded-xl bg-stone-100 border border-stone-200 text-stone-400 text-sm"
@@ -140,10 +151,6 @@ export default function AllRoutesMap({ routes, height = '500px', interactive = t
   }
 
   return (
-    <div
-      ref={mapRef}
-      style={{ height }}
-      className="rounded-xl overflow-hidden border border-stone-200 shadow-sm"
-    />
+    <div ref={mapRef} style={{ height }} className={className} />
   )
 }

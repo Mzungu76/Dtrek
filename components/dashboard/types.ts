@@ -5,6 +5,9 @@ import type { DailyLoad, FormStatus } from '@/lib/trainingLoad'
 import type { RecoveryInfo } from '@/lib/bioMetrics'
 import type { DiarySummary } from '@/app/api/diaries/route'
 import type { CollectionSummary } from '@/app/api/collections/route'
+import type { PlannedHikeMeta } from '@/lib/plannedStore'
+import type { RecommendationCard } from '@/lib/routeBuilder/generateRecommendations'
+import type { RecoCardSummary } from '@/lib/routeBuilder/recoCardSummary'
 
 export interface NextOuting {
   id: string
@@ -50,5 +53,20 @@ export interface DashboardData {
   defaultDiary: DiarySummary | null
   publishedCollections: CollectionSummary[]
 
-  percorsiPerTe: { status: 'loading' | 'ok' | 'empty_no_location' | 'error'; count: number }
+  percorsiPerTe: {
+    status: 'loading' | 'ok' | 'empty_no_location' | 'error'
+    count: number
+    /** Prima card del batch, riassunta per una visualizzazione compatta — solo per l'hero della
+     *  Dashboard (Direzione E, utente nuovo senza ancora Guide/Resoconti propri): un percorso da
+     *  disegnare sulla mappa a zoom regionale, prima ancora che l'utente abbia fatto la sua prima
+     *  uscita. `raw` resta necessaria per aprirla davvero (openRecommendationCard vuole la card
+     *  intera, non il riassunto). */
+    firstCard: RecoCardSummary | null
+    firstCardRaw: RecommendationCard | null
+  }
+
+  /** Elenco completo delle Mete pianificate ("Guide" nella barra di navigazione) — a differenza di
+   *  nextOuting sopra (solo la più imminente), serve per disegnare un pin per ciascuna sulla mappa
+   *  "Guide e Resoconti" dell'hero della Dashboard (Direzione E). */
+  plannedHikes: PlannedHikeMeta[]
 }

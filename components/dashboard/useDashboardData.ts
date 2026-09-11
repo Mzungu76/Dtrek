@@ -2,7 +2,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { format } from 'date-fns'
 import { getAllActivities, computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
-import { getAllPlanned } from '@/lib/plannedStore'
+import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
+import { recoCardSummary, type RecoCardSummary } from '@/lib/routeBuilder/recoCardSummary'
+import type { RecommendationCard } from '@/lib/routeBuilder/generateRecommendations'
 import { useCtsUpdated } from '@/lib/sync/useCtsUpdated'
 import { computeStreaks, getPersonalRecords } from '@/lib/stats'
 import { computeBadges } from '@/lib/badges'
@@ -30,12 +32,14 @@ export function useDashboardData(): { data: DashboardData; loading: boolean } {
   const [nextOutingLoading, setNextOutingLoading] = useState(true)
   const [defaultDiary, setDefaultDiary] = useState<DiarySummary | null>(null)
   const [publishedCollections, setPublishedCollections] = useState<CollectionSummary[]>([])
-  const [percorsiPerTe, setPercorsiPerTe] = useState<{ status: 'loading' | 'ok' | 'empty_no_location' | 'error'; count: number }>({ status: 'loading', count: 0 })
+  const [percorsiPerTe, setPercorsiPerTe] = useState<DashboardData['percorsiPerTe']>({ status: 'loading', count: 0, firstCard: null, firstCardRaw: null })
+  const [plannedHikes, setPlannedHikes] = useState<PlannedHikeMeta[]>([])
 
   useEffect(() => {
     getAllActivities().then(setActivities).finally(() => setLoading(false))
   }, [])
   useCtsUpdated(() => { getAllActivities().then(setActivities) })
+  useCtsUpdated(() => { getAllPlanned().then(list => setPlannedHikes(list.filter(h => !h.archivedAt))) })
 
   useEffect(() => {
     fetch('/api/diaries').then(r => r.ok ? r.json() : []).then((ds: DiarySummary[]) => {
@@ -45,8 +49,16 @@ export function useDashboardData(): { data: DashboardData; loading: boolean } {
       setPublishedCollections(cs.filter(c => c.isPublished))
     }).catch(() => {})
     fetch('/api/percorsi-per-te?peek=1').then(r => r.ok ? r.json() : Promise.reject())
-      .then(d => setPercorsiPerTe({ status: d.status, count: (d.cards ?? []).length }))
-      .catch(() => setPercorsiPerTe({ status: 'error', count: 0 }))
+      .then(d => {
+        const cards = (d.cards ?? []) as RecommendationCard[]
+        const first = cards[0] ?? null
+        setPercorsiPerTe({
+          status: d.status, count: cards.length,
+          firstCard: first ? recoCardSummary(first) : null,
+          firstCardRaw: first,
+        })
+      })
+      .catch(() => setPercorsiPerTe({ status: 'error', count: 0, firstCard: null, firstCardRaw: null }))
   }, [])
 
   // Prossima uscita: la Meta pianificata più vicina da oggi in poi, con meteo previsto se ha una
@@ -56,6 +68,7 @@ export function useDashboardData(): { data: DashboardData; loading: boolean } {
     setNextOutingLoading(true)
     getAllPlanned().then(async list => {
       if (cancelled) return
+      setPlannedHikes(list.filter(h => !h.archivedAt))
       const today = format(new Date(), 'yyyy-MM-dd')
       const upcoming = list
         .filter(h => h.plannedDate && h.plannedDate >= today && !h.archivedAt)
@@ -144,6 +157,7 @@ export function useDashboardData(): { data: DashboardData; loading: boolean } {
     nextOuting, nextOutingLoading,
     defaultDiary, publishedCollections,
     percorsiPerTe,
+    plannedHikes,
   }
 
   return { data, loading }
