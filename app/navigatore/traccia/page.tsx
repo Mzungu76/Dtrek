@@ -6,6 +6,7 @@ import FreeTrackSaveDialog from '@/components/navigation/FreeTrackSaveDialog'
 import { FreeTrackSession, type FreeTrackStats } from '@/lib/navigation/freeTrackSession'
 import { buildActivityFromTrack } from '@/lib/navigation/trackToActivity'
 import { saveActivityWithEnrichment } from '@/lib/activitySave'
+import { createSyntheticPercorso } from '@/lib/diari/syntheticPercorso'
 import { navigatorHomePath, openMainAppOrNavigate } from '@/lib/native/mainAppLinks'
 import { haptics } from '@/lib/navigation/haptics'
 import type { TcxActivity, TrackPoint } from '@/lib/tcxParser'
@@ -194,10 +195,18 @@ export default function TracciaPage() {
     router.push(homePath)
   }
 
-  const handleSave = async (title: string) => {
+  const handleSave = async (title: string, diaryId: string | undefined) => {
     if (!pendingActivity) return
+    // Una traccia libera non ha una Meta pianificata dietro: ne crea una sintetica, già segnata
+    // come vissuta, col Diario scelto nel dialogo — altrimenti il Reportage non apparterrebbe a
+    // nessun Diario (vedi lib/diari/syntheticPercorso.ts).
+    let linkedPlannedId: string | undefined
+    try {
+      const synthetic = await createSyntheticPercorso(pendingActivity, { title, diaryId })
+      linkedPlannedId = synthetic.id
+    } catch {}
     const saved = await saveActivityWithEnrichment(pendingActivity, {
-      title, sourceApp: 'navigator', hikeNotes,
+      title, sourceApp: 'navigator', hikeNotes, linkedPlannedId,
       onSyncResult: (ok) => setSavedOffline(!ok),
     })
     setSavedActivityId(saved.id)

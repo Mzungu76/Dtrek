@@ -32,7 +32,7 @@ import {
   FileSpreadsheet, FileText, Map,
   Route, TrendingUp, Clock, Flame,
   Pencil, Trash2, Loader2, Share2, Box, Images, Film, Camera, X,
-  Star, Car,
+  Star, Car, ArrowRightLeft, BookOpen,
 } from 'lucide-react'
 import ShareModal from '@/components/ShareModal'
 import HikeNotesRecorder from '@/app/components/HikeNotesRecorder'
@@ -44,6 +44,7 @@ import { useProtectedAreaCheck } from './useProtectedAreaCheck'
 import { useDrivingDistance } from './useDrivingDistance'
 import { useUserPrefs } from '@/lib/useUserPrefs'
 import { useCtsRecompute } from '@/lib/useCtsRecompute'
+import type { DiarySummary } from '@/app/api/diaries/route'
 
 const RouteMap3D      = dynamic(() => import('@/components/RouteMap3D'),      { ssr: false })
 const StreetViewPanel = dynamic(() => import('@/components/StreetViewPanel'), { ssr: false })
@@ -115,6 +116,15 @@ export default function ResocontoHub({ id }: { id?: string }) {
   const [ctsComputing,    setCtsComputing]    = useState(false)
   const [favoritesFilter, setFavoritesFilter] = useState(false)
   const [pendingScrollSection, setPendingScrollSection] = useState<'dati_punteggi' | null>(null)
+
+  // A quale Diario appartiene il resoconto aperto — indiretto (activities.linked_planned_id →
+  // planned_hikes.diary_id, mai una colonna diretta), quindi noto solo per QUELLO aperto, mai per
+  // gli altri della galleria (stesso limite già accettato da scoreGaugeBadge/ratingBadge sopra).
+  const [diaries,         setDiaries]         = useState<DiarySummary[]>([])
+  const [currentDiaryId,  setCurrentDiaryId]  = useState<string | null>(null)
+  const [moverOpen,       setMoverOpen]       = useState(false)
+  const [moveBusy,        setMoveBusy]        = useState(false)
+  const [moveError,       setMoveError]       = useState<string | null>(null)
 
   const dtmProfile      = useDtmProfile(activity)
   const terrainProfile  = useTerrainProfile(activity)
@@ -229,6 +239,49 @@ export default function ResocontoHub({ id }: { id?: string }) {
     const savedCover = localStorage.getItem(`dtrek_cover_${currentId}`)
     if (savedCover) setCoverPhotoId(savedCover)
   }, [currentId, router])
+
+  useEffect(() => {
+    fetch('/api/diaries').then(r => r.ok ? r.json() : []).then(setDiaries).catch(() => {})
+  }, [])
+
+  // Chiude il selettore "sposta in un altro Diario" se cambia il resoconto in copertina (swipe) —
+  // evita di spostare per sbaglio quello sbagliato se restasse aperto.
+  useEffect(() => { setMoverOpen(false); setMoveError(null) }, [currentId])
+
+  // Il Diario del resoconto aperto passa dalla sua Meta (activities.linked_planned_id →
+  // planned_hikes.diary_id) — non c'è una colonna diretta, quindi serve questa chiamata in più.
+  useEffect(() => {
+    const plannedId = activity?.linkedPlannedId
+    if (!plannedId) { setCurrentDiaryId(null); return }
+    let cancelled = false
+    fetch(`/api/planned?id=${encodeURIComponent(plannedId)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then((h: { diaryId?: string | null } | null) => { if (!cancelled) setCurrentDiaryId(h?.diaryId ?? null) })
+      .catch(() => { if (!cancelled) setCurrentDiaryId(null) })
+    return () => { cancelled = true }
+  }, [activity?.linkedPlannedId])
+
+  // Sposta il resoconto aperto in un altro Diario — l'appartenenza passa dalla sua Meta, non da una
+  // colonna propria dell'attività (stesso meccanismo di components/diario/DiarioSommarioContent.tsx).
+  async function moveToDiary(targetDiaryId: string) {
+    const plannedId = activity?.linkedPlannedId
+    if (!plannedId) { setMoveError('Questo resoconto è antecedente ai Diari e non ha una Meta da spostare.'); return }
+    setMoveBusy(true); setMoveError(null)
+    try {
+      const res = await fetch('/api/planned', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: plannedId, diaryId: targetDiaryId }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error ?? data.message ?? `HTTP ${res.status}`)
+      setCurrentDiaryId(targetDiaryId)
+      setMoverOpen(false)
+    } catch (e) {
+      setMoveError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setMoveBusy(false)
+    }
+  }
 
   // CTS+Beauty: computed once at import (lib/activitySave.ts) and re-verified here only if
   // missing (an older activity, saved before that policy existed) or older than
@@ -428,6 +481,34 @@ export default function ResocontoHub({ id }: { id?: string }) {
     )
   }
 
+  // Nome del Diario a cui appartiene il resoconto aperto, sopra il titolo (stessa modalità della
+  // Raccolta in app/diario/page.tsx) — tap per spostarlo in un altro. Solo per la scheda aperta:
+  // vedi il commento sull'effetto che risolve currentDiaryId sopra.
+  const contextBadge = (routeItem: RouteHubItem) => {
+    if (!activity || routeItem.id !== activity.id) return null
+    const diary = diaries.find(d => d.id === currentDiaryId)
+    return (
+      <button
+        onClick={() => setMoverOpen(true)}
+        className="pointer-events-auto inline-flex items-center gap-1.5 bg-white/15 backdrop-blur-sm text-white text-xs font-semibold px-3 py-1.5 rounded-full"
+      >
+        <BookOpen className="w-3.5 h-3.5" />
+        {diary ? diary.title : 'Nessun Diario'}
+      </button>
+    )
+  }
+
+  // Icona dedicata "sposta questo Resoconto in un altro Diario", sulla riga del titolo — stessa
+  // funzione del chip sopra, ma sempre visibile anche quando il Diario non è ancora noto.
+  const titleAction = (routeItem: RouteHubItem) => {
+    if (!activity || routeItem.id !== activity.id) return null
+    return (
+      <button onClick={() => setMoverOpen(true)} title="Sposta in un altro Diario" className="pointer-events-auto p-1">
+        <ArrowRightLeft className="w-5 h-5 text-white" style={{ filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.5))' }} />
+      </button>
+    )
+  }
+
   const retryPhotos = () => {
     if (!currentId) return
     setPhotosError(false)
@@ -614,7 +695,20 @@ export default function ResocontoHub({ id }: { id?: string }) {
         topOverlayVariant="magazine"
         importLabel="Carica"
         onImport={() => router.push('/upload?tab=activity')}
+        contextBadge={contextBadge}
+        titleAction={titleAction}
       />
+
+      {moverOpen && activity && (
+        <DiaryMoverOverlay
+          diaries={diaries.filter(d => !d.archivedAt)}
+          currentId={currentDiaryId}
+          busy={moveBusy}
+          error={moveError}
+          onSelect={moveToDiary}
+          onClose={() => setMoverOpen(false)}
+        />
+      )}
 
       {showRatingPanel && activity && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowRatingPanel(false)}>
@@ -726,5 +820,58 @@ export default function ResocontoHub({ id }: { id?: string }) {
         />
       )}
     </>
+  )
+}
+
+// Elenco verticale a schermo intero per scegliere il Diario di destinazione — stessa identità
+// visiva (sfondo #0b1a24, righe con thumbnail 64×64, separatore bianco 10%) delle liste "Tutti i
+// ___" (ExpandedGalleryList.tsx) e della galleria Raccolte di app/diario/page.tsx: sola selezione,
+// niente crea/modifica/elimina (quello resta appannaggio del Sommario di ogni Diario).
+function DiaryMoverOverlay({ diaries, currentId, busy, error, onSelect, onClose }: {
+  diaries: DiarySummary[]
+  currentId: string | null
+  busy: boolean
+  error: string | null
+  onSelect: (id: string) => void
+  onClose: () => void
+}) {
+  return (
+    <div className="fixed inset-0 z-50 bg-[#0b1a24] flex flex-col">
+      <div className="shrink-0 flex items-center justify-between px-4 pt-[calc(env(safe-area-inset-top,0px)+14px)] pb-3 border-b border-white/10">
+        <h2 className="font-display text-base font-bold text-white">Sposta in un altro Diario</h2>
+        <button onClick={onClose} aria-label="Chiudi" className="shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+16px)]">
+        {error && <p className="text-xs text-red-400 my-3">{error}</p>}
+        {diaries.length === 0 ? (
+          <p className="text-center text-white/50 text-sm mt-10">Nessun Diario disponibile.</p>
+        ) : diaries.map(d => (
+          <button
+            key={d.id}
+            onClick={() => onSelect(d.id)}
+            disabled={busy || d.id === currentId}
+            className="w-full flex items-center gap-3.5 py-3 border-b border-white/10 text-left disabled:opacity-50"
+          >
+            <div className={`w-16 h-16 rounded-xl shrink-0 overflow-hidden relative flex items-center justify-center bg-white/5 ${d.id === currentId ? 'ring-2 ring-sky-400' : ''}`}>
+              {d.coverUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={d.coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
+              ) : (
+                <BookOpen className="w-6 h-6 text-white/30" />
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-display font-semibold text-[15px] text-white truncate">{d.title}</p>
+              <p className="text-[11px] text-white/50 mt-1.5">
+                {d.id === currentId ? 'Diario attuale' : `${d.reportageCount} resoconti`}
+              </p>
+            </div>
+            {busy && d.id !== currentId && <Loader2 className="w-4 h-4 animate-spin text-white/50 shrink-0" />}
+          </button>
+        ))}
+      </div>
+    </div>
   )
 }

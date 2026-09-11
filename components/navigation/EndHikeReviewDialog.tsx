@@ -1,8 +1,9 @@
 'use client'
-import { useState } from 'react'
-import { CheckCircle2, Loader2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { BookOpen, CheckCircle2, Loader2 } from 'lucide-react'
 import type { TcxActivity } from '@/lib/tcxParser'
 import { MAX_NOTE_LENGTH } from '@/lib/community/moderation'
+import { listSelectableDiaries, type DiaryChoice } from '@/lib/diari/syntheticPercorso'
 
 interface Props {
   activity: TcxActivity
@@ -10,8 +11,9 @@ interface Props {
   /** mode 'overwrite' consumes the linked planned hike into this activity (same as before);
    * 'new' saves this as an independent activity and leaves the planned hike untouched, so it
    * can be hiked again later. reportCompletion/completionNote sono Fase 4 di
-   * docs/navigator-orizzonti-roadmap.md — opt-in esplicito, mai automatico (default deselezionato). */
-  onSave: (title: string, mode: 'overwrite' | 'new', reportCompletion: boolean, completionNote: string) => Promise<void>
+   * docs/navigator-orizzonti-roadmap.md — opt-in esplicito, mai automatico (default deselezionato).
+   * diaryId è il Diario scelto qui sotto — passato solo se la Meta collegata non ne ha già uno. */
+  onSave: (title: string, mode: 'overwrite' | 'new', reportCompletion: boolean, completionNote: string, diaryId: string | undefined) => Promise<void>
   onDiscard: () => void
 }
 
@@ -36,12 +38,21 @@ export default function EndHikeReviewDialog({ activity, defaultTitle, onSave, on
   const [error, setError] = useState<string | null>(null)
   const [reportCompletion, setReportCompletion] = useState(false)
   const [completionNote, setCompletionNote] = useState('')
+  const [diaryChoices, setDiaryChoices] = useState<DiaryChoice[]>([])
+  const [selectedDiaryId, setSelectedDiaryId] = useState<string | null>(null)
+
+  useEffect(() => {
+    listSelectableDiaries().then(choices => {
+      setDiaryChoices(choices)
+      setSelectedDiaryId(prev => prev ?? (choices.find(d => d.isDefault) ?? choices[0])?.id ?? null)
+    }).catch(() => {})
+  }, [])
 
   const handleSave = async (mode: 'overwrite' | 'new') => {
     setSaving(mode)
     setError(null)
     try {
-      await onSave(title, mode, reportCompletion, completionNote)
+      await onSave(title, mode, reportCompletion, completionNote, selectedDiaryId ?? undefined)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Errore nel salvataggio')
       setSaving(null)
@@ -82,6 +93,29 @@ export default function EndHikeReviewDialog({ activity, defaultTitle, onSave, on
           className="w-full px-3 py-2.5 rounded-xl border border-stone-200 text-stone-900 font-body mb-5 focus:outline-none focus:ring-2 focus:ring-forest-400"
           placeholder="Nome dell'escursione"
         />
+
+        {diaryChoices.length > 0 && (
+          <div className="mb-5">
+            <label className="flex items-center gap-1.5 text-xs font-semibold text-stone-500 font-body uppercase tracking-wide mb-1.5">
+              <BookOpen className="w-3.5 h-3.5 text-forest-500" /> In quale Diario?
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {diaryChoices.map(d => (
+                <button
+                  key={d.id}
+                  type="button"
+                  onClick={() => setSelectedDiaryId(d.id)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all
+                    ${selectedDiaryId === d.id
+                      ? 'bg-forest-500 text-white border-forest-500'
+                      : 'bg-white text-stone-600 border-stone-200 hover:border-forest-300'}`}
+                >
+                  {d.title}{d.isDefault ? ' (predefinito)' : ''}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="mb-5 p-3 rounded-xl bg-stone-50 border border-stone-200">
           <label className="flex items-start gap-2.5 cursor-pointer select-none">

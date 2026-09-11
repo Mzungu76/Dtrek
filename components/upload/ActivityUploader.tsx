@@ -5,7 +5,8 @@ import { parseTcx, formatDuration, type TcxActivity } from '@/lib/tcxParser'
 import { parseGpxActivity } from '@/lib/gpxActivityParser'
 import { saveActivityWithEnrichment } from '@/lib/activitySave'
 import { getAllPlanned, getPlannedById, type PlannedHikeMeta } from '@/lib/plannedStore'
-import { Upload, CheckCircle, AlertCircle, Mountain, Clock, TrendingUp, Route, Link2, Link2Off, Info } from 'lucide-react'
+import { listSelectableDiaries, createSyntheticPercorso, type DiaryChoice } from '@/lib/diari/syntheticPercorso'
+import { Upload, CheckCircle, AlertCircle, Mountain, Clock, TrendingUp, Route, Link2, Link2Off, Info, BookOpen } from 'lucide-react'
 
 type ActivityStatus = 'idle' | 'parsing' | 'parsed' | 'analyzing' | 'saving' | 'success' | 'error'
 
@@ -23,6 +24,8 @@ export default function ActivityUploader() {
   const [plannedHikes,     setPlannedHikes]     = useState<PlannedHikeMeta[]>([])
   const [selectedPlanned,  setSelectedPlanned]  = useState<PlannedHikeMeta | null>(null)
   const [linkMode,         setLinkMode]         = useState<'none' | 'link'>('none')
+  const [diaryChoices,     setDiaryChoices]     = useState<DiaryChoice[]>([])
+  const [selectedDiaryId,  setSelectedDiaryId]  = useState<string | null>(null)
 
   const processFile = useCallback(async (file: File) => {
     const ext = file.name.toLowerCase().split('.').pop() ?? ''
@@ -53,6 +56,10 @@ export default function ActivityUploader() {
       setTitleVal(activity.notes ?? '')
       setStatus('parsed')
       getAllPlanned().then(setPlannedHikes).catch(() => {})
+      listSelectableDiaries().then(choices => {
+        setDiaryChoices(choices)
+        setSelectedDiaryId(prev => prev ?? (choices.find(d => d.isDefault) ?? choices[0])?.id ?? null)
+      }).catch(() => {})
     } catch (e) {
       console.error(e); setStatus('error')
       setErrorMsg(e instanceof Error ? e.message : 'Errore nel caricamento del file.')
@@ -65,12 +72,23 @@ export default function ActivityUploader() {
       // ── Resolve linked planned hike track points ──────────────────
       let linkedPlannedTrackPoints: import('@/lib/tcxParser').TrackPoint[] | undefined
       let linkedPlannedNotes: import('@/lib/blobStore').HikeNote[] | undefined
+      let linkedPlannedId = selectedPlanned?.id
       if (selectedPlanned) {
         try {
           const full = await getPlannedById(selectedPlanned.id)
           const validPts = (full?.trackPoints ?? []).filter(p => p.lat && p.lon)
           if (validPts.length >= 2) linkedPlannedTrackPoints = validPts
           if (full?.hikeNotes?.length) linkedPlannedNotes = full.hikeNotes
+        } catch {}
+      } else {
+        // Nessun percorso pianificato collegato: ne crea uno sintetico per questa escursione già
+        // fatta, col Diario scelto qui sotto — altrimenti il Reportage non apparterrebbe a nessun
+        // Diario (l'appartenenza passa solo dalla Meta, mai da una colonna diretta su activities).
+        try {
+          const synthetic = await createSyntheticPercorso(parsedActivity, {
+            title: titleVal, diaryId: selectedDiaryId ?? undefined,
+          })
+          linkedPlannedId = synthetic.id
         } catch {}
       }
 
@@ -79,9 +97,10 @@ export default function ActivityUploader() {
       const saved = await saveActivityWithEnrichment(parsedActivity, {
         title: titleVal,
         fileName,
-        linkedPlannedId: selectedPlanned?.id,
+        linkedPlannedId,
         linkedPlannedTrackPoints,
         hikeNotes: linkedPlannedNotes,
+        diaryId: selectedDiaryId ?? undefined,
       })
       setStatus('success')
       setTimeout(() => router.push(`/resoconto/${encodeURIComponent(saved.id)}`), 1200)
@@ -94,6 +113,7 @@ export default function ActivityUploader() {
   const reset = () => {
     setStatus('idle'); setParsedActivity(null); setTitleVal('')
     setSelectedPlanned(null); setLinkMode('none'); setErrorMsg('')
+    setDiaryChoices([]); setSelectedDiaryId(null)
   }
 
   // ── Drop zone ──────────────────────────────────────────────────────────────
@@ -226,6 +246,29 @@ export default function ActivityUploader() {
           className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm text-stone-800 bg-stone-50 outline-none focus:border-forest-400 focus:bg-white"
         />
       </div>
+
+      {/* Diario di destinazione */}
+      {diaryChoices.length > 0 && (
+        <div className="bg-white rounded-2xl border border-stone-200 p-5">
+          <p className="text-sm font-semibold text-stone-700 mb-3 flex items-center gap-1.5">
+            <BookOpen className="w-4 h-4 text-forest-600" /> In quale Diario?
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {diaryChoices.map(d => (
+              <button
+                key={d.id}
+                onClick={() => setSelectedDiaryId(d.id)}
+                className={`px-3.5 py-2 rounded-xl text-sm font-medium border transition-all
+                  ${selectedDiaryId === d.id
+                    ? 'bg-forest-600 text-white border-forest-600'
+                    : 'bg-white text-stone-600 border-stone-200 hover:border-forest-300'}`}
+              >
+                {d.title}{d.isDefault ? ' (predefinito)' : ''}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Associazione percorso pianificato */}
       <div className="bg-white rounded-2xl border border-stone-200 p-5">

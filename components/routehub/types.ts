@@ -159,14 +159,16 @@ export interface RouteHubProps {
    *  nessuna galleria/tessera "+" da cui farlo (quello stato sostituisce l'intera UI di Screen 1). */
   emptyAction?: ReactNode
   /** Chip persistente sopra la copertina (Screen 1), sopra il titolo — non un badge di
-   *  punteggio: Diario lo usa per "in quale Raccolta sei" con l'azione per cambiarla. Funzione
-   *  dell'item corrente (come subtitle/weatherIcon) così segue lo swipe senza ritardo — un
-   *  ReactNode statico resterebbe legato all'item con cui il chiamante l'ha costruito la prima
-   *  volta. Renderizzato solo in variant="magazine". */
+   *  punteggio: Diario lo usa per "in quale Raccolta sei" con l'azione per cambiarla, Resoconto
+   *  per "in quale Diario sei" con l'azione per spostarcelo. Funzione dell'item corrente (come
+   *  subtitle/weatherIcon) così segue lo swipe senza ritardo — un ReactNode statico resterebbe
+   *  legato all'item con cui il chiamante l'ha costruito la prima volta. Renderizzato solo in
+   *  variant="magazine". */
   contextBadge?: (item: RouteHubItem) => ReactNode
   /** Azione accanto al titolo, sulla stessa riga di weatherIcon/favoriteButton/compareButton —
-   *  Diario la usa per "modifica questo Diario" (titolo/sottotitolo/copertina). Stesso motivo di
-   *  contextBadge per cui è una funzione dell'item, non un ReactNode statico. */
+   *  Diario la usa per "modifica questo Diario" (titolo/sottotitolo/copertina), Resoconto per
+   *  "sposta questo Resoconto in un altro Diario". Stesso motivo di contextBadge per cui è una
+   *  funzione dell'item, non un ReactNode statico. */
   titleAction?: (item: RouteHubItem) => ReactNode
   /** Nasconde il pulsante "Strumenti" (menu ⋮) di Screen 2 in bodyMode 'continuous' quando il
    *  chiamante non ha nulla da mostrarci — default true (comportamento invariato per Guida). */

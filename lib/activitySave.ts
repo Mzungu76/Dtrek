@@ -36,6 +36,11 @@ export interface SaveActivityOptions {
    * "salvato in locale, verrà sincronizzato" instead of implying it's already on the server.
    */
   onSyncResult?: (ok: boolean) => void
+  /** Diario scelto esplicitamente dall'utente al momento del salvataggio (vedi
+   *  lib/diari/syntheticPercorso.ts, listSelectableDiaries/getDefaultDiaryId) — usato solo se la
+   *  Meta collegata non ha ancora un Diario. Assente ⇒ ripiega sul Diario di default
+   *  (comportamento invariato per i flussi che non offrono ancora la scelta). */
+  diaryId?: string
 }
 
 /** navigator.onLine can false-negative on mobile (see lib/sync/syncEngine.ts's flush() comment for
@@ -208,10 +213,11 @@ export async function saveActivityWithEnrichment(
   opts.onSyncResult?.(ok)
 
   if (opts.linkedPlannedId && (plannedNeedsFirstCompletedAt || plannedNeedsDiary)) {
-    // getDefaultDiaryId() è best-effort (offline torna undefined): in quel caso si aggiorna solo
-    // firstCompletedAt, e la Meta resterà senza Diario — mai un Diario inventato pur di riempire
-    // il campo.
-    const diaryId = plannedNeedsDiary ? await getDefaultDiaryId() : undefined
+    // opts.diaryId è la scelta esplicita dell'utente (quando il flusso di salvataggio la offre);
+    // getDefaultDiaryId() resta il ripiego per i flussi che non la offrono ancora, best-effort
+    // (offline torna undefined): in quel caso si aggiorna solo firstCompletedAt, e la Meta
+    // resterà senza Diario — mai un Diario inventato pur di riempire il campo.
+    const diaryId = plannedNeedsDiary ? (opts.diaryId ?? await getDefaultDiaryId()) : undefined
     await updatePlannedMeta(opts.linkedPlannedId, {
       ...(plannedNeedsFirstCompletedAt ? { firstCompletedAt: new Date().toISOString() } : {}),
       ...(diaryId ? { diaryId } : {}),
