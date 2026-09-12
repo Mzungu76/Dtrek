@@ -3,7 +3,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { Compass, BookMarked, BookOpen, User, LayoutDashboard } from 'lucide-react'
+import { Compass, BookMarked, BookOpen, User, LayoutDashboard, Library } from 'lucide-react'
 import { getProfile } from '@/lib/userProfile'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
@@ -20,6 +20,7 @@ export const NAV_LINKS = [
   { href: '/guida',      label: 'Guide',      icon: Compass    },
   { href: '/resoconto',  label: 'Reportage',  icon: BookOpen   },
   { href: '/diario',     label: 'Diari',      icon: BookMarked },
+  { href: '/raccolte',   label: 'Raccolte',   icon: Library    },
 ]
 
 export function isActive(href: string, path: string) {
@@ -153,32 +154,44 @@ function DesktopNav() {
 // `pointer-events-auto` è sempre presente perché HubNavBar la monta dentro un antenato
 // `pointer-events-none` (l'overlay trasparente sopra la foto/mappa) — innocuo qui, dove
 // l'antenato è già interattivo di suo.
-export function MobileNavBar({ className = '' }: { className?: string }) {
+//
+// showLinks/showAvatar: le pagine "magazine" (Bacheca/Guide/Reportage/Diari, HubNavBar.tsx) ora
+// mostrano le due metà separate — solo l'icona profilo in cima (showLinks=false) e solo i link di
+// navigazione in fondo (showAvatar=false) — invece della barra intera insieme in cima. Il Navbar
+// "normale" (pagine non a schermo intero, sopra) continua a passare entrambi true, invariato.
+// safeAreaTop: il rientro per lo status bar del telefono ha senso solo quando la barra sta
+// davvero in cima allo schermo — per la metà spostata in fondo (HubNavBar) va disattivato, o
+// aggiungerebbe uno spazio vuoto senza motivo sopra i link.
+export function MobileNavBar({
+  className = '', showLinks = true, showAvatar = true, safeAreaTop = true,
+}: { className?: string; showLinks?: boolean; showAvatar?: boolean; safeAreaTop?: boolean }) {
   const path = usePathname()
   return (
     <nav
-      className={`pointer-events-auto bg-forest-600/95 backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.18)] ${className}`}
-      style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+      className={`pointer-events-auto ${showLinks ? 'bg-forest-600/95 backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.18)]' : ''} ${className}`}
+      style={safeAreaTop ? { paddingTop: 'env(safe-area-inset-top, 0px)' } : undefined}
     >
-      <div className="flex items-center gap-1 px-3 h-14">
-        <div className="flex-1 flex items-center justify-around">
-          {NAV_LINKS.map(({ href, label, icon: Icon }) => {
-            const active = isActive(href, path)
-            return (
-              <Link
-                key={href}
-                href={href}
-                className={`flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-2xl transition-colors ${
-                  active ? 'text-white' : 'text-forest-300'
-                }`}
-              >
-                <Icon className="w-4 h-4" strokeWidth={2} />
-                <span className="text-[9px] font-bold leading-none">{label}</span>
-              </Link>
-            )
-          })}
-        </div>
-        <ProfileAvatar size={32} iconSize={14} />
+      <div className={`flex items-center gap-1 px-3 h-14 ${showLinks ? '' : 'justify-end'}`}>
+        {showLinks && (
+          <div className="flex-1 flex items-center justify-around">
+            {NAV_LINKS.map(({ href, label, icon: Icon }) => {
+              const active = isActive(href, path)
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  className={`flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-2xl transition-colors ${
+                    active ? 'text-white' : 'text-forest-300'
+                  }`}
+                >
+                  <Icon className="w-4 h-4" strokeWidth={2} />
+                  <span className="text-[9px] font-bold leading-none">{label}</span>
+                </Link>
+              )
+            })}
+          </div>
+        )}
+        {showAvatar && <ProfileAvatar size={32} iconSize={14} />}
       </div>
     </nav>
   )

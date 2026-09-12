@@ -89,11 +89,18 @@ export default function DiarioHubPage() {
 
   const visibleDiaries = useMemo(() => (diaries ?? []).filter(d => !d.archivedAt), [diaries])
 
-  const itemsForCollection = useMemo(() => visibleDiaries
-    .filter(d => diaryToCollectionId.get(d.id) === selectedCollectionId)
-    .sort((a, b) => a.shelfPosition - b.shelfPosition)
-    .map(toHubItem),
-  [visibleDiaries, diaryToCollectionId, selectedCollectionId])
+  // selectedCollectionId === null ⇒ "Tutte le Raccolte" (nessun filtro, stesso significato del
+  // filtro per Diario in app/resoconto/ResocontoHub.tsx) — non più "Diari senza raccolta", stato
+  // che in pratica non esiste mai (ogni Diario ha sempre uno scaffale, vedi DiarioSommarioContent).
+  const itemsForCollection = useMemo(() => {
+    const filtered = selectedCollectionId === null
+      ? visibleDiaries
+      : visibleDiaries.filter(d => diaryToCollectionId.get(d.id) === selectedCollectionId)
+    const sorted = selectedCollectionId === null
+      ? [...filtered].sort((a, b) => a.title.localeCompare(b.title))
+      : [...filtered].sort((a, b) => a.shelfPosition - b.shelfPosition)
+    return sorted.map(toHubItem)
+  }, [visibleDiaries, diaryToCollectionId, selectedCollectionId])
 
   const currentDiary = itemsForCollection.find(i => i.id === currentItemId)?.diary ?? itemsForCollection[0]?.diary ?? null
   const initialIndex = Math.max(0, itemsForCollection.findIndex(i => i.id === currentItemId))
@@ -189,16 +196,15 @@ export default function DiarioHubPage() {
             <Settings className="w-5 h-5 text-white" style={{ filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.5))' }} />
           </button>
         )}
-        contextBadge={item => {
-          const diaryId = (item as DiarioHubItem).diary.id
-          const collectionForItem = collections.find(c => c.diaryIds.includes(diaryId)) ?? null
+        contextBadge={() => {
+          const filterCollection = selectedCollectionId ? collections.find(c => c.id === selectedCollectionId) : null
           return (
             <button
               onClick={() => setCollectionSwitcherOpen(true)}
               className="pointer-events-auto inline-flex items-center gap-1.5 bg-white/15 backdrop-blur-sm text-white text-xs font-semibold px-3 py-1.5 rounded-full"
             >
               <Layers className="w-3.5 h-3.5" />
-              {collectionForItem ? collectionForItem.title : 'Nessuna raccolta'}
+              {filterCollection ? filterCollection.title : 'Tutte le Raccolte'}
               <ChevronDown className="w-3 h-3" />
             </button>
           )
@@ -246,7 +252,7 @@ function CollectionSpineFallback() {
 function CollectionSwitcherOverlay({ collections, currentId, onSelect, onClose }: {
   collections: CollectionSummary[]
   currentId: string | null
-  onSelect: (id: string) => void
+  onSelect: (id: string | null) => void
   onClose: () => void
 }) {
   const router = useRouter()
@@ -278,6 +284,15 @@ function CollectionSwitcherOverlay({ collections, currentId, onSelect, onClose }
       </div>
       <div className="flex-1 overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+16px)]">
         {createError && <p className="text-xs text-red-400 my-3">{createError}</p>}
+        <button onClick={() => onSelect(null)} className="w-full flex items-center gap-3.5 py-3 border-b border-white/10 text-left">
+          <div className={`w-16 h-16 rounded-xl shrink-0 flex items-center justify-center bg-white/5 ${currentId === null ? 'ring-2 ring-sky-400' : ''}`}>
+            <Library className="w-6 h-6 text-white/30" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="font-display font-semibold text-[15px] text-white truncate">Tutte le Raccolte</p>
+            <p className="text-[11px] text-white/50 mt-1.5">{currentId === null ? 'Filtro attuale' : `${collections.length} Raccolte`}</p>
+          </div>
+        </button>
         {collections.map(c => (
           <div key={c.id} className="relative flex items-center gap-3.5 py-3 border-b border-white/10">
             <button onClick={() => onSelect(c.id)} className="flex items-center gap-3.5 flex-1 min-w-0 text-left">

@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
-import HubNavBar from '@/components/routehub/HubNavBar'
+import { MobileNavBar } from '@/components/Navbar'
 import { RailButton } from '@/components/routehub/SideRails'
 import { getAllActivities, getActivityById, computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
 import { fetchActivityPhotos, type RoutePhoto } from '@/lib/activityPhotos'
@@ -687,10 +687,12 @@ export default function DiarioLibroPage() {
 
   return (
     <div className="min-h-screen bg-stone-100">
-      {/* Top nav — stessa barra di Bacheca/Guida/Resoconto (components/Navbar.tsx), sticky sopra
-          il libro come le altre sezioni "hub" dell'app (niente tab bar in basso qui). */}
+      {/* Top nav — stessa barra di Bacheca/Guida/Reportage (components/Navbar.tsx), sticky sopra
+          il libro come le altre sezioni "hub" dell'app (niente tab bar in basso qui — questa
+          pagina non ha la galleria/freccetta di scorrimento che nelle altre sposta i link in
+          fondo, vedi HubNavBar/HubProfileButton: qui la barra intera resta unica, in cima). */}
       <div className="sticky top-0 z-40 print:hidden">
-        <HubNavBar />
+        <MobileNavBar />
       </div>
 
       {/* Left icon rail — cover customization */}

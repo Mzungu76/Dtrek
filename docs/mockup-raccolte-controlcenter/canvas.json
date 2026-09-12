@@ -1,0 +1,13 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 390, "h": 844 },
+    { "file": "DirezioneB.dc.html", "x": 470, "y": 0, "w": 390, "h": 844 },
+    { "file": "DirezioneC.dc.html", "x": 940, "y": 0, "w": 390, "h": 844 }
+  ],
+  "annotations": [
+    { "id": "note-a", "x": 0, "y": -130, "w": 390, "text": "A — Esploratore ad albero\nUn'unica lista verticale, Raccolta → Diario → Reportage annidati con rientro e chevron. Trascinamento per riordinare/spostare a ogni livello, tocco sul titolo per rinominare." },
+    { "id": "note-b", "x": 470, "y": -130, "w": 390, "text": "B — Board a colonne\nRaccolte come una fila stretta di icone a sinistra; i Diari della raccolta scelta in una colonna; toccando un Diario si sfoglia un terzo pannello con i suoi Reportage. Si trascina un Diario da una colonna all'altra per spostarlo." },
+    { "id": "note-c", "x": 940, "y": -130, "w": 390, "text": "C — Evoluzione della lista attuale\nStessa pagina Raccolte di oggi, ma ogni card si apre ad accordion mostrando i Diari (e loro, i primi Reportage) senza cambiare pagina. Si trascina un Diario su un'altra card per spostarlo." }
+  ],
+  "launch": { "view": "canvas" }
+}

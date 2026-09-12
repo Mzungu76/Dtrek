@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { Route, Mountain, TrendingUp, Compass, Loader2 } from 'lucide-react'
 import TopOverlay from '@/components/routehub/TopOverlay'
+import HubNavBar from '@/components/routehub/HubNavBar'
 import type { StatPill } from '@/components/routehub/types'
 import { openRecommendationCard } from '@/lib/routeBuilder/openRecommendationCard'
 import type { DashboardData } from './types'
@@ -86,7 +87,7 @@ export default function DashboardHero({ data }: { data: DashboardData }) {
             </span>
           }
         />
-        <div className="absolute inset-x-0 bottom-0 z-20 px-4 pb-[calc(env(safe-area-inset-bottom,0px)+16px)]">
+        <div className="absolute inset-x-0 bottom-0 z-20 flex flex-col gap-3 px-4 pb-[calc(env(safe-area-inset-bottom,0px)+10px)]">
           <button
             onClick={handleOpenSuggested}
             disabled={opening}
@@ -95,6 +96,9 @@ export default function DashboardHero({ data }: { data: DashboardData }) {
             {opening ? <Loader2 className="w-4 h-4 animate-spin" /> : <Compass className="w-4 h-4" />}
             {opening ? 'Preparazione…' : 'Scopri il percorso'}
           </button>
+          <div className="-mx-4">
+            <HubNavBar />
+          </div>
         </div>
       </>
     )
@@ -111,6 +115,9 @@ export default function DashboardHero({ data }: { data: DashboardData }) {
           subtitle="Le tue tracce, le tue Guide e i tuoi Reportage compariranno su questa mappa."
           statPills={[]} variant="magazine"
         />
+        <div className="absolute inset-x-0 bottom-0 z-20 pb-[calc(env(safe-area-inset-bottom,0px)+10px)]">
+          <HubNavBar />
+        </div>
       </>
     )
   }

@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { Pencil, Plus, X, ChevronUp, ChevronDown, Check } from 'lucide-react'
+import HubNavBar from '@/components/routehub/HubNavBar'
 import { WIDGET_CATALOG, WIDGET_BY_ID } from '@/components/dashboard/widgets'
 import {
   normalizeDashboardConfig, DEFAULT_DASHBOARD_CONFIG, DEFAULT_TAB_ID,
@@ -179,6 +180,13 @@ export default function DashboardSheet({ data }: { data: DashboardData }) {
             {[0, 1].map(i => <div key={i} className="flex-1 h-[72px] rounded-2xl bg-white/10 animate-pulse" />)}
           </div>
         )}
+        {/* Barra di navigazione, spostata qui in fondo (sotto il pannello widget e la freccetta
+            di scorrimento) — stesso posizionamento di HubNavBar in RouteHub.tsx per Guida/
+            Reportage/Diari, solo montata direttamente qui perché la Dashboard non passa da
+            RouteHub. -mx-4 per farla toccare i bordi (il contenitore ha px-4). */}
+        <div className="-mx-4">
+          <HubNavBar />
+        </div>
       </div>
 
       {/* ── Pannello aperto: tutto il catalogo widget/schede, invariato nella logica ── */}

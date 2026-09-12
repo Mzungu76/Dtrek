@@ -1,0 +1,141 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900&family=DM+Sans:ital,wght@0,400;0,500;0,700&family=Barlow+Condensed:wght@600;700&family=Lora:ital,wght@0,400;1,400&display=swap">
+  <style>
+    body { margin: 0; }
+    * { box-sizing: border-box; }
+    a { color: #277134; text-decoration: none; }
+    .display { font-family: 'Playfair Display', Georgia, serif; }
+    .body-f { font-family: 'DM Sans', system-ui, sans-serif; }
+    .barlow { font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif; }
+    .lora { font-family: 'Lora', Georgia, serif; }
+    .row { display: flex; align-items: center; gap: 10px; }
+    .grip { color: #c4bead; flex-shrink: 0; }
+  </style>
+</helmet>
+<div class="body-f" style="width:390px;height:844px;background:#f8f7f4;position:relative;overflow:hidden;box-shadow:0 0 0 1px #dcd8cc;">
+
+  <!-- Header, stesso pattern della pagina attuale (ArrowLeft + titolo + Nuova) -->
+  <div style="padding:16px 16px 4px;">
+    <div class="row" style="color:#978e7a;font-size:13px;font-weight:500;margin-bottom:14px;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#978e7a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+      Diari
+    </div>
+    <div class="row" style="justify-content:space-between;align-items:flex-start;margin-bottom:4px;">
+      <div>
+        <h1 class="display" style="margin:0;font-weight:900;font-size:26px;color:#2c2520;">Raccolte</h1>
+        <p class="lora" style="font-style:italic;font-size:12.5px;color:#978e7a;margin:4px 0 0;">Tocca una riga per aprirla, tieni premuto per trascinarla.</p>
+      </div>
+      <button style="flex-shrink:0;display:flex;align-items:center;gap:6px;background:#277134;color:#fff;border-radius:10px;padding:9px 14px;font-size:13px;font-weight:600;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Nuova
+      </button>
+    </div>
+  </div>
+
+  <!-- Albero -->
+  <div style="padding:10px 16px 0;display:flex;flex-direction:column;gap:2px;overflow-y:auto;height:calc(100% - 128px);">
+
+    <!-- RACCOLTA 1 — espansa, menù contestuale aperto (rinomina/sposta/elimina sempre da qui) -->
+    <div class="row" style="position:relative;padding:10px 4px;border-bottom:1px solid #eeece5;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4d4740" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polyline points="6 9 12 15 18 9"/></svg>
+      <div style="width:26px;height:26px;border-radius:8px;background:linear-gradient(160deg,#8cc894,#277134);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+      </div>
+      <div style="flex:1;min-width:0;">
+        <p class="display" style="margin:0;font-weight:700;font-size:15px;color:#2c2520;">Le mie stagioni 2024</p>
+        <p class="barlow" style="margin:1px 0 0;font-size:11px;color:#978e7a;letter-spacing:0.2px;">2 diari · 41 reportage</p>
+      </div>
+      <svg class="grip" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.4"/><circle cx="15" cy="6" r="1.4"/><circle cx="9" cy="12" r="1.4"/><circle cx="15" cy="12" r="1.4"/><circle cx="9" cy="18" r="1.4"/><circle cx="15" cy="18" r="1.4"/></svg>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#277134" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+      <div style="position:absolute;top:38px;right:4px;background:#fff;border:1px solid #dcd8cc;border-radius:12px;box-shadow:0 8px 20px rgba(44,37,32,0.16);width:150px;z-index:6;overflow:hidden;">
+        <div style="padding:9px 12px;font-size:12px;color:#4d4740;border-bottom:1px solid #f3f1ea;">Rinomina</div>
+        <div style="padding:9px 12px;font-size:12px;color:#4d4740;border-bottom:1px solid #f3f1ea;">Pubblica come volume</div>
+        <div style="padding:9px 12px;font-size:12px;color:#b0413a;">Elimina Raccolta</div>
+      </div>
+    </div>
+
+    <!-- DIARIO 1.1 — espanso, rinomina in corso -->
+    <div class="row" style="padding:9px 4px 9px 30px;background:#fdfcf9;border-bottom:1px solid #eeece5;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4d4740" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polyline points="6 9 12 15 18 9"/></svg>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#277134" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M6 3h12a1 1 0 0 1 1 1v16l-7-4-7 4V4a1 1 0 0 1 1-1z"/></svg>
+      <div style="flex:1;min-width:0;">
+        <input value="Appennino 2024" style="width:100%;font-family:'Playfair Display',serif;font-weight:700;font-size:14px;color:#2c2520;border:none;border-bottom:1.5px solid #277134;outline:none;background:transparent;padding:0 0 1px;" />
+        <p class="barlow" style="margin:2px 0 0;font-size:10.5px;color:#978e7a;">24 reportage · 312 km</p>
+      </div>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#277134" stroke-width="2.4" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+      <svg class="grip" width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.3"/><circle cx="15" cy="6" r="1.3"/><circle cx="9" cy="12" r="1.3"/><circle cx="15" cy="12" r="1.3"/><circle cx="9" cy="18" r="1.3"/><circle cx="15" cy="18" r="1.3"/></svg>
+    </div>
+
+    <!-- REPORTAGE 1.1.a -->
+    <div class="row" style="padding:8px 4px 8px 56px;border-bottom:1px solid #f3f1ea;">
+      <span style="width:5px;height:5px;border-radius:99px;background:#c4bead;flex-shrink:0;"></span>
+      <div style="flex:1;min-width:0;">
+        <p class="body-f" style="margin:0;font-size:12.5px;font-weight:500;color:#4d4740;">Anello del Corno alle Scale</p>
+        <p class="barlow" style="margin:1px 0 0;font-size:10px;color:#a9a18e;">12 set 2024 · 14,2 km</p>
+      </div>
+      <svg class="grip" width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style="opacity:0.7;"><circle cx="9" cy="6" r="1.3"/><circle cx="15" cy="6" r="1.3"/><circle cx="9" cy="12" r="1.3"/><circle cx="15" cy="12" r="1.3"/><circle cx="9" cy="18" r="1.3"/><circle cx="15" cy="18" r="1.3"/></svg>
+    </div>
+
+    <!-- REPORTAGE 1.1.b — SOLLEVATO IN TRASCINAMENTO -->
+    <div style="position:relative;height:44px;">
+      <div style="position:absolute;left:4px;right:4px;top:20px;height:1.5px;background:#277134;border-radius:2px;"></div>
+      <div class="row" style="position:absolute;left:0;right:0;top:2px;padding:8px 8px 8px 52px;background:#fff;border-radius:10px;box-shadow:0 8px 20px rgba(44,37,32,0.18);transform:rotate(-1.2deg);z-index:5;">
+        <span style="width:5px;height:5px;border-radius:99px;background:#c4bead;flex-shrink:0;"></span>
+        <div style="flex:1;min-width:0;">
+          <p class="body-f" style="margin:0;font-size:12.5px;font-weight:500;color:#4d4740;">Rifugio Battisti</p>
+          <p class="barlow" style="margin:1px 0 0;font-size:10px;color:#a9a18e;">3 ago 2024 · 9,8 km</p>
+        </div>
+        <svg class="grip" width="13" height="13" viewBox="0 0 24 24" fill="#277134"><circle cx="9" cy="6" r="1.3"/><circle cx="15" cy="6" r="1.3"/><circle cx="9" cy="12" r="1.3"/><circle cx="15" cy="12" r="1.3"/><circle cx="9" cy="18" r="1.3"/><circle cx="15" cy="18" r="1.3"/></svg>
+      </div>
+    </div>
+
+    <!-- REPORTAGE 1.1.c -->
+    <div class="row" style="padding:8px 4px 8px 56px;border-bottom:1px solid #f3f1ea;">
+      <span style="width:5px;height:5px;border-radius:99px;background:#c4bead;flex-shrink:0;"></span>
+      <div style="flex:1;min-width:0;">
+        <p class="body-f" style="margin:0;font-size:12.5px;font-weight:500;color:#4d4740;">Traversata dei tre passi</p>
+        <p class="barlow" style="margin:1px 0 0;font-size:10px;color:#a9a18e;">22 lug 2024 · 21,6 km</p>
+      </div>
+      <svg class="grip" width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style="opacity:0.7;"><circle cx="9" cy="6" r="1.3"/><circle cx="15" cy="6" r="1.3"/><circle cx="9" cy="12" r="1.3"/><circle cx="15" cy="12" r="1.3"/><circle cx="9" cy="18" r="1.3"/><circle cx="15" cy="18" r="1.3"/></svg>
+    </div>
+
+    <!-- DIARIO 1.2 — collassato -->
+    <div class="row" style="padding:9px 4px 9px 30px;border-bottom:1px solid #eeece5;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#978e7a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polyline points="9 6 15 12 9 18"/></svg>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#c05a17" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M6 3h12a1 1 0 0 1 1 1v16l-7-4-7 4V4a1 1 0 0 1 1-1z"/></svg>
+      <div style="flex:1;min-width:0;">
+        <p class="display" style="margin:0;font-weight:700;font-size:14px;color:#2c2520;">Alpi 2023</p>
+        <p class="barlow" style="margin:1px 0 0;font-size:10.5px;color:#978e7a;">17 reportage · 198 km</p>
+      </div>
+      <svg class="grip" width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.3"/><circle cx="15" cy="6" r="1.3"/><circle cx="9" cy="12" r="1.3"/><circle cx="15" cy="12" r="1.3"/><circle cx="9" cy="18" r="1.3"/><circle cx="15" cy="18" r="1.3"/></svg>
+    </div>
+
+    <!-- RACCOLTA 2 — collassata -->
+    <div class="row" style="padding:10px 4px;border-bottom:1px solid #eeece5;margin-top:8px;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#978e7a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polyline points="9 6 15 12 9 18"/></svg>
+      <div style="width:26px;height:26px;border-radius:8px;background:linear-gradient(160deg,#e9ab64,#9f4315);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+      </div>
+      <div style="flex:1;min-width:0;">
+        <p class="display" style="margin:0;font-weight:700;font-size:15px;color:#2c2520;">Sentieri di casa</p>
+        <p class="barlow" style="margin:1px 0 0;font-size:11px;color:#978e7a;letter-spacing:0.2px;">1 diario · 6 reportage · bozza</p>
+      </div>
+      <svg class="grip" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.4"/><circle cx="15" cy="6" r="1.4"/><circle cx="9" cy="12" r="1.4"/><circle cx="15" cy="12" r="1.4"/><circle cx="9" cy="18" r="1.4"/><circle cx="15" cy="18" r="1.4"/></svg>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#978e7a" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script>
+class Component extends DCLogic {}
+</script>
+</body>
+</html>

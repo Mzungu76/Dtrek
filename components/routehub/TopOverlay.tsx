@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import HubNavBar from './HubNavBar'
+import { HubProfileButton } from './HubNavBar'
 import type { StatPill, WeatherIcon } from './types'
 
 interface Props {
@@ -51,7 +51,7 @@ export default function TopOverlay({ itemKey, title, statPills, weatherIcon, onO
     <div className="pointer-events-none absolute inset-x-0 top-0 z-20">
       <div className="absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-black/70 to-transparent" />
 
-      <HubNavBar />
+      <HubProfileButton />
 
       <div className="relative px-3 sm:px-4 pt-4">
         <div
