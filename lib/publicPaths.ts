@@ -13,6 +13,9 @@ export function isPublicPath(pathname: string): boolean {
     pathname.startsWith('/api/') ||
     pathname.startsWith('/s/') ||
     pathname.startsWith('/leggi/') ||
+    // /u/[slug] è il profilo pubblico di un utente (docs/siti-pubblici-taccuino-piano.md, Fase 4)
+    // — apribile da un link condiviso senza sessione, come /leggi/.
+    pathname.startsWith('/u/') ||
     /\.(ico|png|jpg|jpeg|svg|webp|json|js|css|woff2?|mjs)$/.test(pathname) ||
     AUTH_PATHS.some((p) => pathname.startsWith(p)) ||
     PUBLIC_PAGES.some((p) => pathname === p || pathname.startsWith(`${p}/`))
@@ -28,5 +31,5 @@ export function isPublicPath(pathname: string): boolean {
  * o confondere un visitatore che magari l'app non l'ha nemmeno mai aperta.
  */
 export function isSharedContentPath(pathname: string): boolean {
-  return pathname.startsWith('/s/') || pathname.startsWith('/leggi/')
+  return pathname.startsWith('/s/') || pathname.startsWith('/leggi/') || pathname.startsWith('/u/')
 }

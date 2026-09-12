@@ -15,7 +15,7 @@ import { fetchPublicCollection } from '@/lib/sharePublicCollection'
 import { hasNarrative } from '@/lib/sharePublicDiary'
 import { formatDuration } from '@/lib/tcxParser'
 import { HandDrawnFrame } from '@/lib/taccuinoTokens'
-import { SiteHeader, DtrekCallout, SiteFooter, TaccuinoPaperTexture, TaccuinoSpineShadow } from '../../SiteChrome'
+import { SiteHeader, DtrekCallout, SiteFooter, taccuinoPaperBackgroundStyle, TaccuinoSpineShadow } from '../../SiteChrome'
 import { PublicPdfExport } from '@/app/leggi/d/[token]/PublicPdfExport'
 import { RouteSketch } from '@/app/leggi/d/[token]/RouteSketch'
 
@@ -56,8 +56,7 @@ export default async function VolumePage({ params }: { params: { token: string; 
   const show = volume.show
 
   return (
-    <div className="min-h-screen relative">
-      <TaccuinoPaperTexture />
+    <div className="min-h-screen relative" style={taccuinoPaperBackgroundStyle()}>
       <TaccuinoSpineShadow />
       <SiteHeader token={params.token} collectionTitle={collection.title} current="volume" />
 

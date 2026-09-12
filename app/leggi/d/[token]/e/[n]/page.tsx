@@ -9,7 +9,7 @@ import { cache } from 'react'
 import { notFound } from 'next/navigation'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { fetchPublicDiary, hasNarrative } from '@/lib/sharePublicDiary'
-import { SiteHeader, SiteFooter, DtrekCallout, TaccuinoPaperTexture, TaccuinoSpineShadow } from '../../SiteChrome'
+import { SiteHeader, SiteFooter, DtrekCallout, taccuinoPaperBackgroundStyle, TaccuinoSpineShadow } from '../../SiteChrome'
 import { EntryArticle, EntryCard } from '../../EntryArticle'
 import { PageProgressPill } from '@/components/leggi/PageProgressPill'
 
@@ -60,8 +60,7 @@ export default async function EscursionePage({ params }: { params: { token: stri
   const show = diary.config.publicSections
 
   return (
-    <div className="min-h-screen relative">
-      <TaccuinoPaperTexture />
+    <div className="min-h-screen relative" style={taccuinoPaperBackgroundStyle()}>
       <TaccuinoSpineShadow />
       <SiteHeader homeHref={`/leggi/d/${params.token}`} title={diary.config.title} current="escursione" />
 

@@ -9,9 +9,9 @@
 // esattamente il pubblico giusto per l'app, ma lo è finché il diario resta il protagonista.
 
 import { DTREK_URL } from '@/lib/publicSite'
-import { TaccuinoPaperTexture, TaccuinoSpineShadow } from '@/lib/taccuinoTokens'
+import { taccuinoPaperBackgroundStyle, TaccuinoSpineShadow } from '@/lib/taccuinoTokens'
 
-export { TaccuinoPaperTexture, TaccuinoSpineShadow }
+export { taccuinoPaperBackgroundStyle, TaccuinoSpineShadow }
 
 export function SiteHeader({ homeHref, homeLabel = 'Il diario', title, current }: {
   /** Dove porta il logo/titolo e la voce "home" della navigazione — l'indice di questo sito

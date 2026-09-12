@@ -13,12 +13,11 @@
 // solo, lunghissimo muro di card.
 import { ChevronRight } from 'lucide-react'
 import type { PublicCollection } from '@/lib/sharePublicCollection'
-import { SiteHeader, DtrekCallout, SiteFooter, TaccuinoPaperTexture, TaccuinoSpineShadow } from './SiteChrome'
+import { SiteHeader, DtrekCallout, SiteFooter, taccuinoPaperBackgroundStyle, TaccuinoSpineShadow } from './SiteChrome'
 
 export function CollectionPublicView({ collection, token }: { collection: PublicCollection; token: string }) {
   return (
-    <div className="min-h-screen relative">
-      <TaccuinoPaperTexture />
+    <div className="min-h-screen relative" style={taccuinoPaperBackgroundStyle()}>
       <TaccuinoSpineShadow />
       <SiteHeader token={token} collectionTitle={collection.title} current="home" />
 

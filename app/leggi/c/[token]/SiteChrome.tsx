@@ -9,7 +9,7 @@
 // pagina rimasta nella vecchia palette editoriale.
 import { DTREK_URL } from '@/lib/publicSite'
 
-export { DtrekCallout, SiteFooter, TaccuinoPaperTexture, TaccuinoSpineShadow } from '@/app/leggi/d/[token]/SiteChrome'
+export { DtrekCallout, SiteFooter, taccuinoPaperBackgroundStyle, TaccuinoSpineShadow } from '@/app/leggi/d/[token]/SiteChrome'
 
 export function SiteHeader({ token, collectionTitle, current }: {
   token: string

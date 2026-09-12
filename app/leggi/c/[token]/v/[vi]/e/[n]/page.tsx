@@ -11,7 +11,7 @@ import { notFound } from 'next/navigation'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { fetchPublicCollection } from '@/lib/sharePublicCollection'
 import { hasNarrative } from '@/lib/sharePublicDiary'
-import { SiteHeader, SiteFooter, DtrekCallout, TaccuinoPaperTexture, TaccuinoSpineShadow } from '../../../../SiteChrome'
+import { SiteHeader, SiteFooter, DtrekCallout, taccuinoPaperBackgroundStyle, TaccuinoSpineShadow } from '../../../../SiteChrome'
 import { EntryArticle, EntryCard } from '@/app/leggi/d/[token]/EntryArticle'
 import { PageProgressPill } from '@/components/leggi/PageProgressPill'
 
@@ -65,8 +65,7 @@ export default async function CollectionEntryPage({ params }: { params: { token:
   const next = eIdx < volume.entries.length - 1 ? eIdx + 2 : null
 
   return (
-    <div className="min-h-screen relative">
-      <TaccuinoPaperTexture />
+    <div className="min-h-screen relative" style={taccuinoPaperBackgroundStyle()}>
       <TaccuinoSpineShadow />
       <SiteHeader token={params.token} collectionTitle={collection.title} current="escursione" />
 

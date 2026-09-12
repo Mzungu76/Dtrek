@@ -172,42 +172,42 @@ export function HandDrawnFrame({
 }
 
 /**
- * Grana della carta — fibre verticali sottili via `repeating-linear-gradient`, non più cerchi
- * piastrellati (Fase 42: quei cerchi — per quanto alleggeriti in Fase 41 — restavano comunque
- * "puntini" riconoscibili come tali su schermo reale). Tre passi diversi (3px/5px/8px) sovrapposti
- * a angolazione quasi verticale ma leggermente diversa l'uno dall'altro rompono la perfetta
- * regolarità di un singolo pattern, per un effetto di fibra tessuta/carta piuttosto che di righe
- * meccaniche. Nessun `<svg>`/`feTurbulence` (per la classe di bug isolata in Fase 24, vedi sotto).
- * Costruita una volta sola a import-time (stringhe statiche), non ricalcolata a ogni render.
- *
- * Fase 43 — alpha dimezzata più volte rispetto alla Fase 42 (.05/.04/.035 → .008/.006/.005):
- * calibrata nel mockup di anteprima insieme a nuvolato/vignettatura ma non riportata nel codice
- * reale al primo giro di implementazione (Fase 43a) — bug distinto dal nuvolato, corretto qui.
- * Su schermo reale anche i valori "leggeri" del nuvolato bastano da soli a dare struttura alla
- * carta; le fibre restano solo un accenno appena percepibile da vicino.
+ * Grana della carta — RIMOSSA (docs/siti-pubblici-taccuino-piano.md, Fase 6). Erano tre
+ * `repeating-linear-gradient` a passo fine, un layer fra i tanti di quello che allora era
+ * `TaccuinoPaperTexture`, un `<div>` `fixed inset-0` a piena pagina. Prima ipotesi (poi rivista,
+ * vedi il commento sopra `taccuinoPaperBackgroundStyle` più sotto): il pattern ripetuto a passo
+ * fine sarebbe stato lui il problema. Non toccata separatamente: la grana non è più tornata perché
+ * il fix reale (Fase 7) è a monte, sull'elemento `fixed`/`absolute inset-0` in sé, non su cosa ci
+ * viene disegnato sopra.
  */
-const PAPER_GRAIN_IMAGES = [
-  'repeating-linear-gradient(89deg, rgba(122,111,82,.008) 0px, rgba(122,111,82,.008) 1px, transparent 1px, transparent 3px)',
-  'repeating-linear-gradient(91deg, rgba(46,42,34,.006) 0px, rgba(46,42,34,.006) 1px, transparent 1px, transparent 5px)',
-  'repeating-linear-gradient(90.5deg, rgba(122,111,82,.005) 0px, rgba(122,111,82,.005) 1px, transparent 1px, transparent 8px)',
-]
-const PAPER_GRAIN_SIZES = ['auto', 'auto', 'auto']
 
 /**
  * Rigatura orizzontale, ispirata ai quaderni tipo Moleskine (richiesta esplicita dell'utente:
  * "vorrei simulare queste righe orizzontali nelle pagine, sullo sfondo"). Calibrata in un mockup
  * a parte (opacità .07 su una singola riga, passo 34px) prima di essere riportata qui. Due
  * `repeating-linear-gradient` quasi orizzontali ma inclinati in verso opposto e di pochi decimi di
- * grado (stessa tecnica di `PAPER_GRAIN_IMAGES` per le fibre verticali) — mai un angolo esatto di
- * 0deg, per non leggere come una riga stampata a righello.
+ * grado (stessa tecnica usata in passato dalla grana verticale, poi rimossa — vedi il commento
+ * sopra) — mai un angolo esatto di 0deg, per non leggere come una riga stampata a righello.
  *
- * Vive in `TaccuinoRuledLines` (sotto), NON in `TaccuinoPaperTexture`: un primo giro l'aveva
- * incollata lì, ma quel componente è apposta `fixed` al viewport (vignettatura/nuvolato/grana sono
- * un'atmosfera ambiente, non legata allo scroll) — la rigatura invece deve leggersi come stampata
- * sul foglio, quindi scorrere CON il testo. Con la rigatura dentro il layer fisso, scorrendo la
- * pagina il testo scivolava sopra righe che restavano ferme: "sembra che i testi e i foglietti
- * siano volanti sulla pagina" (segnalazione esplicita dell'utente). Da qui la separazione in due
- * componenti con comportamento di scroll diverso.
+ * Vive in `TaccuinoRuledLines` (sotto), NON in `taccuinoPaperBackgroundStyle`: un primo giro
+ * l'aveva incollata lì, ma vignettatura/nuvolato/grana sono un'atmosfera ambiente, ancorata al
+ * viewport (non legata allo scroll) — la rigatura invece deve leggersi come stampata sul foglio,
+ * quindi scorrere CON il testo. Messa nel layer fisso, scorrendo la pagina il testo scivolava sopra
+ * righe che restavano ferme: "sembra che i testi e i foglietti siano volanti sulla pagina"
+ * (segnalazione esplicita dell'utente). Da qui la separazione in due componenti con comportamento
+ * di scroll diverso.
+ *
+ * ⚠️ Non ancora montata da nessuna pagina reale. Prima di un primo uso vero, verificare che non
+ * riproduca il bug isolato in Fase 7 (vedi il commento su `taccuinoPaperBackgroundStyle` sotto):
+ * questo componente è un `<div>` `absolute inset-0` che ricopre l'intero contenitore relativo in
+ * cui viene montato, esattamente il pattern che lì corrompeva il rendering del testo altrove nel
+ * DOM — indipendentemente dal contenuto disegnato sopra (bastava un `background-color` piatto). A
+ * differenza della carta, qui l'effetto voluto è che scorra CON la pagina, quindi non si può
+ * convertire in un `background` con `background-attachment: fixed` sul contenitore radice (quella
+ * proprietà lo terrebbe agganciato al viewport, il contrario di quel che serve): se il bug si
+ * ripresenta, la via è probabilmente disegnare la rigatura come `background` diretto di `<main>`
+ * (o di un contenitore che già esiste nel DOM per altri scopi), mai come elemento a parte pensato
+ * solo per ricoprire la pagina.
  */
 /** Passo della rigatura — unica fonte per i gradienti sotto e per `TACCUINO_RULED_TEXT_STYLE`. */
 const RULE_SPACING_PX = 34
@@ -261,9 +261,8 @@ const PAPER_CLOUD_IMAGES = [
  * riferimento fotografico: carta invecchiata con vignettatura in seppia/ambra). Sostituisce la
  * sfumatura di luce legata a `flip` (Fase 17-40): quel singolo blob chiaro in un angolo competeva
  * visivamente con il nuvolato sotto, coprendolo proprio dove contava di più. La vignettatura è
- * centrata e simmetrica — non serve più `flip` per posizionarla (il parametro resta nella firma di
- * `TaccuinoPaperTexture` per compatibilità con i chiamanti esistenti, ma non ha più effetto).
- * Colore ambra caldo (#8B5E2C, non un token esistente — scelto su un giro di calibrazione visiva,
+ * centrata e simmetrica — non serve più `flip` per posizionarla (il parametro non esiste più in
+ * `taccuinoPaperBackgroundStyle`, Fase 7). Colore ambra caldo (#8B5E2C, non un token esistente — scelto su un giro di calibrazione visiva,
  * più caldo del seppia `TACCUINO_INK.mapSepia` provato per primo) con centro trasparente esteso
  * (55%) e dissolvenza rapida solo nella fascia esterna, per un effetto concentrato sul contorno
  * invece che diffuso verso il centro.
@@ -274,70 +273,62 @@ const PAPER_VIGNETTE_IMAGE =
 /**
  * Texture di sfondo del taccuino — tutta la pagina, dietro al contenuto.
  *
+ * Fase 7 (docs/siti-pubblici-taccuino-piano.md) — RISCRITTA da capo dopo aver trovato un secondo
+ * bug "testo/carte invisibili", stavolta nella sezione Numeri di `DiaryPublicView` e poi
+ * riprodotto anche in `CollectionPublicView`, cioè in una pagina dove la Fase 6 (rimozione della
+ * grana) avrebbe già dovuto risolvere tutto. Bisezionato di nuovo con un browser reale (Chromium
+ * via Playwright, non solo letto nel codice), stavolta isolando l'elemento incriminato con uno
+ * screenshot dell'elemento singolo (non dell'intera pagina, per escludere artefatti di
+ * stitching): il colpevole non erano i gradienti, ma il *componente* stesso, allora chiamato
+ * `TaccuinoPaperTexture` — un `<div>` `fixed inset-0 -z-10`. Anche ridotto a un `<div>` con il
+ * solo `backgroundColor` piatto (niente vignettatura, niente nuvolato, niente grana) l'elemento
+ * continuava a corrompere il rendering di contenuto altrove nel DOM. Sostituendo `fixed` con
+ * `absolute` il bug rimaneva identico; togliendo lo `z-index` negativo pure. L'unica cosa che lo
+ * fa sparire è NON avere affatto un elemento separato che "ricopre la pagina" — la Fase 6 aveva
+ * quindi diagnosticato correttamente il sintomo (rimuovere la grana faceva sparire il bug nel
+ * primo caso testato) ma sbagliato la causa: non è il pattern disegnato sopra, è l'esistenza
+ * stessa di un layer `fixed`/`absolute inset-0` indipendente, qualunque cosa ci sia dentro — la
+ * stessa classe di bug isolata in Fase 24 (lì un `<svg>` che ricopriva la pagina), qui provata
+ * senza alcun SVG e senza alcun pattern ripetuto nel DOM.
+ *
+ * Il fix: niente più elemento a parte. Questa funzione restituisce solo un oggetto di stile, da
+ * spargere (`style={{...taccuinoPaperBackgroundStyle()}}`) sul contenitore radice che ogni pagina
+ * ha già (`<div className="min-h-screen relative">`) — un `background` sul box che contiene
+ * comunque tutto il resto, non un elemento fratello che lo ricopre. Per ottenere lo stesso effetto
+ * "atmosfera ancorata al viewport, non allo scroll" che dava `position: fixed`, usa
+ * `background-attachment: fixed`: stessa resa visiva (la vignettatura resta centrata su quel che
+ * si vede, non sul documento intero), ma è una proprietà del background di un elemento normale,
+ * non un elemento composito a parte — verificato che non riproduce il bug.
+ *
  * Composizione, dal layer più in alto al più in basso (l'ordine conta: in CSS multi-background il
  * primo elencato in `background-image` dipinge sopra gli altri): (1) vignettatura
- * (`PAPER_VIGNETTE_IMAGE`), (2) nuvolato leggero (`PAPER_CLOUD_IMAGES`), (3) fibre verticali
- * sottili (`PAPER_GRAIN_IMAGES`), (4) il colore piatto di base in fondo a tutto. La rigatura
- * orizzontale NON è qui (vedi `TaccuinoRuledLines` sotto): questo componente resta `fixed` al
- * viewport apposta, la rigatura deve invece scorrere col contenuto.
+ * (`PAPER_VIGNETTE_IMAGE`), (2) nuvolato leggero (`PAPER_CLOUD_IMAGES`), (3) il colore piatto di
+ * base in fondo a tutto. La rigatura orizzontale NON è qui (vedi `TaccuinoRuledLines` sotto, con
+ * il proprio avviso): quella deve scorrere CON il contenuto, quindi non può usare
+ * `background-attachment: fixed`.
  *
- * Fase 24 — **causa reale, finalmente isolata**, del bug "titolo/statistiche invisibili" nelle
- * righe del Sommario: qualunque `<svg>` **vivo che ricopre la pagina** (fisso o assoluto, con o
- * senza filtro, con o senza z-index) corrompeva il rendering del testo altrove nel DOM — mai
- * l'SVG in sé, sempre la sovrapposizione. Questo componente resta quindi un `<div>` con sfondo
- * CSS puro (colore + gradienti), mai un elemento SVG nel DOM.
- *
- * `flip` non ha più effetto (Fase 43): posizionava la vecchia sfumatura di luce su un lato o
- * l'altro, sostituita dalla vignettatura centrata e simmetrica. Il parametro resta nella firma solo
- * per compatibilità con i chiamanti esistenti (`BookPage.tsx`, `app/diari/[id]/page.tsx`).
- *
- * ⚠️ Il chiamante NON deve mettere un `background` opaco sul proprio contenitore radice (lo
- * stesso `<div>` in cui questo componente viene montato come figlio): quel contenitore, essendo
- * un box non posizionato, dipinge il proprio sfondo (categoria 3 dell'ordine di stacking,
- * CSS2.1 §E.2) SOPRA questo `<div fixed>` a z-index negativo (categoria 2) — anche se nel markup
- * il componente compare prima. È la stessa classe di bug isolata in Fase 24 (un `<svg>` che
- * ricopre la pagina rompeva lo stacking), qui capovolta: non serve un colore duplicato sul
- * contenitore, questo componente fornisce già `TACCUINO_PAPER.base` come propria `backgroundColor`
- * — un `background` in più sul genitore nasconde grana e nuvolato lasciando visibile solo il
- * colore piatto (bug reale riscontrato su build reale in Fase 40, corretto rimuovendolo da
- * `app/diari/page.tsx` e `app/profilo/page.tsx`).
+ * ⚠️ Chi chiama questa funzione deve spargerne il risultato DIRETTAMENTE sul contenitore radice,
+ * non su un elemento a parte aggiunto per l'occasione: un `<div>` in più il cui unico scopo è
+ * portare questo `style` ricadrebbe nello stesso schema (un elemento che esiste solo per
+ * ricoprire la pagina) che questa riscrittura elimina.
  */
-export function TaccuinoPaperTexture({ flip = false }: { flip?: boolean }) {
-  void flip
-  const images = [
-    PAPER_VIGNETTE_IMAGE,
-    ...PAPER_CLOUD_IMAGES,
-    ...PAPER_GRAIN_IMAGES,
-  ]
-  const sizes = ['auto', ...PAPER_CLOUD_IMAGES.map(() => 'auto'), ...PAPER_GRAIN_SIZES]
-  const repeats = [
-    'no-repeat',
-    ...PAPER_CLOUD_IMAGES.map(() => 'no-repeat'),
-    ...PAPER_GRAIN_IMAGES.map(() => 'no-repeat'),
-  ]
-  return (
-    <div
-      aria-hidden="true"
-      className="fixed inset-0 -z-10 pointer-events-none"
-      style={{
-        backgroundColor: TACCUINO_PAPER.base,
-        backgroundImage: images.join(', '),
-        backgroundSize: sizes.join(', '),
-        backgroundRepeat: repeats.join(', '),
-      }}
-    />
-  )
+export function taccuinoPaperBackgroundStyle(): CSSProperties {
+  return {
+    backgroundColor: TACCUINO_PAPER.base,
+    backgroundAttachment: 'fixed',
+    backgroundImage: [PAPER_VIGNETTE_IMAGE, ...PAPER_CLOUD_IMAGES].join(', '),
+    backgroundRepeat: 'no-repeat',
+  }
 }
 
 /**
- * Rigatura orizzontale del taccuino — va montata SUBITO DOPO `<TaccuinoPaperTexture />`, come
- * fratello successivo nel markup (stesso z-index -10: fra due elementi allo stesso livello di
- * stacking, chi compare dopo nel DOM dipinge sopra — così la rigatura appare sull'atmosfera fissa
- * sotto, restando comunque dietro al contenuto vero) — e dentro un contenitore antenato con
- * `position: relative` la cui altezza segue il contenuto (niente `h-screen`/`overflow` che la
- * tagli): `absolute inset-0` si estende esattamente a quell'altezza, quindi scorre insieme al resto
- * della pagina invece di restare agganciata al viewport come `TaccuinoPaperTexture`. Vedi il
- * commento su `PAPER_RULED_LINE_IMAGES` sopra per il perché della separazione.
+ * Rigatura orizzontale del taccuino — da montare come primo figlio del contenitore radice (quello
+ * che porta `style={{...taccuinoPaperBackgroundStyle()}}`), con `position: relative` e un'altezza
+ * che segue il contenuto (niente `h-screen`/`overflow` che la tagli): `absolute inset-0` si estende
+ * esattamente a quell'altezza, quindi scorre insieme al resto della pagina invece di restare
+ * agganciata al viewport come la carta (`taccuinoPaperBackgroundStyle`, con
+ * `background-attachment: fixed`). Vedi il commento su `PAPER_RULED_LINE_IMAGES` sopra per il
+ * perché della separazione, e l'avviso lì sopra prima di un primo uso reale.
  */
 export function TaccuinoRuledLines() {
   return (

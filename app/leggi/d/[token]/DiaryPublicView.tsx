@@ -23,7 +23,7 @@ import { HandDrawnFrame } from '@/lib/taccuinoTokens'
 import { AllRoutesMap, AllRoutesLegend } from './AllRoutesMap'
 import { RouteSketch } from './RouteSketch'
 import { PublicPdfExport } from './PublicPdfExport'
-import { SiteHeader, DtrekCallout, SiteFooter, TaccuinoPaperTexture, TaccuinoSpineShadow } from './SiteChrome'
+import { SiteHeader, DtrekCallout, SiteFooter, taccuinoPaperBackgroundStyle, TaccuinoSpineShadow } from './SiteChrome'
 
 export function DiaryPublicView({ diary, token, entryBasePath, headerHomeHref, headerHomeLabel }: {
   diary: PublicDiary
@@ -41,12 +41,11 @@ export function DiaryPublicView({ diary, token, entryBasePath, headerHomeHref, h
   const entryBase = entryBasePath ?? `/leggi/d/${token}`
 
   return (
-    <div className="min-h-screen relative">
+    <div className="min-h-screen relative" style={taccuinoPaperBackgroundStyle()}>
       {/* Transizione cross-documento del browser (progressive enhancement, nessun JS) — l'altro
           lato è app/u/[slug]/page.tsx, che dichiara la stessa regola e lo stesso nome sulla propria
           copertina. Dove non supportata, la navigazione resta quella normale. */}
       <style>{'@view-transition { navigation: auto; }'}</style>
-      <TaccuinoPaperTexture />
       <TaccuinoSpineShadow />
       <SiteHeader homeHref={headerHomeHref ?? `/leggi/d/${token}`} homeLabel={headerHomeLabel} title={diary.config.title} current="home" />
 
