@@ -209,6 +209,36 @@ ha chiesto esplicitamente di rendere pubblicabili anche le Raccolte: gli stessi 
 `app/raccolte/[id]/page.tsx` sono quelli della sua riscrittura successiva) — nessuna logica
 riscritta da zero, era già corretta e testata.
 
+### Fase 2 del piano più ampio (settembre 2026): il Reportage diventa un vero articolo
+
+Il modello in cinque righe qui sopra diceva già "Percorso = un articolo (`/leggi/p/[token]`)" fin
+dall'inizio — ma non lo era mai stato per davvero: quella rotta era rimasta un `PdfViewer` nudo,
+l'unico dei tre livelli mai aggiornato al passaggio "il link vive da sé, il PDF è un allegato in
+più" che Diario e Raccolta avevano già. Sistemato ora, su richiesta esplicita dell'utente (Fase 2
+di un piano di pubblicazione più ampio, di cui questo documento copre solo la parte Raccolte):
+
+- **Nuovo `lib/sharePublicReport.ts`** (`fetchPublicReport(token)`): un Reportage pubblicato da
+  solo è la stessa identica voce di un Diario pubblicato, senza il Diario intorno — riusa
+  `buildContentFromReports` di `lib/sharePublicDiary.ts` (ora esportata) invece di duplicarne la
+  logica, nessuna esclusione né selezione foto (non c'è un Diario/una Raccolta a monte che curi la
+  scelta).
+- **`app/leggi/p/[token]/page.tsx` riscritta**: da `PdfViewer` a pagina editoriale vera, stessa
+  testata minima (senza navigazione: un solo Reportage non ha altre pagine da raggiungere),
+  `EntryArticle`/`EntryCard` riusati senza modifiche. **`app/leggi/r/[activityId]` resta invariata**
+  (retrocompatibilità per i link già in circolazione, come già era).
+- **`PATCH /api/share-report` decoppiato dal PDF**: prima il token si generava SOLO insieme a un
+  PDF caricato; ora garantisce il token indipendentemente (stesso contratto delle altre due route
+  token), il PDF resta un allegato facoltativo (`sharePdfUrl` nel corpo lo tocca, la sua assenza no
+  — mai azzerato da un mint-only). `ReportReader.tsx`: "Pubblica" (la pagina, sempre disponibile) e
+  "Allega anche il PDF" (facoltativo) invece dell'unico "Genera e pubblica" di prima che li
+  confondeva in un solo passo.
+- `PublishPrivacyToggles` montato anche qui, terzo posto oltre a Diario e Raccolta.
+
+**Nota**: `app/diario/page.tsx`'s pagina del Diario raggiunta scorrendo verso l'alto
+(`DiarioSommarioContent.tsx`) è rimasta deliberatamente non toccata in questo giro, su richiesta
+esplicita dell'utente — nessuna delle modifiche sopra la riguarda comunque (tutta lato Reportage
+pubblico, non Diario).
+
 ### Cosa c'è già, per chi riprende da qui
 
 - `supabase/migrations/add_collections_tables.sql` — `collections` + `collection_diaries`, RLS

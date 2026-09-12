@@ -38,33 +38,45 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// PATCH /api/share-report { activityId, sharePdfUrl } → save public PDF URL + share_token
+// PATCH /api/share-report { activityId, sharePdfUrl? } → pubblica la pagina del Reportage
+// (garantisce un token, stesso contratto di PATCH /api/diaries/[id]/token e
+// /api/collections/[id]/token) e, se `sharePdfUrl` è presente nel corpo, allega anche un PDF —
+// Fase 2 del piano di pubblicazione: il PDF non è più una condizione per pubblicare (prima il
+// token si generava SOLO insieme a un PDF), resta un allegato facoltativo in più, come già per
+// Diario e Raccolta. `sharePdfUrl` assente nel corpo → la colonna non viene toccata (un mint-only
+// non deve azzerare un PDF già allegato); `sharePdfUrl: null` esplicito la rimuove.
 export async function PATCH(req: NextRequest) {
   try {
     const user = await getUserFromRequest(req)
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    const { activityId, sharePdfUrl } = (await req.json()) as { activityId?: string; sharePdfUrl?: string | null }
+    const body = (await req.json()) as { activityId?: string; sharePdfUrl?: string | null }
+    const { activityId } = body
     if (!activityId) return NextResponse.json({ error: 'Missing activityId' }, { status: 400 })
+    const hasSharePdfUrl = Object.prototype.hasOwnProperty.call(body, 'sharePdfUrl')
 
     // DTREK-AUDIT.md P2 #32 — genera (o riusa) un token opaco invece di esporre l'activityId
     // in chiaro nel link pubblico, come già fatto per activities.share_token in /api/share.
     const { data: existing } = await supabase
       .from('hike_reports')
-      .select('share_token')
+      .select('share_token, share_pdf_url')
       .eq('activity_id', activityId)
       .eq('user_id', user.id)
       .single()
 
-    let token = (existing?.share_token as string | null) ?? null
-    if (sharePdfUrl && !token) token = crypto.randomUUID()
+    const token = (existing?.share_token as string | null) ?? crypto.randomUUID()
+
+    const dbPatch: Record<string, unknown> = { share_token: token }
+    if (hasSharePdfUrl) dbPatch.share_pdf_url = body.sharePdfUrl ?? null
 
     const { error } = await supabase
       .from('hike_reports')
-      .update({ share_pdf_url: sharePdfUrl ?? null, share_token: token })
+      .update(dbPatch)
       .eq('activity_id', activityId)
       .eq('user_id', user.id)
     if (error) throw error
-    return NextResponse.json({ ok: true, share_pdf_url: sharePdfUrl ?? null, share_token: token })
+
+    const sharePdfUrl = hasSharePdfUrl ? (body.sharePdfUrl ?? null) : ((existing?.share_pdf_url as string) ?? null)
+    return NextResponse.json({ ok: true, share_pdf_url: sharePdfUrl, share_token: token })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }

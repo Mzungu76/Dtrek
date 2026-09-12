@@ -93,14 +93,14 @@ export function hasNarrative(content: string): boolean {
   return content.replace(/^##.*$/gm, '').trim().length > 0
 }
 
-type RawHikeReport = { id: string; activity_id: string; title: string; content: string; created_at: string }
+export type RawHikeReport = { id: string; activity_id: string; title: string; content: string; created_at: string }
 
 /** Da un elenco già letto di `hike_reports` (scoped o meno, non importa qui) a `DiaryContent`
  *  completo: applica l'esclusione, carica attività/foto dei soli Reportage visibili, ordina per
  *  data e somma i totali. Condivisa dai due modi di trovare quei report (Diario reale scoped per
  *  `diary_id`, o il vecchio Diario singolo per utente senza scoping) — la parte che segue
  *  l'esclusione non dipende da come ci si è arrivati. */
-async function buildContentFromReports(
+export async function buildContentFromReports(
   reports: RawHikeReport[],
   excluded: Set<string>,
   photoIdsByActivity: Record<string, string[]>,
