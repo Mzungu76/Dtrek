@@ -315,3 +315,107 @@ Sommario di ogni Diario (`/diari/[id]`), accanto a "Pubblicazione".
 Verificato come per PR 1: `tsc` e lint puliti, 374/374 test, `next build` pulita con tutte le nuove
 rotte compilate. Non verificato a schermo in un browser — l'ambiente non ha un progetto Supabase
 reale da cui autenticarsi (stesso limite già segnalato nelle fasi precedenti del restyling).
+
+### Fase 4 del piano più ampio (settembre 2026): stato di pubblicazione nell'albero, parità col
+### libro privato, PDF dal sito
+
+Quattro pezzi distinti, tutti su richiesta esplicita dell'utente dopo aver provato il profilo
+pubblico della Fase 3, ciascuno verificato e committato a sé (`tsc`, lint, `vitest run` — 416/416
+alla fine della fase — dopo ogni blocco):
+
+**Icona pubblicato/bozza + interruttore diretto, nell'albero di `/raccolte`**
+
+- `components/raccolte/PublishToggle.tsx` (nuovo): `Globe2` (pubblicato) / `Lock` (bozza) /
+  `Loader2` (in corso), cliccabile per accendere/spegnere sul posto — nessuna nuova route, riusa
+  `PATCH`/`DELETE` su `/api/collections/[id]/token`, `/api/diaries/[id]/token`,
+  `/api/share-report`. Un Reportage senza `hike_reports` (nessun racconto scritto) mostra
+  l'icona disabilitata con un motivo (`title`) invece di lasciar toccare un interruttore che
+  aggiornerebbe zero righe con un falso "fatto" — per questo `ReportageTreeNode` ha guadagnato
+  `hasReport: boolean` accanto a `isPublished`, distinti (`lib/raccolte/buildRaccolteTree.ts`).
+- `GET /api/collections/tree` ora seleziona anche `share_token` di ogni Diario e i
+  `hike_reports(activity_id, share_token)` scoped all'albero, passati a `buildRaccolteTree`.
+
+**Layout di `/raccolte/[id]`**
+
+Usava ancora la `Navbar` col menù in alto: disallineata rispetto a `/raccolte` (già sulla barra
+inferiore da una modifica precedente) e al resto dell'app. Portata a `mobileNavPosition="bottom"`
+e allo stesso padding inferiore di `/raccolte/page.tsx` — nessun'altra pagina toccata.
+
+**Parità sito pubblico ↔ libro privato**
+
+Richiesta dell'utente: *"integra anche i grafici nel link pubblico e tutto quanto contenuto nel
+Diario (mantieni sempre opzionali le pubblicazioni degli elementi)"* — con chiarimento esplicito
+"parità **quasi** completa", non totale, e ogni contenuto nuovo dietro un interruttore di
+visibilità, esistente o nuovo.
+
+- **Nuovo toggle `grafici`** in `DiaryPublicSections` (`lib/diaryConfig.ts`), **spento di
+  default** anche per Diari già pubblicati (a differenza degli altri quattro, tutti accesi di
+  default): quota/battito/velocità per punto sono un livello di dettaglio in più rispetto alla
+  sola traccia, quindi un'esposizione che l'autore deve scegliere, non ereditare in silenzio.
+  Checkbox in più nel pannello "Mostra sul sito" di `app/diario/libro/[id]/page.tsx`.
+- **`lib/trackSeries.ts`** (nuovo, puro): riduce i `track_points` già salvati per attività (fino a
+  1500 punti, `app/api/activity/route.ts`) a ≤120 punti `{progress, value}` per grafico — stesso
+  principio di `lib/downsamplePolyline.ts` per la traccia GPS, duplicando la nozione di
+  "avanzamento lungo il percorso" invece di importarla da `components/diario/chartUtils.ts`
+  (component lato client) o da `lib/blobStore.ts` (**mai** importabile in un componente server:
+  IndexedDB, motore di sync, effetti a livello di modulo — vincolo che vale per tutta questa
+  fase, vedi sotto). `lib/sharePublicDiary.ts`: `PublicDiaryEntry` guadagna
+  `altitudeSeries`/`hrSeries`/`speedSeriesKmh`, sempre calcolati (come `content`/`photos`/
+  `polyline`) e filtrati solo a valle dal toggle — nessuna differenza architetturale dagli altri
+  campi.
+- **Grafici**: `app/leggi/d/[token]/EntryArticle.tsx` monta `ProgressChart` (già puro, SVG
+  disegnato a mano, nessuna libreria — `components/diario/ProgressChart.tsx`, invariato) sotto la
+  mappa del percorso, dietro `show.grafici` — ereditato "gratis" da Raccolta e Reportage
+  standalone, che riusano lo stesso componente.
+- **Statistiche**: `lib/publicDiaryStats.ts` (nuovo, puro) ricalcola record personali/tabella
+  anno-per-anno/andamento mensile da `PublicDiaryEntry[]` — stesso calcolo di
+  `computeGlobalStats` (`lib/blobStore.ts`), duplicato apposta per lo stesso motivo di sopra
+  (mai importare blobStore in un server component). `components/diario/MonthBarChart.tsx`
+  generalizzato ad accettare `{startTime: string}[]` invece di `ActivityMeta[]` (era solo quel
+  campo a essere letto) per essere riusabile qui senza quell'import. Tutto dietro il toggle
+  `statistiche` già esistente — nessun nuovo interruttore, è la stessa categoria di contenuto.
+- **Mappa di tutti i percorsi**: `app/leggi/d/[token]/AllRoutesMap.tsx` (nuovo) — **non**
+  `components/AllRoutesMap.tsx` (Leaflet): quest'ultimo è deliberatamente escluso dal sito
+  pubblico (vedi il commento in cima a `RouteMap.tsx` — niente JS/istanze vive per una pagina che
+  si scorre e basta, aperta spesso da telefono). Stesso mosaico di tile statiche + `<path>` SVG
+  di `RouteMap.tsx`, generalizzato a N tracce con legenda colori. Dietro il toggle `percorso`
+  già esistente.
+- **Lasciato fuori deliberatamente** (per restare a "quasi" completa): equivalenti pubblici di
+  `AnniversaryBanner`/`DiarioNatura`; un toggle proprio per la griglia "Numeri" della home di una
+  Raccolta (`CollectionPublicView.tsx`), che **non ne ha mai avuto uno** — inconsistenza
+  preesistente rispetto al Diario, non introdotta da questa fase, non ancora corretta.
+
+**Esportazione PDF dal sito pubblico**
+
+Richiesta dell'utente, esplicitamente un primo passo ("*per ora*") di un lavoro più ampio non
+ancora definito sul "sito utente": prima l'unico PDF su un link pubblico era quello, opzionale,
+caricato dall'autore dal libro privato (`diary.pdfUrl`) — senza, non c'era alcun modo di portarsi
+via un Diario pubblicato.
+
+- **`app/leggi/d/[token]/PublicPdfExport.tsx`** (nuovo, client, montato su Diario/volume di
+  Raccolta/Reportage standalone): genera un PDF **nel browser di chi legge**, da zero, senza
+  autenticazione né upload — pulsante "Genera e scarica il PDF" → copertina + una pagina per
+  escursione (statistiche, mappa raster del percorso, foto, racconto).
+- **Deliberatamente NON riusa** i template del libro privato (`DiarioReportPage`/
+  `DiarioStatistiche`/`DiarioMappa`): sono costruiti attorno a `ActivityMeta`/meteo/extra per
+  attività (dati che il sito pubblico non ha) e al DOM già rendered a schermo del libro
+  (`document.querySelectorAll('#diario-book .diario-page')`), non a dati passati come prop —
+  ne servirebbe una versione a sé comunque. Template nuovi e più semplici, scritti per la sola
+  forma di `PublicDiaryEntry`.
+- **Riusa invece il MOTORE**, entrambi puri e indipendenti dal libro privato:
+  `lib/pdfPaginate.ts` (`paginateToPdf`/`nextLayout` — misura il DOM reale, taglia solo ai
+  `.pdf-block`) e la mappa raster di `utils/pdfExport` (`fetchSatMap`: tile OSM cucite su
+  `<canvas>`, non Leaflet — una mappa viva "sporca" il canvas con tile cross-origin e
+  `toDataURL()` lancia `SecurityError`). Stesso accorgimento `flushSync` di
+  `app/lib/guide/usePDFExport.ts`/`app/resoconto/[id]/renderReportPdf.ts` per garantire il
+  commit React prima di misurare.
+- **Fuori da questo primo passo**: le pagine statistiche/mappa d'insieme nel PDF stesso (restano
+  visibili solo sul sito, non nel documento scaricato).
+
+**Vincolo trasversale a tutta la fase, per chi riprende da qui**: `lib/blobStore.ts` è un modulo
+lato client (IndexedDB, `syncEngine`/`pullEngine`, effetti a livello di modulo) — mai importabile
+a runtime in un componente **server** (`app/leggi/**`, `lib/sharePublic*.ts`, tutti con
+`export const runtime = 'nodejs'`). Un `import type` da blobStore è innocuo (cancellato a
+compile-time); un import normale di una sua funzione (anche solo per il tipo `ActivityMeta`) non
+lo è. Da un componente **client** (`'use client'`, come `PublicPdfExport.tsx`) importare
+`utils/pdfExport`/blobStore è invece normale, esattamente come nel libro privato.
