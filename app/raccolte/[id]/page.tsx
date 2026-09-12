@@ -209,7 +209,7 @@ export default function RaccoltaComposerPage() {
   if (error && !collection) {
     return (
       <div className={`min-h-screen bg-stone-50 flex items-center justify-center px-6 text-center ${MOBILE_TOPBAR_SPACER}`}>
-        <Navbar />
+        <Navbar mobileNavPosition="bottom" />
         <p className="text-sm text-red-600">Impossibile caricare questa raccolta: {error}</p>
       </div>
     )
@@ -217,8 +217,8 @@ export default function RaccoltaComposerPage() {
 
   return (
     <div className={`min-h-screen bg-stone-50 ${MOBILE_TOPBAR_SPACER}`}>
-      <Navbar />
-      <div className="max-w-2xl mx-auto px-4 sm:px-8 pb-16">
+      <Navbar mobileNavPosition="bottom" />
+      <div className="max-w-2xl mx-auto px-4 sm:px-8 pb-[calc(env(safe-area-inset-bottom,0px)+80px)] md:pb-16">
         <Link href="/raccolte" className="inline-flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-700 mt-3 mb-5 transition-colors">
           <ArrowLeft className="w-3.5 h-3.5" /> Raccolte
         </Link>
