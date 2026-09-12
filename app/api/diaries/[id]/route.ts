@@ -196,11 +196,22 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const body = await req.json().catch(() => ({})) as {
-      labels?: unknown; archivedAt?: unknown; shelfId?: unknown; shelfPosition?: unknown; title?: unknown
+      labels?: unknown; archivedAt?: unknown; shelfId?: unknown; shelfPosition?: unknown; title?: unknown; coverUrl?: unknown
     }
     const dbPatch: Record<string, unknown> = {}
     const hasShelfId = Object.prototype.hasOwnProperty.call(body, 'shelfId')
     const hasShelfPosition = Object.prototype.hasOwnProperty.call(body, 'shelfPosition')
+
+    // Copertina del Diario — colonna diretta, come su collections (PATCH /api/collections/[id]),
+    // invece di passare dal "sostituisci tutto" di PATCH /api/diaries/[id]/config: quel contratto
+    // serve al form completo del libro impaginato, qui basta il solo campo (es. dal centro di
+    // controllo /raccolte, che non conosce né deve conoscere il resto del DiaryConfig).
+    if (Object.prototype.hasOwnProperty.call(body, 'coverUrl')) {
+      if (body.coverUrl !== null && typeof body.coverUrl !== 'string') {
+        return NextResponse.json({ error: 'coverUrl deve essere una stringa o null' }, { status: 400 })
+      }
+      dbPatch.cover_url = body.coverUrl
+    }
 
     // Il nome del Diario (registro) — distinto dal titolo/sottotitolo di DiaryConfig, quello della
     // copertina del libro impaginato (/api/diaries/[id]/config): questo è il nome usato ovunque
@@ -307,7 +318,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }
 
     const [{ data: diaryRow, error: diaryReadErr }, { data: shelfRow, error: shelfReadErr }] = await Promise.all([
-      supabase.from('diaries').select('title, labels, archived_at').eq('id', params.id).eq('user_id', user.id).maybeSingle(),
+      supabase.from('diaries').select('title, labels, archived_at, cover_url').eq('id', params.id).eq('user_id', user.id).maybeSingle(),
       supabase.from('collection_diaries').select('collection_id, position').eq('diary_id', params.id).eq('user_id', user.id).maybeSingle(),
     ])
     if (diaryReadErr) throw diaryReadErr
@@ -318,6 +329,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       title:         diaryRow.title as string,
       labels:        (diaryRow.labels as string[] | null) ?? [],
       archivedAt:    diaryRow.archived_at as string | null,
+      coverUrl:      (diaryRow.cover_url as string | null) ?? null,
       shelfId:       (shelfRow?.collection_id as string | undefined) ?? null,
       shelfPosition: (shelfRow?.position as number | undefined) ?? 0,
     })
