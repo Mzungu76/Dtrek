@@ -1,0 +1,81 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Lora:ital@0;1&family=Barlow+Condensed:wght@600;700&family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@600&display=swap">
+<style>
+  :root{ --forest-900:#193b20; --forest-800:#1c4724; --forest-700:#20592b; --forest-600:#277134; --forest-400:#58aa63;
+    --terra-600:#c05a17; --terra-500:#d97220; --stone-50:#f8f7f4; --stone-200:#dcd8cc; --stone-400:#a9a18e; --stone-500:#978e7a; }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'DM Sans',sans-serif;color:var(--forest-900);}
+  .display{font-family:'Playfair Display';font-weight:700;}
+  .eyebrow{font-family:'Barlow Condensed';font-weight:700;font-size:9.5px;letter-spacing:.2em;text-transform:uppercase;}
+  .mono{font-family:'JetBrains Mono';}
+</style>
+</helmet>
+
+<!-- Stessa palette che app/diario/libro/[id]/page.tsx usa OGGI per davvero (stone-50, forest-600/800,
+     terra-500/600, Playfair/Lora/Barlow — da lib/designTokens.ts) invece del Taccuino Botanico non
+     ancora in produzione: è la "pergamena" reale del libro, non un'invenzione editoriale a parte -->
+<div style="width:390px;height:844px;position:relative;overflow:hidden;background:var(--stone-50);">
+
+  <div style="padding:18px 20px 4px;display:flex;align-items:center;gap:8px;">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--stone-500)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    <span class="eyebrow" style="color:var(--stone-500);">Diari</span>
+  </div>
+  <div style="padding:4px 20px 14px;">
+    <h1 class="display" style="font-size:26px;color:var(--forest-900);margin:0;">Appennino Tosco-Emiliano</h1>
+    <p class="mono" style="font-size:11px;color:var(--stone-500);margin:5px 0 0;">14 reportage &middot; 187 km &middot; 9.400 m D+</p>
+  </div>
+
+  <div style="padding:0 20px 8px;display:flex;gap:6px;">
+    <span style="background:var(--terra-500);color:#fff;font-family:'DM Sans';font-weight:700;font-size:10.5px;border-radius:999px;padding:4px 11px;">Tutte</span>
+    <span style="color:var(--stone-500);font-family:'DM Sans';font-weight:600;font-size:10.5px;border-radius:999px;padding:4px 11px;border:1px solid var(--stone-200);">Con racconto</span>
+    <span style="margin-left:auto;color:var(--forest-700);font-family:'DM Sans';font-weight:700;font-size:10.5px;display:flex;align-items:center;gap:3px;">
+      Data
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--forest-700)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+    </span>
+  </div>
+
+  <div style="padding:6px 12px 20px 20px;overflow:hidden;height:690px;">
+    <sc-for list="{{righe}}" as="r" hint-placeholder-count="6">
+      <div style="display:flex;align-items:center;gap:11px;padding:9px 8px;border-radius:12px;margin-bottom:4px;background:{{r.tint}};border:1px solid var(--stone-200);">
+        <div style="width:56px;height:56px;border-radius:9px;flex-shrink:0;background:#fff;border:1px solid var(--stone-200);position:relative;">
+          <svg width="100%" height="100%" viewBox="0 0 56 56"><path d="M5,45 Q17,18 28,29 Q39,40 51,10" stroke="var(--terra-600)" stroke-width="1.8" fill="none" stroke-linecap="round"/></svg>
+        </div>
+        <div style="min-width:0;flex:1;">
+          <p style="font-family:'DM Sans';font-weight:700;font-size:13px;color:var(--forest-900);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{r.title}}</p>
+          <p class="mono" style="font-size:10px;color:var(--stone-500);margin:2px 0 0;">{{r.stats}}</p>
+        </div>
+        <div style="width:40px;flex-shrink:0;display:flex;justify-content:center;">
+          <div style="width:28px;height:28px;border-radius:999px;border:2.5px solid {{r.ring}};display:flex;align-items:center;justify-content:center;">
+            <span class="mono" style="font-size:9.5px;color:{{r.ring}};">{{r.score}}</span>
+          </div>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+</div>
+<script data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const rows = [
+      { title: 'Monte Cimone da Pian Cavallaro', stats: '12,4 km · 850 m D+', score: '82', ring: '#c05a17', has: true },
+      { title: 'Corno alle Scale, anello nord', stats: '9,1 km · 620 m D+', score: '74', ring: '#277134', has: true },
+      { title: 'Lago Scaffaiolo dal Passo', stats: '7,8 km · 410 m D+', score: '68', ring: '#277134', has: false },
+      { title: 'Alpe Tre Potenze', stats: '11,2 km · 780 m D+', score: '79', ring: '#c05a17', has: true },
+      { title: 'Sasso Tetto, cresta sud', stats: '8,4 km · 540 m D+', score: '71', ring: '#277134', has: false },
+      { title: 'Monte Cusna da Febbio', stats: '13,6 km · 920 m D+', score: '85', ring: '#c05a17', has: true },
+    ]
+    return { righe: rows.map(r => ({ ...r, tint: r.has ? 'rgba(217,114,32,0.06)' : '#fff' })) }
+  }
+}
+</script>
+</x-dc>
+</body>
+</html>

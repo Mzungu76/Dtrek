@@ -1,6 +1,6 @@
 {
   "artboards": [
-    { "file": "Main.dc.html", "x": 0, "y": -300, "w": 1560, "h": 260 },
+    { "file": "Main.dc.html", "x": 0, "y": -760, "w": 1560, "h": 640 },
 
     { "file": "A_Profilo.dc.html", "x": 0, "y": 0, "w": 390, "h": 844 },
     { "file": "A_Reader.dc.html", "x": 490, "y": 0, "w": 390, "h": 844 },
@@ -13,13 +13,22 @@
 
     { "file": "D_Scaffale.dc.html", "x": 0, "y": 3000, "w": 390, "h": 844 },
     { "file": "D_Sommario.dc.html", "x": 490, "y": 3000, "w": 390, "h": 844 },
-    { "file": "D_Lettura.dc.html", "x": 980, "y": 3000, "w": 390, "h": 844 }
+    { "file": "D_Lettura.dc.html", "x": 980, "y": 3000, "w": 390, "h": 844 },
+
+    { "file": "E_Sommario.dc.html", "x": 490, "y": 4000, "w": 390, "h": 844 },
+    { "file": "E_Lettura.dc.html", "x": 980, "y": 4000, "w": 390, "h": 844 },
+
+    { "file": "F_Sommario.dc.html", "x": 490, "y": 5000, "w": 390, "h": 844 },
+    { "file": "F_Lettura.dc.html", "x": 980, "y": 5000, "w": 390, "h": 844 }
   ],
   "annotations": [
     { "id": "note-a", "x": 940, "y": 40, "w": 300, "text": "A — Il Taccuino Aperto\n\nIl profilo pubblico E' il taccuino: rilegatura sul bordo, carta, titoli scritti a mano (Caveat). Si apre un Diario e si resta dentro un lettore a schermo intero, capitolo dopo capitolo, con barra Indietro/Indice/Avanti come in app.\n\nCompromesso: la piu' immersiva, ma la piu' lontana da un link leggero apribile senza JavaScript." },
     { "id": "note-b", "x": 940, "y": 1040, "w": 300, "text": "B — Lo Scaffale di Taccuini\n\nIl profilo riprende la mensola scura che l'utente conosce gia' da /diario in app (copertina in primo piano, altri Diari scorrevoli, Raccolte come filtro). Si apre e si passa alla lettura a taccuino — qui l'Indice (Sommario), stesso arricchimento dati (mappa, punteggio) ricolorato per la carta.\n\nCompromesso: il porting piu' diretto di cio' che esiste, ma vive su due palette (scaffale scuro + lettura chiara) invece di una sola coerente." },
     { "id": "note-c", "x": 940, "y": 2040, "w": 300, "text": "C — Il Diario in vetrina\n\nIndice editoriale nella stessa palette carta, ma piatto: niente rilegatura vistosa, niente grana, titoli in Playfair Display invece che scritti a mano. La pagina dell'escursione resta un link vero e leggero; il lettore e' una barra sottile sopra, non un livello che sostituisce la pagina.\n\nCompromesso: la piu' performante e indicizzabile, ma la meno scenografica — il taccuino si vede meno." },
-    { "id": "note-d", "x": 1430, "y": 3040, "w": 320, "text": "D — Fedele allo stile reale dell'app\n\nNon una reinterpretazione: la stessa copertina di components/diario/DiarioCover.tsx (verde/terracotta/Playfair, mai cambiata), la stessa mensola scura di /diario, e Sommario/lettura con le formule esatte di lib/taccuinoTokens.tsx (vignettatura, rilegatura, cornice a mano via feTurbulence) — gli stessi numeri, non un'approssimazione.\n\nUnico adattamento deliberato: nessun bottone 'Strumenti' (PDF/GPX/video 3D sono azioni sul proprio account, non sulla copia pubblica)." }
+    { "id": "note-d", "x": 1430, "y": 3040, "w": 320, "text": "D — Fedele allo stile reale dell'app (copertina + mensola)\n\nLa copertina (DiarioCover.tsx, verde/terracotta/Playfair) e la mensola scura di /diario sono verificate 1:1. Sommario e lettura invece usano lib/taccuinoTokens.tsx — un file reale ma NON collegato oggi a nessuna schermata (verificato: solo 2 file di utilita' lo importano). Per queste due schermate D era quindi una direzione futura, non lo stato attuale — vedi E/F/G sotto, che corregono questo in tre modi diversi mantenendo identiche la copertina e la mensola." },
+    { "id": "note-e", "x": 1430, "y": 4040, "w": 320, "text": "E — Tutto scuro, unificato\n\nSommario e lettura restano #0b1a24 come l'hub — nessuno stacco di palette. E' la scelta che il commento reale di DiarioSommarioContent.tsx motiva esplicitamente: 'un'unica identita' visiva invece di una pagina chiara isolata in mezzo a pagine scure'.\n\nCompromesso: coerentissima con l'app, ma un link pubblico tutto scuro a schermo intero legge piu' 'app' che 'articolo da leggere'." },
+    { "id": "note-f", "x": 1430, "y": 5040, "w": 320, "text": "F — La pergamena vera del libro\n\nSommario e lettura nella palette che app/diario/libro/[id]/page.tsx usa DAVVERO oggi (stone-50, forest, terracotta, Playfair/Lora/Barlow — lib/designTokens.ts), non il Taccuino Botanico mai spedito.\n\nCompromesso: la piu' onesta rispetto a cio' che esiste in produzione, ma visivamente vicina al vecchio sito pubblico /leggi — il salto rispetto a oggi si vede meno." },
+    { "id": "note-g", "x": 1430, "y": 3480, "w": 320, "text": "G — Taccuino Botanico, a viso aperto\n\nLe stesse schermate di D_Sommario/D_Lettura qui a sinistra (carta, rilegatura, scrittura a mano) — non cambia un pixel. Cambia solo l'etichetta: non 'e' gia' cosi' in app', ma 'e' la direzione futura, disegnata e pronta in lib/taccuinoTokens.tsx, da costruire per davvero'.\n\nCompromesso: resta la piu' scenografica delle quattro, ma scegliendola si accetta di essere la prima vera implementazione del taccuino, non un riuso." }
   ],
   "launch": { "view": "canvas" }
 }

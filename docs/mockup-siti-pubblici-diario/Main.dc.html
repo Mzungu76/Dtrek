@@ -41,6 +41,30 @@
   <p style="font-family:'Lora';font-style:italic;font-size:12.5px;color:var(--hand-muted);margin:30px 0 0;max-width:900px;">
     Decisioni già prese per tutte le tre: il Diario è il fulcro visivo, Raccolte e Reportage restano ma minori; la lettura avviene in un vero lettore lato client, senza uscire dalla pagina; il profilo è la copertina, ogni Diario un capitolo con proprio frontespizio e indice.
   </p>
+
+  <div style="margin-top:44px;border-top:1px solid var(--card-border);padding-top:34px;">
+    <div style="background:#fbe9e2;border:1px solid #e0a98f;border-radius:12px;padding:16px 20px;margin-bottom:26px;max-width:1100px;">
+      <p style="font-family:'Barlow Condensed';font-weight:700;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:#9f4315;margin:0 0 6px;">Correzione dopo verifica sui componenti reali</p>
+      <p style="font-family:'Lora';font-size:13.5px;line-height:1.6;color:var(--ink);margin:0;">
+        <b style="font-style:normal">lib/taccuinoTokens.tsx</b> esiste in codice ma non è collegato a nessuna schermata reale (solo 2 file di utilità lo importano). Il vero Sommario (<b style="font-style:normal">DiarioSommarioContent.tsx</b>) è scuro, stessa identità dell'hub; le vere pagine di lettura (<b style="font-style:normal">app/diario/libro/[id]/page.tsx</b>) usano ancora la vecchia pergamena forest/terracotta. La Direzione D, quindi, era fedele solo per la copertina e la mensola — non per Sommario e lettura. Le tre alternative sotto correggono questo, ciascuna in un modo diverso.
+      </p>
+    </div>
+    <p style="font-family:'Barlow Condensed';font-weight:700;font-size:12px;letter-spacing:.28em;text-transform:uppercase;color:var(--accent);margin:0 0 10px;">Alternative alla Direzione D</p>
+    <h2 style="font-family:'Playfair Display';font-weight:800;font-size:28px;margin:0 0 22px;color:var(--ink);">Stessa copertina e stessa mensola. Cambia solo cosa succede dopo.</h2>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:24px;">
+      <sc-for list="{{cols2}}" as="c" hint-placeholder-count="3">
+        <div style="background:var(--card);border:1px solid var(--card-border);border-radius:14px;padding:26px 24px;">
+          <p style="font-family:'Barlow Condensed';font-weight:700;font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:{{c.tagColor}};margin:0 0 6px;">{{c.tag}}</p>
+          <h2 style="font-family:'Playfair Display';font-weight:800;font-size:22px;margin:0 0 12px;color:var(--ink);">{{c.title}}</h2>
+          <p style="font-family:'Lora';font-size:14.5px;line-height:1.65;color:var(--ink);margin:0 0 16px;">{{c.pitch}}</p>
+          <div style="border-top:1px solid var(--card-border);padding-top:14px;">
+            <p style="font-family:'Barlow Condensed';font-weight:700;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--hand-muted);margin:0 0 5px;">Il compromesso</p>
+            <p style="font-family:'Lora';font-style:italic;font-size:13.5px;line-height:1.55;color:var(--hand);margin:0;">{{c.tradeoff}}</p>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
 </div>
 <script data-dc-script>
 class Component extends DCLogic {
@@ -63,6 +87,20 @@ class Component extends DCLogic {
           title: 'Fedele allo stile reale',
           pitch: 'Non una reinterpretazione: la stessa copertina verde/terracotta di sempre (DiarioCover.tsx), la stessa mensola scura di /diario, e Sommario/lettura con le formule esatte di lib/taccuinoTokens.tsx — gli stessi numeri, non un’approssimazione.',
           tradeoff: 'La più coerente con ciò che l’utente già conosce — ma eredita anche l’incoerenza fra le due palette (copertina scura, lettura chiara) già presente in app.' },
+      ],
+      cols2: [
+        { tag: 'Direzione E', tagColor: '#e08d3c',
+          title: 'Tutto scuro, unificato',
+          pitch: 'Sommario e lettura restano nello stesso #0b1a24 dell’hub e dello scaffale — nessuno stacco di palette. È la stessa scelta già motivata nel codice di DiarioSommarioContent.tsx: "un’unica identità visiva invece di una pagina chiara isolata in mezzo a pagine scure".',
+          tradeoff: 'La più coerente con l’app di oggi in assoluto — ma su un link pubblico condiviso in chat, uno sfondo scuro a schermo intero legge più "app" che "articolo da leggere".' },
+        { tag: 'Direzione F', tagColor: '#277134',
+          title: 'La pergamena vera del libro',
+          pitch: 'Sommario e lettura nella palette che le pagine di Guida/Reportage usano davvero oggi (stone-50, forest, terracotta, Playfair/Lora/Barlow — lib/designTokens.ts) — non il Taccuino Botanico, che nessuna schermata reale mostra ancora.',
+          tradeoff: 'La più onesta rispetto a cosa esiste in produzione — ma è visivamente quasi identica al vecchio sito pubblico /leggi, quindi il salto rispetto a oggi si vede meno.' },
+        { tag: 'Direzione G', tagColor: '#7C8F6E',
+          title: 'Taccuino Botanico, a viso aperto',
+          pitch: 'Le stesse schermate della Direzione D (carta, rilegatura, scrittura a mano), riproposte non come "già così in app" ma come quello che sono davvero: una direzione futura, disegnata e pronta in lib/taccuinoTokens.tsx, non ancora agganciata a nessuna schermata.',
+          tradeoff: 'Resta l’opzione più scenografica delle tre — ma sceglierla significa costruire la prima vera implementazione del taccuino, non riusare qualcosa già in produzione.' },
       ],
     }
   }
