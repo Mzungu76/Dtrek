@@ -1,0 +1,69 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Lora:ital@0;1&family=Caveat:wght@600;700&family=Barlow+Condensed:wght@600;700&family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@600&display=swap">
+<style>
+  :root{
+    --paper:#F5EDDD; --card:#EBE0C8; --card-border:#D9C9A8; --contour:#A89A78;
+    --ink:#2E2A22; --hand:#7A6F52; --hand-muted:#95886A;
+    --accent:#C0603D; --sage:#7C8F6E; --tint:#E9DAC3;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--paper);font-family:'DM Sans',sans-serif;color:var(--ink);}
+  a{color:var(--accent);} a:hover{color:#9f4d33;}
+</style>
+</helmet>
+<div style="width:1360px;padding:56px 64px;position:relative;">
+  <p style="font-family:'Barlow Condensed';font-weight:700;font-size:12px;letter-spacing:.28em;text-transform:uppercase;color:var(--accent);margin:0 0 10px;">Siti pubblici · 3 direzioni</p>
+  <h1 style="font-family:'Playfair Display';font-weight:800;font-size:38px;margin:0 0 14px;color:var(--ink);">Il Diario, non il Reportage, al centro del sito che si condivide</h1>
+  <p style="font-family:'Lora';font-style:italic;font-size:16px;color:var(--hand);max-width:900px;line-height:1.6;margin:0 0 34px;">
+    Oggi <b style="font-style:normal">/u/[slug]</b> è un indice a tre liste piatte (Raccolte, Diari, Reportage) e ogni Diario pubblico è una griglia di schede — una per escursione. In app il Diario ha invece già una sua identità precisa, la direzione "Taccuino Botanico": carta, rilegatura, scrittura a mano. Le tre direzioni sotto portano quella stessa identità sul sito pubblico, con un lettore vero al posto della sola scheda.
+  </p>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:28px;">
+    <sc-for list="{{cols}}" as="c" hint-placeholder-count="3">
+      <div style="background:var(--card);border:1px solid var(--card-border);border-radius:14px;padding:26px 24px;">
+        <p style="font-family:'Barlow Condensed';font-weight:700;font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:{{c.tagColor}};margin:0 0 6px;">{{c.tag}}</p>
+        <h2 style="font-family:'Playfair Display';font-weight:800;font-size:22px;margin:0 0 12px;color:var(--ink);">{{c.title}}</h2>
+        <p style="font-family:'Lora';font-size:14.5px;line-height:1.65;color:var(--ink);margin:0 0 16px;">{{c.pitch}}</p>
+        <div style="border-top:1px solid var(--card-border);padding-top:14px;">
+          <p style="font-family:'Barlow Condensed';font-weight:700;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--hand-muted);margin:0 0 5px;">Il compromesso</p>
+          <p style="font-family:'Lora';font-style:italic;font-size:13.5px;line-height:1.55;color:var(--hand);margin:0;">{{c.tradeoff}}</p>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+  <p style="font-family:'Lora';font-style:italic;font-size:12.5px;color:var(--hand-muted);margin:30px 0 0;max-width:900px;">
+    Decisioni già prese per tutte le tre: il Diario è il fulcro visivo, Raccolte e Reportage restano ma minori; la lettura avviene in un vero lettore lato client, senza uscire dalla pagina; il profilo è la copertina, ogni Diario un capitolo con proprio frontespizio e indice.
+  </p>
+</div>
+<script data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      cols: [
+        { tag: 'Direzione A', tagColor: '#C0603D',
+          title: 'Il Taccuino Aperto',
+          pitch: 'Il profilo pubblico è il taccuino stesso, aperto: rilegatura, carta, titoli scritti a mano. Il Diario si apre e si resta dentro, si sfoglia pagina dopo pagina.',
+          tradeoff: 'La più immersiva e la più fedele all’app — ma la più lontana dal link "leggero" apribile senza JavaScript.' },
+        { tag: 'Direzione B', tagColor: '#20592b',
+          title: 'Lo Scaffale di Taccuini',
+          pitch: 'Il profilo riprende la mensola scura che l’utente già conosce da /diario in app: copertine, drag verso l’alto, Raccolte come filtro. Si apre e si passa alla lettura a taccuino.',
+          tradeoff: 'Il porting più diretto di ciò che esiste già — ma richiede due palette (scura per lo scaffale, carta per la lettura) invece di una sola.' },
+        { tag: 'Direzione C', tagColor: '#7C8F6E',
+          title: 'Il Diario in vetrina',
+          pitch: 'Un indice editoriale leggero, nella stessa palette carta ma senza rilegatura né grana — pensato per un link condiviso in chat. La pagina dell’escursione resta vera e leggera, il lettore è un livello sottile sopra.',
+          tradeoff: 'La più performante e indicizzabile — ma la meno scenografica delle tre, il taccuino si vede meno.' },
+      ],
+    }
+  }
+}
+</script>
+</x-dc>
+</body>
+</html>

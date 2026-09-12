@@ -1,0 +1,81 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Lora:ital@0;1&family=Barlow+Condensed:wght@600;700&family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@600&display=swap">
+<style>
+  :root{
+    --paper:#F5EDDD; --paper-light:#F9F2E4; --card:#EBE0C8; --card-border:#D9C9A8;
+    --ink:#2E2A22; --hand:#7A6F52; --hand-muted:#95886A;
+    --accent:#C0603D; --sage:#7C8F6E; --tint:#E9DAC3;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'DM Sans',sans-serif;color:var(--ink);}
+  .display{font-family:'Playfair Display';font-weight:800;}
+  .eyebrow{font-family:'Barlow Condensed';font-weight:700;font-size:10px;letter-spacing:.2em;text-transform:uppercase;}
+  .lora{font-family:'Lora';}
+  .lora-i{font-family:'Lora';font-style:italic;}
+  .mono{font-family:'JetBrains Mono';}
+</style>
+</helmet>
+
+<div style="width:390px;height:844px;position:relative;overflow:hidden;background:var(--paper);">
+
+  <div style="position:sticky;top:0;z-index:20;background:rgba(245,237,221,.95);backdrop-filter:blur(6px);border-bottom:1px solid var(--card-border);padding:14px 20px;display:flex;align-items:center;justify-content:space-between;">
+    <a href="#" style="display:flex;align-items:center;gap:5px;font-family:'DM Sans';font-weight:600;font-size:11.5px;color:var(--hand);">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--hand)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      Tutte le escursioni
+    </a>
+    <a href="#" style="font-family:'DM Sans';font-weight:700;font-size:10.5px;background:var(--accent);color:#fff;border-radius:999px;padding:5px 12px;">Prova DTrek</a>
+  </div>
+
+  <div style="padding:16px 20px 100px;overflow:hidden;height:706px;">
+    <div style="width:100%;height:150px;border-radius:12px;background:linear-gradient(158deg,#193b20 0%,#1c4724 45%,#20592b 100%);margin-bottom:14px;"></div>
+
+    <p class="eyebrow" style="color:var(--accent);margin:0 0 5px;">Escursione #12 &middot; giugno 2025</p>
+    <h1 class="display" style="font-size:25px;line-height:1.12;margin:0 0 5px;color:var(--ink);">Monte Cimone da Pian Cavallaro</h1>
+    <p style="font-family:'DM Sans';font-size:11px;color:var(--hand-muted);margin:0 0 12px;">14 giugno 2025</p>
+
+    <div style="display:flex;border-top:1px solid var(--card-border);border-bottom:1px solid var(--card-border);padding:9px 0;margin-bottom:16px;">
+      <div style="flex:1;text-align:center;"><p class="mono" style="font-size:13.5px;margin:0;">12,4 km</p><p class="eyebrow" style="font-size:8px;color:var(--hand-muted);margin:2px 0 0;">Distanza</p></div>
+      <div style="flex:1;text-align:center;border-left:1px solid var(--card-border);"><p class="mono" style="font-size:13.5px;margin:0;">850 m</p><p class="eyebrow" style="font-size:8px;color:var(--hand-muted);margin:2px 0 0;">D+</p></div>
+      <div style="flex:1;text-align:center;border-left:1px solid var(--card-border);"><p class="mono" style="font-size:13.5px;margin:0;">4h20</p><p class="eyebrow" style="font-size:8px;color:var(--hand-muted);margin:2px 0 0;">Tempo</p></div>
+      <div style="flex:1;text-align:center;border-left:1px solid var(--card-border);"><p class="mono" style="font-size:13.5px;margin:0;">2.165 m</p><p class="eyebrow" style="font-size:8px;color:var(--hand-muted);margin:2px 0 0;">Quota</p></div>
+    </div>
+
+    <p class="eyebrow" style="color:var(--accent);margin:0 0 6px;">Il crinale</p>
+    <p class="lora" style="font-size:14px;line-height:1.7;color:var(--ink);margin:0 0 10px;">
+      Dal rifugio il sentiero guadagna quota tra faggi radi, poi esce sul crinale nudo: da qui in
+      avanti è tutto vento e vista, fino alla croce di vetta che si vede già, piccola, contro il cielo.
+    </p>
+    <div style="border-left:3px solid var(--accent);background:var(--tint);border-radius:0 8px 8px 0;padding:9px 12px;margin-bottom:10px;">
+      <p class="lora-i" style="font-size:12.5px;line-height:1.5;color:var(--hand);margin:0;">Nelle giornate terse si vede il mare, oltre le colline reggiane.</p>
+    </div>
+    <p class="lora" style="font-size:14px;line-height:1.7;color:var(--ink);margin:0;">
+      L'ultimo tratto è un saliscendi breve ma esposto al vento: in vetta, il Cimone regala la vista
+      più ampia di tutto l'Appennino settentrionale.
+    </p>
+  </div>
+
+  <!-- livello sottile di lettura, sopra una pagina reale -->
+  <div style="position:absolute;left:14px;right:14px;bottom:18px;z-index:30;background:rgba(46,42,34,.92);backdrop-filter:blur(6px);border-radius:14px;padding:10px 8px 10px 16px;display:flex;align-items:center;gap:10px;box-shadow:0 8px 24px rgba(0,0,0,.22);">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    <div style="flex:1;min-width:0;">
+      <p style="font-family:'DM Sans';font-weight:700;font-size:12px;color:#fff;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">12 di 14 &middot; Monte Cimone</p>
+      <div style="height:2.5px;border-radius:2px;background:rgba(255,255,255,.2);margin-top:5px;overflow:hidden;">
+        <div style="width:83%;height:100%;background:#e9ab64;"></div>
+      </div>
+    </div>
+    <button style="background:#e9ab64;color:#2E2A22;border:none;border-radius:999px;width:34px;height:34px;flex-shrink:0;display:flex;align-items:center;justify-content:center;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+    </button>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

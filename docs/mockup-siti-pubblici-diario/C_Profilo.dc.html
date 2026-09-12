@@ -1,0 +1,93 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Lora:ital@0;1&family=Barlow+Condensed:wght@600;700&family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@600&display=swap">
+<style>
+  :root{
+    --paper:#F5EDDD; --paper-light:#F9F2E4; --card:#EBE0C8; --card-border:#D9C9A8;
+    --ink:#2E2A22; --hand:#7A6F52; --hand-muted:#95886A;
+    --accent:#C0603D; --sage:#7C8F6E;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'DM Sans',sans-serif;color:var(--ink);}
+  a{color:var(--accent);text-decoration:none;}
+  .display{font-family:'Playfair Display';font-weight:800;}
+  .eyebrow{font-family:'Barlow Condensed';font-weight:700;font-size:10px;letter-spacing:.22em;text-transform:uppercase;}
+  .lora-i{font-family:'Lora';font-style:italic;}
+  .mono{font-family:'JetBrains Mono';}
+</style>
+</helmet>
+
+<div style="width:390px;height:844px;position:relative;overflow:hidden;background:var(--paper);">
+
+  <div style="position:absolute;inset-block:0;left:0;width:18px;z-index:20;pointer-events:none;
+    background:linear-gradient(to right, rgba(41,35,30,0.30) 0%, rgba(41,35,30,0.14) 40%, transparent 100%);"></div>
+
+  <div style="position:relative;padding:16px 20px 8px 30px;display:flex;align-items:center;justify-content:space-between;">
+    <span style="display:flex;align-items:center;gap:7px;">
+      <span style="color:var(--accent);font-size:14px;">&#9650;</span>
+      <span class="eyebrow" style="color:var(--hand-muted);">DTrek</span>
+    </span>
+    <a href="#" style="font-family:'DM Sans';font-weight:700;font-size:10.5px;background:var(--accent);color:#fff;border-radius:999px;padding:6px 13px;">Prova DTrek</a>
+  </div>
+
+  <div style="position:relative;padding:6px 20px 0 30px;overflow:hidden;height:786px;">
+    <p class="eyebrow" style="color:var(--hand-muted);margin:0 0 6px;">Profilo pubblico</p>
+    <h1 class="display" style="font-size:28px;margin:0 0 20px;color:var(--ink);">Marco B.</h1>
+
+    <p class="eyebrow" style="color:var(--accent);margin:0 0 8px;">In apertura</p>
+    <div style="border-radius:12px;overflow:hidden;position:relative;height:168px;margin-bottom:22px;background:linear-gradient(158deg,#6a2e18 0%,#813619 45%,#9f4315 100%);">
+      <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 45%,rgba(0,0,0,.55) 100%);"></div>
+      <div style="position:absolute;left:16px;right:16px;bottom:13px;">
+        <p class="eyebrow" style="color:#f2cd9d;margin:0 0 5px;">2023 &ndash; 2025</p>
+        <h2 class="display" style="font-size:21px;color:#fff;margin:0;line-height:1.1;">Appennino Tosco-Emiliano</h2>
+        <p class="mono" style="font-size:10.5px;color:rgba(255,255,255,.7);margin:5px 0 0;">14 escursioni &middot; 187 km &middot; 9.400 m D+</p>
+      </div>
+    </div>
+
+    <p class="eyebrow" style="color:var(--hand-muted);margin:0 0 10px;">Sommario dei taccuini</p>
+    <sc-for list="{{diari}}" as="d" hint-placeholder-count="3">
+      <a href="#" style="display:flex;align-items:center;gap:13px;padding:13px 0;border-bottom:1px solid var(--card-border);">
+        <span class="mono" style="font-size:11px;color:var(--hand-muted);width:34px;flex-shrink:0;">{{d.vol}}</span>
+        <div style="min-width:0;flex:1;">
+          <p class="display" style="font-size:16.5px;margin:0;color:var(--ink);line-height:1.15;">{{d.title}}</p>
+          <p class="lora-i" style="font-size:11.5px;color:var(--hand);margin:3px 0 0;">{{d.subtitle}} &middot; <span class="mono" style="font-style:normal;">{{d.stats}}</span></p>
+        </div>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--hand-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </a>
+    </sc-for>
+
+    <p class="eyebrow" style="color:var(--hand-muted);margin:22px 0 10px;">Collane</p>
+    <div style="border:1px solid var(--card-border);border-radius:10px;padding:12px 14px;display:flex;align-items:center;gap:12px;margin-bottom:20px;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--sage)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 6 4 14"/><path d="M12 6v14"/><path d="M8 8v12"/><path d="M4 4v16"/></svg>
+      <div style="min-width:0;flex:1;">
+        <p style="font-family:'DM Sans';font-weight:700;font-size:13.5px;color:var(--ink);margin:0;">In cammino sulle Alpi</p>
+        <p style="font-family:'DM Sans';font-size:11px;color:var(--hand-muted);margin:2px 0 0;">2 taccuini</p>
+      </div>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--hand-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+    </div>
+
+    <p class="lora-i" style="font-size:11.5px;color:var(--hand-muted);text-align:center;margin:0;">+ 1 reportage pubblicato singolarmente</p>
+  </div>
+</div>
+<script data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      diari: [
+        { vol: 'Vol. 02', title: 'Alpi Marittime', subtitle: 'Tra le Alpi e il mare', stats: '6 esc. · 74 km' },
+        { vol: 'Vol. 03', title: 'Sentieri di casa', subtitle: 'Weekend nel Mugello', stats: '22 esc. · 138 km' },
+      ],
+    }
+  }
+}
+</script>
+</x-dc>
+</body>
+</html>

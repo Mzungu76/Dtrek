@@ -1,0 +1,20 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": -300, "w": 1360, "h": 260 },
+
+    { "file": "A_Profilo.dc.html", "x": 0, "y": 0, "w": 390, "h": 844 },
+    { "file": "A_Reader.dc.html", "x": 490, "y": 0, "w": 390, "h": 844 },
+
+    { "file": "B_Profilo.dc.html", "x": 0, "y": 1000, "w": 390, "h": 844 },
+    { "file": "B_Reader.dc.html", "x": 490, "y": 1000, "w": 390, "h": 844 },
+
+    { "file": "C_Profilo.dc.html", "x": 0, "y": 2000, "w": 390, "h": 844 },
+    { "file": "C_Reader.dc.html", "x": 490, "y": 2000, "w": 390, "h": 844 }
+  ],
+  "annotations": [
+    { "id": "note-a", "x": 940, "y": 40, "w": 300, "text": "A — Il Taccuino Aperto\n\nIl profilo pubblico E' il taccuino: rilegatura sul bordo, carta, titoli scritti a mano (Caveat). Si apre un Diario e si resta dentro un lettore a schermo intero, capitolo dopo capitolo, con barra Indietro/Indice/Avanti come in app.\n\nCompromesso: la piu' immersiva, ma la piu' lontana da un link leggero apribile senza JavaScript." },
+    { "id": "note-b", "x": 940, "y": 1040, "w": 300, "text": "B — Lo Scaffale di Taccuini\n\nIl profilo riprende la mensola scura che l'utente conosce gia' da /diario in app (copertina in primo piano, altri Diari scorrevoli, Raccolte come filtro). Si apre e si passa alla lettura a taccuino — qui l'Indice (Sommario), stesso arricchimento dati (mappa, punteggio) ricolorato per la carta.\n\nCompromesso: il porting piu' diretto di cio' che esiste, ma vive su due palette (scaffale scuro + lettura chiara) invece di una sola coerente." },
+    { "id": "note-c", "x": 940, "y": 2040, "w": 300, "text": "C — Il Diario in vetrina\n\nIndice editoriale nella stessa palette carta, ma piatto: niente rilegatura vistosa, niente grana, titoli in Playfair Display invece che scritti a mano. La pagina dell'escursione resta un link vero e leggero; il lettore e' una barra sottile sopra, non un livello che sostituisce la pagina.\n\nCompromesso: la piu' performante e indicizzabile, ma la meno scenografica — il taccuino si vede meno." }
+  ],
+  "launch": { "view": "canvas" }
+}
