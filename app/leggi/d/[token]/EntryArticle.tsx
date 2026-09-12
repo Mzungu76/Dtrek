@@ -1,6 +1,11 @@
 // Articolo di una singola escursione sul sito pubblico del Diario, e scheda compatta per le
 // escursioni senza racconto. Estratto da DiaryPublicView quando il link è diventato un sito con
 // una pagina per escursione: lo stesso articolo serve alla home (in anteprima) e alla sua pagina.
+//
+// Direzione Taccuino Botanico (docs/siti-pubblici-taccuino-piano.md): carta al posto della card
+// bianca, cornice disegnata a mano sulla mappa, marker delle foto sul grafico del profilo
+// altimetrico invece che (solo) sulla mappa — la stessa struttura di
+// components/diario/DiarioReportPage.tsx, il libro privato, riusata qui per la prima volta.
 
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
@@ -11,6 +16,7 @@ import { formatDuration } from '@/lib/tcxParser'
 import { bucketPhotosByChapter } from '@/lib/photoBuckets'
 import type { PublicDiaryEntry, PublicDiaryPhoto } from '@/lib/sharePublicDiary'
 import type { DiaryPublicSections } from '@/lib/diaryConfig'
+import { HandDrawnFrame } from '@/lib/taccuinoTokens'
 import { RouteSketch } from './RouteSketch'
 import { RouteMap } from './RouteMap'
 import { LocatorMap } from '@/components/LocatorMap'
@@ -22,7 +28,7 @@ function Inline({ text }: { text: string }) {
   return (
     <>
       {parseInlineEmphasis(text).map((seg, i) =>
-        seg.bold ? <strong key={i} className="font-semibold text-stone-800">{seg.text}</strong> : <span key={i}>{seg.text}</span>,
+        seg.bold ? <strong key={i} className="font-semibold text-[#2E2A22]">{seg.text}</strong> : <span key={i}>{seg.text}</span>,
       )}
     </>
   )
@@ -31,22 +37,22 @@ function Inline({ text }: { text: string }) {
 function StatCell({ icon, value, label }: { icon?: React.ReactNode; value: string; label: string }) {
   return (
     <div className="flex-1 min-w-0 px-3 py-3 text-center">
-      <div className="flex items-center justify-center gap-1 text-forest-700">
+      <div className="flex items-center justify-center gap-1 text-[#2E2A22]">
         {icon}
         <span className="font-mono text-base font-bold leading-none">{value}</span>
       </div>
-      <div className="text-[9px] font-semibold text-stone-400 uppercase tracking-wider mt-1">{label}</div>
+      <div className="text-[9px] font-semibold text-[#95886A] uppercase tracking-wider mt-1">{label}</div>
     </div>
   )
 }
 
 export function EntryStats({ entry }: { entry: PublicDiaryEntry }) {
   return (
-    <div className="flex items-stretch divide-x divide-stone-100 border-y border-stone-100 my-5">
-      <StatCell icon={<RouteIcon className="w-3.5 h-3.5 text-stone-300" />} value={`${(entry.distanceMeters / 1000).toFixed(1)}`} label="km" />
-      <StatCell icon={<Mountain className="w-3.5 h-3.5 text-stone-300" />} value={`${Math.round(entry.elevationGain)}`} label="m D+" />
+    <div className="flex items-stretch divide-x divide-[#D9C9A8]/60 border-y border-[#D9C9A8]/60 my-5">
+      <StatCell icon={<RouteIcon className="w-3.5 h-3.5 text-[#C4BEAD]" />} value={`${(entry.distanceMeters / 1000).toFixed(1)}`} label="km" />
+      <StatCell icon={<Mountain className="w-3.5 h-3.5 text-[#C4BEAD]" />} value={`${Math.round(entry.elevationGain)}`} label="m D+" />
       {entry.totalTimeSeconds > 0 && (
-        <StatCell icon={<Clock className="w-3.5 h-3.5 text-stone-300" />} value={formatDuration(entry.totalTimeSeconds)} label="in cammino" />
+        <StatCell icon={<Clock className="w-3.5 h-3.5 text-[#C4BEAD]" />} value={formatDuration(entry.totalTimeSeconds)} label="in cammino" />
       )}
       {entry.altitudeMax != null && (
         <StatCell value={`${Math.round(entry.altitudeMax)}`} label="quota max" />
@@ -65,9 +71,9 @@ export function PhotoGrid({ photos }: { photos: PublicDiaryPhoto[] }) {
               centinaio di foto a piena risoluzione, e chi apre il link spesso è in mobilità. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={p.url} alt={p.caption ?? ''} loading="lazy" decoding="async"
-            className="w-full aspect-[4/3] object-cover rounded-xl bg-stone-100" />
+            className="w-full aspect-[4/3] object-cover rounded-xl bg-[#F9F2E4]" />
           {p.caption && (
-            <figcaption className="text-[11px] font-lora italic text-stone-400 text-center mt-1.5 leading-snug">
+            <figcaption className="text-[11px] font-lora italic text-[#95886A] text-center mt-1.5 leading-snug">
               {p.caption}
             </figcaption>
           )}
@@ -91,9 +97,9 @@ function InlineFigure({ photo, side }: { photo: PublicDiaryPhoto; side: 'left' |
     <figure className={`my-4 sm:w-[46%] sm:mb-3 ${side === 'right' ? 'sm:float-right sm:ml-5' : 'sm:float-left sm:mr-5'}`}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={photo.url} alt={photo.caption ?? ''} loading="lazy" decoding="async"
-        className="w-full aspect-[4/3] object-cover rounded-xl bg-stone-100" />
+        className="w-full aspect-[4/3] object-cover rounded-xl bg-[#F9F2E4]" />
       {photo.caption && (
-        <figcaption className="text-[11px] font-lora italic text-stone-400 mt-1.5 leading-snug">
+        <figcaption className="text-[11px] font-lora italic text-[#95886A] mt-1.5 leading-snug">
           {photo.caption}
         </figcaption>
       )}
@@ -129,8 +135,8 @@ export function EntryArticle({ entry, n, show }: { entry: PublicDiaryEntry; n: n
     parseMarkupBlocks(section.body).forEach((block, bi) => {
       if (block.type === 'curiosita') {
         nodes.push(
-          <aside key={`b${bi}`} className="my-4 rounded-r-xl border-l-[3px] border-terra-500 bg-terra-50/60 px-4 py-3">
-            <p className="font-lora italic text-[15px] leading-relaxed text-stone-600">
+          <aside key={`b${bi}`} className="my-4 rounded-r-xl border-l-[3px] border-[#C0603D] bg-[#E9DAC3]/70 px-4 py-3">
+            <p className="font-lora italic text-[15px] leading-relaxed text-[#7A6F52]">
               <Inline text={block.text} />
             </p>
           </aside>,
@@ -147,14 +153,14 @@ export function EntryArticle({ entry, n, show }: { entry: PublicDiaryEntry; n: n
       }
       if (block.type === 'subsection') {
         nodes.push(
-          <h4 key={`b${bi}`} className="font-display font-bold text-base text-forest-800 mt-5 mb-1.5">
+          <h4 key={`b${bi}`} className="font-display font-bold text-base text-[#193b20] mt-5 mb-1.5">
             {block.text}
           </h4>,
         )
         return
       }
       nodes.push(
-        <p key={`b${bi}`} className="font-lora text-[15px] leading-[1.75] text-stone-600 mb-3.5">
+        <p key={`b${bi}`} className="font-lora text-[15px] leading-[1.75] text-[#4d4740] mb-3.5">
           <Inline text={block.text} />
         </p>,
       )
@@ -172,7 +178,7 @@ export function EntryArticle({ entry, n, show }: { entry: PublicDiaryEntry; n: n
     return (
       // `flow-root` contiene i float delle foto dentro la sezione che le ospita.
       <section key={si} className="mt-6 first:mt-0 flow-root">
-        <h3 className="font-barlow font-bold text-[11px] tracking-[0.2em] uppercase text-terra-500 mb-2">
+        <h3 className="font-barlow font-bold text-[11px] tracking-[0.2em] uppercase text-[#C0603D] mb-2">
           {section.title}
         </h3>
         {nodes}
@@ -180,22 +186,30 @@ export function EntryArticle({ entry, n, show }: { entry: PublicDiaryEntry; n: n
     )
   })
 
+  // Marker delle foto sul grafico del profilo altimetrico, non (solo) sulla mappa — la stessa
+  // struttura di DiarioReportPage.tsx (il libro privato): ogni foto con una posizione nota lungo
+  // il percorso diventa un marker sulla curva, non un punto in più sulla mappa sottostante.
+  const photoMarkers = show.foto
+    ? entry.photos.filter((p): p is PublicDiaryPhoto & { progress: number } => typeof p.progress === 'number')
+      .map(p => ({ progress: p.progress, url: p.url }))
+    : []
+
   return (
-    <article id={`esc-${n}`} className="bg-white rounded-3xl border border-stone-200 shadow-sm overflow-hidden scroll-mt-16">
+    <article id={`esc-${n}`} className="bg-[#EBE0C8] rounded-3xl border border-[#D9C9A8] shadow-sm overflow-hidden scroll-mt-16">
       {show.foto && entry.photos[0] && (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={entry.photos[0].url} alt="" loading="lazy" decoding="async"
-          className="w-full aspect-[16/9] object-cover bg-stone-100" />
+          className="w-full aspect-[16/9] object-cover bg-[#F9F2E4]" />
       )}
 
       <div className="p-5 sm:p-7">
-        <p className="font-barlow font-bold text-[10px] tracking-[0.2em] uppercase text-terra-500">
+        <p className="font-barlow font-bold text-[10px] tracking-[0.2em] uppercase text-[#C0603D]">
           Escursione #{String(n).padStart(2, '0')} · {format(new Date(entry.startTime), 'MMMM yyyy', { locale: it })}
         </p>
-        <h2 className="font-display text-2xl sm:text-3xl font-bold text-forest-900 leading-tight mt-1.5">
+        <h2 className="font-display text-2xl sm:text-3xl font-bold text-[#193b20] leading-tight mt-1.5">
           {entry.title}
         </h2>
-        <p className="text-xs text-stone-400 mt-1.5">
+        <p className="text-xs text-[#95886A] mt-1.5">
           {format(new Date(entry.startTime), 'd MMMM yyyy', { locale: it })}
         </p>
 
@@ -206,13 +220,14 @@ export function EntryArticle({ entry, n, show }: { entry: PublicDiaryEntry; n: n
           // quella dell'Italia dice dove si trova. Da sola, la prima lascia chi legge senza
           // riferimenti — una traccia fra due boschi può stare ovunque.
           <div className="mb-6 flex gap-3 items-start">
-            <div className="flex-1 min-w-0">
+            <div className="relative flex-1 min-w-0">
+              <HandDrawnFrame stroke="#7C8F6E" rx={10} />
               <RouteMap
-              polyline={entry.polyline}
+                polyline={entry.polyline}
                 photoProgress={entry.photos.map(p => p.progress).filter((p): p is number => p != null)}
               />
-              <p className="text-[10px] text-stone-400 text-center mt-1.5">
-                Partenza, arrivo e punti in cui sono state scattate le foto
+              <p className="text-[10px] text-[#95886A] text-center mt-1.5">
+                Partenza, arrivo e inquadramento generale
               </p>
             </div>
             <div className="w-[104px] sm:w-[132px] shrink-0">
@@ -225,11 +240,11 @@ export function EntryArticle({ entry, n, show }: { entry: PublicDiaryEntry; n: n
           <div className="mb-6 space-y-4">
             {entry.altitudeSeries.length > 1 && (
               <div>
-                <p className="font-barlow font-bold text-[9px] tracking-[0.2em] uppercase text-stone-400 mb-1.5">
-                  Profilo altimetrico
+                <p className="font-barlow font-bold text-[9px] tracking-[0.2em] uppercase text-[#95886A] mb-1.5">
+                  Profilo altimetrico{photoMarkers.length > 0 && ' · con posizione foto'}
                 </p>
-                <div className="rounded-lg border border-forest-100 bg-forest-50/60 px-3 py-2.5">
-                  <ProgressChart series={entry.altitudeSeries} accent={GREEN} unit=" m" />
+                <div className="rounded-lg border border-[#D9C9A8] bg-[#F9F2E4] px-3 py-2.5">
+                  <ProgressChart series={entry.altitudeSeries} photoMarkers={photoMarkers} accent={GREEN} unit=" m" animated />
                 </div>
               </div>
             )}
@@ -237,23 +252,23 @@ export function EntryArticle({ entry, n, show }: { entry: PublicDiaryEntry; n: n
               <div className="flex flex-col gap-3 sm:flex-row">
                 {entry.hrSeries.length > 1 && (
                   <div className="flex-1 min-w-0">
-                    <p className="font-barlow font-bold text-[9px] tracking-[0.2em] uppercase text-stone-400 mb-1.5">
+                    <p className="font-barlow font-bold text-[9px] tracking-[0.2em] uppercase text-[#95886A] mb-1.5">
                       Frequenza cardiaca
                     </p>
                     <div className="rounded-lg border border-red-100 bg-red-50/60 px-3 py-2.5">
                       <ProgressChart series={entry.hrSeries}
                         accent={{ bg: '#fef2f2', border: '#fecaca', text: '#991b1b', iconBg: '#fee2e2', iconColor: '#dc2626' }}
-                        unit=" bpm" />
+                        unit=" bpm" animated />
                     </div>
                   </div>
                 )}
                 {entry.speedSeriesKmh.length > 1 && (
                   <div className="flex-1 min-w-0">
-                    <p className="font-barlow font-bold text-[9px] tracking-[0.2em] uppercase text-stone-400 mb-1.5">
+                    <p className="font-barlow font-bold text-[9px] tracking-[0.2em] uppercase text-[#95886A] mb-1.5">
                       Velocità
                     </p>
                     <div className="rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-2.5">
-                      <ProgressChart series={entry.speedSeriesKmh} accent={BLUE} unit=" km/h" decimals={1} />
+                      <ProgressChart series={entry.speedSeriesKmh} accent={BLUE} unit=" km/h" decimals={1} animated />
                     </div>
                   </div>
                 )}
@@ -281,26 +296,26 @@ export function EntryArticle({ entry, n, show }: { entry: PublicDiaryEntry; n: n
  */
 export function EntryCard({ entry, n }: { entry: PublicDiaryEntry; n: number }) {
   return (
-    <article id={`esc-${n}`} className="bg-white rounded-3xl border border-stone-200 shadow-sm p-5 flex gap-4 items-center scroll-mt-16">
+    <article id={`esc-${n}`} className="bg-[#EBE0C8] rounded-3xl border border-[#D9C9A8] shadow-sm p-5 flex gap-4 items-center scroll-mt-16">
       {entry.photos[0]
         // eslint-disable-next-line @next/next/no-img-element
         ? <img src={entry.photos[0].url} alt="" loading="lazy" decoding="async"
-            className="w-20 h-20 sm:w-24 sm:h-24 object-cover rounded-2xl shrink-0 bg-stone-100" />
+            className="w-20 h-20 sm:w-24 sm:h-24 object-cover rounded-2xl shrink-0 bg-[#F9F2E4]" />
         : entry.polyline
-          ? <div className="w-20 sm:w-24 shrink-0"><RouteSketch polyline={entry.polyline} /></div>
-          : <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl shrink-0 bg-stone-100" />
+          ? <div className="w-20 sm:w-24 shrink-0"><RouteSketch polyline={entry.polyline} color="#C0603D" className="bg-[#F9F2E4]" animated /></div>
+          : <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl shrink-0 bg-[#F9F2E4]" />
       }
       <div className="min-w-0 flex-1">
-        <p className="font-barlow font-bold text-[9px] tracking-[0.2em] uppercase text-terra-500">
+        <p className="font-barlow font-bold text-[9px] tracking-[0.2em] uppercase text-[#C0603D]">
           Escursione #{String(n).padStart(2, '0')}
         </p>
-        <h2 className="font-display text-lg font-bold text-forest-900 leading-tight mt-0.5 truncate">
+        <h2 className="font-display text-lg font-bold text-[#193b20] leading-tight mt-0.5 truncate">
           {entry.title}
         </h2>
-        <p className="text-xs text-stone-400 mt-0.5">
+        <p className="text-xs text-[#95886A] mt-0.5">
           {format(new Date(entry.startTime), 'd MMMM yyyy', { locale: it })}
         </p>
-        <p className="font-mono text-xs text-stone-500 mt-1.5">
+        <p className="font-mono text-xs text-[#7A6F52] mt-1.5">
           {(entry.distanceMeters / 1000).toFixed(1)} km · {Math.round(entry.elevationGain)} m D+
           {entry.totalTimeSeconds > 0 && ` · ${formatDuration(entry.totalTimeSeconds)}`}
         </p>
@@ -308,4 +323,3 @@ export function EntryCard({ entry, n }: { entry: PublicDiaryEntry; n: number }) 
     </article>
   )
 }
-

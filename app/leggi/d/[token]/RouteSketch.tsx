@@ -12,11 +12,16 @@ const W = 320
 const H = 200
 const PAD = 14
 
-export function RouteSketch({ polyline, photoProgress = [], color = '#277134' }: {
+export function RouteSketch({ polyline, photoProgress = [], color = '#277134', className, animated = false }: {
   polyline: [number, number][]
   /** Posizioni (0–1) lungo il percorso in cui sono state scattate le foto. */
   photoProgress?: number[]
   color?: string
+  /** Sfondo/angoli del riquadro — default `bg-stone-100` invariato per i chiamanti esistenti. */
+  className?: string
+  /** Il tracciato si disegna come a penna invece di apparire di colpo (solo sito pubblico
+   *  taccuino, docs/siti-pubblici-taccuino-piano.md) — default false, comportamento invariato. */
+  animated?: boolean
 }) {
   if (polyline.length < 2) return null
 
@@ -56,7 +61,7 @@ export function RouteSketch({ polyline, photoProgress = [], color = '#277134' }:
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Schizzo del percorso"
-      className="w-full h-auto block rounded-2xl bg-stone-100">
+      className={`w-full h-auto block rounded-2xl ${className ?? 'bg-stone-100'} ${animated ? 'draw-path-frame' : ''}`}>
       {/* Alone chiaro sotto la traccia: la stacca dallo sfondo come sulle mappe dell'app. */}
       <path d={d} fill="none" stroke="#ffffff" strokeWidth={6} strokeLinecap="round" strokeLinejoin="round" />
       <path d={d} fill="none" stroke={color} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
@@ -65,8 +70,12 @@ export function RouteSketch({ polyline, photoProgress = [], color = '#277134' }:
         <circle key={i} cx={x} cy={y} r={3.5} fill="#e08d3c" stroke="#fff" strokeWidth={1.5} />
       ))}
 
-      <circle cx={sx} cy={sy} r={5} fill="#22c55e" stroke="#fff" strokeWidth={2} />
-      <circle cx={ex} cy={ey} r={5} fill="#ef4444" stroke="#fff" strokeWidth={2} />
+      <circle cx={sx} cy={sy} r={5} fill="#22c55e" stroke="#fff" strokeWidth={2}
+        className={animated ? 'fade-marker-in' : undefined}
+        style={animated ? { transformOrigin: `${sx}px ${sy}px`, animationDelay: '.1s' } : undefined} />
+      <circle cx={ex} cy={ey} r={5} fill="#ef4444" stroke="#fff" strokeWidth={2}
+        className={animated ? 'fade-marker-in' : undefined}
+        style={animated ? { transformOrigin: `${ex}px ${ey}px`, animationDelay: '1.5s' } : undefined} />
     </svg>
   )
 }

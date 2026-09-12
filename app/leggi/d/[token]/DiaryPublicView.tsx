@@ -5,6 +5,9 @@
 // sito — copertina, numeri, indice — e ogni escursione ha una pagina propria
 // (`/leggi/d/[token]/e/[n]`), raggiungibile dall'indice e con la sua navigazione.
 //
+// Direzione Taccuino Botanico (docs/siti-pubblici-taccuino-piano.md): carta e rilegatura invece
+// della card bianca su `bg-stone-50` di prima — prima implementazione reale di quella direzione.
+//
 // Resta un componente SERVER: nessuno stato, nessun JavaScript spedito al browser. Chi apre il
 // link da una chat scarica del testo e delle immagini pigre, non un runtime.
 
@@ -16,9 +19,11 @@ import { formatDuration } from '@/lib/tcxParser'
 import { hasNarrative, type PublicDiary } from '@/lib/sharePublicDiary'
 import { computePublicDiaryStats } from '@/lib/publicDiaryStats'
 import { MonthBarChart } from '@/components/diario/MonthBarChart'
+import { HandDrawnFrame } from '@/lib/taccuinoTokens'
 import { AllRoutesMap, AllRoutesLegend } from './AllRoutesMap'
+import { RouteSketch } from './RouteSketch'
 import { PublicPdfExport } from './PublicPdfExport'
-import { SiteHeader, DtrekCallout, SiteFooter } from './SiteChrome'
+import { SiteHeader, DtrekCallout, SiteFooter, TaccuinoPaperTexture, TaccuinoSpineShadow } from './SiteChrome'
 
 export function DiaryPublicView({ diary, token, entryBasePath, headerHomeHref, headerHomeLabel }: {
   diary: PublicDiary
@@ -36,12 +41,15 @@ export function DiaryPublicView({ diary, token, entryBasePath, headerHomeHref, h
   const entryBase = entryBasePath ?? `/leggi/d/${token}`
 
   return (
-    <div className="min-h-screen bg-stone-50">
+    <div className="min-h-screen relative">
+      <TaccuinoPaperTexture />
+      <TaccuinoSpineShadow />
       <SiteHeader homeHref={headerHomeHref ?? `/leggi/d/${token}`} homeLabel={headerHomeLabel} title={diary.config.title} current="home" />
 
-      <main className="max-w-4xl mx-auto px-4 sm:px-5 py-6 sm:py-8 space-y-5">
-        {/* Copertina */}
-        <section className="relative rounded-3xl overflow-hidden shadow-sm border border-stone-200">
+      <main className="max-w-4xl mx-auto px-4 sm:px-5 py-6 sm:py-8 pl-[calc(1rem+34px)] sm:pl-[calc(1.25rem+34px)] space-y-5">
+        {/* Copertina — invariata: è components/diario/DiarioCover.tsx nella sua identità reale, non
+            un'invenzione di questo restyling. */}
+        <section className="relative rounded-3xl overflow-hidden shadow-sm border border-[#D9C9A8]">
           <div className="relative p-8 sm:p-12 text-white"
             style={{ background: diary.config.coverUrl ? undefined : 'linear-gradient(158deg,#193b20 0%,#1c4724 45%,#20592b 100%)' }}>
             {diary.config.coverUrl && (
@@ -53,7 +61,7 @@ export function DiaryPublicView({ diary, token, entryBasePath, headerHomeHref, h
             )}
             <div className="relative">
               {diary.dateRangeLabel && (
-                <p className="font-barlow font-bold text-[11px] tracking-[0.25em] uppercase text-terra-300 mb-3">
+                <p className="font-barlow font-bold text-[11px] tracking-[0.25em] uppercase text-[#e9ab64] mb-3">
                   {diary.dateRangeLabel}
                 </p>
               )}
@@ -75,38 +83,38 @@ export function DiaryPublicView({ diary, token, entryBasePath, headerHomeHref, h
                   { value: `${diary.totalKm.toFixed(0)} km`, label: 'Percorsi' },
                   { value: `${Math.round(diary.totalElevationGain).toLocaleString('it')} m`, label: 'Dislivello +' },
                 ].map(s => (
-                  <div key={s.label} className="bg-white rounded-2xl border border-stone-200 px-3 py-4 text-center shadow-sm">
-                    <div className="font-mono text-xl sm:text-2xl font-bold text-forest-800 leading-tight">{s.value}</div>
-                    <div className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider mt-1">{s.label}</div>
+                  <div key={s.label} className="bg-[#EBE0C8] rounded-2xl border border-[#D9C9A8] px-3 py-4 text-center shadow-sm">
+                    <div className="font-mono text-xl sm:text-2xl font-bold text-[#2E2A22] leading-tight">{s.value}</div>
+                    <div className="text-[10px] font-semibold text-[#95886A] uppercase tracking-wider mt-1">{s.label}</div>
                   </div>
                 ))}
               </div>
 
               {diary.entries.length > 0 && (
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-white rounded-2xl border border-stone-200 px-4 py-3 shadow-sm flex items-center gap-2.5">
-                    <Trophy className="w-4 h-4 text-amber-500 shrink-0" />
+                  <div className="bg-[#EBE0C8] rounded-2xl border border-[#D9C9A8] px-4 py-3 shadow-sm flex items-center gap-2.5">
+                    <Trophy className="w-4 h-4 text-[#C0603D] shrink-0" />
                     <div className="min-w-0">
-                      <div className="font-mono text-sm font-bold text-stone-700">{stats.longestKm.toFixed(1)} km</div>
-                      <div className="text-[10px] text-stone-400 truncate">Più lunga{stats.longestTitle ? ` · ${stats.longestTitle}` : ''}</div>
+                      <div className="font-mono text-sm font-bold text-[#2E2A22]">{stats.longestKm.toFixed(1)} km</div>
+                      <div className="text-[10px] text-[#95886A] truncate">Più lunga{stats.longestTitle ? ` · ${stats.longestTitle}` : ''}</div>
                     </div>
                   </div>
-                  <div className="bg-white rounded-2xl border border-stone-200 px-4 py-3 shadow-sm flex items-center gap-2.5">
-                    <Mountain className="w-4 h-4 text-amber-500 shrink-0" />
+                  <div className="bg-[#EBE0C8] rounded-2xl border border-[#D9C9A8] px-4 py-3 shadow-sm flex items-center gap-2.5">
+                    <Mountain className="w-4 h-4 text-[#C0603D] shrink-0" />
                     <div className="min-w-0">
-                      <div className="font-mono text-sm font-bold text-stone-700">{Math.round(stats.highestAlt)} m</div>
-                      <div className="text-[10px] text-stone-400 truncate">Quota max{stats.highestTitle ? ` · ${stats.highestTitle}` : ''}</div>
+                      <div className="font-mono text-sm font-bold text-[#2E2A22]">{Math.round(stats.highestAlt)} m</div>
+                      <div className="text-[10px] text-[#95886A] truncate">Quota max{stats.highestTitle ? ` · ${stats.highestTitle}` : ''}</div>
                     </div>
                   </div>
                 </div>
               )}
 
               {stats.years.length > 1 && (
-                <div className="bg-white rounded-2xl border border-stone-200 px-4 py-3.5 shadow-sm overflow-x-auto">
-                  <p className="font-barlow font-bold text-[10px] tracking-[0.2em] uppercase text-stone-400 mb-2">Anno per anno</p>
+                <div className="bg-[#EBE0C8] rounded-2xl border border-[#D9C9A8] px-4 py-3.5 shadow-sm overflow-x-auto">
+                  <p className="font-barlow font-bold text-[10px] tracking-[0.2em] uppercase text-[#95886A] mb-2">Anno per anno</p>
                   <table className="w-full text-xs">
                     <thead>
-                      <tr className="text-stone-400 uppercase text-[9px] tracking-wide">
+                      <tr className="text-[#95886A] uppercase text-[9px] tracking-wide">
                         <th className="text-left font-semibold py-1">Anno</th>
                         <th className="text-right font-semibold py-1">Escursioni</th>
                         <th className="text-right font-semibold py-1">Distanza</th>
@@ -115,8 +123,8 @@ export function DiaryPublicView({ diary, token, entryBasePath, headerHomeHref, h
                     </thead>
                     <tbody>
                       {stats.years.map(y => (
-                        <tr key={y.year} className="border-t border-stone-100 text-stone-600">
-                          <td className="py-1.5 font-bold text-forest-800">{y.year}</td>
+                        <tr key={y.year} className="border-t border-[#D9C9A8]/60 text-[#2E2A22]">
+                          <td className="py-1.5 font-bold">{y.year}</td>
                           <td className="py-1.5 text-right">{y.count}</td>
                           <td className="py-1.5 text-right font-mono">{y.km.toFixed(0)} km</td>
                           <td className="py-1.5 text-right font-mono">{Math.round(y.elevGain).toLocaleString('it')} m</td>
@@ -128,8 +136,8 @@ export function DiaryPublicView({ diary, token, entryBasePath, headerHomeHref, h
               )}
 
               {diary.entries.length > 0 && (
-                <div className="bg-white rounded-2xl border border-stone-200 px-4 py-3.5 shadow-sm">
-                  <p className="font-barlow font-bold text-[10px] tracking-[0.2em] uppercase text-stone-400 mb-2">Andamento mensile</p>
+                <div className="bg-[#EBE0C8] rounded-2xl border border-[#D9C9A8] px-4 py-3.5 shadow-sm">
+                  <p className="font-barlow font-bold text-[10px] tracking-[0.2em] uppercase text-[#95886A] mb-2">Andamento mensile</p>
                   <MonthBarChart activities={diary.entries} />
                 </div>
               )}
@@ -139,8 +147,8 @@ export function DiaryPublicView({ diary, token, entryBasePath, headerHomeHref, h
 
         {/* Tutti i percorsi su una mappa */}
         {show.percorso && diary.entries.length > 0 && (
-          <section className="bg-white rounded-3xl border border-stone-200 shadow-sm p-4 sm:p-5">
-            <p className="font-barlow font-bold text-[10px] tracking-[0.2em] uppercase text-stone-400 mb-2.5">
+          <section className="bg-[#EBE0C8] rounded-3xl border border-[#D9C9A8] shadow-sm p-4 sm:p-5">
+            <p className="font-barlow font-bold text-[10px] tracking-[0.2em] uppercase text-[#95886A] mb-2.5">
               Tutti i percorsi
             </p>
             <AllRoutesMap routes={diary.entries.map(e => ({ id: e.id, title: e.title, polyline: e.polyline ?? [] }))} />
@@ -161,8 +169,8 @@ export function DiaryPublicView({ diary, token, entryBasePath, headerHomeHref, h
         ).sort((a, b) => b[0] - a[0]).map(([year, items]) => (
         <section key={year} className="space-y-3">
           <h2 className="flex items-baseline gap-3 px-1">
-            <span className="font-display text-2xl font-bold text-forest-900">{year}</span>
-            <span className="font-barlow font-bold text-[10px] tracking-[0.2em] uppercase text-stone-400">
+            <span className="font-display text-2xl font-bold text-[#2E2A22]">{year}</span>
+            <span className="font-barlow font-bold text-[10px] tracking-[0.2em] uppercase text-[#95886A]">
               {items.length} {items.length === 1 ? 'escursione' : 'escursioni'} ·{' '}
               {(items.reduce((s, x) => s + x.e.distanceMeters, 0) / 1000).toFixed(0)} km
             </span>
@@ -172,24 +180,31 @@ export function DiaryPublicView({ diary, token, entryBasePath, headerHomeHref, h
               const cover = show.foto ? e.photos[0] : undefined
               return (
                 <a key={e.id} href={`${entryBase}/e/${i + 1}`}
-                  className="group bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden hover:shadow-md hover:border-stone-300 transition flex flex-col">
-                  {cover
+                  className="group bg-[#EBE0C8] rounded-2xl border border-[#D9C9A8] shadow-sm overflow-hidden hover:shadow-md hover:border-[#C0603D]/50 transition flex flex-col">
+                  {cover ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    ? <img src={cover.url} alt="" loading="lazy" decoding="async"
-                        className="w-full aspect-[16/9] object-cover bg-stone-100" />
-                    : <div className="w-full aspect-[16/9] bg-gradient-to-br from-forest-800 to-forest-950" />}
+                    <img src={cover.url} alt="" loading="lazy" decoding="async"
+                      className="w-full aspect-[16/9] object-cover bg-[#F9F2E4]" />
+                  ) : e.polyline && e.polyline.length > 1 ? (
+                    <div className="relative w-full aspect-[16/9]">
+                      <HandDrawnFrame stroke="#D9C9A8" rx={8} />
+                      <RouteSketch polyline={e.polyline} color="#C0603D" className="bg-[#F9F2E4]" animated />
+                    </div>
+                  ) : (
+                    <div className="w-full aspect-[16/9]" style={{ background: 'linear-gradient(158deg,#193b20 0%,#1c4724 45%,#20592b 100%)' }} />
+                  )}
                   <div className="p-4 flex-1 flex flex-col">
-                    <p className="font-barlow font-bold text-[9px] tracking-[0.2em] uppercase text-terra-500">
+                    <p className="font-barlow font-bold text-[9px] tracking-[0.2em] uppercase text-[#C0603D]">
                       #{String(i + 1).padStart(2, '0')} · {format(new Date(e.startTime), 'MMMM yyyy', { locale: it })}
                     </p>
-                    <h3 className="font-display text-lg font-bold text-forest-900 leading-tight mt-1 group-hover:text-forest-700 transition">
+                    <h3 className="font-display text-lg font-bold text-[#2E2A22] leading-tight mt-1 group-hover:text-[#193b20] transition">
                       {e.title}
                     </h3>
-                    <p className="font-mono text-xs text-stone-500 mt-2">
+                    <p className="font-mono text-xs text-[#95886A] mt-2">
                       {(e.distanceMeters / 1000).toFixed(1)} km · {Math.round(e.elevationGain)} m D+
                       {e.totalTimeSeconds > 0 && ` · ${formatDuration(e.totalTimeSeconds)}`}
                     </p>
-                    <p className="mt-auto pt-3 flex items-center gap-1 text-xs font-semibold text-forest-700">
+                    <p className="mt-auto pt-3 flex items-center gap-1 text-xs font-semibold text-[#C0603D]">
                       {hasNarrative(e.content) && show.racconto ? 'Leggi il racconto' : 'Vedi l’escursione'}
                       <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
                     </p>
@@ -201,7 +216,7 @@ export function DiaryPublicView({ diary, token, entryBasePath, headerHomeHref, h
         </section>
         ))}
         {diary.entries.length === 0 && (
-          <p className="text-sm text-stone-400 text-center py-8">Nessuna escursione pubblicata.</p>
+          <p className="text-sm text-[#95886A] text-center py-8">Nessuna escursione pubblicata.</p>
         )}
 
         {/* Il PDF è un allegato: il sito si legge per intero senza scaricarlo. Quello caricato
@@ -209,7 +224,7 @@ export function DiaryPublicView({ diary, token, entryBasePath, headerHomeHref, h
             nuovo al volo, dal solo contenuto già pubblico, per chi non lo trova. */}
         {diary.pdfUrl && (
           <a href={withForcedDownload(diary.pdfUrl, 'diario-dtrek.pdf')} download
-            className="flex items-center justify-center gap-2 bg-white border border-stone-200 hover:bg-stone-50 transition text-stone-600 font-display font-bold text-sm rounded-2xl py-3.5 shadow-sm">
+            className="flex items-center justify-center gap-2 bg-[#EBE0C8] border border-[#D9C9A8] hover:bg-[#e3d6b8] transition text-[#2E2A22] font-display font-bold text-sm rounded-2xl py-3.5 shadow-sm">
             <Download className="w-4 h-4" /> Scarica il diario in PDF
           </a>
         )}
@@ -228,8 +243,8 @@ export function DiaryPublicView({ diary, token, entryBasePath, headerHomeHref, h
 /** Riepilogo compatto usato in testa alla pagina di una escursione. */
 export function EntryQuickStats({ km, dplus, seconds }: { km: number; dplus: number; seconds: number }) {
   return (
-    <p className="font-mono text-xs text-stone-500 flex items-center gap-1.5">
-      <RouteIcon className="w-3.5 h-3.5 text-stone-300" />
+    <p className="font-mono text-xs text-[#95886A] flex items-center gap-1.5">
+      <RouteIcon className="w-3.5 h-3.5 text-[#C4BEAD]" />
       {km.toFixed(1)} km · {Math.round(dplus)} m D+{seconds > 0 && ` · ${formatDuration(seconds)}`}
     </p>
   )
