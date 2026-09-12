@@ -11,6 +11,7 @@ import { fetchPublicCollection } from '@/lib/sharePublicCollection'
 import { hasNarrative } from '@/lib/sharePublicDiary'
 import { formatDuration } from '@/lib/tcxParser'
 import { SiteHeader, DtrekCallout, SiteFooter } from '../../SiteChrome'
+import { PublicPdfExport } from '@/app/leggi/d/[token]/PublicPdfExport'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -118,6 +119,11 @@ export default async function VolumePage({ params }: { params: { token: string; 
         {volume.entries.length === 0 && (
           <p className="text-sm text-stone-400 text-center py-8">Nessuna escursione pubblicata in questo volume.</p>
         )}
+
+        <PublicPdfExport diary={{
+          entries: volume.entries, ownerName: collection.ownerName, title: volume.title,
+          subtitle: volume.subtitle, coverUrl: volume.coverUrl, dateRangeLabel: volume.dateRangeLabel,
+        }} />
 
         <DtrekCallout />
         <SiteFooter />

@@ -17,6 +17,7 @@ import { hasNarrative, type PublicDiary } from '@/lib/sharePublicDiary'
 import { computePublicDiaryStats } from '@/lib/publicDiaryStats'
 import { MonthBarChart } from '@/components/diario/MonthBarChart'
 import { AllRoutesMap, AllRoutesLegend } from './AllRoutesMap'
+import { PublicPdfExport } from './PublicPdfExport'
 import { SiteHeader, DtrekCallout, SiteFooter } from './SiteChrome'
 
 export function DiaryPublicView({ diary, token, entryBasePath, headerHomeHref, headerHomeLabel }: {
@@ -203,13 +204,19 @@ export function DiaryPublicView({ diary, token, entryBasePath, headerHomeHref, h
           <p className="text-sm text-stone-400 text-center py-8">Nessuna escursione pubblicata.</p>
         )}
 
-        {/* Il PDF è un allegato: il sito si legge per intero senza scaricarlo */}
+        {/* Il PDF è un allegato: il sito si legge per intero senza scaricarlo. Quello caricato
+            dall'autore (se c'è) resta il documento curato a mano; PublicPdfExport ne genera uno
+            nuovo al volo, dal solo contenuto già pubblico, per chi non lo trova. */}
         {diary.pdfUrl && (
           <a href={withForcedDownload(diary.pdfUrl, 'diario-dtrek.pdf')} download
             className="flex items-center justify-center gap-2 bg-white border border-stone-200 hover:bg-stone-50 transition text-stone-600 font-display font-bold text-sm rounded-2xl py-3.5 shadow-sm">
             <Download className="w-4 h-4" /> Scarica il diario in PDF
           </a>
         )}
+        <PublicPdfExport diary={{
+          entries: diary.entries, ownerName: diary.ownerName, title: diary.config.title,
+          subtitle: diary.config.subtitle, coverUrl: diary.config.coverUrl, dateRangeLabel: diary.dateRangeLabel,
+        }} />
 
         <DtrekCallout />
         <SiteFooter />

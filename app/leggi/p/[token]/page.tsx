@@ -20,6 +20,7 @@ import { DEFAULT_DIARY_CONFIG } from '@/lib/diaryConfig'
 import { withForcedDownload } from '@/lib/storageDownloadUrl'
 import { DtrekCallout, SiteFooter } from '@/app/leggi/d/[token]/SiteChrome'
 import { EntryArticle, EntryCard } from '@/app/leggi/d/[token]/EntryArticle'
+import { PublicPdfExport } from '@/app/leggi/d/[token]/PublicPdfExport'
 import { DTREK_URL } from '@/lib/publicSite'
 
 export const runtime = 'nodejs'
@@ -84,6 +85,10 @@ export default async function ReportPublicPage({ params }: { params: { token: st
             <Download className="w-4 h-4" /> Scarica il reportage in PDF
           </a>
         )}
+        <PublicPdfExport diary={{
+          entries: [entry], ownerName: report.ownerName, title: entry.title,
+          subtitle: '', coverUrl: entry.photos[0]?.url ?? null,
+        }} />
 
         <DtrekCallout />
         <SiteFooter />
