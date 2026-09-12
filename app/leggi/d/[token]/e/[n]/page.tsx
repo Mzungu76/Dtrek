@@ -60,7 +60,7 @@ export default async function EscursionePage({ params }: { params: { token: stri
 
   return (
     <div className="min-h-screen bg-stone-50">
-      <SiteHeader token={params.token} diaryTitle={diary.config.title} current="escursione" />
+      <SiteHeader homeHref={`/leggi/d/${params.token}`} title={diary.config.title} current="escursione" />
 
       <main className="max-w-3xl mx-auto px-4 sm:px-5 py-6 space-y-5">
         <a href={`/leggi/d/${params.token}`}

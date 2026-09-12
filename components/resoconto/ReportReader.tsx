@@ -49,6 +49,7 @@ import { PrintPhotoGrid } from '@/app/resoconto/[id]/PrintPhotoGrid'
 // Import dinamico: il modulo si porta dietro il template del PDF, `react-dom/client` e jsPDF/
 // html2canvas per via delle sue dipendenze. Statico finiva nel bundle di /resoconto — la rotta più
 // pesante dell'app — anche per chi apre un resoconto senza mai esportarlo.
+import { PublishPrivacyToggles } from '@/components/PublishPrivacyToggles'
 import ReportHero from './ReportHero'
 import ReportStatsStrip from './ReportStatsStrip'
 import PhotoShowcase from './PhotoShowcase'
@@ -177,6 +178,7 @@ export default function ReportReader({
   const [publishing,    setPublishing]    = useState(false)
   const [downloadingPdf, setDownloadingPdf] = useState(false)
   const [publishError,  setPublishError]  = useState<string | null>(null)
+  const [publishingPage, setPublishingPage] = useState(false)
   const [questionnaireStatus, setQuestionnaireStatus] = useState<'none' | 'in_progress' | 'completed' | 'skipped'>('none')
   const [questionnaireCounts, setQuestionnaireCounts] = useState({ answered: 0, total: 0 })
   const [writingStyleReady, setWritingStyleReady] = useState(false)
@@ -505,6 +507,24 @@ export default function ReportReader({
     sections, photos, poiWikiEntries,
   })
 
+  // Pubblica la pagina del Reportage — indipendente dal PDF (Fase 2 del piano di pubblicazione):
+  // garantisce un token, come già per Diario e Raccolta, senza dover prima generare un allegato.
+  const publishPage = async () => {
+    setPublishingPage(true); setPublishError(null)
+    try {
+      const res = await fetch('/api/share-report', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ activityId: id }),
+      })
+      const d = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(d?.error ?? `HTTP ${res.status}`)
+      if (d?.share_token) setShareToken(d.share_token)
+    } catch (e) {
+      setPublishError(String(e))
+    } finally {
+      setPublishingPage(false)
+    }
+  }
+
   const publishPdf = async () => {
     setPublishing(true); setPublishError(null)
     try {
@@ -552,7 +572,9 @@ export default function ReportReader({
     }
   }
 
-  const unpublishPdf = async () => {
+  // Disattiva la pagina pubblicata (e l'eventuale PDF allegato con lei) — revoca completa, non una
+  // rotazione del token: chi ha il vecchio link non vede più nulla, ripubblicare ne genera uno nuovo.
+  const unpublish = async () => {
     await fetch(`/api/share-report?activityId=${encodeURIComponent(id)}`, { method: 'DELETE' })
     setSharePdfUrl(null)
     setShareToken(null)
@@ -944,50 +966,60 @@ export default function ReportReader({
                     })}
                   </div>
 
-                {/* ── Pubblica PDF ──────────────────────────────────────────── */}
+                {/* ── Pubblica ─────────────────────────────────────────────────
+                    Fase 2 del piano di pubblicazione: la pagina si pubblica da sé (stesso stile
+                    editoriale di Diario e Raccolta, /leggi/p/[token]), il PDF è un allegato
+                    facoltativo in più, non più una condizione per pubblicare. */}
                 {hasContent && (
                   <div className="mt-8 mb-6 pt-5 print:hidden" style={{ borderTop: '1px solid #dcd8cc' }}>
                     <button onClick={() => setShowPublish(s => !s)}
                       className="flex items-center gap-1.5 text-xs font-display font-bold uppercase tracking-wide text-stone-500 hover:text-stone-700 transition-colors">
-                      <Share2 className="w-3.5 h-3.5" /> Pubblica PDF {showPublish ? '▲' : '▼'}
+                      <Share2 className="w-3.5 h-3.5" /> Pubblica {showPublish ? '▲' : '▼'}
                     </button>
                     {showPublish && (
-                      <div className="mt-3 flex items-center gap-3 flex-wrap">
-                        {sharePdfUrl ? (
+                      <div className="mt-3 flex flex-col gap-3">
+                      <div className="flex items-center gap-3 flex-wrap">
+                        {shareToken ? (
                           <>
                             {/* DTREK-AUDIT.md P2 #32 — link per token opaco, non per activityId in
                                 chiaro; /leggi/r resta solo come fallback per il breve intervallo
                                 prima che il token arrivi dal PATCH/GET. */}
-                            <a href={shareToken ? `/leggi/p/${encodeURIComponent(shareToken)}` : `/leggi/r/${encodeURIComponent(id)}`} target="_blank" rel="noopener noreferrer"
+                            <a href={`/leggi/p/${encodeURIComponent(shareToken)}`} target="_blank" rel="noopener noreferrer"
                               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 text-xs font-display font-bold uppercase tracking-wide transition-colors">
-                              <ExternalLink className="w-3.5 h-3.5" /> Apri lettore
+                              <ExternalLink className="w-3.5 h-3.5" /> Apri la pagina
                             </a>
                             <button
                               onClick={async () => {
-                                const viewerPath = shareToken ? `/leggi/p/${encodeURIComponent(shareToken)}` : `/leggi/r/${encodeURIComponent(id)}`
-                                const viewerUrl = `${window.location.origin}${viewerPath}`
+                                const viewerUrl = `${window.location.origin}/leggi/p/${encodeURIComponent(shareToken)}`
                                 await navigator.clipboard.writeText(viewerUrl)
                                 setCopyOk(true); setTimeout(() => setCopyOk(false), 2000)
                               }}
                               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forest-600 text-white text-xs font-display font-bold uppercase tracking-wide hover:bg-forest-700 transition-colors">
                               <Copy className="w-3.5 h-3.5" /> {copyOk ? 'Copiato!' : 'Copia link'}
                             </button>
-                            <a href={withForcedDownload(sharePdfUrl)} target="_blank" rel="noopener noreferrer" download
-                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-stone-500 text-xs font-display font-bold uppercase tracking-wide hover:bg-stone-50 transition-colors">
-                              <ExternalLink className="w-3.5 h-3.5" /> PDF diretto
-                            </a>
-                            <button onClick={unpublishPdf}
+                            {sharePdfUrl ? (
+                              <a href={withForcedDownload(sharePdfUrl)} target="_blank" rel="noopener noreferrer" download
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-stone-500 text-xs font-display font-bold uppercase tracking-wide hover:bg-stone-50 transition-colors">
+                                <ExternalLink className="w-3.5 h-3.5" /> PDF allegato
+                              </a>
+                            ) : (
+                              <button disabled={publishing} onClick={publishPdf}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-stone-600 text-xs font-display font-bold uppercase tracking-wide hover:bg-stone-50 disabled:opacity-50 transition-colors">
+                                {publishing ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generazione…</> : <><Download className="w-3.5 h-3.5" /> Allega anche il PDF</>}
+                              </button>
+                            )}
+                            <button onClick={unpublish}
                               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 text-red-500 text-xs font-display font-bold uppercase tracking-wide hover:bg-red-50 transition-colors">
                               <Link2Off className="w-3.5 h-3.5" /> Disattiva
                             </button>
                           </>
                         ) : (
                           <>
-                            <p className="text-xs text-stone-500 italic">Genera un PDF con le foto e pubblicalo online, oppure scaricalo senza pubblicarlo.</p>
+                            <p className="text-xs text-stone-500 italic">Pubblica una pagina web di questo reportage, leggibile da telefono senza scaricare nulla.</p>
                             {publishError && <p className="text-xs text-red-500">{publishError}</p>}
-                            <button disabled={publishing} onClick={publishPdf}
+                            <button disabled={publishingPage} onClick={publishPage}
                               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forest-600 text-white text-xs font-display font-bold uppercase tracking-wide hover:bg-forest-700 disabled:opacity-50 transition-colors">
-                              {publishing ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generazione PDF…</> : <><Share2 className="w-3.5 h-3.5" /> Genera e pubblica</>}
+                              {publishingPage ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Pubblicazione…</> : <><Share2 className="w-3.5 h-3.5" /> Pubblica</>}
                             </button>
                             <button disabled={downloadingPdf} onClick={downloadPdf}
                               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-stone-600 text-xs font-display font-bold uppercase tracking-wide hover:bg-stone-50 disabled:opacity-50 transition-colors">
@@ -995,6 +1027,18 @@ export default function ReportReader({
                             </button>
                           </>
                         )}
+                      </div>
+
+                      {/* Preferenze globali (vale per ogni Reportage, Diario e Raccolta, non solo
+                          questo) — mostrate anche qui, non solo nel pannello di pubblicazione del
+                          Diario/della Raccolta, per lo stesso motivo: sono le stesse due colonne
+                          lette da tutti e tre a ogni apertura della rispettiva pagina pubblica. */}
+                      <div className="pt-2.5 border-t border-stone-100">
+                        <p className="text-[10px] font-display font-bold uppercase tracking-widest text-stone-400 mb-1">
+                          Privacy (vale per tutto quello che pubblichi)
+                        </p>
+                        <PublishPrivacyToggles />
+                      </div>
                       </div>
                     )}
                   </div>

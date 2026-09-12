@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { MobileNavBar } from '@/components/Navbar'
+import { PublishPrivacyToggles } from '@/components/PublishPrivacyToggles'
 import { RailButton } from '@/components/routehub/SideRails'
 import { getAllActivities, getActivityById, computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
 import { fetchActivityPhotos, type RoutePhoto } from '@/lib/activityPhotos'
@@ -963,6 +964,14 @@ export default function DiarioLibroPage() {
                         Il PDF allegato si aggiorna quando esporti il Diario.
                       </p>
                     )}
+                  </div>
+
+                  {/* Preferenze globali (vale per ogni Diario e Raccolta, non solo questo). */}
+                  <div className="pt-1.5 border-t border-stone-100">
+                    <p className="text-[10px] font-barlow font-bold uppercase tracking-widest text-stone-400 mb-1">
+                      Privacy (vale per tutto quello che pubblichi)
+                    </p>
+                    <PublishPrivacyToggles />
                   </div>
 
                   <button onClick={handleRevokeLink}

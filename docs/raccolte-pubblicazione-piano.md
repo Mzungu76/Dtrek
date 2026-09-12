@@ -190,6 +190,93 @@ qualcuno ha già condiviso, quindi lo decidi tu (vedi sotto).
    quelle non ancora migrate; due booleani in più lì avrebbero rischiato una regressione
    sproporzionata al beneficio di evitare un file nuovo.
 
+### Nota: rimosso e ripristinato (settembre 2026)
+
+Le PR 2 e 3 di questo piano erano già interamente implementate (vedi sotto), ma il commit
+`73b2efa` ("restore: layout dell'app allo stato PR #741 (pre-taccuino)") le ha rimosse insieme a
+un ripristino generale del layout dell'app a uno stato precedente — decisione esplicita dell'utente
+di allora ("le nascondo, torno alla nav vecchia"), non un difetto di questo piano. Rimossi solo i
+file di UI/pagina (`app/leggi/c/[token]/*`, la sezione di pubblicazione di `app/raccolte/[id]/
+page.tsx`, `components/PublishPrivacyToggles.tsx`); il resto (tabelle Supabase, `lib/raccolte/*`,
+`lib/sharePublicCollection.ts`, `lib/privacy/*`, le route `/api/collections/**` e
+`/api/user-settings/privacy`) è sempre rimasto intatto, come previsto dal commit di ripristino
+stesso.
+
+Ripristinato di nuovo (Fase 1 di un piano più ampio — pubblicazione con stile editoriale coerente
+per Raccolta/Diario/Reportage, sotto un futuro profilo pubblico unico per utente) quando l'utente
+ha chiesto esplicitamente di rendere pubblicabili anche le Raccolte: gli stessi file, recuperati da
+`git show 52de651`/`6170d20`, adattati solo nello stile (oggi niente più "Taccuino", i token di
+`app/raccolte/[id]/page.tsx` sono quelli della sua riscrittura successiva) — nessuna logica
+riscritta da zero, era già corretta e testata.
+
+### Fase 2 del piano più ampio (settembre 2026): il Reportage diventa un vero articolo
+
+Il modello in cinque righe qui sopra diceva già "Percorso = un articolo (`/leggi/p/[token]`)" fin
+dall'inizio — ma non lo era mai stato per davvero: quella rotta era rimasta un `PdfViewer` nudo,
+l'unico dei tre livelli mai aggiornato al passaggio "il link vive da sé, il PDF è un allegato in
+più" che Diario e Raccolta avevano già. Sistemato ora, su richiesta esplicita dell'utente (Fase 2
+di un piano di pubblicazione più ampio, di cui questo documento copre solo la parte Raccolte):
+
+- **Nuovo `lib/sharePublicReport.ts`** (`fetchPublicReport(token)`): un Reportage pubblicato da
+  solo è la stessa identica voce di un Diario pubblicato, senza il Diario intorno — riusa
+  `buildContentFromReports` di `lib/sharePublicDiary.ts` (ora esportata) invece di duplicarne la
+  logica, nessuna esclusione né selezione foto (non c'è un Diario/una Raccolta a monte che curi la
+  scelta).
+- **`app/leggi/p/[token]/page.tsx` riscritta**: da `PdfViewer` a pagina editoriale vera, stessa
+  testata minima (senza navigazione: un solo Reportage non ha altre pagine da raggiungere),
+  `EntryArticle`/`EntryCard` riusati senza modifiche. **`app/leggi/r/[activityId]` resta invariata**
+  (retrocompatibilità per i link già in circolazione, come già era).
+- **`PATCH /api/share-report` decoppiato dal PDF**: prima il token si generava SOLO insieme a un
+  PDF caricato; ora garantisce il token indipendentemente (stesso contratto delle altre due route
+  token), il PDF resta un allegato facoltativo (`sharePdfUrl` nel corpo lo tocca, la sua assenza no
+  — mai azzerato da un mint-only). `ReportReader.tsx`: "Pubblica" (la pagina, sempre disponibile) e
+  "Allega anche il PDF" (facoltativo) invece dell'unico "Genera e pubblica" di prima che li
+  confondeva in un solo passo.
+- `PublishPrivacyToggles` montato anche qui, terzo posto oltre a Diario e Raccolta.
+
+**Nota**: `app/diario/page.tsx`'s pagina del Diario raggiunta scorrendo verso l'alto
+(`DiarioSommarioContent.tsx`) è rimasta deliberatamente non toccata in questo giro, su richiesta
+esplicita dell'utente — nessuna delle modifiche sopra la riguarda comunque (tutta lato Reportage
+pubblico, non Diario).
+
+### Fase 3 del piano più ampio (settembre 2026): il profilo pubblico
+
+Il modello in cinque righe diceva già "il profilo pubblico non è un quarto documento: è l'indice
+di ciò che è già pubblicato" e lo lasciava esplicitamente fuori da questa fase. Costruito ora, con
+una decisione dell'utente sulla forma dell'indirizzo: **uno slug leggibile come ALIAS pubblico
+dell'id utente reale**, mai come credenziale — `/u/marco-rossi`, non un token opaco come agli altri
+tre livelli. Motivazione dell'utente: UX (facile da condividere/ricordare), branding, stabilità
+(cambiare il nome visualizzato non deve richiedere di cambiare l'indirizzo), unicità gestita con un
+vincolo UNIQUE, e consapevolezza esplicita che uno slug scelto può rivelare l'identità — una scelta
+di privacy dell'utente, non un difetto tecnico da correggere.
+
+- **`supabase/migrations/add_profile_slug.sql`**: due colonne su `user_settings`, non una —
+  `profile_slug` (l'identità, stabile) e `profile_enabled` (la visibilità, revocabile senza perdere
+  lo slug scelto). Indice UNIQUE case-insensitive (`lower(profile_slug)`) — "Marco-Rossi" e
+  "marco-rossi" sono lo stesso indirizzo. Stessa policy RLS "cintura e bretelle" di
+  collections/diaries.
+- **`lib/profileSlug.ts`** (nuovo, puro, testato): validazione del formato (minuscolo,
+  alfanumerico e trattini singoli, 3–30 caratteri) e un piccolo elenco di parole riservate. Nessun
+  precedente da riusare nel repo — scritto da zero, non c'era mai stato un identificatore pubblico
+  leggibile prima d'ora (solo token opachi).
+- **`app/api/user-settings/profile/route.ts`** (nuovo, non nel monolite `/api/user-settings/`,
+  stesso motivo già dato per `/privacy`): GET legge `{slug, enabled}`; PATCH normalizza e valida lo
+  slug lato server (mai fidarsi solo del client), traduce una violazione UNIQUE (codice Postgres
+  23505) in "indirizzo già in uso" invece di un 500 generico; rifiuta `enabled: true` senza uno
+  slug già scelto.
+- **`lib/publicProfile.ts`** (`fetchPublicProfile(slug)`): NON aggrega contenuto (a differenza di
+  `fetchPublicCollection`) — elenca solo cosa ha già un proprio token ai tre livelli esistenti,
+  senza dedurre appartenenza fra loro. Un Diario dentro una Raccolta pubblicata E con un proprio
+  token compare in entrambi gli elenchi, deliberatamente: sono due condivisioni indipendenti,
+  entrambe vere.
+- **`app/u/[slug]/page.tsx`** (nuovo): tre sezioni (Raccolte/Diari/Reportage), ciascuna solo se non
+  vuota, ogni riga apre direttamente `/leggi/c|d|p/[token]` — il profilo è un indice, non
+  un'ulteriore cornice attorno ai contenuti.
+- **`components/profilo/SectionProfiloPubblico.tsx`**, montata in
+  `app/profilo/impostazioni/page.tsx` subito dopo `SectionIdentita` (lo slug è concettualmente
+  adiacente al nome visualizzato): campo indirizzo + Salva, poi — solo dopo aver scelto uno slug —
+  l'interruttore di visibilità e copia-link.
+
 ### Cosa c'è già, per chi riprende da qui
 
 - `supabase/migrations/add_collections_tables.sql` — `collections` + `collection_diaries`, RLS

@@ -11,9 +11,14 @@
 
 import { DTREK_URL } from '@/lib/publicSite'
 
-export function SiteHeader({ token, diaryTitle, current }: {
-  token: string
-  diaryTitle: string
+export function SiteHeader({ homeHref, homeLabel = 'Il diario', title, current }: {
+  /** Dove porta il logo/titolo e la voce "home" della navigazione — l'indice di questo sito
+   *  (il Diario stesso), o, per un Diario annidato in una Raccolta, l'indice della Raccolta. */
+  homeHref: string
+  /** Etichetta della voce "home" in navigazione — "Il diario" di default, "La raccolta" per una
+   *  Raccolta (docs/raccolte-pubblicazione-piano.md, Fase 3g). */
+  homeLabel?: string
+  title: string
   /** Voce attiva, per l'evidenza in navigazione. */
   current?: 'home' | 'escursione'
 }) {
@@ -21,18 +26,18 @@ export function SiteHeader({ token, diaryTitle, current }: {
     <header className="sticky top-0 z-30 bg-forest-900/95 backdrop-blur text-white">
       <div className="max-w-4xl mx-auto px-4 sm:px-5">
         <div className="flex items-center justify-between h-14">
-          <a href={`/leggi/d/${token}`} className="flex items-center gap-2.5 min-w-0 group">
+          <a href={homeHref} className="flex items-center gap-2.5 min-w-0 group">
             <span className="text-forest-300 text-lg leading-none">▲</span>
             <span className="font-display font-bold text-base truncate group-hover:text-forest-200 transition">
-              {diaryTitle}
+              {title}
             </span>
           </a>
           <nav className="flex items-center gap-1 shrink-0">
-            <a href={`/leggi/d/${token}`}
+            <a href={homeHref}
               className={`hidden sm:block text-xs font-semibold px-3 py-1.5 rounded-full transition ${
                 current === 'home' ? 'bg-white/15' : 'hover:bg-white/10 text-white/70'
               }`}>
-              Il diario
+              {homeLabel}
             </a>
             <a href={DTREK_URL} target="_blank" rel="noopener noreferrer"
               className="text-xs font-semibold bg-terra-500 hover:bg-terra-400 transition rounded-full px-3.5 py-1.5">
