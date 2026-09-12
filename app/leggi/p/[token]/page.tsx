@@ -26,7 +26,7 @@ export default async function ResocontoViewerByTokenPage({
   return (
     <PdfViewer
       pdfUrl={data.share_pdf_url as string}
-      title={(data.title as string) || 'Resoconto escursione'}
+      title={(data.title as string) || 'Reportage escursione'}
     />
   )
 }

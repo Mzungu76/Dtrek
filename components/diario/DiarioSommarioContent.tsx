@@ -53,6 +53,14 @@ export default function DiarioSommarioContent({ diaryId, onDeleted, onChanged }:
   const [collections, setCollections] = useState<CollectionSummary[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
 
+  // Nome del Diario (diaries.title) — modificabile solo qui: la copertina a schermo intero di
+  // /diario non ha più l'icona a matita che apriva un popover di modifica (rimossa perché editava
+  // in realtà il titolo della copertina del libro impaginato, DiaryConfig, non il nome vero e
+  // proprio del Diario, che finora non era modificabile da nessuna parte).
+  const [titleDraft, setTitleDraft] = useState('')
+  const [titleError, setTitleError] = useState<string | null>(null)
+  useEffect(() => { setTitleDraft(detail?.title ?? '') }, [detail?.title])
+
   const [moveOpenFor, setMoveOpenFor] = useState<string | null>(null)
   const [moveError, setMoveError] = useState<string | null>(null)
   const [movingId, setMovingId] = useState<string | null>(null)
@@ -182,6 +190,24 @@ export default function DiarioSommarioContent({ diaryId, onDeleted, onChanged }:
     }
   }
 
+  async function saveTitle(value: string) {
+    const trimmed = value.trim()
+    if (!trimmed || trimmed === detail?.title) { setTitleDraft(detail?.title ?? ''); return }
+    setTitleError(null)
+    try {
+      const res = await fetch(`/api/diaries/${encodeURIComponent(diaryId)}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: trimmed }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
+      setDetail(d => d ? { ...d, title: trimmed } : d)
+      onChangedRef.current?.()
+    } catch (e) {
+      setTitleError(e instanceof Error ? e.message : String(e))
+      setTitleDraft(detail?.title ?? '')
+    }
+  }
+
   async function moveToCollection(targetCollectionId: string) {
     setShelfBusy(true); setShelfError(null)
     try {
@@ -254,9 +280,21 @@ export default function DiarioSommarioContent({ diaryId, onDeleted, onChanged }:
   return (
     <div className="min-h-full bg-[#0b1a24]">
       <div className="max-w-2xl mx-auto px-4 sm:px-8 py-5">
+        <div className="mb-5">
+          <input
+            value={titleDraft}
+            onChange={e => setTitleDraft(e.target.value)}
+            onBlur={e => saveTitle(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+            placeholder="Titolo del Diario"
+            className="w-full bg-transparent outline-none border-b border-white/15 focus:border-white/40 font-display text-2xl font-bold text-white pb-1.5 transition-colors"
+          />
+          {titleError && <p className="text-xs text-red-400 mt-1">{titleError}</p>}
+        </div>
+
         {stats.count > 0 && (
           <div className="grid grid-cols-4 gap-2 mb-6 py-4 rounded-2xl bg-white/5 border border-white/10">
-            <StatCell value={String(stats.count)} label="resoconti" />
+            <StatCell value={String(stats.count)} label="reportage" />
             <StatCell value={stats.distanceKm.toFixed(1)} label="km" />
             <StatCell value={`+${Math.round(stats.elevationGain)}`} label="D+ m" />
             <StatCell value={formatDuration(stats.totalTimeSeconds)} label="tempo" />
@@ -293,9 +331,9 @@ export default function DiarioSommarioContent({ diaryId, onDeleted, onChanged }:
           )}
         </div>
 
-        {/* Resoconti */}
+        {/* Reportage */}
         <div className="flex items-center justify-between mb-1">
-          <span className="font-barlow font-bold text-xs tracking-[2px] uppercase text-white/40">Resoconti</span>
+          <span className="font-barlow font-bold text-xs tracking-[2px] uppercase text-white/40">Reportage</span>
           <div className="flex items-center gap-3">
             {!detail.isDefault && defaultDiary && (
               <button
@@ -312,7 +350,7 @@ export default function DiarioSommarioContent({ diaryId, onDeleted, onChanged }:
 
         {detail.reportage.length === 0 ? (
           <div className="py-8 text-center">
-            <p className="font-lora italic text-sm text-white/40">Nessun resoconto ancora in questo Diario.</p>
+            <p className="font-lora italic text-sm text-white/40">Nessun reportage ancora in questo Diario.</p>
             {!detail.isDefault && defaultDiary && (
               <button
                 onClick={openAddPicker}
@@ -431,18 +469,18 @@ export default function DiarioSommarioContent({ diaryId, onDeleted, onChanged }:
                 </button>
               ) : (
                 <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-4 max-w-lg space-y-3">
-                  <p className="text-sm text-red-300 font-medium">Cosa succede ai Resoconti di questo Diario?</p>
+                  <p className="text-sm text-red-300 font-medium">Cosa succede ai Reportage di questo Diario?</p>
                   {deleteError && <p className="text-sm text-red-400">{deleteError}</p>}
                   <div className="flex flex-col gap-2">
                     <button onClick={() => runDelete('migrate')} disabled={deleteBusy !== null}
                       className="flex items-center justify-center gap-2 px-4 py-2.5 bg-white/5 border border-red-400/30 hover:border-red-400/60 rounded-xl text-sm font-medium text-white transition-colors disabled:opacity-60">
                       {deleteBusy === 'migrate' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                      Sposta i Resoconti nel Diario di default, poi elimina questo Diario
+                      Sposta i Reportage nel Diario di default, poi elimina questo Diario
                     </button>
                     <button onClick={() => runDelete('deleteAll')} disabled={deleteBusy !== null}
                       className="flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-700 rounded-xl text-sm font-medium text-white transition-colors disabled:opacity-60">
                       {deleteBusy === 'deleteAll' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                      Elimina tutto — Resoconti inclusi (foto, video, racconti)
+                      Elimina tutto — Reportage inclusi (foto, video, racconti)
                     </button>
                     <button onClick={() => setDeleteOpen(false)} disabled={deleteBusy !== null} className="text-sm text-white/50 hover:text-white/80 transition-colors">
                       Annulla

@@ -40,7 +40,7 @@ export function computeMaterialScore(input: MaterialScoreInput): MaterialScoreRe
     // Suggerisce il componente più debole tra i due su cui l'utente ha controllo diretto e peso
     // maggiore (foto e questionario) — mai le note/meteo/guida, che non sono "azionabili" allo stesso modo.
     if (cappedPhotoScore <= questionnaireScore) {
-      suggestion = 'Aggiungi qualche foto, magari in vetta o nei punti più belli, per un resoconto più ricco.'
+      suggestion = 'Aggiungi qualche foto, magari in vetta o nei punti più belli, per un reportage più ricco.'
     } else if (input.questionnaireStatus !== 'completed' && input.questionnaireStatus !== 'skipped') {
       suggestion = 'Rispondi a qualche domanda del racconto guidato per renderlo più personale.'
     }

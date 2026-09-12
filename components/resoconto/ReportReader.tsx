@@ -732,7 +732,7 @@ export default function ReportReader({
 
   if (loading) return (
     <div className="flex items-center justify-center py-32 text-stone-400 gap-3">
-      <Loader2 className="w-6 h-6 animate-spin" /><span>Caricamento resoconto…</span>
+      <Loader2 className="w-6 h-6 animate-spin" /><span>Caricamento reportage…</span>
     </div>
   )
 
@@ -810,7 +810,7 @@ export default function ReportReader({
                       <div className="bg-white rounded-2xl shadow-sm border border-stone-100 p-5">
                         <div className="flex items-center justify-between flex-wrap gap-4">
                           <div>
-                            <p className="font-display font-bold text-stone-700 uppercase tracking-wide text-sm mb-2">Rigenera il resoconto</p>
+                            <p className="font-display font-bold text-stone-700 uppercase tracking-wide text-sm mb-2">Rigenera il reportage</p>
                             {materialBadge}
                           </div>
                           <div className="flex items-center gap-2 flex-wrap">
@@ -833,7 +833,7 @@ export default function ReportReader({
                           <Pencil className="w-10 h-10 text-stone-400 mb-3" />
                           <p className="font-display font-bold uppercase tracking-wide text-stone-700 mb-2">Scrivi tu</p>
                           <p className="text-sm text-stone-500 italic mb-4">
-                            Costruisci il resoconto sezione per sezione, con le tue parole. Puoi richiedere aiuto all&apos;AI su singoli paragrafi e associare le tue foto.
+                            Costruisci il reportage sezione per sezione, con le tue parole. Puoi richiedere aiuto all&apos;AI su singoli paragrafi e associare le tue foto.
                           </p>
                           <button
                             onClick={() => { setReportSections(SCAFFOLD_SECTIONS); setReportAuthoredBy('manual'); setEditorMode('manual') }}
@@ -868,7 +868,7 @@ export default function ReportReader({
                 {generating && sections.length === 0 && (
                   <div className="flex items-center gap-3 py-8 text-stone-500">
                     <Loader2 className="w-5 h-5 animate-spin text-forest-500" />
-                    <span className="italic text-sm">Giulia sta scrivendo il tuo resoconto…</span>
+                    <span className="italic text-sm">Giulia sta scrivendo il tuo reportage…</span>
                   </div>
                 )}
                 {generating && sections.length === 0 && content && (

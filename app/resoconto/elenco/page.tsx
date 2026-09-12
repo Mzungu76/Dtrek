@@ -297,7 +297,7 @@ export default function ResocontoIndexPage() {
         <div className="absolute inset-0 bg-gradient-to-b from-forest-900/15 to-forest-900/85" />
         <div className="absolute left-6 right-6 bottom-6 sm:left-10 sm:right-10 sm:bottom-8 max-w-[1400px] mx-auto sm:static sm:px-0">
           <div className="max-w-[1400px] mx-auto px-0 sm:px-4">
-            <p className="text-forest-300 text-[13px] font-semibold mb-1.5">Resoconto</p>
+            <p className="text-forest-300 text-[13px] font-semibold mb-1.5">Reportage</p>
             <h1 className="font-display text-[26px] sm:text-4xl font-bold text-white leading-tight">
               {loading ? 'Caricamento…' :
                 activities.length > 0
@@ -343,7 +343,7 @@ export default function ResocontoIndexPage() {
             </div>
             <h2 className="font-display text-2xl font-semibold text-stone-700 mb-2">Nessuna escursione conclusa</h2>
             <p className="text-stone-400 text-sm max-w-sm mb-6 px-4">
-              Il resoconto di un&apos;escursione si genera automaticamente quando concludi una navigazione
+              Il reportage di un&apos;escursione si genera automaticamente quando concludi una navigazione
               dal tab Guida, oppure carica direttamente un&apos;attività registrata.
             </p>
             <Link

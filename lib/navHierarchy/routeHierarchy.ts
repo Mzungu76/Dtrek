@@ -71,7 +71,7 @@ export const ROUTE_LABELS: Record<string, string> = {
   '/atlante': 'Atlante',
   '/atlante/salvate': 'Salvate',
   '/guida': 'Guida',
-  '/resoconto': 'Resoconto',
+  '/resoconto': 'Reportage',
   '/statistiche': 'Statistiche',
   '/profilo': 'Profilo',
   '/profilo/ricerche-salvate': 'Le mie ricerche',

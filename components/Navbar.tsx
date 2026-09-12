@@ -18,7 +18,7 @@ import type { User as SupabaseUser, Session, AuthChangeEvent } from '@supabase/s
 export const NAV_LINKS = [
   { href: '/bacheca',    label: 'Dashboard',  icon: LayoutDashboard },
   { href: '/guida',      label: 'Guide',      icon: Compass    },
-  { href: '/resoconto',  label: 'Resoconti',  icon: BookOpen   },
+  { href: '/resoconto',  label: 'Reportage',  icon: BookOpen   },
   { href: '/diario',     label: 'Diari',      icon: BookMarked },
 ]
 

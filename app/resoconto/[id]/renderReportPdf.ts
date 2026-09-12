@@ -83,7 +83,7 @@ export async function renderReportPdfBlob(
 /** Genera e scarica localmente il PDF, senza pubblicarlo. */
 export async function downloadReportPdf(params: ReportPdfParams): Promise<void> {
   const blob = await renderReportPdfBlob(params)
-  const filename = `dtrek-resoconto-${(params.activity.title ?? 'escursione').replace(/\s+/g, '-').replace(/[^a-z0-9-]/gi, '').slice(0, 40)}.pdf`
+  const filename = `dtrek-reportage-${(params.activity.title ?? 'escursione').replace(/\s+/g, '-').replace(/[^a-z0-9-]/gi, '').slice(0, 40)}.pdf`
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a'); a.href = url; a.download = filename
   a.click(); URL.revokeObjectURL(url)

@@ -219,7 +219,7 @@ function DiarioAttivoWidget({ data }: WidgetProps) {
       <div className="flex-1 min-w-0">
         <div className={EYEBROW}>Diario attivo</div>
         <div className="font-display font-semibold text-[14px] text-stone-800 truncate mt-0.5">{d?.title ?? 'Il mio Diario'}</div>
-        {d && <div className="text-[10.5px] text-stone-500 mt-0.5">{d.reportageCount} resoconti</div>}
+        {d && <div className="text-[10.5px] text-stone-500 mt-0.5">{d.reportageCount} reportage</div>}
       </div>
       <ChevronRight className="w-4 h-4 text-stone-300 shrink-0" />
     </Link>

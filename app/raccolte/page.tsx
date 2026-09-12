@@ -83,7 +83,7 @@ export default function RaccolteListPage() {
                 <div className="flex-1 min-w-0">
                   <p className="font-display font-semibold text-base text-stone-800 truncate">{c.title}</p>
                   <p className="text-xs text-stone-400 mt-1 flex items-center gap-1.5">
-                    <span>{c.volumeCount} diari</span> · <span>{c.reportageCount} resoconti</span> ·{' '}
+                    <span>{c.volumeCount} diari</span> · <span>{c.reportageCount} reportage</span> ·{' '}
                     {c.isPublished
                       ? <span className="inline-flex items-center gap-1 text-forest-600 font-medium"><Globe2 className="w-3 h-3" /> pubblicata</span>
                       : <span className="inline-flex items-center gap-1"><Lock className="w-3 h-3" /> bozza</span>}

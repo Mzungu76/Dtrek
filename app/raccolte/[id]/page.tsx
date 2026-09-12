@@ -48,7 +48,7 @@ function VolumeRow({ volume, index, total, onMoveUp, onMoveDown }: {
       <span className="font-mono font-bold text-xs text-stone-300 w-4 shrink-0">{index + 1}</span>
       <Link href={`/diario/${encodeURIComponent(volume.id)}`} className="min-w-0 flex-1">
         <p className="truncate font-display font-semibold text-[15px] text-stone-800">{volume.title}</p>
-        <p className="text-xs text-stone-400 mt-0.5">{volume.reportageCount} resoconti · {(volume.distanceMeters / 1000).toFixed(0)} km</p>
+        <p className="text-xs text-stone-400 mt-0.5">{volume.reportageCount} reportage · {(volume.distanceMeters / 1000).toFixed(0)} km</p>
       </Link>
       <div className="flex items-center gap-0.5 shrink-0">
         <button type="button" onClick={onMoveUp} disabled={index === 0} className="p-1.5 rounded-lg disabled:opacity-25 text-stone-400 hover:text-stone-600 hover:bg-stone-50 transition-colors" aria-label="Sposta su">
@@ -224,7 +224,7 @@ export default function RaccoltaComposerPage() {
                       className="w-full flex items-center justify-between px-4 py-3 text-left border-b border-stone-50 last:border-b-0 hover:bg-stone-50 transition-colors">
                       <span className="font-display font-semibold text-sm text-stone-700">{d.title}</span>
                       <span className="text-xs text-stone-400 text-right">
-                        {d.reportageCount} resoconti
+                        {d.reportageCount} reportage
                         {d.shelfId && d.shelfId !== collectionId && <><br />sposta qui dalla sua raccolta</>}
                       </span>
                     </button>

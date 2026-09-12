@@ -11,7 +11,7 @@ export default function PrezziPage() {
         <div className="text-center mb-10">
           <h1 className="font-display text-2xl sm:text-3xl font-bold text-forest-900 mb-2">Sblocca Dtrek</h1>
           <p className="text-stone-500">
-            Percorsi, guide e resoconti generati dall&apos;AI senza limiti di volume né periodo di prova.
+            Percorsi, guide e reportage generati dall&apos;AI senza limiti di volume né periodo di prova.
           </p>
         </div>
 

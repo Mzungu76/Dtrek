@@ -350,8 +350,8 @@ export default function ActivityPhotoManager({
                 <h3 className="font-display font-bold text-stone-800 text-[15px] leading-snug">Eliminare questa foto?</h3>
                 <p className="text-[11.5px] text-stone-500 leading-snug mt-1">
                   {pendingDelete.caption
-                    ? `«${pendingDelete.caption}» sparirà dal resoconto, dalla galleria e dalla mappa. Non si può annullare.`
-                    : 'Sparirà dal resoconto, dalla galleria e dalla mappa. Non si può annullare.'}
+                    ? `«${pendingDelete.caption}» sparirà dal reportage, dalla galleria e dalla mappa. Non si può annullare.`
+                    : 'Sparirà dal reportage, dalla galleria e dalla mappa. Non si può annullare.'}
                 </p>
               </div>
             </div>

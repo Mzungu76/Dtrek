@@ -196,11 +196,22 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const body = await req.json().catch(() => ({})) as {
-      labels?: unknown; archivedAt?: unknown; shelfId?: unknown; shelfPosition?: unknown
+      labels?: unknown; archivedAt?: unknown; shelfId?: unknown; shelfPosition?: unknown; title?: unknown
     }
     const dbPatch: Record<string, unknown> = {}
     const hasShelfId = Object.prototype.hasOwnProperty.call(body, 'shelfId')
     const hasShelfPosition = Object.prototype.hasOwnProperty.call(body, 'shelfPosition')
+
+    // Il nome del Diario (registro) — distinto dal titolo/sottotitolo di DiaryConfig, quello della
+    // copertina del libro impaginato (/api/diaries/[id]/config): questo è il nome usato ovunque
+    // nell'app (elenco Diari, etichetta del Diario su un Reportage, breadcrumb) e finora non era
+    // modificabile da nessuna UI.
+    if (Object.prototype.hasOwnProperty.call(body, 'title')) {
+      if (typeof body.title !== 'string' || !body.title.trim()) {
+        return NextResponse.json({ error: 'title deve essere una stringa non vuota' }, { status: 400 })
+      }
+      dbPatch.title = body.title.trim()
+    }
 
     if (Object.prototype.hasOwnProperty.call(body, 'labels')) {
       if (!Array.isArray(body.labels) || !body.labels.every((l): l is string => typeof l === 'string')) {
@@ -296,7 +307,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }
 
     const [{ data: diaryRow, error: diaryReadErr }, { data: shelfRow, error: shelfReadErr }] = await Promise.all([
-      supabase.from('diaries').select('labels, archived_at').eq('id', params.id).eq('user_id', user.id).maybeSingle(),
+      supabase.from('diaries').select('title, labels, archived_at').eq('id', params.id).eq('user_id', user.id).maybeSingle(),
       supabase.from('collection_diaries').select('collection_id, position').eq('diary_id', params.id).eq('user_id', user.id).maybeSingle(),
     ])
     if (diaryReadErr) throw diaryReadErr
@@ -304,6 +315,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (!diaryRow) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     return NextResponse.json({
+      title:         diaryRow.title as string,
       labels:        (diaryRow.labels as string[] | null) ?? [],
       archivedAt:    diaryRow.archived_at as string | null,
       shelfId:       (shelfRow?.collection_id as string | undefined) ?? null,
