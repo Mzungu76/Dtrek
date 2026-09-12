@@ -3,36 +3,51 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowDown, ArrowLeft, ArrowUp, Loader2, Plus, Trash2, X } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowUp, Copy, ExternalLink, Link2Off, Loader2, Plus, Share2, Trash2, X } from 'lucide-react'
 import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
+import { PublishPrivacyToggles } from '@/components/PublishPrivacyToggles'
 import type { CollectionDetail, CollectionDetailDiario } from '@/app/api/collections/[id]/route'
 import type { DiarySummary } from '@/app/api/diaries/route'
 
 // Composizione di una Raccolta — restyling nei token attuali di app/raccolte/[id]/page.tsx (la
-// pagina "Taccuino Botanico" rimossa nel ripristino al layout PR #741), senza la sezione di
-// pubblicazione (token/link pubblico): non richiesta in questa fase, resta un passo successivo —
-// PATCH /api/collections/[id]/token esiste già quando servirà.
+// pagina "Taccuino Botanico" rimossa nel ripristino al layout PR #741). La pubblicazione era stata
+// deliberatamente rimandata qui ("PATCH /api/collections/[id]/token esiste già quando servirà") —
+// ora richiesta esplicitamente (Fase 1 del piano di pubblicazione), riportata riprendendo la stessa
+// logica pubblica/copia/revoca già scritta e verificata nella versione precedente di questa pagina
+// (commit 52de651), solo nello stile attuale invece del "Taccuino" nel frattempo rimosso.
 //
-// Niente bottone "rimuovi" isolato: un Diario sta sempre su una Raccolta (UNIQUE(diary_id) su
-// collection_diaries) — si sposta scegliendolo dal picker di un'altra raccolta, non si toglie e
-// basta (il server rifiuterebbe comunque la richiesta, vedi PUT /api/collections/[id]/diari).
-function EditableField({ label, value, onSave, placeholder, big }: {
-  label: string; value: string; onSave: (v: string) => void; placeholder?: string; big?: boolean
+// Niente bottone "rimuovi" isolato per un Diario: un Diario sta sempre su una Raccolta
+// (UNIQUE(diary_id) su collection_diaries) — si sposta scegliendolo dal picker di un'altra
+// raccolta, non si toglie e basta (il server rifiuterebbe comunque la richiesta, vedi
+// PUT /api/collections/[id]/diari).
+function EditableField({ label, value, onSave, placeholder, big, multiline }: {
+  label: string; value: string; onSave: (v: string) => void; placeholder?: string; big?: boolean; multiline?: boolean
 }) {
   const [draft, setDraft] = useState(value)
   useEffect(() => setDraft(value), [value])
+  const className = big
+    ? 'w-full bg-transparent outline-none border-b border-stone-200 focus:border-forest-400 font-display text-2xl font-bold text-stone-800 pb-1.5 transition-colors'
+    : 'w-full bg-transparent outline-none border-b border-stone-200 focus:border-forest-400 font-lora italic text-sm text-stone-600 pb-1.5 transition-colors resize-none'
   return (
     <div className="mb-4">
       <p className="font-barlow font-bold uppercase tracking-widest text-[10px] text-stone-400 mb-1.5">{label}</p>
-      <input
-        value={draft}
-        onChange={e => setDraft(e.target.value)}
-        onBlur={() => { if (draft !== value) onSave(draft) }}
-        placeholder={placeholder}
-        className={big
-          ? 'w-full bg-transparent outline-none border-b border-stone-200 focus:border-forest-400 font-display text-2xl font-bold text-stone-800 pb-1.5 transition-colors'
-          : 'w-full bg-transparent outline-none border-b border-stone-200 focus:border-forest-400 font-lora italic text-sm text-stone-600 pb-1.5 transition-colors'}
-      />
+      {multiline ? (
+        <textarea
+          value={draft} rows={3}
+          onChange={e => setDraft(e.target.value)}
+          onBlur={() => { if (draft !== value) onSave(draft) }}
+          placeholder={placeholder}
+          className={className}
+        />
+      ) : (
+        <input
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onBlur={() => { if (draft !== value) onSave(draft) }}
+          placeholder={placeholder}
+          className={className}
+        />
+      )}
     </div>
   )
 }
@@ -75,6 +90,10 @@ export default function RaccoltaComposerPage() {
   const [deleteConfirming, setDeleteConfirming] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [shareToken, setShareToken] = useState<string | null>(null)
+  const [publishing, setPublishing] = useState(false)
+  const [publishError, setPublishError] = useState<string | null>(null)
+  const [copyOk, setCopyOk] = useState(false)
 
   function loadCollection() {
     return fetch(`/api/collections/${encodeURIComponent(collectionId)}`)
@@ -85,7 +104,14 @@ export default function RaccoltaComposerPage() {
 
   useEffect(() => { loadCollection() }, [collectionId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function patchField(field: 'title' | 'subtitle', value: string) {
+  useEffect(() => {
+    fetch(`/api/collections/${encodeURIComponent(collectionId)}/token`)
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
+      .then(data => setShareToken(data.shareToken ?? null))
+      .catch(() => { /* il token si vede solo dopo la pubblicazione — un fallimento qui non blocca la pagina */ })
+  }, [collectionId])
+
+  async function patchField(field: 'title' | 'subtitle' | 'preface', value: string) {
     setCollection(c => c ? { ...c, [field]: value } : c)
     try {
       const res = await fetch(`/api/collections/${encodeURIComponent(collectionId)}`, {
@@ -156,6 +182,30 @@ export default function RaccoltaComposerPage() {
     }
   }
 
+  // Pubblica/revoca — stesso contratto UX del Diario (PATCH garantisce un token, DELETE lo ruota:
+  // il link già condiviso smette di funzionare, "pubblicata" torna a "bozza" finché non si ripubblica).
+  async function publish() {
+    setPublishing(true); setPublishError(null)
+    try {
+      const res = await fetch(`/api/collections/${encodeURIComponent(collectionId)}/token`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: '{}',
+      })
+      if (!res.ok) throw new Error(`Pubblicazione non riuscita (${res.status})`)
+      const data = await res.json() as { shareToken?: string }
+      if (data.shareToken) setShareToken(data.shareToken)
+    } catch (e) {
+      setPublishError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setPublishing(false)
+    }
+  }
+  async function revoke() {
+    await fetch(`/api/collections/${encodeURIComponent(collectionId)}/token`, { method: 'DELETE' })
+    setShareToken(null)
+  }
+
+  const publicUrl = shareToken && typeof window !== 'undefined' ? `${window.location.origin}/leggi/c/${shareToken}` : ''
+
   if (error && !collection) {
     return (
       <div className={`min-h-screen bg-stone-50 flex items-center justify-center px-6 text-center ${MOBILE_TOPBAR_SPACER}`}>
@@ -192,6 +242,12 @@ export default function RaccoltaComposerPage() {
                 <EditableField label="Sottotitolo" value={collection.subtitle} onSave={v => patchField('subtitle', v)} placeholder="es. Tre stagioni sullo stesso crinale" />
               </div>
             </div>
+
+            <EditableField
+              label="Prefazione" value={collection.preface} onSave={v => patchField('preface', v)}
+              placeholder="Qualche riga per introdurre la collana — compare nella pagina pubblica, sopra l'indice dei Diari."
+              multiline
+            />
 
             <div className="flex items-center justify-between mb-3.5">
               <span className="font-barlow font-bold text-xs tracking-[2px] uppercase text-stone-400">Diari ({collection.diari.length})</span>
@@ -237,6 +293,55 @@ export default function RaccoltaComposerPage() {
                 <Plus className="w-4 h-4" /> Aggiungi un Diario
               </button>
             )}
+
+            <div className="rounded-2xl px-4 py-4 mb-6 bg-white border border-stone-200 shadow-sm">
+              <p className="font-barlow font-bold uppercase tracking-widest text-[11px] text-stone-400 mb-2.5">Pubblicazione</p>
+              {publishError && <p className="text-xs text-red-600 mb-2">{publishError}</p>}
+              {shareToken ? (
+                <div className="flex flex-col gap-2">
+                  <a
+                    href={publicUrl} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wide bg-stone-100 text-stone-700 hover:bg-stone-200 transition-colors"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" /> Apri la raccolta
+                  </a>
+                  <button
+                    type="button"
+                    onClick={async () => { await navigator.clipboard.writeText(publicUrl); setCopyOk(true); setTimeout(() => setCopyOk(false), 2000) }}
+                    className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white bg-forest-600 hover:bg-forest-700 transition-colors"
+                  >
+                    <Copy className="w-3.5 h-3.5" /> {copyOk ? 'Copiato!' : 'Copia link'}
+                  </button>
+                  <button
+                    type="button" onClick={revoke}
+                    className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs border border-red-200 text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    <Link2Off className="w-3.5 h-3.5" /> Rimuovi link
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <p className="text-xs text-stone-500 mb-2.5">
+                    Pubblica una pagina web con tutti i Diari di questa raccolta, leggibile da chiunque abbia il link.
+                  </p>
+                  <button
+                    type="button" onClick={publish} disabled={publishing}
+                    className="w-full flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wide text-white bg-forest-600 hover:bg-forest-700 disabled:opacity-60 transition-colors"
+                  >
+                    {publishing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Share2 className="w-3.5 h-3.5" />}
+                    Pubblica online
+                  </button>
+                </>
+              )}
+
+              {/* Preferenze globali (vale per ogni Diario e Raccolta, non solo questa). */}
+              <div className="pt-2.5 mt-2.5 border-t border-stone-100">
+                <p className="font-barlow font-bold uppercase tracking-widest text-[9.5px] text-stone-400 mb-1.5">
+                  Privacy (vale per tutto quello che pubblichi)
+                </p>
+                <PublishPrivacyToggles />
+              </div>
+            </div>
 
             <div className="pt-6 border-t border-stone-200">
               {!deleteConfirming ? (

@@ -190,6 +190,25 @@ qualcuno ha già condiviso, quindi lo decidi tu (vedi sotto).
    quelle non ancora migrate; due booleani in più lì avrebbero rischiato una regressione
    sproporzionata al beneficio di evitare un file nuovo.
 
+### Nota: rimosso e ripristinato (settembre 2026)
+
+Le PR 2 e 3 di questo piano erano già interamente implementate (vedi sotto), ma il commit
+`73b2efa` ("restore: layout dell'app allo stato PR #741 (pre-taccuino)") le ha rimosse insieme a
+un ripristino generale del layout dell'app a uno stato precedente — decisione esplicita dell'utente
+di allora ("le nascondo, torno alla nav vecchia"), non un difetto di questo piano. Rimossi solo i
+file di UI/pagina (`app/leggi/c/[token]/*`, la sezione di pubblicazione di `app/raccolte/[id]/
+page.tsx`, `components/PublishPrivacyToggles.tsx`); il resto (tabelle Supabase, `lib/raccolte/*`,
+`lib/sharePublicCollection.ts`, `lib/privacy/*`, le route `/api/collections/**` e
+`/api/user-settings/privacy`) è sempre rimasto intatto, come previsto dal commit di ripristino
+stesso.
+
+Ripristinato di nuovo (Fase 1 di un piano più ampio — pubblicazione con stile editoriale coerente
+per Raccolta/Diario/Reportage, sotto un futuro profilo pubblico unico per utente) quando l'utente
+ha chiesto esplicitamente di rendere pubblicabili anche le Raccolte: gli stessi file, recuperati da
+`git show 52de651`/`6170d20`, adattati solo nello stile (oggi niente più "Taccuino", i token di
+`app/raccolte/[id]/page.tsx` sono quelli della sua riscrittura successiva) — nessuna logica
+riscritta da zero, era già corretta e testata.
+
 ### Cosa c'è già, per chi riprende da qui
 
 - `supabase/migrations/add_collections_tables.sql` — `collections` + `collection_diaries`, RLS

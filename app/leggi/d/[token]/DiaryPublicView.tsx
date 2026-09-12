@@ -16,12 +16,24 @@ import { formatDuration } from '@/lib/tcxParser'
 import { hasNarrative, type PublicDiary } from '@/lib/sharePublicDiary'
 import { SiteHeader, DtrekCallout, SiteFooter } from './SiteChrome'
 
-export function DiaryPublicView({ diary, token }: { diary: PublicDiary; token: string }) {
+export function DiaryPublicView({ diary, token, entryBasePath, headerHomeHref, headerHomeLabel }: {
+  diary: PublicDiary
+  token: string
+  /** Dove puntano i link alle singole escursioni — `/leggi/d/[token]` di default; un Diario
+   *  annidato in una Raccolta (`app/leggi/c/[token]/v/[v]/page.tsx`) passa il proprio prefisso. */
+  entryBasePath?: string
+  /** Dove porta il logo/la voce "home" della testata — di norma questo stesso Diario, ma per un
+   *  Diario dentro una Raccolta punta all'indice della Raccolta (si "torna al cofanetto", non a
+   *  un giro su se stessi). */
+  headerHomeHref?: string
+  headerHomeLabel?: string
+}) {
   const show = diary.config.publicSections
+  const entryBase = entryBasePath ?? `/leggi/d/${token}`
 
   return (
     <div className="min-h-screen bg-stone-50">
-      <SiteHeader token={token} diaryTitle={diary.config.title} current="home" />
+      <SiteHeader homeHref={headerHomeHref ?? `/leggi/d/${token}`} homeLabel={headerHomeLabel} title={diary.config.title} current="home" />
 
       <main className="max-w-4xl mx-auto px-4 sm:px-5 py-6 sm:py-8 space-y-5">
         {/* Copertina */}
@@ -87,7 +99,7 @@ export function DiaryPublicView({ diary, token }: { diary: PublicDiary; token: s
             {items.map(({ e, i }) => {
               const cover = show.foto ? e.photos[0] : undefined
               return (
-                <a key={e.id} href={`/leggi/d/${token}/e/${i + 1}`}
+                <a key={e.id} href={`${entryBase}/e/${i + 1}`}
                   className="group bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden hover:shadow-md hover:border-stone-300 transition flex flex-col">
                   {cover
                     // eslint-disable-next-line @next/next/no-img-element
