@@ -56,6 +56,18 @@ creati). Direzione scelta: **D**, poi integrata con il conta-pagine di C e due a
   parte oggi), la regola non ha alcun effetto e la navigazione resta quella di sempre — lo stesso
   miglioramento progressivo richiesto, ottenuto in CSS puro invece che con uno script.
 
+**Fase 5 — coerenza con la Raccolta** ✅ **COMPLETATA**
+
+Segnalato dall'utente dopo la Fase 4: un'escursione dentro un volume di una Raccolta pubblicata
+(`/leggi/c/[token]/v/[vi]/e/[n]`) riusa già `EntryArticle.tsx` — quindi mostrava la card in stile
+taccuino incorniciata da una `SiteChrome` e uno sfondo rimasti nella vecchia palette editoriale.
+Estesa la stessa carta/rilegatura a tutte le pagine della Raccolta:
+`app/leggi/c/[token]/SiteChrome.tsx` (testata), `CollectionPublicView.tsx` (frontespizio/indice
+volumi), `v/[vi]/page.tsx` (indice di un volume, incluso lo schizzo del percorso al posto del
+gradiente per le escursioni senza foto), `v/[vi]/e/[n]/page.tsx` (telaio + `PageProgressPill`
+relativa al volume, non all'intera raccolta). `DtrekCallout`/`SiteFooter` erano già coerenti: quel
+file li riesporta da `app/leggi/d/[token]/SiteChrome.tsx`, già in taccuino dalla Fase 2.
+
 ## Verifica
 
 `tsc --noEmit` ed `eslint` puliti; nessun test automatico nuovo (le fasi sopra sono presentazione,
