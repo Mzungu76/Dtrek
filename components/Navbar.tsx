@@ -207,13 +207,31 @@ function MobileTopBar() {
   return <MobileNavBar className="md:hidden fixed z-40 inset-x-0 top-0" />
 }
 
+// Variante "a fondo" della barra mobile — link in fondo allo schermo, solo l'icona profilo in
+// cima, come le pagine "magazine" (HubNavBar.tsx). Per pagine "normali" (non a schermo intero,
+// come questa) che vogliono comunque la stessa posizione della barra per coerenza con le altre
+// voci del menù — es. /raccolte, ora che è la quinta voce della stessa famiglia logica.
+function MobileTopAvatarOnly() {
+  return <MobileNavBar className="md:hidden fixed z-40 inset-x-0 top-0" showLinks={false} />
+}
+function MobileBottomNavBar() {
+  return <MobileNavBar className="md:hidden fixed z-40 inset-x-0 bottom-0" showAvatar={false} safeAreaTop={false} safeAreaBottom />
+}
+
 // ── Navbar ─────────────────────────────────────────────────────────────────────
 
-export default function Navbar() {
+export default function Navbar({ mobileNavPosition = 'top' }: { mobileNavPosition?: 'top' | 'bottom' } = {}) {
   return (
     <>
       <DesktopNav />
-      <MobileTopBar />
+      {mobileNavPosition === 'bottom' ? (
+        <>
+          <MobileTopAvatarOnly />
+          <MobileBottomNavBar />
+        </>
+      ) : (
+        <MobileTopBar />
+      )}
     </>
   )
 }
