@@ -423,7 +423,7 @@ export default function RouteHub({
       </div>
 
       <div
-        className="absolute inset-x-0 bottom-0 z-20 flex flex-col gap-3 pb-[calc(env(safe-area-inset-bottom,0px)+10px)] transition-opacity ease-out"
+        className="absolute inset-x-0 bottom-0 z-20 flex flex-col gap-3 transition-opacity ease-out"
         style={{ opacity: chromeOpacity, pointerEvents: isOpen ? 'none' : 'auto', transitionDuration: `${chromeTransitionMs}ms` }}
       >
         {summary && (
@@ -443,7 +443,7 @@ export default function RouteHub({
         />
         {/* Trascina la scheda chiusa verso l'alto per aprirla — l'icona stessa è anche un
             pulsante equivalente per chi preferisce toccare piuttosto che trascinare. */}
-        <div className="flex justify-center">
+        <div className="flex justify-center pb-1">
           <button
             onClick={() => openWithAnimation(defaultSection)}
             aria-label={`Apri il ${emptyNoun}`}

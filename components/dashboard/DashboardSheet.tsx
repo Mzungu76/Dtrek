@@ -165,7 +165,7 @@ export default function DashboardSheet({ data }: { data: DashboardData }) {
     <>
       {/* ── Peek: sempre visibile, ancorato in basso sopra la mappa ── */}
       <div
-        className="absolute inset-x-0 bottom-0 z-20 flex flex-col gap-2.5 px-4 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] transition-opacity"
+        className="absolute inset-x-0 bottom-0 z-20 flex flex-col gap-2.5 px-4 transition-opacity"
         style={{ opacity: open ? 0 : 1, pointerEvents: open ? 'none' : 'auto' }}
       >
         <button

@@ -162,14 +162,20 @@ function DesktopNav() {
 // safeAreaTop: il rientro per lo status bar del telefono ha senso solo quando la barra sta
 // davvero in cima allo schermo — per la metà spostata in fondo (HubNavBar) va disattivato, o
 // aggiungerebbe uno spazio vuoto senza motivo sopra i link.
+// safeAreaBottom: simmetrico, per quando la barra sta in fondo — il rientro per l'home indicator
+// va DENTRO la barra stessa (allunga lo sfondo colorato), non lasciato come spazio vuoto dopo di
+// essa nel contenitore che la ospita, altrimenti torna il "piccolo spazio sotto la barra" segnalato.
 export function MobileNavBar({
-  className = '', showLinks = true, showAvatar = true, safeAreaTop = true,
-}: { className?: string; showLinks?: boolean; showAvatar?: boolean; safeAreaTop?: boolean }) {
+  className = '', showLinks = true, showAvatar = true, safeAreaTop = true, safeAreaBottom = false,
+}: { className?: string; showLinks?: boolean; showAvatar?: boolean; safeAreaTop?: boolean; safeAreaBottom?: boolean }) {
   const path = usePathname()
   return (
     <nav
       className={`pointer-events-auto ${showLinks ? 'bg-forest-600/95 backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.18)]' : ''} ${className}`}
-      style={safeAreaTop ? { paddingTop: 'env(safe-area-inset-top, 0px)' } : undefined}
+      style={{
+        ...(safeAreaTop ? { paddingTop: 'env(safe-area-inset-top, 0px)' } : null),
+        ...(safeAreaBottom ? { paddingBottom: 'env(safe-area-inset-bottom, 0px)' } : null),
+      }}
     >
       <div className={`flex items-center gap-1 px-3 h-14 ${showLinks ? '' : 'justify-end'}`}>
         {showLinks && (

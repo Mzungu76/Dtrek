@@ -18,6 +18,12 @@
     .lora { font-family: 'Lora', Georgia, serif; }
     .row { display: flex; align-items: center; gap: 10px; }
     .grip { color: #c4bead; flex-shrink: 0; }
+    .thumb-wrap { position: relative; flex-shrink: 0; }
+    .edit-badge {
+      position: absolute; bottom: -3px; right: -3px; border-radius: 99px; background: #fff;
+      border: 1.5px solid #f8f7f4; display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.18);
+    }
   </style>
 </helmet>
 <div class="body-f" style="width:390px;height:844px;background:#f8f7f4;position:relative;overflow:hidden;box-shadow:0 0 0 1px #dcd8cc;">
@@ -43,11 +49,20 @@
   <!-- Albero -->
   <div style="padding:10px 16px 0;display:flex;flex-direction:column;gap:2px;overflow-y:auto;height:calc(100% - 128px);">
 
-    <!-- RACCOLTA 1 — espansa, menù contestuale aperto (rinomina/sposta/elimina sempre da qui) -->
+    <!-- RACCOLTA 1 — espansa, menù contestuale aperto (rinomina/pubblica/elimina sempre da qui).
+         Copertina 32×32 con l'icona di riferimento Library (la stessa di Navbar.tsx) come badge
+         dentro il riquadro colorato, più il badge penna in basso a destra per la modifica rapida
+         della sola immagine — separato dal kebab, che gestisce titolo e ciclo di vita. -->
     <div class="row" style="position:relative;padding:10px 4px;border-bottom:1px solid #eeece5;">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4d4740" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polyline points="6 9 12 15 18 9"/></svg>
-      <div style="width:26px;height:26px;border-radius:8px;background:linear-gradient(160deg,#8cc894,#277134);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+      <div class="thumb-wrap">
+        <div style="width:32px;height:32px;border-radius:9px;background:linear-gradient(160deg,#8cc894,#277134);display:flex;align-items:center;justify-content:center;">
+          <!-- Library (lucide) — icona di riferimento per le Raccolte, la stessa di NAV_LINKS -->
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 6 4 14"/><path d="M12 6v14"/><path d="M8 8v12"/><path d="M4 4v16"/></svg>
+        </div>
+        <div class="edit-badge" style="width:16px;height:16px;">
+          <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#4d4740" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>
+        </div>
       </div>
       <div style="flex:1;min-width:0;">
         <p class="display" style="margin:0;font-weight:700;font-size:15px;color:#2c2520;">Le mie stagioni 2024</p>
@@ -62,10 +77,20 @@
       </div>
     </div>
 
-    <!-- DIARIO 1.1 — espanso, rinomina in corso -->
+    <!-- DIARIO 1.1 — espanso, rinomina in corso. Copertina 26×26 con l'icona di riferimento
+         BookMarked (la stessa di Navbar.tsx) e badge penna: la modifica del titolo E della
+         copertina non sono più solo prerogativa della Raccolta. -->
     <div class="row" style="padding:9px 4px 9px 30px;background:#fdfcf9;border-bottom:1px solid #eeece5;">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4d4740" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polyline points="6 9 12 15 18 9"/></svg>
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#277134" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M6 3h12a1 1 0 0 1 1 1v16l-7-4-7 4V4a1 1 0 0 1 1-1z"/></svg>
+      <div class="thumb-wrap">
+        <div style="width:26px;height:26px;border-radius:8px;background:linear-gradient(160deg,#e9ab64,#9f4315);display:flex;align-items:center;justify-content:center;">
+          <!-- BookMarked (lucide) — icona di riferimento per i Diari -->
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2v8l3-3 3 3V2"/><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/></svg>
+        </div>
+        <div class="edit-badge" style="width:14px;height:14px;">
+          <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="#4d4740" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>
+        </div>
+      </div>
       <div style="flex:1;min-width:0;">
         <input value="Appennino 2024" style="width:100%;font-family:'Playfair Display',serif;font-weight:700;font-size:14px;color:#2c2520;border:none;border-bottom:1.5px solid #277134;outline:none;background:transparent;padding:0 0 1px;" />
         <p class="barlow" style="margin:2px 0 0;font-size:10.5px;color:#978e7a;">24 reportage · 312 km</p>
@@ -74,21 +99,35 @@
       <svg class="grip" width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.3"/><circle cx="15" cy="6" r="1.3"/><circle cx="9" cy="12" r="1.3"/><circle cx="15" cy="12" r="1.3"/><circle cx="9" cy="18" r="1.3"/><circle cx="15" cy="18" r="1.3"/></svg>
     </div>
 
-    <!-- REPORTAGE 1.1.a -->
+    <!-- REPORTAGE 1.1.a — rinomina in corso: stessa possibilità di Raccolte e Diari, non più
+         solo un puntino e un titolo statico. Copertina 20×20 con l'icona di riferimento
+         BookOpen (la stessa di Navbar.tsx) e badge penna. -->
     <div class="row" style="padding:8px 4px 8px 56px;border-bottom:1px solid #f3f1ea;">
-      <span style="width:5px;height:5px;border-radius:99px;background:#c4bead;flex-shrink:0;"></span>
-      <div style="flex:1;min-width:0;">
-        <p class="body-f" style="margin:0;font-size:12.5px;font-weight:500;color:#4d4740;">Anello del Corno alle Scale</p>
-        <p class="barlow" style="margin:1px 0 0;font-size:10px;color:#a9a18e;">12 set 2024 · 14,2 km</p>
+      <div class="thumb-wrap">
+        <div style="width:20px;height:20px;border-radius:7px;background:linear-gradient(160deg,#9db8c4,#3f6577);display:flex;align-items:center;justify-content:center;">
+          <!-- BookOpen (lucide) — icona di riferimento per i Reportage -->
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg>
+        </div>
+        <div class="edit-badge" style="width:12px;height:12px;">
+          <svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="#4d4740" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>
+        </div>
       </div>
+      <div style="flex:1;min-width:0;">
+        <input value="Anello del Corno alle Scale" style="width:100%;font-family:'DM Sans',sans-serif;font-weight:600;font-size:12.5px;color:#2c2520;border:none;border-bottom:1.5px solid #277134;outline:none;background:transparent;padding:0 0 1px;" />
+        <p class="barlow" style="margin:2px 0 0;font-size:10px;color:#a9a18e;">12 set 2024 · 14,2 km</p>
+      </div>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#277134" stroke-width="2.6" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
       <svg class="grip" width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style="opacity:0.7;"><circle cx="9" cy="6" r="1.3"/><circle cx="15" cy="6" r="1.3"/><circle cx="9" cy="12" r="1.3"/><circle cx="15" cy="12" r="1.3"/><circle cx="9" cy="18" r="1.3"/><circle cx="15" cy="18" r="1.3"/></svg>
     </div>
 
-    <!-- REPORTAGE 1.1.b — SOLLEVATO IN TRASCINAMENTO -->
+    <!-- REPORTAGE 1.1.b — SOLLEVATO IN TRASCINAMENTO: durante il trascinamento resta solo
+         l'anteprima (copertina + titolo), niente chrome di modifica — coerente con un vero drag. -->
     <div style="position:relative;height:44px;">
       <div style="position:absolute;left:4px;right:4px;top:20px;height:1.5px;background:#277134;border-radius:2px;"></div>
       <div class="row" style="position:absolute;left:0;right:0;top:2px;padding:8px 8px 8px 52px;background:#fff;border-radius:10px;box-shadow:0 8px 20px rgba(44,37,32,0.18);transform:rotate(-1.2deg);z-index:5;">
-        <span style="width:5px;height:5px;border-radius:99px;background:#c4bead;flex-shrink:0;"></span>
+        <div style="width:20px;height:20px;border-radius:7px;flex-shrink:0;background:linear-gradient(160deg,#9db8c4,#3f6577);display:flex;align-items:center;justify-content:center;">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg>
+        </div>
         <div style="flex:1;min-width:0;">
           <p class="body-f" style="margin:0;font-size:12.5px;font-weight:500;color:#4d4740;">Rifugio Battisti</p>
           <p class="barlow" style="margin:1px 0 0;font-size:10px;color:#a9a18e;">3 ago 2024 · 9,8 km</p>
@@ -97,9 +136,17 @@
       </div>
     </div>
 
-    <!-- REPORTAGE 1.1.c -->
+    <!-- REPORTAGE 1.1.c — a riposo: titolo statico (torna input al tap), badge penna sempre
+         presente sulla copertina come le altre righe. -->
     <div class="row" style="padding:8px 4px 8px 56px;border-bottom:1px solid #f3f1ea;">
-      <span style="width:5px;height:5px;border-radius:99px;background:#c4bead;flex-shrink:0;"></span>
+      <div class="thumb-wrap">
+        <div style="width:20px;height:20px;border-radius:7px;background:linear-gradient(160deg,#9db8c4,#3f6577);display:flex;align-items:center;justify-content:center;">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg>
+        </div>
+        <div class="edit-badge" style="width:12px;height:12px;">
+          <svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="#4d4740" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>
+        </div>
+      </div>
       <div style="flex:1;min-width:0;">
         <p class="body-f" style="margin:0;font-size:12.5px;font-weight:500;color:#4d4740;">Traversata dei tre passi</p>
         <p class="barlow" style="margin:1px 0 0;font-size:10px;color:#a9a18e;">22 lug 2024 · 21,6 km</p>
@@ -107,10 +154,18 @@
       <svg class="grip" width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style="opacity:0.7;"><circle cx="9" cy="6" r="1.3"/><circle cx="15" cy="6" r="1.3"/><circle cx="9" cy="12" r="1.3"/><circle cx="15" cy="12" r="1.3"/><circle cx="9" cy="18" r="1.3"/><circle cx="15" cy="18" r="1.3"/></svg>
     </div>
 
-    <!-- DIARIO 1.2 — collassato -->
+    <!-- DIARIO 1.2 — collassato, a riposo. Copertina in una tonalità diversa dal Diario 1.1
+         (come due vere copertine diverse), stesso badge penna sempre presente. -->
     <div class="row" style="padding:9px 4px 9px 30px;border-bottom:1px solid #eeece5;">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#978e7a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polyline points="9 6 15 12 9 18"/></svg>
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#c05a17" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M6 3h12a1 1 0 0 1 1 1v16l-7-4-7 4V4a1 1 0 0 1 1-1z"/></svg>
+      <div class="thumb-wrap">
+        <div style="width:26px;height:26px;border-radius:8px;background:linear-gradient(160deg,#7fa8c9,#2f5c7a);display:flex;align-items:center;justify-content:center;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2v8l3-3 3 3V2"/><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/></svg>
+        </div>
+        <div class="edit-badge" style="width:14px;height:14px;">
+          <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="#4d4740" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>
+        </div>
+      </div>
       <div style="flex:1;min-width:0;">
         <p class="display" style="margin:0;font-weight:700;font-size:14px;color:#2c2520;">Alpi 2023</p>
         <p class="barlow" style="margin:1px 0 0;font-size:10.5px;color:#978e7a;">17 reportage · 198 km</p>
@@ -118,11 +173,17 @@
       <svg class="grip" width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.3"/><circle cx="15" cy="6" r="1.3"/><circle cx="9" cy="12" r="1.3"/><circle cx="15" cy="12" r="1.3"/><circle cx="9" cy="18" r="1.3"/><circle cx="15" cy="18" r="1.3"/></svg>
     </div>
 
-    <!-- RACCOLTA 2 — collassata -->
+    <!-- RACCOLTA 2 — collassata, a riposo. Stessa anatomia della Raccolta 1 (copertina Library +
+         badge penna + kebab), kebab chiuso. -->
     <div class="row" style="padding:10px 4px;border-bottom:1px solid #eeece5;margin-top:8px;">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#978e7a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polyline points="9 6 15 12 9 18"/></svg>
-      <div style="width:26px;height:26px;border-radius:8px;background:linear-gradient(160deg,#e9ab64,#9f4315);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+      <div class="thumb-wrap">
+        <div style="width:32px;height:32px;border-radius:9px;background:linear-gradient(160deg,#e9ab64,#9f4315);display:flex;align-items:center;justify-content:center;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 6 4 14"/><path d="M12 6v14"/><path d="M8 8v12"/><path d="M4 4v16"/></svg>
+        </div>
+        <div class="edit-badge" style="width:16px;height:16px;">
+          <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#4d4740" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>
+        </div>
       </div>
       <div style="flex:1;min-width:0;">
         <p class="display" style="margin:0;font-weight:700;font-size:15px;color:#2c2520;">Sentieri di casa</p>
