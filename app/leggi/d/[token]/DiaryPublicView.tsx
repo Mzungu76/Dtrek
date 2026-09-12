@@ -42,14 +42,21 @@ export function DiaryPublicView({ diary, token, entryBasePath, headerHomeHref, h
 
   return (
     <div className="min-h-screen relative">
+      {/* Transizione cross-documento del browser (progressive enhancement, nessun JS) — l'altro
+          lato è app/u/[slug]/page.tsx, che dichiara la stessa regola e lo stesso nome sulla propria
+          copertina. Dove non supportata, la navigazione resta quella normale. */}
+      <style>{'@view-transition { navigation: auto; }'}</style>
       <TaccuinoPaperTexture />
       <TaccuinoSpineShadow />
       <SiteHeader homeHref={headerHomeHref ?? `/leggi/d/${token}`} homeLabel={headerHomeLabel} title={diary.config.title} current="home" />
 
       <main className="max-w-4xl mx-auto px-4 sm:px-5 py-6 sm:py-8 pl-[calc(1rem+34px)] sm:pl-[calc(1.25rem+34px)] space-y-5">
         {/* Copertina — invariata: è components/diario/DiarioCover.tsx nella sua identità reale, non
-            un'invenzione di questo restyling. */}
-        <section className="relative rounded-3xl overflow-hidden shadow-sm border border-[#D9C9A8]">
+            un'invenzione di questo restyling. `viewTransitionName` corrisponde a quello dichiarato
+            dalla copertina del profilo pubblico (app/u/[slug]/page.tsx): quando si arriva da lì, il
+            browser la fa continuare da dov'era invece di un cambio secco di pagina. */}
+        <section className="relative rounded-3xl overflow-hidden shadow-sm border border-[#D9C9A8]"
+          style={{ viewTransitionName: 'diario-cover' }}>
           <div className="relative p-8 sm:p-12 text-white"
             style={{ background: diary.config.coverUrl ? undefined : 'linear-gradient(158deg,#193b20 0%,#1c4724 45%,#20592b 100%)' }}>
             {diary.config.coverUrl && (

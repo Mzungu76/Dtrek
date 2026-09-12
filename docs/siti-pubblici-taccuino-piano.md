@@ -39,11 +39,22 @@ creati). Direzione scelta: **D**, poi integrata con il conta-pagine di C e due a
   (passare `photoMarkers` a `ProgressChart`, già supportato — additivo, il resto del componente non
   cambia). Cornice disegnata a mano sulla mappa del percorso.
 
-**Fase 4 — non in questo giro**: profilo pubblico `/u/[slug]` come "scaffale" (copertina +
-mensola) e transizione "il taccuino che si apre" alla navigazione — richiede la View Transitions
-API, da introdurre come miglioramento progressivo (rilevato via `document.startViewTransition`,
-altrimenti navigazione istantanea senza animazione). Rimandata: tocca una pagina diversa
-(`/u/[slug]`) e un meccanismo di navigazione, non solo lo stile di una pagina esistente.
+**Fase 4 — profilo pubblico "scaffale" e apertura** ✅ **COMPLETATA**
+- `app/u/[slug]/page.tsx` riscritta: il primo Diario pubblicato in copertina a piena pagina (stessa
+  identità scura di `/diario` in app, stesso sfondo topografico di `DiarioCover.tsx`), gli altri
+  come dorsi sotto, Raccolte minori, Reportage ridotti a un link in fondo — struttura del mockup D,
+  dati disponibili. **Deviazione dal piano**: `fetchPublicProfile` non espone km/dislivello/
+  conteggio per Diario, solo titolo/sottotitolo/copertina — recuperarli per ognuno richiederebbe
+  una query aggregata nuova; le tessere secondarie mostrano quindi solo il titolo, non le
+  statistiche del mockup.
+- Apertura come transizione di navigazione: **transizione cross-documento nativa del browser**
+  (`@view-transition { navigation: auto; }`, stessa regola dichiarata sia in
+  `app/u/[slug]/page.tsx` sia in `DiaryPublicView.tsx`, più un `view-transition-name` condiviso
+  sulla copertina) invece della View Transitions API `document.startViewTransition` ipotizzata nel
+  piano — quella serve per aggiornamenti nello stesso documento (SPA), qui si naviga davvero da una
+  pagina a un'altra. **Zero JavaScript**: dove il browser non supporta la funzione (la maggior
+  parte oggi), la regola non ha alcun effetto e la navigazione resta quella di sempre — lo stesso
+  miglioramento progressivo richiesto, ottenuto in CSS puro invece che con uno script.
 
 ## Verifica
 
