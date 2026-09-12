@@ -19,6 +19,7 @@
   .hand{font-family:'Caveat',cursive;color:rgba(46,42,34,.82);mix-blend-mode:multiply;text-shadow:0 0 2px rgba(122,90,50,.3);}
   .eyebrow{font-family:'Barlow Condensed';font-weight:700;font-size:9.5px;letter-spacing:.2em;text-transform:uppercase;}
   .mono{font-family:'JetBrains Mono';}
+  @keyframes draw-path{to{stroke-dashoffset:0;}}
 </style>
 </helmet>
 
@@ -78,7 +79,7 @@
           <svg width="100%" height="100%" viewBox="0 0 60 60" style="position:absolute;inset:0;">
             <defs><filter id="{{r.filterId}}"><feTurbulence type="fractalNoise" baseFrequency="0.06" numOctaves="2" seed="5" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.6"/></filter></defs>
             <rect x="2" y="2" width="56" height="56" rx="7" fill="none" stroke="var(--card-border)" stroke-width="1.5" filter="url(#{{r.filterId}})" vector-effect="non-scaling-stroke"/>
-            <path d="M6,48 Q18,20 30,32 Q42,44 54,12" stroke="var(--accent)" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+            <path d="M6,48 Q18,20 30,32 Q42,44 54,12" stroke="var(--accent)" stroke-width="1.8" fill="none" stroke-linecap="round" style="{{r.drawStyle}}"/>
           </svg>
         </div>
         <div style="min-width:0;flex:1;">
@@ -110,6 +111,8 @@ class Component extends DCLogic {
         ...r,
         tint: r.has ? 'rgba(192,96,61,0.07)' : 'transparent',
         filterId: 'hw' + i,
+        // Ogni tracciato si disegna in sequenza scendendo l'elenco, non tutti insieme
+        drawStyle: `stroke-dasharray:120;stroke-dashoffset:120;animation:draw-path .7s ease-out ${i * 0.12}s forwards;`,
       })),
     }
   }

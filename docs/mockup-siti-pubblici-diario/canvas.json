@@ -21,7 +21,9 @@
     { "file": "E_Lettura.dc.html", "x": 980, "y": 4000, "w": 390, "h": 844 },
 
     { "file": "F_Sommario.dc.html", "x": 490, "y": 5000, "w": 390, "h": 844 },
-    { "file": "F_Lettura.dc.html", "x": 980, "y": 5000, "w": 390, "h": 844 }
+    { "file": "F_Lettura.dc.html", "x": 980, "y": 5000, "w": 390, "h": 844 },
+
+    { "file": "D_Apertura.dc.html", "x": 0, "y": 6800, "w": 390, "h": 844 }
   ],
   "annotations": [
     { "id": "note-a", "x": 940, "y": 40, "w": 300, "text": "A — Il Taccuino Aperto\n\nIl profilo pubblico E' il taccuino: rilegatura sul bordo, carta, titoli scritti a mano (Caveat). Si apre un Diario e si resta dentro un lettore a schermo intero, capitolo dopo capitolo, con barra Indietro/Indice/Avanti come in app.\n\nCompromesso: la piu' immersiva, ma la piu' lontana da un link leggero apribile senza JavaScript." },
@@ -31,7 +33,8 @@
     { "id": "note-e", "x": 1430, "y": 4040, "w": 320, "text": "E — Tutto scuro, unificato\n\nSommario e lettura restano #0b1a24 come l'hub — nessuno stacco di palette. E' la scelta che il commento reale di DiarioSommarioContent.tsx motiva esplicitamente: 'un'unica identita' visiva invece di una pagina chiara isolata in mezzo a pagine scure'.\n\nCompromesso: coerentissima con l'app, ma un link pubblico tutto scuro a schermo intero legge piu' 'app' che 'articolo da leggere'." },
     { "id": "note-f", "x": 1430, "y": 5040, "w": 320, "text": "F — La pergamena vera del libro\n\nSommario e lettura nella palette che app/diario/libro/[id]/page.tsx usa DAVVERO oggi (stone-50, forest, terracotta, Playfair/Lora/Barlow — lib/designTokens.ts), non il Taccuino Botanico mai spedito.\n\nCompromesso: la piu' onesta rispetto a cio' che esiste in produzione, ma visivamente vicina al vecchio sito pubblico /leggi — il salto rispetto a oggi si vede meno." },
     { "id": "note-g", "x": 2460, "y": 3700, "w": 320, "text": "G — Taccuino Botanico, a viso aperto\n\nLe stesse schermate di D_Sommario/D_Lettura qui a sinistra (carta, rilegatura, scrittura a mano) — non cambia un pixel. Cambia solo l'etichetta: non 'e' gia' cosi' in app', ma 'e' la direzione futura, disegnata e pronta in lib/taccuinoTokens.tsx, da costruire per davvero'.\n\nCompromesso: resta la piu' scenografica delle quattro, ma scegliendola si accetta di essere la prima vera implementazione del taccuino, non un riuso." },
+    { "id": "note-wow", "x": 490, "y": 6840, "w": 500, "text": "Due 'wow' aggiunti su D (richiesti dall'utente)\n\n1. Il percorso disegnato a mano — ogni traccia (qui a sinistra, e su D_Lettura/2/3) si disegna sullo schermo come tracciata a penna, invece di apparire di colpo. Le foto sul grafico altimetrico compaiono solo dopo che la linea ha finito di disegnarsi.\n\n2. Il taccuino che si apre (questo artboard, cliccabile) — la copertina si apre sul cardine della rilegatura (stesso bordo sinistro di ogni pagina) invece di un cambio di schermata secco. Tocca la copertina per aprirla, 'Chiudi il taccuino' per richiuderla e riprovare.\n\nEntrambi vivono solo su D: nessuna delle altre direzioni (A/B/C/E/F/G) li ha ancora." },
     { "id": "note-galleria", "x": 0, "y": 5900, "w": 850, "text": "Come si innestano foto, mappa e grafici — pag. 4 e 5, stessa escursione di D_Lettura (pag. 3)\n\nStruttura presa 1:1 da components/diario/DiarioReportPage.tsx (righe 540-620), non inventata: le foto NON stanno sulla mappa. Stanno sul grafico del profilo altimetrico, come marker alla posizione esatta in cui sono state scattate (pag. 4, 'Profilo altimetrico · con posizione foto') — insieme a frequenza cardiaca e velocita', stesso ordine del componente reale. La mappa del percorso (pag. 5, 'Il percorso') porta invece un inquadramento in miniatura in un angolo, per capire dove ci si trova. Sotto, la galleria foto e' un elenco numerato — non una griglia — perche' cosi' il componente reale la impagina anche per il PDF." }
   ],
-  "launch": { "view": "canvas" }
+  "launch": { "view": "focused", "file": "D_Apertura.dc.html" }
 }

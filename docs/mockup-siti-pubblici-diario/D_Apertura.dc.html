@@ -1,0 +1,148 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Lora:ital@0;1&family=Caveat:wght@600;700&family=Barlow+Condensed:wght@600;900&family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@600&display=swap">
+<style>
+  :root{
+    --paper:#F5EDDD; --paper-light:#F9F2E4; --card:#EBE0C8; --card-border:#D9C9A8;
+    --ink:#2E2A22; --hand:#7A6F52; --hand-muted:#95886A; --accent:#C0603D; --sage:#7C8F6E;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'DM Sans',sans-serif;color:var(--ink);}
+  .hand{font-family:'Caveat',cursive;color:rgba(46,42,34,.82);mix-blend-mode:multiply;text-shadow:0 0 2px rgba(122,90,50,.3);}
+  .display{font-family:'Playfair Display';font-weight:700;}
+  .barlow{font-family:'Barlow Condensed';}
+  .lora-i{font-family:'Lora';font-style:italic;}
+  .mono{font-family:'JetBrains Mono';}
+  @keyframes draw-path{to{stroke-dashoffset:0;}}
+  @keyframes pulse-hint{0%,100%{opacity:.55;}50%{opacity:1;}}
+  .hint{animation:pulse-hint 1.8s ease-in-out infinite;}
+</style>
+</helmet>
+
+<!-- Prototipo cliccabile: tocca la copertina per aprirla, tocca "Chiudi" per richiuderla e
+     riprovare. La cerniera (transform-origin) è sul bordo sinistro — lo stesso punto dove vive la
+     rilegatura in ogni altra pagina di questo set, non una scelta arbitraria. -->
+<div style="width:390px;height:844px;position:relative;overflow:hidden;background:var(--paper);perspective:1400px;">
+
+  <!-- SOMMARIO — sempre montato sotto, si rivela quando la copertina si apre -->
+  <div style="position:absolute;inset:0;z-index:1;background-color:var(--paper);background-repeat:no-repeat;background-image:
+    radial-gradient(ellipse 90% 84% at 50% 40%, transparent 55%, rgba(139,94,44,.15) 78%, rgba(139,94,44,.48) 100%),
+    radial-gradient(ellipse 150px 115px at 18% 14%, rgba(249,242,228,.35), transparent 70%),
+    radial-gradient(ellipse 125px 140px at 72% 10%, rgba(122,111,82,.10), transparent 68%);">
+
+    <div style="position:absolute;inset-block:0;left:0;width:34px;z-index:5;pointer-events:none;
+      background:linear-gradient(to right, rgba(41,35,30,0.48) 0%, rgba(41,35,30,0.48) 7%, rgba(128,103,70,0.36) 15%, rgba(41,35,30,0.17) 30%, transparent 60%);
+      -webkit-mask-image:linear-gradient(to bottom, transparent 0%, black 18%, black 82%, transparent 100%);
+      mask-image:linear-gradient(to bottom, transparent 0%, black 18%, black 82%, transparent 100%);"></div>
+
+    <div style="position:relative;z-index:2;padding:18px 20px 2px 44px;">
+      <p class="barlow" style="font-weight:700;font-size:9.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--hand-muted);margin:0 0 3px;">Sommario &middot; DTrek</p>
+      <h1 class="hand" style="font-size:30px;font-weight:700;margin:0;">Appennino Tosco-Emiliano</h1>
+    </div>
+
+    <div style="position:relative;z-index:2;padding:14px 20px 8px 44px;">
+      <sc-for list="{{righe}}" as="r" hint-placeholder-count="5">
+        <div style="display:flex;align-items:center;gap:11px;padding:9px 8px;border-radius:10px;margin-bottom:1px;background:{{r.tint}};">
+          <div style="width:52px;height:52px;border-radius:9px;flex-shrink:0;background:var(--card);">
+            <svg width="100%" height="100%" viewBox="0 0 52 52">
+              <path d="M5,42 Q16,17 26,28 Q36,38 47,10" stroke="var(--accent)" stroke-width="1.8" fill="none" stroke-linecap="round" style="{{r.drawStyle}}"/>
+            </svg>
+          </div>
+          <div style="min-width:0;flex:1;">
+            <p style="font-family:'DM Sans';font-weight:700;font-size:12.5px;color:var(--ink);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{r.title}}</p>
+            <p class="mono" style="font-size:9.5px;color:var(--hand-muted);margin:2px 0 0;">{{r.stats}}</p>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+
+    <sc-if value="{{open}}" hint-placeholder-val="{{true}}">
+      <button onClick="{{toggle}}" style="position:absolute;top:16px;right:16px;z-index:6;background:var(--ink);color:#fff;border:none;border-radius:999px;padding:8px 16px;font-family:'DM Sans';font-weight:700;font-size:11px;box-shadow:0 4px 14px rgba(0,0,0,.2);">
+        &#8617; Chiudi il taccuino
+      </button>
+    </sc-if>
+  </div>
+
+  <!-- COPERTINA — stessa identica composizione di DiarioCover.tsx (D_Scaffale.dc.html), qui a
+       piena pagina. Cerniera sul bordo sinistro: si apre esattamente come si apre un libro vero. -->
+  <div onClick="{{toggle}}" style="position:absolute;inset:0;z-index:5;overflow:hidden;background:linear-gradient(158deg,#193b20 0%,#1c4724 45%,#20592b 100%);cursor:pointer;{{coverStyle}}">
+    <svg style="position:absolute;inset:0;width:100%;height:100%;opacity:.045" viewBox="0 0 390 844" preserveAspectRatio="xMidYMid slice">
+      <path d="M0,640 Q98,590 196,605 Q294,620 390,570" fill="white" opacity=".6"/>
+      <path d="M0,565 Q88,515 186,530 Q284,545 390,498" stroke="white" stroke-width=".8" fill="none"/>
+      <path d="M0,490 Q98,448 196,462 Q294,476 390,428" stroke="white" stroke-width=".8" fill="none"/>
+      <path d="M0,415 Q108,375 196,388 Q294,401 390,355" stroke="white" stroke-width=".7" fill="none"/>
+    </svg>
+    <svg style="position:absolute;bottom:0;left:0;width:100%;opacity:.09" viewBox="0 0 390 240" preserveAspectRatio="none">
+      <path d="M0,240 L34,158 L64,190 L110,92 L150,132 L189,42 L221,92 L255,52 L292,96 L324,60 L358,88 L390,65 L390,240 Z" fill="white"/>
+    </svg>
+    <div style="position:absolute;top:70px;right:14px;font-family:'Playfair Display';font-size:150px;font-weight:700;color:rgba(255,255,255,.025);line-height:1;user-select:none;">II</div>
+
+    <div style="position:absolute;top:0;left:0;right:0;height:3px;background:#e08d3c;"></div>
+    <div style="position:absolute;top:34px;left:26px;right:26px;display:flex;align-items:center;justify-content:space-between;">
+      <span class="barlow" style="font-size:14px;font-weight:900;letter-spacing:.3em;color:#e08d3c;text-transform:uppercase;">DTrek</span>
+      <span style="font-family:'DM Sans';font-size:8px;letter-spacing:.18em;color:rgba(255,255,255,.3);text-transform:uppercase;">Diario di Escursioni</span>
+    </div>
+
+    <div style="position:absolute;top:340px;left:26px;right:36px;">
+      <p class="barlow" style="font-size:11px;font-weight:700;letter-spacing:.26em;color:#e08d3c;text-transform:uppercase;margin:0 0 14px;">2023 &ndash; 2025</p>
+      <h1 class="display" style="font-size:38px;color:#fff;line-height:1.06;letter-spacing:-.5px;margin:0 0 18px;">Appennino<br/>Tosco-Emiliano</h1>
+      <div style="width:48px;height:2px;background:#e08d3c;margin:0 0 18px;"></div>
+      <p class="lora-i" style="font-size:14px;color:rgba(255,255,255,.58);margin:0 0 26px;">Crinali, faggete e rifugi</p>
+      <div style="display:flex;border-top:1px solid rgba(255,255,255,.1);padding-top:18px;">
+        <div style="flex:1;padding-right:16px;"><p class="mono" style="font-size:20px;font-weight:500;color:#fff;margin:0;line-height:1;">14</p><p style="font-family:'DM Sans';font-size:8px;letter-spacing:.2em;color:rgba(255,255,255,.38);text-transform:uppercase;margin:6px 0 0;">Escursioni</p></div>
+        <div style="flex:1;padding:0 16px;border-left:1px solid rgba(255,255,255,.08);"><p class="mono" style="font-size:20px;font-weight:500;color:#fff;margin:0;line-height:1;">187</p><p style="font-family:'DM Sans';font-size:8px;letter-spacing:.2em;color:rgba(255,255,255,.38);text-transform:uppercase;margin:6px 0 0;">Km percorsi</p></div>
+        <div style="flex:1;padding-left:16px;border-left:1px solid rgba(255,255,255,.08);"><p class="mono" style="font-size:20px;font-weight:500;color:#fff;margin:0;line-height:1;">9.400</p><p style="font-family:'DM Sans';font-size:8px;letter-spacing:.2em;color:rgba(255,255,255,.38);text-transform:uppercase;margin:6px 0 0;">M dislivello</p></div>
+      </div>
+    </div>
+
+    <div class="hint" style="position:absolute;left:0;right:0;bottom:78px;text-align:center;">
+      <span class="barlow" style="font-size:10.5px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.6);">Tocca per aprire</span>
+    </div>
+    <div style="position:absolute;bottom:26px;left:26px;right:26px;display:flex;align-items:flex-end;justify-content:space-between;">
+      <p style="font-family:'DM Sans';font-size:9px;letter-spacing:.24em;color:rgba(255,255,255,.38);text-transform:uppercase;margin:0;">Marco B.</p>
+      <p class="lora-i" style="font-size:9px;color:rgba(255,255,255,.2);margin:0;">Fatto con DTrek</p>
+    </div>
+    <div style="position:absolute;bottom:0;left:0;right:0;height:2.5px;background:linear-gradient(90deg,#e08d3c 0%,#d97220 55%,transparent 100%);"></div>
+  </div>
+</div>
+<script data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const open = !!this.state.open
+    const toggle = () => this.setState({ open: !this.state.open })
+    const rows = [
+      { title: 'Monte Cimone da Pian Cavallaro', stats: '12,4 km · 850 m D+', has: true },
+      { title: 'Corno alle Scale, anello nord', stats: '9,1 km · 620 m D+', has: true },
+      { title: 'Lago Scaffaiolo dal Passo', stats: '7,8 km · 410 m D+', has: false },
+      { title: 'Alpe Tre Potenze', stats: '11,2 km · 780 m D+', has: true },
+      { title: 'Sasso Tetto, cresta sud', stats: '8,4 km · 540 m D+', has: false },
+    ]
+    return {
+      open,
+      toggle,
+      // Cerniera sul bordo sinistro (0% 50%) — lo stesso punto della rilegatura. -108deg invece di
+      // -90: un filo oltre il perpendicolare, così la copertina "cade" oltre lo sguardo invece di
+      // restare a taglio, più vicina al gesto di un libro vero.
+      coverStyle: `transform-origin:0% 50%;transform:${open ? 'rotateY(-108deg)' : 'rotateY(0deg)'};opacity:${open ? 0 : 1};pointer-events:${open ? 'none' : 'auto'};transition:transform .95s cubic-bezier(.5,0,.2,1),opacity .55s ease ${open ? '.2s' : '0s'};`,
+      righe: rows.map((r, i) => ({
+        ...r,
+        tint: r.has ? 'rgba(192,96,61,0.07)' : 'transparent',
+        // Le tracce si disegnano in sequenza solo dopo che la copertina si è aperta (.9s), non da subito
+        drawStyle: open
+          ? `stroke-dasharray:110;stroke-dashoffset:110;animation:draw-path .6s ease-out ${0.9 + i * 0.12}s forwards;`
+          : 'stroke-dasharray:110;stroke-dashoffset:110;',
+      })),
+    }
+  }
+}
+</script>
+</x-dc>
+</body>
+</html>
