@@ -22,6 +22,7 @@ body {
 .font-mono    { font-family: var(--font-mono), monospace; }
 .font-barlow  { font-family: var(--font-barlow), sans-serif; }
 .font-lora    { font-family: var(--font-lora), serif; }
+.font-hand    { font-family: var(--font-caveat), cursive; }
 
 /* Hairline — filo sottile per separare sezioni in stile editoriale,
    alternativa ai riquadri pieni colorati */

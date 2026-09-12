@@ -172,22 +172,25 @@ export function HandDrawnFrame({
 }
 
 /**
- * Grana della carta — RIMOSSA (docs/siti-pubblici-taccuino-piano.md, Fase 6). Erano tre
- * `repeating-linear-gradient` a passo fine, un layer fra i tanti di quello che allora era
- * `TaccuinoPaperTexture`, un `<div>` `fixed inset-0` a piena pagina. Prima ipotesi (poi rivista,
- * vedi il commento sopra `taccuinoPaperBackgroundStyle` più sotto): il pattern ripetuto a passo
- * fine sarebbe stato lui il problema. Non toccata separatamente: la grana non è più tornata perché
- * il fix reale (Fase 7) è a monte, sull'elemento `fixed`/`absolute inset-0` in sé, non su cosa ci
- * viene disegnato sopra.
+ * Grana della carta — un `repeating-linear-gradient` a passo fine (89deg, 1px pieno ogni 3px).
+ * Rimossa in Fase 6 sospettandola causa del bug "testo invisibile", poi reintrodotta in Fase 8
+ * dopo che la Fase 7 ha isolato la causa reale altrove (l'elemento `fixed`/`absolute inset-0`
+ * separato, non il pattern disegnato sopra — vedi il commento su `taccuinoPaperBackgroundStyle`
+ * più sotto): verificato con un browser reale che, come `background-image` del contenitore radice
+ * invece che di un elemento a parte, non riproduce alcun bug. Passo fedele al mockup approvato
+ * (`docs/mockup-siti-pubblici-diario/D_Sommario.dc.html`), mai un angolo esatto (89deg, non 90)
+ * per non leggere come una texture generata al computer.
  */
+const PAPER_GRAIN_IMAGE =
+  'repeating-linear-gradient(89deg, rgba(122,111,82,.02) 0px, rgba(122,111,82,.02) 1px, transparent 1px, transparent 3px)'
 
 /**
  * Rigatura orizzontale, ispirata ai quaderni tipo Moleskine (richiesta esplicita dell'utente:
  * "vorrei simulare queste righe orizzontali nelle pagine, sullo sfondo"). Calibrata in un mockup
  * a parte (opacità .07 su una singola riga, passo 34px) prima di essere riportata qui. Due
  * `repeating-linear-gradient` quasi orizzontali ma inclinati in verso opposto e di pochi decimi di
- * grado (stessa tecnica usata in passato dalla grana verticale, poi rimossa — vedi il commento
- * sopra) — mai un angolo esatto di 0deg, per non leggere come una riga stampata a righello.
+ * grado (stessa tecnica di `PAPER_GRAIN_IMAGE` sopra, qui quasi orizzontale invece che quasi
+ * verticale) — mai un angolo esatto di 0deg, per non leggere come una riga stampata a righello.
  *
  * Vive in `TaccuinoRuledLines` (sotto), NON in `taccuinoPaperBackgroundStyle`: un primo giro
  * l'aveva incollata lì, ma vignettatura/nuvolato/grana sono un'atmosfera ambiente, ancorata al
@@ -302,10 +305,11 @@ const PAPER_VIGNETTE_IMAGE =
  *
  * Composizione, dal layer più in alto al più in basso (l'ordine conta: in CSS multi-background il
  * primo elencato in `background-image` dipinge sopra gli altri): (1) vignettatura
- * (`PAPER_VIGNETTE_IMAGE`), (2) nuvolato leggero (`PAPER_CLOUD_IMAGES`), (3) il colore piatto di
- * base in fondo a tutto. La rigatura orizzontale NON è qui (vedi `TaccuinoRuledLines` sotto, con
- * il proprio avviso): quella deve scorrere CON il contenuto, quindi non può usare
- * `background-attachment: fixed`.
+ * (`PAPER_VIGNETTE_IMAGE`), (2) nuvolato leggero (`PAPER_CLOUD_IMAGES`), (3) grana verticale
+ * sottile (`PAPER_GRAIN_IMAGE`, Fase 8), (4) il colore piatto di base in fondo a tutto — stessa
+ * composizione e stessi valori del mockup approvato, non un'approssimazione. La rigatura
+ * orizzontale NON è qui (vedi `TaccuinoRuledLines` sotto, con il proprio avviso): quella deve
+ * scorrere CON il contenuto, quindi non può usare `background-attachment: fixed`.
  *
  * ⚠️ Chi chiama questa funzione deve spargerne il risultato DIRETTAMENTE sul contenitore radice,
  * non su un elemento a parte aggiunto per l'occasione: un `<div>` in più il cui unico scopo è
@@ -316,7 +320,7 @@ export function taccuinoPaperBackgroundStyle(): CSSProperties {
   return {
     backgroundColor: TACCUINO_PAPER.base,
     backgroundAttachment: 'fixed',
-    backgroundImage: [PAPER_VIGNETTE_IMAGE, ...PAPER_CLOUD_IMAGES].join(', '),
+    backgroundImage: [PAPER_VIGNETTE_IMAGE, ...PAPER_CLOUD_IMAGES, PAPER_GRAIN_IMAGE].join(', '),
     backgroundRepeat: 'no-repeat',
   }
 }

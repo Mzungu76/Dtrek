@@ -106,11 +106,54 @@ riprodurre il bug con un browser vero invece di leggere solo il codice.
   rendendo l'intera Fase 4 di fatto irraggiungibile. Aggiunto `/u/` a `isPublicPath` e
   `isSharedContentPath`.
 
+**Fase 8 — fedeltà al mockup: copertina a piena pagina e righe compatte del Sommario** ✅ **COMPLETATA**
+
+Segnalato dall'utente su screenshot reali (home e volume di una Raccolta pubblicata): risolto il
+bug della Fase 6/7, lo sfondo tornava a leggersi come piatto e generico — "non ha nulla a che fare
+col mockup" — perché la copertina restava una piccola card in cima alla pagina (mai a piena
+pagina come in `D_Apertura.dc.html`) e le righe dell'indice erano grandi card 16:9 (mai le righe
+compatte con icona di `D_Sommario.dc.html`). Riportato fedele al mockup approvato:
+
+- **Grana della carta, reintrodotta**: la Fase 6 l'aveva rimossa sospettandola causa del bug; la
+  Fase 7 ha isolato la causa reale altrove (l'elemento `fixed`/`absolute inset-0` separato, non il
+  pattern disegnato sopra). Verificato con un browser reale che la grana, come `background-image`
+  del contenitore radice invece che di un elemento a parte, non riproduce alcun bug — reintrodotta
+  in `taccuinoPaperBackgroundStyle()` con gli stessi valori del mockup.
+- **Font "a mano" (Caveat), collegato per la prima volta**: `FONT_HAND`/`INK_ABSORB_STYLE`
+  esistevano in `lib/taccuinoTokens.tsx` da tempo ma la variabile CSS `--font-caveat` che
+  dichiarano non era mai stata dichiarata in `app/layout.tsx` — un altro caso, come la carta
+  stessa, di token scritti prima di essere davvero montati da qualcosa. Aggiunto `Caveat` da
+  `next/font/google` in `app/layout.tsx` e la classe `.font-hand` in `app/globals.css`, sullo
+  stesso schema di `.font-barlow`/`.font-lora`.
+- **Copertina a piena pagina che "si apre"**: il mockup (`D_Apertura.dc.html`) usa un vero overlay
+  (`position:absolute`/`fixed` a piena pagina, cerniera 3D via `rotateY`) — esattamente il pattern
+  che la Fase 7 ha isolato come causa del bug "testo invisibile". Riprodurlo identico avrebbe
+  rischiato di reintrodurlo sulle sezioni sotto (Numeri, indice). Sostituito con una tecnica
+  equivalente ma sicura: la copertina resta nel **flusso normale** del documento (mai un secondo
+  layer che ricopre la pagina) e si "apre" collassando la propria altezza (`max-height`) a zero con
+  una dissolvenza, invece di ruotare via da sopra un Sommario già montato sotto. Stesso effetto
+  percepito (si tocca, la copertina sparisce, sotto c'è il Sommario), interazione pura CSS
+  (checkbox nascosto + `peer-checked:` di Tailwind, **zero JavaScript** spedito al browser — resta
+  un componente SERVER), verificata sicura con lo stesso metodo (screenshot di un browser reale,
+  prima e dopo il "tocco"). Applicata a `DiaryPublicView.tsx` e — un volume di una Raccolta è
+  concettualmente un Diario — al volume di una Raccolta, spostato dal suo `page.tsx` in un nuovo
+  `VolumeView.tsx` (Next.js rifiuta in build un file `page.tsx` con export diversi da quelli che
+  riconosce).
+- **Righe compatte con icona, al posto delle card 16:9**: `RouteSketch.tsx` ha ora `width`/
+  `height`/`showMarkers` opzionali (default invariati per i chiamanti esistenti) per renderizzare
+  la stessa proiezione lat/lon in un riquadro piccolo e quadrato invece di duplicarne la
+  matematica altrove. Riga: icona 60×60 (foto di copertina se c'è, altrimenti lo schizzo animato,
+  sempre dentro una `HandDrawnFrame`), titolo, statistiche — niente più il "punteggio" del mockup
+  (un dato inventato, senza equivalente reale in `PublicDiaryEntry`) né la barra di ricerca/filtri
+  (avrebbe richiesto JavaScript lato client per essere reale, non solo decorativa).
+
 ## Verifica
 
 `tsc --noEmit`, `eslint` e `next build` puliti; 416/416 test esistenti (`vitest run`) ancora
 verdi — nessun test automatico nuovo, le fasi di questo piano restano presentazione, non logica
-pura da testare. **Fase 6/7**: prima verifica a schermo reale di questa direzione, con Chromium
-via Playwright — pagine reali (`DiaryPublicView`, `CollectionPublicView`) montate con dati finti
-su rotte temporanee sotto `/leggi/` (cancellate a verifica conclusa), screenshot dell'intera
-pagina e di singoli elementi per bisezionare ed escludere artefatti di stitching.
+pura da testare. **Fase 6/7/8**: prima verifica a schermo reale di questa direzione, con Chromium
+via Playwright (anche in emulazione mobile, `devices['Pixel 5']`, per lo stesso schermo segnalato
+dall'utente) — pagine reali (`DiaryPublicView`, `CollectionPublicView`, `VolumeView`) montate con
+dati finti su rotte temporanee sotto `/leggi/` (cancellate a verifica conclusa), screenshot
+dell'intera pagina e di singoli elementi per bisezionare ed escludere artefatti di stitching, e
+dell'interazione copertina→Sommario prima e dopo un click programmatico sulla copertina.
