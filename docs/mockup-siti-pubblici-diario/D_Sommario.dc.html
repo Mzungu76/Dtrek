@@ -1,0 +1,120 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Lora:ital@0;1&family=Caveat:wght@600;700&family=Barlow+Condensed:wght@600;700&family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@600&display=swap">
+<style>
+  :root{
+    --paper:#F5EDDD; --paper-light:#F9F2E4; --card:#EBE0C8; --card-border:#D9C9A8; --contour:#A89A78;
+    --ink:#2E2A22; --hand:#7A6F52; --hand-muted:#95886A;
+    --accent:#C0603D; --sage:#7C8F6E; --tint:#E9DAC3;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'DM Sans',sans-serif;color:var(--ink);}
+  .hand{font-family:'Caveat',cursive;color:rgba(46,42,34,.82);mix-blend-mode:multiply;text-shadow:0 0 2px rgba(122,90,50,.3);}
+  .eyebrow{font-family:'Barlow Condensed';font-weight:700;font-size:9.5px;letter-spacing:.2em;text-transform:uppercase;}
+  .mono{font-family:'JetBrains Mono';}
+</style>
+</helmet>
+
+<!-- Ricette esatte da lib/taccuinoTokens.tsx: vignettatura (PAPER_VIGNETTE_IMAGE), nuvolato
+     (PAPER_CLOUD_IMAGES, tutti i 10), grana (PAPER_GRAIN_IMAGES), rilegatura (TaccuinoSpineShadow) —
+     stessi valori, non un'approssimazione. Righe del Sommario come in Fase 7/9 di
+     docs/diario-a-libro-piano.md: colonna anello a larghezza fissa, sfondo tinteggiato per le righe
+     con un racconto, ordinamento invertibile. -->
+<div style="width:390px;height:844px;position:relative;overflow:hidden;background-color:var(--paper);background-repeat:no-repeat;background-image:
+  radial-gradient(ellipse 90% 84% at 50% 40%, transparent 55%, rgba(139,94,44,.15) 78%, rgba(139,94,44,.48) 100%),
+  radial-gradient(ellipse 150px 115px at 18% 14%, rgba(249,242,228,.35), transparent 70%),
+  radial-gradient(ellipse 125px 140px at 72% 10%, rgba(122,111,82,.10), transparent 68%),
+  radial-gradient(ellipse 165px 125px at 45% 38%, rgba(184,142,86,.08), transparent 72%),
+  radial-gradient(ellipse 110px 140px at 85% 42%, rgba(124,143,110,.07), transparent 68%),
+  radial-gradient(ellipse 125px 140px at 10% 62%, rgba(249,242,228,.3), transparent 70%),
+  radial-gradient(ellipse 140px 115px at 55% 72%, rgba(192,96,61,.06), transparent 68%),
+  radial-gradient(ellipse 115px 130px at 88% 78%, rgba(122,111,82,.09), transparent 68%),
+  radial-gradient(ellipse 130px 115px at 30% 92%, rgba(184,142,86,.08), transparent 66%),
+  radial-gradient(ellipse 100px 90px at 60% 22%, rgba(124,143,110,.06), transparent 68%),
+  radial-gradient(ellipse 95px 110px at 22% 45%, rgba(192,96,61,.05), transparent 68%),
+  repeating-linear-gradient(89deg, rgba(122,111,82,.02) 0px, rgba(122,111,82,.02) 1px, transparent 1px, transparent 3px);">
+
+  <!-- rilegatura — stessa geometria di TaccuinoSpineShadow (width 34, stessi stop, stessa mask) -->
+  <div style="position:absolute;inset-block:0;left:0;width:34px;z-index:30;pointer-events:none;
+    background:linear-gradient(to right, rgba(41,35,30,0.48) 0%, rgba(41,35,30,0.48) 7%, rgba(128,103,70,0.36) 15%, rgba(41,35,30,0.17) 30%, transparent 60%);
+    -webkit-mask-image:linear-gradient(to bottom, transparent 0%, black 18%, black 82%, transparent 100%);
+    mask-image:linear-gradient(to bottom, transparent 0%, black 18%, black 82%, transparent 100%);"></div>
+
+  <div style="position:relative;z-index:10;padding:18px 20px 2px 44px;">
+    <p class="eyebrow" style="color:var(--hand-muted);margin:0 0 3px;">Sommario &middot; DTrek</p>
+    <h1 class="hand" style="font-size:30px;font-weight:700;margin:0;">Appennino Tosco-Emiliano</h1>
+  </div>
+
+  <div style="position:relative;z-index:10;padding:11px 20px 8px 44px;display:flex;gap:6px;align-items:center;">
+    <div style="flex:1;min-width:0;display:flex;align-items:center;gap:6px;background:var(--paper-light);border:1px solid var(--card-border);border-radius:8px;padding:6px 10px;">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--hand-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <span style="font-family:'DM Sans';font-size:11px;color:var(--hand-muted);">Cerca nel taccuino</span>
+    </div>
+    <span style="width:30px;height:30px;border-radius:8px;border:1px solid var(--card-border);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="var(--accent)" stroke="var(--accent)" stroke-width="1.5"><polygon points="12 2 15 8.5 22 9.5 17 14.5 18.5 21.5 12 18 5.5 21.5 7 14.5 2 9.5 9 8.5"/></svg>
+    </span>
+  </div>
+
+  <div style="position:relative;z-index:10;padding:2px 20px 8px 44px;display:flex;gap:6px;">
+    <span style="background:var(--accent);color:#fff;font-family:'DM Sans';font-weight:700;font-size:10.5px;border-radius:999px;padding:4px 11px;">Tutte</span>
+    <span style="background:transparent;color:var(--hand);font-family:'DM Sans';font-weight:600;font-size:10.5px;border-radius:999px;padding:4px 11px;border:1px solid var(--card-border);">Con racconto</span>
+    <span style="margin-left:auto;color:var(--accent);font-family:'DM Sans';font-weight:700;font-size:10.5px;display:flex;align-items:center;gap:3px;">
+      Data
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+    </span>
+  </div>
+
+  <div style="position:relative;z-index:5;padding:8px 12px 30px 44px;overflow:hidden;height:670px;">
+    <sc-for list="{{righe}}" as="r" hint-placeholder-count="6">
+      <div style="display:flex;align-items:center;gap:11px;padding:9px 8px;border-radius:10px;margin-bottom:1px;background:{{r.tint}};">
+        <div style="width:60px;height:60px;border-radius:9px;flex-shrink:0;position:relative;background:var(--card);">
+          <svg width="100%" height="100%" viewBox="0 0 60 60" style="position:absolute;inset:0;">
+            <defs><filter id="{{r.filterId}}"><feTurbulence type="fractalNoise" baseFrequency="0.06" numOctaves="2" seed="5" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.6"/></filter></defs>
+            <rect x="2" y="2" width="56" height="56" rx="7" fill="none" stroke="var(--card-border)" stroke-width="1.5" filter="url(#{{r.filterId}})" vector-effect="non-scaling-stroke"/>
+            <path d="M6,48 Q18,20 30,32 Q42,44 54,12" stroke="var(--accent)" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div style="min-width:0;flex:1;">
+          <p style="font-family:'DM Sans';font-weight:700;font-size:13px;color:var(--ink);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{r.title}}</p>
+          <p class="mono" style="font-size:10px;color:var(--hand-muted);margin:2px 0 0;">{{r.stats}}</p>
+        </div>
+        <div style="width:40px;flex-shrink:0;display:flex;justify-content:center;">
+          <div style="width:28px;height:28px;border-radius:999px;border:2.5px solid {{r.ring}};display:flex;align-items:center;justify-content:center;">
+            <span class="mono" style="font-size:9.5px;color:{{r.ring}};">{{r.score}}</span>
+          </div>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+</div>
+<script data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const rows = [
+      { title: 'Monte Cimone da Pian Cavallaro', stats: '12,4 km · 850 m D+', score: '82', ring: '#C0603D', has: true },
+      { title: 'Corno alle Scale, anello nord', stats: '9,1 km · 620 m D+', score: '74', ring: '#7C8F6E', has: true },
+      { title: 'Lago Scaffaiolo dal Passo', stats: '7,8 km · 410 m D+', score: '68', ring: '#7C8F6E', has: false },
+      { title: 'Alpe Tre Potenze', stats: '11,2 km · 780 m D+', score: '79', ring: '#C0603D', has: true },
+      { title: 'Sasso Tetto, cresta sud', stats: '8,4 km · 540 m D+', score: '71', ring: '#7C8F6E', has: false },
+      { title: 'Monte Cusna da Febbio', stats: '13,6 km · 920 m D+', score: '85', ring: '#C0603D', has: true },
+    ]
+    return {
+      righe: rows.map((r, i) => ({
+        ...r,
+        tint: r.has ? 'rgba(192,96,61,0.07)' : 'transparent',
+        filterId: 'hw' + i,
+      })),
+    }
+  }
+}
+</script>
+</x-dc>
+</body>
+</html>

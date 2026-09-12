@@ -1,0 +1,97 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Lora:ital@0;1&family=Caveat:wght@600;700&family=Barlow+Condensed:wght@600;700&family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@600&display=swap">
+<style>
+  :root{
+    --paper:#F5EDDD; --paper-light:#F9F2E4; --card:#EBE0C8; --card-border:#D9C9A8;
+    --ink:#2E2A22; --hand:#7A6F52; --hand-muted:#95886A;
+    --accent:#C0603D; --sage:#7C8F6E; --tint:#E9DAC3;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'DM Sans',sans-serif;color:var(--ink);}
+  .hand{font-family:'Caveat',cursive;color:rgba(46,42,34,.82);mix-blend-mode:multiply;text-shadow:0 0 2px rgba(122,90,50,.3);}
+  .eyebrow{font-family:'Barlow Condensed';font-weight:700;font-size:9.5px;letter-spacing:.2em;text-transform:uppercase;}
+  .lora{font-family:'Lora';}
+  .lora-i{font-family:'Lora';font-style:italic;}
+  .mono{font-family:'JetBrains Mono';}
+</style>
+</helmet>
+
+<!-- Pagina del libro come le pagine reali di Guida/Reportage: stessa carta, stessa rilegatura,
+     stessa barra inferiore Indietro/Indice/Avanti (Fase 17) — "Strumenti" non compare perché è
+     l'apertura del drawer di editing privato dell'utente, senza senso per un visitatore pubblico. -->
+<div style="width:390px;height:844px;position:relative;overflow:hidden;background-color:var(--paper);background-repeat:no-repeat;background-image:
+  radial-gradient(ellipse 90% 84% at 50% 40%, transparent 55%, rgba(139,94,44,.15) 78%, rgba(139,94,44,.48) 100%),
+  radial-gradient(ellipse 150px 115px at 20% 12%, rgba(249,242,228,.35), transparent 70%),
+  radial-gradient(ellipse 140px 120px at 80% 64%, rgba(122,111,82,.09), transparent 68%),
+  radial-gradient(ellipse 130px 115px at 30% 88%, rgba(184,142,86,.07), transparent 66%);">
+
+  <div style="position:absolute;inset-block:0;left:0;width:34px;z-index:30;pointer-events:none;
+    background:linear-gradient(to right, rgba(41,35,30,0.48) 0%, rgba(41,35,30,0.48) 7%, rgba(128,103,70,0.36) 15%, rgba(41,35,30,0.17) 30%, transparent 60%);
+    -webkit-mask-image:linear-gradient(to bottom, transparent 0%, black 18%, black 82%, transparent 100%);
+    mask-image:linear-gradient(to bottom, transparent 0%, black 18%, black 82%, transparent 100%);"></div>
+
+  <!-- testata informativa, non cliccabile (Fase 17: solo titolo Diario / sezione / pagina) -->
+  <div style="position:relative;z-index:10;padding:14px 20px 6px 44px;display:flex;align-items:center;justify-content:space-between;">
+    <span class="eyebrow" style="color:var(--hand-muted);">Appennino Tosco-Emiliano &middot; Guida</span>
+    <span class="mono" style="font-size:10px;color:var(--hand-muted);">pag. 3 di 5</span>
+  </div>
+
+  <div style="position:relative;z-index:5;padding:10px 20px 92px 44px;overflow:hidden;height:660px;">
+    <p class="eyebrow" style="color:var(--accent);margin:0 0 6px;">Monte Cimone da Pian Cavallaro</p>
+    <h1 class="hand" style="font-size:34px;font-weight:700;line-height:1.02;margin:0 0 12px;">Il crinale</h1>
+
+    <div style="position:relative;margin-bottom:14px;">
+      <svg width="322" height="96" viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;">
+        <defs><filter id="hwmap"><feTurbulence type="fractalNoise" baseFrequency="0.06" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.6"/></filter></defs>
+        <rect x="2" y="2" width="96" height="96" rx="5" fill="var(--paper-light)" stroke="var(--sage)" stroke-width="1.5" filter="url(#hwmap)" vector-effect="non-scaling-stroke"/>
+      </svg>
+      <svg width="100%" height="96" viewBox="0 0 320 96" style="position:relative;">
+        <path d="M6,74 Q40,32 70,48 Q100,64 130,22 Q160,4 190,30 Q230,58 260,38 Q290,16 314,32" stroke="var(--accent)" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+        <circle cx="6" cy="74" r="3.5" fill="var(--sage)"/><circle cx="314" cy="32" r="3.5" fill="var(--accent)"/>
+      </svg>
+    </div>
+
+    <div style="display:flex;border-top:1px solid var(--card-border);border-bottom:1px solid var(--card-border);padding:8px 0;margin-bottom:16px;">
+      <div style="flex:1;text-align:center;"><p class="mono" style="font-size:13px;margin:0;">12,4 km</p><p class="eyebrow" style="font-size:8px;color:var(--hand-muted);margin:2px 0 0;">Distanza</p></div>
+      <div style="flex:1;text-align:center;border-left:1px solid var(--card-border);"><p class="mono" style="font-size:13px;margin:0;">850 m</p><p class="eyebrow" style="font-size:8px;color:var(--hand-muted);margin:2px 0 0;">D+</p></div>
+      <div style="flex:1;text-align:center;border-left:1px solid var(--card-border);"><p class="mono" style="font-size:13px;margin:0;">4h20</p><p class="eyebrow" style="font-size:8px;color:var(--hand-muted);margin:2px 0 0;">Tempo</p></div>
+    </div>
+
+    <p class="lora" style="font-size:14px;line-height:1.7;color:var(--ink);margin:0 0 10px;">
+      Dal rifugio il sentiero guadagna quota tra faggi radi, poi esce sul crinale nudo: da qui in
+      avanti è tutto vento e vista, fino alla croce di vetta che si vede già, piccola, contro il cielo.
+    </p>
+    <div style="border-left:3px solid var(--accent);background:var(--tint);border-radius:0 8px 8px 0;padding:9px 12px;">
+      <p class="lora-i" style="font-size:12.5px;line-height:1.5;color:var(--hand);margin:0;">Nelle giornate terse si vede il mare, oltre le colline reggiane.</p>
+    </div>
+  </div>
+
+  <!-- barra inferiore fissa, identica a BookPage.tsx (Fase 17): Indietro / Indice / Avanti.
+       "Strumenti" resta fuori: PDF/GPX/video 3D sono azioni sul proprio account, non sulla copia
+       pubblica. -->
+  <div style="position:absolute;left:34px;right:0;bottom:0;z-index:20;background:var(--paper-light);border-top:1px solid var(--card-border);padding:10px 22px calc(10px + env(safe-area-inset-bottom,0px));display:flex;align-items:center;justify-content:space-between;">
+    <button style="display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;color:var(--hand);font-family:'DM Sans';font-size:9.5px;font-weight:600;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--hand)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      Indietro
+    </button>
+    <button style="display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;color:var(--ink);font-family:'DM Sans';font-size:9.5px;font-weight:700;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+      Indice
+    </button>
+    <button style="display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;color:var(--accent);font-family:'DM Sans';font-size:9.5px;font-weight:700;">
+      Avanti
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+    </button>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

@@ -19,14 +19,14 @@
   a{color:var(--accent);} a:hover{color:#9f4d33;}
 </style>
 </helmet>
-<div style="width:1360px;padding:56px 64px;position:relative;">
+<div style="width:1560px;padding:56px 64px;position:relative;">
   <p style="font-family:'Barlow Condensed';font-weight:700;font-size:12px;letter-spacing:.28em;text-transform:uppercase;color:var(--accent);margin:0 0 10px;">Siti pubblici · 3 direzioni</p>
   <h1 style="font-family:'Playfair Display';font-weight:800;font-size:38px;margin:0 0 14px;color:var(--ink);">Il Diario, non il Reportage, al centro del sito che si condivide</h1>
   <p style="font-family:'Lora';font-style:italic;font-size:16px;color:var(--hand);max-width:900px;line-height:1.6;margin:0 0 34px;">
     Oggi <b style="font-style:normal">/u/[slug]</b> è un indice a tre liste piatte (Raccolte, Diari, Reportage) e ogni Diario pubblico è una griglia di schede — una per escursione. In app il Diario ha invece già una sua identità precisa, la direzione "Taccuino Botanico": carta, rilegatura, scrittura a mano. Le tre direzioni sotto portano quella stessa identità sul sito pubblico, con un lettore vero al posto della sola scheda.
   </p>
-  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:28px;">
-    <sc-for list="{{cols}}" as="c" hint-placeholder-count="3">
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:24px;">
+    <sc-for list="{{cols}}" as="c" hint-placeholder-count="4">
       <div style="background:var(--card);border:1px solid var(--card-border);border-radius:14px;padding:26px 24px;">
         <p style="font-family:'Barlow Condensed';font-weight:700;font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:{{c.tagColor}};margin:0 0 6px;">{{c.tag}}</p>
         <h2 style="font-family:'Playfair Display';font-weight:800;font-size:22px;margin:0 0 12px;color:var(--ink);">{{c.title}}</h2>
@@ -59,6 +59,10 @@ class Component extends DCLogic {
           title: 'Il Diario in vetrina',
           pitch: 'Un indice editoriale leggero, nella stessa palette carta ma senza rilegatura né grana — pensato per un link condiviso in chat. La pagina dell’escursione resta vera e leggera, il lettore è un livello sottile sopra.',
           tradeoff: 'La più performante e indicizzabile — ma la meno scenografica delle tre, il taccuino si vede meno.' },
+        { tag: 'Direzione D', tagColor: '#9f4315',
+          title: 'Fedele allo stile reale',
+          pitch: 'Non una reinterpretazione: la stessa copertina verde/terracotta di sempre (DiarioCover.tsx), la stessa mensola scura di /diario, e Sommario/lettura con le formule esatte di lib/taccuinoTokens.tsx — gli stessi numeri, non un’approssimazione.',
+          tradeoff: 'La più coerente con ciò che l’utente già conosce — ma eredita anche l’incoerenza fra le due palette (copertina scura, lettura chiara) già presente in app.' },
       ],
     }
   }
