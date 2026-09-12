@@ -1,0 +1,120 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;0,900;1,400&family=DM+Sans:ital,wght@0,400;0,500;1,400&family=Barlow+Condensed:wght@600;700;900&family=Lora:ital,wght@0,400;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin: 0; }
+    * { box-sizing: border-box; }
+    a { color: #fff; text-decoration: none; }
+    .barlow { font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif; }
+    .display { font-family: 'Playfair Display', Georgia, serif; }
+    .body-f { font-family: 'DM Sans', system-ui, sans-serif; }
+    .lora { font-family: 'Lora', Georgia, serif; }
+    .glass { background: rgba(255,255,255,0.14); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid rgba(255,255,255,0.22); }
+  </style>
+</helmet>
+<div class="body-f" style="width:390px;height:844px;background:#dfd8bf;position:relative;overflow:hidden;box-shadow:0 0 0 1px #dcd8cc;">
+
+  <!-- ── Sfondo, VISTA 1 di 2: mappa aggregata di TUTTI i percorsi (stessi dati di AllRoutesMap.tsx /
+       statistiche). La seconda vista (DirezioneEGuide.dc.html — posizioni di Guide e Resoconti) si
+       raggiunge toccando/scorrendo la pillola sotto: stesso sfondo di mappa, contenuto diverso. ── -->
+  <div style="position:absolute;inset:0;background:linear-gradient(160deg,#e4dec8 0%,#cdc4a6 55%,#b9ae8c 100%);">
+    <svg width="400" height="400" style="position:absolute;inset:0;opacity:0.35;mix-blend-mode:multiply;"><filter id="eGrain"><feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch"/></filter><rect width="400" height="400" filter="url(#eGrain)"/></svg>
+    <svg viewBox="0 0 390 700" width="390" height="700" style="position:absolute;top:0;left:0;">
+      <circle cx="70" cy="120" r="2.2" fill="#a89f83"/><circle cx="90" cy="128" r="1.6" fill="#a89f83"/><circle cx="300" cy="200" r="2" fill="#a89f83"/>
+      <circle cx="250" cy="420" r="2.4" fill="#a89f83"/><circle cx="120" cy="500" r="1.8" fill="#a89f83"/><circle cx="330" cy="560" r="2" fill="#a89f83"/>
+      <path d="M40 60 Q120 140 90 240 T160 380 Q200 440 170 540" fill="none" stroke="#2d7a3d" stroke-width="4.5" stroke-linecap="round" opacity="0.85"/>
+      <path d="M350 40 Q260 100 280 220 T190 340 Q140 380 150 470" fill="none" stroke="#c05a17" stroke-width="4.5" stroke-linecap="round" opacity="0.85"/>
+      <path d="M60 300 Q140 320 180 260 T300 300 Q340 340 320 420" fill="none" stroke="#0284c7" stroke-width="4" stroke-linecap="round" opacity="0.8"/>
+      <path d="M200 60 Q220 160 160 200 T110 320 Q90 400 140 460" fill="none" stroke="#9333ea" stroke-width="4" stroke-linecap="round" opacity="0.75"/>
+      <path d="M330 380 Q260 440 270 520 T180 600 Q130 630 160 690" fill="none" stroke="#e08d3c" stroke-width="4" stroke-linecap="round" opacity="0.8"/>
+      <path d="M20 480 Q90 460 130 520 T240 560 Q300 580 280 660" fill="none" stroke="#377134" stroke-width="4" stroke-linecap="round" opacity="0.7"/>
+    </svg>
+  </div>
+  <div style="position:absolute;inset:0;background:linear-gradient(160deg,rgba(129,54,25,0.14) 0%,rgba(28,71,36,0.1) 55%,rgba(7,24,36,0.16) 100%);pointer-events:none;"></div>
+  <div style="position:absolute;inset-x:0;top:0;height:210px;background:linear-gradient(to bottom, rgba(0,0,0,0.62), transparent);pointer-events:none;"></div>
+  <div style="position:absolute;inset-x:0;bottom:0;height:55%;background:linear-gradient(to top, rgba(11,26,36,0.88) 12%, rgba(11,26,36,0.35) 50%, transparent);pointer-events:none;"></div>
+
+  <!-- ── HubNavBar ── -->
+  <div style="position:relative;z-index:10;background:rgba(39,113,52,0.95);display:flex;align-items:center;gap:6px;padding:14px 12px 10px;">
+    <div style="flex:1;display:flex;align-items:center;justify-content:space-around;">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:2px;color:#ffffff;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+        <span class="barlow" style="font-size:9px;font-weight:700;">Dashboard</span>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:2px;color:#8cc894;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polygon points="16 8 13 13 8 16 11 11"/></svg>
+        <span class="barlow" style="font-size:9px;font-weight:700;">Guide</span>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:2px;color:#8cc894;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6c-1.6-1.1-4.2-1.6-6.2-1v13c2 0 4.7.5 6.2 1.6"/><path d="M12 6c1.6-1.1 4.2-1.6 6.2-1v13c-2 0-4.7.5-6.2 1.6z"/></svg>
+        <span class="barlow" style="font-size:9px;font-weight:700;">Resoconti</span>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:2px;color:#8cc894;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12a1 1 0 0 1 1 1v16l-7-4-7 4V4a1 1 0 0 1 1-1z"/></svg>
+        <span class="barlow" style="font-size:9px;font-weight:700;">Diari</span>
+      </div>
+    </div>
+    <div style="width:30px;height:30px;border-radius:999px;background:#20592b;border:2px solid rgba(255,255,255,0.5);display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700;flex-shrink:0;">M</div>
+  </div>
+
+  <!-- ── Selettore delle 2 mappe: pillola a due segmenti, si tocca o si scorre lateralmente per
+       passare da "Tutti i percorsi" a "Guide e Resoconti" (vedi DirezioneEGuide.dc.html) ── -->
+  <div style="position:relative;z-index:10;padding:14px 16px 0;display:flex;justify-content:center;">
+    <div class="glass" style="display:inline-flex;padding:3px;border-radius:999px;gap:2px;">
+      <span style="background:#fff;color:#20592b;font-size:11.5px;font-weight:700;padding:7px 14px;border-radius:999px;">Tutti i percorsi</span>
+      <span style="color:rgba(255,255,255,0.75);font-size:11.5px;font-weight:700;padding:7px 14px;border-radius:999px;">Guide e Resoconti</span>
+    </div>
+  </div>
+  <p class="barlow" style="position:relative;z-index:10;text-align:center;margin:6px 0 0;font-size:9.5px;font-weight:700;letter-spacing:1.3px;text-transform:uppercase;color:rgba(255,255,255,0.55);">← Scorri o tocca per cambiare mappa →</p>
+
+  <!-- ── Titolo + pillole aggregate, sopra la mappa fissa ── -->
+  <div style="position:relative;z-index:10;padding:16px 16px 0;">
+    <div style="display:flex;gap:6px;overflow-x:auto;margin-bottom:10px;">
+      <span style="flex:0 0 auto;background:#fff;color:#4d4740;font-size:11px;font-weight:700;padding:6px 12px;border-radius:999px;display:flex;align-items:center;gap:5px;box-shadow:0 2px 6px rgba(0,0,0,0.15);">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#377134" stroke-width="2.4" stroke-linecap="round"><path d="M12 21s7-7.5 7-12a7 7 0 0 0-14 0c0 4.5 7 12 7 12z"/></svg>12 percorsi
+      </span>
+      <span style="flex:0 0 auto;background:#fff;color:#4d4740;font-size:11px;font-weight:700;padding:6px 12px;border-radius:999px;box-shadow:0 2px 6px rgba(0,0,0,0.15);">348 km</span>
+      <span style="flex:0 0 auto;background:#fff;color:#4d4740;font-size:11px;font-weight:700;padding:6px 12px;border-radius:999px;box-shadow:0 2px 6px rgba(0,0,0,0.15);">+9.400 m D+</span>
+    </div>
+    <h1 class="display" style="margin:0;font-weight:900;font-size:25px;letter-spacing:0.3px;text-transform:uppercase;color:#fff;text-shadow:0 2px 10px rgba(0,0,0,0.55);line-height:1.05;">I tuoi percorsi</h1>
+    <p class="lora" style="font-style:italic;font-size:13px;color:rgba(255,255,255,0.9);margin:4px 0 0;text-shadow:0 1px 6px rgba(0,0,0,0.5);">Ogni traccia che hai mai camminato, in un unico sguardo.</p>
+  </div>
+
+  <!-- ── Pannello fisso in basso: solo 2 widget chiave + maniglia "trascina per il resto" (stesso
+       gesto di apertura di Guida/Resoconto/Diari — RouteCarousel/RoutePage) ── -->
+  <div style="position:absolute;left:0;right:0;bottom:0;z-index:10;padding:0 16px calc(env(safe-area-inset-bottom,0px) + 16px);">
+    <div style="display:flex;flex-direction:column;align-items:center;margin-bottom:10px;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+      <span class="barlow" style="font-size:9.5px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.6);margin-top:1px;">Trascina per tutti i widget</span>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <div class="glass" style="flex:1;border-radius:18px;padding:13px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="width:36px;height:36px;border-radius:999px;flex-shrink:0;background:conic-gradient(#e0a83c 0% 52%, rgba(255,255,255,0.15) 52% 100%);display:flex;align-items:center;justify-content:center;">
+            <div style="width:27px;height:27px;border-radius:999px;background:rgba(11,26,36,0.9);display:flex;align-items:center;justify-content:center;">
+              <span class="display" style="font-weight:700;font-size:10.5px;color:#fff;">52</span>
+            </div>
+          </div>
+          <div class="barlow" style="font-size:9.5px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,0.65);">Recovery</div>
+        </div>
+      </div>
+      <div class="glass" style="flex:1;border-radius:18px;padding:13px;">
+        <div class="barlow" style="font-size:9.5px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,0.65);margin-bottom:4px;">Prossima uscita</div>
+        <div class="display" style="font-weight:600;font-size:13px;color:#fff;">Dom 15 set</div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script>
+class Component extends DCLogic {}
+</script>
+</body>
+</html>

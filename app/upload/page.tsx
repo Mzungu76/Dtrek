@@ -46,7 +46,7 @@ function UploadPageInner() {
             <Mountain className="w-8 h-8 text-forest-600" />
           </div>
           <h1 className="font-display text-3xl font-semibold text-stone-800 mb-2">
-            {tab === 'activity' ? 'Crea un Resoconto' : 'Crea una guida'}
+            {tab === 'activity' ? 'Crea un Reportage' : 'Crea una guida'}
           </h1>
           <p className="text-stone-500 text-sm">
             {tab === 'activity'

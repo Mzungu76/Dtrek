@@ -43,7 +43,7 @@ export default function SectionAbbonamento() {
 
       <ul className="space-y-1.5 mb-4 ml-12">
         {[
-          'Percorsi, guide e resoconti AI senza limiti di volume',
+          'Percorsi, guide e reportage AI senza limiti di volume',
           'Nessun periodo di prova a tempo',
           'Sincronizzazione multi-dispositivo illimitata',
         ].map(item => (

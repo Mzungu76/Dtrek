@@ -114,6 +114,12 @@ export interface ActivityMeta {
   sourceApp?: 'navigator'
   metaType?: MetaType
   siteType?: SiteType
+  /** A quale Meta (planned_hikes) è collegato — l'unico modo per risalire al Diario di un
+   *  resoconto (planned_hikes.diary_id), che non ha una colonna propria. Proiettato qui, sulla
+   *  lista leggera, per il filtro per Diario di app/resoconto/ResocontoHub.tsx: prima era
+   *  disponibile solo su StoredActivity (il resoconto aperto), che avrebbe richiesto una fetch
+   *  pesante per ogni elemento della lista solo per sapere a quale Diario appartiene. */
+  linkedPlannedId?: string
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -151,6 +157,7 @@ function toMeta(a: StoredActivity): ActivityMeta {
     favorite:        a.favorite,
     metaType:        a.metaType,
     siteType:        a.siteType,
+    linkedPlannedId: a.linkedPlannedId,
   }
 }
 

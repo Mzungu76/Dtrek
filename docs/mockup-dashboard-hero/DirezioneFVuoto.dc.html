@@ -1,0 +1,92 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;0,900;1,400&family=DM+Sans:ital,wght@0,400;0,500;1,400&family=Barlow+Condensed:wght@600;700;900&family=Lora:ital,wght@0,400;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin: 0; }
+    * { box-sizing: border-box; }
+    a { color: #277134; text-decoration: none; }
+    .barlow { font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif; }
+    .display { font-family: 'Playfair Display', Georgia, serif; }
+    .body-f { font-family: 'DM Sans', system-ui, sans-serif; }
+    .lora { font-family: 'Lora', Georgia, serif; }
+    .scrolly::-webkit-scrollbar { display: none; }
+    .card { background: #fff; border: 1px solid #dcd8cc; border-radius: 16px; padding: 14px; }
+  </style>
+</helmet>
+<div class="body-f" style="width:390px;height:844px;background:#f7f5ee;position:relative;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 0 0 1px #dcd8cc;">
+
+  <!-- Fascia letterbox: stesso fallback "nessuna traccia" di CoverMap.tsx, ma solo nella fascia
+       superiore invece che a piena pagina — il pannello sotto resta comunque utile (Accesso
+       rapido, Percorsi per te non hanno bisogno di dati). -->
+  <div style="position:relative;flex-shrink:0;height:280px;overflow:hidden;background:linear-gradient(160deg,#123448 0%,#071824 100%);">
+    <svg width="400" height="400" style="position:absolute;inset:0;opacity:0.18;"><filter id="fvGrain"><feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch"/></filter><rect width="400" height="400" filter="url(#fvGrain)"/></svg>
+    <div style="position:absolute;inset-x:0;bottom:0;height:120px;background:linear-gradient(to top, #f7f5ee, transparent);pointer-events:none;"></div>
+
+    <div style="position:relative;z-index:10;background:rgba(39,113,52,0.95);display:flex;align-items:center;gap:6px;padding:14px 12px 10px;">
+      <div style="flex:1;display:flex;align-items:center;justify-content:space-around;">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:2px;color:#ffffff;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+          <span class="barlow" style="font-size:9px;font-weight:700;">Dashboard</span>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:2px;color:#8cc894;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polygon points="16 8 13 13 8 16 11 11"/></svg>
+          <span class="barlow" style="font-size:9px;font-weight:700;">Guide</span>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:2px;color:#8cc894;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6c-1.6-1.1-4.2-1.6-6.2-1v13c2 0 4.7.5 6.2 1.6"/><path d="M12 6c1.6-1.1 4.2-1.6 6.2-1v13c-2 0-4.7.5-6.2 1.6z"/></svg>
+          <span class="barlow" style="font-size:9px;font-weight:700;">Resoconti</span>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:2px;color:#8cc894;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12a1 1 0 0 1 1 1v16l-7-4-7 4V4a1 1 0 0 1 1-1z"/></svg>
+          <span class="barlow" style="font-size:9px;font-weight:700;">Diari</span>
+        </div>
+      </div>
+      <div style="width:30px;height:30px;border-radius:999px;background:#20592b;border:2px solid rgba(255,255,255,0.5);display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700;flex-shrink:0;">M</div>
+    </div>
+
+    <div style="position:relative;z-index:10;padding:22px 16px 0;text-align:left;">
+      <h1 class="display" style="margin:0;font-weight:900;font-size:24px;text-transform:uppercase;color:#fff;line-height:1.05;">Dashboard</h1>
+      <p class="lora" style="font-style:italic;font-size:12.5px;color:rgba(255,255,255,0.75);margin:6px 0 0;">La mappa dei tuoi percorsi comparirà qui.</p>
+    </div>
+  </div>
+
+  <div class="scrolly" style="flex:1;overflow-y:auto;padding:16px 16px calc(env(safe-area-inset-bottom,0px) + 20px);display:flex;flex-direction:column;gap:11px;">
+    <a href="#" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:13px 26px;background:#377134;color:#fff;border-radius:14px;font-weight:600;font-size:14px;">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      Crea un Resoconto
+    </a>
+    <div class="card">
+      <p class="lora" style="margin:0;font-style:italic;font-size:13px;color:#a9a18e;">Recovery, forma e traguardi compariranno qui dopo la prima escursione caricata.</p>
+    </div>
+    <div>
+      <div class="barlow" style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#a9a18e;margin-bottom:8px;">Accesso rapido</div>
+      <div style="display:flex;gap:10px;">
+        <a href="#" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;background:#fff;border:1px solid #dcd8cc;border-radius:14px;padding:12px 6px;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#377134" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12a1 1 0 0 1 1 1v16l-7-4-7 4V4a1 1 0 0 1 1-1z"/></svg>
+          <span style="font-size:10px;font-weight:600;color:#4d4740;">Diario</span>
+        </a>
+        <a href="#" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;background:#fff;border:1px solid #dcd8cc;border-radius:14px;padding:12px 6px;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c05a17" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 3 3 8 12 13 21 8 12 3"/><polyline points="3 13 12 18 21 13"/></svg>
+          <span style="font-size:10px;font-weight:600;color:#4d4740;">Raccolte</span>
+        </a>
+        <a href="#" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;background:#fff;border:1px solid #dcd8cc;border-radius:14px;padding:12px 6px;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9f4315" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-7.5 7-12a7 7 0 0 0-14 0c0 4.5 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>
+          <span style="font-size:10px;font-weight:600;color:#4d4740;">Percorsi</span>
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script>
+class Component extends DCLogic {}
+</script>
+</body>
+</html>

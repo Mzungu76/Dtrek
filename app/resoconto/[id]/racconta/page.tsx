@@ -173,13 +173,13 @@ export default function RacconaPage() {
                 </p>
                 <p className="font-body text-sm text-stone-500 italic mb-6">
                   {questionnaire.status === 'skipped'
-                    ? 'Puoi generare il resoconto rapido, oppure ricominciare il racconto guidato.'
-                    : 'Le tue risposte sono pronte per essere fuse nel resoconto. Torna alla pagina del resoconto per generarlo.'}
+                    ? 'Puoi generare il reportage rapido, oppure ricominciare il racconto guidato.'
+                    : 'Le tue risposte sono pronte per essere fuse nel reportage. Torna alla pagina del reportage per generarlo.'}
                 </p>
                 <div className="flex items-center justify-center gap-3">
                   <button onClick={goToResoconto}
                     className="px-5 py-2 bg-forest-600 hover:bg-forest-700 text-white rounded-xl text-sm font-display font-bold uppercase tracking-wide transition-colors">
-                    Torna al resoconto
+                    Torna al reportage
                   </button>
                   <button onClick={restart}
                     className="px-5 py-2 border border-stone-200 rounded-xl text-sm font-display font-bold uppercase tracking-wide text-stone-600 hover:bg-stone-50 transition-colors">

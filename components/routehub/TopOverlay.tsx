@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import HubNavBar from './HubNavBar'
+import { ProfileAvatar } from '@/components/Navbar'
 import type { StatPill, WeatherIcon } from './types'
 
 interface Props {
@@ -51,34 +51,38 @@ export default function TopOverlay({ itemKey, title, statPills, weatherIcon, onO
     <div className="pointer-events-none absolute inset-x-0 top-0 z-20">
       <div className="absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-black/70 to-transparent" />
 
-      <HubNavBar />
-
-      <div className="relative px-3 sm:px-4 pt-4">
+      {/* L'icona profilo, unica cosa rimasta in cima ora che i link di navigazione sono scesi in
+          fondo (HubNavBar), vive nella STESSA riga delle pillole invece che in una fascia propria
+          sopra di esse — libera lo spazio che quella fascia occupava, invece di lasciarlo vuoto. */}
+      <div className="relative px-3 sm:px-4" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 10px)' }}>
         <div
           className="transition-opacity ease-out"
           style={{ opacity: visible ? 1 : 0, transitionDuration: `${visible ? FADE_IN_MS : FADE_OUT_MS}ms` }}
         >
-          <div className="pointer-events-auto mt-3 flex items-center gap-1.5 overflow-x-auto">
-            {scoreBadges}
-            {statPills.map(({ icon: Icon, label, href }) => {
-              const className = 'pointer-events-auto shrink-0 flex items-center gap-1.5 bg-white text-stone-700 text-[11px] font-semibold whitespace-nowrap px-2.5 py-1.5 rounded-full shadow-sm'
-              return href ? (
-                <a
-                  key={label}
-                  href={href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={e => e.stopPropagation()}
-                  className={`${className} hover:bg-stone-50 transition-colors`}
-                >
-                  <Icon className="w-3 h-3" /> {label}
-                </a>
-              ) : (
-                <span key={label} className={className}>
-                  <Icon className="w-3 h-3" /> {label}
-                </span>
-              )
-            })}
+          <div className="pointer-events-auto flex items-center gap-1.5">
+            <div className="flex-1 min-w-0 flex items-center gap-1.5 overflow-x-auto">
+              {scoreBadges}
+              {statPills.map(({ icon: Icon, label, href }) => {
+                const className = 'pointer-events-auto shrink-0 flex items-center gap-1.5 bg-white text-stone-700 text-[11px] font-semibold whitespace-nowrap px-2.5 py-1.5 rounded-full shadow-sm'
+                return href ? (
+                  <a
+                    key={label}
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={e => e.stopPropagation()}
+                    className={`${className} hover:bg-stone-50 transition-colors`}
+                  >
+                    <Icon className="w-3 h-3" /> {label}
+                  </a>
+                ) : (
+                  <span key={label} className={className}>
+                    <Icon className="w-3 h-3" /> {label}
+                  </span>
+                )
+              })}
+            </div>
+            <ProfileAvatar size={32} iconSize={14} />
           </div>
 
           {variant === 'magazine' && contextBadge && (

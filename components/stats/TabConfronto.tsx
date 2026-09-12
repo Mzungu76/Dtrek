@@ -261,7 +261,7 @@ export default function TabConfronto({ activities, preselectId }: Props) {
 
       {selected.length >= 2 && (
         <div className="space-y-6">
-          {/* Resoconto AI */}
+          {/* Reportage AI */}
           <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5">
             {!aiResult && !aiLoading && (
               <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -270,17 +270,17 @@ export default function TabConfronto({ activities, preselectId }: Props) {
                     <Sparkles className="w-4 h-4 text-terra-600" />
                   </div>
                   <div>
-                    <h3 className="font-medium text-stone-700">Resoconto AI</h3>
+                    <h3 className="font-medium text-stone-700">Reportage AI</h3>
                     <p className="text-xs text-stone-400 mt-0.5">
                       {canAiCompare
                         ? 'Giulia confronta questi percorsi e li ordina in base al tuo profilo e al tuo storico.'
-                        : 'Seleziona al massimo 3 percorsi per chiedere un resoconto AI.'}
+                        : 'Seleziona al massimo 3 percorsi per chiedere un reportage AI.'}
                     </p>
                   </div>
                 </div>
                 <button onClick={runAiCompare} disabled={!canAiCompare}
                   className="flex items-center gap-1.5 px-4 py-2 bg-terra-600 text-white rounded-lg text-sm hover:bg-terra-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0">
-                  <Sparkles className="w-4 h-4" /> Chiedi un resoconto AI
+                  <Sparkles className="w-4 h-4" /> Chiedi un reportage AI
                 </button>
               </div>
             )}
@@ -303,7 +303,7 @@ export default function TabConfronto({ activities, preselectId }: Props) {
               <div className="space-y-4">
                 <div className="flex items-center justify-between gap-3">
                   <h3 className="font-medium text-stone-700 flex items-center gap-1.5">
-                    <Sparkles className="w-4 h-4 text-terra-600" /> Resoconto AI
+                    <Sparkles className="w-4 h-4 text-terra-600" /> Reportage AI
                   </h3>
                   <button onClick={runAiCompare} className="text-xs text-terra-600 hover:text-terra-700 font-medium shrink-0">Rigenera</button>
                 </div>

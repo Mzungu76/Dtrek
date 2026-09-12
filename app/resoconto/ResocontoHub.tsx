@@ -33,7 +33,7 @@ import {
   FileSpreadsheet, FileText, Map as MapIcon,
   Route, TrendingUp, Clock, Flame,
   Pencil, Trash2, Loader2, Share2, Box, Images, Film, Camera, X,
-  Star, Car, ArrowRightLeft, BookOpen,
+  Star, Car, Settings, BookMarked, ChevronDown, Check,
 } from 'lucide-react'
 import ShareModal from '@/components/ShareModal'
 import HikeNotesRecorder from '@/app/components/HikeNotesRecorder'
@@ -125,9 +125,22 @@ export default function ResocontoHub({ id }: { id?: string }) {
   // del Diario visibilmente in ritardo rispetto al resto della copertina.
   const [diaries,         setDiaries]         = useState<DiarySummary[]>([])
   const [plannedDiaryById, setPlannedDiaryById] = useState<Map<string, string | null>>(new Map())
-  const [moverOpen,       setMoverOpen]       = useState(false)
+  // Pannello "Gestisci questo Reportage" (icona a ingranaggio sul titolo, uniformata con quella di
+  // /diario — prima erano due frecce che aprivano solo lo spostamento) — titolo e Diario di
+  // appartenenza modificabili nello stesso posto, invece di due azioni separate.
+  const [manageOpen,      setManageOpen]      = useState(false)
+  const [manageTitleVal,  setManageTitleVal]  = useState('')
+  const [manageTitleSaving, setManageTitleSaving] = useState(false)
   const [moveBusy,        setMoveBusy]        = useState(false)
   const [moveError,       setMoveError]       = useState<string | null>(null)
+
+  // Filtro per Diario — a differenza del mover sopra (sposta il singolo resoconto aperto), questo
+  // filtra l'intera lista (carosello + galleria) a un solo Diario, o la lascia intera ("Tutti i
+  // Diari", null). Vive nell'etichetta che prima mostrava soltanto il Diario del resoconto aperto:
+  // ora quell'etichetta è il controllo del filtro stesso, sempre visibile indipendentemente da
+  // quale resoconto è in copertina.
+  const [diaryFilter,     setDiaryFilter]     = useState<string | null>(null)
+  const [diaryFilterOpen, setDiaryFilterOpen] = useState(false)
 
   const dtmProfile      = useDtmProfile(activity)
   const terrainProfile  = useTerrainProfile(activity)
@@ -261,9 +274,9 @@ export default function ResocontoHub({ id }: { id?: string }) {
   // sottoscriverlo, l'etichetta del Diario resterebbe quella con cui questa pagina si è aperta.
   useCtsUpdated(() => { getAllPlanned().then(applyPlannedDiaryMap).catch(() => {}) })
 
-  // Chiude il selettore "sposta in un altro Diario" se cambia il resoconto in copertina (swipe) —
-  // evita di spostare per sbaglio quello sbagliato se restasse aperto.
-  useEffect(() => { setMoverOpen(false); setMoveError(null) }, [currentId])
+  // Chiude il pannello "Gestisci questo Reportage" se cambia il resoconto in copertina (swipe) —
+  // evita di modificare per sbaglio quello sbagliato se restasse aperto.
+  useEffect(() => { setManageOpen(false); setMoveError(null) }, [currentId])
 
   // Il Diario del resoconto aperto passa dalla sua Meta (activities.linked_planned_id →
   // planned_hikes.diary_id) — non c'è una colonna diretta, quindi un lookup nella mappa sopra
@@ -276,7 +289,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
   // colonna propria dell'attività (stesso meccanismo di components/diario/DiarioSommarioContent.tsx).
   async function moveToDiary(targetDiaryId: string) {
     const plannedId = activity?.linkedPlannedId
-    if (!plannedId) { setMoveError('Questo resoconto è antecedente ai Diari e non ha una Meta da spostare.'); return }
+    if (!plannedId) { setMoveError('Questo reportage è antecedente ai Diari e non ha una Meta da spostare.'); return }
     setMoveBusy(true); setMoveError(null)
     try {
       const res = await fetch('/api/planned', {
@@ -286,7 +299,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error ?? data.message ?? `HTTP ${res.status}`)
       setPlannedDiaryById(prev => new Map(prev).set(plannedId, targetDiaryId))
-      setMoverOpen(false)
+      setManageOpen(false)
     } catch (e) {
       setMoveError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -338,6 +351,8 @@ export default function ResocontoHub({ id }: { id?: string }) {
     return { emoji: info.emoji, label: info.label }
   }, [activity])
 
+  const rawActivityById = useMemo(() => new Map(rawActivities.map(a => [a.id, a])), [rawActivities])
+
   const displayItems = useMemo(() => {
     // Distanza in auto REALE (OSRM, via useDrivingDistance) — non in linea d'aria. A differenza
     // di planned_hikes, un'activity completata non ha una colonna cache per questo valore (vedi
@@ -386,11 +401,19 @@ export default function ResocontoHub({ id }: { id?: string }) {
       const coverUrl = cover(it.id)
       return coverUrl ? { ...it, coverPhotoUrl: coverUrl } : it
     })
-    if (activity && !mapped.some(it => it.id === activity.id)) {
-      return [{ id: activity.id, title: activity.title ?? 'Escursione', polyline: activity.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number]), statPills: pillsFor(activity), coverPhotoUrl: cover(activity.id), sortValues: sortValuesFor(activity), scorePreview: scorePreviewFor(activity), favorite: activity.favorite }, ...mapped]
-    }
-    return mapped
-  }, [items, covers, activity, photos, coverPhotoId, driving, userOrigin])
+    const withOpen = activity && !mapped.some(it => it.id === activity.id)
+      ? [{ id: activity.id, title: activity.title ?? 'Escursione', polyline: activity.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number]), statPills: pillsFor(activity), coverPhotoUrl: cover(activity.id), sortValues: sortValuesFor(activity), scorePreview: scorePreviewFor(activity), favorite: activity.favorite }, ...mapped]
+      : mapped
+    if (diaryFilter == null) return withOpen
+    // Il Diario di ogni resoconto passa dalla sua Meta (activity.linkedPlannedId →
+    // planned_hikes.diary_id), non da una colonna propria — stesso lookup di currentDiaryId sopra,
+    // ripetuto qui per ogni elemento della lista invece che solo per quello aperto.
+    return withOpen.filter(it => {
+      const linkedPlannedId = it.id === activity?.id ? activity.linkedPlannedId : rawActivityById.get(it.id)?.linkedPlannedId
+      if (!linkedPlannedId) return false
+      return (plannedDiaryById.get(linkedPlannedId) ?? null) === diaryFilter
+    })
+  }, [items, covers, activity, photos, coverPhotoId, driving, userOrigin, diaryFilter, rawActivityById, plannedDiaryById])
 
   if (!listLoaded) {
     return <HubSkeleton />
@@ -423,6 +446,20 @@ export default function ResocontoHub({ id }: { id?: string }) {
     await patch({ title: trimmed })
     setItems(prev => prev.map(it => it.id === activity?.id ? { ...it, title: trimmed } : it))
     setEditTitle(false)
+  }
+  // Titolo dal pannello "Gestisci questo Reportage" (icona a ingranaggio) — stesso patch di
+  // saveTitle sopra, stato separato: i due editor (questo e quello nella scheda Strumenti) non si
+  // influenzano a vicenda se aperti in momenti diversi.
+  const saveManageTitle = async () => {
+    const trimmed = manageTitleVal.trim()
+    if (!trimmed || trimmed === activity?.title) { setManageTitleVal(activity?.title ?? ''); return }
+    setManageTitleSaving(true)
+    try {
+      await patch({ title: trimmed })
+      setItems(prev => prev.map(it => it.id === activity?.id ? { ...it, title: trimmed } : it))
+    } finally {
+      setManageTitleSaving(false)
+    }
   }
   const saveRating = async () => {
     if (!activity || !ratingVal) return
@@ -492,30 +529,38 @@ export default function ResocontoHub({ id }: { id?: string }) {
     )
   }
 
-  // Nome del Diario a cui appartiene il resoconto aperto, sopra il titolo (stessa modalità della
-  // Raccolta in app/diario/page.tsx) — tap per spostarlo in un altro. Solo per la scheda aperta:
-  // vedi il lookup di currentDiaryId sopra.
-  const contextBadge = (routeItem: RouteHubItem) => {
-    if (!activity || routeItem.id !== activity.id) return null
-    const diary = diaries.find(d => d.id === currentDiaryId)
+  // Filtro per Diario, sopra il titolo (stessa posizione della Raccolta in app/diario/page.tsx) —
+  // mostra sempre il filtro attivo ("Tutti i Diari", o il Diario scelto), non più il Diario del
+  // singolo resoconto aperto: è un controllo di pagina, non un'informazione sulla scheda in
+  // copertina. Stessa icona della voce "Diari" nella barra del menù (BookMarked), non più BookOpen
+  // (quella di "Resoconti" — usarla qui confondeva le due sezioni).
+  const contextBadge = () => {
+    const filterDiary = diaryFilter ? diaries.find(d => d.id === diaryFilter) : null
     return (
       <button
-        onClick={() => setMoverOpen(true)}
+        onClick={() => setDiaryFilterOpen(true)}
         className="pointer-events-auto inline-flex items-center gap-1.5 bg-white/15 backdrop-blur-sm text-white text-xs font-semibold px-3 py-1.5 rounded-full"
       >
-        <BookOpen className="w-3.5 h-3.5" />
-        {diary ? diary.title : 'Nessun Diario'}
+        <BookMarked className="w-3.5 h-3.5" />
+        {filterDiary ? filterDiary.title : 'Tutti i Diari'}
+        <ChevronDown className="w-3 h-3" />
       </button>
     )
   }
 
-  // Icona dedicata "sposta questo Resoconto in un altro Diario", sulla riga del titolo — stessa
-  // funzione del chip sopra, ma sempre visibile anche quando il Diario non è ancora noto.
+  // Icona a ingranaggio "Gestisci questo Reportage" — uniformata con quella di /diario (prima
+  // erano due frecce, come l'icona di spostamento vera e propria sulla pagina Diari, che generava
+  // confusione: qui apre un pannello che modifica titolo e Diario di appartenenza insieme, non solo
+  // lo spostamento). Sempre visibile anche quando il Diario non è ancora noto.
   const titleAction = (routeItem: RouteHubItem) => {
     if (!activity || routeItem.id !== activity.id) return null
     return (
-      <button onClick={() => setMoverOpen(true)} title="Sposta in un altro Diario" className="pointer-events-auto p-1">
-        <ArrowRightLeft className="w-5 h-5 text-white" style={{ filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.5))' }} />
+      <button
+        onClick={() => { setManageTitleVal(activity.title ?? ''); setManageOpen(true) }}
+        title="Gestisci questo Reportage"
+        className="pointer-events-auto p-1"
+      >
+        <Settings className="w-5 h-5 text-white" style={{ filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.5))' }} />
       </button>
     )
   }
@@ -629,7 +674,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
             </div>
           ) : (
             <button onClick={() => { setTitleVal(activity.title ?? ''); setEditTitle(true) }} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left">
-              <Pencil className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Rinomina resoconto</span>
+              <Pencil className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Rinomina reportage</span>
             </button>
           )}
         </div>
@@ -710,14 +755,27 @@ export default function ResocontoHub({ id }: { id?: string }) {
         titleAction={titleAction}
       />
 
-      {moverOpen && activity && (
-        <DiaryMoverOverlay
+      {manageOpen && activity && (
+        <ManageReportageOverlay
+          titleVal={manageTitleVal}
+          onTitleChange={setManageTitleVal}
+          onTitleBlur={saveManageTitle}
+          titleSaving={manageTitleSaving}
           diaries={diaries.filter(d => !d.archivedAt)}
-          currentId={currentDiaryId}
-          busy={moveBusy}
-          error={moveError}
-          onSelect={moveToDiary}
-          onClose={() => setMoverOpen(false)}
+          currentDiaryId={currentDiaryId}
+          moveBusy={moveBusy}
+          moveError={moveError}
+          onSelectDiary={moveToDiary}
+          onClose={() => setManageOpen(false)}
+        />
+      )}
+
+      {diaryFilterOpen && (
+        <DiaryFilterOverlay
+          diaries={diaries.filter(d => !d.archivedAt)}
+          currentId={diaryFilter}
+          onSelect={id => { setDiaryFilter(id); setDiaryFilterOpen(false) }}
+          onClose={() => setDiaryFilterOpen(false)}
         />
       )}
 
@@ -834,35 +892,128 @@ export default function ResocontoHub({ id }: { id?: string }) {
   )
 }
 
-// Elenco verticale a schermo intero per scegliere il Diario di destinazione — stessa identità
-// visiva (sfondo #0b1a24, righe con thumbnail 64×64, separatore bianco 10%) delle liste "Tutti i
-// ___" (ExpandedGalleryList.tsx) e della galleria Raccolte di app/diario/page.tsx: sola selezione,
-// niente crea/modifica/elimina (quello resta appannaggio del Sommario di ogni Diario).
-function DiaryMoverOverlay({ diaries, currentId, busy, error, onSelect, onClose }: {
+// Pannello "Gestisci questo Reportage" — icona a ingranaggio sul titolo (uniformata con quella di
+// /diario, che apre l'analogo "Gestisci questo Diario"): titolo e Diario di appartenenza in un
+// unico posto invece di due azioni separate (prima solo lo spostamento, dietro un'icona a doppia
+// freccia). Stessa identità visiva scura delle altre liste a schermo intero di questa pagina.
+function ManageReportageOverlay({
+  titleVal, onTitleChange, onTitleBlur, titleSaving,
+  diaries, currentDiaryId, moveBusy, moveError, onSelectDiary, onClose,
+}: {
+  titleVal: string
+  onTitleChange: (v: string) => void
+  onTitleBlur: () => void
+  titleSaving: boolean
   diaries: DiarySummary[]
-  currentId: string | null
-  busy: boolean
-  error: string | null
-  onSelect: (id: string) => void
+  currentDiaryId: string | null
+  moveBusy: boolean
+  moveError: string | null
+  onSelectDiary: (id: string) => void
   onClose: () => void
 }) {
   return (
     <div className="fixed inset-0 z-50 bg-[#0b1a24] flex flex-col">
       <div className="shrink-0 flex items-center justify-between px-4 pt-[calc(env(safe-area-inset-top,0px)+14px)] pb-3 border-b border-white/10">
-        <h2 className="font-display text-base font-bold text-white">Sposta in un altro Diario</h2>
+        <h2 className="font-display text-base font-bold text-white">Gestisci questo Reportage</h2>
         <button onClick={onClose} aria-label="Chiudi" className="shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors">
           <X className="w-4 h-4" />
         </button>
       </div>
       <div className="flex-1 overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+16px)]">
-        {error && <p className="text-xs text-red-400 my-3">{error}</p>}
+        <div className="py-4 border-b border-white/10">
+          <label className="block font-barlow text-[10px] font-bold uppercase tracking-widest text-white/40 mb-1.5">Titolo</label>
+          <div className="relative">
+            <input
+              value={titleVal}
+              onChange={e => onTitleChange(e.target.value)}
+              onBlur={onTitleBlur}
+              onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+              placeholder="Titolo del Reportage"
+              className="w-full bg-transparent outline-none border-b border-white/15 focus:border-white/40 font-display text-lg font-bold text-white pb-1.5 pr-7 transition-colors"
+            />
+            {titleSaving && <Loader2 className="w-3.5 h-3.5 animate-spin text-white/40 absolute right-0 bottom-2.5" />}
+          </div>
+        </div>
+
+        <div className="pt-4">
+          <label className="block font-barlow text-[10px] font-bold uppercase tracking-widest text-white/40 mb-1.5">Diario</label>
+          {moveError && <p className="text-xs text-red-400 mb-2">{moveError}</p>}
+          {diaries.length === 0 ? (
+            <p className="text-center text-white/50 text-sm mt-6">Nessun Diario disponibile.</p>
+          ) : diaries.map(d => (
+            <button
+              key={d.id}
+              onClick={() => onSelectDiary(d.id)}
+              disabled={moveBusy || d.id === currentDiaryId}
+              className="w-full flex items-center gap-3.5 py-3 border-b border-white/10 text-left disabled:opacity-50"
+            >
+              <div className={`w-14 h-14 rounded-xl shrink-0 overflow-hidden relative flex items-center justify-center bg-white/5 ${d.id === currentDiaryId ? 'ring-2 ring-sky-400' : ''}`}>
+                {d.coverUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={d.coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                ) : (
+                  <BookMarked className="w-5 h-5 text-white/30" />
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="font-display font-semibold text-[15px] text-white truncate">{d.title}</p>
+                <p className="text-[11px] text-white/50 mt-1">
+                  {d.id === currentDiaryId ? 'Diario attuale' : `${d.reportageCount} reportage`}
+                </p>
+              </div>
+              {d.id === currentDiaryId && <Check className="w-4 h-4 text-sky-400 shrink-0" />}
+              {moveBusy && d.id !== currentDiaryId && <Loader2 className="w-4 h-4 animate-spin text-white/50 shrink-0" />}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Elenco verticale a schermo intero per il filtro per Diario della pagina (etichetta sopra il
+// titolo) — stessa identità visiva (sfondo #0b1a24, righe con thumbnail 64×64, separatore bianco
+// 10%) delle liste "Tutti i ___" (ExpandedGalleryList.tsx) e della galleria Raccolte di
+// app/diario/page.tsx: sola selezione, niente crea/modifica/elimina. "Tutti i Diari" in cima
+// rimuove il filtro. Lo spostamento del singolo resoconto aperto vive in ManageReportageOverlay
+// sopra, insieme al titolo — non più qui.
+function DiaryFilterOverlay({ diaries, currentId, onSelect, onClose }: {
+  diaries: DiarySummary[]
+  currentId: string | null
+  onSelect: (id: string | null) => void
+  onClose: () => void
+}) {
+  return (
+    <div className="fixed inset-0 z-50 bg-[#0b1a24] flex flex-col">
+      <div className="shrink-0 flex items-center justify-between px-4 pt-[calc(env(safe-area-inset-top,0px)+14px)] pb-3 border-b border-white/10">
+        <h2 className="font-display text-base font-bold text-white">Filtra per Diario</h2>
+        <button onClick={onClose} aria-label="Chiudi" className="shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+16px)]">
+        <button
+          onClick={() => onSelect(null)}
+          disabled={currentId === null}
+          className="w-full flex items-center gap-3.5 py-3 border-b border-white/10 text-left disabled:opacity-50"
+        >
+          <div className={`w-16 h-16 rounded-xl shrink-0 flex items-center justify-center bg-white/5 ${currentId === null ? 'ring-2 ring-sky-400' : ''}`}>
+            <BookMarked className="w-6 h-6 text-white/30" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="font-display font-semibold text-[15px] text-white truncate">Tutti i Diari</p>
+            <p className="text-[11px] text-white/50 mt-1.5">
+              {currentId === null ? 'Filtro attuale' : `${diaries.length} Diari`}
+            </p>
+          </div>
+        </button>
         {diaries.length === 0 ? (
           <p className="text-center text-white/50 text-sm mt-10">Nessun Diario disponibile.</p>
         ) : diaries.map(d => (
           <button
             key={d.id}
             onClick={() => onSelect(d.id)}
-            disabled={busy || d.id === currentId}
+            disabled={d.id === currentId}
             className="w-full flex items-center gap-3.5 py-3 border-b border-white/10 text-left disabled:opacity-50"
           >
             <div className={`w-16 h-16 rounded-xl shrink-0 overflow-hidden relative flex items-center justify-center bg-white/5 ${d.id === currentId ? 'ring-2 ring-sky-400' : ''}`}>
@@ -870,16 +1021,15 @@ function DiaryMoverOverlay({ diaries, currentId, busy, error, onSelect, onClose 
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={d.coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
               ) : (
-                <BookOpen className="w-6 h-6 text-white/30" />
+                <BookMarked className="w-6 h-6 text-white/30" />
               )}
             </div>
             <div className="min-w-0 flex-1">
               <p className="font-display font-semibold text-[15px] text-white truncate">{d.title}</p>
               <p className="text-[11px] text-white/50 mt-1.5">
-                {d.id === currentId ? 'Diario attuale' : `${d.reportageCount} resoconti`}
+                {d.id === currentId ? 'Filtro attuale' : `${d.reportageCount} reportage`}
               </p>
             </div>
-            {busy && d.id !== currentId && <Loader2 className="w-4 h-4 animate-spin text-white/50 shrink-0" />}
           </button>
         ))}
       </div>

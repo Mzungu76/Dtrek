@@ -418,7 +418,7 @@ export async function POST(req: NextRequest) {
         // Con l'accesso condiviso esteso a tutto il periodo di prova, questo ramo scatta quasi
         // solo a prova scaduta — non è più il caso tipico "non hai mai aggiunto una chiave".
         message: entitlement.trialExpired
-          ? 'Il periodo di prova gratuito è terminato — sblocca Dtrek per continuare a generare resoconti.'
+          ? 'Il periodo di prova gratuito è terminato — sblocca Dtrek per continuare a generare reportage.'
           : 'Al momento non hai accesso alla generazione AI — sblocca Dtrek nelle impostazioni del profilo.',
       }),
       { status: 402, headers: { 'Content-Type': 'application/json' } },
@@ -457,15 +457,15 @@ export async function POST(req: NextRequest) {
       JSON.stringify({
         error:   'trial_limit_reached',
         message: entitlement.trialExpired
-          ? 'Periodo di prova terminato — sblocca Dtrek per generare nuovi resoconti.'
-          : `Hai raggiunto il limite di ${entitlement.reportsLimit} resoconti del periodo di prova — sblocca Dtrek per continuare.`,
+          ? 'Periodo di prova terminato — sblocca Dtrek per generare nuovi reportage.'
+          : `Hai raggiunto il limite di ${entitlement.reportsLimit} reportage del periodo di prova — sblocca Dtrek per continuare.`,
       }),
       { status: 403, headers: { 'Content-Type': 'application/json' } },
     )
   }
   if (existingReport && entitlement.trialExpired) {
     return new Response(
-      JSON.stringify({ error: 'trial_expired', message: 'Periodo di prova terminato — questo resoconto è in sola lettura finché non sblocchi Dtrek.' }),
+      JSON.stringify({ error: 'trial_expired', message: 'Periodo di prova terminato — questo reportage è in sola lettura finché non sblocchi Dtrek.' }),
       { status: 403, headers: { 'Content-Type': 'application/json' } },
     )
   }
@@ -478,7 +478,7 @@ export async function POST(req: NextRequest) {
     return new Response(
       JSON.stringify({
         error:   'cooldown',
-        message: 'Hai appena generato questo resoconto — aspetta qualche secondo prima di rigenerarlo.',
+        message: 'Hai appena generato questo reportage — aspetta qualche secondo prima di rigenerarlo.',
       }),
       { status: 429, headers: { 'Content-Type': 'application/json' } },
     )
@@ -622,7 +622,7 @@ export async function PATCH(req: NextRequest) {
   const entitlement = await resolveDtrekEntitlement(user.id)
   if (entitlement.trialExpired) {
     return new Response(
-      JSON.stringify({ error: 'trial_expired', message: 'Periodo di prova terminato — questo resoconto è in sola lettura finché non sblocchi Dtrek.' }),
+      JSON.stringify({ error: 'trial_expired', message: 'Periodo di prova terminato — questo reportage è in sola lettura finché non sblocchi Dtrek.' }),
       { status: 403, headers: { 'Content-Type': 'application/json' } },
     )
   }

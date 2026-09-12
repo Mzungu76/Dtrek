@@ -32,7 +32,7 @@ export const SORT_OPTIONS_BY_MODE: Record<HubMode, { id: SortKey; label: string 
     { id: 'distance', label: 'Distanza' },
   ],
   diario: [
-    { id: 'date', label: 'Data' }, { id: 'km', label: 'Km' }, { id: 'dplus', label: 'D+' }, { id: 'count', label: 'Resoconti' },
+    { id: 'date', label: 'Data' }, { id: 'km', label: 'Km' }, { id: 'dplus', label: 'D+' }, { id: 'count', label: 'Reportage' },
   ],
 }
 

@@ -6,7 +6,7 @@ import RouteCarousel from './RouteCarousel'
 import RoutePage from './RoutePage'
 import CoverMap from './CoverMap'
 import TopOverlay from './TopOverlay'
-import HubNavBar from './HubNavBar'
+import HubNavBar, { HubProfileButton } from './HubNavBar'
 import BottomGallery, { SORT_CMP, type SortKey } from './BottomGallery'
 import ExpandedGalleryList from './ExpandedGalleryList'
 import type { RouteHubProps, SectionKind } from './types'
@@ -254,10 +254,13 @@ export default function RouteHub({
     return (
       <div className="fixed inset-0 bg-[#0b1a24] flex flex-col items-center justify-center gap-3 text-stone-400 text-sm">
         <div className="absolute inset-x-0 top-0 z-20">
-          <HubNavBar />
+          <HubProfileButton />
         </div>
         Nessun {emptyNoun} disponibile.
         {emptyAction}
+        <div className="absolute inset-x-0 bottom-0 z-20">
+          <HubNavBar />
+        </div>
       </div>
     )
   }
@@ -266,7 +269,7 @@ export default function RouteHub({
     return (
       <div className="fixed inset-0 bg-[#0b1a24] flex flex-col items-center justify-center gap-3 text-stone-400 text-sm px-6 text-center">
         <div className="absolute inset-x-0 top-0 z-20">
-          <HubNavBar />
+          <HubProfileButton />
         </div>
         {favoritesFilter && nextOutingFilter && !searchQueryNorm
           ? <CalendarClock className="w-8 h-8 text-stone-600" />
@@ -293,6 +296,9 @@ export default function RouteHub({
             Mostra tutti i percorsi
           </button>
         )}
+        <div className="absolute inset-x-0 bottom-0 z-20">
+          <HubNavBar />
+        </div>
       </div>
     )
   }
@@ -417,7 +423,7 @@ export default function RouteHub({
       </div>
 
       <div
-        className="absolute inset-x-0 bottom-0 z-20 flex flex-col gap-3 pb-[calc(env(safe-area-inset-bottom,0px)+10px)] transition-opacity ease-out"
+        className="absolute inset-x-0 bottom-0 z-20 flex flex-col gap-3 transition-opacity ease-out"
         style={{ opacity: chromeOpacity, pointerEvents: isOpen ? 'none' : 'auto', transitionDuration: `${chromeTransitionMs}ms` }}
       >
         {summary && (
@@ -437,7 +443,7 @@ export default function RouteHub({
         />
         {/* Trascina la scheda chiusa verso l'alto per aprirla — l'icona stessa è anche un
             pulsante equivalente per chi preferisce toccare piuttosto che trascinare. */}
-        <div className="flex justify-center">
+        <div className="flex justify-center pb-1">
           <button
             onClick={() => openWithAnimation(defaultSection)}
             aria-label={`Apri il ${emptyNoun}`}
@@ -446,6 +452,7 @@ export default function RouteHub({
             <ChevronUp className="w-5 h-5 text-white/60 animate-bounce" strokeWidth={2.5} />
           </button>
         </div>
+        <HubNavBar />
       </div>
 
       {galleryExpanded && (
