@@ -45,6 +45,9 @@ export default function RaccolteTreePage() {
   const [kebabOpenId, setKebabOpenId] = useState<string | null>(null)
   const [raccoltaCoverUploadingId, setRaccoltaCoverUploadingId] = useState<string | null>(null)
   const [diarioCoverUploadingId, setDiarioCoverUploadingId] = useState<string | null>(null)
+  const [raccoltaPublishBusyId, setRaccoltaPublishBusyId] = useState<string | null>(null)
+  const [diarioPublishBusyId, setDiarioPublishBusyId] = useState<string | null>(null)
+  const [reportagePublishBusyId, setReportagePublishBusyId] = useState<string | null>(null)
   const [movePicker, setMovePicker] = useState<{ kind: 'diario'; diarioId: string; currentRaccoltaId: string } | { kind: 'reportage'; reportageId: string; linkedPlannedId: string; currentDiarioId: string } | null>(null)
 
   function load() {
@@ -139,6 +142,24 @@ export default function RaccolteTreePage() {
       setRaccoltaCoverUploadingId(null)
     }
   }
+  // Accendi/spegni la pubblicazione direttamente dall'albero — stesso contratto PATCH garantisce/
+  // DELETE revoca già usato in /raccolte/[id], solo senza passare da quella pagina.
+  async function toggleRaccoltaPublish(id: string, currentlyPublished: boolean) {
+    setRaccoltaPublishBusyId(id); setError(null)
+    try {
+      const res = await fetch(`/api/collections/${id}/token`, {
+        method: currentlyPublished ? 'DELETE' : 'PATCH',
+        headers: currentlyPublished ? undefined : { 'Content-Type': 'application/json' },
+        body: currentlyPublished ? undefined : '{}',
+      })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? `HTTP ${res.status}`)
+      updateTree(t => t.map(r => r.id === id ? { ...r, isPublished: !currentlyPublished } : r))
+    } catch (e) {
+      reportError(e)
+    } finally {
+      setRaccoltaPublishBusyId(null)
+    }
+  }
 
   // ── Un Diario: riordino dentro la sua Raccolta, rinomina, copertina, spostamento ───────────
   async function reorderDiari(raccoltaId: string, from: number, to: number) {
@@ -180,6 +201,22 @@ export default function RaccolteTreePage() {
       setDiarioCoverUploadingId(null)
     }
   }
+  async function toggleDiarioPublish(diarioId: string, currentlyPublished: boolean) {
+    setDiarioPublishBusyId(diarioId); setError(null)
+    try {
+      const res = await fetch(`/api/diaries/${diarioId}/token`, {
+        method: currentlyPublished ? 'DELETE' : 'PATCH',
+        headers: currentlyPublished ? undefined : { 'Content-Type': 'application/json' },
+        body: currentlyPublished ? undefined : '{}',
+      })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? `HTTP ${res.status}`)
+      updateTree(t => t.map(r => ({ ...r, diari: r.diari.map(d => d.id === diarioId ? { ...d, isPublished: !currentlyPublished } : d) })))
+    } catch (e) {
+      reportError(e)
+    } finally {
+      setDiarioPublishBusyId(null)
+    }
+  }
   function requestMoveDiario(diarioId: string) {
     const owner = tree?.find(r => r.diari.some(d => d.id === diarioId))
     if (!owner) return
@@ -207,6 +244,27 @@ export default function RaccolteTreePage() {
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? `HTTP ${res.status}`)
     } catch (e) {
       reportError(e); load()
+    }
+  }
+  // Il Reportage senza un racconto scritto (nessuna riga in hike_reports) non arriva qui: il
+  // PublishToggle resta disattivato finché non c'è nulla da pubblicare (vedi RaccoltaSection.tsx).
+  async function toggleReportagePublish(reportageId: string, currentlyPublished: boolean) {
+    setReportagePublishBusyId(reportageId); setError(null)
+    try {
+      const res = currentlyPublished
+        ? await fetch(`/api/share-report?activityId=${encodeURIComponent(reportageId)}`, { method: 'DELETE' })
+        : await fetch('/api/share-report', {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ activityId: reportageId }),
+          })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? `HTTP ${res.status}`)
+      updateTree(t => t.map(r => ({
+        ...r,
+        diari: r.diari.map(d => ({ ...d, reportage: d.reportage.map(x => x.id === reportageId ? { ...x, isPublished: !currentlyPublished } : x) })),
+      })))
+    } catch (e) {
+      reportError(e)
+    } finally {
+      setReportagePublishBusyId(null)
     }
   }
   function requestMoveReportage(reportageId: string) {
@@ -238,12 +296,15 @@ export default function RaccolteTreePage() {
     onDeleteRaccolta: deleteRaccolta,
     onOpenDetails: id => router.push(`/raccolte/${encodeURIComponent(id)}`),
     onPickRaccoltaCover: pickRaccoltaCover,
+    onToggleRaccoltaPublish: toggleRaccoltaPublish,
     onReorderDiari: reorderDiari,
     onRenameDiario: renameDiario,
     onPickDiarioCover: pickDiarioCover,
     onMoveDiarioRequest: requestMoveDiario,
+    onToggleDiarioPublish: toggleDiarioPublish,
     onRenameReportage: renameReportage,
     onMoveReportageRequest: requestMoveReportage,
+    onToggleReportagePublish: toggleReportagePublish,
     onOpenReportage: id => router.push(`/resoconto/${encodeURIComponent(id)}`),
   }
 
@@ -294,6 +355,9 @@ export default function RaccolteTreePage() {
                   kebabOpen={kebabOpenId === raccolta.id}
                   raccoltaCoverUploadingId={raccoltaCoverUploadingId}
                   diarioCoverUploadingId={diarioCoverUploadingId}
+                  raccoltaPublishBusyId={raccoltaPublishBusyId}
+                  diarioPublishBusyId={diarioPublishBusyId}
+                  reportagePublishBusyId={reportagePublishBusyId}
                   isDragging={raccolteDrag.dragIndex === i}
                   dropBefore={false}
                   deltaY={raccolteDrag.dragIndex === i ? raccolteDrag.deltaY : 0}

@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { getUserFromRequest } from '@/lib/supabaseAuth'
 import type { CollectionRow, CollectionDiaryLinkRow } from '@/lib/raccolte/aggregateCollections'
 import type { DiaryRow, PlannedDiaryLinkRow } from '@/lib/diari/aggregateDiaries'
-import { buildRaccolteTree, type ActivityTreeRow, type RaccoltaTreeNode } from '@/lib/raccolte/buildRaccolteTree'
+import { buildRaccolteTree, type ActivityTreeRow, type HikeReportTokenRow, type RaccoltaTreeNode } from '@/lib/raccolte/buildRaccolteTree'
 
 export type { RaccoltaTreeNode, DiarioTreeNode, ReportageTreeNode } from '@/lib/raccolte/buildRaccolteTree'
 
@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
 
     const [{ data: diaries, error: diariesErr }, { data: planned, error: plannedErr }, { data: activities, error: activitiesErr }] =
       await Promise.all([
-        supabase.from('diaries').select('id, title, subtitle, author, cover_url, footer_text, is_default, labels, archived_at').eq('user_id', user.id),
+        supabase.from('diaries').select('id, title, subtitle, author, cover_url, footer_text, is_default, labels, archived_at, share_token').eq('user_id', user.id),
         supabase.from('planned_hikes').select('id, diary_id').eq('user_id', user.id).not('diary_id', 'is', null),
         supabase.from('activities').select('id, title, start_time, distance_meters, linked_planned_id').eq('user_id', user.id).not('linked_planned_id', 'is', null),
       ])
@@ -45,12 +45,21 @@ export async function GET(req: NextRequest) {
     if (plannedErr) throw plannedErr
     if (activitiesErr) throw activitiesErr
 
+    // Solo per l'icona pubblicato/bozza di ogni Reportage nell'albero — un Reportage senza
+    // hike_reports non ha mai un token, quindi è sempre bozza (nessuna riga da cercare per lui).
+    const activityIds = (activities ?? []).map(a => a.id as string)
+    const { data: hikeReports, error: hikeReportsErr } = activityIds.length
+      ? await supabase.from('hike_reports').select('activity_id, share_token').eq('user_id', user.id).in('activity_id', activityIds)
+      : { data: [], error: null }
+    if (hikeReportsErr) throw hikeReportsErr
+
     const tree: RaccoltaTreeNode[] = buildRaccolteTree(
       (collections ?? []) as CollectionRow[],
       (links ?? []) as CollectionDiaryLinkRow[],
       (diaries ?? []) as DiaryRow[],
       (planned ?? []) as PlannedDiaryLinkRow[],
       (activities ?? []) as ActivityTreeRow[],
+      (hikeReports ?? []) as HikeReportTokenRow[],
     )
 
     return NextResponse.json(tree)
