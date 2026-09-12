@@ -10,10 +10,13 @@
 
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
-import { Download, Route as RouteIcon, ChevronRight } from 'lucide-react'
+import { Download, Route as RouteIcon, ChevronRight, Trophy, Mountain } from 'lucide-react'
 import { withForcedDownload } from '@/lib/storageDownloadUrl'
 import { formatDuration } from '@/lib/tcxParser'
 import { hasNarrative, type PublicDiary } from '@/lib/sharePublicDiary'
+import { computePublicDiaryStats } from '@/lib/publicDiaryStats'
+import { MonthBarChart } from '@/components/diario/MonthBarChart'
+import { AllRoutesMap, AllRoutesLegend } from './AllRoutesMap'
 import { SiteHeader, DtrekCallout, SiteFooter } from './SiteChrome'
 
 export function DiaryPublicView({ diary, token, entryBasePath, headerHomeHref, headerHomeLabel }: {
@@ -61,18 +64,86 @@ export function DiaryPublicView({ diary, token, entryBasePath, headerHomeHref, h
         </section>
 
         {/* Numeri */}
-        {show.statistiche && (
-          <section className="grid grid-cols-3 gap-3">
-            {[
-              { value: String(diary.entries.length), label: diary.entries.length === 1 ? 'Escursione' : 'Escursioni' },
-              { value: `${diary.totalKm.toFixed(0)} km`, label: 'Percorsi' },
-              { value: `${Math.round(diary.totalElevationGain).toLocaleString('it')} m`, label: 'Dislivello +' },
-            ].map(s => (
-              <div key={s.label} className="bg-white rounded-2xl border border-stone-200 px-3 py-4 text-center shadow-sm">
-                <div className="font-mono text-xl sm:text-2xl font-bold text-forest-800 leading-tight">{s.value}</div>
-                <div className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider mt-1">{s.label}</div>
+        {show.statistiche && (() => {
+          const stats = computePublicDiaryStats(diary.entries)
+          return (
+            <section className="space-y-3">
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { value: String(diary.entries.length), label: diary.entries.length === 1 ? 'Escursione' : 'Escursioni' },
+                  { value: `${diary.totalKm.toFixed(0)} km`, label: 'Percorsi' },
+                  { value: `${Math.round(diary.totalElevationGain).toLocaleString('it')} m`, label: 'Dislivello +' },
+                ].map(s => (
+                  <div key={s.label} className="bg-white rounded-2xl border border-stone-200 px-3 py-4 text-center shadow-sm">
+                    <div className="font-mono text-xl sm:text-2xl font-bold text-forest-800 leading-tight">{s.value}</div>
+                    <div className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider mt-1">{s.label}</div>
+                  </div>
+                ))}
               </div>
-            ))}
+
+              {diary.entries.length > 0 && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-white rounded-2xl border border-stone-200 px-4 py-3 shadow-sm flex items-center gap-2.5">
+                    <Trophy className="w-4 h-4 text-amber-500 shrink-0" />
+                    <div className="min-w-0">
+                      <div className="font-mono text-sm font-bold text-stone-700">{stats.longestKm.toFixed(1)} km</div>
+                      <div className="text-[10px] text-stone-400 truncate">Più lunga{stats.longestTitle ? ` · ${stats.longestTitle}` : ''}</div>
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-2xl border border-stone-200 px-4 py-3 shadow-sm flex items-center gap-2.5">
+                    <Mountain className="w-4 h-4 text-amber-500 shrink-0" />
+                    <div className="min-w-0">
+                      <div className="font-mono text-sm font-bold text-stone-700">{Math.round(stats.highestAlt)} m</div>
+                      <div className="text-[10px] text-stone-400 truncate">Quota max{stats.highestTitle ? ` · ${stats.highestTitle}` : ''}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {stats.years.length > 1 && (
+                <div className="bg-white rounded-2xl border border-stone-200 px-4 py-3.5 shadow-sm overflow-x-auto">
+                  <p className="font-barlow font-bold text-[10px] tracking-[0.2em] uppercase text-stone-400 mb-2">Anno per anno</p>
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-stone-400 uppercase text-[9px] tracking-wide">
+                        <th className="text-left font-semibold py-1">Anno</th>
+                        <th className="text-right font-semibold py-1">Escursioni</th>
+                        <th className="text-right font-semibold py-1">Distanza</th>
+                        <th className="text-right font-semibold py-1">Dislivello</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {stats.years.map(y => (
+                        <tr key={y.year} className="border-t border-stone-100 text-stone-600">
+                          <td className="py-1.5 font-bold text-forest-800">{y.year}</td>
+                          <td className="py-1.5 text-right">{y.count}</td>
+                          <td className="py-1.5 text-right font-mono">{y.km.toFixed(0)} km</td>
+                          <td className="py-1.5 text-right font-mono">{Math.round(y.elevGain).toLocaleString('it')} m</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {diary.entries.length > 0 && (
+                <div className="bg-white rounded-2xl border border-stone-200 px-4 py-3.5 shadow-sm">
+                  <p className="font-barlow font-bold text-[10px] tracking-[0.2em] uppercase text-stone-400 mb-2">Andamento mensile</p>
+                  <MonthBarChart activities={diary.entries} />
+                </div>
+              )}
+            </section>
+          )
+        })()}
+
+        {/* Tutti i percorsi su una mappa */}
+        {show.percorso && diary.entries.length > 0 && (
+          <section className="bg-white rounded-3xl border border-stone-200 shadow-sm p-4 sm:p-5">
+            <p className="font-barlow font-bold text-[10px] tracking-[0.2em] uppercase text-stone-400 mb-2.5">
+              Tutti i percorsi
+            </p>
+            <AllRoutesMap routes={diary.entries.map(e => ({ id: e.id, title: e.title, polyline: e.polyline ?? [] }))} />
+            <AllRoutesLegend routes={diary.entries.map(e => ({ id: e.id, title: e.title, polyline: e.polyline ?? [] }))} />
           </section>
         )}
 

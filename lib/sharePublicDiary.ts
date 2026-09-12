@@ -27,6 +27,8 @@
 import { supabase } from './supabase'
 import { normalizeDiaryConfig, type DiaryConfig } from './diaryConfig'
 import { trimHomeStart, type HomePoint } from './privacy/trimHomeStart'
+import { buildMetricSeries, type MetricPoint } from './trackSeries'
+import type { TrackPoint } from './tcxParser'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -64,6 +66,13 @@ export interface PublicDiaryEntry {
   /** `[[lat, lon], …]`, già ridotta a ~60 punti a monte (lib/downsamplePolyline.ts). `null` se
    *  l'attività non ha traccia GPS. */
   polyline:          [number, number][] | null
+  /** Grafici di quota/battito/velocità lungo il percorso, ridotti a poche decine di punti
+   *  (lib/trackSeries.ts) — presenti solo se l'attività ha un tracciato con quei dati.
+   *  Gate di visibilità in `DiaryPublicSections.grafici`, applicato dove si rende la pagina, non
+   *  qui: stesso principio di `content`/`photos`/`polyline`, sempre calcolati e filtrati a valle. */
+  altitudeSeries:    MetricPoint[]
+  hrSeries:          MetricPoint[]
+  speedSeriesKmh:    MetricPoint[]
 }
 
 /** Il contenuto pubblico di un Diario, senza i campi che appartengono al documento che lo
@@ -114,7 +123,7 @@ export async function buildContentFromReports(
     ? await Promise.all([
         supabase
           .from('activities')
-          .select('id, start_time, distance_meters, elevation_gain, total_time_seconds, altitude_max, calories, route_polyline')
+          .select('id, start_time, distance_meters, elevation_gain, total_time_seconds, altitude_max, calories, route_polyline, track_points')
           .in('id', activityIds),
         supabase
           .from('activity_photos')
@@ -153,6 +162,7 @@ export async function buildContentFromReports(
       const polyline = fullPolyline && privacy.hideHomeStarts
         ? trimHomeStart(fullPolyline, privacy.home)
         : fullPolyline
+      const trackPoints = (act?.track_points as TrackPoint[] | null) ?? []
       return {
         id:               r.id as string,
         title:            (r.title as string) || 'Escursione',
@@ -172,6 +182,9 @@ export async function buildContentFromReports(
           return chosen && chosen.length > 0 ? all.filter(p => chosen.includes(p.id)) : all
         })(),
         polyline,
+        altitudeSeries: buildMetricSeries(trackPoints, 'altitudeMeters'),
+        hrSeries:       buildMetricSeries(trackPoints, 'heartRateBpm'),
+        speedSeriesKmh: buildMetricSeries(trackPoints, 'speedMs').map(p => ({ progress: p.progress, value: p.value * 3.6 })),
       }
     })
     .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())

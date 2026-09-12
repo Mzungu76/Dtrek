@@ -1,11 +1,14 @@
-import type { ActivityMeta } from '@/lib/blobStore'
-
 /**
  * Le etichette restano su un font di sistema (Arial) di proposito: html2canvas serializza l'SVG
  * inline in un data URL e lo carica come <img>, dove i webfont non si caricano. Vedi la nota più
  * estesa in ProgressChart.tsx.
+ *
+ * Il tipo accetta qualunque oggetto con `startTime` (non solo `ActivityMeta`) così può essere
+ * riusato anche dal sito pubblico (lib/sharePublicDiary.ts's PublicDiaryEntry), che non deve
+ * dipendere da lib/blobStore.ts — un modulo lato client con effetti a livello di modulo
+ * (IndexedDB, sync) incompatibili con un componente server.
  */
-export function MonthBarChart({ activities }: { activities: ActivityMeta[] }) {
+export function MonthBarChart({ activities }: { activities: { startTime: string }[] }) {
   const counts = Array(12).fill(0)
   activities.forEach(a => {
     if (a.startTime) counts[new Date(a.startTime).getMonth()]++

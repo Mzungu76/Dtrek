@@ -14,6 +14,8 @@ import type { DiaryPublicSections } from '@/lib/diaryConfig'
 import { RouteSketch } from './RouteSketch'
 import { RouteMap } from './RouteMap'
 import { LocatorMap } from '@/components/LocatorMap'
+import { ProgressChart } from '@/components/diario/ProgressChart'
+import { GREEN, BLUE } from '@/components/diario/types'
 
 /** Il corpo dei resoconti è markdown: gli asterischi dell'enfasi vanno resi, non stampati. */
 function Inline({ text }: { text: string }) {
@@ -216,6 +218,47 @@ export function EntryArticle({ entry, n, show }: { entry: PublicDiaryEntry; n: n
             <div className="w-[104px] sm:w-[132px] shrink-0">
               <LocatorMap lat={entry.polyline[0][0]} lon={entry.polyline[0][1]} label={entry.title} />
             </div>
+          </div>
+        )}
+
+        {show.grafici && (entry.altitudeSeries.length > 1 || entry.hrSeries.length > 1 || entry.speedSeriesKmh.length > 1) && (
+          <div className="mb-6 space-y-4">
+            {entry.altitudeSeries.length > 1 && (
+              <div>
+                <p className="font-barlow font-bold text-[9px] tracking-[0.2em] uppercase text-stone-400 mb-1.5">
+                  Profilo altimetrico
+                </p>
+                <div className="rounded-lg border border-forest-100 bg-forest-50/60 px-3 py-2.5">
+                  <ProgressChart series={entry.altitudeSeries} accent={GREEN} unit=" m" />
+                </div>
+              </div>
+            )}
+            {(entry.hrSeries.length > 1 || entry.speedSeriesKmh.length > 1) && (
+              <div className="flex flex-col gap-3 sm:flex-row">
+                {entry.hrSeries.length > 1 && (
+                  <div className="flex-1 min-w-0">
+                    <p className="font-barlow font-bold text-[9px] tracking-[0.2em] uppercase text-stone-400 mb-1.5">
+                      Frequenza cardiaca
+                    </p>
+                    <div className="rounded-lg border border-red-100 bg-red-50/60 px-3 py-2.5">
+                      <ProgressChart series={entry.hrSeries}
+                        accent={{ bg: '#fef2f2', border: '#fecaca', text: '#991b1b', iconBg: '#fee2e2', iconColor: '#dc2626' }}
+                        unit=" bpm" />
+                    </div>
+                  </div>
+                )}
+                {entry.speedSeriesKmh.length > 1 && (
+                  <div className="flex-1 min-w-0">
+                    <p className="font-barlow font-bold text-[9px] tracking-[0.2em] uppercase text-stone-400 mb-1.5">
+                      Velocità
+                    </p>
+                    <div className="rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-2.5">
+                      <ProgressChart series={entry.speedSeriesKmh} accent={BLUE} unit=" km/h" decimals={1} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
