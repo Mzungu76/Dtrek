@@ -2,6 +2,7 @@
 import { ChevronDown, ChevronRight, GripVertical, MoreVertical, ArrowRightLeft } from 'lucide-react'
 import CoverThumb from './CoverThumb'
 import InlineTitle from './InlineTitle'
+import PublishToggle from './PublishToggle'
 import { useRowDrag } from './useRowDrag'
 import type { RaccoltaTreeNode, DiarioTreeNode } from '@/app/api/collections/tree/route'
 
@@ -15,12 +16,15 @@ export interface RaccoltaSectionActions {
   onDeleteRaccolta: (raccoltaId: string) => void
   onOpenDetails: (raccoltaId: string) => void
   onPickRaccoltaCover: (raccoltaId: string, file: File) => void
+  onToggleRaccoltaPublish: (raccoltaId: string, currentlyPublished: boolean) => void
   onReorderDiari: (raccoltaId: string, fromIndex: number, toIndex: number) => void
   onRenameDiario: (diarioId: string, title: string) => void
   onPickDiarioCover: (diarioId: string, file: File) => void
   onMoveDiarioRequest: (diarioId: string) => void
+  onToggleDiarioPublish: (diarioId: string, currentlyPublished: boolean) => void
   onRenameReportage: (reportageId: string, title: string) => void
   onMoveReportageRequest: (reportageId: string) => void
+  onToggleReportagePublish: (reportageId: string, currentlyPublished: boolean) => void
   onOpenReportage: (reportageId: string) => void
 }
 
@@ -31,6 +35,9 @@ interface RaccoltaSectionProps {
   kebabOpen: boolean
   raccoltaCoverUploadingId: string | null
   diarioCoverUploadingId: string | null
+  raccoltaPublishBusyId: string | null
+  diarioPublishBusyId: string | null
+  reportagePublishBusyId: string | null
   isDragging: boolean
   dropBefore: boolean
   deltaY: number
@@ -45,6 +52,7 @@ interface RaccoltaSectionProps {
 
 export default function RaccoltaSection({
   raccolta, expanded, expandedDiari, kebabOpen, raccoltaCoverUploadingId, diarioCoverUploadingId,
+  raccoltaPublishBusyId, diarioPublishBusyId, reportagePublishBusyId,
   isDragging, dropBefore, deltaY, onToggleExpand, onToggleDiario, onToggleKebab,
   onGripPointerDown, onGripPointerMove, onGripPointerUp, actions,
 }: RaccoltaSectionProps) {
@@ -68,9 +76,15 @@ export default function RaccoltaSection({
         <div className="flex-1 min-w-0">
           <p className="font-display font-bold text-[15px] text-stone-800 truncate">{raccolta.title}</p>
           <p className="font-barlow text-[11px] text-stone-400 tracking-wide">
-            {raccolta.diari.length} diari · {reportageCount} reportage{raccolta.isPublished && ' · pubblicata'}
+            {raccolta.diari.length} diari · {reportageCount} reportage
           </p>
         </div>
+        <PublishToggle
+          published={raccolta.isPublished}
+          busy={raccoltaPublishBusyId === raccolta.id}
+          onToggle={() => actions.onToggleRaccoltaPublish(raccolta.id, raccolta.isPublished)}
+          size={16}
+        />
         <button
           onPointerDown={e => { e.stopPropagation(); onGripPointerDown(e) }}
           onPointerMove={e => { e.stopPropagation(); onGripPointerMove(e) }}
@@ -119,6 +133,8 @@ export default function RaccoltaSection({
                 isDragging={diariDrag.dragIndex === i}
                 deltaY={diariDrag.dragIndex === i ? diariDrag.deltaY : 0}
                 coverUploading={diarioCoverUploadingId === diario.id}
+                publishBusy={diarioPublishBusyId === diario.id}
+                reportagePublishBusyId={reportagePublishBusyId}
                 onToggleExpand={() => onToggleDiario(diario.id)}
                 onGripPointerDown={e => diariDrag.start(i, e)}
                 onGripPointerMove={diariDrag.move}
@@ -126,8 +142,10 @@ export default function RaccoltaSection({
                 onRename={title => actions.onRenameDiario(diario.id, title)}
                 onPickCover={f => actions.onPickDiarioCover(diario.id, f)}
                 onMoveRequest={() => actions.onMoveDiarioRequest(diario.id)}
+                onTogglePublish={() => actions.onToggleDiarioPublish(diario.id, diario.isPublished)}
                 onRenameReportage={(id, title) => actions.onRenameReportage(id, title)}
                 onMoveReportageRequest={id => actions.onMoveReportageRequest(id)}
+                onToggleReportagePublish={(id, current) => actions.onToggleReportagePublish(id, current)}
                 onOpenReportage={id => actions.onOpenReportage(id)}
               />
             </div>
@@ -139,15 +157,18 @@ export default function RaccoltaSection({
 }
 
 function DiarioRow({
-  diario, expanded, isDragging, deltaY, coverUploading,
+  diario, expanded, isDragging, deltaY, coverUploading, publishBusy, reportagePublishBusyId,
   onToggleExpand, onGripPointerDown, onGripPointerMove, onGripPointerUp,
-  onRename, onPickCover, onMoveRequest, onRenameReportage, onMoveReportageRequest, onOpenReportage,
+  onRename, onPickCover, onMoveRequest, onTogglePublish,
+  onRenameReportage, onMoveReportageRequest, onToggleReportagePublish, onOpenReportage,
 }: {
   diario: DiarioTreeNode
   expanded: boolean
   isDragging: boolean
   deltaY: number
   coverUploading: boolean
+  publishBusy: boolean
+  reportagePublishBusyId: string | null
   onToggleExpand: () => void
   onGripPointerDown: (e: React.PointerEvent<HTMLElement>) => void
   onGripPointerMove: (e: React.PointerEvent<HTMLElement>) => void
@@ -155,8 +176,10 @@ function DiarioRow({
   onRename: (title: string) => void
   onPickCover: (file: File) => void
   onMoveRequest: () => void
+  onTogglePublish: () => void
   onRenameReportage: (id: string, title: string) => void
   onMoveReportageRequest: (id: string) => void
+  onToggleReportagePublish: (id: string, currentlyPublished: boolean) => void
   onOpenReportage: (id: string) => void
 }) {
   const hasReportage = diario.reportage.length > 0
@@ -180,6 +203,7 @@ function DiarioRow({
           />
           <p className="font-barlow text-[10.5px] text-stone-400">{diario.reportage.length} reportage</p>
         </div>
+        <PublishToggle published={diario.isPublished} busy={publishBusy} onToggle={onTogglePublish} size={14} />
         <button onClick={e => { e.stopPropagation(); onMoveRequest() }} aria-label="Sposta in un'altra Raccolta" className="text-stone-400 shrink-0 p-1 -m-1">
           <ArrowRightLeft className="w-3.5 h-3.5" />
         </button>
@@ -210,6 +234,14 @@ function DiarioRow({
                 />
                 <p className="font-barlow text-[10px] text-stone-400">{fmtDate(r.startTime)} · {fmtKm(r.distanceMeters)}</p>
               </div>
+              <PublishToggle
+                published={r.isPublished}
+                busy={reportagePublishBusyId === r.id}
+                disabled={!r.hasReport}
+                disabledTitle="Scrivi prima il racconto"
+                onToggle={() => onToggleReportagePublish(r.id, r.isPublished)}
+                size={12}
+              />
               <button onClick={e => { e.stopPropagation(); onMoveReportageRequest(r.id) }} aria-label="Sposta in un altro Diario" className="text-stone-300 shrink-0 p-1 -m-1">
                 <ArrowRightLeft className="w-3 h-3" />
               </button>

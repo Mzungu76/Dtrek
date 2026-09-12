@@ -39,7 +39,7 @@ describe('buildRaccolteTree', () => {
     const activities = [attivita({ id: 'a1', title: 'Anello', linked_planned_id: 'p1', distance_meters: 5000 })]
     const [r] = buildRaccolteTree([collezione({ id: 'c1' })], links, diari, planned, activities)
     expect(r.diari[0].reportage).toEqual([
-      { id: 'a1', title: 'Anello', startTime: '2024-01-01T00:00:00Z', distanceMeters: 5000, linkedPlannedId: 'p1' },
+      { id: 'a1', title: 'Anello', startTime: '2024-01-01T00:00:00Z', distanceMeters: 5000, linkedPlannedId: 'p1', isPublished: false, hasReport: false },
     ])
   })
 
@@ -77,5 +77,51 @@ describe('buildRaccolteTree', () => {
   it('isPublished riflette solo la presenza di uno share_token', () => {
     const [r] = buildRaccolteTree([collezione({ id: 'c1', share_token: 'x' })], [], [], [], [])
     expect(r.isPublished).toBe(true)
+  })
+
+  it('un Diario è pubblicato solo se ha un proprio share_token', () => {
+    const diari = [diario({ id: 'd1', share_token: 'x' }), diario({ id: 'd2' })]
+    const links: CollectionDiaryLinkRow[] = [
+      { collection_id: 'c1', diary_id: 'd1', position: 0 },
+      { collection_id: 'c1', diary_id: 'd2', position: 1 },
+    ]
+    const [r] = buildRaccolteTree([collezione({ id: 'c1' })], links, diari, [], [])
+    expect(r.diari.find(d => d.id === 'd1')?.isPublished).toBe(true)
+    expect(r.diari.find(d => d.id === 'd2')?.isPublished).toBe(false)
+  })
+
+  it('un Reportage è pubblicato solo se la sua riga in hike_reports ha uno share_token', () => {
+    const diari = [diario({ id: 'd1' })]
+    const links: CollectionDiaryLinkRow[] = [{ collection_id: 'c1', diary_id: 'd1', position: 0 }]
+    const planned: PlannedDiaryLinkRow[] = [{ id: 'p1', diary_id: 'd1' }, { id: 'p2', diary_id: 'd1' }]
+    const activities = [
+      attivita({ id: 'pubblicato', linked_planned_id: 'p1' }),
+      attivita({ id: 'bozza', linked_planned_id: 'p2' }),
+    ]
+    const hikeReports = [{ activity_id: 'pubblicato', share_token: 'x' }, { activity_id: 'bozza', share_token: null }]
+    const [r] = buildRaccolteTree([collezione({ id: 'c1' })], links, diari, planned, activities, hikeReports)
+    const byId = new Map(r.diari[0].reportage.map(x => [x.id, x.isPublished]))
+    expect(byId.get('pubblicato')).toBe(true)
+    expect(byId.get('bozza')).toBe(false)
+  })
+
+  it('un Reportage senza alcuna riga in hike_reports è sempre bozza e non ha ancora un racconto', () => {
+    const diari = [diario({ id: 'd1' })]
+    const links: CollectionDiaryLinkRow[] = [{ collection_id: 'c1', diary_id: 'd1', position: 0 }]
+    const planned: PlannedDiaryLinkRow[] = [{ id: 'p1', diary_id: 'd1' }]
+    const activities = [attivita({ id: 'a1', linked_planned_id: 'p1' })]
+    const [r] = buildRaccolteTree([collezione({ id: 'c1' })], links, diari, planned, activities, [])
+    expect(r.diari[0].reportage[0].isPublished).toBe(false)
+    expect(r.diari[0].reportage[0].hasReport).toBe(false)
+  })
+
+  it('un Reportage con un racconto scritto ma non pubblicato ha hasReport true e isPublished false', () => {
+    const diari = [diario({ id: 'd1' })]
+    const links: CollectionDiaryLinkRow[] = [{ collection_id: 'c1', diary_id: 'd1', position: 0 }]
+    const planned: PlannedDiaryLinkRow[] = [{ id: 'p1', diary_id: 'd1' }]
+    const activities = [attivita({ id: 'a1', linked_planned_id: 'p1' })]
+    const [r] = buildRaccolteTree([collezione({ id: 'c1' })], links, diari, planned, activities, [{ activity_id: 'a1', share_token: null }])
+    expect(r.diari[0].reportage[0].hasReport).toBe(true)
+    expect(r.diari[0].reportage[0].isPublished).toBe(false)
   })
 })

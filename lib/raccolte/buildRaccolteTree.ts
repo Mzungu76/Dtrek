@@ -14,6 +14,14 @@ export interface ActivityTreeRow {
   linked_planned_id: string | null
 }
 
+/** Riga di `hike_reports` — solo per sapere quali Reportage hanno già un proprio share_token
+ *  (icona pubblicato/bozza nell'albero). Un Reportage senza racconto scritto non ha nessuna riga
+ *  qui, ed è quindi sempre "bozza": non pubblicabile finché non esiste un resoconto da mostrare. */
+export interface HikeReportTokenRow {
+  activity_id: string
+  share_token: string | null
+}
+
 export interface ReportageTreeNode {
   id: string
   title: string
@@ -23,12 +31,17 @@ export interface ReportageTreeNode {
    *  altro Diario (PATCH /api/planned {id, diaryId}, lo stesso meccanismo di
    *  app/resoconto/ResocontoHub.tsx): l'appartenenza passa da lì, non da una colonna propria. */
   linkedPlannedId: string | null
+  isPublished: boolean
+  /** Ha una riga in `hike_reports` (un racconto scritto, anche vuoto) — senza, non c'è nulla da
+   *  pubblicare: il pulsante di pubblicazione resta disattivato finché non lo si scrive. */
+  hasReport: boolean
 }
 
 export interface DiarioTreeNode {
   id: string
   title: string
   coverUrl: string | null
+  isPublished: boolean
   reportage: ReportageTreeNode[]
 }
 
@@ -47,14 +60,21 @@ export function buildRaccolteTree(
   diaries: DiaryRow[],
   planned: PlannedDiaryLinkRow[],
   activities: ActivityTreeRow[],
+  hikeReports: HikeReportTokenRow[] = [],
 ): RaccoltaTreeNode[] {
   const diaryIdByPlannedId = new Map(planned.map(p => [p.id, p.diary_id]))
+  const reportTokenByActivityId = new Map(hikeReports.map(r => [r.activity_id, r.share_token]))
   const reportageByDiaryId = new Map<string, ReportageTreeNode[]>()
   for (const a of activities) {
     const diaryId = a.linked_planned_id ? diaryIdByPlannedId.get(a.linked_planned_id) : null
     if (!diaryId) continue
     const list = reportageByDiaryId.get(diaryId) ?? []
-    list.push({ id: a.id, title: a.title, startTime: a.start_time, distanceMeters: a.distance_meters ?? 0, linkedPlannedId: a.linked_planned_id })
+    list.push({
+      id: a.id, title: a.title, startTime: a.start_time, distanceMeters: a.distance_meters ?? 0,
+      linkedPlannedId: a.linked_planned_id,
+      isPublished: (reportTokenByActivityId.get(a.id) ?? null) !== null,
+      hasReport: reportTokenByActivityId.has(a.id),
+    })
     reportageByDiaryId.set(diaryId, list)
   }
   // Più recente prima — stesso ordine di GET /api/diaries/[id] (reportage di un Diario), non ha
@@ -81,6 +101,7 @@ export function buildRaccolteTree(
         if (!d) continue // Diario eliminato nel frattempo (ON DELETE CASCADE) — semplicemente non compare
         diari.push({
           id: d.id, title: d.title, coverUrl: d.cover_url,
+          isPublished: (d.share_token ?? null) !== null,
           reportage: reportageByDiaryId.get(d.id) ?? [],
         })
       }

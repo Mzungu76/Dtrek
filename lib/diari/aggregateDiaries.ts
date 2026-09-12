@@ -17,6 +17,9 @@ export interface DiaryRow {
   is_default: boolean
   labels: string[] | null
   archived_at: string | null
+  /** Facoltativo: non serve ad aggregateDiaries stessa, solo a chi (lib/raccolte/buildRaccolteTree.ts)
+   *  ha bisogno di sapere se il Diario è già pubblicato, riusando la stessa riga già letta. */
+  share_token?: string | null
 }
 
 export interface PlannedDiaryLinkRow {

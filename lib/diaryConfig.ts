@@ -15,6 +15,10 @@ export interface DiaryPublicSections {
   percorso:    boolean
   /** Pagina con i numeri complessivi. */
   statistiche: boolean
+  /** Grafici di quota, frequenza cardiaca e velocità su ogni escursione — dati più dettagliati
+   *  della sola traccia, quindi spento di default anche per un Diario già pubblicato prima che
+   *  esistesse questa voce (vedi normalizeDiaryConfig). */
+  grafici:     boolean
 }
 
 export interface DiaryStatsToggles {
@@ -88,7 +92,7 @@ export const DEFAULT_DIARY_CONFIG: DiaryConfig = {
   excludedActivityIds: [],
   photoIdsByActivity: {},
   showStubs: true,
-  publicSections: { racconto: true, foto: true, percorso: true, statistiche: true },
+  publicSections: { racconto: true, foto: true, percorso: true, statistiche: true, grafici: false },
 }
 
 /**

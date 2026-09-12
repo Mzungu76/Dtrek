@@ -950,6 +950,7 @@ export default function DiarioLibroPage() {
                       ['foto',        'Fotografie'],
                       ['percorso',    'Mappe dei percorsi'],
                       ['statistiche', 'Numeri complessivi'],
+                      ['grafici',     'Grafici (quota, battito, velocità)'],
                     ] as const).map(([key, label]) => (
                       <label key={key} className="flex items-center gap-2 py-0.5 text-xs text-stone-600 cursor-pointer">
                         <input type="checkbox" checked={config.publicSections[key]}
