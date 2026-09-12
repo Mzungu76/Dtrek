@@ -239,6 +239,44 @@ di un piano di pubblicazione più ampio, di cui questo documento copre solo la p
 esplicita dell'utente — nessuna delle modifiche sopra la riguarda comunque (tutta lato Reportage
 pubblico, non Diario).
 
+### Fase 3 del piano più ampio (settembre 2026): il profilo pubblico
+
+Il modello in cinque righe diceva già "il profilo pubblico non è un quarto documento: è l'indice
+di ciò che è già pubblicato" e lo lasciava esplicitamente fuori da questa fase. Costruito ora, con
+una decisione dell'utente sulla forma dell'indirizzo: **uno slug leggibile come ALIAS pubblico
+dell'id utente reale**, mai come credenziale — `/u/marco-rossi`, non un token opaco come agli altri
+tre livelli. Motivazione dell'utente: UX (facile da condividere/ricordare), branding, stabilità
+(cambiare il nome visualizzato non deve richiedere di cambiare l'indirizzo), unicità gestita con un
+vincolo UNIQUE, e consapevolezza esplicita che uno slug scelto può rivelare l'identità — una scelta
+di privacy dell'utente, non un difetto tecnico da correggere.
+
+- **`supabase/migrations/add_profile_slug.sql`**: due colonne su `user_settings`, non una —
+  `profile_slug` (l'identità, stabile) e `profile_enabled` (la visibilità, revocabile senza perdere
+  lo slug scelto). Indice UNIQUE case-insensitive (`lower(profile_slug)`) — "Marco-Rossi" e
+  "marco-rossi" sono lo stesso indirizzo. Stessa policy RLS "cintura e bretelle" di
+  collections/diaries.
+- **`lib/profileSlug.ts`** (nuovo, puro, testato): validazione del formato (minuscolo,
+  alfanumerico e trattini singoli, 3–30 caratteri) e un piccolo elenco di parole riservate. Nessun
+  precedente da riusare nel repo — scritto da zero, non c'era mai stato un identificatore pubblico
+  leggibile prima d'ora (solo token opachi).
+- **`app/api/user-settings/profile/route.ts`** (nuovo, non nel monolite `/api/user-settings/`,
+  stesso motivo già dato per `/privacy`): GET legge `{slug, enabled}`; PATCH normalizza e valida lo
+  slug lato server (mai fidarsi solo del client), traduce una violazione UNIQUE (codice Postgres
+  23505) in "indirizzo già in uso" invece di un 500 generico; rifiuta `enabled: true` senza uno
+  slug già scelto.
+- **`lib/publicProfile.ts`** (`fetchPublicProfile(slug)`): NON aggrega contenuto (a differenza di
+  `fetchPublicCollection`) — elenca solo cosa ha già un proprio token ai tre livelli esistenti,
+  senza dedurre appartenenza fra loro. Un Diario dentro una Raccolta pubblicata E con un proprio
+  token compare in entrambi gli elenchi, deliberatamente: sono due condivisioni indipendenti,
+  entrambe vere.
+- **`app/u/[slug]/page.tsx`** (nuovo): tre sezioni (Raccolte/Diari/Reportage), ciascuna solo se non
+  vuota, ogni riga apre direttamente `/leggi/c|d|p/[token]` — il profilo è un indice, non
+  un'ulteriore cornice attorno ai contenuti.
+- **`components/profilo/SectionProfiloPubblico.tsx`**, montata in
+  `app/profilo/impostazioni/page.tsx` subito dopo `SectionIdentita` (lo slug è concettualmente
+  adiacente al nome visualizzato): campo indirizzo + Salva, poi — solo dopo aver scelto uno slug —
+  l'interruttore di visibilità e copia-link.
+
 ### Cosa c'è già, per chi riprende da qui
 
 - `supabase/migrations/add_collections_tables.sql` — `collections` + `collection_diaries`, RLS

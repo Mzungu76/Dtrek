@@ -3,6 +3,7 @@ import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import BackLink from '@/app/components/BackLink'
 import Kicker from '@/components/ui/Kicker'
 import SectionIdentita from '@/components/profilo/SectionIdentita'
+import SectionProfiloPubblico from '@/components/profilo/SectionProfiloPubblico'
 import SectionIndirizzo from '@/components/profilo/SectionIndirizzo'
 import SectionBiometria from '@/components/profilo/SectionBiometria'
 import SectionComfortTrailScore from '@/components/profilo/SectionComfortTrailScore'
@@ -24,6 +25,11 @@ export default function ImpostazioniPage() {
         </div>
 
         <SectionIdentita />
+
+        <div className="pt-2">
+          <Kicker className="mb-3">Profilo pubblico</Kicker>
+          <SectionProfiloPubblico />
+        </div>
 
         <div className="pt-2">
           <Kicker className="mb-3">Punto di partenza</Kicker>
