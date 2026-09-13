@@ -5,6 +5,7 @@
 // da sole, "il più restrittivo vince" senza essere riscritto qui.
 import { supabase } from './supabase'
 import { normalizeDiaryConfig, type DiaryPublicSections } from './diaryConfig'
+import { normalizeRaccoltaConfig } from './raccolteConfig'
 import { fetchDiaryContent, type DiaryContent, type PublicDiaryEntry, type PublicPrivacyPrefs } from './sharePublicDiary'
 import { combineDateRangeLabels } from './raccolte/combineDateRangeLabels'
 
@@ -52,12 +53,17 @@ export async function fetchPublicCollection(token: string): Promise<PublicCollec
 
   const { data: collection } = await supabase
     .from('collections')
-    .select('id, user_id, title, subtitle, preface, cover_url')
+    .select('id, user_id, title, subtitle, preface, cover_url, config')
     .eq('share_token', token)
     .maybeSingle()
   if (!collection) return null
 
   const userId = collection.user_id as string
+  // Quando presenti, le impostazioni della Raccolta VINCONO su quelle di ogni Diario membro — vedi
+  // supabase/migrations/add_collections_config.sql. `null` (il caso comune, nessuno le ha mai
+  // toccate) lascia ogni Diario libero di decidere da sé, comportamento identico a prima di questa
+  // colonna.
+  const raccoltaConfig = normalizeRaccoltaConfig(collection.config)
 
   // Nome dell'autore + preferenze di privacy (docs/raccolte-pubblicazione-piano.md, Fase 3f) —
   // una sola volta per l'intera raccolta: sono globali per utente, non per Diario, quindi la
@@ -107,7 +113,7 @@ export async function fetchPublicCollection(token: string): Promise<PublicCollec
       )
       volumes.push({
         diaryId, title: config.title, subtitle: config.subtitle,
-        coverUrl: config.coverUrl, show: config.publicSections,
+        coverUrl: config.coverUrl, show: raccoltaConfig?.publicSections ?? config.publicSections,
         ...content,
       })
     }

@@ -25,7 +25,8 @@
 // Diario si applicano da sole dentro una raccolta, senza essere riscritte lì.
 
 import { supabase } from './supabase'
-import { normalizeDiaryConfig, resolveReportExtras, type DiaryConfig } from './diaryConfig'
+import { normalizeDiaryConfig, resolveReportExtras, type DiaryConfig, type DiaryReportExtras } from './diaryConfig'
+import { normalizeRaccoltaConfig } from './raccolteConfig'
 import { trimHomeStart, type HomePoint } from './privacy/trimHomeStart'
 import { buildMetricSeries, type MetricPoint } from './trackSeries'
 import { fetchCachedPois, type PublicPoi } from './publicPois'
@@ -78,6 +79,12 @@ export interface PublicDiaryEntry {
    *  fonti esterne (lib/publicPois.ts). Vuoto se la zona non è già in cache, o se l'autore non ha
    *  la mappa attiva per questo Reportage (`DiaryReportExtras.mappa`, `lib/diaryConfig.ts`). */
   pois:              PublicPoi[]
+  /** Impostazioni di QUESTO Reportage (mappa/statistiche/grafico/cuore/velocità), risolte da
+   *  `resolveReportExtras` — il default del Diario con sopra il suo eventuale override per
+   *  activity_id. Applicate insieme a (non al posto di) `DiaryPublicSections`: entrambe devono
+   *  essere vere perché una sezione compaia, stesso principio "il più restrittivo vince" già usato
+   *  per le altre preferenze di pubblicazione. */
+  extras:            DiaryReportExtras
 }
 
 /** Il contenuto pubblico di un Diario, senza i campi che appartengono al documento che lo
@@ -169,11 +176,12 @@ export async function buildContentFromReports(
         ? trimHomeStart(fullPolyline, privacy.home)
         : fullPolyline
       const trackPoints = (act?.track_points as TrackPoint[] | null) ?? []
+      // Le impostazioni "per ogni percorso" di questo Reportage, stesse usate dal libro privato
+      // (lib/diaryConfig.ts) — qui applicate anche al sito pubblico (vedi PublicReportPage.tsx).
+      const extras = resolveReportExtras(config, r.activity_id as string)
       // Cache-only: mai una richiesta dal vivo alle fonti esterne da una pagina pubblica
-      // (lib/publicPois.ts). Rispetta lo stesso interruttore "mappa" del libro privato
-      // (lib/diaryConfig.ts), per-Reportage.
-      const wantsMap = resolveReportExtras(config, r.activity_id as string).mappa
-      const pois = wantsMap && polyline ? await fetchCachedPois(polyline) : []
+      // (lib/publicPois.ts).
+      const pois = extras.mappa && polyline ? await fetchCachedPois(polyline) : []
       return {
         id:               r.id as string,
         title:            (r.title as string) || 'Escursione',
@@ -197,6 +205,7 @@ export async function buildContentFromReports(
         hrSeries:       buildMetricSeries(trackPoints, 'heartRateBpm'),
         speedSeriesKmh: buildMetricSeries(trackPoints, 'speedMs').map(p => ({ progress: p.progress, value: p.value * 3.6 })),
         pois,
+        extras,
       }
     })))
     .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
@@ -283,6 +292,25 @@ export async function fetchPublicDiary(token: string): Promise<PublicDiary | nul
       coverUrl: diary.cover_url, footerText: diary.footer_text,
     })
     pdfUrl = (diary.share_pdf_url as string) ?? null
+
+    // Un Diario sta su UNA SOLA Raccolta alla volta (UNIQUE(diary_id) su collection_diaries) — se
+    // quella Raccolta ha impostazioni proprie, vincono anche qui: aprire il Diario per conto suo
+    // deve mostrare la stessa cosa che si vede aprendolo dentro la Raccolta (lib/sharePublicCollection.ts),
+    // non una versione diversa a seconda del link usato.
+    const { data: link } = await supabase
+      .from('collection_diaries')
+      .select('collection_id')
+      .eq('diary_id', diary.id as string)
+      .maybeSingle()
+    if (link) {
+      const { data: coll } = await supabase
+        .from('collections')
+        .select('config')
+        .eq('id', link.collection_id as string)
+        .maybeSingle()
+      const raccoltaConfig = normalizeRaccoltaConfig(coll?.config)
+      if (raccoltaConfig) config = { ...config, publicSections: raccoltaConfig.publicSections }
+    }
   } else {
     const { data: settings, error } = await supabase
       .from('user_settings')
