@@ -26,6 +26,7 @@ import { formatDuration } from '@/lib/tcxParser'
 import { parseSections } from '@/lib/reportStore'
 import { parseInlineEmphasis } from '@/lib/guideMarkup'
 import { extractCuriosita } from '@/components/diario/chartUtils'
+import { formatPublicDate } from '@/lib/privacy/formatPublicDate'
 import { ProgressChart } from '@/components/diario/ProgressChart'
 import { StatCard } from '@/components/diario/StatCard'
 import { GREEN, BLUE } from '@/components/diario/types'
@@ -45,7 +46,14 @@ const STORY_ACCENTS = [
   { bg: '#f1f8f2', border: '#378d44', text: '#193b20' },
 ]
 
-export function PublicReportPage({ entry, n, show }: { entry: PublicDiaryEntry; n: number; show: DiaryPublicSections }) {
+export function PublicReportPage({ entry, n, show, hideExactDates = false }: {
+  entry: PublicDiaryEntry
+  n: number
+  show: DiaryPublicSections
+  /** Preferenza di privacy dell'autore (lib/sharePublicDiary.ts) — mostra solo mese/anno invece
+   *  della data esatta. Default false per i chiamanti che non hanno ancora una preferenza a monte. */
+  hideExactDates?: boolean
+}) {
   const sections = parseSections(show.racconto ? entry.content : '').map(s => {
     const { clean, quotes } = extractCuriosita(s.body)
     return { title: s.title, body: clean, quotes }
@@ -55,7 +63,7 @@ export function PublicReportPage({ entry, n, show }: { entry: PublicDiaryEntry; 
   const storyBoxes = allQuotes.slice(1)
 
   const escLabel = String(n).padStart(2, '0')
-  const dateStr = format(new Date(entry.startTime), 'd MMMM yyyy', { locale: it })
+  const dateStr = formatPublicDate(entry.startTime, hideExactDates)
   const monthYear = format(new Date(entry.startTime), 'MMMM yyyy', { locale: it })
 
   const photos = show.foto ? entry.photos : []

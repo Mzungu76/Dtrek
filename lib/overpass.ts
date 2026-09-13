@@ -56,6 +56,20 @@ export function poiHasLink(poi: PoiItem): boolean {
   return !!(poi.tags?.['wikipedia'] || poi.tags?.['website'] || poi.tags?.['url'])
 }
 
+/** URL Wikipedia da un tag `wikipedia=` in stile OSM ("it:Nome voce"), condivisa dal popup 2D/3D
+ *  qui sotto e dal sito pubblico (lib/publicPois.ts, mai una ricerca dal vivo). `lib/pois/
+ *  overpassSource.ts` e `wikidataSource.ts` scrivono anche un fallback "d:Q12345" quando è nota
+ *  solo la voce Wikidata, non un sitelink Wikipedia — "d" non è un codice lingua valido, va risolto
+ *  su wikidata.org invece che su un inesistente "d.wikipedia.org". */
+export function wikipediaUrlFromTag(tags?: Record<string, string>): string {
+  const wikiTag = tags?.['wikipedia'] ?? ''
+  if (!wikiTag) return ''
+  if (wikiTag.startsWith('d:')) return `https://www.wikidata.org/wiki/${encodeURIComponent(wikiTag.slice(2))}`
+  const wikiLang = wikiTag.includes(':') ? wikiTag.split(':')[0] : 'it'
+  const wikiSlug = wikiTag.includes(':') ? wikiTag.split(':').slice(1).join(':') : ''
+  return wikiSlug ? `https://${wikiLang}.wikipedia.org/wiki/${encodeURIComponent(wikiSlug)}` : ''
+}
+
 /** Link a una vista ravvicinata del punto dato — URL puro (nessuna chiave/API a pagamento). Da
  *  mostrare solo dove è nota una copertura plausibile (vedi
  *  lib/routeBuilder/streetViewCoverage.ts) — molti POI lungo i sentieri non ne hanno, un link
@@ -67,10 +81,7 @@ export function streetViewUrl(lat: number, lon: number): string {
 // Markup HTML del popup di un POI — condiviso tra mappa 2D (Leaflet) e 3D (MapLibre)
 export function buildPoiPopupHtml(poi: PoiItem, hasStreetView = true): string {
   const meta     = POI_META[poi.type]
-  const wikiTag  = poi.tags?.['wikipedia'] ?? ''
-  const wikiLang = wikiTag.includes(':') ? wikiTag.split(':')[0] : 'it'
-  const wikiSlug = wikiTag.includes(':') ? wikiTag.split(':').slice(1).join(':') : ''
-  const wikiUrl  = wikiSlug ? `https://${wikiLang}.wikipedia.org/wiki/${encodeURIComponent(wikiSlug)}` : ''
+  const wikiUrl  = wikipediaUrlFromTag(poi.tags)
   const desc     = poi.tags?.['description'] ?? poi.tags?.['description:it'] ?? ''
   const website  = poi.tags?.['website'] ?? poi.tags?.['url'] ?? ''
 

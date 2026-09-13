@@ -7,13 +7,15 @@
 // semplicemente non mostra POI — nessun errore, nessun ritardo percepibile.
 import { supabase } from './supabase'
 import { computeBbox } from './geoUtils'
-import type { PoiItem } from './overpass'
+import { wikipediaUrlFromTag, type PoiItem, type PoiType } from './overpass'
 
 export interface PublicPoi {
   lat:  number
   lon:  number
   name: string
-  type: string
+  type: PoiType
+  /** Dal tag `wikipedia=` già in cache (mai una ricerca dal vivo) — stringa vuota se assente. */
+  wikipediaUrl: string
 }
 
 /** Stessa normalizzazione di app/api/pois/route.ts: la chiave deve coincidere per trovare la
@@ -36,5 +38,8 @@ export async function fetchCachedPois(polyline: [number, number][]): Promise<Pub
 
   const payload = data.pois as PoiItem[] | { pois: PoiItem[] }
   const all = Array.isArray(payload) ? payload : payload.pois
-  return all.filter(p => p.name).map(p => ({ lat: p.lat, lon: p.lon, name: p.name!, type: p.type }))
+  return all.filter(p => p.name).map(p => ({
+    lat: p.lat, lon: p.lon, name: p.name!, type: p.type,
+    wikipediaUrl: wikipediaUrlFromTag(p.tags),
+  }))
 }

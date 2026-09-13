@@ -50,6 +50,7 @@ export default async function VolumeLibroPage({ params }: { params: { token: str
         totalElevationGain={volume.totalElevationGain}
         backHref={`/leggi/c/${params.token}/v/${idx + 1}`}
         backLabel="Torna ai Diari"
+        hideExactDates={volume.hideExactDates}
       />
     </div>
   )
