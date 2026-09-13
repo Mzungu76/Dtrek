@@ -8,9 +8,9 @@
 // `loading="lazy"`: il browser le scarica solo quando l'escursione entra nel viewport, e la
 // traccia è un `<path>` sopra. Nessun JavaScript, nessuna istanza da distruggere.
 //
-// La versione precedente (RouteSketch, ancora usata per le miniature) disegnava la sola traccia su
-// fondo grigio: corretta come geometria ma senza contesto geografico — «la mappa OSM non viene
-// visualizzata» era una segnalazione giusta, un percorso sospeso nel vuoto non dice dove sei.
+// La versione precedente (RouteSketch, rimossa) disegnava la sola traccia su fondo grigio:
+// corretta come geometria ma senza contesto geografico — «la mappa OSM non viene visualizzata»
+// era una segnalazione giusta, un percorso sospeso nel vuoto non dice dove sei.
 
 const TILE = 256
 const VIEW_W = 560

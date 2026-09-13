@@ -1,30 +1,24 @@
-// Il Diario come libro: Sommario più una pagina per escursione, sfogliate in orizzontale — stessa
-// idea del libro privato (app/diario/libro/[id]/page.tsx), diretta qui in orizzontale invece che
-// in verticale, e senza il motore che la scala a schermo (quello richiede JavaScript client-side,
-// che questo sito non spedisce di proposito: si apre da un link, spesso da telefono).
+// Il Diario come libro: Sommario più una pagina per escursione, in stile rivista — pari pari al
+// libro privato (components/diario/DiarioReportPage.tsx), su richiesta esplicita dell'utente dopo
+// aver visto quella schermata. Scroll VERTICALE, un documento continuo: ogni pagina ha il proprio
+// numero stampato nella barra di navigazione, il Sommario linka ogni escursione con un'ancora
+// (`#p-N`) e ci si può sempre spostare a Precedente/Successiva/Sommario/indietro.
 //
-// Ogni pagina è una `<section>` a piena larghezza in una fila che scorre in orizzontale con
-// scroll-snap CSS puro — nessuno stato, nessun JavaScript. Dentro ogni pagina lo scorrimento resta
-// verticale (un racconto lungo non deve stare per forza in un solo schermo): due assi di scroll
-// indipendenti, uno per pagina e uno per il libro, esattamente come un vero libro dove sfogli in
-// orizzontale ma leggi dall'alto in basso. Il Sommario linka ogni pagina con un'ancora (`#p-N`):
-// il browser ci salta subito, lo scroll-snap la incornicia da sola.
+// Zero JavaScript: le ancore sono `<a href="#p-N">` vere, il browser ci salta da solo. Niente
+// scroll-snap qui (era per la versione orizzontale, superata) — un documento verticale normale.
 import { Download, BookOpen, ChevronLeft, ChevronRight, ArrowLeft } from 'lucide-react'
 import { withForcedDownload } from '@/lib/storageDownloadUrl'
-import { formatDuration } from '@/lib/tcxParser'
-import { hasNarrative, type PublicDiaryEntry } from '@/lib/sharePublicDiary'
+import { type PublicDiaryEntry } from '@/lib/sharePublicDiary'
 import { computePublicDiaryStats } from '@/lib/publicDiaryStats'
 import type { DiaryPublicSections } from '@/lib/diaryConfig'
 import { MonthBarChart } from '@/components/diario/MonthBarChart'
 import { AllRoutesMap, AllRoutesLegend } from '@/app/leggi/d/[token]/AllRoutesMap'
-import { EntryArticle, EntryCard } from '@/app/leggi/d/[token]/EntryArticle'
 import { PublicPdfExport } from '@/app/leggi/d/[token]/PublicPdfExport'
-
-const BOOK_HEIGHT = 'calc(100vh - 56px)'
+import { PublicReportPage } from './PublicReportPage'
 
 function PageNav({ n, total, backHref, backLabel }: { n: number; total: number; backHref: string; backLabel: string }) {
   return (
-    <div className="sticky top-0 z-10 -mx-4 sm:-mx-5 px-4 sm:px-5 py-2.5 mb-5 bg-stone-50/95 backdrop-blur border-b border-stone-200 flex items-center justify-between gap-2">
+    <div className="sticky top-14 z-10 bg-stone-50/95 backdrop-blur border-b border-stone-200 px-4 sm:px-5 py-2.5 flex items-center justify-between gap-2">
       <a href={n > 1 ? `#p-${n - 1}` : undefined} aria-disabled={n === 1}
         className={`flex items-center gap-1 text-xs font-semibold shrink-0 ${n === 1 ? 'invisible' : 'text-stone-500 hover:text-forest-700 transition'}`}>
         <ChevronLeft className="w-3.5 h-3.5" /> Precedente
@@ -65,12 +59,11 @@ export function DiaryBook({ entries, show, title, subtitle, ownerName, dateRange
   const stats = show.statistiche ? computePublicDiaryStats(entries) : null
 
   return (
-    <div className="w-full flex overflow-x-auto bg-stone-50" style={{ height: BOOK_HEIGHT, scrollSnapType: 'x mandatory' }}>
+    <div className="bg-stone-100">
       {/* Pagina 1 — Sommario */}
-      <section id="p-1" className="w-full shrink-0 h-full overflow-y-auto" style={{ scrollSnapAlign: 'start' }}>
-        <div className="max-w-3xl mx-auto px-4 sm:px-5 pb-8">
-          <PageNav n={1} total={totalPages} backHref={backHref} backLabel={backLabel} />
-
+      <section id="p-1">
+        <PageNav n={1} total={totalPages} backHref={backHref} backLabel={backLabel} />
+        <div className="max-w-3xl mx-auto px-4 sm:px-5 py-6 pb-8">
           <h1 className="font-display text-2xl sm:text-3xl font-bold text-forest-900">{title}</h1>
           {subtitle && <p className="font-lora italic text-stone-500 mt-1">{subtitle}</p>}
           <p className="text-xs text-stone-400 mt-1">di {ownerName}{dateRangeLabel ? ` · ${dateRangeLabel}` : ''}</p>
@@ -133,14 +126,12 @@ export function DiaryBook({ entries, show, title, subtitle, ownerName, dateRange
         </div>
       </section>
 
-      {/* Una pagina per escursione */}
+      {/* Una pagina per escursione, in stile rivista */}
       {entries.map((e, i) => (
-        <section key={e.id} id={`p-${i + 2}`} className="w-full shrink-0 h-full overflow-y-auto" style={{ scrollSnapAlign: 'start' }}>
-          <div className="max-w-3xl mx-auto px-4 sm:px-5 pb-8">
-            <PageNav n={i + 2} total={totalPages} backHref={backHref} backLabel={backLabel} />
-            {hasNarrative(e.content) && show.racconto
-              ? <EntryArticle entry={e} n={i + 1} show={show} />
-              : <EntryCard entry={e} n={i + 1} />}
+        <section key={e.id} id={`p-${i + 2}`}>
+          <PageNav n={i + 2} total={totalPages} backHref={backHref} backLabel={backLabel} />
+          <div className="py-6">
+            <PublicReportPage entry={e} n={i + 1} show={show} />
           </div>
         </section>
       ))}
