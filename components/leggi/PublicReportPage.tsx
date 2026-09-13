@@ -76,11 +76,14 @@ export function PublicReportPage({ entry, n, show, hideExactDates = false }: {
   const introSection = sections[0]
   const restSections = sections.slice(1).filter(s => s.body.trim())
 
-  const showStatistiche = show.statistiche
-  const showGrafico  = show.grafici && entry.altitudeSeries.length > 1
-  const showCuore    = show.grafici && entry.hrSeries.length > 1
-  const showVelocita = show.grafici && entry.speedSeriesKmh.length > 1
-  const showMappa    = show.percorso && !!entry.polyline && entry.polyline.length > 1
+  // Entrambe devono essere vere: l'interruttore del Diario/Raccolta E quello di questo singolo
+  // Reportage (entry.extras, lib/diaryConfig.ts) — "il più restrittivo vince", stesso principio già
+  // usato per le altre preferenze di pubblicazione.
+  const showStatistiche = show.statistiche && entry.extras.statistiche
+  const showGrafico  = show.grafici && entry.extras.grafico   && entry.altitudeSeries.length > 1
+  const showCuore    = show.grafici && entry.extras.cuore     && entry.hrSeries.length > 1
+  const showVelocita = show.grafici && entry.extras.velocita  && entry.speedSeriesKmh.length > 1
+  const showMappa    = show.percorso && entry.extras.mappa && !!entry.polyline && entry.polyline.length > 1
 
   // Foto con una posizione nota lungo il percorso — per la loro mappa a sé (PhotoRouteMap.tsx), non
   // per quella del percorso/POI qui sopra: vedi il commento in cima a RouteMap.tsx sul perché sono

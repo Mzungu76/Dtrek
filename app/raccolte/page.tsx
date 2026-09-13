@@ -11,7 +11,15 @@ import { uploadDiaryCover } from '@/lib/diaryCoverUpload'
 import RaccoltaSection, { type RaccoltaSectionActions } from '@/components/raccolte/RaccoltaSection'
 import { useRowDrag } from '@/components/raccolte/useRowDrag'
 import MovePicker, { type MovePickerOption } from '@/components/raccolte/MovePicker'
+import { RaccoltaSettingsSheet, DiarioSettingsSheet, ReportageSettingsSheet } from '@/components/raccolte/SettingsSheet'
 import type { RaccoltaTreeNode } from '@/app/api/collections/tree/route'
+
+type PublishFilter = 'tutti' | 'pubblicati' | 'non-pubblicati'
+
+type SettingsSheetState =
+  | { level: 'raccolta'; id: string; title: string }
+  | { level: 'diario'; id: string; title: string }
+  | { level: 'reportage'; id: string; diarioId: string; title: string }
 
 const RACCOLTA_ROW_H = 64
 
@@ -49,6 +57,8 @@ export default function RaccolteTreePage() {
   const [diarioPublishBusyId, setDiarioPublishBusyId] = useState<string | null>(null)
   const [reportagePublishBusyId, setReportagePublishBusyId] = useState<string | null>(null)
   const [movePicker, setMovePicker] = useState<{ kind: 'diario'; diarioId: string; currentRaccoltaId: string } | { kind: 'reportage'; reportageId: string; linkedPlannedId: string; currentDiarioId: string } | null>(null)
+  const [filter, setFilter] = useState<PublishFilter>('tutti')
+  const [settingsSheet, setSettingsSheet] = useState<SettingsSheetState | null>(null)
 
   function load() {
     fetch('/api/collections/tree')
@@ -291,22 +301,59 @@ export default function RaccolteTreePage() {
     load()
   }
 
+  // Aggiornano solo lo stato locale dopo che il pannello impostazioni ha già pubblicato/revocato
+  // da sé (ha bisogno del token vero, che l'albero non tiene — vedi SettingsSheet.tsx): stessa
+  // forma delle toggleXPublish qui sopra, senza rifare la richiesta.
+  function markRaccoltaPublished(id: string, published: boolean) {
+    updateTree(t => t.map(r => r.id === id ? { ...r, isPublished: published } : r))
+  }
+  function markDiarioPublished(id: string, published: boolean) {
+    updateTree(t => t.map(r => ({ ...r, diari: r.diari.map(d => d.id === id ? { ...d, isPublished: published } : d) })))
+  }
+  function markReportagePublished(id: string, published: boolean) {
+    updateTree(t => t.map(r => ({
+      ...r,
+      diari: r.diari.map(d => ({ ...d, reportage: d.reportage.map(x => x.id === id ? { ...x, isPublished: published } : x) })),
+    })))
+  }
+
   const actions: RaccoltaSectionActions = {
     onRenameRaccolta: renameRaccolta,
     onDeleteRaccolta: deleteRaccolta,
     onOpenDetails: id => router.push(`/raccolte/${encodeURIComponent(id)}`),
+    onOpenRaccoltaSettings: (id, title) => setSettingsSheet({ level: 'raccolta', id, title }),
     onPickRaccoltaCover: pickRaccoltaCover,
     onToggleRaccoltaPublish: toggleRaccoltaPublish,
     onReorderDiari: reorderDiari,
     onRenameDiario: renameDiario,
+    onOpenDiarioSettings: (id, title) => setSettingsSheet({ level: 'diario', id, title }),
     onPickDiarioCover: pickDiarioCover,
     onMoveDiarioRequest: requestMoveDiario,
     onToggleDiarioPublish: toggleDiarioPublish,
     onRenameReportage: renameReportage,
+    onOpenReportageSettings: (id, diarioId, title) => setSettingsSheet({ level: 'reportage', id, diarioId, title }),
     onMoveReportageRequest: requestMoveReportage,
     onToggleReportagePublish: toggleReportagePublish,
     onOpenReportage: id => router.push(`/resoconto/${encodeURIComponent(id)}`),
   }
+
+  // Ogni livello filtrato per conto suo dal proprio stato di pubblicazione — una Raccolta non
+  // pubblicata sparisce da "Pubblicati" anche se contiene un Diario pubblicato al suo interno
+  // (sono pubblicazioni indipendenti, stesso principio "più restrittivo vince" del resto
+  // dell'app): filtrare un solo livello e non gli altri renderebbe il risultato incoerente.
+  const filteredTree = useMemo(() => {
+    if (!tree) return tree
+    if (filter === 'tutti') return tree
+    const want = filter === 'pubblicati'
+    return tree
+      .filter(r => r.isPublished === want)
+      .map(r => ({
+        ...r,
+        diari: r.diari
+          .filter(d => d.isPublished === want)
+          .map(d => ({ ...d, reportage: d.reportage.filter(x => x.isPublished === want) })),
+      }))
+  }, [tree, filter])
 
   const raccolteOptions: MovePickerOption[] = useMemo(() => (tree ?? []).map(r => ({ id: r.id, title: r.title })), [tree])
   const diariOptions: MovePickerOption[] = useMemo(
@@ -335,15 +382,43 @@ export default function RaccolteTreePage() {
           </button>
         </div>
 
+        <div className="flex gap-2 mb-5">
+          {([
+            ['tutti', 'Tutti'],
+            ['pubblicati', 'Pubblicati'],
+            ['non-pubblicati', 'Non pubblicati'],
+          ] as const).map(([value, label]) => (
+            <button
+              key={value}
+              onClick={() => setFilter(value)}
+              className={`px-3.5 py-1.5 rounded-full text-sm font-semibold transition-colors ${
+                filter === value ? 'bg-forest-600 text-white' : 'bg-white border border-stone-200 text-stone-600 hover:bg-stone-100'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
         {error && <p className="text-sm text-red-600 mb-3">{error}</p>}
 
         {tree === null ? (
           <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-stone-400" /></div>
         ) : tree.length === 0 ? (
           <p className="font-lora italic text-sm text-stone-400 py-10 text-center">Nessuna raccolta ancora.</p>
+        ) : filteredTree && filteredTree.length === 0 ? (
+          <p className="font-lora italic text-sm text-stone-400 py-10 text-center">
+            {filter === 'pubblicati' ? 'Nessuna raccolta pubblicata.' : 'Nessuna raccolta non pubblicata.'}
+          </p>
         ) : (
           <div onClick={() => setKebabOpenId(null)}>
-            {tree.map((raccolta, i) => (
+            {/* Il trascinamento resta ancorato agli indici di `tree` (le posizioni salvate sul
+                server), non a quelli filtrati: con un filtro attivo il riordino si disattiva
+                (grip inerte) invece di scrivere posizioni sbagliate — vedi la guardia su
+                onGripPointerDown qui sotto. */}
+            {(filteredTree ?? []).map((raccolta) => {
+              const i = tree.findIndex(r => r.id === raccolta.id)
+              return (
               <div key={raccolta.id}>
                 {raccolteDrag.dropIndex === i && raccolteDrag.dragIndex !== null && raccolteDrag.dragIndex !== i && (
                   <div className="h-[3px] mx-1 rounded-full bg-forest-500" />
@@ -361,16 +436,18 @@ export default function RaccolteTreePage() {
                   isDragging={raccolteDrag.dragIndex === i}
                   dropBefore={false}
                   deltaY={raccolteDrag.dragIndex === i ? raccolteDrag.deltaY : 0}
+                  dragEnabled={filter === 'tutti'}
                   onToggleExpand={() => setExpandedRaccolte(s => { const n = new Set(s); n.has(raccolta.id) ? n.delete(raccolta.id) : n.add(raccolta.id); return n })}
                   onToggleDiario={diarioId => setExpandedDiari(s => { const n = new Set(s); n.has(diarioId) ? n.delete(diarioId) : n.add(diarioId); return n })}
                   onToggleKebab={() => setKebabOpenId(id => id === raccolta.id ? null : raccolta.id)}
-                  onGripPointerDown={e => raccolteDrag.start(i, e)}
+                  onGripPointerDown={e => { if (filter === 'tutti') raccolteDrag.start(i, e) }}
                   onGripPointerMove={raccolteDrag.move}
                   onGripPointerUp={raccolteDrag.end}
                   actions={actions}
                 />
               </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
@@ -391,6 +468,32 @@ export default function RaccolteTreePage() {
           excludeId={movePicker.currentDiarioId}
           onClose={() => setMovePicker(null)}
           onSelect={targetId => moveReportageTo(movePicker.linkedPlannedId, targetId)}
+        />
+      )}
+
+      {settingsSheet?.level === 'raccolta' && (
+        <RaccoltaSettingsSheet
+          raccoltaId={settingsSheet.id}
+          title={settingsSheet.title}
+          onClose={() => setSettingsSheet(null)}
+          onPublishChange={published => markRaccoltaPublished(settingsSheet.id, published)}
+        />
+      )}
+      {settingsSheet?.level === 'diario' && (
+        <DiarioSettingsSheet
+          diarioId={settingsSheet.id}
+          title={settingsSheet.title}
+          onClose={() => setSettingsSheet(null)}
+          onPublishChange={published => markDiarioPublished(settingsSheet.id, published)}
+        />
+      )}
+      {settingsSheet?.level === 'reportage' && (
+        <ReportageSettingsSheet
+          activityId={settingsSheet.id}
+          diarioId={settingsSheet.diarioId}
+          title={settingsSheet.title}
+          onClose={() => setSettingsSheet(null)}
+          onPublishChange={published => markReportagePublished(settingsSheet.id, published)}
         />
       )}
     </div>
