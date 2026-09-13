@@ -8,36 +8,17 @@
 //
 // Componente server puro: nessuno stato, nessun JavaScript spedito al browser.
 
-const DEFAULT_W = 320
-const DEFAULT_H = 200
-const PAD_RATIO = 14 / 320
+const W = 320
+const H = 200
+const PAD = 14
 
-export function RouteSketch({
-  polyline, photoProgress = [], color = '#277134', className, animated = false,
-  width = DEFAULT_W, height = DEFAULT_H, markerRadius = 5, showMarkers = true,
-}: {
+export function RouteSketch({ polyline, photoProgress = [], color = '#277134' }: {
   polyline: [number, number][]
   /** Posizioni (0–1) lungo il percorso in cui sono state scattate le foto. */
   photoProgress?: number[]
   color?: string
-  /** Sfondo/angoli del riquadro — default `bg-stone-100` invariato per i chiamanti esistenti. */
-  className?: string
-  /** Il tracciato si disegna come a penna invece di apparire di colpo (solo sito pubblico
-   *  taccuino, docs/siti-pubblici-taccuino-piano.md) — default false, comportamento invariato. */
-  animated?: boolean
-  /** Dimensioni del viewBox — default 320×200 (16:9) invariato per i chiamanti esistenti. Un
-   *  riquadro compatto e quadrato (Sommario in stile taccuino, riga con icona 60×60) passa 60/60
-   *  qui invece di duplicare la proiezione lat/lon altrove. */
-  width?: number
-  height?: number
-  /** Raggio dei pallini di partenza/arrivo — 5 di default (box 320×200); un'icona piccola passa un
-   *  valore proporzionalmente più piccolo, altrimenti i pallini ne coprono il tracciato. */
-  markerRadius?: number
-  showMarkers?: boolean
 }) {
   if (polyline.length < 2) return null
-
-  const W = width, H = height, PAD = W * PAD_RATIO
 
   const lats = polyline.map(p => p[0])
   const lons = polyline.map(p => p[1])
@@ -73,29 +54,19 @@ export function RouteSketch({
     .filter(p => p >= 0 && p <= 1)
     .map(p => pts[Math.min(pts.length - 1, Math.round(p * (pts.length - 1)))])
 
-  const strokeScale = W / DEFAULT_W
-
   return (
     <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Schizzo del percorso"
-      className={`w-full h-auto block rounded-2xl ${className ?? 'bg-stone-100'} ${animated ? 'draw-path-frame' : ''}`}>
+      className="w-full h-auto block rounded-2xl bg-stone-100">
       {/* Alone chiaro sotto la traccia: la stacca dallo sfondo come sulle mappe dell'app. */}
-      <path d={d} fill="none" stroke="#ffffff" strokeWidth={6 * strokeScale} strokeLinecap="round" strokeLinejoin="round" />
-      <path d={d} fill="none" stroke={color} strokeWidth={3 * strokeScale} strokeLinecap="round" strokeLinejoin="round" />
+      <path d={d} fill="none" stroke="#ffffff" strokeWidth={6} strokeLinecap="round" strokeLinejoin="round" />
+      <path d={d} fill="none" stroke={color} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
 
-      {showMarkers && photoDots.map(([x, y], i) => (
-        <circle key={i} cx={x} cy={y} r={3.5 * strokeScale} fill="#e08d3c" stroke="#fff" strokeWidth={1.5} />
+      {photoDots.map(([x, y], i) => (
+        <circle key={i} cx={x} cy={y} r={3.5} fill="#e08d3c" stroke="#fff" strokeWidth={1.5} />
       ))}
 
-      {showMarkers && (
-        <>
-          <circle cx={sx} cy={sy} r={markerRadius} fill="#22c55e" stroke="#fff" strokeWidth={2}
-            className={animated ? 'fade-marker-in' : undefined}
-            style={animated ? { transformOrigin: `${sx}px ${sy}px`, animationDelay: '.1s' } : undefined} />
-          <circle cx={ex} cy={ey} r={markerRadius} fill="#ef4444" stroke="#fff" strokeWidth={2}
-            className={animated ? 'fade-marker-in' : undefined}
-            style={animated ? { transformOrigin: `${ex}px ${ey}px`, animationDelay: '1.5s' } : undefined} />
-        </>
-      )}
+      <circle cx={sx} cy={sy} r={5} fill="#22c55e" stroke="#fff" strokeWidth={2} />
+      <circle cx={ex} cy={ey} r={5} fill="#ef4444" stroke="#fff" strokeWidth={2} />
     </svg>
   )
 }

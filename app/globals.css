@@ -22,7 +22,6 @@ body {
 .font-mono    { font-family: var(--font-mono), monospace; }
 .font-barlow  { font-family: var(--font-barlow), sans-serif; }
 .font-lora    { font-family: var(--font-lora), serif; }
-.font-hand    { font-family: var(--font-caveat), cursive; }
 
 /* Hairline — filo sottile per separare sezioni in stile editoriale,
    alternativa ai riquadri pieni colorati */
@@ -121,24 +120,3 @@ body {
    HiddenPdfRoot.tsx resta un percorso separato, non tocca questa regola). */
 .diario-page { page: diario; }
 @page diario { size: A4; margin: 0; }
-
-/* ── Taccuino Botanico (docs/siti-pubblici-taccuino-piano.md) ──
-   Il tracciato si disegna come tracciato a penna invece di apparire di colpo — sulle miniature
-   RouteSketch (due <path> diretti figli dell'<svg>: alone bianco + traccia colorata, entrambi
-   senza stroke sull'area di sfondo quindi il selettore è sicuro) e sulle linee di ProgressChart
-   (area+linea sono <path>, i marker delle foto sono <line>/<g>, mai toccati da questo selettore). */
-@keyframes draw-path { to { stroke-dashoffset: 0; } }
-svg.draw-path-frame > path {
-  stroke-dasharray: 700;
-  stroke-dashoffset: 700;
-  animation: draw-path 1.6s cubic-bezier(.3,0,.2,1) forwards;
-}
-
-/* I marker delle foto sul grafico compaiono solo dopo che la linea ha finito di disegnarsi
-   (vedi delay calcolato in linea con la durata di draw-path sopra). */
-@keyframes fade-marker { to { opacity: 1; transform: scale(1); } }
-.fade-marker-in {
-  opacity: 0;
-  transform: scale(.3);
-  animation: fade-marker .3s ease-out forwards;
-}

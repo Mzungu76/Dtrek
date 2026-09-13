@@ -11,16 +11,12 @@ import type { AccentTheme } from './types'
  * caricato così i webfont non si caricano affatto. Referenziare qui var(--font-*) darebbe una
  * custom property non definita, quindi una dichiarazione non valida e un font peggiore di questo.
  */
-export function ProgressChart({ series, photoMarkers, accent, unit, decimals = 0, animated = false }: {
+export function ProgressChart({ series, photoMarkers, accent, unit, decimals = 0 }: {
   series: { progress: number; value: number }[]
   photoMarkers?: { progress: number; url: string }[]
   accent: AccentTheme
   unit: string
   decimals?: number
-  /** Il tracciato si disegna come a penna invece di apparire di colpo, e i marker delle foto
-   *  compaiono solo a disegno completato (docs/siti-pubblici-taccuino-piano.md) — solo per il sito
-   *  pubblico: il libro privato non lo passa, resta invariato. */
-  animated?: boolean
 }) {
   // clipPath ids must be unique across the whole document — many ProgressChart instances
   // (one per report, possibly several per report) render simultaneously in the Diario book,
@@ -41,11 +37,8 @@ export function ProgressChart({ series, photoMarkers, accent, unit, decimals = 0
   })
   const linePath = `M ${pts.map(p => p.join(',')).join(' L ')}`
   const areaPath = `${linePath} L ${pts[pts.length - 1][0]},${topPad + chartH} L ${pts[0][0]},${topPad + chartH} Z`
-  // Compaiono dopo che draw-path ha finito (1.6s, vedi app/globals.css), scaglionati di poco.
-  const markerDelayS = (i: number) => 1.7 + i * 0.15
-
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className={`w-full ${animated ? 'draw-path-frame' : ''}`} style={{ height: H }} preserveAspectRatio="none">
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none">
       <defs>
         {photoMarkers?.map((m, i) => (
           <clipPath key={i} id={`photo-clip-${uid}-${i}`}>
@@ -58,8 +51,7 @@ export function ProgressChart({ series, photoMarkers, accent, unit, decimals = 0
       {photoMarkers?.map((m, i) => {
         const x = pad + Math.min(Math.max(m.progress, 0), 1) * (W - pad * 2)
         return (
-          <g key={i} className={animated ? 'fade-marker-in' : undefined}
-            style={animated ? { transformOrigin: `${x}px 14px`, animationDelay: `${markerDelayS(i)}s` } : undefined}>
+          <g key={i}>
             <line x1={x} y1={28} x2={x} y2={topPad + chartH} stroke="#f59e0b" strokeWidth={1} strokeDasharray="2,2" opacity={0.7} />
             <image href={m.url} x={x - 13} y={1} width={26} height={26} clipPath={`url(#photo-clip-${uid}-${i})`} preserveAspectRatio="xMidYMid slice" />
             <circle cx={x} cy={14} r={13} fill="none" stroke="#f59e0b" strokeWidth={1.5} />
