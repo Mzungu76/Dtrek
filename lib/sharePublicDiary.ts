@@ -25,9 +25,10 @@
 // Diario si applicano da sole dentro una raccolta, senza essere riscritte lì.
 
 import { supabase } from './supabase'
-import { normalizeDiaryConfig, type DiaryConfig } from './diaryConfig'
+import { normalizeDiaryConfig, resolveReportExtras, type DiaryConfig } from './diaryConfig'
 import { trimHomeStart, type HomePoint } from './privacy/trimHomeStart'
 import { buildMetricSeries, type MetricPoint } from './trackSeries'
+import { fetchCachedPois, type PublicPoi } from './publicPois'
 import type { TrackPoint } from './tcxParser'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -73,6 +74,10 @@ export interface PublicDiaryEntry {
   altitudeSeries:    MetricPoint[]
   hrSeries:          MetricPoint[]
   speedSeriesKmh:    MetricPoint[]
+  /** Solo dalla cache già scritta dall'uso privato dell'app — mai una richiesta dal vivo alle
+   *  fonti esterne (lib/publicPois.ts). Vuoto se la zona non è già in cache, o se l'autore non ha
+   *  la mappa attiva per questo Reportage (`DiaryReportExtras.mappa`, `lib/diaryConfig.ts`). */
+  pois:              PublicPoi[]
 }
 
 /** Il contenuto pubblico di un Diario, senza i campi che appartengono al documento che lo
@@ -114,6 +119,7 @@ export async function buildContentFromReports(
   excluded: Set<string>,
   photoIdsByActivity: Record<string, string[]>,
   privacy: PublicPrivacyPrefs,
+  config: DiaryConfig,
 ): Promise<DiaryContent> {
   const visibleReports = reports.filter(r => !excluded.has(r.activity_id))
   const activityIds = visibleReports.map(r => r.activity_id as string).filter(Boolean)
@@ -152,8 +158,8 @@ export async function buildContentFromReports(
     list.sort((a, b) => (a.progress ?? 1) - (b.progress ?? 1))
   })
 
-  const entries: PublicDiaryEntry[] = visibleReports
-    .map(r => {
+  const entries: PublicDiaryEntry[] = (await Promise.all(visibleReports
+    .map(async r => {
       const act = actMap.get(r.activity_id as string)
       const raw = act?.route_polyline
       const fullPolyline = Array.isArray(raw) && raw.length > 1
@@ -163,6 +169,11 @@ export async function buildContentFromReports(
         ? trimHomeStart(fullPolyline, privacy.home)
         : fullPolyline
       const trackPoints = (act?.track_points as TrackPoint[] | null) ?? []
+      // Cache-only: mai una richiesta dal vivo alle fonti esterne da una pagina pubblica
+      // (lib/publicPois.ts). Rispetta lo stesso interruttore "mappa" del libro privato
+      // (lib/diaryConfig.ts), per-Reportage.
+      const wantsMap = resolveReportExtras(config, r.activity_id as string).mappa
+      const pois = wantsMap && polyline ? await fetchCachedPois(polyline) : []
       return {
         id:               r.id as string,
         title:            (r.title as string) || 'Escursione',
@@ -185,8 +196,9 @@ export async function buildContentFromReports(
         altitudeSeries: buildMetricSeries(trackPoints, 'altitudeMeters'),
         hrSeries:       buildMetricSeries(trackPoints, 'heartRateBpm'),
         speedSeriesKmh: buildMetricSeries(trackPoints, 'speedMs').map(p => ({ progress: p.progress, value: p.value * 3.6 })),
+        pois,
       }
-    })
+    })))
     .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
 
   const totalKm = entries.reduce((s, e) => s + e.distanceMeters, 0) / 1000
@@ -213,6 +225,7 @@ export async function fetchDiaryContent(
   excluded: Set<string>,
   photoIdsByActivity: Record<string, string[]>,
   privacy: PublicPrivacyPrefs,
+  config: DiaryConfig,
 ): Promise<DiaryContent> {
   // Una Meta non ha una colonna diary_id "propria" del suo Diario finché non viene camminata
   // (vedi app/api/planned/route.ts) — quindi il Diario di ogni Reportage si ricava passando dalla
@@ -242,7 +255,7 @@ export async function fetchDiaryContent(
     }
   }
 
-  return buildContentFromReports(reports, excluded, photoIdsByActivity, privacy)
+  return buildContentFromReports(reports, excluded, photoIdsByActivity, privacy, config)
 }
 
 export async function fetchPublicDiary(token: string): Promise<PublicDiary | null> {
@@ -301,7 +314,7 @@ export async function fetchPublicDiary(token: string): Promise<PublicDiary | nul
   let content: DiaryContent
   if (diary) {
     content = await fetchDiaryContent(
-      userId, diary.id as string, new Set(config.excludedActivityIds), config.photoIdsByActivity, privacy,
+      userId, diary.id as string, new Set(config.excludedActivityIds), config.photoIdsByActivity, privacy, config,
     )
   } else {
     // Vecchio Diario singolo per utente: nessuno scoping, tutti i resoconti dell'utente.
@@ -309,7 +322,7 @@ export async function fetchPublicDiary(token: string): Promise<PublicDiary | nul
       .from('hike_reports')
       .select('id, activity_id, title, content, created_at')
       .eq('user_id', userId)
-    content = await buildContentFromReports(data ?? [], new Set(config.excludedActivityIds), config.photoIdsByActivity, privacy)
+    content = await buildContentFromReports(data ?? [], new Set(config.excludedActivityIds), config.photoIdsByActivity, privacy, config)
   }
 
   return {

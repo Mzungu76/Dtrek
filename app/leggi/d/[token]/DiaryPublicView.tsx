@@ -1,45 +1,19 @@
-// Home del sito pubblico del Diario.
+// Home del sito pubblico del Diario — SOLO copertina a piena pagina. Il contenuto (numeri,
+// grafico, mappa d'insieme, indice) si è spostato sulla prima pagina del libro (Sommario,
+// components/leggi/DiaryBook.tsx), raggiunto dal pulsante "Vedi Reportage": la copertina è un
+// frontespizio, non un indice.
 //
-// Prima era una pagina sola che conteneva tutto e si scorreva all'infinito: con dieci escursioni
-// e cento foto diventava lunghissima e senza punti di riferimento. Ora è la home di un piccolo
-// sito — copertina, numeri, indice — e ogni escursione ha una pagina propria
-// (`/leggi/d/[token]/e/[n]`), raggiungibile dall'indice e con la sua navigazione.
-//
-// Resta un componente SERVER: nessuno stato, nessun JavaScript spedito al browser. Chi apre il
-// link da una chat scarica del testo e delle immagini pigre, non un runtime.
-
-import { format } from 'date-fns'
-import { it } from 'date-fns/locale'
-import { Download, Route as RouteIcon, ChevronRight, Trophy, Mountain } from 'lucide-react'
-import { withForcedDownload } from '@/lib/storageDownloadUrl'
-import { formatDuration } from '@/lib/tcxParser'
-import { hasNarrative, type PublicDiary } from '@/lib/sharePublicDiary'
-import { computePublicDiaryStats } from '@/lib/publicDiaryStats'
-import { MonthBarChart } from '@/components/diario/MonthBarChart'
+// Resta un componente SERVER: nessuno stato, nessun JavaScript spedito al browser.
+import { type PublicDiary } from '@/lib/sharePublicDiary'
 import { PublicCover } from '@/components/leggi/PublicCover'
-import { BottomGalleryStrip, BOTTOM_GALLERY_SPACER_CLASS } from '@/components/leggi/BottomGalleryStrip'
-import { AllRoutesMap, AllRoutesLegend } from './AllRoutesMap'
-import { PublicPdfExport } from './PublicPdfExport'
 import { SiteHeader, DtrekCallout, SiteFooter } from './SiteChrome'
 
-export function DiaryPublicView({ diary, token, entryBasePath, headerHomeHref, headerHomeLabel }: {
-  diary: PublicDiary
-  token: string
-  /** Dove puntano i link alle singole escursioni — `/leggi/d/[token]` di default; un Diario
-   *  annidato in una Raccolta (`app/leggi/c/[token]/v/[v]/page.tsx`) passa il proprio prefisso. */
-  entryBasePath?: string
-  /** Dove porta il logo/la voce "home" della testata — di norma questo stesso Diario, ma per un
-   *  Diario dentro una Raccolta punta all'indice della Raccolta (si "torna al cofanetto", non a
-   *  un giro su se stessi). */
-  headerHomeHref?: string
-  headerHomeLabel?: string
-}) {
+export function DiaryPublicView({ diary, token }: { diary: PublicDiary; token: string }) {
   const show = diary.config.publicSections
-  const entryBase = entryBasePath ?? `/leggi/d/${token}`
 
   return (
     <div className="min-h-screen bg-stone-50">
-      <SiteHeader homeHref={headerHomeHref ?? `/leggi/d/${token}`} homeLabel={headerHomeLabel} title={diary.config.title} current="home" />
+      <SiteHeader homeHref={`/leggi/d/${token}`} title={diary.config.title} current="home" />
 
       <PublicCover
         coverUrl={diary.config.coverUrl}
@@ -52,170 +26,13 @@ export function DiaryPublicView({ diary, token, entryBasePath, headerHomeHref, h
           { value: `${diary.totalKm.toFixed(0)} km`, label: 'percorsi' },
           { value: `${Math.round(diary.totalElevationGain).toLocaleString('it')} m`, label: 'dislivello+' },
         ] : undefined}
+        cta={{ href: `/leggi/d/${token}/libro`, label: 'Vedi Reportage' }}
       />
 
-      <main className={`max-w-4xl mx-auto px-4 sm:px-5 py-6 sm:py-8 space-y-5 ${BOTTOM_GALLERY_SPACER_CLASS}`}>
-        {/* Numeri di dettaglio: i tre totali principali sono già nelle pillole della copertina. */}
-        {show.statistiche && (() => {
-          const stats = computePublicDiaryStats(diary.entries)
-          return (
-            <section className="space-y-3">
-              {diary.entries.length > 0 && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-white rounded-2xl border border-stone-200 px-4 py-3 shadow-sm flex items-center gap-2.5">
-                    <Trophy className="w-4 h-4 text-amber-500 shrink-0" />
-                    <div className="min-w-0">
-                      <div className="font-mono text-sm font-bold text-stone-700">{stats.longestKm.toFixed(1)} km</div>
-                      <div className="text-[10px] text-stone-400 truncate">Più lunga{stats.longestTitle ? ` · ${stats.longestTitle}` : ''}</div>
-                    </div>
-                  </div>
-                  <div className="bg-white rounded-2xl border border-stone-200 px-4 py-3 shadow-sm flex items-center gap-2.5">
-                    <Mountain className="w-4 h-4 text-amber-500 shrink-0" />
-                    <div className="min-w-0">
-                      <div className="font-mono text-sm font-bold text-stone-700">{Math.round(stats.highestAlt)} m</div>
-                      <div className="text-[10px] text-stone-400 truncate">Quota max{stats.highestTitle ? ` · ${stats.highestTitle}` : ''}</div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {stats.years.length > 1 && (
-                <div className="bg-white rounded-2xl border border-stone-200 px-4 py-3.5 shadow-sm overflow-x-auto">
-                  <p className="font-barlow font-bold text-[10px] tracking-[0.2em] uppercase text-stone-400 mb-2">Anno per anno</p>
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="text-stone-400 uppercase text-[9px] tracking-wide">
-                        <th className="text-left font-semibold py-1">Anno</th>
-                        <th className="text-right font-semibold py-1">Escursioni</th>
-                        <th className="text-right font-semibold py-1">Distanza</th>
-                        <th className="text-right font-semibold py-1">Dislivello</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {stats.years.map(y => (
-                        <tr key={y.year} className="border-t border-stone-100 text-stone-600">
-                          <td className="py-1.5 font-bold text-forest-800">{y.year}</td>
-                          <td className="py-1.5 text-right">{y.count}</td>
-                          <td className="py-1.5 text-right font-mono">{y.km.toFixed(0)} km</td>
-                          <td className="py-1.5 text-right font-mono">{Math.round(y.elevGain).toLocaleString('it')} m</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {diary.entries.length > 0 && (
-                <div className="bg-white rounded-2xl border border-stone-200 px-4 py-3.5 shadow-sm">
-                  <p className="font-barlow font-bold text-[10px] tracking-[0.2em] uppercase text-stone-400 mb-2">Andamento mensile</p>
-                  <MonthBarChart activities={diary.entries} />
-                </div>
-              )}
-            </section>
-          )
-        })()}
-
-        {/* Tutti i percorsi su una mappa */}
-        {show.percorso && diary.entries.length > 0 && (
-          <section className="bg-white rounded-3xl border border-stone-200 shadow-sm p-4 sm:p-5">
-            <p className="font-barlow font-bold text-[10px] tracking-[0.2em] uppercase text-stone-400 mb-2.5">
-              Tutti i percorsi
-            </p>
-            <AllRoutesMap routes={diary.entries.map(e => ({ id: e.id, title: e.title, polyline: e.polyline ?? [] }))} />
-            <AllRoutesLegend routes={diary.entries.map(e => ({ id: e.id, title: e.title, polyline: e.polyline ?? [] }))} />
-          </section>
-        )}
-
-        {/* Indice raggruppato per anno: con più annate un elenco unico diventa un muro senza
-            riferimenti temporali, ed è la prima cosa che si cerca in un diario. Il numero
-            dell'escursione resta quello globale, così coincide con il PDF. */}
-        {Array.from(
-          diary.entries.reduce((m, e, i) => {
-            const y = new Date(e.startTime).getFullYear()
-            const list = m.get(y) ?? []
-            list.push({ e, i })
-            return m.set(y, list)
-          }, new Map<number, { e: typeof diary.entries[number]; i: number }[]>()),
-        ).sort((a, b) => b[0] - a[0]).map(([year, items]) => (
-        <section key={year} className="space-y-3">
-          <h2 className="flex items-baseline gap-3 px-1">
-            <span className="font-display text-2xl font-bold text-forest-900">{year}</span>
-            <span className="font-barlow font-bold text-[10px] tracking-[0.2em] uppercase text-stone-400">
-              {items.length} {items.length === 1 ? 'escursione' : 'escursioni'} ·{' '}
-              {(items.reduce((s, x) => s + x.e.distanceMeters, 0) / 1000).toFixed(0)} km
-            </span>
-          </h2>
-          <div className="grid sm:grid-cols-2 gap-3">
-            {items.map(({ e, i }) => {
-              const cover = show.foto ? e.photos[0] : undefined
-              return (
-                <a key={e.id} href={`${entryBase}/e/${i + 1}`}
-                  className="group bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden hover:shadow-md hover:border-stone-300 transition flex flex-col">
-                  {cover
-                    // eslint-disable-next-line @next/next/no-img-element
-                    ? <img src={cover.url} alt="" loading="lazy" decoding="async"
-                        className="w-full aspect-[16/9] object-cover bg-stone-100" />
-                    : <div className="w-full aspect-[16/9] bg-gradient-to-br from-forest-800 to-forest-950" />}
-                  <div className="p-4 flex-1 flex flex-col">
-                    <p className="font-barlow font-bold text-[9px] tracking-[0.2em] uppercase text-terra-500">
-                      #{String(i + 1).padStart(2, '0')} · {format(new Date(e.startTime), 'MMMM yyyy', { locale: it })}
-                    </p>
-                    <h3 className="font-display text-lg font-bold text-forest-900 leading-tight mt-1 group-hover:text-forest-700 transition">
-                      {e.title}
-                    </h3>
-                    <p className="font-mono text-xs text-stone-500 mt-2">
-                      {(e.distanceMeters / 1000).toFixed(1)} km · {Math.round(e.elevationGain)} m D+
-                      {e.totalTimeSeconds > 0 && ` · ${formatDuration(e.totalTimeSeconds)}`}
-                    </p>
-                    <p className="mt-auto pt-3 flex items-center gap-1 text-xs font-semibold text-forest-700">
-                      {hasNarrative(e.content) && show.racconto ? 'Leggi il racconto' : 'Vedi l’escursione'}
-                      <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-                    </p>
-                  </div>
-                </a>
-              )
-            })}
-          </div>
-        </section>
-        ))}
-        {diary.entries.length === 0 && (
-          <p className="text-sm text-stone-400 text-center py-8">Nessuna escursione pubblicata.</p>
-        )}
-
-        {/* Il PDF è un allegato: il sito si legge per intero senza scaricarlo. Quello caricato
-            dall'autore (se c'è) resta il documento curato a mano; PublicPdfExport ne genera uno
-            nuovo al volo, dal solo contenuto già pubblico, per chi non lo trova. */}
-        {diary.pdfUrl && (
-          <a href={withForcedDownload(diary.pdfUrl, 'diario-dtrek.pdf')} download
-            className="flex items-center justify-center gap-2 bg-white border border-stone-200 hover:bg-stone-50 transition text-stone-600 font-display font-bold text-sm rounded-2xl py-3.5 shadow-sm">
-            <Download className="w-4 h-4" /> Scarica il diario in PDF
-          </a>
-        )}
-        <PublicPdfExport diary={{
-          entries: diary.entries, ownerName: diary.ownerName, title: diary.config.title,
-          subtitle: diary.config.subtitle, coverUrl: diary.config.coverUrl, dateRangeLabel: diary.dateRangeLabel,
-        }} />
-
+      <main className="max-w-4xl mx-auto px-4 sm:px-5 py-6 sm:py-8 space-y-5">
         <DtrekCallout />
         <SiteFooter />
       </main>
-
-      <BottomGalleryStrip items={diary.entries.map((e, i) => ({
-        href: `${entryBase}/e/${i + 1}`,
-        title: e.title,
-        imageUrl: show.foto ? e.photos[0]?.url : undefined,
-        badge: `${(e.distanceMeters / 1000).toFixed(1)} km`,
-      }))} />
     </div>
-  )
-}
-
-/** Riepilogo compatto usato in testa alla pagina di una escursione. */
-export function EntryQuickStats({ km, dplus, seconds }: { km: number; dplus: number; seconds: number }) {
-  return (
-    <p className="font-mono text-xs text-stone-500 flex items-center gap-1.5">
-      <RouteIcon className="w-3.5 h-3.5 text-stone-300" />
-      {km.toFixed(1)} km · {Math.round(dplus)} m D+{seconds > 0 && ` · ${formatDuration(seconds)}`}
-    </p>
   )
 }

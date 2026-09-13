@@ -38,3 +38,7 @@ export function BottomGalleryStrip({ items }: {
 /** Altezza approssimativa della barra (icona 64/80px + padding + safe-area) da lasciare libera in
  *  fondo alla pagina che la monta, così l'ultimo contenuto non ci finisce dietro. */
 export const BOTTOM_GALLERY_SPACER_CLASS = 'pb-24 sm:pb-28'
+/** Stessa altezza, in px — per chi non può usare una classe di padding (PublicCover riserva lo
+ *  spazio riducendo la propria altezza invece di aggiungerne sotto, essendo lei stessa a bordo
+ *  pagina). */
+export const BOTTOM_GALLERY_HEIGHT_PX = 96

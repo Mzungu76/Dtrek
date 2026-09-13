@@ -12,7 +12,7 @@ import { bucketPhotosByChapter } from '@/lib/photoBuckets'
 import type { PublicDiaryEntry, PublicDiaryPhoto } from '@/lib/sharePublicDiary'
 import type { DiaryPublicSections } from '@/lib/diaryConfig'
 import { RouteSketch } from './RouteSketch'
-import { RouteMap } from './RouteMap'
+import { RouteMap, PoiCaption } from './RouteMap'
 import { LocatorMap } from '@/components/LocatorMap'
 import { ProgressChart } from '@/components/diario/ProgressChart'
 import { GREEN, BLUE } from '@/components/diario/types'
@@ -210,10 +210,12 @@ export function EntryArticle({ entry, n, show }: { entry: PublicDiaryEntry; n: n
               <RouteMap
               polyline={entry.polyline}
                 photoProgress={entry.photos.map(p => p.progress).filter((p): p is number => p != null)}
+                pois={entry.pois}
               />
               <p className="text-[10px] text-stone-400 text-center mt-1.5">
                 Partenza, arrivo e punti in cui sono state scattate le foto
               </p>
+              <PoiCaption pois={entry.pois} />
             </div>
             <div className="w-[104px] sm:w-[132px] shrink-0">
               <LocatorMap lat={entry.polyline[0][0]} lon={entry.polyline[0][1]} label={entry.title} />

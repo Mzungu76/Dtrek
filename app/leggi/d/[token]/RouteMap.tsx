@@ -27,9 +27,12 @@ const lat2ty = (lat: number, z: number) => {
   return ((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * 2 ** z
 }
 
-export function RouteMap({ polyline, photoProgress = [], color = '#1d5e2a' }: {
+export function RouteMap({ polyline, photoProgress = [], pois = [], color = '#1d5e2a' }: {
   polyline: [number, number][]
   photoProgress?: number[]
+  /** Punti di interesse nei dintorni, solo dalla cache (lib/publicPois.ts) — mai geolocalizzati
+   *  dal vivo per una pagina pubblica. Fuori dal riquadro vengono scartati, non tagliati a bordo. */
+  pois?: { lat: number; lon: number; name: string }[]
   color?: string
 }) {
   if (polyline.length < 2) return null
@@ -95,6 +98,12 @@ export function RouteMap({ polyline, photoProgress = [], color = '#1d5e2a' }: {
     .filter(p => p >= 0 && p <= 1)
     .map(p => pts[Math.min(pts.length - 1, Math.round(p * (pts.length - 1)))])
 
+  // Fuori dal riquadro (la cache copre l'intera bbox più larga richiesta in privato, non solo lo
+  // stretto intorno della traccia) → scartati, non un pin appiccicato al bordo.
+  const poiDots = pois
+    .map(p => ({ ...p, x: lon2tx(p.lon, zoom) * TILE - originX, y: lat2ty(p.lat, zoom) * TILE - originY }))
+    .filter(p => p.x >= 0 && p.x <= VIEW_W && p.y >= 0 && p.y <= VIEW_H)
+
   return (
     <figure className="relative w-full overflow-hidden rounded-2xl border border-stone-200 bg-stone-100"
       style={{ aspectRatio: `${VIEW_W} / ${VIEW_H}` }}>
@@ -123,6 +132,9 @@ export function RouteMap({ polyline, photoProgress = [], color = '#1d5e2a' }: {
         {photoDots.map(([x, y], i) => (
           <circle key={i} cx={x} cy={y} r={4} fill="#e08d3c" stroke="#fff" strokeWidth={1.5} />
         ))}
+        {poiDots.map((p, i) => (
+          <circle key={i} cx={p.x} cy={p.y} r={4} fill="#0284c7" stroke="#fff" strokeWidth={1.5} />
+        ))}
         <circle cx={sx} cy={sy} r={5.5} fill="#22c55e" stroke="#fff" strokeWidth={2} />
         <circle cx={ex} cy={ey} r={5.5} fill="#ef4444" stroke="#fff" strokeWidth={2} />
       </svg>
@@ -132,5 +144,17 @@ export function RouteMap({ polyline, photoProgress = [], color = '#1d5e2a' }: {
         © OpenStreetMap contributors · © CARTO
       </figcaption>
     </figure>
+  )
+}
+
+/** Nomi dei punti di interesse mostrati sui pallini blu della mappa — la mappa dice dove sono, la
+ *  didascalia dice cosa sono (un pallino da solo non porta un'etichetta leggibile a quella scala). */
+export function PoiCaption({ pois }: { pois: { name: string }[] }) {
+  if (pois.length === 0) return null
+  return (
+    <p className="text-[11px] text-stone-500 mt-1.5">
+      <span className="inline-block w-2 h-2 rounded-full bg-sky-600 mr-1.5 align-middle" />
+      Punti di interesse: {pois.map(p => p.name).join(' · ')}
+    </p>
   )
 }
