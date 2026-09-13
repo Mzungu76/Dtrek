@@ -73,7 +73,7 @@ export default async function ReportPublicPage({ params }: { params: { token: st
       <main className="max-w-3xl mx-auto px-4 sm:px-5 py-6 space-y-5">
         <p className="text-xs text-stone-500">di {report.ownerName}</p>
 
-        <PublicReportPage entry={entry} n={1} show={DEFAULT_DIARY_CONFIG.publicSections} />
+        <PublicReportPage entry={entry} n={1} show={DEFAULT_DIARY_CONFIG.publicSections} hideExactDates={report.hideExactDates} />
 
         {report.pdfUrl && (
           <a href={withForcedDownload(report.pdfUrl, 'reportage-dtrek.pdf')} download

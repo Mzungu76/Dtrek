@@ -6,15 +6,62 @@
 //
 // Zero JavaScript: le ancore sono `<a href="#p-N">` vere, il browser ci salta da solo. Niente
 // scroll-snap qui (era per la versione orizzontale, superata) — un documento verticale normale.
-import { Download, BookOpen, ChevronLeft, ChevronRight, ArrowLeft } from 'lucide-react'
+import { Download, BookOpen, ChevronLeft, ChevronRight, ArrowLeft, MapPin } from 'lucide-react'
 import { withForcedDownload } from '@/lib/storageDownloadUrl'
 import { type PublicDiaryEntry } from '@/lib/sharePublicDiary'
 import { computePublicDiaryStats } from '@/lib/publicDiaryStats'
+import { formatPublicDate } from '@/lib/privacy/formatPublicDate'
+import { excerptFromContent } from '@/lib/publicExcerpt'
 import type { DiaryPublicSections } from '@/lib/diaryConfig'
 import { MonthBarChart } from '@/components/diario/MonthBarChart'
 import { AllRoutesMap, AllRoutesLegend } from '@/app/leggi/d/[token]/AllRoutesMap'
 import { PublicPdfExport } from '@/app/leggi/d/[token]/PublicPdfExport'
 import { PublicReportPage } from './PublicReportPage'
+
+/** Traccia ridotta a un piccolo schizzo (non un mosaico di tile: una manciata di pixel non
+ *  giustifica il peso di richieste `/api/tile`), normalizzata nel riquadro `size×size`. */
+function sketchPath(polyline: [number, number][], size = 56, pad = 6): string {
+  const lats = polyline.map(p => p[0]), lons = polyline.map(p => p[1])
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats)
+  const minLon = Math.min(...lons), maxLon = Math.max(...lons)
+  const spanLat = Math.max(maxLat - minLat, 1e-6)
+  const spanLon = Math.max(maxLon - minLon, 1e-6)
+  const scale = (size - 2 * pad) / Math.max(spanLat, spanLon)
+  const offX = (size - spanLon * scale) / 2
+  const offY = (size - spanLat * scale) / 2
+  return polyline.map(([lat, lon], i) => {
+    const x = offX + (lon - minLon) * scale
+    const y = size - (offY + (lat - minLat) * scale) // la latitudine cresce verso l'alto, l'asse Y dell'SVG verso il basso
+    return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`
+  }).join(' ')
+}
+
+/** Miniatura di ogni riga del Sommario — foto di copertina, o in sua assenza uno schizzo del
+ *  percorso, o in assenza di entrambi un segnaposto generico: mai un buco vuoto nella riga. */
+function SommarioThumb({ entry, show }: { entry: PublicDiaryEntry; show: DiaryPublicSections }) {
+  const photo = show.foto ? entry.photos[0] : undefined
+  if (photo) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={photo.url} alt="" loading="lazy" decoding="async"
+        className="w-14 h-14 rounded-lg object-cover shrink-0 border border-stone-200" />
+    )
+  }
+  if (show.percorso && entry.polyline && entry.polyline.length > 1) {
+    return (
+      <div className="w-14 h-14 rounded-lg shrink-0 border border-stone-200 bg-forest-50 flex items-center justify-center">
+        <svg viewBox="0 0 56 56" width={56} height={56} role="img" aria-label="Percorso">
+          <path d={sketchPath(entry.polyline)} fill="none" stroke="#378d44" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </div>
+    )
+  }
+  return (
+    <div className="w-14 h-14 rounded-lg shrink-0 border border-stone-200 bg-stone-100 flex items-center justify-center">
+      <MapPin className="w-5 h-5 text-stone-300" />
+    </div>
+  )
+}
 
 function PageNav({ n, total, backHref, backLabel }: { n: number; total: number; backHref: string; backLabel: string }) {
   return (
@@ -40,7 +87,7 @@ function PageNav({ n, total, backHref, backLabel }: { n: number; total: number; 
   )
 }
 
-export function DiaryBook({ entries, show, title, subtitle, ownerName, dateRangeLabel, totalKm, totalElevationGain, pdfUrl, backHref, backLabel }: {
+export function DiaryBook({ entries, show, title, subtitle, ownerName, dateRangeLabel, totalKm, totalElevationGain, pdfUrl, backHref, backLabel, hideExactDates = false }: {
   entries: PublicDiaryEntry[]
   show: DiaryPublicSections
   title: string
@@ -54,6 +101,9 @@ export function DiaryBook({ entries, show, title, subtitle, ownerName, dateRange
    *  aperto il libro. */
   backHref: string
   backLabel: string
+  /** Preferenza di privacy dell'autore (lib/sharePublicDiary.ts) — solo mese/anno invece della data
+   *  esatta, nel Sommario e su ogni pagina di escursione. */
+  hideExactDates?: boolean
 }) {
   const totalPages = entries.length + 1
   const stats = show.statistiche ? computePublicDiaryStats(entries) : null
@@ -101,16 +151,28 @@ export function DiaryBook({ entries, show, title, subtitle, ownerName, dateRange
 
           <h2 className="font-display text-xl font-bold text-forest-900 mt-6 mb-3">Indice</h2>
           <div className="flex flex-col gap-1.5">
-            {entries.map((e, i) => (
-              <a key={e.id} href={`#p-${i + 2}`}
-                className="group flex items-center gap-3 bg-white rounded-xl border border-stone-200 px-4 py-3 hover:border-stone-300 hover:shadow-sm transition">
-                <span className="font-mono text-xs text-stone-400 w-14 shrink-0">Pag. {i + 2}</span>
-                <span className="flex-1 min-w-0 font-display font-bold text-forest-900 truncate">{e.title}</span>
-                <span className="font-mono text-[11px] text-stone-400 shrink-0">
-                  {(e.distanceMeters / 1000).toFixed(1)} km
-                </span>
-              </a>
-            ))}
+            {entries.map((e, i) => {
+              const dateLabel = formatPublicDate(e.startTime, hideExactDates)
+              const excerpt = show.racconto ? excerptFromContent(e.content) : ''
+              return (
+                <a key={e.id} href={`#p-${i + 2}`}
+                  className="group flex items-center gap-3 bg-white rounded-xl border border-stone-200 px-4 py-3 hover:border-stone-300 hover:shadow-sm transition">
+                  <SommarioThumb entry={e} show={show} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline gap-2">
+                      <span className="font-mono text-[10px] text-stone-400 shrink-0">Pag. {i + 2}</span>
+                      <span className="font-display font-bold text-forest-900 truncate">{e.title}</span>
+                    </div>
+                    <p className="text-[11px] text-stone-400 mt-0.5">
+                      {dateLabel}{e.distanceMeters > 0 && ` · ${(e.distanceMeters / 1000).toFixed(1)} km`}
+                    </p>
+                    {excerpt && (
+                      <p className="font-lora italic text-[12px] text-stone-500 mt-1 truncate">{excerpt}</p>
+                    )}
+                  </div>
+                </a>
+              )
+            })}
             {entries.length === 0 && (
               <p className="text-sm text-stone-400 text-center py-8">Nessuna escursione pubblicata.</p>
             )}
@@ -131,10 +193,21 @@ export function DiaryBook({ entries, show, title, subtitle, ownerName, dateRange
         <section key={e.id} id={`p-${i + 2}`}>
           <PageNav n={i + 2} total={totalPages} backHref={backHref} backLabel={backLabel} />
           <div className="py-6">
-            <PublicReportPage entry={e} n={i + 1} show={show} />
+            <PublicReportPage entry={e} n={i + 1} show={show} hideExactDates={hideExactDates} />
           </div>
         </section>
       ))}
+
+      {/* Un solo pulsante fisso per l'intero documento, non uno per pagina: `position: fixed` resta
+          ancorato al viewport indipendentemente da dove si scorre, quindi basta un'istanza — dà
+          accesso immediato al Sommario da qualunque punto del libro senza risalire pagina per
+          pagina (es. dalla 59 alla 1). */}
+      {entries.length > 0 && (
+        <a href="#p-1" title="Torna al Sommario"
+          className="fixed bottom-5 right-4 z-20 flex items-center gap-1.5 bg-forest-900 text-white text-xs font-semibold rounded-full pl-3 pr-4 py-2.5 shadow-lg hover:bg-forest-800 transition">
+          <BookOpen className="w-3.5 h-3.5" /> Sommario
+        </a>
+      )}
     </div>
   )
 }

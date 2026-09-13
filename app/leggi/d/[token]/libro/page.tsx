@@ -39,6 +39,7 @@ export default async function DiarioLibroPage({ params }: { params: { token: str
         pdfUrl={diary.pdfUrl}
         backHref={`/leggi/d/${params.token}`}
         backLabel="Torna al Diario"
+        hideExactDates={diary.hideExactDates}
       />
     </div>
   )
