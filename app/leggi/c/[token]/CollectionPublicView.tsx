@@ -1,7 +1,7 @@
-// Home del sito pubblico della Raccolta — frontespizio, prefazione, indice dei volumi.
-// docs/raccolte-pubblicazione-piano.md, Fase 3e. Stessa architettura del Diario
-// (app/leggi/d/[token]/DiaryPublicView.tsx): componente SERVER, nessuno stato, nessun JavaScript
-// spedito al browser.
+// Home del sito pubblico della Raccolta — copertina a piena pagina, prefazione, indice dei
+// volumi, galleria di miniature fissa in fondo. docs/raccolte-pubblicazione-piano.md, Fase 3e.
+// Stessa architettura del Diario (app/leggi/d/[token]/DiaryPublicView.tsx): componente SERVER,
+// nessuno stato, nessun JavaScript spedito al browser.
 //
 // A differenza della home del Diario (che elenca le escursioni direttamente, raggruppate per
 // anno), qui l'indice è dei VOLUMI: ciascuno apre la propria pagina con le sue escursioni
@@ -9,6 +9,8 @@
 // solo, lunghissimo muro di card.
 import { ChevronRight } from 'lucide-react'
 import type { PublicCollection } from '@/lib/sharePublicCollection'
+import { PublicCover } from '@/components/leggi/PublicCover'
+import { BottomGalleryStrip, BOTTOM_GALLERY_SPACER_CLASS } from '@/components/leggi/BottomGalleryStrip'
 import { SiteHeader, DtrekCallout, SiteFooter } from './SiteChrome'
 
 export function CollectionPublicView({ collection, token }: { collection: PublicCollection; token: string }) {
@@ -16,44 +18,20 @@ export function CollectionPublicView({ collection, token }: { collection: Public
     <div className="min-h-screen bg-stone-50">
       <SiteHeader token={token} collectionTitle={collection.title} current="home" />
 
-      <main className="max-w-4xl mx-auto px-4 sm:px-5 py-6 sm:py-8 space-y-5">
-        {/* Frontespizio */}
-        <section className="relative rounded-3xl overflow-hidden shadow-sm border border-stone-200">
-          <div className="relative p-8 sm:p-12 text-white"
-            style={{ background: collection.coverUrl ? undefined : 'linear-gradient(158deg,#3a2a1c 0%,#1c4724 55%,#20592b 100%)' }}>
-            {collection.coverUrl && (
-              <>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={collection.coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
-                <div className="absolute inset-0" style={{ background: 'linear-gradient(160deg, rgba(8,24,14,0.74) 0%, rgba(8,24,14,0.5) 60%, rgba(8,24,14,0.62) 100%)' }} />
-              </>
-            )}
-            <div className="relative">
-              <p className="font-barlow font-bold text-[11px] tracking-[0.25em] uppercase text-terra-300 mb-3">
-                Una Raccolta di {collection.volumes.length} {collection.volumes.length === 1 ? 'Diario' : 'Diari'}
-                {collection.dateRangeLabel && ` · ${collection.dateRangeLabel}`}
-              </p>
-              <h1 className="font-display text-3xl sm:text-5xl font-bold leading-tight">{collection.title}</h1>
-              {collection.subtitle && <p className="mt-2 font-lora italic text-white/70 text-lg">{collection.subtitle}</p>}
-              <p className="mt-5 text-sm text-white/60">di {collection.ownerName}</p>
-            </div>
-          </div>
-        </section>
+      <PublicCover
+        coverUrl={collection.coverUrl}
+        eyebrow={`Una Raccolta di ${collection.volumes.length} ${collection.volumes.length === 1 ? 'Diario' : 'Diari'}${collection.dateRangeLabel ? ` · ${collection.dateRangeLabel}` : ''}`}
+        title={collection.title}
+        subtitle={collection.subtitle}
+        ownerName={collection.ownerName}
+        pills={[
+          { value: String(collection.totalEntries), label: collection.totalEntries === 1 ? 'escursione' : 'escursioni' },
+          { value: `${collection.totalKm.toFixed(0)} km`, label: 'percorsi' },
+          { value: `${Math.round(collection.totalElevationGain).toLocaleString('it')} m`, label: 'dislivello+' },
+        ]}
+      />
 
-        {/* Numeri complessivi */}
-        <section className="grid grid-cols-3 gap-3">
-          {[
-            { value: String(collection.totalEntries), label: collection.totalEntries === 1 ? 'Escursione' : 'Escursioni' },
-            { value: `${collection.totalKm.toFixed(0)} km`, label: 'Percorsi' },
-            { value: `${Math.round(collection.totalElevationGain).toLocaleString('it')} m`, label: 'Dislivello +' },
-          ].map(s => (
-            <div key={s.label} className="bg-white rounded-2xl border border-stone-200 px-3 py-4 text-center shadow-sm">
-              <div className="font-mono text-xl sm:text-2xl font-bold text-forest-800 leading-tight">{s.value}</div>
-              <div className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider mt-1">{s.label}</div>
-            </div>
-          ))}
-        </section>
-
+      <main className={`max-w-4xl mx-auto px-4 sm:px-5 py-6 sm:py-8 space-y-5 ${BOTTOM_GALLERY_SPACER_CLASS}`}>
         {/* Prefazione */}
         {collection.preface && (
           <section className="bg-white rounded-2xl border border-stone-200 shadow-sm px-6 py-6 sm:px-8 sm:py-7">
@@ -103,6 +81,13 @@ export function CollectionPublicView({ collection, token }: { collection: Public
         <DtrekCallout />
         <SiteFooter />
       </main>
+
+      <BottomGalleryStrip items={collection.volumes.map((v, i) => ({
+        href: `/leggi/c/${token}/v/${i + 1}`,
+        title: v.title,
+        imageUrl: v.coverUrl,
+        badge: `${v.entries.length}`,
+      }))} />
     </div>
   )
 }

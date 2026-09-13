@@ -16,6 +16,8 @@ import { formatDuration } from '@/lib/tcxParser'
 import { hasNarrative, type PublicDiary } from '@/lib/sharePublicDiary'
 import { computePublicDiaryStats } from '@/lib/publicDiaryStats'
 import { MonthBarChart } from '@/components/diario/MonthBarChart'
+import { PublicCover } from '@/components/leggi/PublicCover'
+import { BottomGalleryStrip, BOTTOM_GALLERY_SPACER_CLASS } from '@/components/leggi/BottomGalleryStrip'
 import { AllRoutesMap, AllRoutesLegend } from './AllRoutesMap'
 import { PublicPdfExport } from './PublicPdfExport'
 import { SiteHeader, DtrekCallout, SiteFooter } from './SiteChrome'
@@ -39,49 +41,25 @@ export function DiaryPublicView({ diary, token, entryBasePath, headerHomeHref, h
     <div className="min-h-screen bg-stone-50">
       <SiteHeader homeHref={headerHomeHref ?? `/leggi/d/${token}`} homeLabel={headerHomeLabel} title={diary.config.title} current="home" />
 
-      <main className="max-w-4xl mx-auto px-4 sm:px-5 py-6 sm:py-8 space-y-5">
-        {/* Copertina */}
-        <section className="relative rounded-3xl overflow-hidden shadow-sm border border-stone-200">
-          <div className="relative p-8 sm:p-12 text-white"
-            style={{ background: diary.config.coverUrl ? undefined : 'linear-gradient(158deg,#193b20 0%,#1c4724 45%,#20592b 100%)' }}>
-            {diary.config.coverUrl && (
-              <>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={diary.config.coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
-                <div className="absolute inset-0" style={{ background: 'linear-gradient(160deg, rgba(8,24,14,0.74) 0%, rgba(8,24,14,0.5) 60%, rgba(8,24,14,0.62) 100%)' }} />
-              </>
-            )}
-            <div className="relative">
-              {diary.dateRangeLabel && (
-                <p className="font-barlow font-bold text-[11px] tracking-[0.25em] uppercase text-terra-300 mb-3">
-                  {diary.dateRangeLabel}
-                </p>
-              )}
-              <h1 className="font-display text-3xl sm:text-5xl font-bold leading-tight">{diary.config.title}</h1>
-              {diary.config.subtitle && <p className="mt-2 font-lora italic text-white/70 text-lg">{diary.config.subtitle}</p>}
-              <p className="mt-5 text-sm text-white/60">di {diary.ownerName}</p>
-            </div>
-          </div>
-        </section>
+      <PublicCover
+        coverUrl={diary.config.coverUrl}
+        eyebrow={diary.dateRangeLabel}
+        title={diary.config.title}
+        subtitle={diary.config.subtitle}
+        ownerName={diary.ownerName}
+        pills={show.statistiche ? [
+          { value: String(diary.entries.length), label: diary.entries.length === 1 ? 'escursione' : 'escursioni' },
+          { value: `${diary.totalKm.toFixed(0)} km`, label: 'percorsi' },
+          { value: `${Math.round(diary.totalElevationGain).toLocaleString('it')} m`, label: 'dislivello+' },
+        ] : undefined}
+      />
 
-        {/* Numeri */}
+      <main className={`max-w-4xl mx-auto px-4 sm:px-5 py-6 sm:py-8 space-y-5 ${BOTTOM_GALLERY_SPACER_CLASS}`}>
+        {/* Numeri di dettaglio: i tre totali principali sono già nelle pillole della copertina. */}
         {show.statistiche && (() => {
           const stats = computePublicDiaryStats(diary.entries)
           return (
             <section className="space-y-3">
-              <div className="grid grid-cols-3 gap-3">
-                {[
-                  { value: String(diary.entries.length), label: diary.entries.length === 1 ? 'Escursione' : 'Escursioni' },
-                  { value: `${diary.totalKm.toFixed(0)} km`, label: 'Percorsi' },
-                  { value: `${Math.round(diary.totalElevationGain).toLocaleString('it')} m`, label: 'Dislivello +' },
-                ].map(s => (
-                  <div key={s.label} className="bg-white rounded-2xl border border-stone-200 px-3 py-4 text-center shadow-sm">
-                    <div className="font-mono text-xl sm:text-2xl font-bold text-forest-800 leading-tight">{s.value}</div>
-                    <div className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider mt-1">{s.label}</div>
-                  </div>
-                ))}
-              </div>
-
               {diary.entries.length > 0 && (
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-white rounded-2xl border border-stone-200 px-4 py-3 shadow-sm flex items-center gap-2.5">
@@ -221,6 +199,13 @@ export function DiaryPublicView({ diary, token, entryBasePath, headerHomeHref, h
         <DtrekCallout />
         <SiteFooter />
       </main>
+
+      <BottomGalleryStrip items={diary.entries.map((e, i) => ({
+        href: `${entryBase}/e/${i + 1}`,
+        title: e.title,
+        imageUrl: show.foto ? e.photos[0]?.url : undefined,
+        badge: `${(e.distanceMeters / 1000).toFixed(1)} km`,
+      }))} />
     </div>
   )
 }

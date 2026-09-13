@@ -10,6 +10,8 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { fetchPublicCollection } from '@/lib/sharePublicCollection'
 import { hasNarrative } from '@/lib/sharePublicDiary'
 import { formatDuration } from '@/lib/tcxParser'
+import { PublicCover } from '@/components/leggi/PublicCover'
+import { BottomGalleryStrip, BOTTOM_GALLERY_SPACER_CLASS } from '@/components/leggi/BottomGalleryStrip'
 import { SiteHeader, DtrekCallout, SiteFooter } from '../../SiteChrome'
 import { PublicPdfExport } from '@/app/leggi/d/[token]/PublicPdfExport'
 
@@ -53,19 +55,24 @@ export default async function VolumePage({ params }: { params: { token: string; 
     <div className="min-h-screen bg-stone-50">
       <SiteHeader token={params.token} collectionTitle={collection.title} current="volume" />
 
-      <main className="max-w-4xl mx-auto px-4 sm:px-5 py-6 sm:py-8 space-y-5">
+      <PublicCover
+        coverUrl={volume.coverUrl}
+        eyebrow={`Diario ${idx + 1} di ${collection.volumes.length}${volume.dateRangeLabel ? ` · ${volume.dateRangeLabel}` : ''}`}
+        title={volume.title}
+        subtitle={volume.subtitle}
+        ownerName={collection.ownerName}
+        pills={[
+          { value: String(volume.entries.length), label: volume.entries.length === 1 ? 'escursione' : 'escursioni' },
+          { value: `${volume.totalKm.toFixed(0)} km`, label: 'percorsi' },
+          { value: `${Math.round(volume.totalElevationGain).toLocaleString('it')} m`, label: 'dislivello+' },
+        ]}
+      />
+
+      <main className={`max-w-4xl mx-auto px-4 sm:px-5 py-6 sm:py-8 space-y-5 ${BOTTOM_GALLERY_SPACER_CLASS}`}>
         <a href={`/leggi/c/${params.token}`}
           className="inline-flex items-center gap-1 text-xs font-semibold text-stone-500 hover:text-forest-700 transition">
           <ChevronLeft className="w-3.5 h-3.5" /> {collection.title}
         </a>
-
-        <div>
-          <p className="font-barlow font-bold text-[10px] tracking-[0.2em] uppercase text-terra-500">
-            Diario {idx + 1} di {collection.volumes.length}
-          </p>
-          <h1 className="font-display text-3xl font-bold text-forest-900 mt-1">{volume.title}</h1>
-          {volume.subtitle && <p className="font-lora italic text-stone-500 mt-1">{volume.subtitle}</p>}
-        </div>
 
         {Array.from(
           volume.entries.reduce((m, e, i) => {
@@ -128,6 +135,13 @@ export default async function VolumePage({ params }: { params: { token: string; 
         <DtrekCallout />
         <SiteFooter />
       </main>
+
+      <BottomGalleryStrip items={volume.entries.map((e, i) => ({
+        href: `/leggi/c/${params.token}/v/${idx + 1}/e/${i + 1}`,
+        title: e.title,
+        imageUrl: show.foto ? e.photos[0]?.url : undefined,
+        badge: `${(e.distanceMeters / 1000).toFixed(1)} km`,
+      }))} />
     </div>
   )
 }
