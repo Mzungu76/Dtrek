@@ -4,12 +4,15 @@
 // server-only delle altre pagine pubbliche (app/leggi/d|c|p/[token]) — nessuno stato, nessun
 // JavaScript spedito al browser.
 //
-// Fase 4 (docs/raccolte-pubblicazione-piano.md): il profilo diventa lo "scaffale" — la stessa
-// identità scura e immersiva di /diario in app (RouteHub), con il primo Diario pubblicato in
-// copertina a piena pagina e gli altri sotto come dorsi. `fetchPublicProfile` non espone
-// km/dislivello/conteggio per Diario (solo titolo/sottotitolo/copertina): recuperarli per ognuno
-// richiederebbe una query aggregata nuova, fuori dal perimetro sintetico di questa fase — le
-// tessere secondarie mostrano quindi solo il titolo, non le statistiche del mockup.
+// Fase 4 del piano Taccuino Botanico (docs/siti-pubblici-taccuino-piano.md): il profilo diventa lo
+// "scaffale" — la stessa identità scura e immersiva di /diario in app (RouteHub), con il primo
+// Diario pubblicato in copertina a piena pagina e gli altri sotto come dorsi. Apre sul Diario, che
+// vive nella carta del taccuino (Fase 2) — le due palette restano volutamente diverse, come per la
+// mensola e il libro in app: è il costo già accettato della direzione scelta, non un difetto di
+// questa pagina. `fetchPublicProfile` non espone km/dislivello/conteggio per Diario (solo
+// titolo/sottotitolo/copertina): recuperarli per ognuno richiederebbe una query aggregata nuova,
+// fuori dal perimetro sintetico di questa fase — le tessere secondarie mostrano quindi solo il
+// titolo, non le statistiche del mockup.
 import type { Metadata } from 'next'
 import { cache } from 'react'
 import { notFound } from 'next/navigation'
@@ -182,7 +185,7 @@ function FeaturedCover({ diary, displayName }: { diary: PublicProfileDiary; disp
 
         <div className="absolute left-0 right-0 bottom-6 flex flex-col items-center gap-1 text-white/50 group-hover:text-white/75 transition">
           <ChevronDown className="w-4 h-4" />
-          <span className="font-barlow font-bold text-[10px] tracking-[0.2em] uppercase">Apri il diario</span>
+          <span className="font-barlow font-bold text-[10px] tracking-[0.2em] uppercase">Apri il taccuino</span>
         </div>
       </div>
     </a>

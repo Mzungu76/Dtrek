@@ -9,8 +9,9 @@ import { cache } from 'react'
 import { notFound } from 'next/navigation'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { fetchPublicDiary, hasNarrative } from '@/lib/sharePublicDiary'
-import { SiteHeader, SiteFooter, DtrekCallout } from '../../SiteChrome'
+import { SiteHeader, SiteFooter, DtrekCallout, taccuinoPaperBackgroundStyle, TaccuinoSpineShadow } from '../../SiteChrome'
 import { EntryArticle, EntryCard } from '../../EntryArticle'
+import { PageProgressPill } from '@/components/leggi/PageProgressPill'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -59,12 +60,13 @@ export default async function EscursionePage({ params }: { params: { token: stri
   const show = diary.config.publicSections
 
   return (
-    <div className="min-h-screen bg-stone-50">
+    <div className="min-h-screen relative" style={taccuinoPaperBackgroundStyle()}>
+      <TaccuinoSpineShadow />
       <SiteHeader homeHref={`/leggi/d/${params.token}`} title={diary.config.title} current="escursione" />
 
-      <main className="max-w-3xl mx-auto px-4 sm:px-5 py-6 space-y-5">
+      <main className="max-w-3xl mx-auto px-4 sm:px-5 py-6 pl-[calc(1rem+34px)] sm:pl-[calc(1.25rem+34px)] pb-24 space-y-5">
         <a href={`/leggi/d/${params.token}`}
-          className="inline-flex items-center gap-1 text-xs font-semibold text-stone-500 hover:text-forest-700 transition">
+          className="inline-flex items-center gap-1 text-xs font-semibold text-[#7A6F52] hover:text-[#193b20] transition">
           <ChevronLeft className="w-3.5 h-3.5" /> Tutte le escursioni
         </a>
 
@@ -77,22 +79,22 @@ export default async function EscursionePage({ params }: { params: { token: stri
         <nav className="flex items-stretch gap-3">
           {prev !== null ? (
             <a href={`/leggi/d/${params.token}/e/${prev}`}
-              className="flex-1 min-w-0 bg-white rounded-2xl border border-stone-200 shadow-sm px-4 py-3 hover:border-stone-300 transition group">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400 flex items-center gap-1">
+              className="flex-1 min-w-0 bg-[#EBE0C8] rounded-2xl border border-[#D9C9A8] shadow-sm px-4 py-3 hover:border-[#C0603D]/50 transition group">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-[#95886A] flex items-center gap-1">
                 <ChevronLeft className="w-3 h-3" /> Precedente
               </p>
-              <p className="text-sm font-display font-bold text-forest-900 truncate mt-0.5 group-hover:text-forest-700 transition">
+              <p className="text-sm font-display font-bold text-[#193b20] truncate mt-0.5 group-hover:text-[#20592b] transition">
                 {diary.entries[prev - 1].title}
               </p>
             </a>
           ) : <div className="flex-1" />}
           {next !== null ? (
             <a href={`/leggi/d/${params.token}/e/${next}`}
-              className="flex-1 min-w-0 bg-white rounded-2xl border border-stone-200 shadow-sm px-4 py-3 text-right hover:border-stone-300 transition group">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400 flex items-center justify-end gap-1">
+              className="flex-1 min-w-0 bg-[#EBE0C8] rounded-2xl border border-[#D9C9A8] shadow-sm px-4 py-3 text-right hover:border-[#C0603D]/50 transition group">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-[#95886A] flex items-center justify-end gap-1">
                 Successiva <ChevronRight className="w-3 h-3" />
               </p>
-              <p className="text-sm font-display font-bold text-forest-900 truncate mt-0.5 group-hover:text-forest-700 transition">
+              <p className="text-sm font-display font-bold text-[#193b20] truncate mt-0.5 group-hover:text-[#20592b] transition">
                 {diary.entries[next - 1].title}
               </p>
             </a>
@@ -102,6 +104,8 @@ export default async function EscursionePage({ params }: { params: { token: stri
         <DtrekCallout />
         <SiteFooter />
       </main>
+
+      <PageProgressPill label={entry.title} current={idx + 1} total={diary.entries.length} />
     </div>
   )
 }

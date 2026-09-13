@@ -3,22 +3,27 @@
 // (app/leggi/d/[token]/DiaryPublicView.tsx): componente SERVER, nessuno stato, nessun JavaScript
 // spedito al browser.
 //
+// Direzione Taccuino Botanico (docs/siti-pubblici-taccuino-piano.md, Fase 5): stessa carta e
+// rilegatura del Diario, per coerenza con chi arriva qui da una Raccolta invece che da un link
+// diretto al volume.
+//
 // A differenza della home del Diario (che elenca le escursioni direttamente, raggruppate per
 // anno), qui l'indice è dei VOLUMI: ciascuno apre la propria pagina con le sue escursioni
 // (`/v/[vi]`) — una raccolta con molti Diari, ciascuno con molte uscite, diventerebbe altrimenti un
 // solo, lunghissimo muro di card.
 import { ChevronRight } from 'lucide-react'
 import type { PublicCollection } from '@/lib/sharePublicCollection'
-import { SiteHeader, DtrekCallout, SiteFooter } from './SiteChrome'
+import { SiteHeader, DtrekCallout, SiteFooter, taccuinoPaperBackgroundStyle, TaccuinoSpineShadow } from './SiteChrome'
 
 export function CollectionPublicView({ collection, token }: { collection: PublicCollection; token: string }) {
   return (
-    <div className="min-h-screen bg-stone-50">
+    <div className="min-h-screen relative" style={taccuinoPaperBackgroundStyle()}>
+      <TaccuinoSpineShadow />
       <SiteHeader token={token} collectionTitle={collection.title} current="home" />
 
-      <main className="max-w-4xl mx-auto px-4 sm:px-5 py-6 sm:py-8 space-y-5">
+      <main className="max-w-4xl mx-auto px-4 sm:px-5 py-6 sm:py-8 pl-[calc(1rem+34px)] sm:pl-[calc(1.25rem+34px)] space-y-5">
         {/* Frontespizio */}
-        <section className="relative rounded-3xl overflow-hidden shadow-sm border border-stone-200">
+        <section className="relative rounded-3xl overflow-hidden shadow-sm border border-[#D9C9A8]">
           <div className="relative p-8 sm:p-12 text-white"
             style={{ background: collection.coverUrl ? undefined : 'linear-gradient(158deg,#3a2a1c 0%,#1c4724 55%,#20592b 100%)' }}>
             {collection.coverUrl && (
@@ -29,7 +34,7 @@ export function CollectionPublicView({ collection, token }: { collection: Public
               </>
             )}
             <div className="relative">
-              <p className="font-barlow font-bold text-[11px] tracking-[0.25em] uppercase text-terra-300 mb-3">
+              <p className="font-barlow font-bold text-[11px] tracking-[0.25em] uppercase text-[#e9ab64] mb-3">
                 Una collana in {collection.volumes.length} {collection.volumes.length === 1 ? 'volume' : 'volumi'}
                 {collection.dateRangeLabel && ` · ${collection.dateRangeLabel}`}
               </p>
@@ -47,17 +52,17 @@ export function CollectionPublicView({ collection, token }: { collection: Public
             { value: `${collection.totalKm.toFixed(0)} km`, label: 'Percorsi' },
             { value: `${Math.round(collection.totalElevationGain).toLocaleString('it')} m`, label: 'Dislivello +' },
           ].map(s => (
-            <div key={s.label} className="bg-white rounded-2xl border border-stone-200 px-3 py-4 text-center shadow-sm">
-              <div className="font-mono text-xl sm:text-2xl font-bold text-forest-800 leading-tight">{s.value}</div>
-              <div className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider mt-1">{s.label}</div>
+            <div key={s.label} className="bg-[#EBE0C8] rounded-2xl border border-[#D9C9A8] px-3 py-4 text-center shadow-sm">
+              <div className="font-mono text-xl sm:text-2xl font-bold text-[#2E2A22] leading-tight">{s.value}</div>
+              <div className="text-[10px] font-semibold text-[#95886A] uppercase tracking-wider mt-1">{s.label}</div>
             </div>
           ))}
         </section>
 
         {/* Prefazione */}
         {collection.preface && (
-          <section className="bg-white rounded-2xl border border-stone-200 shadow-sm px-6 py-6 sm:px-8 sm:py-7">
-            <p className="font-lora text-[15px] leading-relaxed text-stone-700 whitespace-pre-line">
+          <section className="bg-[#EBE0C8] rounded-2xl border border-[#D9C9A8] shadow-sm px-6 py-6 sm:px-8 sm:py-7">
+            <p className="font-lora text-[15px] leading-relaxed text-[#4d4740] whitespace-pre-line">
               {collection.preface}
             </p>
           </section>
@@ -65,11 +70,11 @@ export function CollectionPublicView({ collection, token }: { collection: Public
 
         {/* Indice dei volumi */}
         <section className="space-y-3">
-          <h2 className="font-display text-2xl font-bold text-forest-900 px-1">I volumi</h2>
+          <h2 className="font-display text-2xl font-bold text-[#2E2A22] px-1">I volumi</h2>
           <div className="flex flex-col gap-3">
             {collection.volumes.map((v, i) => (
               <a key={v.diaryId} href={`/leggi/c/${token}/v/${i + 1}`}
-                className="group bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden hover:shadow-md hover:border-stone-300 transition flex items-stretch">
+                className="group bg-[#EBE0C8] rounded-2xl border border-[#D9C9A8] shadow-sm overflow-hidden hover:shadow-md hover:border-[#C0603D]/50 transition flex items-stretch">
                 <div className="w-20 sm:w-28 shrink-0 relative"
                   style={{ background: v.coverUrl ? undefined : 'linear-gradient(160deg,#1c4724,#0e2118)' }}>
                   {v.coverUrl && (
@@ -78,24 +83,24 @@ export function CollectionPublicView({ collection, token }: { collection: Public
                   )}
                 </div>
                 <div className="flex-1 min-w-0 p-4 flex flex-col justify-center">
-                  <p className="font-barlow font-bold text-[9px] tracking-[0.2em] uppercase text-terra-500">
+                  <p className="font-barlow font-bold text-[9px] tracking-[0.2em] uppercase text-[#C0603D]">
                     Volume {i + 1}
                   </p>
-                  <h3 className="font-display text-lg font-bold text-forest-900 leading-tight mt-0.5 group-hover:text-forest-700 transition truncate">
+                  <h3 className="font-display text-lg font-bold text-[#2E2A22] leading-tight mt-0.5 group-hover:text-[#193b20] transition truncate">
                     {v.title}
                   </h3>
-                  <p className="font-mono text-xs text-stone-500 mt-1.5">
+                  <p className="font-mono text-xs text-[#95886A] mt-1.5">
                     {v.entries.length} {v.entries.length === 1 ? 'escursione' : 'escursioni'} · {v.totalKm.toFixed(0)} km
                     {v.dateRangeLabel && ` · ${v.dateRangeLabel}`}
                   </p>
                 </div>
-                <div className="flex items-center pr-4 text-stone-300 group-hover:text-forest-500 transition">
+                <div className="flex items-center pr-4 text-[#C4BEAD] group-hover:text-[#C0603D] transition">
                   <ChevronRight className="w-5 h-5" />
                 </div>
               </a>
             ))}
             {collection.volumes.length === 0 && (
-              <p className="text-sm text-stone-400 text-center py-8">Nessun volume ancora pubblicato in questa raccolta.</p>
+              <p className="text-sm text-[#95886A] text-center py-8">Nessun volume ancora pubblicato in questa raccolta.</p>
             )}
           </div>
         </section>

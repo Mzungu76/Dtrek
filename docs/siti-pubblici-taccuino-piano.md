@@ -1,31 +1,5 @@
 # Siti pubblici del Diario — direzione Taccuino Botanico
 
-⚠️ **ABBANDONATO (settembre 2026)** — l'intero piano sotto, e tutto il codice che ne è nato,
-partiva da una premessa già superata. Il commit `73b2efa` ("restore: layout dell'app allo stato PR
-#741 (pre-taccuino)", 10 settembre) aveva riportato **tutta l'app** — `app/`, `components/`,
-`tailwind.config.ts`, `lib/designTokens.ts` — allo stile precedente (terra/forest/stone, quello di
-`lib/designTokens.ts`), per decisione esplicita dell'utente ("le nascondo, torno alla nav
-vecchia"): il "Taccuino Botanico" era morto ovunque nell'app. I mockup di questo piano
-(`docs/mockup-siti-pubblici-diario/D_*.dc.html`) sono stati creati DUE GIORNI DOPO quel ripristino,
-in una sessione che non se n'era accorta e ha riusato la vecchia direzione taccuino come se fosse
-ancora quella corrente — poi approvati e implementati (Fasi 1-8 sotto) senza che nessuno si
-accorgesse della premessa sbagliata, fino a quando l'utente l'ha segnalato direttamente vedendo lo
-stile risultante.
-
-**Tutto il codice delle Fasi 1-8** (`lib/taccuinoTokens.tsx`, la carta/vignettatura/grana, il font
-Caveat, le cornici disegnate a mano, la rilegatura, la copertina che si "apre", le righe compatte
-del Sommario) è stato rimosso e le pagine pubbliche (`app/leggi/d/[token]/*`, `app/leggi/c/
-[token]/*`) sono state riportate allo stile terra/forest/stone di `lib/designTokens.ts` — lo stesso
-già in uso nel resto dell'app — ripristinando il contenuto reale dei commit precedenti
-(`c31fcae`/`56be9ef`/`1fac994`, l'ultimo stato pre-taccuino di ciascun file) invece di riscriverlo
-da zero. Le funzionalità aggiunte durante quella fase ma indipendenti dallo stile (Numeri estesi
-con Trofeo/Quota max, grafico mensile, mappa di tutti i percorsi, export PDF, transizione
-cross-documento fra profilo e Diario) erano già presenti in quei commit pre-taccuino e sono
-rimaste. Questo documento resta solo come registro storico di cosa è stato provato e perché non va
-ripetuto — non è più una guida per lo stile dei siti pubblici.
-
----
-
 Seguito di `docs/raccolte-pubblicazione-piano.md`: il modello (Percorso=articolo, Diario=volume,
 Raccolta=collana, Profilo=indice) resta quello. Questo piano riguarda solo lo **stile** delle
 pagine pubbliche del Diario (`/leggi/d/[token]` e le sue sottopagine) — non tocca Raccolta,

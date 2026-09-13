@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next'
-import { Playfair_Display, DM_Sans, JetBrains_Mono, Barlow_Condensed, Lora } from 'next/font/google'
+import { Playfair_Display, DM_Sans, JetBrains_Mono, Barlow_Condensed, Lora, Caveat } from 'next/font/google'
 import './globals.css'
 import AppChrome from '@/components/AppChrome'
 
@@ -26,6 +26,13 @@ const barlowCondensed = Barlow_Condensed({
 const lora = Lora({
   subsets: ['latin'], style: ['normal', 'italic'], weight: ['400', '600'],
   variable: '--font-lora', display: 'swap',
+})
+// Titoli "a mano" del taccuino (lib/taccuinoTokens.tsx, FONT_HAND) — dichiarato lì da tempo ma mai
+// collegato qui finché nessuna pagina reale lo montava (docs/siti-pubblici-taccuino-piano.md,
+// Fase 8): la prima vera copertina/Sommario in stile taccuino ne ha bisogno.
+const caveat = Caveat({
+  subsets: ['latin'], weight: ['600', '700'],
+  variable: '--font-caveat', display: 'swap',
 })
 
 export const metadata: Metadata = {
@@ -65,7 +72,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="it" className={`${playfairDisplay.variable} ${dmSans.variable} ${jetBrainsMono.variable} ${barlowCondensed.variable} ${lora.variable}`}>
+    <html lang="it" className={`${playfairDisplay.variable} ${dmSans.variable} ${jetBrainsMono.variable} ${barlowCondensed.variable} ${lora.variable} ${caveat.variable}`}>
       <body className="antialiased">
         <AppChrome>{children}</AppChrome>
       </body>
