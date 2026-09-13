@@ -21,6 +21,12 @@ export interface PublicCollectionVolume extends DiaryContent {
   show:     DiaryPublicSections
 }
 
+export interface PublicCollectionSibling {
+  token:    string
+  title:    string
+  coverUrl: string | null
+}
+
 export interface PublicCollection {
   ownerName:          string
   title:              string
@@ -32,6 +38,13 @@ export interface PublicCollection {
   totalElevationGain: number
   totalEntries:       number
   dateRangeLabel?:    string
+  /** Le altre Raccolte pubblicate dallo stesso autore, questa inclusa, nello stesso ordine in cui
+   *  sono state pubblicate — permette a chi apre un link di scorrere anche alle altre, con
+   *  freccia avanti/indietro (Fase 6 del piano più ampio di pubblicazione). Non richiede un
+   *  proprio token per ciascuna: sono già tutte pubbliche per definizione (solo le Raccolte con
+   *  `share_token` finiscono qui). */
+  siblings:      PublicCollectionSibling[]
+  siblingIndex:  number
 }
 
 export async function fetchPublicCollection(token: string): Promise<PublicCollection | null> {
@@ -90,7 +103,7 @@ export async function fetchPublicCollection(token: string): Promise<PublicCollec
         coverUrl: d.cover_url, footerText: d.footer_text,
       })
       const content = await fetchDiaryContent(
-        userId, diaryId, new Set(config.excludedActivityIds), config.photoIdsByActivity, privacy,
+        userId, diaryId, new Set(config.excludedActivityIds), config.photoIdsByActivity, privacy, config,
       )
       volumes.push({
         diaryId, title: config.title, subtitle: config.subtitle,
@@ -101,6 +114,17 @@ export async function fetchPublicCollection(token: string): Promise<PublicCollec
   }
 
   const allEntries: PublicDiaryEntry[] = volumes.flatMap(v => v.entries)
+
+  const { data: siblingRows } = await supabase
+    .from('collections')
+    .select('id, title, cover_url, share_token, created_at')
+    .eq('user_id', userId)
+    .not('share_token', 'is', null)
+    .order('created_at', { ascending: true })
+  const siblings: PublicCollectionSibling[] = (siblingRows ?? []).map(r => ({
+    token: r.share_token as string, title: r.title as string, coverUrl: (r.cover_url as string) ?? null,
+  }))
+  const siblingIndex = Math.max(0, (siblingRows ?? []).findIndex(r => r.id === collection.id))
 
   return {
     ownerName:          (ownerSettings?.display_name as string) || 'Escursionista',
@@ -113,5 +137,7 @@ export async function fetchPublicCollection(token: string): Promise<PublicCollec
     totalElevationGain: volumes.reduce((s, v) => s + v.totalElevationGain, 0),
     totalEntries:       allEntries.length,
     dateRangeLabel:     combineDateRangeLabels(volumes.map(v => v.dateRangeLabel)),
+    siblings,
+    siblingIndex,
   }
 }

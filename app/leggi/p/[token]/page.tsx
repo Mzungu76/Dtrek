@@ -1,8 +1,7 @@
-// Pagina pubblica di UN Reportage — Fase 2 del piano di pubblicazione
-// (docs/raccolte-pubblicazione-piano.md): stesso stile editoriale del Diario e della Raccolta
-// (app/leggi/d/[token], app/leggi/c/[token]) invece del solo visualizzatore PDF che questa rotta
-// mostrava finora — un Reportage pubblicato è la stessa identica voce di un Diario pubblicato,
-// solo senza il Diario intorno, quindi riusa EntryArticle/EntryCard senza modifiche.
+// Pagina pubblica di UN Reportage — stesso stile a rivista del Diario e della Raccolta
+// (components/leggi/PublicReportPage.tsx) invece del solo visualizzatore PDF che questa rotta
+// mostrava in origine — un Reportage pubblicato è la stessa identica voce di un Diario pubblicato,
+// solo senza il Diario intorno.
 //
 // Il PDF non sparisce (decisione dell'utente, "manteniamo anche export PDF"): resta un allegato
 // scaricabile in fondo alla pagina se l'utente ne ha generato e allegato uno, esattamente come già
@@ -15,11 +14,10 @@ import { cache } from 'react'
 import { notFound } from 'next/navigation'
 import { Download } from 'lucide-react'
 import { fetchPublicReport } from '@/lib/sharePublicReport'
-import { hasNarrative } from '@/lib/sharePublicDiary'
 import { DEFAULT_DIARY_CONFIG } from '@/lib/diaryConfig'
 import { withForcedDownload } from '@/lib/storageDownloadUrl'
 import { DtrekCallout, SiteFooter } from '@/app/leggi/d/[token]/SiteChrome'
-import { EntryArticle, EntryCard } from '@/app/leggi/d/[token]/EntryArticle'
+import { PublicReportPage } from '@/components/leggi/PublicReportPage'
 import { PublicPdfExport } from '@/app/leggi/d/[token]/PublicPdfExport'
 import { DTREK_URL } from '@/lib/publicSite'
 
@@ -75,9 +73,7 @@ export default async function ReportPublicPage({ params }: { params: { token: st
       <main className="max-w-3xl mx-auto px-4 sm:px-5 py-6 space-y-5">
         <p className="text-xs text-stone-500">di {report.ownerName}</p>
 
-        {hasNarrative(entry.content)
-          ? <EntryArticle entry={entry} n={1} show={DEFAULT_DIARY_CONFIG.publicSections} />
-          : <EntryCard entry={entry} n={1} />}
+        <PublicReportPage entry={entry} n={1} show={DEFAULT_DIARY_CONFIG.publicSections} />
 
         {report.pdfUrl && (
           <a href={withForcedDownload(report.pdfUrl, 'reportage-dtrek.pdf')} download

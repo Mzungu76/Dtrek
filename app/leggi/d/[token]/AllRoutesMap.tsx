@@ -74,7 +74,7 @@ export function AllRoutesMap({ routes }: { routes: AtlasRoute[] }) {
       style={{ aspectRatio: `${VIEW_W} / ${VIEW_H}` }}>
       {tiles.map(t => (
         // eslint-disable-next-line @next/next/no-img-element
-        <img key={t.key} src={`/api/tile?z=${zoom}&x=${t.x}&y=${t.y}&style=voyager`} alt=""
+        <img key={t.key} src={`/api/tile?z=${zoom}&x=${t.x}&y=${t.y}&style=light`} alt=""
           loading="lazy" decoding="async" aria-hidden="true"
           style={{
             position: 'absolute',
@@ -103,7 +103,7 @@ export function AllRoutesMap({ routes }: { routes: AtlasRoute[] }) {
       </svg>
 
       <figcaption className="absolute bottom-0 right-0 bg-white/75 text-stone-500 text-[9px] leading-none px-1.5 py-1 rounded-tl">
-        © OpenStreetMap contributors · © CARTO
+        © OpenStreetMap contributors
       </figcaption>
     </figure>
   )

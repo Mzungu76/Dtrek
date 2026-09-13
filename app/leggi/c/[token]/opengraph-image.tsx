@@ -21,7 +21,7 @@ export default async function OgImage({ params }: { params: { token: string } })
   }
 
   const stats = [
-    { v: String(collection.volumes.length), l: collection.volumes.length === 1 ? 'VOLUME' : 'VOLUMI' },
+    { v: String(collection.volumes.length), l: collection.volumes.length === 1 ? 'DIARIO' : 'DIARI' },
     { v: `${collection.totalKm.toFixed(0)} km`, l: 'PERCORSI' },
     { v: `${Math.round(collection.totalElevationGain).toLocaleString('it')} m`, l: 'DISLIVELLO' },
   ]

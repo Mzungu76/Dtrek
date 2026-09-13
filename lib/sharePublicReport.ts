@@ -6,6 +6,7 @@
 // voce dentro un Diario pubblicato, solo senza il Diario intorno.
 import { supabase } from './supabase'
 import { buildContentFromReports, type PublicDiaryEntry, type PublicPrivacyPrefs, type RawHikeReport } from './sharePublicDiary'
+import { DEFAULT_DIARY_CONFIG } from './diaryConfig'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -52,8 +53,9 @@ export async function fetchPublicReport(token: string): Promise<PublicReport | n
     created_at: report.created_at as string,
   }
   // Nessuna esclusione né selezione foto: un Reportage pubblicato da solo non ha un Diario/una
-  // Raccolta a monte che ne curi la scelta — mostra tutto quello che ha.
-  const content = await buildContentFromReports([rawReport], new Set(), {}, privacy)
+  // Raccolta a monte che ne curi la scelta — mostra tutto quello che ha, con gli extra di default
+  // (mappa/grafici) perché non ha nemmeno un `DiaryConfig` proprio da cui leggere un'eccezione.
+  const content = await buildContentFromReports([rawReport], new Set(), {}, privacy, DEFAULT_DIARY_CONFIG)
   const entry = content.entries[0]
   if (!entry) return null
 
