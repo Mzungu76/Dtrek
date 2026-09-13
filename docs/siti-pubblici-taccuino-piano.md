@@ -1,5 +1,15 @@
 # Siti pubblici del Diario — direzione Taccuino Botanico
 
+⚠️ **Nota (settembre 2026) — scelta deliberata, diversa dallo stile dell'app privata.** L'app
+privata è tornata il 10 settembre allo stile pre-taccuino (terra/forest/stone,
+`lib/designTokens.ts`, commit `73b2efa`). I mockup di questo piano sono stati fatti due giorni
+dopo senza saperlo, e per un momento questo documento è stato marcato come abbandonato per lo
+stesso motivo — salvo poi scoprire, chiedendo direttamente, che l'utente vuole comunque questa
+direzione per i SOLI siti pubblici (`/leggi/*`), come identità propria e distinta dall'app privata
+che li genera: non un errore da correggere, una scelta di prodotto confermata due volte. Non
+riportare queste pagine allo stile editoriale di `lib/designTokens.ts` senza una richiesta
+esplicita e altrettanto diretta in tal senso.
+
 Seguito di `docs/raccolte-pubblicazione-piano.md`: il modello (Percorso=articolo, Diario=volume,
 Raccolta=collana, Profilo=indice) resta quello. Questo piano riguarda solo lo **stile** delle
 pagine pubbliche del Diario (`/leggi/d/[token]` e le sue sottopagine) — non tocca Raccolta,
