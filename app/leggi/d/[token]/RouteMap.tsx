@@ -11,6 +11,11 @@
 // La versione precedente (RouteSketch, rimossa) disegnava la sola traccia su fondo grigio:
 // corretta come geometria ma senza contesto geografico — «la mappa OSM non viene visualizzata»
 // era una segnalazione giusta, un percorso sospeso nel vuoto non dice dove sei.
+//
+// Le foto scattate lungo il percorso NON sono qui: hanno una mappa a sé, PhotoRouteMap.tsx, stesso
+// principio della sezione "Foto sulla mappa" dell'app (mappa separata da quella di "Andamento") —
+// un'unica mappa con percorso, POI e foto insieme sarebbe troppo affollata da leggere a colpo
+// d'occhio su un telefono.
 
 import { POI_META, type PoiType } from '@/lib/overpass'
 
@@ -29,9 +34,8 @@ const lat2ty = (lat: number, z: number) => {
   return ((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * 2 ** z
 }
 
-export function RouteMap({ polyline, photoProgress = [], pois = [], color = '#1d5e2a' }: {
+export function RouteMap({ polyline, pois = [], color = '#1d5e2a' }: {
   polyline: [number, number][]
-  photoProgress?: number[]
   /** Punti di interesse nei dintorni, solo dalla cache (lib/publicPois.ts) — mai geolocalizzati
    *  dal vivo per una pagina pubblica. Fuori dal riquadro vengono scartati, non tagliati a bordo. */
   pois?: { lat: number; lon: number; name: string; type: PoiType; wikipediaUrl: string }[]
@@ -96,9 +100,6 @@ export function RouteMap({ polyline, photoProgress = [], pois = [], color = '#1d
 
   const [sx, sy] = pts[0]
   const [ex, ey] = pts[pts.length - 1]
-  const photoDots = photoProgress
-    .filter(p => p >= 0 && p <= 1)
-    .map(p => pts[Math.min(pts.length - 1, Math.round(p * (pts.length - 1)))])
 
   // Fuori dal riquadro (la cache copre l'intera bbox più larga richiesta in privato, non solo lo
   // stretto intorno della traccia) → scartati, non un pin appiccicato al bordo.
@@ -131,9 +132,6 @@ export function RouteMap({ polyline, photoProgress = [], pois = [], color = '#1d
         <path d={d} fill="none" stroke="#ffffff" strokeWidth={7} strokeLinecap="round" strokeLinejoin="round" opacity={0.9} />
         <path d={d} fill="none" stroke={color} strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round" />
 
-        {photoDots.map(([x, y], i) => (
-          <circle key={i} cx={x} cy={y} r={4} fill="#e08d3c" stroke="#fff" strokeWidth={1.5} />
-        ))}
         {poiDots.map((p, i) => {
           const meta = POI_META[p.type]
           const marker = (

@@ -10,7 +10,8 @@
 // Tre differenze deliberate rispetto all'originale, tutte concordate:
 //  1. Nessun controllo di modifica (Personalizza/Escludi/scelta foto): quei pulsanti nel privato
 //     sono già opzionali (props assenti = niente pulsante), qui semplicemente non esistono.
-//  2. La mappa del percorso è quella statica del sito pubblico (RouteMap.tsx: tile OpenStreetMap
+//  2. Le mappe sono quelle statiche del sito pubblico (RouteMap.tsx per percorso e POI,
+//     PhotoRouteMap.tsx per le foto — due mappe distinte, non una sola affollata: tile OpenStreetMap
 //     vere, stile "light" cioè gli stessi tile osm.org che Leaflet userebbe, + traccia SVG, zero
 //     JavaScript) invece del Leaflet del libro — che comunque, in lettura, non è interattivo
 //     nemmeno lì (`mapsInteractive=false`): stessa resa a schermo, senza spedire un runtime di
@@ -34,6 +35,7 @@ import { LocatorMap } from '@/components/LocatorMap'
 import type { PublicDiaryEntry } from '@/lib/sharePublicDiary'
 import type { DiaryPublicSections } from '@/lib/diaryConfig'
 import { RouteMap, PoiCaption } from '@/app/leggi/d/[token]/RouteMap'
+import { PhotoRouteMap } from '@/app/leggi/d/[token]/PhotoRouteMap'
 
 function renderInline(text: string) {
   return parseInlineEmphasis(text).map((seg, k) =>
@@ -80,7 +82,13 @@ export function PublicReportPage({ entry, n, show, hideExactDates = false }: {
   const showVelocita = show.grafici && entry.speedSeriesKmh.length > 1
   const showMappa    = show.percorso && !!entry.polyline && entry.polyline.length > 1
 
-  const photoMarkers = photos.map(p => p.progress).filter((p): p is number => p != null)
+  // Foto con una posizione nota lungo il percorso — per la loro mappa a sé (PhotoRouteMap.tsx), non
+  // per quella del percorso/POI qui sopra: vedi il commento in cima a RouteMap.tsx sul perché sono
+  // due mappe distinte invece di una sola più affollata.
+  const photosWithProgress = photos
+    .filter((p): p is typeof p & { progress: number } => p.progress != null)
+    .map(p => ({ url: p.url, progress: p.progress }))
+  const showFotoMappa = showMappa && photosWithProgress.length > 0
 
   return (
     <article id={`esc-${n}`} className="w-full bg-white scroll-mt-14">
@@ -284,9 +292,17 @@ export function PublicReportPage({ entry, n, show, hideExactDates = false }: {
             <div className="float-right w-20 ml-2.5 mb-1.5">
               <LocatorMap eager lat={entry.polyline![0][0]} lon={entry.polyline![0][1]} label={entry.title} />
             </div>
-            <RouteMap polyline={entry.polyline!} photoProgress={photoMarkers} pois={entry.pois} />
+            <RouteMap polyline={entry.polyline!} pois={entry.pois} />
             <div className="clear-both" />
             <PoiCaption pois={entry.pois} />
+          </div>
+        )}
+
+        {/* Mappa a sé per le foto (mai insieme a percorso/POI: vedi RouteMap.tsx) */}
+        {showFotoMappa && (
+          <div className="mb-5">
+            <p className="font-display font-bold text-forest-900 text-lg mb-3">Foto lungo il percorso</p>
+            <PhotoRouteMap polyline={entry.polyline!} photos={photosWithProgress} idPrefix={`esc-${n}`} />
           </div>
         )}
 
