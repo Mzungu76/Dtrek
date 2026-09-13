@@ -31,7 +31,7 @@ export async function generateMetadata(
   const idx = parseIndex(params.vi)
   const collection = idx === null ? null : await getCollection(params.token)
   const volume = collection && idx !== null ? collection.volumes[idx] : undefined
-  if (!volume) return { title: 'Volume non trovato · DTrek' }
+  if (!volume) return { title: 'Diario non trovato · DTrek' }
 
   return {
     title: `${volume.title} · ${collection!.title} · DTrek`,
@@ -61,7 +61,7 @@ export default async function VolumePage({ params }: { params: { token: string; 
 
         <div>
           <p className="font-barlow font-bold text-[10px] tracking-[0.2em] uppercase text-terra-500">
-            Volume {idx + 1} di {collection.volumes.length}
+            Diario {idx + 1} di {collection.volumes.length}
           </p>
           <h1 className="font-display text-3xl font-bold text-forest-900 mt-1">{volume.title}</h1>
           {volume.subtitle && <p className="font-lora italic text-stone-500 mt-1">{volume.subtitle}</p>}
@@ -117,7 +117,7 @@ export default async function VolumePage({ params }: { params: { token: string; 
         </section>
         ))}
         {volume.entries.length === 0 && (
-          <p className="text-sm text-stone-400 text-center py-8">Nessuna escursione pubblicata in questo volume.</p>
+          <p className="text-sm text-stone-400 text-center py-8">Nessuna escursione pubblicata in questo Diario.</p>
         )}
 
         <PublicPdfExport diary={{

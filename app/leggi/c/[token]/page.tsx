@@ -21,7 +21,7 @@ export async function generateMetadata({ params }: { params: { token: string } }
 
   const title = `${collection.title} · DTrek`
   const desc = collection.totalEntries > 0
-    ? `${collection.volumes.length} volumi · ${collection.totalEntries} escursioni · ${collection.totalKm.toFixed(0)} km · di ${collection.ownerName}`
+    ? `${collection.volumes.length} Diari · ${collection.totalEntries} escursioni · ${collection.totalKm.toFixed(0)} km · di ${collection.ownerName}`
     : `Una raccolta di Diari di ${collection.ownerName}`
 
   return {

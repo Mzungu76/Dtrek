@@ -30,7 +30,7 @@ export function CollectionPublicView({ collection, token }: { collection: Public
             )}
             <div className="relative">
               <p className="font-barlow font-bold text-[11px] tracking-[0.25em] uppercase text-terra-300 mb-3">
-                Una collana in {collection.volumes.length} {collection.volumes.length === 1 ? 'volume' : 'volumi'}
+                Una Raccolta di {collection.volumes.length} {collection.volumes.length === 1 ? 'Diario' : 'Diari'}
                 {collection.dateRangeLabel && ` · ${collection.dateRangeLabel}`}
               </p>
               <h1 className="font-display text-3xl sm:text-5xl font-bold leading-tight">{collection.title}</h1>
@@ -65,7 +65,7 @@ export function CollectionPublicView({ collection, token }: { collection: Public
 
         {/* Indice dei volumi */}
         <section className="space-y-3">
-          <h2 className="font-display text-2xl font-bold text-forest-900 px-1">I volumi</h2>
+          <h2 className="font-display text-2xl font-bold text-forest-900 px-1">I Diari</h2>
           <div className="flex flex-col gap-3">
             {collection.volumes.map((v, i) => (
               <a key={v.diaryId} href={`/leggi/c/${token}/v/${i + 1}`}
@@ -79,7 +79,7 @@ export function CollectionPublicView({ collection, token }: { collection: Public
                 </div>
                 <div className="flex-1 min-w-0 p-4 flex flex-col justify-center">
                   <p className="font-barlow font-bold text-[9px] tracking-[0.2em] uppercase text-terra-500">
-                    Volume {i + 1}
+                    Diario {i + 1}
                   </p>
                   <h3 className="font-display text-lg font-bold text-forest-900 leading-tight mt-0.5 group-hover:text-forest-700 transition truncate">
                     {v.title}
@@ -95,7 +95,7 @@ export function CollectionPublicView({ collection, token }: { collection: Public
               </a>
             ))}
             {collection.volumes.length === 0 && (
-              <p className="text-sm text-stone-400 text-center py-8">Nessun volume ancora pubblicato in questa raccolta.</p>
+              <p className="text-sm text-stone-400 text-center py-8">Nessun Diario ancora pubblicato in questa Raccolta.</p>
             )}
           </div>
         </section>
