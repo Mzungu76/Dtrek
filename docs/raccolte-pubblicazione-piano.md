@@ -301,6 +301,40 @@ di privacy dell'utente, non un difetto tecnico da correggere.
 La decisione 3 (limite volumi) resta anticipata in `normalizeDiaryOrder` con un tetto di 20, più
 basso della sola paginazione proposta nel piano — da rivedere se stretto.
 
+### Fase 4 (settembre 2026): un solo link, sempre
+
+Richiesta esplicita dell'utente: mai più di un link condivisibile per volta. Fino a qui ogni
+livello restava pubblicabile con un link a sé (Diario/Reportage/Raccolta, ciascuno col proprio
+token) — la Fase "Pre-pubblicazione" aveva già spostato il profilo (`/u/[slug]`) al centro come
+link principale, ma i link diretti per singolo contenuto restavano comunque visibili, in più
+punti dell'app, come opzione secondaria. Qui vengono tolti del tutto: pubblicare un contenuto
+significa solo farlo comparire sul proprio sito, non genera più un indirizzo da copiare a parte.
+
+- **`lib/requireActiveProfile.ts`** (nuovo): `hasActiveProfile(userId)` — vero solo con
+  `profile_slug` scelto E `profile_enabled = true`. Chiamato prima di ogni mint di un nuovo
+  `share_token` (mai su un token già esistente, né su una revoca) in `PATCH
+  /api/diaries/[id]/token`, `PATCH /api/collections/[id]/token`, `PATCH /api/share-report`, `POST
+  /api/collections/publish-batch` — 409 con lo stesso messaggio (`PROFILE_REQUIRED_ERROR`) se il
+  sito non è ancora attivo. Un Diario/Reportage/Raccolta non può avere un link proprio prima che
+  l'utente abbia scelto e attivato il suo unico indirizzo.
+- **`lib/hooks/useProfileStatus.ts`** + **`components/PublishGateNotice.tsx`** (nuovi): il gate
+  gemello lato client — letto da ogni pannello di pubblicazione per disabilitare in anticipo il
+  pulsante "Pubblica" e mostrare l'invito ad attivare il sito, invece di far fallire la richiesta.
+- **Tolti "Apri"/"Copia link" per il singolo contenuto** in tutte le superfici che li mostravano:
+  `components/raccolte/SettingsSheet.tsx` (`PublishBlock`, condiviso da Raccolta/Diario/Reportage
+  nell'albero di `/raccolte`), `components/resoconto/ReportReader.tsx` (pannello "Pubblica" del
+  Reportage), `app/raccolte/[id]/page.tsx` (composizione di una Raccolta), `app/diario/libro/
+  [id]/page.tsx` (menù "Condividi / pubblica" del libro), e la sezione "Oppure condividi una
+  singola Raccolta" di `app/raccolte/pubblica/page.tsx`. Al posto del link: un badge "Pubblicato
+  sul tuo sito" e un pulsante "Rimuovi dal sito" (la revoca — mai gated, sempre disponibile).
+- **`share_token` non sparisce dal database**: le pagine `/leggi/d|c|p/[token]` restano
+  esattamente come sono (il profilo le apre da lì), il token resta la chiave con cui `/u/[slug]`
+  le trova — cambia solo che l'utente non lo vede più né lo copia mai come indirizzo a sé.
+- Il link pubblico "attività singola" di `components/ShareModal.tsx` (`/s/[token]`, scheda
+  immagine da condividere sui social) resta fuori da questa fase: non fa parte del modello
+  Diario/Reportage/Raccolta/Profilo, è una funzione diversa (esportare una card statistica), non
+  un secondo modo di pubblicare lo stesso contenuto editoriale.
+
 Per PR 3: migration `add_publish_privacy_settings.sql` (eseguita in produzione) —
 `user_settings.publish_hide_home_starts`/`publish_hide_exact_dates`. `lib/privacy/trimHomeStart.ts`
 e `lib/privacy/formatPublicDate.ts`, puri e testati. `lib/sharePublicDiary.ts` e

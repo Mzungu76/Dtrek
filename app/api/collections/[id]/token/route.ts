@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { getUserFromRequest } from '@/lib/supabaseAuth'
+import { hasActiveProfile, PROFILE_REQUIRED_ERROR } from '@/lib/requireActiveProfile'
 
 export const dynamic = 'force-dynamic'
 
@@ -44,6 +45,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       .maybeSingle()
     if (fetchErr) throw fetchErr
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+    const alreadyPublished = !!existing.share_token
+    if (!alreadyPublished && !(await hasActiveProfile(user.id))) {
+      return NextResponse.json({ error: PROFILE_REQUIRED_ERROR }, { status: 409 })
+    }
 
     const token = (existing.share_token as string | null) ?? crypto.randomUUID()
 

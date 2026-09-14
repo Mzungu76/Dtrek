@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { getUserFromRequest } from '@/lib/supabaseAuth'
 import { planPublishBatch, type MarkedCollectionRow } from '@/lib/raccolte/planPublishBatch'
+import { hasActiveProfile, PROFILE_REQUIRED_ERROR } from '@/lib/requireActiveProfile'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,6 +32,10 @@ export async function POST(req: NextRequest) {
 
     const titleById = new Map((rows ?? []).map(r => [r.id as string, r.title as string]))
     const plan = planPublishBatch((rows ?? []) as MarkedCollectionRow[])
+
+    if (plan.toPublish.length > 0 && !(await hasActiveProfile(user.id))) {
+      return NextResponse.json({ error: PROFILE_REQUIRED_ERROR }, { status: 409 })
+    }
 
     const newTokenById = new Map(plan.toPublish.map(id => [id, crypto.randomUUID()]))
     if (plan.toPublish.length > 0) {

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
-  ArrowLeft, BarChart3, BookText, Camera, ChevronDown, ChevronRight, Copy, ExternalLink,
+  ArrowLeft, BarChart3, BookText, Camera, ChevronDown, ChevronRight,
   LineChart, Loader2, Map, Share2,
 } from 'lucide-react'
 import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
@@ -37,7 +37,6 @@ export default function PrePubblicazionePage() {
   const [publishing, setPublishing] = useState(false)
   const [publishError, setPublishError] = useState<string | null>(null)
   const [results, setResults] = useState<Record<string, string>>({}) // collectionId -> shareToken, dopo "Pubblica tutto"
-  const [copiedId, setCopiedId] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/collections/marked-for-publish')
@@ -64,13 +63,6 @@ export default function PrePubblicazionePage() {
     } finally {
       setPublishing(false)
     }
-  }
-
-  async function copyLink(token: string, id: string) {
-    const url = `${window.location.origin}/leggi/c/${token}`
-    await navigator.clipboard.writeText(url)
-    setCopiedId(id)
-    setTimeout(() => setCopiedId(null), 2000)
   }
 
   const totalReportage = (collections ?? []).reduce((s, c) => s + c.totalEntries, 0)
@@ -219,37 +211,6 @@ export default function PrePubblicazionePage() {
                 {publishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />}
                 {publishedCount === collections.length ? 'Pubblicate' : 'Pubblica tutto'}
               </button>
-
-              {/* Link diretti per singola Raccolta — un dettaglio secondario per chi vuole
-                  condividerne una sola invece del sito intero, non l'azione principale di questa
-                  pagina (quella è "Il tuo sito" qui sopra). */}
-              <div className="pt-3 mt-3 border-t border-stone-100">
-                <p className="text-[11px] text-stone-400 mb-1.5">Oppure condividi una singola Raccolta:</p>
-                <div className="flex flex-col divide-y divide-stone-100">
-                  {collections.map(c => {
-                    const token = shareTokenFor(c)
-                    return (
-                      <div key={c.id} className="flex items-center gap-2 py-1.5">
-                        <span className="text-xs text-stone-500 flex-1 truncate">{c.title}</span>
-                        {token ? (
-                          <>
-                            <a href={`/leggi/c/${token}`} target="_blank" rel="noopener noreferrer" title="Apri la raccolta online"
-                              className="text-stone-300 hover:text-forest-600 p-1 -m-1 transition-colors">
-                              <ExternalLink className="w-3 h-3" />
-                            </a>
-                            <button onClick={() => copyLink(token, c.id)} title="Copia link" className="text-stone-300 hover:text-forest-600 p-1 -m-1 transition-colors">
-                              <Copy className="w-3 h-3" />
-                            </button>
-                            {copiedId === c.id && <span className="text-[10px] text-forest-600 font-semibold">Copiato!</span>}
-                          </>
-                        ) : (
-                          <span className="text-[11px] text-stone-300">non ancora pubblicata</span>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
             </div>
             )}
           </>
