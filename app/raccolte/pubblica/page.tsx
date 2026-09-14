@@ -93,13 +93,19 @@ export default function PrePubblicazionePage() {
 
         {collections === null ? (
           <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-stone-400" /></div>
-        ) : collections.length === 0 ? (
-          <div className="py-10 text-center">
-            <p className="text-sm text-stone-400 mb-3">Nessuna Raccolta marcata come pubblicabile.</p>
-            <Link href="/raccolte" className="text-sm font-semibold text-forest-600 hover:text-forest-700">Torna a Raccolte</Link>
-          </div>
         ) : (
           <>
+            {/* Niente di marcato — "Il tuo sito" e Privacy restano comunque visibili qui sotto:
+                gestire il proprio sito (indirizzo, attivazione) non dipende dall'avere qualcosa di
+                nuovo da pubblicare in questo momento. */}
+            {collections.length === 0 && (
+              <p className="text-sm text-stone-400 mb-8">
+                Nessuna Raccolta marcata come pubblicabile al momento — <Link href="/raccolte" className="font-semibold text-forest-600 hover:text-forest-700">torna a Raccolte</Link> per marcarne una col pulsante &quot;Pubblica&quot;.
+              </p>
+            )}
+
+            {collections.length > 0 && (
+            <>
             <p className="font-barlow text-xs tracking-wide text-stone-400 mb-4">
               {collections.length} {collections.length === 1 ? 'raccolta' : 'raccolte'} · {totalReportage} reportage
             </p>
@@ -175,6 +181,8 @@ export default function PrePubblicazionePage() {
             <p className="text-xs text-stone-400 mb-6">
               Le cinque iconcine sono un riepilogo di cosa mostra ogni Diario — si accendono e spengono dal suo menù nell&apos;elenco Raccolte, non da qui.
             </p>
+            </>
+            )}
 
             <div className="rounded-2xl bg-white border border-stone-200 shadow-sm p-4 mb-6">
               <Kicker>Privacy</Kicker>
@@ -185,15 +193,18 @@ export default function PrePubblicazionePage() {
             {/* Un solo link personale che resta sempre lo stesso — non uno per Raccolta: quello che
                 pubblichi qui sotto con "Pubblica tutto" compare qui, l'utente lo trova sempre allo
                 stesso indirizzo anche quando in futuro pubblica dell'altro. Componente riusato
-                identico da /profilo/impostazioni — stessa identità, non una versione a parte. */}
+                identico da /profilo/impostazioni — stessa identità, non una versione a parte.
+                Sempre visibile, anche senza nulla di marcato: gestire il sito non dipende da
+                questo — è il pulsante "Il tuo sito" di /raccolte che porta qui apposta. */}
             <div className="mb-6">
               <Kicker className="mb-2.5">Il tuo sito</Kicker>
               <p className="text-xs text-stone-400 mb-3">
-                Un indirizzo fisso, sempre lo stesso: le Raccolte che pubblichi qui sotto compaiono lì, insieme a tutto quello che pubblichi in futuro.
+                Un indirizzo fisso, sempre lo stesso: quello che pubblichi compare lì, insieme a tutto quello che pubblichi in futuro.
               </p>
               <SectionProfiloPubblico />
             </div>
 
+            {collections.length > 0 && (
             <div className="rounded-2xl bg-white border border-stone-200 shadow-sm p-4">
               <Kicker>Pubblicazione</Kicker>
               <p className="text-xs text-stone-400 mb-3">
@@ -240,6 +251,7 @@ export default function PrePubblicazionePage() {
                 </div>
               </div>
             </div>
+            )}
           </>
         )}
       </div>

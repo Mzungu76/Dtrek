@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, ArrowRight, Loader2, Plus } from 'lucide-react'
+import { ArrowLeft, ArrowRight, ExternalLink, Loader2, Plus } from 'lucide-react'
 import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import { uploadCollectionCover } from '@/lib/collectionCoverUpload'
@@ -59,6 +59,17 @@ export default function RaccolteTreePage() {
   const [movePicker, setMovePicker] = useState<{ kind: 'diario'; diarioId: string; currentRaccoltaId: string } | { kind: 'reportage'; reportageId: string; linkedPlannedId: string; currentDiarioId: string } | null>(null)
   const [filter, setFilter] = useState<PublishFilter>('tutti')
   const [settingsSheet, setSettingsSheet] = useState<SettingsSheetState | null>(null)
+  // Per il pulsante "Il tuo sito" in fondo — sempre presente, non solo quando c'è qualcosa di
+  // marcato: serve anche solo ad aprire il sito già pubblicato, o a scoprire che va ancora creato.
+  const [profileSlug, setProfileSlug] = useState<string | null>(null)
+  const [profileEnabled, setProfileEnabled] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/user-settings/profile')
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(String(r.status))))
+      .then(d => { setProfileSlug(d.slug ?? null); setProfileEnabled(!!d.enabled) })
+      .catch(() => {})
+  }, [])
 
   function load() {
     fetch('/api/collections/tree')
@@ -362,16 +373,15 @@ export default function RaccolteTreePage() {
     [tree],
   )
 
-  // Mostra la barra "Procedi alla pubblicazione" solo quando c'è qualcosa da portare in revisione
-  // — nessuna barra permanente per niente da fare. Non si azzera da sé alla pubblicazione (vedi
-  // supabase/migrations/add_collections_marked_for_publish.sql): resta finché l'utente non smarca
-  // la Raccolta col pulsante "Pubblica" in elenco.
+  // Non si azzera da sé alla pubblicazione (vedi supabase/migrations/add_collections_marked_for_
+  // publish.sql): resta finché l'utente non smarca la Raccolta col pulsante "Pubblica" in elenco.
   const hasMarkedForPublish = (tree ?? []).some(r => r.markedForPublish)
+  const hasPublicSite = profileEnabled && !!profileSlug
 
   return (
     <div className={`min-h-screen bg-stone-50 ${MOBILE_TOPBAR_SPACER}`}>
       <Navbar mobileNavPosition="bottom" />
-      <div className={`max-w-2xl mx-auto px-4 sm:px-8 md:pb-16 ${hasMarkedForPublish ? 'pb-[calc(env(safe-area-inset-bottom,0px)+144px)]' : 'pb-[calc(env(safe-area-inset-bottom,0px)+80px)]'}`}>
+      <div className="max-w-2xl mx-auto px-4 sm:px-8 pb-[calc(env(safe-area-inset-bottom,0px)+144px)] md:pb-16">
         <Link href="/diario" className="inline-flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-700 mt-3 mb-5 transition-colors">
           <ArrowLeft className="w-3.5 h-3.5" /> Diari
         </Link>
@@ -505,22 +515,33 @@ export default function RaccolteTreePage() {
       )}
 
       {/* Barra fissa sopra il menù di navigazione — non scorre con l'albero (è `fixed`, non parte
-          del flusso della pagina), sempre a vista mentre c'è qualcosa di marcato da rivedere. Su
-          mobile `bottom` è l'altezza reale della barra di navigazione (h-14 = 56px + il suo stesso
-          safe-area-inset-bottom, vedi MobileNavBar in components/Navbar.tsx: cambia lì, cambia
-          anche qui) — su desktop non c'è una barra sotto cui stare (Navbar è in alto, DesktopNav),
-          quindi solo un margine dal fondo. */}
-      {hasMarkedForPublish && (
-        <div className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom,0px)+56px)] md:bottom-6 z-40 flex justify-center px-4 pt-2.5 pb-2.5 md:pt-0 md:pb-0 bg-stone-50/95 md:bg-transparent backdrop-blur-sm md:backdrop-blur-none border-t md:border-0 border-stone-200">
+          del flusso della pagina) — SEMPRE presente, non solo quando c'è qualcosa di marcato: è
+          anche il modo di aprire il proprio sito già pubblicato, o di scoprire che va ancora
+          creato. Su mobile `bottom` è l'altezza reale della barra di navigazione (h-14 = 56px + il
+          suo stesso safe-area-inset-bottom, vedi MobileNavBar in components/Navbar.tsx: cambia lì,
+          cambia anche qui) — su desktop non c'è una barra sotto cui stare (Navbar è in alto,
+          DesktopNav), quindi solo un margine dal fondo. */}
+      <div className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom,0px)+56px)] md:bottom-6 z-40 flex justify-center px-4 pt-2.5 pb-2.5 md:pt-0 md:pb-0 bg-stone-50/95 md:bg-transparent backdrop-blur-sm md:backdrop-blur-none border-t md:border-0 border-stone-200">
+        <div className="w-full max-w-2xl flex items-center gap-2">
           <button
             onClick={() => router.push('/raccolte/pubblica')}
-            className="w-full max-w-2xl flex items-center justify-center gap-2 bg-forest-600 hover:bg-forest-700 text-white text-sm font-semibold px-4 py-3 rounded-xl transition-colors shadow-lg"
+            className={`flex-1 flex items-center justify-center gap-2 text-sm font-semibold px-4 py-3 rounded-xl transition-colors shadow-lg ${
+              hasMarkedForPublish ? 'bg-forest-600 hover:bg-forest-700 text-white' : 'bg-white hover:bg-stone-50 text-stone-700 border border-stone-200'
+            }`}
           >
-            Procedi alla pubblicazione
+            {hasMarkedForPublish ? 'Procedi alla pubblicazione' : 'Il tuo sito'}
             <ArrowRight className="w-4 h-4" />
           </button>
+          {hasPublicSite && (
+            <a
+              href={`/u/${profileSlug}`} target="_blank" rel="noopener noreferrer" title="Apri il tuo sito"
+              className="shrink-0 flex items-center justify-center w-12 h-12 rounded-xl bg-white border border-stone-200 text-stone-500 hover:text-forest-600 hover:border-forest-300 transition-colors shadow-lg"
+            >
+              <ExternalLink className="w-4 h-4" />
+            </a>
+          )}
         </div>
-      )}
+      </div>
     </div>
   )
 }
