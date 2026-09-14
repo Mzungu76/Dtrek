@@ -1,4 +1,4 @@
-// Profilo pubblico di un utente — Fase 3 del piano di pubblicazione
+// Il sito personale di un utente — Fase 3 del piano di pubblicazione
 // (docs/raccolte-pubblicazione-piano.md): non un quarto documento, l'INDICE di ciò che l'utente ha
 // già reso pubblico ai tre livelli esistenti (Raccolta/Diario/Reportage). Stessa architettura
 // server-only delle altre pagine pubbliche (app/leggi/d|c|p/[token]) — nessuno stato, nessun
@@ -20,7 +20,7 @@ const getProfile = cache(fetchPublicProfile)
 
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
   const profile = await getProfile(params.slug)
-  if (!profile) return { title: 'Profilo non trovato · DTrek' }
+  if (!profile) return { title: 'Sito non trovato · DTrek' }
 
   const total = profile.collections.length + profile.diaries.length + profile.reports.length
   return {
@@ -46,11 +46,11 @@ export default async function PublicProfilePage({ params }: { params: { slug: st
 
   return (
     <div className="min-h-screen bg-stone-50">
-      <SiteHeader homeHref={`/u/${params.slug}`} homeLabel="Profilo" title={profile.displayName} current="home" />
+      <SiteHeader homeHref={`/u/${params.slug}`} homeLabel="Sito" title={profile.displayName} current="home" />
 
       <PublicCover
         coverUrl={coverUrl}
-        eyebrow="Profilo pubblico"
+        eyebrow="Sito personale"
         title={profile.displayName}
         pills={pills}
       />

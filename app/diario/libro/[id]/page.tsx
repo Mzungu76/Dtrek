@@ -4,6 +4,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { MobileNavBar } from '@/components/Navbar'
 import { PublishPrivacyToggles } from '@/components/PublishPrivacyToggles'
+import { PublishGateNotice } from '@/components/PublishGateNotice'
+import { useProfileStatus } from '@/lib/hooks/useProfileStatus'
 import { RailButton } from '@/components/routehub/SideRails'
 import { getAllActivities, getActivityById, computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
 import { fetchActivityPhotos, type RoutePhoto } from '@/lib/activityPhotos'
@@ -13,7 +15,7 @@ import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import type { TrackPoint } from '@/lib/tcxParser'
 import {
-  FileDown, Share2, Copy, Link2Off, ExternalLink,
+  FileDown, Share2, Link2Off,
   Loader2, Image as ImageIcon, BarChart2, X, Pencil,
   Lock, LockOpen, Eye, EyeOff, Archive, RotateCcw, RefreshCw, AlertTriangle,
 } from 'lucide-react'
@@ -123,7 +125,7 @@ export default function DiarioLibroPage() {
   const [linkPublishing, setLinkPublishing] = useState(false)
   const [publishError, setPublishError] = useState<string | null>(null)
   const [publishProgress, setPublishProgress] = useState<{ done: number; total: number } | null>(null)
-  const [copyOk,       setCopyOk]       = useState(false)
+  const profileStatus = useProfileStatus()
   const [coverUploading, setCoverUploading] = useState(false)
   const [coverError,   setCoverError]   = useState<string | null>(null)
 
@@ -955,20 +957,14 @@ export default function DiarioLibroPage() {
 
               {/* Il link è ora indipendente dal PDF: la pagina pubblica legge il contenuto dal
                   database, quindi condividere costa una richiesta da poche centinaia di byte
-                  invece di un upload da decine di MB che su rete mobile si pianta. */}
+                  invece di un upload da decine di MB che su rete mobile si pianta. Nessun link a
+                  sé da copiare qui: pubblicare significa comparire sul sito personale
+                  (/u/[slug], vedi SectionProfiloPubblico) — l'unico indirizzo condivisibile. */}
               {diaryToken ? (
                 <div className="space-y-1.5">
-                  <a href={`/leggi/d/${diaryToken}`} target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 text-xs font-barlow font-bold uppercase tracking-wide transition-colors">
-                    <ExternalLink className="w-3.5 h-3.5" /> Apri il diario
-                  </a>
-                  <button onClick={async () => {
-                    await navigator.clipboard.writeText(`${window.location.origin}/leggi/d/${diaryToken}`)
-                    setCopyOk(true); setTimeout(() => setCopyOk(false), 2000)
-                  }}
-                    className="w-full flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forest-600 text-white text-xs font-barlow font-bold uppercase tracking-wide hover:bg-forest-700 transition-colors">
-                    <Copy className="w-3.5 h-3.5" /> {copyOk ? 'Copiato!' : 'Copia link'}
-                  </button>
+                  <p className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forest-50 text-forest-700 text-xs font-barlow font-bold uppercase tracking-wide">
+                    <Share2 className="w-3.5 h-3.5" /> Pubblicato sul tuo sito
+                  </p>
 
                   {/* Cosa mostrare sul sito. Il PDF non è più un'azione a sé: lo aggiorna
                       l'esportazione del Diario, che è l'unico posto dove il documento si genera. */}
@@ -1008,15 +1004,17 @@ export default function DiarioLibroPage() {
 
                   <button onClick={handleRevokeLink}
                     className="w-full flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 text-red-400 text-xs hover:bg-red-50 transition-colors">
-                    <Link2Off className="w-3.5 h-3.5" /> Rimuovi link
+                    <Link2Off className="w-3.5 h-3.5" /> Rimuovi dal sito
                   </button>
                 </div>
+              ) : profileStatus && !profileStatus.enabled ? (
+                <PublishGateNotice />
               ) : (
                 <>
                   <p className="text-[10px] text-stone-400 leading-snug">
-                    Crea una pagina pubblica del diario, leggibile da telefono senza scaricare nulla.
+                    Rendi questo diario visibile sul tuo sito pubblico.
                   </p>
-                  <button onClick={publishLink} disabled={linkPublishing || loading}
+                  <button onClick={publishLink} disabled={linkPublishing || loading || !profileStatus}
                     className="w-full flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forest-600 text-white text-xs font-barlow font-bold uppercase tracking-wide hover:bg-forest-700 disabled:opacity-50 transition-colors">
                     {linkPublishing ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Pubblicazione…</> : <><Share2 className="w-3.5 h-3.5" /> Pubblica online</>}
                   </button>

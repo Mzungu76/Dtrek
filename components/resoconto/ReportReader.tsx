@@ -50,6 +50,8 @@ import { PrintPhotoGrid } from '@/app/resoconto/[id]/PrintPhotoGrid'
 // html2canvas per via delle sue dipendenze. Statico finiva nel bundle di /resoconto — la rotta più
 // pesante dell'app — anche per chi apre un resoconto senza mai esportarlo.
 import { PublishPrivacyToggles } from '@/components/PublishPrivacyToggles'
+import { PublishGateNotice } from '@/components/PublishGateNotice'
+import { useProfileStatus } from '@/lib/hooks/useProfileStatus'
 import ReportHero from './ReportHero'
 import ReportStatsStrip from './ReportStatsStrip'
 import PhotoShowcase from './PhotoShowcase'
@@ -58,7 +60,7 @@ import StickyRouteMap from './StickyRouteMap'
 import { pickBestCoverPhoto } from '@/lib/activityPhotos'
 import { REPORT_SECTION_STYLE, REPORT_SECTION_TITLE, narrativeStyleFor, type ReportFixedSectionKey } from './sectionStyle'
 import {
-  Pencil, Loader2, BookOpen, Share2, Copy, Link2Off, ExternalLink,
+  Pencil, Loader2, BookOpen, Share2, Link2Off, ExternalLink,
   Layers, RefreshCw, Heart, Zap, Flame, Download,
 } from 'lucide-react'
 
@@ -152,6 +154,7 @@ export default function ReportReader({
   const router = useRouter()
   const searchParams = useSearchParams()
   const id = activity.id
+  const profileStatus = useProfileStatus()
 
   const [report,      setReport]      = useState<HikeReport | null>(null)
   const [content,     setContent]     = useState('')
@@ -174,7 +177,6 @@ export default function ReportReader({
   // DTREK-AUDIT.md P2 #32 — token opaco per il link pubblico, non l'activityId in chiaro.
   const [shareToken,    setShareToken]    = useState<string | null>(null)
   const [showPublish,   setShowPublish]   = useState(false)
-  const [copyOk,        setCopyOk]        = useState(false)
   const [publishing,    setPublishing]    = useState(false)
   const [downloadingPdf, setDownloadingPdf] = useState(false)
   const [publishError,  setPublishError]  = useState<string | null>(null)
@@ -981,22 +983,9 @@ export default function ReportReader({
                       <div className="flex items-center gap-3 flex-wrap">
                         {shareToken ? (
                           <>
-                            {/* DTREK-AUDIT.md P2 #32 — link per token opaco, non per activityId in
-                                chiaro; /leggi/r resta solo come fallback per il breve intervallo
-                                prima che il token arrivi dal PATCH/GET. */}
-                            <a href={`/leggi/p/${encodeURIComponent(shareToken)}`} target="_blank" rel="noopener noreferrer"
-                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 text-xs font-display font-bold uppercase tracking-wide transition-colors">
-                              <ExternalLink className="w-3.5 h-3.5" /> Apri la pagina
-                            </a>
-                            <button
-                              onClick={async () => {
-                                const viewerUrl = `${window.location.origin}/leggi/p/${encodeURIComponent(shareToken)}`
-                                await navigator.clipboard.writeText(viewerUrl)
-                                setCopyOk(true); setTimeout(() => setCopyOk(false), 2000)
-                              }}
-                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forest-600 text-white text-xs font-display font-bold uppercase tracking-wide hover:bg-forest-700 transition-colors">
-                              <Copy className="w-3.5 h-3.5" /> {copyOk ? 'Copiato!' : 'Copia link'}
-                            </button>
+                            <p className="flex items-center gap-1.5 text-xs font-display font-bold uppercase tracking-wide text-forest-700">
+                              <Share2 className="w-3.5 h-3.5" /> Pubblicato sul tuo sito
+                            </p>
                             {sharePdfUrl ? (
                               <a href={withForcedDownload(sharePdfUrl)} target="_blank" rel="noopener noreferrer" download
                                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 text-stone-500 text-xs font-display font-bold uppercase tracking-wide hover:bg-stone-50 transition-colors">
@@ -1013,11 +1002,13 @@ export default function ReportReader({
                               <Link2Off className="w-3.5 h-3.5" /> Disattiva
                             </button>
                           </>
+                        ) : profileStatus && !profileStatus.enabled ? (
+                          <PublishGateNotice />
                         ) : (
                           <>
                             <p className="text-xs text-stone-500 italic">Pubblica una pagina web di questo reportage, leggibile da telefono senza scaricare nulla.</p>
                             {publishError && <p className="text-xs text-red-500">{publishError}</p>}
-                            <button disabled={publishingPage} onClick={publishPage}
+                            <button disabled={publishingPage || !profileStatus} onClick={publishPage}
                               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forest-600 text-white text-xs font-display font-bold uppercase tracking-wide hover:bg-forest-700 disabled:opacity-50 transition-colors">
                               {publishingPage ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Pubblicazione…</> : <><Share2 className="w-3.5 h-3.5" /> Pubblica</>}
                             </button>

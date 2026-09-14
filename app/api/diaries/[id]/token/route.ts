@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { getUserFromRequest } from '@/lib/supabaseAuth'
+import { hasActiveProfile, PROFILE_REQUIRED_ERROR } from '@/lib/requireActiveProfile'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,6 +52,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (fetchErr) throw fetchErr
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
+    const alreadyPublished = !!existing.share_token
+    if (!alreadyPublished && !(await hasActiveProfile(user.id))) {
+      return NextResponse.json({ error: PROFILE_REQUIRED_ERROR }, { status: 409 })
+    }
+
     const token = (existing.share_token as string | null) ?? crypto.randomUUID()
     const pdfUrl = touchesPdf
       ? (body.diaryPdfUrl ?? null)
@@ -72,7 +78,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 }
 
 // DELETE /api/diaries/[id]/token → revoca il link pubblico di questo Diario: cancella il PDF dallo
-// Storage (percorso dedicato, vedi lib/pdfUpload.ts) e ruota lo share_token.
+// Storage (percorso dedicato, vedi lib/pdfUpload.ts) e azzera share_token. Deve essere `null`, non
+// un token ruotato: la policy RLS pubblica e ogni aggregazione (fetchPublicProfile,
+// fetchPublicCollection) filtrano su `share_token IS NOT NULL` — un token ruotato resta non-null e
+// il Diario continua a comparire sul sito (con un indirizzo nuovo che nessuno conosce), invece di
+// sparire davvero. Ripubblicare (PATCH) ne genera uno nuovo da zero, non c'è bisogno di tenerne uno
+// "di scorta" qui.
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const user = await getUserFromRequest(req)
@@ -85,7 +96,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
 
     const { error } = await supabase
       .from('diaries')
-      .update({ share_pdf_url: null, share_token: crypto.randomUUID(), updated_at: new Date().toISOString() })
+      .update({ share_pdf_url: null, share_token: null, updated_at: new Date().toISOString() })
       .eq('id', params.id)
       .eq('user_id', user.id)
     if (error) throw error

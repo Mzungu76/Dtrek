@@ -5,7 +5,7 @@ import { normalizeSlug, validateSlug } from '@/lib/profileSlug'
 
 export const dynamic = 'force-dynamic'
 
-// Profilo pubblico (/u/[slug]) — route a sé invece di infilarla nel monolite di
+// Il sito personale dell'utente (/u/[slug]) — route a sé invece di infilarla nel monolite di
 // app/api/user-settings/route.ts, per lo stesso motivo già documentato per /api/user-settings/
 // privacy: quel file esiste per il caso "colonna non ancora migrata" (ritenta togliendo i campi
 // mancanti), qui l'errore atteso è diverso e non deve essere confuso con quello — uno slug già
@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
 
 // PATCH /api/user-settings/profile { slug?: string, enabled?: boolean } — un campo alla volta.
 // `enabled: true` senza uno slug già scelto (né passato in questa stessa chiamata) è rifiutato:
-// non ha senso un profilo pubblico raggiungibile da nessun indirizzo.
+// non ha senso un sito raggiungibile da nessun indirizzo.
 export async function PATCH(req: NextRequest) {
   try {
     const user = await getUserFromRequest(req)
@@ -63,7 +63,7 @@ export async function PATCH(req: NextRequest) {
         const { data: existing } = await supabase
           .from('user_settings').select('profile_slug').eq('user_id', user.id).maybeSingle()
         if (!existing?.profile_slug) {
-          return NextResponse.json({ error: 'Scegli prima un indirizzo per il tuo profilo' }, { status: 400 })
+          return NextResponse.json({ error: 'Scegli prima un indirizzo per il tuo sito' }, { status: 400 })
         }
       }
       patch.profile_enabled = body.enabled

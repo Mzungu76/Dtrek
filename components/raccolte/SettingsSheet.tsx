@@ -13,8 +13,10 @@
 //    SOLO per lui, in aggiunta (non al posto di) alle impostazioni del Diario/Raccolta — "il più
 //    restrittivo vince", vedi components/leggi/PublicReportPage.tsx.
 import { useEffect, useState } from 'react'
-import { X, Copy, ExternalLink, Link2Off, Loader2, Share2 } from 'lucide-react'
+import { X, Link2Off, Loader2, Share2 } from 'lucide-react'
 import { PublishPrivacyToggles } from '@/components/PublishPrivacyToggles'
+import { PublishGateNotice } from '@/components/PublishGateNotice'
+import { useProfileStatus } from '@/lib/hooks/useProfileStatus'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import {
   DEFAULT_DIARY_CONFIG, resolveReportExtras,
@@ -49,21 +51,21 @@ function SheetShell({ title, onClose, children }: { title: string; onClose: () =
   )
 }
 
-/** Blocco pubblica/copia/revoca — stesso contratto UX ovunque nell'app (garantisci un token con
- *  PATCH, ruotalo/rimuovilo con DELETE), qui parametrizzato sulle 3 rotte diverse invece di
- *  duplicare il blocco 3 volte. */
-function PublishBlock({ token, publicPathPrefix, publishLabel, publishDescription, onPublish, onRevoke }: {
+/** Blocco pubblica/revoca — stesso contratto UX ovunque nell'app (garantisci un token con PATCH,
+ *  ruotalo/rimuovilo con DELETE), qui parametrizzato sulle 3 rotte diverse invece di duplicare il
+ *  blocco 3 volte. Un solo link possibile in tutta l'app (/u/[slug]): questo pannello dice solo se
+ *  il contenuto compare o no sul sito pubblico, non espone né fa copiare un indirizzo a sé — vedi
+ *  lib/requireActiveProfile.ts per il gate gemello lato server. */
+function PublishBlock({ token, publishLabel, publishDescription, onPublish, onRevoke }: {
   token: string | null
-  publicPathPrefix: string
   publishLabel: string
   publishDescription: string
   onPublish: () => Promise<void>
   onRevoke: () => Promise<void>
 }) {
   const [busy, setBusy] = useState(false)
-  const [copyOk, setCopyOk] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const publicUrl = token && typeof window !== 'undefined' ? `${window.location.origin}${publicPathPrefix}${token}` : ''
+  const profileStatus = useProfileStatus()
 
   async function run(fn: () => Promise<void>) {
     setBusy(true); setError(null)
@@ -76,24 +78,20 @@ function PublishBlock({ token, publicPathPrefix, publishLabel, publishDescriptio
       {error && <p className="text-xs text-red-600 mb-2">{error}</p>}
       {token ? (
         <div className="flex flex-col gap-2">
-          <a href={publicUrl} target="_blank" rel="noopener noreferrer"
-            className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wide bg-stone-100 text-stone-700 hover:bg-stone-200 transition-colors">
-            <ExternalLink className="w-3.5 h-3.5" /> Apri
-          </a>
-          <button
-            onClick={async () => { await navigator.clipboard.writeText(publicUrl); setCopyOk(true); setTimeout(() => setCopyOk(false), 2000) }}
-            className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white bg-forest-600 hover:bg-forest-700 transition-colors">
-            <Copy className="w-3.5 h-3.5" /> {copyOk ? 'Copiato!' : 'Copia link'}
-          </button>
+          <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-forest-700">
+            <Share2 className="w-3.5 h-3.5" /> Pubblicato sul tuo sito
+          </p>
           <button onClick={() => run(onRevoke)} disabled={busy}
             className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-60 transition-colors">
-            {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Link2Off className="w-3.5 h-3.5" />} Rimuovi link
+            {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Link2Off className="w-3.5 h-3.5" />} Rimuovi dal sito
           </button>
         </div>
+      ) : profileStatus && !profileStatus.enabled ? (
+        <PublishGateNotice />
       ) : (
         <>
           <p className="text-xs text-stone-500 mb-2.5">{publishDescription}</p>
-          <button onClick={() => run(onPublish)} disabled={busy}
+          <button onClick={() => run(onPublish)} disabled={busy || !profileStatus}
             className="w-full flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wide text-white bg-forest-600 hover:bg-forest-700 disabled:opacity-60 transition-colors">
             {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Share2 className="w-3.5 h-3.5" />} {publishLabel}
           </button>
@@ -175,7 +173,7 @@ export function RaccoltaSettingsSheet({ raccoltaId, title, onClose, onPublishCha
   return (
     <SheetShell title={title} onClose={onClose}>
       <PublishBlock
-        token={token} publicPathPrefix="/leggi/c/" publishLabel="Pubblica online"
+        token={token} publishLabel="Pubblica online"
         publishDescription="Pubblica una pagina web con tutti i Diari di questa raccolta, leggibile da chiunque abbia il link."
         onPublish={async () => {
           const res = await fetch(`/api/collections/${raccoltaId}/token`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: '{}' })
@@ -261,7 +259,7 @@ export function DiarioSettingsSheet({ diarioId, title, onClose, onPublishChange 
   return (
     <SheetShell title={title} onClose={onClose}>
       <PublishBlock
-        token={token} publicPathPrefix="/leggi/d/" publishLabel="Pubblica online"
+        token={token} publishLabel="Pubblica online"
         publishDescription="Crea una pagina pubblica del diario, leggibile da telefono senza scaricare nulla."
         onPublish={async () => {
           const res = await fetch(`/api/diaries/${diarioId}/token`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: '{}' })
@@ -357,7 +355,7 @@ export function ReportageSettingsSheet({ activityId, diarioId, title, onClose, o
   return (
     <SheetShell title={title} onClose={onClose}>
       <PublishBlock
-        token={token} publicPathPrefix="/leggi/p/" publishLabel="Pubblica online"
+        token={token} publishLabel="Pubblica online"
         publishDescription="Pubblica questo Reportage come pagina a sé, leggibile da chiunque abbia il link."
         onPublish={async () => {
           const res = await fetch('/api/share-report', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ activityId }) })

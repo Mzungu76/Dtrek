@@ -27,7 +27,7 @@ export default function ImpostazioniPage() {
         <SectionIdentita />
 
         <div className="pt-2">
-          <Kicker className="mb-3">Profilo pubblico</Kicker>
+          <Kicker className="mb-3">Il tuo sito</Kicker>
           <SectionProfiloPubblico />
         </div>
 

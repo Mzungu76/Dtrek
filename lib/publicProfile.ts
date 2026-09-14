@@ -1,7 +1,8 @@
-// Lettura pubblica (non autenticata) del profilo di un utente — Fase 3 del piano di pubblicazione
-// (docs/raccolte-pubblicazione-piano.md): non un quarto documento pubblicato, ma l'INDICE di ciò
-// che l'utente ha già reso pubblico ai tre livelli esistenti (Raccolta/Diario/Reportage, ciascuno
-// con il proprio token indipendente). Niente qui decide cosa è pubblico — legge solo cosa lo è già.
+// Lettura pubblica (non autenticata) del sito personale di un utente (/u/[slug]) — Fase 3 del
+// piano di pubblicazione (docs/raccolte-pubblicazione-piano.md): non un quarto documento
+// pubblicato, ma l'INDICE di ciò che l'utente ha già reso pubblico ai tre livelli esistenti
+// (Raccolta/Diario/Reportage, ciascuno con il proprio token indipendente). Niente qui decide cosa
+// è pubblico — legge solo cosa lo è già.
 import { supabase } from './supabase'
 import { normalizeSlug } from './profileSlug'
 

@@ -3,8 +3,11 @@ import { useEffect, useState } from 'react'
 import { Check, Copy, ExternalLink, Loader2 } from 'lucide-react'
 import { validateSlug } from '@/lib/profileSlug'
 
-// Profilo pubblico (/u/[slug]) — Fase 3 del piano di pubblicazione (docs/raccolte-pubblicazione-
-// piano.md): un solo link personale che raccoglie Raccolte/Diari/Reportage già pubblicati.
+// Il sito personale dell'utente (/u/[slug]) — Fase 3 del piano di pubblicazione (docs/raccolte-
+// pubblicazione-piano.md): un solo link che raccoglie Raccolte/Diari/Reportage già pubblicati.
+// ("Profilo pubblico" era il nome della Fase 3 quando questo componente è nato — internamente è
+// rimasto così (nome del file, del componente, colonne del DB), ma per l'utente è "il tuo sito":
+// non una vetrina personale a sé, è l'unico indirizzo dove i suoi contenuti pubblicati compaiono.)
 // Due stati distinti: lo SLUG (l'indirizzo, stabile una volta scelto) e l'INTERRUTTORE (la
 // visibilità, spegnibile senza perdere l'indirizzo scelto).
 export default function SectionProfiloPubblico() {
@@ -97,7 +100,7 @@ export default function SectionProfiloPubblico() {
       {slug && (
         <div className="pt-3 border-t border-stone-100 space-y-2.5">
           <label className="flex items-center justify-between gap-3 cursor-pointer">
-            <span className="text-sm font-semibold text-stone-700">Profilo pubblico attivo</span>
+            <span className="text-sm font-semibold text-stone-700">Sito attivo</span>
             <input
               type="checkbox" checked={enabled} disabled={togglingEnabled}
               onChange={toggleEnabled}
@@ -108,7 +111,7 @@ export default function SectionProfiloPubblico() {
             <div className="flex items-center gap-2 flex-wrap">
               <a href={`/u/${slug}`} target="_blank" rel="noopener noreferrer"
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 text-xs font-bold uppercase tracking-wide transition-colors">
-                <ExternalLink className="w-3.5 h-3.5" /> Apri profilo
+                <ExternalLink className="w-3.5 h-3.5" /> Apri il tuo sito
               </a>
               <button
                 onClick={async () => { await navigator.clipboard.writeText(publicUrl); setCopyOk(true); setTimeout(() => setCopyOk(false), 2000) }}

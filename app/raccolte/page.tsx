@@ -349,22 +349,28 @@ export default function RaccolteTreePage() {
     onOpenReportage: id => router.push(`/resoconto/${encodeURIComponent(id)}`),
   }
 
-  // Ogni livello filtrato per conto suo dal proprio stato di pubblicazione — una Raccolta non
-  // pubblicata sparisce da "Pubblicati" anche se contiene un Diario pubblicato al suo interno
-  // (sono pubblicazioni indipendenti, stesso principio "più restrittivo vince" del resto
-  // dell'app): filtrare un solo livello e non gli altri renderebbe il risultato incoerente.
+  // Ogni livello ha il proprio stato di pubblicazione, indipendente da quello dei suoi genitori
+  // (un Reportage può essere pubblicato da solo dentro un Diario ancora in bozza, e viceversa —
+  // stesso principio "più restrittivo vince" del resto dell'app). Il filtro deve quindi decidere
+  // per ogni riga se comparire guardando SOLO il proprio stato, non quello dell'antenato: prima
+  // filtrava una Raccolta/Diario dall'alto e scartava tutto il ramo sotto se il nodo non
+  // corrispondeva, quindi un Diario in bozza dentro una Raccolta già pubblicata (o viceversa)
+  // spariva del tutto da entrambi i filtri invece di comparire in quello giusto. Ora un nodo
+  // compare se corrisponde lui stesso, o se contiene almeno un discendente che corrisponde — e in
+  // quel caso mostra solo i discendenti che corrispondono, non l'intero ramo.
   const filteredTree = useMemo(() => {
     if (!tree) return tree
     if (filter === 'tutti') return tree
     const want = filter === 'pubblicati'
-    return tree
-      .filter(r => r.isPublished === want)
-      .map(r => ({
-        ...r,
-        diari: r.diari
-          .filter(d => d.isPublished === want)
-          .map(d => ({ ...d, reportage: d.reportage.filter(x => x.isPublished === want) })),
-      }))
+    return tree.flatMap(r => {
+      const diari = r.diari.flatMap(d => {
+        const reportage = d.reportage.filter(x => x.isPublished === want)
+        if (d.isPublished !== want && reportage.length === 0) return []
+        return [{ ...d, reportage }]
+      })
+      if (r.isPublished !== want && diari.length === 0) return []
+      return [{ ...r, diari }]
+    })
   }, [tree, filter])
 
   const raccolteOptions: MovePickerOption[] = useMemo(() => (tree ?? []).map(r => ({ id: r.id, title: r.title })), [tree])

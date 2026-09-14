@@ -3,9 +3,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowDown, ArrowLeft, ArrowUp, Copy, ExternalLink, Link2Off, Loader2, Plus, Share2, Trash2, X } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowUp, Link2Off, Loader2, Plus, Share2, Trash2, X } from 'lucide-react'
 import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import { PublishPrivacyToggles } from '@/components/PublishPrivacyToggles'
+import { PublishGateNotice } from '@/components/PublishGateNotice'
+import { useProfileStatus } from '@/lib/hooks/useProfileStatus'
 import type { CollectionDetail, CollectionDetailDiario } from '@/app/api/collections/[id]/route'
 import type { DiarySummary } from '@/app/api/diaries/route'
 
@@ -93,7 +95,7 @@ export default function RaccoltaComposerPage() {
   const [shareToken, setShareToken] = useState<string | null>(null)
   const [publishing, setPublishing] = useState(false)
   const [publishError, setPublishError] = useState<string | null>(null)
-  const [copyOk, setCopyOk] = useState(false)
+  const profileStatus = useProfileStatus()
 
   function loadCollection() {
     return fetch(`/api/collections/${encodeURIComponent(collectionId)}`)
@@ -204,8 +206,6 @@ export default function RaccoltaComposerPage() {
     setShareToken(null)
   }
 
-  const publicUrl = shareToken && typeof window !== 'undefined' ? `${window.location.origin}/leggi/c/${shareToken}` : ''
-
   if (error && !collection) {
     return (
       <div className={`min-h-screen bg-stone-50 flex items-center justify-center px-6 text-center ${MOBILE_TOPBAR_SPACER}`}>
@@ -299,33 +299,25 @@ export default function RaccoltaComposerPage() {
               {publishError && <p className="text-xs text-red-600 mb-2">{publishError}</p>}
               {shareToken ? (
                 <div className="flex flex-col gap-2">
-                  <a
-                    href={publicUrl} target="_blank" rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wide bg-stone-100 text-stone-700 hover:bg-stone-200 transition-colors"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" /> Apri la raccolta
-                  </a>
-                  <button
-                    type="button"
-                    onClick={async () => { await navigator.clipboard.writeText(publicUrl); setCopyOk(true); setTimeout(() => setCopyOk(false), 2000) }}
-                    className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wide text-white bg-forest-600 hover:bg-forest-700 transition-colors"
-                  >
-                    <Copy className="w-3.5 h-3.5" /> {copyOk ? 'Copiato!' : 'Copia link'}
-                  </button>
+                  <p className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wide bg-forest-50 text-forest-700">
+                    <Share2 className="w-3.5 h-3.5" /> Pubblicata sul tuo sito
+                  </p>
                   <button
                     type="button" onClick={revoke}
                     className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs border border-red-200 text-red-600 hover:bg-red-50 transition-colors"
                   >
-                    <Link2Off className="w-3.5 h-3.5" /> Rimuovi link
+                    <Link2Off className="w-3.5 h-3.5" /> Rimuovi dal sito
                   </button>
                 </div>
+              ) : profileStatus && !profileStatus.enabled ? (
+                <PublishGateNotice />
               ) : (
                 <>
                   <p className="text-xs text-stone-500 mb-2.5">
-                    Pubblica una pagina web con tutti i Diari di questa raccolta, leggibile da chiunque abbia il link.
+                    Pubblica una pagina con tutti i Diari di questa raccolta, visibile sul tuo sito.
                   </p>
                   <button
-                    type="button" onClick={publish} disabled={publishing}
+                    type="button" onClick={publish} disabled={publishing || !profileStatus}
                     className="w-full flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wide text-white bg-forest-600 hover:bg-forest-700 disabled:opacity-60 transition-colors"
                   >
                     {publishing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Share2 className="w-3.5 h-3.5" />}
