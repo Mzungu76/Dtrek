@@ -18,14 +18,30 @@ export const dynamic = 'force-dynamic'
 
 const getProfile = cache(fetchPublicProfile)
 
+// Stesso pattern di app/leggi/d/[token]/page.tsx e app/leggi/c/[token]/page.tsx — senza
+// metadataBase, i link relativi generati per l'immagine OG risolverebbero contro l'host che ha
+// servito la richiesta, che dietro un proxy/CDN può non essere l'URL pubblico canonico.
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL ||
+  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined)
+
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
   const profile = await getProfile(params.slug)
   if (!profile) return { title: 'Sito non trovato · DTrek' }
 
   const total = profile.collections.length + profile.diaries.length + profile.reports.length
+  const desc = `${total} pubblicazion${total === 1 ? 'e' : 'i'} di ${profile.displayName} su DTrek`
+
   return {
+    metadataBase: SITE_URL ? new URL(SITE_URL) : undefined,
     title: `${profile.displayName} · DTrek`,
-    description: `${total} pubblicazion${total === 1 ? 'e' : 'i'} di ${profile.displayName} su DTrek`,
+    description: desc,
+    // Prima di questo fix il sito personale (il link più condiviso, essendo l'indice di tutto
+    // ciò che l'utente ha pubblicato) era l'unica pagina pubblica senza openGraph/twitter — su
+    // WhatsApp/social appariva come testo nudo mentre Diario/Raccolta/Reportage mostravano già
+    // una card con foto.
+    openGraph: { title: profile.displayName, description: desc, type: 'profile' },
+    twitter: { card: 'summary_large_image', title: profile.displayName, description: desc },
   }
 }
 
