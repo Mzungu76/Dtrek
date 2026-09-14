@@ -66,9 +66,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 }
 
-// DELETE /api/collections/[id]/token → revoca il link pubblico corrente: ruota lo share_token
-// (stesso comportamento di DELETE /api/diaries/[id]/token) — il link già condiviso smette di
-// funzionare, la Raccolta resta pronta per essere ripubblicata con un link nuovo.
+// DELETE /api/collections/[id]/token → revoca il link pubblico corrente: azzera share_token
+// (stesso comportamento di DELETE /api/diaries/[id]/token, stesso motivo — deve essere `null`, non
+// ruotato: la policy RLS pubblica e fetchPublicProfile filtrano su `share_token IS NOT NULL`, un
+// token ruotato resta non-null e la Raccolta continua a comparire sul sito). Ripubblicare (PATCH)
+// ne genera uno nuovo da zero.
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const user = await getUserFromRequest(req)
@@ -76,7 +78,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
 
     const { error } = await supabase
       .from('collections')
-      .update({ share_token: crypto.randomUUID(), updated_at: new Date().toISOString() })
+      .update({ share_token: null, updated_at: new Date().toISOString() })
       .eq('id', params.id)
       .eq('user_id', user.id)
     if (error) throw error
