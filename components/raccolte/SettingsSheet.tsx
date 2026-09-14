@@ -15,10 +15,23 @@
 import { useEffect, useState } from 'react'
 import { X, Copy, ExternalLink, Link2Off, Loader2, Share2 } from 'lucide-react'
 import { PublishPrivacyToggles } from '@/components/PublishPrivacyToggles'
+import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import {
   DEFAULT_DIARY_CONFIG, resolveReportExtras,
   type DiaryConfig, type DiaryPublicSections, type DiaryReportExtras,
 } from '@/lib/diaryConfig'
+
+// Le selezioni "Mostra sul sito"/"Mostra questo Reportage" sparivano silenziosamente: le funzioni
+// patch* qui sotto aggiornavano lo stato in ottimistico ma non controllavano mai `res.ok` né
+// rifacevano un GET dopo — una PATCH fallita (tipico: sessione vicina alla scadenza, lo stesso
+// difetto già corretto altrove con getSession(), vedi handleCoverUpload in
+// app/diario/libro/[id]/page.tsx e currentUserId() in app/raccolte/page.tsx) lasciava il pannello
+// con la spunta "giusta" mentre sul server non era cambiato nulla: alla riapertura, un GET fresco
+// mostrava di nuovo lo stato precedente. refreshSession() qui sotto previene il 401 rinfrescando
+// proattivamente un token vicino alla scadenza prima della PATCH.
+async function refreshSession() {
+  await getBrowserSupabase().auth.getSession()
+}
 
 function SheetShell({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
@@ -133,6 +146,7 @@ export function RaccoltaSettingsSheet({ raccoltaId, title, onClose, onPublishCha
   const [token, setToken] = useState<string | null>(null)
   // undefined = ancora in caricamento, null = nessuna impostazione a livello di Raccolta.
   const [publicSections, setPublicSections] = useState<DiaryPublicSections | null | undefined>(undefined)
+  const [sectionsError, setSectionsError] = useState<string | null>(null)
 
   useEffect(() => {
     fetch(`/api/collections/${raccoltaId}/token`).then(r => r.ok ? r.json() : Promise.reject())
@@ -142,11 +156,20 @@ export function RaccoltaSettingsSheet({ raccoltaId, title, onClose, onPublishCha
   }, [raccoltaId])
 
   async function patchSections(patch: Partial<DiaryPublicSections> | null) {
+    const previous = publicSections
     setPublicSections(patch === null ? null : { ...(publicSections ?? DEFAULT_DIARY_CONFIG.publicSections), ...patch }) // ottimistico
-    const res = await fetch(`/api/collections/${raccoltaId}/config`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ publicSections: patch }),
-    })
-    if (res.ok) setPublicSections((await res.json()).publicSections)
+    setSectionsError(null)
+    try {
+      await refreshSession()
+      const res = await fetch(`/api/collections/${raccoltaId}/config`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ publicSections: patch }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      setPublicSections((await res.json()).publicSections)
+    } catch {
+      setPublicSections(previous) // rollback: la PATCH non è andata a buon fine, non far credere che sia salvato
+      setSectionsError('Non salvato — riprova.')
+    }
   }
 
   return (
@@ -168,6 +191,7 @@ export function RaccoltaSettingsSheet({ raccoltaId, title, onClose, onPublishCha
 
       <div className="pt-4 mt-4 border-t border-stone-100">
         <p className="font-barlow font-bold uppercase tracking-widest text-[11px] text-stone-400 mb-1.5">Mostra sul sito</p>
+        {sectionsError && <p className="text-xs text-red-600 mb-1.5">{sectionsError}</p>}
         {publicSections === undefined ? (
           <p className="text-xs text-stone-400">Caricamento…</p>
         ) : publicSections === null ? (
@@ -209,6 +233,7 @@ export function DiarioSettingsSheet({ diarioId, title, onClose, onPublishChange 
 }) {
   const [token, setToken] = useState<string | null>(null)
   const [config, setConfig] = useState<DiaryConfig | null>(null)
+  const [sectionsError, setSectionsError] = useState<string | null>(null)
 
   useEffect(() => {
     fetch(`/api/diaries/${diarioId}/token`).then(r => r.ok ? r.json() : Promise.reject())
@@ -219,9 +244,18 @@ export function DiarioSettingsSheet({ diarioId, title, onClose, onPublishChange 
 
   async function patchSections(patch: Partial<DiaryPublicSections>) {
     if (!config) return
+    const previous = config
     const next: DiaryConfig = { ...config, publicSections: { ...config.publicSections, ...patch } }
     setConfig(next) // ottimistico
-    await fetch(`/api/diaries/${diarioId}/config`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(next) })
+    setSectionsError(null)
+    try {
+      await refreshSession()
+      const res = await fetch(`/api/diaries/${diarioId}/config`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(next) })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    } catch {
+      setConfig(previous) // rollback: la PATCH non è andata a buon fine, non far credere che sia salvato
+      setSectionsError('Non salvato — riprova.')
+    }
   }
 
   return (
@@ -243,6 +277,7 @@ export function DiarioSettingsSheet({ diarioId, title, onClose, onPublishChange 
 
       <div className="pt-4 mt-4 border-t border-stone-100">
         <p className="font-barlow font-bold uppercase tracking-widest text-[11px] text-stone-400 mb-1.5">Mostra sul sito</p>
+        {sectionsError && <p className="text-xs text-red-600 mb-1.5">{sectionsError}</p>}
         {!config ? <p className="text-xs text-stone-400">Caricamento…</p> : (
           <PublicSectionsCheckboxes value={config.publicSections} onChange={patchSections} />
         )}
@@ -269,6 +304,8 @@ export function ReportageSettingsSheet({ activityId, diarioId, title, onClose, o
 }) {
   const [token, setToken] = useState<string | null>(null)
   const [config, setConfig] = useState<DiaryConfig | null>(null)
+  const [extrasError, setExtrasError] = useState<string | null>(null)
+  const [excludedError, setExcludedError] = useState<string | null>(null)
 
   useEffect(() => {
     fetch(`/api/share-report?activityId=${encodeURIComponent(activityId)}`).then(r => r.ok ? r.json() : Promise.reject())
@@ -282,21 +319,39 @@ export function ReportageSettingsSheet({ activityId, diarioId, title, onClose, o
 
   async function patchExtras(patch: Partial<DiaryReportExtras>) {
     if (!config) return
+    const previous = config
     const next: DiaryConfig = {
       ...config,
       reportExtrasByActivity: { ...config.reportExtrasByActivity, [activityId]: { ...config.reportExtrasByActivity[activityId], ...patch } },
     }
     setConfig(next)
-    await fetch(`/api/diaries/${diarioId}/config`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(next) })
+    setExtrasError(null)
+    try {
+      await refreshSession()
+      const res = await fetch(`/api/diaries/${diarioId}/config`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(next) })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    } catch {
+      setConfig(previous) // rollback: la PATCH non è andata a buon fine, non far credere che sia salvato
+      setExtrasError('Non salvato — riprova.')
+    }
   }
 
   async function toggleExcluded() {
     if (!config) return
+    const previous = config
     const set = new Set(config.excludedActivityIds)
     excluded ? set.delete(activityId) : set.add(activityId)
     const next: DiaryConfig = { ...config, excludedActivityIds: Array.from(set) }
     setConfig(next)
-    await fetch(`/api/diaries/${diarioId}/config`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(next) })
+    setExcludedError(null)
+    try {
+      await refreshSession()
+      const res = await fetch(`/api/diaries/${diarioId}/config`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(next) })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    } catch {
+      setConfig(previous) // rollback: la PATCH non è andata a buon fine, non far credere che sia salvato
+      setExcludedError('Non salvato — riprova.')
+    }
   }
 
   return (
@@ -321,10 +376,12 @@ export function ReportageSettingsSheet({ activityId, diarioId, title, onClose, o
           <input type="checkbox" checked={!excluded} disabled={!config} onChange={toggleExcluded} />
           Mostra questo Reportage nel Diario pubblico
         </label>
+        {excludedError && <p className="text-xs text-red-600 mt-1">{excludedError}</p>}
       </div>
 
       <div className="pt-4 mt-4 border-t border-stone-100">
         <p className="font-barlow font-bold uppercase tracking-widest text-[11px] text-stone-400 mb-1.5">Mostra per questo Reportage</p>
+        {extrasError && <p className="text-xs text-red-600 mb-1.5">{extrasError}</p>}
         {!config ? <p className="text-xs text-stone-400">Caricamento…</p> : (
           <div className="space-y-1">
             {REPORT_EXTRAS_LABELS.map(([key, label]) => (

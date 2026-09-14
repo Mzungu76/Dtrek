@@ -22,6 +22,7 @@ export interface CollectionDetail {
   preface:     string
   coverUrl:    string | null
   isPublished: boolean
+  markedForPublish: boolean
   /** Già nell'ordine di lettura della raccolta (`collection_diaries.position`). */
   diari:       CollectionDetailDiario[]
 }
@@ -36,7 +37,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
     const { data: collection, error: collectionErr } = await supabase
       .from('collections')
-      .select('id, title, subtitle, preface, cover_url, share_token')
+      .select('id, title, subtitle, preface, cover_url, share_token, marked_for_publish')
       .eq('id', params.id)
       .eq('user_id', user.id)
       .maybeSingle()
@@ -89,6 +90,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       preface:     collection.preface as string,
       coverUrl:    (collection.cover_url as string) ?? null,
       isPublished: collection.share_token !== null,
+      markedForPublish: collection.marked_for_publish as boolean,
       diari,
     }
     return NextResponse.json(detail)
@@ -127,6 +129,16 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       dbPatch.position = body.position
     }
 
+    // "Pronta per la pubblicazione" — il pulsante "Pubblica" in elenco (/raccolte), non ancora la
+    // pubblicazione vera (quella resta PATCH .../token, in blocco da /raccolte/pubblica). Vedi
+    // supabase/migrations/add_collections_marked_for_publish.sql.
+    if (Object.prototype.hasOwnProperty.call(body, 'markedForPublish')) {
+      if (typeof body.markedForPublish !== 'boolean') {
+        return NextResponse.json({ error: 'markedForPublish deve essere un booleano' }, { status: 400 })
+      }
+      dbPatch.marked_for_publish = body.markedForPublish
+    }
+
     if (Object.keys(dbPatch).length === 0) {
       return NextResponse.json({ error: 'Nessun campo da aggiornare' }, { status: 400 })
     }
@@ -136,7 +148,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       .update({ ...dbPatch, updated_at: new Date().toISOString() })
       .eq('id', params.id)
       .eq('user_id', user.id)
-      .select('id, title, subtitle, preface, cover_url, position')
+      .select('id, title, subtitle, preface, cover_url, position, marked_for_publish')
       .maybeSingle()
     if (error) throw error
     if (!data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -144,6 +156,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     return NextResponse.json({
       id: data.id, title: data.title, subtitle: data.subtitle, preface: data.preface,
       coverUrl: (data.cover_url as string) ?? null, position: data.position as number,
+      markedForPublish: data.marked_for_publish as boolean,
     })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 })

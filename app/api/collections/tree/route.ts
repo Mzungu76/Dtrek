@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
 
     const { data: collections, error: collectionsErr } = await supabase
       .from('collections')
-      .select('id, title, subtitle, cover_url, share_token, position')
+      .select('id, title, subtitle, cover_url, share_token, position, marked_for_publish')
       .eq('user_id', user.id)
       .order('position', { ascending: true })
     if (collectionsErr) throw collectionsErr

@@ -7,6 +7,7 @@
 // live a ogni apertura della pagina pubblica — vedi lib/sharePublicDiary.ts): qui l'utente può
 // spegnerlo, non deve fare nulla per averlo attivo.
 import { useEffect, useState } from 'react'
+import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 
 interface Prefs {
   hideHomeStarts: boolean
@@ -30,6 +31,9 @@ export function PublishPrivacyToggles({ className = '' }: { className?: string }
     setPrefs({ ...prefs, [field]: next }) // ottimistico
     setSaving(field)
     try {
+      // Rinfresca proattivamente un token vicino alla scadenza prima della PATCH — stesso motivo
+      // già corretto altrove (handleCoverUpload in app/diario/libro/[id]/page.tsx).
+      await getBrowserSupabase().auth.getSession()
       const res = await fetch('/api/user-settings/privacy', {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ [field]: next }),
       })
