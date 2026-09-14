@@ -10,7 +10,7 @@ export function PublishGateNotice() {
     <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-amber-50 border border-amber-200">
       <Globe className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
       <p className="text-xs text-amber-800 leading-relaxed">
-        Attiva prima il tuo sito pubblico per poter pubblicare qualcosa —{' '}
+        Attiva prima il tuo sito per poter pubblicare qualcosa —{' '}
         <Link href="/raccolte/pubblica" className="font-semibold underline hover:no-underline">scegli il tuo indirizzo</Link>.
       </p>
     </div>

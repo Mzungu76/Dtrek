@@ -335,6 +335,21 @@ significa solo farlo comparire sul proprio sito, non genera più un indirizzo da
   Diario/Reportage/Raccolta/Profilo, è una funzione diversa (esportare una card statistica), non
   un secondo modo di pubblicare lo stesso contenuto editoriale.
 
+**Nota terminologica (stesso giorno)**: "profilo pubblico" era il nome della Fase 3 quando questo
+oggetto è nato come indice delle pubblicazioni — con la Fase 4 è diventato l'unico link possibile,
+e a quel punto "profilo" descrive male cosa vede l'utente: non una vetrina personale a sé, ma *il
+suo sito*, dove compaiono i contenuti che ha scelto di pubblicare. Corretti i testi rivolti
+all'utente e i commenti che lo chiamavano ancora "profilo pubblico": il Kicker in
+`/profilo/impostazioni` ("Il tuo sito"), l'interruttore e il pulsante "Apri" in
+`SectionProfiloPubblico.tsx` ("Sito attivo" / "Apri il tuo sito"), l'eyebrow e l'etichetta
+dell'header di `app/u/[slug]/page.tsx` ("Sito personale" / "Sito", il titolo di errore "Sito non
+trovato"), e i commenti esplicativi in `lib/publicProfile.ts`, `lib/profileSlug.ts`,
+`lib/requireActiveProfile.ts` e `app/api/user-settings/profile/route.ts` (incluso il messaggio
+d'errore "Scegli prima un indirizzo per il tuo sito"). **Deliberatamente invariati**: nomi di
+file/componenti/funzioni (`SectionProfiloPubblico`, `fetchPublicProfile`, `PublicProfile`, …), le
+colonne del database (`user_settings.profile_slug`, `profile_enabled`) e la rotta
+`/api/user-settings/profile` — un rename lì richiederebbe una migration, non richiesta qui.
+
 Per PR 3: migration `add_publish_privacy_settings.sql` (eseguita in produzione) —
 `user_settings.publish_hide_home_starts`/`publish_hide_exact_dates`. `lib/privacy/trimHomeStart.ts`
 e `lib/privacy/formatPublicDate.ts`, puri e testati. `lib/sharePublicDiary.ts` e

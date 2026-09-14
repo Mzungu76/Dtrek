@@ -1,4 +1,4 @@
-// Validazione dello slug del profilo pubblico (/u/[slug]) — pura e testabile, come lib/raccolte/*.
+// Validazione dello slug del sito personale (/u/[slug]) — pura e testabile, come lib/raccolte/*.
 // Nessun precedente da riusare nel repo (lib/guideSlug.ts è per le ancore di pagina, non per un
 // identificatore pubblico univoco fra utenti) — regole scritte da zero.
 
