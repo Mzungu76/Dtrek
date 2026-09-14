@@ -91,15 +91,21 @@ export async function fetchPublicCollection(token: string): Promise<PublicCollec
 
   const volumes: PublicCollectionVolume[] = []
   if (diaryIds.length > 0) {
+    // .not('share_token', 'is', null): un Diario resta membro della Raccolta anche se il suo
+    // "Pubblica" viene tolto, ma non deve più comparire da nessuna parte del sito — stessa regola
+    // di /u/[slug] (fetchPublicProfile), qui applicata anche dentro la Raccolta che lo contiene,
+    // non solo al suo link diretto. Un Diario tolto così finisce nel `continue` sotto, esattamente
+    // come uno eliminato: nessun buco da saltare a mano.
     const { data: diaries } = await supabase
       .from('diaries')
       .select('id, title, subtitle, author, cover_url, footer_text, config')
       .in('id', diaryIds)
+      .not('share_token', 'is', null)
     const diaryById = new Map((diaries ?? []).map((d: Record<string, unknown>) => [d.id as string, d]))
 
     // Nell'ordine della raccolta (`position`), non nell'ordine in cui `diaries` li restituisce —
-    // un Diario eliminato nel frattempo (ON DELETE CASCADE sulla giunzione) semplicemente non è
-    // più in `links`, non lascia un buco da saltare a mano.
+    // un Diario eliminato o non pubblicato nel frattempo semplicemente non è in `diaryById`, non
+    // lascia un buco da saltare a mano.
     for (const diaryId of diaryIds) {
       const d = diaryById.get(diaryId)
       if (!d) continue

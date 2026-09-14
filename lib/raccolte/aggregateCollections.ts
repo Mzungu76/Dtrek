@@ -13,6 +13,12 @@ export interface CollectionRow {
    *  Non ha peso editoriale (non è l'ordine dei volumi dentro una raccolta, quello resta
    *  `collection_diaries.position`): è solo "in che ordine appare questo scaffale nel banner". */
   position: number
+  /** "Pronta per la pubblicazione", ma non ancora online — supabase/migrations/
+   *  add_collections_marked_for_publish.sql. Un secondo stato distinto da `share_token`: il
+   *  pulsante "Pubblica" in elenco marca solo la Raccolta, la pubblicazione vera avviene in blocco
+   *  da /raccolte/pubblica ("Pubblica tutto"). Da non confondere con `pubblicabile` di
+   *  DiarySummary (lib/diari/aggregateDiaries.ts), che dice solo "ha qualcosa da mostrare". */
+  marked_for_publish: boolean
 }
 
 export interface CollectionDiaryLinkRow {
@@ -40,6 +46,7 @@ export interface CollectionSummary {
    *  appartiene, senza un'altra chiamata dedicata. */
   diaryIds: string[]
   position: number
+  markedForPublish: boolean
 }
 
 export function aggregateCollections(
@@ -74,6 +81,7 @@ export function aggregateCollections(
       isPublished: c.share_token !== null,
       volumeCount, reportageCount, distanceMeters, elevationGain, diaryIds,
       position: c.position,
+      markedForPublish: c.marked_for_publish,
     }
   })
 }

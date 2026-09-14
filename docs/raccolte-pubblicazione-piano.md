@@ -23,6 +23,13 @@ Un Reportage escluso da un Diario (`config.excludedActivityIds`) resta escluso a
 raccolta pubblicata. Pubblicare una raccolta NON pubblica i Diari singoli: dentro la collana sono
 leggibili in contesto, ma senza un link diretto proprio finché l'utente non lo crea.
 
+**Aggiornamento (settembre 2026)**: la cascata è ora anche verso il basso, non solo verso l'alto.
+Un Diario tolto dalla pubblicazione (il suo "Pubblica" spento, `share_token` a `null`) sparisce
+anche da dentro le Raccolte pubblicate di cui è membro (`lib/sharePublicCollection.ts`,
+`fetchPublicCollection`) — non solo dal proprio link diretto. Ogni cambio di stato di pubblicazione,
+a qualunque livello, deve riflettersi ovunque quel contenuto potrebbe comparire sul sito: il sito
+pubblico dell'utente non deve mai mostrare qualcosa che l'utente ha smesso di voler pubblicare.
+
 ## Fase 3a — Dati
 
 `supabase/migrations/add_collections_tables.sql` (idempotente, da eseguire nell'SQL Editor come le

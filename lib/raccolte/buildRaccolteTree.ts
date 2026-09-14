@@ -50,6 +50,8 @@ export interface RaccoltaTreeNode {
   title: string
   coverUrl: string | null
   isPublished: boolean
+  /** "Pronta per la pubblicazione", ma non ancora online — vedi CollectionRow.marked_for_publish. */
+  markedForPublish: boolean
   position: number
   diari: DiarioTreeNode[]
 }
@@ -107,7 +109,7 @@ export function buildRaccolteTree(
       }
       return {
         id: c.id, title: c.title, coverUrl: c.cover_url,
-        isPublished: c.share_token !== null, position: c.position,
+        isPublished: c.share_token !== null, markedForPublish: c.marked_for_publish, position: c.position,
         diari,
       }
     })

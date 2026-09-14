@@ -1,8 +1,7 @@
 'use client'
-import { ChevronDown, ChevronRight, GripVertical, MoreVertical, ArrowRightLeft, Settings } from 'lucide-react'
+import { ChevronDown, ChevronRight, GripVertical, MoreVertical, ArrowRightLeft, Settings, Globe2 } from 'lucide-react'
 import CoverThumb from './CoverThumb'
 import InlineTitle from './InlineTitle'
-import PublishToggle from './PublishToggle'
 import { useRowDrag } from './useRowDrag'
 import type { RaccoltaTreeNode, DiarioTreeNode } from '@/app/api/collections/tree/route'
 
@@ -17,6 +16,75 @@ function GearButton({ onClick, size = 16, label }: { onClick: () => void; size?:
   )
 }
 
+// Stato di pubblicazione di una Raccolta — tre stati, non un semplice on/off: pubblicata (online,
+// sola lettura da qui — revocare è un passaggio più deliberato, in Impostazioni), pronta (marcata,
+// in attesa del prossimo "Procedi alla pubblicazione" in blocco — tocca per smarcarla) o bozza (un
+// vero pulsante "Pubblica" che marca sul posto, non naviga — vedi app/raccolte/page.tsx).
+function MarkedForPublishControl({ raccolta, busy, onToggle }: {
+  raccolta: RaccoltaTreeNode
+  busy: boolean
+  onToggle: () => void
+}) {
+  if (raccolta.isPublished) {
+    return (
+      <span className="shrink-0 inline-flex items-center gap-1 px-2 py-[3px] rounded-full bg-forest-50 text-forest-700 font-barlow font-bold uppercase tracking-wide text-[10px]">
+        <span className="w-[5px] h-[5px] rounded-full bg-forest-600" />Pubblicata
+      </span>
+    )
+  }
+  if (raccolta.markedForPublish) {
+    return (
+      <button
+        onClick={e => { e.stopPropagation(); onToggle() }}
+        disabled={busy}
+        title="Pronta per la pubblicazione — tocca per smarcarla"
+        className="shrink-0 inline-flex items-center gap-1 px-2 py-[3px] rounded-full bg-terra-100 text-terra-700 font-barlow font-bold uppercase tracking-wide text-[10px] disabled:opacity-50"
+      >
+        <span className="w-[5px] h-[5px] rounded-full bg-terra-600" />Pronta
+      </button>
+    )
+  }
+  return (
+    <button
+      onClick={e => { e.stopPropagation(); onToggle() }}
+      disabled={busy}
+      title="Rende questa Raccolta pubblicabile — non pubblica ancora, non naviga"
+      className="shrink-0 inline-flex items-center gap-1 bg-white text-forest-600 border border-forest-600 font-barlow font-bold uppercase tracking-wide text-[10px] px-2.5 py-1 rounded-full disabled:opacity-50"
+    >
+      <Globe2 className="w-2.5 h-2.5" />Pubblica
+    </button>
+  )
+}
+
+// Stato di pubblicazione di un Diario/Reportage — a differenza della Raccolta resta un semplice
+// on/off diretto (nessuno stadio "pronta"): un badge invece della sola iconcina di PublishToggle,
+// stesso comportamento di sempre (tocca per pubblicare/revocare), solo meno minuscolo da leggere.
+function PublishBadge({ published, busy, disabled, onToggle, size = 'sm' }: {
+  published: boolean; busy: boolean; disabled?: boolean; onToggle: () => void; size?: 'sm' | 'xs'
+}) {
+  if (disabled) {
+    return (
+      <span title="Scrivi prima il racconto" className="shrink-0 font-barlow font-bold uppercase tracking-wide text-stone-300" style={{ fontSize: size === 'sm' ? 9 : 8 }}>
+        —
+      </span>
+    )
+  }
+  return (
+    <button
+      onClick={e => { e.stopPropagation(); onToggle() }}
+      disabled={busy}
+      title={published ? 'Pubblicato — tocca per revocare' : 'Bozza — tocca per pubblicare'}
+      className={`shrink-0 inline-flex items-center gap-1 px-1.5 py-[2px] rounded-full font-barlow font-bold uppercase tracking-wide disabled:opacity-50 ${
+        published ? 'bg-forest-50 text-forest-700' : 'bg-stone-100 text-stone-500'
+      }`}
+      style={{ fontSize: size === 'sm' ? 9 : 8 }}
+    >
+      <span className="rounded-full" style={{ width: 4, height: 4, background: published ? '#277134' : '#c4bead' }} />
+      {published ? 'Pubblicato' : 'Bozza'}
+    </button>
+  )
+}
+
 function fmtKm(m: number) { return m >= 100_000 ? `${Math.round(m / 1000)} km` : `${(m / 1000).toFixed(1)} km` }
 function fmtDate(iso: string) { return new Date(iso).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' }) }
 
@@ -26,7 +94,7 @@ export interface RaccoltaSectionActions {
   onOpenDetails: (raccoltaId: string) => void
   onOpenRaccoltaSettings: (raccoltaId: string, title: string) => void
   onPickRaccoltaCover: (raccoltaId: string, file: File) => void
-  onToggleRaccoltaPublish: (raccoltaId: string, currentlyPublished: boolean) => void
+  onToggleMarkedForPublish: (raccoltaId: string, currentlyMarked: boolean) => void
   onReorderDiari: (raccoltaId: string, fromIndex: number, toIndex: number) => void
   onRenameDiario: (diarioId: string, title: string) => void
   onOpenDiarioSettings: (diarioId: string, title: string) => void
@@ -47,7 +115,7 @@ interface RaccoltaSectionProps {
   kebabOpen: boolean
   raccoltaCoverUploadingId: string | null
   diarioCoverUploadingId: string | null
-  raccoltaPublishBusyId: string | null
+  markedForPublishBusyId: string | null
   diarioPublishBusyId: string | null
   reportagePublishBusyId: string | null
   isDragging: boolean
@@ -68,7 +136,7 @@ interface RaccoltaSectionProps {
 
 export default function RaccoltaSection({
   raccolta, expanded, expandedDiari, kebabOpen, raccoltaCoverUploadingId, diarioCoverUploadingId,
-  raccoltaPublishBusyId, diarioPublishBusyId, reportagePublishBusyId,
+  markedForPublishBusyId, diarioPublishBusyId, reportagePublishBusyId,
   isDragging, dropBefore, deltaY, dragEnabled = true, onToggleExpand, onToggleDiario, onToggleKebab,
   onGripPointerDown, onGripPointerMove, onGripPointerUp, actions,
 }: RaccoltaSectionProps) {
@@ -95,13 +163,11 @@ export default function RaccoltaSection({
             {raccolta.diari.length} diari · {reportageCount} reportage
           </p>
         </div>
-        <PublishToggle
-          published={raccolta.isPublished}
-          busy={raccoltaPublishBusyId === raccolta.id}
-          onToggle={() => actions.onToggleRaccoltaPublish(raccolta.id, raccolta.isPublished)}
-          size={16}
+        <MarkedForPublishControl
+          raccolta={raccolta}
+          busy={markedForPublishBusyId === raccolta.id}
+          onToggle={() => actions.onToggleMarkedForPublish(raccolta.id, raccolta.markedForPublish)}
         />
-        <GearButton onClick={() => actions.onOpenRaccoltaSettings(raccolta.id, raccolta.title)} label="Impostazioni della Raccolta" size={16} />
         <button
           onPointerDown={e => { e.stopPropagation(); onGripPointerDown(e) }}
           onPointerMove={e => { e.stopPropagation(); onGripPointerMove(e) }}
@@ -126,6 +192,9 @@ export default function RaccoltaSection({
             </button>
             <button onClick={() => actions.onOpenDetails(raccolta.id)} className="w-full text-left px-3.5 py-2.5 text-sm text-stone-700 border-b border-stone-100">
               Contenuti e prefazione
+            </button>
+            <button onClick={() => actions.onOpenRaccoltaSettings(raccolta.id, raccolta.title)} className="w-full text-left px-3.5 py-2.5 text-sm text-stone-700 border-b border-stone-100">
+              Impostazioni
             </button>
             <button onClick={() => actions.onDeleteRaccolta(raccolta.id)} className="w-full text-left px-3.5 py-2.5 text-sm text-red-600">
               Elimina Raccolta
@@ -224,7 +293,7 @@ function DiarioRow({
           />
           <p className="font-barlow text-[10px] text-stone-400">{diario.reportage.length} reportage</p>
         </div>
-        <PublishToggle published={diario.isPublished} busy={publishBusy} onToggle={onTogglePublish} size={14} />
+        <PublishBadge published={diario.isPublished} busy={publishBusy} onToggle={onTogglePublish} size="sm" />
         <GearButton onClick={onOpenSettings} label="Impostazioni del Diario" size={14} />
         <button onClick={e => { e.stopPropagation(); onMoveRequest() }} aria-label="Sposta in un'altra Raccolta" className="text-stone-400 shrink-0 p-1 -m-1">
           <ArrowRightLeft className="w-3.5 h-3.5" />
@@ -256,13 +325,12 @@ function DiarioRow({
                 />
                 <p className="font-barlow text-[10px] text-stone-400">{fmtDate(r.startTime)} · {fmtKm(r.distanceMeters)}</p>
               </div>
-              <PublishToggle
+              <PublishBadge
                 published={r.isPublished}
                 busy={reportagePublishBusyId === r.id}
                 disabled={!r.hasReport}
-                disabledTitle="Scrivi prima il racconto"
                 onToggle={() => onToggleReportagePublish(r.id, r.isPublished)}
-                size={12}
+                size="xs"
               />
               <GearButton onClick={() => onOpenReportageSettings(r.id, r.title)} label="Impostazioni del Reportage" size={12} />
               <button onClick={e => { e.stopPropagation(); onMoveReportageRequest(r.id) }} aria-label="Sposta in un altro Diario" className="text-stone-300 shrink-0 p-1 -m-1">

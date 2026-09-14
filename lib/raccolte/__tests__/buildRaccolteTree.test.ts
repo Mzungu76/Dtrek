@@ -4,7 +4,7 @@ import type { CollectionRow, CollectionDiaryLinkRow } from '../aggregateCollecti
 import type { DiaryRow, PlannedDiaryLinkRow } from '../../diari/aggregateDiaries'
 
 function collezione(overrides: Partial<CollectionRow> & { id: string }): CollectionRow {
-  return { title: 'Raccolta', subtitle: '', cover_url: null, share_token: null, position: 0, ...overrides }
+  return { title: 'Raccolta', subtitle: '', cover_url: null, share_token: null, position: 0, marked_for_publish: false, ...overrides }
 }
 function diario(overrides: Partial<DiaryRow> & { id: string }): DiaryRow {
   return {
@@ -77,6 +77,12 @@ describe('buildRaccolteTree', () => {
   it('isPublished riflette solo la presenza di uno share_token', () => {
     const [r] = buildRaccolteTree([collezione({ id: 'c1', share_token: 'x' })], [], [], [], [])
     expect(r.isPublished).toBe(true)
+  })
+
+  it('markedForPublish passa invariato ed è indipendente da isPublished', () => {
+    const [r] = buildRaccolteTree([collezione({ id: 'c1', marked_for_publish: true })], [], [], [], [])
+    expect(r.markedForPublish).toBe(true)
+    expect(r.isPublished).toBe(false)
   })
 
   it('un Diario è pubblicato solo se ha un proprio share_token', () => {

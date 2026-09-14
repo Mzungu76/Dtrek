@@ -13,7 +13,7 @@ function diario(overrides: Partial<DiarySummary> & { id: string }): DiarySummary
 }
 
 function collezione(overrides: Partial<CollectionRow> & { id: string }): CollectionRow {
-  return { title: 'Raccolta', subtitle: '', cover_url: null, share_token: null, position: 0, ...overrides }
+  return { title: 'Raccolta', subtitle: '', cover_url: null, share_token: null, position: 0, marked_for_publish: false, ...overrides }
 }
 
 describe('aggregateCollections', () => {
@@ -59,6 +59,15 @@ describe('aggregateCollections', () => {
     const [r] = aggregateCollections([collezione({ id: 'c1' })], links, diari)
     expect(r.volumeCount).toBe(0)
     expect(r.reportageCount).toBe(0)
+  })
+
+  it('markedForPublish passa invariato da marked_for_publish — indipendente da isPublished', () => {
+    const [marcata] = aggregateCollections([collezione({ id: 'c1', marked_for_publish: true })], [], [])
+    expect(marcata.markedForPublish).toBe(true)
+    expect(marcata.isPublished).toBe(false)
+    const [nonMarcata] = aggregateCollections([collezione({ id: 'c2', marked_for_publish: false, share_token: 'x' })], [], [])
+    expect(nonMarcata.markedForPublish).toBe(false)
+    expect(nonMarcata.isPublished).toBe(true)
   })
 
   it('diaryIds segue l\'ordine di collection_diaries.position, non l\'ordine di arrivo dei link', () => {

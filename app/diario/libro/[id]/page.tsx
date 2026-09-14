@@ -147,7 +147,9 @@ export default function DiarioLibroPage() {
   // ogni Diario ha il proprio, con solo i propri Resoconti — non più un libro unico globale.
   const [config, setConfig] = useState<DiaryConfig>(DEFAULT_DIARY_CONFIG)
   const [configLoaded, setConfigLoaded] = useState(false)
+  const [configSaveError, setConfigSaveError] = useState(false)
   const configSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const configRetryCount = useRef(0)
 
   const bookOuterRef = useRef<HTMLDivElement>(null)
   const bookInnerRef = useRef<HTMLDivElement>(null)
@@ -257,14 +259,37 @@ export default function DiarioLibroPage() {
   // Salvataggio con debounce: ogni modifica alla configurazione (titolo, toggle, esclusioni…)
   // riscrive l'intero oggetto sul server 800ms dopo l'ultima modifica, invece di un round-trip
   // per ogni tasto premuto o ogni singolo toggle.
+  //
+  // Il commento diceva "riprovato al prossimo cambiamento", ma non era vero: un fallimento (rete,
+  // o una sessione vicina alla scadenza — getSession() qui sotto la rinfresca proattivamente,
+  // stesso difetto già corretto in handleCoverUpload più sopra) veniva solo ignorato, senza alcun
+  // avviso. Se l'utente non toccava più nulla dopo quel toggle, la modifica non veniva mai
+  // salvata: chiudendo la pagina spariva, esattamente come se non fosse mai stata fatta. Ora un
+  // fallimento riprova da solo (fino a 3 volte, backoff semplice) e solo se anche i retry falliscono
+  // mostra un avviso invece di far credere che sia salvato.
   useEffect(() => {
     if (!configLoaded) return
+    configRetryCount.current = 0
     if (configSaveTimer.current) clearTimeout(configSaveTimer.current)
-    configSaveTimer.current = setTimeout(() => {
-      fetch(`/api/diaries/${encodeURIComponent(diaryId)}/config`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(config),
-      }).catch(() => { /* riprovato al prossimo cambiamento */ })
-    }, 800)
+
+    async function save() {
+      setConfigSaveError(false)
+      try {
+        await getBrowserSupabase().auth.getSession()
+        const res = await fetch(`/api/diaries/${encodeURIComponent(diaryId)}/config`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(config),
+        })
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      } catch {
+        if (configRetryCount.current < 3) {
+          configRetryCount.current += 1
+          configSaveTimer.current = setTimeout(save, 1500 * configRetryCount.current)
+        } else {
+          setConfigSaveError(true)
+        }
+      }
+    }
+    configSaveTimer.current = setTimeout(save, 800)
     return () => { if (configSaveTimer.current) clearTimeout(configSaveTimer.current) }
   }, [config, configLoaded, diaryId])
 
@@ -695,6 +720,12 @@ export default function DiarioLibroPage() {
       <div className="sticky top-0 z-40 print:hidden">
         <MobileNavBar />
       </div>
+
+      {configSaveError && (
+        <div className="fixed bottom-24 inset-x-4 z-50 bg-red-600 text-white text-sm px-4 py-2.5 rounded-xl shadow-lg print:hidden text-center">
+          Le ultime modifiche non si sono salvate — riprova o ricarica la pagina prima di chiuderla.
+        </div>
+      )}
 
       {/* Left icon rail — cover customization */}
       <div className="fixed left-3 md:left-5 top-1/2 -translate-y-1/2 z-30 flex flex-col gap-3 print:hidden">

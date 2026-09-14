@@ -2,14 +2,16 @@
 // (docs/raccolte-pubblicazione-piano.md): non un quarto documento, l'INDICE di ciò che l'utente ha
 // già reso pubblico ai tre livelli esistenti (Raccolta/Diario/Reportage). Stessa architettura
 // server-only delle altre pagine pubbliche (app/leggi/d|c|p/[token]) — nessuno stato, nessun
-// JavaScript spedito al browser.
+// JavaScript spedito al browser. Stessa identità visiva della home di una Raccolta pubblica
+// (app/leggi/c/[token]/CollectionPublicView.tsx): copertina a piena pagina, poi una galleria a
+// immagine grande — non l'elenco a righe con miniature che questa pagina usava prima.
 import type { Metadata } from 'next'
 import { cache } from 'react'
 import { notFound } from 'next/navigation'
-import { Library, BookMarked, BookOpen, ChevronRight } from 'lucide-react'
+import { Library, BookMarked, BookOpen } from 'lucide-react'
 import { fetchPublicProfile } from '@/lib/publicProfile'
-import { DtrekCallout, SiteFooter } from '@/app/leggi/d/[token]/SiteChrome'
-import { DTREK_URL } from '@/lib/publicSite'
+import { PublicCover } from '@/components/leggi/PublicCover'
+import { SiteHeader, DtrekCallout, SiteFooter } from '@/app/leggi/d/[token]/SiteChrome'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -32,33 +34,28 @@ export default async function PublicProfilePage({ params }: { params: { slug: st
   if (!profile) notFound()
 
   const isEmpty = profile.collections.length === 0 && profile.diaries.length === 0 && profile.reports.length === 0
+  const coverUrl = profile.collections.find(c => c.coverUrl)?.coverUrl
+    ?? profile.diaries.find(d => d.coverUrl)?.coverUrl
+    ?? null
+
+  const pills = [
+    profile.collections.length > 0 ? { value: String(profile.collections.length), label: profile.collections.length === 1 ? 'raccolta' : 'raccolte' } : null,
+    profile.diaries.length > 0 ? { value: String(profile.diaries.length), label: profile.diaries.length === 1 ? 'diario' : 'diari' } : null,
+    profile.reports.length > 0 ? { value: String(profile.reports.length), label: profile.reports.length === 1 ? 'reportage' : 'reportage' } : null,
+  ].filter((p): p is { value: string; label: string } => p !== null)
 
   return (
     <div className="min-h-screen bg-stone-50">
-      <header className="sticky top-0 z-30 bg-forest-900/95 backdrop-blur text-white">
-        <div className="max-w-3xl mx-auto px-4 sm:px-5">
-          <div className="flex items-center justify-between h-14">
-            <span className="flex items-center gap-2.5 min-w-0">
-              <span className="text-forest-300 text-lg leading-none">▲</span>
-              <span className="font-display font-bold text-base truncate">DTrek</span>
-            </span>
-            <a href={DTREK_URL} target="_blank" rel="noopener noreferrer"
-              className="text-xs font-semibold bg-terra-500 hover:bg-terra-400 transition rounded-full px-3.5 py-1.5 shrink-0">
-              Prova DTrek
-            </a>
-          </div>
-        </div>
-      </header>
+      <SiteHeader homeHref={`/u/${params.slug}`} homeLabel="Profilo" title={profile.displayName} current="home" />
 
-      <main className="max-w-3xl mx-auto px-4 sm:px-5 py-6 sm:py-8 space-y-6">
-        <section className="rounded-3xl overflow-hidden shadow-sm border border-stone-200 p-8 sm:p-10 text-white"
-          style={{ background: 'linear-gradient(158deg,#193b20 0%,#1c4724 45%,#20592b 100%)' }}>
-          <p className="font-barlow font-bold text-[11px] tracking-[0.25em] uppercase text-terra-300 mb-2">
-            Profilo pubblico
-          </p>
-          <h1 className="font-display text-3xl sm:text-4xl font-bold leading-tight">{profile.displayName}</h1>
-        </section>
+      <PublicCover
+        coverUrl={coverUrl}
+        eyebrow="Profilo pubblico"
+        title={profile.displayName}
+        pills={pills}
+      />
 
+      <main className="max-w-4xl mx-auto px-4 sm:px-5 py-6 sm:py-8 space-y-8">
         {isEmpty && (
           <p className="text-sm text-stone-400 text-center py-10 font-lora italic">
             Nessuna pubblicazione ancora.
@@ -68,7 +65,7 @@ export default async function PublicProfilePage({ params }: { params: { slug: st
         {profile.collections.length > 0 && (
           <ProfileSection icon={Library} title="Raccolte">
             {profile.collections.map(c => (
-              <ProfileCard key={c.token} href={`/leggi/c/${c.token}`} coverUrl={c.coverUrl}
+              <GalleryCard key={c.token} href={`/leggi/c/${c.token}`} coverUrl={c.coverUrl}
                 title={c.title} subtitle={c.subtitle} />
             ))}
           </ProfileSection>
@@ -77,7 +74,7 @@ export default async function PublicProfilePage({ params }: { params: { slug: st
         {profile.diaries.length > 0 && (
           <ProfileSection icon={BookMarked} title="Diari">
             {profile.diaries.map(d => (
-              <ProfileCard key={d.token} href={`/leggi/d/${d.token}`} coverUrl={d.coverUrl}
+              <GalleryCard key={d.token} href={`/leggi/d/${d.token}`} coverUrl={d.coverUrl}
                 title={d.title} subtitle={d.subtitle} />
             ))}
           </ProfileSection>
@@ -86,7 +83,7 @@ export default async function PublicProfilePage({ params }: { params: { slug: st
         {profile.reports.length > 0 && (
           <ProfileSection icon={BookOpen} title="Reportage">
             {profile.reports.map(r => (
-              <ProfileCard key={r.token} href={`/leggi/p/${r.token}`} coverUrl={null}
+              <GalleryCard key={r.token} href={`/leggi/p/${r.token}`} coverUrl={null}
                 title={r.title} subtitle="" />
             ))}
           </ProfileSection>
@@ -105,29 +102,31 @@ function ProfileSection({ icon: Icon, title, children }: { icon: typeof Library;
       <h2 className="flex items-center gap-2 font-display text-xl font-bold text-forest-900 px-1">
         <Icon className="w-5 h-5 text-forest-600" /> {title}
       </h2>
-      <div className="flex flex-col gap-3">{children}</div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">{children}</div>
     </section>
   )
 }
 
-function ProfileCard({ href, coverUrl, title, subtitle }: { href: string; coverUrl: string | null; title: string; subtitle: string }) {
+/** Card a immagine piena, stesso linguaggio visivo della BottomGalleryStrip (components/leggi/
+ *  BottomGalleryStrip.tsx) ma più grande — qui non è una barra di navigazione fissa, è la griglia
+ *  principale della pagina. Nessuna copertina disponibile → stesso sfondo verde a gradiente della
+ *  copertina in testa (PublicCover), mai un riquadro bianco piatto. */
+function GalleryCard({ href, coverUrl, title, subtitle }: { href: string; coverUrl: string | null; title: string; subtitle: string }) {
   return (
     <a href={href} target="_blank" rel="noopener noreferrer"
-      className="group bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden hover:shadow-md hover:border-stone-300 transition flex items-stretch">
-      {coverUrl && (
-        <div className="w-16 sm:w-20 shrink-0 relative">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
-        </div>
+      className="group relative aspect-[4/5] rounded-2xl overflow-hidden shadow-sm border border-stone-200 hover:shadow-md transition">
+      {coverUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+      ) : (
+        <div className="absolute inset-0" style={{ background: 'linear-gradient(158deg,#193b20 0%,#1c4724 45%,#20592b 100%)' }} />
       )}
-      <div className="flex-1 min-w-0 p-4 flex flex-col justify-center">
-        <h3 className="font-display text-base font-bold text-forest-900 leading-tight group-hover:text-forest-700 transition truncate">
+      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
+      <div className="absolute inset-x-0 bottom-0 p-3 sm:p-4">
+        <h3 className="font-display text-sm sm:text-base font-bold text-white leading-tight" style={{ textShadow: '0 1px 6px rgba(0,0,0,0.5)' }}>
           {title}
         </h3>
-        {subtitle && <p className="font-lora italic text-xs text-stone-500 mt-0.5 truncate">{subtitle}</p>}
-      </div>
-      <div className="flex items-center pr-4 text-stone-300 group-hover:text-forest-500 transition">
-        <ChevronRight className="w-5 h-5" />
+        {subtitle && <p className="font-lora italic text-[11px] text-white/75 mt-0.5 truncate">{subtitle}</p>}
       </div>
     </a>
   )
