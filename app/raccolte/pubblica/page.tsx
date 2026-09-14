@@ -9,6 +9,7 @@ import {
 import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import Kicker from '@/components/ui/Kicker'
 import { PublishPrivacyToggles } from '@/components/PublishPrivacyToggles'
+import SectionProfiloPubblico from '@/components/profilo/SectionProfiloPubblico'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import type { MarkedCollectionPreview, PreviewVolume } from '@/lib/raccolte/fetchMarkedCollectionsPreview'
 import type { PublishBatchResultRow } from '@/app/api/collections/publish-batch/route'
@@ -181,37 +182,24 @@ export default function PrePubblicazionePage() {
               <p className="text-xs text-stone-400 mt-1.5">Vale per tutto quello che pubblichi, non una scelta per Raccolta.</p>
             </div>
 
+            {/* Un solo link personale che resta sempre lo stesso — non uno per Raccolta: quello che
+                pubblichi qui sotto con "Pubblica tutto" compare qui, l'utente lo trova sempre allo
+                stesso indirizzo anche quando in futuro pubblica dell'altro. Componente riusato
+                identico da /profilo/impostazioni — stessa identità, non una versione a parte. */}
+            <div className="mb-6">
+              <Kicker className="mb-2.5">Il tuo sito</Kicker>
+              <p className="text-xs text-stone-400 mb-3">
+                Un indirizzo fisso, sempre lo stesso: le Raccolte che pubblichi qui sotto compaiono lì, insieme a tutto quello che pubblichi in futuro.
+              </p>
+              <SectionProfiloPubblico />
+            </div>
+
             <div className="rounded-2xl bg-white border border-stone-200 shadow-sm p-4">
               <Kicker>Pubblicazione</Kicker>
               <p className="text-xs text-stone-400 mb-3">
                 {publishedCount === collections.length ? 'Tutte già online.' : `${publishedCount} già online, ${collections.length - publishedCount} da pubblicare.`}
               </p>
               {publishError && <p className="text-xs text-red-600 mb-2">{publishError}</p>}
-
-              <div className="flex flex-col divide-y divide-stone-100 mb-3.5">
-                {collections.map(c => {
-                  const token = shareTokenFor(c)
-                  return (
-                    <div key={c.id} className="flex items-center gap-2 py-2">
-                      <span className="text-sm text-stone-700 flex-1 truncate">{c.title}</span>
-                      {token ? (
-                        <>
-                          <a href={`/leggi/c/${token}`} target="_blank" rel="noopener noreferrer" title="Apri la raccolta online"
-                            className="text-stone-400 hover:text-forest-600 p-1 -m-1 transition-colors">
-                            <ExternalLink className="w-3.5 h-3.5" />
-                          </a>
-                          <button onClick={() => copyLink(token, c.id)} title="Copia link" className="text-stone-400 hover:text-forest-600 p-1 -m-1 transition-colors">
-                            <Copy className="w-3.5 h-3.5" />
-                          </button>
-                          {copiedId === c.id && <span className="text-[11px] text-forest-600 font-semibold">Copiato!</span>}
-                        </>
-                      ) : (
-                        <span className="text-xs text-stone-300">link creato ora</span>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
 
               <button
                 onClick={publishAll} disabled={publishing || publishedCount === collections.length}
@@ -220,6 +208,37 @@ export default function PrePubblicazionePage() {
                 {publishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />}
                 {publishedCount === collections.length ? 'Pubblicate' : 'Pubblica tutto'}
               </button>
+
+              {/* Link diretti per singola Raccolta — un dettaglio secondario per chi vuole
+                  condividerne una sola invece del sito intero, non l'azione principale di questa
+                  pagina (quella è "Il tuo sito" qui sopra). */}
+              <div className="pt-3 mt-3 border-t border-stone-100">
+                <p className="text-[11px] text-stone-400 mb-1.5">Oppure condividi una singola Raccolta:</p>
+                <div className="flex flex-col divide-y divide-stone-100">
+                  {collections.map(c => {
+                    const token = shareTokenFor(c)
+                    return (
+                      <div key={c.id} className="flex items-center gap-2 py-1.5">
+                        <span className="text-xs text-stone-500 flex-1 truncate">{c.title}</span>
+                        {token ? (
+                          <>
+                            <a href={`/leggi/c/${token}`} target="_blank" rel="noopener noreferrer" title="Apri la raccolta online"
+                              className="text-stone-300 hover:text-forest-600 p-1 -m-1 transition-colors">
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                            <button onClick={() => copyLink(token, c.id)} title="Copia link" className="text-stone-300 hover:text-forest-600 p-1 -m-1 transition-colors">
+                              <Copy className="w-3 h-3" />
+                            </button>
+                            {copiedId === c.id && <span className="text-[10px] text-forest-600 font-semibold">Copiato!</span>}
+                          </>
+                        ) : (
+                          <span className="text-[11px] text-stone-300">non ancora pubblicata</span>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
             </div>
           </>
         )}
