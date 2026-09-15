@@ -13,11 +13,14 @@
 import type { Metadata } from 'next'
 import { cache } from 'react'
 import { notFound } from 'next/navigation'
-import { Library, BookMarked, BookOpen, Sparkles } from 'lucide-react'
+import { Library, BookMarked, BookOpen, Sparkles, ArrowRight } from 'lucide-react'
 import { fetchPublicProfile } from '@/lib/publicProfile'
 import { PublicCover } from '@/components/leggi/PublicCover'
+import { ReportageCard } from '@/components/leggi/ReportageCard'
 import { AllRoutesMap, AllRoutesLegend } from '@/app/leggi/d/[token]/AllRoutesMap'
 import { SiteHeader, DtrekCallout, SiteFooter } from '@/app/leggi/d/[token]/SiteChrome'
+
+const LATEST_REPORTAGE_COUNT = 3
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -87,13 +90,18 @@ export default async function PublicProfilePage({ params }: { params: { slug: st
   const pills = [
     profile.collections.length > 0 ? { value: String(profile.collections.length), label: profile.collections.length === 1 ? 'raccolta' : 'raccolte' } : null,
     profile.diaries.length > 0 ? { value: String(profile.diaries.length), label: profile.diaries.length === 1 ? 'diario' : 'diari' } : null,
-    profile.reports.length > 0 ? { value: String(profile.reports.length), label: profile.reports.length === 1 ? 'reportage' : 'reportage' } : null,
+    profile.reportage.length > 0 ? { value: String(profile.reportage.length), label: 'reportage' } : null,
   ].filter((p): p is { value: string; label: string } => p !== null)
 
   const featured = pickFeatured(profile)
   const collections = profile.collections.filter(c => `c-${c.token}` !== featured?.key)
   const diaries = profile.diaries.filter(d => `d-${d.token}` !== featured?.key)
-  const reports = profile.reports.filter(r => `r-${r.token}` !== featured?.key)
+  // Il Reportage in evidenza (se è uno di questi) non va ripetuto anche qui sotto — confrontato
+  // per href, l'unico campo comune a un'escursione dentro un Diario (ancora `#p-N`) e a un
+  // Reportage indipendente (pagina propria).
+  const latestReportage = profile.reportage
+    .filter(r => r.href !== featured?.href)
+    .slice(0, LATEST_REPORTAGE_COUNT)
 
   return (
     <div className="min-h-screen bg-stone-50">
@@ -166,13 +174,23 @@ export default async function PublicProfilePage({ params }: { params: { slug: st
           </ProfileSection>
         )}
 
-        {reports.length > 0 && (
-          <ProfileSection icon={BookOpen} title="Reportage">
-            {reports.map(r => (
-              <GalleryCard key={r.token} href={`/leggi/p/${r.token}`} coverUrl={null}
-                title={r.title} subtitle="" />
-            ))}
-          </ProfileSection>
+        {latestReportage.length > 0 && (
+          <section className="space-y-3">
+            <div className="flex items-center justify-between px-1">
+              <h2 className="flex items-center gap-2 font-display text-xl font-bold text-forest-900">
+                <BookOpen className="w-5 h-5 text-forest-600" /> Ultimi reportage
+              </h2>
+              <a href={`/u/${params.slug}/reportage`}
+                className="flex items-center gap-1 text-xs font-semibold text-forest-700 hover:text-forest-800 transition shrink-0">
+                Vedi tutti <ArrowRight className="w-3.5 h-3.5" />
+              </a>
+            </div>
+            <div className="flex flex-col gap-2">
+              {latestReportage.map(r => (
+                <ReportageCard key={r.id} item={r} hideExactDates={profile.hideExactDates} />
+              ))}
+            </div>
+          </section>
         )}
 
         <DtrekCallout />
