@@ -29,6 +29,7 @@ import { DiarioNatura } from '@/components/diario/DiarioNatura'
 import { DiarioMappa } from '@/components/diario/DiarioMappa'
 import { DiarioStatistiche } from '@/components/diario/DiarioStatistiche'
 import { DiarioReportPage } from '@/components/diario/DiarioReportPage'
+import { AppReportPage, AppStubPage } from '@/components/diario/AppReportPage'
 import type { DiaryReport, ReportExtras, BookPage } from '@/components/diario/types'
 import {
   type DiaryConfig, normalizeDiaryConfig, resolveReportExtras,
@@ -370,6 +371,21 @@ export default function DiarioLibroPage() {
     visibleBookPages.forEach(p => { if (p.kind === 'report') { n++; m.set(p.report.id, n) } })
     return m
   }, [visibleBookPages])
+
+  // Calcolato una volta sola e riusato da entrambe le rese della pagina (scalata sotto lg:, a
+  // schermo intero da lg: in su — vedi più sotto): tenere il calcolo della fascia-anno in un solo
+  // posto evita che le due rese possano un giorno divergere silenziosamente.
+  const pagesWithYearBand = useMemo(() => visibleBookPages.map((page, i) => {
+    const year = new Date(page.startTime).getFullYear()
+    const prevYear = i > 0 ? new Date(visibleBookPages[i - 1].startTime).getFullYear() : null
+    const showBand = year !== prevYear
+    const yearPages = visibleBookPages.filter(p => new Date(p.startTime).getFullYear() === year)
+    const yearKm = yearPages.reduce((s, p) =>
+      s + (p.kind === 'stub' ? p.activity.distanceMeters : p.report.activity?.distance_meters ?? 0), 0) / 1000
+    const yearBand = showBand ? { year: String(year), count: yearPages.length, totalKm: yearKm } : undefined
+    const activityId = page.kind === 'stub' ? page.activity.id : page.report.activity_id
+    return { page, yearBand, activityId }
+  }), [visibleBookPages])
 
   async function handleCoverUpload(file: File) {
     setCoverUploading(true); setCoverError(null)
@@ -1033,9 +1049,12 @@ export default function DiarioLibroPage() {
         </div>
       )}
 
-      {/* Book — scaled to fit the viewport width, like a responsive PDF viewer */}
+      {/* Copertina/Indice/Mappa/Statistiche: sempre in questa pagina scalata, a ogni larghezza —
+          da lg: in su la scala è comunque 1 (Math.min(1, outerWidth/794) con outerWidth≥1024),
+          quindi qui non cambia nulla nel passaggio a desktop, è già "alla sua dimensione naturale".
+          Le pagine di escursione invece hanno DUE rese distinte, vedi sotto. */}
       {!loading && (
-        <div ref={bookOuterRef} className="bg-stone-200 min-h-screen overflow-hidden">
+        <div ref={bookOuterRef} className="bg-stone-200 min-h-screen lg:min-h-0 overflow-hidden">
           <div style={{ height: innerHeight ? innerHeight * scale + 48 : undefined, position: 'relative' }}>
             <div
               ref={bookInnerRef}
@@ -1056,16 +1075,17 @@ export default function DiarioLibroPage() {
               {activities.length > 0 && showStats && (
                 <DiarioStatistiche activities={activities} toggles={config.statsToggles} />
               )}
-              {visibleBookPages.map((page, i) => {
-                const year = new Date(page.startTime).getFullYear()
-                const prevYear = i > 0 ? new Date(visibleBookPages[i - 1].startTime).getFullYear() : null
-                const showBand = year !== prevYear
-                const yearPages = visibleBookPages.filter(p => new Date(p.startTime).getFullYear() === year)
-                const yearKm = yearPages.reduce((s, p) =>
-                  s + (p.kind === 'stub' ? p.activity.distanceMeters : p.report.activity?.distance_meters ?? 0), 0) / 1000
-                const yearBand = showBand ? { year: String(year), count: yearPages.length, totalKm: yearKm } : undefined
-                const activityId = page.kind === 'stub' ? page.activity.id : page.report.activity_id
-                return (
+
+              {/* Pagine di escursione, versione scalata (sotto lg:) — e SEMPRE, a ogni larghezza,
+                  la fonte esatta da cui nasce il PDF (app/diario/libro/[id]/page.tsx clona dal DOM
+                  i nodi `.diario-page` prodotti da DiarioReportPage/DiarioStubPage): nascosta con
+                  `lg:hidden` (display:none), non smontata, così l'export continua a funzionare
+                  identico a prima anche quando l'utente guarda la versione desktop qui sotto. Le
+                  mappe Leaflet di queste pagine nascoste non si montano comunque (LazyMount usa
+                  IntersectionObserver, che non "vede" mai un elemento display:none), quindi non
+                  raddoppiano il costo delle mappe reali della vista desktop. */}
+              <div className="lg:hidden">
+                {pagesWithYearBand.map(({ page, yearBand, activityId }) => (
                   <div key={page.kind === 'report' ? `rep-${page.report.id}` : `stub-${page.activity.id}`}>
                     {page.kind === 'report' ? (
                       <DiarioReportPage
@@ -1098,10 +1118,50 @@ export default function DiarioLibroPage() {
                       />
                     )}
                   </div>
-                )
-              })}
+                ))}
+              </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Pagine di escursione, versione a schermo intero (da lg: in su) — componente responsivo
+          nuovo (AppReportPage/AppStubPage, componenti/diario/AppReportPage.tsx): stessi dati e
+          stessi gestori di modifica della versione sopra, impaginazione Scheda/testo/rail invece
+          della pagina A4 congelata. Fuori dal contenitore scalato apposta: quel contenitore resta
+          fisso a 794px anche a scala 1, qui serve tutta la larghezza dello schermo. */}
+      {!loading && (
+        <div className="hidden lg:block max-w-[1600px] mx-auto">
+          {pagesWithYearBand.map(({ page, yearBand, activityId }) => (
+            <div key={page.kind === 'report' ? `rep-app-${page.report.id}` : `stub-app-${page.activity.id}`}>
+              {page.kind === 'report' ? (
+                <AppReportPage
+                  report={page.report}
+                  photos={photosByAct[page.report.activity_id] ?? []}
+                  meta={activities.find(a => a.id === page.report.activity_id)}
+                  extras={resolveReportExtras(config, page.report.activity_id)}
+                  trackPoints={trackPointsByAct[page.report.activity_id]}
+                  escNumber={reportNumbers.get(page.report.id) ?? 1}
+                  yearBand={yearBand}
+                  selectedPhotoIds={config.photoIdsByActivity[page.report.activity_id]}
+                  onSelectedPhotosChange={ids => setConfig(c => {
+                    const next = { ...c.photoIdsByActivity }
+                    if (ids.length === 0) delete next[page.report.activity_id]
+                    else next[page.report.activity_id] = ids
+                    return { ...c, photoIdsByActivity: next }
+                  })}
+                  onExclude={() => toggleExcludeActivity(activityId)}
+                  onExtrasChange={patch => patchReportExtrasForActivity(activityId, patch)}
+                />
+              ) : (
+                <AppStubPage
+                  activity={page.activity}
+                  yearBand={yearBand}
+                  onExclude={() => toggleExcludeActivity(activityId)}
+                />
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>

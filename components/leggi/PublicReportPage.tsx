@@ -145,183 +145,236 @@ export function PublicReportPage({ entry, n, show, hideExactDates = false }: {
         </p>
       </div>
 
-      <div className="px-4 sm:px-8 py-6 sm:py-9">
+      <div className="px-4 sm:px-8 lg:px-12 xl:px-16 py-6 sm:py-9 max-w-[1600px] mx-auto">
         <p className="font-barlow font-bold text-[10px] sm:text-[11px] tracking-[0.25em] uppercase text-terra-500 mb-5">
           Cronaca · Escursione #{escLabel}
         </p>
 
-        {/* Titolo + intro, a colonna singola */}
-        <div className="mb-8">
-          {(!introSection || !introSection.body.trim()) && (
-            <h2 className="font-display font-bold text-forest-900 text-2xl sm:text-[32px] leading-tight -tracking-[0.5px]">
-              {entry.title}
-            </h2>
-          )}
-          {introSection && introSection.body.split(/\n\n+/).filter(p => p.trim()).map((p, j) => {
-            const text = p.trim()
-            const dropCap = j === 0 && text.length > 0
-            const segments = parseInlineEmphasis(text)
-            const first = segments[0]
-            const paragraph = (
-              <p className="font-lora text-[15px] leading-[1.85] text-stone-700 mb-4">
-                {dropCap ? (
-                  <>
-                    <span className="float-left font-display font-bold text-terra-500 leading-[0.8] pr-1.5 pt-1" style={{ fontSize: 52 }}>
-                      {first?.text[0] ?? ''}
-                    </span>
-                    {first?.bold ? <strong className="font-semibold">{first.text.slice(1)}</strong> : first?.text.slice(1)}
-                    {segments.slice(1).map((seg, k) =>
-                      seg.bold ? <strong key={k} className="font-semibold">{seg.text}</strong> : <span key={k}>{seg.text}</span>,
-                    )}
-                  </>
-                ) : renderInline(text)}
-              </p>
-            )
-            return j === 0 ? (
-              <div key={j}>
-                <h2 className="font-display font-bold text-forest-900 text-2xl sm:text-[32px] leading-tight -tracking-[0.5px] mb-5">
-                  {entry.title}
-                </h2>
-                {paragraph}
-              </div>
-            ) : <div key={j}>{paragraph}</div>
-          })}
-        </div>
+        {/* Da lg: griglia a 3 colonne — Scheda · testo a larghezza di lettura · rail fotografico.
+            Sotto lg gli stessi elementi restano nell'ordine e nell'impaginazione di sempre (mobile
+            invariato): il genitore diventa una griglia solo da lg in su. */}
+        <div className="lg:grid lg:grid-cols-[200px_minmax(0,660px)_1fr] lg:gap-12 lg:items-start">
 
-        {/* Citazione centrale */}
-        {pullQuote && (
-          <div className="relative border-t-2 border-b-2 border-forest-900 px-2 py-7 mb-8">
-            <span className="absolute -top-6 left-0 font-display text-forest-900/10 select-none" style={{ fontSize: 64, lineHeight: 1 }}>&ldquo;</span>
-            <p className="font-display italic text-forest-900 text-[17px] sm:text-lg leading-[1.55]">
-              {renderInline(pullQuote)}
+          {/* Scheda — solo da lg in su */}
+          <aside className="hidden lg:block lg:sticky lg:top-20">
+            <p className="font-barlow font-black text-[10px] tracking-[0.18em] uppercase text-stone-400 mb-3.5 pb-2.5 border-b-[1.5px] border-terra-500">
+              Scheda
             </p>
-          </div>
-        )}
-
-        {/* Resto del racconto */}
-        {restSections.map((section, i) => (
-          <div key={i} className="mb-5">
-            {i === 0 && detailPhoto && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <div className="float-none w-full mb-4 sm:float-right sm:w-[42%] sm:ml-5 sm:mb-3 relative rounded-lg overflow-hidden">
-                <img src={detailPhoto.url} alt={detailPhoto.caption ?? ''} loading="lazy" decoding="async" className="w-full aspect-[4/3] sm:aspect-[3/4] object-cover" />
-                {detailPhoto.caption && (
-                  <>
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
-                    <p className="absolute bottom-2 left-2 right-2 font-lora italic text-[11px] text-white/90 leading-snug">
-                      {detailPhoto.caption}
-                    </p>
-                  </>
-                )}
+            <div className="flex flex-col gap-3.5">
+              <div>
+                <p className="font-barlow text-[9px] font-semibold tracking-[0.15em] uppercase text-stone-400 mb-1">Escursione</p>
+                <p className="font-lora text-[13px] text-stone-800">#{escLabel}</p>
               </div>
+              {dateStr && (
+                <div>
+                  <p className="font-barlow text-[9px] font-semibold tracking-[0.15em] uppercase text-stone-400 mb-1">Periodo</p>
+                  <p className="font-lora text-[13px] text-stone-800">{dateStr}</p>
+                </div>
+              )}
+              {!!entry.altitudeMax && (
+                <div>
+                  <p className="font-barlow text-[9px] font-semibold tracking-[0.15em] uppercase text-stone-400 mb-1">Quota massima</p>
+                  <p className="font-lora text-[13px] text-stone-800">{Math.round(entry.altitudeMax)} m</p>
+                </div>
+              )}
+            </div>
+          </aside>
+
+          {/* Testo */}
+          <div className="min-w-0">
+            {(!introSection || !introSection.body.trim()) && (
+              <h2 className="font-display font-bold text-forest-900 text-2xl sm:text-[32px] leading-tight -tracking-[0.5px] mb-5">
+                {entry.title}
+              </h2>
             )}
-            {section.body.split(/\n\n+/).filter(p => p.trim()).map((p, j) => {
+            {introSection && introSection.body.split(/\n\n+/).filter(p => p.trim()).map((p, j) => {
+              const text = p.trim()
+              const dropCap = j === 0 && text.length > 0
+              const segments = parseInlineEmphasis(text)
+              const first = segments[0]
               const paragraph = (
-                <p className="font-lora text-[15px] leading-[1.85] text-stone-700 mb-3.5">{renderInline(p.trim())}</p>
+                <p className="font-lora text-[15px] leading-[1.85] text-stone-700 mb-4">
+                  {dropCap ? (
+                    <>
+                      <span className="float-left font-display font-bold text-terra-500 leading-[0.8] pr-1.5 pt-1" style={{ fontSize: 52 }}>
+                        {first?.text[0] ?? ''}
+                      </span>
+                      {first?.bold ? <strong className="font-semibold">{first.text.slice(1)}</strong> : first?.text.slice(1)}
+                      {segments.slice(1).map((seg, k) =>
+                        seg.bold ? <strong key={k} className="font-semibold">{seg.text}</strong> : <span key={k}>{seg.text}</span>,
+                      )}
+                    </>
+                  ) : renderInline(text)}
+                </p>
               )
               return j === 0 ? (
                 <div key={j}>
-                  <p className="font-barlow font-bold text-[11px] tracking-[0.2em] uppercase text-terra-500 mb-2">
-                    {section.title}
-                  </p>
+                  <h2 className="font-display font-bold text-forest-900 text-2xl sm:text-[32px] leading-tight -tracking-[0.5px] mb-5">
+                    {entry.title}
+                  </h2>
                   {paragraph}
                 </div>
               ) : <div key={j}>{paragraph}</div>
             })}
-            <div className="clear-both" />
-          </div>
-        ))}
 
-        {/* Box curiosità */}
-        {storyBoxes.length > 0 && (
-          <div className="flex flex-col gap-3 mb-8">
-            {storyBoxes.map((q, i) => {
-              const acc = STORY_ACCENTS[i % STORY_ACCENTS.length]
-              return (
-                <div key={i} className="rounded-r-lg py-4 px-5" style={{ background: acc.bg, borderLeft: `3px solid ${acc.border}` }}>
-                  <p className="font-lora italic text-[13.5px] leading-[1.75]" style={{ color: acc.text }}>{renderInline(q)}</p>
-                </div>
-              )
-            })}
-          </div>
-        )}
-
-        {/* Dati e percorso */}
-        {showStatistiche && (
-          <div className="grid grid-cols-2 gap-2 mb-4">
-            <StatCard value={`${(entry.distanceMeters / 1000).toFixed(1)} km`} label="Distanza" icon={<Route style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
-            <StatCard value={`${Math.round(entry.elevationGain)} m`} label="Dislivello D+" icon={<Mountain style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
-            <StatCard value={formatDuration(entry.totalTimeSeconds)} label="Durata" icon={<Clock style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
-            <StatCard value={entry.calories ? `${entry.calories}` : '—'} label="Calorie (kcal)" icon={<Flame style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
-          </div>
-        )}
-        {showGrafico && (
-          <div className="mb-4">
-            <p className="font-barlow font-bold text-[10px] text-stone-400 tracking-[0.2em] uppercase mb-1.5">
-              Profilo altimetrico
-            </p>
-            <div className="rounded-lg p-3" style={{ background: GREEN.bg, border: `1px solid ${GREEN.border}` }}>
-              <ProgressChart series={entry.altitudeSeries} accent={GREEN} unit=" m" />
-            </div>
-          </div>
-        )}
-        {(showCuore || showVelocita) && (
-          <div className="flex flex-col gap-3 mb-4">
-            {showCuore && (
-              <div>
-                <p className="font-barlow font-bold text-[10px] text-stone-400 tracking-[0.2em] uppercase mb-1.5">
-                  Frequenza cardiaca
+            {pullQuote && (
+              <div className="relative border-t-2 border-b-2 border-forest-900 px-2 py-7 mb-8">
+                <span className="absolute -top-6 left-0 font-display text-forest-900/10 select-none" style={{ fontSize: 64, lineHeight: 1 }}>&ldquo;</span>
+                <p className="font-display italic text-forest-900 text-[17px] sm:text-lg leading-[1.55]">
+                  {renderInline(pullQuote)}
                 </p>
-                <div className="bg-red-50 rounded-lg p-3 border border-red-200">
-                  <ProgressChart series={entry.hrSeries} accent={{ bg: '#fef2f2', border: '#fecaca', text: '#991b1b', iconBg: '#fee2e2', iconColor: '#dc2626' }} unit=" bpm" />
-                </div>
               </div>
             )}
-            {showVelocita && (
-              <div>
-                <p className="font-barlow font-bold text-[10px] text-stone-400 tracking-[0.2em] uppercase mb-1.5">
-                  Velocità
-                </p>
-                <div className="rounded-lg p-3" style={{ background: BLUE.bg, border: `1px solid ${BLUE.border}` }}>
-                  <ProgressChart series={entry.speedSeriesKmh} accent={BLUE} unit=" km/h" decimals={1} />
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-        {showMappa && (
-          <div className="mb-5">
-            <p className="font-display font-bold text-forest-900 text-lg mb-3">Il percorso</p>
-            <div className="float-right w-20 ml-2.5 mb-1.5">
-              <LocatorMap eager lat={entry.polyline![0][0]} lon={entry.polyline![0][1]} label={entry.title} />
-            </div>
-            <RouteMap polyline={entry.polyline!} pois={entry.pois} />
-            <div className="clear-both" />
-            <PoiCaption pois={entry.pois} />
-          </div>
-        )}
 
-        {/* Mappa a sé per le foto (mai insieme a percorso/POI: vedi RouteMap.tsx) */}
-        {showFotoMappa && (
-          <div className="mb-5">
-            <p className="font-display font-bold text-forest-900 text-lg mb-3">Foto lungo il percorso</p>
-            <PhotoRouteMap polyline={entry.polyline!} photos={photosWithProgress} idPrefix={`esc-${n}`} />
-          </div>
-        )}
-
-        {/* Foto */}
-        {galleryPhotos.length > 0 && (
-          <div className="mt-4 flex flex-col gap-3.5">
-            {galleryPhotos.map((ph, i) => (
-              <div key={ph.id} className="relative">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={ph.url} alt={ph.caption ?? ''} loading="lazy" decoding="async" className="w-full aspect-[4/3] object-cover rounded-lg shadow-sm" />
-                <span className="absolute top-1.5 left-1.5 w-5 h-5 bg-terra-500 text-white rounded-full text-center text-[10px] font-bold leading-5 border border-white">{i + 1}</span>
-                {ph.caption && <p className="text-[11px] text-stone-500 text-center mt-1.5 italic font-lora">{ph.caption}</p>}
+            {/* Resto del racconto — la foto di dettaglio resta ancorata al primo blocco solo sotto
+                lg (mobile/tablet invariati): da lg in su la stessa foto vive nel rail qui a
+                destra, non più nel testo. */}
+            {restSections.map((section, i) => (
+              <div key={i} className="mb-5">
+                {i === 0 && detailPhoto && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <div className="lg:hidden float-none w-full mb-4 sm:float-right sm:w-[42%] sm:ml-5 sm:mb-3 relative rounded-lg overflow-hidden">
+                    <img src={detailPhoto.url} alt={detailPhoto.caption ?? ''} loading="lazy" decoding="async" className="w-full aspect-[4/3] sm:aspect-[3/4] object-cover" />
+                    {detailPhoto.caption && (
+                      <>
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+                        <p className="absolute bottom-2 left-2 right-2 font-lora italic text-[11px] text-white/90 leading-snug">
+                          {detailPhoto.caption}
+                        </p>
+                      </>
+                    )}
+                  </div>
+                )}
+                {section.body.split(/\n\n+/).filter(p => p.trim()).map((p, j) => {
+                  const paragraph = (
+                    <p className="font-lora text-[15px] leading-[1.85] text-stone-700 mb-3.5">{renderInline(p.trim())}</p>
+                  )
+                  return j === 0 ? (
+                    <div key={j}>
+                      <p className="font-barlow font-bold text-[11px] tracking-[0.2em] uppercase text-terra-500 mb-2">
+                        {section.title}
+                      </p>
+                      {paragraph}
+                    </div>
+                  ) : <div key={j}>{paragraph}</div>
+                })}
+                <div className="clear-both" />
               </div>
             ))}
+
+            {storyBoxes.length > 0 && (
+              <div className="flex flex-col gap-3 mb-8">
+                {storyBoxes.map((q, i) => {
+                  const acc = STORY_ACCENTS[i % STORY_ACCENTS.length]
+                  return (
+                    <div key={i} className="rounded-r-lg py-4 px-5" style={{ background: acc.bg, borderLeft: `3px solid ${acc.border}` }}>
+                      <p className="font-lora italic text-[13.5px] leading-[1.75]" style={{ color: acc.text }}>{renderInline(q)}</p>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {showStatistiche && (
+              <div className="grid grid-cols-2 gap-2 mb-4">
+                <StatCard value={`${(entry.distanceMeters / 1000).toFixed(1)} km`} label="Distanza" icon={<Route style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
+                <StatCard value={`${Math.round(entry.elevationGain)} m`} label="Dislivello D+" icon={<Mountain style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
+                <StatCard value={formatDuration(entry.totalTimeSeconds)} label="Durata" icon={<Clock style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
+                <StatCard value={entry.calories ? `${entry.calories}` : '—'} label="Calorie (kcal)" icon={<Flame style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
+              </div>
+            )}
+            {showGrafico && (
+              <div className="mb-4">
+                <p className="font-barlow font-bold text-[10px] text-stone-400 tracking-[0.2em] uppercase mb-1.5">
+                  Profilo altimetrico
+                </p>
+                <div className="rounded-lg p-3" style={{ background: GREEN.bg, border: `1px solid ${GREEN.border}` }}>
+                  <ProgressChart series={entry.altitudeSeries} accent={GREEN} unit=" m" />
+                </div>
+              </div>
+            )}
+            {(showCuore || showVelocita) && (
+              <div className="flex flex-col gap-3 mb-4">
+                {showCuore && (
+                  <div>
+                    <p className="font-barlow font-bold text-[10px] text-stone-400 tracking-[0.2em] uppercase mb-1.5">
+                      Frequenza cardiaca
+                    </p>
+                    <div className="bg-red-50 rounded-lg p-3 border border-red-200">
+                      <ProgressChart series={entry.hrSeries} accent={{ bg: '#fef2f2', border: '#fecaca', text: '#991b1b', iconBg: '#fee2e2', iconColor: '#dc2626' }} unit=" bpm" />
+                    </div>
+                  </div>
+                )}
+                {showVelocita && (
+                  <div>
+                    <p className="font-barlow font-bold text-[10px] text-stone-400 tracking-[0.2em] uppercase mb-1.5">
+                      Velocità
+                    </p>
+                    <div className="rounded-lg p-3" style={{ background: BLUE.bg, border: `1px solid ${BLUE.border}` }}>
+                      <ProgressChart series={entry.speedSeriesKmh} accent={BLUE} unit=" km/h" decimals={1} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            {showMappa && (
+              <div className="mb-5">
+                <p className="font-display font-bold text-forest-900 text-lg mb-3">Il percorso</p>
+                <div className="float-right w-20 ml-2.5 mb-1.5">
+                  <LocatorMap eager lat={entry.polyline![0][0]} lon={entry.polyline![0][1]} label={entry.title} />
+                </div>
+                <RouteMap polyline={entry.polyline!} pois={entry.pois} />
+                <div className="clear-both" />
+                <PoiCaption pois={entry.pois} />
+              </div>
+            )}
+
+            {/* Mappa a sé per le foto (mai insieme a percorso/POI: vedi RouteMap.tsx) */}
+            {showFotoMappa && (
+              <div className="mb-5">
+                <p className="font-display font-bold text-forest-900 text-lg mb-3">Foto lungo il percorso</p>
+                <PhotoRouteMap polyline={entry.polyline!} photos={photosWithProgress} idPrefix={`esc-${n}`} />
+              </div>
+            )}
+
+            {/* Foto — sotto lg: stessa sequenza impilata di sempre (la foto di dettaglio è già
+                comparsa sopra, dentro il testo). Da lg in su queste stesse foto vivono nel rail. */}
+            {galleryPhotos.length > 0 && (
+              <div className="lg:hidden mt-4 flex flex-col gap-3.5">
+                {galleryPhotos.map((ph, i) => (
+                  <div key={ph.id} className="relative">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={ph.url} alt={ph.caption ?? ''} loading="lazy" decoding="async" className="w-full aspect-[4/3] object-cover rounded-lg shadow-sm" />
+                    <span className="absolute top-1.5 left-1.5 w-5 h-5 bg-terra-500 text-white rounded-full text-center text-[10px] font-bold leading-5 border border-white">{i + 1}</span>
+                    {ph.caption && <p className="text-[11px] text-stone-500 text-center mt-1.5 italic font-lora">{ph.caption}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-        )}
+
+          {/* Rail fotografico — solo da lg in su: la foto di dettaglio + la galleria, tolte dal
+              flusso del racconto invece che impilate o flottanti dentro il testo. */}
+          {(detailPhoto || galleryPhotos.length > 0) && (
+            <div className="hidden lg:flex lg:flex-col lg:gap-5">
+              {detailPhoto && (
+                <div className="relative rounded-lg overflow-hidden">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={detailPhoto.url} alt={detailPhoto.caption ?? ''} loading="lazy" decoding="async" className="w-full aspect-[4/3] object-cover shadow-sm" />
+                  {detailPhoto.caption && <p className="text-[11px] text-stone-500 text-center mt-1.5 italic font-lora">{detailPhoto.caption}</p>}
+                </div>
+              )}
+              {galleryPhotos.map((ph, i) => (
+                <div key={ph.id} className="relative">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={ph.url} alt={ph.caption ?? ''} loading="lazy" decoding="async" className="w-full aspect-[4/3] object-cover rounded-lg shadow-sm" />
+                  <span className="absolute top-1.5 left-1.5 w-5 h-5 bg-terra-500 text-white rounded-full text-center text-[10px] font-bold leading-5 border border-white">{i + 1}</span>
+                  {ph.caption && <p className="text-[11px] text-stone-500 text-center mt-1.5 italic font-lora">{ph.caption}</p>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Piede pagina */}
         <div className="flex items-center justify-between border-t border-stone-100 pt-3.5 mt-8">

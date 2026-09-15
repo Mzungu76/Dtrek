@@ -69,6 +69,21 @@ function PeekWidgets({ data }: { data: DashboardData }) {
   )
 }
 
+/** Le stesse 2 "chiavi" del peek mobile (Recovery/Prossima uscita), ma nella versione già pronta
+ *  per uno sfondo chiaro: da lg in su il pannello è un riquadro bianco fisso, non più un foglio
+ *  sopra la mappa scura, quindi qui si riusano i widget del catalogo (WIDGET_BY_ID) invece dello
+ *  stile "vetro" di PeekWidgets sopra, pensato apposta per stare sopra la mappa. */
+function PinnedPeekWidgets({ data }: { data: DashboardData }) {
+  const RecoveryC = WIDGET_BY_ID.recovery.Component
+  const NextOutingC = WIDGET_BY_ID['prossima-uscita'].Component
+  return (
+    <>
+      <RecoveryC data={data} />
+      <NextOutingC data={data} />
+    </>
+  )
+}
+
 /** Pannello a scomparsa (Direzione E): peek con 2 widget chiave + maniglia, trascinata o toccata
  *  per aprire tutto il catalogo di schede/widget personalizzabili già costruito per la Dashboard
  *  a card (Direzione C, app/bacheca/page.tsx prima di questo restyling) — quella logica non
@@ -163,9 +178,11 @@ export default function DashboardSheet({ data }: { data: DashboardData }) {
 
   return (
     <>
-      {/* ── Peek: sempre visibile, ancorato in basso sopra la mappa ── */}
+      {/* ── Peek: sempre visibile, ancorato in basso sopra la mappa — solo sotto lg, dove il
+          pannello è un foglio trascinabile che altrimenti coprirebbe tutta la mappa. Da lg in
+          su il pannello è un riquadro fisso sempre aperto (sotto), quindi non serve un peek. ── */}
       <div
-        className="absolute inset-x-0 bottom-0 z-20 flex flex-col gap-2.5 px-4 transition-opacity"
+        className="absolute inset-x-0 bottom-0 z-20 flex flex-col gap-2.5 px-4 transition-opacity lg:hidden"
         style={{ opacity: open ? 0 : 1, pointerEvents: open ? 'none' : 'auto' }}
       >
         <button
@@ -189,19 +206,33 @@ export default function DashboardSheet({ data }: { data: DashboardData }) {
         </div>
       </div>
 
-      {/* ── Pannello aperto: tutto il catalogo widget/schede, invariato nella logica ── */}
+      {/* ── Pannello: sotto lg un foglio trascinabile (stessa logica di sempre); da lg in su un
+          riquadro fisso a destra, sempre aperto — niente maniglia da trascinare, niente peek
+          separato: le due "chiavi" del peek (Recovery/Prossima uscita) restano in cima anche
+          qui, sopra le schede. Il catalogo di widget/schede sotto non cambia. ── */}
       <div
-        className="fixed inset-x-0 bottom-0 z-30 bg-stone-50 rounded-t-[26px] shadow-2xl flex flex-col transition-transform duration-300 ease-out"
-        style={{ top: 'calc(env(safe-area-inset-top,0px) + 64px)', transform: open ? 'translateY(0)' : 'translateY(100%)' }}
+        className={`fixed inset-x-0 bottom-0 z-30 bg-stone-50 rounded-t-[26px] shadow-2xl flex flex-col
+          transition-transform duration-300 ease-out top-[calc(env(safe-area-inset-top,0px)+64px)]
+          ${open ? 'translate-y-0' : 'translate-y-full'}
+          lg:translate-y-0 lg:inset-y-0 lg:left-auto lg:right-0 lg:w-[420px]
+          lg:rounded-t-none lg:rounded-l-2xl lg:shadow-none lg:border-l lg:border-stone-200`}
       >
         <button
           onPointerDown={handlePointerDown} onPointerUp={handlePointerUp}
-          aria-label="Chiudi" className="shrink-0 flex flex-col items-center pt-2.5 pb-1 touch-none select-none"
+          aria-label="Chiudi" className="shrink-0 flex flex-col items-center pt-2.5 pb-1 touch-none select-none lg:hidden"
         >
           <div className="w-9 h-1.5 rounded-full bg-stone-300" />
         </button>
 
-        <div className="shrink-0 flex items-center justify-between px-4 pb-2">
+        <div className="hidden lg:flex flex-col gap-2.5 px-4 pt-4">
+          {configLoaded ? <PinnedPeekWidgets data={data} /> : (
+            <div className="flex flex-col gap-2.5">
+              {[0, 1].map(i => <div key={i} className="h-[72px] rounded-2xl bg-stone-100 animate-pulse" />)}
+            </div>
+          )}
+        </div>
+
+        <div className="shrink-0 flex items-center justify-between px-4 pb-2 pt-2 lg:pt-4">
           <h1 className="font-display text-xl font-bold text-stone-800">Dashboard</h1>
           <button
             onClick={() => setEditMode(v => !v)}

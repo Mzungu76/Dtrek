@@ -72,6 +72,9 @@ export default function DashboardHero({ data }: { data: DashboardData }) {
       { icon: TrendingUp, label: `+${Math.round(suggested.elevationGain)} m` },
     ]
     return (
+      // Niente scarto lg:right qui: in questi due stati page.tsx non monta affatto
+      // DashboardSheet (hasAnyData è false), quindi l'hero resta a piena pagina — lo scarto per
+      // il pannello fisso (sotto) vale solo per lo stato "popolato" che segue.
       <>
         <AllRoutesMap
           routes={[{ id: 'suggerito', title: suggested.title, startTime: new Date().toISOString(), polyline: suggested.polyline }]}
@@ -136,7 +139,7 @@ export default function DashboardHero({ data }: { data: DashboardData }) {
   ]
 
   return (
-    <>
+    <div className="absolute inset-0 lg:right-[420px]">
       {tab === 'resoconti' ? (
         <AllRoutesMap key="resoconti" routes={resocontoRoutes} height="100%" interactive={false} emptyFallback={REGIONAL_FALLBACK} className="absolute inset-0" />
       ) : (
@@ -168,6 +171,6 @@ export default function DashboardHero({ data }: { data: DashboardData }) {
           </div>
         }
       />
-    </>
+    </div>
   )
 }
