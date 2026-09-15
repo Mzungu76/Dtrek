@@ -29,7 +29,6 @@ import { DiarioNatura } from '@/components/diario/DiarioNatura'
 import { DiarioMappa } from '@/components/diario/DiarioMappa'
 import { DiarioStatistiche } from '@/components/diario/DiarioStatistiche'
 import { DiarioReportPage } from '@/components/diario/DiarioReportPage'
-import { AppReportPage, AppStubPage } from '@/components/diario/AppReportPage'
 import type { DiaryReport, ReportExtras, BookPage } from '@/components/diario/types'
 import {
   type DiaryConfig, normalizeDiaryConfig, resolveReportExtras,
@@ -49,6 +48,14 @@ import { uploadDiaryCover } from '@/lib/diaryCoverUpload'
 // il Diario che ha ereditato la vecchia configurazione singola (in pratica quello di default: un
 // Diario nuovo ha già un titolo diverso da DEFAULT_DIARY_CONFIG e la guardia sotto lo salta).
 const MIGRATED_FLAG = 'dtrek_diary_migrated_v1'
+
+// Il libro è un vero foglio A4 impaginato (DiarioReportPage.tsx e le altre pagine, tutte
+// width:794 — vedi PDF_PAGE_W), scalato per adattarsi allo schermo come un lettore PDF: sotto
+// 794px si rimpicciolisce proporzionalmente, com'è giusto che sia. Il tetto a 1 lo teneva invece
+// congelato a 794px su ogni schermo più largo — su un monitor la pagina restava un francobollo
+// circondato da spazio vuoto. Qui cresce fino a un massimo ragionevole (~1070px, la larghezza di
+// una vera pagina di rivista a schermo) invece di restare bloccata per sempre.
+const MAX_BOOK_SCALE = 1070 / 794
 
 function isConfigDefault(c: DiaryConfig): boolean {
   return (
@@ -336,7 +343,7 @@ export default function DiarioLibroPage() {
 
     function recalc() {
       const outerWidth = outer!.clientWidth
-      setScale(Math.min(1, outerWidth / 794))
+      setScale(Math.min(MAX_BOOK_SCALE, outerWidth / 794))
       setInnerHeight(inner!.scrollHeight)
     }
     recalc()
@@ -1049,12 +1056,12 @@ export default function DiarioLibroPage() {
         </div>
       )}
 
-      {/* Copertina/Indice/Mappa/Statistiche: sempre in questa pagina scalata, a ogni larghezza —
-          da lg: in su la scala è comunque 1 (Math.min(1, outerWidth/794) con outerWidth≥1024),
-          quindi qui non cambia nulla nel passaggio a desktop, è già "alla sua dimensione naturale".
-          Le pagine di escursione invece hanno DUE rese distinte, vedi sotto. */}
+      {/* Il libro è un unico foglio impaginato come una rivista stampabile, a ogni larghezza —
+          vedi MAX_BOOK_SCALE più sopra: sotto i 794px si rimpicciolisce come un lettore PDF, sopra
+          cresce fino a un tetto ragionevole invece di restare bloccato a 794px per sempre. Stessa
+          identità in app e sul sito pubblico (components/leggi/PublicReportPage.tsx). */}
       {!loading && (
-        <div ref={bookOuterRef} className="bg-stone-200 min-h-screen lg:min-h-0 overflow-hidden">
+        <div ref={bookOuterRef} className="bg-stone-200 min-h-screen overflow-hidden">
           <div style={{ height: innerHeight ? innerHeight * scale + 48 : undefined, position: 'relative' }}>
             <div
               ref={bookInnerRef}
@@ -1076,92 +1083,42 @@ export default function DiarioLibroPage() {
                 <DiarioStatistiche activities={activities} toggles={config.statsToggles} />
               )}
 
-              {/* Pagine di escursione, versione scalata (sotto lg:) — e SEMPRE, a ogni larghezza,
-                  la fonte esatta da cui nasce il PDF (app/diario/libro/[id]/page.tsx clona dal DOM
-                  i nodi `.diario-page` prodotti da DiarioReportPage/DiarioStubPage): nascosta con
-                  `lg:hidden` (display:none), non smontata, così l'export continua a funzionare
-                  identico a prima anche quando l'utente guarda la versione desktop qui sotto. Le
-                  mappe Leaflet di queste pagine nascoste non si montano comunque (LazyMount usa
-                  IntersectionObserver, che non "vede" mai un elemento display:none), quindi non
-                  raddoppiano il costo delle mappe reali della vista desktop. */}
-              <div className="lg:hidden">
-                {pagesWithYearBand.map(({ page, yearBand, activityId }) => (
-                  <div key={page.kind === 'report' ? `rep-${page.report.id}` : `stub-${page.activity.id}`}>
-                    {page.kind === 'report' ? (
-                      <DiarioReportPage
-                        report={page.report}
-                        photos={photosByAct[page.report.activity_id] ?? []}
-                        meta={activities.find(a => a.id === page.report.activity_id)}
-                        extras={resolveReportExtras(config, page.report.activity_id)}
-                        trackPoints={trackPointsByAct[page.report.activity_id]}
-                        mapsInteractive={mapsInteractive}
-                        escNumber={reportNumbers.get(page.report.id) ?? 1}
-                        yearBand={yearBand}
-                        selectedPhotoIds={config.photoIdsByActivity[page.report.activity_id]}
-                        onSelectedPhotosChange={ids => setConfig(c => {
-                          const next = { ...c.photoIdsByActivity }
-                          // Elenco vuoto = torna alla scelta automatica: si toglie la chiave invece
-                          // di salvare un array vuoto, così la configurazione non accumula voci
-                          // che dicono «niente di particolare».
-                          if (ids.length === 0) delete next[page.report.activity_id]
-                          else next[page.report.activity_id] = ids
-                          return { ...c, photoIdsByActivity: next }
-                        })}
-                        onExclude={() => toggleExcludeActivity(activityId)}
-                        onExtrasChange={patch => patchReportExtrasForActivity(activityId, patch)}
-                      />
-                    ) : (
-                      <DiarioStubPage
-                        activity={page.activity}
-                        yearBand={yearBand}
-                        onExclude={() => toggleExcludeActivity(activityId)}
-                      />
-                    )}
-                  </div>
-                ))}
-              </div>
+              {pagesWithYearBand.map(({ page, yearBand, activityId }) => (
+                <div key={page.kind === 'report' ? `rep-${page.report.id}` : `stub-${page.activity.id}`}>
+                  {page.kind === 'report' ? (
+                    <DiarioReportPage
+                      report={page.report}
+                      photos={photosByAct[page.report.activity_id] ?? []}
+                      meta={activities.find(a => a.id === page.report.activity_id)}
+                      extras={resolveReportExtras(config, page.report.activity_id)}
+                      trackPoints={trackPointsByAct[page.report.activity_id]}
+                      mapsInteractive={mapsInteractive}
+                      escNumber={reportNumbers.get(page.report.id) ?? 1}
+                      yearBand={yearBand}
+                      selectedPhotoIds={config.photoIdsByActivity[page.report.activity_id]}
+                      onSelectedPhotosChange={ids => setConfig(c => {
+                        const next = { ...c.photoIdsByActivity }
+                        // Elenco vuoto = torna alla scelta automatica: si toglie la chiave invece
+                        // di salvare un array vuoto, così la configurazione non accumula voci
+                        // che dicono «niente di particolare».
+                        if (ids.length === 0) delete next[page.report.activity_id]
+                        else next[page.report.activity_id] = ids
+                        return { ...c, photoIdsByActivity: next }
+                      })}
+                      onExclude={() => toggleExcludeActivity(activityId)}
+                      onExtrasChange={patch => patchReportExtrasForActivity(activityId, patch)}
+                    />
+                  ) : (
+                    <DiarioStubPage
+                      activity={page.activity}
+                      yearBand={yearBand}
+                      onExclude={() => toggleExcludeActivity(activityId)}
+                    />
+                  )}
+                </div>
+              ))}
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Pagine di escursione, versione a schermo intero (da lg: in su) — componente responsivo
-          nuovo (AppReportPage/AppStubPage, componenti/diario/AppReportPage.tsx): stessi dati e
-          stessi gestori di modifica della versione sopra, impaginazione Scheda/testo/rail invece
-          della pagina A4 congelata. Fuori dal contenitore scalato apposta: quel contenitore resta
-          fisso a 794px anche a scala 1, qui serve tutta la larghezza dello schermo. */}
-      {!loading && (
-        <div className="hidden lg:block max-w-[1600px] mx-auto">
-          {pagesWithYearBand.map(({ page, yearBand, activityId }) => (
-            <div key={page.kind === 'report' ? `rep-app-${page.report.id}` : `stub-app-${page.activity.id}`}>
-              {page.kind === 'report' ? (
-                <AppReportPage
-                  report={page.report}
-                  photos={photosByAct[page.report.activity_id] ?? []}
-                  meta={activities.find(a => a.id === page.report.activity_id)}
-                  extras={resolveReportExtras(config, page.report.activity_id)}
-                  trackPoints={trackPointsByAct[page.report.activity_id]}
-                  escNumber={reportNumbers.get(page.report.id) ?? 1}
-                  yearBand={yearBand}
-                  selectedPhotoIds={config.photoIdsByActivity[page.report.activity_id]}
-                  onSelectedPhotosChange={ids => setConfig(c => {
-                    const next = { ...c.photoIdsByActivity }
-                    if (ids.length === 0) delete next[page.report.activity_id]
-                    else next[page.report.activity_id] = ids
-                    return { ...c, photoIdsByActivity: next }
-                  })}
-                  onExclude={() => toggleExcludeActivity(activityId)}
-                  onExtrasChange={patch => patchReportExtrasForActivity(activityId, patch)}
-                />
-              ) : (
-                <AppStubPage
-                  activity={page.activity}
-                  yearBand={yearBand}
-                  onExclude={() => toggleExcludeActivity(activityId)}
-                />
-              )}
-            </div>
-          ))}
         </div>
       )}
     </div>
