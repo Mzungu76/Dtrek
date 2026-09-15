@@ -63,7 +63,7 @@ function SommarioThumb({ entry, show }: { entry: PublicDiaryEntry; show: DiaryPu
   )
 }
 
-function PageNav({ n, total, backHref, backLabel }: { n: number; total: number; backHref: string; backLabel: string }) {
+function PageNav({ n, total, backHref, backLabel }: { n: number; total: number; backHref?: string; backLabel?: string }) {
   return (
     <div className="sticky top-14 z-10 bg-stone-50/95 backdrop-blur border-b border-stone-200 px-4 sm:px-5 py-2.5 flex items-center justify-between gap-2">
       <a href={n > 1 ? `#p-${n - 1}` : undefined} aria-disabled={n === 1}
@@ -75,9 +75,15 @@ function PageNav({ n, total, backHref, backLabel }: { n: number; total: number; 
           <BookOpen className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Sommario</span>
         </a>
         <span className="font-mono text-[11px] text-stone-400">Pagina {n} di {total}</span>
-        <a href={backHref} title={backLabel} className="flex items-center gap-1 text-xs font-semibold text-stone-500 hover:text-forest-700 transition">
-          <ArrowLeft className="w-3.5 h-3.5" /> <span className="hidden sm:inline">{backLabel}</span>
-        </a>
+        {/* backHref assente per un Diario da solo dopo l'unione con la copertina (nessuna pagina
+            separata a cui tornare, la copertina è appena sopra il Sommario nello stesso scroll) —
+            presente solo per un Volume dentro una Raccolta, dove serve davvero risalire alla
+            Raccolta (app/leggi/c/[token]/v/[vi]/libro). */}
+        {backHref && (
+          <a href={backHref} title={backLabel} className="flex items-center gap-1 text-xs font-semibold text-stone-500 hover:text-forest-700 transition">
+            <ArrowLeft className="w-3.5 h-3.5" /> <span className="hidden sm:inline">{backLabel}</span>
+          </a>
+        )}
       </div>
       <a href={n < total ? `#p-${n + 1}` : undefined} aria-disabled={n === total}
         className={`flex items-center gap-1 text-xs font-semibold shrink-0 ${n === total ? 'invisible' : 'text-stone-500 hover:text-forest-700 transition'}`}>
@@ -87,7 +93,7 @@ function PageNav({ n, total, backHref, backLabel }: { n: number; total: number; 
   )
 }
 
-export function DiaryBook({ entries, show, title, subtitle, ownerName, dateRangeLabel, totalKm, totalElevationGain, pdfUrl, backHref, backLabel, hideExactDates = false }: {
+export function DiaryBook({ entries, show, title, subtitle, ownerName, dateRangeLabel, totalKm, totalElevationGain, pdfUrl, backHref, backLabel, hideExactDates = false, compactSummary = false }: {
   entries: PublicDiaryEntry[]
   show: DiaryPublicSections
   title: string
@@ -97,13 +103,22 @@ export function DiaryBook({ entries, show, title, subtitle, ownerName, dateRange
   totalKm: number
   totalElevationGain: number
   pdfUrl?: string | null
-  /** Dove porta "torna ai Diari"/"torna al Diario" — la copertina del Diario/Volume da cui si è
-   *  aperto il libro. */
-  backHref: string
-  backLabel: string
+  /** Dove porta "torna ai Diari"/"torna al Diario" — assente per un Diario da solo (nessuna
+   *  copertina separata a cui tornare dopo l'unione, vedi `compactSummary`); presente solo per un
+   *  Volume dentro una Raccolta, che torna davvero alla Raccolta. */
+  backHref?: string
+  backLabel?: string
   /** Preferenza di privacy dell'autore (lib/sharePublicDiary.ts) — solo mese/anno invece della data
    *  esatta, nel Sommario e su ogni pagina di escursione. */
   hideExactDates?: boolean
+  /** Il Diario da solo (app/leggi/d/[token]/page.tsx) mostra PublicCover appena sopra questo
+   *  componente, con già titolo/sottotitolo/autore e questi stessi tre numeri — ripeterli qui
+   *  sarebbe la stessa card duplicata due volte nella stessa pagina. Con `compactSummary` il
+   *  Sommario salta quel blocco e comincia direttamente dall'Andamento mensile (unico contenuto
+   *  della copertina che PublicCover non mostra). Un Volume di Raccolta (che ha la propria
+   *  copertina identica un livello sopra) userà lo stesso compattamento in un giro successivo — qui
+   *  resta false per non toccare quella pagina in questo cambiamento. */
+  compactSummary?: boolean
 }) {
   const totalPages = entries.length + 1
   const stats = show.statistiche ? computePublicDiaryStats(entries) : null
@@ -114,26 +129,32 @@ export function DiaryBook({ entries, show, title, subtitle, ownerName, dateRange
       <section id="p-1">
         <PageNav n={1} total={totalPages} backHref={backHref} backLabel={backLabel} />
         <div className="max-w-3xl mx-auto px-4 sm:px-5 py-6 pb-8">
-          <h1 className="font-display text-2xl sm:text-3xl font-bold text-forest-900">{title}</h1>
-          {subtitle && <p className="font-lora italic text-stone-500 mt-1">{subtitle}</p>}
-          <p className="text-xs text-stone-400 mt-1">di {ownerName}{dateRangeLabel ? ` · ${dateRangeLabel}` : ''}</p>
+          {!compactSummary && (
+            <>
+              <h1 className="font-display text-2xl sm:text-3xl font-bold text-forest-900">{title}</h1>
+              {subtitle && <p className="font-lora italic text-stone-500 mt-1">{subtitle}</p>}
+              <p className="text-xs text-stone-400 mt-1">di {ownerName}{dateRangeLabel ? ` · ${dateRangeLabel}` : ''}</p>
+            </>
+          )}
 
           {stats && (
             <>
-              <div className="grid grid-cols-3 gap-3 mt-5">
-                {[
-                  { value: String(entries.length), label: entries.length === 1 ? 'Escursione' : 'Escursioni' },
-                  { value: `${totalKm.toFixed(0)} km`, label: 'Percorsi' },
-                  { value: `${Math.round(totalElevationGain).toLocaleString('it')} m`, label: 'Dislivello +' },
-                ].map(s => (
-                  <div key={s.label} className="bg-white rounded-2xl border border-stone-200 px-3 py-4 text-center shadow-sm">
-                    <div className="font-mono text-xl font-bold text-forest-800 leading-tight">{s.value}</div>
-                    <div className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider mt-1">{s.label}</div>
-                  </div>
-                ))}
-              </div>
+              {!compactSummary && (
+                <div className="grid grid-cols-3 gap-3 mt-5">
+                  {[
+                    { value: String(entries.length), label: entries.length === 1 ? 'Escursione' : 'Escursioni' },
+                    { value: `${totalKm.toFixed(0)} km`, label: 'Percorsi' },
+                    { value: `${Math.round(totalElevationGain).toLocaleString('it')} m`, label: 'Dislivello +' },
+                  ].map(s => (
+                    <div key={s.label} className="bg-white rounded-2xl border border-stone-200 px-3 py-4 text-center shadow-sm">
+                      <div className="font-mono text-xl font-bold text-forest-800 leading-tight">{s.value}</div>
+                      <div className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider mt-1">{s.label}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
               {entries.length > 0 && (
-                <div className="bg-white rounded-2xl border border-stone-200 px-4 py-3.5 shadow-sm mt-3">
+                <div className={`bg-white rounded-2xl border border-stone-200 px-4 py-3.5 shadow-sm ${compactSummary ? '' : 'mt-3'}`}>
                   <p className="font-barlow font-bold text-[10px] tracking-[0.2em] uppercase text-stone-400 mb-2">Andamento mensile</p>
                   <MonthBarChart activities={entries} />
                 </div>

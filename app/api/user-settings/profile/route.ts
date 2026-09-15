@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
 
     const { data, error } = await supabase
       .from('user_settings')
-      .select('profile_slug, profile_enabled')
+      .select('profile_slug, profile_enabled, profile_bio')
       .eq('user_id', user.id)
       .maybeSingle()
     if (error) throw error
@@ -28,6 +28,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       slug: (data?.profile_slug as string | null) ?? null,
       enabled: (data?.profile_enabled as boolean | null) ?? false,
+      bio: (data?.profile_bio as string | null) ?? '',
     })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 })
@@ -42,7 +43,7 @@ export async function PATCH(req: NextRequest) {
     const user = await getUserFromRequest(req)
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const body = await req.json().catch(() => ({})) as { slug?: unknown; enabled?: unknown }
+    const body = await req.json().catch(() => ({})) as { slug?: unknown; enabled?: unknown; bio?: unknown }
     const patch: Record<string, unknown> = {}
 
     if (Object.prototype.hasOwnProperty.call(body, 'slug')) {
@@ -67,6 +68,17 @@ export async function PATCH(req: NextRequest) {
         }
       }
       patch.profile_enabled = body.enabled
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, 'bio')) {
+      if (typeof body.bio !== 'string') {
+        return NextResponse.json({ error: 'bio deve essere una stringa' }, { status: 400 })
+      }
+      // Una riga di presentazione, non un racconto — sta sotto il nome nella copertina del sito
+      // (components/leggi/PublicCover.tsx `preface`), stesso limite di lunghezza ragionevole di
+      // un sottotitolo, non del corpo di un Diario.
+      const bio = body.bio.trim().slice(0, 280)
+      patch.profile_bio = bio
     }
 
     if (Object.keys(patch).length === 0) {
