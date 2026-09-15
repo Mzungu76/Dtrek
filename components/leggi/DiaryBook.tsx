@@ -26,7 +26,7 @@ function cq(px: number): string {
   return `${+(px / PAGE_W * 100).toFixed(3)}cqw`
 }
 
-function PageNav({ n, total, backHref, backLabel }: { n: number; total: number; backHref: string; backLabel: string }) {
+function PageNav({ n, total, backHref, backLabel }: { n: number; total: number; backHref?: string; backLabel?: string }) {
   return (
     <div className="sticky top-14 z-10 bg-stone-50/95 backdrop-blur border-b border-stone-200 px-4 sm:px-5 py-2.5 flex items-center justify-between gap-2">
       <a href={n > 1 ? `#p-${n - 1}` : undefined} aria-disabled={n === 1}
@@ -38,9 +38,15 @@ function PageNav({ n, total, backHref, backLabel }: { n: number; total: number; 
           <BookOpen className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Sommario</span>
         </a>
         <span className="font-mono text-[11px] text-stone-400">Pagina {n} di {total}</span>
-        <a href={backHref} title={backLabel} className="flex items-center gap-1 text-xs font-semibold text-stone-500 hover:text-forest-700 transition">
-          <ArrowLeft className="w-3.5 h-3.5" /> <span className="hidden sm:inline">{backLabel}</span>
-        </a>
+        {/* backHref assente per un Diario da solo dopo l'unione con la copertina (nessuna pagina
+            separata a cui tornare, la copertina è appena sopra il Sommario nello stesso scroll) —
+            presente solo per un Volume dentro una Raccolta, dove serve davvero risalire alla
+            Raccolta (app/leggi/c/[token]/v/[vi]/libro). */}
+        {backHref && (
+          <a href={backHref} title={backLabel} className="flex items-center gap-1 text-xs font-semibold text-stone-500 hover:text-forest-700 transition">
+            <ArrowLeft className="w-3.5 h-3.5" /> <span className="hidden sm:inline">{backLabel}</span>
+          </a>
+        )}
       </div>
       <a href={n < total ? `#p-${n + 1}` : undefined} aria-disabled={n === total}
         className={`flex items-center gap-1 text-xs font-semibold shrink-0 ${n === total ? 'invisible' : 'text-stone-500 hover:text-forest-700 transition'}`}>
@@ -50,7 +56,7 @@ function PageNav({ n, total, backHref, backLabel }: { n: number; total: number; 
   )
 }
 
-export function DiaryBook({ entries, show, title, subtitle, ownerName, dateRangeLabel, totalKm, totalElevationGain, pdfUrl, backHref, backLabel, hideExactDates = false }: {
+export function DiaryBook({ entries, show, title, subtitle, ownerName, dateRangeLabel, totalKm, totalElevationGain, pdfUrl, backHref, backLabel, hideExactDates = false, compactSummary = false }: {
   entries: PublicDiaryEntry[]
   show: DiaryPublicSections
   title: string
@@ -60,13 +66,22 @@ export function DiaryBook({ entries, show, title, subtitle, ownerName, dateRange
   totalKm: number
   totalElevationGain: number
   pdfUrl?: string | null
-  /** Dove porta "torna ai Diari"/"torna al Diario" — la copertina del Diario/Volume da cui si è
-   *  aperto il libro. */
-  backHref: string
-  backLabel: string
+  /** Dove porta "torna ai Diari"/"torna al Diario" — assente per un Diario da solo (nessuna
+   *  copertina separata a cui tornare dopo l'unione, vedi `compactSummary`); presente solo per un
+   *  Volume dentro una Raccolta, che torna davvero alla Raccolta. */
+  backHref?: string
+  backLabel?: string
   /** Preferenza di privacy dell'autore (lib/sharePublicDiary.ts) — solo mese/anno invece della data
    *  esatta, nel Sommario e su ogni pagina di escursione. */
   hideExactDates?: boolean
+  /** Il Diario da solo (app/leggi/d/[token]/page.tsx) mostra PublicCover appena sopra questo
+   *  componente, con già titolo/sottotitolo/autore e questi stessi tre numeri — ripeterli qui
+   *  sarebbe la stessa card duplicata due volte nella stessa pagina. Con `compactSummary` il
+   *  Sommario salta quel blocco e comincia direttamente dall'Andamento mensile (unico contenuto
+   *  della copertina che PublicCover non mostra). Un Volume di Raccolta (che ha la propria
+   *  copertina identica un livello sopra) userà lo stesso compattamento in un giro successivo — qui
+   *  resta false per non toccare quella pagina in questo cambiamento. */
+  compactSummary?: boolean
 }) {
   const totalPages = entries.length + 1
   const stats = show.statistiche ? computePublicDiaryStats(entries) : null
@@ -83,35 +98,45 @@ export function DiaryBook({ entries, show, title, subtitle, ownerName, dateRange
             boxShadow: '0 8px 56px rgba(0,0,0,0.22)', borderRadius: cq(3),
           }}>
             <div style={{ padding: `${cq(72)} ${cq(64)}` }}>
-              <p className="font-barlow" style={{ fontWeight: 700, fontSize: cq(9), letterSpacing: cq(4), color: '#e08d3c', textTransform: 'uppercase', margin: `0 0 ${cq(8)}` }}>
-                Sommario
-              </p>
-              <h1 className="font-display" style={{ fontWeight: 700, color: '#193b20', letterSpacing: cq(-0.5), fontSize: cq(32), margin: 0 }}>
-                {title}
-              </h1>
-              {subtitle && (
-                <p className="font-lora" style={{ fontStyle: 'italic', color: '#978e7a', marginTop: cq(6), fontSize: cq(14) }}>{subtitle}</p>
+              {/* compactSummary: il Diario da solo (app/leggi/d/[token]/DiaryPublicView.tsx) mostra
+                  PublicCover appena sopra, con già titolo/sottotitolo/autore e questi stessi tre
+                  numeri — ripeterli qui sarebbe la stessa card duplicata due volte nella stessa
+                  pagina, quindi il Sommario salta quel blocco e comincia dall'Andamento mensile. */}
+              {!compactSummary && (
+                <>
+                  <p className="font-barlow" style={{ fontWeight: 700, fontSize: cq(9), letterSpacing: cq(4), color: '#e08d3c', textTransform: 'uppercase', margin: `0 0 ${cq(8)}` }}>
+                    Sommario
+                  </p>
+                  <h1 className="font-display" style={{ fontWeight: 700, color: '#193b20', letterSpacing: cq(-0.5), fontSize: cq(32), margin: 0 }}>
+                    {title}
+                  </h1>
+                  {subtitle && (
+                    <p className="font-lora" style={{ fontStyle: 'italic', color: '#978e7a', marginTop: cq(6), fontSize: cq(14) }}>{subtitle}</p>
+                  )}
+                  <p style={{ fontSize: cq(11), color: '#a9a18e', marginTop: cq(6) }}>
+                    di {ownerName}{dateRangeLabel ? ` · ${dateRangeLabel}` : ''}
+                  </p>
+                </>
               )}
-              <p style={{ fontSize: cq(11), color: '#a9a18e', marginTop: cq(6) }}>
-                di {ownerName}{dateRangeLabel ? ` · ${dateRangeLabel}` : ''}
-              </p>
 
               {stats && (
                 <>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: cq(10), marginTop: cq(28) }}>
-                    {[
-                      { value: String(entries.length), label: entries.length === 1 ? 'Escursione' : 'Escursioni' },
-                      { value: `${totalKm.toFixed(0)} km`, label: 'Percorsi' },
-                      { value: `${Math.round(totalElevationGain).toLocaleString('it')} m`, label: 'Dislivello +' },
-                    ].map(s => (
-                      <div key={s.label} style={{ background: '#f8f7f4', border: '1px solid #eeece5', borderRadius: cq(12), padding: `${cq(14)} ${cq(10)}`, textAlign: 'center' }}>
-                        <div className="font-mono" style={{ fontWeight: 700, color: '#1c4724', lineHeight: 1.15, fontSize: cq(19) }}>{s.value}</div>
-                        <div className="font-barlow" style={{ fontWeight: 700, color: '#a9a18e', textTransform: 'uppercase', letterSpacing: cq(1), marginTop: cq(4), fontSize: cq(9) }}>{s.label}</div>
-                      </div>
-                    ))}
-                  </div>
+                  {!compactSummary && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: cq(10), marginTop: cq(28) }}>
+                      {[
+                        { value: String(entries.length), label: entries.length === 1 ? 'Escursione' : 'Escursioni' },
+                        { value: `${totalKm.toFixed(0)} km`, label: 'Percorsi' },
+                        { value: `${Math.round(totalElevationGain).toLocaleString('it')} m`, label: 'Dislivello +' },
+                      ].map(s => (
+                        <div key={s.label} style={{ background: '#f8f7f4', border: '1px solid #eeece5', borderRadius: cq(12), padding: `${cq(14)} ${cq(10)}`, textAlign: 'center' }}>
+                          <div className="font-mono" style={{ fontWeight: 700, color: '#1c4724', lineHeight: 1.15, fontSize: cq(19) }}>{s.value}</div>
+                          <div className="font-barlow" style={{ fontWeight: 700, color: '#a9a18e', textTransform: 'uppercase', letterSpacing: cq(1), marginTop: cq(4), fontSize: cq(9) }}>{s.label}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   {entries.length > 0 && (
-                    <div style={{ background: '#f8f7f4', border: '1px solid #eeece5', borderRadius: cq(12), padding: `${cq(14)} ${cq(16)}`, marginTop: cq(12) }}>
+                    <div style={{ background: '#f8f7f4', border: '1px solid #eeece5', borderRadius: cq(12), padding: `${cq(14)} ${cq(16)}`, marginTop: compactSummary ? 0 : cq(12) }}>
                       <p className="font-barlow" style={{ fontWeight: 700, letterSpacing: cq(3), color: '#a9a18e', textTransform: 'uppercase', marginBottom: cq(8), fontSize: cq(9) }}>Andamento mensile</p>
                       <MonthBarChart activities={entries} />
                     </div>

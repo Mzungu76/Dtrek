@@ -2,16 +2,25 @@
 // (docs/raccolte-pubblicazione-piano.md): non un quarto documento, l'INDICE di ciò che l'utente ha
 // già reso pubblico ai tre livelli esistenti (Raccolta/Diario/Reportage). Stessa architettura
 // server-only delle altre pagine pubbliche (app/leggi/d|c|p/[token]) — nessuno stato, nessun
-// JavaScript spedito al browser. Stessa identità visiva della home di una Raccolta pubblica
-// (app/leggi/c/[token]/CollectionPublicView.tsx): copertina a piena pagina, poi una galleria a
-// immagine grande — non l'elenco a righe con miniature che questa pagina usava prima.
+// JavaScript spedito al browser.
+//
+// Fase 3h (restyling della home): prima mostrava solo un elenco piatto, tutto allo stesso livello
+// visivo — nessun punto d'ingresso, nessun contesto su chi fosse l'autore. Quattro cambi, in
+// ordine di comparsa sulla pagina: (1) `bio` sotto il nome nella copertina; (2) l'ultima
+// pubblicazione aggiornata in evidenza, non sepolta in mezzo alla griglia; (3) una mappa
+// d'insieme di tutti i percorsi pubblicati, prima ancora della griglia; (4) i Diari ordinati per
+// aggiornamento invece che per titolo (risolto a monte, in lib/publicProfile.ts).
 import type { Metadata } from 'next'
 import { cache } from 'react'
 import { notFound } from 'next/navigation'
-import { Library, BookMarked, BookOpen } from 'lucide-react'
+import { Library, BookMarked, BookOpen, Sparkles, ArrowRight } from 'lucide-react'
 import { fetchPublicProfile } from '@/lib/publicProfile'
 import { PublicCover } from '@/components/leggi/PublicCover'
+import { ReportageCard } from '@/components/leggi/ReportageCard'
+import { AllRoutesMap, AllRoutesLegend } from '@/app/leggi/d/[token]/AllRoutesMap'
 import { SiteHeader, DtrekCallout, SiteFooter } from '@/app/leggi/d/[token]/SiteChrome'
+
+const LATEST_REPORTAGE_COUNT = 3
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -45,6 +54,30 @@ export async function generateMetadata({ params }: { params: { slug: string } })
   }
 }
 
+interface FeaturedItem {
+  key: string
+  href: string
+  title: string
+  subtitle: string
+  coverUrl: string | null
+  updatedAt: string
+}
+
+/** L'ultima pubblicazione toccata dall'autore, tra Raccolte/Diari/Reportage insieme — non "il
+ *  primo della lista", il più recente per davvero, a prescindere dal tipo. Su un sito che si
+ *  presenta come "cosa ha fatto/pubblicato di recente questo escursionista", seppellire l'ultima
+ *  uscita in mezzo a una griglia indistinta era la lacuna più visibile. */
+function pickFeatured(profile: Awaited<ReturnType<typeof fetchPublicProfile>>): FeaturedItem | null {
+  if (!profile) return null
+  const candidates: FeaturedItem[] = [
+    ...profile.collections.map(c => ({ key: `c-${c.token}`, href: `/leggi/c/${c.token}`, title: c.title, subtitle: c.subtitle, coverUrl: c.coverUrl, updatedAt: c.updatedAt })),
+    ...profile.diaries.map(d => ({ key: `d-${d.token}`, href: `/leggi/d/${d.token}`, title: d.title, subtitle: d.subtitle, coverUrl: d.coverUrl, updatedAt: d.updatedAt })),
+    ...profile.reports.map(r => ({ key: `r-${r.token}`, href: `/leggi/p/${r.token}`, title: r.title, subtitle: '', coverUrl: null, updatedAt: r.createdAt })),
+  ]
+  if (candidates.length === 0) return null
+  return candidates.reduce((best, c) => new Date(c.updatedAt).getTime() > new Date(best.updatedAt).getTime() ? c : best)
+}
+
 export default async function PublicProfilePage({ params }: { params: { slug: string } }) {
   const profile = await getProfile(params.slug)
   if (!profile) notFound()
@@ -57,8 +90,18 @@ export default async function PublicProfilePage({ params }: { params: { slug: st
   const pills = [
     profile.collections.length > 0 ? { value: String(profile.collections.length), label: profile.collections.length === 1 ? 'raccolta' : 'raccolte' } : null,
     profile.diaries.length > 0 ? { value: String(profile.diaries.length), label: profile.diaries.length === 1 ? 'diario' : 'diari' } : null,
-    profile.reports.length > 0 ? { value: String(profile.reports.length), label: profile.reports.length === 1 ? 'reportage' : 'reportage' } : null,
+    profile.reportage.length > 0 ? { value: String(profile.reportage.length), label: 'reportage' } : null,
   ].filter((p): p is { value: string; label: string } => p !== null)
+
+  const featured = pickFeatured(profile)
+  const collections = profile.collections.filter(c => `c-${c.token}` !== featured?.key)
+  const diaries = profile.diaries.filter(d => `d-${d.token}` !== featured?.key)
+  // Il Reportage in evidenza (se è uno di questi) non va ripetuto anche qui sotto — confrontato
+  // per href, l'unico campo comune a un'escursione dentro un Diario (ancora `#p-N`) e a un
+  // Reportage indipendente (pagina propria).
+  const latestReportage = profile.reportage
+    .filter(r => r.href !== featured?.href)
+    .slice(0, LATEST_REPORTAGE_COUNT)
 
   return (
     <div className="min-h-screen bg-stone-50">
@@ -68,6 +111,7 @@ export default async function PublicProfilePage({ params }: { params: { slug: st
         coverUrl={coverUrl}
         eyebrow="Sito personale"
         title={profile.displayName}
+        preface={profile.bio || null}
         pills={pills}
       />
 
@@ -78,31 +122,75 @@ export default async function PublicProfilePage({ params }: { params: { slug: st
           </p>
         )}
 
-        {profile.collections.length > 0 && (
+        {featured && (
+          <section>
+            <h2 className="flex items-center gap-2 font-display text-xl font-bold text-forest-900 px-1 mb-3">
+              <Sparkles className="w-5 h-5 text-terra-500" /> In evidenza
+            </h2>
+            <a href={featured.href} target="_blank" rel="noopener noreferrer"
+              className="group relative block aspect-[16/10] sm:aspect-[21/9] rounded-3xl overflow-hidden shadow-md border border-stone-200">
+              {featured.coverUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={featured.coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+              ) : (
+                <div className="absolute inset-0" style={{ background: 'linear-gradient(158deg,#193b20 0%,#1c4724 45%,#20592b 100%)' }} />
+              )}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
+              <div className="absolute inset-x-0 bottom-0 p-4 sm:p-6">
+                <h3 className="font-display text-xl sm:text-2xl font-bold text-white leading-tight" style={{ textShadow: '0 1px 6px rgba(0,0,0,0.5)' }}>
+                  {featured.title}
+                </h3>
+                {featured.subtitle && (
+                  <p className="font-lora italic text-sm text-white/80 mt-1 truncate">{featured.subtitle}</p>
+                )}
+              </div>
+            </a>
+          </section>
+        )}
+
+        {profile.routes.length > 0 && (
+          <section>
+            <h2 className="font-display text-xl font-bold text-forest-900 px-1 mb-3">Tutti i percorsi</h2>
+            <AllRoutesMap routes={profile.routes} />
+            <AllRoutesLegend routes={profile.routes} />
+          </section>
+        )}
+
+        {collections.length > 0 && (
           <ProfileSection icon={Library} title="Raccolte">
-            {profile.collections.map(c => (
+            {collections.map(c => (
               <GalleryCard key={c.token} href={`/leggi/c/${c.token}`} coverUrl={c.coverUrl}
                 title={c.title} subtitle={c.subtitle} />
             ))}
           </ProfileSection>
         )}
 
-        {profile.diaries.length > 0 && (
+        {diaries.length > 0 && (
           <ProfileSection icon={BookMarked} title="Diari">
-            {profile.diaries.map(d => (
+            {diaries.map(d => (
               <GalleryCard key={d.token} href={`/leggi/d/${d.token}`} coverUrl={d.coverUrl}
                 title={d.title} subtitle={d.subtitle} />
             ))}
           </ProfileSection>
         )}
 
-        {profile.reports.length > 0 && (
-          <ProfileSection icon={BookOpen} title="Reportage">
-            {profile.reports.map(r => (
-              <GalleryCard key={r.token} href={`/leggi/p/${r.token}`} coverUrl={null}
-                title={r.title} subtitle="" />
-            ))}
-          </ProfileSection>
+        {latestReportage.length > 0 && (
+          <section className="space-y-3">
+            <div className="flex items-center justify-between px-1">
+              <h2 className="flex items-center gap-2 font-display text-xl font-bold text-forest-900">
+                <BookOpen className="w-5 h-5 text-forest-600" /> Ultimi reportage
+              </h2>
+              <a href={`/u/${params.slug}/reportage`}
+                className="flex items-center gap-1 text-xs font-semibold text-forest-700 hover:text-forest-800 transition shrink-0">
+                Vedi tutti <ArrowRight className="w-3.5 h-3.5" />
+              </a>
+            </div>
+            <div className="flex flex-col gap-2">
+              {latestReportage.map(r => (
+                <ReportageCard key={r.id} item={r} hideExactDates={profile.hideExactDates} />
+              ))}
+            </div>
+          </section>
         )}
 
         <DtrekCallout />
