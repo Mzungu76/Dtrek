@@ -14,9 +14,13 @@ export default function SectionProfiloPubblico() {
   const [slug, setSlug] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [enabled, setEnabled] = useState(false)
+  const [bio, setBio] = useState('')
+  const [bioDraft, setBioDraft] = useState('')
   const [loaded, setLoaded] = useState(false)
   const [savingSlug, setSavingSlug] = useState(false)
   const [togglingEnabled, setTogglingEnabled] = useState(false)
+  const [savingBio, setSavingBio] = useState(false)
+  const [bioSaved, setBioSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
   const [copyOk, setCopyOk] = useState(false)
@@ -24,10 +28,30 @@ export default function SectionProfiloPubblico() {
   useEffect(() => {
     fetch('/api/user-settings/profile')
       .then(r => r.ok ? r.json() : Promise.reject(new Error(String(r.status))))
-      .then(d => { setSlug(d.slug ?? null); setDraft(d.slug ?? ''); setEnabled(!!d.enabled) })
+      .then(d => {
+        setSlug(d.slug ?? null); setDraft(d.slug ?? ''); setEnabled(!!d.enabled)
+        setBio(d.bio ?? ''); setBioDraft(d.bio ?? '')
+      })
       .catch(() => {})
       .finally(() => setLoaded(true))
   }, [])
+
+  async function saveBio() {
+    setSavingBio(true); setError(null)
+    try {
+      const res = await fetch('/api/user-settings/profile', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bio: bioDraft }),
+      })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(d.error ?? `HTTP ${res.status}`)
+      setBio(bioDraft.trim().slice(0, 280))
+      setBioSaved(true); setTimeout(() => setBioSaved(false), 2500)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSavingBio(false)
+    }
+  }
 
   async function saveSlug() {
     const clientError = validateSlug(draft)
@@ -93,6 +117,27 @@ export default function SectionProfiloPubblico() {
         <p className="text-xs text-stone-400 mt-2 leading-relaxed">
           Un alias pubblico — puoi cambiare il tuo nome visualizzato senza dover cambiare questo indirizzo.
         </p>
+      </div>
+
+      <div>
+        <label className="block text-sm font-semibold text-stone-700 mb-2">Presentazione</label>
+        <textarea
+          value={bioDraft} maxLength={280} rows={2}
+          onChange={e => { setBioDraft(e.target.value); setBioSaved(false); setError(null) }}
+          placeholder="Una riga su di te — chi sei, dove cammini di solito…"
+          className="w-full px-3 py-2 rounded-xl border border-stone-200 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 text-stone-800 resize-none"
+        />
+        <div className="flex items-center justify-between mt-2">
+          <p className="text-xs text-stone-400">Compare sotto il nome nella copertina del tuo sito.</p>
+          <button
+            onClick={saveBio} disabled={savingBio || bioDraft.trim() === bio}
+            className={`shrink-0 px-3.5 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50 ${
+              bioSaved ? 'bg-green-500 text-white' : 'bg-amber-500 hover:bg-amber-600 text-white'
+            }`}
+          >
+            {savingBio ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : bioSaved ? <Check className="w-3.5 h-3.5" /> : 'Salva'}
+          </button>
+        </div>
       </div>
 
       {error && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{error}</p>}
