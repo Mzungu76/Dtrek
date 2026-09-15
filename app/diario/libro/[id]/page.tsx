@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { MobileNavBar } from '@/components/Navbar'
+import { MobileNavBar, DesktopNav } from '@/components/Navbar'
 import { PublishPrivacyToggles } from '@/components/PublishPrivacyToggles'
 import { PublishGateNotice } from '@/components/PublishGateNotice'
 import { useProfileStatus } from '@/lib/hooks/useProfileStatus'
@@ -741,9 +741,11 @@ export default function DiarioLibroPage() {
       {/* Top nav — stessa barra di Bacheca/Guida/Reportage (components/Navbar.tsx), sticky sopra
           il libro come le altre sezioni "hub" dell'app (niente tab bar in basso qui — questa
           pagina non ha la galleria/freccetta di scorrimento che nelle altre sposta i link in
-          fondo, vedi HubNavBar/HubProfileButton: qui la barra intera resta unica, in cima). */}
+          fondo, vedi HubNavBar/HubProfileButton: qui la barra intera resta unica, in cima). Da
+          md: in su la testata chiara DesktopNav sostituisce la MobileNavBar scura. */}
       <div className="sticky top-0 z-40 print:hidden">
-        <MobileNavBar />
+        <DesktopNav />
+        <MobileNavBar className="md:hidden" />
       </div>
 
       {configSaveError && (

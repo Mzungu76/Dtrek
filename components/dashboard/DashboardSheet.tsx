@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { Pencil, Plus, X, ChevronUp, ChevronDown, Check } from 'lucide-react'
-import HubNavBar from '@/components/routehub/HubNavBar'
+import { MobileNavBar, DesktopNav } from '@/components/Navbar'
 import { WIDGET_CATALOG, WIDGET_BY_ID } from '@/components/dashboard/widgets'
 import {
   normalizeDashboardConfig, DEFAULT_DASHBOARD_CONFIG, DEFAULT_TAB_ID,
@@ -182,7 +182,7 @@ export default function DashboardSheet({ data }: { data: DashboardData }) {
           pannello è un foglio trascinabile che altrimenti coprirebbe tutta la mappa. Da lg in
           su il pannello è un riquadro fisso sempre aperto (sotto), quindi non serve un peek. ── */}
       <div
-        className="absolute inset-x-0 bottom-0 z-20 flex flex-col gap-2.5 px-4 transition-opacity lg:invisible lg:pointer-events-none"
+        className="absolute inset-x-0 bottom-0 z-20 flex flex-col gap-2.5 px-4 transition-opacity lg:hidden"
         style={{ opacity: open ? 0 : 1, pointerEvents: open ? 'none' : 'auto' }}
       >
         <button
@@ -197,20 +197,25 @@ export default function DashboardSheet({ data }: { data: DashboardData }) {
             {[0, 1].map(i => <div key={i} className="flex-1 h-[72px] rounded-2xl bg-white/10 animate-pulse" />)}
           </div>
         )}
-        {/* Barra di navigazione, spostata qui in fondo (sotto il pannello widget e la freccetta
-            di scorrimento) — stesso posizionamento di HubNavBar in RouteHub.tsx per Guida/
-            Reportage/Diari, solo montata direttamente qui perché la Dashboard non passa da
-            RouteHub. -mx-4 per farla toccare i bordi (il contenitore ha px-4).
-            La testata desktop che HubNavBar monta da md: in su (DesktopNav, position="fixed") è
-            un elemento a sé (esce dal flusso, si aggancia alla viewport) — non sparisca da lg: in
-            su insieme al resto di questo contenitore: qui sopra si usa `lg:invisible` invece di
-            `lg:hidden` apposta (visibility, non display — un antenato display:none si porta via
-            anche i figli fixed, invisible no) e DesktopNav si dichiara `lg:visible` per riemergere
-            da quell'invisibilità ereditata. */}
+        {/* Barra di navigazione mobile, spostata qui in fondo (sotto il pannello widget e la
+            freccetta di scorrimento) — stesso posizionamento di HubNavBar in RouteHub.tsx per
+            Guida/Reportage/Diari, solo montata direttamente qui perché la Dashboard non passa da
+            RouteHub. -mx-4 per farla toccare i bordi (il contenitore ha px-4). Solo la metà
+            mobile: la testata desktop vive fuori da qui sotto, vedi il commento lì per il perché
+            (un antenato `position:absolute` con z-index, come questo contenitore, crea un
+            proprio contesto di stacking — un `position:fixed` annidato dentro non può più
+            "uscirne" per confrontare il proprio z-index con quello di fratelli esterni, come il
+            pannello qui sotto: sarebbe rimasto sempre coperto, qualunque z-index gli si desse). */}
         <div className="-mx-4">
-          <HubNavBar />
+          <MobileNavBar className="md:hidden" showAvatar={false} safeAreaTop={false} safeAreaBottom />
         </div>
       </div>
+
+      {/* Testata desktop — fuori da QUALUNQUE antenato con la propria z-index/stacking (il peek
+          sopra, il pannello sotto): solo così il suo z-50 si confronta alla pari con quello del
+          pannello (z-30) invece di restarne coperto. Da md: in su, a ogni larghezza — DesktopNav
+          si nasconde da sé sotto md: (className interno), non serve alcun wrapper qui. */}
+      <DesktopNav position="fixed" />
 
       {/* ── Pannello: sotto lg un foglio trascinabile (stessa logica di sempre); da lg in su un
           riquadro fisso a destra, sempre aperto — niente maniglia da trascinare, niente peek
