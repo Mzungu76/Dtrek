@@ -53,7 +53,7 @@ export const SORT_CMP: Record<SortKey, (a: SortValues, b: SortValues) => number>
 
 function TextBadge({ children }: { children: ReactNode }) {
   return (
-    <span className="px-1.5 py-0.5 rounded-md bg-white/90 text-stone-800 text-[9px] font-bold shadow-sm leading-none">
+    <span className="px-1.5 py-0.5 md:px-2 md:py-1 rounded-md bg-white/90 text-stone-800 text-[9px] md:text-[10px] font-bold shadow-sm leading-none">
       {children}
     </span>
   )
@@ -316,11 +316,11 @@ export default function BottomGallery({
         {onImport && (
           <button
             onClick={onImport}
-            className="shrink-0 w-20 h-20 rounded-2xl overflow-hidden relative border-[1.5px] border-dashed border-white/40 bg-white/10 flex flex-col items-center justify-center gap-0.5 hover:bg-white/15 transition-colors"
+            className="shrink-0 w-20 h-20 md:w-28 md:h-28 lg:w-32 lg:h-32 rounded-2xl overflow-hidden relative border-[1.5px] border-dashed border-white/40 bg-white/10 flex flex-col items-center justify-center gap-0.5 hover:bg-white/15 transition-colors"
             style={{ scrollSnapAlign: 'start' }}
           >
-            <Upload className="w-5 h-5 text-white/80" />
-            <span className="text-[10px] font-bold text-white/80 leading-tight">{importLabel ?? 'Importa'}</span>
+            <Upload className="w-5 h-5 md:w-6 md:h-6 text-white/80" />
+            <span className="text-[10px] md:text-xs font-bold text-white/80 leading-tight">{importLabel ?? 'Importa'}</span>
           </button>
         )}
         {items.map((item, i) => {
@@ -330,14 +330,14 @@ export default function BottomGallery({
             key={item.id}
             data-route-id={item.id}
             onClick={() => onSelect(i)}
-            className={`shrink-0 w-20 h-20 rounded-2xl overflow-hidden relative ${
+            className={`shrink-0 w-20 h-20 md:w-28 md:h-28 lg:w-32 lg:h-32 rounded-2xl overflow-hidden relative ${
               isCurrent ? 'border-[3px] border-sky-400 shadow-[0_0_0_2px_rgba(56,189,248,0.35)]' : 'border-[1.5px] border-white/35'
             }`}
             style={{ scrollSnapAlign: 'start' }}
           >
             {item.coverPhotoUrl ? (
               <>
-                <Image src={item.coverPhotoUrl} alt={item.title} fill sizes="80px" className="object-cover" loading="lazy" />
+                <Image src={item.coverPhotoUrl} alt={item.title} fill sizes="(min-width: 1024px) 128px, (min-width: 768px) 112px, 80px" className="object-cover" loading="lazy" />
                 <div className="absolute inset-0 bg-black/20 pointer-events-none" />
               </>
             ) : (
@@ -348,17 +348,17 @@ export default function BottomGallery({
               <GalleryMapThumb polyline={item.polyline} />
             )}
             {(hasSortData || (favoritesFilter && nextOutingFilter)) && (
-              <div className="absolute top-1 left-1">
+              <div className="absolute top-1 left-1 md:top-1.5 md:left-1.5">
                 <ThumbBadge sortBy={sortBy} item={item} showPlannedDate={favoritesFilter && nextOutingFilter} />
               </div>
             )}
-            <div className="absolute bottom-0 inset-x-0 px-1.5 pb-1 pt-5 bg-gradient-to-t from-black/75 to-transparent">
+            <div className="absolute bottom-0 inset-x-0 px-1.5 md:px-2 pb-1 md:pb-1.5 pt-5 md:pt-7 bg-gradient-to-t from-black/75 to-transparent">
               {/* Frase sintetica TS+Sicurezza — sulla scheda chiusa i due numeri nell'anello (in
                   alto) non si capiscono da soli: qui si traduce il punteggio nelle stesse etichette
                   qualitative già usate altrove nell'app (lib/trailScore.ts, lib/safetyScore.ts),
                   non un nuovo testo inventato ad hoc. */}
               {mode === 'guida' && item.scorePreview && item.safetyPreview && (
-                <span className="block text-[8px] font-semibold text-white/75 truncate leading-tight mb-0.5">
+                <span className="block text-[8px] md:text-[10px] font-semibold text-white/75 truncate leading-tight mb-0.5">
                   {ctsLabel(item.scorePreview.value).label} · {item.safetyPreview.label}
                 </span>
               )}
@@ -368,7 +368,7 @@ export default function BottomGallery({
                   risultato di un titolo lungo che si avvolgeva su più righe fino a riempire l'intera
                   miniatura. Il nome per intero resta comunque leggibile: vedi il pulsante "Vedi
                   tutti in elenco" qui sotto, che apre ExpandedGalleryList.tsx senza troncamenti. */}
-              <span className="block text-[10px] font-bold text-white truncate leading-tight">{item.title}</span>
+              <span className="block text-[10px] md:text-xs font-bold text-white truncate leading-tight">{item.title}</span>
             </div>
           </button>
           )

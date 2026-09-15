@@ -78,7 +78,7 @@ export default function DashboardHero({ data }: { data: DashboardData }) {
       <>
         <AllRoutesMap
           routes={[{ id: 'suggerito', title: suggested.title, startTime: new Date().toISOString(), polyline: suggested.polyline }]}
-          height="100%" interactive={false} emptyFallback={REGIONAL_FALLBACK} className="absolute inset-0"
+          height="100%" emptyFallback={REGIONAL_FALLBACK} className="absolute inset-0"
         />
         <div className="absolute inset-x-0 bottom-0 h-56 bg-gradient-to-t from-black/70 to-transparent pointer-events-none z-10" />
         <TopOverlay
@@ -111,7 +111,7 @@ export default function DashboardHero({ data }: { data: DashboardData }) {
   if (!hasAnyData) {
     return (
       <>
-        <AllRoutesMap routes={[]} height="100%" interactive={false} emptyFallback={REGIONAL_FALLBACK} className="absolute inset-0" />
+        <AllRoutesMap routes={[]} height="100%" emptyFallback={REGIONAL_FALLBACK} className="absolute inset-0" />
         <div className="absolute inset-x-0 bottom-0 h-56 bg-gradient-to-t from-black/70 to-transparent pointer-events-none z-10" />
         <TopOverlay
           itemKey="vuoto" title="Nessuna uscita ancora"
@@ -141,9 +141,9 @@ export default function DashboardHero({ data }: { data: DashboardData }) {
   return (
     <div className="absolute inset-0 lg:right-[420px]">
       {tab === 'resoconti' ? (
-        <AllRoutesMap key="resoconti" routes={resocontoRoutes} height="100%" interactive={false} emptyFallback={REGIONAL_FALLBACK} className="absolute inset-0" />
+        <AllRoutesMap key="resoconti" routes={resocontoRoutes} height="100%" emptyFallback={REGIONAL_FALLBACK} className="absolute inset-0" />
       ) : (
-        <AllRoutesMap key="guide" routes={guideRoutes} height="100%" interactive={false} emptyFallback={REGIONAL_FALLBACK} className="absolute inset-0" />
+        <AllRoutesMap key="guide" routes={guideRoutes} height="100%" emptyFallback={REGIONAL_FALLBACK} className="absolute inset-0" />
       )}
       <div className="absolute inset-x-0 bottom-0 h-56 bg-gradient-to-t from-black/70 to-transparent pointer-events-none z-10" />
       <TopOverlay

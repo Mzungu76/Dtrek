@@ -220,13 +220,21 @@ export default function DashboardSheet({ data }: { data: DashboardData }) {
       {/* ── Pannello: sotto lg un foglio trascinabile (stessa logica di sempre); da lg in su un
           riquadro fisso a destra, sempre aperto — niente maniglia da trascinare, niente peek
           separato: le due "chiavi" del peek (Recovery/Prossima uscita) restano in cima anche
-          qui, sopra le schede. Il catalogo di widget/schede sotto non cambia. ── */}
+          qui, sopra le schede. Il catalogo di widget/schede sotto non cambia.
+          Da lg: il guscio del pannello (sfondo/bordi/testata/tab/controlli di modifica) passa allo
+          stesso linguaggio "vetro" scuro di TopOverlay/HubNavBar (bg-white/10, border-white/20,
+          testo bianco) invece del bianco piatto — coerenza con l'identità hero scura del resto
+          dell'app. Le SCHEDE dei widget (Component qui sotto) restano invariate: sono già card
+          bianche (WIDGET_BY_ID, components/dashboard/widgets.tsx), che sul nuovo sfondo scuro
+          leggono come vetrini luminosi appoggiati sul pannello — stesso principio di PeekWidgets
+          sopra la mappa, senza dover toccare ogni widget uno per uno. ── */}
       <div
         className={`fixed inset-x-0 bottom-0 z-30 bg-stone-50 rounded-t-[26px] shadow-2xl flex flex-col
           transition-transform duration-300 ease-out top-[calc(env(safe-area-inset-top,0px)+64px)]
           ${open ? 'translate-y-0' : 'translate-y-full'}
           lg:translate-y-0 lg:inset-y-0 lg:left-auto lg:right-0 lg:w-[420px]
-          lg:rounded-t-none lg:rounded-l-2xl lg:shadow-none lg:border-l lg:border-stone-200`}
+          lg:rounded-t-none lg:rounded-l-2xl lg:shadow-none lg:border-l lg:border-white/10
+          lg:bg-[#0f2029]/95 lg:backdrop-blur-xl`}
       >
         <button
           onPointerDown={handlePointerDown} onPointerUp={handlePointerUp}
@@ -238,18 +246,18 @@ export default function DashboardSheet({ data }: { data: DashboardData }) {
         <div className="hidden lg:flex flex-col gap-2.5 px-4 pt-4">
           {configLoaded ? <PinnedPeekWidgets data={data} /> : (
             <div className="flex flex-col gap-2.5">
-              {[0, 1].map(i => <div key={i} className="h-[72px] rounded-2xl bg-stone-100 animate-pulse" />)}
+              {[0, 1].map(i => <div key={i} className="h-[72px] rounded-2xl bg-white/10 animate-pulse" />)}
             </div>
           )}
         </div>
 
         <div className="shrink-0 flex items-center justify-between px-4 pb-2 pt-2 lg:pt-4">
-          <h1 className="font-display text-xl font-bold text-stone-800">Dashboard</h1>
+          <h1 className="font-display text-xl font-bold text-stone-800 lg:text-white">Dashboard</h1>
           <button
             onClick={() => setEditMode(v => !v)}
             title={editMode ? 'Fine modifica' : 'Personalizza questa scheda'}
             className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${
-              editMode ? 'bg-forest-600 text-white' : 'bg-white border border-stone-200 text-forest-700'
+              editMode ? 'bg-forest-600 text-white' : 'bg-white border border-stone-200 text-forest-700 lg:bg-white/10 lg:border-white/20 lg:text-white'
             }`}
           >
             {editMode ? <Check className="w-4 h-4" /> : <Pencil className="w-4 h-4" />}
@@ -262,26 +270,26 @@ export default function DashboardSheet({ data }: { data: DashboardData }) {
               key={t.id}
               onClick={() => { setActiveTabId(t.id); setEditMode(false) }}
               className={`shrink-0 px-4 py-2 rounded-full font-barlow text-xs font-bold tracking-wide transition-colors ${
-                t.id === activeTab.id ? 'bg-forest-600 text-white shadow-sm' : 'bg-white border border-stone-200 text-stone-500'
+                t.id === activeTab.id ? 'bg-forest-600 text-white shadow-sm' : 'bg-white border border-stone-200 text-stone-500 lg:bg-white/10 lg:border-white/20 lg:text-white/75'
               }`}
             >
               {t.label}
             </button>
           ))}
           {creatingTab ? (
-            <div className="shrink-0 flex items-center gap-1.5 bg-white border border-stone-200 rounded-full pl-3 pr-1.5 py-1">
+            <div className="shrink-0 flex items-center gap-1.5 bg-white border border-stone-200 rounded-full pl-3 pr-1.5 py-1 lg:bg-white/10 lg:border-white/20">
               <input
                 autoFocus value={newTabName} onChange={e => setNewTabName(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') createTab(); if (e.key === 'Escape') { setCreatingTab(false); setNewTabName('') } }}
                 placeholder="Nome scheda"
-                className="w-24 text-xs outline-none bg-transparent"
+                className="w-24 text-xs outline-none bg-transparent lg:text-white lg:placeholder:text-white/40"
               />
               <button onClick={createTab} className="w-6 h-6 rounded-full bg-forest-600 text-white flex items-center justify-center shrink-0"><Check className="w-3 h-3" /></button>
             </div>
           ) : (
             <button
               onClick={() => setCreatingTab(true)}
-              className="shrink-0 w-9 h-9 rounded-full border-[1.5px] border-dashed border-stone-300 text-stone-400 flex items-center justify-center"
+              className="shrink-0 w-9 h-9 rounded-full border-[1.5px] border-dashed border-stone-300 text-stone-400 flex items-center justify-center lg:border-white/30 lg:text-white/50"
               title="Nuova scheda"
             >
               <Plus className="w-4 h-4" />
@@ -290,21 +298,21 @@ export default function DashboardSheet({ data }: { data: DashboardData }) {
         </div>
 
         {editMode && (
-          <div className="shrink-0 mx-4 mb-3 p-3.5 rounded-2xl bg-white border border-stone-200 flex items-center gap-2.5">
+          <div className="shrink-0 mx-4 mb-3 p-3.5 rounded-2xl bg-white border border-stone-200 flex items-center gap-2.5 lg:bg-white/10 lg:border-white/15">
             {renaming ? (
               <input
                 autoFocus defaultValue={activeTab.label}
                 onBlur={e => { updateActiveTab({ label: e.target.value }); setRenaming(false) }}
                 onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-                className="flex-1 text-sm border border-stone-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-forest-400"
+                className="flex-1 text-sm border border-stone-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-forest-400 lg:bg-white/10 lg:border-white/20 lg:text-white"
               />
             ) : (
-              <button onClick={() => setRenaming(true)} className="flex-1 text-left text-sm font-semibold text-stone-700">
+              <button onClick={() => setRenaming(true)} className="flex-1 text-left text-sm font-semibold text-stone-700 lg:text-white">
                 Rinomina «{activeTab.label}»
               </button>
             )}
             {config.tabs.length > 1 && (
-              <button onClick={deleteActiveTab} className="text-xs font-semibold text-red-600 shrink-0">Elimina scheda</button>
+              <button onClick={deleteActiveTab} className="text-xs font-semibold text-red-600 shrink-0 lg:text-red-400">Elimina scheda</button>
             )}
           </div>
         )}
@@ -313,8 +321,8 @@ export default function DashboardSheet({ data }: { data: DashboardData }) {
           <div className="flex flex-col gap-3">
             {activeTab.widgetIds.length === 0 && !editMode && (
               <div className="text-center py-14">
-                <p className="font-lora italic text-sm text-stone-400 mb-3">Questa scheda è vuota.</p>
-                <button onClick={() => setEditMode(true)} className="text-sm font-semibold text-forest-700">Aggiungi qualche widget →</button>
+                <p className="font-lora italic text-sm text-stone-400 mb-3 lg:text-white/50">Questa scheda è vuota.</p>
+                <button onClick={() => setEditMode(true)} className="text-sm font-semibold text-forest-700 lg:text-white">Aggiungi qualche widget →</button>
               </div>
             )}
 
@@ -348,7 +356,7 @@ export default function DashboardSheet({ data }: { data: DashboardData }) {
             {editMode && (
               <button
                 onClick={() => setPickerOpen(true)}
-                className="flex items-center justify-center gap-2 py-4 rounded-2xl border-[1.5px] border-dashed border-stone-300 text-stone-500 text-sm font-semibold"
+                className="flex items-center justify-center gap-2 py-4 rounded-2xl border-[1.5px] border-dashed border-stone-300 text-stone-500 text-sm font-semibold lg:border-white/30 lg:text-white/60"
               >
                 <Plus className="w-4 h-4" /> Aggiungi widget
               </button>
