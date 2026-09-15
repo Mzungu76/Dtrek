@@ -17,7 +17,7 @@ import type { TrackPoint } from '@/lib/tcxParser'
 import {
   FileDown, Share2, Link2Off,
   Loader2, Image as ImageIcon, BarChart2, X, Pencil,
-  Lock, LockOpen, Eye, EyeOff, Archive, RotateCcw, RefreshCw, AlertTriangle,
+  Lock, LockOpen, Eye, EyeOff, Archive, RotateCcw, RefreshCw, AlertTriangle, BookOpen,
 } from 'lucide-react'
 import { ROUTE_COLORS } from '@/lib/designTokens'
 import { mapOutH } from '@/components/diario/chartUtils'
@@ -1083,8 +1083,12 @@ export default function DiarioLibroPage() {
                 <DiarioStatistiche activities={activities} toggles={config.statsToggles} />
               )}
 
-              {pagesWithYearBand.map(({ page, yearBand, activityId }) => (
-                <div key={page.kind === 'report' ? `rep-${page.report.id}` : `stub-${page.activity.id}`}>
+              {pagesWithYearBand.map(({ page, yearBand, activityId }, i) => (
+                // id "diario-pagina-N" — bersaglio dei link del Sommario (DiarioIndice.tsx) e del
+                // pulsante "Torna al Sommario" fisso più sotto: prima il libro non aveva alcuna
+                // ancora, un indice muto e nessun modo di saltare da una pagina all'altra.
+                <div key={page.kind === 'report' ? `rep-${page.report.id}` : `stub-${page.activity.id}`}
+                  id={`diario-pagina-${i + 1}`} style={{ scrollMarginTop: 72 }}>
                   {page.kind === 'report' ? (
                     <DiarioReportPage
                       report={page.report}
@@ -1120,6 +1124,16 @@ export default function DiarioLibroPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Un solo pulsante fisso per l'intero libro, non uno per pagina — dà accesso immediato al
+          Sommario da qualunque punto del libro senza risalire pagina per pagina. Stesso principio
+          della pagina pubblica equivalente (components/leggi/DiaryBook.tsx). */}
+      {!loading && visibleBookPages.length > 0 && (
+        <a href="#diario-sommario" title="Torna al Sommario"
+          className="fixed bottom-5 right-4 z-20 flex items-center gap-1.5 bg-forest-900 text-white text-xs font-semibold rounded-full pl-3 pr-4 py-2.5 shadow-lg hover:bg-forest-800 transition">
+          <BookOpen className="w-3.5 h-3.5" /> Sommario
+        </a>
       )}
     </div>
   )

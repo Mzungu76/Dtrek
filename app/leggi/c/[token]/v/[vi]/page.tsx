@@ -1,15 +1,15 @@
-// Copertina a piena pagina di UN Diario dentro la Raccolta — stessa idea della copertina del
-// Diario standalone (DiaryPublicView), con in più le frecce per scorrere agli altri Diari della
-// stessa Raccolta (sempre leggibili: chi ha il link della Raccolta ha già accesso a tutti i suoi
-// Diari) e la galleria in fondo che li elenca tutti. Il contenuto vero (Sommario + escursioni) è
-// il libro, raggiunto da "Vedi Reportage" — app/leggi/c/[token]/v/[vi]/libro.
+// Il Diario (volume di una Raccolta) — direttamente il libro (Sommario + pagine delle
+// escursioni), non più un frontespizio con il pulsante "Vedi Reportage" da premere prima di
+// arrivare al contenuto. L'elenco degli altri Diari della Raccolta vive nella pagina della
+// Raccolta (/leggi/c/[token]), che ora li mostra tutti direttamente — non serve più ripeterlo
+// qui con una copertina-carosello. /leggi/c/[token]/v/[vi]/libro resta raggiungibile con lo
+// stesso contenuto per chi ha già quel link salvato.
 import type { Metadata } from 'next'
 import { cache } from 'react'
 import { notFound } from 'next/navigation'
 import { fetchPublicCollection } from '@/lib/sharePublicCollection'
-import { PublicCover } from '@/components/leggi/PublicCover'
-import { BottomGalleryStrip, BOTTOM_GALLERY_SPACER_CLASS, BOTTOM_GALLERY_HEIGHT_PX } from '@/components/leggi/BottomGalleryStrip'
-import { SiteHeader, DtrekCallout, SiteFooter } from '../../SiteChrome'
+import { DiaryBook } from '@/components/leggi/DiaryBook'
+import { SiteHeader } from '../../SiteChrome'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -47,41 +47,19 @@ export default async function VolumeCoverPage({ params }: { params: { token: str
   return (
     <div className="min-h-screen bg-stone-50">
       <SiteHeader token={params.token} collectionTitle={collection.title} current="volume" />
-
-      <PublicCover
-        coverUrl={volume.coverUrl}
-        eyebrow={`Diario ${idx + 1} di ${collection.volumes.length}${volume.dateRangeLabel ? ` · ${volume.dateRangeLabel}` : ''}`}
+      <DiaryBook
+        entries={volume.entries}
+        show={volume.show}
         title={volume.title}
         subtitle={volume.subtitle}
         ownerName={collection.ownerName}
-        pills={[
-          { value: String(volume.entries.length), label: volume.entries.length === 1 ? 'escursione' : 'escursioni' },
-          { value: `${volume.totalKm.toFixed(0)} km`, label: 'percorsi' },
-          { value: `${Math.round(volume.totalElevationGain).toLocaleString('it')} m`, label: 'dislivello+' },
-        ]}
-        prevHref={idx > 0 ? `/leggi/c/${params.token}/v/${idx}` : undefined}
-        nextHref={idx < collection.volumes.length - 1 ? `/leggi/c/${params.token}/v/${idx + 2}` : undefined}
-        cta={{ href: `/leggi/c/${params.token}/v/${idx + 1}/libro`, label: 'Vedi Reportage' }}
-        bottomInset={collection.volumes.length > 1 ? BOTTOM_GALLERY_HEIGHT_PX : 0}
+        dateRangeLabel={volume.dateRangeLabel}
+        totalKm={volume.totalKm}
+        totalElevationGain={volume.totalElevationGain}
+        backHref={`/leggi/c/${params.token}`}
+        backLabel="Torna ai Diari"
+        hideExactDates={volume.hideExactDates}
       />
-
-      {collection.volumes.length > 1 && (
-        <BottomGalleryStrip items={collection.volumes.map((v, i) => ({
-          href: `/leggi/c/${params.token}/v/${i + 1}`,
-          title: v.title,
-          imageUrl: v.coverUrl,
-          badge: `${v.entries.length} rep.`,
-        }))} />
-      )}
-
-      <main className={`max-w-4xl mx-auto px-4 sm:px-5 py-6 sm:py-8 space-y-5 ${collection.volumes.length > 1 ? BOTTOM_GALLERY_SPACER_CLASS : ''}`}>
-        <a href={`/leggi/c/${params.token}`}
-          className="inline-flex items-center gap-1 text-xs font-semibold text-stone-500 hover:text-forest-700 transition">
-          ← {collection.title}
-        </a>
-        <DtrekCallout />
-        <SiteFooter />
-      </main>
     </div>
   )
 }

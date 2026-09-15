@@ -6,61 +6,24 @@
 //
 // Zero JavaScript: le ancore sono `<a href="#p-N">` vere, il browser ci salta da solo. Niente
 // scroll-snap qui (era per la versione orizzontale, superata) — un documento verticale normale.
-import { Download, BookOpen, ChevronLeft, ChevronRight, ArrowLeft, MapPin } from 'lucide-react'
+import { Download, BookOpen, ChevronLeft, ChevronRight, ArrowLeft } from 'lucide-react'
 import { withForcedDownload } from '@/lib/storageDownloadUrl'
 import { type PublicDiaryEntry } from '@/lib/sharePublicDiary'
 import { computePublicDiaryStats } from '@/lib/publicDiaryStats'
 import { formatPublicDate } from '@/lib/privacy/formatPublicDate'
-import { excerptFromContent } from '@/lib/publicExcerpt'
 import type { DiaryPublicSections } from '@/lib/diaryConfig'
 import { MonthBarChart } from '@/components/diario/MonthBarChart'
 import { AllRoutesMap, AllRoutesLegend } from '@/app/leggi/d/[token]/AllRoutesMap'
 import { PublicPdfExport } from '@/app/leggi/d/[token]/PublicPdfExport'
 import { PublicReportPage } from './PublicReportPage'
 
-/** Traccia ridotta a un piccolo schizzo (non un mosaico di tile: una manciata di pixel non
- *  giustifica il peso di richieste `/api/tile`), normalizzata nel riquadro `size×size`. */
-function sketchPath(polyline: [number, number][], size = 56, pad = 6): string {
-  const lats = polyline.map(p => p[0]), lons = polyline.map(p => p[1])
-  const minLat = Math.min(...lats), maxLat = Math.max(...lats)
-  const minLon = Math.min(...lons), maxLon = Math.max(...lons)
-  const spanLat = Math.max(maxLat - minLat, 1e-6)
-  const spanLon = Math.max(maxLon - minLon, 1e-6)
-  const scale = (size - 2 * pad) / Math.max(spanLat, spanLon)
-  const offX = (size - spanLon * scale) / 2
-  const offY = (size - spanLat * scale) / 2
-  return polyline.map(([lat, lon], i) => {
-    const x = offX + (lon - minLon) * scale
-    const y = size - (offY + (lat - minLat) * scale) // la latitudine cresce verso l'alto, l'asse Y dell'SVG verso il basso
-    return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`
-  }).join(' ')
-}
-
-/** Miniatura di ogni riga del Sommario — foto di copertina, o in sua assenza uno schizzo del
- *  percorso, o in assenza di entrambi un segnaposto generico: mai un buco vuoto nella riga. */
-function SommarioThumb({ entry, show }: { entry: PublicDiaryEntry; show: DiaryPublicSections }) {
-  const photo = show.foto ? entry.photos[0] : undefined
-  if (photo) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img src={photo.url} alt="" loading="lazy" decoding="async"
-        className="w-14 h-14 rounded-lg object-cover shrink-0 border border-stone-200" />
-    )
-  }
-  if (show.percorso && entry.polyline && entry.polyline.length > 1) {
-    return (
-      <div className="w-14 h-14 rounded-lg shrink-0 border border-stone-200 bg-forest-50 flex items-center justify-center">
-        <svg viewBox="0 0 56 56" width={56} height={56} role="img" aria-label="Percorso">
-          <path d={sketchPath(entry.polyline)} fill="none" stroke="#378d44" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </div>
-    )
-  }
-  return (
-    <div className="w-14 h-14 rounded-lg shrink-0 border border-stone-200 bg-stone-100 flex items-center justify-center">
-      <MapPin className="w-5 h-5 text-stone-300" />
-    </div>
-  )
+// Stesso foglio "di disegno" a 794px e stessa tecnica delle CSS Container Queries di
+// PublicReportPage.tsx — il Sommario è la prima pagina dello stesso libro, deve avere la stessa
+// identità di foglio stampabile, non un layout a parte. Vedi il commento in cima a
+// PublicReportPage.tsx per il perché di `cqw` invece di `transform: scale()`.
+const PAGE_W = 794
+function cq(px: number): string {
+  return `${+(px / PAGE_W * 100).toFixed(3)}cqw`
 }
 
 function PageNav({ n, total, backHref, backLabel }: { n: number; total: number; backHref: string; backLabel: string }) {
@@ -110,81 +73,114 @@ export function DiaryBook({ entries, show, title, subtitle, ownerName, dateRange
 
   return (
     <div className="bg-stone-100">
-      {/* Pagina 1 — Sommario */}
+      {/* Pagina 1 — Sommario, lo stesso foglio A4/rivista delle pagine di escursione (e del
+          Sommario del libro privato, components/diario/DiarioIndice.tsx): non un layout a sé. */}
       <section id="p-1">
         <PageNav n={1} total={totalPages} backHref={backHref} backLabel={backLabel} />
-        <div className="max-w-3xl mx-auto px-4 sm:px-5 py-6 pb-8">
-          <h1 className="font-display text-2xl sm:text-3xl font-bold text-forest-900">{title}</h1>
-          {subtitle && <p className="font-lora italic text-stone-500 mt-1">{subtitle}</p>}
-          <p className="text-xs text-stone-400 mt-1">di {ownerName}{dateRangeLabel ? ` · ${dateRangeLabel}` : ''}</p>
+        <div className="bg-stone-200 px-2.5 sm:px-4 py-4">
+          <div className="mx-auto bg-white overflow-hidden" style={{
+            containerType: 'inline-size', width: 'min(100%, 1070px)',
+            boxShadow: '0 8px 56px rgba(0,0,0,0.22)', borderRadius: cq(3),
+          }}>
+            <div style={{ padding: `${cq(72)} ${cq(64)}` }}>
+              <p className="font-barlow" style={{ fontWeight: 700, fontSize: cq(9), letterSpacing: cq(4), color: '#e08d3c', textTransform: 'uppercase', margin: `0 0 ${cq(8)}` }}>
+                Sommario
+              </p>
+              <h1 className="font-display" style={{ fontWeight: 700, color: '#193b20', letterSpacing: cq(-0.5), fontSize: cq(32), margin: 0 }}>
+                {title}
+              </h1>
+              {subtitle && (
+                <p className="font-lora" style={{ fontStyle: 'italic', color: '#978e7a', marginTop: cq(6), fontSize: cq(14) }}>{subtitle}</p>
+              )}
+              <p style={{ fontSize: cq(11), color: '#a9a18e', marginTop: cq(6) }}>
+                di {ownerName}{dateRangeLabel ? ` · ${dateRangeLabel}` : ''}
+              </p>
 
-          {stats && (
-            <>
-              <div className="grid grid-cols-3 gap-3 mt-5">
-                {[
-                  { value: String(entries.length), label: entries.length === 1 ? 'Escursione' : 'Escursioni' },
-                  { value: `${totalKm.toFixed(0)} km`, label: 'Percorsi' },
-                  { value: `${Math.round(totalElevationGain).toLocaleString('it')} m`, label: 'Dislivello +' },
-                ].map(s => (
-                  <div key={s.label} className="bg-white rounded-2xl border border-stone-200 px-3 py-4 text-center shadow-sm">
-                    <div className="font-mono text-xl font-bold text-forest-800 leading-tight">{s.value}</div>
-                    <div className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider mt-1">{s.label}</div>
+              {stats && (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: cq(10), marginTop: cq(28) }}>
+                    {[
+                      { value: String(entries.length), label: entries.length === 1 ? 'Escursione' : 'Escursioni' },
+                      { value: `${totalKm.toFixed(0)} km`, label: 'Percorsi' },
+                      { value: `${Math.round(totalElevationGain).toLocaleString('it')} m`, label: 'Dislivello +' },
+                    ].map(s => (
+                      <div key={s.label} style={{ background: '#f8f7f4', border: '1px solid #eeece5', borderRadius: cq(12), padding: `${cq(14)} ${cq(10)}`, textAlign: 'center' }}>
+                        <div className="font-mono" style={{ fontWeight: 700, color: '#1c4724', lineHeight: 1.15, fontSize: cq(19) }}>{s.value}</div>
+                        <div className="font-barlow" style={{ fontWeight: 700, color: '#a9a18e', textTransform: 'uppercase', letterSpacing: cq(1), marginTop: cq(4), fontSize: cq(9) }}>{s.label}</div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-              {entries.length > 0 && (
-                <div className="bg-white rounded-2xl border border-stone-200 px-4 py-3.5 shadow-sm mt-3">
-                  <p className="font-barlow font-bold text-[10px] tracking-[0.2em] uppercase text-stone-400 mb-2">Andamento mensile</p>
-                  <MonthBarChart activities={entries} />
+                  {entries.length > 0 && (
+                    <div style={{ background: '#f8f7f4', border: '1px solid #eeece5', borderRadius: cq(12), padding: `${cq(14)} ${cq(16)}`, marginTop: cq(12) }}>
+                      <p className="font-barlow" style={{ fontWeight: 700, letterSpacing: cq(3), color: '#a9a18e', textTransform: 'uppercase', marginBottom: cq(8), fontSize: cq(9) }}>Andamento mensile</p>
+                      <MonthBarChart activities={entries} />
+                    </div>
+                  )}
+                </>
+              )}
+
+              {show.percorso && entries.length > 0 && (
+                <div style={{ background: '#fff', border: '1px solid #eeece5', borderRadius: cq(16), padding: `${cq(16)} ${cq(20)}`, marginTop: cq(12), boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+                  <p className="font-barlow" style={{ fontWeight: 700, letterSpacing: cq(3), color: '#a9a18e', textTransform: 'uppercase', marginBottom: cq(10), fontSize: cq(9) }}>Tutti i percorsi</p>
+                  <AllRoutesMap routes={entries.map(e => ({ id: e.id, title: e.title, polyline: e.polyline ?? [] }))} />
+                  <AllRoutesLegend routes={entries.map(e => ({ id: e.id, title: e.title, polyline: e.polyline ?? [] }))} />
                 </div>
               )}
-            </>
-          )}
 
-          {show.percorso && entries.length > 0 && (
-            <div className="bg-white rounded-3xl border border-stone-200 shadow-sm p-4 sm:p-5 mt-3">
-              <p className="font-barlow font-bold text-[10px] tracking-[0.2em] uppercase text-stone-400 mb-2.5">Tutti i percorsi</p>
-              <AllRoutesMap routes={entries.map(e => ({ id: e.id, title: e.title, polyline: e.polyline ?? [] }))} />
-              <AllRoutesLegend routes={entries.map(e => ({ id: e.id, title: e.title, polyline: e.polyline ?? [] }))} />
-            </div>
-          )}
+              {/* Indice — stessa riga numerata del Sommario in app (DiarioIndice.tsx): niente più
+                  miniature/estratti di testo, un elenco da rivista stampata. */}
+              <p className="font-barlow" style={{ fontWeight: 900, fontSize: cq(8), letterSpacing: cq(3), color: '#a9a18e', textTransform: 'uppercase', margin: `${cq(36)} 0 ${cq(14)}`, paddingBottom: cq(9), borderBottom: `${cq(1.5)} solid #e08d3c` }}>
+                Le escursioni
+              </p>
+              <div style={{ borderTop: '1px solid #eeece5' }}>
+                {entries.map((e, i) => {
+                  const dateLabel = formatPublicDate(e.startTime, hideExactDates)
+                  return (
+                    <a key={e.id} href={`#p-${i + 2}`} style={{
+                      display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+                      padding: `${cq(14)} 0`, borderBottom: '1px solid #eeece5', textDecoration: 'none', color: 'inherit',
+                    }}>
+                      <div style={{ display: 'flex', gap: cq(16), alignItems: 'baseline', flex: 1, minWidth: 0 }}>
+                        <span className="font-mono" style={{ color: '#a9a18e', fontWeight: 500, minWidth: cq(24), fontSize: cq(11) }}>
+                          {String(i + 1).padStart(2, '0')}
+                        </span>
+                        <div style={{ minWidth: 0 }}>
+                          <div className="font-display" style={{ fontWeight: 700, color: '#193b20', letterSpacing: cq(-0.2), fontSize: cq(15) }}>
+                            {e.title}
+                          </div>
+                          {dateLabel && (
+                            <div className="font-lora" style={{ fontStyle: 'italic', color: '#a9a18e', marginTop: cq(2), fontSize: cq(10) }}>{dateLabel}</div>
+                          )}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: cq(12), color: '#73695c', flexShrink: 0, marginLeft: cq(16), fontSize: cq(10) }}>
+                        {e.distanceMeters > 0 && <span>{(e.distanceMeters / 1000).toFixed(1)} km</span>}
+                        {e.elevationGain > 0 && <span>{Math.round(e.elevationGain)} m D+</span>}
+                      </div>
+                    </a>
+                  )
+                })}
+                {entries.length === 0 && (
+                  <p className="font-lora" style={{ fontStyle: 'italic', color: '#a9a18e', textAlign: 'center', padding: `${cq(32)} 0`, fontSize: cq(13) }}>
+                    Nessuna escursione pubblicata.
+                  </p>
+                )}
+              </div>
 
-          <h2 className="font-display text-xl font-bold text-forest-900 mt-6 mb-3">Indice</h2>
-          <div className="flex flex-col gap-1.5">
-            {entries.map((e, i) => {
-              const dateLabel = formatPublicDate(e.startTime, hideExactDates)
-              const excerpt = show.racconto ? excerptFromContent(e.content) : ''
-              return (
-                <a key={e.id} href={`#p-${i + 2}`}
-                  className="group flex items-center gap-3 bg-white rounded-xl border border-stone-200 px-4 py-3 hover:border-stone-300 hover:shadow-sm transition">
-                  <SommarioThumb entry={e} show={show} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-baseline gap-2">
-                      <span className="font-mono text-[10px] text-stone-400 shrink-0">Pag. {i + 2}</span>
-                      <span className="font-display font-bold text-forest-900 truncate">{e.title}</span>
-                    </div>
-                    <p className="text-[11px] text-stone-400 mt-0.5">
-                      {dateLabel}{e.distanceMeters > 0 && ` · ${(e.distanceMeters / 1000).toFixed(1)} km`}
-                    </p>
-                    {excerpt && (
-                      <p className="font-lora italic text-[12px] text-stone-500 mt-1 truncate">{excerpt}</p>
-                    )}
-                  </div>
+              {pdfUrl && (
+                <a href={withForcedDownload(pdfUrl, 'diario-dtrek.pdf')} download
+                  className="font-display" style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: cq(8),
+                    background: '#fff', border: '1px solid #dcd8cc', color: '#57534e', fontWeight: 700,
+                    borderRadius: cq(16), marginTop: cq(20), textDecoration: 'none', fontSize: cq(13),
+                    padding: `${cq(14)} 0`,
+                  }}>
+                  <Download style={{ width: cq(16), height: cq(16) }} /> Scarica il diario in PDF
                 </a>
-              )
-            })}
-            {entries.length === 0 && (
-              <p className="text-sm text-stone-400 text-center py-8">Nessuna escursione pubblicata.</p>
-            )}
+              )}
+              <PublicPdfExport diary={{ entries, ownerName, title, subtitle: subtitle ?? '', coverUrl: null, dateRangeLabel }} />
+            </div>
           </div>
-
-          {pdfUrl && (
-            <a href={withForcedDownload(pdfUrl, 'diario-dtrek.pdf')} download
-              className="flex items-center justify-center gap-2 bg-white border border-stone-200 hover:bg-stone-50 transition text-stone-600 font-display font-bold text-sm rounded-2xl py-3.5 shadow-sm mt-5">
-              <Download className="w-4 h-4" /> Scarica il diario in PDF
-            </a>
-          )}
-          <PublicPdfExport diary={{ entries, ownerName, title, subtitle: subtitle ?? '', coverUrl: null, dateRangeLabel }} />
         </div>
       </section>
 

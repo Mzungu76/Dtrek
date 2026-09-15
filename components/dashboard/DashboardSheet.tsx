@@ -182,7 +182,7 @@ export default function DashboardSheet({ data }: { data: DashboardData }) {
           pannello è un foglio trascinabile che altrimenti coprirebbe tutta la mappa. Da lg in
           su il pannello è un riquadro fisso sempre aperto (sotto), quindi non serve un peek. ── */}
       <div
-        className="absolute inset-x-0 bottom-0 z-20 flex flex-col gap-2.5 px-4 transition-opacity lg:hidden"
+        className="absolute inset-x-0 bottom-0 z-20 flex flex-col gap-2.5 px-4 transition-opacity lg:invisible lg:pointer-events-none"
         style={{ opacity: open ? 0 : 1, pointerEvents: open ? 'none' : 'auto' }}
       >
         <button
@@ -200,7 +200,13 @@ export default function DashboardSheet({ data }: { data: DashboardData }) {
         {/* Barra di navigazione, spostata qui in fondo (sotto il pannello widget e la freccetta
             di scorrimento) — stesso posizionamento di HubNavBar in RouteHub.tsx per Guida/
             Reportage/Diari, solo montata direttamente qui perché la Dashboard non passa da
-            RouteHub. -mx-4 per farla toccare i bordi (il contenitore ha px-4). */}
+            RouteHub. -mx-4 per farla toccare i bordi (il contenitore ha px-4).
+            La testata desktop che HubNavBar monta da md: in su (DesktopNav, position="fixed") è
+            un elemento a sé (esce dal flusso, si aggancia alla viewport) — non sparisca da lg: in
+            su insieme al resto di questo contenitore: qui sopra si usa `lg:invisible` invece di
+            `lg:hidden` apposta (visibility, non display — un antenato display:none si porta via
+            anche i figli fixed, invisible no) e DesktopNav si dichiara `lg:visible` per riemergere
+            da quell'invisibilità ereditata. */}
         <div className="-mx-4">
           <HubNavBar />
         </div>

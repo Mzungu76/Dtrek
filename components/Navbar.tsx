@@ -103,11 +103,15 @@ export const MOBILE_TOPBAR_SPACER = 'pt-[calc(env(safe-area-inset-top,0px)+72px)
 
 // ── Desktop top bar ──────────────────────────────────────────────────────────
 
-function DesktopNav() {
+// `position`: 'sticky' per le pagine "normali" (in un flusso di documento che scorre davvero,
+// il caso di sempre); 'fixed' per le pagine "magazine" a schermo intero (Bacheca, Guida/
+// Resoconto/Diario via HubNavBar.tsx) — lì il contenuto vive dentro contenitori `fixed`/`absolute`
+// propri, senza uno scroll di pagina reale da cui `sticky` possa agganciarsi in modo affidabile.
+export function DesktopNav({ position = 'sticky' }: { position?: 'sticky' | 'fixed' } = {}) {
   const path = usePathname()
 
   return (
-    <nav className="hidden md:block sticky top-0 z-50 bg-white/90 backdrop-blur-sm border-b border-stone-200 shadow-sm">
+    <nav className={`hidden md:block lg:visible ${position} top-0 inset-x-0 z-50 bg-white/90 backdrop-blur-sm border-b border-stone-200 shadow-sm`}>
       <div className="max-w-[1400px] mx-auto px-4 flex items-center justify-between h-14">
         <Link href="/guida" className="flex items-center gap-2 group shrink-0">
           <Image src="/icon-192.png" alt="DTrek" width={28} height={28} className="rounded-md" />

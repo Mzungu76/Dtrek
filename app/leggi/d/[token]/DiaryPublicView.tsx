@@ -1,38 +1,32 @@
-// Home del sito pubblico del Diario — SOLO copertina a piena pagina. Il contenuto (numeri,
-// grafico, mappa d'insieme, indice) si è spostato sulla prima pagina del libro (Sommario,
-// components/leggi/DiaryBook.tsx), raggiunto dal pulsante "Vedi Reportage": la copertina è un
-// frontespizio, non un indice.
+// Home del sito pubblico del Diario — direttamente il libro (Sommario + pagine delle escursioni,
+// components/leggi/DiaryBook.tsx): prima c'era solo un frontespizio con un pulsante "Vedi
+// Reportage" da premere per arrivare al contenuto vero. Chi apre il link di un Diario condiviso
+// vuole leggerlo, non prima trovare e premere un pulsante — /leggi/d/[token]/libro resta
+// raggiungibile con lo stesso contenuto per chi ha già quel link salvato.
 //
 // Resta un componente SERVER: nessuno stato, nessun JavaScript spedito al browser.
 import { type PublicDiary } from '@/lib/sharePublicDiary'
-import { PublicCover } from '@/components/leggi/PublicCover'
-import { SiteHeader, DtrekCallout, SiteFooter } from './SiteChrome'
+import { DiaryBook } from '@/components/leggi/DiaryBook'
+import { SiteHeader } from './SiteChrome'
 
 export function DiaryPublicView({ diary, token }: { diary: PublicDiary; token: string }) {
-  const show = diary.config.publicSections
-
   return (
     <div className="min-h-screen bg-stone-50">
-      <SiteHeader homeHref={`/leggi/d/${token}`} title={diary.config.title} current="home" />
-
-      <PublicCover
-        coverUrl={diary.config.coverUrl}
-        eyebrow={diary.dateRangeLabel}
+      <SiteHeader homeHref={`/leggi/d/${token}`} title={diary.config.title} />
+      <DiaryBook
+        entries={diary.entries}
+        show={diary.config.publicSections}
         title={diary.config.title}
         subtitle={diary.config.subtitle}
         ownerName={diary.ownerName}
-        pills={show.statistiche ? [
-          { value: String(diary.entries.length), label: diary.entries.length === 1 ? 'escursione' : 'escursioni' },
-          { value: `${diary.totalKm.toFixed(0)} km`, label: 'percorsi' },
-          { value: `${Math.round(diary.totalElevationGain).toLocaleString('it')} m`, label: 'dislivello+' },
-        ] : undefined}
-        cta={{ href: `/leggi/d/${token}/libro`, label: 'Vedi Reportage' }}
+        dateRangeLabel={diary.dateRangeLabel}
+        totalKm={diary.totalKm}
+        totalElevationGain={diary.totalElevationGain}
+        pdfUrl={diary.pdfUrl}
+        backHref={`/leggi/d/${token}`}
+        backLabel="Diario"
+        hideExactDates={diary.hideExactDates}
       />
-
-      <main className="max-w-4xl mx-auto px-4 sm:px-5 py-6 sm:py-8 space-y-5">
-        <DtrekCallout />
-        <SiteFooter />
-      </main>
     </div>
   )
 }
