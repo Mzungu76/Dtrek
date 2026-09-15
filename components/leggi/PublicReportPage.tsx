@@ -1,11 +1,13 @@
-// Pagina di un'escursione nel sito pubblico del Diario — stesso stile a rivista del libro privato
-// (components/diario/DiarioReportPage.tsx): copertina scura, striscia di statistiche, capolettera,
-// citazione centrale, box curiosità, grafici, foto numerate. Qui però reimpaginata per il telefono
-// invece che ristretta da un foglio A4: niente colonna "Scheda" a fianco del testo (su un telefono
-// stringe il racconto in un corridoio stretto), niente foto in una colonnina di 164px, niente
-// riquadro a larghezza fissa con margine e ombra come un foglio appoggiato su un tavolo — la
-// copertina e le statistiche sono a bordo pagina, il testo scorre a colonna singola su tutta la
-// larghezza disponibile, le proporzioni cambiano con `sm:` invece di essere fisse in pixel.
+// Pagina di un'escursione nel sito pubblico del Diario — stessa identità di pagina-rivista
+// stampabile del libro privato (components/diario/DiarioReportPage.tsx): copertina scura, striscia
+// di statistiche, capolettera, citazione centrale, box curiosità, grafici, foto numerate. Non più
+// una pagina web a tutto schermo: un vero foglio, come nell'app — larghezza fissa (794px, la stessa
+// di PDF_PAGE_W) scalata proporzionalmente al contenitore con le CSS Container Queries (`cqw`),
+// l'equivalente in puro CSS del `transform: scale()` che il libro privato calcola in JavaScript.
+// Zero JavaScript spedito al browser: qui non c'è un client che misuri la larghezza, la scala la
+// calcola il motore CSS stesso in base alla larghezza del contenitore — un vero foglio A4 in
+// miniatura sul telefono, la stessa pagina più grande su un monitor, mai una colonna di testo a
+// tutta larghezza.
 //
 // Tre differenze deliberate rispetto all'originale, tutte concordate:
 //  1. Nessun controllo di modifica (Personalizza/Escludi/scelta foto): quei pulsanti nel privato
@@ -37,9 +39,19 @@ import type { DiaryPublicSections } from '@/lib/diaryConfig'
 import { RouteMap, PoiCaption } from '@/app/leggi/d/[token]/RouteMap'
 import { PhotoRouteMap } from '@/app/leggi/d/[token]/PhotoRouteMap'
 
+// Il foglio è disegnato a 794px (PDF_PAGE_W, la stessa unità del libro privato) e ogni misura
+// fissa del disegno originale passa da qui — `cq(32)` è "32px alla larghezza di disegno 794px",
+// espresso come percentuale della larghezza del CONTENITORE (`cqw`): quando il contenitore si
+// allarga o si stringe, ogni misura cresce o si restringe insieme a tutte le altre, proprio come
+// uno zoom sulla stessa pagina — mai una ricomposizione del layout in colonne diverse.
+const PAGE_W = 794
+function cq(px: number): string {
+  return `${+(px / PAGE_W * 100).toFixed(3)}cqw`
+}
+
 function renderInline(text: string) {
   return parseInlineEmphasis(text).map((seg, k) =>
-    seg.bold ? <strong key={k} className="font-semibold">{seg.text}</strong> : <span key={k}>{seg.text}</span>,
+    seg.bold ? <strong key={k} style={{ fontWeight: 600 }}>{seg.text}</strong> : <span key={k}>{seg.text}</span>,
   )
 }
 
@@ -94,241 +106,290 @@ export function PublicReportPage({ entry, n, show, hideExactDates = false }: {
   const showFotoMappa = showMappa && photosWithProgress.length > 0
 
   return (
-    <article id={`esc-${n}`} className="w-full bg-white scroll-mt-14">
-      {/* Apertura — a bordo pagina, non una card ristretta */}
-      <div className="relative h-[260px] sm:h-[360px] overflow-hidden"
-        style={{ background: heroPhoto ? undefined : 'linear-gradient(170deg,#0f2e1a 0%,#1b4332 30%,#193b20 62%,#0d1f12 100%)' }}>
-        {heroPhoto && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={heroPhoto.url} alt="" loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />
-        )}
-        <div className="absolute inset-0" style={{ background: 'radial-gradient(ellipse at 50% 40%, transparent 25%, rgba(0,0,0,0.35) 100%)' }} />
-        <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.15) 0%, transparent 35%, rgba(0,0,0,0.75) 100%)' }} />
-
-        <div className="absolute top-4 sm:top-6 left-4 sm:left-8 right-4 sm:right-8">
-          <span className="font-barlow font-bold text-[10px] sm:text-[11px] tracking-[0.3em] uppercase text-terra-300">
-            Escursione #{escLabel} · {monthYear}
-          </span>
-        </div>
-
-        <div className="absolute bottom-4 sm:bottom-7 left-4 sm:left-8 right-4 sm:right-8">
-          <h1 className="font-display font-bold text-white leading-[1.05] tracking-tight text-[28px] sm:text-5xl"
-            style={{ textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>
-            {entry.title}
-          </h1>
-          <div className="w-12 h-0.5 bg-terra-500 mt-3" />
-        </div>
-      </div>
-
-      {/* Striscia statistiche — 2x2 su telefono, 4 in fila da tablet in su. `gap-px` + sfondo
-          condiviso disegna le linee divisorie: regge qualunque numero di colonne senza dover
-          calcolare a mano quale cella ha bordo destro/basso. */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-white/10">
-        {[
-          { label: 'Distanza', value: entry.distanceMeters > 0 ? `${(entry.distanceMeters / 1000).toFixed(1)}` : '—', sub: 'km' },
-          { label: 'Dislivello', value: entry.elevationGain > 0 ? `${Math.round(entry.elevationGain)}` : '—', sub: 'm D+' },
-          { label: 'Durata', value: entry.totalTimeSeconds > 0 ? formatDuration(entry.totalTimeSeconds) : '—', sub: 'in movimento' },
-          { label: 'Calorie', value: entry.calories ? `${entry.calories}` : '—', sub: 'kcal' },
-        ].map(s => (
-          <div key={s.label} className="bg-forest-900 px-4 sm:px-6 py-4">
-            <p className="font-barlow font-bold text-[10px] tracking-[0.2em] uppercase text-terra-300 mb-1.5">{s.label}</p>
-            <p className="font-mono text-xl sm:text-2xl font-medium text-white leading-none">{s.value}</p>
-            <p className="text-[10px] text-white/40 mt-1">{s.sub}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Data + quota massima */}
-      <div className="bg-stone-50 border-t border-stone-200 px-4 sm:px-8 py-3">
-        <p className="font-barlow font-bold text-[10px] tracking-[0.2em] uppercase text-stone-500">
-          {dateStr}{!!entry.altitudeMax && ` · Quota max ${Math.round(entry.altitudeMax)} m`}
-        </p>
-      </div>
-
-      <div className="px-4 sm:px-8 py-6 sm:py-9">
-        <p className="font-barlow font-bold text-[10px] sm:text-[11px] tracking-[0.25em] uppercase text-terra-500 mb-5">
-          Cronaca · Escursione #{escLabel}
-        </p>
-
-        {/* Titolo + intro, a colonna singola */}
-        <div className="mb-8">
-          {(!introSection || !introSection.body.trim()) && (
-            <h2 className="font-display font-bold text-forest-900 text-2xl sm:text-[32px] leading-tight -tracking-[0.5px]">
-              {entry.title}
-            </h2>
+    // Sfondo neutro dietro il foglio — non più bianco a bordo pagina: il bordo/ombra del foglio
+    // deve vedersi anche sul telefono, non solo da tablet in su.
+    <article id={`esc-${n}`} className="scroll-mt-14 bg-stone-200 px-2.5 sm:px-4 py-4">
+      {/* Il foglio: 794px "di disegno", largo quanto il contenitore lo permette (fino a un tetto
+          ragionevole), mai a bordo schermo — sempre un vero foglio, anche sul telefono. */}
+      <div
+        className="mx-auto bg-white overflow-hidden"
+        style={{
+          containerType: 'inline-size',
+          width: 'min(100%, 1070px)',
+          boxShadow: '0 8px 56px rgba(0,0,0,0.22)',
+          borderRadius: cq(3),
+        }}
+      >
+        {/* Apertura */}
+        <div className="relative overflow-hidden" style={{
+          height: cq(320),
+          background: heroPhoto ? undefined : 'linear-gradient(170deg,#0f2e1a 0%,#1b4332 30%,#193b20 62%,#0d1f12 100%)',
+        }}>
+          {heroPhoto && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={heroPhoto.url} alt="" loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />
           )}
-          {introSection && introSection.body.split(/\n\n+/).filter(p => p.trim()).map((p, j) => {
-            const text = p.trim()
-            const dropCap = j === 0 && text.length > 0
-            const segments = parseInlineEmphasis(text)
-            const first = segments[0]
-            const paragraph = (
-              <p className="font-lora text-[15px] leading-[1.85] text-stone-700 mb-4">
-                {dropCap ? (
-                  <>
-                    <span className="float-left font-display font-bold text-terra-500 leading-[0.8] pr-1.5 pt-1" style={{ fontSize: 52 }}>
-                      {first?.text[0] ?? ''}
-                    </span>
-                    {first?.bold ? <strong className="font-semibold">{first.text.slice(1)}</strong> : first?.text.slice(1)}
-                    {segments.slice(1).map((seg, k) =>
-                      seg.bold ? <strong key={k} className="font-semibold">{seg.text}</strong> : <span key={k}>{seg.text}</span>,
-                    )}
-                  </>
-                ) : renderInline(text)}
+          <div className="absolute inset-0" style={{ background: 'radial-gradient(ellipse at 50% 40%, transparent 25%, rgba(0,0,0,0.35) 100%)' }} />
+          <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.12) 0%, transparent 35%, rgba(0,0,0,0.72) 100%)' }} />
+
+          <div className="absolute" style={{ top: cq(32), left: cq(48), right: cq(48) }}>
+            <span className="font-barlow" style={{ fontWeight: 700, fontSize: cq(11), letterSpacing: cq(5), color: '#e08d3c', textTransform: 'uppercase' }}>
+              Escursione #{escLabel} · {monthYear}
+            </span>
+          </div>
+
+          <div className="absolute" style={{ bottom: cq(32), left: cq(48), right: cq(48) }}>
+            <h1 className="font-display" style={{ fontWeight: 700, color: '#fff', lineHeight: 1.02, letterSpacing: cq(-1), fontSize: cq(48), margin: `0 0 ${cq(18)}`, textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>
+              {entry.title}
+            </h1>
+            <div style={{ width: cq(56), height: cq(2), background: '#e08d3c' }} />
+          </div>
+        </div>
+
+        {/* Striscia statistiche — sempre 4 colonne, come sul foglio stampato: si rimpicciolisce
+            insieme al resto, non si reimpagina mai in 2. */}
+        <div style={{ background: '#193b20', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)' }}>
+          {[
+            { label: 'Distanza', value: entry.distanceMeters > 0 ? `${(entry.distanceMeters / 1000).toFixed(1)}` : '—', sub: 'km' },
+            { label: 'Dislivello', value: entry.elevationGain > 0 ? `${Math.round(entry.elevationGain)}` : '—', sub: 'm D+' },
+            { label: 'Durata', value: entry.totalTimeSeconds > 0 ? formatDuration(entry.totalTimeSeconds) : '—', sub: 'in movimento' },
+            { label: 'Calorie', value: entry.calories ? `${entry.calories}` : '—', sub: 'kcal' },
+          ].map((s, i) => (
+            <div key={s.label} style={{ padding: `${cq(22)} ${cq(28)}`, borderRight: i < 3 ? '1px solid rgba(255,255,255,0.07)' : undefined }}>
+              <p className="font-barlow" style={{ fontWeight: 700, fontSize: cq(10), letterSpacing: cq(3), color: '#e08d3c', textTransform: 'uppercase', margin: `0 0 ${cq(7)}` }}>{s.label}</p>
+              <p className="font-mono" style={{ fontWeight: 500, color: '#fff', margin: 0, lineHeight: 1, fontSize: cq(26) }}>{s.value}</p>
+              <p style={{ fontSize: cq(10), color: 'rgba(255,255,255,0.4)', margin: `${cq(5)} 0 0` }}>{s.sub}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Data */}
+        <div style={{ background: '#f8f7f4', padding: `${cq(12)} ${cq(48)}`, borderTop: '1px solid #dcd8cc' }}>
+          <p className="font-barlow" style={{ fontWeight: 700, fontSize: cq(10), letterSpacing: cq(3), color: '#8a7f6e', textTransform: 'uppercase', margin: 0 }}>
+            {dateStr}{!!entry.altitudeMax && ` · Quota max ${Math.round(entry.altitudeMax)} m`}
+          </p>
+        </div>
+
+        <div style={{ padding: `${cq(48)} ${cq(48)} ${cq(40)}` }}>
+          <p className="font-barlow" style={{ fontWeight: 700, fontSize: cq(9), letterSpacing: cq(4), color: '#e08d3c', textTransform: 'uppercase', margin: `0 0 ${cq(36)}` }}>
+            Cronaca · Escursione #{escLabel}
+          </p>
+
+          {/* Scheda editoriale + intro — griglia fissa 170px+1fr, la stessa del libro privato */}
+          <div style={{ display: 'grid', gridTemplateColumns: `${cq(170)} 1fr`, gap: cq(36), marginBottom: cq(40) }}>
+            <div>
+              <p className="font-barlow" style={{ fontWeight: 900, fontSize: cq(8), letterSpacing: cq(3), color: '#a9a18e', textTransform: 'uppercase', margin: `0 0 ${cq(14)}`, paddingBottom: cq(9), borderBottom: `${cq(1.5)} solid #e08d3c` }}>
+                Scheda
               </p>
-            )
-            return j === 0 ? (
-              <div key={j}>
-                <h2 className="font-display font-bold text-forest-900 text-2xl sm:text-[32px] leading-tight -tracking-[0.5px] mb-5">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: cq(13) }}>
+                <SchedaField label="Escursione" value={`#${escLabel}`} />
+                {dateStr && <SchedaField label="Periodo" value={dateStr} />}
+                {!!entry.altitudeMax && <SchedaField label="Quota massima" value={`${Math.round(entry.altitudeMax)} m`} />}
+              </div>
+            </div>
+
+            <div>
+              {(!introSection || !introSection.body.trim()) && (
+                <h2 className="font-display" style={{ fontWeight: 700, color: '#193b20', lineHeight: 1.12, margin: 0, letterSpacing: cq(-0.5), fontSize: cq(32) }}>
                   {entry.title}
                 </h2>
-                {paragraph}
-              </div>
-            ) : <div key={j}>{paragraph}</div>
-          })}
-        </div>
-
-        {/* Citazione centrale */}
-        {pullQuote && (
-          <div className="relative border-t-2 border-b-2 border-forest-900 px-2 py-7 mb-8">
-            <span className="absolute -top-6 left-0 font-display text-forest-900/10 select-none" style={{ fontSize: 64, lineHeight: 1 }}>&ldquo;</span>
-            <p className="font-display italic text-forest-900 text-[17px] sm:text-lg leading-[1.55]">
-              {renderInline(pullQuote)}
-            </p>
+              )}
+              {introSection && introSection.body.split(/\n\n+/).filter(p => p.trim()).map((p, j) => {
+                const text = p.trim()
+                const dropCap = j === 0 && text.length > 0
+                const segments = parseInlineEmphasis(text)
+                const first = segments[0]
+                const paragraph = (
+                  <p className="font-lora" style={{ fontSize: cq(13.5), lineHeight: 1.85, color: '#4d4740', margin: `0 0 ${cq(16)}` }}>
+                    {dropCap ? (
+                      <>
+                        <span className="font-display" style={{ float: 'left', lineHeight: 0.8, fontWeight: 700, color: '#e08d3c', padding: `${cq(4)} ${cq(7)} 0 0`, fontSize: cq(52) }}>
+                          {first?.text[0] ?? ''}
+                        </span>
+                        {first?.bold ? <strong style={{ fontWeight: 600 }}>{first.text.slice(1)}</strong> : first?.text.slice(1)}
+                        {segments.slice(1).map((seg, k) =>
+                          seg.bold ? <strong key={k} style={{ fontWeight: 600 }}>{seg.text}</strong> : <span key={k}>{seg.text}</span>,
+                        )}
+                      </>
+                    ) : renderInline(text)}
+                  </p>
+                )
+                return j === 0 ? (
+                  <div key={j}>
+                    <h2 className="font-display" style={{ fontWeight: 700, color: '#193b20', lineHeight: 1.12, letterSpacing: cq(-0.5), fontSize: cq(32), margin: `0 0 ${cq(24)}` }}>
+                      {entry.title}
+                    </h2>
+                    {paragraph}
+                  </div>
+                ) : <div key={j}>{paragraph}</div>
+              })}
+            </div>
           </div>
-        )}
 
-        {/* Resto del racconto */}
-        {restSections.map((section, i) => (
-          <div key={i} className="mb-5">
-            {i === 0 && detailPhoto && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <div className="float-none w-full mb-4 sm:float-right sm:w-[42%] sm:ml-5 sm:mb-3 relative rounded-lg overflow-hidden">
-                <img src={detailPhoto.url} alt={detailPhoto.caption ?? ''} loading="lazy" decoding="async" className="w-full aspect-[4/3] sm:aspect-[3/4] object-cover" />
+          {/* Citazione centrale */}
+          {pullQuote && (
+            <div style={{ margin: `0 ${cq(-8)} ${cq(40)}`, padding: `${cq(32)} ${cq(40)}`, borderTop: `${cq(2)} solid #193b20`, borderBottom: `${cq(2)} solid #193b20`, position: 'relative' }}>
+              <span className="font-display" style={{ position: 'absolute', top: cq(-26), left: cq(36), fontSize: cq(70), lineHeight: 1, color: '#193b20', opacity: 0.12, userSelect: 'none' }}>&ldquo;</span>
+              <p className="font-display" style={{ fontStyle: 'italic', lineHeight: 1.55, color: '#193b20', margin: 0, fontSize: cq(19) }}>
+                {renderInline(pullQuote)}
+              </p>
+            </div>
+          )}
+
+          {/* Resto del racconto, con la foto di dettaglio nella sua colonna stretta — sempre
+              affiancata, mai flottante dentro il testo: è così anche nel libro privato. */}
+          <div style={{ display: 'grid', gridTemplateColumns: detailPhoto ? `1fr ${cq(164)}` : '1fr', gap: cq(32), marginBottom: cq(32) }}>
+            <div>
+              {restSections.map((section, i) => (
+                <div key={i} style={{ marginBottom: cq(22) }}>
+                  {section.body.split(/\n\n+/).filter(p => p.trim()).map((p, j) => {
+                    const paragraph = (
+                      <p className="font-lora" style={{ fontSize: cq(13.5), lineHeight: 1.85, color: '#4d4740', margin: `0 0 ${cq(14)}` }}>{renderInline(p.trim())}</p>
+                    )
+                    return j === 0 ? (
+                      <div key={j}>
+                        <p className="font-barlow" style={{ fontWeight: 900, fontSize: cq(10), letterSpacing: cq(3), color: '#e08d3c', textTransform: 'uppercase', margin: `0 0 ${cq(8)}` }}>
+                          {section.title}
+                        </p>
+                        {paragraph}
+                      </div>
+                    ) : <div key={j}>{paragraph}</div>
+                  })}
+                </div>
+              ))}
+            </div>
+            {detailPhoto && (
+              <div style={{ position: 'relative', borderRadius: cq(4), overflow: 'hidden', alignSelf: 'start' }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={detailPhoto.url} alt={detailPhoto.caption ?? ''} loading="lazy" decoding="async" style={{ width: '100%', aspectRatio: '2/3', objectFit: 'cover', display: 'block' }} />
+                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top,rgba(0,0,0,0.5) 0%,transparent 55%)' }} />
                 {detailPhoto.caption && (
-                  <>
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
-                    <p className="absolute bottom-2 left-2 right-2 font-lora italic text-[11px] text-white/90 leading-snug">
-                      {detailPhoto.caption}
-                    </p>
-                  </>
+                  <p className="font-lora" style={{ position: 'absolute', bottom: cq(10), left: cq(10), right: cq(10), fontStyle: 'italic', color: 'rgba(255,255,255,0.88)', margin: 0, lineHeight: 1.4, fontSize: cq(9) }}>
+                    {detailPhoto.caption}
+                  </p>
                 )}
               </div>
             )}
-            {section.body.split(/\n\n+/).filter(p => p.trim()).map((p, j) => {
-              const paragraph = (
-                <p className="font-lora text-[15px] leading-[1.85] text-stone-700 mb-3.5">{renderInline(p.trim())}</p>
-              )
-              return j === 0 ? (
-                <div key={j}>
-                  <p className="font-barlow font-bold text-[11px] tracking-[0.2em] uppercase text-terra-500 mb-2">
-                    {section.title}
+          </div>
+
+          {/* Box curiosità */}
+          {storyBoxes.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: cq(12), marginBottom: cq(36) }}>
+              {storyBoxes.map((q, i) => {
+                const acc = STORY_ACCENTS[i % STORY_ACCENTS.length]
+                return (
+                  <div key={i} style={{ background: acc.bg, borderLeft: `${cq(3)} solid ${acc.border}`, borderRadius: `0 ${cq(6)} ${cq(6)} 0`, padding: `${cq(18)} ${cq(22)}` }}>
+                    <p className="font-lora" style={{ fontStyle: 'italic', lineHeight: 1.75, margin: 0, color: acc.text, fontSize: cq(13) }}>{renderInline(q)}</p>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Dati e percorso — StatCard/ProgressChart restano alla loro dimensione abituale
+              (componenti condivisi con altre schermate, non riscalati qui). */}
+          {showStatistiche && (
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              <StatCard value={`${(entry.distanceMeters / 1000).toFixed(1)} km`} label="Distanza" icon={<Route style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
+              <StatCard value={`${Math.round(entry.elevationGain)} m`} label="Dislivello D+" icon={<Mountain style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
+              <StatCard value={formatDuration(entry.totalTimeSeconds)} label="Durata" icon={<Clock style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
+              <StatCard value={entry.calories ? `${entry.calories}` : '—'} label="Calorie (kcal)" icon={<Flame style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
+            </div>
+          )}
+          {showGrafico && (
+            <div className="mb-4">
+              <p className="font-barlow font-bold text-[10px] text-stone-400 tracking-[0.2em] uppercase mb-1.5">
+                Profilo altimetrico
+              </p>
+              <div className="rounded-lg p-3" style={{ background: GREEN.bg, border: `1px solid ${GREEN.border}` }}>
+                <ProgressChart series={entry.altitudeSeries} accent={GREEN} unit=" m" />
+              </div>
+            </div>
+          )}
+          {(showCuore || showVelocita) && (
+            <div className="flex flex-col gap-3 mb-4">
+              {showCuore && (
+                <div>
+                  <p className="font-barlow font-bold text-[10px] text-stone-400 tracking-[0.2em] uppercase mb-1.5">
+                    Frequenza cardiaca
                   </p>
-                  {paragraph}
+                  <div className="bg-red-50 rounded-lg p-3 border border-red-200">
+                    <ProgressChart series={entry.hrSeries} accent={{ bg: '#fef2f2', border: '#fecaca', text: '#991b1b', iconBg: '#fee2e2', iconColor: '#dc2626' }} unit=" bpm" />
+                  </div>
                 </div>
-              ) : <div key={j}>{paragraph}</div>
-            })}
-            <div className="clear-both" />
-          </div>
-        ))}
-
-        {/* Box curiosità */}
-        {storyBoxes.length > 0 && (
-          <div className="flex flex-col gap-3 mb-8">
-            {storyBoxes.map((q, i) => {
-              const acc = STORY_ACCENTS[i % STORY_ACCENTS.length]
-              return (
-                <div key={i} className="rounded-r-lg py-4 px-5" style={{ background: acc.bg, borderLeft: `3px solid ${acc.border}` }}>
-                  <p className="font-lora italic text-[13.5px] leading-[1.75]" style={{ color: acc.text }}>{renderInline(q)}</p>
+              )}
+              {showVelocita && (
+                <div>
+                  <p className="font-barlow font-bold text-[10px] text-stone-400 tracking-[0.2em] uppercase mb-1.5">
+                    Velocità
+                  </p>
+                  <div className="rounded-lg p-3" style={{ background: BLUE.bg, border: `1px solid ${BLUE.border}` }}>
+                    <ProgressChart series={entry.speedSeriesKmh} accent={BLUE} unit=" km/h" decimals={1} />
+                  </div>
                 </div>
-              )
-            })}
-          </div>
-        )}
-
-        {/* Dati e percorso */}
-        {showStatistiche && (
-          <div className="grid grid-cols-2 gap-2 mb-4">
-            <StatCard value={`${(entry.distanceMeters / 1000).toFixed(1)} km`} label="Distanza" icon={<Route style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
-            <StatCard value={`${Math.round(entry.elevationGain)} m`} label="Dislivello D+" icon={<Mountain style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
-            <StatCard value={formatDuration(entry.totalTimeSeconds)} label="Durata" icon={<Clock style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
-            <StatCard value={entry.calories ? `${entry.calories}` : '—'} label="Calorie (kcal)" icon={<Flame style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
-          </div>
-        )}
-        {showGrafico && (
-          <div className="mb-4">
-            <p className="font-barlow font-bold text-[10px] text-stone-400 tracking-[0.2em] uppercase mb-1.5">
-              Profilo altimetrico
-            </p>
-            <div className="rounded-lg p-3" style={{ background: GREEN.bg, border: `1px solid ${GREEN.border}` }}>
-              <ProgressChart series={entry.altitudeSeries} accent={GREEN} unit=" m" />
+              )}
             </div>
-          </div>
-        )}
-        {(showCuore || showVelocita) && (
-          <div className="flex flex-col gap-3 mb-4">
-            {showCuore && (
-              <div>
-                <p className="font-barlow font-bold text-[10px] text-stone-400 tracking-[0.2em] uppercase mb-1.5">
-                  Frequenza cardiaca
-                </p>
-                <div className="bg-red-50 rounded-lg p-3 border border-red-200">
-                  <ProgressChart series={entry.hrSeries} accent={{ bg: '#fef2f2', border: '#fecaca', text: '#991b1b', iconBg: '#fee2e2', iconColor: '#dc2626' }} unit=" bpm" />
-                </div>
+          )}
+          {showMappa && (
+            <div className="mb-5">
+              <p className="font-display font-bold text-forest-900 text-lg mb-3">Il percorso</p>
+              <div className="float-right w-20 ml-2.5 mb-1.5">
+                <LocatorMap eager lat={entry.polyline![0][0]} lon={entry.polyline![0][1]} label={entry.title} />
               </div>
-            )}
-            {showVelocita && (
-              <div>
-                <p className="font-barlow font-bold text-[10px] text-stone-400 tracking-[0.2em] uppercase mb-1.5">
-                  Velocità
-                </p>
-                <div className="rounded-lg p-3" style={{ background: BLUE.bg, border: `1px solid ${BLUE.border}` }}>
-                  <ProgressChart series={entry.speedSeriesKmh} accent={BLUE} unit=" km/h" decimals={1} />
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-        {showMappa && (
-          <div className="mb-5">
-            <p className="font-display font-bold text-forest-900 text-lg mb-3">Il percorso</p>
-            <div className="float-right w-20 ml-2.5 mb-1.5">
-              <LocatorMap eager lat={entry.polyline![0][0]} lon={entry.polyline![0][1]} label={entry.title} />
+              <RouteMap polyline={entry.polyline!} pois={entry.pois} />
+              <div className="clear-both" />
+              <PoiCaption pois={entry.pois} />
             </div>
-            <RouteMap polyline={entry.polyline!} pois={entry.pois} />
-            <div className="clear-both" />
-            <PoiCaption pois={entry.pois} />
-          </div>
-        )}
+          )}
 
-        {/* Mappa a sé per le foto (mai insieme a percorso/POI: vedi RouteMap.tsx) */}
-        {showFotoMappa && (
-          <div className="mb-5">
-            <p className="font-display font-bold text-forest-900 text-lg mb-3">Foto lungo il percorso</p>
-            <PhotoRouteMap polyline={entry.polyline!} photos={photosWithProgress} idPrefix={`esc-${n}`} />
-          </div>
-        )}
+          {/* Mappa a sé per le foto (mai insieme a percorso/POI: vedi RouteMap.tsx) */}
+          {showFotoMappa && (
+            <div className="mb-5">
+              <p className="font-display font-bold text-forest-900 text-lg mb-3">Foto lungo il percorso</p>
+              <PhotoRouteMap polyline={entry.polyline!} photos={photosWithProgress} idPrefix={`esc-${n}`} />
+            </div>
+          )}
 
-        {/* Foto */}
-        {galleryPhotos.length > 0 && (
-          <div className="mt-4 flex flex-col gap-3.5">
-            {galleryPhotos.map((ph, i) => (
-              <div key={ph.id} className="relative">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={ph.url} alt={ph.caption ?? ''} loading="lazy" decoding="async" className="w-full aspect-[4/3] object-cover rounded-lg shadow-sm" />
-                <span className="absolute top-1.5 left-1.5 w-5 h-5 bg-terra-500 text-white rounded-full text-center text-[10px] font-bold leading-5 border border-white">{i + 1}</span>
-                {ph.caption && <p className="text-[11px] text-stone-500 text-center mt-1.5 italic font-lora">{ph.caption}</p>}
-              </div>
-            ))}
-          </div>
-        )}
+          {/* Foto — una griglia fissa a 2 colonne come una pagina stampata, non una colonna
+              singola che si allarga: cresce e si rimpicciolisce con tutto il resto del foglio. */}
+          {galleryPhotos.length > 0 && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: cq(14), marginTop: cq(16) }}>
+              {galleryPhotos.map((ph, i) => (
+                <div key={ph.id} style={{ position: 'relative' }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={ph.url} alt={ph.caption ?? ''} loading="lazy" decoding="async"
+                    style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: cq(8), boxShadow: '0 4px 14px rgba(0,0,0,0.12)', display: 'block' }} />
+                  <span style={{
+                    position: 'absolute', top: cq(6), left: cq(6), width: cq(20), height: cq(20), background: '#e08d3c', color: '#fff',
+                    borderRadius: '50%', textAlign: 'center', lineHeight: cq(20), fontSize: cq(10), fontWeight: 700, border: `${cq(1)} solid #fff`,
+                  }}>{i + 1}</span>
+                  {ph.caption && (
+                    <p className="font-lora" style={{ fontSize: cq(9), color: '#73695c', textAlign: 'center', marginTop: cq(5), fontStyle: 'italic' }}>{ph.caption}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
 
-        {/* Piede pagina */}
-        <div className="flex items-center justify-between border-t border-stone-100 pt-3.5 mt-8">
-          <span className="text-[10px] tracking-[0.2em] uppercase text-stone-300">{entry.title}</span>
-          <span className="font-mono text-[10px] text-stone-300">{escLabel}</span>
+          {/* Piede pagina */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid #eeece5', paddingTop: cq(14), marginTop: cq(32) }}>
+            <span style={{ fontSize: cq(9), letterSpacing: cq(3), color: '#c4bead', textTransform: 'uppercase' }}>{entry.title}</span>
+            <span className="font-mono" style={{ fontSize: cq(9), color: '#c4bead' }}>{escLabel}</span>
+          </div>
         </div>
       </div>
     </article>
+  )
+}
+
+function SchedaField({ label, value }: { label: string; value: string }) {
+  return (
+    <>
+      <div>
+        <p style={{ fontSize: cq(7.5), fontWeight: 600, letterSpacing: cq(2), color: '#a9a18e', textTransform: 'uppercase', margin: `0 0 ${cq(3)}` }}>{label}</p>
+        <p className="font-lora" style={{ fontSize: cq(13), color: '#2c2520', margin: 0 }}>{value}</p>
+      </div>
+      <div style={{ height: 1, background: '#eeece5' }} />
+    </>
   )
 }

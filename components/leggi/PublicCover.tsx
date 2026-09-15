@@ -41,8 +41,8 @@ export function PublicCover({ coverUrl, eyebrow, title, subtitle, preface, owner
       <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, rgba(6,16,10,0.62) 0%, rgba(6,16,10,0.18) 32%, rgba(6,16,10,0.85) 100%)' }} />
 
       {pills && pills.length > 0 && (
-        <div className="absolute inset-x-0 top-0 px-4 sm:px-6 pt-4">
-          <div className="max-w-4xl mx-auto flex flex-wrap gap-1.5">
+        <div className="absolute inset-x-0 top-0 px-4 sm:px-6 lg:px-10 xl:px-14 pt-4 lg:pt-8">
+          <div className="max-w-4xl lg:max-w-6xl xl:max-w-[1600px] mx-auto flex flex-wrap gap-1.5">
             {pills.map(p => (
               <span key={p.label} className="bg-white text-stone-700 text-[11px] font-semibold px-2.5 py-1.5 rounded-full shadow-sm">
                 {p.value} <span className="text-stone-400 font-normal">{p.label}</span>
@@ -65,14 +65,14 @@ export function PublicCover({ coverUrl, eyebrow, title, subtitle, preface, owner
         </a>
       )}
 
-      <div className="absolute inset-x-0 bottom-0 px-4 sm:px-6 pb-6 sm:pb-8">
-        <div className="max-w-4xl mx-auto">
+      <div className="absolute inset-x-0 bottom-0 px-4 sm:px-6 lg:px-10 xl:px-14 pb-6 sm:pb-8 lg:pb-12">
+        <div className="max-w-4xl lg:max-w-6xl xl:max-w-[1600px] mx-auto">
           {eyebrow && (
-            <p className="font-barlow font-bold text-[11px] tracking-[0.25em] uppercase text-terra-300 mb-2">
+            <p className="font-barlow font-bold text-[11px] lg:text-xs tracking-[0.25em] lg:tracking-[0.3em] uppercase text-terra-300 mb-2 lg:mb-3">
               {eyebrow}
             </p>
           )}
-          <h1 className="font-display text-3xl sm:text-5xl font-black uppercase tracking-tight text-white leading-[1.05]"
+          <h1 className="font-display text-3xl sm:text-5xl lg:text-6xl xl:text-7xl font-black uppercase tracking-tight text-white leading-[1.05] lg:leading-[1.02]"
             style={{ textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>
             {title}
           </h1>

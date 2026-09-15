@@ -56,7 +56,7 @@ export default async function ReportPublicPage({ params }: { params: { token: st
       {/* Testata minima, senza navigazione: un Reportage pubblicato da solo non ha un "sito"
           attorno con altre pagine da raggiungere, a differenza di un Diario o una Raccolta. */}
       <header className="sticky top-0 z-30 bg-forest-900/95 backdrop-blur text-white">
-        <div className="max-w-3xl mx-auto px-4 sm:px-5">
+        <div className="max-w-3xl lg:max-w-[1120px] mx-auto px-4 sm:px-5">
           <div className="flex items-center justify-between h-14">
             <span className="flex items-center gap-2.5 min-w-0">
               <span className="text-forest-300 text-lg leading-none">▲</span>
@@ -70,7 +70,7 @@ export default async function ReportPublicPage({ params }: { params: { token: st
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto px-4 sm:px-5 py-6 space-y-5">
+      <main className="max-w-3xl lg:max-w-[1120px] mx-auto px-4 sm:px-5 py-6 space-y-5">
         <p className="text-xs text-stone-500">di {report.ownerName}</p>
 
         <PublicReportPage entry={entry} n={1} show={DEFAULT_DIARY_CONFIG.publicSections} hideExactDates={report.hideExactDates} />

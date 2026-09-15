@@ -115,7 +115,7 @@ export default async function PublicProfilePage({ params }: { params: { slug: st
         pills={pills}
       />
 
-      <main className="max-w-4xl mx-auto px-4 sm:px-5 py-6 sm:py-8 space-y-8">
+      <main className="max-w-4xl lg:max-w-6xl xl:max-w-[1600px] mx-auto px-4 sm:px-5 lg:px-10 xl:px-14 py-6 sm:py-8 lg:py-10 space-y-8 lg:space-y-10">
         {isEmpty && (
           <p className="text-sm text-stone-400 text-center py-10 font-lora italic">
             Nessuna pubblicazione ancora.
@@ -202,11 +202,11 @@ export default async function PublicProfilePage({ params }: { params: { slug: st
 
 function ProfileSection({ icon: Icon, title, children }: { icon: typeof Library; title: string; children: React.ReactNode }) {
   return (
-    <section className="space-y-3">
-      <h2 className="flex items-center gap-2 font-display text-xl font-bold text-forest-900 px-1">
-        <Icon className="w-5 h-5 text-forest-600" /> {title}
+    <section className="space-y-3 lg:space-y-4">
+      <h2 className="flex items-center gap-2 font-display text-xl lg:text-2xl font-bold text-forest-900 px-1">
+        <Icon className="w-5 h-5 lg:w-6 lg:h-6 text-forest-600" /> {title}
       </h2>
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">{children}</div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 lg:gap-4">{children}</div>
     </section>
   )
 }

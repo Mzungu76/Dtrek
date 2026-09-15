@@ -2,7 +2,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Capacitor } from '@capacitor/core'
-import { AlertTriangle, BatteryWarning, ArrowUp, Download, CheckCircle2, Radio, Locate, Signpost, HelpCircle } from 'lucide-react'
+import {
+  AlertTriangle, BatteryWarning, ArrowUp, Download, CheckCircle2, Radio, Locate, Signpost, HelpCircle,
+  Route, MapPin, Mountain, type LucideIcon,
+} from 'lucide-react'
 import Sheet from '@/components/ui/Sheet'
 import type { PlannedHike } from '@/lib/plannedStore'
 import { updatePlannedMeta } from '@/lib/plannedStore'
@@ -92,6 +95,48 @@ interface Props {
 }
 
 const FIX_STALE_MS = 20000 // if no fix arrives for this long, "moving time" stops accruing
+
+// ── Pannello laterale etichettato (da lg: in su) ────────────────────────────────────────────────
+// Il cluster di icone mute (colonne sinistra/destra sopra) resta l'unica interfaccia sotto lg:,
+// per scelta di prodotto — vedi il mockup di direzione discusso con l'utente. Da lg: in su, con
+// spazio da vendere, lo stesso insieme di controlli vive invece in un pannello fisso con
+// un'etichetta di testo accanto a ogni icona: "capirei cosa fa senza premere?" diventa sì anche
+// qui, non solo nella Bacheca/Diario.
+function NavPanelSection({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <p className="font-barlow text-[10px] font-bold tracking-[0.15em] uppercase text-stone-400 px-1">{label}</p>
+      {children}
+    </div>
+  )
+}
+
+function NavPanelButton({ icon: Icon, label, onClick, active }: {
+  icon: LucideIcon; label: string; onClick: () => void; active?: boolean
+}) {
+  return (
+    <button onClick={onClick} aria-pressed={active}
+      className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13px] font-medium transition-colors ${
+        active ? 'bg-terra-500 text-white' : 'bg-white text-stone-700 border border-stone-200 hover:border-stone-300'
+      }`}>
+      <Icon className="w-[18px] h-[18px] shrink-0" />
+      <span className="flex-1 text-left">{label}</span>
+    </button>
+  )
+}
+
+/** Riga per i controlli composti (SosButton, MapModeSwitcher, TrailConfidenceBadge,
+ *  ParkingSpotControl) che qui non vengono riscritti — restano icon-only, la loro logica/i loro
+ *  popover interni non cambiano — ma acquistano un'etichetta di testo accanto, letta da chi guarda
+ *  il pannello invece che dover premere per scoprire cosa fanno. */
+function NavPanelCompoundRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-3 px-1">
+      {children}
+      <span className="text-[13px] font-medium text-stone-700">{label}</span>
+    </div>
+  )
+}
 
 export default function ActiveNavigationView({ hike, locationProviderFactory, simulationLabel }: Props) {
   const router = useRouter()
@@ -1022,7 +1067,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
           POI/Pendenze) più il pulsante "centra sulla mia posizione", raggruppati invece di
           lasciare quest'ultimo a fluttuare da solo a metà schermo (dove si scontrava con la
           rotaia destra una volta centrata anche lei). */}
-      <div className="absolute left-0 z-10 top-1/2 -translate-y-1/2 flex flex-col items-start gap-3">
+      <div className="absolute left-0 z-10 top-1/2 -translate-y-1/2 flex flex-col items-start gap-3 lg:hidden">
         <NavLayerRail
           showNearbyTrails={showNearbyTrails} onToggleNearbyTrails={() => setShowNearbyTrails((v) => !v)}
           showPois={showPoiLayer} onTogglePois={() => setShowPoiLayer((v) => !v)}
@@ -1145,7 +1190,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       {/* Soluzione B: un'unica rotaia destra, centrata verticalmente — SOS, mappa/layer,
           affidabilità, condivisione live, mappa offline, punto auto — invece di due colonne
           separate a offset fissi che finivano per scontrarsi con altri controlli fluttuanti. */}
-      <div className="absolute right-3 z-10 top-1/2 -translate-y-1/2 flex flex-col items-end gap-2">
+      <div className="absolute right-3 z-10 top-1/2 -translate-y-1/2 flex flex-col items-end gap-2 lg:hidden">
         <SosButton
           fix={position ? { lat: position.lat, lon: position.lon, accuracyM } : null}
           liveShareUrl={liveShareToken ? `${typeof window !== 'undefined' ? window.location.origin : ''}/s/live/${liveShareToken}` : null}
@@ -1206,6 +1251,70 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         >
           <HelpCircle className="w-5 h-5 text-stone-700" />
         </button>
+      </div>
+
+      {/* Pannello laterale — da lg: in su, stessi controlli delle due colonne sopra ma con
+          un'etichetta di testo accanto a ogni icona invece di doverla premere per scoprire cosa
+          fa. I componenti composti (SOS, modalità mappa, affidabilità percorso, punto auto)
+          restano gli stessi bottoni icon-only di sempre — solo affiancati da un'etichetta — la
+          loro logica interna non cambia. */}
+      <div className="hidden lg:flex flex-col absolute right-0 top-0 bottom-0 w-[300px] bg-white border-l border-stone-200 shadow-xl z-20 overflow-y-auto py-6 px-4 gap-5">
+        <NavPanelSection label="Vista">
+          <div className="flex flex-col gap-1.5">
+            <NavPanelButton icon={Locate} label="Centra sulla mia posizione" active={mapFollowMode}
+              onClick={() => mapHandleRef.current?.recenter()} />
+            <NavPanelButton icon={Route} label="Sentieri vicini" active={showNearbyTrails}
+              onClick={() => setShowNearbyTrails((v) => !v)} />
+            <NavPanelButton icon={MapPin} label="Punti di interesse" active={showPoiLayer}
+              onClick={() => setShowPoiLayer((v) => !v)} />
+            <NavPanelButton icon={Mountain} label="Pendenze" active={showSlopeLayer}
+              onClick={() => setShowSlopeLayer((v) => !v)} />
+          </div>
+        </NavPanelSection>
+
+        <NavPanelSection label="Mappa e sicurezza">
+          <div className="flex flex-col gap-2.5">
+            <NavPanelCompoundRow label="Emergenza SOS">
+              <SosButton
+                fix={position ? { lat: position.lat, lon: position.lon, accuracyM } : null}
+                liveShareUrl={liveShareToken ? `${typeof window !== 'undefined' ? window.location.origin : ''}/s/live/${liveShareToken}` : null}
+                onTriggered={(action) => logEvent('sos_triggered', { action })}
+              />
+            </NavPanelCompoundRow>
+            <NavPanelCompoundRow label="Modalità mappa">
+              <MapModeSwitcher
+                mode={mapMode} onModeChange={setMapMode} is3D={is3D} onToggle3D={() => setIs3D((v) => !v)} isOnline={isOnline}
+                showNatura2000={showNatura2000} onToggleNatura2000={() => setShowNatura2000((v) => !v)}
+              />
+            </NavPanelCompoundRow>
+            <NavPanelCompoundRow label="Affidabilità percorso">
+              <TrailConfidenceBadge confidence={trailConfidence} />
+            </NavPanelCompoundRow>
+            <NavPanelButton icon={Signpost} label="Vie d'uscita" onClick={handleEscapeOptions} />
+            <NavPanelButton icon={Radio} active={liveSharingEnabled}
+              label={liveSharingEnabled ? 'Condivisione posizione live attiva' : 'Condividi la tua posizione live'}
+              onClick={() => setShowLiveShareSheet(true)} />
+            {routePolyline.length >= 2 && (
+              <NavPanelButton icon={offlineReady ? CheckCircle2 : Download} active={offlineReady}
+                label={offlineReady ? 'Mappa scaricata per offline' : 'Scarica mappa per offline'}
+                onClick={() => setShowOfflineSheet(true)} />
+            )}
+            <NavPanelCompoundRow label="Punto auto">
+              <ParkingSpotControl
+                spot={parkingSpot}
+                position={position}
+                distanceM={parkingDistanceM}
+                bearingToSpotDeg={parkingBearingDeg}
+                onSave={handleSaveParking}
+                onClear={handleClearParking}
+              />
+            </NavPanelCompoundRow>
+          </div>
+        </NavPanelSection>
+
+        <NavPanelSection label="Assistenza">
+          <NavPanelButton icon={HelpCircle} label="Come funziona la navigazione" onClick={() => setShowOnboarding(true)} />
+        </NavPanelSection>
       </div>
 
       <NavOnboardingSheet

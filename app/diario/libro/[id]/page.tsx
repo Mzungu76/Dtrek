@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { MobileNavBar } from '@/components/Navbar'
+import { MobileNavBar, DesktopNav } from '@/components/Navbar'
 import { PublishPrivacyToggles } from '@/components/PublishPrivacyToggles'
 import { PublishGateNotice } from '@/components/PublishGateNotice'
 import { useProfileStatus } from '@/lib/hooks/useProfileStatus'
@@ -17,7 +17,7 @@ import type { TrackPoint } from '@/lib/tcxParser'
 import {
   FileDown, Share2, Link2Off,
   Loader2, Image as ImageIcon, BarChart2, X, Pencil,
-  Lock, LockOpen, Eye, EyeOff, Archive, RotateCcw, RefreshCw, AlertTriangle,
+  Lock, LockOpen, Eye, EyeOff, Archive, RotateCcw, RefreshCw, AlertTriangle, BookOpen,
 } from 'lucide-react'
 import { ROUTE_COLORS } from '@/lib/designTokens'
 import { mapOutH } from '@/components/diario/chartUtils'
@@ -48,6 +48,14 @@ import { uploadDiaryCover } from '@/lib/diaryCoverUpload'
 // il Diario che ha ereditato la vecchia configurazione singola (in pratica quello di default: un
 // Diario nuovo ha già un titolo diverso da DEFAULT_DIARY_CONFIG e la guardia sotto lo salta).
 const MIGRATED_FLAG = 'dtrek_diary_migrated_v1'
+
+// Il libro è un vero foglio A4 impaginato (DiarioReportPage.tsx e le altre pagine, tutte
+// width:794 — vedi PDF_PAGE_W), scalato per adattarsi allo schermo come un lettore PDF: sotto
+// 794px si rimpicciolisce proporzionalmente, com'è giusto che sia. Il tetto a 1 lo teneva invece
+// congelato a 794px su ogni schermo più largo — su un monitor la pagina restava un francobollo
+// circondato da spazio vuoto. Qui cresce fino a un massimo ragionevole (~1070px, la larghezza di
+// una vera pagina di rivista a schermo) invece di restare bloccata per sempre.
+const MAX_BOOK_SCALE = 1070 / 794
 
 function isConfigDefault(c: DiaryConfig): boolean {
   return (
@@ -335,7 +343,7 @@ export default function DiarioLibroPage() {
 
     function recalc() {
       const outerWidth = outer!.clientWidth
-      setScale(Math.min(1, outerWidth / 794))
+      setScale(Math.min(MAX_BOOK_SCALE, outerWidth / 794))
       setInnerHeight(inner!.scrollHeight)
     }
     recalc()
@@ -370,6 +378,21 @@ export default function DiarioLibroPage() {
     visibleBookPages.forEach(p => { if (p.kind === 'report') { n++; m.set(p.report.id, n) } })
     return m
   }, [visibleBookPages])
+
+  // Calcolato una volta sola e riusato da entrambe le rese della pagina (scalata sotto lg:, a
+  // schermo intero da lg: in su — vedi più sotto): tenere il calcolo della fascia-anno in un solo
+  // posto evita che le due rese possano un giorno divergere silenziosamente.
+  const pagesWithYearBand = useMemo(() => visibleBookPages.map((page, i) => {
+    const year = new Date(page.startTime).getFullYear()
+    const prevYear = i > 0 ? new Date(visibleBookPages[i - 1].startTime).getFullYear() : null
+    const showBand = year !== prevYear
+    const yearPages = visibleBookPages.filter(p => new Date(p.startTime).getFullYear() === year)
+    const yearKm = yearPages.reduce((s, p) =>
+      s + (p.kind === 'stub' ? p.activity.distanceMeters : p.report.activity?.distance_meters ?? 0), 0) / 1000
+    const yearBand = showBand ? { year: String(year), count: yearPages.length, totalKm: yearKm } : undefined
+    const activityId = page.kind === 'stub' ? page.activity.id : page.report.activity_id
+    return { page, yearBand, activityId }
+  }), [visibleBookPages])
 
   async function handleCoverUpload(file: File) {
     setCoverUploading(true); setCoverError(null)
@@ -718,9 +741,11 @@ export default function DiarioLibroPage() {
       {/* Top nav — stessa barra di Bacheca/Guida/Reportage (components/Navbar.tsx), sticky sopra
           il libro come le altre sezioni "hub" dell'app (niente tab bar in basso qui — questa
           pagina non ha la galleria/freccetta di scorrimento che nelle altre sposta i link in
-          fondo, vedi HubNavBar/HubProfileButton: qui la barra intera resta unica, in cima). */}
+          fondo, vedi HubNavBar/HubProfileButton: qui la barra intera resta unica, in cima). Da
+          md: in su la testata chiara DesktopNav sostituisce la MobileNavBar scura. */}
       <div className="sticky top-0 z-40 print:hidden">
-        <MobileNavBar />
+        <DesktopNav />
+        <MobileNavBar className="md:hidden" />
       </div>
 
       {configSaveError && (
@@ -1033,7 +1058,10 @@ export default function DiarioLibroPage() {
         </div>
       )}
 
-      {/* Book — scaled to fit the viewport width, like a responsive PDF viewer */}
+      {/* Il libro è un unico foglio impaginato come una rivista stampabile, a ogni larghezza —
+          vedi MAX_BOOK_SCALE più sopra: sotto i 794px si rimpicciolisce come un lettore PDF, sopra
+          cresce fino a un tetto ragionevole invece di restare bloccato a 794px per sempre. Stessa
+          identità in app e sul sito pubblico (components/leggi/PublicReportPage.tsx). */}
       {!loading && (
         <div ref={bookOuterRef} className="bg-stone-200 min-h-screen overflow-hidden">
           <div style={{ height: innerHeight ? innerHeight * scale + 48 : undefined, position: 'relative' }}>
@@ -1056,53 +1084,58 @@ export default function DiarioLibroPage() {
               {activities.length > 0 && showStats && (
                 <DiarioStatistiche activities={activities} toggles={config.statsToggles} />
               )}
-              {visibleBookPages.map((page, i) => {
-                const year = new Date(page.startTime).getFullYear()
-                const prevYear = i > 0 ? new Date(visibleBookPages[i - 1].startTime).getFullYear() : null
-                const showBand = year !== prevYear
-                const yearPages = visibleBookPages.filter(p => new Date(p.startTime).getFullYear() === year)
-                const yearKm = yearPages.reduce((s, p) =>
-                  s + (p.kind === 'stub' ? p.activity.distanceMeters : p.report.activity?.distance_meters ?? 0), 0) / 1000
-                const yearBand = showBand ? { year: String(year), count: yearPages.length, totalKm: yearKm } : undefined
-                const activityId = page.kind === 'stub' ? page.activity.id : page.report.activity_id
-                return (
-                  <div key={page.kind === 'report' ? `rep-${page.report.id}` : `stub-${page.activity.id}`}>
-                    {page.kind === 'report' ? (
-                      <DiarioReportPage
-                        report={page.report}
-                        photos={photosByAct[page.report.activity_id] ?? []}
-                        meta={activities.find(a => a.id === page.report.activity_id)}
-                        extras={resolveReportExtras(config, page.report.activity_id)}
-                        trackPoints={trackPointsByAct[page.report.activity_id]}
-                        mapsInteractive={mapsInteractive}
-                        escNumber={reportNumbers.get(page.report.id) ?? 1}
-                        yearBand={yearBand}
-                        selectedPhotoIds={config.photoIdsByActivity[page.report.activity_id]}
-                        onSelectedPhotosChange={ids => setConfig(c => {
-                          const next = { ...c.photoIdsByActivity }
-                          // Elenco vuoto = torna alla scelta automatica: si toglie la chiave invece
-                          // di salvare un array vuoto, così la configurazione non accumula voci
-                          // che dicono «niente di particolare».
-                          if (ids.length === 0) delete next[page.report.activity_id]
-                          else next[page.report.activity_id] = ids
-                          return { ...c, photoIdsByActivity: next }
-                        })}
-                        onExclude={() => toggleExcludeActivity(activityId)}
-                        onExtrasChange={patch => patchReportExtrasForActivity(activityId, patch)}
-                      />
-                    ) : (
-                      <DiarioStubPage
-                        activity={page.activity}
-                        yearBand={yearBand}
-                        onExclude={() => toggleExcludeActivity(activityId)}
-                      />
-                    )}
-                  </div>
-                )
-              })}
+
+              {pagesWithYearBand.map(({ page, yearBand, activityId }, i) => (
+                // id "diario-pagina-N" — bersaglio dei link del Sommario (DiarioIndice.tsx) e del
+                // pulsante "Torna al Sommario" fisso più sotto: prima il libro non aveva alcuna
+                // ancora, un indice muto e nessun modo di saltare da una pagina all'altra.
+                <div key={page.kind === 'report' ? `rep-${page.report.id}` : `stub-${page.activity.id}`}
+                  id={`diario-pagina-${i + 1}`} style={{ scrollMarginTop: 72 }}>
+                  {page.kind === 'report' ? (
+                    <DiarioReportPage
+                      report={page.report}
+                      photos={photosByAct[page.report.activity_id] ?? []}
+                      meta={activities.find(a => a.id === page.report.activity_id)}
+                      extras={resolveReportExtras(config, page.report.activity_id)}
+                      trackPoints={trackPointsByAct[page.report.activity_id]}
+                      mapsInteractive={mapsInteractive}
+                      escNumber={reportNumbers.get(page.report.id) ?? 1}
+                      yearBand={yearBand}
+                      selectedPhotoIds={config.photoIdsByActivity[page.report.activity_id]}
+                      onSelectedPhotosChange={ids => setConfig(c => {
+                        const next = { ...c.photoIdsByActivity }
+                        // Elenco vuoto = torna alla scelta automatica: si toglie la chiave invece
+                        // di salvare un array vuoto, così la configurazione non accumula voci
+                        // che dicono «niente di particolare».
+                        if (ids.length === 0) delete next[page.report.activity_id]
+                        else next[page.report.activity_id] = ids
+                        return { ...c, photoIdsByActivity: next }
+                      })}
+                      onExclude={() => toggleExcludeActivity(activityId)}
+                      onExtrasChange={patch => patchReportExtrasForActivity(activityId, patch)}
+                    />
+                  ) : (
+                    <DiarioStubPage
+                      activity={page.activity}
+                      yearBand={yearBand}
+                      onExclude={() => toggleExcludeActivity(activityId)}
+                    />
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         </div>
+      )}
+
+      {/* Un solo pulsante fisso per l'intero libro, non uno per pagina — dà accesso immediato al
+          Sommario da qualunque punto del libro senza risalire pagina per pagina. Stesso principio
+          della pagina pubblica equivalente (components/leggi/DiaryBook.tsx). */}
+      {!loading && visibleBookPages.length > 0 && (
+        <a href="#diario-sommario" title="Torna al Sommario"
+          className="fixed bottom-5 right-4 z-20 flex items-center gap-1.5 bg-forest-900 text-white text-xs font-semibold rounded-full pl-3 pr-4 py-2.5 shadow-lg hover:bg-forest-800 transition">
+          <BookOpen className="w-3.5 h-3.5" /> Sommario
+        </a>
       )}
     </div>
   )

@@ -7,9 +7,9 @@ import type { BookPage } from './types'
 
 export function DiarioIndice({ pages }: { pages: BookPage[] }) {
   return (
-    <div className="diario-page" style={{
+    <div id="diario-sommario" className="diario-page" style={{
       width: PDF_PAGE_W, minHeight: PDF_CONTENT_H, background: 'white', margin: '24px auto',
-      padding: '72px 64px', boxShadow: '0 8px 56px rgba(0,0,0,0.28)',
+      padding: '72px 64px', boxShadow: '0 8px 56px rgba(0,0,0,0.28)', scrollMarginTop: 72,
     }}>
       <PageHeader label="Indice" title="Le escursioni" />
       <div style={{ borderTop: '1px solid #eeece5' }}>
@@ -29,9 +29,12 @@ export function DiarioIndice({ pages }: { pages: BookPage[] }) {
                   {year}
                 </p>
               )}
-              <div className="pdf-block" style={{
+              {/* Riga cliccabile — porta direttamente alla pagina dell'escursione (id
+                  "diario-pagina-N" montato da app/diario/libro/[id]/page.tsx sul contenitore di
+                  ogni pagina), invece di un elenco muto da scorrere a mano. */}
+              <a href={`#diario-pagina-${i + 1}`} className="pdf-block" style={{
                 display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
-                padding: '14px 0', borderBottom: '1px solid #eeece5',
+                padding: '14px 0', borderBottom: '1px solid #eeece5', textDecoration: 'none', color: 'inherit',
               }}>
                 <div style={{ display: 'flex', gap: 16, alignItems: 'baseline', flex: 1, minWidth: 0 }}>
                   <span style={{ fontSize: 11, color: '#a9a18e', fontFamily: FONT.mono, fontWeight: 500, minWidth: 24 }}>
@@ -50,7 +53,7 @@ export function DiarioIndice({ pages }: { pages: BookPage[] }) {
                   {distanceM > 0 && <span>{(distanceM / 1000).toFixed(1)} km</span>}
                   {elevGain > 0 && <span>{Math.round(elevGain)} m D+</span>}
                 </div>
-              </div>
+              </a>
             </div>
           )
         })}

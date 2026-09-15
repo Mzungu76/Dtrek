@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { Pencil, Plus, X, ChevronUp, ChevronDown, Check } from 'lucide-react'
-import HubNavBar from '@/components/routehub/HubNavBar'
+import { MobileNavBar, DesktopNav } from '@/components/Navbar'
 import { WIDGET_CATALOG, WIDGET_BY_ID } from '@/components/dashboard/widgets'
 import {
   normalizeDashboardConfig, DEFAULT_DASHBOARD_CONFIG, DEFAULT_TAB_ID,
@@ -66,6 +66,21 @@ function PeekWidgets({ data }: { data: DashboardData }) {
         )}
       </div>
     </div>
+  )
+}
+
+/** Le stesse 2 "chiavi" del peek mobile (Recovery/Prossima uscita), ma nella versione già pronta
+ *  per uno sfondo chiaro: da lg in su il pannello è un riquadro bianco fisso, non più un foglio
+ *  sopra la mappa scura, quindi qui si riusano i widget del catalogo (WIDGET_BY_ID) invece dello
+ *  stile "vetro" di PeekWidgets sopra, pensato apposta per stare sopra la mappa. */
+function PinnedPeekWidgets({ data }: { data: DashboardData }) {
+  const RecoveryC = WIDGET_BY_ID.recovery.Component
+  const NextOutingC = WIDGET_BY_ID['prossima-uscita'].Component
+  return (
+    <>
+      <RecoveryC data={data} />
+      <NextOutingC data={data} />
+    </>
   )
 }
 
@@ -163,9 +178,11 @@ export default function DashboardSheet({ data }: { data: DashboardData }) {
 
   return (
     <>
-      {/* ── Peek: sempre visibile, ancorato in basso sopra la mappa ── */}
+      {/* ── Peek: sempre visibile, ancorato in basso sopra la mappa — solo sotto lg, dove il
+          pannello è un foglio trascinabile che altrimenti coprirebbe tutta la mappa. Da lg in
+          su il pannello è un riquadro fisso sempre aperto (sotto), quindi non serve un peek. ── */}
       <div
-        className="absolute inset-x-0 bottom-0 z-20 flex flex-col gap-2.5 px-4 transition-opacity"
+        className="absolute inset-x-0 bottom-0 z-20 flex flex-col gap-2.5 px-4 transition-opacity lg:hidden"
         style={{ opacity: open ? 0 : 1, pointerEvents: open ? 'none' : 'auto' }}
       >
         <button
@@ -180,28 +197,53 @@ export default function DashboardSheet({ data }: { data: DashboardData }) {
             {[0, 1].map(i => <div key={i} className="flex-1 h-[72px] rounded-2xl bg-white/10 animate-pulse" />)}
           </div>
         )}
-        {/* Barra di navigazione, spostata qui in fondo (sotto il pannello widget e la freccetta
-            di scorrimento) — stesso posizionamento di HubNavBar in RouteHub.tsx per Guida/
-            Reportage/Diari, solo montata direttamente qui perché la Dashboard non passa da
-            RouteHub. -mx-4 per farla toccare i bordi (il contenitore ha px-4). */}
+        {/* Barra di navigazione mobile, spostata qui in fondo (sotto il pannello widget e la
+            freccetta di scorrimento) — stesso posizionamento di HubNavBar in RouteHub.tsx per
+            Guida/Reportage/Diari, solo montata direttamente qui perché la Dashboard non passa da
+            RouteHub. -mx-4 per farla toccare i bordi (il contenitore ha px-4). Solo la metà
+            mobile: la testata desktop vive fuori da qui sotto, vedi il commento lì per il perché
+            (un antenato `position:absolute` con z-index, come questo contenitore, crea un
+            proprio contesto di stacking — un `position:fixed` annidato dentro non può più
+            "uscirne" per confrontare il proprio z-index con quello di fratelli esterni, come il
+            pannello qui sotto: sarebbe rimasto sempre coperto, qualunque z-index gli si desse). */}
         <div className="-mx-4">
-          <HubNavBar />
+          <MobileNavBar className="md:hidden" showAvatar={false} safeAreaTop={false} safeAreaBottom />
         </div>
       </div>
 
-      {/* ── Pannello aperto: tutto il catalogo widget/schede, invariato nella logica ── */}
+      {/* Testata desktop — fuori da QUALUNQUE antenato con la propria z-index/stacking (il peek
+          sopra, il pannello sotto): solo così il suo z-50 si confronta alla pari con quello del
+          pannello (z-30) invece di restarne coperto. Da md: in su, a ogni larghezza — DesktopNav
+          si nasconde da sé sotto md: (className interno), non serve alcun wrapper qui. */}
+      <DesktopNav position="fixed" />
+
+      {/* ── Pannello: sotto lg un foglio trascinabile (stessa logica di sempre); da lg in su un
+          riquadro fisso a destra, sempre aperto — niente maniglia da trascinare, niente peek
+          separato: le due "chiavi" del peek (Recovery/Prossima uscita) restano in cima anche
+          qui, sopra le schede. Il catalogo di widget/schede sotto non cambia. ── */}
       <div
-        className="fixed inset-x-0 bottom-0 z-30 bg-stone-50 rounded-t-[26px] shadow-2xl flex flex-col transition-transform duration-300 ease-out"
-        style={{ top: 'calc(env(safe-area-inset-top,0px) + 64px)', transform: open ? 'translateY(0)' : 'translateY(100%)' }}
+        className={`fixed inset-x-0 bottom-0 z-30 bg-stone-50 rounded-t-[26px] shadow-2xl flex flex-col
+          transition-transform duration-300 ease-out top-[calc(env(safe-area-inset-top,0px)+64px)]
+          ${open ? 'translate-y-0' : 'translate-y-full'}
+          lg:translate-y-0 lg:inset-y-0 lg:left-auto lg:right-0 lg:w-[420px]
+          lg:rounded-t-none lg:rounded-l-2xl lg:shadow-none lg:border-l lg:border-stone-200`}
       >
         <button
           onPointerDown={handlePointerDown} onPointerUp={handlePointerUp}
-          aria-label="Chiudi" className="shrink-0 flex flex-col items-center pt-2.5 pb-1 touch-none select-none"
+          aria-label="Chiudi" className="shrink-0 flex flex-col items-center pt-2.5 pb-1 touch-none select-none lg:hidden"
         >
           <div className="w-9 h-1.5 rounded-full bg-stone-300" />
         </button>
 
-        <div className="shrink-0 flex items-center justify-between px-4 pb-2">
+        <div className="hidden lg:flex flex-col gap-2.5 px-4 pt-4">
+          {configLoaded ? <PinnedPeekWidgets data={data} /> : (
+            <div className="flex flex-col gap-2.5">
+              {[0, 1].map(i => <div key={i} className="h-[72px] rounded-2xl bg-stone-100 animate-pulse" />)}
+            </div>
+          )}
+        </div>
+
+        <div className="shrink-0 flex items-center justify-between px-4 pb-2 pt-2 lg:pt-4">
           <h1 className="font-display text-xl font-bold text-stone-800">Dashboard</h1>
           <button
             onClick={() => setEditMode(v => !v)}

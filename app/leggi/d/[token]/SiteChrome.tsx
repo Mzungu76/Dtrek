@@ -24,7 +24,7 @@ export function SiteHeader({ homeHref, homeLabel = 'Il diario', title, current }
 }) {
   return (
     <header className="sticky top-0 z-30 bg-forest-900/95 backdrop-blur text-white">
-      <div className="max-w-4xl mx-auto px-4 sm:px-5">
+      <div className="max-w-4xl lg:max-w-6xl xl:max-w-[1600px] mx-auto px-4 sm:px-5 lg:px-10 xl:px-14">
         <div className="flex items-center justify-between h-14">
           <a href={homeHref} className="flex items-center gap-2.5 min-w-0 group">
             <span className="text-forest-300 text-lg leading-none">▲</span>

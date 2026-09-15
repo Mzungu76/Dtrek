@@ -54,7 +54,10 @@ export default function TopOverlay({ itemKey, title, statPills, weatherIcon, onO
       {/* L'icona profilo, unica cosa rimasta in cima ora che i link di navigazione sono scesi in
           fondo (HubNavBar), vive nella STESSA riga delle pillole invece che in una fascia propria
           sopra di esse — libera lo spazio che quella fascia occupava, invece di lasciarlo vuoto. */}
-      <div className="relative px-3 sm:px-4" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 10px)' }}>
+      {/* md:!pt-20 con `!` perché uno stile inline (sotto, per il safe-area del telefono) batte
+          sempre una classe a parità di tutto — serve `!important` per scavalcarlo da md: in su,
+          dove la testata desktop fissa (56px) prende il posto del notch. */}
+      <div className="relative px-3 sm:px-4 md:!pt-20" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 10px)' }}>
         <div
           className="transition-opacity ease-out"
           style={{ opacity: visible ? 1 : 0, transitionDuration: `${visible ? FADE_IN_MS : FADE_OUT_MS}ms` }}
@@ -82,7 +85,11 @@ export default function TopOverlay({ itemKey, title, statPills, weatherIcon, onO
                 )
               })}
             </div>
-            <ProfileAvatar size={32} iconSize={14} />
+            {/* Da md: in su l'avatar vive già nella testata desktop (HubNavBar.tsx monta
+                DesktopNav) — qui resterebbe un secondo avatar duplicato. */}
+            <div className="md:hidden">
+              <ProfileAvatar size={32} iconSize={14} />
+            </div>
           </div>
 
           {variant === 'magazine' && contextBadge && (

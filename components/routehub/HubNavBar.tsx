@@ -1,5 +1,5 @@
 'use client'
-import { MobileNavBar } from '@/components/Navbar'
+import { MobileNavBar, DesktopNav } from '@/components/Navbar'
 
 /**
  * La stessa barra della navbar principale (components/Navbar.tsx), non una copia — garantisce che
@@ -11,13 +11,24 @@ import { MobileNavBar } from '@/components/Navbar'
  * safeAreaBottom=true: il rientro per l'home indicator vive dentro la barra stessa (ne allunga lo
  * sfondo) — così il chiamante può ancorarla proprio al bordo inferiore reale senza lasciarvi sotto
  * uno spazio vuoto residuo, qualunque cosa la precede nel proprio contenitore.
+ *
+ * Da md: in su, la barra mobile in fondo (pensata per il pollice, icone+etichette in fila) non va
+ * bene su tablet/desktop — qui compare invece la stessa testata "normale" del resto dell'app
+ * (logo, link testuali a destra, avatar), fissa in cima. `md:hidden` sulla barra mobile evita che
+ * le due convivano.
  */
 export default function HubNavBar() {
-  return <MobileNavBar showAvatar={false} safeAreaTop={false} safeAreaBottom />
+  return (
+    <>
+      <MobileNavBar className="md:hidden" showAvatar={false} safeAreaTop={false} safeAreaBottom />
+      <DesktopNav position="fixed" />
+    </>
+  )
 }
 
 /** Solo l'icona profilo, in alto a destra — quel che resta in cima alle pagine "magazine" ora che
- *  i link di navigazione sono scesi in fondo (HubNavBar sopra). */
+ *  i link di navigazione sono scesi in fondo (HubNavBar sopra). Da md: in su non serve: l'avatar
+ *  vive già nella testata desktop che HubNavBar monta. */
 export function HubProfileButton() {
-  return <MobileNavBar showLinks={false} />
+  return <MobileNavBar className="md:hidden" showLinks={false} />
 }

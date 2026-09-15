@@ -3,7 +3,7 @@
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
-import { MobileNavBar } from '@/components/Navbar'
+import { MobileNavBar, DesktopNav } from '@/components/Navbar'
 import DiarioSommarioContent from '@/components/diario/DiarioSommarioContent'
 
 // Rotta standalone del Sommario — raggiunta da un link diretto (es. la riga di un volume in
@@ -13,12 +13,15 @@ import DiarioSommarioContent from '@/components/diario/DiarioSommarioContent'
 // la stessa identità scura (MobileNavBar, non il Navbar chiaro) del corpo del Sommario sotto.
 // La barra intera (link + profilo insieme) resta in cima qui, non divisa fra cima e fondo come
 // nelle pagine "magazine" con galleria/freccetta di scorrimento (HubNavBar/HubProfileButton) —
-// questa pagina di gestione non ha quel meccanismo.
+// questa pagina di gestione non ha quel meccanismo. Da md: in su la MobileNavBar scura lascia
+// posto alla testata chiara DesktopNav (sticky: pagina "normale" con scroll reale, non a schermo
+// intero come Bacheca/Guida/Resoconto/Diario libro — vedi il commento su `position` in Navbar.tsx).
 export default function DiarioSommarioPage() {
   const params = useParams<{ id: string }>()
   return (
     <div className="min-h-screen bg-[#0b1a24]">
-      <MobileNavBar />
+      <DesktopNav />
+      <MobileNavBar className="md:hidden" />
       <Link href="/diario" className="max-w-2xl mx-auto px-4 sm:px-8 flex items-center gap-1.5 text-sm text-white/50 hover:text-white/80 mt-4 transition-colors">
         <ArrowLeft className="w-3.5 h-3.5" /> Diari
       </Link>
