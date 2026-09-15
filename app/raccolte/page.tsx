@@ -387,92 +387,100 @@ export default function RaccolteTreePage() {
   return (
     <div className={`min-h-screen bg-stone-50 ${MOBILE_TOPBAR_SPACER}`}>
       <Navbar mobileNavPosition="bottom" />
-      <div className="max-w-2xl mx-auto px-4 sm:px-8 pb-[calc(env(safe-area-inset-bottom,0px)+144px)] md:pb-16">
-        <Link href="/diario" className="inline-flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-700 mt-3 mb-5 transition-colors">
+      <div className="max-w-2xl lg:max-w-3xl mx-auto px-4 sm:px-8 pb-[calc(env(safe-area-inset-bottom,0px)+144px)] md:pb-16">
+        <Link href="/diario" className="inline-flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-700 mt-3 mb-5 md:mb-6 transition-colors">
           <ArrowLeft className="w-3.5 h-3.5" /> Diari
         </Link>
 
-        <div className="flex items-start justify-between gap-4 mb-6">
-          <div>
-            <h1 className="font-display text-2xl font-bold text-stone-800">Raccolte</h1>
-            <p className="text-sm text-stone-400 mt-1.5">Tocca per aprire, tieni premuto sulla maniglia per riordinare.</p>
-          </div>
-          <button
-            onClick={createRaccolta} disabled={creating}
-            className="shrink-0 inline-flex items-center gap-1.5 bg-forest-600 hover:bg-forest-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors disabled:opacity-60 shadow-sm"
-          >
-            {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Nuova
-          </button>
-        </div>
-
-        <div className="flex gap-2 mb-5">
-          {([
-            ['tutti', 'Tutti'],
-            ['pubblicati', 'Pubblicati'],
-            ['non-pubblicati', 'Non pubblicati'],
-          ] as const).map(([value, label]) => (
+        {/* Da md in su l'intera pagina (testata, filtri, albero) vive dentro una card bianca con
+            bordo/ombra e più respiro, invece della lista piatta a filo pagina — stesso linguaggio
+            "card" già usato altrove nell'app (schede della Dashboard, widget), qui applicato a
+            un'unica card che contiene tutto. L'albero sotto (RaccoltaSection) resta esattamente
+            com'era: nessun cambio di interazione o di altezza riga, che romperebbe la matematica
+            del trascinamento (RACCOLTA_ROW_H/DIARIO_ROW_H in useRowDrag). */}
+        <div className="md:bg-white md:rounded-2xl md:border md:border-stone-200 md:shadow-sm md:p-7">
+          <div className="flex items-start justify-between gap-4 mb-6">
+            <div>
+              <h1 className="font-display text-2xl md:text-3xl font-bold text-stone-800">Raccolte</h1>
+              <p className="text-sm text-stone-400 mt-1.5">Tocca per aprire, tieni premuto sulla maniglia per riordinare.</p>
+            </div>
             <button
-              key={value}
-              onClick={() => setFilter(value)}
-              className={`px-3.5 py-1.5 rounded-full text-sm font-semibold transition-colors ${
-                filter === value ? 'bg-forest-600 text-white' : 'bg-white border border-stone-200 text-stone-600 hover:bg-stone-100'
-              }`}
+              onClick={createRaccolta} disabled={creating}
+              className="shrink-0 inline-flex items-center gap-1.5 bg-forest-600 hover:bg-forest-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors disabled:opacity-60 shadow-sm"
             >
-              {label}
+              {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Nuova
             </button>
-          ))}
-        </div>
-
-        {error && <p className="text-sm text-red-600 mb-3">{error}</p>}
-
-        {tree === null ? (
-          <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-stone-400" /></div>
-        ) : tree.length === 0 ? (
-          <p className="font-lora italic text-sm text-stone-400 py-10 text-center">Nessuna raccolta ancora.</p>
-        ) : filteredTree && filteredTree.length === 0 ? (
-          <p className="font-lora italic text-sm text-stone-400 py-10 text-center">
-            {filter === 'pubblicati' ? 'Nessuna raccolta pubblicata.' : 'Nessuna raccolta non pubblicata.'}
-          </p>
-        ) : (
-          <div onClick={() => setKebabOpenId(null)}>
-            {/* Il trascinamento resta ancorato agli indici di `tree` (le posizioni salvate sul
-                server), non a quelli filtrati: con un filtro attivo il riordino si disattiva
-                (grip inerte) invece di scrivere posizioni sbagliate — vedi la guardia su
-                onGripPointerDown qui sotto. */}
-            {(filteredTree ?? []).map((raccolta) => {
-              const i = tree.findIndex(r => r.id === raccolta.id)
-              return (
-              <div key={raccolta.id}>
-                {raccolteDrag.dropIndex === i && raccolteDrag.dragIndex !== null && raccolteDrag.dragIndex !== i && (
-                  <div className="h-[3px] mx-1 rounded-full bg-forest-500" />
-                )}
-                <RaccoltaSection
-                  raccolta={raccolta}
-                  expanded={expandedRaccolte.has(raccolta.id)}
-                  expandedDiari={expandedDiari}
-                  kebabOpen={kebabOpenId === raccolta.id}
-                  raccoltaCoverUploadingId={raccoltaCoverUploadingId}
-                  diarioCoverUploadingId={diarioCoverUploadingId}
-                  markedForPublishBusyId={markedForPublishBusyId}
-                  diarioPublishBusyId={diarioPublishBusyId}
-                  reportagePublishBusyId={reportagePublishBusyId}
-                  isDragging={raccolteDrag.dragIndex === i}
-                  dropBefore={false}
-                  deltaY={raccolteDrag.dragIndex === i ? raccolteDrag.deltaY : 0}
-                  dragEnabled={filter === 'tutti'}
-                  onToggleExpand={() => setExpandedRaccolte(s => { const n = new Set(s); n.has(raccolta.id) ? n.delete(raccolta.id) : n.add(raccolta.id); return n })}
-                  onToggleDiario={diarioId => setExpandedDiari(s => { const n = new Set(s); n.has(diarioId) ? n.delete(diarioId) : n.add(diarioId); return n })}
-                  onToggleKebab={() => setKebabOpenId(id => id === raccolta.id ? null : raccolta.id)}
-                  onGripPointerDown={e => { if (filter === 'tutti') raccolteDrag.start(i, e) }}
-                  onGripPointerMove={raccolteDrag.move}
-                  onGripPointerUp={raccolteDrag.end}
-                  actions={actions}
-                />
-              </div>
-              )
-            })}
           </div>
-        )}
+
+          <div className="flex gap-2 mb-5">
+            {([
+              ['tutti', 'Tutti'],
+              ['pubblicati', 'Pubblicati'],
+              ['non-pubblicati', 'Non pubblicati'],
+            ] as const).map(([value, label]) => (
+              <button
+                key={value}
+                onClick={() => setFilter(value)}
+                className={`px-3.5 py-1.5 rounded-full text-sm font-semibold transition-colors ${
+                  filter === value ? 'bg-forest-600 text-white' : 'bg-white border border-stone-200 text-stone-600 hover:bg-stone-100'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {error && <p className="text-sm text-red-600 mb-3">{error}</p>}
+
+          {tree === null ? (
+            <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-stone-400" /></div>
+          ) : tree.length === 0 ? (
+            <p className="font-lora italic text-sm text-stone-400 py-10 text-center">Nessuna raccolta ancora.</p>
+          ) : filteredTree && filteredTree.length === 0 ? (
+            <p className="font-lora italic text-sm text-stone-400 py-10 text-center">
+              {filter === 'pubblicati' ? 'Nessuna raccolta pubblicata.' : 'Nessuna raccolta non pubblicata.'}
+            </p>
+          ) : (
+            <div onClick={() => setKebabOpenId(null)}>
+              {/* Il trascinamento resta ancorato agli indici di `tree` (le posizioni salvate sul
+                  server), non a quelli filtrati: con un filtro attivo il riordino si disattiva
+                  (grip inerte) invece di scrivere posizioni sbagliate — vedi la guardia su
+                  onGripPointerDown qui sotto. */}
+              {(filteredTree ?? []).map((raccolta) => {
+                const i = tree.findIndex(r => r.id === raccolta.id)
+                return (
+                <div key={raccolta.id}>
+                  {raccolteDrag.dropIndex === i && raccolteDrag.dragIndex !== null && raccolteDrag.dragIndex !== i && (
+                    <div className="h-[3px] mx-1 rounded-full bg-forest-500" />
+                  )}
+                  <RaccoltaSection
+                    raccolta={raccolta}
+                    expanded={expandedRaccolte.has(raccolta.id)}
+                    expandedDiari={expandedDiari}
+                    kebabOpen={kebabOpenId === raccolta.id}
+                    raccoltaCoverUploadingId={raccoltaCoverUploadingId}
+                    diarioCoverUploadingId={diarioCoverUploadingId}
+                    markedForPublishBusyId={markedForPublishBusyId}
+                    diarioPublishBusyId={diarioPublishBusyId}
+                    reportagePublishBusyId={reportagePublishBusyId}
+                    isDragging={raccolteDrag.dragIndex === i}
+                    dropBefore={false}
+                    deltaY={raccolteDrag.dragIndex === i ? raccolteDrag.deltaY : 0}
+                    dragEnabled={filter === 'tutti'}
+                    onToggleExpand={() => setExpandedRaccolte(s => { const n = new Set(s); n.has(raccolta.id) ? n.delete(raccolta.id) : n.add(raccolta.id); return n })}
+                    onToggleDiario={diarioId => setExpandedDiari(s => { const n = new Set(s); n.has(diarioId) ? n.delete(diarioId) : n.add(diarioId); return n })}
+                    onToggleKebab={() => setKebabOpenId(id => id === raccolta.id ? null : raccolta.id)}
+                    onGripPointerDown={e => { if (filter === 'tutti') raccolteDrag.start(i, e) }}
+                    onGripPointerMove={raccolteDrag.move}
+                    onGripPointerUp={raccolteDrag.end}
+                    actions={actions}
+                  />
+                </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       {movePicker?.kind === 'diario' && (
