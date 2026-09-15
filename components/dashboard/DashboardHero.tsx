@@ -7,6 +7,9 @@ import TopOverlay from '@/components/routehub/TopOverlay'
 import HubNavBar from '@/components/routehub/HubNavBar'
 import type { StatPill } from '@/components/routehub/types'
 import { openRecommendationCard } from '@/lib/routeBuilder/openRecommendationCard'
+import { TRAIL_SCORE_MAX } from '@/components/ScoreRing'
+import { ctsLabel } from '@/lib/trailScore'
+import { ratingColor } from '@/components/resoconto/RatingGaugeBadge'
 import type { DashboardData } from './types'
 
 const AllRoutesMap = dynamic(() => import('@/components/AllRoutesMap'), { ssr: false })
@@ -38,14 +41,35 @@ export default function DashboardHero({ data }: { data: DashboardData }) {
   // Le mappe di "Guide" e "Resoconti" sono due aggregati di tracciati distinti (non più un'unica
   // mappa mista a pin) — stessi dati già calcolati altrove nella Dashboard, solo riformattati per
   // AllRoutesMap.tsx: le Mete pianificate (Guide) hanno la propria routePolyline esattamente come
-  // le attività concluse (Resoconti).
+  // le attività concluse (Resoconti). Distanza/dislivello, badge CTS+Sicurezza (o voto) e il link
+  // "Apri" arricchiscono il fumetto del percorso cliccato (AllRoutesMap.tsx) — stessi dati/colori
+  // già usati dalla galleria di Guida/Resoconto (BottomGallery.tsx), qui solo riletti dalla stessa
+  // cache invece di rifare una fetch dedicata.
   const guideRoutes = useMemo(() => data.plannedHikes
     .filter(h => h.routePolyline && h.routePolyline.length > 1)
-    .map(h => ({ id: h.id, title: h.title, startTime: h.createdAt, polyline: h.routePolyline! })),
+    .map(h => {
+      // Stessa preferenza di GuidaHub.tsx (previewScoreValue): il Trail Score v2 aggregato se già
+      // calcolato, altrimenti il solo Comfort TrailScore grezzo cachato.
+      const ts = h.cachedTsTotal ?? h.cachedTrailScore ?? 0
+      return {
+        id: h.id, title: h.title, startTime: h.createdAt, polyline: h.routePolyline!,
+        distanceMeters: h.distanceMeters, elevationGain: h.elevationGain,
+        scorePreview: ts > 0 ? { value: ts, max: TRAIL_SCORE_MAX, color: ctsLabel(ts).color, label: 'CTS' } : undefined,
+        safetyPreview: h.cachedSafetyScore
+          ? { overall: h.cachedSafetyScore.overall, color: h.cachedSafetyScore.color, label: h.cachedSafetyScore.label }
+          : undefined,
+        openHref: `/guida/${encodeURIComponent(h.id)}`,
+      }
+    }),
     [data.plannedHikes])
   const resocontoRoutes = useMemo(() => data.activities
     .filter(a => a.routePolyline && a.routePolyline.length > 1)
-    .map(a => ({ id: a.id, title: a.title, startTime: a.startTime, polyline: a.routePolyline! })),
+    .map(a => ({
+      id: a.id, title: a.title, startTime: a.startTime, polyline: a.routePolyline!,
+      distanceMeters: a.distanceMeters, elevationGain: a.elevationGain,
+      scorePreview: a.userRating != null ? { value: a.userRating, max: 10, color: ratingColor(a.userRating), label: 'Voto' } : undefined,
+      openHref: `/resoconto/${encodeURIComponent(a.id)}`,
+    })),
     [data.activities])
 
   const guideStats = useMemo(() => ({
@@ -72,9 +96,6 @@ export default function DashboardHero({ data }: { data: DashboardData }) {
       { icon: TrendingUp, label: `+${Math.round(suggested.elevationGain)} m` },
     ]
     return (
-      // Niente scarto lg:right qui: in questi due stati page.tsx non monta affatto
-      // DashboardSheet (hasAnyData è false), quindi l'hero resta a piena pagina — lo scarto per
-      // il pannello fisso (sotto) vale solo per lo stato "popolato" che segue.
       <>
         <AllRoutesMap
           routes={[{ id: 'suggerito', title: suggested.title, startTime: new Date().toISOString(), polyline: suggested.polyline }]}
@@ -139,7 +160,10 @@ export default function DashboardHero({ data }: { data: DashboardData }) {
   ]
 
   return (
-    <div className="absolute inset-0 lg:right-[420px]">
+    // Non più uno scarto lg:right per il pannello (DashboardSheet.tsx): il pannello desktop ora
+    // galleggia come overlay semitrasparente sopra la mappa invece di essere docked a fianco —
+    // la mappa resta a piena pagina a ogni larghezza, come le altre pagine hero dell'app.
+    <div className="absolute inset-0">
       {tab === 'resoconti' ? (
         <AllRoutesMap key="resoconti" routes={resocontoRoutes} height="100%" emptyFallback={REGIONAL_FALLBACK} className="absolute inset-0" />
       ) : (

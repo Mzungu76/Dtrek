@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
-import { Pencil, Plus, X, ChevronUp, ChevronDown, Check } from 'lucide-react'
+import { Pencil, Plus, X, ChevronUp, ChevronDown, Check, LayoutDashboard } from 'lucide-react'
 import { MobileNavBar, DesktopNav } from '@/components/Navbar'
 import { WIDGET_CATALOG, WIDGET_BY_ID } from '@/components/dashboard/widgets'
 import {
@@ -93,6 +93,10 @@ export default function DashboardSheet({ data }: { data: DashboardData }) {
   const [configLoaded, setConfigLoaded] = useState(false)
   const [activeTabId, setActiveTabId] = useState(DEFAULT_TAB_ID)
   const [open, setOpen] = useState(false)
+  // Da lg in su il pannello non è più sempre aperto e docked (spostava la mappa, vedi
+  // DashboardHero.tsx): parte iconato (richiesta esplicita) e la mappa resta sempre a piena
+  // pagina — il pannello, quando aperto, galleggia sopra come overlay semitrasparente.
+  const [desktopOpen, setDesktopOpen] = useState(false)
   const [editMode, setEditMode] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [creatingTab, setCreatingTab] = useState(false)
@@ -217,24 +221,40 @@ export default function DashboardSheet({ data }: { data: DashboardData }) {
           si nasconde da sé sotto md: (className interno), non serve alcun wrapper qui. */}
       <DesktopNav position="fixed" />
 
-      {/* ── Pannello: sotto lg un foglio trascinabile (stessa logica di sempre); da lg in su un
-          riquadro fisso a destra, sempre aperto — niente maniglia da trascinare, niente peek
-          separato: le due "chiavi" del peek (Recovery/Prossima uscita) restano in cima anche
-          qui, sopra le schede. Il catalogo di widget/schede sotto non cambia.
-          Da lg: il guscio del pannello (sfondo/bordi/testata/tab/controlli di modifica) passa allo
-          stesso linguaggio "vetro" scuro di TopOverlay/HubNavBar (bg-white/10, border-white/20,
-          testo bianco) invece del bianco piatto — coerenza con l'identità hero scura del resto
-          dell'app. Le SCHEDE dei widget (Component qui sotto) restano invariate: sono già card
-          bianche (WIDGET_BY_ID, components/dashboard/widgets.tsx), che sul nuovo sfondo scuro
-          leggono come vetrini luminosi appoggiati sul pannello — stesso principio di PeekWidgets
-          sopra la mappa, senza dover toccare ogni widget uno per uno. ── */}
+      {/* ── Icona da lg in su, quando il pannello è chiuso (stato iniziale): grande, in tema,
+          fissa nello stesso angolo dove poi si apre il pannello — un tocco lo apre. Assente sotto
+          lg, dove il pannello resta il solito foglio trascinabile dal basso. ── */}
+      {!desktopOpen && (
+        <button
+          onClick={() => setDesktopOpen(true)}
+          title="Apri la Dashboard"
+          aria-label="Apri la Dashboard"
+          className="hidden lg:flex fixed z-30 top-[calc(env(safe-area-inset-top,0px)+80px)] right-6 w-16 h-16 rounded-2xl items-center justify-center
+            bg-forest-600/90 hover:bg-forest-600 backdrop-blur-md border border-white/20 shadow-2xl text-white transition-colors"
+        >
+          <LayoutDashboard className="w-7 h-7" />
+        </button>
+      )}
+
+      {/* ── Pannello: sotto lg un foglio trascinabile (stessa logica di sempre); da lg in su una
+          card fluttuante in alto a destra, semitrasparente (sfondo/bordi/testata/tab/controlli in
+          stile "vetro" scuro, come TopOverlay/HubNavBar) — non più docked/sempre aperta: parte
+          iconata (sopra) e si apre/richiude con l'icona o il pulsante di chiusura in testata,
+          senza più spostare la mappa di sotto (DashboardHero.tsx torna a piena pagina anche a
+          lg). Le SCHEDE dei widget (Component qui sotto) restano invariate: sono già card bianche
+          (WIDGET_BY_ID, components/dashboard/widgets.tsx), che sul pannello scuro leggono come
+          vetrini luminosi — stesso principio di PeekWidgets sopra la mappa, senza doverle toccare
+          una per una. Il contrasto testo/badge resta comunque alto (bianco pieno, non su un
+          fondo troppo trasparente) per restare leggibile sopra la mappa sotto. ── */}
       <div
         className={`fixed inset-x-0 bottom-0 z-30 bg-stone-50 rounded-t-[26px] shadow-2xl flex flex-col
           transition-transform duration-300 ease-out top-[calc(env(safe-area-inset-top,0px)+64px)]
           ${open ? 'translate-y-0' : 'translate-y-full'}
-          lg:translate-y-0 lg:inset-y-0 lg:left-auto lg:right-0 lg:w-[420px]
-          lg:rounded-t-none lg:rounded-l-2xl lg:shadow-none lg:border-l lg:border-white/10
-          lg:bg-[#0f2029]/95 lg:backdrop-blur-xl`}
+          lg:translate-y-0 lg:inset-y-auto lg:left-auto lg:right-6 lg:w-[380px]
+          lg:top-[calc(env(safe-area-inset-top,0px)+80px)] lg:bottom-6 lg:max-h-[calc(100vh-env(safe-area-inset-top,0px)-104px)]
+          lg:rounded-2xl lg:border lg:border-white/15 lg:bg-[#0f2029]/75 lg:backdrop-blur-xl
+          lg:origin-top-right lg:transition-all lg:duration-200
+          ${desktopOpen ? 'lg:opacity-100 lg:scale-100 lg:pointer-events-auto' : 'lg:opacity-0 lg:scale-95 lg:pointer-events-none'}`}
       >
         <button
           onPointerDown={handlePointerDown} onPointerUp={handlePointerUp}
@@ -253,15 +273,25 @@ export default function DashboardSheet({ data }: { data: DashboardData }) {
 
         <div className="shrink-0 flex items-center justify-between px-4 pb-2 pt-2 lg:pt-4">
           <h1 className="font-display text-xl font-bold text-stone-800 lg:text-white">Dashboard</h1>
-          <button
-            onClick={() => setEditMode(v => !v)}
-            title={editMode ? 'Fine modifica' : 'Personalizza questa scheda'}
-            className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${
-              editMode ? 'bg-forest-600 text-white' : 'bg-white border border-stone-200 text-forest-700 lg:bg-white/10 lg:border-white/20 lg:text-white'
-            }`}
-          >
-            {editMode ? <Check className="w-4 h-4" /> : <Pencil className="w-4 h-4" />}
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setEditMode(v => !v)}
+              title={editMode ? 'Fine modifica' : 'Personalizza questa scheda'}
+              className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${
+                editMode ? 'bg-forest-600 text-white' : 'bg-white border border-stone-200 text-forest-700 lg:bg-white/10 lg:border-white/20 lg:text-white'
+              }`}
+            >
+              {editMode ? <Check className="w-4 h-4" /> : <Pencil className="w-4 h-4" />}
+            </button>
+            <button
+              onClick={() => setDesktopOpen(false)}
+              title="Riduci a icona"
+              aria-label="Riduci a icona"
+              className="hidden lg:flex w-9 h-9 rounded-full items-center justify-center bg-white/10 border border-white/20 text-white transition-colors hover:bg-white/20"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         <div className="shrink-0 flex items-center gap-2 overflow-x-auto px-4 pb-3" style={{ scrollbarWidth: 'none' }}>

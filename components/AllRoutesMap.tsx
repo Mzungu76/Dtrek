@@ -9,6 +9,19 @@ interface RouteEntry {
   title: string
   startTime: string
   polyline: [number, number][]
+  /** Statistiche essenziali per il fumetto — assenti ⇒ quella riga di pillole non compare
+   *  (fallback al solo titolo/data di sempre, es. /statistiche che non le passa). */
+  distanceMeters?: number
+  elevationGain?: number
+  /** Stesso "punteggio migliore disponibile" già mostrato in galleria (BottomGallery.tsx,
+   *  scorePreview): Trail Score per una Guida, voto utente per un Reportage. */
+  scorePreview?: { value: number; max: number; color?: string; label?: string }
+  /** Guida-only: Sicurezza oggettiva già cachata (RouteHubItem.safetyPreview). */
+  safetyPreview?: { overall: number; color: string; label: string }
+  /** Link "Apri" nel fumetto verso la scheda del percorso (/guida/{id} o /resoconto/{id}) —
+   *  assente ⇒ nessun pulsante (es. il percorso "suggerito" della Dashboard, che non ha ancora
+   *  una scheda propria da aprire). */
+  openHref?: string
 }
 
 interface Props {
@@ -32,6 +45,50 @@ interface Props {
 // quindi lo stesso percorso poteva risultare di un colore sulla mappa a schermo e di un altro
 // nella legenda o nel PDF.
 const PALETTE = ROUTE_COLORS
+
+// route.title arriva dall'utente (nome dato alla Guida/al Reportage) e finisce in innerHTML via
+// Leaflet bindPopup — mai interpolato senza escape, anche se qui l'unico "attaccante" possibile è
+// l'utente stesso sul proprio dispositivo.
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' } as Record<string, string>)[c])
+}
+
+function badgePillHtml(color: string, value: number, label: string): string {
+  return `<span style="display:inline-flex;align-items:center;gap:4px;background:${color}1a;border:1px solid ${color}55;color:${color};border-radius:999px;padding:2px 8px;font-size:10px;font-weight:700;white-space:nowrap">
+    <span style="width:6px;height:6px;border-radius:999px;background:${color};flex-shrink:0"></span>${Math.round(value)} · ${escapeHtml(label)}
+  </span>`
+}
+
+/** Fumetto Leaflet arricchito — titolo/data (di sempre) più, quando disponibili, le statistiche
+ *  essenziali, gli stessi badge di punteggio già mostrati in galleria (CTS+Sicurezza per una
+ *  Guida, voto per un Reportage — BottomGallery.tsx) e un link "Apri" diretto alla scheda del
+ *  percorso. Costruito come stringa HTML (non un componente React) perché Leaflet monta i popup
+ *  fuori dall'albero React — badgePillHtml sopra imita lo stesso linguaggio visivo dei badge reali
+ *  (TrailScoreGaugeBadge/MiniScoreRing) senza poterli montare qui dentro. */
+function buildPopupHtml(route: RouteEntry, color: string, dateStr: string): string {
+  const statsRow = (route.distanceMeters != null || route.elevationGain != null)
+    ? `<div style="display:flex;gap:10px;margin-top:5px;font-size:11px;color:#57534e">
+        ${route.distanceMeters != null ? `<span>${(route.distanceMeters / 1000).toFixed(1)} km</span>` : ''}
+        ${route.elevationGain != null ? `<span>+${Math.round(route.elevationGain)} m D+</span>` : ''}
+      </div>`
+    : ''
+  const badges: string[] = []
+  if (route.scorePreview) {
+    badges.push(badgePillHtml(route.scorePreview.color ?? '#57534e', route.scorePreview.value, route.scorePreview.label ?? (route.scorePreview.max === 10 ? 'Voto' : 'CTS')))
+  }
+  if (route.safetyPreview) {
+    badges.push(badgePillHtml(route.safetyPreview.color, route.safetyPreview.overall, route.safetyPreview.label))
+  }
+  const badgeRow = badges.length > 0 ? `<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">${badges.join('')}</div>` : ''
+  const openLink = route.openHref
+    ? `<a href="${escapeHtml(route.openHref)}" style="display:block;margin-top:9px;padding:6px 10px;background:#277134;color:#fff;border-radius:8px;font-size:11px;font-weight:700;text-decoration:none;text-align:center">Apri →</a>`
+    : ''
+  return `<div style="min-width:190px">
+    <strong style="display:block;color:${color};font-size:13px;line-height:1.3;margin-bottom:2px">${escapeHtml(route.title)}</strong>
+    <span style="font-size:12px;color:#666">${dateStr}</span>
+    ${statsRow}${badgeRow}${openLink}
+  </div>`
+}
 
 export default function AllRoutesMap({ routes, height = '500px', interactive = true, emptyFallback, className = 'rounded-xl overflow-hidden border border-stone-200 shadow-sm' }: Props) {
   const mapRef = useRef<HTMLDivElement>(null)
@@ -98,9 +155,7 @@ export default function AllRoutesMap({ routes, height = '500px', interactive = t
           }
         })()
 
-        polyline.bindPopup(
-          `<strong style="color:${color}">${route.title}</strong><br/><span style="font-size:12px;color:#666">${dateStr}</span>`
-        )
+        polyline.bindPopup(buildPopupHtml(route, color, dateStr))
 
         allBounds.push(polyline.getBounds())
       })
