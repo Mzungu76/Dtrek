@@ -57,7 +57,10 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          # @supabase/supabase-js (via @supabase/realtime-js) richiede il WebSocket nativo di
+          # Node, disponibile solo da Node 22 in poi — con Node 20 la createClient() dello step
+          # "write" falla in fase di costruzione del RealtimeClient anche se non si usa Realtime.
+          node-version: 22
           cache: npm
 
       - run: npm ci
