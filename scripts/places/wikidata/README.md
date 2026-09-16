@@ -17,11 +17,25 @@ ad arricchire righe puntuali già note.
 
 ## Bloccante di rete
 
-Stesso di ISTAT/PTPR/MiC/OSM: query.wikidata.org rifiutato dal proxy di questo ambiente (policy
-dell'organizzazione, verificato con `curl -v`). Non eseguito contro l'endpoint reale in questa
-sessione — e comunque non avrebbe righe da arricchire finché le altre fonti non hanno scritto in
-`dtrek_places` (nessuna scrittura reale avvenuta in nessuna fonte in questa sessione, vedi le altre
-cartelle).
+Stesso di ISTAT/PTPR/MiC/OSM: query.wikidata.org rifiutato dal proxy di ogni sandbox di sviluppo
+usata finora — solo il runner GitHub Actions (`.github/workflows/import-places-wikidata.yml`) ci
+arriva.
+
+## Resilienza — 502 transitorio visto dal vivo (2026-09-16)
+
+Primo run reale, tutto il Lazio (1425 righe, `--limit 1500`): 10 righe arricchite, poi
+`Error: Wikidata SPARQL 502` alla riga 11 — l'intero processo interrotto (nessun retry, nessun
+try/catch nel loop). Le 10 UPDATE già fatte restano valide (idempotente, per-riga), ma senza
+correzione ogni run lungo rischia di fermarsi al primo blip transitorio dell'endpoint pubblico
+condiviso. Aggiunto in `enrich.ts`:
+- retry con backoff esponenziale (1s/2s/4s/8s, fino a 4 tentativi) solo per status transitori
+  (429/500/502/503/504) o errori di rete/timeout — un 4xx diverso da 429 (query malformata) fallisce
+  subito;
+- una pausa di 150ms fra una riga e la successiva, per non contribuire noi stessi al carico;
+- il loop principale non si interrompe più su una singola riga fallita dopo i retry: la logga come
+  errore e prosegue — quella riga resta `wikidata_id IS NULL` e verrà ritentata al prossimo lancio.
+
+Non ancora riverificato con un nuovo run reale dopo questa correzione.
 
 ## Logica di matching
 
