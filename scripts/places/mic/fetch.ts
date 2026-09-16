@@ -51,7 +51,11 @@
  * conservativi sul riuso senza aver verificato la licenza specifica di ogni campo testuale.
  *
  * Usage:
- *   npx tsx scripts/places/mic/fetch.ts [--dry-run] [--region Lazio]
+ *   npx tsx scripts/places/mic/fetch.ts [--dry-run] [--region Lazio] [--limit 5000]
+ *
+ * --limit sovrascrive la LIMIT SPARQL (default 5000) — usare un valore piccolo (5-20) per il primo
+ * lancio contro l'endpoint reale, dato il punto non verificato sulle coordinate in cima al file:
+ * ispezionare l'esempio stampato da --dry-run prima di un caricamento completo.
  */
 import { createClient } from '@supabase/supabase-js'
 import { importPlaceCandidates } from '../import'
@@ -153,7 +157,7 @@ export function micBindingToPlaceCandidate(b: MicBinding): PlaceCandidate {
 // ATTENZIONE: il blocco OPTIONAL per le coordinate non è verificato contro l'endpoint reale (vedi
 // nota in cima al file) — provare prima con LIMIT 5 e ispezionare l'output reale prima di un
 // import su tutta la regione.
-function buildSparqlQuery(regionLabel?: string): string {
+function buildSparqlQuery(regionLabel?: string, limit = 5000): string {
   const regionFilter = regionLabel
     ? `FILTER(CONTAINS(LCASE(?regionLabel), LCASE("${regionLabel.replace(/"/g, '')}")))`
     : ''
@@ -188,7 +192,7 @@ SELECT DISTINCT ?cis ?name ?typeLabel ?comune ?address ?lat ?long WHERE {
   FILTER(BOUND(?lat) && BOUND(?long))
   ${regionFilter}
 }
-LIMIT 5000`
+LIMIT ${limit}`
 }
 
 async function querySparql(query: string): Promise<MicBinding[]> {
@@ -231,9 +235,11 @@ async function main() {
   const DRY_RUN = process.argv.includes('--dry-run')
   const regionIdx = process.argv.indexOf('--region')
   const region = regionIdx !== -1 ? process.argv[regionIdx + 1] : 'Lazio'
+  const limitIdx = process.argv.indexOf('--limit')
+  const limit = limitIdx !== -1 ? parseInt(process.argv[limitIdx + 1], 10) : 5000
 
-  console.log(`Interrogo ${SPARQL_ENDPOINT} (regione: ${region ?? 'tutte'})…`)
-  const bindings = await querySparql(buildSparqlQuery(region ?? undefined))
+  console.log(`Interrogo ${SPARQL_ENDPOINT} (regione: ${region || 'tutte'}, limit ${limit})…`)
+  const bindings = await querySparql(buildSparqlQuery(region || undefined, limit))
   console.log(`${bindings.length} risultati con coordinate valide.`)
   const candidates = bindings.map(micBindingToPlaceCandidate)
 

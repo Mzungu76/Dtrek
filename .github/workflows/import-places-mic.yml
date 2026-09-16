@@ -1,0 +1,99 @@
+name: Import Places — MiC (ArCo → dtrek_places, meta_type=sito)
+
+# Manuale (workflow_dispatch), stesso schema di import-places-istat.yml — leggere quel file prima
+# di modificare questo, spiega le correzioni (Node 24 per le action, Node 22 per il client
+# Supabase, fallback SUPABASE_SERVICE_ROLE_KEY) già applicate qui dall'inizio.
+#
+# Differenza importante rispetto a ISTAT: scripts/places/mic/fetch.ts interroga dal vivo
+# l'endpoint SPARQL di ArCo (dati.cultura.gov.it) — nessun file da scaricare prima, ma anche
+# nessuna opzione --to-json (il dry-run stampa solo un candidato di esempio + il conteggio nei log,
+# non produce un artifact scaricabile).
+#
+# Punto aperto segnalato in scripts/places/mic/README.md: il predicato SPARQL che porta le
+# coordinate NON è verificato contro l'endpoint reale. Per questo il dry-run supporta --limit (5-20
+# consigliato per il primo lancio): serve a ispezionare l'esempio stampato nei log — coordinate
+# plausibili per l'Italia (lat ~35-47, lon ~6-19) — PRIMA di alzare il limite per un caricamento
+# più ampio, non a risparmiare tempo di per sé.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dry-run: solo log (esempio + conteggio), nessuna scrittura. write: importa davvero in Supabase."
+        required: true
+        type: choice
+        options:
+          - dry-run
+          - write
+        default: dry-run
+      region:
+        description: "Regione (es. Lazio). Vuoto = tutta Italia (nessun filtro SPARQL)."
+        required: false
+        type: string
+        default: "Lazio"
+      limit:
+        description: "Numero massimo di risultati SPARQL. Piccolo (5-20) per il primo test delle coordinate, più alto per un caricamento vero."
+        required: false
+        type: string
+        default: "20"
+
+concurrency:
+  group: import-places
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    env:
+      MODE: ${{ inputs.mode }}
+      REGION: ${{ inputs.region }}
+      LIMIT: ${{ inputs.limit }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Dry-run — solo log, nessuna scrittura su Supabase
+        if: ${{ inputs.mode == 'dry-run' }}
+        run: |
+          set -euo pipefail
+          npx tsx scripts/places/mic/fetch.ts --dry-run --region "$REGION" --limit "$LIMIT" | tee /tmp/mic-dryrun.txt
+          {
+            echo "### Import Places — MiC (dry-run)"
+            echo "- Regione: ${REGION:-tutta Italia}"
+            echo "- Limit: $LIMIT"
+            echo '```json'
+            cat /tmp/mic-dryrun.txt
+            echo '```'
+            echo ""
+            echo "Verifica le coordinate dell'esempio sopra (lat/lon plausibili per l'Italia) prima di alzare --limit o passare a write."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Write — import reale in dtrek_places/dtrek_place_sources
+        if: ${{ inputs.mode == 'write' }}
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_SERVICE_KEY:-}" ]; then
+            echo "Secret Supabase mancanti nel repository — serve SUPABASE_URL e (SUPABASE_SERVICE_KEY o SUPABASE_SERVICE_ROLE_KEY). Vedi Settings > Secrets and variables > Actions." >&2
+            exit 1
+          fi
+          npx tsx scripts/places/mic/fetch.ts --region "$REGION" --limit "$LIMIT" | tee /tmp/mic-write.txt
+          {
+            echo "### Import Places — MiC (write)"
+            echo "- Regione: ${REGION:-tutta Italia}"
+            echo "- Limit: $LIMIT"
+            echo '```json'
+            cat /tmp/mic-write.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

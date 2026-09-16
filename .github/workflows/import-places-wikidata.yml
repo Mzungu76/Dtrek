@@ -1,0 +1,89 @@
+name: Import Places — Wikidata (arricchimento wikidata_id su dtrek_places)
+
+# Manuale (workflow_dispatch), stesso schema di import-places-istat.yml — leggere quel file prima
+# di modificare questo (Node 24 per le action, Node 22 per il client Supabase, fallback
+# SUPABASE_SERVICE_ROLE_KEY, tutti già applicati qui dall'inizio).
+#
+# Differenze importanti rispetto a ISTAT/MiC:
+# - scripts/places/wikidata/enrich.ts NON crea righe (piano §11: Wikidata non è fonte primaria) —
+#   fa solo UPDATE di wikidata_id su righe dtrek_places GIÀ esistenti create da altre fonti. Va
+#   quindi lanciato DOPO ISTAT/MiC/PTPR/OSM, non prima — se lanciato prima o quando non c'è ancora
+#   nulla da arricchire, semplicemente non fa nulla (0 arricchite, non un errore).
+# - anche il dry-run legge da Supabase (deve sapere quali righe non hanno ancora un wikidata_id) —
+#   a differenza di ISTAT/MiC, qui servono i secret Supabase in ENTRAMBE le modalità. dry-run non
+#   fa comunque nessun UPDATE, solo query di lettura + query Wikidata.
+# - nessun file da scaricare: interroga dal vivo query.wikidata.org, una richiesta per riga da
+#   arricchire (sequenziale) — con `limit` alto il job può durare a lungo, stesso discorso fatto
+#   per l'import ISTAT (nessun batching).
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dry-run: logga i match trovati, nessuna scrittura. write: aggiorna wikidata_id su Supabase."
+        required: true
+        type: choice
+        options:
+          - dry-run
+          - write
+        default: dry-run
+      region:
+        description: "Regione (es. Lazio). Vuoto = tutte le regioni presenti in dtrek_places."
+        required: false
+        type: string
+        default: "Lazio"
+      limit:
+        description: "Numero massimo di righe da arricchire in questa esecuzione (una richiesta Wikidata per riga, sequenziale)."
+        required: false
+        type: string
+        default: "200"
+
+concurrency:
+  group: import-places
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  enrich:
+    runs-on: ubuntu-latest
+    env:
+      MODE: ${{ inputs.mode }}
+      REGION: ${{ inputs.region }}
+      LIMIT: ${{ inputs.limit }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Verifica secret Supabase
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_SERVICE_KEY:-}" ]; then
+            echo "Secret Supabase mancanti nel repository — serve SUPABASE_URL e (SUPABASE_SERVICE_KEY o SUPABASE_SERVICE_ROLE_KEY). Vedi Settings > Secrets and variables > Actions." >&2
+            exit 1
+          fi
+          echo "OK: secret presenti."
+
+      - name: Arricchimento wikidata_id
+        run: |
+          set -euo pipefail
+          ARGS=(scripts/places/wikidata/enrich.ts --region "$REGION" --limit "$LIMIT")
+          if [ "$MODE" = "dry-run" ]; then ARGS+=(--dry-run); fi
+          npx tsx "${ARGS[@]}" | tee /tmp/wikidata-enrich.txt
+          {
+            echo "### Import Places — Wikidata ($MODE)"
+            echo "- Regione: ${REGION:-tutte}"
+            echo "- Limit: $LIMIT"
+            echo '```'
+            cat /tmp/wikidata-enrich.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

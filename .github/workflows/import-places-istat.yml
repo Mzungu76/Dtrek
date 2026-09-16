@@ -39,7 +39,12 @@ on:
         default: "2025"
 
 concurrency:
-  group: import-places-istat
+  # Gruppo condiviso con import-places-mic/wikidata/ptpr.yml: tutti scrivono con lo stesso
+  # importPlaceCandidates() (scripts/places/import.ts), che fa prima una lettura di vicinanza e poi
+  # una scrittura non atomiche — due fonti in scrittura nello stesso momento potrebbero creare
+  # duplicati invece di deduplicare. cancel-in-progress: false mette in coda, non cancella un
+  # import già partito.
+  group: import-places
   cancel-in-progress: false
 
 permissions:
