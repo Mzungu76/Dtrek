@@ -1,0 +1,73 @@
+name: Import Places — PTPR Lazio (ptpr_pois → dtrek_places, meta_type=sito)
+
+# Manuale (workflow_dispatch), stesso schema di import-places-istat.yml — leggere quel file prima
+# di modificare questo (Node 24 per le action, Node 22 per il client Supabase, fallback
+# SUPABASE_SERVICE_ROLE_KEY, tutti già applicati qui dall'inizio).
+#
+# La fonte più semplice delle quattro: scripts/places/ptpr/import.ts non tocca reti esterne, legge
+# solo la tabella `ptpr_pois` già popolata in Supabase (6.678 righe, solo Lazio, layer archeologici
+# di Tavola B — vedi il commento in cima a quel file) e la traduce nel catalogo comune. Per questo
+# gira identica ovunque, compresa la sandbox di sviluppo.
+#
+# A differenza di ISTAT/MiC: NON c'è un file locale da scaricare, quindi anche il dry-run legge da
+# Supabase (serve sapere quante/quali righe ci sono in ptpr_pois) — servono i secret in ENTRAMBE le
+# modalità, ma il dry-run non fa comunque nessuna scrittura. Nessuna opzione --region/--limit: lo
+# script importa sempre tutte le righe di ptpr_pois (oggi solo Lazio, per costruzione della fonte).
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dry-run: logga un esempio + il conteggio, nessuna scrittura. write: importa davvero in Supabase."
+        required: true
+        type: choice
+        options:
+          - dry-run
+          - write
+        default: dry-run
+
+concurrency:
+  group: import-places
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    env:
+      MODE: ${{ inputs.mode }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Verifica secret Supabase
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_SERVICE_KEY:-}" ]; then
+            echo "Secret Supabase mancanti nel repository — serve SUPABASE_URL e (SUPABASE_SERVICE_KEY o SUPABASE_SERVICE_ROLE_KEY). Vedi Settings > Secrets and variables > Actions." >&2
+            exit 1
+          fi
+          echo "OK: secret presenti."
+
+      - name: Import da ptpr_pois in dtrek_places/dtrek_place_sources
+        run: |
+          set -euo pipefail
+          ARGS=(scripts/places/ptpr/import.ts)
+          if [ "$MODE" = "dry-run" ]; then ARGS+=(--dry-run); fi
+          npx tsx "${ARGS[@]}" | tee /tmp/ptpr-import.txt
+          {
+            echo "### Import Places — PTPR Lazio ($MODE)"
+            echo '```'
+            cat /tmp/ptpr-import.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
