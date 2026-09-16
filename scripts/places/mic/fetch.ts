@@ -29,15 +29,25 @@
  * es. `http://dati.beniculturali.it/mibact/luoghi/resource/CulturalInstituteOrSite/104060`) — è
  * questo l'identificativo MiC usato come `sourceId` sotto (piano §48.12, mai inventato).
  *
- * ── Cosa NON è verificato ────────────────────────────────────────────────────────────────────
- * Il predicato esatto che porta il valore numerico di lat/long finale (la classe `Coordinates`
- * dell'ontologia location NON definisce proprietà lat/long proprie — le delega alla classe esterna
- * CLV `Geometry`, il cui vocabolario completo non è stato ispezionabile in questa sessione: le
- * pagine LodView di dati.beniculturali.it/dati.cultura.gov.it sono andate sistematicamente in
- * timeout quando interrogate via WebFetch). La query sotto prova le forme più comuni per un dataset
- * AgID/CLV (WGS84 Geo Vocabulary `geo:lat`/`geo:long`, e la geometria CLV come WKT) con OPTIONAL —
- * **da verificare/correggere contro l'endpoint reale prima del primo uso**, vedi
- * `scripts/places/mic/README.md`.
+ * ── Coordinate: predicato corretto (era sbagliato, vedi nota) ──────────────────────────────────
+ * Il primo dry-run reale contro l'endpoint (--limit 20, regione Lazio) ha dato 0 risultati con
+ * coordinate valide: la query usava `geo:lat`/`geo:long` (WGS84 Basic Geo Vocabulary) direttamente
+ * su `?site`, un'ipotesi mai verificata contro l'endpoint reale (vedi git history di questo file).
+ * Predicati REALI, verificati leggendo i file OWL/RDF pubblicati — non un blog di terzi:
+ *   - `location.owl` (https://raw.githubusercontent.com/ICCD-MiBACT/ArCo/master/ArCo-release/ontologie/location/location.owl):
+ *     `loc:hasCoordinates` collega una `clv:Geometry` alla sua `loc:Coordinates` — ma i valori
+ *     numerici non sono su `loc:Coordinates`, sono proprietà della `clv:Geometry` stessa.
+ *   - `CLV-AP_IT.rdf`, l'ontologia AgID importata da ArCo per Geometry/Address
+ *     (https://raw.githubusercontent.com/italia/daf-ontologie-vocabolari-controllati/master/Ontologie/CLV/latest/CLV-AP_IT.rdf):
+ *     `clv:lat`/`clv:long` (`https://w3id.org/italia/onto/CLV/{lat,long}`) sono proprietà
+ *     dirette della classe `clv:Geometry`; `clv:hasGeometry` (domain `owl:Thing`, quindi
+ *     utilizzabile su qualunque risorsa) collega una cosa alla sua Geometry.
+ * Non essendo noto CON CERTEZZA se `clv:hasGeometry` sia attaccato al CIS stesso, al `Site`
+ * (via `atSite`) o al `Feature` dell'indirizzo (via `atLocation`) — il dominio `owl:Thing` lo rende
+ * plausibile ovunque — la query prova tutti e tre i percorsi con un path SPARQL `|` (alternation),
+ * prendendo il primo che effettivamente bind. Ancora da confermare con un nuovo --limit piccolo
+ * contro l'endpoint reale (solo il runner GitHub Actions ci arriva, non questa sandbox né la
+ * precedente — vedi `scripts/places/mic/README.md`) prima di alzare il limite.
  *
  * La tipologia (`hasCulturalInstituteOrSiteType`) punta a una risorsa di un thesaurus MiC di cui
  * non è stato possibile verificare i valori esatti in questa sessione — la classificazione sotto
@@ -154,9 +164,11 @@ export function micBindingToPlaceCandidate(b: MicBinding): PlaceCandidate {
 }
 
 // ── SPARQL (server-side, batch — MAI per-ricerca-utente, piano §9/§21) ─────────────────────────
-// ATTENZIONE: il blocco OPTIONAL per le coordinate non è verificato contro l'endpoint reale (vedi
-// nota in cima al file) — provare prima con LIMIT 5 e ispezionare l'output reale prima di un
-// import su tutta la regione.
+// Coordinate: clv:lat/clv:long sono proprietà dirette di una clv:Geometry (non geo:lat/geo:long su
+// ?site, che ha dato 0 risultati nel primo dry-run reale — vedi nota in cima al file). clv:hasGeometry
+// ha domain owl:Thing, quindi non è certo se sia attaccata al CIS, al Site o al Feature indirizzo:
+// il path `|` sotto prova tutti e tre, prendendo il primo che bind. Ancora da confermare con un
+// --limit piccolo contro l'endpoint reale prima di alzarlo.
 function buildSparqlQuery(regionLabel?: string, limit = 5000): string {
   const regionFilter = regionLabel
     ? `FILTER(CONTAINS(LCASE(?regionLabel), LCASE("${regionLabel.replace(/"/g, '')}")))`
@@ -167,7 +179,6 @@ PREFIX cis: <http://dati.beniculturali.it/cis/>
 PREFIX loc: <https://w3id.org/arco/ontology/location/>
 PREFIX clvapit: <https://w3id.org/italia/onto/CLV/>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-PREFIX geo: <http://www.w3.org/2003/01/geo/wgs84_pos#>
 
 SELECT DISTINCT ?cis ?name ?typeLabel ?comune ?address ?lat ?long WHERE {
   ?cis a cis:CulturalInstituteOrSite ;
@@ -177,17 +188,16 @@ SELECT DISTINCT ?cis ?name ?typeLabel ?comune ?address ?lat ?long WHERE {
     ?type rdfs:label ?typeLabel .
   }
   OPTIONAL {
-    ?cis loc:hasTimeIndexedTypedLocation ?til .
-    OPTIONAL {
-      ?til loc:atSite ?site .
-      ?site geo:lat ?lat ; geo:long ?long .
-    }
-    OPTIONAL {
-      ?til loc:atLocation ?feature .
-      ?feature clvapit:hasAddress ?addr .
-      ?addr rdfs:label ?address .
-      OPTIONAL { ?addr clvapit:hasCity ?comuneRes . ?comuneRes rdfs:label ?comune . }
-    }
+    ?cis (clvapit:hasGeometry
+         | loc:hasTimeIndexedTypedLocation/loc:atSite/clvapit:hasGeometry
+         | loc:hasTimeIndexedTypedLocation/loc:atLocation/clvapit:hasGeometry) ?geom .
+    ?geom clvapit:lat ?lat ; clvapit:long ?long .
+  }
+  OPTIONAL {
+    ?cis loc:hasTimeIndexedTypedLocation/loc:atLocation ?feature .
+    ?feature clvapit:hasAddress ?addr .
+    ?addr rdfs:label ?address .
+    OPTIONAL { ?addr clvapit:hasCity ?comuneRes . ?comuneRes rdfs:label ?comune . }
   }
   FILTER(BOUND(?lat) && BOUND(?long))
   ${regionFilter}

@@ -17,14 +17,22 @@ Conoscenza"), il knowledge graph ufficiale del MiC:
   `http://dati.beniculturali.it/mibact/luoghi/resource/CulturalInstituteOrSite/104060`) — usati
   come `sourceId`.
 
-**Non verificato**: il predicato esatto che porta il valore finale di lat/long (la classe
-`Coordinates` dell'ontologia location non ha proprietà lat/long proprie, le delega alla classe
-esterna CLV `Geometry` — il cui vocabolario non è stato ispezionabile in questa sessione: le pagine
-LodView di dati.beniculturali.it/dati.cultura.gov.it sono andate sistematicamente in timeout via
-WebFetch, e l'endpoint SPARQL stesso non è raggiungibile dalla shell di questo ambiente per lo
-stesso motivo di rete di ISTAT/PTPR — vedi sotto). La query in `fetch.ts` prova la forma più comune
-(WGS84 Geo Vocabulary `geo:lat`/`geo:long`) ma **va verificata contro l'endpoint reale prima del
-primo uso** (partire con `LIMIT 5` e ispezionare l'output).
+**Coordinate — corretto dopo un primo dry-run reale (2026-09-16, GitHub Actions, --limit 20,
+regione Lazio → 0 risultati)**: la prima versione della query usava `geo:lat`/`geo:long` (WGS84
+Basic Geo Vocabulary) su `?site`, un'ipotesi mai eseguita contro l'endpoint reale (nessun ambiente
+di sviluppo qui raggiunge `dati.cultura.gov.it`, solo il runner GitHub Actions ci arriva). Predicati
+reali, verificati leggendo i file OWL/RDF ufficiali:
+- `location.owl` (ICCD-MiBACT/ArCo su GitHub): `loc:hasCoordinates` collega una `clv:Geometry` alla
+  sua `loc:Coordinates`, ma i valori numerici sono proprietà della `clv:Geometry` stessa, non di
+  `loc:Coordinates`.
+- `CLV-AP_IT.rdf` (italia/daf-ontologie-vocabolari-controllati su GitHub, l'ontologia AgID che ArCo
+  importa per Geometry/Address): `clv:lat`/`clv:long` sono proprietà dirette di `clv:Geometry`;
+  `clv:hasGeometry` (domain `owl:Thing`) collega una risorsa qualsiasi alla sua Geometry.
+
+Non essendo certo se `clv:hasGeometry` sia attaccata al CIS, al `Site` (via `atSite`) o al
+`Feature` indirizzo (via `atLocation`), la query in `fetch.ts` prova tutti e tre i percorsi con un
+path SPARQL `|`. **Ancora da confermare con un nuovo dry-run `--limit` piccolo** prima di alzarlo —
+questa correzione non è stata eseguita contro l'endpoint reale, solo derivata dalle ontologie.
 
 ## Cosa esisteva già nel repository (riusato come riferimento, non duplicato)
 
@@ -35,9 +43,12 @@ perché il thesaurus dei tipi ArCo non è stato verificabile in questa sessione.
 
 ## Bloccante di rete
 
-Stesso di ISTAT/PTPR: il proxy di questo ambiente rifiuta la connessione a `dati.cultura.gov.it`
-(verificato con `curl -v` — policy dell'organizzazione, non un URL sbagliato). La query SPARQL in
-`fetch.ts` non è stata eseguita contro l'endpoint reale in questa sessione. 0 righe importate.
+Nessun ambiente di sviluppo usato finora (sandbox Claude Code, incluse sessioni successive)
+raggiunge `dati.cultura.gov.it` — stesso blocco di rete di ISTAT/PTPR. Solo il runner GitHub
+Actions (`.github/workflows/import-places-mic.yml`) ci arriva: il primo dry-run reale lì (2026-09-16)
+ha eseguito la query con successo (nessun errore HTTP/rete) ma **0 risultati con coordinate
+valide**, per il predicato sbagliato ora corretto sopra — non ancora riverificato contro l'endpoint
+reale dopo la correzione.
 
 ## Licenza (piano §8/§44 — CC BY-SA 4.0)
 
