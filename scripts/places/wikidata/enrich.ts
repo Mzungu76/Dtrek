@@ -61,6 +61,7 @@ export interface WikidataCandidate {
 
 export interface WikidataMatch {
   qid: string
+  label: string
   confidence: number
 }
 
@@ -74,7 +75,7 @@ export function pickBestWikidataMatch(place: DtrekPlaceRow, nearby: WikidataCand
   for (const cand of nearby) {
     const nameScore = nameTokenSimilarity(place.name, cand.label)
     if (nameScore < NAME_MATCH_THRESHOLD) continue
-    if (!best || nameScore > best.confidence) best = { qid: cand.qid, confidence: nameScore }
+    if (!best || nameScore > best.confidence) best = { qid: cand.qid, label: cand.label, confidence: nameScore }
   }
   return best
 }
@@ -211,11 +212,15 @@ async function main() {
       if (!match) { unmatched++; continue }
 
       matched++
+      // Label Wikidata inclusa nel log (non solo il QID) — senza, un abbinamento a bassa confidence
+      // (es. 0.50, il minimo accettato) non è controllabile a occhio senza aprire il link Wikidata:
+      // "Nome ISTAT → Nome Wikidata (Qxxx)" rende visibile subito se i due nomi si assomigliano
+      // davvero o l'abbinamento è debole.
       if (DRY_RUN) {
-        console.log(`[DRY RUN] ${place.name} → ${match.qid} (confidence ${match.confidence.toFixed(2)})`)
+        console.log(`[DRY RUN] ${place.name} → ${match.label} (${match.qid}, confidence ${match.confidence.toFixed(2)})`)
       } else {
         await updateWikidataId(supabase, place.id, match.qid)
-        console.log(`${place.name} → ${match.qid} (confidence ${match.confidence.toFixed(2)})`)
+        console.log(`${place.name} → ${match.label} (${match.qid}, confidence ${match.confidence.toFixed(2)})`)
       }
     } catch (e) {
       // Dopo MAX_RETRIES tentativi falliti (rete/errore transitorio Wikidata): non interrompere
