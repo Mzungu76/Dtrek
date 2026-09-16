@@ -1,0 +1,137 @@
+name: Import Places — ISTAT (Comuni → dtrek_places)
+
+# Manuale (workflow_dispatch): scrive nel catalogo `dtrek_places` di produzione, non deve mai
+# partire da sola su push/PR. Serve anche come primo test end-to-end dei workflow (questo repo non
+# ne aveva ancora nessuno che tocchi Supabase): la sandbox di sviluppo non ha accesso di rete a
+# istat.it, i runner GitHub sì — vedi data/istat/README.md e scripts/places/istat/README.md.
+#
+# Due modalità:
+#   dry-run (default) — scarica ed elabora i dati ISTAT, produce il JSON dei candidati come
+#     artifact scaricabile, NON tocca Supabase (non richiede nemmeno i secret). È il modo sicuro
+#     per verificare che il workflow funzioni (rete, parsing shapefile/xlsx, conteggi) prima di
+#     scrivere qualunque cosa nel database reale.
+#   write — esegue l'import vero in `dtrek_places`/`dtrek_place_sources` (idempotente: righe già
+#     presenti — es. i 378 Comuni del Lazio già importati a mano — vengono aggiornate, non
+#     duplicate, grazie a UNIQUE(source, source_id) in scripts/places/import.ts). Richiede i
+#     secret di repository SUPABASE_URL e SUPABASE_SERVICE_KEY (service role — bypassa la RLS,
+#     stesso pattern di scripts/import-ptpr.ts).
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dry-run: solo JSON scaricabile, nessuna scrittura. write: importa davvero in Supabase."
+        required: true
+        type: choice
+        options:
+          - dry-run
+          - write
+        default: dry-run
+      region:
+        description: "Regione da importare (es. Lazio). Vuoto = tutta Italia."
+        required: false
+        type: string
+        default: ""
+      istat_year:
+        description: "Edizione ISTAT (Com0101<ANNO>_g.shp). 2025 è l'ultima verificata contro il file reale."
+        required: false
+        type: string
+        default: "2025"
+
+concurrency:
+  group: import-places-istat
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    env:
+      MODE: ${{ inputs.mode }}
+      REGION: ${{ inputs.region }}
+      ISTAT_YEAR: ${{ inputs.istat_year }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Scarica shapefile Comuni (confini/centroidi ISTAT)
+        run: |
+          set -euo pipefail
+          mkdir -p data/istat /tmp/istat-limiti
+          URL="https://www.istat.it/storage/cartografia/confini_amministrativi/generalizzati/${ISTAT_YEAR}/Limiti0101${ISTAT_YEAR}_g.zip"
+          echo "Download: $URL"
+          curl -fL --retry 3 --retry-delay 5 -o /tmp/limiti.zip "$URL"
+          unzip -o -q /tmp/limiti.zip -d /tmp/istat-limiti
+          # Il nome della sottocartella nello zip varia per edizione — si cerca ricorsivamente
+          # invece di assumere un path fisso (stesso principio di findShpFile in fetch.ts).
+          find /tmp/istat-limiti -iname 'Com*.shp' -exec cp {} data/istat/ \;
+          find /tmp/istat-limiti -iname 'Com*.dbf' -exec cp {} data/istat/ \;
+          find /tmp/istat-limiti -iname 'Com*.shx' -exec cp {} data/istat/ \;
+          find /tmp/istat-limiti -iname 'Com*.prj' -exec cp {} data/istat/ \; || true
+          find /tmp/istat-limiti -iname 'Com*.cpg' -exec cp {} data/istat/ \; || true
+          ls -la data/istat/
+
+      - name: Scarica tabella di codifica Comune/Provincia/Regione
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 --retry-delay 5 \
+            -o data/istat/Elenco-comuni-italiani.xlsx \
+            "https://www.istat.it/storage/codici-unita-amministrative/Elenco-comuni-italiani.xlsx"
+
+      - name: Dry-run — JSON dei candidati, nessuna scrittura su Supabase
+        if: ${{ inputs.mode == 'dry-run' }}
+        run: |
+          set -euo pipefail
+          OUT="places-istat-${REGION:-italia}.json"
+          ARGS=(scripts/places/istat/fetch.ts --to-json "$OUT")
+          if [ -n "$REGION" ]; then ARGS+=(--region "$REGION"); fi
+          npx tsx "${ARGS[@]}"
+          COUNT=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).length)" "$OUT")
+          echo "Candidati prodotti: $COUNT"
+          echo "candidates_file=$OUT" >> "$GITHUB_ENV"
+          {
+            echo "### Import Places — ISTAT (dry-run)"
+            echo "- Regione: ${REGION:-tutta Italia}"
+            echo "- Edizione: $ISTAT_YEAR"
+            echo "- Candidati prodotti: $COUNT"
+            echo "- Nessuna scrittura su Supabase in questa modalità."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload JSON candidati
+        if: ${{ inputs.mode == 'dry-run' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: places-istat-candidates
+          path: ${{ env.candidates_file }}
+          retention-days: 14
+
+      - name: Write — import reale in dtrek_places/dtrek_place_sources
+        if: ${{ inputs.mode == 'write' }}
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_SERVICE_KEY:-}" ]; then
+            echo "Secret SUPABASE_URL/SUPABASE_SERVICE_KEY mancanti nel repository — vedi Settings > Secrets and variables > Actions." >&2
+            exit 1
+          fi
+          ARGS=(scripts/places/istat/fetch.ts)
+          if [ -n "$REGION" ]; then ARGS+=(--region "$REGION"); fi
+          npx tsx "${ARGS[@]}" | tee /tmp/import-stats.txt
+          {
+            echo "### Import Places — ISTAT (write)"
+            echo "- Regione: ${REGION:-tutta Italia}"
+            echo "- Edizione: $ISTAT_YEAR"
+            echo '```json'
+            cat /tmp/import-stats.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
