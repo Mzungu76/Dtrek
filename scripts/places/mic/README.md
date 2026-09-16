@@ -17,22 +17,21 @@ Conoscenza"), il knowledge graph ufficiale del MiC:
   `http://dati.beniculturali.it/mibact/luoghi/resource/CulturalInstituteOrSite/104060`) — usati
   come `sourceId`.
 
-**Coordinate — corretto dopo un primo dry-run reale (2026-09-16, GitHub Actions, --limit 20,
-regione Lazio → 0 risultati)**: la prima versione della query usava `geo:lat`/`geo:long` (WGS84
-Basic Geo Vocabulary) su `?site`, un'ipotesi mai eseguita contro l'endpoint reale (nessun ambiente
-di sviluppo qui raggiunge `dati.cultura.gov.it`, solo il runner GitHub Actions ci arriva). Predicati
-reali, verificati leggendo i file OWL/RDF ufficiali:
-- `location.owl` (ICCD-MiBACT/ArCo su GitHub): `loc:hasCoordinates` collega una `clv:Geometry` alla
-  sua `loc:Coordinates`, ma i valori numerici sono proprietà della `clv:Geometry` stessa, non di
-  `loc:Coordinates`.
-- `CLV-AP_IT.rdf` (italia/daf-ontologie-vocabolari-controllati su GitHub, l'ontologia AgID che ArCo
-  importa per Geometry/Address): `clv:lat`/`clv:long` sono proprietà dirette di `clv:Geometry`;
-  `clv:hasGeometry` (domain `owl:Thing`) collega una risorsa qualsiasi alla sua Geometry.
+**Coordinate — due tentativi falliti, serve la struttura reale.**
+- Tentativo 1 (2026-09-16): `geo:lat`/`geo:long` (WGS84) su `?site` → 0 risultati contro l'endpoint
+  reale (`--limit 20`, regione Lazio).
+- Tentativo 2, stesso giorno: dedotto leggendo `location.owl` e `CLV-AP_IT.rdf` (ICCD-MiBACT/ArCo e
+  AgID su GitHub, non un blog di terzi) — `clv:lat`/`clv:long` come proprietà dirette di una
+  `clv:Geometry`, raggiunta da CIS/Site/Feature via `clv:hasGeometry` (path SPARQL `|` su tutti e
+  tre) → di nuovo **0 risultati** (`--limit 1500`, regione Lazio).
 
-Non essendo certo se `clv:hasGeometry` sia attaccata al CIS, al `Site` (via `atSite`) o al
-`Feature` indirizzo (via `atLocation`), la query in `fetch.ts` prova tutti e tre i percorsi con un
-path SPARQL `|`. **Ancora da confermare con un nuovo dry-run `--limit` piccolo** prima di alzarlo —
-questa correzione non è stata eseguita contro l'endpoint reale, solo derivata dalle ontologie.
+Nessuno dei due tentativi è stato verificato contro un dato reale prima di essere eseguito — solo
+dedotti dalla documentazione. Invece di un terzo tentativo alla cieca, `fetch.ts` supporta ora
+`--describe`: interroga l'endpoint per UN `CulturalInstituteOrSite` vero e dumpa tutte le sue triple
+dirette più un salto in più (per attraversare `TimeIndexedTypedLocation`/`Site` senza già sapere
+quale proprietà cercare). Il prossimo fix a `buildSparqlQuery` va scritto leggendo quell'output —
+la struttura reale, non altra documentazione. Workflow: `mode: describe` in
+`import-places-mic.yml`, nessun secret Supabase richiesto.
 
 ## Cosa esisteva già nel repository (riusato come riferimento, non duplicato)
 
@@ -45,10 +44,9 @@ perché il thesaurus dei tipi ArCo non è stato verificabile in questa sessione.
 
 Nessun ambiente di sviluppo usato finora (sandbox Claude Code, incluse sessioni successive)
 raggiunge `dati.cultura.gov.it` — stesso blocco di rete di ISTAT/PTPR. Solo il runner GitHub
-Actions (`.github/workflows/import-places-mic.yml`) ci arriva: il primo dry-run reale lì (2026-09-16)
-ha eseguito la query con successo (nessun errore HTTP/rete) ma **0 risultati con coordinate
-valide**, per il predicato sbagliato ora corretto sopra — non ancora riverificato contro l'endpoint
-reale dopo la correzione.
+Actions (`.github/workflows/import-places-mic.yml`) ci arriva: entrambi i tentativi sopra hanno
+eseguito la query con successo (nessun errore HTTP/rete, query sintatticamente valida) ma con 0
+risultati — il problema è il predicato usato, non la raggiungibilità dell'endpoint.
 
 ## Licenza (piano §8/§44 — CC BY-SA 4.0)
 
@@ -65,5 +63,6 @@ richiede rete.
 ## Uso
 
 ```bash
-npx tsx scripts/places/mic/fetch.ts --dry-run --region Lazio
+npx tsx scripts/places/mic/fetch.ts --describe                       # diagnostica (nessun Supabase)
+npx tsx scripts/places/mic/fetch.ts --dry-run --region Lazio --limit 20
 ```
