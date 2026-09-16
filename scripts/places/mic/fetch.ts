@@ -241,11 +241,13 @@ async function querySparql(query: string): Promise<MicBinding[]> {
 // ── Diagnostica (--describe) ─────────────────────────────────────────────────────────────────
 // Due tentativi di correggere il predicato delle coordinate (geo:lat/geo:long su ?site, poi
 // clv:hasGeometry/clv:lat/clv:long su tre percorsi diversi) hanno entrambi dato 0 risultati contro
-// l'endpoint reale, dedotti leggendo l'ontologia invece che i dati veri — nessun ambiente
-// disponibile finora ha accesso di rete a dati.cultura.gov.it per verificarlo direttamente.
-// Invece di un terzo tentativo alla cieca, questo dump tutte le triple di UN CulturalInstituteOrSite
-// reale più un salto in più (per attraversare TimeIndexedTypedLocation/Site senza già sapere quale
-// proprietà usare) — la struttura REALE, non quella dedotta dallo schema. Nessun Supabase richiesto.
+// l'endpoint reale, dedotti leggendo l'ontologia invece che i dati veri. Un primo --describe (dump
+// a 2 salti da un CIS reale) ha rivelato il collegamento VERO: `cis:hasSite` (semplice, diretto —
+// non loc:hasTimeIndexedTypedLocation/atSite come assunto in entrambi i tentativi precedenti), su
+// un nodo reale `Site/Sede_di_7275`. Quel primo dump si è fermato un salto troppo presto per vedere
+// COSA c'è dentro quel Site — questa seconda query segue `cis:hasSite` e dumpa le proprietà dirette
+// del Site (più un salto in più, nel caso le coordinate siano un ulteriore livello sotto, es. via
+// un nodo Address/Geometry) — dovrebbe rivelare direttamente il predicato delle coordinate.
 const DESCRIBE_QUERY = `
 PREFIX cis: <http://dati.beniculturali.it/cis/>
 SELECT ?cis ?p1 ?o1 ?p2 ?o2 WHERE {
@@ -254,8 +256,17 @@ SELECT ?cis ?p1 ?o1 ?p2 ?o2 WHERE {
   OPTIONAL { ?o1 ?p2 ?o2 . }
 }`
 
-async function runDescribe(): Promise<void> {
-  console.log(`Interrogo ${SPARQL_ENDPOINT} — diagnostica struttura reale di un CulturalInstituteOrSite…`)
+const DESCRIBE_SITE_QUERY = `
+PREFIX cis: <http://dati.beniculturali.it/cis/>
+SELECT ?cis ?site ?p1 ?o1 ?p2 ?o2 WHERE {
+  { SELECT ?cis WHERE { ?cis a cis:CulturalInstituteOrSite . } LIMIT 1 }
+  ?cis cis:hasSite ?site .
+  ?site ?p1 ?o1 .
+  OPTIONAL { ?o1 ?p2 ?o2 . }
+}`
+
+async function runSparqlDiagnostic(label: string, query: string): Promise<void> {
+  console.log(`Interrogo ${SPARQL_ENDPOINT} — ${label}…`)
   const res = await fetch(SPARQL_ENDPOINT, {
     method: 'POST',
     headers: {
@@ -263,12 +274,17 @@ async function runDescribe(): Promise<void> {
       'Accept': 'application/sparql-results+json',
       'User-Agent': USER_AGENT,
     },
-    body: `query=${encodeURIComponent(DESCRIBE_QUERY)}`,
+    body: `query=${encodeURIComponent(query)}`,
     signal: AbortSignal.timeout(60000),
   })
   if (!res.ok) throw new Error(`MiC SPARQL ${res.status}: ${(await res.text()).slice(0, 500)}`)
   const data = await res.json()
   console.log(JSON.stringify(data, null, 2))
+}
+
+async function runDescribe(): Promise<void> {
+  await runSparqlDiagnostic('struttura reale di un CulturalInstituteOrSite', DESCRIBE_QUERY)
+  await runSparqlDiagnostic('proprietà dirette del suo Site (via cis:hasSite)', DESCRIBE_SITE_QUERY)
 }
 
 async function main() {
