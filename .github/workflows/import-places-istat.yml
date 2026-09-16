@@ -53,9 +53,9 @@ jobs:
       REGION: ${{ inputs.region }}
       ISTAT_YEAR: ${{ inputs.istat_year }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
           cache: npm
@@ -107,7 +107,7 @@ jobs:
 
       - name: Upload JSON candidati
         if: ${{ inputs.mode == 'dry-run' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: places-istat-candidates
           path: ${{ env.candidates_file }}
@@ -117,11 +117,13 @@ jobs:
         if: ${{ inputs.mode == 'write' }}
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          # fetch.ts accetta entrambi i nomi (SUPABASE_SERVICE_KEY ?? SUPABASE_SERVICE_ROLE_KEY) —
+          # qui si passa qualunque dei due secret sia stato configurato nel repository, nell'ordine.
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           set -euo pipefail
           if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_SERVICE_KEY:-}" ]; then
-            echo "Secret SUPABASE_URL/SUPABASE_SERVICE_KEY mancanti nel repository — vedi Settings > Secrets and variables > Actions." >&2
+            echo "Secret Supabase mancanti nel repository — serve SUPABASE_URL e (SUPABASE_SERVICE_KEY o SUPABASE_SERVICE_ROLE_KEY). Vedi Settings > Secrets and variables > Actions." >&2
             exit 1
           fi
           ARGS=(scripts/places/istat/fetch.ts)
