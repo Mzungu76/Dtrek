@@ -29,25 +29,21 @@
  * es. `http://dati.beniculturali.it/mibact/luoghi/resource/CulturalInstituteOrSite/104060`) — è
  * questo l'identificativo MiC usato come `sourceId` sotto (piano §48.12, mai inventato).
  *
- * ── Coordinate: predicato corretto (era sbagliato, vedi nota) ──────────────────────────────────
- * Il primo dry-run reale contro l'endpoint (--limit 20, regione Lazio) ha dato 0 risultati con
- * coordinate valide: la query usava `geo:lat`/`geo:long` (WGS84 Basic Geo Vocabulary) direttamente
- * su `?site`, un'ipotesi mai verificata contro l'endpoint reale (vedi git history di questo file).
- * Predicati REALI, verificati leggendo i file OWL/RDF pubblicati — non un blog di terzi:
- *   - `location.owl` (https://raw.githubusercontent.com/ICCD-MiBACT/ArCo/master/ArCo-release/ontologie/location/location.owl):
- *     `loc:hasCoordinates` collega una `clv:Geometry` alla sua `loc:Coordinates` — ma i valori
- *     numerici non sono su `loc:Coordinates`, sono proprietà della `clv:Geometry` stessa.
- *   - `CLV-AP_IT.rdf`, l'ontologia AgID importata da ArCo per Geometry/Address
- *     (https://raw.githubusercontent.com/italia/daf-ontologie-vocabolari-controllati/master/Ontologie/CLV/latest/CLV-AP_IT.rdf):
- *     `clv:lat`/`clv:long` (`https://w3id.org/italia/onto/CLV/{lat,long}`) sono proprietà
- *     dirette della classe `clv:Geometry`; `clv:hasGeometry` (domain `owl:Thing`, quindi
- *     utilizzabile su qualunque risorsa) collega una cosa alla sua Geometry.
- * Non essendo noto CON CERTEZZA se `clv:hasGeometry` sia attaccato al CIS stesso, al `Site`
- * (via `atSite`) o al `Feature` dell'indirizzo (via `atLocation`) — il dominio `owl:Thing` lo rende
- * plausibile ovunque — la query prova tutti e tre i percorsi con un path SPARQL `|` (alternation),
- * prendendo il primo che effettivamente bind. Ancora da confermare con un nuovo --limit piccolo
- * contro l'endpoint reale (solo il runner GitHub Actions ci arriva, non questa sandbox né la
- * precedente — vedi `scripts/places/mic/README.md`) prima di alzare il limite.
+ * ── Coordinate: DUE tentativi falliti, serve la struttura reale ────────────────────────────────
+ * Tentativo 1: `geo:lat`/`geo:long` (WGS84) su `?site` → 0 risultati contro l'endpoint reale
+ * (--limit 20, regione Lazio, 2026-09-16).
+ * Tentativo 2: `clv:lat`/`clv:long` su una `clv:Geometry` raggiunta da CIS/Site/Feature via
+ * `clv:hasGeometry` (dedotto da `location.owl` + `CLV-AP_IT.rdf` di ICCD-MiBACT/ArCo e AgID su
+ * GitHub, non un blog di terzi) → di nuovo 0 risultati (--limit 1500, regione Lazio, stesso giorno).
+ * Nessuno dei due ambienti che hanno scritto queste query (questa sessione inclusa) ha MAI avuto
+ * accesso di rete a dati.cultura.gov.it per verificare le ipotesi prima di eseguirle — entrambe
+ * dedotte dalla documentazione/ontologia, non da un dato reale osservato.
+ *
+ * Invece di un terzo tentativo alla cieca: `runDescribe()` più sotto (`--describe`) interroga
+ * l'endpoint reale per UN CulturalInstituteOrSite vero e ne dumpa tutte le triple dirette più un
+ * salto in più (per attraversare TimeIndexedTypedLocation/Site senza già sapere quale proprietà
+ * cercare) — la struttura REALE dei dati pubblicati, non quella dedotta dallo schema. Il prossimo
+ * fix a `buildSparqlQuery` va scritto leggendo l'output di quel dump, non da altra documentazione.
  *
  * La tipologia (`hasCulturalInstituteOrSiteType`) punta a una risorsa di un thesaurus MiC di cui
  * non è stato possibile verificare i valori esatti in questa sessione — la classificazione sotto
@@ -62,6 +58,7 @@
  *
  * Usage:
  *   npx tsx scripts/places/mic/fetch.ts [--dry-run] [--region Lazio] [--limit 5000]
+ *   npx tsx scripts/places/mic/fetch.ts --describe   (diagnostica, vedi runDescribe più sotto)
  *
  * --limit sovrascrive la LIMIT SPARQL (default 5000) — usare un valore piccolo (5-20) per il primo
  * lancio contro l'endpoint reale, dato il punto non verificato sulle coordinate in cima al file:
@@ -241,7 +238,45 @@ async function querySparql(query: string): Promise<MicBinding[]> {
   return out
 }
 
+// ── Diagnostica (--describe) ─────────────────────────────────────────────────────────────────
+// Due tentativi di correggere il predicato delle coordinate (geo:lat/geo:long su ?site, poi
+// clv:hasGeometry/clv:lat/clv:long su tre percorsi diversi) hanno entrambi dato 0 risultati contro
+// l'endpoint reale, dedotti leggendo l'ontologia invece che i dati veri — nessun ambiente
+// disponibile finora ha accesso di rete a dati.cultura.gov.it per verificarlo direttamente.
+// Invece di un terzo tentativo alla cieca, questo dump tutte le triple di UN CulturalInstituteOrSite
+// reale più un salto in più (per attraversare TimeIndexedTypedLocation/Site senza già sapere quale
+// proprietà usare) — la struttura REALE, non quella dedotta dallo schema. Nessun Supabase richiesto.
+const DESCRIBE_QUERY = `
+PREFIX cis: <http://dati.beniculturali.it/cis/>
+SELECT ?cis ?p1 ?o1 ?p2 ?o2 WHERE {
+  { SELECT ?cis WHERE { ?cis a cis:CulturalInstituteOrSite . } LIMIT 1 }
+  ?cis ?p1 ?o1 .
+  OPTIONAL { ?o1 ?p2 ?o2 . }
+}`
+
+async function runDescribe(): Promise<void> {
+  console.log(`Interrogo ${SPARQL_ENDPOINT} — diagnostica struttura reale di un CulturalInstituteOrSite…`)
+  const res = await fetch(SPARQL_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Accept': 'application/sparql-results+json',
+      'User-Agent': USER_AGENT,
+    },
+    body: `query=${encodeURIComponent(DESCRIBE_QUERY)}`,
+    signal: AbortSignal.timeout(60000),
+  })
+  if (!res.ok) throw new Error(`MiC SPARQL ${res.status}: ${(await res.text()).slice(0, 500)}`)
+  const data = await res.json()
+  console.log(JSON.stringify(data, null, 2))
+}
+
 async function main() {
+  if (process.argv.includes('--describe')) {
+    await runDescribe()
+    return
+  }
+
   const DRY_RUN = process.argv.includes('--dry-run')
   const regionIdx = process.argv.indexOf('--region')
   const region = regionIdx !== -1 ? process.argv[regionIdx + 1] : 'Lazio'

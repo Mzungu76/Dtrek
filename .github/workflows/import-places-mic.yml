@@ -9,20 +9,22 @@ name: Import Places — MiC (ArCo → dtrek_places, meta_type=sito)
 # nessuna opzione --to-json (il dry-run stampa solo un candidato di esempio + il conteggio nei log,
 # non produce un artifact scaricabile).
 #
-# Punto aperto segnalato in scripts/places/mic/README.md: il predicato SPARQL che porta le
-# coordinate NON è verificato contro l'endpoint reale. Per questo il dry-run supporta --limit (5-20
-# consigliato per il primo lancio): serve a ispezionare l'esempio stampato nei log — coordinate
-# plausibili per l'Italia (lat ~35-47, lon ~6-19) — PRIMA di alzare il limite per un caricamento
-# più ampio, non a risparmiare tempo di per sé.
+# Punto aperto segnalato in scripts/places/mic/README.md: DUE tentativi di dedurre il predicato
+# delle coordinate dall'ontologia hanno dato entrambi 0 risultati contro l'endpoint reale. La
+# modalità "describe" dumpa la struttura REALE di un CulturalInstituteOrSite vero (nessun Supabase
+# richiesto) — usarla per scrivere il prossimo fix leggendo dati osservati, non altra
+# documentazione. Il dry-run supporta comunque --limit (5-20 per il primo test) per ispezionare un
+# esempio prima di alzare il limite per un caricamento più ampio.
 
 on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "dry-run: solo log (esempio + conteggio), nessuna scrittura. write: importa davvero in Supabase."
+        description: "describe: dump della struttura reale di un CIS (diagnostica). dry-run: solo log, nessuna scrittura. write: importa davvero in Supabase."
         required: true
         type: choice
         options:
+          - describe
           - dry-run
           - write
         default: dry-run
@@ -60,6 +62,20 @@ jobs:
           cache: npm
 
       - run: npm ci
+
+      - name: Describe — dump della struttura reale di un CulturalInstituteOrSite (diagnostica)
+        if: ${{ inputs.mode == 'describe' }}
+        run: |
+          set -euo pipefail
+          npx tsx scripts/places/mic/fetch.ts --describe | tee /tmp/mic-describe.txt
+          {
+            echo "### Import Places — MiC (describe)"
+            echo '```json'
+            cat /tmp/mic-describe.txt
+            echo '```'
+            echo ""
+            echo "Usare questo dump per scrivere il prossimo fix a buildSparqlQuery in scripts/places/mic/fetch.ts."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Dry-run — solo log, nessuna scrittura su Supabase
         if: ${{ inputs.mode == 'dry-run' }}
