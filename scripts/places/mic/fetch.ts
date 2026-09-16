@@ -202,20 +202,50 @@ SELECT DISTINCT ?cis ?name ?typeLabel ?comune ?address ?lat ?long WHERE {
 LIMIT ${limit}`
 }
 
-async function querySparql(query: string): Promise<MicBinding[]> {
-  const res = await fetch(SPARQL_ENDPOINT, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'Accept': 'application/sparql-results+json',
-      'User-Agent': USER_AGENT,
-    },
-    body: `query=${encodeURIComponent(query)}`,
-    signal: AbortSignal.timeout(60000),
-  })
-  if (!res.ok) throw new Error(`MiC SPARQL ${res.status}: ${(await res.text()).slice(0, 500)}`)
+// dati.cultura.gov.it è un endpoint pubblico condiviso, non dedicato a questo script — visto dal
+// vivo: un --describe è fallito con "ConnectTimeoutError... timeout: 10000ms" (il timeout di
+// connessione di undici, più stretto dei 60s di AbortSignal sotto, che copre solo la risposta una
+// volta stabilita la connessione). Stesso trattamento del retry con backoff già aggiunto a
+// scripts/places/wikidata/enrich.ts dopo un problema analogo (502 lì, connect timeout qui).
+const TRANSIENT_STATUS = new Set([429, 500, 502, 503, 504])
+const MAX_RETRIES = 4
 
-  const data: { results: { bindings: Record<string, { value: string }>[] } } = await res.json()
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+async function fetchSparqlJson(query: string): Promise<unknown> {
+  let lastError: unknown
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    if (attempt > 0) await sleep(1000 * 2 ** (attempt - 1)) // 1s, 2s, 4s, 8s
+
+    let res: Response
+    try {
+      res = await fetch(SPARQL_ENDPOINT, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Accept': 'application/sparql-results+json',
+          'User-Agent': USER_AGENT,
+        },
+        body: `query=${encodeURIComponent(query)}`,
+        signal: AbortSignal.timeout(60000),
+      })
+    } catch (e) {
+      // Errore di rete/timeout (incluso il ConnectTimeoutError visto dal vivo) — stesso
+      // trattamento di uno status transitorio.
+      lastError = e
+      continue
+    }
+    if (res.ok) return res.json()
+    if (!TRANSIENT_STATUS.has(res.status)) throw new Error(`MiC SPARQL ${res.status}: ${(await res.text()).slice(0, 500)}`)
+    lastError = new Error(`MiC SPARQL ${res.status}`)
+  }
+  throw lastError instanceof Error ? lastError : new Error('MiC SPARQL: troppi tentativi falliti')
+}
+
+async function querySparql(query: string): Promise<MicBinding[]> {
+  const data = await fetchSparqlJson(query) as { results: { bindings: Record<string, { value: string }>[] } }
   const out: MicBinding[] = []
   for (const row of data.results.bindings) {
     const iri = row.cis?.value
@@ -267,18 +297,7 @@ SELECT ?cis ?site ?p1 ?o1 ?p2 ?o2 WHERE {
 
 async function runSparqlDiagnostic(label: string, query: string): Promise<void> {
   console.log(`Interrogo ${SPARQL_ENDPOINT} — ${label}…`)
-  const res = await fetch(SPARQL_ENDPOINT, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'Accept': 'application/sparql-results+json',
-      'User-Agent': USER_AGENT,
-    },
-    body: `query=${encodeURIComponent(query)}`,
-    signal: AbortSignal.timeout(60000),
-  })
-  if (!res.ok) throw new Error(`MiC SPARQL ${res.status}: ${(await res.text()).slice(0, 500)}`)
-  const data = await res.json()
+  const data = await fetchSparqlJson(query)
   console.log(JSON.stringify(data, null, 2))
 }
 
