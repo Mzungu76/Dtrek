@@ -117,11 +117,13 @@ jobs:
         if: ${{ inputs.mode == 'write' }}
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          # fetch.ts accetta entrambi i nomi (SUPABASE_SERVICE_KEY ?? SUPABASE_SERVICE_ROLE_KEY) —
+          # qui si passa qualunque dei due secret sia stato configurato nel repository, nell'ordine.
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           set -euo pipefail
           if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_SERVICE_KEY:-}" ]; then
-            echo "Secret SUPABASE_URL/SUPABASE_SERVICE_KEY mancanti nel repository — vedi Settings > Secrets and variables > Actions." >&2
+            echo "Secret Supabase mancanti nel repository — serve SUPABASE_URL e (SUPABASE_SERVICE_KEY o SUPABASE_SERVICE_ROLE_KEY). Vedi Settings > Secrets and variables > Actions." >&2
             exit 1
           fi
           ARGS=(scripts/places/istat/fetch.ts)
