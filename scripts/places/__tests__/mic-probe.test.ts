@@ -12,6 +12,9 @@ describe('MiC probe — struttura dei probe diagnostici', () => {
       'clvapit:hasRegion',
       'clvapit:hasGeometry+lat/long',
       'cis:hasAddress (NON verificato)',
+      'combo-candidati-lazio',
+      'combo-candidati+tipo',
+      'combo-produzione-completa',
     ])
   })
 

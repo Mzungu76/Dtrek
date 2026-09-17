@@ -101,6 +101,85 @@ SELECT ?cis ?addr WHERE {
        cis:hasAddress ?addr .
 } LIMIT ${PROBE_LIMIT}`,
   },
+  // ── Round 2 (2026-09-17): ogni predicato singolarmente è rapido (<1.1s, tutti 200) — quindi il
+  // timeout della query di produzione non viene da un predicato lento, ma dalla COMBINAZIONE. I
+  // probe sotto ricostruiscono fetch.ts a pezzi crescenti (stessa struttura, stesso filtro regione
+  // via CONTAINS/LCASE non indicizzabile) per isolare dove scatta il collasso — non un'altra
+  // ipotesi, ma bisezione della query reale.
+  {
+    name: 'combo-candidati-lazio',
+    note: "Sotto-query dei candidati di fetch.ts, esatta: name+site+address+comune, tutti OPTIONAL, filtro regione CONTAINS/LCASE('Lazio'). Isola il costo del filtro regione non indicizzabile combinato con i join OPTIONAL.",
+    query: `${PREFIXES}
+SELECT ?cis ?name ?site ?address ?comune WHERE {
+  ?cis a cis:CulturalInstituteOrSite ;
+       rdfs:label ?name .
+  OPTIONAL { ?cis cis:hasSite ?site . }
+  OPTIONAL {
+    ?site cis:siteAddress ?addr .
+    ?addr clvapit:fullAddress ?address .
+    OPTIONAL { ?addr clvapit:hasCity ?comuneRes . ?comuneRes rdfs:label ?comune . }
+    OPTIONAL { ?addr clvapit:hasRegion ?regionRes . ?regionRes rdfs:label ?regionLabel . }
+  }
+  FILTER(CONTAINS(LCASE(?regionLabel), LCASE("Lazio")))
+} LIMIT 20`,
+  },
+  {
+    name: 'combo-candidati+tipo',
+    note: 'Come sopra + OPTIONAL sul tipo (loc:hasCulturalInstituteOrSiteType + label) — isola il costo di aggiungere un quinto OPTIONAL indipendente.',
+    query: `${PREFIXES}
+PREFIX loc: <https://w3id.org/arco/ontology/location/>
+SELECT ?cis ?name ?site ?address ?comune ?typeLabel WHERE {
+  ?cis a cis:CulturalInstituteOrSite ;
+       rdfs:label ?name .
+  OPTIONAL { ?cis cis:hasSite ?site . }
+  OPTIONAL {
+    ?site cis:siteAddress ?addr .
+    ?addr clvapit:fullAddress ?address .
+    OPTIONAL { ?addr clvapit:hasCity ?comuneRes . ?comuneRes rdfs:label ?comune . }
+    OPTIONAL { ?addr clvapit:hasRegion ?regionRes . ?regionRes rdfs:label ?regionLabel . }
+  }
+  OPTIONAL {
+    ?cis loc:hasCulturalInstituteOrSiteType ?type .
+    ?type rdfs:label ?typeLabel .
+  }
+  FILTER(CONTAINS(LCASE(?regionLabel), LCASE("Lazio")))
+} LIMIT 20`,
+  },
+  {
+    name: 'combo-produzione-completa',
+    note: 'Ricostruzione fedele della query intera di fetch.ts (4 OPTIONAL coordinate indipendenti + COALESCE + DISTINCT + FILTER BOUND), stesso filtro regione, LIMIT piccolo. Se questa va in timeout ma i pezzi sopra no, il collasso è nella combinazione DISTINCT+4 OPTIONAL geometria, non nel filtro regione da solo.',
+    query: `${PREFIXES}
+PREFIX loc: <https://w3id.org/arco/ontology/location/>
+PREFIX geo: <http://www.w3.org/2003/01/geo/wgs84_pos#>
+SELECT DISTINCT ?cis ?name ?typeLabel ?comune ?address ?lat ?long WHERE {
+  {
+    SELECT ?cis ?name ?site ?address ?comune WHERE {
+      ?cis a cis:CulturalInstituteOrSite ;
+           rdfs:label ?name .
+      OPTIONAL { ?cis cis:hasSite ?site . }
+      OPTIONAL {
+        ?site cis:siteAddress ?addr .
+        ?addr clvapit:fullAddress ?address .
+        OPTIONAL { ?addr clvapit:hasCity ?comuneRes . ?comuneRes rdfs:label ?comune . }
+        OPTIONAL { ?addr clvapit:hasRegion ?regionRes . ?regionRes rdfs:label ?regionLabel . }
+      }
+      FILTER(CONTAINS(LCASE(?regionLabel), LCASE("Lazio")))
+    }
+    LIMIT 20
+  }
+  OPTIONAL {
+    ?cis loc:hasCulturalInstituteOrSiteType ?type .
+    ?type rdfs:label ?typeLabel .
+  }
+  OPTIONAL { ?cis geo:lat ?lat1 ; geo:long ?long1 . }
+  OPTIONAL { ?site geo:lat ?lat2 ; geo:long ?long2 . }
+  OPTIONAL { ?cis clvapit:hasGeometry ?geomA . ?geomA clvapit:lat ?lat3 ; clvapit:long ?long3 . }
+  OPTIONAL { ?site clvapit:hasGeometry ?geomB . ?geomB clvapit:lat ?lat4 ; clvapit:long ?long4 . }
+  BIND(COALESCE(?lat1, ?lat2, ?lat3, ?lat4) AS ?lat)
+  BIND(COALESCE(?long1, ?long2, ?long3, ?long4) AS ?long)
+  FILTER(BOUND(?lat) && BOUND(?long))
+} LIMIT ${PROBE_LIMIT}`,
+  },
 ]
 
 export interface ProbeResult {
