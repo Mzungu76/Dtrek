@@ -29,8 +29,13 @@ on:
           - dry-run
           - write
         default: dry-run
+      all_italy:
+        description: "Tutta Italia (ignora il campo Regione sotto, nessun filtro SPARQL). Il campo di testo di GitHub Actions arriva precompilato col default — svuotarlo non basta ad affidabilità, verificato dal vivo: usare questa checkbox invece di fidarsi del campo vuoto."
+        required: false
+        type: boolean
+        default: false
       region:
-        description: "Regione (es. Lazio). Vuoto = tutta Italia (nessun filtro SPARQL). Non usato in modalità probe."
+        description: "Regione (es. Lazio). Ignorato se 'Tutta Italia' sopra è selezionato. Non usato in modalità probe."
         required: false
         type: string
         default: "Lazio"
@@ -57,6 +62,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       MODE: ${{ inputs.mode }}
+      ALL_ITALY: ${{ inputs.all_italy }}
       REGION: ${{ inputs.region }}
       LIMIT: ${{ inputs.limit }}
       PROBE_TIMEOUT_MS: ${{ inputs.probe_timeout_ms }}
@@ -101,10 +107,12 @@ jobs:
         if: ${{ inputs.mode == 'dry-run' }}
         run: |
           set -euo pipefail
-          npx tsx scripts/places/mic/fetch.ts --dry-run --region "$REGION" --limit "$LIMIT" | tee /tmp/mic-dryrun.txt
+          EFFECTIVE_REGION="$REGION"
+          if [ "$ALL_ITALY" = "true" ]; then EFFECTIVE_REGION=""; fi
+          npx tsx scripts/places/mic/fetch.ts --dry-run --region "$EFFECTIVE_REGION" --limit "$LIMIT" | tee /tmp/mic-dryrun.txt
           {
             echo "### Import Places — MiC (dry-run)"
-            echo "- Regione: ${REGION:-tutta Italia}"
+            echo "- Regione: ${EFFECTIVE_REGION:-tutta Italia}"
             echo "- Limit: $LIMIT"
             echo '```json'
             cat /tmp/mic-dryrun.txt
@@ -124,10 +132,12 @@ jobs:
             echo "Secret Supabase mancanti nel repository — serve SUPABASE_URL e (SUPABASE_SERVICE_KEY o SUPABASE_SERVICE_ROLE_KEY). Vedi Settings > Secrets and variables > Actions." >&2
             exit 1
           fi
-          npx tsx scripts/places/mic/fetch.ts --region "$REGION" --limit "$LIMIT" | tee /tmp/mic-write.txt
+          EFFECTIVE_REGION="$REGION"
+          if [ "$ALL_ITALY" = "true" ]; then EFFECTIVE_REGION=""; fi
+          npx tsx scripts/places/mic/fetch.ts --region "$EFFECTIVE_REGION" --limit "$LIMIT" | tee /tmp/mic-write.txt
           {
             echo "### Import Places — MiC (write)"
-            echo "- Regione: ${REGION:-tutta Italia}"
+            echo "- Regione: ${EFFECTIVE_REGION:-tutta Italia}"
             echo "- Limit: $LIMIT"
             echo '```json'
             cat /tmp/mic-write.txt
