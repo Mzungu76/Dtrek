@@ -33,15 +33,22 @@ aufidenate") le aveva, ma con un vocabolario diverso: `geo:lat`/`geo:long` (WGS8
 di `clvapit:hasGeometry` — il catalogo non è uniforme tra schede catalogate in periodi diversi.
 `fetch.ts` prova ora entrambi i vocabolari su entrambi i punti di aggancio (CIS e Site).
 
-**Nota di prestazioni (2026-09-17)**: la query con tutti e quattro i rami di ricerca coordinate ha
-dato `MiC SPARQL 500` (timeout del motore) contro l'endpoint reale con `--limit 300`, regione Lazio
-— troppo pesante da eseguire sull'intera classe `CulturalInstituteOrSite` (il catalogo generale del
-MiC è nell'ordine dei milioni di schede). `buildSparqlQuery` ora restringe prima il numero di
-istituti esaminati con una sotto-query con `LIMIT` proprio (`CANDIDATE_POOL`, 5000, indipendente da
-`--limit`) prima di applicare i join costosi per le coordinate — pattern SPARQL standard per
-limitare il lavoro del motore. Conseguenza: con una copertura bassa delle coordinate nel catalogo,
-il numero di risultati può essere inferiore a `--limit` anche se esistono altri istituti con
-coordinate oltre il pool esaminato.
+**Nota di prestazioni (2026-09-17, due round)**:
+1. La query con tutti e quattro i rami di ricerca coordinate ha dato `MiC SPARQL 500` (timeout del
+   motore) contro l'endpoint reale con `--limit 300`, regione Lazio. Primo tentativo di correzione:
+   una sotto-query con `LIMIT` proprio (`CANDIDATE_POOL`) prima dei join per le coordinate — ancora
+   `500` con la stessa combinazione.
+2. Causa più probabile: il pattern `OPTIONAL` che avvolge una `UNION` a 4 rami è un caso noto in
+   cui i motori SPARQL pianificano male la query indipendentemente da quanti candidati arrivano a
+   quel punto. `buildSparqlQuery` ora usa 4 `OPTIONAL` indipendenti (uno per combinazione
+   vocabolario/nodo) con `COALESCE` per prendere il primo valore trovato, invece di un `OPTIONAL`
+   con `UNION` dentro — e il filtro regione entra nella sotto-query **prima** del `LIMIT` sui
+   candidati (con una regione specificata, i candidati esaminati sono già quelli di quella regione,
+   non un pool casuale su tutta Italia).
+
+`CANDIDATE_POOL` (2000) resta comunque un tetto al lavoro del motore, non ai risultati possibili —
+con una copertura bassa delle coordinate nel catalogo, il numero di risultati può restare sotto
+`--limit`.
 
 Workflow: `mode: dry-run`/`write` in `import-places-mic.yml` (`mode: describe` resta disponibile
 per ulteriore diagnostica, nessun secret Supabase richiesto).
