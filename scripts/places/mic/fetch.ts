@@ -176,17 +176,22 @@ export function micBindingToPlaceCandidate(b: MicBinding): PlaceCandidate {
 // era invece sempre presente anche sul record senza coordinate — possibile fallback futuro
 // (geocodifica) per i record senza geometria, oggi scartati dal FILTER sotto: latitude/longitude
 // sono NOT NULL su dtrek_places, un indirizzo da solo non basta.
-// Query risultata troppo pesante per l'endpoint (visto dal vivo: "MiC SPARQL 500", limit 300,
-// regione Lazio — un timeout del motore SPARQL, non un errore nella query). Causa probabile: 4
-// rami UNION per le coordinate dentro un OPTIONAL, sull'intera classe CulturalInstituteOrSite
-// (che il catalogo generale del MiC descrive come milioni di schede) senza restringere prima il
-// numero di istituti da esaminare. Sotto-query interna con un proprio LIMIT (CANDIDATE_POOL,
-// indipendente da quello richiesto dal chiamante) — pattern SPARQL standard per limitare il
-// lavoro del motore PRIMA dei join costosi, non dopo. Conseguenza: con una copertura bassa delle
-// coordinate nel catalogo, il numero di risultati restituiti può essere inferiore a `limit` anche
-// se esistono altri istituti con coordinate oltre il pool esaminato — non un tetto ai risultati
-// possibili, un tetto al lavoro fatto per trovarli.
-const CANDIDATE_POOL = 5000
+// Ancora "MiC SPARQL 500" con la sotto-query a candidati limitati (vedi git history) — il limite
+// sui candidati non basta. Causa più probabile, seconda ipotesi: il pattern OPTIONAL che avvolge
+// una UNION a 4 rami è un caso noto in cui i motori SPARQL (Virtuoso incluso, verosimile qui viste
+// le tracce "@id"/JSON-LD tipiche di ICCD-MiBACT) pianificano male la query, indipendentemente da
+// quanti candidati arrivano a quel punto. Due correzioni insieme, entrambe pratiche SPARQL note,
+// non nuove ipotesi sui dati:
+//   1. 4 OPTIONAL indipendenti (uno per combinazione vocabolario/nodo) invece di un OPTIONAL con
+//      UNION dentro, poi COALESCE per prendere il primo che ha valore — evita la combinazione
+//      OPTIONAL+UNION.
+//   2. Il filtro regione entra nella sotto-query PRIMA del limite sui candidati (join
+//      hasSite/siteAddress/hasRegion spostati lì) — con una regione specificata, i candidati
+//      esaminati sono già quelli di quella regione, non un pool casuale su tutta Italia di cui la
+//      maggior parte verrebbe scartata dopo (come nella versione precedente).
+// CANDIDATE_POOL resta un tetto al lavoro del motore, non ai risultati possibili — con una
+// copertura bassa delle coordinate, il numero di risultati può restare sotto `limit`.
+const CANDIDATE_POOL = 2000
 
 function buildSparqlQuery(regionLabel?: string, limit = 5000): string {
   const regionFilter = regionLabel
@@ -202,34 +207,31 @@ PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 
 SELECT DISTINCT ?cis ?name ?typeLabel ?comune ?address ?lat ?long WHERE {
   {
-    SELECT ?cis ?name WHERE {
+    SELECT ?cis ?name ?site ?address ?comune WHERE {
       ?cis a cis:CulturalInstituteOrSite ;
            rdfs:label ?name .
+      OPTIONAL { ?cis cis:hasSite ?site . }
+      OPTIONAL {
+        ?site cis:siteAddress ?addr .
+        ?addr clvapit:fullAddress ?address .
+        OPTIONAL { ?addr clvapit:hasCity ?comuneRes . ?comuneRes rdfs:label ?comune . }
+        OPTIONAL { ?addr clvapit:hasRegion ?regionRes . ?regionRes rdfs:label ?regionLabel . }
+      }
+      ${regionFilter}
     }
     LIMIT ${CANDIDATE_POOL}
   }
-  OPTIONAL { ?cis cis:hasSite ?site . }
   OPTIONAL {
     ?cis loc:hasCulturalInstituteOrSiteType ?type .
     ?type rdfs:label ?typeLabel .
   }
-  OPTIONAL {
-    { ?cis geo:lat ?lat ; geo:long ?long . }
-    UNION
-    { ?site geo:lat ?lat ; geo:long ?long . }
-    UNION
-    { ?cis clvapit:hasGeometry ?geom . ?geom clvapit:lat ?lat ; clvapit:long ?long . }
-    UNION
-    { ?site clvapit:hasGeometry ?geom . ?geom clvapit:lat ?lat ; clvapit:long ?long . }
-  }
-  OPTIONAL {
-    ?site cis:siteAddress ?addr .
-    ?addr clvapit:fullAddress ?address .
-    OPTIONAL { ?addr clvapit:hasCity ?comuneRes . ?comuneRes rdfs:label ?comune . }
-    OPTIONAL { ?addr clvapit:hasRegion ?regionRes . ?regionRes rdfs:label ?regionLabel . }
-  }
+  OPTIONAL { ?cis geo:lat ?lat1 ; geo:long ?long1 . }
+  OPTIONAL { ?site geo:lat ?lat2 ; geo:long ?long2 . }
+  OPTIONAL { ?cis clvapit:hasGeometry ?geomA . ?geomA clvapit:lat ?lat3 ; clvapit:long ?long3 . }
+  OPTIONAL { ?site clvapit:hasGeometry ?geomB . ?geomB clvapit:lat ?lat4 ; clvapit:long ?long4 . }
+  BIND(COALESCE(?lat1, ?lat2, ?lat3, ?lat4) AS ?lat)
+  BIND(COALESCE(?long1, ?long2, ?long3, ?long4) AS ?long)
   FILTER(BOUND(?lat) && BOUND(?long))
-  ${regionFilter}
 }
 LIMIT ${limit}`
 }
