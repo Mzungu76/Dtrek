@@ -28,9 +28,20 @@ classe Site, non più una deduzione.
 
 **Nota di copertura**: il record usato per il dump non aveva coordinate popolate (solo un indirizzo
 strutturato via `cis:siteAddress` → `clvapit:fullAddress`) — non è detto che tutti i record ArCo
-abbiano la geometria. Verificare il tasso di successo reale con un dry-run prima di contare su una
-copertura alta; l'indirizzo strutturato resta un possibile fallback futuro (geocodifica) per i
-record senza coordinate.
+abbiano la geometria. Un secondo record reale trovato dall'utente su LodView (100005, "Museo civico
+aufidenate") le aveva, ma con un vocabolario diverso: `geo:lat`/`geo:long` (WGS84 Basic Geo) invece
+di `clvapit:hasGeometry` — il catalogo non è uniforme tra schede catalogate in periodi diversi.
+`fetch.ts` prova ora entrambi i vocabolari su entrambi i punti di aggancio (CIS e Site).
+
+**Nota di prestazioni (2026-09-17)**: la query con tutti e quattro i rami di ricerca coordinate ha
+dato `MiC SPARQL 500` (timeout del motore) contro l'endpoint reale con `--limit 300`, regione Lazio
+— troppo pesante da eseguire sull'intera classe `CulturalInstituteOrSite` (il catalogo generale del
+MiC è nell'ordine dei milioni di schede). `buildSparqlQuery` ora restringe prima il numero di
+istituti esaminati con una sotto-query con `LIMIT` proprio (`CANDIDATE_POOL`, 5000, indipendente da
+`--limit`) prima di applicare i join costosi per le coordinate — pattern SPARQL standard per
+limitare il lavoro del motore. Conseguenza: con una copertura bassa delle coordinate nel catalogo,
+il numero di risultati può essere inferiore a `--limit` anche se esistono altri istituti con
+coordinate oltre il pool esaminato.
 
 Workflow: `mode: dry-run`/`write` in `import-places-mic.yml` (`mode: describe` resta disponibile
 per ulteriore diagnostica, nessun secret Supabase richiesto).

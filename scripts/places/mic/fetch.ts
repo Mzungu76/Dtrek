@@ -176,6 +176,18 @@ export function micBindingToPlaceCandidate(b: MicBinding): PlaceCandidate {
 // era invece sempre presente anche sul record senza coordinate — possibile fallback futuro
 // (geocodifica) per i record senza geometria, oggi scartati dal FILTER sotto: latitude/longitude
 // sono NOT NULL su dtrek_places, un indirizzo da solo non basta.
+// Query risultata troppo pesante per l'endpoint (visto dal vivo: "MiC SPARQL 500", limit 300,
+// regione Lazio — un timeout del motore SPARQL, non un errore nella query). Causa probabile: 4
+// rami UNION per le coordinate dentro un OPTIONAL, sull'intera classe CulturalInstituteOrSite
+// (che il catalogo generale del MiC descrive come milioni di schede) senza restringere prima il
+// numero di istituti da esaminare. Sotto-query interna con un proprio LIMIT (CANDIDATE_POOL,
+// indipendente da quello richiesto dal chiamante) — pattern SPARQL standard per limitare il
+// lavoro del motore PRIMA dei join costosi, non dopo. Conseguenza: con una copertura bassa delle
+// coordinate nel catalogo, il numero di risultati restituiti può essere inferiore a `limit` anche
+// se esistono altri istituti con coordinate oltre il pool esaminato — non un tetto ai risultati
+// possibili, un tetto al lavoro fatto per trovarli.
+const CANDIDATE_POOL = 5000
+
 function buildSparqlQuery(regionLabel?: string, limit = 5000): string {
   const regionFilter = regionLabel
     ? `FILTER(CONTAINS(LCASE(?regionLabel), LCASE("${regionLabel.replace(/"/g, '')}")))`
@@ -189,8 +201,13 @@ PREFIX geo: <http://www.w3.org/2003/01/geo/wgs84_pos#>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 
 SELECT DISTINCT ?cis ?name ?typeLabel ?comune ?address ?lat ?long WHERE {
-  ?cis a cis:CulturalInstituteOrSite ;
-       rdfs:label ?name .
+  {
+    SELECT ?cis ?name WHERE {
+      ?cis a cis:CulturalInstituteOrSite ;
+           rdfs:label ?name .
+    }
+    LIMIT ${CANDIDATE_POOL}
+  }
   OPTIONAL { ?cis cis:hasSite ?site . }
   OPTIONAL {
     ?cis loc:hasCulturalInstituteOrSiteType ?type .
