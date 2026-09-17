@@ -29,21 +29,19 @@
  * es. `http://dati.beniculturali.it/mibact/luoghi/resource/CulturalInstituteOrSite/104060`) — è
  * questo l'identificativo MiC usato come `sourceId` sotto (piano §48.12, mai inventato).
  *
- * ── Coordinate: DUE tentativi falliti, serve la struttura reale ────────────────────────────────
- * Tentativo 1: `geo:lat`/`geo:long` (WGS84) su `?site` → 0 risultati contro l'endpoint reale
- * (--limit 20, regione Lazio, 2026-09-16).
- * Tentativo 2: `clv:lat`/`clv:long` su una `clv:Geometry` raggiunta da CIS/Site/Feature via
- * `clv:hasGeometry` (dedotto da `location.owl` + `CLV-AP_IT.rdf` di ICCD-MiBACT/ArCo e AgID su
- * GitHub, non un blog di terzi) → di nuovo 0 risultati (--limit 1500, regione Lazio, stesso giorno).
- * Nessuno dei due ambienti che hanno scritto queste query (questa sessione inclusa) ha MAI avuto
- * accesso di rete a dati.cultura.gov.it per verificare le ipotesi prima di eseguirle — entrambe
- * dedotte dalla documentazione/ontologia, non da un dato reale osservato.
- *
- * Invece di un terzo tentativo alla cieca: `runDescribe()` più sotto (`--describe`) interroga
- * l'endpoint reale per UN CulturalInstituteOrSite vero e ne dumpa tutte le triple dirette più un
- * salto in più (per attraversare TimeIndexedTypedLocation/Site senza già sapere quale proprietà
- * cercare) — la struttura REALE dei dati pubblicati, non quella dedotta dallo schema. Il prossimo
- * fix a `buildSparqlQuery` va scritto leggendo l'output di quel dump, non da altra documentazione.
+ * ── Coordinate: risolto leggendo i dati reali, dopo due tentativi dedotti dalla sola ontologia ──
+ * Tentativo 1 (`geo:lat`/`geo:long` su `?site`) e tentativo 2 (`clv:lat`/`clv:long` via
+ * `clv:hasGeometry` su CIS/Site/Feature, dedotto da `location.owl`+`CLV-AP_IT.rdf`) hanno dato
+ * entrambi 0 risultati contro l'endpoint reale — dedotti dalla documentazione, mai verificati.
+ * `runDescribe()` più sotto (`--describe`) ha finalmente dumpato la struttura vera di un
+ * CulturalInstituteOrSite reale (7275, Archivio di Stato di Firenze — Fondo Coppedè,
+ * 2026-09-17): il collegamento è `cis:hasSite` (confermato, `hasTimeIndexedTypedLocation` non è
+ * mai apparso nei dati reali), e la geometria è `clvapit:hasGeometry` sul **Site** stesso →
+ * `clvapit:lat`/`clvapit:long` — è l'esempio ufficiale nel commento della classe Site restituito
+ * dall'endpoint stesso, non più una deduzione. Nota: quel record specifico NON aveva coordinate
+ * popolate (solo un indirizzo strutturato via `cis:siteAddress`) — non è detto che tutti i record
+ * ArCo abbiano la geometria, verificare la copertura reale con un dry-run prima di contare su un
+ * tasso di successo alto.
  *
  * La tipologia (`hasCulturalInstituteOrSiteType`) punta a una risorsa di un thesaurus MiC di cui
  * non è stato possibile verificare i valori esatti in questa sessione — la classificazione sotto
@@ -161,11 +159,23 @@ export function micBindingToPlaceCandidate(b: MicBinding): PlaceCandidate {
 }
 
 // ── SPARQL (server-side, batch — MAI per-ricerca-utente, piano §9/§21) ─────────────────────────
-// Coordinate: clv:lat/clv:long sono proprietà dirette di una clv:Geometry (non geo:lat/geo:long su
-// ?site, che ha dato 0 risultati nel primo dry-run reale — vedi nota in cima al file). clv:hasGeometry
-// ha domain owl:Thing, quindi non è certo se sia attaccata al CIS, al Site o al Feature indirizzo:
-// il path `|` sotto prova tutti e tre, prendendo il primo che bind. Ancora da confermare con un
-// --limit piccolo contro l'endpoint reale prima di alzarlo.
+// Collegamento CONFERMATO su dati reali (2026-09-17, --describe su CulturalInstituteOrSite/7275 —
+// Archivio di Stato di Firenze): `?cis cis:hasSite ?site` (non hasTimeIndexedTypedLocation, mai
+// apparso nei dati reali). Quel record però non aveva coordinate — solo un indirizzo strutturato.
+//
+// Le coordinate: un SECONDO record reale (CulturalInstituteOrSite/100005, "Museo civico
+// aufidenate", trovato dall'utente su LodView) le aveva sì, ma con un vocabolario DIVERSO da
+// quello confermato nell'esempio ufficiale della classe Site: `geo:lat`/`geo:long` (WGS84 Basic
+// Geo) direttamente sul nodo, oltre a `clvapit:hasGeometry`. Il catalogo ArCo non è uniforme —
+// schede diverse, catalogate in periodi diversi, sembrano usare vocabolari diversi. La query sotto
+// prova ENTRAMBI i vocabolari (`geo:lat`/`geo:long` diretto, e `clvapit:hasGeometry` →
+// `clvapit:lat`/`clvapit:long`) su ENTRAMBI i punti di aggancio (CIS e Site), invece di sceglierne
+// uno solo — ogni ramo è supportato da un'osservazione reale, non una nuova ipotesi.
+//
+// L'indirizzo (siteAddress → clvapit:fullAddress, un testo leggibile tipo "Via Roma, 1 - Firenze")
+// era invece sempre presente anche sul record senza coordinate — possibile fallback futuro
+// (geocodifica) per i record senza geometria, oggi scartati dal FILTER sotto: latitude/longitude
+// sono NOT NULL su dtrek_places, un indirizzo da solo non basta.
 function buildSparqlQuery(regionLabel?: string, limit = 5000): string {
   const regionFilter = regionLabel
     ? `FILTER(CONTAINS(LCASE(?regionLabel), LCASE("${regionLabel.replace(/"/g, '')}")))`
@@ -175,26 +185,31 @@ function buildSparqlQuery(regionLabel?: string, limit = 5000): string {
 PREFIX cis: <http://dati.beniculturali.it/cis/>
 PREFIX loc: <https://w3id.org/arco/ontology/location/>
 PREFIX clvapit: <https://w3id.org/italia/onto/CLV/>
+PREFIX geo: <http://www.w3.org/2003/01/geo/wgs84_pos#>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 
 SELECT DISTINCT ?cis ?name ?typeLabel ?comune ?address ?lat ?long WHERE {
   ?cis a cis:CulturalInstituteOrSite ;
        rdfs:label ?name .
+  OPTIONAL { ?cis cis:hasSite ?site . }
   OPTIONAL {
     ?cis loc:hasCulturalInstituteOrSiteType ?type .
     ?type rdfs:label ?typeLabel .
   }
   OPTIONAL {
-    ?cis (clvapit:hasGeometry
-         | loc:hasTimeIndexedTypedLocation/loc:atSite/clvapit:hasGeometry
-         | loc:hasTimeIndexedTypedLocation/loc:atLocation/clvapit:hasGeometry) ?geom .
-    ?geom clvapit:lat ?lat ; clvapit:long ?long .
+    { ?cis geo:lat ?lat ; geo:long ?long . }
+    UNION
+    { ?site geo:lat ?lat ; geo:long ?long . }
+    UNION
+    { ?cis clvapit:hasGeometry ?geom . ?geom clvapit:lat ?lat ; clvapit:long ?long . }
+    UNION
+    { ?site clvapit:hasGeometry ?geom . ?geom clvapit:lat ?lat ; clvapit:long ?long . }
   }
   OPTIONAL {
-    ?cis loc:hasTimeIndexedTypedLocation/loc:atLocation ?feature .
-    ?feature clvapit:hasAddress ?addr .
-    ?addr rdfs:label ?address .
+    ?site cis:siteAddress ?addr .
+    ?addr clvapit:fullAddress ?address .
     OPTIONAL { ?addr clvapit:hasCity ?comuneRes . ?comuneRes rdfs:label ?comune . }
+    OPTIONAL { ?addr clvapit:hasRegion ?regionRes . ?regionRes rdfs:label ?regionLabel . }
   }
   FILTER(BOUND(?lat) && BOUND(?long))
   ${regionFilter}
