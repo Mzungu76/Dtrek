@@ -189,11 +189,20 @@ export function micBindingToPlaceCandidate(b: MicBinding): PlaceCandidate {
 //      hasSite/siteAddress/hasRegion spostati lì) — con una regione specificata, i candidati
 //      esaminati sono già quelli di quella regione, non un pool casuale su tutta Italia di cui la
 //      maggior parte verrebbe scartata dopo (come nella versione precedente).
-// CANDIDATE_POOL resta un tetto al lavoro del motore, non ai risultati possibili — con una
+// CANDIDATE_POOL_CAP resta un tetto al lavoro del motore, non ai risultati possibili — con una
 // copertura bassa delle coordinate, il numero di risultati può restare sotto `limit`.
-const CANDIDATE_POOL = 2000
+//
+// FIX (2026-09-17, terzo round — timeout visto dal vivo, log reale): il pool era fisso a 2000
+// indipendentemente da `--limit`, quindi anche un test con `--limit 20` (il default del workflow)
+// forzava comunque alla sotto-query un JOIN su 2000 candidati prima di scartarne la stragrande
+// maggioranza. Ora scala con `limit` (4x, con un minimo di 50 per non essere troppo stretto sui
+// filtri regione+coordinate a valle) — non è ancora verificato che basti a evitare il timeout
+// dell'endpoint, ma è una regressione nota e certa (query inutilmente pesante su run piccoli) da
+// correggere comunque prima di provare altre ipotesi.
+const CANDIDATE_POOL_CAP = 2000
 
 function buildSparqlQuery(regionLabel?: string, limit = 5000): string {
+  const candidatePool = Math.min(CANDIDATE_POOL_CAP, Math.max(limit * 4, 50))
   const regionFilter = regionLabel
     ? `FILTER(CONTAINS(LCASE(?regionLabel), LCASE("${regionLabel.replace(/"/g, '')}")))`
     : ''
@@ -219,7 +228,7 @@ SELECT DISTINCT ?cis ?name ?typeLabel ?comune ?address ?lat ?long WHERE {
       }
       ${regionFilter}
     }
-    LIMIT ${CANDIDATE_POOL}
+    LIMIT ${candidatePool}
   }
   OPTIONAL {
     ?cis loc:hasCulturalInstituteOrSiteType ?type .
