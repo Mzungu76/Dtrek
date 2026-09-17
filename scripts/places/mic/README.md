@@ -75,6 +75,28 @@ contro l'endpoint reale via il workflow in `mode: probe`) ha bisezionato la quer
 match parziale — la regione passata va scritta con la stessa capitalizzazione del `rdfs:label` nel
 grafo (es. "Lazio", non "lazio"/"LAZIO").
 
+**Nota di prestazioni (2026-09-17, quarto round — bug segnalato dal vivo, non un'ipotesi)**: un run
+`write` con "Regione: tutta Italia" e `--limit 10000` ha dato **0 risultati**, senza alcun errore
+HTTP. Causa trovata rileggendo `buildSparqlQuery`: `CANDIDATE_POOL_CAP` (2000) troncava la
+sotto-query dei candidati **prima** del filtro sulle coordinate. Con un filtro regione questo è
+innocuo (i candidati sono già ristretti a quella regione), ma senza filtro regione ("tutta Italia")
+quel pool era una fetta **arbitraria** dell'intero catalogo (nessun `ORDER BY`, ordine deciso dal
+motore — verosimilmente correlato all'ID: il record 7275 usato da `--describe`, un archivio di
+stato, non aveva coordinate; il record 100005 con coordinate reali è molto più avanti). Con una
+copertura delle coordinate bassa e non uniforme nel catalogo, quella fetta di 2000 poteva contenere
+zero record georeferenziati — esattamente il bug osservato.
+
+Fix: il filtro coordinate (i 4 `OPTIONAL` + `COALESCE` + `FILTER(BOUND(...))`) è entrato nella
+stessa sotto-query del filtro regione, **prima** del suo `LIMIT` — che ora è direttamente `limit`
+invece di un pool separato (`CANDIDATE_POOL_CAP` rimosso). Il `LIMIT` tronca così solo candidati che
+hanno già coordinate valide, mai un campione arbitrario da filtrare dopo. Aggiunto anche
+`scripts/places/mic/probe.ts` → `tutta-italia-con-coordinate`, che riproduce a basso costo
+(`LIMIT 20`) la nuova forma senza filtro regione, per verificare via `mode: probe` che il motore
+trovi record georeferenziati scandendo il catalogo intero entro un timeout ragionevole, prima di un
+`write` con `--limit` alto. **Non ancora verificato dal vivo** (sandbox senza rete verso
+l'endpoint, vedi sezione "Bloccante di rete" sotto) — testare prima con `mode: probe` o
+`mode: dry-run --limit 20` senza regione.
+
 Workflow: `mode: dry-run`/`write` in `import-places-mic.yml` (`mode: describe` e `mode: probe`
 restano disponibili per ulteriore diagnostica, nessun secret Supabase richiesto).
 

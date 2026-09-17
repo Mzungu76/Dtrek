@@ -189,18 +189,13 @@ export function micBindingToPlaceCandidate(b: MicBinding): PlaceCandidate {
 //      hasSite/siteAddress/hasRegion spostati lì) — con una regione specificata, i candidati
 //      esaminati sono già quelli di quella regione, non un pool casuale su tutta Italia di cui la
 //      maggior parte verrebbe scartata dopo (come nella versione precedente).
-// CANDIDATE_POOL_CAP resta un tetto al lavoro del motore, non ai risultati possibili — con una
-// copertura bassa delle coordinate, il numero di risultati può restare sotto `limit`.
 //
 // FIX (2026-09-17, terzo round — timeout visto dal vivo, log reale): il pool era fisso a 2000
 // indipendentemente da `--limit`, quindi anche un test con `--limit 20` (il default del workflow)
 // forzava comunque alla sotto-query un JOIN su 2000 candidati prima di scartarne la stragrande
-// maggioranza. Ora scala con `limit` (4x, con un minimo di 50 per non essere troppo stretto sui
-// filtri regione+coordinate a valle) — non è ancora verificato che basti a evitare il timeout
-// dell'endpoint, ma è una regressione nota e certa (query inutilmente pesante su run piccoli) da
-// correggere comunque prima di provare altre ipotesi.
-const CANDIDATE_POOL_CAP = 2000
-
+// maggioranza. Scalato con `limit` (4x, minimo 50) — vedi però FIX successivo: quel pool è stato
+// rimosso del tutto, la ragione è sotto.
+//
 // FIX (2026-09-17, isolato con scripts/places/mic/probe.ts contro l'endpoint reale — non
 // un'ipotesi): il filtro regione con CONTAINS/LCASE, dopo i due salti OPTIONAL
 // siteAddress→hasRegion, fa esplodere lo stimatore di costo di Virtuoso — rifiuto immediato
@@ -209,8 +204,31 @@ const CANDIDATE_POOL_CAP = 2000
 // (200, <300ms, risultati corretti) — probe `combo-candidati-uguaglianza-regione`. Compromesso
 // accettato: l'uguaglianza è case-sensitive e non fa più match parziale — la regione va passata
 // con la stessa capitalizzazione usata da rdfs:label nel grafo (es. "Lazio", non "lazio"/"LAZIO").
+//
+// FIX (2026-09-17, quarto round — bug segnalato dal vivo: "Regione: tutta Italia, Limit: 10000" →
+// 0 risultati, nessun errore HTTP). Causa trovata rileggendo la query, non un'altra ipotesi sui
+// dati: `CANDIDATE_POOL_CAP` (2000, il tetto della riga `Math.min` qui sopra prima di questo fix)
+// troncava la sotto-query dei candidati PRIMA del filtro sulle coordinate — con un filtro regione,
+// quel troncamento è innocuo perché i candidati sono già ristretti a una regione. Senza filtro
+// regione ("tutta Italia"), il pool da 2000 era una fetta ARBITRARIA del catalogo intero (nessun
+// ORDER BY — ordine deciso dal motore, verosimilmente correlato all'ID/inserimento: il record
+// 7275 usato da `--describe`, un archivio di stato, non aveva coordinate; il record 100005 con
+// coordinate reali è molto più avanti). Con una copertura bassa e non uniforme delle coordinate nel
+// catalogo, quella fetta arbitraria di 2000 può benissimo non contenere NESSUN record georeferenziato
+// — esattamente il bug osservato (0/2000, non un campione a caso che avrebbe dato una piccola
+// percentuale).
+//
+// Fix: il filtro sulle coordinate (i 4 OPTIONAL + COALESCE + FILTER BOUND) entra ORA nella stessa
+// sotto-query del filtro regione, PRIMA del suo LIMIT — che diventa direttamente `limit` invece di
+// un pool separato. Così il LIMIT tronca solo candidati che hanno già coordinate valide, mai un
+// campione arbitrario da filtrare dopo. Il join tipo (`hasCulturalInstituteOrSiteType`) resta fuori
+// nella query esterna: OPTIONAL, non riduce il conteggio di righe con coordinate, e il DISTINCT +
+// LIMIT esterno restano a proteggere da un eventuale fan-out se un CIS avesse più tipi.
+// Non verificato dal vivo (sandbox senza rete verso l'endpoint, vedi README §"Bloccante di rete"):
+// resta il rischio che, senza filtro regione, il motore debba scandire una porzione ampia del
+// catalogo per trovare `limit` record georeferenziati — testare con `--dry-run --limit 20` (o il
+// nuovo probe `tutta-italia-con-coordinate` in probe.ts) prima di un `write` con limit alto.
 function buildSparqlQuery(regionLabel?: string, limit = 5000): string {
-  const candidatePool = Math.min(CANDIDATE_POOL_CAP, Math.max(limit * 4, 50))
   const regionFilter = regionLabel
     ? `FILTER(?regionLabel = "${regionLabel.replace(/"/g, '')}")`
     : ''
@@ -224,7 +242,7 @@ PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 
 SELECT DISTINCT ?cis ?name ?typeLabel ?comune ?regionLabel ?address ?lat ?long WHERE {
   {
-    SELECT ?cis ?name ?site ?address ?comune ?regionLabel WHERE {
+    SELECT ?cis ?name ?site ?address ?comune ?regionLabel ?lat ?long WHERE {
       ?cis a cis:CulturalInstituteOrSite ;
            rdfs:label ?name .
       OPTIONAL { ?cis cis:hasSite ?site . }
@@ -235,20 +253,20 @@ SELECT DISTINCT ?cis ?name ?typeLabel ?comune ?regionLabel ?address ?lat ?long W
         OPTIONAL { ?addr clvapit:hasRegion ?regionRes . ?regionRes rdfs:label ?regionLabel . }
       }
       ${regionFilter}
+      OPTIONAL { ?cis geo:lat ?lat1 ; geo:long ?long1 . }
+      OPTIONAL { ?site geo:lat ?lat2 ; geo:long ?long2 . }
+      OPTIONAL { ?cis clvapit:hasGeometry ?geomA . ?geomA clvapit:lat ?lat3 ; clvapit:long ?long3 . }
+      OPTIONAL { ?site clvapit:hasGeometry ?geomB . ?geomB clvapit:lat ?lat4 ; clvapit:long ?long4 . }
+      BIND(COALESCE(?lat1, ?lat2, ?lat3, ?lat4) AS ?lat)
+      BIND(COALESCE(?long1, ?long2, ?long3, ?long4) AS ?long)
+      FILTER(BOUND(?lat) && BOUND(?long))
     }
-    LIMIT ${candidatePool}
+    LIMIT ${limit}
   }
   OPTIONAL {
     ?cis loc:hasCulturalInstituteOrSiteType ?type .
     ?type rdfs:label ?typeLabel .
   }
-  OPTIONAL { ?cis geo:lat ?lat1 ; geo:long ?long1 . }
-  OPTIONAL { ?site geo:lat ?lat2 ; geo:long ?long2 . }
-  OPTIONAL { ?cis clvapit:hasGeometry ?geomA . ?geomA clvapit:lat ?lat3 ; clvapit:long ?long3 . }
-  OPTIONAL { ?site clvapit:hasGeometry ?geomB . ?geomB clvapit:lat ?lat4 ; clvapit:long ?long4 . }
-  BIND(COALESCE(?lat1, ?lat2, ?lat3, ?lat4) AS ?lat)
-  BIND(COALESCE(?long1, ?long2, ?long3, ?long4) AS ?long)
-  FILTER(BOUND(?lat) && BOUND(?long))
 }
 LIMIT ${limit}`
 }
