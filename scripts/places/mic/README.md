@@ -138,6 +138,30 @@ accettato: un'etichetta reale con capitalizzazione diversa dalla whitelist verre
 silenziosamente — "Lazio" nel grafo usa però esattamente questa capitalizzazione (round 3), verificato
 su dato reale. Non ancora riverificato dal vivo dopo questo fix.
 
+**Nota di prestazioni (2026-09-17, settimo round — bug segnalato dal vivo, non un'ipotesi)**: il fix
+del round 6 ha eliminato il crash (grazie al `try`/`catch`), ma il run reale ("tutta Italia",
+`mode: write`) ha fallito su **ogni singola regione provata** (Marche, Piemonte, Calabria,
+Emilia-Romagna, Friuli-Venezia Giulia, Molise, Trentino-Alto Adige, Veneto — tutte etichette reali,
+confermate dalla whitelist, non un valore sporco), sempre con lo **stesso identico** numero di stima
+negativo (`-1990249984`). Uno stesso numero su regioni con cardinalità molto diversa tra loro esclude
+un problema del valore filtrato — punta alla FORMA della query introdotta al round 4: i 4 `OPTIONAL`
+coordinate + `COALESCE` + `FILTER(BOUND(...))` erano stati spostati DENTRO la stessa sotto-query del
+filtro regione (6 `OPTIONAL` totali in un solo scope, con un'uguaglianza e un `FILTER(BOUND(...))`)
+— stesso genere di collasso combinatorio già visto al round 2/3, solo con un'altra combinazione di
+predicati. **Risultato: 0 record scritti**, confermato in Supabase (488 invariati, nessun nuovo
+inserimento).
+
+Fix: le coordinate tornano nella query ESTERNA, fuori dalla sotto-query filtrata per regione —
+esattamente la struttura del round 3, **già verificata con una scrittura reale riuscita** (495 record
+importati in Lazio, confermati in Supabase prima di questo round). Il punto chiave che rende sicuro
+questo ritorno: da quando "tutta Italia" passa sempre da `fetchAllRegions`, `buildSparqlQuery` non
+viene più chiamata senza un `regionLabel` reale — il caso che il fix del round 4 doveva risolvere
+(scansione dell'intero catalogo senza alcun filtro) non può più accadere da nessun punto di chiamata
+attuale, quindi il pool di candidati scalato (`CANDIDATE_POOL_CAP`, tornato) resta sempre limitato a
+una singola regione, mai a un campione arbitrario su tutta Italia. Aggiunto
+`produzione-round6-coordinate-esterne` a `probe.ts` per riverificare questa struttura isolata prima di
+un altro `write`. Non ancora riverificato dal vivo dopo questo fix.
+
 Workflow: `mode: dry-run`/`write` in `import-places-mic.yml` (`mode: describe` e `mode: probe`
 restano disponibili per ulteriore diagnostica, nessun secret Supabase richiesto).
 

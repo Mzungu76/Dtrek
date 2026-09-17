@@ -205,30 +205,37 @@ export function micBindingToPlaceCandidate(b: MicBinding): PlaceCandidate {
 // accettato: l'uguaglianza è case-sensitive e non fa più match parziale — la regione va passata
 // con la stessa capitalizzazione usata da rdfs:label nel grafo (es. "Lazio", non "lazio"/"LAZIO").
 //
-// FIX (2026-09-17, quarto round — bug segnalato dal vivo: "Regione: tutta Italia, Limit: 10000" →
-// 0 risultati, nessun errore HTTP). Causa trovata rileggendo la query, non un'altra ipotesi sui
-// dati: `CANDIDATE_POOL_CAP` (2000, il tetto della riga `Math.min` qui sopra prima di questo fix)
-// troncava la sotto-query dei candidati PRIMA del filtro sulle coordinate — con un filtro regione,
-// quel troncamento è innocuo perché i candidati sono già ristretti a una regione. Senza filtro
-// regione ("tutta Italia"), il pool da 2000 era una fetta ARBITRARIA del catalogo intero (nessun
-// ORDER BY — ordine deciso dal motore, verosimilmente correlato all'ID/inserimento: il record
-// 7275 usato da `--describe`, un archivio di stato, non aveva coordinate; il record 100005 con
-// coordinate reali è molto più avanti). Con una copertura bassa e non uniforme delle coordinate nel
-// catalogo, quella fetta arbitraria di 2000 può benissimo non contenere NESSUN record georeferenziato
-// — esattamente il bug osservato (0/2000, non un campione a caso che avrebbe dato una piccola
-// percentuale).
+// FIX (2026-09-17, quarto round, di un'altra sessione concorrente — bug segnalato dal vivo:
+// "Regione: tutta Italia, Limit: 10000" → 0 risultati, nessun errore HTTP). All'epoca `buildSparqlQuery`
+// veniva ancora chiamata anche SENZA alcun filtro regione per "tutta Italia" — il pool fisso di
+// candidati (allora 2000) era una fetta ARBITRARIA dell'intero catalogo (nessun `ORDER BY`), che con
+// una copertura coordinate bassa e non uniforme poteva benissimo non contenere NESSUN record
+// georeferenziato. Il fix di quel round aveva spostato i 4 `OPTIONAL` coordinate + `COALESCE` +
+// `FILTER(BOUND(...))` DENTRO la stessa sotto-query del filtro regione, prima del suo `LIMIT`.
 //
-// Fix: il filtro sulle coordinate (i 4 OPTIONAL + COALESCE + FILTER BOUND) entra ORA nella stessa
-// sotto-query del filtro regione, PRIMA del suo LIMIT — che diventa direttamente `limit` invece di
-// un pool separato. Così il LIMIT tronca solo candidati che hanno già coordinate valide, mai un
-// campione arbitrario da filtrare dopo. Il join tipo (`hasCulturalInstituteOrSiteType`) resta fuori
-// nella query esterna: OPTIONAL, non riduce il conteggio di righe con coordinate, e il DISTINCT +
-// LIMIT esterno restano a proteggere da un eventuale fan-out se un CIS avesse più tipi.
-// Non verificato dal vivo (sandbox senza rete verso l'endpoint, vedi README §"Bloccante di rete"):
-// resta il rischio che, senza filtro regione, il motore debba scandire una porzione ampia del
-// catalogo per trovare `limit` record georeferenziati — testare con `--dry-run --limit 20` (o il
-// nuovo probe `tutta-italia-con-coordinate` in probe.ts) prima di un `write` con limit alto.
+// FIX (2026-09-17, sesto round, bis — bug segnalato dal vivo, log reale): quella struttura, con
+// l'uguaglianza esatta invece di CONTAINS/LCASE, ha dato lo STESSO tipo di rifiuto del pianificatore
+// visto al round 3 (`Virtuoso 42000 Error The estimated execution time ... exceeds the limit`, questa
+// volta un numero negativo — tipico overflow), ma stavolta su OGNI singola regione provata (Marche,
+// Piemonte, Calabria, Emilia-Romagna, Friuli-Venezia Giulia, Molise, Trentino-Alto Adige, Veneto —
+// tutte etichette reali, confermate dalla whitelist del round precedente, non un valore sporco).
+// Un numero di stima IDENTICO su regioni con cardinalità reale molto diversa tra loro esclude che sia
+// un problema del valore filtrato — è la FORMA della query: 6 `OPTIONAL` (hasSite, siteAddress+city,
+// siteAddress+region, più i 4 delle coordinate) combinati con un'uguaglianza e un `FILTER(BOUND(...))`
+// nello stesso scope fa esplodere lo stimatore, come già visto in altra forma al round 2/3.
+//
+// Il punto chiave che sblocca la scelta: da quando "tutta Italia" passa da `fetchAllRegions` (sopra),
+// `buildSparqlQuery` non viene MAI più chiamata senza un `regionLabel` reale — il caso che il fix del
+// round 4 doveva risolvere (scansione dell'intero catalogo senza filtro) non può più accadere da
+// nessun punto di chiamata attuale. Si può quindi tornare alla struttura del round 3, GIÀ VERIFICATA
+// con una scrittura reale riuscita (495 record importati in Lazio, confermati in Supabase): i 4
+// `OPTIONAL` coordinate + `COALESCE` + `FILTER(BOUND(...))` nella query ESTERNA, fuori dalla
+// sotto-query filtrata per regione — che riguadagna un pool di candidati proprio (scalato con
+// `limit`, mai un pool arbitrario su tutto il catalogo perché la regione filtra già a monte).
+const CANDIDATE_POOL_CAP = 2000
+
 function buildSparqlQuery(regionLabel?: string, limit = 5000): string {
+  const candidatePool = Math.min(CANDIDATE_POOL_CAP, Math.max(limit * 4, 50))
   const regionFilter = regionLabel
     ? `FILTER(?regionLabel = "${regionLabel.replace(/"/g, '')}")`
     : ''
@@ -242,7 +249,7 @@ PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 
 SELECT DISTINCT ?cis ?name ?typeLabel ?comune ?regionLabel ?address ?lat ?long WHERE {
   {
-    SELECT ?cis ?name ?site ?address ?comune ?regionLabel ?lat ?long WHERE {
+    SELECT ?cis ?name ?site ?address ?comune ?regionLabel WHERE {
       ?cis a cis:CulturalInstituteOrSite ;
            rdfs:label ?name .
       OPTIONAL { ?cis cis:hasSite ?site . }
@@ -253,20 +260,20 @@ SELECT DISTINCT ?cis ?name ?typeLabel ?comune ?regionLabel ?address ?lat ?long W
         OPTIONAL { ?addr clvapit:hasRegion ?regionRes . ?regionRes rdfs:label ?regionLabel . }
       }
       ${regionFilter}
-      OPTIONAL { ?cis geo:lat ?lat1 ; geo:long ?long1 . }
-      OPTIONAL { ?site geo:lat ?lat2 ; geo:long ?long2 . }
-      OPTIONAL { ?cis clvapit:hasGeometry ?geomA . ?geomA clvapit:lat ?lat3 ; clvapit:long ?long3 . }
-      OPTIONAL { ?site clvapit:hasGeometry ?geomB . ?geomB clvapit:lat ?lat4 ; clvapit:long ?long4 . }
-      BIND(COALESCE(?lat1, ?lat2, ?lat3, ?lat4) AS ?lat)
-      BIND(COALESCE(?long1, ?long2, ?long3, ?long4) AS ?long)
-      FILTER(BOUND(?lat) && BOUND(?long))
     }
-    LIMIT ${limit}
+    LIMIT ${candidatePool}
   }
   OPTIONAL {
     ?cis loc:hasCulturalInstituteOrSiteType ?type .
     ?type rdfs:label ?typeLabel .
   }
+  OPTIONAL { ?cis geo:lat ?lat1 ; geo:long ?long1 . }
+  OPTIONAL { ?site geo:lat ?lat2 ; geo:long ?long2 . }
+  OPTIONAL { ?cis clvapit:hasGeometry ?geomA . ?geomA clvapit:lat ?lat3 ; clvapit:long ?long3 . }
+  OPTIONAL { ?site clvapit:hasGeometry ?geomB . ?geomB clvapit:lat ?lat4 ; clvapit:long ?long4 . }
+  BIND(COALESCE(?lat1, ?lat2, ?lat3, ?lat4) AS ?lat)
+  BIND(COALESCE(?long1, ?long2, ?long3, ?long4) AS ?long)
+  FILTER(BOUND(?lat) && BOUND(?long))
 }
 LIMIT ${limit}`
 }
