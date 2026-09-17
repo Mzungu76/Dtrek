@@ -1,0 +1,90 @@
+name: Enrich Places — Popolazione Comuni (dtrek_places.population + subtype)
+
+# Manuale (workflow_dispatch), stesso schema di import-places-istat.yml — leggere quel file prima
+# di modificare questo (Node 24 per le action, Node 22 per il client Supabase, fallback
+# SUPABASE_SERVICE_ROLE_KEY, retry con backoff sulle chiamate di rete: tutti già applicati qui).
+#
+# Arricchisce (mai crea righe) le Mete borgo_citta importate da ISTAT con popolazione e una prima
+# classificazione borgo/città (piano §6 — mai "Comune = Borgo": oggi Roma e un Comune di 80
+# abitanti sono indistinguibili). Fonte: CSV comunitario su GitHub (nessun file da scaricare a
+# mano, a differenza della popolazione ISTAT ufficiale che vive su demo.istat.it, portale separato
+# e irraggiungibile da ogni ambiente usato finora — vedi commento in cima a
+# scripts/places/istat/population.ts).
+#
+# Come Wikidata (e diversamente da ISTAT/MiC): anche il dry-run legge da Supabase, per calcolare e
+# mostrare il tasso di abbinamento PRIMA di scrivere — un tasso basso segnalerebbe un'ipotesi di
+# formato del codice ISTAT sbagliata (stesso tipo di errore già fatto due volte sulle coordinate
+# MiC), non qualcosa da scoprire dopo aver scritto migliaia di righe.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dry-run: mostra il tasso di abbinamento e un esempio, nessuna scrittura. write: aggiorna population/subtype su Supabase."
+        required: true
+        type: choice
+        options:
+          - dry-run
+          - write
+        default: dry-run
+      citta_threshold:
+        description: "Soglia di popolazione per classificare 'citta' invece di 'borgo' — punto di partenza Dtrek, non una definizione ufficiale ISTAT."
+        required: false
+        type: string
+        default: "15000"
+      limit:
+        description: "Numero massimo di righe da processare (vuoto = tutte le ~7.896). Utile per un primo test piccolo."
+        required: false
+        type: string
+        default: ""
+
+concurrency:
+  group: import-places
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  enrich:
+    runs-on: ubuntu-latest
+    env:
+      MODE: ${{ inputs.mode }}
+      CITTA_THRESHOLD: ${{ inputs.citta_threshold }}
+      LIMIT: ${{ inputs.limit }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Verifica secret Supabase
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_SERVICE_KEY:-}" ]; then
+            echo "Secret Supabase mancanti nel repository — serve SUPABASE_URL e (SUPABASE_SERVICE_KEY o SUPABASE_SERVICE_ROLE_KEY). Vedi Settings > Secrets and variables > Actions." >&2
+            exit 1
+          fi
+          echo "OK: secret presenti."
+
+      - name: Arricchimento popolazione + subtype
+        run: |
+          set -euo pipefail
+          ARGS=(scripts/places/istat/population.ts --citta-threshold "$CITTA_THRESHOLD")
+          if [ "$MODE" = "dry-run" ]; then ARGS+=(--dry-run); fi
+          if [ -n "$LIMIT" ]; then ARGS+=(--limit "$LIMIT"); fi
+          npx tsx "${ARGS[@]}" | tee /tmp/population-enrich.txt
+          {
+            echo "### Enrich Places — Popolazione ($MODE)"
+            echo "- Soglia città: $CITTA_THRESHOLD abitanti"
+            echo "- Limit: ${LIMIT:-tutte}"
+            echo '```'
+            cat /tmp/population-enrich.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
