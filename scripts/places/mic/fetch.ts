@@ -379,23 +379,57 @@ SELECT DISTINCT ?regionLabel WHERE {
 }
 LIMIT 100`
 
+// FIX (2026-09-17, sesto round — bug segnalato dal vivo: "tutta Italia"/limit 10000 ha dato
+// "100 regioni trovate nel grafo" — l'Italia ne ha 20 — seguito da
+// `Virtuoso 42000 Error The estimated execution time -907544064 (sec) exceeds the limit`, un numero
+// NEGATIVO tipico di un overflow di interi del pianificatore, non il rifiuto "pulito" già visto col
+// caso CONTAINS/LCASE. `clvapit:hasRegion` non è vincolato a restituire solo vere regioni — con
+// `REGION_LIST_QUERY` senza alcun filtro di validità, un'etichetta rara o sporca tra le 100 può
+// mandare in confusione lo stimatore di costo per quel valore specifico quando usato
+// nell'uguaglianza esatta. Le 20 regioni italiane sono un'enumerazione fissa e nota (non una
+// deduzione da documentazione, come il thesaurus dei tipi MiC) — filtrare l'elenco scoperto dal
+// grafo contro questa lista, invece di fidarsi di ogni valore distinto restituito, evita di
+// interrogare mai con un valore sporco. Compromesso accettato: un'etichetta reale con
+// capitalizzazione diversa da questa lista verrebbe scartata silenziosamente — già osservato però
+// che "Lazio" nel grafo usa esattamente questa capitalizzazione (round 3).
+const ITALIAN_REGIONS = new Set([
+  'Abruzzo', 'Basilicata', 'Calabria', 'Campania', 'Emilia-Romagna',
+  'Friuli-Venezia Giulia', 'Lazio', 'Liguria', 'Lombardia', 'Marche',
+  'Molise', 'Piemonte', 'Puglia', 'Sardegna', 'Sicilia', 'Toscana',
+  'Trentino-Alto Adige', 'Umbria', "Valle d'Aosta", 'Veneto',
+])
+
+// Pura, testabile senza rete.
+export function filterToKnownRegions(labels: string[]): string[] {
+  return labels.filter(label => ITALIAN_REGIONS.has(label))
+}
+
 async function fetchRegionLabels(): Promise<string[]> {
   const data = await fetchSparqlJson(REGION_LIST_QUERY) as { results: { bindings: Record<string, { value: string }>[] } }
-  return data.results.bindings
+  const raw = data.results.bindings
     .map(row => row.regionLabel?.value)
     .filter((label): label is string => !!label)
+  return filterToKnownRegions(raw)
 }
 
 async function fetchAllRegions(limit: number): Promise<MicBinding[]> {
   const regions = await fetchRegionLabels()
-  console.log(`${regions.length} regioni trovate nel grafo — interrogo una alla volta.`)
+  console.log(`${regions.length} regioni valide trovate nel grafo — interrogo una alla volta.`)
   const out: MicBinding[] = []
   for (const region of regions) {
     if (out.length >= limit) break
     const remaining = limit - out.length
-    const bindings = await querySparql(buildSparqlQuery(region, remaining))
-    console.log(`  ${region}: ${bindings.length} risultati con coordinate valide.`)
-    out.push(...bindings)
+    // FIX (sesto round): un errore su una singola regione non deve abortire l'intero "tutta
+    // Italia" — l'endpoint si è già dimostrato imprevedibile per valori/piani specifici (round 3,
+    // round 6) anche con un filtro whitelisted. Logga e continua con le regioni restanti invece di
+    // perdere tutto il lavoro già fatto.
+    try {
+      const bindings = await querySparql(buildSparqlQuery(region, remaining))
+      console.log(`  ${region}: ${bindings.length} risultati con coordinate valide.`)
+      out.push(...bindings)
+    } catch (e) {
+      console.error(`  ${region}: saltata — ${e instanceof Error ? e.message : String(e)}`)
+    }
   }
   return out
 }

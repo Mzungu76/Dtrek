@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { micTypeLabelToSiteType, micBindingToPlaceCandidate } from '../mic/fetch'
+import { micTypeLabelToSiteType, micBindingToPlaceCandidate, filterToKnownRegions } from '../mic/fetch'
 import type { MicBinding } from '../mic/fetch'
 
 describe('micTypeLabelToSiteType', () => {
@@ -73,5 +73,19 @@ describe('micBindingToPlaceCandidate', () => {
   it('region undefined se assente nel binding (comune noto, hasRegion opzionale non popolato)', () => {
     const c = micBindingToPlaceCandidate(CERAMICA)
     expect(c.region).toBeUndefined()
+  })
+})
+
+describe('filterToKnownRegions', () => {
+  it('tiene le 20 regioni italiane reali, esattamente come scritte nel grafo (round 3: "Lazio")', () => {
+    expect(filterToKnownRegions(['Lazio', 'Marche', "Valle d'Aosta"])).toEqual(['Lazio', 'Marche', "Valle d'Aosta"])
+  })
+
+  it('scarta valori che non sono una delle 20 regioni (bug: "100 regioni trovate nel grafo", causa del crash con stima negativa di Virtuoso)', () => {
+    expect(filterToKnownRegions(['Lazio', 'Roma', 'lazio', 'Repubblica di San Marino', ''])).toEqual(['Lazio'])
+  })
+
+  it('lista vuota → lista vuota, nessun errore', () => {
+    expect(filterToKnownRegions([])).toEqual([])
   })
 })
