@@ -19,6 +19,7 @@ describe('MiC probe — struttura dei probe diagnostici', () => {
       'combo-candidati-uguaglianza-regione',
       'tutta-italia-con-coordinate',
       'lista-regioni',
+      'produzione-round6-coordinate-esterne',
     ])
   })
 

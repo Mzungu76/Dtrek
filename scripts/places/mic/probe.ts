@@ -270,6 +270,50 @@ SELECT DISTINCT ?regionLabel WHERE {
   ?regionRes rdfs:label ?regionLabel .
 } LIMIT 100`,
   },
+  // ── Round 6 (2026-09-17): la struttura del round 4 (coordinate DENTRO la sotto-query filtrata per
+  // regione) ha dato lo stesso tipo di rifiuto del pianificatore del round 3, ma su TUTTE le 8
+  // regioni provate dal vivo (etichette reali, whitelisted, non un valore sporco) — con lo STESSO
+  // numero di stima negativo per ognuna, il che esclude un problema di cardinalità di un valore
+  // specifico e punta alla forma della query. Poiché "tutta Italia" ora passa sempre da
+  // fetchAllRegions (mai più buildSparqlQuery senza un regionLabel reale), si può tornare alla
+  // struttura del round 3 — GIÀ VERIFICATA con una scrittura reale riuscita (495 record importati in
+  // Lazio, confermati in Supabase): coordinate nella query ESTERNA, fuori dalla sotto-query regione.
+  // Questo probe la testa di nuovo, isolata, prima di un altro `write`.
+  {
+    name: 'produzione-round6-coordinate-esterne',
+    note: 'Struttura ripristinata al round 3 (coordinate fuori dalla sotto-query regione, con pool candidati scalato) applicata a una regione reale (Lazio) — la stessa che aveva già dato 495 risultati validi in scrittura, prima che il round 4 spostasse le coordinate dentro la sotto-query e rompesse anche il caso per-regione (round 6).',
+    query: `${PREFIXES}
+PREFIX loc: <https://w3id.org/arco/ontology/location/>
+PREFIX geo: <http://www.w3.org/2003/01/geo/wgs84_pos#>
+SELECT DISTINCT ?cis ?name ?typeLabel ?comune ?regionLabel ?address ?lat ?long WHERE {
+  {
+    SELECT ?cis ?name ?site ?address ?comune ?regionLabel WHERE {
+      ?cis a cis:CulturalInstituteOrSite ;
+           rdfs:label ?name .
+      OPTIONAL { ?cis cis:hasSite ?site . }
+      OPTIONAL {
+        ?site cis:siteAddress ?addr .
+        ?addr clvapit:fullAddress ?address .
+        OPTIONAL { ?addr clvapit:hasCity ?comuneRes . ?comuneRes rdfs:label ?comune . }
+        OPTIONAL { ?addr clvapit:hasRegion ?regionRes . ?regionRes rdfs:label ?regionLabel . }
+      }
+      FILTER(?regionLabel = "Lazio")
+    }
+    LIMIT 80
+  }
+  OPTIONAL {
+    ?cis loc:hasCulturalInstituteOrSiteType ?type .
+    ?type rdfs:label ?typeLabel .
+  }
+  OPTIONAL { ?cis geo:lat ?lat1 ; geo:long ?long1 . }
+  OPTIONAL { ?site geo:lat ?lat2 ; geo:long ?long2 . }
+  OPTIONAL { ?cis clvapit:hasGeometry ?geomA . ?geomA clvapit:lat ?lat3 ; clvapit:long ?long3 . }
+  OPTIONAL { ?site clvapit:hasGeometry ?geomB . ?geomB clvapit:lat ?lat4 ; clvapit:long ?long4 . }
+  BIND(COALESCE(?lat1, ?lat2, ?lat3, ?lat4) AS ?lat)
+  BIND(COALESCE(?long1, ?long2, ?long3, ?long4) AS ?long)
+  FILTER(BOUND(?lat) && BOUND(?long))
+} LIMIT ${PROBE_LIMIT}`,
+  },
 ]
 
 export interface ProbeResult {
