@@ -64,4 +64,14 @@ describe('micBindingToPlaceCandidate', () => {
     expect(c.subtype).toBe('altro')
     expect(c.confidence).toBe(0.6)
   })
+
+  it('region passa al candidato quando presente nel binding (bug: mai letta prima del 2026-09-17, buildSparqlQuery non la selezionava)', () => {
+    const c = micBindingToPlaceCandidate({ ...CERAMICA, region: 'Marche' })
+    expect(c.region).toBe('Marche')
+  })
+
+  it('region undefined se assente nel binding (comune noto, hasRegion opzionale non popolato)', () => {
+    const c = micBindingToPlaceCandidate(CERAMICA)
+    expect(c.region).toBeUndefined()
+  })
 })

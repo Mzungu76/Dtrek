@@ -222,9 +222,9 @@ PREFIX clvapit: <https://w3id.org/italia/onto/CLV/>
 PREFIX geo: <http://www.w3.org/2003/01/geo/wgs84_pos#>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 
-SELECT DISTINCT ?cis ?name ?typeLabel ?comune ?address ?lat ?long WHERE {
+SELECT DISTINCT ?cis ?name ?typeLabel ?comune ?regionLabel ?address ?lat ?long WHERE {
   {
-    SELECT ?cis ?name ?site ?address ?comune WHERE {
+    SELECT ?cis ?name ?site ?address ?comune ?regionLabel WHERE {
       ?cis a cis:CulturalInstituteOrSite ;
            rdfs:label ?name .
       OPTIONAL { ?cis cis:hasSite ?site . }
@@ -311,6 +311,7 @@ async function querySparql(query: string): Promise<MicBinding[]> {
       name: row.name?.value ?? 'Luogo della cultura',
       typeLabel: row.typeLabel?.value,
       comune: row.comune?.value,
+      region: row.regionLabel?.value,
       address: row.address?.value,
       lat,
       lon,
