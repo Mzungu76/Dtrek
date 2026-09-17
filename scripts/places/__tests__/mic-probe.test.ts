@@ -15,6 +15,8 @@ describe('MiC probe — struttura dei probe diagnostici', () => {
       'combo-candidati-lazio',
       'combo-candidati+tipo',
       'combo-produzione-completa',
+      'combo-candidati-senza-filtro-regione',
+      'combo-candidati-uguaglianza-regione',
     ])
   })
 

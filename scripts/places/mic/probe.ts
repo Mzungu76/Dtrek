@@ -180,6 +180,47 @@ SELECT DISTINCT ?cis ?name ?typeLabel ?comune ?address ?lat ?long WHERE {
   FILTER(BOUND(?lat) && BOUND(?long))
 } LIMIT ${PROBE_LIMIT}`,
   },
+  // ── Round 3 (2026-09-17): round 2 ha isolato la causa con un dato certo, non un'ipotesi —
+  // Virtuoso rifiuta 'combo-candidati-lazio'/'combo-candidati+tipo' in 117-118ms con un errore del
+  // PIANIFICATORE ("estimated execution time ... exceeds the limit"), non un timeout dopo
+  // esecuzione lenta. Il filtro regione CONTAINS(LCASE(?regionLabel), ...) dopo due OPTIONAL
+  // (siteAddress→hasRegion) non è indicizzabile — è quello che fa esplodere la stima. Ogni singolo
+  // pezzo preso da solo (incluso clvapit:hasRegion SENZA filtro, round 1) è invece rapido. Questi
+  // due probe verificano il fix più diretto: togliere il filtro server-side (candidato per un
+  // filtro lato client in fetch.ts) o sostituire CONTAINS/LCASE con un'uguaglianza esatta.
+  {
+    name: 'combo-candidati-senza-filtro-regione',
+    note: 'Identica a combo-candidati-lazio MA senza il FILTER regione — regionLabel resta come colonna in output, da filtrare lato client. Se questa passa, il fix è spostare il filtro regione in fetch.ts invece che in SPARQL.',
+    query: `${PREFIXES}
+SELECT ?cis ?name ?site ?address ?comune ?regionLabel WHERE {
+  ?cis a cis:CulturalInstituteOrSite ;
+       rdfs:label ?name .
+  OPTIONAL { ?cis cis:hasSite ?site . }
+  OPTIONAL {
+    ?site cis:siteAddress ?addr .
+    ?addr clvapit:fullAddress ?address .
+    OPTIONAL { ?addr clvapit:hasCity ?comuneRes . ?comuneRes rdfs:label ?comune . }
+    OPTIONAL { ?addr clvapit:hasRegion ?regionRes . ?regionRes rdfs:label ?regionLabel . }
+  }
+} LIMIT 20`,
+  },
+  {
+    name: 'combo-candidati-uguaglianza-regione',
+    note: "Identica a combo-candidati-lazio ma con FILTER(?regionLabel = \"Lazio\") (uguaglianza esatta) invece di CONTAINS/LCASE — verifica se è la non-indicizzabilità di CONTAINS/LCASE specificamente a far esplodere la stima, o qualunque FILTER a quel punto della query.",
+    query: `${PREFIXES}
+SELECT ?cis ?name ?site ?address ?comune WHERE {
+  ?cis a cis:CulturalInstituteOrSite ;
+       rdfs:label ?name .
+  OPTIONAL { ?cis cis:hasSite ?site . }
+  OPTIONAL {
+    ?site cis:siteAddress ?addr .
+    ?addr clvapit:fullAddress ?address .
+    OPTIONAL { ?addr clvapit:hasCity ?comuneRes . ?comuneRes rdfs:label ?comune . }
+    OPTIONAL { ?addr clvapit:hasRegion ?regionRes . ?regionRes rdfs:label ?regionLabel . }
+  }
+  FILTER(?regionLabel = "Lazio")
+} LIMIT 20`,
+  },
 ]
 
 export interface ProbeResult {
