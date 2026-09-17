@@ -17,21 +17,23 @@ Conoscenza"), il knowledge graph ufficiale del MiC:
   `http://dati.beniculturali.it/mibact/luoghi/resource/CulturalInstituteOrSite/104060`) — usati
   come `sourceId`.
 
-**Coordinate — due tentativi falliti, serve la struttura reale.**
-- Tentativo 1 (2026-09-16): `geo:lat`/`geo:long` (WGS84) su `?site` → 0 risultati contro l'endpoint
-  reale (`--limit 20`, regione Lazio).
-- Tentativo 2, stesso giorno: dedotto leggendo `location.owl` e `CLV-AP_IT.rdf` (ICCD-MiBACT/ArCo e
-  AgID su GitHub, non un blog di terzi) — `clv:lat`/`clv:long` come proprietà dirette di una
-  `clv:Geometry`, raggiunta da CIS/Site/Feature via `clv:hasGeometry` (path SPARQL `|` su tutti e
-  tre) → di nuovo **0 risultati** (`--limit 1500`, regione Lazio).
+**Coordinate — risolto (2026-09-17) leggendo i dati reali con `--describe`.**
+Due tentativi dedotti dalla sola documentazione (`geo:lat`/`geo:long` su `?site`, poi
+`clv:lat`/`clv:long` via `clv:hasGeometry` su CIS/Site/Feature) avevano dato entrambi 0 risultati.
+`--describe` ha dumpato la struttura vera di un `CulturalInstituteOrSite` reale (7275, Archivio di
+Stato di Firenze — Fondo Coppedè): il collegamento è `cis:hasSite` (confermato — `hasTimeIndexedTypedLocation`
+non compare mai nei dati reali), e la geometria è `clvapit:hasGeometry` sul **Site** stesso →
+`clvapit:lat`/`clvapit:long` — l'esempio ufficiale restituito dall'endpoint nel commento della
+classe Site, non più una deduzione.
 
-Nessuno dei due tentativi è stato verificato contro un dato reale prima di essere eseguito — solo
-dedotti dalla documentazione. Invece di un terzo tentativo alla cieca, `fetch.ts` supporta ora
-`--describe`: interroga l'endpoint per UN `CulturalInstituteOrSite` vero e dumpa tutte le sue triple
-dirette più un salto in più (per attraversare `TimeIndexedTypedLocation`/`Site` senza già sapere
-quale proprietà cercare). Il prossimo fix a `buildSparqlQuery` va scritto leggendo quell'output —
-la struttura reale, non altra documentazione. Workflow: `mode: describe` in
-`import-places-mic.yml`, nessun secret Supabase richiesto.
+**Nota di copertura**: il record usato per il dump non aveva coordinate popolate (solo un indirizzo
+strutturato via `cis:siteAddress` → `clvapit:fullAddress`) — non è detto che tutti i record ArCo
+abbiano la geometria. Verificare il tasso di successo reale con un dry-run prima di contare su una
+copertura alta; l'indirizzo strutturato resta un possibile fallback futuro (geocodifica) per i
+record senza coordinate.
+
+Workflow: `mode: dry-run`/`write` in `import-places-mic.yml` (`mode: describe` resta disponibile
+per ulteriore diagnostica, nessun secret Supabase richiesto).
 
 ## Cosa esisteva già nel repository (riusato come riferimento, non duplicato)
 
