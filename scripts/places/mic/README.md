@@ -117,6 +117,27 @@ poi risultata in 500 — utile a confermare la diagnosi quando il corpo dell'err
 vivo** (sandbox senza rete verso l'endpoint, vedi sezione "Bloccante di rete" sotto) — testare prima
 con `mode: probe` (in particolare `lista-regioni`) o `mode: dry-run --limit 20` senza regione.
 
+**Nota di prestazioni (2026-09-17, sesto round — bug segnalato dal vivo, non un'ipotesi)**: il fix del
+round 5 ha eliminato il 500 generico, ma il run reale ("tutta Italia", `--limit 10000`, `mode: write`)
+ha loggato `100 regioni trovate nel grafo` (l'Italia ne ha 20) seguito da
+`Virtuoso 42000 Error The estimated execution time -907544064 (sec) exceeds the limit of 4000 (sec)`
+— un numero **negativo**, tipico di un overflow di interi nel pianificatore, non il rifiuto "pulito"
+già visto col caso CONTAINS/LCASE (round 3). `REGION_LIST_QUERY` non vincola `clvapit:hasRegion` a
+restituire solo vere regioni amministrative — tra le 100 etichette distinte trovate, almeno una non è
+una regione reale e ha mandato in confusione lo stimatore di costo quando usata nell'uguaglianza
+esatta.
+
+Fix: `filterToKnownRegions` (puro, testato in `mic.test.ts`) filtra l'elenco scoperto dal grafo contro
+`ITALIAN_REGIONS`, le 20 regioni italiane reali — un'enumerazione fissa e nota (non una deduzione da
+documentazione, diversamente dal thesaurus dei tipi MiC o dai predicati RDF) — così non si interroga
+mai con un valore sporco. In più, `fetchAllRegions` ora avvolge la query per-regione in un
+`try`/`catch`: una singola regione che fallisce (l'endpoint si è già dimostrato imprevedibile per
+valori/piani specifici anche con un filtro whitelisted) logga un avviso e passa alla successiva,
+invece di abortire l'intero import perdendo il lavoro già fatto sulle regioni precedenti. Compromesso
+accettato: un'etichetta reale con capitalizzazione diversa dalla whitelist verrebbe scartata
+silenziosamente — "Lazio" nel grafo usa però esattamente questa capitalizzazione (round 3), verificato
+su dato reale. Non ancora riverificato dal vivo dopo questo fix.
+
 Workflow: `mode: dry-run`/`write` in `import-places-mic.yml` (`mode: describe` e `mode: probe`
 restano disponibili per ulteriore diagnostica, nessun secret Supabase richiesto).
 
