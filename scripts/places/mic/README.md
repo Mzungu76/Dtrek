@@ -46,12 +46,37 @@ di `clvapit:hasGeometry` — il catalogo non è uniforme tra schede catalogate i
    candidati (con una regione specificata, i candidati esaminati sono già quelli di quella regione,
    non un pool casuale su tutta Italia).
 
-`CANDIDATE_POOL` (2000) resta comunque un tetto al lavoro del motore, non ai risultati possibili —
-con una copertura bassa delle coordinate nel catalogo, il numero di risultati può restare sotto
-`--limit`.
+`CANDIDATE_POOL_CAP` (2000, scala con `--limit`) resta comunque un tetto al lavoro del motore, non
+ai risultati possibili — con una copertura bassa delle coordinate nel catalogo, il numero di
+risultati può restare sotto `--limit`.
 
-Workflow: `mode: dry-run`/`write` in `import-places-mic.yml` (`mode: describe` resta disponibile
-per ulteriore diagnostica, nessun secret Supabase richiesto).
+**Nota di prestazioni (2026-09-17, terzo round — causa isolata con dato reale, non ipotesi)**:
+anche dopo i due round sopra, un log reale mostrava ancora `DOMException [TimeoutError]` in
+`fetchSparqlJson`. `scripts/places/mic/probe.ts` (query minime isolate, un tentativo ciascuna,
+contro l'endpoint reale via il workflow in `mode: probe`) ha bisezionato la query di produzione:
+
+1. Ogni singolo predicato preso da solo è rapido (tutti <1.3s, la maggior parte <250ms) — incluso
+   `clvapit:hasGeometry`+`lat`/`long` (coordinate reali popolate, confermate) e `clvapit:hasRegion`
+   senza filtro. `cis:hasAddress` (predicato suggerito da una fonte esterna basata sulla sola
+   documentazione dell'ontologia CulturalON) è stato testato e **falsificato**: 0 risultati, non
+   esiste nei dati reali — stesso errore già evitato due volte prima con `--describe`.
+2. La sotto-query dei candidati con il filtro regione così com'era
+   (`FILTER(CONTAINS(LCASE(?regionLabel), LCASE("Lazio")))`, dopo due salti `OPTIONAL`
+   `siteAddress`→`hasRegion`) dava un **500 istantaneo (~120-180ms)**, non un timeout dopo
+   esecuzione lenta: `Virtuoso 42000 Error The estimated execution time 20627 (sec) exceeds the
+   limit of 4000 (sec)` — il *pianificatore* di Virtuoso rifiuta la query prima di eseguirla,
+   perché `CONTAINS`/`LCASE` a quel punto non è indicizzabile e la sua stima esplode (~5.7h).
+3. La stessa identica sotto-query con `FILTER(?regionLabel = "Lazio")` (uguaglianza esatta invece
+   di `CONTAINS`/`LCASE`) è passata: `200`, <300ms, risultati corretti (es. "Casa Pasolini", Roma,
+   Lazio). Anche senza alcun filtro regione la sotto-query passava — confermando che il problema
+   era specificamente `CONTAINS`/`LCASE`, non un filtro in sé né i join `OPTIONAL`.
+
+`buildSparqlQuery` ora usa l'uguaglianza esatta. Compromesso accettato: case-sensitive, nessun
+match parziale — la regione passata va scritta con la stessa capitalizzazione del `rdfs:label` nel
+grafo (es. "Lazio", non "lazio"/"LAZIO").
+
+Workflow: `mode: dry-run`/`write` in `import-places-mic.yml` (`mode: describe` e `mode: probe`
+restano disponibili per ulteriore diagnostica, nessun secret Supabase richiesto).
 
 ## Cosa esisteva già nel repository (riusato come riferimento, non duplicato)
 
@@ -78,11 +103,13 @@ fonte.
 
 `scripts/places/__tests__/mic.test.ts` copre `micTypeLabelToSiteType` (mapping tipologia→SiteType)
 e `micBindingToPlaceCandidate` (costruzione del candidato, licenza, sourceId/sourceUrl reali) — non
-richiede rete.
+richiede rete. `scripts/places/__tests__/mic-probe.test.ts` copre la struttura di `probe.ts` (nomi
+univoci, nessun predicato non verificato fuori dal probe dedicato) — non richiede rete.
 
 ## Uso
 
 ```bash
 npx tsx scripts/places/mic/fetch.ts --describe                       # diagnostica (nessun Supabase)
 npx tsx scripts/places/mic/fetch.ts --dry-run --region Lazio --limit 20
+npx tsx scripts/places/mic/probe.ts                                  # diagnostica: probe isolati per predicato (nessun Supabase)
 ```

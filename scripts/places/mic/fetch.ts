@@ -201,10 +201,18 @@ export function micBindingToPlaceCandidate(b: MicBinding): PlaceCandidate {
 // correggere comunque prima di provare altre ipotesi.
 const CANDIDATE_POOL_CAP = 2000
 
+// FIX (2026-09-17, isolato con scripts/places/mic/probe.ts contro l'endpoint reale — non
+// un'ipotesi): il filtro regione con CONTAINS/LCASE, dopo i due salti OPTIONAL
+// siteAddress→hasRegion, fa esplodere lo stimatore di costo di Virtuoso — rifiuto immediato
+// ("estimated execution time ... exceeds the limit", ~5.7h stimate), non un timeout dopo
+// esecuzione lenta. Un'uguaglianza esatta sullo stesso punto della query è invece passata
+// (200, <300ms, risultati corretti) — probe `combo-candidati-uguaglianza-regione`. Compromesso
+// accettato: l'uguaglianza è case-sensitive e non fa più match parziale — la regione va passata
+// con la stessa capitalizzazione usata da rdfs:label nel grafo (es. "Lazio", non "lazio"/"LAZIO").
 function buildSparqlQuery(regionLabel?: string, limit = 5000): string {
   const candidatePool = Math.min(CANDIDATE_POOL_CAP, Math.max(limit * 4, 50))
   const regionFilter = regionLabel
-    ? `FILTER(CONTAINS(LCASE(?regionLabel), LCASE("${regionLabel.replace(/"/g, '')}")))`
+    ? `FILTER(?regionLabel = "${regionLabel.replace(/"/g, '')}")`
     : ''
 
   return `
