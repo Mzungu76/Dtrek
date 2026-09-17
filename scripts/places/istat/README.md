@@ -72,3 +72,18 @@ Il resto d'Italia (7518 Comuni) non è stato importato — resta il pilota Lazio
 
 Chi ha accesso di rete a istat.it e a Supabase può rilanciare `fetch.ts` direttamente (env var
 `SUPABASE_URL`/`SUPABASE_SERVICE_KEY`) per estendere ad altre regioni o rinfrescare i dati.
+
+Aggiornamento 2026-09-16/17: `fetch.ts` è stato rilanciato su tutta Italia (non solo Lazio) tramite
+`.github/workflows/import-places-istat.yml` — 7.896 Comuni in `dtrek_places`.
+
+## `population.ts` — popolazione + classificazione borgo/città
+
+Le 7.896 righe ISTAT non hanno alcun segnale di rilevanza (`subtype` NULL su tutte, Roma
+indistinguibile da un Comune di 80 abitanti). `population.ts` arricchisce (mai crea righe) con
+popolazione e una prima classificazione `borgo`/`citta` (piano §6) — dettagli, fonte e nota
+importante sul formato del codice ISTAT nel commento in cima al file. Workflow:
+`.github/workflows/enrich-places-population.yml`.
+
+```bash
+npx tsx scripts/places/istat/population.ts --dry-run   # mostra il tasso di abbinamento, nessuna scrittura
+```

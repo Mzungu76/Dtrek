@@ -628,6 +628,7 @@ CREATE TABLE IF NOT EXISTS dtrek_places (
   name                    text NOT NULL,
   meta_type               text NOT NULL CHECK (meta_type IN ('sentiero', 'borgo_citta', 'sito')),
   subtype                 text,
+  population              integer,
   description             text,
   latitude                double precision NOT NULL,
   longitude               double precision NOT NULL,
@@ -655,6 +656,7 @@ CREATE TABLE IF NOT EXISTS dtrek_places (
 CREATE INDEX IF NOT EXISTS idx_dtrek_places_geometry     ON dtrek_places USING GIST (geometry);
 CREATE INDEX IF NOT EXISTS idx_dtrek_places_meta_type    ON dtrek_places (meta_type);
 CREATE INDEX IF NOT EXISTS idx_dtrek_places_subtype      ON dtrek_places (subtype);
+CREATE INDEX IF NOT EXISTS idx_dtrek_places_population   ON dtrek_places (population);
 CREATE INDEX IF NOT EXISTS idx_dtrek_places_municipality_istat_code ON dtrek_places (municipality_istat_code);
 CREATE INDEX IF NOT EXISTS idx_dtrek_places_region        ON dtrek_places (region);
 CREATE INDEX IF NOT EXISTS idx_dtrek_places_lat_lon        ON dtrek_places (latitude, longitude);
