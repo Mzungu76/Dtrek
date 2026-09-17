@@ -20,24 +20,30 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "describe: dump della struttura reale di un CIS (diagnostica). dry-run: solo log, nessuna scrittura. write: importa davvero in Supabase."
+        description: "describe: dump della struttura reale di un CIS (diagnostica). probe: test isolato di ogni predicato verificato (diagnostica, vedi scripts/places/mic/probe.ts). dry-run: solo log, nessuna scrittura. write: importa davvero in Supabase."
         required: true
         type: choice
         options:
           - describe
+          - probe
           - dry-run
           - write
         default: dry-run
       region:
-        description: "Regione (es. Lazio). Vuoto = tutta Italia (nessun filtro SPARQL)."
+        description: "Regione (es. Lazio). Vuoto = tutta Italia (nessun filtro SPARQL). Non usato in modalità probe."
         required: false
         type: string
         default: "Lazio"
       limit:
-        description: "Numero massimo di risultati SPARQL. Piccolo (5-20) per il primo test delle coordinate, più alto per un caricamento vero."
+        description: "Numero massimo di risultati SPARQL. Piccolo (5-20) per il primo test delle coordinate, più alto per un caricamento vero. Non usato in modalità probe."
         required: false
         type: string
         default: "20"
+      probe_timeout_ms:
+        description: "Timeout (ms) per ciascun probe in modalità probe — un solo tentativo, nessuna retry."
+        required: false
+        type: string
+        default: "30000"
 
 concurrency:
   group: import-places
@@ -53,6 +59,7 @@ jobs:
       MODE: ${{ inputs.mode }}
       REGION: ${{ inputs.region }}
       LIMIT: ${{ inputs.limit }}
+      PROBE_TIMEOUT_MS: ${{ inputs.probe_timeout_ms }}
     steps:
       - uses: actions/checkout@v7
 
@@ -75,6 +82,19 @@ jobs:
             echo '```'
             echo ""
             echo "Usare questo dump per scrivere il prossimo fix a buildSparqlQuery in scripts/places/mic/fetch.ts."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Probe — test isolato di ogni predicato verificato (diagnostica temporanea, nessun Supabase, non tocca fetch.ts)
+        if: ${{ inputs.mode == 'probe' }}
+        run: |
+          set -euo pipefail
+          npx tsx scripts/places/mic/probe.ts --timeout "$PROBE_TIMEOUT_MS" | tee /tmp/mic-probe.txt
+          {
+            echo "### Import Places — MiC (probe diagnostico)"
+            echo "Query minime (LIMIT 5), un tentativo ciascuna, per isolare quale predicato/join causa il timeout visto nella query di produzione — vedi scripts/places/mic/probe.ts per i predicati testati e le note di verifica."
+            echo '```'
+            cat /tmp/mic-probe.txt
+            echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Dry-run — solo log, nessuna scrittura su Supabase
