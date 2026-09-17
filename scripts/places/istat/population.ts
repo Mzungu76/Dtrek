@@ -104,16 +104,37 @@ interface IstatPlaceRow {
   municipality_istat_code: string | null
 }
 
+// Supabase/PostgREST limita ogni risposta a 1000 righe di default (indipendentemente da .limit(),
+// che alza il tetto RICHIESTO ma non lo garantisce oltre il max-rows del progetto) — un singolo
+// .select() senza .range() su 7.896 righe ne restituiva silenziosamente solo le prime 1000, sempre
+// le stesse a ogni rilancio (nessun filtro su cosa è già stato fatto). Verificato dal vivo: il
+// primo run reale si è fermato esattamente a 1000. Pagina con .range() finché non esaurisce le
+// righe, con un ordinamento esplicito (altrimenti l'ordine fra pagine successive non è garantito).
 async function findIstatPlaces(supabase: SupabaseClient, limit?: number): Promise<IstatPlaceRow[]> {
-  let query = supabase
-    .from('dtrek_places')
-    .select('id, municipality_istat_code')
-    .eq('source', 'istat')
-  if (limit) query = query.limit(limit)
+  const PAGE_SIZE = 1000
+  const rows: IstatPlaceRow[] = []
+  let offset = 0
 
-  const { data, error } = await query
-  if (error) throw error
-  return (data ?? []) as IstatPlaceRow[]
+  while (true) {
+    const remaining = limit !== undefined ? limit - rows.length : undefined
+    if (remaining !== undefined && remaining <= 0) break
+    const pageSize = remaining !== undefined ? Math.min(PAGE_SIZE, remaining) : PAGE_SIZE
+
+    const { data, error } = await supabase
+      .from('dtrek_places')
+      .select('id, municipality_istat_code')
+      .eq('source', 'istat')
+      .order('id', { ascending: true })
+      .range(offset, offset + pageSize - 1)
+    if (error) throw error
+
+    const page = (data ?? []) as IstatPlaceRow[]
+    rows.push(...page)
+    if (page.length < pageSize) break // ultima pagina
+    offset += pageSize
+  }
+
+  return rows
 }
 
 async function updatePopulation(supabase: SupabaseClient, id: string, population: number, subtype: PlaceCategory): Promise<void> {
