@@ -221,6 +221,35 @@ SELECT ?cis ?name ?site ?address ?comune WHERE {
   FILTER(?regionLabel = "Lazio")
 } LIMIT 20`,
   },
+  // ── Round 4 (2026-09-17): bug segnalato dal vivo — "Regione: tutta Italia, Limit: 10000" ha dato
+  // 0 risultati (nessun errore HTTP). Causa trovata leggendo la query di produzione, non un'ipotesi
+  // nuova: senza filtro regione, il vecchio CANDIDATE_POOL_CAP troncava a un campione ARBITRARIO di
+  // 2000 candidati PRIMA del filtro coordinate — con una copertura bassa e non uniforme delle
+  // coordinate nel catalogo, quella fetta poteva contenere zero record georeferenziati. Fix
+  // applicato in fetch.ts: il filtro coordinate entra ora nella stessa sotto-query del filtro
+  // regione, prima del LIMIT (che diventa `limit` diretto, niente più pool separato). Questo probe
+  // riproduce ESATTAMENTE la nuova forma per il caso "tutta Italia" (nessun filtro regione) con un
+  // LIMIT piccolo — verifica a basso costo, prima di un write con limit alto, se il motore riesce a
+  // trovare record georeferenziati scandendo il catalogo intero senza un filtro regione a restringere
+  // subito lo spazio di ricerca (rischio non ancora verificato dal vivo, annotato in fetch.ts).
+  {
+    name: 'tutta-italia-con-coordinate',
+    note: 'Forma nuova (round 4) della sotto-query di produzione senza filtro regione: filtro coordinate spostato dentro la sotto-query, prima del suo LIMIT, invece di un pool arbitrario filtrato dopo. Verifica se il motore trova record georeferenziati su tutto il catalogo entro un timeout ragionevole.',
+    query: `${PREFIXES}
+PREFIX geo: <http://www.w3.org/2003/01/geo/wgs84_pos#>
+SELECT ?cis ?name ?lat ?long WHERE {
+  ?cis a cis:CulturalInstituteOrSite ;
+       rdfs:label ?name .
+  OPTIONAL { ?cis cis:hasSite ?site . }
+  OPTIONAL { ?cis geo:lat ?lat1 ; geo:long ?long1 . }
+  OPTIONAL { ?site geo:lat ?lat2 ; geo:long ?long2 . }
+  OPTIONAL { ?cis clvapit:hasGeometry ?geomA . ?geomA clvapit:lat ?lat3 ; clvapit:long ?long3 . }
+  OPTIONAL { ?site clvapit:hasGeometry ?geomB . ?geomB clvapit:lat ?lat4 ; clvapit:long ?long4 . }
+  BIND(COALESCE(?lat1, ?lat2, ?lat3, ?lat4) AS ?lat)
+  BIND(COALESCE(?long1, ?long2, ?long3, ?long4) AS ?long)
+  FILTER(BOUND(?lat) && BOUND(?long))
+} LIMIT 20`,
+  },
 ]
 
 export interface ProbeResult {
