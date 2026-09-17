@@ -16,7 +16,7 @@ import GemStatusBadge from '@/components/premium/GemStatusBadge'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 import {
   BarChart2, Trophy, Mountain, Compass, Settings, Sparkles, ArrowDownToLine,
-  Info, LogOut, ChevronRight, User as UserIcon, X,
+  Info, LogOut, ChevronRight, User as UserIcon, X, Search,
 } from 'lucide-react'
 
 interface Row {
@@ -116,6 +116,7 @@ export default function ProfiloPage() {
     { href: '/profilo/cronologia-navigazione', icon: <Compass className="w-[18px] h-[18px]" />, iconBg: '#f1f8f2', label: 'Cronologia navigazione', sub: 'Le tue uscite guidate dal navigatore' },
     { href: '/profilo/impostazioni', icon: <Settings className="w-[18px] h-[18px]" />, iconBg: '#f1f8f2', label: 'Impostazioni', sub: 'Identità, indirizzo, dati biometrici, comfort score' },
     { href: '/profilo/ai', icon: <Sparkles className="w-[18px] h-[18px]" />, iconBg: '#f1f8f2', label: 'Intelligenza artificiale', sub: 'Chiave Claude personale (BYOK)' },
+    { href: '/test-ricerca-mete', icon: <Search className="w-[18px] h-[18px]" />, iconBg: '#f1f8f2', label: 'Test ricerca Borghi/Siti', sub: 'Pagina temporanea per verificare l’archivio ampliato' },
     ...(installed ? [] : [{ onClick: handleInstall, icon: <ArrowDownToLine className="w-[18px] h-[18px]" />, iconBg: '#f1f8f2', label: "Installa l'app", sub: 'Aggiungi alla schermata Home' }]),
     { href: '/fonti-e-crediti', icon: <Info className="w-[18px] h-[18px]" />, iconBg: '#f1f8f2', label: 'Fonti e crediti', sub: '' },
     { onClick: handleLogout, icon: <LogOut className="w-[18px] h-[18px]" />, iconBg: '#fef2f2', label: 'Esci', sub: '', danger: true },
