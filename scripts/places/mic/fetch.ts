@@ -307,8 +307,15 @@ async function fetchSparqlJson(query: string): Promise<unknown> {
       continue
     }
     if (res.ok) return res.json()
-    if (!TRANSIENT_STATUS.has(res.status)) throw new Error(`MiC SPARQL ${res.status}: ${(await res.text()).slice(0, 500)}`)
-    lastError = new Error(`MiC SPARQL ${res.status}`)
+    // FIX (2026-09-17, quinto round — visto dal vivo: un 500 su "tutta Italia"/limit 10000 è
+    // arrivato in log come solo "MiC SPARQL 500", senza corpo, perché 500 è in TRANSIENT_STATUS e
+    // il ramo sotto scartava il testo della risposta prima di esaurire i retry — nessun modo di
+    // sapere se fosse un rifiuto immediato del pianificatore (come il caso CONTAINS/LCASE) o un
+    // timeout reale dopo esecuzione lenta. Il corpo va letto e conservato ad ogni tentativo, non
+    // solo per gli status non transitori.
+    const bodyText = (await res.text()).slice(0, 500)
+    if (!TRANSIENT_STATUS.has(res.status)) throw new Error(`MiC SPARQL ${res.status}: ${bodyText}`)
+    lastError = new Error(`MiC SPARQL ${res.status}: ${bodyText}`)
   }
   throw lastError instanceof Error ? lastError : new Error('MiC SPARQL: troppi tentativi falliti')
 }
@@ -334,6 +341,61 @@ async function querySparql(query: string): Promise<MicBinding[]> {
       lat,
       lon,
     })
+  }
+  return out
+}
+
+// ── "Tutta Italia": query per-regione, mai una query unica non filtrata ────────────────────────
+// FIX (2026-09-17, quinto round — bug segnalato dal vivo: dopo il fix del round 4, "Regione: tutta
+// Italia, Limit: 10000" non dava più 0 risultati silenziosi ma un `MiC SPARQL 500` dopo tutti i
+// retry). Causa più probabile, non ancora confermata (il corpo dell'errore non era leggibile prima
+// del fix a fetchSparqlJson sopra — la prossima esecuzione lo dirà con certezza): senza un filtro
+// regione a restringere subito lo spazio di ricerca, la sotto-query con i 4 OPTIONAL coordinate +
+// FILTER(BOUND(...)) deve scandire l'intero catalogo (decine di migliaia di CulturalInstituteOrSite)
+// per trovare fino a 10000 record georeferenziati — lo stesso genere di esplosione di costo già
+// visto con CONTAINS/LCASE, ma qui per assenza di un filtro selettivo invece che per un filtro non
+// indicizzabile.
+//
+// La query per-regione con uguaglianza esatta È invece verificata veloce e corretta (round 3,
+// 200/<300ms). Invece di tentare "tutta Italia" come un'unica query non filtrata, "tutta Italia" ora
+// interroga una regione alla volta, usando le etichette REALI presenti nel grafo (mai una lista di
+// nomi regione indovinata — vedi nota di verifica in cima al file) fino a raggiungere `limit` o
+// esaurire le regioni. `clvapit:hasRegion`/`rdfs:label` senza filtro è già stato provato veloce
+// (probe round 1, <1.3s) — REGION_LIST_QUERY sotto è lo stesso predicato, solo con DISTINCT invece
+// di un LIMIT piccolo.
+// Non ancora verificato dal vivo (sandbox senza rete verso l'endpoint) — testare con
+// `--dry-run --limit 20` prima di un `write` con limit alto.
+const REGION_LIST_QUERY = `
+PREFIX cis: <http://dati.beniculturali.it/cis/>
+PREFIX clvapit: <https://w3id.org/italia/onto/CLV/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT DISTINCT ?regionLabel WHERE {
+  ?cis a cis:CulturalInstituteOrSite ;
+       cis:hasSite ?site .
+  ?site cis:siteAddress ?addr .
+  ?addr clvapit:hasRegion ?regionRes .
+  ?regionRes rdfs:label ?regionLabel .
+}
+LIMIT 100`
+
+async function fetchRegionLabels(): Promise<string[]> {
+  const data = await fetchSparqlJson(REGION_LIST_QUERY) as { results: { bindings: Record<string, { value: string }>[] } }
+  return data.results.bindings
+    .map(row => row.regionLabel?.value)
+    .filter((label): label is string => !!label)
+}
+
+async function fetchAllRegions(limit: number): Promise<MicBinding[]> {
+  const regions = await fetchRegionLabels()
+  console.log(`${regions.length} regioni trovate nel grafo — interrogo una alla volta.`)
+  const out: MicBinding[] = []
+  for (const region of regions) {
+    if (out.length >= limit) break
+    const remaining = limit - out.length
+    const bindings = await querySparql(buildSparqlQuery(region, remaining))
+    console.log(`  ${region}: ${bindings.length} risultati con coordinate valide.`)
+    out.push(...bindings)
   }
   return out
 }
@@ -389,7 +451,9 @@ async function main() {
   const limit = limitIdx !== -1 ? parseInt(process.argv[limitIdx + 1], 10) : 5000
 
   console.log(`Interrogo ${SPARQL_ENDPOINT} (regione: ${region || 'tutte'}, limit ${limit})…`)
-  const bindings = await querySparql(buildSparqlQuery(region || undefined, limit))
+  const bindings = region
+    ? await querySparql(buildSparqlQuery(region, limit))
+    : await fetchAllRegions(limit)
   console.log(`${bindings.length} risultati con coordinate valide.`)
   const candidates = bindings.map(micBindingToPlaceCandidate)
 

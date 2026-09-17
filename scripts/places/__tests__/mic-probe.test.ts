@@ -18,6 +18,7 @@ describe('MiC probe — struttura dei probe diagnostici', () => {
       'combo-candidati-senza-filtro-regione',
       'combo-candidati-uguaglianza-regione',
       'tutta-italia-con-coordinate',
+      'lista-regioni',
     ])
   })
 

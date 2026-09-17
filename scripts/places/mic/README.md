@@ -89,13 +89,33 @@ zero record georeferenziati — esattamente il bug osservato.
 Fix: il filtro coordinate (i 4 `OPTIONAL` + `COALESCE` + `FILTER(BOUND(...))`) è entrato nella
 stessa sotto-query del filtro regione, **prima** del suo `LIMIT` — che ora è direttamente `limit`
 invece di un pool separato (`CANDIDATE_POOL_CAP` rimosso). Il `LIMIT` tronca così solo candidati che
-hanno già coordinate valide, mai un campione arbitrario da filtrare dopo. Aggiunto anche
-`scripts/places/mic/probe.ts` → `tutta-italia-con-coordinate`, che riproduce a basso costo
-(`LIMIT 20`) la nuova forma senza filtro regione, per verificare via `mode: probe` che il motore
-trovi record georeferenziati scandendo il catalogo intero entro un timeout ragionevole, prima di un
-`write` con `--limit` alto. **Non ancora verificato dal vivo** (sandbox senza rete verso
-l'endpoint, vedi sezione "Bloccante di rete" sotto) — testare prima con `mode: probe` o
-`mode: dry-run --limit 20` senza regione.
+hanno già coordinate valide, mai un campione arbitrario da filtrare dopo.
+
+**Nota di prestazioni (2026-09-17, quinto round — bug segnalato dal vivo, non un'ipotesi)**: dopo il
+fix del round 4, lo stesso run ("tutta Italia", `--limit 10000`, `mode: write`) non ha più dato 0
+risultati ma `Error: MiC SPARQL 500` dopo tutti i retry — nessun corpo di risposta leggibile in log,
+perché `fetchSparqlJson` scartava il testo della risposta per qualunque status "transitorio" (500
+incluso) prima di esaurire i retry, non solo per quelli definitivi. **Due correzioni**:
+
+1. `fetchSparqlJson` ora legge e conserva il corpo della risposta ad ogni tentativo, non solo per gli
+   status non transitori — il prossimo errore dirà con certezza se è un rifiuto immediato del
+   pianificatore Virtuoso (come il caso CONTAINS/LCASE del round 3) o un timeout reale dopo
+   esecuzione lenta.
+2. Causa più probabile del 500 (coerente con l'evidenza disponibile, non ancora confermata dal corpo
+   dell'errore): senza un filtro regione a restringere subito lo spazio di ricerca, la sotto-query con
+   i 4 `OPTIONAL` coordinate + `FILTER(BOUND(...))` introdotta al round 4 deve scandire l'intero
+   catalogo (decine di migliaia di record) per trovare fino a 10000 record georeferenziati — la
+   query per-regione, invece, resta verificata veloce e corretta (round 3). `fetch.ts` non tenta più
+   una query "tutta Italia" senza filtro: interroga ora una regione alla volta, usando le etichette
+   **realmente presenti nel grafo** (query `REGION_LIST_QUERY`, stesso predicato
+   `clvapit:hasRegion`/`rdfs:label` già provato veloce senza filtro al round 1 — mai una lista di
+   nomi regione indovinata), fino a raggiungere `--limit` o esaurire le regioni trovate.
+
+Aggiunti a `scripts/places/mic/probe.ts`: `tutta-italia-con-coordinate` (round 4, riproduce la forma
+poi risultata in 500 — utile a confermare la diagnosi quando il corpo dell'errore sarà leggibile) e
+`lista-regioni` (round 5, verifica solo la query di scoperta regioni). **Non ancora verificato dal
+vivo** (sandbox senza rete verso l'endpoint, vedi sezione "Bloccante di rete" sotto) — testare prima
+con `mode: probe` (in particolare `lista-regioni`) o `mode: dry-run --limit 20` senza regione.
 
 Workflow: `mode: dry-run`/`write` in `import-places-mic.yml` (`mode: describe` e `mode: probe`
 restano disponibili per ulteriore diagnostica, nessun secret Supabase richiesto).

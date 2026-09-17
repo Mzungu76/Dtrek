@@ -250,6 +250,26 @@ SELECT ?cis ?name ?lat ?long WHERE {
   FILTER(BOUND(?lat) && BOUND(?long))
 } LIMIT 20`,
   },
+  // ── Round 5 (2026-09-17): il probe sopra ('tutta-italia-con-coordinate') girato dal vivo in
+  // `write` con --limit 10000 ha dato `MiC SPARQL 500` dopo tutti i retry — coerente con l'ipotesi
+  // scritta nella sua nota (scandire l'intero catalogo senza filtro regione è troppo costoso).
+  // fetch.ts non tenta più una query "tutta Italia" senza filtro: interroga una regione alla volta,
+  // usando le etichette REALI presenti nel grafo invece di una lista di nomi indovinata. Questo probe
+  // verifica solo la query di scoperta delle regioni (`REGION_LIST_QUERY` in fetch.ts) — stesso
+  // predicato di 'clvapit:hasRegion' (già provato veloce senza filtro, round 1), qui con DISTINCT al
+  // posto di un LIMIT piccolo per elenco completo.
+  {
+    name: 'lista-regioni',
+    note: 'Query di scoperta regioni usata da fetch.ts per "tutta Italia" (round 5) — stesso predicato clvapit:hasRegion già provato veloce (round 1), qui con DISTINCT per ottenere la lista completa delle etichette regione realmente presenti nel grafo, mai una lista indovinata.',
+    query: `${PREFIXES}
+SELECT DISTINCT ?regionLabel WHERE {
+  ?cis a cis:CulturalInstituteOrSite ;
+       cis:hasSite ?site .
+  ?site cis:siteAddress ?addr .
+  ?addr clvapit:hasRegion ?regionRes .
+  ?regionRes rdfs:label ?regionLabel .
+} LIMIT 100`,
+  },
 ]
 
 export interface ProbeResult {
