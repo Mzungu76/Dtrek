@@ -42,6 +42,15 @@ export async function searchSiti(supabase: SupabaseClient, params: SitiSearchPar
     .from('dtrek_places')
     .select('id, name, subtype, description, latitude, longitude, region, province, municipality, image_url, official_url, website, address, opening_hours, source, confidence, metadata')
     .eq('meta_type', 'sito')
+    // 391 Siti da MiC/ArCo condividono coordinate identiche con altri Siti scollegati (bug della
+    // query SPARQL d'importazione, scripts/places/mic/fetch.ts — ?site non vincolato in certi
+    // OPTIONAL si lega a una risorsa arbitraria invece di restare assente, individuato 2026-09-18
+    // e marcato in dtrek_places.metadata.coordinatesUnreliable). Un pin in un punto sbagliato è
+    // peggio di nessun pin (piano §48.8, mai un dato fabbricato/inaffidabile spacciato per buono)
+    // — restano fuori dalla ricerca finché non c'è una posizione verificata, mai cancellati.
+    // `.or()` invece di un filtro negato diretto: `metadata->>x != 'true'` in SQL scarterebbe anche
+    // le righe senza quella chiave (confronto con NULL), che sono la stragrande maggioranza.
+    .or('metadata->>coordinatesUnreliable.is.null,metadata->>coordinatesUnreliable.eq.false')
 
   if (params.query) query = query.ilike('name', `%${params.query}%`)
   if (params.region) query = query.ilike('region', params.region)
