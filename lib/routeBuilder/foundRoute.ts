@@ -92,3 +92,49 @@ export function isComfortVerdictStale(
   }
   return false
 }
+
+// Sottoinsieme dei campi di TrailCacheRow (lib/trailsCache.ts) necessari per costruire un
+// FoundRouteItem — un tipo suo, non TrailCacheRow stesso, perché quel modulo importa il client
+// Supabase (server-only) e questo file è importato anche da componenti client (RouteBuilder.tsx,
+// CreaGuidaMapSearch.tsx).
+export interface CachedTrailForFoundRoute {
+  osmRelationId: number
+  name: string
+  distanceKm: number | null
+  elevationGain: number | null
+  elevationLoss: number | null
+  estimatedTimeMin: number | null
+  difficulty?: string | null
+  dataQuality: string
+  geometrySimplified: [number, number][]
+}
+
+/**
+ * Converte una riga della cache `trails` (import OSM nazionale) in un FoundRouteItem, senza
+ * chiamata di rete: stessa conversione già usata da generateRecommendations.ts per "Percorsi per
+ * te", qui riutilizzata dalla ricerca su mappa di Crea Guida (CreaGuidaMapSearch.tsx) — un
+ * candidato così ha sempre `track.trackPoints` vuoto (nessun profilo altimetrico punto-per-punto
+ * dalla cache) ma `saveResultItemToGuide` lo arricchisce con la quota reale al salvataggio, quindi
+ * resta comunque una traccia valida da mostrare e importare.
+ */
+export function foundRouteItemFromCachedTrail(row: CachedTrailForFoundRoute): FoundRouteItem {
+  const distanceKm = row.distanceKm ?? 0
+  const track: ResolvedTrack = {
+    trackPoints: [],
+    routePolyline: row.geometrySimplified,
+    distanceMeters: Math.round(distanceKm * 1000),
+    elevationGain: row.elevationGain ?? 0,
+    elevationLoss: row.elevationLoss ?? 0,
+    altitudeMax: 0,
+    altitudeMin: 0,
+    estimatedTimeSeconds: (row.estimatedTimeMin ?? Math.round((distanceKm / 4) * 60)) * 60,
+    hasElevation: row.dataQuality === 'calculated',
+  }
+  return {
+    name: row.name,
+    difficulty: row.difficulty ?? undefined,
+    sourceUrl: `https://www.openstreetmap.org/relation/${row.osmRelationId}`,
+    osmId: row.osmRelationId,
+    track,
+  }
+}
