@@ -1,22 +1,25 @@
 'use client'
 import 'leaflet/dist/leaflet.css'
 import type * as L from 'leaflet'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, Search as SearchIcon, RefreshCw, Loader2, ChevronUp, ChevronDown, X as XIcon,
-  MoreHorizontal, Link2, PencilLine, MapPin, History, ChevronRight,
+  MoreHorizontal, Link2, PencilLine, MapPin, History, ChevronRight, Building2, Landmark, Globe,
+  Clock, Milestone, Route as RouteIcon,
 } from 'lucide-react'
 import RouteBuilder, { type ResultItem } from './RouteBuilder'
+import TrailPreviewMap from '@/components/TrailPreviewMap'
 import { defaultPendingExpiresAt } from './sharedHelpers'
 import { saveResultItemToGuide } from '@/lib/routeBuilder/importResultItem'
 import { foundRouteItemFromCachedTrail } from '@/lib/routeBuilder/foundRoute'
 import { resolvePlaceClientFirst } from '@/lib/routeBuilder/resolvePlaceClient'
 import { useCreateMetaFromSearch } from '@/lib/useCreateMetaFromSearch'
-import { META_TYPE_CONFIG, type MetaType } from '@/lib/metaTypes'
+import { META_TYPE_CONFIG, SITE_TYPE_CONFIG, type MetaType, type SiteType } from '@/lib/metaTypes'
 import type { MetaSearchResultItem } from '@/lib/metaSearch/types'
 import type { TrailNearbyItem } from '@/app/api/trails-nearby/route'
+import type { PlaceDetail } from '@/app/api/places/[id]/route'
 
 type TypeFilter = 'tutto' | MetaType
 
@@ -374,33 +377,33 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
         </div>
       )}
 
-      {/* ── Card di dettaglio sul pin selezionato ───────────────────────── */}
+      {/* ── Scheda del pin selezionato — il popup È la scheda (niente più un link "Scheda" a
+          parte): foto o mappa del tracciato in testa, informazioni sotto (a tab quando ce n'è
+          abbastanza da separare), "Crea guida" come unica azione in fondo. */}
       {selected && (
         <div className="absolute left-3 right-3 z-20" style={{ top: '112px' }}>
-          <div className="relative bg-white/95 backdrop-blur rounded-2xl shadow-lg px-4 py-3.5 max-w-sm mx-auto">
+          <div className="relative bg-white/97 backdrop-blur rounded-2xl shadow-lg max-w-sm mx-auto overflow-hidden">
+            <div className="overflow-y-auto" style={{ maxHeight: 'min(66vh, 560px)' }}>
+              {selected.kind === 'meta' ? (
+                <MetaDetailCard
+                  item={selected.item}
+                  creating={creatingMetaId === selected.item.id}
+                  onCreate={() => createAndOpen(selected.item)}
+                  error={metaSaveError && creatingMetaId === null ? metaSaveError : null}
+                />
+              ) : (
+                <TrailDetailCard
+                  item={selected.item}
+                  saving={savingTrailId === selected.item.id}
+                  onCreate={() => saveTrail(selected.item)}
+                  error={trailSaveError && savingTrailId === null ? trailSaveError : null}
+                />
+              )}
+            </div>
             <button onClick={() => setSelected(null)} aria-label="Chiudi"
-              className="absolute right-2.5 top-2.5 w-6 h-6 rounded-full bg-stone-100 flex items-center justify-center text-stone-500">
-              <XIcon className="w-3.5 h-3.5" />
+              className="absolute right-2.5 top-2.5 w-7 h-7 rounded-full bg-stone-900/55 hover:bg-stone-900/70 backdrop-blur-sm flex items-center justify-center text-white transition-colors">
+              <XIcon className="w-4 h-4" />
             </button>
-            {selected.kind === 'meta' ? (
-              <MetaDetailCard
-                item={selected.item}
-                creating={creatingMetaId === selected.item.id}
-                onCreate={() => createAndOpen(selected.item)}
-              />
-            ) : (
-              <TrailDetailCard
-                item={selected.item}
-                saving={savingTrailId === selected.item.id}
-                onCreate={() => saveTrail(selected.item)}
-              />
-            )}
-            {selected.kind === 'meta' && metaSaveError && creatingMetaId === null && (
-              <p className="text-xs text-red-600 mt-2">{metaSaveError}</p>
-            )}
-            {selected.kind === 'trail' && trailSaveError && savingTrailId === null && (
-              <p className="text-xs text-red-600 mt-2">{trailSaveError}</p>
-            )}
           </div>
         </div>
       )}
@@ -488,30 +491,138 @@ function OtherWayRow({ icon: Icon, label, description, onClick }: { icon: typeof
   )
 }
 
-function MetaBadge({ metaType }: { metaType: MetaType }) {
-  const cfg = META_TYPE_CONFIG[metaType]
+function TabBar<T extends string>({ tabs, active, onChange }: { tabs: { id: T; label: string }[]; active: T; onChange: (id: T) => void }) {
+  if (tabs.length <= 1) return null
   return (
-    <span className="text-[9px] font-bold tracking-wide uppercase px-1.5 py-0.5 rounded-full" style={{ background: `${cfg.color}20`, color: cfg.color }}>
-      {cfg.label}
-    </span>
+    <div className="flex gap-1 bg-stone-100 rounded-lg p-0.5 mb-2.5">
+      {tabs.map(t => (
+        <button key={t.id} type="button" onClick={() => onChange(t.id)}
+          className={`flex-1 py-1.5 rounded-md text-[11px] font-semibold transition-colors ${active === t.id ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500'}`}>
+          {t.label}
+        </button>
+      ))}
+    </div>
   )
 }
 
-function MetaDetailCard({ item, creating, onCreate }: { item: MetaSearchResultItem; creating: boolean; onCreate: () => void }) {
+function InfoRow({ icon: Icon, href, children }: { icon: typeof MapPin; href?: string; children: ReactNode }) {
+  const content = (
+    <span className="flex items-start gap-2">
+      <Icon className="w-3.5 h-3.5 text-stone-400 shrink-0 mt-0.5" />
+      <span>{children}</span>
+    </span>
+  )
+  return href
+    ? <a href={href} target="_blank" rel="noopener noreferrer" className="block text-xs text-forest-700 hover:underline">{content}</a>
+    : <p className="text-xs text-stone-600">{content}</p>
+}
+
+// ── Borgo/Città e Sito — il popup del pin È la scheda: sul tap carica il dettaglio completo da
+// /api/places/:id (stessa fonte di app/mete/[id]/page.tsx: descrizione/Wikipedia, indirizzo,
+// contatti, orari, fonti) invece di limitarsi ai pochi campi già presenti nel risultato di
+// ricerca — un link "Scheda" a parte non serve più.
+type MetaTab = 'descrizione' | 'info'
+
+function MetaDetailCard({ item, creating, onCreate, error }: { item: MetaSearchResultItem; creating: boolean; onCreate: () => void; error: string | null }) {
+  const [detail, setDetail] = useState<PlaceDetail | null>(null)
+  const [loadingDetail, setLoadingDetail] = useState(true)
+  const [detailError, setDetailError] = useState<string | null>(null)
+  const [tab, setTab] = useState<MetaTab>('descrizione')
+
+  useEffect(() => {
+    let cancelled = false
+    setDetail(null)
+    setLoadingDetail(true)
+    setDetailError(null)
+    fetch(`/api/places/${encodeURIComponent(item.id)}`)
+      .then(async res => {
+        const data = await res.json()
+        if (!res.ok) throw new Error(data?.error || `Errore ${res.status}`)
+        if (!cancelled) {
+          setDetail(data as PlaceDetail)
+          setTab(data.description || data.wikipedia ? 'descrizione' : 'info')
+        }
+      })
+      .catch(e => { if (!cancelled) setDetailError(e instanceof Error ? e.message : 'Impossibile caricare la scheda') })
+      .finally(() => { if (!cancelled) setLoadingDetail(false) })
+    return () => { cancelled = true }
+  }, [item.id])
+
+  const cfg = META_TYPE_CONFIG[item.metaType]
+  const TypeIcon = item.metaType === 'sito' ? Landmark : Building2
+  const siteLabel = detail?.siteType ? SITE_TYPE_CONFIG[detail.siteType as SiteType].label : (item.siteType ? SITE_TYPE_CONFIG[item.siteType].label : null)
   const location = [item.municipality, item.province, item.region].filter(Boolean).join(', ')
+  const photo = detail?.imageUrl || detail?.wikipedia?.thumbnail || item.imageUrl
+  const hasDescription = !!(detail?.description || detail?.wikipedia?.extract)
+
+  const tabs: { id: MetaTab; label: string }[] = hasDescription
+    ? [{ id: 'descrizione', label: 'Descrizione' }, { id: 'info', label: 'Info' }]
+    : [{ id: 'info', label: 'Info' }]
+
   return (
     <div>
-      <div className="flex items-center gap-2 mb-1">
-        <MetaBadge metaType={item.metaType} />
-        {location && <span className="text-[10px] text-stone-400 truncate">{location}</span>}
+      <div className="relative h-36 bg-stone-100">
+        {photo ? (
+          <img src={photo} alt="" className="absolute inset-0 w-full h-full object-cover" />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${cfg.color}, #2E3A26)` }}>
+            <TypeIcon className="w-10 h-10 text-white/30" />
+          </div>
+        )}
+        <div className="absolute inset-x-0 bottom-0 h-14" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0), rgba(0,0,0,.55))' }} />
+        <span className="absolute left-3 bottom-2.5 text-[10px] font-bold uppercase tracking-wide text-white/90">
+          {siteLabel ?? cfg.label}
+        </span>
       </div>
-      <p className="font-display text-[15px] font-semibold text-stone-800 mb-2.5 pr-6">{item.name}</p>
-      <div className="flex gap-2">
-        <a href={`/mete/${encodeURIComponent(item.id)}`} className="flex-1 text-center bg-white border border-stone-200 rounded-lg py-1.5 text-xs font-bold text-stone-600">
-          Scheda
-        </a>
+
+      <div className="p-3.5">
+        {location && <p className="text-[10px] text-stone-400 truncate mb-0.5">{location}</p>}
+        <p className="font-display text-[15px] font-semibold text-stone-800 mb-2.5">{item.name}</p>
+
+        {loadingDetail && (
+          <div className="flex justify-center py-4"><Loader2 className="w-4 h-4 animate-spin text-stone-300" /></div>
+        )}
+        {detailError && <p className="text-xs text-red-600 mb-2">{detailError}</p>}
+
+        {detail && (
+          <>
+            <TabBar tabs={tabs} active={tab} onChange={setTab} />
+
+            {tab === 'descrizione' && hasDescription && (
+              <div className="mb-1">
+                <p className="text-xs text-stone-600 leading-relaxed">{detail.description || detail.wikipedia?.extract}</p>
+                {!detail.description && detail.wikipedia && (
+                  <a href={detail.wikipedia.url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-forest-700 hover:underline mt-1.5 inline-block">
+                    Leggi su Wikipedia →
+                  </a>
+                )}
+              </div>
+            )}
+
+            {tab === 'info' && (
+              <div className="space-y-1.5 mb-1">
+                {detail.address && <InfoRow icon={MapPin}>{detail.address}</InfoRow>}
+                {(detail.website || detail.officialUrl) && (
+                  <InfoRow icon={Globe} href={detail.website ?? detail.officialUrl ?? undefined}>{detail.website ?? detail.officialUrl}</InfoRow>
+                )}
+                {typeof detail.openingHours === 'string' && detail.openingHours && (
+                  <InfoRow icon={Clock}>{detail.openingHours}</InfoRow>
+                )}
+                {detail.coordinatesApproximate && (
+                  <p className="text-[11px] text-amber-600">Posizione approssimativa — centro del Comune, non il punto esatto.</p>
+                )}
+                <p className="text-[11px] text-stone-400 pt-0.5">
+                  Dato aggregato da {detail.sourceCount} {detail.sourceCount === 1 ? 'fonte' : 'fonti'} · confidenza {detail.confidence.toFixed(2)}
+                </p>
+              </div>
+            )}
+          </>
+        )}
+
+        {error && <p className="text-xs text-red-600 mb-2">{error}</p>}
+
         <button onClick={onCreate} disabled={creating}
-          className="flex-1 flex items-center justify-center gap-1.5 bg-forest-600 hover:bg-forest-700 disabled:opacity-60 rounded-lg py-1.5 text-xs font-bold text-white transition-colors">
+          className="w-full flex items-center justify-center gap-1.5 bg-forest-600 hover:bg-forest-700 disabled:opacity-60 rounded-lg py-2 text-xs font-bold text-white transition-colors">
           {creating && <Loader2 className="w-3 h-3 animate-spin" />} Crea guida
         </button>
       </div>
@@ -519,23 +630,72 @@ function MetaDetailCard({ item, creating, onCreate }: { item: MetaSearchResultIt
   )
 }
 
-function TrailDetailCard({ item, saving, onCreate }: { item: TrailNearbyItem; saving: boolean; onCreate: () => void }) {
-  const stats = [
-    item.distanceKm != null ? `${item.distanceKm.toFixed(1)} km` : null,
-    item.elevationGain != null ? `+${Math.round(item.elevationGain)} m` : null,
-    item.difficulty ? `SAC ${item.difficulty}` : null,
-  ].filter(Boolean).join(' · ')
+// ── Sentiero — la scheda mostra l'estratto di mappa col solo tracciato (stesso TrailPreviewMap
+// già usato dalle card di RouteBuilder.tsx) invece di una foto, e i campi descrittivi della cache
+// `trails` (vedi app/api/trails-nearby/route.ts) organizzati in due tab.
+type TrailTab = 'dettagli' | 'descrizione'
+
+function TrailDetailCard({ item, saving, onCreate, error }: { item: TrailNearbyItem; saving: boolean; onCreate: () => void; error: string | null }) {
+  const hasDescription = !!item.description
+  const [tab, setTab] = useState<TrailTab>('dettagli')
+  const tabs: { id: TrailTab; label: string }[] = hasDescription
+    ? [{ id: 'dettagli', label: 'Dettagli' }, { id: 'descrizione', label: 'Descrizione' }]
+    : [{ id: 'dettagli', label: 'Dettagli' }]
+
+  const stats: { label: string; val: string }[] = [
+    item.distanceKm != null ? { label: 'Distanza', val: `${item.distanceKm.toFixed(1)} km` } : null,
+    item.elevationGain != null ? { label: 'Dislivello +', val: `${Math.round(item.elevationGain)} m` } : null,
+    item.elevationLoss != null ? { label: 'Dislivello −', val: `${Math.round(item.elevationLoss)} m` } : null,
+    item.estimatedTimeMin != null ? { label: 'Tempo stimato', val: `${Math.round(item.estimatedTimeMin / 60)} h ${item.estimatedTimeMin % 60} min` } : null,
+    item.difficulty ? { label: 'Difficoltà CAI', val: item.difficulty } : null,
+  ].filter((s): s is { label: string; val: string } => s !== null)
+
   return (
     <div>
-      <div className="flex items-center gap-2 mb-1">
-        <MetaBadge metaType="sentiero" />
-        {stats && <span className="text-[10px] text-stone-400">{stats}</span>}
+      <div className="relative isolate h-36">
+        <TrailPreviewMap polyline={item.geometry} height="144px" />
       </div>
-      <p className="font-display text-[15px] font-semibold text-stone-800 mb-2.5 pr-6">{item.name || 'Sentiero senza nome'}</p>
-      <button onClick={onCreate} disabled={saving}
-        className="w-full flex items-center justify-center gap-1.5 bg-forest-600 hover:bg-forest-700 disabled:opacity-60 rounded-lg py-1.5 text-xs font-bold text-white transition-colors">
-        {saving && <Loader2 className="w-3 h-3 animate-spin" />} Crea guida
-      </button>
+
+      <div className="p-3.5">
+        {(item.fromLabel || item.toLabel) && (
+          <p className="text-[10px] text-stone-400 truncate mb-0.5">
+            {[item.fromLabel, item.toLabel].filter(Boolean).join(' → ')}
+          </p>
+        )}
+        <p className="font-display text-[15px] font-semibold text-stone-800 mb-2.5">{item.name || 'Sentiero senza nome'}</p>
+
+        <TabBar tabs={tabs} active={tab} onChange={setTab} />
+
+        {tab === 'dettagli' && (
+          <div className="mb-1">
+            {stats.length > 0 && (
+              <div className="grid grid-cols-2 gap-1.5 mb-2">
+                {stats.map(s => (
+                  <div key={s.label} className="bg-stone-50 rounded-lg border border-stone-100 px-2.5 py-1.5">
+                    <p className="text-[9px] text-stone-400">{s.label}</p>
+                    <p className="text-xs font-semibold text-stone-800">{s.val}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="space-y-1">
+              {item.ref && <InfoRow icon={Milestone}>Segnavia {item.ref}</InfoRow>}
+              {item.network && <InfoRow icon={RouteIcon}>{item.network}</InfoRow>}
+            </div>
+          </div>
+        )}
+
+        {tab === 'descrizione' && hasDescription && (
+          <p className="text-xs text-stone-600 leading-relaxed mb-1">{item.description}</p>
+        )}
+
+        {error && <p className="text-xs text-red-600 mb-2 mt-1.5">{error}</p>}
+
+        <button onClick={onCreate} disabled={saving}
+          className="w-full flex items-center justify-center gap-1.5 bg-forest-600 hover:bg-forest-700 disabled:opacity-60 rounded-lg py-2 text-xs font-bold text-white transition-colors mt-1">
+          {saving && <Loader2 className="w-3 h-3 animate-spin" />} Crea guida
+        </button>
+      </div>
     </div>
   )
 }
