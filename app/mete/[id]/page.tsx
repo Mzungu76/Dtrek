@@ -118,10 +118,20 @@ export default function MetaDettaglioPage() {
           )}
         </div>
 
-        {place.description && (
+        {(place.description || place.wikipedia) && (
           <section className="bg-white rounded-xl border border-stone-200 p-4 sm:p-5 mb-4">
             <h2 className="font-display text-base font-semibold text-stone-800 mb-2">Descrizione</h2>
-            <p className="text-sm text-stone-600 leading-relaxed">{place.description}</p>
+            {place.description && (
+              <p className="text-sm text-stone-600 leading-relaxed">{place.description}</p>
+            )}
+            {!place.description && place.wikipedia && (
+              <>
+                <p className="text-sm text-stone-600 leading-relaxed">{place.wikipedia.extract}</p>
+                <a href={place.wikipedia.url} target="_blank" rel="noopener noreferrer" className="text-xs text-forest-700 hover:underline mt-2 inline-block">
+                  Leggi su Wikipedia →
+                </a>
+              </>
+            )}
           </section>
         )}
 
