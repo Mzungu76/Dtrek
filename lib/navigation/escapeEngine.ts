@@ -21,6 +21,7 @@
 import { haversineM, bearingDeg, minDistToTrack } from '@/lib/geoUtils'
 import type { WalkNetwork } from '@/lib/routeBuilder/osmGraph'
 import { nearestGraphNode } from '@/lib/routeBuilder/osmGraph'
+import { dijkstra, reconstructPath } from '@/lib/routeBuilder/walkRouting'
 import type { NavPoi, RouteProgress } from './types'
 
 export type EscapeSafety = 'alta' | 'media' | 'bassa'
@@ -62,58 +63,6 @@ const MAX_VISITED_NODES = 600
 /** A graph node this close to the planned route isn't a genuine alternative — it's the same route (or a cartographic duplicate of it), so candidates within this distance are skipped rather than proposed as an "escape". */
 const MIN_ALTERNATIVE_DISTANCE_FROM_ROUTE_M = 40
 const MAX_SAFE_POI_DISTANCE_M = 3000
-
-interface DijkstraResult {
-  dist: Map<number, number>
-  prev: Map<number, number>
-  viaHighway: Map<number, string | undefined>
-  visited: Set<number>
-}
-
-/** Plain Dijkstra, no priority-queue library — graphs here are a single hiking area's OSM network (at most a few thousand nodes before MAX_SEARCH_RADIUS_M/MAX_VISITED_NODES prune it), and this runs once per user tap, not per fix, so an O(n²) min-scan is a non-issue in practice. */
-function dijkstra(network: WalkNetwork, startNodeId: number, maxDistM: number, maxNodes: number): DijkstraResult {
-  const dist = new Map<number, number>([[startNodeId, 0]])
-  const prev = new Map<number, number>()
-  const viaHighway = new Map<number, string | undefined>()
-  const visited = new Set<number>()
-
-  while (visited.size < maxNodes) {
-    let currentId: number | null = null
-    let currentDist = Infinity
-    for (const [id, d] of Array.from(dist)) {
-      if (!visited.has(id) && d < currentDist) { currentDist = d; currentId = id }
-    }
-    if (currentId == null || currentDist > maxDistM) break
-    visited.add(currentId)
-
-    const node = network.nodes.get(currentId)
-    if (!node) continue
-    for (const edge of node.edges) {
-      const nd = currentDist + edge.distM
-      if (nd > maxDistM) continue
-      const existing = dist.get(edge.to)
-      if (existing == null || nd < existing) {
-        dist.set(edge.to, nd)
-        prev.set(edge.to, currentId)
-        viaHighway.set(edge.to, edge.highway)
-      }
-    }
-  }
-
-  return { dist, prev, viaHighway, visited }
-}
-
-function reconstructPath(network: WalkNetwork, prev: Map<number, number>, targetNodeId: number, startNodeId: number): [number, number][] {
-  const path: [number, number][] = []
-  let cur: number | undefined = targetNodeId
-  while (cur != null) {
-    const node = network.nodes.get(cur)
-    if (node) path.unshift([node.lat, node.lon])
-    if (cur === startNodeId) break
-    cur = prev.get(cur)
-  }
-  return path
-}
 
 function safetyForDistance(distanceM: number, nearThresholdM: number, farThresholdM: number): EscapeSafety {
   if (distanceM <= nearThresholdM) return 'alta'
