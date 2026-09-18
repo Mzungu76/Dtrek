@@ -4,11 +4,13 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import ActivityUploader from '@/components/upload/ActivityUploader'
 import GpxUploader from '@/components/upload/GpxUploader'
-import ManualImportChoice from '@/components/upload/ManualImportChoice'
+import ManualPlanUploader from '@/components/upload/ManualPlanUploader'
+import UrlImportUploader from '@/components/upload/UrlImportUploader'
 import FromActivityUploader from '@/components/upload/FromActivityUploader'
+import CreaGuidaMapSearch, { type OtherWayToAdd } from '@/components/upload/CreaGuidaMapSearch'
 import TrialStatusBanner from '@/components/dtrek/TrialStatusBanner'
 import { tryOpenNavigatorApp } from '@/lib/navigatorHandoff'
-import { Mountain, MapPin, PencilLine, History, Compass } from 'lucide-react'
+import { Mountain, Compass, ArrowLeft } from 'lucide-react'
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
@@ -20,6 +22,8 @@ export default function UploadPage() {
   )
 }
 
+type GpxSource = 'cerca' | OtherWayToAdd
+
 // Due punti d'ingresso distinti (bottoni "Crea una guida" in Guide, "Importa o Naviga" in
 // Resoconti — GuidaHub.tsx/ResocontoHub.tsx e i rispettivi elenco/page.tsx), non più uno
 // switcher dentro la pagina: chi arriva da Resoconti non ha motivo di vedere l'opzione "per la
@@ -28,12 +32,23 @@ function UploadPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const tab: 'activity' | 'gpx' = searchParams.get('tab') === 'gpx' ? 'gpx' : 'activity'
-  const [gpxSource, setGpxSource] = useState<'file' | 'manual' | 'from-activity'>('file')
+  // 'cerca' (la mappa unificata di CreaGuidaMapSearch.tsx) è l'ingresso di default per "Crea una
+  // guida" — il bottone "Crea una guida" (GuidaHub.tsx) porta qui direttamente, a schermo intero,
+  // senza più uno switcher intermedio. Le altre vie (file GPX, da un'attività del diario, link,
+  // inserimento manuale) restano raggiungibili da dentro la mappa stessa (pulsante "Altri modi",
+  // vedi onOtherWays sotto), non più come card alla pari sulla stessa schermata.
+  const [gpxSource, setGpxSource] = useState<GpxSource>('cerca')
 
   // "Naviga adesso" prova prima l'app nativa (se il device può averla), altrimenti ricade sul
   // navigatore libero via web già esistente (app/navigatore/traccia) — vedi lib/navigatorHandoff.ts.
   const handleStartUnplannedNavigation = () => {
     tryOpenNavigatorApp(router, '/navigatore/traccia')
+  }
+
+  // La mappa è un overlay a schermo intero (createPortal, come RouteBuilder.tsx): la renderizziamo
+  // da sola, senza il resto della chrome della pagina sotto (comunque nascosta dall'overlay).
+  if (tab === 'gpx' && gpxSource === 'cerca') {
+    return <CreaGuidaMapSearch onBack={() => router.back()} onOtherWays={mode => setGpxSource(mode)} />
   }
 
   return (
@@ -71,35 +86,19 @@ function UploadPageInner() {
           </button>
         )}
 
-        {tab === 'gpx' && (
-          <div className="flex bg-stone-100 rounded-xl p-1 mb-6 text-xs">
-            <button
-              onClick={() => setGpxSource('file')}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg font-medium transition-all
-                ${gpxSource === 'file' ? 'bg-white text-sky-700 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
-            >
-              <MapPin className="w-3.5 h-3.5" /> File traccia
-            </button>
-            <button
-              onClick={() => setGpxSource('manual')}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg font-medium transition-all
-                ${gpxSource === 'manual' ? 'bg-white text-sky-700 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
-            >
-              <PencilLine className="w-3.5 h-3.5" /> Manuale
-            </button>
-            <button
-              onClick={() => setGpxSource('from-activity')}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg font-medium transition-all
-                ${gpxSource === 'from-activity' ? 'bg-white text-sky-700 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
-            >
-              <History className="w-3.5 h-3.5" /> Da diario esistente
-            </button>
-          </div>
+        {/* UrlImportUploader ha già il proprio "Indietro" (onBack sotto) — un secondo link qui
+            sopra sarebbe ridondante, solo gli altri tre ne sono privi (vedi il loro import). */}
+        {tab === 'gpx' && gpxSource !== 'cerca' && gpxSource !== 'url' && (
+          <button onClick={() => setGpxSource('cerca')}
+            className="mb-4 flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-700 transition-colors">
+            <ArrowLeft className="w-4 h-4" /> Torna alla ricerca su mappa
+          </button>
         )}
 
         {tab === 'activity' && <ActivityUploader />}
         {tab === 'gpx' && gpxSource === 'file' && <GpxUploader />}
-        {tab === 'gpx' && gpxSource === 'manual' && <ManualImportChoice />}
+        {tab === 'gpx' && gpxSource === 'manual' && <ManualPlanUploader />}
+        {tab === 'gpx' && gpxSource === 'url' && <UrlImportUploader onBack={() => setGpxSource('cerca')} />}
         {tab === 'gpx' && gpxSource === 'from-activity' && <FromActivityUploader />}
       </main>
     </div>

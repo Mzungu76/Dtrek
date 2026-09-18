@@ -1,6 +1,5 @@
 'use client'
 import { useSyncExternalStore, useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
 import { Loader2, CheckCircle2, X, AlertTriangle } from 'lucide-react'
 import { subscribe, getSnapshot, dismiss } from '@/lib/routeBuilder/backgroundSearchStore'
 
@@ -11,14 +10,13 @@ function formatElapsed(seconds: number): string {
 }
 
 /**
- * Indicatore globale (montato una volta in app/layout.tsx) di una ricerca/generazione "Costruisci o
- * trova un percorso" in corso o appena finita — visibile su QUALSIASI pagina dell'app, non solo sul
- * wizard che l'ha avviata (vedi lib/routeBuilder/backgroundSearchStore.ts per il perché: la ricerca
- * prosegue anche navigando altrove). Si silenzia da sé mentre il wizard stesso è montato e mostra
- * già il proprio indicatore (state.suppressed), per non duplicare la stessa informazione.
+ * Indicatore globale (montato una volta in app/layout.tsx) di una generazione "Su misura" in corso
+ * o appena finita — visibile su QUALSIASI pagina dell'app, non solo sul wizard che l'ha avviata
+ * (vedi lib/routeBuilder/backgroundSearchStore.ts per il perché: la generazione prosegue anche
+ * navigando altrove). Si silenzia da sé mentre il wizard stesso è montato e mostra già il proprio
+ * indicatore (state.suppressed), per non duplicare la stessa informazione.
  */
 export default function GlobalSearchStatusPill() {
-  const router = useRouter()
   const state = useSyncExternalStore(subscribe, getSnapshot, () => getSnapshot())
   const [elapsed, setElapsed] = useState(0)
 
@@ -32,8 +30,6 @@ export default function GlobalSearchStatusPill() {
 
   if (state.status === 'idle' || state.suppressed) return null
 
-  const modeLabel = state.mode === 'su_misura' ? 'Su misura' : 'Esistenti'
-
   return (
     <div
       className="fixed z-40 right-4 flex items-center gap-2.5 bg-stone-800 text-white rounded-full shadow-lg pl-4 pr-2 py-2.5 max-w-[calc(100vw-2rem)]"
@@ -43,16 +39,13 @@ export default function GlobalSearchStatusPill() {
         <>
           <Loader2 className="w-4 h-4 animate-spin text-terra-400 shrink-0" />
           <div className="min-w-0">
-            <p className="text-xs font-semibold truncate">{state.stage || `Genero (${modeLabel})…`}</p>
+            <p className="text-xs font-semibold truncate">{state.stage || 'Genero il percorso…'}</p>
             <p className="text-[10px] text-white/50 font-mono tabular-nums">{formatElapsed(elapsed)}</p>
           </div>
         </>
       )}
       {state.status === 'done' && (
-        <button
-          onClick={() => { if (state.searchHistoryId) router.push(`/profilo/ricerche-salvate/${encodeURIComponent(state.searchHistoryId)}`); dismiss() }}
-          className="flex items-center gap-2.5"
-        >
+        <button onClick={() => dismiss()} className="flex items-center gap-2.5">
           <CheckCircle2 className="w-4 h-4 text-forest-400 shrink-0" />
           <span className="text-xs font-semibold">
             Percorso pronto{state.resultCount ? ` — ${state.resultCount} risultat${state.resultCount === 1 ? 'o' : 'i'}` : ''}
