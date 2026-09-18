@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, Search as SearchIcon, RefreshCw, Loader2, ChevronUp, ChevronDown, X as XIcon,
+  MoreHorizontal, Link2, PencilLine, MapPin, History, ChevronRight,
 } from 'lucide-react'
 import RouteBuilder, { type ResultItem } from './RouteBuilder'
 import { defaultPendingExpiresAt } from './sharedHelpers'
@@ -39,6 +40,13 @@ function trailLatLon(t: TrailNearbyItem): [number, number] | null {
   return t.geometry[Math.floor(t.geometry.length / 2)]
 }
 
+// Le altre vie per creare una Guida oltre alla ricerca su mappa — prima card separate nella
+// schermata di scelta di ManualImportChoice.tsx (rimossa: questa mappa è ora l'unico ingresso),
+// ora raggiungibili da qui tramite il pulsante "Altri modi" e rese dal chiamante (app/upload/
+// page.tsx), che già possiede GpxUploader/ManualPlanUploader/UrlImportUploader/
+// FromActivityUploader e la loro navigazione di ritorno.
+export type OtherWayToAdd = 'file' | 'manual' | 'url' | 'from-activity'
+
 /**
  * Ricerca su mappa di "Crea Guida" — sostituisce, per le tre tipologie insieme (Sentiero, Borgo/
  * Città, Sito), la vecchia ricerca "Esistenti" a raggio fisso di RouteBuilder.tsx: muovere/
@@ -49,9 +57,11 @@ function trailLatLon(t: TrailNearbyItem): [number, number] | null {
  * (lib/routeBuilder/foundRoute.ts's foundRouteItemFromCachedTrail) e la fa passare dallo stesso
  * salvataggio del wizard (saveResultItemToGuide) — quota reale arricchita al salvataggio, non qui.
  * La generazione di un percorso su misura resta RouteBuilder.tsx invariato, raggiunta da qui solo
- * via il FAB "Costruisci su misura".
+ * via il FAB "Costruisci su misura". Le altre vie (file GPX, da un'attività del diario, link,
+ * inserimento manuale) restano un tocco più lontano, dietro "Altri modi" (vedi onOtherWays), non
+ * più esposte come card equivalenti sulla stessa schermata.
  */
-export default function CreaGuidaMapSearch({ onBack }: { onBack: () => void }) {
+export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: () => void; onOtherWays?: (mode: OtherWayToAdd) => void }) {
   const router = useRouter()
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstance = useRef<L.Map | null>(null)
@@ -63,6 +73,7 @@ export default function CreaGuidaMapSearch({ onBack }: { onBack: () => void }) {
   const initialMoveHandled = useRef(false)
 
   const [showBuilder, setShowBuilder] = useState(false)
+  const [showOtherWays, setShowOtherWays] = useState(false)
 
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('tutto')
   const [metaResults, setMetaResults] = useState<MetaSearchResultItem[]>([])
@@ -311,6 +322,12 @@ export default function CreaGuidaMapSearch({ onBack }: { onBack: () => void }) {
               </button>
             )}
           </div>
+          {onOtherWays && (
+            <button onClick={() => setShowOtherWays(true)} aria-label="Altri modi per aggiungere un percorso"
+              className="w-10 h-10 rounded-full bg-white/95 backdrop-blur shadow-md flex items-center justify-center text-stone-600 hover:text-stone-800 transition-colors shrink-0">
+              <MoreHorizontal className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
         <div className="flex justify-center">
@@ -423,8 +440,51 @@ export default function CreaGuidaMapSearch({ onBack }: { onBack: () => void }) {
           </div>
         )}
       </div>
+
+      {/* ── "Altri modi" — le vie di creazione diverse dalla ricerca su mappa (file GPX, da
+          un'attività del diario, link, inserimento manuale), un tocco più lontano invece che card
+          equivalenti sulla stessa schermata. */}
+      {showOtherWays && onOtherWays && (
+        <>
+          <div className="fixed inset-0 z-30 bg-stone-900/20" onClick={() => setShowOtherWays(false)} />
+          <div className="fixed left-0 right-0 bottom-0 z-40 bg-white rounded-t-3xl shadow-[0_-6px_24px_rgba(0,0,0,.15)] p-4 pb-6">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-semibold text-stone-800">Altri modi per aggiungere</p>
+              <button onClick={() => setShowOtherWays(false)} aria-label="Chiudi"
+                className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center text-stone-500 hover:bg-stone-200 transition-colors">
+                <XIcon className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="space-y-2">
+              <OtherWayRow icon={Link2} label="Importa da un link" description="Incolla l'indirizzo di una pagina — proviamo a scaricarne la traccia reale."
+                onClick={() => { setShowOtherWays(false); onOtherWays('url') }} />
+              <OtherWayRow icon={MapPin} label="Carica un file GPX" description="Un file traccia già pronto (GPX, KML o GeoJSON)."
+                onClick={() => { setShowOtherWays(false); onOtherWays('file') }} />
+              <OtherWayRow icon={History} label="Da un'attività del diario" description="Clona un'escursione già registrata come punto di partenza."
+                onClick={() => { setShowOtherWays(false); onOtherWays('from-activity') }} />
+              <OtherWayRow icon={PencilLine} label="Inserisci a mano" description="Hai già tutti i dati? Compila nome, distanza e dislivello senza cercare nulla."
+                onClick={() => { setShowOtherWays(false); onOtherWays('manual') }} />
+            </div>
+          </div>
+        </>
+      )}
     </div>,
     document.body,
+  )
+}
+
+function OtherWayRow({ icon: Icon, label, description, onClick }: { icon: typeof Link2; label: string; description: string; onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="w-full flex items-center gap-3 text-left rounded-2xl border border-stone-200 p-3.5 hover:border-forest-300 transition-colors">
+      <span className="w-9 h-9 rounded-xl bg-forest-50 text-forest-600 flex items-center justify-center shrink-0">
+        <Icon className="w-4.5 h-4.5" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-stone-800">{label}</span>
+        <span className="block text-xs text-stone-500">{description}</span>
+      </span>
+      <ChevronRight className="w-4 h-4 text-stone-400 shrink-0" />
+    </button>
   )
 }
 

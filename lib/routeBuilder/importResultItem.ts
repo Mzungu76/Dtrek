@@ -1,7 +1,7 @@
-// Salva un ResultItem (percorso "trovato" o "costruito" da una ricerca — vedi
-// components/upload/RouteBuilder.tsx per il tipo) come PlannedHike/Guida — nucleo condiviso tra il
-// wizard di ricerca (salvataggio singolo o import in blocco) e la creazione di una Guida a partire
-// da una ricerca salvata (app/profilo/ricerche-salvate/[id]/page.tsx), così le due strade non
+// Salva un ResultItem (percorso "trovato" o "costruito" — vedi components/upload/RouteBuilder.tsx
+// per il tipo) come PlannedHike/Guida — nucleo condiviso tra il wizard "Su misura" (salvataggio
+// singolo o import in blocco) e la ricerca su mappa unificata
+// (components/upload/CreaGuidaMapSearch.tsx, per un Sentiero da cache OSM), così le due strade non
 // duplicano lo stesso arricchimento (quota reale, POI, punteggi).
 import { savePlanned, type PlannedHike } from '@/lib/plannedStore'
 import { computeCtsForHike } from '@/lib/computeCtsForHike'
@@ -60,9 +60,8 @@ function trackPointsWithFallback(trackPoints: TrackPoint[], routePolyline: [numb
 // "costruito" (trackPoints/pois in cima) sia per uno "trovato" (annidati in `track`), senza dover
 // salvare nulla prima: RouteMap3D lavora già con la sola traccia GPS (activityId/dtmProfile
 // restano assenti, opzionali, va bene per un'anteprima non ancora salvata). Condiviso tra il
-// wizard di ricerca (components/upload/RouteBuilder.tsx) e il dettaglio di una ricerca salvata
-// (app/profilo/ricerche-salvate/[id]/page.tsx), che offre la stessa vista 3D sugli stessi risultati
-// riletti dall'archivio.
+// wizard "Su misura" (components/upload/RouteBuilder.tsx) e la ricerca su mappa unificata
+// (components/upload/CreaGuidaMapSearch.tsx).
 export function resultItemToMap3DProps(item: ResultItem) {
   return item.kind === 'built'
     ? { trackPoints: trackPointsWithFallback(item.data.trackPoints, item.data.routePolyline), title: routeTypeLabel(item.data.type), distanceMeters: item.data.distanceMeters, elevationGain: item.data.elevationGain, pois: item.data.pois }

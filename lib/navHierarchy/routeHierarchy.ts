@@ -45,8 +45,6 @@ export const ROUTE_HIERARCHY: RouteEntry[] = [
   { pattern: '/profilo/impostazioni', parent: '/profilo' },
   { pattern: '/profilo/ai', parent: '/profilo' },
   { pattern: '/profilo/cronologia-navigazione', parent: '/profilo' },
-  { pattern: '/profilo/ricerche-salvate', parent: '/profilo' },
-  { pattern: '/profilo/ricerche-salvate/[id]', parent: '/profilo/ricerche-salvate' },
   { pattern: '/upload', parent: '/guida' },
   { pattern: '/fonti-e-crediti', parent: '/profilo' },
   { pattern: '/vette', parent: '/profilo' },
@@ -74,7 +72,6 @@ export const ROUTE_LABELS: Record<string, string> = {
   '/resoconto': 'Reportage',
   '/statistiche': 'Statistiche',
   '/profilo': 'Profilo',
-  '/profilo/ricerche-salvate': 'Le mie ricerche',
   '/login': 'Accedi',
 }
 
