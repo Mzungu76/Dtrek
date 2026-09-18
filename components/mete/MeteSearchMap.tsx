@@ -60,14 +60,20 @@ export default function MeteSearchMap() {
   useEffect(() => {
     fetch('/api/percorsi')
       .then(res => res.ok ? res.json() : Promise.reject(new Error(`Errore ${res.status}`)))
-      .then((rows: { id: string; title: string; latitude: number | null; longitude: number | null }[]) => {
-        const withCoords = rows.filter((r): r is PercorsoPin => r.latitude != null && r.longitude != null)
+      .then((rows: { id: string; title: string; metaType: MetaType; latitude: number | null; longitude: number | null }[]) => {
+        // /api/percorsi restituisce ogni Meta salvata dall'utente, non solo i Sentieri (include
+        // anche un eventuale Borgo/Città o Sito già salvato in passato) — qui servono solo i
+        // Sentieri: gli altri due tipi arrivano già dall'archivio via searchCurrentView(), mai da
+        // qui, e un Sentiero è l'unico per cui "Apri" verso /guida/[id] ha senso.
+        const withCoords: PercorsoPin[] = rows
+          .filter(r => r.metaType === 'sentiero' && r.latitude != null && r.longitude != null)
+          .map(r => ({ id: r.id, title: r.title, latitude: r.latitude as number, longitude: r.longitude as number }))
         percorsiRef.current = withCoords
         // La mappa può essersi già mossa/inizializzata prima che questa fetch tornasse — un
         // secondo giro del filtro locale la allinea invece di aspettare il prossimo pan/zoom.
         updatePercorsiForView()
       })
-      .catch(() => { /* i Sentieri restano semplicemente assenti dalla mappa, mai un errore bloccante */ })
+      .catch(e => { console.error('[MeteSearchMap] /api/percorsi', e) /* i Sentieri restano semplicemente assenti dalla mappa, mai un errore bloccante */ })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

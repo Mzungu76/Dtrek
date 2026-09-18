@@ -53,10 +53,15 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   const sourceCounts = await fetchSourceCounts(supabase, [data.id])
 
+  // dtrek_places.subtype è una colonna condivisa a significato diverso per tipologia (lib/
+  // metaTypes.ts): PlaceCategory ('borgo'|'citta') per un borgo_citta, SiteType per un sito —
+  // valorizzare siteType anche per un borgo_citta manderebbe SITE_TYPE_CONFIG['borgo'] (chiave
+  // inesistente) in giro fino a un crash sul primo `.label` letto (era esattamente il bug
+  // segnalato: "Cannot read properties of undefined (reading 'label')" aprendo una scheda Borgo).
   const detail: PlaceDetail = {
     id: data.id,
     metaType: data.meta_type as MetaType,
-    siteType: (data.subtype ?? null) as SiteType | null,
+    siteType: data.meta_type === 'sito' ? (data.subtype ?? null) as SiteType | null : null,
     name: data.name,
     description: data.description,
     latitude: data.latitude,
