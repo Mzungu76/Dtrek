@@ -25,6 +25,10 @@ export interface PlaceDetail {
   source: string
   sourceCount: number
   confidence: number
+  /** true quando latitude/longitude sono il centro del Comune, non la posizione reale del Sito —
+   *  vedi supabase/migrations/recover_mic_sito_duplicate_coordinates_to_municipality_centroid.sql.
+   *  La UI deve dirlo esplicitamente (mai una posizione approssimata spacciata per esatta). */
+  coordinatesApproximate: boolean
 }
 
 /**
@@ -40,7 +44,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   const { data, error } = await supabase
     .from('dtrek_places')
-    .select('id, name, meta_type, subtype, description, latitude, longitude, region, province, municipality, address, image_url, official_url, website, opening_hours, source, confidence')
+    .select('id, name, meta_type, subtype, description, latitude, longitude, region, province, municipality, address, image_url, official_url, website, opening_hours, source, confidence, metadata')
     .eq('id', params.id)
     .in('meta_type', ['borgo_citta', 'sito'])
     .maybeSingle()
@@ -77,6 +81,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     source: data.source,
     sourceCount: sourceCounts.get(data.id) ?? 1,
     confidence: data.confidence,
+    coordinatesApproximate: (data.metadata as Record<string, unknown> | null)?.coordinatesApproximate === true,
   }
   return NextResponse.json(detail)
 }

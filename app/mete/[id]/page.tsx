@@ -125,7 +125,10 @@ export default function MetaDettaglioPage() {
         )}
 
         <section className="bg-white rounded-xl border border-stone-200 p-4 sm:p-5 mb-4">
-          <h2 className="font-display text-base font-semibold text-stone-800 mb-3">Posizione</h2>
+          <h2 className="font-display text-base font-semibold text-stone-800 mb-1">Posizione</h2>
+          {place.coordinatesApproximate && (
+            <p className="text-xs text-amber-600 mb-2">Posizione approssimativa — centro del Comune, non il punto esatto.</p>
+          )}
           <PlacePinMap lat={place.latitude} lon={place.longitude} color={config.color} />
         </section>
 
