@@ -95,6 +95,41 @@ function rawTypeOf(tags: Record<string, string>): string | undefined {
   return undefined
 }
 
+// ── Centroide di una way ─────────────────────────────────────────────────────────────────────
+// La media semplice dei vertici (usata prima) pesa di più i tratti disegnati con nodi più fitti
+// (es. una curva del perimetro), spostando il punto lontano dal vero centro geometrico — causa
+// più probabile di un Sito "un po' fuori" dalla sua posizione reale quando la sorgente OSM è un
+// poligono (perimetro di un castello, area archeologica, sagoma di un museo) e non un singolo
+// punto: a differenza di un confine comunale (scripts/places/istat/fetch.ts, dove lo stesso errore
+// resta trascurabile rispetto all'estensione del Comune), qui l'oggetto è piccolo quanto l'errore
+// stesso. Formula dello shoelace: centroide "ad area", non pesato dalla densità dei vertici. Pura,
+// testabile senza rete/filesystem.
+export function wayCentroid(coords: [number, number][], refs: number[]): [number, number] {
+  const isClosed = refs.length >= 4 && refs[0] === refs[refs.length - 1]
+  if (isClosed && coords.length >= 3) {
+    const n = coords.length
+    let area = 0, cLat = 0, cLon = 0
+    for (let i = 0; i < n; i++) {
+      const [lat1, lon1] = coords[i]
+      const [lat2, lon2] = coords[(i + 1) % n]
+      const cross = lat1 * lon2 - lat2 * lon1
+      area += cross
+      cLat += (lat1 + lat2) * cross
+      cLon += (lon1 + lon2) * cross
+    }
+    area /= 2
+    // Poligono degenere (vertici collineari, area ~0) — la formula dividerebbe per ~0, ripiega
+    // sulla media semplice sotto invece di NaN/Infinity.
+    if (Math.abs(area) > 1e-12) return [cLat / (6 * area), cLon / (6 * area)]
+  }
+  // Way aperta (una linea, es. un muro): un "centro d'area" non ha lo stesso significato — resta
+  // la media semplice, unica opzione ragionevole senza calcolare un punto medio lungo il tracciato.
+  return [
+    coords.reduce((s, c) => s + c[0], 0) / coords.length,
+    coords.reduce((s, c) => s + c[1], 0) / coords.length,
+  ]
+}
+
 // ── Elemento OSM (con coordinate già risolte per una way) → PlaceCandidate ──────────────────────
 // Pura, testabile senza rete/filesystem.
 export function osmElementToPlaceCandidate(
@@ -159,8 +194,7 @@ async function readCandidatesFromPbf(pbfPath: string): Promise<PlaceCandidate[]>
             if (Object.keys(way.tags ?? {}).length === 0) continue
             const resolved = way.refs.map(r => nodeCoords.get(r)).filter((c): c is [number, number] => !!c)
             if (resolved.length === 0) continue
-            const lat = resolved.reduce((s, c) => s + c[0], 0) / resolved.length
-            const lon = resolved.reduce((s, c) => s + c[1], 0) / resolved.length
+            const [lat, lon] = wayCentroid(resolved, way.refs)
             const c = osmElementToPlaceCandidate({ type: 'way', id: way.id, tags: way.tags }, { lat, lon })
             if (c) candidates.push(c)
           }

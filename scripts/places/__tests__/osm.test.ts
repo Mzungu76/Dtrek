@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { osmElementToPlaceCandidate } from '../osm/fetch'
+import { osmElementToPlaceCandidate, wayCentroid } from '../osm/fetch'
 
 const CASTELLO_ORSINI = {
   type: 'node' as const,
@@ -65,5 +65,44 @@ describe('osmElementToPlaceCandidate', () => {
   it('confidence 0.7 — fonte crowdsourced, non un\'anagrafe ufficiale', () => {
     const c = osmElementToPlaceCandidate(CASTELLO_ORSINI, { lat: 42, lon: 12 })
     expect(c?.confidence).toBe(0.7)
+  })
+})
+
+describe('wayCentroid', () => {
+  it('per una way chiusa calcola il centroide d\'area, non la media semplice dei vertici', () => {
+    // Quadrato (0,0)-(10,0)-(10,10)-(0,10), centro reale (5,5) — con 9 punti aggiuntivi
+    // esattamente sul lato (0,10)-(0,0), che non cambiano la forma/area del poligono (sono
+    // ridondanti, collineari) ma sposterebbero pesantemente una media semplice verso quel lato.
+    const coords: [number, number][] = [
+      [0, 0], [10, 0], [10, 10], [0, 10],
+      [0, 9], [0, 8], [0, 7], [0, 6], [0, 5], [0, 4], [0, 3], [0, 2], [0, 1],
+      [0, 0], // chiusura: stesso nodo del primo (way chiusa)
+    ]
+    const refs = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 1]
+    const [lat, lon] = wayCentroid(coords, refs)
+    expect(lat).toBeCloseTo(5, 1)
+    expect(lon).toBeCloseTo(5, 1)
+
+    // La media semplice degli stessi punti sarebbe molto diversa — la conferma che il fix cambia
+    // davvero il risultato, non solo che non esplode.
+    const naiveAvgLat = coords.reduce((s, c) => s + c[0], 0) / coords.length
+    expect(Math.abs(naiveAvgLat - 5)).toBeGreaterThan(2)
+  })
+
+  it('per una way aperta (una linea) resta la media semplice', () => {
+    const coords: [number, number][] = [[0, 0], [10, 0]]
+    const refs = [1, 2] // non chiusa: refs[0] !== refs[last]
+    expect(wayCentroid(coords, refs)).toEqual([5, 0])
+  })
+
+  it('non esplode su un poligono chiuso ma degenere (vertici collineari, area ~0)', () => {
+    const coords: [number, number][] = [[0, 0], [0, 5], [0, 10], [0, 0]]
+    const refs = [1, 2, 3, 1]
+    const [lat, lon] = wayCentroid(coords, refs)
+    expect(Number.isFinite(lat)).toBe(true)
+    expect(Number.isFinite(lon)).toBe(true)
+    // Ripiega sulla media semplice quando l'area è ~0 (nessun centro d'area significativo).
+    expect(lat).toBeCloseTo(0, 6)
+    expect(lon).toBeCloseTo(3.75, 6)
   })
 })
