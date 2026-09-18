@@ -17,6 +17,7 @@ import { foundRouteItemFromCachedTrail } from '@/lib/routeBuilder/foundRoute'
 import { resolvePlaceClientFirst } from '@/lib/routeBuilder/resolvePlaceClient'
 import { useCreateMetaFromSearch } from '@/lib/useCreateMetaFromSearch'
 import { META_TYPE_CONFIG, SITE_TYPE_CONFIG, type MetaType, type SiteType } from '@/lib/metaTypes'
+import { ROUTE_COLORS } from '@/lib/designTokens'
 import type { MetaSearchResultItem } from '@/lib/metaSearch/types'
 import type { TrailNearbyItem } from '@/app/api/trails-nearby/route'
 import type { PlaceDetail } from '@/app/api/places/[id]/route'
@@ -217,6 +218,19 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
         iconSize: [size, size],
         iconAnchor: [size / 2, size],
       })
+    }
+
+    // Tracciato reale per ogni Sentiero, non solo il pin — un colore diverso a testa (stessa
+    // palette/idea di MeteSearchMap.tsx, ROUTE_COLORS in giro) così più tracciati vicini restano
+    // distinguibili. Disegnate PRIMA dei pin: restano sotto, mai a coprire un marker toccabile.
+    let routeColorIdx = 0
+    for (const item of trailResults) {
+      if (item.geometry.length < 2) continue
+      const color = ROUTE_COLORS[routeColorIdx++ % ROUTE_COLORS.length]
+      const isSelected = selected?.kind === 'trail' && selected.item.id === item.id
+      const line = L.polyline(item.geometry, { color, weight: isSelected ? 5.5 : 3.5, opacity: isSelected ? 1 : 0.8 })
+      line.on('click', () => { setSelected({ kind: 'trail', item }); setSheetExpanded(false) })
+      line.addTo(layer)
     }
 
     for (const item of metaResults) {
