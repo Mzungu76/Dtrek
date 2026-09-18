@@ -8,6 +8,7 @@ export const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-5'
 export type AiFeature =
   | 'guide'            // app/api/guide/route.ts
   | 'guideQa'           // app/api/guide/qa/route.ts ("Chiedi a Giulia")
+  | 'meteQa'            // app/api/mete/qa/route.ts ("Chiedi a Giulia" su un Borgo/Città/Sito)
   | 'liveQa'            // app/api/guide/live-qa/route.ts ("Giulia in cammino" — Fase 10 di docs/navigator-orizzonti-roadmap.md)
   | 'resoconto'         // app/api/resoconto/route.ts
   | 'routeCompare'       // app/api/route-compare/route.ts
@@ -28,6 +29,7 @@ export type AiFeature =
 const FEATURE_DEFAULT_MODEL: Record<AiFeature, string> = {
   guide:           DEFAULT_CLAUDE_MODEL,
   guideQa:         DEFAULT_CLAUDE_MODEL,
+  meteQa:          DEFAULT_CLAUDE_MODEL,
   // Domanda breve, contesto minimo, nessuna ricerca web — economica per natura (vedi il
   // commento in app/api/guide/live-qa/route.ts), stesso trattamento di questionnaire/caption.
   liveQa:          'claude-haiku-4-5',

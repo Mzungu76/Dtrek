@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import PlacePinMap from '@/components/mete/PlacePinMap'
+import PlaceQA from '@/components/mete/PlaceQA'
 import type { PlaceDetail } from '@/app/api/places/[id]/route'
 import { META_TYPE_CONFIG, SITE_TYPE_CONFIG, type SiteType } from '@/lib/metaTypes'
 import { ArrowLeft, Building2, Clock, Globe, Landmark, Loader2, MapPin, Tag } from 'lucide-react'
@@ -158,6 +159,20 @@ export default function MetaDettaglioPage() {
           </p>
           <Link href="/fonti-e-crediti" className="text-xs text-forest-700 hover:underline mt-1 inline-block">Fonti e crediti →</Link>
         </section>
+
+        <PlaceQA
+          placeId={place.id}
+          placeFallback={{
+            name: place.name,
+            metaType: place.metaType,
+            siteType: place.siteType,
+            description: place.description,
+            region: place.region,
+            province: place.province,
+            municipality: place.municipality,
+            address: place.address,
+          }}
+        />
       </main>
     </div>
   )
