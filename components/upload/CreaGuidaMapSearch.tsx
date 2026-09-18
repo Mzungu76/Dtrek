@@ -286,7 +286,14 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
   if (showBuilder) return <RouteBuilder onBack={() => setShowBuilder(false)} />
 
   const totalResults = metaResults.length + trailResults.length
-  const showTrailZoomHint = (typeFilter === 'tutto' || typeFilter === 'sentiero') && zoom < TRAILS_MIN_ZOOM
+  const wantsTrails = typeFilter === 'tutto' || typeFilter === 'sentiero'
+  const showTrailZoomHint = wantsTrails && zoom < TRAILS_MIN_ZOOM
+  // Zoom sufficiente e Sentieri cercati, ma la cache `trails` non ne ha per quest'area — distinto
+  // dal messaggio generico "nessun risultato" (che qui non scatterebbe comunque se Borghi/Siti
+  // hanno trovato qualcosa): la cache si popola sull'uso (lib/routeBuilder/generateRecommendations.ts)
+  // e da un pre-riscaldamento manuale per regione (app/api/admin/prewarm-trails/route.ts) — un'area
+  // mai visitata prima può restare vuota anche a zoom corretto, non è un guasto.
+  const trailsEmptyAtThisZoom = wantsTrails && !showTrailZoomHint && !searching && trailResults.length === 0
 
   const TYPE_FILTERS: { id: TypeFilter; label: string }[] = [
     { id: 'tutto', label: 'Tutto' },
@@ -433,6 +440,11 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
           <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-2">
             {totalResults === 0 && !searching && (
               <p className="text-sm text-center text-stone-400 py-8">Nessun risultato — allarga la ricerca o muovi la mappa.</p>
+            )}
+            {trailsEmptyAtThisZoom && (
+              <p className="text-xs text-stone-400 text-center py-2">
+                Nessun sentiero già in cache per quest&apos;area — la copertura è ancora parziale, prova un&apos;altra zona.
+              </p>
             )}
             {metaResults.map(item => (
               <MetaRow key={item.id} item={item} creating={creatingMetaId === item.id} onCreate={() => createAndOpen(item)} onSelect={() => { setSelected({ kind: 'meta', item }); setSheetExpanded(false) }} />

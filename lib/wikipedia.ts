@@ -162,6 +162,37 @@ export async function searchAndFetch(
   }
 }
 
+// Tetto reale dell'API MediaWiki per `exchars` (richieste anonime, senza bot flag) — un valore più
+// alto viene silenziosamente riportato a questo, meglio dichiararlo qui che scoprirlo a runtime.
+const EXTENDED_EXTRACT_MAX_CHARS = 1200
+
+/**
+ * Estratto più lungo del solo primo paragrafo — la REST /page/summary/ (fetchSummary, sopra) ne
+ * restituisce sempre e solo un frammento breve (spesso 1 frase), qui invece l'intera sezione
+ * introduttiva fino al tetto dell'API (~1200 caratteri), per una scheda di dettaglio che ha spazio
+ * per più testo di un badge/popup di POI. Titolo già risolto e validato da searchAndFetch (mai una
+ * ricerca propria: chiamare questa funzione con un nome libero rischierebbe di agganciare un
+ * articolo diverso senza il controllo di somiglianza/prossimità che searchAndFetch già applica).
+ */
+export async function fetchExtendedExtract(title: string, lang: string): Promise<string | null> {
+  try {
+    const url = `https://${lang}.wikipedia.org/w/api.php?` + new URLSearchParams({
+      action: 'query', prop: 'extracts', titles: title,
+      exintro: '1', explaintext: '1', exchars: String(EXTENDED_EXTRACT_MAX_CHARS),
+      format: 'json', origin: '*',
+    })
+    const res = await fetch(url)
+    if (!res.ok) return null
+    const data = await res.json() as { query?: { pages?: Record<string, { extract?: string }> } }
+    const pages = data.query?.pages
+    if (!pages) return null
+    const extract = Object.values(pages)[0]?.extract?.trim()
+    return extract || null
+  } catch {
+    return null
+  }
+}
+
 /**
  * Look up information for each named POI that is physically on/near the route.
  * Cascade: OSM wikipedia= tag → Italian Wikipedia → English Wikipedia → Italian Wikivoyage

@@ -2,9 +2,27 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { getUserFromRequest } from '@/lib/supabaseAuth'
 import { fetchSourceCounts } from '@/lib/metaSearch/placeQuery'
-import { searchAndFetch } from '@/lib/wikipedia'
+import { searchAndFetch, fetchExtendedExtract } from '@/lib/wikipedia'
 import { haversineM } from '@/lib/geoUtils'
 import type { MetaType, SiteType } from '@/lib/metaTypes'
+
+// L'importer PTPR (scripts/import-ptpr.ts) compone `description` da campi tipologici del
+// shapefile (spesso solo un codice numerico, es. "Tipo: 76") più questa attribuzione obbligatoria
+// — MAI vuota, quindi un Sito da PTPR ha sempre un `description` non-null anche senza un solo
+// carattere di prosa reale. Trattarla come "descrizione già buona" (il criterio originale, prima
+// di questo controllo) blocca l'arricchimento Wikipedia per ogni Sito PTPR, sempre — non un caso
+// raro, la norma. Nessun modo affidabile di riconoscere un vero campo NOTE_ testuale da un codice
+// senza un campo dedicato nell'import (fuori scopo qui); il controllo minimo e sicuro è escludere
+// il caso più comune e più povero, quando restano meno di 15 caratteri dopo aver tolto
+// l'attribuzione.
+const PTPR_ATTRIBUTION = 'PTPR Regione Lazio — Tavola B (CC BY 4.0)'
+const MIN_SUBSTANTIVE_DESCRIPTION_CHARS = 15
+
+function isSubstantiveDescription(description: string | null): boolean {
+  if (!description) return false
+  const withoutAttribution = description.replace(PTPR_ATTRIBUTION, '').replace(/·\s*$/, '').trim()
+  return withoutAttribution.length >= MIN_SUBSTANTIVE_DESCRIPTION_CHARS
+}
 
 export const dynamic = 'force-dynamic'
 
@@ -31,12 +49,13 @@ export interface PlaceDetail {
    *  vedi supabase/migrations/recover_mic_sito_duplicate_coordinates_to_municipality_centroid.sql.
    *  La UI deve dirlo esplicitamente (mai una posizione approssimata spacciata per esatta). */
   coordinatesApproximate: boolean
-  /** Popolato quando manca una foto propria o una descrizione propria (Borgo/Città non ha mai una
-   *  foto dall'import ISTAT; un Sito da MiC/ArCo non ha mai una descrizione — vedi
-   *  scripts/places/mic/README.md, "nessun campo di descrizione testuale estesa") — un
-   *  arricchimento best-effort da Wikipedia, mai al posto di un dato reale già presente: `thumbnail`
-   *  colma solo `imageUrl` assente, `extract` colma solo `description` assente. null quando non
-   *  trovata, o non abbastanza vicina da fidarsene. */
+  /** Popolato quando manca una foto propria o una descrizione propria SOSTANZIALE (Borgo/Città non
+   *  ha mai una foto dall'import ISTAT; un Sito da MiC/ArCo non ha mai una descrizione, un Sito da
+   *  PTPR ne ha sempre una ma spesso solo un codice tipologico + attribuzione, vedi
+   *  isSubstantiveDescription) — un arricchimento best-effort da Wikipedia, mai al posto di un dato
+   *  reale già presente: `thumbnail` colma solo `imageUrl` assente, `extract` colma solo
+   *  `description` assente/non sostanziale (qui `description` riflette già quel giudizio — vedi
+   *  sotto). null quando non trovata, o non abbastanza vicina da fidarsene. */
   wikipedia: { extract: string; url: string; thumbnail?: string } | null
 }
 
@@ -68,23 +87,35 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   const sourceCounts = await fetchSourceCounts(supabase, [data.id])
 
-  // Borgo/Città e Sito, quando manca una foto propria o una descrizione propria — mai una seconda
-  // fonte a RIMPIAZZARE un dato reale già buono (un `description` già presente resta quello
-  // mostrato, vedi PlaceDetail.wikipedia's uso lato client: l'estratto Wikipedia serve solo come
-  // ripiego quando `description` è vuoto), solo a colmare quello che manca. L'import ISTAT dei
-  // Borghi/Città non porta mai un'immagine propria (scripts/places/istat/fetch.ts non ha un
-  // campo foto) — senza questo, ogni Borgo/Città restava senza copertina. searchAndFetch valida
-  // solo la somiglianza del titolo (lib/wikipedia.ts); qui in più un controllo di prossimità,
-  // perché quel controllo lì manca (a differenza di fetchWikiForNamedPois/isNearPoi) — senza, un
-  // nome generico rischierebbe di agganciare la voce Wikipedia di un omonimo lontano.
+  const hasRealDescription = isSubstantiveDescription(data.description)
+
+  // Borgo/Città e Sito, quando manca una foto propria o una descrizione propria (vera, non solo
+  // fonte/attribuzione — vedi isSubstantiveDescription) — mai una seconda fonte a RIMPIAZZARE un
+  // dato reale già buono (un `description` sostanziale resta quello mostrato, vedi
+  // PlaceDetail.wikipedia's uso lato client: l'estratto Wikipedia serve solo come ripiego quando
+  // manca), solo a colmare quello che manca. L'import ISTAT dei Borghi/Città non porta mai
+  // un'immagine propria (scripts/places/istat/fetch.ts non ha un campo foto) — senza questo, ogni
+  // Borgo/Città restava senza copertina. searchAndFetch valida solo la somiglianza del titolo
+  // (lib/wikipedia.ts); qui in più un controllo di prossimità, perché quel controllo lì manca (a
+  // differenza di fetchWikiForNamedPois/isNearPoi) — senza, un nome generico rischierebbe di
+  // agganciare la voce Wikipedia di un omonimo lontano.
   let wikipedia: PlaceDetail['wikipedia'] = null
-  if (!data.image_url || !data.description) {
+  if (!data.image_url || !hasRealDescription) {
     try {
       const wiki = await searchAndFetch(data.name, 'it', 'wikipedia')
       const hasCoords = wiki?.lat != null && wiki?.lon != null
       const closeEnough = !hasCoords || haversineM(data.latitude, data.longitude, wiki!.lat!, wiki!.lon!) / 1000 <= WIKIPEDIA_MAX_DISTANCE_KM
       if (wiki && closeEnough) {
-        wikipedia = { extract: wiki.extract, url: wiki.url, thumbnail: wiki.thumbnail }
+        // L'estratto della REST /page/summary/ (wiki.extract) è sempre solo il primo paragrafo,
+        // spesso poche righe — quando serve davvero (nessuna descrizione propria sostanziale), un
+        // secondo fetch mirato sullo stesso titolo già validato prende più testo (fino al tetto
+        // dell'API MediaWiki), mai una ricerca propria che rischi un match diverso.
+        let extract = wiki.extract
+        if (!hasRealDescription) {
+          const longer = await fetchExtendedExtract(wiki.title, 'it')
+          if (longer && longer.length > extract.length) extract = longer
+        }
+        wikipedia = { extract, url: wiki.url, thumbnail: wiki.thumbnail }
       }
     } catch (e) {
       console.error('[places/:id] arricchimento Wikipedia fallito', e)
@@ -101,7 +132,11 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     metaType: data.meta_type as MetaType,
     siteType: data.meta_type === 'sito' ? (data.subtype ?? null) as SiteType | null : null,
     name: data.name,
-    description: data.description,
+    // Solo se sostanziale (vedi isSubstantiveDescription) — il testo composto dall'importer PTPR
+    // (solo un codice tipologico + attribuzione, mai vuoto) non è una descrizione da mostrare come
+    // tale: l'attribuzione resta comunque rintracciabile da `source`/`sourceCount` e da
+    // /fonti-e-crediti, non persa, solo non spacciata per prosa descrittiva.
+    description: hasRealDescription ? data.description : null,
     latitude: data.latitude,
     longitude: data.longitude,
     region: data.region,
