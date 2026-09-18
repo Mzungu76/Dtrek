@@ -3,6 +3,7 @@ import 'leaflet/dist/leaflet.css'
 import type * as L from 'leaflet'
 import { useEffect, useRef, useState } from 'react'
 import { META_TYPE_CONFIG, type MetaType } from '@/lib/metaTypes'
+import { ROUTE_COLORS } from '@/lib/designTokens'
 import type { MetaSearchResultItem } from '@/lib/metaSearch/types'
 import { Loader2, RefreshCw } from 'lucide-react'
 
@@ -222,11 +223,18 @@ export default function MeteSearchMap() {
       })
     }
 
+    // Un colore diverso per ogni singolo percorso (stessa palette/idea di AllRoutesMap.tsx),
+    // non un unico verde piatto per la tipologia — con più tracciati/Sentieri vicini altrimenti
+    // si sovrappongono senza modo di distinguerli. Un solo indice condiviso fra tracciati da
+    // cache e Sentieri salvati, così i due gruppi non ripetono lo stesso colore fra loro.
+    let routeColorIdx = 0
+    const nextRouteColor = () => ROUTE_COLORS[routeColorIdx++ % ROUTE_COLORS.length]
+
     // Disegnati per primi: un tracciato reale, non un pin — resta sotto i marker così restano
     // sempre toccabili anche dove una linea ci passa sopra.
     for (const trail of cachedTrails) {
       if (trail.geometry.length < 2) continue
-      const color = META_TYPE_CONFIG.sentiero.color
+      const color = nextRouteColor()
       const line = L.polyline(trail.geometry, { color, weight: 3.5, opacity: 0.8 })
       const statsLine = [
         trail.distanceKm != null ? `${trail.distanceKm.toFixed(1)} km` : null,
@@ -251,7 +259,7 @@ export default function MeteSearchMap() {
     }
 
     for (const p of percorsi) {
-      const color = META_TYPE_CONFIG.sentiero.color
+      const color = nextRouteColor()
       const marker = L.marker([p.latitude, p.longitude], { icon: pinIcon(color, GLYPH.sentiero) })
       marker.bindPopup(`<div style="min-width:160px">
         <strong style="display:block;font-size:13px;margin-bottom:4px">${escapeHtml(p.title)}</strong>
