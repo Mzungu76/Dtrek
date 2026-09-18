@@ -1,13 +1,20 @@
 'use client'
 import { useCallback, useEffect, useState } from 'react'
+import dynamic from 'next/dynamic'
+import Link from 'next/link'
 import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import BackLink from '@/app/components/BackLink'
 import type { MetaSearchResultItem } from '@/lib/metaSearch/types'
 import { SITE_TYPE_CONFIG, SITE_TYPES, type PlaceCategory, type SiteType } from '@/lib/metaTypes'
 import { ITALIAN_REGIONS } from '@/lib/italianRegions'
-import { Building2, Landmark, Loader2, MapPin, Search, X } from 'lucide-react'
+import { Building2, Landmark, List, Loader2, Map as MapIcon, MapPin, Search, X } from 'lucide-react'
+
+// Leaflet tocca `window` al modulo — mai importato lato server (stesso pattern di StreetViewPanel/
+// RouteMap3D in app/guida/GuidaHub.tsx).
+const MeteSearchMap = dynamic(() => import('@/components/mete/MeteSearchMap'), { ssr: false })
 
 type SearchMetaType = 'borgo_citta' | 'sito'
+type View = 'lista' | 'mappa'
 
 const PLACE_CATEGORY_OPTIONS: { id: PlaceCategory; label: string }[] = [
   { id: 'borgo', label: 'Borgo' },
@@ -22,6 +29,7 @@ const PLACE_CATEGORY_OPTIONS: { id: PlaceCategory; label: string }[] = [
  * revisione della pagina di ricerca definitiva (fuori scopo qui).
  */
 export default function TestRicercaMetePage() {
+  const [view, setView] = useState<View>('lista')
   const [metaType, setMetaType] = useState<SearchMetaType>('borgo_citta')
   const [queryText, setQueryText] = useState('')
   const [region, setRegion] = useState('')
@@ -77,11 +85,40 @@ export default function TestRicercaMetePage() {
       <main className="max-w-[720px] mx-auto px-4 sm:px-6 py-5 sm:py-8">
         <BackLink fallbackHref="/profilo" label="Profilo" className="flex items-center gap-1.5 text-sm text-stone-400 hover:text-stone-700 mb-2 transition-colors" />
         <h1 className="font-display text-2xl font-semibold text-stone-800 mb-1">Test ricerca Borghi/Città e Siti</h1>
-        <p className="text-stone-500 text-sm mb-6">
+        <p className="text-stone-500 text-sm mb-4">
           Pagina temporanea per verificare che l&apos;archivio ampliato risponda alla ricerca — chiama
           direttamente <code className="text-xs bg-stone-100 px-1 py-0.5 rounded">/api/meta-search</code>.
         </p>
 
+        <div className="flex gap-1.5 bg-stone-100 rounded-xl p-1 mb-5 w-fit">
+          {([
+            { id: 'lista' as const, label: 'Lista', icon: List },
+            { id: 'mappa' as const, label: 'Mappa', icon: MapIcon },
+          ]).map(v => (
+            <button
+              key={v.id}
+              onClick={() => setView(v.id)}
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                view === v.id ? 'bg-white shadow-sm text-forest-700' : 'text-stone-500 hover:text-stone-700'
+              }`}
+            >
+              <v.icon className="w-3.5 h-3.5" /> {v.label}
+            </button>
+          ))}
+        </div>
+
+        {view === 'mappa' && (
+          <>
+            <p className="text-xs text-stone-400 mb-3">
+              Borghi/Città e Siti dell&apos;archivio insieme alle tue Mete Sentiero salvate — muovi la mappa e tocca
+              &quot;Cerca in quest&apos;area&quot;. I Sentieri compaiono solo avvicinandosi (stile Komoot).
+            </p>
+            <MeteSearchMap />
+          </>
+        )}
+
+        {view === 'lista' && (
+        <>
         <div className="flex gap-2 mb-4">
           {([
             { id: 'borgo_citta' as const, label: 'Borgo / Città', icon: Building2 },
@@ -164,7 +201,7 @@ export default function TestRicercaMetePage() {
         ) : results !== null ? (
           <div className="flex flex-col gap-2">
             {results.map(item => (
-              <div key={item.id} className="flex items-start gap-3.5 p-3.5 bg-white rounded-xl border border-stone-200">
+              <Link key={item.id} href={`/mete/${encodeURIComponent(item.id)}`} className="flex items-start gap-3.5 p-3.5 bg-white rounded-xl border border-stone-200 hover:border-forest-300 transition-colors">
                 <div className="w-[56px] h-[56px] shrink-0 rounded-lg overflow-hidden flex items-center justify-center bg-stone-50 border border-stone-100">
                   {item.imageUrl
                     ? <img src={item.imageUrl} alt="" className="w-full h-full object-cover" />
@@ -188,10 +225,12 @@ export default function TestRicercaMetePage() {
                     {item.distanceKm !== undefined ? ` · ${item.distanceKm.toFixed(1)} km` : ''}
                   </p>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         ) : null}
+        </>
+        )}
       </main>
     </div>
   )
