@@ -11,6 +11,13 @@ export interface TrailNearbyItem {
   name: string
   distanceKm: number | null
   elevationGain: number | null
+  // Campi in più rispetto a quanto serve solo per disegnare il tracciato (elevationLoss,
+  // estimatedTimeMin, dataQuality) — servono a CreaGuidaMapSearch.tsx per costruire un
+  // FoundRouteItem completo (vedi lib/routeBuilder/foundRoute.ts's foundRouteItemFromCachedTrail)
+  // quando l'utente tocca "Crea guida" su un pin Sentiero, senza una seconda chiamata di rete.
+  elevationLoss: number | null
+  estimatedTimeMin: number | null
+  dataQuality: string
   difficulty: string | null
   routeType: string
   geometry: [number, number][]
@@ -49,6 +56,9 @@ export async function POST(req: NextRequest) {
       name: r.name,
       distanceKm: r.distanceKm,
       elevationGain: r.elevationGain,
+      elevationLoss: r.elevationLoss,
+      estimatedTimeMin: r.estimatedTimeMin,
+      dataQuality: r.dataQuality,
       difficulty: r.difficulty ?? null,
       routeType: r.routeType,
       geometry: r.geometrySimplified,

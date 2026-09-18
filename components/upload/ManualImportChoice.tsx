@@ -4,24 +4,25 @@ import Link from 'next/link'
 import { PencilLine, ChevronRight, Link2, Route, FolderSearch } from 'lucide-react'
 import ManualPlanUploader from './ManualPlanUploader'
 import UrlImportUploader from './UrlImportUploader'
-import RouteBuilder from './RouteBuilder'
+import CreaGuidaMapSearch from './CreaGuidaMapSearch'
 
 type Mode = 'choice' | 'manual' | 'url' | 'build'
 
 /**
- * Schermata di scelta davanti al tab "Manuale" — affianca il wizard "Costruisci un percorso"
- * (che include anche la ricerca AI di un percorso già documentato, vedi RouteBuilder.tsx e
- * GiuliaSearchPanel.tsx — le due ricerche prima erano card separate, ora fuse in un solo ingresso),
- * l'import da link e il form manuale esistente (invariato, ManualPlanUploader). La ricerca diretta
- * su OpenStreetMap senza AI (ex "Cerca senza AI", PlainSearchUploader) è stata rimossa: chi conosce
- * già il percorso ha "Importa da un link" o "Inserisci a mano" per arrivarci senza l'AI.
+ * Schermata di scelta davanti al tab "Manuale" — affianca la ricerca su mappa
+ * (CreaGuidaMapSearch.tsx: Sentiero/Borgo-Città/Sito insieme, stile Komoot — sostituisce la
+ * vecchia ricerca "Esistenti" a raggio fisso di RouteBuilder.tsx, che resta invece per generare un
+ * percorso su misura, raggiunta da qui solo via il suo FAB), l'import da link e il form manuale
+ * esistente (invariato, ManualPlanUploader). La ricerca diretta su OpenStreetMap senza AI (ex
+ * "Cerca senza AI", PlainSearchUploader) è stata rimossa: chi conosce già il percorso ha "Importa
+ * da un link" o "Inserisci a mano" per arrivarci senza l'AI.
  */
 export default function ManualImportChoice() {
   const [mode, setMode] = useState<Mode>('choice')
 
   if (mode === 'manual') return <ManualPlanUploader />
   if (mode === 'url') return <UrlImportUploader onBack={() => setMode('choice')} />
-  if (mode === 'build') return <RouteBuilder onBack={() => setMode('choice')} />
+  if (mode === 'build') return <CreaGuidaMapSearch onBack={() => setMode('choice')} />
 
   return (
     <div className="space-y-3">
@@ -47,12 +48,12 @@ export default function ManualImportChoice() {
           <div className="w-9 h-9 rounded-xl bg-forest-500 text-white flex items-center justify-center shrink-0">
             <Route className="w-4.5 h-4.5" />
           </div>
-          <h3 className="font-display text-base font-semibold text-stone-800">Costruisci o trova un percorso</h3>
+          <h3 className="font-display text-base font-semibold text-stone-800">Cerca su mappa</h3>
         </div>
         <p className="text-sm text-stone-500">
-          Scegli un punto di partenza, la lunghezza e il dislivello — generiamo un percorso reale sui
-          sentieri della zona. Oppure descrivi a Giulia un percorso che già conosci — se lo trova
-          documentato altrove, te lo propone insieme a quelli costruiti.
+          Muovi la mappa e tocca &quot;Cerca in quest&apos;area&quot; — Sentieri, Borghi/Città e Siti
+          insieme, con un tocco per creare la Guida. Oppure genera un percorso su misura sui sentieri
+          reali della zona, dalla mappa stessa.
         </p>
         <span className="mt-1 inline-flex items-center gap-1 self-start px-3.5 py-1.5 rounded-full bg-forest-500 text-white text-xs font-semibold uppercase tracking-wide">
           Inizia <ChevronRight className="w-3.5 h-3.5" />
