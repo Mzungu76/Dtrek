@@ -1,0 +1,61 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { getUserFromRequest } from '@/lib/supabaseAuth'
+import { findCachedTrailsNearPoint } from '@/lib/trailsCache'
+
+export const dynamic = 'force-dynamic'
+
+const MAX_LIMIT = 60
+
+export interface TrailNearbyItem {
+  id: number
+  name: string
+  distanceKm: number | null
+  elevationGain: number | null
+  difficulty: string | null
+  routeType: string
+  geometry: [number, number][]
+}
+
+/**
+ * POST /api/trails-nearby — sentieri già presenti nella cache `trails` (import OSM nazionale,
+ * lib/trailsCache.ts) vicino a un punto, per il layer "Percorsi" della mappa di test
+ * (components/mete/MeteSearchMap.tsx). Stessa fonte dati e stessa funzione di lettura
+ * (findCachedTrailsNearPoint) già usata dalla ricerca "Esistenti" del wizard Costruisci-o-trova
+ * (lib/routeBuilder/searchSteps.ts) — qui solo un elenco per l'area visibile, senza risoluzione
+ * POI/punteggio provvisorio (quella pipeline resta dietro /api/route-build/search, invariata).
+ * Un risultato qui non è ancora una Meta salvata: nessun link "Apri", solo anteprima sulla mappa.
+ */
+export async function POST(req: NextRequest) {
+  const user = await getUserFromRequest(req)
+  if (!user) return NextResponse.json({ error: 'Non autenticato' }, { status: 401 })
+
+  let lat: number, lon: number, radiusKm: number
+  try {
+    const body = await req.json()
+    lat = Number(body.lat)
+    lon = Number(body.lon)
+    radiusKm = Number(body.radiusKm)
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || !Number.isFinite(radiusKm) || radiusKm <= 0) {
+      throw new Error('parametri non validi')
+    }
+  } catch {
+    return NextResponse.json({ error: 'Richiesta non valida' }, { status: 400 })
+  }
+
+  try {
+    const rows = await findCachedTrailsNearPoint(lat, lon, radiusKm, MAX_LIMIT)
+    const items: TrailNearbyItem[] = rows.map(r => ({
+      id: r.osmRelationId,
+      name: r.name,
+      distanceKm: r.distanceKm,
+      elevationGain: r.elevationGain,
+      difficulty: r.difficulty ?? null,
+      routeType: r.routeType,
+      geometry: r.geometrySimplified,
+    }))
+    return NextResponse.json({ items })
+  } catch (e) {
+    console.error('[trails-nearby]', e)
+    return NextResponse.json({ error: 'Errore interno' }, { status: 500 })
+  }
+}
