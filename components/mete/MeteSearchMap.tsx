@@ -13,6 +13,15 @@ interface PercorsoPin {
   longitude: number
 }
 
+interface CachedTrailItem {
+  id: number
+  name: string
+  distanceKm: number | null
+  elevationGain: number | null
+  difficulty: string | null
+  geometry: [number, number][]
+}
+
 const ITALY_CENTER: [number, number] = [42.5, 12.5]
 const ITALY_ZOOM = 6
 // Sotto questo zoom i Sentieri restano nascosti (stile Komoot: compaiono avvicinandosi, mai a
@@ -29,12 +38,17 @@ function escapeHtml(s: string): string {
 
 /**
  * Mappa di test per la ricerca unificata (docs/piano-ricerca-mete.md — questa non è ancora quella
- * pagina, solo un banco di prova): Percorsi (le Mete Sentiero salvate dall'utente, /api/percorsi —
- * non esiste oggi un catalogo sentieri sfogliabile per area indipendente, vedi lib/metaSearch/
- * searchSentieri.ts) insieme a Borghi/Città e Siti (/api/meta-search) sulla stessa mappa, con pin
- * colorati per tipologia (stessi colori di lib/metaTypes.ts's META_TYPE_CONFIG). Pattern "cerca in
- * quest'area" stile Komoot: muovere la mappa non ricerca da sola, un pulsante lo fa esplicitamente;
- * i Sentieri compaiono solo sotto PERCORSI_MIN_ZOOM di distanza (zoom ravvicinato).
+ * pagina, solo un banco di prova): tre fonti insieme sulla stessa mappa, pin/linee colorati per
+ * tipologia (stessi colori di lib/metaTypes.ts's META_TYPE_CONFIG) —
+ *  - Borghi/Città e Siti (/api/meta-search, dtrek_places)
+ *  - le Mete Sentiero salvate dall'utente (/api/percorsi, pin sul punto di partenza)
+ *  - i sentieri già in cache da OSM (/api/trails-nearby → lib/trailsCache.ts's `trails`, stessa
+ *    fonte già usata dalla ricerca "Esistenti" del wizard Costruisci-o-trova, qui però un elenco
+ *    per l'area visibile invece che per un raggio scelto dall'utente), disegnati come tracciato
+ *    reale (geometry_simplified) non come pin — sono percorsi, non punti.
+ * Pattern "cerca in quest'area" stile Komoot: muovere la mappa non ricerca da sola, un pulsante lo
+ * fa esplicitamente; i Sentieri (salvati e da cache) compaiono solo sotto PERCORSI_MIN_ZOOM di
+ * distanza (zoom ravvicinato) — a scala nazionale sarebbero migliaia di tracciati sovrapposti.
  */
 export default function MeteSearchMap() {
   const mapRef = useRef<HTMLDivElement>(null)
@@ -50,6 +64,7 @@ export default function MeteSearchMap() {
 
   const [places, setPlaces] = useState<MetaSearchResultItem[]>([])
   const [percorsi, setPercorsi] = useState<PercorsoPin[]>([])
+  const [cachedTrails, setCachedTrails] = useState<CachedTrailItem[]>([])
   const [zoom, setZoom] = useState(ITALY_ZOOM)
   const [searching, setSearching] = useState(false)
   const [dirty, setDirty] = useState(false)
@@ -101,6 +116,23 @@ export default function MeteSearchMap() {
         }),
       )
       setPlaces([...borghi, ...siti])
+
+      // I sentieri da cache OSM restano dietro lo stesso zoom ravvicinato dei Sentieri salvati
+      // dall'utente (PERCORSI_MIN_ZOOM) — a scala nazionale/regionale la cache ne ha migliaia,
+      // nessuna ragione di scaricarli se poi restano nascosti.
+      if (map.getZoom() >= PERCORSI_MIN_ZOOM) {
+        const res = await fetch('/api/trails-nearby', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lat: origin.lat, lon: origin.lon, radiusKm }),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data?.error || `Errore ${res.status}`)
+        setCachedTrails(data.items as CachedTrailItem[])
+      } else {
+        setCachedTrails([])
+      }
+
       setDirty(false)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Ricerca non riuscita')
@@ -190,6 +222,24 @@ export default function MeteSearchMap() {
       })
     }
 
+    // Disegnati per primi: un tracciato reale, non un pin — resta sotto i marker così restano
+    // sempre toccabili anche dove una linea ci passa sopra.
+    for (const trail of cachedTrails) {
+      if (trail.geometry.length < 2) continue
+      const color = META_TYPE_CONFIG.sentiero.color
+      const line = L.polyline(trail.geometry, { color, weight: 3.5, opacity: 0.8 })
+      const statsLine = [
+        trail.distanceKm != null ? `${trail.distanceKm.toFixed(1)} km` : null,
+        trail.elevationGain != null ? `+${Math.round(trail.elevationGain)} m` : null,
+        trail.difficulty ? `SAC ${trail.difficulty}` : null,
+      ].filter(Boolean).join(' · ')
+      line.bindPopup(`<div style="min-width:160px">
+        <strong style="display:block;font-size:13px;margin-bottom:2px">${escapeHtml(trail.name || 'Sentiero senza nome')}</strong>
+        ${statsLine ? `<span style="font-size:11px;color:#666">${escapeHtml(statsLine)}</span>` : ''}
+      </div>`)
+      line.addTo(layer)
+    }
+
     for (const item of places) {
       const color = META_TYPE_CONFIG[item.metaType].color
       const marker = L.marker([item.latitude, item.longitude], { icon: pinIcon(color, GLYPH[item.metaType]) })
@@ -209,7 +259,7 @@ export default function MeteSearchMap() {
       </div>`)
       marker.addTo(layer)
     }
-  }, [places, percorsi])
+  }, [places, percorsi, cachedTrails])
 
   return (
     <div className="relative rounded-xl overflow-hidden border border-stone-200" style={{ height: '520px' }}>

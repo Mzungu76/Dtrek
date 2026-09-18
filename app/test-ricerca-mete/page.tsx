@@ -110,8 +110,9 @@ export default function TestRicercaMetePage() {
         {view === 'mappa' && (
           <>
             <p className="text-xs text-stone-400 mb-3">
-              Borghi/Città e Siti dell&apos;archivio insieme alle tue Mete Sentiero salvate — muovi la mappa e tocca
-              &quot;Cerca in quest&apos;area&quot;. I Sentieri compaiono solo avvicinandosi (stile Komoot).
+              Borghi/Città e Siti dell&apos;archivio, le tue Mete Sentiero salvate e i sentieri già in cache da OSM —
+              muovi la mappa e tocca &quot;Cerca in quest&apos;area&quot;. I Sentieri (salvati e da cache) compaiono
+              solo avvicinandosi (stile Komoot).
             </p>
             <MeteSearchMap />
           </>
