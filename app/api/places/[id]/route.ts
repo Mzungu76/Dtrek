@@ -31,10 +31,12 @@ export interface PlaceDetail {
    *  vedi supabase/migrations/recover_mic_sito_duplicate_coordinates_to_municipality_centroid.sql.
    *  La UI deve dirlo esplicitamente (mai una posizione approssimata spacciata per esatta). */
   coordinatesApproximate: boolean
-  /** Solo per un Sito senza descrizione propria (la fonte MiC/ArCo non ne porta mai una — vedi
+  /** Popolato quando manca una foto propria o una descrizione propria (Borgo/Città non ha mai una
+   *  foto dall'import ISTAT; un Sito da MiC/ArCo non ha mai una descrizione — vedi
    *  scripts/places/mic/README.md, "nessun campo di descrizione testuale estesa") — un
-   *  arricchimento best-effort da Wikipedia, mai al posto di un dato reale già presente. null
-   *  quando non trovata, non applicabile (Borgo/Città) o non abbastanza vicina da fidarsene. */
+   *  arricchimento best-effort da Wikipedia, mai al posto di un dato reale già presente: `thumbnail`
+   *  colma solo `imageUrl` assente, `extract` colma solo `description` assente. null quando non
+   *  trovata, o non abbastanza vicina da fidarsene. */
   wikipedia: { extract: string; url: string; thumbnail?: string } | null
 }
 
@@ -66,13 +68,17 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   const sourceCounts = await fetchSourceCounts(supabase, [data.id])
 
-  // Solo un Sito, solo quando manca già una descrizione — mai una seconda fonte a rimpiazzare un
-  // dato reale già buono. searchAndFetch valida solo la somiglianza del titolo (lib/wikipedia.ts);
-  // qui in più un controllo di prossimità, perché quel controllo lì manca (a differenza di
-  // fetchWikiForNamedPois/isNearPoi) — senza, un nome generico rischierebbe di agganciare la voce
-  // Wikipedia di un omonimo lontano.
+  // Borgo/Città e Sito, quando manca una foto propria o una descrizione propria — mai una seconda
+  // fonte a RIMPIAZZARE un dato reale già buono (un `description` già presente resta quello
+  // mostrato, vedi PlaceDetail.wikipedia's uso lato client: l'estratto Wikipedia serve solo come
+  // ripiego quando `description` è vuoto), solo a colmare quello che manca. L'import ISTAT dei
+  // Borghi/Città non porta mai un'immagine propria (scripts/places/istat/fetch.ts non ha un
+  // campo foto) — senza questo, ogni Borgo/Città restava senza copertina. searchAndFetch valida
+  // solo la somiglianza del titolo (lib/wikipedia.ts); qui in più un controllo di prossimità,
+  // perché quel controllo lì manca (a differenza di fetchWikiForNamedPois/isNearPoi) — senza, un
+  // nome generico rischierebbe di agganciare la voce Wikipedia di un omonimo lontano.
   let wikipedia: PlaceDetail['wikipedia'] = null
-  if (data.meta_type === 'sito' && !data.description) {
+  if (!data.image_url || !data.description) {
     try {
       const wiki = await searchAndFetch(data.name, 'it', 'wikipedia')
       const hasCoords = wiki?.lat != null && wiki?.lon != null
