@@ -17,11 +17,20 @@ import TrailPreviewMap from '@/components/TrailPreviewMap'
 import type { FoundRouteItem } from '@/lib/routeBuilder/foundRoute'
 import { saveResultItemToGuide } from '@/lib/routeBuilder/importResultItem'
 import { defaultPendingExpiresAt } from './sharedHelpers'
+import type { MetaType } from '@/lib/metaTypes'
 
-export interface PersonalizeStop { id: string; lat: number; lon: number; name: string; source: 'meta' | 'itinerary' }
+// `metaType`: presente solo per una tappa che coincide con un pin di metaResults (source:'meta',
+// vedi CreaGuidaMapSearch.tsx) — 'borgo_citta' abilita il toggle "includi i punti di interesse"
+// qui sotto (findBorgoPoi, app/api/route-build/multi-stop/route.ts), le altre tappe non hanno
+// punti di interesse "propri" da offrire.
+export interface PersonalizeStop { id: string; lat: number; lon: number; name: string; source: 'meta' | 'itinerary'; metaType?: MetaType }
 
 const MIN_KM = 1
 const MAX_KM = 15
+
+const MODE_LABEL: Record<'urbano' | 'misto' | 'naturalistico', string> = {
+  urbano: 'urbano', misto: 'misto', naturalistico: 'naturalistico',
+}
 
 interface MultiStopLegResponse {
   fromStopIdx: number
@@ -30,8 +39,13 @@ interface MultiStopLegResponse {
   real: boolean
   fallbackReason?: 'too_far_from_network' | 'no_path'
 }
+/** La tappa scelta a mano, o un punto di interesse del Borgo/Città inserito da `includePoi` — non
+ *  distinguibili qui: la sequenza intera è quella che `legs[].fromStopIdx/toStopIdx` indicizza,
+ *  non le sole tappe inviate nella richiesta (vedi app/api/route-build/multi-stop/route.ts). */
+interface MultiStopFullStop { id: string; name: string; lat: number; lon: number }
 interface MultiStopResponse {
   ok: true
+  stops: MultiStopFullStop[]
   legs: MultiStopLegResponse[]
   routePolyline: [number, number][]
   distanceMeters: number
@@ -46,7 +60,6 @@ interface MultiStopResponse {
 }
 
 interface Props {
-  anchor: { id: string; lat: number; lon: number; name: string }
   stops: PersonalizeStop[]
   color: string
   onRemoveStop: (id: string) => void
@@ -54,14 +67,18 @@ interface Props {
   onSaved: (hikeId: string) => void
 }
 
-export default function PersonalizeItineraryPanel({ anchor, stops, color, onRemoveStop, onClose, onSaved }: Props) {
+export default function PersonalizeItineraryPanel({ stops, color, onRemoveStop, onClose, onSaved }: Props) {
   // Richiudibile a barra (stesso pattern del foglio risultati normale, sheetExpanded in
   // CreaGuidaMapSearch.tsx) — a differenza di un vero modale, qui la mappa deve restare
   // raggiungibile per toccare i pin: iniziare già espanso a piena altezza (come prima di questa
   // correzione) lasciava visibile solo una striscia di mappa, troppo piccola per scegliere le
   // tappe. Parte chiuso: si espande solo quando l'utente vuole toccare modalità/distanza/genera.
   const [expanded, setExpanded] = useState(false)
-  const [mode, setMode] = useState<'urbano' | 'misto'>('misto')
+  const [mode, setMode] = useState<'urbano' | 'misto' | 'naturalistico'>('misto')
+  // Opt-in per tappa (id di PersonalizeStop) — "includi i punti di interesse di {Borgo}" (solo per
+  // tappe metaType:'borgo_citta', vedi PersonalizeStop sopra): mai automatico, un itinerario fra
+  // Borghi lontani non deve allungarsi di punti che l'utente non ha chiesto di visitare.
+  const [includePoiIds, setIncludePoiIds] = useState<Set<string>>(new Set())
   const [distanceKm, setDistanceKm] = useState('')
   const [historyIsDecent, setHistoryIsDecent] = useState(false)
   const [loadingDefaults, setLoadingDefaults] = useState(true)
@@ -87,10 +104,9 @@ export default function PersonalizeItineraryPanel({ anchor, stops, color, onRemo
       .finally(() => setLoadingDefaults(false))
   }, [])
 
-  const allPoints = [anchor, ...stops]
   const distanceValue = Number(distanceKm)
   const distanceValid = distanceKm.trim() !== '' && Number.isFinite(distanceValue) && distanceValue >= MIN_KM && distanceValue <= MAX_KM
-  const canGenerate = distanceValid && stops.length >= 1 && !generating
+  const canGenerate = distanceValid && stops.length >= 2 && !generating
 
   // Qui non c'è scelta fra candidati come nella generazione "su misura" (Modalità A) — il percorso
   // è un unico cammino minimo forzato dalle tappe scelte, la distanza richiesta non può cambiarlo:
@@ -108,7 +124,7 @@ export default function PersonalizeItineraryPanel({ anchor, stops, color, onRemo
   // tratti in ripiego in modalità urbano — un modo concreto di "rompere" quel vincolo invece di
   // accontentarsi di una linea d'aria, senza aspettare il re-render dello stato `mode` prima di
   // richiamare la generazione.
-  async function generate(modeOverride?: 'urbano' | 'misto') {
+  async function generate(modeOverride?: 'urbano' | 'misto' | 'naturalistico') {
     if (!canGenerate) return
     const effectiveMode = modeOverride ?? mode
     setGenerating(true)
@@ -119,7 +135,11 @@ export default function PersonalizeItineraryPanel({ anchor, stops, color, onRemo
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          stops: allPoints.map(p => ({ lat: p.lat, lon: p.lon })),
+          stops: stops.map(p => ({
+            id: p.id, name: p.name, lat: p.lat, lon: p.lon,
+            placeId: p.metaType === 'borgo_citta' ? p.id : undefined,
+            includePoi: p.metaType === 'borgo_citta' && includePoiIds.has(p.id),
+          })),
           mode: effectiveMode,
           targetDistanceKm: distanceValue,
         }),
@@ -128,7 +148,7 @@ export default function PersonalizeItineraryPanel({ anchor, stops, color, onRemo
       if (!res.ok) { setError(data?.message || data?.error || 'Generazione non riuscita, riprova.'); return }
       if (modeOverride) setMode(modeOverride)
       setResult(data as MultiStopResponse)
-      setTitle(`${anchor.name} — itinerario personalizzato`)
+      setTitle(`${stops[0]?.name ?? 'Itinerario'} — itinerario personalizzato`)
     } catch {
       setError('Errore di rete, riprova.')
     } finally {
@@ -142,8 +162,8 @@ export default function PersonalizeItineraryPanel({ anchor, stops, color, onRemo
     setSaveError('')
     try {
       const found: FoundRouteItem = {
-        name: title.trim() || `${anchor.name} — itinerario personalizzato`,
-        description: allPoints.map(p => p.name).join(' → '),
+        name: title.trim() || `${stops[0]?.name ?? 'Itinerario'} — itinerario personalizzato`,
+        description: result.stops.map(p => p.name).join(' → '),
         track: {
           trackPoints: result.trackPoints ?? [],
           routePolyline: result.routePolyline,
@@ -177,9 +197,11 @@ export default function PersonalizeItineraryPanel({ anchor, stops, color, onRemo
         <button onClick={() => setExpanded(v => !v)} className="flex-1 min-w-0 flex items-center gap-2 text-left">
           <RouteIcon className="w-4 h-4 shrink-0" style={{ color }} />
           <span className="min-w-0 flex-1">
-            <span className="block text-sm font-bold text-stone-800 truncate">Personalizza itinerario — {anchor.name}</span>
+            <span className="block text-sm font-bold text-stone-800 truncate">
+              Personalizza itinerario{stops[0] ? ` — ${stops[0].name}` : ''}
+            </span>
             <span className="block text-[11px] text-stone-400">
-              {stops.length} tapp{stops.length === 1 ? 'a' : 'e'} scelt{stops.length === 1 ? 'a' : 'e'} · {mode === 'urbano' ? 'urbano' : 'misto'}
+              {stops.length} tapp{stops.length === 1 ? 'a' : 'e'} scelt{stops.length === 1 ? 'a' : 'e'} · {MODE_LABEL[mode]}
               {!expanded && ' · tocca per aprire'}
             </span>
           </span>
@@ -200,23 +222,40 @@ export default function PersonalizeItineraryPanel({ anchor, stops, color, onRemo
                 Tappe scelte ({stops.length}) — tocca un pin sulla mappa per aggiungerne o toglierne
               </p>
               {stops.length === 0 ? (
-                <p className="text-xs text-stone-400">Nessuna tappa selezionata oltre a {anchor.name}.</p>
+                <p className="text-xs text-stone-400">Nessuna tappa selezionata — tocca almeno due pin sulla mappa.</p>
               ) : (
                 <ol className="flex flex-col gap-1">
                   {stops.map((s, i) => (
-                    <li key={s.id} className="flex items-center gap-2">
-                      <span className="w-5 h-5 shrink-0 rounded-full flex items-center justify-center text-white text-[10px] font-bold" style={{ background: color }}>{i + 1}</span>
-                      <span className="text-xs text-stone-700 truncate flex-1">{s.name}</span>
-                      <button onClick={() => onRemoveStop(s.id)} className="text-[11px] text-stone-400 hover:text-red-600 shrink-0">Rimuovi</button>
+                    <li key={s.id} className="flex flex-col gap-1 py-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="w-5 h-5 shrink-0 rounded-full flex items-center justify-center text-white text-[10px] font-bold" style={{ background: color }}>{i + 1}</span>
+                        <span className="text-xs text-stone-700 truncate flex-1">{s.name}</span>
+                        <button onClick={() => onRemoveStop(s.id)} className="text-[11px] text-stone-400 hover:text-red-600 shrink-0">Rimuovi</button>
+                      </div>
+                      {s.metaType === 'borgo_citta' && (
+                        <label className="flex items-center gap-1.5 pl-7 text-[11px] text-stone-500">
+                          <input type="checkbox" checked={includePoiIds.has(s.id)}
+                            onChange={e => setIncludePoiIds(prev => {
+                              const next = new Set(prev)
+                              if (e.target.checked) next.add(s.id); else next.delete(s.id)
+                              return next
+                            })}
+                            className="w-3.5 h-3.5 accent-forest-600" />
+                          Includi i punti di interesse di {s.name}
+                        </label>
+                      )}
                     </li>
                   ))}
                 </ol>
+              )}
+              {stops.length === 1 && (
+                <p className="text-[11px] text-terra-600 font-medium mt-1">Serve almeno una seconda tappa per generare un percorso.</p>
               )}
             </div>
 
             <div>
               <p className="text-xs font-semibold text-stone-600 mb-1.5">Modalità</p>
-              <div className="grid grid-cols-2 gap-1.5">
+              <div className="grid grid-cols-3 gap-1.5">
                 <button type="button" onClick={() => setMode('urbano')}
                   className={`py-2.5 rounded-lg text-xs font-semibold border transition-colors ${mode === 'urbano' ? 'bg-forest-500 border-forest-500 text-white' : 'bg-white border-stone-300 text-stone-600'}`}>
                   Trekking urbano
@@ -225,9 +264,15 @@ export default function PersonalizeItineraryPanel({ anchor, stops, color, onRemo
                   className={`py-2.5 rounded-lg text-xs font-semibold border transition-colors ${mode === 'misto' ? 'bg-forest-500 border-forest-500 text-white' : 'bg-white border-stone-300 text-stone-600'}`}>
                   Trekking misto
                 </button>
+                <button type="button" onClick={() => setMode('naturalistico')}
+                  className={`py-2.5 rounded-lg text-xs font-semibold border transition-colors ${mode === 'naturalistico' ? 'bg-forest-500 border-forest-500 text-white' : 'bg-white border-stone-300 text-stone-600'}`}>
+                  Naturalistico
+                </button>
               </div>
               <p className="text-[11px] text-stone-400 mt-1">
-                {mode === 'urbano' ? 'Solo vie di paese/città — nessun sentiero.' : 'Può includere anche sentieri, non solo strade.'}
+                {mode === 'urbano' && 'Solo vie di paese/città — nessun sentiero.'}
+                {mode === 'misto' && 'Preferisce strade bianche e secondarie, poi sentieri, solo per ultime le strade urbane/provinciali.'}
+                {mode === 'naturalistico' && 'Preferisce i sentieri a qualunque altra via, quando possibile.'}
               </p>
             </div>
 
@@ -266,7 +311,7 @@ export default function PersonalizeItineraryPanel({ anchor, stops, color, onRemo
                 <ul className="text-[11px] text-amber-600 space-y-0.5">
                   {fakeLegs.map((l, i) => (
                     <li key={i}>
-                      {allPoints[l.fromStopIdx]?.name ?? '?'} → {allPoints[l.toStopIdx]?.name ?? '?'}: {l.fallbackReason === 'too_far_from_network' ? 'troppo lontano da vie percorribili' : 'nessun cammino trovato nella rete pedonale disponibile'}
+                      {result.stops[l.fromStopIdx]?.name ?? '?'} → {result.stops[l.toStopIdx]?.name ?? '?'}: {l.fallbackReason === 'too_far_from_network' ? 'troppo lontano da vie percorribili' : 'nessun cammino trovato nella rete pedonale disponibile'}
                     </li>
                   ))}
                 </ul>
@@ -300,9 +345,9 @@ export default function PersonalizeItineraryPanel({ anchor, stops, color, onRemo
               </div>
             </div>
             <ol className="flex flex-col gap-1">
-              {allPoints.map((p, i) => (
-                <li key={p.id} className="flex items-center gap-2">
-                  <span className="w-5 h-5 shrink-0 rounded-full flex items-center justify-center text-white text-[10px] font-bold" style={{ background: i === 0 ? '#44403c' : color }}>{i === 0 ? 'B' : i}</span>
+              {result.stops.map((p, i) => (
+                <li key={`${p.id}-${i}`} className="flex items-center gap-2">
+                  <span className="w-5 h-5 shrink-0 rounded-full flex items-center justify-center text-white text-[10px] font-bold" style={{ background: color }}>{i + 1}</span>
                   <span className="text-xs text-stone-700 truncate">{p.name}</span>
                 </li>
               ))}

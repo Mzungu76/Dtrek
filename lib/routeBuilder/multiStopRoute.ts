@@ -24,7 +24,7 @@ import { nearestGraphNode, type WalkNetwork, type GraphEdge } from './osmGraph'
 import { dijkstra, reconstructPath, reconstructNodePath } from './walkRouting'
 import { haversineM } from '../geoUtils'
 
-export type MultiStopMode = 'urbano' | 'misto'
+export type MultiStopMode = 'urbano' | 'misto' | 'naturalistico'
 
 // "Trekking urbano": solo le vie di un centro abitato o le strade che collegano un paese all'altro
 // — mai un sentiero/tracciato/mulattiera, le stesse esclusioni descritte dall'utente ("deve
@@ -49,14 +49,10 @@ function urbanEdgeFilter(edge: GraphEdge): boolean {
 // esisteva nel repo con questa identica suddivisione a 3 livelli (verificato: lib/overpass.ts's
 // classifyHighway ha 6 livelli diversi e non è esportato, lib/navigation/escapeEngine.ts's
 // TRAIL_HIGHWAY_QUALITY ignora del tutto tertiary/secondary) — introdotto qui apposta.
-// - 'quiet' (strade bianche/secondarie non asfaltate — track/unclassified): il livello più
-//   sicuro/prevedibile per camminare, preferito per primo.
-// - 'trail' (sentieri veri e propri — path/footway/bridleway/steps): secondo livello.
+// - 'quiet' (strade bianche/secondarie non asfaltate — track/unclassified): sicuro/prevedibile.
+// - 'trail' (sentieri veri e propri — path/footway/bridleway/steps).
 // - 'road' (strade di un centro abitato o che collegano due paesi — residential/tertiary/
-//   secondary): trafficabili da veicoli, mai l'ideale per un pedone, ultimo livello.
-// Stesso ordine in ENTRAMBE le modalità: "urbano" esclude solo il livello 'trail' (isEdgeAllowed
-// se ne occupa già), non cambia la preferenza fra gli altri due — è una questione di sicurezza
-// (vie tranquille prima di strade con traffico), non di ambientazione urbana/naturale.
+//   secondary): trafficabili da veicoli, mai l'ideale per un pedone.
 type HighwayTier = 'quiet' | 'trail' | 'road'
 
 function highwayTier(highway: string | undefined): HighwayTier {
@@ -65,15 +61,29 @@ function highwayTier(highway: string | undefined): HighwayTier {
   return 'road'
 }
 
-const TIER_COST_MULTIPLIER: Record<HighwayTier, number> = { quiet: 1, trail: 1.5, road: 2.5 }
-// Tetto teorico del moltiplicatore sopra — dà al budget di ricerca (passato a dijkstra() in unità
-// di costo, non metri reali una volta che un moltiplicatore è in gioco) margine sufficiente a
-// coprire anche un cammino interamente sul livello più penalizzato: altrimenti "preferire" vie
-// migliori rischierebbe di nascondere cammini reali che esistono solo attraverso il livello peggiore.
-const MAX_TIER_MULTIPLIER = Math.max(...Object.values(TIER_COST_MULTIPLIER))
+// Ordine diverso per modalità — non solo "quali livelli sono ammessi" (isEdgeAllowed se ne occupa
+// già, solo per i sentieri in "urbano"), ma la loro priorità relativa:
+// - 'urbano'/'misto': strade bianche prima, poi sentieri, infine strade urbane/provinciali — una
+//   questione di sicurezza (vie tranquille prima di strade con traffico), l'ordine fra questi due
+//   ultimi livelli resta identico in entrambe, "urbano" esclude solo 'trail' del tutto.
+// - 'naturalistico': i sentieri vengono preferiti PER PRIMI (il punto di questa modalità), poi lo
+//   stesso ordine delle altre per il resto (strade bianche, infine strade urbane/provinciali).
+const TIER_COST_MULTIPLIER_BY_MODE: Record<MultiStopMode, Record<HighwayTier, number>> = {
+  urbano: { quiet: 1, trail: 1.5, road: 2.5 }, // trail comunque esclusa da urbanEdgeFilter, valore inerte
+  misto: { quiet: 1, trail: 1.5, road: 2.5 },
+  naturalistico: { trail: 1, quiet: 1.5, road: 2.5 },
+}
+// Tetto teorico dei moltiplicatori sopra (su TUTTE le modalità) — dà al budget di ricerca (passato
+// a dijkstra() in unità di costo, non metri reali una volta che un moltiplicatore è in gioco)
+// margine sufficiente a coprire anche un cammino interamente sul livello più penalizzato:
+// altrimenti "preferire" vie migliori rischierebbe di nascondere cammini reali che esistono solo
+// attraverso il livello peggiore.
+const MAX_TIER_MULTIPLIER = Math.max(
+  ...Object.values(TIER_COST_MULTIPLIER_BY_MODE).flatMap(m => Object.values(m)),
+)
 
-function tierEdgeCost(edge: GraphEdge): number {
-  return TIER_COST_MULTIPLIER[highwayTier(edge.highway)]
+function tierEdgeCost(mode: MultiStopMode, edge: GraphEdge): number {
+  return TIER_COST_MULTIPLIER_BY_MODE[mode][highwayTier(edge.highway)]
 }
 
 // La distanza REALE di un cammino trovato con dijkstra.ts's `edgeCost` in gioco non è più leggibile
@@ -161,8 +171,9 @@ interface LegSearchResult { distanceM: number; polyline: [number, number][]; nod
 function runLegDijkstra(
   network: WalkNetwork, startNodeId: number, endNodeId: number, costBudgetM: number,
   isEdgeAllowed: ((edge: GraphEdge, fromNodeId: number) => boolean) | undefined,
+  mode: MultiStopMode,
 ): LegSearchResult | null {
-  const { dist, prev } = dijkstra(network, startNodeId, costBudgetM, DIJKSTRA_MAX_NODES, isEdgeAllowed, tierEdgeCost)
+  const { dist, prev } = dijkstra(network, startNodeId, costBudgetM, DIJKSTRA_MAX_NODES, isEdgeAllowed, edge => tierEdgeCost(mode, edge))
   if (dist.get(endNodeId) == null) return null // solo per verificare la raggiungibilità entro il budget di costo
   const polyline = reconstructPath(network, prev, endNodeId, startNodeId)
   return {
@@ -181,7 +192,7 @@ function shortestLegPath(
   const from = network.nodes.get(startNodeId)
   const to = network.nodes.get(endNodeId)
   if (!from || !to) return null
-  return runLegDijkstra(network, startNodeId, endNodeId, toCostBudget(legDijkstraBudgetM(from, to)), baseFilter)
+  return runLegDijkstra(network, startNodeId, endNodeId, toCostBudget(legDijkstraBudgetM(from, to)), baseFilter, mode)
 }
 
 /**
@@ -208,7 +219,7 @@ function seekCloserToTarget(
       if (baseFilter && !baseFilter(edge)) return false
       return !excluded.has(edgeKey(fromNodeId, edge.to))
     }
-    const alt = runLegDijkstra(network, startNodeId, endNodeId, toCostBudget(legDijkstraBudgetM(from, to, legTargetM)), filter)
+    const alt = runLegDijkstra(network, startNodeId, endNodeId, toCostBudget(legDijkstraBudgetM(from, to, legTargetM)), filter, mode)
     if (!alt) break // nessuna via alternativa esiste proprio: quella trovata finora resta la migliore
     if (Math.abs(alt.distanceM - legTargetM) < Math.abs(best.distanceM - legTargetM)) best = alt
     // Si accumulano gli archi di OGNI tentativo (non solo del migliore): il prossimo giro deve

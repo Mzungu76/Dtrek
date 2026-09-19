@@ -53,16 +53,24 @@ type Selected =
   | { kind: 'meta'; item: MetaSearchResultItem }
   | { kind: 'trail'; item: TrailNearbyItem }
 
-// Stato della personalizzazione di un itinerario Borgo/Città (vedi "Personalizza itinerario" nel
-// tab Itinerario di MetaDetailCard) — l'anchor è il Borgo stesso, `stops` le tappe scelte
-// dall'utente nell'ordine di selezione (mai riordinate: è una personalizzazione deliberata).
-// `source:'meta'` per una tappa che coincide con un pin già disegnato da metaResults (si riusa
-// quello stesso marker, solo con badge), `source:'itinerary'` per una tappa dall'itinerario
-// automatico che non ha un marker proprio sulla mappa (serve disegnarne uno sintetico).
+// Stato della personalizzazione di un itinerario multi-tappa — `stops` le tappe scelte
+// dall'utente nell'ordine di selezione (mai riordinate: è una personalizzazione deliberata), senza
+// più un "anchor" distinto: raggiungibile sia dal popup di un Borgo/Città (che semina `stops` con
+// il Borgo stesso + il suo itinerario automatico, vedi enterPersonalize) sia da un ingresso
+// autonomo sulla mappa che parte da zero (vedi enterPersonalizeStandalone) — in entrambi i casi
+// ogni tappa è ugualmente rimovibile, nessuna è più "fissa". `source:'meta'` per una tappa che
+// coincide con un pin già disegnato da metaResults (si riusa quello stesso marker, solo con
+// badge), `source:'itinerary'` per una tappa dall'itinerario automatico di un Borgo che non ha un
+// marker proprio sulla mappa (serve disegnarne uno sintetico).
 interface PersonalizeState {
-  anchor: { id: string; lat: number; lon: number; name: string; color: string }
   stops: PersonalizeStop[]
+  color: string
 }
+
+// Colore neutro per una personalizzazione avviata senza un Borgo di partenza (ingresso autonomo,
+// enterPersonalizeStandalone) — quando invece si parte dal popup di un Borgo/Città si riusa il
+// colore di quel tipo (META_TYPE_CONFIG.borgo_citta.color) per coerenza visiva con quel contesto.
+const PERSONALIZE_DEFAULT_COLOR = '#B0724A'
 
 function trailLatLon(t: TrailNearbyItem): [number, number] | null {
   if (t.geometry.length === 0) return null
@@ -127,9 +135,14 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
   // momento dell'apertura, non un valore che segue la mappa mentre il pannello è aperto.
   const [showSentieroGen, setShowSentieroGen] = useState(false)
   const [sentieroGenOrigin, setSentieroGenOrigin] = useState<{ lat: number; lon: number; radiusKm: number } | null>(null)
+  // Scelta fra le due modalità di generazione dal FAB in basso a destra — un tocco più lontano
+  // invece di due FAB affiancati (Sentieri e Personalizza), che sulla mappa affollerebbero
+  // l'angolo insieme agli altri controlli fissi (peek dei risultati, "Cerca in quest'area").
+  const [showGenChooser, setShowGenChooser] = useState(false)
 
-  // Modalità B — personalizzazione dell'itinerario di un Borgo/Città (vedi "Personalizza
-  // itinerario" nel tab Itinerario di MetaDetailCard).
+  // Modalità B — personalizzazione di un itinerario multi-tappa, sia dal popup di un Borgo/Città
+  // (vedi "Personalizza itinerario" nel tab Itinerario di MetaDetailCard) sia da zero tramite il
+  // FAB "Genera" qui sotto (vedi enterPersonalizeStandalone).
   const [personalize, setPersonalize] = useState<PersonalizeState | null>(null)
 
   async function searchCurrentView() {
@@ -287,18 +300,14 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
       const isSelected = selected?.kind === 'meta' && selected.item.id === item.id
 
       if (personalize) {
-        const isAnchor = item.id === personalize.anchor.id
         const stopIdx = personalize.stops.findIndex(s => s.id === item.id && s.source === 'meta')
         const isStop = stopIdx >= 0
-        const icon = isAnchor
-          ? pinIcon(color, GLYPH[item.metaType], true)
-          : isStop
-            ? pinIcon(color, GLYPH[item.metaType], false, { badge: stopIdx + 1 })
-            : pinIcon(color, GLYPH[item.metaType], false, { dimmed: true })
+        const icon = isStop
+          ? pinIcon(color, GLYPH[item.metaType], true, { badge: stopIdx + 1 })
+          : pinIcon(color, GLYPH[item.metaType], false, { dimmed: true })
         const marker = L.marker([item.latitude, item.longitude], { icon })
         marker.on('click', () => {
-          if (isAnchor) return
-          togglePersonalizeStop({ id: item.id, lat: item.latitude, lon: item.longitude, name: item.name, source: 'meta' })
+          togglePersonalizeStop({ id: item.id, lat: item.latitude, lon: item.longitude, name: item.name, source: 'meta', metaType: item.metaType })
         })
         marker.addTo(layer)
         continue
@@ -315,7 +324,7 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
     if (personalize) {
       personalize.stops.filter(s => s.source === 'itinerary').forEach(stop => {
         const stopIdx = personalize.stops.findIndex(s => s.id === stop.id)
-        const marker = L.marker([stop.lat, stop.lon], { icon: pinIcon(personalize.anchor.color, '📍', false, { badge: stopIdx + 1 }) })
+        const marker = L.marker([stop.lat, stop.lon], { icon: pinIcon(personalize.color, '📍', true, { badge: stopIdx + 1 }) })
         marker.on('click', () => togglePersonalizeStop(stop))
         marker.addTo(layer)
       })
@@ -392,27 +401,28 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
     setShowSentieroGen(true)
   }
 
-  // Apre la personalizzazione dell'itinerario di un Borgo/Città — chiude il popup, semina le tappe
-  // dall'itinerario automatico se ce n'è già uno con risultati (una tappa che coincide con un pin
-  // già disegnato da metaResults riusa quel marker con un badge, `source:'meta'`; una tappa
-  // solo-Wikipedia senza marker proprio, `source:'itinerary'`, ne disegna uno sintetico — vedi
-  // l'effetto di disegno marker sotto), altrimenti parte da zero tappe (`itinerary` null o senza
-  // stop: l'automatico spesso non trova nulla di utilizzabile, l'utente sceglie a mano). Inquadra
-  // la mappa "ampia ma non eccessiva" sull'anchor (+ tappe, se ce ne sono già).
+  // Apre la personalizzazione a partire dal popup di un Borgo/Città — chiude il popup, semina le
+  // tappe col Borgo stesso (prima tappa, come qualunque altra — rimovibile anche lei, nessun
+  // "anchor" fisso: vedi PersonalizeState) seguito dall'itinerario automatico se ce n'è già uno con
+  // risultati (una tappa che coincide con un pin già disegnato da metaResults riusa quel marker con
+  // un badge, `source:'meta'`; una tappa solo-Wikipedia senza marker proprio, `source:'itinerary'`,
+  // ne disegna uno sintetico — vedi l'effetto di disegno marker sopra), altrimenti solo il Borgo
+  // (`itinerary` null o senza stop: l'automatico spesso non trova nulla di utilizzabile, l'utente
+  // sceglie il resto a mano). Inquadra la mappa "ampia ma non eccessiva" sulle tappe già seminate.
   function enterPersonalize(borgo: MetaSearchResultItem, itinerary: BorgoItinerary | null) {
     setSelected(null)
-    const seedStops: PersonalizeStop[] = (itinerary?.stops ?? []).map(s => ({
-      id: s.id, lat: s.lat, lon: s.lon, name: s.name,
-      source: metaResults.some(m => m.id === s.id) ? 'meta' : 'itinerary',
-    }))
-    setPersonalize({
-      anchor: { id: borgo.id, lat: borgo.latitude, lon: borgo.longitude, name: borgo.name, color: META_TYPE_CONFIG.borgo_citta.color },
-      stops: seedStops,
-    })
+    const seedStops: PersonalizeStop[] = [
+      { id: borgo.id, lat: borgo.latitude, lon: borgo.longitude, name: borgo.name, source: 'meta', metaType: borgo.metaType },
+      ...(itinerary?.stops ?? []).map(s => ({
+        id: s.id, lat: s.lat, lon: s.lon, name: s.name,
+        source: (metaResults.some(m => m.id === s.id) ? 'meta' : 'itinerary') as PersonalizeStop['source'],
+      })),
+    ]
+    setPersonalize({ stops: seedStops, color: META_TYPE_CONFIG.borgo_citta.color })
     const map = mapInstance.current
     const L = leafletRef.current
     if (map && L) {
-      const points: [number, number][] = [[borgo.latitude, borgo.longitude], ...seedStops.map(s => [s.lat, s.lon] as [number, number])]
+      const points: [number, number][] = seedStops.map(s => [s.lat, s.lon])
       if (points.length > 1) {
         map.fitBounds(L.latLngBounds(points), { padding: [60, 60], maxZoom: PERSONALIZE_MAX_ZOOM })
       } else {
@@ -421,12 +431,21 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
     }
   }
 
+  // Apre la personalizzazione da zero, senza passare dal popup di un Borgo — ingresso autonomo
+  // dalla mappa (vedi il pulsante "Genera", più sotto): nessuna tappa già scelta, l'utente parte
+  // toccando i pin che vuole, la vista resta quella corrente (nessun fitBounds, non c'è ancora
+  // nulla su cui inquadrare).
+  function enterPersonalizeStandalone() {
+    setSelected(null)
+    setPersonalize({ stops: [], color: PERSONALIZE_DEFAULT_COLOR })
+  }
+
   // Tocco su un pin mentre la personalizzazione è attiva: aggiunge/toglie quel punto dalle tappe
-  // scelte invece di aprire il popup di dettaglio — l'anchor (il Borgo stesso) non è togglabile.
-  // Le nuove tappe si aggiungono in coda (mai un riordino automatico, vedi PersonalizeState).
+  // scelte invece di aprire il popup di dettaglio — nessuna tappa è più "fissa" (vedi
+  // PersonalizeState). Le nuove tappe si aggiungono in coda (mai un riordino automatico).
   function togglePersonalizeStop(stop: PersonalizeStop) {
     setPersonalize(prev => {
-      if (!prev || stop.id === prev.anchor.id) return prev
+      if (!prev) return prev
       const exists = prev.stops.some(s => s.id === stop.id)
       return { ...prev, stops: exists ? prev.stops.filter(s => s.id !== stop.id) : [...prev.stops, stop] }
     })
@@ -537,24 +556,19 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
         </div>
       )}
 
-      {/* ── "Genera percorso" (Modalità A, Sentieri) — sempre visibile quando i Sentieri sono
-          cercabili, disabilitato sotto SENTIERO_GEN_MIN_ZOOM (un fetch dal vivo, non una lettura da
-          cache, merita una soglia più stretta di TRAILS_MIN_ZOOM). Nascosto durante popup/
-          personalizzazione, per non sovrapporsi ad altri controlli fissi in basso a destra. ────── */}
+      {/* ── "Genera" (apre la scelta fra Modalità A, Sentieri, e Modalità B, itinerario
+          personalizzato) — sempre visibile quando i Sentieri sono cercabili. Nessun gate di zoom
+          qui: quello di Modalità A (SENTIERO_GEN_MIN_ZOOM) vive dentro il foglio di scelta, non sul
+          FAB, perché Modalità B non ne ha bisogno (l'utente sceglie le tappe a mano, non genera dal
+          vivo sul viewport). Nascosto durante popup/personalizzazione, per non sovrapporsi ad altri
+          controlli fissi in basso a destra. ──────────────────────────────────────────────────── */}
       {wantsTrails && !selected && !personalize && (
-        <>
-          <button onClick={openSentieroGen} disabled={zoom < SENTIERO_GEN_MIN_ZOOM}
-            title="Genera un percorso qui"
-            className="absolute right-4 z-10 w-14 h-14 rounded-full bg-terra-500 hover:bg-terra-600 disabled:opacity-40 text-white shadow-lg flex items-center justify-center transition-colors"
-            style={{ bottom: '112px' }}>
-            <RouteIcon className="w-5 h-5" />
-          </button>
-          {zoom < SENTIERO_GEN_MIN_ZOOM && (
-            <p className="absolute right-3 z-10 text-[10.5px] font-medium text-stone-500 bg-white/90 backdrop-blur rounded-full px-2.5 py-1 shadow border border-stone-200 whitespace-nowrap" style={{ bottom: '170px' }}>
-              Avvicinati per generare
-            </p>
-          )}
-        </>
+        <button onClick={() => setShowGenChooser(true)}
+          title="Genera un percorso"
+          className="absolute right-4 z-10 w-14 h-14 rounded-full bg-terra-500 hover:bg-terra-600 text-white shadow-lg flex items-center justify-center transition-colors"
+          style={{ bottom: '112px' }}>
+          <RouteIcon className="w-5 h-5" />
+        </button>
       )}
 
       {/* ── Scheda del pin selezionato — il popup È la scheda (niente più un link "Scheda" a
@@ -633,9 +647,8 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
 
       {personalize && (
         <PersonalizeItineraryPanel
-          anchor={personalize.anchor}
           stops={personalize.stops}
-          color={personalize.anchor.color}
+          color={personalize.color}
           onRemoveStop={removePersonalizeStop}
           onClose={() => setPersonalize(null)}
           onSaved={hikeId => router.push(`/guida/${encodeURIComponent(hikeId)}`)}
@@ -648,6 +661,32 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
           onBack={() => setShowSentieroGen(false)}
           onSaved={hikeId => router.push(`/guida/${encodeURIComponent(hikeId)}`)}
         />
+      )}
+
+      {/* ── Scelta della modalità di generazione — Modalità A (Sentieri, dal vivo sul viewport) o
+          Modalità B (itinerario personalizzato, tappe scelte a mano) dallo stesso FAB. Stesso
+          pattern del foglio "Altri modi" qui sotto. ────────────────────────────────────────── */}
+      {showGenChooser && (
+        <>
+          <div className="fixed inset-0 z-30 bg-stone-900/20" onClick={() => setShowGenChooser(false)} />
+          <div className="fixed left-0 right-0 bottom-0 z-40 bg-white rounded-t-3xl shadow-[0_-6px_24px_rgba(0,0,0,.15)] p-4 pb-6">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-semibold text-stone-800">Genera un percorso</p>
+              <button onClick={() => setShowGenChooser(false)} aria-label="Chiudi"
+                className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center text-stone-500 hover:bg-stone-200 transition-colors">
+                <XIcon className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="space-y-2">
+              <OtherWayRow icon={RouteIcon} label="Genera un sentiero qui"
+                description={zoom < SENTIERO_GEN_MIN_ZOOM ? 'Avvicinati sulla mappa per usare questa modalità.' : "Un percorso ad anello nel punto della mappa che stai guardando."}
+                onClick={() => { if (zoom < SENTIERO_GEN_MIN_ZOOM) return; setShowGenChooser(false); openSentieroGen() }} />
+              <OtherWayRow icon={Sliders} label="Personalizza un itinerario"
+                description="Scegli a mano le tappe da toccare sulla mappa, in qualunque ordine."
+                onClick={() => { setShowGenChooser(false); enterPersonalizeStandalone() }} />
+            </div>
+          </div>
+        </>
       )}
 
       {/* ── "Altri modi" — le vie di creazione diverse dalla ricerca su mappa (file GPX, da

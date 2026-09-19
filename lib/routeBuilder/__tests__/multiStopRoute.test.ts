@@ -93,6 +93,22 @@ describe('buildMultiStopRoute', () => {
     expect(outcome.legs[0].distanceM).toBeLessThan(1600)
   })
 
+  it('in modalità naturalistico preferisce un sentiero a una strada bianca più corta', () => {
+    // A diretto (1-4, ~1000m, track — livello "quiet", il preferito nelle altre modalità) vs B
+    // (1-2-3-4, ~1500m totali, path — un sentiero): in "naturalistico" il sentiero passa in testa
+    // all'ordine di preferenza, quindi B viene scelto nonostante sia più lungo.
+    const nodes = detourNodes()
+    const network = buildNetwork(nodes, [
+      [1, 4, 'track'],
+      [1, 2, 'path'], [2, 3, 'path'], [3, 4, 'path'],
+    ])
+    const outcome = buildMultiStopRoute(network, [nodes[1], nodes[4]], 'naturalistico')
+    expect(outcome.legs).toHaveLength(1)
+    expect(outcome.legs[0].real).toBe(true)
+    expect(outcome.legs[0].distanceM).toBeGreaterThan(1400)
+    expect(outcome.legs[0].distanceM).toBeLessThan(1600)
+  })
+
   it('senza un target di distanza sceglie il cammino preferito, non lo allunga inutilmente', () => {
     const nodes = { 1: { lat: 0, lon: 0 }, 2: { lat: 0, lon: degFor(500) } }
     const network = buildNetwork(nodes, [[1, 2, 'track']])
