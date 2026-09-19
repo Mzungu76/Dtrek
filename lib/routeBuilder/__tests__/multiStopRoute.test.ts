@@ -156,5 +156,33 @@ describe('buildMultiStopRoute', () => {
     expect(outcome.legs[0].real).toBe(true)
     expect(outcome.legs[0].distanceM).toBeGreaterThan(190)
     expect(outcome.legs[0].distanceM).toBeLessThan(210)
+    // La diagnostica (vedi §4 punto 2 del doc di stato) deve riflettere esattamente lo scenario
+    // che questo test riproduce: il tentativo pesato esaurisce il budget di nodi (non trova un
+    // cammino non perché non esista, ma perché il budget finisce prima), e il ripiego a distanza
+    // reale è quello che produce davvero il cammino restituito.
+    expect(outcome.legs[0].diagnostic?.pathSource).toBe('distance_fallback')
+    expect(outcome.legs[0].diagnostic?.preferred.budgetExhausted).toBe(true)
+    expect(outcome.legs[0].diagnostic?.fallback?.budgetExhausted).toBe(false)
+  })
+
+  it('diagnostica pathSource:"preferred" quando la ricerca pesata trova subito il cammino, senza bisogno del ripiego', () => {
+    const nodes = { 1: { lat: 0, lon: 0 }, 2: { lat: 0, lon: degFor(500) } }
+    const network = buildNetwork(nodes, [[1, 2, 'track']])
+    const outcome = buildMultiStopRoute(network, [nodes[1], nodes[2]], 'misto')
+    expect(outcome.legs[0].real).toBe(true)
+    expect(outcome.legs[0].diagnostic?.pathSource).toBe('preferred')
+    expect(outcome.legs[0].diagnostic?.fallback).toBeUndefined()
+  })
+
+  it('nessuna diagnostica quando il ripiego a linea d\'aria è dovuto a uno snap alla rete fallito (too_far_from_network)', () => {
+    // Le due tappe sono troppo lontane da qualunque nodo della rete (SNAP_THRESHOLD_M=350) — mai
+    // avviato un Dijkstra, niente da diagnosticare oltre al motivo già in fallbackReason.
+    const nodes = { 1: { lat: 0, lon: 0 }, 2: { lat: 0, lon: degFor(500) } }
+    const network = buildNetwork(nodes, [[1, 2, 'track']])
+    const far = { lat: 5, lon: 5 }
+    const outcome = buildMultiStopRoute(network, [nodes[1], far], 'misto')
+    expect(outcome.legs[0].real).toBe(false)
+    expect(outcome.legs[0].fallbackReason).toBe('too_far_from_network')
+    expect(outcome.legs[0].diagnostic).toBeUndefined()
   })
 })

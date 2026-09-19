@@ -121,8 +121,20 @@ out body qt;`
   // dopo una breve pausa (vedi lib/overpassTrails.ts), quindi il caso peggiore resta ~2×timeoutMs
   // invece di superare da solo il budget della funzione chiamante (maxDuration del proprio
   // endpoint, con margine per il resto della pipeline a valle).
-  const json = await fetchOverpass<{ elements: OverpassEl[] }>(query, timeoutMs)
+  const json = await fetchOverpass<{ elements: OverpassEl[]; remark?: string }>(query, timeoutMs)
   const elements = json.elements ?? []
+  // `remark` compare SOLO quando Overpass stesso ha interrotto la query prima di finirla (di
+  // solito perché ha raggiunto il proprio `[timeout:...]` interno) — la risposta resta comunque
+  // HTTP 200 con qualunque elemento raccolto fino a quel momento, quindi `fetchOverpass` sopra non
+  // la vede come un errore: un fallimento silenzioso, rete parziale servita come se fosse completa.
+  // Nessun modo affidabile di distinguere qui "parziale ma sufficiente per il bbox richiesto" da
+  // "parziale e con un buco proprio dove serviva" — solo segnalarlo, non correggerlo: vedi §4 punto
+  // 3 di docs/crea-guida-itinerario-personalizzato-stato.md, una causa plausibile di "nessun
+  // cammino trovato" che il ripiego a distanza reale in multiStopRoute.ts non risolverebbe (la rete
+  // su cui cerca è quella incompleta).
+  if (json.remark) {
+    console.warn('[osmGraph] risposta Overpass parziale/incompleta per bbox', bbox, '-', json.remark)
+  }
 
   const nodes = new Map<number, GraphNode>()
   for (const el of elements) {

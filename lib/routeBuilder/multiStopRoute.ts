@@ -178,6 +178,16 @@ function edgeKeysOfPath(nodeIds: number[]): Set<string> {
 
 interface LegSearchResult { distanceM: number; polyline: [number, number][]; nodeIds: number[] }
 
+// Esito grezzo di un singolo tentativo Dijkstra, PRIMA di sapere se ha raggiunto il bersaglio —
+// `budgetExhausted` distingue "il bersaglio potrebbe comunque esistere, la ricerca si è fermata
+// solo perché ha visitato DIJKSTRA_MAX_NODES/DIJKSTRA_FALLBACK_MAX_NODES nodi" (vero limite di
+// ricerca) da "la ricerca ha esaurito l'intera rete raggiungibile entro costBudgetM PRIMA di
+// arrivare a quel tetto" (nessun cammino esiste in quella rete/bbox, un problema di copertura dati
+// o di rete davvero disconnessa, non di budget) — indistinguibili guardando solo `result`, serve a
+// LegDiagnostic sotto per orientare l'indagine (vedi §4 punto 2 di
+// docs/crea-guida-itinerario-personalizzato-stato.md).
+interface LegSearchAttempt { result: LegSearchResult | null; nodesVisited: number; budgetExhausted: boolean }
+
 // `costBudgetM`: già in unità di costo (peso per tipo di via compreso, salvo `plainDistance`) — il
 // chiamante decide se e come convertire il budget in metri reali prima di passarlo qui.
 // `plainDistance`: true per il ripiego di shortestLegPath sotto — nessun peso per tipo di via
@@ -188,31 +198,52 @@ function runLegDijkstra(
   isEdgeAllowed: ((edge: GraphEdge, fromNodeId: number) => boolean) | undefined,
   mode: MultiStopMode,
   plainDistance = false,
-): LegSearchResult | null {
+): LegSearchAttempt {
   const maxNodes = plainDistance ? DIJKSTRA_FALLBACK_MAX_NODES : DIJKSTRA_MAX_NODES
   const edgeCost = plainDistance ? undefined : (edge: GraphEdge) => tierEdgeCost(mode, edge)
-  const { dist, prev } = dijkstra(network, startNodeId, costBudgetM, maxNodes, isEdgeAllowed, edgeCost)
-  if (dist.get(endNodeId) == null) return null // solo per verificare la raggiungibilità entro il budget di costo
+  const { dist, prev, visited } = dijkstra(network, startNodeId, costBudgetM, maxNodes, isEdgeAllowed, edgeCost)
+  const budgetExhausted = visited.size >= maxNodes
+  if (dist.get(endNodeId) == null) return { result: null, nodesVisited: visited.size, budgetExhausted } // solo per verificare la raggiungibilità entro il budget di costo
   const polyline = reconstructPath(network, prev, endNodeId, startNodeId)
   return {
-    // MAI dist.get(endNodeId): con tierEdgeCost in gioco è un costo pesato, non la distanza reale
-    // — ricalcolata dalla geometria (vedi polylineDistanceM).
-    distanceM: polylineDistanceM(polyline),
-    polyline,
-    nodeIds: reconstructNodePath(prev, endNodeId, startNodeId),
+    result: {
+      // MAI dist.get(endNodeId): con tierEdgeCost in gioco è un costo pesato, non la distanza reale
+      // — ricalcolata dalla geometria (vedi polylineDistanceM).
+      distanceM: polylineDistanceM(polyline),
+      polyline,
+      nodeIds: reconstructNodePath(prev, endNodeId, startNodeId),
+    },
+    nodesVisited: visited.size,
+    budgetExhausted,
   }
+}
+
+// Diagnostica interna (MAI mostrata all'utente, solo per il logging server-side in
+// app/api/route-build/multi-stop/route.ts) — vedi il commento su LegSearchAttempt sopra.
+// `pathSource`: presente solo quando shortestLegPath trova un risultato, dice quale dei due
+// tentativi lo ha prodotto — verifica se il ripiego a distanza reale (§3 del doc di stato) scatta
+// davvero in produzione, o se resta teorico.
+export interface LegDiagnostic {
+  pathSource?: 'preferred' | 'distance_fallback'
+  preferred: { nodesVisited: number; budgetExhausted: boolean }
+  fallback?: { nodesVisited: number; budgetExhausted: boolean }
 }
 
 function shortestLegPath(
   network: WalkNetwork, startNodeId: number, endNodeId: number, mode: MultiStopMode,
-): LegSearchResult | null {
+): { result: LegSearchResult | null; diagnostic: LegDiagnostic } {
   const baseFilter = mode === 'urbano' ? (edge: GraphEdge) => urbanEdgeFilter(edge) : undefined
   const from = network.nodes.get(startNodeId)
   const to = network.nodes.get(endNodeId)
-  if (!from || !to) return null
+  if (!from || !to) return { result: null, diagnostic: { preferred: { nodesVisited: 0, budgetExhausted: false } } }
   const costBudget = toCostBudget(legDijkstraBudgetM(from, to))
   const preferred = runLegDijkstra(network, startNodeId, endNodeId, costBudget, baseFilter, mode)
-  if (preferred) return preferred
+  if (preferred.result) {
+    return {
+      result: preferred.result,
+      diagnostic: { pathSource: 'preferred', preferred: { nodesVisited: preferred.nodesVisited, budgetExhausted: preferred.budgetExhausted } },
+    }
+  }
   // Ripiego: la ricerca pesata per tipo di via non ha raggiunto il bersaglio entro il suo budget —
   // non vuol dire che una connessione reale non esista (vedi il commento su DIJKSTRA_FALLBACK_MAX_
   // NODES sopra), solo che quella ricerca in particolare non l'ha trovata. Un secondo tentativo
@@ -223,7 +254,15 @@ function shortestLegPath(
   // accettabile. Stesso `costBudget` del tentativo pesato (qui in metri reali, senza moltiplicatore
   // in gioco): non ha senso essere più restrittivi in un tentativo pensato per essere l'ultima
   // spiaggia prima della linea d'aria.
-  return runLegDijkstra(network, startNodeId, endNodeId, costBudget, baseFilter, mode, true)
+  const fallback = runLegDijkstra(network, startNodeId, endNodeId, costBudget, baseFilter, mode, true)
+  return {
+    result: fallback.result,
+    diagnostic: {
+      pathSource: fallback.result ? 'distance_fallback' : undefined,
+      preferred: { nodesVisited: preferred.nodesVisited, budgetExhausted: preferred.budgetExhausted },
+      fallback: { nodesVisited: fallback.nodesVisited, budgetExhausted: fallback.budgetExhausted },
+    },
+  }
 }
 
 /**
@@ -250,7 +289,7 @@ function seekCloserToTarget(
       if (baseFilter && !baseFilter(edge)) return false
       return !excluded.has(edgeKey(fromNodeId, edge.to))
     }
-    const alt = runLegDijkstra(network, startNodeId, endNodeId, toCostBudget(legDijkstraBudgetM(from, to, legTargetM)), filter, mode)
+    const alt = runLegDijkstra(network, startNodeId, endNodeId, toCostBudget(legDijkstraBudgetM(from, to, legTargetM)), filter, mode).result
     if (!alt) break // nessuna via alternativa esiste proprio: quella trovata finora resta la migliore
     if (Math.abs(alt.distanceM - legTargetM) < Math.abs(best.distanceM - legTargetM)) best = alt
     // Si accumulano gli archi di OGNI tentativo (non solo del migliore): il prossimo giro deve
@@ -271,6 +310,10 @@ export interface MultiStopLeg {
   // ItineraryLeg.real), mai nascosta dietro un esito che sembra completo senza esserlo.
   real: boolean
   fallbackReason?: 'too_far_from_network' | 'no_path'
+  // Diagnostica interna (MAI mostrata all'utente, letta solo da app/api/route-build/multi-stop/
+  // route.ts per il logging server-side) — assente per 'too_far_from_network' (fallito
+  // nearestGraphNode, Dijkstra non è mai partito, niente da diagnosticare). Vedi LegDiagnostic.
+  diagnostic?: LegDiagnostic
 }
 
 export interface MultiStopOutcome {
@@ -299,6 +342,7 @@ interface ResolvedLeg {
   endNodeId?: number
   snapDistM?: number
   shortest?: LegSearchResult
+  diagnostic?: LegDiagnostic
 }
 
 /**
@@ -326,9 +370,9 @@ export function buildMultiStopRoute(
       continue
     }
 
-    const shortest = shortestLegPath(network, startNode.nodeId, endNode.nodeId, mode)
+    const { result: shortest, diagnostic } = shortestLegPath(network, startNode.nodeId, endNode.nodeId, mode)
     if (!shortest) {
-      resolved.push({ ...airlineLeg(i, i + 1, from, to, 'no_path') })
+      resolved.push({ ...airlineLeg(i, i + 1, from, to, 'no_path'), diagnostic })
       continue
     }
     resolved.push({
@@ -338,6 +382,7 @@ export function buildMultiStopRoute(
       startNodeId: startNode.nodeId, endNodeId: endNode.nodeId,
       snapDistM: startNode.distM + endNode.distM,
       shortest,
+      diagnostic,
     })
   }
 
@@ -349,7 +394,7 @@ export function buildMultiStopRoute(
 
   const toLeg = (l: ResolvedLeg): MultiStopLeg => ({
     fromStopIdx: l.fromStopIdx, toStopIdx: l.toStopIdx, distanceM: l.distanceM, polyline: l.polyline,
-    real: l.real, fallbackReason: l.fallbackReason,
+    real: l.real, fallbackReason: l.fallbackReason, diagnostic: l.diagnostic,
   })
 
   // Nessun target, o il più breve fra le tratte reali lo raggiunge/supera già: non c'è margine per

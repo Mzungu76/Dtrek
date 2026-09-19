@@ -1,11 +1,14 @@
 # Crea Guida — Modalità A/B di generazione itinerario: stato lavori
 
-Riepilogo per riprendere il lavoro in una nuova chat. Branch `claude/gifted-mendel-q31uau`,
-PR #942 (aperta, non ancora mergiata), repo `mzungu76/dtrek`.
+Riepilogo per riprendere il lavoro in una nuova chat. Branch
+`claude/missing-connections-fallback-xtjikb`, repo `mzungu76/dtrek`.
 
 **Attenzione**: il problema principale di questo filone di lavoro — percorsi non trovati fra
-tappe reali, con ripiego su linea d'aria — **non è risolto**. È stato tentato un fix (vedi §3),
-ma non è stato confermato risolutivo nell'app reale: va riverificato prima di considerarlo chiuso.
+tappe reali, con ripiego su linea d'aria — **non è ancora confermato risolto**. Il fix tentato
+nella sessione precedente (§3) resta non verificato sul caso reale. In questa sessione è stato
+aggiunto il logging diagnostico raccomandato al punto 2 di §4 (vedi §3bis sotto) — permette di
+distinguere le cause quando il sintomo si ripresenta, ma richiede comunque di riprodurre il
+problema in staging/produzione e leggere i log per avere una risposta.
 
 ---
 
@@ -103,32 +106,80 @@ test) — **confermato che il test fallisce senza il fix e passa con il fix**, m
   ancora esaurire pure il budget più ampio (60000 nodi) — non è stato provato un limite
   superiore realistico.
 
+## 3bis. Logging diagnostico aggiunto in questa sessione (punto 2 e parte del punto 3 di §4 sotto)
+
+**`lib/routeBuilder/multiStopRoute.ts`**: `shortestLegPath` ora restituisce, insieme al cammino
+trovato, una `LegDiagnostic` (esportata) che distingue con precisione le cause di un ripiego a
+linea d'aria (`fallbackReason:'no_path'`):
+- `pathSource`: per una tratta reale, se il cammino usato viene dalla ricerca pesata per tipo di
+  via (`'preferred'`) o dal ripiego a distanza reale del punto 3 sopra (`'distance_fallback'`) —
+  permette di verificare in produzione se quel ripiego scatta davvero, o resta teorico.
+- `preferred`/`fallback`: per ciascun tentativo, `nodesVisited` e `budgetExhausted` (vero quando
+  la ricerca si è fermata solo perché ha raggiunto `DIJKSTRA_MAX_NODES`/
+  `DIJKSTRA_FALLBACK_MAX_NODES`, non perché ha esplorato l'intera rete raggiungibile senza
+  trovare il bersaglio) — distingue "una connessione potrebbe comunque esistere, il budget è
+  finito prima" da "nessun cammino esiste in quella rete/bbox" (rete davvero disconnessa o dato
+  mancante, non un limite di ricerca). Assente (`diagnostic` intero assente) quando il ripiego è
+  per `fallbackReason:'too_far_from_network'` (Dijkstra non è nemmeno partito, lo snap alla rete è
+  fallito prima).
+
+`MultiStopLeg.diagnostic` porta questo dato fino alla risposta dell'endpoint — MAI usato o
+mostrato lato client (`PersonalizeItineraryPanel.tsx` continua a leggere solo `real` e
+`fallbackReason`, invariati), solo per il logging server-side.
+
+**`app/api/route-build/multi-stop/route.ts`**: per ogni tratta con `real:false`, un
+`console.warn` riporta nome tappe, `fallbackReason`, distanza in linea d'aria, modalità, numero
+di nodi della rete scaricata e il dettaglio della diagnostica sopra — leggibile nei log del
+deployment quando il sintomo si ripresenta, senza dover riprodurre il problema in un ambiente di
+sviluppo.
+
+**`lib/routeBuilder/osmGraph.ts`** (`fetchWalkNetwork`, copre parte del punto 3 di §4): Overpass
+può rispondere HTTP 200 con un campo `remark` quando ha interrotto la query prima di finirla (in
+genere per il proprio timeout interno) — una rete PARZIALE servita come se fosse completa, mai
+stata un errore per `fetchOverpass` (nessuna eccezione, nessun retry). Ora un `console.warn`
+segnala bbox e `remark` quando questo accade. Non risolve il problema (la rete incompleta resta
+quella su cui si cerca), solo lo rende visibile nei log invece che silenzioso — se un ripiego a
+linea d'aria coincide nei log con questo warning per lo stesso bbox, è la causa più probabile, non
+un limite dell'algoritmo di ricerca in `multiStopRoute.ts`.
+
+Copre punto 2 di §4 per intero. Copre SOLO la parte "silenziosa" del punto 3 (rete parziale non
+segnalata) — non copre ancora un timeout che fa fallire l'intera richiesta con un errore esplicito
+(già gestito, l'utente vede "Rete pedonale non disponibile"), né misura quanto spesso accade in
+produzione (serve osservare i log dopo il deploy). Punto 1 e punto 4 restano non affrontati in
+questa sessione (nessun accesso a staging/produzione o a Wikipedia dal sandbox).
+
 ## 4. Prossimi passi consigliati (per la nuova chat)
 
-1. **Riverificare in staging/produzione** le due coppie di tappe degli screenshot originali dopo
-   il fix del punto 3, per confermare (o smentire) l'ipotesi.
-2. Se il problema persiste, aggiungere **logging diagnostico** lato server
-   (`app/api/route-build/multi-stop/route.ts` o dentro `multiStopRoute.ts`) per distinguere, per
-   ogni tratta in ripiego: fallito lo snap alla rete (`too_far_from_network`) vs. nessun cammino
-   nella ricerca pesata ma trovato nel ripiego vs. nessun cammino nemmeno nel ripiego (rete
-   davvero disconnessa in quel bbox) — oggi il client vede solo il motivo finale, non se il
-   ripiego a distanza reale è mai scattato o con che esito.
-3. Verificare se il fetch della rete pedonale (`fetchWalkNetworkCached`,
-   `WALK_NETWORK_TIMEOUT_MS`) per bbox grandi (tappe distanti, o con una riserva naturale densa
-   in mezzo) va in timeout o restituisce una rete parziale in silenzio — un'altra causa
-   plausibile di "nessun cammino trovato" che il fix del punto 3 non risolverebbe.
+1. **Riverificare in staging/produzione** le due coppie di tappe degli screenshot originali (Civita
+   Castellana ↔ Castel Sant'Elia, Ronciglione ↔ Capranica) dopo il fix del punto 3 sopra — ora con
+   il logging di §3bis, un tentativo che ripiega a linea d'aria produce nei log server-side quale
+   causa esatta si è verificata (budget esaurito nel tentativo pesato ma trovato nel ripiego —
+   allora il fix ha funzionato semplicemente osservandolo di persona nell'app; budget esaurito in
+   ENTRAMBI i tentativi — il budget resta insufficiente anche a 60 000 nodi, alzarlo ulteriormente
+   o rivedere l'euristica; nessun budget esaurito in nessuno dei due — la rete scaricata per quel
+   bbox non contiene proprio un cammino, quasi certamente un problema di dati/copertura Overpass,
+   non di ricerca — controllare in quel caso anche se è comparso il warning `remark` di §3bis).
+2. ~~Aggiungere logging diagnostico~~ — fatto in questa sessione, vedi §3bis.
+3. ~~Verificare se il fetch della rete pedonale va in timeout o restituisce una rete parziale in
+   silenzio~~ — la parte "silenziosa" (risposta 200 con `remark`) è ora segnalata, vedi §3bis.
+   Resta da osservare in produzione QUANTO SPESSO accade per i bbox reali in questione.
 4. Valutare se le coordinate dei punti scoperti via Wikipedia (usati sia dall'itinerario
-   automatico sia dal nuovo toggle "punti di interesse", punto 11 sopra) sono abbastanza precise
+   automatico sia dal nuovo toggle "punti di interesse", punto 11 di §2) sono abbastanza precise
    da agganciarsi correttamente alla rete pedonale — un punto con coordinate leggermente sbagliate
    potrebbe agganciarsi a un nodo isolato o dal lato sbagliato di un ostacolo (fiume, dislivello).
+   Non affrontato in questa sessione.
 5. Solo dopo aver risolto/confermato questo, riprendere gli altri task rimasti aperti da sessioni
    precedenti (se non già coperti): nessuno di rilievo aperto oltre a questo al momento della
    stesura.
 
 ## 5. Verifica eseguita in questa sessione
 
-`npx tsc --noEmit` pulito, `npx next lint` senza nuovi errori, `npx vitest run
-lib/routeBuilder/__tests__/` verde (51 test), `npm run build` compila con successo e si ferma al
-limite noto del sandbox (assenza di env Supabase in questo ambiente, non una regressione — va
-verificato con un ambiente con Supabase configurato). Nessun test manuale end-to-end nell'app
-reale è stato possibile in questo sandbox.
+`npx tsc --noEmit` pulito (progetto intero, dopo `npm install` — `node_modules` non era presente
+all'avvio del sandbox), `npx next lint` senza nuovi errori/warning (solo warning preesistenti non
+toccati da questa sessione), `npx vitest run` verde (464 test, l'intera suite — inclusi 3 nuovi
+test in `lib/routeBuilder/__tests__/multiStopRoute.test.ts` per la diagnostica di §3bis: budget
+esaurito+ripiego, ricerca pesata diretta, snap fallito senza diagnostica). `npm run build` non
+rieseguito in questa sessione (nessuna modifica a route/pagine che ne richiedesse una verifica
+oltre a tsc/lint/vitest, già verde). Nessun test manuale end-to-end nell'app reale è stato
+possibile in questo sandbox (nessun accesso a Supabase/Overpass live) — il logging aggiunto va
+osservato in un ambiente con accesso reale per essere utile.

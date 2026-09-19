@@ -182,6 +182,26 @@ export async function POST(req: NextRequest) {
   // una linea d'aria SOLO per quella tratta (leg.real === false), mai un fallimento totale.
   const outcome = buildMultiStopRoute(network, fullStops, mode, targetDistanceKm != null ? targetDistanceKm * 1000 : null)
 
+  // Logging diagnostico per ogni tratta in ripiego a linea d'aria — mai mostrato all'utente (vedi
+  // MultiStopLeg.diagnostic in multiStopRoute.ts), serve solo a distinguere in produzione, quando
+  // il sintomo si ripresenta, quale delle cause plausibili elencate nel §3/§4 del doc di stato è
+  // quella reale: budget di nodi esaurito (una connessione potrebbe comunque esistere, la ricerca
+  // non l'ha raggiunta) vs rete esplorata per intero senza trovare il bersaglio (nessun cammino
+  // esiste nel bbox scaricato — dati insufficienti, non un limite di ricerca).
+  for (const leg of outcome.legs) {
+    if (leg.real) continue
+    const from = fullStops[leg.fromStopIdx]
+    const to = fullStops[leg.toStopIdx]
+    console.warn(
+      `[route-build/multi-stop] ripiego a linea d'aria: "${from?.name}" -> "${to?.name}"`,
+      `reason=${leg.fallbackReason} airlineM=${Math.round(leg.distanceM)} mode=${mode} networkNodes=${network.nodes.size}`,
+      leg.diagnostic
+        ? `preferred(visited=${leg.diagnostic.preferred.nodesVisited},budgetExhausted=${leg.diagnostic.preferred.budgetExhausted})` +
+          (leg.diagnostic.fallback ? ` fallback(visited=${leg.diagnostic.fallback.nodesVisited},budgetExhausted=${leg.diagnostic.fallback.budgetExhausted})` : ' fallback=not_attempted')
+        : 'diagnostic=n/a (snap alla rete fallito, too_far_from_network)',
+    )
+  }
+
   // Concatena i tratti in un'unica polyline — scarta il primo punto di ogni tratto dopo il primo,
   // che reconstructPath ripete identico all'ultimo punto del tratto precedente (entrambi partono
   // esattamente dal nodo di aggancio condiviso). Una linea d'aria di ripiego ha comunque solo 2
