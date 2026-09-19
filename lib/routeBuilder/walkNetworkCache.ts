@@ -6,7 +6,7 @@
 // stesso centroide, utenti vicini).
 import { normalizeBboxKey } from '@/lib/geoUtils'
 import { supabase } from '@/lib/supabase'
-import { fetchWalkNetwork, type WalkNetwork, type GraphNode } from '@/lib/routeBuilder/osmGraph'
+import { fetchWalkNetwork, WALK_NETWORK_QUERY_VERSION, type WalkNetwork, type GraphNode } from '@/lib/routeBuilder/osmGraph'
 import { shouldRunCleanup } from '@/lib/cacheCleanupThrottle'
 
 // Più corto dei 180 giorni del DTM (l'orografia non cambia, la rete cammini un po' di più — un
@@ -46,7 +46,10 @@ function deserialize(stored: StoredNetwork): WalkNetwork {
 // rischierebbe un cache-miss e un fetch Overpass a freddo ripetuto, vanificando il vantaggio della
 // cache proprio nel caso in cui serve di più.
 export async function fetchWalkNetworkCached(bbox: [number, number, number, number], awaitWrite = false, timeoutMs?: number): Promise<WalkNetwork> {
-  const bboxKey = normalizeBboxKey(bbox.join(','))
+  // WALK_NETWORK_QUERY_VERSION nella chiave: una rete già in cache da prima di un cambio della
+  // query (osmGraph.ts, es. i tag highway ammessi) non deve restare servita come se fosse ancora
+  // valida — il bbox da solo non lo rileva, la versione sì (vedi il commento su quella costante).
+  const bboxKey = `${normalizeBboxKey(bbox.join(','))}:v${WALK_NETWORK_QUERY_VERSION}`
 
   if (shouldRunCleanup('walk_network_cache')) {
     supabase.from('walk_network_cache').delete().lt('expires_at', new Date().toISOString())

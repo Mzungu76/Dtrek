@@ -6,17 +6,33 @@ import { fetchOverpass } from '@/lib/overpassTrails'
 import { haversineM } from '@/lib/geoUtils'
 import { mapOsmSacScale } from '@/lib/osm/sacScale'
 
-// Tag highway ammessi per un percorso escursionistico: sentieri/tracciati/carrarecce (comprese le
-// "strade bianche", tipicamente track/unclassified) più residential — necessario perché un punto
-// di partenza scelto in un paese (il caso più comune) è spesso collegato ai sentieri veri fuori
-// centro abitato proprio tramite le sue strade residenziali: escluderle del tutto (come in una
-// versione precedente, per contenere il tempo di risposta di Overpass) lasciava il nodo di
-// partenza agganciato a un frammento di rete isolato, senza nessun cammino reale verso nessun
-// altro punto — la generazione falliva sempre, non per dati scarsi ma per grafo disconnesso.
-// `service` resta escluso (accessi/parcheggi interni, numerosissimi e non utili per un percorso
-// escursionistico) insieme ai tag stradali maggiori (motorway/primary/secondary/trunk) e agli
-// accessi privati/vietati.
-const WALKABLE_HIGHWAY = 'path|track|footway|bridleway|steps|unclassified|residential'
+// Tag highway ammessi: sentieri/tracciati/carrarecce (comprese le "strade bianche", tipicamente
+// track/unclassified) più residential — necessario perché un punto di partenza scelto in un paese
+// (il caso più comune) è spesso collegato ai sentieri veri fuori centro abitato proprio tramite le
+// sue strade residenziali: escluderle del tutto (come in una versione precedente, per contenere il
+// tempo di risposta di Overpass) lasciava il nodo di partenza agganciato a un frammento di rete
+// isolato, senza nessun cammino reale verso nessun altro punto — la generazione falliva sempre,
+// non per dati scarsi ma per grafo disconnesso.
+// tertiary/secondary aggiunti per lo stesso motivo, un livello più in su: due paesi diversi (non
+// un punto di partenza e i sentieri nei dintorni, il caso sopra) sono quasi sempre collegati SOLO
+// da una strada provinciale ("SP..."), tipicamente taggata tertiary o secondary in OSM, mai da
+// residential/unclassified (che restano interni al singolo paese) né da un sentiero. Escluderli
+// lasciava paesi realmente raggiungibili a piedi (la personalizzazione multi-tappa di un Borgo/
+// Città, lib/routeBuilder/multiStopRoute.ts, sceglie tappe che sono spesso paesi diversi) senza
+// NESSUN arco che li collegasse nel grafo scaricato — non un limite di ricerca (Dijkstra non trova
+// un cammino che non è mai stato scaricato), un buco nei dati fetchati. Le strade davvero maggiori
+// (motorway/primary/trunk) restano escluse insieme a `service` (accessi/parcheggi interni,
+// numerosissimi e non utili) e agli accessi privati/vietati — troppo trafficate per un pedone,
+// mai l'unica via reale fra due paesi vicini in area rurale.
+const WALKABLE_HIGHWAY = 'path|track|footway|bridleway|steps|unclassified|residential|tertiary|secondary'
+
+// Bump ad ogni cambio della query stessa (WALKABLE_HIGHWAY, o qualunque altro filtro dentro
+// fetchWalkNetwork sotto) — lib/routeBuilder/walkNetworkCache.ts lo include nella chiave di cache
+// proprio perché la chiave è altrimenti solo il bbox: senza questo, una rete già in cache da PRIMA
+// di un cambio di filtro (es. l'aggiunta di tertiary/secondary sopra) resterebbe servita così
+// com'era, con lo stesso identico buco nei dati che il cambio doveva risolvere, fino alla scadenza
+// naturale della cache (45gg) — un fix silenziosamente inefficace per qualunque bbox già visitato.
+export const WALK_NETWORK_QUERY_VERSION = 2
 
 export interface GraphNode {
   lat: number

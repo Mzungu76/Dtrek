@@ -20,13 +20,17 @@ import { haversineM } from '../geoUtils'
 
 export type MultiStopMode = 'urbano' | 'misto'
 
-// "Trekking urbano": solo le vie di un centro abitato, mai un sentiero/tracciato/mulattiera — le
-// stesse esclusioni descritte dall'utente ("deve ignorare i sentieri"). `footway` resta escluso
-// insieme a path/track/bridleway/steps: OSM non distingue nei tag un marciapiede urbano da un
-// sentiero di campagna, quindi non c'è modo affidabile di tenere l'uno ed escludere l'altro — la
-// rete percorribile fetchata (WALKABLE_HIGHWAY, lib/routeBuilder/osmGraph.ts) resta comunque la
-// stessa in entrambe le modalità, qui si filtra solo in fase di attraversamento del grafo.
-const URBAN_ALLOWED_HIGHWAY = new Set(['residential', 'unclassified'])
+// "Trekking urbano": solo le vie di un centro abitato o le strade che collegano un paese all'altro
+// — mai un sentiero/tracciato/mulattiera, le stesse esclusioni descritte dall'utente ("deve
+// ignorare i sentieri"). `footway` resta escluso insieme a path/track/bridleway/steps: OSM non
+// distingue nei tag un marciapiede urbano da un sentiero di campagna, quindi non c'è modo
+// affidabile di tenere l'uno ed escludere l'altro. tertiary/secondary sono incluse insieme a
+// residential/unclassified: una strada provinciale fra due paesi (tipicamente taggata così, vedi
+// WALKABLE_HIGHWAY in osmGraph.ts) è una strada a tutti gli effetti, non un sentiero — escluderla
+// dal "trekking urbano" lascerebbe quella modalità priva dell'unico collegamento reale che spesso
+// esiste fra due paesi diversi. La rete percorribile fetchata resta comunque la stessa in entrambe
+// le modalità, qui si filtra solo in fase di attraversamento del grafo.
+const URBAN_ALLOWED_HIGHWAY = new Set(['residential', 'unclassified', 'tertiary', 'secondary'])
 
 function urbanEdgeFilter(edge: GraphEdge): boolean {
   return edge.highway != null && URBAN_ALLOWED_HIGHWAY.has(edge.highway)
