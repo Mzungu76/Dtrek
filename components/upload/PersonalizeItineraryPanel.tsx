@@ -86,8 +86,21 @@ export default function PersonalizeItineraryPanel({ anchor, stops, color, onRemo
   const distanceValid = distanceKm.trim() !== '' && Number.isFinite(distanceValue) && distanceValue >= MIN_KM && distanceValue <= MAX_KM
   const canGenerate = distanceValid && stops.length >= 1 && !generating
 
-  async function generate() {
+  // Qui non c'è scelta fra candidati come nella generazione "su misura" (Modalità A) — il percorso
+  // è un unico cammino minimo forzato dalle tappe scelte, la distanza richiesta non può cambiarlo:
+  // se si discosta molto, l'unico modo onesto di "rispettare" il limite è dichiararlo, non fingere
+  // un rispetto che l'algoritmo non può garantire con tappe fisse.
+  const DISTANCE_MISMATCH_THRESHOLD = 0.3
+  const distanceMismatch = result && distanceValid
+    ? Math.abs(result.distanceMeters / 1000 - distanceValue) / distanceValue > DISTANCE_MISMATCH_THRESHOLD
+    : false
+
+  // `modeOverride`: usato dal pulsante "prova anche con i sentieri" dopo un fallimento in modalità
+  // urbano — un modo concreto di "rompere" quel vincolo invece di lasciare l'utente bloccato,
+  // senza aspettare il re-render dello stato `mode` prima di richiamare la generazione.
+  async function generate(modeOverride?: 'urbano' | 'misto') {
     if (!canGenerate) return
+    const effectiveMode = modeOverride ?? mode
     setGenerating(true)
     setError('')
     setResult(null)
@@ -98,7 +111,7 @@ export default function PersonalizeItineraryPanel({ anchor, stops, color, onRemo
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           stops: allPoints.map(p => ({ lat: p.lat, lon: p.lon })),
-          mode,
+          mode: effectiveMode,
           targetDistanceKm: distanceValue,
           targetElevationM: elevationM.trim() ? Number(elevationM) : null,
         }),
@@ -106,6 +119,7 @@ export default function PersonalizeItineraryPanel({ anchor, stops, color, onRemo
       const data = await res.json()
       if (!res.ok) { setError(data?.message || data?.error || 'Generazione non riuscita, riprova.'); return }
       if (data.ok === false) { setFailure(data as MultiStopFailure); return }
+      if (modeOverride) setMode(modeOverride)
       setResult(data as MultiStopResponse)
       setTitle(`${anchor.name} — itinerario personalizzato`)
     } catch {
@@ -233,8 +247,8 @@ export default function PersonalizeItineraryPanel({ anchor, stops, color, onRemo
 
             {error && <p className="text-xs text-red-600">{error}</p>}
             {failure && (
-              <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5">
-                <p className="text-xs text-amber-700 font-medium mb-1">{failure.message}</p>
+              <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 space-y-2">
+                <p className="text-xs text-amber-700 font-medium">{failure.message}</p>
                 <ul className="text-[11px] text-amber-600 space-y-0.5">
                   {failure.failedLegs.map((l, i) => (
                     <li key={i}>
@@ -242,10 +256,17 @@ export default function PersonalizeItineraryPanel({ anchor, stops, color, onRemo
                     </li>
                   ))}
                 </ul>
+                {mode === 'urbano' && (
+                  <button onClick={() => generate('misto')} disabled={generating}
+                    className="w-full flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-60 text-white font-bold text-xs rounded-lg py-2 transition-colors">
+                    {generating && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    {generating ? 'Provo…' : 'Prova includendo anche i sentieri (misto)'}
+                  </button>
+                )}
               </div>
             )}
 
-            <button onClick={generate} disabled={!canGenerate}
+            <button onClick={() => generate()} disabled={!canGenerate}
               className="w-full flex items-center justify-center gap-2 bg-terra-500 hover:bg-terra-600 disabled:opacity-40 text-white font-bold text-sm rounded-xl py-3 transition-colors">
               {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
               {generating ? 'Genero…' : 'Genera il percorso'}
@@ -255,6 +276,11 @@ export default function PersonalizeItineraryPanel({ anchor, stops, color, onRemo
 
         {result && (
           <div className="space-y-3">
+            {distanceMismatch && (
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5">
+                Il percorso generato è di {(result.distanceMeters / 1000).toFixed(1)} km — {result.distanceMeters / 1000 > distanceValue ? 'più lungo' : 'più corto'} dei {distanceValue} km richiesti: le tappe scelte non permettono di avvicinarsi di più mantenendo un cammino reale che le tocchi tutte.
+              </p>
+            )}
             <TrailPreviewMap polyline={result.routePolyline} height="200px" />
             <div className="grid grid-cols-3 gap-1.5">
               <div className="bg-stone-50 rounded-lg border border-stone-100 px-2.5 py-1.5">

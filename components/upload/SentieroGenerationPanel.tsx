@@ -45,6 +45,11 @@ export default function SentieroGenerationPanel({ origin, onBack, onSaved }: Pro
   const [buildStage, setBuildStage] = useState('')
   const [results, setResults] = useState<BuiltCandidate[]>([])
   const [error, setError] = useState('')
+  // true solo dopo un primo tentativo (entro i parametri richiesti) senza risultati — offre di
+  // "rompere" il vincolo di lunghezza/dislivello invece di lasciare l'utente bloccato. Mai per un
+  // errore di rete/server (lì "riprova con parametri diversi" non ha senso).
+  const [offerRelax, setOfferRelax] = useState(false)
+  const [relaxedResults, setRelaxedResults] = useState(false)
 
   const [selected, setSelected] = useState<BuiltCandidate | null>(null)
   const [title, setTitle] = useState('')
@@ -73,10 +78,11 @@ export default function SentieroGenerationPanel({ origin, onBack, onSaved }: Pro
   const distanceValid = distanceKm.trim() !== '' && Number.isFinite(distanceValue) && distanceValue >= MIN_KM && distanceValue <= MAX_KM
   const canGenerate = distanceValid && !generating
 
-  async function generate() {
-    if (!canGenerate) return
+  async function generate(relaxed = false) {
+    if (!relaxed && !canGenerate) return
     setGenerating(true)
     setError('')
+    setOfferRelax(false)
     setBuildStage('')
     try {
       const common: BuildParamsCommon = {
@@ -88,12 +94,17 @@ export default function SentieroGenerationPanel({ origin, onBack, onSaved }: Pro
         destinationLat: null, destinationLon: null,
         radiusKm: origin.radiusKm,
       }
-      const { candidates, message } = await runStepBuild(routeType, common, setBuildStage)
+      const { candidates, message, reason } = await runStepBuild(routeType, common, setBuildStage, relaxed)
       if (candidates.length > 0) {
         setResults(candidates)
+        setRelaxedResults(relaxed)
         setStep('results')
       } else {
         setError(message ?? 'Nessun percorso trovato con questi vincoli — prova una lunghezza diversa.')
+        // Solo se il tentativo era ancora entro i parametri richiesti (non già "relaxed") e il
+        // motivo è davvero "nessun candidato trovato" (non un errore di rete/server, dove
+        // "avvicinati comunque" non avrebbe senso).
+        setOfferRelax(!relaxed && reason === 'no_results')
       }
     } catch {
       setError('Errore di rete, riprova.')
@@ -178,7 +189,20 @@ export default function SentieroGenerationPanel({ origin, onBack, onSaved }: Pro
 
             {error && <p className="text-xs text-red-600">{error}</p>}
 
-            <button onClick={generate} disabled={!canGenerate}
+            {offerRelax && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 space-y-2">
+                <p className="text-xs text-amber-700">
+                  Vuoi che provi ad avvicinarmi il più possibile, anche oltre la distanza/dislivello richiesti?
+                </p>
+                <button onClick={() => generate(true)} disabled={generating}
+                  className="w-full flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-60 text-white font-bold text-xs rounded-lg py-2 transition-colors">
+                  {generating && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  {generating ? (buildStage || 'Cerco…') : 'Sì, avvicinati il più possibile'}
+                </button>
+              </div>
+            )}
+
+            <button onClick={() => generate(false)} disabled={!canGenerate}
               className="w-full flex items-center justify-center gap-2 bg-terra-500 hover:bg-terra-600 disabled:opacity-40 text-white font-bold text-sm rounded-xl py-3 transition-colors">
               {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
               {generating ? (buildStage || 'Genero…') : 'Genera'}
@@ -188,6 +212,11 @@ export default function SentieroGenerationPanel({ origin, onBack, onSaved }: Pro
 
         {step === 'results' && (
           <div className="space-y-3 max-w-md mx-auto">
+            {relaxedResults && (
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5">
+                Questi percorsi sono i più vicini possibile a {distanceKm} km, ma non rispettano esattamente la distanza richiesta — nella zona scelta non ne esistono di più vicini.
+              </p>
+            )}
             {results.map((c, i) => (
               <BuiltRouteCard key={i} data={c} onChoose={() => chooseCandidate(c, i)} />
             ))}

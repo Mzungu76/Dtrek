@@ -49,11 +49,19 @@ export async function postJSON(url: string, body: unknown): Promise<{ ok: boolea
  * step/network → step/candidates → step/enrich, con lo stesso ritentativo a lunghezze
  * alternative (RETRY_DISTANCE_FACTORS) orchestrato qui invece che dentro un'unica richiesta.
  */
+// `relaxed`: true solo dopo che l'utente ha esplicitamente confermato di voler "rompere" il
+// vincolo di lunghezza/dislivello a fronte di un primo tentativo senza risultati (vedi
+// SentieroGenerationPanel.tsx) — il pathfinding (lib/routeBuilder/loopBuilder.ts) non scarta più i
+// candidati fuori da LENGTH_TOLERANCE, restituisce il più vicino possibile al target invece di
+// niente. In questo caso il ritentativo con lunghezze alternative (0.75x/1.25x, sotto) non serve
+// più: la ricerca è già andata oltre ogni tolleranza sulla lunghezza originale, provare altre
+// lunghezze non aggiungerebbe candidati più vicini al target reale dell'utente.
 export async function runStepBuild(
-  routeType: RouteType, common: BuildParamsCommon, onStage: (stage: string) => void,
-): Promise<{ candidates: BuiltCandidate[]; message: string | null }> {
+  routeType: RouteType, common: BuildParamsCommon, onStage: (stage: string) => void, relaxed = false,
+): Promise<{ candidates: BuiltCandidate[]; message: string | null; reason?: 'no_results' | 'error' }> {
   const startedAt = Date.now()
   const noResultsMessage = 'Nessun percorso trovato con questi vincoli nella zona scelta — prova una lunghezza diversa o un punto di partenza differente.'
+  const noResultsMessageRelaxed = 'Anche allargando la ricerca oltre i parametri richiesti non ho trovato nessun percorso in questa zona — la rete pedonale qui è troppo rada o isolata.'
 
   function logResult(tierReached: string, builtCount: number, retried: boolean, message: string | null) {
     postJSON('/api/route-build/step/log', {
@@ -73,7 +81,7 @@ export async function runStepBuild(
   if (!net.ok) {
     const message = net.data.message || net.data.error || 'Generazione non riuscita, riprova.'
     logResult(net.data.error ?? 'error', 0, false, message)
-    return { candidates: [], message }
+    return { candidates: [], message, reason: 'error' }
   }
 
   const { bbox, startNodeIds, targetDistanceM, hasDestination, rawCandidates: destRawCandidates, concerns, environmentPrefs: resolvedEnvPrefs } = net.data
@@ -83,12 +91,12 @@ export async function runStepBuild(
   // catturava e tornava [] senza propagare l'errore) — false per il tentativo primario, dove un
   // fallimento di rete deve restare visibile invece di confondersi con un generico "nessun
   // percorso trovato".
-  async function candidatesAndEnrich(distanceM: number, silent: boolean): Promise<{ candidates: BuiltCandidate[]; errorMessage: string | null }> {
+  async function candidatesAndEnrich(distanceM: number, silent: boolean, relaxedAttempt = false): Promise<{ candidates: BuiltCandidate[]; errorMessage: string | null }> {
     let raw: RouteCandidate[]
     if (hasDestination) {
       raw = destRawCandidates ?? []
     } else {
-      const cRes = await postJSON('/api/route-build/step/candidates', { bbox, startNodeIds, routeType, targetDistanceM: distanceM, concerns })
+      const cRes = await postJSON('/api/route-build/step/candidates', { bbox, startNodeIds, routeType, targetDistanceM: distanceM, concerns, relaxed: relaxedAttempt })
       if (!cRes.ok) return { candidates: [], errorMessage: silent ? null : (cRes.data.message || cRes.data.error) }
       raw = cRes.data.rawCandidates ?? []
     }
@@ -101,16 +109,16 @@ export async function runStepBuild(
     return { candidates: (eRes.data.candidates ?? []) as BuiltCandidate[], errorMessage: null }
   }
 
-  onStage('Genero i percorsi…')
-  const primary = await candidatesAndEnrich(targetDistanceM, false)
+  onStage(relaxed ? 'Cerco il percorso più vicino possibile…' : 'Genero i percorsi…')
+  const primary = await candidatesAndEnrich(targetDistanceM, false, relaxed)
   if (primary.errorMessage) {
     logResult('error', 0, false, primary.errorMessage)
-    return { candidates: [], message: primary.errorMessage }
+    return { candidates: [], message: primary.errorMessage, reason: 'error' }
   }
   let candidates = primary.candidates
 
   let retried = false
-  if (!hasDestination && candidates.length < MIN_BUILT_RESULTS) {
+  if (!relaxed && !hasDestination && candidates.length < MIN_BUILT_RESULTS) {
     retried = true
     onStage('Provo lunghezze alternative…')
     const seen = new Set(candidates.map(candidateSignature))
@@ -132,10 +140,11 @@ export async function runStepBuild(
   }
 
   if (candidates.length === 0) {
-    logResult(retried ? 'no_dtm_coverage' : 'no_raw_candidates', 0, retried, noResultsMessage)
-    return { candidates: [], message: noResultsMessage }
+    const message = relaxed ? noResultsMessageRelaxed : noResultsMessage
+    logResult(retried ? 'no_dtm_coverage' : (relaxed ? 'no_raw_candidates_relaxed' : 'no_raw_candidates'), 0, retried, message)
+    return { candidates: [], message, reason: 'no_results' }
   }
 
-  logResult(retried ? 'retry_built' : 'built', candidates.length, retried, null)
+  logResult(retried ? 'retry_built' : (relaxed ? 'relaxed_built' : 'built'), candidates.length, retried, null)
   return { candidates, message: null }
 }
