@@ -4,9 +4,28 @@ import { fetchWalkNetworkCached } from '@/lib/routeBuilder/walkNetworkCache'
 import { buildMultiStopRoute, type MultiStopMode } from '@/lib/routeBuilder/multiStopRoute'
 import { scoreAndEnrichCandidates } from '@/lib/routeBuilder/scoreCandidates'
 import { padBbox } from '@/lib/overpassTrails'
+import { haversineM } from '@/lib/geoUtils'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
+
+// Un margine fisso (0.4km, il valore precedente — mutuato da app/api/borgo-itinerary/route.ts,
+// pensato per tappe auto-scoperte entro 2.5km dal Borgo) tagliava fuori dalla rete scaricata
+// esattamente le vie che un cammino reale fra tappe più distanti (scelte liberamente dall'utente,
+// spesso paesi diversi separati da una valle) deve percorrere per aggirare il terreno — il
+// collegamento non falliva perché irraggiungibile, ma perché la parte di rete che lo conteneva non
+// era mai stata scaricata. Il margine ora scala con quanto sono effettivamente distanti le tappe
+// scelte (la diagonale del loro rettangolo), con un pavimento e un tetto di sicurezza per il costo
+// della query Overpass.
+const NETWORK_PADDING_MIN_KM = 1.5
+const NETWORK_PADDING_MAX_KM = 5
+const NETWORK_PADDING_FACTOR = 0.6
+// Più alto del default (18s, lib/routeBuilder/osmGraph.ts) — stessa ragione già documentata per
+// app/api/borgo-itinerary/route.ts: un bbox più ampio (tappe distanti + il margine proporzionale
+// sopra) rende un fetch a freddo più lento, e senza margine il fallimento più comune non è "nessuna
+// via trovata" ma "Overpass non ha risposto in tempo" — un problema diverso, mascherato dallo
+// stesso identico messaggio se non si allarga anche il tetto del fetch.
+const WALK_NETWORK_TIMEOUT_MS = 25_000
 
 interface StopInput { lat: number; lon: number }
 
@@ -48,20 +67,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Richiesta non valida' }, { status: 400 })
   }
 
-  // Bbox di tutte le tappe scelte, con un margine di 400m — stesso schema di
-  // app/api/borgo-itinerary/route.ts's networkBbox (le vie che collegano una tappa periferica
-  // spesso escono dal rettangolo stretto che le contiene tutte).
+  // Bbox di tutte le tappe scelte, con un margine proporzionale a quanto sono effettivamente
+  // distanti (vedi commento sulle costanti sopra) — le vie che collegano due tappe spesso escono
+  // dal rettangolo stretto che le contiene entrambe, tanto più quanto più le tappe sono lontane.
   const rawBbox: [number, number, number, number] = [
     Math.min(...stops.map(s => s.lat)),
     Math.min(...stops.map(s => s.lon)),
     Math.max(...stops.map(s => s.lat)),
     Math.max(...stops.map(s => s.lon)),
   ]
-  const networkBbox = padBbox(rawBbox, 0.4)
+  const diagonalKm = haversineM(rawBbox[0], rawBbox[1], rawBbox[2], rawBbox[3]) / 1000
+  const paddingKm = Math.min(NETWORK_PADDING_MAX_KM, Math.max(NETWORK_PADDING_MIN_KM, diagonalKm * NETWORK_PADDING_FACTOR))
+  const networkBbox = padBbox(rawBbox, paddingKm)
 
   let network
   try {
-    network = await fetchWalkNetworkCached(networkBbox, false)
+    network = await fetchWalkNetworkCached(networkBbox, false, WALK_NETWORK_TIMEOUT_MS)
   } catch (e) {
     console.error('[route-build/multi-stop] rete pedonale non disponibile:', e)
     return NextResponse.json({ error: 'network_unavailable', message: 'Rete pedonale non disponibile in questo momento, riprova.' }, { status: 502 })

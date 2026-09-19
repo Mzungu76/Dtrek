@@ -9,6 +9,7 @@
 // lib/routeBuilder/loopBuilder.ts — chi chiama fornisce già il WalkNetwork.
 import { nearestGraphNode, type WalkNetwork, type GraphEdge } from './osmGraph'
 import { dijkstra, reconstructPath } from './walkRouting'
+import { haversineM } from '../geoUtils'
 
 export type MultiStopMode = 'urbano' | 'misto'
 
@@ -28,10 +29,28 @@ function urbanEdgeFilter(edge: GraphEdge): boolean {
 // tappe qui sono scelte liberamente dall'utente sulla mappa, spesso più sparse delle sole "tappe
 // vicine" scoperte in autonomia.
 const SNAP_THRESHOLD_M = 350
-// Più ampi di DIJKSTRA_MAX_DIST_M/MAX_NODES di borgo-itinerary.ts (3000/800): le tappe scelte
-// dall'utente possono essere più distanti fra loro di un giro "nelle vicinanze" auto-scoperto.
-const DIJKSTRA_MAX_DIST_M = 8000
-const DIJKSTRA_MAX_NODES = 2500
+// Un tetto FISSO (come 8000, il valore precedente — mutuato da borgo-itinerary.ts, pensato per
+// tappe auto-scoperte entro 2.5km dal Borgo) è troppo stretto qui: le tappe sono scelte
+// liberamente dall'utente, spesso paesi diversi a diversi km in linea d'aria — e il cammino REALE
+// su strada, specie fra centri separati da una valle (mai in linea retta), supera facilmente il
+// doppio o il triplo della distanza in linea d'aria. Un tetto fisso troppo basso interrompeva
+// Dijkstra prima di trovare un cammino che esisteva davvero nella rete già scaricata — un
+// fallimento evitabile, non un limite reale del terreno. Il budget ora scala con quanto sono
+// distanti le due tappe, con un pavimento (tratte brevi restano comunque ben servite) e un tetto
+// di sicurezza (costo di Dijkstra/tempo di risposta, mai oltre MAX_TARGET_DISTANCE_KM
+// dell'intera app, 15km — buildConstants.ts).
+const DIJKSTRA_MIN_DIST_M = 8000
+const DIJKSTRA_MAX_DIST_CAP_M = 20000
+const DIJKSTRA_DIST_MULTIPLIER = 3
+// Alzato in proporzione al budget di distanza più ampio sopra — una rete più estesa da esplorare
+// richiede più nodi visitabili prima di arrendersi, altrimenti il nuovo tetto di distanza non ha
+// mai la possibilità di essere raggiunto.
+const DIJKSTRA_MAX_NODES = 6000
+
+function legDijkstraBudgetM(from: { lat: number; lon: number }, to: { lat: number; lon: number }): number {
+  const airlineM = haversineM(from.lat, from.lon, to.lat, to.lon)
+  return Math.min(DIJKSTRA_MAX_DIST_CAP_M, Math.max(DIJKSTRA_MIN_DIST_M, airlineM * DIJKSTRA_DIST_MULTIPLIER))
+}
 
 export interface MultiStopLeg {
   fromStopIdx: number
@@ -74,7 +93,7 @@ export function buildMultiStopRoute(
       continue
     }
 
-    const { dist, prev } = dijkstra(network, startNode.nodeId, DIJKSTRA_MAX_DIST_M, DIJKSTRA_MAX_NODES, isEdgeAllowed)
+    const { dist, prev } = dijkstra(network, startNode.nodeId, legDijkstraBudgetM(from, to), DIJKSTRA_MAX_NODES, isEdgeAllowed)
     const targetDist = dist.get(endNode.nodeId)
     if (targetDist == null) {
       failedLegs.push({ fromStopIdx: i, toStopIdx: i + 1, reason: 'no_path' })
