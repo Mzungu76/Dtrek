@@ -116,4 +116,45 @@ describe('buildMultiStopRoute', () => {
     expect(outcome.legs[0].distanceM).toBeGreaterThan(400)
     expect(outcome.legs[0].distanceM).toBeLessThan(600)
   })
+
+  // Riproduce il bug segnalato dall'utente: due tappe reali collegate solo da una strada (road,
+  // moltiplicatore di costo 2.5x) restano in ripiego a linea d'aria quando fra loro (in direzione
+  // diversa) esiste una fitta rete di vie "quiet" a basso costo — es. i sentieri di una riserva
+  // naturale — abbastanza estesa da esaurire DIJKSTRA_MAX_NODES prima che la ricerca pesata per
+  // tipo di via arrivi mai a visitare il nodo della strada, anche se quella strada è vicinissima in
+  // metri reali. Non è un problema di budget di distanza (la strada dista solo 200m) ma di ORDINE
+  // di visita: Dijkstra esplora per costo crescente, quindi una fitta diramazione a basso costo (mai
+  // collegata al bersaglio) precede nella coda un nodo più vicino in realtà ma penalizzato — vedi il
+  // commento su DIJKSTRA_FALLBACK_MAX_NODES in multiStopRoute.ts.
+  it('trova comunque un cammino reale quando una fitta rete a basso costo esaurisce il budget di nodi prima della strada che collega le tappe', () => {
+    const nodes: Record<number, { lat: number; lon: number }> = {
+      1: { lat: 0, lon: 0 },
+      // Nodo "A" sulla strada che porta al bersaglio — 200m a est di 1, "residential" (road, 2.5x
+      // ⇒ costo 500) — e il bersaglio stesso, appena oltre.
+      2: { lat: 0, lon: degFor(200) },
+      3: { lat: 0, lon: degFor(201) },
+    }
+    const edges: [number, number, string][] = [
+      [1, 2, 'residential'],
+      [2, 3, 'track'],
+    ]
+    // Diramazione a bassissimo costo (track, 1x) in un'altra direzione — 30 000 nodi a 0.01m l'uno
+    // dall'altro (costo cumulativo ~300, sempre sotto i 500 del nodo sulla strada): più della metà
+    // di questa diramazione basta da sola a esaurire DIJKSTRA_MAX_NODES (25 000) prima che la
+    // ricerca pesata visiti mai il nodo 2.
+    const DECOY_COUNT = 30_000
+    let prevId = 1
+    for (let i = 0; i < DECOY_COUNT; i++) {
+      const id = 100 + i
+      nodes[id] = { lat: -degFor(0.01 * (i + 1)), lon: 0 }
+      edges.push([prevId, id, 'track'])
+      prevId = id
+    }
+    const network = buildNetwork(nodes, edges)
+    const outcome = buildMultiStopRoute(network, [nodes[1], nodes[3]], 'misto')
+    expect(outcome.legs).toHaveLength(1)
+    expect(outcome.legs[0].real).toBe(true)
+    expect(outcome.legs[0].distanceM).toBeGreaterThan(190)
+    expect(outcome.legs[0].distanceM).toBeLessThan(210)
+  })
 })

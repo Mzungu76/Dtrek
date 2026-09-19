@@ -120,6 +120,18 @@ const DIJKSTRA_DIST_MULTIPLIER = 3
 // esaurirsi esplorando una rete locale densa (vicoli, strade residenziali) PRIMA di raggiungere un
 // sentiero lontano che esisteva davvero — un fallimento di ricerca, non di dati.
 const DIJKSTRA_MAX_NODES = 25000
+// Budget di nodi per il SOLO tentativo di ripiego di shortestLegPath sotto — quando la ricerca
+// pesata per tipo di via (tierEdgeCost) non raggiunge il bersaglio entro DIJKSTRA_MAX_NODES, non
+// significa che una connessione reale non esista: un peso (edgeCost) fa esplorare la coda a
+// priorità in ordine di COSTO, non di distanza reale, quindi un'area dove il tipo preferito è
+// molto denso (es. i sentieri di una riserva naturale, tutti a costo 1) può esaurire il budget di
+// nodi restando dentro quell'area, senza mai raggiungere il nodo — magari più vicino in metri reali
+// — che porta fuori verso la tappa successiva. Un tentativo senza peso (edgeCost=1 per ogni arco,
+// vedi il ripiego in shortestLegPath) esplora invece in ordine di distanza REALE, uscendo da
+// un'area densa non appena la si è attraversata, quindi raggiunge un bersaglio più lontano con
+// molti meno nodi visitati a parità di area — un budget più alto qui è un margine di sicurezza,
+// non il vero motivo per cui il ripiego funziona dove il tentativo pesato non ci riesce.
+const DIJKSTRA_FALLBACK_MAX_NODES = 60000
 
 // Quante alternative (oltre al più breve) provare per avvicinarsi al target di lunghezza di UNA
 // tratta — ogni tentativo è un intero Dijkstra sulla stessa rete; con l'heap il costo per tentativo
@@ -166,14 +178,20 @@ function edgeKeysOfPath(nodeIds: number[]): Set<string> {
 
 interface LegSearchResult { distanceM: number; polyline: [number, number][]; nodeIds: number[] }
 
-// `costBudgetM`: già in unità di costo (vedi toCostBudget) — il chiamante decide se e come
-// convertire il budget in metri reali prima di passarlo qui.
+// `costBudgetM`: già in unità di costo (peso per tipo di via compreso, salvo `plainDistance`) — il
+// chiamante decide se e come convertire il budget in metri reali prima di passarlo qui.
+// `plainDistance`: true per il ripiego di shortestLegPath sotto — nessun peso per tipo di via
+// (edgeCost=1 su ogni arco, `costBudgetM` allora sono metri reali) e un budget di nodi più ampio
+// (DIJKSTRA_FALLBACK_MAX_NODES, vedi sopra), mai il comportamento di default.
 function runLegDijkstra(
   network: WalkNetwork, startNodeId: number, endNodeId: number, costBudgetM: number,
   isEdgeAllowed: ((edge: GraphEdge, fromNodeId: number) => boolean) | undefined,
   mode: MultiStopMode,
+  plainDistance = false,
 ): LegSearchResult | null {
-  const { dist, prev } = dijkstra(network, startNodeId, costBudgetM, DIJKSTRA_MAX_NODES, isEdgeAllowed, edge => tierEdgeCost(mode, edge))
+  const maxNodes = plainDistance ? DIJKSTRA_FALLBACK_MAX_NODES : DIJKSTRA_MAX_NODES
+  const edgeCost = plainDistance ? undefined : (edge: GraphEdge) => tierEdgeCost(mode, edge)
+  const { dist, prev } = dijkstra(network, startNodeId, costBudgetM, maxNodes, isEdgeAllowed, edgeCost)
   if (dist.get(endNodeId) == null) return null // solo per verificare la raggiungibilità entro il budget di costo
   const polyline = reconstructPath(network, prev, endNodeId, startNodeId)
   return {
@@ -192,7 +210,20 @@ function shortestLegPath(
   const from = network.nodes.get(startNodeId)
   const to = network.nodes.get(endNodeId)
   if (!from || !to) return null
-  return runLegDijkstra(network, startNodeId, endNodeId, toCostBudget(legDijkstraBudgetM(from, to)), baseFilter, mode)
+  const costBudget = toCostBudget(legDijkstraBudgetM(from, to))
+  const preferred = runLegDijkstra(network, startNodeId, endNodeId, costBudget, baseFilter, mode)
+  if (preferred) return preferred
+  // Ripiego: la ricerca pesata per tipo di via non ha raggiunto il bersaglio entro il suo budget —
+  // non vuol dire che una connessione reale non esista (vedi il commento su DIJKSTRA_FALLBACK_MAX_
+  // NODES sopra), solo che quella ricerca in particolare non l'ha trovata. Un secondo tentativo
+  // senza peso (`plainDistance`) esplora per distanza reale invece che per costo — un cammino reale
+  // ma non necessariamente sul tipo di via preferito resta sempre meglio di una linea d'aria (vedi
+  // il commento in testa al file: "MAI un fallimento completo"). `baseFilter` resta applicato anche
+  // qui: in "urbano" un sentiero va comunque escluso per sicurezza, non è mai un compromesso
+  // accettabile. Stesso `costBudget` del tentativo pesato (qui in metri reali, senza moltiplicatore
+  // in gioco): non ha senso essere più restrittivi in un tentativo pensato per essere l'ultima
+  // spiaggia prima della linea d'aria.
+  return runLegDijkstra(network, startNodeId, endNodeId, costBudget, baseFilter, mode, true)
 }
 
 /**
