@@ -393,13 +393,15 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
   }
 
   // Apre la personalizzazione dell'itinerario di un Borgo/Città — chiude il popup, semina le tappe
-  // dall'itinerario automatico già generato (una tappa che coincide con un pin già disegnato da
-  // metaResults riusa quel marker con un badge, `source:'meta'`; una tappa solo-Wikipedia senza
-  // marker proprio, `source:'itinerary'`, ne disegna uno sintetico — vedi l'effetto di disegno
-  // marker sotto) e inquadra la mappa "ampia ma non eccessiva" sull'anchor+tappe.
-  function enterPersonalize(borgo: MetaSearchResultItem, itinerary: BorgoItinerary) {
+  // dall'itinerario automatico se ce n'è già uno con risultati (una tappa che coincide con un pin
+  // già disegnato da metaResults riusa quel marker con un badge, `source:'meta'`; una tappa
+  // solo-Wikipedia senza marker proprio, `source:'itinerary'`, ne disegna uno sintetico — vedi
+  // l'effetto di disegno marker sotto), altrimenti parte da zero tappe (`itinerary` null o senza
+  // stop: l'automatico spesso non trova nulla di utilizzabile, l'utente sceglie a mano). Inquadra
+  // la mappa "ampia ma non eccessiva" sull'anchor (+ tappe, se ce ne sono già).
+  function enterPersonalize(borgo: MetaSearchResultItem, itinerary: BorgoItinerary | null) {
     setSelected(null)
-    const seedStops: PersonalizeStop[] = itinerary.stops.map(s => ({
+    const seedStops: PersonalizeStop[] = (itinerary?.stops ?? []).map(s => ({
       id: s.id, lat: s.lat, lon: s.lon, name: s.name,
       source: metaResults.some(m => m.id === s.id) ? 'meta' : 'itinerary',
     }))
@@ -411,7 +413,11 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
     const L = leafletRef.current
     if (map && L) {
       const points: [number, number][] = [[borgo.latitude, borgo.longitude], ...seedStops.map(s => [s.lat, s.lon] as [number, number])]
-      map.fitBounds(L.latLngBounds(points), { padding: [60, 60], maxZoom: PERSONALIZE_MAX_ZOOM })
+      if (points.length > 1) {
+        map.fitBounds(L.latLngBounds(points), { padding: [60, 60], maxZoom: PERSONALIZE_MAX_ZOOM })
+      } else {
+        map.setView([borgo.latitude, borgo.longitude], Math.min(Math.max(map.getZoom(), PLACE_ZOOM), PERSONALIZE_MAX_ZOOM))
+      }
     }
   }
 
@@ -726,9 +732,11 @@ type MetaTab = 'descrizione' | 'info' | 'itinerario'
 function MetaDetailCard({ item, creating, onCreate, error, onPersonalize }: {
   item: MetaSearchResultItem; creating: boolean; onCreate: () => void; error: string | null
   // Solo per un Borgo/Città (vedi isBorgo sotto) — apre la personalizzazione multi-tappa
-  // dell'itinerario già generato (CreaGuidaMapSearch.tsx's enterPersonalize), passando l'itinerario
-  // corrente come tappe di partenza da modificare.
-  onPersonalize: (itinerary: BorgoItinerary) => void
+  // (CreaGuidaMapSearch.tsx's enterPersonalize). Sempre selezionabile, non solo dopo un
+  // itinerario automatico riuscito (spesso l'automatico non trova tappe/cammini utilizzabili
+  // nella zona): `null` quando l'utente non ha ancora generato nulla, o l'ha generato ma senza
+  // risultati — in entrambi i casi si parte da zero tappe, scelte a mano sulla mappa.
+  onPersonalize: (itinerary: BorgoItinerary | null) => void
 }) {
   const [detail, setDetail] = useState<PlaceDetail | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(true)
@@ -857,12 +865,19 @@ function MetaDetailCard({ item, creating, onCreate, error, onPersonalize }: {
 
             {tab === 'itinerario' && (
               <div className="mb-1">
-                {!itinerary && !itLoading && (
-                  <button onClick={generateItinerary}
-                    className="w-full flex items-center justify-center gap-1.5 border border-stone-200 rounded-lg py-2 text-xs font-bold text-stone-700 hover:border-forest-300 transition-colors">
-                    <RouteIcon className="w-3.5 h-3.5" /> Genera itinerario a piedi
+                {/* Sempre entrambe visibili, non solo dopo un tentativo automatico riuscito —
+                    l'automatico spesso non trova tappe/cammini utilizzabili nella zona, in quel
+                    caso l'utente deve poter scegliere le tappe a mano senza restare bloccato. */}
+                <div className="flex gap-1.5 mb-2">
+                  <button onClick={generateItinerary} disabled={itLoading}
+                    className="flex-1 flex items-center justify-center gap-1.5 border border-stone-200 rounded-lg py-2 text-xs font-bold text-stone-700 hover:border-forest-300 disabled:opacity-60 transition-colors">
+                    <RouteIcon className="w-3.5 h-3.5" /> {itinerary ? 'Rigenera automatico' : 'Genera automatico'}
                   </button>
-                )}
+                  <button onClick={() => onPersonalize(itinerary)}
+                    className="flex-1 flex items-center justify-center gap-1.5 border border-forest-300 bg-forest-50 rounded-lg py-2 text-xs font-bold text-forest-700 hover:bg-forest-100 transition-colors">
+                    <Sliders className="w-3.5 h-3.5" /> Scegli le tappe a mano
+                  </button>
+                </div>
 
                 {itLoading && (
                   <div className="flex items-center justify-center gap-2 text-xs text-stone-400 py-4">
@@ -905,15 +920,6 @@ function MetaDetailCard({ item, creating, onCreate, error, onPersonalize }: {
                         </li>
                       ))}
                     </ol>
-                    <div className="flex items-center gap-3 mt-2">
-                      <button onClick={generateItinerary} className="text-[11px] text-stone-400 hover:text-stone-600">
-                        Rigenera itinerario
-                      </button>
-                      <button onClick={() => onPersonalize(itinerary)}
-                        className="flex items-center gap-1 text-[11px] font-semibold text-forest-700 hover:text-forest-800">
-                        <Sliders className="w-3 h-3" /> Personalizza itinerario
-                      </button>
-                    </div>
                   </>
                 )}
               </div>
