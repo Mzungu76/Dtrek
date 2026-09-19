@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequestDetailed } from '@/lib/supabaseAuth'
 import { scoreAndEnrichCandidates, type ScoredCandidate } from '@/lib/routeBuilder/scoreCandidates'
-import { fetchHikerProfile, fetchActivitySummary } from '@/lib/hikerContext'
+import { fetchHikerProfile, fetchActivitySummary, DECENT_HISTORY_MIN_COUNT } from '@/lib/hikerContext'
 import { sanitizeHikerConcerns, sanitizeHikerEnvironmentPrefs } from '@/lib/hikerProfile'
 import { logRouteBuildEvent } from '@/lib/routeBuilder/operationsLog'
 import {
@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
   if (!user) {
     return NextResponse.json({
       suggestedDistanceKm: null, suggestedElevationM: null, environmentPrefs: [], concerns: [],
-      routeBuildAiPlaceSearch: true,
+      routeBuildAiPlaceSearch: true, historyIsDecent: false,
     })
   }
 
@@ -59,6 +59,11 @@ export async function GET(req: NextRequest) {
     environmentPrefs: sanitizeHikerEnvironmentPrefs(profile.environmentPrefs),
     concerns: sanitizeHikerConcerns(profile.concerns),
     routeBuildAiPlaceSearch: profile.routeBuildAiPlaceSearch,
+    // Distinto da `history.count > 0`: sotto DECENT_HISTORY_MIN_COUNT i pannelli di generazione
+    // (Sentieri viewport, itinerario Borgo personalizzato) lasciano distanza/dislivello vuoti e
+    // obbligatori da riempire invece di precompilarli con la media di 1-2 uscite (vedi
+    // lib/hikerContext.ts).
+    historyIsDecent: history.count >= DECENT_HISTORY_MIN_COUNT,
   })
 }
 

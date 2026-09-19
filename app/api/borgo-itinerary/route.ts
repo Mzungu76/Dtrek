@@ -20,6 +20,14 @@ const WIKI_LIMIT = 10
 const DIJKSTRA_MAX_DIST_M = 3000
 const DIJKSTRA_MAX_NODES = 800
 const SNAP_THRESHOLD_M = 300
+// Più alto del default (18s, lib/routeBuilder/osmGraph.ts) — questo endpoint non ha stage pesanti
+// a valle del fetch della rete (solo Dijkstra per tappa, già limitato da DIJKSTRA_MAX_NODES), a
+// differenza di app/api/route-build/route.ts che a valle deve ancora fare pathfinding + DTM/POI.
+// Un fetch a freddo (bbox mai cercato prima) di questa query è il passo più lento e la causa più
+// comune di un itinerario che ripiega su linee d'aria per OGNI tratto — più margine qui aumenta
+// le probabilità che Overpass risponda prima che fetchOverpass rinunci, senza avvicinarsi al
+// tetto reale della piattaforma (worst case retry incluso: ~2×questo valore + 1.2s).
+const WALK_NETWORK_TIMEOUT_MS = 22_000
 // ~4.3 km/h — un ritmo da visita (con soste implicite), non una camminata sportiva: la stessa
 // differenza per cui la stima di un Sentiero (lib/trailStats.ts) non è utilizzabile qui.
 const WALK_SPEED_MPS = 1.2
@@ -175,7 +183,7 @@ export async function POST(req: NextRequest) {
 
   let network: WalkNetwork | null = null
   try {
-    network = await fetchWalkNetworkCached(networkBbox)
+    network = await fetchWalkNetworkCached(networkBbox, false, WALK_NETWORK_TIMEOUT_MS)
   } catch (e) {
     console.error('[borgo-itinerary] rete pedonale non disponibile, ripiego su linee d\'aria', e)
   }

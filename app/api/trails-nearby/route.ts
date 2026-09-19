@@ -21,6 +21,16 @@ export interface TrailNearbyItem {
   difficulty: string | null
   routeType: string
   geometry: [number, number][]
+  // Campi puramente descrittivi (mai usati per costruire il FoundRouteItem) — per la scheda del
+  // pin su CreaGuidaMapSearch.tsx (tab "Dettagli"/"Descrizione"), assenti per la maggior parte
+  // delle righe importate da OSM (nessun fallback fabbricato: la UI nasconde ciò che manca).
+  description: string | null
+  fromLabel: string | null
+  toLabel: string | null
+  ref: string | null
+  caiScale: string | null
+  operator: string | null
+  network: string | null
 }
 
 /**
@@ -62,6 +72,13 @@ export async function POST(req: NextRequest) {
       difficulty: r.difficulty ?? null,
       routeType: r.routeType,
       geometry: r.geometrySimplified,
+      description: r.description ?? null,
+      fromLabel: r.fromLabel ?? null,
+      toLabel: r.toLabel ?? null,
+      ref: r.ref ?? null,
+      caiScale: r.caiScale ?? null,
+      operator: r.operator ?? null,
+      network: r.network ?? null,
     }))
     return NextResponse.json({ items })
   } catch (e) {

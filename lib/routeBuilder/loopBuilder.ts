@@ -312,6 +312,10 @@ function logReachDiagnostics(dist: Map<number, number>, totalNodes: number, targ
  * Sceglie, tra i nodi la cui distanza reale da start rientra nella tolleranza attorno a
  * `targetOneWayM`, il migliore per ciascun settore direzionale — così i candidati risultano in
  * direzioni diverse tra loro invece di ammassarsi tutti sullo stesso sentiero principale.
+ * `relaxed`: quando la ricerca normale non trova nulla entro tolleranza, l'utente può scegliere
+ * esplicitamente di andare oltre (vedi runStepBuild.ts) — qui si accetta QUALSIASI nodo
+ * raggiungibile, non solo quelli entro LENGTH_TOLERANCE, sempre ordinati per vicinanza al target:
+ * il candidato più vicino possibile, non uno a caso.
  */
 function pickCandidateNodesByDirection(
   network: WalkNetwork,
@@ -319,9 +323,11 @@ function pickCandidateNodesByDirection(
   dist: Map<number, number>,
   targetOneWayM: number,
   maxCandidates: number,
+  relaxed = false,
 ): { nodeId: number; distanceM: number }[] {
-  const inTolerance = Array.from(dist)
-    .filter(([, d]) => withinTolerance(d, targetOneWayM))
+  const inTolerance = relaxed
+    ? Array.from(dist)
+    : Array.from(dist).filter(([, d]) => withinTolerance(d, targetOneWayM))
 
   const bestPerBucket = new Map<number, { nodeId: number; distanceM: number }>()
   for (const [nodeId, distanceM] of inTolerance) {
@@ -346,13 +352,14 @@ export function generateOutAndBackCandidates(
   targetDistanceM: number,
   maxCandidates = 14,
   concerns: HikerConcernKey[] = [],
+  relaxed = false,
 ): RouteCandidate[] {
   const start = network.nodes.get(startNodeId)
   if (!start) return []
 
   const { dist, prev } = dijkstraAll(network, startNodeId, undefined, concerns)
   logReachDiagnostics(dist, network.nodes.size, targetDistanceM / 2)
-  const picked = pickCandidateNodesByDirection(network, start, dist, targetDistanceM / 2, maxCandidates)
+  const picked = pickCandidateNodesByDirection(network, start, dist, targetDistanceM / 2, maxCandidates, relaxed)
 
   const candidates: (RouteCandidate & { nodeSet: Set<number> })[] = []
   for (const { nodeId, distanceM: oneWayM } of picked) {
@@ -378,13 +385,14 @@ export function generateOneWayCandidates(
   targetDistanceM: number,
   maxCandidates = 14,
   concerns: HikerConcernKey[] = [],
+  relaxed = false,
 ): RouteCandidate[] {
   const start = network.nodes.get(startNodeId)
   if (!start) return []
 
   const { dist, prev } = dijkstraAll(network, startNodeId, undefined, concerns)
   logReachDiagnostics(dist, network.nodes.size, targetDistanceM)
-  const picked = pickCandidateNodesByDirection(network, start, dist, targetDistanceM, maxCandidates)
+  const picked = pickCandidateNodesByDirection(network, start, dist, targetDistanceM, maxCandidates, relaxed)
 
   const candidates: (RouteCandidate & { nodeSet: Set<number> })[] = []
   for (const { nodeId, distanceM } of picked) {
@@ -406,6 +414,7 @@ export function generateLoopCandidates(
   targetDistanceM: number,
   maxCandidates = 14,
   concerns: HikerConcernKey[] = [],
+  relaxed = false,
 ): RouteCandidate[] {
   const start = network.nodes.get(startNodeId)
   if (!start) return []
@@ -415,7 +424,7 @@ export function generateLoopCandidates(
   // Più candidati grezzi del necessario: per un anello il tratto di ritorno (via diversa) può
   // allungare il totale oltre tolleranza anche quando l'andata era ben piazzata, quindi conviene
   // provarne qualcuno in più prima di scartare.
-  const picked = pickCandidateNodesByDirection(network, start, dist, targetDistanceM / 2, maxCandidates * 2)
+  const picked = pickCandidateNodesByDirection(network, start, dist, targetDistanceM / 2, maxCandidates * 2, relaxed)
 
   const candidates: (RouteCandidate & { nodeSet: Set<number> })[] = []
   for (const { nodeId: farNodeId } of picked) {
@@ -431,7 +440,7 @@ export function generateLoopCandidates(
 
     const fullPath = [...outPath, ...backPath.slice(1)]
     const distanceM = pathDistanceM(network, fullPath)
-    if (!withinTolerance(distanceM, targetDistanceM)) continue
+    if (!relaxed && !withinTolerance(distanceM, targetDistanceM)) continue
 
     const polyline = pathToPolyline(network, fullPath)
     const bearingDeg = bearingFromStart(start, network.nodes.get(farNodeId)!)

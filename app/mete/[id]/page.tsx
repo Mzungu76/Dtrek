@@ -105,8 +105,8 @@ export default function MetaDettaglioPage() {
       {/* Copertina — stessa idea della hero-header di /guida (foto piena larghezza, titolo in
           overlay in basso), altezza fissa invece del carosello a schermo intero di RouteHub. */}
       <div className="relative h-[42vh] min-h-[240px] max-h-[380px] overflow-hidden">
-        {place.imageUrl ? (
-          <img src={place.imageUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
+        {place.imageUrl || place.wikipedia?.thumbnail ? (
+          <img src={place.imageUrl ?? place.wikipedia?.thumbnail} alt="" className="absolute inset-0 w-full h-full object-cover" />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${config.color}, #2E3A26)` }}>
             <TypeIcon className="w-16 h-16 text-white/25" />

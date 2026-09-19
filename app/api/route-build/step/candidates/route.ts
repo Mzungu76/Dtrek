@@ -32,6 +32,11 @@ interface CandidatesRequestBody {
   // ha dichiarati, non solo penalizzarli a valle nel punteggio finale (vedi loopBuilder.ts's
   // terrainCostMultiplier). Assente/non valido ⇒ nessun cambiamento di comportamento.
   concerns: ReturnType<typeof sanitizeHikerConcerns>
+  // true solo quando l'utente ha esplicitamente confermato di voler "rompere" il vincolo di
+  // lunghezza dopo un primo tentativo senza risultati (vedi lib/routeBuilder/runStepBuild.ts) —
+  // il pathfinding non scarta più i candidati fuori dalla tolleranza normale (LENGTH_TOLERANCE,
+  // loopBuilder.ts), restituisce comunque il più vicino possibile al target invece di niente.
+  relaxed: boolean
 }
 
 function parseBody(raw: unknown): CandidatesRequestBody {
@@ -49,8 +54,9 @@ function parseBody(raw: unknown): CandidatesRequestBody {
   const targetDistanceM = Number(body.targetDistanceM)
   if (!Number.isFinite(targetDistanceM) || targetDistanceM <= 0) throw new Error('targetDistanceM non valido')
   const concerns = sanitizeHikerConcerns(Array.isArray(body.concerns) ? body.concerns : [])
+  const relaxed = body.relaxed === true
 
-  return { bbox: bbox as [number, number, number, number], startNodeIds, routeType: body.routeType, targetDistanceM, concerns }
+  return { bbox: bbox as [number, number, number, number], startNodeIds, routeType: body.routeType, targetDistanceM, concerns, relaxed }
 }
 
 export async function POST(req: NextRequest) {
@@ -94,6 +100,6 @@ async function handlePost(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'network_unavailable', message: 'Rete sentieri non disponibile in questo momento, riprova.' }, { status: 502 })
   }
 
-  const rawCandidates = generateRawCandidatesForAnchors(network, params.startNodeIds, params.routeType, params.targetDistanceM, 14, params.concerns)
+  const rawCandidates = generateRawCandidatesForAnchors(network, params.startNodeIds, params.routeType, params.targetDistanceM, 14, params.concerns, params.relaxed)
   return NextResponse.json({ rawCandidates })
 }
