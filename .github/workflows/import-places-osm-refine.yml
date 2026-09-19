@@ -16,6 +16,14 @@ name: Import Places — OSM (raffina lat/lon dei Borghi/Città su dtrek_places)
 # Anche il dry-run legge da Supabase (deve sapere quali Borghi/Città raffinare) — a differenza di
 # ISTAT/MiC, qui servono i secret Supabase in ENTRAMBE le modalità. dry-run non fa comunque nessun
 # UPDATE, solo query di lettura + query Overpass.
+#
+# MAI tutta Italia (region vuoto) in un solo lancio: un job GitHub Actions ha un tetto FISSO di 6
+# ore (limite della piattaforma, non alzabile da qui) — 7896 Comuni ad una richiesta Overpass
+# sequenziale per riga lo supererebbero ampiamente, il job verrebbe interrotto a metà senza un
+# riepilogo pulito (vedi il commento in cima a scripts/places/osm/refine-borgo-coords.ts). Un
+# lancio per regione (la maggior parte sta comodamente sotto il tetto) — o, per una regione molto
+# grande, più lanci con `offset` crescente (il log di ogni lancio suggerisce il prossimo `offset`
+# quando ce n'è ancora) — copre tutta Italia in più esecuzioni sicure invece di una sola rischiosa.
 
 on:
   workflow_dispatch:
@@ -29,7 +37,7 @@ on:
           - write
         default: dry-run
       region:
-        description: "Regione (es. Lazio). Vuoto = tutte le regioni presenti in dtrek_places."
+        description: "Regione (es. Lazio) — MAI vuoto per tutta Italia in un lancio solo, vedi il commento sopra. Una regione alla volta."
         required: false
         type: string
         default: "Lazio"
@@ -38,6 +46,11 @@ on:
         required: false
         type: string
         default: "500"
+      offset:
+        description: "Da quale riga partire (ordinate per id) — usalo per un secondo blocco quando una regione non entra in un solo lancio. Il log del lancio precedente suggerisce il prossimo offset."
+        required: false
+        type: string
+        default: "0"
 
 concurrency:
   group: import-places
@@ -53,6 +66,7 @@ jobs:
       MODE: ${{ inputs.mode }}
       REGION: ${{ inputs.region }}
       LIMIT: ${{ inputs.limit }}
+      OFFSET: ${{ inputs.offset }}
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
     steps:
@@ -77,13 +91,13 @@ jobs:
       - name: Raffina lat/lon dei Borghi/Città da OSM
         run: |
           set -euo pipefail
-          ARGS=(scripts/places/osm/refine-borgo-coords.ts --region "$REGION" --limit "$LIMIT")
+          ARGS=(scripts/places/osm/refine-borgo-coords.ts --region "$REGION" --limit "$LIMIT" --offset "$OFFSET")
           if [ "$MODE" = "dry-run" ]; then ARGS+=(--dry-run); fi
           npx tsx "${ARGS[@]}" | tee /tmp/osm-refine.txt
           {
             echo "### Import Places — OSM refine ($MODE)"
             echo "- Regione: ${REGION:-tutte}"
-            echo "- Limit: $LIMIT"
+            echo "- Limit: $LIMIT, offset: $OFFSET"
             echo '```'
             cat /tmp/osm-refine.txt
             echo '```'

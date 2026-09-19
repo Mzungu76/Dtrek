@@ -20,7 +20,16 @@
  * (vedi .github/workflows/import-places-osm-refine.yml).
  *
  * Usage:
- *   npx tsx scripts/places/osm/refine-borgo-coords.ts [--dry-run] [--region Lazio] [--limit 500]
+ *   npx tsx scripts/places/osm/refine-borgo-coords.ts [--dry-run] [--region Lazio] [--limit 500] [--offset 0]
+ *
+ * Tutta Italia in un solo lancio NON è consigliato: 7896 Comuni, una richiesta Overpass sequenziale
+ * per riga (~15-20s/riga osservato, anche di più con un mirror sotto stress) supera comodamente le
+ * 6 ore di tetto massimo per un job GitHub Actions (limite della piattaforma, non configurabile più
+ * alto) — il job verrebbe interrotto a metà, senza un riepilogo pulito. Vanno fatti più lanci a
+ * blocchi (per regione — `--region` da solo copre già tutta quella regione in un lancio, la
+ * maggior parte sta comodamente sotto il tetto — o con `--offset` crescente per un blocco più
+ * grande), ognuno garantito entro il tetto di tempo. `--offset`/`region` sono ortogonali: si può
+ * paginare ANCHE dentro una singola regione molto grande, se necessario.
  */
 import { createClient } from '@supabase/supabase-js'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -91,12 +100,21 @@ export function pickBestOsmPlaceMatch(borgo: DtrekBorgoRow, nearby: OsmPlaceCand
 }
 
 // ── I/O: Supabase (righe da raffinare) ───────────────────────────────────────────────────────
-async function findBorghi(supabase: SupabaseClient, region: string | null, limit: number): Promise<DtrekBorgoRow[]> {
+// `offset`, insieme a un ordinamento deterministico (`order('id')`, mai l'ordine implicito di
+// Postgres — non garantito stabile fra query diverse): senza questo, ririlanciare lo script più
+// volte con lo stesso `limit` rischiava di ricontrollare sempre lo stesso sottoinsieme di righe
+// invece di avanzare — innocuo per una singola regione (limit già la copre tutta), ma bloccante
+// per un giro a blocchi su tutta Italia (7896 Comuni — un solo job supera comodamente il tetto di
+// 6 ore di GitHub Actions, vedi il commento in cima al file). Con `offset`, più esecuzioni
+// successive (stesso `region`, `offset` crescente di `limit` ogni volta) attraversano l'intero
+// catalogo in blocchi, ciascuno garantito entro il tetto di tempo.
+async function findBorghi(supabase: SupabaseClient, region: string | null, limit: number, offset: number): Promise<DtrekBorgoRow[]> {
   let query = supabase
     .from('dtrek_places')
     .select('id, name, latitude, longitude')
     .eq('meta_type', 'borgo_citta')
-    .limit(limit)
+    .order('id')
+    .range(offset, offset + limit - 1)
   if (region) query = query.eq('region', region)
 
   const { data, error } = await query
@@ -165,6 +183,8 @@ async function main() {
   const region = regionIdx !== -1 ? process.argv[regionIdx + 1] : 'Lazio'
   const limitIdx = process.argv.indexOf('--limit')
   const limit = limitIdx !== -1 ? parseInt(process.argv[limitIdx + 1], 10) : 500
+  const offsetIdx = process.argv.indexOf('--offset')
+  const offset = offsetIdx !== -1 ? parseInt(process.argv[offsetIdx + 1], 10) : 0
 
   const SUPABASE_URL = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL
   const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -174,8 +194,11 @@ async function main() {
   }
   const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 
-  const borghi = await findBorghi(supabase, region, limit)
-  console.log(`${borghi.length} Borghi/Città da raffinare (regione: ${region ?? 'tutte'}).`)
+  const borghi = await findBorghi(supabase, region, limit, offset)
+  console.log(`${borghi.length} Borghi/Città da raffinare (regione: ${region ?? 'tutte'}, offset ${offset}).`)
+  // Prossimo blocco: stesso comando con --offset ${offset + limit} — utile a colpo d'occhio nel
+  // log di un run su un lotto grande (es. tutta Italia a blocchi) senza dover ricalcolare a mano.
+  if (borghi.length === limit) console.log(`Se ce ne sono altri, il prossimo blocco è --offset ${offset + limit}.`)
 
   let refined = 0, unmatched = 0, errored = 0
   for (const [i, borgo] of borghi.entries()) {
