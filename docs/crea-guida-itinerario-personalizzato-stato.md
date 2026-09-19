@@ -1,11 +1,17 @@
 # Crea Guida — Modalità A/B di generazione itinerario: stato lavori
 
-Riepilogo per riprendere il lavoro in una nuova chat. Branch `claude/gifted-mendel-q31uau`,
-PR #942 (aperta, non ancora mergiata), repo `mzungu76/dtrek`.
+Riepilogo per riprendere il lavoro in una nuova chat. Branch
+`claude/missing-connections-fallback-xtjikb`, repo `mzungu76/dtrek`.
 
-**Attenzione**: il problema principale di questo filone di lavoro — percorsi non trovati fra
-tappe reali, con ripiego su linea d'aria — **non è risolto**. È stato tentato un fix (vedi §3),
-ma non è stato confermato risolutivo nell'app reale: va riverificato prima di considerarlo chiuso.
+**Aggiornamento**: il problema principale di questo filone — percorsi non trovati fra tappe reali,
+con ripiego su linea d'aria — è stato **testato dall'utente nell'app reale dopo il fix di §3ter e
+"sembra funzionare"** (conferma non ancora definitiva, l'utente ha detto che lo testerà ancora).
+Nessun nuovo sintomo segnalato da allora.
+
+Il lavoro proseguito in questa stessa sessione dopo la conferma (§6): barra di avanzamento per
+"genera percorso" in entrambe le modalità, e una nuova opzione "considera i percorsi esistenti"
+in Modalità B, che dà peso ai tratti di un percorso escursionistico già noto quando aiutano a
+collegare le tappe scelte.
 
 ---
 
@@ -103,32 +109,199 @@ test) — **confermato che il test fallisce senza il fix e passa con il fix**, m
   ancora esaurire pure il budget più ampio (60000 nodi) — non è stato provato un limite
   superiore realistico.
 
+## 3bis. Logging diagnostico aggiunto in questa sessione (punto 2 e parte del punto 3 di §4 sotto)
+
+**`lib/routeBuilder/multiStopRoute.ts`**: `shortestLegPath` ora restituisce, insieme al cammino
+trovato, una `LegDiagnostic` (esportata) che distingue con precisione le cause di un ripiego a
+linea d'aria (`fallbackReason:'no_path'`):
+- `pathSource`: per una tratta reale, se il cammino usato viene dalla ricerca pesata per tipo di
+  via (`'preferred'`) o dal ripiego a distanza reale del punto 3 sopra (`'distance_fallback'`) —
+  permette di verificare in produzione se quel ripiego scatta davvero, o resta teorico.
+- `preferred`/`fallback`: per ciascun tentativo, `nodesVisited` e `budgetExhausted` (vero quando
+  la ricerca si è fermata solo perché ha raggiunto `DIJKSTRA_MAX_NODES`/
+  `DIJKSTRA_FALLBACK_MAX_NODES`, non perché ha esplorato l'intera rete raggiungibile senza
+  trovare il bersaglio) — distingue "una connessione potrebbe comunque esistere, il budget è
+  finito prima" da "nessun cammino esiste in quella rete/bbox" (rete davvero disconnessa o dato
+  mancante, non un limite di ricerca). Assente (`diagnostic` intero assente) quando il ripiego è
+  per `fallbackReason:'too_far_from_network'` (Dijkstra non è nemmeno partito, lo snap alla rete è
+  fallito prima).
+
+`MultiStopLeg.diagnostic` porta questo dato fino alla risposta dell'endpoint — MAI usato o
+mostrato lato client (`PersonalizeItineraryPanel.tsx` continua a leggere solo `real` e
+`fallbackReason`, invariati), solo per il logging server-side.
+
+**`app/api/route-build/multi-stop/route.ts`**: per ogni tratta con `real:false`, un
+`console.warn` riporta nome tappe, `fallbackReason`, distanza in linea d'aria, modalità, numero
+di nodi della rete scaricata e il dettaglio della diagnostica sopra — leggibile nei log del
+deployment quando il sintomo si ripresenta, senza dover riprodurre il problema in un ambiente di
+sviluppo.
+
+**`lib/routeBuilder/osmGraph.ts`** (`fetchWalkNetwork`, copre parte del punto 3 di §4): Overpass
+può rispondere HTTP 200 con un campo `remark` quando ha interrotto la query prima di finirla (in
+genere per il proprio timeout interno) — una rete PARZIALE servita come se fosse completa, mai
+stata un errore per `fetchOverpass` (nessuna eccezione, nessun retry). Ora un `console.warn`
+segnala bbox e `remark` quando questo accade. Non risolve il problema (la rete incompleta resta
+quella su cui si cerca), solo lo rende visibile nei log invece che silenzioso — se un ripiego a
+linea d'aria coincide nei log con questo warning per lo stesso bbox, è la causa più probabile, non
+un limite dell'algoritmo di ricerca in `multiStopRoute.ts`.
+
+Copre punto 2 di §4 per intero. Copre SOLO la parte "silenziosa" del punto 3 (rete parziale non
+segnalata) — non copre ancora un timeout che fa fallire l'intera richiesta con un errore esplicito
+(già gestito, l'utente vede "Rete pedonale non disponibile"), né misura quanto spesso accade in
+produzione (serve osservare i log dopo il deploy). Punto 1 e punto 4 restano non affrontati in
+questa sessione (nessun accesso a staging/produzione o a Wikipedia dal sandbox).
+
+## 3ter. Causa reale trovata e fix applicato: piazze/vicoli pedonali mai scaricati (stessa sessione)
+
+L'utente ha fornito accesso diretto al progetto Supabase di produzione (`sdxlcpxgbkagbxhukehd`,
+`supabase-teal-cave`) e uno screenshot dell'app reale — entrambi hanno permesso, per la prima
+volta in questo filone, una verifica sui dati veri invece che su una rete sintetica.
+
+**Verifica su dati reali (Ronciglione ↔ Capranica)**: `walk_network_cache` conteneva già una rete
+fresca (v2, con le strade provinciali del fix precedente) per quella zona. Ho ricostruito il grafo
+in Postgres (tabelle di scratch + estensione `pgRouting`, poi rimosse/pulite a fine verifica) e
+rieseguito l'identica logica pesata di `shortestLegPath` sui dati reali: il nodo più vicino a
+Ronciglione e quello più vicino a Capranica sono nello stesso componente connesso (25 861 nodi su
+27 165), il costo del cammino pesato "misto" è 23 576 (budget disponibile 50 000) e servono ~18 706
+nodi visitati per raggiungerlo — sotto il tetto di 25 000 (`DIJKSTRA_MAX_NODES`). **Per questa
+coppia, con la rete e il codice già in produzione, la ricerca pesata dovrebbe riuscire da sola**,
+senza nemmeno il ripiego del punto 3 — l'ipotesi originale di quel punto (budget di nodi esaurito
+in un'area densa) non è la causa per questa coppia specifica.
+
+**Lo screenshot ha rivelato la causa vera**: le due tratte che falliscono davvero non sono
+Ronciglione→Capranica, ma Ronciglione→**Chiesa dei Santi Pietro e Caterina** (un punto di interesse
+inserito automaticamente dal toggle "punti di interesse", punto 11 di §2) e Chiesa→Capranica. La
+prima tratta collega due punti nello STESSO centro storico, a distanza minima — eppure fallisce con
+"nessun cammino trovato" (non "troppo lontano dalla rete": l'aggancio riesce). Con una distanza così
+piccola il budget di ricerca (minimo 8km) è enormemente abbondante: non può essere un esaurimento
+di budget. L'unica spiegazione coerente con ENTRAMBE le tratte è che il nodo della Chiesa sia in una
+porzione di rete isolata dal resto — non perché il collegamento reale non esista, ma perché non è
+mai stato scaricato.
+
+**Causa identificata**: `WALKABLE_HIGHWAY` (`lib/routeBuilder/osmGraph.ts`) non includeva i tag
+OSM `pedestrian` (piazze pedonali) né `living_street` (vicoli/zone a traffico limitato) — i tag più
+comuni per il tessuto di un centro storico italiano, mai `residential`/`unclassified`. Una Chiesa
+affacciata su una piazza pedonale restava con l'aggancio riuscito (un nodo vicino esiste) ma isolata
+da tutto il resto, perché la via che la collegava al resto del paese non era proprio nel grafo
+scaricato — stesso identico sintomo, in scala più piccola, del buco tertiary/secondary già risolto
+nella sessione precedente. Causa secondaria correlata: il filtro `access!~private|no` escludeva in
+blocco anche le vie di una ZTL taggate `access=private` (comune nei centri storici italiani), pur
+essendo per convenzione OSM un tag che riguarda in primis i veicoli — un router pedonale dovrebbe
+guardare il tag `foot` quando presente.
+
+**Fix applicato** (bump `WALK_NETWORK_QUERY_VERSION` 2→3, invalida la cache di rete già salvata):
+- `lib/routeBuilder/osmGraph.ts`: `WALKABLE_HIGHWAY` include ora `pedestrian`/`living_street`; la
+  query Overpass è diventata una union di due filtri (`WALKABLE_ACCESS_FILTER` +
+  `WALKABLE_FOOT_OVERRIDE_FILTER`) — il secondo recupera le vie escluse da `access` generico ma
+  permesse esplicitamente dal tag `foot`.
+- `lib/routeBuilder/multiStopRoute.ts`: `highwayTier` classifica `pedestrian`/`living_street` come
+  `'quiet'` (sicure quanto una strada bianca, niente traffico veicolare vero); `URBAN_ALLOWED_HIGHWAY`
+  (modalità "urbano") le include — sono l'essenza stessa del trekking urbano, mai un compromesso
+  come i sentieri.
+- Nuovo test in `multiStopRoute.test.ts` che riproduce il bug esatto dello screenshot (due punti
+  collegati solo da una via `pedestrian`, sia in "misto" sia in "urbano").
+
+**Non ancora verificato**: il fix stesso NON è stato testato sul caso reale — richiede un nuovo
+fetch Overpass (bump di versione invalida la cache esistente), mai possibile da questo sandbox
+(accesso a `overpass-api.de` bloccato dal proxy di rete). Il prossimo test nell'app reale (stessa
+coppia Ronciglione + Chiesa + Capranica, dopo il deploy) è la vera verifica.
+
 ## 4. Prossimi passi consigliati (per la nuova chat)
 
-1. **Riverificare in staging/produzione** le due coppie di tappe degli screenshot originali dopo
-   il fix del punto 3, per confermare (o smentire) l'ipotesi.
-2. Se il problema persiste, aggiungere **logging diagnostico** lato server
-   (`app/api/route-build/multi-stop/route.ts` o dentro `multiStopRoute.ts`) per distinguere, per
-   ogni tratta in ripiego: fallito lo snap alla rete (`too_far_from_network`) vs. nessun cammino
-   nella ricerca pesata ma trovato nel ripiego vs. nessun cammino nemmeno nel ripiego (rete
-   davvero disconnessa in quel bbox) — oggi il client vede solo il motivo finale, non se il
-   ripiego a distanza reale è mai scattato o con che esito.
-3. Verificare se il fetch della rete pedonale (`fetchWalkNetworkCached`,
-   `WALK_NETWORK_TIMEOUT_MS`) per bbox grandi (tappe distanti, o con una riserva naturale densa
-   in mezzo) va in timeout o restituisce una rete parziale in silenzio — un'altra causa
-   plausibile di "nessun cammino trovato" che il fix del punto 3 non risolverebbe.
+1. **PRIORITÀ: riverificare nell'app reale il fix di §3ter** — stessa coppia dello screenshot
+   (Ronciglione, tappa "Chiesa dei Santi Pietro e Caterina" via toggle punti di interesse,
+   Capranica), modalità "misto". Il bump di `WALK_NETWORK_QUERY_VERSION` invalida la cache: la
+   prima richiesta dopo il deploy rifà un fetch Overpass a freddo (più lento del solito, normale).
+   Se il sintomo persiste, usare il logging di §3bis per vedere il `fallbackReason`/diagnostica
+   esatti di quella tratta, e controllare se compare il warning `remark` di §3bis per lo stesso
+   bbox (rete Overpass parziale, causa diversa non coperta da questo fix).
+2. Se punto 1 conferma il fix, **verificare anche Civita Castellana ↔ Castel Sant'Elia** (l'altra
+   coppia originale) — non testata con dati reali in questa sessione (nessuna cache v2 disponibile
+   per quella zona, Overpass irraggiungibile da questo sandbox).
+3. ~~Aggiungere logging diagnostico~~ — fatto, vedi §3bis. ~~Verificare rete parziale in
+   silenzio~~ — fatto, vedi §3bis (resta da osservare QUANTO SPESSO accade in produzione).
 4. Valutare se le coordinate dei punti scoperti via Wikipedia (usati sia dall'itinerario
-   automatico sia dal nuovo toggle "punti di interesse", punto 11 sopra) sono abbastanza precise
-   da agganciarsi correttamente alla rete pedonale — un punto con coordinate leggermente sbagliate
-   potrebbe agganciarsi a un nodo isolato o dal lato sbagliato di un ostacolo (fiume, dislivello).
-5. Solo dopo aver risolto/confermato questo, riprendere gli altri task rimasti aperti da sessioni
+   automatico sia dal nuovo toggle "punti di interesse", punto 11 di §2) sono abbastanza precise
+   da agganciarsi correttamente alla rete pedonale — non più la causa più probabile dopo §3ter
+   (il caso reale osservato era un buco di dati, non una coordinata imprecisa), ma resta un
+   sospetto residuo per casi futuri diversi. Non affrontato in questa sessione.
+5. Solo dopo aver confermato questo, riprendere gli altri task rimasti aperti da sessioni
    precedenti (se non già coperti): nessuno di rilievo aperto oltre a questo al momento della
    stesura.
 
 ## 5. Verifica eseguita in questa sessione
 
-`npx tsc --noEmit` pulito, `npx next lint` senza nuovi errori, `npx vitest run
-lib/routeBuilder/__tests__/` verde (51 test), `npm run build` compila con successo e si ferma al
-limite noto del sandbox (assenza di env Supabase in questo ambiente, non una regressione — va
-verificato con un ambiente con Supabase configurato). Nessun test manuale end-to-end nell'app
-reale è stato possibile in questo sandbox.
+`npx tsc --noEmit` pulito (progetto intero, dopo `npm install` — `node_modules` non era presente
+all'avvio del sandbox), `npx next lint` senza nuovi errori/warning (solo warning preesistenti non
+toccati da questa sessione), `npx vitest run` verde (465 test, l'intera suite — inclusi 4 nuovi
+test in `lib/routeBuilder/__tests__/multiStopRoute.test.ts`: 3 per la diagnostica di §3bis, 1 per
+il fix pedestrian/living_street di §3ter). `npm run build` non rieseguito in questa sessione
+(nessuna modifica a route/pagine che ne richiedesse una verifica oltre a tsc/lint/vitest, già
+verde). La verifica di §3ter (query Overpass ricostruita a mano, sintassi non eseguibile da
+questo sandbox) è stata fatta leggendo attentamente la sintassi Overpass QL prodotta, non
+eseguendola contro Overpass — un margine di rischio residuo rispetto a un test end-to-end reale,
+da chiudere col punto 1 di §4. Nessun altro test manuale end-to-end nell'app reale è stato
+possibile in questo sandbox.
+
+## 6. Barra di avanzamento + preferenza per i percorsi esistenti (stessa sessione, dopo la conferma)
+
+Dopo la conferma dell'utente che il fix di §3ter funziona, due funzionalità nuove richieste
+esplicitamente, entrambe per la Modalità B (con la barra di avanzamento estesa anche alla
+Modalità A):
+
+**1. Barra di avanzamento per "genera percorso"** (entrambe le modalità):
+- `components/upload/RouteGenerationProgress.tsx` (nuovo) — barra semplice ed elegante (nessuna
+  percentuale numerica, nessuna stima di tempo: nessun dato affidabile per calcolarla), con
+  l'etichetta testuale dello step corrente. Avanza a checkpoint fissi per stage (`targetPct`),
+  mai all'indietro.
+- **Modalità B era un'unica richiesta al server, senza fasi intermedie** — per una barra con
+  fasi VERE (non un'animazione a tempo stimato) è stata spezzata in 3 step HTTP, mirror esatto
+  del pattern già esistente per la Modalità A (`lib/routeBuilder/buildSteps.ts` →
+  `app/api/route-build/step/*`):
+  - `lib/routeBuilder/multiStopSteps.ts` (logica condivisa) + `app/api/route-build/multi-stop/
+    step/{network,build,enrich}/route.ts` (i 3 endpoint).
+  - `lib/routeBuilder/runMultiStopStepBuild.ts` (nuovo, mirror di `runStepBuild.ts`) — orchestratore
+    client, unica fonte di verità per le etichette di stage e per la forma della risposta finale
+    (`MultiStopResponse`, prima definita localmente nel pannello).
+  - **L'endpoint monolitico `app/api/route-build/multi-stop/route.ts` è stato RIMOSSO** (non
+    mantenuto per compatibilità come la pipeline "Su misura" monolitica): nessun altro chiamante
+    esisteva oltre a `PersonalizeItineraryPanel.tsx`, feature troppo recente per avere consumatori
+    esterni — a differenza di Modalità A, dove l'endpoint monolitico resta invariato apposta.
+  - Beneficio collaterale non richiesto ma reale: lo split riduce anche il rischio di timeout a
+    60s dell'endpoint monolitico (stessa ragione per cui Modalità A fu spezzata a suo tempo — vedi
+    i commenti in `buildSteps.ts`).
+  - **Modalità A**: nessuno split necessario (le fasi reali esistevano già via `onStage`), solo
+    aggiunto un checkpoint mancante per lo step di arricchimento (`onStage('Rifinisco i
+    dettagli…')` prima della sola chiamata primaria a `step/enrich` in `runStepBuild.ts`, non per
+    i ritentativi silenziosi con lunghezza alternativa) ed esportata `SENTIERO_BUILD_STAGES`.
+
+**2. "Considera i percorsi esistenti"** (default ON, solo Modalità B, come richiesto):
+- `lib/routeBuilder/hikingProbability.ts`: nuova `fetchKnownTrailWayIds(bbox)` esportata — riusa
+  la `fetchHikingRelations` già esistente (privata), restituisce solo l'insieme delle way membro
+  di una relation `route=hiking/foot`, senza il resto della pipeline di scoring di quel file
+  (pensata per un problema diverso, classificare candidati "Esistenti" già trovati). Nessuna cache
+  dedicata in questa prima versione (query leggera, fetchata in parallelo al fetch della rete
+  pedonale in `multiStopSteps.ts`'s `prepareMultiStopNetworkStep` — un fallimento di questo solo
+  fetch non blocca la generazione, `Promise.allSettled` con ripiego a nessuna preferenza).
+- `lib/routeBuilder/multiStopRoute.ts`: `knownTrailWayIds?: Set<number>` opzionale thread fino a
+  `tierEdgeCost` — un arco il cui `wayId` è in un percorso noto riceve uno SCONTO moltiplicativo
+  (`KNOWN_TRAIL_DISCOUNT = 0.6`, mai un'esclusione: "sempre il concetto dei pesi" come richiesto)
+  sopra il moltiplicatore di tier già esistente (quiet/trail/road) — un percorso noto resta
+  preferito, ma un'alternativa reale molto più diretta può ancora vincere se la modalità in vigore
+  penalizza abbastanza il resto. Copre sia la ricerca principale (`shortestLegPath`) sia la ricerca
+  "più vicino al target" (`seekCloserToTarget`) — stesso punto di costruzione dell'`edgeCost` in
+  `runLegDijkstra`. Nuovo test che riproduce lo scenario: due percorsi a parità di tier, il più
+  lungo vince quando è quello marcato come noto.
+- UI: checkbox "Considera i percorsi esistenti" in `PersonalizeItineraryPanel.tsx`, subito dopo la
+  scelta di modalità, default checked.
+
+**Verifica**: `tsc --noEmit` pulito, `next lint` senza nuovi errori/warning, `vitest run` verde
+(466 test — 1 nuovo per la barra/split, invariato nei test esistenti; +1 per lo sconto percorsi
+noti), `npm run build` compila e fa il bundle di TUTTE le route (incluse le 3 nuove) senza errori,
+si ferma solo al solito limite noto del sandbox (env Supabase assenti, fallisce a
+"Collecting page data" per `/api/activity-photos`, una route non toccata da questo lavoro — non
+una regressione). **Nessun test end-to-end nella UI reale** (niente click-through autenticato in
+un browser): l'app richiede login e Supabase live, non disponibili in questo sandbox in modo
+sicuro senza rischiare di scrivere dati di test nel database di produzione — da fare al prossimo
+test manuale dell'utente, insieme alla riverifica di Civita Castellana/Castel Sant'Elia di §4
+punto 2.

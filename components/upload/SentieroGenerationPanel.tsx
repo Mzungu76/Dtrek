@@ -10,7 +10,8 @@ import { createPortal } from 'react-dom'
 import { ArrowLeft, Loader2, X as XIcon } from 'lucide-react'
 import { BuiltRouteCard } from '@/components/RouteResultCard'
 import TrailPreviewMap from '@/components/TrailPreviewMap'
-import { runStepBuild, type BuildParamsCommon } from '@/lib/routeBuilder/runStepBuild'
+import { runStepBuild, SENTIERO_BUILD_STAGES, type BuildParamsCommon } from '@/lib/routeBuilder/runStepBuild'
+import RouteGenerationProgress from './RouteGenerationProgress'
 import { routeTypeLabel, type RouteType } from '@/lib/routeBuilder/loopBuilder'
 import type { ScoredCandidate as BuiltCandidate } from '@/lib/routeBuilder/scoreCandidates'
 import { saveResultItemToGuide } from '@/lib/routeBuilder/importResultItem'
@@ -189,24 +190,26 @@ export default function SentieroGenerationPanel({ origin, onBack, onSaved }: Pro
 
             {error && <p className="text-xs text-red-600">{error}</p>}
 
-            {offerRelax && (
+            {offerRelax && !generating && (
               <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 space-y-2">
                 <p className="text-xs text-amber-700">
                   Vuoi che provi ad avvicinarmi il più possibile, anche oltre la distanza/dislivello richiesti?
                 </p>
-                <button onClick={() => generate(true)} disabled={generating}
-                  className="w-full flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-60 text-white font-bold text-xs rounded-lg py-2 transition-colors">
-                  {generating && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  {generating ? (buildStage || 'Cerco…') : 'Sì, avvicinati il più possibile'}
+                <button onClick={() => generate(true)}
+                  className="w-full flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-lg py-2 transition-colors">
+                  Sì, avvicinati il più possibile
                 </button>
               </div>
             )}
 
-            <button onClick={() => generate(false)} disabled={!canGenerate}
-              className="w-full flex items-center justify-center gap-2 bg-terra-500 hover:bg-terra-600 disabled:opacity-40 text-white font-bold text-sm rounded-xl py-3 transition-colors">
-              {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-              {generating ? (buildStage || 'Genero…') : 'Genera'}
-            </button>
+            {generating ? (
+              <RouteGenerationProgress active={generating} stage={buildStage} stages={SENTIERO_BUILD_STAGES} />
+            ) : (
+              <button onClick={() => generate(false)} disabled={!canGenerate}
+                className="w-full flex items-center justify-center gap-2 bg-terra-500 hover:bg-terra-600 disabled:opacity-40 text-white font-bold text-sm rounded-xl py-3 transition-colors">
+                Genera
+              </button>
+            )}
           </div>
         )}
 

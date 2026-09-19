@@ -18,6 +18,8 @@ import type { FoundRouteItem } from '@/lib/routeBuilder/foundRoute'
 import { saveResultItemToGuide } from '@/lib/routeBuilder/importResultItem'
 import { defaultPendingExpiresAt } from './sharedHelpers'
 import type { MetaType } from '@/lib/metaTypes'
+import { runMultiStopStepBuild, MULTISTOP_BUILD_STAGES, type MultiStopResponse } from '@/lib/routeBuilder/runMultiStopStepBuild'
+import RouteGenerationProgress from './RouteGenerationProgress'
 
 // `metaType`: presente solo per una tappa che coincide con un pin di metaResults (source:'meta',
 // vedi CreaGuidaMapSearch.tsx) — 'borgo_citta' abilita il toggle "includi i punti di interesse"
@@ -30,33 +32,6 @@ const MAX_KM = 15
 
 const MODE_LABEL: Record<'urbano' | 'misto' | 'naturalistico', string> = {
   urbano: 'urbano', misto: 'misto', naturalistico: 'naturalistico',
-}
-
-interface MultiStopLegResponse {
-  fromStopIdx: number
-  toStopIdx: number
-  distanceM: number
-  real: boolean
-  fallbackReason?: 'too_far_from_network' | 'no_path'
-}
-/** La tappa scelta a mano, o un punto di interesse del Borgo/Città inserito da `includePoi` — non
- *  distinguibili qui: la sequenza intera è quella che `legs[].fromStopIdx/toStopIdx` indicizza,
- *  non le sole tappe inviate nella richiesta (vedi app/api/route-build/multi-stop/route.ts). */
-interface MultiStopFullStop { id: string; name: string; lat: number; lon: number }
-interface MultiStopResponse {
-  ok: true
-  stops: MultiStopFullStop[]
-  legs: MultiStopLegResponse[]
-  routePolyline: [number, number][]
-  distanceMeters: number
-  elevationGain: number
-  elevationLoss: number
-  altitudeMax: number
-  altitudeMin: number
-  estimatedTimeSeconds: number
-  hasElevation: boolean
-  trackPoints?: FoundRouteItem['track']['trackPoints']
-  pois?: FoundRouteItem['pois']
 }
 
 interface Props {
@@ -80,10 +55,15 @@ export default function PersonalizeItineraryPanel({ stops, color, onRemoveStop, 
   // Borghi lontani non deve allungarsi di punti che l'utente non ha chiesto di visitare.
   const [includePoiIds, setIncludePoiIds] = useState<Set<string>>(new Set())
   const [distanceKm, setDistanceKm] = useState('')
+  // Default ON: un percorso già noto/riconosciuto (evidenziato sulla mappa con zoom ravvicinato) è
+  // considerato sicuro — l'utente deve disattivare esplicitamente questa preferenza, non il
+  // contrario. Vedi lib/routeBuilder/multiStopRoute.ts's KNOWN_TRAIL_DISCOUNT.
+  const [considerExistingTrails, setConsiderExistingTrails] = useState(true)
   const [historyIsDecent, setHistoryIsDecent] = useState(false)
   const [loadingDefaults, setLoadingDefaults] = useState(true)
 
   const [generating, setGenerating] = useState(false)
+  const [buildStage, setBuildStage] = useState('')
   const [result, setResult] = useState<MultiStopResponse | null>(null)
   const [error, setError] = useState('')
 
@@ -130,29 +110,25 @@ export default function PersonalizeItineraryPanel({ stops, color, onRemoveStop, 
     setGenerating(true)
     setError('')
     setResult(null)
+    setBuildStage('')
     try {
-      const res = await fetch('/api/route-build/multi-stop', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          stops: stops.map(p => ({
-            id: p.id, name: p.name, lat: p.lat, lon: p.lon,
-            placeId: p.metaType === 'borgo_citta' ? p.id : undefined,
-            includePoi: p.metaType === 'borgo_citta' && includePoiIds.has(p.id),
-          })),
-          mode: effectiveMode,
-          targetDistanceKm: distanceValue,
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok) { setError(data?.message || data?.error || 'Generazione non riuscita, riprova.'); return }
+      const { result: built, message } = await runMultiStopStepBuild({
+        stops: stops.map(p => ({
+          id: p.id, name: p.name, lat: p.lat, lon: p.lon,
+          placeId: p.metaType === 'borgo_citta' ? p.id : undefined,
+          includePoi: p.metaType === 'borgo_citta' && includePoiIds.has(p.id),
+        })),
+        mode: effectiveMode,
+        targetDistanceKm: distanceValue,
+        considerExistingTrails,
+      }, setBuildStage)
+      if (!built) { setError(message ?? 'Generazione non riuscita, riprova.'); return }
       if (modeOverride) setMode(modeOverride)
-      setResult(data as MultiStopResponse)
+      setResult(built)
       setTitle(`${stops[0]?.name ?? 'Itinerario'} — itinerario personalizzato`)
-    } catch {
-      setError('Errore di rete, riprova.')
     } finally {
       setGenerating(false)
+      setBuildStage('')
     }
   }
 
@@ -276,6 +252,18 @@ export default function PersonalizeItineraryPanel({ stops, color, onRemoveStop, 
               </p>
             </div>
 
+            <label className="flex items-start gap-2 bg-stone-50 border border-stone-100 rounded-lg px-3 py-2.5">
+              <input type="checkbox" checked={considerExistingTrails}
+                onChange={e => setConsiderExistingTrails(e.target.checked)}
+                className="w-3.5 h-3.5 mt-0.5 accent-forest-600 shrink-0" />
+              <span>
+                <span className="block text-xs font-semibold text-stone-700">Considera i percorsi esistenti</span>
+                <span className="block text-[11px] text-stone-400">
+                  Preferisce i tratti dei percorsi già noti (quelli evidenziati sulla mappa) quando aiutano a collegare le tappe — sono riconosciuti come sicuri.
+                </span>
+              </span>
+            </label>
+
             <div>
               <p className="text-xs font-semibold text-stone-600 mb-1.5">
                 Distanza (km) {!distanceKm.trim() && <span className="text-terra-600 font-bold">— obbligatoria</span>}
@@ -291,11 +279,14 @@ export default function PersonalizeItineraryPanel({ stops, color, onRemoveStop, 
 
             {error && <p className="text-xs text-red-600">{error}</p>}
 
-            <button onClick={() => generate()} disabled={!canGenerate}
-              className="w-full flex items-center justify-center gap-2 bg-terra-500 hover:bg-terra-600 disabled:opacity-40 text-white font-bold text-sm rounded-xl py-3 transition-colors">
-              {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-              {generating ? 'Genero…' : 'Genera il percorso'}
-            </button>
+            {generating ? (
+              <RouteGenerationProgress active={generating} stage={buildStage} stages={MULTISTOP_BUILD_STAGES} />
+            ) : (
+              <button onClick={() => generate()} disabled={!canGenerate}
+                className="w-full flex items-center justify-center gap-2 bg-terra-500 hover:bg-terra-600 disabled:opacity-40 text-white font-bold text-sm rounded-xl py-3 transition-colors">
+                Genera il percorso
+              </button>
+            )}
           </div>
         )}
 

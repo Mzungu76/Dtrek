@@ -24,15 +24,35 @@ import { mapOsmSacScale } from '@/lib/osm/sacScale'
 // (motorway/primary/trunk) restano escluse insieme a `service` (accessi/parcheggi interni,
 // numerosissimi e non utili) e agli accessi privati/vietati — troppo trafficate per un pedone,
 // mai l'unica via reale fra due paesi vicini in area rurale.
-const WALKABLE_HIGHWAY = 'path|track|footway|bridleway|steps|unclassified|residential|tertiary|secondary'
+// pedestrian/living_street aggiunti per lo stesso identico motivo, stavolta dentro un centro
+// storico: una piazza o un vicolo pedonale italiano è quasi sempre taggato così in OSM, MAI
+// residential/unclassified — un punto di interesse (Chiesa, palazzo) affacciato su una di queste
+// vie restava con l'aggancio alla rete riuscito (un nodo vicino esiste) ma isolato da tutto il
+// resto, perché la via che lo collegava al resto del paese non era mai stata scaricata — stesso
+// sintomo del buco tertiary/secondary sopra (due punti vicinissimi, "nessun cammino trovato", non
+// "troppo lontano dalla rete"), stavolta all'interno di un solo centro abitato invece che fra due.
+const WALKABLE_HIGHWAY = 'path|track|footway|bridleway|steps|unclassified|residential|tertiary|secondary|pedestrian|living_street'
 
-// Bump ad ogni cambio della query stessa (WALKABLE_HIGHWAY, o qualunque altro filtro dentro
-// fetchWalkNetwork sotto) — lib/routeBuilder/walkNetworkCache.ts lo include nella chiave di cache
-// proprio perché la chiave è altrimenti solo il bbox: senza questo, una rete già in cache da PRIMA
-// di un cambio di filtro (es. l'aggiunta di tertiary/secondary sopra) resterebbe servita così
-// com'era, con lo stesso identico buco nei dati che il cambio doveva risolvere, fino alla scadenza
-// naturale della cache (45gg) — un fix silenziosamente inefficace per qualunque bbox già visitato.
-export const WALK_NETWORK_QUERY_VERSION = 2
+// Il filtro sul tag `access` da solo esclude in blocco anche le vie di una Zona a Traffico
+// Limitato taggate `access=private` (comune per le ZTL dei centri storici) — un tag che per
+// convenzione OSM si applica di default A TUTTI i modi di trasporto, pedoni compresi, ma che nella
+// pratica i mappatori italiani usano quasi sempre per restringere SOLO i veicoli (l'accesso
+// pedonale a una ZTL è quasi sempre libero). Un router pedonale deve quindi guardare il tag `foot`
+// quando presente — più specifico, prevale sempre su `access` per convenzione OSM — e ripiegare su
+// `access` solo quando `foot` non è taggato affatto: unione di due filtri invece di uno solo,
+// Overpass QL non supporta un "coalesce" fra tag in un singolo filtro.
+const WALKABLE_ACCESS_FILTER =
+  '["access"!~"^(private|no)$"]["foot"!~"^(private|no)$"]'
+const WALKABLE_FOOT_OVERRIDE_FILTER = '["foot"~"^(yes|permissive|designated)$"]'
+
+// Bump ad ogni cambio della query stessa (WALKABLE_HIGHWAY, i filtri di accesso sopra, o
+// qualunque altro filtro dentro fetchWalkNetwork sotto) — lib/routeBuilder/walkNetworkCache.ts lo
+// include nella chiave di cache proprio perché la chiave è altrimenti solo il bbox: senza questo,
+// una rete già in cache da PRIMA di un cambio di filtro (es. l'aggiunta di tertiary/secondary, o
+// di pedestrian/living_street sopra) resterebbe servita così com'era, con lo stesso identico buco
+// nei dati che il cambio doveva risolvere, fino alla scadenza naturale della cache (45gg) — un fix
+// silenziosamente inefficace per qualunque bbox già visitato.
+export const WALK_NETWORK_QUERY_VERSION = 3
 
 export interface GraphNode {
   lat: number
@@ -112,8 +132,16 @@ export async function fetchWalkNetwork(bbox: [number, number, number, number], t
   // serializzazione/il trasferimento, non la ricerca) — stesso pattern, non una query nuova. Il
   // tetto lato server della query segue timeoutMs (in secondi, arrotondato per difetto) invece di
   // un valore fisso, così il client non chiude la connessione prima che Overpass stesso rinunci.
+  // Union di due filtri (vedi WALKABLE_ACCESS_FILTER/WALKABLE_FOOT_OVERRIDE_FILTER sopra) invece
+  // di un solo `way[...]`: la seconda metà recupera le vie che la prima esclude per `access`
+  // generico ma che un tag `foot` esplicito rende comunque percorribili a piedi (le ZTL dei centri
+  // storici, tipicamente). `(._;>;);` sotto funziona identico su una union di più way — stessa
+  // sintassi già usata per un singolo statement, Overpass la accetta indifferentemente.
   const query = `[out:json][timeout:${Math.floor(timeoutMs / 1000)}][maxsize:536870912];
-way["highway"~"^(${WALKABLE_HIGHWAY})$"]["access"!~"^(private|no)$"](${minLat},${minLon},${maxLat},${maxLon});
+(
+way["highway"~"^(${WALKABLE_HIGHWAY})$"]${WALKABLE_ACCESS_FILTER}(${minLat},${minLon},${maxLat},${maxLon});
+way["highway"~"^(${WALKABLE_HIGHWAY})$"]${WALKABLE_FOOT_OVERRIDE_FILTER}(${minLat},${minLon},${maxLat},${maxLon});
+);
 (._;>;);
 out body qt;`
 
@@ -121,8 +149,20 @@ out body qt;`
   // dopo una breve pausa (vedi lib/overpassTrails.ts), quindi il caso peggiore resta ~2×timeoutMs
   // invece di superare da solo il budget della funzione chiamante (maxDuration del proprio
   // endpoint, con margine per il resto della pipeline a valle).
-  const json = await fetchOverpass<{ elements: OverpassEl[] }>(query, timeoutMs)
+  const json = await fetchOverpass<{ elements: OverpassEl[]; remark?: string }>(query, timeoutMs)
   const elements = json.elements ?? []
+  // `remark` compare SOLO quando Overpass stesso ha interrotto la query prima di finirla (di
+  // solito perché ha raggiunto il proprio `[timeout:...]` interno) — la risposta resta comunque
+  // HTTP 200 con qualunque elemento raccolto fino a quel momento, quindi `fetchOverpass` sopra non
+  // la vede come un errore: un fallimento silenzioso, rete parziale servita come se fosse completa.
+  // Nessun modo affidabile di distinguere qui "parziale ma sufficiente per il bbox richiesto" da
+  // "parziale e con un buco proprio dove serviva" — solo segnalarlo, non correggerlo: vedi §4 punto
+  // 3 di docs/crea-guida-itinerario-personalizzato-stato.md, una causa plausibile di "nessun
+  // cammino trovato" che il ripiego a distanza reale in multiStopRoute.ts non risolverebbe (la rete
+  // su cui cerca è quella incompleta).
+  if (json.remark) {
+    console.warn('[osmGraph] risposta Overpass parziale/incompleta per bbox', bbox, '-', json.remark)
+  }
 
   const nodes = new Map<number, GraphNode>()
   for (const el of elements) {

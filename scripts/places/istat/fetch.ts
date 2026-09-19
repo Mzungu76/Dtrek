@@ -131,27 +131,74 @@ function toWgs84FromUtm32N(coords: number[]): [number, number] {
   return [lon, lat]
 }
 
+// Area (con segno) e centroide di un anello poligonale CHIUSO, in coordinate PIANE (qui: UTM32N in
+// metri, mai lat/lon direttamente — un centroide di poligono è per definizione un integrale
+// sull'area, che richiede una proiezione piana per essere corretto; mediare lat/lon vertice per
+// vertice, come faceva la versione precedente di questa funzione, non è la stessa cosa e introduce
+// una distorsione propria). Formula standard "shoelace" per area e centroide di un poligono
+// semplice (Bourke, "Calculating The Area And Centroid Of A Polygon", 1988) — mai usata altrove nel
+// repo con questa esattezza (scripts/import-ptpr.ts's extractCentroid fa la stessa media grezza dei
+// vertici del bug qui sotto corretto, un problema distinto da non toccare in questa sessione).
+// Un anello non esplicitamente chiuso (ultimo punto ≠ primo) viene chiuso implicitamente: GeoJSON/
+// shapefile di norma ripetono già il primo punto come ultimo, ma un input non conforme non deve
+// produrre silenziosamente un centroide sbagliato.
+function ringAreaCentroid(ring: number[][]): { area: number; cx: number; cy: number } | null {
+  if (ring.length < 3) return null
+  let area = 0, cx = 0, cy = 0
+  const step = (p0: number[], p1: number[]) => {
+    const cross = p0[0] * p1[1] - p1[0] * p0[1]
+    area += cross
+    cx += (p0[0] + p1[0]) * cross
+    cy += (p0[1] + p1[1]) * cross
+  }
+  for (let i = 0; i < ring.length - 1; i++) step(ring[i], ring[i + 1])
+  const first = ring[0], last = ring[ring.length - 1]
+  if (first[0] !== last[0] || first[1] !== last[1]) step(last, first)
+  area /= 2
+  if (area === 0) return null
+  return { area, cx: cx / (6 * area), cy: cy / (6 * area) }
+}
+
+// Centroide pesato per area (MAI la media grezza dei vertici del confine — un bug reale di questa
+// funzione, corretto in questa sessione dopo aver osservato un'offset di diversi km fra il
+// centroide "istat" di un Comune reale (Nepi) e un punto di interesse verificato al suo interno:
+// la densità dei vertici lungo un confine comunale varia molto da un tratto all'altro, tratti
+// digitalizzati con più punti "tirano" la media grezza verso di sé senza alcun rapporto con la vera
+// forma del poligono). Somma pesata per |area| di OGNI parte di un MultiPolygon (mai solo la prima
+// — due Comuni confinanti con un'exclave/parte disgiunta digitalizzata per prima nello shapefile
+// finivano con centroidi quasi identici, tirati entrambi verso quella parte condivisa invece che
+// verso il proprio corpo principale). Solo l'anello ESTERNO di ciascun poligono (coordinates[0]) —
+// le eventuali "hole" interne (enclave rarissime per un Comune italiano) non vengono sottratte,
+// sposterebbero il centroide di poco: non vale la complessità aggiuntiva qui.
+// Esportata per il test diretto (§ scripts/places/__tests__/istat.test.ts) — la classe di bug
+// corretta qui (media grezza dei vertici invece del centroide pesato per area) non è osservabile
+// da istatRowToPlaceCandidate, che riceve già lat/lon calcolate: serve testare questa funzione
+// direttamente su geometrie sintetiche per bloccare una regressione.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function centroidOf(geometry: any): { lat: number; lon: number } | null {
+export function centroidOf(geometry: any): { lat: number; lon: number } | null {
   try {
     if (!geometry) return null
     if (geometry.type === 'Point') {
       const [lon, lat] = toWgs84FromUtm32N(geometry.coordinates)
       return { lat, lon }
     }
-    if (geometry.type === 'Polygon' || geometry.type === 'MultiPolygon') {
-      // Anello esterno del primo poligono — sufficiente per un centroide approssimativo di un
-      // confine comunale (stesso approccio di extractCentroid in scripts/import-ptpr.ts).
-      const ring: number[][] = geometry.type === 'Polygon'
-        ? geometry.coordinates[0]
-        : geometry.coordinates[0][0]
-      if (!ring || ring.length === 0) return null
-      const converted = ring.map(toWgs84FromUtm32N)
-      return {
-        lat: converted.reduce((s, c) => s + c[1], 0) / converted.length,
-        lon: converted.reduce((s, c) => s + c[0], 0) / converted.length,
-      }
+    if (geometry.type !== 'Polygon' && geometry.type !== 'MultiPolygon') return null
+
+    const polygons: number[][][][] = geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates
+    let totalWeight = 0, sumX = 0, sumY = 0
+    for (const rings of polygons) {
+      const outerRing = rings?.[0]
+      if (!outerRing || outerRing.length === 0) continue
+      const rc = ringAreaCentroid(outerRing)
+      if (!rc) continue
+      const weight = Math.abs(rc.area)
+      totalWeight += weight
+      sumX += rc.cx * weight
+      sumY += rc.cy * weight
     }
+    if (totalWeight === 0) return null
+    const [lon, lat] = toWgs84FromUtm32N([sumX / totalWeight, sumY / totalWeight])
+    return { lat, lon }
   } catch {}
   return null
 }

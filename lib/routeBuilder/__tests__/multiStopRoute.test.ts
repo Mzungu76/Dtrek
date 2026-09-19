@@ -67,6 +67,26 @@ describe('buildMultiStopRoute', () => {
     expect(leg.polyline).toHaveLength(4) // passa per i nodi 1,2,3,4
   })
 
+  it('preferisce un percorso già noto (knownTrailWayIds) anche se più lungo, a parità di tipo di via', () => {
+    // A diretto (1-4, ~1000m, unclassified — "quiet", nessuna penalità di tier) vs B a tre tratti
+    // (1-2-3-4, ~1500m totali, STESSO tier "quiet"): senza knownTrailWayIds sono confrontati a
+    // parità di costo/metro, quindi vince il più corto (A). Marcando le way del detour (B) come un
+    // percorso escursionistico già noto, lo sconto (KNOWN_TRAIL_DISCOUNT) ne abbassa il costo sotto
+    // quello di A anche restando più lungo in realtà — la preferenza esplicita richiesta.
+    const nodes = detourNodes()
+    const network = buildNetwork(nodes, [
+      [1, 4, 'unclassified'],
+      [1, 2, 'unclassified'], [2, 3, 'unclassified'], [3, 4, 'unclassified'],
+    ])
+    const withoutKnownTrails = buildMultiStopRoute(network, [nodes[1], nodes[4]], 'misto')
+    expect(withoutKnownTrails.legs[0].distanceM).toBeLessThan(1100) // sceglie A, il diretto
+
+    const knownTrailWayIds = new Set([1 * 1000 + 2, 2 * 1000 + 3, 3 * 1000 + 4]) // le way del detour B
+    const withKnownTrails = buildMultiStopRoute(network, [nodes[1], nodes[4]], 'misto', null, knownTrailWayIds)
+    expect(withKnownTrails.legs[0].distanceM).toBeGreaterThan(1400) // ora sceglie B, il percorso noto
+    expect(withKnownTrails.legs[0].distanceM).toBeLessThan(1600)
+  })
+
   it("usa comunque una strada se è l'unico modo di collegare due tappe", () => {
     const nodes = { 1: { lat: 0, lon: 0 }, 2: { lat: 0, lon: degFor(800) } }
     const network = buildNetwork(nodes, [[1, 2, 'residential']])
@@ -107,6 +127,24 @@ describe('buildMultiStopRoute', () => {
     expect(outcome.legs[0].real).toBe(true)
     expect(outcome.legs[0].distanceM).toBeGreaterThan(1400)
     expect(outcome.legs[0].distanceM).toBeLessThan(1600)
+  })
+
+  // Riproduce il bug segnalato dall'utente (screenshot, dopo il fix del ripiego a distanza reale):
+  // due punti nello STESSO centro storico (Chiesa e centro di un Borgo), distanza minima, collegati
+  // SOLO da una piazza pedonale — se `pedestrian` non fosse un tipo di via riconosciuto (né in
+  // WALKABLE_HIGHWAY, osmGraph.ts, né in highwayTier/URBAN_ALLOWED_HIGHWAY qui), l'arco non
+  // esisterebbe proprio nel grafo scaricato o verrebbe escluso in "urbano" — "nessun cammino
+  // trovato" pur essendo i due punti a pochi metri l'uno dall'altro, non un problema di budget.
+  it('collega due punti dello stesso centro storico attraverso una piazza pedonale (pedestrian)', () => {
+    const nodes = { 1: { lat: 0, lon: 0 }, 2: { lat: 0, lon: degFor(80) } }
+    const network = buildNetwork(nodes, [[1, 2, 'pedestrian']])
+    const misto = buildMultiStopRoute(network, [nodes[1], nodes[2]], 'misto')
+    expect(misto.legs[0].real).toBe(true)
+    expect(misto.legs[0].distanceM).toBeCloseTo(80, 0)
+    // "urbano" esclude i sentieri ma MAI una piazza pedonale — è l'essenza stessa del trekking
+    // urbano, non un compromesso di sicurezza come `path`/`footway`.
+    const urbano = buildMultiStopRoute(network, [nodes[1], nodes[2]], 'urbano')
+    expect(urbano.legs[0].real).toBe(true)
   })
 
   it('senza un target di distanza sceglie il cammino preferito, non lo allunga inutilmente', () => {
@@ -156,5 +194,33 @@ describe('buildMultiStopRoute', () => {
     expect(outcome.legs[0].real).toBe(true)
     expect(outcome.legs[0].distanceM).toBeGreaterThan(190)
     expect(outcome.legs[0].distanceM).toBeLessThan(210)
+    // La diagnostica (vedi §4 punto 2 del doc di stato) deve riflettere esattamente lo scenario
+    // che questo test riproduce: il tentativo pesato esaurisce il budget di nodi (non trova un
+    // cammino non perché non esista, ma perché il budget finisce prima), e il ripiego a distanza
+    // reale è quello che produce davvero il cammino restituito.
+    expect(outcome.legs[0].diagnostic?.pathSource).toBe('distance_fallback')
+    expect(outcome.legs[0].diagnostic?.preferred.budgetExhausted).toBe(true)
+    expect(outcome.legs[0].diagnostic?.fallback?.budgetExhausted).toBe(false)
+  })
+
+  it('diagnostica pathSource:"preferred" quando la ricerca pesata trova subito il cammino, senza bisogno del ripiego', () => {
+    const nodes = { 1: { lat: 0, lon: 0 }, 2: { lat: 0, lon: degFor(500) } }
+    const network = buildNetwork(nodes, [[1, 2, 'track']])
+    const outcome = buildMultiStopRoute(network, [nodes[1], nodes[2]], 'misto')
+    expect(outcome.legs[0].real).toBe(true)
+    expect(outcome.legs[0].diagnostic?.pathSource).toBe('preferred')
+    expect(outcome.legs[0].diagnostic?.fallback).toBeUndefined()
+  })
+
+  it('nessuna diagnostica quando il ripiego a linea d\'aria è dovuto a uno snap alla rete fallito (too_far_from_network)', () => {
+    // Le due tappe sono troppo lontane da qualunque nodo della rete (SNAP_THRESHOLD_M=350) — mai
+    // avviato un Dijkstra, niente da diagnosticare oltre al motivo già in fallbackReason.
+    const nodes = { 1: { lat: 0, lon: 0 }, 2: { lat: 0, lon: degFor(500) } }
+    const network = buildNetwork(nodes, [[1, 2, 'track']])
+    const far = { lat: 5, lon: 5 }
+    const outcome = buildMultiStopRoute(network, [nodes[1], far], 'misto')
+    expect(outcome.legs[0].real).toBe(false)
+    expect(outcome.legs[0].fallbackReason).toBe('too_far_from_network')
+    expect(outcome.legs[0].diagnostic).toBeUndefined()
   })
 })

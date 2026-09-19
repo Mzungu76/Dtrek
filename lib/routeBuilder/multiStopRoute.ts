@@ -20,6 +20,15 @@
 // più, non quello minimo. Il cammino preferito resta l'unica scelta quando non c'è un target, o
 // quando il target è già raggiunto/superato (non si può accorciare sotto il minimo) — e non si
 // applica affatto a una tratta già in ripiego a linea d'aria (niente su cui cercare).
+//
+// Percorsi già noti (opt-in utente, di default attivo — PersonalizeItineraryPanel.tsx): quando il
+// chiamante passa `knownTrailWayIds` (id delle way membro di una relation OSM route=hiking/foot,
+// gli stessi percorsi evidenziati sulla mappa con zoom ravvicinato), un arco che ne fa parte riceve
+// uno sconto sul costo di ricerca (KNOWN_TRAIL_DISCOUNT) — MAI un'esclusione degli altri archi né
+// un obbligo di seguirlo per intero: solo un peso in più, come i tier di tipo di via già in gioco,
+// applicato arco per arco (una tratta può usarne solo una PARTE, quanto serve a collegare le
+// tappe). Un percorso noto è considerato sicuro perché già percorso e riconosciuto, non perché
+// necessariamente più diretto.
 import { nearestGraphNode, type WalkNetwork, type GraphEdge } from './osmGraph'
 import { dijkstra, reconstructPath, reconstructNodePath } from './walkRouting'
 import { haversineM } from '../geoUtils'
@@ -34,9 +43,13 @@ export type MultiStopMode = 'urbano' | 'misto' | 'naturalistico'
 // residential/unclassified: una strada provinciale fra due paesi (tipicamente taggata così, vedi
 // WALKABLE_HIGHWAY in osmGraph.ts) è una strada a tutti gli effetti, non un sentiero — escluderla
 // dal "trekking urbano" lascerebbe quella modalità priva dell'unico collegamento reale che spesso
-// esiste fra due paesi diversi. La rete percorribile fetchata resta comunque la stessa in entrambe
-// le modalità, qui si filtra solo in fase di attraversamento del grafo.
-const URBAN_ALLOWED_HIGHWAY = new Set(['residential', 'unclassified', 'tertiary', 'secondary'])
+// esiste fra due paesi diversi. pedestrian/living_street (piazze e vicoli pedonali di un centro
+// storico) sono l'essenza stessa del trekking urbano, mai un compromesso come i sentieri — la loro
+// assenza qui, insieme al buco nei dati già risolto in osmGraph.ts (non erano nemmeno scaricati),
+// lasciava "urbano" priva di collegamenti reali dentro gli stessi centri storici che questa
+// modalità dovrebbe attraversare per prima. La rete percorribile fetchata resta comunque la stessa
+// in entrambe le modalità, qui si filtra solo in fase di attraversamento del grafo.
+const URBAN_ALLOWED_HIGHWAY = new Set(['residential', 'unclassified', 'tertiary', 'secondary', 'pedestrian', 'living_street'])
 
 function urbanEdgeFilter(edge: GraphEdge): boolean {
   return edge.highway != null && URBAN_ALLOWED_HIGHWAY.has(edge.highway)
@@ -49,14 +62,17 @@ function urbanEdgeFilter(edge: GraphEdge): boolean {
 // esisteva nel repo con questa identica suddivisione a 3 livelli (verificato: lib/overpass.ts's
 // classifyHighway ha 6 livelli diversi e non è esportato, lib/navigation/escapeEngine.ts's
 // TRAIL_HIGHWAY_QUALITY ignora del tutto tertiary/secondary) — introdotto qui apposta.
-// - 'quiet' (strade bianche/secondarie non asfaltate — track/unclassified): sicuro/prevedibile.
+// - 'quiet' (strade bianche/secondarie non asfaltate — track/unclassified — più le piazze e i
+//   vicoli pedonali di un centro storico, pedestrian/living_street: niente traffico veicolare vero,
+//   più sicure di una strada residenziale qualunque, non diverse da una strada bianca per un
+//   pedone): sicuro/prevedibile.
 // - 'trail' (sentieri veri e propri — path/footway/bridleway/steps).
 // - 'road' (strade di un centro abitato o che collegano due paesi — residential/tertiary/
 //   secondary): trafficabili da veicoli, mai l'ideale per un pedone.
 type HighwayTier = 'quiet' | 'trail' | 'road'
 
 function highwayTier(highway: string | undefined): HighwayTier {
-  if (highway === 'track' || highway === 'unclassified') return 'quiet'
+  if (highway === 'track' || highway === 'unclassified' || highway === 'pedestrian' || highway === 'living_street') return 'quiet'
   if (highway === 'path' || highway === 'footway' || highway === 'bridleway' || highway === 'steps') return 'trail'
   return 'road'
 }
@@ -82,8 +98,23 @@ const MAX_TIER_MULTIPLIER = Math.max(
   ...Object.values(TIER_COST_MULTIPLIER_BY_MODE).flatMap(m => Object.values(m)),
 )
 
-function tierEdgeCost(mode: MultiStopMode, edge: GraphEdge): number {
-  return TIER_COST_MULTIPLIER_BY_MODE[mode][highwayTier(edge.highway)]
+// Sconto (mai un'esclusione: sempre il concetto dei pesi, come i tier sopra) per un arco che
+// appartiene a un percorso escursionistico già noto e riconosciuto (relation OSM route=hiking/foot,
+// vedi lib/routeBuilder/hikingProbability.ts's fetchKnownTrailWayIds — stesso identico segnale già
+// usato per la modalità "Esistenti", qui riusato per orientare la ricerca "Su misura" invece di
+// classificare candidati già trovati). Un tratto noto è considerato sicuro (percorso e verificato
+// da altri) indipendentemente dal suo tipo di via fisico — lo sconto si applica SOPRA il
+// moltiplicatore di tier già in vigore (mai lo sostituisce): un sentiero noto resta preferito a un
+// sentiero anonimo, una strada bianca nota resta preferita a una strada bianca anonima, ma un
+// sentiero anonimo può ancora battere una strada nota se la modalità in vigore penalizza le strade
+// abbastanza (naturalistico). < 1, mai 0: un tratto noto lunghissimo che allontana dal bersaglio non
+// deve mai vincere su un'alternativa reale molto più diretta — resta un elemento di UN costo
+// pesato, non un binario "sempre scelto se disponibile".
+const KNOWN_TRAIL_DISCOUNT = 0.6
+
+function tierEdgeCost(mode: MultiStopMode, edge: GraphEdge, knownTrailWayIds?: Set<number>): number {
+  const base = TIER_COST_MULTIPLIER_BY_MODE[mode][highwayTier(edge.highway)]
+  return knownTrailWayIds?.has(edge.wayId) ? base * KNOWN_TRAIL_DISCOUNT : base
 }
 
 // La distanza REALE di un cammino trovato con dijkstra.ts's `edgeCost` in gioco non è più leggibile
@@ -178,6 +209,16 @@ function edgeKeysOfPath(nodeIds: number[]): Set<string> {
 
 interface LegSearchResult { distanceM: number; polyline: [number, number][]; nodeIds: number[] }
 
+// Esito grezzo di un singolo tentativo Dijkstra, PRIMA di sapere se ha raggiunto il bersaglio —
+// `budgetExhausted` distingue "il bersaglio potrebbe comunque esistere, la ricerca si è fermata
+// solo perché ha visitato DIJKSTRA_MAX_NODES/DIJKSTRA_FALLBACK_MAX_NODES nodi" (vero limite di
+// ricerca) da "la ricerca ha esaurito l'intera rete raggiungibile entro costBudgetM PRIMA di
+// arrivare a quel tetto" (nessun cammino esiste in quella rete/bbox, un problema di copertura dati
+// o di rete davvero disconnessa, non di budget) — indistinguibili guardando solo `result`, serve a
+// LegDiagnostic sotto per orientare l'indagine (vedi §4 punto 2 di
+// docs/crea-guida-itinerario-personalizzato-stato.md).
+interface LegSearchAttempt { result: LegSearchResult | null; nodesVisited: number; budgetExhausted: boolean }
+
 // `costBudgetM`: già in unità di costo (peso per tipo di via compreso, salvo `plainDistance`) — il
 // chiamante decide se e come convertire il budget in metri reali prima di passarlo qui.
 // `plainDistance`: true per il ripiego di shortestLegPath sotto — nessun peso per tipo di via
@@ -188,31 +229,54 @@ function runLegDijkstra(
   isEdgeAllowed: ((edge: GraphEdge, fromNodeId: number) => boolean) | undefined,
   mode: MultiStopMode,
   plainDistance = false,
-): LegSearchResult | null {
+  knownTrailWayIds?: Set<number>,
+): LegSearchAttempt {
   const maxNodes = plainDistance ? DIJKSTRA_FALLBACK_MAX_NODES : DIJKSTRA_MAX_NODES
-  const edgeCost = plainDistance ? undefined : (edge: GraphEdge) => tierEdgeCost(mode, edge)
-  const { dist, prev } = dijkstra(network, startNodeId, costBudgetM, maxNodes, isEdgeAllowed, edgeCost)
-  if (dist.get(endNodeId) == null) return null // solo per verificare la raggiungibilità entro il budget di costo
+  const edgeCost = plainDistance ? undefined : (edge: GraphEdge) => tierEdgeCost(mode, edge, knownTrailWayIds)
+  const { dist, prev, visited } = dijkstra(network, startNodeId, costBudgetM, maxNodes, isEdgeAllowed, edgeCost)
+  const budgetExhausted = visited.size >= maxNodes
+  if (dist.get(endNodeId) == null) return { result: null, nodesVisited: visited.size, budgetExhausted } // solo per verificare la raggiungibilità entro il budget di costo
   const polyline = reconstructPath(network, prev, endNodeId, startNodeId)
   return {
-    // MAI dist.get(endNodeId): con tierEdgeCost in gioco è un costo pesato, non la distanza reale
-    // — ricalcolata dalla geometria (vedi polylineDistanceM).
-    distanceM: polylineDistanceM(polyline),
-    polyline,
-    nodeIds: reconstructNodePath(prev, endNodeId, startNodeId),
+    result: {
+      // MAI dist.get(endNodeId): con tierEdgeCost in gioco è un costo pesato, non la distanza reale
+      // — ricalcolata dalla geometria (vedi polylineDistanceM).
+      distanceM: polylineDistanceM(polyline),
+      polyline,
+      nodeIds: reconstructNodePath(prev, endNodeId, startNodeId),
+    },
+    nodesVisited: visited.size,
+    budgetExhausted,
   }
+}
+
+// Diagnostica interna (MAI mostrata all'utente, solo per il logging server-side in
+// app/api/route-build/multi-stop/route.ts) — vedi il commento su LegSearchAttempt sopra.
+// `pathSource`: presente solo quando shortestLegPath trova un risultato, dice quale dei due
+// tentativi lo ha prodotto — verifica se il ripiego a distanza reale (§3 del doc di stato) scatta
+// davvero in produzione, o se resta teorico.
+export interface LegDiagnostic {
+  pathSource?: 'preferred' | 'distance_fallback'
+  preferred: { nodesVisited: number; budgetExhausted: boolean }
+  fallback?: { nodesVisited: number; budgetExhausted: boolean }
 }
 
 function shortestLegPath(
   network: WalkNetwork, startNodeId: number, endNodeId: number, mode: MultiStopMode,
-): LegSearchResult | null {
+  knownTrailWayIds?: Set<number>,
+): { result: LegSearchResult | null; diagnostic: LegDiagnostic } {
   const baseFilter = mode === 'urbano' ? (edge: GraphEdge) => urbanEdgeFilter(edge) : undefined
   const from = network.nodes.get(startNodeId)
   const to = network.nodes.get(endNodeId)
-  if (!from || !to) return null
+  if (!from || !to) return { result: null, diagnostic: { preferred: { nodesVisited: 0, budgetExhausted: false } } }
   const costBudget = toCostBudget(legDijkstraBudgetM(from, to))
-  const preferred = runLegDijkstra(network, startNodeId, endNodeId, costBudget, baseFilter, mode)
-  if (preferred) return preferred
+  const preferred = runLegDijkstra(network, startNodeId, endNodeId, costBudget, baseFilter, mode, false, knownTrailWayIds)
+  if (preferred.result) {
+    return {
+      result: preferred.result,
+      diagnostic: { pathSource: 'preferred', preferred: { nodesVisited: preferred.nodesVisited, budgetExhausted: preferred.budgetExhausted } },
+    }
+  }
   // Ripiego: la ricerca pesata per tipo di via non ha raggiunto il bersaglio entro il suo budget —
   // non vuol dire che una connessione reale non esista (vedi il commento su DIJKSTRA_FALLBACK_MAX_
   // NODES sopra), solo che quella ricerca in particolare non l'ha trovata. Un secondo tentativo
@@ -223,7 +287,15 @@ function shortestLegPath(
   // accettabile. Stesso `costBudget` del tentativo pesato (qui in metri reali, senza moltiplicatore
   // in gioco): non ha senso essere più restrittivi in un tentativo pensato per essere l'ultima
   // spiaggia prima della linea d'aria.
-  return runLegDijkstra(network, startNodeId, endNodeId, costBudget, baseFilter, mode, true)
+  const fallback = runLegDijkstra(network, startNodeId, endNodeId, costBudget, baseFilter, mode, true)
+  return {
+    result: fallback.result,
+    diagnostic: {
+      pathSource: fallback.result ? 'distance_fallback' : undefined,
+      preferred: { nodesVisited: preferred.nodesVisited, budgetExhausted: preferred.budgetExhausted },
+      fallback: { nodesVisited: fallback.nodesVisited, budgetExhausted: fallback.budgetExhausted },
+    },
+  }
 }
 
 /**
@@ -237,6 +309,7 @@ function shortestLegPath(
  */
 function seekCloserToTarget(
   network: WalkNetwork, startNodeId: number, endNodeId: number, shortest: LegSearchResult, legTargetM: number, mode: MultiStopMode,
+  knownTrailWayIds?: Set<number>,
 ): LegSearchResult {
   const baseFilter = mode === 'urbano' ? (edge: GraphEdge) => urbanEdgeFilter(edge) : undefined
   const from = network.nodes.get(startNodeId)!
@@ -250,7 +323,7 @@ function seekCloserToTarget(
       if (baseFilter && !baseFilter(edge)) return false
       return !excluded.has(edgeKey(fromNodeId, edge.to))
     }
-    const alt = runLegDijkstra(network, startNodeId, endNodeId, toCostBudget(legDijkstraBudgetM(from, to, legTargetM)), filter, mode)
+    const alt = runLegDijkstra(network, startNodeId, endNodeId, toCostBudget(legDijkstraBudgetM(from, to, legTargetM)), filter, mode, false, knownTrailWayIds).result
     if (!alt) break // nessuna via alternativa esiste proprio: quella trovata finora resta la migliore
     if (Math.abs(alt.distanceM - legTargetM) < Math.abs(best.distanceM - legTargetM)) best = alt
     // Si accumulano gli archi di OGNI tentativo (non solo del migliore): il prossimo giro deve
@@ -271,6 +344,10 @@ export interface MultiStopLeg {
   // ItineraryLeg.real), mai nascosta dietro un esito che sembra completo senza esserlo.
   real: boolean
   fallbackReason?: 'too_far_from_network' | 'no_path'
+  // Diagnostica interna (MAI mostrata all'utente, letta solo da app/api/route-build/multi-stop/
+  // route.ts per il logging server-side) — assente per 'too_far_from_network' (fallito
+  // nearestGraphNode, Dijkstra non è mai partito, niente da diagnosticare). Vedi LegDiagnostic.
+  diagnostic?: LegDiagnostic
 }
 
 export interface MultiStopOutcome {
@@ -299,6 +376,7 @@ interface ResolvedLeg {
   endNodeId?: number
   snapDistM?: number
   shortest?: LegSearchResult
+  diagnostic?: LegDiagnostic
 }
 
 /**
@@ -309,10 +387,16 @@ interface ResolvedLeg {
  * reali), ogni tratta reale viene ricercata verso una quota proporzionale del target (vedi
  * seekCloserToTarget) invece di restare al minimo — quando non è impostato, o il minimo lo supera
  * già, resta semplicemente il cammino più breve. Una tratta già in ripiego a linea d'aria non
- * partecipa a questa ricerca (niente su cui cercare).
+ * partecipa a questa ricerca (niente su cui cercare). `knownTrailWayIds`, opzionale: id delle way
+ * OSM che appartengono a un percorso escursionistico già riconosciuto (route=hiking/foot — vedi
+ * lib/routeBuilder/hikingProbability.ts's fetchKnownTrailWayIds), scontate nel costo di ricerca
+ * (KNOWN_TRAIL_DISCOUNT sopra) così la ricerca le preferisce quando aiutano a collegare le tappe,
+ * senza mai forzarle end-to-end né escludere il resto — un peso in più fra quelli già in gioco
+ * (tierEdgeCost), non un vincolo. Omesso, comportamento invariato (nessuna via ha priorità extra).
  */
 export function buildMultiStopRoute(
   network: WalkNetwork, stops: { lat: number; lon: number }[], mode: MultiStopMode, targetDistanceM?: number | null,
+  knownTrailWayIds?: Set<number>,
 ): MultiStopOutcome {
   const resolved: ResolvedLeg[] = []
 
@@ -326,9 +410,9 @@ export function buildMultiStopRoute(
       continue
     }
 
-    const shortest = shortestLegPath(network, startNode.nodeId, endNode.nodeId, mode)
+    const { result: shortest, diagnostic } = shortestLegPath(network, startNode.nodeId, endNode.nodeId, mode, knownTrailWayIds)
     if (!shortest) {
-      resolved.push({ ...airlineLeg(i, i + 1, from, to, 'no_path') })
+      resolved.push({ ...airlineLeg(i, i + 1, from, to, 'no_path'), diagnostic })
       continue
     }
     resolved.push({
@@ -338,6 +422,7 @@ export function buildMultiStopRoute(
       startNodeId: startNode.nodeId, endNodeId: endNode.nodeId,
       snapDistM: startNode.distM + endNode.distM,
       shortest,
+      diagnostic,
     })
   }
 
@@ -349,7 +434,7 @@ export function buildMultiStopRoute(
 
   const toLeg = (l: ResolvedLeg): MultiStopLeg => ({
     fromStopIdx: l.fromStopIdx, toStopIdx: l.toStopIdx, distanceM: l.distanceM, polyline: l.polyline,
-    real: l.real, fallbackReason: l.fallbackReason,
+    real: l.real, fallbackReason: l.fallbackReason, diagnostic: l.diagnostic,
   })
 
   // Nessun target, o il più breve fra le tratte reali lo raggiunge/supera già: non c'è margine per
@@ -366,7 +451,7 @@ export function buildMultiStopRoute(
     if (!l.real || !l.shortest || l.startNodeId == null || l.endNodeId == null || l.snapDistM == null) return toLeg(l)
     const legTargetGraphM = Math.max(0, l.distanceM * (targetDistanceM / totalShortestM) - l.snapDistM)
     if (legTargetGraphM <= l.shortest.distanceM) return toLeg(l)
-    const closer = seekCloserToTarget(network, l.startNodeId, l.endNodeId, l.shortest, legTargetGraphM, mode)
+    const closer = seekCloserToTarget(network, l.startNodeId, l.endNodeId, l.shortest, legTargetGraphM, mode, knownTrailWayIds)
     return { fromStopIdx: l.fromStopIdx, toStopIdx: l.toStopIdx, distanceM: closer.distanceM + l.snapDistM, polyline: closer.polyline, real: true }
   })
 
