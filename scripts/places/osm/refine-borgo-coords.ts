@@ -114,25 +114,49 @@ async function updateCoords(supabase: SupabaseClient, placeId: string, lat: numb
 // ── I/O: Overpass ────────────────────────────────────────────────────────────────────────────
 interface OverpassPlaceEl { type: 'node'; id: number; lat: number; lon: number; tags?: Record<string, string> }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+// fetchOverpass (lib/overpassTrails.ts) già raccorda 3 mirror e ritenta una volta — non basta
+// contro un rate-limit SOSTENUTO sull'IP condivisa dei runner GitHub Actions: osservato dal vivo
+// su una prima esecuzione reale (378 righe, Lazio), 145 su 378 (38%) fallite con "Overpass non
+// disponibile", tutte con lo stesso identico messaggio (il fallimento finale di fetchOverpass dopo
+// aver già esaurito i suoi 2 tentativi × 3 mirror). Qui si aggiungono altri tentativi con backoff
+// ESPONENZIALE (secondi, non gli 1.2s fissi di fetchOverpass) sopra quel primo livello, stesso
+// principio già applicato a wikidata/enrich.ts per il proprio endpoint — ma DELIBERATAMENTE
+// contenuto (2 tentativi in più, non di più): se il blocco fosse sostenuto per l'intera durata
+// della run (non solo transitorio), insistere aggressivamente su ogni riga fallita moltiplicherebbe
+// il tempo totale senza aumentare il tasso di successo — meglio un run più breve, con più righe
+// ancora da recuperare in un rilancio successivo (lo script è idempotente, vedi sotto), che un
+// singolo run che rischia di durare ore in più per lo stesso risultato.
+const MAX_QUERY_RETRIES = 2
+
 async function queryNearbyOsmPlaces(lat: number, lon: number): Promise<OsmPlaceCandidate[]> {
   const bbox = padBbox([lat, lon, lat, lon], SEARCH_RADIUS_KM)
   const [minLat, minLon, maxLat, maxLon] = bbox
   const query = `[out:json][timeout:20];
 node["place"~"^(${PLACE_TAGS.join('|')})$"](${minLat},${minLon},${maxLat},${maxLon});
 out body qt;`
-  const json = await fetchOverpass<{ elements: OverpassPlaceEl[] }>(query, 20_000)
-  const out: OsmPlaceCandidate[] = []
-  for (const el of json.elements ?? []) {
-    const name = el.tags?.name
-    const place = el.tags?.place
-    if (!name || !place) continue
-    out.push({ osmId: el.id, place, name, lat: el.lat, lon: el.lon })
-  }
-  return out
-}
 
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms))
+  let lastError: unknown
+  for (let attempt = 0; attempt <= MAX_QUERY_RETRIES; attempt++) {
+    if (attempt > 0) await sleep(3000 * 2 ** (attempt - 1)) // 3s, 6s
+    try {
+      const json = await fetchOverpass<{ elements: OverpassPlaceEl[] }>(query, 20_000)
+      const out: OsmPlaceCandidate[] = []
+      for (const el of json.elements ?? []) {
+        const name = el.tags?.name
+        const place = el.tags?.place
+        if (!name || !place) continue
+        out.push({ osmId: el.id, place, name, lat: el.lat, lon: el.lon })
+      }
+      return out
+    } catch (e) {
+      lastError = e
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('Overpass: troppi tentativi falliti')
 }
 
 async function main() {
@@ -155,9 +179,13 @@ async function main() {
 
   let refined = 0, unmatched = 0, errored = 0
   for (const [i, borgo] of borghi.entries()) {
-    // Spaziatura minima fra richieste — stesso principio di wikidata/enrich.ts: overpass-api.de è
-    // un endpoint pubblico condiviso, non dedicato a questo script.
-    if (i > 0) await sleep(300)
+    // Spaziatura fra richieste — più ampia dei 150ms di wikidata/enrich.ts: ogni chiamata qui
+    // raggiunge 3 mirror Overpass IN PARALLELO (fetchOverpass, lib/overpassTrails.ts), non un
+    // singolo endpoint SPARQL, quindi il carico reale generato per richiesta è già triplo a monte
+    // — osservato dal vivo (vedi il commento su MAX_QUERY_RETRIES sopra) un tasso di fallimento del
+    // 38% con soli 300ms, coerente con un throttling innescato dal ritmo delle richieste più che da
+    // un singolo mirror sovraccarico.
+    if (i > 0) await sleep(800)
 
     try {
       const nearby = await queryNearbyOsmPlaces(borgo.latitude, borgo.longitude)
