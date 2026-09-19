@@ -6,7 +6,7 @@
 // fallimento (lib/routeBuilder/multiStopRoute.ts) è riportato per nome delle tappe coinvolte,
 // mai nascosto.
 import { useEffect, useState } from 'react'
-import { Loader2, X as XIcon, Route as RouteIcon } from 'lucide-react'
+import { Loader2, X as XIcon, Route as RouteIcon, ChevronUp, ChevronDown } from 'lucide-react'
 import TrailPreviewMap from '@/components/TrailPreviewMap'
 import type { FoundRouteItem } from '@/lib/routeBuilder/foundRoute'
 import { saveResultItemToGuide } from '@/lib/routeBuilder/importResultItem'
@@ -46,6 +46,12 @@ interface Props {
 }
 
 export default function PersonalizeItineraryPanel({ anchor, stops, color, onRemoveStop, onClose, onSaved }: Props) {
+  // Richiudibile a barra (stesso pattern del foglio risultati normale, sheetExpanded in
+  // CreaGuidaMapSearch.tsx) — a differenza di un vero modale, qui la mappa deve restare
+  // raggiungibile per toccare i pin: iniziare già espanso a piena altezza (come prima di questa
+  // correzione) lasciava visibile solo una striscia di mappa, troppo piccola per scegliere le
+  // tappe. Parte chiuso: si espande solo quando l'utente vuole toccare modalità/distanza/genera.
+  const [expanded, setExpanded] = useState(false)
   const [mode, setMode] = useState<'urbano' | 'misto'>('misto')
   const [distanceKm, setDistanceKm] = useState('')
   const [elevationM, setElevationM] = useState('')
@@ -140,18 +146,32 @@ export default function PersonalizeItineraryPanel({ anchor, stops, color, onRemo
   }
 
   return (
-    <>
-      <div className="fixed inset-0 z-30 bg-stone-900/20" onClick={onClose} />
-      <div className="fixed left-0 right-0 bottom-0 z-40 bg-white rounded-t-3xl shadow-[0_-6px_24px_rgba(0,0,0,.15)] p-4 pb-6 max-h-[72vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-sm font-bold text-stone-800 flex items-center gap-1.5">
-            <RouteIcon className="w-4 h-4" style={{ color }} /> Personalizza itinerario — {anchor.name}
-          </p>
-          <button onClick={onClose} aria-label="Chiudi" className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center text-stone-500 hover:bg-stone-200 transition-colors shrink-0">
-            <XIcon className="w-4 h-4" />
-          </button>
-        </div>
+    // Niente sfondo a schermo intero: a differenza di "Altri modi" (un vero foglio modale), qui la
+    // mappa sotto deve restare toccabile — un tap fuori dal pannello seleziona/deseleziona una
+    // tappa, non chiude nulla. Nessun backdrop ⇒ nessun blocco involontario di pan/zoom/tap sui pin.
+    <div className="fixed left-0 right-0 bottom-0 z-40 bg-white rounded-t-3xl shadow-[0_-6px_24px_rgba(0,0,0,.15)] flex flex-col"
+      style={{ maxHeight: expanded ? '66vh' : '104px' }}>
+      <div className="relative shrink-0 flex items-center gap-2 px-4 pt-3 pb-2.5 w-full">
+        <span className="w-9 h-1 rounded-full bg-stone-200 absolute left-1/2 -translate-x-1/2 top-1.5" />
+        <button onClick={() => setExpanded(v => !v)} className="flex-1 min-w-0 flex items-center gap-2 text-left">
+          <RouteIcon className="w-4 h-4 shrink-0" style={{ color }} />
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-bold text-stone-800 truncate">Personalizza itinerario — {anchor.name}</span>
+            <span className="block text-[11px] text-stone-400">
+              {stops.length} tapp{stops.length === 1 ? 'a' : 'e'} scelt{stops.length === 1 ? 'a' : 'e'} · {mode === 'urbano' ? 'urbano' : 'misto'}
+              {!expanded && ' · tocca per aprire'}
+            </span>
+          </span>
+          {expanded ? <ChevronDown className="w-4 h-4 text-stone-400 shrink-0" /> : <ChevronUp className="w-4 h-4 text-stone-400 shrink-0" />}
+        </button>
+        <button onClick={onClose} aria-label="Chiudi personalizzazione"
+          className="w-7 h-7 rounded-full bg-stone-100 flex items-center justify-center text-stone-500 hover:bg-stone-200 transition-colors shrink-0">
+          <XIcon className="w-3.5 h-3.5" />
+        </button>
+      </div>
 
+      {expanded && (
+      <div className="flex-1 overflow-y-auto px-4 pb-5">
         {!result && (
           <div className="space-y-3">
             <div>
@@ -271,6 +291,7 @@ export default function PersonalizeItineraryPanel({ anchor, stops, color, onRemo
           </div>
         )}
       </div>
-    </>
+      )}
+    </div>
   )
 }
