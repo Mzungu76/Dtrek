@@ -9,8 +9,9 @@ import {
   MoreHorizontal, Link2, PencilLine, MapPin, History, ChevronRight, Building2, Landmark, Globe,
   Clock, Milestone, Route as RouteIcon,
 } from 'lucide-react'
-import RouteBuilder, { type ResultItem } from './RouteBuilder'
+import type { ResultItem } from './RouteBuilder'
 import TrailPreviewMap from '@/components/TrailPreviewMap'
+import ItineraryMap from '@/components/mete/ItineraryMap'
 import { defaultPendingExpiresAt } from './sharedHelpers'
 import { saveResultItemToGuide } from '@/lib/routeBuilder/importResultItem'
 import { foundRouteItemFromCachedTrail } from '@/lib/routeBuilder/foundRoute'
@@ -21,6 +22,7 @@ import { ROUTE_COLORS } from '@/lib/designTokens'
 import type { MetaSearchResultItem } from '@/lib/metaSearch/types'
 import type { TrailNearbyItem } from '@/app/api/trails-nearby/route'
 import type { PlaceDetail } from '@/app/api/places/[id]/route'
+import type { BorgoItinerary } from '@/app/api/borgo-itinerary/route'
 
 type TypeFilter = 'tutto' | MetaType
 
@@ -60,10 +62,10 @@ export type OtherWayToAdd = 'file' | 'manual' | 'url' | 'from-activity'
  * Sentiero da cache OSM converte la riga in FoundRouteItem
  * (lib/routeBuilder/foundRoute.ts's foundRouteItemFromCachedTrail) e la fa passare dallo stesso
  * salvataggio del wizard (saveResultItemToGuide) — quota reale arricchita al salvataggio, non qui.
- * La generazione di un percorso su misura resta RouteBuilder.tsx invariato, raggiunta da qui solo
- * via il FAB "Costruisci su misura". Le altre vie (file GPX, da un'attività del diario, link,
- * inserimento manuale) restano un tocco più lontano, dietro "Altri modi" (vedi onOtherWays), non
- * più esposte come card equivalenti sulla stessa schermata.
+ * Le altre vie di creazione (file GPX, da un'attività del diario, link, inserimento manuale)
+ * restano un tocco più lontano, dietro "Altri modi" (vedi onOtherWays), non più esposte come card
+ * equivalenti sulla stessa schermata. Il generatore "su misura" (RouteBuilder.tsx) non è più
+ * raggiunto da qui — restava percepito come "torna alla vecchia ricerca", non un'opzione distinta.
  */
 export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: () => void; onOtherWays?: (mode: OtherWayToAdd) => void }) {
   const router = useRouter()
@@ -76,7 +78,6 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
   // dell'utente — non deve accendere "Cerca in quest'area" (la prima ricerca parte già da sola).
   const initialMoveHandled = useRef(false)
 
-  const [showBuilder, setShowBuilder] = useState(false)
   const [showOtherWays, setShowOtherWays] = useState(false)
 
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('tutto')
@@ -159,7 +160,11 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
       leafletRef.current = L
 
       delete (L.Icon.Default.prototype as any)._getIconUrl
-      const map = L.map(mapRef.current!).setView(ITALY_CENTER, ITALY_ZOOM)
+      // zoomControl: false — il +/- di default di Leaflet nasce in alto a sinistra, sotto la
+      // freccia "indietro" e la barra di ricerca (stessa chrome che occupa quell'angolo): su
+      // schermo stretto i due si sovrappongono. Pinch-to-zoom e doppio tap restano attivi di
+      // default (mai disattivati), lo stesso pattern di ogni app mappe mobile-first.
+      const map = L.map(mapRef.current!, { zoomControl: false }).setView(ITALY_CENTER, ITALY_ZOOM)
       mapInstance.current = map
       markersLayer.current = L.layerGroup().addTo(map)
 
@@ -297,8 +302,6 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
     }
   }
 
-  if (showBuilder) return <RouteBuilder onBack={() => setShowBuilder(false)} />
-
   const totalResults = metaResults.length + trailResults.length
   const wantsTrails = typeFilter === 'tutto' || typeFilter === 'sentiero'
   const showTrailZoomHint = wantsTrails && zoom < TRAILS_MIN_ZOOM
@@ -400,7 +403,11 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
 
       {/* ── Scheda del pin selezionato — il popup È la scheda (niente più un link "Scheda" a
           parte): foto o mappa del tracciato in testa, informazioni sotto (a tab quando ce n'è
-          abbastanza da separare), "Crea guida" come unica azione in fondo. */}
+          abbastanza da separare), "Crea guida" come unica azione in fondo. Sfondo scurito/sfocato
+          dietro, per dargli risalto sulla mappa — tocco fuori per chiudere, come gli altri fogli. */}
+      {selected && (
+        <div className="fixed inset-0 z-[15] bg-stone-900/30 backdrop-blur-[2px]" onClick={() => setSelected(null)} />
+      )}
       {selected && (
         <div className="absolute left-3 right-3 z-20" style={{ top: '112px' }}>
           <div className="relative bg-white/97 backdrop-blur rounded-2xl shadow-lg max-w-sm mx-auto overflow-hidden">
@@ -428,13 +435,6 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
           </div>
         </div>
       )}
-
-      {/* ── FAB "Costruisci su misura" — resta un'opzione fra le altre, non più l'unica via. ──── */}
-      <button onClick={() => setShowBuilder(true)}
-        className="absolute right-4 z-20 w-14 h-14 rounded-full bg-terra-500 hover:bg-terra-600 text-white shadow-lg flex items-center justify-center transition-colors"
-        style={{ bottom: '112px' }} title="Costruisci un percorso su misura">
-        <RefreshCw className="w-5 h-5" />
-      </button>
 
       {/* ── Foglio risultati — peek sempre visibile, tap per espandere la lista completa. ──────── */}
       <div className="absolute left-0 right-0 bottom-0 z-10 bg-white rounded-t-3xl shadow-[0_-6px_20px_rgba(0,0,0,.12)] flex flex-col"
@@ -547,7 +547,7 @@ function InfoRow({ icon: Icon, href, children }: { icon: typeof MapPin; href?: s
 // /api/places/:id (stessa fonte di app/mete/[id]/page.tsx: descrizione/Wikipedia, indirizzo,
 // contatti, orari, fonti) invece di limitarsi ai pochi campi già presenti nel risultato di
 // ricerca — un link "Scheda" a parte non serve più.
-type MetaTab = 'descrizione' | 'info'
+type MetaTab = 'descrizione' | 'info' | 'itinerario'
 
 function MetaDetailCard({ item, creating, onCreate, error }: { item: MetaSearchResultItem; creating: boolean; onCreate: () => void; error: string | null }) {
   const [detail, setDetail] = useState<PlaceDetail | null>(null)
@@ -555,11 +555,18 @@ function MetaDetailCard({ item, creating, onCreate, error }: { item: MetaSearchR
   const [detailError, setDetailError] = useState<string | null>(null)
   const [tab, setTab] = useState<MetaTab>('descrizione')
 
+  const [itinerary, setItinerary] = useState<BorgoItinerary | null>(null)
+  const [itLoading, setItLoading] = useState(false)
+  const [itError, setItError] = useState<string | null>(null)
+
   useEffect(() => {
     let cancelled = false
     setDetail(null)
     setLoadingDetail(true)
     setDetailError(null)
+    setItinerary(null)
+    setItLoading(false)
+    setItError(null)
     fetch(`/api/places/${encodeURIComponent(item.id)}`)
       .then(async res => {
         const data = await res.json()
@@ -574,16 +581,41 @@ function MetaDetailCard({ item, creating, onCreate, error }: { item: MetaSearchR
     return () => { cancelled = true }
   }, [item.id])
 
+  async function generateItinerary() {
+    if (itLoading) return
+    setItLoading(true)
+    setItError(null)
+    try {
+      const res = await fetch('/api/borgo-itinerary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ placeId: item.id }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.error || `Errore ${res.status}`)
+      setItinerary(data as BorgoItinerary)
+    } catch (e) {
+      setItError(e instanceof Error ? e.message : "Impossibile generare l'itinerario")
+    } finally {
+      setItLoading(false)
+    }
+  }
+
   const cfg = META_TYPE_CONFIG[item.metaType]
   const TypeIcon = item.metaType === 'sito' ? Landmark : Building2
   const siteLabel = detail?.siteType ? SITE_TYPE_CONFIG[detail.siteType as SiteType].label : (item.siteType ? SITE_TYPE_CONFIG[item.siteType].label : null)
   const location = [item.municipality, item.province, item.region].filter(Boolean).join(', ')
   const photo = detail?.imageUrl || detail?.wikipedia?.thumbnail || item.imageUrl
   const hasDescription = !!(detail?.description || detail?.wikipedia?.extract)
+  // Solo un Borgo/Città ha un itinerario a piedi tra le sue tappe (piano §48.9 — mai per un Sito,
+  // che non ha "tappe" proprie) — stesso endpoint/componente già usati da app/mete/[id]/page.tsx.
+  const isBorgo = item.metaType === 'borgo_citta'
 
-  const tabs: { id: MetaTab; label: string }[] = hasDescription
-    ? [{ id: 'descrizione', label: 'Descrizione' }, { id: 'info', label: 'Info' }]
-    : [{ id: 'info', label: 'Info' }]
+  const tabs: { id: MetaTab; label: string }[] = [
+    ...(hasDescription ? [{ id: 'descrizione' as const, label: 'Descrizione' }] : []),
+    { id: 'info' as const, label: 'Info' },
+    ...(isBorgo ? [{ id: 'itinerario' as const, label: 'Itinerario' }] : []),
+  ]
 
   return (
     <div>
@@ -640,6 +672,55 @@ function MetaDetailCard({ item, creating, onCreate, error }: { item: MetaSearchR
                 <p className="text-[11px] text-stone-400 pt-0.5">
                   Dato aggregato da {detail.sourceCount} {detail.sourceCount === 1 ? 'fonte' : 'fonti'} · confidenza {detail.confidence.toFixed(2)}
                 </p>
+              </div>
+            )}
+
+            {tab === 'itinerario' && (
+              <div className="mb-1">
+                {!itinerary && !itLoading && (
+                  <button onClick={generateItinerary}
+                    className="w-full flex items-center justify-center gap-1.5 border border-stone-200 rounded-lg py-2 text-xs font-bold text-stone-700 hover:border-forest-300 transition-colors">
+                    <RouteIcon className="w-3.5 h-3.5" /> Genera itinerario a piedi
+                  </button>
+                )}
+
+                {itLoading && (
+                  <div className="flex items-center justify-center gap-2 text-xs text-stone-400 py-4">
+                    <Loader2 className="w-4 h-4 animate-spin" /> Cerco le tappe e il cammino migliore…
+                  </div>
+                )}
+
+                {itError && <p className="text-xs text-red-600 mb-2">{itError}</p>}
+
+                {itinerary && itinerary.stops.length === 0 && (
+                  <p className="text-xs text-stone-400 py-2">Nessuna tappa trovata nei dintorni — solo l&apos;archivio e Wikipedia, non un elenco esaustivo.</p>
+                )}
+
+                {itinerary && itinerary.stops.length > 0 && (
+                  <>
+                    <p className="text-[11px] text-stone-500 mb-2">
+                      {itinerary.stops.length} tappe · {(itinerary.totalDistanceM / 1000).toFixed(1)} km · ~{Math.round(itinerary.estimatedTimeSeconds / 60)} min a piedi
+                      {itinerary.legs.some(l => !l.real) && ' · alcuni tratti sono indicativi (nessuna via trovata)'}
+                    </p>
+                    <ItineraryMap
+                      center={{ lat: item.latitude, lon: item.longitude }}
+                      stops={itinerary.stops}
+                      legs={itinerary.legs}
+                      color={cfg.color}
+                      height="176px"
+                    />
+                    <ol className="flex flex-col gap-1.5 mt-2">
+                      {itinerary.stops.map((stop, i) => (
+                        <li key={stop.id} className="flex items-center gap-2">
+                          <span className="w-5 h-5 shrink-0 rounded-full flex items-center justify-center text-white text-[10px] font-bold" style={{ background: cfg.color }}>
+                            {i + 1}
+                          </span>
+                          <span className="text-xs text-stone-700 truncate">{stop.name}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  </>
+                )}
               </div>
             )}
           </>
