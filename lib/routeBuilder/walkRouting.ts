@@ -85,10 +85,19 @@ class MinHeap {
  * a identificare quale coppia di nodi è già stata esclusa. Omesso, ogni arco del WalkNetwork
  * resta percorribile come prima di questo parametro — comportamento invariato per gli altri
  * chiamanti (app/api/borgo-itinerary/route.ts, lib/navigation/escapeEngine.ts).
+ * `edgeCost`, opzionale: a differenza di `isEdgeAllowed` (sì/no), pesa un arco SENZA escluderlo —
+ * usato da multiStopRoute.ts per preferire un tipo di via a un altro (es. una strada bianca a un
+ * sentiero, un sentiero a una strada trafficata) restando comunque disposta a percorrerlo se è
+ * l'unico modo di collegare due punti. Il valore restituito è un MOLTIPLICATORE su `edge.distM`
+ * (1 = nessuna penalità), non una distanza reale — `dist` diventa quindi un costo pesato, non più
+ * metri veri: chi chiama e ha bisogno della distanza reale del cammino trovato deve ricalcolarla
+ * dalla geometria (reconstructPath), mai leggerla da `dist`. Omesso, tutti gli archi pesano 1 come
+ * prima di questo parametro.
  */
 export function dijkstra(
   network: WalkNetwork, startNodeId: number, maxDistM: number, maxNodes: number,
   isEdgeAllowed?: (edge: GraphEdge, fromNodeId: number) => boolean,
+  edgeCost?: (edge: GraphEdge, fromNodeId: number) => number,
 ): DijkstraResult {
   const dist = new Map<number, number>([[startNodeId, 0]])
   const prev = new Map<number, number>()
@@ -114,7 +123,8 @@ export function dijkstra(
     if (!node) continue
     for (const edge of node.edges) {
       if (isEdgeAllowed && !isEdgeAllowed(edge, currentId)) continue
-      const nd = currentDist + edge.distM
+      const multiplier = edgeCost ? edgeCost(edge, currentId) : 1
+      const nd = currentDist + edge.distM * multiplier
       if (nd > maxDistM) continue
       const existing = dist.get(edge.to)
       if (existing == null || nd < existing) {

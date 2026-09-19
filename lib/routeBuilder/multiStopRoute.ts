@@ -9,10 +9,16 @@
 // Puro (nessun import Supabase/Overpass), stesso livello di lib/routeBuilder/loopBuilder.ts — chi
 // chiama fornisce già il WalkNetwork.
 //
-// Distanza target: NON semplicemente il cammino più breve fra le tappe — se l'utente ha impostato
-// una distanza (e il più breve è già più corto), si cerca il percorso che vi si avvicina di più,
-// non quello minimo. Il più breve resta l'unica scelta quando non c'è un target, o quando il
-// target è già raggiunto/superato dal più breve (non si può accorciare sotto il minimo) — e non si
+// Ogni tratta cerca il cammino PREFERITO fra i due punti, non il più breve in assoluto — a parità
+// di rilevanza per il target di lunghezza (sotto), fra due tipi di via si preferisce quello più
+// sicuro (vedi TIER_COST_MULTIPLIER: strade bianche/secondarie, poi sentieri, infine strade
+// urbane/provinciali), restando comunque disposti a usare un tipo penalizzato se è l'unico modo
+// di collegare i due punti.
+//
+// Distanza target: NON semplicemente il cammino preferito fra le tappe — se l'utente ha impostato
+// una distanza (e quello preferito è già più corto), si cerca il percorso che vi si avvicina di
+// più, non quello minimo. Il cammino preferito resta l'unica scelta quando non c'è un target, o
+// quando il target è già raggiunto/superato (non si può accorciare sotto il minimo) — e non si
 // applica affatto a una tratta già in ripiego a linea d'aria (niente su cui cercare).
 import { nearestGraphNode, type WalkNetwork, type GraphEdge } from './osmGraph'
 import { dijkstra, reconstructPath, reconstructNodePath } from './walkRouting'
@@ -34,6 +40,54 @@ const URBAN_ALLOWED_HIGHWAY = new Set(['residential', 'unclassified', 'tertiary'
 
 function urbanEdgeFilter(edge: GraphEdge): boolean {
   return edge.highway != null && URBAN_ALLOWED_HIGHWAY.has(edge.highway)
+}
+
+// Ordine di preferenza fra i tipi di via — mai un'esclusione (quella la fa già urbanEdgeFilter
+// sopra, solo per i sentieri in modalità urbana), un PESO: un percorso resta disposto a usare un
+// livello penalizzato se è l'unico modo di collegare due punti, semplicemente lo evita quando
+// esiste un'alternativa di livello migliore. Nessun classificatore "sentiero/strada" condiviso già
+// esisteva nel repo con questa identica suddivisione a 3 livelli (verificato: lib/overpass.ts's
+// classifyHighway ha 6 livelli diversi e non è esportato, lib/navigation/escapeEngine.ts's
+// TRAIL_HIGHWAY_QUALITY ignora del tutto tertiary/secondary) — introdotto qui apposta.
+// - 'quiet' (strade bianche/secondarie non asfaltate — track/unclassified): il livello più
+//   sicuro/prevedibile per camminare, preferito per primo.
+// - 'trail' (sentieri veri e propri — path/footway/bridleway/steps): secondo livello.
+// - 'road' (strade di un centro abitato o che collegano due paesi — residential/tertiary/
+//   secondary): trafficabili da veicoli, mai l'ideale per un pedone, ultimo livello.
+// Stesso ordine in ENTRAMBE le modalità: "urbano" esclude solo il livello 'trail' (isEdgeAllowed
+// se ne occupa già), non cambia la preferenza fra gli altri due — è una questione di sicurezza
+// (vie tranquille prima di strade con traffico), non di ambientazione urbana/naturale.
+type HighwayTier = 'quiet' | 'trail' | 'road'
+
+function highwayTier(highway: string | undefined): HighwayTier {
+  if (highway === 'track' || highway === 'unclassified') return 'quiet'
+  if (highway === 'path' || highway === 'footway' || highway === 'bridleway' || highway === 'steps') return 'trail'
+  return 'road'
+}
+
+const TIER_COST_MULTIPLIER: Record<HighwayTier, number> = { quiet: 1, trail: 1.5, road: 2.5 }
+// Tetto teorico del moltiplicatore sopra — dà al budget di ricerca (passato a dijkstra() in unità
+// di costo, non metri reali una volta che un moltiplicatore è in gioco) margine sufficiente a
+// coprire anche un cammino interamente sul livello più penalizzato: altrimenti "preferire" vie
+// migliori rischierebbe di nascondere cammini reali che esistono solo attraverso il livello peggiore.
+const MAX_TIER_MULTIPLIER = Math.max(...Object.values(TIER_COST_MULTIPLIER))
+
+function tierEdgeCost(edge: GraphEdge): number {
+  return TIER_COST_MULTIPLIER[highwayTier(edge.highway)]
+}
+
+// La distanza REALE di un cammino trovato con dijkstra.ts's `edgeCost` in gioco non è più leggibile
+// da `dist` (quello è costo pesato, non metri) — va ricalcolata dalla geometria. Gli archi di
+// questo grafo sono già segmenti dritti nodo-nodo (osmGraph.ts's addEdge calcola distM come
+// haversine fra i due nodi), quindi la somma delle distanze fra punti consecutivi della polyline
+// coincide esattamente con la somma delle distanze reali degli archi percorsi — nessuna
+// ricostruzione separata via ID nodo necessaria solo per questo.
+function polylineDistanceM(polyline: [number, number][]): number {
+  let total = 0
+  for (let i = 0; i < polyline.length - 1; i++) {
+    total += haversineM(polyline[i][0], polyline[i][1], polyline[i + 1][0], polyline[i + 1][1])
+  }
+  return total
 }
 
 // Soglia di aggancio più larga di quella dell'itinerario automatico (300m, borgo-itinerary) — le
@@ -66,11 +120,23 @@ const MAX_DETOUR_ATTEMPTS = 3
 // pena cercarne uno migliore.
 const DETOUR_CLOSE_ENOUGH = 0.1
 
+// Budget di ricerca in metri REALI — indipendente dal peso per tipo di via (TIER_COST_MULTIPLIER
+// sopra), usato per il confronto col target di lunghezza e per il "quanto è vicino il tentativo
+// migliore" di seekCloserToTarget. Va convertito in unità di costo (vedi toCostBudget sotto) solo
+// nel punto in cui viene passato a dijkstra() come maxDistM.
 function legDijkstraBudgetM(from: { lat: number; lon: number }, to: { lat: number; lon: number }, legTargetM?: number): number {
   const airlineM = haversineM(from.lat, from.lon, to.lat, to.lon)
   const base = Math.max(DIJKSTRA_MIN_DIST_M, airlineM * DIJKSTRA_DIST_MULTIPLIER)
   const withTarget = legTargetM != null ? Math.max(base, legTargetM * 1.3) : base
   return Math.min(DIJKSTRA_MAX_DIST_CAP_M, withTarget)
+}
+
+// dijkstra() con `edgeCost` in gioco accumula costo pesato in `dist`, non più metri reali — il suo
+// `maxDistM` deve quindi coprire anche il caso peggiore (un cammino interamente sul livello più
+// penalizzato), altrimenti la preferenza per vie migliori rischierebbe di far scartare per budget
+// un cammino che nella realtà rientrerebbe comunque in legDijkstraBudgetM.
+function toCostBudget(realBudgetM: number): number {
+  return realBudgetM * MAX_TIER_MULTIPLIER
 }
 
 // Chiave non orientata di un arco (gli archi sono sempre presenti in entrambe le direzioni, vedi
@@ -90,16 +156,20 @@ function edgeKeysOfPath(nodeIds: number[]): Set<string> {
 
 interface LegSearchResult { distanceM: number; polyline: [number, number][]; nodeIds: number[] }
 
+// `costBudgetM`: già in unità di costo (vedi toCostBudget) — il chiamante decide se e come
+// convertire il budget in metri reali prima di passarlo qui.
 function runLegDijkstra(
-  network: WalkNetwork, startNodeId: number, endNodeId: number, maxDistM: number,
+  network: WalkNetwork, startNodeId: number, endNodeId: number, costBudgetM: number,
   isEdgeAllowed: ((edge: GraphEdge, fromNodeId: number) => boolean) | undefined,
 ): LegSearchResult | null {
-  const { dist, prev } = dijkstra(network, startNodeId, maxDistM, DIJKSTRA_MAX_NODES, isEdgeAllowed)
-  const distanceM = dist.get(endNodeId)
-  if (distanceM == null) return null
+  const { dist, prev } = dijkstra(network, startNodeId, costBudgetM, DIJKSTRA_MAX_NODES, isEdgeAllowed, tierEdgeCost)
+  if (dist.get(endNodeId) == null) return null // solo per verificare la raggiungibilità entro il budget di costo
+  const polyline = reconstructPath(network, prev, endNodeId, startNodeId)
   return {
-    distanceM,
-    polyline: reconstructPath(network, prev, endNodeId, startNodeId),
+    // MAI dist.get(endNodeId): con tierEdgeCost in gioco è un costo pesato, non la distanza reale
+    // — ricalcolata dalla geometria (vedi polylineDistanceM).
+    distanceM: polylineDistanceM(polyline),
+    polyline,
     nodeIds: reconstructNodePath(prev, endNodeId, startNodeId),
   }
 }
@@ -111,7 +181,7 @@ function shortestLegPath(
   const from = network.nodes.get(startNodeId)
   const to = network.nodes.get(endNodeId)
   if (!from || !to) return null
-  return runLegDijkstra(network, startNodeId, endNodeId, legDijkstraBudgetM(from, to), baseFilter)
+  return runLegDijkstra(network, startNodeId, endNodeId, toCostBudget(legDijkstraBudgetM(from, to)), baseFilter)
 }
 
 /**
@@ -138,7 +208,7 @@ function seekCloserToTarget(
       if (baseFilter && !baseFilter(edge)) return false
       return !excluded.has(edgeKey(fromNodeId, edge.to))
     }
-    const alt = runLegDijkstra(network, startNodeId, endNodeId, legDijkstraBudgetM(from, to, legTargetM), filter)
+    const alt = runLegDijkstra(network, startNodeId, endNodeId, toCostBudget(legDijkstraBudgetM(from, to, legTargetM)), filter)
     if (!alt) break // nessuna via alternativa esiste proprio: quella trovata finora resta la migliore
     if (Math.abs(alt.distanceM - legTargetM) < Math.abs(best.distanceM - legTargetM)) best = alt
     // Si accumulano gli archi di OGNI tentativo (non solo del migliore): il prossimo giro deve
