@@ -46,7 +46,6 @@ export async function POST(req: NextRequest) {
   let stops: StopInput[]
   let mode: MultiStopMode
   let targetDistanceKm: number | null
-  let targetElevationM: number | null
   try {
     const body = await req.json()
     if (!Array.isArray(body.stops) || body.stops.length < 2) throw new Error('stops mancanti')
@@ -60,8 +59,6 @@ export async function POST(req: NextRequest) {
     mode = body.mode === 'urbano' ? 'urbano' : 'misto'
     const distRaw = Number(body.targetDistanceKm)
     targetDistanceKm = body.targetDistanceKm != null && Number.isFinite(distRaw) ? distRaw : null
-    const elevRaw = Number(body.targetElevationM)
-    targetElevationM = body.targetElevationM != null && Number.isFinite(elevRaw) ? elevRaw : null
   } catch {
     return NextResponse.json({ error: 'Richiesta non valida' }, { status: 400 })
   }
@@ -110,7 +107,12 @@ export async function POST(req: NextRequest) {
     [{ type: 'solo_andata', polyline: routePolyline, distanceM: totalDistanceM, bearingDeg: 0, hasSteps: false, hazardMarkers: [] }],
     {
       targetDistanceM: (targetDistanceKm ?? totalDistanceM / 1000) * 1000,
-      targetElevationM,
+      // Nessun input dislivello qui (vedi PersonalizeItineraryPanel.tsx) — l'algoritmo non ha
+      // alcuna leva per orientare il cammino verso un dislivello target con tappe fisse, un campo
+      // che non può mai influenzare il risultato sarebbe stato solo un'opzione fittizia.
+      // targetElevationM assente ⇒ nessun effetto sul punteggio (ScoreOptions, scoreCandidates.ts)
+      // — irrilevante comunque con un solo candidato, nessun ranking da fare.
+      targetElevationM: null,
       environmentPrefs: [],
       concerns: [],
       desiredPoiTypes: [],

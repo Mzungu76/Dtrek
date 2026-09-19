@@ -1,11 +1,16 @@
 'use client'
 // Pannello di controllo per l'itinerario Borgo/Città personalizzato — la selezione delle tappe
 // (tap sui pin, evidenziati/attenuati) resta nella mappa (CreaGuidaMapSearch.tsx, stato
-// `personalize`); questo pannello si occupa solo di urbano/misto, distanza/dislivello,
-// generazione (app/api/route-build/multi-stop) e salvataggio. La generazione dà SEMPRE un
-// risultato (lib/routeBuilder/multiStopRoute.ts non fallisce più del tutto): un tratto non
-// collegabile ripiega su una linea d'aria solo per quella tratta, segnalata qui esplicitamente,
-// mai nascosta dietro un esito che sembra completo.
+// `personalize`); questo pannello si occupa solo di urbano/misto, distanza, generazione
+// (app/api/route-build/multi-stop) e salvataggio. Nessun campo dislivello: qui il percorso è un
+// cammino fra tappe fisse, l'algoritmo non ha alcuna leva per orientarlo verso un dislivello
+// target (a differenza della distanza, dove una tratta più corta del minimo può comunque essere
+// "allungata" cercando un'alternativa — vedi seekCloserToTarget in multiStopRoute.ts) — un campo
+// che non può mai influenzare il risultato sarebbe solo un'opzione fittizia. Il dislivello STIMATO
+// del percorso generato resta comunque visibile fra le statistiche del risultato, è solo l'input
+// a non avere senso. La generazione dà SEMPRE un risultato (lib/routeBuilder/multiStopRoute.ts non
+// fallisce più del tutto): un tratto non collegabile ripiega su una linea d'aria solo per quella
+// tratta, segnalata qui esplicitamente, mai nascosta dietro un esito che sembra completo.
 import { useEffect, useState } from 'react'
 import { Loader2, X as XIcon, Route as RouteIcon, ChevronUp, ChevronDown } from 'lucide-react'
 import TrailPreviewMap from '@/components/TrailPreviewMap'
@@ -58,7 +63,6 @@ export default function PersonalizeItineraryPanel({ anchor, stops, color, onRemo
   const [expanded, setExpanded] = useState(false)
   const [mode, setMode] = useState<'urbano' | 'misto'>('misto')
   const [distanceKm, setDistanceKm] = useState('')
-  const [elevationM, setElevationM] = useState('')
   const [historyIsDecent, setHistoryIsDecent] = useState(false)
   const [loadingDefaults, setLoadingDefaults] = useState(true)
 
@@ -77,7 +81,6 @@ export default function PersonalizeItineraryPanel({ anchor, stops, color, onRemo
         if (data?.historyIsDecent) {
           setHistoryIsDecent(true)
           if (data.suggestedDistanceKm) setDistanceKm(String(Math.min(MAX_KM, Math.max(MIN_KM, data.suggestedDistanceKm))))
-          if (data.suggestedElevationM) setElevationM(String(data.suggestedElevationM))
         }
       })
       .catch(() => {})
@@ -119,7 +122,6 @@ export default function PersonalizeItineraryPanel({ anchor, stops, color, onRemo
           stops: allPoints.map(p => ({ lat: p.lat, lon: p.lon })),
           mode: effectiveMode,
           targetDistanceKm: distanceValue,
-          targetElevationM: elevationM.trim() ? Number(elevationM) : null,
         }),
       })
       const data = await res.json()
@@ -240,14 +242,6 @@ export default function PersonalizeItineraryPanel({ anchor, stops, color, onRemo
               {!historyIsDecent && !loadingDefaults && (
                 <p className="text-[11px] text-stone-400 mt-1">Non abbiamo ancora abbastanza escursioni tue per suggerirla — scegli tu.</p>
               )}
-            </div>
-
-            <div>
-              <p className="text-xs font-semibold text-stone-600 mb-1.5">Dislivello (m) <span className="text-stone-400 font-normal">— facoltativo</span></p>
-              <input type="number" inputMode="numeric" min={0}
-                value={elevationM} onChange={e => setElevationM(e.target.value)}
-                placeholder="Lascia vuoto se non ti importa"
-                className="w-full bg-white border border-stone-300 rounded-lg px-3 py-2.5 text-sm text-stone-800 outline-none focus:border-forest-400" />
             </div>
 
             {error && <p className="text-xs text-red-600">{error}</p>}
