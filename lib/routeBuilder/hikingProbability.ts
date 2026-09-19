@@ -361,6 +361,27 @@ out body qt;`
   return (json.elements ?? []).filter(e => e.type === 'relation')
 }
 
+// Riusato da lib/routeBuilder/multiStopRoute.ts (tramite app/api/route-build/multi-stop/step/
+// network/route.ts) per dare peso ai tratti di un percorso escursionistico già noto — quelli
+// evidenziati sulla mappa con zoom ravvicinato (components/upload/CreaGuidaMapSearch.tsx) — nella
+// generazione "Su misura" personalizzata a più tappe. Stessa fetch di fetchHikingRelations sopra,
+// solo l'insieme delle way membro invece del resto della pipeline di punteggio qui sotto
+// (relationScore/wayScore/topologyScore...), pensata per un problema diverso (classificare
+// candidati "Esistenti" già trovati, non orientare una ricerca "Su misura"). Nessuna cache
+// dedicata in questa prima versione — query leggera (solo le relation, niente geometria, timeout
+// 20s, vedi sopra) fetchata in parallelo al fetch della rete pedonale dal chiamante, non un collo
+// di bottiglia separato finché non si dimostra tale in produzione.
+export async function fetchKnownTrailWayIds(bbox: Bbox): Promise<Set<number>> {
+  const relations = await fetchHikingRelations(bbox)
+  const wayIds = new Set<number>()
+  for (const rel of relations) {
+    for (const m of rel.members ?? []) {
+      if (m.type === 'way') wayIds.add(m.ref)
+    }
+  }
+  return wayIds
+}
+
 interface OverpassBoundedEl { type: 'way' | 'relation'; id: number; tags?: Record<string, string>; bounds?: { minlat: number; minlon: number; maxlat: number; maxlon: number } }
 interface OverpassPlaceEl { type: 'node'; id: number; lat: number; lon: number }
 type OverpassContextEl = OverpassBoundedEl | OverpassPlaceEl

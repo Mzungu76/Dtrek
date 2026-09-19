@@ -67,6 +67,26 @@ describe('buildMultiStopRoute', () => {
     expect(leg.polyline).toHaveLength(4) // passa per i nodi 1,2,3,4
   })
 
+  it('preferisce un percorso già noto (knownTrailWayIds) anche se più lungo, a parità di tipo di via', () => {
+    // A diretto (1-4, ~1000m, unclassified — "quiet", nessuna penalità di tier) vs B a tre tratti
+    // (1-2-3-4, ~1500m totali, STESSO tier "quiet"): senza knownTrailWayIds sono confrontati a
+    // parità di costo/metro, quindi vince il più corto (A). Marcando le way del detour (B) come un
+    // percorso escursionistico già noto, lo sconto (KNOWN_TRAIL_DISCOUNT) ne abbassa il costo sotto
+    // quello di A anche restando più lungo in realtà — la preferenza esplicita richiesta.
+    const nodes = detourNodes()
+    const network = buildNetwork(nodes, [
+      [1, 4, 'unclassified'],
+      [1, 2, 'unclassified'], [2, 3, 'unclassified'], [3, 4, 'unclassified'],
+    ])
+    const withoutKnownTrails = buildMultiStopRoute(network, [nodes[1], nodes[4]], 'misto')
+    expect(withoutKnownTrails.legs[0].distanceM).toBeLessThan(1100) // sceglie A, il diretto
+
+    const knownTrailWayIds = new Set([1 * 1000 + 2, 2 * 1000 + 3, 3 * 1000 + 4]) // le way del detour B
+    const withKnownTrails = buildMultiStopRoute(network, [nodes[1], nodes[4]], 'misto', null, knownTrailWayIds)
+    expect(withKnownTrails.legs[0].distanceM).toBeGreaterThan(1400) // ora sceglie B, il percorso noto
+    expect(withKnownTrails.legs[0].distanceM).toBeLessThan(1600)
+  })
+
   it("usa comunque una strada se è l'unico modo di collegare due tappe", () => {
     const nodes = { 1: { lat: 0, lon: 0 }, 2: { lat: 0, lon: degFor(800) } }
     const network = buildNetwork(nodes, [[1, 2, 'residential']])

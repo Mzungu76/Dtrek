@@ -3,12 +3,15 @@
 Riepilogo per riprendere il lavoro in una nuova chat. Branch
 `claude/missing-connections-fallback-xtjikb`, repo `mzungu76/dtrek`.
 
-**Attenzione**: il problema principale di questo filone di lavoro — percorsi non trovati fra
-tappe reali, con ripiego su linea d'aria — ha una **causa reale identificata e un fix applicato in
-questa sessione** (§3ter), verificata sui dati OSM reali del caso segnalato dall'utente, ma **il
-fix stesso non è ancora stato testato nell'app reale** (serve un nuovo fetch Overpass, mai
-possibile da questo sandbox — vedi §3ter). Va riverificato con uno screenshot nuovo prima di
-considerarlo chiuso.
+**Aggiornamento**: il problema principale di questo filone — percorsi non trovati fra tappe reali,
+con ripiego su linea d'aria — è stato **testato dall'utente nell'app reale dopo il fix di §3ter e
+"sembra funzionare"** (conferma non ancora definitiva, l'utente ha detto che lo testerà ancora).
+Nessun nuovo sintomo segnalato da allora.
+
+Il lavoro proseguito in questa stessa sessione dopo la conferma (§6): barra di avanzamento per
+"genera percorso" in entrambe le modalità, e una nuova opzione "considera i percorsi esistenti"
+in Modalità B, che dà peso ai tratti di un percorso escursionistico già noto quando aiutano a
+collegare le tappe scelte.
 
 ---
 
@@ -239,3 +242,66 @@ questo sandbox) è stata fatta leggendo attentamente la sintassi Overpass QL pro
 eseguendola contro Overpass — un margine di rischio residuo rispetto a un test end-to-end reale,
 da chiudere col punto 1 di §4. Nessun altro test manuale end-to-end nell'app reale è stato
 possibile in questo sandbox.
+
+## 6. Barra di avanzamento + preferenza per i percorsi esistenti (stessa sessione, dopo la conferma)
+
+Dopo la conferma dell'utente che il fix di §3ter funziona, due funzionalità nuove richieste
+esplicitamente, entrambe per la Modalità B (con la barra di avanzamento estesa anche alla
+Modalità A):
+
+**1. Barra di avanzamento per "genera percorso"** (entrambe le modalità):
+- `components/upload/RouteGenerationProgress.tsx` (nuovo) — barra semplice ed elegante (nessuna
+  percentuale numerica, nessuna stima di tempo: nessun dato affidabile per calcolarla), con
+  l'etichetta testuale dello step corrente. Avanza a checkpoint fissi per stage (`targetPct`),
+  mai all'indietro.
+- **Modalità B era un'unica richiesta al server, senza fasi intermedie** — per una barra con
+  fasi VERE (non un'animazione a tempo stimato) è stata spezzata in 3 step HTTP, mirror esatto
+  del pattern già esistente per la Modalità A (`lib/routeBuilder/buildSteps.ts` →
+  `app/api/route-build/step/*`):
+  - `lib/routeBuilder/multiStopSteps.ts` (logica condivisa) + `app/api/route-build/multi-stop/
+    step/{network,build,enrich}/route.ts` (i 3 endpoint).
+  - `lib/routeBuilder/runMultiStopStepBuild.ts` (nuovo, mirror di `runStepBuild.ts`) — orchestratore
+    client, unica fonte di verità per le etichette di stage e per la forma della risposta finale
+    (`MultiStopResponse`, prima definita localmente nel pannello).
+  - **L'endpoint monolitico `app/api/route-build/multi-stop/route.ts` è stato RIMOSSO** (non
+    mantenuto per compatibilità come la pipeline "Su misura" monolitica): nessun altro chiamante
+    esisteva oltre a `PersonalizeItineraryPanel.tsx`, feature troppo recente per avere consumatori
+    esterni — a differenza di Modalità A, dove l'endpoint monolitico resta invariato apposta.
+  - Beneficio collaterale non richiesto ma reale: lo split riduce anche il rischio di timeout a
+    60s dell'endpoint monolitico (stessa ragione per cui Modalità A fu spezzata a suo tempo — vedi
+    i commenti in `buildSteps.ts`).
+  - **Modalità A**: nessuno split necessario (le fasi reali esistevano già via `onStage`), solo
+    aggiunto un checkpoint mancante per lo step di arricchimento (`onStage('Rifinisco i
+    dettagli…')` prima della sola chiamata primaria a `step/enrich` in `runStepBuild.ts`, non per
+    i ritentativi silenziosi con lunghezza alternativa) ed esportata `SENTIERO_BUILD_STAGES`.
+
+**2. "Considera i percorsi esistenti"** (default ON, solo Modalità B, come richiesto):
+- `lib/routeBuilder/hikingProbability.ts`: nuova `fetchKnownTrailWayIds(bbox)` esportata — riusa
+  la `fetchHikingRelations` già esistente (privata), restituisce solo l'insieme delle way membro
+  di una relation `route=hiking/foot`, senza il resto della pipeline di scoring di quel file
+  (pensata per un problema diverso, classificare candidati "Esistenti" già trovati). Nessuna cache
+  dedicata in questa prima versione (query leggera, fetchata in parallelo al fetch della rete
+  pedonale in `multiStopSteps.ts`'s `prepareMultiStopNetworkStep` — un fallimento di questo solo
+  fetch non blocca la generazione, `Promise.allSettled` con ripiego a nessuna preferenza).
+- `lib/routeBuilder/multiStopRoute.ts`: `knownTrailWayIds?: Set<number>` opzionale thread fino a
+  `tierEdgeCost` — un arco il cui `wayId` è in un percorso noto riceve uno SCONTO moltiplicativo
+  (`KNOWN_TRAIL_DISCOUNT = 0.6`, mai un'esclusione: "sempre il concetto dei pesi" come richiesto)
+  sopra il moltiplicatore di tier già esistente (quiet/trail/road) — un percorso noto resta
+  preferito, ma un'alternativa reale molto più diretta può ancora vincere se la modalità in vigore
+  penalizza abbastanza il resto. Copre sia la ricerca principale (`shortestLegPath`) sia la ricerca
+  "più vicino al target" (`seekCloserToTarget`) — stesso punto di costruzione dell'`edgeCost` in
+  `runLegDijkstra`. Nuovo test che riproduce lo scenario: due percorsi a parità di tier, il più
+  lungo vince quando è quello marcato come noto.
+- UI: checkbox "Considera i percorsi esistenti" in `PersonalizeItineraryPanel.tsx`, subito dopo la
+  scelta di modalità, default checked.
+
+**Verifica**: `tsc --noEmit` pulito, `next lint` senza nuovi errori/warning, `vitest run` verde
+(466 test — 1 nuovo per la barra/split, invariato nei test esistenti; +1 per lo sconto percorsi
+noti), `npm run build` compila e fa il bundle di TUTTE le route (incluse le 3 nuove) senza errori,
+si ferma solo al solito limite noto del sandbox (env Supabase assenti, fallisce a
+"Collecting page data" per `/api/activity-photos`, una route non toccata da questo lavoro — non
+una regressione). **Nessun test end-to-end nella UI reale** (niente click-through autenticato in
+un browser): l'app richiede login e Supabase live, non disponibili in questo sandbox in modo
+sicuro senza rischiare di scrivere dati di test nel database di produzione — da fare al prossimo
+test manuale dell'utente, insieme alla riverifica di Civita Castellana/Castel Sant'Elia di §4
+punto 2.

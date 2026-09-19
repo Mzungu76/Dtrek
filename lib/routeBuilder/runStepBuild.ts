@@ -11,10 +11,24 @@ import type { RouteCandidate } from './loopBuilder'
 import type { ScoredCandidate as BuiltCandidate } from './scoreCandidates'
 import type { HikerEnvironmentPrefKey } from '../hikerProfile'
 import type { PoiType } from '../overpass'
+import type { GenerationStage } from '../../components/upload/RouteGenerationProgress'
 import {
   MIN_TARGET_DISTANCE_KM, MAX_TARGET_DISTANCE_KM, MIN_BUILT_RESULTS, RETRY_DISTANCE_FACTORS,
   MAX_BUILT_RESULTS, candidateSignature,
 } from './buildConstants'
+
+// Etichette usate come checkpoint sia da onStage (sotto) sia dalla barra di avanzamento
+// (components/upload/RouteGenerationProgress.tsx) — unica fonte di verità, così le due non possono
+// disallinearsi. `targetPct` cresce lungo l'array, non deve mai arrivare a 100: il "riempimento"
+// finale avviene smontando la barra a generazione conclusa, non un ultimo scatto a 100 che
+// nessuno farebbe in tempo a vedere.
+export const SENTIERO_BUILD_STAGES: GenerationStage[] = [
+  { label: 'Cerco i sentieri della zona…', targetPct: 45 },
+  { label: 'Genero i percorsi…', targetPct: 75 },
+  { label: 'Cerco il percorso più vicino possibile…', targetPct: 75 },
+  { label: 'Rifinisco i dettagli…', targetPct: 92 },
+  { label: 'Provo lunghezze alternative…', targetPct: 98 },
+]
 
 export interface BuildParamsCommon {
   lat: number
@@ -101,6 +115,10 @@ export async function runStepBuild(
       raw = cRes.data.rawCandidates ?? []
     }
     if (raw.length === 0) return { candidates: [], errorMessage: null }
+    // Solo per il tentativo primario (mai per i ritentativi silenziosi in parallelo sotto): quelli
+    // non devono far "tornare indietro" la barra di avanzamento fra un checkpoint già raggiunto e
+    // l'altro, un progresso che regredisce sembra un errore anche quando non lo è.
+    if (!silent) onStage('Rifinisco i dettagli…')
     const eRes = await postJSON('/api/route-build/step/enrich', {
       rawCandidates: raw, targetDistanceM, targetElevationM: common.targetElevationM,
       environmentPrefs: resolvedEnvPrefs, concerns, desiredPoiTypes: common.desiredPoiTypes, bbox,
