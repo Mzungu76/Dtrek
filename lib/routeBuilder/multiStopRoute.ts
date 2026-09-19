@@ -34,9 +34,13 @@ export type MultiStopMode = 'urbano' | 'misto' | 'naturalistico'
 // residential/unclassified: una strada provinciale fra due paesi (tipicamente taggata così, vedi
 // WALKABLE_HIGHWAY in osmGraph.ts) è una strada a tutti gli effetti, non un sentiero — escluderla
 // dal "trekking urbano" lascerebbe quella modalità priva dell'unico collegamento reale che spesso
-// esiste fra due paesi diversi. La rete percorribile fetchata resta comunque la stessa in entrambe
-// le modalità, qui si filtra solo in fase di attraversamento del grafo.
-const URBAN_ALLOWED_HIGHWAY = new Set(['residential', 'unclassified', 'tertiary', 'secondary'])
+// esiste fra due paesi diversi. pedestrian/living_street (piazze e vicoli pedonali di un centro
+// storico) sono l'essenza stessa del trekking urbano, mai un compromesso come i sentieri — la loro
+// assenza qui, insieme al buco nei dati già risolto in osmGraph.ts (non erano nemmeno scaricati),
+// lasciava "urbano" priva di collegamenti reali dentro gli stessi centri storici che questa
+// modalità dovrebbe attraversare per prima. La rete percorribile fetchata resta comunque la stessa
+// in entrambe le modalità, qui si filtra solo in fase di attraversamento del grafo.
+const URBAN_ALLOWED_HIGHWAY = new Set(['residential', 'unclassified', 'tertiary', 'secondary', 'pedestrian', 'living_street'])
 
 function urbanEdgeFilter(edge: GraphEdge): boolean {
   return edge.highway != null && URBAN_ALLOWED_HIGHWAY.has(edge.highway)
@@ -49,14 +53,17 @@ function urbanEdgeFilter(edge: GraphEdge): boolean {
 // esisteva nel repo con questa identica suddivisione a 3 livelli (verificato: lib/overpass.ts's
 // classifyHighway ha 6 livelli diversi e non è esportato, lib/navigation/escapeEngine.ts's
 // TRAIL_HIGHWAY_QUALITY ignora del tutto tertiary/secondary) — introdotto qui apposta.
-// - 'quiet' (strade bianche/secondarie non asfaltate — track/unclassified): sicuro/prevedibile.
+// - 'quiet' (strade bianche/secondarie non asfaltate — track/unclassified — più le piazze e i
+//   vicoli pedonali di un centro storico, pedestrian/living_street: niente traffico veicolare vero,
+//   più sicure di una strada residenziale qualunque, non diverse da una strada bianca per un
+//   pedone): sicuro/prevedibile.
 // - 'trail' (sentieri veri e propri — path/footway/bridleway/steps).
 // - 'road' (strade di un centro abitato o che collegano due paesi — residential/tertiary/
 //   secondary): trafficabili da veicoli, mai l'ideale per un pedone.
 type HighwayTier = 'quiet' | 'trail' | 'road'
 
 function highwayTier(highway: string | undefined): HighwayTier {
-  if (highway === 'track' || highway === 'unclassified') return 'quiet'
+  if (highway === 'track' || highway === 'unclassified' || highway === 'pedestrian' || highway === 'living_street') return 'quiet'
   if (highway === 'path' || highway === 'footway' || highway === 'bridleway' || highway === 'steps') return 'trail'
   return 'road'
 }

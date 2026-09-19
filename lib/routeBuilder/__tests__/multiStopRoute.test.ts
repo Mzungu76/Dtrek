@@ -109,6 +109,24 @@ describe('buildMultiStopRoute', () => {
     expect(outcome.legs[0].distanceM).toBeLessThan(1600)
   })
 
+  // Riproduce il bug segnalato dall'utente (screenshot, dopo il fix del ripiego a distanza reale):
+  // due punti nello STESSO centro storico (Chiesa e centro di un Borgo), distanza minima, collegati
+  // SOLO da una piazza pedonale — se `pedestrian` non fosse un tipo di via riconosciuto (né in
+  // WALKABLE_HIGHWAY, osmGraph.ts, né in highwayTier/URBAN_ALLOWED_HIGHWAY qui), l'arco non
+  // esisterebbe proprio nel grafo scaricato o verrebbe escluso in "urbano" — "nessun cammino
+  // trovato" pur essendo i due punti a pochi metri l'uno dall'altro, non un problema di budget.
+  it('collega due punti dello stesso centro storico attraverso una piazza pedonale (pedestrian)', () => {
+    const nodes = { 1: { lat: 0, lon: 0 }, 2: { lat: 0, lon: degFor(80) } }
+    const network = buildNetwork(nodes, [[1, 2, 'pedestrian']])
+    const misto = buildMultiStopRoute(network, [nodes[1], nodes[2]], 'misto')
+    expect(misto.legs[0].real).toBe(true)
+    expect(misto.legs[0].distanceM).toBeCloseTo(80, 0)
+    // "urbano" esclude i sentieri ma MAI una piazza pedonale — è l'essenza stessa del trekking
+    // urbano, non un compromesso di sicurezza come `path`/`footway`.
+    const urbano = buildMultiStopRoute(network, [nodes[1], nodes[2]], 'urbano')
+    expect(urbano.legs[0].real).toBe(true)
+  })
+
   it('senza un target di distanza sceglie il cammino preferito, non lo allunga inutilmente', () => {
     const nodes = { 1: { lat: 0, lon: 0 }, 2: { lat: 0, lon: degFor(500) } }
     const network = buildNetwork(nodes, [[1, 2, 'track']])

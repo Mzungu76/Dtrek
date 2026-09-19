@@ -4,11 +4,11 @@ Riepilogo per riprendere il lavoro in una nuova chat. Branch
 `claude/missing-connections-fallback-xtjikb`, repo `mzungu76/dtrek`.
 
 **Attenzione**: il problema principale di questo filone di lavoro — percorsi non trovati fra
-tappe reali, con ripiego su linea d'aria — **non è ancora confermato risolto**. Il fix tentato
-nella sessione precedente (§3) resta non verificato sul caso reale. In questa sessione è stato
-aggiunto il logging diagnostico raccomandato al punto 2 di §4 (vedi §3bis sotto) — permette di
-distinguere le cause quando il sintomo si ripresenta, ma richiede comunque di riprodurre il
-problema in staging/produzione e leggere i log per avere una risposta.
+tappe reali, con ripiego su linea d'aria — ha una **causa reale identificata e un fix applicato in
+questa sessione** (§3ter), verificata sui dati OSM reali del caso segnalato dall'utente, ma **il
+fix stesso non è ancora stato testato nell'app reale** (serve un nuovo fetch Overpass, mai
+possibile da questo sandbox — vedi §3ter). Va riverificato con uno screenshot nuovo prima di
+considerarlo chiuso.
 
 ---
 
@@ -148,27 +148,81 @@ segnalata) — non copre ancora un timeout che fa fallire l'intera richiesta con
 produzione (serve osservare i log dopo il deploy). Punto 1 e punto 4 restano non affrontati in
 questa sessione (nessun accesso a staging/produzione o a Wikipedia dal sandbox).
 
+## 3ter. Causa reale trovata e fix applicato: piazze/vicoli pedonali mai scaricati (stessa sessione)
+
+L'utente ha fornito accesso diretto al progetto Supabase di produzione (`sdxlcpxgbkagbxhukehd`,
+`supabase-teal-cave`) e uno screenshot dell'app reale — entrambi hanno permesso, per la prima
+volta in questo filone, una verifica sui dati veri invece che su una rete sintetica.
+
+**Verifica su dati reali (Ronciglione ↔ Capranica)**: `walk_network_cache` conteneva già una rete
+fresca (v2, con le strade provinciali del fix precedente) per quella zona. Ho ricostruito il grafo
+in Postgres (tabelle di scratch + estensione `pgRouting`, poi rimosse/pulite a fine verifica) e
+rieseguito l'identica logica pesata di `shortestLegPath` sui dati reali: il nodo più vicino a
+Ronciglione e quello più vicino a Capranica sono nello stesso componente connesso (25 861 nodi su
+27 165), il costo del cammino pesato "misto" è 23 576 (budget disponibile 50 000) e servono ~18 706
+nodi visitati per raggiungerlo — sotto il tetto di 25 000 (`DIJKSTRA_MAX_NODES`). **Per questa
+coppia, con la rete e il codice già in produzione, la ricerca pesata dovrebbe riuscire da sola**,
+senza nemmeno il ripiego del punto 3 — l'ipotesi originale di quel punto (budget di nodi esaurito
+in un'area densa) non è la causa per questa coppia specifica.
+
+**Lo screenshot ha rivelato la causa vera**: le due tratte che falliscono davvero non sono
+Ronciglione→Capranica, ma Ronciglione→**Chiesa dei Santi Pietro e Caterina** (un punto di interesse
+inserito automaticamente dal toggle "punti di interesse", punto 11 di §2) e Chiesa→Capranica. La
+prima tratta collega due punti nello STESSO centro storico, a distanza minima — eppure fallisce con
+"nessun cammino trovato" (non "troppo lontano dalla rete": l'aggancio riesce). Con una distanza così
+piccola il budget di ricerca (minimo 8km) è enormemente abbondante: non può essere un esaurimento
+di budget. L'unica spiegazione coerente con ENTRAMBE le tratte è che il nodo della Chiesa sia in una
+porzione di rete isolata dal resto — non perché il collegamento reale non esista, ma perché non è
+mai stato scaricato.
+
+**Causa identificata**: `WALKABLE_HIGHWAY` (`lib/routeBuilder/osmGraph.ts`) non includeva i tag
+OSM `pedestrian` (piazze pedonali) né `living_street` (vicoli/zone a traffico limitato) — i tag più
+comuni per il tessuto di un centro storico italiano, mai `residential`/`unclassified`. Una Chiesa
+affacciata su una piazza pedonale restava con l'aggancio riuscito (un nodo vicino esiste) ma isolata
+da tutto il resto, perché la via che la collegava al resto del paese non era proprio nel grafo
+scaricato — stesso identico sintomo, in scala più piccola, del buco tertiary/secondary già risolto
+nella sessione precedente. Causa secondaria correlata: il filtro `access!~private|no` escludeva in
+blocco anche le vie di una ZTL taggate `access=private` (comune nei centri storici italiani), pur
+essendo per convenzione OSM un tag che riguarda in primis i veicoli — un router pedonale dovrebbe
+guardare il tag `foot` quando presente.
+
+**Fix applicato** (bump `WALK_NETWORK_QUERY_VERSION` 2→3, invalida la cache di rete già salvata):
+- `lib/routeBuilder/osmGraph.ts`: `WALKABLE_HIGHWAY` include ora `pedestrian`/`living_street`; la
+  query Overpass è diventata una union di due filtri (`WALKABLE_ACCESS_FILTER` +
+  `WALKABLE_FOOT_OVERRIDE_FILTER`) — il secondo recupera le vie escluse da `access` generico ma
+  permesse esplicitamente dal tag `foot`.
+- `lib/routeBuilder/multiStopRoute.ts`: `highwayTier` classifica `pedestrian`/`living_street` come
+  `'quiet'` (sicure quanto una strada bianca, niente traffico veicolare vero); `URBAN_ALLOWED_HIGHWAY`
+  (modalità "urbano") le include — sono l'essenza stessa del trekking urbano, mai un compromesso
+  come i sentieri.
+- Nuovo test in `multiStopRoute.test.ts` che riproduce il bug esatto dello screenshot (due punti
+  collegati solo da una via `pedestrian`, sia in "misto" sia in "urbano").
+
+**Non ancora verificato**: il fix stesso NON è stato testato sul caso reale — richiede un nuovo
+fetch Overpass (bump di versione invalida la cache esistente), mai possibile da questo sandbox
+(accesso a `overpass-api.de` bloccato dal proxy di rete). Il prossimo test nell'app reale (stessa
+coppia Ronciglione + Chiesa + Capranica, dopo il deploy) è la vera verifica.
+
 ## 4. Prossimi passi consigliati (per la nuova chat)
 
-1. **Riverificare in staging/produzione** le due coppie di tappe degli screenshot originali (Civita
-   Castellana ↔ Castel Sant'Elia, Ronciglione ↔ Capranica) dopo il fix del punto 3 sopra — ora con
-   il logging di §3bis, un tentativo che ripiega a linea d'aria produce nei log server-side quale
-   causa esatta si è verificata (budget esaurito nel tentativo pesato ma trovato nel ripiego —
-   allora il fix ha funzionato semplicemente osservandolo di persona nell'app; budget esaurito in
-   ENTRAMBI i tentativi — il budget resta insufficiente anche a 60 000 nodi, alzarlo ulteriormente
-   o rivedere l'euristica; nessun budget esaurito in nessuno dei due — la rete scaricata per quel
-   bbox non contiene proprio un cammino, quasi certamente un problema di dati/copertura Overpass,
-   non di ricerca — controllare in quel caso anche se è comparso il warning `remark` di §3bis).
-2. ~~Aggiungere logging diagnostico~~ — fatto in questa sessione, vedi §3bis.
-3. ~~Verificare se il fetch della rete pedonale va in timeout o restituisce una rete parziale in
-   silenzio~~ — la parte "silenziosa" (risposta 200 con `remark`) è ora segnalata, vedi §3bis.
-   Resta da osservare in produzione QUANTO SPESSO accade per i bbox reali in questione.
+1. **PRIORITÀ: riverificare nell'app reale il fix di §3ter** — stessa coppia dello screenshot
+   (Ronciglione, tappa "Chiesa dei Santi Pietro e Caterina" via toggle punti di interesse,
+   Capranica), modalità "misto". Il bump di `WALK_NETWORK_QUERY_VERSION` invalida la cache: la
+   prima richiesta dopo il deploy rifà un fetch Overpass a freddo (più lento del solito, normale).
+   Se il sintomo persiste, usare il logging di §3bis per vedere il `fallbackReason`/diagnostica
+   esatti di quella tratta, e controllare se compare il warning `remark` di §3bis per lo stesso
+   bbox (rete Overpass parziale, causa diversa non coperta da questo fix).
+2. Se punto 1 conferma il fix, **verificare anche Civita Castellana ↔ Castel Sant'Elia** (l'altra
+   coppia originale) — non testata con dati reali in questa sessione (nessuna cache v2 disponibile
+   per quella zona, Overpass irraggiungibile da questo sandbox).
+3. ~~Aggiungere logging diagnostico~~ — fatto, vedi §3bis. ~~Verificare rete parziale in
+   silenzio~~ — fatto, vedi §3bis (resta da osservare QUANTO SPESSO accade in produzione).
 4. Valutare se le coordinate dei punti scoperti via Wikipedia (usati sia dall'itinerario
    automatico sia dal nuovo toggle "punti di interesse", punto 11 di §2) sono abbastanza precise
-   da agganciarsi correttamente alla rete pedonale — un punto con coordinate leggermente sbagliate
-   potrebbe agganciarsi a un nodo isolato o dal lato sbagliato di un ostacolo (fiume, dislivello).
-   Non affrontato in questa sessione.
-5. Solo dopo aver risolto/confermato questo, riprendere gli altri task rimasti aperti da sessioni
+   da agganciarsi correttamente alla rete pedonale — non più la causa più probabile dopo §3ter
+   (il caso reale osservato era un buco di dati, non una coordinata imprecisa), ma resta un
+   sospetto residuo per casi futuri diversi. Non affrontato in questa sessione.
+5. Solo dopo aver confermato questo, riprendere gli altri task rimasti aperti da sessioni
    precedenti (se non già coperti): nessuno di rilievo aperto oltre a questo al momento della
    stesura.
 
@@ -176,10 +230,12 @@ questa sessione (nessun accesso a staging/produzione o a Wikipedia dal sandbox).
 
 `npx tsc --noEmit` pulito (progetto intero, dopo `npm install` — `node_modules` non era presente
 all'avvio del sandbox), `npx next lint` senza nuovi errori/warning (solo warning preesistenti non
-toccati da questa sessione), `npx vitest run` verde (464 test, l'intera suite — inclusi 3 nuovi
-test in `lib/routeBuilder/__tests__/multiStopRoute.test.ts` per la diagnostica di §3bis: budget
-esaurito+ripiego, ricerca pesata diretta, snap fallito senza diagnostica). `npm run build` non
-rieseguito in questa sessione (nessuna modifica a route/pagine che ne richiedesse una verifica
-oltre a tsc/lint/vitest, già verde). Nessun test manuale end-to-end nell'app reale è stato
-possibile in questo sandbox (nessun accesso a Supabase/Overpass live) — il logging aggiunto va
-osservato in un ambiente con accesso reale per essere utile.
+toccati da questa sessione), `npx vitest run` verde (465 test, l'intera suite — inclusi 4 nuovi
+test in `lib/routeBuilder/__tests__/multiStopRoute.test.ts`: 3 per la diagnostica di §3bis, 1 per
+il fix pedestrian/living_street di §3ter). `npm run build` non rieseguito in questa sessione
+(nessuna modifica a route/pagine che ne richiedesse una verifica oltre a tsc/lint/vitest, già
+verde). La verifica di §3ter (query Overpass ricostruita a mano, sintassi non eseguibile da
+questo sandbox) è stata fatta leggendo attentamente la sintassi Overpass QL prodotta, non
+eseguendola contro Overpass — un margine di rischio residuo rispetto a un test end-to-end reale,
+da chiudere col punto 1 di §4. Nessun altro test manuale end-to-end nell'app reale è stato
+possibile in questo sandbox.
