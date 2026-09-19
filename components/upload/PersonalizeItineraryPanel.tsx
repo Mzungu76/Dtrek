@@ -2,9 +2,10 @@
 // Pannello di controllo per l'itinerario Borgo/Città personalizzato — la selezione delle tappe
 // (tap sui pin, evidenziati/attenuati) resta nella mappa (CreaGuidaMapSearch.tsx, stato
 // `personalize`); questo pannello si occupa solo di urbano/misto, distanza/dislivello,
-// generazione (app/api/route-build/multi-stop) e salvataggio. Mai un ripiego a linea d'aria: un
-// fallimento (lib/routeBuilder/multiStopRoute.ts) è riportato per nome delle tappe coinvolte,
-// mai nascosto.
+// generazione (app/api/route-build/multi-stop) e salvataggio. La generazione dà SEMPRE un
+// risultato (lib/routeBuilder/multiStopRoute.ts non fallisce più del tutto): un tratto non
+// collegabile ripiega su una linea d'aria solo per quella tratta, segnalata qui esplicitamente,
+// mai nascosta dietro un esito che sembra completo.
 import { useEffect, useState } from 'react'
 import { Loader2, X as XIcon, Route as RouteIcon, ChevronUp, ChevronDown } from 'lucide-react'
 import TrailPreviewMap from '@/components/TrailPreviewMap'
@@ -17,8 +18,16 @@ export interface PersonalizeStop { id: string; lat: number; lon: number; name: s
 const MIN_KM = 1
 const MAX_KM = 15
 
+interface MultiStopLegResponse {
+  fromStopIdx: number
+  toStopIdx: number
+  distanceM: number
+  real: boolean
+  fallbackReason?: 'too_far_from_network' | 'no_path'
+}
 interface MultiStopResponse {
   ok: true
+  legs: MultiStopLegResponse[]
   routePolyline: [number, number][]
   distanceMeters: number
   elevationGain: number
@@ -29,11 +38,6 @@ interface MultiStopResponse {
   hasElevation: boolean
   trackPoints?: FoundRouteItem['track']['trackPoints']
   pois?: FoundRouteItem['pois']
-}
-interface MultiStopFailure {
-  ok: false
-  failedLegs: { fromStopIdx: number; toStopIdx: number; reason: 'too_far_from_network' | 'no_path' }[]
-  message: string
 }
 
 interface Props {
@@ -60,7 +64,6 @@ export default function PersonalizeItineraryPanel({ anchor, stops, color, onRemo
 
   const [generating, setGenerating] = useState(false)
   const [result, setResult] = useState<MultiStopResponse | null>(null)
-  const [failure, setFailure] = useState<MultiStopFailure | null>(null)
   const [error, setError] = useState('')
 
   const [title, setTitle] = useState('')
@@ -95,16 +98,19 @@ export default function PersonalizeItineraryPanel({ anchor, stops, color, onRemo
     ? Math.abs(result.distanceMeters / 1000 - distanceValue) / distanceValue > DISTANCE_MISMATCH_THRESHOLD
     : false
 
-  // `modeOverride`: usato dal pulsante "prova anche con i sentieri" dopo un fallimento in modalità
-  // urbano — un modo concreto di "rompere" quel vincolo invece di lasciare l'utente bloccato,
-  // senza aspettare il re-render dello stato `mode` prima di richiamare la generazione.
+  const fakeLegs = result?.legs.filter(l => !l.real) ?? []
+  const allLegsFake = result != null && result.legs.length > 0 && fakeLegs.length === result.legs.length
+
+  // `modeOverride`: usato dal suggerimento "prova anche con i sentieri" dopo un risultato con
+  // tratti in ripiego in modalità urbano — un modo concreto di "rompere" quel vincolo invece di
+  // accontentarsi di una linea d'aria, senza aspettare il re-render dello stato `mode` prima di
+  // richiamare la generazione.
   async function generate(modeOverride?: 'urbano' | 'misto') {
     if (!canGenerate) return
     const effectiveMode = modeOverride ?? mode
     setGenerating(true)
     setError('')
     setResult(null)
-    setFailure(null)
     try {
       const res = await fetch('/api/route-build/multi-stop', {
         method: 'POST',
@@ -118,7 +124,6 @@ export default function PersonalizeItineraryPanel({ anchor, stops, color, onRemo
       })
       const data = await res.json()
       if (!res.ok) { setError(data?.message || data?.error || 'Generazione non riuscita, riprova.'); return }
-      if (data.ok === false) { setFailure(data as MultiStopFailure); return }
       if (modeOverride) setMode(modeOverride)
       setResult(data as MultiStopResponse)
       setTitle(`${anchor.name} — itinerario personalizzato`)
@@ -246,13 +251,28 @@ export default function PersonalizeItineraryPanel({ anchor, stops, color, onRemo
             </div>
 
             {error && <p className="text-xs text-red-600">{error}</p>}
-            {failure && (
+
+            <button onClick={() => generate()} disabled={!canGenerate}
+              className="w-full flex items-center justify-center gap-2 bg-terra-500 hover:bg-terra-600 disabled:opacity-40 text-white font-bold text-sm rounded-xl py-3 transition-colors">
+              {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              {generating ? 'Genero…' : 'Genera il percorso'}
+            </button>
+          </div>
+        )}
+
+        {result && (
+          <div className="space-y-3">
+            {fakeLegs.length > 0 && (
               <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 space-y-2">
-                <p className="text-xs text-amber-700 font-medium">{failure.message}</p>
+                <p className="text-xs text-amber-700 font-medium">
+                  {allLegsFake
+                    ? 'Nessun tratto segue vie reali — solo linee dirette fra le tappe, la rete pedonale disponibile qui non offre un collegamento.'
+                    : `${fakeLegs.length} tratt${fakeLegs.length === 1 ? 'o è una linea diretta' : 'i sono linee dirette'} (nessun cammino trovato), il resto segue vie reali.`}
+                </p>
                 <ul className="text-[11px] text-amber-600 space-y-0.5">
-                  {failure.failedLegs.map((l, i) => (
+                  {fakeLegs.map((l, i) => (
                     <li key={i}>
-                      {allPoints[l.fromStopIdx]?.name ?? '?'} → {allPoints[l.toStopIdx]?.name ?? '?'}: {l.reason === 'too_far_from_network' ? 'troppo lontano da vie percorribili' : 'nessun cammino trovato'}
+                      {allPoints[l.fromStopIdx]?.name ?? '?'} → {allPoints[l.toStopIdx]?.name ?? '?'}: {l.fallbackReason === 'too_far_from_network' ? 'troppo lontano da vie percorribili' : 'nessun cammino trovato nella rete pedonale disponibile'}
                     </li>
                   ))}
                 </ul>
@@ -265,17 +285,6 @@ export default function PersonalizeItineraryPanel({ anchor, stops, color, onRemo
                 )}
               </div>
             )}
-
-            <button onClick={() => generate()} disabled={!canGenerate}
-              className="w-full flex items-center justify-center gap-2 bg-terra-500 hover:bg-terra-600 disabled:opacity-40 text-white font-bold text-sm rounded-xl py-3 transition-colors">
-              {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-              {generating ? 'Genero…' : 'Genera il percorso'}
-            </button>
-          </div>
-        )}
-
-        {result && (
-          <div className="space-y-3">
             {distanceMismatch && (
               <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5">
                 Il percorso generato è di {(result.distanceMeters / 1000).toFixed(1)} km — {result.distanceMeters / 1000 > distanceValue ? 'più lungo' : 'più corto'} dei {distanceValue} km richiesti: le tappe scelte non permettono di avvicinarsi di più mantenendo un cammino reale che le tocchi tutte.

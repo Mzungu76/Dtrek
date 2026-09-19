@@ -1,17 +1,19 @@
 // Itinerario a piedi che deve toccare TUTTE le tappe scelte dall'utente, nell'ordine di selezione
 // — a differenza di app/api/borgo-itinerary/route.ts (itinerario automatico passivo, tappe
-// scoperte in autonomia e ordinate a vicino-più-vicino, con un ripiego a linea d'aria per una
-// tappa isolata), questa è una generazione DELIBERATA: l'utente ha scelto a mano quali punti
-// toccare, quindi un tratto irraggiungibile non deve mai degradare silenziosamente a linea
-// d'aria — va dichiarato esplicitamente, per coppia di tappe, così l'utente può aggiustare la
-// selezione (rimuovere quella tappa, cambiare urbano/misto) invece di ricevere un risultato che
-// sembra completo ma non lo è. Puro (nessun import Supabase/Overpass), stesso livello di
-// lib/routeBuilder/loopBuilder.ts — chi chiama fornisce già il WalkNetwork.
+// scoperte in autonomia e ordinate a vicino-più-vicino), questa è una generazione DELIBERATA:
+// l'utente ha scelto a mano quali punti toccare. Un tratto irraggiungibile non blocca comunque
+// l'intera generazione — MAI un fallimento completo: quella sola tratta ripiega su una linea
+// diretta fra i due punti (`real:false`), segnalata esplicitamente nel risultato, mentre le altre
+// tratte restano reali. Un fallimento totale costringerebbe l'utente a rinunciare o a cambiare
+// selezione prima di vedere qualunque cosa — un risultato parziale ma dichiarato è sempre preferibile.
+// Puro (nessun import Supabase/Overpass), stesso livello di lib/routeBuilder/loopBuilder.ts — chi
+// chiama fornisce già il WalkNetwork.
 //
 // Distanza target: NON semplicemente il cammino più breve fra le tappe — se l'utente ha impostato
 // una distanza (e il più breve è già più corto), si cerca il percorso che vi si avvicina di più,
 // non quello minimo. Il più breve resta l'unica scelta quando non c'è un target, o quando il
-// target è già raggiunto/superato dal più breve (non si può accorciare sotto il minimo).
+// target è già raggiunto/superato dal più breve (non si può accorciare sotto il minimo) — e non si
+// applica affatto a una tratta già in ripiego a linea d'aria (niente su cui cercare).
 import { nearestGraphNode, type WalkNetwork, type GraphEdge } from './osmGraph'
 import { dijkstra, reconstructPath, reconstructNodePath } from './walkRouting'
 import { haversineM } from '../geoUtils'
@@ -38,23 +40,22 @@ const SNAP_THRESHOLD_M = 350
 // tappe auto-scoperte entro 2.5km dal Borgo) è troppo stretto qui: le tappe sono scelte
 // liberamente dall'utente, spesso paesi diversi a diversi km in linea d'aria — e il cammino REALE
 // su strada, specie fra centri separati da una valle (mai in linea retta), supera facilmente il
-// doppio o il triplo della distanza in linea d'aria. Un tetto fisso troppo basso interrompeva
-// Dijkstra prima di trovare un cammino che esisteva davvero nella rete già scaricata — un
-// fallimento evitabile, non un limite reale del terreno. Il budget ora scala con quanto sono
-// distanti le due tappe, con un pavimento (tratte brevi restano comunque ben servite) e un tetto
-// di sicurezza (costo di Dijkstra/tempo di risposta, mai oltre MAX_TARGET_DISTANCE_KM
+// doppio o il triplo della distanza in linea d'aria. Il budget scala con quanto sono distanti le
+// due tappe, con un pavimento e un tetto di sicurezza (mai oltre MAX_TARGET_DISTANCE_KM
 // dell'intera app, 15km — buildConstants.ts).
 const DIJKSTRA_MIN_DIST_M = 8000
 const DIJKSTRA_MAX_DIST_CAP_M = 20000
 const DIJKSTRA_DIST_MULTIPLIER = 3
-// Alzato in proporzione al budget di distanza più ampio sopra — una rete più estesa da esplorare
-// richiede più nodi visitabili prima di arrendersi, altrimenti il nuovo tetto di distanza non ha
-// mai la possibilità di essere raggiunto.
-const DIJKSTRA_MAX_NODES = 6000
+// Con walkRouting.ts's dijkstra() ora basata su una coda a priorità (O((V+E) log V) invece di
+// O(V²)), un tetto di nodi alto costa poco — qui serve solo come rete di sicurezza contro un bbox
+// patologicamente denso, non più il vincolo pratico che era: prima, un budget troppo basso poteva
+// esaurirsi esplorando una rete locale densa (vicoli, strade residenziali) PRIMA di raggiungere un
+// sentiero lontano che esisteva davvero — un fallimento di ricerca, non di dati.
+const DIJKSTRA_MAX_NODES = 25000
 
 // Quante alternative (oltre al più breve) provare per avvicinarsi al target di lunghezza di UNA
-// tratta — ogni tentativo è un intero Dijkstra sulla stessa rete, il costo cresce linearmente con
-// questo numero, quindi resta basso: è un'euristica ("prova un'altra via", non un ottimo
+// tratta — ogni tentativo è un intero Dijkstra sulla stessa rete; con l'heap il costo per tentativo
+// è basso, ma il numero resta contenuto: è un'euristica ("prova un'altra via", non un ottimo
 // garantito), non una ricerca esaustiva di ogni percorso possibile.
 const MAX_DETOUR_ATTEMPTS = 3
 // Sotto questo scarto relativo dal target, un tentativo è già abbastanza vicino da non valere la
@@ -148,40 +149,55 @@ export interface MultiStopLeg {
   toStopIdx: number
   distanceM: number
   polyline: [number, number][]
+  // false quando non è stato trovato un cammino reale (tappa isolata dalla rete, o nessun percorso
+  // entro il budget di ricerca) — il tratto è allora una linea d'aria di ripiego, MAI spacciata per
+  // reale: va sempre segnalata all'utente (stesso principio di app/api/borgo-itinerary/route.ts's
+  // ItineraryLeg.real), mai nascosta dietro un esito che sembra completo senza esserlo.
+  real: boolean
+  fallbackReason?: 'too_far_from_network' | 'no_path'
 }
 
-export interface MultiStopFailedLeg {
-  fromStopIdx: number
-  toStopIdx: number
-  reason: 'too_far_from_network' | 'no_path'
+export interface MultiStopOutcome {
+  legs: MultiStopLeg[]
 }
 
-export type MultiStopOutcome =
-  | { ok: true; legs: MultiStopLeg[] }
-  | { ok: false; failedLegs: MultiStopFailedLeg[] }
+function airlineLeg(fromStopIdx: number, toStopIdx: number, from: { lat: number; lon: number }, to: { lat: number; lon: number }, reason: 'too_far_from_network' | 'no_path'): MultiStopLeg {
+  return {
+    fromStopIdx, toStopIdx,
+    distanceM: haversineM(from.lat, from.lon, to.lat, to.lon),
+    polyline: [[from.lat, from.lon], [to.lat, to.lon]],
+    real: false,
+    fallbackReason: reason,
+  }
+}
 
-/**
- * Percorso a piedi che tocca, in sequenza, tutti i punti di `stops` (indice 0 incluso) — MAI un
- * ripiego a linea d'aria: una coppia che non si raggiunge finisce in `failedLegs` e si continua
- * comunque a verificare le altre, così un solo tentativo elenca tutti i collegamenti mancanti
- * invece di fermarsi al primo. `targetDistanceM`, opzionale: quando impostato ed è più lungo della
- * somma dei cammini più brevi, ogni tratta viene ricercata verso una quota proporzionale del
- * target (vedi seekCloserToTarget) invece di restare al minimo — quando non è impostato, o il
- * minimo lo supera già, resta semplicemente il cammino più breve per ogni tratta.
- */
 interface ResolvedLeg {
   fromStopIdx: number
   toStopIdx: number
-  startNodeId: number
-  endNodeId: number
-  snapDistM: number // startNode.distM + endNode.distM, il tratto di aggancio dal punto esatto al nodo di rete
-  shortest: LegSearchResult
+  real: boolean
+  fallbackReason?: 'too_far_from_network' | 'no_path'
+  distanceM: number
+  polyline: [number, number][]
+  // Presenti solo per una tratta reale — servono all'eventuale ricerca "più vicino al target".
+  startNodeId?: number
+  endNodeId?: number
+  snapDistM?: number
+  shortest?: LegSearchResult
 }
 
+/**
+ * Percorso a piedi che tocca, in sequenza, tutti i punti di `stops` (indice 0 incluso) — sempre un
+ * risultato, mai un fallimento totale: una coppia che non si raggiunge ripiega su una linea
+ * d'aria per quella sola tratta (`real:false`), le altre restano cammini reali. `targetDistanceM`,
+ * opzionale: quando impostato ed è più lungo della somma dei cammini più brevi (fra le sole tratte
+ * reali), ogni tratta reale viene ricercata verso una quota proporzionale del target (vedi
+ * seekCloserToTarget) invece di restare al minimo — quando non è impostato, o il minimo lo supera
+ * già, resta semplicemente il cammino più breve. Una tratta già in ripiego a linea d'aria non
+ * partecipa a questa ricerca (niente su cui cercare).
+ */
 export function buildMultiStopRoute(
   network: WalkNetwork, stops: { lat: number; lon: number }[], mode: MultiStopMode, targetDistanceM?: number | null,
 ): MultiStopOutcome {
-  const failedLegs: MultiStopFailedLeg[] = []
   const resolved: ResolvedLeg[] = []
 
   for (let i = 0; i < stops.length - 1; i++) {
@@ -190,55 +206,53 @@ export function buildMultiStopRoute(
     const startNode = nearestGraphNode(network, from.lat, from.lon, SNAP_THRESHOLD_M)
     const endNode = nearestGraphNode(network, to.lat, to.lon, SNAP_THRESHOLD_M)
     if (!startNode || !endNode) {
-      failedLegs.push({ fromStopIdx: i, toStopIdx: i + 1, reason: 'too_far_from_network' })
+      resolved.push({ ...airlineLeg(i, i + 1, from, to, 'too_far_from_network') })
       continue
     }
 
     const shortest = shortestLegPath(network, startNode.nodeId, endNode.nodeId, mode)
     if (!shortest) {
-      failedLegs.push({ fromStopIdx: i, toStopIdx: i + 1, reason: 'no_path' })
+      resolved.push({ ...airlineLeg(i, i + 1, from, to, 'no_path') })
       continue
     }
     resolved.push({
-      fromStopIdx: i, toStopIdx: i + 1,
+      fromStopIdx: i, toStopIdx: i + 1, real: true,
+      distanceM: shortest.distanceM + startNode.distM + endNode.distM,
+      polyline: shortest.polyline,
       startNodeId: startNode.nodeId, endNodeId: endNode.nodeId,
       snapDistM: startNode.distM + endNode.distM,
       shortest,
     })
   }
 
-  if (failedLegs.length > 0) return { ok: false, failedLegs }
+  // Somma solo delle tratte reali: una linea d'aria non è "già abbastanza vicina al target", è
+  // semplicemente fuori dalla ricerca — includerla nella somma falserebbe la quota assegnata alle
+  // tratte reali.
+  const realLegs = resolved.filter(l => l.real)
+  const totalShortestM = realLegs.reduce((s, l) => s + l.distanceM, 0)
 
-  const totalShortestM = resolved.reduce((s, l) => s + l.shortest.distanceM + l.snapDistM, 0)
+  const toLeg = (l: ResolvedLeg): MultiStopLeg => ({
+    fromStopIdx: l.fromStopIdx, toStopIdx: l.toStopIdx, distanceM: l.distanceM, polyline: l.polyline,
+    real: l.real, fallbackReason: l.fallbackReason,
+  })
 
-  // Nessun target, o il più breve lo raggiunge/supera già: non c'è margine per avvicinarsi di più
-  // restando un cammino reale — il più breve resta la risposta.
+  // Nessun target, o il più breve fra le tratte reali lo raggiunge/supera già: non c'è margine per
+  // avvicinarsi di più restando un cammino reale — il più breve resta la risposta.
   if (targetDistanceM == null || targetDistanceM <= totalShortestM || totalShortestM <= 0) {
-    return {
-      ok: true,
-      legs: resolved.map(l => ({
-        fromStopIdx: l.fromStopIdx, toStopIdx: l.toStopIdx,
-        distanceM: l.shortest.distanceM + l.snapDistM, polyline: l.shortest.polyline,
-      })),
-    }
+    return { legs: resolved.map(toLeg) }
   }
 
-  // Riparte il "di più" richiesto proporzionalmente al peso di ciascuna tratta (una tratta già più
-  // lunga delle altre riceve una quota maggiore del margine, non tutte uguale) e cerca di
+  // Riparte il "di più" richiesto proporzionalmente al peso di ciascuna tratta reale (una tratta
+  // già più lunga delle altre riceve una quota maggiore del margine, non tutte uguale) e cerca di
   // avvicinarsi a quel target — riparte dal cammino più breve già trovato sopra, nessun nuovo
   // aggancio alla rete né un secondo Dijkstra "a vuoto" per ritrovare la stessa distanza minima.
   const legs: MultiStopLeg[] = resolved.map(l => {
-    const legDistanceM = l.shortest.distanceM + l.snapDistM
-    // Il target si riferisce alla tratta intera (compreso l'aggancio dal punto esatto alla rete),
-    // ma seekCloserToTarget cerca solo la parte "sulla rete" (fra i due nodi agganciati) — sottratto
-    // l'aggancio (fisso, indipendente da quale variante di percorso si sceglie) prima di confrontarlo.
-    const legTargetGraphM = Math.max(0, legDistanceM * (targetDistanceM / totalShortestM) - l.snapDistM)
-    if (legTargetGraphM <= l.shortest.distanceM) {
-      return { fromStopIdx: l.fromStopIdx, toStopIdx: l.toStopIdx, distanceM: legDistanceM, polyline: l.shortest.polyline }
-    }
+    if (!l.real || !l.shortest || l.startNodeId == null || l.endNodeId == null || l.snapDistM == null) return toLeg(l)
+    const legTargetGraphM = Math.max(0, l.distanceM * (targetDistanceM / totalShortestM) - l.snapDistM)
+    if (legTargetGraphM <= l.shortest.distanceM) return toLeg(l)
     const closer = seekCloserToTarget(network, l.startNodeId, l.endNodeId, l.shortest, legTargetGraphM, mode)
-    return { fromStopIdx: l.fromStopIdx, toStopIdx: l.toStopIdx, distanceM: closer.distanceM + l.snapDistM, polyline: closer.polyline }
+    return { fromStopIdx: l.fromStopIdx, toStopIdx: l.toStopIdx, distanceM: closer.distanceM + l.snapDistM, polyline: closer.polyline, real: true }
   })
 
-  return { ok: true, legs }
+  return { legs }
 }

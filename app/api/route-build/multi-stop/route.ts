@@ -32,13 +32,12 @@ interface StopInput { lat: number; lon: number }
 /**
  * POST /api/route-build/multi-stop — itinerario a piedi che deve toccare TUTTE le tappe scelte a
  * mano dall'utente (personalizzazione di un Borgo/Città, components/upload/CreaGuidaMapSearch.tsx),
- * nell'ordine di selezione — a differenza di /api/borgo-itinerary (itinerario automatico passivo,
- * ripiega su una linea d'aria per una tappa isolata), qui un tratto irraggiungibile è un fallimento
- * dichiarato (vedi lib/routeBuilder/multiStopRoute.ts), mai un ripiego silenzioso: la richiesta è
- * deliberata, l'utente deve poter capire cosa aggiustare. Richiesta singola (non a step come
- * app/api/route-build/route.ts): il bbox è quello di poche tappe scelte a mano intorno a un solo
- * Borgo/Città, stessa scala di costo di /api/borgo-itinerary, mai quella di un'intera zona esplorata
- * da un punto di partenza libero.
+ * nell'ordine di selezione. Restituisce sempre un percorso — mai un fallimento totale: un tratto
+ * irraggiungibile ripiega su una linea d'aria SOLO per quella tratta (`legs[].real === false`,
+ * vedi lib/routeBuilder/multiStopRoute.ts), segnalata esplicitamente al client, non nascosta.
+ * Richiesta singola (non a step come app/api/route-build/route.ts): il bbox è quello di poche
+ * tappe scelte a mano intorno a un solo Borgo/Città, stessa scala di costo di
+ * /api/borgo-itinerary, mai quella di un'intera zona esplorata da un punto di partenza libero.
  */
 export async function POST(req: NextRequest) {
   const user = await getUserFromRequest(req)
@@ -90,21 +89,14 @@ export async function POST(req: NextRequest) {
 
   // targetDistanceKm*1000: cerca il cammino più vicino a questa distanza tratta per tratta (non
   // semplicemente il più breve) quando è più lungo della somma dei cammini minimi — vedi
-  // lib/routeBuilder/multiStopRoute.ts.
+  // lib/routeBuilder/multiStopRoute.ts. Sempre un risultato: un tratto irraggiungibile ripiega su
+  // una linea d'aria SOLO per quella tratta (leg.real === false), mai un fallimento totale.
   const outcome = buildMultiStopRoute(network, stops, mode, targetDistanceKm != null ? targetDistanceKm * 1000 : null)
-  if (!outcome.ok) {
-    return NextResponse.json({
-      ok: false,
-      failedLegs: outcome.failedLegs,
-      message: outcome.failedLegs.length === 1
-        ? `Non riesco a collegare a piedi la tappa ${outcome.failedLegs[0].fromStopIdx + 1} e la ${outcome.failedLegs[0].toStopIdx + 1} — ${outcome.failedLegs[0].reason === 'too_far_from_network' ? 'una delle due è troppo lontana da qualunque via percorribile' : 'nessun cammino trovato fra le due nella rete pedonale disponibile'}.`
-        : `${outcome.failedLegs.length} collegamenti non trovati fra le tappe scelte — prova a rimuoverne una, o passa a "misto" se avevi scelto "urbano".`,
-    })
-  }
 
   // Concatena i tratti in un'unica polyline — scarta il primo punto di ogni tratto dopo il primo,
   // che reconstructPath ripete identico all'ultimo punto del tratto precedente (entrambi partono
-  // esattamente dal nodo di aggancio condiviso).
+  // esattamente dal nodo di aggancio condiviso). Una linea d'aria di ripiego ha comunque solo 2
+  // punti (i due estremi), lo stesso schema si applica senza distinzioni.
   const routePolyline: [number, number][] = []
   let totalDistanceM = 0
   outcome.legs.forEach((leg, i) => {
