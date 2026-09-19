@@ -23,6 +23,10 @@ const NEARBY_DEGREES = 0.03 // ~3km a queste latitudini
 export interface ImportStats {
   processed: number
   linkedToExisting: number
+  // Sottoinsieme di linkedToExisting: quante di quelle righe esistenti sono state anche
+  // aggiornate con i valori freschi del candidato (stesso source+sourceId della riga — vedi
+  // refreshExistingPlace) invece di un semplice ri-collegamento senza modifiche.
+  refreshedExisting: number
   createdNew: number
   flaggedForReview: number
   skippedInvalidCoordinates: number
@@ -30,10 +34,10 @@ export interface ImportStats {
 }
 
 function emptyStats(): ImportStats {
-  return { processed: 0, linkedToExisting: 0, createdNew: 0, flaggedForReview: 0, skippedInvalidCoordinates: 0, errors: [] }
+  return { processed: 0, linkedToExisting: 0, refreshedExisting: 0, createdNew: 0, flaggedForReview: 0, skippedInvalidCoordinates: 0, errors: [] }
 }
 
-const EXISTING_PLACE_COLS = 'id, name, meta_type, subtype, latitude, longitude, municipality, municipality_istat_code, wikidata_id'
+const EXISTING_PLACE_COLS = 'id, name, meta_type, subtype, latitude, longitude, municipality, municipality_istat_code, wikidata_id, source, source_id'
 
 function rowToExistingPlace(r: Record<string, unknown>): ExistingPlace {
   return {
@@ -46,6 +50,8 @@ function rowToExistingPlace(r: Record<string, unknown>): ExistingPlace {
     municipality:          r.municipality as string | null,
     municipalityIstatCode: r.municipality_istat_code as string | null,
     wikidataId:            r.wikidata_id as string | null,
+    source:                r.source as ExistingPlace['source'],
+    sourceId:              r.source_id as string | null,
   }
 }
 
@@ -95,6 +101,44 @@ async function linkSourceToPlace(supabase: SupabaseClient, placeId: string, cand
   if (error) throw error
 }
 
+// Ri-fetch della STESSA fonte per la STESSA entità (source+sourceId identici alla riga già in
+// dtrek_places, non un match incrociato con un'altra fonte) — aggiorna i campi che quella fonte
+// fornisce davvero, mai gli altri: un ri-fetch ISTAT non deve azzerare wikidata_id/image_url
+// popolati da un passaggio di arricchimento successivo (wikidata/enrich.ts, mic/fetch.ts...) che
+// questo candidato non conosce affatto (`undefined`, non `null` — la differenza conta qui). Prima
+// di questa funzione, il collegamento a un match ≥AUTO_MERGE_THRESHOLD (vedi importPlaceCandidates
+// sotto) non toccava MAI latitude/longitude di una riga già esistente — bug reale osservato in
+// produzione: un fix del centroide ISTAT (scripts/places/istat/fetch.ts) non aveva alcun effetto
+// per un Comune già importato in precedenza, perché questo ramo si fermava a ri-collegare la
+// fonte senza mai riscrivere le coordinate.
+// Esportata per il test diretto (pura, nessun I/O) — vedi scripts/places/__tests__/import.test.ts.
+export function candidateToPartialUpdate(candidate: PlaceCandidate): Record<string, unknown> {
+  const updates: Record<string, unknown> = {
+    name: candidate.name,
+    latitude: candidate.latitude,
+    longitude: candidate.longitude,
+    confidence: candidate.confidence,
+  }
+  if (candidate.subtype !== undefined) updates.subtype = candidate.subtype
+  if (candidate.description !== undefined) updates.description = candidate.description
+  if (candidate.region !== undefined) updates.region = candidate.region
+  if (candidate.province !== undefined) updates.province = candidate.province
+  if (candidate.municipality !== undefined) updates.municipality = candidate.municipality
+  if (candidate.municipalityIstatCode !== undefined) updates.municipality_istat_code = candidate.municipalityIstatCode
+  if (candidate.address !== undefined) updates.address = candidate.address
+  if (candidate.imageUrl !== undefined) updates.image_url = candidate.imageUrl
+  if (candidate.officialUrl !== undefined) updates.official_url = candidate.officialUrl
+  if (candidate.website !== undefined) updates.website = candidate.website
+  if (candidate.openingHours !== undefined) updates.opening_hours = candidate.openingHours
+  if (candidate.wikidataId !== undefined) updates.wikidata_id = candidate.wikidataId
+  return updates
+}
+
+async function refreshExistingPlace(supabase: SupabaseClient, placeId: string, candidate: PlaceCandidate) {
+  const { error } = await supabase.from('dtrek_places').update(candidateToPartialUpdate(candidate)).eq('id', placeId)
+  if (error) throw error
+}
+
 async function insertNewPlace(supabase: SupabaseClient, candidate: PlaceCandidate, review: { confidence: number; matchedPlaceId: string } | null) {
   const metadata = { ...(candidate.metadata ?? {}) } as Record<string, unknown>
   if (review) {
@@ -135,8 +179,12 @@ async function insertNewPlace(supabase: SupabaseClient, candidate: PlaceCandidat
 }
 
 // Importa un lotto di candidati (tipicamente tutti dalla stessa fonte/esecuzione di un fetcher).
-// Idempotente: ri-eseguire con lo stesso input aggiorna last_synced_at invece di duplicare righe,
-// grazie ai vincoli UNIQUE(source, source_id) su entrambe le tabelle.
+// Idempotente: ri-eseguire con lo stesso input aggiorna last_synced_at (e i campi che quella fonte
+// possiede — vedi refreshExistingPlace/candidateToPartialUpdate sopra) invece di duplicare righe,
+// grazie ai vincoli UNIQUE(source, source_id) su entrambe le tabelle. Un match ≥AUTO_MERGE_THRESHOLD
+// con una fonte DIVERSA da quella già collegata (es. `mic` che incrocia una riga nata da `istat`)
+// resta invece un semplice ri-collegamento senza scrittura — mai sovrascrivere il dato di una fonte
+// con quello di un'altra solo perché sono state giudicate "lo stesso posto".
 export async function importPlaceCandidates(supabase: SupabaseClient, candidates: PlaceCandidate[]): Promise<ImportStats> {
   const stats = emptyStats()
 
@@ -153,6 +201,10 @@ export async function importPlaceCandidates(supabase: SupabaseClient, candidates
       const match = findBestMatch(candidate, nearby)
 
       if (match && match.confidence >= AUTO_MERGE_THRESHOLD) {
+        if (match.place.source === candidate.source && match.place.sourceId === candidate.sourceId) {
+          await refreshExistingPlace(supabase, match.place.id, candidate)
+          stats.refreshedExisting++
+        }
         await linkSourceToPlace(supabase, match.place.id, candidate)
         stats.linkedToExisting++
         continue

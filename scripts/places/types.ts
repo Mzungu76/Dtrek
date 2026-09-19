@@ -66,4 +66,11 @@ export interface ExistingPlace {
   municipality?: string | null
   municipalityIstatCode?: string | null
   wikidataId?: string | null
+  // Provenienza della riga così com'è OGGI in dtrek_places — usata da import.ts per distinguere
+  // un ri-fetch della STESSA fonte (source+sourceId identici al candidato: la riga può essere
+  // aggiornata con i valori freschi, sono la stessa entità autorevole) da un match incrociato con
+  // una fonte diversa (mai sovrascrivere ciecamente i dati di un'altra fonte con un guess di
+  // qualità potenzialmente inferiore).
+  source?: PlaceSource | null
+  sourceId?: string | null
 }
