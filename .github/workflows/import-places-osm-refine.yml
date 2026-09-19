@@ -1,0 +1,90 @@
+name: Import Places — OSM (raffina lat/lon dei Borghi/Città su dtrek_places)
+
+# Manuale (workflow_dispatch), stesso schema di import-places-wikidata.yml — leggere quel file
+# prima di modificare questo (Node 22 per il client Supabase, fallback SUPABASE_SERVICE_ROLE_KEY,
+# tutti già applicati qui dall'inizio).
+#
+# scripts/places/osm/refine-borgo-coords.ts NON crea righe — fa solo UPDATE di latitude/longitude
+# su righe dtrek_places meta_type='borgo_citta' GIÀ esistenti (create da ISTAT). Va quindi lanciato
+# DOPO import-places-istat.yml, non prima — se non c'è ancora nulla da raffinare, semplicemente non
+# fa nulla (0 raffinate, non un errore). Diverso da import-places-osm.yml (non esiste ancora: quel
+# fetcher usa un estratto .pbf offline per musei/castelli/monumenti, piano §9/§21/§48.7 — "MAI
+# Overpass live come motore principale della ricerca [del catalogo]"): questo script non scopre
+# nuove entità, solo corregge la posizione di quelle già note, stesso principio già applicato a
+# import-places-wikidata.yml per lo stesso identico motivo (mai un INSERT).
+#
+# Anche il dry-run legge da Supabase (deve sapere quali Borghi/Città raffinare) — a differenza di
+# ISTAT/MiC, qui servono i secret Supabase in ENTRAMBE le modalità. dry-run non fa comunque nessun
+# UPDATE, solo query di lettura + query Overpass.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dry-run: logga i match trovati, nessuna scrittura. write: aggiorna latitude/longitude su Supabase."
+        required: true
+        type: choice
+        options:
+          - dry-run
+          - write
+        default: dry-run
+      region:
+        description: "Regione (es. Lazio). Vuoto = tutte le regioni presenti in dtrek_places."
+        required: false
+        type: string
+        default: "Lazio"
+      limit:
+        description: "Numero massimo di Borghi/Città da raffinare in questa esecuzione (una richiesta Overpass per riga, sequenziale)."
+        required: false
+        type: string
+        default: "500"
+
+concurrency:
+  group: import-places
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  refine:
+    runs-on: ubuntu-latest
+    env:
+      MODE: ${{ inputs.mode }}
+      REGION: ${{ inputs.region }}
+      LIMIT: ${{ inputs.limit }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Verifica secret Supabase
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_SERVICE_KEY:-}" ]; then
+            echo "Secret Supabase mancanti nel repository — serve SUPABASE_URL e (SUPABASE_SERVICE_KEY o SUPABASE_SERVICE_ROLE_KEY). Vedi Settings > Secrets and variables > Actions." >&2
+            exit 1
+          fi
+          echo "OK: secret presenti."
+
+      - name: Raffina lat/lon dei Borghi/Città da OSM
+        run: |
+          set -euo pipefail
+          ARGS=(scripts/places/osm/refine-borgo-coords.ts --region "$REGION" --limit "$LIMIT")
+          if [ "$MODE" = "dry-run" ]; then ARGS+=(--dry-run); fi
+          npx tsx "${ARGS[@]}" | tee /tmp/osm-refine.txt
+          {
+            echo "### Import Places — OSM refine ($MODE)"
+            echo "- Regione: ${REGION:-tutte}"
+            echo "- Limit: $LIMIT"
+            echo '```'
+            cat /tmp/osm-refine.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
