@@ -17,13 +17,16 @@ export interface DijkstraResult {
  *  per user tap, or once per leg of an itinerary), not per fix, so an O(n²) min-scan is a
  *  non-issue in practice.
  *  `isEdgeAllowed`, opzionale: esclude un arco dall'esplorazione invece di limitarsi a pesarlo —
- *  usato da lib/routeBuilder/multiStopRoute.ts per "trekking urbano" (esclude path/track/footway/
- *  bridleway/steps, cammina solo su strade). Omesso, ogni arco del WalkNetwork resta percorribile
- *  come prima di questo parametro — comportamento invariato per gli altri chiamanti
- *  (app/api/borgo-itinerary/route.ts, lib/navigation/escapeEngine.ts). */
+ *  usato da lib/routeBuilder/multiStopRoute.ts sia per "trekking urbano" (esclude path/track/
+ *  footway/bridleway/steps, cammina solo su strade) sia per escludere gli archi già percorsi in un
+ *  tentativo precedente quando cerca un cammino più vicino a un target di lunghezza (invece del
+ *  più breve) — per questo riceve anche il nodo di partenza dell'arco: `edge.to` da solo non basta
+ *  a identificare quale coppia di nodi è già stata esclusa. Omesso, ogni arco del WalkNetwork
+ *  resta percorribile come prima di questo parametro — comportamento invariato per gli altri
+ *  chiamanti (app/api/borgo-itinerary/route.ts, lib/navigation/escapeEngine.ts). */
 export function dijkstra(
   network: WalkNetwork, startNodeId: number, maxDistM: number, maxNodes: number,
-  isEdgeAllowed?: (edge: GraphEdge) => boolean,
+  isEdgeAllowed?: (edge: GraphEdge, fromNodeId: number) => boolean,
 ): DijkstraResult {
   const dist = new Map<number, number>([[startNodeId, 0]])
   const prev = new Map<number, number>()
@@ -42,7 +45,7 @@ export function dijkstra(
     const node = network.nodes.get(currentId)
     if (!node) continue
     for (const edge of node.edges) {
-      if (isEdgeAllowed && !isEdgeAllowed(edge)) continue
+      if (isEdgeAllowed && !isEdgeAllowed(edge, currentId)) continue
       const nd = currentDist + edge.distM
       if (nd > maxDistM) continue
       const existing = dist.get(edge.to)
@@ -66,6 +69,21 @@ export function reconstructPath(network: WalkNetwork, prev: Map<number, number>,
   while (cur != null) {
     const node = network.nodes.get(cur)
     if (node) path.unshift([node.lat, node.lon])
+    if (cur === startNodeId) break
+    cur = prev.get(cur)
+  }
+  return path
+}
+
+/** Come reconstructPath, ma la sequenza di ID nodo invece delle coordinate — serve a chi deve poi
+ *  identificare gli ARCHI effettivamente percorsi (es. lib/routeBuilder/multiStopRoute.ts, per
+ *  escluderli e forzare un percorso alternativo quando quello più breve è più corto del target
+ *  richiesto), non solo disegnarli su mappa. */
+export function reconstructNodePath(prev: Map<number, number>, targetNodeId: number, startNodeId: number): number[] {
+  const path: number[] = []
+  let cur: number | undefined = targetNodeId
+  while (cur != null) {
+    path.unshift(cur)
     if (cur === startNodeId) break
     cur = prev.get(cur)
   }

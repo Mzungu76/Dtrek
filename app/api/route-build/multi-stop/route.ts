@@ -88,7 +88,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'network_unavailable', message: 'Rete pedonale non disponibile in questo momento, riprova.' }, { status: 502 })
   }
 
-  const outcome = buildMultiStopRoute(network, stops, mode)
+  // targetDistanceKm*1000: cerca il cammino più vicino a questa distanza tratta per tratta (non
+  // semplicemente il più breve) quando è più lungo della somma dei cammini minimi — vedi
+  // lib/routeBuilder/multiStopRoute.ts.
+  const outcome = buildMultiStopRoute(network, stops, mode, targetDistanceKm != null ? targetDistanceKm * 1000 : null)
   if (!outcome.ok) {
     return NextResponse.json({
       ok: false,

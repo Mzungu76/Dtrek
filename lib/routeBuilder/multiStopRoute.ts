@@ -7,8 +7,13 @@
 // selezione (rimuovere quella tappa, cambiare urbano/misto) invece di ricevere un risultato che
 // sembra completo ma non lo è. Puro (nessun import Supabase/Overpass), stesso livello di
 // lib/routeBuilder/loopBuilder.ts — chi chiama fornisce già il WalkNetwork.
+//
+// Distanza target: NON semplicemente il cammino più breve fra le tappe — se l'utente ha impostato
+// una distanza (e il più breve è già più corto), si cerca il percorso che vi si avvicina di più,
+// non quello minimo. Il più breve resta l'unica scelta quando non c'è un target, o quando il
+// target è già raggiunto/superato dal più breve (non si può accorciare sotto il minimo).
 import { nearestGraphNode, type WalkNetwork, type GraphEdge } from './osmGraph'
-import { dijkstra, reconstructPath } from './walkRouting'
+import { dijkstra, reconstructPath, reconstructNodePath } from './walkRouting'
 import { haversineM } from '../geoUtils'
 
 export type MultiStopMode = 'urbano' | 'misto'
@@ -47,9 +52,95 @@ const DIJKSTRA_DIST_MULTIPLIER = 3
 // mai la possibilità di essere raggiunto.
 const DIJKSTRA_MAX_NODES = 6000
 
-function legDijkstraBudgetM(from: { lat: number; lon: number }, to: { lat: number; lon: number }): number {
+// Quante alternative (oltre al più breve) provare per avvicinarsi al target di lunghezza di UNA
+// tratta — ogni tentativo è un intero Dijkstra sulla stessa rete, il costo cresce linearmente con
+// questo numero, quindi resta basso: è un'euristica ("prova un'altra via", non un ottimo
+// garantito), non una ricerca esaustiva di ogni percorso possibile.
+const MAX_DETOUR_ATTEMPTS = 3
+// Sotto questo scarto relativo dal target, un tentativo è già abbastanza vicino da non valere la
+// pena cercarne uno migliore.
+const DETOUR_CLOSE_ENOUGH = 0.1
+
+function legDijkstraBudgetM(from: { lat: number; lon: number }, to: { lat: number; lon: number }, legTargetM?: number): number {
   const airlineM = haversineM(from.lat, from.lon, to.lat, to.lon)
-  return Math.min(DIJKSTRA_MAX_DIST_CAP_M, Math.max(DIJKSTRA_MIN_DIST_M, airlineM * DIJKSTRA_DIST_MULTIPLIER))
+  const base = Math.max(DIJKSTRA_MIN_DIST_M, airlineM * DIJKSTRA_DIST_MULTIPLIER)
+  const withTarget = legTargetM != null ? Math.max(base, legTargetM * 1.3) : base
+  return Math.min(DIJKSTRA_MAX_DIST_CAP_M, withTarget)
+}
+
+// Chiave non orientata di un arco (gli archi sono sempre presenti in entrambe le direzioni, vedi
+// addEdge in osmGraph.ts) — usata solo per "questo arco è già stato percorso da un tentativo
+// precedente", mai per identificare in modo univoco una via OSM specifica (due way diverse che
+// condividono per coincidenza la stessa coppia di nodi vengono trattate come lo stesso arco: va
+// bene, qui serve solo variare il percorso, non un'identità perfetta).
+function edgeKey(a: number, b: number): string {
+  return a < b ? `${a}-${b}` : `${b}-${a}`
+}
+
+function edgeKeysOfPath(nodeIds: number[]): Set<string> {
+  const keys = new Set<string>()
+  for (let i = 0; i < nodeIds.length - 1; i++) keys.add(edgeKey(nodeIds[i], nodeIds[i + 1]))
+  return keys
+}
+
+interface LegSearchResult { distanceM: number; polyline: [number, number][]; nodeIds: number[] }
+
+function runLegDijkstra(
+  network: WalkNetwork, startNodeId: number, endNodeId: number, maxDistM: number,
+  isEdgeAllowed: ((edge: GraphEdge, fromNodeId: number) => boolean) | undefined,
+): LegSearchResult | null {
+  const { dist, prev } = dijkstra(network, startNodeId, maxDistM, DIJKSTRA_MAX_NODES, isEdgeAllowed)
+  const distanceM = dist.get(endNodeId)
+  if (distanceM == null) return null
+  return {
+    distanceM,
+    polyline: reconstructPath(network, prev, endNodeId, startNodeId),
+    nodeIds: reconstructNodePath(prev, endNodeId, startNodeId),
+  }
+}
+
+function shortestLegPath(
+  network: WalkNetwork, startNodeId: number, endNodeId: number, mode: MultiStopMode,
+): LegSearchResult | null {
+  const baseFilter = mode === 'urbano' ? (edge: GraphEdge) => urbanEdgeFilter(edge) : undefined
+  const from = network.nodes.get(startNodeId)
+  const to = network.nodes.get(endNodeId)
+  if (!from || !to) return null
+  return runLegDijkstra(network, startNodeId, endNodeId, legDijkstraBudgetM(from, to), baseFilter)
+}
+
+/**
+ * A partire da un cammino già trovato (`shortest`, il più breve fra i due estremi), cerca di
+ * avvicinarsi a `legTargetM` escludendo via via gli archi già percorsi nei tentativi precedenti,
+ * forzando un'alternativa diversa (stesso principio del ritorno di un anello in loopBuilder.ts, qui
+ * applicato punto-a-punto fra due estremi fissi invece che verso un punto scelto liberamente) — non
+ * ricalcola `shortest` da zero (il chiamante lo ha già), un'euristica che prova poche alternative
+ * in più, non una ricerca esaustiva: se la rete offre una sola via reale fra i due punti, resta
+ * quella, comunque più corta del target richiesto.
+ */
+function seekCloserToTarget(
+  network: WalkNetwork, startNodeId: number, endNodeId: number, shortest: LegSearchResult, legTargetM: number, mode: MultiStopMode,
+): LegSearchResult {
+  const baseFilter = mode === 'urbano' ? (edge: GraphEdge) => urbanEdgeFilter(edge) : undefined
+  const from = network.nodes.get(startNodeId)!
+  const to = network.nodes.get(endNodeId)!
+
+  let best = shortest
+  const excluded = edgeKeysOfPath(shortest.nodeIds)
+  for (let attempt = 0; attempt < MAX_DETOUR_ATTEMPTS; attempt++) {
+    if (Math.abs(best.distanceM - legTargetM) / legTargetM < DETOUR_CLOSE_ENOUGH) break
+    const filter = (edge: GraphEdge, fromNodeId: number) => {
+      if (baseFilter && !baseFilter(edge)) return false
+      return !excluded.has(edgeKey(fromNodeId, edge.to))
+    }
+    const alt = runLegDijkstra(network, startNodeId, endNodeId, legDijkstraBudgetM(from, to, legTargetM), filter)
+    if (!alt) break // nessuna via alternativa esiste proprio: quella trovata finora resta la migliore
+    if (Math.abs(alt.distanceM - legTargetM) < Math.abs(best.distanceM - legTargetM)) best = alt
+    // Si accumulano gli archi di OGNI tentativo (non solo del migliore): il prossimo giro deve
+    // esplorare qualcosa di ancora diverso, non ripiegare sulla stessa alternativa già scartata.
+    Array.from(edgeKeysOfPath(alt.nodeIds)).forEach(k => excluded.add(k))
+  }
+  return best
 }
 
 export interface MultiStopLeg {
@@ -70,18 +161,28 @@ export type MultiStopOutcome =
   | { ok: false; failedLegs: MultiStopFailedLeg[] }
 
 /**
- * Percorso a piedi che tocca, in sequenza, tutti i punti di `stops` (indice 0 incluso) — un
- * Dijkstra + ricostruzione per ogni coppia consecutiva (stesso schema di routeLeg() in
- * app/api/borgo-itinerary/route.ts), MAI un ripiego a linea d'aria: una coppia che non si
- * raggiunge finisce in `failedLegs` e si continua comunque a verificare le altre, così un solo
- * tentativo elenca tutti i collegamenti mancanti invece di fermarsi al primo.
+ * Percorso a piedi che tocca, in sequenza, tutti i punti di `stops` (indice 0 incluso) — MAI un
+ * ripiego a linea d'aria: una coppia che non si raggiunge finisce in `failedLegs` e si continua
+ * comunque a verificare le altre, così un solo tentativo elenca tutti i collegamenti mancanti
+ * invece di fermarsi al primo. `targetDistanceM`, opzionale: quando impostato ed è più lungo della
+ * somma dei cammini più brevi, ogni tratta viene ricercata verso una quota proporzionale del
+ * target (vedi seekCloserToTarget) invece di restare al minimo — quando non è impostato, o il
+ * minimo lo supera già, resta semplicemente il cammino più breve per ogni tratta.
  */
+interface ResolvedLeg {
+  fromStopIdx: number
+  toStopIdx: number
+  startNodeId: number
+  endNodeId: number
+  snapDistM: number // startNode.distM + endNode.distM, il tratto di aggancio dal punto esatto al nodo di rete
+  shortest: LegSearchResult
+}
+
 export function buildMultiStopRoute(
-  network: WalkNetwork, stops: { lat: number; lon: number }[], mode: MultiStopMode,
+  network: WalkNetwork, stops: { lat: number; lon: number }[], mode: MultiStopMode, targetDistanceM?: number | null,
 ): MultiStopOutcome {
-  const isEdgeAllowed = mode === 'urbano' ? urbanEdgeFilter : undefined
-  const legs: MultiStopLeg[] = []
   const failedLegs: MultiStopFailedLeg[] = []
+  const resolved: ResolvedLeg[] = []
 
   for (let i = 0; i < stops.length - 1; i++) {
     const from = stops[i]
@@ -93,21 +194,51 @@ export function buildMultiStopRoute(
       continue
     }
 
-    const { dist, prev } = dijkstra(network, startNode.nodeId, legDijkstraBudgetM(from, to), DIJKSTRA_MAX_NODES, isEdgeAllowed)
-    const targetDist = dist.get(endNode.nodeId)
-    if (targetDist == null) {
+    const shortest = shortestLegPath(network, startNode.nodeId, endNode.nodeId, mode)
+    if (!shortest) {
       failedLegs.push({ fromStopIdx: i, toStopIdx: i + 1, reason: 'no_path' })
       continue
     }
-
-    legs.push({
-      fromStopIdx: i,
-      toStopIdx: i + 1,
-      distanceM: targetDist + startNode.distM + endNode.distM,
-      polyline: reconstructPath(network, prev, endNode.nodeId, startNode.nodeId),
+    resolved.push({
+      fromStopIdx: i, toStopIdx: i + 1,
+      startNodeId: startNode.nodeId, endNodeId: endNode.nodeId,
+      snapDistM: startNode.distM + endNode.distM,
+      shortest,
     })
   }
 
   if (failedLegs.length > 0) return { ok: false, failedLegs }
+
+  const totalShortestM = resolved.reduce((s, l) => s + l.shortest.distanceM + l.snapDistM, 0)
+
+  // Nessun target, o il più breve lo raggiunge/supera già: non c'è margine per avvicinarsi di più
+  // restando un cammino reale — il più breve resta la risposta.
+  if (targetDistanceM == null || targetDistanceM <= totalShortestM || totalShortestM <= 0) {
+    return {
+      ok: true,
+      legs: resolved.map(l => ({
+        fromStopIdx: l.fromStopIdx, toStopIdx: l.toStopIdx,
+        distanceM: l.shortest.distanceM + l.snapDistM, polyline: l.shortest.polyline,
+      })),
+    }
+  }
+
+  // Riparte il "di più" richiesto proporzionalmente al peso di ciascuna tratta (una tratta già più
+  // lunga delle altre riceve una quota maggiore del margine, non tutte uguale) e cerca di
+  // avvicinarsi a quel target — riparte dal cammino più breve già trovato sopra, nessun nuovo
+  // aggancio alla rete né un secondo Dijkstra "a vuoto" per ritrovare la stessa distanza minima.
+  const legs: MultiStopLeg[] = resolved.map(l => {
+    const legDistanceM = l.shortest.distanceM + l.snapDistM
+    // Il target si riferisce alla tratta intera (compreso l'aggancio dal punto esatto alla rete),
+    // ma seekCloserToTarget cerca solo la parte "sulla rete" (fra i due nodi agganciati) — sottratto
+    // l'aggancio (fisso, indipendente da quale variante di percorso si sceglie) prima di confrontarlo.
+    const legTargetGraphM = Math.max(0, legDistanceM * (targetDistanceM / totalShortestM) - l.snapDistM)
+    if (legTargetGraphM <= l.shortest.distanceM) {
+      return { fromStopIdx: l.fromStopIdx, toStopIdx: l.toStopIdx, distanceM: legDistanceM, polyline: l.shortest.polyline }
+    }
+    const closer = seekCloserToTarget(network, l.startNodeId, l.endNodeId, l.shortest, legTargetGraphM, mode)
+    return { fromStopIdx: l.fromStopIdx, toStopIdx: l.toStopIdx, distanceM: closer.distanceM + l.snapDistM, polyline: closer.polyline }
+  })
+
   return { ok: true, legs }
 }
