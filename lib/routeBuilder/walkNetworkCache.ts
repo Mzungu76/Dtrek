@@ -45,7 +45,7 @@ function deserialize(stored: StoredNetwork): WalkNetwork {
 // la scrittura deve essere GARANTITA completa prima di rispondere al client — altrimenti lo step 2
 // rischierebbe un cache-miss e un fetch Overpass a freddo ripetuto, vanificando il vantaggio della
 // cache proprio nel caso in cui serve di più.
-export async function fetchWalkNetworkCached(bbox: [number, number, number, number], awaitWrite = false): Promise<WalkNetwork> {
+export async function fetchWalkNetworkCached(bbox: [number, number, number, number], awaitWrite = false, timeoutMs?: number): Promise<WalkNetwork> {
   const bboxKey = normalizeBboxKey(bbox.join(','))
 
   if (shouldRunCleanup('walk_network_cache')) {
@@ -69,7 +69,7 @@ export async function fetchWalkNetworkCached(bbox: [number, number, number, numb
 
   // Nessun hit — fetch dal vivo. Un fallimento (Overpass irraggiungibile) si propaga come
   // eccezione, esattamente come prima di questa cache: il chiamante (executeBuild) lo gestisce già.
-  const network = await fetchWalkNetwork(bbox)
+  const network = timeoutMs != null ? await fetchWalkNetwork(bbox, timeoutMs) : await fetchWalkNetwork(bbox)
 
   const expiresAt = new Date(Date.now() + WALK_NETWORK_CACHE_TTL_MS).toISOString()
   const upsert = supabase.from('walk_network_cache')

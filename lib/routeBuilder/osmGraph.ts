@@ -77,7 +77,14 @@ function addEdge(nodes: Map<number, GraphNode>, fromId: number, toId: number, wa
  * consecutivi — i node condivisi da più way (le intersezioni reali sul terreno) collegano
  * automaticamente i due tratti, senza bisogno di calcoli geometrici di prossimità.
  */
-export async function fetchWalkNetwork(bbox: [number, number, number, number]): Promise<WalkNetwork> {
+// `timeoutMs`, opzionale: il chiamante sceglie in base al proprio budget residuo (vedi
+// maxDuration del proprio endpoint) — 18s per default, il valore storico condiviso da tutti i
+// chiamanti finché era l'unico usato (app/api/route-build/route.ts, che a valle deve ancora
+// lasciare margine a pathfinding e arricchimento DTM/POI). app/api/borgo-itinerary/route.ts non
+// ha stage pesanti a valle (solo Dijkstra per tappa, già limitato da DIJKSTRA_MAX_NODES) e passa
+// un valore più alto: un fetch a freddo di questa query, quella più lenta e più spesso causa di
+// ripiego su linee d'aria, ha così più margine per riuscire prima di arrendersi.
+export async function fetchWalkNetwork(bbox: [number, number, number, number], timeoutMs = 18_000): Promise<WalkNetwork> {
   const [minLat, minLon, maxLat, maxLon] = bbox
   // DTREK-AUDIT.md P0 #10 — "out skel qt" (verbosità precedente) NON include mai i tag delle way,
   // solo id/skeleton: el.tags?.highway era quindi sempre undefined, e con esso anche
@@ -86,17 +93,19 @@ export async function fetchWalkNetwork(bbox: [number, number, number, number]): 
   // i tag — stessa identica combinazione filtro/bbox già usata con successo in produzione da
   // lib/routeBuilder/hikingProbability.ts::fetchTaggedNetwork (lì con [timeout:25] anziché 18, ma
   // il costo lato server di trovare le way corrispondenti è identico: cambia solo la
-  // serializzazione/il trasferimento, non la ricerca) — stesso pattern, non una query nuova.
-  const query = `[out:json][timeout:18][maxsize:536870912];
+  // serializzazione/il trasferimento, non la ricerca) — stesso pattern, non una query nuova. Il
+  // tetto lato server della query segue timeoutMs (in secondi, arrotondato per difetto) invece di
+  // un valore fisso, così il client non chiude la connessione prima che Overpass stesso rinunci.
+  const query = `[out:json][timeout:${Math.floor(timeoutMs / 1000)}][maxsize:536870912];
 way["highway"~"^(${WALKABLE_HIGHWAY})$"]["access"!~"^(private|no)$"](${minLat},${minLon},${maxLat},${maxLon});
 (._;>;);
 out body qt;`
 
-  // Timeout client allineato al [timeout:18] della query — fetchOverpass ritenta una volta sola
-  // dopo una breve pausa (vedi lib/overpassTrails.ts), quindi il caso peggiore resta ~37s invece
-  // di superare da solo il budget della funzione (maxDuration=60 su app/api/route-build/route.ts,
-  // che deve lasciare margine anche per pathfinding e arricchimento DTM/POI a valle).
-  const json = await fetchOverpass<{ elements: OverpassEl[] }>(query, 18_000)
+  // Timeout client allineato al [timeout:] della query — fetchOverpass ritenta una volta sola
+  // dopo una breve pausa (vedi lib/overpassTrails.ts), quindi il caso peggiore resta ~2×timeoutMs
+  // invece di superare da solo il budget della funzione chiamante (maxDuration del proprio
+  // endpoint, con margine per il resto della pipeline a valle).
+  const json = await fetchOverpass<{ elements: OverpassEl[] }>(query, timeoutMs)
   const elements = json.elements ?? []
 
   const nodes = new Map<number, GraphNode>()

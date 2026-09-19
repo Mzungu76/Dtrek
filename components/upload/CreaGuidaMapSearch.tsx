@@ -700,8 +700,14 @@ function MetaDetailCard({ item, creating, onCreate, error }: { item: MetaSearchR
                   <>
                     <p className="text-[11px] text-stone-500 mb-2">
                       {itinerary.stops.length} tappe · {(itinerary.totalDistanceM / 1000).toFixed(1)} km · ~{Math.round(itinerary.estimatedTimeSeconds / 60)} min a piedi
-                      {itinerary.legs.some(l => !l.real) && ' · alcuni tratti sono indicativi (nessuna via trovata)'}
                     </p>
+                    {itinerary.legs.some(l => !l.real) && (
+                      <p className="text-[11px] text-amber-600 mb-2">
+                        {itinerary.legs.every(l => !l.real)
+                          ? 'La rete pedonale non ha risposto in tempo: nessun tratto segue vie reali, solo linee dirette — riprova tra poco.'
+                          : 'Alcuni tratti sono linee dirette (nessuna via trovata per quella tappa), il resto segue vie reali.'}
+                      </p>
+                    )}
                     <ItineraryMap
                       center={{ lat: item.latitude, lon: item.longitude }}
                       stops={itinerary.stops}
@@ -719,6 +725,9 @@ function MetaDetailCard({ item, creating, onCreate, error }: { item: MetaSearchR
                         </li>
                       ))}
                     </ol>
+                    <button onClick={generateItinerary} className="text-[11px] text-stone-400 hover:text-stone-600 mt-2">
+                      Rigenera itinerario
+                    </button>
                   </>
                 )}
               </div>
