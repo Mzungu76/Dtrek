@@ -27,6 +27,13 @@ export interface ActivityHistorySummary {
   maxElevationM: number
 }
 
+// Sotto questa soglia lo storico non basta a rappresentare un'abitudine (una sola uscita
+// sembrerebbe una preferenza fissa) — usato dai pannelli di generazione (Sentieri viewport,
+// itinerario Borgo personalizzato) per decidere se precompilare distanza/dislivello dallo storico
+// o lasciarli vuoti e obbligatori da riempire (vedi app/api/route-build/route.ts's GET,
+// `historyIsDecent`).
+export const DECENT_HISTORY_MIN_COUNT = 3
+
 export async function fetchHikerProfile(userId: string): Promise<HikerProfileBlock> {
   const { data } = await supabase
     .from('user_settings')

@@ -1,0 +1,141 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { getUserFromRequest } from '@/lib/supabaseAuth'
+import { fetchWalkNetworkCached } from '@/lib/routeBuilder/walkNetworkCache'
+import { buildMultiStopRoute, type MultiStopMode } from '@/lib/routeBuilder/multiStopRoute'
+import { scoreAndEnrichCandidates } from '@/lib/routeBuilder/scoreCandidates'
+import { padBbox } from '@/lib/overpassTrails'
+
+export const dynamic = 'force-dynamic'
+export const maxDuration = 60
+
+interface StopInput { lat: number; lon: number }
+
+/**
+ * POST /api/route-build/multi-stop — itinerario a piedi che deve toccare TUTTE le tappe scelte a
+ * mano dall'utente (personalizzazione di un Borgo/Città, components/upload/CreaGuidaMapSearch.tsx),
+ * nell'ordine di selezione — a differenza di /api/borgo-itinerary (itinerario automatico passivo,
+ * ripiega su una linea d'aria per una tappa isolata), qui un tratto irraggiungibile è un fallimento
+ * dichiarato (vedi lib/routeBuilder/multiStopRoute.ts), mai un ripiego silenzioso: la richiesta è
+ * deliberata, l'utente deve poter capire cosa aggiustare. Richiesta singola (non a step come
+ * app/api/route-build/route.ts): il bbox è quello di poche tappe scelte a mano intorno a un solo
+ * Borgo/Città, stessa scala di costo di /api/borgo-itinerary, mai quella di un'intera zona esplorata
+ * da un punto di partenza libero.
+ */
+export async function POST(req: NextRequest) {
+  const user = await getUserFromRequest(req)
+  if (!user) return NextResponse.json({ error: 'Non autenticato' }, { status: 401 })
+
+  let stops: StopInput[]
+  let mode: MultiStopMode
+  let targetDistanceKm: number | null
+  let targetElevationM: number | null
+  try {
+    const body = await req.json()
+    if (!Array.isArray(body.stops) || body.stops.length < 2) throw new Error('stops mancanti')
+    stops = body.stops.map((s: unknown) => {
+      const p = s as Record<string, unknown>
+      const lat = Number(p.lat)
+      const lon = Number(p.lon)
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) throw new Error('tappa non valida')
+      return { lat, lon }
+    })
+    mode = body.mode === 'urbano' ? 'urbano' : 'misto'
+    const distRaw = Number(body.targetDistanceKm)
+    targetDistanceKm = body.targetDistanceKm != null && Number.isFinite(distRaw) ? distRaw : null
+    const elevRaw = Number(body.targetElevationM)
+    targetElevationM = body.targetElevationM != null && Number.isFinite(elevRaw) ? elevRaw : null
+  } catch {
+    return NextResponse.json({ error: 'Richiesta non valida' }, { status: 400 })
+  }
+
+  // Bbox di tutte le tappe scelte, con un margine di 400m — stesso schema di
+  // app/api/borgo-itinerary/route.ts's networkBbox (le vie che collegano una tappa periferica
+  // spesso escono dal rettangolo stretto che le contiene tutte).
+  const rawBbox: [number, number, number, number] = [
+    Math.min(...stops.map(s => s.lat)),
+    Math.min(...stops.map(s => s.lon)),
+    Math.max(...stops.map(s => s.lat)),
+    Math.max(...stops.map(s => s.lon)),
+  ]
+  const networkBbox = padBbox(rawBbox, 0.4)
+
+  let network
+  try {
+    network = await fetchWalkNetworkCached(networkBbox, false)
+  } catch (e) {
+    console.error('[route-build/multi-stop] rete pedonale non disponibile:', e)
+    return NextResponse.json({ error: 'network_unavailable', message: 'Rete pedonale non disponibile in questo momento, riprova.' }, { status: 502 })
+  }
+
+  const outcome = buildMultiStopRoute(network, stops, mode)
+  if (!outcome.ok) {
+    return NextResponse.json({
+      ok: false,
+      failedLegs: outcome.failedLegs,
+      message: outcome.failedLegs.length === 1
+        ? `Non riesco a collegare a piedi la tappa ${outcome.failedLegs[0].fromStopIdx + 1} e la ${outcome.failedLegs[0].toStopIdx + 1} — ${outcome.failedLegs[0].reason === 'too_far_from_network' ? 'una delle due è troppo lontana da qualunque via percorribile' : 'nessun cammino trovato fra le due nella rete pedonale disponibile'}.`
+        : `${outcome.failedLegs.length} collegamenti non trovati fra le tappe scelte — prova a rimuoverne una, o passa a "misto" se avevi scelto "urbano".`,
+    })
+  }
+
+  // Concatena i tratti in un'unica polyline — scarta il primo punto di ogni tratto dopo il primo,
+  // che reconstructPath ripete identico all'ultimo punto del tratto precedente (entrambi partono
+  // esattamente dal nodo di aggancio condiviso).
+  const routePolyline: [number, number][] = []
+  let totalDistanceM = 0
+  outcome.legs.forEach((leg, i) => {
+    routePolyline.push(...(i === 0 ? leg.polyline : leg.polyline.slice(1)))
+    totalDistanceM += leg.distanceM
+  })
+
+  // Un'unica candidata sintetica attraverso lo scorer esistente — solo per la stima di
+  // quota/tempo/POI dell'anteprima (nessun ranking: non esiste un'alternativa da confrontare).
+  const [scored] = await scoreAndEnrichCandidates(
+    [{ type: 'solo_andata', polyline: routePolyline, distanceM: totalDistanceM, bearingDeg: 0, hasSteps: false, hazardMarkers: [] }],
+    {
+      targetDistanceM: (targetDistanceKm ?? totalDistanceM / 1000) * 1000,
+      targetElevationM,
+      environmentPrefs: [],
+      concerns: [],
+      desiredPoiTypes: [],
+      bbox: networkBbox,
+    },
+    1,
+  )
+
+  // scoreAndEnrichCandidates scarta solo un candidato con polyline < 2 punti (due tappe scelte
+  // così vicine da agganciarsi allo stesso nodo della rete) — un caso raro ma non impossibile, da
+  // non far crashare: si risponde comunque con i dati grezzi già calcolati (nessuna stima
+  // quota/POI, coerente con "mai inventare un dato" — meglio assente che falso).
+  if (!scored) {
+    return NextResponse.json({
+      ok: true,
+      legs: outcome.legs,
+      routePolyline,
+      trackPoints: [],
+      distanceMeters: totalDistanceM,
+      elevationGain: 0,
+      elevationLoss: 0,
+      altitudeMax: 0,
+      altitudeMin: 0,
+      estimatedTimeSeconds: Math.round(totalDistanceM / 1.2),
+      hasElevation: false,
+      pois: [],
+    })
+  }
+
+  return NextResponse.json({
+    ok: true,
+    legs: outcome.legs,
+    routePolyline: scored.routePolyline,
+    trackPoints: scored.trackPoints,
+    distanceMeters: scored.distanceMeters,
+    elevationGain: scored.elevationGain,
+    elevationLoss: scored.elevationLoss,
+    altitudeMax: scored.altitudeMax,
+    altitudeMin: scored.altitudeMin,
+    estimatedTimeSeconds: scored.estimatedTimeSeconds,
+    hasElevation: scored.hasElevation,
+    pois: scored.pois,
+  })
+}

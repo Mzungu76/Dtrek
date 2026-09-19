@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, Search as SearchIcon, RefreshCw, Loader2, ChevronUp, ChevronDown, X as XIcon,
   MoreHorizontal, Link2, PencilLine, MapPin, History, ChevronRight, Building2, Landmark, Globe,
-  Clock, Milestone, Route as RouteIcon,
+  Clock, Milestone, Route as RouteIcon, Sliders,
 } from 'lucide-react'
 import type { ResultItem } from './RouteBuilder'
 import TrailPreviewMap from '@/components/TrailPreviewMap'
@@ -23,6 +23,8 @@ import type { MetaSearchResultItem } from '@/lib/metaSearch/types'
 import type { TrailNearbyItem } from '@/app/api/trails-nearby/route'
 import type { PlaceDetail } from '@/app/api/places/[id]/route'
 import type { BorgoItinerary } from '@/app/api/borgo-itinerary/route'
+import SentieroGenerationPanel from './SentieroGenerationPanel'
+import PersonalizeItineraryPanel, { type PersonalizeStop } from './PersonalizeItineraryPanel'
 
 type TypeFilter = 'tutto' | MetaType
 
@@ -32,14 +34,35 @@ const ITALY_ZOOM = 6
 // scala nazionale/regionale dove sarebbero migliaia di tracciati sovrapposti) — stessa soglia già
 // validata in components/mete/MeteSearchMap.tsx.
 const TRAILS_MIN_ZOOM = 10
+// Più stretta di TRAILS_MIN_ZOOM: qui si innesca un fetch Overpass + pathfinding dal vivo (stesso
+// costo di lib/routeBuilder/buildSteps.ts's prepareNetworkStep), non una lettura da cache. A z14 il
+// raggio a schermo di un viewport tipico (anche un tablet in landscape) resta sotto il tetto di
+// sicurezza di 8-10km già imposto lato server (BUILD_DINTORNI_MAX_KM in buildSteps.ts) — "genera
+// qui" corrisponde davvero a quanto visibile, invece di un'area silenziosamente più piccola.
+const SENTIERO_GEN_MIN_ZOOM = 14
 const SEARCH_LIMIT = 60
 const PLACE_ZOOM = 13
+// "Ampio ma non eccessivo" per la personalizzazione di un itinerario Borgo/Città — un tetto allo
+// zoom di fitBounds sull'anchor+tappe, altrimenti poche tappe molto vicine (es. un piccolo centro
+// storico) farebbero zoomare fino al singolo isolato.
+const PERSONALIZE_MAX_ZOOM = 15
 
 const GLYPH: Record<MetaType, string> = { borgo_citta: '🏘️', sito: '🏛️', sentiero: '🥾' }
 
 type Selected =
   | { kind: 'meta'; item: MetaSearchResultItem }
   | { kind: 'trail'; item: TrailNearbyItem }
+
+// Stato della personalizzazione di un itinerario Borgo/Città (vedi "Personalizza itinerario" nel
+// tab Itinerario di MetaDetailCard) — l'anchor è il Borgo stesso, `stops` le tappe scelte
+// dall'utente nell'ordine di selezione (mai riordinate: è una personalizzazione deliberata).
+// `source:'meta'` per una tappa che coincide con un pin già disegnato da metaResults (si riusa
+// quello stesso marker, solo con badge), `source:'itinerary'` per una tappa dall'itinerario
+// automatico che non ha un marker proprio sulla mappa (serve disegnarne uno sintetico).
+interface PersonalizeState {
+  anchor: { id: string; lat: number; lon: number; name: string; color: string }
+  stops: PersonalizeStop[]
+}
 
 function trailLatLon(t: TrailNearbyItem): [number, number] | null {
   if (t.geometry.length === 0) return null
@@ -98,6 +121,16 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
   const [savingTrailId, setSavingTrailId] = useState<number | null>(null)
   const [trailSaveError, setTrailSaveError] = useState<string | null>(null)
   const { creatingId: creatingMetaId, createError: metaSaveError, createAndOpen } = useCreateMetaFromSearch()
+
+  // Modalità A — "Genera percorso" per i Sentieri, scoped al viewport corrente (vedi
+  // SentieroGenerationPanel.tsx). `sentieroGenOrigin` è uno scatto del centro/raggio della mappa al
+  // momento dell'apertura, non un valore che segue la mappa mentre il pannello è aperto.
+  const [showSentieroGen, setShowSentieroGen] = useState(false)
+  const [sentieroGenOrigin, setSentieroGenOrigin] = useState<{ lat: number; lon: number; radiusKm: number } | null>(null)
+
+  // Modalità B — personalizzazione dell'itinerario di un Borgo/Città (vedi "Personalizza
+  // itinerario" nel tab Itinerario di MetaDetailCard).
+  const [personalize, setPersonalize] = useState<PersonalizeState | null>(null)
 
   async function searchCurrentView() {
     const map = mapInstance.current
@@ -213,48 +246,92 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
     if (!L || !layer) return
     layer.clearLayers()
 
-    function pinIcon(color: string, glyph: string, big: boolean) {
+    function pinIcon(color: string, glyph: string, big: boolean, opts?: { dimmed?: boolean; badge?: number }) {
       const size = big ? 34 : 28
+      const opacity = opts?.dimmed ? 0.35 : 1
+      const badgeHtml = opts?.badge != null
+        ? `<div style="position:absolute;top:-6px;right:-6px;width:16px;height:16px;border-radius:50%;background:#1c1917;border:1.5px solid white;color:white;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;transform:rotate(45deg)">${opts.badge}</div>`
+        : ''
       return L!.divIcon({
         className: '',
-        html: `<div style="width:${size}px;height:${size}px;border-radius:50% 50% 50% 0;background:${color};transform:rotate(-45deg);border:${big ? 3 : 2}px solid white;box-shadow:0 2px 6px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center">
-          <span style="transform:rotate(45deg);font-size:${big ? 15 : 13}px;line-height:1">${glyph}</span>
+        html: `<div style="position:relative;opacity:${opacity}">
+          <div style="width:${size}px;height:${size}px;border-radius:50% 50% 50% 0;background:${color};transform:rotate(-45deg);border:${big ? 3 : 2}px solid white;box-shadow:0 2px 6px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center">
+            <span style="transform:rotate(45deg);font-size:${big ? 15 : 13}px;line-height:1">${glyph}</span>
+          </div>
+          ${badgeHtml}
         </div>`,
         iconSize: [size, size],
         iconAnchor: [size / 2, size],
       })
     }
 
-    // Tracciato reale per ogni Sentiero, non solo il pin — un colore diverso a testa (stessa
-    // palette/idea di MeteSearchMap.tsx, ROUTE_COLORS in giro) così più tracciati vicini restano
-    // distinguibili. Disegnate PRIMA dei pin: restano sotto, mai a coprire un marker toccabile.
-    let routeColorIdx = 0
-    for (const item of trailResults) {
-      if (item.geometry.length < 2) continue
-      const color = ROUTE_COLORS[routeColorIdx++ % ROUTE_COLORS.length]
-      const isSelected = selected?.kind === 'trail' && selected.item.id === item.id
-      const line = L.polyline(item.geometry, { color, weight: isSelected ? 5.5 : 3.5, opacity: isSelected ? 1 : 0.8 })
-      line.on('click', () => { setSelected({ kind: 'trail', item }); setSheetExpanded(false) })
-      line.addTo(layer)
+    // In personalizzazione (vedi PersonalizeState) i Sentieri non sono tappe selezionabili — restano
+    // fuori dal disegno per non confondere cosa è toccabile come tappa dell'itinerario Borgo/Città.
+    if (!personalize) {
+      // Tracciato reale per ogni Sentiero, non solo il pin — un colore diverso a testa (stessa
+      // palette/idea di MeteSearchMap.tsx, ROUTE_COLORS in giro) così più tracciati vicini restano
+      // distinguibili. Disegnate PRIMA dei pin: restano sotto, mai a coprire un marker toccabile.
+      let routeColorIdx = 0
+      for (const item of trailResults) {
+        if (item.geometry.length < 2) continue
+        const color = ROUTE_COLORS[routeColorIdx++ % ROUTE_COLORS.length]
+        const isSelected = selected?.kind === 'trail' && selected.item.id === item.id
+        const line = L.polyline(item.geometry, { color, weight: isSelected ? 5.5 : 3.5, opacity: isSelected ? 1 : 0.8 })
+        line.on('click', () => { setSelected({ kind: 'trail', item }); setSheetExpanded(false) })
+        line.addTo(layer)
+      }
     }
 
     for (const item of metaResults) {
       const color = META_TYPE_CONFIG[item.metaType].color
       const isSelected = selected?.kind === 'meta' && selected.item.id === item.id
+
+      if (personalize) {
+        const isAnchor = item.id === personalize.anchor.id
+        const stopIdx = personalize.stops.findIndex(s => s.id === item.id && s.source === 'meta')
+        const isStop = stopIdx >= 0
+        const icon = isAnchor
+          ? pinIcon(color, GLYPH[item.metaType], true)
+          : isStop
+            ? pinIcon(color, GLYPH[item.metaType], false, { badge: stopIdx + 1 })
+            : pinIcon(color, GLYPH[item.metaType], false, { dimmed: true })
+        const marker = L.marker([item.latitude, item.longitude], { icon })
+        marker.on('click', () => {
+          if (isAnchor) return
+          togglePersonalizeStop({ id: item.id, lat: item.latitude, lon: item.longitude, name: item.name, source: 'meta' })
+        })
+        marker.addTo(layer)
+        continue
+      }
+
       const marker = L.marker([item.latitude, item.longitude], { icon: pinIcon(color, GLYPH[item.metaType], isSelected) })
       marker.on('click', () => { setSelected({ kind: 'meta', item }); setSheetExpanded(false) })
       marker.addTo(layer)
     }
 
-    for (const item of trailResults) {
-      const pos = trailLatLon(item)
-      if (!pos) continue
-      const isSelected = selected?.kind === 'trail' && selected.item.id === item.id
-      const marker = L.marker(pos, { icon: pinIcon(META_TYPE_CONFIG.sentiero.color, GLYPH.sentiero, isSelected) })
-      marker.on('click', () => { setSelected({ kind: 'trail', item }); setSheetExpanded(false) })
-      marker.addTo(layer)
+    // Tappe dell'itinerario automatico che non coincidono con nessun pin già disegnato da
+    // metaResults (source:'itinerary', vedi enterPersonalize) — serve un marker proprio, altrimenti
+    // resterebbero invisibili/non togglabili.
+    if (personalize) {
+      personalize.stops.filter(s => s.source === 'itinerary').forEach(stop => {
+        const stopIdx = personalize.stops.findIndex(s => s.id === stop.id)
+        const marker = L.marker([stop.lat, stop.lon], { icon: pinIcon(personalize.anchor.color, '📍', false, { badge: stopIdx + 1 }) })
+        marker.on('click', () => togglePersonalizeStop(stop))
+        marker.addTo(layer)
+      })
     }
-  }, [metaResults, trailResults, selected])
+
+    if (!personalize) {
+      for (const item of trailResults) {
+        const pos = trailLatLon(item)
+        if (!pos) continue
+        const isSelected = selected?.kind === 'trail' && selected.item.id === item.id
+        const marker = L.marker(pos, { icon: pinIcon(META_TYPE_CONFIG.sentiero.color, GLYPH.sentiero, isSelected) })
+        marker.on('click', () => { setSelected({ kind: 'trail', item }); setSheetExpanded(false) })
+        marker.addTo(layer)
+      }
+    }
+  }, [metaResults, trailResults, selected, personalize])
 
   async function handleSearchSubmit() {
     const q = queryText.trim()
@@ -300,6 +377,57 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
       setTrailSaveError(e instanceof Error ? e.message : 'Impossibile creare la guida — riprova.')
       setSavingTrailId(null)
     }
+  }
+
+  // Apre il pannello "Genera percorso" (Sentieri) con centro/raggio scattati dal viewport corrente
+  // — nessun ricalcolo mentre il pannello resta aperto, un tap fuori tempo massimo (zoom
+  // insufficiente) non apre nulla.
+  function openSentieroGen() {
+    const map = mapInstance.current
+    if (!map || map.getZoom() < SENTIERO_GEN_MIN_ZOOM) return
+    const bounds = map.getBounds()
+    const center = bounds.getCenter()
+    const radiusKm = center.distanceTo(bounds.getNorthEast()) / 1000
+    setSentieroGenOrigin({ lat: center.lat, lon: center.lng, radiusKm })
+    setShowSentieroGen(true)
+  }
+
+  // Apre la personalizzazione dell'itinerario di un Borgo/Città — chiude il popup, semina le tappe
+  // dall'itinerario automatico già generato (una tappa che coincide con un pin già disegnato da
+  // metaResults riusa quel marker con un badge, `source:'meta'`; una tappa solo-Wikipedia senza
+  // marker proprio, `source:'itinerary'`, ne disegna uno sintetico — vedi l'effetto di disegno
+  // marker sotto) e inquadra la mappa "ampia ma non eccessiva" sull'anchor+tappe.
+  function enterPersonalize(borgo: MetaSearchResultItem, itinerary: BorgoItinerary) {
+    setSelected(null)
+    const seedStops: PersonalizeStop[] = itinerary.stops.map(s => ({
+      id: s.id, lat: s.lat, lon: s.lon, name: s.name,
+      source: metaResults.some(m => m.id === s.id) ? 'meta' : 'itinerary',
+    }))
+    setPersonalize({
+      anchor: { id: borgo.id, lat: borgo.latitude, lon: borgo.longitude, name: borgo.name, color: META_TYPE_CONFIG.borgo_citta.color },
+      stops: seedStops,
+    })
+    const map = mapInstance.current
+    const L = leafletRef.current
+    if (map && L) {
+      const points: [number, number][] = [[borgo.latitude, borgo.longitude], ...seedStops.map(s => [s.lat, s.lon] as [number, number])]
+      map.fitBounds(L.latLngBounds(points), { padding: [60, 60], maxZoom: PERSONALIZE_MAX_ZOOM })
+    }
+  }
+
+  // Tocco su un pin mentre la personalizzazione è attiva: aggiunge/toglie quel punto dalle tappe
+  // scelte invece di aprire il popup di dettaglio — l'anchor (il Borgo stesso) non è togglabile.
+  // Le nuove tappe si aggiungono in coda (mai un riordino automatico, vedi PersonalizeState).
+  function togglePersonalizeStop(stop: PersonalizeStop) {
+    setPersonalize(prev => {
+      if (!prev || stop.id === prev.anchor.id) return prev
+      const exists = prev.stops.some(s => s.id === stop.id)
+      return { ...prev, stops: exists ? prev.stops.filter(s => s.id !== stop.id) : [...prev.stops, stop] }
+    })
+  }
+
+  function removePersonalizeStop(id: string) {
+    setPersonalize(prev => (prev ? { ...prev, stops: prev.stops.filter(s => s.id !== id) } : prev))
   }
 
   const totalResults = metaResults.length + trailResults.length
@@ -376,8 +504,10 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
       </div>
 
       {/* ── "Cerca in quest'area" — compare solo dopo che l'utente ha mosso la mappa (pattern
-          Komoot, stesso di MeteSearchMap.tsx), mai a ogni pan/zoom automatico. ─────────────────── */}
-      {dirty && (
+          Komoot, stesso di MeteSearchMap.tsx), mai a ogni pan/zoom automatico. Nascosto durante la
+          personalizzazione di un itinerario Borgo/Città: lì un pan/zoom non deve riavviare la
+          ricerca normale, solo la vista sull'anchor+tappe. ─────────────────────────────────────── */}
+      {dirty && !personalize && (
         <div className="absolute left-0 right-0 top-[112px] z-10 flex justify-center">
           <button onClick={searchCurrentView} disabled={searching}
             className="flex items-center gap-2 bg-stone-800 hover:bg-stone-900 text-white text-xs font-bold px-4 py-2.5 rounded-full shadow-lg disabled:opacity-70 transition-colors">
@@ -387,7 +517,7 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
         </div>
       )}
 
-      {showTrailZoomHint && (
+      {showTrailZoomHint && !personalize && (
         <div className="absolute left-0 right-0 z-10 flex justify-center" style={{ top: dirty ? '158px' : '112px' }}>
           <p className="bg-white/90 backdrop-blur text-stone-500 text-[11px] px-3 py-1.5 rounded-full shadow border border-stone-200">
             Avvicinati per vedere anche i Sentieri
@@ -395,10 +525,30 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
         </div>
       )}
 
-      {error && (
+      {error && !personalize && (
         <div className="absolute left-3 right-3 top-[160px] z-10 bg-red-500/95 backdrop-blur rounded-xl px-3 py-2 shadow-md text-center">
           <p className="text-xs text-white">{error}</p>
         </div>
+      )}
+
+      {/* ── "Genera percorso" (Modalità A, Sentieri) — sempre visibile quando i Sentieri sono
+          cercabili, disabilitato sotto SENTIERO_GEN_MIN_ZOOM (un fetch dal vivo, non una lettura da
+          cache, merita una soglia più stretta di TRAILS_MIN_ZOOM). Nascosto durante popup/
+          personalizzazione, per non sovrapporsi ad altri controlli fissi in basso a destra. ────── */}
+      {wantsTrails && !selected && !personalize && (
+        <>
+          <button onClick={openSentieroGen} disabled={zoom < SENTIERO_GEN_MIN_ZOOM}
+            title="Genera un percorso qui"
+            className="absolute right-4 z-10 w-14 h-14 rounded-full bg-terra-500 hover:bg-terra-600 disabled:opacity-40 text-white shadow-lg flex items-center justify-center transition-colors"
+            style={{ bottom: '112px' }}>
+            <RouteIcon className="w-5 h-5" />
+          </button>
+          {zoom < SENTIERO_GEN_MIN_ZOOM && (
+            <p className="absolute right-3 z-10 text-[10.5px] font-medium text-stone-500 bg-white/90 backdrop-blur rounded-full px-2.5 py-1 shadow border border-stone-200 whitespace-nowrap" style={{ bottom: '170px' }}>
+              Avvicinati per generare
+            </p>
+          )}
+        </>
       )}
 
       {/* ── Scheda del pin selezionato — il popup È la scheda (niente più un link "Scheda" a
@@ -418,6 +568,7 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
                   creating={creatingMetaId === selected.item.id}
                   onCreate={() => createAndOpen(selected.item)}
                   error={metaSaveError && creatingMetaId === null ? metaSaveError : null}
+                  onPersonalize={itinerary => enterPersonalize(selected.item, itinerary)}
                 />
               ) : (
                 <TrailDetailCard
@@ -436,7 +587,10 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
         </div>
       )}
 
-      {/* ── Foglio risultati — peek sempre visibile, tap per espandere la lista completa. ──────── */}
+      {/* ── Foglio risultati — peek sempre visibile, tap per espandere la lista completa. Nascosto
+          durante la personalizzazione di un itinerario: PersonalizeItineraryPanel occupa lo stesso
+          angolo basso-fisso dello schermo. ──────────────────────────────────────────────────────── */}
+      {!personalize && (
       <div className="absolute left-0 right-0 bottom-0 z-10 bg-white rounded-t-3xl shadow-[0_-6px_20px_rgba(0,0,0,.12)] flex flex-col"
         style={{ maxHeight: sheetExpanded ? '58vh' : '96px' }}>
         <button onClick={() => setSheetExpanded(v => !v)}
@@ -469,6 +623,26 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
           </div>
         )}
       </div>
+      )}
+
+      {personalize && (
+        <PersonalizeItineraryPanel
+          anchor={personalize.anchor}
+          stops={personalize.stops}
+          color={personalize.anchor.color}
+          onRemoveStop={removePersonalizeStop}
+          onClose={() => setPersonalize(null)}
+          onSaved={hikeId => router.push(`/guida/${encodeURIComponent(hikeId)}`)}
+        />
+      )}
+
+      {showSentieroGen && sentieroGenOrigin && (
+        <SentieroGenerationPanel
+          origin={sentieroGenOrigin}
+          onBack={() => setShowSentieroGen(false)}
+          onSaved={hikeId => router.push(`/guida/${encodeURIComponent(hikeId)}`)}
+        />
+      )}
 
       {/* ── "Altri modi" — le vie di creazione diverse dalla ricerca su mappa (file GPX, da
           un'attività del diario, link, inserimento manuale), un tocco più lontano invece che card
@@ -549,7 +723,13 @@ function InfoRow({ icon: Icon, href, children }: { icon: typeof MapPin; href?: s
 // ricerca — un link "Scheda" a parte non serve più.
 type MetaTab = 'descrizione' | 'info' | 'itinerario'
 
-function MetaDetailCard({ item, creating, onCreate, error }: { item: MetaSearchResultItem; creating: boolean; onCreate: () => void; error: string | null }) {
+function MetaDetailCard({ item, creating, onCreate, error, onPersonalize }: {
+  item: MetaSearchResultItem; creating: boolean; onCreate: () => void; error: string | null
+  // Solo per un Borgo/Città (vedi isBorgo sotto) — apre la personalizzazione multi-tappa
+  // dell'itinerario già generato (CreaGuidaMapSearch.tsx's enterPersonalize), passando l'itinerario
+  // corrente come tappe di partenza da modificare.
+  onPersonalize: (itinerary: BorgoItinerary) => void
+}) {
   const [detail, setDetail] = useState<PlaceDetail | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(true)
   const [detailError, setDetailError] = useState<string | null>(null)
@@ -725,9 +905,15 @@ function MetaDetailCard({ item, creating, onCreate, error }: { item: MetaSearchR
                         </li>
                       ))}
                     </ol>
-                    <button onClick={generateItinerary} className="text-[11px] text-stone-400 hover:text-stone-600 mt-2">
-                      Rigenera itinerario
-                    </button>
+                    <div className="flex items-center gap-3 mt-2">
+                      <button onClick={generateItinerary} className="text-[11px] text-stone-400 hover:text-stone-600">
+                        Rigenera itinerario
+                      </button>
+                      <button onClick={() => onPersonalize(itinerary)}
+                        className="flex items-center gap-1 text-[11px] font-semibold text-forest-700 hover:text-forest-800">
+                        <Sliders className="w-3 h-3" /> Personalizza itinerario
+                      </button>
+                    </div>
                   </>
                 )}
               </div>
