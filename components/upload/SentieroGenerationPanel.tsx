@@ -37,10 +37,11 @@ interface Props {
 
 export default function SentieroGenerationPanel({ origin, onBack, onSaved }: Props) {
   const [step, setStep] = useState<Step>('params')
-  // Parte chiuso (stesso motivo di PersonalizeItineraryPanel.tsx): la mappa e la rail sopra devono
-  // restare visibili appena si entra in questa modalità, non solo dopo averla chiusa — si espande
-  // solo quando l'utente tocca il banner per compilare i parametri.
-  const [expanded, setExpanded] = useState(false)
+  // Parte espanso: a differenza di PersonalizeItineraryPanel (dove l'utente deve prima toccare i
+  // pin sulla mappa) qui non c'è nulla da fare sulla mappa prima di compilare i parametri — arrivare
+  // già pronti a scrivere distanza/dislivello evita un tocco in più. Restando un banner (non più uno
+  // schermo intero) la rail sopra resta comunque raggiungibile richiudendolo.
+  const [expanded, setExpanded] = useState(true)
 
   const [routeType, setRouteType] = useState<RouteType>('anello')
   const [distanceKm, setDistanceKm] = useState('')
