@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, Loader2, RefreshCw, Undo2, Trash2, ArrowLeftRight, ListOrdered, Save,
+  Search as SearchIcon, Route as RouteIcon, Upload,
 } from 'lucide-react'
 import { META_TYPE_CONFIG, type MetaType } from '@/lib/metaTypes'
 import type { MetaSearchResultItem } from '@/lib/metaSearch/types'
@@ -123,7 +124,7 @@ async function fetchJson<T>(url: string, body: unknown, key: string): Promise<T>
  * costruzione). Strumento a sé stante, non un terzo modo dentro CreaGuidaMapSearch.tsx — stesso
  * setup Leaflet imperativo di quel file, senza importarne i componenti.
  */
-export default function ManualRouteEditor({ onBack, initialView, onViewChange }: {
+export default function ManualRouteEditor({ onBack, initialView, onViewChange, onOpenPanel }: {
   onBack: () => void
   /** Centro/zoom di partenza (vedi sharedHelpers.ts's MapView, sollevato in app/upload/page.tsx) —
    *  se assente riparte da ITALY_CENTER/ITALY_ZOOM come prima. */
@@ -131,6 +132,10 @@ export default function ManualRouteEditor({ onBack, initialView, onViewChange }:
   /** Richiamato a ogni 'moveend' col centro/zoom corrente, così tornando a CreaGuidaMapSearch la
    *  mappa riparte da qui invece che dal centro Italia. */
   onViewChange?: (view: MapView) => void
+  /** Rail (vedi sotto) "Genera"/"Porta i tuoi dati": questo editor non ha una propria copia di quei
+   *  fogli (vivono in CreaGuidaMapSearch.tsx), quindi torna lì con quel foglio già aperto invece di
+   *  duplicarne la lista qui. */
+  onOpenPanel?: (panel: 'genera' | 'importa') => void
 }) {
   const router = useRouter()
   const mapRef = useRef<HTMLDivElement>(null)
@@ -658,6 +663,26 @@ export default function ManualRouteEditor({ onBack, initialView, onViewChange }:
           <p className="text-center text-[11px] font-medium text-red-600 bg-white/95 backdrop-blur rounded-full py-1.5 px-3 mx-auto w-fit shadow-sm">
             {loadError}
           </p>
+        )}
+      </div>
+
+      {/* ── Rail: stesse 3 famiglie di CreaGuidaMapSearch.tsx, sempre presente — questo editor è
+          "Crea un percorso a mano" (dentro la famiglia Genera, evidenziata), ma deve restare
+          possibile passare a Scopri o Porta i tuoi dati senza dover prima tornare indietro a mano. */}
+      <div className="absolute left-3 top-1/2 -translate-y-1/2 z-10 bg-white/95 backdrop-blur rounded-[28px] shadow-md p-1.5 flex flex-col gap-2">
+        <button onClick={onBack} title="Scopri sulla mappa" aria-label="Scopri sulla mappa"
+          className="w-11 h-11 rounded-2xl flex items-center justify-center text-stone-600 hover:bg-stone-100 transition-colors">
+          <SearchIcon className="w-[18px] h-[18px]" />
+        </button>
+        <button onClick={() => onOpenPanel?.('genera')} title="Genera un percorso" aria-label="Genera un percorso"
+          className="w-11 h-11 rounded-2xl flex items-center justify-center bg-terra-500 text-white transition-colors">
+          <RouteIcon className="w-[18px] h-[18px]" />
+        </button>
+        {onOpenPanel && (
+          <button onClick={() => onOpenPanel('importa')} title="Porta i tuoi dati" aria-label="Porta i tuoi dati"
+            className="w-11 h-11 rounded-2xl flex items-center justify-center text-stone-600 hover:bg-stone-100 transition-colors">
+            <Upload className="w-[18px] h-[18px]" />
+          </button>
         )}
       </div>
 

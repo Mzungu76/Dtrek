@@ -44,6 +44,16 @@ function UploadPageInner() {
   // pagina (mai montati insieme): senza condividere l'ultima vista, passare dall'uno all'altro (o
   // tornare indietro) farebbe ripartire la mappa dal centro Italia invece che da dove si era.
   const [mapView, setMapView] = useState<MapView | null>(null)
+  // Foglio da riaprire subito in CreaGuidaMapSearch quando ci si torna dalla rail di
+  // ManualRouteEditor.tsx (che non ha una propria copia dei fogli "Genera"/"Porta i tuoi dati") —
+  // azzerato da CreaGuidaMapSearch stessa appena l'ha consumato (onInitialPanelConsumed sotto), mai
+  // lasciato in giro per un ritorno successivo e non correlato.
+  const [pendingPanel, setPendingPanel] = useState<'genera' | 'importa' | null>(null)
+
+  function goToPanel(panel: 'genera' | 'importa') {
+    setPendingPanel(panel)
+    setGpxSource('cerca')
+  }
 
   // "Naviga adesso" prova prima l'app nativa (se il device può averla), altrimenti ricade sul
   // navigatore libero via web già esistente (app/navigatore/traccia) — vedi lib/navigatorHandoff.ts.
@@ -55,14 +65,15 @@ function UploadPageInner() {
   // da sola, senza il resto della chrome della pagina sotto (comunque nascosta dall'overlay).
   if (tab === 'gpx' && gpxSource === 'cerca') {
     return <CreaGuidaMapSearch onBack={() => router.back()} onOtherWays={mode => setGpxSource(mode)}
-      initialView={mapView ?? undefined} onViewChange={setMapView} />
+      initialView={mapView ?? undefined} onViewChange={setMapView}
+      initialPanel={pendingPanel ?? undefined} onInitialPanelConsumed={() => setPendingPanel(null)} />
   }
 
   // Strumento a sé stante (piano "Editor manuale di percorsi"): stesso pattern a schermo intero di
   // 'cerca' sopra, non annidato dentro il <main> con Navbar come le altre vie di "Altri modi".
   if (tab === 'gpx' && gpxSource === 'manual-route') {
     return <ManualRouteEditor onBack={() => setGpxSource('cerca')}
-      initialView={mapView ?? undefined} onViewChange={setMapView} />
+      initialView={mapView ?? undefined} onViewChange={setMapView} onOpenPanel={goToPanel} />
   }
 
   return (

@@ -100,7 +100,7 @@ export type OtherWayToAdd = 'file' | 'manual' | 'url' | 'from-activity' | 'manua
  * onOtherWays). Il generatore "su misura" (RouteBuilder.tsx) non è più raggiunto da qui — restava
  * percepito come "torna alla vecchia ricerca", non un'opzione distinta.
  */
-export default function CreaGuidaMapSearch({ onBack, onOtherWays, initialView, onViewChange }: {
+export default function CreaGuidaMapSearch({ onBack, onOtherWays, initialView, onViewChange, initialPanel, onInitialPanelConsumed }: {
   onBack: () => void
   onOtherWays?: (mode: OtherWayToAdd) => void
   /** Centro/zoom di partenza (vedi sharedHelpers.ts's MapView) — se assente riparte da ITALY_CENTER/
@@ -109,6 +109,13 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays, initialView, o
   /** Richiamato a ogni 'moveend' col centro/zoom corrente — il chiamante lo tiene per passarlo come
    *  initialView a questo componente (o a ManualRouteEditor) al prossimo mount. */
   onViewChange?: (view: MapView) => void
+  /** Apre subito al mount il foglio "Genera" o "Porta i tuoi dati" — usato quando si arriva qui
+   *  dalla rail di ManualRouteEditor.tsx (che non ha una propria copia di questi fogli). */
+  initialPanel?: 'genera' | 'importa'
+  /** Richiamato una sola volta al mount se `initialPanel` era impostato, così il chiamante può
+   *  azzerarlo: senza, un ritorno successivo e non correlato a questa pagina riaprirebbe lo stesso
+   *  foglio da solo. */
+  onInitialPanelConsumed?: () => void
 }) {
   const router = useRouter()
   const mapRef = useRef<HTMLDivElement>(null)
@@ -125,7 +132,15 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays, initialView, o
   const onViewChangeRef = useRef(onViewChange)
   onViewChangeRef.current = onViewChange
 
-  const [showOtherWays, setShowOtherWays] = useState(false)
+  // onInitialPanelConsumed va richiamato una sola volta, al mount — non nelle dep di un effetto
+  // che potrebbe rirunnare, altrimenti azzererebbe il pending panel del chiamante più volte per
+  // niente (innocuo qui, ma vale lo stesso pattern "ref" già usato sopra per coerenza).
+  useEffect(() => {
+    if (initialPanel) onInitialPanelConsumed?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const [showOtherWays, setShowOtherWays] = useState(initialPanel === 'importa')
 
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('tutto')
   const [metaResults, setMetaResults] = useState<MetaSearchResultItem[]>([])
@@ -154,7 +169,7 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays, initialView, o
   // Scelta fra le due modalità di generazione dal FAB in basso a destra — un tocco più lontano
   // invece di due FAB affiancati (Sentieri e Personalizza), che sulla mappa affollerebbero
   // l'angolo insieme agli altri controlli fissi (peek dei risultati, "Cerca in quest'area").
-  const [showGenChooser, setShowGenChooser] = useState(false)
+  const [showGenChooser, setShowGenChooser] = useState(initialPanel === 'genera')
 
   // Modalità B — personalizzazione di un itinerario multi-tappa, sia dal popup di un Borgo/Città
   // (vedi "Personalizza itinerario" nel tab Itinerario di MetaDetailCard) sia da zero tramite il
