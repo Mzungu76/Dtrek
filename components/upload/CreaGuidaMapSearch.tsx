@@ -489,14 +489,14 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
             className="w-10 h-10 rounded-full bg-white/95 backdrop-blur shadow-md flex items-center justify-center text-stone-600 hover:text-stone-800 transition-colors shrink-0">
             <ArrowLeft className="w-4 h-4" />
           </button>
-          <div className="flex-1 flex items-center gap-2 bg-white/95 backdrop-blur rounded-2xl shadow-md px-3.5 py-2.5 min-w-0">
-            {resolving ? <Loader2 className="w-4 h-4 text-stone-400 shrink-0 animate-spin" /> : <SearchIcon className="w-4 h-4 text-stone-400 shrink-0" />}
+          <div className="flex-1 flex items-center gap-2 bg-stone-100 rounded-full px-3.5 py-2.5 min-w-0">
+            {resolving ? <Loader2 className="w-4 h-4 text-stone-400 shrink-0 animate-spin" /> : <SearchIcon className="w-4 h-4 text-stone-500 shrink-0" />}
             <input
               value={queryText}
               onChange={e => { setQueryText(e.target.value); setQueryError(null) }}
               onKeyDown={e => { if (e.key === 'Enter') handleSearchSubmit() }}
               placeholder="Borgo, sito o sentiero…"
-              className="flex-1 min-w-0 bg-transparent text-sm text-stone-800 outline-none placeholder:text-stone-400"
+              className="flex-1 min-w-0 bg-transparent text-sm text-stone-800 outline-none placeholder:text-stone-500"
             />
             {queryText && (
               <button onClick={() => { setQueryText(''); setQueryError(null) }} aria-label="Cancella ricerca" className="text-stone-400 shrink-0">
@@ -506,15 +506,16 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
           </div>
         </div>
 
-        <div className="flex justify-center">
-          <div className="inline-flex bg-white/95 backdrop-blur rounded-full shadow-md p-1 gap-1">
-            {TYPE_FILTERS.map(f => (
-              <button key={f.id} type="button" onClick={() => { setTypeFilter(f.id); setSelected(null) }}
-                className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-colors ${typeFilter === f.id ? 'bg-stone-800 text-white' : 'text-stone-500'}`}>
-                {f.label}
-              </button>
-            ))}
-          </div>
+        {/* Filtro per tipo — controllo segmentato a piena larghezza (stesso sfondo piatto stone-100
+            della barra di ricerca sopra), non più una pillola centrata larga solo quanto il testo:
+            più leggibile e coerente con la barra. */}
+        <div className="flex bg-stone-100 rounded-full p-1 gap-1">
+          {TYPE_FILTERS.map(f => (
+            <button key={f.id} type="button" onClick={() => { setTypeFilter(f.id); setSelected(null) }}
+              className={`flex-1 py-1.5 rounded-full text-xs font-semibold text-center transition-colors ${typeFilter === f.id ? 'bg-stone-900 text-white' : 'text-stone-700'}`}>
+              {f.label}
+            </button>
+          ))}
         </div>
 
         {queryError && (
