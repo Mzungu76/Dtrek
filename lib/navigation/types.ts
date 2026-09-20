@@ -106,6 +106,11 @@ export type NavEventMap = {
   gpsLost: { permissionDenied: boolean }
   gpsRecovered: {}
   stateChanged: { from: NavState; to: NavState }
+  /** Fired by NavigationEngine.reverseRoute() — the hiker confirmed they're deliberately walking
+   * the route end-to-start, so route polyline, turn instructions, moments and elevation profile
+   * were all re-based to match. UI should refresh anything caching the old instruction/progress
+   * shape (e.g. lastInstructionIndex-derived state) in response. */
+  routeReversed: {}
   paceUpdated: import('./paceAssistant').PaceUpdateResult
   /**
    * High-frequency (~10Hz), render-only position sample — extrapolated by the Position Engine's

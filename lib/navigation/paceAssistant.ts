@@ -64,7 +64,7 @@ function weatherMultiplier(w: WeatherConditions | null): number {
 
 export class PaceAssistant {
   private readonly totalRouteM: number
-  private readonly elevationProfile: ElevationProfilePoint[]
+  private elevationProfile: ElevationProfilePoint[]
   private readonly terrainMult: number
   private readonly fitnessMult: number
   private weather: WeatherConditions | null = null
@@ -80,6 +80,11 @@ export class PaceAssistant {
 
   setWeather(w: WeatherConditions): void {
     this.weather = w
+  }
+
+  /** Swapped in by NavigationEngine.reverseRoute() (see elevationProfile.ts's reverseElevationProfile) — moving/observed-pace state above is deliberately untouched, only which way "remaining" climbs/descends now reads. */
+  setElevationProfile(profile: ElevationProfilePoint[]): void {
+    this.elevationProfile = profile
   }
 
   update(distanceAlongRouteM: number, traveledDistanceM: number, instantSpeedMs: number | null, fixTs: number): PaceUpdateResult {

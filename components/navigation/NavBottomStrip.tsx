@@ -1,5 +1,5 @@
 'use client'
-import { ChevronUp, Pause, Play, Square } from 'lucide-react'
+import { Camera, ChevronUp, Pause, Play, Square } from 'lucide-react'
 
 interface Props {
   /** Riga di sintesi già formattata dal chiamante (es. "4,2 km · 13:40 · +180 m" per il
@@ -9,9 +9,14 @@ interface Props {
   timerRunning: boolean
   onTogglePlayPause: () => void
   onStop: () => void
-  /** Apre il pannello dettagli a schermo intero — il resto (tempi, altimetria, foto/nota/...) vive
-   *  lì, non più in una scheda sempre montata sopra la mappa. */
+  /** Apre il pannello dettagli a schermo intero — il resto (tempi, altimetria, nota testuale/...)
+   *  vive lì, non più in una scheda sempre montata sopra la mappa. */
   onExpand: () => void
+  /** Scatto rapido durante la navigazione (apre FieldNoteSheet con la fotocamera già pronta) —
+   *  unico accesso diretto sopra la mappa: era l'azione più cercata e più nascosta (raggiungibile
+   *  solo da Dettagli), ma resta un solo pulsante in più per non appesantire una barra pensata
+   *  per restare minimale. Una nota di solo testo resta un tocco più in là, in Dettagli. */
+  onOpenFoto: () => void
   /** DTREK-AUDIT.md P1 #20 — interruttore manuale (nessun sensore di luce disponibile a una
    *  pagina web): sfondo pieno opaco invece di semi-trasparente sotto sole forte. */
   highContrast?: boolean
@@ -30,7 +35,7 @@ const TEXT_SHADOW = '0 1px 3px rgba(0,0,0,0.75), 0 1px 8px rgba(0,0,0,0.5)'
  * il percorso pianificato (ActiveNavigationView.tsx) e la registrazione libera
  * (app/navigatore/traccia/page.tsx): stessa striscia, contenuto diverso.
  */
-export default function NavBottomStrip({ summary, timerRunning, onTogglePlayPause, onStop, onExpand, highContrast }: Props) {
+export default function NavBottomStrip({ summary, timerRunning, onTogglePlayPause, onStop, onExpand, onOpenFoto, highContrast }: Props) {
   // DTREK-AUDIT.md P1 #20 — sfondo pieno opaco (bg-black, non bg-black/40-45) sotto sole forte per
   // testo/pulsanti icona: la trasparenza lascia passare troppa luce su uno schermo molto luminoso
   // perché restino leggibili/riconoscibili.
@@ -64,6 +69,10 @@ export default function NavBottomStrip({ summary, timerRunning, onTogglePlayPaus
             <span className="font-mono text-[20px] font-bold text-white" style={{ textShadow: TEXT_SHADOW }}>
               {summary}
             </span>
+          </button>
+
+          <button onClick={onOpenFoto} className={`${iconBtn} pointer-events-auto`} aria-label="Scatta una foto">
+            <Camera className="w-5 h-5" />
           </button>
 
           <button onClick={onStop} className={`${iconBtn} pointer-events-auto bg-red-600/90`} aria-label="Termina">

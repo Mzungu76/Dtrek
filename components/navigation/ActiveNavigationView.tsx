@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Capacitor } from '@capacitor/core'
 import {
@@ -72,6 +72,7 @@ import { buildSlopeSegments } from '@/lib/navigation/routeSlopeSegments'
 import { readHighContrastPref, writeHighContrastPref } from '@/lib/navigation/highContrastPref'
 import { readNarrationPref, writeNarrationPref } from '@/lib/navigation/narrationPref'
 import { hasSeenNavOnboarding, markNavOnboardingSeen } from '@/lib/navigation/navOnboardingPref'
+import { useAutoDismiss } from '@/lib/hooks/useAutoDismiss'
 import NavOnboardingSheet from './NavOnboardingSheet'
 import ConfirmEndDialog from './ConfirmEndDialog'
 import EndHikeReviewDialog from './EndHikeReviewDialog'
@@ -95,6 +96,7 @@ interface Props {
 }
 
 const FIX_STALE_MS = 20000 // if no fix arrives for this long, "moving time" stops accruing
+const CONTROLS_HIDE_MS = 6000 // secondary icon rails fade after this long without a touch on screen
 
 // ── Pannello laterale etichettato (da lg: in su) ────────────────────────────────────────────────
 // Il cluster di icone mute (colonne sinistra/destra sopra) resta l'unica interfaccia sotto lg:,
@@ -248,6 +250,19 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   const lastLivePublishSuccessRef = useRef<number | null>(null)
   const [showNatura2000, setShowNatura2000] = useState(false)
   const [wildlifeAlertDismissed, setWildlifeAlertDismissed] = useState(false)
+  // Soluzione B (punto 6 del feedback utente, docs/diario-valutazione-ux-piano.md): la mappa era
+  // sempre coperta da 8+ pulsanti fissi sulle due rotaie laterali, mai nascosti. Questi si
+  // dissolvono dopo CONTROLS_HIDE_MS di inattività (nessun tocco sullo schermo), lasciando SOS,
+  // istruzione corrente e barra inferiore sempre visibili — vedi bumpControlsVisibility più sotto
+  // per come si riattivano e perché restano sempre accesi negli stati off_route/wrong_direction/
+  // gps_lost.
+  const [controlsVisible, setControlsVisible] = useState(true)
+  const controlsHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const bumpControlsVisibility = useCallback(() => {
+    setControlsVisible(true)
+    if (controlsHideTimerRef.current) clearTimeout(controlsHideTimerRef.current)
+    controlsHideTimerRef.current = setTimeout(() => setControlsVisible(false), CONTROLS_HIDE_MS)
+  }, [])
   const [weatherLookaheadDismissed, setWeatherLookaheadDismissed] = useState(false)
   const [pace, setPace] = useState<PaceUpdateResult | null>(null)
   const [turnBackDismissed, setTurnBackDismissed] = useState(false)
@@ -420,6 +435,14 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   // Un nuovo avviso (testo diverso, es. l'ETA si sposta e ora indica pioggia invece di vento)
   // non deve restare nascosto solo perché un avviso precedente era stato chiuso.
   useEffect(() => { setWeatherLookaheadDismissed(false) }, [weatherLookahead?.message])
+  // Avvisi informativi (non critici, non una condizione operativa da risolvere): si tolgono da
+  // soli dopo un po' invece di restare a occupare spazio sulla mappa finché qualcuno non li
+  // chiude a mano — vedi useAutoDismiss.ts. off_route/wrong_direction/gps_lost/batteria scarica
+  // restano invece persistenti, gestiti a parte più sotto.
+  useAutoDismiss(!!weatherLookahead?.message && !weatherLookaheadDismissed, () => setWeatherLookaheadDismissed(true))
+  useAutoDismiss(offlinePackageWarning, () => setOfflinePackageWarning(false))
+  useAutoDismiss(offlineDegradedMissing.length > 0, () => setOfflineDegradedMissing([]))
+  useAutoDismiss(state !== 'idle' && relevantWildlifeRisks.length > 0 && !wildlifeAlertDismissed, () => setWildlifeAlertDismissed(true))
   const sunTimes = useSunTimes(hike.id, routePolyline, positionRef)
 
   const remainingPois = useMemo(() => {
@@ -617,6 +640,12 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         logEvent('on_route_again')
         setOffRouteBearingDeg(null)
         setMapMatch(null)
+      })
+      engine.on('routeReversed', () => {
+        if (cancelled) return
+        logEvent('route_reversed', { reversed: engine.isReversed })
+        speakIfEnabled(engine.isReversed ? 'Percorso invertito' : 'Percorso ripristinato nel verso originale')
+        haptics.success()
       })
       engine.on('gpsLost', ({ permissionDenied }) => {
         if (cancelled) return
@@ -851,6 +880,20 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
     }
   }, [state, wakeLockEnabled])
 
+  // Off-route/direzione sbagliata/GPS perso: "Vie d'uscita" deve restare raggiungibile dalla
+  // rotaia senza dover prima toccare lo schermo per farla riapparire — stessa ragione del
+  // commento sul pulsante Signpost più sotto. Qualunque altro stato riparte semplicemente il
+  // timer di dissolvimento (stesso effetto di un tocco sullo schermo).
+  useEffect(() => {
+    if (state === 'off_route' || state === 'wrong_direction' || state === 'gps_lost') {
+      if (controlsHideTimerRef.current) { clearTimeout(controlsHideTimerRef.current); controlsHideTimerRef.current = null }
+      setControlsVisible(true)
+      return
+    }
+    bumpControlsVisibility()
+    return () => { if (controlsHideTimerRef.current) clearTimeout(controlsHideTimerRef.current) }
+  }, [state, bumpControlsVisibility])
+
   const handleTogglePlayPause = () => {
     timerRunningRef.current = !timerRunningRef.current
     setTimerRunning(timerRunningRef.current)
@@ -903,6 +946,18 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       })
     })
   }
+
+  /**
+   * Wired to the wrong_direction banner's "Sto percorrendo al contrario" action — the hiker is
+   * confirming this isn't a mistake, so instead of keep flagging it, flip which end of the route
+   * counts as "forward" (NavigationEngine.reverseRoute() re-bases progress/instructions/pace/
+   * elevation to match). Feedback (voice + haptic + clearing the banner) happens off the
+   * engine's own 'routeReversed'/'backOnRoute' events, not here, so it stays correct however the
+   * call is triggered.
+   */
+  const handleReverseRoute = () => engineRef.current?.reverseRoute()
+
+  const handleOpenFoto = () => { setFieldNoteAutoCamera(true); setShowFieldNote(true) }
 
   /**
    * Snapshot, not live: the Escape Engine's graph search (lib/navigation/escapeEngine.ts) is cheap
@@ -1036,7 +1091,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   }, [turnBackNow])
 
   return (
-    <div className="fixed inset-0 z-[2000] bg-stone-900 font-body">
+    <div className="fixed inset-0 z-[2000] bg-stone-900 font-body" onPointerDown={bumpControlsVisibility}>
       {mapMode === 'offline' ? (
         <NavigationMap
           ref={mapHandleRef}
@@ -1067,7 +1122,11 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
           POI/Pendenze) più il pulsante "centra sulla mia posizione", raggruppati invece di
           lasciare quest'ultimo a fluttuare da solo a metà schermo (dove si scontrava con la
           rotaia destra una volta centrata anche lei). */}
-      <div className="absolute left-0 z-10 top-1/2 -translate-y-1/2 flex flex-col items-start gap-3 lg:hidden">
+      <div
+        className={`absolute left-0 z-10 top-1/2 -translate-y-1/2 flex flex-col items-start gap-3 lg:hidden transition-opacity duration-300 ${
+          controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        }`}
+      >
         <NavLayerRail
           showNearbyTrails={showNearbyTrails} onToggleNearbyTrails={() => setShowNearbyTrails((v) => !v)}
           showPois={showPoiLayer} onTogglePois={() => setShowPoiLayer((v) => !v)}
@@ -1191,66 +1250,80 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
           affidabilità, condivisione live, mappa offline, punto auto — invece di due colonne
           separate a offset fissi che finivano per scontrarsi con altri controlli fluttuanti. */}
       <div className="absolute right-3 z-10 top-1/2 -translate-y-1/2 flex flex-col items-end gap-2 lg:hidden">
+        {/* SOS resta sempre visibile e toccabile, fuori dal dissolvimento qui sotto — è l'unico
+            controllo di questa rotaia per cui "nascosto dopo un po' d'inattività" non è mai
+            accettabile. */}
         <SosButton
           fix={position ? { lat: position.lat, lon: position.lon, accuracyM } : null}
           liveShareUrl={liveShareToken ? `${typeof window !== 'undefined' ? window.location.origin : ''}/s/live/${liveShareToken}` : null}
           onTriggered={(action) => logEvent('sos_triggered', { action })}
         />
-        <MapModeSwitcher
-          mode={mapMode} onModeChange={setMapMode} is3D={is3D} onToggle3D={() => setIs3D((v) => !v)} isOnline={isOnline}
-          showNatura2000={showNatura2000} onToggleNatura2000={() => setShowNatura2000((v) => !v)}
-        />
-        <TrailConfidenceBadge confidence={trailConfidence} />
-        {/* Raggiungibile sempre, non solo dal banner fuori-percorso: prima le "vie d'uscita"
-            comparivano solo dentro l'avviso off_route/wrong_direction, che sparisce del tutto
-            quando lo stato è gps_lost (l'avviso GPS perso lo sostituisce) — proprio nel momento
-            in cui questo strumento serve di più. Un punto di accesso proattivo permette anche di
-            consultarle "per sicurezza" mentre si è ancora regolarmente sul percorso. */}
-        <button
-          onClick={handleEscapeOptions}
-          title="Vie d'uscita"
-          className="w-11 h-11 rounded-full flex items-center justify-center shadow-lg border bg-white/95 border-stone-200"
-        >
-          <Signpost className="w-5 h-5 text-stone-700" />
-        </button>
-        <button
-          onClick={() => setShowLiveShareSheet(true)}
-          title={liveSharingEnabled ? 'Condivisione posizione live attiva' : 'Condividi la tua posizione live'}
-          className={`w-11 h-11 rounded-full flex items-center justify-center shadow-lg border ${
-            liveSharingEnabled ? 'bg-sky-600 border-sky-400/40' : 'bg-white/95 border-stone-200'
+        {/* Il resto della rotaia si dissolve dopo un po' di inattività (vedi bumpControlsVisibility
+            più sopra) invece di restare sempre sopra la mappa — riappare al primo tocco sullo
+            schermo, o subito se lo stato diventa off_route/wrong_direction/gps_lost (vie d'uscita
+            deve restare raggiungibile). opacity, non display: none, così le dimensioni della
+            colonna non cambiano e SOS non "salta" quando il resto scompare/riappare. */}
+        <div
+          className={`flex flex-col items-end gap-2 transition-opacity duration-300 ${
+            controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
           }`}
         >
-          <Radio className={`w-5 h-5 ${liveSharingEnabled ? 'text-white' : 'text-stone-700'}`} />
-        </button>
-        {routePolyline.length >= 2 && (
+          <MapModeSwitcher
+            mode={mapMode} onModeChange={setMapMode} is3D={is3D} onToggle3D={() => setIs3D((v) => !v)} isOnline={isOnline}
+            showNatura2000={showNatura2000} onToggleNatura2000={() => setShowNatura2000((v) => !v)}
+          />
+          <TrailConfidenceBadge confidence={trailConfidence} />
+          {/* Raggiungibile sempre, non solo dal banner fuori-percorso: prima le "vie d'uscita"
+              comparivano solo dentro l'avviso off_route/wrong_direction, che sparisce del tutto
+              quando lo stato è gps_lost (l'avviso GPS perso lo sostituisce) — proprio nel momento
+              in cui questo strumento serve di più. Un punto di accesso proattivo permette anche di
+              consultarle "per sicurezza" mentre si è ancora regolarmente sul percorso. */}
           <button
-            onClick={() => setShowOfflineSheet(true)}
-            title={offlineReady ? 'Mappa scaricata per offline' : 'Scarica mappa per offline'}
+            onClick={handleEscapeOptions}
+            title="Vie d'uscita"
+            className="w-11 h-11 rounded-full flex items-center justify-center shadow-lg border bg-white/95 border-stone-200"
+          >
+            <Signpost className="w-5 h-5 text-stone-700" />
+          </button>
+          <button
+            onClick={() => setShowLiveShareSheet(true)}
+            title={liveSharingEnabled ? 'Condivisione posizione live attiva' : 'Condividi la tua posizione live'}
             className={`w-11 h-11 rounded-full flex items-center justify-center shadow-lg border ${
-              offlineReady ? 'bg-emerald-600 border-emerald-400/40' : 'bg-white/95 border-stone-200'
+              liveSharingEnabled ? 'bg-sky-600 border-sky-400/40' : 'bg-white/95 border-stone-200'
             }`}
           >
-            {offlineReady ? <CheckCircle2 className="w-5 h-5 text-white" /> : <Download className="w-5 h-5 text-stone-700" />}
+            <Radio className={`w-5 h-5 ${liveSharingEnabled ? 'text-white' : 'text-stone-700'}`} />
           </button>
-        )}
-        <ParkingSpotControl
-          spot={parkingSpot}
-          position={position}
-          distanceM={parkingDistanceM}
-          bearingToSpotDeg={parkingBearingDeg}
-          onSave={handleSaveParking}
-          onClear={handleClearParking}
-        />
-        {/* DTREK-AUDIT.md P2 #26 — riapre in ogni momento il riepilogo mostrato all'avvio della
-            prima navigazione (SOS, vie d'uscita, layer, colori POI), non solo la prima volta. */}
-        <button
-          onClick={() => setShowOnboarding(true)}
-          aria-label="Come funziona la navigazione"
-          title="Come funziona la navigazione"
-          className="w-11 h-11 rounded-full flex items-center justify-center shadow-lg border bg-white/95 border-stone-200"
-        >
-          <HelpCircle className="w-5 h-5 text-stone-700" />
-        </button>
+          {routePolyline.length >= 2 && (
+            <button
+              onClick={() => setShowOfflineSheet(true)}
+              title={offlineReady ? 'Mappa scaricata per offline' : 'Scarica mappa per offline'}
+              className={`w-11 h-11 rounded-full flex items-center justify-center shadow-lg border ${
+                offlineReady ? 'bg-emerald-600 border-emerald-400/40' : 'bg-white/95 border-stone-200'
+              }`}
+            >
+              {offlineReady ? <CheckCircle2 className="w-5 h-5 text-white" /> : <Download className="w-5 h-5 text-stone-700" />}
+            </button>
+          )}
+          <ParkingSpotControl
+            spot={parkingSpot}
+            position={position}
+            distanceM={parkingDistanceM}
+            bearingToSpotDeg={parkingBearingDeg}
+            onSave={handleSaveParking}
+            onClear={handleClearParking}
+          />
+          {/* DTREK-AUDIT.md P2 #26 — riapre in ogni momento il riepilogo mostrato all'avvio della
+              prima navigazione (SOS, vie d'uscita, layer, colori POI), non solo la prima volta. */}
+          <button
+            onClick={() => setShowOnboarding(true)}
+            aria-label="Come funziona la navigazione"
+            title="Come funziona la navigazione"
+            className="w-11 h-11 rounded-full flex items-center justify-center shadow-lg border bg-white/95 border-stone-200"
+          >
+            <HelpCircle className="w-5 h-5 text-stone-700" />
+          </button>
+        </div>
       </div>
 
       {/* Pannello laterale — da lg: in su, stessi controlli delle due colonne sopra ma con
@@ -1474,12 +1547,26 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
                       : `Sei fuori dal percorso${offRouteBearingDeg != null ? ' — torna verso la freccia' : ' pianificato'}`}
                   </span>
                 </div>
-                <button
-                  onClick={handleEscapeOptions}
-                  className="self-start pl-6 text-xs font-bold underline decoration-white/60 underline-offset-2 py-1"
-                >
-                  Vie d&apos;uscita
-                </button>
+                <div className="flex items-center gap-4 pl-6">
+                  {isWrongDirection && (
+                    /* Prima l'unica risposta possibile a questo avviso era smettere di seguirlo —
+                       se il contrario è voluto (percorso ad anello preso all'inverso, ecc.) questo
+                       aggiorna il verso "avanti" del percorso invece di continuare a segnalare
+                       come errore una scelta deliberata. */
+                    <button
+                      onClick={handleReverseRoute}
+                      className="text-xs font-bold underline decoration-white/60 underline-offset-2 py-1"
+                    >
+                      Lo faccio al contrario apposta
+                    </button>
+                  )}
+                  <button
+                    onClick={handleEscapeOptions}
+                    className="text-xs font-bold underline decoration-white/60 underline-offset-2 py-1"
+                  >
+                    Vie d&apos;uscita
+                  </button>
+                </div>
                 {/* Map Matching (Fase 4, lib/navigation/mapMatcher.ts): distinguishes "off the plan
                     but on a real, mapped trail" (likely deliberate) from being off any known trail —
                     informational only, never changes the off-route verdict itself above. */}
@@ -1500,6 +1587,18 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
             node: (
               <div className="px-4 py-2 rounded-xl bg-stone-800 text-white text-sm font-semibold font-body shadow-lg flex items-center gap-2">
                 <BatteryWarning size={16} className="shrink-0 text-amber-400" /> Batteria scarica
+                {/* Il wake lock (schermo sempre acceso durante la navigazione, vedi l'effetto più
+                    sopra) è probabilmente il consumo maggiore quando la batteria è già bassa — ma
+                    il suo interruttore vive solo dentro Dettagli, facile da non trovare proprio
+                    quando servirebbe di più. Azione diretta qui, non solo nel pannello. */}
+                {wakeLockEnabled && (
+                  <button
+                    onClick={() => setWakeLockEnabled(false)}
+                    className="text-xs font-bold underline decoration-white/60 underline-offset-2 ml-1"
+                  >
+                    Spegni schermo sempre acceso
+                  </button>
+                )}
                 <button onClick={() => setLowBatteryNotice(false)} className="text-stone-400 hover:text-white ml-1" aria-label="Chiudi avviso">✕</button>
               </div>
             ),
@@ -1547,6 +1646,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         onTogglePlayPause={handleTogglePlayPause}
         onStop={requestEnd}
         onExpand={() => setShowStatsSheet(true)}
+        onOpenFoto={handleOpenFoto}
         highContrast={highContrastEnabled}
       />
 
@@ -1568,7 +1668,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         currentDistanceM={progress?.distanceAlongRouteM ?? 0}
         remainingPois={remainingPois}
         guideExcerpts={guideExcerpts}
-        onOpenFoto={() => { setFieldNoteAutoCamera(true); setShowFieldNote(true) }}
+        onOpenFoto={handleOpenFoto}
         onOpenNota={() => { setFieldNoteAutoCamera(false); setShowFieldNote(true) }}
         onOpenSpecie={() => setShowSpeciesIdentify(true)}
         wakeLockEnabled={wakeLockEnabled}

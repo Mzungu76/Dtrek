@@ -8,7 +8,7 @@ import { watchDeviceCompass, bearingDeg } from './orientation'
 import { NavStateMachine } from './stateMachine'
 import { buildRouteInstructions } from './routeInstructions'
 import { PaceAssistant, type WeatherConditions } from './paceAssistant'
-import type { ElevationProfilePoint } from './elevationProfile'
+import { reverseElevationProfile, type ElevationProfilePoint } from './elevationProfile'
 import type { GeoFix, NavEventMap, NavEventName, NavInstruction, NavPoi, RouteMoment } from './types'
 
 const GPS_LOST_MS = 15000
@@ -61,12 +61,22 @@ export interface NavigationEngineOptions {
  * (feeding it a recorded hike_navigation_track instead of live GPS).
  */
 export class NavigationEngine {
-  private readonly tracker: RouteTracker
+  private tracker: RouteTracker
   private readonly poiIndex: PoiSpatialIndex
-  private readonly moments: RouteMoment[]
+  private moments: RouteMoment[]
   private readonly pace: PaceAssistant
-  private readonly instructions: NavInstruction[]
+  private instructions: NavInstruction[]
   private lastInstructionIndex = -1
+  /**
+   * Originals, kept around purely so reverseRoute() can always rebuild from the source data
+   * instead of re-reversing an already-reversed copy (which would silently no-op on a second
+   * call, or drift, if it mutated its own output in place). `reversed` is the only mutable state
+   * here — everything else below is derived fresh from these plus that flag.
+   */
+  private readonly originalRoutePolyline: [number, number][]
+  private readonly originalMoments: RouteMoment[]
+  private readonly originalElevationProfile: ElevationProfilePoint[]
+  private reversed = false
   private readonly position = new PositionEngine()
   private readonly offRoute = new OffRouteEngine()
   private readonly stateMachine = new NavStateMachine()
@@ -88,13 +98,16 @@ export class NavigationEngine {
   private lastRenderTickAt = 0
 
   constructor(opts: NavigationEngineOptions) {
+    this.originalRoutePolyline = opts.routePolyline
+    this.originalMoments = opts.moments ?? []
+    this.originalElevationProfile = opts.elevationProfile ?? []
     this.tracker = new RouteTracker(opts.routePolyline)
     this.poiIndex = new PoiSpatialIndex(opts.pois)
-    this.moments = opts.moments ?? []
+    this.moments = this.originalMoments
     this.instructions = buildRouteInstructions(opts.routePolyline)
     this.pace = new PaceAssistant({
       totalRouteM: this.tracker.totalRouteM,
-      elevationProfile: opts.elevationProfile ?? [],
+      elevationProfile: this.originalElevationProfile,
       terrainMultiplier: opts.terrainMultiplier,
       fitnessMult: opts.fitnessMult,
     })
@@ -114,6 +127,53 @@ export class NavigationEngine {
   /** Pushed in by the caller (e.g. from an Open-Meteo fetch), not fetched by the engine itself — keeps this class free of network calls, same "pure, mockable, replayable" property the rest of it already has. */
   setWeatherConditions(w: WeatherConditions): void {
     this.pace.setWeather(w)
+  }
+
+  get isReversed(): boolean {
+    return this.reversed
+  }
+
+  /**
+   * The hiker confirmed (via the wrong_direction banner's action) that walking the route
+   * end-to-start is deliberate, not a mistake — re-bases everything that has a notion of "the
+   * route's own forward direction" so Off-Route/wrong_direction stops flagging what is now the
+   * expected way to walk, and turn instructions/pace/elevation read correctly for this direction
+   * too. Idempotent-by-toggle: calling it again flips back to the original direction (rebuilt
+   * from the untouched originals, never a reverse-of-a-reverse), rather than only ever going one
+   * way — a hiker can call it by mistake, or genuinely turn around partway through.
+   */
+  reverseRoute(): void {
+    this.reversed = !this.reversed
+    const polyline = this.reversed ? [...this.originalRoutePolyline].reverse() : this.originalRoutePolyline
+
+    this.tracker = new RouteTracker(polyline)
+    this.instructions = buildRouteInstructions(polyline)
+    this.lastInstructionIndex = -1
+    // Brand-new RouteTracker starts its windowed search at index 0 of the (possibly just-flipped)
+    // polyline, which has no relation to where the hiker actually is along it — same "next fix
+    // isn't in spatial continuity with the tracker's internal state" situation the gps_lost/
+    // visibility-resume paths already handle, so reuse their fix.
+    this.forceFullScanUntilMs = Date.now() + CATCH_UP_FULL_SCAN_GRACE_MS
+
+    const totalM = this.tracker.totalRouteM
+    this.moments = this.reversed
+      ? this.originalMoments.map((m) => ({ ...m, distanceAlongRouteM: totalM - m.distanceAlongRouteM }))
+      : this.originalMoments
+
+    this.pace.setElevationProfile(
+      this.reversed ? reverseElevationProfile(this.originalElevationProfile) : this.originalElevationProfile,
+    )
+
+    // Off-Route/wrong_direction judged the old direction right up to this call — start clean
+    // against the new one instead of carrying over dwell timers that no longer mean anything.
+    this.offRoute.reset()
+    const current = this.stateMachine.state
+    if (current === 'off_route' || current === 'wrong_direction' || current === 'uncertain') {
+      this.setState('navigating')
+      this.emit('backOnRoute', {})
+    }
+
+    this.emit('routeReversed', {})
   }
 
   on<K extends NavEventName>(event: K, listener: Listener<K>): () => void {
