@@ -8,6 +8,7 @@ import ManualPlanUploader from '@/components/upload/ManualPlanUploader'
 import UrlImportUploader from '@/components/upload/UrlImportUploader'
 import FromActivityUploader from '@/components/upload/FromActivityUploader'
 import CreaGuidaMapSearch, { type OtherWayToAdd } from '@/components/upload/CreaGuidaMapSearch'
+import ManualRouteEditor from '@/components/upload/ManualRouteEditor'
 import TrialStatusBanner from '@/components/dtrek/TrialStatusBanner'
 import { tryOpenNavigatorApp } from '@/lib/navigatorHandoff'
 import { Mountain, Compass, ArrowLeft } from 'lucide-react'
@@ -49,6 +50,12 @@ function UploadPageInner() {
   // da sola, senza il resto della chrome della pagina sotto (comunque nascosta dall'overlay).
   if (tab === 'gpx' && gpxSource === 'cerca') {
     return <CreaGuidaMapSearch onBack={() => router.back()} onOtherWays={mode => setGpxSource(mode)} />
+  }
+
+  // Strumento a sé stante (piano "Editor manuale di percorsi"): stesso pattern a schermo intero di
+  // 'cerca' sopra, non annidato dentro il <main> con Navbar come le altre vie di "Altri modi".
+  if (tab === 'gpx' && gpxSource === 'manual-route') {
+    return <ManualRouteEditor onBack={() => setGpxSource('cerca')} />
   }
 
   return (

@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, Search as SearchIcon, RefreshCw, Loader2, ChevronUp, ChevronDown, X as XIcon,
   MoreHorizontal, Link2, PencilLine, MapPin, History, ChevronRight, Building2, Landmark, Globe,
-  Clock, Milestone, Route as RouteIcon, Sliders,
+  Clock, Milestone, Route as RouteIcon, Sliders, Waypoints,
 } from 'lucide-react'
 import type { ResultItem } from './RouteBuilder'
 import TrailPreviewMap from '@/components/TrailPreviewMap'
@@ -82,7 +82,7 @@ function trailLatLon(t: TrailNearbyItem): [number, number] | null {
 // ora raggiungibili da qui tramite il pulsante "Altri modi" e rese dal chiamante (app/upload/
 // page.tsx), che già possiede GpxUploader/ManualPlanUploader/UrlImportUploader/
 // FromActivityUploader e la loro navigazione di ritorno.
-export type OtherWayToAdd = 'file' | 'manual' | 'url' | 'from-activity'
+export type OtherWayToAdd = 'file' | 'manual' | 'url' | 'from-activity' | 'manual-route'
 
 /**
  * Ricerca su mappa di "Crea Guida" — sostituisce, per le tre tipologie insieme (Sentiero, Borgo/
@@ -712,6 +712,8 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
                 onClick={() => { setShowOtherWays(false); onOtherWays('from-activity') }} />
               <OtherWayRow icon={PencilLine} label="Inserisci a mano" description="Hai già tutti i dati? Compila nome, distanza e dislivello senza cercare nulla."
                 onClick={() => { setShowOtherWays(false); onOtherWays('manual') }} />
+              <OtherWayRow icon={Waypoints} label="Crea un percorso a mano" description="Unisci tratti di Percorsi e Sentieri sulla mappa, come un editor."
+                onClick={() => { setShowOtherWays(false); onOtherWays('manual-route') }} />
             </div>
           </div>
         </>
