@@ -100,9 +100,27 @@ describe('nearestRouteVertexDistance', () => {
 })
 
 describe('splitPolylineAtJunctions', () => {
-  it('nessuna giunzione nota → la polilinea resta un solo sotto-tratto', () => {
+  it('nessuna giunzione nota → ripiega sui vertici propri della spezzata (mai un solo tratto)', () => {
     const points: [number, number][] = [[0, 0], [D, 0], [2 * D, 0]]
-    expect(splitPolylineAtJunctions(points, [])).toEqual([points])
+    const result = splitPolylineAtJunctions(points, [])
+    expect(result).toHaveLength(2)
+    expect(result[0]).toEqual([[0, 0], [D, 0]])
+    expect(result[1]).toEqual([[D, 0], [2 * D, 0]])
+  })
+
+  it('giunzioni note ma nessuna vicina a questo Percorso → ripiega comunque sui suoi vertici', () => {
+    const points: [number, number][] = [[0, 0], [D, 0], [2 * D, 0]]
+    // Ben lontane da ogni vertice del Percorso — il layer Sentieri è caricato, ma per un'altra zona.
+    const junctions: [number, number][] = [[50 * D, 50 * D]]
+    const result = splitPolylineAtJunctions(points, junctions)
+    expect(result).toHaveLength(2)
+  })
+
+  it('vertici propri troppo vicini fra loro nel ripiego restano uniti dalla soglia minima', () => {
+    // ~11m fra i due punti centrali — ben sotto una soglia minima di 50m.
+    const points: [number, number][] = [[0, 0], [3 * D, 0], [3 * D + D / 10, 0], [8 * D, 0]]
+    const result = splitPolylineAtJunctions(points, [], 50, 50)
+    expect(result).toHaveLength(2)
   })
 
   it('spezza in corrispondenza di una giunzione in mezzo al tratto', () => {

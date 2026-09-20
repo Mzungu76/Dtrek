@@ -144,10 +144,11 @@ export default function ManualRouteEditor({ onBack }: { onBack: () => void }) {
     return d
   }, [routePoints])
 
-  // Ogni Percorso censito spezzato nei suoi sotto-tratti logici (fino al prossimo incrocio),
-  // riusando le giunzioni della rete OSM grezza della stessa viewport — nessuna giunzione nota
-  // (layer Sentieri non ancora caricato, o zoom troppo basso) → l'intero Percorso resta un solo
-  // sotto-tratto, mai un errore (vedi lib/routeBuilder/manualRouteAssembly.ts).
+  // Ogni Percorso censito spezzato nei suoi sotto-tratti (fino al prossimo incrocio, riusando le
+  // giunzioni della rete OSM grezza della stessa viewport quando disponibili) — mai selezionabile
+  // come un solo tratto indivisibile: senza nessuna giunzione nota (layer Sentieri non ancora
+  // caricato, zoom troppo basso, o il Percorso non ne incrocia nessuna) il ripiego spezza comunque
+  // sui vertici propri della sua spezzata (vedi lib/routeBuilder/manualRouteAssembly.ts).
   const trailSubSegments = useMemo(() => {
     const junctions = collectJunctionPoints(networkSegments)
     const out: { id: string; trailId: number; trailName: string; points: [number, number][] }[] = []

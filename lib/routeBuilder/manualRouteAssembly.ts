@@ -3,8 +3,10 @@
 // mappa. Due responsabilità distinte:
 // - tryAddSegment: aggancia un nuovo tratto cliccato a un'estremità del percorso in costruzione,
 //   rifiutando (nessun collegamento automatico) un tratto che non tocca né l'inizio né la fine.
-// - splitPolylineAtJunctions: spezza la geometria di un Percorso censito nei suoi sotto-tratti
-//   logici, riusando le giunzioni già note della rete OSM grezza della stessa viewport.
+// - splitPolylineAtJunctions: spezza la geometria di un Percorso censito nei suoi sotto-tratti,
+//   preferendo le giunzioni già note della rete OSM grezza della stessa viewport (un vero incrocio)
+//   e ripiegando sui vertici propri della sua spezzata quando non ne conosce nessuna — mai l'intero
+//   Percorso resta un solo tratto indivisibile.
 import { haversineM } from '@/lib/geoUtils'
 
 // Le geometrie dei Percorsi censiti (tabella `trails`) sono campionate ogni ~200m
@@ -105,12 +107,17 @@ export function nearestRouteVertexDistance(routePoints: [number, number][], lat:
 /**
  * Spezza `points` (la geometria di un Percorso censito) nei punti in cui passa vicino a una
  * giunzione nota (`junctionPoints`, tipicamente gli estremi dei NetworkSegment della stessa
- * viewport — vedi lib/routeBuilder/osmGraph.ts's buildNetworkSegments). Un candidato di taglio è
+ * viewport — vedi lib/routeBuilder/osmGraph.ts's buildNetworkSegments) — un vero incrocio/
+ * deviazione, il taglio preferito quando esiste. Se nessun vertice del Percorso cade vicino a una
+ * giunzione nota (rete grezza non ancora caricata per questa zona, o il Percorso non ne incrocia
+ * nessuna in quest'area) NON lascia comunque l'intero Percorso un solo tratto indivisibile: un
+ * Percorso censito deve sempre poter essere selezionato un tratto alla volta, non tutto insieme —
+ * il ripiego usa allora ogni vertice della sua stessa spezzata originale (`geometry_simplified`,
+ * campionata ogni ~200m) come confine di taglio valido. In entrambi i casi un candidato di taglio è
  * scartato se produrrebbe un sotto-tratto più corto di `minSegmentLengthM` rispetto al taglio
- * precedente O rispetto alla fine della polilinea — evita di frammentare per pochi metri quando
- * due giunzioni sono vicinissime fra loro o una giunzione cade appena prima dell'estremo finale.
- * Nessuna giunzione nota (es. layer Sentieri non ancora caricato per la viewport corrente) o
- * nessun candidato valido → l'intera polilinea resta un solo sotto-tratto, mai un errore.
+ * precedente O rispetto alla fine della polilinea — evita di frammentare per pochi metri quando due
+ * giunzioni (o due vertici del ripiego) sono vicinissimi fra loro o cadono appena prima dell'estremo
+ * finale.
  */
 export function splitPolylineAtJunctions(
   points: [number, number][],
@@ -118,7 +125,7 @@ export function splitPolylineAtJunctions(
   snapToleranceM = SNAP_TOLERANCE_M,
   minSegmentLengthM = SNAP_TOLERANCE_M,
 ): [number, number][][] {
-  if (points.length < 2 || junctionPoints.length === 0) return [points]
+  if (points.length < 2) return [points]
 
   const cumDist: number[] = [0]
   for (let i = 1; i < points.length; i++) {
@@ -126,16 +133,25 @@ export function splitPolylineAtJunctions(
   }
   const totalDist = cumDist[cumDist.length - 1]
 
-  const cutIndices: number[] = []
-  for (let i = 1; i < points.length - 1; i++) {
-    const [lat, lon] = points[i]
-    const nearJunction = junctionPoints.some(([jLat, jLon]) => haversineM(lat, lon, jLat, jLon) <= snapToleranceM)
-    if (!nearJunction) continue
-    const lastCutDist = cutIndices.length ? cumDist[cutIndices[cutIndices.length - 1]] : 0
-    if (cumDist[i] - lastCutDist < minSegmentLengthM) continue
-    if (totalDist - cumDist[i] < minSegmentLengthM) continue
-    cutIndices.push(i)
+  function collectCuts(isCandidate: (i: number) => boolean): number[] {
+    const cuts: number[] = []
+    for (let i = 1; i < points.length - 1; i++) {
+      if (!isCandidate(i)) continue
+      const lastCutDist = cuts.length ? cumDist[cuts[cuts.length - 1]] : 0
+      if (cumDist[i] - lastCutDist < minSegmentLengthM) continue
+      if (totalDist - cumDist[i] < minSegmentLengthM) continue
+      cuts.push(i)
+    }
+    return cuts
   }
+
+  let cutIndices = collectCuts(i => {
+    const [lat, lon] = points[i]
+    return junctionPoints.some(([jLat, jLon]) => haversineM(lat, lon, jLat, jLon) <= snapToleranceM)
+  })
+  // Ripiego: nessun vertice tocca una giunzione nota — spezza comunque sui vertici propri del
+  // Percorso, mai un errore né un tratto unico indivisibile.
+  if (cutIndices.length === 0) cutIndices = collectCuts(() => true)
   if (cutIndices.length === 0) return [points]
 
   const segments: [number, number][][] = []
