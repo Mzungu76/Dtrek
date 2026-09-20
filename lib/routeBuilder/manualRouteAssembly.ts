@@ -17,6 +17,17 @@ import { haversineM } from '@/lib/geoUtils'
 // giunzione — coerenza fra le due, non due numeri arbitrari scelti indipendentemente.
 export const SNAP_TOLERANCE_M = 50
 
+// Un Percorso censito (tabella `trails`, campionato ogni ~200m) e un tratto di rete OSM grezza
+// (nodi esatti) sono digitalizzati da fonti indipendenti: anche quando sono davvero lo stesso
+// incrocio sul terreno, l'estremo registrato del Percorso può cadere fino a ~150-200m dal vero
+// punto di giunzione lungo la traccia — un errore diverso (e più grande) di quello di solo
+// campionamento entro la stessa fonte che giustifica SNAP_TOLERANCE_M sopra. Tolleranza più larga
+// SOLO quando le due estremità a confronto vengono da fonti diverse (mai fra due tratti della
+// stessa fonte, dove resta valida quella stretta): altrimenti un cambio di tipologia che in realtà
+// è continuo sul terreno (es. un CAI censito che prosegue come sentiero della rete grezza) viene
+// scartato più spesso di quanto dovrebbe.
+export const CROSS_SOURCE_SNAP_TOLERANCE_M = 120
+
 export interface AddSegmentResult {
   ok: boolean
   /** Il nuovo tratto, riorientato se necessario perché il suo primo punto tocchi il capo del
@@ -30,20 +41,38 @@ export interface AddSegmentResult {
   reason?: string
 }
 
+/** Fonte di un tratto — 'trail' = Percorso censito (tabella `trails`), 'network' = rete OSM grezza
+ *  (vedi lib/routeBuilder/osmGraph.ts's buildNetworkSegments). Solo per scegliere la tolleranza di
+ *  aggancio in tryAddSegment, mai per filtrare quali tratti sono cliccabili/collegabili. */
+export type SegmentSource = 'trail' | 'network'
+
+export interface SegmentKindContext {
+  /** Fonte del tratto già in `routePoints` dal lato inizio (per i candidati "prepend" sotto). */
+  routeStartKind?: SegmentSource
+  /** Fonte del tratto già in `routePoints` dal lato fine (per i candidati "append" sotto). */
+  routeEndKind?: SegmentSource
+  /** Fonte di `newSegment`. */
+  newKind?: SegmentSource
+}
+
 /**
  * Prova ad agganciare `newSegment` a un capo di `routePoints` (l'intero percorso assemblato finora,
  * per il solo confronto di distanza — il chiamante gestisce la lista di parti). Il percorso vuoto
  * accetta qualunque primo tratto così com'è. Altrimenti prova le 4 combinazioni possibili (l'inizio
- * o la fine del percorso contro l'inizio o la fine del nuovo tratto) e sceglie l'aggancio più
- * vicino in assoluto — così un percorso quasi ad anello (entrambe le estremità entro tolleranza)
- * sceglie comunque l'aggancio più stretto, non il primo controllato per ordine. Se nessuna delle 4
- * combinazioni è entro `snapToleranceM`, il tratto viene rifiutato: nessun collegamento automatico
- * dei buchi.
+ * o la fine del percorso contro l'inizio o la fine del nuovo tratto), ciascuna con la propria
+ * tolleranza (più larga quando le due fonti coinvolte in quel confronto sono diverse — vedi
+ * CROSS_SOURCE_SNAP_TOLERANCE_M — altrimenti `snapToleranceM`; senza `kinds` tutte usano
+ * `snapToleranceM`, comportamento invariato), e sceglie l'aggancio più comodo rispetto alla propria
+ * soglia (distanza meno tolleranza più piccola) — così un percorso quasi ad anello (entrambe le
+ * estremità entro tolleranza) sceglie comunque l'aggancio più stretto, non il primo controllato per
+ * ordine. Se nessuna delle 4 combinazioni rientra nella propria tolleranza, il tratto viene
+ * rifiutato: nessun collegamento automatico dei buchi.
  */
 export function tryAddSegment(
   routePoints: [number, number][],
   newSegment: [number, number][],
   snapToleranceM = SNAP_TOLERANCE_M,
+  kinds?: SegmentKindContext,
 ): AddSegmentResult {
   if (newSegment.length < 2) return { ok: false, reason: 'Tratto non valido.' }
   if (routePoints.length === 0) return { ok: true, orientedPoints: newSegment, attachedAt: 'end' }
@@ -53,14 +82,23 @@ export function tryAddSegment(
   const segStart = newSegment[0]
   const segEnd = newSegment[newSegment.length - 1]
 
+  const toleranceFor = (routeSideKind: SegmentSource | undefined): number =>
+    routeSideKind && kinds?.newKind && routeSideKind !== kinds.newKind ? CROSS_SOURCE_SNAP_TOLERANCE_M : snapToleranceM
+
+  const appendTol = toleranceFor(kinds?.routeEndKind)
+  const prependTol = toleranceFor(kinds?.routeStartKind)
+
   const candidates = [
-    { d: haversineM(routeEnd[0], routeEnd[1], segStart[0], segStart[1]), kind: 'append' as const, reversed: false },
-    { d: haversineM(routeEnd[0], routeEnd[1], segEnd[0], segEnd[1]), kind: 'append' as const, reversed: true },
-    { d: haversineM(routeStart[0], routeStart[1], segStart[0], segStart[1]), kind: 'prepend' as const, reversed: true },
-    { d: haversineM(routeStart[0], routeStart[1], segEnd[0], segEnd[1]), kind: 'prepend' as const, reversed: false },
+    { d: haversineM(routeEnd[0], routeEnd[1], segStart[0], segStart[1]), kind: 'append' as const, reversed: false, tol: appendTol },
+    { d: haversineM(routeEnd[0], routeEnd[1], segEnd[0], segEnd[1]), kind: 'append' as const, reversed: true, tol: appendTol },
+    { d: haversineM(routeStart[0], routeStart[1], segStart[0], segStart[1]), kind: 'prepend' as const, reversed: true, tol: prependTol },
+    { d: haversineM(routeStart[0], routeStart[1], segEnd[0], segEnd[1]), kind: 'prepend' as const, reversed: false, tol: prependTol },
   ]
-  const best = candidates.reduce((a, b) => (b.d < a.d ? b : a))
-  if (best.d > snapToleranceM) {
+  // Il candidato più "comodo" rispetto alla propria tolleranza (non la sola distanza minima): con
+  // tolleranze diverse fra candidati un aggancio leggermente più lontano ma nella sua soglia larga
+  // deve poter vincere su uno più vicino ma già fuori dalla sua soglia stretta.
+  const best = candidates.reduce((a, b) => (b.d - b.tol < a.d - a.tol ? b : a))
+  if (best.d > best.tol) {
     return { ok: false, reason: "Questo tratto non tocca il percorso: scegli un tratto adiacente a un'estremità." }
   }
 

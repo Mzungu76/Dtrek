@@ -12,7 +12,7 @@ import {
 import type { ResultItem } from './RouteBuilder'
 import TrailPreviewMap from '@/components/TrailPreviewMap'
 import ItineraryMap from '@/components/mete/ItineraryMap'
-import { defaultPendingExpiresAt } from './sharedHelpers'
+import { defaultPendingExpiresAt, type MapView } from './sharedHelpers'
 import { saveResultItemToGuide } from '@/lib/routeBuilder/importResultItem'
 import { foundRouteItemFromCachedTrail } from '@/lib/routeBuilder/foundRoute'
 import { resolvePlaceClientFirst } from '@/lib/routeBuilder/resolvePlaceClient'
@@ -100,7 +100,16 @@ export type OtherWayToAdd = 'file' | 'manual' | 'url' | 'from-activity' | 'manua
  * onOtherWays). Il generatore "su misura" (RouteBuilder.tsx) non è più raggiunto da qui — restava
  * percepito come "torna alla vecchia ricerca", non un'opzione distinta.
  */
-export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: () => void; onOtherWays?: (mode: OtherWayToAdd) => void }) {
+export default function CreaGuidaMapSearch({ onBack, onOtherWays, initialView, onViewChange }: {
+  onBack: () => void
+  onOtherWays?: (mode: OtherWayToAdd) => void
+  /** Centro/zoom di partenza (vedi sharedHelpers.ts's MapView) — se assente riparte da ITALY_CENTER/
+   *  ITALY_ZOOM come prima. */
+  initialView?: MapView
+  /** Richiamato a ogni 'moveend' col centro/zoom corrente — il chiamante lo tiene per passarlo come
+   *  initialView a questo componente (o a ManualRouteEditor) al prossimo mount. */
+  onViewChange?: (view: MapView) => void
+}) {
   const router = useRouter()
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstance = useRef<L.Map | null>(null)
@@ -110,6 +119,11 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
   // Il primo 'moveend' arriva dal setView() di creazione della mappa, non da un pan/zoom
   // dell'utente — non deve accendere "Cerca in quest'area" (la prima ricerca parte già da sola).
   const initialMoveHandled = useRef(false)
+  // Ultima versione di onViewChange, letta dentro il listener 'moveend' registrato una sola volta al
+  // mount (stesso motivo di searchCurrentViewRef in ManualRouteEditor.tsx: altrimenti richiuderebbe
+  // sulla prop del primo render).
+  const onViewChangeRef = useRef(onViewChange)
+  onViewChangeRef.current = onViewChange
 
   const [showOtherWays, setShowOtherWays] = useState(false)
 
@@ -212,7 +226,8 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
       // freccia "indietro" e la barra di ricerca (stessa chrome che occupa quell'angolo): su
       // schermo stretto i due si sovrappongono. Pinch-to-zoom e doppio tap restano attivi di
       // default (mai disattivati), lo stesso pattern di ogni app mappe mobile-first.
-      const map = L.map(mapRef.current!, { zoomControl: false }).setView(ITALY_CENTER, ITALY_ZOOM)
+      const map = L.map(mapRef.current!, { zoomControl: false })
+        .setView(initialView ? [initialView.lat, initialView.lon] : ITALY_CENTER, initialView?.zoom ?? ITALY_ZOOM)
       mapInstance.current = map
       markersLayer.current = L.layerGroup().addTo(map)
 
@@ -223,6 +238,8 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
 
       map.on('moveend', () => {
         setZoom(map.getZoom())
+        const c = map.getCenter()
+        onViewChangeRef.current?.({ lat: c.lat, lon: c.lng, zoom: map.getZoom() })
         if (!initialMoveHandled.current) { initialMoveHandled.current = true; return }
         setDirty(true)
       })
