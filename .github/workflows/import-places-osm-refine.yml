@@ -17,13 +17,11 @@ name: Import Places — OSM (raffina lat/lon dei Borghi/Città su dtrek_places)
 # ISTAT/MiC, qui servono i secret Supabase in ENTRAMBE le modalità. dry-run non fa comunque nessun
 # UPDATE, solo query di lettura + query Overpass.
 #
-# MAI tutta Italia (region vuoto) in un solo lancio: un job GitHub Actions ha un tetto FISSO di 6
-# ore (limite della piattaforma, non alzabile da qui) — 7896 Comuni ad una richiesta Overpass
-# sequenziale per riga lo supererebbero ampiamente, il job verrebbe interrotto a metà senza un
-# riepilogo pulito (vedi il commento in cima a scripts/places/osm/refine-borgo-coords.ts). Un
-# lancio per regione (la maggior parte sta comodamente sotto il tetto) — o, per una regione molto
-# grande, più lanci con `offset` crescente (il log di ogni lancio suggerisce il prossimo `offset`
-# quando ce n'è ancora) — copre tutta Italia in più esecuzioni sicure invece di una sola rischiosa.
+# Region vuoto (default) = TUTTA Italia in un lancio solo — sicuro dopo il riprogetto: una sola
+# query Overpass per regione (non più una per Comune, vedi il commento in cima allo script), l'intero
+# giro di ~20 regioni sta comodamente entro il tetto di 6 ore di un job GitHub Actions (limite della
+# piattaforma, non alzabile da qui). `region` resta utile per rilanciare SOLO una regione (es. dopo
+# che è fallita nel giro precedente — il riepilogo finale elenca le regioni fallite).
 
 on:
   workflow_dispatch:
@@ -37,20 +35,10 @@ on:
           - write
         default: dry-run
       region:
-        description: "Regione (es. Lazio) — MAI vuoto per tutta Italia in un lancio solo, vedi il commento sopra. Una regione alla volta."
+        description: "Regione (es. Lazio) — vuoto = TUTTA Italia in questo lancio (default, sicuro). Usa una regione solo per rilanciare quella sola dopo un fallimento parziale."
         required: false
         type: string
-        default: "Lazio"
-      limit:
-        description: "Numero massimo di Borghi/Città da raffinare in questa esecuzione (una richiesta Overpass per riga, sequenziale)."
-        required: false
-        type: string
-        default: "500"
-      offset:
-        description: "Da quale riga partire (ordinate per id) — usalo per un secondo blocco quando una regione non entra in un solo lancio. Il log del lancio precedente suggerisce il prossimo offset."
-        required: false
-        type: string
-        default: "0"
+        default: ""
 
 concurrency:
   group: import-places
@@ -65,8 +53,6 @@ jobs:
     env:
       MODE: ${{ inputs.mode }}
       REGION: ${{ inputs.region }}
-      LIMIT: ${{ inputs.limit }}
-      OFFSET: ${{ inputs.offset }}
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
     steps:
@@ -91,13 +77,13 @@ jobs:
       - name: Raffina lat/lon dei Borghi/Città da OSM
         run: |
           set -euo pipefail
-          ARGS=(scripts/places/osm/refine-borgo-coords.ts --region "$REGION" --limit "$LIMIT" --offset "$OFFSET")
+          ARGS=(scripts/places/osm/refine-borgo-coords.ts)
+          if [ -n "$REGION" ]; then ARGS+=(--region "$REGION"); fi
           if [ "$MODE" = "dry-run" ]; then ARGS+=(--dry-run); fi
           npx tsx "${ARGS[@]}" | tee /tmp/osm-refine.txt
           {
             echo "### Import Places — OSM refine ($MODE)"
-            echo "- Regione: ${REGION:-tutte}"
-            echo "- Limit: $LIMIT, offset: $OFFSET"
+            echo "- Regione: ${REGION:-tutta Italia}"
             echo '```'
             cat /tmp/osm-refine.txt
             echo '```'
