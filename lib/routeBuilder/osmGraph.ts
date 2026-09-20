@@ -3,7 +3,7 @@
 // route=hiking per nome, qui servono le way generiche con i node id (non solo la geometria), così
 // i nodi condivisi tra way diverse restano visibili come intersezioni reali della rete stradale.
 import { fetchOverpass } from '@/lib/overpassTrails'
-import { haversineM } from '@/lib/geoUtils'
+import { haversineM, simplifyPolyline } from '@/lib/geoUtils'
 import { mapOsmSacScale } from '@/lib/osm/sacScale'
 
 // Tag highway ammessi: sentieri/tracciati/carrarecce (comprese le "strade bianche", tipicamente
@@ -225,6 +225,13 @@ export interface NetworkSegment {
  * nodi di grado 2, raro ma possibile) — altrimenti il primo giro, che parte solo da intersezioni
  * reali, li salterebbe interamente: nessun nodo del ciclo farebbe mai da punto di partenza.
  */
+// Pochi metri, impercettibile alla scala a cui questi tratti si vedono su una mappa (anche zoomata
+// a livello di quartiere) — ma una via leggermente curva con uno shape-point OSM ogni pochi metri
+// può perdere la maggior parte dei suoi vertici senza cambiare forma percepibile, alleggerendo sia
+// il payload JSON sia il numero di punti che Leaflet deve disegnare (il vero costo su un centro
+// storico denso, vedi il commento su NETWORK_FETCH_RADIUS_M in ManualRouteEditor.tsx).
+const NETWORK_SEGMENT_SIMPLIFY_TOLERANCE_M = 4
+
 export function buildNetworkSegments(network: WalkNetwork): NetworkSegment[] {
   const segments: NetworkSegment[] = []
   const visited = new Set<string>()
@@ -257,7 +264,7 @@ export function buildNetworkSegments(network: WalkNetwork): NetworkSegment[] {
       curNode = nextNode
     }
 
-    segments.push({ id: `${wayId}:${segments.length}`, points, wayId, highway })
+    segments.push({ id: `${wayId}:${segments.length}`, points: simplifyPolyline(points, NETWORK_SEGMENT_SIMPLIFY_TOLERANCE_M), wayId, highway })
   }
 
   for (const [nodeId, node] of Array.from(network.nodes)) {

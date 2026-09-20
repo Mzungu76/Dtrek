@@ -13,11 +13,13 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 
 // La rete grezza è molto più densa dei Percorsi censiti (ogni strada/sentiero, non solo quelli con
-// nome) — un bbox troppo grande scaricherebbe una rete enorme e lenta da contrarre/trasferire.
-// L'editor gate lato client lo zoom minimo (coerente con TRAILS_MIN_ZOOM di CreaGuidaMapSearch.tsx
-// ma più alto), questo è un secondo cancello lato server contro un bbox comunque troppo esteso
-// (es. un client compromesso o un bug nel calcolo del bbox).
-const MAX_AREA_KM2 = 400
+// nome) — un bbox troppo grande scaricherebbe una rete enorme e lenta da contrarre/trasferire (la
+// causa dei fallimenti Overpass osservati in produzione con il tetto precedente di 400 km², quando
+// il client mandava l'intero rettangolo visibile invece di un raggio fisso). L'editor ora richiede
+// sempre un'area centrata sul centro mappa di raggio NETWORK_FETCH_RADIUS_M (vedi
+// ManualRouteEditor.tsx, ~900m → poco più di 3 km²) — questo tetto resta un secondo cancello lato
+// server con un margine di sicurezza, non il limite operativo vero e proprio.
+const MAX_AREA_KM2 = 20
 
 function areaKm2(bbox: [number, number, number, number]): number {
   const [minLat, minLon, maxLat, maxLon] = bbox

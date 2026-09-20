@@ -35,6 +35,34 @@ const ARROW_SPACING_M = 250
 const ARROW_ICON_PX = 13
 const ARROW_SVG_PX = 10
 
+// La rete grezza (Sentieri) è la sorgente pesante — un raggio fisso e piccolo, indipendente da
+// quanto è largo il rettangolo visibile (che a parità di zoom può variare molto con la finestra),
+// invece dell'intero viewport: meno dati da scaricare, disegnare e mandare a Overpass (query più
+// piccole = meno probabilità di timeout — la causa dei fallimenti osservati in produzione col
+// vecchio approccio "tutto il viewport", vedi il commento su MAX_AREA_KM2 nell'endpoint).
+const NETWORK_FETCH_RADIUS_M = 900
+// Allineata alla stessa granularità di normalizeBboxKey (lib/geoUtils.ts, ~1.1km) usata lato
+// server per la cache Overpass — un pan che resta nella stessa cella non genera una nuova
+// richiesta: né verso il nostro endpoint né, quando serve, verso Overpass.
+const NETWORK_GRID_DEG = 0.01
+// Debounce del ricaricamento automatico dopo che la mappa si ferma — sostituisce il vecchio
+// bottone "Cerca in quest'area": comodo per una ricerca una tantum, scomodo per un editor dove ci
+// si sposta in continuazione componendo un percorso.
+const AUTO_SEARCH_DEBOUNCE_MS = 600
+// Fascia invisibile più larga sopra ogni tratto cliccabile, per un bersaglio tollerante al tocco
+// (soprattutto da mobile) — la linea visibile resta sottile, solo l'area di hit-test è più larga.
+const CLICK_HITBOX_EXTRA_PX = 16
+
+function snapToGrid(value: number, grid: number): number {
+  return Math.round(value / grid) * grid
+}
+
+function bboxFromCenterRadius(lat: number, lon: number, radiusM: number): [number, number, number, number] {
+  const dLat = radiusM / 111_000
+  const dLon = radiusM / (111_000 * Math.cos((lat * Math.PI) / 180))
+  return [lat - dLat, lon - dLon, lat + dLat, lon + dLon]
+}
+
 interface EnrichResult {
   routePolyline: [number, number][]
   trackPoints: { time: string; lat: number; lon: number }[]
@@ -97,9 +125,17 @@ export default function ManualRouteEditor({ onBack }: { onBack: () => void }) {
   const leafletRef = useRef<typeof L | null>(null)
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
   const initialMoveHandled = useRef(false)
+  // Cella di griglia (vedi NETWORK_GRID_DEG) dell'ultimo fetch Sentieri riuscito — un pan che
+  // resta nella stessa cella salta del tutto la richiesta, non solo lato cache server.
+  const lastNetworkGridKeyRef = useRef<string | null>(null)
+  const autoSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Il listener 'moveend' è registrato una sola volta (effetto di mount) — richiamare tramite
+  // questo ref, aggiornato ad ogni render, invece della funzione catturata al mount, evita di
+  // richiudere su stato ormai vecchio (networkSegments su tutti: il riuso "stessa cella" sotto
+  // altrimenti vedrebbe sempre l'array vuoto iniziale, mai gli ultimi dati caricati).
+  const searchCurrentViewRef = useRef<() => void>(() => {})
 
   const [zoom, setZoom] = useState(ITALY_ZOOM)
-  const [dirty, setDirty] = useState(false)
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
 
@@ -109,6 +145,11 @@ export default function ManualRouteEditor({ onBack }: { onBack: () => void }) {
 
   const [parts, setParts] = useState<RoutePart[]>([])
   const [selectionError, setSelectionError] = useState<string | null>(null)
+  // Id del tratto appena cliccato e rifiutato (non tocca il percorso) — lampeggia brevemente in
+  // rosso sulla mappa così è chiaro QUALE tratto ha ricevuto il click, non solo che uno è stato
+  // rifiutato: senza questo, un click "sembra non fare nulla" quando in realtà è stato registrato
+  // ma scartato, la stessa confusione segnalata sull'affidabilità del tocco.
+  const [flashRejectedId, setFlashRejectedId] = useState<string | null>(null)
   const [showList, setShowList] = useState(false)
 
   const [title, setTitle] = useState('')
@@ -125,6 +166,12 @@ export default function ManualRouteEditor({ onBack }: { onBack: () => void }) {
     const t = setTimeout(() => setSelectionError(null), 4000)
     return () => clearTimeout(t)
   }, [selectionError])
+
+  useEffect(() => {
+    if (!flashRejectedId) return
+    const t = setTimeout(() => setFlashRejectedId(null), 1100)
+    return () => clearTimeout(t)
+  }, [flashRejectedId])
 
   const segmentParts = useMemo(() => parts.filter((p): p is SegmentPart => p.kind !== 'pin'), [parts])
   const usedSegmentIds = useMemo(() => new Set(segmentParts.map(p => p.id)), [segmentParts])
@@ -170,34 +217,57 @@ export default function ManualRouteEditor({ onBack }: { onBack: () => void }) {
       const center = bounds.getCenter()
       const radiusKm = center.distanceTo(bounds.getNorthEast()) / 1000
       const origin = { lat: center.lat, lon: center.lng }
-      const bbox: [number, number, number, number] = [bounds.getSouth(), bounds.getWest(), bounds.getNorth(), bounds.getEast()]
       const z = map.getZoom()
 
       // Un fallimento (es. Overpass momentaneamente irraggiungibile per la rete grezza, la
-      // sorgente più fragile delle tre) non deve azzerare gli altri due layer — ognuno fallisce per
+      // sorgente più fragile delle quattro) non deve azzerare gli altri layer — ognuno fallisce per
       // conto suo (ripiega su [] e segna il proprio nome), non un solo Promise.all che con un
       // singolo rifiuto avrebbe lasciato la mappa senza NESSUN elemento disegnato, PIN inclusi.
-      const failed: string[] = []
-      const safely = <T,>(label: string, p: Promise<T[]>): Promise<T[]> =>
-        p.catch(e => { failed.push(label); console.warn(`[ManualRouteEditor] ${label}:`, e); return [] })
+      const layer = async <T,>(label: string, p: Promise<T[]>): Promise<{ label: string; items: T[]; ok: boolean }> => {
+        try { return { label, items: await p, ok: true } }
+        catch (e) { console.warn(`[ManualRouteEditor] ${label}:`, e); return { label, items: [], ok: false } }
+      }
+
+      // Rete grezza: raggio fisso allineato a una griglia invece dell'intero rettangolo visibile
+      // (vedi NETWORK_FETCH_RADIUS_M/NETWORK_GRID_DEG sopra) — se il pan corrente ricade ancora
+      // nella stessa cella dell'ultimo fetch riuscito, nessuna nuova richiesta: il layer resta
+      // quello già in stato, senza nemmeno un giro di rete verso il nostro endpoint.
+      let networkGridKey: string | null = null
+      let networkResultPromise: Promise<{ label: string; items: NetworkSegment[]; ok: boolean }>
+      if (z < NETWORK_MIN_ZOOM) {
+        lastNetworkGridKeyRef.current = null
+        networkResultPromise = Promise.resolve({ label: 'Sentieri', items: [], ok: true })
+      } else {
+        const gLat = snapToGrid(center.lat, NETWORK_GRID_DEG)
+        const gLon = snapToGrid(center.lng, NETWORK_GRID_DEG)
+        networkGridKey = `${gLat.toFixed(4)},${gLon.toFixed(4)}`
+        if (networkGridKey === lastNetworkGridKeyRef.current) {
+          networkResultPromise = Promise.resolve({ label: 'Sentieri', items: networkSegments, ok: true })
+        } else {
+          const networkBbox = bboxFromCenterRadius(gLat, gLon, NETWORK_FETCH_RADIUS_M)
+          networkResultPromise = layer('Sentieri', fetchJson<NetworkSegment[]>('/api/walk-network-segments', { bbox: networkBbox }, 'segments'))
+        }
+      }
 
       const [borghi, siti, trails, network] = await Promise.all([
-        safely('Borghi/Città', fetchJson<MetaSearchResultItem[]>('/api/meta-search', { metaType: 'borgo_citta', origin, maxDistanceKm: radiusKm, limit: SEARCH_LIMIT }, 'items')),
-        safely('Siti', fetchJson<MetaSearchResultItem[]>('/api/meta-search', { metaType: 'sito', origin, maxDistanceKm: radiusKm, limit: SEARCH_LIMIT }, 'items')),
+        layer('Borghi/Città', fetchJson<MetaSearchResultItem[]>('/api/meta-search', { metaType: 'borgo_citta', origin, maxDistanceKm: radiusKm, limit: SEARCH_LIMIT }, 'items')),
+        layer('Siti', fetchJson<MetaSearchResultItem[]>('/api/meta-search', { metaType: 'sito', origin, maxDistanceKm: radiusKm, limit: SEARCH_LIMIT }, 'items')),
         z >= TRAILS_MIN_ZOOM
-          ? safely('Percorsi', fetchJson<TrailNearbyItem[]>('/api/trails-nearby', { lat: origin.lat, lon: origin.lon, radiusKm }, 'items'))
-          : Promise.resolve([]),
-        z >= NETWORK_MIN_ZOOM
-          ? safely('Sentieri', fetchJson<NetworkSegment[]>('/api/walk-network-segments', { bbox }, 'segments'))
-          : Promise.resolve([]),
+          ? layer('Percorsi', fetchJson<TrailNearbyItem[]>('/api/trails-nearby', { lat: origin.lat, lon: origin.lon, radiusKm }, 'items'))
+          : Promise.resolve({ label: 'Percorsi', items: [] as TrailNearbyItem[], ok: true }),
+        networkResultPromise,
       ])
 
-      setMetaResults([...borghi, ...siti])
-      setTrailResults(trails)
-      setNetworkSegments(network)
-      setDirty(false)
-      if (failed.length > 0) {
-        setLoadError(`${failed.join(', ')}: caricamento non riuscito in quest'area — gli altri elementi restano comunque selezionabili.`)
+      setMetaResults([...borghi.items, ...siti.items])
+      setTrailResults(trails.items)
+      setNetworkSegments(network.items)
+      // Solo su un fetch riuscito (o riusato dalla stessa cella) — un fallimento non deve
+      // "bloccare" quella zona come già coperta, altrimenti un prossimo giro non ritenterebbe mai.
+      if (network.ok && networkGridKey) lastNetworkGridKeyRef.current = networkGridKey
+
+      const failedLabels = [borghi, siti, trails, network].filter(r => !r.ok).map(r => r.label)
+      if (failedLabels.length > 0) {
+        setLoadError(`${failedLabels.join(', ')}: caricamento non riuscito in quest'area — gli altri elementi restano comunque selezionabili.`)
       }
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Caricamento non riuscito')
@@ -205,6 +275,7 @@ export default function ManualRouteEditor({ onBack }: { onBack: () => void }) {
       setLoading(false)
     }
   }
+  searchCurrentViewRef.current = searchCurrentView
 
   // Mappa Leaflet — stesso setup di CreaGuidaMapSearch.tsx (tile proxy, zoomControl:false).
   useEffect(() => {
@@ -215,7 +286,12 @@ export default function ManualRouteEditor({ onBack }: { onBack: () => void }) {
       leafletRef.current = L
 
       delete (L.Icon.Default.prototype as any)._getIconUrl
-      const map = L.map(mapRef.current!, { zoomControl: false }).setView(ITALY_CENTER, ITALY_ZOOM)
+      // renderer: L.canvas() — di default Leaflet disegna ogni polilinea come un elemento SVG a sé;
+      // con centinaia di tratti Sentieri/Percorsi visibili insieme (anche dopo aver ridotto l'area
+      // richiesta, vedi NETWORK_FETCH_RADIUS_M sopra) il canvas resta molto più scattante da
+      // disegnare e ridisegnare a ogni click. Il click-detection di Leaflet funziona identico sul
+      // canvas (hit-test manuale interno, non richiede nulla in più qui).
+      const map = L.map(mapRef.current!, { zoomControl: false, renderer: L.canvas() }).setView(ITALY_CENTER, ITALY_ZOOM)
       mapInstance.current = map
       layerRef.current = L.layerGroup().addTo(map)
 
@@ -224,10 +300,16 @@ export default function ManualRouteEditor({ onBack }: { onBack: () => void }) {
         maxZoom: 19,
       }).addTo(map)
 
+      // Ricaricamento automatico e con debounce vero (il timer si riarma a ogni 'moveend', non solo
+      // al primo) invece del vecchio bottone "Cerca in quest'area" — comodo per una ricerca una
+      // tantum, scomodo per un editor dove ci si sposta in continuazione componendo un percorso.
+      // Richiama tramite searchCurrentViewRef (sempre la versione più recente, vedi la sua
+      // dichiarazione) perché questo listener è registrato una sola volta qui al mount.
       map.on('moveend', () => {
         setZoom(map.getZoom())
         if (!initialMoveHandled.current) { initialMoveHandled.current = true; return }
-        setDirty(true)
+        if (autoSearchTimerRef.current) clearTimeout(autoSearchTimerRef.current)
+        autoSearchTimerRef.current = setTimeout(() => { searchCurrentViewRef.current() }, AUTO_SEARCH_DEBOUNCE_MS)
       })
 
       const ro = new ResizeObserver(() => map.invalidateSize())
@@ -238,6 +320,7 @@ export default function ManualRouteEditor({ onBack }: { onBack: () => void }) {
     })
 
     return () => {
+      if (autoSearchTimerRef.current) clearTimeout(autoSearchTimerRef.current)
       resizeObserverRef.current?.disconnect()
       resizeObserverRef.current = null
       if (mapInstance.current) {
@@ -253,6 +336,7 @@ export default function ManualRouteEditor({ onBack }: { onBack: () => void }) {
     const result = tryAddSegment(routePoints, points, SNAP_TOLERANCE_M)
     if (!result.ok || !result.orientedPoints) {
       setSelectionError(result.reason ?? 'Tratto non valido.')
+      setFlashRejectedId(id)
       return
     }
     setSelectionError(null)
@@ -399,13 +483,31 @@ export default function ManualRouteEditor({ onBack }: { onBack: () => void }) {
       })
     }
 
-    // 1) Rete OSM grezza — tratti sottili grigi, evidenziati in arancio quando già nel percorso.
+    // Un tratto cliccabile è disegnato come DUE polilinee: quella visibile (sottile, sempre
+    // interactive:false) e una seconda invisibile più larga sopra di essa che porta davvero il
+    // click — un bersaglio più tollerante al tocco (soprattutto da mobile) senza allargare la
+    // linea a schermo. interactive:false sulla visibile evita anche che "rubi" il click a un
+    // tratto sottostante quando due linee si sovrappongono: prima di questo fix un tratto Path di
+    // Leaflet restava cliccabile (e quindi bloccava i click sotto di sé) anche senza nessun
+    // handler attaccato, il bug più probabile dietro "a volte il click non fa nulla".
+    function addClickableLine(points: [number, number][], color: string, weight: number, opacity: number, onClick: (() => void) | null) {
+      L!.polyline(points, { color, weight, opacity, interactive: false }).addTo(layer!)
+      if (onClick) {
+        L!.polyline(points, { color: '#000000', weight: weight + CLICK_HITBOX_EXTRA_PX, opacity: 0 })
+          .on('click', onClick)
+          .addTo(layer!)
+      }
+    }
+
+    // 1) Rete OSM grezza — tratti sottili grigi, evidenziati in arancio quando già nel percorso, in
+    // rosso un istante quando appena rifiutati (vedi flashRejectedId).
     for (const seg of networkSegments) {
       if (seg.points.length < 2) continue
       const used = usedSegmentIds.has(seg.id)
-      const line = L.polyline(seg.points, { color: used ? '#ea580c' : '#94a3b8', weight: used ? 5 : 3, opacity: used ? 1 : 0.55 })
-      if (!used) line.on('click', () => handleSegmentClick('network', seg.id, `Sentiero (${seg.highway ?? 'via'})`, seg.points))
-      line.addTo(layer)
+      const flashing = !used && flashRejectedId === seg.id
+      const color = used ? '#ea580c' : flashing ? '#dc2626' : '#94a3b8'
+      addClickableLine(seg.points, color, used ? 5 : flashing ? 5 : 3, used ? 1 : 0.55,
+        used ? null : () => handleSegmentClick('network', seg.id, `Sentiero (${seg.highway ?? 'via'})`, seg.points))
     }
 
     // 2) Percorsi censiti, spezzati nei loro sotto-tratti — un colore per Percorso (ciclico), più
@@ -416,19 +518,22 @@ export default function ManualRouteEditor({ onBack }: { onBack: () => void }) {
     for (const sub of trailSubSegments) {
       if (sub.points.length < 2) continue
       if (!trailColorIdx.has(sub.trailId)) trailColorIdx.set(sub.trailId, nextColorIdx++ % TRAIL_COLORS.length)
-      const color = TRAIL_COLORS[trailColorIdx.get(sub.trailId)!]
+      const baseColor = TRAIL_COLORS[trailColorIdx.get(sub.trailId)!]
       const used = usedSegmentIds.has(sub.id)
-      const line = L.polyline(sub.points, { color: used ? '#ea580c' : color, weight: used ? 5.5 : 4, opacity: used ? 1 : 0.75 })
-      if (!used) line.on('click', () => handleSegmentClick('trail', sub.id, sub.trailName, sub.points))
-      line.addTo(layer)
+      const flashing = !used && flashRejectedId === sub.id
+      const color = used ? '#ea580c' : flashing ? '#dc2626' : baseColor
+      addClickableLine(sub.points, color, used ? 5.5 : flashing ? 5.5 : 4, used ? 1 : 0.75,
+        used ? null : () => handleSegmentClick('trail', sub.id, sub.trailName, sub.points))
     }
 
     // 3) Il percorso assemblato, in evidenza sopra tutto — doppia linea (fascia bianca sotto) più le
     // frecce di direzione (stesso pattern di components/video/RouteLeafletEditor.tsx), così
-    // "Inverti direzione" ha un riscontro visivo immediato.
+    // "Inverti direzione" ha un riscontro visivo immediato. interactive:false: è puro decoro, non
+    // deve mai intercettare un click destinato a un tratto adiacente ancora selezionabile — proprio
+    // nel punto più delicato, dove il percorso tocca il prossimo tratto da aggiungere.
     if (routePoints.length >= 2) {
-      L.polyline(routePoints, { color: '#ffffff', weight: 9, opacity: 0.85 }).addTo(layer)
-      L.polyline(routePoints, { color: '#1c1917', weight: 5, opacity: 1 }).addTo(layer)
+      L.polyline(routePoints, { color: '#ffffff', weight: 9, opacity: 0.85, interactive: false }).addTo(layer)
+      L.polyline(routePoints, { color: '#1c1917', weight: 5, opacity: 1, interactive: false }).addTo(layer)
       for (const arrow of computeDirectionArrows(routePoints, ARROW_SPACING_M)) {
         const icon = L.divIcon({
           html: `<div style="transform:rotate(${arrow.bearing}deg);width:${ARROW_ICON_PX}px;height:${ARROW_ICON_PX}px;display:flex;align-items:center;justify-content:center">
@@ -456,7 +561,7 @@ export default function ManualRouteEditor({ onBack }: { onBack: () => void }) {
     // usedSegmentIds, entrambe già qui sotto — includerla aggiungerebbe solo rumore, mai un valore
     // mancante realmente diverso da quelli già tracciati.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [metaResults, trailSubSegments, networkSegments, routePoints, usedSegmentIds, pinParts])
+  }, [metaResults, trailSubSegments, networkSegments, routePoints, usedSegmentIds, pinParts, flashRejectedId])
 
   const showTrailsZoomHint = zoom < TRAILS_MIN_ZOOM
   const showNetworkZoomHint = zoom >= TRAILS_MIN_ZOOM && zoom < NETWORK_MIN_ZOOM
@@ -468,17 +573,27 @@ export default function ManualRouteEditor({ onBack }: { onBack: () => void }) {
         <div ref={mapRef} className="w-full h-full" />
       </div>
 
-      {/* ── Header ───────────────────────────────────────────────────────── */}
+      {/* ── Header — il caricamento è automatico (con debounce) a ogni pan/zoom, vedi
+          searchCurrentViewRef: nessun bottone "Cerca in quest'area" da toccare a ogni spostamento.
+          Il refresh qui resta solo come scorciatoia manuale (es. per ritentare dopo un fallimento
+          Overpass senza dover muovere la mappa). ─────────────────────────────────────────────── */}
       <div className="absolute left-0 right-0 top-0 z-10 p-3 space-y-2">
         <div className="flex items-center gap-2">
           <button onClick={onBack} aria-label="Indietro"
             className="w-10 h-10 rounded-full bg-white/95 backdrop-blur shadow-md flex items-center justify-center text-stone-600 hover:text-stone-800 transition-colors shrink-0">
             <ArrowLeft className="w-4 h-4" />
           </button>
-          <div className="flex-1 bg-white/95 backdrop-blur rounded-2xl shadow-md px-3.5 py-2.5 min-w-0">
-            <p className="text-sm font-semibold text-stone-800">Crea un percorso a mano</p>
-            <p className="text-[11px] text-stone-500">Tocca i tratti sulla mappa per unirli</p>
+          <div className="flex-1 bg-white/95 backdrop-blur rounded-2xl shadow-md px-3.5 py-2.5 min-w-0 flex items-center gap-2">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-stone-800">Crea un percorso a mano</p>
+              <p className="text-[11px] text-stone-500">Tocca i tratti sulla mappa per unirli</p>
+            </div>
+            {loading && <Loader2 className="w-3.5 h-3.5 text-stone-400 animate-spin shrink-0" />}
           </div>
+          <button onClick={searchCurrentView} disabled={loading} aria-label="Aggiorna quest'area"
+            className="w-10 h-10 rounded-full bg-white/95 backdrop-blur shadow-md flex items-center justify-center text-stone-600 hover:text-stone-800 transition-colors disabled:opacity-50 shrink-0">
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
         </div>
         {loadError && (
           <p className="text-center text-[11px] font-medium text-red-600 bg-white/95 backdrop-blur rounded-full py-1.5 px-3 mx-auto w-fit shadow-sm">
@@ -487,18 +602,8 @@ export default function ManualRouteEditor({ onBack }: { onBack: () => void }) {
         )}
       </div>
 
-      {dirty && (
-        <div className="absolute left-0 right-0 top-[76px] z-10 flex justify-center">
-          <button onClick={searchCurrentView} disabled={loading}
-            className="flex items-center gap-2 bg-stone-800 hover:bg-stone-900 text-white text-xs font-bold px-4 py-2.5 rounded-full shadow-lg disabled:opacity-70 transition-colors">
-            {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-            Cerca in quest&apos;area
-          </button>
-        </div>
-      )}
-
       {(showTrailsZoomHint || showNetworkZoomHint) && (
-        <div className="absolute left-0 right-0 z-10 flex justify-center" style={{ top: dirty ? '122px' : '76px' }}>
+        <div className="absolute left-0 right-0 top-[76px] z-10 flex justify-center">
           <p className="bg-white/90 backdrop-blur text-stone-500 text-[11px] px-3 py-1.5 rounded-full shadow border border-stone-200">
             {showTrailsZoomHint ? 'Avvicinati per vedere anche i Percorsi e i Sentieri' : 'Avvicinati ancora per vedere anche i Sentieri (rete OSM)'}
           </p>
