@@ -6,7 +6,7 @@ import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, Search as SearchIcon, RefreshCw, Loader2, ChevronUp, ChevronDown, X as XIcon,
-  MoreHorizontal, Link2, PencilLine, MapPin, History, ChevronRight, Building2, Landmark, Globe,
+  Upload, Link2, PencilLine, MapPin, History, ChevronRight, Building2, Landmark, Globe,
   Clock, Milestone, Route as RouteIcon, Sliders, Waypoints,
 } from 'lucide-react'
 import type { ResultItem } from './RouteBuilder'
@@ -93,10 +93,12 @@ export type OtherWayToAdd = 'file' | 'manual' | 'url' | 'from-activity' | 'manua
  * Sentiero da cache OSM converte la riga in FoundRouteItem
  * (lib/routeBuilder/foundRoute.ts's foundRouteItemFromCachedTrail) e la fa passare dallo stesso
  * salvataggio del wizard (saveResultItemToGuide) — quota reale arricchita al salvataggio, non qui.
- * Le altre vie di creazione (file GPX, da un'attività del diario, link, inserimento manuale)
- * restano un tocco più lontano, dietro "Altri modi" (vedi onOtherWays), non più esposte come card
- * equivalenti sulla stessa schermata. Il generatore "su misura" (RouteBuilder.tsx) non è più
- * raggiunto da qui — restava percepito come "torna alla vecchia ricerca", non un'opzione distinta.
+ * Le altre vie di creazione vivono dietro la rail a sinistra (vedi Rail più sotto), non più esposte
+ * come card equivalenti sulla stessa schermata: "Genera" per le due modalità algoritmiche più "Crea
+ * un percorso a mano" (che costruisce comunque sulla mappa), "Porta i tuoi dati" per le vie che
+ * portano dati da fuori l'app (file GPX, da un'attività del diario, link, inserimento manuale — vedi
+ * onOtherWays). Il generatore "su misura" (RouteBuilder.tsx) non è più raggiunto da qui — restava
+ * percepito come "torna alla vecchia ricerca", non un'opzione distinta.
  */
 export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: () => void; onOtherWays?: (mode: OtherWayToAdd) => void }) {
   const router = useRouter()
@@ -487,14 +489,14 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
             className="w-10 h-10 rounded-full bg-white/95 backdrop-blur shadow-md flex items-center justify-center text-stone-600 hover:text-stone-800 transition-colors shrink-0">
             <ArrowLeft className="w-4 h-4" />
           </button>
-          <div className="flex-1 flex items-center gap-2 bg-white/95 backdrop-blur rounded-2xl shadow-md px-3.5 py-2.5 min-w-0">
-            {resolving ? <Loader2 className="w-4 h-4 text-stone-400 shrink-0 animate-spin" /> : <SearchIcon className="w-4 h-4 text-stone-400 shrink-0" />}
+          <div className="flex-1 flex items-center gap-2 bg-stone-100 rounded-full px-3.5 py-2.5 min-w-0">
+            {resolving ? <Loader2 className="w-4 h-4 text-stone-400 shrink-0 animate-spin" /> : <SearchIcon className="w-4 h-4 text-stone-500 shrink-0" />}
             <input
               value={queryText}
               onChange={e => { setQueryText(e.target.value); setQueryError(null) }}
               onKeyDown={e => { if (e.key === 'Enter') handleSearchSubmit() }}
               placeholder="Borgo, sito o sentiero…"
-              className="flex-1 min-w-0 bg-transparent text-sm text-stone-800 outline-none placeholder:text-stone-400"
+              className="flex-1 min-w-0 bg-transparent text-sm text-stone-800 outline-none placeholder:text-stone-500"
             />
             {queryText && (
               <button onClick={() => { setQueryText(''); setQueryError(null) }} aria-label="Cancella ricerca" className="text-stone-400 shrink-0">
@@ -502,23 +504,18 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
               </button>
             )}
           </div>
-          {onOtherWays && (
-            <button onClick={() => setShowOtherWays(true)} aria-label="Altri modi per aggiungere un percorso"
-              className="w-10 h-10 rounded-full bg-white/95 backdrop-blur shadow-md flex items-center justify-center text-stone-600 hover:text-stone-800 transition-colors shrink-0">
-              <MoreHorizontal className="w-4 h-4" />
-            </button>
-          )}
         </div>
 
-        <div className="flex justify-center">
-          <div className="inline-flex bg-white/95 backdrop-blur rounded-full shadow-md p-1 gap-1">
-            {TYPE_FILTERS.map(f => (
-              <button key={f.id} type="button" onClick={() => { setTypeFilter(f.id); setSelected(null) }}
-                className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-colors ${typeFilter === f.id ? 'bg-stone-800 text-white' : 'text-stone-500'}`}>
-                {f.label}
-              </button>
-            ))}
-          </div>
+        {/* Filtro per tipo — controllo segmentato a piena larghezza (stesso sfondo piatto stone-100
+            della barra di ricerca sopra), non più una pillola centrata larga solo quanto il testo:
+            più leggibile e coerente con la barra. */}
+        <div className="flex bg-stone-100 rounded-full p-1 gap-1">
+          {TYPE_FILTERS.map(f => (
+            <button key={f.id} type="button" onClick={() => { setTypeFilter(f.id); setSelected(null) }}
+              className={`flex-1 py-1.5 rounded-full text-xs font-semibold text-center transition-colors ${typeFilter === f.id ? 'bg-stone-900 text-white' : 'text-stone-700'}`}>
+              {f.label}
+            </button>
+          ))}
         </div>
 
         {queryError && (
@@ -556,19 +553,31 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
         </div>
       )}
 
-      {/* ── "Genera" (apre la scelta fra Modalità A, Sentieri, e Modalità B, itinerario
-          personalizzato) — sempre visibile quando i Sentieri sono cercabili. Nessun gate di zoom
-          qui: quello di Modalità A (SENTIERO_GEN_MIN_ZOOM) vive dentro il foglio di scelta, non sul
-          FAB, perché Modalità B non ne ha bisogno (l'utente sceglie le tappe a mano, non genera dal
-          vivo sul viewport). Nascosto durante popup/personalizzazione, per non sovrapporsi ad altri
-          controlli fissi in basso a destra. ──────────────────────────────────────────────────── */}
-      {wantsTrails && !selected && !personalize && (
-        <button onClick={() => setShowGenChooser(true)}
-          title="Genera un percorso"
-          className="absolute right-4 z-10 w-14 h-14 rounded-full bg-terra-500 hover:bg-terra-600 text-white shadow-lg flex items-center justify-center transition-colors"
-          style={{ bottom: '112px' }}>
-          <RouteIcon className="w-5 h-5" />
-        </button>
+      {/* ── Rail: le 3 famiglie di pari livello per creare una guida — Scopri (ricerca sulla mappa,
+          selezionata di default: il suo contenuto è già nell'header sopra, non apre un foglio),
+          Genera (le modalità algoritmiche + "a mano") e Porta i tuoi dati (le vie che portano dati
+          da fuori l'app). Nascosta durante popup/personalizzazione, per non sovrapporsi ad altri
+          controlli fissi sulla mappa. ──────────────────────────────────────────────────────────── */}
+      {!selected && !personalize && (
+        <div className="absolute left-3 top-1/2 -translate-y-1/2 z-10 bg-white/95 backdrop-blur rounded-[28px] shadow-md p-1.5 flex flex-col gap-2">
+          <button onClick={() => { setShowGenChooser(false); setShowOtherWays(false) }}
+            title="Scopri sulla mappa" aria-label="Scopri sulla mappa"
+            className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-colors ${!showGenChooser && !showOtherWays ? 'bg-forest-600 text-white' : 'text-stone-600 hover:bg-stone-100'}`}>
+            <SearchIcon className="w-[18px] h-[18px]" />
+          </button>
+          <button onClick={() => setShowGenChooser(true)}
+            title="Genera un percorso" aria-label="Genera un percorso"
+            className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-colors ${showGenChooser ? 'bg-terra-500 text-white' : 'text-stone-600 hover:bg-stone-100'}`}>
+            <RouteIcon className="w-[18px] h-[18px]" />
+          </button>
+          {onOtherWays && (
+            <button onClick={() => setShowOtherWays(true)}
+              title="Porta i tuoi dati" aria-label="Porta i tuoi dati"
+              className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-colors ${showOtherWays ? 'bg-stone-700 text-white' : 'text-stone-600 hover:bg-stone-100'}`}>
+              <Upload className="w-[18px] h-[18px]" />
+            </button>
+          )}
+        </div>
       )}
 
       {/* ── Scheda del pin selezionato — il popup È la scheda (niente più un link "Scheda" a
@@ -663,9 +672,10 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
         />
       )}
 
-      {/* ── Scelta della modalità di generazione — Modalità A (Sentieri, dal vivo sul viewport) o
-          Modalità B (itinerario personalizzato, tappe scelte a mano) dallo stesso FAB. Stesso
-          pattern del foglio "Altri modi" qui sotto. ────────────────────────────────────────── */}
+      {/* ── "Genera" — le due modalità algoritmiche (Sentieri dal vivo sul viewport, itinerario
+          personalizzato) più "Crea un percorso a mano": costruisce comunque sulla mappa, non porta
+          dati da fuori, per questo vive qui e non in "Porta i tuoi dati". Stesso pattern del foglio
+          "Porta i tuoi dati" qui sotto. */}
       {showGenChooser && (
         <>
           <div className="fixed inset-0 z-30 bg-stone-900/20" onClick={() => setShowGenChooser(false)} />
@@ -684,12 +694,16 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
               <OtherWayRow icon={Sliders} label="Personalizza un itinerario"
                 description="Scegli a mano le tappe da toccare sulla mappa, in qualunque ordine."
                 onClick={() => { setShowGenChooser(false); enterPersonalizeStandalone() }} />
+              {onOtherWays && (
+                <OtherWayRow icon={Waypoints} label="Crea un percorso a mano" description="Unisci tratti di Percorsi e Sentieri sulla mappa, come un editor."
+                  onClick={() => { setShowGenChooser(false); onOtherWays('manual-route') }} />
+              )}
             </div>
           </div>
         </>
       )}
 
-      {/* ── "Altri modi" — le vie di creazione diverse dalla ricerca su mappa (file GPX, da
+      {/* ── "Porta i tuoi dati" — le vie di creazione che portano dati da fuori l'app (file GPX, da
           un'attività del diario, link, inserimento manuale), un tocco più lontano invece che card
           equivalenti sulla stessa schermata. */}
       {showOtherWays && onOtherWays && (
@@ -697,7 +711,7 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
           <div className="fixed inset-0 z-30 bg-stone-900/20" onClick={() => setShowOtherWays(false)} />
           <div className="fixed left-0 right-0 bottom-0 z-40 bg-white rounded-t-3xl shadow-[0_-6px_24px_rgba(0,0,0,.15)] p-4 pb-6">
             <div className="flex items-center justify-between mb-3">
-              <p className="text-sm font-semibold text-stone-800">Altri modi per aggiungere</p>
+              <p className="text-sm font-semibold text-stone-800">Porta i tuoi dati</p>
               <button onClick={() => setShowOtherWays(false)} aria-label="Chiudi"
                 className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center text-stone-500 hover:bg-stone-200 transition-colors">
                 <XIcon className="w-4 h-4" />
@@ -712,8 +726,6 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays }: { onBack: ()
                 onClick={() => { setShowOtherWays(false); onOtherWays('from-activity') }} />
               <OtherWayRow icon={PencilLine} label="Inserisci a mano" description="Hai già tutti i dati? Compila nome, distanza e dislivello senza cercare nulla."
                 onClick={() => { setShowOtherWays(false); onOtherWays('manual') }} />
-              <OtherWayRow icon={Waypoints} label="Crea un percorso a mano" description="Unisci tratti di Percorsi e Sentieri sulla mappa, come un editor."
-                onClick={() => { setShowOtherWays(false); onOtherWays('manual-route') }} />
             </div>
           </div>
         </>
