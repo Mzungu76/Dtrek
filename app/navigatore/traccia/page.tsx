@@ -299,6 +299,7 @@ export default function TracciaPage() {
           onTogglePlayPause={handlePauseResume}
           onStop={handleStop}
           onExpand={() => setShowStatsSheet(true)}
+          onOpenFoto={() => { setFieldNoteAutoCamera(true); setShowFieldNote(true) }}
         />
 
         <FreeTrackStatsSheet

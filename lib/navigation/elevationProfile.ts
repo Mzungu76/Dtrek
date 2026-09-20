@@ -59,3 +59,16 @@ export function traveledElevation(profile: ElevationProfilePoint[], uptoDistance
   if (profile.length < 2) return { gainM: 0, lossM: 0 }
   return sumElevation(profile, 0, indexAtDistance(profile, uptoDistanceM))
 }
+
+/**
+ * Re-expresses the profile as if the route were walked end-to-start — for the hiker who set off
+ * in the wrong direction on purpose (NavigationEngine.reverseRoute()). Flips point order and
+ * re-bases distanceAlongRouteM from the new start (old end); altitudeM stays attached to the
+ * same physical point, so a climb in the original direction correctly becomes a descent here —
+ * remainingElevation/traveledElevation need no changes of their own to stay correct afterwards.
+ */
+export function reverseElevationProfile(profile: ElevationProfilePoint[]): ElevationProfilePoint[] {
+  if (profile.length < 2) return profile
+  const totalM = profile[profile.length - 1].distanceAlongRouteM
+  return [...profile].reverse().map((p) => ({ distanceAlongRouteM: totalM - p.distanceAlongRouteM, altitudeM: p.altitudeM }))
+}
