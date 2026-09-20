@@ -173,14 +173,22 @@ export default function ManualRouteEditor({ onBack }: { onBack: () => void }) {
       const bbox: [number, number, number, number] = [bounds.getSouth(), bounds.getWest(), bounds.getNorth(), bounds.getEast()]
       const z = map.getZoom()
 
+      // Un fallimento (es. Overpass momentaneamente irraggiungibile per la rete grezza, la
+      // sorgente più fragile delle tre) non deve azzerare gli altri due layer — ognuno fallisce per
+      // conto suo (ripiega su [] e segna il proprio nome), non un solo Promise.all che con un
+      // singolo rifiuto avrebbe lasciato la mappa senza NESSUN elemento disegnato, PIN inclusi.
+      const failed: string[] = []
+      const safely = <T,>(label: string, p: Promise<T[]>): Promise<T[]> =>
+        p.catch(e => { failed.push(label); console.warn(`[ManualRouteEditor] ${label}:`, e); return [] })
+
       const [borghi, siti, trails, network] = await Promise.all([
-        fetchJson<MetaSearchResultItem[]>('/api/meta-search', { metaType: 'borgo_citta', origin, maxDistanceKm: radiusKm, limit: SEARCH_LIMIT }, 'items'),
-        fetchJson<MetaSearchResultItem[]>('/api/meta-search', { metaType: 'sito', origin, maxDistanceKm: radiusKm, limit: SEARCH_LIMIT }, 'items'),
+        safely('Borghi/Città', fetchJson<MetaSearchResultItem[]>('/api/meta-search', { metaType: 'borgo_citta', origin, maxDistanceKm: radiusKm, limit: SEARCH_LIMIT }, 'items')),
+        safely('Siti', fetchJson<MetaSearchResultItem[]>('/api/meta-search', { metaType: 'sito', origin, maxDistanceKm: radiusKm, limit: SEARCH_LIMIT }, 'items')),
         z >= TRAILS_MIN_ZOOM
-          ? fetchJson<TrailNearbyItem[]>('/api/trails-nearby', { lat: origin.lat, lon: origin.lon, radiusKm }, 'items')
+          ? safely('Percorsi', fetchJson<TrailNearbyItem[]>('/api/trails-nearby', { lat: origin.lat, lon: origin.lon, radiusKm }, 'items'))
           : Promise.resolve([]),
         z >= NETWORK_MIN_ZOOM
-          ? fetchJson<NetworkSegment[]>('/api/walk-network-segments', { bbox }, 'segments')
+          ? safely('Sentieri', fetchJson<NetworkSegment[]>('/api/walk-network-segments', { bbox }, 'segments'))
           : Promise.resolve([]),
       ])
 
@@ -188,6 +196,9 @@ export default function ManualRouteEditor({ onBack }: { onBack: () => void }) {
       setTrailResults(trails)
       setNetworkSegments(network)
       setDirty(false)
+      if (failed.length > 0) {
+        setLoadError(`${failed.join(', ')}: caricamento non riuscito in quest'area — gli altri elementi restano comunque selezionabili.`)
+      }
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Caricamento non riuscito')
     } finally {
