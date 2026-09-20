@@ -114,20 +114,38 @@ export function pickBestOsmPlaceMatch(borgo: DtrekBorgoRow, nearby: OsmPlaceCand
 }
 
 // ── I/O: Supabase ─────────────────────────────────────────────────────────────────────────────
+// PostgREST (Supabase) applica un tetto di default alle righe restituite da una query SENZA
+// `.range()` esplicito — osservato dal vivo in un run reale: Lombardia (1502 Comuni) e Piemonte
+// (1180) troncate silenziosamente a ESATTAMENTE 1000 ciascuna, 682 righe perse in tutto (nessun
+// errore, nessun avviso — la query "riesce" e basta, restituendo un sottoinsieme senza dirlo). Le
+// due funzioni sotto paginano esplicitamente con `.range()` finché una pagina non torna più corta
+// della dimensione richiesta, invece di fidarsi che un singolo `.select()` porti sempre tutto:
+// l'unico modo di reggere ANCHE una crescita futura oltre l'attuale tetto (che potrebbe cambiare),
+// non solo il caso di oggi.
+const SUPABASE_PAGE_SIZE = 1000
+
+async function fetchAllPages<T>(supabase: SupabaseClient, buildQuery: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>): Promise<T[]> {
+  const all: T[] = []
+  for (let from = 0; ; from += SUPABASE_PAGE_SIZE) {
+    const { data, error } = await buildQuery(from, from + SUPABASE_PAGE_SIZE - 1)
+    if (error) throw error
+    all.push(...(data ?? []))
+    if (!data || data.length < SUPABASE_PAGE_SIZE) break
+  }
+  return all
+}
+
 async function findAllRegions(supabase: SupabaseClient): Promise<string[]> {
-  const { data, error } = await supabase.from('dtrek_places').select('region').eq('meta_type', 'borgo_citta').not('region', 'is', null)
-  if (error) throw error
-  return Array.from(new Set((data ?? []).map(r => r.region as string))).sort()
+  const rows = await fetchAllPages<{ region: string }>(supabase, (from, to) =>
+    supabase.from('dtrek_places').select('region').eq('meta_type', 'borgo_citta').not('region', 'is', null).range(from, to),
+  )
+  return Array.from(new Set(rows.map(r => r.region))).sort()
 }
 
 async function findBorghiInRegion(supabase: SupabaseClient, region: string): Promise<DtrekBorgoRow[]> {
-  const { data, error } = await supabase
-    .from('dtrek_places')
-    .select('id, name, latitude, longitude')
-    .eq('meta_type', 'borgo_citta')
-    .eq('region', region)
-  if (error) throw error
-  return (data ?? []) as DtrekBorgoRow[]
+  return fetchAllPages<DtrekBorgoRow>(supabase, (from, to) =>
+    supabase.from('dtrek_places').select('id, name, latitude, longitude').eq('meta_type', 'borgo_citta').eq('region', region).range(from, to),
+  )
 }
 
 async function updateCoords(supabase: SupabaseClient, placeId: string, lat: number, lon: number): Promise<void> {
