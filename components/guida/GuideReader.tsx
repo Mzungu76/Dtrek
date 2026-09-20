@@ -33,6 +33,7 @@ import {
   type GuideSectionKey, type GuideTextLength, type SectionLengthMap,
 } from '@/lib/guideSections'
 import { parseGuideSections, mergeGuideSection } from '@/lib/guideParse'
+import { guideProfileFor } from '@/lib/guideProfiles'
 import { SECTION_STYLE, LEGACY_STYLE } from './sectionStyle'
 import { slugifyHeading } from '@/lib/guideSlug'
 import WeatherWidget from '@/components/WeatherWidget'
@@ -276,18 +277,26 @@ export default function GuideReader({
 
   const parsedSections = useMemo(() => guideText ? parseGuideSections(guideText) : [], [guideText])
 
+  // Titolo di card per tipologia (lib/guideProfiles.ts, piano §29/§30) — "Il borgo"/"Le tappe del
+  // borgo" per un borgo_citta, "Il museo"/"Il castello"/... per un sito con siteType noto, invece
+  // del titolo generico da sentiero ("Il percorso"/"I luoghi da non perdere") che lo stesso
+  // profilo istruisce Giulia a NON scrivere più per queste tipologie (vedi SECTION_BRIEF in
+  // app/api/guide/route.ts, che incorpora questi stessi titoli nell'intestazione "## ..." generata).
+  const guideProfile = useMemo(() => guideProfileFor(hike.metaType, hike.siteType), [hike.metaType, hike.siteType])
+
   const displaySections = useMemo<DisplaySection[]>(() => {
     const byKey = new Map(parsedSections.filter(s => s.key).map(s => [s.key as GuideSectionKey, s]))
     const fixed: DisplaySection[] = GUIDE_SECTIONS.map(def => {
       const parsed = byKey.get(def.key)
       const style = SECTION_STYLE[def.key]
-      return { key: def.key, guideKey: def.key, title: def.title, subtitle: def.subtitle, body: parsed?.body, icon: style.icon, color: style.color }
+      const override = guideProfile.sectionOverrides?.[def.key]
+      return { key: def.key, guideKey: def.key, title: override?.title ?? def.title, subtitle: def.subtitle, body: parsed?.body, icon: style.icon, color: style.color }
     })
     const legacy: DisplaySection[] = parsedSections
       .filter(s => !s.key)
       .map((s, i) => ({ key: `legacy-${i}` as const, guideKey: null, title: s.title, body: s.body, icon: LEGACY_STYLE.icon, color: LEGACY_STYLE.color }))
     return [...fixed, ...legacy]
-  }, [parsedSections])
+  }, [parsedSections, guideProfile])
 
   // Voice state
   const [isPlaying,     setIsPlaying]     = useState(false)

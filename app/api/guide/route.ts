@@ -39,7 +39,9 @@ import { effectiveHikeMetrics } from '@/lib/routeMode'
 import { findAllSourceImages } from '@/lib/sourceImageFetch'
 import { resolveComuneFromLatLon } from '@/lib/overpassTrails'
 import { guideProfileFor, type GuideProfile } from '@/lib/guideProfiles'
-import { metaHasHikingMetrics } from '@/lib/metaTypes'
+import { metaHasHikingMetrics, SITE_TYPE_CONFIG } from '@/lib/metaTypes'
+import { fetchBorgoDetailStops } from '@/lib/guideBorgoDetailStops'
+import type { ItineraryStopCandidate } from '@/lib/metaSearch/borgoItinerary'
 import { readOrBackfillHistoryStats, formatHistoryStatsBlock } from '@/lib/hikerHistory'
 import { concernLabel, environmentPrefLabel } from '@/lib/hikerProfile'
 
@@ -418,6 +420,8 @@ interface GuideHikeFallback {
   trackPoints?: TrackPoint[]
   metaType?: PlannedHike['metaType']
   siteType?: PlannedHike['siteType']
+  latitude?: number
+  longitude?: number
 }
 
 /**
@@ -447,6 +451,8 @@ function hikeFromFallback(hikeId: string, hikeFallback: GuideHikeFallback): Plan
     cachedPoiWiki:        hikeFallback.cachedPoiWiki,
     metaType:             hikeFallback.metaType,
     siteType:             hikeFallback.siteType,
+    latitude:             hikeFallback.latitude,
+    longitude:            hikeFallback.longitude,
   }
 }
 
@@ -473,6 +479,13 @@ function buildPrompt(
    *  con ogni chiamata esistente. Determina sia le istruzioni/titolo di alcune sezioni sia se
    *  includere il blocco di metriche escursionistiche (distanza/dislivello/quota/punteggi). */
   profile: GuideProfile = guideProfileFor('sentiero'),
+  /** Punti di dettaglio del Borgo/Città (lib/guideBorgoDetailStops.ts), già ordinati a
+   *  vicino-più-vicino dal centro — SOLO per metaType 'borgo_citta' e SOLO quando la sezione
+   *  'luoghi' è tra quelle richieste (vedi generateGuide). undefined/vuoto per ogni altra
+   *  tipologia, o quando la scoperta non ha trovato nulla nel raggio: in quel caso il blocco
+   *  "luoghi" sotto ripiega sul comportamento invariato (wikiBlock, vuoto per un borgo/sito che
+   *  non ha mai avuto cachedPoiWiki). */
+  borgoDetailStops: ItineraryStopCandidate[] | undefined = undefined,
 ): string {
   const wiki = (hike.cachedPoiWiki ?? []) as { poi: PoiItem; wiki: WikiPage }[]
   const raw  = (hike.cachedPois   ?? []) as PoiItem[]
@@ -495,6 +508,15 @@ function buildPrompt(
     .slice(0, 12)
     .map(p => `• ${p.name} [${p.type}${p.ele ? `, ${p.ele} m` : ''}]`)
     .join('\n')
+
+  // Blocco "tappe" per un Borgo/Città (piano §29) — numerate nell'ordine di visita consigliato,
+  // così la sequenza che Giulia racconta corrisponde a quella che l'utente vede sulla mappa
+  // dell'itinerario (stessa scoperta/ordinamento di app/api/borgo-itinerary/route.ts).
+  const borgoStopsBlock = borgoDetailStops && borgoDetailStops.length > 0
+    ? borgoDetailStops.map((s, i) =>
+        `TAPPA ${i + 1}: ${s.name}${s.siteType ? ` [${SITE_TYPE_CONFIG[s.siteType]?.label ?? s.siteType}]` : ''}\n${(s.description ?? '(nessuna descrizione disponibile — racconta comunque cosa rende degno di nota questo luogo, in base al nome e al contesto)').slice(0, 500)}`
+      ).join('\n\n')
+    : null
 
   const dateStr = hike.plannedDate
     ? format(new Date(hike.plannedDate + 'T12:00'), "EEEE d MMMM yyyy", { locale: it })
@@ -581,9 +603,9 @@ ${dateStr ? `DATA: ${dateStr}` : ''}
 ${hikingMetricsBlock}
 ${comfortContext ? `PROFILO E STORICO DI QUESTO ESCURSIONISTA (usali SOLO per la sezione "Su misura per te"):\n${comfortContext}` : ''}
 
-LUOGHI CON VOCE WIKIPEDIA (usa questi come base per la narrazione storico-culturale):
-${wikiBlock}
-${rawOnly ? `\nALTRI PUNTI DI INTERESSE OSM:\n${rawOnly}` : ''}
+${borgoStopsBlock
+    ? `TAPPE DEL BORGO/CITTÀ, GIÀ ORDINATE A PIEDI DAL CENTRO (usale come base per la sezione tappa-per-tappa — segui QUESTO ordine, non inventarne uno diverso):\n${borgoStopsBlock}`
+    : `LUOGHI CON VOCE WIKIPEDIA (usa questi come base per la narrazione storico-culturale):\n${wikiBlock}\n${rawOnly ? `\nALTRI PUNTI DI INTERESSE OSM:\n${rawOnly}` : ''}`}
 ${hike.userNotes ? `\nNOTE DEL PROPRIETARIO DEL PERCORSO:\n${hike.userNotes}` : ''}
 ${natureBlock ? `\nDATI NATURALISTICI E FENOLOGICI REALI (usa questi dati per la sezione "La natura intorno a te" — non inventare flora/fauna in contraddizione con questi dati):\n${natureBlock}` : ''}
 
@@ -913,6 +935,8 @@ async function generateGuide(req: NextRequest): Promise<Response> {
         cachedPoiWiki:        data.cached_poi_wiki      ?? undefined,
         metaType:             data.meta_type            ?? 'sentiero',
         siteType:             data.site_type            ?? undefined,
+        latitude:             data.latitude             ?? undefined,
+        longitude:            data.longitude            ?? undefined,
       }
 
       scores = {
@@ -950,7 +974,7 @@ async function generateGuide(req: NextRequest): Promise<Response> {
   // ora, non prima: la tipologia della Meta è nota solo dopo averla letta da Supabase/fallback.
   // "verificato" non passa mai da questo filtro/profilo: resta gestita separatamente più sotto
   // (unica chiamata a SYSTEM_VERIFICATO, indipendente dalla tipologia).
-  const guideProfile = guideProfileFor(hike.metaType)
+  const guideProfile = guideProfileFor(hike.metaType, hike.siteType)
   sectionKeys = sectionKeys.filter(k => k === 'verificato' || guideProfile.availableSections.includes(k))
   if (sectionKeys.length === 0) {
     return new Response(JSON.stringify({ error: 'Nessuna sezione da generare per questa tipologia di Meta' }), {
@@ -972,6 +996,15 @@ async function generateGuide(req: NextRequest): Promise<Response> {
   // tutto, indipendentemente da cosa è stato richiesto.
   const needsVerificato = sectionKeys.includes('verificato') && aiUseWebSearch
   const narrativeSectionKeys = sectionKeys.filter(k => k !== 'verificato')
+
+  // Punti di dettaglio del Borgo/Città (piano §29) — letti solo quando servono davvero: la
+  // sezione 'luoghi' è tra quelle richieste in QUESTA generazione, e la Meta ha una posizione nota
+  // (assente solo per un fallback di emergenza senza lat/lon, mai per una Meta salvata su
+  // Supabase). Lanciata in parallelo a verificatoPromise sotto (nessuna dipendenza reciproca).
+  const needsBorgoDetailStops = hike.metaType === 'borgo_citta' && narrativeSectionKeys.includes('luoghi') && hike.latitude != null && hike.longitude != null
+  const borgoDetailStopsPromise = needsBorgoDetailStops
+    ? fetchBorgoDetailStops(supabase, { lat: hike.latitude!, lon: hike.longitude! })
+    : Promise.resolve(undefined)
 
   const client = new Anthropic({ apiKey })
   // Comune/provincia/regione del punto di partenza: passati a generateVerificatoText come ancoraggio
@@ -1029,7 +1062,8 @@ async function generateGuide(req: NextRequest): Promise<Response> {
     })
   }
 
-  const prompt = buildPrompt(hike, nature, narrativeSectionKeys, scores, isFirstGeneration, comfortContext, effectiveSectionLengths, guideProfile)
+  const borgoDetailStops = await borgoDetailStopsPromise
+  const prompt = buildPrompt(hike, nature, narrativeSectionKeys, scores, isFirstGeneration, comfortContext, effectiveSectionLengths, guideProfile, borgoDetailStops)
 
   // SYSTEM_CORE (+ SYSTEM_SUBTITLE quando applicabile) è testo fisso, identico per ogni utente e
   // ogni percorso nella stessa combinazione (~1700-1900 token) — niente cache_control (rimosso
