@@ -9,6 +9,7 @@ import UrlImportUploader from '@/components/upload/UrlImportUploader'
 import FromActivityUploader from '@/components/upload/FromActivityUploader'
 import CreaGuidaMapSearch, { type OtherWayToAdd } from '@/components/upload/CreaGuidaMapSearch'
 import ManualRouteEditor from '@/components/upload/ManualRouteEditor'
+import type { MapView } from '@/components/upload/sharedHelpers'
 import TrialStatusBanner from '@/components/dtrek/TrialStatusBanner'
 import { tryOpenNavigatorApp } from '@/lib/navigatorHandoff'
 import { Mountain, Compass, ArrowLeft } from 'lucide-react'
@@ -39,6 +40,10 @@ function UploadPageInner() {
   // inserimento manuale) restano raggiungibili da dentro la mappa stessa (pulsante "Altri modi",
   // vedi onOtherWays sotto), non più come card alla pari sulla stessa schermata.
   const [gpxSource, setGpxSource] = useState<GpxSource>('cerca')
+  // Sollevato qui perché CreaGuidaMapSearch e ManualRouteEditor sono rami esclusivi della stessa
+  // pagina (mai montati insieme): senza condividere l'ultima vista, passare dall'uno all'altro (o
+  // tornare indietro) farebbe ripartire la mappa dal centro Italia invece che da dove si era.
+  const [mapView, setMapView] = useState<MapView | null>(null)
 
   // "Naviga adesso" prova prima l'app nativa (se il device può averla), altrimenti ricade sul
   // navigatore libero via web già esistente (app/navigatore/traccia) — vedi lib/navigatorHandoff.ts.
@@ -49,13 +54,15 @@ function UploadPageInner() {
   // La mappa è un overlay a schermo intero (createPortal, come RouteBuilder.tsx): la renderizziamo
   // da sola, senza il resto della chrome della pagina sotto (comunque nascosta dall'overlay).
   if (tab === 'gpx' && gpxSource === 'cerca') {
-    return <CreaGuidaMapSearch onBack={() => router.back()} onOtherWays={mode => setGpxSource(mode)} />
+    return <CreaGuidaMapSearch onBack={() => router.back()} onOtherWays={mode => setGpxSource(mode)}
+      initialView={mapView ?? undefined} onViewChange={setMapView} />
   }
 
   // Strumento a sé stante (piano "Editor manuale di percorsi"): stesso pattern a schermo intero di
   // 'cerca' sopra, non annidato dentro il <main> con Navbar come le altre vie di "Altri modi".
   if (tab === 'gpx' && gpxSource === 'manual-route') {
-    return <ManualRouteEditor onBack={() => setGpxSource('cerca')} />
+    return <ManualRouteEditor onBack={() => setGpxSource('cerca')}
+      initialView={mapView ?? undefined} onViewChange={setMapView} />
   }
 
   return (

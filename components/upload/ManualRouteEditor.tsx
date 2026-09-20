@@ -19,7 +19,7 @@ import {
 import { haversineM, computeDirectionArrows } from '@/lib/geoUtils'
 import type { FoundRouteItem } from '@/lib/routeBuilder/foundRoute'
 import { saveResultItemToGuide } from '@/lib/routeBuilder/importResultItem'
-import { defaultPendingExpiresAt } from './sharedHelpers'
+import { defaultPendingExpiresAt, type MapView } from './sharedHelpers'
 
 const ITALY_CENTER: [number, number] = [42.5, 12.5]
 const ITALY_ZOOM = 6
@@ -45,6 +45,12 @@ const NETWORK_FETCH_RADIUS_M = 900
 // server per la cache Overpass — un pan che resta nella stessa cella non genera una nuova
 // richiesta: né verso il nostro endpoint né, quando serve, verso Overpass.
 const NETWORK_GRID_DEG = 0.01
+// I Percorsi censiti (tabella `trails`, query sul nostro DB — non Overpass, nessun rischio di
+// timeout come per la rete grezza sopra) vengono richiesti per un'area più ampia di quella
+// strettamente visibile, e riusati finché la viewport corrente rientra per intero in quella già
+// coperta (vedi lastTrailsFetchRef sotto) — un pan piccolo dentro l'area già scaricata non genera
+// una nuova richiesta né un ricalcolo, invece di rifare la stessa ricerca a ogni spostamento.
+const TRAILS_FETCH_PAD = 1.6
 // Debounce del ricaricamento automatico dopo che la mappa si ferma — sostituisce il vecchio
 // bottone "Cerca in quest'area": comodo per una ricerca una tantum, scomodo per un editor dove ci
 // si sposta in continuazione componendo un percorso.
@@ -117,7 +123,15 @@ async function fetchJson<T>(url: string, body: unknown, key: string): Promise<T>
  * costruzione). Strumento a sé stante, non un terzo modo dentro CreaGuidaMapSearch.tsx — stesso
  * setup Leaflet imperativo di quel file, senza importarne i componenti.
  */
-export default function ManualRouteEditor({ onBack }: { onBack: () => void }) {
+export default function ManualRouteEditor({ onBack, initialView, onViewChange }: {
+  onBack: () => void
+  /** Centro/zoom di partenza (vedi sharedHelpers.ts's MapView, sollevato in app/upload/page.tsx) —
+   *  se assente riparte da ITALY_CENTER/ITALY_ZOOM come prima. */
+  initialView?: MapView
+  /** Richiamato a ogni 'moveend' col centro/zoom corrente, così tornando a CreaGuidaMapSearch la
+   *  mappa riparte da qui invece che dal centro Italia. */
+  onViewChange?: (view: MapView) => void
+}) {
   const router = useRouter()
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstance = useRef<L.Map | null>(null)
@@ -125,9 +139,17 @@ export default function ManualRouteEditor({ onBack }: { onBack: () => void }) {
   const leafletRef = useRef<typeof L | null>(null)
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
   const initialMoveHandled = useRef(false)
+  // Stesso motivo di searchCurrentViewRef sotto: il listener 'moveend' è registrato una sola volta
+  // al mount, questo ref evita che richiuda sulla prop onViewChange del primo render.
+  const onViewChangeRef = useRef(onViewChange)
+  onViewChangeRef.current = onViewChange
   // Cella di griglia (vedi NETWORK_GRID_DEG) dell'ultimo fetch Sentieri riuscito — un pan che
   // resta nella stessa cella salta del tutto la richiesta, non solo lato cache server.
   const lastNetworkGridKeyRef = useRef<string | null>(null)
+  // Centro/raggio (km) dell'ultimo fetch Percorsi riuscito — vedi TRAILS_FETCH_PAD sopra: a
+  // differenza della rete grezza il raggio non è fisso (segue lo zoom), quindi qui il riuso è "il
+  // cerchio della viewport corrente rientra per intero in quello già coperto", non una cella fissa.
+  const lastTrailsFetchRef = useRef<{ lat: number; lon: number; radiusKm: number } | null>(null)
   const autoSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Il listener 'moveend' è registrato una sola volta (effetto di mount) — richiamare tramite
   // questo ref, aggiornato ad ogni render, invece della funzione catturata al mount, evita di
@@ -249,12 +271,38 @@ export default function ManualRouteEditor({ onBack }: { onBack: () => void }) {
         }
       }
 
+      // Percorsi censiti: stesso principio della rete grezza sopra (salta la richiesta se l'area
+      // corrente è già coperta) ma senza una griglia a celle fisse, perché qui il raggio segue lo
+      // zoom invece di essere fisso — "coperta" vuol dire che il cerchio (centro, raggio) della
+      // viewport corrente rientra per intero in quello dell'ultimo fetch riuscito. Quando serve
+      // comunque un fetch, la richiesta copre un'area più ampia di quella visibile (TRAILS_FETCH_PAD)
+      // così i prossimi pan piccoli restano coperti senza un nuovo giro di rete.
+      let trailsResultPromise: Promise<{ label: string; items: TrailNearbyItem[]; ok: boolean }>
+      if (z < TRAILS_MIN_ZOOM) {
+        lastTrailsFetchRef.current = null
+        trailsResultPromise = Promise.resolve({ label: 'Percorsi', items: [], ok: true })
+      } else {
+        const last = lastTrailsFetchRef.current
+        const coveredByLastFetch = last != null
+          && haversineM(last.lat, last.lon, origin.lat, origin.lon) + radiusKm * 1000 <= last.radiusKm * 1000
+        if (coveredByLastFetch) {
+          trailsResultPromise = Promise.resolve({ label: 'Percorsi', items: trailResults, ok: true })
+        } else {
+          const fetchRadiusKm = radiusKm * TRAILS_FETCH_PAD
+          trailsResultPromise = layer('Percorsi', fetchJson<TrailNearbyItem[]>('/api/trails-nearby', { lat: origin.lat, lon: origin.lon, radiusKm: fetchRadiusKm }, 'items'))
+            .then(r => {
+              // Solo su un fetch riuscito — un fallimento non deve "bloccare" quella zona come già
+              // coperta, altrimenti un prossimo giro non ritenterebbe mai.
+              if (r.ok) lastTrailsFetchRef.current = { lat: origin.lat, lon: origin.lon, radiusKm: fetchRadiusKm }
+              return r
+            })
+        }
+      }
+
       const [borghi, siti, trails, network] = await Promise.all([
         layer('Borghi/Città', fetchJson<MetaSearchResultItem[]>('/api/meta-search', { metaType: 'borgo_citta', origin, maxDistanceKm: radiusKm, limit: SEARCH_LIMIT }, 'items')),
         layer('Siti', fetchJson<MetaSearchResultItem[]>('/api/meta-search', { metaType: 'sito', origin, maxDistanceKm: radiusKm, limit: SEARCH_LIMIT }, 'items')),
-        z >= TRAILS_MIN_ZOOM
-          ? layer('Percorsi', fetchJson<TrailNearbyItem[]>('/api/trails-nearby', { lat: origin.lat, lon: origin.lon, radiusKm }, 'items'))
-          : Promise.resolve({ label: 'Percorsi', items: [] as TrailNearbyItem[], ok: true }),
+        trailsResultPromise,
         networkResultPromise,
       ])
 
@@ -291,7 +339,8 @@ export default function ManualRouteEditor({ onBack }: { onBack: () => void }) {
       // richiesta, vedi NETWORK_FETCH_RADIUS_M sopra) il canvas resta molto più scattante da
       // disegnare e ridisegnare a ogni click. Il click-detection di Leaflet funziona identico sul
       // canvas (hit-test manuale interno, non richiede nulla in più qui).
-      const map = L.map(mapRef.current!, { zoomControl: false, renderer: L.canvas() }).setView(ITALY_CENTER, ITALY_ZOOM)
+      const map = L.map(mapRef.current!, { zoomControl: false, renderer: L.canvas() })
+        .setView(initialView ? [initialView.lat, initialView.lon] : ITALY_CENTER, initialView?.zoom ?? ITALY_ZOOM)
       mapInstance.current = map
       layerRef.current = L.layerGroup().addTo(map)
 
@@ -307,6 +356,8 @@ export default function ManualRouteEditor({ onBack }: { onBack: () => void }) {
       // dichiarazione) perché questo listener è registrato una sola volta qui al mount.
       map.on('moveend', () => {
         setZoom(map.getZoom())
+        const c = map.getCenter()
+        onViewChangeRef.current?.({ lat: c.lat, lon: c.lng, zoom: map.getZoom() })
         if (!initialMoveHandled.current) { initialMoveHandled.current = true; return }
         if (autoSearchTimerRef.current) clearTimeout(autoSearchTimerRef.current)
         autoSearchTimerRef.current = setTimeout(() => { searchCurrentViewRef.current() }, AUTO_SEARCH_DEBOUNCE_MS)
@@ -333,7 +384,15 @@ export default function ManualRouteEditor({ onBack }: { onBack: () => void }) {
 
   function handleSegmentClick(kind: 'trail' | 'network', id: string, label: string, points: [number, number][]) {
     if (usedSegmentIds.has(id)) return
-    const result = tryAddSegment(routePoints, points, SNAP_TOLERANCE_M)
+    // Tolleranza più larga quando il tratto in coda/testa al percorso viene da una fonte diversa
+    // (Percorso censito ↔ rete OSM grezza) — vedi CROSS_SOURCE_SNAP_TOLERANCE_M in
+    // manualRouteAssembly.ts: le due fonti non condividono nodi esatti, un cambio di tipologia
+    // realmente continuo sul terreno non deve essere scartato solo per questo.
+    const result = tryAddSegment(routePoints, points, SNAP_TOLERANCE_M, {
+      routeStartKind: segmentParts[0]?.kind,
+      routeEndKind: segmentParts[segmentParts.length - 1]?.kind,
+      newKind: kind,
+    })
     if (!result.ok || !result.orientedPoints) {
       setSelectionError(result.reason ?? 'Tratto non valido.')
       setFlashRejectedId(id)
