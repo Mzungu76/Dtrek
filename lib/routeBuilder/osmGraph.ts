@@ -3,7 +3,7 @@
 // route=hiking per nome, qui servono le way generiche con i node id (non solo la geometria), così
 // i nodi condivisi tra way diverse restano visibili come intersezioni reali della rete stradale.
 import { fetchOverpass } from '@/lib/overpassTrails'
-import { haversineM } from '@/lib/geoUtils'
+import { haversineM, simplifyPolyline } from '@/lib/geoUtils'
 import { mapOsmSacScale } from '@/lib/osm/sacScale'
 
 // Tag highway ammessi: sentieri/tracciati/carrarecce (comprese le "strade bianche", tipicamente
@@ -196,4 +196,94 @@ export function nearestGraphNode(
     if (distM <= thresholdM && (!best || distM < best.distM)) best = { nodeId, distM }
   }
   return best
+}
+
+/**
+ * Un tratto contratto della rete, da un'intersezione reale alla successiva — per l'editor manuale
+ * dei percorsi (app/api/walk-network-segments/route.ts), dove un click deve selezionare "tutta la
+ * strada fino al prossimo incrocio", non un singolo arco fra due nodi consecutivi della stessa way
+ * (il grafo grezzo ne avrebbe decine anche per un tratto dritto). `wayId`/`highway` riportano solo
+ * il PRIMO arco del tratto: un tratto può in teoria attraversare un cambio di way OSM senza un vero
+ * incrocio (una way spezzata in due dai mappatori senza motivo topologico) — qui serve solo come
+ * etichetta indicativa, mai per la geometria stessa.
+ */
+export interface NetworkSegment {
+  id: string
+  points: [number, number][]
+  wayId: number
+  highway?: string
+}
+
+/**
+ * Contrae un WalkNetwork in NetworkSegment intersezione-intersezione: un nodo è un'intersezione se
+ * ha un numero di archi diverso da 2 (una vera diramazione, o l'estremità di un ramo cieco) — da
+ * ogni arco uscente da un'intersezione si cammina lungo nodi di grado 2 finché non se ne incontra
+ * un'altra. Ogni arco (fisico, non le due metà bidirezionali con cui è memorizzato in WalkNetwork)
+ * viene emesso una sola volta.
+ *
+ * Un secondo giro raccoglie i cicli isolati senza NESSUNA intersezione (un anello completo di soli
+ * nodi di grado 2, raro ma possibile) — altrimenti il primo giro, che parte solo da intersezioni
+ * reali, li salterebbe interamente: nessun nodo del ciclo farebbe mai da punto di partenza.
+ */
+// Pochi metri, impercettibile alla scala a cui questi tratti si vedono su una mappa (anche zoomata
+// a livello di quartiere) — ma una via leggermente curva con uno shape-point OSM ogni pochi metri
+// può perdere la maggior parte dei suoi vertici senza cambiare forma percepibile, alleggerendo sia
+// il payload JSON sia il numero di punti che Leaflet deve disegnare (il vero costo su un centro
+// storico denso, vedi il commento su NETWORK_FETCH_RADIUS_M in ManualRouteEditor.tsx).
+const NETWORK_SEGMENT_SIMPLIFY_TOLERANCE_M = 4
+
+export function buildNetworkSegments(network: WalkNetwork): NetworkSegment[] {
+  const segments: NetworkSegment[] = []
+  const visited = new Set<string>()
+  const isJunction = (id: number) => (network.nodes.get(id)?.edges.length ?? 0) !== 2
+  const edgeKey = (a: number, b: number, wayId: number) => (a < b ? `${a}|${b}|${wayId}` : `${b}|${a}|${wayId}`)
+
+  function walkFrom(startNodeId: number, startEdge: GraphEdge) {
+    const startNode = network.nodes.get(startNodeId)
+    let curNode = network.nodes.get(startEdge.to)
+    if (!startNode || !curNode) return
+    visited.add(edgeKey(startNodeId, startEdge.to, startEdge.wayId))
+
+    const points: [number, number][] = [[startNode.lat, startNode.lon], [curNode.lat, curNode.lon]]
+    const { wayId, highway } = startEdge
+    let prevNodeId = startNodeId
+    let curId = startEdge.to
+
+    // Si ferma a una vera intersezione, oppure tornando al nodo di partenza stesso (chiusura di un
+    // ciclo isolato senza intersezioni — vedi il secondo giro sotto).
+    while (!isJunction(curId) && curId !== startNodeId) {
+      const backEdge = curNode.edges.find(e => e.to === prevNodeId)
+      const forwardEdge = curNode.edges.find(e => e !== backEdge)
+      if (!forwardEdge) break
+      const nextNode = network.nodes.get(forwardEdge.to)
+      if (!nextNode) break
+      visited.add(edgeKey(curId, forwardEdge.to, forwardEdge.wayId))
+      points.push([nextNode.lat, nextNode.lon])
+      prevNodeId = curId
+      curId = forwardEdge.to
+      curNode = nextNode
+    }
+
+    segments.push({ id: `${wayId}:${segments.length}`, points: simplifyPolyline(points, NETWORK_SEGMENT_SIMPLIFY_TOLERANCE_M), wayId, highway })
+  }
+
+  for (const [nodeId, node] of Array.from(network.nodes)) {
+    if (!isJunction(nodeId)) continue
+    for (const edge of node.edges) {
+      if (visited.has(edgeKey(nodeId, edge.to, edge.wayId))) continue
+      walkFrom(nodeId, edge)
+    }
+  }
+
+  // Cicli isolati: ogni arco rimasto non visitato appartiene per forza a una componente senza
+  // nessuna intersezione — il nodo di partenza scelto qui è un taglio arbitrario, non un'intersezione
+  // reale (non ce ne sono), solo per rendere il ciclo comunque selezionabile come un tratto.
+  for (const [nodeId, node] of Array.from(network.nodes)) {
+    for (const edge of node.edges) {
+      if (visited.has(edgeKey(nodeId, edge.to, edge.wayId))) continue
+      walkFrom(nodeId, edge)
+    }
+  }
+
+  return segments
 }

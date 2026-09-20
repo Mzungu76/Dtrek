@@ -128,6 +128,40 @@ function distToSegmentM(lat: number, lon: number, a: [number, number], b: [numbe
   return Math.hypot(px - (ax + t * dx), py - (ay + t * dy))
 }
 
+/**
+ * Douglas-Peucker: rimuove i vertici di `points` che si scostano meno di `toleranceM` dalla corda
+ * fra i due estremi del tratto in cui cadono — la forma resta indistinguibile a occhio con una
+ * tolleranza di pochi metri, ma il numero di vertici può calare drasticamente su una way OSM con
+ * molti shape-point ravvicinati (una strada leggermente curva campionata ogni pochi metri). Usato
+ * da buildNetworkSegments (lib/routeBuilder/osmGraph.ts) per alleggerire sia il payload sia il
+ * disegno lato client dell'editor manuale dei percorsi — mai sui primi/ultimi due punti, che
+ * restano sempre gli estremi reali del tratto.
+ */
+export function simplifyPolyline(points: [number, number][], toleranceM: number): [number, number][] {
+  if (points.length < 3) return points
+  const keep = new Array(points.length).fill(false)
+  keep[0] = true
+  keep[points.length - 1] = true
+
+  function recurse(start: number, end: number) {
+    if (end <= start + 1) return
+    let maxDist = -1
+    let maxIdx = -1
+    for (let i = start + 1; i < end; i++) {
+      const d = distToSegmentM(points[i][0], points[i][1], points[start], points[end])
+      if (d > maxDist) { maxDist = d; maxIdx = i }
+    }
+    if (maxDist > toleranceM) {
+      keep[maxIdx] = true
+      recurse(start, maxIdx)
+      recurse(maxIdx, end)
+    }
+  }
+  recurse(0, points.length - 1)
+
+  return points.filter((_, i) => keep[i])
+}
+
 /** Min distance in meters from (lat, lon) to the polyline `track`, measured against every segment (not just vertices) so a point between two sparse track vertices is measured against the line connecting them. */
 export function minDistToTrack(lat: number, lon: number, track: [number, number][]): number {
   if (track.length === 0) return Infinity
