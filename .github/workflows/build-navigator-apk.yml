@@ -38,6 +38,15 @@ jobs:
           java-version: '21'
 
       - uses: android-actions/setup-android@v3
+        with:
+          # Default is "tools platform-tools" — Google removed the legacy standalone "tools"
+          # package from the SDK repository around 2026-09-15, so requesting it now hard-fails
+          # sdkmanager ("Failed to find package 'tools'") before the job ever reaches the actual
+          # Gradle build. Everything the build itself needs (build-tools, the target platform)
+          # is resolved separately by the Android Gradle Plugin during ./gradlew, not by this
+          # action — platform-tools (adb) plus the cmdline-tools this action already puts on
+          # PATH is all that's actually required here.
+          packages: 'platform-tools'
 
       - uses: gradle/actions/setup-gradle@v4
 
