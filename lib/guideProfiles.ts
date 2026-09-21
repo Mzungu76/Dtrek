@@ -112,6 +112,16 @@ dedicare alla visita, come raggiungere il luogo.`,
 Narrazione vivace del luogo: storia, architettura, atmosfera, cosa colpisce di più a chi lo visita.
 Dai l'idea di cosa si prova davvero a trovarsi lì.`,
       },
+      luoghi: {
+        title: 'Cosa vedere',
+        brief: `## Cosa vedere
+Un Sito è un luogo puntuale da visitare, non un itinerario a tappe: non parlare di "proseguire verso"
+o di un ordine di percorrenza. Racconta invece, con un sottotitolo ### per ciascuno, gli
+elementi/ambienti/opere più notevoli da non perdere durante la visita (es. una sala del museo, un
+ambiente del castello, un affresco, un reperto) — cosa cercare con lo sguardo e perché merita
+attenzione. Se non emergono elementi distinti dai dati disponibili, un solo blocco senza sottotitoli
+va bene: mai inventarne per riempire lo spazio.`,
+      },
     },
     personaAddendum: `\n\nQuesta Meta è un museo, un castello, un sito archeologico o un altro luogo
 puntuale da visitare, NON un sentiero escursionistico: non parlare mai di traccia GPS, dislivello,

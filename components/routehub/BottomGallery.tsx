@@ -343,8 +343,11 @@ export default function BottomGallery({
             ) : (
               // Nessuna foto ⇒ mappa del percorso, non un placeholder generico — stessa priorità
               // usata per la copertina grande a percorso aperto (vedi cover() in ResocontoHub.tsx e
-              // CoverMap in RouteHub.tsx). Guida non ha mai coverPhotoUrl, quindi qui vede sempre
-              // la mappa, come prima.
+              // CoverMap in RouteHub.tsx). Un sentiero di Guida non ha mai coverPhotoUrl, quindi
+              // vede sempre la mappa qui, come prima — un Borgo/Città o Sito senza traccia GPS
+              // invece la riceve in background da app/guida/GuidaHub.tsx (foto dell'archivio
+              // dtrek_places), altrimenti resterebbe questa stessa mappa disegnata su una
+              // polyline vuota (nulla da mostrare, piano §48.9).
               <GalleryMapThumb polyline={item.polyline} />
             )}
             {(hasSortData || (favoritesFilter && nextOutingFilter)) && (

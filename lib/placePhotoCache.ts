@@ -88,8 +88,18 @@ export async function fetchPlaceCoverPhoto(place: PlaceForPhoto): Promise<PlaceC
       .eq('id', place.id)
       .maybeSingle()
 
-    if (cached?.image_checked_at) {
-      return cached.image_url ? { url: cached.image_url as string, credit: cached.image_credit as string | null } : null
+    // Solo un risultato POSITIVO è definitivo. Un negativo (image_url NULL con image_checked_at
+    // valorizzato) qui è indistinguibile da un fallimento temporaneo della ricerca dal vivo sotto
+    // (timeout Wikidata, un 503 Wikipedia, un articolo scartato solo perché il suo extract era
+    // troppo corto — fetchNearbyWiki rientra silenziosamente con [] in tutti questi casi, mai
+    // un'eccezione che li distingua da "cercato per bene, non esiste"). Trattarlo come definitivo
+    // bloccherebbe per sempre qualunque foto futura — visto dal vivo: il primo giro automatico
+    // sull'intera galleria (app/guida/GuidaHub.tsx) ha reso "senza foto" un Borgo con una voce
+    // Wikipedia perfettamente valida, per il resto della sessione. Un positivo resta invece
+    // definitivo (nessun motivo di ricercarlo di nuovo): il costo di riprovare ad ogni chiamata
+    // ricade solo sui luoghi genuinamente senza foto, il caso raro.
+    if (cached?.image_url) {
+      return { url: cached.image_url as string, credit: cached.image_credit as string | null }
     }
 
     let found: PlaceCoverPhoto | null = null
