@@ -27,7 +27,7 @@ const DEDUP_DISTANCE_M = 150
 // via lib/wikipedia.ts's searchAndFetch — sufficiente a distinguere "Chiesa di San Pietro" da
 // "Chiesa di San Paolo" pur tollerando piccole differenze di formattazione ("Chiesa di San Pietro"
 // vs "San Pietro, Chiesa").
-function namesOverlap(a: string, b: string): boolean {
+export function namesOverlap(a: string, b: string): boolean {
   const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, '')
   const wordsA = norm(a).split(' ').filter(w => w.length > 3)
   const wordsB = new Set(norm(b).split(' ').filter(w => w.length > 3))

@@ -150,6 +150,13 @@ export function osmElementToPlaceCandidate(
     latitude: coords.lat,
     longitude: coords.lon,
     region: 'Lazio',
+    // website/contact:website — nessuna delle altre fonti della pipeline (MiC/ArCo esclude
+    // esplicitamente questi campi, vedi scripts/places/mic/fetch.ts) li fornisce oggi: OSM resta
+    // l'unica sorgente per orari/sito ufficiale, anche se sparsa (solo i POI ben mappati la hanno).
+    website: el.tags.website || el.tags['contact:website'],
+    // Formato OSM opening_hours (es. "Mo-Fr 09:00-18:00; Sa 10:00-16:00") passato as-is — la UI
+    // (app/mete/[id]/page.tsx) lo tratta già come testo libero, non lo si riformatta qui.
+    openingHours: el.tags.opening_hours,
     source: 'osm',
     // node/way + id numerico — univoco solo includendo il tipo di elemento (README della cartella).
     sourceId: `${el.type}/${el.id}`,

@@ -114,6 +114,14 @@ export default function MetaDettaglioPage() {
         )}
         <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,.15), rgba(0,0,0,.75))' }} />
 
+        {/* Attribuzione richiesta dalla licenza CC BY-SA di Wikimedia Commons — vedi
+            lib/placePhotoCache.ts e app/fonti-e-crediti. */}
+        {place.imageUrl && place.imageCredit && (
+          <span className="absolute top-2.5 right-2.5 bg-black/40 text-white/80 text-[9px] px-1.5 py-0.5 rounded backdrop-blur-sm">
+            {place.imageCredit}
+          </span>
+        )}
+
         <button
           onClick={() => router.back()}
           className="absolute left-4 top-4 flex items-center gap-1.5 bg-black/30 hover:bg-black/45 text-white text-sm font-medium px-3 py-1.5 rounded-full backdrop-blur-sm transition-colors"
@@ -262,9 +270,9 @@ export default function MetaDettaglioPage() {
               {place.address && (
                 <p className="flex items-start gap-2 text-stone-600"><MapPin className="w-4 h-4 text-stone-400 shrink-0 mt-0.5" /> {place.address}</p>
               )}
-              {(place.website || place.officialUrl) && (
-                <a href={place.website ?? place.officialUrl ?? '#'} target="_blank" rel="noopener noreferrer" className="flex items-start gap-2 text-forest-700 hover:underline">
-                  <Globe className="w-4 h-4 text-stone-400 shrink-0 mt-0.5" /> {place.website ?? place.officialUrl}
+              {(place.officialUrl || place.website) && (
+                <a href={place.officialUrl ?? place.website ?? '#'} target="_blank" rel="noopener noreferrer" className="flex items-start gap-2 text-forest-700 hover:underline">
+                  <Globe className="w-4 h-4 text-stone-400 shrink-0 mt-0.5" /> {place.officialUrl ?? place.website}
                 </a>
               )}
               {typeof place.openingHours === 'string' && place.openingHours && (

@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { haversineM } from '../geoUtils'
-import type { SiteType } from '../metaTypes'
+import { inferSiteTypeFromName, type SiteType } from '../metaTypes'
 import type { SitiSearchParams, MetaSearchResult, MetaSearchResultItem } from './types'
 import { combineFactors, dataQualityFactor, distanceFactor, inferredInterestTags, interestMatchFactor } from './ranking'
 import { countPopulatedFields, fetchSourceCounts, originBbox } from './placeQuery'
@@ -84,7 +84,12 @@ export async function searchSiti(supabase: SupabaseClient, params: SitiSearchPar
     return {
       id: row.id,
       metaType: 'sito',
-      siteType: (row.subtype ?? undefined) as SiteType | undefined,
+      // inferSiteTypeFromName: un subtype 'altro' spesso viene da un tag sorgente troppo generico
+      // (es. OSM tourism=attraction) anche quando il nome dice chiaramente di cosa si tratta — vedi
+      // lib/metaTypes.ts. Il filtro per categoria qui sopra (params.category) resta sul subtype
+      // grezzo del DB: una Meta con subtype='altro' non compare cercando "musei" anche se il nome
+      // lo è — correggere anche quello richiederebbe un filtro lato query, non solo di lettura.
+      siteType: inferSiteTypeFromName(row.name, (row.subtype ?? undefined) as SiteType | undefined),
       name: row.name,
       description: row.description ?? undefined,
       latitude: row.latitude,

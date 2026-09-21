@@ -66,6 +66,29 @@ describe('osmElementToPlaceCandidate', () => {
     const c = osmElementToPlaceCandidate(CASTELLO_ORSINI, { lat: 42, lon: 12 })
     expect(c?.confidence).toBe(0.7)
   })
+
+  it('porta website e opening_hours quando presenti nei tag OSM', () => {
+    const c = osmElementToPlaceCandidate(
+      { ...CASTELLO_ORSINI, tags: { ...CASTELLO_ORSINI.tags, website: 'https://esempio.it', opening_hours: 'Mo-Fr 09:00-18:00' } },
+      { lat: 42, lon: 12 },
+    )
+    expect(c?.website).toBe('https://esempio.it')
+    expect(c?.openingHours).toBe('Mo-Fr 09:00-18:00')
+  })
+
+  it('usa contact:website quando manca website', () => {
+    const c = osmElementToPlaceCandidate(
+      { ...CASTELLO_ORSINI, tags: { ...CASTELLO_ORSINI.tags, 'contact:website': 'https://esempio.it' } },
+      { lat: 42, lon: 12 },
+    )
+    expect(c?.website).toBe('https://esempio.it')
+  })
+
+  it('website/openingHours assenti quando i tag OSM non li hanno (mai un valore fabbricato)', () => {
+    const c = osmElementToPlaceCandidate(CASTELLO_ORSINI, { lat: 42, lon: 12 })
+    expect(c?.website).toBeUndefined()
+    expect(c?.openingHours).toBeUndefined()
+  })
 })
 
 describe('wayCentroid', () => {

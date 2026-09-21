@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { getUserFromRequest } from '@/lib/supabaseAuth'
-import { originBbox } from '@/lib/metaSearch/placeQuery'
-import { mergeStopCandidates, nearestStops, orderStopsNearestNeighbor, type ItineraryStopCandidate } from '@/lib/metaSearch/borgoItinerary'
-import { fetchNearbyWiki } from '@/lib/wikipedia'
+import { mergeStopCandidates, nearestStops, orderStopsNearestNeighbor } from '@/lib/metaSearch/borgoItinerary'
+import { fetchBorgoArchiveStops, fetchBorgoWikiStops } from '@/lib/guideBorgoDetailStops'
 import { fetchWalkNetworkCached } from '@/lib/routeBuilder/walkNetworkCache'
 import { nearestGraphNode, type WalkNetwork } from '@/lib/routeBuilder/osmGraph'
 import { dijkstra, reconstructPath } from '@/lib/routeBuilder/walkRouting'
@@ -14,9 +13,7 @@ import type { SiteType } from '@/lib/metaTypes'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60 // Wikipedia + rete pedonale (cache-miss = fetch Overpass) + dijkstra per tappa
 
-const STOP_SEARCH_RADIUS_KM = 2.5
 const MAX_STOPS = 6
-const WIKI_LIMIT = 10
 const DIJKSTRA_MAX_DIST_M = 3000
 const DIJKSTRA_MAX_NODES = 800
 const SNAP_THRESHOLD_M = 300
@@ -31,18 +28,6 @@ const WALK_NETWORK_TIMEOUT_MS = 22_000
 // ~4.3 km/h — un ritmo da visita (con soste implicite), non una camminata sportiva: la stessa
 // differenza per cui la stima di un Sentiero (lib/trailStats.ts) non è utilizzabile qui.
 const WALK_SPEED_MPS = 1.2
-
-interface ArchiveSiteRow {
-  id: string
-  name: string
-  latitude: number
-  longitude: number
-  description: string | null
-  image_url: string | null
-  official_url: string | null
-  website: string | null
-  subtype: string | null
-}
 
 export interface ItineraryStop {
   id: string
@@ -114,52 +99,18 @@ export async function POST(req: NextRequest) {
   if (!borgo) return NextResponse.json({ error: 'Borgo/Città non trovato' }, { status: 404 })
 
   const center = { lat: borgo.latitude as number, lon: borgo.longitude as number }
-  const bbox = originBbox(center, STOP_SEARCH_RADIUS_KM)
 
-  const [archiveResult, wikiPages] = await Promise.all([
-    supabase
-      .from('dtrek_places')
-      .select('id, name, latitude, longitude, description, image_url, official_url, website, subtype')
-      .eq('meta_type', 'sito')
-      .gte('latitude', bbox.minLat).lte('latitude', bbox.maxLat)
-      .gte('longitude', bbox.minLon).lte('longitude', bbox.maxLon)
-      .limit(60),
-    fetchNearbyWiki(center.lat, center.lon, STOP_SEARCH_RADIUS_KM * 1000, WIKI_LIMIT).catch(e => {
-      console.error('[borgo-itinerary] geosearch Wikipedia fallita', e)
-      return []
-    }),
-  ])
-
-  if (archiveResult.error) {
-    console.error('[borgo-itinerary]', archiveResult.error)
+  let archiveStops: Awaited<ReturnType<typeof fetchBorgoArchiveStops>>
+  try {
+    archiveStops = await fetchBorgoArchiveStops(supabase, center)
+  } catch (e) {
+    console.error('[borgo-itinerary]', e)
     return NextResponse.json({ error: 'Errore interno' }, { status: 500 })
   }
-  const archiveRows = (archiveResult.data ?? []) as ArchiveSiteRow[]
-
-  const archiveStops: ItineraryStopCandidate[] = archiveRows.map(r => ({
-    id: r.id,
-    name: r.name,
-    lat: r.latitude,
-    lon: r.longitude,
-    description: r.description ?? undefined,
-    thumbnail: r.image_url ?? undefined,
-    url: r.official_url ?? r.website ?? undefined,
-    source: 'archivio',
-    siteType: (r.subtype ?? undefined) as SiteType | undefined,
-  }))
-
-  const wikiStops: ItineraryStopCandidate[] = wikiPages
-    .filter(w => w.lat != null && w.lon != null)
-    .map(w => ({
-      id: `wiki:${w.pageid}`,
-      name: w.title,
-      lat: w.lat as number,
-      lon: w.lon as number,
-      description: w.extract,
-      thumbnail: w.thumbnail,
-      url: w.url,
-      source: 'wikipedia' as const,
-    }))
+  const wikiStops = await fetchBorgoWikiStops(center).catch(e => {
+    console.error('[borgo-itinerary] geosearch Wikipedia fallita', e)
+    return []
+  })
 
   const merged = mergeStopCandidates(archiveStops, wikiStops)
   const capped = nearestStops(center, merged, MAX_STOPS)

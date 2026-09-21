@@ -233,8 +233,16 @@ export default function GuidaHub({ id }: { id?: string }) {
   // All the data the auto-generated Breve guide should be able to draw on: POIs/Wikipedia,
   // flora, Safety and CTS scores. True once every source has settled (resolved or deliberately
   // skipped, e.g. no GPS) — or once the 90s watchdog above fires regardless.
-  const enrichmentReady = enrichmentTimedOut ||
-    (poisFullyLoaded && !flora.loading && safetyScore != null && ctsSettled)
+  //
+  // Un Borgo/Città o Sito non ha nessuno di questi segnali da attendere (niente traccia GPS ⇒
+  // niente POI/flora/Safety/CTS da calcolare) — pronto subito. Senza questo controllo esplicito,
+  // `poisFullyLoaded` non viene MAI impostato a true per una Meta senza traccia (vedi l'effetto
+  // sopra: il ramo che lo fa vive dentro `if (gps.length > 0)`), quindi la Guida di un Borgo/Sito
+  // restava bloccata sul messaggio "Sto raccogliendo i dati del percorso…" fino al watchdog di 90s
+  // — visto dal vivo su una preview Vercel, piano "Guida Borgo/Città e Sito".
+  const enrichmentReady = hike && hike.metaType !== 'sentiero'
+    ? true
+    : enrichmentTimedOut || (poisFullyLoaded && !flora.loading && safetyScore != null && ctsSettled)
 
   // Lightweight list of every active (non-archived) planned hike, sorted by import
   // order (most recent first) — backs the carousel/gallery. Resolves the bare

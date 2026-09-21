@@ -3,8 +3,9 @@ import { supabase } from '@/lib/supabase'
 import { getUserFromRequest } from '@/lib/supabaseAuth'
 import { fetchSourceCounts } from '@/lib/metaSearch/placeQuery'
 import { searchAndFetch, fetchExtendedExtract } from '@/lib/wikipedia'
+import { fetchPlaceCoverPhoto } from '@/lib/placePhotoCache'
 import { haversineM } from '@/lib/geoUtils'
-import type { MetaType, SiteType } from '@/lib/metaTypes'
+import { inferSiteTypeFromName, type MetaType, type SiteType } from '@/lib/metaTypes'
 
 // L'importer PTPR (scripts/import-ptpr.ts) compone `description` da campi tipologici del
 // shapefile (spesso solo un codice numerico, es. "Tipo: 76") più questa attribuzione obbligatoria
@@ -39,6 +40,9 @@ export interface PlaceDetail {
   municipality: string | null
   address: string | null
   imageUrl: string | null
+  /** Attribuzione da mostrare accanto a imageUrl quando viene da Wikimedia Commons (quasi sempre
+   *  CC BY-SA) — vedi lib/placePhotoCache.ts. */
+  imageCredit: string | null
   officialUrl: string | null
   website: string | null
   openingHours: unknown
@@ -74,7 +78,13 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   const { data, error } = await supabase
     .from('dtrek_places')
-    .select('id, name, meta_type, subtype, description, latitude, longitude, region, province, municipality, address, image_url, official_url, website, opening_hours, source, confidence, metadata')
+    // image_credit/image_checked_at (supabase/migrations/add_place_photo_cache_columns.sql) NON
+    // vanno qui: questa query gira per OGNI Meta aperta, prima ancora di sapere se serve una foto
+    // — se la migration non è ancora stata applicata sul progetto Supabase in uso, selezionare una
+    // colonna inesistente fa fallire l'intera query con un 500 ("Errore interno" su qualunque pin,
+    // visto dal vivo su una preview Vercel senza la migration). image_credit resta letto SOLO
+    // dentro lib/placePhotoCache.ts, che gestisce già la sua assenza senza propagare l'errore qui.
+    .select('id, name, meta_type, subtype, description, latitude, longitude, region, province, municipality, address, image_url, official_url, website, opening_hours, source, confidence, metadata, wikidata_id')
     .eq('id', params.id)
     .in('meta_type', ['borgo_citta', 'sito'])
     .maybeSingle()
@@ -122,6 +132,17 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     }
   }
 
+  // Foto di copertina con cache (lib/placePhotoCache.ts) — cascata Wikidata P18 → Wikipedia (match
+  // sul nome, più precisa del semplice searchAndFetch sopra) → geosearch Commons. Solo quando
+  // manca già un image_url proprio: mai a rimpiazzare un dato reale già buono, stesso principio
+  // già applicato sopra per la descrizione.
+  let coverPhoto: { url: string; credit: string | null } | null = null
+  if (!data.image_url) {
+    coverPhoto = await fetchPlaceCoverPhoto({
+      id: data.id, name: data.name, lat: data.latitude, lon: data.longitude, wikidataId: data.wikidata_id,
+    })
+  }
+
   // dtrek_places.subtype è una colonna condivisa a significato diverso per tipologia (lib/
   // metaTypes.ts): PlaceCategory ('borgo'|'citta') per un borgo_citta, SiteType per un sito —
   // valorizzare siteType anche per un borgo_citta manderebbe SITE_TYPE_CONFIG['borgo'] (chiave
@@ -130,7 +151,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const detail: PlaceDetail = {
     id: data.id,
     metaType: data.meta_type as MetaType,
-    siteType: data.meta_type === 'sito' ? (data.subtype ?? null) as SiteType | null : null,
+    // inferSiteTypeFromName: 'altro' spesso viene da un tag sorgente troppo generico (es. OSM
+    // tourism=attraction) anche quando il nome dice chiaramente di cosa si tratta — vedi
+    // lib/metaTypes.ts.
+    siteType: data.meta_type === 'sito' ? (inferSiteTypeFromName(data.name, (data.subtype ?? null) as SiteType | null) ?? null) : null,
     name: data.name,
     // Solo se sostanziale (vedi isSubstantiveDescription) — il testo composto dall'importer PTPR
     // (solo un codice tipologico + attribuzione, mai vuoto) non è una descrizione da mostrare come
@@ -143,7 +167,12 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     province: data.province,
     municipality: data.municipality,
     address: data.address,
-    imageUrl: data.image_url,
+    imageUrl: data.image_url ?? coverPhoto?.url ?? null,
+    // Solo dalla ricerca appena fatta (coverPhoto) — mai da data.image_credit: quella colonna non
+    // è nella select principale sopra apposta (vedi il commento lì), e un image_url già presente
+    // in questa riga oggi non può comunque venire da lì (nessuna fonte della pipeline lo popola
+    // ancora, vedi supabase/migrations/add_place_photo_cache_columns.sql).
+    imageCredit: coverPhoto?.credit ?? null,
     officialUrl: data.official_url,
     website: data.website,
     openingHours: data.opening_hours,

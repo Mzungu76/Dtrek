@@ -1,6 +1,6 @@
 'use client'
 import dynamic from 'next/dynamic'
-import { useMemo } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { Car, SquareParking, Milestone, MapPinned } from 'lucide-react'
@@ -28,6 +28,19 @@ interface Props {
    *  vedi lib/routeBuilder/startPointInfo.ts. Assente/null finché non arriva o se non determinabile
    *  ⇒ nessun badge, invariato. */
   startPoint?: StartPointInfo | null
+  /** 'map' (default, invariato) per un Sentiero o un Borgo/Città "trekking misto" — la mappa
+   *  ricolorata del tracciato. 'photo' per un Borgo/Città "cammino urbano" o un Sito: una foto
+   *  reale del luogo (lib/placePhotoCache.ts), o un gradiente + icona di categoria quando non ce
+   *  n'è una (mai una traccia GPS disegnata per una Meta che non ne ha, piano §48.9). */
+  coverMode?: 'map' | 'photo'
+  photoUrl?: string | null
+  /** Attribuzione Wikimedia Commons (licenza CC BY-SA) — mostrata in un angolo della copertina
+   *  quando presente. Vedi app/fonti-e-crediti. */
+  photoCredit?: string | null
+  /** Icona + colore di categoria per il fallback senza foto (coverMode='photo' con photoUrl
+   *  assente) — vedi lib/metaTypes.ts's META_TYPE_CONFIG/SITE_TYPE_CONFIG. */
+  fallbackIcon?: ReactNode
+  fallbackColor?: string
 }
 
 /**
@@ -37,7 +50,10 @@ interface Props {
  * TUO percorso, non una foto generica trovata online, e non dipende dalla disponibilità di foto.
  * Le foto Wikimedia restano usate più sotto (mosaico e foto per-sezione), solo non più qui.
  */
-export default function GuideHero({ trackPoints, routePolyline, title, categoryBadge, plannedDate, driving, startPoint }: Props) {
+export default function GuideHero({
+  trackPoints, routePolyline, title, categoryBadge, plannedDate, driving, startPoint,
+  coverMode = 'map', photoUrl, photoCredit, fallbackIcon, fallbackColor,
+}: Props) {
   const points = useMemo(() => {
     const fromTrack = (trackPoints ?? []).filter(p => p.lat !== undefined && p.lon !== undefined)
     if (fromTrack.length > 1) return fromTrack
@@ -51,7 +67,20 @@ export default function GuideHero({ trackPoints, routePolyline, title, categoryB
       className="relative w-full overflow-hidden [--hero-h:clamp(200px,50vw,300px)] md:[--hero-h:clamp(240px,32vw,380px)] lg:[--hero-h:clamp(280px,26vw,460px)]"
       style={{ height: 'var(--hero-h)' }}
     >
-      {hasGps ? (
+      {coverMode === 'photo' ? (
+        photoUrl ? (
+          // Copertina esterna (Wikidata/Wikipedia/Commons), non un asset locale ottimizzabile da next/image.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={photoUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
+        ) : (
+          <div
+            className="absolute inset-0 flex items-center justify-center"
+            style={{ background: `linear-gradient(135deg, ${fallbackColor ?? '#813619'}, #2E3A26)` }}
+          >
+            <span className="[&>svg]:w-16 [&>svg]:h-16 text-white/25">{fallbackIcon}</span>
+          </div>
+        )
+      ) : hasGps ? (
         <div
           className="absolute inset-0 pointer-events-none"
           style={{
@@ -78,6 +107,14 @@ export default function GuideHero({ trackPoints, routePolyline, title, categoryB
       <div className="absolute inset-0" style={{
         background: 'linear-gradient(to top, rgba(31,22,15,0.88) 0%, rgba(31,22,15,0.4) 42%, rgba(31,22,15,0.08) 78%, transparent 100%)',
       }} />
+
+      {/* Attribuzione richiesta dalla licenza CC BY-SA di Wikimedia Commons — vedi
+          lib/placePhotoCache.ts e app/fonti-e-crediti. */}
+      {coverMode === 'photo' && photoUrl && photoCredit && (
+        <span className="absolute top-2.5 right-2.5 bg-black/40 text-white/80 text-[9px] px-1.5 py-0.5 rounded backdrop-blur-sm">
+          {photoCredit}
+        </span>
+      )}
 
       <div className="absolute bottom-0 left-0 right-0 px-5 sm:px-8 md:px-10 pb-5 md:pb-7">
         <span className="inline-block bg-terra-500 text-white text-[8px] font-bold tracking-[2.5px] px-2.5 py-1 rounded-sm mb-2.5 uppercase">

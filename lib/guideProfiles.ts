@@ -1,4 +1,4 @@
-import type { MetaType } from './metaTypes'
+import type { MetaType, SiteType } from './metaTypes'
 import { GUIDE_SECTIONS, type GuideSectionKey } from './guideSections'
 
 // Blocco E (piano §28) — quali sezioni della Guida ha senso generare/mostrare per tipologia, e
@@ -41,6 +41,28 @@ function availableSectionsFor(exclude: GuideSectionKey[]): GuideSectionKey[] {
   return GUIDE_SECTIONS.map(s => s.key).filter(k => !exclude.includes(k))
 }
 
+const NON_HIKING_SECTIONS = availableSectionsFor(HIKING_ONLY_SECTIONS)
+
+// Brief di "luoghi" per un Borgo/Città (piano §29, "Guida diventa narrativa e geografica" con
+// Tappa 1/Tappa 2/...) — un'unica istruzione che si adatta da sola a due casi, invece di due
+// varianti scelte lato codice: quando app/api/guide/route.ts (lib/guideBorgoDetailStops.ts) ha
+// trovato punti di dettaglio nel raggio del Borgo, il prompt li elenca già numerati come "TAPPA 1,
+// TAPPA 2, ..." in ordine di visita a piedi dal centro — qui si chiede di raccontarli in quello
+// stesso ordine, uno per sottotitolo ###, chiudendo ciascuno con l'indicazione per proseguire
+// verso il successivo (esattamente i 4 campi del piano: luogo, posizione, contenuto, indicazione
+// per proseguire). Quando quell'elenco manca (borgo isolato, o la scoperta non ha trovato nulla),
+// non si inventano tappe numerate: si ripiega su un ritratto dei luoghi più noti, stesso taglio a
+// sottotitoli ma senza la sequenza vincolata.
+const BORGO_LUOGHI_BRIEF = `## Le tappe del borgo
+Se più sotto trovi un elenco TAPPA 1, TAPPA 2, ... numerato, racconta il borgo seguendo ESATTAMENTE
+quell'ordine di visita (non riordinarlo, non saltarne nessuna): per ciascuna tappa, un sottotitolo
+### col suo nome, poi la sua storia, architettura o la curiosità più memorabile, e chiudi con una
+riga breve che indichi come si prosegue a piedi verso la tappa successiva (es. "Da qui, pochi passi
+lungo i vicoli portano a...") — l'ultima tappa non ha una riga di proseguimento.
+Se quell'elenco non è presente o è vuoto, non inventare tappe numerate: racconta invece, con lo
+stesso taglio a sottotitoli ###, i luoghi più significativi del borgo che emergono dagli altri dati
+disponibili.`
+
 export const GUIDE_PROFILES: Record<MetaType, GuideProfile> = {
   sentiero: {
     metaType: 'sentiero',
@@ -48,7 +70,7 @@ export const GUIDE_PROFILES: Record<MetaType, GuideProfile> = {
   },
   borgo_citta: {
     metaType: 'borgo_citta',
-    availableSections: availableSectionsFor(HIKING_ONLY_SECTIONS),
+    availableSections: NON_HIKING_SECTIONS,
     sectionOverrides: {
       prima_di_partire: {
         title: 'Prima di partire',
@@ -59,8 +81,14 @@ zone a traffico limitato), eventuali orari di apertura di chiese/musei principal
       il_percorso: {
         title: 'Il borgo',
         brief: `## Il borgo
-Narrazione vivace del centro storico: atmosfera, scorci, vicoli, piazze, il cambio di paesaggio da un
-quartiere all'altro. Dai l'idea di cosa si prova davvero a camminarci ed esplorarlo.`,
+Narrazione d'insieme del centro storico: la prima impressione arrivando, l'atmosfera generale,
+il carattere che lo contraddistingue da altri borghi della zona, il cambio di paesaggio da un
+quartiere all'altro. Resta sul quadro d'insieme: il racconto luogo per luogo vive nella sezione
+dedicata più avanti, qui non anticiparlo.`,
+      },
+      luoghi: {
+        title: 'Le tappe del borgo',
+        brief: BORGO_LUOGHI_BRIEF,
       },
     },
     personaAddendum: `\n\nQuesta Meta è un borgo o una città da esplorare a piedi, NON un sentiero
@@ -70,7 +98,7 @@ centro storico e vita quotidiana del luogo.`,
   },
   sito: {
     metaType: 'sito',
-    availableSections: availableSectionsFor(HIKING_ONLY_SECTIONS),
+    availableSections: NON_HIKING_SECTIONS,
     sectionOverrides: {
       prima_di_partire: {
         title: 'Prima di partire',
@@ -92,8 +120,203 @@ storia, architettura, curiosità e cosa vedere durante la visita.`,
   },
 }
 
+// ── Profili per siteType (piano §30, "Guida sito dipende da siteType") ────────────────────────
+//
+// Sovrascrivono SOLO "prima_di_partire"/"il_percorso" del profilo 'sito' generico sopra — le due
+// sezioni la cui natura cambia davvero passando da un museo a una cascata (cosa serve sapere prima
+// di partire, cosa raccontare del luogo in sé). Le altre sezioni disponibili per 'sito'
+// (luoghi/natura/sapori/consigli) restano quelle del profilo generico: già scritte in modo
+// abbastanza aperto da restare pertinenti per qualunque sottotipo, e "natura" in particolare vale
+// tanto per una cascata quanto per il contesto paesaggistico di un castello o di un'abbazia.
+// 'altro' non ha un override proprio: resta il profilo 'sito' generico, corretto per un luogo che
+// non rientra in nessuna delle categorie note.
+const SITE_TYPE_OVERRIDES: Partial<Record<SiteType, Partial<Record<GuideSectionKey, GuideSectionOverride>>>> = {
+  museo: {
+    prima_di_partire: {
+      title: 'Prima di partire',
+      brief: `## Prima di partire
+Consigli pratici per la visita: giorno/orario migliore per evitare la folla, biglietti e riduzioni
+se noti, se serve prenotare, tempo indicativo da dedicare alla visita.`,
+    },
+    il_percorso: {
+      title: 'Il museo',
+      brief: `## Il museo
+Le opere e le sale principali, gli artisti rappresentati, un percorso di visita consigliato, cosa
+non perdere assolutamente anche con poco tempo a disposizione.`,
+    },
+  },
+  castello: {
+    prima_di_partire: {
+      title: 'Prima di partire',
+      brief: `## Prima di partire
+Consigli pratici per la visita: periodo migliore, orari e biglietti se noti, tempo indicativo di
+visita, eventuali limiti di accessibilità (scale, cortili, mura, torri).`,
+    },
+    il_percorso: {
+      title: 'Il castello',
+      brief: `## Il castello
+Storia (chi lo costruì, assedi o battaglie, i passaggi di proprietà nel tempo), architettura (torri,
+mura, fossato), personaggi che vi hanno vissuto, gli ambienti principali da vedere, eventi che vi si
+svolgono ancora oggi se noti, il panorama che si gode dall'alto.`,
+    },
+  },
+  abbazia: {
+    prima_di_partire: {
+      title: 'Prima di partire',
+      brief: `## Prima di partire
+Consigli pratici per la visita: orari di apertura, eventuali funzioni religiose da rispettare,
+un abbigliamento adeguato se richiesto, tempo indicativo di visita.`,
+    },
+    il_percorso: {
+      title: "L'abbazia",
+      brief: `## L'abbazia
+Fondazione e ordine religioso, architettura (chiostro, chiesa, biblioteca, refettorio), la vita
+monastica di ieri e di oggi, le opere d'arte custodite, l'atmosfera di raccoglimento del luogo.`,
+    },
+  },
+  chiesa: {
+    prima_di_partire: {
+      title: 'Prima di partire',
+      brief: `## Prima di partire
+Consigli pratici per la visita: orari di apertura, eventuali funzioni in corso da rispettare, se
+l'ingresso è libero o a offerta.`,
+    },
+    il_percorso: {
+      title: 'La chiesa',
+      brief: `## La chiesa
+Storia della fondazione, stile architettonico, opere d'arte e affreschi custoditi, i dettagli che
+meritano uno sguardo attento (facciata, campanile, cripta, altari).`,
+    },
+  },
+  sito_archeologico: {
+    prima_di_partire: {
+      title: 'Prima di partire',
+      brief: `## Prima di partire
+Consigli pratici per la visita: periodo migliore per il caldo/l'ombra, orari e biglietti se noti,
+calzature adatte a un terreno irregolare, tempo indicativo di visita.`,
+    },
+    il_percorso: {
+      title: 'Il sito archeologico',
+      brief: `## Il sito archeologico
+Epoca e civiltà a cui appartiene, cosa resta visibile oggi e come leggerlo, scoperte o scavi
+significativi, come doveva apparire il luogo nel suo periodo di massimo splendore.`,
+    },
+  },
+  monumento: {
+    prima_di_partire: {
+      title: 'Prima di partire',
+      brief: `## Prima di partire
+Consigli pratici per la visita: come raggiungerlo, orari se prevede un interno visitabile, tempo
+indicativo da dedicargli.`,
+    },
+    il_percorso: {
+      title: 'Il monumento',
+      brief: `## Il monumento
+Cosa commemora o rappresenta, chi lo ha voluto e realizzato, i dettagli scultorei o architettonici
+da notare, il suo ruolo nella vita e nella memoria della città.`,
+    },
+  },
+  palazzo: {
+    prima_di_partire: {
+      title: 'Prima di partire',
+      brief: `## Prima di partire
+Consigli pratici per la visita: orari e biglietti se noti, se è ancora abitato o sede istituzionale
+(e quindi con accesso limitato), tempo indicativo di visita.`,
+    },
+    il_percorso: {
+      title: 'Il palazzo',
+      brief: `## Il palazzo
+La famiglia o l'istituzione che lo fece costruire, lo stile e la facciata, i saloni e le stanze
+principali, le opere e gli arredi custoditi all'interno.`,
+    },
+  },
+  teatro: {
+    prima_di_partire: {
+      title: 'Prima di partire',
+      brief: `## Prima di partire
+Consigli pratici per la visita: se è visitabile liberamente o solo con spettacoli/visite guidate,
+orari, biglietti se noti.`,
+    },
+    il_percorso: {
+      title: 'Il teatro',
+      brief: `## Il teatro
+Storia e inaugurazione, stile architettonico e acustica, gli spettacoli o gli artisti che lo hanno
+reso celebre, cosa vedere della sala e del palcoscenico.`,
+    },
+  },
+  cascata: {
+    prima_di_partire: {
+      title: 'Prima di partire',
+      brief: `## Prima di partire
+Consigli pratici per la visita: periodo migliore per la portata d'acqua, come raggiungerla, calzature
+adatte, attenzione a rocce bagnate e scivolose lungo l'accesso.`,
+    },
+    il_percorso: {
+      title: 'La cascata',
+      brief: `## La cascata
+Origine geologica, come si è formata nel tempo, l'ambiente naturale che la circonda, i punti
+migliori da cui ammirarla, una nota onesta sulla sicurezza dell'accesso.`,
+    },
+  },
+  grotta: {
+    prima_di_partire: {
+      title: 'Prima di partire',
+      brief: `## Prima di partire
+Consigli pratici per la visita: se serve una guida o una prenotazione, temperatura interna e
+abbigliamento adatto, calzature adeguate a un terreno umido e irregolare.`,
+    },
+    il_percorso: {
+      title: 'La grotta',
+      brief: `## La grotta
+Formazione geologica (stalattiti, stalagmiti, l'epoca in cui si sono formate), la storia di
+scoperta e uso umano nel tempo, l'ambiente e il microclima interno, i punti di maggior suggestione
+del percorso.`,
+    },
+  },
+  belvedere: {
+    prima_di_partire: {
+      title: 'Prima di partire',
+      brief: `## Prima di partire
+Consigli pratici per la visita: l'orario migliore per la luce (es. tramonto), come raggiungerlo,
+attenzione a parapetti e dislivelli per chi soffre di vertigini.`,
+    },
+    il_percorso: {
+      title: 'Il belvedere',
+      brief: `## Il belvedere
+Cosa si vede da lì e come leggere il panorama (vette, valli, coste riconoscibili), la storia del
+punto panoramico stesso quando è rilevante.`,
+    },
+  },
+  area_naturale: {
+    prima_di_partire: {
+      title: 'Prima di partire',
+      brief: `## Prima di partire
+Consigli pratici per la visita: periodo migliore, itinerari o punti di accesso interni se noti,
+eventuali regole di tutela/accesso dell'area protetta.`,
+    },
+    il_percorso: {
+      title: "L'area naturale",
+      brief: `## L'area naturale
+Le caratteristiche dell'ambiente protetto, l'ecosistema che lo popola, gli itinerari interni
+principali, cosa rende questo luogo un ambiente da proteggere.`,
+    },
+  },
+}
+
+/** Applica, se presente, l'override specifico del siteType sopra il profilo 'sito' generico —
+ *  solo le chiavi di sezione che quel siteType sovrascrive davvero (prima_di_partire/il_percorso),
+ *  il resto del profilo base resta invariato. */
+function applySiteTypeOverride(base: GuideProfile, siteType: SiteType | undefined): GuideProfile {
+  const overrides = siteType ? SITE_TYPE_OVERRIDES[siteType] : undefined
+  if (!overrides) return base
+  return { ...base, sectionOverrides: { ...base.sectionOverrides, ...overrides } }
+}
+
 // Assente/undefined trattato come 'sentiero' (il default di colonna, coerente con
 // lib/metaTypes.ts's metaHasHikingMetrics) — mai come "tipologia sconosciuta ⇒ profilo vuoto".
-export function guideProfileFor(metaType: MetaType | undefined): GuideProfile {
-  return GUIDE_PROFILES[metaType ?? 'sentiero']
+// siteType è letto SOLO quando metaType è 'sito' (piano §30) — ignorato per ogni altra tipologia,
+// coerente con lib/metaTypes.ts dove SiteType è valorizzato solo in quel caso.
+export function guideProfileFor(metaType: MetaType | undefined, siteType?: SiteType): GuideProfile {
+  const base = GUIDE_PROFILES[metaType ?? 'sentiero']
+  return base.metaType === 'sito' ? applySiteTypeOverride(base, siteType) : base
 }
