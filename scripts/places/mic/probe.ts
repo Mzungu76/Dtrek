@@ -389,6 +389,11 @@ export interface ProbeResult {
   durationMs: number
   resultCount: number | null
   sample: unknown
+  // Bug reale trovato dal vivo (2026-09-21): `sample` (bindings[0]) bastava per i probe con LIMIT 5
+  // dove serve solo un esempio, ma un probe come 'contatti-canepina-un-salto-oltre' (LIMIT 50, 8
+  // righe reali attese) perdeva silenziosamente le righe 2-8 — ogni query qui è comunque limitata
+  // (LIMIT nel probe stesso), quindi non c'è motivo di troncare: tutte le righe, sempre.
+  bindings: unknown[]
   error: string | null
 }
 
@@ -414,6 +419,7 @@ async function runProbe(probe: Probe, timeoutMs: number): Promise<ProbeResult> {
         durationMs,
         resultCount: null,
         sample: null,
+        bindings: [],
         error: (await res.text()).slice(0, 300),
       }
     }
@@ -426,6 +432,7 @@ async function runProbe(probe: Probe, timeoutMs: number): Promise<ProbeResult> {
       durationMs,
       resultCount: bindings.length,
       sample: bindings[0] ?? null,
+      bindings,
       error: null,
     }
   } catch (e) {
@@ -438,6 +445,7 @@ async function runProbe(probe: Probe, timeoutMs: number): Promise<ProbeResult> {
       durationMs,
       resultCount: null,
       sample: null,
+      bindings: [],
       error: e instanceof Error ? e.message : String(e),
     }
   }
