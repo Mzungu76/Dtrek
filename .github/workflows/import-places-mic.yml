@@ -49,6 +49,11 @@ on:
         required: false
         type: string
         default: "30000"
+      describe_name:
+        description: "Solo modalità describe: testo da cercare in rdfs:label (es. 'Canepina') invece di un record arbitrario — vedi fetch.ts --describe --name."
+        required: false
+        type: string
+        default: ""
 
 concurrency:
   group: import-places
@@ -66,6 +71,7 @@ jobs:
       REGION: ${{ inputs.region }}
       LIMIT: ${{ inputs.limit }}
       PROBE_TIMEOUT_MS: ${{ inputs.probe_timeout_ms }}
+      DESCRIBE_NAME: ${{ inputs.describe_name }}
     steps:
       - uses: actions/checkout@v7
 
@@ -80,9 +86,14 @@ jobs:
         if: ${{ inputs.mode == 'describe' }}
         run: |
           set -euo pipefail
-          npx tsx scripts/places/mic/fetch.ts --describe | tee /tmp/mic-describe.txt
+          if [ -n "${DESCRIBE_NAME:-}" ]; then
+            npx tsx scripts/places/mic/fetch.ts --describe --name "$DESCRIBE_NAME" | tee /tmp/mic-describe.txt
+          else
+            npx tsx scripts/places/mic/fetch.ts --describe | tee /tmp/mic-describe.txt
+          fi
           {
             echo "### Import Places — MiC (describe)"
+            echo "- Nome cercato: ${DESCRIBE_NAME:-(record arbitrario)}"
             echo '```json'
             cat /tmp/mic-describe.txt
             echo '```'
