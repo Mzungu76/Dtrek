@@ -74,6 +74,28 @@ describe('micBindingToPlaceCandidate', () => {
     const c = micBindingToPlaceCandidate(CERAMICA)
     expect(c.region).toBeUndefined()
   })
+
+  it('usa dc:type come fallback quando typeLabel è assente (caso reale: Canepina/105665, MIC_DATA_SOURCES.md §3bis — loc:hasCulturalInstituteOrSiteType mai presente per quel record, dc:type sì)', () => {
+    const c = micBindingToPlaceCandidate({
+      ...CERAMICA,
+      typeLabel: undefined,
+      dcType: 'Museo, Galleria e/o raccolta',
+    })
+    expect(c.subtype).toBe('museo')
+    expect(c.confidence).toBe(0.9)
+    expect(c.rawType).toBe('Museo, Galleria e/o raccolta')
+    expect(c.metadata?.micDcType).toBe('Museo, Galleria e/o raccolta')
+  })
+
+  it('typeLabel ha precedenza su dc:type quando entrambi sono presenti', () => {
+    const c = micBindingToPlaceCandidate({
+      ...CERAMICA,
+      typeLabel: 'Castello',
+      dcType: 'Museo, Galleria e/o raccolta',
+    })
+    expect(c.subtype).toBe('castello')
+    expect(c.rawType).toBe('Castello')
+  })
 })
 
 describe('filterToKnownRegions', () => {

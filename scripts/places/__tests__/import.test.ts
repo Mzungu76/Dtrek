@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { candidateToPartialUpdate } from '../import'
+import { candidateToPartialUpdate, mergeMetadata } from '../import'
 import type { PlaceCandidate } from '../types'
 
 // Fixture minima valida — solo i campi obbligatori di PlaceCandidate (types.ts), il resto
@@ -42,5 +42,53 @@ describe('candidateToPartialUpdate', () => {
     const withExtras: PlaceCandidate = { ...MINIMAL, region: 'Lazio', province: 'Viterbo', municipalityIstatCode: '056039' }
     const update = candidateToPartialUpdate(withExtras)
     expect(update).toMatchObject({ region: 'Lazio', province: 'Viterbo', municipality_istat_code: '056039' })
+  })
+
+  // Bug reale (MIC_DATA_SOURCES.md §9/§10, corretto in questa sessione): prima di mergeMetadata,
+  // un ri-fetch della stessa fonte non toccava mai `metadata` — fieldProvenance scritta al primo
+  // insert restava congelata per sempre (retrievedAt incluso).
+  it('un candidato senza metadata non tocca il campo (comportamento invariato)', () => {
+    const update = candidateToPartialUpdate(MINIMAL)
+    expect(update).not.toHaveProperty('metadata')
+  })
+
+  it('un candidato con metadata la include, fusa con quella esistente sulla riga', () => {
+    const withMetadata: PlaceCandidate = { ...MINIMAL, metadata: { micTypeLabel: 'Museo' } }
+    const update = candidateToPartialUpdate(withMetadata, { needsReview: true })
+    expect(update.metadata).toEqual({ needsReview: true, micTypeLabel: 'Museo' })
+  })
+})
+
+describe('mergeMetadata', () => {
+  it('nessuna metadata esistente, nessuna in arrivo → oggetto vuoto', () => {
+    expect(mergeMetadata(null, undefined)).toEqual({})
+    expect(mergeMetadata(undefined, undefined)).toEqual({})
+  })
+
+  it('nessuna metadata in arrivo → quella esistente resta intatta', () => {
+    expect(mergeMetadata({ a: 1 }, undefined)).toEqual({ a: 1 })
+  })
+
+  it('chiavi non fieldProvenance: quella in arrivo vince, il resto della esistente resta', () => {
+    expect(mergeMetadata({ a: 1, b: 2 }, { b: 3, c: 4 })).toEqual({ a: 1, b: 3, c: 4 })
+  })
+
+  it('fieldProvenance si fonde CAMPO PER CAMPO, non come blob unico (il punto del bug §9/§10)', () => {
+    const existing = {
+      fieldProvenance: {
+        description: { value: 'vecchia descrizione', source: 'mic', retrievedAt: '2026-01-01', confidence: 'high' as const },
+        price: { value: null, source: 'mic', retrievedAt: '2026-01-01', confidence: 'low' as const, status: 'missing' as const },
+      },
+    }
+    const incoming = {
+      fieldProvenance: {
+        description: { value: 'nuova descrizione', source: 'mic', retrievedAt: '2026-09-21', confidence: 'high' as const },
+      },
+    }
+    const merged = mergeMetadata(existing, incoming)
+    expect(merged.fieldProvenance).toEqual({
+      description: { value: 'nuova descrizione', source: 'mic', retrievedAt: '2026-09-21', confidence: 'high' },
+      price: { value: null, source: 'mic', retrievedAt: '2026-01-01', confidence: 'low', status: 'missing' },
+    })
   })
 })
