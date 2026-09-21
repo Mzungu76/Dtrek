@@ -127,6 +127,15 @@ export interface MicBinding {
   id: string          // parte numerica finale dell'IRI CulturalInstituteOrSite
   name: string
   typeLabel?: string
+  // `dc:type` (http://purl.org/dc/elements/1.1/type) — letterale diretto sul CIS, es. "Museo,
+  // Galleria e/o raccolta". VERIFICATO reale con --describe --name Canepina (MIC_DATA_SOURCES.md
+  // §3bis, CulturalInstituteOrSite/105665): quel record NON ha alcuna tripla
+  // `loc:hasCulturalInstituteOrSiteType` (typeLabel sempre unbound), ma ha `dc:type` popolato —
+  // senza questo fallback, quel record specifico cade silenziosamente su 'altro' nonostante il
+  // dato reale dica chiaramente "Museo". Non ancora noto quanto sia diffuso sul resto del catalogo
+  // (vedi probe `copertura-campi-arricchenti` in probe.ts) — usato solo come fallback, mai al posto
+  // di typeLabel quando quest'ultimo è presente.
+  dcType?: string
   comune?: string
   province?: string
   region?: string
@@ -138,10 +147,11 @@ export interface MicBinding {
 
 // Pura, testabile senza rete.
 export function micBindingToPlaceCandidate(b: MicBinding): PlaceCandidate {
+  const typeSource = b.typeLabel ?? b.dcType
   return {
     name: b.name,
     metaType: 'sito',
-    subtype: micTypeLabelToSiteType(b.typeLabel),
+    subtype: micTypeLabelToSiteType(typeSource),
     // Nessuna descrizione testuale estesa — vedi nota licenza CC BY-SA 4.0 in cima al file.
     latitude: b.lat,
     longitude: b.lon,
@@ -153,12 +163,13 @@ export function micBindingToPlaceCandidate(b: MicBinding): PlaceCandidate {
     source: 'mic',
     sourceId: b.id,
     sourceUrl: `http://dati.beniculturali.it/mibact/luoghi/resource/CulturalInstituteOrSite/${b.id}`,
-    rawType: b.typeLabel,
+    rawType: typeSource,
     // Non 1 come ISTAT/PTPR: la conversione tipo-testuale→SiteType qui è euristica (vedi
     // MIC_TYPE_MAP), non un campo strutturato con valori chiusi verificati.
-    confidence: b.typeLabel ? 0.9 : 0.6,
+    confidence: typeSource ? 0.9 : 0.6,
     metadata: {
       micTypeLabel: b.typeLabel,
+      micDcType: b.dcType,
     },
   }
 }
@@ -251,8 +262,9 @@ PREFIX loc: <https://w3id.org/arco/ontology/location/>
 PREFIX clvapit: <https://w3id.org/italia/onto/CLV/>
 PREFIX geo: <http://www.w3.org/2003/01/geo/wgs84_pos#>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX dc: <http://purl.org/dc/elements/1.1/>
 
-SELECT DISTINCT ?cis ?name ?typeLabel ?comune ?regionLabel ?address ?lat ?long WHERE {
+SELECT DISTINCT ?cis ?name ?typeLabel ?dcType ?comune ?regionLabel ?address ?lat ?long WHERE {
   {
     SELECT ?cis ?name ?site ?address ?comune ?regionLabel WHERE {
       ?cis a cis:CulturalInstituteOrSite ;
@@ -272,6 +284,10 @@ SELECT DISTINCT ?cis ?name ?typeLabel ?comune ?regionLabel ?address ?lat ?long W
     ?cis loc:hasCulturalInstituteOrSiteType ?type .
     ?type rdfs:label ?typeLabel .
   }
+  # Fallback verificato reale su CulturalInstituteOrSite/105665 (Canepina, MIC_DATA_SOURCES.md
+  # §3bis) — letterale diretto, indipendente da typeLabel sopra, mai annidato in un altro OPTIONAL
+  # (stessa forma sicura già usata per le coordinate, round 6/7 in probe.ts).
+  OPTIONAL { ?cis dc:type ?dcType . }
   OPTIONAL { ?cis geo:lat ?lat1 ; geo:long ?long1 . }
   OPTIONAL { ?site geo:lat ?lat2 ; geo:long ?long2 . }
   OPTIONAL { ?cis clvapit:hasGeometry ?geomA . ?geomA clvapit:lat ?lat3 ; clvapit:long ?long3 . }
@@ -347,6 +363,7 @@ async function querySparql(query: string): Promise<MicBinding[]> {
       id,
       name: row.name?.value ?? 'Luogo della cultura',
       typeLabel: row.typeLabel?.value,
+      dcType: row.dcType?.value,
       comune: row.comune?.value,
       region: row.regionLabel?.value,
       address: row.address?.value,
