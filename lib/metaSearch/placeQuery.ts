@@ -19,13 +19,32 @@ export function originBbox(origin: MetaSearchOrigin, maxDistanceKm: number) {
   }
 }
 
+// Un `.in()` con centinaia/migliaia di UUID genera una query string di decine di KB — oltre la
+// soglia che Kong (il gateway davanti a PostgREST su Supabase) accetta, risposta 400 Bad Request
+// con corpo vuoto (bug reale in produzione 2026-09-21, dopo che searchSiti.ts/searchBorghi.ts
+// hanno alzato il tetto di query.limit() a 3000: ogni ricerca andava in "Errore interno"). A
+// bocconi paralleli invece di un solo `.in()` gigante — ogni richiesta resta sotto quella soglia
+// indipendentemente da quante righe restituisce la query principale.
+const SOURCE_COUNT_CHUNK_SIZE = 150
+
 export async function fetchSourceCounts(supabase: SupabaseClient, placeIds: string[]): Promise<Map<string, number>> {
   const counts = new Map<string, number>()
   if (placeIds.length === 0) return counts
-  const { data, error } = await supabase.from('dtrek_place_sources').select('place_id').in('place_id', placeIds)
-  if (error) throw error
-  for (const row of (data ?? []) as { place_id: string }[]) {
-    counts.set(row.place_id, (counts.get(row.place_id) ?? 0) + 1)
+
+  const chunks: string[][] = []
+  for (let i = 0; i < placeIds.length; i += SOURCE_COUNT_CHUNK_SIZE) {
+    chunks.push(placeIds.slice(i, i + SOURCE_COUNT_CHUNK_SIZE))
+  }
+
+  const results = await Promise.all(chunks.map(chunk =>
+    supabase.from('dtrek_place_sources').select('place_id').in('place_id', chunk)
+  ))
+
+  for (const { data, error } of results) {
+    if (error) throw error
+    for (const row of (data ?? []) as { place_id: string }[]) {
+      counts.set(row.place_id, (counts.get(row.place_id) ?? 0) + 1)
+    }
   }
   return counts
 }

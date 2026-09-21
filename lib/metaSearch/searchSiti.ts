@@ -66,7 +66,14 @@ export async function searchSiti(supabase: SupabaseClient, params: SitiSearchPar
       .gte('longitude', bbox.minLon).lte('longitude', bbox.maxLon)
   }
 
-  const { data, error } = await query.limit(500)
+  // Bug reale (segnalato dal vivo 2026-09-21, "ho perso tantissimi siti"): 500 bastava quando il
+  // catalogo Siti era più piccolo, ma senza un `order by` esplicito Postgres non garantisce QUALE
+  // sottoinsieme di righe arriva prima del taglio — con il Lazio da solo a 1488 righe (dopo
+  // un'importazione MiC massiva), righe note e ben piazzate uscivano dai risultati prima ancora di
+  // essere valutate dal ranking sotto. Alzato il tetto e aggiunto un ordinamento esplicito per
+  // confidenza, cosi anche in una regione più popolata di questo tetto le righe scartate sono le
+  // meno affidabili, non un sottoinsieme arbitrario/instabile.
+  const { data, error } = await query.order('confidence', { ascending: false }).limit(3000)
   if (error) throw error
   const rows = (data ?? []) as PlaceRow[]
 

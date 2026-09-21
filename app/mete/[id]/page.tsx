@@ -8,7 +8,7 @@ import PlaceQA from '@/components/mete/PlaceQA'
 import type { PlaceDetail } from '@/app/api/places/[id]/route'
 import type { BorgoItinerary } from '@/app/api/borgo-itinerary/route'
 import { META_TYPE_CONFIG, SITE_TYPE_CONFIG, type SiteType } from '@/lib/metaTypes'
-import { ArrowLeft, Building2, Clock, Footprints, Globe, Landmark, Loader2, MapPin, Tag } from 'lucide-react'
+import { ArrowLeft, Building2, Clock, Footprints, Globe, Landmark, Loader2, Mail, MapPin, Phone, Tag } from 'lucide-react'
 import Link from 'next/link'
 
 // Leaflet tocca `window` al modulo — mai importato lato server (stesso pattern già usato per
@@ -263,7 +263,7 @@ export default function MetaDettaglioPage() {
           <PlacePinMap lat={place.latitude} lon={place.longitude} color={config.color} />
         </section>
 
-        {(place.address || place.website || place.officialUrl || place.openingHours != null) && (
+        {(place.address || place.website || place.officialUrl || place.openingHours != null || place.phone || place.email) && (
           <section className="bg-white rounded-xl border border-stone-200 p-4 sm:p-5 mb-4">
             <h2 className="font-display text-base font-semibold text-stone-800 mb-3">Informazioni</h2>
             <div className="flex flex-col gap-2.5 text-sm">
@@ -277,6 +277,16 @@ export default function MetaDettaglioPage() {
               )}
               {typeof place.openingHours === 'string' && place.openingHours && (
                 <p className="flex items-start gap-2 text-stone-600"><Clock className="w-4 h-4 text-stone-400 shrink-0 mt-0.5" /> {place.openingHours}</p>
+              )}
+              {place.phone && (
+                <a href={`tel:${place.phone}`} className="flex items-start gap-2 text-forest-700 hover:underline">
+                  <Phone className="w-4 h-4 text-stone-400 shrink-0 mt-0.5" /> {place.phone}
+                </a>
+              )}
+              {place.email && (
+                <a href={`mailto:${place.email}`} className="flex items-start gap-2 text-forest-700 hover:underline">
+                  <Mail className="w-4 h-4 text-stone-400 shrink-0 mt-0.5" /> {place.email}
+                </a>
               )}
             </div>
           </section>
