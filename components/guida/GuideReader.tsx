@@ -1210,7 +1210,11 @@ export default function GuideReader({
             {!hasGuide && hasAiAccess !== false && !generating && !enrichmentReady && (
               <div className="flex items-center gap-3 py-8 justify-center text-center">
                 <Loader2 className="w-5 h-5 animate-spin text-terra-500" />
-                <p className="text-stone-500 text-sm">Sto raccogliendo i dati del percorso… la guida di Giulia arriverà tra poco.</p>
+                <p className="text-stone-500 text-sm">
+                  {hike.metaType === 'sentiero'
+                    ? 'Sto raccogliendo i dati del percorso… la guida di Giulia arriverà tra poco.'
+                    : 'Sto preparando la scheda… la guida di Giulia arriverà tra poco.'}
+                </p>
               </div>
             )}
 

@@ -1,9 +1,9 @@
 // Foto di copertina per una Meta Borgo/Città o Sito — nessuna fonte della pipeline (MiC/ArCo, OSM,
 // Wikidata-enrich) popola dtrek_places.image_url oggi (MiC/ArCo lo esclude esplicitamente, vedi
 // scripts/places/mic/fetch.ts). Qui la si cerca dal vivo, in ordine di PRECISIONE (una foto
-// dell'esatto soggetto, non solo "nei dintorni"), e si persiste il risultato — stesso principio di
-// cache-poi-fetch-poi-salva (anche l'esito negativo) già rodato per le foto delle specie in
-// lib/wikidataFallback.ts.
+// dell'esatto soggetto, MAI solo "nei dintorni" — vedi sotto il motivo), e si persiste il risultato
+// — stesso principio di cache-poi-fetch-poi-salva (anche l'esito negativo) già rodato per le foto
+// delle specie in lib/wikidataFallback.ts.
 //
 // 1. Wikidata P18 (quando la Meta ha già un wikidata_id da scripts/places/wikidata/enrich.ts) — la
 //    più precisa: l'immagine è dichiarata sulla voce Wikidata di QUESTA entità specifica, non
@@ -11,15 +11,17 @@
 // 2. Miniatura dell'articolo Wikipedia il cui titolo combacia col nome della Meta, tra quelli
 //    trovati da una geosearch stretta (lib/wikipedia.ts's fetchNearbyWiki) — quasi altrettanto
 //    precisa, copre i casi senza wikidata_id.
-// 3. Geosearch Wikimedia Commons (app/lib/guide/fetchRoutePhotos.ts, già in uso per il mosaico foto
-//    di un Sentiero) — ultima risorsa: una foto "nei pressi", non garantita del soggetto esatto.
 //
-// Mai una foto stock generica: fuori da queste tre fonti, l'assenza resta assenza (fallback a
-// icona/gradiente lato UI, non un'immagine qualunque spacciata per il luogo).
+// NIENTE terzo livello a geosearch Commons pura (tipo app/lib/guide/fetchRoutePhotos.ts, che va
+// benissimo per il MOSAICO di un Sentiero o per components/guida/widgets/SitoGalleryWidget.tsx,
+// dove "qualche foto dei dintorni" è onestamente quello che promette) — qui era stata usata come
+// terzo livello e ha prodotto dal vivo la copertina di un fiore per una chiesa (nessun controllo
+// che la foto trovata "nei paraggi" sia DAVVERO il soggetto, solo che passi filtri di contenuto
+// generici tipo orientamento/non-loghi). Una copertina sbagliata è peggio di nessuna copertina:
+// oltre i primi due livelli, l'assenza resta assenza (fallback a icona/gradiente lato UI).
 import { supabase } from './supabase'
 import { fetchNearbyWiki } from './wikipedia'
 import { namesOverlap } from './metaSearch/borgoItinerary'
-import { fetchRoutePhotos } from '@/app/lib/guide/fetchRoutePhotos'
 
 const WD_SPARQL = 'https://query.wikidata.org/sparql'
 const WD_USER_AGENT = 'DTrek/1.0 (places cover photo; mzulpt@gmail.com)'
@@ -65,15 +67,6 @@ async function fetchFromWikipediaThumbnail(name: string, lat: number, lon: numbe
   return match?.thumbnail ? { url: match.thumbnail, credit: 'Wikipedia' } : null
 }
 
-// Più ampio dei precedenti apposta — qui si accetta una foto "nei pressi", non del soggetto esatto,
-// quindi vale la pena guardare un'area più larga prima di rinunciare del tutto.
-const COMMONS_FALLBACK_RADIUS_M = 1500
-
-async function fetchFromCommonsGeosearch(lat: number, lon: number): Promise<PlaceCoverPhoto | null> {
-  const [photo] = await fetchRoutePhotos(lat, lon, COMMONS_FALLBACK_RADIUS_M, 1)
-  return photo ? { url: photo.url, credit: photo.credit } : null
-}
-
 /**
  * Foto di copertina per `place`, con cache su dtrek_places (image_url/image_credit/
  * image_checked_at — supabase/migrations/add_place_photo_cache_columns.sql). Mai un'eccezione: un
@@ -103,7 +96,6 @@ export async function fetchPlaceCoverPhoto(place: PlaceForPhoto): Promise<PlaceC
     try {
       if (place.wikidataId) found = await fetchFromWikidataP18(place.wikidataId)
       if (!found) found = await fetchFromWikipediaThumbnail(place.name, place.lat, place.lon)
-      if (!found) found = await fetchFromCommonsGeosearch(place.lat, place.lon)
     } catch (e) {
       console.error('[placePhotoCache] ricerca foto fallita:', e)
     }
