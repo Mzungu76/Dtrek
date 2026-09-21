@@ -37,7 +37,7 @@ function emptyStats(): ImportStats {
   return { processed: 0, linkedToExisting: 0, refreshedExisting: 0, createdNew: 0, flaggedForReview: 0, skippedInvalidCoordinates: 0, errors: [] }
 }
 
-const EXISTING_PLACE_COLS = 'id, name, meta_type, subtype, latitude, longitude, municipality, municipality_istat_code, wikidata_id, source, source_id'
+const EXISTING_PLACE_COLS = 'id, name, meta_type, subtype, latitude, longitude, municipality, municipality_istat_code, wikidata_id, source, source_id, metadata'
 
 function rowToExistingPlace(r: Record<string, unknown>): ExistingPlace {
   return {
@@ -52,7 +52,29 @@ function rowToExistingPlace(r: Record<string, unknown>): ExistingPlace {
     wikidataId:            r.wikidata_id as string | null,
     source:                r.source as ExistingPlace['source'],
     sourceId:              r.source_id as string | null,
+    metadata:              r.metadata as Record<string, unknown> | null,
   }
+}
+
+// Fonde il `metadata` di un candidato in arrivo con quello già scritto sulla riga (MIC_DATA_SOURCES.md
+// §9/§10) — MAI un overwrite completo: un ri-fetch che aggiorna solo alcuni campi arricchenti (es.
+// solo le coordinate, non la descrizione) non deve cancellare la provenienza già registrata per gli
+// altri. `fieldProvenance` è fuso chiave per chiave (una entry per campo), non come blob unico — lo
+// stesso principio già applicato riga per riga in `candidateToPartialUpdate` sotto. Pura, testabile
+// senza rete.
+export function mergeMetadata(
+  existing: Record<string, unknown> | null | undefined,
+  incoming: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  const base = { ...(existing ?? {}) }
+  if (!incoming) return base
+  const merged = { ...base, ...incoming }
+  const existingProvenance = (base.fieldProvenance ?? {}) as Record<string, unknown>
+  const incomingProvenance = (incoming.fieldProvenance ?? {}) as Record<string, unknown>
+  if (Object.keys(existingProvenance).length > 0 || Object.keys(incomingProvenance).length > 0) {
+    merged.fieldProvenance = { ...existingProvenance, ...incomingProvenance }
+  }
+  return merged
 }
 
 async function findNearbyExisting(supabase: SupabaseClient, candidate: PlaceCandidate): Promise<ExistingPlace[]> {
@@ -111,8 +133,14 @@ async function linkSourceToPlace(supabase: SupabaseClient, placeId: string, cand
 // produzione: un fix del centroide ISTAT (scripts/places/istat/fetch.ts) non aveva alcun effetto
 // per un Comune già importato in precedenza, perché questo ramo si fermava a ri-collegare la
 // fonte senza mai riscrivere le coordinate.
-// Esportata per il test diretto (pura, nessun I/O) — vedi scripts/places/__tests__/import.test.ts.
-export function candidateToPartialUpdate(candidate: PlaceCandidate): Record<string, unknown> {
+// `existingMetadata` è la riga della Meta così com'è OGGI (ExistingPlace.metadata) — assente per i
+// chiamanti che non ce l'hanno (es. i test diretti su un candidato isolato, dove non fondere con
+// nulla è corretto). Esportata per il test diretto (pura, nessun I/O) — vedi
+// scripts/places/__tests__/import.test.ts.
+export function candidateToPartialUpdate(
+  candidate: PlaceCandidate,
+  existingMetadata?: Record<string, unknown> | null,
+): Record<string, unknown> {
   const updates: Record<string, unknown> = {
     name: candidate.name,
     latitude: candidate.latitude,
@@ -131,11 +159,16 @@ export function candidateToPartialUpdate(candidate: PlaceCandidate): Record<stri
   if (candidate.website !== undefined) updates.website = candidate.website
   if (candidate.openingHours !== undefined) updates.opening_hours = candidate.openingHours
   if (candidate.wikidataId !== undefined) updates.wikidata_id = candidate.wikidataId
+  // Prima di questo cambio, un ri-fetch della stessa fonte non toccava MAI `metadata` — la
+  // provenienza per campo (fieldProvenance) scritta al primo insert restava congelata per sempre,
+  // `retrievedAt` incluso, anche quando la fonte veniva rinterrogata mesi dopo. Fusa con quella
+  // esistente (mergeMetadata), mai un overwrite completo — vedi la funzione sopra.
+  if (candidate.metadata !== undefined) updates.metadata = mergeMetadata(existingMetadata, candidate.metadata)
   return updates
 }
 
-async function refreshExistingPlace(supabase: SupabaseClient, placeId: string, candidate: PlaceCandidate) {
-  const { error } = await supabase.from('dtrek_places').update(candidateToPartialUpdate(candidate)).eq('id', placeId)
+async function refreshExistingPlace(supabase: SupabaseClient, placeId: string, candidate: PlaceCandidate, existingMetadata: Record<string, unknown> | null | undefined) {
+  const { error } = await supabase.from('dtrek_places').update(candidateToPartialUpdate(candidate, existingMetadata)).eq('id', placeId)
   if (error) throw error
 }
 
@@ -202,7 +235,7 @@ export async function importPlaceCandidates(supabase: SupabaseClient, candidates
 
       if (match && match.confidence >= AUTO_MERGE_THRESHOLD) {
         if (match.place.source === candidate.source && match.place.sourceId === candidate.sourceId) {
-          await refreshExistingPlace(supabase, match.place.id, candidate)
+          await refreshExistingPlace(supabase, match.place.id, candidate, match.place.metadata)
           stats.refreshedExisting++
         }
         await linkSourceToPlace(supabase, match.place.id, candidate)

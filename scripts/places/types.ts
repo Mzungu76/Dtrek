@@ -73,4 +73,27 @@ export interface ExistingPlace {
   // qualità potenzialmente inferiore).
   source?: PlaceSource | null
   sourceId?: string | null
+  // metadata.fieldProvenance esistente sulla riga (MIC_DATA_SOURCES.md §10) — letto da import.ts
+  // per fondere, non sovrascrivere, la provenienza per campo già registrata da un run precedente
+  // quando un ri-fetch della stessa fonte aggiorna solo un sottoinsieme dei campi arricchenti.
+  metadata?: Record<string, unknown> | null
+}
+
+// Provenienza di UN campo arricchente di una Meta (MIC_DATA_SOURCES.md §9/§10) — mai per l'intera
+// riga: due campi della stessa Meta possono venire da due fonti diverse con confidenza diversa.
+// Un fetcher che sa da dove viene un dato (non l'anagrafica di base, quella resta su
+// source/sourceId della riga) lo mette qui, sotto `PlaceCandidate.metadata.fieldProvenance`
+// (nessun nuovo campo su PlaceCandidate: `metadata` resta il contenitore libero già esistente).
+export interface FieldProvenance {
+  value: unknown
+  source: PlaceSource | string
+  sourceUrl?: string
+  // ISO 8601 — quando QUESTA pipeline ha letto il dato, non quando la fonte lo ha pubblicato.
+  retrievedAt: string
+  // Quando la fonte stessa dichiara un aggiornamento (es. la data mostrata su una pagina MiC) —
+  // assente quando la fonte non espone questa informazione (es. ArCo, verificato non esporla per
+  // record in MIC_DATA_SOURCES.md §3bis).
+  sourceUpdatedAt?: string
+  confidence: 'low' | 'medium' | 'high' | 'institutional'
+  status?: 'ok' | 'stale' | 'missing' | 'conflict'
 }
