@@ -444,14 +444,26 @@ riga) — esattamente il comportamento richiesto per il caso Canepina (§8).
    - oppure l'utente scarica il PDF del manuale REST OPENDATA (§4, link nel report) e lo incolla/
      allega qui, dato che il dominio è bloccato per il fetch automatico — è l'unico modo rimasto per
      scoprire l'URL base reale del servizio REST senza indovinarlo.
-3. **FATTO in parte**: corretto il gap tipologico trovato in §3bis (`dc:type` come fallback quando
-   `loc:hasCulturalInstituteOrSiteType` è assente — commit su questo branch). Aggiunto anche un
-   probe di copertura (`copertura-campi-arricchenti` in `probe.ts`) che conta, su un campione di
-   300 record, quanti hanno ciascuno dei 5 predicati arricchenti restanti (`l0:description`,
-   `AccessCondition/hasAccessCondition`, `SM:hasOnlineContactPoint`, `POT:hasTicket`,
-   `foaf:depiction`) — **in attesa dell'esito** (richiede un altro lancio manuale del workflow,
-   `mode: probe`, stesso blocco del permesso Actions in §9) prima di generalizzarli alla query di
-   produzione, per non farlo su un campione di un solo record (Canepina).
+3. **FATTO**: corretto il gap tipologico trovato in §3bis (`dc:type` come fallback quando
+   `loc:hasCulturalInstituteOrSiteType` è assente). Il probe di copertura (`copertura-campi-arricchenti`,
+   lanciato dall'utente il 2026-09-21, run reale) ha dato, su un campione di 443 righe (non
+   necessariamente 443 CIS distinti — `COUNT(*)` senza `DISTINCT`, alcuni predicati sono
+   multi-valore, es. Canepina aveva 2 `hasOnlineContactPoint`: il numero va letto come ordine di
+   grandezza, non come percentuale esatta su entità distinte):
+
+   | Predicato | Presente su | Su ~300-443 |
+   |---|---|---|
+   | `l0:description` | 281 | maggioritario (~65-90%) |
+   | `AccessCondition/hasAccessCondition` (orari/prenotazione) | 281 | maggioritario, stesso ordine di description |
+   | `SM:hasOnlineContactPoint` (contatti) | 281 | maggioritario, stesso ordine |
+   | `dc:type` | 12 | raro (~3-4%) — solo fallback, mai al posto di `loc:hasCulturalInstituteOrSiteType` |
+   | `foaf:depiction` (immagine) | 12 | raro |
+   | `POT:hasTicket` | 9 | raro, e come visto su Canepina spesso vuoto anche quando presente |
+
+   **`l0:description` è stato cablato in `fetch.ts`** (commit successivo su questo branch) — non
+   più un caso isolato di Canepina, confermato maggioritario. Orari e contatti restano da cablare:
+   sono altrettanto maggioritari, ma un salto RDF più complesso (nodi intermedi con proprietà non
+   ancora verificate una per una, vedi punto 6).
 4. **FATTO**: implementato lo schema di provenienza per campo (§10) in `scripts/places/types.ts`
    (`FieldProvenance`) e `scripts/places/import.ts` (`mergeMetadata`, fusione campo per campo di
    `metadata.fieldProvenance`, mai un overwrite) — nessuna migration SQL necessaria: `metadata` è
@@ -463,8 +475,16 @@ riga) — esattamente il comportamento richiesto per il caso Canepina (§8).
    locale (Comunità Montana dei Cimini/Musei DEMOS, unico gestore reale trovato, un numero di
    telefono diverso da quello in ArCo — §7) resta il solo modo per risolverlo con dati reali invece
    che dedotti da recensioni turistiche.
-6. Una volta noto l'esito del probe di copertura (punto 3): decidere insieme quali dei 5 campi
-   restanti generalizzano abbastanza da entrare nella query di produzione, e wiring effettivo di
-   `fieldProvenance` dentro `micBindingToPlaceCandidate` per quei campi.
+6. **In corso**: orari (`AccessCondition/hasAccessCondition`) e contatti (`SM:hasOnlineContactPoint`)
+   sono confermati maggioritari (punto 3) ma i nodi contatto (Telephone/Email/WebSite) sono noti
+   finora SOLO come URI — `--describe --name Canepina` si è fermato 2 salti da CIS, non ha mai
+   dumpato le loro proprietà dirette (il valore letterale, es. il numero di telefono come stringa).
+   Aggiunto un nuovo probe (`contatti-canepina-un-salto-oltre`, round 8) che dumpa esaustivamente
+   quei 3 nodi via `VALUES` sugli URI reali già noti (query quasi gratuita, nessun join con il
+   catalogo) — **in attesa di un altro lancio manuale** (`mode: probe`) prima di cablare i contatti.
+   Gli orari restano ANCORA più delicati: `hasAccessCondition` è multi-valore (Canepina ne aveva 2:
+   una "Chiusura" e un "Booking") e serve capire come distinguerli in una query aggregata senza
+   ripetere le esplosioni del pianificatore già viste su questo endpoint (round 2/3/6) — richiede
+   un probe dedicato, non ancora scritto.
 
 Nessuno scraper "definitivo" è stato scritto, per istruzione esplicita del compito.
