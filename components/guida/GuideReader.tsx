@@ -831,6 +831,12 @@ export default function GuideReader({
             ? <BorgoTappeWidget stops={borgoItinerary.stops} />
             : null
         }
+        // Un Sito è già di per sé il singolo punto di interesse: qui non c'è mai un elenco di POI
+        // "lungo il percorso" (poiList arriva comunque come oggetto — con array vuoti — dal
+        // genitore, quindi senza questo controllo PoiListWidget veniva renderizzata comunque,
+        // mostrando "Nessun luogo trovato lungo il percorso" per una Meta senza traccia). "Cosa
+        // vedere"/"I luoghi da non perdere" per un Sito resta solo testo narrativo di Giulia.
+        if (hike.metaType === 'sito') return null
         return poiList
           ? (
             <PoiListWidget
