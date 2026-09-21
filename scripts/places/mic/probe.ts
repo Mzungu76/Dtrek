@@ -354,6 +354,32 @@ WHERE {
   OPTIONAL { ?cis foaf:depiction ?img . }
 }`,
   },
+  // ── Round 8 (2026-09-21): il probe round 7 (girato dal vivo dall'utente, risultato in
+  // MIC_DATA_SOURCES.md §12) conferma che description/AccessCondition/contatti sono maggioritari
+  // (281/443, non un caso isolato) — description è già stato cablato in fetch.ts. Prima di cablare
+  // orari e contatti serve però un salto in più: il dump `--describe --name Canepina` (§3bis) si è
+  // fermato a 2 salti da CIS, quindi ha rivelato SOLO l'esistenza dei nodi
+  // Telephone/0761653008, Email/info_cmcimini_it, WebSite/http___www_cmcimini_it — non le LORO
+  // proprietà dirette (il numero/indirizzo/URL come letterale, verosimilmente un salto più sotto,
+  // es. `sm:telephoneNumber`/`sm:emailAddress`/`sm:URL` per analogia con l'esempio ufficiale nel
+  // commento della classe Site — MAI verificato su dati reali, stesso errore già evitato due volte
+  // per le coordinate). Questo probe non joina candidati: usa `VALUES` sui TRE URI reali già
+  // osservati per Canepina, dump esaustivo delle loro proprietà dirette — query quasi gratuita per
+  // il motore (nessun join con l'intero catalogo), zero rischio di ripetere le esplosioni del
+  // pianificatore viste ai round 2/3/6.
+  {
+    name: 'contatti-canepina-un-salto-oltre',
+    note: 'Dump esaustivo delle proprietà dirette dei 3 nodi contatto reali di Canepina/105665 (Telephone/Email/WebSite) — un salto oltre a dove si era fermato --describe --name Canepina, per scoprire il predicato del valore letterale prima di cablarlo in fetch.ts.',
+    query: `
+SELECT ?res ?p ?o WHERE {
+  VALUES ?res {
+    <http://dati.beniculturali.it/mibact/luoghi/resource/Telephone/0761653008>
+    <http://dati.beniculturali.it/mibact/luoghi/resource/Email/info_cmcimini_it>
+    <http://dati.beniculturali.it/mibact/luoghi/resource/WebSite/http___www_cmcimini_it>
+  }
+  ?res ?p ?o .
+} LIMIT 50`,
+  },
 ]
 
 export interface ProbeResult {
