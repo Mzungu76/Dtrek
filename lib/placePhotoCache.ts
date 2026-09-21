@@ -81,36 +81,52 @@ async function fetchFromCommonsGeosearch(lat: number, lon: number): Promise<Plac
  * (fallback a icona/gradiente lato UI) e lasciare image_checked_at NULL per un prossimo tentativo.
  */
 export async function fetchPlaceCoverPhoto(place: PlaceForPhoto): Promise<PlaceCoverPhoto | null> {
-  const { data: cached } = await supabase
-    .from('dtrek_places')
-    .select('image_url, image_credit, image_checked_at')
-    .eq('id', place.id)
-    .maybeSingle()
-
-  if (cached?.image_checked_at) {
-    return cached.image_url ? { url: cached.image_url as string, credit: cached.image_credit as string | null } : null
-  }
-
-  let found: PlaceCoverPhoto | null = null
+  // La cache (SELECT/UPDATE su image_credit/image_checked_at) presuppone
+  // supabase/migrations/add_place_photo_cache_columns.sql già applicata — su un progetto Supabase
+  // dove non lo è ancora, selezionare una colonna inesistente fa fallire la query con un errore
+  // PostgREST. Tutta la funzione è avvolta in un try/catch apposta: senza la migration si ripiega
+  // sulla ricerca dal vivo ad ogni chiamata (nessuna cache, ma funziona), MAI un 500 propagato al
+  // chiamante — un chiamante (es. app/api/places/[id]/route.ts) non deve mai rompersi per una
+  // migration non ancora eseguita.
   try {
-    if (place.wikidataId) found = await fetchFromWikidataP18(place.wikidataId)
-    if (!found) found = await fetchFromWikipediaThumbnail(place.name, place.lat, place.lon)
-    if (!found) found = await fetchFromCommonsGeosearch(place.lat, place.lon)
+    const { data: cached } = await supabase
+      .from('dtrek_places')
+      .select('image_url, image_credit, image_checked_at')
+      .eq('id', place.id)
+      .maybeSingle()
+
+    if (cached?.image_checked_at) {
+      return cached.image_url ? { url: cached.image_url as string, credit: cached.image_credit as string | null } : null
+    }
+
+    let found: PlaceCoverPhoto | null = null
+    try {
+      if (place.wikidataId) found = await fetchFromWikidataP18(place.wikidataId)
+      if (!found) found = await fetchFromWikipediaThumbnail(place.name, place.lat, place.lon)
+      if (!found) found = await fetchFromCommonsGeosearch(place.lat, place.lon)
+    } catch (e) {
+      console.error('[placePhotoCache] ricerca foto fallita:', e)
+    }
+
+    // Fire-and-forget, come lib/wikidataFallback.ts: la Guida non deve aspettare la scrittura
+    // della cache per mostrare la foto appena trovata. Se la migration manca, questo fallisce in
+    // silenzio (loggato) — la prossima chiamata ritenta dal vivo, mai un dato perso per sempre.
+    supabase
+      .from('dtrek_places')
+      .update({
+        image_url: found?.url ?? null,
+        image_credit: found?.credit ?? null,
+        image_checked_at: new Date().toISOString(),
+      })
+      .eq('id', place.id)
+      .then(
+        ({ error }) => { if (error) console.error('[placePhotoCache] cache update fallito:', error.message) },
+        (e: unknown) => console.error('[placePhotoCache] cache update fallito:', e),
+      )
+
+    return found
   } catch (e) {
-    console.error('[placePhotoCache] ricerca foto fallita:', e)
+    console.error('[placePhotoCache] cache foto non disponibile (migration non applicata?):', e)
+    return null
   }
-
-  // Fire-and-forget, come lib/wikidataFallback.ts: la Guida non deve aspettare la scrittura della
-  // cache per mostrare la foto appena trovata.
-  supabase
-    .from('dtrek_places')
-    .update({
-      image_url: found?.url ?? null,
-      image_credit: found?.credit ?? null,
-      image_checked_at: new Date().toISOString(),
-    })
-    .eq('id', place.id)
-    .then(({ error }) => { if (error) console.error('[placePhotoCache] cache update fallito:', error.message) })
-
-  return found
 }

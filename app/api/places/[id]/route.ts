@@ -78,7 +78,13 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   const { data, error } = await supabase
     .from('dtrek_places')
-    .select('id, name, meta_type, subtype, description, latitude, longitude, region, province, municipality, address, image_url, image_credit, official_url, website, opening_hours, source, confidence, metadata, wikidata_id')
+    // image_credit/image_checked_at (supabase/migrations/add_place_photo_cache_columns.sql) NON
+    // vanno qui: questa query gira per OGNI Meta aperta, prima ancora di sapere se serve una foto
+    // — se la migration non è ancora stata applicata sul progetto Supabase in uso, selezionare una
+    // colonna inesistente fa fallire l'intera query con un 500 ("Errore interno" su qualunque pin,
+    // visto dal vivo su una preview Vercel senza la migration). image_credit resta letto SOLO
+    // dentro lib/placePhotoCache.ts, che gestisce già la sua assenza senza propagare l'errore qui.
+    .select('id, name, meta_type, subtype, description, latitude, longitude, region, province, municipality, address, image_url, official_url, website, opening_hours, source, confidence, metadata, wikidata_id')
     .eq('id', params.id)
     .in('meta_type', ['borgo_citta', 'sito'])
     .maybeSingle()
@@ -159,7 +165,11 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     municipality: data.municipality,
     address: data.address,
     imageUrl: data.image_url ?? coverPhoto?.url ?? null,
-    imageCredit: data.image_url ? data.image_credit : (coverPhoto?.credit ?? null),
+    // Solo dalla ricerca appena fatta (coverPhoto) — mai da data.image_credit: quella colonna non
+    // è nella select principale sopra apposta (vedi il commento lì), e un image_url già presente
+    // in questa riga oggi non può comunque venire da lì (nessuna fonte della pipeline lo popola
+    // ancora, vedi supabase/migrations/add_place_photo_cache_columns.sql).
+    imageCredit: coverPhoto?.credit ?? null,
     officialUrl: data.official_url,
     website: data.website,
     openingHours: data.opening_hours,
