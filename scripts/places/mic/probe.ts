@@ -314,6 +314,46 @@ SELECT DISTINCT ?cis ?name ?typeLabel ?comune ?regionLabel ?address ?lat ?long W
   FILTER(BOUND(?lat) && BOUND(?long))
 } LIMIT ${PROBE_LIMIT}`,
   },
+  // ── Round 7 (2026-09-21): `--describe --name Canepina` (MIC_DATA_SOURCES.md §3bis, lanciato
+  // manualmente dall'utente contro l'endpoint reale) ha rivelato 6 predicati MAI interrogati da
+  // `fetch.ts` — descrizione (`l0:description`), tipologia via letterale diretto (`dc:type`,
+  // presente quando `loc:hasCulturalInstituteOrSiteType` non lo è), orari/prenotazione
+  // (`ac:hasAccessCondition`), contatti (`sm:hasOnlineContactPoint`), biglietto (`pot:hasTicket`),
+  // immagine (`foaf:depiction`) — tutti confermati REALI, ma su un solo record (105665). Prima di
+  // cablarli nella query di produzione per tutta Italia serve sapere se sono un caso isolato di
+  // quel record o generalizzabili — questo probe conta, su un campione fisso (nessun filtro
+  // regione: la tripla di tipo da sola è già verificata veloce senza filtro, round 1), quanti CIS
+  // hanno ciascun predicato. Sei `OPTIONAL` indipendenti in cima allo scope (mai annidati, mai
+  // combinati con `UNION` o un `FILTER` su stringa) — la stessa forma già verificata sicura per le
+  // coordinate (round 6) — non la combinazione OPTIONAL+UNION o CONTAINS/LCASE che ha fatto
+  // esplodere lo stimatore ai round 2/3.
+  {
+    name: 'copertura-campi-arricchenti',
+    note: 'Conta, su un campione di 300 CulturalInstituteOrSite (nessun filtro), quanti hanno ciascuno dei 6 predicati trovati su Canepina/105665 — verifica se generalizzano prima di estendere fetch.ts.',
+    query: `${PREFIXES}
+PREFIX l0: <https://w3id.org/italia/onto/l0/>
+PREFIX ac: <https://w3id.org/italia/onto/AccessCondition/>
+PREFIX sm: <https://w3id.org/italia/onto/SM/>
+PREFIX pot: <https://w3id.org/italia/onto/POT/>
+PREFIX dc: <http://purl.org/dc/elements/1.1/>
+PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+SELECT (COUNT(*) AS ?campione)
+       (COUNT(?desc) AS ?conDescrizione)
+       (COUNT(?dctype) AS ?conDcType)
+       (COUNT(?access) AS ?conAccessCondition)
+       (COUNT(?contact) AS ?conContatti)
+       (COUNT(?ticket) AS ?conTicket)
+       (COUNT(?img) AS ?conImmagine)
+WHERE {
+  { SELECT ?cis WHERE { ?cis a cis:CulturalInstituteOrSite . } LIMIT 300 }
+  OPTIONAL { ?cis l0:description ?desc . }
+  OPTIONAL { ?cis dc:type ?dctype . }
+  OPTIONAL { ?cis ac:hasAccessCondition ?access . }
+  OPTIONAL { ?cis sm:hasOnlineContactPoint ?contact . }
+  OPTIONAL { ?cis pot:hasTicket ?ticket . }
+  OPTIONAL { ?cis foaf:depiction ?img . }
+}`,
+  },
 ]
 
 export interface ProbeResult {

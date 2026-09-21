@@ -20,6 +20,7 @@ describe('MiC probe — struttura dei probe diagnostici', () => {
       'tutta-italia-con-coordinate',
       'lista-regioni',
       'produzione-round6-coordinate-esterne',
+      'copertura-campi-arricchenti',
     ])
   })
 
