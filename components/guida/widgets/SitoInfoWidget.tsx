@@ -1,4 +1,4 @@
-import { Clock, Ticket, Car } from 'lucide-react'
+import { Clock, Ticket, Car, Phone, Mail } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 interface Props {
@@ -8,6 +8,10 @@ interface Props {
   officialLink?: string | null
   wikipediaUrl?: string | null
   address?: string | null
+  // PlaceDetail.phone/email (app/api/places/[id]/route.ts) — null finché
+  // supabase/migrations/add_places_contacts.sql non è applicata, o quando la fonte non li fornisce.
+  phone?: string | null
+  email?: string | null
 }
 
 function Cell({ icon, value, label, href }: { icon: ReactNode; value: string; label: string; href?: string }) {
@@ -37,7 +41,7 @@ function Cell({ icon, value, label, href }: { icon: ReactNode; value: string; la
  * sito ufficiale (official_url ?? website) → voce Wikipedia → cella omessa. Mai un
  * orario/prezzo fabbricato.
  */
-export default function SitoInfoWidget({ openingHours, officialLink, wikipediaUrl, address }: Props) {
+export default function SitoInfoWidget({ openingHours, officialLink, wikipediaUrl, address, phone, email }: Props) {
   const infoLink = officialLink ?? wikipediaUrl ?? null
   const infoLinkLabel = officialLink ? 'Sito ufficiale' : 'Wikipedia'
 
@@ -56,6 +60,14 @@ export default function SitoInfoWidget({ openingHours, officialLink, wikipediaUr
 
   if (address) {
     cells.push(<Cell key="address" icon={<Car className="w-4 h-4" />} value={address} label="Indirizzo" />)
+  }
+
+  if (phone) {
+    cells.push(<Cell key="phone" icon={<Phone className="w-4 h-4" />} value={phone} label="Telefono" href={`tel:${phone}`} />)
+  }
+
+  if (email) {
+    cells.push(<Cell key="email" icon={<Mail className="w-4 h-4" />} value={email} label="Email" href={`mailto:${email}`} />)
   }
 
   if (cells.length === 0) return null

@@ -1090,6 +1090,8 @@ export default function GuideReader({
             officialLink={officialLink}
             wikipediaUrl={placeDetail?.wikipedia?.url}
             address={placeDetail?.address}
+            phone={placeDetail?.phone}
+            email={placeDetail?.email}
           />
         ) : hike.latitude != null && hike.longitude != null ? (
           <div className="px-5 sm:px-8 md:px-10 py-4 border-b border-stone-200">
