@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { getUserFromRequest } from '@/lib/supabaseAuth'
 import { fetchSourceCounts } from '@/lib/metaSearch/placeQuery'
 import { searchAndFetch, fetchExtendedExtract } from '@/lib/wikipedia'
+import { fetchPlaceCoverPhoto } from '@/lib/placePhotoCache'
 import { haversineM } from '@/lib/geoUtils'
 import type { MetaType, SiteType } from '@/lib/metaTypes'
 
@@ -39,6 +40,9 @@ export interface PlaceDetail {
   municipality: string | null
   address: string | null
   imageUrl: string | null
+  /** Attribuzione da mostrare accanto a imageUrl quando viene da Wikimedia Commons (quasi sempre
+   *  CC BY-SA) — vedi lib/placePhotoCache.ts. */
+  imageCredit: string | null
   officialUrl: string | null
   website: string | null
   openingHours: unknown
@@ -74,7 +78,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   const { data, error } = await supabase
     .from('dtrek_places')
-    .select('id, name, meta_type, subtype, description, latitude, longitude, region, province, municipality, address, image_url, official_url, website, opening_hours, source, confidence, metadata')
+    .select('id, name, meta_type, subtype, description, latitude, longitude, region, province, municipality, address, image_url, image_credit, official_url, website, opening_hours, source, confidence, metadata, wikidata_id')
     .eq('id', params.id)
     .in('meta_type', ['borgo_citta', 'sito'])
     .maybeSingle()
@@ -122,6 +126,17 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     }
   }
 
+  // Foto di copertina con cache (lib/placePhotoCache.ts) — cascata Wikidata P18 → Wikipedia (match
+  // sul nome, più precisa del semplice searchAndFetch sopra) → geosearch Commons. Solo quando
+  // manca già un image_url proprio: mai a rimpiazzare un dato reale già buono, stesso principio
+  // già applicato sopra per la descrizione.
+  let coverPhoto: { url: string; credit: string | null } | null = null
+  if (!data.image_url) {
+    coverPhoto = await fetchPlaceCoverPhoto({
+      id: data.id, name: data.name, lat: data.latitude, lon: data.longitude, wikidataId: data.wikidata_id,
+    })
+  }
+
   // dtrek_places.subtype è una colonna condivisa a significato diverso per tipologia (lib/
   // metaTypes.ts): PlaceCategory ('borgo'|'citta') per un borgo_citta, SiteType per un sito —
   // valorizzare siteType anche per un borgo_citta manderebbe SITE_TYPE_CONFIG['borgo'] (chiave
@@ -143,7 +158,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     province: data.province,
     municipality: data.municipality,
     address: data.address,
-    imageUrl: data.image_url,
+    imageUrl: data.image_url ?? coverPhoto?.url ?? null,
+    imageCredit: data.image_url ? data.image_credit : (coverPhoto?.credit ?? null),
     officialUrl: data.official_url,
     website: data.website,
     openingHours: data.opening_hours,

@@ -41,8 +41,12 @@ import RouteMapSection from '@/components/RouteMapSection'
 import DatiSicurezzaTabs from './widgets/DatiSicurezzaTabs'
 import PoiListWidget from './widgets/PoiListWidget'
 import NaturaWidget from './widgets/NaturaWidget'
+import BorgoTappeWidget from './widgets/BorgoTappeWidget'
+import SitoInfoWidget from './widgets/SitoInfoWidget'
+import SitoGalleryWidget from './widgets/SitoGalleryWidget'
 import GuideHero from './GuideHero'
 import GuideStatsStrip from './GuideStatsStrip'
+import GuideBorgoStatsStrip from './GuideBorgoStatsStrip'
 import SectionNav from '@/components/editorial/SectionNav'
 import VoicePlayer from '@/components/editorial/VoicePlayer'
 import SectionCard from '@/components/editorial/SectionCard'
@@ -53,6 +57,11 @@ import type { HikeAssessment } from '@/lib/hikeAssessment'
 import type { ClassifiedDifficultyMarker } from '@/lib/difficultyMarkers'
 import type { FloraResult } from '@/lib/floraTypes'
 import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
+import type { PlaceDetail } from '@/app/api/places/[id]/route'
+import type { BorgoItinerary } from '@/app/api/borgo-itinerary/route'
+import { borgoCardVariant, sitoCardFamily } from '@/lib/guideCardVariant'
+import { META_TYPE_CONFIG, SITE_TYPE_CONFIG } from '@/lib/metaTypes'
+import { Building2, Landmark } from 'lucide-react'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -252,6 +261,11 @@ export default function GuideReader({
   const [aiCreditError, setAiCreditError] = useState<GuideAiError | null>(null)
   const [routePhotos,  setRoutePhotos]  = useState<string[]>([])
   const [visibleSec,   setVisibleSec]   = useState(0)
+  // Arricchimento dall'archivio (dtrek_places) per un Borgo/Città o Sito — foto di copertina,
+  // indirizzo, orari/sito ufficiale: dati che planned_hikes non porta (vedi lib/guideCardVariant.ts
+  // per come vengono usati). null per un Sentiero (mai richiesto) o finché non arriva.
+  const [placeDetail,    setPlaceDetail]    = useState<PlaceDetail | null>(null)
+  const [borgoItinerary, setBorgoItinerary] = useState<BorgoItinerary | null>(null)
 
   // Un percorso a tratta unica (start/end lontani — non un anello, non un andata-ritorno già
   // rilevato come tale dalla geometria) si percorre in uno di due modi, e quale dei due è una
@@ -286,12 +300,19 @@ export default function GuideReader({
 
   const displaySections = useMemo<DisplaySection[]>(() => {
     const byKey = new Map(parsedSections.filter(s => s.key).map(s => [s.key as GuideSectionKey, s]))
-    const fixed: DisplaySection[] = GUIDE_SECTIONS.map(def => {
-      const parsed = byKey.get(def.key)
-      const style = SECTION_STYLE[def.key]
-      const override = guideProfile.sectionOverrides?.[def.key]
-      return { key: def.key, guideKey: def.key, title: override?.title ?? def.title, subtitle: def.subtitle, body: parsed?.body, icon: style.icon, color: style.color }
-    })
+    // Una sezione fuori da guideProfile.availableSections (es. "Dati e sicurezza"/"Su misura per
+    // te" per un Borgo/Sito) non va mai mostrata, nemmeno vuota: app/api/guide/route.ts la
+    // rifiuterebbe comunque se richiesta ("Nessuna sezione da generare per questa tipologia"), un
+    // "Approfondisci con Giulia" su una card che sembra disponibile finirebbe solo in un errore.
+    // 'verificato' non è mai gestita dal profilo (resta sempre disponibile, vedi guide/route.ts).
+    const fixed: DisplaySection[] = GUIDE_SECTIONS
+      .filter(def => def.key === 'verificato' || guideProfile.availableSections.includes(def.key))
+      .map(def => {
+        const parsed = byKey.get(def.key)
+        const style = SECTION_STYLE[def.key]
+        const override = guideProfile.sectionOverrides?.[def.key]
+        return { key: def.key, guideKey: def.key, title: override?.title ?? def.title, subtitle: def.subtitle, body: parsed?.body, icon: style.icon, color: style.color }
+      })
     const legacy: DisplaySection[] = parsedSections
       .filter(s => !s.key)
       .map((s, i) => ({ key: `legacy-${i}` as const, guideKey: null, title: s.title, body: s.body, icon: LEGACY_STYLE.icon, color: LEGACY_STYLE.color }))
@@ -362,6 +383,38 @@ export default function GuideReader({
       setRoutePhotos(photos.map(p => p.url))
     }).catch(() => {})
   }, [hike.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Borgo/Città e Sito: stesso endpoint già usato da app/mete/[id]/page.tsx per la scheda di
+  // ricerca — nessun nuovo endpoint per la Guida. Mai richiesto per un Sentiero (planned_hikes ha
+  // già tutto il necessario).
+  useEffect(() => {
+    if (hike.metaType === 'sentiero' || !hike.placeId) return
+    let cancelled = false
+    fetch(`/api/places/${hike.placeId}`)
+      .then(res => res.ok ? res.json() : null)
+      .then(data => { if (!cancelled && data) setPlaceDetail(data as PlaceDetail) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [hike.metaType, hike.placeId])
+
+  // Borgo/Città: tappe principali nel raggio (lib/guideBorgoDetailStops.ts, via lo stesso
+  // endpoint POST già usato da app/mete/[id]/page.tsx) — alimenta sia la timeline (case 'luoghi'
+  // più sotto) sia le pillole tappe/km-a-piedi/durata di GuideBorgoStatsStrip in variante
+  // "cammino urbano". Richiesto in entrambe le varianti (lib/guideCardVariant.ts): anche
+  // "trekking misto" mostra la timeline delle tappe interne, solo non le sue pillole.
+  useEffect(() => {
+    if (hike.metaType !== 'borgo_citta' || !hike.placeId) return
+    let cancelled = false
+    fetch('/api/borgo-itinerary', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ placeId: hike.placeId }),
+    })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => { if (!cancelled && data) setBorgoItinerary(data as BorgoItinerary) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [hike.metaType, hike.placeId])
 
   // IntersectionObserver: track which section is in view for pin-nav highlighting. Uses a thin
   // "activation band" near the top of the viewport (threshold 0, shrunk rootMargin) rather than
@@ -749,6 +802,10 @@ export default function GuideReader({
           ? <WeatherWidget mode={weather.mode} lat={weather.lat} lon={weather.lon} date={hike.plannedDate} altitudeMax={hike.altitudeMax} elevationGain={hike.elevationGain} days={7} />
           : null
       case 'il_percorso':
+        // Un Borgo/Città "cammino urbano" o un Sito non hanno una traccia GPS da mostrare — mai un
+        // RouteMapSection vuoto/rotto al posto del nulla (piano §48.9). "Trekking misto" ha una
+        // traccia reale: resta invariato.
+        if (hike.metaType !== 'sentiero' && !usesRealTrack) return null
         return (
           <RouteMapSection
             trackPoints={hike.trackPoints}
@@ -765,6 +822,15 @@ export default function GuideReader({
       case 'dati_sicurezza':
         return <DatiSicurezzaTabs scores={scores ? { ...scores, guideNotices } : scores} safetyDetails={safetyDetails} />
       case 'luoghi':
+        // Borgo/Città: tappe strutturate (numero, foto, nome) sopra il testo narrativo di Giulia,
+        // che le racconta nello stesso ordine (vedi BORGO_LUOGHI_BRIEF in lib/guideProfiles.ts) —
+        // mai PoiListWidget qui, è costruita per un Sentiero (mappa del tracciato, Street View,
+        // POI OSM) che un Borgo/Città non ha.
+        if (hike.metaType === 'borgo_citta') {
+          return borgoItinerary && borgoItinerary.stops.length > 0
+            ? <BorgoTappeWidget stops={borgoItinerary.stops} />
+            : null
+        }
         return poiList
           ? (
             <PoiListWidget
@@ -886,7 +952,29 @@ export default function GuideReader({
 
   const hasGuide  = guideText.trim().length > 50
   const hikeTitle = hike.title
-  const categoryBadge = (hike.tags?.[0] ?? hike.assessment?.difficulty ?? 'Escursione').toUpperCase()
+  // Per un Borgo/Città o Sito il badge è la sua categoria (mai "Escursione", fuorviante per una
+  // Meta senza traccia GPS) — per un Sito, l'etichetta del siteType quando nota è più specifica
+  // del generico "Sito". Per un Sentiero, invariato.
+  const categoryBadge = hike.metaType === 'borgo_citta'
+    ? META_TYPE_CONFIG.borgo_citta.label.toUpperCase()
+    : hike.metaType === 'sito'
+      ? (hike.siteType ? SITE_TYPE_CONFIG[hike.siteType].label : META_TYPE_CONFIG.sito.label).toUpperCase()
+      : (hike.tags?.[0] ?? hike.assessment?.difficulty ?? 'Escursione').toUpperCase()
+
+  // lib/guideCardVariant.ts — quale variante di copertina/statistiche mostrare. undefined per un
+  // Sentiero (mai valutato, la Guida resta quella di sempre).
+  const usesRealTrack = (hike.trackPoints?.length ?? 0) > 1 || (hike.routePolyline?.length ?? 0) > 1
+  const borgoVariant = hike.metaType === 'borgo_citta' ? borgoCardVariant(hike) : undefined
+  const hasVisitInfo = !!(placeDetail?.officialUrl || placeDetail?.website || placeDetail?.openingHours)
+  const sitoFamily = hike.metaType === 'sito' ? sitoCardFamily(hike.siteType, hasVisitInfo) : undefined
+  const usesCoverPhoto = hike.metaType === 'sito' || borgoVariant === 'cammino_urbano'
+
+  // Icona di fallback per la copertina senza foto (GuideHero coverMode='photo') — Building2 per un
+  // Borgo/Città, l'icona di categoria di lib/metaTypes.ts per un Sito (coerente coi chip/pin già
+  // disegnati altrove nell'app, vedi lib/metaTypes.ts's META_TYPE_CONFIG/SITE_TYPE_CONFIG).
+  const FallbackIconComponent = hike.metaType === 'sito' && hike.siteType ? SITE_TYPE_CONFIG[hike.siteType].icon : (hike.metaType === 'sito' ? Landmark : Building2)
+  const coverFallbackColor = hike.metaType === 'sito' ? META_TYPE_CONFIG.sito.color : META_TYPE_CONFIG.borgo_citta.color
+  const officialLink = placeDetail?.officialUrl ?? placeDetail?.website ?? null
   // Qualunque sezione ancora senza testo AI può mostrare l'invito ad "Approfondisci con Giulia" —
   // SectionCard mostra comunque il bottone solo se !hasBody. Non dipende da hasGuide: deve
   // funzionare anche alla primissima generazione (nessuna sezione ha ancora testo, es. utente con
@@ -963,19 +1051,46 @@ export default function GuideReader({
         plannedDate={hike.plannedDate}
         driving={driving}
         startPoint={startPointInfo}
+        coverMode={usesCoverPhoto ? 'photo' : 'map'}
+        photoUrl={placeDetail?.imageUrl}
+        photoCredit={placeDetail?.imageCredit}
+        fallbackIcon={<FallbackIconComponent />}
+        fallbackColor={coverFallbackColor}
       />
 
-      <GuideStatsStrip
-        distanceKm={effective.distanceMeters / 1000}
-        elevationGain={effective.elevationGain}
-        altitudeMax={hike.altitudeMax}
-        durationLabel={formatDuration(effective.estimatedTimeSeconds)}
-        roundTrip={isLinearRoute && onRouteModeChange ? {
-          active: showAsRoundTrip,
-          saving: savingRouteMode,
-          onToggle: () => chooseRouteMode(showAsRoundTrip ? 'one_way' : 'round_trip'),
-        } : undefined}
-      />
+      {hike.metaType === 'sito' ? (
+        sitoFamily === 'scheda_pratica' ? (
+          <SitoInfoWidget
+            openingHours={typeof placeDetail?.openingHours === 'string' ? placeDetail.openingHours : null}
+            officialLink={officialLink}
+            wikipediaUrl={placeDetail?.wikipedia?.url}
+            address={placeDetail?.address}
+          />
+        ) : hike.latitude != null && hike.longitude != null ? (
+          <div className="px-5 sm:px-8 md:px-10 py-4 border-b border-stone-200">
+            <SitoGalleryWidget lat={hike.latitude} lon={hike.longitude} siteType={hike.siteType} />
+          </div>
+        ) : null
+      ) : hike.metaType === 'borgo_citta' && borgoVariant === 'cammino_urbano' ? (
+        <GuideBorgoStatsStrip
+          stopsCount={borgoItinerary?.stops.length}
+          walkDistanceKm={borgoItinerary ? borgoItinerary.totalDistanceM / 1000 : undefined}
+          walkDurationLabel={borgoItinerary ? formatDuration(borgoItinerary.estimatedTimeSeconds) : undefined}
+          categoryLabel={META_TYPE_CONFIG.borgo_citta.label}
+        />
+      ) : (
+        <GuideStatsStrip
+          distanceKm={effective.distanceMeters / 1000}
+          elevationGain={effective.elevationGain}
+          altitudeMax={hike.altitudeMax}
+          durationLabel={formatDuration(effective.estimatedTimeSeconds)}
+          roundTrip={isLinearRoute && onRouteModeChange ? {
+            active: showAsRoundTrip,
+            saving: savingRouteMode,
+            onToggle: () => chooseRouteMode(showAsRoundTrip ? 'one_way' : 'round_trip'),
+          } : undefined}
+        />
+      )}
 
       <PhotoMosaic
         photos={routePhotos.slice(0, 4).map((url, i) => ({ id: String(i), url }))}
