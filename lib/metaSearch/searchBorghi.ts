@@ -60,7 +60,11 @@ export async function searchBorghi(supabase: SupabaseClient, params: BorghiSearc
       .gte('longitude', bbox.minLon).lte('longitude', bbox.maxLon)
   }
 
-  const { data, error } = await query.limit(500) // tetto largo pre-ranking, non il limit finale richiesto dall'utente
+  // Stesso bug reale già corretto in searchSiti.ts (2026-09-21, "ho perso tantissimi siti") — senza
+  // un `order by` esplicito Postgres non garantisce quale sottoinsieme di righe arriva prima del
+  // taglio, e 500 è comunque ben sotto ai 7896 borgo_citta totali (ISTAT, tutti i Comuni italiani).
+  // Tetto alzato + ordinamento per confidenza per determinismo, non più solo "largo pre-ranking".
+  const { data, error } = await query.order('confidence', { ascending: false }).limit(3000)
   if (error) throw error
   const rows = (data ?? []) as PlaceRow[]
 
