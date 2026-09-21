@@ -649,6 +649,9 @@ CREATE TABLE IF NOT EXISTS dtrek_places (
   image_checked_at         timestamptz,
   official_url            text,
   website                 text,
+  -- phone/email — vedi supabase/migrations/add_places_contacts.sql per la nota completa.
+  phone                   text,
+  email                   text,
   opening_hours           jsonb,
   source                  text NOT NULL,
   source_id               text NOT NULL,

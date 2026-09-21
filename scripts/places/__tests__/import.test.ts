@@ -31,6 +31,8 @@ describe('candidateToPartialUpdate', () => {
     expect(update).not.toHaveProperty('website')
     expect(update).not.toHaveProperty('opening_hours')
     expect(update).not.toHaveProperty('address')
+    expect(update).not.toHaveProperty('phone')
+    expect(update).not.toHaveProperty('email')
   })
 
   it('include sempre nome/coordinate/confidence — i campi che ogni fonte fornisce comunque', () => {
@@ -42,6 +44,12 @@ describe('candidateToPartialUpdate', () => {
     const withExtras: PlaceCandidate = { ...MINIMAL, region: 'Lazio', province: 'Viterbo', municipalityIstatCode: '056039' }
     const update = candidateToPartialUpdate(withExtras)
     expect(update).toMatchObject({ region: 'Lazio', province: 'Viterbo', municipality_istat_code: '056039' })
+  })
+
+  it('include phone/email quando il candidato li fornisce (supabase/migrations/add_places_contacts.sql)', () => {
+    const withContacts: PlaceCandidate = { ...MINIMAL, phone: '0761653008', email: 'info@cmcimini.it' }
+    const update = candidateToPartialUpdate(withContacts)
+    expect(update).toMatchObject({ phone: '0761653008', email: 'info@cmcimini.it' })
   })
 
   // Bug reale (MIC_DATA_SOURCES.md §9/§10, corretto in questa sessione): prima di mergeMetadata,
