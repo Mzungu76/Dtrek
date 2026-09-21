@@ -639,6 +639,14 @@ CREATE TABLE IF NOT EXISTS dtrek_places (
   municipality_istat_code text,
   address                 text,
   image_url               text,
+  -- Attribuzione da mostrare sotto la foto quando image_url viene da Wikimedia Commons (quasi
+  -- sempre CC BY-SA, licenza che la richiede) — vedi lib/placePhotoCache.ts. NULL quando image_url
+  -- è NULL o quando la fonte non la richiede.
+  image_credit             text,
+  -- Timestamp dell'ultima ricerca foto (riuscita o no) — distingue "non ancora cercata" (NULL,
+  -- fetchPlaceCoverPhoto interroga dal vivo) da "cercata e nessuna foto trovata" (valorizzato,
+  -- image_url resta NULL ma non si ri-interroga Wikidata/Wikipedia ad ogni apertura della Guida).
+  image_checked_at         timestamptz,
   official_url            text,
   website                 text,
   opening_hours           jsonb,

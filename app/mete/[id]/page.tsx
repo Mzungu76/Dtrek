@@ -262,9 +262,9 @@ export default function MetaDettaglioPage() {
               {place.address && (
                 <p className="flex items-start gap-2 text-stone-600"><MapPin className="w-4 h-4 text-stone-400 shrink-0 mt-0.5" /> {place.address}</p>
               )}
-              {(place.website || place.officialUrl) && (
-                <a href={place.website ?? place.officialUrl ?? '#'} target="_blank" rel="noopener noreferrer" className="flex items-start gap-2 text-forest-700 hover:underline">
-                  <Globe className="w-4 h-4 text-stone-400 shrink-0 mt-0.5" /> {place.website ?? place.officialUrl}
+              {(place.officialUrl || place.website) && (
+                <a href={place.officialUrl ?? place.website ?? '#'} target="_blank" rel="noopener noreferrer" className="flex items-start gap-2 text-forest-700 hover:underline">
+                  <Globe className="w-4 h-4 text-stone-400 shrink-0 mt-0.5" /> {place.officialUrl ?? place.website}
                 </a>
               )}
               {typeof place.openingHours === 'string' && place.openingHours && (
