@@ -21,6 +21,7 @@ describe('MiC probe — struttura dei probe diagnostici', () => {
       'lista-regioni',
       'produzione-round6-coordinate-esterne',
       'copertura-campi-arricchenti',
+      'contatti-canepina-un-salto-oltre',
     ])
   })
 

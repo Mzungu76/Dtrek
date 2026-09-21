@@ -49,9 +49,25 @@ describe('micBindingToPlaceCandidate', () => {
     expect(c.sourceUrl).toBe('http://dati.beniculturali.it/mibact/luoghi/resource/CulturalInstituteOrSite/104060')
   })
 
-  it('nessun campo description valorizzato — licenza CC BY-SA 4.0 (piano §8/§44)', () => {
+  it('description assente nel binding → candidato senza description e senza fieldProvenance per quel campo', () => {
     const c = micBindingToPlaceCandidate(CERAMICA)
     expect(c.description).toBeUndefined()
+    expect(c.metadata?.fieldProvenance).toBeUndefined()
+  })
+
+  it('description presente nel binding (verificato reale su Canepina/105665, MIC_DATA_SOURCES.md §3bis) → popolata con provenienza CC BY-SA 4.0 (piano §8/§44)', () => {
+    const c = micBindingToPlaceCandidate({ ...CERAMICA, description: 'Testo descrittivo reale.' })
+    expect(c.description).toBe('Testo descrittivo reale.')
+    const provenance = (c.metadata?.fieldProvenance as Record<string, unknown>)?.description as Record<string, unknown>
+    expect(provenance).toMatchObject({
+      value: 'Testo descrittivo reale.',
+      source: 'mic',
+      sourceUrl: c.sourceUrl,
+      confidence: 'high',
+      status: 'ok',
+    })
+    expect(provenance.retrievedAt).toBeTypeOf('string')
+    expect(provenance).not.toHaveProperty('sourceUpdatedAt')
   })
 
   it('confidence più bassa di ISTAT/PTPR quando la tipologia è nota da un\'euristica testuale', () => {

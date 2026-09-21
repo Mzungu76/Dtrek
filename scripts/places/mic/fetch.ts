@@ -50,9 +50,13 @@
  * dal README di questa cartella) invece che su URI di tipo specifici.
  *
  * ── Licenza (piano §8/§44, CC BY-SA 4.0) ─────────────────────────────────────────────────────
- * Non si richiede/usa nessun campo di descrizione testuale estesa — solo nome, tipologia,
- * indirizzo/comune, coordinate: dati strutturati, non contenuto editoriale, per restare
- * conservativi sul riuso senza aver verificato la licenza specifica di ogni campo testuale.
+ * Il dataset LOD "Luoghi della Cultura" è pubblicato dal MiC sotto CC BY-SA 4.0 — richiede
+ * attribuzione e "share-alike" (redistribuire con la stessa licenza), non vieta il riuso di
+ * contenuto editoriale. `description` (predicato `l0:description`, verificato reale su
+ * CulturalInstituteOrSite/105665 — Museo delle tradizioni popolari di Canepina, MIC_DATA_SOURCES.md
+ * §3bis) è quindi popolato — a differenza di una nota precedente in questo file che escludeva
+ * qualunque campo testuale esteso per prudenza prima di aver verificato dati reali. `sourceUrl` del
+ * candidato resta sempre l'attribuzione minima richiesta ovunque il testo venga mostrato.
  *
  * Usage:
  *   npx tsx scripts/places/mic/fetch.ts [--dry-run] [--region Lazio] [--limit 5000]
@@ -69,7 +73,7 @@
  */
 import { createClient } from '@supabase/supabase-js'
 import { importPlaceCandidates } from '../import'
-import type { PlaceCandidate } from '../types'
+import type { PlaceCandidate, FieldProvenance } from '../types'
 import type { SiteType } from '../../../lib/metaTypes'
 
 const SPARQL_ENDPOINT = 'https://dati.cultura.gov.it/sparql'
@@ -126,6 +130,11 @@ export function micTypeLabelToSiteType(label: string | undefined | null): SiteTy
 export interface MicBinding {
   id: string          // parte numerica finale dell'IRI CulturalInstituteOrSite
   name: string
+  // `l0:description` — VERIFICATO reale su CulturalInstituteOrSite/105665 (MIC_DATA_SOURCES.md
+  // §3bis), letterale diretto sul CIS. Coverage reale su un campione di 443 righe (probe
+  // `copertura-campi-arricchenti`, non necessariamente 443 CIS distinti — vedi nota lì su
+  // COUNT(*) senza DISTINCT): 281 con descrizione — maggioritario, non un caso isolato.
+  description?: string
   typeLabel?: string
   // `dc:type` (http://purl.org/dc/elements/1.1/type) — letterale diretto sul CIS, es. "Museo,
   // Galleria e/o raccolta". VERIFICATO reale con --describe --name Canepina (MIC_DATA_SOURCES.md
@@ -148,11 +157,30 @@ export interface MicBinding {
 // Pura, testabile senza rete.
 export function micBindingToPlaceCandidate(b: MicBinding): PlaceCandidate {
   const typeSource = b.typeLabel ?? b.dcType
+  const sourceUrl = `http://dati.beniculturali.it/mibact/luoghi/resource/CulturalInstituteOrSite/${b.id}`
+  const retrievedAt = new Date().toISOString()
+
+  const fieldProvenance: Record<string, FieldProvenance> = {}
+  if (b.description !== undefined) {
+    // Nessun `sourceUpdatedAt`: ArCo non espone una data di aggiornamento per record (verificato,
+    // non solo non cercato — MIC_DATA_SOURCES.md §3bis, dump esaustivo di CulturalInstituteOrSite/105665
+    // senza alcun predicato di data/timestamp). `sourceUrl` è l'attribuzione richiesta da CC BY-SA 4.0
+    // — vedi nota licenza in cima al file.
+    fieldProvenance.description = {
+      value: b.description,
+      source: 'mic',
+      sourceUrl,
+      retrievedAt,
+      confidence: 'high',
+      status: 'ok',
+    }
+  }
+
   return {
     name: b.name,
     metaType: 'sito',
     subtype: micTypeLabelToSiteType(typeSource),
-    // Nessuna descrizione testuale estesa — vedi nota licenza CC BY-SA 4.0 in cima al file.
+    description: b.description,
     latitude: b.lat,
     longitude: b.lon,
     region: b.region,
@@ -162,7 +190,7 @@ export function micBindingToPlaceCandidate(b: MicBinding): PlaceCandidate {
     website: b.website,
     source: 'mic',
     sourceId: b.id,
-    sourceUrl: `http://dati.beniculturali.it/mibact/luoghi/resource/CulturalInstituteOrSite/${b.id}`,
+    sourceUrl,
     rawType: typeSource,
     // Non 1 come ISTAT/PTPR: la conversione tipo-testuale→SiteType qui è euristica (vedi
     // MIC_TYPE_MAP), non un campo strutturato con valori chiusi verificati.
@@ -170,6 +198,7 @@ export function micBindingToPlaceCandidate(b: MicBinding): PlaceCandidate {
     metadata: {
       micTypeLabel: b.typeLabel,
       micDcType: b.dcType,
+      ...(Object.keys(fieldProvenance).length > 0 ? { fieldProvenance } : {}),
     },
   }
 }
@@ -263,8 +292,9 @@ PREFIX clvapit: <https://w3id.org/italia/onto/CLV/>
 PREFIX geo: <http://www.w3.org/2003/01/geo/wgs84_pos#>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX dc: <http://purl.org/dc/elements/1.1/>
+PREFIX l0: <https://w3id.org/italia/onto/l0/>
 
-SELECT DISTINCT ?cis ?name ?typeLabel ?dcType ?comune ?regionLabel ?address ?lat ?long WHERE {
+SELECT DISTINCT ?cis ?name ?typeLabel ?dcType ?description ?comune ?regionLabel ?address ?lat ?long WHERE {
   {
     SELECT ?cis ?name ?site ?address ?comune ?regionLabel WHERE {
       ?cis a cis:CulturalInstituteOrSite ;
@@ -288,6 +318,10 @@ SELECT DISTINCT ?cis ?name ?typeLabel ?dcType ?comune ?regionLabel ?address ?lat
   # §3bis) — letterale diretto, indipendente da typeLabel sopra, mai annidato in un altro OPTIONAL
   # (stessa forma sicura già usata per le coordinate, round 6/7 in probe.ts).
   OPTIONAL { ?cis dc:type ?dcType . }
+  # l0:description — verificato reale sullo stesso record (§3bis), maggioritario nel campione
+  # (probe copertura-campi-arricchenti: 281/443). OPTIONAL indipendente in cima allo scope, stessa
+  # forma sicura di dc:type sopra.
+  OPTIONAL { ?cis l0:description ?description . }
   OPTIONAL { ?cis geo:lat ?lat1 ; geo:long ?long1 . }
   OPTIONAL { ?site geo:lat ?lat2 ; geo:long ?long2 . }
   OPTIONAL { ?cis clvapit:hasGeometry ?geomA . ?geomA clvapit:lat ?lat3 ; clvapit:long ?long3 . }
@@ -362,6 +396,7 @@ async function querySparql(query: string): Promise<MicBinding[]> {
     out.push({
       id,
       name: row.name?.value ?? 'Luogo della cultura',
+      description: row.description?.value,
       typeLabel: row.typeLabel?.value,
       dcType: row.dcType?.value,
       comune: row.comune?.value,
