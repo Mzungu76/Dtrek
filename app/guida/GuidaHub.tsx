@@ -162,6 +162,11 @@ export default function GuidaHub({ id }: { id?: string }) {
   // poi tenuto aggiornato dall'effetto di sync qui sotto quando manca o l'indirizzo è cambiato.
   const [driveCache, setDriveCache] = useState<Map<string, { distanceMeters: number; durationSeconds: number; originLat: number; originLon: number }>>(new Map())
   const attemptedDriveRef = useRef<Set<string>>(new Set())
+  // Copia leggera dell'ultima lista applicata (metaType/placeId per ogni percorso) — items (sopra)
+  // è già mappato a RouteHubItem e non porta più questi campi, ma il riempimento della copertina
+  // sotto ne ha bisogno per sapere quali schede interrogare e con quale placeId.
+  const [metaList, setMetaList] = useState<PlannedHikeMeta[]>([])
+  const attemptedCoverPhotoRef = useRef<Set<string>>(new Set())
 
   // Indirizzo/punto di partenza salvato nelle impostazioni utente — usato per la distanza in
   // auto mostrata tra i dati principali di ogni scheda e come filtro di ordinamento.
@@ -268,9 +273,15 @@ export default function GuidaHub({ id }: { id?: string }) {
         // facendo sfarfallare la mappa di copertina di qualunque scheda si stesse guardando in
         // quel momento, tipicamente proprio quella su cui si era appena atterrati sfogliando.
         const existing = prevById.get(h.id)
-        return existing?.polyline?.length ? { ...fresh, polyline: existing.polyline } : fresh
+        const merged = existing?.polyline?.length ? { ...fresh, polyline: existing.polyline } : fresh
+        // Stesso motivo del polyline sopra: metaToItem() non valorizza mai coverPhotoUrl (arriva
+        // solo dal fill effect qui sotto, dopo il primo mount) — senza questo, ogni rivalidazione
+        // in background la azzererebbe di nuovo, e attemptedCoverPhotoRef ne impedirebbe un
+        // secondo tentativo, lasciando la copertina nera per il resto della sessione.
+        return existing?.coverPhotoUrl ? { ...merged, coverPhotoUrl: existing.coverPhotoUrl } : merged
       })
     })
+    setMetaList(sorted)
     setDriveCache(prev => {
       const next = new Map(prev)
       for (const h of sorted) {
@@ -352,6 +363,41 @@ export default function GuidaHub({ id }: { id?: string }) {
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userOrigin, items, hike?.id, enrichmentReady])
+
+  // Riempie in background la copertina reale (foto dell'archivio dtrek_places) per ogni Borgo/
+  // Città o Sito della galleria — senza una traccia GPS da disegnare, la copertina "Screen 1"
+  // (components/routehub/CoverMap.tsx) resterebbe altrimenti solo lo sfondo scuro di ripiego, MAI
+  // una mappa (queste Mete non ne hanno una, piano §48.9) — visto dal vivo su una preview Vercel
+  // come una copertina nera. Stesso endpoint di GuideReader (fetch alla vera apertura della
+  // Guida), stesso pattern del riempimento della distanza in auto sopra: parte solo a
+  // enrichmentReady, una scheda alla volta con una piccola pausa, mai in corsa con le fetch
+  // critiche del percorso aperto.
+  useEffect(() => {
+    if (metaList.length === 0 || !enrichmentReady) return
+    let cancelled = false
+    ;(async () => {
+      for (const h of metaList) {
+        if (cancelled) return
+        if (!h.metaType || h.metaType === 'sentiero' || !h.placeId) continue
+        if (attemptedCoverPhotoRef.current.has(h.id)) continue
+        attemptedCoverPhotoRef.current.add(h.id)
+        try {
+          const res = await fetch(`/api/places/${h.placeId}`)
+          if (res.ok) {
+            const data = await res.json() as { imageUrl?: string | null }
+            if (!cancelled && data.imageUrl) {
+              setItems(prev => prev.map(it => it.id === h.id ? { ...it, coverPhotoUrl: data.imageUrl! } : it))
+            }
+          }
+        } catch { /* silenzioso — resta la copertina di ripiego (CoverMap/gradiente) */ }
+        // Stesso respiro della distanza in auto sopra — questo endpoint fa anche una ricerca
+        // Wikipedia quando manca una foto/descrizione propria, non va martellato per l'intera
+        // galleria in un colpo solo.
+        await new Promise(r => setTimeout(r, 300))
+      }
+    })()
+    return () => { cancelled = true }
+  }, [metaList, enrichmentReady])
 
   useEffect(() => {
     if (currentId || items.length === 0) return
