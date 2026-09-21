@@ -77,6 +77,29 @@ export function mergeMetadata(
   return merged
 }
 
+// Ricerca ESATTA e univoca su (source, source_id) — mai ambigua, a differenza di
+// findNearbyExisting sotto (prossimità geografica + punteggio nome). Bug reale trovato dal vivo
+// (2026-09-21, segnalazione utente "ho perso tantissimi siti"): quando molte righe condividono per
+// errore la stessa coordinata (flag `coordinatesUnreliable`, impostato a mano il 2026-09-18 su 391
+// Siti MiC), la ricerca "vicino" può non riconoscere come "la stessa entità" un candidato che in
+// realtà è un semplice ri-fetch di una riga già importata — quel candidato finiva quindi in
+// insertNewPlace, che tramite l'UNIQUE(source, source_id) del database colpiva comunque la riga
+// originale ma con un upsert che SOVRASCRIVEVA la sua metadata alla cieca (cancellando
+// coordinatesUnreliable) e la marcava pure `needsReview` nonostante fosse la stessa Meta di sempre.
+// Controllare PRIMA questa identità univoca — se il candidato è un ri-fetch della stessa fonte+ID,
+// è la stessa entità per definizione, indipendentemente da coordinate/nome — evita del tutto
+// l'ambiguità della ricerca per prossimità in questo caso.
+async function findExistingBySourceId(supabase: SupabaseClient, candidate: PlaceCandidate): Promise<ExistingPlace | null> {
+  const { data, error } = await supabase
+    .from('dtrek_places')
+    .select(EXISTING_PLACE_COLS)
+    .eq('source', candidate.source)
+    .eq('source_id', candidate.sourceId)
+    .maybeSingle()
+  if (error) throw error
+  return data ? rowToExistingPlace(data) : null
+}
+
 async function findNearbyExisting(supabase: SupabaseClient, candidate: PlaceCandidate): Promise<ExistingPlace[]> {
   const { data, error } = await supabase
     .from('dtrek_places')
@@ -175,7 +198,24 @@ async function refreshExistingPlace(supabase: SupabaseClient, placeId: string, c
 }
 
 async function insertNewPlace(supabase: SupabaseClient, candidate: PlaceCandidate, review: { confidence: number; matchedPlaceId: string } | null) {
-  const metadata = { ...(candidate.metadata ?? {}) } as Record<string, unknown>
+  // Bug reale (segnalato dal vivo 2026-09-21): l'upsert sotto usa `onConflict: 'source,source_id'`
+  // — se una riga con QUESTA identica coppia esiste già ma `findNearbyExisting`/`findBestMatch` non
+  // l'ha riconosciuta come "vicina" (capita spesso quando più Siti condividono per errore la stessa
+  // coordinata, vedi il flag `coordinatesUnreliable` impostato manualmente su 391 Siti MiC il
+  // 2026-09-18), il vincolo del database colpisce comunque quella riga — e un upsert con
+  // `metadata: {...(candidate.metadata ?? {})}` la SOVRASCRIVE alla cieca, cancellando
+  // silenziosamente qualunque flag curato a mano che il candidato fresco non conosce affatto.
+  // Query diretta e ​univoca (non la ricerca "vicino" di findNearbyExisting) per fondere sempre con
+  // quanto già presente, mai un overwrite completo — stesso principio già applicato in
+  // refreshExistingPlace/mergeMetadata sopra.
+  const { data: existingBySourceId } = await supabase
+    .from('dtrek_places')
+    .select('metadata')
+    .eq('source', candidate.source)
+    .eq('source_id', candidate.sourceId)
+    .maybeSingle()
+
+  const metadata = mergeMetadata(existingBySourceId?.metadata as Record<string, unknown> | null | undefined, candidate.metadata)
   if (review) {
     // Match probabile (piano §14) — MAI fuso automaticamente, ma segnalato per verifica manuale
     // invece di sparire silenziosamente come duplicato indistinguibile.
@@ -234,6 +274,18 @@ export async function importPlaceCandidates(supabase: SupabaseClient, candidates
     }
 
     try {
+      // Identità esatta PRIMA della ricerca fuzzy per prossimità — vedi il commento su
+      // findExistingBySourceId sopra. Un ri-fetch della stessa fonte+ID è sempre la stessa entità,
+      // mai un nuovo candidato "trovato per caso vicino", qualunque cosa dicano le coordinate.
+      const exact = await findExistingBySourceId(supabase, candidate)
+      if (exact) {
+        await refreshExistingPlace(supabase, exact.id, candidate, exact.metadata)
+        await linkSourceToPlace(supabase, exact.id, candidate)
+        stats.refreshedExisting++
+        stats.linkedToExisting++
+        continue
+      }
+
       const nearby = await findNearbyExisting(supabase, candidate)
       const match = findBestMatch(candidate, nearby)
 
