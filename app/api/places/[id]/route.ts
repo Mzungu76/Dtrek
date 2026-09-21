@@ -5,7 +5,7 @@ import { fetchSourceCounts } from '@/lib/metaSearch/placeQuery'
 import { searchAndFetch, fetchExtendedExtract } from '@/lib/wikipedia'
 import { fetchPlaceCoverPhoto } from '@/lib/placePhotoCache'
 import { haversineM } from '@/lib/geoUtils'
-import type { MetaType, SiteType } from '@/lib/metaTypes'
+import { inferSiteTypeFromName, type MetaType, type SiteType } from '@/lib/metaTypes'
 
 // L'importer PTPR (scripts/import-ptpr.ts) compone `description` da campi tipologici del
 // shapefile (spesso solo un codice numerico, es. "Tipo: 76") più questa attribuzione obbligatoria
@@ -151,7 +151,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const detail: PlaceDetail = {
     id: data.id,
     metaType: data.meta_type as MetaType,
-    siteType: data.meta_type === 'sito' ? (data.subtype ?? null) as SiteType | null : null,
+    // inferSiteTypeFromName: 'altro' spesso viene da un tag sorgente troppo generico (es. OSM
+    // tourism=attraction) anche quando il nome dice chiaramente di cosa si tratta — vedi
+    // lib/metaTypes.ts.
+    siteType: data.meta_type === 'sito' ? (inferSiteTypeFromName(data.name, (data.subtype ?? null) as SiteType | null) ?? null) : null,
     name: data.name,
     // Solo se sostanziale (vedi isSubstantiveDescription) — il testo composto dall'importer PTPR
     // (solo un codice tipologico + attribuzione, mai vuoto) non è una descrizione da mostrare come

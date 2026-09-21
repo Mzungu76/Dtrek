@@ -60,7 +60,7 @@ import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
 import type { PlaceDetail } from '@/app/api/places/[id]/route'
 import type { BorgoItinerary } from '@/app/api/borgo-itinerary/route'
 import { borgoCardVariant, sitoCardFamily } from '@/lib/guideCardVariant'
-import { META_TYPE_CONFIG, SITE_TYPE_CONFIG } from '@/lib/metaTypes'
+import { META_TYPE_CONFIG, SITE_TYPE_CONFIG, inferSiteTypeFromName } from '@/lib/metaTypes'
 import { Building2, Landmark } from 'lucide-react'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -291,12 +291,20 @@ export default function GuideReader({
 
   const parsedSections = useMemo(() => guideText ? parseGuideSections(guideText) : [], [guideText])
 
+  // hike.siteType così com'è arriva dal negozio locale (lib/plannedStore.ts, mirror di
+  // planned_hikes.site_type) — mai ricalcolato lì. 'altro' spesso viene da un tag sorgente troppo
+  // generico (es. OSM tourism=attraction) anche quando il titolo dice chiaramente di cosa si
+  // tratta (es. "Museo civico ...") — vedi lib/metaTypes.ts's inferSiteTypeFromName. Corretto QUI,
+  // una sola volta, e riusato per badge/profilo/icona di fallback sotto invece di leggere
+  // hike.siteType direttamente in più punti con risultati incoerenti tra loro.
+  const siteType = hike.metaType === 'sito' ? inferSiteTypeFromName(hike.title, hike.siteType) : hike.siteType
+
   // Titolo di card per tipologia (lib/guideProfiles.ts, piano §29/§30) — "Il borgo"/"Le tappe del
   // borgo" per un borgo_citta, "Il museo"/"Il castello"/... per un sito con siteType noto, invece
   // del titolo generico da sentiero ("Il percorso"/"I luoghi da non perdere") che lo stesso
   // profilo istruisce Giulia a NON scrivere più per queste tipologie (vedi SECTION_BRIEF in
   // app/api/guide/route.ts, che incorpora questi stessi titoli nell'intestazione "## ..." generata).
-  const guideProfile = useMemo(() => guideProfileFor(hike.metaType, hike.siteType), [hike.metaType, hike.siteType])
+  const guideProfile = useMemo(() => guideProfileFor(hike.metaType, siteType), [hike.metaType, siteType])
 
   const displaySections = useMemo<DisplaySection[]>(() => {
     const byKey = new Map(parsedSections.filter(s => s.key).map(s => [s.key as GuideSectionKey, s]))
@@ -964,7 +972,7 @@ export default function GuideReader({
   const categoryBadge = hike.metaType === 'borgo_citta'
     ? META_TYPE_CONFIG.borgo_citta.label.toUpperCase()
     : hike.metaType === 'sito'
-      ? (hike.siteType ? SITE_TYPE_CONFIG[hike.siteType].label : META_TYPE_CONFIG.sito.label).toUpperCase()
+      ? (siteType ? SITE_TYPE_CONFIG[siteType].label : META_TYPE_CONFIG.sito.label).toUpperCase()
       : (hike.tags?.[0] ?? hike.assessment?.difficulty ?? 'Escursione').toUpperCase()
 
   // lib/guideCardVariant.ts — quale variante di copertina/statistiche mostrare. undefined per un
@@ -972,13 +980,13 @@ export default function GuideReader({
   const usesRealTrack = (hike.trackPoints?.length ?? 0) > 1 || (hike.routePolyline?.length ?? 0) > 1
   const borgoVariant = hike.metaType === 'borgo_citta' ? borgoCardVariant(hike) : undefined
   const hasVisitInfo = !!(placeDetail?.officialUrl || placeDetail?.website || placeDetail?.openingHours)
-  const sitoFamily = hike.metaType === 'sito' ? sitoCardFamily(hike.siteType, hasVisitInfo) : undefined
+  const sitoFamily = hike.metaType === 'sito' ? sitoCardFamily(siteType, hasVisitInfo) : undefined
   const usesCoverPhoto = hike.metaType === 'sito' || borgoVariant === 'cammino_urbano'
 
   // Icona di fallback per la copertina senza foto (GuideHero coverMode='photo') — Building2 per un
   // Borgo/Città, l'icona di categoria di lib/metaTypes.ts per un Sito (coerente coi chip/pin già
   // disegnati altrove nell'app, vedi lib/metaTypes.ts's META_TYPE_CONFIG/SITE_TYPE_CONFIG).
-  const FallbackIconComponent = hike.metaType === 'sito' && hike.siteType ? SITE_TYPE_CONFIG[hike.siteType].icon : (hike.metaType === 'sito' ? Landmark : Building2)
+  const FallbackIconComponent = hike.metaType === 'sito' && siteType ? SITE_TYPE_CONFIG[siteType].icon : (hike.metaType === 'sito' ? Landmark : Building2)
   const coverFallbackColor = hike.metaType === 'sito' ? META_TYPE_CONFIG.sito.color : META_TYPE_CONFIG.borgo_citta.color
   const officialLink = placeDetail?.officialUrl ?? placeDetail?.website ?? null
   // Qualunque sezione ancora senza testo AI può mostrare l'invito ad "Approfondisci con Giulia" —
@@ -1074,7 +1082,7 @@ export default function GuideReader({
           />
         ) : hike.latitude != null && hike.longitude != null ? (
           <div className="px-5 sm:px-8 md:px-10 py-4 border-b border-stone-200">
-            <SitoGalleryWidget lat={hike.latitude} lon={hike.longitude} siteType={hike.siteType} />
+            <SitoGalleryWidget lat={hike.latitude} lon={hike.longitude} siteType={siteType} />
           </div>
         ) : null
       ) : hike.metaType === 'borgo_citta' && borgoVariant === 'cammino_urbano' ? (

@@ -124,3 +124,40 @@ export function isSiteType(value: unknown): value is SiteType {
 export function metaHasHikingMetrics(metaType: MetaType | undefined): boolean {
   return META_TYPE_CONFIG[metaType ?? 'sentiero'].hikingMetrics
 }
+
+// Parole generiche nel NOME che indicano una tipologia più precisa di 'altro' — stesso stile a
+// sottostringa di MIC_TYPE_MAP in scripts/places/mic/fetch.ts (riusato qui come ripiego runtime,
+// non ridondante: quella lista classifica dall'ETICHETTA MiC, questa dal NOME della Meta, fonti
+// diverse). Serve perché 'altro' non significa sempre "davvero non classificabile" — un caso
+// frequente osservato dal vivo: OSM tagga molti musei/luoghi minori con `tourism=attraction`
+// (troppo generico, mappato ad 'altro' in scripts/places/osm/fetch.ts) anche quando il NOME dice
+// esplicitamente "Museo civico ...". Un fix alla fonte (OSM) richiederebbe un nuovo import
+// completo; questo ripiego corregge anche le Mete già importate, al momento in cui vengono lette.
+const NAME_TYPE_HINTS: [string, SiteType][] = [
+  ['museo', 'museo'], ['pinacoteca', 'museo'], ['galleria', 'museo'], ['collezione', 'museo'],
+  ['castello', 'castello'], ['rocca', 'castello'], ['fortezza', 'castello'], ['forte', 'castello'],
+  ['abbazia', 'abbazia'], ['monastero', 'abbazia'], ['convento', 'abbazia'], ['eremo', 'abbazia'],
+  ['chiesa', 'chiesa'], ['basilica', 'chiesa'], ['cattedrale', 'chiesa'], ['santuario', 'chiesa'], ['duomo', 'chiesa'], ['battistero', 'chiesa'],
+  ['area archeologic', 'sito_archeologico'], ['scavi', 'sito_archeologico'], ['necropoli', 'sito_archeologico'], ['parco archeologic', 'sito_archeologico'],
+  ['palazzo', 'palazzo'], ['villa', 'palazzo'],
+  ['teatro', 'teatro'], ['anfiteatro', 'teatro'],
+  ['monumento', 'monumento'], ['mausoleo', 'monumento'], ['obelisco', 'monumento'],
+  ['cascata', 'cascata'],
+  ['grotta', 'grotta'],
+  ['belvedere', 'belvedere'],
+]
+
+/**
+ * `subtype` così com'è quando è già una classificazione specifica (mai sovrascritta — il nome è
+ * solo un ripiego, non un'autorità superiore a un dato strutturato reale). Solo per 'altro' o
+ * assente si prova a leggere il nome; se nemmeno quello aiuta, resta 'altro'/assente — mai
+ * inventare una categoria senza nessun segnale.
+ */
+export function inferSiteTypeFromName(name: string, subtype: SiteType | null | undefined): SiteType | undefined {
+  if (subtype && subtype !== 'altro') return subtype
+  const lower = name.toLowerCase()
+  for (const [needle, type] of NAME_TYPE_HINTS) {
+    if (lower.includes(needle)) return type
+  }
+  return subtype ?? undefined
+}

@@ -39,7 +39,7 @@ import { effectiveHikeMetrics } from '@/lib/routeMode'
 import { findAllSourceImages } from '@/lib/sourceImageFetch'
 import { resolveComuneFromLatLon } from '@/lib/overpassTrails'
 import { guideProfileFor, type GuideProfile } from '@/lib/guideProfiles'
-import { metaHasHikingMetrics, SITE_TYPE_CONFIG } from '@/lib/metaTypes'
+import { metaHasHikingMetrics, SITE_TYPE_CONFIG, inferSiteTypeFromName } from '@/lib/metaTypes'
 import { fetchBorgoDetailStops } from '@/lib/guideBorgoDetailStops'
 import type { ItineraryStopCandidate } from '@/lib/metaSearch/borgoItinerary'
 import { readOrBackfillHistoryStats, formatHistoryStatsBlock } from '@/lib/hikerHistory'
@@ -450,7 +450,10 @@ function hikeFromFallback(hikeId: string, hikeFallback: GuideHikeFallback): Plan
     cachedPois:           hikeFallback.cachedPois,
     cachedPoiWiki:        hikeFallback.cachedPoiWiki,
     metaType:             hikeFallback.metaType,
-    siteType:             hikeFallback.siteType,
+    // inferSiteTypeFromName: 'altro' spesso viene da un tag sorgente troppo generico (es. OSM
+    // tourism=attraction) anche quando il nome dice chiaramente di cosa si tratta — vedi
+    // lib/metaTypes.ts. Corregge anche le Mete già importate, non serve un nuovo import.
+    siteType:             inferSiteTypeFromName(hikeFallback.title ?? 'Percorso', hikeFallback.siteType),
     latitude:             hikeFallback.latitude,
     longitude:            hikeFallback.longitude,
   }
@@ -934,7 +937,9 @@ async function generateGuide(req: NextRequest): Promise<Response> {
         cachedPois:           data.cached_pois          ?? undefined,
         cachedPoiWiki:        data.cached_poi_wiki      ?? undefined,
         metaType:             data.meta_type            ?? 'sentiero',
-        siteType:             data.site_type            ?? undefined,
+        // inferSiteTypeFromName: vedi il commento in hikeFromFallback sopra — stessa correzione,
+        // qui per il percorso normale (riga già su Supabase) invece che per il fallback locale.
+        siteType:             inferSiteTypeFromName(data.title, data.site_type ?? undefined),
         latitude:             data.latitude             ?? undefined,
         longitude:            data.longitude            ?? undefined,
       }
