@@ -32,6 +32,11 @@ export interface PlaceCandidate {
   imageUrl?: string
   officialUrl?: string
   website?: string
+  // dtrek_places.phone/email (supabase/migrations/add_places_contacts.sql) — testo semplice come
+  // website, non una struttura composita (a differenza di openingHours/pricing, che restano in
+  // metadata.fieldProvenance — MIC_DATA_SOURCES.md §10/§11).
+  phone?: string
+  email?: string
   openingHours?: unknown
 
   source: PlaceSource

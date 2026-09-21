@@ -151,7 +151,21 @@ export interface MicBinding {
   address?: string
   lat: number
   lon: number
+  // Predicati del VALORE letterale verificati reali su Canepina/105665 (probe
+  // contatti-canepina-un-salto-oltre, MIC_DATA_SOURCES.md §12) — `website` esisteva già in questa
+  // interfaccia ma non era mai stato popolato dalla query prima d'ora (nessun predicato verificato).
   website?: string
+  // `sm:emailAddress` letterale reale osservato: "mailto:info@cmcimini.it" (schema mailto: incluso)
+  // — ripulito in micBindingToPlaceCandidate, non qui (questo campo resta il valore SPARQL grezzo).
+  email?: string
+  phone?: string
+}
+
+// Pura, testabile senza rete.
+// `sm:emailAddress` è letteralmente "mailto:indirizzo@dominio" nei dati reali (verificato,
+// probe contatti-canepina-un-salto-oltre) — non un'ipotesi di formato. Pura, testabile senza rete.
+export function stripMailto(email: string): string {
+  return email.replace(/^mailto:/i, '')
 }
 
 // Pura, testabile senza rete.
@@ -159,22 +173,21 @@ export function micBindingToPlaceCandidate(b: MicBinding): PlaceCandidate {
   const typeSource = b.typeLabel ?? b.dcType
   const sourceUrl = `http://dati.beniculturali.it/mibact/luoghi/resource/CulturalInstituteOrSite/${b.id}`
   const retrievedAt = new Date().toISOString()
+  const email = b.email !== undefined ? stripMailto(b.email) : undefined
 
+  // Nessun `sourceUpdatedAt` su nessuno di questi campi: ArCo non espone una data di aggiornamento
+  // per record (verificato, non solo non cercato — MIC_DATA_SOURCES.md §3bis, dump esaustivo di
+  // CulturalInstituteOrSite/105665 senza alcun predicato di data/timestamp). `sourceUrl` è
+  // l'attribuzione richiesta da CC BY-SA 4.0 per `description` — vedi nota licenza in cima al file.
   const fieldProvenance: Record<string, FieldProvenance> = {}
-  if (b.description !== undefined) {
-    // Nessun `sourceUpdatedAt`: ArCo non espone una data di aggiornamento per record (verificato,
-    // non solo non cercato — MIC_DATA_SOURCES.md §3bis, dump esaustivo di CulturalInstituteOrSite/105665
-    // senza alcun predicato di data/timestamp). `sourceUrl` è l'attribuzione richiesta da CC BY-SA 4.0
-    // — vedi nota licenza in cima al file.
-    fieldProvenance.description = {
-      value: b.description,
-      source: 'mic',
-      sourceUrl,
-      retrievedAt,
-      confidence: 'high',
-      status: 'ok',
-    }
+  const track = (field: string, value: unknown) => {
+    if (value === undefined) return
+    fieldProvenance[field] = { value, source: 'mic', sourceUrl, retrievedAt, confidence: 'high', status: 'ok' }
   }
+  track('description', b.description)
+  track('phone', b.phone)
+  track('email', email)
+  track('website', b.website)
 
   return {
     name: b.name,
@@ -188,6 +201,8 @@ export function micBindingToPlaceCandidate(b: MicBinding): PlaceCandidate {
     municipality: b.comune,
     address: b.address,
     website: b.website,
+    phone: b.phone,
+    email,
     source: 'mic',
     sourceId: b.id,
     sourceUrl,
@@ -293,8 +308,9 @@ PREFIX geo: <http://www.w3.org/2003/01/geo/wgs84_pos#>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX dc: <http://purl.org/dc/elements/1.1/>
 PREFIX l0: <https://w3id.org/italia/onto/l0/>
+PREFIX sm: <https://w3id.org/italia/onto/SM/>
 
-SELECT DISTINCT ?cis ?name ?typeLabel ?dcType ?description ?comune ?regionLabel ?address ?lat ?long WHERE {
+SELECT DISTINCT ?cis ?name ?typeLabel ?dcType ?description ?comune ?regionLabel ?address ?lat ?long ?phone ?email ?website WHERE {
   {
     SELECT ?cis ?name ?site ?address ?comune ?regionLabel WHERE {
       ?cis a cis:CulturalInstituteOrSite ;
@@ -322,6 +338,16 @@ SELECT DISTINCT ?cis ?name ?typeLabel ?dcType ?description ?comune ?regionLabel 
   # (probe copertura-campi-arricchenti: 281/443). OPTIONAL indipendente in cima allo scope, stessa
   # forma sicura di dc:type sopra.
   OPTIONAL { ?cis l0:description ?description . }
+  # Contatti — predicati del VALORE letterale (non solo l'esistenza del nodo) verificati reali sui
+  # 3 nodi contatto di Canepina/105665, un salto oltre a dove --describe si era fermato (probe
+  # contatti-canepina-un-salto-oltre, MIC_DATA_SOURCES.md §12): sm:telephoneNumber, sm:emailAddress
+  # (letterale "mailto:...", ripulito in micBindingToPlaceCandidate), sm:URL. Percorsi di proprietà
+  # (mai annidati in OPTIONAL multipli) — SELECT DISTINCT a monte evita duplicati quando lo stesso
+  # valore è raggiungibile da più OnlineContactPoint dello stesso CIS (visto su Canepina: 2 contact
+  # point, stesso numero di telefono su entrambi).
+  OPTIONAL { ?cis sm:hasOnlineContactPoint/sm:hasTelephone/sm:telephoneNumber ?phone . }
+  OPTIONAL { ?cis sm:hasOnlineContactPoint/sm:hasEmail/sm:emailAddress ?email . }
+  OPTIONAL { ?cis sm:hasOnlineContactPoint/sm:hasWebSite/sm:URL ?website . }
   OPTIONAL { ?cis geo:lat ?lat1 ; geo:long ?long1 . }
   OPTIONAL { ?site geo:lat ?lat2 ; geo:long ?long2 . }
   OPTIONAL { ?cis clvapit:hasGeometry ?geomA . ?geomA clvapit:lat ?lat3 ; clvapit:long ?long3 . }
@@ -404,6 +430,9 @@ async function querySparql(query: string): Promise<MicBinding[]> {
       address: row.address?.value,
       lat,
       lon,
+      phone: row.phone?.value,
+      email: row.email?.value,
+      website: row.website?.value,
     })
   }
   return out

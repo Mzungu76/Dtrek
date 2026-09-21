@@ -475,16 +475,21 @@ riga) — esattamente il comportamento richiesto per il caso Canepina (§8).
    locale (Comunità Montana dei Cimini/Musei DEMOS, unico gestore reale trovato, un numero di
    telefono diverso da quello in ArCo — §7) resta il solo modo per risolverlo con dati reali invece
    che dedotti da recensioni turistiche.
-6. **In corso**: orari (`AccessCondition/hasAccessCondition`) e contatti (`SM:hasOnlineContactPoint`)
-   sono confermati maggioritari (punto 3) ma i nodi contatto (Telephone/Email/WebSite) sono noti
-   finora SOLO come URI — `--describe --name Canepina` si è fermato 2 salti da CIS, non ha mai
-   dumpato le loro proprietà dirette (il valore letterale, es. il numero di telefono come stringa).
-   Aggiunto un nuovo probe (`contatti-canepina-un-salto-oltre`, round 8) che dumpa esaustivamente
-   quei 3 nodi via `VALUES` sugli URI reali già noti (query quasi gratuita, nessun join con il
-   catalogo) — **in attesa di un altro lancio manuale** (`mode: probe`) prima di cablare i contatti.
-   Gli orari restano ANCORA più delicati: `hasAccessCondition` è multi-valore (Canepina ne aveva 2:
-   una "Chiusura" e un "Booking") e serve capire come distinguerli in una query aggregata senza
-   ripetere le esplosioni del pianificatore già viste su questo endpoint (round 2/3/6) — richiede
-   un probe dedicato, non ancora scritto.
+6. **FATTO**: contatti cablati in `fetch.ts`. Il probe round 8 (`contatti-canepina-un-salto-oltre`,
+   lanciato dall'utente) ha rivelato i predicati del VALORE letterale, un salto oltre a dove
+   `--describe` si era fermato: `sm:telephoneNumber` ("0761653008"), `sm:emailAddress`
+   ("mailto:info@cmcimini.it" — schema `mailto:` incluso, ripulito in `micBindingToPlaceCandidate`),
+   `sm:URL` ("http://www.cmcimini.it"). Aggiunta la migration additiva
+   `supabase/migrations/add_places_contacts.sql` (colonne `phone`/`email` — `website` esisteva già)
+   — **da eseguire manualmente nel Supabase SQL Editor** (stesso pattern non invasivo delle altre
+   migration di questo repo, mai auto-applicata da uno script). `website` era già un campo
+   dell'interfaccia `MicBinding` ma non era mai stato popolato da alcuna query finora: ora lo è
+   davvero, con lo stesso predicato verificato.
+
+   Gli **orari restano l'unico campo maggioritario non ancora cablato**: `hasAccessCondition` è
+   multi-valore (Canepina ne aveva 2 — una "Chiusura" e un "Booking", ruoli diversi da distinguere)
+   e questo endpoint ha già dimostrato più volte di esplodere su query mal strutturate (round 2/3/6)
+   — serve un probe dedicato prima di toccare la produzione, non ancora scritto. È anche il campo
+   più direttamente legato al conflitto discusso al §8bis.
 
 Nessuno scraper "definitivo" è stato scritto, per istruzione esplicita del compito.

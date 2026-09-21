@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { micTypeLabelToSiteType, micBindingToPlaceCandidate, filterToKnownRegions } from '../mic/fetch'
+import { micTypeLabelToSiteType, micBindingToPlaceCandidate, filterToKnownRegions, stripMailto } from '../mic/fetch'
 import type { MicBinding } from '../mic/fetch'
 
 describe('micTypeLabelToSiteType', () => {
@@ -111,6 +111,45 @@ describe('micBindingToPlaceCandidate', () => {
     })
     expect(c.subtype).toBe('castello')
     expect(c.rawType).toBe('Castello')
+  })
+
+  // Predicati del valore letterale verificati reali su Canepina/105665 (probe
+  // contatti-canepina-un-salto-oltre, MIC_DATA_SOURCES.md §12): sm:telephoneNumber, sm:emailAddress
+  // ("mailto:...", da ripulire), sm:URL — website esisteva già nell'interfaccia ma non era mai stato
+  // popolato dalla query prima di verificare questi predicati.
+  it('contatti assenti nel binding → candidato senza phone/email/website e senza la loro provenienza', () => {
+    const c = micBindingToPlaceCandidate(CERAMICA)
+    expect(c.phone).toBeUndefined()
+    expect(c.email).toBeUndefined()
+    expect(c.website).toBeUndefined()
+    expect(c.metadata?.fieldProvenance).toBeUndefined()
+  })
+
+  it('contatti presenti nel binding → popolati con provenienza, email ripulita dal prefisso mailto:', () => {
+    const c = micBindingToPlaceCandidate({
+      ...CERAMICA,
+      phone: '0761653008',
+      email: 'mailto:info@cmcimini.it',
+      website: 'http://www.cmcimini.it',
+    })
+    expect(c.phone).toBe('0761653008')
+    expect(c.email).toBe('info@cmcimini.it')
+    expect(c.website).toBe('http://www.cmcimini.it')
+    const provenance = c.metadata?.fieldProvenance as Record<string, { value: unknown }>
+    expect(provenance.phone).toMatchObject({ value: '0761653008', source: 'mic', confidence: 'high' })
+    expect(provenance.email).toMatchObject({ value: 'info@cmcimini.it' })
+    expect(provenance.website).toMatchObject({ value: 'http://www.cmcimini.it' })
+  })
+})
+
+describe('stripMailto', () => {
+  it('rimuove il prefisso mailto: (formato reale osservato su sm:emailAddress)', () => {
+    expect(stripMailto('mailto:info@cmcimini.it')).toBe('info@cmcimini.it')
+  })
+
+  it('non case-sensitive, nessun effetto se il prefisso è già assente', () => {
+    expect(stripMailto('MAILTO:info@cmcimini.it')).toBe('info@cmcimini.it')
+    expect(stripMailto('info@cmcimini.it')).toBe('info@cmcimini.it')
   })
 })
 

@@ -157,6 +157,8 @@ export function candidateToPartialUpdate(
   if (candidate.imageUrl !== undefined) updates.image_url = candidate.imageUrl
   if (candidate.officialUrl !== undefined) updates.official_url = candidate.officialUrl
   if (candidate.website !== undefined) updates.website = candidate.website
+  if (candidate.phone !== undefined) updates.phone = candidate.phone
+  if (candidate.email !== undefined) updates.email = candidate.email
   if (candidate.openingHours !== undefined) updates.opening_hours = candidate.openingHours
   if (candidate.wikidataId !== undefined) updates.wikidata_id = candidate.wikidataId
   // Prima di questo cambio, un ri-fetch della stessa fonte non toccava MAI `metadata` — la
@@ -197,6 +199,8 @@ async function insertNewPlace(supabase: SupabaseClient, candidate: PlaceCandidat
     image_url:                candidate.imageUrl ?? null,
     official_url:             candidate.officialUrl ?? null,
     website:                  candidate.website ?? null,
+    phone:                    candidate.phone ?? null,
+    email:                    candidate.email ?? null,
     opening_hours:            candidate.openingHours ?? null,
     source:                   candidate.source,
     source_id:                candidate.sourceId,
