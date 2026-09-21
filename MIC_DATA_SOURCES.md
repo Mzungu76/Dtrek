@@ -133,26 +133,49 @@ Interrogo https://dati.cultura.gov.it/sparql (regione: tutte, limit 3000)…
   certo di `fetch.ts`.
 - Lazio (dove si trova Canepina) ha una copertura buona (495 record con coordinate).
 
-**Cosa NON è ancora stato verificato dal vivo, nemmeno da sessioni precedenti**: nessun
-`--describe --name` è mai stato eseguito puntando esplicitamente a "Canepina" — le uniche due
-diagnostiche `--describe` reali fin qui sono su record diversi (CulturalInstituteOrSite/7275,
-"Archivio di Stato di Firenze", e 100005, "Museo civico aufidenate", quest'ultimo trovato
-dall'utente su LodView, non dall'endpoint). Ho preparato l'input del workflow per farlo
-(`describe_name: Canepina`, §1) ma non ho i permessi per lanciarlo da questa sessione (§0/§15).
-
-**Predicati confermati REALI sui due record esaminati finora** (dump a 2 salti,
+**Predicati confermati REALI sui primi due record esaminati** (dump a 2 salti,
 `?cis ?p1 ?o1 . OPTIONAL { ?o1 ?p2 ?o2 }`): `rdfs:label`, `cis:hasSite`,
 `loc:hasCulturalInstituteOrSiteType` → tipo con `rdfs:label`, `cis:siteAddress` →
 `clvapit:fullAddress`/`hasCity`/`hasRegion`, coordinate su **due vocabolari diversi** a seconda del
 record (`geo:lat`/`geo:long` diretti, oppure `clvapit:hasGeometry` → `clvapit:lat`/`clvapit:long`).
-**Nessuna proprietà `description`, `OpeningHoursSpecification`, `Ticket`, `Offer`, o
-`PriceSpecification` è mai comparsa in nessuno dei due dump reali finora esaminati** — ma
-attenzione: il compito chiede esplicitamente di non assumere che l'assenza dalla prima query
-significhi che il dato non esista altrove nel grafo. I due dump sono un campionamento di 2
-record su un catalogo di ~25.000 (cifra da WebSearch, progetto Wikidata/Synapta che ha
-sincronizzato dati MiBACT — non verificata con una COUNT reale in questa sessione) — non è una
-prova di assenza generale, solo di assenza su QUEI due record. **La verifica specifica su
-Canepina è la richiesta esplicita del compito e resta il passo mancante più importante** (§15).
+Nessuna proprietà `description`/orari/prezzi era comparsa in quei due dump — **ma, come richiesto
+dal compito, questo non è stato trattato come prova di assenza generale**: vedi §3bis, dove lo
+stesso `--describe --name` eseguito su Canepina (grazie all'utente, che ha lanciato manualmente il
+workflow preparato in §1) le trova tutte.
+
+### 3bis. Verifica dal vivo su Canepina — ESEGUITA (2026-09-21, via workflow manuale dell'utente)
+
+L'utente ha lanciato `mode: describe`, `describe_name: Canepina` sul workflow aggiornato in
+questa sessione. Risultato: **CulturalInstituteOrSite/105665** — trovato al primo tentativo,
+`rdfs:label` = "Museo delle tradizioni popolari di Canepina". Questa è ora una richiesta reale
+eseguita ed osservata, non dedotta. Estratto completo delle triple rilevanti (URI abbreviati per
+leggibilità, namespace pieni sotto):
+
+| Predicato reale osservato | Valore | Verdetto del compito |
+|---|---|---|
+| `https://w3id.org/italia/onto/l0/description` (sul CIS stesso) | *"Il Museo è allestito all'interno di un Convento edificato agli inizi del Seicento. [...] 19 sezioni dedicate alla vita quotidiana delle Comunità. Sezioni: Religiosità popolare, Mondo dell'infanzia e scuola, Attività lavorative maschili e femminili, Ciclo della vita familiare e storia locale."* | **PRESENTE — smentisce l'assunzione precedente** (§1) che ArCo non abbia descrizione. Esiste, su un predicato mai interrogato da `fetch.ts` (`l0:description`, non `dc:description`/`rdfs:comment` — quelli erano solo nel commento di esempio della classe, un falso indizio) |
+| `l0:identifier` | `"DBUnico.105665"` | Conferma che l'ID numerico ArCo (105665) **è lo stesso ID del DBUnico/OPENDATA** — ponte diretto tra sorgente 3/4 (LOD) e sorgente 1/2 (REST OPENDATA) del compito |
+| `owl:sameAs` | `http://www.wikidata.org/entity/Q21552216` | Collegamento Wikidata reale per questo record |
+| `dc:type` (`http://purl.org/dc/elements/1.1/type`) | `"Museo, Galleria e/o raccolta"` | Tipologia reale, letterale — **ma non tramite il predicato che `fetch.ts` interroga** (`loc:hasCulturalInstituteOrSiteType`), che **non compare affatto** in questo dump. Vedi "limite trovato" sotto |
+| `foaf:depiction` | `http://media.beniculturali.it/.../Museo%20delle%20tradizioni%20popolari%20di%20Canepina.jpg` | URL foto reale — campo `imageUrl` di `PlaceCandidate` esiste già ma non è mai popolato per MiC |
+| `https://w3id.org/italia/onto/AccessCondition/hasAccessCondition` → `OpeningHoursSpecification/Chiusura_105665` | tipo `acapit:OpeningHoursSpecification`; `l0:description` = **`"Lunedì\|Martedì\|Mercoledì\|Giovedì\|Venerdì\|Sabato\|Domenica"`** | **ORARI: PRESENTI nel grafo, non assenti** — ma il valore letterale è un elenco di TUTTI i 7 giorni sotto una risorsa chiamata "Chiusura" (Closure) — cioè il grafo ArCo dichiara esplicitamente chiuso tutti i giorni. Vedi §8bis |
+| `hasAccessCondition` → `Booking/None` | tipo `acapit:Booking`; label = `"Ingresso libero"` | Nessuna prenotazione richiesta / ingresso libero — ma vedi riga sotto sul Ticket, potenziale ambiguità |
+| `https://w3id.org/italia/onto/POT/hasTicket` → `Ticket/105665_Base` | **solo** `rdf:type POT:Ticket` — nessun'altra proprietà (il dump `?o1 ?p2 ?o2` è esaustivo su TUTTE le triple con quel nodo come soggetto, senza LIMIT: se esistesse un prezzo sarebbe comparso) | **PREZZO: il nodo Ticket esiste ma è vuoto** — nessun prezzo/valuta popolato per questo record in ArCo. Non "non verificato": verificato esaustivamente e risultato assente |
+| `SM:hasOnlineContactPoint` → `OnlineContactPoint/Biglietteria/0761653008-info_cmcimini_it` | `SM:hasTelephone` → `Telephone/0761653008`; `SM:hasEmail` → `Email/info_cmcimini_it` | Telefono **0761653008**, email **info@cmcimini.it** (dominio email coerente con quanto trovato via WebSearch, §7 — ma il **numero di telefono NON coincide**: WebSearch aveva trovato 0761-327677. Conflitto reale, non risolto — vedi nota sotto) |
+| `SM:hasOnlineContactPoint` → altro OnlineContactPoint | `SM:hasWebSite` → `WebSite/http___www_cmcimini_it` (= `www.cmcimini.it`) | Sito web conferma quanto trovato via WebSearch |
+| `cis:siteAddress` → `Address/...` | `CLV:hasProvince` → `Province/Viterbo`; `CLV:postCode` = `"01030"`; `CLV:hasCity` → `City/Canepina`; `CLV:hasRegion` → `Region/Lazio`; `CLV:fullAddress` = `"Largo Maria de De Mattias - Canepina"` | Provincia/CAP/comune/regione confermati. **`fullAddress` non include il civico "7"** che invece compare nella fonte WebSearch (Comune/DEMOS) — discrepanza minore ma reale |
+| `CLV:hasGeometry` (sia su CIS sia su Site) → `Geometry/...` | `clvapit:lat` = `"42.381863"`, `clvapit:long` = `"12.230836"`, **più** `geo:lat`/`geo:long` diretti sullo stesso CIS con **gli stessi valori** | Coordinate reali confermate, **entrambi i vocabolari coesistono sullo stesso record** (non "l'uno o l'altro a seconda del record", come ipotizzato prima — qui ci sono entrambi insieme) |
+| `cis:hasDiscipline` → `SubjectDiscipline/ND` | label `"ND"` | Disciplina non specificata ("Non Disponibile") |
+
+**Limite reale trovato in `fetch.ts` (non ipotizzato — osservato su questo dump)**: la query di
+produzione lega `typeLabel` a `loc:hasCulturalInstituteOrSiteType` → `rdfs:label`, ma **questo
+predicato non compare affatto** nelle ~70 triple dumpate per Canepina — la tipologia reale vive
+invece su `dc:type` (letterale diretto, `"Museo, Galleria e/o raccolta"`), un predicato mai
+interrogato da `fetch.ts`. Conseguenza pratica: per questo record specifico, `micTypeLabelToSiteType`
+riceverebbe `undefined` e classificherebbe Canepina come `'altro'` (confidence 0.6) invece di
+`'museo'`, nonostante il dato reale dica chiaramente "Museo" — un gap di qualità reale, non
+teorico, da correggere quando si toccherà di nuovo `fetch.ts` (fuori dallo scope "solo report" di
+questa sessione, §14 del compito).
 
 ---
 
@@ -256,60 +279,81 @@ direttamente in questa sessione** (tutte bloccate, §0) — i valori sotto sono 
 restituito come sintesi di quelle pagine, non una lettura diretta dell'HTML. Trattare come
 attendibile per il confronto qualitativo, non come citazione letterale.
 
-| Campo | OPENDATA REST | LOD/SPARQL (ArCo) | Ecomic/I.PaC | Pagina MiC | Altre fonti istituzionali | Valore finale proposto |
+| Campo | OPENDATA REST | LOD/SPARQL (ArCo) — **verificato dal vivo, §3bis** | Ecomic/I.PaC | Pagina MiC | Altre fonti istituzionali | Valore finale proposto |
 |---|---|---|---|---|---|---|
-| Nome | non testato | non ancora cercato per nome (§3) | non testato | "Museo delle tradizioni popolari di Canepina" | idem (Rete Musei Lazio, Comune) | MiC/LOD (concordi) |
-| Identificativo | non testato | ID numerico CulturalInstituteOrSite non ancora trovato per Canepina | non testato | slug URL, non un ID numerico | "DBUnico MIBACT ID" esiste come proprietà Wikidata (P5782) ma valore per Canepina non recuperato | **da recuperare** — ArCo via `--describe --name Canepina` (§15) |
-| Tipologia | non testato | non ancora verificato (probabile "Museo etnografico"/museo) | non testato | "Museo" (categoria sito) | "museo" | concorde, bassa priorità |
-| Descrizione | schema non confermato | **assente per design in Dtrek** (§1), non confermato nel grafo | non testato | presente (testo su convento carmelitano, 20 sezioni tematiche) | presente e più dettagliata (Comune/DEMOS: 1988, ex convento Carmelitani, vita rurale Alto Lazio) | **fonte istituzionale (Comune/DEMOS)**, non MiC (licenza contenuto da verificare) |
-| Indirizzo | non testato | presente ma non verificato per Canepina | non testato | non confermato dal fetch (§5) | **Largo Maria de Mattias, 7 — 01030 Canepina (VT)** | fonte istituzionale |
-| Comune | non testato | campo esistente in `fetch.ts` (`comune`) | non testato | Canepina | Canepina | concorde |
-| Provincia | dichiarato come parametro di ricerca (§4) | non esposto direttamente da `fetch.ts` (solo comune/regione) | non testato | Viterbo | Viterbo | concorde |
-| Regione | dichiarato come parametro di ricerca (§4) | campo esistente (`regionLabel`) | non testato | Lazio | Lazio | concorde |
-| Coordinate | schema non confermato | copertura non garantita (§3) — da verificare per questo record specifico | non testato | non confermato dal fetch | non recuperate in questa sessione | **da verificare con `--describe --name Canepina`** |
-| Telefono | non testato | non previsto dal modello attuale (§1) | non testato | non confermato dal fetch | **0761-327677** | fonte istituzionale |
-| Email | non testato | non previsto | non testato | non confermato dal fetch | **info@cmcimini.it** | fonte istituzionale |
-| Sito web | schema non confermato | campo esistente (`website`), non popolato per questo record | non testato | non confermato dal fetch | **www.cmcimini.it** | fonte istituzionale |
-| Prenotazione | non testato | non previsto | non testato | non confermato dal fetch | non trovata esplicitamente | nessuna fonte disponibile |
-| Giorni apertura / orari | schema non confermato | **non previsto dal modello attuale** — nessun predicato `OpeningHoursSpecification` osservato sui 2 record esaminati (§3), MAI cercato per Canepina | non testato | **"Chiuso" tutti i giorni, aggiornato 2020-06-23** (WebSearch) | nessun orario aggiornato trovato con certezza (recensioni non ufficiali parlano di apertura pomeridiana) | **CONFLITTO APERTO — nessuna fonte fornisce un orario corrente affidabile**, vedi §10 |
-| Prezzo | schema non confermato | non previsto | non testato | non confermato dal fetch | non trovato con certezza | **dato mancante ovunque**, da verificare telefonicamente/con fonte 2025-2026 |
-| Biglietti | non testato | non previsto | non testato | non confermato dal fetch | non trovato | dato mancante |
-| Accessibilità | non testato | non previsto | non testato | non confermato dal fetch | non trovato | dato mancante |
+| Nome | non testato | **"Museo delle tradizioni popolari di Canepina"** (`rdfs:label`, `institutionalCISName`) | non testato | idem | idem (Rete Musei Lazio, Comune) | concorde su tutte le fonti |
+| Identificativo | non testato | **CulturalInstituteOrSite/105665**; `l0:identifier` = `"DBUnico.105665"` | non testato | slug URL, non un ID numerico | Wikidata `sameAs` → `Q21552216` | **ArCo/DBUnico ID 105665** — verificato, ponte diretto REST↔LOD |
+| Tipologia | non testato | `dc:type` = **"Museo, Galleria e/o raccolta"** (ma NON via il predicato che `fetch.ts` interroga — vedi limite in §3bis) | non testato | "Museo" | "museo" | concorde nel contenuto, gap tecnico reale in `fetch.ts` da correggere |
+| Descrizione | schema non confermato | **PRESENTE** — `l0:description`: *"Il Museo è allestito all'interno di un Convento edificato agli inizi del Seicento [...] 19 sezioni [...]"* | non testato | presente (testo simile, convento carmelitano, 20 sezioni) | presente (Comune/DEMOS, coerente) | **ArCo stesso ha ora la descrizione più autorevole verificata** — smentisce l'assunzione precedente di Dtrek (§1) |
+| Indirizzo | non testato | `fullAddress` = **"Largo Maria de De Mattias - Canepina"** (senza civico), CAP 01030 | non testato | non confermato dal fetch (§5) | "Largo Maria de Mattias, 7" (con civico) — **discrepanza minore reale** | ArCo per struttura, integrare civico da fonte locale |
+| Comune | non testato | **City/Canepina** | non testato | Canepina | Canepina | concorde |
+| Provincia | dichiarato come parametro di ricerca (§4) | **Province/Viterbo** | non testato | Viterbo | Viterbo | concorde |
+| Regione | dichiarato come parametro di ricerca (§4) | **Region/Lazio** | non testato | Lazio | Lazio | concorde |
+| Coordinate | schema non confermato | **42.381863, 12.230836** (doppio vocabolario coerente: `geo:lat/long` E `clvapit:lat/long`, stesso valore) | non testato | non confermato dal fetch | non recuperate | **ArCo, verificato dal vivo** |
+| Telefono | non testato | **0761653008** (`SM:hasTelephone`) | non testato | non confermato dal fetch | 0761-327677 (WebSearch) — **CONFLITTO REALE, numeri diversi, non risolto** | nessuna fonte prevale con certezza — verificare telefonicamente |
+| Email | non testato | **info@cmcimini.it** (`SM:hasEmail`) | non testato | non confermato dal fetch | info@cmcimini.it | concorde |
+| Sito web | schema non confermato | **www.cmcimini.it** (`SM:hasWebSite`) | non testato | non confermato dal fetch | www.cmcimini.it | concorde |
+| Prenotazione | non testato | **`Booking/None` → "Ingresso libero"** | non testato | non confermato dal fetch | non trovata | ArCo, verificato |
+| Giorni apertura / orari | schema non confermato | **PRESENTE, non assente**: `OpeningHoursSpecification/Chiusura_105665`, `l0:description` = *"Lunedì\|Martedì\|Mercoledì\|Giovedì\|Venerdì\|Sabato\|Domenica"* — cioè il grafo dichiara esplicitamente **chiuso tutti i 7 giorni** | non testato | "Chiuso" tutti i giorni, aggiornato 2020-06-23 (WebSearch) | nessun orario aggiornato trovato con certezza | **ArCo e pagina MiC CONCORDANO entrambi su "chiuso sempre"** — vedi §8bis, il conflitto è con la realtà, non tra fonti MiC |
+| Prezzo | schema non confermato | **nodo `Ticket/105665_Base` esiste ma è vuoto** (nessuna proprietà oltre al tipo, verificato esaustivamente) | non testato | non confermato dal fetch | non trovato con certezza | **dato assente ovunque, confermato per esaustione** — non "non verificato" |
+| Biglietti | non testato | vedi Prezzo — nodo Ticket vuoto | non testato | non confermato dal fetch | non trovato | dato mancante, confermato |
+| Accessibilità | non testato | nessuna proprietà di accessibilità comparsa nel dump esaustivo | non testato | non confermato dal fetch | non trovato | dato mancante, confermato |
 | URL scheda MiC | — | — | — | `cultura.gov.it/luogo/museo-delle-tradizioni-popolari-di-canepina` | — | riferimento fisso |
-| Data aggiornamento | non testato | non esposto da `fetch.ts` (nessun predicato di data cercato finora) | non testato | **2020-06-23** (via WebSearch) | non datata esplicitamente | MiC è l'unica fonte con una data dichiarata, ma è vecchia — non usarla come garanzia di attualità (§9) |
+| Data aggiornamento | non testato | nessun predicato di data/timestamp comparso nel dump esaustivo | non testato | **2020-06-23** (via WebSearch) | non datata esplicitamente | MiC è l'unica fonte con una data dichiarata (vecchia) — ArCo non espone affatto una data di aggiornamento per record, un gap da tenere presente |
 
 ---
 
 ## 8. Il conflitto sugli orari — perché non scegliere MiC di default
 
-Prova raccolta (§5, §7): la scheda MiC di Canepina mostra "Chiuso" tutti i giorni con un
-aggiornamento dichiarato del 2020-06-23. Nessuna fonte alternativa raggiungibile in questa sessione
-fornisce un orario corrente **verificato e datato** in modo affidabile — le uniche informazioni su
-"apertura pomeridiana" trovate provengono da recensioni turistiche non ufficiali (TripAdvisor),
-non da un ente terzo con una data di verifica propria. Questo è esattamente il caso descritto dal
-compito: **un'assenza-di-dato dichiarata da MiC non va trattata come "il museo è chiuso", va
-trattata come "MiC non ha aggiornato il dato dal 2020"**, e va marcata come tale (bassa confidenza,
-`sourceUpdatedAt` vecchio) invece di essere silenziosamente accettata come verità.
+### 8bis. Aggiornamento dopo la verifica dal vivo (§3bis) — il conflitto è diverso da come sembrava
 
-Non essendo raggiungibile in questa sessione né il Comune di Canepina né Musei DEMOS/Comunità
-Montana dei Cimini (il gestore reale, stando ai contatti trovati) direttamente, **non posso oggi
-fornire un orario alternativo verificato con la stessa cautela richiesta dal compito** — riportarne
-uno dedotto da recensioni turistiche violerebbe "non inventare campi/dati". Questo resta un action
-item per la sezione 15.
+Prima del test reale su Canepina, l'ipotesi di lavoro (coerente con l'osservazione del compito) era
+che la pagina MiC fosse semplicemente **stale** (ferma al 2020) mentre la fonte dati "vera" (ArCo)
+potesse avere un'informazione diversa/più aggiornata. **Il test reale smentisce questa ipotesi**:
+ArCo stesso contiene una risorsa `OpeningHoursSpecification` chiamata esplicitamente **"Chiusura"**
+(non "Orari di apertura") con tutti e 7 i giorni della settimana elencati come chiusi. La pagina MiC
+e il grafo LOD **non sono due fonti in conflitto tra loro** — derivano entrambi dallo stesso dato di
+origine (DBUnico, confermato dal `l0:identifier = "DBUnico.105665"` presente su questo stesso
+record) e sono **concordi**: il record ufficiale MiC, in qualunque forma lo si legga, dice "chiuso
+sempre".
+
+**Il vero conflitto è quindi tra il dato ufficiale MiC/DBUnico (concorde su "chiuso") e la realtà
+plausibile di un piccolo museo comunale** — verosimilmente aperto su prenotazione/richiesta (pratica
+comune per musei di questa scala, coerente con l'"Ingresso libero"/nessuna prenotazione formale
+trovato nello stesso record ArCo, §3bis) — non confermabile con una fonte verificata in questa
+sessione. Le uniche informazioni su "apertura pomeridiana" trovate provengono da recensioni
+turistiche non ufficiali (TripAdvisor), non da un ente terzo con una data di verifica propria — **non
+le riporto come dato**, per non violare "non inventare campi/dati" del compito.
+
+**Implicazione pratica per l'architettura (§10/§11)**: questo è un caso da manuale per la
+provenienza per campo — un dato "chiuso tutti i giorni" con **alta confidenza sulla fonte** (ArCo,
+strutturato, verificato) ma che resta **operativamente sospetto** perché nessuna fonte espone una
+data di verifica (né ArCo né la pagina MiC hanno un timestamp per-record verificato in questa
+sessione, tranne la data 2020-06-23 letta sulla pagina via WebSearch). La regola corretta non è
+"MiC dice chiuso quindi è vero" né "MiC è vecchio quindi ignoralo" — è "il dato è concorde tra le
+fonti ufficiali ma nessuna fornisce evidenza di una verifica recente": va marcato a bassa confidenza
+operativa indipendentemente da quale fonte MiC lo riporta, e non sostituito automaticamente da fonti
+non verificabili (recensioni turistiche).
 
 ---
 
 ## 9. Cosa NON è stato possibile fare in questa sessione (elenco esplicito, per trasparenza)
 
-- Nessuna richiesta HTTP reale contro `dati.cultura.gov.it/sparql` eseguita da questa sessione
-  (bloccato, §0) — mi appoggio a run reali di sessioni precedenti (§3), che però non hanno mai
-  cercato Canepina specificamente.
+- ~~Nessuna richiesta HTTP reale contro `dati.cultura.gov.it/sparql` specifica per Canepina~~ —
+  **RISOLTO**: l'utente ha lanciato manualmente il workflow con l'input preparato in §1
+  (`mode: describe`, `describe_name: Canepina`) e incollato il risultato reale — vedi §3bis. Tutte
+  le proprietà dirette (e quelle a un salto di distanza, esaustivamente) del CIS 105665 e del suo
+  Site sono ora note con certezza, non dedotte.
 - Nessuna richiesta reale contro il manuale REST OPENDATA/DBUnico o il suo endpoint (URL non
-  determinato con certezza, §4).
-- Nessuna richiesta reale contro Ecomic/I.PaC (§6).
-- Nessuna ispezione di rete/HTML della pagina cultura.gov.it di Canepina (§5).
-- Nessun trigger del workflow GitHub Actions esistente da questa sessione (permesso negato, §0) —
-  ho preparato l'input (`describe_name`) ma non potuto usarlo.
+  determinato con certezza, §4) — resta aperto.
+- Nessuna richiesta reale contro Ecomic/I.PaC (§6) — resta aperto.
+- Nessuna ispezione di rete/HTML della pagina cultura.gov.it di Canepina (§5) — resta aperto (ma
+  ora meno critico: §3bis mostra che il dato "chiuso sempre" è nella sorgente strutturata stessa,
+  non solo nel rendering della pagina).
+- Il permesso `workflow_dispatch` per il connettore GitHub di questa sessione resta negato (ultimo
+  tentativo ripetuto dopo la richiesta dell'utente di concederlo: ancora `403 Resource not
+  accessible by integration`) — il lancio manuale dell'utente resta l'unica via per ulteriori test
+  dal vivo, finché il permesso non viene attivato lato GitHub.
 
 Questo NON significa che queste fonti "non esistono" o "non sono raggiungibili in assoluto" — vedi
 §3 (il SPARQL endpoint è dimostrabilmente raggiungibile e funzionante dal runner GitHub Actions).
@@ -387,24 +431,33 @@ riga) — esattamente il comportamento richiesto per il caso Canepina (§8).
 
 ## 12. Prossimi passi proposti (non eseguiti — in attesa di decisione, §14 del compito)
 
-1. **Sbloccare la verifica live** (§0/§9) — una di queste:
-   - l'utente lancia manualmente il workflow `Import Places — MiC` già presente
-     (`.github/workflows/import-places-mic.yml`, aggiornato in questa sessione con l'input
-     `describe_name`) con `mode: describe`, `describe_name: Canepina`, e incolla qui l'output
-     (`GITHUB_STEP_SUMMARY` del job) — copre la richiesta del §3 del compito (triple RDF reali di
-     Canepina, verifica esplicita di descrizione/orari/prezzi);
-   - oppure l'utente concede il permesso Actions al connettore GitHub di questa sessione;
+1. **Verifica LOD/SPARQL su Canepina: COMPLETATA** (§3bis) — la richiesta del §3 del compito è
+   soddisfatta: descrizione, orari (come "Chiusura" su tutti i giorni), prezzo (nodo Ticket vuoto),
+   contatti, coordinate, indirizzo, tipologia sono tutti stati verificati con una richiesta reale,
+   non assunti.
+2. **Sbloccare la verifica live restante** (REST OPENDATA §4, Ecomic/I.PaC §6, pagina cultura.gov.it
+   §5) — resta necessaria una di queste:
+   - l'utente lancia manualmente altri test (nuovo script/diagnostica da preparare per REST
+     OPENDATA una volta noto l'endpoint reale — oggi non lo conosciamo con certezza, §4);
+   - oppure il permesso Actions per questa sessione viene attivato lato GitHub (ultimo tentativo
+     ancora negato, §9);
    - oppure l'utente scarica il PDF del manuale REST OPENDATA (§4, link nel report) e lo incolla/
-     allega qui, dato che il dominio è bloccato per il fetch automatico.
-2. Solo dopo aver visto un dump RDF reale di Canepina: decidere se estendere `fetch.ts` per
-   catturare eventuali predicati aggiuntivi trovati (mai aggiungerne uno "per simmetria" con altre
-   ontologie se non osservato nei dati reali — stessa disciplina già seguita nel file, §1).
-2bis. Se il manuale REST OPENDATA risulta leggibile, verificarne endpoint/campi con una richiesta
-   reale (curl/script dedicato), poi decidere se e come integrarlo.
-3. Implementare lo schema di provenienza per campo (§10) — richiede una migration additiva, non
+     allega qui, dato che il dominio è bloccato per il fetch automatico — è l'unico modo rimasto per
+     scoprire l'URL base reale del servizio REST senza indovinarlo.
+3. Estendere `fetch.ts` per usare i predicati ora confermati reali su Canepina e non ancora
+   interrogati: `l0:description` (descrizione), `dc:type` (tipologia — corregge il gap trovato in
+   §3bis, dove `loc:hasCulturalInstituteOrSiteType` risulta assente per questo record), `foaf:depiction`
+   (immagine), `AccessCondition/hasAccessCondition`→`OpeningHoursSpecification`/`Booking` (orari e
+   prenotazione), `SM:hasOnlineContactPoint`→`hasTelephone`/`hasEmail`/`hasWebSite` (contatti),
+   `POT:hasTicket` (prezzo, quando popolato). Prima di generalizzare questi predicati a TUTTI i
+   record, verificarne la presenza su un campione più ampio (questa sessione ne ha la prova solo su
+   Canepina/105665) — stessa disciplina già seguita nel file per gli altri predicati (§1).
+4. Implementare lo schema di provenienza per campo (§10) — richiede una migration additiva, non
    distruttiva, coerente con `add_places_catalog.sql`.
-4. Per Canepina specificamente: contattare la fonte locale (Comunità Montana dei Cimini/Musei
-   DEMOS, unico gestore reale trovato) per un orario/prezzo verificato con data, invece di dedurlo
-   da recensioni turistiche.
+5. Per Canepina specificamente: il conflitto orari (§8bis) resta aperto nella sostanza — nessuna
+   fonte verificabile in questa sessione conferma o smentisce "chiuso sempre". Contattare la fonte
+   locale (Comunità Montana dei Cimini/Musei DEMOS, unico gestore reale trovato, un numero di
+   telefono diverso da quello in ArCo — §7) resta il solo modo per risolverlo con dati reali invece
+   che dedotti da recensioni turistiche.
 
 Nessuno scraper "definitivo" è stato scritto, per istruzione esplicita del compito.
