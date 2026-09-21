@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { micTypeLabelToSiteType, micBindingToPlaceCandidate, filterToKnownRegions, stripMailto } from '../mic/fetch'
+import { micTypeLabelToSiteType, micBindingToPlaceCandidate, filterToKnownRegions, stripMailto, hasCoordinates } from '../mic/fetch'
 import type { MicBinding } from '../mic/fetch'
 
 describe('micTypeLabelToSiteType', () => {
@@ -139,6 +139,40 @@ describe('micBindingToPlaceCandidate', () => {
     expect(provenance.phone).toMatchObject({ value: '0761653008', source: 'mic', confidence: 'high' })
     expect(provenance.email).toMatchObject({ value: 'info@cmcimini.it' })
     expect(provenance.website).toMatchObject({ value: 'http://www.cmcimini.it' })
+  })
+
+  it('geocoded=true (fallback Nominatim, bug reale 2026-09-21: Lombardia/Toscana senza geometria diretta in ArCo) → confidenza ridotta e coordinatesGeocoded in metadata', () => {
+    const geocodedBinding = { ...CERAMICA, geocoded: true }
+    const c = micBindingToPlaceCandidate(geocodedBinding)
+    const direct = micBindingToPlaceCandidate(CERAMICA)
+    expect(c.confidence).toBeLessThan(direct.confidence)
+    expect(c.metadata?.coordinatesGeocoded).toBe(true)
+  })
+
+  it('geocoded=true → fieldProvenance per lat/lon separata, source nominatim e confidenza low (mai spacciata per affidabile quanto ArCo)', () => {
+    const c = micBindingToPlaceCandidate({ ...CERAMICA, geocoded: true })
+    const provenance = c.metadata?.fieldProvenance as Record<string, { value: unknown; source: string; confidence: string }>
+    expect(provenance.latitude).toMatchObject({ value: CERAMICA.lat, source: 'nominatim', confidence: 'low' })
+    expect(provenance.longitude).toMatchObject({ value: CERAMICA.lon, source: 'nominatim', confidence: 'low' })
+  })
+
+  it('geocoded assente/false → nessuna provenienza lat/lon, nessun coordinatesGeocoded (comportamento identico a prima di questo fix)', () => {
+    const c = micBindingToPlaceCandidate(CERAMICA)
+    const provenance = c.metadata?.fieldProvenance as Record<string, unknown> | undefined
+    expect(provenance?.latitude).toBeUndefined()
+    expect(c.metadata?.coordinatesGeocoded).toBeUndefined()
+  })
+})
+
+describe('hasCoordinates', () => {
+  it('true quando lat e lon sono entrambi definiti', () => {
+    expect(hasCoordinates({ id: '1', name: 'X', lat: 43.5, lon: 13.2 })).toBe(true)
+  })
+
+  it('false quando lat o lon sono assenti (record MiC senza geometria diretta, prima della geocodifica)', () => {
+    expect(hasCoordinates({ id: '1', name: 'X', lon: 13.2 })).toBe(false)
+    expect(hasCoordinates({ id: '1', name: 'X', lat: 43.5 })).toBe(false)
+    expect(hasCoordinates({ id: '1', name: 'X' })).toBe(false)
   })
 })
 

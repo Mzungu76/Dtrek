@@ -70,6 +70,18 @@
  * --limit sovrascrive la LIMIT SPARQL (default 5000) — usare un valore piccolo (5-20) per il primo
  * lancio contro l'endpoint reale, dato il punto non verificato sulle coordinate in cima al file:
  * ispezionare l'esempio stampato da --dry-run prima di un caricamento completo.
+ *
+ * ── Coordinate mancanti (Lombardia/Toscana, verificato 2026-09-21) — geocodifica di ripiego ────
+ * Il sotto-grafo ArCo per Lombardia/Toscana (namespace w3id.org/arco/resource/<Regione>/...,
+ * diverso da quello nazionale usato da Lazio e dalle altre regioni) porta un indirizzo strutturato
+ * completo ma MAI una tripla di coordinate — non un dato mancante alla fonte (SIRBeC per la
+ * Lombardia, il sistema della Regione Toscana/Consorzio LaMMA, entrambi georeferenziati), solo
+ * assente nella conversione verso ArCo. Questi record non vengono più scartati in silenzio: se
+ * hanno un `comune`, vengono geocodificati via Nominatim (fillMissingCoordinates/geocodeAddress,
+ * sequenziale, ~1 richiesta/secondo per la policy d'uso pubblica) e marcati `coordinatesGeocoded`
+ * in metadata con confidenza ridotta — mai spacciati per precisi quanto una coordinata diretta di
+ * ArCo (l'indirizzo di ArCo è tipicamente senza numero civico, Nominatim geocodifica al centroide
+ * di via/piazza).
  */
 import { createClient } from '@supabase/supabase-js'
 import { importPlaceCandidates } from '../import'
@@ -149,8 +161,14 @@ export interface MicBinding {
   province?: string
   region?: string
   address?: string
-  lat: number
-  lon: number
+  // Assenti quando ArCo non porta geometria per questo record (verificato reale 2026-09-21 su
+  // "Cenacolo Vinciano", Lombardia — vedi geocodeAddress/fillMissingCoordinates più sotto) — MAI
+  // scartati subito, prima si tenta la geocodifica di ripiego sull'indirizzo strutturato.
+  lat?: number
+  lon?: number
+  // true quando lat/lon vengono da geocodeAddress invece che da una tripla diretta di ArCo — letto
+  // da micBindingToPlaceCandidate per abbassare la confidenza e marcare la provenienza.
+  geocoded?: boolean
   // Predicati del VALORE letterale verificati reali su Canepina/105665 (probe
   // contatti-canepina-un-salto-oltre, MIC_DATA_SOURCES.md §12) — `website` esisteva già in questa
   // interfaccia ma non era mai stato popolato dalla query prima d'ora (nessun predicato verificato).
@@ -168,8 +186,9 @@ export function stripMailto(email: string): string {
   return email.replace(/^mailto:/i, '')
 }
 
-// Pura, testabile senza rete.
-export function micBindingToPlaceCandidate(b: MicBinding): PlaceCandidate {
+// Pura, testabile senza rete. Il chiamante (main()) passa solo binding già filtrati da
+// hasCoordinates — lat/lon sono garantiti qui, diretti da ArCo o riempiti da geocodeAddress.
+export function micBindingToPlaceCandidate(b: MicBinding & { lat: number; lon: number }): PlaceCandidate {
   const typeSource = b.typeLabel ?? b.dcType
   const sourceUrl = `http://dati.beniculturali.it/mibact/luoghi/resource/CulturalInstituteOrSite/${b.id}`
   const retrievedAt = new Date().toISOString()
@@ -188,6 +207,12 @@ export function micBindingToPlaceCandidate(b: MicBinding): PlaceCandidate {
   track('phone', b.phone)
   track('email', email)
   track('website', b.website)
+  // Provenienza SEPARATA per lat/lon quando geocodificate — mai spacciate per la stessa
+  // affidabilità di una tripla diretta di ArCo (piano §48.8, mai un dato incerto marcato "high").
+  if (b.geocoded) {
+    fieldProvenance.latitude = { value: b.lat, source: 'nominatim', retrievedAt, confidence: 'low', status: 'ok' }
+    fieldProvenance.longitude = { value: b.lon, source: 'nominatim', retrievedAt, confidence: 'low', status: 'ok' }
+  }
 
   return {
     name: b.name,
@@ -208,11 +233,15 @@ export function micBindingToPlaceCandidate(b: MicBinding): PlaceCandidate {
     sourceUrl,
     rawType: typeSource,
     // Non 1 come ISTAT/PTPR: la conversione tipo-testuale→SiteType qui è euristica (vedi
-    // MIC_TYPE_MAP), non un campo strutturato con valori chiusi verificati.
-    confidence: typeSource ? 0.9 : 0.6,
+    // MIC_TYPE_MAP), non un campo strutturato con valori chiusi verificati. Ulteriormente scontata
+    // quando la posizione è geocodificata invece che diretta da ArCo.
+    confidence: (typeSource ? 0.9 : 0.6) * (b.geocoded ? 0.7 : 1),
     metadata: {
       micTypeLabel: b.typeLabel,
       micDcType: b.dcType,
+      // Letto da searchSiti.ts/ranking per non trattare un pin geocodificato (indirizzo senza
+      // civico → precisione via/piazza, non edificio) come affidabile quanto uno diretto da ArCo.
+      ...(b.geocoded ? { coordinatesGeocoded: true } : {}),
       ...(Object.keys(fieldProvenance).length > 0 ? { fieldProvenance } : {}),
     },
   }
@@ -292,6 +321,18 @@ export function micBindingToPlaceCandidate(b: MicBinding): PlaceCandidate {
 // `OPTIONAL` coordinate + `COALESCE` + `FILTER(BOUND(...))` nella query ESTERNA, fuori dalla
 // sotto-query filtrata per regione — che riguadagna un pool di candidati proprio (scalato con
 // `limit`, mai un pool arbitrario su tutto il catalogo perché la regione filtra già a monte).
+//
+// FIX (2026-09-21 — bug segnalato dal vivo: "cerco Siti vicino a Milano, zero risultati").
+// `FILTER(BOUND(?lat) && BOUND(?long))` scartava OGNI record senza geometria diretta — verificato
+// con --describe --name "Cenacolo Vinciano" (Lombardia, MIC_DATA_SOURCES.md): il sotto-grafo
+// regionale di ArCo per Lombardia/Toscana (namespace w3id.org/arco/resource/<Regione>/..., diverso
+// da quello nazionale usato da Lazio e dalle altre regioni) porta un indirizzo strutturato COMPLETO
+// (fullAddress/hasCity/hasRegion) ma mai una tripla di coordinate — non un dato mancante alla fonte
+// (Lombardia ha SIRBeC, Toscana un proprio sistema, entrambi georeferenziati), solo assente nella
+// conversione verso ArCo. `|| BOUND(?address)` lascia passare anche questi record — vengono
+// geocodificati in JS da fillMissingCoordinates/geocodeAddress sotto, MAI scartati in silenzio
+// come prima. Un record senza coordinate E senza indirizzo resta comunque escluso qui: non c'è
+// nulla da geocodificare, inutile portarlo fino a JS per poi buttarlo via.
 const CANDIDATE_POOL_CAP = 2000
 
 function buildSparqlQuery(regionLabel?: string, limit = 5000): string {
@@ -354,7 +395,7 @@ SELECT DISTINCT ?cis ?name ?typeLabel ?dcType ?description ?comune ?regionLabel 
   OPTIONAL { ?site clvapit:hasGeometry ?geomB . ?geomB clvapit:lat ?lat4 ; clvapit:long ?long4 . }
   BIND(COALESCE(?lat1, ?lat2, ?lat3, ?lat4) AS ?lat)
   BIND(COALESCE(?long1, ?long2, ?long3, ?long4) AS ?long)
-  FILTER(BOUND(?lat) && BOUND(?long))
+  FILTER(BOUND(?lat) || BOUND(?address))
 }
 LIMIT ${limit}`
 }
@@ -415,9 +456,14 @@ async function querySparql(query: string): Promise<MicBinding[]> {
     const iri = row.cis?.value
     if (!iri) continue
     const id = iri.split('/').pop()
-    const lat = row.lat ? parseFloat(row.lat.value) : NaN
-    const lon = row.long ? parseFloat(row.long.value) : NaN
-    if (!id || Number.isNaN(lat) || Number.isNaN(lon)) continue
+    if (!id) continue
+    // Assenti (non più NaN-e-scartate) quando ArCo non porta geometria per questo record — il
+    // filtro SPARQL sopra ora lascia passare anche questi, fillMissingCoordinates() li geocodifica
+    // prima che main() li scarti per davvero (hasCoordinates, se anche quello fallisce).
+    const rawLat = row.lat ? parseFloat(row.lat.value) : NaN
+    const rawLon = row.long ? parseFloat(row.long.value) : NaN
+    const lat = Number.isNaN(rawLat) ? undefined : rawLat
+    const lon = Number.isNaN(rawLon) ? undefined : rawLon
 
     out.push({
       id,
@@ -436,6 +482,77 @@ async function querySparql(query: string): Promise<MicBinding[]> {
     })
   }
   return out
+}
+
+// ── Geocodifica di ripiego (Nominatim/OSM) per i record senza coordinate dirette in ArCo ───────
+// Vedi la nota FIX 2026-09-21 sopra buildSparqlQuery per il perché esistono record così (Lombardia/
+// Toscana). Precisione: `address` di ArCo è tipicamente un indirizzo SENZA numero civico
+// ("Piazza X", "Via Y") — Nominatim lo geocodifica al centroide della via/piazza, non
+// all'edificio: buono per un luogo puntuale come una piazza (decine di metri), più incerto per una
+// via lunga. Mai spacciato per preciso quanto una coordinata diretta — vedi `geocoded`/
+// `coordinatesGeocoded`/confidenza ridotta in micBindingToPlaceCandidate.
+const NOMINATIM_ENDPOINT = 'https://nominatim.openstreetmap.org/search'
+// Policy d'uso Nominatim (operations.osmfoundation.org/policies/nominatim): max 1 richiesta al
+// secondo, MAI in parallelo. 1100ms invece di 1000 per un margine contro il jitter di rete.
+const NOMINATIM_DELAY_MS = 1100
+// Bounding box dell'Italia coi margini (Sicilia/Sardegna/Alpi) — un risultato di Nominatim fuori da
+// qui è quasi certamente un omonimo (stessa via in un altro Paese), mai accettato in silenzio.
+const ITALY_BBOX = { minLat: 35, maxLat: 47.5, minLon: 6, maxLon: 19 }
+
+interface GeocodeResult { lat: number; lon: number }
+
+// Un solo tentativo, nessun retry: è un arricchimento best-effort, non il percorso dati primario —
+// un fallimento qui significa solo che quel record resta escluso da questo giro (mai un errore
+// fatale per l'intero import, mai ripetuto a raffica contro un servizio pubblico condiviso).
+async function geocodeAddress(query: string): Promise<GeocodeResult | null> {
+  const url = `${NOMINATIM_ENDPOINT}?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=it`
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': USER_AGENT },
+      signal: AbortSignal.timeout(8000),
+    })
+    if (!res.ok) return null
+    const results = await res.json() as { lat: string; lon: string }[]
+    const first = results[0]
+    if (!first) return null
+    const lat = parseFloat(first.lat)
+    const lon = parseFloat(first.lon)
+    if (Number.isNaN(lat) || Number.isNaN(lon)) return null
+    if (lat < ITALY_BBOX.minLat || lat > ITALY_BBOX.maxLat || lon < ITALY_BBOX.minLon || lon > ITALY_BBOX.maxLon) return null
+    return { lat, lon }
+  } catch {
+    return null
+  }
+}
+
+// Sequenziale per costruzione (MAI Promise.all — violerebbe il limite di 1 richiesta/secondo sopra)
+// — muta e restituisce lo stesso array, toccando solo i binding privi di coordinate dirette.
+async function fillMissingCoordinates(bindings: MicBinding[]): Promise<void> {
+  const missing = bindings.filter(b => b.lat === undefined || b.lon === undefined)
+  if (missing.length === 0) return
+  console.log(`${missing.length} record senza coordinate dirette — tento la geocodifica (Nominatim, ~1/sec)…`)
+
+  let resolved = 0
+  for (const b of missing) {
+    // Un comune è il minimo per una geocodifica non arbitraria — senza, l'unico testo disponibile
+    // sarebbe la sola regione ("Lombardia, Italia"), troppo grossolano per un pin utile.
+    if (!b.comune) continue
+    const query = [b.address, b.comune, b.region, 'Italia'].filter(Boolean).join(', ')
+    const result = await geocodeAddress(query)
+    await sleep(NOMINATIM_DELAY_MS)
+    if (result) {
+      b.lat = result.lat
+      b.lon = result.lon
+      b.geocoded = true
+      resolved++
+    }
+  }
+  console.log(`  geocodifica: ${resolved}/${missing.length} risolti.`)
+}
+
+// Pura, testabile senza rete.
+export function hasCoordinates(b: MicBinding): b is MicBinding & { lat: number; lon: number } {
+  return b.lat !== undefined && b.lon !== undefined
 }
 
 // ── "Tutta Italia": query per-regione, mai una query unica non filtrata ────────────────────────
@@ -629,8 +746,11 @@ async function main() {
   const bindings = region
     ? await querySparql(buildSparqlQuery(region, limit))
     : await fetchAllRegions(limit)
-  console.log(`${bindings.length} risultati con coordinate valide.`)
-  const candidates = bindings.map(micBindingToPlaceCandidate)
+  console.log(`${bindings.length} risultati (con o senza coordinate dirette).`)
+  await fillMissingCoordinates(bindings)
+  const geocodable = bindings.filter(hasCoordinates)
+  console.log(`${geocodable.length} risultati con coordinate valide (dirette o geocodificate).`)
+  const candidates = geocodable.map(micBindingToPlaceCandidate)
 
   if (DRY_RUN) {
     console.log('[DRY RUN] Esempio candidato:', JSON.stringify(candidates[0], null, 2))
