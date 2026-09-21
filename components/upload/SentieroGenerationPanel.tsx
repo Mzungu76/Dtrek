@@ -5,9 +5,11 @@
 // il chiamante calcola centro/raggio dalla vista attuale (stesso calcolo di searchCurrentView()) e
 // li passa come `origin`, già gated per zoom (SENTIERO_GEN_MIN_ZOOM in CreaGuidaMapSearch.tsx —
 // qui non si ripete il controllo, il pannello si apre già sapendo che lo zoom è sufficiente).
+// Banner inferiore richiudibile (stesso pattern/altezze di PersonalizeItineraryPanel.tsx), non più
+// un foglio a schermo intero: la mappa sotto — e la rail delle 3 famiglie — devono restare
+// raggiungibili senza dover prima chiudere questo pannello, non solo dopo esserne usciti.
 import { useEffect, useState } from 'react'
-import { createPortal } from 'react-dom'
-import { ArrowLeft, Loader2, X as XIcon } from 'lucide-react'
+import { ArrowLeft, Loader2, X as XIcon, Route as RouteIcon, ChevronUp, ChevronDown } from 'lucide-react'
 import { BuiltRouteCard } from '@/components/RouteResultCard'
 import TrailPreviewMap from '@/components/TrailPreviewMap'
 import { runStepBuild, SENTIERO_BUILD_STAGES, type BuildParamsCommon } from '@/lib/routeBuilder/runStepBuild'
@@ -35,6 +37,11 @@ interface Props {
 
 export default function SentieroGenerationPanel({ origin, onBack, onSaved }: Props) {
   const [step, setStep] = useState<Step>('params')
+  // Parte espanso: a differenza di PersonalizeItineraryPanel (dove l'utente deve prima toccare i
+  // pin sulla mappa) qui non c'è nulla da fare sulla mappa prima di compilare i parametri — arrivare
+  // già pronti a scrivere distanza/dislivello evita un tocco in più. Restando un banner (non più uno
+  // schermo intero) la rail sopra resta comunque raggiungibile richiudendolo.
+  const [expanded, setExpanded] = useState(true)
 
   const [routeType, setRouteType] = useState<RouteType>('anello')
   const [distanceKm, setDistanceKm] = useState('')
@@ -137,24 +144,45 @@ export default function SentieroGenerationPanel({ origin, onBack, onSaved }: Pro
     }
   }
 
-  return createPortal(
-    <div className="fixed inset-0 z-[70] bg-stone-100 flex flex-col">
-      <div className="flex items-center gap-2 p-3 shrink-0">
-        <button onClick={step === 'params' ? onBack : () => setStep(step === 'confirm' ? 'results' : 'params')} aria-label="Indietro"
-          className="w-10 h-10 rounded-full bg-white shadow-md flex items-center justify-center text-stone-600 hover:text-stone-800 transition-colors shrink-0">
-          <ArrowLeft className="w-4 h-4" />
+  const stepTitle = step === 'params' ? 'Genera un sentiero qui' : step === 'results' ? 'Percorsi generati' : 'Conferma percorso'
+  const stepSubtitle = step === 'params'
+    ? `${routeTypeLabel(routeType)}${distanceKm.trim() ? ` · ${distanceKm} km` : ''}`
+    : step === 'results'
+      ? `${results.length} percors${results.length === 1 ? 'o trovato' : 'i trovati'}`
+      : selected ? `${(selected.distanceMeters / 1000).toFixed(1)} km` : ''
+
+  return (
+    // Niente sfondo a schermo intero (stesso motivo di PersonalizeItineraryPanel.tsx): la mappa e la
+    // rail sopra restano toccabili anche col pannello aperto, solo più in basso quando è espanso.
+    <div className="fixed left-0 right-0 bottom-0 z-40 bg-white rounded-t-3xl shadow-[0_-6px_24px_rgba(0,0,0,.15)] flex flex-col"
+      style={{ maxHeight: expanded ? '70vh' : '104px' }}>
+      <div className="relative shrink-0 flex items-center gap-2 px-4 pt-3 pb-2.5 w-full">
+        <span className="w-9 h-1 rounded-full bg-stone-200 absolute left-1/2 -translate-x-1/2 top-1.5" />
+        {step !== 'params' && (
+          <button onClick={() => setStep(step === 'confirm' ? 'results' : 'params')} aria-label="Indietro"
+            className="w-7 h-7 rounded-full bg-stone-100 flex items-center justify-center text-stone-500 hover:bg-stone-200 transition-colors shrink-0">
+            <ArrowLeft className="w-3.5 h-3.5" />
+          </button>
+        )}
+        <button onClick={() => setExpanded(v => !v)} className="flex-1 min-w-0 flex items-center gap-2 text-left">
+          <RouteIcon className="w-4 h-4 shrink-0 text-terra-600" />
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-bold text-stone-800 truncate">{stepTitle}</span>
+            <span className="block text-[11px] text-stone-400 truncate">
+              {stepSubtitle}{stepSubtitle && ' · '}{!expanded ? 'tocca per aprire' : ''}
+            </span>
+          </span>
+          {expanded ? <ChevronDown className="w-4 h-4 text-stone-400 shrink-0" /> : <ChevronUp className="w-4 h-4 text-stone-400 shrink-0" />}
         </button>
-        <p className="text-sm font-bold text-stone-800">
-          {step === 'params' ? 'Genera un percorso qui' : step === 'results' ? 'Percorsi generati' : 'Conferma percorso'}
-        </p>
-        <button onClick={onBack} aria-label="Chiudi" className="ml-auto w-8 h-8 rounded-full bg-white shadow-md flex items-center justify-center text-stone-500 hover:text-stone-700 transition-colors shrink-0">
-          <XIcon className="w-4 h-4" />
+        <button onClick={onBack} aria-label="Chiudi" className="w-7 h-7 rounded-full bg-stone-100 flex items-center justify-center text-stone-500 hover:bg-stone-200 transition-colors shrink-0">
+          <XIcon className="w-3.5 h-3.5" />
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 pb-6">
+      {expanded && (
+      <div className="flex-1 overflow-y-auto px-4 pb-5">
         {step === 'params' && (
-          <div className="space-y-4 max-w-md mx-auto">
+          <div className="space-y-3">
             <div>
               <p className="text-xs font-semibold text-stone-600 mb-1.5">Tipo di percorso</p>
               <div className="grid grid-cols-3 gap-1.5">
@@ -214,7 +242,7 @@ export default function SentieroGenerationPanel({ origin, onBack, onSaved }: Pro
         )}
 
         {step === 'results' && (
-          <div className="space-y-3 max-w-md mx-auto">
+          <div className="space-y-3">
             {relaxedResults && (
               <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5">
                 Questi percorsi sono i più vicini possibile a {distanceKm} km, ma non rispettano esattamente la distanza richiesta — nella zona scelta non ne esistono di più vicini.
@@ -227,7 +255,7 @@ export default function SentieroGenerationPanel({ origin, onBack, onSaved }: Pro
         )}
 
         {step === 'confirm' && selected && (
-          <div className="space-y-3 max-w-md mx-auto">
+          <div className="space-y-3">
             <TrailPreviewMap polyline={selected.routePolyline} height="200px" />
             <div className="grid grid-cols-3 gap-1.5">
               <div className="bg-white rounded-lg border border-stone-200 px-2.5 py-1.5">
@@ -255,7 +283,7 @@ export default function SentieroGenerationPanel({ origin, onBack, onSaved }: Pro
           </div>
         )}
       </div>
-    </div>,
-    document.body,
+      )}
+    </div>
   )
 }

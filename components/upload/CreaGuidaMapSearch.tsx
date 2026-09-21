@@ -588,22 +588,24 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays, initialView, o
       {/* ── Rail: le 3 famiglie di pari livello per creare una guida — Scopri (ricerca sulla mappa,
           selezionata di default: il suo contenuto è già nell'header sopra, non apre un foglio),
           Genera (le modalità algoritmiche + "a mano") e Porta i tuoi dati (le vie che portano dati
-          da fuori l'app). Nascosta durante popup/personalizzazione, per non sovrapporsi ad altri
-          controlli fissi sulla mappa. ──────────────────────────────────────────────────────────── */}
-      {!selected && !personalize && (
+          da fuori l'app). Sempre presente eccetto sul popup di un pin (quello ha un vero backdrop a
+          tutto schermo, la rail lì sopra sarebbe fuori contesto) — Personalizza/Genera un sentiero
+          qui sono banner richiudibili proprio per lasciarla raggiungibile anche mentre sono aperti,
+          non un motivo per nasconderla. */}
+      {!selected && (
         <div className="absolute left-3 top-1/2 -translate-y-1/2 z-10 bg-white/95 backdrop-blur rounded-[28px] shadow-md p-1.5 flex flex-col gap-2">
-          <button onClick={() => { setShowGenChooser(false); setShowOtherWays(false) }}
+          <button onClick={() => { setShowGenChooser(false); setShowOtherWays(false); setShowSentieroGen(false); setPersonalize(null) }}
             title="Scopri sulla mappa" aria-label="Scopri sulla mappa"
-            className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-colors ${!showGenChooser && !showOtherWays ? 'bg-forest-600 text-white' : 'text-stone-600 hover:bg-stone-100'}`}>
+            className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-colors ${!showGenChooser && !showOtherWays && !showSentieroGen && !personalize ? 'bg-forest-600 text-white' : 'text-stone-600 hover:bg-stone-100'}`}>
             <SearchIcon className="w-[18px] h-[18px]" />
           </button>
-          <button onClick={() => setShowGenChooser(true)}
+          <button onClick={() => { setShowOtherWays(false); setShowGenChooser(true) }}
             title="Genera un percorso" aria-label="Genera un percorso"
-            className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-colors ${showGenChooser ? 'bg-terra-500 text-white' : 'text-stone-600 hover:bg-stone-100'}`}>
+            className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-colors ${showGenChooser || showSentieroGen || personalize ? 'bg-terra-500 text-white' : 'text-stone-600 hover:bg-stone-100'}`}>
             <RouteIcon className="w-[18px] h-[18px]" />
           </button>
           {onOtherWays && (
-            <button onClick={() => setShowOtherWays(true)}
+            <button onClick={() => { setShowGenChooser(false); setShowSentieroGen(false); setPersonalize(null); setShowOtherWays(true) }}
               title="Porta i tuoi dati" aria-label="Porta i tuoi dati"
               className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-colors ${showOtherWays ? 'bg-stone-700 text-white' : 'text-stone-600 hover:bg-stone-100'}`}>
               <Upload className="w-[18px] h-[18px]" />
@@ -649,9 +651,10 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays, initialView, o
       )}
 
       {/* ── Foglio risultati — peek sempre visibile, tap per espandere la lista completa. Nascosto
-          durante la personalizzazione di un itinerario: PersonalizeItineraryPanel occupa lo stesso
-          angolo basso-fisso dello schermo. ──────────────────────────────────────────────────────── */}
-      {!personalize && (
+          durante la personalizzazione di un itinerario o "Genera un sentiero qui": PersonalizeItineraryPanel
+          e SentieroGenerationPanel occupano lo stesso angolo basso-fisso dello schermo, due banner lì
+          insieme si sovrapporrebbero. ──────────────────────────────────────────────────────────── */}
+      {!personalize && !showSentieroGen && (
       <div className="absolute left-0 right-0 bottom-0 z-10 bg-white rounded-t-3xl shadow-[0_-6px_20px_rgba(0,0,0,.12)] flex flex-col"
         style={{ maxHeight: sheetExpanded ? '58vh' : '96px' }}>
         <button onClick={() => setSheetExpanded(v => !v)}
