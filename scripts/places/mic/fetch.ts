@@ -56,7 +56,12 @@
  *
  * Usage:
  *   npx tsx scripts/places/mic/fetch.ts [--dry-run] [--region Lazio] [--limit 5000]
- *   npx tsx scripts/places/mic/fetch.ts --describe   (diagnostica, vedi runDescribe più sotto)
+ *   npx tsx scripts/places/mic/fetch.ts --describe   (diagnostica, vedi runDescribe più sotto —
+ *     dump di un CulturalInstituteOrSite ARBITRARIO)
+ *   npx tsx scripts/places/mic/fetch.ts --describe --name "Museo X"   (stessa diagnostica, ma sul
+ *     primo record il cui rdfs:label contiene questo testo — per verificare cosa ArCo porta
+ *     davvero per UNA Meta specifica, es. per capire se orari/foto/contatti esistono da qualche
+ *     parte oltre ai campi già importati)
  *
  * --limit sovrascrive la LIMIT SPARQL (default 5000) — usare un valore piccolo (5-20) per il primo
  * lancio contro l'endpoint reale, dato il punto non verificato sulle coordinate in cima al file:
@@ -468,20 +473,68 @@ SELECT ?cis ?site ?p1 ?o1 ?p2 ?o2 WHERE {
   OPTIONAL { ?o1 ?p2 ?o2 . }
 }`
 
+// Variante di DESCRIBE_QUERY/DESCRIBE_SITE_QUERY filtrata per nome invece che su un record
+// arbitrario (--describe "Museo X") — per verificare se ArCo porta per DAVVERO campi che la query
+// di importo principale sopra non chiede (orari, foto, contatti, biglietti: assenti dall'ontologia
+// "location" già letta, vedi discussione "Guida Borgo/Città e Sito" — potrebbero comunque vivere
+// su altre proprietà del CIS/Site che solo un dump reale rivela). Il filtro è sullo stesso pattern
+// diretto `?cis a cis:CulturalInstituteOrSite ; rdfs:label ?name` già usato senza problemi nella
+// query di importo (nessun salto OPTIONAL prima del filtro) — non lo stesso pattern che aveva fatto
+// esplodere lo stimatore di Virtuoso sul filtro regione (quello passava per due OPTIONAL
+// concatenati, siteAddress→hasRegion, prima del filtro).
+function buildDescribeByNameQuery(name: string): string {
+  const escaped = name.replace(/"/g, '')
+  return `
+PREFIX cis: <http://dati.beniculturali.it/cis/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT ?cis ?p1 ?o1 ?p2 ?o2 WHERE {
+  { SELECT ?cis WHERE {
+      ?cis a cis:CulturalInstituteOrSite ; rdfs:label ?name .
+      FILTER(CONTAINS(LCASE(?name), LCASE("${escaped}")))
+    } LIMIT 1 }
+  ?cis ?p1 ?o1 .
+  OPTIONAL { ?o1 ?p2 ?o2 . }
+}`
+}
+
+function buildDescribeSiteByNameQuery(name: string): string {
+  const escaped = name.replace(/"/g, '')
+  return `
+PREFIX cis: <http://dati.beniculturali.it/cis/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT ?cis ?site ?p1 ?o1 ?p2 ?o2 WHERE {
+  { SELECT ?cis WHERE {
+      ?cis a cis:CulturalInstituteOrSite ; rdfs:label ?name .
+      FILTER(CONTAINS(LCASE(?name), LCASE("${escaped}")))
+    } LIMIT 1 }
+  ?cis cis:hasSite ?site .
+  ?site ?p1 ?o1 .
+  OPTIONAL { ?o1 ?p2 ?o2 . }
+}`
+}
+
 async function runSparqlDiagnostic(label: string, query: string): Promise<void> {
   console.log(`Interrogo ${SPARQL_ENDPOINT} — ${label}…`)
   const data = await fetchSparqlJson(query)
   console.log(JSON.stringify(data, null, 2))
 }
 
-async function runDescribe(): Promise<void> {
-  await runSparqlDiagnostic('struttura reale di un CulturalInstituteOrSite', DESCRIBE_QUERY)
+async function runDescribe(name: string | null): Promise<void> {
+  if (name) {
+    console.log(`Cerco un CulturalInstituteOrSite il cui rdfs:label contiene "${name}"…`)
+    await runSparqlDiagnostic(`struttura reale di "${name}"`, buildDescribeByNameQuery(name))
+    await runSparqlDiagnostic(`proprietà dirette del suo Site (via cis:hasSite)`, buildDescribeSiteByNameQuery(name))
+    return
+  }
+  await runSparqlDiagnostic('struttura reale di un CulturalInstituteOrSite (record arbitrario)', DESCRIBE_QUERY)
   await runSparqlDiagnostic('proprietà dirette del suo Site (via cis:hasSite)', DESCRIBE_SITE_QUERY)
 }
 
 async function main() {
   if (process.argv.includes('--describe')) {
-    await runDescribe()
+    const nameIdx = process.argv.indexOf('--name')
+    const name = nameIdx !== -1 ? process.argv[nameIdx + 1] : null
+    await runDescribe(name)
     return
   }
 
