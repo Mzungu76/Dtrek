@@ -45,6 +45,14 @@ export interface PlaceDetail {
   imageCredit: string | null
   officialUrl: string | null
   website: string | null
+  // supabase/migrations/add_places_contacts.sql (MIC_DATA_SOURCES.md §12) — letti con una query
+  // separata, MAI aggiunti alla select principale sopra: finché quella migration non è applicata
+  // sul progetto Supabase in uso, selezionare una colonna inesistente lì farebbe fallire con un 500
+  // la scheda di OGNI Meta, non solo quelle senza contatti — stesso rischio già documentato per
+  // image_credit/image_checked_at. null finché la migration non è applicata, o quando la fonte non
+  // li fornisce.
+  phone: string | null
+  email: string | null
   openingHours: unknown
   source: string
   sourceCount: number
@@ -54,8 +62,8 @@ export interface PlaceDetail {
    *  La UI deve dirlo esplicitamente (mai una posizione approssimata spacciata per esatta). */
   coordinatesApproximate: boolean
   /** Popolato quando manca una foto propria o una descrizione propria SOSTANZIALE (Borgo/Città non
-   *  ha mai una foto dall'import ISTAT; un Sito da MiC/ArCo non ha mai una descrizione, un Sito da
-   *  PTPR ne ha sempre una ma spesso solo un codice tipologico + attribuzione, vedi
+   *  ha mai una foto dall'import ISTAT; un Sito da PTPR ha sempre una `description` ma spesso solo
+   *  un codice tipologico + attribuzione, vedi
    *  isSubstantiveDescription) — un arricchimento best-effort da Wikipedia, mai al posto di un dato
    *  reale già presente: `thumbnail` colma solo `imageUrl` assente, `extract` colma solo
    *  `description` assente/non sostanziale (qui `description` riflette già quel giudizio — vedi
@@ -94,6 +102,17 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     return NextResponse.json({ error: 'Errore interno' }, { status: 500 })
   }
   if (!data) return NextResponse.json({ error: 'Non trovato' }, { status: 404 })
+
+  // Query separata e best-effort per phone/email (vedi il commento su PlaceDetail.phone sopra) —
+  // se add_places_contacts.sql non è ancora applicata sul progetto Supabase in uso, `error` è
+  // valorizzato (colonna inesistente) e si prosegue con `null`, mai propagando un 500 alla scheda
+  // dell'intera Meta.
+  const { data: contacts, error: contactsError } = await supabase
+    .from('dtrek_places')
+    .select('phone, email')
+    .eq('id', data.id)
+    .maybeSingle()
+  if (contactsError) console.error('[places/:id] phone/email non disponibili (migration applicata?)', contactsError)
 
   const sourceCounts = await fetchSourceCounts(supabase, [data.id])
 
@@ -175,6 +194,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     imageCredit: coverPhoto?.credit ?? null,
     officialUrl: data.official_url,
     website: data.website,
+    phone: contacts?.phone ?? null,
+    email: contacts?.email ?? null,
     openingHours: data.opening_hours,
     source: data.source,
     sourceCount: sourceCounts.get(data.id) ?? 1,
