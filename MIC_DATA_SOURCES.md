@@ -444,20 +444,27 @@ riga) — esattamente il comportamento richiesto per il caso Canepina (§8).
    - oppure l'utente scarica il PDF del manuale REST OPENDATA (§4, link nel report) e lo incolla/
      allega qui, dato che il dominio è bloccato per il fetch automatico — è l'unico modo rimasto per
      scoprire l'URL base reale del servizio REST senza indovinarlo.
-3. Estendere `fetch.ts` per usare i predicati ora confermati reali su Canepina e non ancora
-   interrogati: `l0:description` (descrizione), `dc:type` (tipologia — corregge il gap trovato in
-   §3bis, dove `loc:hasCulturalInstituteOrSiteType` risulta assente per questo record), `foaf:depiction`
-   (immagine), `AccessCondition/hasAccessCondition`→`OpeningHoursSpecification`/`Booking` (orari e
-   prenotazione), `SM:hasOnlineContactPoint`→`hasTelephone`/`hasEmail`/`hasWebSite` (contatti),
-   `POT:hasTicket` (prezzo, quando popolato). Prima di generalizzare questi predicati a TUTTI i
-   record, verificarne la presenza su un campione più ampio (questa sessione ne ha la prova solo su
-   Canepina/105665) — stessa disciplina già seguita nel file per gli altri predicati (§1).
-4. Implementare lo schema di provenienza per campo (§10) — richiede una migration additiva, non
-   distruttiva, coerente con `add_places_catalog.sql`.
+3. **FATTO in parte**: corretto il gap tipologico trovato in §3bis (`dc:type` come fallback quando
+   `loc:hasCulturalInstituteOrSiteType` è assente — commit su questo branch). Aggiunto anche un
+   probe di copertura (`copertura-campi-arricchenti` in `probe.ts`) che conta, su un campione di
+   300 record, quanti hanno ciascuno dei 5 predicati arricchenti restanti (`l0:description`,
+   `AccessCondition/hasAccessCondition`, `SM:hasOnlineContactPoint`, `POT:hasTicket`,
+   `foaf:depiction`) — **in attesa dell'esito** (richiede un altro lancio manuale del workflow,
+   `mode: probe`, stesso blocco del permesso Actions in §9) prima di generalizzarli alla query di
+   produzione, per non farlo su un campione di un solo record (Canepina).
+4. **FATTO**: implementato lo schema di provenienza per campo (§10) in `scripts/places/types.ts`
+   (`FieldProvenance`) e `scripts/places/import.ts` (`mergeMetadata`, fusione campo per campo di
+   `metadata.fieldProvenance`, mai un overwrite) — nessuna migration SQL necessaria: `metadata` è
+   già `jsonb` su `dtrek_places`. Ha anche corretto un bug reale trovato implementandolo:
+   `refreshExistingPlace` non toccava mai `metadata` su un ri-fetch della stessa fonte, quindi
+   `retrievedAt` sarebbe rimasto congelato alla prima importazione per sempre.
 5. Per Canepina specificamente: il conflitto orari (§8bis) resta aperto nella sostanza — nessuna
    fonte verificabile in questa sessione conferma o smentisce "chiuso sempre". Contattare la fonte
    locale (Comunità Montana dei Cimini/Musei DEMOS, unico gestore reale trovato, un numero di
    telefono diverso da quello in ArCo — §7) resta il solo modo per risolverlo con dati reali invece
    che dedotti da recensioni turistiche.
+6. Una volta noto l'esito del probe di copertura (punto 3): decidere insieme quali dei 5 campi
+   restanti generalizzano abbastanza da entrare nella query di produzione, e wiring effettivo di
+   `fieldProvenance` dentro `micBindingToPlaceCandidate` per quei campi.
 
 Nessuno scraper "definitivo" è stato scritto, per istruzione esplicita del compito.
