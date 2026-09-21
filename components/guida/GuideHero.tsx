@@ -3,7 +3,7 @@ import dynamic from 'next/dynamic'
 import { useMemo, type ReactNode } from 'react'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
-import { Car, SquareParking, Milestone, MapPinned } from 'lucide-react'
+import { Car, SquareParking, Milestone, MapPinned, MapPin } from 'lucide-react'
 import type { TrackPoint } from '@/lib/tcxParser'
 import type { StartPointInfo } from '@/lib/routeBuilder/startPointInfo'
 
@@ -41,6 +41,13 @@ interface Props {
    *  assente) — vedi lib/metaTypes.ts's META_TYPE_CONFIG/SITE_TYPE_CONFIG. */
   fallbackIcon?: ReactNode
   fallbackColor?: string
+  /** Icona mostrata dentro il badge di categoria (es. l'icona del siteType) — solo coverMode='photo'
+   *  (mai per un Sentiero, badge invariato). */
+  badgeIcon?: ReactNode
+  /** Comune/Provincia/Regione — riga sotto il titolo con icona di posizione, come nella scheda di
+   *  ricerca (app/mete/[id]/page.tsx). Solo coverMode='photo': un Sentiero mostra già la distanza in
+   *  auto/il punto di partenza al posto suo (driving/startPoint sotto). */
+  locationLabel?: string
 }
 
 /**
@@ -52,7 +59,7 @@ interface Props {
  */
 export default function GuideHero({
   trackPoints, routePolyline, title, categoryBadge, plannedDate, driving, startPoint,
-  coverMode = 'map', photoUrl, photoCredit, fallbackIcon, fallbackColor,
+  coverMode = 'map', photoUrl, photoCredit, fallbackIcon, fallbackColor, badgeIcon, locationLabel,
 }: Props) {
   const points = useMemo(() => {
     const fromTrack = (trackPoints ?? []).filter(p => p.lat !== undefined && p.lon !== undefined)
@@ -117,7 +124,8 @@ export default function GuideHero({
       )}
 
       <div className="absolute bottom-0 left-0 right-0 px-5 sm:px-8 md:px-10 pb-5 md:pb-7">
-        <span className="inline-block bg-terra-500 text-white text-[8px] font-bold tracking-[2.5px] px-2.5 py-1 rounded-sm mb-2.5 uppercase">
+        <span className="inline-flex items-center gap-1.5 bg-terra-500 text-white text-[8px] font-bold tracking-[2.5px] px-2.5 py-1 rounded-sm mb-2.5 uppercase">
+          {badgeIcon && <span className="[&>svg]:w-3 [&>svg]:h-3">{badgeIcon}</span>}
           {categoryBadge}
         </span>
         <h1 className="font-display text-xl sm:text-3xl md:text-4xl font-black text-white leading-tight mb-1 max-w-2xl uppercase tracking-tight"
@@ -125,6 +133,12 @@ export default function GuideHero({
         >
           {title}
         </h1>
+        {locationLabel && (
+          <p className="inline-flex items-center gap-1 text-[12px] font-semibold text-white/90">
+            <MapPin className="w-3.5 h-3.5" />
+            {locationLabel}
+          </p>
+        )}
         {plannedDate && (
           <p className="text-[12px] italic text-white/70">
             {format(new Date(plannedDate + 'T12:00'), 'EEEE d MMMM yyyy', { locale: it })}

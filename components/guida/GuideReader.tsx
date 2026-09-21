@@ -319,13 +319,18 @@ export default function GuideReader({
         const parsed = byKey.get(def.key)
         const style = SECTION_STYLE[def.key]
         const override = guideProfile.sectionOverrides?.[def.key]
-        return { key: def.key, guideKey: def.key, title: override?.title ?? def.title, subtitle: def.subtitle, body: parsed?.body, icon: style.icon, color: style.color }
+        // "Il percorso" per un Sito non è mai un percorso da camminare (usesRealTrack è sempre
+        // false lì, vedi il case sotto) — è la sezione "Il museo"/"Il castello"/... del mockup, quindi
+        // porta l'icona di categoria del siteType invece della generica Route da sentiero.
+        const SiteIcon = def.key === 'il_percorso' && hike.metaType === 'sito' && siteType ? SITE_TYPE_CONFIG[siteType].icon : null
+        const icon = SiteIcon ? <SiteIcon className="w-4 h-4" /> : style.icon
+        return { key: def.key, guideKey: def.key, title: override?.title ?? def.title, subtitle: def.subtitle, body: parsed?.body, icon, color: style.color }
       })
     const legacy: DisplaySection[] = parsedSections
       .filter(s => !s.key)
       .map((s, i) => ({ key: `legacy-${i}` as const, guideKey: null, title: s.title, body: s.body, icon: LEGACY_STYLE.icon, color: LEGACY_STYLE.color }))
     return [...fixed, ...legacy]
-  }, [parsedSections, guideProfile])
+  }, [parsedSections, guideProfile, hike.metaType, siteType])
 
   // Voice state
   const [isPlaying,     setIsPlaying]     = useState(false)
@@ -988,6 +993,10 @@ export default function GuideReader({
   // disegnati altrove nell'app, vedi lib/metaTypes.ts's META_TYPE_CONFIG/SITE_TYPE_CONFIG).
   const FallbackIconComponent = hike.metaType === 'sito' && siteType ? SITE_TYPE_CONFIG[siteType].icon : (hike.metaType === 'sito' ? Landmark : Building2)
   const coverFallbackColor = hike.metaType === 'sito' ? META_TYPE_CONFIG.sito.color : META_TYPE_CONFIG.borgo_citta.color
+  // Comune/Provincia/Regione sotto il titolo in copertina — stesso formato della scheda di ricerca
+  // (app/mete/[id]/page.tsx). Solo da placeDetail (mai da hike, che non porta questi campi per un
+  // Borgo/Sito); assente finché placeDetail non è ancora arrivato.
+  const locationLabel = [placeDetail?.municipality, placeDetail?.province, placeDetail?.region].filter(Boolean).join(', ')
   const officialLink = placeDetail?.officialUrl ?? placeDetail?.website ?? null
   // Qualunque sezione ancora senza testo AI può mostrare l'invito ad "Approfondisci con Giulia" —
   // SectionCard mostra comunque il bottone solo se !hasBody. Non dipende da hasGuide: deve
@@ -1070,6 +1079,8 @@ export default function GuideReader({
         photoCredit={placeDetail?.imageCredit}
         fallbackIcon={<FallbackIconComponent />}
         fallbackColor={coverFallbackColor}
+        badgeIcon={usesCoverPhoto ? <FallbackIconComponent /> : undefined}
+        locationLabel={usesCoverPhoto ? locationLabel : undefined}
       />
 
       {hike.metaType === 'sito' ? (

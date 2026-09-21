@@ -48,8 +48,9 @@ export const GUIDE_SECTIONS: GuideSectionDef[] = [
   { key: 'comfort',          title: 'Su misura per te',           match: ['su misura per te', 'su misura'],
     subtitle: 'Quanto questo percorso è in linea con le tue capacità e preferenze personali.' },
   // 'le tappe del borgo' — titolo usato dall'override borgo_citta di 'luoghi' (piano §29), vedi
-  // stesso motivo del commento sopra su 'il_percorso'.
-  { key: 'luoghi',           title: 'I luoghi da non perdere',    match: ['i luoghi', 'luoghi da non perdere', 'le tappe del borgo'],
+  // stesso motivo del commento sopra su 'il_percorso'. 'cosa vedere' — stesso motivo per l'override
+  // sito (lib/guideProfiles.ts).
+  { key: 'luoghi',           title: 'I luoghi da non perdere',    match: ['i luoghi', 'luoghi da non perdere', 'le tappe del borgo', 'cosa vedere'],
     subtitle: 'Storia, leggende e curiosità dei punti di interesse lungo il tracciato.' },
   { key: 'natura',           title: 'La natura intorno a te',     match: ['la natura'],
     subtitle: 'Flora, fauna e geologia che potresti incontrare, in base alla stagione.' },
