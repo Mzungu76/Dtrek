@@ -1,0 +1,107 @@
+import { describe, it, expect } from 'vitest'
+import {
+  lombardiaTipologiaToSiteType,
+  lombardiaFeatureToPlaceCandidate,
+  arcgisFeatureToLombardiaFeature,
+} from '../lombardia/fetch'
+import type { LombardiaFeature } from '../lombardia/fetch'
+
+describe('lombardiaTipologiaToSiteType', () => {
+  it('mappa i 3 valori osservati dal vivo (round 1/2 di probe.ts, Milano/Lecco)', () => {
+    expect(lombardiaTipologiaToSiteType('anfiteatro')).toBe('sito_archeologico')
+    expect(lombardiaTipologiaToSiteType('Museo, galleria non a scopo di lucro e/o raccolta')).toBe('museo')
+    expect(lombardiaTipologiaToSiteType('convento')).toBe('abbazia')
+  })
+
+  it('non case-sensitive', () => {
+    expect(lombardiaTipologiaToSiteType('CONVENTO')).toBe('abbazia')
+  })
+
+  it('tipologia sconosciuta o assente → altro (mai un errore, stessa tolleranza di MIC_TYPE_MAP)', () => {
+    expect(lombardiaTipologiaToSiteType('Qualcosa di non mappato')).toBe('altro')
+    expect(lombardiaTipologiaToSiteType(undefined)).toBe('altro')
+    expect(lombardiaTipologiaToSiteType(null)).toBe('altro')
+  })
+})
+
+describe('lombardiaFeatureToPlaceCandidate', () => {
+  // Dato reale osservato (round 2, arcgis-lblgeo-geometry-sample-milano).
+  const ANFITEATRO: LombardiaFeature = {
+    idBene: '8839',
+    denominazione: 'Anfiteatro romano',
+    tipologia: 'anfiteatro',
+    categoria: 'SA',
+    comune: 'Milano',
+    lat: 45.456901002109788,
+    lon: 9.1788255283839248,
+  }
+
+  it('metaType sito, sourceId = IDBENE reale (mai inventato), source lombardia_sirbec', () => {
+    const c = lombardiaFeatureToPlaceCandidate(ANFITEATRO)
+    expect(c.metaType).toBe('sito')
+    expect(c.source).toBe('lombardia_sirbec')
+    expect(c.sourceId).toBe('8839')
+    expect(c.subtype).toBe('sito_archeologico')
+  })
+
+  it('region fissa a Lombardia (fonte specifica per regione, come ptpr_lazio)', () => {
+    expect(lombardiaFeatureToPlaceCandidate(ANFITEATRO).region).toBe('Lombardia')
+  })
+
+  it('latitude/longitude passate così come riproiettate dal server (outSR=4326), nessuna trasformazione qui', () => {
+    const c = lombardiaFeatureToPlaceCandidate(ANFITEATRO)
+    expect(c.latitude).toBe(ANFITEATRO.lat)
+    expect(c.longitude).toBe(ANFITEATRO.lon)
+  })
+
+  it('confidence più alta quando la tipologia mappa a un subtype noto', () => {
+    expect(lombardiaFeatureToPlaceCandidate(ANFITEATRO).confidence).toBe(0.85)
+  })
+
+  it('confidence più bassa quando la tipologia è assente o non mappata (altro)', () => {
+    const c = lombardiaFeatureToPlaceCandidate({ ...ANFITEATRO, tipologia: undefined })
+    expect(c.subtype).toBe('altro')
+    expect(c.confidence).toBe(0.6)
+  })
+
+  it('denominazione vuota → nome di fallback, mai un candidato senza nome', () => {
+    const c = lombardiaFeatureToPlaceCandidate({ ...ANFITEATRO, denominazione: '' })
+    expect(c.name).toBe('Sito Lombardia')
+  })
+
+  it('metadata porta i campi grezzi SIRBeC per audit, mai usati per la classificazione al posto di subtype', () => {
+    const c = lombardiaFeatureToPlaceCandidate(ANFITEATRO)
+    expect(c.metadata).toMatchObject({ sirbecCategoria: 'SA', sirbecTipologia: 'anfiteatro' })
+  })
+})
+
+describe('arcgisFeatureToLombardiaFeature', () => {
+  it('feature reale (round 2, Milano) → LombardiaFeature con geometry.x/y come lon/lat', () => {
+    const raw = {
+      attributes: { IDBENE: 8839, DENOMINAZIONE: 'Anfiteatro romano', TIPOLOGIA: 'anfiteatro', CATEGORIA: 'SA', COMUNE: 'Milano' },
+      geometry: { x: 9.1788255283839248, y: 45.456901002109788 },
+    }
+    const f = arcgisFeatureToLombardiaFeature(raw)
+    expect(f).toMatchObject({ idBene: '8839', denominazione: 'Anfiteatro romano', lon: 9.1788255283839248, lat: 45.456901002109788 })
+  })
+
+  it('nessuna geometria → null (mai un candidato con coordinate NaN)', () => {
+    const raw = { attributes: { IDBENE: 1, DENOMINAZIONE: 'X' } }
+    expect(arcgisFeatureToLombardiaFeature(raw)).toBeNull()
+  })
+
+  it('IDBENE assente → null (mai un sourceId inventato)', () => {
+    const raw = { attributes: { DENOMINAZIONE: 'X' }, geometry: { x: 9, y: 45 } }
+    expect(arcgisFeatureToLombardiaFeature(raw)).toBeNull()
+  })
+
+  it('campi testuali vuoti trattati come assenti (stesso pattern str() di ptpr/extra-layers.ts)', () => {
+    const raw = {
+      attributes: { IDBENE: 1, DENOMINAZIONE: 'X', INDIRIZZO: '   ', COMUNE: null },
+      geometry: { x: 9, y: 45 },
+    }
+    const f = arcgisFeatureToLombardiaFeature(raw)
+    expect(f?.indirizzo).toBeUndefined()
+    expect(f?.comune).toBeUndefined()
+  })
+})

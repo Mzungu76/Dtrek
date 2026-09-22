@@ -4,7 +4,7 @@ export type { PlaceCategory }
 
 // Sorgenti supportate dalla pipeline (piano §41). Ogni fonte deve avere `source`/`source_id`
 // (piano §48.12) — mai un candidato senza provenienza ricostruibile.
-export type PlaceSource = 'istat' | 'ptpr_lazio' | 'mic' | 'osm' | 'wikidata'
+export type PlaceSource = 'istat' | 'ptpr_lazio' | 'mic' | 'osm' | 'wikidata' | 'lombardia_sirbec'
 
 // Output normalizzato di un singolo fetcher di sorgente (scripts/places/<fonte>/), prima di
 // deduplicazione/import — il "modello comune" richiesto dal piano §41 ("l'importer finale deve
