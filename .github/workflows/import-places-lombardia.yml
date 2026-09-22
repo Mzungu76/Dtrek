@@ -1,25 +1,43 @@
-name: Import Places — Lombardia (probe diagnostico fonti candidate)
+name: Import Places — Lombardia (SIRBeC ArcGIS → dtrek_places, meta_type=sito)
 
 # Manuale (workflow_dispatch), stesso schema di import-places-mic.yml — leggere quel file e
 # scripts/places/lombardia/README.md prima di modificare questo.
 #
-# Solo modalità "probe": nessun fetch.ts/importer esiste ancora per questa fonte (vedi README,
-# sezione "Stato") — questo workflow serve a raccogliere il primo dump reale di ciascuna fonte
-# candidata (Socrata Bella Lombardia, ArcGIS cultura/LBL_GEO, un tentativo WFS generico), MAI
-# ancora interrogate dal vivo perché il sandbox di sviluppo non ha accesso di rete a nessuna di
-# esse (verificato più ampio del solito blocco regione.*.it — vedi README "Bloccante di rete").
-# Nessuna scrittura, nessun secret Supabase richiesto.
+# `probe` resta la diagnostica sulle fonti candidate (scripts/places/lombardia/probe.ts, due round
+# già eseguiti dal vivo — vedi README "Stato"). `describe`/`dry-run`/`write` usano invece
+# scripts/places/lombardia/fetch.ts, la fonte scelta dopo quei due round (layer ArcGIS
+# cultura/LBL_GEO, 651 record verificati in tutta la regione, 70 nel solo Comune di Milano).
 
 on:
   workflow_dispatch:
     inputs:
-      only:
-        description: "Nome di un singolo probe da scripts/places/lombardia/probe.ts (vuoto = tutti, consigliato). Round 1: socrata-mappa-bella-lombardia, socrata-bella-lombardia-base, arcgis-cultura-lblgeo-service-json, arcgis-cultura-lblgeo-query-layer0, arcgis-cultura-lblgeo-wfs-getcapabilities, geoserver-wfs-getcapabilities-guess-non-verificato. Round 2: arcgis-lblgeo-count-totale, arcgis-lblgeo-categorie-distinte, arcgis-lblgeo-milano-count, arcgis-lblgeo-geometry-sample-milano, socrata-mappa-bella-lombardia-metadata, socrata-bella-lombardia-base-columns."
+      mode:
+        description: "probe: test isolato degli endpoint candidati (diagnostica, vedi probe.ts). describe: dump di un record ArcGIS reale. dry-run: solo log, nessuna scrittura. write: importa davvero in Supabase."
+        required: true
+        type: choice
+        options:
+          - probe
+          - describe
+          - dry-run
+          - write
+        default: dry-run
+      limit:
+        description: "Numero massimo di record ArcGIS da importare (dry-run/write). La regione intera è 651 record verificati (round 2) — il default copre tutto."
+        required: false
+        type: string
+        default: "5000"
+      describe_name:
+        description: "Solo modalità describe: testo da cercare in DENOMINAZIONE (es. 'Museo Archeologico') invece di un record arbitrario."
         required: false
         type: string
         default: ""
-      timeout_ms:
-        description: "Timeout (ms) per ciascun probe — un solo tentativo, nessuna retry."
+      probe_only:
+        description: "Solo modalità probe: nome di un singolo probe da probe.ts (vuoto = tutti). Vedi il file per l'elenco completo (round 1 e round 2)."
+        required: false
+        type: string
+        default: ""
+      probe_timeout_ms:
+        description: "Solo modalità probe: timeout (ms) per ciascun probe — un solo tentativo, nessuna retry."
         required: false
         type: string
         default: "30000"
@@ -32,11 +50,14 @@ permissions:
   contents: read
 
 jobs:
-  probe:
+  import:
     runs-on: ubuntu-latest
     env:
-      ONLY: ${{ inputs.only }}
-      TIMEOUT_MS: ${{ inputs.timeout_ms }}
+      MODE: ${{ inputs.mode }}
+      LIMIT: ${{ inputs.limit }}
+      DESCRIBE_NAME: ${{ inputs.describe_name }}
+      PROBE_ONLY: ${{ inputs.probe_only }}
+      PROBE_TIMEOUT_MS: ${{ inputs.probe_timeout_ms }}
     steps:
       - uses: actions/checkout@v7
 
@@ -48,19 +69,69 @@ jobs:
       - run: npm ci
 
       - name: Probe — test degli endpoint candidati (diagnostica, nessun Supabase)
+        if: ${{ inputs.mode == 'probe' }}
         run: |
           set -euo pipefail
-          if [ -n "${ONLY:-}" ]; then
-            npx tsx scripts/places/lombardia/probe.ts --timeout "$TIMEOUT_MS" --only "$ONLY" | tee /tmp/lombardia-probe.txt
+          if [ -n "${PROBE_ONLY:-}" ]; then
+            npx tsx scripts/places/lombardia/probe.ts --timeout "$PROBE_TIMEOUT_MS" --only "$PROBE_ONLY" | tee /tmp/lombardia-probe.txt
           else
-            npx tsx scripts/places/lombardia/probe.ts --timeout "$TIMEOUT_MS" | tee /tmp/lombardia-probe.txt
+            npx tsx scripts/places/lombardia/probe.ts --timeout "$PROBE_TIMEOUT_MS" | tee /tmp/lombardia-probe.txt
           fi
           {
             echo "### Import Places — Lombardia (probe diagnostico)"
-            echo "Primo dump reale delle fonti candidate (vedi scripts/places/lombardia/README.md) — nessuna era mai stata raggiunta dal vivo prima, il sandbox di sviluppo non ha accesso di rete a nessuna di esse."
             echo '```'
             cat /tmp/lombardia-probe.txt
             echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Describe — dump di un record ArcGIS reale (diagnostica)
+        if: ${{ inputs.mode == 'describe' }}
+        run: |
+          set -euo pipefail
+          if [ -n "${DESCRIBE_NAME:-}" ]; then
+            npx tsx scripts/places/lombardia/fetch.ts --describe --name "$DESCRIBE_NAME" | tee /tmp/lombardia-describe.txt
+          else
+            npx tsx scripts/places/lombardia/fetch.ts --describe | tee /tmp/lombardia-describe.txt
+          fi
+          {
+            echo "### Import Places — Lombardia (describe)"
+            echo "- Nome cercato: ${DESCRIBE_NAME:-(record arbitrario)}"
+            echo '```json'
+            cat /tmp/lombardia-describe.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Dry-run — solo log, nessuna scrittura su Supabase
+        if: ${{ inputs.mode == 'dry-run' }}
+        run: |
+          set -euo pipefail
+          npx tsx scripts/places/lombardia/fetch.ts --dry-run --limit "$LIMIT" | tee /tmp/lombardia-dryrun.txt
+          {
+            echo "### Import Places — Lombardia (dry-run)"
+            echo "- Limit: $LIMIT"
+            echo '```json'
+            cat /tmp/lombardia-dryrun.txt
+            echo '```'
             echo ""
-            echo "Prossimo passo: leggere lo status/contentType/bodySnippet di ciascun probe. Per il candidato Socrata, verificare i nomi dei campi reali e se la colonna geografica è già WGS84. Per ArcGIS, leggere spatialReference nel probe 'service-json' prima di usare il probe 'query-layer0'."
+            echo "Verifica la distribuzione per subtype (quanto cade su 'altro') e le coordinate dell'esempio prima di passare a write."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Write — import reale in dtrek_places/dtrek_place_sources
+        if: ${{ inputs.mode == 'write' }}
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_SERVICE_KEY:-}" ]; then
+            echo "Secret Supabase mancanti nel repository — serve SUPABASE_URL e (SUPABASE_SERVICE_KEY o SUPABASE_SERVICE_ROLE_KEY). Vedi Settings > Secrets and variables > Actions." >&2
+            exit 1
+          fi
+          npx tsx scripts/places/lombardia/fetch.ts --limit "$LIMIT" | tee /tmp/lombardia-write.txt
+          {
+            echo "### Import Places — Lombardia (write)"
+            echo "- Limit: $LIMIT"
+            echo '```json'
+            cat /tmp/lombardia-write.txt
+            echo '```'
           } >> "$GITHUB_STEP_SUMMARY"

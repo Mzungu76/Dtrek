@@ -1,6 +1,8 @@
 # Regione Lombardia → dtrek_places (Siti)
 
-Non ancora implementato: solo `probe.ts` (diagnostica), nessun `fetch.ts` — vedi "Stato" sotto.
+Implementato: `fetch.ts` (fonte scelta dopo due round di probe reali — vedi "Stato" sotto). Modalità
+`--describe`/`--dry-run` disponibili prima di qualunque `write` su scala piena, stesso principio già
+applicato a MiC/PTPR.
 
 ## Perché serve questa fonte (contesto)
 
@@ -67,48 +69,49 @@ In pratica: **nessun dominio esterno a una piccola whitelist infrastrutturale è
 qui**, non un blocco mirato solo ai domini regionali. Solo il runner GitHub Actions ci arriva — vedi
 `.github/workflows/import-places-lombardia.yml`, `mode: probe`.
 
-## Stato (aggiornato dopo il round 1 di probe, eseguito dal vivo dall'utente il 2026-09-22)
+## Stato (aggiornato dopo il round 2 di probe, eseguito dal vivo dall'utente il 2026-09-22)
 
-Tutti i probe del round 1 hanno risposto 200 tranne il tentativo GeoServer "a costo zero" (404,
-atteso — nessuna fonte lo confermava). Risultati reali:
+Entrambi i round di probe hanno risposto 200 su tutti gli endpoint reali (tranne il tentativo
+GeoServer "a costo zero", 404 atteso). Fonte scelta e verificata: **B, ArcGIS `cultura/LBL_GEO`**.
 
-- **B (ArcGIS `cultura/LBL_GEO`) è il candidato migliore, confermato con dati reali**: layer
-  `Beni_Culturali`, campi reali `IDBENE, DENOMINAZIONE, TIPOLOGIA, TIPOMUSEO, CATEGORIA, INDIRIZZO,
-  COMUNE, PROVINCIA, ABSTRACT, URLFOTOL...`. Interrogato con `outSR=4326`, il server ha
-  **riproiettato lui stesso** in WGS84 (`spatialReference` di risposta = 4326) — nessuna
-  trasformazione CRS a mano necessaria (a differenza del PTPR Lazio). Esempio reale: "Museo
-  Archeologico" di Lecco, `CATEGORIA:"LDC"`.
-- **A e B sono la stessa fonte SIRBeC** esposta due volte: il record ArcGIS (`IDBENE:102`) e il
-  dataset Socrata base (campo `idbene:"6960"`) condividono nome campo e dominio foto
-  (`bellalombardia.regione.lombardia.it`).
-- **Rischio reale trovato nei dati (non un'ipotesi)**: il dataset Socrata base (`4mr7-hfsh`)
-  cataloga ANCHE oggetti/opere singole (es. "Statuetta fittile di vignaiolo", categoria
-  "Capolavori"), non solo luoghi. Se il layer ArcGIS mischia le stesse categorie, un importer
-  ingenuo scriverebbe statue come "Siti" — **non ancora verificato se il layer ArcGIS sia già
-  filtrato ai soli luoghi** (round 2 di probe verifica i valori distinti di `CATEGORIA` con un
-  conteggio reale, non un'assunzione).
-- `socrata-mappa-bella-lombardia` (ap3k-i5ip) ha risposto 200 ma con righe **vuote** — probabile
-  vista "mappa" non interrogabile via SODA standard (round 2 ne legge la metadata per capire perché).
+- **Copertura reale**: **651** record in tutta la Lombardia (`arcgis-lblgeo-count-totale`) — contro
+  i soli 6 di MiC/ArCo — di cui **70** nel solo Comune di Milano (`arcgis-lblgeo-milano-count`), il
+  numero concreto che risolve il problema segnalato dall'utente.
+- **CRS confermato senza trasformazione manuale**: `outSR=4326` nella query fa riproiettare il
+  server stesso — verificato con 3 record reali su Milano (`arcgis-lblgeo-geometry-sample-milano`),
+  coordinate plausibili (lon ~9.17-9.18, lat ~45.45-45.47, esattamente Milano). Nessun proj4/EPSG a
+  mano come per il PTPR Lazio.
+- **Nessun filtro CATEGORIA necessario, verificato con un conteggio esatto**: i valori distinti di
+  `CATEGORIA` (`arcgis-lblgeo-categorie-distinte`: `LDC` 110, `B` 146, `A4` 133, `A1` 207, `A3` 40,
+  `SA` 10, `A2` 5) sommano ESATTAMENTE a 651 — nessuna categoria residua "oggetto singolo" nascosta,
+  a differenza del dataset Socrata gemello (che cataloga anche opere d'arte individuali, es.
+  "Statuetta fittile di vignaiolo"). Il layer ArcGIS risulta già curato ai soli luoghi.
+- **A e B sono la stessa fonte SIRBeC** esposta due volte: il record ArcGIS (`IDBENE`) e il dataset
+  Socrata condividono nome campo (`idbene`) e dominio foto (`bellalombardia.regione.lombardia.it`).
+- `socrata-mappa-bella-lombardia` (ap3k-i5ip) spiegato dalla sua metadata (round 2): è una vista
+  "mappa" (`assetType: "map"`, `modifyingViewUid: "4mr7-hfsh"`) — non un dataset indipendente,
+  motivo delle righe vuote al round 1. Scartata come fonte, non serve altro.
+- **Licenza — CC0 1.0 confermata sul dataset gemello, non sul canale ArcGIS**: la metadata Socrata
+  di ENTRAMBI i dataset (`4mr7-hfsh` e `ap3k-i5ip`) dichiara `licenseId: "CC0_10"` (pubblico
+  dominio), con `attribution: "Regione Lombardia"` come cortesia non obbligatoria. Il servizio
+  ArcGIS ha `copyrightText` vuoto — trattato come CC0 per analogia (stessa fonte, stesso `IDBENE`),
+  non una conferma indipendente per questo canale specifico. Vedi il commento di licenza in cima a
+  `fetch.ts` per il dettaglio.
 - **Nessun vero WFS disponibile**: sia il tentativo `WFSServer` su ArcGIS sia il GeoServer generico
   sul dominio del geoportale hanno dato pagine HTML/404 — l'unica via reale è la query REST di
   ArcGIS (`.../MapServer/0/query`), comunque più semplice di un WFS.
-- **Licenza — non ancora confermata per questo layer specifico**: il geoportale dichiara (pagina
-  "note legali", trovata via WebSearch) che i dati scaricabili sono **IODL 2.0 o CC-BY-NC-SA 3.0
-  Italia** a seconda del dataset. Il servizio ArcGIS ha `copyrightText` vuoto. Il dataset Socrata
-  gemello (stessa fonte SIRBeC) è confermato IODL 2.0 — ragionevole assumerla anche per questo
-  layer, ma da trattare come non confermata finché non si trova la scheda metadato specifica.
 
-Round 2 di probe aggiunto a `probe.ts` (conteggio totale del layer, distribuzione `CATEGORIA`,
-conteggio su Milano come prova concreta di copertura, un campione di geometria con pochi campi per
-vedere le coordinate reali non troncate, metadata dei due dataset Socrata). **Non ancora eseguito.**
-
-Nessun `fetch.ts`/importer ancora: va scritto SOLO dopo il round 2 (in particolare dopo aver
-confermato se serve un filtro `CATEGORIA`) — stesso principio già applicato a MiC (mai fidarsi della
-sola documentazione, mai scrivere la logica di filtro prima di un conteggio reale).
+`fetch.ts` implementato di conseguenza (`--describe`/`--dry-run`/`write`, stesso pattern di
+`mic/fetch.ts`). La mappatura `TIPOLOGIA → SiteType` (`LOMBARDIA_TYPE_MAP`) ha solo 3 valori
+verificati dal vivo finora (`anfiteatro`, `Museo, galleria non a scopo di lucro e/o raccolta`,
+`convento`) — le altre voci sono per analogia con `MIC_TYPE_MAP`, da rivedere contro la
+distribuzione reale stampata da `--dry-run` prima di un `write` su scala piena.
 
 ## Uso
 
 ```bash
-npx tsx scripts/places/lombardia/probe.ts                       # tutti i probe
-npx tsx scripts/places/lombardia/probe.ts --only socrata-mappa-bella-lombardia
+npx tsx scripts/places/lombardia/probe.ts                              # diagnostica fonti candidate (round 1+2)
+npx tsx scripts/places/lombardia/fetch.ts --describe                   # dump di un record ArcGIS reale
+npx tsx scripts/places/lombardia/fetch.ts --describe --name "Museo"    # stesso, filtrato per nome
+npx tsx scripts/places/lombardia/fetch.ts --dry-run                    # tutta la regione, nessuna scrittura
 ```
