@@ -67,12 +67,44 @@ In pratica: **nessun dominio esterno a una piccola whitelist infrastrutturale è
 qui**, non un blocco mirato solo ai domini regionali. Solo il runner GitHub Actions ci arriva — vedi
 `.github/workflows/import-places-lombardia.yml`, `mode: probe`.
 
-## Stato
+## Stato (aggiornato dopo il round 1 di probe, eseguito dal vivo dall'utente il 2026-09-22)
 
-Solo `probe.ts` esiste, e non è stato ancora eseguito contro gli endpoint reali (serve la GitHub
-Action). Nessun `fetch.ts`/importer: va scritto SOLO dopo aver visto un dump reale di almeno una
-fonte tra A/B (schema dei campi, CRS reale se serve una trasformazione, licenza confermata) — stesso
-principio già applicato a MiC (mai fidarsi della sola documentazione).
+Tutti i probe del round 1 hanno risposto 200 tranne il tentativo GeoServer "a costo zero" (404,
+atteso — nessuna fonte lo confermava). Risultati reali:
+
+- **B (ArcGIS `cultura/LBL_GEO`) è il candidato migliore, confermato con dati reali**: layer
+  `Beni_Culturali`, campi reali `IDBENE, DENOMINAZIONE, TIPOLOGIA, TIPOMUSEO, CATEGORIA, INDIRIZZO,
+  COMUNE, PROVINCIA, ABSTRACT, URLFOTOL...`. Interrogato con `outSR=4326`, il server ha
+  **riproiettato lui stesso** in WGS84 (`spatialReference` di risposta = 4326) — nessuna
+  trasformazione CRS a mano necessaria (a differenza del PTPR Lazio). Esempio reale: "Museo
+  Archeologico" di Lecco, `CATEGORIA:"LDC"`.
+- **A e B sono la stessa fonte SIRBeC** esposta due volte: il record ArcGIS (`IDBENE:102`) e il
+  dataset Socrata base (campo `idbene:"6960"`) condividono nome campo e dominio foto
+  (`bellalombardia.regione.lombardia.it`).
+- **Rischio reale trovato nei dati (non un'ipotesi)**: il dataset Socrata base (`4mr7-hfsh`)
+  cataloga ANCHE oggetti/opere singole (es. "Statuetta fittile di vignaiolo", categoria
+  "Capolavori"), non solo luoghi. Se il layer ArcGIS mischia le stesse categorie, un importer
+  ingenuo scriverebbe statue come "Siti" — **non ancora verificato se il layer ArcGIS sia già
+  filtrato ai soli luoghi** (round 2 di probe verifica i valori distinti di `CATEGORIA` con un
+  conteggio reale, non un'assunzione).
+- `socrata-mappa-bella-lombardia` (ap3k-i5ip) ha risposto 200 ma con righe **vuote** — probabile
+  vista "mappa" non interrogabile via SODA standard (round 2 ne legge la metadata per capire perché).
+- **Nessun vero WFS disponibile**: sia il tentativo `WFSServer` su ArcGIS sia il GeoServer generico
+  sul dominio del geoportale hanno dato pagine HTML/404 — l'unica via reale è la query REST di
+  ArcGIS (`.../MapServer/0/query`), comunque più semplice di un WFS.
+- **Licenza — non ancora confermata per questo layer specifico**: il geoportale dichiara (pagina
+  "note legali", trovata via WebSearch) che i dati scaricabili sono **IODL 2.0 o CC-BY-NC-SA 3.0
+  Italia** a seconda del dataset. Il servizio ArcGIS ha `copyrightText` vuoto. Il dataset Socrata
+  gemello (stessa fonte SIRBeC) è confermato IODL 2.0 — ragionevole assumerla anche per questo
+  layer, ma da trattare come non confermata finché non si trova la scheda metadato specifica.
+
+Round 2 di probe aggiunto a `probe.ts` (conteggio totale del layer, distribuzione `CATEGORIA`,
+conteggio su Milano come prova concreta di copertura, un campione di geometria con pochi campi per
+vedere le coordinate reali non troncate, metadata dei due dataset Socrata). **Non ancora eseguito.**
+
+Nessun `fetch.ts`/importer ancora: va scritto SOLO dopo il round 2 (in particolare dopo aver
+confermato se serve un filtro `CATEGORIA`) — stesso principio già applicato a MiC (mai fidarsi della
+sola documentazione, mai scrivere la logica di filtro prima di un conteggio reale).
 
 ## Uso
 
