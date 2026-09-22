@@ -72,6 +72,47 @@ export const PROBES: Probe[] = [
     note: "PURO TENTATIVO, nessuna fonte trovata lo conferma: pattern GeoServer standard (\"/geoserver/wfs\") sul dominio principale del geoportale, ipotizzato dal piano originale prima di qualunque verifica. Incluso solo perché a costo zero — non usare il risultato per scrivere un importer senza prima averlo confermato con --describe su dati reali, stesso errore già fatto (ed evitato) due volte con MiC.",
     url: 'https://www.geoportale.regione.lombardia.it/geoserver/wfs?service=WFS&version=2.0.0&request=GetCapabilities',
   },
+  // ── Round 2 (2026-09-22): il round 1, girato dal vivo dall'utente, ha dato tutti 200 tranne il
+  // tentativo GeoServer indovinato (404, atteso). Il candidato migliore è confermato con dati
+  // reali: 'arcgis-cultura-lblgeo-query-layer0' ha risposto con outSR=4326 riproiettato dal server
+  // stesso (spatialReference di risposta = 4326, niente proj4 a mano come per il PTPR Lazio) e
+  // campi reali (IDBENE, DENOMINAZIONE, TIPOLOGIA, CATEGORIA, COMUNE...). MA lo stesso round ha
+  // anche rivelato un rischio reale nel dataset Socrata gemello (4mr7-hfsh): cataloga ANCHE oggetti
+  // singoli ("Statuetta fittile di vignaiolo", categoria "Capolavori"), non solo luoghi — se il
+  // layer ArcGIS mischia le stesse categorie, un importer ingenuo scriverebbe statue come "Siti".
+  // Questi probe verificano CON UN CONTEGGIO REALE (mai un'assunzione) quali CATEGORIA popolano il
+  // layer ArcGIS, quanti record ha in totale, e quanti a Milano (prova concreta di copertura per
+  // l'utente) — prima di scrivere qualunque logica di filtro in un importer.
+  {
+    name: 'arcgis-lblgeo-count-totale',
+    note: "Conteggio totale del layer Beni_Culturali per tutta la Lombardia — quantifica la copertura reale prima di scrivere l'importer (il numero che conta per l'utente: MiC/ArCo ne dava solo 6 in tutta la regione).",
+    url: 'https://www.cartografia.servizirl.it/arcgis2/rest/services/cultura/LBL_GEO/MapServer/0/query?where=1%3D1&returnCountOnly=true&f=json',
+  },
+  {
+    name: 'arcgis-lblgeo-categorie-distinte',
+    note: "Valori DISTINTI del campo CATEGORIA nel layer (con conteggio, via outStatistics) — verifica se il layer ArcGIS è già filtrato ai soli luoghi (es. solo 'LDC') o mischia anche oggetti/opere come il dataset Socrata gemello. Decide se serve un filtro CATEGORIA nell'importer.",
+    url: "https://www.cartografia.servizirl.it/arcgis2/rest/services/cultura/LBL_GEO/MapServer/0/query?where=1%3D1&outFields=CATEGORIA&returnGeometry=false&groupByFieldsForStatistics=CATEGORIA&outStatistics=%5B%7B%22statisticType%22%3A%22count%22%2C%22onStatisticField%22%3A%22OBJECTID%22%2C%22outStatisticFieldName%22%3A%22conteggio%22%7D%5D&f=json",
+  },
+  {
+    name: 'arcgis-lblgeo-milano-count',
+    note: "Conteggio dei record con COMUNE='Milano' — prova concreta e verificabile del problema che questa fonte deve risolvere (l'utente segnala che cercare Siti vicino a Milano dà quasi nulla con MiC/ArCo).",
+    url: "https://www.cartografia.servizirl.it/arcgis2/rest/services/cultura/LBL_GEO/MapServer/0/query?where=COMUNE%3D%27Milano%27&returnCountOnly=true&f=json",
+  },
+  {
+    name: 'arcgis-lblgeo-geometry-sample-milano',
+    note: 'Query con pochi campi (per far stare la geometria intera nello snippet troncato a 4000 caratteri del round 1) su Milano — verifica che le coordinate WGS84 riproiettate dal server siano plausibili per l\'Italia (lat ~45.4, lon ~9.1), non un dato di scala/unità sbagliata passato inosservato.',
+    url: 'https://www.cartografia.servizirl.it/arcgis2/rest/services/cultura/LBL_GEO/MapServer/0/query?where=COMUNE%3D%27Milano%27&outFields=IDBENE,DENOMINAZIONE,TIPOLOGIA,CATEGORIA,COMUNE&outSR=4326&resultRecordCount=3&f=json',
+  },
+  {
+    name: 'socrata-mappa-bella-lombardia-metadata',
+    note: "Metadata della vista Socrata ap3k-i5ip (non i dati: le righe sono tornate vuote al round 1) — spiega se è una 'vista mappa' derivata (non interrogabile via SODA standard) invece di un dataset vero, prima di scartarla o di provare un'altra sintassi di query.",
+    url: 'https://www.dati.lombardia.it/api/views/ap3k-i5ip.json',
+  },
+  {
+    name: 'socrata-bella-lombardia-base-columns',
+    note: "Schema colonne (nomi/tipi, non righe) del dataset Socrata base 4mr7-hfsh — il dump del round 1 si è troncato dentro i campi di testo lungo (abstract/descrizione) prima di rivelare se esiste una colonna geografica (Location) o solo province/comuni testuali.",
+    url: 'https://www.dati.lombardia.it/api/views/4mr7-hfsh.json',
+  },
 ]
 
 export interface ProbeResult {

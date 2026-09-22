@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       only:
-        description: "Nome di un singolo probe da scripts/places/lombardia/probe.ts (vuoto = tutti). Vedi il file per l'elenco: socrata-mappa-bella-lombardia, socrata-bella-lombardia-base, arcgis-cultura-lblgeo-service-json, arcgis-cultura-lblgeo-query-layer0, arcgis-cultura-lblgeo-wfs-getcapabilities, geoserver-wfs-getcapabilities-guess-non-verificato."
+        description: "Nome di un singolo probe da scripts/places/lombardia/probe.ts (vuoto = tutti, consigliato). Round 1: socrata-mappa-bella-lombardia, socrata-bella-lombardia-base, arcgis-cultura-lblgeo-service-json, arcgis-cultura-lblgeo-query-layer0, arcgis-cultura-lblgeo-wfs-getcapabilities, geoserver-wfs-getcapabilities-guess-non-verificato. Round 2: arcgis-lblgeo-count-totale, arcgis-lblgeo-categorie-distinte, arcgis-lblgeo-milano-count, arcgis-lblgeo-geometry-sample-milano, socrata-mappa-bella-lombardia-metadata, socrata-bella-lombardia-base-columns."
         required: false
         type: string
         default: ""
