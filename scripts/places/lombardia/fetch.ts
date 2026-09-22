@@ -122,6 +122,32 @@ const LOMBARDIA_TYPE_MAP: [string, SiteType][] = [
   ['collezione', 'museo'],
   ['monumento', 'monumento'],
   ['mausoleo', 'monumento'],
+
+  // ── Estensioni verificate sul dry-run reale (651 record, 2026-09-22) ──────────────────────────
+  // Il primo dry-run (solo i 3 valori sopra osservati dal vivo + analogie MiC) dava 212/651 (32.6%)
+  // su 'altro'. `countRawTipologiaForSubtype` ha mostrato i valori REALI dietro quel numero: 144
+  // record senza alcun TIPOLOGIA (dato mancante alla fonte, non un buco della mappa — resta
+  // 'altro' comunque, correttamente) e 68 con un valore reale non ancora mappato. Le righe sotto
+  // classificano i 36 di quei 68 con un fit ragionevole; i restanti 32 (casa, scuola, ospedale,
+  // stadio, grattacielo, centrale elettrica, cimitero, torre, collegio, cascina, portici, baita,
+  // diga, casale, magazzino, università, albergo, casello, edificio in linea, edificio a torre,
+  // stazione, argine) restano deliberatamente 'altro': troppo generici o eterogenei per un fit
+  // onesto in una categoria esistente — forzarli sarebbe lo stesso errore di classificazione
+  // ingiustificata già evitato altrove in questo progetto.
+  ['tempio civico', 'monumento'], // PRIMA di 'tempio' sotto: sostantivo secolare (memoriale civico), non un luogo di culto
+  ['porta', 'monumento'],         // porta cittadina/di fortificazione storica
+  ['ponte', 'monumento'],
+  ['campanile', 'chiesa'],
+  ['cappella', 'chiesa'],
+  ['oratorio', 'chiesa'],
+  ['culto', 'chiesa'],            // copre "edificio di culto ed annessi" e "luogo di culto rupestre"
+  ['sacro monte', 'chiesa'],
+  ['tempio', 'chiesa'],
+  ['edificio religioso fortificato', 'chiesa'],
+  ['terme', 'sito_archeologico'],
+  ['insediamento', 'sito_archeologico'], // copre insediamento urbano/palafitticolo/fortificato
+  ['mura difensive', 'castello'],
+  ['forte', 'castello'],           // copre anche "casaforte" (contiene "forte")
 ]
 
 export function lombardiaTipologiaToSiteType(tipologia: string | undefined | null): SiteType {
