@@ -6,7 +6,7 @@ import RouteHub from '@/components/routehub/RouteHub'
 import HubSkeleton from '@/components/routehub/HubSkeleton'
 import GuideReader from '@/components/guida/GuideReader'
 import { textPrimary, textMuted } from '@/components/routehub/overlayTheme'
-import type { RouteHubItem, SectionKind, PrimaryAction } from '@/components/routehub/types'
+import type { RouteHubItem, SectionKind, PrimaryAction, StatPill } from '@/components/routehub/types'
 import { computeTrailScoreTotal, computeTrailScoreBreakdown, isTrailScoreVetoed, TRAIL_SCORE_MAX } from '@/components/ScoreRing'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 import { normalizeGuideNotices } from '@/lib/guideNotices'
@@ -35,10 +35,12 @@ import { getUserStartingPoint, googleMapsDirectionsUrl, fetchDrivingInfo, origin
 import { useCtsUpdated } from '@/lib/sync/useCtsUpdated'
 import { formatDuration } from '@/lib/tcxParser'
 import type { GuideSectionKey } from '@/lib/guideSections'
+import { metaHasHikingMetrics, SITE_TYPE_CONFIG } from '@/lib/metaTypes'
+import { metaRowLocationStats } from '@/lib/metaCard'
 import {
   Mountain, Route, TrendingUp, Clock, Loader2,
   Car, Trash2, Pencil, Check, Images,
-  Navigation, Download,
+  Navigation, Download, MapPin,
   Calendar as CalendarIcon,
 } from 'lucide-react'
 import { exportPlannedHikeToGpx } from '@/utils/exportGpx'
@@ -69,18 +71,44 @@ function previewScoreValue(h: PlannedHikeMeta): number {
   return h.cachedTrailScore ?? 0
 }
 
+/** Pillole per una Meta senza metriche escursionistiche (Borgo/Città, Sito) — mai km/D+/quota/
+ *  durata (piano guide-eccellenza §Fase 0: "se manca il dato, la riga sparisce, non uno zero").
+ *  municipality/region non esistono ancora su PlannedHikeMeta (solo su dtrek_places via placeId,
+ *  non denormalizzati qui), quindi restano null: metaRowLocationStats è già tollerante alla loro
+ *  assenza e produce solo la categoria (per un Sito) o nessuna pillola (per un Borgo/Città). */
+function nonHikingStatPills(h: Pick<PlannedHikeMeta, 'metaType' | 'siteType'>): StatPill[] {
+  return metaRowLocationStats({
+    metaType: h.metaType ?? 'sentiero',
+    siteType: h.siteType ?? null,
+    municipality: null,
+    region: null,
+  }).map(stat => ({
+    icon: stat.key === 'category' && h.siteType ? SITE_TYPE_CONFIG[h.siteType].icon : MapPin,
+    label: stat.value,
+  }))
+}
+
+function statPillsForMeta(h: PlannedHikeMeta, distPill?: StatPill | null): StatPill[] {
+  const basePills = metaHasHikingMetrics(h.metaType)
+    ? [
+        { icon: Route,      label: `${(h.distanceMeters / 1000).toFixed(1)} km` },
+        { icon: TrendingUp, label: `+${Math.round(h.elevationGain)} m` },
+        { icon: Mountain,   label: `${Math.round(h.altitudeMax)} m` },
+        { icon: Clock,      label: formatDuration(h.estimatedTimeSeconds) },
+      ]
+    : nonHikingStatPills(h)
+  return distPill ? [...basePills, distPill] : basePills
+}
+
 function metaToItem(h: PlannedHikeMeta): RouteHubItem {
   const previewTotal = previewScoreValue(h)
   return {
     id: h.id,
     title: h.title,
     polyline: h.routePolyline,
-    statPills: [
-      { icon: Route,       label: `${(h.distanceMeters / 1000).toFixed(1)} km` },
-      { icon: TrendingUp,  label: `+${Math.round(h.elevationGain)} m` },
-      { icon: Mountain,    label: `${Math.round(h.altitudeMax)} m` },
-      { icon: Clock,       label: formatDuration(h.estimatedTimeSeconds) },
-    ],
+    metaType: h.metaType,
+    siteType: h.siteType,
+    statPills: statPillsForMeta(h),
     sortValues: {
       date: new Date(h.createdAt).getTime(),
       km: h.distanceMeters,
@@ -549,13 +577,7 @@ export default function GuidaHub({ id }: { id?: string }) {
     }
     const pillsFor = (h: PlannedHike, distanceMeters: number | undefined) => {
       const distPill = distancePillFor(h.routePolyline, distanceMeters)
-      return [
-        { icon: Route,      label: `${(h.distanceMeters / 1000).toFixed(1)} km` },
-        { icon: TrendingUp, label: `+${Math.round(h.elevationGain)} m` },
-        { icon: Mountain,   label: `${Math.round(h.altitudeMax)} m` },
-        { icon: Clock,      label: formatDuration(h.estimatedTimeSeconds) },
-        ...(distPill ? [distPill] : []),
-      ]
+      return statPillsForMeta(h, distPill)
     }
     const sortValuesFor = (h: PlannedHike, previewValue: number, distanceMeters: number | undefined) => ({
       date: new Date(h.createdAt).getTime(), km: h.distanceMeters, dplus: h.elevationGain, cts: previewValue,
@@ -587,7 +609,7 @@ export default function GuidaHub({ id }: { id?: string }) {
     if (hike && !mapped.some(it => it.id === hike.id)) {
       const distanceMeters = driving?.distanceMeters ?? hike.cachedDrivingDistanceMeters
       const preview = scorePreviewFor(hike)
-      return [{ id: hike.id, title: hike.title, polyline: hike.routePolyline, statPills: pillsFor(hike, distanceMeters), sortValues: sortValuesFor(hike, preview?.value ?? 0, distanceMeters), scorePreview: preview, favorite: hike.favorite, plannedDate: hike.plannedDate }, ...mapped]
+      return [{ id: hike.id, title: hike.title, polyline: hike.routePolyline, metaType: hike.metaType, siteType: hike.siteType, statPills: pillsFor(hike, distanceMeters), sortValues: sortValuesFor(hike, preview?.value ?? 0, distanceMeters), scorePreview: preview, favorite: hike.favorite, plannedDate: hike.plannedDate }, ...mapped]
     }
     return mapped
   }, [items, hike, driving, userOrigin, driveCache, ctsSettled])

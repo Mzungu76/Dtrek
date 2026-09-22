@@ -1,6 +1,7 @@
 import type { ReactNode, Ref } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import type { SafetyPreview } from '@/components/TrailScoreGaugeBadge'
+import type { MetaType, SiteType } from '@/lib/metaTypes'
 
 export type HubMode = 'guida' | 'resoconto' | 'diario'
 
@@ -42,6 +43,12 @@ export interface RouteHubItem {
   /** Cover photo for the fullscreen stage + gallery thumb (Resoconto: real activity photo).
    *  When absent, the cover falls back to a stylized, non-interactive route map (CoverMap). */
   coverPhotoUrl?: string
+  /** Guida-only (piano guide-eccellenza §Fase 0.3) — assente per Resoconto/Diario, che restano
+   *  sempre trattati come 'sentiero' agli effetti dell'icona di ripiego quando manca la traccia
+   *  GPS (vedi GalleryMapThumb in BottomGallery.tsx). Mai dedotto: passato così com'è da
+   *  PlannedHikeMeta. */
+  metaType?: MetaType
+  siteType?: SiteType
   statPills: StatPill[]
   sortValues?: SortValues
   /** Best-effort score badge for the gallery thumbnail (top-left) — Guida: partial Trail Score

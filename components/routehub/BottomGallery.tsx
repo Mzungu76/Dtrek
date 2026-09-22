@@ -3,11 +3,12 @@ import type * as L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import Image from 'next/image'
-import { Mountain, ArrowUpDown, Upload, Star, Search, X, Rows3, CalendarClock } from 'lucide-react'
+import { ArrowUpDown, Upload, Star, Search, X, Rows3, CalendarClock } from 'lucide-react'
 import RouteThumb from '@/components/RouteThumb'
 import { MiniScoreRing } from '@/components/ScoreRing'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 import { ctsLabel } from '@/lib/trailScore'
+import { META_TYPE_CONFIG, SITE_TYPE_CONFIG, type MetaType, type SiteType } from '@/lib/metaTypes'
 import type { HubMode, RouteHubItem, SortValues } from './types'
 
 // Dimensione del badge a doppio anello nella miniatura di galleria (80×80px) — più grande del
@@ -103,7 +104,9 @@ function ThumbBadge({ sortBy, item, showPlannedDate }: { sortBy: SortKey; item: 
 // (quasi) in vista per non creare troppe istanze Leaflet in una lista lunga.
 // Esportata: riusata identica dalle righe di ExpandedGalleryList.tsx, stessa miniatura-mappa
 // invece di duplicarne la logica IntersectionObserver/Leaflet.
-export function GalleryMapThumb({ polyline }: { polyline?: [number, number][] }) {
+export function GalleryMapThumb({ polyline, metaType, siteType }: {
+  polyline?: [number, number][]; metaType?: MetaType; siteType?: SiteType
+}) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<HTMLDivElement>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -156,11 +159,15 @@ export function GalleryMapThumb({ polyline }: { polyline?: [number, number][] })
   }, [nearView, polyline])
 
   const hasRoute = polyline && polyline.length > 1
+  // Sentiero/assente ⇒ icona escursionistica come prima; Borgo/Sito ⇒ icona coerente con la
+  // tipologia (piano guide-eccellenza §Fase 0.3) — mai Mountain fisso per una tipologia che non
+  // cammina su una traccia. Un Sito con sottotipo noto usa l'icona più specifica del sottotipo.
+  const FallbackIcon = siteType ? SITE_TYPE_CONFIG[siteType].icon : META_TYPE_CONFIG[metaType ?? 'sentiero'].icon
 
   return (
     <div ref={wrapRef} className="absolute inset-0 bg-gradient-to-br from-[#123448] to-[#071824]">
       {!hasRoute && (
-        <div className="w-full h-full flex items-center justify-center"><Mountain className="w-5 h-5 text-sky-300/60" /></div>
+        <div className="w-full h-full flex items-center justify-center"><FallbackIcon className="w-5 h-5 text-sky-300/60" /></div>
       )}
       {hasRoute && !nearView && <RouteThumb polyline={polyline!} color="#7dd3fc" strokeWidth={3} />}
       {hasRoute && nearView && <div ref={mapRef} className="absolute inset-0" />}
@@ -348,7 +355,7 @@ export default function BottomGallery({
               // invece la riceve in background da app/guida/GuidaHub.tsx (foto dell'archivio
               // dtrek_places), altrimenti resterebbe questa stessa mappa disegnata su una
               // polyline vuota (nulla da mostrare, piano §48.9).
-              <GalleryMapThumb polyline={item.polyline} />
+              <GalleryMapThumb polyline={item.polyline} metaType={item.metaType} siteType={item.siteType} />
             )}
             {(hasSortData || (favoritesFilter && nextOutingFilter)) && (
               <div className="absolute top-1 left-1 md:top-1.5 md:left-1.5">
