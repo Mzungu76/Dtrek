@@ -465,9 +465,16 @@ async function querySparql(query: string): Promise<MicBinding[]> {
     const lat = Number.isNaN(rawLat) ? undefined : rawLat
     const lon = Number.isNaN(rawLon) ? undefined : rawLon
 
+    // `?? 'fallback'` da solo non basta: verificato dal vivo su un record Lombardia (via
+    // fillMissingCoordinates, 2026-09-22) che `name` è una tripla PRESENTE ma con valore stringa
+    // vuota — mai visto prima perché quei record erano sempre stati scartati a monte per mancanza
+    // di coordinate. Una stringa vuota non è `undefined`, `??` non scatta, e un pin senza nome
+    // finirebbe in ricerca. `.trim()` tratta anche whitespace-only allo stesso modo.
+    const rawName = row.name?.value?.trim()
+
     out.push({
       id,
-      name: row.name?.value ?? 'Luogo della cultura',
+      name: rawName || 'Luogo della cultura',
       description: row.description?.value,
       typeLabel: row.typeLabel?.value,
       dcType: row.dcType?.value,
