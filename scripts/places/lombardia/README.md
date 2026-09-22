@@ -102,10 +102,28 @@ GeoServer "a costo zero", 404 atteso). Fonte scelta e verificata: **B, ArcGIS `c
   ArcGIS (`.../MapServer/0/query`), comunque più semplice di un WFS.
 
 `fetch.ts` implementato di conseguenza (`--describe`/`--dry-run`/`write`, stesso pattern di
-`mic/fetch.ts`). La mappatura `TIPOLOGIA → SiteType` (`LOMBARDIA_TYPE_MAP`) ha solo 3 valori
-verificati dal vivo finora (`anfiteatro`, `Museo, galleria non a scopo di lucro e/o raccolta`,
-`convento`) — le altre voci sono per analogia con `MIC_TYPE_MAP`, da rivedere contro la
-distribuzione reale stampata da `--dry-run` prima di un `write` su scala piena.
+`mic/fetch.ts`).
+
+**Mappatura `TIPOLOGIA → SiteType` completata sui dati reali (dry-run 651 record, 2026-09-22).**
+Il primo `--dry-run` (solo i 3 valori osservati dal vivo + analogie MiC) dava **212/651 (32.6%)**
+su `altro`. `countRawTipologiaForSubtype` (aggiunta al dry-run apposta) ha mostrato i valori REALI
+dietro quel numero — mai indovinati:
+
+- **144** record senza alcun `TIPOLOGIA` (dato mancante alla fonte, non un buco della mappa — resta
+  `altro` comunque, correttamente, stessa tolleranza di `MIC_TYPE_MAP`).
+- **68** con un valore reale non ancora mappato. Di questi, **36** classificati con un fit
+  ragionevole (`ponte`/`porta`/`tempio civico`→monumento, `oratorio`/`cappella`/`campanile`/
+  `culto`/`sacro monte`/`tempio`/`edificio religioso fortificato`→chiesa, `terme`/`insediamento`
+  (urbano/palafitticolo/fortificato)→sito_archeologico, `mura difensive`/`forte`→castello). I
+  restanti **32** (`casa`, `scuola`, `ospedale`, `stadio`, `grattacielo`, `centrale elettrica`,
+  `cimitero`, `torre`, `collegio`, `cascina`, `portici`, `baita`, `diga`, `casale`, `magazzino`,
+  `università`, `albergo`, `casello`, `edificio in linea`, `edificio a torre`, `stazione`,
+  `argine`) restano deliberatamente `altro` — troppo generici o eterogenei per un fit onesto in una
+  categoria esistente.
+
+`altro` atteso dopo l'estensione: **~176/651 (27%)**, quasi tutto dato mancante alla fonte
+(144/176), non un gap di classificazione. Verificare con un nuovo `--dry-run` prima di procedere
+a `write`.
 
 ## Uso
 

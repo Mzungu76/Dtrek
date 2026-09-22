@@ -23,6 +23,39 @@ describe('lombardiaTipologiaToSiteType', () => {
     expect(lombardiaTipologiaToSiteType(undefined)).toBe('altro')
     expect(lombardiaTipologiaToSiteType(null)).toBe('altro')
   })
+
+  it('estensioni verificate sul dry-run reale (651 record, 2026-09-22) — valori TIPOLOGIA reali dietro il 32.6% di altro del primo giro', () => {
+    expect(lombardiaTipologiaToSiteType('ponte')).toBe('monumento')
+    expect(lombardiaTipologiaToSiteType('oratorio')).toBe('chiesa')
+    expect(lombardiaTipologiaToSiteType('cappella')).toBe('chiesa')
+    expect(lombardiaTipologiaToSiteType('campanile')).toBe('chiesa')
+    expect(lombardiaTipologiaToSiteType('sacro monte')).toBe('chiesa')
+    expect(lombardiaTipologiaToSiteType('edificio di culto ed annessi')).toBe('chiesa')
+    expect(lombardiaTipologiaToSiteType('luogo di culto rupestre')).toBe('chiesa')
+    expect(lombardiaTipologiaToSiteType('edificio religioso fortificato')).toBe('chiesa')
+    expect(lombardiaTipologiaToSiteType('mura difensive')).toBe('castello')
+    expect(lombardiaTipologiaToSiteType('forte')).toBe('castello')
+    expect(lombardiaTipologiaToSiteType('casaforte')).toBe('castello')
+    expect(lombardiaTipologiaToSiteType('porta')).toBe('monumento')
+    expect(lombardiaTipologiaToSiteType('terme')).toBe('sito_archeologico')
+    expect(lombardiaTipologiaToSiteType('insediamento urbano')).toBe('sito_archeologico')
+    expect(lombardiaTipologiaToSiteType('insediamento palafitticolo')).toBe('sito_archeologico')
+    expect(lombardiaTipologiaToSiteType('insediamento fortificato')).toBe('sito_archeologico')
+  })
+
+  it("'tempio civico' è un memoriale civico (monumento), non un luogo di culto — deve avere precedenza su 'tempio' da solo", () => {
+    expect(lombardiaTipologiaToSiteType('tempio civico')).toBe('monumento')
+    expect(lombardiaTipologiaToSiteType('tempio')).toBe('chiesa')
+  })
+
+  it('valori genuinamente troppo generici/eterogenei restano deliberatamente altro (mai forzati in una categoria)', () => {
+    expect(lombardiaTipologiaToSiteType('casa')).toBe('altro')
+    expect(lombardiaTipologiaToSiteType('scuola')).toBe('altro')
+    expect(lombardiaTipologiaToSiteType('ospedale')).toBe('altro')
+    expect(lombardiaTipologiaToSiteType('stadio')).toBe('altro')
+    expect(lombardiaTipologiaToSiteType('grattacielo')).toBe('altro')
+    expect(lombardiaTipologiaToSiteType('centrale elettrica')).toBe('altro')
+  })
 })
 
 describe('lombardiaFeatureToPlaceCandidate', () => {
