@@ -1,0 +1,66 @@
+name: Import Places — Lombardia (probe diagnostico fonti candidate)
+
+# Manuale (workflow_dispatch), stesso schema di import-places-mic.yml — leggere quel file e
+# scripts/places/lombardia/README.md prima di modificare questo.
+#
+# Solo modalità "probe": nessun fetch.ts/importer esiste ancora per questa fonte (vedi README,
+# sezione "Stato") — questo workflow serve a raccogliere il primo dump reale di ciascuna fonte
+# candidata (Socrata Bella Lombardia, ArcGIS cultura/LBL_GEO, un tentativo WFS generico), MAI
+# ancora interrogate dal vivo perché il sandbox di sviluppo non ha accesso di rete a nessuna di
+# esse (verificato più ampio del solito blocco regione.*.it — vedi README "Bloccante di rete").
+# Nessuna scrittura, nessun secret Supabase richiesto.
+
+on:
+  workflow_dispatch:
+    inputs:
+      only:
+        description: "Nome di un singolo probe da scripts/places/lombardia/probe.ts (vuoto = tutti). Vedi il file per l'elenco: socrata-mappa-bella-lombardia, socrata-bella-lombardia-base, arcgis-cultura-lblgeo-service-json, arcgis-cultura-lblgeo-query-layer0, arcgis-cultura-lblgeo-wfs-getcapabilities, geoserver-wfs-getcapabilities-guess-non-verificato."
+        required: false
+        type: string
+        default: ""
+      timeout_ms:
+        description: "Timeout (ms) per ciascun probe — un solo tentativo, nessuna retry."
+        required: false
+        type: string
+        default: "30000"
+
+concurrency:
+  group: import-places
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    env:
+      ONLY: ${{ inputs.only }}
+      TIMEOUT_MS: ${{ inputs.timeout_ms }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Probe — test degli endpoint candidati (diagnostica, nessun Supabase)
+        run: |
+          set -euo pipefail
+          if [ -n "${ONLY:-}" ]; then
+            npx tsx scripts/places/lombardia/probe.ts --timeout "$TIMEOUT_MS" --only "$ONLY" | tee /tmp/lombardia-probe.txt
+          else
+            npx tsx scripts/places/lombardia/probe.ts --timeout "$TIMEOUT_MS" | tee /tmp/lombardia-probe.txt
+          fi
+          {
+            echo "### Import Places — Lombardia (probe diagnostico)"
+            echo "Primo dump reale delle fonti candidate (vedi scripts/places/lombardia/README.md) — nessuna era mai stata raggiunta dal vivo prima, il sandbox di sviluppo non ha accesso di rete a nessuna di esse."
+            echo '```'
+            cat /tmp/lombardia-probe.txt
+            echo '```'
+            echo ""
+            echo "Prossimo passo: leggere lo status/contentType/bodySnippet di ciascun probe. Per il candidato Socrata, verificare i nomi dei campi reali e se la colonna geografica è già WGS84. Per ArcGIS, leggere spatialReference nel probe 'service-json' prima di usare il probe 'query-layer0'."
+          } >> "$GITHUB_STEP_SUMMARY"
