@@ -3,6 +3,7 @@ import {
   lombardiaTipologiaToSiteType,
   lombardiaFeatureToPlaceCandidate,
   arcgisFeatureToLombardiaFeature,
+  countRawTipologiaForSubtype,
 } from '../lombardia/fetch'
 import type { LombardiaFeature } from '../lombardia/fetch'
 
@@ -72,6 +73,30 @@ describe('lombardiaFeatureToPlaceCandidate', () => {
   it('metadata porta i campi grezzi SIRBeC per audit, mai usati per la classificazione al posto di subtype', () => {
     const c = lombardiaFeatureToPlaceCandidate(ANFITEATRO)
     expect(c.metadata).toMatchObject({ sirbecCategoria: 'SA', sirbecTipologia: 'anfiteatro' })
+  })
+})
+
+describe('countRawTipologiaForSubtype', () => {
+  it('conta i valori TIPOLOGIA reali che cadono su un subtype, ordinati per frequenza decrescente (dry-run reale 2026-09-22: 212/651 su altro)', () => {
+    const features = [
+      { tipologia: 'complesso monumentale' },
+      { tipologia: 'complesso monumentale' },
+      { tipologia: 'complesso monumentale' },
+      { tipologia: 'area produttiva' },
+      { tipologia: 'convento' }, // mappato ad abbazia, non deve comparire
+    ]
+    expect(countRawTipologiaForSubtype(features, 'altro')).toEqual([
+      ['complesso monumentale', 3],
+      ['area produttiva', 1],
+    ])
+  })
+
+  it('tipologia assente conteggiata sotto "(assente)"', () => {
+    expect(countRawTipologiaForSubtype([{ tipologia: undefined }], 'altro')).toEqual([['(assente)', 1]])
+  })
+
+  it('nessun record per quel subtype → array vuoto', () => {
+    expect(countRawTipologiaForSubtype([{ tipologia: 'convento' }], 'altro')).toEqual([])
   })
 })
 
