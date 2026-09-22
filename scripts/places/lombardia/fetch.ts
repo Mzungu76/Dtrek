@@ -133,6 +133,19 @@ export function lombardiaTipologiaToSiteType(tipologia: string | undefined | nul
   return 'altro'
 }
 
+// Pura, testabile senza rete. Conta i valori REALI di `tipologia` (mai un'ipotesi) che cadono su un
+// dato subtype — usata dal dry-run per mostrare ESATTAMENTE cosa manca a LOMBARDIA_TYPE_MAP prima
+// di estenderla, invece di indovinare dalla sola percentuale di 'altro'.
+export function countRawTipologiaForSubtype(features: { tipologia?: string }[], subtype: SiteType): [string, number][] {
+  const counts = new Map<string, number>()
+  for (const f of features) {
+    if (lombardiaTipologiaToSiteType(f.tipologia) !== subtype) continue
+    const key = f.tipologia ?? '(assente)'
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])
+}
+
 // ── Feature ArcGIS grezza → PlaceCandidate ───────────────────────────────────────────────────────
 export interface LombardiaFeature {
   idBene: string
@@ -324,6 +337,10 @@ async function main() {
     bySubtype.set(subtype, (bySubtype.get(subtype) ?? 0) + 1)
   }
   console.log('Distribuzione per subtype:', Object.fromEntries(bySubtype))
+  if ((bySubtype.get('altro') ?? 0) > 0) {
+    console.log("Valori TIPOLOGIA reali che cadono su 'altro' (da usare per estendere LOMBARDIA_TYPE_MAP, mai indovinati):")
+    console.log(countRawTipologiaForSubtype(features, 'altro'))
+  }
 
   const candidates = features.map(lombardiaFeatureToPlaceCandidate)
 
