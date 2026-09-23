@@ -1,8 +1,16 @@
 import { describe, it, expect } from 'vitest'
-import { mergeStopCandidates, nearestStops, orderStopsNearestNeighbor, type ItineraryStopCandidate } from '../borgoItinerary'
+import {
+  mergeStopCandidates, nearestStops, orderStopsNearestNeighbor, groupStopsIntoTappe, personalizedTappaDistanceM,
+  type ItineraryStopCandidate,
+} from '../borgoItinerary'
+import type { ItineraryLeg } from '@/app/api/borgo-itinerary/route'
 
 function stop(id: string, name: string, lat: number, lon: number, extra: Partial<ItineraryStopCandidate> = {}): ItineraryStopCandidate {
   return { id, name, lat, lon, source: 'archivio', ...extra }
+}
+
+function leg(distanceM: number): ItineraryLeg {
+  return { fromIdx: 0, toIdx: 1, distanceM, polyline: [], real: true }
 }
 
 describe('mergeStopCandidates', () => {
@@ -66,5 +74,77 @@ describe('orderStopsNearestNeighbor', () => {
 
   it('un elenco vuoto produce un ordine vuoto', () => {
     expect(orderStopsNearestNeighbor({ lat: 0, lon: 0 }, [])).toEqual([])
+  })
+})
+
+describe('personalizedTappaDistanceM', () => {
+  it('preferenze non ancora caricate → il default medio (3 km)', () => {
+    expect(personalizedTappaDistanceM(undefined)).toBe(3000)
+  })
+
+  it('pref_durata uguale al default (270 min) → invariato', () => {
+    expect(personalizedTappaDistanceM(270)).toBe(3000)
+  })
+
+  it('scala proporzionalmente a metà tra il pavimento e il tetto', () => {
+    expect(personalizedTappaDistanceM(480)).toBe(Math.round(3000 * (480 / 270)))
+  })
+
+  it('mai sotto il pavimento, anche per una preferenza molto bassa', () => {
+    expect(personalizedTappaDistanceM(60)).toBe(1500)
+  })
+
+  it('mai oltre il tetto, anche per una preferenza molto alta', () => {
+    expect(personalizedTappaDistanceM(1000)).toBe(6000)
+  })
+})
+
+describe('groupStopsIntoTappe', () => {
+  const center = { lat: 0, lon: 0 }
+
+  it('un elenco vuoto produce nessuna tappa', () => {
+    expect(groupStopsIntoTappe(center, [], [], 6, 3000)).toEqual([])
+  })
+
+  it('poche tappe vicine restano tutte in un\'unica tappa', () => {
+    const stops = [stop('a', 'A', 0, 0), stop('b', 'B', 0, 0), stop('c', 'C', 0, 0)]
+    const legs = [leg(500), leg(500), leg(500)]
+    const tappe = groupStopsIntoTappe(center, stops, legs, 6, 3000)
+    expect(tappe).toHaveLength(1)
+    expect(tappe[0].stops.map(s => s.id)).toEqual(['a', 'b', 'c'])
+    expect(tappe[0].distanceM).toBe(1500)
+    expect(tappe[0].startPoint).toEqual(center)
+  })
+
+  it('si divide per numero massimo di punti', () => {
+    const stops = ['a', 'b', 'c', 'd', 'e'].map(id => stop(id, id, 0, 0))
+    const legs = stops.map(() => leg(100))
+    const tappe = groupStopsIntoTappe(center, stops, legs, 2, 10000)
+    expect(tappe.map(t => t.stops.map(s => s.id))).toEqual([['a', 'b'], ['c', 'd'], ['e']])
+  })
+
+  it('si divide per distanza massima accumulata', () => {
+    const stops = ['a', 'b', 'c'].map(id => stop(id, id, 0, 0))
+    const legs = [leg(1000), leg(1000), leg(1000)]
+    // Tetto 1900m: dopo 'a' (1000) il tratto per 'b' (altri 1000) supererebbe il tetto → nuova tappa.
+    const tappe = groupStopsIntoTappe(center, stops, legs, 6, 1900)
+    expect(tappe.map(t => t.stops.map(s => s.id))).toEqual([['a'], ['b'], ['c']])
+  })
+
+  it('una tappa non è mai vuota, anche quando il primo punto da solo supera già il tetto', () => {
+    const stops = [stop('a', 'A', 0, 0), stop('b', 'B', 0, 0)]
+    const legs = [leg(5000), leg(100)]
+    const tappe = groupStopsIntoTappe(center, stops, legs, 6, 1000)
+    expect(tappe.map(t => t.stops.map(s => s.id))).toEqual([['a'], ['b']])
+  })
+
+  it('la tappa successiva parte dall\'ultimo punto della precedente, non dal centro del borgo', () => {
+    const stops = ['a', 'b', 'c'].map(id => stop(id, id, 1, 1))
+    const legs = [leg(100), leg(100), leg(100)]
+    const tappe = groupStopsIntoTappe(center, stops, legs, 1, 10000)
+    expect(tappe).toHaveLength(3)
+    expect(tappe[0].startPoint).toEqual(center)
+    expect(tappe[1].startPoint).toEqual({ lat: 1, lon: 1 }) // ultimo punto di tappe[0] ('a')
+    expect(tappe[2].startPoint).toEqual({ lat: 1, lon: 1 }) // ultimo punto di tappe[1] ('b')
   })
 })

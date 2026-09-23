@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { getUserFromRequest } from '@/lib/supabaseAuth'
-import { mergeStopCandidates, nearestStops, orderStopsNearestNeighbor } from '@/lib/metaSearch/borgoItinerary'
+import { mergeStopCandidates, nearestStops, orderStopsNearestNeighbor, type ItineraryStopCandidate } from '@/lib/metaSearch/borgoItinerary'
 import { fetchBorgoArchiveStops, fetchBorgoWikiStops, enrichStopDescriptions } from '@/lib/guideBorgoDetailStops'
 import { fetchWalkNetworkCached } from '@/lib/routeBuilder/walkNetworkCache'
 import { nearestGraphNode, type WalkNetwork } from '@/lib/routeBuilder/osmGraph'
@@ -11,9 +11,35 @@ import { haversineM } from '@/lib/geoUtils'
 import type { SiteType } from '@/lib/metaTypes'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 60 // Wikipedia + rete pedonale (cache-miss = fetch Overpass) + dijkstra per tappa
+// Alzato da 60s — verifica utente: il raggio di ricerca ora si allarga fino a 20km per una città
+// grande, con fino a 4 giri di geosearch archivio/Wikipedia invece di uno solo. Pagato una sola
+// volta ogni 30 giorni per borgo grazie alla cache sotto, mai ad ogni apertura della guida — ben
+// entro il tetto reale della piattaforma (300s, piano Vercel di questo progetto).
+export const maxDuration = 120
 
-const MAX_STOPS = 6
+// Verifica utente — "la dimensione geografica della città/borgo": invece di un raggio fisso, si
+// parte stretto (comportamento invariato per un borgo compatto) e si allarga finché si continuano
+// a trovare punti nuovi in quantità significativa, fino al tetto di MAX_TOTAL_STOPS o al raggio
+// massimo — una città vera "riempie" ogni passo, un borgo piccolo esaurisce i punti trovabili
+// presto e il raggio si ferma corto da solo. Ogni passo riparte da zero con un raggio più ampio
+// (non incrementale, mai bisogno di deduplicare "anelli" di raggio) — il costo extra dei passi
+// successivi è pagato una sola volta ogni 30 giorni per borgo, grazie alla cache sotto.
+const RADIUS_STEPS: { radiusKm: number; wikiLimit: number; archiveLimit: number }[] = [
+  { radiusKm: 2.5, wikiLimit: 10, archiveLimit: 60 },
+  { radiusKm: 5,   wikiLimit: 20, archiveLimit: 120 },
+  { radiusKm: 10,  wikiLimit: 35, archiveLimit: 200 },
+  { radiusKm: 20,  wikiLimit: 50, archiveLimit: 300 },
+]
+// Un passo che aggiunge meno di questa soglia di candidati NUOVI rispetto al passo precedente
+// segnala rendimento decrescente (il borgo è già "esaurito"): allargare ulteriormente il raggio
+// non aggiungerebbe granché, si preferisce fermarsi lì piuttosto che pagare altri due giri di
+// rete per pochi punti in più.
+const MIN_NEW_CANDIDATES_TO_KEEP_EXPANDING = 3
+// Tetto complessivo sull'intera città (non per singola tappa — quello è MAX_STOPS_PER_TAPPA in
+// lib/metaSearch/borgoItinerary.ts, applicato lato client dopo il raggruppamento in tappe): anche
+// la città più grande non deve produrre un itinerario open-ended, che appesantirebbe Dijkstra/
+// l'arricchimento descrizioni oltre ogni beneficio reale per l'utente.
+const MAX_TOTAL_STOPS = 30
 // Verifica utente: l'itinerario si ricalcolava da zero ad ogni apertura della guida, anche per lo
 // stesso borgo appena visto — 30 giorni perché le fonti (voci Wikipedia, rete pedonale OSM) cambiano
 // di rado, un mese di cache non produce quasi mai un dato percepibilmente vecchio. Cache SUL BORGO
@@ -112,24 +138,30 @@ export async function POST(req: NextRequest) {
 
   const center = { lat: borgo.latitude as number, lon: borgo.longitude as number }
 
-  let archiveStops: Awaited<ReturnType<typeof fetchBorgoArchiveStops>>
-  try {
-    archiveStops = await fetchBorgoArchiveStops(supabase, center)
-  } catch (e) {
-    console.error('[borgo-itinerary]', e)
-    return NextResponse.json({ error: 'Errore interno' }, { status: 500 })
+  let merged: ItineraryStopCandidate[] = []
+  for (const step of RADIUS_STEPS) {
+    let archiveStops: ItineraryStopCandidate[]
+    try {
+      archiveStops = await fetchBorgoArchiveStops(supabase, center, step.radiusKm, step.archiveLimit)
+    } catch (e) {
+      console.error('[borgo-itinerary]', e)
+      return NextResponse.json({ error: 'Errore interno' }, { status: 500 })
+    }
+    const wikiStops = await fetchBorgoWikiStops(center, step.radiusKm, step.wikiLimit).catch(e => {
+      console.error('[borgo-itinerary] geosearch Wikipedia fallita', e)
+      return []
+    })
+    const previousCount = merged.length
+    merged = mergeStopCandidates(archiveStops, wikiStops)
+    if (merged.length >= MAX_TOTAL_STOPS) break
+    if (step !== RADIUS_STEPS[0] && merged.length - previousCount < MIN_NEW_CANDIDATES_TO_KEEP_EXPANDING) break
   }
-  const wikiStops = await fetchBorgoWikiStops(center).catch(e => {
-    console.error('[borgo-itinerary] geosearch Wikipedia fallita', e)
-    return []
-  })
 
-  const merged = mergeStopCandidates(archiveStops, wikiStops)
-  const capped = nearestStops(center, merged, MAX_STOPS)
+  const capped = nearestStops(center, merged, MAX_TOTAL_STOPS)
   // Verifica utente: descrizioni delle tappe "più esaustive" (e coerenti tra loro, non solo per
   // quelle da Wikipedia) — lib/guideBorgoDetailStops.ts's enrichStopDescriptions, stessa funzione
-  // riusata da app/api/guide/route.ts per il prompt, applicata SOLO alle MAX_STOPS tappe che
-  // sopravvivono alla selezione finale, mai all'intero elenco di candidati scartati.
+  // riusata da app/api/guide/route.ts per il prompt, applicata SOLO alle tappe che sopravvivono
+  // alla selezione finale, mai all'intero elenco di candidati scartati.
   const ordered = await enrichStopDescriptions(orderStopsNearestNeighbor(center, capped))
 
   if (ordered.length === 0) {

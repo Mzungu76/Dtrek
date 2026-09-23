@@ -163,6 +163,12 @@ interface Props {
    *  app/guida/useDrivingDistance.ts. Undefined finché l'indirizzo non è geocodificato o non c'è
    *  un punto di partenza noto per questo percorso. mapsUrl apre le indicazioni su Google Maps. */
   driving?: { distanceMeters: number; durationSeconds: number; mapsUrl?: string } | null
+  /** Minuti di camminata preferiti (user_settings.pref_durata, lib/useUserPrefs.ts) — verifica
+   *  utente: usato per personalizzare la distanza massima di ogni tappa nella suddivisione
+   *  dell'itinerario di un Borgo/Città (lib/metaSearch/borgoItinerary.ts's
+   *  personalizedTappaDistanceM), non per nient'altro qui. undefined finché le preferenze non sono
+   *  ancora caricate ⇒ il default medio, mai bloccante. */
+  prefDurata?: number
   /** Opens the fullscreen 3D map view for the route — forwarded to the "Il percorso" map section. */
   onOpenMap3D?: () => void
   /** Pendenza/esposizione overlay state — forwarded to the "Il percorso" map section (the toggle
@@ -241,7 +247,7 @@ export default function GuideReader({
   hike, onHikeUpdate, enrichmentReady, hasAiAccess, aiUnavailable, trialExpired,
   scrollToSectionKey, onScrollToSectionConsumed, highlightedPoiId, onPoiTap,
   weather, onOpenMap3D, showGradient, showAspect, dtmProfile, scores, safetyDetails, poiList, natura, driving,
-  onRouteModeChange,
+  onRouteModeChange, prefDurata,
 }: Props) {
   const [guideText,    setGuideText]    = useState<string>(hike.cachedGuide ?? '')
   const [guideNotices, setGuideNotices] = useState<GuideNotice[]>(normalizeGuideNotices(hike.cachedGuideNotices))
@@ -944,6 +950,7 @@ export default function GuideReader({
                 legs={borgoItinerary.legs}
                 center={hike.latitude != null && hike.longitude != null ? { lat: hike.latitude, lon: hike.longitude } : undefined}
                 color={SECTION_STYLE.luoghi.color}
+                prefDurata={prefDurata}
               />
             )
           }

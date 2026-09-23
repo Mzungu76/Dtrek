@@ -1052,6 +1052,7 @@ export default function GuidaHub({ id }: { id?: string }) {
           showAspect={showAspect}
           dtmProfile={dtmProfile}
           driving={drivingWithMaps}
+          prefDurata={prefsLoaded ? prefDurata : undefined}
           scores={{
             safety: refinedSafety,
             personalSafety,

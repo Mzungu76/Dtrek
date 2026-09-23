@@ -36,15 +36,17 @@ interface ArchiveSiteRow {
 export async function fetchBorgoArchiveStops(
   supabase: SupabaseClient,
   center: { lat: number; lon: number },
+  radiusKm = STOP_SEARCH_RADIUS_KM,
+  limit = 60,
 ): Promise<ItineraryStopCandidate[]> {
-  const bbox = originBbox(center, STOP_SEARCH_RADIUS_KM)
+  const bbox = originBbox(center, radiusKm)
   const { data, error } = await supabase
     .from('dtrek_places')
     .select('id, name, latitude, longitude, description, image_url, official_url, website, subtype')
     .eq('meta_type', 'sito')
     .gte('latitude', bbox.minLat).lte('latitude', bbox.maxLat)
     .gte('longitude', bbox.minLon).lte('longitude', bbox.maxLon)
-    .limit(60)
+    .limit(limit)
   if (error) throw error
 
   return ((data ?? []) as ArchiveSiteRow[]).map(r => ({
@@ -60,8 +62,12 @@ export async function fetchBorgoArchiveStops(
   }))
 }
 
-export async function fetchBorgoWikiStops(center: { lat: number; lon: number }): Promise<ItineraryStopCandidate[]> {
-  const wikiPages = await fetchNearbyWiki(center.lat, center.lon, STOP_SEARCH_RADIUS_KM * 1000, WIKI_LIMIT)
+export async function fetchBorgoWikiStops(
+  center: { lat: number; lon: number },
+  radiusKm = STOP_SEARCH_RADIUS_KM,
+  limit = WIKI_LIMIT,
+): Promise<ItineraryStopCandidate[]> {
+  const wikiPages = await fetchNearbyWiki(center.lat, center.lon, radiusKm * 1000, limit)
   return wikiPages
     .filter(w => w.lat != null && w.lon != null)
     .map(w => ({
