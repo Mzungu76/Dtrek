@@ -46,10 +46,15 @@ export function originMatches(aLat?: number | null, aLon?: number | null, bLat?:
   return Math.abs(aLat - bLat) < 1e-4 && Math.abs(aLon - bLon) < 1e-4
 }
 
-/** Returns the [lat, lon] of a planned hike's trail start, or null if unavailable. */
-export function getTrailStartPoint(hike: { routePolyline?: [number, number][] }): [number, number] | null {
+/** Returns the [lat, lon] of a planned hike's "trail start", or null if unavailable — a Sentiero
+ *  uses its routePolyline's first point; un Borgo/Città o Sito non ha mai una polyline e usa
+ *  invece latitude/longitude (valorizzate via placeId, piano Blocco D): senza questo fallback la
+ *  distanza in auto non veniva mai calcolata per quelle tipologie (piano guide-eccellenza). */
+export function getTrailStartPoint(hike: { routePolyline?: [number, number][]; latitude?: number | null; longitude?: number | null }): [number, number] | null {
   const p = hike.routePolyline?.[0]
-  return p ? p : null
+  if (p) return p
+  if (hike.latitude != null && hike.longitude != null) return [hike.latitude, hike.longitude]
+  return null
 }
 
 let startingPointPromise: Promise<{ lat: number; lon: number } | null> | null = null

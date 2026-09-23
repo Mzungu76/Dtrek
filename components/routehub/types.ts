@@ -49,6 +49,21 @@ export interface RouteHubItem {
    *  PlannedHikeMeta. */
   metaType?: MetaType
   siteType?: SiteType
+  /** Guida-only, Borgo/Città (piano guide-eccellenza) — posizione per calcolare la distanza in
+   *  auto (che un Borgo/Sito non ha mai via routePolyline, vedi lib/drivingInfo.ts) e il bbox per
+   *  il conteggio POI nei dintorni. Passate così come sono da PlannedHikeMeta.latitude/longitude,
+   *  mai dedotte. */
+  latitude?: number
+  longitude?: number
+  /** Guida-only, Borgo/Città — conteggio dei punti di interesse nominati nel raggio walkable dal
+   *  centro (app/api/pois, stesso servizio multi-fonte cachato lato server già usato per un
+   *  Sentiero aperto), riempito in background dopo il primo mount. Assente finché non calcolato,
+   *  mai un numero fabbricato. */
+  poiCount?: number
+  /** Guida-only, Sito — orario as-is dalla fonte (formato OSM opening_hours quando presente, mai
+   *  parsato/normalizzato qui — stesso principio di components/guida/widgets/SitoInfoWidget.tsx).
+   *  Assente quando dtrek_places non ha il dato, mai un placeholder. */
+  openingHoursLabel?: string
   statPills: StatPill[]
   sortValues?: SortValues
   /** Best-effort score badge for the gallery thumbnail (top-left) — Guida: partial Trail Score
