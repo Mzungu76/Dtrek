@@ -1,7 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { originBbox } from './metaSearch/placeQuery'
-import { fetchNearbyWiki, fetchExtendedExtract } from './wikipedia'
+import { fetchNearbyWiki, fetchExtendedExtract, searchAndFetch } from './wikipedia'
 import { mergeStopCandidates, nearestStops, orderStopsNearestNeighbor, type ItineraryStopCandidate } from './metaSearch/borgoItinerary'
+import { haversineM } from './geoUtils'
 import type { SiteType } from './metaTypes'
 
 // Punti di dettaglio di un Borgo/Città per la Guida (app/api/guide/route.ts) — stessa scoperta
@@ -75,24 +76,43 @@ export async function fetchBorgoWikiStops(center: { lat: number; lon: number }):
     }))
 }
 
-// Verifica utente: le tappe con descrizione da Wikipedia arrivavano con l'estratto corto della
-// REST /page/summary/ (fetchNearbyWiki sopra — spesso una sola frase, pensato per un elenco di
-// risultati, non per raccontare la tappa). Qui si richiede il testo esteso (fetchExtendedExtract,
-// Action API con exchars, fino a ~1200 caratteri) SOLO per le tappe che sopravvivono alla
-// selezione finale (nearestStops/orderStopsNearestNeighbor già a valle) — mai per tutti i
-// candidati scartati, che sprecherebbe chiamate per testo che nessuno vedrà mai. Le tappe
-// dall'archivio (source 'archivio') restano invariate: la loro description viene da dtrek_places,
-// non da questa API.
-export async function enrichWikiStopDescriptions(stops: ItineraryStopCandidate[]): Promise<ItineraryStopCandidate[]> {
-  return Promise.all(stops.map(async stop => {
-    if (stop.source !== 'wikipedia') return stop
-    try {
+// Verifica utente: "alcuni [testi delle tappe] sono ben ampliati e altri no" — solo le tappe da
+// Wikipedia (source 'wikipedia') venivano ampliate col testo esteso, quelle dall'archivio
+// (dtrek_places.description, spesso assente o un breve accenno — quel campo non è mai stato
+// pensato per una narrazione) restavano invariate: da qui l'incoerenza. Sotto una soglia di
+// lunghezza, si cerca ORA una voce Wikipedia corrispondente per nome anche per una tappa
+// dall'archivio, validata per prossimità (raggio stretto: un'omonimia in un'altra città non deve
+// mai sostituire una descrizione corta ma corretta con un testo lungo ma sbagliato) — mai
+// un'eccezione, un fallimento lascia semplicemente la description originale (anche se breve).
+const MIN_DESCRIPTION_CHARS = 300
+const ARCHIVE_WIKI_MATCH_RADIUS_M = 400
+
+async function ensureExhaustiveDescription(stop: ItineraryStopCandidate): Promise<ItineraryStopCandidate> {
+  try {
+    if (stop.source === 'wikipedia') {
       const extended = await fetchExtendedExtract(stop.name, 'it')
-      return extended ? { ...stop, description: extended } : stop
-    } catch {
-      return stop
+      return extended && extended.length > (stop.description?.length ?? 0) ? { ...stop, description: extended } : stop
     }
-  }))
+    if ((stop.description?.length ?? 0) >= MIN_DESCRIPTION_CHARS) return stop
+    const wiki = await searchAndFetch(stop.name, 'it', 'wikipedia')
+    if (!wiki || wiki.lat == null || wiki.lon == null) return stop
+    if (haversineM(stop.lat, stop.lon, wiki.lat, wiki.lon) > ARCHIVE_WIKI_MATCH_RADIUS_M) return stop
+    const extended = await fetchExtendedExtract(wiki.title, 'it')
+    return extended && extended.length > (stop.description?.length ?? 0) ? { ...stop, description: extended } : stop
+  } catch {
+    return stop
+  }
+}
+
+/**
+ * Descrizioni delle tappe selezionate portate al testo esteso Wikipedia (fetchExtendedExtract,
+ * Action API con exchars, fino a ~1200 caratteri) invece del breve estratto della geosearch REST o
+ * della description dell'archivio quando troppo corta — SOLO per le tappe che sopravvivono alla
+ * selezione finale (nearestStops/orderStopsNearestNeighbor già a valle), mai per tutti i candidati
+ * scartati, che sprecherebbe chiamate per testo che nessuno vedrà mai.
+ */
+export async function enrichStopDescriptions(stops: ItineraryStopCandidate[]): Promise<ItineraryStopCandidate[]> {
+  return Promise.all(stops.map(ensureExhaustiveDescription))
 }
 
 /**
@@ -116,7 +136,7 @@ export async function fetchBorgoDetailStops(
     ])
     const merged = mergeStopCandidates(archiveStops, wikiStops)
     const selected = orderStopsNearestNeighbor(center, nearestStops(center, merged, MAX_DETAIL_STOPS))
-    return await enrichWikiStopDescriptions(selected)
+    return await enrichStopDescriptions(selected)
   } catch (e) {
     console.error('[guide] fetch punti di dettaglio del borgo fallito', e)
     return []

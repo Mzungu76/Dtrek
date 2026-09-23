@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { getUserFromRequest } from '@/lib/supabaseAuth'
 import { mergeStopCandidates, nearestStops, orderStopsNearestNeighbor } from '@/lib/metaSearch/borgoItinerary'
-import { fetchBorgoArchiveStops, fetchBorgoWikiStops, enrichWikiStopDescriptions } from '@/lib/guideBorgoDetailStops'
+import { fetchBorgoArchiveStops, fetchBorgoWikiStops, enrichStopDescriptions } from '@/lib/guideBorgoDetailStops'
 import { fetchWalkNetworkCached } from '@/lib/routeBuilder/walkNetworkCache'
 import { nearestGraphNode, type WalkNetwork } from '@/lib/routeBuilder/osmGraph'
 import { dijkstra, reconstructPath } from '@/lib/routeBuilder/walkRouting'
@@ -114,12 +114,11 @@ export async function POST(req: NextRequest) {
 
   const merged = mergeStopCandidates(archiveStops, wikiStops)
   const capped = nearestStops(center, merged, MAX_STOPS)
-  // Verifica utente: descrizioni delle tappe "più esaustive" — l'estratto Wikipedia breve della
-  // geosearch (fetchBorgoWikiStops, pensato per un elenco di risultati) viene sostituito col testo
-  // esteso (lib/guideBorgoDetailStops.ts's enrichWikiStopDescriptions, stessa funzione riusata da
-  // app/api/guide/route.ts per il prompt) SOLO per le MAX_STOPS tappe che sopravvivono alla
-  // selezione finale, mai per l'intero elenco di candidati scartati.
-  const ordered = await enrichWikiStopDescriptions(orderStopsNearestNeighbor(center, capped))
+  // Verifica utente: descrizioni delle tappe "più esaustive" (e coerenti tra loro, non solo per
+  // quelle da Wikipedia) — lib/guideBorgoDetailStops.ts's enrichStopDescriptions, stessa funzione
+  // riusata da app/api/guide/route.ts per il prompt, applicata SOLO alle MAX_STOPS tappe che
+  // sopravvivono alla selezione finale, mai all'intero elenco di candidati scartati.
+  const ordered = await enrichStopDescriptions(orderStopsNearestNeighbor(center, capped))
 
   if (ordered.length === 0) {
     const empty: BorgoItinerary = { borgoName: borgo.name, stops: [], legs: [], totalDistanceM: 0, estimatedTimeSeconds: 0 }

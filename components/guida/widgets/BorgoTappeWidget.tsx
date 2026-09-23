@@ -1,8 +1,9 @@
 import dynamic from 'next/dynamic'
 import { useState } from 'react'
-import { ExternalLink, ChevronDown, ChevronUp } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
 import { SITE_TYPE_CONFIG, type SiteType } from '@/lib/metaTypes'
 import type { ItineraryLeg } from '@/app/api/borgo-itinerary/route'
+import StopSourceSheet, { type StopSourceSheetData } from './StopSourceSheet'
 
 // Leaflet tocca `window` al modulo — mai importato lato server (stesso pattern già usato in
 // app/mete/[id]/page.tsx, l'unico altro punto che monta questa mappa).
@@ -32,10 +33,10 @@ interface Props {
 }
 
 // Verifica utente: le descrizioni delle tappe sono ora più lunghe (testo esteso Wikipedia via
-// lib/guideBorgoDetailStops.ts's enrichWikiStopDescriptions, non più il breve estratto della
+// lib/guideBorgoDetailStops.ts's enrichStopDescriptions, non più il breve estratto della
 // geosearch) — un muro di testo sempre aperto sarebbe eccessivo per una timeline pensata per essere
-// scorsa rapidamente, quindi resta troncata di default con un "Leggi tutto"/"Riduci" in-app invece
-// di un line-clamp fisso senza via d'uscita.
+// scorsa rapidamente, quindi resta troncata di default con un "Leggi tutto" che apre la lettura
+// completa in StopSourceSheet, mai un line-clamp fisso senza via d'uscita.
 const PREVIEW_CHARS = 160
 
 function truncateStopDescription(text: string): { preview: string; isTruncated: boolean } {
@@ -57,18 +58,21 @@ function truncateStopDescription(text: string): { preview: string; isTruncated: 
  *  qui: un tratto pieno è un cammino reale sulla rete pedonale OSM, tratteggiato è una linea
  *  d'aria di ripiego quando quella tappa risulta isolata dalla rete.
  *
- *  Verifica utente: prima l'intera riga era un link che apriva subito Wikipedia/la fonte esterna —
- *  ora il tap espande/riduce la descrizione qui dentro, e solo un link "Fonte" esplicito e
- *  secondario porta fuori dall'app, per chi lo cerca davvero. */
+ *  Verifica utente: prima l'intera riga era un link che apriva subito Wikipedia/la fonte esterna in
+ *  un'altra scheda del browser — "Leggi tutto" ora apre una pagina di lettura DENTRO l'app
+ *  (StopSourceSheet), col link esterno vero solo lì dentro, secondario. */
 export default function BorgoTappeWidget({ stops, center, legs, color }: Props) {
-  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [openStopId, setOpenStopId] = useState<string | null>(null)
   if (stops.length === 0) return null
 
-  const toggleExpanded = (id: string) => setExpanded(prev => {
-    const next = new Set(prev)
-    if (next.has(id)) next.delete(id); else next.add(id)
-    return next
-  })
+  const openStop = stops.find(s => s.id === openStopId)
+  const sheetData: StopSourceSheetData | null = openStop ? {
+    name: openStop.name,
+    description: openStop.description,
+    thumbnail: openStop.thumbnail,
+    url: openStop.url,
+    sourceLabel: openStop.source === 'wikipedia' ? 'su Wikipedia' : 'la fonte',
+  } : null
 
   return (
     <div className="flex flex-col gap-4">
@@ -79,7 +83,6 @@ export default function BorgoTappeWidget({ stops, center, legs, color }: Props) 
       {stops.map((stop, i) => {
         const desc = stop.description
         const { preview, isTruncated } = desc ? truncateStopDescription(desc) : { preview: '', isTruncated: false }
-        const isExpanded = expanded.has(stop.id)
         return (
           <div key={stop.id} className="flex gap-3">
             <div className="flex flex-col items-center">
@@ -104,28 +107,20 @@ export default function BorgoTappeWidget({ stops, center, legs, color }: Props) 
                     )}
                   </p>
                   {desc && (
-                    <p className="text-[12px] text-stone-500 leading-snug mt-0.5">
-                      {isExpanded ? desc : preview}
-                      {isTruncated && (
-                        <button
-                          type="button"
-                          onClick={() => toggleExpanded(stop.id)}
-                          className="ml-1 inline-flex items-center gap-0.5 font-semibold text-terra-600 hover:text-terra-700 whitespace-nowrap"
-                        >
-                          {isExpanded ? <>Riduci <ChevronUp className="w-3 h-3" /></> : <>Leggi tutto <ChevronDown className="w-3 h-3" /></>}
-                        </button>
-                      )}
-                    </p>
+                    <p className="text-[12px] text-stone-500 leading-snug mt-0.5">{preview}</p>
                   )}
-                  {stop.url && (
-                    <a
-                      href={stop.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-1 inline-flex items-center gap-1 text-[11px] text-stone-400 hover:text-stone-600 transition-colors"
+                  {/* Leggi tutto/Fonte convergono nella stessa pagina di lettura in-app
+                      (StopSourceSheet) — mostrato anche senza troncamento quando resta comunque
+                      una fonte da citare, altrimenti quella tappa non avrebbe alcun modo di
+                      raggiungerla. */}
+                  {(isTruncated || stop.url) && (
+                    <button
+                      type="button"
+                      onClick={() => setOpenStopId(stop.id)}
+                      className="mt-0.5 inline-flex items-center gap-0.5 text-[12px] font-semibold text-terra-600 hover:text-terra-700 whitespace-nowrap"
                     >
-                      Fonte <ExternalLink className="w-3 h-3" />
-                    </a>
+                      {isTruncated ? 'Leggi tutto' : 'Fonte'} <ChevronRight className="w-3 h-3" />
+                    </button>
                   )}
                 </div>
               </div>
@@ -134,6 +129,7 @@ export default function BorgoTappeWidget({ stops, center, legs, color }: Props) 
         )
       })}
       </div>
+      {sheetData && <StopSourceSheet data={sheetData} onClose={() => setOpenStopId(null)} />}
     </div>
   )
 }
