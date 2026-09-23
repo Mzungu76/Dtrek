@@ -163,12 +163,6 @@ interface Props {
    *  app/guida/useDrivingDistance.ts. Undefined finché l'indirizzo non è geocodificato o non c'è
    *  un punto di partenza noto per questo percorso. mapsUrl apre le indicazioni su Google Maps. */
   driving?: { distanceMeters: number; durationSeconds: number; mapsUrl?: string } | null
-  /** Minuti di camminata preferiti (user_settings.pref_durata, lib/useUserPrefs.ts) — verifica
-   *  utente: usato per personalizzare la distanza massima di ogni tappa nella suddivisione
-   *  dell'itinerario di un Borgo/Città (lib/metaSearch/borgoItinerary.ts's
-   *  personalizedTappaDistanceM), non per nient'altro qui. undefined finché le preferenze non sono
-   *  ancora caricate ⇒ il default medio, mai bloccante. */
-  prefDurata?: number
   /** Opens the fullscreen 3D map view for the route — forwarded to the "Il percorso" map section. */
   onOpenMap3D?: () => void
   /** Pendenza/esposizione overlay state — forwarded to the "Il percorso" map section (the toggle
@@ -247,7 +241,7 @@ export default function GuideReader({
   hike, onHikeUpdate, enrichmentReady, hasAiAccess, aiUnavailable, trialExpired,
   scrollToSectionKey, onScrollToSectionConsumed, highlightedPoiId, onPoiTap,
   weather, onOpenMap3D, showGradient, showAspect, dtmProfile, scores, safetyDetails, poiList, natura, driving,
-  onRouteModeChange, prefDurata,
+  onRouteModeChange,
 }: Props) {
   const [guideText,    setGuideText]    = useState<string>(hike.cachedGuide ?? '')
   const [guideNotices, setGuideNotices] = useState<GuideNotice[]>(normalizeGuideNotices(hike.cachedGuideNotices))
@@ -943,16 +937,8 @@ export default function GuideReader({
         // mai PoiListWidget qui, è costruita per un Sentiero (mappa del tracciato, Street View,
         // POI OSM) che un Borgo/Città non ha.
         if (hike.metaType === 'borgo_citta') {
-          if (borgoItinerary && borgoItinerary.stops.length > 0) {
-            return (
-              <BorgoTappeWidget
-                stops={borgoItinerary.stops}
-                legs={borgoItinerary.legs}
-                center={hike.latitude != null && hike.longitude != null ? { lat: hike.latitude, lon: hike.longitude } : undefined}
-                color={SECTION_STYLE.luoghi.color}
-                prefDurata={prefDurata}
-              />
-            )
+          if (borgoItinerary && borgoItinerary.tappe.length > 0) {
+            return <BorgoTappeWidget tappe={borgoItinerary.tappe} color={SECTION_STYLE.luoghi.color} />
           }
           // Verifica utente: mentre l'itinerario si calcola (geosearch Wikipedia + rete pedonale
           // OSM + Dijkstra, può metterci diversi secondi) questa sezione va distinta da una

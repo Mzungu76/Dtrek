@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { getUserFromRequest } from '@/lib/supabaseAuth'
-import { mergeStopCandidates, nearestStops, orderStopsNearestNeighbor, type ItineraryStopCandidate } from '@/lib/metaSearch/borgoItinerary'
+import {
+  mergeStopCandidates, nearestStops, orderStopsNearestNeighbor, groupStopsIntoTappe,
+  personalizedTappaMinutes, resolveDurationSignalMinutes, WALK_SPEED_MPS,
+  type ItineraryStopCandidate, type ItineraryTappa,
+} from '@/lib/metaSearch/borgoItinerary'
 import { fetchBorgoArchiveStops, fetchBorgoWikiStops, enrichStopDescriptions } from '@/lib/guideBorgoDetailStops'
+import { readOrBackfillHistoryStats } from '@/lib/hikerHistory'
 import { fetchWalkNetworkCached } from '@/lib/routeBuilder/walkNetworkCache'
 import { nearestGraphNode, type WalkNetwork } from '@/lib/routeBuilder/osmGraph'
 import { dijkstra, reconstructPath } from '@/lib/routeBuilder/walkRouting'
@@ -35,10 +40,10 @@ const RADIUS_STEPS: { radiusKm: number; wikiLimit: number; archiveLimit: number 
 // non aggiungerebbe granché, si preferisce fermarsi lì piuttosto che pagare altri due giri di
 // rete per pochi punti in più.
 const MIN_NEW_CANDIDATES_TO_KEEP_EXPANDING = 3
-// Tetto complessivo sull'intera città (non per singola tappa — quello è MAX_STOPS_PER_TAPPA in
-// lib/metaSearch/borgoItinerary.ts, applicato lato client dopo il raggruppamento in tappe): anche
-// la città più grande non deve produrre un itinerario open-ended, che appesantirebbe Dijkstra/
-// l'arricchimento descrizioni oltre ogni beneficio reale per l'utente.
+// Tetto complessivo sull'intera città (non per singola tappa — quello è MAX_STOPS_PER_TAPPA
+// sotto, applicato dopo il raggruppamento in tappe): anche la città più grande non deve produrre
+// un itinerario open-ended, che appesantirebbe Dijkstra/l'arricchimento descrizioni oltre ogni
+// beneficio reale per l'utente.
 const MAX_TOTAL_STOPS = 30
 // Verifica utente: l'itinerario si ricalcolava da zero ad ogni apertura della guida, anche per lo
 // stesso borgo appena visto — 30 giorni perché le fonti (voci Wikipedia, rete pedonale OSM) cambiano
@@ -61,9 +66,9 @@ const SNAP_THRESHOLD_M = 300
 // dell'ALTRA modalità di fallimento — un errore di rete vero e proprio, quella sì ritentata da
 // fetchOverpass — resta comunque ~2×questo valore + 1.2s).
 const WALK_NETWORK_TIMEOUT_MS = 45_000
-// ~4.3 km/h — un ritmo da visita (con soste implicite), non una camminata sportiva: la stessa
-// differenza per cui la stima di un Sentiero (lib/trailStats.ts) non è utilizzabile qui.
-const WALK_SPEED_MPS = 1.2
+// Stesso tetto già usato prima dell'allargamento del raggio di ricerca — per SINGOLA tappa (non
+// più sull'intero itinerario, quello è MAX_TOTAL_STOPS sopra).
+const MAX_STOPS_PER_TAPPA = 6
 
 export interface ItineraryStop {
   id: string
@@ -95,6 +100,11 @@ export interface BorgoItinerary {
   legs: ItineraryLeg[]
   totalDistanceM: number
   estimatedTimeSeconds: number
+  /** Suddivisione in tappe percorribili (lib/metaSearch/borgoItinerary.ts's groupStopsIntoTappe) —
+   *  personalizzata sull'utente che ha fatto QUESTA richiesta (storico reale o pref_durata), quindi
+   *  calcolata SEMPRE fresca ad ogni risposta, mai dentro itinerary_cache: la cache su dtrek_places
+   *  è condivisa tra tutti gli utenti, questo campo non può esserlo. */
+  tappe: ItineraryTappa[]
 }
 
 /**
@@ -134,14 +144,18 @@ export async function POST(req: NextRequest) {
   }
   if (!borgo) return NextResponse.json({ error: 'Borgo/Città non trovato' }, { status: 404 })
 
+  const center = { lat: borgo.latitude as number, lon: borgo.longitude as number }
+
   // Cache ancora valida — skip completo di geosearch/rete pedonale/Dijkstra, mai un dato scaduto
-  // silenziosamente servito oltre il TTL dichiarato.
+  // silenziosamente servito oltre il TTL dichiarato. Le tappe (personalizzate sull'utente) restano
+  // FUORI dalla cache condivisa: calcolate fresche anche su un hit di cache, mai congelate per
+  // l'utente che le ha calcolate per primo.
   const cachedAt = borgo.itinerary_cached_at ? new Date(borgo.itinerary_cached_at as string).getTime() : 0
   if (borgo.itinerary_cache && Date.now() - cachedAt < CACHE_TTL_MS) {
-    return NextResponse.json(borgo.itinerary_cache as BorgoItinerary)
+    const cached = borgo.itinerary_cache as BorgoItinerary
+    const tappe = await computeTappe(user.id, center, cached.stops, cached.legs)
+    return NextResponse.json({ ...cached, tappe })
   }
-
-  const center = { lat: borgo.latitude as number, lon: borgo.longitude as number }
 
   let merged: ItineraryStopCandidate[] = []
   for (const step of RADIUS_STEPS) {
@@ -174,7 +188,7 @@ export async function POST(req: NextRequest) {
     // dintorni" ma anche da un fallimento silenzioso della geosearch Wikipedia (wikiStops ricade
     // su [] sopra) — cachare un falso negativo per 30 giorni sarebbe peggio di ricalcolare ogni
     // volta. Il prossimo tentativo riparte sempre da zero, come prima di questa cache.
-    const empty: BorgoItinerary = { borgoName: borgo.name, stops: [], legs: [], totalDistanceM: 0, estimatedTimeSeconds: 0 }
+    const empty: BorgoItinerary = { borgoName: borgo.name, stops: [], legs: [], totalDistanceM: 0, estimatedTimeSeconds: 0, tappe: [] }
     return NextResponse.json(empty)
   }
 
@@ -206,10 +220,12 @@ export async function POST(req: NextRequest) {
     totalDistanceM += leg.distanceM
   }
 
-  const itinerary: BorgoItinerary = {
+  const stopsForResponse: ItineraryStop[] = ordered.map(({ id, name, lat, lon, description, thumbnail, url, source, siteType }) =>
+    ({ id, name, lat, lon, description, thumbnail, url, source, siteType }))
+
+  const cacheableItinerary: Omit<BorgoItinerary, 'tappe'> = {
     borgoName: borgo.name,
-    stops: ordered.map(({ id, name, lat, lon, description, thumbnail, url, source, siteType }) =>
-      ({ id, name, lat, lon, description, thumbnail, url, source, siteType })),
+    stops: stopsForResponse,
     legs,
     totalDistanceM,
     estimatedTimeSeconds: Math.round(totalDistanceM / WALK_SPEED_MPS),
@@ -219,11 +235,12 @@ export async function POST(req: NextRequest) {
   // aspettare la scrittura della cache. Solo quando la rete pedonale è stata trovata davvero (mai
   // quando `network` è null e ogni leg è quindi una linea d'aria di ripiego) — altrimenti un esito
   // degradato per un problema temporaneo di Overpass resterebbe "congelato" in cache per 30 giorni
-  // invece di lasciare che il prossimo tentativo riprovi con la rete vera.
+  // invece di lasciare che il prossimo tentativo riprovi con la rete vera. Mai `tappe` dentro
+  // questo oggetto: è personalizzato sull'utente corrente, la cache è condivisa tra tutti.
   if (network) {
     supabase
       .from('dtrek_places')
-      .update({ itinerary_cache: itinerary, itinerary_cached_at: new Date().toISOString() })
+      .update({ itinerary_cache: cacheableItinerary, itinerary_cached_at: new Date().toISOString() })
       .eq('id', placeId)
       .then(
         ({ error }) => { if (error) console.error('[borgo-itinerary] cache update fallito:', error.message) },
@@ -231,7 +248,29 @@ export async function POST(req: NextRequest) {
       )
   }
 
-  return NextResponse.json(itinerary)
+  const tappe = await computeTappe(user.id, center, ordered, legs)
+  return NextResponse.json({ ...cacheableItinerary, tappe })
+}
+
+/** Tappe personalizzate sull'utente che ha fatto la richiesta (verifica utente: "sei sicuro di
+ *  considerare anche lo storico?") — storico reale (lib/hikerHistory.ts) con priorità sulla
+ *  preferenza dichiarata (user_settings.pref_durata) quando l'utente ha già attività registrate.
+ *  Mai bloccante: un fallimento di una delle due fonti ricade sul default medio, mai un errore
+ *  che fa fallire l'intero itinerario per un problema di personalizzazione. */
+async function computeTappe(
+  userId: string,
+  center: { lat: number; lon: number },
+  stops: ItineraryStopCandidate[],
+  legs: ItineraryLeg[],
+): Promise<ItineraryTappa[]> {
+  const [prefDurata, history] = await Promise.all([
+    Promise.resolve(supabase.from('user_settings').select('pref_durata').eq('user_id', userId).maybeSingle())
+      .then(({ data }) => data?.pref_durata as number | undefined)
+      .catch(() => undefined),
+    readOrBackfillHistoryStats(userId).catch(() => undefined),
+  ])
+  const durationSignal = resolveDurationSignalMinutes(history, prefDurata)
+  return groupStopsIntoTappe(center, stops, legs, MAX_STOPS_PER_TAPPA, personalizedTappaMinutes(durationSignal))
 }
 
 function routeLeg(

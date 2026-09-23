@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  mergeStopCandidates, nearestStops, orderStopsNearestNeighbor, groupStopsIntoTappe, personalizedTappaDistanceM,
+  mergeStopCandidates, nearestStops, orderStopsNearestNeighbor, groupStopsIntoTappe,
+  personalizedTappaMinutes, resolveDurationSignalMinutes, visitMinutesFor, WALK_SPEED_MPS,
   type ItineraryStopCandidate,
 } from '../borgoItinerary'
 import type { ItineraryLeg } from '@/app/api/borgo-itinerary/route'
@@ -77,25 +78,56 @@ describe('orderStopsNearestNeighbor', () => {
   })
 })
 
-describe('personalizedTappaDistanceM', () => {
-  it('preferenze non ancora caricate → il default medio (3 km)', () => {
-    expect(personalizedTappaDistanceM(undefined)).toBe(3000)
+describe('visitMinutesFor', () => {
+  it('siteType noto → il tempo di visita configurato per quel tipo (lib/metaTypes.ts)', () => {
+    expect(visitMinutesFor({ siteType: 'museo' })).toBe(90)
+    expect(visitMinutesFor({ siteType: 'monumento' })).toBe(15)
   })
 
-  it('pref_durata uguale al default (270 min) → invariato', () => {
-    expect(personalizedTappaDistanceM(270)).toBe(3000)
+  it('nessun siteType (tappa da Wikipedia, o archivio senza subtype) → il default prudente, mai zero', () => {
+    expect(visitMinutesFor({})).toBeGreaterThan(0)
+  })
+})
+
+describe('resolveDurationSignalMinutes', () => {
+  it('nessuno storico → ricade sulla preferenza dichiarata', () => {
+    expect(resolveDurationSignalMinutes(undefined, 200)).toBe(200)
   })
 
-  it('scala proporzionalmente a metà tra il pavimento e il tetto', () => {
-    expect(personalizedTappaDistanceM(480)).toBe(Math.round(3000 * (480 / 270)))
+  it('storico con zero uscite → ricade comunque sulla preferenza dichiarata', () => {
+    expect(resolveDurationSignalMinutes({ count: 0, sumDurationMin: 0, recent: [] }, 200)).toBe(200)
   })
 
-  it('mai sotto il pavimento, anche per una preferenza molto bassa', () => {
-    expect(personalizedTappaDistanceM(60)).toBe(1500)
+  it('storico con uscite recenti → la media delle ultime, non la preferenza dichiarata', () => {
+    const history = { count: 10, sumDurationMin: 3000, recent: [{ durationMin: 400 }, { durationMin: 600 }] }
+    expect(resolveDurationSignalMinutes(history, 100)).toBe(500) // (400+600)/2, ignora sia sumDurationMin/count sia 100
   })
 
-  it('mai oltre il tetto, anche per una preferenza molto alta', () => {
-    expect(personalizedTappaDistanceM(1000)).toBe(6000)
+  it('storico senza uscite recenti salvate ma con conteggio → la media storica complessiva', () => {
+    const history = { count: 5, sumDurationMin: 1000, recent: [] }
+    expect(resolveDurationSignalMinutes(history, 100)).toBe(200) // 1000/5, ignora la preferenza dichiarata
+  })
+})
+
+describe('personalizedTappaMinutes', () => {
+  it('nessun segnale di durata → il default medio (150 min, ~2h30)', () => {
+    expect(personalizedTappaMinutes(undefined)).toBe(150)
+  })
+
+  it('segnale uguale al riferimento (270 min) → invariato', () => {
+    expect(personalizedTappaMinutes(270)).toBe(150)
+  })
+
+  it('scala proporzionalmente al segnale di durata', () => {
+    expect(personalizedTappaMinutes(480)).toBe(Math.round(150 * (480 / 270)))
+  })
+
+  it('mai sotto il pavimento, anche per un segnale molto basso', () => {
+    expect(personalizedTappaMinutes(90)).toBe(60)
+  })
+
+  it('mai oltre il tetto, anche per un segnale molto alto', () => {
+    expect(personalizedTappaMinutes(1000)).toBe(300)
   })
 })
 
@@ -103,45 +135,55 @@ describe('groupStopsIntoTappe', () => {
   const center = { lat: 0, lon: 0 }
 
   it('un elenco vuoto produce nessuna tappa', () => {
-    expect(groupStopsIntoTappe(center, [], [], 6, 3000)).toEqual([])
+    expect(groupStopsIntoTappe(center, [], [], 6, 150)).toEqual([])
   })
 
-  it('poche tappe vicine restano tutte in un\'unica tappa', () => {
+  it('poche tappe vicine restano tutte in un\'unica tappa quando il budget di tempo è ampio', () => {
     const stops = [stop('a', 'A', 0, 0), stop('b', 'B', 0, 0), stop('c', 'C', 0, 0)]
     const legs = [leg(500), leg(500), leg(500)]
-    const tappe = groupStopsIntoTappe(center, stops, legs, 6, 3000)
+    const tappe = groupStopsIntoTappe(center, stops, legs, 6, 600)
     expect(tappe).toHaveLength(1)
     expect(tappe[0].stops.map(s => s.id)).toEqual(['a', 'b', 'c'])
     expect(tappe[0].distanceM).toBe(1500)
     expect(tappe[0].startPoint).toEqual(center)
+    // Cammino (3×500m a WALK_SPEED_MPS) + visita (3× il default, nessun siteType impostato).
+    const expectedMinutes = Math.round(3 * ((500 / WALK_SPEED_MPS / 60) + visitMinutesFor({})))
+    expect(tappe[0].totalMinutes).toBe(expectedMinutes)
   })
 
-  it('si divide per numero massimo di punti', () => {
+  it('si divide per numero massimo di punti anche con un budget di tempo amplissimo', () => {
     const stops = ['a', 'b', 'c', 'd', 'e'].map(id => stop(id, id, 0, 0))
     const legs = stops.map(() => leg(100))
-    const tappe = groupStopsIntoTappe(center, stops, legs, 2, 10000)
+    const tappe = groupStopsIntoTappe(center, stops, legs, 2, 100_000)
     expect(tappe.map(t => t.stops.map(s => s.id))).toEqual([['a', 'b'], ['c', 'd'], ['e']])
   })
 
-  it('si divide per distanza massima accumulata', () => {
-    const stops = ['a', 'b', 'c'].map(id => stop(id, id, 0, 0))
+  it('si divide per tempo massimo accumulato — cammino PIÙ tempo di visita, non solo distanza', () => {
+    // Stesso identico tragitto (1000m ciascuna) ma tappe di tipo diverso (tempi di visita diversi):
+    // un museo (90min) esaurisce il budget dopo un solo punto, un monumento (15min) ne fa stare di più.
     const legs = [leg(1000), leg(1000), leg(1000)]
-    // Tetto 1900m: dopo 'a' (1000) il tratto per 'b' (altri 1000) supererebbe il tetto → nuova tappa.
-    const tappe = groupStopsIntoTappe(center, stops, legs, 6, 1900)
-    expect(tappe.map(t => t.stops.map(s => s.id))).toEqual([['a'], ['b'], ['c']])
+    const budget = (1000 / WALK_SPEED_MPS / 60) + 100 // poco sopra "un museo", sotto "due musei"
+
+    const museumStops = ['a', 'b', 'c'].map(id => stop(id, id, 0, 0, { siteType: 'museo' }))
+    expect(groupStopsIntoTappe(center, museumStops, legs, 6, budget).map(t => t.stops.length)).toEqual([1, 1, 1])
+
+    const monumentStops = ['a', 'b', 'c'].map(id => stop(id, id, 0, 0, { siteType: 'monumento' }))
+    // Un monumento (15min) pesa molto meno di un museo: più punti stanno nello stesso budget.
+    expect(groupStopsIntoTappe(center, monumentStops, legs, 6, budget).length)
+      .toBeLessThan(groupStopsIntoTappe(center, museumStops, legs, 6, budget).length)
   })
 
-  it('una tappa non è mai vuota, anche quando il primo punto da solo supera già il tetto', () => {
-    const stops = [stop('a', 'A', 0, 0), stop('b', 'B', 0, 0)]
+  it('una tappa non è mai vuota, anche quando il primo punto da solo supera già il budget', () => {
+    const stops = [stop('a', 'A', 0, 0, { siteType: 'museo' }), stop('b', 'B', 0, 0, { siteType: 'monumento' })]
     const legs = [leg(5000), leg(100)]
-    const tappe = groupStopsIntoTappe(center, stops, legs, 6, 1000)
+    const tappe = groupStopsIntoTappe(center, stops, legs, 6, 40)
     expect(tappe.map(t => t.stops.map(s => s.id))).toEqual([['a'], ['b']])
   })
 
   it('la tappa successiva parte dall\'ultimo punto della precedente, non dal centro del borgo', () => {
     const stops = ['a', 'b', 'c'].map(id => stop(id, id, 1, 1))
     const legs = [leg(100), leg(100), leg(100)]
-    const tappe = groupStopsIntoTappe(center, stops, legs, 1, 10000)
+    const tappe = groupStopsIntoTappe(center, stops, legs, 1, 100_000)
     expect(tappe).toHaveLength(3)
     expect(tappe[0].startPoint).toEqual(center)
     expect(tappe[1].startPoint).toEqual({ lat: 1, lon: 1 }) // ultimo punto di tappe[0] ('a')

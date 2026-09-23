@@ -59,6 +59,14 @@ interface MetaTypeConfig {
 interface SiteTypeConfig {
   label: string
   icon: LucideIcon
+  // Tempo di visita tipico in minuti (verifica utente, piano guide-eccellenza — "un poi potrebbe
+  // essere molto vicino ma richiedere mezza giornata di visita") — usato per il raggruppamento in
+  // tappe di un itinerario Borgo/Città (lib/metaSearch/borgoItinerary.ts), come base personalizzabile
+  // dall'utente con uno slider per singolo punto, mai un valore fisso imposto. Stime di buon senso
+  // calibrate su siti locali/regionali italiani (l'archivio di questa app), non su landmark mondiali
+  // (Louvre, Pompei, Windsor...) — quei riferimenti tornano numeri 2-4× più alti, coerenti con
+  // musei/siti di scala e affluenza molto maggiori di un museo civico o un'area archeologica locale.
+  visitMinutes: number
 }
 
 export const META_TYPE_CONFIG: Record<MetaType, MetaTypeConfig> = {
@@ -92,20 +100,25 @@ export const META_TYPE_CONFIG: Record<MetaType, MetaTypeConfig> = {
 }
 
 export const SITE_TYPE_CONFIG: Record<SiteType, SiteTypeConfig> = {
-  museo:             { label: 'Museo',             icon: Palette },
-  castello:          { label: 'Castello',           icon: Castle },
-  abbazia:           { label: 'Abbazia',            icon: Church },
-  chiesa:            { label: 'Chiesa',             icon: Church },
-  sito_archeologico: { label: 'Sito archeologico',  icon: Pyramid },
-  monumento:         { label: 'Monumento',          icon: Landmark },
-  palazzo:           { label: 'Palazzo',            icon: Building2 },
-  teatro:            { label: 'Teatro',             icon: Theater },
-  cascata:           { label: 'Cascata',            icon: Waves },
-  grotta:            { label: 'Grotta',             icon: Gem },
-  belvedere:         { label: 'Belvedere',          icon: MountainSnow },
-  area_naturale:     { label: 'Area naturale',      icon: Trees },
-  altro:             { label: 'Altro',               icon: MapPin },
+  museo:             { label: 'Museo',             icon: Palette,      visitMinutes: 90 },
+  castello:          { label: 'Castello',           icon: Castle,      visitMinutes: 120 },
+  abbazia:           { label: 'Abbazia',            icon: Church,      visitMinutes: 60 },
+  chiesa:            { label: 'Chiesa',             icon: Church,      visitMinutes: 20 },
+  sito_archeologico: { label: 'Sito archeologico',  icon: Pyramid,     visitMinutes: 60 },
+  monumento:         { label: 'Monumento',          icon: Landmark,    visitMinutes: 15 },
+  palazzo:           { label: 'Palazzo',            icon: Building2,   visitMinutes: 60 },
+  teatro:            { label: 'Teatro',             icon: Theater,     visitMinutes: 45 },
+  cascata:           { label: 'Cascata',            icon: Waves,       visitMinutes: 30 },
+  grotta:            { label: 'Grotta',             icon: Gem,         visitMinutes: 60 },
+  belvedere:         { label: 'Belvedere',          icon: MountainSnow, visitMinutes: 20 },
+  area_naturale:     { label: 'Area naturale',      icon: Trees,       visitMinutes: 45 },
+  altro:             { label: 'Altro',               icon: MapPin,     visitMinutes: 30 },
 }
+
+// Nessun siteType (tappa da Wikipedia senza classificazione, o un punto archivio senza subtype) —
+// stesso valore di 'altro': una via di mezzo prudente, mai zero (un punto senza tempo di visita
+// stimato sparirebbe dal budget della tappa come se non richiedesse nulla).
+export const DEFAULT_VISIT_MINUTES = SITE_TYPE_CONFIG.altro.visitMinutes
 
 export const META_TYPES: MetaType[] = ['sentiero', 'borgo_citta', 'sito']
 export const SITE_TYPES: SiteType[] = Object.keys(SITE_TYPE_CONFIG) as SiteType[]

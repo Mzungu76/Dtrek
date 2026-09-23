@@ -1,6 +1,12 @@
 import { haversineM } from '../geoUtils'
-import type { SiteType } from '../metaTypes'
+import { DEFAULT_VISIT_MINUTES, SITE_TYPE_CONFIG, type SiteType } from '../metaTypes'
 import type { ItineraryLeg } from '@/app/api/borgo-itinerary/route'
+
+// ~4.3 km/h — un ritmo da visita (con soste implicite), non una camminata sportiva: la stessa
+// differenza per cui la stima di un Sentiero (lib/trailStats.ts) non è utilizzabile qui. Vive qui
+// (non in app/api/borgo-itinerary/route.ts, che la importa) perché il raggruppamento in tappe a
+// tempo (più sotto) ne ha bisogno per convertire una distanza in un tempo di cammino equivalente.
+export const WALK_SPEED_MPS = 1.2
 
 // Logica pura dell'itinerario a piedi di un Borgo/Città (app/api/borgo-itinerary/route.ts) —
 // nessuna rete/Supabase qui, solo unione/dedup delle tappe candidate e il loro ordine di visita,
@@ -99,81 +105,115 @@ export interface ItineraryTappa {
    *  precedente, dentro la tappa o dalla tappa precedente per il primo). */
   legs: ItineraryLeg[]
   distanceM: number
+  /** Cammino + visita di ogni tappa (verifica utente: "un poi potrebbe essere molto vicino ma
+   *  richiedere mezza giornata di visita") — il vero criterio di chiusura di una tappa, la
+   *  distanza sopra resta solo per mostrare i km percorsi. */
+  totalMinutes: number
   /** Punto di partenza di QUESTA tappa — il Borgo stesso per la prima tappa, l'ultima tappa
    *  della tappa precedente per le successive: la camminata continua da lì, non si
    *  "teletrasporta" da un capo all'altro della città tra una tappa e la successiva. */
   startPoint: { lat: number; lon: number }
 }
 
-// "Distanza media per un adulto" (verifica utente) — un ritmo da visita comodo con soste
-// implicite (~40-45 minuti a WALK_SPEED_MPS, app/api/borgo-itinerary/route.ts), il default quando
-// non c'è ancora una preferenza utente caricata. DEFAULT_PREF_DURATA_MIN rispecchia lo stesso
-// default di user_settings.pref_durata (lib/useUserPrefs.ts) — la base rispetto a cui scalare.
-const DEFAULT_TAPPA_DISTANCE_M = 3000
-const DEFAULT_PREF_DURATA_MIN = 270
+/** Tempo di visita tipico di una tappa — SITE_TYPE_CONFIG (lib/metaTypes.ts) quando il siteType è
+ *  noto, altrimenti DEFAULT_VISIT_MINUTES (una tappa da Wikipedia senza classificazione, o
+ *  dall'archivio senza subtype) — mai zero, sparirebbe dal budget come se non richiedesse nulla. */
+export function visitMinutesFor(stop: { siteType?: SiteType }): number {
+  return stop.siteType ? SITE_TYPE_CONFIG[stop.siteType].visitMinutes : DEFAULT_VISIT_MINUTES
+}
+
+// Un segmento comodo di visita (cammino + soste) quando non c'è ancora nessun segnale
+// sull'utente — DEFAULT_REFERENCE_MINUTES rispecchia lo stesso default di user_settings.pref_durata
+// (lib/useUserPrefs.ts), la base rispetto a cui scalare qualunque segnale reale.
+const DEFAULT_TAPPA_MINUTES = 150
+const DEFAULT_REFERENCE_MINUTES = 270
 // Mai una tappa così corta da essere inutile, né così lunga da vanificare il senso stesso di
 // "tappa" — un pavimento e un tetto attorno al valore scalato, non un secondo criterio a sé.
-const MIN_TAPPA_DISTANCE_M = 1500
-const MAX_TAPPA_DISTANCE_M = 6000
+const MIN_TAPPA_MINUTES = 60
+const MAX_TAPPA_MINUTES = 300
 
 /**
- * Distanza massima "comoda" per una singola tappa, personalizzata sulle preferenze dell'utente
- * (verifica utente: "storico dell'utente, settato sulle sue preferenze... o distanza media per un
- * adulto") — scala il default medio in proporzione a pref_durata (minuti di camminata preferiti,
- * user_settings — lo stesso segnale già usato per Trail Score/Sicurezza), non lo riusa
- * direttamente come durata di UNA tappa: pref_durata rappresenta l'intera uscita che un utente
- * preferisce fare, non un singolo segmento tra le tante tappe di una città grande. undefined
- * (preferenze non ancora caricate) ⇒ il default medio, mai bloccante.
+ * Segnale di durata da usare per personalizzare una tappa — verifica utente: "sei sicuro di
+ * considerare anche lo storico? Io gestisco anche distanze più lunghe". Priorità allo storico
+ * REALE (lib/hikerHistory.ts — le ultime uscite se già disponibili, altrimenti la media storica)
+ * quando l'utente ha già attività registrate: più affidabile di una preferenza impostata una volta
+ * in Impostazioni e mai più toccata. Ricade su quella preferenza (pref_durata) solo per un utente
+ * ancora senza storico. Struttura minimale (non l'intero HikerHistoryStats) apposta: questo modulo
+ * resta puro/testabile senza importare lib/hikerHistory.ts (solo lato server).
  */
-export function personalizedTappaDistanceM(prefDurataMinutes: number | undefined): number {
-  if (prefDurataMinutes == null) return DEFAULT_TAPPA_DISTANCE_M
-  const scaled = DEFAULT_TAPPA_DISTANCE_M * (prefDurataMinutes / DEFAULT_PREF_DURATA_MIN)
-  return Math.min(MAX_TAPPA_DISTANCE_M, Math.max(MIN_TAPPA_DISTANCE_M, Math.round(scaled)))
+export function resolveDurationSignalMinutes(
+  history: { count: number; sumDurationMin: number; recent: { durationMin: number }[] } | undefined,
+  prefDurataMinutes: number | undefined,
+): number | undefined {
+  if (history && history.count > 0) {
+    if (history.recent.length > 0) return history.recent.reduce((s, r) => s + r.durationMin, 0) / history.recent.length
+    return history.sumDurationMin / history.count
+  }
+  return prefDurataMinutes
+}
+
+/**
+ * Budget di tempo "comodo" per una singola tappa, personalizzato sul segnale di durata risolto
+ * sopra (storico reale o preferenza dichiarata) — scala il default medio in proporzione, non lo
+ * riusa direttamente: quel segnale rappresenta l'intera uscita che un utente preferisce fare, non
+ * un singolo segmento tra le tante tappe di una città grande. undefined (nessun segnale
+ * disponibile) ⇒ il default medio, mai bloccante.
+ */
+export function personalizedTappaMinutes(durationSignalMinutes: number | undefined): number {
+  if (durationSignalMinutes == null || durationSignalMinutes <= 0) return DEFAULT_TAPPA_MINUTES
+  const scaled = DEFAULT_TAPPA_MINUTES * (durationSignalMinutes / DEFAULT_REFERENCE_MINUTES)
+  return Math.min(MAX_TAPPA_MINUTES, Math.max(MIN_TAPPA_MINUTES, Math.round(scaled)))
 }
 
 /**
  * Divide l'itinerario ordinato (già l'esito di orderStopsNearestNeighbor + le legs reali già
  * calcolate) in tappe percorribili — verifica utente: "all'interno dello stesso cammino non è
  * ragionevole piazzare più di un certo numero di punti [...] impossibile visitare 30 musei in una
- * camminata soltanto". Una tappa si chiude al PRIMO dei due limiti raggiunto (numero di punti o
- * distanza accumulata), mai oltre — ma non è mai vuota: il primo punto entra sempre, anche
- * quando da solo supera già la soglia di distanza (un singolo balzo lungo non deve produrre una
- * tappa fantasma senza nulla dentro).
+ * camminata soltanto" + "un poi potrebbe essere molto vicino ma richiedere mezza giornata di
+ * visita". Una tappa si chiude al PRIMO dei due limiti raggiunto (numero di punti o TEMPO
+ * accumulato — cammino fino a quel punto più il tempo di visita di ciascuno, mai la sola
+ * distanza), mai oltre — ma non è mai vuota: il primo punto entra sempre, anche quando da solo
+ * supera già il budget (un singolo balzo lungo, o un museo molto lungo da visitare, non deve
+ * produrre una tappa fantasma senza nulla dentro).
  */
 export function groupStopsIntoTappe(
   center: { lat: number; lon: number },
   stops: ItineraryStopCandidate[],
   legs: ItineraryLeg[],
   maxStopsPerTappa: number,
-  maxDistancePerTappaM: number,
+  maxMinutesPerTappa: number,
 ): ItineraryTappa[] {
   const tappe: ItineraryTappa[] = []
   let currentStops: ItineraryStopCandidate[] = []
   let currentLegs: ItineraryLeg[] = []
   let currentDistanceM = 0
+  let currentMinutes = 0
   let tappaStart = center
 
   function flush() {
     if (currentStops.length === 0) return
-    tappe.push({ stops: currentStops, legs: currentLegs, distanceM: currentDistanceM, startPoint: tappaStart })
+    tappe.push({ stops: currentStops, legs: currentLegs, distanceM: currentDistanceM, totalMinutes: Math.round(currentMinutes), startPoint: tappaStart })
     tappaStart = { lat: currentStops[currentStops.length - 1].lat, lon: currentStops[currentStops.length - 1].lon }
     currentStops = []
     currentLegs = []
     currentDistanceM = 0
+    currentMinutes = 0
   }
 
   stops.forEach((stop, i) => {
     const leg = legs[i]
     const legDistanceM = leg?.distanceM ?? 0
+    const addedMinutes = (legDistanceM / WALK_SPEED_MPS / 60) + visitMinutesFor(stop)
     if (currentStops.length > 0 && (
       currentStops.length >= maxStopsPerTappa ||
-      currentDistanceM + legDistanceM > maxDistancePerTappaM
+      currentMinutes + addedMinutes > maxMinutesPerTappa
     )) {
       flush()
     }
     currentStops.push(stop)
     currentLegs.push(leg)
     currentDistanceM += legDistanceM
+    currentMinutes += addedMinutes
   })
   flush()
 

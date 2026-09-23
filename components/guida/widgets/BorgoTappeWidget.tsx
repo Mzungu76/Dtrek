@@ -1,39 +1,21 @@
 import dynamic from 'next/dynamic'
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { ChevronRight } from 'lucide-react'
-import { SITE_TYPE_CONFIG, type SiteType } from '@/lib/metaTypes'
-import { groupStopsIntoTappe, personalizedTappaDistanceM } from '@/lib/metaSearch/borgoItinerary'
-import type { ItineraryLeg } from '@/app/api/borgo-itinerary/route'
+import { SITE_TYPE_CONFIG } from '@/lib/metaTypes'
+import type { ItineraryTappa } from '@/lib/metaSearch/borgoItinerary'
 import StopSourceSheet, { type StopSourceSheetData } from './StopSourceSheet'
 
 // Leaflet tocca `window` al modulo — mai importato lato server (stesso pattern già usato in
 // app/mete/[id]/page.tsx, l'unico altro punto che monta questa mappa).
 const ItineraryMap = dynamic(() => import('@/components/mete/ItineraryMap'), { ssr: false })
 
-export interface BorgoTappeStop {
-  id: string
-  name: string
-  lat: number
-  lon: number
-  description?: string
-  thumbnail?: string
-  url?: string
-  siteType?: SiteType
-  /** Presente solo per passare la tappa a ItineraryMap così com'è (ItineraryStop) — mai letto qui. */
-  source: 'archivio' | 'wikipedia'
-}
-
 interface Props {
-  stops: BorgoTappeStop[]
-  /** Centro del Borgo (piano guide-eccellenza, verifica post-piano) — assente insieme a `legs`
-   *  quando manca hike.latitude/longitude: la timeline resta comunque utile da sola, mai bloccata
-   *  in attesa della mappa. */
-  center?: { lat: number; lon: number }
-  legs?: ItineraryLeg[]
+  /** Già raggruppate in tappe percorribili dal server (app/api/borgo-itinerary/route.ts's
+   *  computeTappe — tempo di visita per tipo + storico reale/preferenza dell'utente), mai
+   *  ricalcolate qui: la personalizzazione ha bisogno di dati solo lato server (lib/hikerHistory.ts).
+   *  Sempre almeno una tappa quando ci sono punti da mostrare — mai vuoto insieme a stops non vuoti. */
+  tappe: ItineraryTappa[]
   color: string
-  /** Minuti di camminata preferiti dell'utente (user_settings.pref_durata) — personalizza la
-   *  distanza massima di ogni tappa (verifica utente). undefined ⇒ il default medio. */
-  prefDurata?: number
 }
 
 // Verifica utente: le descrizioni delle tappe sono ora più lunghe (testo esteso Wikipedia via
@@ -43,18 +25,18 @@ interface Props {
 // completa in StopSourceSheet, mai un line-clamp fisso senza via d'uscita.
 const PREVIEW_CHARS = 160
 
-// Verifica utente: "all'interno dello stesso cammino non è ragionevole piazzare più di un certo
-// numero di punti [...] impossibile visitare 30 musei in una camminata soltanto. Se i POI sono
-// tanti si suddividono in più tappe" — stesso tetto già usato prima dell'allargamento del raggio
-// di ricerca (app/api/borgo-itinerary/route.ts), qui applicato per SINGOLA tappa invece che
-// sull'intero itinerario dell'intera città.
-const MAX_STOPS_PER_TAPPA = 6
-
 function truncateStopDescription(text: string): { preview: string; isTruncated: boolean } {
   if (text.length <= PREVIEW_CHARS) return { preview: text, isTruncated: false }
   const cut = text.slice(0, PREVIEW_CHARS)
   const lastSpace = cut.lastIndexOf(' ')
   return { preview: `${cut.slice(0, lastSpace > 0 ? lastSpace : PREVIEW_CHARS)}…`, isTruncated: true }
+}
+
+function formatMinutes(min: number): string {
+  if (min < 60) return `${min} min`
+  const h = Math.floor(min / 60)
+  const m = min % 60
+  return m === 0 ? `${h} h` : `${h} h ${m} min`
 }
 
 /** Timeline verticale delle tappe di un Borgo/Città, in ordine di visita a piedi dal centro (lib/
@@ -66,32 +48,23 @@ function truncateStopDescription(text: string): { preview: string; isTruncated: 
  *  aggancia.
  *
  *  Verifica utente — una città grande può restituire molte più tappe di quante ne stia bene
- *  visitare in un'unica camminata: l'elenco ordinato viene diviso qui in "Tappe" percorribili
- *  (lib/metaSearch/borgoItinerary.ts's groupStopsIntoTappe — max 6 punti o una distanza massima
- *  personalizzata sulle preferenze dell'utente, quale dei due si esaurisce prima), ciascuna con la
- *  propria mappa e la propria mini-timeline; un selettore a chip appare solo quando ce n'è più di
- *  una — per un borgo piccolo (il caso comune) resta un'unica tappa, nessun cambiamento visibile.
- *  Le stesse fondamenta (una "Tappa" con punti/tragitto/distanza propri) serviranno anche per i
- *  futuri cammini multi-giorno (Francigena e simili), lì con tappe scandite da un percorso
- *  predefinito invece che da questo clustering algoritmico. */
-export default function BorgoTappeWidget({ stops, center, legs, color, prefDurata }: Props) {
+ *  visitare in un'unica camminata: l'elenco ordinato viene diviso in "Tappe" percorribili lato
+ *  server (max 6 punti o un budget di TEMPO — cammino + visita, personalizzato sullo storico reale
+ *  o sulla preferenza dell'utente — quale dei due si esaurisce prima), ciascuna con la propria
+ *  mappa e la propria mini-timeline; un selettore a chip appare solo quando ce n'è più di una — per
+ *  un borgo piccolo (il caso comune) resta un'unica tappa, nessun cambiamento visibile. Le stesse
+ *  fondamenta (una "Tappa" con punti/tragitto/tempo propri) serviranno anche per i futuri cammini
+ *  multi-giorno (Francigena e simili), lì con tappe scandite da un percorso predefinito invece che
+ *  da questo clustering algoritmico. */
+export default function BorgoTappeWidget({ tappe, color }: Props) {
   const [openStopId, setOpenStopId] = useState<string | null>(null)
   const [selectedTappaIdx, setSelectedTappaIdx] = useState(0)
 
-  // Fallback: senza hike.latitude/longitude (raro — Blocco D le valorizza sempre via placeId) il
-  // primo punto stesso fa da pseudo-centro, così il raggruppamento in tappe resta comunque
-  // utilizzabile invece di trattare l'intero elenco come un'unica tappa senza un vero motivo.
-  const effectiveCenter = center ?? (stops[0] ? { lat: stops[0].lat, lon: stops[0].lon } : null)
+  if (tappe.length === 0) return null
 
-  const tappe = useMemo(() => {
-    if (!effectiveCenter || !legs || legs.length === 0) return null
-    return groupStopsIntoTappe(effectiveCenter, stops, legs, MAX_STOPS_PER_TAPPA, personalizedTappaDistanceM(prefDurata))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stops, legs, effectiveCenter?.lat, effectiveCenter?.lon, prefDurata])
-
-  if (stops.length === 0) return null
-
-  const openStop = stops.find(s => s.id === openStopId)
+  const activeTappa = tappe[Math.min(selectedTappaIdx, tappe.length - 1)]
+  const allStops = tappe.flatMap(t => t.stops)
+  const openStop = allStops.find(s => s.id === openStopId)
   const sheetData: StopSourceSheetData | null = openStop ? {
     name: openStop.name,
     description: openStop.description,
@@ -100,19 +73,13 @@ export default function BorgoTappeWidget({ stops, center, legs, color, prefDurat
     sourceLabel: openStop.source === 'wikipedia' ? 'su Wikipedia' : 'la fonte',
   } : null
 
-  // Senza legs/centro (mappa non disponibile) resta la timeline piatta di sempre, mai bloccata in
-  // attesa di dati che potrebbero non arrivare mai per questa Meta.
-  const activeTappa = tappe?.[Math.min(selectedTappaIdx, tappe.length - 1)]
-  const displayStops = activeTappa?.stops ?? stops
-  const displayLegs = activeTappa?.legs
-  const displayCenter = activeTappa?.startPoint ?? center
   // Numerazione GLOBALE (continua tra le tappe, non riparte da 1 ad ogni tappa) — quanti punti
   // precedono la tappa selezionata nell'ordine di visita complessivo.
-  const numberOffset = tappe && activeTappa ? tappe.slice(0, selectedTappaIdx).reduce((n, t) => n + t.stops.length, 0) : 0
+  const numberOffset = tappe.slice(0, selectedTappaIdx).reduce((n, t) => n + t.stops.length, 0)
 
   return (
     <div className="flex flex-col gap-4">
-      {tappe && tappe.length > 1 && (
+      {tappe.length > 1 && (
         <div className="flex flex-wrap gap-1.5">
           {tappe.map((t, i) => (
             <button
@@ -126,21 +93,21 @@ export default function BorgoTappeWidget({ stops, center, legs, color, prefDurat
               }`}
               style={i === selectedTappaIdx ? { background: color } : undefined}
             >
-              Tappa {i + 1} <span className="font-normal opacity-80">· {t.stops.length} {t.stops.length === 1 ? 'punto' : 'punti'}</span>
+              Tappa {i + 1} <span className="font-normal opacity-80">· {t.stops.length} {t.stops.length === 1 ? 'punto' : 'punti'} · {formatMinutes(t.totalMinutes)}</span>
             </button>
           ))}
         </div>
       )}
-      {displayCenter && displayLegs && displayLegs.length > 0 && (
+      {activeTappa.legs.length > 0 && (
         // Verifica utente: la mappa non si aggiornava al cambio di tappa — ItineraryMap costruisce
         // la propria istanza Leaflet una sola volta al mount (useEffect con deps []), quindi senza
         // una key che cambia con la tappa selezionata React riusa la stessa istanza già montata e i
         // nuovi stops/legs non vengono mai ridisegnati. La key forza uno smontaggio/rimontaggio
         // pulito (ItineraryMap distrugge già la mappa Leaflet nel cleanup dell'effetto).
-        <ItineraryMap key={selectedTappaIdx} center={displayCenter} stops={displayStops} legs={displayLegs} color={color} />
+        <ItineraryMap key={selectedTappaIdx} center={activeTappa.startPoint} stops={activeTappa.stops} legs={activeTappa.legs} color={color} />
       )}
       <div className="flex flex-col">
-      {displayStops.map((stop, i) => {
+      {activeTappa.stops.map((stop, i) => {
           const desc = stop.description
           const { preview, isTruncated } = desc ? truncateStopDescription(desc) : { preview: '', isTruncated: false }
           return (
@@ -149,9 +116,9 @@ export default function BorgoTappeWidget({ stops, center, legs, color, prefDurat
                 <span className="w-6 h-6 shrink-0 rounded-full bg-terra-600 text-white font-barlow font-bold text-xs flex items-center justify-center">
                   {numberOffset + i + 1}
                 </span>
-                {i < displayStops.length - 1 && <span className="w-px flex-1 bg-terra-100 my-1" />}
+                {i < activeTappa.stops.length - 1 && <span className="w-px flex-1 bg-terra-100 my-1" />}
               </div>
-              <div className={`flex-1 min-w-0 ${i < displayStops.length - 1 ? 'pb-4' : ''}`}>
+              <div className={`flex-1 min-w-0 ${i < activeTappa.stops.length - 1 ? 'pb-4' : ''}`}>
                 <div className="flex gap-2.5 items-start">
                   {stop.thumbnail && (
                     // eslint-disable-next-line @next/next/no-img-element -- provenienza esterna (Wikipedia/archivio), non un asset ottimizzabile
