@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { originBbox } from './metaSearch/placeQuery'
-import { fetchNearbyWiki } from './wikipedia'
+import { fetchNearbyWiki, fetchExtendedExtract } from './wikipedia'
 import { mergeStopCandidates, nearestStops, orderStopsNearestNeighbor, type ItineraryStopCandidate } from './metaSearch/borgoItinerary'
 import type { SiteType } from './metaTypes'
 
@@ -75,6 +75,26 @@ export async function fetchBorgoWikiStops(center: { lat: number; lon: number }):
     }))
 }
 
+// Verifica utente: le tappe con descrizione da Wikipedia arrivavano con l'estratto corto della
+// REST /page/summary/ (fetchNearbyWiki sopra — spesso una sola frase, pensato per un elenco di
+// risultati, non per raccontare la tappa). Qui si richiede il testo esteso (fetchExtendedExtract,
+// Action API con exchars, fino a ~1200 caratteri) SOLO per le tappe che sopravvivono alla
+// selezione finale (nearestStops/orderStopsNearestNeighbor già a valle) — mai per tutti i
+// candidati scartati, che sprecherebbe chiamate per testo che nessuno vedrà mai. Le tappe
+// dall'archivio (source 'archivio') restano invariate: la loro description viene da dtrek_places,
+// non da questa API.
+export async function enrichWikiStopDescriptions(stops: ItineraryStopCandidate[]): Promise<ItineraryStopCandidate[]> {
+  return Promise.all(stops.map(async stop => {
+    if (stop.source !== 'wikipedia') return stop
+    try {
+      const extended = await fetchExtendedExtract(stop.name, 'it')
+      return extended ? { ...stop, description: extended } : stop
+    } catch {
+      return stop
+    }
+  }))
+}
+
 /**
  * Punti di dettaglio di un Borgo/Città, uniti e ordinati per la narrazione tappa-per-tappa della
  * Guida — mai un'eccezione: un fallimento della geosearch Wikipedia (rete irraggiungibile in
@@ -95,7 +115,8 @@ export async function fetchBorgoDetailStops(
       }),
     ])
     const merged = mergeStopCandidates(archiveStops, wikiStops)
-    return orderStopsNearestNeighbor(center, nearestStops(center, merged, MAX_DETAIL_STOPS))
+    const selected = orderStopsNearestNeighbor(center, nearestStops(center, merged, MAX_DETAIL_STOPS))
+    return await enrichWikiStopDescriptions(selected)
   } catch (e) {
     console.error('[guide] fetch punti di dettaglio del borgo fallito', e)
     return []
