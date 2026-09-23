@@ -39,6 +39,7 @@ import { effectiveHikeMetrics } from '@/lib/routeMode'
 import { findAllSourceImages } from '@/lib/sourceImageFetch'
 import { resolveComuneFromLatLon } from '@/lib/overpassTrails'
 import { guideProfileFor, type GuideProfile } from '@/lib/guideProfiles'
+import { borgoCardVariant } from '@/lib/guideCardVariant'
 import { metaHasHikingMetrics, SITE_TYPE_CONFIG, inferSiteTypeFromName } from '@/lib/metaTypes'
 import { fetchBorgoDetailStops } from '@/lib/guideBorgoDetailStops'
 import type { ItineraryStopCandidate } from '@/lib/metaSearch/borgoItinerary'
@@ -979,7 +980,12 @@ async function generateGuide(req: NextRequest): Promise<Response> {
   // ora, non prima: la tipologia della Meta è nota solo dopo averla letta da Supabase/fallback.
   // "verificato" non passa mai da questo filtro/profilo: resta gestita separatamente più sotto
   // (unica chiamata a SYSTEM_VERIFICATO, indipendente dalla tipologia).
-  const guideProfile = guideProfileFor(hike.metaType, hike.siteType)
+  // hike qui non porta mai routePolyline (mai selezionata sopra, un sentiero la usa solo per il
+  // proprio disegno mappa) — trackPoints da solo basta per riconoscere una traccia reale collegata
+  // a un Borgo/Città (piano guide-eccellenza §Fase 3), stesso segnale che lib/guideCardVariant.ts
+  // usa lato client con in più routePolyline.
+  const borgoVariant = hike.metaType === 'borgo_citta' ? borgoCardVariant({ trackPoints }) : undefined
+  const guideProfile = guideProfileFor(hike.metaType, hike.siteType, borgoVariant)
   sectionKeys = sectionKeys.filter(k => k === 'verificato' || guideProfile.availableSections.includes(k))
   if (sectionKeys.length === 0) {
     return new Response(JSON.stringify({ error: 'Nessuna sezione da generare per questa tipologia di Meta' }), {

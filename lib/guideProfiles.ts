@@ -1,4 +1,5 @@
 import type { MetaType, SiteType } from './metaTypes'
+import type { BorgoCardVariant } from './guideCardVariant'
 import { GUIDE_SECTIONS, type GuideSectionKey } from './guideSections'
 
 // Blocco E (piano §28) — quali sezioni della Guida ha senso generare/mostrare per tipologia, e
@@ -322,11 +323,25 @@ function applySiteTypeOverride(base: GuideProfile, siteType: SiteType | undefine
   return { ...base, sectionOverrides: { ...base.sectionOverrides, ...overrides } }
 }
 
+// piano guide-eccellenza §Fase 3 — lib/guideCardVariant.ts promette che un Borgo/Città
+// 'trekking_misto' (traccia GPS reale collegata, un cammino che tocca il borgo) mantiene "Dati e
+// sicurezza" quasi come un Sentiero; questo profilo escludeva prima dati_sicurezza per OGNI
+// borgo_citta senza eccezione, in disaccordo con quella promessa. Solo dati_sicurezza cambia con
+// la variante — "comfort"/"Su misura per te" (confronto con lo storico escursionistico
+// dell'utente) resta escluso in ogni caso, il piano non lo cita. "Il percorso" resta l'override
+// narrativo "Il borgo" per ogni variante: qui non c'entra, invariato.
+function applyBorgoVariantOverride(base: GuideProfile, variant: BorgoCardVariant | undefined): GuideProfile {
+  if (variant !== 'trekking_misto') return base
+  return { ...base, availableSections: availableSectionsFor(['comfort']) }
+}
+
 // Assente/undefined trattato come 'sentiero' (il default di colonna, coerente con
 // lib/metaTypes.ts's metaHasHikingMetrics) — mai come "tipologia sconosciuta ⇒ profilo vuoto".
-// siteType è letto SOLO quando metaType è 'sito' (piano §30) — ignorato per ogni altra tipologia,
-// coerente con lib/metaTypes.ts dove SiteType è valorizzato solo in quel caso.
-export function guideProfileFor(metaType: MetaType | undefined, siteType?: SiteType): GuideProfile {
+// siteType è letto SOLO quando metaType è 'sito' (piano §30), borgoVariant SOLO quando metaType è
+// 'borgo_citta' (piano §Fase 3) — ignorati per ogni altra tipologia.
+export function guideProfileFor(metaType: MetaType | undefined, siteType?: SiteType, borgoVariant?: BorgoCardVariant): GuideProfile {
   const base = GUIDE_PROFILES[metaType ?? 'sentiero']
-  return base.metaType === 'sito' ? applySiteTypeOverride(base, siteType) : base
+  if (base.metaType === 'sito') return applySiteTypeOverride(base, siteType)
+  if (base.metaType === 'borgo_citta') return applyBorgoVariantOverride(base, borgoVariant)
+  return base
 }

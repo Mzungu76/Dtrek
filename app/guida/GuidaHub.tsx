@@ -37,6 +37,7 @@ import { formatDuration } from '@/lib/tcxParser'
 import type { GuideSectionKey } from '@/lib/guideSections'
 import { metaHasHikingMetrics, SITE_TYPE_CONFIG } from '@/lib/metaTypes'
 import { metaRowLocationStats } from '@/lib/metaCard'
+import { metaEligibleForHikingScores } from '@/lib/guideCardVariant'
 import {
   Mountain, Route, TrendingUp, Clock, Loader2,
   Car, Trash2, Pencil, Check, Images,
@@ -573,7 +574,11 @@ export default function GuidaHub({ id }: { id?: string }) {
     entity: hike,
     entityId: hike?.id,
     isFresh: (h) => h.cachedTrailScore != null && isScoreFresh(h.cachedScoresComputedAt),
-    hasEnoughGps: (h) => (h.trackPoints ?? []).filter(p => p.lat && p.lon).length >= 2,
+    // In AND col confine esplicito di tipologia (piano guide-eccellenza §Fase 4) — il controllo
+    // sui dati resta la prima difesa, mai sostituito: un Sito/Borgo cammino_urbano a cui viene
+    // iniettata per errore una traccia di 2 punti da un bug di import non deve comunque produrre
+    // un CTS Score.
+    hasEnoughGps: (h) => (h.trackPoints ?? []).filter(p => p.lat && p.lon).length >= 2 && metaEligibleForHikingScores(h),
     poisReady: poisFullyLoaded,
     dtmProfile, terrainProfile, inProtectedArea, prefsLoaded,
     pois,
@@ -787,7 +792,9 @@ export default function GuidaHub({ id }: { id?: string }) {
   const handleComputeCts = async () => {
     if (!hike) return
     const gps = (hike.trackPoints ?? []).filter(p => p.lat && p.lon)
-    if (gps.length < 2) return
+    // Stesso confine esplicito di tipologia di useCtsRecompute sopra (piano guide-eccellenza
+    // §Fase 4), in AND col controllo sui dati — mai in sua sostituzione.
+    if (gps.length < 2 || !metaEligibleForHikingScores(hike)) return
     setCtsComputing(true)
     try {
       // Shares the same pipeline (and the same prefetched-data shortcut) as the automatic

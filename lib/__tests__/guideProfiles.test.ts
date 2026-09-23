@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { guideProfileFor, GUIDE_PROFILES } from '../guideProfiles'
 import { GUIDE_SECTIONS, sectionDefForTitle } from '../guideSections'
 import { SITE_TYPES } from '../metaTypes'
+import { borgoCardVariant } from '../guideCardVariant'
 
 describe('guideProfileFor', () => {
   it('assente → trattato come sentiero (default di colonna)', () => {
@@ -74,6 +75,48 @@ describe('guideProfileFor — profili per siteType (piano §30)', () => {
   it('siteType è ignorato per metaType diverso da "sito"', () => {
     expect(guideProfileFor('borgo_citta', 'museo')).toEqual(guideProfileFor('borgo_citta'))
     expect(guideProfileFor('sentiero', 'museo')).toEqual(guideProfileFor('sentiero'))
+  })
+})
+
+// piano guide-eccellenza §Fase 3 — lib/guideCardVariant.ts promette che un Borgo/Città
+// 'trekking_misto' mantiene "Dati e sicurezza" quasi come un Sentiero; guideProfileFor lo
+// escludeva prima per OGNI borgo_citta senza eccezione, in disaccordo con quella promessa.
+describe('guideProfileFor — variante borgo_citta (piano guide-eccellenza §Fase 3)', () => {
+  it('nessuna variante (o "cammino_urbano") esclude "dati_sicurezza", come il profilo base', () => {
+    expect(guideProfileFor('borgo_citta').availableSections).not.toContain('dati_sicurezza')
+    expect(guideProfileFor('borgo_citta', undefined, 'cammino_urbano').availableSections).not.toContain('dati_sicurezza')
+  })
+
+  it('"trekking_misto" include "dati_sicurezza" ma non "comfort" — il piano cita solo il primo', () => {
+    const profile = guideProfileFor('borgo_citta', undefined, 'trekking_misto')
+    expect(profile.availableSections).toContain('dati_sicurezza')
+    expect(profile.availableSections).not.toContain('comfort')
+  })
+
+  it('"trekking_misto" non tocca gli override di sezione ("Il percorso" resta "Il borgo")', () => {
+    const base = guideProfileFor('borgo_citta')
+    const trekkingMisto = guideProfileFor('borgo_citta', undefined, 'trekking_misto')
+    expect(trekkingMisto.sectionOverrides).toEqual(base.sectionOverrides)
+    expect(trekkingMisto.personaAddendum).toBe(base.personaAddendum)
+  })
+
+  it('borgoVariant è ignorato per metaType diverso da "borgo_citta"', () => {
+    expect(guideProfileFor('sito', undefined, 'trekking_misto')).toEqual(guideProfileFor('sito'))
+    expect(guideProfileFor('sentiero', undefined, 'trekking_misto')).toEqual(guideProfileFor('sentiero'))
+  })
+
+  // La verifica letterale del "Fatto quando" del piano: le due fonti (guideCardVariant.ts che
+  // decide la variante, guideProfiles.ts che decide le sezioni) devono dire la stessa cosa per lo
+  // stesso hike — non solo per lo stesso valore di variant passato a mano.
+  it('un Borgo/Città con una traccia GPS reale collegata ottiene "Dati e sicurezza"; senza, no', () => {
+    const conTraccia = { trackPoints: [{ lat: 42.1, lon: 12.1 }, { lat: 42.2, lon: 12.2 }] }
+    const senzaTraccia = { trackPoints: [] }
+    expect(borgoCardVariant(conTraccia)).toBe('trekking_misto')
+    expect(borgoCardVariant(senzaTraccia)).toBe('cammino_urbano')
+    expect(guideProfileFor('borgo_citta', undefined, borgoCardVariant(conTraccia)).availableSections)
+      .toContain('dati_sicurezza')
+    expect(guideProfileFor('borgo_citta', undefined, borgoCardVariant(senzaTraccia)).availableSections)
+      .not.toContain('dati_sicurezza')
   })
 })
 

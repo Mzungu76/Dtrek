@@ -1,4 +1,4 @@
-import type { SiteType } from './metaTypes'
+import type { MetaType, SiteType } from './metaTypes'
 
 // Quale scheda Guida mostrare per un Borgo/Città o un Sito — decisioni pure, testabili, mai
 // duplicate come `if` sparsi nei componenti (stesso principio di lib/metaCard.ts).
@@ -7,10 +7,13 @@ export type BorgoCardVariant = 'cammino_urbano' | 'trekking_misto'
 
 /**
  * 'trekking_misto' quando la Meta ha una traccia GPS reale collegata (un cammino che tocca il
- * borgo, non solo la sua posizione) — copertina a mappa e sezioni "Il percorso"/"Dati e
- * sicurezza" restano quasi invariate rispetto a un Sentiero, con solo la timeline delle tappe
- * interne aggiunta. 'cammino_urbano' (il caso comune) quando non c'è nessuna traccia: copertina a
- * foto, statistiche di visita al posto di quelle escursionistiche.
+ * borgo, non solo la sua posizione) — copertina a mappa, e "Dati e sicurezza" (Trail Score,
+ * Sicurezza, dislivello, quota della traccia reale) torna disponibile proprio come per un
+ * Sentiero (lib/guideProfiles.ts's guideProfileFor, piano guide-eccellenza §Fase 3 — le due fonti
+ * erano in disaccordo prima di quella fase). "Il percorso" resta invece l'override narrativo "Il
+ * borgo" del profilo base in ogni caso, con solo la timeline delle tappe interne aggiunta.
+ * 'cammino_urbano' (il caso comune) quando non c'è nessuna traccia: copertina a foto, statistiche
+ * di visita al posto di quelle escursionistiche, "Dati e sicurezza" mai disponibile.
  */
 export function borgoCardVariant(hike: {
   trackPoints?: { lat?: number; lon?: number }[]
@@ -18,6 +21,24 @@ export function borgoCardVariant(hike: {
 }): BorgoCardVariant {
   const hasTrack = (hike.trackPoints?.length ?? 0) > 1 || (hike.routePolyline?.length ?? 0) > 1
   return hasTrack ? 'trekking_misto' : 'cammino_urbano'
+}
+
+// piano guide-eccellenza §Fase 4 — CTS/Safety Score si attivavano solo da "esistono ≥2
+// trackPoints", non da "è un Sentiero": funzionava per accidente (un Sito/Borgo normale non ha
+// mai trackPoints), non per garanzia. Confine ESPLICITO per tipologia, sempre in AND con un
+// controllo sui dati (hasEnoughGps) fatto dal chiamante — mai in sua sostituzione: quel controllo
+// resta la prima difesa, questo aggiunge una garanzia che non dipenda "per accidente" dalla sola
+// presenza di punti traccia (es. un Sito a cui viene iniettata per errore una traccia di 2 punti
+// da un bug di import non deve comunque produrre un punteggio).
+export function metaEligibleForHikingScores(hike: {
+  metaType?: MetaType
+  trackPoints?: { lat?: number; lon?: number }[]
+  routePolyline?: [number, number][]
+}): boolean {
+  const metaType = hike.metaType ?? 'sentiero'
+  if (metaType === 'sentiero') return true
+  if (metaType === 'borgo_citta') return borgoCardVariant(hike) === 'trekking_misto'
+  return false
 }
 
 export type SitoCardFamily = 'scheda_pratica' | 'galleria_sicurezza'

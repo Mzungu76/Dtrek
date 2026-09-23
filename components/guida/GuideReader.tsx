@@ -299,12 +299,23 @@ export default function GuideReader({
   // hike.siteType direttamente in più punti con risultati incoerenti tra loro.
   const siteType = hike.metaType === 'sito' ? inferSiteTypeFromName(hike.title, hike.siteType) : hike.siteType
 
+  // lib/guideCardVariant.ts — quale variante di copertina/statistiche mostrare, e (piano
+  // guide-eccellenza §Fase 3) quale profilo di sezioni: un Borgo/Città 'trekking_misto' ha una
+  // traccia GPS reale (un cammino che tocca il borgo) e guadagna anche "Dati e sicurezza", proprio
+  // come un Sentiero — vedi guideProfileFor. undefined per un Sentiero (mai valutato, il profilo
+  // resta quello di sempre).
+  const usesRealTrack = (hike.trackPoints?.length ?? 0) > 1 || (hike.routePolyline?.length ?? 0) > 1
+  const borgoVariant = hike.metaType === 'borgo_citta' ? borgoCardVariant(hike) : undefined
+
   // Titolo di card per tipologia (lib/guideProfiles.ts, piano §29/§30) — "Il borgo"/"Le tappe del
   // borgo" per un borgo_citta, "Il museo"/"Il castello"/... per un sito con siteType noto, invece
   // del titolo generico da sentiero ("Il percorso"/"I luoghi da non perdere") che lo stesso
   // profilo istruisce Giulia a NON scrivere più per queste tipologie (vedi SECTION_BRIEF in
   // app/api/guide/route.ts, che incorpora questi stessi titoli nell'intestazione "## ..." generata).
-  const guideProfile = useMemo(() => guideProfileFor(hike.metaType, siteType), [hike.metaType, siteType])
+  const guideProfile = useMemo(
+    () => guideProfileFor(hike.metaType, siteType, borgoVariant),
+    [hike.metaType, siteType, borgoVariant],
+  )
 
   const displaySections = useMemo<DisplaySection[]>(() => {
     const byKey = new Map(parsedSections.filter(s => s.key).map(s => [s.key as GuideSectionKey, s]))
@@ -988,10 +999,6 @@ export default function GuideReader({
       ? (siteType ? SITE_TYPE_CONFIG[siteType].label : META_TYPE_CONFIG.sito.label).toUpperCase()
       : (hike.tags?.[0] ?? hike.assessment?.difficulty ?? 'Escursione').toUpperCase()
 
-  // lib/guideCardVariant.ts — quale variante di copertina/statistiche mostrare. undefined per un
-  // Sentiero (mai valutato, la Guida resta quella di sempre).
-  const usesRealTrack = (hike.trackPoints?.length ?? 0) > 1 || (hike.routePolyline?.length ?? 0) > 1
-  const borgoVariant = hike.metaType === 'borgo_citta' ? borgoCardVariant(hike) : undefined
   const hasVisitInfo = !!(placeDetail?.officialUrl || placeDetail?.website || placeDetail?.openingHours)
   const sitoFamily = hike.metaType === 'sito' ? sitoCardFamily(siteType, hasVisitInfo) : undefined
   const usesCoverPhoto = hike.metaType === 'sito' || borgoVariant === 'cammino_urbano'
