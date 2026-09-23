@@ -20,8 +20,14 @@
 // generici tipo orientamento/non-loghi). Una copertina sbagliata è peggio di nessuna copertina:
 // oltre i primi due livelli, l'assenza resta assenza (fallback a icona/gradiente lato UI).
 import { supabase } from './supabase'
-import { fetchNearbyWiki } from './wikipedia'
+import { fetchNearbyWiki, upscaleWikiThumbnail } from './wikipedia'
 import { namesOverlap } from './metaSearch/borgoItinerary'
+
+// Copertina a piena larghezza (GuideHero) — ben oltre i pochi px che la miniatura REST di
+// Wikipedia porta di default (vedi upscaleWikiThumbnail in lib/wikipedia.ts). 1200 è già più
+// della larghezza reale di ogni device comune; il server MediaWiki comunque non supera mai la
+// risoluzione del file originale, quindi resta il valore massimo utile da chiedere.
+const COVER_PHOTO_WIDTH = 1200
 
 const WD_SPARQL = 'https://query.wikidata.org/sparql'
 const WD_USER_AGENT = 'DTrek/1.0 (places cover photo; mzulpt@gmail.com)'
@@ -64,7 +70,7 @@ const WIKIPEDIA_MATCH_RADIUS_M = 800
 async function fetchFromWikipediaThumbnail(name: string, lat: number, lon: number): Promise<PlaceCoverPhoto | null> {
   const pages = await fetchNearbyWiki(lat, lon, WIKIPEDIA_MATCH_RADIUS_M, 5)
   const match = pages.find(p => p.thumbnail && namesOverlap(name, p.title))
-  return match?.thumbnail ? { url: match.thumbnail, credit: 'Wikipedia' } : null
+  return match?.thumbnail ? { url: upscaleWikiThumbnail(match.thumbnail, COVER_PHOTO_WIDTH), credit: 'Wikipedia' } : null
 }
 
 /**

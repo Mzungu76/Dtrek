@@ -629,7 +629,7 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays, initialView, o
                 <MetaDetailCard
                   item={selected.item}
                   creating={creatingMetaId === selected.item.id}
-                  onCreate={() => createAndOpen(selected.item)}
+                  onCreate={itinerary => createAndOpen(selected.item, itinerary)}
                   error={metaSaveError && creatingMetaId === null ? metaSaveError : null}
                   onPersonalize={itinerary => enterPersonalize(selected.item, itinerary)}
                 />
@@ -818,7 +818,13 @@ function InfoRow({ icon: Icon, href, children }: { icon: typeof MapPin; href?: s
 type MetaTab = 'descrizione' | 'info' | 'itinerario'
 
 function MetaDetailCard({ item, creating, onCreate, error, onPersonalize }: {
-  item: MetaSearchResultItem; creating: boolean; onCreate: () => void; error: string | null
+  item: MetaSearchResultItem; creating: boolean
+  // borgoItinerary (piano guide-eccellenza — verifica post-piano): l'itinerario già calcolato in
+  // questa scheda (bottone "Genera automatico" sotto, tab "Itinerario") — null quando l'utente
+  // non l'ha mai toccato, il chiamante lo ricalcola da sé in quel caso invece di crearlo senza
+  // itinerario a piedi collegato.
+  onCreate: (borgoItinerary: BorgoItinerary | null) => void
+  error: string | null
   // Solo per un Borgo/Città (vedi isBorgo sotto) — apre la personalizzazione multi-tappa
   // (CreaGuidaMapSearch.tsx's enterPersonalize). Sempre selezionabile, non solo dopo un
   // itinerario automatico riuscito (spesso l'automatico non trova tappe/cammini utilizzabili
@@ -1017,7 +1023,7 @@ function MetaDetailCard({ item, creating, onCreate, error, onPersonalize }: {
 
         {error && <p className="text-xs text-red-600 mb-2">{error}</p>}
 
-        <button onClick={onCreate} disabled={creating}
+        <button onClick={() => onCreate(itinerary)} disabled={creating}
           className="w-full flex items-center justify-center gap-1.5 bg-forest-600 hover:bg-forest-700 disabled:opacity-60 rounded-lg py-2 text-xs font-bold text-white transition-colors">
           {creating && <Loader2 className="w-3 h-3 animate-spin" />} Crea guida
         </button>

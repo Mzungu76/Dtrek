@@ -60,6 +60,7 @@ import type { FloraResult } from '@/lib/floraTypes'
 import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
 import type { PlaceDetail } from '@/app/api/places/[id]/route'
 import type { BorgoItinerary } from '@/app/api/borgo-itinerary/route'
+import { computeBorgoWalkFields } from '@/lib/borgoWalkPolyline'
 import { borgoCardVariant, sitoCardFamily } from '@/lib/guideCardVariant'
 import { META_TYPE_CONFIG, SITE_TYPE_CONFIG, inferSiteTypeFromName } from '@/lib/metaTypes'
 import { Building2, Landmark } from 'lucide-react'
@@ -454,11 +455,10 @@ export default function GuideReader({
         // lib/plannedStore.ts, che spiega perché). borgoWalkStopsHash invece di un timestamp:
         // ricalcola solo se le tappe che compongono l'itinerario sono cambiate (nuova geosearch
         // Wikipedia, nuovo import archivio), non ad ogni apertura della guida.
-        const stopsHash = itinerary.stops.map(s => s.id).join(',')
-        if (itinerary.legs.length > 0 && stopsHash !== hike.borgoWalkStopsHash) {
-          const borgoWalkPolyline = itinerary.legs.flatMap(leg => leg.polyline)
-          updatePlannedMeta(hike.id, { borgoWalkPolyline, borgoWalkStopsHash: stopsHash }).catch(() => {})
-          onHikeUpdate({ borgoWalkPolyline, borgoWalkStopsHash: stopsHash })
+        const walkFields = computeBorgoWalkFields(itinerary)
+        if (walkFields && walkFields.borgoWalkStopsHash !== hike.borgoWalkStopsHash) {
+          updatePlannedMeta(hike.id, walkFields).catch(() => {})
+          onHikeUpdate(walkFields)
         }
       })
       .catch(() => {})

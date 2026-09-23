@@ -98,6 +98,19 @@ function isNearPoi(wiki: WikiPage, poi: PoiItem): boolean {
   return distKm(wiki.lat, wiki.lon, poi.lat, poi.lon) <= maxKm
 }
 
+// Verifica post-piano guide-eccellenza: la miniatura di /api/rest_v1/page/summary/ (thumbnail.
+// source) è pensata per un elenco di risultati, non per una copertina a piena larghezza — è
+// piccola (in genere qualche centinaio di px) e appariva sgranata quando stirata a riempire
+// GuideHero. L'URL del thumbnail server MediaWiki incorpora la larghezza richiesta nel path
+// stesso (.../thumb/a/ab/Foto.jpg/320px-Foto.jpg): sostituendola si ottiene dallo stesso server
+// una resa più grande della STESSA immagine, generata al volo fino alla risoluzione reale del
+// file originale — mai un ingrandimento artificiale di un file più piccolo (il server MediaWiki
+// non serve mai un thumbnail più largo del file sorgente). Se l'URL non rispetta questo formato
+// (fonte diversa da un thumb MediaWiki), resta invariato.
+export function upscaleWikiThumbnail(url: string, width: number): string {
+  return url.replace(/\/(\d+)px-([^/]+)$/, `/${width}px-$2`)
+}
+
 // Fetch the REST summary for a given title from any Wikimedia project
 async function fetchSummary(
   title: string,
