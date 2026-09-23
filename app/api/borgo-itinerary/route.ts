@@ -14,6 +14,11 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60 // Wikipedia + rete pedonale (cache-miss = fetch Overpass) + dijkstra per tappa
 
 const MAX_STOPS = 6
+// Verifica utente: l'itinerario si ricalcolava da zero ad ogni apertura della guida, anche per lo
+// stesso borgo appena visto — 30 giorni perché le fonti (voci Wikipedia, rete pedonale OSM) cambiano
+// di rado, un mese di cache non produce quasi mai un dato percepibilmente vecchio. Cache SUL BORGO
+// (dtrek_places), non sulla guida: condivisa tra tutti gli utenti/guide che aprono lo stesso borgo.
+const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000
 const DIJKSTRA_MAX_DIST_M = 3000
 const DIJKSTRA_MAX_NODES = 800
 const SNAP_THRESHOLD_M = 300
@@ -87,7 +92,7 @@ export async function POST(req: NextRequest) {
 
   const { data: borgo, error: borgoError } = await supabase
     .from('dtrek_places')
-    .select('id, name, latitude, longitude')
+    .select('id, name, latitude, longitude, itinerary_cache, itinerary_cached_at')
     .eq('id', placeId)
     .eq('meta_type', 'borgo_citta')
     .maybeSingle()
@@ -97,6 +102,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Errore interno' }, { status: 500 })
   }
   if (!borgo) return NextResponse.json({ error: 'Borgo/Città non trovato' }, { status: 404 })
+
+  // Cache ancora valida — skip completo di geosearch/rete pedonale/Dijkstra, mai un dato scaduto
+  // silenziosamente servito oltre il TTL dichiarato.
+  const cachedAt = borgo.itinerary_cached_at ? new Date(borgo.itinerary_cached_at as string).getTime() : 0
+  if (borgo.itinerary_cache && Date.now() - cachedAt < CACHE_TTL_MS) {
+    return NextResponse.json(borgo.itinerary_cache as BorgoItinerary)
+  }
 
   const center = { lat: borgo.latitude as number, lon: borgo.longitude as number }
 
@@ -121,6 +133,10 @@ export async function POST(req: NextRequest) {
   const ordered = await enrichStopDescriptions(orderStopsNearestNeighbor(center, capped))
 
   if (ordered.length === 0) {
+    // Mai messo in cache: un elenco vuoto qui può derivare da un genuino "nessuna tappa nei
+    // dintorni" ma anche da un fallimento silenzioso della geosearch Wikipedia (wikiStops ricade
+    // su [] sopra) — cachare un falso negativo per 30 giorni sarebbe peggio di ricalcolare ogni
+    // volta. Il prossimo tentativo riparte sempre da zero, come prima di questa cache.
     const empty: BorgoItinerary = { borgoName: borgo.name, stops: [], legs: [], totalDistanceM: 0, estimatedTimeSeconds: 0 }
     return NextResponse.json(empty)
   }
@@ -161,6 +177,23 @@ export async function POST(req: NextRequest) {
     totalDistanceM,
     estimatedTimeSeconds: Math.round(totalDistanceM / WALK_SPEED_MPS),
   }
+
+  // Fire-and-forget, come lib/wikidataFallback.ts/lib/placePhotoCache.ts: la risposta non deve mai
+  // aspettare la scrittura della cache. Solo quando la rete pedonale è stata trovata davvero (mai
+  // quando `network` è null e ogni leg è quindi una linea d'aria di ripiego) — altrimenti un esito
+  // degradato per un problema temporaneo di Overpass resterebbe "congelato" in cache per 30 giorni
+  // invece di lasciare che il prossimo tentativo riprovi con la rete vera.
+  if (network) {
+    supabase
+      .from('dtrek_places')
+      .update({ itinerary_cache: itinerary, itinerary_cached_at: new Date().toISOString() })
+      .eq('id', placeId)
+      .then(
+        ({ error }) => { if (error) console.error('[borgo-itinerary] cache update fallito:', error.message) },
+        (e: unknown) => console.error('[borgo-itinerary] cache update fallito:', e),
+      )
+  }
+
   return NextResponse.json(itinerary)
 }
 
