@@ -860,7 +860,14 @@ export default function GuideReader({
         // POI OSM) che un Borgo/Città non ha.
         if (hike.metaType === 'borgo_citta') {
           return borgoItinerary && borgoItinerary.stops.length > 0
-            ? <BorgoTappeWidget stops={borgoItinerary.stops} />
+            ? (
+              <BorgoTappeWidget
+                stops={borgoItinerary.stops}
+                legs={borgoItinerary.legs}
+                center={hike.latitude != null && hike.longitude != null ? { lat: hike.latitude, lon: hike.longitude } : undefined}
+                color={SECTION_STYLE.luoghi.color}
+              />
+            )
             : null
         }
         // Un Sito è già di per sé il singolo punto di interesse: qui non c'è mai un elenco di POI
