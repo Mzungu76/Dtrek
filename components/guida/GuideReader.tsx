@@ -530,6 +530,12 @@ export default function GuideReader({
         hikeId: hike.id,
         sections,
         sectionLengths: sectionLengthsForCall,
+        // Le stesse tappe già mostrate in BorgoTappeWidget (verifica post-piano guide-eccellenza)
+        // — così il server le riusa invece di rifare una propria ricerca live indipendente, che
+        // poteva restituire un insieme diverso (Giulia nominava tappe mai viste nel widget sopra
+        // il suo testo). undefined quando borgoItinerary non è ancora arrivato: il server ripiega
+        // sulla propria ricerca, invariata.
+        borgoDetailStops: borgoItinerary?.stops,
         hikeFallback: {
           title:                hike.title,
           plannedDate:          hike.plannedDate,
@@ -661,7 +667,7 @@ export default function GuideReader({
     hike.distanceMeters, hike.elevationGain, hike.elevationLoss, hike.altitudeMax, hike.altitudeMin, hike.routeMode,
     hike.estimatedTimeSeconds, hike.assessment, hike.cachedPois, hike.cachedPoiWiki, hike.trackPoints,
     hike.cachedEpochPois,
-    onHikeUpdate, sectionLengths,
+    onHikeUpdate, sectionLengths, borgoItinerary?.stops,
   ])
 
   // Sezioni Breve scelte dall'utente in Impostazioni (components/profilo/SectionGuida.tsx) — null
