@@ -44,6 +44,7 @@ import NaturaWidget from './widgets/NaturaWidget'
 import BorgoTappeWidget from './widgets/BorgoTappeWidget'
 import SitoInfoWidget from './widgets/SitoInfoWidget'
 import PlaceDescriptionWidget from './widgets/PlaceDescriptionWidget'
+import GuideGalleryLightbox, { type GuideGalleryItem } from './widgets/GuideGalleryLightbox'
 import SitoGalleryWidget from './widgets/SitoGalleryWidget'
 import GuideHero from './GuideHero'
 import GuideStatsStrip from './GuideStatsStrip'
@@ -1136,6 +1137,17 @@ export default function GuideReader({
       .map(({ wiki: w }) => ({ url: w.url, imageUrl: w.thumbnail!, title: w.title }))
   }, [hike.cachedPoiWiki])
 
+  // Verifica utente: le foto della galleria si aprivano subito come link esterno alla pagina
+  // Wikipedia/fonte, mai ingrandite dentro l'app — a differenza della stessa galleria nei
+  // Reportage (app/resoconto/[id]/PhotoGallery.tsx + PhotoLightbox.tsx). Elenco unico (poiPhotos +
+  // guideSources con immagine) nello stesso ordine già mostrato sotto, così l'indice del tap
+  // corrisponde 1:1 alla posizione nella lightbox.
+  const galleryItems = useMemo<GuideGalleryItem[]>(() => [
+    ...poiPhotos.map(p => ({ imageUrl: p.imageUrl, title: p.title, sourceUrl: p.url, sourceLabel: `Luogo: ${p.title}` })),
+    ...guideSources.filter(s => s.imageUrl).map(s => ({ imageUrl: s.imageUrl!, title: s.title, sourceUrl: s.url, sourceLabel: `Fonte: ${s.title}` })),
+  ], [poiPhotos, guideSources])
+  const [galleryLightboxIndex, setGalleryLightboxIndex] = useState<number | null>(null)
+
   // Punto di arrivo (ultimo punto della traccia) — da qui parte la ricerca di bus/stazioni/taxi per
   // chi non vuole tornare a piedi sui propri passi (sottosezione "Tornare al punto di partenza" in
   // "Luoghi da non perdere", vedi PoiListWidget.tsx/ReturnOptionsSection.tsx).
@@ -1454,58 +1466,44 @@ export default function GuideReader({
               </div>
             )}
 
-            {hasGuide && !generating && (poiPhotos.length > 0 || guideSources.some(s => s.imageUrl)) && (
+            {hasGuide && !generating && galleryItems.length > 0 && (
               <div className="mt-4 mb-1">
                 <p className="text-[9px] font-bold uppercase tracking-[2.5px] text-stone-400 mb-2">
                   Galleria fotografica
                 </p>
                 <div className="flex gap-2.5 overflow-x-auto pb-1" style={{ scrollSnapType: 'x proximity' }}>
-                  {poiPhotos.map((p, i) => (
-                    <a
-                      key={`poi-${i}`}
-                      href={p.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="shrink-0 w-52 rounded-2xl overflow-hidden border border-stone-200 group"
-                      style={{ scrollSnapAlign: 'start' }}
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element -- foto hotlinkata da Wikipedia, mai copiata sui nostri server */}
-                      <img
-                        src={p.imageUrl}
-                        alt={p.title}
-                        className="w-52 h-36 object-cover group-hover:opacity-90 transition-opacity"
-                        loading="lazy"
-                        onError={e => { (e.currentTarget.closest('a') as HTMLElement | null)?.style.setProperty('display', 'none') }}
-                      />
-                      <p className="px-2.5 py-1.5 text-[10px] text-stone-400 bg-stone-50 truncate">
-                        Luogo: {p.title}
-                      </p>
-                    </a>
-                  ))}
-                  {guideSources.filter(s => s.imageUrl).map((s, i) => (
-                    <a
-                      key={`src-${i}`}
-                      href={s.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="shrink-0 w-52 rounded-2xl overflow-hidden border border-stone-200 group"
+                  {galleryItems.map((item, i) => (
+                    <button
+                      key={`gallery-${i}`}
+                      type="button"
+                      onClick={() => setGalleryLightboxIndex(i)}
+                      className="shrink-0 w-52 rounded-2xl overflow-hidden border border-stone-200 group text-left"
                       style={{ scrollSnapAlign: 'start' }}
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element -- foto hotlinkata dalla fonte, mai copiata sui nostri server */}
                       <img
-                        src={s.imageUrl}
-                        alt={s.title}
+                        src={item.imageUrl}
+                        alt={item.title}
                         className="w-52 h-36 object-cover group-hover:opacity-90 transition-opacity"
                         loading="lazy"
-                        onError={e => { (e.currentTarget.closest('a') as HTMLElement | null)?.style.setProperty('display', 'none') }}
+                        onError={e => { (e.currentTarget.closest('button') as HTMLElement | null)?.style.setProperty('display', 'none') }}
                       />
                       <p className="px-2.5 py-1.5 text-[10px] text-stone-400 bg-stone-50 truncate">
-                        Fonte: {s.title}
+                        {item.sourceLabel}
                       </p>
-                    </a>
+                    </button>
                   ))}
                 </div>
               </div>
+            )}
+
+            {galleryLightboxIndex != null && (
+              <GuideGalleryLightbox
+                items={galleryItems}
+                index={galleryLightboxIndex}
+                onNavigate={setGalleryLightboxIndex}
+                onClose={() => setGalleryLightboxIndex(null)}
+              />
             )}
 
             {hasGuide && !generating && hasAiAccess === true && (

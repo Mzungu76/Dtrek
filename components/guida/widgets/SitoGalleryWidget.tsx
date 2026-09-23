@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, Image as ImageIcon } from 'lucide-react'
 import type { RoutePhoto } from '@/app/lib/guide/fetchRoutePhotos'
 import type { SiteType } from '@/lib/metaTypes'
+import GuideGalleryLightbox, { type GuideGalleryItem } from './GuideGalleryLightbox'
 
 // Avviso GENERICO di categoria, non una segnalazione su QUESTA Meta specifica (quella resta a
 // "Verificato online", l'unica sezione con una ricerca AI mirata) — una proprietà tipica del tipo
@@ -35,6 +36,14 @@ export default function SitoGalleryWidget({ lat, lon, siteType }: Props) {
   }, [lat, lon])
 
   const caution = siteType ? CATEGORY_CAUTION[siteType] : undefined
+  // Verifica utente: il tap qui apriva subito il file immagine su un'altra scheda invece di
+  // ingrandirlo dentro l'app, come la stessa galleria nei Reportage — stesso GuideGalleryLightbox
+  // già usato in components/guida/GuideReader.tsx per la Galleria fotografica di fondo pagina.
+  const galleryItems = useMemo<GuideGalleryItem[]>(
+    () => photos.map(p => ({ imageUrl: p.url, title: p.title, sourceUrl: p.url, sourceLabel: p.credit })),
+    [photos],
+  )
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
 
   if (photos.length === 0 && !caution) return null
 
@@ -46,14 +55,22 @@ export default function SitoGalleryWidget({ lat, lon, siteType }: Props) {
             <ImageIcon className="w-3 h-3" /> Galleria
           </p>
           <div data-hscroll className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-            {photos.map(p => (
-              <a key={p.url} href={p.url} target="_blank" rel="noopener noreferrer" className="shrink-0 w-24">
+            {photos.map((p, i) => (
+              <button key={p.url} type="button" onClick={() => setLightboxIndex(i)} className="shrink-0 w-24 text-left">
                 {/* eslint-disable-next-line @next/next/no-img-element -- foto esterna (Wikimedia Commons), non un asset ottimizzabile */}
                 <img src={p.url} alt={p.title} className="w-24 h-24 rounded-xl object-cover" />
                 <p className="text-[9.5px] text-stone-400 mt-1 truncate">{p.credit}</p>
-              </a>
+              </button>
             ))}
           </div>
+          {lightboxIndex != null && (
+            <GuideGalleryLightbox
+              items={galleryItems}
+              index={lightboxIndex}
+              onNavigate={setLightboxIndex}
+              onClose={() => setLightboxIndex(null)}
+            />
+          )}
         </div>
       )}
       {caution && (
