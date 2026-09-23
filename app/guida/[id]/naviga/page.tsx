@@ -37,8 +37,16 @@ function NavigaPageInner() {
     let cancelled = false
     getPlannedById(id).then((h) => {
       if (cancelled) return
-      if (!h || !h.routePolyline?.length) { setNotFound(true); return }
-      setHike(h)
+      // Un Borgo/Città senza traccia GPS reale non ha mai routePolyline (piano guide-eccellenza,
+      // verifica post-piano) — cade su borgoWalkPolyline, l'itinerario a piedi reale già calcolato
+      // da /api/borgo-itinerary (rete pedonale OSM, mai linee d'aria) e mostrato in
+      // BorgoTappeWidget. Un oggetto SOLO per questo render, mai persistito così: routePolyline
+      // resta vuota sul record vero, altrimenti borgoCardVariant lo riclasserebbe per errore come
+      // 'trekking_misto' (vedi il commento su borgoWalkPolyline in lib/plannedStore.ts).
+      if (!h) { setNotFound(true); return }
+      const walkPolyline = h.routePolyline?.length ? h.routePolyline : h.borgoWalkPolyline
+      if (!walkPolyline?.length) { setNotFound(true); return }
+      setHike(h.routePolyline?.length ? h : { ...h, routePolyline: walkPolyline })
     })
     return () => { cancelled = true }
   }, [id])

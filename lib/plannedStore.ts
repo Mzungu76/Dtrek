@@ -127,6 +127,15 @@ export interface PlannedHike {
   floraResult?:                  FloraResult
   floraTrackHash?:                string
   floraComputedAt?:              string
+  // Itinerario a piedi generato per un Borgo/Città (rete pedonale OSM, app/api/borgo-itinerary,
+  // piano guide-eccellenza) — usato dal Navigator come ripiego quando routePolyline è vuota
+  // (nessuna traccia GPS reale). MAI letto da borgoCardVariant/metaEligibleForHikingScores (lib/
+  // guideCardVariant.ts): quei confini usano solo routePolyline/trackPoints, per non confondere
+  // un itinerario generato con una vera traccia GPS collegata. borgoWalkStopsHash (hash delle
+  // tappe da cui è stato calcolato) invece di un timestamp — l'itinerario tra le stesse tappe non
+  // cambia nel breve termine, stesso principio di dtmTrackHash/floraTrackHash.
+  borgoWalkPolyline?:            [number, number][]
+  borgoWalkStopsHash?:           string
   // Metadati di un percorso "trovato" da Giulia (ricerca AI di un percorso già documentato, vedi
   // components/upload/RouteBuilder.tsx / GiuliaSearchPanel.tsx) invece che costruito
   // algoritmicamente — assenti su un percorso costruito o importato in altro modo. Valorizzati una
@@ -325,7 +334,7 @@ export async function savePlanned(hike: PlannedHike): Promise<{ assessment?: Hik
 /** Applies a partial update to the local cache immediately and queues it for background sync. */
 export async function updatePlannedMeta(
   id: string,
-  meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'hikeNotes' | 'tags' | 'plannedDate' | 'cachedPois' | 'cachedPoiWiki' | 'cachedGuide' | 'cachedGuideSubtitle' | 'cachedGuideNotices' | 'cachedGuideSources' | 'guideTier' | 'guideGeneratedAt' | 'cachedEpochPois' | 'cachedBeautyScore' | 'cachedTrailScore' | 'cachedTrailScoreConfidence' | 'cachedScoresComputedAt' | 'cachedSafetyScore' | 'cachedSafetyComputedAt' | 'cachedTsTotal' | 'cachedDrivingDistanceMeters' | 'cachedDrivingDurationSeconds' | 'cachedDrivingOriginLat' | 'cachedDrivingOriginLon' | 'pendingExpiresAt' | 'archivedAt' | 'favorite' | 'firstCompletedAt' | 'diaryId' | 'routeMode' | 'dtmProfile' | 'dtmTrackHash' | 'dtmComputedAt' | 'terrainProfile' | 'terrainTrackHash' | 'terrainComputedAt' | 'cachedInProtectedArea' | 'cachedProtectedAreaTrackHash' | 'cachedProtectedAreaComputedAt' | 'floraResult' | 'floraTrackHash' | 'floraComputedAt'>>,
+  meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'hikeNotes' | 'tags' | 'plannedDate' | 'cachedPois' | 'cachedPoiWiki' | 'cachedGuide' | 'cachedGuideSubtitle' | 'cachedGuideNotices' | 'cachedGuideSources' | 'guideTier' | 'guideGeneratedAt' | 'cachedEpochPois' | 'cachedBeautyScore' | 'cachedTrailScore' | 'cachedTrailScoreConfidence' | 'cachedScoresComputedAt' | 'cachedSafetyScore' | 'cachedSafetyComputedAt' | 'cachedTsTotal' | 'cachedDrivingDistanceMeters' | 'cachedDrivingDurationSeconds' | 'cachedDrivingOriginLat' | 'cachedDrivingOriginLon' | 'pendingExpiresAt' | 'archivedAt' | 'favorite' | 'firstCompletedAt' | 'diaryId' | 'routeMode' | 'dtmProfile' | 'dtmTrackHash' | 'dtmComputedAt' | 'terrainProfile' | 'terrainTrackHash' | 'terrainComputedAt' | 'cachedInProtectedArea' | 'cachedProtectedAreaTrackHash' | 'cachedProtectedAreaComputedAt' | 'floraResult' | 'floraTrackHash' | 'floraComputedAt' | 'borgoWalkPolyline' | 'borgoWalkStopsHash'>>,
 ): Promise<void> {
   const local = await lsGet<PlannedHike>(LS_KEYS.planned(id))
   if (local) await lsSet(LS_KEYS.planned(id), { ...local, ...meta })

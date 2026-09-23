@@ -5,6 +5,7 @@ import type { PlannedHike } from '@/lib/plannedStore'
 import { type SafetyScore } from '@/lib/safetyScore'
 import { computeSafetyForHike } from '@/lib/computeSafetyForHike'
 import { isScoreFresh } from '@/lib/scoreFreshness'
+import { metaEligibleForHikingScores } from '@/lib/guideCardVariant'
 
 // Shows the cached value immediately if there is one (even a stale one, to avoid a flash of
 // "no data"), then refreshes in the background if it's missing or older than SCORE_STALE_DAYS —
@@ -20,6 +21,15 @@ export function useSafetyScore(
     if (!hike) return
     if (hike.cachedSafetyScore) setSafetyScore(hike.cachedSafetyScore)
     if (hike.cachedSafetyScore && isScoreFresh(hike.cachedSafetyComputedAt)) return
+    // Confine esplicito di tipologia (piano guide-eccellenza §Fase 4) — prima questo effect non ne
+    // aveva nessuno: calcolava una Sicurezza per qualunque Meta, anche un Sito o un Borgo/Città
+    // cammino_urbano senza traccia (distanza/dislivello a zero producono comunque un punteggio,
+    // mai un valore che abbia senso mostrare). Nessun controllo aggiuntivo sui dati qui (a
+    // differenza di useCtsRecompute/handleComputeCts in GuidaHub.tsx): computeSafetyForHike
+    // gestisce già da sé l'assenza di una traccia (computeSafetyCore degrada senza l'arricchimento
+    // fauna/cani/terreno, che richiede una polyline, ma calcola comunque un punteggio dalle sole
+    // cifre — legittimo per un Sentiero inserito a mano senza GPS, vedi app/upload/page.tsx).
+    if (!metaEligibleForHikingScores(hike)) return
     let cancelled = false
     computeSafetyForHike(hike).then(safety => {
       if (cancelled) return

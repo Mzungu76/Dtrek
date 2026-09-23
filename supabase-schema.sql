@@ -1282,6 +1282,20 @@ ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION;
 
 CREATE INDEX IF NOT EXISTS idx_planned_hikes_place_id ON planned_hikes (place_id);
 
+-- Piano guide-eccellenza — vedi supabase/migrations/add_planned_hikes_borgo_walk_polyline.sql
+-- per i commenti completi. Itinerario a piedi generato (rete pedonale OSM, app/api/
+-- borgo-itinerary/route.ts) per il Navigator — colonna DEDICATA, mai route_polyline/
+-- track_points: quelle restano il segnale di una VERA traccia GPS (borgoCardVariant).
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS borgo_walk_polyline JSONB;
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS borgo_walk_stops_hash TEXT;
+
+-- Verifica utente — vedi supabase/migrations/add_dtrek_places_itinerary_cache.sql per i commenti
+-- completi. Cache dell'intero BorgoItinerary (stops+legs+totali) SUL BORGO stesso (mai su
+-- planned_hikes: l'itinerario dipende solo dalla posizione del borgo, condivisa tra tutte le
+-- guide/utenti che lo aprono), TTL di 30 giorni applicato in lettura da app/api/borgo-itinerary/route.ts.
+ALTER TABLE dtrek_places ADD COLUMN IF NOT EXISTS itinerary_cache JSONB;
+ALTER TABLE dtrek_places ADD COLUMN IF NOT EXISTS itinerary_cached_at TIMESTAMPTZ;
+
 -- Slug di lib/italianRegions.ts (es. 'lazio'), NULL se l'utente ha scelto esplicitamente di non
 -- specificarla — vedi add_home_region.sql per il perché.
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS home_region TEXT;

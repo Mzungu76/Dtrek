@@ -10,7 +10,7 @@ import { LS_KEYS } from '@/lib/localStore'
 import type { WikiPage } from '@/lib/wikipedia'
 import {
   VolumeX, Loader2,
-  FileDown, BookOpen, Sparkles,
+  FileDown, BookOpen, Sparkles, ChevronRight,
 } from 'lucide-react'
 import type { PoiItem } from '@/lib/overpass'
 import PhotoMosaic from '@/components/PhotoMosaic'
@@ -43,6 +43,8 @@ import PoiListWidget from './widgets/PoiListWidget'
 import NaturaWidget from './widgets/NaturaWidget'
 import BorgoTappeWidget from './widgets/BorgoTappeWidget'
 import SitoInfoWidget from './widgets/SitoInfoWidget'
+import PlaceDescriptionWidget from './widgets/PlaceDescriptionWidget'
+import GuideGalleryLightbox, { type GuideGalleryItem } from './widgets/GuideGalleryLightbox'
 import SitoGalleryWidget from './widgets/SitoGalleryWidget'
 import GuideHero from './GuideHero'
 import GuideStatsStrip from './GuideStatsStrip'
@@ -59,7 +61,8 @@ import type { FloraResult } from '@/lib/floraTypes'
 import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
 import type { PlaceDetail } from '@/app/api/places/[id]/route'
 import type { BorgoItinerary } from '@/app/api/borgo-itinerary/route'
-import { borgoCardVariant, sitoCardFamily } from '@/lib/guideCardVariant'
+import { computeBorgoWalkFields } from '@/lib/borgoWalkPolyline'
+import { borgoCardVariant, sitoCardFamily, metaEligibleForHikingScores } from '@/lib/guideCardVariant'
 import { META_TYPE_CONFIG, SITE_TYPE_CONFIG, inferSiteTypeFromName } from '@/lib/metaTypes'
 import { Building2, Landmark } from 'lucide-react'
 
@@ -249,6 +252,18 @@ export default function GuideReader({
   // una sezione, più d'una per "Genera il resto della guida") — pilota lo spinner per-sezione in
   // SectionCard senza interferire con `generating`, usato solo per la primissima generazione.
   const [generatingSections, setGeneratingSections] = useState<GuideSectionKey[]>([])
+  // Verifica utente: "Genera il resto della guida" e la riga compatta "+N sezioni da generare"
+  // chiedevano SEMPRE tutte le sezioni mancanti insieme, senza modo di scegliere solo alcune.
+  // Qui si tiene solo l'insieme delle chiavi ESCLUSE dall'utente (non quelle incluse): di default
+  // tutto resta selezionato come prima (comportamento invariato per chi non tocca nulla), un tap
+  // su un chip la toglie dalla prossima chiamata — mai ripulito quando una sezione esce
+  // dall'elenco (generata o rimossa), il filtro all'uso la ignora comunque in quel caso.
+  const [deselectedSections, setDeselectedSections] = useState<Set<GuideSectionKey>>(new Set())
+  const toggleSectionSelected = (key: GuideSectionKey) => setDeselectedSections(prev => {
+    const next = new Set(prev)
+    if (next.has(key)) next.delete(key); else next.add(key)
+    return next
+  })
   // Lunghezza scelta per sezione — parte dal default salvato in Impostazioni (vedi l'effetto più
   // sotto), modificabile qui per sezione prima di premere "Approfondisci con Giulia" / "Genera il
   // resto della guida": è l'override "per singola guida" richiesto, non persistito altrove.
@@ -266,13 +281,31 @@ export default function GuideReader({
   // per come vengono usati). null per un Sentiero (mai richiesto) o finché non arriva.
   const [placeDetail,    setPlaceDetail]    = useState<PlaceDetail | null>(null)
   const [borgoItinerary, setBorgoItinerary] = useState<BorgoItinerary | null>(null)
+  // Verifica utente: "non vengono più generati gli itinerari" — in realtà venivano generati, solo
+  // che il calcolo (geosearch Wikipedia + rete pedonale OSM + Dijkstra, vedi /api/borgo-itinerary)
+  // può metterci diversi secondi, e nel frattempo la sezione "Itinerario consigliato" appariva
+  // identica a una sezione genuinamente vuota (stessa riga "+N sezioni da generare"), senza alcun
+  // segnale che qualcosa si stesse calcolando in background. True dall'avvio della richiesta a
+  // quando si stabilizza (successo, vuoto o errore) — mai bloccante, solo pilota il messaggio sotto.
+  const [borgoItineraryLoading, setBorgoItineraryLoading] = useState(false)
 
   // Un percorso a tratta unica (start/end lontani — non un anello, non un andata-ritorno già
   // rilevato come tale dalla geometria) si percorre in uno di due modi, e quale dei due è una
   // proprietà del percorso salvata su Supabase (planned_hikes.route_mode), non uno stato di sola
   // visualizzazione: le cifre qui sotto E i punteggi che ne derivano seguono la scelta. Vedi
   // lib/routeMode.ts per il calcolo delle cifre effettive e il perché del raddoppio semplice.
-  const isLinearRoute = useMemo(() => classifyTrackShape(hike.routePolyline ?? []) === 'linear', [hike.routePolyline])
+  // metaEligibleForHikingScores in AND col controllo di forma (confine esplicito di tipologia,
+  // piano guide-eccellenza §Fase 4) — verifica utente: senza questo controllo, un Borgo/Città
+  // "cammino urbano" o un Sito senza traccia (routePolyline sempre vuoto) risultava "lineare" per
+  // accidente (classifyTrackShape su un array vuoto/corto ritorna sempre 'linear'), aprendo il
+  // popup "Come percorri questo percorso" — che ha senso solo per un vero cammino a piedi
+  // (Sentiero, o Borgo/Città "trekking misto" con una traccia reale) — anche per chi visita
+  // semplicemente un borgo o un museo.
+  const isLinearRoute = useMemo(
+    () => metaEligibleForHikingScores({ metaType: hike.metaType, trackPoints: hike.trackPoints, routePolyline: hike.routePolyline })
+      && classifyTrackShape(hike.routePolyline ?? []) === 'linear',
+    [hike.metaType, hike.trackPoints, hike.routePolyline],
+  )
   const showAsRoundTrip = isLinearRoute && hike.routeMode === 'round_trip'
   const effective = effectiveHikeMetrics(hike, isLinearRoute ? hike.routeMode : undefined)
   // Scelta mai fatta su un percorso lineare ⇒ popup bloccante. Deve arrivare PRIMA della
@@ -299,12 +332,23 @@ export default function GuideReader({
   // hike.siteType direttamente in più punti con risultati incoerenti tra loro.
   const siteType = hike.metaType === 'sito' ? inferSiteTypeFromName(hike.title, hike.siteType) : hike.siteType
 
+  // lib/guideCardVariant.ts — quale variante di copertina/statistiche mostrare, e (piano
+  // guide-eccellenza §Fase 3) quale profilo di sezioni: un Borgo/Città 'trekking_misto' ha una
+  // traccia GPS reale (un cammino che tocca il borgo) e guadagna anche "Dati e sicurezza", proprio
+  // come un Sentiero — vedi guideProfileFor. undefined per un Sentiero (mai valutato, il profilo
+  // resta quello di sempre).
+  const usesRealTrack = (hike.trackPoints?.length ?? 0) > 1 || (hike.routePolyline?.length ?? 0) > 1
+  const borgoVariant = hike.metaType === 'borgo_citta' ? borgoCardVariant(hike) : undefined
+
   // Titolo di card per tipologia (lib/guideProfiles.ts, piano §29/§30) — "Il borgo"/"Le tappe del
   // borgo" per un borgo_citta, "Il museo"/"Il castello"/... per un sito con siteType noto, invece
   // del titolo generico da sentiero ("Il percorso"/"I luoghi da non perdere") che lo stesso
   // profilo istruisce Giulia a NON scrivere più per queste tipologie (vedi SECTION_BRIEF in
   // app/api/guide/route.ts, che incorpora questi stessi titoli nell'intestazione "## ..." generata).
-  const guideProfile = useMemo(() => guideProfileFor(hike.metaType, siteType), [hike.metaType, siteType])
+  const guideProfile = useMemo(
+    () => guideProfileFor(hike.metaType, siteType, borgoVariant),
+    [hike.metaType, siteType, borgoVariant],
+  )
 
   const displaySections = useMemo<DisplaySection[]>(() => {
     const byKey = new Map(parsedSections.filter(s => s.key).map(s => [s.key as GuideSectionKey, s]))
@@ -384,14 +428,22 @@ export default function GuideReader({
 
   // Load route photos from Wikimedia Commons for the mosaic + section illustrations (the hero
   // itself is now a recolored map, not a photo — see GuideHero — so every photo slot here goes
-  // to the mosaic/section illustrations instead of being reserved for the hero).
+  // to the mosaic/section illustrations instead of being reserved for the hero). Un Borgo/Città o
+  // Sito senza traccia (piano guide-eccellenza §Fase 2.1) non ha un punto medio di percorso da
+  // usare: cade su hike.latitude/longitude (valorizzate via placeId, piano Blocco D) con un
+  // raggio stretto attorno al punto stesso — stesso raggio di SitoGalleryWidget qui sotto, che fa
+  // esattamente questo per il proprio caso — invece dei 15km pensati per il punto medio di un
+  // sentiero, che per un singolo punto includerebbe foto di tutt'altro luogo.
   useEffect(() => {
     const pts = (hike.trackPoints ?? []).filter((p: { lat?: number; lon?: number }) => p.lat && p.lon) as { lat: number; lon: number }[]
     const poly = pts.length > 0 ? pts : (hike.routePolyline ?? []).map((p: [number, number]) => ({ lat: p[0], lon: p[1] }))
-    if (!poly.length) return
-    const mid = poly[Math.floor(poly.length / 2)]
+    const mid = poly.length > 0
+      ? poly[Math.floor(poly.length / 2)]
+      : hike.latitude != null && hike.longitude != null ? { lat: hike.latitude, lon: hike.longitude } : null
+    if (!mid) return
+    const radiusM = poly.length > 0 ? 15000 : 1500
     import('@/app/lib/guide/fetchRoutePhotos').then(({ fetchRoutePhotos }) =>
-      fetchRoutePhotos(mid.lat, mid.lon, 15000, 6)
+      fetchRoutePhotos(mid.lat, mid.lon, radiusM, 6)
     ).then(photos => {
       setRoutePhotos(photos.map(p => p.url))
     }).catch(() => {})
@@ -417,17 +469,41 @@ export default function GuideReader({
   // "trekking misto" mostra la timeline delle tappe interne, solo non le sue pillole.
   useEffect(() => {
     if (hike.metaType !== 'borgo_citta' || !hike.placeId) return
+    // Un borgoWalkPolyline già persistito (creato al volo dal popup di ricerca o da una guida
+    // aperta in precedenza, vedi lib/useCreateMetaFromSearch.ts) significa che l'itinerario esiste
+    // già: questa richiesta lo ricalcola comunque (mai la stessa istanza — vedi il commento sopra
+    // sul perché — ma con dati quasi certamente identici), quindi non è la prima generazione agli
+    // occhi dell'utente e non merita lo stesso messaggio "sto calcolando per la prima volta".
+    const alreadyHasItinerary = (hike.borgoWalkPolyline?.length ?? 0) > 0
     let cancelled = false
+    if (!alreadyHasItinerary) setBorgoItineraryLoading(true)
     fetch('/api/borgo-itinerary', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ placeId: hike.placeId }),
     })
       .then(res => res.ok ? res.json() : null)
-      .then(data => { if (!cancelled && data) setBorgoItinerary(data as BorgoItinerary) })
+      .then(data => {
+        if (cancelled || !data) return
+        const itinerary = data as BorgoItinerary
+        setBorgoItinerary(itinerary)
+        // Naviga (piano guide-eccellenza, verifica post-piano) — persiste l'itinerario a piedi
+        // reale (legs, già calcolato qui sopra) come polyline unica riusabile dal Navigator, in un
+        // campo DEDICATO (mai routePolyline/trackPoints — vedi il commento su borgoWalkPolyline in
+        // lib/plannedStore.ts, che spiega perché). borgoWalkStopsHash invece di un timestamp:
+        // ricalcola solo se le tappe che compongono l'itinerario sono cambiate (nuova geosearch
+        // Wikipedia, nuovo import archivio), non ad ogni apertura della guida.
+        const walkFields = computeBorgoWalkFields(itinerary)
+        if (walkFields && walkFields.borgoWalkStopsHash !== hike.borgoWalkStopsHash) {
+          updatePlannedMeta(hike.id, walkFields).catch(() => {})
+          onHikeUpdate(walkFields)
+        }
+      })
       .catch(() => {})
+      .finally(() => { if (!cancelled) setBorgoItineraryLoading(false) })
     return () => { cancelled = true }
-  }, [hike.metaType, hike.placeId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hike.metaType, hike.placeId, hike.id])
 
   // IntersectionObserver: track which section is in view for pin-nav highlighting. Uses a thin
   // "activation band" near the top of the viewport (threshold 0, shrunk rootMargin) rather than
@@ -510,6 +586,12 @@ export default function GuideReader({
         hikeId: hike.id,
         sections,
         sectionLengths: sectionLengthsForCall,
+        // Le stesse tappe già mostrate in BorgoTappeWidget (verifica post-piano guide-eccellenza)
+        // — così il server le riusa invece di rifare una propria ricerca live indipendente, che
+        // poteva restituire un insieme diverso (Giulia nominava tappe mai viste nel widget sopra
+        // il suo testo). undefined quando borgoItinerary non è ancora arrivato: il server ripiega
+        // sulla propria ricerca, invariata.
+        borgoDetailStops: borgoItinerary?.stops,
         hikeFallback: {
           title:                hike.title,
           plannedDate:          hike.plannedDate,
@@ -641,7 +723,7 @@ export default function GuideReader({
     hike.distanceMeters, hike.elevationGain, hike.elevationLoss, hike.altitudeMax, hike.altitudeMin, hike.routeMode,
     hike.estimatedTimeSeconds, hike.assessment, hike.cachedPois, hike.cachedPoiWiki, hike.trackPoints,
     hike.cachedEpochPois,
-    onHikeUpdate, sectionLengths,
+    onHikeUpdate, sectionLengths, borgoItinerary?.stops,
   ])
 
   // Sezioni Breve scelte dall'utente in Impostazioni (components/profilo/SectionGuida.tsx) — null
@@ -818,7 +900,22 @@ export default function GuideReader({
         // Un Borgo/Città "cammino urbano" o un Sito non hanno una traccia GPS da mostrare — mai un
         // RouteMapSection vuoto/rotto al posto del nulla (piano §48.9). "Trekking misto" ha una
         // traccia reale: resta invariato.
-        if (hike.metaType !== 'sentiero' && !usesRealTrack) return null
+        if (hike.metaType !== 'sentiero' && !usesRealTrack) {
+          // Verifica post-piano guide-eccellenza: "quando vengono create le schede di Borghi/Siti,
+          // la scheda dovrebbe essere già popolata con le info descrittive" — prima, senza una
+          // traccia, questa sezione (il titolo di card "Il borgo"/"Il museo"/...) non aveva né
+          // widget né testo finché Giulia non scriveva, quindi finiva nella riga compatta "sezioni
+          // da generare" (piano §Fase 1) anche appena creata la Meta. placeDetail arriva già dal
+          // mount (archivio dtrek_places, con fallback Wikipedia — vedi l'effect qui sopra), quindi
+          // un riassunto reale è spesso disponibile da subito. Solo finché Giulia non ha ancora
+          // scritto QUESTA sezione: un riassunto enciclopedico e la sua narrazione insieme
+          // sarebbero ridondanti, non complementari.
+          if (body?.trim()) return null
+          const description = placeDetail?.description ?? placeDetail?.wikipedia?.extract
+          return description
+            ? <PlaceDescriptionWidget text={description} wikipediaUrl={!placeDetail?.description ? placeDetail?.wikipedia?.url : undefined} />
+            : null
+        }
         return (
           <RouteMapSection
             trackPoints={hike.trackPoints}
@@ -840,9 +937,29 @@ export default function GuideReader({
         // mai PoiListWidget qui, è costruita per un Sentiero (mappa del tracciato, Street View,
         // POI OSM) che un Borgo/Città non ha.
         if (hike.metaType === 'borgo_citta') {
-          return borgoItinerary && borgoItinerary.stops.length > 0
-            ? <BorgoTappeWidget stops={borgoItinerary.stops} />
-            : null
+          if (borgoItinerary && borgoItinerary.stops.length > 0) {
+            return (
+              <BorgoTappeWidget
+                stops={borgoItinerary.stops}
+                legs={borgoItinerary.legs}
+                center={hike.latitude != null && hike.longitude != null ? { lat: hike.latitude, lon: hike.longitude } : undefined}
+                color={SECTION_STYLE.luoghi.color}
+              />
+            )
+          }
+          // Verifica utente: mentre l'itinerario si calcola (geosearch Wikipedia + rete pedonale
+          // OSM + Dijkstra, può metterci diversi secondi) questa sezione va distinta da una
+          // genuinamente vuota — altrimenti finisce anonima dentro "+N sezioni da generare", dando
+          // l'impressione che l'itinerario non si stia generando affatto.
+          if (borgoItineraryLoading) {
+            return (
+              <div className="flex items-center gap-2.5 text-stone-400 text-[12.5px]">
+                <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                Sto calcolando l&apos;itinerario a piedi tra le tappe del borgo…
+              </div>
+            )
+          }
+          return null
         }
         // Un Sito è già di per sé il singolo punto di interesse: qui non c'è mai un elenco di POI
         // "lungo il percorso" (poiList arriva comunque come oggetto — con array vuoti — dal
@@ -980,13 +1097,12 @@ export default function GuideReader({
       ? (siteType ? SITE_TYPE_CONFIG[siteType].label : META_TYPE_CONFIG.sito.label).toUpperCase()
       : (hike.tags?.[0] ?? hike.assessment?.difficulty ?? 'Escursione').toUpperCase()
 
-  // lib/guideCardVariant.ts — quale variante di copertina/statistiche mostrare. undefined per un
-  // Sentiero (mai valutato, la Guida resta quella di sempre).
-  const usesRealTrack = (hike.trackPoints?.length ?? 0) > 1 || (hike.routePolyline?.length ?? 0) > 1
-  const borgoVariant = hike.metaType === 'borgo_citta' ? borgoCardVariant(hike) : undefined
   const hasVisitInfo = !!(placeDetail?.officialUrl || placeDetail?.website || placeDetail?.openingHours)
   const sitoFamily = hike.metaType === 'sito' ? sitoCardFamily(siteType, hasVisitInfo) : undefined
   const usesCoverPhoto = hike.metaType === 'sito' || borgoVariant === 'cammino_urbano'
+  // Stessa condizione usata sotto per montare <SitoGalleryWidget> — PhotoMosaic non deve
+  // duplicarla (piano guide-eccellenza §Fase 2.1).
+  const showsSitoGallery = hike.metaType === 'sito' && sitoFamily !== 'scheda_pratica' && hike.latitude != null && hike.longitude != null
 
   // Icona di fallback per la copertina senza foto (GuideHero coverMode='photo') — Building2 per un
   // Borgo/Città, l'icona di categoria di lib/metaTypes.ts per un Sito (coerente coi chip/pin già
@@ -1011,6 +1127,48 @@ export default function GuideReader({
     () => displaySections.filter((s): s is DisplaySection & { guideKey: GuideSectionKey } => s.guideKey != null && !s.body?.trim()).map(s => s.guideKey),
     [displaySections],
   )
+  // Titolo per chiave — per i chip di selezione sotto, dove serve un'etichetta breve per ciascuna
+  // sezione ancora mancante (missingSectionKeys porta solo le chiavi, non i titoli già risolti da
+  // displaySections con gli override di lib/guideProfiles.ts).
+  const sectionTitleByKey = useMemo(
+    () => new Map(displaySections.filter((s): s is DisplaySection & { guideKey: GuideSectionKey } => s.guideKey != null).map(s => [s.guideKey, s.title])),
+    [displaySections],
+  )
+  // Solo le chiavi non deselezionate dall'utente restano nella richiesta — vedi deselectedSections.
+  const selectedFrom = (keys: GuideSectionKey[]) => keys.filter(k => !deselectedSections.has(k))
+
+  // Sezioni "vuote" (piano guide-eccellenza §Fase 1.1) — né testo AI né un widget con dati reali
+  // (es. mappa/meteo): quelle NON sono "contenuto in attesa", sono un vero e proprio nulla, e
+  // prima restavano N placeholder quasi identici sparsi nello scroll con lo stesso peso visivo
+  // delle card piene. Una sezione con un widget ma senza testo (es. "Il percorso" con la mappa già
+  // pronta) non è mai vuota in questo senso — mostra comunque contenuto reale, SectionCard la
+  // rende già come "widget con footer discreto". Non ricalcolato con un useMemo dedicato: chiama
+  // renderWidget(), che chiude su molto stato del componente (weather, scores, borgoItinerary,
+  // poiList, natura, ...) — più semplice e sicuro ricalcolarlo ad ogni render come già fa il loop
+  // di rendering sotto, piuttosto che elencare quella stessa superficie di dipendenze qui.
+  const sectionMeta = displaySections.map((s, i) => ({
+    section: s,
+    index: i,
+    // 'il_percorso' ("Il borgo"/"Il sito"/...) non entra MAI nella riga compatta "+N sezioni da
+    // generare" — verifica utente: la sua descrizione "spariva" quando compariva "Le tappe del
+    // borgo", perché borgoItinerary (Overpass, veloce) di norma risolve prima di placeDetail
+    // (Wikipedia/Wikidata, più lento): nel frattempo 'il_percorso' restava vuota e finiva
+    // anonimizzata dentro l'etichetta condivisa della riga compatta insieme alle altre sezioni
+    // ancora vuote — quando 'luoghi' usciva da quell'elenco per prendersi la propria card, restava
+    // solo un'etichetta ridotta e facile da perdere, mai una vera card propria. Qui resta sempre una
+    // card/riga DEDICATA (widget/descrizione se pronti, altrimenti il proprio hint "Approfondisci"),
+    // mai confusa con la sorte delle altre sezioni.
+    isEmpty: s.guideKey != null && s.guideKey !== 'il_percorso' && !s.body?.trim() && renderWidget(s.key, s.body) == null,
+  }))
+  const emptySections = sectionMeta
+    .filter((m): m is typeof m & { section: DisplaySection & { guideKey: GuideSectionKey } } => m.isEmpty)
+    .map(m => m.section)
+  const firstEmptyIndex = sectionMeta.find(m => m.isEmpty)?.index
+  // SectionNav e lo scroll principale condividono questa stessa lista filtrata (invece di
+  // displaySections per intero): solo la prima sezione vuota vi compare, come voce unica che
+  // rappresenta tutte le altre — punta solo a ciò che è davvero presente nello scroll (piano
+  // §Fase 1.3), mai a un placeholder che non esiste più come card propria.
+  const navEntries = sectionMeta.filter(m => !m.isEmpty || m.index === firstEmptyIndex)
 
   // Galleria fotografica — fonte principale: le thumbnail degli articoli Wikipedia dei luoghi
   // lungo il percorso (già scaricate durante l'arricchimento del percorso, prima ancora che la
@@ -1027,6 +1185,17 @@ export default function GuideReader({
       .slice(0, 12)
       .map(({ wiki: w }) => ({ url: w.url, imageUrl: w.thumbnail!, title: w.title }))
   }, [hike.cachedPoiWiki])
+
+  // Verifica utente: le foto della galleria si aprivano subito come link esterno alla pagina
+  // Wikipedia/fonte, mai ingrandite dentro l'app — a differenza della stessa galleria nei
+  // Reportage (app/resoconto/[id]/PhotoGallery.tsx + PhotoLightbox.tsx). Elenco unico (poiPhotos +
+  // guideSources con immagine) nello stesso ordine già mostrato sotto, così l'indice del tap
+  // corrisponde 1:1 alla posizione nella lightbox.
+  const galleryItems = useMemo<GuideGalleryItem[]>(() => [
+    ...poiPhotos.map(p => ({ imageUrl: p.imageUrl, title: p.title, sourceUrl: p.url, sourceLabel: `Luogo: ${p.title}` })),
+    ...guideSources.filter(s => s.imageUrl).map(s => ({ imageUrl: s.imageUrl!, title: s.title, sourceUrl: s.url, sourceLabel: `Fonte: ${s.title}` })),
+  ], [poiPhotos, guideSources])
+  const [galleryLightboxIndex, setGalleryLightboxIndex] = useState<number | null>(null)
 
   // Punto di arrivo (ultimo punto della traccia) — da qui parte la ricerca di bus/stazioni/taxi per
   // chi non vuole tornare a piedi sui propri passi (sottosezione "Tornare al punto di partenza" in
@@ -1119,44 +1288,82 @@ export default function GuideReader({
         />
       )}
 
-      <PhotoMosaic
-        photos={routePhotos.slice(0, 4).map((url, i) => ({ id: String(i), url }))}
-        heightClass="h-32"
-      />
+      {/* SitoGalleryWidget sopra mostra già una galleria (stesso raggio, stessa fonte Commons) per
+          un Sito non-scheda_pratica — evitare qui la stessa galleria due volte nello scroll
+          (piano guide-eccellenza §Fase 2.1). Per ogni altro caso (Sentiero, Borgo/Città, Sito
+          scheda_pratica) PhotoMosaic resta l'unica galleria e usa il fallback sul punto della
+          Meta appena aggiunto sopra quando manca una traccia. */}
+      {!showsSitoGallery && (
+        <PhotoMosaic
+          photos={routePhotos.slice(0, 4).map((url, i) => ({ id: String(i), url }))}
+          heightClass="h-32"
+        />
+      )}
 
       {/* ── Section nav (mobile: sticky pill bar / md+: sidebar) + reading column ────────── */}
       <div className="md:px-8 md:max-w-[1180px] md:mx-auto">
         <div className="md:grid md:grid-cols-[auto_1fr] md:gap-8 md:items-start md:pt-6">
           <SectionNav
-            sections={displaySections.map(s => ({ key: s.key, title: s.title, icon: s.icon, color: s.color }))}
-            activeIndex={visibleSec}
-            onSelect={scrollToSection}
+            sections={navEntries.map(m => m.index === firstEmptyIndex
+              ? { key: m.section.key, title: `Altre sezioni (${emptySections.length})`, icon: LEGACY_STYLE.icon, color: LEGACY_STYLE.color, empty: true }
+              : { key: m.section.key, title: m.section.title, icon: m.section.icon, color: m.section.color, empty: !m.section.body?.trim() }
+            )}
+            activeIndex={navEntries.findIndex(m => m.index === visibleSec)}
+            onSelect={navIdx => scrollToSection(navEntries[navIdx].index)}
           />
 
           <div className="min-w-0 px-4 sm:px-6 md:px-0 md:max-w-3xl lg:max-w-[52rem]">
 
-            {/* ── Genera il resto della guida in un'unica chiamata ────────────── */}
-            {hasGuide && !generating && generatingSections.length === 0 && missingSectionKeys.length > 0 && (
-              <div className="mt-4 flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-3 rounded-2xl bg-terra-50 border border-terra-200">
-                <div className="flex items-start gap-3 min-w-0">
-                  <Sparkles className="w-4 h-4 text-terra-600 shrink-0 mt-0.5" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-semibold text-stone-800">
-                      {missingSectionKeys.length === 1 ? 'Manca ancora una sezione' : `Mancano ancora ${missingSectionKeys.length} sezioni`}
-                    </p>
-                    <p className="text-[11.5px] text-stone-500 leading-snug">
-                      Generarle tutte insieme in un&apos;unica richiesta è più efficiente che una alla volta
-                    </p>
+            {/* ── Genera il resto della guida — verifica utente: scelta per sezione, mai più
+                 tutte insieme senza alternativa ────────────────────────────────────────── */}
+            {hasGuide && !generating && generatingSections.length === 0 && missingSectionKeys.length > 0 && (() => {
+              const selected = selectedFrom(missingSectionKeys)
+              return (
+                <div className="mt-4 flex flex-col gap-3 px-4 py-3 rounded-2xl bg-terra-50 border border-terra-200">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <Sparkles className="w-4 h-4 text-terra-600 shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-semibold text-stone-800">
+                        {missingSectionKeys.length === 1 ? 'Manca ancora una sezione' : `Mancano ancora ${missingSectionKeys.length} sezioni`}
+                      </p>
+                      <p className="text-[11.5px] text-stone-500 leading-snug">
+                        Tocca per togliere una sezione dalla richiesta — quelle selezionate si generano insieme, in una sola chiamata
+                      </p>
+                    </div>
                   </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {missingSectionKeys.map(key => {
+                      const isSelected = !deselectedSections.has(key)
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => toggleSectionSelected(key)}
+                          className={`px-2.5 py-1 rounded-full text-[11.5px] font-semibold border transition-colors ${
+                            isSelected
+                              ? 'bg-terra-600 border-terra-600 text-white'
+                              : 'bg-white border-stone-200 text-stone-400 line-through'
+                          }`}
+                        >
+                          {sectionTitleByKey.get(key) ?? key}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <button
+                    onClick={() => generateSections(selected)}
+                    disabled={selected.length === 0}
+                    className="w-full sm:w-auto shrink-0 px-4 py-2 rounded-full bg-terra-600 hover:bg-terra-700 disabled:bg-stone-300 disabled:cursor-not-allowed text-white text-[12.5px] font-semibold transition-colors self-start"
+                  >
+                    {selected.length === 0
+                      ? 'Seleziona almeno una sezione'
+                      : selected.length === missingSectionKeys.length
+                        ? 'Genera il resto con Giulia (AI)'
+                        : `Genera ${selected.length} ${selected.length === 1 ? 'sezione' : 'sezioni'} con Giulia (AI)`}
+                  </button>
                 </div>
-                <button
-                  onClick={() => generateSections(missingSectionKeys)}
-                  className="w-full sm:w-auto shrink-0 px-4 py-2 rounded-full bg-terra-600 hover:bg-terra-700 text-white text-[12.5px] font-semibold transition-colors"
-                >
-                  Genera il resto con Giulia (AI)
-                </button>
-              </div>
-            )}
+              )
+            })()}
 
             {/* ── Voice mini-player ──────────────────────────────────────────── */}
             {hasGuide && (
@@ -1254,7 +1461,71 @@ export default function GuideReader({
 
             {/* ── Guide sections — always rendered (widgets), text where available ────────── */}
             <div className="mt-4">
-              {displaySections.map((s, i) => {
+              {navEntries.map(({ section: s, index: i }) => {
+                // La prima sezione vuota (piano guide-eccellenza §Fase 1.1) diventa una riga
+                // compatta unica che riassume TUTTE le sezioni vuote insieme, con un'unica azione
+                // — le altre non hanno più una card propria in questo loop (navEntries le esclude
+                // già, vedi sopra), invece di N placeholder quasi identici sparsi nello scroll.
+                if (i === firstEmptyIndex) {
+                  const approfondendoMerged = emptySections.some(es => generatingSections.includes(es.guideKey))
+                  const emptyKeys = emptySections.map(es => es.guideKey)
+                  const selectedEmpty = selectedFrom(emptyKeys)
+                  return (
+                    <article
+                      key={s.key}
+                      ref={el => { sectionRefs.current[i] = el }}
+                      className="scroll-mt-16 flex flex-col gap-2 px-4 py-3 border border-stone-200 rounded-xl bg-white mb-2.5"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="[&>svg]:w-4 [&>svg]:h-4 shrink-0 text-stone-400">{LEGACY_STYLE.icon}</span>
+                        <span className="flex-1 min-w-0 text-[13px] font-semibold text-stone-800">
+                          + {emptySections.length} {emptySections.length === 1 ? 'sezione da generare' : 'sezioni da generare'}
+                        </span>
+                        {approfondendoMerged && (
+                          <span className="flex items-center gap-1 text-[11.5px] font-medium text-stone-400 shrink-0">
+                            <Loader2 className="w-3 h-3 animate-spin" /> Approfondimento…
+                          </span>
+                        )}
+                      </div>
+                      {!approfondendoMerged && showApprofondisciHint && generatingSections.length === 0 && (
+                        <>
+                          {/* Verifica utente: chip per sezione, non più un unico "Approfondisci"
+                              che le generava tutte insieme senza scelta. */}
+                          <div className="flex flex-wrap gap-1.5">
+                            {emptySections.map(es => {
+                              const isSelected = !deselectedSections.has(es.guideKey)
+                              return (
+                                <button
+                                  key={es.guideKey}
+                                  type="button"
+                                  onClick={() => toggleSectionSelected(es.guideKey)}
+                                  className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-colors ${
+                                    isSelected
+                                      ? 'bg-terra-100 border-terra-200 text-terra-700'
+                                      : 'bg-stone-50 border-stone-200 text-stone-400 line-through'
+                                  }`}
+                                >
+                                  {es.title}
+                                </button>
+                              )
+                            })}
+                          </div>
+                          <div className="flex flex-wrap items-center justify-end gap-2">
+                            <button
+                              onClick={() => generateSections(selectedEmpty)}
+                              disabled={selectedEmpty.length === 0}
+                              className="flex items-center gap-0.5 text-[11.5px] font-bold text-terra-600 hover:text-terra-700 disabled:text-stone-300 disabled:cursor-not-allowed shrink-0 whitespace-nowrap"
+                            >
+                              {selectedEmpty.length === 0
+                                ? 'Seleziona almeno una sezione'
+                                : <>Approfondisci con Giulia (AI) <ChevronRight className="w-3 h-3" /></>}
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </article>
+                  )
+                }
                 // Ogni sezione può essere approfondita singolarmente (app/api/guide/route.ts,
                 // sections) — a differenza di "Genera il resto della guida" che le chiede tutte
                 // insieme. Solo per le sezioni fisse (s.guideKey), non per quelle "legacy".
@@ -1300,58 +1571,44 @@ export default function GuideReader({
               </div>
             )}
 
-            {hasGuide && !generating && (poiPhotos.length > 0 || guideSources.some(s => s.imageUrl)) && (
+            {hasGuide && !generating && galleryItems.length > 0 && (
               <div className="mt-4 mb-1">
                 <p className="text-[9px] font-bold uppercase tracking-[2.5px] text-stone-400 mb-2">
                   Galleria fotografica
                 </p>
                 <div className="flex gap-2.5 overflow-x-auto pb-1" style={{ scrollSnapType: 'x proximity' }}>
-                  {poiPhotos.map((p, i) => (
-                    <a
-                      key={`poi-${i}`}
-                      href={p.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="shrink-0 w-52 rounded-2xl overflow-hidden border border-stone-200 group"
-                      style={{ scrollSnapAlign: 'start' }}
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element -- foto hotlinkata da Wikipedia, mai copiata sui nostri server */}
-                      <img
-                        src={p.imageUrl}
-                        alt={p.title}
-                        className="w-52 h-36 object-cover group-hover:opacity-90 transition-opacity"
-                        loading="lazy"
-                        onError={e => { (e.currentTarget.closest('a') as HTMLElement | null)?.style.setProperty('display', 'none') }}
-                      />
-                      <p className="px-2.5 py-1.5 text-[10px] text-stone-400 bg-stone-50 truncate">
-                        Luogo: {p.title}
-                      </p>
-                    </a>
-                  ))}
-                  {guideSources.filter(s => s.imageUrl).map((s, i) => (
-                    <a
-                      key={`src-${i}`}
-                      href={s.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="shrink-0 w-52 rounded-2xl overflow-hidden border border-stone-200 group"
+                  {galleryItems.map((item, i) => (
+                    <button
+                      key={`gallery-${i}`}
+                      type="button"
+                      onClick={() => setGalleryLightboxIndex(i)}
+                      className="shrink-0 w-52 rounded-2xl overflow-hidden border border-stone-200 group text-left"
                       style={{ scrollSnapAlign: 'start' }}
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element -- foto hotlinkata dalla fonte, mai copiata sui nostri server */}
                       <img
-                        src={s.imageUrl}
-                        alt={s.title}
+                        src={item.imageUrl}
+                        alt={item.title}
                         className="w-52 h-36 object-cover group-hover:opacity-90 transition-opacity"
                         loading="lazy"
-                        onError={e => { (e.currentTarget.closest('a') as HTMLElement | null)?.style.setProperty('display', 'none') }}
+                        onError={e => { (e.currentTarget.closest('button') as HTMLElement | null)?.style.setProperty('display', 'none') }}
                       />
                       <p className="px-2.5 py-1.5 text-[10px] text-stone-400 bg-stone-50 truncate">
-                        Fonte: {s.title}
+                        {item.sourceLabel}
                       </p>
-                    </a>
+                    </button>
                   ))}
                 </div>
               </div>
+            )}
+
+            {galleryLightboxIndex != null && (
+              <GuideGalleryLightbox
+                items={galleryItems}
+                index={galleryLightboxIndex}
+                onNavigate={setGalleryLightboxIndex}
+                onClose={() => setGalleryLightboxIndex(null)}
+              />
             )}
 
             {hasGuide && !generating && hasAiAccess === true && (

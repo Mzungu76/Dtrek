@@ -39,6 +39,7 @@ import { effectiveHikeMetrics } from '@/lib/routeMode'
 import { findAllSourceImages } from '@/lib/sourceImageFetch'
 import { resolveComuneFromLatLon } from '@/lib/overpassTrails'
 import { guideProfileFor, type GuideProfile } from '@/lib/guideProfiles'
+import { borgoCardVariant } from '@/lib/guideCardVariant'
 import { metaHasHikingMetrics, SITE_TYPE_CONFIG, inferSiteTypeFromName } from '@/lib/metaTypes'
 import { fetchBorgoDetailStops } from '@/lib/guideBorgoDetailStops'
 import type { ItineraryStopCandidate } from '@/lib/metaSearch/borgoItinerary'
@@ -717,6 +718,19 @@ export async function GET(req: NextRequest) {
   })
 }
 
+// Validazione minima del body non fidato (piano guide-eccellenza — vedi borgoDetailStopsFromClient
+// più sotto): solo i campi che buildPrompt legge davvero (name/description/siteType, vedi
+// borgoStopsBlock) più id/lat/lon/source per restare un ItineraryStopCandidate strutturalmente
+// valido — mai un valore fabbricato per un campo mancante, una voce che non passa questo controllo
+// viene scartata, non corretta a metà.
+function isBorgoDetailStopCandidate(v: unknown): v is ItineraryStopCandidate {
+  if (!v || typeof v !== 'object') return false
+  const s = v as Record<string, unknown>
+  return typeof s.id === 'string' && typeof s.name === 'string'
+    && typeof s.lat === 'number' && typeof s.lon === 'number'
+    && (s.source === 'archivio' || s.source === 'wikipedia')
+}
+
 // ── Route ─────────────────────────────────────────────────────────────────────
 // POST è solo un guscio sottile attorno a generateGuide: qualunque eccezione non gestita che sfugga
 // da generateGuide (letture Supabase che lanciano invece di restituire {error}, un TypeError su un
@@ -789,6 +803,15 @@ async function generateGuide(req: NextRequest): Promise<Response> {
   // Giulia" / "Genera il resto della guida") — solo le sezioni esplicitamente cambiate lì, non
   // un'intera mappa: quelle assenti restano al valore salvato in Impostazioni (sectionLengths).
   const sectionLengthOverrides: Partial<SectionLengthMap> = {}
+  // Tappe già mostrate dal client in BorgoTappeWidget (borgoItinerary.stops, /api/borgo-itinerary)
+  // — verifica post-piano guide-eccellenza: prima questa route rifaceva sempre una propria ricerca
+  // indipendente (fetchBorgoDetailStops, live: archivio + geosearch Wikipedia, senza ORDER BY sulla
+  // query), che poteva restituire un insieme diverso da quello che l'utente vede già nel widget
+  // (tetti diversi, 6 contro 8, e nessuna garanzia di stabilità tra due chiamate live separate) —
+  // Giulia poteva quindi nominare tappe mai mostrate nel widget sopra il suo testo. undefined
+  // quando il client non le manda (client più vecchio, o widget non ancora arrivato): fetchBorgoDetailStops
+  // resta il ripiego, mai rimosso.
+  let borgoDetailStopsFromClient: ItineraryStopCandidate[] | undefined
   try {
     const body = await req.json()
     hikeId = body.hikeId
@@ -799,6 +822,10 @@ async function generateGuide(req: NextRequest): Promise<Response> {
       for (const [k, v] of Object.entries(body.sectionLengths as Record<string, unknown>)) {
         if (isGuideSectionKey(k) && isGuideTextLength(v)) sectionLengthOverrides[k] = v
       }
+    }
+    if (Array.isArray(body.borgoDetailStops)) {
+      const valid = body.borgoDetailStops.filter(isBorgoDetailStopCandidate)
+      if (valid.length > 0) borgoDetailStopsFromClient = valid
     }
   } catch {
     return new Response(JSON.stringify({ error: 'Body non valido' }), {
@@ -979,7 +1006,12 @@ async function generateGuide(req: NextRequest): Promise<Response> {
   // ora, non prima: la tipologia della Meta è nota solo dopo averla letta da Supabase/fallback.
   // "verificato" non passa mai da questo filtro/profilo: resta gestita separatamente più sotto
   // (unica chiamata a SYSTEM_VERIFICATO, indipendente dalla tipologia).
-  const guideProfile = guideProfileFor(hike.metaType, hike.siteType)
+  // hike qui non porta mai routePolyline (mai selezionata sopra, un sentiero la usa solo per il
+  // proprio disegno mappa) — trackPoints da solo basta per riconoscere una traccia reale collegata
+  // a un Borgo/Città (piano guide-eccellenza §Fase 3), stesso segnale che lib/guideCardVariant.ts
+  // usa lato client con in più routePolyline.
+  const borgoVariant = hike.metaType === 'borgo_citta' ? borgoCardVariant({ trackPoints }) : undefined
+  const guideProfile = guideProfileFor(hike.metaType, hike.siteType, borgoVariant)
   sectionKeys = sectionKeys.filter(k => k === 'verificato' || guideProfile.availableSections.includes(k))
   if (sectionKeys.length === 0) {
     return new Response(JSON.stringify({ error: 'Nessuna sezione da generare per questa tipologia di Meta' }), {
@@ -1006,10 +1038,20 @@ async function generateGuide(req: NextRequest): Promise<Response> {
   // sezione 'luoghi' è tra quelle richieste in QUESTA generazione, e la Meta ha una posizione nota
   // (assente solo per un fallback di emergenza senza lat/lon, mai per una Meta salvata su
   // Supabase). Lanciata in parallelo a verificatoPromise sotto (nessuna dipendenza reciproca).
+  //
+  // Preferisce SEMPRE le tappe del client quando presenti (borgoDetailStopsFromClient, verifica
+  // post-piano guide-eccellenza) invece di rifare qui una ricerca live indipendente — le stesse
+  // che l'utente vede già in BorgoTappeWidget, non un secondo insieme potenzialmente diverso
+  // (fetchBorgoDetailStops interroga di nuovo archivio+Wikipedia dal vivo, senza alcuna garanzia
+  // di restituire lo stesso risultato di /api/borgo-itinerary: prima Giulia poteva nominare tappe
+  // mai mostrate nel widget sopra il suo testo). fetchBorgoDetailStops resta il ripiego per un
+  // client che non le manda (versione precedente, o widget non ancora arrivato).
   const needsBorgoDetailStops = hike.metaType === 'borgo_citta' && narrativeSectionKeys.includes('luoghi') && hike.latitude != null && hike.longitude != null
-  const borgoDetailStopsPromise = needsBorgoDetailStops
-    ? fetchBorgoDetailStops(supabase, { lat: hike.latitude!, lon: hike.longitude! })
-    : Promise.resolve(undefined)
+  const borgoDetailStopsPromise = borgoDetailStopsFromClient
+    ? Promise.resolve(borgoDetailStopsFromClient)
+    : needsBorgoDetailStops
+      ? fetchBorgoDetailStops(supabase, { lat: hike.latitude!, lon: hike.longitude! })
+      : Promise.resolve(undefined)
 
   const client = new Anthropic({ apiKey })
   // Comune/provincia/regione del punto di partenza: passati a generateVerificatoText come ancoraggio

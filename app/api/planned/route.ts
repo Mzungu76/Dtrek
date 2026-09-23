@@ -95,6 +95,8 @@ function rowToHike(row: Record<string, unknown>, includeTracks = true): PlannedH
     placeId:                       row.place_id as string | undefined,
     latitude:                      row.latitude as number | undefined,
     longitude:                     row.longitude as number | undefined,
+    borgoWalkPolyline:             row.borgo_walk_polyline as [number, number][] | undefined,
+    borgoWalkStopsHash:            row.borgo_walk_stops_hash as string | undefined,
   }
 }
 
@@ -456,6 +458,8 @@ export async function PATCH(req: NextRequest) {
       floraResult?: PlannedHike['floraResult']
       floraTrackHash?: string
       floraComputedAt?: string
+      borgoWalkPolyline?: PlannedHike['borgoWalkPolyline']
+      borgoWalkStopsHash?: string
     }
 
     const dbPatch: Record<string, unknown> = {}
@@ -502,6 +506,8 @@ export async function PATCH(req: NextRequest) {
     if (patch.floraResult                  !== undefined) dbPatch.flora_result                   = patch.floraResult
     if (patch.floraTrackHash               !== undefined) dbPatch.flora_track_hash               = patch.floraTrackHash
     if (patch.floraComputedAt              !== undefined) dbPatch.flora_computed_at              = patch.floraComputedAt
+    if (patch.borgoWalkPolyline            !== undefined) dbPatch.borgo_walk_polyline            = patch.borgoWalkPolyline
+    if (patch.borgoWalkStopsHash           !== undefined) dbPatch.borgo_walk_stops_hash          = patch.borgoWalkStopsHash
 
     const { error } = await supabase
       .from('planned_hikes')

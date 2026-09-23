@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { borgoCardVariant, sitoCardFamily } from '../guideCardVariant'
+import { borgoCardVariant, sitoCardFamily, metaEligibleForHikingScores } from '../guideCardVariant'
 
 describe('borgoCardVariant', () => {
   it('nessuna traccia → cammino_urbano', () => {
@@ -11,6 +11,36 @@ describe('borgoCardVariant', () => {
   it('traccia GPS reale (trackPoints o routePolyline con almeno 2 punti) → trekking_misto', () => {
     expect(borgoCardVariant({ trackPoints: [{ lat: 42, lon: 12 }, { lat: 42.01, lon: 12.01 }] })).toBe('trekking_misto')
     expect(borgoCardVariant({ routePolyline: [[42, 12], [42.01, 12.01]] })).toBe('trekking_misto')
+  })
+})
+
+// piano guide-eccellenza §Fase 4 — confine esplicito di tipologia per CTS/Safety Score, in AND
+// col controllo sui dati che ciascun chiamante fa già da sé (qui non ripetuto: questa funzione
+// decide solo se la TIPOLOGIA è ammessa, non se i dati bastano).
+describe('metaEligibleForHikingScores', () => {
+  it('un Sentiero è sempre ammesso, anche senza traccia (inserito a mano, vedi app/upload/page.tsx)', () => {
+    expect(metaEligibleForHikingScores({ metaType: 'sentiero' })).toBe(true)
+    expect(metaEligibleForHikingScores({})).toBe(true) // assente ⇒ trattato come 'sentiero'
+  })
+
+  it('un Sito non è MAI ammesso, anche se acquisisce per errore una traccia GPS reale', () => {
+    expect(metaEligibleForHikingScores({ metaType: 'sito' })).toBe(false)
+    expect(metaEligibleForHikingScores({
+      metaType: 'sito',
+      trackPoints: [{ lat: 42, lon: 12 }, { lat: 42.01, lon: 12.01 }],
+    })).toBe(false)
+    expect(metaEligibleForHikingScores({
+      metaType: 'sito',
+      routePolyline: [[42, 12], [42.01, 12.01]],
+    })).toBe(false)
+  })
+
+  it('un Borgo/Città è ammesso solo con una traccia GPS reale collegata (variante trekking_misto)', () => {
+    expect(metaEligibleForHikingScores({ metaType: 'borgo_citta' })).toBe(false)
+    expect(metaEligibleForHikingScores({
+      metaType: 'borgo_citta',
+      trackPoints: [{ lat: 42, lon: 12 }, { lat: 42.01, lon: 12.01 }],
+    })).toBe(true)
   })
 })
 

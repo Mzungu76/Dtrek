@@ -149,7 +149,7 @@ function ListRow({ item, mode, isCurrent, onSelect }: {
             <div className="absolute inset-0 bg-black/20 pointer-events-none" />
           </>
         ) : (
-          <GalleryMapThumb polyline={item.polyline} />
+          <GalleryMapThumb polyline={item.polyline} metaType={item.metaType} siteType={item.siteType} />
         )}
       </div>
       <div className="flex-1 min-w-0">

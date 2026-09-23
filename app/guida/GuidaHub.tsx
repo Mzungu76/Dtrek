@@ -6,7 +6,7 @@ import RouteHub from '@/components/routehub/RouteHub'
 import HubSkeleton from '@/components/routehub/HubSkeleton'
 import GuideReader from '@/components/guida/GuideReader'
 import { textPrimary, textMuted } from '@/components/routehub/overlayTheme'
-import type { RouteHubItem, SectionKind, PrimaryAction } from '@/components/routehub/types'
+import type { RouteHubItem, SectionKind, PrimaryAction, StatPill } from '@/components/routehub/types'
 import { computeTrailScoreTotal, computeTrailScoreBreakdown, isTrailScoreVetoed, TRAIL_SCORE_MAX } from '@/components/ScoreRing'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 import { normalizeGuideNotices } from '@/lib/guideNotices'
@@ -30,15 +30,18 @@ import { refineSafetyWithTerrainSignals } from '@/lib/safetyScore'
 import { computePersonalSafety, verdictPhrase, type PersonalFitProfile, type PersonalFitHistory, type PersonalFitRoute } from '@/lib/personalSafetyFit'
 import { isHikerExperienceLevel, sanitizeHikerConcerns, type HikerExperienceLevel, type HikerConcernKey } from '@/lib/hikerProfile'
 import { type BeautyScore } from '@/lib/beautyScore'
-import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
-import { getUserStartingPoint, googleMapsDirectionsUrl, fetchDrivingInfo, originMatches } from '@/lib/drivingInfo'
+import { computeBbox, minDistToTrack, haversineM } from '@/lib/geoUtils'
+import { getUserStartingPoint, googleMapsDirectionsUrl, fetchDrivingInfo, originMatches, getTrailStartPoint } from '@/lib/drivingInfo'
 import { useCtsUpdated } from '@/lib/sync/useCtsUpdated'
 import { formatDuration } from '@/lib/tcxParser'
 import type { GuideSectionKey } from '@/lib/guideSections'
+import { metaHasHikingMetrics, SITE_TYPE_CONFIG } from '@/lib/metaTypes'
+import { metaRowLocationStats } from '@/lib/metaCard'
+import { metaEligibleForHikingScores } from '@/lib/guideCardVariant'
 import {
   Mountain, Route, TrendingUp, Clock, Loader2,
   Car, Trash2, Pencil, Check, Images,
-  Navigation, Download,
+  Navigation, Download, MapPin,
   Calendar as CalendarIcon,
 } from 'lucide-react'
 import { exportPlannedHikeToGpx } from '@/utils/exportGpx'
@@ -65,8 +68,52 @@ const AnimalGallery    = dynamic(() => import('@/components/AnimalGallery'),   {
  *  (no cachedTsTotal) falls back to just its raw Comfort TrailScore instead of fabricating a full
  *  v2 number out of incomplete data. */
 function previewScoreValue(h: PlannedHikeMeta): number {
+  // Confine esplicito di tipologia (piano guide-eccellenza — verifica post-Fase 4): un badge CTS
+  // non ha senso per un Sito/Borgo cammino_urbano — mai mostrarne uno anche se un valore stale è
+  // rimasto cachato da prima di questo confine (es. Meta creata prima di questa verifica).
+  if (!metaEligibleForHikingScores(h)) return 0
   if (h.cachedTsTotal != null) return h.cachedTsTotal
   return h.cachedTrailScore ?? 0
+}
+
+/** Pillole per una Meta senza metriche escursionistiche (Borgo/Città, Sito) — mai km/D+/quota/
+ *  durata (piano guide-eccellenza §Fase 0: "se manca il dato, la riga sparisce, non uno zero").
+ *  municipality/region non esistono ancora su PlannedHikeMeta (solo su dtrek_places via placeId,
+ *  non denormalizzati qui), quindi restano null: metaRowLocationStats è già tollerante alla loro
+ *  assenza e produce solo la categoria (per un Sito) o nessuna pillola (per un Borgo/Città). */
+function nonHikingStatPills(h: Pick<PlannedHikeMeta, 'metaType' | 'siteType'>): StatPill[] {
+  return metaRowLocationStats({
+    metaType: h.metaType ?? 'sentiero',
+    siteType: h.siteType ?? null,
+    municipality: null,
+    region: null,
+  }).map(stat => ({
+    icon: stat.key === 'category' && h.siteType ? SITE_TYPE_CONFIG[h.siteType].icon : MapPin,
+    label: stat.value,
+  }))
+}
+
+/** Dati asincroni riempiti in background dopo il primo mount (fetch POI/orario per placeId, vedi
+ *  gli effect dedicati più sotto) — mai disponibili alla costruzione iniziale della card, quindi
+ *  sempre un parametro a parte invece che un campo di PlannedHikeMeta. */
+interface MetaExtraStats {
+  poiCount?: number
+  openingHoursLabel?: string
+}
+
+function statPillsForMeta(h: PlannedHikeMeta, distPill?: StatPill | null, extra?: MetaExtraStats): StatPill[] {
+  const basePills = metaHasHikingMetrics(h.metaType)
+    ? [
+        { icon: Route,      label: `${(h.distanceMeters / 1000).toFixed(1)} km` },
+        { icon: TrendingUp, label: `+${Math.round(h.elevationGain)} m` },
+        { icon: Mountain,   label: `${Math.round(h.altitudeMax)} m` },
+        { icon: Clock,      label: formatDuration(h.estimatedTimeSeconds) },
+      ]
+    : nonHikingStatPills(h)
+  const extraPills: StatPill[] = []
+  if (extra?.poiCount) extraPills.push({ icon: MapPin, label: `${extra.poiCount} punti d'interesse` })
+  if (extra?.openingHoursLabel) extraPills.push({ icon: Clock, label: extra.openingHoursLabel })
+  return [...basePills, ...extraPills, ...(distPill ? [distPill] : [])]
 }
 
 function metaToItem(h: PlannedHikeMeta): RouteHubItem {
@@ -75,12 +122,11 @@ function metaToItem(h: PlannedHikeMeta): RouteHubItem {
     id: h.id,
     title: h.title,
     polyline: h.routePolyline,
-    statPills: [
-      { icon: Route,       label: `${(h.distanceMeters / 1000).toFixed(1)} km` },
-      { icon: TrendingUp,  label: `+${Math.round(h.elevationGain)} m` },
-      { icon: Mountain,    label: `${Math.round(h.altitudeMax)} m` },
-      { icon: Clock,       label: formatDuration(h.estimatedTimeSeconds) },
-    ],
+    metaType: h.metaType,
+    siteType: h.siteType,
+    latitude: h.latitude,
+    longitude: h.longitude,
+    statPills: statPillsForMeta(h),
     sortValues: {
       date: new Date(h.createdAt).getTime(),
       km: h.distanceMeters,
@@ -98,7 +144,11 @@ function metaToItem(h: PlannedHikeMeta): RouteHubItem {
     // (components/TrailScoreGaugeBadge.tsx) ha subito una Sicurezza da mostrare nella galleria/
     // carosello per ogni percorso, anche prima che arrivi il valore live — vedi scoreGaugeBadge
     // sotto, che per il percorso davvero aperto preferisce comunque quello.
-    safetyPreview: h.cachedSafetyScore ? { overall: h.cachedSafetyScore.overall, color: h.cachedSafetyScore.color, label: h.cachedSafetyScore.label } : undefined,
+    // Stesso confine esplicito di previewScoreValue sopra — mai una Sicurezza stale per un Sito/
+    // Borgo cammino_urbano, anche se cachata da prima di questa verifica.
+    safetyPreview: h.cachedSafetyScore && metaEligibleForHikingScores(h)
+      ? { overall: h.cachedSafetyScore.overall, color: h.cachedSafetyScore.color, label: h.cachedSafetyScore.label }
+      : undefined,
     favorite: h.favorite,
     plannedDate: h.plannedDate,
   }
@@ -166,7 +216,8 @@ export default function GuidaHub({ id }: { id?: string }) {
   // è già mappato a RouteHubItem e non porta più questi campi, ma il riempimento della copertina
   // sotto ne ha bisogno per sapere quali schede interrogare e con quale placeId.
   const [metaList, setMetaList] = useState<PlannedHikeMeta[]>([])
-  const attemptedCoverPhotoRef = useRef<Set<string>>(new Set())
+  const attemptedPlaceDetailRef = useRef<Set<string>>(new Set())
+  const attemptedPoiCountRef = useRef<Set<string>>(new Set())
 
   // Indirizzo/punto di partenza salvato nelle impostazioni utente — usato per la distanza in
   // auto mostrata tra i dati principali di ogni scheda e come filtro di ordinamento.
@@ -185,12 +236,16 @@ export default function GuidaHub({ id }: { id?: string }) {
   const driving = useDrivingDistance(hike)
   const drivingWithMaps = useMemo(() => {
     if (!driving) return driving
-    const trailStart = hike?.routePolyline?.[0]
+    // getTrailStartPoint (non solo hike?.routePolyline?.[0]) — verifica utente: per un Borgo/Città
+    // "cammino urbano" o un Sito (nessuna traccia, solo hike.latitude/longitude) il pallino km
+    // restava testo semplice invece di un link a Google Maps, perché qui si guardava solo la
+    // traccia mentre la distanza stessa (useDrivingDistance sopra) usa già lo stesso fallback.
+    const trailStart = hike ? getTrailStartPoint(hike) : null
     const mapsUrl = userOrigin && trailStart
       ? googleMapsDirectionsUrl(userOrigin.lat, userOrigin.lon, trailStart[0], trailStart[1])
       : undefined
     return { ...driving, mapsUrl }
-  }, [driving, userOrigin, hike?.routePolyline])
+  }, [driving, userOrigin, hike])
   const { safetyScore, setSafetyScore } = useSafetyScore(hike, setHike)
   const { prefsLoaded, prefSforzo, prefDurata, hrRest, hrMax } = useUserPrefs()
 
@@ -276,9 +331,19 @@ export default function GuidaHub({ id }: { id?: string }) {
         const merged = existing?.polyline?.length ? { ...fresh, polyline: existing.polyline } : fresh
         // Stesso motivo del polyline sopra: metaToItem() non valorizza mai coverPhotoUrl (arriva
         // solo dal fill effect qui sotto, dopo il primo mount) — senza questo, ogni rivalidazione
-        // in background la azzererebbe di nuovo, e attemptedCoverPhotoRef ne impedirebbe un
+        // in background la azzererebbe di nuovo, e attemptedPlaceDetailRef ne impedirebbe un
         // secondo tentativo, lasciando la copertina nera per il resto della sessione.
-        return existing?.coverPhotoUrl ? { ...merged, coverPhotoUrl: existing.coverPhotoUrl } : merged
+        const withCover = existing?.coverPhotoUrl ? { ...merged, coverPhotoUrl: existing.coverPhotoUrl } : merged
+        // Stesso motivo, per poiCount/openingHoursLabel (riempiti dai due fill effect POI/orario
+        // più sotto): fresh.statPills non li conosce ancora, quindi vanno ricostruiti qui invece
+        // di andare persi a ogni rivalidazione in background.
+        if (existing?.poiCount == null && existing?.openingHoursLabel == null) return withCover
+        return {
+          ...withCover,
+          poiCount: existing.poiCount,
+          openingHoursLabel: existing.openingHoursLabel,
+          statPills: statPillsForMeta(h, undefined, { poiCount: existing.poiCount, openingHoursLabel: existing.openingHoursLabel }),
+        }
       })
     })
     setMetaList(sorted)
@@ -331,7 +396,7 @@ export default function GuidaHub({ id }: { id?: string }) {
       for (const it of items) {
         if (cancelled) return
         if (it.id === hike?.id) continue
-        const trailStart = it.polyline?.[0]
+        const trailStart = getTrailStartPoint({ routePolyline: it.polyline, latitude: it.latitude, longitude: it.longitude })
         if (!trailStart) continue
         const cached = driveCache.get(it.id)
         if (cached && originMatches(cached.originLat, cached.originLon, userOrigin.lat, userOrigin.lon)) continue
@@ -364,14 +429,15 @@ export default function GuidaHub({ id }: { id?: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userOrigin, items, hike?.id, enrichmentReady])
 
-  // Riempie in background la copertina reale (foto dell'archivio dtrek_places) per ogni Borgo/
-  // Città o Sito della galleria — senza una traccia GPS da disegnare, la copertina "Screen 1"
-  // (components/routehub/CoverMap.tsx) resterebbe altrimenti solo lo sfondo scuro di ripiego, MAI
-  // una mappa (queste Mete non ne hanno una, piano §48.9) — visto dal vivo su una preview Vercel
-  // come una copertina nera. Stesso endpoint di GuideReader (fetch alla vera apertura della
-  // Guida), stesso pattern del riempimento della distanza in auto sopra: parte solo a
-  // enrichmentReady, una scheda alla volta con una piccola pausa, mai in corsa con le fetch
-  // critiche del percorso aperto.
+  // Riempie in background la copertina reale (foto dell'archivio dtrek_places) e, per un Sito,
+  // l'orario (dtrek_places.opening_hours — as-is dalla fonte, mai parsato, stesso principio di
+  // components/guida/widgets/SitoInfoWidget.tsx) per ogni Borgo/Città o Sito della galleria —
+  // senza una traccia GPS da disegnare, la copertina "Screen 1" (components/routehub/
+  // CoverMap.tsx) resterebbe altrimenti solo lo sfondo scuro di ripiego, MAI una mappa (queste
+  // Mete non ne hanno una, piano §48.9) — visto dal vivo su una preview Vercel come una copertina
+  // nera. Stesso endpoint di GuideReader (fetch alla vera apertura della Guida), stesso pattern
+  // del riempimento della distanza in auto sopra: parte solo a enrichmentReady, una scheda alla
+  // volta con una piccola pausa, mai in corsa con le fetch critiche del percorso aperto.
   useEffect(() => {
     if (metaList.length === 0 || !enrichmentReady) return
     let cancelled = false
@@ -379,20 +445,69 @@ export default function GuidaHub({ id }: { id?: string }) {
       for (const h of metaList) {
         if (cancelled) return
         if (!h.metaType || h.metaType === 'sentiero' || !h.placeId) continue
-        if (attemptedCoverPhotoRef.current.has(h.id)) continue
-        attemptedCoverPhotoRef.current.add(h.id)
+        if (attemptedPlaceDetailRef.current.has(h.id)) continue
+        attemptedPlaceDetailRef.current.add(h.id)
         try {
           const res = await fetch(`/api/places/${h.placeId}`)
           if (res.ok) {
-            const data = await res.json() as { imageUrl?: string | null }
-            if (!cancelled && data.imageUrl) {
-              setItems(prev => prev.map(it => it.id === h.id ? { ...it, coverPhotoUrl: data.imageUrl! } : it))
+            const data = await res.json() as { imageUrl?: string | null; openingHours?: unknown }
+            const openingHoursLabel = h.metaType === 'sito' && typeof data.openingHours === 'string' && data.openingHours.trim()
+              ? data.openingHours.trim()
+              : undefined
+            if (!cancelled && (data.imageUrl || openingHoursLabel)) {
+              setItems(prev => prev.map(it => {
+                if (it.id !== h.id) return it
+                const next = { ...it, ...(data.imageUrl ? { coverPhotoUrl: data.imageUrl } : {}) }
+                if (!openingHoursLabel) return next
+                return { ...next, openingHoursLabel, statPills: statPillsForMeta(h, undefined, { poiCount: it.poiCount, openingHoursLabel }) }
+              }))
             }
           }
-        } catch { /* silenzioso — resta la copertina di ripiego (CoverMap/gradiente) */ }
+        } catch { /* silenzioso — resta la copertina/orario di ripiego (nessuno) */ }
         // Stesso respiro della distanza in auto sopra — questo endpoint fa anche una ricerca
         // Wikipedia quando manca una foto/descrizione propria, non va martellato per l'intera
         // galleria in un colpo solo.
+        await new Promise(r => setTimeout(r, 300))
+      }
+    })()
+    return () => { cancelled = true }
+  }, [metaList, enrichmentReady])
+
+  // Riempie in background il conteggio dei punti di interesse nei dintorni per ogni Borgo/Città
+  // della galleria — stesso servizio POI multi-fonte già usato per il Sentiero aperto (app/api/
+  // pois: GNA/PTPR/Wikidata/Overpass dedotti, cache server-side di 7 giorni per bbox), mai una
+  // nuova chiamata Overpass live indipendente per scheda. Raggio walkable di 600m dal centro per
+  // il conteggio (più stretto del bbox richiesto all'API, che ha solo margine per i risultati) —
+  // nessun conteggio "esatto" del perimetro del centro storico (non esiste ancora, piano §7),
+  // solo un'indicazione dei punti nominati nei dintorni immediati. Solo POI con un nome: un nodo
+  // OSM anonimo non è un punto di interesse per l'utente. Stesso pattern/cadenza degli altri
+  // riempimenti in background sopra.
+  useEffect(() => {
+    if (metaList.length === 0 || !enrichmentReady) return
+    let cancelled = false
+    const BORGO_POI_RADIUS_M = 600
+    ;(async () => {
+      for (const h of metaList) {
+        if (cancelled) return
+        if (h.metaType !== 'borgo_citta' || h.latitude == null || h.longitude == null) continue
+        const lat = h.latitude, lon = h.longitude
+        if (attemptedPoiCountRef.current.has(h.id)) continue
+        attemptedPoiCountRef.current.add(h.id)
+        try {
+          const bbox = computeBbox([[lat, lon]], 0.01)
+          const res = await fetch(`/api/pois?bbox=${bbox}`)
+          if (res.ok) {
+            const all = await res.json() as PoiItem[]
+            const count = Array.isArray(all)
+              ? all.filter(p => p.name && haversineM(p.lat, p.lon, lat, lon) <= BORGO_POI_RADIUS_M).length
+              : 0
+            if (!cancelled && count > 0) {
+              setItems(prev => prev.map(it => it.id === h.id
+                ? { ...it, poiCount: count, statPills: statPillsForMeta(h, undefined, { poiCount: count, openingHoursLabel: it.openingHoursLabel }) }
+                : it))
+            }
+          }
+        } catch { /* silenzioso — resta senza pillola POI, mai un conteggio fabbricato */ }
         await new Promise(r => setTimeout(r, 300))
       }
     })()
@@ -471,7 +586,11 @@ export default function GuidaHub({ id }: { id?: string }) {
     entity: hike,
     entityId: hike?.id,
     isFresh: (h) => h.cachedTrailScore != null && isScoreFresh(h.cachedScoresComputedAt),
-    hasEnoughGps: (h) => (h.trackPoints ?? []).filter(p => p.lat && p.lon).length >= 2,
+    // In AND col confine esplicito di tipologia (piano guide-eccellenza §Fase 4) — il controllo
+    // sui dati resta la prima difesa, mai sostituito: un Sito/Borgo cammino_urbano a cui viene
+    // iniettata per errore una traccia di 2 punti da un bug di import non deve comunque produrre
+    // un CTS Score.
+    hasEnoughGps: (h) => (h.trackPoints ?? []).filter(p => p.lat && p.lon).length >= 2 && metaEligibleForHikingScores(h),
     poisReady: poisFullyLoaded,
     dtmProfile, terrainProfile, inProtectedArea, prefsLoaded,
     pois,
@@ -522,7 +641,7 @@ export default function GuidaHub({ id }: { id?: string }) {
   useEffect(() => {
     if (!hike || !ctsSettled) return
     const preview = scorePreviewFor(hike)
-    const safetyPreview = hike.cachedSafetyScore
+    const safetyPreview = hike.cachedSafetyScore && metaEligibleForHikingScores(hike)
       ? { overall: hike.cachedSafetyScore.overall, color: hike.cachedSafetyScore.color, label: hike.cachedSafetyScore.label }
       : undefined
     setItems(prev => {
@@ -539,23 +658,16 @@ export default function GuidaHub({ id }: { id?: string }) {
     // live di useDrivingDistance (che lo ricalcola/persiste se l'indirizzo è cambiato); per gli
     // altri usa il valore già cachato in Supabase l'ultima volta che quel percorso è stato aperto
     // (nessuna chiamata di routing per-scheda). Il link apre le indicazioni su Google Maps.
-    const distancePillFor = (polyline: [number, number][] | undefined, distanceMeters: number | undefined) => {
+    const distancePillFor = (destPoint: [number, number] | null, distanceMeters: number | undefined) => {
       if (distanceMeters == null) return null
-      const trailStart = polyline?.[0]
-      const href = userOrigin && trailStart
-        ? googleMapsDirectionsUrl(userOrigin.lat, userOrigin.lon, trailStart[0], trailStart[1])
+      const href = userOrigin && destPoint
+        ? googleMapsDirectionsUrl(userOrigin.lat, userOrigin.lon, destPoint[0], destPoint[1])
         : undefined
       return { icon: Car, label: `${Math.round(distanceMeters / 1000)} km in auto`, href }
     }
-    const pillsFor = (h: PlannedHike, distanceMeters: number | undefined) => {
-      const distPill = distancePillFor(h.routePolyline, distanceMeters)
-      return [
-        { icon: Route,      label: `${(h.distanceMeters / 1000).toFixed(1)} km` },
-        { icon: TrendingUp, label: `+${Math.round(h.elevationGain)} m` },
-        { icon: Mountain,   label: `${Math.round(h.altitudeMax)} m` },
-        { icon: Clock,      label: formatDuration(h.estimatedTimeSeconds) },
-        ...(distPill ? [distPill] : []),
-      ]
+    const pillsFor = (h: PlannedHike, distanceMeters: number | undefined, extra?: MetaExtraStats) => {
+      const distPill = distancePillFor(getTrailStartPoint(h), distanceMeters)
+      return statPillsForMeta(h, distPill, extra)
     }
     const sortValuesFor = (h: PlannedHike, previewValue: number, distanceMeters: number | undefined) => ({
       date: new Date(h.createdAt).getTime(), km: h.distanceMeters, dplus: h.elevationGain, cts: previewValue,
@@ -569,7 +681,8 @@ export default function GuidaHub({ id }: { id?: string }) {
         const distanceMeters = cached && (!userOrigin || originMatches(cached.originLat, cached.originLon, userOrigin.lat, userOrigin.lon))
           ? cached.distanceMeters
           : undefined
-        const distPill = distancePillFor(it.polyline, distanceMeters)
+        const destPoint = getTrailStartPoint({ routePolyline: it.polyline, latitude: it.latitude, longitude: it.longitude })
+        const distPill = distancePillFor(destPoint, distanceMeters)
         if (!distPill) return it
         return { ...it, statPills: [...it.statPills, distPill], sortValues: it.sortValues ? { ...it.sortValues, distance: distanceMeters } : it.sortValues }
       }
@@ -580,14 +693,15 @@ export default function GuidaHub({ id }: { id?: string }) {
       // to the final value — otherwise the TS-sorted gallery reshuffles on every intermediate score
       // update while the user is still looking at the route they just opened.
       const stableCts = ctsSettled ? (preview?.value ?? 0) : (it.sortValues?.cts ?? preview?.value ?? 0)
-      return { ...it, statPills: pillsFor(hike, distanceMeters), sortValues: sortValuesFor(hike, stableCts, distanceMeters), scorePreview: preview, plannedDate: hike.plannedDate }
+      const extra = { poiCount: it.poiCount, openingHoursLabel: it.openingHoursLabel }
+      return { ...it, statPills: pillsFor(hike, distanceMeters, extra), sortValues: sortValuesFor(hike, stableCts, distanceMeters), scorePreview: preview, plannedDate: hike.plannedDate }
     })
     // Deep link to a hike outside the active list (e.g. archived/expired) — still show it
     // standalone rather than 404, once its full record has loaded.
     if (hike && !mapped.some(it => it.id === hike.id)) {
       const distanceMeters = driving?.distanceMeters ?? hike.cachedDrivingDistanceMeters
       const preview = scorePreviewFor(hike)
-      return [{ id: hike.id, title: hike.title, polyline: hike.routePolyline, statPills: pillsFor(hike, distanceMeters), sortValues: sortValuesFor(hike, preview?.value ?? 0, distanceMeters), scorePreview: preview, favorite: hike.favorite, plannedDate: hike.plannedDate }, ...mapped]
+      return [{ id: hike.id, title: hike.title, polyline: hike.routePolyline, metaType: hike.metaType, siteType: hike.siteType, latitude: hike.latitude, longitude: hike.longitude, statPills: pillsFor(hike, distanceMeters), sortValues: sortValuesFor(hike, preview?.value ?? 0, distanceMeters), scorePreview: preview, favorite: hike.favorite, plannedDate: hike.plannedDate }, ...mapped]
     }
     return mapped
   }, [items, hike, driving, userOrigin, driveCache, ctsSettled])
@@ -690,7 +804,9 @@ export default function GuidaHub({ id }: { id?: string }) {
   const handleComputeCts = async () => {
     if (!hike) return
     const gps = (hike.trackPoints ?? []).filter(p => p.lat && p.lon)
-    if (gps.length < 2) return
+    // Stesso confine esplicito di tipologia di useCtsRecompute sopra (piano guide-eccellenza
+    // §Fase 4), in AND col controllo sui dati — mai in sua sostituzione.
+    if (gps.length < 2 || !metaEligibleForHikingScores(hike)) return
     setCtsComputing(true)
     try {
       // Shares the same pipeline (and the same prefetched-data shortcut) as the automatic
@@ -848,6 +964,11 @@ export default function GuidaHub({ id }: { id?: string }) {
   // invece per i thumbnail di galleria, non qui).
   const scoreGaugeBadge = (routeItem: RouteHubItem, onTap: () => void) => {
     if (!hike || routeItem.id !== hike.id) return null
+    // Confine esplicito di tipologia (piano guide-eccellenza) — senza questo, un Sito/Borgo
+    // cammino_urbano restava con questo badge bloccato in caricamento per sempre: useSafetyScore
+    // (Fase 4) non risolve mai `safetyScore` per una tipologia non idonea, quindi scoreLoading qui
+    // sotto non diventava mai false e il ramo "punteggio ≤ 0 ⇒ nascondi" non scattava mai.
+    if (!metaEligibleForHikingScores(hike)) return null
     // Mirrors previewScoreValue(): if the aggregate is already cached in Supabase, show it
     // instantly like the gallery thumbnail does. Only a hike that's never had a total computed
     // needs the live loading state (waiting on Safety/CTS to settle).
@@ -1021,14 +1142,25 @@ export default function GuidaHub({ id }: { id?: string }) {
     )
   }
 
-  const primaryAction = (routeItem: RouteHubItem): PrimaryAction => ({
-    label: 'Naviga',
-    icon: Navigation,
-    // Prova prima l'app nativa Navigator (se il device può averla), altrimenti ricade sulla
-    // stessa pagina di navigazione via web che serviva già da sola (lib/navigatorHandoff.ts).
-    onClick: () => tryOpenNavigatorApp(router, `/guida/${encodeURIComponent(routeItem.id)}/naviga`),
-    variant: 'terra',
-  })
+  const primaryAction = (routeItem: RouteHubItem): PrimaryAction | null => {
+    // Per l'hike davvero aperto (unico per cui hike.routePolyline/borgoWalkPolyline sono già in
+    // memoria, stesso motivo di scoreGaugeBadge sopra) niente bottone "Naviga" quando non c'è
+    // proprio nulla da seguire — un Sito, o un Borgo/Città cammino_urbano il cui itinerario a
+    // piedi non è (ancora) arrivato — invece di portare a un vicolo cieco
+    // ("Impossibile avviare la navigazione: percorso non disponibile offline", app/guida/[id]/
+    // naviga/page.tsx). Per ogni altra scheda della galleria resta mostrato: non c'è ancora modo
+    // di sapere qui se avrà un itinerario senza caricarne il record intero, e il tocco stesso
+    // porta comunque a quella pagina, che verifica di nuovo con i dati freschi.
+    if (routeItem.id === hike?.id && !hike.routePolyline?.length && !hike.borgoWalkPolyline?.length) return null
+    return {
+      label: 'Naviga',
+      icon: Navigation,
+      // Prova prima l'app nativa Navigator (se il device può averla), altrimenti ricade sulla
+      // stessa pagina di navigazione via web che serviva già da sola (lib/navigatorHandoff.ts).
+      onClick: () => tryOpenNavigatorApp(router, `/guida/${encodeURIComponent(routeItem.id)}/naviga`),
+      variant: 'terra',
+    }
+  }
 
   const currentItem = displayItems.find(i => i.id === currentId) ?? displayItems[0]
   const initialIndex = Math.max(0, displayItems.findIndex(i => i.id === currentItem.id))

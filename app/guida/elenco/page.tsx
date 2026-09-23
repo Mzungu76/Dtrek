@@ -8,9 +8,11 @@ import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { useCtsUpdated } from '@/lib/sync/useCtsUpdated'
 import { formatDuration } from '@/lib/tcxParser'
 import { ctsLabel } from '@/lib/trailScore'
+import { metaHasHikingMetrics, META_TYPE_CONFIG, SITE_TYPE_CONFIG } from '@/lib/metaTypes'
+import { metaRowLocationStats } from '@/lib/metaCard'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
-import { CalendarClock, Loader2, Mountain, Upload, Archive, Search, X } from 'lucide-react'
+import { CalendarClock, Loader2, Upload, Archive, Search, X } from 'lucide-react'
 
 function pendingBadge(hike: PlannedHikeMeta): { label: string; className: string } | null {
   if (hike.archivedAt) return null
@@ -19,6 +21,33 @@ function pendingBadge(hike: PlannedHikeMeta): { label: string; className: string
   if (expired) return { label: 'Scaduto — proroga o archivia', className: 'bg-amber-500 text-white' }
   const daysLeft = Math.ceil((new Date(hike.pendingExpiresAt).getTime() - Date.now()) / 86400000)
   return { label: `In attesa · ${daysLeft}g`, className: 'bg-sky-600/90 text-white' }
+}
+
+/** Riga di sintesi per una card della lista — mai km/D+/durata per Borgo/Città o Sito (piano
+ *  guide-eccellenza §Fase 0: "se manca il dato, la riga sparisce, non uno zero"). municipality/
+ *  region non esistono ancora su PlannedHikeMeta, quindi restano null: metaRowLocationStats
+ *  produce solo la categoria (per un Sito) o niente (per un Borgo/Città) finché non esistono. */
+function metaSummaryStats(hike: PlannedHikeMeta): string[] {
+  if (metaHasHikingMetrics(hike.metaType)) {
+    return [
+      `${(hike.distanceMeters / 1000).toFixed(1)} km`,
+      `${Math.round(hike.elevationGain)} m D+`,
+      `${formatDuration(hike.estimatedTimeSeconds)} stim.`,
+    ]
+  }
+  return metaRowLocationStats({
+    metaType: hike.metaType ?? 'sentiero',
+    siteType: hike.siteType ?? null,
+    municipality: null,
+    region: null,
+  }).map(stat => stat.value)
+}
+
+/** Icona di copertina quando manca la traccia GPS — coerente con la tipologia invece di Mountain
+ *  fisso (piano guide-eccellenza §Fase 0.3). Un Sito con sottotipo noto usa l'icona più specifica
+ *  del sottotipo, altrimenti l'icona della tipologia. */
+function metaFallbackIcon(hike: PlannedHikeMeta) {
+  return hike.siteType ? SITE_TYPE_CONFIG[hike.siteType].icon : META_TYPE_CONFIG[hike.metaType ?? 'sentiero'].icon
 }
 
 /**
@@ -135,6 +164,7 @@ export default function GuidaIndexPage() {
               const ctsScore  = hike.cachedTrailScore
               const ctsData   = ctsScore != null ? ctsLabel(ctsScore) : null
               const badge     = pendingBadge(hike)
+              const FallbackIcon = metaFallbackIcon(hike)
               return (
                 <Link
                   key={hike.id}
@@ -148,7 +178,7 @@ export default function GuidaIndexPage() {
                       </div>
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
-                        <Mountain className="w-10 h-10 text-sky-200" />
+                        <FallbackIcon className="w-10 h-10 text-sky-200" />
                       </div>
                     )}
                     {badge ? (
@@ -164,9 +194,7 @@ export default function GuidaIndexPage() {
                   <div className="px-[18px] pt-4 pb-[18px]">
                     <p className="text-[16px] font-bold text-sky-900 mb-2 truncate">{hike.title}</p>
                     <div className="flex items-center gap-4 text-[13px] text-stone-500 flex-wrap">
-                      <span>{(hike.distanceMeters / 1000).toFixed(1)} km</span>
-                      <span>{Math.round(hike.elevationGain)} m D+</span>
-                      <span>{formatDuration(hike.estimatedTimeSeconds)} stim.</span>
+                      {metaSummaryStats(hike).map(text => <span key={text}>{text}</span>)}
                       {ctsData && (
                         <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-md text-white" style={{ backgroundColor: ctsData.color }}>
                           {ctsData.label}
@@ -190,16 +218,19 @@ export default function GuidaIndexPage() {
             </button>
             {showArchived && (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 opacity-70">
-                {archived.map(hike => (
-                  <Link
-                    key={hike.id}
-                    href={`/guida/${encodeURIComponent(hike.id)}`}
-                    className="block bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-md transition-shadow border border-stone-200 px-[18px] py-4"
-                  >
-                    <p className="text-[15px] font-bold text-stone-700 truncate">{hike.title}</p>
-                    <p className="text-[12px] text-stone-400 mt-1">{(hike.distanceMeters / 1000).toFixed(1)} km</p>
-                  </Link>
-                ))}
+                {archived.map(hike => {
+                  const summary = metaSummaryStats(hike)[0]
+                  return (
+                    <Link
+                      key={hike.id}
+                      href={`/guida/${encodeURIComponent(hike.id)}`}
+                      className="block bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-md transition-shadow border border-stone-200 px-[18px] py-4"
+                    >
+                      <p className="text-[15px] font-bold text-stone-700 truncate">{hike.title}</p>
+                      {summary && <p className="text-[12px] text-stone-400 mt-1">{summary}</p>}
+                    </Link>
+                  )
+                })}
               </div>
             )}
           </div>

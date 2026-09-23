@@ -1,4 +1,5 @@
 import type { MetaType, SiteType } from './metaTypes'
+import { isNaturalSiteType, type BorgoCardVariant } from './guideCardVariant'
 import { GUIDE_SECTIONS, type GuideSectionKey } from './guideSections'
 
 // Blocco E (piano §28) — quali sezioni della Guida ha senso generare/mostrare per tipologia, e
@@ -41,7 +42,14 @@ function availableSectionsFor(exclude: GuideSectionKey[]): GuideSectionKey[] {
   return GUIDE_SECTIONS.map(s => s.key).filter(k => !exclude.includes(k))
 }
 
-const NON_HIKING_SECTIONS = availableSectionsFor(HIKING_ONLY_SECTIONS)
+// "Natura intorno a te" ha senso solo quando c'è un vero tratto a piedi nella natura da
+// raccontare (verifica post-piano guide-eccellenza): un Sentiero sempre, un Borgo/Città solo con
+// una traccia reale collegata (trekking_misto, vedi applyBorgoVariantOverride sotto — stessa
+// condizione di dati_sicurezza), un Sito solo se è esso stesso un luogo naturale (cascata, grotta,
+// belvedere, area naturale — vedi isNaturalSiteType). Un museo o un palazzo in centro città non ha
+// una "natura intorno" da mostrare: prima la sezione restava comunque disponibile, con
+// NaturaWidget che mostrava due pulsanti "Galleria" quasi certamente vuoti.
+const NON_HIKING_SECTIONS = availableSectionsFor([...HIKING_ONLY_SECTIONS, 'natura'])
 
 // Brief di "luoghi" per un Borgo/Città (piano §29, "Guida diventa narrativa e geografica" con
 // Tappa 1/Tappa 2/...) — un'unica istruzione che si adatta da sola a due casi, invece di due
@@ -53,7 +61,7 @@ const NON_HIKING_SECTIONS = availableSectionsFor(HIKING_ONLY_SECTIONS)
 // per proseguire). Quando quell'elenco manca (borgo isolato, o la scoperta non ha trovato nulla),
 // non si inventano tappe numerate: si ripiega su un ritratto dei luoghi più noti, stesso taglio a
 // sottotitoli ma senza la sequenza vincolata.
-const BORGO_LUOGHI_BRIEF = `## Le tappe del borgo
+const BORGO_LUOGHI_BRIEF = `## Itinerario consigliato
 Se più sotto trovi un elenco TAPPA 1, TAPPA 2, ... numerato, racconta il borgo seguendo ESATTAMENTE
 quell'ordine di visita (non riordinarlo, non saltarne nessuna): per ciascuna tappa, un sottotitolo
 ### col suo nome, poi la sua storia, architettura o la curiosità più memorabile, e chiudi con una
@@ -87,7 +95,7 @@ quartiere all'altro. Resta sul quadro d'insieme: il racconto luogo per luogo viv
 dedicata più avanti, qui non anticiparlo.`,
       },
       luoghi: {
-        title: 'Le tappe del borgo',
+        title: 'Itinerario consigliato',
         brief: BORGO_LUOGHI_BRIEF,
       },
     },
@@ -315,18 +323,37 @@ principali, cosa rende questo luogo un ambiente da proteggere.`,
 
 /** Applica, se presente, l'override specifico del siteType sopra il profilo 'sito' generico —
  *  solo le chiavi di sezione che quel siteType sovrascrive davvero (prima_di_partire/il_percorso),
- *  il resto del profilo base resta invariato. */
+ *  il resto del profilo base resta invariato. Un Sito "naturalistico" (isNaturalSiteType, verifica
+ *  post-piano guide-eccellenza) riguadagna anche "Natura", esclusa di default dal profilo base. */
 function applySiteTypeOverride(base: GuideProfile, siteType: SiteType | undefined): GuideProfile {
+  const withNatura = isNaturalSiteType(siteType)
+    ? { ...base, availableSections: availableSectionsFor(HIKING_ONLY_SECTIONS) }
+    : base
   const overrides = siteType ? SITE_TYPE_OVERRIDES[siteType] : undefined
-  if (!overrides) return base
-  return { ...base, sectionOverrides: { ...base.sectionOverrides, ...overrides } }
+  if (!overrides) return withNatura
+  return { ...withNatura, sectionOverrides: { ...withNatura.sectionOverrides, ...overrides } }
+}
+
+// piano guide-eccellenza §Fase 3 — lib/guideCardVariant.ts promette che un Borgo/Città
+// 'trekking_misto' (traccia GPS reale collegata, un cammino che tocca il borgo) mantiene "Dati e
+// sicurezza" quasi come un Sentiero; questo profilo escludeva prima dati_sicurezza per OGNI
+// borgo_citta senza eccezione, in disaccordo con quella promessa. dati_sicurezza e natura (verifica
+// post-piano — entrambe hanno senso solo con una traccia reale) cambiano con la variante —
+// "comfort"/"Su misura per te" (confronto con lo storico escursionistico dell'utente) resta escluso
+// in ogni caso, il piano non lo cita. "Il percorso" resta l'override narrativo "Il borgo" per ogni
+// variante: qui non c'entra, invariato.
+function applyBorgoVariantOverride(base: GuideProfile, variant: BorgoCardVariant | undefined): GuideProfile {
+  if (variant !== 'trekking_misto') return base
+  return { ...base, availableSections: availableSectionsFor(['comfort']) }
 }
 
 // Assente/undefined trattato come 'sentiero' (il default di colonna, coerente con
 // lib/metaTypes.ts's metaHasHikingMetrics) — mai come "tipologia sconosciuta ⇒ profilo vuoto".
-// siteType è letto SOLO quando metaType è 'sito' (piano §30) — ignorato per ogni altra tipologia,
-// coerente con lib/metaTypes.ts dove SiteType è valorizzato solo in quel caso.
-export function guideProfileFor(metaType: MetaType | undefined, siteType?: SiteType): GuideProfile {
+// siteType è letto SOLO quando metaType è 'sito' (piano §30), borgoVariant SOLO quando metaType è
+// 'borgo_citta' (piano §Fase 3) — ignorati per ogni altra tipologia.
+export function guideProfileFor(metaType: MetaType | undefined, siteType?: SiteType, borgoVariant?: BorgoCardVariant): GuideProfile {
   const base = GUIDE_PROFILES[metaType ?? 'sentiero']
-  return base.metaType === 'sito' ? applySiteTypeOverride(base, siteType) : base
+  if (base.metaType === 'sito') return applySiteTypeOverride(base, siteType)
+  if (base.metaType === 'borgo_citta') return applyBorgoVariantOverride(base, borgoVariant)
+  return base
 }
