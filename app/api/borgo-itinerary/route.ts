@@ -48,14 +48,19 @@ const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000
 const DIJKSTRA_MAX_DIST_M = 3000
 const DIJKSTRA_MAX_NODES = 800
 const SNAP_THRESHOLD_M = 300
-// Più alto del default (18s, lib/routeBuilder/osmGraph.ts) — questo endpoint non ha stage pesanti
-// a valle del fetch della rete (solo Dijkstra per tappa, già limitato da DIJKSTRA_MAX_NODES), a
-// differenza di app/api/route-build/route.ts che a valle deve ancora fare pathfinding + DTM/POI.
-// Un fetch a freddo (bbox mai cercato prima) di questa query è il passo più lento e la causa più
-// comune di un itinerario che ripiega su linee d'aria per OGNI tratto — più margine qui aumenta
-// le probabilità che Overpass risponda prima che fetchOverpass rinunci, senza avvicinarsi al
-// tetto reale della piattaforma (worst case retry incluso: ~2×questo valore + 1.2s).
-const WALK_NETWORK_TIMEOUT_MS = 22_000
+// Verifica utente ("gli itinerari sono tornati in linea d'aria") — confermato sui dati reali: per
+// Trento (7 tappe, area compatta ~3km) solo 1 leg su 7 risultava reale, le altre tutte in linea
+// d'aria. Causa (vedi il commento su `remark` in lib/routeBuilder/osmGraph.ts's fetchWalkNetwork):
+// Overpass può interrompere la query al proprio [timeout:...] interno e rispondere comunque con
+// HTTP 200 e una rete PARZIALE — un fallimento silenzioso, mai visto come errore da fetchOverpass,
+// quindi mai ritentato. Il centro di una vera città (rete stradale molto più densa per km² di un
+// borgo — decine di vie/vicoli invece di poche strade tra campi) rischia di riempire il budget
+// [timeout:] molto prima di un'area della stessa estensione intorno a un piccolo borgo: alzato da
+// 22s per dare a Overpass margine sufficiente a completare la query anche per un centro storico
+// denso, ben entro il tetto della piattaforma (maxDuration=120s sopra, worst case col retry
+// dell'ALTRA modalità di fallimento — un errore di rete vero e proprio, quella sì ritentata da
+// fetchOverpass — resta comunque ~2×questo valore + 1.2s).
+const WALK_NETWORK_TIMEOUT_MS = 45_000
 // ~4.3 km/h — un ritmo da visita (con soste implicite), non una camminata sportiva: la stessa
 // differenza per cui la stima di un Sentiero (lib/trailStats.ts) non è utilizzabile qui.
 const WALK_SPEED_MPS = 1.2

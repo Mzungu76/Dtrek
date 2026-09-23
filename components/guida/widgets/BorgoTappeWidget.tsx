@@ -132,7 +132,12 @@ export default function BorgoTappeWidget({ stops, center, legs, color, prefDurat
         </div>
       )}
       {displayCenter && displayLegs && displayLegs.length > 0 && (
-        <ItineraryMap center={displayCenter} stops={displayStops} legs={displayLegs} color={color} />
+        // Verifica utente: la mappa non si aggiornava al cambio di tappa — ItineraryMap costruisce
+        // la propria istanza Leaflet una sola volta al mount (useEffect con deps []), quindi senza
+        // una key che cambia con la tappa selezionata React riusa la stessa istanza già montata e i
+        // nuovi stops/legs non vengono mai ridisegnati. La key forza uno smontaggio/rimontaggio
+        // pulito (ItineraryMap distrugge già la mappa Leaflet nel cleanup dell'effetto).
+        <ItineraryMap key={selectedTappaIdx} center={displayCenter} stops={displayStops} legs={displayLegs} color={color} />
       )}
       <div className="flex flex-col">
       {displayStops.map((stop, i) => {
