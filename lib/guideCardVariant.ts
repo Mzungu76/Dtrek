@@ -49,6 +49,14 @@ export type SitoCardFamily = 'scheda_pratica' | 'galleria_sicurezza'
 // sempre vuoto.
 const ALWAYS_NATURAL: SiteType[] = ['cascata', 'grotta', 'belvedere', 'area_naturale']
 
+// Verifica post-piano guide-eccellenza — l'unico caso in cui la sezione "Natura" (lib/
+// guideProfiles.ts) ha senso per un Sito: una cascata/grotta/belvedere/area naturale è già
+// intrinsecamente natura, un museo o un palazzo no. Stessa lista di ALWAYS_NATURAL sopra, mai un
+// secondo elenco parallelo.
+export function isNaturalSiteType(siteType: SiteType | undefined): boolean {
+  return !!siteType && ALWAYS_NATURAL.includes(siteType)
+}
+
 // Ambigui: possono essere un istituto con biglietto/orario oppure un luogo minore ad accesso
 // libero — la differenza sta nei DATI di questa Meta (website/official_url/opening_hours), non
 // nel tipo da solo (discussione "Guida Borgo/Città e Sito", 2026-09-21).

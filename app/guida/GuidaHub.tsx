@@ -68,6 +68,10 @@ const AnimalGallery    = dynamic(() => import('@/components/AnimalGallery'),   {
  *  (no cachedTsTotal) falls back to just its raw Comfort TrailScore instead of fabricating a full
  *  v2 number out of incomplete data. */
 function previewScoreValue(h: PlannedHikeMeta): number {
+  // Confine esplicito di tipologia (piano guide-eccellenza — verifica post-Fase 4): un badge CTS
+  // non ha senso per un Sito/Borgo cammino_urbano — mai mostrarne uno anche se un valore stale è
+  // rimasto cachato da prima di questo confine (es. Meta creata prima di questa verifica).
+  if (!metaEligibleForHikingScores(h)) return 0
   if (h.cachedTsTotal != null) return h.cachedTsTotal
   return h.cachedTrailScore ?? 0
 }
@@ -140,7 +144,11 @@ function metaToItem(h: PlannedHikeMeta): RouteHubItem {
     // (components/TrailScoreGaugeBadge.tsx) ha subito una Sicurezza da mostrare nella galleria/
     // carosello per ogni percorso, anche prima che arrivi il valore live — vedi scoreGaugeBadge
     // sotto, che per il percorso davvero aperto preferisce comunque quello.
-    safetyPreview: h.cachedSafetyScore ? { overall: h.cachedSafetyScore.overall, color: h.cachedSafetyScore.color, label: h.cachedSafetyScore.label } : undefined,
+    // Stesso confine esplicito di previewScoreValue sopra — mai una Sicurezza stale per un Sito/
+    // Borgo cammino_urbano, anche se cachata da prima di questa verifica.
+    safetyPreview: h.cachedSafetyScore && metaEligibleForHikingScores(h)
+      ? { overall: h.cachedSafetyScore.overall, color: h.cachedSafetyScore.color, label: h.cachedSafetyScore.label }
+      : undefined,
     favorite: h.favorite,
     plannedDate: h.plannedDate,
   }
@@ -629,7 +637,7 @@ export default function GuidaHub({ id }: { id?: string }) {
   useEffect(() => {
     if (!hike || !ctsSettled) return
     const preview = scorePreviewFor(hike)
-    const safetyPreview = hike.cachedSafetyScore
+    const safetyPreview = hike.cachedSafetyScore && metaEligibleForHikingScores(hike)
       ? { overall: hike.cachedSafetyScore.overall, color: hike.cachedSafetyScore.color, label: hike.cachedSafetyScore.label }
       : undefined
     setItems(prev => {
@@ -952,6 +960,11 @@ export default function GuidaHub({ id }: { id?: string }) {
   // invece per i thumbnail di galleria, non qui).
   const scoreGaugeBadge = (routeItem: RouteHubItem, onTap: () => void) => {
     if (!hike || routeItem.id !== hike.id) return null
+    // Confine esplicito di tipologia (piano guide-eccellenza) — senza questo, un Sito/Borgo
+    // cammino_urbano restava con questo badge bloccato in caricamento per sempre: useSafetyScore
+    // (Fase 4) non risolve mai `safetyScore` per una tipologia non idonea, quindi scoreLoading qui
+    // sotto non diventava mai false e il ramo "punteggio ≤ 0 ⇒ nascondi" non scattava mai.
+    if (!metaEligibleForHikingScores(hike)) return null
     // Mirrors previewScoreValue(): if the aggregate is already cached in Supabase, show it
     // instantly like the gallery thumbnail does. Only a hike that's never had a total computed
     // needs the live loading state (waiting on Safety/CTS to settle).

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { guideProfileFor, GUIDE_PROFILES } from '../guideProfiles'
 import { GUIDE_SECTIONS, sectionDefForTitle } from '../guideSections'
 import { SITE_TYPES } from '../metaTypes'
-import { borgoCardVariant } from '../guideCardVariant'
+import { borgoCardVariant, isNaturalSiteType } from '../guideCardVariant'
 
 describe('guideProfileFor', () => {
   it('assente → trattato come sentiero (default di colonna)', () => {
@@ -16,15 +16,17 @@ describe('guideProfileFor', () => {
     expect(profile.personaAddendum).toBeUndefined()
   })
 
-  it('borgo_citta e sito escludono "dati_sicurezza" e "comfort" — nessuna metrica/confronto escursionistico fabbricato', () => {
+  it('borgo_citta e sito (base, non naturalistico) escludono "dati_sicurezza", "comfort" e "natura" — nessuna metrica/confronto escursionistico o galleria di specie fabbricata', () => {
     expect(guideProfileFor('borgo_citta').availableSections).not.toContain('dati_sicurezza')
     expect(guideProfileFor('sito').availableSections).not.toContain('dati_sicurezza')
     expect(guideProfileFor('borgo_citta').availableSections).not.toContain('comfort')
     expect(guideProfileFor('sito').availableSections).not.toContain('comfort')
+    expect(guideProfileFor('borgo_citta').availableSections).not.toContain('natura')
+    expect(guideProfileFor('sito').availableSections).not.toContain('natura')
   })
 
-  it('borgo_citta e sito mantengono tutte le altre sezioni del sentiero', () => {
-    const nonHiking = GUIDE_SECTIONS.map(s => s.key).filter(k => k !== 'dati_sicurezza' && k !== 'comfort')
+  it('borgo_citta e sito (base, non naturalistico) mantengono tutte le altre sezioni del sentiero', () => {
+    const nonHiking = GUIDE_SECTIONS.map(s => s.key).filter(k => k !== 'dati_sicurezza' && k !== 'comfort' && k !== 'natura')
     expect(guideProfileFor('borgo_citta').availableSections).toEqual(nonHiking)
     expect(guideProfileFor('sito').availableSections).toEqual(nonHiking)
   })
@@ -62,8 +64,14 @@ describe('guideProfileFor — profili per siteType (piano §30)', () => {
     const generic = guideProfileFor('sito')
     for (const siteType of SITE_TYPES) {
       const profile = guideProfileFor('sito', siteType)
-      // availableSections/personaAddendum restano quelli del profilo 'sito' base — solo prima_di_partire/il_percorso cambiano.
-      expect(profile.availableSections).toEqual(generic.availableSections)
+      // availableSections resta quello del profilo 'sito' base per ogni siteType, TRANNE i
+      // naturalistici (isNaturalSiteType, verifica post-piano guide-eccellenza), che riguadagnano
+      // "natura" — personaAddendum resta comunque sempre quello generico.
+      if (isNaturalSiteType(siteType)) {
+        expect(profile.availableSections).toContain('natura')
+      } else {
+        expect(profile.availableSections).toEqual(generic.availableSections)
+      }
       expect(profile.personaAddendum).toBe(generic.personaAddendum)
       if (siteType === 'altro') continue
       expect(profile.sectionOverrides?.il_percorso?.title).not.toBe(generic.sectionOverrides?.il_percorso?.title)
@@ -87,9 +95,10 @@ describe('guideProfileFor — variante borgo_citta (piano guide-eccellenza §Fas
     expect(guideProfileFor('borgo_citta', undefined, 'cammino_urbano').availableSections).not.toContain('dati_sicurezza')
   })
 
-  it('"trekking_misto" include "dati_sicurezza" ma non "comfort" — il piano cita solo il primo', () => {
+  it('"trekking_misto" include "dati_sicurezza" e "natura" ma non "comfort" — il piano cita solo dati_sicurezza, natura segue la stessa logica (verifica post-piano)', () => {
     const profile = guideProfileFor('borgo_citta', undefined, 'trekking_misto')
     expect(profile.availableSections).toContain('dati_sicurezza')
+    expect(profile.availableSections).toContain('natura')
     expect(profile.availableSections).not.toContain('comfort')
   })
 
@@ -117,6 +126,42 @@ describe('guideProfileFor — variante borgo_citta (piano guide-eccellenza §Fas
       .toContain('dati_sicurezza')
     expect(guideProfileFor('borgo_citta', undefined, borgoCardVariant(senzaTraccia)).availableSections)
       .not.toContain('dati_sicurezza')
+  })
+})
+
+// Verifica post-piano guide-eccellenza: "Natura intorno a te" non ha senso per un Borgo/Città o
+// un Sito generico (NaturaWidget mostrava comunque due pulsanti "Galleria" quasi certamente
+// vuoti) — solo un Borgo/Città trekking_misto (traccia reale) o un Sito naturalistico
+// (isNaturalSiteType: cascata, grotta, belvedere, area naturale) hanno un "intorno" reale da
+// raccontare.
+describe('guideProfileFor — sezione "natura" condizionata alla tipologia', () => {
+  it('un Sentiero include sempre "natura"', () => {
+    expect(guideProfileFor('sentiero').availableSections).toContain('natura')
+  })
+
+  it('un Borgo/Città cammino_urbano (o senza variante) esclude "natura"; trekking_misto la include', () => {
+    expect(guideProfileFor('borgo_citta').availableSections).not.toContain('natura')
+    expect(guideProfileFor('borgo_citta', undefined, 'cammino_urbano').availableSections).not.toContain('natura')
+    expect(guideProfileFor('borgo_citta', undefined, 'trekking_misto').availableSections).toContain('natura')
+  })
+
+  it('un Sito naturalistico include "natura"; ogni altro Sito la esclude', () => {
+    for (const siteType of SITE_TYPES) {
+      const profile = guideProfileFor('sito', siteType)
+      if (isNaturalSiteType(siteType)) {
+        expect(profile.availableSections, siteType).toContain('natura')
+      } else {
+        expect(profile.availableSections, siteType).not.toContain('natura')
+      }
+    }
+    expect(guideProfileFor('sito', undefined).availableSections).not.toContain('natura')
+  })
+
+  it('cascata, grotta, belvedere, area_naturale sono esattamente i Siti naturalistici', () => {
+    const expected = ['cascata', 'grotta', 'belvedere', 'area_naturale']
+    for (const siteType of SITE_TYPES) {
+      expect(isNaturalSiteType(siteType), siteType).toBe(expected.includes(siteType))
+    }
   })
 })
 
