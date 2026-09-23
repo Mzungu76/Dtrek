@@ -1,7 +1,8 @@
 'use client'
 import 'leaflet/dist/leaflet.css'
 import type * as L from 'leaflet'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { Maximize2, Minimize2 } from 'lucide-react'
 import type { ItineraryLeg, ItineraryStop } from '@/app/api/borgo-itinerary/route'
 
 interface Props {
@@ -16,15 +17,38 @@ function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' } as Record<string, string>)[c])
 }
 
+// Stesso taglio del popup POI di un Sentiero (lib/overpass.ts's buildPoiPopupHtml) — nome, foto se
+// disponibile, descrizione se disponibile: mai solo il numero/nome nudo come prima (verifica
+// utente, piano guide-eccellenza).
+function stopPopupHtml(n: string, name: string, stop?: ItineraryStop): string {
+  const thumb = stop?.thumbnail
+    ? `<img src="${stop.thumbnail}" alt="" style="width:100%;height:90px;object-fit:cover;border-radius:8px;margin-bottom:6px" />`
+    : ''
+  const desc = stop?.description
+    ? `<div style="color:#4b5563;font-size:11px;line-height:1.4;margin-top:3px">${escapeHtml(stop.description)}</div>`
+    : ''
+  return `
+  <div style="font-family:system-ui,sans-serif;min-width:170px;max-width:230px;font-size:12px">
+    ${thumb}
+    <div style="font-weight:700;font-size:13px;color:#111827;line-height:1.3">${n}. ${escapeHtml(name)}</div>
+    ${desc}
+  </div>`
+}
+
+const chipBase = 'flex items-center justify-center w-9 h-9 rounded-full backdrop-blur-md border transition-colors shrink-0 bg-black/50 border-white/15 text-white/90'
+
 /** Mappa dell'itinerario a piedi di un Borgo/Città — un tracciato reale (leg.real) disegnato pieno,
  *  una linea d'aria di ripiego (nessun cammino trovato per quella tappa) tratteggiata, mai lo
  *  stesso stile per entrambi: l'utente deve poter distinguere a colpo d'occhio dove la mappa sta
  *  davvero seguendo le vie e dove sta solo indicando una direzione. Marker numerati nell'ordine di
- *  visita, il Borgo stesso come punto di partenza (0). */
+ *  visita, il Borgo stesso come punto di partenza (0). Ampliabile a tutto schermo (stesso pattern
+ *  di components/guida/PoiMap.tsx) — verifica utente: prima restava sempre alla sua altezza fissa,
+ *  scomoda per leggere i popup delle tappe più fitte. */
 export default function ItineraryMap({ center, stops, legs, color, height = '320px' }: Props) {
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstance = useRef<L.Map | null>(null)
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
+  const [fullscreen, setFullscreen] = useState(false)
 
   useEffect(() => {
     if (!mapRef.current || mapInstance.current) return
@@ -63,12 +87,12 @@ export default function ItineraryMap({ center, stops, legs, color, height = '320
       }
 
       const startMarker = L.marker([center.lat, center.lon], { icon: numberedIcon('B', '#44403c') })
-      startMarker.bindPopup(`<strong>Partenza</strong>`)
+      startMarker.bindPopup(`<strong>Partenza</strong>`, { maxWidth: 250 })
       startMarker.addTo(map)
 
       stops.forEach((stop, i) => {
         const marker = L.marker([stop.lat, stop.lon], { icon: numberedIcon(String(i + 1), color) })
-        marker.bindPopup(`<strong>${i + 1}. ${escapeHtml(stop.name)}</strong>`)
+        marker.bindPopup(stopPopupHtml(String(i + 1), stop.name, stop), { maxWidth: 250 })
         marker.addTo(map)
       })
 
@@ -94,5 +118,29 @@ export default function ItineraryMap({ center, stops, legs, color, height = '320
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  return <div ref={mapRef} style={{ height }} className="rounded-xl overflow-hidden border border-stone-200" />
+  // Il ResizeObserver sopra già chiama invalidateSize() quando il container cambia dimensione (il
+  // toggle fullscreen lo fa), quindi qui non serve altro — a differenza di PoiMap.tsx, che passa
+  // resizeSignal a un MapView separato invece di possedere l'istanza Leaflet direttamente.
+  const toggleFullscreen = () => setFullscreen(v => !v)
+
+  return (
+    <div
+      className={fullscreen ? 'fixed inset-0 z-[70] bg-black isolate' : 'relative isolate rounded-xl overflow-hidden border border-stone-200'}
+      style={fullscreen ? undefined : { height }}
+    >
+      <div ref={mapRef} style={{ height: '100%' }} />
+      <div
+        className="absolute inset-x-3 z-[1000] flex items-center justify-end"
+        style={{ top: fullscreen ? 'calc(env(safe-area-inset-top, 0px) + 12px)' : '10px' }}
+      >
+        <button
+          onClick={toggleFullscreen}
+          title={fullscreen ? 'Esci da schermo intero' : 'Schermo intero'}
+          className={chipBase}
+        >
+          {fullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+        </button>
+      </div>
+    </div>
+  )
 }
