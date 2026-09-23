@@ -281,6 +281,13 @@ export default function GuideReader({
   // per come vengono usati). null per un Sentiero (mai richiesto) o finché non arriva.
   const [placeDetail,    setPlaceDetail]    = useState<PlaceDetail | null>(null)
   const [borgoItinerary, setBorgoItinerary] = useState<BorgoItinerary | null>(null)
+  // Verifica utente: "non vengono più generati gli itinerari" — in realtà venivano generati, solo
+  // che il calcolo (geosearch Wikipedia + rete pedonale OSM + Dijkstra, vedi /api/borgo-itinerary)
+  // può metterci diversi secondi, e nel frattempo la sezione "Itinerario consigliato" appariva
+  // identica a una sezione genuinamente vuota (stessa riga "+N sezioni da generare"), senza alcun
+  // segnale che qualcosa si stesse calcolando in background. True dall'avvio della richiesta a
+  // quando si stabilizza (successo, vuoto o errore) — mai bloccante, solo pilota il messaggio sotto.
+  const [borgoItineraryLoading, setBorgoItineraryLoading] = useState(false)
 
   // Un percorso a tratta unica (start/end lontani — non un anello, non un andata-ritorno già
   // rilevato come tale dalla geometria) si percorre in uno di due modi, e quale dei due è una
@@ -462,7 +469,14 @@ export default function GuideReader({
   // "trekking misto" mostra la timeline delle tappe interne, solo non le sue pillole.
   useEffect(() => {
     if (hike.metaType !== 'borgo_citta' || !hike.placeId) return
+    // Un borgoWalkPolyline già persistito (creato al volo dal popup di ricerca o da una guida
+    // aperta in precedenza, vedi lib/useCreateMetaFromSearch.ts) significa che l'itinerario esiste
+    // già: questa richiesta lo ricalcola comunque (mai la stessa istanza — vedi il commento sopra
+    // sul perché — ma con dati quasi certamente identici), quindi non è la prima generazione agli
+    // occhi dell'utente e non merita lo stesso messaggio "sto calcolando per la prima volta".
+    const alreadyHasItinerary = (hike.borgoWalkPolyline?.length ?? 0) > 0
     let cancelled = false
+    if (!alreadyHasItinerary) setBorgoItineraryLoading(true)
     fetch('/api/borgo-itinerary', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -486,6 +500,7 @@ export default function GuideReader({
         }
       })
       .catch(() => {})
+      .finally(() => { if (!cancelled) setBorgoItineraryLoading(false) })
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hike.metaType, hike.placeId, hike.id])
@@ -922,8 +937,8 @@ export default function GuideReader({
         // mai PoiListWidget qui, è costruita per un Sentiero (mappa del tracciato, Street View,
         // POI OSM) che un Borgo/Città non ha.
         if (hike.metaType === 'borgo_citta') {
-          return borgoItinerary && borgoItinerary.stops.length > 0
-            ? (
+          if (borgoItinerary && borgoItinerary.stops.length > 0) {
+            return (
               <BorgoTappeWidget
                 stops={borgoItinerary.stops}
                 legs={borgoItinerary.legs}
@@ -931,7 +946,20 @@ export default function GuideReader({
                 color={SECTION_STYLE.luoghi.color}
               />
             )
-            : null
+          }
+          // Verifica utente: mentre l'itinerario si calcola (geosearch Wikipedia + rete pedonale
+          // OSM + Dijkstra, può metterci diversi secondi) questa sezione va distinta da una
+          // genuinamente vuota — altrimenti finisce anonima dentro "+N sezioni da generare", dando
+          // l'impressione che l'itinerario non si stia generando affatto.
+          if (borgoItineraryLoading) {
+            return (
+              <div className="flex items-center gap-2.5 text-stone-400 text-[12.5px]">
+                <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                Sto calcolando l&apos;itinerario a piedi tra le tappe del borgo…
+              </div>
+            )
+          }
+          return null
         }
         // Un Sito è già di per sé il singolo punto di interesse: qui non c'è mai un elenco di POI
         // "lungo il percorso" (poiList arriva comunque come oggetto — con array vuoti — dal
