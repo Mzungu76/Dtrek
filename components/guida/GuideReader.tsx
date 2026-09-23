@@ -61,7 +61,7 @@ import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
 import type { PlaceDetail } from '@/app/api/places/[id]/route'
 import type { BorgoItinerary } from '@/app/api/borgo-itinerary/route'
 import { computeBorgoWalkFields } from '@/lib/borgoWalkPolyline'
-import { borgoCardVariant, sitoCardFamily } from '@/lib/guideCardVariant'
+import { borgoCardVariant, sitoCardFamily, metaEligibleForHikingScores } from '@/lib/guideCardVariant'
 import { META_TYPE_CONFIG, SITE_TYPE_CONFIG, inferSiteTypeFromName } from '@/lib/metaTypes'
 import { Building2, Landmark } from 'lucide-react'
 
@@ -274,7 +274,18 @@ export default function GuideReader({
   // proprietà del percorso salvata su Supabase (planned_hikes.route_mode), non uno stato di sola
   // visualizzazione: le cifre qui sotto E i punteggi che ne derivano seguono la scelta. Vedi
   // lib/routeMode.ts per il calcolo delle cifre effettive e il perché del raddoppio semplice.
-  const isLinearRoute = useMemo(() => classifyTrackShape(hike.routePolyline ?? []) === 'linear', [hike.routePolyline])
+  // metaEligibleForHikingScores in AND col controllo di forma (confine esplicito di tipologia,
+  // piano guide-eccellenza §Fase 4) — verifica utente: senza questo controllo, un Borgo/Città
+  // "cammino urbano" o un Sito senza traccia (routePolyline sempre vuoto) risultava "lineare" per
+  // accidente (classifyTrackShape su un array vuoto/corto ritorna sempre 'linear'), aprendo il
+  // popup "Come percorri questo percorso" — che ha senso solo per un vero cammino a piedi
+  // (Sentiero, o Borgo/Città "trekking misto" con una traccia reale) — anche per chi visita
+  // semplicemente un borgo o un museo.
+  const isLinearRoute = useMemo(
+    () => metaEligibleForHikingScores({ metaType: hike.metaType, trackPoints: hike.trackPoints, routePolyline: hike.routePolyline })
+      && classifyTrackShape(hike.routePolyline ?? []) === 'linear',
+    [hike.metaType, hike.trackPoints, hike.routePolyline],
+  )
   const showAsRoundTrip = isLinearRoute && hike.routeMode === 'round_trip'
   const effective = effectiveHikeMetrics(hike, isLinearRoute ? hike.routeMode : undefined)
   // Scelta mai fatta su un percorso lineare ⇒ popup bloccante. Deve arrivare PRIMA della
@@ -1088,7 +1099,16 @@ export default function GuideReader({
   const sectionMeta = displaySections.map((s, i) => ({
     section: s,
     index: i,
-    isEmpty: s.guideKey != null && !s.body?.trim() && renderWidget(s.key, s.body) == null,
+    // 'il_percorso' ("Il borgo"/"Il sito"/...) non entra MAI nella riga compatta "+N sezioni da
+    // generare" — verifica utente: la sua descrizione "spariva" quando compariva "Le tappe del
+    // borgo", perché borgoItinerary (Overpass, veloce) di norma risolve prima di placeDetail
+    // (Wikipedia/Wikidata, più lento): nel frattempo 'il_percorso' restava vuota e finiva
+    // anonimizzata dentro l'etichetta condivisa della riga compatta insieme alle altre sezioni
+    // ancora vuote — quando 'luoghi' usciva da quell'elenco per prendersi la propria card, restava
+    // solo un'etichetta ridotta e facile da perdere, mai una vera card propria. Qui resta sempre una
+    // card/riga DEDICATA (widget/descrizione se pronti, altrimenti il proprio hint "Approfondisci"),
+    // mai confusa con la sorte delle altre sezioni.
+    isEmpty: s.guideKey != null && s.guideKey !== 'il_percorso' && !s.body?.trim() && renderWidget(s.key, s.body) == null,
   }))
   const emptySections = sectionMeta
     .filter((m): m is typeof m & { section: DisplaySection & { guideKey: GuideSectionKey } } => m.isEmpty)

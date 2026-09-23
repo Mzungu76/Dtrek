@@ -48,7 +48,7 @@ describe('guideProfileFor', () => {
 
   it('borgo_citta sovrascrive "luoghi" con la narrazione tappa-per-tappa (piano §29)', () => {
     const override = guideProfileFor('borgo_citta').sectionOverrides?.luoghi
-    expect(override?.title).toBe('Le tappe del borgo')
+    expect(override?.title).toBe('Itinerario consigliato')
     expect(override?.brief).toMatch(/TAPPA 1/)
   })
 })

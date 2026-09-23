@@ -1,23 +1,53 @@
-import { describe, it, expect } from 'vitest'
-import { upscaleWikiThumbnail } from '../wikipedia'
+import { describe, it, expect, afterEach, vi } from 'vitest'
+import { fetchPageThumbnail } from '../wikipedia'
 
-describe('upscaleWikiThumbnail', () => {
-  it('sostituisce la larghezza nel path di un thumbnail MediaWiki', () => {
-    expect(upscaleWikiThumbnail(
-      'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Foto.jpg/320px-Foto.jpg',
-      1200,
-    )).toBe('https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Foto.jpg/1200px-Foto.jpg')
+describe('fetchPageThumbnail', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
   })
 
-  it('gestisce un nome file con caratteri speciali/spazi codificati', () => {
-    expect(upscaleWikiThumbnail(
-      'https://upload.wikimedia.org/wikipedia/commons/thumb/1/12/Palazzo%20Farnese.png/220px-Palazzo%20Farnese.png',
-      1200,
-    )).toBe('https://upload.wikimedia.org/wikipedia/commons/thumb/1/12/Palazzo%20Farnese.png/1200px-Palazzo%20Farnese.png')
+  it('restituisce la thumbnail alla larghezza richiesta tramite pithumbsize', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        query: {
+          pages: {
+            123: {
+              thumbnail: { source: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Foto.jpg/1200px-Foto.jpg' },
+            },
+          },
+        },
+      }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const url = await fetchPageThumbnail('Calcata', 'it', 1200)
+
+    expect(url).toBe('https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Foto.jpg/1200px-Foto.jpg')
+    const requestedUrl = fetchMock.mock.calls[0][0] as string
+    expect(requestedUrl).toContain('it.wikipedia.org')
+    expect(requestedUrl).toContain('pithumbsize=1200')
+    expect(requestedUrl).toContain(encodeURIComponent('Calcata'))
   })
 
-  it('un url che non è un thumbnail MediaWiki (nessuna larghezza nel path) resta invariato', () => {
-    const url = 'https://upload.wikimedia.org/wikipedia/commons/a/ab/Foto.jpg'
-    expect(upscaleWikiThumbnail(url, 1200)).toBe(url)
+  it('nessuna thumbnail disponibile per la pagina → null', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ query: { pages: { 123: {} } } }),
+    }))
+
+    expect(await fetchPageThumbnail('Pagina senza immagine', 'it', 1200)).toBeNull()
+  })
+
+  it('risposta HTTP non ok → null, mai un\'eccezione propagata', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }))
+
+    expect(await fetchPageThumbnail('Qualcosa', 'it', 1200)).toBeNull()
+  })
+
+  it('errore di rete → null, mai un\'eccezione propagata', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')))
+
+    expect(await fetchPageThumbnail('Qualcosa', 'it', 1200)).toBeNull()
   })
 })

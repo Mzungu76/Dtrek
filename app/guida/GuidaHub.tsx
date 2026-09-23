@@ -236,12 +236,16 @@ export default function GuidaHub({ id }: { id?: string }) {
   const driving = useDrivingDistance(hike)
   const drivingWithMaps = useMemo(() => {
     if (!driving) return driving
-    const trailStart = hike?.routePolyline?.[0]
+    // getTrailStartPoint (non solo hike?.routePolyline?.[0]) — verifica utente: per un Borgo/Città
+    // "cammino urbano" o un Sito (nessuna traccia, solo hike.latitude/longitude) il pallino km
+    // restava testo semplice invece di un link a Google Maps, perché qui si guardava solo la
+    // traccia mentre la distanza stessa (useDrivingDistance sopra) usa già lo stesso fallback.
+    const trailStart = hike ? getTrailStartPoint(hike) : null
     const mapsUrl = userOrigin && trailStart
       ? googleMapsDirectionsUrl(userOrigin.lat, userOrigin.lon, trailStart[0], trailStart[1])
       : undefined
     return { ...driving, mapsUrl }
-  }, [driving, userOrigin, hike?.routePolyline])
+  }, [driving, userOrigin, hike])
   const { safetyScore, setSafetyScore } = useSafetyScore(hike, setHike)
   const { prefsLoaded, prefSforzo, prefDurata, hrRest, hrMax } = useUserPrefs()
 

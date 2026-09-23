@@ -58,7 +58,11 @@ export function useCreateMetaFromSearch() {
       if (item.metaType === 'borgo_citta') {
         persistBorgoWalkItinerary(hike.id, item.id, borgoItinerary).catch(() => {})
       }
-      router.push(`/guida/${encodeURIComponent(hike.id)}/prima_di_partire`)
+      // Verifica utente: `/prima_di_partire` non è mai stata una route reale sotto app/guida/[id]/
+      // (solo page.tsx/naviga/flora/animali esistono lì) — portava a una pagina inesistente invece
+      // della Guida appena creata. Ogni altro punto dell'app che apre una Guida (RouteBuilder,
+      // GpxUploader, CreaGuidaMapSearch stesso poco più sotto, ...) usa questa stessa forma piana.
+      router.push(`/guida/${encodeURIComponent(hike.id)}`)
     } catch (e) {
       setCreateError(e instanceof Error ? e.message : 'Impossibile creare la Meta — riprova.')
       setCreatingId(null)

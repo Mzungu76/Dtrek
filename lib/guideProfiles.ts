@@ -61,7 +61,7 @@ const NON_HIKING_SECTIONS = availableSectionsFor([...HIKING_ONLY_SECTIONS, 'natu
 // per proseguire). Quando quell'elenco manca (borgo isolato, o la scoperta non ha trovato nulla),
 // non si inventano tappe numerate: si ripiega su un ritratto dei luoghi più noti, stesso taglio a
 // sottotitoli ma senza la sequenza vincolata.
-const BORGO_LUOGHI_BRIEF = `## Le tappe del borgo
+const BORGO_LUOGHI_BRIEF = `## Itinerario consigliato
 Se più sotto trovi un elenco TAPPA 1, TAPPA 2, ... numerato, racconta il borgo seguendo ESATTAMENTE
 quell'ordine di visita (non riordinarlo, non saltarne nessuna): per ciascuna tappa, un sottotitolo
 ### col suo nome, poi la sua storia, architettura o la curiosità più memorabile, e chiudi con una
@@ -95,7 +95,7 @@ quartiere all'altro. Resta sul quadro d'insieme: il racconto luogo per luogo viv
 dedicata più avanti, qui non anticiparlo.`,
       },
       luoghi: {
-        title: 'Le tappe del borgo',
+        title: 'Itinerario consigliato',
         brief: BORGO_LUOGHI_BRIEF,
       },
     },

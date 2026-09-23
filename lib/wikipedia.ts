@@ -101,14 +101,28 @@ function isNearPoi(wiki: WikiPage, poi: PoiItem): boolean {
 // Verifica post-piano guide-eccellenza: la miniatura di /api/rest_v1/page/summary/ (thumbnail.
 // source) è pensata per un elenco di risultati, non per una copertina a piena larghezza — è
 // piccola (in genere qualche centinaio di px) e appariva sgranata quando stirata a riempire
-// GuideHero. L'URL del thumbnail server MediaWiki incorpora la larghezza richiesta nel path
-// stesso (.../thumb/a/ab/Foto.jpg/320px-Foto.jpg): sostituendola si ottiene dallo stesso server
-// una resa più grande della STESSA immagine, generata al volo fino alla risoluzione reale del
-// file originale — mai un ingrandimento artificiale di un file più piccolo (il server MediaWiki
-// non serve mai un thumbnail più largo del file sorgente). Se l'URL non rispetta questo formato
-// (fonte diversa da un thumb MediaWiki), resta invariato.
-export function upscaleWikiThumbnail(url: string, width: number): string {
-  return url.replace(/\/(\d+)px-([^/]+)$/, `/${width}px-$2`)
+// GuideHero. Un primo tentativo riscriveva l'URL del thumbnail per sostituire la larghezza nel
+// path — troppo fragile (presuppone un formato URL specifico, mai garantito da nessuna
+// documentazione ufficiale): qui invece si richiede la miniatura a una pagina già risolta tramite
+// l'Action API (prop=pageimages, pithumbsize), che accetta la larghezza come parametro di prima
+// classe — nessuna assunzione sulla forma dell'URL restituito. Mai un ingrandimento artificiale:
+// il server MediaWiki non genera mai un thumbnail più largo del file sorgente.
+export async function fetchPageThumbnail(title: string, lang: string, width: number): Promise<string | null> {
+  try {
+    const url = `https://${lang}.wikipedia.org/w/api.php?` + new URLSearchParams({
+      action: 'query', prop: 'pageimages', titles: title,
+      piprop: 'thumbnail', pithumbsize: String(width),
+      format: 'json', origin: '*',
+    })
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
+    if (!res.ok) return null
+    const data = await res.json() as { query?: { pages?: Record<string, { thumbnail?: { source?: string } }> } }
+    const pages = data.query?.pages
+    if (!pages) return null
+    return Object.values(pages)[0]?.thumbnail?.source ?? null
+  } catch {
+    return null
+  }
 }
 
 // Fetch the REST summary for a given title from any Wikimedia project
