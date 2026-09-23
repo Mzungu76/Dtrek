@@ -10,7 +10,7 @@ import { LS_KEYS } from '@/lib/localStore'
 import type { WikiPage } from '@/lib/wikipedia'
 import {
   VolumeX, Loader2,
-  FileDown, BookOpen, Sparkles,
+  FileDown, BookOpen, Sparkles, ChevronRight,
 } from 'lucide-react'
 import type { PoiItem } from '@/lib/overpass'
 import PhotoMosaic from '@/components/PhotoMosaic'
@@ -1012,6 +1012,30 @@ export default function GuideReader({
     [displaySections],
   )
 
+  // Sezioni "vuote" (piano guide-eccellenza §Fase 1.1) — né testo AI né un widget con dati reali
+  // (es. mappa/meteo): quelle NON sono "contenuto in attesa", sono un vero e proprio nulla, e
+  // prima restavano N placeholder quasi identici sparsi nello scroll con lo stesso peso visivo
+  // delle card piene. Una sezione con un widget ma senza testo (es. "Il percorso" con la mappa già
+  // pronta) non è mai vuota in questo senso — mostra comunque contenuto reale, SectionCard la
+  // rende già come "widget con footer discreto". Non ricalcolato con un useMemo dedicato: chiama
+  // renderWidget(), che chiude su molto stato del componente (weather, scores, borgoItinerary,
+  // poiList, natura, ...) — più semplice e sicuro ricalcolarlo ad ogni render come già fa il loop
+  // di rendering sotto, piuttosto che elencare quella stessa superficie di dipendenze qui.
+  const sectionMeta = displaySections.map((s, i) => ({
+    section: s,
+    index: i,
+    isEmpty: s.guideKey != null && !s.body?.trim() && renderWidget(s.key, s.body) == null,
+  }))
+  const emptySections = sectionMeta
+    .filter((m): m is typeof m & { section: DisplaySection & { guideKey: GuideSectionKey } } => m.isEmpty)
+    .map(m => m.section)
+  const firstEmptyIndex = sectionMeta.find(m => m.isEmpty)?.index
+  // SectionNav e lo scroll principale condividono questa stessa lista filtrata (invece di
+  // displaySections per intero): solo la prima sezione vuota vi compare, come voce unica che
+  // rappresenta tutte le altre — punta solo a ciò che è davvero presente nello scroll (piano
+  // §Fase 1.3), mai a un placeholder che non esiste più come card propria.
+  const navEntries = sectionMeta.filter(m => !m.isEmpty || m.index === firstEmptyIndex)
+
   // Galleria fotografica — fonte principale: le thumbnail degli articoli Wikipedia dei luoghi
   // lungo il percorso (già scaricate durante l'arricchimento del percorso, prima ancora che la
   // guida esista — vedi lib/wikipedia.ts's WikiPage.thumbnail), quindi disponibili a costo zero e
@@ -1128,9 +1152,12 @@ export default function GuideReader({
       <div className="md:px-8 md:max-w-[1180px] md:mx-auto">
         <div className="md:grid md:grid-cols-[auto_1fr] md:gap-8 md:items-start md:pt-6">
           <SectionNav
-            sections={displaySections.map(s => ({ key: s.key, title: s.title, icon: s.icon, color: s.color }))}
-            activeIndex={visibleSec}
-            onSelect={scrollToSection}
+            sections={navEntries.map(m => m.index === firstEmptyIndex
+              ? { key: m.section.key, title: `Altre sezioni (${emptySections.length})`, icon: LEGACY_STYLE.icon, color: LEGACY_STYLE.color, empty: true }
+              : { key: m.section.key, title: m.section.title, icon: m.section.icon, color: m.section.color, empty: !m.section.body?.trim() }
+            )}
+            activeIndex={navEntries.findIndex(m => m.index === visibleSec)}
+            onSelect={navIdx => scrollToSection(navEntries[navIdx].index)}
           />
 
           <div className="min-w-0 px-4 sm:px-6 md:px-0 md:max-w-3xl lg:max-w-[52rem]">
@@ -1254,7 +1281,43 @@ export default function GuideReader({
 
             {/* ── Guide sections — always rendered (widgets), text where available ────────── */}
             <div className="mt-4">
-              {displaySections.map((s, i) => {
+              {navEntries.map(({ section: s, index: i }) => {
+                // La prima sezione vuota (piano guide-eccellenza §Fase 1.1) diventa una riga
+                // compatta unica che riassume TUTTE le sezioni vuote insieme, con un'unica azione
+                // — le altre non hanno più una card propria in questo loop (navEntries le esclude
+                // già, vedi sopra), invece di N placeholder quasi identici sparsi nello scroll.
+                if (i === firstEmptyIndex) {
+                  const approfondendoMerged = emptySections.some(es => generatingSections.includes(es.guideKey))
+                  return (
+                    <article
+                      key={s.key}
+                      ref={el => { sectionRefs.current[i] = el }}
+                      className="scroll-mt-16 flex flex-col gap-2 px-4 py-3 border border-stone-200 rounded-xl bg-white mb-2.5"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="[&>svg]:w-4 [&>svg]:h-4 shrink-0 text-stone-400">{LEGACY_STYLE.icon}</span>
+                        <span className="flex-1 min-w-0 truncate text-[13px] font-semibold text-stone-800">
+                          + {emptySections.length} {emptySections.length === 1 ? 'sezione da generare' : 'sezioni da generare'}: {emptySections.map(es => es.title).join(', ')}
+                        </span>
+                        {approfondendoMerged && (
+                          <span className="flex items-center gap-1 text-[11.5px] font-medium text-stone-400 shrink-0">
+                            <Loader2 className="w-3 h-3 animate-spin" /> Approfondimento…
+                          </span>
+                        )}
+                      </div>
+                      {!approfondendoMerged && showApprofondisciHint && generatingSections.length === 0 && (
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                          <button
+                            onClick={() => generateSections(emptySections.map(es => es.guideKey))}
+                            className="flex items-center gap-0.5 text-[11.5px] font-bold text-terra-600 hover:text-terra-700 shrink-0 whitespace-nowrap"
+                          >
+                            Approfondisci con Giulia (AI) <ChevronRight className="w-3 h-3" />
+                          </button>
+                        </div>
+                      )}
+                    </article>
+                  )
+                }
                 // Ogni sezione può essere approfondita singolarmente (app/api/guide/route.ts,
                 // sections) — a differenza di "Genera il resto della guida" che le chiede tutte
                 // insieme. Solo per le sezioni fisse (s.guideKey), non per quelle "legacy".

@@ -6,9 +6,10 @@ export interface NavSection {
   title: string
   icon: ReactNode
   color: string
-  /** Editor manuale (Resoconto): pallino discreto per le sezioni ancora senza testo, per capire a
-   *  colpo d'occhio cosa manca da scrivere senza scorrere tutta la pagina. Assente in lettura
-   *  (Guida non ha mai sezioni "vuote" da segnalare così). */
+  /** Pallino discreto per le sezioni ancora senza testo, per capire a colpo d'occhio cosa manca
+   *  senza scorrere tutta la pagina — nell'editor manuale (Resoconto) per il testo non ancora
+   *  scritto, in lettura (Guida, piano guide-eccellenza §Fase 1.2) per una sezione con un widget
+   *  ma senza ancora il testo di Giulia. */
   empty?: boolean
 }
 
