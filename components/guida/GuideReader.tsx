@@ -43,6 +43,7 @@ import PoiListWidget from './widgets/PoiListWidget'
 import NaturaWidget from './widgets/NaturaWidget'
 import BorgoTappeWidget from './widgets/BorgoTappeWidget'
 import SitoInfoWidget from './widgets/SitoInfoWidget'
+import PlaceDescriptionWidget from './widgets/PlaceDescriptionWidget'
 import SitoGalleryWidget from './widgets/SitoGalleryWidget'
 import GuideHero from './GuideHero'
 import GuideStatsStrip from './GuideStatsStrip'
@@ -837,7 +838,22 @@ export default function GuideReader({
         // Un Borgo/Città "cammino urbano" o un Sito non hanno una traccia GPS da mostrare — mai un
         // RouteMapSection vuoto/rotto al posto del nulla (piano §48.9). "Trekking misto" ha una
         // traccia reale: resta invariato.
-        if (hike.metaType !== 'sentiero' && !usesRealTrack) return null
+        if (hike.metaType !== 'sentiero' && !usesRealTrack) {
+          // Verifica post-piano guide-eccellenza: "quando vengono create le schede di Borghi/Siti,
+          // la scheda dovrebbe essere già popolata con le info descrittive" — prima, senza una
+          // traccia, questa sezione (il titolo di card "Il borgo"/"Il museo"/...) non aveva né
+          // widget né testo finché Giulia non scriveva, quindi finiva nella riga compatta "sezioni
+          // da generare" (piano §Fase 1) anche appena creata la Meta. placeDetail arriva già dal
+          // mount (archivio dtrek_places, con fallback Wikipedia — vedi l'effect qui sopra), quindi
+          // un riassunto reale è spesso disponibile da subito. Solo finché Giulia non ha ancora
+          // scritto QUESTA sezione: un riassunto enciclopedico e la sua narrazione insieme
+          // sarebbero ridondanti, non complementari.
+          if (body?.trim()) return null
+          const description = placeDetail?.description ?? placeDetail?.wikipedia?.extract
+          return description
+            ? <PlaceDescriptionWidget text={description} wikipediaUrl={!placeDetail?.description ? placeDetail?.wikipedia?.url : undefined} />
+            : null
+        }
         return (
           <RouteMapSection
             trackPoints={hike.trackPoints}
