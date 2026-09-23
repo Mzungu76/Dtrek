@@ -384,14 +384,22 @@ export default function GuideReader({
 
   // Load route photos from Wikimedia Commons for the mosaic + section illustrations (the hero
   // itself is now a recolored map, not a photo — see GuideHero — so every photo slot here goes
-  // to the mosaic/section illustrations instead of being reserved for the hero).
+  // to the mosaic/section illustrations instead of being reserved for the hero). Un Borgo/Città o
+  // Sito senza traccia (piano guide-eccellenza §Fase 2.1) non ha un punto medio di percorso da
+  // usare: cade su hike.latitude/longitude (valorizzate via placeId, piano Blocco D) con un
+  // raggio stretto attorno al punto stesso — stesso raggio di SitoGalleryWidget qui sotto, che fa
+  // esattamente questo per il proprio caso — invece dei 15km pensati per il punto medio di un
+  // sentiero, che per un singolo punto includerebbe foto di tutt'altro luogo.
   useEffect(() => {
     const pts = (hike.trackPoints ?? []).filter((p: { lat?: number; lon?: number }) => p.lat && p.lon) as { lat: number; lon: number }[]
     const poly = pts.length > 0 ? pts : (hike.routePolyline ?? []).map((p: [number, number]) => ({ lat: p[0], lon: p[1] }))
-    if (!poly.length) return
-    const mid = poly[Math.floor(poly.length / 2)]
+    const mid = poly.length > 0
+      ? poly[Math.floor(poly.length / 2)]
+      : hike.latitude != null && hike.longitude != null ? { lat: hike.latitude, lon: hike.longitude } : null
+    if (!mid) return
+    const radiusM = poly.length > 0 ? 15000 : 1500
     import('@/app/lib/guide/fetchRoutePhotos').then(({ fetchRoutePhotos }) =>
-      fetchRoutePhotos(mid.lat, mid.lon, 15000, 6)
+      fetchRoutePhotos(mid.lat, mid.lon, radiusM, 6)
     ).then(photos => {
       setRoutePhotos(photos.map(p => p.url))
     }).catch(() => {})
@@ -987,6 +995,9 @@ export default function GuideReader({
   const hasVisitInfo = !!(placeDetail?.officialUrl || placeDetail?.website || placeDetail?.openingHours)
   const sitoFamily = hike.metaType === 'sito' ? sitoCardFamily(siteType, hasVisitInfo) : undefined
   const usesCoverPhoto = hike.metaType === 'sito' || borgoVariant === 'cammino_urbano'
+  // Stessa condizione usata sotto per montare <SitoGalleryWidget> — PhotoMosaic non deve
+  // duplicarla (piano guide-eccellenza §Fase 2.1).
+  const showsSitoGallery = hike.metaType === 'sito' && sitoFamily !== 'scheda_pratica' && hike.latitude != null && hike.longitude != null
 
   // Icona di fallback per la copertina senza foto (GuideHero coverMode='photo') — Building2 per un
   // Borgo/Città, l'icona di categoria di lib/metaTypes.ts per un Sito (coerente coi chip/pin già
@@ -1143,10 +1154,17 @@ export default function GuideReader({
         />
       )}
 
-      <PhotoMosaic
-        photos={routePhotos.slice(0, 4).map((url, i) => ({ id: String(i), url }))}
-        heightClass="h-32"
-      />
+      {/* SitoGalleryWidget sopra mostra già una galleria (stesso raggio, stessa fonte Commons) per
+          un Sito non-scheda_pratica — evitare qui la stessa galleria due volte nello scroll
+          (piano guide-eccellenza §Fase 2.1). Per ogni altro caso (Sentiero, Borgo/Città, Sito
+          scheda_pratica) PhotoMosaic resta l'unica galleria e usa il fallback sul punto della
+          Meta appena aggiunto sopra quando manca una traccia. */}
+      {!showsSitoGallery && (
+        <PhotoMosaic
+          photos={routePhotos.slice(0, 4).map((url, i) => ({ id: String(i), url }))}
+          heightClass="h-32"
+        />
+      )}
 
       {/* ── Section nav (mobile: sticky pill bar / md+: sidebar) + reading column ────────── */}
       <div className="md:px-8 md:max-w-[1180px] md:mx-auto">
