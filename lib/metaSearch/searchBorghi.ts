@@ -3,7 +3,7 @@ import { haversineM } from '../geoUtils'
 import type { BorghiSearchParams, MetaSearchResult, MetaSearchResultItem } from './types'
 import {
   combineFactors, dataQualityFactor, distanceFactor, historicalCenterFactor,
-  inferredInterestTags, interestMatchFactor, ptprBorgoIdentitarioFactor,
+  inferredInterestTags, interestMatchFactor, populationFactor, ptprBorgoIdentitarioFactor,
 } from './ranking'
 import { countPopulatedFields, fetchSourceCounts, originBbox } from './placeQuery'
 
@@ -31,6 +31,7 @@ interface PlaceRow {
   source: string
   confidence: number
   metadata: Record<string, unknown> | null
+  population: number | null
 }
 
 // Query + ranking deterministico (piano §19/§22) su dtrek_places — MAI un LLM a decidere quali
@@ -42,7 +43,7 @@ export async function searchBorghi(supabase: SupabaseClient, params: BorghiSearc
 
   let query = supabase
     .from('dtrek_places')
-    .select('id, name, subtype, description, latitude, longitude, region, province, municipality, image_url, official_url, website, address, source, confidence, metadata')
+    .select('id, name, subtype, description, latitude, longitude, region, province, municipality, image_url, official_url, website, address, source, confidence, metadata, population')
     .eq('meta_type', 'borgo_citta')
 
   if (params.query) query = query.ilike('name', `%${params.query}%`)
@@ -79,6 +80,7 @@ export async function searchBorghi(supabase: SupabaseClient, params: BorghiSearc
       distanceFactor(params.origin, row.latitude, row.longitude, maxDistanceKm),
       dataQualityFactor(sourceCounts.get(row.id) ?? 1, row.confidence, populatedCount, OPTIONAL_FIELDS.length),
       interestMatchFactor(params.interests, available),
+      populationFactor(row.population),
     ])
 
     return {
