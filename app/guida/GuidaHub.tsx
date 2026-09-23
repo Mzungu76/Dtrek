@@ -1138,14 +1138,25 @@ export default function GuidaHub({ id }: { id?: string }) {
     )
   }
 
-  const primaryAction = (routeItem: RouteHubItem): PrimaryAction => ({
-    label: 'Naviga',
-    icon: Navigation,
-    // Prova prima l'app nativa Navigator (se il device può averla), altrimenti ricade sulla
-    // stessa pagina di navigazione via web che serviva già da sola (lib/navigatorHandoff.ts).
-    onClick: () => tryOpenNavigatorApp(router, `/guida/${encodeURIComponent(routeItem.id)}/naviga`),
-    variant: 'terra',
-  })
+  const primaryAction = (routeItem: RouteHubItem): PrimaryAction | null => {
+    // Per l'hike davvero aperto (unico per cui hike.routePolyline/borgoWalkPolyline sono già in
+    // memoria, stesso motivo di scoreGaugeBadge sopra) niente bottone "Naviga" quando non c'è
+    // proprio nulla da seguire — un Sito, o un Borgo/Città cammino_urbano il cui itinerario a
+    // piedi non è (ancora) arrivato — invece di portare a un vicolo cieco
+    // ("Impossibile avviare la navigazione: percorso non disponibile offline", app/guida/[id]/
+    // naviga/page.tsx). Per ogni altra scheda della galleria resta mostrato: non c'è ancora modo
+    // di sapere qui se avrà un itinerario senza caricarne il record intero, e il tocco stesso
+    // porta comunque a quella pagina, che verifica di nuovo con i dati freschi.
+    if (routeItem.id === hike?.id && !hike.routePolyline?.length && !hike.borgoWalkPolyline?.length) return null
+    return {
+      label: 'Naviga',
+      icon: Navigation,
+      // Prova prima l'app nativa Navigator (se il device può averla), altrimenti ricade sulla
+      // stessa pagina di navigazione via web che serviva già da sola (lib/navigatorHandoff.ts).
+      onClick: () => tryOpenNavigatorApp(router, `/guida/${encodeURIComponent(routeItem.id)}/naviga`),
+      variant: 'terra',
+    }
+  }
 
   const currentItem = displayItems.find(i => i.id === currentId) ?? displayItems[0]
   const initialIndex = Math.max(0, displayItems.findIndex(i => i.id === currentItem.id))

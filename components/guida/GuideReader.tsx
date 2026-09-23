@@ -444,10 +444,27 @@ export default function GuideReader({
       body: JSON.stringify({ placeId: hike.placeId }),
     })
       .then(res => res.ok ? res.json() : null)
-      .then(data => { if (!cancelled && data) setBorgoItinerary(data as BorgoItinerary) })
+      .then(data => {
+        if (cancelled || !data) return
+        const itinerary = data as BorgoItinerary
+        setBorgoItinerary(itinerary)
+        // Naviga (piano guide-eccellenza, verifica post-piano) — persiste l'itinerario a piedi
+        // reale (legs, già calcolato qui sopra) come polyline unica riusabile dal Navigator, in un
+        // campo DEDICATO (mai routePolyline/trackPoints — vedi il commento su borgoWalkPolyline in
+        // lib/plannedStore.ts, che spiega perché). borgoWalkStopsHash invece di un timestamp:
+        // ricalcola solo se le tappe che compongono l'itinerario sono cambiate (nuova geosearch
+        // Wikipedia, nuovo import archivio), non ad ogni apertura della guida.
+        const stopsHash = itinerary.stops.map(s => s.id).join(',')
+        if (itinerary.legs.length > 0 && stopsHash !== hike.borgoWalkStopsHash) {
+          const borgoWalkPolyline = itinerary.legs.flatMap(leg => leg.polyline)
+          updatePlannedMeta(hike.id, { borgoWalkPolyline, borgoWalkStopsHash: stopsHash }).catch(() => {})
+          onHikeUpdate({ borgoWalkPolyline, borgoWalkStopsHash: stopsHash })
+        }
+      })
       .catch(() => {})
     return () => { cancelled = true }
-  }, [hike.metaType, hike.placeId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hike.metaType, hike.placeId, hike.id])
 
   // IntersectionObserver: track which section is in view for pin-nav highlighting. Uses a thin
   // "activation band" near the top of the viewport (threshold 0, shrunk rootMargin) rather than
