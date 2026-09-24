@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import { buildNetworkSegments, fetchWalkNetwork, stitchNearbyEndpoints, type WalkNetwork, type GraphNode } from '@/lib/routeBuilder/osmGraph'
+import { buildNetworkSegments, fetchWalkNetwork, stitchNearbyEndpoints, bridgeDisconnectedComponents, type WalkNetwork, type GraphNode } from '@/lib/routeBuilder/osmGraph'
+import { haversineM } from '@/lib/geoUtils'
 
 // Coordinate arbitrarie ma monotone (0.001° ≈ 111m), solo per dare a ogni nodo una posizione
 // distinta — la logica testata qui è puramente topologica (grado dei nodi), non geometrica.
@@ -156,6 +157,61 @@ describe('stitchNearbyEndpoints', () => {
 
     stitchNearbyEndpoints(nodes)
     expect(reachable(nodes, 1).has(4)).toBe(false)
+  })
+})
+
+describe('bridgeDisconnectedComponents', () => {
+  // Verifica utente (Chieti, place id eb07bfac-e861-484c-bb4c-acca63838e3f) — confermato sui dati
+  // reali (walk_network_cache id=69): "Terme romane di Chieti" è un frammento isolato di sole 3
+  // node, staccato dal resto della rete da un varco di ~56m — troppo largo per
+  // STITCH_THRESHOLD_M=15 (Sirmione, ~8m). Qui il punto più vicino del frammento isolato (nodo 2)
+  // cade a metà di un arco esistente dell'altra componente (nodi 10-11), non su uno dei suoi due
+  // estremi: la distanza dal punto più vicino DELL'ARCO è ~100m (sotto soglia), mentre la distanza
+  // dal nodo estremo più vicino (10 o 11) è ~269m (sopra soglia) — un aggancio solo ai node (come
+  // stitchNearbyEndpoints) non troverebbe questo ponte con la stessa soglia.
+  it('collega due componenti scollegate agganciando a metà di un arco esistente, non solo ai suoi nodi', () => {
+    const nodes = new Map<number, GraphNode>([
+      [1, node(-0.001, 0)], [2, node(0, 0)], // componente A, isolata
+      [10, node(0.000898, -0.002246)], [11, node(0.000898, 0.002246)], // componente B, isolata
+    ])
+    addEdge(nodes, 1, 2, 100)
+    addEdge(nodes, 10, 11, 200)
+    expect(reachable(nodes, 1).has(11)).toBe(false) // prima del ponte, davvero scollegate
+
+    // Distanza dai due estremi del segmento, ben oltre la soglia — solo l'interno dell'arco è vicino.
+    expect(haversineM(0, 0, 0.000898, -0.002246)).toBeGreaterThan(220)
+    expect(haversineM(0, 0, 0.000898, 0.002246)).toBeGreaterThan(220)
+
+    bridgeDisconnectedComponents(nodes)
+    expect(reachable(nodes, 1).has(11)).toBe(true)
+  })
+
+  it('non collega due componenti oltre la soglia (mai un ponte inventato attraverso una barriera reale)', () => {
+    const nodes = new Map<number, GraphNode>([
+      [1, node(-0.001, 0)], [2, node(0, 0)],
+      // Stesso segmento di sopra, ma spostato molto più lontano (~300m di distanza perpendicolare,
+      // oltre COMPONENT_BRIDGE_MAX_M anche per il punto più vicino sull'arco).
+      [10, node(0.0027, -0.002246)], [11, node(0.0027, 0.002246)],
+    ])
+    addEdge(nodes, 1, 2, 100)
+    addEdge(nodes, 10, 11, 200)
+
+    bridgeDisconnectedComponents(nodes)
+    expect(reachable(nodes, 1).has(11)).toBe(false)
+  })
+
+  it('non aggiunge nessuna scorciatoia quando le componenti sono già connesse', () => {
+    const nodes = new Map<number, GraphNode>([
+      [1, node(-0.001, 0)], [2, node(0, 0)],
+      [10, node(0.000898, -0.002246)], [11, node(0.000898, 0.002246)],
+    ])
+    addEdge(nodes, 1, 2, 100)
+    addEdge(nodes, 10, 11, 200)
+    addEdge(nodes, 2, 10, 300) // già connesse da un arco reale
+
+    bridgeDisconnectedComponents(nodes)
+    const hasBridgeEdge = Array.from(nodes.values()).some(n => n.edges.some(e => e.wayId === -2))
+    expect(hasBridgeEdge).toBe(false)
   })
 })
 

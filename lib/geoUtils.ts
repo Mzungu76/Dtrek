@@ -114,18 +114,39 @@ function toLocalXY(lat: number, lon: number, lat0: number): [number, number] {
   return [x, y]
 }
 
-/** Min distance in meters from (lat, lon) to the segment [a, b], via a local equirectangular projection (accurate well under 1% error at the segment lengths involved here). */
-function distToSegmentM(lat: number, lon: number, a: [number, number], b: [number, number]): number {
+function fromLocalXY(x: number, y: number, lat0: number): [number, number] {
+  const lat = (y / EARTH_R_M) * 180 / Math.PI
+  const lon = (x / (Math.cos(lat0 * Math.PI / 180) * EARTH_R_M)) * 180 / Math.PI
+  return [lat, lon]
+}
+
+/**
+ * Punto più vicino a (lat, lon) sul segmento [a, b] (non solo ai suoi due estremi) — via la stessa
+ * proiezione equirettangolare locale di distToSegmentM sotto, `t` in [0,1] indica dove cade lungo
+ * il segmento (0 = a, 1 = b). Usato da lib/routeBuilder/osmGraph.ts's bridgeDisconnectedComponents
+ * per agganciare un nodo isolato al punto più vicino di un arco esistente invece che al solo nodo
+ * più vicino — lo stesso "snap alla via" che un router pedonale usa per agganciare un punto di
+ * partenza/arrivo alla rete, qui usato per ricucire due componenti scollegate del grafo.
+ */
+export function nearestPointOnSegment(
+  lat: number, lon: number, a: [number, number], b: [number, number],
+): { lat: number; lon: number; distM: number; t: number } {
   const lat0 = (a[0] + b[0]) / 2
   const [px, py] = toLocalXY(lat, lon, lat0)
   const [ax, ay] = toLocalXY(a[0], a[1], lat0)
   const [bx, by] = toLocalXY(b[0], b[1], lat0)
   const dx = bx - ax, dy = by - ay
   const lenSq = dx * dx + dy * dy
-  if (lenSq === 0) return haversineM(lat, lon, a[0], a[1])
+  if (lenSq === 0) return { lat: a[0], lon: a[1], distM: haversineM(lat, lon, a[0], a[1]), t: 0 }
   let t = ((px - ax) * dx + (py - ay) * dy) / lenSq
   t = Math.max(0, Math.min(1, t))
-  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy))
+  const [projLat, projLon] = fromLocalXY(ax + t * dx, ay + t * dy, lat0)
+  return { lat: projLat, lon: projLon, distM: haversineM(lat, lon, projLat, projLon), t }
+}
+
+/** Min distance in meters from (lat, lon) to the segment [a, b], via a local equirectangular projection (accurate well under 1% error at the segment lengths involved here). */
+function distToSegmentM(lat: number, lon: number, a: [number, number], b: [number, number]): number {
+  return nearestPointOnSegment(lat, lon, a, b).distM
 }
 
 /**
