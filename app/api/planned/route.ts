@@ -97,6 +97,8 @@ function rowToHike(row: Record<string, unknown>, includeTracks = true): PlannedH
     longitude:                     row.longitude as number | undefined,
     borgoWalkPolyline:             row.borgo_walk_polyline as [number, number][] | undefined,
     borgoWalkStopsHash:            row.borgo_walk_stops_hash as string | undefined,
+    borgoItineraryOverrides:       row.borgo_itinerary_overrides as PlannedHike['borgoItineraryOverrides'],
+    borgoDayBudgetMinutes:         row.borgo_day_budget_minutes as number | undefined,
   }
 }
 
@@ -460,6 +462,8 @@ export async function PATCH(req: NextRequest) {
       floraComputedAt?: string
       borgoWalkPolyline?: PlannedHike['borgoWalkPolyline']
       borgoWalkStopsHash?: string
+      borgoItineraryOverrides?: PlannedHike['borgoItineraryOverrides']
+      borgoDayBudgetMinutes?: number
     }
 
     const dbPatch: Record<string, unknown> = {}
@@ -508,6 +512,8 @@ export async function PATCH(req: NextRequest) {
     if (patch.floraComputedAt              !== undefined) dbPatch.flora_computed_at              = patch.floraComputedAt
     if (patch.borgoWalkPolyline            !== undefined) dbPatch.borgo_walk_polyline            = patch.borgoWalkPolyline
     if (patch.borgoWalkStopsHash           !== undefined) dbPatch.borgo_walk_stops_hash          = patch.borgoWalkStopsHash
+    if (patch.borgoItineraryOverrides      !== undefined) dbPatch.borgo_itinerary_overrides      = patch.borgoItineraryOverrides
+    if (patch.borgoDayBudgetMinutes        !== undefined) dbPatch.borgo_day_budget_minutes       = patch.borgoDayBudgetMinutes
 
     const { error } = await supabase
       .from('planned_hikes')

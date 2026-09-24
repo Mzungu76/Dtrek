@@ -1,5 +1,17 @@
 import { haversineM } from '../geoUtils'
-import type { SiteType } from '../metaTypes'
+import { DEFAULT_VISIT_MINUTES, SITE_TYPE_CONFIG, type SiteType } from '../metaTypes'
+import type { ItineraryLeg } from '@/app/api/borgo-itinerary/route'
+
+// ~4.3 km/h — un ritmo da visita (con soste implicite), non una camminata sportiva: la stessa
+// differenza per cui la stima di un Sentiero (lib/trailStats.ts) non è utilizzabile qui. Vive qui
+// (non in app/api/borgo-itinerary/route.ts, che la importa) perché il raggruppamento in tappe a
+// tempo (più sotto) ne ha bisogno per convertire una distanza in un tempo di cammino equivalente.
+export const WALK_SPEED_MPS = 1.2
+
+// Tetto di punti per singola tappa — condiviso da app/api/borgo-itinerary/route.ts (raggruppamento
+// automatico) e app/api/borgo-itinerary/apply-overrides/route.ts (stesso raggruppamento sui bucket
+// non toccati da un pin manuale): un solo valore, mai due copie che potrebbero divergere.
+export const MAX_STOPS_PER_TAPPA = 6
 
 // Logica pura dell'itinerario a piedi di un Borgo/Città (app/api/borgo-itinerary/route.ts) —
 // nessuna rete/Supabase qui, solo unione/dedup delle tappe candidate e il loro ordine di visita,
@@ -85,4 +97,310 @@ export function orderStopsNearestNeighbor(start: { lat: number; lon: number }, s
     current = next
   }
   return ordered
+}
+
+// ── Suddivisione in tappe (verifica utente — "se i POI sono tanti si suddividono in più tappe",
+// pensata da subito per tornare utile anche ai futuri cammini multi-giorno tipo la Francigena, che
+// riuseranno la stessa forma "Tappa" con un criterio di suddivisione diverso: un percorso
+// predefinito diviso per giorni invece di un clustering algoritmico su un raggio di ricerca) ──────
+
+export interface ItineraryTappa {
+  stops: ItineraryStopCandidate[]
+  /** Stessa lunghezza di `stops` — legs[i] è il tratto a piedi che ARRIVA a stops[i] (dal punto
+   *  precedente, dentro la tappa o dalla tappa precedente per il primo). */
+  legs: ItineraryLeg[]
+  distanceM: number
+  /** Cammino + visita di ogni tappa (verifica utente: "un poi potrebbe essere molto vicino ma
+   *  richiedere mezza giornata di visita") — il vero criterio di chiusura di una tappa, la
+   *  distanza sopra resta solo per mostrare i km percorsi. */
+  totalMinutes: number
+  /** Punto di partenza di QUESTA tappa — il Borgo stesso per la prima tappa, l'ultima tappa
+   *  della tappa precedente per le successive: la camminata continua da lì, non si
+   *  "teletrasporta" da un capo all'altro della città tra una tappa e la successiva. */
+  startPoint: { lat: number; lon: number }
+}
+
+/** Tempo di visita tipico di una tappa — SITE_TYPE_CONFIG (lib/metaTypes.ts) quando il siteType è
+ *  noto, altrimenti DEFAULT_VISIT_MINUTES (una tappa da Wikipedia senza classificazione, o
+ *  dall'archivio senza subtype) — mai zero, sparirebbe dal budget come se non richiedesse nulla. */
+export function visitMinutesFor(stop: { siteType?: SiteType }): number {
+  return stop.siteType ? SITE_TYPE_CONFIG[stop.siteType].visitMinutes : DEFAULT_VISIT_MINUTES
+}
+
+// ── Personalizzazioni dell'utente (verifica utente — slider del tempo di visita, "spegnimento" di
+// un punto, spostamento manuale tra tappe) — persistite sparse su planned_hikes.
+// borgo_itinerary_overrides (mai un default duplicato per ogni punto, solo le voci che l'utente ha
+// davvero cambiato), applicate qui sopra all'elenco base condiviso (dtrek_places.itinerary_cache)
+// prima del raggruppamento in tappe. ─────────────────────────────────────────────────────────────
+
+export interface BorgoStopOverride {
+  /** Sostituisce visitMinutesFor(stop) per QUESTO punto — dallo slider dell'utente. */
+  visitMinutes?: number
+  /** "Spento" dall'utente — mai considerato nel budget/raggruppamento, ma non sparisce: resta
+   *  visibile (semitrasparente) e riattivabile. */
+  disabled?: boolean
+  /** Tappa scelta esplicitamente dall'utente (indice 0-based) — vince sul raggruppamento
+   *  automatico. Uno spostamento manuale richiede un ricalcolo dei tragitti reali lato server
+   *  (verifica utente: "ricalcolo reale al server quando l'utente conferma"), mai una linea d'aria
+   *  istantanea lato client. */
+  tappaIndex?: number
+}
+
+export type BorgoItineraryOverrides = Record<string, BorgoStopOverride>
+
+/**
+ * Applica le personalizzazioni all'elenco base (già ordinato/con le legs reali) — separa i punti
+ * "spenti" (esclusi dal budget/raggruppamento, mai dal risultato: il chiamante li mostra comunque,
+ * semitrasparenti) da quelli attivi. Le legs restano quelle originali (indicizzate come stops) fino
+ * a un'eventuale richiesta di ricalcolo — questa funzione non tocca mai i tragitti.
+ */
+export function partitionStopsByOverrides(
+  stops: ItineraryStopCandidate[],
+  overrides: BorgoItineraryOverrides | undefined,
+): { activeStops: ItineraryStopCandidate[]; disabledStops: ItineraryStopCandidate[] } {
+  if (!overrides) return { activeStops: stops, disabledStops: [] }
+  const activeStops: ItineraryStopCandidate[] = []
+  const disabledStops: ItineraryStopCandidate[] = []
+  for (const stop of stops) {
+    if (overrides[stop.id]?.disabled) disabledStops.push(stop)
+    else activeStops.push(stop)
+  }
+  return { activeStops, disabledStops }
+}
+
+/** Tempo di visita effettivo di un punto — l'override dell'utente se presente, altrimenti il
+ *  default per tipo (visitMinutesFor sopra). Iniettato in groupStopsIntoTappe invece di una
+ *  seconda copia dell'algoritmo di raggruppamento: la sola differenza tra "con override" e "senza"
+ *  è QUALE tempo si somma per ciascun punto, non come si somma. */
+export function effectiveVisitMinutesFor(stop: ItineraryStopCandidate, overrides: BorgoItineraryOverrides | undefined): number {
+  return overrides?.[stop.id]?.visitMinutes ?? visitMinutesFor(stop)
+}
+
+// Budget di una "giornata di visita culturale" (verifica utente: il tempo di un Borgo/Città non è
+// la fatica fisica di un'escursione — pref_durata/lo storico escursionistico misuravano la cosa
+// sbagliata, un vincolo fisico applicato a un'attività che non lo è). ~6 ore di visita attiva:
+// abbastanza per un centro storico importante, pause/pranzo lasciati fuori (mai conteggiati come
+// tempo di visita). Ogni tappa rappresenta una giornata (o una sua frazione, quando il contenuto
+// del Borgo non la riempie) — "mezza giornata"/"giornata intera"/"più giorni" emergono così da
+// soli dal numero di tappe che groupStopsIntoTappe produce quando l'utente non tocca nulla, mai da
+// una scelta obbligatoria — ma restano comunque tre preset selezionabili esplicitamente (verifica
+// utente: "mi dicevi che hai previsto anche la modifica della durata"), persistiti per Meta su
+// planned_hikes.borgo_day_budget_minutes.
+export const DAY_BUDGET_MINUTES = 360
+export const HALF_DAY_BUDGET_MINUTES = 180
+export const MULTI_DAY_BUDGET_MINUTES = 600
+
+// Pavimento per il "trekking misto" sotto — un Borgo/Città con una traccia GPS reale collegata
+// (borgoCardVariant 'trekking_misto', lib/guideCardVariant.ts) non deve mai azzerare del tutto il
+// tempo per le soste culturali, anche quando il trek da solo esaurirebbe l'intera giornata: restano
+// sempre un paio di soste "flash" possibili lungo il percorso.
+const MIN_CULTURAL_BUDGET_MINUTES = 45
+
+/**
+ * Budget di tempo per tappa culturale — verifica utente: "budget residuo della giornata" per il
+ * trekking misto, "automatico dal contenuto" (dayBudgetOverrideMinutes assente) per stabilire se
+ * è mezza giornata/giornata/più giorni quando l'utente non ha mai scelto esplicitamente. Senza
+ * nessuna traccia GPS reale collegata (cammino_urbano, il caso comune) l'intera giornata è libera
+ * per la cultura: il budget (di default o scelto dall'utente) per intero. Con una traccia reale
+ * (trekking_misto) il tempo del cammino fisico vero e proprio va sottratto prima — quello resta
+ * legittimamente governato dal passo/storico escursionistico altrove (lib/hikerHistory.ts), qui
+ * arriva già come durata. Un dayBudgetOverrideMinutes esplicito (planned_hikes.
+ * borgo_day_budget_minutes) sostituisce solo il default automatico, la sottrazione del trekking
+ * misto si applica comunque sopra: scegliere "giornata intera" mentre si è a metà di un trek reale
+ * non deve mai promettere un'intera giornata libera che non esiste.
+ *
+ * trackDurationMinutes viene da PlannedHike.estimatedTimeSeconds — nasce a 0 per una Meta creata
+ * dalla ricerca (lib/metaToPlannedHike.ts) e diventa reale solo quando una traccia GPX viene
+ * davvero importata: lo stesso segnale usato da borgoCardVariant, senza dover rileggere
+ * trackPoints/routePolyline (molto più pesanti) solo per un controllo di presenza.
+ */
+export function culturalTappaBudgetMinutes(
+  trackDurationMinutes: number | undefined,
+  dayBudgetOverrideMinutes?: number,
+): number {
+  const dayBudget = dayBudgetOverrideMinutes ?? DAY_BUDGET_MINUTES
+  if (!trackDurationMinutes || trackDurationMinutes <= 0) return dayBudget
+  return Math.max(MIN_CULTURAL_BUDGET_MINUTES, dayBudget - trackDurationMinutes)
+}
+
+/**
+ * Divide l'itinerario ordinato (già l'esito di orderStopsNearestNeighbor + le legs reali già
+ * calcolate) in tappe percorribili — verifica utente: "all'interno dello stesso cammino non è
+ * ragionevole piazzare più di un certo numero di punti [...] impossibile visitare 30 musei in una
+ * camminata soltanto" + "un poi potrebbe essere molto vicino ma richiedere mezza giornata di
+ * visita". Una tappa si chiude al PRIMO dei due limiti raggiunto (numero di punti o TEMPO
+ * accumulato — cammino fino a quel punto più il tempo di visita di ciascuno, mai la sola
+ * distanza), mai oltre — ma non è mai vuota: il primo punto entra sempre, anche quando da solo
+ * supera già il budget (un singolo balzo lungo, o un museo molto lungo da visitare, non deve
+ * produrre una tappa fantasma senza nulla dentro).
+ */
+export function groupStopsIntoTappe(
+  center: { lat: number; lon: number },
+  stops: ItineraryStopCandidate[],
+  legs: ItineraryLeg[],
+  maxStopsPerTappa: number,
+  maxMinutesPerTappa: number,
+  // Iniettabile — di default il tempo per tipo di sito, ma il chiamante può passare
+  // effectiveVisitMinutesFor (sopra) per tenere conto degli slider dell'utente senza duplicare
+  // questo algoritmo.
+  visitMinutesForStop: (stop: ItineraryStopCandidate) => number = visitMinutesFor,
+): ItineraryTappa[] {
+  const tappe: ItineraryTappa[] = []
+  let currentStops: ItineraryStopCandidate[] = []
+  let currentLegs: ItineraryLeg[] = []
+  let currentDistanceM = 0
+  let currentMinutes = 0
+  let tappaStart = center
+
+  function flush() {
+    if (currentStops.length === 0) return
+    tappe.push({ stops: currentStops, legs: currentLegs, distanceM: currentDistanceM, totalMinutes: Math.round(currentMinutes), startPoint: tappaStart })
+    tappaStart = { lat: currentStops[currentStops.length - 1].lat, lon: currentStops[currentStops.length - 1].lon }
+    currentStops = []
+    currentLegs = []
+    currentDistanceM = 0
+    currentMinutes = 0
+  }
+
+  stops.forEach((stop, i) => {
+    const leg = legs[i]
+    const legDistanceM = leg?.distanceM ?? 0
+    const addedMinutes = (legDistanceM / WALK_SPEED_MPS / 60) + visitMinutesForStop(stop)
+    if (currentStops.length > 0 && (
+      currentStops.length >= maxStopsPerTappa ||
+      currentMinutes + addedMinutes > maxMinutesPerTappa
+    )) {
+      flush()
+    }
+    currentStops.push(stop)
+    currentLegs.push(leg)
+    currentDistanceM += legDistanceM
+    currentMinutes += addedMinutes
+  })
+  flush()
+
+  return tappe
+}
+
+// ── Spostamento manuale tra tappe (verifica utente — "ricalcolo reale al server quando l'utente
+// conferma", mai una linea d'aria istantanea lato client per QUESTO caso) e "spegnimento" di un
+// punto (istantaneo, sempre lato client: nessun tragitto reale da ricalcolare, solo un "ponte" tra
+// i due punti rimasti adiacenti). ────────────────────────────────────────────────────────────────
+
+/**
+ * Assembla una ItineraryTappa già pronta (stops+legs nello stesso ordine) sommando distanza e
+ * tempo — stessa formula di somma di groupStopsIntoTappe, usata quando i confini della tappa non
+ * derivano da un budget di tempo ma da un bucket già fissato altrove (un pin manuale di tappa,
+ * lib/routeBuilder/borgoTappePersonalization.ts): mai una seconda versione della somma che
+ * potrebbe divergere da quella "automatica".
+ */
+export function summarizeTappa(
+  stops: ItineraryStopCandidate[],
+  legs: ItineraryLeg[],
+  startPoint: { lat: number; lon: number },
+  visitMinutesForStop: (stop: ItineraryStopCandidate) => number = visitMinutesFor,
+): ItineraryTappa {
+  let distanceM = 0
+  let minutes = 0
+  stops.forEach((stop, i) => {
+    const legDistanceM = legs[i]?.distanceM ?? 0
+    distanceM += legDistanceM
+    minutes += (legDistanceM / WALK_SPEED_MPS / 60) + visitMinutesForStop(stop)
+  })
+  return { stops, legs, distanceM, totalMinutes: Math.round(minutes), startPoint }
+}
+
+/**
+ * Legs "ponte" in linea d'aria per una sequenza di waypoint — SOLO per un'anteprima ISTANTANEA
+ * lato client di uno spostamento manuale non ancora confermato (componenti/guida/widgets/
+ * BorgoTappeWidget.tsx): mai per il risultato finale mostrato dopo la conferma, quello arriva
+ * sempre da un vero ricalcolo lato server (computePersonalizedTappe, lib/routeBuilder/
+ * borgoTappePersonalization.ts) sulla rete pedonale reale. Stessa convenzione di indicizzazione di
+ * ogni altra leg in questo modulo (fromIdx -1 per il primo tratto).
+ */
+export function buildStraightLegs(waypoints: { lat: number; lon: number }[]): ItineraryLeg[] {
+  const legs: ItineraryLeg[] = []
+  for (let i = 0; i < waypoints.length - 1; i++) {
+    const from = waypoints[i]
+    const to = waypoints[i + 1]
+    legs.push({
+      fromIdx: i - 1,
+      toIdx: i,
+      distanceM: haversineM(from.lat, from.lon, to.lat, to.lon),
+      polyline: [[from.lat, from.lon], [to.lat, to.lon]],
+      real: false,
+    })
+  }
+  return legs
+}
+
+/**
+ * Raggruppa le tappe ATTIVE (già escluse quelle spente, partitionStopsByOverrides sopra) per tappa
+ * "effettiva": quella scelta dal raggruppamento automatico (groupStopsIntoTappe), salvo un pin
+ * esplicito dell'utente (override.tappaIndex, spostamento manuale) che vince sempre. Un pin oltre
+ * l'ultima tappa automatica apre le tappe intermedie/finali necessarie (mai un indice "perso" per
+ * mancanza di spazio) — il chiamante (l'endpoint di ricalcolo) riordina poi ciascun bucket a
+ * vicino-più-vicino e ne ricalcola i tragitti reali: questa funzione fa solo lo smistamento, mai
+ * l'ordine di visita al suo interno.
+ */
+export function bucketStopsByEffectiveTappa(
+  autoTappe: ItineraryTappa[],
+  overrides: BorgoItineraryOverrides | undefined,
+): ItineraryStopCandidate[][] {
+  if (!overrides) return autoTappe.map(t => [...t.stops])
+
+  const assignments: { stop: ItineraryStopCandidate; tappaIndex: number }[] = []
+  autoTappe.forEach((tappa, autoIdx) => {
+    for (const stop of tappa.stops) {
+      const pinned = overrides[stop.id]?.tappaIndex
+      assignments.push({ stop, tappaIndex: pinned != null ? Math.max(0, pinned) : autoIdx })
+    }
+  })
+
+  const bucketCount = assignments.reduce((max, a) => Math.max(max, a.tappaIndex + 1), autoTappe.length)
+  const buckets: ItineraryStopCandidate[][] = Array.from({ length: bucketCount }, () => [])
+  for (const { stop, tappaIndex } of assignments) buckets[tappaIndex].push(stop)
+
+  return buckets.filter(b => b.length > 0)
+}
+
+/**
+ * Anteprima ISTANTANEA (nessun round-trip al server) di uno "spegnimento": rimuove i punti indicati
+ * da stops/legs di una singola tappa, sostituendo le legs spezzate da un punto rimosso con un'unica
+ * nuova leg "ponte" (linea d'aria tra i due punti rimasti adiacenti, mai spacciata per reale) — le
+ * legs non toccate da una rimozione restano quelle originali, reali o meno che fossero. Opera su UNA
+ * tappa alla volta (le stesse `stops`/`legs` già mostrate da BorgoTappeWidget), non sull'intero
+ * itinerario: riattivare il punto in seguito significa semplicemente ricalcolare questa funzione
+ * senza quell'id nell'insieme, mai una richiesta al server per un'operazione reversibile e gratuita.
+ */
+export function spliceLegsForRemovedStops(
+  stops: ItineraryStopCandidate[],
+  legs: ItineraryLeg[],
+  removedStopIds: Set<string>,
+  tappaStart: { lat: number; lon: number },
+): { stops: ItineraryStopCandidate[]; legs: ItineraryLeg[] } {
+  const resultStops: ItineraryStopCandidate[] = []
+  const resultLegs: ItineraryLeg[] = []
+  let prevPoint = tappaStart
+
+  stops.forEach((stop, i) => {
+    if (removedStopIds.has(stop.id)) return
+    resultStops.push(stop)
+    const prevOriginal = stops[i - 1]
+    if (prevOriginal && removedStopIds.has(prevOriginal.id)) {
+      resultLegs.push({
+        fromIdx: resultStops.length - 2,
+        toIdx: resultStops.length - 1,
+        distanceM: haversineM(prevPoint.lat, prevPoint.lon, stop.lat, stop.lon),
+        polyline: [[prevPoint.lat, prevPoint.lon], [stop.lat, stop.lon]],
+        real: false,
+      })
+    } else {
+      const leg = legs[i]
+      resultLegs.push({ ...leg, fromIdx: resultStops.length - 2, toIdx: resultStops.length - 1 })
+    }
+    prevPoint = { lat: stop.lat, lon: stop.lon }
+  })
+
+  return { stops: resultStops, legs: resultLegs }
 }

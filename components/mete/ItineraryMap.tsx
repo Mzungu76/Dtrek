@@ -11,6 +11,10 @@ interface Props {
   legs: ItineraryLeg[]
   color: string
   height?: string
+  /** Punti "spenti" dall'utente (piano guide-eccellenza Fase 2, verifica utente: "renderli
+   *  semitrasparenti in mappa") — mostrati senza numero né tragitto, solo un marker attenuato a
+   *  indicare che esistono ma non fanno parte dell'itinerario corrente; mai rimossi del tutto. */
+  dimmedStops?: ItineraryStop[]
 }
 
 function escapeHtml(s: string): string {
@@ -19,7 +23,9 @@ function escapeHtml(s: string): string {
 
 // Stesso taglio del popup POI di un Sentiero (lib/overpass.ts's buildPoiPopupHtml) — nome, foto se
 // disponibile, descrizione se disponibile: mai solo il numero/nome nudo come prima (verifica
-// utente, piano guide-eccellenza).
+// utente, piano guide-eccellenza). Mostrato SOLO a schermo intero (vedi namePopupHtml sotto) —
+// verifica utente: a mappa normale lo spazio è stretto, un popup con foto/testo lungo copre metà
+// mappa e costringe a chiuderlo subito; a schermo intero c'è spazio per leggerlo comodamente.
 function stopPopupHtml(n: string, name: string, stop?: ItineraryStop): string {
   const thumb = stop?.thumbnail
     ? `<img src="${stop.thumbnail}" alt="" style="width:100%;height:90px;object-fit:cover;border-radius:8px;margin-bottom:6px" />`
@@ -35,6 +41,12 @@ function stopPopupHtml(n: string, name: string, stop?: ItineraryStop): string {
   </div>`
 }
 
+// Solo il nome (e il numero d'ordine) — la versione a mappa NON a schermo intero, vedi il
+// commento su stopPopupHtml sopra.
+function namePopupHtml(n: string, name: string): string {
+  return `<div style="font-family:system-ui,sans-serif;font-size:13px;font-weight:700;color:#111827;white-space:nowrap">${n}. ${escapeHtml(name)}</div>`
+}
+
 const chipBase = 'flex items-center justify-center w-9 h-9 rounded-full backdrop-blur-md border transition-colors shrink-0 bg-black/50 border-white/15 text-white/90'
 
 /** Mappa dell'itinerario a piedi di un Borgo/Città — un tracciato reale (leg.real) disegnato pieno,
@@ -44,11 +56,18 @@ const chipBase = 'flex items-center justify-center w-9 h-9 rounded-full backdrop
  *  visita, il Borgo stesso come punto di partenza (0). Ampliabile a tutto schermo (stesso pattern
  *  di components/guida/PoiMap.tsx) — verifica utente: prima restava sempre alla sua altezza fissa,
  *  scomoda per leggere i popup delle tappe più fitte. */
-export default function ItineraryMap({ center, stops, legs, color, height = '320px' }: Props) {
+export default function ItineraryMap({ center, stops, legs, color, height = '320px', dimmedStops = [] }: Props) {
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstance = useRef<L.Map | null>(null)
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
   const [fullscreen, setFullscreen] = useState(false)
+  // I marker sono creati una sola volta al mount (useEffect con deps [] sotto, stesso motivo già
+  // spiegato per la key della mappa in BorgoTappeWidget) — un ref invece di leggere `fullscreen`
+  // direttamente lascia al popup (bindPopup con una funzione, richiamata da Leaflet ad ogni
+  // apertura) la possibilità di mostrare il contenuto giusto per lo stato ATTUALE, anche se
+  // l'utente cambia schermo intero mentre la mappa è già montata.
+  const fullscreenRef = useRef(false)
+  fullscreenRef.current = fullscreen
 
   useEffect(() => {
     if (!mapRef.current || mapInstance.current) return
@@ -65,7 +84,11 @@ export default function ItineraryMap({ center, stops, legs, color, height = '320
         maxZoom: 19,
       }).addTo(map)
 
-      const boundsPoints: [number, number][] = [[center.lat, center.lon], ...stops.map(s => [s.lat, s.lon] as [number, number])]
+      const boundsPoints: [number, number][] = [
+        [center.lat, center.lon],
+        ...stops.map(s => [s.lat, s.lon] as [number, number]),
+        ...dimmedStops.map(s => [s.lat, s.lon] as [number, number]),
+      ]
 
       for (const leg of legs) {
         L.polyline(leg.polyline, {
@@ -92,7 +115,25 @@ export default function ItineraryMap({ center, stops, legs, color, height = '320
 
       stops.forEach((stop, i) => {
         const marker = L.marker([stop.lat, stop.lon], { icon: numberedIcon(String(i + 1), color) })
-        marker.bindPopup(stopPopupHtml(String(i + 1), stop.name, stop), { maxWidth: 250 })
+        // Leaflet richiama questa funzione ad ogni apertura del popup, non solo alla creazione —
+        // legge fullscreenRef.current al momento del click, mai quello (magari già superato) di
+        // quando il marker è stato costruito.
+        marker.bindPopup(
+          () => fullscreenRef.current ? stopPopupHtml(String(i + 1), stop.name, stop) : namePopupHtml(String(i + 1), stop.name),
+          { maxWidth: 250 },
+        )
+        marker.addTo(map)
+      })
+
+      // Punti spenti — un'icona attenuata (opacity, nessun numero d'ordine: non fanno parte del
+      // percorso), mai una linea che li collega: restano visibili solo come promemoria "qui c'è
+      // ancora qualcosa, riattivabile" (verifica utente).
+      dimmedStops.forEach(stop => {
+        const marker = L.marker([stop.lat, stop.lon], { icon: numberedIcon('·', '#a8a29e'), opacity: 0.45 })
+        marker.bindPopup(
+          () => fullscreenRef.current ? stopPopupHtml('Spento', stop.name, stop) : namePopupHtml('Spento', stop.name),
+          { maxWidth: 250 },
+        )
         marker.addTo(map)
       })
 
@@ -130,13 +171,13 @@ export default function ItineraryMap({ center, stops, legs, color, height = '320
     >
       <div ref={mapRef} style={{ height: '100%' }} />
       <div
-        className="absolute inset-x-3 z-[1000] flex items-center justify-end"
+        className="absolute inset-x-3 z-[1000] flex items-center justify-end pointer-events-none"
         style={{ top: fullscreen ? 'calc(env(safe-area-inset-top, 0px) + 12px)' : '10px' }}
       >
         <button
           onClick={toggleFullscreen}
           title={fullscreen ? 'Esci da schermo intero' : 'Schermo intero'}
-          className={chipBase}
+          className={`${chipBase} pointer-events-auto`}
         >
           {fullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
         </button>

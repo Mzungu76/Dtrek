@@ -84,6 +84,29 @@ export function ptprBorgoIdentitarioFactor(metadata: Record<string, unknown> | n
   return { factor: 'ptpr_borgo_identitario', score: metadata?.ptprBorgoIdentitario === true ? 1 : 0, weight: 0.15 }
 }
 
+// Popolazione (ISTAT, scripts/places/istat/population.ts — presente su quasi tutte le righe
+// borgo_citta oggi, verificato in produzione) — verifica utente: senza questo segnale una città
+// enorme come Padova/Verona/Parma pesa quanto un Comune di poche decine di abitanti in una
+// ricerca "in quest'area" (MeteSearchMap.tsx), e con centinaia di Comuni nella stessa regione
+// (es. 560 in Veneto) i risultati vengono tagliati al limite — senza nessun fattore che privilegi
+// una città nota, quella grande può sparire dietro decine di piccoli borghi con lo stesso
+// punteggio sugli altri fattori. Scala logaritmica (non lineare): quello che conta all'utente è
+// "piccolo borgo" vs "città" vs "grande città", non il conteggio esatto degli abitanti — una
+// scala lineare schiaccerebbe ogni città sotto qualche centinaio di migliaia di abitanti quasi a
+// zero rispetto a una metropoli, qui invece la differenza resta percepibile a ogni fascia di
+// dimensione.
+const POPULATION_SCORE_FLOOR_LOG10 = Math.log10(100)         // un piccolo borgo (~100 abitanti) → punteggio 0
+const POPULATION_SCORE_CEILING_LOG10 = Math.log10(1_000_000) // una grande città (es. Roma/Milano) → punteggio pieno
+
+// undefined/null/non positiva ⇒ fattore assente (mai una penalizzazione per una riga non ancora
+// arricchita — stesso principio di interestMatchFactor sopra), non uno zero che la farebbe
+// sistematicamente perdere contro ogni riga che invece la popolazione ce l'ha.
+export function populationFactor(population: number | null | undefined): RankingFactor | null {
+  if (population == null || population <= 0) return null
+  const raw = (Math.log10(population) - POPULATION_SCORE_FLOOR_LOG10) / (POPULATION_SCORE_CEILING_LOG10 - POPULATION_SCORE_FLOOR_LOG10)
+  return { factor: 'popolazione', score: Math.min(1, Math.max(0, raw)), weight: 0.35 }
+}
+
 export function combineFactors(factors: (RankingFactor | null)[]): RankingResult {
   return combine(factors.filter((f): f is RankingFactor => f !== null))
 }

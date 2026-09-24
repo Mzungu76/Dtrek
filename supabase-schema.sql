@@ -1289,6 +1289,15 @@ CREATE INDEX IF NOT EXISTS idx_planned_hikes_place_id ON planned_hikes (place_id
 ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS borgo_walk_polyline JSONB;
 ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS borgo_walk_stops_hash TEXT;
 
+-- Piano guide-eccellenza Fase 2 — vedi supabase/migrations/add_planned_hikes_borgo_itinerary_overrides.sql
+-- per i commenti completi. Personalizzazioni PER-UTENTE dell'itinerario di un Borgo/Città (slider
+-- tempo di visita, punti spenti, spostamento manuale tra tappe) — mappa sparsa per id di tappa,
+-- mai duplicata sulla cache condivisa dtrek_places.itinerary_cache sotto.
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS borgo_itinerary_overrides JSONB;
+-- Override esplicito del budget-giornata (mezza giornata/giornata/più giorni scelto
+-- manualmente) — NULL ricade sull'automatico dal contenuto.
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS borgo_day_budget_minutes SMALLINT;
+
 -- Verifica utente — vedi supabase/migrations/add_dtrek_places_itinerary_cache.sql per i commenti
 -- completi. Cache dell'intero BorgoItinerary (stops+legs+totali) SUL BORGO stesso (mai su
 -- planned_hikes: l'itinerario dipende solo dalla posizione del borgo, condivisa tra tutte le

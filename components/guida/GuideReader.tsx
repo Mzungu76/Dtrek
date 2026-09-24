@@ -10,7 +10,7 @@ import { LS_KEYS } from '@/lib/localStore'
 import type { WikiPage } from '@/lib/wikipedia'
 import {
   VolumeX, Loader2,
-  FileDown, BookOpen, Sparkles, ChevronRight,
+  FileDown, BookOpen, Sparkles,
 } from 'lucide-react'
 import type { PoiItem } from '@/lib/overpass'
 import PhotoMosaic from '@/components/PhotoMosaic'
@@ -225,6 +225,18 @@ function getItalianVoice(): SpeechSynthesisVoice | null {
 }
 
 const RATES = [0.8, 1, 1.2, 1.5]
+
+// Verifica utente: "aprendo e chiudendo la guida ha rifatto l'elaborazione almeno 3 volte" —
+// GuideReader viene montato solo quando la sezione attiva è 'featured' (vedi GuidaHub.tsx),
+// quindi passare ad un'altra sezione e tornare lo SMONTA e RIMONTA, azzerando lo state
+// (borgoItinerary) e rifacendo da capo la POST /api/borgo-itinerary ad ogni volta — anche su un
+// hit di cache lato server questo resta un giro di rete evitabile e un lampo "in caricamento"
+// ingiustificato per un itinerario che il browser ha già visto in questa stessa sessione. Cache
+// di modulo (non uno state, sopravvive ai remount di QUESTO componente finché la pagina resta
+// caricata, mai persistita oltre: un refresh vero deve comunque poter vedere un dato aggiornato)
+// indicizzata per hikeId — le personalizzazioni (overrides) dipendono da QUESTA Meta, mai dal
+// solo placeId condiviso fra guide diverse sullo stesso Borgo.
+const borgoItineraryMemoryCache = new Map<string, BorgoItinerary>()
 
 /**
  * Magazine-style tourist guide reader. The Breve tier is generated automatically (no user
@@ -469,6 +481,12 @@ export default function GuideReader({
   // "trekking misto" mostra la timeline delle tappe interne, solo non le sue pillole.
   useEffect(() => {
     if (hike.metaType !== 'borgo_citta' || !hike.placeId) return
+    // Verifica utente ("aprendo e chiudendo la guida ha rifatto l'elaborazione almeno 3 volte") —
+    // già visto in QUESTA sessione (un remount precedente di questo stesso componente, GuideReader
+    // è montato solo mentre la sezione 'featured' è attiva) → nessuna nuova richiesta, mai un
+    // lampo "in caricamento" per un dato che il browser ha già.
+    const memoryCached = borgoItineraryMemoryCache.get(hike.id)
+    if (memoryCached) { setBorgoItinerary(memoryCached); return }
     // Un borgoWalkPolyline già persistito (creato al volo dal popup di ricerca o da una guida
     // aperta in precedenza, vedi lib/useCreateMetaFromSearch.ts) significa che l'itinerario esiste
     // già: questa richiesta lo ricalcola comunque (mai la stessa istanza — vedi il commento sopra
@@ -480,12 +498,16 @@ export default function GuideReader({
     fetch('/api/borgo-itinerary', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ placeId: hike.placeId }),
+      // hikeId — piano guide-eccellenza Fase 2: applica le personalizzazioni già confermate
+      // dall'utente per QUESTA Meta (planned_hikes.borgo_itinerary_overrides), mai quelle di
+      // un'altra Meta che punta allo stesso Borgo.
+      body: JSON.stringify({ placeId: hike.placeId, hikeId: hike.id }),
     })
       .then(res => res.ok ? res.json() : null)
       .then(data => {
         if (cancelled || !data) return
         const itinerary = data as BorgoItinerary
+        borgoItineraryMemoryCache.set(hike.id, itinerary)
         setBorgoItinerary(itinerary)
         // Naviga (piano guide-eccellenza, verifica post-piano) — persiste l'itinerario a piedi
         // reale (legs, già calcolato qui sopra) come polyline unica riusabile dal Navigator, in un
@@ -937,13 +959,34 @@ export default function GuideReader({
         // mai PoiListWidget qui, è costruita per un Sentiero (mappa del tracciato, Street View,
         // POI OSM) che un Borgo/Città non ha.
         if (hike.metaType === 'borgo_citta') {
-          if (borgoItinerary && borgoItinerary.stops.length > 0) {
+          if (borgoItinerary && borgoItinerary.tappe.length > 0 && hike.placeId) {
             return (
               <BorgoTappeWidget
+                key={hike.id}
                 stops={borgoItinerary.stops}
                 legs={borgoItinerary.legs}
-                center={hike.latitude != null && hike.longitude != null ? { lat: hike.latitude, lon: hike.longitude } : undefined}
+                center={{ lat: hike.latitude ?? borgoItinerary.stops[0].lat, lon: hike.longitude ?? borgoItinerary.stops[0].lon }}
+                maxStopsPerTappa={borgoItinerary.maxStopsPerTappa}
+                maxMinutesPerTappa={borgoItinerary.maxMinutesPerTappa}
+                serverTappe={borgoItinerary.tappe}
                 color={SECTION_STYLE.luoghi.color}
+                placeId={hike.placeId}
+                hikeId={hike.id}
+                savedOverrides={hike.borgoItineraryOverrides}
+                savedDayBudgetMinutes={hike.borgoDayBudgetMinutes}
+                onOverridesSaved={overrides => {
+                  updatePlannedMeta(hike.id, { borgoItineraryOverrides: overrides }).catch(() => {})
+                  onHikeUpdate({ borgoItineraryOverrides: overrides })
+                  // Invalida la cache di modulo sopra — un remount successivo di questo componente
+                  // (cambio sezione e ritorno) deve ripartire dalle personalizzazioni appena
+                  // salvate, mai da uno snapshot precedente al cambio.
+                  borgoItineraryMemoryCache.delete(hike.id)
+                }}
+                onDayBudgetSaved={dayBudgetMinutes => {
+                  updatePlannedMeta(hike.id, { borgoDayBudgetMinutes: dayBudgetMinutes }).catch(() => {})
+                  onHikeUpdate({ borgoDayBudgetMinutes: dayBudgetMinutes })
+                  borgoItineraryMemoryCache.delete(hike.id)
+                }}
               />
             )
           }
@@ -1314,6 +1357,34 @@ export default function GuideReader({
 
           <div className="min-w-0 px-4 sm:px-6 md:px-0 md:max-w-3xl lg:max-w-[52rem]">
 
+            {/* Verifica utente: cliccare "Genera il resto"/"Approfondisci" sembrava non fare
+                nulla — il banner sotto (quello con la scelta delle sezioni) SPARISCE non appena
+                generatingSections si valorizza, senza nulla al suo posto finché l'utente non
+                scorre fino allo spinner per-sezione, facile da perdere. Questo banner prende lo
+                stesso spazio quando una generazione è in corso, da QUALUNQUE bottone sia partita
+                (banner qui sotto, riga "+N sezioni", o "Approfondisci" su una singola sezione già
+                visibile più in basso — generatingSections è lo stesso stato condiviso). */}
+            {hasGuide && generatingSections.length > 0 && (
+              <div className="mt-4 flex items-center gap-3 px-4 py-3 rounded-2xl bg-terra-50 border border-terra-200">
+                <Loader2 className="w-4 h-4 text-terra-600 shrink-0 animate-spin" />
+                <p className="text-[13px] font-semibold text-stone-800">
+                  Giulia sta scrivendo {generatingSections.length === 1 ? 'la sezione' : `${generatingSections.length} sezioni`}…
+                </p>
+              </div>
+            )}
+
+            {/* Verifica utente: un errore di generazione (es. il cooldown anti-click-ripetuto,
+                lib/aiCooldown.ts, o l'AI temporaneamente non disponibile) finiva mostrato in fondo
+                a TUTTE le sezioni della guida — fuori dallo schermo rispetto a dove l'utente ha
+                appena cliccato "Genera il resto"/"Approfondisci" quassù, indistinguibile da "non è
+                successo nulla". Spostato subito sotto il banner di caricamento, sempre visibile
+                senza scorrere. */}
+            {error && (
+              <div className="mt-4 p-4 bg-red-50 border border-red-100 rounded-xl text-sm text-red-600">
+                {error}
+              </div>
+            )}
+
             {/* ── Genera il resto della guida — verifica utente: scelta per sezione, mai più
                  tutte insieme senza alternativa ────────────────────────────────────────── */}
             {hasGuide && !generating && generatingSections.length === 0 && missingSectionKeys.length > 0 && (() => {
@@ -1463,65 +1534,32 @@ export default function GuideReader({
             <div className="mt-4">
               {navEntries.map(({ section: s, index: i }) => {
                 // La prima sezione vuota (piano guide-eccellenza §Fase 1.1) diventa una riga
-                // compatta unica che riassume TUTTE le sezioni vuote insieme, con un'unica azione
-                // — le altre non hanno più una card propria in questo loop (navEntries le esclude
-                // già, vedi sopra), invece di N placeholder quasi identici sparsi nello scroll.
+                // compatta unica che riassume TUTTE le sezioni vuote insieme — le altre non hanno
+                // più una card propria in questo loop (navEntries le esclude già, vedi sopra),
+                // invece di N placeholder quasi identici sparsi nello scroll. Verifica utente: qui
+                // dentro c'era ANCHE un secondo set di chip + un secondo bottone "Approfondisci"
+                // per scegliere/generare le stesse sezioni — praticamente duplicato del banner
+                // "Genera il resto della guida" appena sopra la lista (stesso deselectedSections,
+                // stessa generateSections()), la vecchia modalità prima di quel banner mai rimossa
+                // dopo la riscrittura. Questa riga resta solo come segnaposto di stato (quante
+                // sezioni mancano ancora, e se un approfondimento è in corso) — la scelta/l'azione
+                // vive un'unica volta, nel banner sopra.
                 if (i === firstEmptyIndex) {
                   const approfondendoMerged = emptySections.some(es => generatingSections.includes(es.guideKey))
-                  const emptyKeys = emptySections.map(es => es.guideKey)
-                  const selectedEmpty = selectedFrom(emptyKeys)
                   return (
                     <article
                       key={s.key}
                       ref={el => { sectionRefs.current[i] = el }}
-                      className="scroll-mt-16 flex flex-col gap-2 px-4 py-3 border border-stone-200 rounded-xl bg-white mb-2.5"
+                      className="scroll-mt-16 flex items-center gap-3 px-4 py-3 border border-stone-200 rounded-xl bg-white mb-2.5"
                     >
-                      <div className="flex items-center gap-3">
-                        <span className="[&>svg]:w-4 [&>svg]:h-4 shrink-0 text-stone-400">{LEGACY_STYLE.icon}</span>
-                        <span className="flex-1 min-w-0 text-[13px] font-semibold text-stone-800">
-                          + {emptySections.length} {emptySections.length === 1 ? 'sezione da generare' : 'sezioni da generare'}
+                      <span className="[&>svg]:w-4 [&>svg]:h-4 shrink-0 text-stone-400">{LEGACY_STYLE.icon}</span>
+                      <span className="flex-1 min-w-0 text-[13px] font-semibold text-stone-800">
+                        + {emptySections.length} {emptySections.length === 1 ? 'sezione da generare' : 'sezioni da generare'}
+                      </span>
+                      {approfondendoMerged && (
+                        <span className="flex items-center gap-1 text-[11.5px] font-medium text-stone-400 shrink-0">
+                          <Loader2 className="w-3 h-3 animate-spin" /> Approfondimento…
                         </span>
-                        {approfondendoMerged && (
-                          <span className="flex items-center gap-1 text-[11.5px] font-medium text-stone-400 shrink-0">
-                            <Loader2 className="w-3 h-3 animate-spin" /> Approfondimento…
-                          </span>
-                        )}
-                      </div>
-                      {!approfondendoMerged && showApprofondisciHint && generatingSections.length === 0 && (
-                        <>
-                          {/* Verifica utente: chip per sezione, non più un unico "Approfondisci"
-                              che le generava tutte insieme senza scelta. */}
-                          <div className="flex flex-wrap gap-1.5">
-                            {emptySections.map(es => {
-                              const isSelected = !deselectedSections.has(es.guideKey)
-                              return (
-                                <button
-                                  key={es.guideKey}
-                                  type="button"
-                                  onClick={() => toggleSectionSelected(es.guideKey)}
-                                  className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-colors ${
-                                    isSelected
-                                      ? 'bg-terra-100 border-terra-200 text-terra-700'
-                                      : 'bg-stone-50 border-stone-200 text-stone-400 line-through'
-                                  }`}
-                                >
-                                  {es.title}
-                                </button>
-                              )
-                            })}
-                          </div>
-                          <div className="flex flex-wrap items-center justify-end gap-2">
-                            <button
-                              onClick={() => generateSections(selectedEmpty)}
-                              disabled={selectedEmpty.length === 0}
-                              className="flex items-center gap-0.5 text-[11.5px] font-bold text-terra-600 hover:text-terra-700 disabled:text-stone-300 disabled:cursor-not-allowed shrink-0 whitespace-nowrap"
-                            >
-                              {selectedEmpty.length === 0
-                                ? 'Seleziona almeno una sezione'
-                                : <>Approfondisci con Giulia (AI) <ChevronRight className="w-3 h-3" /></>}
-                            </button>
-                          </div>
-                        </>
                       )}
                     </article>
                   )
@@ -1564,12 +1602,6 @@ export default function GuideReader({
                 </div>
               )}
             </div>
-
-            {error && (
-              <div className="mt-4 p-4 bg-red-50 border border-red-100 rounded-xl text-sm text-red-600">
-                {error}
-              </div>
-            )}
 
             {hasGuide && !generating && galleryItems.length > 0 && (
               <div className="mt-4 mb-1">

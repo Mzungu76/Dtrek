@@ -16,6 +16,7 @@ import type { FloraResult } from './floraTypes'
 import type { GuideNotice } from './guideNotices'
 import type { RouteMode } from './routeMode'
 import { metaHasHikingMetrics, type MetaType, type SiteType } from './metaTypes'
+import type { BorgoItineraryOverrides } from './metaSearch/borgoItinerary'
 
 export type { HikeAssessment, AssessmentItem } from './hikeAssessment'
 export type { HikeNote } from './blobStore'
@@ -136,6 +137,19 @@ export interface PlannedHike {
   // cambia nel breve termine, stesso principio di dtmTrackHash/floraTrackHash.
   borgoWalkPolyline?:            [number, number][]
   borgoWalkStopsHash?:           string
+  // Personalizzazioni PER-UTENTE dell'itinerario di un Borgo/Città (piano guide-eccellenza Fase 2,
+  // verifica utente: slider del tempo di visita, punto "spento", spostamento manuale tra tappe) —
+  // mappa sparsa per id di tappa (lib/metaSearch/borgoItinerary.ts), mai un default duplicato per
+  // ogni punto. Applicata server-side (app/api/borgo-itinerary) sopra all'itinerario base
+  // condiviso (dtrek_places.itinerary_cache), mai dentro quella cache: è specifica di QUESTA Meta
+  // pianificata, non del borgo in generale.
+  borgoItineraryOverrides?:      BorgoItineraryOverrides
+  // Budget-giornata scelto esplicitamente per QUESTA visita (verifica utente: "mi dicevi che hai
+  // previsto anche la modifica della durata") — mezza giornata/giornata/più giorni, in minuti
+  // (HALF_DAY_BUDGET_MINUTES/DAY_BUDGET_MINUTES/MULTI_DAY_BUDGET_MINUTES, lib/metaSearch/
+  // borgoItinerary.ts). undefined quando l'utente non ha mai toccato il selettore: ricade
+  // sull'automatico dal contenuto (culturalTappaBudgetMinutes senza override).
+  borgoDayBudgetMinutes?:        number
   // Metadati di un percorso "trovato" da Giulia (ricerca AI di un percorso già documentato, vedi
   // components/upload/RouteBuilder.tsx / GiuliaSearchPanel.tsx) invece che costruito
   // algoritmicamente — assenti su un percorso costruito o importato in altro modo. Valorizzati una
@@ -334,7 +348,7 @@ export async function savePlanned(hike: PlannedHike): Promise<{ assessment?: Hik
 /** Applies a partial update to the local cache immediately and queues it for background sync. */
 export async function updatePlannedMeta(
   id: string,
-  meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'hikeNotes' | 'tags' | 'plannedDate' | 'cachedPois' | 'cachedPoiWiki' | 'cachedGuide' | 'cachedGuideSubtitle' | 'cachedGuideNotices' | 'cachedGuideSources' | 'guideTier' | 'guideGeneratedAt' | 'cachedEpochPois' | 'cachedBeautyScore' | 'cachedTrailScore' | 'cachedTrailScoreConfidence' | 'cachedScoresComputedAt' | 'cachedSafetyScore' | 'cachedSafetyComputedAt' | 'cachedTsTotal' | 'cachedDrivingDistanceMeters' | 'cachedDrivingDurationSeconds' | 'cachedDrivingOriginLat' | 'cachedDrivingOriginLon' | 'pendingExpiresAt' | 'archivedAt' | 'favorite' | 'firstCompletedAt' | 'diaryId' | 'routeMode' | 'dtmProfile' | 'dtmTrackHash' | 'dtmComputedAt' | 'terrainProfile' | 'terrainTrackHash' | 'terrainComputedAt' | 'cachedInProtectedArea' | 'cachedProtectedAreaTrackHash' | 'cachedProtectedAreaComputedAt' | 'floraResult' | 'floraTrackHash' | 'floraComputedAt' | 'borgoWalkPolyline' | 'borgoWalkStopsHash'>>,
+  meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'hikeNotes' | 'tags' | 'plannedDate' | 'cachedPois' | 'cachedPoiWiki' | 'cachedGuide' | 'cachedGuideSubtitle' | 'cachedGuideNotices' | 'cachedGuideSources' | 'guideTier' | 'guideGeneratedAt' | 'cachedEpochPois' | 'cachedBeautyScore' | 'cachedTrailScore' | 'cachedTrailScoreConfidence' | 'cachedScoresComputedAt' | 'cachedSafetyScore' | 'cachedSafetyComputedAt' | 'cachedTsTotal' | 'cachedDrivingDistanceMeters' | 'cachedDrivingDurationSeconds' | 'cachedDrivingOriginLat' | 'cachedDrivingOriginLon' | 'pendingExpiresAt' | 'archivedAt' | 'favorite' | 'firstCompletedAt' | 'diaryId' | 'routeMode' | 'dtmProfile' | 'dtmTrackHash' | 'dtmComputedAt' | 'terrainProfile' | 'terrainTrackHash' | 'terrainComputedAt' | 'cachedInProtectedArea' | 'cachedProtectedAreaTrackHash' | 'cachedProtectedAreaComputedAt' | 'floraResult' | 'floraTrackHash' | 'floraComputedAt' | 'borgoWalkPolyline' | 'borgoWalkStopsHash' | 'borgoItineraryOverrides' | 'borgoDayBudgetMinutes'>>,
 ): Promise<void> {
   const local = await lsGet<PlannedHike>(LS_KEYS.planned(id))
   if (local) await lsSet(LS_KEYS.planned(id), { ...local, ...meta })

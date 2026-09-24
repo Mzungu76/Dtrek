@@ -2,7 +2,7 @@
 // come un grafo navigabile — a differenza di lib/overpassTrails.ts, che cerca solo relation
 // route=hiking per nome, qui servono le way generiche con i node id (non solo la geometria), così
 // i nodi condivisi tra way diverse restano visibili come intersezioni reali della rete stradale.
-import { fetchOverpass } from '@/lib/overpassTrails'
+import { OVERPASS_ENDPOINTS } from '@/lib/overpassTrails'
 import { haversineM, simplifyPolyline } from '@/lib/geoUtils'
 import { mapOsmSacScale } from '@/lib/osm/sacScale'
 
@@ -46,13 +46,14 @@ const WALKABLE_ACCESS_FILTER =
 const WALKABLE_FOOT_OVERRIDE_FILTER = '["foot"~"^(yes|permissive|designated)$"]'
 
 // Bump ad ogni cambio della query stessa (WALKABLE_HIGHWAY, i filtri di accesso sopra, o
-// qualunque altro filtro dentro fetchWalkNetwork sotto) — lib/routeBuilder/walkNetworkCache.ts lo
-// include nella chiave di cache proprio perché la chiave è altrimenti solo il bbox: senza questo,
-// una rete già in cache da PRIMA di un cambio di filtro (es. l'aggiunta di tertiary/secondary, o
-// di pedestrian/living_street sopra) resterebbe servita così com'era, con lo stesso identico buco
-// nei dati che il cambio doveva risolvere, fino alla scadenza naturale della cache (45gg) — un fix
-// silenziosamente inefficace per qualunque bbox già visitato.
-export const WALK_NETWORK_QUERY_VERSION = 3
+// qualunque altro filtro dentro fetchWalkNetwork sotto, INCLUSA stitchNearbyEndpoints — cambia la
+// forma del grafo restituito, non solo la query Overpass) — lib/routeBuilder/walkNetworkCache.ts
+// lo include nella chiave di cache proprio perché la chiave è altrimenti solo il bbox: senza
+// questo, una rete già in cache da PRIMA di un cambio di filtro (es. l'aggiunta di tertiary/
+// secondary, o di pedestrian/living_street sopra) resterebbe servita così com'era, con lo stesso
+// identico buco nei dati che il cambio doveva risolvere, fino alla scadenza naturale della cache
+// (45gg) — un fix silenziosamente inefficace per qualunque bbox già visitato.
+export const WALK_NETWORK_QUERY_VERSION = 4
 
 export interface GraphNode {
   lat: number
@@ -107,6 +108,64 @@ function addEdge(nodes: Map<number, GraphNode>, fromId: number, toId: number, wa
   to.edges.push({ to: fromId, distM, wayId, highway, sacScale, ford })
 }
 
+interface OverpassNetworkResponse { elements: OverpassEl[]; remark?: string }
+
+async function fetchOverpassNetworkOnce(endpoint: string, query: string, timeoutMs: number): Promise<OverpassNetworkResponse> {
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `data=${encodeURIComponent(query)}`,
+    signal: AbortSignal.timeout(timeoutMs),
+  })
+  if (!res.ok) throw new Error(`status ${res.status}`)
+  return res.json()
+}
+
+/**
+ * Verifica utente ("gli itinerari sono tornati in linea d'aria", anche dopo aver alzato
+ * WALK_NETWORK_TIMEOUT_MS a 45s) — causa reale trovata sui dati: lib/overpassTrails.ts's
+ * fetchOverpass fa una Promise.any fra i 3 mirror, "il primo che risponde vince". Ottimo per una
+ * query leggera dove ogni mirror o fallisce o restituisce la stessa risposta completa — sbagliato
+ * per QUESTA query (la rete pedonale di un centro storico denso, spesso al limite del [timeout:]
+ * interno di Overpass): un mirror può rispondere PRIMA degli altri proprio perché ha rinunciato
+ * prima, restituendo una rete PARZIALE (HTTP 200, `remark` valorizzato) — la corsa premiava sempre
+ * il mirror più "pigro", anche quando un altro stava per restituire la rete COMPLETA solo qualche
+ * secondo dopo. allSettled aspetta ogni mirror fino al proprio timeoutMs (già applicato per
+ * richiesta, quindi nessun costo aggiuntivo nel caso peggiore rispetto a prima), poi sceglie la
+ * risposta migliore fra quelle arrivate: una completa se ce n'è almeno una, altrimenti la parziale
+ * con più elementi — mai la prima e basta.
+ */
+async function fetchWalkNetworkOnceAcrossMirrors(query: string, timeoutMs: number): Promise<OverpassNetworkResponse | null> {
+  const settled = await Promise.allSettled(
+    OVERPASS_ENDPOINTS.map(endpoint => fetchOverpassNetworkOnce(endpoint, query, timeoutMs)),
+  )
+  const results = settled
+    .filter((r): r is PromiseFulfilledResult<OverpassNetworkResponse> => r.status === 'fulfilled')
+    .map(r => r.value)
+  if (results.length === 0) return null
+  const complete = results.find(r => !r.remark)
+  return complete ?? results.reduce((best, r) => (r.elements.length > best.elements.length ? r : best))
+}
+
+/**
+ * Verifica utente (Sirmione, log Vercel: "Overpass non disponibile" — i 3 mirror avevano TUTTI
+ * rifiutato la richiesta, non solo risposto parziale) — passando da fetchOverpass (lib/
+ * overpassTrails.ts) alla scelta "risposta migliore" sopra si era perso anche il SUO singolo
+ * retry dopo una breve pausa, che copriva proprio questo caso: un rifiuto simultaneo dei 3 mirror
+ * pubblici è quasi sempre un throttling/hiccup transitorio lato loro (traffico da IP datacenter),
+ * mai un errore permanente affidabile dopo un solo giro in parallelo. Un secondo giro, stessa
+ * pausa di fetchOverpass, prima di arrendersi davvero (→ linea d'aria in fetchWalkNetworkForPoints,
+ * lib/routeBuilder/borgoWalkLegs.ts, mai un errore che fa fallire l'intero itinerario).
+ */
+async function fetchWalkNetworkRaw(query: string, timeoutMs: number): Promise<OverpassNetworkResponse> {
+  const first = await fetchWalkNetworkOnceAcrossMirrors(query, timeoutMs)
+  if (first) return first
+  await new Promise(r => setTimeout(r, 1200))
+  const second = await fetchWalkNetworkOnceAcrossMirrors(query, timeoutMs)
+  if (second) return second
+  throw new Error('Overpass non disponibile')
+}
+
 /**
  * Scarica ed espande in un grafo in memoria la rete percorribile in un bbox
  * [minLat, minLon, maxLat, maxLon]. Ogni way viene spezzata negli archi tra i suoi node
@@ -145,23 +204,19 @@ way["highway"~"^(${WALKABLE_HIGHWAY})$"]${WALKABLE_FOOT_OVERRIDE_FILTER}(${minLa
 (._;>;);
 out body qt;`
 
-  // Timeout client allineato al [timeout:] della query — fetchOverpass ritenta una volta sola
-  // dopo una breve pausa (vedi lib/overpassTrails.ts), quindi il caso peggiore resta ~2×timeoutMs
-  // invece di superare da solo il budget della funzione chiamante (maxDuration del proprio
-  // endpoint, con margine per il resto della pipeline a valle).
-  const json = await fetchOverpass<{ elements: OverpassEl[]; remark?: string }>(query, timeoutMs)
+  // Timeout client allineato al [timeout:] della query, applicato per-mirror (vedi
+  // fetchWalkNetworkRaw sopra) — il caso peggiore resta timeoutMs, mai un multiplo: nessun retry
+  // sequenziale qui, i 3 mirror sono già interrogati in parallelo.
+  const json = await fetchWalkNetworkRaw(query, timeoutMs)
   const elements = json.elements ?? []
-  // `remark` compare SOLO quando Overpass stesso ha interrotto la query prima di finirla (di
-  // solito perché ha raggiunto il proprio `[timeout:...]` interno) — la risposta resta comunque
-  // HTTP 200 con qualunque elemento raccolto fino a quel momento, quindi `fetchOverpass` sopra non
-  // la vede come un errore: un fallimento silenzioso, rete parziale servita come se fosse completa.
-  // Nessun modo affidabile di distinguere qui "parziale ma sufficiente per il bbox richiesto" da
-  // "parziale e con un buco proprio dove serviva" — solo segnalarlo, non correggerlo: vedi §4 punto
-  // 3 di docs/crea-guida-itinerario-personalizzato-stato.md, una causa plausibile di "nessun
-  // cammino trovato" che il ripiego a distanza reale in multiStopRoute.ts non risolverebbe (la rete
-  // su cui cerca è quella incompleta).
+  // `remark` compare SOLO quando OGNI mirror che ha risposto ha comunque interrotto la query prima
+  // di finirla (fetchWalkNetworkRaw sopra ha già preferito una risposta completa quando almeno un
+  // mirror l'ha restituita) — la risposta resta comunque HTTP 200 con qualunque elemento raccolto
+  // fino a quel momento. Nessun modo affidabile di distinguere qui "parziale ma sufficiente per il
+  // bbox richiesto" da "parziale e con un buco proprio dove serviva" — solo segnalarlo, non
+  // correggerlo oltre: vedi §4 punto 3 di docs/crea-guida-itinerario-personalizzato-stato.md.
   if (json.remark) {
-    console.warn('[osmGraph] risposta Overpass parziale/incompleta per bbox', bbox, '-', json.remark)
+    console.warn('[osmGraph] risposta Overpass parziale/incompleta per bbox (nessun mirror ha risposto completo)', bbox, '-', json.remark)
   }
 
   const nodes = new Map<number, GraphNode>()
@@ -180,7 +235,63 @@ out body qt;`
     }
   }
 
+  stitchNearbyEndpoints(nodes)
+
   return { nodes }
+}
+
+// Verifica utente (Sirmione, "ancora linea d'aria" — confermato con Dijkstra su dati reali, non
+// un limite di SNAP_THRESHOLD_M/DIJKSTRA_MAX_DIST_M: entrambi gli estremi agganciano un nodo della
+// rete a pochi metri, ma quel nodo NON RAGGIUNGE l'altro con nessuna distanza, perché appartengono
+// a due componenti del grafo scollegate fra loro). Causa reale: due way OSM che si toccano o si
+// incrociano sul terreno senza condividere un node — un artefatto comune di digitalizzazione
+// (un marciapiede digitalizzato separatamente dalla strada che costeggia, un sentiero che sfiora
+// una via senza un vero incrocio mappato) — mai risolvibile allargando la soglia di aggancio o il
+// raggio Dijkstra, perché il grafo scaricato non ha proprio l'arco che li collegherebbe.
+// Qui si aggiunge un arco "virtuale" fra coppie di node abbastanza vicini sul terreno (pochi metri,
+// ben sotto la precisione GPS/di digitalizzazione tipica) che il grafo non collega già — SOLO fra
+// node a bassa valenza (<= MAX_STITCH_DEGREE archi originali): un vero incrocio già mappato (una
+// piazza con 5+ vie) non ha bisogno di altre scorciatoie, i candidati sono le estremità di way
+// isolate, dove un buco come questo può davvero esistere. Griglia spaziale invece di un confronto
+// O(n²) fra tutti i node — con qualche migliaio di node per bbox (il caso comune) il costo resta
+// lineare.
+const STITCH_THRESHOLD_M = 15
+const MAX_STITCH_DEGREE = 3
+const STITCH_CELL_DEG = 0.0003 // ~33m in latitudine, abbastanza per contenere STITCH_THRESHOLD_M in una cella adiacente
+
+export function stitchNearbyEndpoints(nodes: Map<number, GraphNode>): void {
+  const cellKey = (lat: number, lon: number) => `${Math.floor(lat / STITCH_CELL_DEG)}_${Math.floor(lon / STITCH_CELL_DEG)}`
+  const grid = new Map<string, number[]>()
+  const candidates: [number, GraphNode][] = []
+  for (const entry of Array.from(nodes)) {
+    const [, node] = entry
+    if (node.edges.length > MAX_STITCH_DEGREE) continue
+    candidates.push(entry)
+    const k = cellKey(node.lat, node.lon)
+    const bucket = grid.get(k)
+    if (bucket) bucket.push(entry[0])
+    else grid.set(k, [entry[0]])
+  }
+
+  for (const [id, node] of candidates) {
+    const cx = Math.floor(node.lat / STITCH_CELL_DEG)
+    const cy = Math.floor(node.lon / STITCH_CELL_DEG)
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        const bucket = grid.get(`${cx + dx}_${cy + dy}`)
+        if (!bucket) continue
+        for (const otherId of bucket) {
+          if (otherId <= id) continue // ogni coppia una sola volta
+          const other = nodes.get(otherId)!
+          if (node.edges.some(e => e.to === otherId)) continue // già collegati (stessa way o incrocio reale)
+          const distM = haversineM(node.lat, node.lon, other.lat, other.lon)
+          if (distM > STITCH_THRESHOLD_M) continue
+          node.edges.push({ to: otherId, distM, wayId: -1, highway: 'stitch' })
+          other.edges.push({ to: id, distM, wayId: -1, highway: 'stitch' })
+        }
+      }
+    }
+  }
 }
 
 /** Nodo del grafo più vicino a (lat, lon), entro thresholdM — null se la rete è vuota o troppo lontana. */

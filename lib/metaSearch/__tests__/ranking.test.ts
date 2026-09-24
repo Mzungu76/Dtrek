@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   distanceFactor, dataQualityFactor, historicalCenterFactor, ptprBorgoIdentitarioFactor,
-  inferredInterestTags, interestMatchFactor, combineFactors,
+  inferredInterestTags, interestMatchFactor, populationFactor, combineFactors,
 } from '../ranking'
 
 describe('distanceFactor', () => {
@@ -71,6 +71,38 @@ describe('interestMatchFactor', () => {
   it('match parziale → punteggio proporzionale', () => {
     const f = interestMatchFactor(['storia', 'gastronomia'], ['storia'])
     expect(f?.score).toBeCloseTo(0.5, 5)
+  })
+})
+
+describe('populationFactor', () => {
+  it('assente (null/undefined/non positiva) — non deve penalizzare una riga non ancora arricchita', () => {
+    expect(populationFactor(undefined)).toBeNull()
+    expect(populationFactor(null)).toBeNull()
+    expect(populationFactor(0)).toBeNull()
+    expect(populationFactor(-5)).toBeNull()
+  })
+
+  it('un piccolo borgo (~100 abitanti) → punteggio vicino a 0', () => {
+    expect(populationFactor(100)?.score).toBeCloseTo(0, 5)
+  })
+
+  it('una grande città (1 milione+) → punteggio pieno', () => {
+    expect(populationFactor(1_000_000)?.score).toBe(1)
+    expect(populationFactor(3_000_000)?.score).toBe(1) // mai oltre 1, anche per Roma
+  })
+
+  it('una città media pesa più di un piccolo borgo — verifica utente: Padova/Verona/Parma sparivano dietro centinaia di piccoli Comuni nella stessa regione, privi di qualunque segnale che le distinguesse', () => {
+    const borgo = populationFactor(200)!    // un piccolo Comune
+    const padova = populationFactor(208_306)! // popolazione reale di Padova
+    expect(padova.score).toBeGreaterThan(borgo.score)
+  })
+
+  it('scala logaritmica — il salto da 1k a 10k pesa quanto quello da 100k a 1M, non una frazione trascurabile', () => {
+    const f1 = populationFactor(1_000)!
+    const f2 = populationFactor(10_000)!
+    const f3 = populationFactor(100_000)!
+    const f4 = populationFactor(1_000_000)!
+    expect(f2.score - f1.score).toBeCloseTo(f4.score - f3.score, 5)
   })
 })
 

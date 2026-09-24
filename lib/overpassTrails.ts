@@ -5,7 +5,10 @@
 // these routes fetch the underlying OSM hiking-route data from Overpass instead.
 import { haversineM } from './geoUtils'
 
-const OVERPASS_ENDPOINTS = [
+// Esportato per lib/routeBuilder/osmGraph.ts's fetchWalkNetwork, che ha bisogno dello stesso pool
+// di mirror ma con un criterio di scelta diverso (allSettled + preferenza per una risposta
+// completa, non la prima che arriva) — mai una seconda lista di mirror duplicata.
+export const OVERPASS_ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
   'https://overpass.openstreetmap.fr/api/interpreter',
   'https://maps.mail.ru/osm/tools/overpass/api/interpreter',

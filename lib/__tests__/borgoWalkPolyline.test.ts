@@ -15,6 +15,9 @@ function itinerary(overrides: Partial<BorgoItinerary> = {}): BorgoItinerary {
     ],
     totalDistanceM: 250,
     estimatedTimeSeconds: 200,
+    tappe: [],
+    maxStopsPerTappa: 6,
+    maxMinutesPerTappa: 150,
     ...overrides,
   }
 }
