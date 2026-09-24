@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   mergeStopCandidates, nearestStops, orderStopsNearestNeighbor, groupStopsIntoTappe,
-  personalizedTappaMinutes, resolveDurationSignalMinutes, visitMinutesFor, WALK_SPEED_MPS,
+  culturalTappaBudgetMinutes, DAY_BUDGET_MINUTES, visitMinutesFor, WALK_SPEED_MPS,
   partitionStopsByOverrides, effectiveVisitMinutesFor, bucketStopsByEffectiveTappa,
   spliceLegsForRemovedStops, buildStraightLegs, summarizeTappa,
   type ItineraryStopCandidate, type BorgoItineraryOverrides, type ItineraryTappa,
@@ -91,45 +91,22 @@ describe('visitMinutesFor', () => {
   })
 })
 
-describe('resolveDurationSignalMinutes', () => {
-  it('nessuno storico → ricade sulla preferenza dichiarata', () => {
-    expect(resolveDurationSignalMinutes(undefined, 200)).toBe(200)
+describe('culturalTappaBudgetMinutes', () => {
+  it('nessuna traccia GPS reale collegata (cammino_urbano) → l\'intera giornata libera per la cultura', () => {
+    expect(culturalTappaBudgetMinutes(undefined)).toBe(DAY_BUDGET_MINUTES)
   })
 
-  it('storico con zero uscite → ricade comunque sulla preferenza dichiarata', () => {
-    expect(resolveDurationSignalMinutes({ count: 0, sumDurationMin: 0, recent: [] }, 200)).toBe(200)
+  it('una traccia a durata zero è trattata come assente, mai un budget azzerato', () => {
+    expect(culturalTappaBudgetMinutes(0)).toBe(DAY_BUDGET_MINUTES)
   })
 
-  it('storico con uscite recenti → la media delle ultime, non la preferenza dichiarata', () => {
-    const history = { count: 10, sumDurationMin: 3000, recent: [{ durationMin: 400 }, { durationMin: 600 }] }
-    expect(resolveDurationSignalMinutes(history, 100)).toBe(500) // (400+600)/2, ignora sia sumDurationMin/count sia 100
+  it('con una traccia reale (trekking misto) → il residuo della giornata dopo il cammino fisico', () => {
+    expect(culturalTappaBudgetMinutes(120)).toBe(DAY_BUDGET_MINUTES - 120)
   })
 
-  it('storico senza uscite recenti salvate ma con conteggio → la media storica complessiva', () => {
-    const history = { count: 5, sumDurationMin: 1000, recent: [] }
-    expect(resolveDurationSignalMinutes(history, 100)).toBe(200) // 1000/5, ignora la preferenza dichiarata
-  })
-})
-
-describe('personalizedTappaMinutes', () => {
-  it('nessun segnale di durata → il default medio (150 min, ~2h30)', () => {
-    expect(personalizedTappaMinutes(undefined)).toBe(150)
-  })
-
-  it('segnale uguale al riferimento (270 min) → invariato', () => {
-    expect(personalizedTappaMinutes(270)).toBe(150)
-  })
-
-  it('scala proporzionalmente al segnale di durata', () => {
-    expect(personalizedTappaMinutes(480)).toBe(Math.round(150 * (480 / 270)))
-  })
-
-  it('mai sotto il pavimento, anche per un segnale molto basso', () => {
-    expect(personalizedTappaMinutes(90)).toBe(60)
-  })
-
-  it('mai oltre il tetto, anche per un segnale molto alto', () => {
-    expect(personalizedTappaMinutes(1000)).toBe(300)
+  it('mai sotto il pavimento, anche quando la traccia da sola esaurirebbe l\'intera giornata', () => {
+    expect(culturalTappaBudgetMinutes(DAY_BUDGET_MINUTES + 500)).toBeGreaterThan(0)
+    expect(culturalTappaBudgetMinutes(DAY_BUDGET_MINUTES + 500)).toBeLessThan(DAY_BUDGET_MINUTES)
   })
 })
 

@@ -2,10 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { getUserFromRequest } from '@/lib/supabaseAuth'
 import {
-  personalizedTappaMinutes, resolveDurationSignalMinutes, MAX_STOPS_PER_TAPPA,
+  culturalTappaBudgetMinutes, MAX_STOPS_PER_TAPPA,
   type BorgoItineraryOverrides, type BorgoStopOverride,
 } from '@/lib/metaSearch/borgoItinerary'
-import { readOrBackfillHistoryStats } from '@/lib/hikerHistory'
 import { computePersonalizedTappe } from '@/lib/routeBuilder/borgoTappePersonalization'
 import type { BorgoItinerary } from '../route'
 
@@ -67,7 +66,7 @@ export async function POST(req: NextRequest) {
 
   const { data: hike, error: hikeError } = await supabase
     .from('planned_hikes')
-    .select('id')
+    .select('id, estimated_time_seconds')
     .eq('id', hikeId)
     .eq('user_id', user.id)
     .maybeSingle()
@@ -76,6 +75,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Errore interno' }, { status: 500 })
   }
   if (!hike) return NextResponse.json({ error: 'Meta pianificata non trovata' }, { status: 404 })
+  // Durata REALE di un'eventuale traccia GPS collegata (trekking misto, verifica utente: "budget
+  // residuo della giornata") — vedi il commento su culturalTappaBudgetMinutes in lib/metaSearch/
+  // borgoItinerary.ts per perché questo campo è un segnale affidabile di presenza traccia.
+  const estimatedTimeSeconds = hike.estimated_time_seconds as number | undefined
+  const trackDurationMinutes = estimatedTimeSeconds ? estimatedTimeSeconds / 60 : undefined
 
   const { data: borgo, error: borgoError } = await supabase
     .from('dtrek_places')
@@ -96,16 +100,8 @@ export async function POST(req: NextRequest) {
   const center = { lat: borgo.latitude as number, lon: borgo.longitude as number }
   const cached = borgo.itinerary_cache as BorgoItinerary
 
-  const [prefDurata, history] = await Promise.all([
-    Promise.resolve(supabase.from('user_settings').select('pref_durata').eq('user_id', user.id).maybeSingle())
-      .then(({ data }) => data?.pref_durata as number | undefined)
-      .catch(() => undefined),
-    readOrBackfillHistoryStats(user.id).catch(() => undefined),
-  ])
-  const durationSignal = resolveDurationSignalMinutes(history, prefDurata)
-
   const tappe = await computePersonalizedTappe(
-    center, cached.stops, cached.legs, overrides, MAX_STOPS_PER_TAPPA, personalizedTappaMinutes(durationSignal), WALK_NETWORK_TIMEOUT_MS,
+    center, cached.stops, cached.legs, overrides, MAX_STOPS_PER_TAPPA, culturalTappaBudgetMinutes(trackDurationMinutes), WALK_NETWORK_TIMEOUT_MS,
   )
 
   // Persistito PRIMA di rispondere (a differenza della cache condivisa in POST /api/borgo-itinerary,

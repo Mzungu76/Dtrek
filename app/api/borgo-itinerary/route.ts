@@ -3,11 +3,10 @@ import { supabase } from '@/lib/supabase'
 import { getUserFromRequest } from '@/lib/supabaseAuth'
 import {
   mergeStopCandidates, nearestStops, orderStopsNearestNeighbor,
-  personalizedTappaMinutes, resolveDurationSignalMinutes, WALK_SPEED_MPS, MAX_STOPS_PER_TAPPA,
+  culturalTappaBudgetMinutes, WALK_SPEED_MPS, MAX_STOPS_PER_TAPPA,
   type ItineraryStopCandidate, type ItineraryTappa, type BorgoItineraryOverrides,
 } from '@/lib/metaSearch/borgoItinerary'
 import { fetchBorgoArchiveStops, fetchBorgoWikiStops, enrichStopDescriptions } from '@/lib/guideBorgoDetailStops'
-import { readOrBackfillHistoryStats } from '@/lib/hikerHistory'
 import { fetchWalkNetworkForPoints, buildLegsForWaypoints } from '@/lib/routeBuilder/borgoWalkLegs'
 import { computePersonalizedTappe } from '@/lib/routeBuilder/borgoTappePersonalization'
 import type { SiteType } from '@/lib/metaTypes'
@@ -91,10 +90,13 @@ export interface BorgoItinerary {
   legs: ItineraryLeg[]
   totalDistanceM: number
   estimatedTimeSeconds: number
-  /** Suddivisione in tappe percorribili (lib/metaSearch/borgoItinerary.ts's groupStopsIntoTappe) —
-   *  personalizzata sull'utente che ha fatto QUESTA richiesta (storico reale o pref_durata), quindi
-   *  calcolata SEMPRE fresca ad ogni risposta, mai dentro itinerary_cache: la cache su dtrek_places
-   *  è condivisa tra tutti gli utenti, questo campo non può esserlo. */
+  /** Suddivisione in tappe percorribili (lib/metaSearch/borgoItinerary.ts's groupStopsIntoTappe,
+   *  budget da culturalTappaBudgetMinutes — verifica utente: il tempo di un Borgo/Città è una
+   *  giornata di visita culturale, non la fatica fisica di un'escursione) — personalizzata sulle
+   *  eventuali personalizzazioni salvate per QUESTA Meta (planned_hikes.borgo_itinerary_overrides)
+   *  e su un'eventuale traccia GPS reale collegata (trekking misto), quindi calcolata SEMPRE fresca
+   *  ad ogni risposta, mai dentro itinerary_cache: la cache su dtrek_places è condivisa tra tutti
+   *  gli utenti, questo campo non può esserlo. */
   tappe: ItineraryTappa[]
   /** Budget con cui `tappe` è stata calcolata (piano guide-eccellenza Fase 2) — il client lo riusa
    *  per un'anteprima ISTANTANEA locale dello slider del tempo di visita/dello spegnimento di un
@@ -157,12 +159,15 @@ export async function POST(req: NextRequest) {
   // silenziosamente servito oltre il TTL dichiarato. Le tappe (personalizzate sull'utente) restano
   // FUORI dalla cache condivisa: calcolate fresche anche su un hit di cache, mai congelate per
   // l'utente che le ha calcolate per primo.
-  const overrides = hikeId ? await fetchItineraryOverrides(hikeId, user.id) : undefined
+  const { overrides, trackDurationMinutes } = hikeId
+    ? await fetchHikePersonalizationContext(hikeId, user.id)
+    : { overrides: undefined, trackDurationMinutes: undefined }
+  const maxMinutesPerTappa = culturalTappaBudgetMinutes(trackDurationMinutes)
 
   const cachedAt = borgo.itinerary_cached_at ? new Date(borgo.itinerary_cached_at as string).getTime() : 0
   if (borgo.itinerary_cache && Date.now() - cachedAt < CACHE_TTL_MS) {
     const cached = borgo.itinerary_cache as BorgoItinerary
-    const { tappe, maxMinutesPerTappa } = await computeTappe(user.id, center, cached.stops, cached.legs, overrides)
+    const tappe = await computePersonalizedTappe(center, cached.stops, cached.legs, overrides, MAX_STOPS_PER_TAPPA, maxMinutesPerTappa, WALK_NETWORK_TIMEOUT_MS)
     return NextResponse.json({ ...cached, tappe, maxStopsPerTappa: MAX_STOPS_PER_TAPPA, maxMinutesPerTappa })
   }
 
@@ -199,7 +204,7 @@ export async function POST(req: NextRequest) {
     // volta. Il prossimo tentativo riparte sempre da zero, come prima di questa cache.
     const empty: BorgoItinerary = {
       borgoName: borgo.name, stops: [], legs: [], totalDistanceM: 0, estimatedTimeSeconds: 0, tappe: [],
-      maxStopsPerTappa: MAX_STOPS_PER_TAPPA, maxMinutesPerTappa: personalizedTappaMinutes(undefined),
+      maxStopsPerTappa: MAX_STOPS_PER_TAPPA, maxMinutesPerTappa,
     }
     return NextResponse.json(empty)
   }
@@ -239,48 +244,34 @@ export async function POST(req: NextRequest) {
       )
   }
 
-  const { tappe, maxMinutesPerTappa } = await computeTappe(user.id, center, ordered, legs, overrides)
+  const tappe = await computePersonalizedTappe(center, ordered, legs, overrides, MAX_STOPS_PER_TAPPA, maxMinutesPerTappa, WALK_NETWORK_TIMEOUT_MS)
   return NextResponse.json({ ...cacheableItinerary, tappe, maxStopsPerTappa: MAX_STOPS_PER_TAPPA, maxMinutesPerTappa })
 }
 
 /** Personalizzazioni salvate per QUESTA Meta pianificata (piano guide-eccellenza Fase 2) — mai
- *  bloccante: un fallimento di lettura ricade sul raggruppamento automatico puro, come per uno
- *  storico/una preferenza non disponibili in computeTappe sotto. */
-async function fetchItineraryOverrides(hikeId: string, userId: string): Promise<BorgoItineraryOverrides | undefined> {
+ *  bloccante: un fallimento di lettura ricade sul raggruppamento automatico puro/sull'intera
+ *  giornata libera (culturalTappaBudgetMinutes(undefined)), mai un errore che fa fallire l'intero
+ *  itinerario per un problema di personalizzazione. estimated_time_seconds è la durata REALE di
+ *  un'eventuale traccia GPS collegata (trekking misto, verifica utente: "budget residuo della
+ *  giornata") — nasce a 0 per una Meta creata dalla ricerca, vedi il commento su
+ *  culturalTappaBudgetMinutes in lib/metaSearch/borgoItinerary.ts. */
+async function fetchHikePersonalizationContext(
+  hikeId: string, userId: string,
+): Promise<{ overrides: BorgoItineraryOverrides | undefined; trackDurationMinutes: number | undefined }> {
   try {
     const { data } = await supabase
       .from('planned_hikes')
-      .select('borgo_itinerary_overrides')
+      .select('borgo_itinerary_overrides, estimated_time_seconds')
       .eq('id', hikeId)
       .eq('user_id', userId)
       .maybeSingle()
-    return (data?.borgo_itinerary_overrides as BorgoItineraryOverrides | undefined) ?? undefined
+    const estimatedTimeSeconds = data?.estimated_time_seconds as number | undefined
+    return {
+      overrides: (data?.borgo_itinerary_overrides as BorgoItineraryOverrides | undefined) ?? undefined,
+      trackDurationMinutes: estimatedTimeSeconds ? estimatedTimeSeconds / 60 : undefined,
+    }
   } catch (e) {
-    console.error('[borgo-itinerary] lettura overrides fallita', e)
-    return undefined
+    console.error('[borgo-itinerary] lettura contesto personalizzazione fallita', e)
+    return { overrides: undefined, trackDurationMinutes: undefined }
   }
-}
-
-/** Tappe personalizzate sull'utente che ha fatto la richiesta (verifica utente: "sei sicuro di
- *  considerare anche lo storico?") — storico reale (lib/hikerHistory.ts) con priorità sulla
- *  preferenza dichiarata (user_settings.pref_durata) quando l'utente ha già attività registrate.
- *  Mai bloccante: un fallimento di una delle due fonti ricade sul default medio, mai un errore
- *  che fa fallire l'intero itinerario per un problema di personalizzazione. */
-async function computeTappe(
-  userId: string,
-  center: { lat: number; lon: number },
-  stops: ItineraryStopCandidate[],
-  legs: ItineraryLeg[],
-  overrides: BorgoItineraryOverrides | undefined,
-): Promise<{ tappe: ItineraryTappa[]; maxMinutesPerTappa: number }> {
-  const [prefDurata, history] = await Promise.all([
-    Promise.resolve(supabase.from('user_settings').select('pref_durata').eq('user_id', userId).maybeSingle())
-      .then(({ data }) => data?.pref_durata as number | undefined)
-      .catch(() => undefined),
-    readOrBackfillHistoryStats(userId).catch(() => undefined),
-  ])
-  const durationSignal = resolveDurationSignalMinutes(history, prefDurata)
-  const maxMinutesPerTappa = personalizedTappaMinutes(durationSignal)
-  const tappe = await computePersonalizedTappe(center, stops, legs, overrides, MAX_STOPS_PER_TAPPA, maxMinutesPerTappa, WALK_NETWORK_TIMEOUT_MS)
-  return { tappe, maxMinutesPerTappa }
 }

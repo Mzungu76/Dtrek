@@ -176,47 +176,39 @@ export function effectiveVisitMinutesFor(stop: ItineraryStopCandidate, overrides
   return overrides?.[stop.id]?.visitMinutes ?? visitMinutesFor(stop)
 }
 
-// Un segmento comodo di visita (cammino + soste) quando non c'è ancora nessun segnale
-// sull'utente — DEFAULT_REFERENCE_MINUTES rispecchia lo stesso default di user_settings.pref_durata
-// (lib/useUserPrefs.ts), la base rispetto a cui scalare qualunque segnale reale.
-const DEFAULT_TAPPA_MINUTES = 150
-const DEFAULT_REFERENCE_MINUTES = 270
-// Mai una tappa così corta da essere inutile, né così lunga da vanificare il senso stesso di
-// "tappa" — un pavimento e un tetto attorno al valore scalato, non un secondo criterio a sé.
-const MIN_TAPPA_MINUTES = 60
-const MAX_TAPPA_MINUTES = 300
+// Budget di una "giornata di visita culturale" (verifica utente: il tempo di un Borgo/Città non è
+// la fatica fisica di un'escursione — pref_durata/lo storico escursionistico misuravano la cosa
+// sbagliata, un vincolo fisico applicato a un'attività che non lo è). ~6 ore di visita attiva:
+// abbastanza per un centro storico importante, pause/pranzo lasciati fuori (mai conteggiati come
+// tempo di visita). Ogni tappa rappresenta una giornata (o una sua frazione, quando il contenuto
+// del Borgo non la riempie) — "mezza giornata"/"giornata intera"/"più giorni" emergono così da
+// soli dal numero di tappe che groupStopsIntoTappe produce, mai da una scelta esplicita richiesta
+// all'utente: un Borgo piccolo resta un'unica tappa più corta, uno enorme si allunga su più tappe.
+export const DAY_BUDGET_MINUTES = 360
+
+// Pavimento per il "trekking misto" sotto — un Borgo/Città con una traccia GPS reale collegata
+// (borgoCardVariant 'trekking_misto', lib/guideCardVariant.ts) non deve mai azzerare del tutto il
+// tempo per le soste culturali, anche quando il trek da solo esaurirebbe l'intera giornata: restano
+// sempre un paio di soste "flash" possibili lungo il percorso.
+const MIN_CULTURAL_BUDGET_MINUTES = 45
 
 /**
- * Segnale di durata da usare per personalizzare una tappa — verifica utente: "sei sicuro di
- * considerare anche lo storico? Io gestisco anche distanze più lunghe". Priorità allo storico
- * REALE (lib/hikerHistory.ts — le ultime uscite se già disponibili, altrimenti la media storica)
- * quando l'utente ha già attività registrate: più affidabile di una preferenza impostata una volta
- * in Impostazioni e mai più toccata. Ricade su quella preferenza (pref_durata) solo per un utente
- * ancora senza storico. Struttura minimale (non l'intero HikerHistoryStats) apposta: questo modulo
- * resta puro/testabile senza importare lib/hikerHistory.ts (solo lato server).
+ * Budget di tempo per tappa culturale — verifica utente: "budget residuo della giornata" per il
+ * trekking misto, "automatico dal contenuto" per stabilire se è mezza giornata/giornata/più
+ * giorni (nessuna scelta esplicita, vedi il commento su DAY_BUDGET_MINUTES sopra). Senza nessuna
+ * traccia GPS reale collegata (cammino_urbano, il caso comune) l'intera giornata è libera per la
+ * cultura: DAY_BUDGET_MINUTES per intero. Con una traccia reale (trekking_misto) il tempo del
+ * cammino fisico vero e proprio va sottratto prima — quello resta legittimamente governato dal
+ * passo/storico escursionistico altrove (lib/hikerHistory.ts), qui arriva già come durata.
+ *
+ * trackDurationMinutes viene da PlannedHike.estimatedTimeSeconds — nasce a 0 per una Meta creata
+ * dalla ricerca (lib/metaToPlannedHike.ts) e diventa reale solo quando una traccia GPX viene
+ * davvero importata: lo stesso segnale usato da borgoCardVariant, senza dover rileggere
+ * trackPoints/routePolyline (molto più pesanti) solo per un controllo di presenza.
  */
-export function resolveDurationSignalMinutes(
-  history: { count: number; sumDurationMin: number; recent: { durationMin: number }[] } | undefined,
-  prefDurataMinutes: number | undefined,
-): number | undefined {
-  if (history && history.count > 0) {
-    if (history.recent.length > 0) return history.recent.reduce((s, r) => s + r.durationMin, 0) / history.recent.length
-    return history.sumDurationMin / history.count
-  }
-  return prefDurataMinutes
-}
-
-/**
- * Budget di tempo "comodo" per una singola tappa, personalizzato sul segnale di durata risolto
- * sopra (storico reale o preferenza dichiarata) — scala il default medio in proporzione, non lo
- * riusa direttamente: quel segnale rappresenta l'intera uscita che un utente preferisce fare, non
- * un singolo segmento tra le tante tappe di una città grande. undefined (nessun segnale
- * disponibile) ⇒ il default medio, mai bloccante.
- */
-export function personalizedTappaMinutes(durationSignalMinutes: number | undefined): number {
-  if (durationSignalMinutes == null || durationSignalMinutes <= 0) return DEFAULT_TAPPA_MINUTES
-  const scaled = DEFAULT_TAPPA_MINUTES * (durationSignalMinutes / DEFAULT_REFERENCE_MINUTES)
-  return Math.min(MAX_TAPPA_MINUTES, Math.max(MIN_TAPPA_MINUTES, Math.round(scaled)))
+export function culturalTappaBudgetMinutes(trackDurationMinutes: number | undefined): number {
+  if (!trackDurationMinutes || trackDurationMinutes <= 0) return DAY_BUDGET_MINUTES
+  return Math.max(MIN_CULTURAL_BUDGET_MINUTES, DAY_BUDGET_MINUTES - trackDurationMinutes)
 }
 
 /**
