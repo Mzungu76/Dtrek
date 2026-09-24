@@ -134,17 +134,35 @@ async function fetchOverpassNetworkOnce(endpoint: string, query: string, timeout
  * risposta migliore fra quelle arrivate: una completa se ce n'è almeno una, altrimenti la parziale
  * con più elementi — mai la prima e basta.
  */
-async function fetchWalkNetworkRaw(query: string, timeoutMs: number): Promise<OverpassNetworkResponse> {
+async function fetchWalkNetworkOnceAcrossMirrors(query: string, timeoutMs: number): Promise<OverpassNetworkResponse | null> {
   const settled = await Promise.allSettled(
     OVERPASS_ENDPOINTS.map(endpoint => fetchOverpassNetworkOnce(endpoint, query, timeoutMs)),
   )
   const results = settled
     .filter((r): r is PromiseFulfilledResult<OverpassNetworkResponse> => r.status === 'fulfilled')
     .map(r => r.value)
-  if (results.length === 0) throw new Error('Overpass non disponibile')
+  if (results.length === 0) return null
   const complete = results.find(r => !r.remark)
-  if (complete) return complete
-  return results.reduce((best, r) => (r.elements.length > best.elements.length ? r : best))
+  return complete ?? results.reduce((best, r) => (r.elements.length > best.elements.length ? r : best))
+}
+
+/**
+ * Verifica utente (Sirmione, log Vercel: "Overpass non disponibile" — i 3 mirror avevano TUTTI
+ * rifiutato la richiesta, non solo risposto parziale) — passando da fetchOverpass (lib/
+ * overpassTrails.ts) alla scelta "risposta migliore" sopra si era perso anche il SUO singolo
+ * retry dopo una breve pausa, che copriva proprio questo caso: un rifiuto simultaneo dei 3 mirror
+ * pubblici è quasi sempre un throttling/hiccup transitorio lato loro (traffico da IP datacenter),
+ * mai un errore permanente affidabile dopo un solo giro in parallelo. Un secondo giro, stessa
+ * pausa di fetchOverpass, prima di arrendersi davvero (→ linea d'aria in fetchWalkNetworkForPoints,
+ * lib/routeBuilder/borgoWalkLegs.ts, mai un errore che fa fallire l'intero itinerario).
+ */
+async function fetchWalkNetworkRaw(query: string, timeoutMs: number): Promise<OverpassNetworkResponse> {
+  const first = await fetchWalkNetworkOnceAcrossMirrors(query, timeoutMs)
+  if (first) return first
+  await new Promise(r => setTimeout(r, 1200))
+  const second = await fetchWalkNetworkOnceAcrossMirrors(query, timeoutMs)
+  if (second) return second
+  throw new Error('Overpass non disponibile')
 }
 
 /**

@@ -144,4 +144,24 @@ describe('fetchWalkNetwork', () => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('mirror down'))))
     await expect(fetchWalkNetwork([0, 0, 0.01, 0.01], 5000)).rejects.toThrow()
   })
+
+  // Verifica utente (Sirmione, log Vercel: "Overpass non disponibile" — i 3 mirror avevano TUTTI
+  // rifiutato al primo giro) — passando dalla Promise.any di fetchOverpass alla scelta "risposta
+  // migliore" si era perso anche il suo singolo retry dopo una pausa, che copriva proprio un
+  // rifiuto simultaneo transitorio dei 3 mirror pubblici.
+  it('tutti i mirror rifiutano al primo giro ma rispondono al secondo → un solo retry basta, mai un errore prematuro', async () => {
+    const complete = { elements: [{ type: 'node', id: 1, lat: 0, lon: 0 }, { type: 'node', id: 2, lat: 0.001, lon: 0 }] }
+    let attempt = 0
+    vi.stubGlobal('fetch', vi.fn(() => {
+      attempt++
+      // Tutti e 3 i mirror (una sola chiamata fetch a "giro" per endpoint) rifiutano fino a
+      // quando non è scattato il retry (attempt > 3, cioè il secondo giro di 3 chiamate).
+      if (attempt <= 3) return Promise.reject(new Error('mirror down'))
+      return Promise.resolve({ ok: true, json: async () => complete })
+    }))
+
+    const network = await fetchWalkNetwork([0, 0, 0.01, 0.01], 5000)
+    expect(network.nodes.size).toBe(2)
+    expect(attempt).toBe(6) // 3 mirror × 2 giri
+  })
 })
