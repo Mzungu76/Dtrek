@@ -1,5 +1,6 @@
 import { haversineM } from '../geoUtils'
 import { DEFAULT_VISIT_MINUTES, SITE_TYPE_CONFIG, type SiteType } from '../metaTypes'
+import { DIJKSTRA_MAX_DIST_M } from '../routeBuilder/walkRouting'
 import type { ItineraryLeg } from '@/app/api/borgo-itinerary/route'
 
 // ~4.3 km/h — un ritmo da visita (con soste implicite), non una camminata sportiva: la stessa
@@ -75,6 +76,55 @@ export function nearestStops(center: { lat: number; lon: number }, stops: Itiner
   return [...stops]
     .sort((a, b) => haversineM(center.lat, center.lon, a.lat, a.lon) - haversineM(center.lat, center.lon, b.lat, b.lon))
     .slice(0, maxStops)
+}
+
+// Stessa soglia della rete pedonale (lib/routeBuilder/borgoWalkLegs.ts): oltre questa distanza un
+// tragitto non riceve comunque mai un cammino reale (routeLeg ricade sulla linea d'aria), quindi un
+// candidato più lontano di così dal resto del cluster non produrrebbe un itinerario A PIEDI
+// sensato in ogni caso — un solo valore condiviso, mai due soglie che potrebbero divergere.
+export const MAX_STOP_NEIGHBOR_DISTANCE_M = DIJKSTRA_MAX_DIST_M
+
+/**
+ * Verifica utente (Chieti, place id eb07bfac-e861-484c-bb4c-acca63838e3f) — "Casa natale di S.
+ * Camillo de Lellis" (a Bucchianico, un paese diverso) inclusa fra le tappe pur essendo a ~4,4km in
+ * linea d'aria da OGNI altra tappa trovata (confermato sui dati reali di dtrek_places.
+ * itinerary_cache) — RADIUS_STEPS (app/api/borgo-itinerary/route.ts) allarga il raggio di ricerca
+ * fino a 20km per una città grande, ma nulla a valle scartava un candidato la cui distanza dal
+ * resto del cluster fosse anomala rispetto alle altre tappe. Un raggio fisso dal CENTRO non
+ * basterebbe a distinguere i due casi: una città vera densa può avere tappe genuine fino al bordo
+ * del raggio massimo, raggiungibili però l'una dall'altra con una catena di passi brevi (mai un
+ * salto isolato) — qui si verifica invece la raggiungibilità A CATENA entro maxNeighborDistM,
+ * partendo dal centro del Borgo (sempre legittimo, il seme della ricerca): un candidato entra nel
+ * cluster se è entro la soglia dal centro O da un altro candidato già nel cluster, quale che sia
+ * l'estensione totale del centro storico — un candidato realmente isolato (un paese diverso emerso
+ * dalla stessa geosearch) non lo è mai, nessuna catena di passi brevi lo raggiunge.
+ */
+export function excludeIsolatedOutliers<T extends { lat: number; lon: number }>(
+  center: { lat: number; lon: number },
+  stops: T[],
+  maxNeighborDistM: number = MAX_STOP_NEIGHBOR_DISTANCE_M,
+): { kept: T[]; outliers: T[] } {
+  const clusterPoints: { lat: number; lon: number }[] = [center]
+  let remaining = stops.map((stop, index) => ({ stop, index }))
+  const keptIndexes = new Set<number>()
+
+  let progress = true
+  while (progress) {
+    progress = false
+    remaining = remaining.filter(({ stop, index }) => {
+      const isInCluster = clusterPoints.some(p => haversineM(p.lat, p.lon, stop.lat, stop.lon) <= maxNeighborDistM)
+      if (!isInCluster) return true
+      keptIndexes.add(index)
+      clusterPoints.push(stop)
+      progress = true
+      return false
+    })
+  }
+
+  const kept: T[] = []
+  const outliers: T[] = []
+  stops.forEach((stop, index) => (keptIndexes.has(index) ? kept : outliers).push(stop))
+  return { kept, outliers }
 }
 
 /** Ordine di visita a "vicino più vicino" (greedy nearest-neighbor) a partire dal Borgo — non

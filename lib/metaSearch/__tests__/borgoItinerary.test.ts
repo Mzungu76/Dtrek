@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  mergeStopCandidates, nearestStops, orderStopsNearestNeighbor, groupStopsIntoTappe,
+  mergeStopCandidates, nearestStops, excludeIsolatedOutliers, orderStopsNearestNeighbor, groupStopsIntoTappe,
   culturalTappaBudgetMinutes, DAY_BUDGET_MINUTES, HALF_DAY_BUDGET_MINUTES, MULTI_DAY_BUDGET_MINUTES,
   visitMinutesFor, WALK_SPEED_MPS,
   partitionStopsByOverrides, effectiveVisitMinutesFor, bucketStopsByEffectiveTappa,
@@ -60,6 +60,52 @@ describe('nearestStops', () => {
     ]
     const result = nearestStops(center, stops, 2)
     expect(result.map(s => s.id)).toEqual(['near', 'mid'])
+  })
+})
+
+describe('excludeIsolatedOutliers', () => {
+  // Verifica utente (Chieti, place id eb07bfac-e861-484c-bb4c-acca63838e3f) — "Casa natale di S.
+  // Camillo de Lellis" (Bucchianico, un paese diverso) inclusa fra le tappe pur essendo a ~4,4km in
+  // linea d'aria da OGNI altra tappa trovata: nessuna soglia sul raggio di ricerca dal centro
+  // (RADIUS_STEPS, app/api/borgo-itinerary/route.ts) la esclude, perché l'obiettivo di
+  // RADIUS_STEPS è proprio raggiungere i bordi di una città grande — serve un controllo sulla
+  // distanza dal RESTO DEL CLUSTER, non dal centro.
+  it('scarta un candidato isolato dal resto del cluster, anche entro il raggio di ricerca dal centro', () => {
+    const center = { lat: 42.3446529, lon: 14.1659738 }
+    const museo = stop('museo', 'Museo archeologico', 42.342743, 14.164568)
+    const terme = stop('terme', 'Terme romane', 42.346992, 14.168101)
+    const camillo = stop('camillo', 'Casa natale S. Camillo', 42.305862, 14.182742) // Bucchianico, ~4,4km
+    const { kept, outliers } = excludeIsolatedOutliers(center, [museo, terme, camillo])
+    expect(kept.map(s => s.id)).toEqual(['museo', 'terme'])
+    expect(outliers.map(s => s.id)).toEqual(['camillo'])
+  })
+
+  it('tiene una città grande ed estesa, raggiungibile a catena di tappe vicine, mai un salto isolato', () => {
+    const center = { lat: 0, lon: 0 }
+    // Ogni tappa è entro maxNeighborDistM (qui di default, 3000m ≈ 0.027°) dalla precedente, ma il
+    // centro storico nel complesso si estende per km — un raggio fisso dal SOLO centro escluderebbe
+    // ingiustamente le tappe più lontane, pur essendo tutte collegate da passi brevi.
+    const a = stop('a', 'A', 0, 0.02)
+    const b = stop('b', 'B', 0, 0.04)
+    const c = stop('c', 'C', 0, 0.06)
+    const { kept, outliers } = excludeIsolatedOutliers(center, [a, b, c])
+    expect(kept.map(s => s.id)).toEqual(['a', 'b', 'c'])
+    expect(outliers).toEqual([])
+  })
+
+  it('accetta una soglia esplicita più stretta di quella di default', () => {
+    const center = { lat: 0, lon: 0 }
+    const near = stop('near', 'Vicina', 0, 0.001) // ~111m
+    const far = stop('far', 'Lontana', 0, 0.01) // ~1112m, oltre una soglia di 500m
+    const { kept, outliers } = excludeIsolatedOutliers(center, [near, far], 500)
+    expect(kept.map(s => s.id)).toEqual(['near'])
+    expect(outliers.map(s => s.id)).toEqual(['far'])
+  })
+
+  it('un elenco vuoto non produce né tappe né outlier', () => {
+    const { kept, outliers } = excludeIsolatedOutliers({ lat: 0, lon: 0 }, [])
+    expect(kept).toEqual([])
+    expect(outliers).toEqual([])
   })
 })
 

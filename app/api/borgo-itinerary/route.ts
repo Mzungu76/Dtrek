@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { getUserFromRequest } from '@/lib/supabaseAuth'
 import {
-  mergeStopCandidates, nearestStops, orderStopsNearestNeighbor,
+  mergeStopCandidates, nearestStops, excludeIsolatedOutliers, orderStopsNearestNeighbor,
   culturalTappaBudgetMinutes, WALK_SPEED_MPS, MAX_STOPS_PER_TAPPA,
   type ItineraryStopCandidate, type ItineraryTappa, type BorgoItineraryOverrides,
 } from '@/lib/metaSearch/borgoItinerary'
@@ -191,11 +191,21 @@ export async function POST(req: NextRequest) {
   }
 
   const capped = nearestStops(center, merged, MAX_TOTAL_STOPS)
+  // Verifica utente: "Casa natale di S. Camillo de Lellis" (Bucchianico, un paese diverso) inclusa
+  // fra le tappe di Chieti pur essendo isolata dal resto del cluster — vedi il commento su
+  // excludeIsolatedOutliers in lib/metaSearch/borgoItinerary.ts. Gli outlier sono scartati, mai
+  // messi nell'itinerario a piedi principale: RADIUS_STEPS può allargarsi fino a 20km proprio per
+  // raggiungere i bordi di una città grande, ma un candidato senza nessuna catena di tappe vicine
+  // che lo colleghi al centro è quasi sempre un luogo diverso emerso dalla stessa geosearch.
+  const { kept: clustered, outliers } = excludeIsolatedOutliers(center, capped)
+  if (outliers.length > 0) {
+    console.warn('[borgo-itinerary] tappe scartate perché isolate dal resto del cluster:', outliers.map(s => s.name))
+  }
   // Verifica utente: descrizioni delle tappe "più esaustive" (e coerenti tra loro, non solo per
   // quelle da Wikipedia) — lib/guideBorgoDetailStops.ts's enrichStopDescriptions, stessa funzione
   // riusata da app/api/guide/route.ts per il prompt, applicata SOLO alle tappe che sopravvivono
   // alla selezione finale, mai all'intero elenco di candidati scartati.
-  const ordered = await enrichStopDescriptions(orderStopsNearestNeighbor(center, capped))
+  const ordered = await enrichStopDescriptions(orderStopsNearestNeighbor(center, clustered))
 
   if (ordered.length === 0) {
     // Mai messo in cache: un elenco vuoto qui può derivare da un genuino "nessuna tappa nei
