@@ -54,8 +54,12 @@ const WALKABLE_FOOT_OVERRIDE_FILTER = '["foot"~"^(yes|permissive|designated)$"]'
 // così com'era, con lo stesso identico buco nei dati che il cambio doveva risolvere, fino alla
 // scadenza naturale della cache (45gg) — un fix silenziosamente inefficace per qualunque bbox già
 // visitato. v5: aggiunta bridgeDisconnectedComponents sotto (verifica utente, Chieti — un bbox già
-// in cache da PRIMA di questo fix resterebbe altrimenti scollegato per altri 45 giorni).
-export const WALK_NETWORK_QUERY_VERSION = 5
+// in cache da PRIMA di questo fix resterebbe altrimenti scollegato per altri 45 giorni). v6:
+// bridgeDisconnectedComponents ricostruita (verifica utente, Agrigento — un bug di prestazioni e
+// una correzione di correttezza sulla stessa funzione, entrambi capaci di cambiare quali ponti
+// vengono trovati) — un bbox già in cache da un deploy intermedio fra i due fix andrebbe altrimenti
+// servito con la ricucitura sbagliata per altri 45 giorni.
+export const WALK_NETWORK_QUERY_VERSION = 6
 
 export interface GraphNode {
   lat: number
