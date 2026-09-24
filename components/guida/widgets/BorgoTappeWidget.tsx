@@ -346,7 +346,16 @@ export default function BorgoTappeWidget({
                 <div className="flex gap-2.5 items-start">
                   {stop.thumbnail && (
                     // eslint-disable-next-line @next/next/no-img-element -- provenienza esterna (Wikipedia/archivio), non un asset ottimizzabile
-                    <img src={stop.thumbnail} alt="" className="w-11 h-11 rounded-lg object-cover shrink-0" />
+                    <img
+                      src={stop.thumbnail}
+                      alt=""
+                      className="w-11 h-11 rounded-lg object-cover shrink-0"
+                      // Alcune fonti d'archivio più vecchie hanno link a immagini non più raggiungibili
+                      // (server regionale lento/offline, http:// bloccato come contenuto misto su una
+                      // pagina https) — mai un'icona di immagine rotta al posto del punto: nascosta,
+                      // il resto della riga (nome/descrizione) resta comunque leggibile.
+                      onError={e => { e.currentTarget.style.display = 'none' }}
+                    />
                   )}
                   <div className="min-w-0 flex-1">
                     <p className="font-semibold text-[13.5px] text-stone-800 leading-tight">
