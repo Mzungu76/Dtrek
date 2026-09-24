@@ -786,15 +786,23 @@ export default function GuidaHub({ id }: { id?: string }) {
     if (!hike || !confirm('Eliminare questa escursione pianificata?')) return
     setSaving(true)
     try {
-      await deletePlanned(hike.id)
-      // Verifica utente: "l'utente elimina la guida, ma non succede nulla (almeno sembra), se non
-      // con molto ritardo" — deletePlanned è già istantanea (solo IndexedDB locale, la sincronizzazione
-      // col server è in background), ma prima il SOLO segnale era questo toast letto dopo il remount
-      // che segue router.push: se quella pagina elenco impiega anche solo un istante a montare/
-      // caricare, l'utente restava a fissare la pagina di dettaglio senza alcun riscontro nel
-      // frattempo. Ora il toast si accende SUBITO, su questa stessa pagina, prima ancora di navigare
-      // — sessionStorage resta sotto come rete di sicurezza per il caso in cui il remount avvenga
-      // prima che questo frame faccia in tempo a dipingersi.
+      const deletedId = hike.id
+      await deletePlanned(deletedId)
+      // Verifica utente: dopo l'eliminazione restava a vedere la STESSA guida appena cancellata.
+      // Causa reale: GuidaHub serve sia /guida sia /guida/[id] con la STESSA istanza React — Next
+      // non la rimonta passando dall'uno all'altro (nessun key/route boundary che lo forzi), quindi
+      // router.push('/guida') da solo non tocca affatto items/currentId/hike, tutto stato locale
+      // rimasto quello di prima ("pick the first item" più sotto è già guardato da `if (currentId
+      // || …) return`, quindi con currentId ancora valorizzato su questa guida non scatta mai). Il
+      // dato locale (deletePlanned) è già sparito, ma senza aggiornare esplicitamente questo stato
+      // lo schermo restava congelato sulla vista precedente indipendentemente da quanto in fretta
+      // la cancellazione fosse davvero avvenuta. Aggiornati qui direttamente, mai in attesa di un
+      // remount che in questo flusso non arriva.
+      setItems(prev => prev.filter(it => it.id !== deletedId))
+      setCurrentId(null)
+      setHike(null)
+      // Il toast si accende SUBITO, prima ancora di navigare — sessionStorage resta come rete di
+      // sicurezza per il caso (diverso, es. link diretto) in cui la pagina elenco rimonti davvero.
       setShowDeletedToast(true)
       if (typeof window !== 'undefined') sessionStorage.setItem('dtrek:justDeletedHike', '1')
       router.push('/guida')
