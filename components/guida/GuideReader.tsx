@@ -480,7 +480,10 @@ export default function GuideReader({
     fetch('/api/borgo-itinerary', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ placeId: hike.placeId }),
+      // hikeId — piano guide-eccellenza Fase 2: applica le personalizzazioni già confermate
+      // dall'utente per QUESTA Meta (planned_hikes.borgo_itinerary_overrides), mai quelle di
+      // un'altra Meta che punta allo stesso Borgo.
+      body: JSON.stringify({ placeId: hike.placeId, hikeId: hike.id }),
     })
       .then(res => res.ok ? res.json() : null)
       .then(data => {
@@ -937,8 +940,26 @@ export default function GuideReader({
         // mai PoiListWidget qui, è costruita per un Sentiero (mappa del tracciato, Street View,
         // POI OSM) che un Borgo/Città non ha.
         if (hike.metaType === 'borgo_citta') {
-          if (borgoItinerary && borgoItinerary.tappe.length > 0) {
-            return <BorgoTappeWidget tappe={borgoItinerary.tappe} color={SECTION_STYLE.luoghi.color} />
+          if (borgoItinerary && borgoItinerary.tappe.length > 0 && hike.placeId) {
+            return (
+              <BorgoTappeWidget
+                key={hike.id}
+                stops={borgoItinerary.stops}
+                legs={borgoItinerary.legs}
+                center={{ lat: hike.latitude ?? borgoItinerary.stops[0].lat, lon: hike.longitude ?? borgoItinerary.stops[0].lon }}
+                maxStopsPerTappa={borgoItinerary.maxStopsPerTappa}
+                maxMinutesPerTappa={borgoItinerary.maxMinutesPerTappa}
+                serverTappe={borgoItinerary.tappe}
+                color={SECTION_STYLE.luoghi.color}
+                placeId={hike.placeId}
+                hikeId={hike.id}
+                savedOverrides={hike.borgoItineraryOverrides}
+                onOverridesSaved={overrides => {
+                  updatePlannedMeta(hike.id, { borgoItineraryOverrides: overrides }).catch(() => {})
+                  onHikeUpdate({ borgoItineraryOverrides: overrides })
+                }}
+              />
+            )
           }
           // Verifica utente: mentre l'itinerario si calcola (geosearch Wikipedia + rete pedonale
           // OSM + Dijkstra, può metterci diversi secondi) questa sezione va distinta da una

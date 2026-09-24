@@ -11,6 +11,10 @@ interface Props {
   legs: ItineraryLeg[]
   color: string
   height?: string
+  /** Punti "spenti" dall'utente (piano guide-eccellenza Fase 2, verifica utente: "renderli
+   *  semitrasparenti in mappa") — mostrati senza numero né tragitto, solo un marker attenuato a
+   *  indicare che esistono ma non fanno parte dell'itinerario corrente; mai rimossi del tutto. */
+  dimmedStops?: ItineraryStop[]
 }
 
 function escapeHtml(s: string): string {
@@ -44,7 +48,7 @@ const chipBase = 'flex items-center justify-center w-9 h-9 rounded-full backdrop
  *  visita, il Borgo stesso come punto di partenza (0). Ampliabile a tutto schermo (stesso pattern
  *  di components/guida/PoiMap.tsx) — verifica utente: prima restava sempre alla sua altezza fissa,
  *  scomoda per leggere i popup delle tappe più fitte. */
-export default function ItineraryMap({ center, stops, legs, color, height = '320px' }: Props) {
+export default function ItineraryMap({ center, stops, legs, color, height = '320px', dimmedStops = [] }: Props) {
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstance = useRef<L.Map | null>(null)
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
@@ -65,7 +69,11 @@ export default function ItineraryMap({ center, stops, legs, color, height = '320
         maxZoom: 19,
       }).addTo(map)
 
-      const boundsPoints: [number, number][] = [[center.lat, center.lon], ...stops.map(s => [s.lat, s.lon] as [number, number])]
+      const boundsPoints: [number, number][] = [
+        [center.lat, center.lon],
+        ...stops.map(s => [s.lat, s.lon] as [number, number]),
+        ...dimmedStops.map(s => [s.lat, s.lon] as [number, number]),
+      ]
 
       for (const leg of legs) {
         L.polyline(leg.polyline, {
@@ -93,6 +101,15 @@ export default function ItineraryMap({ center, stops, legs, color, height = '320
       stops.forEach((stop, i) => {
         const marker = L.marker([stop.lat, stop.lon], { icon: numberedIcon(String(i + 1), color) })
         marker.bindPopup(stopPopupHtml(String(i + 1), stop.name, stop), { maxWidth: 250 })
+        marker.addTo(map)
+      })
+
+      // Punti spenti — un'icona attenuata (opacity, nessun numero d'ordine: non fanno parte del
+      // percorso), mai una linea che li collega: restano visibili solo come promemoria "qui c'è
+      // ancora qualcosa, riattivabile" (verifica utente).
+      dimmedStops.forEach(stop => {
+        const marker = L.marker([stop.lat, stop.lon], { icon: numberedIcon('·', '#a8a29e'), opacity: 0.45 })
+        marker.bindPopup(stopPopupHtml('Spento', stop.name, stop), { maxWidth: 250 })
         marker.addTo(map)
       })
 

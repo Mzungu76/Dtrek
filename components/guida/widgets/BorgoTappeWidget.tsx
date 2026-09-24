@@ -1,8 +1,13 @@
 import dynamic from 'next/dynamic'
-import { useState } from 'react'
-import { ChevronRight } from 'lucide-react'
+import { useState, useMemo, useEffect, useRef } from 'react'
+import { ChevronRight, Settings2, EyeOff, Eye, Loader2, ArrowRight } from 'lucide-react'
 import { SITE_TYPE_CONFIG } from '@/lib/metaTypes'
-import type { ItineraryTappa } from '@/lib/metaSearch/borgoItinerary'
+import {
+  groupStopsIntoTappe, spliceLegsForRemovedStops, effectiveVisitMinutesFor,
+  bucketStopsByEffectiveTappa, orderStopsNearestNeighbor, summarizeTappa, buildStraightLegs,
+  type ItineraryTappa, type ItineraryStopCandidate, type BorgoItineraryOverrides,
+} from '@/lib/metaSearch/borgoItinerary'
+import type { ItineraryStop, ItineraryLeg } from '@/app/api/borgo-itinerary/route'
 import StopSourceSheet, { type StopSourceSheetData } from './StopSourceSheet'
 
 // Leaflet tocca `window` al modulo — mai importato lato server (stesso pattern già usato in
@@ -10,12 +15,31 @@ import StopSourceSheet, { type StopSourceSheetData } from './StopSourceSheet'
 const ItineraryMap = dynamic(() => import('@/components/mete/ItineraryMap'), { ssr: false })
 
 interface Props {
-  /** Già raggruppate in tappe percorribili dal server (app/api/borgo-itinerary/route.ts's
-   *  computeTappe — tempo di visita per tipo + storico reale/preferenza dell'utente), mai
-   *  ricalcolate qui: la personalizzazione ha bisogno di dati solo lato server (lib/hikerHistory.ts).
-   *  Sempre almeno una tappa quando ci sono punti da mostrare — mai vuoto insieme a stops non vuoti. */
-  tappe: ItineraryTappa[]
+  /** Elenco COMPLETO e ordinato delle tappe candidate e i relativi tragitti — la stessa coppia
+   *  stops/legs alla radice di BorgoItinerary (mai il sottoinsieme già raggruppato di una singola
+   *  Tappa): la personalizzazione (piano guide-eccellenza Fase 2) deve poter ridisegnare i confini
+   *  tra tappe, non solo il contenuto di una già decisa. */
+  stops: ItineraryStop[]
+  legs: ItineraryLeg[]
+  center: { lat: number; lon: number }
+  /** Budget con cui il server ha prodotto `serverTappe` — riusato per un'anteprima locale
+   *  identica finché l'utente non tocca nulla (lib/metaSearch/borgoItinerary.ts's
+   *  groupStopsIntoTappe, stessa formula). */
+  maxStopsPerTappa: number
+  maxMinutesPerTappa: number
+  /** Tappe già calcolate dal server (app/api/borgo-itinerary/route.ts's computeTappe — eventuali
+   *  pin già CONFERMATI risolti in tragitti reali) — la base da cui parte ogni anteprima. */
+  serverTappe: ItineraryTappa[]
   color: string
+  /** Personalizzazioni già salvate per questa Meta (planned_hikes.borgo_itinerary_overrides) —
+   *  undefined la primissima volta che l'itinerario viene mostrato. */
+  savedOverrides: BorgoItineraryOverrides | undefined
+  placeId: string
+  hikeId: string
+  /** Persistenza "leggera" (slider/spegnimento) — mai bloccante, stesso pattern già usato per
+   *  borgoWalkPolyline in GuideReader: aggiorna lo stato locale della Meta e accoda la
+   *  sincronizzazione in background, nessun round-trip sincrono con l'utente in attesa. */
+  onOverridesSaved: (overrides: BorgoItineraryOverrides) => void
 }
 
 // Verifica utente: le descrizioni delle tappe sono ora più lunghe (testo esteso Wikipedia via
@@ -39,32 +63,108 @@ function formatMinutes(min: number): string {
   return m === 0 ? `${h} h` : `${h} h ${m} min`
 }
 
+function overridesHavePins(overrides: BorgoItineraryOverrides): boolean {
+  return Object.values(overrides).some(o => o.tappaIndex != null)
+}
+
+// Confronto per valore su una mappa sparsa piccola (poche decine di tappe al massimo) — mai
+// bisogno di una diff più sofisticata qui.
+function overridesEqual(a: BorgoItineraryOverrides, b: BorgoItineraryOverrides): boolean {
+  return JSON.stringify(a) === JSON.stringify(b)
+}
+
+/**
+ * Raggruppamento ISTANTANEO lato client (piano guide-eccellenza Fase 2) — stessa formula del
+ * server quando non c'è nessun pin di tappa in gioco (nessuna approssimazione: groupStopsIntoTappe
+ * è deterministico, stesso input stesso risultato), un'ANTEPRIMA a linee d'aria quando invece
+ * l'utente ha spostato manualmente almeno un punto e non ha ancora premuto "Conferma" — quel
+ * ricalcolo resta sempre reale e lato server (verifica utente).
+ */
+function computeLocalTappe(
+  stops: ItineraryStop[],
+  legs: ItineraryLeg[],
+  center: { lat: number; lon: number },
+  maxStopsPerTappa: number,
+  maxMinutesPerTappa: number,
+  overrides: BorgoItineraryOverrides,
+): ItineraryTappa[] {
+  const disabledIds = new Set(stops.filter(s => overrides[s.id]?.disabled).map(s => s.id))
+  const { stops: activeStops, legs: activeLegs } = disabledIds.size > 0
+    ? spliceLegsForRemovedStops(stops, legs, disabledIds, center)
+    : { stops, legs }
+  const visitMinutesForStop = (s: ItineraryStopCandidate) => effectiveVisitMinutesFor(s, overrides)
+  const autoTappe = groupStopsIntoTappe(center, activeStops, activeLegs, maxStopsPerTappa, maxMinutesPerTappa, visitMinutesForStop)
+
+  if (!overridesHavePins(overrides)) return autoTappe
+
+  const buckets = bucketStopsByEffectiveTappa(autoTappe, overrides)
+  const tappe: ItineraryTappa[] = []
+  let cursor = center
+  for (const bucketStops of buckets) {
+    const ordered = orderStopsNearestNeighbor(cursor, bucketStops)
+    const waypoints = [cursor, ...ordered.map(s => ({ lat: s.lat, lon: s.lon }))]
+    tappe.push(summarizeTappa(ordered, buildStraightLegs(waypoints), cursor, visitMinutesForStop))
+    if (ordered.length > 0) cursor = { lat: ordered[ordered.length - 1].lat, lon: ordered[ordered.length - 1].lon }
+  }
+  return tappe
+}
+
 /** Timeline verticale delle tappe di un Borgo/Città, in ordine di visita a piedi dal centro (lib/
  *  guideBorgoDetailStops.ts, /api/borgo-itinerary) — dati strutturati mostrati SOPRA il testo
  *  narrativo di Giulia (stesso pattern di PoiListWidget/NaturaWidget: un widget dati + un corpo
- *  AI nella stessa sezione, mai uno al posto dell'altro). Nessuna riga "prosegui verso" qui: quella
- *  narrazione vive nel testo AI (vedi BORGO_LUOGHI_BRIEF in lib/guideProfiles.ts), che la scrive
- *  seguendo questo stesso ordine — qui solo l'ancora visiva (numero, foto, nome) a cui il testo si
- *  aggancia.
+ *  AI nella stessa sezione, mai uno al posto dell'altro).
  *
- *  Verifica utente — una città grande può restituire molte più tappe di quante ne stia bene
- *  visitare in un'unica camminata: l'elenco ordinato viene diviso in "Tappe" percorribili lato
- *  server (max 6 punti o un budget di TEMPO — cammino + visita, personalizzato sullo storico reale
- *  o sulla preferenza dell'utente — quale dei due si esaurisce prima), ciascuna con la propria
- *  mappa e la propria mini-timeline; un selettore a chip appare solo quando ce n'è più di una — per
- *  un borgo piccolo (il caso comune) resta un'unica tappa, nessun cambiamento visibile. Le stesse
- *  fondamenta (una "Tappa" con punti/tragitto/tempo propri) serviranno anche per i futuri cammini
- *  multi-giorno (Francigena e simili), lì con tappe scandite da un percorso predefinito invece che
- *  da questo clustering algoritmico. */
-export default function BorgoTappeWidget({ tappe, color }: Props) {
+ *  Piano guide-eccellenza Fase 2 (verifica utente — slider del tempo di visita, "spegnimento" di
+ *  un punto, spostamento manuale tra tappe): il raggruppamento in tappe non è più solo quello
+ *  ricevuto dal server, ma ricalcolato qui ad ogni personalizzazione — istantaneo per lo slider e
+ *  lo spegnimento (computeLocalTappe sopra, stessa formula esatta del server), un'anteprima in
+ *  attesa di conferma per uno spostamento manuale (che richiede sempre un vero ricalcolo lato
+ *  server prima di diventare definitivo). */
+export default function BorgoTappeWidget({
+  stops, legs, center, maxStopsPerTappa, maxMinutesPerTappa, serverTappe, color,
+  savedOverrides, placeId, hikeId, onOverridesSaved,
+}: Props) {
   const [openStopId, setOpenStopId] = useState<string | null>(null)
   const [selectedTappaIdx, setSelectedTappaIdx] = useState(0)
+  const [expandedStopId, setExpandedStopId] = useState<string | null>(null)
+  const [overrides, setOverrides] = useState<BorgoItineraryOverrides>(savedOverrides ?? {})
+  const [confirmedOverrides, setConfirmedOverrides] = useState<BorgoItineraryOverrides>(savedOverrides ?? {})
+  const [confirmedTappe, setConfirmedTappe] = useState<ItineraryTappa[]>(serverTappe)
+  const [confirming, setConfirming] = useState(false)
+  const [confirmError, setConfirmError] = useState<string | null>(null)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  if (tappe.length === 0) return null
+  const hasPins = overridesHavePins(overrides)
+  const dirty = !overridesEqual(overrides, confirmedOverrides)
 
-  const activeTappa = tappe[Math.min(selectedTappaIdx, tappe.length - 1)]
-  const allStops = tappe.flatMap(t => t.stops)
-  const openStop = allStops.find(s => s.id === openStopId)
+  const localTappe = useMemo(
+    () => computeLocalTappe(stops, legs, center, maxStopsPerTappa, maxMinutesPerTappa, overrides),
+    [stops, legs, center, maxStopsPerTappa, maxMinutesPerTappa, overrides],
+  )
+  // Una volta confermato uno spostamento manuale, il risultato reale (tragitti sulla rete
+  // pedonale) resta mostrato finché l'utente non tocca di nuovo qualcosa — mai ricalcolato in
+  // un'anteprima approssimata solo perché un altro slider è stato sfiorato altrove.
+  const tappe = (!hasPins || dirty) ? localTappe : confirmedTappe
+  const showConfirmBar = hasPins && dirty
+
+  // Slider/spegnimento (nessun pin coinvolto) — persistiti in background, mai un'attesa per
+  // l'utente: appena l'algoritmo locale è già la stessa formula esatta del server, non serve
+  // aspettare una risposta per fidarsi del risultato mostrato.
+  useEffect(() => {
+    if (hasPins || !dirty) return
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
+      onOverridesSaved(overrides)
+      setConfirmedOverrides(overrides)
+    }, 500)
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }
+  }, [overrides, hasPins, dirty, onOverridesSaved])
+
+  if (stops.length === 0) return null
+
+  const activeTappa = tappe[Math.min(selectedTappaIdx, Math.max(tappe.length - 1, 0))]
+  const disabledStops = stops.filter(s => overrides[s.id]?.disabled)
+  const openStop = stops.find(s => s.id === openStopId)
   const sheetData: StopSourceSheetData | null = openStop ? {
     name: openStop.name,
     description: openStop.description,
@@ -76,6 +176,42 @@ export default function BorgoTappeWidget({ tappe, color }: Props) {
   // Numerazione GLOBALE (continua tra le tappe, non riparte da 1 ad ogni tappa) — quanti punti
   // precedono la tappa selezionata nell'ordine di visita complessivo.
   const numberOffset = tappe.slice(0, selectedTappaIdx).reduce((n, t) => n + t.stops.length, 0)
+
+  function setStopOverride(stopId: string, patch: Partial<BorgoItineraryOverrides[string]>) {
+    setOverrides(prev => {
+      const next = { ...prev, [stopId]: { ...prev[stopId], ...patch } }
+      // Nessuna voce residua — mai un default duplicato per un punto tornato allo stato di base.
+      if (Object.values(next[stopId]).every(v => v === undefined)) delete next[stopId]
+      return next
+    })
+  }
+
+  function handleCancelMove() {
+    setOverrides(confirmedOverrides)
+    setConfirmError(null)
+  }
+
+  async function handleConfirm() {
+    setConfirming(true)
+    setConfirmError(null)
+    try {
+      const res = await fetch('/api/borgo-itinerary/apply-overrides', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ placeId, hikeId, overrides }),
+      })
+      if (!res.ok) throw new Error()
+      const data = await res.json() as { tappe: ItineraryTappa[] }
+      setConfirmedTappe(data.tappe)
+      setConfirmedOverrides(overrides)
+      onOverridesSaved(overrides)
+      setSelectedTappaIdx(0)
+    } catch {
+      setConfirmError('Non è stato possibile ricalcolare i tragitti — riprova.')
+    } finally {
+      setConfirming(false)
+    }
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -98,27 +234,59 @@ export default function BorgoTappeWidget({ tappe, color }: Props) {
           ))}
         </div>
       )}
-      {activeTappa.legs.length > 0 && (
+      {activeTappa && activeTappa.legs.length > 0 && (
         // Verifica utente: la mappa non si aggiornava al cambio di tappa — ItineraryMap costruisce
         // la propria istanza Leaflet una sola volta al mount (useEffect con deps []), quindi senza
         // una key che cambia con la tappa selezionata React riusa la stessa istanza già montata e i
         // nuovi stops/legs non vengono mai ridisegnati. La key forza uno smontaggio/rimontaggio
-        // pulito (ItineraryMap distrugge già la mappa Leaflet nel cleanup dell'effetto).
-        <ItineraryMap key={selectedTappaIdx} center={activeTappa.startPoint} stops={activeTappa.stops} legs={activeTappa.legs} color={color} />
+        // pulito (ItineraryMap distrugge già la mappa Leaflet nel cleanup dell'effetto) — include
+        // anche i punti spenti: un cambio lì deve ridisegnare i marker attenuati.
+        <ItineraryMap
+          key={`${selectedTappaIdx}-${disabledStops.map(s => s.id).join(',')}`}
+          center={activeTappa.startPoint}
+          stops={activeTappa.stops}
+          legs={activeTappa.legs}
+          color={color}
+          dimmedStops={disabledStops}
+        />
+      )}
+      {showConfirmBar && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5">
+          <p className="text-[12.5px] text-amber-800 leading-snug">
+            Spostamento in attesa — conferma per ricalcolare i tragitti reali.
+            {confirmError && <span className="block text-red-600 mt-0.5">{confirmError}</span>}
+          </p>
+          <div className="flex gap-2 shrink-0">
+            <button type="button" onClick={handleCancelMove} disabled={confirming} className="text-[12px] font-semibold text-stone-500 hover:text-stone-700 disabled:opacity-50">
+              Annulla
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirm}
+              disabled={confirming}
+              className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-white bg-terra-600 hover:bg-terra-700 rounded-full px-3 py-1.5 disabled:opacity-60"
+            >
+              {confirming && <Loader2 className="w-3 h-3 animate-spin" />}
+              Conferma
+            </button>
+          </div>
+        </div>
       )}
       <div className="flex flex-col">
-      {activeTappa.stops.map((stop, i) => {
+      {(activeTappa?.stops ?? []).map((stop, i) => {
           const desc = stop.description
           const { preview, isTruncated } = desc ? truncateStopDescription(desc) : { preview: '', isTruncated: false }
+          const visitMinutes = effectiveVisitMinutesFor(stop, overrides)
+          const isLast = i === (activeTappa?.stops.length ?? 0) - 1
           return (
             <div key={stop.id} className="flex gap-3">
               <div className="flex flex-col items-center">
                 <span className="w-6 h-6 shrink-0 rounded-full bg-terra-600 text-white font-barlow font-bold text-xs flex items-center justify-center">
                   {numberOffset + i + 1}
                 </span>
-                {i < activeTappa.stops.length - 1 && <span className="w-px flex-1 bg-terra-100 my-1" />}
+                {!isLast && <span className="w-px flex-1 bg-terra-100 my-1" />}
               </div>
-              <div className={`flex-1 min-w-0 ${i < activeTappa.stops.length - 1 ? 'pb-4' : ''}`}>
+              <div className={`flex-1 min-w-0 ${!isLast ? 'pb-4' : ''}`}>
                 <div className="flex gap-2.5 items-start">
                   {stop.thumbnail && (
                     // eslint-disable-next-line @next/next/no-img-element -- provenienza esterna (Wikipedia/archivio), non un asset ottimizzabile
@@ -136,18 +304,79 @@ export default function BorgoTappeWidget({ tappe, color }: Props) {
                     {desc && (
                       <p className="text-[12px] text-stone-500 leading-snug mt-0.5">{preview}</p>
                     )}
-                    {/* Leggi tutto/Fonte convergono nella stessa pagina di lettura in-app
-                        (StopSourceSheet) — mostrato anche senza troncamento quando resta comunque
-                        una fonte da citare, altrimenti quella tappa non avrebbe alcun modo di
-                        raggiungerla. */}
-                    {(isTruncated || stop.url) && (
+                    <div className="flex items-center gap-3 mt-1 flex-wrap">
+                      {/* Leggi tutto/Fonte convergono nella stessa pagina di lettura in-app
+                          (StopSourceSheet) — mostrato anche senza troncamento quando resta comunque
+                          una fonte da citare, altrimenti quella tappa non avrebbe alcun modo di
+                          raggiungerla. */}
+                      {(isTruncated || stop.url) && (
+                        <button
+                          type="button"
+                          onClick={() => setOpenStopId(stop.id)}
+                          className="inline-flex items-center gap-0.5 text-[12px] font-semibold text-terra-600 hover:text-terra-700 whitespace-nowrap"
+                        >
+                          {isTruncated ? 'Leggi tutto' : 'Fonte'} <ChevronRight className="w-3 h-3" />
+                        </button>
+                      )}
                       <button
                         type="button"
-                        onClick={() => setOpenStopId(stop.id)}
-                        className="mt-0.5 inline-flex items-center gap-0.5 text-[12px] font-semibold text-terra-600 hover:text-terra-700 whitespace-nowrap"
+                        onClick={() => setExpandedStopId(v => v === stop.id ? null : stop.id)}
+                        className="inline-flex items-center gap-1 text-[12px] font-semibold text-stone-400 hover:text-stone-600 whitespace-nowrap"
                       >
-                        {isTruncated ? 'Leggi tutto' : 'Fonte'} <ChevronRight className="w-3 h-3" />
+                        <Settings2 className="w-3.5 h-3.5" /> {formatMinutes(visitMinutes)}
                       </button>
+                    </div>
+                    {expandedStopId === stop.id && (
+                      <div className="mt-2.5 rounded-lg border border-stone-200 bg-stone-50 p-3 flex flex-col gap-3">
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-[11px] font-semibold text-stone-500">Tempo di visita</span>
+                            <span className="text-[11px] font-semibold text-stone-700">{formatMinutes(visitMinutes)}</span>
+                          </div>
+                          <input
+                            type="range"
+                            min={15}
+                            max={240}
+                            step={15}
+                            value={visitMinutes}
+                            onChange={e => setStopOverride(stop.id, { visitMinutes: Number(e.target.value) })}
+                            className="w-full accent-terra-600"
+                          />
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setStopOverride(stop.id, { disabled: true })}
+                            className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-stone-500 hover:text-red-600"
+                          >
+                            <EyeOff className="w-3.5 h-3.5" /> Spegni questo punto
+                          </button>
+                        </div>
+                        {tappe.length > 0 && (
+                          <div>
+                            <span className="text-[11px] font-semibold text-stone-500 block mb-1.5">Sposta in</span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {tappe.map((_, ti) => ti !== selectedTappaIdx && (
+                                <button
+                                  key={ti}
+                                  type="button"
+                                  onClick={() => setStopOverride(stop.id, { tappaIndex: ti })}
+                                  className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-stone-600 bg-white border border-stone-200 rounded-full px-2.5 py-1 hover:border-terra-300"
+                                >
+                                  <ArrowRight className="w-3 h-3" /> Tappa {ti + 1}
+                                </button>
+                              ))}
+                              <button
+                                type="button"
+                                onClick={() => setStopOverride(stop.id, { tappaIndex: tappe.length })}
+                                className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-stone-600 bg-white border border-stone-200 rounded-full px-2.5 py-1 hover:border-terra-300"
+                              >
+                                <ArrowRight className="w-3 h-3" /> Nuova tappa
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -156,6 +385,25 @@ export default function BorgoTappeWidget({ tappe, color }: Props) {
           )
       })}
       </div>
+      {disabledStops.length > 0 && (
+        <div className="rounded-lg border border-stone-200 bg-stone-50 p-3">
+          <p className="text-[11px] font-semibold text-stone-500 mb-2">Punti spenti — esclusi dall&apos;itinerario, mai rimossi</p>
+          <div className="flex flex-col gap-1.5">
+            {disabledStops.map(stop => (
+              <div key={stop.id} className="flex items-center justify-between gap-2">
+                <span className="text-[12.5px] text-stone-500 truncate">{stop.name}</span>
+                <button
+                  type="button"
+                  onClick={() => setStopOverride(stop.id, { disabled: undefined })}
+                  className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-terra-600 hover:text-terra-700 shrink-0"
+                >
+                  <Eye className="w-3.5 h-3.5" /> Riattiva
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       {sheetData && <StopSourceSheet data={sheetData} onClose={() => setOpenStopId(null)} />}
     </div>
   )
