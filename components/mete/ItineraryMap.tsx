@@ -171,13 +171,13 @@ export default function ItineraryMap({ center, stops, legs, color, height = '320
     >
       <div ref={mapRef} style={{ height: '100%' }} />
       <div
-        className="absolute inset-x-3 z-[1000] flex items-center justify-end"
+        className="absolute inset-x-3 z-[1000] flex items-center justify-end pointer-events-none"
         style={{ top: fullscreen ? 'calc(env(safe-area-inset-top, 0px) + 12px)' : '10px' }}
       >
         <button
           onClick={toggleFullscreen}
           title={fullscreen ? 'Esci da schermo intero' : 'Schermo intero'}
-          className={chipBase}
+          className={`${chipBase} pointer-events-auto`}
         >
           {fullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
         </button>
