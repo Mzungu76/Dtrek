@@ -3,6 +3,24 @@
 
 import type { PoiItem } from './overpass'
 
+// Verifica utente (Agrigento/Cefalù — "l'itinerario finisce di calcolare e sparisce", nessuna
+// tappa trovata pur essendo entrambe città turistiche importanti con sicuramente più voci
+// Wikipedia geolocalizzate nel raggio): la chiamata di geosearch (action API, w/api.php) non
+// mandava MAI un header di identificazione, a differenza delle chiamate alla REST API più sotto
+// (già con Api-User-Agent) — la policy di Wikimedia (meta.wikimedia.org/wiki/User-Agent_policy)
+// tratta il traffico automatizzato senza User-Agent come il primo candidato a un throttling/blocco
+// silenzioso (l'IP condiviso di un host serverless come Vercel è già di per sé un bersaglio più
+// probabile), e `if (!res.ok) return []` qui sotto lo confondeva silenziosamente con "nessun
+// risultato nel raggio", mai loggato. La action API (a differenza della REST API, che i browser
+// impediscono di impostare direttamente — da cui il nome alternativo Api-User-Agent) legge lo
+// header User-Agent standard: qui le chiamate girano SEMPRE lato server (route API/lib import da
+// route API), mai dal browser, quindi impostarlo ha effetto reale — aggiunto a ogni chiamata di
+// questo file che ne era priva, mai solo a quella del bug segnalato: la stessa causa vale
+// ugualmente per le altre (fetchPageThumbnail, searchAndFetch, fetchExtendedExtract,
+// fetchWikiFullDetails), solo non ancora segnalata perché più difficili da notare (arricchimento
+// "best effort", nessuna sezione che sparisce del tutto quando fallisce).
+const WIKI_USER_AGENT = 'DtrekApp/1.0'
+
 export interface WikiPage {
   pageid:      number
   title:       string
@@ -114,7 +132,7 @@ export async function fetchPageThumbnail(title: string, lang: string, width: num
       piprop: 'thumbnail', pithumbsize: String(width),
       format: 'json', origin: '*',
     })
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
+    const res = await fetch(url, { headers: { 'User-Agent': WIKI_USER_AGENT }, signal: AbortSignal.timeout(8000) })
     if (!res.ok) return null
     const data = await res.json() as { query?: { pages?: Record<string, { thumbnail?: { source?: string } }> } }
     const pages = data.query?.pages
@@ -135,7 +153,7 @@ async function fetchSummary(
     const slug = encodeURIComponent(title.replace(/ /g, '_'))
     const res = await fetch(
       `https://${lang}.${project}.org/api/rest_v1/page/summary/${slug}`,
-      { headers: { 'Api-User-Agent': 'DtrekApp/1.0' } },
+      { headers: { 'Api-User-Agent': WIKI_USER_AGENT } },
     )
     if (!res.ok) return null
     const s = await res.json() as WikiRestSummary
@@ -172,7 +190,7 @@ export async function searchAndFetch(
       action: 'query', list: 'search', srsearch: name, srlimit: '1',
       srnamespace: '0', format: 'json', origin: '*',
     })
-    const res = await fetch(searchUrl)
+    const res = await fetch(searchUrl, { headers: { 'User-Agent': WIKI_USER_AGENT } })
     if (!res.ok) return null
     const searchJson = await res.json() as WikiSearchApiResponse
     const top = searchJson.query?.search?.[0]
@@ -208,7 +226,7 @@ export async function fetchExtendedExtract(title: string, lang: string): Promise
       exintro: '1', explaintext: '1', exchars: String(EXTENDED_EXTRACT_MAX_CHARS),
       format: 'json', origin: '*',
     })
-    const res = await fetch(url)
+    const res = await fetch(url, { headers: { 'User-Agent': WIKI_USER_AGENT } })
     if (!res.ok) return null
     const data = await res.json() as { query?: { pages?: Record<string, { extract?: string }> } }
     const pages = data.query?.pages
@@ -359,7 +377,7 @@ export async function fetchWikiFullDetails(wiki: WikiPage): Promise<WikiFullDeta
     fetch(`https://${lang}.${project}.org/w/api.php?` + new URLSearchParams({
       action: 'query', prop: 'extracts', explaintext: '1', exchars: '2000',
       titles: wiki.title, format: 'json', origin: '*',
-    }))
+    }), { headers: { 'User-Agent': WIKI_USER_AGENT } })
       .then(r => (r.ok ? r.json() as Promise<WikiExtractsApiResponse> : null))
       .then(data => {
         const page = Object.values(data?.query?.pages ?? {})[0]
@@ -367,7 +385,7 @@ export async function fetchWikiFullDetails(wiki: WikiPage): Promise<WikiFullDeta
         return trimToCompleteSentence(stripHeadingMarkup(raw))
       })
       .catch(() => wiki.extract),
-    fetch(`https://${lang}.${project}.org/api/rest_v1/page/media-list/${titleSlug}`)
+    fetch(`https://${lang}.${project}.org/api/rest_v1/page/media-list/${titleSlug}`, { headers: { 'Api-User-Agent': WIKI_USER_AGENT } })
       .then(r => (r.ok ? r.json() as Promise<WikiMediaListResponse> : null))
       .then(data => (data?.items ?? [])
         .filter(it => it.type === 'image' && it.srcset?.length)
@@ -400,7 +418,7 @@ export async function fetchNearbyWiki(
     format:   'json',
     origin:   '*',
   })
-  const searchRes = await fetch(searchUrl)
+  const searchRes = await fetch(searchUrl, { headers: { 'User-Agent': WIKI_USER_AGENT } })
   if (!searchRes.ok) return []
   const searchData = await searchRes.json() as WikiGeosearchApiResponse
   const hits = searchData.query?.geosearch ?? []
@@ -413,7 +431,7 @@ export async function fetchNearbyWiki(
         const slug  = encodeURIComponent(h.title.replace(/ /g, '_'))
         const sumRes = await fetch(
           `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${slug}`,
-          { headers: { 'Api-User-Agent': 'DtrekApp/1.0' } },
+          { headers: { 'Api-User-Agent': WIKI_USER_AGENT } },
         )
         if (!sumRes.ok) return null
         const s = await sumRes.json() as WikiRestSummary
