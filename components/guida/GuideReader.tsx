@@ -226,6 +226,18 @@ function getItalianVoice(): SpeechSynthesisVoice | null {
 
 const RATES = [0.8, 1, 1.2, 1.5]
 
+// Verifica utente: "aprendo e chiudendo la guida ha rifatto l'elaborazione almeno 3 volte" —
+// GuideReader viene montato solo quando la sezione attiva è 'featured' (vedi GuidaHub.tsx),
+// quindi passare ad un'altra sezione e tornare lo SMONTA e RIMONTA, azzerando lo state
+// (borgoItinerary) e rifacendo da capo la POST /api/borgo-itinerary ad ogni volta — anche su un
+// hit di cache lato server questo resta un giro di rete evitabile e un lampo "in caricamento"
+// ingiustificato per un itinerario che il browser ha già visto in questa stessa sessione. Cache
+// di modulo (non uno state, sopravvive ai remount di QUESTO componente finché la pagina resta
+// caricata, mai persistita oltre: un refresh vero deve comunque poter vedere un dato aggiornato)
+// indicizzata per hikeId — le personalizzazioni (overrides) dipendono da QUESTA Meta, mai dal
+// solo placeId condiviso fra guide diverse sullo stesso Borgo.
+const borgoItineraryMemoryCache = new Map<string, BorgoItinerary>()
+
 /**
  * Magazine-style tourist guide reader. The Breve tier is generated automatically (no user
  * action) once `enrichmentReady` — every widget (mappa, profilo altimetrico, punteggi, POI,
@@ -469,6 +481,12 @@ export default function GuideReader({
   // "trekking misto" mostra la timeline delle tappe interne, solo non le sue pillole.
   useEffect(() => {
     if (hike.metaType !== 'borgo_citta' || !hike.placeId) return
+    // Verifica utente ("aprendo e chiudendo la guida ha rifatto l'elaborazione almeno 3 volte") —
+    // già visto in QUESTA sessione (un remount precedente di questo stesso componente, GuideReader
+    // è montato solo mentre la sezione 'featured' è attiva) → nessuna nuova richiesta, mai un
+    // lampo "in caricamento" per un dato che il browser ha già.
+    const memoryCached = borgoItineraryMemoryCache.get(hike.id)
+    if (memoryCached) { setBorgoItinerary(memoryCached); return }
     // Un borgoWalkPolyline già persistito (creato al volo dal popup di ricerca o da una guida
     // aperta in precedenza, vedi lib/useCreateMetaFromSearch.ts) significa che l'itinerario esiste
     // già: questa richiesta lo ricalcola comunque (mai la stessa istanza — vedi il commento sopra
@@ -489,6 +507,7 @@ export default function GuideReader({
       .then(data => {
         if (cancelled || !data) return
         const itinerary = data as BorgoItinerary
+        borgoItineraryMemoryCache.set(hike.id, itinerary)
         setBorgoItinerary(itinerary)
         // Naviga (piano guide-eccellenza, verifica post-piano) — persiste l'itinerario a piedi
         // reale (legs, già calcolato qui sopra) come polyline unica riusabile dal Navigator, in un
@@ -958,10 +977,15 @@ export default function GuideReader({
                 onOverridesSaved={overrides => {
                   updatePlannedMeta(hike.id, { borgoItineraryOverrides: overrides }).catch(() => {})
                   onHikeUpdate({ borgoItineraryOverrides: overrides })
+                  // Invalida la cache di modulo sopra — un remount successivo di questo componente
+                  // (cambio sezione e ritorno) deve ripartire dalle personalizzazioni appena
+                  // salvate, mai da uno snapshot precedente al cambio.
+                  borgoItineraryMemoryCache.delete(hike.id)
                 }}
                 onDayBudgetSaved={dayBudgetMinutes => {
                   updatePlannedMeta(hike.id, { borgoDayBudgetMinutes: dayBudgetMinutes }).catch(() => {})
                   onHikeUpdate({ borgoDayBudgetMinutes: dayBudgetMinutes })
+                  borgoItineraryMemoryCache.delete(hike.id)
                 }}
               />
             )
