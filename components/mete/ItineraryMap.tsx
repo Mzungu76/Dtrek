@@ -23,7 +23,9 @@ function escapeHtml(s: string): string {
 
 // Stesso taglio del popup POI di un Sentiero (lib/overpass.ts's buildPoiPopupHtml) — nome, foto se
 // disponibile, descrizione se disponibile: mai solo il numero/nome nudo come prima (verifica
-// utente, piano guide-eccellenza).
+// utente, piano guide-eccellenza). Mostrato SOLO a schermo intero (vedi namePopupHtml sotto) —
+// verifica utente: a mappa normale lo spazio è stretto, un popup con foto/testo lungo copre metà
+// mappa e costringe a chiuderlo subito; a schermo intero c'è spazio per leggerlo comodamente.
 function stopPopupHtml(n: string, name: string, stop?: ItineraryStop): string {
   const thumb = stop?.thumbnail
     ? `<img src="${stop.thumbnail}" alt="" style="width:100%;height:90px;object-fit:cover;border-radius:8px;margin-bottom:6px" />`
@@ -37,6 +39,12 @@ function stopPopupHtml(n: string, name: string, stop?: ItineraryStop): string {
     <div style="font-weight:700;font-size:13px;color:#111827;line-height:1.3">${n}. ${escapeHtml(name)}</div>
     ${desc}
   </div>`
+}
+
+// Solo il nome (e il numero d'ordine) — la versione a mappa NON a schermo intero, vedi il
+// commento su stopPopupHtml sopra.
+function namePopupHtml(n: string, name: string): string {
+  return `<div style="font-family:system-ui,sans-serif;font-size:13px;font-weight:700;color:#111827;white-space:nowrap">${n}. ${escapeHtml(name)}</div>`
 }
 
 const chipBase = 'flex items-center justify-center w-9 h-9 rounded-full backdrop-blur-md border transition-colors shrink-0 bg-black/50 border-white/15 text-white/90'
@@ -53,6 +61,13 @@ export default function ItineraryMap({ center, stops, legs, color, height = '320
   const mapInstance = useRef<L.Map | null>(null)
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
   const [fullscreen, setFullscreen] = useState(false)
+  // I marker sono creati una sola volta al mount (useEffect con deps [] sotto, stesso motivo già
+  // spiegato per la key della mappa in BorgoTappeWidget) — un ref invece di leggere `fullscreen`
+  // direttamente lascia al popup (bindPopup con una funzione, richiamata da Leaflet ad ogni
+  // apertura) la possibilità di mostrare il contenuto giusto per lo stato ATTUALE, anche se
+  // l'utente cambia schermo intero mentre la mappa è già montata.
+  const fullscreenRef = useRef(false)
+  fullscreenRef.current = fullscreen
 
   useEffect(() => {
     if (!mapRef.current || mapInstance.current) return
@@ -100,7 +115,13 @@ export default function ItineraryMap({ center, stops, legs, color, height = '320
 
       stops.forEach((stop, i) => {
         const marker = L.marker([stop.lat, stop.lon], { icon: numberedIcon(String(i + 1), color) })
-        marker.bindPopup(stopPopupHtml(String(i + 1), stop.name, stop), { maxWidth: 250 })
+        // Leaflet richiama questa funzione ad ogni apertura del popup, non solo alla creazione —
+        // legge fullscreenRef.current al momento del click, mai quello (magari già superato) di
+        // quando il marker è stato costruito.
+        marker.bindPopup(
+          () => fullscreenRef.current ? stopPopupHtml(String(i + 1), stop.name, stop) : namePopupHtml(String(i + 1), stop.name),
+          { maxWidth: 250 },
+        )
         marker.addTo(map)
       })
 
@@ -109,7 +130,10 @@ export default function ItineraryMap({ center, stops, legs, color, height = '320
       // ancora qualcosa, riattivabile" (verifica utente).
       dimmedStops.forEach(stop => {
         const marker = L.marker([stop.lat, stop.lon], { icon: numberedIcon('·', '#a8a29e'), opacity: 0.45 })
-        marker.bindPopup(stopPopupHtml('Spento', stop.name, stop), { maxWidth: 250 })
+        marker.bindPopup(
+          () => fullscreenRef.current ? stopPopupHtml('Spento', stop.name, stop) : namePopupHtml('Spento', stop.name),
+          { maxWidth: 250 },
+        )
         marker.addTo(map)
       })
 

@@ -10,7 +10,7 @@ import { LS_KEYS } from '@/lib/localStore'
 import type { WikiPage } from '@/lib/wikipedia'
 import {
   VolumeX, Loader2,
-  FileDown, BookOpen, Sparkles, ChevronRight,
+  FileDown, BookOpen, Sparkles,
 } from 'lucide-react'
 import type { PoiItem } from '@/lib/overpass'
 import PhotoMosaic from '@/components/PhotoMosaic'
@@ -1333,6 +1333,34 @@ export default function GuideReader({
 
           <div className="min-w-0 px-4 sm:px-6 md:px-0 md:max-w-3xl lg:max-w-[52rem]">
 
+            {/* Verifica utente: cliccare "Genera il resto"/"Approfondisci" sembrava non fare
+                nulla — il banner sotto (quello con la scelta delle sezioni) SPARISCE non appena
+                generatingSections si valorizza, senza nulla al suo posto finché l'utente non
+                scorre fino allo spinner per-sezione, facile da perdere. Questo banner prende lo
+                stesso spazio quando una generazione è in corso, da QUALUNQUE bottone sia partita
+                (banner qui sotto, riga "+N sezioni", o "Approfondisci" su una singola sezione già
+                visibile più in basso — generatingSections è lo stesso stato condiviso). */}
+            {hasGuide && generatingSections.length > 0 && (
+              <div className="mt-4 flex items-center gap-3 px-4 py-3 rounded-2xl bg-terra-50 border border-terra-200">
+                <Loader2 className="w-4 h-4 text-terra-600 shrink-0 animate-spin" />
+                <p className="text-[13px] font-semibold text-stone-800">
+                  Giulia sta scrivendo {generatingSections.length === 1 ? 'la sezione' : `${generatingSections.length} sezioni`}…
+                </p>
+              </div>
+            )}
+
+            {/* Verifica utente: un errore di generazione (es. il cooldown anti-click-ripetuto,
+                lib/aiCooldown.ts, o l'AI temporaneamente non disponibile) finiva mostrato in fondo
+                a TUTTE le sezioni della guida — fuori dallo schermo rispetto a dove l'utente ha
+                appena cliccato "Genera il resto"/"Approfondisci" quassù, indistinguibile da "non è
+                successo nulla". Spostato subito sotto il banner di caricamento, sempre visibile
+                senza scorrere. */}
+            {error && (
+              <div className="mt-4 p-4 bg-red-50 border border-red-100 rounded-xl text-sm text-red-600">
+                {error}
+              </div>
+            )}
+
             {/* ── Genera il resto della guida — verifica utente: scelta per sezione, mai più
                  tutte insieme senza alternativa ────────────────────────────────────────── */}
             {hasGuide && !generating && generatingSections.length === 0 && missingSectionKeys.length > 0 && (() => {
@@ -1482,65 +1510,32 @@ export default function GuideReader({
             <div className="mt-4">
               {navEntries.map(({ section: s, index: i }) => {
                 // La prima sezione vuota (piano guide-eccellenza §Fase 1.1) diventa una riga
-                // compatta unica che riassume TUTTE le sezioni vuote insieme, con un'unica azione
-                // — le altre non hanno più una card propria in questo loop (navEntries le esclude
-                // già, vedi sopra), invece di N placeholder quasi identici sparsi nello scroll.
+                // compatta unica che riassume TUTTE le sezioni vuote insieme — le altre non hanno
+                // più una card propria in questo loop (navEntries le esclude già, vedi sopra),
+                // invece di N placeholder quasi identici sparsi nello scroll. Verifica utente: qui
+                // dentro c'era ANCHE un secondo set di chip + un secondo bottone "Approfondisci"
+                // per scegliere/generare le stesse sezioni — praticamente duplicato del banner
+                // "Genera il resto della guida" appena sopra la lista (stesso deselectedSections,
+                // stessa generateSections()), la vecchia modalità prima di quel banner mai rimossa
+                // dopo la riscrittura. Questa riga resta solo come segnaposto di stato (quante
+                // sezioni mancano ancora, e se un approfondimento è in corso) — la scelta/l'azione
+                // vive un'unica volta, nel banner sopra.
                 if (i === firstEmptyIndex) {
                   const approfondendoMerged = emptySections.some(es => generatingSections.includes(es.guideKey))
-                  const emptyKeys = emptySections.map(es => es.guideKey)
-                  const selectedEmpty = selectedFrom(emptyKeys)
                   return (
                     <article
                       key={s.key}
                       ref={el => { sectionRefs.current[i] = el }}
-                      className="scroll-mt-16 flex flex-col gap-2 px-4 py-3 border border-stone-200 rounded-xl bg-white mb-2.5"
+                      className="scroll-mt-16 flex items-center gap-3 px-4 py-3 border border-stone-200 rounded-xl bg-white mb-2.5"
                     >
-                      <div className="flex items-center gap-3">
-                        <span className="[&>svg]:w-4 [&>svg]:h-4 shrink-0 text-stone-400">{LEGACY_STYLE.icon}</span>
-                        <span className="flex-1 min-w-0 text-[13px] font-semibold text-stone-800">
-                          + {emptySections.length} {emptySections.length === 1 ? 'sezione da generare' : 'sezioni da generare'}
+                      <span className="[&>svg]:w-4 [&>svg]:h-4 shrink-0 text-stone-400">{LEGACY_STYLE.icon}</span>
+                      <span className="flex-1 min-w-0 text-[13px] font-semibold text-stone-800">
+                        + {emptySections.length} {emptySections.length === 1 ? 'sezione da generare' : 'sezioni da generare'}
+                      </span>
+                      {approfondendoMerged && (
+                        <span className="flex items-center gap-1 text-[11.5px] font-medium text-stone-400 shrink-0">
+                          <Loader2 className="w-3 h-3 animate-spin" /> Approfondimento…
                         </span>
-                        {approfondendoMerged && (
-                          <span className="flex items-center gap-1 text-[11.5px] font-medium text-stone-400 shrink-0">
-                            <Loader2 className="w-3 h-3 animate-spin" /> Approfondimento…
-                          </span>
-                        )}
-                      </div>
-                      {!approfondendoMerged && showApprofondisciHint && generatingSections.length === 0 && (
-                        <>
-                          {/* Verifica utente: chip per sezione, non più un unico "Approfondisci"
-                              che le generava tutte insieme senza scelta. */}
-                          <div className="flex flex-wrap gap-1.5">
-                            {emptySections.map(es => {
-                              const isSelected = !deselectedSections.has(es.guideKey)
-                              return (
-                                <button
-                                  key={es.guideKey}
-                                  type="button"
-                                  onClick={() => toggleSectionSelected(es.guideKey)}
-                                  className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-colors ${
-                                    isSelected
-                                      ? 'bg-terra-100 border-terra-200 text-terra-700'
-                                      : 'bg-stone-50 border-stone-200 text-stone-400 line-through'
-                                  }`}
-                                >
-                                  {es.title}
-                                </button>
-                              )
-                            })}
-                          </div>
-                          <div className="flex flex-wrap items-center justify-end gap-2">
-                            <button
-                              onClick={() => generateSections(selectedEmpty)}
-                              disabled={selectedEmpty.length === 0}
-                              className="flex items-center gap-0.5 text-[11.5px] font-bold text-terra-600 hover:text-terra-700 disabled:text-stone-300 disabled:cursor-not-allowed shrink-0 whitespace-nowrap"
-                            >
-                              {selectedEmpty.length === 0
-                                ? 'Seleziona almeno una sezione'
-                                : <>Approfondisci con Giulia (AI) <ChevronRight className="w-3 h-3" /></>}
-                            </button>
-                          </div>
-                        </>
                       )}
                     </article>
                   )
@@ -1583,12 +1578,6 @@ export default function GuideReader({
                 </div>
               )}
             </div>
-
-            {error && (
-              <div className="mt-4 p-4 bg-red-50 border border-red-100 rounded-xl text-sm text-red-600">
-                {error}
-              </div>
-            )}
 
             {hasGuide && !generating && galleryItems.length > 0 && (
               <div className="mt-4 mb-1">
