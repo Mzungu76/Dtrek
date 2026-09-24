@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { getUserFromRequest } from '@/lib/supabaseAuth'
 import {
-  mergeStopCandidates, nearestStops, orderStopsNearestNeighbor,
+  mergeStopCandidates, nearestStops, excludeIsolatedOutliers, orderStopsNearestNeighbor,
   culturalTappaBudgetMinutes, WALK_SPEED_MPS, MAX_STOPS_PER_TAPPA,
   type ItineraryStopCandidate, type ItineraryTappa, type BorgoItineraryOverrides,
 } from '@/lib/metaSearch/borgoItinerary'
@@ -59,6 +59,19 @@ const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000
 // dell'ALTRA modalità di fallimento — un errore di rete vero e proprio, quella sì ritentata da
 // fetchOverpass — resta comunque ~2×questo valore + 1.2s).
 const WALK_NETWORK_TIMEOUT_MS = 45_000
+
+// Verifica utente (Agrigento) — vedi il commento sopra la scrittura della cache più sotto: ora
+// attesa invece di fire-and-forget, ma un tetto di tempo evita che una Supabase lenta/irraggiungibile
+// blocchi la risposta fino a maxDuration — un fallimento del solo salvataggio in cache non deve mai
+// costare quanto un fallimento della generazione stessa, l'utente ottiene comunque il suo itinerario.
+const CACHE_WRITE_TIMEOUT_MS = 5000
+
+function withTimeout<T>(p: PromiseLike<T>, ms: number, onTimeout: () => T): Promise<T> {
+  return Promise.race([
+    Promise.resolve(p),
+    new Promise<T>(resolve => setTimeout(() => resolve(onTimeout()), ms)),
+  ])
+}
 
 export interface ItineraryStop {
   id: string
@@ -191,11 +204,21 @@ export async function POST(req: NextRequest) {
   }
 
   const capped = nearestStops(center, merged, MAX_TOTAL_STOPS)
+  // Verifica utente: "Casa natale di S. Camillo de Lellis" (Bucchianico, un paese diverso) inclusa
+  // fra le tappe di Chieti pur essendo isolata dal resto del cluster — vedi il commento su
+  // excludeIsolatedOutliers in lib/metaSearch/borgoItinerary.ts. Gli outlier sono scartati, mai
+  // messi nell'itinerario a piedi principale: RADIUS_STEPS può allargarsi fino a 20km proprio per
+  // raggiungere i bordi di una città grande, ma un candidato senza nessuna catena di tappe vicine
+  // che lo colleghi al centro è quasi sempre un luogo diverso emerso dalla stessa geosearch.
+  const { kept: clustered, outliers } = excludeIsolatedOutliers(center, capped)
+  if (outliers.length > 0) {
+    console.warn('[borgo-itinerary] tappe scartate perché isolate dal resto del cluster:', outliers.map(s => s.name))
+  }
   // Verifica utente: descrizioni delle tappe "più esaustive" (e coerenti tra loro, non solo per
   // quelle da Wikipedia) — lib/guideBorgoDetailStops.ts's enrichStopDescriptions, stessa funzione
   // riusata da app/api/guide/route.ts per il prompt, applicata SOLO alle tappe che sopravvivono
   // alla selezione finale, mai all'intero elenco di candidati scartati.
-  const ordered = await enrichStopDescriptions(orderStopsNearestNeighbor(center, capped))
+  const ordered = await enrichStopDescriptions(orderStopsNearestNeighbor(center, clustered))
 
   if (ordered.length === 0) {
     // Mai messo in cache: un elenco vuoto qui può derivare da un genuino "nessuna tappa nei
@@ -227,21 +250,32 @@ export async function POST(req: NextRequest) {
     estimatedTimeSeconds: Math.round(totalDistanceM / WALK_SPEED_MPS),
   }
 
-  // Fire-and-forget, come lib/wikidataFallback.ts/lib/placePhotoCache.ts: la risposta non deve mai
-  // aspettare la scrittura della cache. Solo quando la rete pedonale è stata trovata davvero (mai
-  // quando `network` è null e ogni leg è quindi una linea d'aria di ripiego) — altrimenti un esito
-  // degradato per un problema temporaneo di Overpass resterebbe "congelato" in cache per 30 giorni
-  // invece di lasciare che il prossimo tentativo riprovi con la rete vera. Mai `tappe` dentro
-  // questo oggetto: è personalizzato sull'utente corrente, la cache è condivisa tra tutti.
+  // Verifica utente (Agrigento — "ancora lento" a ogni tentativo, mai una tappa in cache): la
+  // scrittura era fire-and-forget (come lib/wikidataFallback.ts/lib/placePhotoCache.ts, per non far
+  // aspettare la risposta), ma su un runtime serverless (Vercel, questa route non è edge) una
+  // promise non attesa può restare tagliata a metà se la funzione viene rilasciata subito dopo
+  // l'invio della risposta — senza garanzia di completamento (il progetto non ha @vercel/functions'
+  // waitUntil né Next.js `after`, non disponibile in questa versione). Un payload piccolo (Chieti,
+  // poche tappe) vince quasi sempre questa corsa per puro caso; un bbox più esteso (più tappe, rete
+  // pedonale più grande da processare PRIMA di arrivare qui) la perde quasi sempre — mai una cache
+  // scritta, quindi ogni apertura della guida ripete l'intera pipeline costosa da zero. Attesa qui
+  // (poche centinaia di ms per un upsert, trascurabile sul totale della richiesta) garantisce che la
+  // scrittura sia completa prima di rispondere, invece di sperare che il runtime resti vivo
+  // abbastanza a lungo. Solo quando la rete pedonale è stata trovata davvero (mai quando `network`
+  // è null e ogni leg è quindi una linea d'aria di ripiego) — altrimenti un esito degradato per un
+  // problema temporaneo di Overpass resterebbe "congelato" in cache per 30 giorni invece di lasciare
+  // che il prossimo tentativo riprovi con la rete vera. Mai `tappe` dentro questo oggetto: è
+  // personalizzato sull'utente corrente, la cache è condivisa tra tutti.
   if (network) {
-    supabase
-      .from('dtrek_places')
-      .update({ itinerary_cache: cacheableItinerary, itinerary_cached_at: new Date().toISOString() })
-      .eq('id', placeId)
-      .then(
-        ({ error }) => { if (error) console.error('[borgo-itinerary] cache update fallito:', error.message) },
-        (e: unknown) => console.error('[borgo-itinerary] cache update fallito:', e),
-      )
+    const { error } = await withTimeout<{ error: { message: string } | null }>(
+      supabase
+        .from('dtrek_places')
+        .update({ itinerary_cache: cacheableItinerary, itinerary_cached_at: new Date().toISOString() })
+        .eq('id', placeId),
+      CACHE_WRITE_TIMEOUT_MS,
+      () => ({ error: { message: 'timeout' } }),
+    )
+    if (error) console.error('[borgo-itinerary] cache update fallito:', error.message)
   }
 
   const tappe = await computePersonalizedTappe(center, ordered, legs, overrides, MAX_STOPS_PER_TAPPA, maxMinutesPerTappa, WALK_NETWORK_TIMEOUT_MS)

@@ -238,6 +238,21 @@ const RATES = [0.8, 1, 1.2, 1.5]
 // solo placeId condiviso fra guide diverse sullo stesso Borgo.
 const borgoItineraryMemoryCache = new Map<string, BorgoItinerary>()
 
+// Verifica utente ("chiudendo e riaprendo la guida, la sezione 'Il borgo' mostra via via più
+// contenuto — prima niente, poi le foto, poi la descrizione") — STESSA causa già diagnosticata e
+// risolta sopra per borgoItinerary, mai applicata a queste due fetch: ogni chiusura/riapertura
+// smonta e rimonta questo componente, e se l'utente richiude prima che fetchRoutePhotos/
+// /api/places rispondano, quella singola apertura le perde del tutto (la Promise risolve dopo lo
+// smontaggio, il componente rimontato non la vede mai) — servono tentativi successivi finché una
+// singola apertura non dura abbastanza da vedere la risposta, il che sembra "si carica un po' di
+// più ogni volta" ma è solo il caso di essere stati pazienti abbastanza quella volta. Stessa cache
+// di modulo, stesso principio (mai persistita oltre la pagina caricata): un rimontaggio successivo
+// trova subito il risultato di un tentativo precedente ANCHE SE quel tentativo si è concluso dopo
+// che l'utente aveva già richiuso — la Promise in volo aggiorna comunque la cache al suo arrivo,
+// solo non più uno state di un componente ormai smontato.
+const routePhotosMemoryCache = new Map<string, string[]>()
+const placeDetailMemoryCache = new Map<string, PlaceDetail>()
+
 /**
  * Magazine-style tourist guide reader. The Breve tier is generated automatically (no user
  * action) once `enrichmentReady` — every widget (mappa, profilo altimetrico, punteggi, POI,
@@ -447,6 +462,8 @@ export default function GuideReader({
   // esattamente questo per il proprio caso — invece dei 15km pensati per il punto medio di un
   // sentiero, che per un singolo punto includerebbe foto di tutt'altro luogo.
   useEffect(() => {
+    const memoryCached = routePhotosMemoryCache.get(hike.id)
+    if (memoryCached) { setRoutePhotos(memoryCached); return }
     const pts = (hike.trackPoints ?? []).filter((p: { lat?: number; lon?: number }) => p.lat && p.lon) as { lat: number; lon: number }[]
     const poly = pts.length > 0 ? pts : (hike.routePolyline ?? []).map((p: [number, number]) => ({ lat: p[0], lon: p[1] }))
     const mid = poly.length > 0
@@ -454,11 +471,17 @@ export default function GuideReader({
       : hike.latitude != null && hike.longitude != null ? { lat: hike.latitude, lon: hike.longitude } : null
     if (!mid) return
     const radiusM = poly.length > 0 ? 15000 : 1500
+    let cancelled = false
     import('@/app/lib/guide/fetchRoutePhotos').then(({ fetchRoutePhotos }) =>
       fetchRoutePhotos(mid.lat, mid.lon, radiusM, 6)
     ).then(photos => {
-      setRoutePhotos(photos.map(p => p.url))
+      const urls = photos.map(p => p.url)
+      // Scritta anche se questo montaggio è già stato chiuso (vedi il commento sopra
+      // routePhotosMemoryCache) — un rimontaggio successivo la trova comunque pronta.
+      routePhotosMemoryCache.set(hike.id, urls)
+      if (!cancelled) setRoutePhotos(urls)
     }).catch(() => {})
+    return () => { cancelled = true }
   }, [hike.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Borgo/Città e Sito: stesso endpoint già usato da app/mete/[id]/page.tsx per la scheda di
@@ -466,10 +489,23 @@ export default function GuideReader({
   // già tutto il necessario).
   useEffect(() => {
     if (hike.metaType === 'sentiero' || !hike.placeId) return
+    // Chiave per placeId, non hikeId (a differenza di routePhotosMemoryCache/
+    // borgoItineraryMemoryCache sopra): questo dato è del Borgo/Sito in sé, mai personalizzato per
+    // singola Meta — due Meta diverse sullo stesso placeId condividono legittimamente la cache,
+    // esattamente come l'effetto qui sopra già ricalcola solo al cambio di placeId, non di hikeId.
+    const memoryCached = placeDetailMemoryCache.get(hike.placeId)
+    if (memoryCached) { setPlaceDetail(memoryCached); return }
     let cancelled = false
     fetch(`/api/places/${hike.placeId}`)
       .then(res => res.ok ? res.json() : null)
-      .then(data => { if (!cancelled && data) setPlaceDetail(data as PlaceDetail) })
+      .then(data => {
+        if (!data) return
+        const detail = data as PlaceDetail
+        // Scritta anche a componente già smontato (vedi il commento su routePhotosMemoryCache
+        // sopra) — un rimontaggio successivo la trova comunque pronta.
+        placeDetailMemoryCache.set(hike.placeId!, detail)
+        if (!cancelled) setPlaceDetail(detail)
+      })
       .catch(() => {})
     return () => { cancelled = true }
   }, [hike.metaType, hike.placeId])

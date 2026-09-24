@@ -5,13 +5,20 @@
 // tappe, confermato) — stessa identica logica, un solo posto invece di due copie.
 import { fetchWalkNetworkCached } from './walkNetworkCache'
 import { nearestGraphNode, type WalkNetwork } from './osmGraph'
-import { dijkstra, reconstructPath } from './walkRouting'
+import { aStarToTarget, reconstructPath, DIJKSTRA_MAX_DIST_M } from './walkRouting'
 import { padBbox } from '../overpassTrails'
 import { haversineM } from '../geoUtils'
 import type { ItineraryLeg } from '@/app/api/borgo-itinerary/route'
 
-const DIJKSTRA_MAX_DIST_M = 3000
-const DIJKSTRA_MAX_NODES = 800
+// Verifica utente (Chieti) — vedi il commento su aStarToTarget in lib/routeBuilder/walkRouting.ts:
+// con Dijkstra puro questo tetto doveva bastare a esplorare un intero "anello" di nodi equidistanti
+// in ogni direzione (~3700 nodi serviti per una tappa reale a 2,8km in un centro denso, ben oltre
+// gli 800 di prima) — con A* lo stesso cammino ne esplora meno di 1000, perché la ricerca converge
+// verso il bersaglio invece di espandersi alla cieca. Il margine resta ampio (non il minimo
+// osservato) perché un centro storico ancora più denso di Chieti può sempre richiederne qualcuno in
+// più, e il costo di un budget più alto qui è pagato solo quando serve davvero (A* si ferma appena
+// il bersaglio viene estratto, mai un'esplorazione completa fino al tetto quando il cammino è breve).
+const ASTAR_MAX_NODES = 4000
 const SNAP_THRESHOLD_M = 300
 
 export function routeLeg(
@@ -30,12 +37,11 @@ export function routeLeg(
   const end = nearestGraphNode(network, to.lat, to.lon, SNAP_THRESHOLD_M)
   if (!start || !end) return straightLine
 
-  const { dist, prev } = dijkstra(network, start.nodeId, DIJKSTRA_MAX_DIST_M, DIJKSTRA_MAX_NODES)
-  const targetDist = dist.get(end.nodeId)
-  if (targetDist == null) return straightLine
+  const { distM, prev } = aStarToTarget(network, start.nodeId, end.nodeId, DIJKSTRA_MAX_DIST_M, ASTAR_MAX_NODES)
+  if (distM == null) return straightLine
 
   return {
-    distanceM: targetDist + start.distM + end.distM,
+    distanceM: distM + start.distM + end.distM,
     polyline: reconstructPath(network, prev, end.nodeId, start.nodeId),
     real: true,
   }

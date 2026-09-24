@@ -3,7 +3,7 @@
 // route=hiking per nome, qui servono le way generiche con i node id (non solo la geometria), così
 // i nodi condivisi tra way diverse restano visibili come intersezioni reali della rete stradale.
 import { OVERPASS_ENDPOINTS } from '@/lib/overpassTrails'
-import { haversineM, simplifyPolyline } from '@/lib/geoUtils'
+import { haversineM, simplifyPolyline, nearestPointOnSegment } from '@/lib/geoUtils'
 import { mapOsmSacScale } from '@/lib/osm/sacScale'
 
 // Tag highway ammessi: sentieri/tracciati/carrarecce (comprese le "strade bianche", tipicamente
@@ -46,14 +46,20 @@ const WALKABLE_ACCESS_FILTER =
 const WALKABLE_FOOT_OVERRIDE_FILTER = '["foot"~"^(yes|permissive|designated)$"]'
 
 // Bump ad ogni cambio della query stessa (WALKABLE_HIGHWAY, i filtri di accesso sopra, o
-// qualunque altro filtro dentro fetchWalkNetwork sotto, INCLUSA stitchNearbyEndpoints — cambia la
-// forma del grafo restituito, non solo la query Overpass) — lib/routeBuilder/walkNetworkCache.ts
-// lo include nella chiave di cache proprio perché la chiave è altrimenti solo il bbox: senza
-// questo, una rete già in cache da PRIMA di un cambio di filtro (es. l'aggiunta di tertiary/
-// secondary, o di pedestrian/living_street sopra) resterebbe servita così com'era, con lo stesso
-// identico buco nei dati che il cambio doveva risolvere, fino alla scadenza naturale della cache
-// (45gg) — un fix silenziosamente inefficace per qualunque bbox già visitato.
-export const WALK_NETWORK_QUERY_VERSION = 4
+// qualunque altro filtro dentro fetchWalkNetwork sotto, INCLUSA stitchNearbyEndpoints/
+// bridgeDisconnectedComponents — cambia la forma del grafo restituito, non solo la query Overpass)
+// — lib/routeBuilder/walkNetworkCache.ts lo include nella chiave di cache proprio perché la chiave
+// è altrimenti solo il bbox: senza questo, una rete già in cache da PRIMA di un cambio di filtro
+// (es. l'aggiunta di tertiary/secondary, o di pedestrian/living_street sopra) resterebbe servita
+// così com'era, con lo stesso identico buco nei dati che il cambio doveva risolvere, fino alla
+// scadenza naturale della cache (45gg) — un fix silenziosamente inefficace per qualunque bbox già
+// visitato. v5: aggiunta bridgeDisconnectedComponents sotto (verifica utente, Chieti — un bbox già
+// in cache da PRIMA di questo fix resterebbe altrimenti scollegato per altri 45 giorni). v6:
+// bridgeDisconnectedComponents ricostruita (verifica utente, Agrigento — un bug di prestazioni e
+// una correzione di correttezza sulla stessa funzione, entrambi capaci di cambiare quali ponti
+// vengono trovati) — un bbox già in cache da un deploy intermedio fra i due fix andrebbe altrimenti
+// servito con la ricucitura sbagliata per altri 45 giorni.
+export const WALK_NETWORK_QUERY_VERSION = 6
 
 export interface GraphNode {
   lat: number
@@ -236,6 +242,7 @@ out body qt;`
   }
 
   stitchNearbyEndpoints(nodes)
+  bridgeDisconnectedComponents(nodes)
 
   return { nodes }
 }
@@ -291,6 +298,235 @@ export function stitchNearbyEndpoints(nodes: Map<number, GraphNode>): void {
         }
       }
     }
+  }
+}
+
+// Verifica utente (Chieti, place id eb07bfac-e861-484c-bb4c-acca63838e3f) — confermato sui dati
+// reali (walk_network_cache id=69, 8345 nodi): "Terme romane di Chieti" cade su un frammento
+// isolato di sole 3 node, staccato dal resto della rete (7269 nodi) da un varco di ~56m — la
+// stessa causa di stitchNearbyEndpoints sopra (due way che non condividono un node), ma un varco
+// troppo largo per STITCH_THRESHOLD_M=15 (pensato per un buco di digitalizzazione di pochi metri,
+// Sirmione ~8m, non per un frammento OSM realmente isolato di decine di metri). Alzare
+// STITCH_THRESHOLD_M stesso per farlo passare significherebbe applicare quella soglia più ampia a
+// OGNI coppia di nodi a bassa valenza della rete, rischiando di inventare scorciatoie fra way
+// vicine ma reciprocamente irraggiungibili per un motivo reale (un fiume, un dislivello, un varco
+// senza attraversamento) — un rischio molto più concreto quando la soglia sale da 15 a oltre 50m.
+// Qui la soglia più ampia si applica SOLO fra componenti del grafo altrimenti del tutto scollegate
+// (mai fra due nodi già raggiungibili l'uno dall'altro, quale che sia la distanza reale del
+// percorso) — e limitata all'UNICO ponte più corto necessario a riunirle, mai una scorciatoia in
+// più su una rete già connessa. Approccio stile Kruskal (minimum bridging forest): si valutano
+// tutti i ponti candidati entro COMPONENT_BRIDGE_MAX_M in ordine di distanza crescente, applicando
+// solo quelli che uniscono due componenti ancora distinte — un varco più corto già ricucito rende
+// ridondante (mai dannoso) un secondo ponte più lungo fra le stesse due componenti.
+// Snap alla via più vicina (nearestPointOnSegment, lib/geoUtils.ts) invece che al solo nodo più
+// vicino — l'approccio standard di un router pedonale OSM per agganciare un punto alla rete: il
+// punto più vicino di un frammento isolato cade spesso a metà di un arco esistente dell'altra
+// componente (un marciapiede che sfiora il centro di un tratto di strada, non uno dei suoi due
+// estremi), non su uno dei suoi node — agganciare solo ai node (come stitchNearbyEndpoints)
+// richiederebbe una soglia ancora più larga per lo stesso identico varco fisico.
+const COMPONENT_BRIDGE_MAX_M = 220
+// Verifica utente — un tentativo di stringere questa cella a 0.0032 (il minimo teoricamente
+// sufficiente per COMPONENT_BRIDGE_MAX_M, calcolato dal solo margine cella>=soglia) ha fatto perdere
+// dei ponti validi sui dati reali di Chieti (8351/8368 raggiungibili invece di tutti): un arco lungo
+// (fra due node distanti, non infrequente su una via poco digitalizzata) è indicizzato SOLO sulla
+// cella dei suoi due estremi, mai sulle celle che il segmento attraversa in mezzo — un candidato
+// vicino al centro di un arco simile ma lontano da entrambi i suoi estremi può cadere in una cella
+// che l'intorno 3×3 del candidato non arriva a coprire, quale che sia il margine teorico su un
+// singolo punto. Tornare a 0.004 (stesso rapporto cella/soglia di STITCH_CELL_DEG, ~440m) elimina
+// il problema con un margine ben più ampio del minimo — verificato senza nodi orfani su tutti i
+// bbox reali già testati (Chieti, Sirmione, Porto Torres, Pescara).
+const COMPONENT_BRIDGE_CELL_DEG = 0.004
+
+class UnionFind {
+  private parent = new Map<number, number>()
+  find(x: number): number {
+    const p = this.parent.get(x)
+    if (p == null) { this.parent.set(x, x); return x }
+    if (p !== x) {
+      const root = this.find(p)
+      this.parent.set(x, root)
+      return root
+    }
+    return p
+  }
+  union(a: number, b: number): void {
+    const ra = this.find(a), rb = this.find(b)
+    if (ra !== rb) this.parent.set(ra, rb)
+  }
+}
+
+export function bridgeDisconnectedComponents(nodes: Map<number, GraphNode>): void {
+  if (nodes.size === 0) return
+
+  const uf = new UnionFind()
+  for (const [id, node] of Array.from(nodes)) {
+    uf.find(id)
+    for (const e of node.edges) uf.union(id, e.to)
+  }
+  // Verifica utente (Agrigento — "sembra lentissimo") — confermato sui dati reali già raccolti per
+  // Chieti/Sirmione/Pescara: senza la restrizione sotto, bridgeDisconnectedComponents impiegava
+  // fino a 8 SECONDI su una rete di 8345 node, perché "solo node a bassa valenza" da solo non basta
+  // a restringere i CANDIDATI di partenza — la stragrande maggioranza dei node di una qualunque
+  // rete stradale ha grado 2 (un punto intermedio qualunque lungo una via, non solo l'estremità di
+  // un frammento isolato): il 71% dei node di Chieti passava il filtro (5890/8345), ciascuno a
+  // scandagliare un intorno di ~1.3km×1.3km (COMPONENT_BRIDGE_CELL_DEG, molto più ampio dei ~100m
+  // di STITCH_CELL_DEG) — un costo che stitchNearbyEndpoints non paga proprio perché la sua cella è
+  // piccola, non perché il suo filtro di grado sia più stretto. La vera proprietà che rende un node
+  // un candidato utile da cui CERCARE un ponte è appartenere a una componente DIVERSA da quella
+  // principale (quella con più node): un node già nella componente principale non ha mai bisogno
+  // di iniziare la ricerca da sé stesso. Attenzione però (verificato sui dati reali, un primo
+  // tentativo di scartare interamente i node della componente principale aveva perso alcuni ponti
+  // validi): un ponte può benissimo avere il suo punto più vicino su un ARCO principale ma vicino a
+  // un ESTREMO che è proprio un node della componente principale — nearestPointOnSegment(punto,
+  // arco) NON è simmetrico rispetto a chi "cerca" (la ricerca inversa, punto sull'arco principale
+  // verso l'arco minoritario, è una query geometrica diversa) — per questo sotto si cercano ENTRAMBE
+  // le direzioni, ciascuna delimitata dal solo lato minoritario (mai iterando tutti i node/archi
+  // principali): dai node minoritari verso QUALUNQUE arco vicino, e dagli archi minoritari verso i
+  // node principali vicini.
+  const componentSize = new Map<number, number>()
+  for (const id of Array.from(nodes.keys())) {
+    const root = uf.find(id)
+    componentSize.set(root, (componentSize.get(root) ?? 0) + 1)
+  }
+  let mainRoot = -1, mainSize = -1
+  for (const [root, size] of Array.from(componentSize)) {
+    if (size > mainSize) { mainSize = size; mainRoot = root }
+  }
+  if (componentSize.size <= 1) return // già tutta una sola componente, niente da ricucire
+
+  const cellKey = (lat: number, lon: number) => `${Math.floor(lat / COMPONENT_BRIDGE_CELL_DEG)}_${Math.floor(lon / COMPONENT_BRIDGE_CELL_DEG)}`
+
+  // Griglia di ARCHI (non solo nodi, vedi il commento sopra) — indicizzati sulla cella di entrambi
+  // gli estremi, così una ricerca vicino a uno qualunque dei due lo trova. Include TUTTI gli archi
+  // (anche quelli della componente principale): serve da bersaglio per la ricerca dal lato
+  // minoritario sotto.
+  interface EdgeRef { aId: number; bId: number }
+  const edgeGrid = new Map<string, EdgeRef[]>()
+  const addToGrid = <T,>(grid: Map<string, T[]>, key: string, ref: T) => {
+    const bucket = grid.get(key)
+    if (bucket) bucket.push(ref)
+    else grid.set(key, [ref])
+  }
+  const seenEdge = new Set<string>()
+  for (const [id, node] of Array.from(nodes)) {
+    for (const e of node.edges) {
+      const key = id < e.to ? `${id}|${e.to}` : `${e.to}|${id}`
+      if (seenEdge.has(key)) continue
+      seenEdge.add(key)
+      const a = nodes.get(id)!, b = nodes.get(e.to)!
+      const ref: EdgeRef = { aId: id, bId: e.to }
+      addToGrid(edgeGrid, cellKey(a.lat, a.lon), ref)
+      addToGrid(edgeGrid, cellKey(b.lat, b.lon), ref)
+    }
+  }
+
+  // Griglia di NODI della sola componente principale — bersaglio per la ricerca dal lato degli
+  // archi minoritari sotto (mai bisogno di indicizzare i node minoritari qui: un ponte fra due
+  // componenti minoritarie è già trovato dalla ricerca "da node minoritario" sopra, in entrambe le
+  // direzioni essendo entrambi i lati minoritari).
+  const mainNodeGrid = new Map<string, number[]>()
+  for (const [id, node] of Array.from(nodes)) {
+    if (uf.find(id) !== mainRoot) continue
+    addToGrid(mainNodeGrid, cellKey(node.lat, node.lon), id)
+  }
+
+  interface BridgeCandidate { fromId: number; edge: EdgeRef; proj: { lat: number; lon: number; distM: number; t: number } }
+  const candidates: BridgeCandidate[] = []
+
+  // Dai node minoritari a bassa valenza (le estremità di way isolate, stesso identico criterio di
+  // stitchNearbyEndpoints — un vero incrocio già mappato al loro interno non ha bisogno di un
+  // ponte) verso QUALUNQUE arco vicino di una componente diversa, entro COMPONENT_BRIDGE_MAX_M.
+  for (const [id, node] of Array.from(nodes)) {
+    if (uf.find(id) === mainRoot) continue
+    if (node.edges.length > MAX_STITCH_DEGREE) continue
+    const cx = Math.floor(node.lat / COMPONENT_BRIDGE_CELL_DEG)
+    const cy = Math.floor(node.lon / COMPONENT_BRIDGE_CELL_DEG)
+    const seenHere = new Set<string>()
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        const bucket = edgeGrid.get(`${cx + dx}_${cy + dy}`)
+        if (!bucket) continue
+        for (const edgeRef of bucket) {
+          const edgeKey = `${edgeRef.aId}|${edgeRef.bId}`
+          if (seenHere.has(edgeKey)) continue
+          seenHere.add(edgeKey)
+          if (edgeRef.aId === id || edgeRef.bId === id) continue // il proprio stesso arco
+          if (uf.find(id) === uf.find(edgeRef.aId)) continue // stessa componente, mai una scorciatoia su una rete già connessa
+          const a = nodes.get(edgeRef.aId)!, b = nodes.get(edgeRef.bId)!
+          const proj = nearestPointOnSegment(node.lat, node.lon, [a.lat, a.lon], [b.lat, b.lon])
+          if (proj.distM > COMPONENT_BRIDGE_MAX_M) continue
+          candidates.push({ fromId: id, edge: edgeRef, proj })
+        }
+      }
+    }
+  }
+
+  // Dagli archi minoritari (entrambi gli estremi in una componente non principale per costruzione —
+  // un arco esistente unisce sempre i suoi due estremi nella stessa componente) ai node principali
+  // vicini — la direzione "mancante" sopra: il punto più vicino di un arco minoritario può cadere
+  // vicino a un node principale che non è mai stato considerato come punto di partenza. Cerca dal
+  // vicinato di ENTRAMBI gli estremi dell'arco (mai solo dal punto medio): lo stesso motivo per cui
+  // la griglia degli archi sopra indicizza entrambi gli estremi — un arco più lungo della cella
+  // avrebbe altrimenti un estremo fuori dal vicinato 3×3 centrato sul solo punto medio.
+  for (const [id, node] of Array.from(nodes)) {
+    if (uf.find(id) === mainRoot) continue
+    for (const e of node.edges) {
+      if (id >= e.to) continue // ogni arco una sola volta (stesso criterio di seenEdge sopra)
+      const other = nodes.get(e.to)!
+      const seenHere = new Set<number>()
+      for (const endpoint of [node, other]) {
+        const cx = Math.floor(endpoint.lat / COMPONENT_BRIDGE_CELL_DEG)
+        const cy = Math.floor(endpoint.lon / COMPONENT_BRIDGE_CELL_DEG)
+        for (let dx = -1; dx <= 1; dx++) {
+          for (let dy = -1; dy <= 1; dy++) {
+            const bucket = mainNodeGrid.get(`${cx + dx}_${cy + dy}`)
+            if (!bucket) continue
+            for (const mainId of bucket) {
+              if (seenHere.has(mainId)) continue
+              seenHere.add(mainId)
+              const mainNode = nodes.get(mainId)!
+              const proj = nearestPointOnSegment(mainNode.lat, mainNode.lon, [node.lat, node.lon], [other.lat, other.lon])
+              if (proj.distM > COMPONENT_BRIDGE_MAX_M) continue
+              candidates.push({ fromId: mainId, edge: { aId: id, bId: e.to }, proj })
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Kruskal: si applicano i ponti in ordine di distanza crescente, saltando quelli le cui due
+  // componenti sono già state riunite da un ponte più corto processato prima.
+  candidates.sort((x, y) => x.proj.distM - y.proj.distM)
+
+  let nextVirtualId = -1
+  const EPS_T = 0.02 // proiezione (quasi) su un estremo → aggancio diretto, mai un nodo virtuale praticamente coincidente
+  for (const c of candidates) {
+    if (uf.find(c.fromId) === uf.find(c.edge.aId)) continue
+
+    let targetId: number
+    if (c.proj.t <= EPS_T) {
+      targetId = c.edge.aId
+    } else if (c.proj.t >= 1 - EPS_T) {
+      targetId = c.edge.bId
+    } else {
+      const a = nodes.get(c.edge.aId)!, b = nodes.get(c.edge.bId)!
+      const original = a.edges.find(e => e.to === c.edge.bId)
+      // Può mancare se un ponte precedente ha già spezzato proprio questo arco (due componenti
+      // diverse che proiettano sullo stesso segmento, raro) — il target di quel primo split resta
+      // comunque raggiungibile dalla stessa componente, un secondo ponte qui sarebbe ridondante.
+      if (!original) continue
+      a.edges = a.edges.filter(e => !(e.to === c.edge.bId && e.wayId === original.wayId))
+      b.edges = b.edges.filter(e => !(e.to === c.edge.aId && e.wayId === original.wayId))
+      targetId = nextVirtualId--
+      nodes.set(targetId, { lat: c.proj.lat, lon: c.proj.lon, edges: [] })
+      addEdge(nodes, c.edge.aId, targetId, original.wayId, original.highway, original.sacScale, original.ford)
+      addEdge(nodes, targetId, c.edge.bId, original.wayId, original.highway, original.sacScale, original.ford)
+      uf.union(c.edge.aId, targetId)
+    }
+
+    addEdge(nodes, c.fromId, targetId, -2, 'bridge')
+    uf.union(c.fromId, targetId)
   }
 }
 

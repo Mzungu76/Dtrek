@@ -4,6 +4,16 @@
 // (lib/metaSearch/borgoItinerary.ts). Stessa identica logica, un solo posto invece di due copie
 // — escapeEngine.ts importa da qui, non ha più una propria copia.
 import type { WalkNetwork, GraphEdge } from './osmGraph'
+import { haversineM } from '../geoUtils'
+
+// Oltre questa distanza un tragitto fra due punti non riceve comunque mai un cammino reale (vedi
+// routeLeg, lib/routeBuilder/borgoWalkLegs.ts) — vive qui (un modulo puro, nessuna dipendenza
+// Supabase/rete) perché serve anche a lib/metaSearch/borgoItinerary.ts's excludeIsolatedOutliers
+// (verifica utente: un candidato più lontano di così dal resto del cluster non produrrebbe
+// comunque un itinerario A PIEDI sensato) — importarlo da borgoWalkLegs.ts trascinerebbe con sé
+// walkNetworkCache.ts/lib/supabase.ts, rompendo la testabilità "senza dover scaricare nulla" che
+// borgoItinerary.ts richiede esplicitamente.
+export const DIJKSTRA_MAX_DIST_M = 3000
 
 export interface DijkstraResult {
   dist: Map<number, number>
@@ -137,6 +147,82 @@ export function dijkstra(
   }
 
   return { dist, prev, viaHighway, visited }
+}
+
+export interface AStarResult {
+  distM: number | undefined
+  prev: Map<number, number>
+  visited: Set<number>
+}
+
+/**
+ * Come dijkstra sopra, ma per UN SOLO bersaglio noto in anticipo (mai una richiesta di
+ * lib/routeBuilder/multiStopRoute.ts, che deve esplorare tutto ciò che è raggiungibile entro un
+ * raggio, non un singolo punto — quella resta su dijkstra invariata) — A* con l'euristica
+ * haversine (la distanza in linea d'aria fino al bersaglio): ammissibile per costruzione, perché
+ * nessun cammino reale sulla rete pedonale può mai essere più corto della linea d'aria fra due suoi
+ * estremi, quindi il primo pop del nodo bersaglio dallo heap è già la distanza ottima, esattamente
+ * come per Dijkstra puro.
+ *
+ * Verifica utente (Chieti, place id eb07bfac-e861-484c-bb4c-acca63838e3f) — confermato sui dati
+ * reali (walk_network_cache id=69, 8345 nodi, centro storico molto denso): due tappe a 1,3km e
+ * 2,8km di distanza REALE (ben sotto DIJKSTRA_MAX_DIST_M) risultavano "non trovate" da Dijkstra con
+ * DIJKSTRA_MAX_NODES=800 — servivano rispettivamente ~3000 e ~3700 nodi esplorati per raggiungerle,
+ * perché Dijkstra esplora un intero "anello" di nodi equidistanti in OGNI direzione prima di
+ * raggiungere il bersaglio, quale che sia la sua direzione reale. A* esplora invece verso il
+ * bersaglio (l'euristica penalizza i nodi che se ne allontanano): sulla STESSA rete, la stessa
+ * coppia di tappe è risolta esplorando solo ~500 e ~990 nodi — un budget di nodi che prima falliva
+ * quasi sempre in un centro storico denso ora basta con ampio margine, senza dover indovinare un
+ * tetto "abbastanza alto" diverso per ogni città (mai risolvibile in generale: un tetto che basta
+ * per Chieti potrebbe non bastare per un centro ancora più denso).
+ */
+export function aStarToTarget(
+  network: WalkNetwork, startNodeId: number, targetNodeId: number, maxDistM: number, maxNodes: number,
+): AStarResult {
+  const targetNode = network.nodes.get(targetNodeId)
+  if (!targetNode) return { distM: undefined, prev: new Map(), visited: new Set() }
+  const heuristic = (nodeId: number): number => {
+    const node = network.nodes.get(nodeId)
+    return node ? haversineM(node.lat, node.lon, targetNode.lat, targetNode.lon) : 0
+  }
+
+  const gScore = new Map<number, number>([[startNodeId, 0]])
+  const prev = new Map<number, number>()
+  const visited = new Set<number>()
+
+  const heap = new MinHeap()
+  heap.push(heuristic(startNodeId), startNodeId)
+
+  while (visited.size < maxNodes) {
+    const top = heap.pop()
+    if (!top) break
+    const currentId = top.val
+    if (visited.has(currentId)) continue
+    const currentG = gScore.get(currentId)
+    // Voce "stale" (una g migliore trovata dopo l'inserimento nello heap, vedi lo stesso commento
+    // su dijkstra sopra) — a differenza di dijkstra, qui non si può interrompere l'intero ciclo
+    // quando la CHIAVE dello heap (f = g + euristica) supera maxDistM: f non è mai inferiore a g
+    // (l'euristica è sempre >= 0), ma può restare sotto maxDistM anche per una g già oltre il
+    // limite se il nodo è nella direzione "giusta" — solo g stessa decide se scartare il nodo.
+    if (currentG == null || currentG > maxDistM) continue
+    visited.add(currentId)
+    if (currentId === targetNodeId) break // bersaglio estratto per primo dallo heap = distanza ottima
+
+    const node = network.nodes.get(currentId)
+    if (!node) continue
+    for (const edge of node.edges) {
+      const nd = currentG + edge.distM
+      if (nd > maxDistM) continue
+      const existing = gScore.get(edge.to)
+      if (existing == null || nd < existing) {
+        gScore.set(edge.to, nd)
+        prev.set(edge.to, currentId)
+        heap.push(nd + heuristic(edge.to), edge.to)
+      }
+    }
+  }
+
+  return { distM: visited.has(targetNodeId) ? gScore.get(targetNodeId) : undefined, prev, visited }
 }
 
 /** Nodo per nodo, dal nodo di partenza al bersaglio, seguendo la catena `prev` di un DijkstraResult
