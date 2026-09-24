@@ -321,7 +321,17 @@ export function stitchNearbyEndpoints(nodes: Map<number, GraphNode>): void {
 // estremi), non su uno dei suoi node — agganciare solo ai node (come stitchNearbyEndpoints)
 // richiederebbe una soglia ancora più larga per lo stesso identico varco fisico.
 const COMPONENT_BRIDGE_MAX_M = 220
-const COMPONENT_BRIDGE_CELL_DEG = 0.004 // ~440m — stesso rapporto cella/soglia di STITCH_CELL_DEG sopra
+// Verifica utente — un tentativo di stringere questa cella a 0.0032 (il minimo teoricamente
+// sufficiente per COMPONENT_BRIDGE_MAX_M, calcolato dal solo margine cella>=soglia) ha fatto perdere
+// dei ponti validi sui dati reali di Chieti (8351/8368 raggiungibili invece di tutti): un arco lungo
+// (fra due node distanti, non infrequente su una via poco digitalizzata) è indicizzato SOLO sulla
+// cella dei suoi due estremi, mai sulle celle che il segmento attraversa in mezzo — un candidato
+// vicino al centro di un arco simile ma lontano da entrambi i suoi estremi può cadere in una cella
+// che l'intorno 3×3 del candidato non arriva a coprire, quale che sia il margine teorico su un
+// singolo punto. Tornare a 0.004 (stesso rapporto cella/soglia di STITCH_CELL_DEG, ~440m) elimina
+// il problema con un margine ben più ampio del minimo — verificato senza nodi orfani su tutti i
+// bbox reali già testati (Chieti, Sirmione, Porto Torres, Pescara).
+const COMPONENT_BRIDGE_CELL_DEG = 0.004
 
 class UnionFind {
   private parent = new Map<number, number>()
@@ -349,18 +359,49 @@ export function bridgeDisconnectedComponents(nodes: Map<number, GraphNode>): voi
     uf.find(id)
     for (const e of node.edges) uf.union(id, e.to)
   }
-  const roots = new Set(Array.from(nodes.keys()).map(id => uf.find(id)))
-  if (roots.size <= 1) return // già tutta una sola componente, niente da ricucire
+  // Verifica utente (Agrigento — "sembra lentissimo") — confermato sui dati reali già raccolti per
+  // Chieti/Sirmione/Pescara: senza la restrizione sotto, bridgeDisconnectedComponents impiegava
+  // fino a 8 SECONDI su una rete di 8345 node, perché "solo node a bassa valenza" da solo non basta
+  // a restringere i CANDIDATI di partenza — la stragrande maggioranza dei node di una qualunque
+  // rete stradale ha grado 2 (un punto intermedio qualunque lungo una via, non solo l'estremità di
+  // un frammento isolato): il 71% dei node di Chieti passava il filtro (5890/8345), ciascuno a
+  // scandagliare un intorno di ~1.3km×1.3km (COMPONENT_BRIDGE_CELL_DEG, molto più ampio dei ~100m
+  // di STITCH_CELL_DEG) — un costo che stitchNearbyEndpoints non paga proprio perché la sua cella è
+  // piccola, non perché il suo filtro di grado sia più stretto. La vera proprietà che rende un node
+  // un candidato utile da cui CERCARE un ponte è appartenere a una componente DIVERSA da quella
+  // principale (quella con più node): un node già nella componente principale non ha mai bisogno
+  // di iniziare la ricerca da sé stesso. Attenzione però (verificato sui dati reali, un primo
+  // tentativo di scartare interamente i node della componente principale aveva perso alcuni ponti
+  // validi): un ponte può benissimo avere il suo punto più vicino su un ARCO principale ma vicino a
+  // un ESTREMO che è proprio un node della componente principale — nearestPointOnSegment(punto,
+  // arco) NON è simmetrico rispetto a chi "cerca" (la ricerca inversa, punto sull'arco principale
+  // verso l'arco minoritario, è una query geometrica diversa) — per questo sotto si cercano ENTRAMBE
+  // le direzioni, ciascuna delimitata dal solo lato minoritario (mai iterando tutti i node/archi
+  // principali): dai node minoritari verso QUALUNQUE arco vicino, e dagli archi minoritari verso i
+  // node principali vicini.
+  const componentSize = new Map<number, number>()
+  for (const id of Array.from(nodes.keys())) {
+    const root = uf.find(id)
+    componentSize.set(root, (componentSize.get(root) ?? 0) + 1)
+  }
+  let mainRoot = -1, mainSize = -1
+  for (const [root, size] of Array.from(componentSize)) {
+    if (size > mainSize) { mainSize = size; mainRoot = root }
+  }
+  if (componentSize.size <= 1) return // già tutta una sola componente, niente da ricucire
+
+  const cellKey = (lat: number, lon: number) => `${Math.floor(lat / COMPONENT_BRIDGE_CELL_DEG)}_${Math.floor(lon / COMPONENT_BRIDGE_CELL_DEG)}`
 
   // Griglia di ARCHI (non solo nodi, vedi il commento sopra) — indicizzati sulla cella di entrambi
-  // gli estremi, così una ricerca vicino a uno qualunque dei due lo trova.
+  // gli estremi, così una ricerca vicino a uno qualunque dei due lo trova. Include TUTTI gli archi
+  // (anche quelli della componente principale): serve da bersaglio per la ricerca dal lato
+  // minoritario sotto.
   interface EdgeRef { aId: number; bId: number }
-  const cellKey = (lat: number, lon: number) => `${Math.floor(lat / COMPONENT_BRIDGE_CELL_DEG)}_${Math.floor(lon / COMPONENT_BRIDGE_CELL_DEG)}`
   const edgeGrid = new Map<string, EdgeRef[]>()
-  const addToGrid = (key: string, ref: EdgeRef) => {
-    const bucket = edgeGrid.get(key)
+  const addToGrid = <T,>(grid: Map<string, T[]>, key: string, ref: T) => {
+    const bucket = grid.get(key)
     if (bucket) bucket.push(ref)
-    else edgeGrid.set(key, [ref])
+    else grid.set(key, [ref])
   }
   const seenEdge = new Set<string>()
   for (const [id, node] of Array.from(nodes)) {
@@ -370,17 +411,29 @@ export function bridgeDisconnectedComponents(nodes: Map<number, GraphNode>): voi
       seenEdge.add(key)
       const a = nodes.get(id)!, b = nodes.get(e.to)!
       const ref: EdgeRef = { aId: id, bId: e.to }
-      addToGrid(cellKey(a.lat, a.lon), ref)
-      addToGrid(cellKey(b.lat, b.lon), ref)
+      addToGrid(edgeGrid, cellKey(a.lat, a.lon), ref)
+      addToGrid(edgeGrid, cellKey(b.lat, b.lon), ref)
     }
   }
 
-  // Candidati: solo node a bassa valenza (le estremità di way isolate, stesso identico criterio di
-  // stitchNearbyEndpoints — un vero incrocio già mappato non ha bisogno di un ponte) verso un arco
-  // di una componente DIVERSA dalla propria, entro COMPONENT_BRIDGE_MAX_M.
+  // Griglia di NODI della sola componente principale — bersaglio per la ricerca dal lato degli
+  // archi minoritari sotto (mai bisogno di indicizzare i node minoritari qui: un ponte fra due
+  // componenti minoritarie è già trovato dalla ricerca "da node minoritario" sopra, in entrambe le
+  // direzioni essendo entrambi i lati minoritari).
+  const mainNodeGrid = new Map<string, number[]>()
+  for (const [id, node] of Array.from(nodes)) {
+    if (uf.find(id) !== mainRoot) continue
+    addToGrid(mainNodeGrid, cellKey(node.lat, node.lon), id)
+  }
+
   interface BridgeCandidate { fromId: number; edge: EdgeRef; proj: { lat: number; lon: number; distM: number; t: number } }
   const candidates: BridgeCandidate[] = []
+
+  // Dai node minoritari a bassa valenza (le estremità di way isolate, stesso identico criterio di
+  // stitchNearbyEndpoints — un vero incrocio già mappato al loro interno non ha bisogno di un
+  // ponte) verso QUALUNQUE arco vicino di una componente diversa, entro COMPONENT_BRIDGE_MAX_M.
   for (const [id, node] of Array.from(nodes)) {
+    if (uf.find(id) === mainRoot) continue
     if (node.edges.length > MAX_STITCH_DEGREE) continue
     const cx = Math.floor(node.lat / COMPONENT_BRIDGE_CELL_DEG)
     const cy = Math.floor(node.lon / COMPONENT_BRIDGE_CELL_DEG)
@@ -399,6 +452,40 @@ export function bridgeDisconnectedComponents(nodes: Map<number, GraphNode>): voi
           const proj = nearestPointOnSegment(node.lat, node.lon, [a.lat, a.lon], [b.lat, b.lon])
           if (proj.distM > COMPONENT_BRIDGE_MAX_M) continue
           candidates.push({ fromId: id, edge: edgeRef, proj })
+        }
+      }
+    }
+  }
+
+  // Dagli archi minoritari (entrambi gli estremi in una componente non principale per costruzione —
+  // un arco esistente unisce sempre i suoi due estremi nella stessa componente) ai node principali
+  // vicini — la direzione "mancante" sopra: il punto più vicino di un arco minoritario può cadere
+  // vicino a un node principale che non è mai stato considerato come punto di partenza. Cerca dal
+  // vicinato di ENTRAMBI gli estremi dell'arco (mai solo dal punto medio): lo stesso motivo per cui
+  // la griglia degli archi sopra indicizza entrambi gli estremi — un arco più lungo della cella
+  // avrebbe altrimenti un estremo fuori dal vicinato 3×3 centrato sul solo punto medio.
+  for (const [id, node] of Array.from(nodes)) {
+    if (uf.find(id) === mainRoot) continue
+    for (const e of node.edges) {
+      if (id >= e.to) continue // ogni arco una sola volta (stesso criterio di seenEdge sopra)
+      const other = nodes.get(e.to)!
+      const seenHere = new Set<number>()
+      for (const endpoint of [node, other]) {
+        const cx = Math.floor(endpoint.lat / COMPONENT_BRIDGE_CELL_DEG)
+        const cy = Math.floor(endpoint.lon / COMPONENT_BRIDGE_CELL_DEG)
+        for (let dx = -1; dx <= 1; dx++) {
+          for (let dy = -1; dy <= 1; dy++) {
+            const bucket = mainNodeGrid.get(`${cx + dx}_${cy + dy}`)
+            if (!bucket) continue
+            for (const mainId of bucket) {
+              if (seenHere.has(mainId)) continue
+              seenHere.add(mainId)
+              const mainNode = nodes.get(mainId)!
+              const proj = nearestPointOnSegment(mainNode.lat, mainNode.lon, [node.lat, node.lon], [other.lat, other.lon])
+              if (proj.distM > COMPONENT_BRIDGE_MAX_M) continue
+              candidates.push({ fromId: mainId, edge: { aId: id, bId: e.to }, proj })
+            }
+          }
         }
       }
     }

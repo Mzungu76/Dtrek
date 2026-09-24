@@ -213,6 +213,31 @@ describe('bridgeDisconnectedComponents', () => {
     const hasBridgeEdge = Array.from(nodes.values()).some(n => n.edges.some(e => e.wayId === -2))
     expect(hasBridgeEdge).toBe(false)
   })
+
+  // Verifica utente (Agrigento — "sembra lentissimo", indagine sulle prestazioni) — un primo
+  // tentativo di ottimizzazione cercava un ponte SOLO a partire dai node della componente
+  // minoritaria verso qualunque arco vicino, mai il contrario: sui dati reali di Chieti questo
+  // perdeva alcuni ponti validi (8351/8368 raggiungibili invece di tutti). Causa: nearestPointOnSegment
+  // (punto, arco) non è simmetrico rispetto a chi "cerca" — un ponte il cui punto più vicino cade su
+  // un ARCO della componente principale ma vicino a un suo ESTREMO (un node della componente
+  // principale, mai considerato "punto di partenza" in quel primo tentativo) va cercato anche
+  // nell'altra direzione: dagli archi minoritari verso i node principali vicini. Qui il punto più
+  // vicino del segmento minoritario 10-11 cade a metà strada (nodo 2, componente principale — la
+  // catena 1-2-3-4, più grande della coppia 10-11), mai trovabile partendo solo dai node minoritari.
+  it('collega anche quando il punto più vicino è un node della componente principale, non uno minoritario', () => {
+    const nodes = new Map<number, GraphNode>([
+      [1, node(-0.001, 0)], [2, node(0, 0)], [3, node(0.001, 0)], [4, node(0.002, 0)], // componente principale, 4 nodi
+      [10, node(0.000898, -0.002246)], [11, node(0.000898, 0.002246)], // componente minoritaria, 2 nodi
+    ])
+    addEdge(nodes, 1, 2, 100)
+    addEdge(nodes, 2, 3, 100)
+    addEdge(nodes, 3, 4, 100)
+    addEdge(nodes, 10, 11, 200)
+    expect(reachable(nodes, 1).has(11)).toBe(false)
+
+    bridgeDisconnectedComponents(nodes)
+    expect(reachable(nodes, 1).has(11)).toBe(true)
+  })
 })
 
 describe('fetchWalkNetwork', () => {
