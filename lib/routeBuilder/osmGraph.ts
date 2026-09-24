@@ -46,13 +46,14 @@ const WALKABLE_ACCESS_FILTER =
 const WALKABLE_FOOT_OVERRIDE_FILTER = '["foot"~"^(yes|permissive|designated)$"]'
 
 // Bump ad ogni cambio della query stessa (WALKABLE_HIGHWAY, i filtri di accesso sopra, o
-// qualunque altro filtro dentro fetchWalkNetwork sotto) — lib/routeBuilder/walkNetworkCache.ts lo
-// include nella chiave di cache proprio perché la chiave è altrimenti solo il bbox: senza questo,
-// una rete già in cache da PRIMA di un cambio di filtro (es. l'aggiunta di tertiary/secondary, o
-// di pedestrian/living_street sopra) resterebbe servita così com'era, con lo stesso identico buco
-// nei dati che il cambio doveva risolvere, fino alla scadenza naturale della cache (45gg) — un fix
-// silenziosamente inefficace per qualunque bbox già visitato.
-export const WALK_NETWORK_QUERY_VERSION = 3
+// qualunque altro filtro dentro fetchWalkNetwork sotto, INCLUSA stitchNearbyEndpoints — cambia la
+// forma del grafo restituito, non solo la query Overpass) — lib/routeBuilder/walkNetworkCache.ts
+// lo include nella chiave di cache proprio perché la chiave è altrimenti solo il bbox: senza
+// questo, una rete già in cache da PRIMA di un cambio di filtro (es. l'aggiunta di tertiary/
+// secondary, o di pedestrian/living_street sopra) resterebbe servita così com'era, con lo stesso
+// identico buco nei dati che il cambio doveva risolvere, fino alla scadenza naturale della cache
+// (45gg) — un fix silenziosamente inefficace per qualunque bbox già visitato.
+export const WALK_NETWORK_QUERY_VERSION = 4
 
 export interface GraphNode {
   lat: number
@@ -234,7 +235,63 @@ out body qt;`
     }
   }
 
+  stitchNearbyEndpoints(nodes)
+
   return { nodes }
+}
+
+// Verifica utente (Sirmione, "ancora linea d'aria" — confermato con Dijkstra su dati reali, non
+// un limite di SNAP_THRESHOLD_M/DIJKSTRA_MAX_DIST_M: entrambi gli estremi agganciano un nodo della
+// rete a pochi metri, ma quel nodo NON RAGGIUNGE l'altro con nessuna distanza, perché appartengono
+// a due componenti del grafo scollegate fra loro). Causa reale: due way OSM che si toccano o si
+// incrociano sul terreno senza condividere un node — un artefatto comune di digitalizzazione
+// (un marciapiede digitalizzato separatamente dalla strada che costeggia, un sentiero che sfiora
+// una via senza un vero incrocio mappato) — mai risolvibile allargando la soglia di aggancio o il
+// raggio Dijkstra, perché il grafo scaricato non ha proprio l'arco che li collegherebbe.
+// Qui si aggiunge un arco "virtuale" fra coppie di node abbastanza vicini sul terreno (pochi metri,
+// ben sotto la precisione GPS/di digitalizzazione tipica) che il grafo non collega già — SOLO fra
+// node a bassa valenza (<= MAX_STITCH_DEGREE archi originali): un vero incrocio già mappato (una
+// piazza con 5+ vie) non ha bisogno di altre scorciatoie, i candidati sono le estremità di way
+// isolate, dove un buco come questo può davvero esistere. Griglia spaziale invece di un confronto
+// O(n²) fra tutti i node — con qualche migliaio di node per bbox (il caso comune) il costo resta
+// lineare.
+const STITCH_THRESHOLD_M = 15
+const MAX_STITCH_DEGREE = 3
+const STITCH_CELL_DEG = 0.0003 // ~33m in latitudine, abbastanza per contenere STITCH_THRESHOLD_M in una cella adiacente
+
+export function stitchNearbyEndpoints(nodes: Map<number, GraphNode>): void {
+  const cellKey = (lat: number, lon: number) => `${Math.floor(lat / STITCH_CELL_DEG)}_${Math.floor(lon / STITCH_CELL_DEG)}`
+  const grid = new Map<string, number[]>()
+  const candidates: [number, GraphNode][] = []
+  for (const entry of Array.from(nodes)) {
+    const [, node] = entry
+    if (node.edges.length > MAX_STITCH_DEGREE) continue
+    candidates.push(entry)
+    const k = cellKey(node.lat, node.lon)
+    const bucket = grid.get(k)
+    if (bucket) bucket.push(entry[0])
+    else grid.set(k, [entry[0]])
+  }
+
+  for (const [id, node] of candidates) {
+    const cx = Math.floor(node.lat / STITCH_CELL_DEG)
+    const cy = Math.floor(node.lon / STITCH_CELL_DEG)
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        const bucket = grid.get(`${cx + dx}_${cy + dy}`)
+        if (!bucket) continue
+        for (const otherId of bucket) {
+          if (otherId <= id) continue // ogni coppia una sola volta
+          const other = nodes.get(otherId)!
+          if (node.edges.some(e => e.to === otherId)) continue // già collegati (stessa way o incrocio reale)
+          const distM = haversineM(node.lat, node.lon, other.lat, other.lon)
+          if (distM > STITCH_THRESHOLD_M) continue
+          node.edges.push({ to: otherId, distM, wayId: -1, highway: 'stitch' })
+          other.edges.push({ to: id, distM, wayId: -1, highway: 'stitch' })
+        }
+      }
+    }
+  }
 }
 
 /** Nodo del grafo più vicino a (lat, lon), entro thresholdM — null se la rete è vuota o troppo lontana. */

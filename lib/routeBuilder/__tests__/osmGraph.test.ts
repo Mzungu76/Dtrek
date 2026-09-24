@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import { buildNetworkSegments, fetchWalkNetwork, type WalkNetwork, type GraphNode } from '@/lib/routeBuilder/osmGraph'
+import { buildNetworkSegments, fetchWalkNetwork, stitchNearbyEndpoints, type WalkNetwork, type GraphNode } from '@/lib/routeBuilder/osmGraph'
 
 // Coordinate arbitrarie ma monotone (0.001° ≈ 111m), solo per dare a ogni nodo una posizione
 // distinta — la logica testata qui è puramente topologica (grado dei nodi), non geometrica.
@@ -89,6 +89,73 @@ describe('buildNetworkSegments', () => {
     // Punti 1/2/3 collineari — vedi il commento sulla semplificazione nel primo test di questo file.
     expect(segments[0].points[0]).toEqual([0, 0])
     expect(segments[0].points[segments[0].points.length - 1]).toEqual([0.002, 0])
+  })
+})
+
+// BFS minimale solo per verificare la raggiungibilità (non serve un percorso pesato per questi test).
+function reachable(nodes: Map<number, GraphNode>, fromId: number): Set<number> {
+  const seen = new Set<number>([fromId])
+  const queue = [fromId]
+  while (queue.length > 0) {
+    const cur = nodes.get(queue.shift()!)
+    if (!cur) continue
+    for (const e of cur.edges) {
+      if (!seen.has(e.to)) { seen.add(e.to); queue.push(e.to) }
+    }
+  }
+  return seen
+}
+
+describe('stitchNearbyEndpoints', () => {
+  // Verifica utente (Sirmione: "Borgo storico" → "Grotte di Catullo", 630m in linea d'aria, resi
+  // sempre in linea d'aria pur con SNAP_THRESHOLD_M e DIJKSTRA_MAX_DIST_M ampi) — causa reale
+  // confermata sui dati di produzione (network reale scaricato, non ipotetica): due way OSM che si
+  // toccano sul terreno (qui, ~8m di distanza) SENZA condividere un node, quindi due componenti del
+  // grafo scollegate — nessuna soglia di aggancio/raggio Dijkstra risolve un arco che il grafo
+  // scaricato non contiene affatto.
+  it('collega due way vicine ma topologicamente scollegate, entro la soglia', () => {
+    const nodes = new Map<number, GraphNode>([
+      [1, node(0, 0)], [2, node(0.0001, 0)], // way A, isolata
+      [3, node(0.0001, 0.00007)], [4, node(0.0002, 0.00007)], // way B, isolata — nodo 3 a ~8m dal nodo 2
+    ])
+    addEdge(nodes, 1, 2, 100)
+    addEdge(nodes, 3, 4, 200)
+    expect(reachable(nodes, 1).has(4)).toBe(false) // prima dello stitching, davvero scollegate
+
+    stitchNearbyEndpoints(nodes)
+    expect(reachable(nodes, 1).has(4)).toBe(true)
+  })
+
+  it('non collega due way oltre la soglia di distanza (mai un collegamento inventato)', () => {
+    const nodes = new Map<number, GraphNode>([
+      [1, node(0, 0)], [2, node(0.0001, 0)],
+      [3, node(0.001, 0)], [4, node(0.0011, 0)], // ~100m dal nodo 2, ben oltre STITCH_THRESHOLD_M
+    ])
+    addEdge(nodes, 1, 2, 100)
+    addEdge(nodes, 3, 4, 200)
+
+    stitchNearbyEndpoints(nodes)
+    expect(reachable(nodes, 1).has(4)).toBe(false)
+  })
+
+  it('non usa come candidato un nodo già ad alta valenza (un vero incrocio mappato)', () => {
+    // Nodo 2 (0,0) è un vero incrocio a 4 bracci, con un altro tratto isolato (3-4) a ~11m — entro
+    // STITCH_THRESHOLD_M se nodo 2 fosse un candidato valido. Gli altri bracci dell'incrocio (5/6/7)
+    // e nodo 1 restano lontani sia dal tratto 3-4 sia fra loro, così l'unico modo per 1 di
+    // raggiungere 4 sarebbe proprio una scorciatoia da nodo 2 — quella che non deve esistere.
+    const nodes = new Map<number, GraphNode>([
+      [1, node(0, -0.002)], [2, node(0, 0)],
+      [5, node(0.002, 0.002)], [6, node(0.002, -0.002)], [7, node(-0.002, 0)],
+      [3, node(0, 0.0001)], [4, node(0, 0.0002)],
+    ])
+    addEdge(nodes, 1, 2, 100)
+    addEdge(nodes, 2, 5, 100)
+    addEdge(nodes, 2, 6, 100)
+    addEdge(nodes, 2, 7, 100)
+    addEdge(nodes, 3, 4, 200)
+
+    stitchNearbyEndpoints(nodes)
+    expect(reachable(nodes, 1).has(4)).toBe(false)
   })
 })
 
