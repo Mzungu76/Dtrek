@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   mergeStopCandidates, nearestStops, orderStopsNearestNeighbor, groupStopsIntoTappe,
-  culturalTappaBudgetMinutes, DAY_BUDGET_MINUTES, visitMinutesFor, WALK_SPEED_MPS,
+  culturalTappaBudgetMinutes, DAY_BUDGET_MINUTES, HALF_DAY_BUDGET_MINUTES, MULTI_DAY_BUDGET_MINUTES,
+  visitMinutesFor, WALK_SPEED_MPS,
   partitionStopsByOverrides, effectiveVisitMinutesFor, bucketStopsByEffectiveTappa,
   spliceLegsForRemovedStops, buildStraightLegs, summarizeTappa,
   type ItineraryStopCandidate, type BorgoItineraryOverrides, type ItineraryTappa,
@@ -107,6 +108,15 @@ describe('culturalTappaBudgetMinutes', () => {
   it('mai sotto il pavimento, anche quando la traccia da sola esaurirebbe l\'intera giornata', () => {
     expect(culturalTappaBudgetMinutes(DAY_BUDGET_MINUTES + 500)).toBeGreaterThan(0)
     expect(culturalTappaBudgetMinutes(DAY_BUDGET_MINUTES + 500)).toBeLessThan(DAY_BUDGET_MINUTES)
+  })
+
+  it('un override esplicito sostituisce il default automatico', () => {
+    expect(culturalTappaBudgetMinutes(undefined, HALF_DAY_BUDGET_MINUTES)).toBe(HALF_DAY_BUDGET_MINUTES)
+    expect(culturalTappaBudgetMinutes(undefined, MULTI_DAY_BUDGET_MINUTES)).toBe(MULTI_DAY_BUDGET_MINUTES)
+  })
+
+  it('la sottrazione del trekking misto si applica comunque sopra un override esplicito', () => {
+    expect(culturalTappaBudgetMinutes(60, HALF_DAY_BUDGET_MINUTES)).toBe(HALF_DAY_BUDGET_MINUTES - 60)
   })
 })
 

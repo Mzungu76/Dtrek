@@ -1294,6 +1294,9 @@ ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS borgo_walk_stops_hash TEXT;
 -- tempo di visita, punti spenti, spostamento manuale tra tappe) — mappa sparsa per id di tappa,
 -- mai duplicata sulla cache condivisa dtrek_places.itinerary_cache sotto.
 ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS borgo_itinerary_overrides JSONB;
+-- Override esplicito del budget-giornata (mezza giornata/giornata/più giorni scelto
+-- manualmente) — NULL ricade sull'automatico dal contenuto.
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS borgo_day_budget_minutes SMALLINT;
 
 -- Verifica utente — vedi supabase/migrations/add_dtrek_places_itinerary_cache.sql per i commenti
 -- completi. Cache dell'intero BorgoItinerary (stops+legs+totali) SUL BORGO stesso (mai su

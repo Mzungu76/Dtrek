@@ -954,9 +954,14 @@ export default function GuideReader({
                 placeId={hike.placeId}
                 hikeId={hike.id}
                 savedOverrides={hike.borgoItineraryOverrides}
+                savedDayBudgetMinutes={hike.borgoDayBudgetMinutes}
                 onOverridesSaved={overrides => {
                   updatePlannedMeta(hike.id, { borgoItineraryOverrides: overrides }).catch(() => {})
                   onHikeUpdate({ borgoItineraryOverrides: overrides })
+                }}
+                onDayBudgetSaved={dayBudgetMinutes => {
+                  updatePlannedMeta(hike.id, { borgoDayBudgetMinutes: dayBudgetMinutes }).catch(() => {})
+                  onHikeUpdate({ borgoDayBudgetMinutes: dayBudgetMinutes })
                 }}
               />
             )

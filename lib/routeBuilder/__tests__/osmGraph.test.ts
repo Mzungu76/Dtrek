@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { buildNetworkSegments, type WalkNetwork, type GraphNode } from '@/lib/routeBuilder/osmGraph'
+import { describe, it, expect, afterEach, vi } from 'vitest'
+import { buildNetworkSegments, fetchWalkNetwork, type WalkNetwork, type GraphNode } from '@/lib/routeBuilder/osmGraph'
 
 // Coordinate arbitrarie ma monotone (0.001° ≈ 111m), solo per dare a ogni nodo una posizione
 // distinta — la logica testata qui è puramente topologica (grado dei nodi), non geometrica.
@@ -89,5 +89,59 @@ describe('buildNetworkSegments', () => {
     // Punti 1/2/3 collineari — vedi il commento sulla semplificazione nel primo test di questo file.
     expect(segments[0].points[0]).toEqual([0, 0])
     expect(segments[0].points[segments[0].points.length - 1]).toEqual([0.002, 0])
+  })
+})
+
+describe('fetchWalkNetwork', () => {
+  afterEach(() => { vi.unstubAllGlobals() })
+
+  // Verifica utente ("gli itinerari sono tornati in linea d'aria", anche dopo aver alzato il
+  // timeout) — la causa reale: una Promise.any fra i 3 mirror premiava sempre il primo a
+  // rispondere, anche quando quello era un mirror che aveva RINUNCIATO prima (una rete parziale,
+  // HTTP 200 con `remark`), mentre un altro mirror stava per restituire la rete completa poco
+  // dopo. Il fix (allSettled + preferenza per una risposta completa) va verificato qui, non solo
+  // spiegato in un commento.
+  it('preferisce una risposta completa anche se un mirror più \'pigro\' (parziale) arriva per primo', async () => {
+    const partial = { elements: [{ type: 'node', id: 1, lat: 0, lon: 0 }], remark: 'runtime timeout' }
+    const complete = {
+      elements: [
+        { type: 'node', id: 1, lat: 0, lon: 0 },
+        { type: 'node', id: 2, lat: 0.001, lon: 0 },
+        { type: 'way', id: 10, nodes: [1, 2], tags: { highway: 'residential' } },
+      ],
+    }
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      if (url.includes('overpass-api.de')) return Promise.resolve({ ok: true, json: async () => partial })
+      if (url.includes('overpass.openstreetmap.fr')) return Promise.resolve({ ok: true, json: async () => complete })
+      return Promise.reject(new Error('mirror down'))
+    }))
+
+    const network = await fetchWalkNetwork([0, 0, 0.01, 0.01], 5000)
+    // La rete completa ha 2 nodi collegati da una way — quella parziale ne avrebbe solo 1 isolato.
+    expect(network.nodes.size).toBe(2)
+  })
+
+  it('nessun mirror completo → ripiega sulla risposta parziale con più elementi, mai la prima arrivata', async () => {
+    const smallerPartial = { elements: [{ type: 'node', id: 1, lat: 0, lon: 0 }], remark: 'runtime timeout' }
+    const biggerPartial = {
+      elements: [
+        { type: 'node', id: 1, lat: 0, lon: 0 },
+        { type: 'node', id: 2, lat: 0.001, lon: 0 },
+      ],
+      remark: 'runtime timeout',
+    }
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      if (url.includes('overpass-api.de')) return Promise.resolve({ ok: true, json: async () => smallerPartial })
+      if (url.includes('overpass.openstreetmap.fr')) return Promise.resolve({ ok: true, json: async () => biggerPartial })
+      return Promise.reject(new Error('mirror down'))
+    }))
+
+    const network = await fetchWalkNetwork([0, 0, 0.01, 0.01], 5000)
+    expect(network.nodes.size).toBe(2)
+  })
+
+  it('tutti i mirror falliscono → errore esplicito, mai una rete vuota spacciata per valida', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('mirror down'))))
+    await expect(fetchWalkNetwork([0, 0, 0.01, 0.01], 5000)).rejects.toThrow()
   })
 })

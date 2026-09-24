@@ -182,9 +182,13 @@ export function effectiveVisitMinutesFor(stop: ItineraryStopCandidate, overrides
 // abbastanza per un centro storico importante, pause/pranzo lasciati fuori (mai conteggiati come
 // tempo di visita). Ogni tappa rappresenta una giornata (o una sua frazione, quando il contenuto
 // del Borgo non la riempie) — "mezza giornata"/"giornata intera"/"più giorni" emergono così da
-// soli dal numero di tappe che groupStopsIntoTappe produce, mai da una scelta esplicita richiesta
-// all'utente: un Borgo piccolo resta un'unica tappa più corta, uno enorme si allunga su più tappe.
+// soli dal numero di tappe che groupStopsIntoTappe produce quando l'utente non tocca nulla, mai da
+// una scelta obbligatoria — ma restano comunque tre preset selezionabili esplicitamente (verifica
+// utente: "mi dicevi che hai previsto anche la modifica della durata"), persistiti per Meta su
+// planned_hikes.borgo_day_budget_minutes.
 export const DAY_BUDGET_MINUTES = 360
+export const HALF_DAY_BUDGET_MINUTES = 180
+export const MULTI_DAY_BUDGET_MINUTES = 600
 
 // Pavimento per il "trekking misto" sotto — un Borgo/Città con una traccia GPS reale collegata
 // (borgoCardVariant 'trekking_misto', lib/guideCardVariant.ts) non deve mai azzerare del tutto il
@@ -194,21 +198,29 @@ const MIN_CULTURAL_BUDGET_MINUTES = 45
 
 /**
  * Budget di tempo per tappa culturale — verifica utente: "budget residuo della giornata" per il
- * trekking misto, "automatico dal contenuto" per stabilire se è mezza giornata/giornata/più
- * giorni (nessuna scelta esplicita, vedi il commento su DAY_BUDGET_MINUTES sopra). Senza nessuna
- * traccia GPS reale collegata (cammino_urbano, il caso comune) l'intera giornata è libera per la
- * cultura: DAY_BUDGET_MINUTES per intero. Con una traccia reale (trekking_misto) il tempo del
- * cammino fisico vero e proprio va sottratto prima — quello resta legittimamente governato dal
- * passo/storico escursionistico altrove (lib/hikerHistory.ts), qui arriva già come durata.
+ * trekking misto, "automatico dal contenuto" (dayBudgetOverrideMinutes assente) per stabilire se
+ * è mezza giornata/giornata/più giorni quando l'utente non ha mai scelto esplicitamente. Senza
+ * nessuna traccia GPS reale collegata (cammino_urbano, il caso comune) l'intera giornata è libera
+ * per la cultura: il budget (di default o scelto dall'utente) per intero. Con una traccia reale
+ * (trekking_misto) il tempo del cammino fisico vero e proprio va sottratto prima — quello resta
+ * legittimamente governato dal passo/storico escursionistico altrove (lib/hikerHistory.ts), qui
+ * arriva già come durata. Un dayBudgetOverrideMinutes esplicito (planned_hikes.
+ * borgo_day_budget_minutes) sostituisce solo il default automatico, la sottrazione del trekking
+ * misto si applica comunque sopra: scegliere "giornata intera" mentre si è a metà di un trek reale
+ * non deve mai promettere un'intera giornata libera che non esiste.
  *
  * trackDurationMinutes viene da PlannedHike.estimatedTimeSeconds — nasce a 0 per una Meta creata
  * dalla ricerca (lib/metaToPlannedHike.ts) e diventa reale solo quando una traccia GPX viene
  * davvero importata: lo stesso segnale usato da borgoCardVariant, senza dover rileggere
  * trackPoints/routePolyline (molto più pesanti) solo per un controllo di presenza.
  */
-export function culturalTappaBudgetMinutes(trackDurationMinutes: number | undefined): number {
-  if (!trackDurationMinutes || trackDurationMinutes <= 0) return DAY_BUDGET_MINUTES
-  return Math.max(MIN_CULTURAL_BUDGET_MINUTES, DAY_BUDGET_MINUTES - trackDurationMinutes)
+export function culturalTappaBudgetMinutes(
+  trackDurationMinutes: number | undefined,
+  dayBudgetOverrideMinutes?: number,
+): number {
+  const dayBudget = dayBudgetOverrideMinutes ?? DAY_BUDGET_MINUTES
+  if (!trackDurationMinutes || trackDurationMinutes <= 0) return dayBudget
+  return Math.max(MIN_CULTURAL_BUDGET_MINUTES, dayBudget - trackDurationMinutes)
 }
 
 /**

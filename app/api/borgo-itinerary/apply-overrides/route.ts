@@ -52,6 +52,10 @@ export async function POST(req: NextRequest) {
   let placeId: string
   let hikeId: string
   let overrides: BorgoItineraryOverrides
+  // Budget-giornata scelto esplicitamente (verifica utente — mezza giornata/giornata/più giorni)
+  // — opzionale, undefined quando la Conferma riguarda solo uno spostamento manuale senza toccare
+  // il selettore: in quel caso il valore già salvato su planned_hikes resta invariato.
+  let dayBudgetMinutes: number | undefined
   try {
     const body = await req.json()
     placeId = body.placeId
@@ -60,13 +64,17 @@ export async function POST(req: NextRequest) {
     if (!hikeId || typeof hikeId !== 'string') throw new Error()
     if (!isValidOverrides(body.overrides)) throw new Error()
     overrides = body.overrides
+    if (body.dayBudgetMinutes != null) {
+      if (typeof body.dayBudgetMinutes !== 'number' || body.dayBudgetMinutes <= 0) throw new Error()
+      dayBudgetMinutes = body.dayBudgetMinutes
+    }
   } catch {
     return NextResponse.json({ error: 'Richiesta non valida' }, { status: 400 })
   }
 
   const { data: hike, error: hikeError } = await supabase
     .from('planned_hikes')
-    .select('id, estimated_time_seconds')
+    .select('id, estimated_time_seconds, borgo_day_budget_minutes')
     .eq('id', hikeId)
     .eq('user_id', user.id)
     .maybeSingle()
@@ -80,6 +88,9 @@ export async function POST(req: NextRequest) {
   // borgoItinerary.ts per perché questo campo è un segnale affidabile di presenza traccia.
   const estimatedTimeSeconds = hike.estimated_time_seconds as number | undefined
   const trackDurationMinutes = estimatedTimeSeconds ? estimatedTimeSeconds / 60 : undefined
+  // Quello appena arrivato nella richiesta vince se presente (la Conferma può cambiare il
+  // selettore nello stesso momento in cui conferma uno spostamento), altrimenti quello già salvato.
+  const effectiveDayBudgetMinutes = dayBudgetMinutes ?? (hike.borgo_day_budget_minutes as number | undefined) ?? undefined
 
   const { data: borgo, error: borgoError } = await supabase
     .from('dtrek_places')
@@ -100,16 +111,31 @@ export async function POST(req: NextRequest) {
   const center = { lat: borgo.latitude as number, lon: borgo.longitude as number }
   const cached = borgo.itinerary_cache as BorgoItinerary
 
-  const tappe = await computePersonalizedTappe(
-    center, cached.stops, cached.legs, overrides, MAX_STOPS_PER_TAPPA, culturalTappaBudgetMinutes(trackDurationMinutes), WALK_NETWORK_TIMEOUT_MS,
-  )
+  // Mai un errore generico e muto qui — questo è il ricalcolo che l'utente ha esplicitamente
+  // confermato, un fallimento silenzioso (500 senza corpo) lascerebbe il client con un solo
+  // "riprova" senza indizi. computePersonalizedTappe stesso non dovrebbe mai lanciare (il fetch
+  // della rete pedonale ha già il proprio fallback interno su null/linea d'aria) — questo try è
+  // solo una rete di sicurezza contro un bug non ancora scoperto.
+  let tappe
+  try {
+    tappe = await computePersonalizedTappe(
+      center, cached.stops, cached.legs, overrides, MAX_STOPS_PER_TAPPA,
+      culturalTappaBudgetMinutes(trackDurationMinutes, effectiveDayBudgetMinutes), WALK_NETWORK_TIMEOUT_MS,
+    )
+  } catch (e) {
+    console.error('[apply-overrides] ricalcolo tappe fallito', e)
+    return NextResponse.json({ error: 'Ricalcolo fallito' }, { status: 500 })
+  }
 
   // Persistito PRIMA di rispondere (a differenza della cache condivisa in POST /api/borgo-itinerary,
   // fire-and-forget lì solo per non allungare l'apertura della guida): qui è l'azione esplicita di
   // "Conferma" dell'utente, la risposta deve garantire che la personalizzazione sia salvata.
   const { error: saveError } = await supabase
     .from('planned_hikes')
-    .update({ borgo_itinerary_overrides: overrides })
+    .update({
+      borgo_itinerary_overrides: overrides,
+      ...(dayBudgetMinutes != null ? { borgo_day_budget_minutes: dayBudgetMinutes } : {}),
+    })
     .eq('id', hikeId)
     .eq('user_id', user.id)
   if (saveError) {

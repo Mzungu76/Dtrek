@@ -159,10 +159,10 @@ export async function POST(req: NextRequest) {
   // silenziosamente servito oltre il TTL dichiarato. Le tappe (personalizzate sull'utente) restano
   // FUORI dalla cache condivisa: calcolate fresche anche su un hit di cache, mai congelate per
   // l'utente che le ha calcolate per primo.
-  const { overrides, trackDurationMinutes } = hikeId
+  const { overrides, trackDurationMinutes, dayBudgetOverrideMinutes } = hikeId
     ? await fetchHikePersonalizationContext(hikeId, user.id)
-    : { overrides: undefined, trackDurationMinutes: undefined }
-  const maxMinutesPerTappa = culturalTappaBudgetMinutes(trackDurationMinutes)
+    : { overrides: undefined, trackDurationMinutes: undefined, dayBudgetOverrideMinutes: undefined }
+  const maxMinutesPerTappa = culturalTappaBudgetMinutes(trackDurationMinutes, dayBudgetOverrideMinutes)
 
   const cachedAt = borgo.itinerary_cached_at ? new Date(borgo.itinerary_cached_at as string).getTime() : 0
   if (borgo.itinerary_cache && Date.now() - cachedAt < CACHE_TTL_MS) {
@@ -255,13 +255,15 @@ export async function POST(req: NextRequest) {
  *  un'eventuale traccia GPS collegata (trekking misto, verifica utente: "budget residuo della
  *  giornata") — nasce a 0 per una Meta creata dalla ricerca, vedi il commento su
  *  culturalTappaBudgetMinutes in lib/metaSearch/borgoItinerary.ts. */
-async function fetchHikePersonalizationContext(
-  hikeId: string, userId: string,
-): Promise<{ overrides: BorgoItineraryOverrides | undefined; trackDurationMinutes: number | undefined }> {
+async function fetchHikePersonalizationContext(hikeId: string, userId: string): Promise<{
+  overrides: BorgoItineraryOverrides | undefined
+  trackDurationMinutes: number | undefined
+  dayBudgetOverrideMinutes: number | undefined
+}> {
   try {
     const { data } = await supabase
       .from('planned_hikes')
-      .select('borgo_itinerary_overrides, estimated_time_seconds')
+      .select('borgo_itinerary_overrides, estimated_time_seconds, borgo_day_budget_minutes')
       .eq('id', hikeId)
       .eq('user_id', userId)
       .maybeSingle()
@@ -269,9 +271,10 @@ async function fetchHikePersonalizationContext(
     return {
       overrides: (data?.borgo_itinerary_overrides as BorgoItineraryOverrides | undefined) ?? undefined,
       trackDurationMinutes: estimatedTimeSeconds ? estimatedTimeSeconds / 60 : undefined,
+      dayBudgetOverrideMinutes: (data?.borgo_day_budget_minutes as number | undefined) ?? undefined,
     }
   } catch (e) {
     console.error('[borgo-itinerary] lettura contesto personalizzazione fallita', e)
-    return { overrides: undefined, trackDurationMinutes: undefined }
+    return { overrides: undefined, trackDurationMinutes: undefined, dayBudgetOverrideMinutes: undefined }
   }
 }

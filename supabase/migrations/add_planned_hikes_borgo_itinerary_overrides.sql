@@ -19,10 +19,16 @@
 --   route.ts, verifica utente: "ricalcolo reale al server quando l'utente conferma", mai una
 --   linea d'aria istantanea lato client per questo campo).
 --
+-- borgo_day_budget_minutes: override esplicito del budget-giornata (verifica utente — "mezza
+-- giornata/giornata/più giorni" scelto manualmente invece che solo automatico dal contenuto),
+-- NULL quando l'utente non ha mai toccato il selettore (ricade su DAY_BUDGET_MINUTES/il residuo
+-- del trekking misto, lib/metaSearch/borgoItinerary.ts's culturalTappaBudgetMinutes).
+--
 -- Esegui nel Supabase SQL Editor (idempotente, IF NOT EXISTS).
 -- Stesso blocco anche in supabase-schema.sql.
 -- ═══════════════════════════════════════════════════════════
 
 ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS borgo_itinerary_overrides JSONB;
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS borgo_day_budget_minutes SMALLINT;
 
 NOTIFY pgrst, 'reload schema';

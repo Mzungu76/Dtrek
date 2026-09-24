@@ -2,7 +2,7 @@
 // come un grafo navigabile — a differenza di lib/overpassTrails.ts, che cerca solo relation
 // route=hiking per nome, qui servono le way generiche con i node id (non solo la geometria), così
 // i nodi condivisi tra way diverse restano visibili come intersezioni reali della rete stradale.
-import { fetchOverpass } from '@/lib/overpassTrails'
+import { OVERPASS_ENDPOINTS } from '@/lib/overpassTrails'
 import { haversineM, simplifyPolyline } from '@/lib/geoUtils'
 import { mapOsmSacScale } from '@/lib/osm/sacScale'
 
@@ -107,6 +107,46 @@ function addEdge(nodes: Map<number, GraphNode>, fromId: number, toId: number, wa
   to.edges.push({ to: fromId, distM, wayId, highway, sacScale, ford })
 }
 
+interface OverpassNetworkResponse { elements: OverpassEl[]; remark?: string }
+
+async function fetchOverpassNetworkOnce(endpoint: string, query: string, timeoutMs: number): Promise<OverpassNetworkResponse> {
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `data=${encodeURIComponent(query)}`,
+    signal: AbortSignal.timeout(timeoutMs),
+  })
+  if (!res.ok) throw new Error(`status ${res.status}`)
+  return res.json()
+}
+
+/**
+ * Verifica utente ("gli itinerari sono tornati in linea d'aria", anche dopo aver alzato
+ * WALK_NETWORK_TIMEOUT_MS a 45s) — causa reale trovata sui dati: lib/overpassTrails.ts's
+ * fetchOverpass fa una Promise.any fra i 3 mirror, "il primo che risponde vince". Ottimo per una
+ * query leggera dove ogni mirror o fallisce o restituisce la stessa risposta completa — sbagliato
+ * per QUESTA query (la rete pedonale di un centro storico denso, spesso al limite del [timeout:]
+ * interno di Overpass): un mirror può rispondere PRIMA degli altri proprio perché ha rinunciato
+ * prima, restituendo una rete PARZIALE (HTTP 200, `remark` valorizzato) — la corsa premiava sempre
+ * il mirror più "pigro", anche quando un altro stava per restituire la rete COMPLETA solo qualche
+ * secondo dopo. allSettled aspetta ogni mirror fino al proprio timeoutMs (già applicato per
+ * richiesta, quindi nessun costo aggiuntivo nel caso peggiore rispetto a prima), poi sceglie la
+ * risposta migliore fra quelle arrivate: una completa se ce n'è almeno una, altrimenti la parziale
+ * con più elementi — mai la prima e basta.
+ */
+async function fetchWalkNetworkRaw(query: string, timeoutMs: number): Promise<OverpassNetworkResponse> {
+  const settled = await Promise.allSettled(
+    OVERPASS_ENDPOINTS.map(endpoint => fetchOverpassNetworkOnce(endpoint, query, timeoutMs)),
+  )
+  const results = settled
+    .filter((r): r is PromiseFulfilledResult<OverpassNetworkResponse> => r.status === 'fulfilled')
+    .map(r => r.value)
+  if (results.length === 0) throw new Error('Overpass non disponibile')
+  const complete = results.find(r => !r.remark)
+  if (complete) return complete
+  return results.reduce((best, r) => (r.elements.length > best.elements.length ? r : best))
+}
+
 /**
  * Scarica ed espande in un grafo in memoria la rete percorribile in un bbox
  * [minLat, minLon, maxLat, maxLon]. Ogni way viene spezzata negli archi tra i suoi node
@@ -145,23 +185,19 @@ way["highway"~"^(${WALKABLE_HIGHWAY})$"]${WALKABLE_FOOT_OVERRIDE_FILTER}(${minLa
 (._;>;);
 out body qt;`
 
-  // Timeout client allineato al [timeout:] della query — fetchOverpass ritenta una volta sola
-  // dopo una breve pausa (vedi lib/overpassTrails.ts), quindi il caso peggiore resta ~2×timeoutMs
-  // invece di superare da solo il budget della funzione chiamante (maxDuration del proprio
-  // endpoint, con margine per il resto della pipeline a valle).
-  const json = await fetchOverpass<{ elements: OverpassEl[]; remark?: string }>(query, timeoutMs)
+  // Timeout client allineato al [timeout:] della query, applicato per-mirror (vedi
+  // fetchWalkNetworkRaw sopra) — il caso peggiore resta timeoutMs, mai un multiplo: nessun retry
+  // sequenziale qui, i 3 mirror sono già interrogati in parallelo.
+  const json = await fetchWalkNetworkRaw(query, timeoutMs)
   const elements = json.elements ?? []
-  // `remark` compare SOLO quando Overpass stesso ha interrotto la query prima di finirla (di
-  // solito perché ha raggiunto il proprio `[timeout:...]` interno) — la risposta resta comunque
-  // HTTP 200 con qualunque elemento raccolto fino a quel momento, quindi `fetchOverpass` sopra non
-  // la vede come un errore: un fallimento silenzioso, rete parziale servita come se fosse completa.
-  // Nessun modo affidabile di distinguere qui "parziale ma sufficiente per il bbox richiesto" da
-  // "parziale e con un buco proprio dove serviva" — solo segnalarlo, non correggerlo: vedi §4 punto
-  // 3 di docs/crea-guida-itinerario-personalizzato-stato.md, una causa plausibile di "nessun
-  // cammino trovato" che il ripiego a distanza reale in multiStopRoute.ts non risolverebbe (la rete
-  // su cui cerca è quella incompleta).
+  // `remark` compare SOLO quando OGNI mirror che ha risposto ha comunque interrotto la query prima
+  // di finirla (fetchWalkNetworkRaw sopra ha già preferito una risposta completa quando almeno un
+  // mirror l'ha restituita) — la risposta resta comunque HTTP 200 con qualunque elemento raccolto
+  // fino a quel momento. Nessun modo affidabile di distinguere qui "parziale ma sufficiente per il
+  // bbox richiesto" da "parziale e con un buco proprio dove serviva" — solo segnalarlo, non
+  // correggerlo oltre: vedi §4 punto 3 di docs/crea-guida-itinerario-personalizzato-stato.md.
   if (json.remark) {
-    console.warn('[osmGraph] risposta Overpass parziale/incompleta per bbox', bbox, '-', json.remark)
+    console.warn('[osmGraph] risposta Overpass parziale/incompleta per bbox (nessun mirror ha risposto completo)', bbox, '-', json.remark)
   }
 
   const nodes = new Map<number, GraphNode>()

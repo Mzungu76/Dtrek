@@ -5,6 +5,7 @@ import { SITE_TYPE_CONFIG } from '@/lib/metaTypes'
 import {
   groupStopsIntoTappe, spliceLegsForRemovedStops, effectiveVisitMinutesFor,
   bucketStopsByEffectiveTappa, orderStopsNearestNeighbor, summarizeTappa, buildStraightLegs,
+  HALF_DAY_BUDGET_MINUTES, DAY_BUDGET_MINUTES, MULTI_DAY_BUDGET_MINUTES,
   type ItineraryTappa, type ItineraryStopCandidate, type BorgoItineraryOverrides,
 } from '@/lib/metaSearch/borgoItinerary'
 import type { ItineraryStop, ItineraryLeg } from '@/app/api/borgo-itinerary/route'
@@ -34,12 +35,20 @@ interface Props {
   /** Personalizzazioni già salvate per questa Meta (planned_hikes.borgo_itinerary_overrides) —
    *  undefined la primissima volta che l'itinerario viene mostrato. */
   savedOverrides: BorgoItineraryOverrides | undefined
+  /** Budget-giornata scelto esplicitamente per questa Meta (planned_hikes.
+   *  borgo_day_budget_minutes) — undefined quando l'utente non ha mai toccato il selettore
+   *  "Mezza giornata/Giornata/Più giorni", nel qual caso `maxMinutesPerTappa` sopra (l'automatico
+   *  dal contenuto, già calcolato dal server) resta il valore di partenza. */
+  savedDayBudgetMinutes: number | undefined
   placeId: string
   hikeId: string
   /** Persistenza "leggera" (slider/spegnimento) — mai bloccante, stesso pattern già usato per
    *  borgoWalkPolyline in GuideReader: aggiorna lo stato locale della Meta e accoda la
    *  sincronizzazione in background, nessun round-trip sincrono con l'utente in attesa. */
   onOverridesSaved: (overrides: BorgoItineraryOverrides) => void
+  /** Stessa persistenza leggera del selettore di durata — verifica utente: "mi dicevi che hai
+   *  previsto anche la modifica della durata". */
+  onDayBudgetSaved: (dayBudgetMinutes: number) => void
 }
 
 // Verifica utente: le descrizioni delle tappe sono ora più lunghe (testo esteso Wikipedia via
@@ -120,35 +129,48 @@ function computeLocalTappe(
  *  lo spegnimento (computeLocalTappe sopra, stessa formula esatta del server), un'anteprima in
  *  attesa di conferma per uno spostamento manuale (che richiede sempre un vero ricalcolo lato
  *  server prima di diventare definitivo). */
+const DAY_BUDGET_OPTIONS = [
+  { minutes: HALF_DAY_BUDGET_MINUTES, label: 'Mezza giornata' },
+  { minutes: DAY_BUDGET_MINUTES, label: 'Giornata' },
+  { minutes: MULTI_DAY_BUDGET_MINUTES, label: 'Più giorni' },
+]
+
 export default function BorgoTappeWidget({
   stops, legs, center, maxStopsPerTappa, maxMinutesPerTappa, serverTappe, color,
-  savedOverrides, placeId, hikeId, onOverridesSaved,
+  savedOverrides, savedDayBudgetMinutes, placeId, hikeId, onOverridesSaved, onDayBudgetSaved,
 }: Props) {
   const [openStopId, setOpenStopId] = useState<string | null>(null)
   const [selectedTappaIdx, setSelectedTappaIdx] = useState(0)
   const [expandedStopId, setExpandedStopId] = useState<string | null>(null)
   const [overrides, setOverrides] = useState<BorgoItineraryOverrides>(savedOverrides ?? {})
   const [confirmedOverrides, setConfirmedOverrides] = useState<BorgoItineraryOverrides>(savedOverrides ?? {})
+  // maxMinutesPerTappa è già il budget effettivo calcolato dal server (automatico dal contenuto,
+  // o il precedente override se già salvato) — la base da cui parte finché l'utente non tocca il
+  // selettore "Mezza giornata/Giornata/Più giorni" qui sotto.
+  const [dayBudgetMinutes, setDayBudgetMinutes] = useState<number>(savedDayBudgetMinutes ?? maxMinutesPerTappa)
+  const [confirmedDayBudgetMinutes, setConfirmedDayBudgetMinutes] = useState<number>(savedDayBudgetMinutes ?? maxMinutesPerTappa)
   const [confirmedTappe, setConfirmedTappe] = useState<ItineraryTappa[]>(serverTappe)
   const [confirming, setConfirming] = useState(false)
   const [confirmError, setConfirmError] = useState<string | null>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const hasPins = overridesHavePins(overrides)
-  const dirty = !overridesEqual(overrides, confirmedOverrides)
+  const budgetDirty = dayBudgetMinutes !== confirmedDayBudgetMinutes
+  const dirty = !overridesEqual(overrides, confirmedOverrides) || budgetDirty
 
   const localTappe = useMemo(
-    () => computeLocalTappe(stops, legs, center, maxStopsPerTappa, maxMinutesPerTappa, overrides),
-    [stops, legs, center, maxStopsPerTappa, maxMinutesPerTappa, overrides],
+    () => computeLocalTappe(stops, legs, center, maxStopsPerTappa, dayBudgetMinutes, overrides),
+    [stops, legs, center, maxStopsPerTappa, dayBudgetMinutes, overrides],
   )
   // Una volta confermato uno spostamento manuale, il risultato reale (tragitti sulla rete
   // pedonale) resta mostrato finché l'utente non tocca di nuovo qualcosa — mai ricalcolato in
-  // un'anteprima approssimata solo perché un altro slider è stato sfiorato altrove.
+  // un'anteprima approssimata solo perché un altro slider (o il selettore di durata) è stato
+  // sfiorato altrove.
   const tappe = (!hasPins || dirty) ? localTappe : confirmedTappe
   const showConfirmBar = hasPins && dirty
 
-  // Slider/spegnimento (nessun pin coinvolto) — persistiti in background, mai un'attesa per
-  // l'utente: appena l'algoritmo locale è già la stessa formula esatta del server, non serve
+  // Slider/spegnimento/durata (nessun pin coinvolto) — persistiti in background, mai un'attesa
+  // per l'utente: appena l'algoritmo locale è già la stessa formula esatta del server, non serve
   // aspettare una risposta per fidarsi del risultato mostrato.
   useEffect(() => {
     if (hasPins || !dirty) return
@@ -156,9 +178,13 @@ export default function BorgoTappeWidget({
     saveTimerRef.current = setTimeout(() => {
       onOverridesSaved(overrides)
       setConfirmedOverrides(overrides)
+      if (budgetDirty) {
+        onDayBudgetSaved(dayBudgetMinutes)
+        setConfirmedDayBudgetMinutes(dayBudgetMinutes)
+      }
     }, 500)
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }
-  }, [overrides, hasPins, dirty, onOverridesSaved])
+  }, [overrides, dayBudgetMinutes, hasPins, dirty, budgetDirty, onOverridesSaved, onDayBudgetSaved])
 
   if (stops.length === 0) return null
 
@@ -188,6 +214,7 @@ export default function BorgoTappeWidget({
 
   function handleCancelMove() {
     setOverrides(confirmedOverrides)
+    setDayBudgetMinutes(confirmedDayBudgetMinutes)
     setConfirmError(null)
   }
 
@@ -198,16 +225,27 @@ export default function BorgoTappeWidget({
       const res = await fetch('/api/borgo-itinerary/apply-overrides', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ placeId, hikeId, overrides }),
+        body: JSON.stringify({ placeId, hikeId, overrides, ...(budgetDirty ? { dayBudgetMinutes } : {}) }),
       })
-      if (!res.ok) throw new Error()
+      if (!res.ok) {
+        // Il messaggio del server (es. "Meta pianificata non trovata" per un 404, sincronizzata
+        // solo in background — verifica utente) è più utile di un "riprova" generico sempre
+        // uguale: aiuta a distinguere un problema transitorio di rete da uno strutturale.
+        const body = await res.json().catch(() => null) as { error?: string } | null
+        throw new Error(body?.error)
+      }
       const data = await res.json() as { tappe: ItineraryTappa[] }
       setConfirmedTappe(data.tappe)
       setConfirmedOverrides(overrides)
       onOverridesSaved(overrides)
+      if (budgetDirty) {
+        setConfirmedDayBudgetMinutes(dayBudgetMinutes)
+        onDayBudgetSaved(dayBudgetMinutes)
+      }
       setSelectedTappaIdx(0)
-    } catch {
-      setConfirmError('Non è stato possibile ricalcolare i tragitti — riprova.')
+    } catch (e) {
+      const detail = e instanceof Error && e.message ? ` (${e.message})` : ''
+      setConfirmError(`Non è stato possibile ricalcolare i tragitti — riprova${detail}.`)
     } finally {
       setConfirming(false)
     }
@@ -215,6 +253,24 @@ export default function BorgoTappeWidget({
 
   return (
     <div className="flex flex-col gap-4">
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <span className="text-[11px] font-semibold text-stone-400">Durata visita</span>
+        {DAY_BUDGET_OPTIONS.map(opt => (
+          <button
+            key={opt.minutes}
+            type="button"
+            onClick={() => setDayBudgetMinutes(opt.minutes)}
+            className={`px-2.5 py-1 rounded-full text-[11.5px] font-semibold border transition-colors ${
+              dayBudgetMinutes === opt.minutes
+                ? 'text-white border-transparent'
+                : 'bg-white border-stone-200 text-stone-500 hover:border-stone-300'
+            }`}
+            style={dayBudgetMinutes === opt.minutes ? { background: color } : undefined}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
       {tappe.length > 1 && (
         <div className="flex flex-wrap gap-1.5">
           {tappe.map((t, i) => (
