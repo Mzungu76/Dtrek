@@ -787,9 +787,15 @@ export default function GuidaHub({ id }: { id?: string }) {
     setSaving(true)
     try {
       await deletePlanned(hike.id)
-      // Letto dall'effetto in cima al componente subito dopo il remount che segue router.push:
-      // conferma "Percorso eliminato" indipendente da quanto ci mette a caricare il prossimo
-      // percorso (o lo scheletro), che altrimenti sarebbe l'unico segnale visibile.
+      // Verifica utente: "l'utente elimina la guida, ma non succede nulla (almeno sembra), se non
+      // con molto ritardo" — deletePlanned è già istantanea (solo IndexedDB locale, la sincronizzazione
+      // col server è in background), ma prima il SOLO segnale era questo toast letto dopo il remount
+      // che segue router.push: se quella pagina elenco impiega anche solo un istante a montare/
+      // caricare, l'utente restava a fissare la pagina di dettaglio senza alcun riscontro nel
+      // frattempo. Ora il toast si accende SUBITO, su questa stessa pagina, prima ancora di navigare
+      // — sessionStorage resta sotto come rete di sicurezza per il caso in cui il remount avvenga
+      // prima che questo frame faccia in tempo a dipingersi.
+      setShowDeletedToast(true)
       if (typeof window !== 'undefined') sessionStorage.setItem('dtrek:justDeletedHike', '1')
       router.push('/guida')
     } finally { setSaving(false) }
