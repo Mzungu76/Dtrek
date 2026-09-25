@@ -320,7 +320,10 @@ export default function BottomGallery({
           )}
         </div>
       )}
-      <div ref={scrollRef} className="flex gap-2.5 overflow-x-auto px-4" style={{ scrollSnapType: 'x proximity' }}>
+      {/* pt-2: riserva lo spazio in cui sporge il badge di tipologia (a cavallo del bordo
+          superiore di ogni miniatura, vedi sotto) — senza, con overflow-x impostato il browser
+          tratta anche l'asse verticale come 'auto' (non più 'visible'), rischiando di tagliarlo. */}
+      <div ref={scrollRef} className="flex gap-2.5 overflow-x-auto px-4 pt-2" style={{ scrollSnapType: 'x proximity' }}>
         {onImport && (
           <button
             onClick={onImport}
@@ -338,50 +341,45 @@ export default function BottomGallery({
             key={item.id}
             data-route-id={item.id}
             onClick={() => onSelect(i)}
-            className={`shrink-0 w-20 h-20 md:w-28 md:h-28 lg:w-32 lg:h-32 rounded-2xl overflow-hidden relative ${
-              isCurrent ? 'border-[3px] border-sky-400 shadow-[0_0_0_2px_rgba(56,189,248,0.35)]' : 'border-[1.5px] border-white/35'
-            }`}
+            className="shrink-0 w-20 h-20 md:w-28 md:h-28 lg:w-32 lg:h-32 relative"
             style={{ scrollSnapAlign: 'start' }}
           >
-            {item.coverPhotoUrl ? (
-              <>
-                <Image src={item.coverPhotoUrl} alt={item.title} fill sizes="(min-width: 1024px) 128px, (min-width: 768px) 112px, 80px" className="object-cover" loading="lazy" />
-                <div className="absolute inset-0 bg-black/20 pointer-events-none" />
-              </>
-            ) : (
-              // Nessuna foto ⇒ mappa del percorso, non un placeholder generico — stessa priorità
-              // usata per la copertina grande a percorso aperto (vedi cover() in ResocontoHub.tsx e
-              // CoverMap in RouteHub.tsx). Un sentiero di Guida non ha mai coverPhotoUrl, quindi
-              // vede sempre la mappa qui, come prima — un Borgo/Città o Sito senza traccia GPS
-              // invece la riceve in background da app/guida/GuidaHub.tsx (foto dell'archivio
-              // dtrek_places), altrimenti resterebbe questa stessa mappa disegnata su una
-              // polyline vuota (nulla da mostrare, piano §48.9).
-              <GalleryMapThumb polyline={item.polyline} metaType={item.metaType} siteType={item.siteType} />
-            )}
-            {(hasSortData || (favoritesFilter && nextOutingFilter)) && (
-              <div className="absolute top-1 left-1 md:top-1.5 md:left-1.5">
-                <ThumbBadge sortBy={sortBy} item={item} showPlannedDate={favoritesFilter && nextOutingFilter} />
-              </div>
-            )}
-            {/* Tipologia (Sentiero/Borgo-Città/Sito) — sovrapposta al centro della linea superiore
-                della miniatura, mai in conflitto con il badge di ordinamento (sempre a sinistra) o
-                col titolo/gradiente in basso. Guida-only: metaType non ha senso per Resoconto/
-                Diario (vedi RouteHubItem.metaType). */}
-            {mode === 'guida' && (
-              <div className="absolute top-1 left-1/2 -translate-x-1/2 md:top-1.5">
-                <MetaTypeBadge metaType={item.metaType} siteType={item.siteType} size={18} />
-              </div>
-            )}
-            <div className="absolute bottom-0 inset-x-0 px-1.5 md:px-2 pb-1 md:pb-1.5 pt-5 md:pt-7 bg-gradient-to-t from-black/75 to-transparent">
-              {/* Frase sintetica TS+Sicurezza — sulla scheda chiusa i due numeri nell'anello (in
-                  alto) non si capiscono da soli: qui si traduce il punteggio nelle stesse etichette
-                  qualitative già usate altrove nell'app (lib/trailScore.ts, lib/safetyScore.ts),
-                  non un nuovo testo inventato ad hoc. */}
-              {mode === 'guida' && item.scorePreview && item.safetyPreview && (
-                <span className="block text-[8px] md:text-[10px] font-semibold text-white/75 truncate leading-tight mb-0.5">
-                  {ctsLabel(item.scorePreview.value).label} · {item.safetyPreview.label}
-                </span>
+            {/* Contenuto vero e proprio, ritagliato — separato dal badge di tipologia qui sotto
+                (fuori da questo overflow-hidden) perché quello deve poter sporgere a cavallo del
+                bordo superiore, non restarne tagliato a metà. */}
+            <div className={`absolute inset-0 rounded-2xl overflow-hidden ${
+              isCurrent ? 'border-[3px] border-sky-400 shadow-[0_0_0_2px_rgba(56,189,248,0.35)]' : 'border-[1.5px] border-white/35'
+            }`}>
+              {item.coverPhotoUrl ? (
+                <>
+                  <Image src={item.coverPhotoUrl} alt={item.title} fill sizes="(min-width: 1024px) 128px, (min-width: 768px) 112px, 80px" className="object-cover" loading="lazy" />
+                  <div className="absolute inset-0 bg-black/20 pointer-events-none" />
+                </>
+              ) : (
+                // Nessuna foto ⇒ mappa del percorso, non un placeholder generico — stessa priorità
+                // usata per la copertina grande a percorso aperto (vedi cover() in ResocontoHub.tsx e
+                // CoverMap in RouteHub.tsx). Un sentiero di Guida non ha mai coverPhotoUrl, quindi
+                // vede sempre la mappa qui, come prima — un Borgo/Città o Sito senza traccia GPS
+                // invece la riceve in background da app/guida/GuidaHub.tsx (foto dell'archivio
+                // dtrek_places), altrimenti resterebbe questa stessa mappa disegnata su una
+                // polyline vuota (nulla da mostrare, piano §48.9).
+                <GalleryMapThumb polyline={item.polyline} metaType={item.metaType} siteType={item.siteType} />
               )}
+              {(hasSortData || (favoritesFilter && nextOutingFilter)) && (
+                <div className="absolute top-1 left-1 md:top-1.5 md:left-1.5">
+                  <ThumbBadge sortBy={sortBy} item={item} showPlannedDate={favoritesFilter && nextOutingFilter} />
+                </div>
+              )}
+              <div className="absolute bottom-0 inset-x-0 px-1.5 md:px-2 pb-1 md:pb-1.5 pt-5 md:pt-7 bg-gradient-to-t from-black/75 to-transparent">
+                {/* Frase sintetica TS+Sicurezza — sulla scheda chiusa i due numeri nell'anello (in
+                    alto) non si capiscono da soli: qui si traduce il punteggio nelle stesse etichette
+                    qualitative già usate altrove nell'app (lib/trailScore.ts, lib/safetyScore.ts),
+                    non un nuovo testo inventato ad hoc. */}
+                {mode === 'guida' && item.scorePreview && item.safetyPreview && (
+                  <span className="block text-[8px] md:text-[10px] font-semibold text-white/75 truncate leading-tight mb-0.5">
+                    {ctsLabel(item.scorePreview.value).label} · {item.safetyPreview.label}
+                  </span>
+                )}
               {/* Una riga sola con ellissi — il tentativo precedente (line-clamp-2) restava senza
                   effetto in produzione (line-clamp e `block` si contendono la proprietà `display`
                   nel CSS generato da Tailwind: `block` può vincere e disattivare il clamp), col
@@ -389,7 +387,17 @@ export default function BottomGallery({
                   miniatura. Il nome per intero resta comunque leggibile: vedi il pulsante "Vedi
                   tutti in elenco" qui sotto, che apre ExpandedGalleryList.tsx senza troncamenti. */}
               <span className="block text-[10px] md:text-xs font-bold text-white truncate leading-tight">{item.title}</span>
+              </div>
             </div>
+            {/* Tipologia (Sentiero/Borgo-Città/Sito) — a cavallo del bordo superiore, centrata:
+                per questo sta fuori dal riquadro con overflow-hidden qui sopra, come sibling
+                assoluto rispetto al bottone (non clippato). Guida-only: metaType non ha senso per
+                Resoconto/Diario (vedi RouteHubItem.metaType). */}
+            {mode === 'guida' && (
+              <div className="absolute left-1/2 -translate-x-1/2 z-10" style={{ top: -9 }}>
+                <MetaTypeBadge metaType={item.metaType} siteType={item.siteType} size={18} />
+              </div>
+            )}
           </button>
           )
         })}

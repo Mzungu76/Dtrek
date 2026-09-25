@@ -170,44 +170,49 @@ export default function GuidaIndexPage() {
                 <Link
                   key={hike.id}
                   href={`/guida/${encodeURIComponent(hike.id)}`}
-                  className="block bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-md transition-shadow border border-dashed border-sky-200"
+                  className="block relative shadow-sm hover:shadow-md transition-shadow"
                 >
-                  <div className="relative h-[160px] bg-gradient-to-b from-sky-50 to-stone-50 bg-topography">
-                    {hike.routePolyline && hike.routePolyline.length > 1 ? (
-                      <div className="absolute inset-3">
-                        <RouteThumb polyline={hike.routePolyline} color="#0284c7" strokeWidth={3} />
-                      </div>
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <FallbackIcon className="w-10 h-10 text-sky-200" />
-                      </div>
-                    )}
-                    {badge ? (
-                      <span className={`absolute top-3 right-3 text-[11px] font-bold px-2.5 py-1 rounded-full shadow-sm ${badge.className}`}>
-                        {badge.label}
-                      </span>
-                    ) : date && (
-                      <span className="absolute top-3 right-3 text-[11px] font-bold bg-white/92 text-sky-700 px-2.5 py-1 rounded-full shadow-sm">
-                        {format(date, 'd MMM', { locale: it })}
-                      </span>
-                    )}
-                    {/* Tipologia (Sentiero/Borgo-Città/Sito) — sovrapposta al centro della linea
-                        superiore della miniatura, mai in conflitto con la data/badge "in attesa"
-                        (sempre a destra). */}
-                    <div className="absolute top-3 left-1/2 -translate-x-1/2">
-                      <MetaTypeBadge metaType={hike.metaType} siteType={hike.siteType} size={26} />
-                    </div>
-                  </div>
-                  <div className="px-[18px] pt-4 pb-[18px]">
-                    <p className="text-[16px] font-bold text-sky-900 mb-2 truncate">{hike.title}</p>
-                    <div className="flex items-center gap-4 text-[13px] text-stone-500 flex-wrap">
-                      {metaSummaryStats(hike).map(text => <span key={text}>{text}</span>)}
-                      {ctsData && (
-                        <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-md text-white" style={{ backgroundColor: ctsData.color }}>
-                          {ctsData.label}
+                  {/* Contenuto vero e proprio, ritagliato — separato dal badge di tipologia qui
+                      sotto (fuori da questo overflow-hidden) perché quello deve poter sporgere a
+                      cavallo del bordo superiore della card, non restarne tagliato a metà. */}
+                  <div className="bg-white rounded-3xl overflow-hidden border border-dashed border-sky-200">
+                    <div className="relative h-[160px] bg-gradient-to-b from-sky-50 to-stone-50 bg-topography">
+                      {hike.routePolyline && hike.routePolyline.length > 1 ? (
+                        <div className="absolute inset-3">
+                          <RouteThumb polyline={hike.routePolyline} color="#0284c7" strokeWidth={3} />
+                        </div>
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <FallbackIcon className="w-10 h-10 text-sky-200" />
+                        </div>
+                      )}
+                      {badge ? (
+                        <span className={`absolute top-3 right-3 text-[11px] font-bold px-2.5 py-1 rounded-full shadow-sm ${badge.className}`}>
+                          {badge.label}
+                        </span>
+                      ) : date && (
+                        <span className="absolute top-3 right-3 text-[11px] font-bold bg-white/92 text-sky-700 px-2.5 py-1 rounded-full shadow-sm">
+                          {format(date, 'd MMM', { locale: it })}
                         </span>
                       )}
                     </div>
+                    <div className="px-[18px] pt-4 pb-[18px]">
+                      <p className="text-[16px] font-bold text-sky-900 mb-2 truncate">{hike.title}</p>
+                      <div className="flex items-center gap-4 text-[13px] text-stone-500 flex-wrap">
+                        {metaSummaryStats(hike).map(text => <span key={text}>{text}</span>)}
+                        {ctsData && (
+                          <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-md text-white" style={{ backgroundColor: ctsData.color }}>
+                            {ctsData.label}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  {/* Tipologia (Sentiero/Borgo-Città/Sito) — a cavallo del bordo superiore della
+                      card, centrata: per questo sta fuori dal riquadro con overflow-hidden qui
+                      sopra, come sibling assoluto rispetto al Link (non clippato). */}
+                  <div className="absolute left-1/2 -translate-x-1/2 z-10" style={{ top: -13 }}>
+                    <MetaTypeBadge metaType={hike.metaType} siteType={hike.siteType} size={26} />
                   </div>
                 </Link>
               )

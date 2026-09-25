@@ -143,19 +143,21 @@ function ListRow({ item, mode, isCurrent, onSelect }: {
 }) {
   return (
     <button onClick={onSelect} className="w-full flex items-center gap-3 py-3 text-left border-b border-white/10">
-      <div className={`shrink-0 w-16 h-16 rounded-xl overflow-hidden relative ${isCurrent ? 'ring-2 ring-sky-400' : ''}`}>
-        {item.coverPhotoUrl ? (
-          <>
-            <Image src={item.coverPhotoUrl} alt={item.title} fill sizes="64px" className="object-cover" loading="lazy" />
-            <div className="absolute inset-0 bg-black/20 pointer-events-none" />
-          </>
-        ) : (
-          <GalleryMapThumb polyline={item.polyline} metaType={item.metaType} siteType={item.siteType} />
-        )}
-        {/* Stessa tipologia sovrapposta al centro della linea superiore delle miniature di
-            BottomGallery.tsx — qui più piccola per via del quadrato 64×64. Guida-only. */}
+      <div className="shrink-0 w-16 h-16 relative">
+        <div className={`absolute inset-0 rounded-xl overflow-hidden ${isCurrent ? 'ring-2 ring-sky-400' : ''}`}>
+          {item.coverPhotoUrl ? (
+            <>
+              <Image src={item.coverPhotoUrl} alt={item.title} fill sizes="64px" className="object-cover" loading="lazy" />
+              <div className="absolute inset-0 bg-black/20 pointer-events-none" />
+            </>
+          ) : (
+            <GalleryMapThumb polyline={item.polyline} metaType={item.metaType} siteType={item.siteType} />
+          )}
+        </div>
+        {/* Stessa tipologia a cavallo del bordo superiore delle miniature di BottomGallery.tsx —
+            per questo fuori dal riquadro con overflow-hidden qui sopra. Guida-only. */}
         {mode === 'guida' && (
-          <div className="absolute top-1 left-1/2 -translate-x-1/2">
+          <div className="absolute left-1/2 -translate-x-1/2 z-10" style={{ top: -7 }}>
             <MetaTypeBadge metaType={item.metaType} siteType={item.siteType} size={14} />
           </div>
         )}
