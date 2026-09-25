@@ -1,5 +1,6 @@
 'use client'
 import dynamic from 'next/dynamic'
+import Image from 'next/image'
 import { useMemo, type ReactNode } from 'react'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
@@ -76,9 +77,13 @@ export default function GuideHero({
     >
       {coverMode === 'photo' ? (
         photoUrl ? (
-          // Copertina esterna (Wikidata/Wikipedia/Commons), non un asset locale ottimizzabile da next/image.
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={photoUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
+          // Copertina esterna (Wikidata/Wikipedia/Commons) — next/image la ottimizza comunque
+          // (next.config.js's remotePatterns copre già wikimedia.org/wikipedia.org, stesso pattern
+          // di components/guida/widgets/PoiListWidget.tsx): ridimensionamento su misura del device
+          // e conversione AVIF/WebP invece di scaricare per intero qualunque risoluzione la fonte
+          // restituisca. `priority` perché è l'immagine sopra la piega della pagina (candidata LCP),
+          // a differenza dei thumbnail più sotto nello scroll che restano lazy di default.
+          <Image src={photoUrl} alt="" fill priority sizes="100vw" className="object-cover" />
         ) : (
           <div
             className="absolute inset-0 flex items-center justify-center"

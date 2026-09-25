@@ -57,8 +57,15 @@ async function fetchFromWikidataP18(wikidataId: string): Promise<PlaceCoverPhoto
     })
     if (!res.ok) return null
     const data = await res.json() as { results?: { bindings?: Array<{ pic: { value: string } }> } }
-    const url = data.results?.bindings?.[0]?.pic?.value
-    return url ? { url, credit: 'Wikimedia Commons' } : null
+    const rawUrl = data.results?.bindings?.[0]?.pic?.value
+    if (!rawUrl) return null
+    // wdt:P18 restituisce un URL Special:FilePath senza `width`, che Commons serve alla risoluzione
+    // ORIGINALE del file caricato (spesso diversi MB) — MediaWiki reindirizza invece a una miniatura
+    // pre-ridimensionata quando `width` è presente, stesso meccanismo (via Action API) già usato per
+    // il livello Wikipedia sotto (fetchPageThumbnail, COVER_PHOTO_WIDTH). Senza questo la copertina
+    // più comune (Wikidata è il primo livello tentato) è anche la più pesante da caricare.
+    const url = `${rawUrl}${rawUrl.includes('?') ? '&' : '?'}width=${COVER_PHOTO_WIDTH}`
+    return { url, credit: 'Wikimedia Commons' }
   } catch {
     return null
   }

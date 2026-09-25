@@ -21,27 +21,27 @@ export const ROUTE_HIERARCHY: RouteEntry[] = [
   // (minimizza/esci). Ogni altra tab di primo livello (Guida, Resoconto) e le pagine raggiunte da
   // qui (Statistiche, Profilo, Tutti i Percorsi) tornano prima qui, non l'una dentro l'altra —
   // anche se ci si è arrivati passando fisicamente da un'altra tab.
-  { pattern: '/diari', parent: null },
-  { pattern: '/diari/[id]', parent: '/diari' },
-  { pattern: '/diari/[id]/percorsi/[percorsoId]', parent: (p) => `/diari/${p.id}` },
-  { pattern: '/diari/[id]/pubblica', parent: (p) => `/diari/${p.id}` },
-  { pattern: '/percorsi', parent: '/diari' },
+  { pattern: '/diario', parent: null },
+  { pattern: '/diario/[id]', parent: '/diario' },
+  { pattern: '/diario/[id]/percorsi/[percorsoId]', parent: (p) => `/diario/${p.id}` },
+  { pattern: '/diario/[id]/pubblica', parent: (p) => `/diario/${p.id}` },
+  { pattern: '/percorsi', parent: '/diario' },
 
   // Atlante — secondo libro di primo livello (docs/libreria-atlante-piano.md, Fase 2): torna a
   // Libreria come ogni altra tab, mai annidato dentro un'altra.
-  { pattern: '/atlante', parent: '/diari' },
+  { pattern: '/atlante', parent: '/diario' },
   { pattern: '/atlante/salvate', parent: '/atlante' },
   { pattern: '/atlante/salvate/[id]/aggiungi', parent: '/atlante/salvate' },
 
-  { pattern: '/guida', parent: '/diari' },
+  { pattern: '/guida', parent: '/diario' },
   { pattern: '/guida/[id]', parent: '/guida' },
   { pattern: '/guida/[id]/percorso', parent: (p) => `/guida/${p.id}` },
   { pattern: '/guida/[id]/flora', parent: (p) => `/guida/${p.id}` },
   { pattern: '/guida/[id]/animali', parent: (p) => `/guida/${p.id}` },
   { pattern: '/guida/[id]/naviga', parent: (p) => `/guida/${p.id}` },
 
-  { pattern: '/statistiche', parent: '/diari' },
-  { pattern: '/profilo', parent: '/diari' },
+  { pattern: '/statistiche', parent: '/diario' },
+  { pattern: '/profilo', parent: '/diario' },
   { pattern: '/profilo/impostazioni', parent: '/profilo' },
   { pattern: '/profilo/ai', parent: '/profilo' },
   { pattern: '/profilo/cronologia-navigazione', parent: '/profilo' },
@@ -50,7 +50,7 @@ export const ROUTE_HIERARCHY: RouteEntry[] = [
   { pattern: '/vette', parent: '/profilo' },
 
   // ── Resoconto — escursioni concluse (dati + racconto) ───────────────────────
-  { pattern: '/resoconto', parent: '/diari' },
+  { pattern: '/resoconto', parent: '/diario' },
   { pattern: '/resoconto/[id]', parent: '/resoconto' },
   { pattern: '/resoconto/[id]/racconta', parent: (p) => `/resoconto/${p.id}` },
   { pattern: '/resoconto/[id]/flora', parent: (p) => `/resoconto/${p.id}` },
@@ -65,7 +65,7 @@ export const ROUTE_HIERARCHY: RouteEntry[] = [
 ]
 
 export const ROUTE_LABELS: Record<string, string> = {
-  '/diari': 'Diario',
+  '/diario': 'Diario',
   '/atlante': 'Atlante',
   '/atlante/salvate': 'Salvate',
   '/guida': 'Guida',

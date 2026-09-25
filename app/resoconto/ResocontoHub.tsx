@@ -18,8 +18,6 @@ import {
 import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { computeTrailScore, type TrailScoreResult } from '@/lib/trailScore'
 import { formatDuration } from '@/lib/tcxParser'
-import { exportActivityToExcel } from '@/utils/exportExcel'
-import { exportActivityToDoc } from '@/utils/exportDoc'
 import { exportActivityToGpx } from '@/utils/exportGpx'
 import { type PoiItem } from '@/lib/overpass'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
@@ -645,10 +643,10 @@ export default function ResocontoHub({ id }: { id?: string }) {
           <button onClick={() => { onClose(); setOpenVideoWizard(true); setShow3D(true) }} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left">
             <Film className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Crea video</span>
           </button>
-          <button onClick={() => exportActivityToExcel(activity)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left">
+          <button onClick={() => import('@/utils/exportExcel').then(m => m.exportActivityToExcel(activity))} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left">
             <FileSpreadsheet className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Esporta Excel</span>
           </button>
-          <button onClick={() => exportActivityToDoc(activity)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left">
+          <button onClick={() => import('@/utils/exportDoc').then(m => m.exportActivityToDoc(activity))} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left">
             <FileText className="w-4 h-4 text-stone-400/60" /> <span className={`text-sm font-medium ${textPrimary}`}>Esporta Word</span>
           </button>
           <button onClick={() => exportActivityToGpx(activity)} className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-stone-100 transition-colors text-left">
