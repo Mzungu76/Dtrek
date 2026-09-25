@@ -465,6 +465,9 @@ export default function RouteHub({
           favoritesFilter={favoritesFilter} onToggleFavoritesFilter={onToggleFavoritesFilter}
           nextOutingFilter={nextOutingFilter} onToggleNextOutingFilter={onToggleNextOutingFilter}
           searchQuery={searchQuery} onSearchQueryChange={setSearchQuery}
+          // Stesso chip di Screen 1 (sopra), riusato identico qui — vedi il commento sul prop in
+          // ExpandedGalleryList.tsx.
+          contextBadge={contextBadge?.(item)}
         />
       )}
 
