@@ -4,6 +4,7 @@ import Image from 'next/image'
 import { ArrowUpDown, CalendarClock, Search, Star, X } from 'lucide-react'
 import { MiniScoreRing } from '@/components/ScoreRing'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
+import MetaTypeBadge from '@/components/MetaTypeBadge'
 import { ctsLabel } from '@/lib/trailScore'
 import { GalleryMapThumb, SORT_OPTIONS_BY_MODE, type SortKey } from './BottomGallery'
 import type { HubMode, RouteHubItem } from './types'
@@ -150,6 +151,13 @@ function ListRow({ item, mode, isCurrent, onSelect }: {
           </>
         ) : (
           <GalleryMapThumb polyline={item.polyline} metaType={item.metaType} siteType={item.siteType} />
+        )}
+        {/* Stessa tipologia sovrapposta al centro della linea superiore delle miniature di
+            BottomGallery.tsx — qui più piccola per via del quadrato 64×64. Guida-only. */}
+        {mode === 'guida' && (
+          <div className="absolute top-1 left-1/2 -translate-x-1/2">
+            <MetaTypeBadge metaType={item.metaType} siteType={item.siteType} size={14} />
+          </div>
         )}
       </div>
       <div className="flex-1 min-w-0">

@@ -10,6 +10,7 @@ import { formatDuration } from '@/lib/tcxParser'
 import { ctsLabel } from '@/lib/trailScore'
 import { metaHasHikingMetrics, META_TYPE_CONFIG, SITE_TYPE_CONFIG } from '@/lib/metaTypes'
 import { metaRowLocationStats } from '@/lib/metaCard'
+import MetaTypeBadge from '@/components/MetaTypeBadge'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { CalendarClock, Loader2, Upload, Archive, Search, X } from 'lucide-react'
@@ -190,6 +191,12 @@ export default function GuidaIndexPage() {
                         {format(date, 'd MMM', { locale: it })}
                       </span>
                     )}
+                    {/* Tipologia (Sentiero/Borgo-Città/Sito) — sovrapposta al centro della linea
+                        superiore della miniatura, mai in conflitto con la data/badge "in attesa"
+                        (sempre a destra). */}
+                    <div className="absolute top-3 left-1/2 -translate-x-1/2">
+                      <MetaTypeBadge metaType={hike.metaType} siteType={hike.siteType} size={26} />
+                    </div>
                   </div>
                   <div className="px-[18px] pt-4 pb-[18px]">
                     <p className="text-[16px] font-bold text-sky-900 mb-2 truncate">{hike.title}</p>

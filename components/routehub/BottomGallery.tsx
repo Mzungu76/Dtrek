@@ -7,6 +7,7 @@ import { ArrowUpDown, Upload, Star, Search, X, Rows3, CalendarClock } from 'luci
 import RouteThumb from '@/components/RouteThumb'
 import { MiniScoreRing } from '@/components/ScoreRing'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
+import MetaTypeBadge from '@/components/MetaTypeBadge'
 import { ctsLabel } from '@/lib/trailScore'
 import { META_TYPE_CONFIG, SITE_TYPE_CONFIG, type MetaType, type SiteType } from '@/lib/metaTypes'
 import type { HubMode, RouteHubItem, SortValues } from './types'
@@ -360,6 +361,15 @@ export default function BottomGallery({
             {(hasSortData || (favoritesFilter && nextOutingFilter)) && (
               <div className="absolute top-1 left-1 md:top-1.5 md:left-1.5">
                 <ThumbBadge sortBy={sortBy} item={item} showPlannedDate={favoritesFilter && nextOutingFilter} />
+              </div>
+            )}
+            {/* Tipologia (Sentiero/Borgo-Città/Sito) — sovrapposta al centro della linea superiore
+                della miniatura, mai in conflitto con il badge di ordinamento (sempre a sinistra) o
+                col titolo/gradiente in basso. Guida-only: metaType non ha senso per Resoconto/
+                Diario (vedi RouteHubItem.metaType). */}
+            {mode === 'guida' && (
+              <div className="absolute top-1 left-1/2 -translate-x-1/2 md:top-1.5">
+                <MetaTypeBadge metaType={item.metaType} siteType={item.siteType} size={18} />
               </div>
             )}
             <div className="absolute bottom-0 inset-x-0 px-1.5 md:px-2 pb-1 md:pb-1.5 pt-5 md:pt-7 bg-gradient-to-t from-black/75 to-transparent">
