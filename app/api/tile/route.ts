@@ -1,9 +1,15 @@
 export const dynamic = 'force-dynamic'
 
+// Tile CARTO Basemaps — senza questa chiave le tile voyager/dark/positron arrivano con la
+// filigrana "Chiave API richiesta" incisa sopra. OSM ('light') e OpenTopoMap ('topo') non sono
+// CARTO e non la vogliono nell'URL.
+const CARTO_API_KEY = process.env.CARTO_API_KEY ?? ''
+const CARTO_STYLES = new Set(['voyager', 'dark', 'positron'])
+
 const PROVIDERS: Record<string, string> = {
   // CartoDB Voyager — mid-tone, shows terrain, great contrast for route lines
   voyager: 'https://a.basemaps.cartocdn.com/rastertiles/voyager',
-  // CartoDB Dark Matter — free, no key
+  // CartoDB Dark Matter
   dark:    'https://a.basemaps.cartocdn.com/dark_all',
   // CartoDB Positron — chiarissima e quasi senza colore: tutto ciò che si posa sopra (tracciato,
   // pallini di foto e stacchi) resta l'unica cosa satura della vista. È il fondo dell'editor.
@@ -41,8 +47,10 @@ export async function GET(req: Request) {
   if (!Number.isInteger(x) || x < 0 || x > maxTileIndex) return new Response('Invalid x', { status: 400 })
   if (!Number.isInteger(y) || y < 0 || y > maxTileIndex) return new Response('Invalid y', { status: 400 })
 
-  const base = PROVIDERS[style] ?? PROVIDERS.voyager
-  const url  = `${base}/${zoom}/${x}/${y}${retina ? '@2x' : ''}.png`
+  const resolvedStyle = PROVIDERS[style] ? style : 'voyager'
+  const base = PROVIDERS[resolvedStyle]
+  const key  = CARTO_STYLES.has(resolvedStyle) && CARTO_API_KEY ? `?key=${CARTO_API_KEY}` : ''
+  const url  = `${base}/${zoom}/${x}/${y}${retina ? '@2x' : ''}.png${key}`
 
   try {
     const res = await fetch(url, {
