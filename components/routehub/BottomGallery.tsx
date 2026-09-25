@@ -320,10 +320,12 @@ export default function BottomGallery({
           )}
         </div>
       )}
-      {/* pt-2: riserva lo spazio in cui sporge il badge di tipologia (a cavallo del bordo
-          superiore di ogni miniatura, vedi sotto) — senza, con overflow-x impostato il browser
-          tratta anche l'asse verticale come 'auto' (non più 'visible'), rischiando di tagliarlo. */}
-      <div ref={scrollRef} className="flex gap-2.5 overflow-x-auto px-4 pt-2" style={{ scrollSnapType: 'x proximity' }}>
+      {/* pt-3 (12px): riserva lo spazio in cui sporge il badge di tipologia (9px sopra il bordo
+          di ogni miniatura, metà dei suoi 18px — vedi sotto), con un margine di 3px — senza,
+          con overflow-x impostato il browser tratta anche l'asse verticale come 'auto' (non più
+          'visible'), e il badge risultava tagliato in cima (verifica utente, screenshot dal vivo:
+          con soli 8px di riserva mancava di 1px). */}
+      <div ref={scrollRef} className="flex gap-2.5 overflow-x-auto px-4 pt-3" style={{ scrollSnapType: 'x proximity' }}>
         {onImport && (
           <button
             onClick={onImport}
