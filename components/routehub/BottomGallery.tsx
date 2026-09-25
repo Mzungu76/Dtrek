@@ -43,14 +43,29 @@ export const SORT_OPTIONS_BY_MODE: Record<HubMode, { id: SortKey; label: string 
 // other than the list's original load order, and swiping "next" jumps to an unrelated route.
 export const SORT_CMP: Record<SortKey, (a: SortValues, b: SortValues) => number> = {
   date:     (a, b) => b.date - a.date,
-  km:       (a, b) => b.km - a.km,
-  dplus:    (a, b) => b.dplus - a.dplus,
+  // km/dplus assenti per un Borgo/Città o Sito (nessuna metrica escursionistica, vedi
+  // metaHasHikingMetrics) — stesso ripiego ?? -1 di cts/rating sotto, così un elemento senza
+  // quel dato finisce sempre in coda invece di rompere l'ordinamento.
+  km:       (a, b) => (b.km ?? -1) - (a.km ?? -1),
+  dplus:    (a, b) => (b.dplus ?? -1) - (a.dplus ?? -1),
   cts:      (a, b) => (b.cts ?? -1) - (a.cts ?? -1),
   rating:   (a, b) => (b.rating ?? -1) - (a.rating ?? -1),
   // Ascending (nearest first) rather than the descending convention above — for a distance,
   // "closest to home" is the useful default, unlike km/dplus/cts where "most" ranks first.
   distance: (a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity),
   count:    (a, b) => (b.count ?? 0) - (a.count ?? 0),
+}
+
+/** Chip di ordinamento davvero utili per gli elementi visibili ora (già filtrati per tipologia a
+ *  monte, in GuidaHub.tsx) — "Data" resta sempre (ogni elemento ne ha una), gli altri compaiono
+ *  solo se almeno un elemento visibile ha davvero quel dato. Così filtrando su Sentiero si vedono
+ *  Km/D+/TS/Distanza, su Borgo/Città o Sito solo Data/Distanza (km/dplus/cts assenti per quelle
+ *  tipologie), e su "Tutte le tipologie" restano visibili i chip utili ad almeno un elemento della
+ *  lista mista — stesso principio già in uso per "Distanza" (nota solo dopo il primo geocoding),
+ *  ora generalizzato invece di un controllo ad hoc per campo. Usata sia da BottomGallery che da
+ *  ExpandedGalleryList, così le due gallerie non possono disallinearsi su quali chip mostrare. */
+export function visibleSortOptions(mode: HubMode, items: RouteHubItem[]): { id: SortKey; label: string }[] {
+  return SORT_OPTIONS_BY_MODE[mode].filter(o => o.id === 'date' || items.some(i => i.sortValues?.[o.id] != null))
 }
 
 function TextBadge({ children }: { children: ReactNode }) {
@@ -88,9 +103,9 @@ function ThumbBadge({ sortBy, item, showPlannedDate }: { sortBy: SortKey; item: 
     case 'date':
       return <TextBadge>{new Date(sv.date).toLocaleDateString('it-IT', { day: '2-digit', month: 'short' })}</TextBadge>
     case 'km':
-      return <TextBadge>{(sv.km / 1000).toFixed(1)} km</TextBadge>
+      return sv.km != null ? <TextBadge>{(sv.km / 1000).toFixed(1)} km</TextBadge> : null
     case 'dplus':
-      return <TextBadge>+{Math.round(sv.dplus)} m</TextBadge>
+      return sv.dplus != null ? <TextBadge>+{Math.round(sv.dplus)} m</TextBadge> : null
     case 'distance':
       return sv.distance != null ? <TextBadge>~{(sv.distance / 1000).toFixed(0)} km</TextBadge> : null
     case 'count':
@@ -217,10 +232,9 @@ export default function BottomGallery({
 }: Props) {
   const [searchOpen, setSearchOpen] = useState(false)
   const hasSortData = items.some(i => i.sortValues)
-  const hasDistance = items.some(i => i.sortValues?.distance != null)
-  // "Distanza" stays hidden until the user's saved address has actually been geocoded for at
-  // least one item — otherwise it'd be a sort option that visibly does nothing right after import.
-  const sortOptions = SORT_OPTIONS_BY_MODE[mode].filter(o => o.id !== 'distance' || hasDistance)
+  // Vedi visibleSortOptions in questo stesso file — dinamico sui dati davvero presenti negli
+  // elementi visibili ora, non un elenco fisso per mode.
+  const sortOptions = visibleSortOptions(mode, items)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // Without this, changing the sort re-orders `items` correctly but the strip stays scrolled

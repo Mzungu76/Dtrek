@@ -6,7 +6,7 @@ import { MiniScoreRing } from '@/components/ScoreRing'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 import MetaTypeBadge from '@/components/MetaTypeBadge'
 import { ctsLabel } from '@/lib/trailScore'
-import { GalleryMapThumb, SORT_OPTIONS_BY_MODE, type SortKey } from './BottomGallery'
+import { GalleryMapThumb, visibleSortOptions, type SortKey } from './BottomGallery'
 import type { HubMode, RouteHubItem } from './types'
 
 interface Props {
@@ -38,8 +38,9 @@ export default function ExpandedGalleryList({
   searchQuery, onSearchQueryChange,
 }: Props) {
   const hasSortData = items.some(i => i.sortValues)
-  const hasDistance = items.some(i => i.sortValues?.distance != null)
-  const sortOptions = SORT_OPTIONS_BY_MODE[mode].filter(o => o.id !== 'distance' || hasDistance)
+  // Stessa lista dinamica di BottomGallery.tsx (vedi visibleSortOptions lì) — le due gallerie non
+  // devono mai disallinearsi su quali chip di ordinamento mostrare per lo stesso `items`.
+  const sortOptions = visibleSortOptions(mode, items)
   const listTitle = mode === 'diario' ? 'Tutti i Diari' : 'Tutti i percorsi'
   const emptyText = mode === 'diario' ? 'Nessun Diario trovato.' : 'Nessun percorso trovato.'
   // Trascina verso il basso per chiudere — stessa soglia fissa (60px) usata altrove nell'app per

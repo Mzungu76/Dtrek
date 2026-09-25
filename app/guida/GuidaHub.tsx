@@ -129,12 +129,17 @@ function metaToItem(h: PlannedHikeMeta): RouteHubItem {
     statPills: statPillsForMeta(h),
     sortValues: {
       date: new Date(h.createdAt).getTime(),
-      km: h.distanceMeters,
-      dplus: h.elevationGain,
+      // Assenti per un Borgo/Città o Sito (nessuna metrica escursionistica, stesso confine di
+      // statPillsForMeta sopra) — così i chip "Km"/"D+" spariscono da soli quando il filtro per
+      // tipologia non lascia in vista nessun Sentiero (vedi BottomGallery.tsx's
+      // visibleSortOptions), invece di ordinare su un valore sempre a zero.
+      ...(metaHasHikingMetrics(h.metaType) ? { km: h.distanceMeters, dplus: h.elevationGain } : {}),
       // The "TS" sort must rank by the same aggregate the ring badge shows — using the raw
       // cachedTrailScore here would silently sort by the old single-dimension CTS while the
       // badge displays the 5-segment total, so a route's rank and its own badge would disagree.
-      cts: previewTotal,
+      // Stesso confine esplicito di previewScoreValue (piano guide-eccellenza) — assente, non 0,
+      // per una Meta non idonea al Trail Score, altrimenti il chip "TS" non sparirebbe mai.
+      cts: metaEligibleForHikingScores(h) ? previewTotal : undefined,
       // Filled in by displayItems from the driving-distance cache (see the background sync
       // effect below), which also checks the cached value hasn't gone stale (saved address
       // changed since) — not baked in here to avoid two places disagreeing on freshness.
@@ -683,8 +688,13 @@ export default function GuidaHub({ id }: { id?: string }) {
       const distPill = distancePillFor(getTrailStartPoint(h), distanceMeters)
       return statPillsForMeta(h, distPill, extra)
     }
+    // Stesso confine esplicito di metaToItem sopra per km/dplus/cts — un Borgo/Città o Sito non
+    // idoneo non deve mai portare quei campi (nemmeno a 0), altrimenti i chip "Km"/"D+"/"TS"
+    // resterebbero visibili anche quando nessun elemento in vista ne ha davvero uno.
     const sortValuesFor = (h: PlannedHike, previewValue: number, distanceMeters: number | undefined) => ({
-      date: new Date(h.createdAt).getTime(), km: h.distanceMeters, dplus: h.elevationGain, cts: previewValue,
+      date: new Date(h.createdAt).getTime(),
+      ...(metaHasHikingMetrics(h.metaType) ? { km: h.distanceMeters, dplus: h.elevationGain } : {}),
+      cts: metaEligibleForHikingScores(h) ? previewValue : undefined,
       distance: distanceMeters,
     })
     const mapped = items.map(it => {
