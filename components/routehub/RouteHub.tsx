@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import Image from 'next/image'
 import { ChevronLeft, ChevronRight, ChevronUp, Star, GitCompare, CalendarClock } from 'lucide-react'
 import { useRouteHubState } from './useRouteHubState'
 import RouteCarousel from './RouteCarousel'
@@ -337,11 +338,11 @@ export default function RouteHub({
           renderSlide={(slideItem, _i, inWindow) => (
             slideItem.coverPhotoUrl ? (
               <div className="absolute inset-0 overflow-hidden">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                <Image
                   src={slideItem.coverPhotoUrl} alt={slideItem.title}
-                  className="absolute inset-0 w-full h-full object-cover" draggable={false}
+                  fill sizes="100vw" draggable={false}
                   loading={inWindow ? 'eager' : 'lazy'}
+                  className="object-cover"
                   style={{ filter: 'saturate(1.25) contrast(1.08) brightness(0.85)' }}
                 />
                 <div
