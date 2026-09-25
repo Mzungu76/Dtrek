@@ -165,6 +165,20 @@ un altro `write`. Non ancora riverificato dal vivo dopo questo fix.
 Workflow: `mode: dry-run`/`write` in `import-places-mic.yml` (`mode: describe` e `mode: probe`
 restano disponibili per ulteriore diagnostica, nessun secret Supabase richiesto).
 
+## Toscana — probabile falso negativo, da ritestare per prima cosa (2026-09-25)
+
+Verifica utente: 0 Siti con `source='mic'` per la Toscana in Supabase (e Sicilia solo 3 — vedi
+`MIC_DATA_SOURCES.md`). Quel valore però risale a un run del 2026-09-17 ("tutta Italia"), **prima**
+del fix coordinate mancanti Lombardia/Toscana descritto in cima a `fetch.ts` (geocodifica Nominatim
+di ripiego per i record ArCo con indirizzo ma senza tripla di coordinate dirette — verificato dal
+vivo SOLO sulla Lombardia, 2026-09-22: 6 record trovati, 6/6 geocodificati). Il commento in cima a
+`fetch.ts` è esplicito: il sotto-grafo ArCo per Lombardia/Toscana condivide lo stesso problema
+(indirizzo presente, coordinate mai presenti) — la Toscana non è mai stata ritestata con la query
+corretta. **Prima di costruire una fonte dedicata come per la Lombardia** (vedi
+`scripts/places/toscana/`, tenuta di proposito come riserva), lanciare `mode: dry-run`,
+`region: Toscana` su questo workflow: se il numero di risultati è ragionevole, il problema potrebbe
+già essere risolto da questo fix, senza bisogno di altro codice.
+
 ## Cosa esisteva già nel repository (riusato come riferimento, non duplicato)
 
 `lib/pois/gnaSource.ts` — fetcher live per il solo layer archeologico MiC via GNA (WFS), non
