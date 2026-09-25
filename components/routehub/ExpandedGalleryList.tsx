@@ -1,5 +1,5 @@
 'use client'
-import { useRef } from 'react'
+import { useRef, type ReactNode } from 'react'
 import Image from 'next/image'
 import { ArrowUpDown, CalendarClock, Search, Star, X } from 'lucide-react'
 import { MiniScoreRing } from '@/components/ScoreRing'
@@ -26,6 +26,11 @@ interface Props {
   onToggleNextOutingFilter?: () => void
   searchQuery: string
   onSearchQueryChange: (query: string) => void
+  /** Stesso chip "sopra il titolo" di Screen 1 (RouteHubProps.contextBadge in types.ts — Guida:
+   *  filtro per tipologia, Resoconto: filtro per Diario, Diario: filtro per Raccolta), riusato qui
+   *  identico così anche quest'elenco a schermo intero permette di cambiare filtro senza dover
+   *  prima chiuderlo per tornare a Screen 1. */
+  contextBadge?: ReactNode
 }
 
 /** Vista alternativa alla galleria a striscia orizzontale, in stile Google Maps: elenco verticale
@@ -35,7 +40,7 @@ interface Props {
 export default function ExpandedGalleryList({
   mode, items, currentId, onSelect, onClose, sortBy, onSortChange,
   favoritesFilter, onToggleFavoritesFilter, nextOutingFilter, onToggleNextOutingFilter,
-  searchQuery, onSearchQueryChange,
+  searchQuery, onSearchQueryChange, contextBadge,
 }: Props) {
   const hasSortData = items.some(i => i.sortValues)
   // Stessa lista dinamica di BottomGallery.tsx (vedi visibleSortOptions lì) — le due gallerie non
@@ -70,6 +75,7 @@ export default function ExpandedGalleryList({
             <X className="w-4 h-4" />
           </button>
         </div>
+        {contextBadge && <div className="mb-2.5">{contextBadge}</div>}
         <div className="relative mb-2.5">
           <Search className="w-3.5 h-3.5 text-white/50 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
