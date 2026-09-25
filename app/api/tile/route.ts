@@ -51,6 +51,8 @@ export async function GET(req: Request) {
   const base = PROVIDERS[resolvedStyle]
   const key  = CARTO_STYLES.has(resolvedStyle) && CARTO_API_KEY ? `?key=${CARTO_API_KEY}` : ''
   const url  = `${base}/${zoom}/${x}/${y}${retina ? '@2x' : ''}.png${key}`
+  // DEBUG TEMPORANEO — da rimuovere: diagnosi filigrana CARTO senza esporre la chiave.
+  console.log('[tile-debug]', { style: resolvedStyle, isCartoStyle: CARTO_STYLES.has(resolvedStyle), hasKey: !!CARTO_API_KEY, keyLen: CARTO_API_KEY.length, keyTail: CARTO_API_KEY.slice(-4) })
 
   try {
     const res = await fetch(url, {
