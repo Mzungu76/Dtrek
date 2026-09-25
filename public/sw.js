@@ -1,10 +1,10 @@
-const STATIC_CACHE = 'dtrek-static-v9';
+const STATIC_CACHE = 'dtrek-static-v10';
 const API_CACHE    = 'dtrek-api-v1';
 
 // Pages / assets to pre-cache on install
 const PRECACHE_URLS = [
   '/',
-  '/diario',
+  '/bacheca',
   '/statistiche',
   '/esplora',
   '/programma',

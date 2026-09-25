@@ -5,7 +5,6 @@ import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import { getAllActivities, computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
 import { useCtsUpdated } from '@/lib/sync/useCtsUpdated'
 import { getPersonalRecords, computeStreaks } from '@/lib/stats'
-import { exportAllActivitiesToExcel } from '@/utils/exportExcel'
 import { exportStatsPdf, exportMapPdf } from '@/utils/pdfExport'
 import ExportMenu, { type ExportMenuAction } from '@/components/ExportMenu'
 import { Loader2, Mountain, FileSpreadsheet, Share2, FileDown, Map } from 'lucide-react'
@@ -76,7 +75,7 @@ function StatisticheContent() {
                 label="Esporta"
                 actions={[
                   { id: 'share', label: 'Condividi', icon: <Share2 className="w-4 h-4 text-forest-600" />, run: () => setShareStats(true) },
-                  { id: 'excel', label: 'Excel', icon: <FileSpreadsheet className="w-4 h-4 text-forest-600" />, run: () => exportAllActivitiesToExcel(activities as any) },
+                  { id: 'excel', label: 'Excel', icon: <FileSpreadsheet className="w-4 h-4 text-forest-600" />, run: () => import('@/utils/exportExcel').then(m => m.exportAllActivitiesToExcel(activities as any)) },
                   { id: 'pdf', label: 'PDF statistiche', icon: <FileDown className="w-4 h-4 text-forest-600" />, run: () => exportStatsPdf(activities) },
                   { id: 'pdf-map', label: 'PDF mappa percorsi', icon: <Map className="w-4 h-4 text-forest-600" />, run: () => exportMapPdf(activities) },
                 ] satisfies ExportMenuAction[]}
