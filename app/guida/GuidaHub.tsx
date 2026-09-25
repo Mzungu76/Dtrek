@@ -35,14 +35,14 @@ import { getUserStartingPoint, googleMapsDirectionsUrl, fetchDrivingInfo, origin
 import { useCtsUpdated } from '@/lib/sync/useCtsUpdated'
 import { formatDuration } from '@/lib/tcxParser'
 import type { GuideSectionKey } from '@/lib/guideSections'
-import { metaHasHikingMetrics, SITE_TYPE_CONFIG } from '@/lib/metaTypes'
+import { metaHasHikingMetrics, SITE_TYPE_CONFIG, META_TYPE_CONFIG, META_TYPES, type MetaType } from '@/lib/metaTypes'
 import { metaRowLocationStats } from '@/lib/metaCard'
 import { metaEligibleForHikingScores } from '@/lib/guideCardVariant'
 import {
   Mountain, Route, TrendingUp, Clock, Loader2,
   Car, Trash2, Pencil, Check, Images,
   Navigation, Download, MapPin,
-  Calendar as CalendarIcon,
+  Calendar as CalendarIcon, ChevronDown, X, Layers,
 } from 'lucide-react'
 import { exportPlannedHikeToGpx } from '@/utils/exportGpx'
 import { useUserPrefs } from '@/lib/useUserPrefs'
@@ -129,12 +129,17 @@ function metaToItem(h: PlannedHikeMeta): RouteHubItem {
     statPills: statPillsForMeta(h),
     sortValues: {
       date: new Date(h.createdAt).getTime(),
-      km: h.distanceMeters,
-      dplus: h.elevationGain,
+      // Assenti per un Borgo/Città o Sito (nessuna metrica escursionistica, stesso confine di
+      // statPillsForMeta sopra) — così i chip "Km"/"D+" spariscono da soli quando il filtro per
+      // tipologia non lascia in vista nessun Sentiero (vedi BottomGallery.tsx's
+      // visibleSortOptions), invece di ordinare su un valore sempre a zero.
+      ...(metaHasHikingMetrics(h.metaType) ? { km: h.distanceMeters, dplus: h.elevationGain } : {}),
       // The "TS" sort must rank by the same aggregate the ring badge shows — using the raw
       // cachedTrailScore here would silently sort by the old single-dimension CTS while the
       // badge displays the 5-segment total, so a route's rank and its own badge would disagree.
-      cts: previewTotal,
+      // Stesso confine esplicito di previewScoreValue (piano guide-eccellenza) — assente, non 0,
+      // per una Meta non idonea al Trail Score, altrimenti il chip "TS" non sparirebbe mai.
+      cts: metaEligibleForHikingScores(h) ? previewTotal : undefined,
       // Filled in by displayItems from the driving-distance cache (see the background sync
       // effect below), which also checks the cached value hasn't gone stale (saved address
       // changed since) — not baked in here to avoid two places disagreeing on freshness.
@@ -183,6 +188,11 @@ export default function GuidaHub({ id }: { id?: string }) {
   const [guidePdfError, setGuidePdfError] = useState<string | null>(null)
   const [showPendingActions, setShowPendingActions] = useState(false)
   const [favoritesFilter, setFavoritesFilter] = useState(false)
+  // Filtro per tipologia (Sentiero/Borgo-Città/Sito), sopra il titolo — stessa posizione/pattern
+  // del filtro per Diario in app/resoconto/ResocontoHub.tsx e per Raccolta in app/diario/page.tsx
+  // (contextBadge di RouteHub). null ⇒ nessun filtro, tutte le tipologie.
+  const [typeFilter, setTypeFilter] = useState<MetaType | null>(null)
+  const [typeFilterOpen, setTypeFilterOpen] = useState(false)
   // "Prossima uscita": sottosezione dei preferiti, non un filtro a sé — vedi RouteHub.tsx per il
   // criterio (preferiti con data programmata da oggi in poi, in ordine di calendario). Spegnere i
   // preferiti la spegne con sé: da sola non avrebbe più un insieme di partenza da restringere.
@@ -653,6 +663,15 @@ export default function GuidaHub({ id }: { id?: string }) {
     })
   }, [hike?.id, hike?.cachedBeautyScore, hike?.cachedTrailScore, hike?.cachedSafetyScore, hike?.cachedTsTotal, ctsSettled]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Conteggio per tipologia (per l'overlay del filtro sotto) — da `items`, non da `displayItems`
+  // stesso (che il filtro restringe): il conteggio deve sempre riflettere il totale disponibile,
+  // non quanti ne restano dopo aver già filtrato.
+  const typeCounts = useMemo(() => {
+    const counts: Record<MetaType, number> = { sentiero: 0, borgo_citta: 0, sito: 0 }
+    for (const it of items) counts[it.metaType ?? 'sentiero']++
+    return counts
+  }, [items])
+
   const displayItems = useMemo(() => {
     // Distanza in auto REALE (OSRM) — non in linea d'aria: per l'itinerario aperto usa il valore
     // live di useDrivingDistance (che lo ricalcola/persiste se l'indirizzo è cambiato); per gli
@@ -669,8 +688,13 @@ export default function GuidaHub({ id }: { id?: string }) {
       const distPill = distancePillFor(getTrailStartPoint(h), distanceMeters)
       return statPillsForMeta(h, distPill, extra)
     }
+    // Stesso confine esplicito di metaToItem sopra per km/dplus/cts — un Borgo/Città o Sito non
+    // idoneo non deve mai portare quei campi (nemmeno a 0), altrimenti i chip "Km"/"D+"/"TS"
+    // resterebbero visibili anche quando nessun elemento in vista ne ha davvero uno.
     const sortValuesFor = (h: PlannedHike, previewValue: number, distanceMeters: number | undefined) => ({
-      date: new Date(h.createdAt).getTime(), km: h.distanceMeters, dplus: h.elevationGain, cts: previewValue,
+      date: new Date(h.createdAt).getTime(),
+      ...(metaHasHikingMetrics(h.metaType) ? { km: h.distanceMeters, dplus: h.elevationGain } : {}),
+      cts: metaEligibleForHikingScores(h) ? previewValue : undefined,
       distance: distanceMeters,
     })
     const mapped = items.map(it => {
@@ -698,13 +722,20 @@ export default function GuidaHub({ id }: { id?: string }) {
     })
     // Deep link to a hike outside the active list (e.g. archived/expired) — still show it
     // standalone rather than 404, once its full record has loaded.
-    if (hike && !mapped.some(it => it.id === hike.id)) {
-      const distanceMeters = driving?.distanceMeters ?? hike.cachedDrivingDistanceMeters
-      const preview = scorePreviewFor(hike)
-      return [{ id: hike.id, title: hike.title, polyline: hike.routePolyline, metaType: hike.metaType, siteType: hike.siteType, latitude: hike.latitude, longitude: hike.longitude, statPills: pillsFor(hike, distanceMeters), sortValues: sortValuesFor(hike, preview?.value ?? 0, distanceMeters), scorePreview: preview, favorite: hike.favorite, plannedDate: hike.plannedDate }, ...mapped]
-    }
-    return mapped
-  }, [items, hike, driving, userOrigin, driveCache, ctsSettled])
+    const withOpen = hike && !mapped.some(it => it.id === hike.id)
+      ? (() => {
+          const distanceMeters = driving?.distanceMeters ?? hike.cachedDrivingDistanceMeters
+          const preview = scorePreviewFor(hike)
+          return [{ id: hike.id, title: hike.title, polyline: hike.routePolyline, metaType: hike.metaType, siteType: hike.siteType, latitude: hike.latitude, longitude: hike.longitude, statPills: pillsFor(hike, distanceMeters), sortValues: sortValuesFor(hike, preview?.value ?? 0, distanceMeters), scorePreview: preview, favorite: hike.favorite, plannedDate: hike.plannedDate }, ...mapped]
+        })()
+      : mapped
+    // Filtro per tipologia (contextBadge sotto) — stesso punto/stessa logica del filtro per Diario
+    // in app/resoconto/ResocontoHub.tsx: applicato per ultimo, dopo aver garantito la presenza
+    // dell'eventuale hike deep-linkato, cosicché anche quello sparisca dalla vista se non combacia
+    // con la tipologia scelta (coerente: il filtro riguarda cosa si vede, non solo la galleria).
+    if (typeFilter == null) return withOpen
+    return withOpen.filter(it => (it.metaType ?? 'sentiero') === typeFilter)
+  }, [items, hike, driving, userOrigin, driveCache, ctsSettled, typeFilter])
 
   const deletedToastNode = showDeletedToast ? (
     <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-2 bg-stone-900 text-white text-[13px] font-semibold px-4 py-2.5 rounded-full shadow-lg animate-in fade-in slide-in-from-top-2">
@@ -733,6 +764,23 @@ export default function GuidaHub({ id }: { id?: string }) {
     )
   }
   if (displayItems.length === 0) {
+    // Diverso da "ancora in caricamento" (lo skeleton sotto): qui la lista c'è già, il filtro per
+    // tipologia ha solo escluso tutto ciò che contiene — senza questo ramo esplicito lo skeleton
+    // resterebbe visibile per sempre (mai più `!listLoaded`), come se l'app fosse bloccata.
+    if (typeFilter != null) {
+      const cfg = META_TYPE_CONFIG[typeFilter]
+      return (
+        <>
+          {deletedToastNode}
+          <div className="fixed inset-0 bg-[#0b1a24] flex flex-col items-center justify-center gap-4 text-center px-6">
+            <p className="text-stone-300 text-sm">Nessuna guida di tipo «{cfg.pluralLabel}».</p>
+            <button onClick={() => setTypeFilter(null)} className="text-sky-400 font-semibold text-sm">
+              Mostra tutte le tipologie
+            </button>
+          </div>
+        </>
+      )
+    }
     return <>{deletedToastNode}<HubSkeleton /></>
   }
 
@@ -1176,6 +1224,24 @@ export default function GuidaHub({ id }: { id?: string }) {
     }
   }
 
+  // Filtro per tipologia, sopra il titolo (stessa posizione/pattern del filtro per Diario in
+  // app/resoconto/ResocontoHub.tsx) — mostra sempre il filtro attivo ("Tutte le tipologie", o la
+  // tipologia scelta), un controllo di pagina, non un'informazione sulla scheda in copertina.
+  const typeFilterBadge = () => {
+    const cfg = typeFilter ? META_TYPE_CONFIG[typeFilter] : null
+    const Icon = cfg?.icon ?? Layers
+    return (
+      <button
+        onClick={() => setTypeFilterOpen(true)}
+        className="pointer-events-auto inline-flex items-center gap-1.5 bg-white/15 backdrop-blur-sm text-white text-xs font-semibold px-3 py-1.5 rounded-full"
+      >
+        <Icon className="w-3.5 h-3.5" style={cfg ? { color: cfg.color } : undefined} />
+        {cfg ? cfg.pluralLabel : 'Tutte le tipologie'}
+        <ChevronDown className="w-3 h-3" />
+      </button>
+    )
+  }
+
   const currentItem = displayItems.find(i => i.id === currentId) ?? displayItems[0]
   const initialIndex = Math.max(0, displayItems.findIndex(i => i.id === currentItem.id))
 
@@ -1231,7 +1297,17 @@ export default function GuidaHub({ id }: { id?: string }) {
         headerActions={<>{pendingChip}{dateChip}</>}
         importLabel="Crea guida"
         onImport={() => router.push('/upload?tab=gpx')}
+        contextBadge={typeFilterBadge}
       />
+
+      {typeFilterOpen && (
+        <TypeFilterOverlay
+          currentType={typeFilter}
+          counts={typeCounts}
+          onSelect={type => { setTypeFilter(type); setTypeFilterOpen(false) }}
+          onClose={() => setTypeFilterOpen(false)}
+        />
+      )}
 
       {showFloraGallery && hike && (
         <FloraGallery
@@ -1261,5 +1337,69 @@ export default function GuidaHub({ id }: { id?: string }) {
         <StreetViewPanel lat={centerPt.lat} lon={centerPt.lon} title={hike?.title} onClose={() => setShowStreetView(false)} />
       )}
     </>
+  )
+}
+
+// Elenco verticale a schermo intero per il filtro per tipologia della pagina (etichetta sopra il
+// titolo) — stessa identità visiva (sfondo #0b1a24, righe con thumbnail 48×48, separatore bianco
+// 10%) di DiaryFilterOverlay in app/resoconto/ResocontoHub.tsx e delle liste "Tutti i ___"
+// (ExpandedGalleryList.tsx), ma con un elenco fisso (le tre tipologie di lib/metaTypes.ts) invece
+// che una lista caricata da rete. "Tutte le tipologie" in cima rimuove il filtro.
+function TypeFilterOverlay({ currentType, counts, onSelect, onClose }: {
+  currentType: MetaType | null
+  counts: Record<MetaType, number>
+  onSelect: (type: MetaType | null) => void
+  onClose: () => void
+}) {
+  const total = META_TYPES.reduce((sum, t) => sum + counts[t], 0)
+  return (
+    <div className="fixed inset-0 z-50 bg-[#0b1a24] flex flex-col">
+      <div className="shrink-0 flex items-center justify-between px-4 pt-[calc(env(safe-area-inset-top,0px)+14px)] pb-3 border-b border-white/10">
+        <h2 className="font-display text-base font-bold text-white">Filtra per tipologia</h2>
+        <button onClick={onClose} aria-label="Chiudi" className="shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+16px)]">
+        <button
+          onClick={() => onSelect(null)}
+          disabled={currentType === null}
+          className="w-full flex items-center gap-3.5 py-3 border-b border-white/10 text-left disabled:opacity-50"
+        >
+          <div className={`w-12 h-12 rounded-xl shrink-0 flex items-center justify-center bg-white/5 ${currentType === null ? 'ring-2 ring-sky-400' : ''}`}>
+            <Layers className="w-5 h-5 text-white/40" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="font-display font-semibold text-[15px] text-white truncate">Tutte le tipologie</p>
+            <p className="text-[11px] text-white/50 mt-1.5">
+              {currentType === null ? 'Filtro attuale' : `${total} guid${total === 1 ? 'a' : 'e'}`}
+            </p>
+          </div>
+        </button>
+        {META_TYPES.map(t => {
+          const cfg = META_TYPE_CONFIG[t]
+          const Icon = cfg.icon
+          const count = counts[t]
+          return (
+            <button
+              key={t}
+              onClick={() => onSelect(t)}
+              disabled={currentType === t}
+              className="w-full flex items-center gap-3.5 py-3 border-b border-white/10 text-left disabled:opacity-50"
+            >
+              <div className={`w-12 h-12 rounded-xl shrink-0 flex items-center justify-center bg-white/5 ${currentType === t ? 'ring-2 ring-sky-400' : ''}`}>
+                <Icon className="w-5 h-5" style={{ color: cfg.color }} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="font-display font-semibold text-[15px] text-white truncate">{cfg.pluralLabel}</p>
+                <p className="text-[11px] text-white/50 mt-1.5">
+                  {currentType === t ? 'Filtro attuale' : `${count} guid${count === 1 ? 'a' : 'e'}`}
+                </p>
+              </div>
+            </button>
+          )
+        })}
+      </div>
+    </div>
   )
 }

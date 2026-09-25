@@ -22,8 +22,13 @@ export interface WeatherIcon {
 /** Raw sortable metrics for the gallery sort filters — undefined fields just disable that option. */
 export interface SortValues {
   date: number
-  km: number
-  dplus: number
+  /** Assenti per una tipologia senza metriche escursionistiche (Borgo/Città, Sito — vedi
+   *  lib/metaTypes.ts's metaHasHikingMetrics): Resoconto/Diario li valorizzano sempre, Guida solo
+   *  per un Sentiero. Come per distance/count sotto, un valore assente nasconde da sé il chip
+   *  "Km"/"D+" quando nessun elemento visibile ne ha uno (vedi BottomGallery.tsx's
+   *  visibleSortOptions), invece di ordinare su un valore sempre a zero. */
+  km?: number
+  dplus?: number
   cts?: number
   rating?: number
   /** Real driving-route meters (OSRM, via lib/drivingInfo.ts) from the user's saved starting

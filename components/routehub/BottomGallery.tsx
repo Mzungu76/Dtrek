@@ -7,6 +7,7 @@ import { ArrowUpDown, Upload, Star, Search, X, Rows3, CalendarClock } from 'luci
 import RouteThumb from '@/components/RouteThumb'
 import { MiniScoreRing } from '@/components/ScoreRing'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
+import MetaTypeBadge from '@/components/MetaTypeBadge'
 import { ctsLabel } from '@/lib/trailScore'
 import { META_TYPE_CONFIG, SITE_TYPE_CONFIG, type MetaType, type SiteType } from '@/lib/metaTypes'
 import type { HubMode, RouteHubItem, SortValues } from './types'
@@ -42,14 +43,29 @@ export const SORT_OPTIONS_BY_MODE: Record<HubMode, { id: SortKey; label: string 
 // other than the list's original load order, and swiping "next" jumps to an unrelated route.
 export const SORT_CMP: Record<SortKey, (a: SortValues, b: SortValues) => number> = {
   date:     (a, b) => b.date - a.date,
-  km:       (a, b) => b.km - a.km,
-  dplus:    (a, b) => b.dplus - a.dplus,
+  // km/dplus assenti per un Borgo/Città o Sito (nessuna metrica escursionistica, vedi
+  // metaHasHikingMetrics) — stesso ripiego ?? -1 di cts/rating sotto, così un elemento senza
+  // quel dato finisce sempre in coda invece di rompere l'ordinamento.
+  km:       (a, b) => (b.km ?? -1) - (a.km ?? -1),
+  dplus:    (a, b) => (b.dplus ?? -1) - (a.dplus ?? -1),
   cts:      (a, b) => (b.cts ?? -1) - (a.cts ?? -1),
   rating:   (a, b) => (b.rating ?? -1) - (a.rating ?? -1),
   // Ascending (nearest first) rather than the descending convention above — for a distance,
   // "closest to home" is the useful default, unlike km/dplus/cts where "most" ranks first.
   distance: (a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity),
   count:    (a, b) => (b.count ?? 0) - (a.count ?? 0),
+}
+
+/** Chip di ordinamento davvero utili per gli elementi visibili ora (già filtrati per tipologia a
+ *  monte, in GuidaHub.tsx) — "Data" resta sempre (ogni elemento ne ha una), gli altri compaiono
+ *  solo se almeno un elemento visibile ha davvero quel dato. Così filtrando su Sentiero si vedono
+ *  Km/D+/TS/Distanza, su Borgo/Città o Sito solo Data/Distanza (km/dplus/cts assenti per quelle
+ *  tipologie), e su "Tutte le tipologie" restano visibili i chip utili ad almeno un elemento della
+ *  lista mista — stesso principio già in uso per "Distanza" (nota solo dopo il primo geocoding),
+ *  ora generalizzato invece di un controllo ad hoc per campo. Usata sia da BottomGallery che da
+ *  ExpandedGalleryList, così le due gallerie non possono disallinearsi su quali chip mostrare. */
+export function visibleSortOptions(mode: HubMode, items: RouteHubItem[]): { id: SortKey; label: string }[] {
+  return SORT_OPTIONS_BY_MODE[mode].filter(o => o.id === 'date' || items.some(i => i.sortValues?.[o.id] != null))
 }
 
 function TextBadge({ children }: { children: ReactNode }) {
@@ -87,9 +103,9 @@ function ThumbBadge({ sortBy, item, showPlannedDate }: { sortBy: SortKey; item: 
     case 'date':
       return <TextBadge>{new Date(sv.date).toLocaleDateString('it-IT', { day: '2-digit', month: 'short' })}</TextBadge>
     case 'km':
-      return <TextBadge>{(sv.km / 1000).toFixed(1)} km</TextBadge>
+      return sv.km != null ? <TextBadge>{(sv.km / 1000).toFixed(1)} km</TextBadge> : null
     case 'dplus':
-      return <TextBadge>+{Math.round(sv.dplus)} m</TextBadge>
+      return sv.dplus != null ? <TextBadge>+{Math.round(sv.dplus)} m</TextBadge> : null
     case 'distance':
       return sv.distance != null ? <TextBadge>~{(sv.distance / 1000).toFixed(0)} km</TextBadge> : null
     case 'count':
@@ -216,10 +232,9 @@ export default function BottomGallery({
 }: Props) {
   const [searchOpen, setSearchOpen] = useState(false)
   const hasSortData = items.some(i => i.sortValues)
-  const hasDistance = items.some(i => i.sortValues?.distance != null)
-  // "Distanza" stays hidden until the user's saved address has actually been geocoded for at
-  // least one item — otherwise it'd be a sort option that visibly does nothing right after import.
-  const sortOptions = SORT_OPTIONS_BY_MODE[mode].filter(o => o.id !== 'distance' || hasDistance)
+  // Vedi visibleSortOptions in questo stesso file — dinamico sui dati davvero presenti negli
+  // elementi visibili ora, non un elenco fisso per mode.
+  const sortOptions = visibleSortOptions(mode, items)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // Without this, changing the sort re-orders `items` correctly but the strip stays scrolled
@@ -319,7 +334,12 @@ export default function BottomGallery({
           )}
         </div>
       )}
-      <div ref={scrollRef} className="flex gap-2.5 overflow-x-auto px-4" style={{ scrollSnapType: 'x proximity' }}>
+      {/* pt-3 (12px): riserva lo spazio in cui sporge il badge di tipologia (9px sopra il bordo
+          di ogni miniatura, metà dei suoi 18px — vedi sotto), con un margine di 3px — senza,
+          con overflow-x impostato il browser tratta anche l'asse verticale come 'auto' (non più
+          'visible'), e il badge risultava tagliato in cima (verifica utente, screenshot dal vivo:
+          con soli 8px di riserva mancava di 1px). */}
+      <div ref={scrollRef} className="flex gap-2.5 overflow-x-auto px-4 pt-3" style={{ scrollSnapType: 'x proximity' }}>
         {onImport && (
           <button
             onClick={onImport}
@@ -337,41 +357,45 @@ export default function BottomGallery({
             key={item.id}
             data-route-id={item.id}
             onClick={() => onSelect(i)}
-            className={`shrink-0 w-20 h-20 md:w-28 md:h-28 lg:w-32 lg:h-32 rounded-2xl overflow-hidden relative ${
-              isCurrent ? 'border-[3px] border-sky-400 shadow-[0_0_0_2px_rgba(56,189,248,0.35)]' : 'border-[1.5px] border-white/35'
-            }`}
+            className="shrink-0 w-20 h-20 md:w-28 md:h-28 lg:w-32 lg:h-32 relative"
             style={{ scrollSnapAlign: 'start' }}
           >
-            {item.coverPhotoUrl ? (
-              <>
-                <Image src={item.coverPhotoUrl} alt={item.title} fill sizes="(min-width: 1024px) 128px, (min-width: 768px) 112px, 80px" className="object-cover" loading="lazy" />
-                <div className="absolute inset-0 bg-black/20 pointer-events-none" />
-              </>
-            ) : (
-              // Nessuna foto ⇒ mappa del percorso, non un placeholder generico — stessa priorità
-              // usata per la copertina grande a percorso aperto (vedi cover() in ResocontoHub.tsx e
-              // CoverMap in RouteHub.tsx). Un sentiero di Guida non ha mai coverPhotoUrl, quindi
-              // vede sempre la mappa qui, come prima — un Borgo/Città o Sito senza traccia GPS
-              // invece la riceve in background da app/guida/GuidaHub.tsx (foto dell'archivio
-              // dtrek_places), altrimenti resterebbe questa stessa mappa disegnata su una
-              // polyline vuota (nulla da mostrare, piano §48.9).
-              <GalleryMapThumb polyline={item.polyline} metaType={item.metaType} siteType={item.siteType} />
-            )}
-            {(hasSortData || (favoritesFilter && nextOutingFilter)) && (
-              <div className="absolute top-1 left-1 md:top-1.5 md:left-1.5">
-                <ThumbBadge sortBy={sortBy} item={item} showPlannedDate={favoritesFilter && nextOutingFilter} />
-              </div>
-            )}
-            <div className="absolute bottom-0 inset-x-0 px-1.5 md:px-2 pb-1 md:pb-1.5 pt-5 md:pt-7 bg-gradient-to-t from-black/75 to-transparent">
-              {/* Frase sintetica TS+Sicurezza — sulla scheda chiusa i due numeri nell'anello (in
-                  alto) non si capiscono da soli: qui si traduce il punteggio nelle stesse etichette
-                  qualitative già usate altrove nell'app (lib/trailScore.ts, lib/safetyScore.ts),
-                  non un nuovo testo inventato ad hoc. */}
-              {mode === 'guida' && item.scorePreview && item.safetyPreview && (
-                <span className="block text-[8px] md:text-[10px] font-semibold text-white/75 truncate leading-tight mb-0.5">
-                  {ctsLabel(item.scorePreview.value).label} · {item.safetyPreview.label}
-                </span>
+            {/* Contenuto vero e proprio, ritagliato — separato dal badge di tipologia qui sotto
+                (fuori da questo overflow-hidden) perché quello deve poter sporgere a cavallo del
+                bordo superiore, non restarne tagliato a metà. */}
+            <div className={`absolute inset-0 rounded-2xl overflow-hidden ${
+              isCurrent ? 'border-[3px] border-sky-400 shadow-[0_0_0_2px_rgba(56,189,248,0.35)]' : 'border-[1.5px] border-white/35'
+            }`}>
+              {item.coverPhotoUrl ? (
+                <>
+                  <Image src={item.coverPhotoUrl} alt={item.title} fill sizes="(min-width: 1024px) 128px, (min-width: 768px) 112px, 80px" className="object-cover" loading="lazy" />
+                  <div className="absolute inset-0 bg-black/20 pointer-events-none" />
+                </>
+              ) : (
+                // Nessuna foto ⇒ mappa del percorso, non un placeholder generico — stessa priorità
+                // usata per la copertina grande a percorso aperto (vedi cover() in ResocontoHub.tsx e
+                // CoverMap in RouteHub.tsx). Un sentiero di Guida non ha mai coverPhotoUrl, quindi
+                // vede sempre la mappa qui, come prima — un Borgo/Città o Sito senza traccia GPS
+                // invece la riceve in background da app/guida/GuidaHub.tsx (foto dell'archivio
+                // dtrek_places), altrimenti resterebbe questa stessa mappa disegnata su una
+                // polyline vuota (nulla da mostrare, piano §48.9).
+                <GalleryMapThumb polyline={item.polyline} metaType={item.metaType} siteType={item.siteType} />
               )}
+              {(hasSortData || (favoritesFilter && nextOutingFilter)) && (
+                <div className="absolute top-1 left-1 md:top-1.5 md:left-1.5">
+                  <ThumbBadge sortBy={sortBy} item={item} showPlannedDate={favoritesFilter && nextOutingFilter} />
+                </div>
+              )}
+              <div className="absolute bottom-0 inset-x-0 px-1.5 md:px-2 pb-1 md:pb-1.5 pt-5 md:pt-7 bg-gradient-to-t from-black/75 to-transparent">
+                {/* Frase sintetica TS+Sicurezza — sulla scheda chiusa i due numeri nell'anello (in
+                    alto) non si capiscono da soli: qui si traduce il punteggio nelle stesse etichette
+                    qualitative già usate altrove nell'app (lib/trailScore.ts, lib/safetyScore.ts),
+                    non un nuovo testo inventato ad hoc. */}
+                {mode === 'guida' && item.scorePreview && item.safetyPreview && (
+                  <span className="block text-[8px] md:text-[10px] font-semibold text-white/75 truncate leading-tight mb-0.5">
+                    {ctsLabel(item.scorePreview.value).label} · {item.safetyPreview.label}
+                  </span>
+                )}
               {/* Una riga sola con ellissi — il tentativo precedente (line-clamp-2) restava senza
                   effetto in produzione (line-clamp e `block` si contendono la proprietà `display`
                   nel CSS generato da Tailwind: `block` può vincere e disattivare il clamp), col
@@ -379,7 +403,17 @@ export default function BottomGallery({
                   miniatura. Il nome per intero resta comunque leggibile: vedi il pulsante "Vedi
                   tutti in elenco" qui sotto, che apre ExpandedGalleryList.tsx senza troncamenti. */}
               <span className="block text-[10px] md:text-xs font-bold text-white truncate leading-tight">{item.title}</span>
+              </div>
             </div>
+            {/* Tipologia (Sentiero/Borgo-Città/Sito) — a cavallo del bordo superiore, centrata:
+                per questo sta fuori dal riquadro con overflow-hidden qui sopra, come sibling
+                assoluto rispetto al bottone (non clippato). Guida-only: metaType non ha senso per
+                Resoconto/Diario (vedi RouteHubItem.metaType). */}
+            {mode === 'guida' && (
+              <div className="absolute left-1/2 -translate-x-1/2 z-10" style={{ top: -9 }}>
+                <MetaTypeBadge metaType={item.metaType} siteType={item.siteType} size={18} />
+              </div>
+            )}
           </button>
           )
         })}

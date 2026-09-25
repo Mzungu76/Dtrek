@@ -4,8 +4,9 @@ import Image from 'next/image'
 import { ArrowUpDown, CalendarClock, Search, Star, X } from 'lucide-react'
 import { MiniScoreRing } from '@/components/ScoreRing'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
+import MetaTypeBadge from '@/components/MetaTypeBadge'
 import { ctsLabel } from '@/lib/trailScore'
-import { GalleryMapThumb, SORT_OPTIONS_BY_MODE, type SortKey } from './BottomGallery'
+import { GalleryMapThumb, visibleSortOptions, type SortKey } from './BottomGallery'
 import type { HubMode, RouteHubItem } from './types'
 
 interface Props {
@@ -37,8 +38,9 @@ export default function ExpandedGalleryList({
   searchQuery, onSearchQueryChange,
 }: Props) {
   const hasSortData = items.some(i => i.sortValues)
-  const hasDistance = items.some(i => i.sortValues?.distance != null)
-  const sortOptions = SORT_OPTIONS_BY_MODE[mode].filter(o => o.id !== 'distance' || hasDistance)
+  // Stessa lista dinamica di BottomGallery.tsx (vedi visibleSortOptions lì) — le due gallerie non
+  // devono mai disallinearsi su quali chip di ordinamento mostrare per lo stesso `items`.
+  const sortOptions = visibleSortOptions(mode, items)
   const listTitle = mode === 'diario' ? 'Tutti i Diari' : 'Tutti i percorsi'
   const emptyText = mode === 'diario' ? 'Nessun Diario trovato.' : 'Nessun percorso trovato.'
   // Trascina verso il basso per chiudere — stessa soglia fissa (60px) usata altrove nell'app per
@@ -142,14 +144,23 @@ function ListRow({ item, mode, isCurrent, onSelect }: {
 }) {
   return (
     <button onClick={onSelect} className="w-full flex items-center gap-3 py-3 text-left border-b border-white/10">
-      <div className={`shrink-0 w-16 h-16 rounded-xl overflow-hidden relative ${isCurrent ? 'ring-2 ring-sky-400' : ''}`}>
-        {item.coverPhotoUrl ? (
-          <>
-            <Image src={item.coverPhotoUrl} alt={item.title} fill sizes="64px" className="object-cover" loading="lazy" />
-            <div className="absolute inset-0 bg-black/20 pointer-events-none" />
-          </>
-        ) : (
-          <GalleryMapThumb polyline={item.polyline} metaType={item.metaType} siteType={item.siteType} />
+      <div className="shrink-0 w-16 h-16 relative">
+        <div className={`absolute inset-0 rounded-xl overflow-hidden ${isCurrent ? 'ring-2 ring-sky-400' : ''}`}>
+          {item.coverPhotoUrl ? (
+            <>
+              <Image src={item.coverPhotoUrl} alt={item.title} fill sizes="64px" className="object-cover" loading="lazy" />
+              <div className="absolute inset-0 bg-black/20 pointer-events-none" />
+            </>
+          ) : (
+            <GalleryMapThumb polyline={item.polyline} metaType={item.metaType} siteType={item.siteType} />
+          )}
+        </div>
+        {/* Stessa tipologia a cavallo del bordo superiore delle miniature di BottomGallery.tsx —
+            per questo fuori dal riquadro con overflow-hidden qui sopra. Guida-only. */}
+        {mode === 'guida' && (
+          <div className="absolute left-1/2 -translate-x-1/2 z-10" style={{ top: -7 }}>
+            <MetaTypeBadge metaType={item.metaType} siteType={item.siteType} size={14} />
+          </div>
         )}
       </div>
       <div className="flex-1 min-w-0">
