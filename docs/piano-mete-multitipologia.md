@@ -1812,6 +1812,21 @@ Corretto in due punti, entrambi in `GuidaHub.tsx`:
 
 Non risolve la lentezza generale segnalata insieme ("le guide sono tante") — quella richiederebbe dati di profiling reali (rete/IndexedDB su un dispositivo vero) che questo sandbox non può produrre (nessun accesso Supabase/env locale per far girare l'app). Nessun altro punto caldo evidente trovato leggendo il codice (`displayItems`/`metaToItem` restano O(n) senza cicli annidati).
 
+### 51.4.8 Copertine della galleria più veloci, stessa risoluzione (2026-09-30, verifica utente) — ✅ IMPLEMENTATO
+
+Verifica utente: "le immagini delle copertine delle guide sono lentissime da caricarsi, dobbiamo velocizzare senza perdere qualità" — collegato a 51.4.7, stessa galleria.
+
+Non era un problema di peso/qualità delle immagini: la copertina di ogni card arriva già ridimensionata (`components/routehub/BottomGallery.tsx` usa `next/image` con `sizes="(min-width: 1024px) 128px, (min-width: 768px) 112px, 80px"`, e la cascata a monte — `lib/placePhotoCache.ts` — chiede già una miniatura da 1200px invece del file Wikimedia Commons originale, spesso diversi MB). Il collo di bottiglia reale era **come e quanto veniva richiesto** l'URL di quella copertina:
+
+- **In serie, una scheda alla volta**: il riempimento in background di copertina/orario (`app/guida/GuidaHub.tsx`) processava `metaList` con un `for` sequenziale + 300ms di pausa ESPLICITA tra un elemento e il successivo — per N Borghi/Siti nella galleria, N×300ms di solo respiro prima ancora che l'ultima card sapesse il proprio `imageUrl`, indipendentemente da quanto la singola chiamata fosse già veloce.
+- **Un endpoint molto più pesante del necessario**: quella chiamata andava su `/api/places/[id]` — lo stesso usato dalla scheda di dettaglio completa (`app/mete/[id]/page.tsx`), che oltre alla foto fa ANCHE una query contatti, `fetchSourceCounts`, `fetchRelatedPlaces` e un arricchimento Wikipedia della descrizione (`searchAndFetch`/`fetchExtendedExtract`, un'altra chiamata di rete) — tutto lavoro reale ma sprecato per la galleria, che legge solo `imageUrl`/`openingHours`.
+
+Corretto in due punti:
+- `app/api/places/[id]/route.ts` — nuovo ramo leggero attivato da `?fields=cover`: dopo la sola SELECT principale, salta contatti/sourceCounts/relatedPlaces/arricchimento Wikipedia della descrizione e restituisce solo `{ imageUrl, openingHours }` (via la stessa cascata `fetchPlaceCoverPhoto` di prima, con la sua cache su `dtrek_places.image_url` — una volta trovata una foto per un Sito/Borgo, le chiamate successive per quello stesso posto restano comunque una sola SELECT).
+- `app/guida/GuidaHub.tsx` — il riempimento in background chiama ora `?fields=cover` e usa `runWithConcurrency` (`lib/promisePool.ts`, già in uso in `lib/gbifShared.ts`/`lib/galleryCascade.ts`/`lib/offline/packageManager.ts`) con concorrenza 5 invece del loop seriale con pausa fissa — fino a 5 copertine richieste insieme, mai tutte senza limite.
+
+Nessuna modifica alla risoluzione/qualità delle immagini stesse — solo a quante richieste di metadati partono insieme e a quanto lavoro server-side ciascuna fa.
+
 ## 51.5 Cache della descrizione
 
 Il momento in cui una menzione diventa Guida (nested o autonoma, §51.2/51.3) è il punto naturale per persistere in `dtrek_places.description` l'estratto Wikipedia oggi recuperato live a ogni apertura (`lib/wikipedia.ts`, `lib/guideBorgoDetailStops.ts`). NON ricalcolarlo più a ogni lettura una volta che il Sito ha una Guida propria.

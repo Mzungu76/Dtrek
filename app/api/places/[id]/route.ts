@@ -107,6 +107,27 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   }
   if (!data) return NextResponse.json({ error: 'Non trovato' }, { status: 404 })
 
+  // Risposta leggera per la galleria (app/guida/GuidaHub.tsx, riempimento in background di
+  // copertina/orario per OGNI Meta Borgo/Città o Sito) — quella chiamata legge solo imageUrl/
+  // openingHours, mai contatti/sourceCounts/relatedPlaces né l'arricchimento Wikipedia della
+  // DESCRIZIONE sotto (tre query Supabase + una ricerca Wikipedia in più, lavoro reale ma
+  // sprecato per una copertina — verifica utente: "le immagini delle copertine sono lentissime da
+  // caricarsi"). Stessa cascata foto di sotto (fetchPlaceCoverPhoto, con la sua cache su
+  // dtrek_places.image_url — da qui in poi anche questo resta una singola SELECT), il resto
+  // saltato del tutto.
+  if (req.nextUrl.searchParams.get('fields') === 'cover') {
+    let coverPhoto: { url: string; credit: string | null } | null = null
+    if (!data.image_url) {
+      coverPhoto = await fetchPlaceCoverPhoto({
+        id: data.id, name: data.name, lat: data.latitude, lon: data.longitude, wikidataId: data.wikidata_id,
+      })
+    }
+    return NextResponse.json({
+      imageUrl: data.image_url ?? coverPhoto?.url ?? null,
+      openingHours: data.opening_hours,
+    })
+  }
+
   // Query separata e best-effort per phone/email (vedi il commento su PlaceDetail.phone sopra) —
   // se add_places_contacts.sql non è ancora applicata sul progetto Supabase in uso, `error` è
   // valorizzato (colonna inesistente) e si prosegue con `null`, mai propagando un 500 alla scheda
