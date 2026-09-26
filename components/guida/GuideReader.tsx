@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import type { PoiItem } from '@/lib/overpass'
 import PhotoMosaic from '@/components/PhotoMosaic'
+import type { RoutePhoto } from '@/app/lib/guide/fetchRoutePhotos'
 import { extractEpochPois } from '@/lib/epochPois'
 import { extractCoverSubtitle } from '@/lib/coverSubtitle'
 import { extractGuideNotices, normalizeGuideNotices, parseNoticeSource, type GuideNotice } from '@/lib/guideNotices'
@@ -254,7 +255,7 @@ const borgoItineraryMemoryCache = new Map<string, BorgoItinerary>()
 // trova subito il risultato di un tentativo precedente ANCHE SE quel tentativo si è concluso dopo
 // che l'utente aveva già richiuso — la Promise in volo aggiorna comunque la cache al suo arrivo,
 // solo non più uno state di un componente ormai smontato.
-const routePhotosMemoryCache = new Map<string, string[]>()
+const routePhotosMemoryCache = new Map<string, RoutePhoto[]>()
 const placeDetailMemoryCache = new Map<string, PlaceDetail>()
 
 /**
@@ -305,7 +306,7 @@ export default function GuideReader({
   // perché richiede un'azione dell'utente (ricaricare credito o cambiare modello) e non va perso
   // di vista in fondo alla pagina.
   const [aiCreditError, setAiCreditError] = useState<GuideAiError | null>(null)
-  const [routePhotos,  setRoutePhotos]  = useState<string[]>([])
+  const [routePhotos,  setRoutePhotos]  = useState<RoutePhoto[]>([])
   const [visibleSec,   setVisibleSec]   = useState(0)
   // Arricchimento dall'archivio (dtrek_places) per un Borgo/Città o Sito — foto di copertina,
   // indirizzo, orari/sito ufficiale: dati che planned_hikes non porta (vedi lib/guideCardVariant.ts
@@ -494,11 +495,10 @@ export default function GuideReader({
     import('@/app/lib/guide/fetchRoutePhotos').then(({ fetchRoutePhotos }) =>
       fetchRoutePhotos(mid.lat, mid.lon, radiusM, 6)
     ).then(photos => {
-      const urls = photos.map(p => p.url)
       // Scritta anche se questo montaggio è già stato chiuso (vedi il commento sopra
       // routePhotosMemoryCache) — un rimontaggio successivo la trova comunque pronta.
-      routePhotosMemoryCache.set(hike.id, urls)
-      if (!cancelled) setRoutePhotos(urls)
+      routePhotosMemoryCache.set(hike.id, photos)
+      if (!cancelled) setRoutePhotos(photos)
     }).catch(() => {})
     return () => { cancelled = true }
   }, [hike.id]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -631,10 +631,19 @@ export default function GuideReader({
       requestAnimationFrame(recompute)
     }
     recompute()
-    window.addEventListener('scroll', onScroll, { passive: true })
+    // capture: true — la Guida non scorre mai la finestra: è montata dentro un pannello proprio
+    // con overflow-y-auto (components/routehub/RoutePage.tsx, la "stage" di dettaglio; anche
+    // SiteGuideOverlay.tsx ha il proprio overflow-y-auto). Un 'scroll' non fa mai bubbling fino a
+    // window da un discendente con overflow — solo la fase di cattura lo raggiunge — quindi senza
+    // `capture` questo listener non riceveva MAI l'evento reale: risultato, il pin restava fermo
+    // sul valore calcolato una volta sola al mount (verifica utente: "i pin ora sono allineati ma
+    // non si colora quello della sezione attiva", cioè il pin sbloccato al montaggio non seguiva
+    // più lo scroll reale). `capture: true` intercetta lo scroll di QUALUNQUE discendente, non solo
+    // di window, a prescindere da quale pannello lo ospiti.
+    window.addEventListener('scroll', onScroll, { passive: true, capture: true })
     window.addEventListener('resize', onScroll)
     return () => {
-      window.removeEventListener('scroll', onScroll)
+      window.removeEventListener('scroll', onScroll, { capture: true })
       window.removeEventListener('resize', onScroll)
     }
   }, [displaySections])
@@ -1332,6 +1341,19 @@ export default function GuideReader({
   ], [poiPhotos, guideSources])
   const [galleryLightboxIndex, setGalleryLightboxIndex] = useState<number | null>(null)
 
+  // Stesso principio del commento sopra, per il mosaico in cima (PhotoMosaic, sotto in Render):
+  // verifica utente — le sue foto (museo scheda_pratica, o qualunque Meta senza SitoGalleryWidget)
+  // non si aprivano affatto al tap, a differenza della "vera galleria" di SitoGalleryWidget.tsx
+  // (che ha già il proprio GuideGalleryLightbox interno per le sue foto). PhotoMosaic accetta
+  // `onPhotoClick` ma qui non era mai stato passato — un lightbox dedicato invece di infilare
+  // routePhotos in galleryItems sopra: quello resta condizionato a `hasGuide`, questo mosaico è
+  // visibile anche prima che la guida esista.
+  const routePhotoGalleryItems = useMemo<GuideGalleryItem[]>(
+    () => routePhotos.map(p => ({ imageUrl: p.url, title: p.title, sourceUrl: p.url, sourceLabel: p.credit })),
+    [routePhotos],
+  )
+  const [routePhotoLightboxIndex, setRoutePhotoLightboxIndex] = useState<number | null>(null)
+
   // Punto di arrivo (ultimo punto della traccia) — da qui parte la ricerca di bus/stazioni/taxi per
   // chi non vuole tornare a piedi sui propri passi (sottosezione "Tornare al punto di partenza" in
   // "Luoghi da non perdere", vedi PoiListWidget.tsx/ReturnOptionsSection.tsx).
@@ -1447,8 +1469,17 @@ export default function GuideReader({
           Meta appena aggiunto sopra quando manca una traccia. */}
       {!showsSitoGallery && (
         <PhotoMosaic
-          photos={routePhotos.slice(0, 4).map((url, i) => ({ id: String(i), url }))}
+          photos={routePhotos.slice(0, 4).map((p, i) => ({ id: String(i), url: p.url }))}
+          onPhotoClick={id => setRoutePhotoLightboxIndex(Number(id))}
           heightClass="h-32"
+        />
+      )}
+      {routePhotoLightboxIndex != null && (
+        <GuideGalleryLightbox
+          items={routePhotoGalleryItems}
+          index={routePhotoLightboxIndex}
+          onNavigate={setRoutePhotoLightboxIndex}
+          onClose={() => setRoutePhotoLightboxIndex(null)}
         />
       )}
 
@@ -1687,7 +1718,7 @@ export default function GuideReader({
                     color={s.color}
                     body={s.body}
                     widget={renderWidget(s.key, s.body)}
-                    sectionPhoto={routePhotos[i]}
+                    sectionPhoto={routePhotos[i]?.url}
                     twoColumns
                     isVoiceActive={activeSection === i && (isPlaying || isPaused)}
                     onSpeak={() => speakSection(i)}
