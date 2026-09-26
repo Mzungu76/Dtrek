@@ -1726,17 +1726,23 @@ Sganciare una Guida nested per farla diventare autonoma: azzerare `parent_meta_i
 
 NON esiste il percorso inverso automatico (autonoma → nested): richiede una scelta esplicita dell'utente su quale Borgo/Città "adotta" quel Sito, mai dedotto da sola vicinanza geografica.
 
-## 51.4 Collocazione UI
+## 51.4 Collocazione UI — ✅ IMPLEMENTATO, aggiornato (2026-09-26, verifica utente)
 
 ```text
-Sezione "Siti" (top-level, come Sentieri e Borghi/Città)
-  → solo Guide con parent_meta_id IS NULL
+Elenco generale delle Guide (app/guida/GuidaHub.tsx, app/guida/elenco/page.tsx)
+  → NON mostra MAI una Guida con parent_meta_id valorizzato, in nessun filtro/tab,
+    "tutte" incluso — solo le Guide costruite direttamente dalla ricerca (parent_meta_id
+    NULL) formano l'elenco generale, con o senza filtro per tipologia
 
 Guida di un Borgo/Città
-  → sezione interna con le Guide dei Siti che le appartengono (parent_meta_id = quella Guida)
+  → sezione interna, EVIDENTE (sfondo/bordo d'accento, non un elenco anonimo), con le
+    Guide dei Siti che le appartengono (parent_meta_id = quella Guida) —
+    NestedSiteGuidesWidget.tsx
 ```
 
-Una Guida nested NON appare mai nella lista top-level "Siti" — evita l'affollamento. Resta comunque raggiungibile da ricerca globale e da eventuale cross-link (§51.6).
+Correzione rispetto alla prima stesura di questa sezione: non basta escludere una Guida nested dal solo tab "Siti" — non deve comparire nell'elenco generale in ALCUN caso, "tutte le Guide" incluso. L'unico modo di raggiungerla resta la sezione dedicata dentro la Guida del Borgo/Città (o un deep link diretto già noto) — mai la ricerca/l'elenco globale.
+
+`BorgoTappeWidget.tsx` riceve lo stesso elenco di Guide figlie (un solo fetch, condiviso con `NestedSiteGuidesWidget`) per riconoscere, tappa per tappa, quali hanno già una Guida propria: quella tappa mostra un link "Guida creata" invece del bottone di creazione, mai un doppione.
 
 ## 51.5 Cache della descrizione
 

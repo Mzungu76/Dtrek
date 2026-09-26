@@ -69,8 +69,13 @@ export default function GuidaIndexPage() {
 
   useCtsUpdated(() => { getAllPlanned().then(setPlanned).catch(() => {}) })
 
+  // Una Guida Sito nested (piano §51.4) resta annidata nella Guida del suo Borgo/Città — non
+  // compare mai in questo elenco generale (verifica utente 2026-09-26: solo le Guide costruite
+  // direttamente dalla ricerca vanno qui), raggiungibile solo dalla sezione dedicata dentro la
+  // Guida del Borgo o da un deep link diretto.
+  const topLevel = (planned ?? []).filter(h => !(h.metaType === 'sito' && h.parentMetaId))
   const q = query.trim().toLowerCase()
-  const all      = q ? (planned ?? []).filter(h => h.title.toLowerCase().includes(q)) : (planned ?? [])
+  const all      = q ? topLevel.filter(h => h.title.toLowerCase().includes(q)) : topLevel
   const active   = all.filter(h => !h.archivedAt)
   const archived = all.filter(h => h.archivedAt)
   const sorted = active.slice().sort((a, b) => {

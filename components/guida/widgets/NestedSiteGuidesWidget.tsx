@@ -1,50 +1,50 @@
-import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Landmark } from 'lucide-react'
+import { ChevronRight, Landmark, Sparkles } from 'lucide-react'
 import { SITE_TYPE_CONFIG } from '@/lib/metaTypes'
 import type { PlannedHikeMeta } from '@/lib/plannedStore'
 
 interface Props {
-  /** id della Guida Borgo/Città che le "possiede" — interrogate via parentMetaId (piano §51.4). */
-  parentMetaId: string
+  /** Guide già caricate dal chiamante (GuideReader, un solo fetch per parentMetaId=hike.id,
+   *  condiviso con BorgoTappeWidget) — mai un fetch proprio qui, evita la doppia richiesta. */
+  guides: PlannedHikeMeta[]
 }
 
 /**
- * Elenco delle Guide di Sito nate da questa Guida di Borgo/Città (tappe promosse, piano §51.3) —
- * restano annidate qui, MAI nella lista top-level "Siti" (app/guida/GuidaHub.tsx). Silenzioso
- * (null) finché non ce n'è nessuna, mai un riquadro vuoto — stesso principio degli altri widget
- * della Guida.
+ * Elenco EVIDENTE delle Guide di Sito nate da questa Guida di Borgo/Città (tappe promosse, piano
+ * §51.3) — restano annidate qui, MAI nella lista top-level "Siti" (app/guida/GuidaHub.tsx) né
+ * nell'elenco generale (app/guida/elenco/page.tsx): questa sezione è l'UNICO punto da cui
+ * raggiungerle (a parte il deep link diretto), quindi deve risaltare, non essere un elenco
+ * anonimo in fondo alla pagina — sfondo pieno e bordo d'accento invece del semplice bordo grigio
+ * degli altri widget, coerente con l'intento "evidenzia meglio" (verifica utente 2026-09-26).
+ * Silenzioso (null) finché non ce n'è nessuna, mai un riquadro vuoto.
  */
-export default function NestedSiteGuidesWidget({ parentMetaId }: Props) {
-  const [children, setChildren] = useState<PlannedHikeMeta[]>([])
-
-  useEffect(() => {
-    let cancelled = false
-    fetch(`/api/planned?parentMetaId=${encodeURIComponent(parentMetaId)}`)
-      .then(res => res.ok ? res.json() : [])
-      .then((data: PlannedHikeMeta[]) => { if (!cancelled) setChildren(data) })
-      .catch(() => {})
-    return () => { cancelled = true }
-  }, [parentMetaId])
-
-  if (children.length === 0) return null
+export default function NestedSiteGuidesWidget({ guides }: Props) {
+  if (guides.length === 0) return null
 
   return (
-    <div className="mt-4">
-      <p className="font-barlow font-bold uppercase tracking-wide text-[10px] text-stone-400 mb-2.5">
-        Guide dei Siti di questo Borgo
+    <div className="mt-4 rounded-2xl border-2 border-terra-200 bg-terra-50/60 p-4">
+      <p className="flex items-center gap-1.5 font-barlow font-bold uppercase tracking-wide text-[11px] text-terra-700 mb-3">
+        <Sparkles className="w-3.5 h-3.5" /> Guide dei Siti di questo Borgo
       </p>
       <div className="flex flex-col gap-2">
-        {children.map(child => {
-          const Icon = child.siteType ? SITE_TYPE_CONFIG[child.siteType]?.icon ?? Landmark : Landmark
+        {guides.map(guide => {
+          const Icon = guide.siteType ? SITE_TYPE_CONFIG[guide.siteType]?.icon ?? Landmark : Landmark
           return (
             <Link
-              key={child.id}
-              href={`/guida/${encodeURIComponent(child.id)}`}
-              className="flex items-center gap-2.5 rounded-xl border border-stone-200 px-3.5 py-2.5 hover:border-terra-300 transition-colors"
+              key={guide.id}
+              href={`/guida/${encodeURIComponent(guide.id)}`}
+              className="flex items-center gap-2.5 rounded-xl border border-terra-300 bg-white px-3.5 py-2.5 shadow-sm hover:border-terra-500 hover:shadow transition-all"
             >
-              <Icon className="w-4 h-4 text-terra-600 shrink-0" />
-              <span className="min-w-0 flex-1 font-semibold text-[13px] text-stone-800 truncate">{child.title}</span>
+              <span className="flex items-center justify-center w-8 h-8 rounded-full bg-terra-100 shrink-0">
+                <Icon className="w-4 h-4 text-terra-700" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-semibold text-[13.5px] text-stone-800 truncate">{guide.title}</span>
+                {guide.siteType && (
+                  <span className="block text-[11px] text-stone-400">{SITE_TYPE_CONFIG[guide.siteType]?.label}</span>
+                )}
+              </span>
+              <ChevronRight className="w-4 h-4 text-terra-400 shrink-0" />
             </Link>
           )
         })}

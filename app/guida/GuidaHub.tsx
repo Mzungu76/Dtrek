@@ -739,12 +739,14 @@ export default function GuidaHub({ id }: { id?: string }) {
     // in app/resoconto/ResocontoHub.tsx: applicato per ultimo, dopo aver garantito la presenza
     // dell'eventuale hike deep-linkato, cosicché anche quello sparisca dalla vista se non combacia
     // con la tipologia scelta (coerente: il filtro riguarda cosa si vede, non solo la galleria).
-    if (typeFilter == null) return withOpen
-    // Una Guida Sito nested (piano §51.4) resta annidata nella Guida del suo Borgo/Città —
-    // esclusa dal tab "Siti" apposta, mai nella lista top-level. Raggiungibile comunque da lì o
-    // da un deep link diretto, solo non da questo filtro.
-    if (typeFilter === 'sito') return withOpen.filter(it => it.metaType === 'sito' && !it.parentMetaId)
-    return withOpen.filter(it => (it.metaType ?? 'sentiero') === typeFilter)
+    // Una Guida Sito nested (piano §51.4) resta annidata nella Guida del suo Borgo/Città — non
+    // compare mai in QUESTO elenco, in nessun filtro incluso "tutte" (verifica utente 2026-09-26:
+    // solo le Guide costruite direttamente dalla ricerca vanno nell'elenco generale). Anche
+    // l'eventuale hike deep-linkato sparisce se nested, stesso principio del filtro tipologia già
+    // applicato qui sotto — raggiungibile solo dalla sezione dedicata dentro la Guida del Borgo.
+    const topLevel = withOpen.filter(it => !(it.metaType === 'sito' && it.parentMetaId))
+    if (typeFilter == null) return topLevel
+    return topLevel.filter(it => (it.metaType ?? 'sentiero') === typeFilter)
   }, [items, hike, driving, userOrigin, driveCache, ctsSettled, typeFilter])
 
   const deletedToastNode = showDeletedToast ? (

@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState, useRef, useCallback, useMemo, type ReactNode } from 'react'
-import { updatePlannedMeta, type PlannedHike } from '@/lib/plannedStore'
+import { updatePlannedMeta, type PlannedHike, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import { formatDuration } from '@/lib/tcxParser'
 import { classifyTrackShape } from '@/lib/geoUtils'
@@ -310,6 +310,10 @@ export default function GuideReader({
   // indirizzo, orari/sito ufficiale: dati che planned_hikes non porta (vedi lib/guideCardVariant.ts
   // per come vengono usati). null per un Sentiero (mai richiesto) o finché non arriva.
   const [placeDetail,    setPlaceDetail]    = useState<PlaceDetail | null>(null)
+  // Guide dei Siti nate da questo Borgo/Città (piano §51.3/§51.4) — un solo fetch condiviso da
+  // BorgoTappeWidget (per sapere quali tappe hanno già una Guida propria, evitare doppioni) e
+  // NestedSiteGuidesWidget (per elencarle). Solo per un Borgo/Città, mai per un Sentiero/Sito.
+  const [nestedSiteGuides, setNestedSiteGuides] = useState<PlannedHikeMeta[]>([])
   const [borgoItinerary, setBorgoItinerary] = useState<BorgoItinerary | null>(null)
   // Verifica utente: "non vengono più generati gli itinerari" — in realtà venivano generati, solo
   // che il calcolo (geosearch Wikipedia + rete pedonale OSM + Dijkstra, vedi /api/borgo-itinerary)
@@ -512,6 +516,22 @@ export default function GuideReader({
       .catch(() => {})
     return () => { cancelled = true }
   }, [hike.metaType, hike.placeId])
+
+  // Guide dei Siti nate da questo Borgo/Città (piano §51.3/§51.4) — chiave hike.id: sono Guide
+  // proprie di QUESTA Meta (parentMetaId = hike.id), non del placeId condiviso come placeDetail
+  // sopra. Mai richiesto per un Sentiero/Sito, che non possono avere Guide figlie. Niente cache di
+  // modulo qui (a differenza di placeDetail sopra): l'utente stesso le crea navigando da questa
+  // stessa Guida (BorgoTappeWidget's "Crea Guida di questo Sito"), un rimontaggio al ritorno deve
+  // sempre trovare l'elenco aggiornato, mai una lista cachata prima della creazione.
+  useEffect(() => {
+    if (hike.metaType !== 'borgo_citta') { setNestedSiteGuides([]); return }
+    let cancelled = false
+    fetch(`/api/planned?parentMetaId=${encodeURIComponent(hike.id)}`)
+      .then(res => res.ok ? res.json() : [])
+      .then((data: PlannedHikeMeta[]) => { if (!cancelled) setNestedSiteGuides(data) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [hike.metaType, hike.id])
 
   // Borgo/Città: tappe principali nel raggio (lib/guideBorgoDetailStops.ts, via lo stesso
   // endpoint POST già usato da app/mete/[id]/page.tsx) — alimenta sia la timeline (case 'luoghi'
@@ -1001,7 +1021,9 @@ export default function GuideReader({
           // Guide dei Siti nate da una tappa promossa (piano §51.3/§51.4) — indipendente
           // dall'itinerario sopra (dati diversi, parentMetaId su planned_hikes), mostrata sotto
           // in ogni ramo (compreso il caricamento): silenziosa da sé finché non ce n'è nessuna.
-          const nestedSiteGuides = <NestedSiteGuidesWidget parentMetaId={hike.id} />
+          // Stesso elenco (nestedSiteGuides, fetchato una sola volta più sopra) passato anche a
+          // BorgoTappeWidget, che lo usa per riconoscere le tappe che hanno già una Guida propria.
+          const nestedSiteGuidesSection = <NestedSiteGuidesWidget guides={nestedSiteGuides} />
           if (borgoItinerary && borgoItinerary.tappe.length > 0 && hike.placeId) {
             return (
               <>
@@ -1016,6 +1038,7 @@ export default function GuideReader({
                   color={SECTION_STYLE.luoghi.color}
                   placeId={hike.placeId}
                   hikeId={hike.id}
+                  existingSiteGuides={nestedSiteGuides}
                   savedOverrides={hike.borgoItineraryOverrides}
                   savedDayBudgetMinutes={hike.borgoDayBudgetMinutes}
                   onOverridesSaved={overrides => {
@@ -1032,7 +1055,7 @@ export default function GuideReader({
                     borgoItineraryMemoryCache.delete(hike.id)
                   }}
                 />
-                {nestedSiteGuides}
+                {nestedSiteGuidesSection}
               </>
             )
           }
@@ -1047,11 +1070,11 @@ export default function GuideReader({
                   <Loader2 className="w-4 h-4 animate-spin shrink-0" />
                   Sto calcolando l&apos;itinerario a piedi tra le tappe del borgo…
                 </div>
-                {nestedSiteGuides}
+                {nestedSiteGuidesSection}
               </>
             )
           }
-          return nestedSiteGuides
+          return nestedSiteGuidesSection
         }
         // Un Sito è già di per sé il singolo punto di interesse: qui non c'è mai un elenco di POI
         // "lungo il percorso" (poiList arriva comunque come oggetto — con array vuoti — dal
