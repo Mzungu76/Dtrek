@@ -374,6 +374,21 @@ export default function GuidaHub({ id }: { id?: string }) {
       })
     })
     setMetaList(sorted)
+    // Sceglie la Meta da aprire di default (galleria senza un id in URL) nella stessa passata di
+    // setItems sopra, invece che in un useEffect separato che se ne accorge un giro di render dopo
+    // (quando items cambia) — risparmia un intero ciclo di HubSkeleton ad ogni apertura della
+    // sezione Guide. Mai una Guida di Sito nested (piano §51.3/§51.4): il filtro di displayItems
+    // qui sotto esclude sempre un Sito nested DAL basso, TRANNE quello con id === currentId — se
+    // il default cadesse su un Sito nested (es. l'ultimo creato/aperto, spesso il più recente per
+    // data — verifica utente: "compare anche l'ultimo sito visualizzato all'interno di un borgo"),
+    // quell'eccezione lo terrebbe visibile nella galleria generale come se fosse una Guida a sé,
+    // finché l'utente non ne sceglie un'altra. sorted[0] resta il ripiego solo se DAVVERO ogni
+    // Meta è nested (mai lasciare currentId vuoto con items non vuoto).
+    setCurrentId(prev => {
+      if (prev) return prev
+      const first = sorted.find(h => !(h.metaType === 'sito' && h.parentMetaId))
+      return (first ?? sorted[0])?.id ?? null
+    })
     setDriveCache(prev => {
       const next = new Map(prev)
       for (const h of sorted) {
@@ -500,9 +515,15 @@ export default function GuidaHub({ id }: { id?: string }) {
     return () => { cancelled = true }
   }, [metaList, enrichmentReady])
 
+  // Ripiego per quando items cambia SENZA passare da applyList (es. handleDelete sotto, che aggiorna
+  // items direttamente con setItems) — applyList sopra sceglie già currentId nella stessa passata
+  // per il caso comune (primo caricamento), questo effect resta solo per quei casi più rari. Stessa
+  // esclusione di una Guida di Sito nested vista sopra, mai duplicata in una funzione a parte per
+  // due usi così piccoli.
   useEffect(() => {
     if (currentId || items.length === 0) return
-    setCurrentId(items[0].id)
+    const first = items.find(it => !(it.metaType === 'sito' && it.parentMetaId))
+    setCurrentId((first ?? items[0]).id)
   }, [items, currentId])
 
   useEffect(() => {
