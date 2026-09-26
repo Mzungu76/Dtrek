@@ -600,30 +600,43 @@ export default function GuideReader({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hike.metaType, hike.placeId, hike.id])
 
-  // IntersectionObserver: track which section is in view for pin-nav highlighting. Uses a thin
-  // "activation band" near the top of the viewport (threshold 0, shrunk rootMargin) rather than
-  // a ratio threshold — a ratio threshold (e.g. 0.3) requires 30% of the *target's own* height to
-  // be visible, which tall sections (mappa+profilo altimetrico in "Il percorso", mappa+lista+
-  // galleria in "I luoghi da non perdere") could fail to ever reach, leaving their nav pill never
-  // highlighted. A thin band only needs any overlap, so it works regardless of section height.
-  // Intersection state per section is tracked across callback batches (not just the entries in
-  // the current batch) since enter/exit events for different sections don't always land together.
+  // Scrollspy: quale sezione è "attiva" per l'evidenziazione del pin-nav — l'ultima (indice più
+  // alto) il cui bordo superiore ha già superato la riga di attivazione appena sotto la barra
+  // sticky in alto. Prima un IntersectionObserver marcava "attiva" ogni sezione che intersecava
+  // una banda sottile vicino a quella riga, prendendo la più in basso tra quelle intersecanti in
+  // quel momento (Math.max degli indici) — ma se in un dato istante NESSUNA sezione intersecava
+  // quella banda (una sezione breve appena superata, quella successiva non ancora entrata), il
+  // pin restava fermo sull'ultima sezione vista invece di aggiornarsi, finché lo scroll non
+  // riportava una qualunque sezione dentro la banda (verifica utente 2026-09-30: il pin "Il
+  // borgo" restava acceso con "Itinerario consigliato" già visibile sotto). Il confronto diretto
+  // con la posizione corrente qui sotto non ha mai questo buco: c'è sempre un'ultima sezione sopra
+  // la riga di attivazione, finché lo scroll non è tornato prima della primissima (in quel caso
+  // resta la 0 iniziale).
   useEffect(() => {
     if (!displaySections.length) return
-    const state = new Map<number, boolean>()
-    const obs = new IntersectionObserver(
-      entries => {
-        for (const e of entries) {
-          const idx = sectionRefs.current.indexOf(e.target as HTMLElement)
-          if (idx >= 0) state.set(idx, e.isIntersecting)
-        }
-        const activeIdxs = Array.from(state.entries()).filter(([, v]) => v).map(([k]) => k)
-        if (activeIdxs.length > 0) setVisibleSec(Math.max(...activeIdxs))
-      },
-      { threshold: 0, rootMargin: '-96px 0px -70% 0px' },
-    )
-    sectionRefs.current.forEach(el => el && obs.observe(el))
-    return () => obs.disconnect()
+    const ACTIVATION_LINE_PX = 96
+    let ticking = false
+    function recompute() {
+      ticking = false
+      let active = 0
+      for (let i = 0; i < sectionRefs.current.length; i++) {
+        const el = sectionRefs.current[i]
+        if (el && el.getBoundingClientRect().top <= ACTIVATION_LINE_PX) active = i
+      }
+      setVisibleSec(active)
+    }
+    function onScroll() {
+      if (ticking) return
+      ticking = true
+      requestAnimationFrame(recompute)
+    }
+    recompute()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('resize', onScroll)
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      window.removeEventListener('resize', onScroll)
+    }
   }, [displaySections])
 
   // Rebuild chunks on section change

@@ -64,10 +64,10 @@ export interface RouteHubItem {
    *  mai dedotte. */
   latitude?: number
   longitude?: number
-  /** Guida-only, Borgo/Città — conteggio dei punti di interesse nominati nel raggio walkable dal
-   *  centro (app/api/pois, stesso servizio multi-fonte cachato lato server già usato per un
-   *  Sentiero aperto), riempito in background dopo il primo mount. Assente finché non calcolato,
-   *  mai un numero fabbricato. */
+  /** Guida-only, Borgo/Città — numero di tappe del vero Itinerario consigliato mostrato dentro la
+   *  Guida (BorgoTappeWidget), derivato da PlannedHikeMeta.borgoWalkStopsHash (stessa fonte, mai un
+   *  conteggio indipendente — verifica utente 2026-09-30 "allinea il numero..."). Assente finché
+   *  l'itinerario non è mai stato calcolato per questa Meta, mai un numero fabbricato. */
   poiCount?: number
   /** Guida-only, Sito — orario as-is dalla fonte (formato OSM opening_hours quando presente, mai
    *  parsato/normalizzato qui — stesso principio di components/guida/widgets/SitoInfoWidget.tsx).
