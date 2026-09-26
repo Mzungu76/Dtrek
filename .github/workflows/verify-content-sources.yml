@@ -1,0 +1,40 @@
+name: Verify — Fonti contenuto Guide (diagnostica una tantum)
+
+# Manuale (workflow_dispatch). Verifica, su un campione di luoghi reali, se le fonti pubbliche
+# (Wikidata, Wikimedia Commons, OpenStreetMap Nominatim/Overpass) reggono i 5 arricchimenti
+# proposti per le Guide dei Siti/Borghi — vedi discussione in docs/piano-mete-multitipologia.md
+# §51/§52 e scripts/verify/content-sources-check.ts. Nessuna scrittura su Supabase, solo log.
+#
+# Questo sandbox blocca gli host coinvolti in uscita (stesso problema già visto con MiC/ArCo,
+# vedi MIC_DATA_SOURCES.md) — GitHub Actions ha rete piena, da qui il workflow dedicato invece
+# di eseguire lo script in locale.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Verifica fonti contenuto
+        run: |
+          set -euo pipefail
+          npx tsx scripts/verify/content-sources-check.ts | tee /tmp/verify.txt
+          {
+            echo "### Verifica fonti contenuto Guide (campione di luoghi reali)"
+            echo '```'
+            cat /tmp/verify.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
