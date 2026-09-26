@@ -1748,20 +1748,13 @@ Correzione rispetto alla prima stesura di questa sezione: non basta escludere un
 
 Bug osservato con l'apertura via `router.push('/guida/[id]')`: `GuidaHub`/`RouteHub` pescano SEMPRE la Guida da mostrare dallo stesso array filtrato per l'elenco generale (§51.4 sopra) — una Guida nested, esclusa da quell'array, apriva quindi una Guida SBAGLIATA (`displayItems.find(...) ?? displayItems[0]`, fallback sul primo elemento). Corretto una volta (item aperto sempre esente dal filtro), ma il difetto architetturale resta: lista sfogliabile e Guida aperta condividono lo stesso array.
 
-Sostituito con un overlay (mockup comparativo A/B/C, verifica utente 2026-09-27 — opzione B scelta): `components/guida/SiteGuideOverlay.tsx`, montato da `GuideReader.tsx` (stato `openSiteGuideId`, mai una navigazione) e aperto sia da `BorgoTappeWidget.tsx` (badge "Guida creata", e subito dopo la promozione tramite `lib/useCreateSiteGuideFromStop.ts`, che non fa più `router.push`) sia da `NestedSiteGuidesWidget.tsx`. Due stadi:
-
-```text
-Foglio compatto (default) → anteprima con dati reali: foto, SitoInfoWidget (orari/biglietti),
-  PlaceDescriptionWidget (descrizione) — chiuderlo torna ESATTAMENTE al Borgo, mai una route
-
-Guida completa (su "Apri come Guida completa") → il VERO GuideReader (stesso componente di
-  /guida/[id]), montato qui a schermo intero SENZA cambiare route — nessuna dipendenza
-  dall'array lista/dettaglio che ha causato il bug, perché non c'è nessuna lista coinvolta
-```
+Sostituito con un overlay (mockup comparativo A/B/C, verifica utente 2026-09-27 — opzione B scelta): `components/guida/SiteGuideOverlay.tsx`, montato da `GuideReader.tsx` (stato `openSiteGuideId`, mai una navigazione) e aperto sia da `BorgoTappeWidget.tsx` (badge "Guida creata", e subito dopo la promozione tramite `lib/useCreateSiteGuideFromStop.ts`, che non fa più `router.push`) sia da `NestedSiteGuidesWidget.tsx`.
 
 `GuideReader` richiede solo `hike`/`onHikeUpdate`/`enrichmentReady`/`hasAiAccess`/`aiUnavailable`/`trialExpired` per funzionare (verificato sulla sua interface) — CTS/Safety/DTM/distanza in auto sono tutti opzionali e comunque non pertinenti per un Sito. `enrichmentReady` = `hike.metaType !== 'sentiero'` (sempre vero per un Sito appena caricato, stessa formula di `GuidaHub.tsx`), `hasAiAccess`/`aiUnavailable`/`trialExpired` da `useHasAiAccess()` (già cachato per sessione, sicuro da richiamare in un componente in più). Nessuna replica dell'orchestrazione completa di `GuidaHub` (che porterebbe con sé l'intera lista sfogliabile — esattamente ciò che l'overlay evita).
 
 La route `/guida/[id]` resta comunque funzionante per ogni Guida (nested inclusa, deep link diretto) — l'overlay è il percorso preferito da dentro un Borgo, non l'unico.
+
+**Consolidamento (2026-09-28, verifica utente) — ✅ IMPLEMENTATO**: `SiteGuideOverlay` aveva inizialmente anche un proprio foglio di anteprima compatto (foto/orari/descrizione) prima della Guida completa — praticamente identico a `StopSourceSheet.tsx`, il foglio già esistente per "Leggi tutto"/"Fonte" su qualunque tappa. Consolidati in uno solo: `StopSourceSheet` ora accetta `placeId` (foto migliore + `SitoInfoWidget` quando la tappa ha un Sito collegato) e `siteGuideId` (bottone "Apri come Guida completa" in fondo, quando quel Sito ha già una Guida). Una tappa con Guida mostra "Guida creata" al posto di "Leggi tutto"/"Fonte" nella riga bottoni — stesso foglio, mai due esperienze diverse per la stessa tappa. `SiteGuideOverlay` fa ora solo la Guida completa, niente più stadio intermedio.
 
 ## 51.5 Cache della descrizione
 

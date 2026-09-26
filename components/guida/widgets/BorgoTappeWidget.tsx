@@ -220,6 +220,10 @@ export default function BorgoTappeWidget({
     thumbnail: openStop.thumbnail,
     url: openStop.url,
     sourceLabel: openStop.source === 'wikipedia' ? 'su Wikipedia' : 'la fonte',
+    // Solo una tappa 'archivio' ha un dtrek_places.id reale (piano §51.3) — abilita foto migliore
+    // e dati pratici reali nel foglio (StopSourceSheet, consolidato 2026-09-28).
+    placeId: openStop.source === 'archivio' ? openStop.id : undefined,
+    siteGuideId: openStop.source === 'archivio' ? siteGuideByPlaceId.get(openStop.id)?.id : undefined,
   } : null
 
   // Numerazione GLOBALE (continua tra le tappe, non riparte da 1 ad ogni tappa) — quanti punti
@@ -392,25 +396,25 @@ export default function BorgoTappeWidget({
                     {desc && (
                       <p className="text-[12px] text-stone-500 leading-snug mt-0.5">{preview}</p>
                     )}
-                    {/* Evidenzia subito, senza dover espandere il pannello, quale tappa ha già una
-                        Guida propria (piano §52.5 "evidenzia meglio", verifica utente 2026-09-26)
-                        — apre l'overlay (piano §51.4, opzione B), mai una navigazione, mai il
-                        bottone di creazione per una tappa già promossa. */}
-                    {stop.source === 'archivio' && siteGuideByPlaceId.has(stop.id) && (
-                      <button
-                        type="button"
-                        onClick={() => onOpenSiteGuide(siteGuideByPlaceId.get(stop.id)!.id)}
-                        className="inline-flex items-center gap-1 mt-1 w-fit text-[11.5px] font-semibold text-terra-700 bg-terra-100 rounded-full px-2 py-0.5 hover:bg-terra-200 transition-colors"
-                      >
-                        <CheckCircle2 className="w-3 h-3" /> Guida creata
-                      </button>
-                    )}
                     <div className="flex items-center gap-3 mt-1 flex-wrap">
-                      {/* Leggi tutto/Fonte convergono nella stessa pagina di lettura in-app
-                          (StopSourceSheet) — mostrato anche senza troncamento quando resta comunque
-                          una fonte da citare, altrimenti quella tappa non avrebbe alcun modo di
-                          raggiungerla. */}
-                      {(isTruncated || stop.url) && (
+                      {/* Una tappa con Guida propria mostra "Guida creata" al posto di "Leggi
+                          tutto"/"Fonte" (piano §52.5 "evidenzia meglio", verifica utente
+                          2026-09-26) — stesso foglio di lettura (StopSourceSheet, consolidato
+                          2026-09-28), non due esperienze diverse per la stessa tappa: dentro,
+                          foto/dati pratici reali e "Apri come Guida completa" sono già presenti
+                          via placeId/siteGuideId, mai bisogno di un secondo bottone identico.
+                          Leggi tutto/Fonte convergono nella stessa pagina di lettura in-app,
+                          mostrato anche senza troncamento quando resta comunque una fonte da
+                          citare, altrimenti quella tappa non avrebbe alcun modo di raggiungerla. */}
+                      {stop.source === 'archivio' && siteGuideByPlaceId.has(stop.id) ? (
+                        <button
+                          type="button"
+                          onClick={() => setOpenStopId(stop.id)}
+                          className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-terra-700 bg-terra-100 rounded-full px-2 py-0.5 hover:bg-terra-200 transition-colors"
+                        >
+                          <CheckCircle2 className="w-3 h-3" /> Guida creata
+                        </button>
+                      ) : (isTruncated || stop.url) && (
                         <button
                           type="button"
                           onClick={() => setOpenStopId(stop.id)}
@@ -526,7 +530,9 @@ export default function BorgoTappeWidget({
           </div>
         </div>
       )}
-      {sheetData && <StopSourceSheet data={sheetData} onClose={() => setOpenStopId(null)} />}
+      {sheetData && (
+        <StopSourceSheet data={sheetData} onClose={() => setOpenStopId(null)} onOpenSiteGuide={onOpenSiteGuide} />
+      )}
     </div>
   )
 }
