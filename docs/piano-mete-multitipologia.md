@@ -1661,3 +1661,137 @@ Il principio da mantenere in tutto il codice è:
 Dtrek non deve diventare "un'app di trekking che permette anche di visitare borghi e musei".
 
 Deve diventare una piattaforma in cui il trekking è una delle tre forme native di esplorazione.
+
+---
+
+# 51. AGGIORNAMENTO (2026-09-26): SITI — AUTONOMIA E RAPPORTO CON GLI ITINERARI
+
+Decisione presa in discussione (2026-09-26). Integra e specifica le sezioni 13, 20, 30 sopra, senza sostituirle.
+
+## 51.1 Stato reale ad oggi
+
+Gran parte di questo piano è già implementata:
+
+```text
+dtrek_places            → meta_type, subtype (§3)
+dtrek_place_sources     → §12
+dtrek_place_relations   → part_of / located_in / near / contains / associated_with (§13)
+lib/metaTypes.ts        → MetaType, SiteType, SITE_TYPE_CONFIG (§15)
+lib/guideProfiles.ts    → profilo sito generico + override per ciascuno dei 12 SiteType (§30)
+lib/guideCardVariant.ts → scheda_pratica / galleria_sicurezza
+SitoInfoWidget, SitoGalleryWidget, PlaceDescriptionWidget
+```
+
+Il nodo NON ancora risolto: `planned_hikes` (la Guida che l'utente legge) non ha una FK reale verso `dtrek_places` — solo un `placeId` annidato nei metadati. Un sito menzionato dentro la Guida di un Borgo/Città e un sito con Guida propria sono oggi due mondi senza collegamento strutturale, anche quando descrivono lo stesso luogo.
+
+## 51.2 Provenienza della Guida di un Sito
+
+Aggiungere a `planned_hikes`:
+
+```sql
+place_id       uuid null references dtrek_places(id)
+parent_meta_id uuid null references planned_hikes(id)
+```
+
+`place_id` collega SEMPRE la Guida al suo record `dtrek_places` — entità unica, mai duplicata: descrizione/foto/orari vivono lì, non copiati nella Guida.
+
+`parent_meta_id`:
+
+```text
+NULL  → Guida autonoma
+<id>  → Guida generata da/annidata nella Guida del Borgo/Città con quell'id
+```
+
+Un Sito nasce nested quando la sua Guida viene generata dall'interno della Guida di un Borgo/Città (una tappa promossa a Guida a sé). Resta di proprietà di quella Guida — §51.4 stabilisce dove viene mostrata.
+
+NON duplicare `dtrek_places` quando la stessa entità è raggiunta sia come menzione interna a un itinerario sia come Guida autonoma: `place_id` resta l'unico punto di verità.
+
+## 51.3 Promozione e sganciamento
+
+L'utente, da un punto menzionato nella Guida di un Borgo/Città, può generare la Guida di quel Sito: si crea una riga `planned_hikes` con `metaType='sito'`, `place_id` = il `dtrek_places` del punto, `parent_meta_id` = la Guida del Borgo.
+
+Sganciare una Guida nested per farla diventare autonoma: azzerare `parent_meta_id`. Nessuna migrazione di contenuto — stesso `place_id`, stessa riga.
+
+NON esiste il percorso inverso automatico (autonoma → nested): richiede una scelta esplicita dell'utente su quale Borgo/Città "adotta" quel Sito, mai dedotto da sola vicinanza geografica.
+
+## 51.4 Collocazione UI
+
+```text
+Sezione "Siti" (top-level, come Sentieri e Borghi/Città)
+  → solo Guide con parent_meta_id IS NULL
+
+Guida di un Borgo/Città
+  → sezione interna con le Guide dei Siti che le appartengono (parent_meta_id = quella Guida)
+```
+
+Una Guida nested NON appare mai nella lista top-level "Siti" — evita l'affollamento. Resta comunque raggiungibile da ricerca globale e da eventuale cross-link (§51.6).
+
+## 51.5 Cache della descrizione
+
+Il momento in cui una menzione diventa Guida (nested o autonoma, §51.2/51.3) è il punto naturale per persistere in `dtrek_places.description` l'estratto Wikipedia oggi recuperato live a ogni apertura (`lib/wikipedia.ts`, `lib/guideBorgoDetailStops.ts`). NON ricalcolarlo più a ogni lettura una volta che il Sito ha una Guida propria.
+
+## 51.6 Cross-link geografico
+
+`dtrek_place_relations` (§13) esiste già ma non è mai letto lato Guida. Usarlo per un blocco "Fa parte di [Borgo]" (Guida nested) o "Vicino a te" (Guida autonoma) — dati già presenti, nessuna nuova fonte richiesta.
+
+---
+
+# 52. AGGIORNAMENTO (2026-09-26): CONTENUTI DELLA GUIDA SITO
+
+Integra la sezione 30 con lo stato reale e i contenuti ancora da definire.
+
+## 52.1 Dati strutturati (già esistenti)
+
+```text
+SitoInfoWidget         → orari, biglietti, indirizzo, telefono, email
+                          cascata: dato reale → link ufficiale → Wikipedia, mai inventato
+SitoGalleryWidget      → foto (Wikimedia Commons) + avviso di sicurezza per categoria
+PlaceDescriptionWidget → riassunto enciclopedico, solo finché l'AI non ha ancora scritto la narrazione
+```
+
+Famiglia di scheda decisa da `siteType` + presenza reale di dati di visita (`lib/guideCardVariant.ts`):
+
+```text
+scheda_pratica     → musei, palazzi, chiese, castelli/monumenti/siti archeologici con dati reali
+galleria_sicurezza → cascata, grotta, belvedere, area_naturale (sempre)
+                      + castelli/monumenti/siti archeologici SENZA dati di visita
+```
+
+## 52.2 Narrativa AI (già esistente)
+
+`lib/guideProfiles.ts`: profilo `sito` generico + override per ciascuno dei 12 `SiteType` su "Prima di partire"/"Il [tipo]". Sezioni escluse sempre: `dati_sicurezza`, `comfort`. "Natura" disponibile solo per i 4 tipi naturali (`isNaturalSiteType`).
+
+NON creare un secondo scheletro di sezioni: resta `GUIDE_SECTIONS` (`lib/guideSections.ts`).
+
+## 52.3 Gap noti, indipendenti da §51
+
+```text
+PhotoMosaic vuoto per un Sito senza traccia GPS
+  → nascondere, o alimentare da image_url (docs/piano-guide-eccellenza.md, Fase 2)
+
+Tempo di visita (SITE_TYPE_CONFIG.visitMinutes) mai mostrato nella Guida autonoma
+  → oggi usato solo per il budget interno delle tappe di un Borgo
+  → promuoverlo a riga visibile in "Prima di partire" quando il Sito è Guida a sé
+```
+
+## 52.4 Backlog dipendente da fonti dati non ancora disponibili
+
+```text
+prezzo/biglietto reale              → nessuna fonte oggi lo fornisce in modo strutturato
+accessibilità (motoria/sensoriale)  → nessuna fonte oggi la fornisce
+```
+
+NON inventare questi dati nel frattempo: cella omessa o link, stessa regola generale di `SitoInfoWidget`.
+
+## 52.5 Contenuti nuovi, legati a §51 (`parent_meta_id`)
+
+```text
+Guida nested    → richiamo "Fa parte della Guida di [Borgo/Città]" con link (§51.6)
+Guida autonoma  → nessun richiamo di provenienza; eventuale blocco "Vicino a te" (§51.6)
+
+Sezioni sapori/consigli:
+  Guida nested    → escluse di default (già raccontate a livello del Borgo genitore)
+  Guida autonoma  → incluse (nessun genitore che le racconti)
+```
+
+Implementare questa distinzione in `guideProfileFor` come parametro aggiuntivo (oltre `siteType`/`borgoVariant`), condizionato dalla presenza di `parent_meta_id`. NON una quarta lista di sezioni parallela: resta un filtro sulle sezioni già esistenti.
