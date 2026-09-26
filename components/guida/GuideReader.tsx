@@ -42,10 +42,13 @@ import DatiSicurezzaTabs from './widgets/DatiSicurezzaTabs'
 import PoiListWidget from './widgets/PoiListWidget'
 import NaturaWidget from './widgets/NaturaWidget'
 import BorgoTappeWidget from './widgets/BorgoTappeWidget'
+import NestedSiteGuidesWidget from './widgets/NestedSiteGuidesWidget'
 import SitoInfoWidget from './widgets/SitoInfoWidget'
 import PlaceDescriptionWidget from './widgets/PlaceDescriptionWidget'
 import GuideGalleryLightbox, { type GuideGalleryItem } from './widgets/GuideGalleryLightbox'
 import SitoGalleryWidget from './widgets/SitoGalleryWidget'
+import ParentGuideLinkWidget from './widgets/ParentGuideLinkWidget'
+import RelatedPlacesWidget from './widgets/RelatedPlacesWidget'
 import GuideHero from './GuideHero'
 import GuideStatsStrip from './GuideStatsStrip'
 import GuideBorgoStatsStrip from './GuideBorgoStatsStrip'
@@ -995,35 +998,42 @@ export default function GuideReader({
         // mai PoiListWidget qui, è costruita per un Sentiero (mappa del tracciato, Street View,
         // POI OSM) che un Borgo/Città non ha.
         if (hike.metaType === 'borgo_citta') {
+          // Guide dei Siti nate da una tappa promossa (piano §51.3/§51.4) — indipendente
+          // dall'itinerario sopra (dati diversi, parentMetaId su planned_hikes), mostrata sotto
+          // in ogni ramo (compreso il caricamento): silenziosa da sé finché non ce n'è nessuna.
+          const nestedSiteGuides = <NestedSiteGuidesWidget parentMetaId={hike.id} />
           if (borgoItinerary && borgoItinerary.tappe.length > 0 && hike.placeId) {
             return (
-              <BorgoTappeWidget
-                key={hike.id}
-                stops={borgoItinerary.stops}
-                legs={borgoItinerary.legs}
-                center={{ lat: hike.latitude ?? borgoItinerary.stops[0].lat, lon: hike.longitude ?? borgoItinerary.stops[0].lon }}
-                maxStopsPerTappa={borgoItinerary.maxStopsPerTappa}
-                maxMinutesPerTappa={borgoItinerary.maxMinutesPerTappa}
-                serverTappe={borgoItinerary.tappe}
-                color={SECTION_STYLE.luoghi.color}
-                placeId={hike.placeId}
-                hikeId={hike.id}
-                savedOverrides={hike.borgoItineraryOverrides}
-                savedDayBudgetMinutes={hike.borgoDayBudgetMinutes}
-                onOverridesSaved={overrides => {
-                  updatePlannedMeta(hike.id, { borgoItineraryOverrides: overrides }).catch(() => {})
-                  onHikeUpdate({ borgoItineraryOverrides: overrides })
-                  // Invalida la cache di modulo sopra — un remount successivo di questo componente
-                  // (cambio sezione e ritorno) deve ripartire dalle personalizzazioni appena
-                  // salvate, mai da uno snapshot precedente al cambio.
-                  borgoItineraryMemoryCache.delete(hike.id)
-                }}
-                onDayBudgetSaved={dayBudgetMinutes => {
-                  updatePlannedMeta(hike.id, { borgoDayBudgetMinutes: dayBudgetMinutes }).catch(() => {})
-                  onHikeUpdate({ borgoDayBudgetMinutes: dayBudgetMinutes })
-                  borgoItineraryMemoryCache.delete(hike.id)
-                }}
-              />
+              <>
+                <BorgoTappeWidget
+                  key={hike.id}
+                  stops={borgoItinerary.stops}
+                  legs={borgoItinerary.legs}
+                  center={{ lat: hike.latitude ?? borgoItinerary.stops[0].lat, lon: hike.longitude ?? borgoItinerary.stops[0].lon }}
+                  maxStopsPerTappa={borgoItinerary.maxStopsPerTappa}
+                  maxMinutesPerTappa={borgoItinerary.maxMinutesPerTappa}
+                  serverTappe={borgoItinerary.tappe}
+                  color={SECTION_STYLE.luoghi.color}
+                  placeId={hike.placeId}
+                  hikeId={hike.id}
+                  savedOverrides={hike.borgoItineraryOverrides}
+                  savedDayBudgetMinutes={hike.borgoDayBudgetMinutes}
+                  onOverridesSaved={overrides => {
+                    updatePlannedMeta(hike.id, { borgoItineraryOverrides: overrides }).catch(() => {})
+                    onHikeUpdate({ borgoItineraryOverrides: overrides })
+                    // Invalida la cache di modulo sopra — un remount successivo di questo componente
+                    // (cambio sezione e ritorno) deve ripartire dalle personalizzazioni appena
+                    // salvate, mai da uno snapshot precedente al cambio.
+                    borgoItineraryMemoryCache.delete(hike.id)
+                  }}
+                  onDayBudgetSaved={dayBudgetMinutes => {
+                    updatePlannedMeta(hike.id, { borgoDayBudgetMinutes: dayBudgetMinutes }).catch(() => {})
+                    onHikeUpdate({ borgoDayBudgetMinutes: dayBudgetMinutes })
+                    borgoItineraryMemoryCache.delete(hike.id)
+                  }}
+                />
+                {nestedSiteGuides}
+              </>
             )
           }
           // Verifica utente: mentre l'itinerario si calcola (geosearch Wikipedia + rete pedonale
@@ -1032,13 +1042,16 @@ export default function GuideReader({
           // l'impressione che l'itinerario non si stia generando affatto.
           if (borgoItineraryLoading) {
             return (
-              <div className="flex items-center gap-2.5 text-stone-400 text-[12.5px]">
-                <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-                Sto calcolando l&apos;itinerario a piedi tra le tappe del borgo…
-              </div>
+              <>
+                <div className="flex items-center gap-2.5 text-stone-400 text-[12.5px]">
+                  <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                  Sto calcolando l&apos;itinerario a piedi tra le tappe del borgo…
+                </div>
+                {nestedSiteGuides}
+              </>
             )
           }
-          return null
+          return nestedSiteGuides
         }
         // Un Sito è già di per sé il singolo punto di interesse: qui non c'è mai un elenco di POI
         // "lungo il percorso" (poiList arriva comunque come oggetto — con array vuoti — dal
@@ -1331,6 +1344,12 @@ export default function GuideReader({
         locationLabel={usesCoverPhoto ? locationLabel : undefined}
       />
 
+      {/* Richiamo di provenienza per una Guida Sito nested (piano §51.4/§52.5) — solo quando
+          nata dentro una Guida Borgo/Città, mai per una Guida Sito autonoma. */}
+      {hike.metaType === 'sito' && hike.parentMetaId && (
+        <ParentGuideLinkWidget parentMetaId={hike.parentMetaId} />
+      )}
+
       {hike.metaType === 'sito' ? (
         sitoFamily === 'scheda_pratica' ? (
           <SitoInfoWidget
@@ -1365,6 +1384,13 @@ export default function GuideReader({
             onToggle: () => chooseRouteMode(showAsRoundTrip ? 'one_way' : 'round_trip'),
           } : undefined}
         />
+      )}
+
+      {/* "Vicino a te" (piano §51.6) — solo per una Guida Sito AUTONOMA (una nested ha già il
+          richiamo al Borgo sopra, non le serve anche questo); silenzioso da sé se relatedPlaces
+          è vuoto (dtrek_place_relations non ancora popolata). */}
+      {hike.metaType === 'sito' && !hike.parentMetaId && (
+        <RelatedPlacesWidget places={placeDetail?.relatedPlaces ?? []} />
       )}
 
       {/* SitoGalleryWidget sopra mostra già una galleria (stesso raggio, stessa fonte Commons) per

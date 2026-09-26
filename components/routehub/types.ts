@@ -54,6 +54,10 @@ export interface RouteHubItem {
    *  PlannedHikeMeta. */
   metaType?: MetaType
   siteType?: SiteType
+  /** Guida-only, Sito (piano §51.4) — valorizzato quando questa Guida è nata dentro la Guida di
+   *  un Borgo/Città (una tappa promossa, §51.3): resta annidata lì, mai in questa lista top-level
+   *  "Siti" (vedi il filtro in app/guida/GuidaHub.tsx). Assente per una Guida autonoma. */
+  parentMetaId?: string
   /** Guida-only, Borgo/Città (piano guide-eccellenza) — posizione per calcolare la distanza in
    *  auto (che un Borgo/Sito non ha mai via routePolyline, vedi lib/drivingInfo.ts) e il bbox per
    *  il conteggio POI nei dintorni. Passate così come sono da PlannedHikeMeta.latitude/longitude,

@@ -124,6 +124,7 @@ function metaToItem(h: PlannedHikeMeta): RouteHubItem {
     polyline: h.routePolyline,
     metaType: h.metaType,
     siteType: h.siteType,
+    parentMetaId: h.parentMetaId,
     latitude: h.latitude,
     longitude: h.longitude,
     statPills: statPillsForMeta(h),
@@ -668,7 +669,12 @@ export default function GuidaHub({ id }: { id?: string }) {
   // non quanti ne restano dopo aver già filtrato.
   const typeCounts = useMemo(() => {
     const counts: Record<MetaType, number> = { sentiero: 0, borgo_citta: 0, sito: 0 }
-    for (const it of items) counts[it.metaType ?? 'sentiero']++
+    for (const it of items) {
+      // Una Guida Sito nested (piano §51.4) non compare mai nella lista "Siti" — il conteggio sul
+      // chip del filtro deve riflettere quante se ne vedranno davvero aprendolo, non il totale.
+      if (it.metaType === 'sito' && it.parentMetaId) continue
+      counts[it.metaType ?? 'sentiero']++
+    }
     return counts
   }, [items])
 
@@ -734,6 +740,10 @@ export default function GuidaHub({ id }: { id?: string }) {
     // dell'eventuale hike deep-linkato, cosicché anche quello sparisca dalla vista se non combacia
     // con la tipologia scelta (coerente: il filtro riguarda cosa si vede, non solo la galleria).
     if (typeFilter == null) return withOpen
+    // Una Guida Sito nested (piano §51.4) resta annidata nella Guida del suo Borgo/Città —
+    // esclusa dal tab "Siti" apposta, mai nella lista top-level. Raggiungibile comunque da lì o
+    // da un deep link diretto, solo non da questo filtro.
+    if (typeFilter === 'sito') return withOpen.filter(it => it.metaType === 'sito' && !it.parentMetaId)
     return withOpen.filter(it => (it.metaType ?? 'sentiero') === typeFilter)
   }, [items, hike, driving, userOrigin, driveCache, ctsSettled, typeFilter])
 

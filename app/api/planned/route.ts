@@ -250,6 +250,21 @@ export async function GET(req: NextRequest) {
       })
     }
 
+    // Guide dei Siti nate dentro una Guida Borgo/Città (piano §51.4) — usata dalla sezione
+    // "Guide dei Siti di questo Borgo" (components/guida/widgets/NestedSiteGuidesWidget.tsx).
+    // Lista leggera (META_COLS, come sotto), mai trackPoints.
+    const parentMetaId = req.nextUrl.searchParams.get('parentMetaId')
+    if (parentMetaId) {
+      const { data, error } = await supabase
+        .from('planned_hikes')
+        .select(META_COLS)
+        .eq('user_id', user.id)
+        .eq('parent_meta_id', parentMetaId)
+        .order('created_at', { ascending: false })
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json((data ?? []).map((r) => rowToHike(r as unknown as Record<string, unknown>, false) as PlannedHikeMeta))
+    }
+
     // Try full columns; fall back to core if newer ALTER TABLE columns don't exist yet
     let listData: Record<string, unknown>[] | null = null
     const { data: d1, error: e1 } = await supabase

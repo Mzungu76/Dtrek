@@ -1,6 +1,6 @@
 import dynamic from 'next/dynamic'
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { ChevronRight, Settings2, EyeOff, Eye, Loader2, ArrowRight } from 'lucide-react'
+import { ChevronRight, Settings2, EyeOff, Eye, Loader2, ArrowRight, BookOpen } from 'lucide-react'
 import { SITE_TYPE_CONFIG } from '@/lib/metaTypes'
 import {
   groupStopsIntoTappe, spliceLegsForRemovedStops, effectiveVisitMinutesFor,
@@ -9,6 +9,7 @@ import {
   type ItineraryTappa, type ItineraryStopCandidate, type BorgoItineraryOverrides,
 } from '@/lib/metaSearch/borgoItinerary'
 import type { ItineraryStop, ItineraryLeg } from '@/app/api/borgo-itinerary/route'
+import { useCreateSiteGuideFromStop } from '@/lib/useCreateSiteGuideFromStop'
 import StopSourceSheet, { type StopSourceSheetData } from './StopSourceSheet'
 
 // Leaflet tocca `window` al modulo — mai importato lato server (stesso pattern già usato in
@@ -153,6 +154,9 @@ export default function BorgoTappeWidget({
   const [confirming, setConfirming] = useState(false)
   const [confirmError, setConfirmError] = useState<string | null>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Promozione di una tappa a Guida propria, annidata in questa (piano §51.3) — un solo hook
+  // condiviso da tutte le righe: solo una tappa alla volta può essere in creazione.
+  const { creatingStopId, createError: createGuideError, createAndOpen: createSiteGuide } = useCreateSiteGuideFromStop(hikeId)
 
   const hasPins = overridesHavePins(overrides)
   const budgetDirty = dayBudgetMinutes !== confirmedDayBudgetMinutes
@@ -408,7 +412,7 @@ export default function BorgoTappeWidget({
                             className="w-full accent-terra-600"
                           />
                         </div>
-                        <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
                           <button
                             type="button"
                             onClick={() => setStopOverride(stop.id, { disabled: true })}
@@ -416,7 +420,26 @@ export default function BorgoTappeWidget({
                           >
                             <EyeOff className="w-3.5 h-3.5" /> Spegni questo punto
                           </button>
+                          {/* Solo una tappa 'archivio' ha un dtrek_places.id reale da promuovere
+                              (piano §51.3) — una tappa 'wikipedia' non è ancora una riga di
+                              catalogo, mai un placeId fabbricato qui. */}
+                          {stop.source === 'archivio' && (
+                            <button
+                              type="button"
+                              onClick={() => createSiteGuide(stop)}
+                              disabled={creatingStopId === stop.id}
+                              className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-terra-600 hover:text-terra-700 disabled:opacity-50"
+                            >
+                              {creatingStopId === stop.id
+                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                : <BookOpen className="w-3.5 h-3.5" />}
+                              Crea Guida di questo Sito
+                            </button>
+                          )}
                         </div>
+                        {createGuideError && creatingStopId == null && (
+                          <p className="text-[11.5px] text-red-600">{createGuideError}</p>
+                        )}
                         {tappe.length > 0 && (
                           <div>
                             <span className="text-[11px] font-semibold text-stone-500 block mb-1.5">Sposta in</span>

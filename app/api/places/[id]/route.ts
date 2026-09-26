@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { getUserFromRequest } from '@/lib/supabaseAuth'
 import { fetchSourceCounts } from '@/lib/metaSearch/placeQuery'
+import { fetchRelatedPlaces, type RelatedPlace } from '@/lib/metaSearch/placeRelations'
 import { searchAndFetch, fetchExtendedExtract } from '@/lib/wikipedia'
 import { fetchPlaceCoverPhoto } from '@/lib/placePhotoCache'
 import { haversineM } from '@/lib/geoUtils'
@@ -69,6 +70,9 @@ export interface PlaceDetail {
    *  `description` assente/non sostanziale (qui `description` riflette già quel giudizio — vedi
    *  sotto). null quando non trovata, o non abbastanza vicina da fidarsene. */
   wikipedia: { extract: string; url: string; thumbnail?: string } | null
+  /** "Vicino a te"/"Fa parte di" (piano §51.6) — da dtrek_place_relations, oggi quasi sempre
+   *  vuoto finché quei dati non vengono importati (vedi lib/metaSearch/placeRelations.ts). */
+  relatedPlaces: RelatedPlace[]
 }
 
 const WIKIPEDIA_MAX_DISTANCE_KM = 15
@@ -115,6 +119,15 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   if (contactsError) console.error('[places/:id] phone/email non disponibili (migration applicata?)', contactsError)
 
   const sourceCounts = await fetchSourceCounts(supabase, [data.id])
+
+  // Best-effort, mai un 500 sull'intera scheda se dtrek_place_relations avesse un problema —
+  // stesso principio di contacts/wikipedia sopra e sotto.
+  let relatedPlaces: RelatedPlace[] = []
+  try {
+    relatedPlaces = await fetchRelatedPlaces(supabase, data.id)
+  } catch (e) {
+    console.error('[places/:id] relatedPlaces non disponibili', e)
+  }
 
   const hasRealDescription = isSubstantiveDescription(data.description)
 
@@ -202,6 +215,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     confidence: data.confidence,
     coordinatesApproximate: (data.metadata as Record<string, unknown> | null)?.coordinatesApproximate === true,
     wikipedia,
+    relatedPlaces,
   }
   return NextResponse.json(detail)
 }
