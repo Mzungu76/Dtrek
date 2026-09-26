@@ -250,9 +250,10 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    // Guide dei Siti nate dentro una Guida Borgo/Città (piano §51.4) — usata dalla sezione
-    // "Guide dei Siti di questo Borgo" (components/guida/widgets/NestedSiteGuidesWidget.tsx).
-    // Lista leggera (META_COLS, come sotto), mai trackPoints.
+    // Guide dei Siti nate dentro una Guida Borgo/Città (piano §51.4) — usata da
+    // BorgoTappeWidget.tsx per sapere, tappa per tappa, se "Leggi tutto" deve aprire una Guida
+    // già esistente o crearla al volo (verifica utente 2026-09-28). Lista leggera (META_COLS,
+    // come sotto), mai trackPoints.
     const parentMetaId = req.nextUrl.searchParams.get('parentMetaId')
     if (parentMetaId) {
       const { data, error } = await supabase

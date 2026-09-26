@@ -1,6 +1,6 @@
 import dynamic from 'next/dynamic'
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { ChevronRight, Settings2, EyeOff, Eye, Loader2, ArrowRight, BookOpen, CheckCircle2 } from 'lucide-react'
+import { ChevronRight, Settings2, EyeOff, Eye, Loader2, ArrowRight } from 'lucide-react'
 import { SITE_TYPE_CONFIG } from '@/lib/metaTypes'
 import {
   groupStopsIntoTappe, spliceLegsForRemovedStops, effectiveVisitMinutesFor,
@@ -45,13 +45,14 @@ interface Props {
   placeId: string
   hikeId: string
   /** Guide di Sito già create da tappe di QUESTO Borgo (piano §51.3/§51.4, fetchate una sola
-   *  volta da GuideReader e condivise con NestedSiteGuidesWidget) — usate qui per riconoscere,
-   *  tappa per tappa (via placeId), quali hanno già una Guida propria: quella tappa mostra un
-   *  link "Vai alla Guida" invece del bottone di creazione, mai un doppione. */
+   *  volta da GuideReader) — usate qui SOLO per decidere, al tap su "Leggi tutto" di una tappa
+   *  'archivio', se aprire quella già esistente o crearla al volo (piano §51.4, verifica utente
+   *  2026-09-28: "Leggi tutto" è l'unico bottone, l'utente non deve mai percepire la differenza
+   *  tra una tappa già promossa e una no — le vede tutte come "già pronte"). */
   existingSiteGuides: PlannedHikeMeta[]
   /** Apre la Guida di un Sito nell'overlay (piano §51.4, opzione B) — mai una navigazione, la
-   *  Guida del Borgo resta montata sotto. Usato sia dal badge "Guida creata" sia, tramite
-   *  useCreateSiteGuideFromStop, subito dopo la promozione di una tappa. */
+   *  Guida del Borgo resta montata sotto. Chiamato da "Leggi tutto" quando la Guida esiste già,
+   *  o da useCreateSiteGuideFromStop subito dopo averla creata al volo. */
   onOpenSiteGuide: (siteId: string) => void
   /** Persistenza "leggera" (slider/spegnimento) — mai bloccante, stesso pattern già usato per
    *  borgoWalkPolyline in GuideReader: aggiorna lo stato locale della Meta e accoda la
@@ -176,6 +177,9 @@ export default function BorgoTappeWidget({
   // Promozione di una tappa a Guida propria, annidata in questa (piano §51.3) — un solo hook
   // condiviso da tutte le righe: solo una tappa alla volta può essere in creazione.
   const { creatingStopId, createError: createGuideError, createAndOpen: createSiteGuide } = useCreateSiteGuideFromStop(hikeId, onOpenSiteGuide)
+  // creatingStopId torna a null anche in caso di errore (vedi useCreateSiteGuideFromStop) — questo
+  // resta valorizzato per sapere SOTTO QUALE riga mostrare il messaggio d'errore.
+  const [lastAttemptedStopId, setLastAttemptedStopId] = useState<string | null>(null)
 
   const hasPins = overridesHavePins(overrides)
   const budgetDirty = dayBudgetMinutes !== confirmedDayBudgetMinutes
@@ -213,18 +217,28 @@ export default function BorgoTappeWidget({
 
   const activeTappa = tappe[Math.min(selectedTappaIdx, Math.max(tappe.length - 1, 0))]
   const disabledStops = stops.filter(s => overrides[s.id]?.disabled)
+  // Solo per una tappa 'wikipedia' (nessun dtrek_places.id reale, piano §51.3): "Leggi tutto" per
+  // una tappa 'archivio' apre/crea direttamente la Guida completa (handleLeggiTutto sotto), mai
+  // questo foglio — StopSourceSheet resta il semplice "leggi di più" per ciò che non può avere
+  // una Guida propria.
   const openStop = stops.find(s => s.id === openStopId)
   const sheetData: StopSourceSheetData | null = openStop ? {
     name: openStop.name,
     description: openStop.description,
     thumbnail: openStop.thumbnail,
     url: openStop.url,
-    sourceLabel: openStop.source === 'wikipedia' ? 'su Wikipedia' : 'la fonte',
-    // Solo una tappa 'archivio' ha un dtrek_places.id reale (piano §51.3) — abilita foto migliore
-    // e dati pratici reali nel foglio (StopSourceSheet, consolidato 2026-09-28).
-    placeId: openStop.source === 'archivio' ? openStop.id : undefined,
-    siteGuideId: openStop.source === 'archivio' ? siteGuideByPlaceId.get(openStop.id)?.id : undefined,
+    sourceLabel: 'su Wikipedia',
   } : null
+
+  // Unico punto d'ingresso per una tappa 'archivio' (piano §51.4, verifica utente 2026-09-28):
+  // apre la Guida se esiste già, altrimenti la crea al volo e la apre — stesso bottone "Leggi
+  // tutto" in entrambi i casi, l'utente non vede mai la differenza.
+  function handleLeggiTutto(stop: ItineraryStop) {
+    const existing = siteGuideByPlaceId.get(stop.id)
+    if (existing) { onOpenSiteGuide(existing.id); return }
+    setLastAttemptedStopId(stop.id)
+    createSiteGuide(stop)
+  }
 
   // Numerazione GLOBALE (continua tra le tappe, non riparte da 1 ad ogni tappa) — quanti punti
   // precedono la tappa selezionata nell'ordine di visita complessivo.
@@ -397,22 +411,23 @@ export default function BorgoTappeWidget({
                       <p className="text-[12px] text-stone-500 leading-snug mt-0.5">{preview}</p>
                     )}
                     <div className="flex items-center gap-3 mt-1 flex-wrap">
-                      {/* Una tappa con Guida propria mostra "Guida creata" al posto di "Leggi
-                          tutto"/"Fonte" (piano §52.5 "evidenzia meglio", verifica utente
-                          2026-09-26) — stesso foglio di lettura (StopSourceSheet, consolidato
-                          2026-09-28), non due esperienze diverse per la stessa tappa: dentro,
-                          foto/dati pratici reali e "Apri come Guida completa" sono già presenti
-                          via placeId/siteGuideId, mai bisogno di un secondo bottone identico.
-                          Leggi tutto/Fonte convergono nella stessa pagina di lettura in-app,
-                          mostrato anche senza troncamento quando resta comunque una fonte da
-                          citare, altrimenti quella tappa non avrebbe alcun modo di raggiungerla. */}
-                      {stop.source === 'archivio' && siteGuideByPlaceId.has(stop.id) ? (
+                      {/* Unico bottone per una tappa 'archivio' (piano §51.4, verifica utente
+                          2026-09-28): "Leggi tutto" apre direttamente la Guida completa, creandola
+                          al volo se non esiste ancora — sempre la stessa etichetta, l'utente non
+                          deve mai percepire la differenza tra una tappa già promossa e una no.
+                          Per una tappa 'wikipedia' (nessuna Guida possibile, niente
+                          dtrek_places.id) resta il semplice foglio di lettura, mostrato anche
+                          senza troncamento quando resta comunque una fonte da citare. */}
+                      {stop.source === 'archivio' ? (
                         <button
                           type="button"
-                          onClick={() => setOpenStopId(stop.id)}
-                          className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-terra-700 bg-terra-100 rounded-full px-2 py-0.5 hover:bg-terra-200 transition-colors"
+                          onClick={() => handleLeggiTutto(stop)}
+                          disabled={creatingStopId === stop.id}
+                          className="inline-flex items-center gap-0.5 text-[12px] font-semibold text-terra-600 hover:text-terra-700 whitespace-nowrap disabled:opacity-60"
                         >
-                          <CheckCircle2 className="w-3 h-3" /> Guida creata
+                          Leggi tutto {creatingStopId === stop.id
+                            ? <Loader2 className="w-3 h-3 animate-spin" />
+                            : <ChevronRight className="w-3 h-3" />}
                         </button>
                       ) : (isTruncated || stop.url) && (
                         <button
@@ -431,6 +446,9 @@ export default function BorgoTappeWidget({
                         <Settings2 className="w-3.5 h-3.5" /> {formatMinutes(visitMinutes)}
                       </button>
                     </div>
+                    {createGuideError && lastAttemptedStopId === stop.id && creatingStopId == null && (
+                      <p className="text-[11px] text-red-600 mt-1">{createGuideError}</p>
+                    )}
                     {expandedStopId === stop.id && (
                       <div className="mt-2.5 rounded-lg border border-stone-200 bg-stone-50 p-3 flex flex-col gap-3">
                         <div>
@@ -456,28 +474,7 @@ export default function BorgoTappeWidget({
                           >
                             <EyeOff className="w-3.5 h-3.5" /> Spegni questo punto
                           </button>
-                          {/* Solo una tappa 'archivio' ha un dtrek_places.id reale da promuovere
-                              (piano §51.3) — una tappa 'wikipedia' non è ancora una riga di
-                              catalogo, mai un placeId fabbricato qui. Nascosto quando la tappa ha
-                              già una Guida (badge sopra, invece di un secondo punto di creazione
-                              che produrrebbe un doppione). */}
-                          {stop.source === 'archivio' && !siteGuideByPlaceId.has(stop.id) && (
-                            <button
-                              type="button"
-                              onClick={() => createSiteGuide(stop)}
-                              disabled={creatingStopId === stop.id}
-                              className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-terra-600 hover:text-terra-700 disabled:opacity-50"
-                            >
-                              {creatingStopId === stop.id
-                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                : <BookOpen className="w-3.5 h-3.5" />}
-                              Crea Guida di questo Sito
-                            </button>
-                          )}
                         </div>
-                        {createGuideError && creatingStopId == null && (
-                          <p className="text-[11.5px] text-red-600">{createGuideError}</p>
-                        )}
                         {tappe.length > 0 && (
                           <div>
                             <span className="text-[11px] font-semibold text-stone-500 block mb-1.5">Sposta in</span>
@@ -530,9 +527,7 @@ export default function BorgoTappeWidget({
           </div>
         </div>
       )}
-      {sheetData && (
-        <StopSourceSheet data={sheetData} onClose={() => setOpenStopId(null)} onOpenSiteGuide={onOpenSiteGuide} />
-      )}
+      {sheetData && <StopSourceSheet data={sheetData} onClose={() => setOpenStopId(null)} />}
     </div>
   )
 }
