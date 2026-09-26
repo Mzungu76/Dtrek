@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { X, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
 
 export interface GuideGalleryItem {
@@ -42,7 +43,17 @@ export default function GuideGalleryLightbox({ items, index, onNavigate, onClose
 
   if (!item) return null
 
-  return (
+  // Portal su document.body — verifica utente: le foto si aprivano "storte", il riquadro
+  // schiacciato in una fascia più bassa dello schermo e le frecce finite sotto la foto invece che
+  // ai lati. Causa: la Guida è montata dentro RouteHub.tsx's pannello "stage" (RoutePage), che ha
+  // sempre un transform attivo (`transform: translateY(...)`, anche a 0px una volta aperto —
+  // l'animazione di apertura della scheda) — QUALUNQUE transform su un antenato, anche a valore
+  // nullo, diventa il nuovo contenitore per ogni discendente `position: fixed` invece della vera
+  // finestra (stesso principio per SiteGuideOverlay.tsx, altro antenato `fixed` nel caso di una
+  // Guida di Sito annidata) — da cui il riquadro schiacciato nell'altezza di quel pannello. Un
+  // portal sposta il nodo DOM reale fuori da quella gerarchia, così il fixed torna relativo alla
+  // vera finestra a prescindere da quanti antenati transformati ci siano nel mezzo.
+  return createPortal(
     <div
       className="fixed inset-0 z-[95] bg-black/90 flex items-center justify-center p-4 print:hidden"
       onClick={onClose}
@@ -96,6 +107,7 @@ export default function GuideGalleryLightbox({ items, index, onNavigate, onClose
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
