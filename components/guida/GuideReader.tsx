@@ -373,8 +373,8 @@ export default function GuideReader({
   // profilo istruisce Giulia a NON scrivere più per queste tipologie (vedi SECTION_BRIEF in
   // app/api/guide/route.ts, che incorpora questi stessi titoli nell'intestazione "## ..." generata).
   const guideProfile = useMemo(
-    () => guideProfileFor(hike.metaType, siteType, borgoVariant),
-    [hike.metaType, siteType, borgoVariant],
+    () => guideProfileFor(hike.metaType, siteType, borgoVariant, !!hike.parentMetaId),
+    [hike.metaType, siteType, borgoVariant, hike.parentMetaId],
   )
 
   const displaySections = useMemo<DisplaySection[]>(() => {

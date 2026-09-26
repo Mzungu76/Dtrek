@@ -1680,22 +1680,26 @@ lib/metaTypes.ts        → MetaType, SiteType, SITE_TYPE_CONFIG (§15)
 lib/guideProfiles.ts    → profilo sito generico + override per ciascuno dei 12 SiteType (§30)
 lib/guideCardVariant.ts → scheda_pratica / galleria_sicurezza
 SitoInfoWidget, SitoGalleryWidget, PlaceDescriptionWidget
+planned_hikes.place_id  → FK reale verso dtrek_places, GIÀ presente (supabase/migrations/
+                          add_planned_hikes_place_link.sql, Blocco D) — non solo un placeId
+                          annidato nei metadati come una prima ricognizione aveva letto: il
+                          bridge lib/metaToPlannedHike.ts la valorizza già per ogni Meta creata
+                          da ricerca, `app/api/planned/route.ts` la legge/scrive già.
 ```
 
-Il nodo NON ancora risolto: `planned_hikes` (la Guida che l'utente legge) non ha una FK reale verso `dtrek_places` — solo un `placeId` annidato nei metadati. Un sito menzionato dentro la Guida di un Borgo/Città e un sito con Guida propria sono oggi due mondi senza collegamento strutturale, anche quando descrivono lo stesso luogo.
+Il nodo NON ancora risolto (fino a questo aggiornamento): `planned_hikes` non aveva modo di sapere se la Guida di un Sito fosse nata autonoma o dentro la Guida di un Borgo/Città — un sito menzionato in un itinerario e un sito con Guida propria restavano due mondi senza collegamento di *provenienza*, anche condividendo lo stesso `place_id`.
 
-## 51.2 Provenienza della Guida di un Sito
+## 51.2 Provenienza della Guida di un Sito — ✅ IMPLEMENTATO (2026-09-26)
 
-Aggiungere a `planned_hikes`:
+Aggiunto a `planned_hikes` (`supabase/migrations/add_planned_hikes_parent_meta.sql`, `lib/plannedStore.ts`, `app/api/planned/route.ts`):
 
 ```sql
-place_id       uuid null references dtrek_places(id)
-parent_meta_id uuid null references planned_hikes(id)
+parent_meta_id uuid null references planned_hikes(id) on delete set null
 ```
 
-`place_id` collega SEMPRE la Guida al suo record `dtrek_places` — entità unica, mai duplicata: descrizione/foto/orari vivono lì, non copiati nella Guida.
+`place_id` (già esistente, invariato da questo aggiornamento) collega SEMPRE la Guida al suo record `dtrek_places` — entità unica, mai duplicata: descrizione/foto/orari vivono lì, non copiati nella Guida.
 
-`parent_meta_id`:
+`parent_meta_id` (nuovo):
 
 ```text
 NULL  → Guida autonoma
@@ -1704,7 +1708,11 @@ NULL  → Guida autonoma
 
 Un Sito nasce nested quando la sua Guida viene generata dall'interno della Guida di un Borgo/Città (una tappa promossa a Guida a sé). Resta di proprietà di quella Guida — §51.4 stabilisce dove viene mostrata.
 
+Anche `guideProfileFor` (`lib/guideProfiles.ts`) accetta ora un quarto parametro `isNestedSite` che esclude `sapori`/`consigli` per una Guida nested (§52.5) — cablato in `app/api/guide/route.ts` e `components/guida/GuideReader.tsx` da `!!hike.parentMetaId`.
+
 NON duplicare `dtrek_places` quando la stessa entità è raggiunta sia come menzione interna a un itinerario sia come Guida autonoma: `place_id` resta l'unico punto di verità.
+
+**Ancora da fare** (non coperto da questo aggiornamento): l'azione utente di "promozione" che crea davvero la riga `planned_hikes` nested da una tappa (§51.3), il filtro `parentMetaId IS NULL` nella sezione "Siti" e la sezione interna nella Guida del Borgo/Città (§51.4), la persistenza della descrizione Wikipedia al momento della promozione (§51.5), il cross-link via `dtrek_place_relations` (§51.6).
 
 ## 51.3 Promozione e sganciamento
 
@@ -1786,12 +1794,14 @@ NON inventare questi dati nel frattempo: cella omessa o link, stessa regola gene
 ## 52.5 Contenuti nuovi, legati a §51 (`parent_meta_id`)
 
 ```text
-Guida nested    → richiamo "Fa parte della Guida di [Borgo/Città]" con link (§51.6)
-Guida autonoma  → nessun richiamo di provenienza; eventuale blocco "Vicino a te" (§51.6)
+Guida nested    → richiamo "Fa parte della Guida di [Borgo/Città]" con link (§51.6) — DA FARE
+Guida autonoma  → nessun richiamo di provenienza; eventuale blocco "Vicino a te" (§51.6) — DA FARE
 
 Sezioni sapori/consigli:
-  Guida nested    → escluse di default (già raccontate a livello del Borgo genitore)
-  Guida autonoma  → incluse (nessun genitore che le racconti)
+  Guida nested    → escluse di default (già raccontate a livello del Borgo genitore) — ✅ FATTO
+  Guida autonoma  → incluse (nessun genitore che le racconti)                        — ✅ FATTO
 ```
 
-Implementare questa distinzione in `guideProfileFor` come parametro aggiuntivo (oltre `siteType`/`borgoVariant`), condizionato dalla presenza di `parent_meta_id`. NON una quarta lista di sezioni parallela: resta un filtro sulle sezioni già esistenti.
+✅ La distinzione sapori/consigli è implementata: `guideProfileFor` (`lib/guideProfiles.ts`) accetta `isNestedSite` come quarto parametro, condizionato dalla presenza di `parent_meta_id` sul lato chiamante — NON una quarta lista di sezioni parallela, resta un filtro (`NESTED_SITE_EXCLUDED_SECTIONS`) sulle sezioni già esistenti. Test in `lib/__tests__/guideProfiles.test.ts` ("Sito nested (piano §52.5)").
+
+Restano DA FARE: il richiamo di provenienza/cross-link (dipende dal cross-link §51.6, non ancora costruito) e l'azione di promozione che valorizza `parentMetaId` in pratica (§51.3, non ancora costruita).

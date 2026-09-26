@@ -1011,7 +1011,7 @@ async function generateGuide(req: NextRequest): Promise<Response> {
   // a un Borgo/Città (piano guide-eccellenza §Fase 3), stesso segnale che lib/guideCardVariant.ts
   // usa lato client con in più routePolyline.
   const borgoVariant = hike.metaType === 'borgo_citta' ? borgoCardVariant({ trackPoints }) : undefined
-  const guideProfile = guideProfileFor(hike.metaType, hike.siteType, borgoVariant)
+  const guideProfile = guideProfileFor(hike.metaType, hike.siteType, borgoVariant, !!hike.parentMetaId)
   sectionKeys = sectionKeys.filter(k => k === 'verificato' || guideProfile.availableSections.includes(k))
   if (sectionKeys.length === 0) {
     return new Response(JSON.stringify({ error: 'Nessuna sezione da generare per questa tipologia di Meta' }), {
