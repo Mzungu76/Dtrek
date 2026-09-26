@@ -59,13 +59,19 @@
  * candidato resta sempre l'attribuzione minima richiesta ovunque il testo venga mostrato.
  *
  * Usage:
- *   npx tsx scripts/places/mic/fetch.ts [--dry-run] [--region Lazio] [--limit 5000]
+ *   npx tsx scripts/places/mic/fetch.ts [--dry-run] [--source cis|heritage|all] [--region Lazio] [--limit 5000]
  *   npx tsx scripts/places/mic/fetch.ts --describe   (diagnostica, vedi runDescribe più sotto —
  *     dump di un CulturalInstituteOrSite ARBITRARIO)
  *   npx tsx scripts/places/mic/fetch.ts --describe --name "Museo X"   (stessa diagnostica, ma sul
  *     primo record il cui rdfs:label contiene questo testo — per verificare cosa ArCo porta
  *     davvero per UNA Meta specifica, es. per capire se orari/foto/contatti esistono da qualche
  *     parte oltre ai campi già importati)
+ *
+ * --source (default "cis"): "cis" interroga solo cis:CulturalInstituteOrSite (il registro
+ *   "Istituti e Luoghi della Cultura", comportamento invariato rispetto a prima). "heritage"
+ *   interroga solo arco:ArchitecturalOrLandscapeHeritage (Catalogo Generale ICCD — vedi il
+ *   commento sopra buildHeritageQuery per cosa aggiunge e cosa NON può aggiungere, es. mai una
+ *   piazza pubblica). "all" interroga entrambe le classi e unisce i candidati in un solo import.
  *
  * --limit sovrascrive la LIMIT SPARQL (default 5000) — usare un valore piccolo (5-20) per il primo
  * lancio contro l'endpoint reale, dato il punto non verificato sulle coordinate in cima al file:
@@ -562,6 +568,175 @@ export function hasCoordinates(b: MicBinding): b is MicBinding & { lat: number; 
   return b.lat !== undefined && b.lon !== undefined
 }
 
+// ── ICCD Catalogo Generale dei Beni Culturali (arco:ArchitecturalOrLandscapeHeritage) ───────────
+// Verificato dal vivo (2026-09-26, query manuali via Termux contro l'endpoint reale — non
+// un'ipotesi dedotta dalla documentazione, stesso principio del resto del file). Stesso endpoint
+// SPARQL di cis:CulturalInstituteOrSite sopra, ma un grafo ArCo diverso ("Catalogo Generale" ICCD,
+// non il registro "Istituti e Luoghi della Cultura"): contiene beni assenti dal registro Istituti —
+// verificato sul caso reale della Basilica di Sant'Antonio a Padova (0 risultati per
+// "Sant'Antonio"+"Padova" in cis:CulturalInstituteOrSite, 1 risultato reale in questa classe, con
+// indirizzo vero "Piazza del Santo 11" e coordinate dirette 45.401121/11.881033 — a ~950m dal
+// centro di Padova usato oggi da dtrek_places, plausibile per la posizione reale della Basilica).
+//
+// Nota — limite categoriale, non di questa query: una piazza pubblica (verificato con "Prato
+// della Valle", 0 risultati in QUALSIASI classe di questo grafo) non esiste mai qui. Il Ministero
+// cataloga beni culturali, non spazi pubblici comunali — questa fonte aggiunge chiese/palazzi/
+// monumenti mancanti dal registro Istituti, mai piazze/vie.
+//
+// Predicati verificati uno per uno con dump reali (mai dedotti dalla sola documentazione):
+//   arco:ArchitecturalOrLandscapeHeritage --rdfs:label--> nome (spesso "Nome (tipologia) -
+//     Comune (PR)") --dc:type--> tipologia testuale grezza (es. "giardino" per un chiostro
+//     annesso — usata solo come metadato: la classificazione SiteType riusa
+//     micTypeLabelToSiteType sul NOME INTERO, che intercetta "basilica"/"chiesa"/ecc. anche
+//     quando dc:type descrive solo una componente del complesso) --dcterms:spatial--> Address
+//     (rdfs:label = indirizzo completo "ITALIA, Regione, PR, Comune, LOCALITA, Via n";
+//     clvapit:fullAddress = solo "Via n") --foaf:depiction--> URL immagine (può ripetersi)
+//     --clvapit:hasGeometry--> più Geometry (un'area/poligono E quasi sempre anche un punto) —
+//     quella con clvapit:hasGeometryType = clvapit:Point porta coordinate DIRETTE via un salto
+//     verso un nodo Coordinates (predicato del salto lasciato come variabile in query — verificato
+//     bastare un'unica coppia per la geometria punto) con predicati loc:lat/loc:long (verificati,
+//     namespace https://w3id.org/arco/ontology/location/ — DIVERSO da geo:lat/geo:long usato nel
+//     registro Istituti sopra: stesso Ministero, vocabolario diverso per questo grafo).
+//
+// A differenza del registro Istituti (dove le coordinate dirette spesso mancano, vedi
+// geocodeAddress sopra per Lombardia/Toscana), qui la geometria punto porta SEMPRE coordinate
+// dirette quando la query la trova — NESSUNA geocodifica di ripiego per questa fonte. Un bene con
+// solo la geometria "area" (poligono) e nessuna variante punto viene escluso dal JOIN richiesto
+// sotto — mai una coordinata approssimata/inventata al posto di quella mancante.
+//
+// Verificato SOLO su un campione minimo (1 comune, 1 record end-to-end) — non ancora un
+// --dry-run su scala regionale/nazionale: la stessa cautela già applicata al registro Istituti si
+// applica qui, un limite piccolo prima di alzarlo.
+const ARCHITECTURAL_HERITAGE_CLASS = 'https://w3id.org/arco/ontology/arco/ArchitecturalOrLandscapeHeritage'
+
+export interface HeritageBinding {
+  id: string
+  name: string
+  dcType?: string
+  addressLabel?: string
+  fullAddress?: string
+  depiction?: string
+  lat: number
+  long: number
+}
+
+// Pura, testabile senza rete. Formato verificato su UN solo esempio reale (Padova: "ITALIA,
+// Veneto, PD, Padova, PADOVA, Piazza del Santo 11") — non è detto regga su tutto il catalogo
+// nazionale. Se una riga ha un numero di componenti diverso, region/municipality restano
+// undefined invece di un valore indovinato da un parsing fragile: mai un dato inventato.
+export function parseHeritageAddressLabel(label: string | undefined): { region?: string; municipality?: string } {
+  if (!label) return {}
+  const parts = label.split(',').map(p => p.trim())
+  if (parts.length < 4) return {}
+  return { region: parts[1] || undefined, municipality: parts[3] || undefined }
+}
+
+// Pura, testabile senza rete.
+export function heritageBindingToPlaceCandidate(b: HeritageBinding): PlaceCandidate {
+  const { region, municipality } = parseHeritageAddressLabel(b.addressLabel)
+  const sourceUrl = `https://catalogo.beniculturali.it/detail/ArchitecturalOrLandscapeHeritage/${b.id}`
+  return {
+    name: b.name,
+    metaType: 'sito',
+    // Il nome completo ("Basilica di Sant'Antonio...") è un segnale più affidabile di dc:type
+    // (spesso solo la componente catalogata, es. "giardino" per un chiostro annesso alla stessa
+    // Basilica) — stessa funzione a sottostringa già usata per il registro Istituti sopra.
+    subtype: micTypeLabelToSiteType(b.name),
+    latitude: b.lat,
+    longitude: b.long,
+    region,
+    municipality,
+    address: b.fullAddress,
+    imageUrl: b.depiction,
+    source: 'mic_iccd',
+    sourceId: b.id,
+    sourceUrl,
+    rawType: b.dcType,
+    // Più bassa di 'mic' (0.9): qui la classificazione SiteType è euristica sul nome intero, non
+    // su un campo tipo strutturato dedicato — stesso sconto già applicato altrove nel file per
+    // classificazioni non strutturate.
+    confidence: 0.75,
+    metadata: { iccdDcType: b.dcType },
+  }
+}
+
+function buildHeritageQuery(regionLabel?: string, limit = 5000): string {
+  const candidatePool = Math.min(CANDIDATE_POOL_CAP, Math.max(limit * 4, 50))
+  // CONTAINS su un letterale raggiunto da un JOIN richiesto (mai OPTIONAL) — verificato dal vivo
+  // più volte in questa sessione (query "Query B", "Prato della Valle", "basilica+antonio", tutte
+  // senza restrizione di classe) senza il rifiuto del pianificatore visto invece per il registro
+  // Istituti: quel rifiuto (mic/README.md, round 3) scattava con OPTIONAL concatenati PRIMA del
+  // filtro, non per il solo CONTAINS — qui ?addressLabel arriva da un JOIN diretto, non da un
+  // OPTIONAL. Case-sensitive di proposito (una volta rimosso LCASE non serve testarlo): il
+  // letterale osservato usa "Veneto" con l'iniziale maiuscola, stessa capitalizzazione richiesta
+  // dal fix round 3 del registro Istituti.
+  const regionFilter = regionLabel
+    ? `FILTER(CONTAINS(?addressLabel, "${regionLabel.replace(/"/g, '')}"))`
+    : ''
+
+  return `
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX dc: <http://purl.org/dc/elements/1.1/>
+PREFIX dcterms: <http://purl.org/dc/terms/>
+PREFIX clvapit: <https://w3id.org/italia/onto/CLV/>
+PREFIX loc: <https://w3id.org/arco/ontology/location/>
+PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+
+SELECT DISTINCT ?heritage ?name ?dcType ?addressLabel ?fullAddress ?depiction ?lat ?long WHERE {
+  {
+    SELECT DISTINCT ?heritage ?name ?addressLabel ?lat ?long WHERE {
+      ?heritage a <${ARCHITECTURAL_HERITAGE_CLASS}> ;
+                rdfs:label ?name ;
+                dcterms:spatial ?addr ;
+                clvapit:hasGeometry ?geom .
+      ?addr rdfs:label ?addressLabel .
+      ?geom clvapit:hasGeometryType clvapit:Point .
+      ?geom ?hasCoordPred ?coord .
+      ?coord loc:lat ?lat ; loc:long ?long .
+      ${regionFilter}
+    }
+    LIMIT ${candidatePool}
+  }
+  OPTIONAL { ?heritage dcterms:spatial ?addr2 . ?addr2 clvapit:fullAddress ?fullAddress . }
+  OPTIONAL { ?heritage dc:type ?dcType . }
+  OPTIONAL { ?heritage foaf:depiction ?depiction . }
+}
+LIMIT ${limit}`
+}
+
+async function queryHeritageSparql(query: string): Promise<HeritageBinding[]> {
+  const data = await fetchSparqlJson(query) as { results: { bindings: Record<string, { value: string }>[] } }
+  const seen = new Set<string>()
+  const out: HeritageBinding[] = []
+  for (const row of data.results.bindings) {
+    const iri = row.heritage?.value
+    if (!iri) continue
+    const id = iri.split('/').pop()
+    if (!id) continue
+    const lat = row.lat ? parseFloat(row.lat.value) : NaN
+    const long = row.long ? parseFloat(row.long.value) : NaN
+    if (Number.isNaN(lat) || Number.isNaN(long)) continue
+    // SELECT DISTINCT da solo non basta a evitare duplicati esatti quando un OPTIONAL
+    // multi-valore (foaf:depiction) si combina con più di un cammino verso le stesse coordinate
+    // (osservato dal vivo: la stessa riga arriva 2 volte per ogni immagine) — dedup qui su
+    // id+depiction, tiene comunque tutte le immagini distinte come candidati separati a valle.
+    const dedupKey = `${id}|${row.depiction?.value ?? ''}`
+    if (seen.has(dedupKey)) continue
+    seen.add(dedupKey)
+    out.push({
+      id,
+      name: row.name?.value?.trim() || 'Bene architettonico o paesaggistico',
+      dcType: row.dcType?.value,
+      addressLabel: row.addressLabel?.value,
+      fullAddress: row.fullAddress?.value,
+      depiction: row.depiction?.value,
+      lat,
+      long,
+    })
+  }
+  return out
+}
+
 // ── "Tutta Italia": query per-regione, mai una query unica non filtrata ────────────────────────
 // FIX (2026-09-17, quinto round — bug segnalato dal vivo: dopo il fix del round 4, "Regione: tutta
 // Italia, Limit: 10000" non dava più 0 risultati silenziosi ma un `MiC SPARQL 500` dopo tutti i
@@ -744,24 +919,45 @@ async function main() {
   }
 
   const DRY_RUN = process.argv.includes('--dry-run')
+  const sourceIdx = process.argv.indexOf('--source')
+  const source = sourceIdx !== -1 ? process.argv[sourceIdx + 1] : 'cis'
+  if (!['cis', 'heritage', 'all'].includes(source)) {
+    console.error(`--source deve essere "cis", "heritage" o "all" (ricevuto: "${source}")`)
+    process.exit(1)
+  }
   const regionIdx = process.argv.indexOf('--region')
-  const region = regionIdx !== -1 ? process.argv[regionIdx + 1] : 'Lazio'
+  // Nessun default regione per 'heritage' da solo: a differenza del registro Istituti (dove
+  // "nessuna regione" ha un percorso dedicato via fetchAllRegions), la classe ArCo qui non ha
+  // ancora un equivalente "tutta Italia" verificato — un limite alto senza filtro regione resta
+  // comunque valido (interroga l'intero pool fino a `limit`), solo più lento su scala nazionale.
+  const region = regionIdx !== -1 ? process.argv[regionIdx + 1] : (source === 'heritage' ? undefined : 'Lazio')
   const limitIdx = process.argv.indexOf('--limit')
   const limit = limitIdx !== -1 ? parseInt(process.argv[limitIdx + 1], 10) : 5000
 
-  console.log(`Interrogo ${SPARQL_ENDPOINT} (regione: ${region || 'tutte'}, limit ${limit})…`)
-  const bindings = region
-    ? await querySparql(buildSparqlQuery(region, limit))
-    : await fetchAllRegions(limit)
-  console.log(`${bindings.length} risultati (con o senza coordinate dirette).`)
-  await fillMissingCoordinates(bindings)
-  const geocodable = bindings.filter(hasCoordinates)
-  console.log(`${geocodable.length} risultati con coordinate valide (dirette o geocodificate).`)
-  const candidates = geocodable.map(micBindingToPlaceCandidate)
+  const candidates: PlaceCandidate[] = []
+
+  if (source === 'cis' || source === 'all') {
+    console.log(`Interrogo ${SPARQL_ENDPOINT} [cis:CulturalInstituteOrSite] (regione: ${region || 'tutte'}, limit ${limit})…`)
+    const bindings = region
+      ? await querySparql(buildSparqlQuery(region, limit))
+      : await fetchAllRegions(limit)
+    console.log(`${bindings.length} risultati (con o senza coordinate dirette).`)
+    await fillMissingCoordinates(bindings)
+    const geocodable = bindings.filter(hasCoordinates)
+    console.log(`${geocodable.length} risultati con coordinate valide (dirette o geocodificate).`)
+    candidates.push(...geocodable.map(micBindingToPlaceCandidate))
+  }
+
+  if (source === 'heritage' || source === 'all') {
+    console.log(`Interrogo ${SPARQL_ENDPOINT} [arco:ArchitecturalOrLandscapeHeritage] (regione: ${region || 'tutta Italia'}, limit ${limit})…`)
+    const heritageBindings = await queryHeritageSparql(buildHeritageQuery(region, limit))
+    console.log(`${heritageBindings.length} risultati con coordinate dirette (nessuna geocodifica necessaria per questa fonte).`)
+    candidates.push(...heritageBindings.map(heritageBindingToPlaceCandidate))
+  }
 
   if (DRY_RUN) {
     console.log('[DRY RUN] Esempio candidato:', JSON.stringify(candidates[0], null, 2))
-    console.log(`[DRY RUN] ${candidates.length} candidati pronti, nessuna scrittura.`)
+    console.log(`[DRY RUN] ${candidates.length} candidati totali pronti, nessuna scrittura.`)
     return
   }
 

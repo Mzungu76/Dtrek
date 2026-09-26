@@ -29,6 +29,15 @@ on:
           - dry-run
           - write
         default: dry-run
+      source:
+        description: "cis: registro Istituti e Luoghi della Cultura (comportamento invariato). heritage: Catalogo Generale ICCD (arco:ArchitecturalOrLandscapeHeritage — verificato 2026-09-26, vedi README 'Catalogo Generale ICCD'). all: entrambe. Non usato in modalità describe/probe."
+        required: false
+        type: choice
+        options:
+          - cis
+          - heritage
+          - all
+        default: cis
       all_italy:
         description: "Tutta Italia (ignora il campo Regione sotto, nessun filtro SPARQL). Il campo di testo di GitHub Actions arriva precompilato col default — svuotarlo non basta ad affidabilità, verificato dal vivo: usare questa checkbox invece di fidarsi del campo vuoto."
         required: false
@@ -67,6 +76,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       MODE: ${{ inputs.mode }}
+      SOURCE: ${{ inputs.source }}
       ALL_ITALY: ${{ inputs.all_italy }}
       REGION: ${{ inputs.region }}
       LIMIT: ${{ inputs.limit }}
@@ -120,9 +130,10 @@ jobs:
           set -euo pipefail
           EFFECTIVE_REGION="$REGION"
           if [ "$ALL_ITALY" = "true" ]; then EFFECTIVE_REGION=""; fi
-          npx tsx scripts/places/mic/fetch.ts --dry-run --region "$EFFECTIVE_REGION" --limit "$LIMIT" | tee /tmp/mic-dryrun.txt
+          npx tsx scripts/places/mic/fetch.ts --dry-run --source "$SOURCE" --region "$EFFECTIVE_REGION" --limit "$LIMIT" | tee /tmp/mic-dryrun.txt
           {
             echo "### Import Places — MiC (dry-run)"
+            echo "- Fonte: $SOURCE"
             echo "- Regione: ${EFFECTIVE_REGION:-tutta Italia}"
             echo "- Limit: $LIMIT"
             echo '```json'
@@ -145,9 +156,10 @@ jobs:
           fi
           EFFECTIVE_REGION="$REGION"
           if [ "$ALL_ITALY" = "true" ]; then EFFECTIVE_REGION=""; fi
-          npx tsx scripts/places/mic/fetch.ts --region "$EFFECTIVE_REGION" --limit "$LIMIT" | tee /tmp/mic-write.txt
+          npx tsx scripts/places/mic/fetch.ts --source "$SOURCE" --region "$EFFECTIVE_REGION" --limit "$LIMIT" | tee /tmp/mic-write.txt
           {
             echo "### Import Places — MiC (write)"
+            echo "- Fonte: $SOURCE"
             echo "- Regione: ${EFFECTIVE_REGION:-tutta Italia}"
             echo "- Limit: $LIMIT"
             echo '```json'
