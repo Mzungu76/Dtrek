@@ -1694,8 +1694,10 @@ Il nodo NON ancora risolto (fino a questo aggiornamento): `planned_hikes` non av
 Aggiunto a `planned_hikes` (`supabase/migrations/add_planned_hikes_parent_meta.sql`, `lib/plannedStore.ts`, `app/api/planned/route.ts`):
 
 ```sql
-parent_meta_id uuid null references planned_hikes(id) on delete set null
+parent_meta_id text null references planned_hikes(id) on delete set null
 ```
+
+`text`, non `uuid`: `planned_hikes.id` è `TEXT` (a differenza di `dtrek_places.id`, che è `UUID`) — vedi la `CREATE TABLE` in `supabase-schema.sql`.
 
 `place_id` (già esistente, invariato da questo aggiornamento) collega SEMPRE la Guida al suo record `dtrek_places` — entità unica, mai duplicata: descrizione/foto/orari vivono lì, non copiati nella Guida.
 

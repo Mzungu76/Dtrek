@@ -17,7 +17,8 @@
 -- Stesso blocco anche in supabase-schema.sql.
 -- ═══════════════════════════════════════════════════════════
 
-ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS parent_meta_id UUID REFERENCES planned_hikes(id) ON DELETE SET NULL;
+-- planned_hikes.id è TEXT (non UUID come dtrek_places.id) — vedi CREATE TABLE in supabase-schema.sql.
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS parent_meta_id TEXT REFERENCES planned_hikes(id) ON DELETE SET NULL;
 
 CREATE INDEX IF NOT EXISTS idx_planned_hikes_parent_meta_id ON planned_hikes (parent_meta_id);
 

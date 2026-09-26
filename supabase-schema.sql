@@ -1285,7 +1285,8 @@ CREATE INDEX IF NOT EXISTS idx_planned_hikes_place_id ON planned_hikes (place_id
 -- Piano mete multi-tipologia §51.2 — vedi supabase/migrations/add_planned_hikes_parent_meta.sql
 -- per i commenti completi. Provenienza della Guida di un Sito: NULL = autonoma, altrimenti la
 -- Guida Borgo/Città da cui è nata (tappa promossa a Guida a sé). Self-FK, ON DELETE SET NULL.
-ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS parent_meta_id UUID REFERENCES planned_hikes(id) ON DELETE SET NULL;
+-- TEXT (non UUID): planned_hikes.id è TEXT, vedi CREATE TABLE più sopra.
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS parent_meta_id TEXT REFERENCES planned_hikes(id) ON DELETE SET NULL;
 
 CREATE INDEX IF NOT EXISTS idx_planned_hikes_parent_meta_id ON planned_hikes (parent_meta_id);
 
