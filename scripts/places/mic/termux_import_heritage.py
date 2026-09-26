@@ -12,10 +12,18 @@ Uso:
   export SUPABASE_SERVICE_ROLE_KEY=...   # dalla Dashboard Supabase, MAI condivisa con Claude
   python termux_import_heritage.py --region Veneto --limit 5 --dry-run
   python termux_import_heritage.py --region Veneto --limit 5   # scrittura vera
+  python termux_import_heritage.py --all-regions --limit 2000  # tutta Italia, una regione alla volta
 
 --region va scritta con la stessa capitalizzazione usata da ArCo (es. "Veneto"), come nello
-script TypeScript originale. Senza --region interroga senza filtro (piu' lento, valido comunque
-entro --limit).
+script TypeScript originale. Senza --region ne' --all-regions interroga senza filtro (piu' lento,
+un blocco arbitrario di risultati entro --limit, non rappresentativo su scala nazionale).
+
+--all-regions itera sulle 20 regioni italiane (stessa whitelist di ITALIAN_REGIONS in fetch.ts,
+un'enumerazione fissa e nota, non dedotta dal grafo) invece di una singola query nazionale non
+filtrata — stesso principio gia' applicato a fetchAllRegions() per la fonte 'cis' in fetch.ts: una
+query non filtrata su un catalogo con copertura non uniforme rischierebbe di restituire risultati
+tutti concentrati in una parte arbitraria del catalogo. Un errore su una singola regione (timeout,
+hiccup di rete) non interrompe le regioni restanti.
 """
 import argparse
 import json
@@ -31,6 +39,17 @@ SPARQL_ENDPOINT = "https://dati.cultura.gov.it/sparql"
 USER_AGENT = "DTrek/1.0 (places catalog batch import; mzulpt@gmail.com)"
 ARCHITECTURAL_HERITAGE_CLASS = "https://w3id.org/arco/ontology/arco/ArchitecturalOrLandscapeHeritage"
 CANDIDATE_POOL_CAP = 2000
+
+# Le 20 regioni italiane, enumerazione fissa e nota (non dedotta dal grafo) — stessa whitelist
+# ITALIAN_REGIONS usata da fetchAllRegions() in fetch.ts per la fonte 'cis', qui riusata per
+# --all-regions cosi' "tutta Italia" interroga una regione alla volta invece di un'unica query
+# nazionale non filtrata (che restituirebbe un blocco arbitrario di risultati, non rappresentativo).
+ITALIAN_REGIONS = [
+    "Abruzzo", "Basilicata", "Calabria", "Campania", "Emilia-Romagna",
+    "Friuli-Venezia Giulia", "Lazio", "Liguria", "Lombardia", "Marche",
+    "Molise", "Piemonte", "Puglia", "Sardegna", "Sicilia", "Toscana",
+    "Trentino-Alto Adige", "Umbria", "Valle d'Aosta", "Veneto",
+]
 
 MIC_TYPE_MAP = [
     ("area archeologic", "sito_archeologico"), ("scavi", "sito_archeologico"),
@@ -468,33 +487,86 @@ def import_place_candidates(db, candidates):
     return stats
 
 
+def fetch_candidates(region, limit):
+    bindings = query_heritage_sparql(build_heritage_query(region, limit))
+    return [heritage_binding_to_candidate(b) for b in bindings]
+
+
+EMPTY_STATS = {
+    "processed": 0, "linked_to_existing": 0, "refreshed_existing": 0,
+    "created_new": 0, "flagged_for_review": 0, "skipped_invalid_coordinates": 0,
+    "errors": [],
+}
+
+
+def merge_stats(total, part):
+    for key in EMPTY_STATS:
+        if key == "errors":
+            total["errors"].extend(part["errors"])
+        else:
+            total[key] += part[key]
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--region", default=None)
+    parser.add_argument("--all-regions", action="store_true",
+                         help="Itera sulle 20 regioni italiane invece di una singola query (nazionale o su --region).")
     parser.add_argument("--limit", type=int, default=20)
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
-    print(f"Interrogo {SPARQL_ENDPOINT} [arco:ArchitecturalOrLandscapeHeritage] "
-          f"(regione: {args.region or 'tutta Italia'}, limit {args.limit})…")
-    bindings = query_heritage_sparql(build_heritage_query(args.region, args.limit))
-    print(f"{len(bindings)} risultati con coordinate dirette.")
-    candidates = [heritage_binding_to_candidate(b) for b in bindings]
-
-    if args.dry_run:
-        print("[DRY RUN] Esempio candidato:", json.dumps(candidates[0] if candidates else None, indent=2, ensure_ascii=False))
-        print(f"[DRY RUN] {len(candidates)} candidati totali pronti, nessuna scrittura.")
-        return
+    if args.all_regions and args.region:
+        print("--all-regions e --region sono alternativi, non usarli insieme.", file=sys.stderr)
+        sys.exit(1)
 
     supabase_url = os.environ.get("SUPABASE_URL")
     service_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
-    if not supabase_url or not service_key:
+    if not args.dry_run and (not supabase_url or not service_key):
         print("Imposta SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY come variabili d'ambiente, oppure usa --dry-run.", file=sys.stderr)
         sys.exit(1)
+    db = None if args.dry_run else SupabaseRest(supabase_url, service_key)
 
-    db = SupabaseRest(supabase_url, service_key)
-    stats = import_place_candidates(db, candidates)
-    print(json.dumps(stats, indent=2, ensure_ascii=False))
+    if not args.all_regions:
+        print(f"Interrogo {SPARQL_ENDPOINT} [arco:ArchitecturalOrLandscapeHeritage] "
+              f"(regione: {args.region or 'tutta Italia (nessun filtro)'}, limit {args.limit})…")
+        candidates = fetch_candidates(args.region, args.limit)
+        print(f"{len(candidates)} risultati con coordinate dirette.")
+
+        if args.dry_run:
+            print("[DRY RUN] Esempio candidato:", json.dumps(candidates[0] if candidates else None, indent=2, ensure_ascii=False))
+            print(f"[DRY RUN] {len(candidates)} candidati totali pronti, nessuna scrittura.")
+            return
+
+        stats = import_place_candidates(db, candidates)
+        print(json.dumps(stats, indent=2, ensure_ascii=False))
+        return
+
+    print(f"--all-regions: interrogo {len(ITALIAN_REGIONS)} regioni, limit {args.limit} ciascuna…")
+    total_stats = dict(EMPTY_STATS, errors=[])
+    total_candidates = 0
+    for i, region in enumerate(ITALIAN_REGIONS):
+        try:
+            candidates = fetch_candidates(region, args.limit)
+        except Exception as e:  # noqa: BLE001 — un problema su una regione non deve fermare le altre
+            print(f"  {region}: saltata — {e}")
+            continue
+        total_candidates += len(candidates)
+        if args.dry_run:
+            print(f"  {region}: {len(candidates)} candidati.")
+        else:
+            stats = import_place_candidates(db, candidates)
+            merge_stats(total_stats, stats)
+            print(f"  {region}: {len(candidates)} candidati — "
+                  f"nuovi {stats['created_new']}, collegati {stats['linked_to_existing']}, "
+                  f"errori {len(stats['errors'])}.")
+        if i < len(ITALIAN_REGIONS) - 1:
+            time.sleep(2)  # cortesia verso un endpoint pubblico condiviso, non dedicato a questo script
+
+    if args.dry_run:
+        print(f"[DRY RUN] {total_candidates} candidati totali su tutta Italia, nessuna scrittura.")
+    else:
+        print(json.dumps(total_stats, indent=2, ensure_ascii=False))
 
 
 if __name__ == "__main__":
