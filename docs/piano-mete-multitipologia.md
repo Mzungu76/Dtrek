@@ -1744,6 +1744,25 @@ Correzione rispetto alla prima stesura di questa sezione: non basta escludere un
 
 `BorgoTappeWidget.tsx` riceve lo stesso elenco di Guide figlie (un solo fetch, condiviso con `NestedSiteGuidesWidget`) per riconoscere, tappa per tappa, quali hanno già una Guida propria: quella tappa mostra un link "Guida creata" invece del bottone di creazione, mai un doppione.
 
+### 51.4.1 Apertura — overlay, non navigazione (2026-09-27) — ✅ IMPLEMENTATO
+
+Bug osservato con l'apertura via `router.push('/guida/[id]')`: `GuidaHub`/`RouteHub` pescano SEMPRE la Guida da mostrare dallo stesso array filtrato per l'elenco generale (§51.4 sopra) — una Guida nested, esclusa da quell'array, apriva quindi una Guida SBAGLIATA (`displayItems.find(...) ?? displayItems[0]`, fallback sul primo elemento). Corretto una volta (item aperto sempre esente dal filtro), ma il difetto architetturale resta: lista sfogliabile e Guida aperta condividono lo stesso array.
+
+Sostituito con un overlay (mockup comparativo A/B/C, verifica utente 2026-09-27 — opzione B scelta): `components/guida/SiteGuideOverlay.tsx`, montato da `GuideReader.tsx` (stato `openSiteGuideId`, mai una navigazione) e aperto sia da `BorgoTappeWidget.tsx` (badge "Guida creata", e subito dopo la promozione tramite `lib/useCreateSiteGuideFromStop.ts`, che non fa più `router.push`) sia da `NestedSiteGuidesWidget.tsx`. Due stadi:
+
+```text
+Foglio compatto (default) → anteprima con dati reali: foto, SitoInfoWidget (orari/biglietti),
+  PlaceDescriptionWidget (descrizione) — chiuderlo torna ESATTAMENTE al Borgo, mai una route
+
+Guida completa (su "Apri come Guida completa") → il VERO GuideReader (stesso componente di
+  /guida/[id]), montato qui a schermo intero SENZA cambiare route — nessuna dipendenza
+  dall'array lista/dettaglio che ha causato il bug, perché non c'è nessuna lista coinvolta
+```
+
+`GuideReader` richiede solo `hike`/`onHikeUpdate`/`enrichmentReady`/`hasAiAccess`/`aiUnavailable`/`trialExpired` per funzionare (verificato sulla sua interface) — CTS/Safety/DTM/distanza in auto sono tutti opzionali e comunque non pertinenti per un Sito. `enrichmentReady` = `hike.metaType !== 'sentiero'` (sempre vero per un Sito appena caricato, stessa formula di `GuidaHub.tsx`), `hasAiAccess`/`aiUnavailable`/`trialExpired` da `useHasAiAccess()` (già cachato per sessione, sicuro da richiamare in un componente in più). Nessuna replica dell'orchestrazione completa di `GuidaHub` (che porterebbe con sé l'intera lista sfogliabile — esattamente ciò che l'overlay evita).
+
+La route `/guida/[id]` resta comunque funzionante per ogni Guida (nested inclusa, deep link diretto) — l'overlay è il percorso preferito da dentro un Borgo, non l'unico.
+
 ## 51.5 Cache della descrizione
 
 Il momento in cui una menzione diventa Guida (nested o autonoma, §51.2/51.3) è il punto naturale per persistere in `dtrek_places.description` l'estratto Wikipedia oggi recuperato live a ogni apertura (`lib/wikipedia.ts`, `lib/guideBorgoDetailStops.ts`). NON ricalcolarlo più a ogni lettura una volta che il Sito ha una Guida propria.

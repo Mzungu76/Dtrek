@@ -1,5 +1,4 @@
 import dynamic from 'next/dynamic'
-import Link from 'next/link'
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { ChevronRight, Settings2, EyeOff, Eye, Loader2, ArrowRight, BookOpen, CheckCircle2 } from 'lucide-react'
 import { SITE_TYPE_CONFIG } from '@/lib/metaTypes'
@@ -50,6 +49,10 @@ interface Props {
    *  tappa per tappa (via placeId), quali hanno già una Guida propria: quella tappa mostra un
    *  link "Vai alla Guida" invece del bottone di creazione, mai un doppione. */
   existingSiteGuides: PlannedHikeMeta[]
+  /** Apre la Guida di un Sito nell'overlay (piano §51.4, opzione B) — mai una navigazione, la
+   *  Guida del Borgo resta montata sotto. Usato sia dal badge "Guida creata" sia, tramite
+   *  useCreateSiteGuideFromStop, subito dopo la promozione di una tappa. */
+  onOpenSiteGuide: (siteId: string) => void
   /** Persistenza "leggera" (slider/spegnimento) — mai bloccante, stesso pattern già usato per
    *  borgoWalkPolyline in GuideReader: aggiorna lo stato locale della Meta e accoda la
    *  sincronizzazione in background, nessun round-trip sincrono con l'utente in attesa. */
@@ -145,7 +148,7 @@ const DAY_BUDGET_OPTIONS = [
 
 export default function BorgoTappeWidget({
   stops, legs, center, maxStopsPerTappa, maxMinutesPerTappa, serverTappe, color,
-  savedOverrides, savedDayBudgetMinutes, placeId, hikeId, existingSiteGuides, onOverridesSaved, onDayBudgetSaved,
+  savedOverrides, savedDayBudgetMinutes, placeId, hikeId, existingSiteGuides, onOpenSiteGuide, onOverridesSaved, onDayBudgetSaved,
 }: Props) {
   // placeId della tappa → Guida già creata per essa (piano §51.3) — placeId, non l'id della tappa
   // stessa: una tappa 'archivio' ha stop.id === il suo dtrek_places.id (vedi
@@ -172,7 +175,7 @@ export default function BorgoTappeWidget({
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Promozione di una tappa a Guida propria, annidata in questa (piano §51.3) — un solo hook
   // condiviso da tutte le righe: solo una tappa alla volta può essere in creazione.
-  const { creatingStopId, createError: createGuideError, createAndOpen: createSiteGuide } = useCreateSiteGuideFromStop(hikeId)
+  const { creatingStopId, createError: createGuideError, createAndOpen: createSiteGuide } = useCreateSiteGuideFromStop(hikeId, onOpenSiteGuide)
 
   const hasPins = overridesHavePins(overrides)
   const budgetDirty = dayBudgetMinutes !== confirmedDayBudgetMinutes
@@ -391,14 +394,16 @@ export default function BorgoTappeWidget({
                     )}
                     {/* Evidenzia subito, senza dover espandere il pannello, quale tappa ha già una
                         Guida propria (piano §52.5 "evidenzia meglio", verifica utente 2026-09-26)
-                        — link diretto, mai il bottone di creazione per una tappa già promossa. */}
+                        — apre l'overlay (piano §51.4, opzione B), mai una navigazione, mai il
+                        bottone di creazione per una tappa già promossa. */}
                     {stop.source === 'archivio' && siteGuideByPlaceId.has(stop.id) && (
-                      <Link
-                        href={`/guida/${encodeURIComponent(siteGuideByPlaceId.get(stop.id)!.id)}`}
+                      <button
+                        type="button"
+                        onClick={() => onOpenSiteGuide(siteGuideByPlaceId.get(stop.id)!.id)}
                         className="inline-flex items-center gap-1 mt-1 w-fit text-[11.5px] font-semibold text-terra-700 bg-terra-100 rounded-full px-2 py-0.5 hover:bg-terra-200 transition-colors"
                       >
                         <CheckCircle2 className="w-3 h-3" /> Guida creata
-                      </Link>
+                      </button>
                     )}
                     <div className="flex items-center gap-3 mt-1 flex-wrap">
                       {/* Leggi tutto/Fonte convergono nella stessa pagina di lettura in-app

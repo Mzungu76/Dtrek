@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { savePlanned } from './plannedStore'
 import { itineraryStopToNestedSitePlannedHike } from './metaToPlannedHike'
 import type { ItineraryStop } from '@/app/api/borgo-itinerary/route'
@@ -11,9 +10,12 @@ import type { ItineraryStop } from '@/app/api/borgo-itinerary/route'
  * Solo `stop.source === 'archivio'` è promuovibile (vedi itineraryStopToNestedSitePlannedHike);
  * il chiamante nasconde il bottone per una tappa `wikipedia`, qui la chiamata è comunque
  * un no-op per sicurezza.
+ *
+ * NON naviga più (piano §51.4, opzione B — verifica utente 2026-09-27): la nuova Guida si apre
+ * nell'overlay (SiteGuideOverlay) sopra questa stessa Guida di Borgo, mai in una pagina separata
+ * — `onCreated` (l'id della nuova Guida) è responsabilità del chiamante, non di questo hook.
  */
-export function useCreateSiteGuideFromStop(parentMetaId: string) {
-  const router = useRouter()
+export function useCreateSiteGuideFromStop(parentMetaId: string, onCreated: (siteId: string) => void) {
   const [creatingStopId, setCreatingStopId] = useState<string | null>(null)
   const [createError, setCreateError] = useState<string | null>(null)
 
@@ -24,7 +26,8 @@ export function useCreateSiteGuideFromStop(parentMetaId: string) {
     try {
       const hike = itineraryStopToNestedSitePlannedHike(stop, parentMetaId)
       await savePlanned(hike)
-      router.push(`/guida/${encodeURIComponent(hike.id)}`)
+      setCreatingStopId(null)
+      onCreated(hike.id)
     } catch (e) {
       setCreateError(e instanceof Error ? e.message : 'Impossibile creare la Guida — riprova.')
       setCreatingStopId(null)

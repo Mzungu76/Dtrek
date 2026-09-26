@@ -43,6 +43,7 @@ import PoiListWidget from './widgets/PoiListWidget'
 import NaturaWidget from './widgets/NaturaWidget'
 import BorgoTappeWidget from './widgets/BorgoTappeWidget'
 import NestedSiteGuidesWidget from './widgets/NestedSiteGuidesWidget'
+import SiteGuideOverlay from './SiteGuideOverlay'
 import SitoInfoWidget from './widgets/SitoInfoWidget'
 import PlaceDescriptionWidget from './widgets/PlaceDescriptionWidget'
 import GuideGalleryLightbox, { type GuideGalleryItem } from './widgets/GuideGalleryLightbox'
@@ -314,6 +315,9 @@ export default function GuideReader({
   // BorgoTappeWidget (per sapere quali tappe hanno già una Guida propria, evitare doppioni) e
   // NestedSiteGuidesWidget (per elencarle). Solo per un Borgo/Città, mai per un Sentiero/Sito.
   const [nestedSiteGuides, setNestedSiteGuides] = useState<PlannedHikeMeta[]>([])
+  // Guida di Sito aperta nell'overlay (piano §51.4, opzione B — verifica utente 2026-09-27): mai
+  // una navigazione, questa stessa Guida di Borgo resta montata sotto per tutto il tempo.
+  const [openSiteGuideId, setOpenSiteGuideId] = useState<string | null>(null)
   const [borgoItinerary, setBorgoItinerary] = useState<BorgoItinerary | null>(null)
   // Verifica utente: "non vengono più generati gli itinerari" — in realtà venivano generati, solo
   // che il calcolo (geosearch Wikipedia + rete pedonale OSM + Dijkstra, vedi /api/borgo-itinerary)
@@ -1023,7 +1027,7 @@ export default function GuideReader({
           // in ogni ramo (compreso il caricamento): silenziosa da sé finché non ce n'è nessuna.
           // Stesso elenco (nestedSiteGuides, fetchato una sola volta più sopra) passato anche a
           // BorgoTappeWidget, che lo usa per riconoscere le tappe che hanno già una Guida propria.
-          const nestedSiteGuidesSection = <NestedSiteGuidesWidget guides={nestedSiteGuides} />
+          const nestedSiteGuidesSection = <NestedSiteGuidesWidget guides={nestedSiteGuides} onOpen={setOpenSiteGuideId} />
           if (borgoItinerary && borgoItinerary.tappe.length > 0 && hike.placeId) {
             return (
               <>
@@ -1039,6 +1043,7 @@ export default function GuideReader({
                   placeId={hike.placeId}
                   hikeId={hike.id}
                   existingSiteGuides={nestedSiteGuides}
+                  onOpenSiteGuide={setOpenSiteGuideId}
                   savedOverrides={hike.borgoItineraryOverrides}
                   savedDayBudgetMinutes={hike.borgoDayBudgetMinutes}
                   onOverridesSaved={overrides => {
@@ -1786,6 +1791,13 @@ export default function GuideReader({
 
       {aiCreditError && (
         <CreditErrorModal message={aiCreditError.message} onClose={() => setAiCreditError(null)} />
+      )}
+
+      {/* Guida di Sito in overlay (piano §51.4, opzione B) — sopra QUESTA Guida di Borgo/Città,
+          mai al suo posto: nessuna navigazione, questo componente resta montato sotto per tutto
+          il tempo in cui l'overlay è aperto. */}
+      {openSiteGuideId && (
+        <SiteGuideOverlay siteId={openSiteGuideId} onClose={() => setOpenSiteGuideId(null)} />
       )}
     </div>
   )
