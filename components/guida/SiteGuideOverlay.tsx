@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Loader2 } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import GuideReader from './GuideReader'
+import SiteGuideSkeleton from './SiteGuideSkeleton'
 import { getPlannedById, type PlannedHike } from '@/lib/plannedStore'
 import { useHasAiAccess } from '@/app/guida/useHasAiAccess'
 
@@ -57,9 +58,7 @@ export default function SiteGuideOverlay({ siteId, onClose }: Props) {
         <ArrowLeft className="w-4 h-4" /> Torna al Borgo
       </button>
       {!hike ? (
-        <div className="flex items-center justify-center h-full">
-          <Loader2 className="w-6 h-6 animate-spin text-terra-600" />
-        </div>
+        <SiteGuideSkeleton />
       ) : (
         <GuideReader
           hike={hike}

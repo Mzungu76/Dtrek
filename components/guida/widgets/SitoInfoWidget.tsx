@@ -1,4 +1,4 @@
-import { Clock, Ticket, Car, Phone, Mail } from 'lucide-react'
+import { Clock, Ticket, Car, Phone, Mail, Camera } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 interface Props {
@@ -12,13 +12,20 @@ interface Props {
   // supabase/migrations/add_places_contacts.sql non è applicata, o quando la fonte non li fornisce.
   phone?: string | null
   email?: string | null
+  /** Coordinate del luogo (PlaceDetail/hike) — abilita il link "Street View" (Google Maps) sulla
+   *  cella indirizzo, quando presenti insieme all'indirizzo stesso. Verifica utente 2026-09-29. */
+  latitude?: number | null
+  longitude?: number | null
 }
 
-function Cell({ icon, value, label, href }: { icon: ReactNode; value: string; label: string; href?: string }) {
+function Cell({ icon, value, valueIcon, label, href }: { icon: ReactNode; value: string; valueIcon?: ReactNode; label: string; href?: string }) {
   const content = (
     <>
       <span className="text-terra-600">{icon}</span>
-      <p className="font-semibold text-[13px] text-stone-800 mt-1.5 leading-snug">{value}</p>
+      <p className="font-semibold text-[13px] text-stone-800 mt-1.5 leading-snug flex items-center gap-1">
+        <span className="truncate">{value}</span>
+        {valueIcon}
+      </p>
       <p className="text-[10.5px] text-stone-400 mt-0.5">{label}</p>
     </>
   )
@@ -41,7 +48,7 @@ function Cell({ icon, value, label, href }: { icon: ReactNode; value: string; la
  * sito ufficiale (official_url ?? website) → voce Wikipedia → cella omessa. Mai un
  * orario/prezzo fabbricato.
  */
-export default function SitoInfoWidget({ openingHours, officialLink, wikipediaUrl, address, phone, email }: Props) {
+export default function SitoInfoWidget({ openingHours, officialLink, wikipediaUrl, address, phone, email, latitude, longitude }: Props) {
   const infoLink = officialLink ?? wikipediaUrl ?? null
   const infoLinkLabel = officialLink ? 'Sito ufficiale' : 'Wikipedia'
 
@@ -59,7 +66,22 @@ export default function SitoInfoWidget({ openingHours, officialLink, wikipediaUr
   }
 
   if (address) {
-    cells.push(<Cell key="address" icon={<Car className="w-4 h-4" />} value={address} label="Indirizzo" />)
+    // Street View di Google via il link ufficiale documentato (map_action=pano) — nessuna chiave
+    // richiesta. Solo quando ci sono anche le coordinate: l'indirizzo testuale da solo non basta
+    // a Google per centrare il panorama sul punto giusto in modo affidabile.
+    const streetViewHref = latitude != null && longitude != null
+      ? `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${latitude},${longitude}`
+      : undefined
+    cells.push(
+      <Cell
+        key="address"
+        icon={<Car className="w-4 h-4" />}
+        value={address}
+        valueIcon={streetViewHref ? <Camera className="w-3 h-3 text-terra-500 shrink-0" /> : undefined}
+        label={streetViewHref ? 'Indirizzo · Street View' : 'Indirizzo'}
+        href={streetViewHref}
+      />,
+    )
   }
 
   if (phone) {

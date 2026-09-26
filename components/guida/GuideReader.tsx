@@ -44,6 +44,7 @@ import NaturaWidget from './widgets/NaturaWidget'
 import BorgoTappeWidget from './widgets/BorgoTappeWidget'
 import SiteGuideOverlay from './SiteGuideOverlay'
 import SitoInfoWidget from './widgets/SitoInfoWidget'
+import SitoInfoSkeleton from './widgets/SitoInfoSkeleton'
 import PlaceDescriptionWidget from './widgets/PlaceDescriptionWidget'
 import GuideGalleryLightbox, { type GuideGalleryItem } from './widgets/GuideGalleryLightbox'
 import SitoGalleryWidget from './widgets/SitoGalleryWidget'
@@ -310,6 +311,12 @@ export default function GuideReader({
   // indirizzo, orari/sito ufficiale: dati che planned_hikes non porta (vedi lib/guideCardVariant.ts
   // per come vengono usati). null per un Sentiero (mai richiesto) o finché non arriva.
   const [placeDetail,    setPlaceDetail]    = useState<PlaceDetail | null>(null)
+  // True mentre il fetch di placeDetail sopra è in volo — pilota SitoInfoSkeleton (verifica utente
+  // 2026-09-29, "gli elementi sembrano arrivare a cascata"): senza questo, il pannello Sito non
+  // esisteva affatto finché placeDetail non arrivava (appariva di colpo, già completo) e poteva
+  // perfino cambiare FAMIGLIA di scheda (scheda_pratica vs galleria_sicurezza dipende da
+  // hasVisitInfo, derivato da placeDetail — vedi sitoCardFamily più sotto).
+  const [placeDetailLoading, setPlaceDetailLoading] = useState(false)
   // Guide dei Siti già nate da questo Borgo/Città (piano §51.3/§51.4) — passate a
   // BorgoTappeWidget per sapere, tappa per tappa, se "Leggi tutto" deve aprire quella esistente o
   // crearla al volo (verifica utente 2026-09-28: un solo bottone, mai una lista visibile a parte
@@ -500,13 +507,14 @@ export default function GuideReader({
   // ricerca — nessun nuovo endpoint per la Guida. Mai richiesto per un Sentiero (planned_hikes ha
   // già tutto il necessario).
   useEffect(() => {
-    if (hike.metaType === 'sentiero' || !hike.placeId) return
+    if (hike.metaType === 'sentiero' || !hike.placeId) { setPlaceDetailLoading(false); return }
     // Chiave per placeId, non hikeId (a differenza di routePhotosMemoryCache/
     // borgoItineraryMemoryCache sopra): questo dato è del Borgo/Sito in sé, mai personalizzato per
     // singola Meta — due Meta diverse sullo stesso placeId condividono legittimamente la cache,
     // esattamente come l'effetto qui sopra già ricalcola solo al cambio di placeId, non di hikeId.
     const memoryCached = placeDetailMemoryCache.get(hike.placeId)
-    if (memoryCached) { setPlaceDetail(memoryCached); return }
+    if (memoryCached) { setPlaceDetail(memoryCached); setPlaceDetailLoading(false); return }
+    setPlaceDetailLoading(true)
     let cancelled = false
     fetch(`/api/places/${hike.placeId}`)
       .then(res => res.ok ? res.json() : null)
@@ -519,6 +527,7 @@ export default function GuideReader({
         if (!cancelled) setPlaceDetail(detail)
       })
       .catch(() => {})
+      .finally(() => { if (!cancelled) setPlaceDetailLoading(false) })
     return () => { cancelled = true }
   }, [hike.metaType, hike.placeId])
 
@@ -1372,7 +1381,9 @@ export default function GuideReader({
       )}
 
       {hike.metaType === 'sito' ? (
-        sitoFamily === 'scheda_pratica' ? (
+        placeDetailLoading ? (
+          <SitoInfoSkeleton />
+        ) : sitoFamily === 'scheda_pratica' ? (
           <SitoInfoWidget
             openingHours={typeof placeDetail?.openingHours === 'string' ? placeDetail.openingHours : null}
             officialLink={officialLink}
@@ -1380,6 +1391,8 @@ export default function GuideReader({
             address={placeDetail?.address}
             phone={placeDetail?.phone}
             email={placeDetail?.email}
+            latitude={placeDetail?.latitude ?? hike.latitude}
+            longitude={placeDetail?.longitude ?? hike.longitude}
           />
         ) : hike.latitude != null && hike.longitude != null ? (
           <div className="px-5 sm:px-8 md:px-10 py-4 border-b border-stone-200">

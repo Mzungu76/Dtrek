@@ -1772,6 +1772,13 @@ Nessuna lista "Guide dei Siti di questo Borgo" separata (`NestedSiteGuidesWidget
 
 Una tappa `source: 'wikipedia'` (nessun `dtrek_places.id`, non promuovibile) resta con `StopSourceSheet.tsx` nella sua forma originale — un semplice "leggi di più" senza alcun legame con una Guida, dato che tecnicamente non può averne una.
 
+### 51.4.3 Rifinitura: skeleton di caricamento e Street View (2026-09-29, verifica utente) — ✅ IMPLEMENTATO
+
+Due rifiniture indipendenti, stessa sessione:
+
+- **Caricamento a cascata**: l'apertura di una Guida di Sito mostrava prima uno spinner semplice, poi tutto il contenuto in blocco — nel mezzo, il pannello "Informazioni pratiche" non esisteva affatto finché `placeDetail` non arrivava (appariva di colpo, già completo), e per un `siteType` "ambiguo" poteva perfino cambiare FAMIGLIA di scheda (`scheda_pratica` vs `galleria_sicurezza` dipendono da `hasVisitInfo`, derivato da `placeDetail` — `lib/guideCardVariant.ts`). Aggiunto `SiteGuideSkeleton.tsx` (mostrato da `SiteGuideOverlay.tsx` mentre `hike` carica) e `SitoInfoSkeleton.tsx` (mostrato da `GuideReader.tsx` mentre `placeDetailLoading`, nuovo stato) — stessa forma del contenuto reale, blocchi grigi pulsanti al posto del testo, mai il pannello sbagliato per un istante.
+- **Street View**: `SitoInfoWidget.tsx` accetta ora `latitude`/`longitude` — quando presenti insieme all'indirizzo, la cella diventa un link a Google Street View (`maps.google.com/@?api=1&map_action=pano&viewpoint=lat,lon`, l'URL ufficiale documentato, nessuna chiave richiesta) con una piccola icona (`Camera`) accanto al valore a segnalare la funzione.
+
 ## 51.5 Cache della descrizione
 
 Il momento in cui una menzione diventa Guida (nested o autonoma, §51.2/51.3) è il punto naturale per persistere in `dtrek_places.description` l'estratto Wikipedia oggi recuperato live a ogni apertura (`lib/wikipedia.ts`, `lib/guideBorgoDetailStops.ts`). NON ricalcolarlo più a ogni lettura una volta che il Sito ha una Guida propria.
