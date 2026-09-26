@@ -316,14 +316,29 @@ class SupabaseRest:
         if extra_headers:
             headers.update(extra_headers)
         data = json.dumps(body).encode("utf-8") if body is not None else None
-        req = urllib.request.Request(f"{self.base}/{path}{query}", data=data, headers=headers, method=method)
-        try:
-            with urllib.request.urlopen(req, timeout=30) as res:
-                raw = res.read()
-                return json.loads(raw) if raw else None
-        except urllib.error.HTTPError as e:
-            body_text = e.read().decode("utf-8", "replace")
-            raise RuntimeError(f"Supabase REST {method} {path} -> {e.code}: {body_text}")
+        url = f"{self.base}/{path}{query}"
+
+        # Un run --all-regions dura ore su rete mobile: un blip di connessione qui, senza retry,
+        # perdeva per sempre il candidato (nessun errore fatale, solo loggato in stats['errors'] e
+        # mai riprovato) — verificato dal vivo: solo 4576/11480 candidati scritti nel primo run
+        # nazionale. Stesso meccanismo di backoff gia' usato in fetch_sparql_json sopra.
+        last_error = None
+        for attempt in range(MAX_RETRIES + 1):
+            if attempt > 0:
+                time.sleep(2 ** (attempt - 1))
+            req = urllib.request.Request(url, data=data, headers=headers, method=method)
+            try:
+                with urllib.request.urlopen(req, timeout=30) as res:
+                    raw = res.read()
+                    return json.loads(raw) if raw else None
+            except urllib.error.HTTPError as e:
+                body_text = e.read().decode("utf-8", "replace")
+                if e.code not in TRANSIENT_STATUS:
+                    raise RuntimeError(f"Supabase REST {method} {path} -> {e.code}: {body_text}")
+                last_error = RuntimeError(f"Supabase REST {method} {path} -> {e.code}: {body_text}")
+            except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
+                last_error = e
+        raise last_error or RuntimeError(f"Supabase REST {method} {path}: troppi tentativi falliti")
 
     def select(self, table, params):
         return self._request("GET", table, params=params)
