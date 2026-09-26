@@ -1714,7 +1714,9 @@ Anche `guideProfileFor` (`lib/guideProfiles.ts`) accetta ora un quarto parametro
 
 NON duplicare `dtrek_places` quando la stessa entità è raggiunta sia come menzione interna a un itinerario sia come Guida autonoma: `place_id` resta l'unico punto di verità.
 
-**Ancora da fare** (non coperto da questo aggiornamento): l'azione utente di "promozione" che crea davvero la riga `planned_hikes` nested da una tappa (§51.3), il filtro `parentMetaId IS NULL` nella sezione "Siti" e la sezione interna nella Guida del Borgo/Città (§51.4), la persistenza della descrizione Wikipedia al momento della promozione (§51.5), il cross-link via `dtrek_place_relations` (§51.6).
+**Aggiornamento (2026-09-26, seconda parte) — ✅ IMPLEMENTATO**: §51.3 (promozione — bottone "Crea Guida di questo Sito" su ogni tappa `archivio` in `BorgoTappeWidget.tsx`, via `lib/useCreateSiteGuideFromStop.ts`/`itineraryStopToNestedSitePlannedHike` in `lib/metaToPlannedHike.ts`), §51.4 (filtro `parentMetaId` nel tab "Siti" di `app/guida/GuidaHub.tsx`, sezione nested in `GuideReader.tsx` via `NestedSiteGuidesWidget.tsx` e `GET /api/planned?parentMetaId=`), §51.6 (cross-link — `fetchRelatedPlaces` in `lib/metaSearch/placeRelations.ts`, esposto da `/api/places/[id]`, mostrato da `RelatedPlacesWidget.tsx`/`ParentGuideLinkWidget.tsx`).
+
+**Ancora da fare**: §51.5 (persistenza della descrizione Wikipedia al momento della promozione — oggi la Guida nested nasce comunque senza descrizione propria in `dtrek_places`, ricade sull'arricchimento live esistente in `/api/places/[id]`, corretto ma non ottimizzato). Il cross-link (§51.6) è costruito ma inerte in pratica: `dtrek_place_relations` non ha ancora righe importate da nessuna fonte, quindi "Vicino a te" resta silenzioso finché quell'importazione non esiste.
 
 ## 51.3 Promozione e sganciamento
 
@@ -1796,8 +1798,8 @@ NON inventare questi dati nel frattempo: cella omessa o link, stessa regola gene
 ## 52.5 Contenuti nuovi, legati a §51 (`parent_meta_id`)
 
 ```text
-Guida nested    → richiamo "Fa parte della Guida di [Borgo/Città]" con link (§51.6) — DA FARE
-Guida autonoma  → nessun richiamo di provenienza; eventuale blocco "Vicino a te" (§51.6) — DA FARE
+Guida nested    → richiamo "Fa parte della Guida di [Borgo/Città]" con link (§51.6) — ✅ FATTO
+Guida autonoma  → nessun richiamo di provenienza; eventuale blocco "Vicino a te" (§51.6) — ✅ FATTO
 
 Sezioni sapori/consigli:
   Guida nested    → escluse di default (già raccontate a livello del Borgo genitore) — ✅ FATTO
@@ -1806,4 +1808,4 @@ Sezioni sapori/consigli:
 
 ✅ La distinzione sapori/consigli è implementata: `guideProfileFor` (`lib/guideProfiles.ts`) accetta `isNestedSite` come quarto parametro, condizionato dalla presenza di `parent_meta_id` sul lato chiamante — NON una quarta lista di sezioni parallela, resta un filtro (`NESTED_SITE_EXCLUDED_SECTIONS`) sulle sezioni già esistenti. Test in `lib/__tests__/guideProfiles.test.ts` ("Sito nested (piano §52.5)").
 
-Restano DA FARE: il richiamo di provenienza/cross-link (dipende dal cross-link §51.6, non ancora costruito) e l'azione di promozione che valorizza `parentMetaId` in pratica (§51.3, non ancora costruita).
+✅ Anche il richiamo di provenienza e il cross-link sono implementati: `ParentGuideLinkWidget.tsx` ("Fa parte della Guida di...") e `RelatedPlacesWidget.tsx` ("Vicino a te", da `placeDetail.relatedPlaces`), montati in `GuideReader.tsx` subito sotto `GuideHero`. `RelatedPlacesWidget` resta silenzioso finché `dtrek_place_relations` non avrà righe reali (nessuna fonte la importa ancora).
