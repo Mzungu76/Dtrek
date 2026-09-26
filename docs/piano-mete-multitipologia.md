@@ -1079,6 +1079,12 @@ Museo:
 - percorso consigliato;
 - cosa non perdere.
 
+**Nota (2026-09-26)**: "opere" qui è oggi testo generato da un LLM (`lib/guideProfiles.ts`), senza
+alcun dato reale. `docs/arco-opere-musei.md` verifica se/come collegare le opere REALI conservate
+in un museo MiC già in Dtrek, usando ArCo — diagnostica (`scripts/places/mic/opere/probe.ts`) non
+ancora verificata dal vivo, nessuna pipeline di import scritta finché il predicato non è confermato
+sui dati.
+
 Castello:
 
 - storia;

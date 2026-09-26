@@ -1,0 +1,124 @@
+name: Probe — Opere di questo museo (ArCo → dtrek_places museo MiC)
+
+# Diagnostica pura per scripts/places/mic/opere/probe.ts — NESSUNA scrittura, nessun secret
+# Supabase richiesto. Verifica se/come ArCo collega un'opera catalogata (arco:CulturalProperty)
+# al museo (CulturalInstituteOrSite) che la conserva, PRIMA di scrivere qualunque pipeline di
+# import reale. Vedi docs/arco-opere-musei.md per il contesto completo e
+# scripts/places/mic/opere/README.md per cosa aspettarsi da ciascuna modalità.
+#
+# Stesso schema di import-places-mic.yml (unico ambiente che raggiunge dati.cultura.gov.it — la
+# sandbox di sviluppo blocca l'egress verso quel dominio, vedi MIC_DATA_SOURCES.md §0).
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "probe: 4 query minime (esistenza classe/predicato, entrambe le direzioni). cis: opere collegate a UN museo già in Dtrek (id ArCo). describe: dump a 2 salti di un'opera reale."
+        required: true
+        type: choice
+        options:
+          - probe
+          - cis
+          - describe
+        default: probe
+      cis_id:
+        description: "Solo modalità 'cis' e 'describe' (con Describe by CIS sotto): id numerico ArCo di un museo GIÀ importato in dtrek_places (source='mic', colonna source_id) — es. 105665 per Canepina. Non un id indovinato: prenderlo da una riga reale."
+        required: false
+        type: string
+        default: ""
+      describe_name:
+        description: "Solo modalità 'describe', ignorato se cis_id sopra è valorizzato: testo da cercare in rdfs:label di un'opera (es. 'Nettuno') invece di un record arbitrario."
+        required: false
+        type: string
+        default: ""
+      probe_only:
+        description: "Solo modalità 'probe': nome esatto di un singolo probe da isolare (vedi scripts/places/mic/opere/probe.ts, PROBES). Vuoto = tutti."
+        required: false
+        type: string
+        default: ""
+      probe_timeout_ms:
+        description: "Timeout (ms) per query, un solo tentativo, nessuna retry."
+        required: false
+        type: string
+        default: "30000"
+
+concurrency:
+  group: probe-opere-mic
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    env:
+      MODE: ${{ inputs.mode }}
+      CIS_ID: ${{ inputs.cis_id }}
+      DESCRIBE_NAME: ${{ inputs.describe_name }}
+      PROBE_ONLY: ${{ inputs.probe_only }}
+      PROBE_TIMEOUT_MS: ${{ inputs.probe_timeout_ms }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Probe — esistenza classe/predicato (diagnostica)
+        if: ${{ inputs.mode == 'probe' }}
+        run: |
+          set -euo pipefail
+          if [ -n "${PROBE_ONLY:-}" ]; then
+            npx tsx scripts/places/mic/opere/probe.ts --timeout "$PROBE_TIMEOUT_MS" --only "$PROBE_ONLY" | tee /tmp/opere-probe.txt
+          else
+            npx tsx scripts/places/mic/opere/probe.ts --timeout "$PROBE_TIMEOUT_MS" | tee /tmp/opere-probe.txt
+          fi
+          {
+            echo "### Probe Opere/ArCo"
+            echo "Verifica se arco:CulturalProperty ha istanze reali e se/come loc:hasCulturalInstituteOrSite collega un'opera al suo museo — vedi docs/arco-opere-musei.md."
+            echo '```'
+            cat /tmp/opere-probe.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Opere di un museo specifico già in Dtrek (predicato forward, non confermato)
+        if: ${{ inputs.mode == 'cis' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CIS_ID:-}" ]; then
+            echo "cis_id obbligatorio per la modalità 'cis' — prendere il source_id di una riga dtrek_places con source='mic'." >&2
+            exit 1
+          fi
+          npx tsx scripts/places/mic/opere/probe.ts --timeout "$PROBE_TIMEOUT_MS" --cis "$CIS_ID" | tee /tmp/opere-cis.txt
+          {
+            echo "### Probe Opere/ArCo — museo CIS/$CIS_ID"
+            echo '```json'
+            cat /tmp/opere-cis.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Describe — dump a 2 salti di un'opera reale
+        if: ${{ inputs.mode == 'describe' }}
+        run: |
+          set -euo pipefail
+          if [ -n "${CIS_ID:-}" ]; then
+            npx tsx scripts/places/mic/opere/probe.ts --describe --cis "$CIS_ID" | tee /tmp/opere-describe.txt
+          elif [ -n "${DESCRIBE_NAME:-}" ]; then
+            npx tsx scripts/places/mic/opere/probe.ts --describe --name "$DESCRIBE_NAME" | tee /tmp/opere-describe.txt
+          else
+            npx tsx scripts/places/mic/opere/probe.ts --describe | tee /tmp/opere-describe.txt
+          fi
+          {
+            echo "### Describe Opere/ArCo"
+            echo "- Museo (cis_id): ${CIS_ID:-(nessuno)}"
+            echo "- Nome cercato: ${DESCRIBE_NAME:-(record arbitrario)}"
+            echo '```json'
+            cat /tmp/opere-describe.txt
+            echo '```'
+            echo ""
+            echo "Usare questo dump per scoprire i predicati reali di titolo/autore/datazione/immagine — vedi docs/arco-opere-musei.md."
+          } >> "$GITHUB_STEP_SUMMARY"
