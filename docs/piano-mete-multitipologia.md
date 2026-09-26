@@ -1680,22 +1680,28 @@ lib/metaTypes.ts        → MetaType, SiteType, SITE_TYPE_CONFIG (§15)
 lib/guideProfiles.ts    → profilo sito generico + override per ciascuno dei 12 SiteType (§30)
 lib/guideCardVariant.ts → scheda_pratica / galleria_sicurezza
 SitoInfoWidget, SitoGalleryWidget, PlaceDescriptionWidget
+planned_hikes.place_id  → FK reale verso dtrek_places, GIÀ presente (supabase/migrations/
+                          add_planned_hikes_place_link.sql, Blocco D) — non solo un placeId
+                          annidato nei metadati come una prima ricognizione aveva letto: il
+                          bridge lib/metaToPlannedHike.ts la valorizza già per ogni Meta creata
+                          da ricerca, `app/api/planned/route.ts` la legge/scrive già.
 ```
 
-Il nodo NON ancora risolto: `planned_hikes` (la Guida che l'utente legge) non ha una FK reale verso `dtrek_places` — solo un `placeId` annidato nei metadati. Un sito menzionato dentro la Guida di un Borgo/Città e un sito con Guida propria sono oggi due mondi senza collegamento strutturale, anche quando descrivono lo stesso luogo.
+Il nodo NON ancora risolto (fino a questo aggiornamento): `planned_hikes` non aveva modo di sapere se la Guida di un Sito fosse nata autonoma o dentro la Guida di un Borgo/Città — un sito menzionato in un itinerario e un sito con Guida propria restavano due mondi senza collegamento di *provenienza*, anche condividendo lo stesso `place_id`.
 
-## 51.2 Provenienza della Guida di un Sito
+## 51.2 Provenienza della Guida di un Sito — ✅ IMPLEMENTATO (2026-09-26)
 
-Aggiungere a `planned_hikes`:
+Aggiunto a `planned_hikes` (`supabase/migrations/add_planned_hikes_parent_meta.sql`, `lib/plannedStore.ts`, `app/api/planned/route.ts`):
 
 ```sql
-place_id       uuid null references dtrek_places(id)
-parent_meta_id uuid null references planned_hikes(id)
+parent_meta_id text null references planned_hikes(id) on delete set null
 ```
 
-`place_id` collega SEMPRE la Guida al suo record `dtrek_places` — entità unica, mai duplicata: descrizione/foto/orari vivono lì, non copiati nella Guida.
+`text`, non `uuid`: `planned_hikes.id` è `TEXT` (a differenza di `dtrek_places.id`, che è `UUID`) — vedi la `CREATE TABLE` in `supabase-schema.sql`.
 
-`parent_meta_id`:
+`place_id` (già esistente, invariato da questo aggiornamento) collega SEMPRE la Guida al suo record `dtrek_places` — entità unica, mai duplicata: descrizione/foto/orari vivono lì, non copiati nella Guida.
+
+`parent_meta_id` (nuovo):
 
 ```text
 NULL  → Guida autonoma
@@ -1704,7 +1710,13 @@ NULL  → Guida autonoma
 
 Un Sito nasce nested quando la sua Guida viene generata dall'interno della Guida di un Borgo/Città (una tappa promossa a Guida a sé). Resta di proprietà di quella Guida — §51.4 stabilisce dove viene mostrata.
 
+Anche `guideProfileFor` (`lib/guideProfiles.ts`) accetta ora un quarto parametro `isNestedSite` che esclude `sapori`/`consigli` per una Guida nested (§52.5) — cablato in `app/api/guide/route.ts` e `components/guida/GuideReader.tsx` da `!!hike.parentMetaId`.
+
 NON duplicare `dtrek_places` quando la stessa entità è raggiunta sia come menzione interna a un itinerario sia come Guida autonoma: `place_id` resta l'unico punto di verità.
+
+**Aggiornamento (2026-09-26, seconda parte) — ✅ IMPLEMENTATO**: §51.3 (promozione — bottone "Crea Guida di questo Sito" su ogni tappa `archivio` in `BorgoTappeWidget.tsx`, via `lib/useCreateSiteGuideFromStop.ts`/`itineraryStopToNestedSitePlannedHike` in `lib/metaToPlannedHike.ts`), §51.4 (filtro `parentMetaId` nel tab "Siti" di `app/guida/GuidaHub.tsx`, sezione nested in `GuideReader.tsx` via `NestedSiteGuidesWidget.tsx` e `GET /api/planned?parentMetaId=`), §51.6 (cross-link — `fetchRelatedPlaces` in `lib/metaSearch/placeRelations.ts`, esposto da `/api/places/[id]`, mostrato da `RelatedPlacesWidget.tsx`/`ParentGuideLinkWidget.tsx`).
+
+**Ancora da fare**: §51.5 (persistenza della descrizione Wikipedia al momento della promozione — oggi la Guida nested nasce comunque senza descrizione propria in `dtrek_places`, ricade sull'arricchimento live esistente in `/api/places/[id]`, corretto ma non ottimizzato). Il cross-link (§51.6) è costruito ma inerte in pratica: `dtrek_place_relations` non ha ancora righe importate da nessuna fonte, quindi "Vicino a te" resta silenzioso finché quell'importazione non esiste.
 
 ## 51.3 Promozione e sganciamento
 
@@ -1714,17 +1726,72 @@ Sganciare una Guida nested per farla diventare autonoma: azzerare `parent_meta_i
 
 NON esiste il percorso inverso automatico (autonoma → nested): richiede una scelta esplicita dell'utente su quale Borgo/Città "adotta" quel Sito, mai dedotto da sola vicinanza geografica.
 
-## 51.4 Collocazione UI
+## 51.4 Collocazione UI — ✅ IMPLEMENTATO, aggiornato (2026-09-26, verifica utente)
 
 ```text
-Sezione "Siti" (top-level, come Sentieri e Borghi/Città)
-  → solo Guide con parent_meta_id IS NULL
+Elenco generale delle Guide (app/guida/GuidaHub.tsx, app/guida/elenco/page.tsx)
+  → NON mostra MAI una Guida con parent_meta_id valorizzato, in nessun filtro/tab,
+    "tutte" incluso — solo le Guide costruite direttamente dalla ricerca (parent_meta_id
+    NULL) formano l'elenco generale, con o senza filtro per tipologia
 
 Guida di un Borgo/Città
-  → sezione interna con le Guide dei Siti che le appartengono (parent_meta_id = quella Guida)
+  → sezione interna, EVIDENTE (sfondo/bordo d'accento, non un elenco anonimo), con le
+    Guide dei Siti che le appartengono (parent_meta_id = quella Guida) — mai una sezione o
+    un elenco visibile a parte: vedi §51.4.2, "Leggi tutto" è l'unico punto di accesso
 ```
 
-Una Guida nested NON appare mai nella lista top-level "Siti" — evita l'affollamento. Resta comunque raggiungibile da ricerca globale e da eventuale cross-link (§51.6).
+Correzione rispetto alla prima stesura di questa sezione: non basta escludere una Guida nested dal solo tab "Siti" — non deve comparire nell'elenco generale in ALCUN caso, "tutte le Guide" incluso. L'unico modo di raggiungerla resta "Leggi tutto" sulla sua tappa dentro la Guida del Borgo/Città (o un deep link diretto già noto) — mai la ricerca/l'elenco globale.
+
+### 51.4.1 Apertura — overlay, non navigazione (2026-09-27) — ✅ IMPLEMENTATO
+
+Bug osservato con l'apertura via `router.push('/guida/[id]')`: `GuidaHub`/`RouteHub` pescano SEMPRE la Guida da mostrare dallo stesso array filtrato per l'elenco generale (§51.4 sopra) — una Guida nested, esclusa da quell'array, apriva quindi una Guida SBAGLIATA (`displayItems.find(...) ?? displayItems[0]`, fallback sul primo elemento). Corretto una volta (item aperto sempre esente dal filtro), ma il difetto architetturale resta: lista sfogliabile e Guida aperta condividono lo stesso array.
+
+Sostituito con un overlay (mockup comparativo A/B/C, verifica utente 2026-09-27 — opzione B scelta): `components/guida/SiteGuideOverlay.tsx`, montato da `GuideReader.tsx` (stato `openSiteGuideId`, mai una navigazione).
+
+`GuideReader` richiede solo `hike`/`onHikeUpdate`/`enrichmentReady`/`hasAiAccess`/`aiUnavailable`/`trialExpired` per funzionare (verificato sulla sua interface) — CTS/Safety/DTM/distanza in auto sono tutti opzionali e comunque non pertinenti per un Sito. `enrichmentReady` = `hike.metaType !== 'sentiero'` (sempre vero per un Sito appena caricato, stessa formula di `GuidaHub.tsx`), `hasAiAccess`/`aiUnavailable`/`trialExpired` da `useHasAiAccess()` (già cachato per sessione, sicuro da richiamare in un componente in più). Nessuna replica dell'orchestrazione completa di `GuidaHub` (che porterebbe con sé l'intera lista sfogliabile — esattamente ciò che l'overlay evita).
+
+La route `/guida/[id]` resta comunque funzionante per ogni Guida (nested inclusa, deep link diretto) — l'overlay è il percorso preferito da dentro un Borgo, non l'unico.
+
+### 51.4.2 Un solo bottone, creazione invisibile (2026-09-28, verifica utente) — ✅ IMPLEMENTATO
+
+Due iterazioni intermedie di questa sezione (badge "Guida creata" + bottone "Crea Guida di questo Sito" separati; poi un foglio di anteprima consolidato con `StopSourceSheet`) sono state scartate su richiesta esplicita: **"Nessuna altra cosa"**. L'utente non deve mai percepire la differenza tra una tappa già promossa a Guida e una no.
+
+Stato finale: ogni tappa `source: 'archivio'` mostra un solo bottone, **"Leggi tutto"**, sempre uguale (`BorgoTappeWidget.tsx`'s `handleLeggiTutto`):
+
+```text
+Tappa già promossa (una Guida con quel placeId esiste in existingSiteGuides)
+  → onOpenSiteGuide(id) diretto, apre subito
+
+Tappa non ancora promossa
+  → itineraryStopToNestedSitePlannedHike + savePlanned (lib/useCreateSiteGuideFromStop.ts),
+    poi onOpenSiteGuide(nuovoId) — stesso identico risultato agli occhi dell'utente, solo con
+    uno spinner al posto della chevron mentre salva
+```
+
+Nessuna lista "Guide dei Siti di questo Borgo" separata (`NestedSiteGuidesWidget.tsx`, rimosso) — l'elenco delle tappe stesso è l'unica interfaccia, non c'è un secondo posto che riveli quali sono "già create". `existingSiteGuides` (lo stesso fetch `GET /api/planned?parentMetaId=` di prima) resta, ma solo come dato interno per la decisione apri/crea, mai renderizzato come stato visibile.
+
+Una tappa `source: 'wikipedia'` (nessun `dtrek_places.id`, non promuovibile) resta con `StopSourceSheet.tsx` nella sua forma originale — un semplice "leggi di più" senza alcun legame con una Guida, dato che tecnicamente non può averne una.
+
+### 51.4.3 Rifinitura: skeleton di caricamento e Street View (2026-09-29, verifica utente) — ✅ IMPLEMENTATO
+
+Due rifiniture indipendenti, stessa sessione:
+
+- **Caricamento a cascata**: l'apertura di una Guida di Sito mostrava prima uno spinner semplice, poi tutto il contenuto in blocco — nel mezzo, il pannello "Informazioni pratiche" non esisteva affatto finché `placeDetail` non arrivava (appariva di colpo, già completo), e per un `siteType` "ambiguo" poteva perfino cambiare FAMIGLIA di scheda (`scheda_pratica` vs `galleria_sicurezza` dipendono da `hasVisitInfo`, derivato da `placeDetail` — `lib/guideCardVariant.ts`). Aggiunto `SiteGuideSkeleton.tsx` (mostrato da `SiteGuideOverlay.tsx` mentre `hike` carica) e `SitoInfoSkeleton.tsx` (mostrato da `GuideReader.tsx` mentre `placeDetailLoading`, nuovo stato) — stessa forma del contenuto reale, blocchi grigi pulsanti al posto del testo, mai il pannello sbagliato per un istante.
+- **Street View**: `SitoInfoWidget.tsx` accetta ora `latitude`/`longitude` — quando presenti insieme all'indirizzo, la cella diventa un link a Google Street View (`maps.google.com/@?api=1&map_action=pano&viewpoint=lat,lon`, l'URL ufficiale documentato, nessuna chiave richiesta) con una piccola icona (`Camera`) accanto al valore a segnalare la funzione.
+
+### 51.4.4 Pin di sezione e conteggio POI (2026-09-30, verifica utente) — ✅ IMPLEMENTATO
+
+Due bug indipendenti segnalati sulla Guida di un Borgo/Città:
+
+- **Il pin "Itinerario" non si accendeva**: `GuideReader.tsx` tracciava la sezione attiva con un `IntersectionObserver` su una banda sottile vicino al bordo superiore dello schermo, evidenziando la sezione più in basso (`Math.max` degli indici) tra quelle che in quel momento intersecavano la banda. Se in un dato istante NESSUNA sezione la intersecava (una sezione breve appena superata — es. "Il borgo" senza ancora testo proprio, solo l'invito "Approfondisci" — e quella successiva non ancora entrata), il pin restava fermo sull'ultima sezione vista invece di aggiornarsi: da qui "Il borgo" restava acceso con "Itinerario consigliato" già visibile sotto. Sostituito con uno scrollspy classico (`components/guida/GuideReader.tsx`, stesso `useEffect`): ad ogni scroll/resize (throttled con `requestAnimationFrame`), l'attiva è l'ultima sezione il cui bordo superiore (`getBoundingClientRect().top`) ha già superato la riga di attivazione sotto la barra sticky — un confronto diretto con la posizione, mai un "buco" possibile perché c'è sempre un'ultima sezione sopra quella riga.
+- **Il conteggio "N punti d'interesse" sulla copertina chiusa non corrispondeva alle tappe reali della Guida**: `app/guida/GuidaHub.tsx` calcolava quel numero con una query Overpass indipendente (`/api/pois`, ogni POI nominato nel raggio di 600m dal centro) — una cosa del tutto diversa dalle tappe curate dell'"Itinerario consigliato" mostrate dentro la Guida (`BorgoTappeWidget`, derivate da `borgo-itinerary` con clustering/dedup/limiti per tappa). Le due fonti non potevano che divergere. Sostituito con un conteggio derivato dalla STESSA fonte: `PlannedHikeMeta.borgoWalkStopsHash` (l'elenco degli id delle tappe reali, già persistito alla creazione della Meta e ricalcolato alla prima apertura della Guida — `lib/borgoWalkPolyline.ts`) — `stopsCountFromWalkHash()` in `GuidaHub.tsx` ne conta gli id. Aggiunta la colonna `borgo_walk_stops_hash` a `META_COLS` (`app/api/planned/route.ts`) perché la lista leggera della galleria la portasse con sé. Rimossa la vecchia fetch Overpass in background (e l'import ormai inutilizzato di `haversineM`): nessun rimpiazzo attivo per le Guide più vecchie ancora senza hash, la pillola resta assente finché quella Guida non viene aperta almeno una volta (mai un numero fabbricato, stesso principio già seguito dal codice rimosso).
+
+### 51.4.5 Scrollspy sul pannello vero + lightbox sul mosaico dei Siti "scheda_pratica" (2026-09-30, verifica utente) — ✅ IMPLEMENTATO
+
+Due bug ulteriori, entrambi emersi solo alla verifica del fix precedente:
+
+- **Il pin ancora non si accendeva mai sulla sezione giusta**: lo scrollspy di 51.4.4 ascoltava `scroll` su `window`, ma la Guida non scorre mai la finestra — è montata dentro un pannello proprio con `overflow-y-auto` (`components/routehub/RoutePage.tsx`, la "stage" di dettaglio; anche `SiteGuideOverlay.tsx` ha il proprio `overflow-y-auto`). Un evento `scroll` non fa MAI bubbling fino a `window` da un discendente con overflow (a differenza di quasi ogni altro evento DOM) — solo la fase di cattura lo raggiunge. Il listener quindi non riceveva mai lo scroll reale: il pin restava fermo al valore calcolato una volta sola al mount, mai più aggiornato. Corretto passando `{ capture: true }` a `addEventListener`/`removeEventListener` — intercetta lo scroll di qualunque pannello discendente, a prescindere da quale lo ospiti.
+- **Le foto del mosaico in cima a un Sito "scheda_pratica" (es. un museo) non si aprivano al tap**: a differenza di `SitoGalleryWidget.tsx` (usata per un Sito non-scheda_pratica, con un proprio `GuideGalleryLightbox` interno), il mosaico `PhotoMosaic.tsx` mostrato per gli altri casi accetta un `onPhotoClick` opzionale — mai passato da `GuideReader.tsx`, quindi il tap non faceva nulla. Aggiunto un lightbox dedicato: `routePhotos` (prima solo `string[]` di URL) ora conserva l'oggetto `RoutePhoto` completo (url/titolo/credito, la stessa forma già usata da `SitoGalleryWidget`), da cui `routePhotoGalleryItems` costruisce gli item per lo stesso `GuideGalleryLightbox` già in uso altrove nella Guida — un'istanza propria (non condivisa con la Galleria fotografica di fondo pagina, che resta condizionata a `hasGuide`: il mosaico in cima è visibile anche prima).
 
 ## 51.5 Cache della descrizione
 
@@ -1786,12 +1853,14 @@ NON inventare questi dati nel frattempo: cella omessa o link, stessa regola gene
 ## 52.5 Contenuti nuovi, legati a §51 (`parent_meta_id`)
 
 ```text
-Guida nested    → richiamo "Fa parte della Guida di [Borgo/Città]" con link (§51.6)
-Guida autonoma  → nessun richiamo di provenienza; eventuale blocco "Vicino a te" (§51.6)
+Guida nested    → richiamo "Fa parte della Guida di [Borgo/Città]" con link (§51.6) — ✅ FATTO
+Guida autonoma  → nessun richiamo di provenienza; eventuale blocco "Vicino a te" (§51.6) — ✅ FATTO
 
 Sezioni sapori/consigli:
-  Guida nested    → escluse di default (già raccontate a livello del Borgo genitore)
-  Guida autonoma  → incluse (nessun genitore che le racconti)
+  Guida nested    → escluse di default (già raccontate a livello del Borgo genitore) — ✅ FATTO
+  Guida autonoma  → incluse (nessun genitore che le racconti)                        — ✅ FATTO
 ```
 
-Implementare questa distinzione in `guideProfileFor` come parametro aggiuntivo (oltre `siteType`/`borgoVariant`), condizionato dalla presenza di `parent_meta_id`. NON una quarta lista di sezioni parallela: resta un filtro sulle sezioni già esistenti.
+✅ La distinzione sapori/consigli è implementata: `guideProfileFor` (`lib/guideProfiles.ts`) accetta `isNestedSite` come quarto parametro, condizionato dalla presenza di `parent_meta_id` sul lato chiamante — NON una quarta lista di sezioni parallela, resta un filtro (`NESTED_SITE_EXCLUDED_SECTIONS`) sulle sezioni già esistenti. Test in `lib/__tests__/guideProfiles.test.ts` ("Sito nested (piano §52.5)").
+
+✅ Anche il richiamo di provenienza e il cross-link sono implementati: `ParentGuideLinkWidget.tsx` ("Fa parte della Guida di...") e `RelatedPlacesWidget.tsx` ("Vicino a te", da `placeDetail.relatedPlaces`), montati in `GuideReader.tsx` subito sotto `GuideHero`. `RelatedPlacesWidget` resta silenzioso finché `dtrek_place_relations` non avrà righe reali (nessuna fonte la importa ancora).

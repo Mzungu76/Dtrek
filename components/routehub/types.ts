@@ -54,16 +54,20 @@ export interface RouteHubItem {
    *  PlannedHikeMeta. */
   metaType?: MetaType
   siteType?: SiteType
+  /** Guida-only, Sito (piano §51.4) — valorizzato quando questa Guida è nata dentro la Guida di
+   *  un Borgo/Città (una tappa promossa, §51.3): resta annidata lì, mai in questa lista top-level
+   *  "Siti" (vedi il filtro in app/guida/GuidaHub.tsx). Assente per una Guida autonoma. */
+  parentMetaId?: string
   /** Guida-only, Borgo/Città (piano guide-eccellenza) — posizione per calcolare la distanza in
    *  auto (che un Borgo/Sito non ha mai via routePolyline, vedi lib/drivingInfo.ts) e il bbox per
    *  il conteggio POI nei dintorni. Passate così come sono da PlannedHikeMeta.latitude/longitude,
    *  mai dedotte. */
   latitude?: number
   longitude?: number
-  /** Guida-only, Borgo/Città — conteggio dei punti di interesse nominati nel raggio walkable dal
-   *  centro (app/api/pois, stesso servizio multi-fonte cachato lato server già usato per un
-   *  Sentiero aperto), riempito in background dopo il primo mount. Assente finché non calcolato,
-   *  mai un numero fabbricato. */
+  /** Guida-only, Borgo/Città — numero di tappe del vero Itinerario consigliato mostrato dentro la
+   *  Guida (BorgoTappeWidget), derivato da PlannedHikeMeta.borgoWalkStopsHash (stessa fonte, mai un
+   *  conteggio indipendente — verifica utente 2026-09-30 "allinea il numero..."). Assente finché
+   *  l'itinerario non è mai stato calcolato per questa Meta, mai un numero fabbricato. */
   poiCount?: number
   /** Guida-only, Sito — orario as-is dalla fonte (formato OSM opening_hours quando presente, mai
    *  parsato/normalizzato qui — stesso principio di components/guida/widgets/SitoInfoWidget.tsx).

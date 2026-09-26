@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState, useRef, useCallback, useMemo, type ReactNode } from 'react'
-import { updatePlannedMeta, type PlannedHike } from '@/lib/plannedStore'
+import { updatePlannedMeta, type PlannedHike, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import { formatDuration } from '@/lib/tcxParser'
 import { classifyTrackShape } from '@/lib/geoUtils'
@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import type { PoiItem } from '@/lib/overpass'
 import PhotoMosaic from '@/components/PhotoMosaic'
+import type { RoutePhoto } from '@/app/lib/guide/fetchRoutePhotos'
 import { extractEpochPois } from '@/lib/epochPois'
 import { extractCoverSubtitle } from '@/lib/coverSubtitle'
 import { extractGuideNotices, normalizeGuideNotices, parseNoticeSource, type GuideNotice } from '@/lib/guideNotices'
@@ -42,10 +43,14 @@ import DatiSicurezzaTabs from './widgets/DatiSicurezzaTabs'
 import PoiListWidget from './widgets/PoiListWidget'
 import NaturaWidget from './widgets/NaturaWidget'
 import BorgoTappeWidget from './widgets/BorgoTappeWidget'
+import SiteGuideOverlay from './SiteGuideOverlay'
 import SitoInfoWidget from './widgets/SitoInfoWidget'
+import SitoInfoSkeleton from './widgets/SitoInfoSkeleton'
 import PlaceDescriptionWidget from './widgets/PlaceDescriptionWidget'
 import GuideGalleryLightbox, { type GuideGalleryItem } from './widgets/GuideGalleryLightbox'
 import SitoGalleryWidget from './widgets/SitoGalleryWidget'
+import ParentGuideLinkWidget from './widgets/ParentGuideLinkWidget'
+import RelatedPlacesWidget from './widgets/RelatedPlacesWidget'
 import GuideHero from './GuideHero'
 import GuideStatsStrip from './GuideStatsStrip'
 import GuideBorgoStatsStrip from './GuideBorgoStatsStrip'
@@ -250,7 +255,7 @@ const borgoItineraryMemoryCache = new Map<string, BorgoItinerary>()
 // trova subito il risultato di un tentativo precedente ANCHE SE quel tentativo si è concluso dopo
 // che l'utente aveva già richiuso — la Promise in volo aggiorna comunque la cache al suo arrivo,
 // solo non più uno state di un componente ormai smontato.
-const routePhotosMemoryCache = new Map<string, string[]>()
+const routePhotosMemoryCache = new Map<string, RoutePhoto[]>()
 const placeDetailMemoryCache = new Map<string, PlaceDetail>()
 
 /**
@@ -301,12 +306,27 @@ export default function GuideReader({
   // perché richiede un'azione dell'utente (ricaricare credito o cambiare modello) e non va perso
   // di vista in fondo alla pagina.
   const [aiCreditError, setAiCreditError] = useState<GuideAiError | null>(null)
-  const [routePhotos,  setRoutePhotos]  = useState<string[]>([])
+  const [routePhotos,  setRoutePhotos]  = useState<RoutePhoto[]>([])
   const [visibleSec,   setVisibleSec]   = useState(0)
   // Arricchimento dall'archivio (dtrek_places) per un Borgo/Città o Sito — foto di copertina,
   // indirizzo, orari/sito ufficiale: dati che planned_hikes non porta (vedi lib/guideCardVariant.ts
   // per come vengono usati). null per un Sentiero (mai richiesto) o finché non arriva.
   const [placeDetail,    setPlaceDetail]    = useState<PlaceDetail | null>(null)
+  // True mentre il fetch di placeDetail sopra è in volo — pilota SitoInfoSkeleton (verifica utente
+  // 2026-09-29, "gli elementi sembrano arrivare a cascata"): senza questo, il pannello Sito non
+  // esisteva affatto finché placeDetail non arrivava (appariva di colpo, già completo) e poteva
+  // perfino cambiare FAMIGLIA di scheda (scheda_pratica vs galleria_sicurezza dipende da
+  // hasVisitInfo, derivato da placeDetail — vedi sitoCardFamily più sotto).
+  const [placeDetailLoading, setPlaceDetailLoading] = useState(false)
+  // Guide dei Siti già nate da questo Borgo/Città (piano §51.3/§51.4) — passate a
+  // BorgoTappeWidget per sapere, tappa per tappa, se "Leggi tutto" deve aprire quella esistente o
+  // crearla al volo (verifica utente 2026-09-28: un solo bottone, mai una lista visibile a parte
+  // — l'utente non deve mai percepire quali tappe sono "già state promosse"). Solo per un
+  // Borgo/Città, mai per un Sentiero/Sito.
+  const [nestedSiteGuides, setNestedSiteGuides] = useState<PlannedHikeMeta[]>([])
+  // Guida di Sito aperta nell'overlay (piano §51.4, opzione B — verifica utente 2026-09-27): mai
+  // una navigazione, questa stessa Guida di Borgo resta montata sotto per tutto il tempo.
+  const [openSiteGuideId, setOpenSiteGuideId] = useState<string | null>(null)
   const [borgoItinerary, setBorgoItinerary] = useState<BorgoItinerary | null>(null)
   // Verifica utente: "non vengono più generati gli itinerari" — in realtà venivano generati, solo
   // che il calcolo (geosearch Wikipedia + rete pedonale OSM + Dijkstra, vedi /api/borgo-itinerary)
@@ -373,8 +393,8 @@ export default function GuideReader({
   // profilo istruisce Giulia a NON scrivere più per queste tipologie (vedi SECTION_BRIEF in
   // app/api/guide/route.ts, che incorpora questi stessi titoli nell'intestazione "## ..." generata).
   const guideProfile = useMemo(
-    () => guideProfileFor(hike.metaType, siteType, borgoVariant),
-    [hike.metaType, siteType, borgoVariant],
+    () => guideProfileFor(hike.metaType, siteType, borgoVariant, !!hike.parentMetaId),
+    [hike.metaType, siteType, borgoVariant, hike.parentMetaId],
   )
 
   const displaySections = useMemo<DisplaySection[]>(() => {
@@ -475,11 +495,10 @@ export default function GuideReader({
     import('@/app/lib/guide/fetchRoutePhotos').then(({ fetchRoutePhotos }) =>
       fetchRoutePhotos(mid.lat, mid.lon, radiusM, 6)
     ).then(photos => {
-      const urls = photos.map(p => p.url)
       // Scritta anche se questo montaggio è già stato chiuso (vedi il commento sopra
       // routePhotosMemoryCache) — un rimontaggio successivo la trova comunque pronta.
-      routePhotosMemoryCache.set(hike.id, urls)
-      if (!cancelled) setRoutePhotos(urls)
+      routePhotosMemoryCache.set(hike.id, photos)
+      if (!cancelled) setRoutePhotos(photos)
     }).catch(() => {})
     return () => { cancelled = true }
   }, [hike.id]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -488,13 +507,14 @@ export default function GuideReader({
   // ricerca — nessun nuovo endpoint per la Guida. Mai richiesto per un Sentiero (planned_hikes ha
   // già tutto il necessario).
   useEffect(() => {
-    if (hike.metaType === 'sentiero' || !hike.placeId) return
+    if (hike.metaType === 'sentiero' || !hike.placeId) { setPlaceDetailLoading(false); return }
     // Chiave per placeId, non hikeId (a differenza di routePhotosMemoryCache/
     // borgoItineraryMemoryCache sopra): questo dato è del Borgo/Sito in sé, mai personalizzato per
     // singola Meta — due Meta diverse sullo stesso placeId condividono legittimamente la cache,
     // esattamente come l'effetto qui sopra già ricalcola solo al cambio di placeId, non di hikeId.
     const memoryCached = placeDetailMemoryCache.get(hike.placeId)
-    if (memoryCached) { setPlaceDetail(memoryCached); return }
+    if (memoryCached) { setPlaceDetail(memoryCached); setPlaceDetailLoading(false); return }
+    setPlaceDetailLoading(true)
     let cancelled = false
     fetch(`/api/places/${hike.placeId}`)
       .then(res => res.ok ? res.json() : null)
@@ -507,8 +527,25 @@ export default function GuideReader({
         if (!cancelled) setPlaceDetail(detail)
       })
       .catch(() => {})
+      .finally(() => { if (!cancelled) setPlaceDetailLoading(false) })
     return () => { cancelled = true }
   }, [hike.metaType, hike.placeId])
+
+  // Guide dei Siti nate da questo Borgo/Città (piano §51.3/§51.4) — chiave hike.id: sono Guide
+  // proprie di QUESTA Meta (parentMetaId = hike.id), non del placeId condiviso come placeDetail
+  // sopra. Mai richiesto per un Sentiero/Sito, che non possono avere Guide figlie. Niente cache di
+  // modulo qui (a differenza di placeDetail sopra): l'utente stesso le crea navigando da questa
+  // stessa Guida (BorgoTappeWidget's "Crea Guida di questo Sito"), un rimontaggio al ritorno deve
+  // sempre trovare l'elenco aggiornato, mai una lista cachata prima della creazione.
+  useEffect(() => {
+    if (hike.metaType !== 'borgo_citta') { setNestedSiteGuides([]); return }
+    let cancelled = false
+    fetch(`/api/planned?parentMetaId=${encodeURIComponent(hike.id)}`)
+      .then(res => res.ok ? res.json() : [])
+      .then((data: PlannedHikeMeta[]) => { if (!cancelled) setNestedSiteGuides(data) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [hike.metaType, hike.id])
 
   // Borgo/Città: tappe principali nel raggio (lib/guideBorgoDetailStops.ts, via lo stesso
   // endpoint POST già usato da app/mete/[id]/page.tsx) — alimenta sia la timeline (case 'luoghi'
@@ -563,30 +600,52 @@ export default function GuideReader({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hike.metaType, hike.placeId, hike.id])
 
-  // IntersectionObserver: track which section is in view for pin-nav highlighting. Uses a thin
-  // "activation band" near the top of the viewport (threshold 0, shrunk rootMargin) rather than
-  // a ratio threshold — a ratio threshold (e.g. 0.3) requires 30% of the *target's own* height to
-  // be visible, which tall sections (mappa+profilo altimetrico in "Il percorso", mappa+lista+
-  // galleria in "I luoghi da non perdere") could fail to ever reach, leaving their nav pill never
-  // highlighted. A thin band only needs any overlap, so it works regardless of section height.
-  // Intersection state per section is tracked across callback batches (not just the entries in
-  // the current batch) since enter/exit events for different sections don't always land together.
+  // Scrollspy: quale sezione è "attiva" per l'evidenziazione del pin-nav — l'ultima (indice più
+  // alto) il cui bordo superiore ha già superato la riga di attivazione appena sotto la barra
+  // sticky in alto. Prima un IntersectionObserver marcava "attiva" ogni sezione che intersecava
+  // una banda sottile vicino a quella riga, prendendo la più in basso tra quelle intersecanti in
+  // quel momento (Math.max degli indici) — ma se in un dato istante NESSUNA sezione intersecava
+  // quella banda (una sezione breve appena superata, quella successiva non ancora entrata), il
+  // pin restava fermo sull'ultima sezione vista invece di aggiornarsi, finché lo scroll non
+  // riportava una qualunque sezione dentro la banda (verifica utente 2026-09-30: il pin "Il
+  // borgo" restava acceso con "Itinerario consigliato" già visibile sotto). Il confronto diretto
+  // con la posizione corrente qui sotto non ha mai questo buco: c'è sempre un'ultima sezione sopra
+  // la riga di attivazione, finché lo scroll non è tornato prima della primissima (in quel caso
+  // resta la 0 iniziale).
   useEffect(() => {
     if (!displaySections.length) return
-    const state = new Map<number, boolean>()
-    const obs = new IntersectionObserver(
-      entries => {
-        for (const e of entries) {
-          const idx = sectionRefs.current.indexOf(e.target as HTMLElement)
-          if (idx >= 0) state.set(idx, e.isIntersecting)
-        }
-        const activeIdxs = Array.from(state.entries()).filter(([, v]) => v).map(([k]) => k)
-        if (activeIdxs.length > 0) setVisibleSec(Math.max(...activeIdxs))
-      },
-      { threshold: 0, rootMargin: '-96px 0px -70% 0px' },
-    )
-    sectionRefs.current.forEach(el => el && obs.observe(el))
-    return () => obs.disconnect()
+    const ACTIVATION_LINE_PX = 96
+    let ticking = false
+    function recompute() {
+      ticking = false
+      let active = 0
+      for (let i = 0; i < sectionRefs.current.length; i++) {
+        const el = sectionRefs.current[i]
+        if (el && el.getBoundingClientRect().top <= ACTIVATION_LINE_PX) active = i
+      }
+      setVisibleSec(active)
+    }
+    function onScroll() {
+      if (ticking) return
+      ticking = true
+      requestAnimationFrame(recompute)
+    }
+    recompute()
+    // capture: true — la Guida non scorre mai la finestra: è montata dentro un pannello proprio
+    // con overflow-y-auto (components/routehub/RoutePage.tsx, la "stage" di dettaglio; anche
+    // SiteGuideOverlay.tsx ha il proprio overflow-y-auto). Un 'scroll' non fa mai bubbling fino a
+    // window da un discendente con overflow — solo la fase di cattura lo raggiunge — quindi senza
+    // `capture` questo listener non riceveva MAI l'evento reale: risultato, il pin restava fermo
+    // sul valore calcolato una volta sola al mount (verifica utente: "i pin ora sono allineati ma
+    // non si colora quello della sezione attiva", cioè il pin sbloccato al montaggio non seguiva
+    // più lo scroll reale). `capture: true` intercetta lo scroll di QUALUNQUE discendente, non solo
+    // di window, a prescindere da quale pannello lo ospiti.
+    window.addEventListener('scroll', onScroll, { passive: true, capture: true })
+    window.addEventListener('resize', onScroll)
+    return () => {
+      window.removeEventListener('scroll', onScroll, { capture: true })
+      window.removeEventListener('resize', onScroll)
+    }
   }, [displaySections])
 
   // Rebuild chunks on section change
@@ -1008,6 +1067,12 @@ export default function GuideReader({
                 color={SECTION_STYLE.luoghi.color}
                 placeId={hike.placeId}
                 hikeId={hike.id}
+                // Guide dei Siti già nate da tappe di questo Borgo (piano §51.3/§51.4, fetchate
+                // una sola volta più sopra) — qui solo per decidere, al tap su "Leggi tutto", se
+                // aprire quella esistente o crearla al volo (verifica utente 2026-09-28: un solo
+                // bottone, l'utente non deve mai percepire la differenza).
+                existingSiteGuides={nestedSiteGuides}
+                onOpenSiteGuide={setOpenSiteGuideId}
                 savedOverrides={hike.borgoItineraryOverrides}
                 savedDayBudgetMinutes={hike.borgoDayBudgetMinutes}
                 onOverridesSaved={overrides => {
@@ -1276,6 +1341,19 @@ export default function GuideReader({
   ], [poiPhotos, guideSources])
   const [galleryLightboxIndex, setGalleryLightboxIndex] = useState<number | null>(null)
 
+  // Stesso principio del commento sopra, per il mosaico in cima (PhotoMosaic, sotto in Render):
+  // verifica utente — le sue foto (museo scheda_pratica, o qualunque Meta senza SitoGalleryWidget)
+  // non si aprivano affatto al tap, a differenza della "vera galleria" di SitoGalleryWidget.tsx
+  // (che ha già il proprio GuideGalleryLightbox interno per le sue foto). PhotoMosaic accetta
+  // `onPhotoClick` ma qui non era mai stato passato — un lightbox dedicato invece di infilare
+  // routePhotos in galleryItems sopra: quello resta condizionato a `hasGuide`, questo mosaico è
+  // visibile anche prima che la guida esista.
+  const routePhotoGalleryItems = useMemo<GuideGalleryItem[]>(
+    () => routePhotos.map(p => ({ imageUrl: p.url, title: p.title, sourceUrl: p.url, sourceLabel: p.credit })),
+    [routePhotos],
+  )
+  const [routePhotoLightboxIndex, setRoutePhotoLightboxIndex] = useState<number | null>(null)
+
   // Punto di arrivo (ultimo punto della traccia) — da qui parte la ricerca di bus/stazioni/taxi per
   // chi non vuole tornare a piedi sui propri passi (sottosezione "Tornare al punto di partenza" in
   // "Luoghi da non perdere", vedi PoiListWidget.tsx/ReturnOptionsSection.tsx).
@@ -1331,8 +1409,16 @@ export default function GuideReader({
         locationLabel={usesCoverPhoto ? locationLabel : undefined}
       />
 
+      {/* Richiamo di provenienza per una Guida Sito nested (piano §51.4/§52.5) — solo quando
+          nata dentro una Guida Borgo/Città, mai per una Guida Sito autonoma. */}
+      {hike.metaType === 'sito' && hike.parentMetaId && (
+        <ParentGuideLinkWidget parentMetaId={hike.parentMetaId} />
+      )}
+
       {hike.metaType === 'sito' ? (
-        sitoFamily === 'scheda_pratica' ? (
+        placeDetailLoading ? (
+          <SitoInfoSkeleton />
+        ) : sitoFamily === 'scheda_pratica' ? (
           <SitoInfoWidget
             openingHours={typeof placeDetail?.openingHours === 'string' ? placeDetail.openingHours : null}
             officialLink={officialLink}
@@ -1340,6 +1426,8 @@ export default function GuideReader({
             address={placeDetail?.address}
             phone={placeDetail?.phone}
             email={placeDetail?.email}
+            latitude={placeDetail?.latitude ?? hike.latitude}
+            longitude={placeDetail?.longitude ?? hike.longitude}
           />
         ) : hike.latitude != null && hike.longitude != null ? (
           <div className="px-5 sm:px-8 md:px-10 py-4 border-b border-stone-200">
@@ -1367,6 +1455,13 @@ export default function GuideReader({
         />
       )}
 
+      {/* "Vicino a te" (piano §51.6) — solo per una Guida Sito AUTONOMA (una nested ha già il
+          richiamo al Borgo sopra, non le serve anche questo); silenzioso da sé se relatedPlaces
+          è vuoto (dtrek_place_relations non ancora popolata). */}
+      {hike.metaType === 'sito' && !hike.parentMetaId && (
+        <RelatedPlacesWidget places={placeDetail?.relatedPlaces ?? []} />
+      )}
+
       {/* SitoGalleryWidget sopra mostra già una galleria (stesso raggio, stessa fonte Commons) per
           un Sito non-scheda_pratica — evitare qui la stessa galleria due volte nello scroll
           (piano guide-eccellenza §Fase 2.1). Per ogni altro caso (Sentiero, Borgo/Città, Sito
@@ -1374,8 +1469,17 @@ export default function GuideReader({
           Meta appena aggiunto sopra quando manca una traccia. */}
       {!showsSitoGallery && (
         <PhotoMosaic
-          photos={routePhotos.slice(0, 4).map((url, i) => ({ id: String(i), url }))}
+          photos={routePhotos.slice(0, 4).map((p, i) => ({ id: String(i), url: p.url }))}
+          onPhotoClick={id => setRoutePhotoLightboxIndex(Number(id))}
           heightClass="h-32"
+        />
+      )}
+      {routePhotoLightboxIndex != null && (
+        <GuideGalleryLightbox
+          items={routePhotoGalleryItems}
+          index={routePhotoLightboxIndex}
+          onNavigate={setRoutePhotoLightboxIndex}
+          onClose={() => setRoutePhotoLightboxIndex(null)}
         />
       )}
 
@@ -1614,7 +1718,7 @@ export default function GuideReader({
                     color={s.color}
                     body={s.body}
                     widget={renderWidget(s.key, s.body)}
-                    sectionPhoto={routePhotos[i]}
+                    sectionPhoto={routePhotos[i]?.url}
                     twoColumns
                     isVoiceActive={activeSection === i && (isPlaying || isPaused)}
                     onSpeak={() => speakSection(i)}
@@ -1737,6 +1841,13 @@ export default function GuideReader({
 
       {aiCreditError && (
         <CreditErrorModal message={aiCreditError.message} onClose={() => setAiCreditError(null)} />
+      )}
+
+      {/* Guida di Sito in overlay (piano §51.4, opzione B) — sopra QUESTA Guida di Borgo/Città,
+          mai al suo posto: nessuna navigazione, questo componente resta montato sotto per tutto
+          il tempo in cui l'overlay è aperto. */}
+      {openSiteGuideId && (
+        <SiteGuideOverlay siteId={openSiteGuideId} onClose={() => setOpenSiteGuideId(null)} />
       )}
     </div>
   )

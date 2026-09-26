@@ -30,7 +30,7 @@ import { refineSafetyWithTerrainSignals } from '@/lib/safetyScore'
 import { computePersonalSafety, verdictPhrase, type PersonalFitProfile, type PersonalFitHistory, type PersonalFitRoute } from '@/lib/personalSafetyFit'
 import { isHikerExperienceLevel, sanitizeHikerConcerns, type HikerExperienceLevel, type HikerConcernKey } from '@/lib/hikerProfile'
 import { type BeautyScore } from '@/lib/beautyScore'
-import { computeBbox, minDistToTrack, haversineM } from '@/lib/geoUtils'
+import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
 import { getUserStartingPoint, googleMapsDirectionsUrl, fetchDrivingInfo, originMatches, getTrailStartPoint } from '@/lib/drivingInfo'
 import { useCtsUpdated } from '@/lib/sync/useCtsUpdated'
 import { formatDuration } from '@/lib/tcxParser'
@@ -116,17 +116,35 @@ function statPillsForMeta(h: PlannedHikeMeta, distPill?: StatPill | null, extra?
   return [...basePills, ...extraPills, ...(distPill ? [distPill] : [])]
 }
 
+/** Conteggio reale delle tappe dell'Itinerario consigliato mostrato dentro la Guida (BorgoTappeWidget)
+ *  — borgoWalkStopsHash è l'elenco (id separati da virgola) da cui quel widget parte davvero
+ *  (lib/borgoWalkPolyline.ts), persistito alla creazione della Meta e ricalcolato alla prima
+ *  apertura della Guida (GuideReader.tsx): usarlo qui invece di un conteggio Overpass indipendente
+ *  (verifica utente 2026-09-30: "allinea il numero di punti di interesse tra il PIN della
+ *  copertina chiusa e i POI reali in guida") garantisce che i due numeri non possano più divergere,
+ *  visto che condividono la stessa fonte. Assente finché l'itinerario non è mai stato calcolato per
+ *  questo Borgo/Città, mai un numero fabbricato al suo posto.
+ */
+function stopsCountFromWalkHash(hash?: string): number | undefined {
+  if (!hash) return undefined
+  const count = hash.split(',').filter(Boolean).length
+  return count > 0 ? count : undefined
+}
+
 function metaToItem(h: PlannedHikeMeta): RouteHubItem {
   const previewTotal = previewScoreValue(h)
+  const poiCount = h.metaType === 'borgo_citta' ? stopsCountFromWalkHash(h.borgoWalkStopsHash) : undefined
   return {
     id: h.id,
     title: h.title,
     polyline: h.routePolyline,
     metaType: h.metaType,
     siteType: h.siteType,
+    parentMetaId: h.parentMetaId,
     latitude: h.latitude,
     longitude: h.longitude,
-    statPills: statPillsForMeta(h),
+    poiCount,
+    statPills: statPillsForMeta(h, undefined, poiCount != null ? { poiCount } : undefined),
     sortValues: {
       date: new Date(h.createdAt).getTime(),
       // Assenti per un Borgo/Città o Sito (nessuna metrica escursionistica, stesso confine di
@@ -227,7 +245,6 @@ export default function GuidaHub({ id }: { id?: string }) {
   // sotto ne ha bisogno per sapere quali schede interrogare e con quale placeId.
   const [metaList, setMetaList] = useState<PlannedHikeMeta[]>([])
   const attemptedPlaceDetailRef = useRef<Set<string>>(new Set())
-  const attemptedPoiCountRef = useRef<Set<string>>(new Set())
 
   // Indirizzo/punto di partenza salvato nelle impostazioni utente — usato per la distanza in
   // auto mostrata tra i dati principali di ogni scheda e come filtro di ordinamento.
@@ -344,15 +361,15 @@ export default function GuidaHub({ id }: { id?: string }) {
         // in background la azzererebbe di nuovo, e attemptedPlaceDetailRef ne impedirebbe un
         // secondo tentativo, lasciando la copertina nera per il resto della sessione.
         const withCover = existing?.coverPhotoUrl ? { ...merged, coverPhotoUrl: existing.coverPhotoUrl } : merged
-        // Stesso motivo, per poiCount/openingHoursLabel (riempiti dai due fill effect POI/orario
-        // più sotto): fresh.statPills non li conosce ancora, quindi vanno ricostruiti qui invece
-        // di andare persi a ogni rivalidazione in background.
-        if (existing?.poiCount == null && existing?.openingHoursLabel == null) return withCover
+        // Stesso motivo, per openingHoursLabel (riempito dal fill effect più sotto, l'unico dei due
+        // ancora asincrono — poiCount ora arriva già dentro fresh, derivato deterministicamente da
+        // h.borgoWalkStopsHash in metaToItem sopra): fresh.statPills non lo conosce ancora, quindi
+        // va ricostruito qui invece di andare perso a ogni rivalidazione in background.
+        if (existing?.openingHoursLabel == null) return withCover
         return {
           ...withCover,
-          poiCount: existing.poiCount,
           openingHoursLabel: existing.openingHoursLabel,
-          statPills: statPillsForMeta(h, undefined, { poiCount: existing.poiCount, openingHoursLabel: existing.openingHoursLabel }),
+          statPills: statPillsForMeta(h, undefined, { poiCount: fresh.poiCount, openingHoursLabel: existing.openingHoursLabel }),
         }
       })
     })
@@ -477,47 +494,6 @@ export default function GuidaHub({ id }: { id?: string }) {
         // Stesso respiro della distanza in auto sopra — questo endpoint fa anche una ricerca
         // Wikipedia quando manca una foto/descrizione propria, non va martellato per l'intera
         // galleria in un colpo solo.
-        await new Promise(r => setTimeout(r, 300))
-      }
-    })()
-    return () => { cancelled = true }
-  }, [metaList, enrichmentReady])
-
-  // Riempie in background il conteggio dei punti di interesse nei dintorni per ogni Borgo/Città
-  // della galleria — stesso servizio POI multi-fonte già usato per il Sentiero aperto (app/api/
-  // pois: GNA/PTPR/Wikidata/Overpass dedotti, cache server-side di 7 giorni per bbox), mai una
-  // nuova chiamata Overpass live indipendente per scheda. Raggio walkable di 600m dal centro per
-  // il conteggio (più stretto del bbox richiesto all'API, che ha solo margine per i risultati) —
-  // nessun conteggio "esatto" del perimetro del centro storico (non esiste ancora, piano §7),
-  // solo un'indicazione dei punti nominati nei dintorni immediati. Solo POI con un nome: un nodo
-  // OSM anonimo non è un punto di interesse per l'utente. Stesso pattern/cadenza degli altri
-  // riempimenti in background sopra.
-  useEffect(() => {
-    if (metaList.length === 0 || !enrichmentReady) return
-    let cancelled = false
-    const BORGO_POI_RADIUS_M = 600
-    ;(async () => {
-      for (const h of metaList) {
-        if (cancelled) return
-        if (h.metaType !== 'borgo_citta' || h.latitude == null || h.longitude == null) continue
-        const lat = h.latitude, lon = h.longitude
-        if (attemptedPoiCountRef.current.has(h.id)) continue
-        attemptedPoiCountRef.current.add(h.id)
-        try {
-          const bbox = computeBbox([[lat, lon]], 0.01)
-          const res = await fetch(`/api/pois?bbox=${bbox}`)
-          if (res.ok) {
-            const all = await res.json() as PoiItem[]
-            const count = Array.isArray(all)
-              ? all.filter(p => p.name && haversineM(p.lat, p.lon, lat, lon) <= BORGO_POI_RADIUS_M).length
-              : 0
-            if (!cancelled && count > 0) {
-              setItems(prev => prev.map(it => it.id === h.id
-                ? { ...it, poiCount: count, statPills: statPillsForMeta(h, undefined, { poiCount: count, openingHoursLabel: it.openingHoursLabel }) }
-                : it))
-            }
-          }
-        } catch { /* silenzioso — resta senza pillola POI, mai un conteggio fabbricato */ }
         await new Promise(r => setTimeout(r, 300))
       }
     })()
@@ -668,7 +644,12 @@ export default function GuidaHub({ id }: { id?: string }) {
   // non quanti ne restano dopo aver già filtrato.
   const typeCounts = useMemo(() => {
     const counts: Record<MetaType, number> = { sentiero: 0, borgo_citta: 0, sito: 0 }
-    for (const it of items) counts[it.metaType ?? 'sentiero']++
+    for (const it of items) {
+      // Una Guida Sito nested (piano §51.4) non compare mai nella lista "Siti" — il conteggio sul
+      // chip del filtro deve riflettere quante se ne vedranno davvero aprendolo, non il totale.
+      if (it.metaType === 'sito' && it.parentMetaId) continue
+      counts[it.metaType ?? 'sentiero']++
+    }
     return counts
   }, [items])
 
@@ -733,9 +714,21 @@ export default function GuidaHub({ id }: { id?: string }) {
     // in app/resoconto/ResocontoHub.tsx: applicato per ultimo, dopo aver garantito la presenza
     // dell'eventuale hike deep-linkato, cosicché anche quello sparisca dalla vista se non combacia
     // con la tipologia scelta (coerente: il filtro riguarda cosa si vede, non solo la galleria).
-    if (typeFilter == null) return withOpen
-    return withOpen.filter(it => (it.metaType ?? 'sentiero') === typeFilter)
-  }, [items, hike, driving, userOrigin, driveCache, ctsSettled, typeFilter])
+    // Una Guida Sito nested (piano §51.4) resta annidata nella Guida del suo Borgo/Città — non
+    // compare mai come ALTERNATIVA da sfogliare in questo elenco, in nessun filtro incluso "tutte"
+    // (verifica utente: solo le Guide costruite direttamente dalla ricerca vanno nell'elenco
+    // generale). MA l'item con id === currentId resta SEMPRE incluso qui sotto, anche se nested:
+    // RouteHub (poco più sotto) pesca esclusivamente da questo stesso array (`items={displayItems}`),
+    // quindi escludere anche l'item aperto ORA lo lasciava senza nulla da mostrare per quell'id —
+    // `currentItem = displayItems.find(...) ?? displayItems[0]` cadeva sul fallback e apriva
+    // un'altra Guida al posto di quella richiesta (bug osservato: "la guida non si apre, si va
+    // da un'altra parte"). Il filtro per tipologia sotto resta invece invariato (comportamento
+    // preesistente, deliberato): tipofilter parte sempre da null a ogni apertura (mai persistito),
+    // quindi un deep link diretto non lo incontra mai comunque.
+    const topLevel = withOpen.filter(it => it.id === currentId || !(it.metaType === 'sito' && it.parentMetaId))
+    if (typeFilter == null) return topLevel
+    return topLevel.filter(it => (it.metaType ?? 'sentiero') === typeFilter)
+  }, [items, hike, driving, userOrigin, driveCache, ctsSettled, typeFilter, currentId])
 
   const deletedToastNode = showDeletedToast ? (
     <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-2 bg-stone-900 text-white text-[13px] font-semibold px-4 py-2.5 rounded-full shadow-lg animate-in fade-in slide-in-from-top-2">

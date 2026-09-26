@@ -86,6 +86,40 @@ describe('guideProfileFor — profili per siteType (piano §30)', () => {
   })
 })
 
+// piano §52.5 — un Sito nested (parentMetaId valorizzato) condivide il contesto territoriale col
+// suo Borgo/Città genitore: sapori/consigli, già raccontati lì, sono ridondanti nella Guida figlia.
+describe('guideProfileFor — Sito nested (piano §52.5)', () => {
+  it('un Sito nested esclude "sapori" e "consigli" in più delle esclusioni base', () => {
+    const profile = guideProfileFor('sito', undefined, undefined, true)
+    expect(profile.availableSections).not.toContain('sapori')
+    expect(profile.availableSections).not.toContain('consigli')
+  })
+
+  it('un Sito autonomo (isNestedSite assente o false) mantiene "sapori" e "consigli"', () => {
+    expect(guideProfileFor('sito').availableSections).toContain('sapori')
+    expect(guideProfileFor('sito').availableSections).toContain('consigli')
+    expect(guideProfileFor('sito', undefined, undefined, false).availableSections).toContain('sapori')
+  })
+
+  it('isNestedSite non tocca sectionOverrides/personaAddendum né le altre sezioni disponibili', () => {
+    const base = guideProfileFor('sito', 'museo')
+    const nested = guideProfileFor('sito', 'museo', undefined, true)
+    expect(nested.sectionOverrides).toEqual(base.sectionOverrides)
+    expect(nested.personaAddendum).toBe(base.personaAddendum)
+    expect(nested.availableSections).toEqual(base.availableSections.filter(k => k !== 'sapori' && k !== 'consigli'))
+  })
+
+  it('un Sito naturalistico nested mantiene "natura" (non tra le sezioni escluse per nested)', () => {
+    const profile = guideProfileFor('sito', 'cascata', undefined, true)
+    expect(profile.availableSections).toContain('natura')
+  })
+
+  it('isNestedSite è ignorato per metaType diverso da "sito"', () => {
+    expect(guideProfileFor('borgo_citta', undefined, undefined, true)).toEqual(guideProfileFor('borgo_citta'))
+    expect(guideProfileFor('sentiero', undefined, undefined, true)).toEqual(guideProfileFor('sentiero'))
+  })
+})
+
 // piano guide-eccellenza §Fase 3 — lib/guideCardVariant.ts promette che un Borgo/Città
 // 'trekking_misto' mantiene "Dati e sicurezza" quasi come un Sentiero; guideProfileFor lo
 // escludeva prima per OGNI borgo_citta senza eccezione, in disaccordo con quella promessa.

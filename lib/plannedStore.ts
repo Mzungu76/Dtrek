@@ -185,6 +185,13 @@ export interface PlannedHike {
   placeId?:                      string
   latitude?:                     number
   longitude?:                    number
+  // Provenienza della Guida di un Sito (docs/piano-mete-multitipologia.md §51.2,
+  // supabase/migrations/add_planned_hikes_parent_meta.sql) — assente/undefined = Guida autonoma,
+  // altrimenti l'id della Guida Borgo/Città da cui è nata (una tappa promossa a Guida a sé,
+  // §51.3). Valorizzato solo quando metaType === 'sito'; mai per sentiero/borgo_citta. Può
+  // azzerarsi (SET NULL) se la Guida madre viene cancellata — quella del Sito sopravvive e torna
+  // autonoma, mai cancellata a cascata.
+  parentMetaId?:                 string
 }
 
 // Index entry — no trackPoints (kept lightweight for the list)

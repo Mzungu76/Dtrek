@@ -334,6 +334,18 @@ function applySiteTypeOverride(base: GuideProfile, siteType: SiteType | undefine
   return { ...withNatura, sectionOverrides: { ...withNatura.sectionOverrides, ...overrides } }
 }
 
+// piano §52.5 — un Sito nested (parentMetaId valorizzato, nato da una tappa promossa a Guida a
+// sé dentro la Guida di un Borgo/Città) condivide il contesto territoriale col suo genitore: le
+// tradizioni gastronomiche e i consigli pratici della zona sono già raccontati a livello di
+// Borgo, ripeterli nella Guida del Sito sarebbe ridondante. Un Sito autonomo (nessun genitore che
+// li racconti) le mantiene entrambe — resta il profilo base invariato.
+const NESTED_SITE_EXCLUDED_SECTIONS: GuideSectionKey[] = ['sapori', 'consigli']
+
+function applyNestedSiteOverride(base: GuideProfile, isNestedSite: boolean | undefined): GuideProfile {
+  if (!isNestedSite) return base
+  return { ...base, availableSections: base.availableSections.filter(k => !NESTED_SITE_EXCLUDED_SECTIONS.includes(k)) }
+}
+
 // piano guide-eccellenza §Fase 3 — lib/guideCardVariant.ts promette che un Borgo/Città
 // 'trekking_misto' (traccia GPS reale collegata, un cammino che tocca il borgo) mantiene "Dati e
 // sicurezza" quasi come un Sentiero; questo profilo escludeva prima dati_sicurezza per OGNI
@@ -350,10 +362,16 @@ function applyBorgoVariantOverride(base: GuideProfile, variant: BorgoCardVariant
 // Assente/undefined trattato come 'sentiero' (il default di colonna, coerente con
 // lib/metaTypes.ts's metaHasHikingMetrics) — mai come "tipologia sconosciuta ⇒ profilo vuoto".
 // siteType è letto SOLO quando metaType è 'sito' (piano §30), borgoVariant SOLO quando metaType è
-// 'borgo_citta' (piano §Fase 3) — ignorati per ogni altra tipologia.
-export function guideProfileFor(metaType: MetaType | undefined, siteType?: SiteType, borgoVariant?: BorgoCardVariant): GuideProfile {
+// 'borgo_citta' (piano §Fase 3), isNestedSite SOLO quando metaType è 'sito' (piano §52.5) —
+// ignorati per ogni altra tipologia/combinazione.
+export function guideProfileFor(
+  metaType: MetaType | undefined,
+  siteType?: SiteType,
+  borgoVariant?: BorgoCardVariant,
+  isNestedSite?: boolean,
+): GuideProfile {
   const base = GUIDE_PROFILES[metaType ?? 'sentiero']
-  if (base.metaType === 'sito') return applySiteTypeOverride(base, siteType)
+  if (base.metaType === 'sito') return applyNestedSiteOverride(applySiteTypeOverride(base, siteType), isNestedSite)
   if (base.metaType === 'borgo_citta') return applyBorgoVariantOverride(base, borgoVariant)
   return base
 }

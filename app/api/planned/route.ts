@@ -95,6 +95,7 @@ function rowToHike(row: Record<string, unknown>, includeTracks = true): PlannedH
     placeId:                       row.place_id as string | undefined,
     latitude:                      row.latitude as number | undefined,
     longitude:                     row.longitude as number | undefined,
+    parentMetaId:                  row.parent_meta_id as string | undefined,
     borgoWalkPolyline:             row.borgo_walk_polyline as [number, number][] | undefined,
     borgoWalkStopsHash:            row.borgo_walk_stops_hash as string | undefined,
     borgoItineraryOverrides:       row.borgo_itinerary_overrides as PlannedHike['borgoItineraryOverrides'],
@@ -159,6 +160,7 @@ function hikeToRow(h: PlannedHike) {
     place_id:                         h.placeId ?? null,
     latitude:                         h.latitude ?? null,
     longitude:                        h.longitude ?? null,
+    parent_meta_id:                   h.parentMetaId ?? null,
   }
 }
 
@@ -185,6 +187,7 @@ const META_COLS = [
   'pending_expires_at', 'archived_at', 'favorite', 'first_completed_at', 'diary_id', 'route_mode', 'updated_at',
   'source_url', 'comfort_verdict', 'comfort_note', 'zone', 'difficulty', 'source_app',
   'is_sample', 'sample_region', 'meta_type', 'site_type', 'place_id', 'latitude', 'longitude',
+  'parent_meta_id', 'borgo_walk_stops_hash',
 ].join(', ')
 
 // Guaranteed-to-exist columns (base schema, no ALTER TABLE additions — updated_at
@@ -245,6 +248,22 @@ export async function GET(req: NextRequest) {
           severity: m.severity, keywords: m.keywords ?? [],
         })),
       })
+    }
+
+    // Guide dei Siti nate dentro una Guida Borgo/Città (piano §51.4) — usata da
+    // BorgoTappeWidget.tsx per sapere, tappa per tappa, se "Leggi tutto" deve aprire una Guida
+    // già esistente o crearla al volo (verifica utente 2026-09-28). Lista leggera (META_COLS,
+    // come sotto), mai trackPoints.
+    const parentMetaId = req.nextUrl.searchParams.get('parentMetaId')
+    if (parentMetaId) {
+      const { data, error } = await supabase
+        .from('planned_hikes')
+        .select(META_COLS)
+        .eq('user_id', user.id)
+        .eq('parent_meta_id', parentMetaId)
+        .order('created_at', { ascending: false })
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json((data ?? []).map((r) => rowToHike(r as unknown as Record<string, unknown>, false) as PlannedHikeMeta))
     }
 
     // Try full columns; fall back to core if newer ALTER TABLE columns don't exist yet

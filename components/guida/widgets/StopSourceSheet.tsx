@@ -12,11 +12,18 @@ export interface StopSourceSheetData {
 }
 
 /**
- * Pagina di lettura in-app per una tappa — verifica utente: prima "Fonte" apriva subito Wikipedia
- * in un'altra scheda del browser, ora resta un tap "dentro l'app" a leggibilità piena (stesso
- * testo esteso già in stop.description, solo senza il ritaglio della timeline compatta). Il link
- * esterno vero resta disponibile, ma solo come azione esplicita e secondaria in fondo — mai la
- * destinazione di default del tap, stesso principio già applicato in GuideGalleryLightbox. */
+ * Pagina di lettura in-app per una tappa senza un Sito collegato (source 'wikipedia', nessun
+ * dtrek_places.id — piano §51.3) — verifica utente: prima "Fonte" apriva subito Wikipedia in
+ * un'altra scheda del browser, ora resta un tap "dentro l'app" a leggibilità piena (stesso testo
+ * esteso già in stop.description, solo senza il ritaglio della timeline compatta). Il link esterno
+ * vero resta disponibile, ma solo come azione esplicita e secondaria in fondo — mai la
+ * destinazione di default del tap, stesso principio già applicato in GuideGalleryLightbox.
+ *
+ * Una tappa 'archivio' non passa più da qui (verifica utente 2026-09-28): "Leggi tutto" apre
+ * direttamente la Guida completa del Sito (components/guida/widgets/BorgoTappeWidget.tsx's
+ * handleLeggiTutto → SiteGuideOverlay), creandola al volo se non esiste ancora — questo foglio
+ * resta il semplice "leggi di più" per ciò che non può avere una Guida propria.
+ */
 export default function StopSourceSheet({ data, onClose }: { data: StopSourceSheetData; onClose: () => void }) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
