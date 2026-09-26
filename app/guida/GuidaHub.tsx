@@ -740,14 +740,20 @@ export default function GuidaHub({ id }: { id?: string }) {
     // dell'eventuale hike deep-linkato, cosicché anche quello sparisca dalla vista se non combacia
     // con la tipologia scelta (coerente: il filtro riguarda cosa si vede, non solo la galleria).
     // Una Guida Sito nested (piano §51.4) resta annidata nella Guida del suo Borgo/Città — non
-    // compare mai in QUESTO elenco, in nessun filtro incluso "tutte" (verifica utente 2026-09-26:
-    // solo le Guide costruite direttamente dalla ricerca vanno nell'elenco generale). Anche
-    // l'eventuale hike deep-linkato sparisce se nested, stesso principio del filtro tipologia già
-    // applicato qui sotto — raggiungibile solo dalla sezione dedicata dentro la Guida del Borgo.
-    const topLevel = withOpen.filter(it => !(it.metaType === 'sito' && it.parentMetaId))
+    // compare mai come ALTERNATIVA da sfogliare in questo elenco, in nessun filtro incluso "tutte"
+    // (verifica utente: solo le Guide costruite direttamente dalla ricerca vanno nell'elenco
+    // generale). MA l'item con id === currentId resta SEMPRE incluso qui sotto, anche se nested:
+    // RouteHub (poco più sotto) pesca esclusivamente da questo stesso array (`items={displayItems}`),
+    // quindi escludere anche l'item aperto ORA lo lasciava senza nulla da mostrare per quell'id —
+    // `currentItem = displayItems.find(...) ?? displayItems[0]` cadeva sul fallback e apriva
+    // un'altra Guida al posto di quella richiesta (bug osservato: "la guida non si apre, si va
+    // da un'altra parte"). Il filtro per tipologia sotto resta invece invariato (comportamento
+    // preesistente, deliberato): tipofilter parte sempre da null a ogni apertura (mai persistito),
+    // quindi un deep link diretto non lo incontra mai comunque.
+    const topLevel = withOpen.filter(it => it.id === currentId || !(it.metaType === 'sito' && it.parentMetaId))
     if (typeFilter == null) return topLevel
     return topLevel.filter(it => (it.metaType ?? 'sentiero') === typeFilter)
-  }, [items, hike, driving, userOrigin, driveCache, ctsSettled, typeFilter])
+  }, [items, hike, driving, userOrigin, driveCache, ctsSettled, typeFilter, currentId])
 
   const deletedToastNode = showDeletedToast ? (
     <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-2 bg-stone-900 text-white text-[13px] font-semibold px-4 py-2.5 rounded-full shadow-lg animate-in fade-in slide-in-from-top-2">
