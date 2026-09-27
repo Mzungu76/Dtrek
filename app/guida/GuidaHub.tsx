@@ -33,6 +33,7 @@ import { type BeautyScore } from '@/lib/beautyScore'
 import { computeBbox, minDistToTrack } from '@/lib/geoUtils'
 import { getUserStartingPoint, googleMapsDirectionsUrl, fetchDrivingInfo, originMatches, getTrailStartPoint } from '@/lib/drivingInfo'
 import { useCtsUpdated } from '@/lib/sync/useCtsUpdated'
+import { runWithConcurrency } from '@/lib/promisePool'
 import { formatDuration } from '@/lib/tcxParser'
 import type { GuideSectionKey } from '@/lib/guideSections'
 import { metaHasHikingMetrics, SITE_TYPE_CONFIG, META_TYPE_CONFIG, META_TYPES, type MetaType } from '@/lib/metaTypes'
@@ -374,6 +375,21 @@ export default function GuidaHub({ id }: { id?: string }) {
       })
     })
     setMetaList(sorted)
+    // Sceglie la Meta da aprire di default (galleria senza un id in URL) nella stessa passata di
+    // setItems sopra, invece che in un useEffect separato che se ne accorge un giro di render dopo
+    // (quando items cambia) — risparmia un intero ciclo di HubSkeleton ad ogni apertura della
+    // sezione Guide. Mai una Guida di Sito nested (piano §51.3/§51.4): il filtro di displayItems
+    // qui sotto esclude sempre un Sito nested DAL basso, TRANNE quello con id === currentId — se
+    // il default cadesse su un Sito nested (es. l'ultimo creato/aperto, spesso il più recente per
+    // data — verifica utente: "compare anche l'ultimo sito visualizzato all'interno di un borgo"),
+    // quell'eccezione lo terrebbe visibile nella galleria generale come se fosse una Guida a sé,
+    // finché l'utente non ne sceglie un'altra. sorted[0] resta il ripiego solo se DAVVERO ogni
+    // Meta è nested (mai lasciare currentId vuoto con items non vuoto).
+    setCurrentId(prev => {
+      if (prev) return prev
+      const first = sorted.find(h => !(h.metaType === 'sito' && h.parentMetaId))
+      return (first ?? sorted[0])?.id ?? null
+    })
     setDriveCache(prev => {
       const next = new Map(prev)
       for (const h of sorted) {
@@ -462,47 +478,61 @@ export default function GuidaHub({ id }: { id?: string }) {
   // senza una traccia GPS da disegnare, la copertina "Screen 1" (components/routehub/
   // CoverMap.tsx) resterebbe altrimenti solo lo sfondo scuro di ripiego, MAI una mappa (queste
   // Mete non ne hanno una, piano §48.9) — visto dal vivo su una preview Vercel come una copertina
-  // nera. Stesso endpoint di GuideReader (fetch alla vera apertura della Guida), stesso pattern
-  // del riempimento della distanza in auto sopra: parte solo a enrichmentReady, una scheda alla
-  // volta con una piccola pausa, mai in corsa con le fetch critiche del percorso aperto.
+  // nera.
+  //
+  // Verifica utente: "le immagini delle copertine sono lentissime da caricarsi" — non erano le
+  // immagini in sé (già servite ridimensionate, next/image + sizes su BottomGallery.tsx), era
+  // questo riempimento: una scheda alla volta, in serie, con 300ms di pausa tra l'una e l'altra —
+  // per N Borghi/Siti, N×300ms di solo respiro PRIMA ancora che l'ultima card sappia il proprio
+  // imageUrl. In più, `?fields=cover` (app/api/places/[id]/route.ts) invece dell'endpoint completo:
+  // quello portava con sé contatti/sourceCounts/relatedPlaces e l'arricchimento Wikipedia della
+  // descrizione, tre query Supabase e una ricerca in più che questa chiamata non legge mai (le
+  // serve solo imageUrl/openingHours). Ora fino a COVER_FETCH_CONCURRENCY richieste insieme
+  // (stesso pattern/libreria di lib/gbifShared.ts, lib/galleryCascade.ts, lib/offline/
+  // packageManager.ts — lib/promisePool.ts), mai tutte insieme senza limite.
   useEffect(() => {
     if (metaList.length === 0 || !enrichmentReady) return
+    const pending = metaList.filter(h =>
+      h.metaType && h.metaType !== 'sentiero' && h.placeId && !attemptedPlaceDetailRef.current.has(h.id),
+    )
+    if (pending.length === 0) return
+    for (const h of pending) attemptedPlaceDetailRef.current.add(h.id)
     let cancelled = false
-    ;(async () => {
-      for (const h of metaList) {
-        if (cancelled) return
-        if (!h.metaType || h.metaType === 'sentiero' || !h.placeId) continue
-        if (attemptedPlaceDetailRef.current.has(h.id)) continue
-        attemptedPlaceDetailRef.current.add(h.id)
-        try {
-          const res = await fetch(`/api/places/${h.placeId}`)
-          if (res.ok) {
-            const data = await res.json() as { imageUrl?: string | null; openingHours?: unknown }
-            const openingHoursLabel = h.metaType === 'sito' && typeof data.openingHours === 'string' && data.openingHours.trim()
-              ? data.openingHours.trim()
-              : undefined
-            if (!cancelled && (data.imageUrl || openingHoursLabel)) {
-              setItems(prev => prev.map(it => {
-                if (it.id !== h.id) return it
-                const next = { ...it, ...(data.imageUrl ? { coverPhotoUrl: data.imageUrl } : {}) }
-                if (!openingHoursLabel) return next
-                return { ...next, openingHoursLabel, statPills: statPillsForMeta(h, undefined, { poiCount: it.poiCount, openingHoursLabel }) }
-              }))
-            }
-          }
-        } catch { /* silenzioso — resta la copertina/orario di ripiego (nessuno) */ }
-        // Stesso respiro della distanza in auto sopra — questo endpoint fa anche una ricerca
-        // Wikipedia quando manca una foto/descrizione propria, non va martellato per l'intera
-        // galleria in un colpo solo.
-        await new Promise(r => setTimeout(r, 300))
-      }
-    })()
+    const COVER_FETCH_CONCURRENCY = 5
+    runWithConcurrency(
+      pending,
+      COVER_FETCH_CONCURRENCY,
+      async h => {
+        const res = await fetch(`/api/places/${h.placeId}?fields=cover`)
+        if (!res.ok) return null
+        return await res.json() as { imageUrl?: string | null; openingHours?: unknown }
+      },
+      (h, data) => {
+        if (cancelled || !data) return
+        const openingHoursLabel = h.metaType === 'sito' && typeof data.openingHours === 'string' && data.openingHours.trim()
+          ? data.openingHours.trim()
+          : undefined
+        if (!data.imageUrl && !openingHoursLabel) return
+        setItems(prev => prev.map(it => {
+          if (it.id !== h.id) return it
+          const next = { ...it, ...(data.imageUrl ? { coverPhotoUrl: data.imageUrl } : {}) }
+          if (!openingHoursLabel) return next
+          return { ...next, openingHoursLabel, statPills: statPillsForMeta(h, undefined, { poiCount: it.poiCount, openingHoursLabel }) }
+        }))
+      },
+    )
     return () => { cancelled = true }
   }, [metaList, enrichmentReady])
 
+  // Ripiego per quando items cambia SENZA passare da applyList (es. handleDelete sotto, che aggiorna
+  // items direttamente con setItems) — applyList sopra sceglie già currentId nella stessa passata
+  // per il caso comune (primo caricamento), questo effect resta solo per quei casi più rari. Stessa
+  // esclusione di una Guida di Sito nested vista sopra, mai duplicata in una funzione a parte per
+  // due usi così piccoli.
   useEffect(() => {
     if (currentId || items.length === 0) return
-    setCurrentId(items[0].id)
+    const first = items.find(it => !(it.metaType === 'sito' && it.parentMetaId))
+    setCurrentId((first ?? items[0]).id)
   }, [items, currentId])
 
   useEffect(() => {

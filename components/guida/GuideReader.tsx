@@ -11,6 +11,7 @@ import type { WikiPage } from '@/lib/wikipedia'
 import {
   VolumeX, Loader2,
   FileDown, BookOpen, Sparkles,
+  ChevronDown, ChevronUp,
 } from 'lucide-react'
 import type { PoiItem } from '@/lib/overpass'
 import PhotoMosaic from '@/components/PhotoMosaic'
@@ -292,6 +293,12 @@ export default function GuideReader({
   // su un chip la toglie dalla prossima chiamata — mai ripulito quando una sezione esce
   // dall'elenco (generata o rimossa), il filtro all'uso la ignora comunque in quel caso.
   const [deselectedSections, setDeselectedSections] = useState<Set<GuideSectionKey>>(new Set())
+  // Verifica utente: la riga compatta "+N sezioni da generare" (dentro il loop delle sezioni più
+  // sotto) era solo un segnaposto di stato, senza alcuna azione propria — bisognava risalire fino
+  // al banner "Genera il resto della guida" in cima per fare qualcosa. Espandibile sul posto: un
+  // tap la apre sulla stessa scelta per-chip/bottone del banner (stesso deselectedSections, cosicché
+  // un chip tolto in un posto resta tolto anche nell'altro), senza dover scorrere altrove.
+  const [emptyRowExpanded, setEmptyRowExpanded] = useState(false)
   const toggleSectionSelected = (key: GuideSectionKey) => setDeselectedSections(prev => {
     const next = new Set(prev)
     if (next.has(key)) next.delete(key); else next.add(key)
@@ -1682,30 +1689,79 @@ export default function GuideReader({
                 // La prima sezione vuota (piano guide-eccellenza §Fase 1.1) diventa una riga
                 // compatta unica che riassume TUTTE le sezioni vuote insieme — le altre non hanno
                 // più una card propria in questo loop (navEntries le esclude già, vedi sopra),
-                // invece di N placeholder quasi identici sparsi nello scroll. Verifica utente: qui
-                // dentro c'era ANCHE un secondo set di chip + un secondo bottone "Approfondisci"
-                // per scegliere/generare le stesse sezioni — praticamente duplicato del banner
-                // "Genera il resto della guida" appena sopra la lista (stesso deselectedSections,
-                // stessa generateSections()), la vecchia modalità prima di quel banner mai rimossa
-                // dopo la riscrittura. Questa riga resta solo come segnaposto di stato (quante
-                // sezioni mancano ancora, e se un approfondimento è in corso) — la scelta/l'azione
-                // vive un'unica volta, nel banner sopra.
+                // invece di N placeholder quasi identici sparsi nello scroll. Verifica utente
+                // 2026-09-30 ("rendi espandibile quel pulsante"): prima era solo un segnaposto di
+                // stato, senza azione propria — bisognava risalire al banner "Genera il resto della
+                // guida" in cima per fare qualcosa. Ora un tap la espande sul posto sulla stessa
+                // scelta per-chip + bottone del banner (stesso deselectedSections/generateSections,
+                // mai una seconda selezione che potrebbe andare fuori sincrono con quella), solo
+                // limitata alle sezioni davvero riassunte qui (emptySections, non tutte le
+                // missingSectionKeys — quelle con un widget ma senza testo hanno già la propria
+                // card sopra, non vanno contate due volte).
                 if (i === firstEmptyIndex) {
                   const approfondendoMerged = emptySections.some(es => generatingSections.includes(es.guideKey))
+                  const emptyKeys = emptySections.map(es => es.guideKey)
+                  const emptySelected = selectedFrom(emptyKeys)
                   return (
                     <article
                       key={s.key}
                       ref={el => { sectionRefs.current[i] = el }}
-                      className="scroll-mt-16 flex items-center gap-3 px-4 py-3 border border-stone-200 rounded-xl bg-white mb-2.5"
+                      className="scroll-mt-16 border border-stone-200 rounded-xl bg-white mb-2.5 overflow-hidden"
                     >
-                      <span className="[&>svg]:w-4 [&>svg]:h-4 shrink-0 text-stone-400">{LEGACY_STYLE.icon}</span>
-                      <span className="flex-1 min-w-0 text-[13px] font-semibold text-stone-800">
-                        + {emptySections.length} {emptySections.length === 1 ? 'sezione da generare' : 'sezioni da generare'}
-                      </span>
-                      {approfondendoMerged && (
-                        <span className="flex items-center gap-1 text-[11.5px] font-medium text-stone-400 shrink-0">
-                          <Loader2 className="w-3 h-3 animate-spin" /> Approfondimento…
+                      <button
+                        type="button"
+                        onClick={() => setEmptyRowExpanded(v => !v)}
+                        disabled={approfondendoMerged}
+                        aria-expanded={emptyRowExpanded}
+                        className="w-full flex items-center gap-3 px-4 py-3 text-left disabled:cursor-default"
+                      >
+                        <span className="[&>svg]:w-4 [&>svg]:h-4 shrink-0 text-stone-400">{LEGACY_STYLE.icon}</span>
+                        <span className="flex-1 min-w-0 text-[13px] font-semibold text-stone-800">
+                          + {emptySections.length} {emptySections.length === 1 ? 'sezione da generare' : 'sezioni da generare'}
                         </span>
+                        {approfondendoMerged ? (
+                          <span className="flex items-center gap-1 text-[11.5px] font-medium text-stone-400 shrink-0">
+                            <Loader2 className="w-3 h-3 animate-spin" /> Approfondimento…
+                          </span>
+                        ) : emptyRowExpanded ? (
+                          <ChevronUp className="w-4 h-4 text-stone-400 shrink-0" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 text-stone-400 shrink-0" />
+                        )}
+                      </button>
+                      {emptyRowExpanded && !approfondendoMerged && (
+                        <div className="flex flex-col gap-3 px-4 pb-3.5 pt-3 border-t border-stone-100">
+                          <div className="flex flex-wrap gap-1.5">
+                            {emptyKeys.map(key => {
+                              const isSelected = !deselectedSections.has(key)
+                              return (
+                                <button
+                                  key={key}
+                                  type="button"
+                                  onClick={() => toggleSectionSelected(key)}
+                                  className={`px-2.5 py-1 rounded-full text-[11.5px] font-semibold border transition-colors ${
+                                    isSelected
+                                      ? 'bg-terra-600 border-terra-600 text-white'
+                                      : 'bg-white border-stone-200 text-stone-400 line-through'
+                                  }`}
+                                >
+                                  {sectionTitleByKey.get(key) ?? key}
+                                </button>
+                              )
+                            })}
+                          </div>
+                          <button
+                            onClick={() => generateSections(emptySelected)}
+                            disabled={emptySelected.length === 0}
+                            className="w-full sm:w-auto shrink-0 px-4 py-2 rounded-full bg-terra-600 hover:bg-terra-700 disabled:bg-stone-300 disabled:cursor-not-allowed text-white text-[12.5px] font-semibold transition-colors self-start"
+                          >
+                            {emptySelected.length === 0
+                              ? 'Seleziona almeno una sezione'
+                              : emptySelected.length === emptyKeys.length
+                                ? 'Genera con Giulia (AI)'
+                                : `Genera ${emptySelected.length} ${emptySelected.length === 1 ? 'sezione' : 'sezioni'} con Giulia (AI)`}
+                          </button>
+                        </div>
                       )}
                     </article>
                   )
