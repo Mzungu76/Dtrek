@@ -51,6 +51,7 @@ import GuideGalleryLightbox, { type GuideGalleryItem } from './widgets/GuideGall
 import SitoGalleryWidget from './widgets/SitoGalleryWidget'
 import ParentGuideLinkWidget from './widgets/ParentGuideLinkWidget'
 import RelatedPlacesWidget from './widgets/RelatedPlacesWidget'
+import OpereMuseoWidget from './widgets/OpereMuseoWidget'
 import GuideHero from './GuideHero'
 import GuideStatsStrip from './GuideStatsStrip'
 import GuideBorgoStatsStrip from './GuideBorgoStatsStrip'
@@ -1419,16 +1420,21 @@ export default function GuideReader({
         placeDetailLoading ? (
           <SitoInfoSkeleton />
         ) : sitoFamily === 'scheda_pratica' ? (
-          <SitoInfoWidget
-            openingHours={typeof placeDetail?.openingHours === 'string' ? placeDetail.openingHours : null}
-            officialLink={officialLink}
-            wikipediaUrl={placeDetail?.wikipedia?.url}
-            address={placeDetail?.address}
-            phone={placeDetail?.phone}
-            email={placeDetail?.email}
-            latitude={placeDetail?.latitude ?? hike.latitude}
-            longitude={placeDetail?.longitude ?? hike.longitude}
-          />
+          <>
+            <SitoInfoWidget
+              openingHours={typeof placeDetail?.openingHours === 'string' ? placeDetail.openingHours : null}
+              officialLink={officialLink}
+              wikipediaUrl={placeDetail?.wikipedia?.url}
+              address={placeDetail?.address}
+              phone={placeDetail?.phone}
+              email={placeDetail?.email}
+              latitude={placeDetail?.latitude ?? hike.latitude}
+              longitude={placeDetail?.longitude ?? hike.longitude}
+            />
+            {/* Solo per un museo (docs/opere-musei-wikidata.md) — silenzioso da sé se vuoto
+                (OpereMuseoWidget), il caso comune per un museo locale/tematico. */}
+            {siteType === 'museo' && <OpereMuseoWidget opere={placeDetail?.opere ?? []} />}
+          </>
         ) : hike.latitude != null && hike.longitude != null ? (
           <div className="px-5 sm:px-8 md:px-10 py-4 border-b border-stone-200">
             <SitoGalleryWidget lat={hike.latitude} lon={hike.longitude} siteType={siteType} />
