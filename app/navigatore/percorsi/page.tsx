@@ -6,6 +6,8 @@ import { ArrowLeft } from 'lucide-react'
 import MapRouteThumb from '@/components/MapRouteThumb'
 import OfflinePackageDownloader from '@/components/navigation/OfflinePackageDownloader'
 import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
+import { effectiveNavPolyline } from '@/lib/borgoWalkPolyline'
+import { metaHasHikingMetrics } from '@/lib/metaTypes'
 import { formatDuration } from '@/lib/tcxParser'
 import { navigatorHomePath, openMainAppOrNavigate } from '@/lib/native/mainAppLinks'
 import { Loader2, Mountain, ExternalLink, Upload } from 'lucide-react'
@@ -26,7 +28,9 @@ export default function PercorsiPage() {
   }, [])
 
   const routes = (planned ?? [])
-    .filter((h) => !h.archivedAt && h.routePolyline && h.routePolyline.length > 1)
+    // Stesso principio di app/navigatore/page.tsx: un itinerario a piedi di Borgo/Città
+    // (borgoWalkPolyline) è navigabile quanto una traccia GPS reale, un Sito no (nessun percorso).
+    .filter((h) => !h.archivedAt && (effectiveNavPolyline(h)?.length ?? 0) > 1)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 
   return (
@@ -72,42 +76,55 @@ export default function PercorsiPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {routes.map((hike) => (
-              <Link
-                key={hike.id}
-                href={`/guida/${encodeURIComponent(hike.id)}/naviga`}
-                className="block bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-md transition-shadow border border-stone-200"
-              >
-                <div className="relative h-[140px] bg-gradient-to-b from-sky-50 to-stone-50 bg-topography">
-                  <MapRouteThumb polyline={hike.routePolyline!} color="#0284c7" strokeWidth={3} />
-                  {/* Download-for-offline directly from the list — previously only reachable after
-                      already starting live navigation on a route (ActiveNavigationView.tsx's own
-                      sheet), which meant there was effectively nowhere to see or manage this before
-                      committing to a hike offline. stopPropagation/preventDefault: this whole card
-                      is a Link to the navigation screen, and a nested button/anchor click would
-                      otherwise also trigger that navigation. */}
-                  <div
-                    className="absolute top-2 right-2 z-10"
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation() }}
-                  >
-                    <OfflinePackageDownloader
-                      hikeId={hike.id}
-                      routePolyline={hike.routePolyline!}
-                      hikeData={{ cachedPois: hike.cachedPois }}
-                      compact
-                    />
+            {routes.map((hike) => {
+              const polyline = effectiveNavPolyline(hike)!
+              // Un Borgo/Città cammina su un itinerario generato, non su una vera uscita
+              // escursionistica: km/D+/durata stimata (piano §24, "mai 0 km per un museo") restano
+              // pillole di un Sentiero, mai fabbricate per un tipo che non le ha mai calcolate.
+              const hikingPills = metaHasHikingMetrics(hike.metaType)
+              return (
+                <Link
+                  key={hike.id}
+                  href={`/guida/${encodeURIComponent(hike.id)}/naviga`}
+                  className="block bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-md transition-shadow border border-stone-200"
+                >
+                  <div className="relative h-[140px] bg-gradient-to-b from-sky-50 to-stone-50 bg-topography">
+                    <MapRouteThumb polyline={polyline} color="#0284c7" strokeWidth={3} />
+                    {/* Download-for-offline directly from the list — previously only reachable after
+                        already starting live navigation on a route (ActiveNavigationView.tsx's own
+                        sheet), which meant there was effectively nowhere to see or manage this before
+                        committing to a hike offline. stopPropagation/preventDefault: this whole card
+                        is a Link to the navigation screen, and a nested button/anchor click would
+                        otherwise also trigger that navigation. */}
+                    <div
+                      className="absolute top-2 right-2 z-10"
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation() }}
+                    >
+                      <OfflinePackageDownloader
+                        hikeId={hike.id}
+                        routePolyline={polyline}
+                        hikeData={{ cachedPois: hike.cachedPois }}
+                        compact
+                      />
+                    </div>
                   </div>
-                </div>
-                <div className="px-[18px] pt-4 pb-[18px]">
-                  <p className="text-[16px] font-bold text-sky-900 mb-2 truncate">{hike.title}</p>
-                  <div className="flex items-center gap-4 text-[13px] text-stone-500 flex-wrap">
-                    <span>{(hike.distanceMeters / 1000).toFixed(1)} km</span>
-                    <span>{Math.round(hike.elevationGain)} m D+</span>
-                    <span>{formatDuration(hike.estimatedTimeSeconds)} stim.</span>
+                  <div className="px-[18px] pt-4 pb-[18px]">
+                    <p className="text-[16px] font-bold text-sky-900 mb-2 truncate">{hike.title}</p>
+                    <div className="flex items-center gap-4 text-[13px] text-stone-500 flex-wrap">
+                      {hikingPills ? (
+                        <>
+                          <span>{(hike.distanceMeters / 1000).toFixed(1)} km</span>
+                          <span>{Math.round(hike.elevationGain)} m D+</span>
+                          <span>{formatDuration(hike.estimatedTimeSeconds)} stim.</span>
+                        </>
+                      ) : (
+                        <span>Itinerario a piedi</span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </Link>
-            ))}
+                </Link>
+              )
+            })}
           </div>
         )}
       </main>

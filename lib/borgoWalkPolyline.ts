@@ -23,3 +23,17 @@ export function computeBorgoWalkFields(itinerary: BorgoItinerary): BorgoWalkFiel
     borgoWalkStopsHash: itinerary.stops.map(s => s.id).join(','),
   }
 }
+
+/** Polyline da usare per navigare/elencare una Meta come "percorso pronto" — routePolyline (traccia
+ *  GPS reale) quando c'è, altrimenti il ripiego già previsto dal commento su borgoWalkPolyline in
+ *  lib/plannedStore.ts ("usato dal Navigator come ripiego"), finora implementato solo in
+ *  app/guida/[id]/naviga/page.tsx. Un Sito non ha né l'uno né l'altro (nessun percorso da seguire,
+ *  è un punto) — undefined è la risposta corretta, non un errore da gestire a parte. Da usare SOLO
+ *  per la resa locale (filtri/mappa/navigazione): mai scrivere il risultato indietro su
+ *  routePolyline, altrimenti borgoCardVariant/metaEligibleForHikingScores (lib/guideCardVariant.ts)
+ *  riclasserebbero per errore l'itinerario generato come una vera traccia GPS. */
+export function effectiveNavPolyline(
+  hike: { routePolyline?: [number, number][]; borgoWalkPolyline?: [number, number][] },
+): [number, number][] | undefined {
+  return hike.routePolyline?.length ? hike.routePolyline : hike.borgoWalkPolyline
+}

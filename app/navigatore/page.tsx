@@ -6,6 +6,7 @@ import FreeTrackMap, { type FreeTrackMapHandle } from '@/components/navigation/F
 import NavigatorMenu from '@/components/navigation/NavigatorMenu'
 import { LocationSource, type LocationSourceError } from '@/lib/native/locationSource'
 import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
+import { effectiveNavPolyline } from '@/lib/borgoWalkPolyline'
 import { openMainApp } from '@/lib/native/mainAppLinks'
 import { useEntitlement } from '@/lib/useEntitlement'
 
@@ -55,7 +56,12 @@ export default function NavigatorePage() {
   useEffect(() => {
     getAllPlanned().then((list) => {
       const active = list
-        .filter((h) => !h.archivedAt && h.routePolyline && h.routePolyline.length > 1)
+        // Un Borgo/Città con itinerario a piedi generato (borgoWalkPolyline) è navigabile quanto un
+        // Sentiero con traccia GPS reale — solo routePolyline escludeva ogni Borgo dal Navigator
+        // nativo, anche se la stessa Meta si naviga già correttamente via web (app/guida/[id]/
+        // naviga/page.tsx). Un Sito non ha né l'uno né l'altro: resta escluso, corretto, non è un
+        // percorso da seguire.
+        .filter((h) => !h.archivedAt && (effectiveNavPolyline(h)?.length ?? 0) > 1)
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       setReadyHike(active[0] ?? null)
     }).catch(() => setReadyHike(null))
