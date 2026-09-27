@@ -1079,11 +1079,13 @@ Museo:
 - percorso consigliato;
 - cosa non perdere.
 
-**Nota (2026-09-26)**: "opere" qui è oggi testo generato da un LLM (`lib/guideProfiles.ts`), senza
-alcun dato reale. `docs/arco-opere-musei.md` verifica se/come collegare le opere REALI conservate
-in un museo MiC già in Dtrek, usando ArCo — diagnostica (`scripts/places/mic/opere/probe.ts`) non
-ancora verificata dal vivo, nessuna pipeline di import scritta finché il predicato non è confermato
-sui dati.
+**Nota (2026-09-26/27)**: "opere" qui è oggi testo generato da un LLM (`lib/guideProfiles.ts`),
+senza alcun dato reale. `docs/arco-opere-musei.md` ha verificato ArCo come fonte — meccanismo
+tecnico confermato ma copertura reale insufficiente (~8 musei ben catalogati su 2.296 già in
+Dtrek), chiuso negativamente per l'obiettivo di arricchire OGNI Guida Sito museo.
+`docs/opere-musei-wikidata.md` verifica l'alternativa Wikidata (`P195`/`P276`), con copertura
+nettamente migliore per i grandi musei ma ancora da completare per i musei piccoli/tematici —
+diagnostica in `scripts/places/wikidata/opere/probe.ts`, nessuna pipeline di import scritta.
 
 Castello:
 

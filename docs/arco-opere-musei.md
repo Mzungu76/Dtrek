@@ -531,12 +531,11 @@ SPARQL **non è la fonte giusta per arricchire in modo diffuso la sezione "opere
 museo** — il meccanismo tecnico (ponte `owl:sameAs` + `hasCulturalInstituteOrSite`) funziona, ma la
 copertura reale dei dati non regge l'obiettivo. Non si esclude un uso mirato futuro per i pochi
 musei con collezione ben catalogata (identificabili con `--describe-uri`/`--bridge`), ma NON come
-soluzione principale. Vedi `docs/arco-opere-musei-alternative.md` (se creato in una sessione
-successiva) per le alternative valutate al suo posto — Wikidata (proprietà `P195`/`P276`, già
-riusabile via l'arricchimento `wikidata_id` esistente in `scripts/places/wikidata/enrich.ts`, oggi
-non ancora eseguito sui musei: 0/2296 con `wikidata_id`) e/o il testo Wikipedia già usato per
-Borgo/Città (`lib/wikipedia.ts`) come contesto per ancorare la narrazione LLM invece di lasciarla
-pura invenzione.
+soluzione principale. **Vedi `docs/opere-musei-wikidata.md`** per l'alternativa verificata subito
+dopo nella stessa sessione — Wikidata (proprietà `P195`/`P276`, già riusabile via l'arricchimento
+`wikidata_id` esistente in `scripts/places/wikidata/enrich.ts`, oggi non ancora eseguito sui musei:
+0/2296 con `wikidata_id`) dà una copertura reale nettamente migliore per i grandi musei (Galleria
+Borghese 240 opere contro 1 su ArCo).
 
 Nessuna pipeline di import/tabella creata in questa PR (coerente con quanto dichiarato dall'inizio):
 il lavoro qui resta diagnostica + questo report, propedeutici alla decisione di NON proseguire su
