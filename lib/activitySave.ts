@@ -25,6 +25,11 @@ export interface SaveActivityOptions {
   // come default di colonna via activityToRow (app/api/activity/route.ts).
   metaType?: MetaType
   siteType?: SiteType
+  /** Vero (default) per ogni chiamata esistente: una traccia GPS registrata/importata è già di per
+   *  sé la prova reale che l'app ha sempre richiesto (mai un'autodichiarazione). Falso solo dal
+   *  check-in GPS di un Sito fuori raggio/senza segnale ("registra comunque" — lib/visitCompletion.ts),
+   *  l'unico caso in cui l'app crea un'Attività senza prova di posizione reale. */
+  verified?: boolean
   /** Set only by the standalone Navigator app's free-track recording flow (app/navigatore/traccia) — see lib/navigatorSlot.ts. Never set by the main app's own upload/save flows. */
   sourceApp?: 'navigator'
   /**
@@ -207,6 +212,7 @@ export async function saveActivityWithEnrichment(
     sourceApp: opts.sourceApp,
     metaType: opts.metaType,
     siteType: opts.siteType,
+    verified: opts.verified,
     ...guideCarry,
   }
   const { ok } = await saveActivity(stored)

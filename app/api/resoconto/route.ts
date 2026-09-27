@@ -15,7 +15,7 @@ import { wmoInfo, type WeatherAtHike } from '@/lib/openmeteo'
 import { readProfile, isProfileReady, formatStyleProfileBlock, type WritingStyleProfile } from '@/lib/writingStyleProfile'
 import { resolveDtrekEntitlement } from '@/lib/dtrekEntitlement'
 import { reportProfileFor, type ReportProfile } from '@/lib/reportProfiles'
-import type { MetaType } from '@/lib/metaTypes'
+import type { MetaType, SiteType } from '@/lib/metaTypes'
 
 export const maxDuration = 120
 export const dynamic = 'force-dynamic'
@@ -304,14 +304,11 @@ Scrivi il reportage strutturato in queste ${hasQa ? 'quattro' : 'tre'} sezioni (
 ## ${profile.sectionTitle}
 ${profile.sectionBrief}${profile.hikingMetrics ? ' Usa i dati di distanza, dislivello e quota come ancoraggio.' : ''}${guideBlock ? ' Metti a confronto la GUIDA SCRITTA PRIMA DELL\'USCITA con quello che i dati e le foto mostrano davvero: dove trova conferma, dove si è rivelato diverso da come era descritto. Se una previsione della guida non trova riscontro nei dati reali, dillo esplicitamente invece di riscriverla al passato — è proprio quello lo scarto che rende utile un resoconto rispetto a una guida.' : ''}${weatherLine ? ' Se rilevante, integra il METEO fornito sopra come elemento narrativo (luce, condizioni, visibilità), non come sezione a parte.' : ''}
 ${cronacaBlock}
-## Natura e storia
-Approfondisci i luoghi attraversati: geologia, flora, fauna, siti storici o
-archeologici nelle vicinanze, tradizioni locali. Includi almeno un fatto poco noto
-che arricchisca la conoscenza del territorio.${natureBlock ? ' Fonda la parte naturalistica sui DATI NATURALISTICI E FENOLOGICI REALI forniti sopra (specie osservate, tipo di bosco, fenologia satellitare).' : ''}${poiBlock ? ' Usa i PUNTI DI INTERESSE forniti sopra per la parte storico-culturale.' : ''}${guideBlock ? ' La guida pre-uscita ha già raccolto contesto storico-naturalistico: riprendilo, ma verifica se le foto e i dati dell\'uscita lo confermano o lo correggono, e aggiungi ciò che si è potuto sapere solo essendoci stati.' : ''}
+## ${profile.section2Title}
+${profile.section2Brief}${profile.hikingMetrics && natureBlock ? ' Fonda la parte naturalistica sui DATI NATURALISTICI E FENOLOGICI REALI forniti sopra (specie osservate, tipo di bosco, fenologia satellitare).' : ''}${poiBlock ? ' Usa i PUNTI DI INTERESSE forniti sopra per la parte storico-culturale.' : ''}${guideBlock ? (profile.hikingMetrics ? ' La guida pre-uscita ha già raccolto contesto storico-naturalistico: riprendilo, ma verifica se le foto e i dati dell\'uscita lo confermano o lo correggono, e aggiungi ciò che si è potuto sapere solo essendoci stati.' : ' La guida pre-uscita ha già raccolto contesto storico: riprendilo, ma verifica se le foto e i dati della visita lo confermano o lo correggono, e aggiungi ciò che si è potuto sapere solo essendoci stati.') : ''}
 
-## In sintesi
-Valutazione complessiva: difficoltà effettiva, qualità del contesto, periodo ideale,
-consigli pratici. Una o due frasi conclusive che catturino l'essenza dell'esperienza.${guideBlock ? ' I consigli pratici devono valere per chi ci andrà DOPO: dove la guida pre-uscita era ottimista o pessimista, dove serve un\'avvertenza che prima non c\'era.' : ''}
+## ${profile.section3Title}
+${profile.section3Brief}${guideBlock ? ' I consigli pratici devono valere per chi ci andrà DOPO: dove la guida pre-uscita era ottimista o pessimista, dove serve un\'avvertenza che prima non c\'era.' : ''}
 
 ${positionedPhotos.length > 0 ? `Quando fai riferimento a una foto geolocalizzata, usa il suo numero (es. "nella foto 1", "lo scatto 3 mostra"). Le foto della galleria generica possono essere citate per nome senza posizione nel percorso.` : ''}
 Scrivi in italiano preciso, diretto, senza aggettivi inflazionati o toni epici.
@@ -548,7 +545,10 @@ export async function POST(req: NextRequest) {
   // "Travasato" dalla Meta all'Attività al salvataggio (lib/activitySave.ts) — vedi
   // supabase/migrations/add_activities_meta_type_columns.sql. Assente/undefined trattato come
   // 'sentiero' (il default di colonna), coerente con lib/guideProfiles.ts.
-  const reportProfile = reportProfileFor(activity.meta_type as MetaType | undefined)
+  const reportProfile = reportProfileFor(
+    activity.meta_type as MetaType | undefined,
+    activity.site_type as SiteType | undefined,
+  )
 
   const client  = new Anthropic({ apiKey })
   const { text: prompt, imageBlocks } = buildPrompt(activity, length, photos, guideText, qa, poiBlock, nature, aiUseBiometricData, styleProfile, guideGeneratedAt, reportProfile)

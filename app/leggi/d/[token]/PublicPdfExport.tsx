@@ -109,6 +109,14 @@ function EntryPage({ entry, n, mapDataUrl }: {
       </h2>
       <p className="pdf-block" style={{ fontSize: 11, color: '#9ca3af', margin: '0 0 12px' }}>
         {new Date(entry.startTime).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}
+        {/* Solo per un'Attività nata dal ripiego "registra comunque" del check-in GPS di un Sito
+            (lib/visitCompletion.ts) — un PDF esportato è un artefatto statico, la stessa onestà
+            del sito pubblico (components/leggi/PublicReportPage.tsx) va portata anche qui. */}
+        {!entry.verified && (
+          <span style={{ marginLeft: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#a15c00' }}>
+            · Visita non verificata
+          </span>
+        )}
       </p>
 
       <div className="pdf-block" style={{ display: 'flex', borderTop: '1px solid #f0ede7', borderBottom: '1px solid #f0ede7', margin: '0 0 16px' }}>

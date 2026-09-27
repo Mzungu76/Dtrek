@@ -56,6 +56,8 @@ import { useDrivingDistance } from './useDrivingDistance'
 import { useSafetyScore } from './useSafetyScore'
 import { useCtsRecompute } from '@/lib/useCtsRecompute'
 import { tryOpenNavigatorApp } from '@/lib/navigatorHandoff'
+import { canCompleteWithoutTrack } from '@/lib/visitCompletion'
+import { useSiteCheckIn } from '@/lib/useSiteCheckIn'
 
 const StreetViewPanel = dynamic(() => import('@/components/StreetViewPanel'), { ssr: false })
 const RouteMap3D       = dynamic(() => import('@/components/RouteMap3D'),      { ssr: false })
@@ -232,6 +234,13 @@ export default function GuidaHub({ id }: { id?: string }) {
     const t = setTimeout(() => setShowDeletedToast(false), 3000)
     return () => clearTimeout(t)
   }, [])
+  // Check-in GPS per la Guida di un Sito (nessun percorso da seguire, solo un punto — l'unica
+  // tipologia che si completa senza una traccia registrata/importata, vedi lib/visitCompletion.ts).
+  // Aggiorna `hike` SOLO se la Meta appena confermata è quella davvero aperta ora (una scheda della
+  // galleria non ancora aperta non deve toccare lo stato di un'altra Guida in memoria).
+  const { busy: checkInBusy, toast: checkInToast, confirmVisit } = useSiteCheckIn(
+    (refreshed) => setHike(prev => prev && prev.id === refreshed.id ? { ...prev, ...refreshed } : prev),
+  )
   const [ctsSettled, setCtsSettled] = useState(false)
   const [pendingScrollSection, setPendingScrollSection] = useState<GuideSectionKey | null>(null)
   const [highlightedPoiId, setHighlightedPoiId] = useState<number | null>(null)
@@ -766,6 +775,12 @@ export default function GuidaHub({ id }: { id?: string }) {
     </div>
   ) : null
 
+  const checkInToastNode = checkInToast ? (
+    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-2 bg-stone-900 text-white text-[13px] font-semibold px-4 py-2.5 rounded-full shadow-lg animate-in fade-in slide-in-from-top-2 max-w-[calc(100%-2rem)] text-center">
+      <Check className={`w-4 h-4 shrink-0 ${checkInToast.ok ? 'text-forest-400' : 'text-amber-400'}`} /> {checkInToast.message}
+    </div>
+  ) : null
+
   if (!listLoaded) {
     return <>{deletedToastNode}<HubSkeleton /></>
   }
@@ -1131,7 +1146,17 @@ export default function GuidaHub({ id }: { id?: string }) {
           onScrollToSectionConsumed={() => setPendingScrollSection(null)}
           highlightedPoiId={highlightedPoiId}
           onPoiTap={id => setHighlightedPoiId(prev => prev === id ? null : id)}
-          weather={hasGps ? { lat: centerPt.lat!, lon: centerPt.lon!, mode: hike.plannedDate ? 'planned' as const : 'forecast' as const } : undefined}
+          weather={
+            hasGps
+              ? { lat: centerPt.lat!, lon: centerPt.lon!, mode: hike.plannedDate ? 'planned' as const : 'forecast' as const }
+              // Un Borgo/Città senza traccia GPS reale e ogni Sito non hanno mai trackPoints (hasGps
+              // resta sempre false) ma hanno comunque le coordinate copiate in modo durevole da
+              // dtrek_places su hike.latitude/longitude — stesso fallback già usato altrove (es.
+              // borgoWalkPolyline) invece di lasciare il meteo assente per queste due tipologie.
+              : (hike.latitude != null && hike.longitude != null)
+                ? { lat: hike.latitude, lon: hike.longitude, mode: hike.plannedDate ? 'planned' as const : 'forecast' as const }
+                : undefined
+          }
           onOpenMap3D={hasGps ? () => setShow3D(true) : undefined}
           showGradient={showGradient}
           showAspect={showAspect}
@@ -1230,13 +1255,33 @@ export default function GuidaHub({ id }: { id?: string }) {
   const primaryAction = (routeItem: RouteHubItem): PrimaryAction | null => {
     // Per l'hike davvero aperto (unico per cui hike.routePolyline/borgoWalkPolyline sono già in
     // memoria, stesso motivo di scoreGaugeBadge sopra) niente bottone "Naviga" quando non c'è
-    // proprio nulla da seguire — un Sito, o un Borgo/Città cammino_urbano il cui itinerario a
-    // piedi non è (ancora) arrivato — invece di portare a un vicolo cieco
-    // ("Impossibile avviare la navigazione: percorso non disponibile offline", app/guida/[id]/
-    // naviga/page.tsx). Per ogni altra scheda della galleria resta mostrato: non c'è ancora modo
-    // di sapere qui se avrà un itinerario senza caricarne il record intero, e il tocco stesso
-    // porta comunque a quella pagina, che verifica di nuovo con i dati freschi.
-    if (routeItem.id === hike?.id && !hike.routePolyline?.length && !hike.borgoWalkPolyline?.length) return null
+    // proprio nulla da seguire — un Borgo/Città cammino_urbano il cui itinerario a piedi non è
+    // (ancora) arrivato — invece di portare a un vicolo cieco ("Impossibile avviare la
+    // navigazione: percorso non disponibile offline", app/guida/[id]/naviga/page.tsx). Un Sito non
+    // ha mai nulla da seguire: gestito subito sotto con un'azione diversa, mai "Naviga".
+    if (routeItem.id === hike?.id && !hike.routePolyline?.length && !hike.borgoWalkPolyline?.length) {
+      if (canCompleteWithoutTrack(hike.metaType) && !hike.firstCompletedAt) {
+        return {
+          label: checkInBusy ? 'Verifica posizione…' : 'Conferma la tua visita',
+          icon: MapPin,
+          onClick: () => confirmVisit(hike.id),
+          variant: 'terra',
+        }
+      }
+      return null
+    }
+    if (routeItem.metaType === 'sito') {
+      // Stesso principio del commento sopra per "Naviga" sulle altre schede: qui non sappiamo
+      // ancora se questo Sito è già stato visitato (firstCompletedAt non è nel RouteHubItem
+      // leggero) — il tocco stesso lo verifica, aprendo la Meta e richiamando lo stesso handler.
+      // Mai "Naviga" per un Sito: non ha mai un percorso da seguire, in nessun caso.
+      return {
+        label: 'Conferma la tua visita',
+        icon: MapPin,
+        onClick: () => confirmVisit(routeItem.id),
+        variant: 'terra',
+      }
+    }
     return {
       label: 'Naviga',
       icon: Navigation,
@@ -1271,6 +1316,7 @@ export default function GuidaHub({ id }: { id?: string }) {
   return (
     <>
       {deletedToastNode}
+      {checkInToastNode}
       <RouteHub
         mode="guida"
         items={displayItems}

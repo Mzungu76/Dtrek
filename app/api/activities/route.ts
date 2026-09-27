@@ -15,7 +15,7 @@ const META_COLS = [
   'file_name', 'user_notes', 'tags', 'user_rating', 'user_rating_note',
   'route_polyline', 'soddisfazione',
   'linked_beauty_score', 'trail_score', 'trail_score_confidence', 'trail_score_computed_at',
-  'updated_at', 'favorite', 'source_app', 'linked_planned_id',
+  'updated_at', 'favorite', 'source_app', 'linked_planned_id', 'meta_type', 'site_type', 'verified',
 ].join(', ')
 
 // Same list without updated_at — fallback for an environment that hasn't run
@@ -29,7 +29,7 @@ const META_COLS_CORE = [
   'file_name', 'user_notes', 'tags', 'user_rating', 'user_rating_note',
   'route_polyline', 'soddisfazione',
   'linked_beauty_score', 'trail_score', 'trail_score_confidence', 'trail_score_computed_at',
-  'linked_planned_id',
+  'linked_planned_id', 'meta_type', 'site_type', 'verified',
 ].join(', ')
 
 function rowToMeta(row: Record<string, unknown>): ActivityMeta {
@@ -63,6 +63,9 @@ function rowToMeta(row: Record<string, unknown>): ActivityMeta {
     favorite:        row.favorite as boolean | undefined,
     sourceApp:       row.source_app as ActivityMeta['sourceApp'],
     linkedPlannedId: row.linked_planned_id as string | undefined,
+    metaType:        (row.meta_type as ActivityMeta['metaType']) ?? 'sentiero',
+    siteType:        row.site_type as ActivityMeta['siteType'] | undefined,
+    verified:        (row.verified as boolean | undefined) ?? true,
   }
 }
 

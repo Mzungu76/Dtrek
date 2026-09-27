@@ -79,6 +79,13 @@ export interface StoredActivity extends TcxActivity {
   // colonna), mai come "tipologia sconosciuta".
   metaType?: MetaType
   siteType?: SiteType
+  /** Vero quando l'Attività nasce da un dato di posizione reale: traccia GPS registrata/importata
+   *  (ogni Sentiero/Borgo, da sempre), o check-in GPS confermato entro il raggio del Sito
+   *  (lib/visitCompletion.ts). Falso solo per il ripiego "registra comunque" di un check-in Sito
+   *  fuori raggio o senza segnale GPS — mai un'autodichiarazione libera altrove. Assente su ogni
+   *  attività salvata prima di questa colonna: DEFAULT true a livello di colonna (erano tutte reali,
+   *  nessuna eccezione esisteva ancora), mai da trattare come "non verificata" per omissione. */
+  verified?: boolean
 }
 
 export interface ActivityMeta {
@@ -114,6 +121,7 @@ export interface ActivityMeta {
   sourceApp?: 'navigator'
   metaType?: MetaType
   siteType?: SiteType
+  verified?: boolean
   /** A quale Meta (planned_hikes) è collegato — l'unico modo per risalire al Diario di un
    *  resoconto (planned_hikes.diary_id), che non ha una colonna propria. Proiettato qui, sulla
    *  lista leggera, per il filtro per Diario di app/resoconto/ResocontoHub.tsx: prima era
@@ -157,6 +165,7 @@ function toMeta(a: StoredActivity): ActivityMeta {
     favorite:        a.favorite,
     metaType:        a.metaType,
     siteType:        a.siteType,
+    verified:        a.verified,
     linkedPlannedId: a.linkedPlannedId,
   }
 }

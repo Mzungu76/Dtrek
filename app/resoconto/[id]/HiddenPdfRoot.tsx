@@ -56,6 +56,14 @@ export function HiddenPdfRoot({ activity, heroPhoto, dateStr, sections, photos, 
             {activity.title ?? activity.notes ?? 'Escursione'}
           </h1>
           {dateStr && <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)', margin: '4px 0 0', fontStyle: 'italic' }}>{dateStr}</p>}
+          {/* Solo per un'Attività nata dal ripiego "registra comunque" del check-in GPS di un Sito
+              (lib/visitCompletion.ts) — un PDF esportato in locale lascia comunque l'app, stessa
+              onestà del sito pubblico (components/leggi/PublicReportPage.tsx). */}
+          {activity.verified === false && (
+            <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#f0b429', margin: '4px 0 0' }}>
+              Visita non verificata
+            </p>
+          )}
         </div>
       </div>
 

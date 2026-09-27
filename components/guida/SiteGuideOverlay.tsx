@@ -1,11 +1,13 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Check, MapPin } from 'lucide-react'
 import GuideReader from './GuideReader'
 import SiteGuideSkeleton from './SiteGuideSkeleton'
 import { getPlannedById, type PlannedHike } from '@/lib/plannedStore'
 import { useHasAiAccess } from '@/app/guida/useHasAiAccess'
+import { canCompleteWithoutTrack } from '@/lib/visitCompletion'
+import { useSiteCheckIn } from '@/lib/useSiteCheckIn'
 
 interface Props {
   /** id della Guida di Sito da mostrare — nested o autonoma, indifferentemente. */
@@ -35,6 +37,11 @@ interface Props {
 export default function SiteGuideOverlay({ siteId, onClose }: Props) {
   const [hike, setHike] = useState<PlannedHike | null>(null)
   const { hasAiAccess, aiUnavailable, trialExpired } = useHasAiAccess()
+  // Stesso check-in GPS di app/guida/GuidaHub.tsx (lib/useSiteCheckIn.ts) — qui l'unico Sito
+  // possibile è sempre quello aperto, mai una scheda di galleria da risolvere al volo.
+  const { busy: checkInBusy, toast: checkInToast, confirmVisit } = useSiteCheckIn(
+    (refreshed) => setHike(prev => prev && prev.id === refreshed.id ? { ...prev, ...refreshed } : prev),
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -67,7 +74,28 @@ export default function SiteGuideOverlay({ siteId, onClose }: Props) {
           hasAiAccess={hasAiAccess}
           aiUnavailable={aiUnavailable}
           trialExpired={trialExpired}
+          // Mai una traccia GPS per un Sito: niente hasGps/centerPt qui come in GuidaHub.tsx,
+          // solo le coordinate copiate in modo durevole da dtrek_places su hike.latitude/longitude.
+          weather={
+            hike.latitude != null && hike.longitude != null
+              ? { lat: hike.latitude, lon: hike.longitude, mode: hike.plannedDate ? 'planned' as const : 'forecast' as const }
+              : undefined
+          }
         />
+      )}
+      {hike && canCompleteWithoutTrack(hike.metaType) && !hike.firstCompletedAt && (
+        <button
+          onClick={() => confirmVisit(hike.id)}
+          disabled={checkInBusy}
+          className="fixed z-[96] bottom-[calc(env(safe-area-inset-bottom,0px)+16px)] right-4 flex items-center gap-2 pl-3.5 pr-4 py-2.5 rounded-full text-sm font-semibold shadow-lg transition-transform hover:scale-[1.03] disabled:opacity-70 bg-terra-500 text-white"
+        >
+          <MapPin className="w-4 h-4" /> {checkInBusy ? 'Verifica posizione…' : 'Conferma la tua visita'}
+        </button>
+      )}
+      {checkInToast && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[97] flex items-center gap-2 bg-stone-900 text-white text-[13px] font-semibold px-4 py-2.5 rounded-full shadow-lg animate-in fade-in slide-in-from-top-2 max-w-[calc(100%-2rem)] text-center">
+          <Check className={`w-4 h-4 shrink-0 ${checkInToast.ok ? 'text-forest-400' : 'text-amber-400'}`} /> {checkInToast.message}
+        </div>
       )}
     </div>
   )
