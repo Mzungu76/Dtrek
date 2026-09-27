@@ -470,6 +470,36 @@ AltoAdige, forward su Firenze prima del ponte) — mai ancora verificato con una
 musei specifici, solo su un campione generico. Aggiunta `buildWorksCountReverseQuery` (e wired in
 `--bridge`/`--museo-opere`, che ora stampano ENTRAMBE le direzioni) per chiuderlo.
 
+## 5undecies. Predicato giusto trovato — ma copertura reale bassissima anche sui grandi musei
+
+Eseguito dal vivo (2026-09-27) con `hasCulturalInstituteOrSite` (direzione opera→museo) sui 5 musei
+del §5decies:
+
+```
+Galleria Borghese                     : 1 opera
+Musei Capitolini                      : 1 opera
+Museo naz. romano - Palazzo Massimo   : 0 opere
+Museo naz. etrusco di Villa Giulia    : 0 opere
+Galleria naz. d'arte moderna          : 0 opere
+```
+
+**Predicato confermato definitivamente giusto** (non più 0 su tutti come con `isCulturalInstituteOrSiteOf`)
+— ma la copertura reale è **estremamente scarsa anche per i musei statali di primo piano**: la
+Galleria Borghese (collezione reale di centinaia di capolavori — Bernini, Caravaggio, Tiziano) ha
+esattamente **1** opera collegata in questo grafo. Non è un problema del ponte o del predicato: è
+un limite della conversione LOD stessa — il "Catalogo Generale dei Beni Culturali" esposto da
+questo endpoint SPARQL sembra avere una copertura pilota/parziale del collegamento
+opera↔istituto-di-conservazione, non una rappresentazione completa delle collezioni reali.
+
+**Conclusione pratica, onesta**: la catena tecnica ora FUNZIONA end-to-end (source_id Dtrek → ponte
+`owl:sameAs` → URI hash → `hasCulturalInstituteOrSite` → opera reale) — ma il risultato per un
+museo importante sarebbe oggi "1 opera" o "0 opere", non una lista utile per un utente. Prima di
+investire nella pipeline di import (tabella, UI, integrazione nella Guida Sito) serve capire se
+questa scarsità è UNIFORME su tutto il grafo (nessun museo ha una copertura utile) o se esistono
+alcuni musei "ben catalogati" con centinaia/migliaia di opere collegate, isolabili e mostrabili
+selettivamente. Aggiunta `summarizeExactCis`/estensione di `--coverage` (stampa ora anche i top 10
+musei per numero di opere nel campione, non solo le famiglie URI) per rispondere a questo.
+
 ## 5octies. Segnalazione di sicurezza trovata durante la verifica su Supabase (fuori scope, da comunicare)
 
 L'advisory di Supabase per il progetto `sdxlcpxgbkagbxhukehd` segnala **Row Level Security

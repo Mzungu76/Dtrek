@@ -253,6 +253,21 @@ export function summarizeCisFamilies(cisUris: string[]): { family: string; count
     .sort((a, b) => b.count - a.count)
 }
 
+// FIX (2026-09-27, --bridge su 5 musei reali: conteggi di 1/1/0/0/0 opere anche su grandi musei
+// statali con collezioni reali di migliaia di pezzi) — non basta sapere DOVE punta ogni tripla
+// (famiglia URI, sopra), serve anche sapere se la copertura è uniformemente scarsa ovunque o
+// concentrata su pochi musei "ben catalogati" nel campione. Stesso principio di
+// `summarizeCisFamilies`, ma per URI museo ESATTO (non la sola famiglia) — mai un GROUP BY
+// server-side (rischio di esplosione del pianificatore già visto più volte su questo endpoint,
+// scripts/places/mic/probe.ts round 2/3/6): aggregazione lato client su un campione già scaricato.
+export function summarizeExactCis(cisUris: string[]): { cis: string; count: number }[] {
+  const counts = new Map<string, number>()
+  for (const uri of cisUris) counts.set(uri, (counts.get(uri) ?? 0) + 1)
+  return [...counts.entries()]
+    .map(([cis, count]) => ({ cis, count }))
+    .sort((a, b) => b.count - a.count)
+}
+
 // Pura, testabile senza rete. Campione ampio (non filtrato per famiglia — a differenza del probe
 // 'hasCulturalInstituteOrSite-verso-namespace-nazionale' sopra, qui si guarda TUTTO ciò che il
 // motore restituisce per capire la distribuzione reale, non solo confermare/smentire una famiglia).
@@ -497,6 +512,12 @@ async function runCoverage(timeoutMs: number, limit: number): Promise<void> {
   const nationalFamily = 'http://dati.beniculturali.it/mibact/luoghi/resource/CulturalInstituteOrSite/'
   const nationalCount = summary.find(s => s.family === nationalFamily)?.count ?? 0
   console.log(`\nFamiglia nazionale (già usata da Dtrek per Lazio/altre regioni, mibact/luoghi): ${nationalCount}/${uris.length}.`)
+
+  const exact = summarizeExactCis(uris).slice(0, 10)
+  console.log(`\nTop ${exact.length} musei per numero di opere nel campione (concentrazione o copertura uniformemente scarsa?):`)
+  for (const { cis, count } of exact) {
+    console.log(`  ${count.toString().padStart(4)}  ${cis}`)
+  }
 }
 
 async function sparqlSelect(query: string, timeoutMs: number): Promise<Record<string, { value: string }>[]> {

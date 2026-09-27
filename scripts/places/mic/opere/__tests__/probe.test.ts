@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { PROBES, buildCisUri, buildOperaByCisQuery, buildDescribeOperaQuery, buildDescribeOperaByCisQuery, extractCisFamily, summarizeCisFamilies, buildCoverageQuery, buildDescribeUriQuery, buildWorksCountQuery, buildWorksSampleQuery, buildWorksCountReverseQuery, localName, formatDescribeBindings, buildBridgeQuery } from '../probe'
+import { PROBES, buildCisUri, buildOperaByCisQuery, buildDescribeOperaQuery, buildDescribeOperaByCisQuery, extractCisFamily, summarizeCisFamilies, summarizeExactCis, buildCoverageQuery, buildDescribeUriQuery, buildWorksCountQuery, buildWorksSampleQuery, buildWorksCountReverseQuery, localName, formatDescribeBindings, buildBridgeQuery } from '../probe'
 
 describe('Opere/ArCo probe — struttura dei probe diagnostici', () => {
   it('nomi univoci', () => {
@@ -117,6 +117,20 @@ describe('summarizeCisFamilies', () => {
 
   it('lista vuota → lista vuota', () => {
     expect(summarizeCisFamilies([])).toEqual([])
+  })
+})
+
+describe('summarizeExactCis', () => {
+  it('conta per URI esatto (non solo famiglia), ordina per frequenza decrescente — distingue concentrazione da copertura uniformemente scarsa', () => {
+    const uris = ['https://x/A', 'https://x/A', 'https://x/B', 'https://x/A']
+    expect(summarizeExactCis(uris)).toEqual([
+      { cis: 'https://x/A', count: 3 },
+      { cis: 'https://x/B', count: 1 },
+    ])
+  })
+
+  it('lista vuota → lista vuota', () => {
+    expect(summarizeExactCis([])).toEqual([])
   })
 })
 
