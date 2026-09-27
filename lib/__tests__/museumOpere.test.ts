@@ -33,6 +33,16 @@ describe('buildNearbyQuery', () => {
   it('raggio personalizzabile', () => {
     expect(buildNearbyQuery(0, 0, 500)).toContain('wikibase:radius "0.500"')
   })
+
+  it('ordina per distanza PRIMA del LIMIT — fix bug segnalato dal vivo (2026-09-27, "Galleria Doria Pamphilj", Roma centro storico): senza ORDER BY, un centro denso di elementi Wikidata può escludere il vero bersaglio dai 20 risultati anche a 49m di distanza', () => {
+    const q = buildNearbyQuery(41.9, 12.5, 200)
+    expect(q).toContain('bd:serviceParam wikibase:distance ?distance')
+    expect(q).toContain('ORDER BY ASC(?distance)')
+    const orderIdx = q.indexOf('ORDER BY ASC(?distance)')
+    const limitIdx = q.indexOf('LIMIT')
+    expect(orderIdx).toBeGreaterThan(-1)
+    expect(limitIdx).toBeGreaterThan(orderIdx)
+  })
 })
 
 describe('buildWorksQuery', () => {
