@@ -110,11 +110,38 @@ museo del contrabbando), non della fonte scelta.
    il `subtype`/nome del museo per calibrare il tono — mai spacciare un'invenzione per un dato reale,
    ma nemmeno lasciare un buco quando la lista strutturata non esiste.
 
-**Non implementata in questa sessione**: nessuna tabella, import o UI. Prossimi passi concreti, se
-si procede: (a) eseguire `scripts/places/wikidata/enrich.ts` sui musei per popolare `wikidata_id`
-(prerequisito per qualunque cosa, oggi 0/2296); (b) ~~verificare `--sample` su un museo reale~~
-**FATTO, vedi §2.4**; (c) decidere la soglia "museo importante" con dati reali di distribuzione (non
-ancora misurata su scala, solo su 5 musei grandi + 5 piccoli).
+## 4. Implementato (2026-09-27) — arricchimento dal vivo, non batch
+
+Verifica utente: un import batch di tutti i 2.296 musei è impraticabile (una sessione manuale ne ha
+arricchiti 28 in un lotto). Implementato invece l'arricchimento DAL VIVO alla prima apertura della
+Guida di uno specifico museo, con cache condivisa — stesso principio già in produzione per
+`itinerary_cache` (Borgo/Città) e `image_url`/`image_credit` (foto di copertina):
+
+- `lib/museumOpere.ts` — risolve `wikidata_id` (nome+prossimità 200m, stessa soglia 0.5 già
+  validata in produzione da `scripts/places/wikidata/enrich.ts`) se mancante, poi le opere
+  collegate (`wdt:P195`/`P276`) filtrate per sottoclasse di "opera d'arte" (`wd:Q838948` — fix
+  dell'anomalia mostra/esposizione trovata su Galleria Borghese, §2.4, MAI riverificato dal vivo
+  dopo il fix: rete di questa sessione bloccata). Cache TTL 90 giorni su `dtrek_places.opere_cache`/
+  `opere_cached_at` (migration `add_dtrek_places_opere_cache.sql`, **applicata sul progetto
+  Supabase reale in questa sessione**).
+- `app/api/places/[id]/route.ts` — chiama l'arricchimento solo per `subtype === 'museo'`, mai per
+  altri tipi di Sito/Borgo; `opere_cache`/`opere_cached_at` letti con una select ISOLATA (stesso
+  principio già usato in quel file per `image_credit`/`phone`/`email`: mai un 500 sull'intera
+  scheda se la migration non fosse applicata su un altro progetto Supabase).
+- `components/guida/widgets/OpereMuseoWidget.tsx` — silenzioso se vuoto, wired in
+  `GuideReader.tsx` solo per `siteType === 'museo'`, subito dopo `SitoInfoWidget`.
+
+**Verificato in questa sessione**: 720/720 test passano (7 nuovi per le funzioni pure di
+`lib/museumOpere.ts`), `tsc --noEmit` e `next lint` puliti sull'intero progetto.
+
+**NON verificato in questa sessione** (onestà dovuta, non un dettaglio da tacere): nessun test in
+un browser reale. Questa sandbox non ha credenziali Supabase configurate (`.env.local` assente) né
+raggiunge `query.wikidata.org` — non è stato possibile aprire la Guida di un museo reale e vedere
+il widget popolarsi con dati veri. Il filtro anti-mostra (`wd:Q838948`) in particolare resta una
+correzione teorica, mai confermata contro l'endpoint reale dopo l'aggiunta. **Prossimo passo reale
+per l'utente**: aprire la Guida di un museo già arricchito (uno dei 28 con `wikidata_id` da questa
+sessione, es. "Museo Ferrari" o "Museo civico di Vignola" — quest'ultimo con 0 opere attese) e
+confermare che il widget appare/non appare come previsto, senza errori in console.
 
 ## 2.4 Campione opere Galleria Borghese (2026-09-27) — campi reali e un'anomalia da correggere
 

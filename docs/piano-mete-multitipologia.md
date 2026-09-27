@@ -1083,9 +1083,12 @@ Museo:
 senza alcun dato reale. `docs/arco-opere-musei.md` ha verificato ArCo come fonte — meccanismo
 tecnico confermato ma copertura reale insufficiente (~8 musei ben catalogati su 2.296 già in
 Dtrek), chiuso negativamente per l'obiettivo di arricchire OGNI Guida Sito museo.
-`docs/opere-musei-wikidata.md` verifica l'alternativa Wikidata (`P195`/`P276`), con copertura
-nettamente migliore per i grandi musei ma ancora da completare per i musei piccoli/tematici —
-diagnostica in `scripts/places/wikidata/opere/probe.ts`, nessuna pipeline di import scritta.
+`docs/opere-musei-wikidata.md` verifica l'alternativa Wikidata (`P195`/`P276`) e la implementa:
+**FATTO** (2026-09-27) — arricchimento dal vivo alla prima apertura della Guida di un museo (mai un
+import batch), `lib/museumOpere.ts` + `components/guida/widgets/OpereMuseoWidget.tsx`, cache su
+`dtrek_places.opere_cache` (migration applicata sul progetto Supabase reale). Non ancora verificato
+in un browser reale in questa sessione (nessuna credenziale/rete disponibile) — vedi §4 del doc per
+il prossimo passo di conferma.
 
 Castello:
 
