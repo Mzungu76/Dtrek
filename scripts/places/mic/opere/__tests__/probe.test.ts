@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { PROBES, buildCisUri, buildOperaByCisQuery, buildDescribeOperaQuery, buildDescribeOperaByCisQuery, extractCisFamily, summarizeCisFamilies, buildCoverageQuery, buildDescribeUriQuery } from '../probe'
+import { PROBES, buildCisUri, buildOperaByCisQuery, buildDescribeOperaQuery, buildDescribeOperaByCisQuery, extractCisFamily, summarizeCisFamilies, buildCoverageQuery, buildDescribeUriQuery, buildWorksCountQuery, buildWorksSampleQuery } from '../probe'
 
 describe('Opere/ArCo probe — struttura dei probe diagnostici', () => {
   it('nomi univoci', () => {
@@ -130,6 +130,21 @@ describe('buildCoverageQuery', () => {
 
   it('limit personalizzabile', () => {
     expect(buildCoverageQuery(50)).toMatch(/LIMIT 50$/)
+  })
+})
+
+describe('buildWorksCountQuery / buildWorksSampleQuery', () => {
+  const MAF = 'https://w3id.org/arco/resource/CulturalInstituteOrSite/43d07f7aa3c07bf446441d29a5904e75'
+
+  it('count: usa loc:isCulturalInstituteOrSiteOf (predicato forward museo->opera, trovato con --describe-uri sul Museo Archeologico Nazionale di Firenze, 2026-09-27)', () => {
+    const q = buildWorksCountQuery(MAF)
+    expect(q).toContain(`<${MAF}> loc:isCulturalInstituteOrSiteOf ?opera`)
+    expect(q).toContain('COUNT(?opera)')
+  })
+
+  it('sample: stesso predicato, con LIMIT personalizzabile (default 20)', () => {
+    expect(buildWorksSampleQuery(MAF)).toMatch(/LIMIT 20$/)
+    expect(buildWorksSampleQuery(MAF, 5)).toMatch(/LIMIT 5$/)
   })
 })
 

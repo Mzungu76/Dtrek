@@ -28,6 +28,7 @@ npx tsx scripts/places/mic/opere/probe.ts --describe --name "X"    # idem, filtr
 npx tsx scripts/places/mic/opere/probe.ts --describe --cis 105665  # dump a 2 salti della prima opera collegata a QUESTO museo
 npx tsx scripts/places/mic/opere/probe.ts --coverage [--limit 500]  # distribuzione per famiglia di URI museo (nazionale vs regionale) su un campione
 npx tsx scripts/places/mic/opere/probe.ts --describe-uri "<uri>"    # dump a 2 salti di un URI qualunque (es. un museo "hash" trovato da --coverage)
+npx tsx scripts/places/mic/opere/probe.ts --museo-opere "<uri museo>"  # conteggio + campione opere via loc:isCulturalInstituteOrSiteOf (predicato forward museo→opera)
 ```
 
 Nessuna di queste è stata eseguita dal vivo in questa sessione (stesso blocco di rete verso

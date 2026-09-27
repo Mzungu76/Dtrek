@@ -286,6 +286,49 @@ museo — nome (`rdfs:label`), tipo, eventuale `owl:sameAs` verso un URI `mibact
 poter rispondere se "Opere di questo museo" può coprire i musei Dtrek esistenti o solo un
 sottoinsieme diverso da importare a parte.
 
+## 5quinquies. `--describe-uri` eseguito dal vivo (2026-09-27) — identità reale del museo "hash" e un secondo predicato
+
+Il dump (parziale — l'utente riporta un output "enorme", solo un estratto incollato) di
+`https://w3id.org/arco/resource/CulturalInstituteOrSite/43d07f7aa3c07bf446441d29a5904e75` ha
+rivelato due cose importanti:
+
+1. **`cis:hasCISNameInTime` → `CISNameInTime/museo-archeologico-nazionale-di-firenze`**: questo
+   museo "hash" è il **Museo Archeologico Nazionale di Firenze** — un grande museo statale, non una
+   collezione oscura o un catalogo parallelo minore. Prova diretta che la famiglia URI "generica"
+   trovata da `--coverage` (§5quater, 500/500 del campione) copre istituzioni di primo piano, non
+   un angolo marginale del grafo.
+2. **Un secondo predicato, mai visto prima**: `loc:isCulturalInstituteOrSiteOf`, usato DIRETTAMENTE
+   sul museo verso un'opera che possiede (`ArchaeologicalProperty/0900277672`, tipizzata
+   `arco:ArchaeologicalProperty`) — probabile inverso "pulito" di `hasCulturalInstituteOrSite`: più
+   diretto per elencare le opere DI un museo partendo dal museo stesso, invece di cercarle a
+   ritroso su tutto il catalogo (come fanno i probe generici di §2-§5quater). Aggiunte
+   `buildWorksCountQuery`/`buildWorksSampleQuery` (nuovo modo CLI `--museo-opere <uri>`) per
+   verificarlo su scala (quante opere ha DAVVERO questo museo, non solo le 4-5 viste finora in
+   campioni piccoli).
+
+**Cosa resta da fare per rispondere alla domanda del §5quater** (questi musei "hash" sono le STESSE
+istituzioni già in Dtrek, o un catalogo da importare a parte): verificare se "Museo Archeologico
+Nazionale di Firenze" è già presente in `dtrek_places` (query diretta o ricerca nell'app — fuori
+dalla portata di questa sessione, che non ha credenziali Supabase). Se sì, controllare il suo
+`source_id`: se è un hash a 32 caratteri esadecimali (non un numero piccolo come Canepina/105665),
+conferma che i musei della regione Toscana — importati da `scripts/places/mic/fetch.ts` solo dopo il
+fix di geocodifica del 2026-09-21 per la mancanza di coordinate dirette in quel sotto-grafo, vedi
+commenti in quel file — hanno GIÀ un `source_id` nella stessa famiglia "hash" usata dalle opere, e
+quindi la ricostruzione dell'URI museo per interrogare le opere funzionerebbe DIRETTAMENTE per
+quei record, senza bisogno di alcun ponte `owl:sameAs`. In tal caso il problema smesso di essere
+"la famiglia nazionale non ha opere" e diventa "solo i musei del sotto-grafo regionale (Toscana,
+Alto Adige, verosimilmente Lombardia) hanno opere collegate in ArCo — e Dtrek li importa già, con
+l'id giusto, dal fix del 2026-09-21".
+
+**Nota collaterale, bug preesistente non ancora corretto** (trovato indagando questo, non nello
+scope originale): `micBindingToPlaceCandidate` in `scripts/places/mic/fetch.ts` costruisce SEMPRE
+`sourceUrl` con la base nazionale `http://dati.beniculturali.it/mibact/luoghi/resource/...`,
+indipendentemente da quale base URI avesse realmente il `?cis` trovato dalla query (che per
+Toscana/Lombardia è invece `w3id.org/arco/resource/...`, confermato qui) — per quei record
+`source_id` è corretto (l'hash reale) ma `sourceUrl` punta a una risorsa che non esiste. Non
+corretto in questa PR (fuori scope, richiede toccare `fetch.ts` in produzione), ma segnalato perché
+influisce sull'attribuzione mostrata per quei record oggi.
+
 ---
 
 ## 6. Perché non si implementa già ora la pipeline di import

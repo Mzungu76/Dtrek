@@ -47,6 +47,7 @@
  *   npx tsx scripts/places/mic/opere/probe.ts --describe --cis 105665  # dump 2 salti della prima opera collegata a QUESTO museo
  *   npx tsx scripts/places/mic/opere/probe.ts --coverage [--limit 500]  # distribuzione per famiglia di URI museo su un campione
  *   npx tsx scripts/places/mic/opere/probe.ts --describe-uri "https://w3id.org/arco/resource/CulturalInstituteOrSite/<hash>"  # dump 2 salti di un URI qualunque (es. un museo della famiglia "hash" trovata da --coverage)
+ *   npx tsx scripts/places/mic/opere/probe.ts --museo-opere "https://w3id.org/arco/resource/CulturalInstituteOrSite/<hash>"  # conteggio + campione via loc:isCulturalInstituteOrSiteOf (predicato forward museo→opera, trovato con --describe-uri)
  */
 
 const SPARQL_ENDPOINT = 'https://dati.cultura.gov.it/sparql'
@@ -247,6 +248,28 @@ SELECT ?p1 ?o1 ?p2 ?o2 WHERE {
 } LIMIT 200`
 }
 
+// ── loc:isCulturalInstituteOrSiteOf (2026-09-27, trovato con --describe-uri sul Museo
+// Archeologico Nazionale di Firenze — museo "hash" reale, non una collezione oscura) ────────────
+// Predicato USATO DIRETTAMENTE SUL MUSEO verso un'opera che possiede — probabile inverso "pulito"
+// di hasCulturalInstituteOrSite (opera→museo), più diretto per elencare le opere DI un museo
+// partendo dal museo stesso invece di cercarle a ritroso su tutto il catalogo. MAI verificato prima
+// d'ora (un solo esempio visto in un dump parziale) — questi probe lo confermano su scala.
+export function buildWorksCountQuery(cisUri: string): string {
+  return `
+PREFIX loc: <https://w3id.org/arco/ontology/location/>
+SELECT (COUNT(?opera) AS ?count) WHERE {
+  <${cisUri}> loc:isCulturalInstituteOrSiteOf ?opera .
+}`
+}
+
+export function buildWorksSampleQuery(cisUri: string, limit = 20): string {
+  return `
+PREFIX loc: <https://w3id.org/arco/ontology/location/>
+SELECT ?opera WHERE {
+  <${cisUri}> loc:isCulturalInstituteOrSiteOf ?opera .
+} LIMIT ${limit}`
+}
+
 export interface ProbeResult {
   name: string
   note: string
@@ -362,6 +385,14 @@ async function runCoverage(timeoutMs: number, limit: number): Promise<void> {
 async function main() {
   const timeoutIdx = process.argv.indexOf('--timeout')
   const timeoutMs = timeoutIdx !== -1 ? parseInt(process.argv[timeoutIdx + 1], 10) : DEFAULT_TIMEOUT_MS
+
+  const worksIdx = process.argv.indexOf('--museo-opere')
+  if (worksIdx !== -1) {
+    const cisUri = process.argv[worksIdx + 1]
+    await runDiagnosticQuery(`conteggio opere di ${cisUri} (loc:isCulturalInstituteOrSiteOf)`, buildWorksCountQuery(cisUri), timeoutMs)
+    await runDiagnosticQuery(`campione opere di ${cisUri}`, buildWorksSampleQuery(cisUri), timeoutMs)
+    return
+  }
 
   const describeUriIdx = process.argv.indexOf('--describe-uri')
   if (describeUriIdx !== -1) {
