@@ -37,6 +37,11 @@ on:
         required: false
         type: string
         default: "200"
+      subtype:
+        description: "Filtra per dtrek_places.subtype (es. museo) — vuoto = qualunque tipo. Vedi docs/opere-musei-wikidata.md: prerequisito per collegare le opere ai musei."
+        required: false
+        type: string
+        default: ""
 
 concurrency:
   group: import-places
@@ -52,6 +57,7 @@ jobs:
       MODE: ${{ inputs.mode }}
       REGION: ${{ inputs.region }}
       LIMIT: ${{ inputs.limit }}
+      SUBTYPE: ${{ inputs.subtype }}
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
     steps:
@@ -78,11 +84,13 @@ jobs:
           set -euo pipefail
           ARGS=(scripts/places/wikidata/enrich.ts --region "$REGION" --limit "$LIMIT")
           if [ "$MODE" = "dry-run" ]; then ARGS+=(--dry-run); fi
+          if [ -n "${SUBTYPE:-}" ]; then ARGS+=(--subtype "$SUBTYPE"); fi
           npx tsx "${ARGS[@]}" | tee /tmp/wikidata-enrich.txt
           {
             echo "### Import Places — Wikidata ($MODE)"
             echo "- Regione: ${REGION:-tutte}"
             echo "- Limit: $LIMIT"
+            echo "- Subtype: ${SUBTYPE:-qualunque}"
             echo '```'
             cat /tmp/wikidata-enrich.txt
             echo '```'

@@ -24,7 +24,12 @@
  * con fixture.
  *
  * Usage:
- *   npx tsx scripts/places/wikidata/enrich.ts [--dry-run] [--region Lazio] [--limit 200]
+ *   npx tsx scripts/places/wikidata/enrich.ts [--dry-run] [--region Lazio] [--limit 200] [--subtype museo]
+ *
+ * `--subtype` (2026-09-27, docs/opere-musei-wikidata.md): filtra le righe da arricchire per
+ * `dtrek_places.subtype` (es. `museo`) — senza, un lotto pesca da QUALUNQUE tipo di Meta
+ * nell'ordine di default di Supabase, sprecando richieste Wikidata su righe non pertinenti
+ * all'obiettivo corrente ("Opere di questo museo" richiede prima `wikidata_id` sui musei).
  */
 import { createClient } from '@supabase/supabase-js'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -81,13 +86,20 @@ export function pickBestWikidataMatch(place: DtrekPlaceRow, nearby: WikidataCand
 }
 
 // ── I/O: Supabase (righe da arricchire) ──────────────────────────────────────────────────────
-async function findPlacesWithoutWikidataId(supabase: SupabaseClient, region: string | null, limit: number): Promise<DtrekPlaceRow[]> {
+// `subtype` (2026-09-27, docs/opere-musei-wikidata.md — prerequisito per "Opere di questo museo"):
+// senza filtro, un lotto pesca righe di QUALUNQUE metaType/subtype nell'ordine di default di
+// Supabase — su 18.471 righe totali contro 2.296 musei, la stragrande maggioranza delle richieste
+// Wikidata di un lotto non filtrato andrebbe sprecata su sentieri/borghi già arricchiti o non
+// pertinenti all'obiettivo corrente. Filtro opzionale, mai obbligatorio: gli altri chiamanti
+// (nessuno oggi, ma il piano §11 non lo esclude) restano invariati passando `null`.
+async function findPlacesWithoutWikidataId(supabase: SupabaseClient, region: string | null, limit: number, subtype: string | null = null): Promise<DtrekPlaceRow[]> {
   let query = supabase
     .from('dtrek_places')
     .select('id, name, latitude, longitude')
     .is('wikidata_id', null)
     .limit(limit)
   if (region) query = query.eq('region', region)
+  if (subtype) query = query.eq('subtype', subtype)
 
   const { data, error } = await query
   if (error) throw error
@@ -187,6 +199,8 @@ async function main() {
   const region = regionIdx !== -1 ? process.argv[regionIdx + 1] : 'Lazio'
   const limitIdx = process.argv.indexOf('--limit')
   const limit = limitIdx !== -1 ? parseInt(process.argv[limitIdx + 1], 10) : 200
+  const subtypeIdx = process.argv.indexOf('--subtype')
+  const subtype = subtypeIdx !== -1 ? process.argv[subtypeIdx + 1] : null
 
   const SUPABASE_URL = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL
   const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -196,8 +210,8 @@ async function main() {
   }
   const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 
-  const places = await findPlacesWithoutWikidataId(supabase, region, limit)
-  console.log(`${places.length} righe senza wikidata_id (regione: ${region ?? 'tutte'}).`)
+  const places = await findPlacesWithoutWikidataId(supabase, region, limit, subtype)
+  console.log(`${places.length} righe senza wikidata_id (regione: ${region ?? 'tutte'}${subtype ? `, subtype: ${subtype}` : ''}).`)
 
   let matched = 0, unmatched = 0, errored = 0
   for (const [i, place] of places.entries()) {

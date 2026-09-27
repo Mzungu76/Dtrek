@@ -5,6 +5,7 @@ import { fetchSourceCounts } from '@/lib/metaSearch/placeQuery'
 import { fetchRelatedPlaces, type RelatedPlace } from '@/lib/metaSearch/placeRelations'
 import { searchAndFetch, fetchExtendedExtract } from '@/lib/wikipedia'
 import { fetchPlaceCoverPhoto } from '@/lib/placePhotoCache'
+import { getMuseumOpere, type MuseumOpera } from '@/lib/museumOpere'
 import { haversineM } from '@/lib/geoUtils'
 import { inferSiteTypeFromName, type MetaType, type SiteType } from '@/lib/metaTypes'
 
@@ -73,6 +74,13 @@ export interface PlaceDetail {
   /** "Vicino a te"/"Fa parte di" (piano §51.6) — da dtrek_place_relations, oggi quasi sempre
    *  vuoto finché quei dati non vengono importati (vedi lib/metaSearch/placeRelations.ts). */
   relatedPlaces: RelatedPlace[]
+  /** "Opere di questo museo" (docs/opere-musei-wikidata.md) — solo per siteType 'museo', da
+   *  Wikidata (P195/P276), con cache su dtrek_places (lib/museumOpere.ts). Quasi sempre [] per un
+   *  museo locale/tematico (atteso, non un errore: "opere d'arte catalogate" non è pertinente per
+   *  la maggioranza dei musei già in Dtrek) — mai un blocco vuoto o un errore, solo un array vuoto
+   *  che la UI nasconde silenziosamente (stesso principio di relatedPlaces). Sempre [] per
+   *  qualunque Meta che non sia un museo. */
+  opere: MuseumOpera[]
 }
 
 const WIKIPEDIA_MAX_DISTANCE_KM = 15
@@ -140,6 +148,13 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   if (contactsError) console.error('[places/:id] phone/email non disponibili (migration applicata?)', contactsError)
 
   const sourceCounts = await fetchSourceCounts(supabase, [data.id])
+
+  // Solo per un museo — docs/opere-musei-wikidata.md. getMuseumOpere gestisce già cache/errori al
+  // suo interno (mai un'eccezione propagata qui), gated qui solo per non pagare il costo di una
+  // ricerca Wikidata dal vivo per QUALUNQUE altro tipo di Sito/Borgo.
+  const opere = data.subtype === 'museo'
+    ? await getMuseumOpere(supabase, { id: data.id, name: data.name, latitude: data.latitude, longitude: data.longitude, wikidataId: data.wikidata_id })
+    : []
 
   // Best-effort, mai un 500 sull'intera scheda se dtrek_place_relations avesse un problema —
   // stesso principio di contacts/wikipedia sopra e sotto.
@@ -237,6 +252,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     coordinatesApproximate: (data.metadata as Record<string, unknown> | null)?.coordinatesApproximate === true,
     wikipedia,
     relatedPlaces,
+    opere,
   }
   return NextResponse.json(detail)
 }

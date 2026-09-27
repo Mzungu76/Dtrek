@@ -1,0 +1,237 @@
+import { describe, it, expect } from 'vitest'
+import { PROBES, buildCisUri, buildOperaByCisQuery, buildDescribeOperaQuery, buildDescribeOperaByCisQuery, extractCisFamily, summarizeCisFamilies, summarizeExactCis, buildCoverageQuery, buildDescribeUriQuery, buildWorksCountQuery, buildWorksSampleQuery, buildWorksCountReverseQuery, localName, formatDescribeBindings, buildBridgeQuery } from '../probe'
+
+describe('Opere/ArCo probe — struttura dei probe diagnostici', () => {
+  it('nomi univoci', () => {
+    const names = PROBES.map(p => p.name)
+    expect(new Set(names).size).toBe(names.length)
+    expect(names).toEqual([
+      'baseline-culturalproperty',
+      'hasCulturalInstituteOrSite-forward (NON verificato)',
+      'hasCulturalInstituteOrSite-cis-come-soggetto (NON verificato)',
+      'hasCulturalInstituteOrSite-verso-namespace-nazionale (NON verificato)',
+      'culturalproperty+hasCulturalInstituteOrSite-combo (NON verificato)',
+    ])
+  })
+
+  it('ogni query ha un LIMIT (probe diagnostico, mai una scansione completa)', () => {
+    for (const probe of PROBES) {
+      expect(probe.query).toMatch(/LIMIT \d+/)
+    }
+  })
+
+  it('nessun probe è marcato "NON verificato" nel nome senza usare il predicato non confermato, e viceversa', () => {
+    for (const probe of PROBES) {
+      const usesHasCulturalInstituteOrSite = probe.query.includes('hasCulturalInstituteOrSite')
+      const isMarkedUnverified = probe.name.includes('NON verificato')
+      if (usesHasCulturalInstituteOrSite) expect(isMarkedUnverified).toBe(true)
+    }
+  })
+
+  it('forward cerca opera→museo; il probe "cis-come-soggetto" verifica una domanda diversa (il CIS è mai soggetto?), non solo variabili rinominate', () => {
+    const forward = PROBES.find(p => p.name === 'hasCulturalInstituteOrSite-forward (NON verificato)')!
+    const cisAsSubject = PROBES.find(p => p.name === 'hasCulturalInstituteOrSite-cis-come-soggetto (NON verificato)')!
+    expect(forward.query).toContain('?opera loc:hasCulturalInstituteOrSite ?cis')
+    expect(cisAsSubject.query).toContain('?cis a cis:CulturalInstituteOrSite')
+    expect(cisAsSubject.query).toContain('?cis')
+    expect(cisAsSubject.query).toContain('loc:hasCulturalInstituteOrSite ?other')
+  })
+})
+
+describe('buildCisUri', () => {
+  it('usa la stessa base URI già verificata in scripts/places/mic/fetch.ts (sourceUrl reale)', () => {
+    expect(buildCisUri('105665')).toBe('http://dati.beniculturali.it/mibact/luoghi/resource/CulturalInstituteOrSite/105665')
+  })
+})
+
+describe('buildOperaByCisQuery', () => {
+  it('interroga il predicato forward (non confermato) verso il museo passato', () => {
+    const q = buildOperaByCisQuery('105665')
+    expect(q).toContain('<http://dati.beniculturali.it/mibact/luoghi/resource/CulturalInstituteOrSite/105665>')
+    expect(q).toContain('loc:hasCulturalInstituteOrSite')
+    expect(q).toMatch(/LIMIT \d+/)
+  })
+})
+
+describe('buildDescribeOperaQuery', () => {
+  it('senza filtro: dump di una CulturalProperty arbitraria (LIMIT 1 sul candidato)', () => {
+    const q = buildDescribeOperaQuery()
+    expect(q).toContain('?opera a arco:CulturalProperty .')
+    expect(q).not.toContain('FILTER')
+  })
+
+  it('con filtro: cerca per rdfs:label case-insensitive, come fetch.ts --describe --name', () => {
+    const q = buildDescribeOperaQuery('Nettuno')
+    expect(q).toContain('FILTER(CONTAINS(LCASE(?name), LCASE("Nettuno")))')
+  })
+
+  it('rimuove le virgolette doppie dal filtro (mai iniezione nella query SPARQL)', () => {
+    const q = buildDescribeOperaQuery('Il "Nettuno"')
+    expect(q).toContain('LCASE("Il Nettuno")')
+    expect(q).not.toContain('"Il "Nettuno""')
+  })
+})
+
+describe('buildDescribeOperaByCisQuery', () => {
+  it('combina il filtro per museo con il dump a 2 salti', () => {
+    const q = buildDescribeOperaByCisQuery('105665')
+    expect(q).toContain('<http://dati.beniculturali.it/mibact/luoghi/resource/CulturalInstituteOrSite/105665>')
+    expect(q).toContain('?opera ?p1 ?o1')
+    expect(q).toContain('OPTIONAL { ?o1 ?p2 ?o2 . }')
+  })
+})
+
+describe('extractCisFamily', () => {
+  it('nazionale (mibact/luoghi) — verificato reale su Canepina/105665', () => {
+    expect(extractCisFamily('http://dati.beniculturali.it/mibact/luoghi/resource/CulturalInstituteOrSite/105665'))
+      .toBe('http://dati.beniculturali.it/mibact/luoghi/resource/CulturalInstituteOrSite/')
+  })
+
+  it('generico w3id.org/arco/resource — verificato reale (probe forward, 2026-09-27)', () => {
+    expect(extractCisFamily('https://w3id.org/arco/resource/CulturalInstituteOrSite/43d07f7aa3c07bf446441d29a5904e75'))
+      .toBe('https://w3id.org/arco/resource/CulturalInstituteOrSite/')
+  })
+
+  it('regionale (AltoAdige) — verificato reale (probe combo, 2026-09-27)', () => {
+    expect(extractCisFamily('https://w3id.org/arco/resource/AltoAdige/CulturalInstituteOrSite/AA_CG_SVM'))
+      .toBe('https://w3id.org/arco/resource/AltoAdige/CulturalInstituteOrSite/')
+  })
+
+  it('URI senza il marker atteso → restituita invariata (mai un crash su un formato inatteso)', () => {
+    expect(extractCisFamily('https://example.org/qualcosa')).toBe('https://example.org/qualcosa')
+  })
+})
+
+describe('summarizeCisFamilies', () => {
+  it('conta per famiglia, ordina per frequenza decrescente', () => {
+    const uris = [
+      'https://w3id.org/arco/resource/AltoAdige/CulturalInstituteOrSite/AA_CG_SVM',
+      'https://w3id.org/arco/resource/AltoAdige/CulturalInstituteOrSite/AA_CG_ALTRO',
+      'http://dati.beniculturali.it/mibact/luoghi/resource/CulturalInstituteOrSite/105665',
+    ]
+    expect(summarizeCisFamilies(uris)).toEqual([
+      { family: 'https://w3id.org/arco/resource/AltoAdige/CulturalInstituteOrSite/', count: 2 },
+      { family: 'http://dati.beniculturali.it/mibact/luoghi/resource/CulturalInstituteOrSite/', count: 1 },
+    ])
+  })
+
+  it('lista vuota → lista vuota', () => {
+    expect(summarizeCisFamilies([])).toEqual([])
+  })
+})
+
+describe('summarizeExactCis', () => {
+  it('conta per URI esatto (non solo famiglia), ordina per frequenza decrescente — distingue concentrazione da copertura uniformemente scarsa', () => {
+    const uris = ['https://x/A', 'https://x/A', 'https://x/B', 'https://x/A']
+    expect(summarizeExactCis(uris)).toEqual([
+      { cis: 'https://x/A', count: 3 },
+      { cis: 'https://x/B', count: 1 },
+    ])
+  })
+
+  it('lista vuota → lista vuota', () => {
+    expect(summarizeExactCis([])).toEqual([])
+  })
+})
+
+describe('buildCoverageQuery', () => {
+  it('nessun filtro per famiglia (a differenza del probe namespace-nazionale) — vede tutta la distribuzione', () => {
+    const q = buildCoverageQuery(500)
+    expect(q).not.toContain('FILTER')
+    expect(q).toContain('SELECT ?cis WHERE')
+    expect(q).toMatch(/LIMIT 500/)
+  })
+
+  it('limit personalizzabile', () => {
+    expect(buildCoverageQuery(50)).toMatch(/LIMIT 50$/)
+  })
+})
+
+describe('buildWorksCountQuery / buildWorksSampleQuery', () => {
+  const MAF = 'https://w3id.org/arco/resource/CulturalInstituteOrSite/43d07f7aa3c07bf446441d29a5904e75'
+
+  it('count: usa loc:isCulturalInstituteOrSiteOf (predicato forward museo->opera, trovato con --describe-uri sul Museo Archeologico Nazionale di Firenze, 2026-09-27)', () => {
+    const q = buildWorksCountQuery(MAF)
+    expect(q).toContain(`<${MAF}> loc:isCulturalInstituteOrSiteOf ?opera`)
+    expect(q).toContain('COUNT(?opera)')
+  })
+
+  it('sample: stesso predicato, con LIMIT personalizzabile (default 20)', () => {
+    expect(buildWorksSampleQuery(MAF)).toMatch(/LIMIT 20$/)
+    expect(buildWorksSampleQuery(MAF, 5)).toMatch(/LIMIT 5$/)
+  })
+})
+
+describe('buildWorksCountReverseQuery', () => {
+  it('usa hasCulturalInstituteOrSite in direzione opera->museo (predicato originale confermato, non isCulturalInstituteOrSiteOf), verificato reale: 0/5 su Borghese/Capitolini/Palazzo Massimo/Villa Giulia/Galleria naz. con l\'altro predicato, 2026-09-27', () => {
+    const uri = 'https://w3id.org/arco/resource/CulturalInstituteOrSite/6bad7964748b182f24b5f24cea21dcf8'
+    const q = buildWorksCountReverseQuery(uri)
+    expect(q).toContain(`?opera loc:hasCulturalInstituteOrSite <${uri}>`)
+    expect(q).toContain('COUNT(?opera)')
+  })
+})
+
+describe('buildBridgeQuery', () => {
+  it('cerca entrambe le direzioni di owl:sameAs verso la famiglia hash, a partire dal source_id nazionale già in Dtrek (verificato reale: Museo Archeologico Nazionale di Firenze, source_id 20310, 2026-09-27)', () => {
+    const q = buildBridgeQuery('20310')
+    expect(q).toContain('<http://dati.beniculturali.it/mibact/luoghi/resource/CulturalInstituteOrSite/20310> <http://www.w3.org/2002/07/owl#sameAs> ?hash')
+    expect(q).toContain('?hash <http://www.w3.org/2002/07/owl#sameAs> <http://dati.beniculturali.it/mibact/luoghi/resource/CulturalInstituteOrSite/20310>')
+    expect(q).toContain('STRSTARTS(STR(?hash), "https://w3id.org/arco/resource/CulturalInstituteOrSite/")')
+  })
+})
+
+describe('localName', () => {
+  it('estrae il segmento dopo l\'ultimo / (verificato reale: predicati/valori ArCo)', () => {
+    expect(localName('https://w3id.org/arco/ontology/location/hasCulturalInstituteOrSite')).toBe('hasCulturalInstituteOrSite')
+    expect(localName('https://w3id.org/arco/resource/CISNameInTime/museo-archeologico-nazionale-di-firenze')).toBe('museo-archeologico-nazionale-di-firenze')
+  })
+
+  it('estrae il segmento dopo # quando presente (es. rdf:type)', () => {
+    expect(localName('http://www.w3.org/1999/02/22-rdf-syntax-ns#type')).toBe('type')
+  })
+
+  it('nessun / o # → restituito invariato', () => {
+    expect(localName('ciao')).toBe('ciao')
+  })
+})
+
+describe('formatDescribeBindings', () => {
+  const bindings = [
+    { p1: 'http://x/hasCISNameInTime', o1: 'http://x/CISNameInTime/museo-di-prova' },
+    { p1: 'http://x/hasCISNameInTime', o1: 'http://x/CISNameInTime/museo-di-prova', p2: 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', o2: 'http://x/CISNameInTime' },
+    { p1: 'https://w3id.org/arco/ontology/location/isCulturalInstituteOrSiteOf', o1: 'http://x/ArchaeologicalProperty/1' },
+    { p1: 'http://www.w3.org/2002/07/owl#sameAs', o1: 'http://www.wikidata.org/entity/Q123' },
+  ]
+
+  it('accorcia gli URI e raggruppa i salti multipli sotto lo stesso p1/o1 (mai una riga ripetuta per lo stesso predicato/valore)', () => {
+    const lines = formatDescribeBindings(bindings)
+    expect(lines).toContain('hasCISNameInTime = museo-di-prova')
+    expect(lines).toContain('    -> type = CISNameInTime')
+    expect(lines.filter(l => l === 'hasCISNameInTime = museo-di-prova')).toHaveLength(1)
+  })
+
+  it('--grep filtra su predicato o valore, case-insensitive', () => {
+    const lines = formatDescribeBindings(bindings, 'sameas')
+    expect(lines).toEqual(['sameAs = Q123'])
+  })
+
+  it('grep senza corrispondenze → array vuoto (mai un crash)', () => {
+    expect(formatDescribeBindings(bindings, 'nonexistent-term')).toEqual([])
+  })
+
+  it('senza grep, nessun filtro applicato', () => {
+    const lines = formatDescribeBindings(bindings)
+    expect(lines.some(l => l.includes('isCulturalInstituteOrSiteOf'))).toBe(true)
+    expect(lines.some(l => l.includes('sameAs'))).toBe(true)
+  })
+})
+
+describe('buildDescribeUriQuery', () => {
+  it('dump a 2 salti di un URI arbitrario (verificato reale: --coverage, 2026-09-27, 500/500 nella famiglia "hash")', () => {
+    const uri = 'https://w3id.org/arco/resource/CulturalInstituteOrSite/43d07f7aa3c07bf446441d29a5904e75'
+    const q = buildDescribeUriQuery(uri)
+    expect(q).toContain(`<${uri}> ?p1 ?o1 .`)
+    expect(q).toContain('OPTIONAL { ?o1 ?p2 ?o2 . }')
+    expect(q).toMatch(/LIMIT \d+/)
+  })
+})

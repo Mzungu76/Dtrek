@@ -1317,6 +1317,13 @@ ALTER TABLE dtrek_places ADD COLUMN IF NOT EXISTS itinerary_cached_at TIMESTAMPT
 -- specificarla — vedi add_home_region.sql per il perché.
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS home_region TEXT;
 
+-- Vedi supabase/migrations/add_dtrek_places_opere_cache.sql per i commenti completi. Cache delle
+-- opere Wikidata di un museo (lib/museumOpere.ts, app/api/places/[id]/route.ts), TTL di 90 giorni
+-- applicato in lettura — arricchimento dal vivo alla prima apertura della Guida di QUEL museo, mai
+-- un import batch di tutti i musei.
+ALTER TABLE dtrek_places ADD COLUMN IF NOT EXISTS opere_cache JSONB;
+ALTER TABLE dtrek_places ADD COLUMN IF NOT EXISTS opere_cached_at TIMESTAMPTZ;
+
 -- Confine Navigator/Dtrek, modello "un'icona sola" — vedi
 -- supabase/migrations/add_dtrek_activated_at.sql per i commenti completi. NULL finché l'utente
 -- non ha mai toccato "Passa a Dtrek" dentro Navigator; nessun default a NOW() perché l'assenza
