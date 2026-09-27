@@ -17,6 +17,7 @@ import type { GuideNotice } from './guideNotices'
 import type { RouteMode } from './routeMode'
 import { metaHasHikingMetrics, type MetaType, type SiteType } from './metaTypes'
 import type { BorgoItineraryOverrides } from './metaSearch/borgoItinerary'
+import type { BorgoWalkTappaEnd } from './borgoWalkPolyline'
 
 export type { HikeAssessment, AssessmentItem } from './hikeAssessment'
 export type { HikeNote } from './blobStore'
@@ -137,6 +138,10 @@ export interface PlannedHike {
   // cambia nel breve termine, stesso principio di dtmTrackHash/floraTrackHash.
   borgoWalkPolyline?:            [number, number][]
   borgoWalkStopsHash?:           string
+  // Confini di tappa per il Navigator (Modalità A, sessione conversazionale) — vedi il commento
+  // completo su BorgoWalkFields in lib/borgoWalkPolyline.ts. Assente per un itinerario a tappa
+  // unica o per ogni Meta salvata prima di questo campo: mai un confine fabbricato per omissione.
+  borgoWalkTappaEnds?:           BorgoWalkTappaEnd[]
   // Personalizzazioni PER-UTENTE dell'itinerario di un Borgo/Città (piano guide-eccellenza Fase 2,
   // verifica utente: slider del tempo di visita, punto "spento", spostamento manuale tra tappe) —
   // mappa sparsa per id di tappa (lib/metaSearch/borgoItinerary.ts), mai un default duplicato per
@@ -355,7 +360,7 @@ export async function savePlanned(hike: PlannedHike): Promise<{ assessment?: Hik
 /** Applies a partial update to the local cache immediately and queues it for background sync. */
 export async function updatePlannedMeta(
   id: string,
-  meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'hikeNotes' | 'tags' | 'plannedDate' | 'cachedPois' | 'cachedPoiWiki' | 'cachedGuide' | 'cachedGuideSubtitle' | 'cachedGuideNotices' | 'cachedGuideSources' | 'guideTier' | 'guideGeneratedAt' | 'cachedEpochPois' | 'cachedBeautyScore' | 'cachedTrailScore' | 'cachedTrailScoreConfidence' | 'cachedScoresComputedAt' | 'cachedSafetyScore' | 'cachedSafetyComputedAt' | 'cachedTsTotal' | 'cachedDrivingDistanceMeters' | 'cachedDrivingDurationSeconds' | 'cachedDrivingOriginLat' | 'cachedDrivingOriginLon' | 'pendingExpiresAt' | 'archivedAt' | 'favorite' | 'firstCompletedAt' | 'diaryId' | 'routeMode' | 'dtmProfile' | 'dtmTrackHash' | 'dtmComputedAt' | 'terrainProfile' | 'terrainTrackHash' | 'terrainComputedAt' | 'cachedInProtectedArea' | 'cachedProtectedAreaTrackHash' | 'cachedProtectedAreaComputedAt' | 'floraResult' | 'floraTrackHash' | 'floraComputedAt' | 'borgoWalkPolyline' | 'borgoWalkStopsHash' | 'borgoItineraryOverrides' | 'borgoDayBudgetMinutes'>>,
+  meta: Partial<Pick<PlannedHike, 'title' | 'userNotes' | 'hikeNotes' | 'tags' | 'plannedDate' | 'cachedPois' | 'cachedPoiWiki' | 'cachedGuide' | 'cachedGuideSubtitle' | 'cachedGuideNotices' | 'cachedGuideSources' | 'guideTier' | 'guideGeneratedAt' | 'cachedEpochPois' | 'cachedBeautyScore' | 'cachedTrailScore' | 'cachedTrailScoreConfidence' | 'cachedScoresComputedAt' | 'cachedSafetyScore' | 'cachedSafetyComputedAt' | 'cachedTsTotal' | 'cachedDrivingDistanceMeters' | 'cachedDrivingDurationSeconds' | 'cachedDrivingOriginLat' | 'cachedDrivingOriginLon' | 'pendingExpiresAt' | 'archivedAt' | 'favorite' | 'firstCompletedAt' | 'diaryId' | 'routeMode' | 'dtmProfile' | 'dtmTrackHash' | 'dtmComputedAt' | 'terrainProfile' | 'terrainTrackHash' | 'terrainComputedAt' | 'cachedInProtectedArea' | 'cachedProtectedAreaTrackHash' | 'cachedProtectedAreaComputedAt' | 'floraResult' | 'floraTrackHash' | 'floraComputedAt' | 'borgoWalkPolyline' | 'borgoWalkStopsHash' | 'borgoWalkTappaEnds' | 'borgoItineraryOverrides' | 'borgoDayBudgetMinutes'>>,
 ): Promise<void> {
   const local = await lsGet<PlannedHike>(LS_KEYS.planned(id))
   if (local) await lsSet(LS_KEYS.planned(id), { ...local, ...meta })
