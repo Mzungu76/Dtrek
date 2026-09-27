@@ -670,8 +670,19 @@ function buildHeritageQuery(regionLabel?: string, limit = 5000): string {
   // OPTIONAL. Case-sensitive di proposito (una volta rimosso LCASE non serve testarlo): il
   // letterale osservato usa "Veneto" con l'iniziale maiuscola, stessa capitalizzazione richiesta
   // dal fix round 3 del registro Istituti.
+  //
+  // BUG (2026-09-27, segnalato dal vivo — run --all-regions su tutta Italia): CONTAINS su TUTTO
+  // ?addressLabel matcha anche il nome della regione se compare altrove nell'indirizzo, non solo
+  // nel campo regione — osservato reale: "Casa Fiori... - Milano (MI)", indirizzo
+  // "piazza Sicilia, 6", finito tra i risultati per --region Sicilia (falso positivo, l'edificio è
+  // in Lombardia). Su un campione nazionale reale, il 93% dei risultati per "Sicilia" erano falsi
+  // positivi di questo tipo (via/piazza intitolata a un'altra regione), non record siciliani veri.
+  // Fix: richiedere che il nome regione compaia SUBITO dopo "ITALIA, " (posizione fissa e
+  // verificata del campo regione nell'etichetta, es. "ITALIA, Veneto, PD, Padova, ..." — vedi
+  // parseHeritageAddressLabel sotto, stessa struttura a virgole) invece di una sottostringa libera
+  // — stesso pattern CONTAINS-su-JOIN-diretto di prima (sicuro), solo più specifico.
   const regionFilter = regionLabel
-    ? `FILTER(CONTAINS(?addressLabel, "${regionLabel.replace(/"/g, '')}"))`
+    ? `FILTER(CONTAINS(?addressLabel, "ITALIA, ${regionLabel.replace(/"/g, '')},"))`
     : ''
 
   return `

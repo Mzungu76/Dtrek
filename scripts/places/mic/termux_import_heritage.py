@@ -89,8 +89,15 @@ def build_heritage_query(region_label, limit):
     candidate_pool = min(CANDIDATE_POOL_CAP, max(limit * 4, 50))
     region_filter = ""
     if region_label:
+        # BUG (2026-09-27, verificato dal vivo su un run --all-regions reale): CONTAINS su tutto
+        # l'indirizzo matchava anche una via/piazza intitolata alla regione altrove in Italia, non
+        # solo il campo regione vero — esempio reale: "Casa Fiori... - Milano (MI)", indirizzo
+        # "piazza Sicilia, 6", finito tra i risultati per --region Sicilia (falso positivo, 93% dei
+        # 765 risultati su un campione nazionale). Richiedere che il nome regione compaia subito
+        # dopo "ITALIA, " (posizione fissa nell'etichetta, vedi parse_heritage_address_label sopra)
+        # invece di una sottostringa libera elimina il falso positivo.
         escaped = region_label.replace('"', "")
-        region_filter = f'FILTER(CONTAINS(?addressLabel, "{escaped}"))'
+        region_filter = f'FILTER(CONTAINS(?addressLabel, "ITALIA, {escaped},"))'
 
     return f"""
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
