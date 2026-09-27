@@ -67,6 +67,13 @@ export default function SiteGuideOverlay({ siteId, onClose }: Props) {
           hasAiAccess={hasAiAccess}
           aiUnavailable={aiUnavailable}
           trialExpired={trialExpired}
+          // Mai una traccia GPS per un Sito: niente hasGps/centerPt qui come in GuidaHub.tsx,
+          // solo le coordinate copiate in modo durevole da dtrek_places su hike.latitude/longitude.
+          weather={
+            hike.latitude != null && hike.longitude != null
+              ? { lat: hike.latitude, lon: hike.longitude, mode: hike.plannedDate ? 'planned' as const : 'forecast' as const }
+              : undefined
+          }
         />
       )}
     </div>

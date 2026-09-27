@@ -1131,7 +1131,17 @@ export default function GuidaHub({ id }: { id?: string }) {
           onScrollToSectionConsumed={() => setPendingScrollSection(null)}
           highlightedPoiId={highlightedPoiId}
           onPoiTap={id => setHighlightedPoiId(prev => prev === id ? null : id)}
-          weather={hasGps ? { lat: centerPt.lat!, lon: centerPt.lon!, mode: hike.plannedDate ? 'planned' as const : 'forecast' as const } : undefined}
+          weather={
+            hasGps
+              ? { lat: centerPt.lat!, lon: centerPt.lon!, mode: hike.plannedDate ? 'planned' as const : 'forecast' as const }
+              // Un Borgo/Città senza traccia GPS reale e ogni Sito non hanno mai trackPoints (hasGps
+              // resta sempre false) ma hanno comunque le coordinate copiate in modo durevole da
+              // dtrek_places su hike.latitude/longitude — stesso fallback già usato altrove (es.
+              // borgoWalkPolyline) invece di lasciare il meteo assente per queste due tipologie.
+              : (hike.latitude != null && hike.longitude != null)
+                ? { lat: hike.latitude, lon: hike.longitude, mode: hike.plannedDate ? 'planned' as const : 'forecast' as const }
+                : undefined
+          }
           onOpenMap3D={hasGps ? () => setShow3D(true) : undefined}
           showGradient={showGradient}
           showAspect={showAspect}
