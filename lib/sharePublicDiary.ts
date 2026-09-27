@@ -85,6 +85,10 @@ export interface PublicDiaryEntry {
    *  essere vere perché una sezione compaia, stesso principio "il più restrittivo vince" già usato
    *  per le altre preferenze di pubblicazione. */
   extras:            DiaryReportExtras
+  /** Falso solo per un'Attività nata dal ripiego "registra comunque" del check-in GPS di un Sito
+   *  (fix assente o fuori raggio, lib/visitCompletion.ts) — mai un gate di visibilità, solo
+   *  un'etichetta onesta: il contenuto resta pubblicato comunque, la lettura decide se fidarsene. */
+  verified:          boolean
 }
 
 /** Il contenuto pubblico di un Diario, senza i campi che appartengono al documento che lo
@@ -136,7 +140,7 @@ export async function buildContentFromReports(
     ? await Promise.all([
         supabase
           .from('activities')
-          .select('id, start_time, distance_meters, elevation_gain, total_time_seconds, altitude_max, calories, route_polyline, track_points')
+          .select('id, start_time, distance_meters, elevation_gain, total_time_seconds, altitude_max, calories, route_polyline, track_points, verified')
           .in('id', activityIds),
         supabase
           .from('activity_photos')
@@ -191,6 +195,9 @@ export async function buildContentFromReports(
         totalTimeSeconds: (act?.total_time_seconds as number) ?? 0,
         altitudeMax:      (act?.altitude_max as number) ?? null,
         calories:         (act?.calories as number) ?? null,
+        // Assente su un'Attività salvata prima di questa colonna: DEFAULT true a livello di
+        // colonna (erano tutte reali), mai "non verificata" per omissione.
+        verified:         (act?.verified as boolean | undefined) ?? true,
         content:          (r.content as string) ?? '',
         // La scelta fatta nel Diario vale anche qui: `photoIdsByActivity` dice quali foto l'autore
         // vuole pubblicare. Il PDF ne stampa comunque un sottoinsieme distribuito; il sito, che non

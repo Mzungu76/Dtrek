@@ -53,6 +53,10 @@ ALTER TABLE activities ADD COLUMN IF NOT EXISTS site_type TEXT
   ));
 CREATE INDEX IF NOT EXISTS idx_activities_meta_type ON activities (meta_type);
 
+-- Check-in GPS per i Siti — vedi supabase/migrations/add_activities_verified_column.sql per i
+-- commenti completi. DEFAULT true: ogni riga già esistente nasce da una traccia reale.
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS verified BOOLEAN NOT NULL DEFAULT true;
+
 -- ── Escursioni pianificate ───────────────────────────────────
 CREATE TABLE IF NOT EXISTS planned_hikes (
   id                      TEXT PRIMARY KEY,

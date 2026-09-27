@@ -164,10 +164,18 @@ export function PublicReportPage({ entry, n, show, hideExactDates = false }: {
         </div>
 
         {/* Data */}
-        <div style={{ background: '#f8f7f4', padding: `${cq(12)} ${cq(48)}`, borderTop: '1px solid #dcd8cc' }}>
+        <div style={{ background: '#f8f7f4', padding: `${cq(12)} ${cq(48)}`, borderTop: '1px solid #dcd8cc', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: cq(12) }}>
           <p className="font-barlow" style={{ fontWeight: 700, fontSize: cq(10), letterSpacing: cq(3), color: '#8a7f6e', textTransform: 'uppercase', margin: 0 }}>
             {dateStr}{!!entry.altitudeMax && ` · Quota max ${Math.round(entry.altitudeMax)} m`}
           </p>
+          {/* Solo per un'Attività nata dal ripiego "registra comunque" del check-in GPS di un Sito
+              (lib/visitCompletion.ts) — mai un giudizio sul racconto, solo un'etichetta onesta sulla
+              presenza reale che lo ha originato. */}
+          {!entry.verified && (
+            <p className="font-barlow" style={{ fontWeight: 700, fontSize: cq(10), letterSpacing: cq(2), color: '#a15c00', textTransform: 'uppercase', margin: 0, whiteSpace: 'nowrap' }}>
+              Visita non verificata
+            </p>
+          )}
         </div>
 
         <div style={{ padding: `${cq(48)} ${cq(48)} ${cq(40)}` }}>

@@ -67,6 +67,7 @@ function rowToActivity(row: Record<string, unknown>): StoredActivity {
     poiWiki:              row.poi_wiki                 as StoredActivity['poiWiki'] | undefined,
     metaType:             (row.meta_type as StoredActivity['metaType']) ?? 'sentiero',
     siteType:             row.site_type as StoredActivity['siteType'] | undefined,
+    verified:             (row.verified as boolean | undefined) ?? true,
   }
 }
 
@@ -116,6 +117,7 @@ function activityToRow(a: StoredActivity) {
     poi_wiki:                     a.poiWiki ?? null,
     meta_type:                    a.metaType ?? 'sentiero',
     site_type:                    a.siteType ?? null,
+    verified:                     a.verified ?? true,
     route_polyline:       downsamplePolyline(a.trackPoints ?? []),
     track_points:         downsampleTrackPoints(a.trackPoints ?? []),
   }
