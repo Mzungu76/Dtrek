@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react'
 import { BarChart2, Mountain, Leaf, MapPin, Compass, Route, Flag, BookOpen, Camera } from 'lucide-react'
 import { createElement } from 'react'
+import type { ReportFixedSectionKey } from '@/lib/reportSections'
 
-export type ReportFixedSectionKey = 'dati_punteggi' | 'andamento' | 'natura' | 'poi' | 'galleria_foto'
+export type { ReportFixedSectionKey }
 
 /** Colori/icone delle sezioni "dati" fisse — sempre presenti, indipendentemente dal racconto AI/
  *  manuale (stesso principio di components/guida/sectionStyle.ts: ogni widget resta raggiungibile

@@ -67,4 +67,11 @@ describe('reportProfileFor', () => {
     expect(reportProfileFor('borgo_citta', 'museo')).toBe(REPORT_PROFILES.borgo_citta)
     expect(reportProfileFor('sentiero', 'museo')).toBe(REPORT_PROFILES.sentiero)
   })
+
+  it('solo borgo_citta ha una sezione "Sapori e tradizioni" — sentiero e sito restano a 3 sezioni', () => {
+    expect(reportProfileFor('borgo_citta').saporiTitle).toBe('Sapori e tradizioni')
+    expect(reportProfileFor('borgo_citta').saporiBrief?.length).toBeGreaterThan(0)
+    expect(reportProfileFor('sentiero').saporiTitle).toBeUndefined()
+    expect(reportProfileFor('sito').saporiTitle).toBeUndefined()
+  })
 })

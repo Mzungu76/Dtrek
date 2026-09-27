@@ -255,6 +255,10 @@ function buildPrompt(
     : ''
 
   const hasQa = !!(qa && qa.length > 0)
+  const hasSapori = !!(profile.saporiTitle && profile.saporiBrief)
+  const sectionCount = 3 + (hasSapori ? 1 : 0) + (hasQa ? 1 : 0)
+  const SECTION_COUNT_WORDS: Record<number, string> = { 3: 'tre', 4: 'quattro', 5: 'cinque' }
+  const sectionCountWord = SECTION_COUNT_WORDS[sectionCount] ?? String(sectionCount)
   const styleLine = styleProfile && isProfileReady(styleProfile) ? formatStyleProfileBlock(styleProfile) : ''
   const cronacaBlock = hasQa
     ? `
@@ -266,6 +270,16 @@ Eventuali dati biometrici possono essere citati qui se aiutano a descrivere il r
 Integra le risposte dell'escursionista al questionario guidato, seguendo l'ordine cronologico dei punti
 del percorso a cui si riferiscono, fondendole nella narrazione senza mai citarle alla lettera.
 ${styleLine ? `${styleLine}\nCalibra la lunghezza e il ritmo delle frasi di questa sezione su questo registro reale, non su un tono "medio" generico.` : ''}
+`
+    : ''
+
+  // Solo per borgo_citta (lib/reportProfiles.ts) — al posto di "Natura e storia", rimossa perché
+  // non pertinente per un centro abitato. Tra la seconda sezione e "In sintesi": la sequenza di
+  // lettura resta luogo → (cronaca) → storia → sapori → bilancio finale.
+  const saporiBlock = hasSapori
+    ? `
+## ${profile.saporiTitle}
+${profile.saporiBrief}
 `
     : ''
 
@@ -299,14 +313,14 @@ ${qaBlock}
 DOCUMENTAZIONE FOTOGRAFICA (in ordine cronologico dal punto di partenza):
 ${photoBlock}
 
-Scrivi il reportage strutturato in queste ${hasQa ? 'quattro' : 'tre'} sezioni (usa ## per ogni titolo):
+Scrivi il reportage strutturato in queste ${sectionCountWord} sezioni (usa ## per ogni titolo):
 
 ## ${profile.sectionTitle}
 ${profile.sectionBrief}${profile.hikingMetrics ? ' Usa i dati di distanza, dislivello e quota come ancoraggio.' : ''}${guideBlock ? ' Metti a confronto la GUIDA SCRITTA PRIMA DELL\'USCITA con quello che i dati e le foto mostrano davvero: dove trova conferma, dove si è rivelato diverso da come era descritto. Se una previsione della guida non trova riscontro nei dati reali, dillo esplicitamente invece di riscriverla al passato — è proprio quello lo scarto che rende utile un resoconto rispetto a una guida.' : ''}${weatherLine ? ' Se rilevante, integra il METEO fornito sopra come elemento narrativo (luce, condizioni, visibilità), non come sezione a parte.' : ''}
 ${cronacaBlock}
 ## ${profile.section2Title}
 ${profile.section2Brief}${profile.hikingMetrics && natureBlock ? ' Fonda la parte naturalistica sui DATI NATURALISTICI E FENOLOGICI REALI forniti sopra (specie osservate, tipo di bosco, fenologia satellitare).' : ''}${poiBlock ? ' Usa i PUNTI DI INTERESSE forniti sopra per la parte storico-culturale.' : ''}${guideBlock ? (profile.hikingMetrics ? ' La guida pre-uscita ha già raccolto contesto storico-naturalistico: riprendilo, ma verifica se le foto e i dati dell\'uscita lo confermano o lo correggono, e aggiungi ciò che si è potuto sapere solo essendoci stati.' : ' La guida pre-uscita ha già raccolto contesto storico: riprendilo, ma verifica se le foto e i dati della visita lo confermano o lo correggono, e aggiungi ciò che si è potuto sapere solo essendoci stati.') : ''}
-
+${saporiBlock}
 ## ${profile.section3Title}
 ${profile.section3Brief}${guideBlock ? ' I consigli pratici devono valere per chi ci andrà DOPO: dove la guida pre-uscita era ottimista o pessimista, dove serve un\'avvertenza che prima non c\'era.' : ''}
 
@@ -315,7 +329,7 @@ Scrivi in italiano preciso, diretto, senza aggettivi inflazionati o toni epici.
 
 LUNGHEZZA: ${LENGTH_CONFIG[length].instruction}
 
-IMPORTANTE: Completa obbligatoriamente tutte e ${hasQa ? 'quattro le sezioni' : 'tre le sezioni'}${hasQa ? '' : ' (NON scrivere "## Cronaca")'}.`
+IMPORTANTE: Completa obbligatoriamente tutte e ${sectionCountWord} le sezioni${hasQa ? '' : ' (NON scrivere "## Cronaca")'}.`
 
   return { text, imageBlocks }
 }

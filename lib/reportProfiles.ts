@@ -1,17 +1,16 @@
 import type { MetaType, SiteType } from './metaTypes'
 
 // Blocco E (piano §30) — equivalente di lib/guideProfiles.ts ma per il Reportage
-// (app/api/resoconto/route.ts): a differenza della Guida, il Reportage ha uno scheletro fisso di
-// sole 3 sezioni (+ "Cronaca" opzionale, guidata dal questionario, non dalla tipologia) invece di
-// 8 — non serve un elenco di sezioni disponibili, solo sovrascrivere titolo/istruzioni di ciascuna
-// delle tre sezioni fisse e sopprimere il blocco distanza/dislivello/durata/quota per una Meta
-// senza traccia (piano §48.9).
+// (app/api/resoconto/route.ts): a differenza della Guida, il Reportage ha uno scheletro
+// prevalentemente fisso — 3 sezioni per Sentiero/Sito (+ "Cronaca" opzionale, guidata dal
+// questionario, non dalla tipologia), 4 per Borgo/Città (sessione conversazionale: "Sapori e
+// tradizioni" al posto di "Natura e storia", rimossa perché non pertinente per un centro abitato).
 //
-// Fino a qui il profilo cambiava SOLO la prima sezione ("Il percorso"/"Il borgo"/"Il sito") — le
-// altre due restavano scritte in un linguaggio pensato per un sentiero ("Natura e storia":
-// geologia/flora/fauna "nelle vicinanze", presuppone un territorio attraversato; "In sintesi":
-// "difficoltà effettiva", non pertinente per una visita) anche per un Borgo/Sito. Ora tutte e tre
-// le sezioni sono profilate.
+// Fino a una prima iterazione il profilo cambiava SOLO la prima sezione ("Il percorso"/"Il
+// borgo"/"Il sito") — le altre restavano scritte in un linguaggio pensato per un sentiero ("Natura
+// e storia": geologia/flora/fauna "nelle vicinanze", presuppone un territorio attraversato; "In
+// sintesi": "difficoltà effettiva", non pertinente per una visita) anche per un Borgo/Sito. Ora
+// ogni sezione è profilata.
 
 export interface ReportProfile {
   metaType: MetaType
@@ -20,6 +19,12 @@ export interface ReportProfile {
   sectionBrief: string
   section2Title: string
   section2Brief: string
+  /** Solo per borgo_citta (sessione conversazionale) — sezione narrativa in più su gastronomia
+   *  locale/tradizioni, al posto di "Natura e storia" (rimossa per Borgo/Città: non ha senso
+   *  raccontare geologia/flora/fauna di un centro abitato). Assente per sentiero/sito: il loro
+   *  schema resta a 3 sezioni fisse, mai 4 per omologazione. */
+  saporiTitle?: string
+  saporiBrief?: string
   section3Title: string
   section3Brief: string
   personaAddendum?: string
@@ -61,6 +66,12 @@ tradizioni ed eventi locali, aneddoti poco noti, il modo in cui il centro storic
 tempo. Includi almeno un fatto poco noto che arricchisca la conoscenza del luogo — niente geologia,
 flora o fauna "lungo il percorso": qui il protagonista è il centro abitato, non il territorio
 attraversato.`,
+    saporiTitle: 'Sapori e tradizioni',
+    saporiBrief: `Racconta cosa si è mangiato o assaggiato durante la visita, se emerge dalle foto o
+dalle note dell'escursionista — un piatto tipico, un prodotto locale, un vino della zona, una
+bottega o un mercato incontrato per strada. Se non c'è alcun indizio di soste gastronomiche,
+descrivi comunque la tradizione gastronomica del luogo (piatti tipici, vini, prodotti tipici) come
+contesto culturale, senza inventare che l'escursionista li abbia provati.`,
     section3Title: 'In sintesi',
     section3Brief: IN_SINTESI_VISITA,
     personaAddendum: `\n\nQuesta Meta è un borgo o una città visitata a piedi, NON un'escursione: non
