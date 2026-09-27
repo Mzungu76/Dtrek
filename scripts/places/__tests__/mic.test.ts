@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { micTypeLabelToSiteType, micBindingToPlaceCandidate, filterToKnownRegions, stripMailto, hasCoordinates } from '../mic/fetch'
-import type { MicBinding } from '../mic/fetch'
+import {
+  micTypeLabelToSiteType, micBindingToPlaceCandidate, filterToKnownRegions, stripMailto, hasCoordinates,
+  parseHeritageAddressLabel, heritageBindingToPlaceCandidate,
+} from '../mic/fetch'
+import type { MicBinding, HeritageBinding } from '../mic/fetch'
 
 describe('micTypeLabelToSiteType', () => {
   it('mappa le etichette più comuni ai SiteType corretti (piano §8)', () => {
@@ -184,6 +187,71 @@ describe('stripMailto', () => {
   it('non case-sensitive, nessun effetto se il prefisso è già assente', () => {
     expect(stripMailto('MAILTO:info@cmcimini.it')).toBe('info@cmcimini.it')
     expect(stripMailto('info@cmcimini.it')).toBe('info@cmcimini.it')
+  })
+})
+
+// Fixture: caso reale verificato dal vivo (2026-09-26, query manuali via Termux contro
+// dati.cultura.gov.it) — Basilica di Sant'Antonio a Padova, assente da cis:CulturalInstituteOrSite
+// ma presente in questa classe con indirizzo e coordinate dirette reali.
+describe('parseHeritageAddressLabel', () => {
+  const REAL_LABEL = 'ITALIA, Veneto, PD, Padova, PADOVA, Piazza del Santo 11'
+
+  it('estrae regione e comune dal formato reale verificato (Padova)', () => {
+    expect(parseHeritageAddressLabel(REAL_LABEL)).toEqual({ region: 'Veneto', municipality: 'Padova' })
+  })
+
+  it('undefined → oggetto vuoto, mai un errore', () => {
+    expect(parseHeritageAddressLabel(undefined)).toEqual({})
+  })
+
+  it('formato con meno componenti del previsto → oggetto vuoto, mai un valore indovinato da un parsing fragile', () => {
+    expect(parseHeritageAddressLabel('ITALIA, Veneto')).toEqual({})
+  })
+})
+
+describe('heritageBindingToPlaceCandidate', () => {
+  const BASILICA: HeritageBinding = {
+    id: '0500365397',
+    name: "Basilica di Sant'Antonio (giardino, privato) - Padova (PD)",
+    dcType: 'giardino',
+    addressLabel: 'ITALIA, Veneto, PD, Padova, PADOVA, Piazza del Santo 11',
+    fullAddress: 'Piazza del Santo 11',
+    depiction: 'https://sigecweb.beniculturali.it/images/fullsize/ICCD1057156/ICCD13656007_IN644',
+    lat: 45.401121,
+    long: 11.881033,
+  }
+
+  it('metaType sito, source mic_iccd (distinto da mic — audit indipendente delle due fonti)', () => {
+    const c = heritageBindingToPlaceCandidate(BASILICA)
+    expect(c.metaType).toBe('sito')
+    expect(c.source).toBe('mic_iccd')
+    expect(c.sourceId).toBe('0500365397')
+  })
+
+  it('subtype dal NOME intero via micTypeLabelToSiteType, non da dc:type (che qui dice solo "giardino")', () => {
+    const c = heritageBindingToPlaceCandidate(BASILICA)
+    expect(c.subtype).toBe('chiesa')
+    expect(c.rawType).toBe('giardino')
+    expect(c.metadata?.iccdDcType).toBe('giardino')
+  })
+
+  it('region/municipality dall\'indirizzo, coordinate dirette senza geocodifica', () => {
+    const c = heritageBindingToPlaceCandidate(BASILICA)
+    expect(c.region).toBe('Veneto')
+    expect(c.municipality).toBe('Padova')
+    expect(c.latitude).toBe(45.401121)
+    expect(c.longitude).toBe(11.881033)
+  })
+
+  it('imageUrl popolato da foaf:depiction, sourceUrl punta al Catalogo Generale consultabile', () => {
+    const c = heritageBindingToPlaceCandidate(BASILICA)
+    expect(c.imageUrl).toBe(BASILICA.depiction)
+    expect(c.sourceUrl).toBe('https://catalogo.beniculturali.it/detail/ArchitecturalOrLandscapeHeritage/0500365397')
+  })
+
+  it('confidence più bassa di \'mic\' (0.9): qui la tipologia è sempre euristica sul nome, mai da un campo strutturato', () => {
+    const c = heritageBindingToPlaceCandidate(BASILICA)
+    expect(c.confidence).toBe(0.75)
   })
 })
 

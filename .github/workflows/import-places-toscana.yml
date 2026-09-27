@@ -1,0 +1,65 @@
+name: Import Places — Toscana (probe diagnostico fonti candidate)
+
+# Manuale (workflow_dispatch), stesso schema di import-places-lombardia.yml al suo round 1/2 —
+# leggere scripts/places/toscana/README.md e probe.ts prima di lanciare o modificare questo file.
+#
+# RISERVA, non priorità: prima verificare scripts/places/mic/fetch.ts con region=Toscana sul
+# workflow "Import Places — MiC" (già pronto, nessun fix nuovo necessario — vedi il README di
+# questa cartella). Questo workflow esiste solo per verificare dal vivo le fonti candidate trovate
+# via WebSearch se quel test MiC conferma una copertura povera anche col fix già applicato.
+#
+# Solo `mode: probe` per ora — nessun fetch.ts/describe/dry-run/write ancora, esattamente come per
+# la Lombardia prima che il probe confermasse quale fonte usare (round 1/2, poi aggiunti describe/
+# dry-run/write una volta scelta la fonte reale).
+
+on:
+  workflow_dispatch:
+    inputs:
+      probe_only:
+        description: "Nome di un singolo probe da probe.ts (vuoto = tutti). Vedi il file per l'elenco completo."
+        required: false
+        type: string
+        default: ""
+      probe_timeout_ms:
+        description: "Timeout (ms) per ciascun probe — un solo tentativo, nessuna retry."
+        required: false
+        type: string
+        default: "30000"
+
+concurrency:
+  group: import-places
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    env:
+      PROBE_ONLY: ${{ inputs.probe_only }}
+      PROBE_TIMEOUT_MS: ${{ inputs.probe_timeout_ms }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Probe — test degli endpoint candidati (diagnostica, nessun Supabase)
+        run: |
+          set -euo pipefail
+          if [ -n "${PROBE_ONLY:-}" ]; then
+            npx tsx scripts/places/toscana/probe.ts --timeout "$PROBE_TIMEOUT_MS" --only "$PROBE_ONLY" | tee /tmp/toscana-probe.txt
+          else
+            npx tsx scripts/places/toscana/probe.ts --timeout "$PROBE_TIMEOUT_MS" | tee /tmp/toscana-probe.txt
+          fi
+          {
+            echo "### Import Places — Toscana (probe diagnostico)"
+            echo '```'
+            cat /tmp/toscana-probe.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

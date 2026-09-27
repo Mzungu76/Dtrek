@@ -165,6 +165,68 @@ un altro `write`. Non ancora riverificato dal vivo dopo questo fix.
 Workflow: `mode: dry-run`/`write` in `import-places-mic.yml` (`mode: describe` e `mode: probe`
 restano disponibili per ulteriore diagnostica, nessun secret Supabase richiesto).
 
+## Catalogo Generale ICCD (`arco:ArchitecturalOrLandscapeHeritage`) — seconda fonte nello stesso endpoint (2026-09-26)
+
+Verifica utente su Padova: perché il MiC non ha "tutti i più importanti POI di una città" — la
+Basilica di Sant'Antonio (Il Santo) risultava assente da `cis:CulturalInstituteOrSite` (il registro
+"Istituti e Luoghi della Cultura" usato finora). Investigato dal vivo con query manuali via Termux
+(nessun accesso di rete da questa sandbox, stesso limite di sempre — l'utente ha eseguito le query
+lui stesso da smartphone, `curl`/Python contro `dati.cultura.gov.it/sparql`, risultati reali
+incollati in sessione, non un'ipotesi):
+
+- Lo stesso endpoint SPARQL contiene **almeno tre insiemi di dati distinti** sotto namespace URI
+  diversi: quello già importato (`mibact/luoghi/...`, classe `cis:CulturalInstituteOrSite`), le
+  schede ICCD (`iccd/schede/...`, stessa classe ma dataset diverso — non ancora sfruttato, vedi
+  "resta aperto" sotto), e il **Catalogo Generale dei Beni Culturali** vero e proprio
+  (`w3id.org/arco/resource/.../ArchitecturalOrLandscapeHeritage/...`, classe
+  `arco:ArchitecturalOrLandscapeHeritage`) — quest'ultimo corrisponde ai "beni architettonici e
+  paesaggistici" del Catalogo ICCD.
+- **Verificato un caso reale end-to-end**: la Basilica di Sant'Antonio a Padova esiste in questa
+  terza classe (`ArchitecturalOrLandscapeHeritage/0500365397`, etichetta "Basilica di Sant'Antonio
+  (giardino, privato) - Padova (PD)"), con indirizzo reale (`Piazza del Santo 11`, via
+  `dcterms:spatial`) **e coordinate dirette** (45.401121, 11.881033 — verificate plausibili,
+  ~950m dal centro di Padova già in `dtrek_places`) via una geometria di tipo Punto
+  (`clvapit:hasGeometryType = clvapit:Point`) collegata a un nodo Coordinate con predicati
+  `loc:lat`/`loc:long` (namespace `https://w3id.org/arco/ontology/location/` — DIVERSO da
+  `geo:lat`/`geo:long` usato nel registro Istituti, stesso Ministero ma vocabolario diverso per
+  questo grafo). **Nessuna geocodifica di ripiego necessaria per questa fonte** quando la geometria
+  punto esiste — a differenza del registro Istituti (Lombardia/Toscana).
+- **Limite categoriale confermato, non un difetto di questa query**: una piazza pubblica ("Prato
+  della Valle", verificato) non esiste in NESSUNA classe di questo grafo — il Ministero cataloga
+  beni culturali, mai spazi pubblici comunali. Questa fonte recupera chiese/palazzi/monumenti
+  mancanti dal registro Istituti, mai piazze/vie/lungomare.
+- Implementato in `fetch.ts`: `buildHeritageQuery`/`queryHeritageSparql`/
+  `heritageBindingToPlaceCandidate`, dietro il nuovo flag `--source cis|heritage|all` (default
+  `cis`, comportamento invariato per chi non lo passa). Nuovo `source` in `scripts/places/types.ts`:
+  `'mic_iccd'`, tenuto separato da `'mic'` per poter contare/debuggare le due fonti indipendentemente
+  (stesso motivo per cui PTPR e Lombardia hanno il proprio valore).
+- **Verificato solo su un campione minimo** (1 comune, 1 record end-to-end tramite query manuali) —
+  mai ancora un `--dry-run` reale su scala regionale/nazionale: stessa cautela già applicata al
+  registro Istituti, un `--limit` piccolo prima di alzarlo. In particolare non verificato: se il
+  filtro regione (`CONTAINS` sull'etichetta indirizzo) regge su un campione più ampio, se il parsing
+  region/comune (`parseHeritageAddressLabel`, formato osservato su un solo esempio) regge su
+  indirizzi con un numero diverso di componenti, e se esistono molti beni SENZA geometria punto
+  (solo poligono) che quindi resterebbero esclusi.
+- **Resta aperto**: le schede ICCD (`iccd/schede/...`, stessa classe `cis:CulturalInstituteOrSite`
+  ma record diversi da quelli già importati, es. `S000170_Chiesa_di_Sant_Antonio_da_Padova` — in
+  realtà una chiesa ad Agira, Sicilia, non a Padova, verificato dal vivo) non sono ancora sfruttate:
+  intercettate durante l'indagine ma non necessarie per risolvere il caso Sant'Antonio (risolto da
+  `ArchitecturalOrLandscapeHeritage`), quindi non implementate.
+
+## Toscana — probabile falso negativo, da ritestare per prima cosa (2026-09-25)
+
+Verifica utente: 0 Siti con `source='mic'` per la Toscana in Supabase (e Sicilia solo 3 — vedi
+`MIC_DATA_SOURCES.md`). Quel valore però risale a un run del 2026-09-17 ("tutta Italia"), **prima**
+del fix coordinate mancanti Lombardia/Toscana descritto in cima a `fetch.ts` (geocodifica Nominatim
+di ripiego per i record ArCo con indirizzo ma senza tripla di coordinate dirette — verificato dal
+vivo SOLO sulla Lombardia, 2026-09-22: 6 record trovati, 6/6 geocodificati). Il commento in cima a
+`fetch.ts` è esplicito: il sotto-grafo ArCo per Lombardia/Toscana condivide lo stesso problema
+(indirizzo presente, coordinate mai presenti) — la Toscana non è mai stata ritestata con la query
+corretta. **Prima di costruire una fonte dedicata come per la Lombardia** (vedi
+`scripts/places/toscana/`, tenuta di proposito come riserva), lanciare `mode: dry-run`,
+`region: Toscana` su questo workflow: se il numero di risultati è ragionevole, il problema potrebbe
+già essere risolto da questo fix, senza bisogno di altro codice.
+
 ## Cosa esisteva già nel repository (riusato come riferimento, non duplicato)
 
 `lib/pois/gnaSource.ts` — fetcher live per il solo layer archeologico MiC via GNA (WFS), non

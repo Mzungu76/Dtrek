@@ -4,7 +4,17 @@ export type { PlaceCategory }
 
 // Sorgenti supportate dalla pipeline (piano §41). Ogni fonte deve avere `source`/`source_id`
 // (piano §48.12) — mai un candidato senza provenienza ricostruibile.
-export type PlaceSource = 'istat' | 'ptpr_lazio' | 'mic' | 'osm' | 'wikidata' | 'lombardia_sirbec'
+//
+// 'mic_iccd' — Catalogo Generale dei Beni Culturali ICCD (classe ArCo
+// arco:ArchitecturalOrLandscapeHeritage), distinto da 'mic' (registro "Istituti e Luoghi della
+// Cultura", classe cis:CulturalInstituteOrSite): stesso endpoint SPARQL (dati.cultura.gov.it),
+// stesso Ministero, ma un grafo diverso con copertura diversa — verificato dal vivo (2026-09-26,
+// query manuali via Termux, non un'ipotesi: vedi scripts/places/mic/README.md "Catalogo Generale
+// ICCD") che contiene beni assenti dal registro "Istituti" (es. Basilica di Sant'Antonio a
+// Padova, mai presente in cis:CulturalInstituteOrSite). Tenuto separato da 'mic' per poter
+// contare/debuggare le due fonti indipendentemente, stesso motivo per cui PTPR e Lombardia hanno
+// il proprio valore invece di condividere 'mic'.
+export type PlaceSource = 'istat' | 'ptpr_lazio' | 'mic' | 'mic_iccd' | 'osm' | 'wikidata' | 'lombardia_sirbec'
 
 // Output normalizzato di un singolo fetcher di sorgente (scripts/places/<fonte>/), prima di
 // deduplicazione/import — il "modello comune" richiesto dal piano §41 ("l'importer finale deve
