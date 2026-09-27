@@ -112,6 +112,37 @@ museo del contrabbando), non della fonte scelta.
 
 **Non implementata in questa sessione**: nessuna tabella, import o UI. Prossimi passi concreti, se
 si procede: (a) eseguire `scripts/places/wikidata/enrich.ts` sui musei per popolare `wikidata_id`
-(prerequisito per qualunque cosa, oggi 0/2296); (b) verificare `--sample` su un museo reale per i
-campi effettivi; (c) decidere la soglia "museo importante" con dati reali di distribuzione (non
+(prerequisito per qualunque cosa, oggi 0/2296); (b) ~~verificare `--sample` su un museo reale~~
+**FATTO, vedi §2.4**; (c) decidere la soglia "museo importante" con dati reali di distribuzione (non
 ancora misurata su scala, solo su 5 musei grandi + 5 piccoli).
+
+## 2.4 Campione opere Galleria Borghese (2026-09-27) — campi reali e un'anomalia da correggere
+
+`--sample Q841506` (10 opere):
+
+```
+Cranach. L'altro rinascimento
+Sibilla Cumana, Domenichino, 1617 [immagine]
+Il cardinal Domenico Ginnasi, Giuliano Finelli [immagine]
+ritratto di monsignor clemente merlini, Andrea Sacchi, 1630 [immagine]
+Busto di Adriano
+sarcofago con le dodici fatiche di Ercole
+Apollo in stile arcaistico, da un modello rodio, e leone ricomposto da vari frammenti [immagine]
+gruppo con fontana, pescatore, personificazioni di mare e fiumi
+Amazzone con due guerrieri, barbaro e greco [immagine]
+Ritratto di Felice Zacchia Rondinini, Domenico Guidi
+```
+
+**Positivo**: titolo sempre presente, **7/10 con immagine**, autore quando noto (Domenichino,
+Andrea Sacchi, Giuliano Finelli, Domenico Guidi) — assente per i pezzi antichi/anonimi (Busto di
+Adriano, sarcofagi, gruppi scultorei romani), coerente e atteso, non un dato mancante per errore.
+
+**Anomalia trovata, da correggere prima di un import reale**: **"Cranach. L'altro rinascimento" non
+è un'opera — è il titolo di una mostra temporanea** ospitata alla Galleria Borghese, non un pezzo
+della collezione permanente. `wdt:P276` (ubicazione) include quindi anche eventi/mostre, non solo
+opere permanenti — `wdt:P195` (collezione) da solo è probabilmente più pulito per questo scopo (un
+oggetto "in collezione" è quasi sempre un'opera vera, un evento "ubicato" in un museo può essere una
+mostra). Non ancora isolato quale dei due contribuisca l'anomalia (query testata solo con
+UNIONE delle due) — prossimo probe utile, se si procede: contare/campionare separatamente P195 e
+P276, e/o aggiungere un filtro `wdt:P31/wdt:P279*` su classi di opera d'arte (dipinto Q3305213,
+scultura Q860861, ecc.) per escludere eventi ed esposizioni.
