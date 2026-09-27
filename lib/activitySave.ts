@@ -13,6 +13,7 @@ import { fetchWeatherAtHike, type WeatherAtHike } from './openmeteo'
 import { getUserSettingsCached } from './sync/userSettingsStore'
 import { getDefaultDiaryId } from './diari/syntheticPercorso'
 import { metaHasHikingMetrics, type MetaType, type SiteType } from './metaTypes'
+import { visitedBorgoStops } from './borgoWalkPolyline'
 
 export interface SaveActivityOptions {
   title?: string
@@ -167,7 +168,7 @@ export async function saveActivityWithEnrichment(
   // scritto da Giulia e l'abbinamento POI↔Wikipedia (immagini comprese), materiale generato una
   // volta sola e altrimenti perso per sempre nel momento in cui il piano viene consumato in questa
   // attività. Il resoconto e il video ne hanno bisogno per raccontare il percorso, non solo mostrarlo.
-  let guideCarry: Pick<StoredActivity, 'guideText'|'guideSubtitle'|'guideNotices'|'guideGeneratedAt'|'poiWiki'> = {}
+  let guideCarry: Pick<StoredActivity, 'guideText'|'guideSubtitle'|'guideNotices'|'guideGeneratedAt'|'poiWiki'|'borgoStops'> = {}
   // Se questo percorso non è mai stato camminato prima (nessun firstCompletedAt), va marcato dopo
   // il salvataggio — mai cancellato: un Percorso resta l'ancora permanente a cui più Reportage
   // (più uscite nel tempo) si collegano via activities.linked_planned_id.
@@ -190,6 +191,15 @@ export async function saveActivityWithEnrichment(
           guideNotices:     planned.cachedGuideNotices,
           guideGeneratedAt: planned.guideGeneratedAt,
           poiWiki:          planned.cachedPoiWiki as StoredActivity['poiWiki'],
+        }
+        // Solo i veri stop dell'itinerario vicini alla traccia di QUESTA uscita (mai l'intero
+        // itinerario: un Borgo su più tappe deve mostrare nel Reportage solo la tappa camminata
+        // oggi, esattamente come il Navigator la tratta come una sessione a sé — vedi il commento
+        // completo su visitedBorgoStops in lib/borgoWalkPolyline.ts). Solo per un Borgo/Città: mai
+        // un array vuoto scritto su ogni altra tipologia solo perché borgoWalkStops è assente lì.
+        if (planned.metaType === 'borgo_citta' && planned.borgoWalkStops?.length) {
+          const visited = visitedBorgoStops(planned.borgoWalkStops, activity.trackPoints)
+          if (visited.length > 0) guideCarry.borgoStops = visited
         }
         plannedNeedsFirstCompletedAt = !planned.firstCompletedAt
       }

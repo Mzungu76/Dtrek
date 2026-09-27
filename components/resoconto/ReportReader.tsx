@@ -39,6 +39,7 @@ import SpeedChart from '@/components/SpeedChart'
 import RouteMapSection from '@/components/RouteMapSection'
 import WeatherWidget from '@/components/WeatherWidget'
 import PoiListWidget from '@/components/guida/widgets/PoiListWidget'
+import BorgoStopsWidget from '@/components/guida/widgets/BorgoStopsWidget'
 import NaturaWidget from '@/components/guida/widgets/NaturaWidget'
 import RouteTimeline from '@/app/components/RouteTimeline'
 import ManualEditor from '@/app/components/ManualEditor'
@@ -727,6 +728,14 @@ export default function ReportReader({
       case 'natura':
         return <NaturaWidget {...natura} />
       case 'poi':
+        // Un Borgo/Città con i veri stop dell'itinerario curato vicini alla traccia di questa
+        // uscita (lib/activitySave.ts's visitedBorgoStops, mai una query Overpass generica) mostra
+        // quelli — esattamente i luoghi pianificati in Guida, non un elenco di POI qualsiasi nei
+        // dintorni. Assente per ogni altra tipologia o per un'attività salvata prima di questo
+        // campo: ricade sul vecchio PoiListWidget, mai un pannello vuoto.
+        if (activity.metaType === 'borgo_citta' && activity.borgoStops?.length) {
+          return <BorgoStopsWidget stops={activity.borgoStops} />
+        }
         return (
           <PoiListWidget
             hikeId={id}

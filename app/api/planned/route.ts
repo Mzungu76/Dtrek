@@ -99,6 +99,7 @@ function rowToHike(row: Record<string, unknown>, includeTracks = true): PlannedH
     borgoWalkPolyline:             row.borgo_walk_polyline as [number, number][] | undefined,
     borgoWalkStopsHash:            row.borgo_walk_stops_hash as string | undefined,
     borgoWalkTappaEnds:            row.borgo_walk_tappa_ends as PlannedHike['borgoWalkTappaEnds'],
+    borgoWalkStops:                row.borgo_walk_stops as PlannedHike['borgoWalkStops'],
     borgoItineraryOverrides:       row.borgo_itinerary_overrides as PlannedHike['borgoItineraryOverrides'],
     borgoDayBudgetMinutes:         row.borgo_day_budget_minutes as number | undefined,
   }
@@ -483,6 +484,7 @@ export async function PATCH(req: NextRequest) {
       borgoWalkPolyline?: PlannedHike['borgoWalkPolyline']
       borgoWalkStopsHash?: string
       borgoWalkTappaEnds?: PlannedHike['borgoWalkTappaEnds']
+      borgoWalkStops?: PlannedHike['borgoWalkStops']
       borgoItineraryOverrides?: PlannedHike['borgoItineraryOverrides']
       borgoDayBudgetMinutes?: number
     }
@@ -534,6 +536,7 @@ export async function PATCH(req: NextRequest) {
     if (patch.borgoWalkPolyline            !== undefined) dbPatch.borgo_walk_polyline            = patch.borgoWalkPolyline
     if (patch.borgoWalkStopsHash           !== undefined) dbPatch.borgo_walk_stops_hash          = patch.borgoWalkStopsHash
     if (patch.borgoWalkTappaEnds           !== undefined) dbPatch.borgo_walk_tappa_ends          = patch.borgoWalkTappaEnds
+    if (patch.borgoWalkStops               !== undefined) dbPatch.borgo_walk_stops               = patch.borgoWalkStops
     if (patch.borgoItineraryOverrides      !== undefined) dbPatch.borgo_itinerary_overrides      = patch.borgoItineraryOverrides
     if (patch.borgoDayBudgetMinutes        !== undefined) dbPatch.borgo_day_budget_minutes       = patch.borgoDayBudgetMinutes
 
