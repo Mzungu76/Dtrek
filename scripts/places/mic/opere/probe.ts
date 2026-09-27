@@ -103,6 +103,24 @@ SELECT ?cis ?other WHERE {
        loc:hasCulturalInstituteOrSite ?other .
 } LIMIT ${PROBE_LIMIT}`,
   },
+  // FIX (2026-09-27, probe --cis 105665 eseguito dal vivo dall'utente su Canepina — 0 risultati).
+  // Inconclusivo da solo: Canepina è un piccolo ecomuseo, plausibile che non abbia opere
+  // catalogate singolarmente, ma anche compatibile con l'ipotesi (già sollevata sopra per
+  // Alto Adige) che gli URI museo raggiunti da hasCulturalInstituteOrSite vivano SOLO sotto la
+  // base w3id.org/arco/resource/..., mai sotto quella nazionale mibact/luoghi già usata da
+  // scripts/places/mic/fetch.ts per i musei "non regionali" (Lazio compreso, dove vive Canepina).
+  // Questo probe non dipende da un museo specifico: filtra DIRETTAMENTE sulla base URI
+  // dell'oggetto, su un campione di triple hasCulturalInstituteOrSite reali — risponde "sì/no"
+  // indipendentemente da quale museo si scelga.
+  {
+    name: 'hasCulturalInstituteOrSite-verso-namespace-nazionale (NON verificato)',
+    note: "Tra le triple hasCulturalInstituteOrSite reali, ce n'è almeno una il cui oggetto è sotto la base nazionale mibact/luoghi (quella già usata dai musei Lazio/altre regioni importati in Dtrek)? Se 0, la ricostruzione dell'URI dal source_id NON può funzionare per NESSUN museo di quella famiglia, non solo per Canepina.",
+    query: `${PREFIXES}
+SELECT ?opera ?cis WHERE {
+  ?opera loc:hasCulturalInstituteOrSite ?cis .
+  FILTER(STRSTARTS(STR(?cis), "http://dati.beniculturali.it/mibact/luoghi/resource/CulturalInstituteOrSite/"))
+} LIMIT ${PROBE_LIMIT}`,
+  },
   {
     name: 'culturalproperty+hasCulturalInstituteOrSite-combo (NON verificato)',
     note: "Co-occorrenza: un'istanza REALE di arco:CulturalProperty che ha ANCHE il predicato di collegamento popolato (direzione forward). Se questo probe ha risultati, l'IRI di ?opera qui è il miglior candidato per --describe (dump esaustivo dei suoi campi reali: titolo, autore, datazione, immagine).",

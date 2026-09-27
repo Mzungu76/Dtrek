@@ -9,6 +9,7 @@ describe('Opere/ArCo probe — struttura dei probe diagnostici', () => {
       'baseline-culturalproperty',
       'hasCulturalInstituteOrSite-forward (NON verificato)',
       'hasCulturalInstituteOrSite-cis-come-soggetto (NON verificato)',
+      'hasCulturalInstituteOrSite-verso-namespace-nazionale (NON verificato)',
       'culturalproperty+hasCulturalInstituteOrSite-combo (NON verificato)',
     ])
   })
