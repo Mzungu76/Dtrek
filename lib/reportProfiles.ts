@@ -30,7 +30,8 @@ consigli pratici. Una o due frasi conclusive che catturino l'essenza dell'esperi
 
 const IN_SINTESI_VISITA = `Valutazione complessiva della visita: atmosfera, periodo ideale, consigli pratici per chi
 ci andrà dopo (tempo da dedicarci, cosa non perdere). Una o due frasi conclusive che catturino
-l'essenza dell'esperienza — mai un giudizio di "difficoltà", non pertinente per questa tipologia.`
+l'essenza dell'esperienza — mai una valutazione di sforzo fisico o di quanto sia impegnativa,
+non pertinente per questa tipologia.`
 
 export const REPORT_PROFILES: Record<MetaType, ReportProfile> = {
   sentiero: {
