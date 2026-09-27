@@ -286,24 +286,15 @@ export default function GuideReader({
   // una sezione, più d'una per "Genera il resto della guida") — pilota lo spinner per-sezione in
   // SectionCard senza interferire con `generating`, usato solo per la primissima generazione.
   const [generatingSections, setGeneratingSections] = useState<GuideSectionKey[]>([])
-  // Verifica utente: "Genera il resto della guida" e la riga compatta "+N sezioni da generare"
-  // chiedevano SEMPRE tutte le sezioni mancanti insieme, senza modo di scegliere solo alcune.
-  // Qui si tiene solo l'insieme delle chiavi ESCLUSE dall'utente (non quelle incluse): di default
-  // tutto resta selezionato come prima (comportamento invariato per chi non tocca nulla), un tap
-  // su un chip la toglie dalla prossima chiamata — mai ripulito quando una sezione esce
-  // dall'elenco (generata o rimossa), il filtro all'uso la ignora comunque in quel caso.
-  const [deselectedSections, setDeselectedSections] = useState<Set<GuideSectionKey>>(new Set())
-  // Verifica utente: la riga compatta "+N sezioni da generare" (dentro il loop delle sezioni più
-  // sotto) era solo un segnaposto di stato, senza alcuna azione propria — bisognava risalire fino
-  // al banner "Genera il resto della guida" in cima per fare qualcosa. Espandibile sul posto: un
-  // tap la apre sulla stessa scelta per-chip/bottone del banner (stesso deselectedSections, cosicché
-  // un chip tolto in un posto resta tolto anche nell'altro), senza dover scorrere altrove.
+  // Verifica utente 2026-09-27: un precedente meccanismo di selezione (tap = barra/spunta un
+  // chip, poi un bottone separato per confermare) dava l'impressione di "nessun feedback" — un
+  // tap sul chip non avviava nulla finché non si premeva anche il bottone in fondo. Rimosso: ogni
+  // chip genera ora SUBITO la propria sezione al tap (vedi il banner "Genera il resto della
+  // guida" e la riga "+N sezioni da generare" più sotto, entrambi su generateSections([key])),
+  // stesso comportamento immediato di "Approfondisci con Giulia" su una sezione singola.
+  // Espandibile sul posto: un tap la apre sulla stessa lista di chip del banner in cima, senza
+  // dover scorrere altrove.
   const [emptyRowExpanded, setEmptyRowExpanded] = useState(false)
-  const toggleSectionSelected = (key: GuideSectionKey) => setDeselectedSections(prev => {
-    const next = new Set(prev)
-    if (next.has(key)) next.delete(key); else next.add(key)
-    return next
-  })
   // Lunghezza scelta per sezione — parte dal default salvato in Impostazioni (vedi l'effetto più
   // sotto), modificabile qui per sezione prima di premere "Approfondisci con Giulia" / "Genera il
   // resto della guida": è l'override "per singola guida" richiesto, non persistito altrove.
@@ -1286,8 +1277,6 @@ export default function GuideReader({
     () => new Map(displaySections.filter((s): s is DisplaySection & { guideKey: GuideSectionKey } => s.guideKey != null).map(s => [s.guideKey, s.title])),
     [displaySections],
   )
-  // Solo le chiavi non deselezionate dall'utente restano nella richiesta — vedi deselectedSections.
-  const selectedFrom = (keys: GuideSectionKey[]) => keys.filter(k => !deselectedSections.has(k))
 
   // Sezioni "vuote" (piano guide-eccellenza §Fase 1.1) — né testo AI né un widget con dati reali
   // (es. mappa/meteo): quelle NON sono "contenuto in attesa", sono un vero e proprio nulla, e
@@ -1538,56 +1527,52 @@ export default function GuideReader({
               </div>
             )}
 
-            {/* ── Genera il resto della guida — verifica utente: scelta per sezione, mai più
-                 tutte insieme senza alternativa ────────────────────────────────────────── */}
-            {hasGuide && !generating && generatingSections.length === 0 && missingSectionKeys.length > 0 && (() => {
-              const selected = selectedFrom(missingSectionKeys)
-              return (
-                <div className="mt-4 flex flex-col gap-3 px-4 py-3 rounded-2xl bg-terra-50 border border-terra-200">
-                  <div className="flex items-start gap-3 min-w-0">
-                    <Sparkles className="w-4 h-4 text-terra-600 shrink-0 mt-0.5" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[13px] font-semibold text-stone-800">
-                        {missingSectionKeys.length === 1 ? 'Manca ancora una sezione' : `Mancano ancora ${missingSectionKeys.length} sezioni`}
-                      </p>
-                      <p className="text-[11.5px] text-stone-500 leading-snug">
-                        Tocca per togliere una sezione dalla richiesta — quelle selezionate si generano insieme, in una sola chiamata
-                      </p>
-                    </div>
+            {/* ── Genera il resto della guida — verifica utente 2026-09-27: il vecchio meccanismo
+                 (tap = seleziona/deseleziona, poi un bottone separato per generare) dava
+                 l'impressione di "nessun feedback" — toccare un chip barrava solo il testo, senza
+                 mai avviare nulla finché non si premeva il bottone in fondo. Ogni chip genera ora
+                 SUBITO la propria sezione al tap (stesso generateSections([key]) già usato da
+                 "Approfondisci con Giulia" su una sezione singola, con lo stesso banner "Giulia sta
+                 scrivendo…" già cablato più sotto — questo pannello sparisce da sé non appena
+                 generatingSections si valorizza, riappare quando la generazione finisce e la
+                 sezione appena scritta esce da missingSectionKeys). Il bottone in fondo resta come
+                 scorciatoia per generarle tutte in una sola chiamata, non più per "confermare una
+                 selezione". ───────────────────────────────────────────────────────────────── */}
+            {hasGuide && !generating && generatingSections.length === 0 && missingSectionKeys.length > 0 && (
+              <div className="mt-4 flex flex-col gap-3 px-4 py-3 rounded-2xl bg-terra-50 border border-terra-200">
+                <div className="flex items-start gap-3 min-w-0">
+                  <Sparkles className="w-4 h-4 text-terra-600 shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-semibold text-stone-800">
+                      {missingSectionKeys.length === 1 ? 'Manca ancora una sezione' : `Mancano ancora ${missingSectionKeys.length} sezioni`}
+                    </p>
+                    <p className="text-[11.5px] text-stone-500 leading-snug">
+                      Tocca una sezione per generarla subito con Giulia
+                    </p>
                   </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {missingSectionKeys.map(key => {
-                      const isSelected = !deselectedSections.has(key)
-                      return (
-                        <button
-                          key={key}
-                          type="button"
-                          onClick={() => toggleSectionSelected(key)}
-                          className={`px-2.5 py-1 rounded-full text-[11.5px] font-semibold border transition-colors ${
-                            isSelected
-                              ? 'bg-terra-600 border-terra-600 text-white'
-                              : 'bg-white border-stone-200 text-stone-400 line-through'
-                          }`}
-                        >
-                          {sectionTitleByKey.get(key) ?? key}
-                        </button>
-                      )
-                    })}
-                  </div>
-                  <button
-                    onClick={() => generateSections(selected)}
-                    disabled={selected.length === 0}
-                    className="w-full sm:w-auto shrink-0 px-4 py-2 rounded-full bg-terra-600 hover:bg-terra-700 disabled:bg-stone-300 disabled:cursor-not-allowed text-white text-[12.5px] font-semibold transition-colors self-start"
-                  >
-                    {selected.length === 0
-                      ? 'Seleziona almeno una sezione'
-                      : selected.length === missingSectionKeys.length
-                        ? 'Genera il resto con Giulia (AI)'
-                        : `Genera ${selected.length} ${selected.length === 1 ? 'sezione' : 'sezioni'} con Giulia (AI)`}
-                  </button>
                 </div>
-              )
-            })()}
+                <div className="flex flex-wrap gap-1.5">
+                  {missingSectionKeys.map(key => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => generateSections([key])}
+                      className="px-2.5 py-1 rounded-full text-[11.5px] font-semibold border transition-colors bg-terra-600 border-terra-600 text-white hover:bg-terra-700"
+                    >
+                      {sectionTitleByKey.get(key) ?? key}
+                    </button>
+                  ))}
+                </div>
+                {missingSectionKeys.length > 1 && (
+                  <button
+                    onClick={() => generateSections(missingSectionKeys)}
+                    className="w-full sm:w-auto shrink-0 px-4 py-2 rounded-full bg-terra-600 hover:bg-terra-700 text-white text-[12.5px] font-semibold transition-colors self-start"
+                  >
+                    Genera tutte insieme con Giulia (AI)
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* ── Voice mini-player ──────────────────────────────────────────── */}
             {hasGuide && (
@@ -1692,16 +1677,14 @@ export default function GuideReader({
                 // invece di N placeholder quasi identici sparsi nello scroll. Verifica utente
                 // 2026-09-30 ("rendi espandibile quel pulsante"): prima era solo un segnaposto di
                 // stato, senza azione propria — bisognava risalire al banner "Genera il resto della
-                // guida" in cima per fare qualcosa. Ora un tap la espande sul posto sulla stessa
-                // scelta per-chip + bottone del banner (stesso deselectedSections/generateSections,
-                // mai una seconda selezione che potrebbe andare fuori sincrono con quella), solo
-                // limitata alle sezioni davvero riassunte qui (emptySections, non tutte le
-                // missingSectionKeys — quelle con un widget ma senza testo hanno già la propria
-                // card sopra, non vanno contate due volte).
+                // guida" in cima per fare qualcosa. Ora un tap la espande sul posto: ogni chip
+                // genera subito la propria sezione (stesso generateSections([key]) del banner in
+                // cima, 2026-09-27), solo limitata alle sezioni davvero riassunte qui (emptySections,
+                // non tutte le missingSectionKeys — quelle con un widget ma senza testo hanno già la
+                // propria card sopra, non vanno contate due volte).
                 if (i === firstEmptyIndex) {
                   const approfondendoMerged = emptySections.some(es => generatingSections.includes(es.guideKey))
                   const emptyKeys = emptySections.map(es => es.guideKey)
-                  const emptySelected = selectedFrom(emptyKeys)
                   return (
                     <article
                       key={s.key}
@@ -1732,35 +1715,25 @@ export default function GuideReader({
                       {emptyRowExpanded && !approfondendoMerged && (
                         <div className="flex flex-col gap-3 px-4 pb-3.5 pt-3 border-t border-stone-100">
                           <div className="flex flex-wrap gap-1.5">
-                            {emptyKeys.map(key => {
-                              const isSelected = !deselectedSections.has(key)
-                              return (
-                                <button
-                                  key={key}
-                                  type="button"
-                                  onClick={() => toggleSectionSelected(key)}
-                                  className={`px-2.5 py-1 rounded-full text-[11.5px] font-semibold border transition-colors ${
-                                    isSelected
-                                      ? 'bg-terra-600 border-terra-600 text-white'
-                                      : 'bg-white border-stone-200 text-stone-400 line-through'
-                                  }`}
-                                >
-                                  {sectionTitleByKey.get(key) ?? key}
-                                </button>
-                              )
-                            })}
+                            {emptyKeys.map(key => (
+                              <button
+                                key={key}
+                                type="button"
+                                onClick={() => generateSections([key])}
+                                className="px-2.5 py-1 rounded-full text-[11.5px] font-semibold border transition-colors bg-terra-600 border-terra-600 text-white hover:bg-terra-700"
+                              >
+                                {sectionTitleByKey.get(key) ?? key}
+                              </button>
+                            ))}
                           </div>
-                          <button
-                            onClick={() => generateSections(emptySelected)}
-                            disabled={emptySelected.length === 0}
-                            className="w-full sm:w-auto shrink-0 px-4 py-2 rounded-full bg-terra-600 hover:bg-terra-700 disabled:bg-stone-300 disabled:cursor-not-allowed text-white text-[12.5px] font-semibold transition-colors self-start"
-                          >
-                            {emptySelected.length === 0
-                              ? 'Seleziona almeno una sezione'
-                              : emptySelected.length === emptyKeys.length
-                                ? 'Genera con Giulia (AI)'
-                                : `Genera ${emptySelected.length} ${emptySelected.length === 1 ? 'sezione' : 'sezioni'} con Giulia (AI)`}
-                          </button>
+                          {emptyKeys.length > 1 && (
+                            <button
+                              onClick={() => generateSections(emptyKeys)}
+                              className="w-full sm:w-auto shrink-0 px-4 py-2 rounded-full bg-terra-600 hover:bg-terra-700 text-white text-[12.5px] font-semibold transition-colors self-start"
+                            >
+                              Genera tutte insieme con Giulia (AI)
+                            </button>
+                          )}
                         </div>
                       )}
                     </article>
