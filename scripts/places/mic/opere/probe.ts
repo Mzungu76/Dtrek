@@ -87,11 +87,20 @@ SELECT ?opera ?cis WHERE {
 } LIMIT ${PROBE_LIMIT}`,
   },
   {
-    name: 'hasCulturalInstituteOrSite-reverse (NON verificato)',
-    note: 'Stesso predicato, direzione invertita (museo→opera) — verifica difensiva: fetch.ts ha già un precedente in cui la direzione/predicato suggerito dalla sola documentazione non corrispondeva ai dati reali (hasTimeIndexedTypedLocation/atSite vs cis:hasSite).',
+    // FIX (2026-09-27, probe eseguito dal vivo dall'utente via Termux): la prima versione di
+    // questo probe si limitava a rinominare le variabili (?cis/?opera) della stessa identica forma
+    // di tripla — non testava davvero una direzione diversa (in SPARQL `?a p ?b` e `?b p ?a` con
+    // nomi di variabile scambiati restituiscono la STESSA tripla reale nella stessa posizione
+    // soggetto/oggetto, verificato: entrambe le versioni hanno dato gli stessi URI nella stessa
+    // posizione). Questo probe testa una domanda genuinamente diversa: un CulturalInstituteOrSite
+    // (soggetto tipizzato) compare mai come SOGGETTO di questo predicato? Se la direzione è univoca
+    // opera→museo (confermata dal probe forward sui dati reali), questo deve dare 0 risultati.
+    name: 'hasCulturalInstituteOrSite-cis-come-soggetto (NON verificato)',
+    note: 'Verifica se un CulturalInstituteOrSite reale compare MAI come soggetto (non oggetto) di questo predicato — se la direzione osservata (opera→museo) è univoca, atteso 0 risultati.',
     query: `${PREFIXES}
-SELECT ?cis ?opera WHERE {
-  ?cis loc:hasCulturalInstituteOrSite ?opera .
+SELECT ?cis ?other WHERE {
+  ?cis a cis:CulturalInstituteOrSite ;
+       loc:hasCulturalInstituteOrSite ?other .
 } LIMIT ${PROBE_LIMIT}`,
   },
   {

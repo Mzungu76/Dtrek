@@ -8,7 +8,7 @@ describe('Opere/ArCo probe — struttura dei probe diagnostici', () => {
     expect(names).toEqual([
       'baseline-culturalproperty',
       'hasCulturalInstituteOrSite-forward (NON verificato)',
-      'hasCulturalInstituteOrSite-reverse (NON verificato)',
+      'hasCulturalInstituteOrSite-cis-come-soggetto (NON verificato)',
       'culturalproperty+hasCulturalInstituteOrSite-combo (NON verificato)',
     ])
   })
@@ -27,11 +27,13 @@ describe('Opere/ArCo probe — struttura dei probe diagnostici', () => {
     }
   })
 
-  it('forward e reverse usano lo stesso predicato ma direzioni opposte', () => {
+  it('forward cerca opera→museo; il probe "cis-come-soggetto" verifica una domanda diversa (il CIS è mai soggetto?), non solo variabili rinominate', () => {
     const forward = PROBES.find(p => p.name === 'hasCulturalInstituteOrSite-forward (NON verificato)')!
-    const reverse = PROBES.find(p => p.name === 'hasCulturalInstituteOrSite-reverse (NON verificato)')!
+    const cisAsSubject = PROBES.find(p => p.name === 'hasCulturalInstituteOrSite-cis-come-soggetto (NON verificato)')!
     expect(forward.query).toContain('?opera loc:hasCulturalInstituteOrSite ?cis')
-    expect(reverse.query).toContain('?cis loc:hasCulturalInstituteOrSite ?opera')
+    expect(cisAsSubject.query).toContain('?cis a cis:CulturalInstituteOrSite')
+    expect(cisAsSubject.query).toContain('?cis')
+    expect(cisAsSubject.query).toContain('loc:hasCulturalInstituteOrSite ?other')
   })
 })
 

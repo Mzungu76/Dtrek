@@ -170,6 +170,59 @@ predicato è reale.
 
 ---
 
+## 5bis. Primo probe eseguito dal vivo (2026-09-27, via Termux, utente) — RISULTATO POSITIVO
+
+Il probe generico (`scripts/places/mic/opere/probe.ts`, nessun argomento) è stato lanciato dal vivo
+dall'utente (versione standalone senza dipendenze, incollata via `node - <<'EOF'` in Termux — stessa
+logica del file nel repo). Risultato reale, non dedotto:
+
+- **`baseline-culturalproperty`**: 200, 5 risultati — `arco:CulturalProperty` ha istanze reali
+  (es. `https://w3id.org/arco/resource/AltoAdige/HistoricOrArtisticProperty/21022`).
+- **`hasCulturalInstituteOrSite-forward`**: 200, 5 risultati reali — soggetto un bene
+  (`ArchaeologicalProperty/0900277320` e altri), oggetto un museo
+  (`CulturalInstituteOrSite/43d07f7aa3c07bf446441d29a5904e75`). **Direzione confermata: opera →
+  museo**, esattamente come indicato dal commento nell'ontologia (§2).
+- **`culturalproperty+hasCulturalInstituteOrSite-combo`**: 200, 5 risultati — 5 istanze reali di
+  `arco:CulturalProperty` (`AltoAdige/HistoricOrArtisticProperty/21022`, `/72026`, `/72027`,
+  `/72028`, `/72029`) tutte collegate allo STESSO museo reale
+  (`AltoAdige/CulturalInstituteOrSite/AA_CG_SVM`) — la prova end-to-end che il meccanismo
+  "opere di questo museo" funziona con dati reali, non solo nell'ontologia.
+
+**Predicato `loc:hasCulturalInstituteOrSite` ora CONFIRMED sui dati reali** (non più "NON
+verificato") — direzione opera→museo, popolato, co-occorre con `arco:CulturalProperty` tipizzata.
+
+**Difetto trovato nel probe `hasCulturalInstituteOrSite-reverse` (mio errore di progettazione, non
+un dato ambiguo)**: rinominare le variabili SPARQL (`?cis`/`?opera`) non inverte la direzione della
+tripla — `?a predicato ?b` e `?b predicato ?a` scritti con nomi di variabile scambiati restituiscono
+comunque la stessa tripla reale nella stessa posizione soggetto/oggetto. Il risultato di quel probe
+infatti mostrava la STESSA direzione reale (soggetto=bene, oggetto=museo), solo con le colonne di
+output rinominate — non era un test di direzione alternativa. Corretto in `probe.ts` con un test
+vero: verifica se un `CulturalInstituteOrSite` reale compare mai come SOGGETTO di questo predicato
+(dovrebbe dare 0 risultati se la direzione è univoca opera→museo).
+
+**Nuovo rischio reale trovato, non ipotizzato**: gli URI dei musei nei risultati sopra
+(`https://w3id.org/arco/resource/CulturalInstituteOrSite/<hash>`,
+`https://w3id.org/arco/resource/AltoAdige/CulturalInstituteOrSite/AA_CG_SVM`) usano una base
+DIVERSA da quella già usata da `scripts/places/mic/fetch.ts` per i musei già importati in Dtrek
+(`http://dati.beniculturali.it/mibact/luoghi/resource/CulturalInstituteOrSite/<id numerico>`).
+ArCo ha più "famiglie" di URI per la stessa classe a seconda della regione/sotto-dataset di
+provenienza — già notato per Lombardia/Toscana nei commenti di `fetch.ts` (namespace
+`w3id.org/arco/resource/<Regione>/...` per la geometria), ora confermato anche per l'Alto Adige e
+ESTESO qui all'identità stessa del CIS, non solo alla sua geometria. Conseguenza pratica:
+`buildCisUri`/`buildOperaByCisQuery` (che ricostruiscono l'URI del museo dal `source_id` già salvato
+in Dtrek, assumendo sempre la base nazionale `mibact/luoghi`) **potrebbero non trovare nulla anche
+per un museo che ha opere catalogate**, se quel museo specifico in ArCo vive sotto una base
+regionale diversa — non un fallimento del predicato, un problema di ricostruzione dell'URI corretto
+per QUEL museo specifico.
+
+**Prossimo test, in corso**: `--cis 105665` (Canepina, Lazio — confermato in `MIC_DATA_SOURCES.md`
+vivere sotto la base nazionale `mibact/luoghi`) per verificare se la ricostruzione dell'URI dal
+`source_id` funziona almeno per i musei non regionali. Un risultato 0 lì non sarebbe comunque
+conclusivo da solo (Canepina è un piccolo ecomuseo, probabilmente senza opere catalogate
+singolarmente) — servirà anche un secondo test su un museo nazionale più grande già in Dtrek.
+
+---
+
 ## 6. Perché non si implementa già ora la pipeline di import
 
 Il repository ha una regola esplicita, dimostrata necessaria più volte (coordinate dei CIS,
