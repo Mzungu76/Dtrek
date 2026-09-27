@@ -1301,6 +1301,12 @@ CREATE INDEX IF NOT EXISTS idx_planned_hikes_parent_meta_id ON planned_hikes (pa
 ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS borgo_walk_polyline JSONB;
 ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS borgo_walk_stops_hash TEXT;
 
+-- Navigator "Modalità A" (sessione conversazionale) — vedi supabase/migrations/
+-- add_planned_hikes_borgo_walk_tappa_ends.sql per i commenti completi. Coordinate dell'ultimo
+-- punto di ogni tappa tranne l'ultima, per segnalare il confine tra tappe durante la navigazione
+-- invece di trattare un Borgo su più giornate come un cammino continuo.
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS borgo_walk_tappa_ends JSONB;
+
 -- Piano guide-eccellenza Fase 2 — vedi supabase/migrations/add_planned_hikes_borgo_itinerary_overrides.sql
 -- per i commenti completi. Personalizzazioni PER-UTENTE dell'itinerario di un Borgo/Città (slider
 -- tempo di visita, punti spenti, spostamento manuale tra tappe) — mappa sparsa per id di tappa,

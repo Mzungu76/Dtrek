@@ -46,14 +46,22 @@ export interface NavPoi {
   openingHours?: string
 }
 
-/** A non-POI narrative beat along the route (climb start, viewpoint, exposed section...). */
+/** A non-POI narrative beat along the route (climb start, viewpoint, exposed section...). 'tappa_end'
+ *  is different in kind from the others (a semantic day/stage boundary on a multi-tappa Borgo/Città
+ *  itinerary, lib/navigation/borgoTappaMoments.ts) rather than a morphological one — it carries the
+ *  two extra fields below and the UI shows a decision dialog for it instead of a passive callout
+ *  (components/navigation/ActiveNavigationView.tsx). */
 export interface RouteMoment {
   id: string
   lat: number
   lon: number
   distanceAlongRouteM: number
-  kind: 'climb_start' | 'viewpoint' | 'exposed' | 'junction' | 'environment_change'
+  kind: 'climb_start' | 'viewpoint' | 'exposed' | 'junction' | 'environment_change' | 'tappa_end'
   text: string
+  /** Only for kind: 'tappa_end' — 0-based index of the tappa just completed, and how many tappe
+   *  make up the whole itinerary. */
+  tappaIndex?: number
+  tappaCount?: number
 }
 
 export interface RouteProgress {

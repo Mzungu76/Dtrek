@@ -14,6 +14,7 @@ import type { PoiItem } from '@/lib/overpass'
 import type { WikiPage } from '@/lib/wikipedia'
 import { NavigationEngine } from '@/lib/navigation/navigationEngine'
 import { detectRouteMoments } from '@/lib/navigation/routeMoments'
+import { buildTappaEndMoments } from '@/lib/navigation/borgoTappaMoments'
 import { buildElevationProfile, remainingElevation } from '@/lib/navigation/elevationProfile'
 import type { PaceUpdateResult } from '@/lib/navigation/paceAssistant'
 import { altitudeTerrainMultiplier } from '@/lib/trailScore'
@@ -75,6 +76,7 @@ import { hasSeenNavOnboarding, markNavOnboardingSeen } from '@/lib/navigation/na
 import { useAutoDismiss } from '@/lib/hooks/useAutoDismiss'
 import NavOnboardingSheet from './NavOnboardingSheet'
 import ConfirmEndDialog from './ConfirmEndDialog'
+import TappaCompleteDialog from './TappaCompleteDialog'
 import EndHikeReviewDialog from './EndHikeReviewDialog'
 import { speak } from '@/lib/navigation/speech'
 import { useNearbyTrails } from './useNearbyTrails'
@@ -198,6 +200,9 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   const [movingTimeMs, setMovingTimeMs] = useState(0)
   const [timerRunning, setTimerRunning] = useState(false)
   const [showConfirmEnd, setShowConfirmEnd] = useState(false)
+  // Fine tappa di un Borgo/Città su più giornate (Navigator "Modalità A") — un modale con una
+  // vera decisione, non un callout passivo come per un climb_start/viewpoint qualunque.
+  const [tappaComplete, setTappaComplete] = useState<{ tappaIndex: number; tappaCount: number } | null>(null)
   const [mapFallbackNotice, setMapFallbackNotice] = useState(false)
   const [instruction, setInstruction] = useState<{ current: NavInstruction; next: NavInstruction | null; distanceToNextM: number | null } | null>(null)
   const [callout, setCallout] = useState<{ title: string; extract?: string; imageUrl?: string } | null>(null)
@@ -332,7 +337,15 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   const hasLuoghiGuide = (hike.cachedGuide ?? '').includes('I luoghi da non perdere')
   const poiNotesById = usePoiNotes(hike.id, pois.map((p) => p.id), hasLuoghiGuide)
 
-  const moments = useMemo<RouteMoment[]>(() => detectRouteMoments(hike.trackPoints ?? []), [hike.trackPoints])
+  // Confini di tappa di un Borgo/Città su più giornate (Navigator "Modalità A", sessione
+  // conversazionale) — merge con i moments morfologici già esistenti (climb_start/viewpoint, vuoti
+  // per un Borgo che non ha mai trackPoints con quota reale). hike.routePolyline è già la polyline
+  // effettiva risolta a monte (effectiveNavPolyline, app/guida/[id]/naviga/page.tsx) — la stessa che
+  // il motore userà per il proprio calcolo di avanzamento.
+  const moments = useMemo<RouteMoment[]>(() => [
+    ...detectRouteMoments(hike.trackPoints ?? []),
+    ...buildTappaEndMoments(hike.routePolyline ?? [], hike.borgoWalkTappaEnds),
+  ], [hike.trackPoints, hike.routePolyline, hike.borgoWalkTappaEnds])
   const elevationProfile = useMemo(() => buildElevationProfile(hike.trackPoints ?? []), [hike.trackPoints])
   // Layer Pendenze (NavLayerRail) — null quando il percorso non ha abbastanza dati di quota,
   // il che spegne automaticamente il layer anche se l'interruttore resta acceso (vedi il rail più sotto).
@@ -612,6 +625,16 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       engine.on('momentReached', ({ moment }) => {
         if (cancelled) return
         logEvent('moment_reached', { momentId: moment.id, kind: moment.kind })
+        if (moment.kind === 'tappa_end' && moment.tappaIndex != null && moment.tappaCount != null) {
+          // Un modale con una decisione, non il callout passivo usato per gli altri moment —
+          // vedi TappaCompleteDialog.
+          setTappaComplete({ tappaIndex: moment.tappaIndex, tappaCount: moment.tappaCount })
+          if (narrationEnabledRef.current) {
+            speakIfEnabled(moment.text)
+            haptics.notify()
+          }
+          return
+        }
         setCallout({ title: 'Giulia', extract: moment.text })
         if (narrationEnabledRef.current) {
           speakIfEnabled(moment.text)
@@ -1697,6 +1720,16 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       )}
 
       {showConfirmEnd && <ConfirmEndDialog onConfirm={confirmEnd} onCancel={cancelEnd} />}
+      {tappaComplete && (
+        <TappaCompleteDialog
+          tappaIndex={tappaComplete.tappaIndex}
+          tappaCount={tappaComplete.tappaCount}
+          onContinue={() => setTappaComplete(null)}
+          // "Fine per oggi" è già la decisione deliberata (piano-chat: niente doppia conferma) —
+          // salta ConfirmEndDialog e va dritto a confirmEnd(), stessa azione del suo bottone.
+          onFinishForToday={() => { setTappaComplete(null); confirmEnd() }}
+        />
+      )}
 
       {pendingActivity && (
         <EndHikeReviewDialog
