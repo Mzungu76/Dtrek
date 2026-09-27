@@ -48,6 +48,11 @@
  *   npx tsx scripts/places/mic/opere/probe.ts --coverage [--limit 500]  # distribuzione per famiglia di URI museo su un campione
  *   npx tsx scripts/places/mic/opere/probe.ts --describe-uri "https://w3id.org/arco/resource/CulturalInstituteOrSite/<hash>"  # dump 2 salti di un URI qualunque (es. un museo della famiglia "hash" trovata da --coverage)
  *   npx tsx scripts/places/mic/opere/probe.ts --museo-opere "https://w3id.org/arco/resource/CulturalInstituteOrSite/<hash>"  # conteggio + campione via loc:isCulturalInstituteOrSiteOf (predicato forward museo→opera, trovato con --describe-uri)
+ *
+ * `--describe`/`--describe-uri` stampano ora un formato compatto (predicato = valore, con gli URI
+ * accorciati al nome locale, righe deduplicate) invece del JSON grezzo — troppo grande da incollare
+ * da Termux su un dump con molte proprietà. Aggiungere `--grep "<termine>"` per filtrare solo le
+ * righe che contengono quel testo (es. `--grep sameAs`, `--grep label`) prima di stampare.
  */
 
 const SPARQL_ENDPOINT = 'https://dati.cultura.gov.it/sparql'
@@ -270,6 +275,40 @@ SELECT ?opera WHERE {
 } LIMIT ${limit}`
 }
 
+// ── Formattazione compatta dei dump --describe/--describe-uri (2026-09-27, feedback dal vivo:
+// l'output JSON grezzo di un dump a 2 salti è troppo grande da incollare da Termux) ──────────────
+// Un dump a 2 salti produce una riga per OGNI combinazione p1/o1/p2/o2 — quando o1 ha molte
+// proprietà dirette (es. un museo con decine di `isCulturalInstituteOrSiteOf`), lo stesso p1/o1 si
+// ripete su più righe. Raggruppare per p1/o1 e accorciare gli URI al solo nome locale (dopo l'ultimo
+// `/` o `#`) riduce drasticamente il testo senza perdere informazione — e `--grep` filtra a monte
+// per non dover incollare tutto solo per cercare, es., "sameAs" o "label".
+export function localName(uri: string): string {
+  const withoutHash = uri.split('#').pop() ?? uri
+  return withoutHash.split('/').pop() || uri
+}
+
+export interface DescribeBinding { p1: string; o1: string; p2?: string; o2?: string }
+
+export function formatDescribeBindings(bindings: DescribeBinding[], grepTerm?: string): string[] {
+  const needle = grepTerm?.toLowerCase()
+  const matches = (b: DescribeBinding) =>
+    !needle || [b.p1, b.o1, b.p2, b.o2].some(v => v?.toLowerCase().includes(needle))
+
+  const groups = new Map<string, { p1: string; o1: string; hops: Set<string> }>()
+  for (const b of bindings.filter(matches)) {
+    const key = `${b.p1}\u0000${b.o1}`
+    if (!groups.has(key)) groups.set(key, { p1: b.p1, o1: b.o1, hops: new Set() })
+    if (b.p2 && b.o2) groups.get(key)!.hops.add(`${localName(b.p2)} = ${localName(b.o2)}`)
+  }
+
+  const lines: string[] = []
+  for (const { p1, o1, hops } of groups.values()) {
+    lines.push(`${localName(p1)} = ${localName(o1)}`)
+    for (const hop of hops) lines.push(`    -> ${hop}`)
+  }
+  return lines
+}
+
 export interface ProbeResult {
   name: string
   note: string
@@ -354,6 +393,42 @@ async function runDiagnosticQuery(label: string, query: string, timeoutMs: numbe
   console.log(JSON.stringify(await res.json(), null, 2))
 }
 
+// Cap sulle righe stampate — un dump di un museo con molte opere può avere centinaia di gruppi
+// p1/o1: senza un tetto, il testo resta comunque troppo grande da incollare. `--grep` (per trovare
+// un predicato specifico, es. "sameAs") non ha bisogno di questo limite quanto il dump completo.
+const DESCRIBE_PRINT_CAP = 60
+
+async function runDescribeQuery(label: string, query: string, timeoutMs: number, grepTerm?: string): Promise<void> {
+  console.log(`Interrogo ${SPARQL_ENDPOINT} — ${label}${grepTerm ? ` (filtro: "${grepTerm}")` : ''}…`)
+  const res = await fetch(SPARQL_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Accept': 'application/sparql-results+json',
+      'User-Agent': USER_AGENT,
+    },
+    body: `query=${encodeURIComponent(query)}`,
+    signal: AbortSignal.timeout(timeoutMs),
+  })
+  if (!res.ok) {
+    console.error(`${label}: HTTP ${res.status} — ${(await res.text()).slice(0, 500)}`)
+    return
+  }
+  const data = await res.json() as { results?: { bindings?: Record<string, { value: string }>[] } }
+  const raw = data.results?.bindings ?? []
+  const bindings: DescribeBinding[] = raw.map(b => ({ p1: b.p1?.value ?? '', o1: b.o1?.value ?? '', p2: b.p2?.value, o2: b.o2?.value }))
+  const lines = formatDescribeBindings(bindings, grepTerm)
+  if (lines.length === 0) {
+    console.log(grepTerm ? `Nessuna corrispondenza per "${grepTerm}".` : 'Nessun risultato.')
+    return
+  }
+  const shown = lines.slice(0, DESCRIBE_PRINT_CAP)
+  console.log(shown.join('\n'))
+  if (lines.length > DESCRIBE_PRINT_CAP) {
+    console.log(`\n… troncato: ${lines.length - DESCRIBE_PRINT_CAP} righe in più non mostrate. Usa --grep "<termine>" per restringere.`)
+  }
+}
+
 async function runCoverage(timeoutMs: number, limit: number): Promise<void> {
   console.log(`Interrogo ${SPARQL_ENDPOINT} — campione di ${limit} triple hasCulturalInstituteOrSite, aggregazione per famiglia di URI museo (lato client)…`)
   const res = await fetch(SPARQL_ENDPOINT, {
@@ -394,10 +469,13 @@ async function main() {
     return
   }
 
+  const grepIdx = process.argv.indexOf('--grep')
+  const grepTerm = grepIdx !== -1 ? process.argv[grepIdx + 1] : undefined
+
   const describeUriIdx = process.argv.indexOf('--describe-uri')
   if (describeUriIdx !== -1) {
     const uri = process.argv[describeUriIdx + 1]
-    await runDiagnosticQuery(`proprietà dirette (2 salti) di ${uri}`, buildDescribeUriQuery(uri), timeoutMs)
+    await runDescribeQuery(`proprietà dirette (2 salti) di ${uri}`, buildDescribeUriQuery(uri), timeoutMs, grepTerm)
     return
   }
 
@@ -413,14 +491,15 @@ async function main() {
     const cisIdx = process.argv.indexOf('--cis')
     if (cisIdx !== -1) {
       const cisId = process.argv[cisIdx + 1]
-      await runDiagnosticQuery(`prima opera collegata al museo CIS/${cisId}`, buildDescribeOperaByCisQuery(cisId), timeoutMs)
+      await runDescribeQuery(`prima opera collegata al museo CIS/${cisId}`, buildDescribeOperaByCisQuery(cisId), timeoutMs, grepTerm)
       return
     }
     const name = nameIdx !== -1 ? process.argv[nameIdx + 1] : undefined
-    await runDiagnosticQuery(
+    await runDescribeQuery(
       name ? `struttura reale della prima opera il cui rdfs:label contiene "${name}"` : 'struttura reale di una CulturalProperty arbitraria',
       buildDescribeOperaQuery(name),
       timeoutMs,
+      grepTerm,
     )
     return
   }

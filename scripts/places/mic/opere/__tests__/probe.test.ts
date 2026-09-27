@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { PROBES, buildCisUri, buildOperaByCisQuery, buildDescribeOperaQuery, buildDescribeOperaByCisQuery, extractCisFamily, summarizeCisFamilies, buildCoverageQuery, buildDescribeUriQuery, buildWorksCountQuery, buildWorksSampleQuery } from '../probe'
+import { PROBES, buildCisUri, buildOperaByCisQuery, buildDescribeOperaQuery, buildDescribeOperaByCisQuery, extractCisFamily, summarizeCisFamilies, buildCoverageQuery, buildDescribeUriQuery, buildWorksCountQuery, buildWorksSampleQuery, localName, formatDescribeBindings } from '../probe'
 
 describe('Opere/ArCo probe — struttura dei probe diagnostici', () => {
   it('nomi univoci', () => {
@@ -145,6 +145,52 @@ describe('buildWorksCountQuery / buildWorksSampleQuery', () => {
   it('sample: stesso predicato, con LIMIT personalizzabile (default 20)', () => {
     expect(buildWorksSampleQuery(MAF)).toMatch(/LIMIT 20$/)
     expect(buildWorksSampleQuery(MAF, 5)).toMatch(/LIMIT 5$/)
+  })
+})
+
+describe('localName', () => {
+  it('estrae il segmento dopo l\'ultimo / (verificato reale: predicati/valori ArCo)', () => {
+    expect(localName('https://w3id.org/arco/ontology/location/hasCulturalInstituteOrSite')).toBe('hasCulturalInstituteOrSite')
+    expect(localName('https://w3id.org/arco/resource/CISNameInTime/museo-archeologico-nazionale-di-firenze')).toBe('museo-archeologico-nazionale-di-firenze')
+  })
+
+  it('estrae il segmento dopo # quando presente (es. rdf:type)', () => {
+    expect(localName('http://www.w3.org/1999/02/22-rdf-syntax-ns#type')).toBe('type')
+  })
+
+  it('nessun / o # → restituito invariato', () => {
+    expect(localName('ciao')).toBe('ciao')
+  })
+})
+
+describe('formatDescribeBindings', () => {
+  const bindings = [
+    { p1: 'http://x/hasCISNameInTime', o1: 'http://x/CISNameInTime/museo-di-prova' },
+    { p1: 'http://x/hasCISNameInTime', o1: 'http://x/CISNameInTime/museo-di-prova', p2: 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', o2: 'http://x/CISNameInTime' },
+    { p1: 'https://w3id.org/arco/ontology/location/isCulturalInstituteOrSiteOf', o1: 'http://x/ArchaeologicalProperty/1' },
+    { p1: 'http://www.w3.org/2002/07/owl#sameAs', o1: 'http://www.wikidata.org/entity/Q123' },
+  ]
+
+  it('accorcia gli URI e raggruppa i salti multipli sotto lo stesso p1/o1 (mai una riga ripetuta per lo stesso predicato/valore)', () => {
+    const lines = formatDescribeBindings(bindings)
+    expect(lines).toContain('hasCISNameInTime = museo-di-prova')
+    expect(lines).toContain('    -> type = CISNameInTime')
+    expect(lines.filter(l => l === 'hasCISNameInTime = museo-di-prova')).toHaveLength(1)
+  })
+
+  it('--grep filtra su predicato o valore, case-insensitive', () => {
+    const lines = formatDescribeBindings(bindings, 'sameas')
+    expect(lines).toEqual(['sameAs = Q123'])
+  })
+
+  it('grep senza corrispondenze → array vuoto (mai un crash)', () => {
+    expect(formatDescribeBindings(bindings, 'nonexistent-term')).toEqual([])
+  })
+
+  it('senza grep, nessun filtro applicato', () => {
+    const lines = formatDescribeBindings(bindings)
+    expect(lines.some(l => l.includes('isCulturalInstituteOrSiteOf'))).toBe(true)
+    expect(lines.some(l => l.includes('sameAs'))).toBe(true)
   })
 })
 

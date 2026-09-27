@@ -329,6 +329,82 @@ Toscana/Lombardia è invece `w3id.org/arco/resource/...`, confermato qui) — pe
 corretto in questa PR (fuori scope, richiede toccare `fetch.ts` in produzione), ma segnalato perché
 influisce sull'attribuzione mostrata per quei record oggi.
 
+## 5sexies. Verifica diretta su Supabase (2026-09-27) — risposta alla domanda del §5quinquies
+
+Interrogato direttamente `dtrek_places` (progetto Supabase collegato a questa sessione,
+`sdxlcpxgbkagbxhukehd`, 18.471 righe con `source='mic'`):
+
+- **"Museo Archeologico Nazionale di Firenze" NON è in Dtrek** (`name ilike '%firenze%'` su
+  `source='mic'` → 0 righe). Coerente con un fatto più ampio: **`region = 'Toscana'` non compare
+  affatto** nella distribuzione per regione dei musei MiC già importati (`Emilia-Romagna` 642,
+  `Piemonte` 554, `Lazio` 488, ... fino a `Lombardia` con solo 2 — **Toscana: 0**). Conferma quanto
+  già annotato in `scripts/places/mic/README.md`/`MIC_DATA_SOURCES.md`: il sotto-grafo Toscana non
+  ha mai prodotto record scritti in Supabase.
+- **`Trentino-Alto Adige` invece È ben rappresentato (116 righe)** — ma con `source_id` **numerici**
+  (es. `100518` "Museo archeologico dell'Ato Adige", `100519` "Museo civico di Bolzano"), la STESSA
+  famiglia nazionale `mibact/luoghi` di Canepina — **non** il formato alfanumerico
+  `AA_CG_SVM`/`AA_CG_...` visto nel probe `combo` (§5, sotto-grafo regionale
+  `w3id.org/arco/resource/AltoAdige/...`). Sono quindi individui ArCo DIVERSI per lo stesso
+  territorio: la Provincia di Bolzano è rappresentata sia nel grafo nazionale (quello che Dtrek ha
+  importato) sia in un sotto-grafo regionale a parte (quello con le opere collegate) — due insiemi
+  di URI paralleli, non uno sovrapposto all'altro.
+
+**Risposta netta, non più un'ipotesi**: **nessuno dei 18.471 musei/luoghi MiC già in Dtrek usa un
+`source_id` della famiglia URI a cui `hasCulturalInstituteOrSite`/`isCulturalInstituteOrSiteOf`
+risultano collegati** (confermato per Toscana — assente — e per Trentino-Alto Adige — presente ma
+sotto un'identità diversa). La ricostruzione dell'URI dal `source_id` (`buildCisUri`,
+`buildOperaByCisQuery`) **non può funzionare per NESSUN museo già in Dtrek allo stato attuale** — non
+un limite di un singolo test (Canepina), ma della struttura stessa dei due dataset: "Luoghi della
+Cultura" (già importato, identità nazionale) e il sotto-grafo con le opere catalogate (identità
+regionale/hash, mai importato) sono due insiemi di individui ArCo distinti per lo stesso patrimonio
+reale, senza un ponte diretto verificato tra loro (Canepina non ne ha uno verso Wikidata a parte,
+§5quater — nessun test ha ancora cercato un `owl:sameAs` sul lato "hash").
+
+**Conseguenza pratica per la richiesta originale** ("tutti i musei MiC già in Dtrek"): con lo stato
+attuale dei dati, "Opere di questo museo" **non si può agganciare per ID a un museo già importato**.
+Le strade restano due, entrambe più impegnative di un semplice join per `source_id`:
+1. **Cercare un ponte `owl:sameAs` reale** tra un individuo "hash" e uno "nazionale" — non ancora
+   verificato su nessun record (solo escluso su Canepina, dove non serviva comunque perché Canepina
+   non ha opere). Prossimo test: `--describe-uri` sul Museo Archeologico di Firenze con
+   `--grep sameAs` (ora possibile senza incollare l'intero dump, §5septies).
+2. **Importare il sotto-grafo "opere" come una fonte a sé** (nuovi record in `dtrek_places` o in una
+   tabella `dtrek_place_artworks` con il proprio `source_id` hash, collegati ai musei Dtrek esistenti
+   per NOME+comune con un passaggio di matching esplicito — stesso principio già usato da
+   `deduplicate.ts` tra fonti diverse, mai un collegamento automatico per ID) — più lavoro, ma non
+   dipende dal trovare un `owl:sameAs` che potrebbe non esistere.
+
+## 5septies. Miglioria agli strumenti (2026-09-27) — output troppo grandi da incollare
+
+Il dump `--describe-uri` sul Museo Archeologico di Firenze ha prodotto un output "enorme" (l'utente
+non è riuscito a incollarlo per intero) — un dump a 2 salti ripete lo stesso predicato/valore su più
+righe quando l'oggetto ha molte proprietà (es. decine di `isCulturalInstituteOrSiteOf`, uno per
+opera posseduta). Corretto in `probe.ts`:
+
+- `--describe`/`--describe-uri` ora stampano un formato compatto (`predicato = valore`, URI
+  accorciati al nome locale, righe deduplicate raggruppando i salti multipli sotto lo stesso
+  predicato/valore di primo livello) invece del JSON grezzo.
+- Nuovo `--grep "<termine>"`: filtra le righe (case-insensitive, su predicato o valore) prima di
+  stampare — es. `--describe-uri "<uri museo>" --grep sameAs` per cercare un ponte verso l'identità
+  nazionale senza incollare l'intero dump.
+- Tetto di 60 righe stampate anche senza `--grep`, con avviso esplicito se troncato (mai un output
+  silenziosamente incompleto).
+
+28/28 test passano (incluse le nuove funzioni pure `localName`/`formatDescribeBindings`), `tsc`
+pulito.
+
+## 5octies. Segnalazione di sicurezza trovata durante la verifica su Supabase (fuori scope, da comunicare)
+
+L'advisory di Supabase per il progetto `sdxlcpxgbkagbxhukehd` segnala **Row Level Security
+disabilitata** su due tabelle: `public.nature_cell_cache` e `public.spatial_ref_sys` — esposte in
+lettura/scrittura a chiunque abbia la chiave `anon`. Non correlato a "opere"/ArCo, ma da comunicare
+esplicitamente all'utente (non auto-applicato: abilitare RLS senza policy bloccherebbe ogni accesso
+a quelle tabelle finché non si aggiungono le policy corrette):
+
+```sql
+ALTER TABLE "public"."nature_cell_cache" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "public"."spatial_ref_sys" ENABLE ROW LEVEL SECURITY;
+```
+
 ---
 
 ## 6. Perché non si implementa già ora la pipeline di import
