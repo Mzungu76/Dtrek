@@ -15,7 +15,7 @@ import {
 } from 'lucide-react'
 import type { PoiItem } from '@/lib/overpass'
 import PhotoMosaic from '@/components/PhotoMosaic'
-import type { RoutePhoto } from '@/app/lib/guide/fetchRoutePhotos'
+import { SINGLE_POINT_PHOTO_RADIUS_M, type RoutePhoto } from '@/app/lib/guide/fetchRoutePhotos'
 import { extractEpochPois } from '@/lib/epochPois'
 import { extractCoverSubtitle } from '@/lib/coverSubtitle'
 import { extractGuideNotices, normalizeGuideNotices, parseNoticeSource, type GuideNotice } from '@/lib/guideNotices'
@@ -478,8 +478,9 @@ export default function GuideReader({
   // Sito senza traccia (piano guide-eccellenza §Fase 2.1) non ha un punto medio di percorso da
   // usare: cade su hike.latitude/longitude (valorizzate via placeId, piano Blocco D) con un
   // raggio stretto attorno al punto stesso — stesso raggio di SitoGalleryWidget qui sotto, che fa
-  // esattamente questo per il proprio caso — invece dei 15km pensati per il punto medio di un
-  // sentiero, che per un singolo punto includerebbe foto di tutt'altro luogo.
+  // esattamente questo per il proprio caso (SINGLE_POINT_PHOTO_RADIUS_M) — invece dei 15km pensati
+  // per il punto medio di un sentiero, che per un singolo punto includerebbe foto di tutt'altro
+  // luogo.
   useEffect(() => {
     const memoryCached = routePhotosMemoryCache.get(hike.id)
     if (memoryCached) { setRoutePhotos(memoryCached); return }
@@ -489,7 +490,7 @@ export default function GuideReader({
       ? poly[Math.floor(poly.length / 2)]
       : hike.latitude != null && hike.longitude != null ? { lat: hike.latitude, lon: hike.longitude } : null
     if (!mid) return
-    const radiusM = poly.length > 0 ? 15000 : 1500
+    const radiusM = poly.length > 0 ? 15000 : SINGLE_POINT_PHOTO_RADIUS_M
     let cancelled = false
     import('@/app/lib/guide/fetchRoutePhotos').then(({ fetchRoutePhotos }) =>
       fetchRoutePhotos(mid.lat, mid.lon, radiusM, 6)
