@@ -66,33 +66,52 @@ maggioranza dei 2.296 musei già in Dtrek: la sezione "opere" della Guida Sito, 
 contenuto strutturato a cui agganciarsi né su ArCo né su Wikidata — non un problema della fonte, un
 limite del concetto stesso ("opere d'arte" non è pertinente per un museo del contrabbando).
 
-**Test rimasti da fare** (non ancora eseguiti, mandati dall'utente ma non ancora ricevuti/analizzati
-in questa sessione): MACK Museo Arte Contemporanea Crotone, Museo civico della ceramica di Nove,
-Casa di Fausto Coppi — altri 3 musei del campione casuale, per completare il quadro sulla parte
-piccola/tematica prima di stimare una percentuale di copertura complessiva.
+**Completato (2026-09-27)** — i 3 musei mancanti del campione casuale:
+
+| Museo | QID | Opere (Wikidata) |
+|---|---|---|
+| MACK Museo Arte Contemporanea Crotone | *(non trovato)* | — |
+| Museo civico della ceramica di Nove | Q55359420 | **0** |
+| Casa di Fausto Coppi | Q55370304 | **0** |
+
+**Su 5 musei piccoli/tematici testati (campione casuale, non scelti ad hoc): 4/4 con un QID hanno
+0 opere, 1/5 non ha nemmeno un item Wikidata.** Stesso schema di scarsità già visto su ArCo — solo
+con un tetto più alto per i musei importanti (centinaia contro 0-1). Non un limite della fonte: è
+un limite del dominio. La stragrande maggioranza dei 2.296 musei già in Dtrek sono collezioni
+locali/tematiche (storia, mestieri, militari, sportive) dove "opere d'arte catalogate" non è
+nemmeno un concetto pertinente — nessuna fonte LOD pubblica (ArCo, Wikidata) avrà mai un elenco di
+"opere" per una casa museo dedicata a un ciclista o un museo del contrabbando.
 
 ---
 
-## 3. Conclusione preliminare (da completare)
+## 3. Conclusione
 
 **Wikidata è una fonte nettamente migliore di ArCo per i musei che hanno davvero opere d'arte
 catalogate individualmente** (gallerie, pinacoteche, musei archeologici di rilievo) — copertura
-reale su scala molto più alta (centinaia contro 0-1). **Non risolve il caso dei musei
-locali/tematici** (probabilmente la maggioranza dei 2.296 in Dtrek), per i quali "opere" come
-concetto (opere d'arte, non oggetti museali in generale) potrebbe semplicemente non applicarsi.
+reale su scala molto più alta (centinaia contro 0-1). **Non risolve però il caso dei musei
+locali/tematici**, che sono la maggioranza dei 2.296 già in Dtrek: campione casuale di 5, 4/4 con un
+QID hanno 0 opere, 1/5 senza nemmeno un item Wikidata (§2.3). Stesso limite di ArCo, un tetto più
+alto ma la stessa forma — non risolvibile cambiando fonte, perché è un limite del dominio ("opere
+d'arte catalogate" non è un concetto pertinente per una casa museo dedicata a uno sportivo o un
+museo del contrabbando), non della fonte scelta.
 
-Prima di progettare una pipeline reale:
-1. Completare il campione casuale (i 3 musei mancanti) per stimare quanti dei musei "generici" già
-   in Dtrek hanno davvero opere collegabili — non solo i musei d'arte già noti.
-2. Verificare `--sample` su almeno un museo grande (es. Galleria Borghese) per vedere quali campi
-   sono realmente popolati (titolo, immagine, autore, anno) — nessuno di questi verificato ancora,
-   solo il conteggio.
-3. Decidere l'architettura in base a QUANTO è ampia la copertura reale: se resta un sottoinsieme
-   significativo ma minoritario (es. qualche centinaio di musei "importanti" su 2.296), un
-   approccio a doppio binario ha senso — lista reale di opere (con immagini, da Wikidata) per i
-   musei con dati, testo narrativo ancorato a Wikipedia (non più invenzione LLM pura) per tutti gli
-   altri, mai un blocco vuoto o un errore per i musei senza opere.
+**Raccomandazione pratica, a doppio binario**:
+1. **Un sottoinsieme minoritario ma reale di musei "importanti"** (gallerie/pinacoteche/musei
+   archeologici di rilievo, identificabili per numero di opere collegate su Wikidata sopra una
+   soglia, es. ≥10) può avere una vera sezione "Opere di questo museo" — lista reale con titolo,
+   immagine, autore, anno (campi da verificare con `--sample`, non ancora fatto in questa sessione:
+   nessun test ha ancora ispezionato i valori di `operaLabel`/`image`/`creatorLabel`/`inception` su
+   un museo reale, solo il conteggio).
+2. **Per tutti gli altri** (la maggioranza), "opere" come lista strutturata non è realizzabile con
+   nessuna fonte pubblica nota — l'unico miglioramento realistico rispetto a oggi (testo LLM
+   totalmente inventato) è ancorare la narrazione a un segnale reale quando esiste: l'estratto
+   Wikipedia già recuperato da Dtrek per altri tipi di Meta (`lib/wikipedia.ts`), la `description`
+   ArCo già importata per molti CIS (`MIC_DATA_SOURCES.md` §12, `l0:description`), o semplicemente
+   il `subtype`/nome del museo per calibrare il tono — mai spacciare un'invenzione per un dato reale,
+   ma nemmeno lasciare un buco quando la lista strutturata non esiste.
 
-Nessuna pipeline di import/tabella creata in questa sessione — solo diagnostica
-(`scripts/places/wikidata/opere/probe.ts`) e questo report, in continuità con il metodo già seguito
-per ArCo.
+**Non implementata in questa sessione**: nessuna tabella, import o UI. Prossimi passi concreti, se
+si procede: (a) eseguire `scripts/places/wikidata/enrich.ts` sui musei per popolare `wikidata_id`
+(prerequisito per qualunque cosa, oggi 0/2296); (b) verificare `--sample` su un museo reale per i
+campi effettivi; (c) decidere la soglia "museo importante" con dati reali di distribuzione (non
+ancora misurata su scala, solo su 5 musei grandi + 5 piccoli).
