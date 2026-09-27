@@ -98,22 +98,34 @@ LIMIT 20`
 // disegno, fotografia, ...) — NON opzionale, filtro obbligatorio. Aggiunto dopo un'anomalia reale
 // trovata su Galleria Borghese (docs/opere-musei-wikidata.md §2.4): senza questo filtro,
 // wdt:P276 (ubicazione) include anche eventi/mostre temporanee ospitate al museo ("Cranach. L'altro
-// rinascimento" comparso come risultato, non un'opera della collezione). Non ancora riverificato
-// dal vivo dopo questo fix (la rete di questa sessione non raggiunge query.wikidata.org) — se in
-// futuro un museo con opere note (es. Galleria Borghese, 240 senza filtro) risultasse a 0 CON
-// questo filtro, è il primo punto da controllare.
+// rinascimento" comparso come risultato, non un'opera della collezione).
+//
+// FIX (2026-09-27, bug segnalato dal vivo dall'utente su un museo di Gubbio — 4 card identiche
+// per la STESSA opera): senza DISTINCT, un'opera che soddisfa SIA P195 SIA P276 per lo stesso
+// museo viene restituita due volte dalla UNION — e il filtro tipo (`P31/P279*`, un percorso di
+// proprietà con chiusura transitiva) può aggiungere altre righe se l'opera ha più dichiarazioni
+// P31 che raggiungono Q838948 per strade diverse. Sotto-query con `SELECT DISTINCT ?opera` PRIMA
+// del LIMIT (cruciale: senza, il limite tronca su righe duplicate, restituendo MENO opere
+// distinte del richiesto) — i JOIN OPTIONAL (immagine/autore/data) restano nella query esterna,
+// dove un'opera con PIÙ valori per uno di questi campi (es. due autori) può ancora produrre righe
+// multiple: dedup lato client per wikidataId in fetchMuseumOpere sotto, difesa in profondità.
 export function buildWorksQuery(qid: string, limit = MAX_OPERE): string {
   return `
 SELECT ?opera ?operaLabel ?image ?creatorLabel ?inception WHERE {
-  { ?opera wdt:P195 wd:${qid} . }
-  UNION
-  { ?opera wdt:P276 wd:${qid} . }
-  ?opera wdt:P31/wdt:P279* wd:Q838948 .
+  {
+    SELECT DISTINCT ?opera WHERE {
+      { ?opera wdt:P195 wd:${qid} . }
+      UNION
+      { ?opera wdt:P276 wd:${qid} . }
+      ?opera wdt:P31/wdt:P279* wd:Q838948 .
+    }
+    LIMIT ${limit}
+  }
   OPTIONAL { ?opera wdt:P18 ?image . }
   OPTIONAL { ?opera wdt:P170 ?creator . }
   OPTIONAL { ?opera wdt:P571 ?inception . }
   SERVICE wikibase:label { bd:serviceParam wikibase:language "it,en" . }
-} LIMIT ${limit}`
+}`
 }
 
 // ── I/O: Wikidata (nessuna scrittura, solo lettura) ─────────────────────────────────────────────
@@ -161,6 +173,22 @@ async function findMuseumWikidataId(name: string, lat: number, lon: number): Pro
   return best ? { qid: best.qid, label: best.label } : null
 }
 
+// Pura, testabile senza rete. Dedup per wikidataId — difesa in profondità oltre al DISTINCT nella
+// sotto-query di buildWorksQuery: un'opera con più valori per un OPTIONAL (es. due autori) produce
+// comunque righe multiple nel join esterno. Tiene la PRIMA occorrenza (i campi di quella riga,
+// mai un merge tra righe diverse della stessa opera — troppo rischioso indovinare quale
+// combinazione autore/immagine/anno è quella "giusta").
+export function dedupeByWikidataId(opere: MuseumOpera[]): MuseumOpera[] {
+  const seen = new Set<string>()
+  const out: MuseumOpera[] = []
+  for (const o of opere) {
+    if (seen.has(o.wikidataId)) continue
+    seen.add(o.wikidataId)
+    out.push(o)
+  }
+  return out
+}
+
 async function fetchMuseumOpere(qid: string): Promise<MuseumOpera[]> {
   const rows = await sparqlSelect(buildWorksQuery(qid))
   const out: MuseumOpera[] = []
@@ -177,7 +205,7 @@ async function fetchMuseumOpere(qid: string): Promise<MuseumOpera[]> {
       year: row.inception?.value?.slice(0, 4),
     })
   }
-  return out
+  return dedupeByWikidataId(out)
 }
 
 // ── Cache su dtrek_places (opere_cache/opere_cached_at, wikidata_id) ────────────────────────────
