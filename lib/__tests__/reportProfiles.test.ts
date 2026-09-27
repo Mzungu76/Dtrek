@@ -33,4 +33,38 @@ describe('reportProfileFor', () => {
       expect(reportProfileFor(metaType).sectionBrief.length).toBeGreaterThan(0)
     }
   })
+
+  it('sentiero mantiene "Natura e storia" come seconda sezione', () => {
+    expect(reportProfileFor('sentiero').section2Title).toBe('Natura e storia')
+  })
+
+  it('borgo_citta e sito hanno "Storia e curiosità" al posto di "Natura e storia"', () => {
+    expect(reportProfileFor('borgo_citta').section2Title).toBe('Storia e curiosità')
+    expect(reportProfileFor('sito').section2Title).toBe('Storia e curiosità')
+  })
+
+  it('solo sentiero valuta la "difficoltà" nella sezione finale', () => {
+    expect(reportProfileFor('sentiero').section3Brief).toMatch(/difficoltà/)
+    expect(reportProfileFor('borgo_citta').section3Brief).not.toMatch(/difficoltà/)
+    expect(reportProfileFor('sito').section3Brief).not.toMatch(/difficoltà/)
+  })
+
+  it('un siteType noto sovrascrive titolo e brief della prima sezione di un sito', () => {
+    const museo = reportProfileFor('sito', 'museo')
+    expect(museo.sectionTitle).toBe('Il museo')
+    expect(museo.sectionBrief).toMatch(/opere/)
+    // Le altre due sezioni restano quelle del profilo 'sito' generico.
+    expect(museo.section2Title).toBe('Storia e curiosità')
+    expect(museo.section3Title).toBe('In sintesi')
+  })
+
+  it('siteType assente o "altro" (nessun override) ricade sul profilo sito generico', () => {
+    expect(reportProfileFor('sito', undefined)).toBe(REPORT_PROFILES.sito)
+    expect(reportProfileFor('sito', 'altro')).toBe(REPORT_PROFILES.sito)
+  })
+
+  it('siteType è ignorato per metaType diversi da sito', () => {
+    expect(reportProfileFor('borgo_citta', 'museo')).toBe(REPORT_PROFILES.borgo_citta)
+    expect(reportProfileFor('sentiero', 'museo')).toBe(REPORT_PROFILES.sentiero)
+  })
 })

@@ -58,6 +58,7 @@ import PhotoShowcase from './PhotoShowcase'
 import PhotoMapSection from './PhotoMapSection'
 import StickyRouteMap from './StickyRouteMap'
 import { pickBestCoverPhoto } from '@/lib/activityPhotos'
+import { metaHasHikingMetrics } from '@/lib/metaTypes'
 import { REPORT_SECTION_STYLE, REPORT_SECTION_TITLE, narrativeStyleFor, type ReportFixedSectionKey } from './sectionStyle'
 import {
   Pencil, Loader2, BookOpen, Share2, Link2Off, ExternalLink,
@@ -499,6 +500,11 @@ export default function ReportReader({
   const gpsPoints = activity.trackPoints.filter(p => p.lat !== undefined && p.lon !== undefined)
   const hasGps = gpsPoints.length > 0
   const dateISO = activity.startTime.slice(0, 10)
+  // Un Sito confermato con check-in GPS ha 1(+) trackPoint reale (hasGps vero) ma nessun percorso
+  // da mostrare come profilo altimetrico o mappa-foto-lungo-cammino: quei widget presuppongono un
+  // vero spostamento, non solo una posizione. metaHasHikingMetrics(undefined) = true (sentiero è il
+  // default di colonna), quindi nessuna regressione per un'attività che non porta ancora metaType.
+  const hasHikeTrack = hasGps && metaHasHikingMetrics(activity.metaType)
 
   // Stessi dati per la pubblicazione e per lo scarico locale — un solo motore (renderReportPdf.ts,
   // che monta HiddenPdfRoot fuori schermo solo per il tempo della cattura), non più due documenti
@@ -631,7 +637,7 @@ export default function ReportReader({
               </div>
             )}
 
-            {hasGps && data.dtmProfile?.source === 'dtm' && (
+            {hasHikeTrack && data.dtmProfile?.source === 'dtm' && (
               <div className="flex items-center gap-1.5 flex-wrap">
                 {activity.trackPoints.some(p => p.altitudeMeters !== undefined) && (
                   <button onClick={data.onToggleGradient} className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border transition-colors ${data.showGradient ? 'bg-forest-500 text-white border-forest-500' : 'bg-stone-50 border-stone-200 text-stone-500'}`}>
@@ -692,7 +698,7 @@ export default function ReportReader({
       case 'andamento':
         return (
           <div className="space-y-5">
-            {hasGps && activity.trackPoints.length ? (
+            {hasHikeTrack ? (
               <RouteMapSection
                 trackPoints={activity.trackPoints}
                 showPois={false}
@@ -704,7 +710,11 @@ export default function ReportReader({
                 dtmProfile={data.dtmProfile}
               />
             ) : (
-              <p className="text-sm italic text-center py-8 text-stone-400">Profilo altimetrico non disponibile senza un tracciato GPS.</p>
+              <p className="text-sm italic text-center py-8 text-stone-400">
+                {metaHasHikingMetrics(activity.metaType)
+                  ? 'Profilo altimetrico non disponibile senza un tracciato GPS.'
+                  : 'Nessun percorso da mostrare per questa tipologia di visita.'}
+              </p>
             )}
             {activity.trackPoints.some(p => (p.heartRateBpm ?? 0) > 0) && (
               <HRChart trackPoints={activity.trackPoints} avgHR={activity.avgHeartRate} maxHR={activity.maxHeartRate} />
@@ -734,7 +744,7 @@ export default function ReportReader({
       case 'galleria_foto':
         return (
           <div className="space-y-6">
-            {hasGps && (
+            {hasHikeTrack && (
               <PhotoMapSection trackPoints={activity.trackPoints} photos={photos} onPhotoTap={openLightboxById} onOpenMap3D={onOpenMap3D} />
             )}
             {photos.length > 0 && (
@@ -802,7 +812,7 @@ export default function ReportReader({
               sections={displaySections.map(s => ({ key: s.key, title: s.title, icon: s.icon, color: s.color }))}
               activeIndex={visibleSec}
               onSelect={scrollToSection}
-              stickyExtra={hasGps ? <StickyRouteMap trackPoints={activity.trackPoints} progress={sectionProgress[visibleSec] ?? null} /> : undefined}
+              stickyExtra={hasHikeTrack ? <StickyRouteMap trackPoints={activity.trackPoints} progress={sectionProgress[visibleSec] ?? null} /> : undefined}
             />
           )}
 
