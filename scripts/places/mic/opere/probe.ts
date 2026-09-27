@@ -45,6 +45,8 @@
  *   npx tsx scripts/places/mic/opere/probe.ts --describe             # dump 2 salti di una CulturalProperty arbitraria
  *   npx tsx scripts/places/mic/opere/probe.ts --describe --name "Nettuno"
  *   npx tsx scripts/places/mic/opere/probe.ts --describe --cis 105665  # dump 2 salti della prima opera collegata a QUESTO museo
+ *   npx tsx scripts/places/mic/opere/probe.ts --coverage [--limit 500]  # distribuzione per famiglia di URI museo su un campione
+ *   npx tsx scripts/places/mic/opere/probe.ts --describe-uri "https://w3id.org/arco/resource/CulturalInstituteOrSite/<hash>"  # dump 2 salti di un URI qualunque (es. un museo della famiglia "hash" trovata da --coverage)
  */
 
 const SPARQL_ENDPOINT = 'https://dati.cultura.gov.it/sparql'
@@ -229,6 +231,22 @@ SELECT ?cis WHERE {
 } LIMIT ${limit}`
 }
 
+// ── Dump generico di un URI qualunque (2026-09-27, dopo --coverage: 500/500 record puntano alla
+// famiglia GENERICA w3id.org/arco/resource/CulturalInstituteOrSite/<hash>, MAI a mibact/luoghi —
+// campione ampio, non più un caso raro) ─────────────────────────────────────────────────────────
+// Prima di concludere se questi musei "hash" sono le STESSE istituzioni già in Dtrek sotto un altro
+// URI (es. tramite owl:sameAs) o un universo di cataloghi diverso, serve sapere COSA sono — stesso
+// principio del --describe già usato per i CIS mibact/luoghi (mai indovinare un campo, dumparlo).
+// Generico (non solo per un CIS) perché la prossima domanda utile potrebbe riguardare anche un'opera
+// o un altro tipo di risorsa trovata in un risultato precedente.
+export function buildDescribeUriQuery(uri: string): string {
+  return `
+SELECT ?p1 ?o1 ?p2 ?o2 WHERE {
+  <${uri}> ?p1 ?o1 .
+  OPTIONAL { ?o1 ?p2 ?o2 . }
+} LIMIT 200`
+}
+
 export interface ProbeResult {
   name: string
   note: string
@@ -344,6 +362,13 @@ async function runCoverage(timeoutMs: number, limit: number): Promise<void> {
 async function main() {
   const timeoutIdx = process.argv.indexOf('--timeout')
   const timeoutMs = timeoutIdx !== -1 ? parseInt(process.argv[timeoutIdx + 1], 10) : DEFAULT_TIMEOUT_MS
+
+  const describeUriIdx = process.argv.indexOf('--describe-uri')
+  if (describeUriIdx !== -1) {
+    const uri = process.argv[describeUriIdx + 1]
+    await runDiagnosticQuery(`proprietà dirette (2 salti) di ${uri}`, buildDescribeUriQuery(uri), timeoutMs)
+    return
+  }
 
   if (process.argv.includes('--coverage')) {
     const limitIdx = process.argv.indexOf('--limit')

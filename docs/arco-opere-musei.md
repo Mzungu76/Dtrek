@@ -251,6 +251,41 @@ opere catalogate (da identificare — probabilmente Alto Adige, forse Lombardia/
 "tutti i musei MiC già in Dtrek" come nella richiesta originale — un limite reale della fonte, da
 comunicare esplicitamente, non un difetto della pipeline da correggere.
 
+## 5quater. `--coverage` eseguito dal vivo (2026-09-27, campione di 500) — risultato netto, non più un caso raro
+
+```
+500 triple nel campione, 1 famiglie distinte:
+   500  https://w3id.org/arco/resource/CulturalInstituteOrSite/
+Famiglia nazionale (mibact/luoghi, già usata da Dtrek): 0/500
+```
+
+**500 su 500**: nessuna eccezione, nessuna traccia della famiglia nazionale né di quella regionale
+Alto Adige vista nel probe `combo` precedente (probabile: quest'ultima è una minoranza che un
+campione di 500 senza `ORDER BY` — ordine deciso dal motore, non casuale — non ha incluso). Il
+risultato è ora netto, non un artefatto di un campione piccolo: **tutte le triple
+`hasCulturalInstituteOrSite` osservate finora puntano a musei di una famiglia URI "generica"**
+(`w3id.org/arco/resource/CulturalInstituteOrSite/<hash a 32 caratteri esadecimali>`), MAI alla
+famiglia nazionale `mibact/luoghi` già usata da `scripts/places/mic/fetch.ts` per i musei "Luoghi
+della Cultura" già importati in Dtrek (Lazio e altre regioni non regionali, Canepina inclusa).
+
+**Domanda aperta, decisiva per la fattibilità**: questi musei "hash" sono le STESSE istituzioni già
+in Dtrek ma raggiungibili con un URI diverso (es. tramite un collegamento `owl:sameAs` non ancora
+cercato), o sono un universo di cataloghi/istituzioni completamente diverso (es. collezioni private,
+diocesane, universitarie — mai importate come "Luoghi della Cultura")? Dalla verifica esaustiva già
+fatta su Canepina/105665 in una sessione precedente (`MIC_DATA_SOURCES.md` §3bis, dump COMPLETO
+delle sue proprietà dirette) risulta un solo `owl:sameAs` — verso Wikidata (`Q21552216`), NON verso
+un URI ArCo di questa famiglia "hash". Non prova che NESSUN museo nazionale abbia un ponte simile
+(Canepina è un caso, non un campione), ma indica che non è un meccanismo automatico/universale.
+
+**Prossimo passo aggiunto in questa sessione**: `probe.ts --describe-uri "<uri>"` (nuovo, generico —
+dump a 2 salti di un URI qualunque, non solo un CIS ricostruito dal `source_id`). Da lanciare su uno
+degli URI "hash" reali già osservati (es.
+`https://w3id.org/arco/resource/CulturalInstituteOrSite/43d07f7aa3c07bf446441d29a5904e75`, apparso
+nel probe forward collegato a 4 `ArchaeologicalProperty` reali) per scoprire COSA rappresenta questo
+museo — nome (`rdfs:label`), tipo, eventuale `owl:sameAs` verso un URI `mibact/luoghi` — prima di
+poter rispondere se "Opere di questo museo" può coprire i musei Dtrek esistenti o solo un
+sottoinsieme diverso da importare a parte.
+
 ---
 
 ## 6. Perché non si implementa già ora la pipeline di import

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { PROBES, buildCisUri, buildOperaByCisQuery, buildDescribeOperaQuery, buildDescribeOperaByCisQuery, extractCisFamily, summarizeCisFamilies, buildCoverageQuery } from '../probe'
+import { PROBES, buildCisUri, buildOperaByCisQuery, buildDescribeOperaQuery, buildDescribeOperaByCisQuery, extractCisFamily, summarizeCisFamilies, buildCoverageQuery, buildDescribeUriQuery } from '../probe'
 
 describe('Opere/ArCo probe — struttura dei probe diagnostici', () => {
   it('nomi univoci', () => {
@@ -130,5 +130,15 @@ describe('buildCoverageQuery', () => {
 
   it('limit personalizzabile', () => {
     expect(buildCoverageQuery(50)).toMatch(/LIMIT 50$/)
+  })
+})
+
+describe('buildDescribeUriQuery', () => {
+  it('dump a 2 salti di un URI arbitrario (verificato reale: --coverage, 2026-09-27, 500/500 nella famiglia "hash")', () => {
+    const uri = 'https://w3id.org/arco/resource/CulturalInstituteOrSite/43d07f7aa3c07bf446441d29a5904e75'
+    const q = buildDescribeUriQuery(uri)
+    expect(q).toContain(`<${uri}> ?p1 ?o1 .`)
+    expect(q).toContain('OPTIONAL { ?o1 ?p2 ?o2 . }')
+    expect(q).toMatch(/LIMIT \d+/)
   })
 })
