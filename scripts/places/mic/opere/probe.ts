@@ -301,6 +301,22 @@ SELECT ?opera WHERE {
 } LIMIT ${limit}`
 }
 
+// FIX (2026-09-27, --bridge su 5 musei REALMENTE già in Dtrek — Borghese, Capitolini, Palazzo
+// Massimo, Villa Giulia, Galleria naz. d'arte moderna): il ponte owl:sameAs esiste su TUTTI e 5
+// (conferma il meccanismo generale, non solo Firenze), ma `isCulturalInstituteOrSiteOf` ha dato
+// 0/5 — il singolo esempio visto su Firenze con --describe-uri non generalizza (mai confermato con
+// una COUNT vera fino ad ora, solo un dump parziale). Il predicato ORIGINALE confermato su dati
+// reali con una COUNT vera è invece `hasCulturalInstituteOrSite` in direzione opera→museo (probe
+// 'hasCulturalInstituteOrSite-forward', combo AltoAdige, §2/§5quater) — questa query lo riusa in
+// forma COUNT, l'unica ancora da verificare su scala su questi 5 musei specifici.
+export function buildWorksCountReverseQuery(cisUri: string): string {
+  return `
+PREFIX loc: <https://w3id.org/arco/ontology/location/>
+SELECT (COUNT(?opera) AS ?count) WHERE {
+  ?opera loc:hasCulturalInstituteOrSite <${cisUri}> .
+}`
+}
+
 // ── Formattazione compatta dei dump --describe/--describe-uri (2026-09-27, feedback dal vivo:
 // l'output JSON grezzo di un dump a 2 salti è troppo grande da incollare da Termux) ──────────────
 // Un dump a 2 salti produce una riga per OGNI combinazione p1/o1/p2/o2 — quando o1 ha molte
@@ -508,8 +524,10 @@ async function runBridge(nationalId: string, timeoutMs: number): Promise<void> {
     return
   }
   console.log(`Ponte trovato -> ${hashUri}`)
-  const countRows = await sparqlSelect(buildWorksCountQuery(hashUri), timeoutMs)
-  console.log(`Opere collegate (loc:isCulturalInstituteOrSiteOf): ${countRows[0]?.count?.value ?? '0'}`)
+  const forwardCount = await sparqlSelect(buildWorksCountQuery(hashUri), timeoutMs)
+  const reverseCount = await sparqlSelect(buildWorksCountReverseQuery(hashUri), timeoutMs)
+  console.log(`Opere (loc:isCulturalInstituteOrSiteOf, museo->opera): ${forwardCount[0]?.count?.value ?? '0'}`)
+  console.log(`Opere (loc:hasCulturalInstituteOrSite, opera->museo):  ${reverseCount[0]?.count?.value ?? '0'}`)
 }
 
 async function main() {
@@ -526,8 +544,11 @@ async function main() {
   const worksIdx = process.argv.indexOf('--museo-opere')
   if (worksIdx !== -1) {
     const cisUri = process.argv[worksIdx + 1]
-    await runDiagnosticQuery(`conteggio opere di ${cisUri} (loc:isCulturalInstituteOrSiteOf)`, buildWorksCountQuery(cisUri), timeoutMs)
-    await runDiagnosticQuery(`campione opere di ${cisUri}`, buildWorksSampleQuery(cisUri), timeoutMs)
+    const forwardCount = await sparqlSelect(buildWorksCountQuery(cisUri), timeoutMs)
+    const reverseCount = await sparqlSelect(buildWorksCountReverseQuery(cisUri), timeoutMs)
+    console.log(`Opere (loc:isCulturalInstituteOrSiteOf, museo->opera): ${forwardCount[0]?.count?.value ?? '0'}`)
+    console.log(`Opere (loc:hasCulturalInstituteOrSite, opera->museo):  ${reverseCount[0]?.count?.value ?? '0'}`)
+    await runDiagnosticQuery(`campione opere di ${cisUri} (loc:isCulturalInstituteOrSiteOf)`, buildWorksSampleQuery(cisUri), timeoutMs)
     return
   }
 

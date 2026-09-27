@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { PROBES, buildCisUri, buildOperaByCisQuery, buildDescribeOperaQuery, buildDescribeOperaByCisQuery, extractCisFamily, summarizeCisFamilies, buildCoverageQuery, buildDescribeUriQuery, buildWorksCountQuery, buildWorksSampleQuery, localName, formatDescribeBindings, buildBridgeQuery } from '../probe'
+import { PROBES, buildCisUri, buildOperaByCisQuery, buildDescribeOperaQuery, buildDescribeOperaByCisQuery, extractCisFamily, summarizeCisFamilies, buildCoverageQuery, buildDescribeUriQuery, buildWorksCountQuery, buildWorksSampleQuery, buildWorksCountReverseQuery, localName, formatDescribeBindings, buildBridgeQuery } from '../probe'
 
 describe('Opere/ArCo probe — struttura dei probe diagnostici', () => {
   it('nomi univoci', () => {
@@ -145,6 +145,15 @@ describe('buildWorksCountQuery / buildWorksSampleQuery', () => {
   it('sample: stesso predicato, con LIMIT personalizzabile (default 20)', () => {
     expect(buildWorksSampleQuery(MAF)).toMatch(/LIMIT 20$/)
     expect(buildWorksSampleQuery(MAF, 5)).toMatch(/LIMIT 5$/)
+  })
+})
+
+describe('buildWorksCountReverseQuery', () => {
+  it('usa hasCulturalInstituteOrSite in direzione opera->museo (predicato originale confermato, non isCulturalInstituteOrSiteOf), verificato reale: 0/5 su Borghese/Capitolini/Palazzo Massimo/Villa Giulia/Galleria naz. con l\'altro predicato, 2026-09-27', () => {
+    const uri = 'https://w3id.org/arco/resource/CulturalInstituteOrSite/6bad7964748b182f24b5f24cea21dcf8'
+    const q = buildWorksCountReverseQuery(uri)
+    expect(q).toContain(`?opera loc:hasCulturalInstituteOrSite <${uri}>`)
+    expect(q).toContain('COUNT(?opera)')
   })
 })
 

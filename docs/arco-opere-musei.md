@@ -435,6 +435,41 @@ funzionalità "Opere di questo museo" diventa implementabile per un sottoinsieme
 importato di musei Dtrek — non serve più un matching per nome/comune (§5sexies punto 2), basta il
 ponte `owl:sameAs` per i musei che lo hanno.
 
+## 5decies. Ponte confermato su TUTTI e 5 (meccanismo generale) — ma `isCulturalInstituteOrSiteOf` non è quello giusto
+
+Eseguito dal vivo (2026-09-27) sui 5 musei reali del §5nonies:
+
+```
+Galleria Borghese (20405) -> 6bad7964748b182f24b5f24cea21dcf8 : 0 opere
+Musei Capitolini (105936) -> 44d6521b9eb398ea8eff374000d6886d : 0 opere
+Museo naz. romano - Palazzo Massimo (20231) -> 92a671f958f8b52634ecb1651f1ad18f : 0 opere
+Museo naz. etrusco di Villa Giulia (20238) -> DBunicoCG20238 : 0 opere
+Galleria naz. d'arte moderna (20772) -> DBunicoCG20772 : 0 opere
+```
+
+**Buona notizia, confermata su 5/5**: il ponte `owl:sameAs` nazionale→hash **non è un caso isolato
+di Firenze** — esiste per ogni museo statale di rilievo testato finora. Non è quindi un meccanismo
+raro: è verosimilmente sistematico per i grandi musei statali (tutti già in Dtrek).
+
+**Scoperta collaterale sull'identificatore "hash"**: non è sempre un hash a 32 caratteri esadecimali
+— Villa Giulia e Galleria nazionale usano invece `DBunicoCG<stesso id nazionale>` (es.
+`DBunicoCG20238`), un formato leggibile che incorpora lo stesso numero già noto. La "famiglia" URI
+(`w3id.org/arco/resource/CulturalInstituteOrSite/`) è quindi condivisa da almeno due schemi di
+generazione dell'identificatore diversi — irrilevante per il meccanismo (il ponte `owl:sameAs`
+funziona comunque), ma da tenere a mente per non assumere un formato fisso.
+
+**Cattiva notizia, altrettanto netta**: `loc:isCulturalInstituteOrSiteOf` (il predicato forward
+museo→opera trovato con `--describe-uri` su Firenze, mai confermato prima con una COUNT vera) dà
+**0 su tutti e 5** questi grandi musei — il singolo esempio visto su Firenze in un dump parziale
+NON generalizza. **Non era il predicato giusto da usare per contare**, o quantomeno non è quello
+popolato per la maggioranza dei musei.
+
+**Prossimo test, decisivo**: lo stesso conteggio ma con `loc:hasCulturalInstituteOrSite` in
+direzione opera→museo (il predicato ORIGINALE confermato su dati reali fin dal primo probe — combo
+AltoAdige, forward su Firenze prima del ponte) — mai ancora verificato con una COUNT su questi 5
+musei specifici, solo su un campione generico. Aggiunta `buildWorksCountReverseQuery` (e wired in
+`--bridge`/`--museo-opere`, che ora stampano ENTRAMBE le direzioni) per chiuderlo.
+
 ## 5octies. Segnalazione di sicurezza trovata durante la verifica su Supabase (fuori scope, da comunicare)
 
 L'advisory di Supabase per il progetto `sdxlcpxgbkagbxhukehd` segnala **Row Level Security
