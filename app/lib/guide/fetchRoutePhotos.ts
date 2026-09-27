@@ -4,6 +4,18 @@ export interface RoutePhoto {
   title: string
 }
 
+// Raggio per un Borgo/Città o Sito SENZA traccia (un punto singolo, non il punto medio di un
+// sentiero) — usato da SitoGalleryWidget.tsx e GuideReader.tsx (PhotoMosaic per un museo/sito
+// scheda_pratica). Verifica utente (2026-09-27, "Galleria Doria Pamphilj", Roma centro storico):
+// "a volte le immagini sembrano fuori contesto" — questa funzione non verifica MAI il soggetto
+// della foto, solo orientamento/nome file (vedi i filtri sotto): un raggio ampio in un centro
+// storico denso include facilmente un monumento o una piazza tutt'altro, a diverse centinaia di
+// metri, con solo la vicinanza geografica a giustificarlo. Ridotto da 1.500m (già una riduzione
+// precedente rispetto ai 15km del punto medio di un Sentiero, vedi commento in GuideReader.tsx) a
+// una scala da isolato urbano: abbastanza da coprire i dintorni immediati di un edificio, stretto
+// abbastanza da escludere la piazza o il monumento del blocco successivo.
+export const SINGLE_POINT_PHOTO_RADIUS_M = 400
+
 /**
  * Fetch geo-tagged landscape photos from Wikimedia Commons near a coordinate.
  * No API key required. Returns up to `limit` landscape-oriented photos.

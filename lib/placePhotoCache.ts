@@ -59,12 +59,21 @@ async function fetchFromWikidataP18(wikidataId: string): Promise<PlaceCoverPhoto
     const data = await res.json() as { results?: { bindings?: Array<{ pic: { value: string } }> } }
     const rawUrl = data.results?.bindings?.[0]?.pic?.value
     if (!rawUrl) return null
+    // wdt:P18 restituisce SEMPRE l'URL con schema `http://` (un dettaglio della rappresentazione
+    // RDF di Wikidata, non del sito reale — Commons serve solo https) — MAI riscritto da Wikidata
+    // stesso. Bug reale trovato dal vivo ("Museo di Palazzo Doria Pamphilj", 2026-09-27): next.config.js
+    // limita `remotePatterns` a `protocol: 'https'` per wikimedia.org (corretto, un dominio esterno
+    // arbitrario non va aperto in http), quindi next/image scartava silenziosamente l'URL con schema
+    // sbagliato — copertina mai mostrata, nessun errore visibile lato utente. Forzare https qui,
+    // PRIMA di salvarlo in cache, invece di allentare remotePatterns (che aprirebbe anche http per
+    // qualunque altro sotto-dominio wikimedia, non solo questo).
+    const httpsUrl = rawUrl.replace(/^http:/, 'https:')
     // wdt:P18 restituisce un URL Special:FilePath senza `width`, che Commons serve alla risoluzione
     // ORIGINALE del file caricato (spesso diversi MB) — MediaWiki reindirizza invece a una miniatura
     // pre-ridimensionata quando `width` è presente, stesso meccanismo (via Action API) già usato per
     // il livello Wikipedia sotto (fetchPageThumbnail, COVER_PHOTO_WIDTH). Senza questo la copertina
     // più comune (Wikidata è il primo livello tentato) è anche la più pesante da caricare.
-    const url = `${rawUrl}${rawUrl.includes('?') ? '&' : '?'}width=${COVER_PHOTO_WIDTH}`
+    const url = `${httpsUrl}${httpsUrl.includes('?') ? '&' : '?'}width=${COVER_PHOTO_WIDTH}`
     return { url, credit: 'Wikimedia Commons' }
   } catch {
     return null

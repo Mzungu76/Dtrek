@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, Image as ImageIcon } from 'lucide-react'
-import type { RoutePhoto } from '@/app/lib/guide/fetchRoutePhotos'
+import { SINGLE_POINT_PHOTO_RADIUS_M, type RoutePhoto } from '@/app/lib/guide/fetchRoutePhotos'
 import type { SiteType } from '@/lib/metaTypes'
 import GuideGalleryLightbox, { type GuideGalleryItem } from './GuideGalleryLightbox'
 
@@ -29,7 +29,7 @@ export default function SitoGalleryWidget({ lat, lon, siteType }: Props) {
   const [photos, setPhotos] = useState<RoutePhoto[]>([])
   useEffect(() => {
     let cancelled = false
-    import('@/app/lib/guide/fetchRoutePhotos').then(({ fetchRoutePhotos }) => fetchRoutePhotos(lat, lon, 1500, 6))
+    import('@/app/lib/guide/fetchRoutePhotos').then(({ fetchRoutePhotos }) => fetchRoutePhotos(lat, lon, SINGLE_POINT_PHOTO_RADIUS_M, 6))
       .then(found => { if (!cancelled) setPhotos(found) })
       .catch(() => {})
     return () => { cancelled = true }
