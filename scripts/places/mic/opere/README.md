@@ -26,6 +26,7 @@ npx tsx scripts/places/mic/opere/probe.ts --cis 105665            # opere colleg
 npx tsx scripts/places/mic/opere/probe.ts --describe               # dump a 2 salti di una CulturalProperty arbitraria
 npx tsx scripts/places/mic/opere/probe.ts --describe --name "X"    # idem, filtrata per rdfs:label
 npx tsx scripts/places/mic/opere/probe.ts --describe --cis 105665  # dump a 2 salti della prima opera collegata a QUESTO museo
+npx tsx scripts/places/mic/opere/probe.ts --coverage [--limit 500]  # distribuzione per famiglia di URI museo (nazionale vs regionale) su un campione
 ```
 
 Nessuna di queste è stata eseguita dal vivo in questa sessione (stesso blocco di rete verso

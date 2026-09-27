@@ -215,11 +215,41 @@ per un museo che ha opere catalogate**, se quel museo specifico in ArCo vive sot
 regionale diversa — non un fallimento del predicato, un problema di ricostruzione dell'URI corretto
 per QUEL museo specifico.
 
-**Prossimo test, in corso**: `--cis 105665` (Canepina, Lazio — confermato in `MIC_DATA_SOURCES.md`
-vivere sotto la base nazionale `mibact/luoghi`) per verificare se la ricostruzione dell'URI dal
-`source_id` funziona almeno per i musei non regionali. Un risultato 0 lì non sarebbe comunque
-conclusivo da solo (Canepina è un piccolo ecomuseo, probabilmente senza opere catalogate
-singolarmente) — servirà anche un secondo test su un museo nazionale più grande già in Dtrek.
+## 5ter. Secondo e terzo probe eseguiti dal vivo (2026-09-27) — risultato negativo, non ancora conclusivo
+
+- **`--cis 105665` (Canepina)**: 0 risultati. Da solo inconclusivo (piccolo ecomuseo, plausibile
+  nessuna opera catalogata singolarmente).
+- **`hasCulturalInstituteOrSite-verso-namespace-nazionale`** (filtro diretto sulla base URI
+  dell'oggetto, indipendente da quale museo si scelga — vedi query in `probe.ts`): **0 risultati su
+  un campione di 5**. Nessuna delle triple `hasCulturalInstituteOrSite` osservate in quel campione
+  punta a un museo della base nazionale `mibact/luoghi` — la stessa già usata da
+  `scripts/places/mic/fetch.ts` per Lazio e le altre regioni "non regionali" già importate in
+  Dtrek.
+
+**Interpretazione, con cautela** (campione di soli 5 record, non ancora una copertura reale):
+compatibile con l'ipotesi che i dati "opere" (Catalogo Generale dei Beni Culturali) collegati via
+questo predicato esistano SOLO per i sotto-grafi regionali che hanno una loro pipeline di
+digitalizzazione confluita in ArCo (Alto Adige confermato, verosimilmente anche Lombardia/Toscana
+per analogia con quanto già noto su namespace regionali diversi — MIC_DATA_SOURCES.md), mentre il
+grosso dei "Luoghi della Cultura" a namespace nazionale (la maggioranza dei musei già in Dtrek)
+potrebbe non avere alcuna opera catalogata raggiungibile con questo meccanismo — non perché il
+predicato sia sbagliato, ma perché il "Catalogo Generale" a questo endpoint non ha, per quei musei,
+schede di opere separate collegate così.
+
+**Prossimo passo aggiunto in questa sessione**: `scripts/places/mic/opere/probe.ts --coverage`
+(nuovo, non ancora eseguito dal vivo) — prende un campione più ampio (default 500, non filtrato per
+famiglia) di triple `hasCulturalInstituteOrSite` reali e le raggruppa lato client per "famiglia" di
+URI museo (nazionale `mibact/luoghi`, generico `w3id.org/arco/resource/CulturalInstituteOrSite/`,
+regionale `w3id.org/arco/resource/<Regione>/...`), stampando quante ce ne sono di ciascuna. Risponde
+alla domanda che il probe puntuale su 5 record non può risolvere da solo: la famiglia nazionale è
+DAVVERO assente su una scala più ampia, o solo sotto-rappresentata in un campione piccolo?
+
+Se anche a 500 record la famiglia nazionale resta a 0 (o quasi), la conclusione pratica per
+`docs/arco-opere-musei.md` §5 cambierebbe: "Opere di questo museo" sarebbe realisticamente
+disponibile solo per il sottoinsieme di musei Dtrek che ricadono nei sotto-grafi regionali con
+opere catalogate (da identificare — probabilmente Alto Adige, forse Lombardia/Toscana), non per
+"tutti i musei MiC già in Dtrek" come nella richiesta originale — un limite reale della fonte, da
+comunicare esplicitamente, non un difetto della pipeline da correggere.
 
 ---
 

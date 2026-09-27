@@ -186,6 +186,49 @@ SELECT ?opera ?p1 ?o1 ?p2 ?o2 WHERE {
 }`
 }
 
+// ── Copertura per "famiglia" di URI museo (2026-09-27, dopo il probe negativo su namespace nazionale) ──
+// `hasCulturalInstituteOrSite-verso-namespace-nazionale` ha dato 0/5 su un campione (vedi
+// docs/arco-opere-musei.md §5bis) — nessuna opera osservata punta a un museo della base
+// `mibact/luoghi` (quella già usata da Dtrek per Lazio e altre regioni "nazionali", Canepina
+// inclusa). Prima di concludere che l'intero meccanismo non copre quei musei, serve sapere QUANTE
+// famiglie di URI esistono e con che peso — un campione più ampio (non un singolo museo, non un
+// filtro stringa rischioso lato server: stessa cautela già dimostrata in
+// scripts/places/mic/probe.ts round 2/3 con CONTAINS/LCASE) aggregato lato client, come già fatto
+// per bindings multi-valore in quel file.
+const COVERAGE_SAMPLE_LIMIT = 500
+
+// Pura, testabile senza rete. Raggruppa un URI museo per "famiglia" (tutto fino a e incluso l'ultimo
+// `CulturalInstituteOrSite/`) — distingue mibact/luoghi (nazionale) da w3id.org/arco/resource/...
+// (generico) da w3id.org/arco/resource/<Regione>/... (regionale, es. AltoAdige) senza assumere quali
+// famiglie esistano.
+export function extractCisFamily(cisUri: string): string {
+  const marker = 'CulturalInstituteOrSite/'
+  const idx = cisUri.indexOf(marker)
+  return idx === -1 ? cisUri : cisUri.slice(0, idx + marker.length)
+}
+
+// Pura, testabile senza rete. Conta le occorrenze per famiglia, ordinate per frequenza decrescente —
+// più leggibile di un elenco di URI grezzi per capire dove si concentra la copertura reale.
+export function summarizeCisFamilies(cisUris: string[]): { family: string; count: number }[] {
+  const counts = new Map<string, number>()
+  for (const uri of cisUris) {
+    counts.set(extractCisFamily(uri), (counts.get(extractCisFamily(uri)) ?? 0) + 1)
+  }
+  return [...counts.entries()]
+    .map(([family, count]) => ({ family, count }))
+    .sort((a, b) => b.count - a.count)
+}
+
+// Pura, testabile senza rete. Campione ampio (non filtrato per famiglia — a differenza del probe
+// 'hasCulturalInstituteOrSite-verso-namespace-nazionale' sopra, qui si guarda TUTTO ciò che il
+// motore restituisce per capire la distribuzione reale, non solo confermare/smentire una famiglia).
+export function buildCoverageQuery(limit = COVERAGE_SAMPLE_LIMIT): string {
+  return `${PREFIXES}
+SELECT ?cis WHERE {
+  ?opera loc:hasCulturalInstituteOrSite ?cis .
+} LIMIT ${limit}`
+}
+
 export interface ProbeResult {
   name: string
   note: string
@@ -270,9 +313,44 @@ async function runDiagnosticQuery(label: string, query: string, timeoutMs: numbe
   console.log(JSON.stringify(await res.json(), null, 2))
 }
 
+async function runCoverage(timeoutMs: number, limit: number): Promise<void> {
+  console.log(`Interrogo ${SPARQL_ENDPOINT} — campione di ${limit} triple hasCulturalInstituteOrSite, aggregazione per famiglia di URI museo (lato client)…`)
+  const res = await fetch(SPARQL_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Accept': 'application/sparql-results+json',
+      'User-Agent': USER_AGENT,
+    },
+    body: `query=${encodeURIComponent(buildCoverageQuery(limit))}`,
+    signal: AbortSignal.timeout(timeoutMs),
+  })
+  if (!res.ok) {
+    console.error(`HTTP ${res.status} — ${(await res.text()).slice(0, 500)}`)
+    return
+  }
+  const data = await res.json() as { results?: { bindings?: { cis?: { value: string } }[] } }
+  const uris = (data.results?.bindings ?? []).map(b => b.cis?.value).filter((v): v is string => !!v)
+  const summary = summarizeCisFamilies(uris)
+  console.log(`${uris.length} triple nel campione, ${summary.length} famiglie distinte:\n`)
+  for (const { family, count } of summary) {
+    console.log(`  ${count.toString().padStart(4)}  ${family}`)
+  }
+  const nationalFamily = 'http://dati.beniculturali.it/mibact/luoghi/resource/CulturalInstituteOrSite/'
+  const nationalCount = summary.find(s => s.family === nationalFamily)?.count ?? 0
+  console.log(`\nFamiglia nazionale (già usata da Dtrek per Lazio/altre regioni, mibact/luoghi): ${nationalCount}/${uris.length}.`)
+}
+
 async function main() {
   const timeoutIdx = process.argv.indexOf('--timeout')
   const timeoutMs = timeoutIdx !== -1 ? parseInt(process.argv[timeoutIdx + 1], 10) : DEFAULT_TIMEOUT_MS
+
+  if (process.argv.includes('--coverage')) {
+    const limitIdx = process.argv.indexOf('--limit')
+    const limit = limitIdx !== -1 ? parseInt(process.argv[limitIdx + 1], 10) : COVERAGE_SAMPLE_LIMIT
+    await runCoverage(timeoutMs, limit)
+    return
+  }
 
   if (process.argv.includes('--describe')) {
     const nameIdx = process.argv.indexOf('--name')

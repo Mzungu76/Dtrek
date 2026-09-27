@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { PROBES, buildCisUri, buildOperaByCisQuery, buildDescribeOperaQuery, buildDescribeOperaByCisQuery } from '../probe'
+import { PROBES, buildCisUri, buildOperaByCisQuery, buildDescribeOperaQuery, buildDescribeOperaByCisQuery, extractCisFamily, summarizeCisFamilies, buildCoverageQuery } from '../probe'
 
 describe('Opere/ArCo probe — struttura dei probe diagnostici', () => {
   it('nomi univoci', () => {
@@ -78,5 +78,57 @@ describe('buildDescribeOperaByCisQuery', () => {
     expect(q).toContain('<http://dati.beniculturali.it/mibact/luoghi/resource/CulturalInstituteOrSite/105665>')
     expect(q).toContain('?opera ?p1 ?o1')
     expect(q).toContain('OPTIONAL { ?o1 ?p2 ?o2 . }')
+  })
+})
+
+describe('extractCisFamily', () => {
+  it('nazionale (mibact/luoghi) — verificato reale su Canepina/105665', () => {
+    expect(extractCisFamily('http://dati.beniculturali.it/mibact/luoghi/resource/CulturalInstituteOrSite/105665'))
+      .toBe('http://dati.beniculturali.it/mibact/luoghi/resource/CulturalInstituteOrSite/')
+  })
+
+  it('generico w3id.org/arco/resource — verificato reale (probe forward, 2026-09-27)', () => {
+    expect(extractCisFamily('https://w3id.org/arco/resource/CulturalInstituteOrSite/43d07f7aa3c07bf446441d29a5904e75'))
+      .toBe('https://w3id.org/arco/resource/CulturalInstituteOrSite/')
+  })
+
+  it('regionale (AltoAdige) — verificato reale (probe combo, 2026-09-27)', () => {
+    expect(extractCisFamily('https://w3id.org/arco/resource/AltoAdige/CulturalInstituteOrSite/AA_CG_SVM'))
+      .toBe('https://w3id.org/arco/resource/AltoAdige/CulturalInstituteOrSite/')
+  })
+
+  it('URI senza il marker atteso → restituita invariata (mai un crash su un formato inatteso)', () => {
+    expect(extractCisFamily('https://example.org/qualcosa')).toBe('https://example.org/qualcosa')
+  })
+})
+
+describe('summarizeCisFamilies', () => {
+  it('conta per famiglia, ordina per frequenza decrescente', () => {
+    const uris = [
+      'https://w3id.org/arco/resource/AltoAdige/CulturalInstituteOrSite/AA_CG_SVM',
+      'https://w3id.org/arco/resource/AltoAdige/CulturalInstituteOrSite/AA_CG_ALTRO',
+      'http://dati.beniculturali.it/mibact/luoghi/resource/CulturalInstituteOrSite/105665',
+    ]
+    expect(summarizeCisFamilies(uris)).toEqual([
+      { family: 'https://w3id.org/arco/resource/AltoAdige/CulturalInstituteOrSite/', count: 2 },
+      { family: 'http://dati.beniculturali.it/mibact/luoghi/resource/CulturalInstituteOrSite/', count: 1 },
+    ])
+  })
+
+  it('lista vuota → lista vuota', () => {
+    expect(summarizeCisFamilies([])).toEqual([])
+  })
+})
+
+describe('buildCoverageQuery', () => {
+  it('nessun filtro per famiglia (a differenza del probe namespace-nazionale) — vede tutta la distribuzione', () => {
+    const q = buildCoverageQuery(500)
+    expect(q).not.toContain('FILTER')
+    expect(q).toContain('SELECT ?cis WHERE')
+    expect(q).toMatch(/LIMIT 500/)
+  })
+
+  it('limit personalizzabile', () => {
+    expect(buildCoverageQuery(50)).toMatch(/LIMIT 50$/)
   })
 })
