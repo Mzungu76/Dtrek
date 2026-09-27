@@ -500,6 +500,48 @@ alcuni musei "ben catalogati" con centinaia/migliaia di opere collegate, isolabi
 selettivamente. Aggiunta `summarizeExactCis`/estensione di `--coverage` (stampa ora anche i top 10
 musei per numero di opere nel campione, non solo le famiglie URI) per rispondere a questo.
 
+## 5duodecies. `--coverage` su campione più ampio (2026-09-27, limit 2000) — concentrazione confermata, ma insufficiente per l'obiettivo
+
+```
+ 460  8d00851bb176a855d2935df8ac76eec8
+ 310  07daec82c37b58c5e76bebf2202aced1
+ 308  62751cb807dfaaabef951084cdbb8534
+ 300  1ffb7396479e81a82c3659ef4fc03430
+ 289  ea8cc7832f45fd30b720ae44e41c5d8f
+ 196  43d07f7aa3c07bf446441d29a5904e75  (Museo Archeologico Nazionale di Firenze, §5quinquies)
+ 118  98338f8bf3066710602ae0ef97f83c4c
+  12  157d0e5464995f9f4a2b1a7f1bc2594e
+ ... poi 4, 2, 1
+```
+
+**Non è una copertura uniformemente scarsa**: esistono ~8 musei con una copertura reale sostanziosa
+(12-460 opere) su un campione di 2000 triple — la Galleria Borghese/Musei Capitolini/Palazzo
+Massimo/Villa Giulia/Galleria nazionale del §5decies (1/1/0/0/0 opere) NON sono tra questi, quindi
+la scarsità non è casuale: dipende dal singolo museo, non dal meccanismo.
+
+**Ma è comunque insufficiente per l'obiettivo reale**: Dtrek ha **2.296 musei** già importati
+(`subtype='museo'`, verificato su Supabase). Anche assumendo che l'intero catalogo ArCo (non solo
+questo campione di 2000 triple) porti qualche decina di musei ben catalogati invece di 8, resterebbe
+un sottoinsieme minuscolo (nell'ordine dell'1% o meno) — utile al massimo per una manciata di
+"musei vetrina", non per arricchire le Guide Sito in modo diffuso come richiesto dal piano §30/§36
+(dove "opere" è una sezione prevista per OGNI museo, non per una selezione ristretta).
+
+**Conclusione di questo report**: ArCo/il "Catalogo Generale dei Beni Culturali" via questo endpoint
+SPARQL **non è la fonte giusta per arricchire in modo diffuso la sezione "opere" delle Guide Sito
+museo** — il meccanismo tecnico (ponte `owl:sameAs` + `hasCulturalInstituteOrSite`) funziona, ma la
+copertura reale dei dati non regge l'obiettivo. Non si esclude un uso mirato futuro per i pochi
+musei con collezione ben catalogata (identificabili con `--describe-uri`/`--bridge`), ma NON come
+soluzione principale. Vedi `docs/arco-opere-musei-alternative.md` (se creato in una sessione
+successiva) per le alternative valutate al suo posto — Wikidata (proprietà `P195`/`P276`, già
+riusabile via l'arricchimento `wikidata_id` esistente in `scripts/places/wikidata/enrich.ts`, oggi
+non ancora eseguito sui musei: 0/2296 con `wikidata_id`) e/o il testo Wikipedia già usato per
+Borgo/Città (`lib/wikipedia.ts`) come contesto per ancorare la narrazione LLM invece di lasciarla
+pura invenzione.
+
+Nessuna pipeline di import/tabella creata in questa PR (coerente con quanto dichiarato dall'inizio):
+il lavoro qui resta diagnostica + questo report, propedeutici alla decisione di NON proseguire su
+questa fonte per l'obiettivo "opere in ogni Guida Sito museo".
+
 ## 5octies. Segnalazione di sicurezza trovata durante la verifica su Supabase (fuori scope, da comunicare)
 
 L'advisory di Supabase per il progetto `sdxlcpxgbkagbxhukehd` segnala **Row Level Security
