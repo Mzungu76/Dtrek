@@ -392,6 +392,49 @@ opera posseduta). Corretto in `probe.ts`:
 28/28 test passano (incluse le nuove funzioni pure `localName`/`formatDescribeBindings`), `tsc`
 pulito.
 
+## 5nonies. IL PONTE ESISTE — `owl:sameAs` verificato dal vivo (2026-09-27), conclusione ribaltata
+
+Testato direttamente (rete di questa sessione ancora bloccata verso `dati.cultura.gov.it` —
+riverificato con `curl` e WebFetch prima di chiedere all'utente di lanciarlo — quindi eseguito
+dall'utente via Termux) sul Museo Archeologico Nazionale di Firenze, source_id nazionale **20310**
+(dedotto dal ponte stesso — Firenze non è ancora in Dtrek, Toscana ha 0 record, §5sexies):
+
+```
+sameAs uscente dal museo hash  -> http://dati.beniculturali.it/mibact/luoghi/resource/CulturalInstituteOrSite/20310
+sameAs entrante nel museo hash -> http://dati.beniculturali.it/mibact/luoghi/resource/CulturalInstituteOrSite/20310
+```
+
+**Il ponte `owl:sameAs` tra l'identità nazionale (quella usata da Dtrek) e quella "hash" (quella con
+le opere collegate) esiste davvero, in entrambe le direzioni**, per questo museo. La conclusione del
+§5sexies ("nessun museo Dtrek può agganciarsi per ID alle opere") era corretta sui FATTI osservati
+fino a quel momento (nessuna sovrapposizione diretta di `source_id`) ma prematura sulla CONCLUSIONE:
+esiste una via indiretta — nazionale → `owl:sameAs` → hash → `isCulturalInstituteOrSiteOf`/
+`hasCulturalInstituteOrSite` — a due salti invece di uno diretto, non un vicolo cieco.
+
+**Verificato anche su Supabase**: `source_id = '20310'` non è tra i musei già importati (coerente
+con Toscana assente) — il ponte è stato trovato PRIMA di sapere se il museo fosse in Dtrek,
+partendo dall'URI hash e risalendo al nazionale, non il contrario.
+
+Aggiunto `probe.ts --bridge <source_id nazionale>`: dato un `source_id` già in `dtrek_places`, cerca
+il ponte `owl:sameAs` verso la famiglia hash e, se lo trova, conta subito le opere collegate
+(`loc:isCulturalInstituteOrSiteOf`). **Prossimo test, decisivo per capire se è un caso isolato (solo
+i grandi musei statali più noti) o un meccanismo generale**: lanciarlo su musei REALMENTE già in
+Dtrek con un source_id nazionale — candidati reali trovati su Supabase (grandi musei statali di
+Roma, stessa categoria di rilievo del Museo Archeologico di Firenze):
+
+| Museo | source_id (già in Dtrek) |
+|---|---|
+| Galleria Borghese | `20405` |
+| Musei Capitolini | `105936` |
+| Museo nazionale romano – Palazzo Massimo | `20231` |
+| Museo nazionale etrusco di Villa Giulia | `20238` |
+| Galleria nazionale d'arte moderna e contemporanea | `20772` |
+
+Se il ponte si conferma su questi (musei già presenti in Dtrek, non un'ipotesi come Firenze), la
+funzionalità "Opere di questo museo" diventa implementabile per un sottoinsieme reale e già
+importato di musei Dtrek — non serve più un matching per nome/comune (§5sexies punto 2), basta il
+ponte `owl:sameAs` per i musei che lo hanno.
+
 ## 5octies. Segnalazione di sicurezza trovata durante la verifica su Supabase (fuori scope, da comunicare)
 
 L'advisory di Supabase per il progetto `sdxlcpxgbkagbxhukehd` segnala **Row Level Security

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { PROBES, buildCisUri, buildOperaByCisQuery, buildDescribeOperaQuery, buildDescribeOperaByCisQuery, extractCisFamily, summarizeCisFamilies, buildCoverageQuery, buildDescribeUriQuery, buildWorksCountQuery, buildWorksSampleQuery, localName, formatDescribeBindings } from '../probe'
+import { PROBES, buildCisUri, buildOperaByCisQuery, buildDescribeOperaQuery, buildDescribeOperaByCisQuery, extractCisFamily, summarizeCisFamilies, buildCoverageQuery, buildDescribeUriQuery, buildWorksCountQuery, buildWorksSampleQuery, localName, formatDescribeBindings, buildBridgeQuery } from '../probe'
 
 describe('Opere/ArCo probe — struttura dei probe diagnostici', () => {
   it('nomi univoci', () => {
@@ -145,6 +145,15 @@ describe('buildWorksCountQuery / buildWorksSampleQuery', () => {
   it('sample: stesso predicato, con LIMIT personalizzabile (default 20)', () => {
     expect(buildWorksSampleQuery(MAF)).toMatch(/LIMIT 20$/)
     expect(buildWorksSampleQuery(MAF, 5)).toMatch(/LIMIT 5$/)
+  })
+})
+
+describe('buildBridgeQuery', () => {
+  it('cerca entrambe le direzioni di owl:sameAs verso la famiglia hash, a partire dal source_id nazionale già in Dtrek (verificato reale: Museo Archeologico Nazionale di Firenze, source_id 20310, 2026-09-27)', () => {
+    const q = buildBridgeQuery('20310')
+    expect(q).toContain('<http://dati.beniculturali.it/mibact/luoghi/resource/CulturalInstituteOrSite/20310> <http://www.w3.org/2002/07/owl#sameAs> ?hash')
+    expect(q).toContain('?hash <http://www.w3.org/2002/07/owl#sameAs> <http://dati.beniculturali.it/mibact/luoghi/resource/CulturalInstituteOrSite/20310>')
+    expect(q).toContain('STRSTARTS(STR(?hash), "https://w3id.org/arco/resource/CulturalInstituteOrSite/")')
   })
 })
 

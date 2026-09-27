@@ -49,6 +49,8 @@
  *   npx tsx scripts/places/mic/opere/probe.ts --describe-uri "https://w3id.org/arco/resource/CulturalInstituteOrSite/<hash>"  # dump 2 salti di un URI qualunque (es. un museo della famiglia "hash" trovata da --coverage)
  *   npx tsx scripts/places/mic/opere/probe.ts --museo-opere "https://w3id.org/arco/resource/CulturalInstituteOrSite/<hash>"  # conteggio + campione via loc:isCulturalInstituteOrSiteOf (predicato forward museo→opera, trovato con --describe-uri)
  *
+ *   npx tsx scripts/places/mic/opere/probe.ts --bridge 20405        # cerca il ponte owl:sameAs nazionale->hash per un museo GIÀ in Dtrek (source_id) e, se trovato, conta subito le sue opere
+ *
  * `--describe`/`--describe-uri` stampano ora un formato compatto (predicato = valore, con gli URI
  * accorciati al nome locale, righe deduplicate) invece del JSON grezzo — troppo grande da incollare
  * da Termux su un dump con molte proprietà. Aggiungere `--grep "<termine>"` per filtrare solo le
@@ -191,6 +193,30 @@ SELECT ?opera ?p1 ?o1 ?p2 ?o2 WHERE {
     } LIMIT 1 }
   ?opera ?p1 ?o1 .
   OPTIONAL { ?o1 ?p2 ?o2 . }
+}`
+}
+
+// ── Ponte owl:sameAs nazionale↔hash (2026-09-27, verificato reale sul Museo Archeologico Nazionale
+// di Firenze: source_id nazionale 20310, non ancora in Dtrek, sameAs presente in ENTRAMBE le
+// direzioni verso il suo equivalente "hash") ────────────────────────────────────────────────────
+// §5sexies/5octies di docs/arco-opere-musei.md: nessun museo già in Dtrek usa direttamente la
+// famiglia URI con le opere collegate — ma un ponte owl:sameAs esiste almeno per un museo di primo
+// piano. Questo probe verifica, dato il source_id NAZIONALE già in dtrek_places, se esiste un
+// equivalente "hash" — la via alternativa alla ricostruzione diretta dell'URI (§3, ormai esclusa).
+const HASH_FAMILY_BASE = 'https://w3id.org/arco/resource/CulturalInstituteOrSite/'
+
+// Pura, testabile senza rete. Cerca entrambe le direzioni: owl:sameAs è simmetrico per definizione
+// OWL, ma questo endpoint non garantisce che il grafo materializzi sempre entrambi i versi di ogni
+// tripla dichiarata (già visto per Firenze: qui risultava popolato in entrambe, ma non è detto sia
+// sempre così per ogni museo).
+export function buildBridgeQuery(nationalId: string): string {
+  const nationalUri = buildCisUri(nationalId)
+  return `
+SELECT ?hash WHERE {
+  { <${nationalUri}> <http://www.w3.org/2002/07/owl#sameAs> ?hash }
+  UNION
+  { ?hash <http://www.w3.org/2002/07/owl#sameAs> <${nationalUri}> }
+  FILTER(STRSTARTS(STR(?hash), "${HASH_FAMILY_BASE}"))
 }`
 }
 
@@ -457,9 +483,45 @@ async function runCoverage(timeoutMs: number, limit: number): Promise<void> {
   console.log(`\nFamiglia nazionale (già usata da Dtrek per Lazio/altre regioni, mibact/luoghi): ${nationalCount}/${uris.length}.`)
 }
 
+async function sparqlSelect(query: string, timeoutMs: number): Promise<Record<string, { value: string }>[]> {
+  const res = await fetch(SPARQL_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Accept': 'application/sparql-results+json',
+      'User-Agent': USER_AGENT,
+    },
+    body: `query=${encodeURIComponent(query)}`,
+    signal: AbortSignal.timeout(timeoutMs),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`)
+  const data = await res.json() as { results?: { bindings?: Record<string, { value: string }>[] } }
+  return data.results?.bindings ?? []
+}
+
+async function runBridge(nationalId: string, timeoutMs: number): Promise<void> {
+  console.log(`Cerco un ponte owl:sameAs per il museo nazionale CIS/${nationalId}…`)
+  const bridgeRows = await sparqlSelect(buildBridgeQuery(nationalId), timeoutMs)
+  const hashUri = bridgeRows[0]?.hash?.value
+  if (!hashUri) {
+    console.log(`Nessun ponte trovato per CIS/${nationalId}.`)
+    return
+  }
+  console.log(`Ponte trovato -> ${hashUri}`)
+  const countRows = await sparqlSelect(buildWorksCountQuery(hashUri), timeoutMs)
+  console.log(`Opere collegate (loc:isCulturalInstituteOrSiteOf): ${countRows[0]?.count?.value ?? '0'}`)
+}
+
 async function main() {
   const timeoutIdx = process.argv.indexOf('--timeout')
   const timeoutMs = timeoutIdx !== -1 ? parseInt(process.argv[timeoutIdx + 1], 10) : DEFAULT_TIMEOUT_MS
+
+  const bridgeIdx = process.argv.indexOf('--bridge')
+  if (bridgeIdx !== -1) {
+    const nationalId = process.argv[bridgeIdx + 1]
+    await runBridge(nationalId, timeoutMs)
+    return
+  }
 
   const worksIdx = process.argv.indexOf('--museo-opere')
   if (worksIdx !== -1) {
