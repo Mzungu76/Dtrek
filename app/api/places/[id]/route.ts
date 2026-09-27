@@ -115,6 +115,18 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   }
   if (!data) return NextResponse.json({ error: 'Non trovato' }, { status: 404 })
 
+  // Stesso siteType "vero" mostrato più sotto in PlaceDetail.siteType e già usato da
+  // GuideReader.tsx (via lib/plannedStore.ts) per decidere se mostrare OpereMuseoWidget —
+  // calcolato QUI (non solo più sotto) e riusato per il gate di getMuseumOpere sotto. Prima di
+  // questo fix il gate usava `data.subtype === 'museo'` (la colonna grezza) invece del siteType
+  // inferito: bug reale segnalato dal vivo dall'utente su "Galleria Doria Pamphilj"
+  // (subtype='altro' — ArCo non l'ha classificata come museo, dc:type/typeLabel non hanno
+  // combaciato con MIC_TYPE_MAP — ma il nome dice chiaramente "Galleria", riconosciuto da
+  // inferSiteTypeFromName). Il widget si mostrava comunque (GuideReader usa già il siteType
+  // inferito) ma restava sempre vuoto: le due gate leggevano due classificazioni diverse per la
+  // stessa Meta.
+  const inferredSiteType = data.meta_type === 'sito' ? inferSiteTypeFromName(data.name, (data.subtype ?? null) as SiteType | null) : undefined
+
   // Query separata e best-effort per phone/email (vedi il commento su PlaceDetail.phone sopra) —
   // se add_places_contacts.sql non è ancora applicata sul progetto Supabase in uso, `error` è
   // valorizzato (colonna inesistente) e si prosegue con `null`, mai propagando un 500 alla scheda
@@ -130,8 +142,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   // Solo per un museo — docs/opere-musei-wikidata.md. getMuseumOpere gestisce già cache/errori al
   // suo interno (mai un'eccezione propagata qui), gated qui solo per non pagare il costo di una
-  // ricerca Wikidata dal vivo per QUALUNQUE altro tipo di Sito/Borgo.
-  const opere = data.subtype === 'museo'
+  // ricerca Wikidata dal vivo per QUALUNQUE altro tipo di Sito/Borgo. `inferredSiteType`, non
+  // `data.subtype` — vedi il commento su quella costante sopra.
+  const opere = inferredSiteType === 'museo'
     ? await getMuseumOpere(supabase, { id: data.id, name: data.name, latitude: data.latitude, longitude: data.longitude, wikidataId: data.wikidata_id })
     : []
 
@@ -201,7 +214,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     // inferSiteTypeFromName: 'altro' spesso viene da un tag sorgente troppo generico (es. OSM
     // tourism=attraction) anche quando il nome dice chiaramente di cosa si tratta — vedi
     // lib/metaTypes.ts.
-    siteType: data.meta_type === 'sito' ? (inferSiteTypeFromName(data.name, (data.subtype ?? null) as SiteType | null) ?? null) : null,
+    siteType: inferredSiteType ?? null,
     name: data.name,
     // Solo se sostanziale (vedi isSubstantiveDescription) — il testo composto dall'importer PTPR
     // (solo un codice tipologico + attribuzione, mai vuoto) non è una descrizione da mostrare come
