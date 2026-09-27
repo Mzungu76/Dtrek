@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeBorgoWalkFields, nearestPolylineIndex, splitPolylineByTappaEnds } from '../borgoWalkPolyline'
+import { computeBorgoWalkFields, nearestPolylineIndex, splitPolylineByTappaEnds, visitedBorgoStops } from '../borgoWalkPolyline'
 import type { BorgoItinerary } from '@/app/api/borgo-itinerary/route'
 
 function itinerary(overrides: Partial<BorgoItinerary> = {}): BorgoItinerary {
@@ -31,6 +31,19 @@ describe('computeBorgoWalkFields', () => {
   it('lo hash riflette l\'ordine degli id delle tappe', () => {
     const result = computeBorgoWalkFields(itinerary())
     expect(result?.borgoWalkStopsHash).toBe('a,b')
+  })
+
+  it('borgoWalkStops porta tutti gli stop dell\'itinerario, con i campi reali (mai fabbricati)', () => {
+    const result = computeBorgoWalkFields(itinerary({
+      stops: [
+        { id: 'a', name: 'Chiesa', lat: 1, lon: 1, source: 'archivio', description: 'Una chiesa', thumbnail: 'https://x/y.jpg', siteType: 'chiesa' },
+        { id: 'b', name: 'Museo', lat: 2, lon: 2, source: 'wikipedia', url: 'https://it.wikipedia.org/wiki/Museo' },
+      ],
+    }))
+    expect(result?.borgoWalkStops).toEqual([
+      { id: 'a', name: 'Chiesa', lat: 1, lon: 1, description: 'Una chiesa', thumbnail: 'https://x/y.jpg', url: undefined, siteType: 'chiesa' },
+      { id: 'b', name: 'Museo', lat: 2, lon: 2, description: undefined, thumbnail: undefined, url: 'https://it.wikipedia.org/wiki/Museo', siteType: undefined },
+    ])
   })
 
   it('nessuna leg → null, mai un campo vuoto scritto per forza', () => {
@@ -108,5 +121,28 @@ describe('splitPolylineByTappaEnds', () => {
 
   it('confine non trovato entro il raggio → rinuncia a spezzare, un solo segmento', () => {
     expect(splitPolylineByTappaEnds(polyline, [{ lat: 9, lon: 9 }])).toEqual([polyline])
+  })
+})
+
+describe('visitedBorgoStops', () => {
+  const stopA = { id: 'a', name: 'Chiesa', lat: 0, lon: 0 }
+  const stopB = { id: 'b', name: 'Museo', lat: 0, lon: 0.002 } // ~222m da (0,0)
+  const stopC = { id: 'c', name: 'Castello', lat: 5, lon: 5 } // lontanissimo da qualunque traccia qui sotto
+
+  it('nessuno stop o nessuna traccia → nessuno stop visitato', () => {
+    expect(visitedBorgoStops(undefined, [{ lat: 0, lon: 0 }])).toEqual([])
+    expect(visitedBorgoStops([stopA], [])).toEqual([])
+    expect(visitedBorgoStops([stopA], [{ lat: undefined, lon: undefined }])).toEqual([])
+  })
+
+  it('include solo gli stop entro 300m da almeno un punto della traccia — non serve sapere quale tappa è stata camminata', () => {
+    const track = [{ lat: 0, lon: 0 }, { lat: 0, lon: 0.0005 }]
+    expect(visitedBorgoStops([stopA, stopB, stopC], track)).toEqual([stopA, stopB])
+  })
+
+  it('un solo punto di traccia abbastanza vicino a UN solo stop lo include senza bisogno di sapere a quale tappa appartiene', () => {
+    // ~88.9m da stopB, ~311.7m da stopA (appena fuori raggio): solo stopB qualifica.
+    const track = [{ lat: 0, lon: 0.0028 }]
+    expect(visitedBorgoStops([stopA, stopB, stopC], track)).toEqual([stopB])
   })
 })

@@ -11,7 +11,9 @@ import type { PlannedHike } from '@/lib/plannedStore'
 import { updatePlannedMeta } from '@/lib/plannedStore'
 import type { HikeNote } from '@/lib/blobStore'
 import type { PoiItem } from '@/lib/overpass'
+import { siteTypeToPoiType } from '@/lib/overpass'
 import type { WikiPage } from '@/lib/wikipedia'
+import type { BorgoWalkStop } from '@/lib/borgoWalkPolyline'
 import { NavigationEngine } from '@/lib/navigation/navigationEngine'
 import { detectRouteMoments } from '@/lib/navigation/routeMoments'
 import { buildTappaEndMoments } from '@/lib/navigation/borgoTappaMoments'
@@ -317,10 +319,32 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
     return (hike.cachedSafetyScore?.wildlifeRisks ?? []).filter((w) => w.dangerLevel === 'alto' || w.dangerLevel === 'moderato')
   }, [hike.cachedSafetyScore])
 
+  // Un Borgo/Città con l'itinerario curato a tappe (planned_hikes.borgo_walk_stops, lib/
+  // borgoWalkPolyline.ts) usa QUELLI come POI del Navigator — mai la ricerca Overpass generica di
+  // hike.cachedPois, che per un itinerario a piedi senza una vera traccia GPS resta comunque vuota
+  // (GuidaHub.tsx's caricamento POI parte solo da hike.trackPoints). Stesso principio già applicato
+  // al Reportage (BorgoStopsWidget): i VERI luoghi pianificati, non punti Overpass qualsiasi nei
+  // dintorni. Un Borgo senza itinerario curato (creato prima di questo campo, o un Sentiero/Sito)
+  // ricade sul comportamento di sempre.
+  const borgoStops = hike.metaType === 'borgo_citta' ? hike.borgoWalkStops : undefined
   const pois = useMemo<NavPoi[]>(() => {
+    if (borgoStops?.length) {
+      return borgoStops.map((s) => ({
+        id: s.id, lat: s.lat, lon: s.lon, name: s.name,
+        type: s.siteType ? siteTypeToPoiType(s.siteType) : undefined,
+      }))
+    }
     const raw = (hike.cachedPois ?? []) as PoiItem[]
     return raw.filter((p) => p.lat != null && p.lon != null).map((p) => ({ id: p.id, lat: p.lat, lon: p.lon, name: p.name, type: p.type, openingHours: p.tags?.opening_hours }))
-  }, [hike.cachedPois])
+  }, [borgoStops, hike.cachedPois])
+
+  // id → stop curato, per risolvere il callout con la vera descrizione/foto dell'itinerario (mai
+  // la ricerca Wikipedia generica usata per un POI Overpass qualunque) — vedi resolvePoiCallout.
+  const borgoStopById = useMemo(() => {
+    const map = new Map<string | number, BorgoWalkStop>()
+    for (const s of borgoStops ?? []) map.set(s.id, s)
+    return map
+  }, [borgoStops])
 
   const poiWikiById = useMemo(() => {
     const map = new Map<string | number, WikiPage>()
@@ -397,6 +421,21 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
     clearParkingSpot(hike.id).catch(() => {})
   }
 
+  /** Contenuto del callout per un POI — lo stop curato dell'itinerario (descrizione/foto vere,
+   *  mai un estratto Wikipedia trovato per nome) quando è un punto di Borgo/Città con itinerario a
+   *  tappe, altrimenti l'estratto Wikipedia/nota già in uso per un POI Overpass di Sentiero.
+   *  Legge poiNotesByIdRef (dichiarato più sotto, sempre aggiornato) invece dello stato diretto:
+   *  usata anche dentro engine.on('enteredPoi', ...) nell'effect di setup a mount unico, dove una
+   *  chiusura diretta sullo stato resterebbe congelata al valore del primo render (stesso motivo
+   *  già documentato lì per poiNotesByIdRef). */
+  const resolvePoiCallout = (poi: NavPoi) => {
+    const stop = borgoStopById.get(poi.id)
+    if (stop) return { title: stop.name, extract: stop.description, imageUrl: stop.thumbnail }
+    const wiki = poiWikiById.get(poi.id)
+    const note = poiNotesByIdRef.current.get(Number(poi.id))
+    return { title: poi.name ?? 'Punto di interesse', extract: note ?? wiki?.extract, imageUrl: wiki?.thumbnail }
+  }
+
   /** Tapping a POI marker directly on the map — same info, same sheet, as walking up to it and
    *  triggering the engine's own 'enteredPoi' event (see that handler below): a hiker shouldn't
    *  have to wait to get close just to find out what something is. No haptics/speech here, unlike
@@ -404,9 +443,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   const handlePoiTap = (poiId: string | number) => {
     const poi = pois.find((p) => p.id === poiId)
     if (!poi) return
-    const wiki = poiWikiById.get(poiId)
-    const note = poiNotesById.get(Number(poiId))
-    setCallout({ title: poi.name ?? 'Punto di interesse', extract: note ?? wiki?.extract, imageUrl: wiki?.thumbnail })
+    setCallout(resolvePoiCallout(poi))
   }
 
   const parkingDistanceM = parkingSpot && position
@@ -611,14 +648,12 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       engine.on('enteredPoi', ({ poi }) => {
         if (cancelled) return
         logEvent('poi_reached', { poiId: poi.id })
-        const wiki = poiWikiById.get(poi.id)
-        const note = poiNotesByIdRef.current.get(Number(poi.id))
-        const extract = note ?? wiki?.extract
-        setCallout({ title: poi.name ?? 'Punto di interesse', extract, imageUrl: wiki?.thumbnail })
+        const info = resolvePoiCallout(poi)
+        setCallout(info)
         // DTREK-AUDIT.md P4 #38 — narrazione (voce+aptico), non un avviso operativo: la scheda
         // visiva (setCallout sopra) resta comunque, solo il "di più" sonoro è disattivabile.
         if (narrationEnabledRef.current) {
-          speakIfEnabled(`${poi.name ?? 'Sei vicino a un punto di interesse'}. ${extract ?? ''}`.trim())
+          speakIfEnabled(`${info.title}. ${info.extract ?? ''}`.trim())
           haptics.notify()
         }
       })

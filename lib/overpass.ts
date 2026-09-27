@@ -1,6 +1,7 @@
 // Overpass API — OpenStreetMap, 100% gratuita, nessuna chiave
 // https://overpass-api.de/
 import { mapOsmSacScale } from './osm/sacScale'
+import type { SiteType } from './metaTypes'
 
 export type PoiType =
   | 'peak'
@@ -16,6 +17,31 @@ export type PoiType =
   | 'ruins'
   | 'bridge'
   | 'archaeological' | 'castle' | 'fountain' | 'bench' | 'chapel' | 'picnic' | 'tower' | 'monument'
+
+/** Icona più vicina tra quelle già disegnate per un POI di Sentiero (components/poiIcons.tsx) —
+ *  usata SOLO per la resa visiva di uno stop curato di un Borgo/Città sulla mappa del Navigator
+ *  (components/navigation/ActiveNavigationView.tsx), mai per ricategorizzare il dato stesso, che
+ *  resta un SiteType (lib/metaTypes.ts's SITE_TYPE_CONFIG è la classificazione vera). Un'
+ *  approssimazione dichiarata: nessuna delle icone esistenti è pensata per un museo o un palazzo,
+ *  ma resta più informativa di un'icona identica per ogni punto. undefined (icona di ripiego)
+ *  per un tipo senza equivalente sensato. */
+export function siteTypeToPoiType(siteType: SiteType): PoiType | undefined {
+  switch (siteType) {
+    case 'castello': return 'castle'
+    case 'abbazia':
+    case 'chiesa': return 'chapel'
+    case 'sito_archeologico': return 'archaeological'
+    case 'museo':
+    case 'monumento':
+    case 'palazzo':
+    case 'teatro': return 'monument'
+    case 'cascata': return 'waterfall'
+    case 'grotta': return 'cave'
+    case 'belvedere': return 'viewpoint'
+    case 'area_naturale': return 'peak'
+    case 'altro': return undefined
+  }
+}
 
 export interface PoiItem {
   id: number

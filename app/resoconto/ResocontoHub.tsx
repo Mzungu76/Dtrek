@@ -220,6 +220,10 @@ export default function ResocontoHub({ id }: { id?: string }) {
   useEffect(() => {
     if (!currentId) return
     const loadPoisFor = (a: StoredActivity) => {
+      // Un Borgo/Città con i veri stop dell'itinerario curato (lib/activitySave.ts's
+      // visitedBorgoStops) mostra quelli in ReportReader's BorgoStopsWidget — mai la query Overpass
+      // generica qui sotto, che finirebbe solo per essere scaricata e mai mostrata.
+      if (a.metaType === 'borgo_citta' && a.borgoStops?.length) { setPoisLoaded(true); return }
       const gps = a.trackPoints.filter(p => p.lat !== undefined && p.lon !== undefined).map(p => [p.lat!, p.lon!] as [number, number])
       if (gps.length === 0) { setPoisLoaded(true); return }
       const bbox = computeBbox(gps)

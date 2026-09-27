@@ -1,5 +1,6 @@
 import type { BorgoItinerary } from '@/app/api/borgo-itinerary/route'
 import { haversineM } from './geoUtils'
+import type { SiteType } from './metaTypes'
 
 // Calcolo condiviso tra components/guida/GuideReader.tsx (alla prima apertura della guida) e
 // lib/useCreateMetaFromSearch.ts (alla creazione, piano guide-eccellenza — verifica post-piano:
@@ -12,6 +13,23 @@ export interface BorgoWalkTappaEnd {
   lon: number
 }
 
+/** Un punto reale dell'itinerario curato (lib/metaSearch/borgoItinerary.ts's ItineraryStop),
+ *  persistito qui perché il Reportage possa mostrare i VERI luoghi visitati invece di una query
+ *  Overpass generica (sessione conversazionale — verificato: "Luoghi visitati" nel Reportage usava
+ *  gli stessi punti Overpass di un Sentiero, mai i veri stop dell'itinerario a tappe). Stessa forma
+ *  di ItineraryStop, mai un tipo parallelo che potrebbe andare fuori sincrono — solo i campi che
+ *  servono a valle (mai `source`, irrilevante fuori dal widget di personalizzazione). */
+export interface BorgoWalkStop {
+  id: string
+  name: string
+  lat: number
+  lon: number
+  description?: string
+  thumbnail?: string
+  url?: string
+  siteType?: SiteType
+}
+
 export interface BorgoWalkFields {
   borgoWalkPolyline: [number, number][]
   borgoWalkStopsHash: string
@@ -22,6 +40,11 @@ export interface BorgoWalkFields {
    *  lib/navigation/borgoTappaMoments.ts per costruire i RouteMoment 'tappa_end' del motore di
    *  navigazione, mai per ricostruire l'itinerario stesso (quello resta borgoWalkPolyline/tappe). */
   borgoWalkTappaEnds?: BorgoWalkTappaEnd[]
+  /** Tutti gli stop dell'itinerario (di ogni tappa, non solo la prima) — la fonte da cui
+   *  lib/activitySave.ts filtra "quali di questi sono vicini alla traccia di QUESTA uscita" al
+   *  salvataggio di un'Attività, per portare nel Reportage i veri luoghi della tappa camminata
+   *  invece di un elenco Overpass generico (lib/reportSections.ts, ResocontoHub.tsx). */
+  borgoWalkStops: BorgoWalkStop[]
 }
 
 /** Concatenazione in ordine delle `legs[].polyline` (reali o linea d'aria di ripiego, mai un dato
@@ -41,7 +64,34 @@ export function computeBorgoWalkFields(itinerary: BorgoItinerary): BorgoWalkFiel
     borgoWalkPolyline: itinerary.legs.flatMap(leg => leg.polyline),
     borgoWalkStopsHash: itinerary.stops.map(s => s.id).join(','),
     borgoWalkTappaEnds,
+    borgoWalkStops: itinerary.stops.map(s => ({
+      id: s.id, name: s.name, lat: s.lat, lon: s.lon,
+      description: s.description, thumbnail: s.thumbnail, url: s.url, siteType: s.siteType,
+    })),
   }
+}
+
+// Stesso raggio già usato per il filtro Overpass di un Sentiero (ResocontoHub.tsx's loadPoisFor,
+// minDistToTrack <= 300) — non un valore nuovo scelto ad hoc.
+const VISITED_STOP_MATCH_RADIUS_M = 300
+
+/** Quali stop dell'itinerario curato sono "quelli di questa uscita" — non serve sapere esplicitamente
+ *  quale tappa è stata camminata (indice, override manuali...): un confronto di prossimità con la
+ *  traccia REALE appena registrata/importata basta da solo, perché ogni sessione di navigazione
+ *  copre geograficamente solo la tappa percorsa in quel momento (Navigator "Modalità A" — "Fine per
+ *  oggi" chiude la sessione lì). Robusto anche a riordini manuali tra tappe (lib/metaSearch/
+ *  borgoItinerary.ts's BorgoItineraryOverrides): si guarda dove si è stati per davvero, non a un
+ *  indice di tappa salvato altrove che potrebbe non corrispondere più. */
+export function visitedBorgoStops(
+  stops: BorgoWalkStop[] | undefined,
+  trackPoints: { lat?: number; lon?: number }[],
+): BorgoWalkStop[] {
+  if (!stops || stops.length === 0) return []
+  const track = trackPoints.filter((p): p is { lat: number; lon: number } => p.lat != null && p.lon != null)
+  if (track.length === 0) return []
+  return stops.filter(stop =>
+    track.some(p => haversineM(stop.lat, stop.lon, p.lat, p.lon) <= VISITED_STOP_MATCH_RADIUS_M),
+  )
 }
 
 /** Polyline da usare per navigare/elencare una Meta come "percorso pronto" — routePolyline (traccia

@@ -39,6 +39,7 @@ import SpeedChart from '@/components/SpeedChart'
 import RouteMapSection from '@/components/RouteMapSection'
 import WeatherWidget from '@/components/WeatherWidget'
 import PoiListWidget from '@/components/guida/widgets/PoiListWidget'
+import BorgoStopsWidget from '@/components/guida/widgets/BorgoStopsWidget'
 import NaturaWidget from '@/components/guida/widgets/NaturaWidget'
 import RouteTimeline from '@/app/components/RouteTimeline'
 import ManualEditor from '@/app/components/ManualEditor'
@@ -60,6 +61,7 @@ import StickyRouteMap from './StickyRouteMap'
 import { pickBestCoverPhoto } from '@/lib/activityPhotos'
 import { metaHasHikingMetrics } from '@/lib/metaTypes'
 import { REPORT_SECTION_STYLE, REPORT_SECTION_TITLE, narrativeStyleFor, type ReportFixedSectionKey } from './sectionStyle'
+import { reportFixedSectionsFor, reportSectionTitle } from '@/lib/reportSections'
 import {
   Pencil, Loader2, BookOpen, Share2, Link2Off, ExternalLink,
   Layers, RefreshCw, Heart, Zap, Flame, Download,
@@ -343,11 +345,11 @@ export default function ReportReader({
     const narrative: DisplaySection[] = sections.map((s, i) => ({
       key: `narrative-${i}`, title: s.title, narrativeIndex: i, ...narrativeStyleFor(i),
     }))
-    const fixed: DisplaySection[] = (Object.keys(REPORT_SECTION_STYLE) as ReportFixedSectionKey[]).map(k => ({
-      key: k, title: REPORT_SECTION_TITLE[k], ...REPORT_SECTION_STYLE[k],
+    const fixed: DisplaySection[] = reportFixedSectionsFor(activity).map(k => ({
+      key: k, title: reportSectionTitle(k, activity.metaType, REPORT_SECTION_TITLE[k]), ...REPORT_SECTION_STYLE[k],
     }))
     return [...narrative, ...fixed]
-  }, [sections])
+  }, [sections, activity])
 
   // Foto di ogni capitolo — se il racconto ha una struttura editata a mano (reportSections, in
   // sync 1:1 con i capitoli attuali) si usa la scelta esplicita dell'utente (foto principale +
@@ -726,6 +728,14 @@ export default function ReportReader({
       case 'natura':
         return <NaturaWidget {...natura} />
       case 'poi':
+        // Un Borgo/Città con i veri stop dell'itinerario curato vicini alla traccia di questa
+        // uscita (lib/activitySave.ts's visitedBorgoStops, mai una query Overpass generica) mostra
+        // quelli — esattamente i luoghi pianificati in Guida, non un elenco di POI qualsiasi nei
+        // dintorni. Assente per ogni altra tipologia o per un'attività salvata prima di questo
+        // campo: ricade sul vecchio PoiListWidget, mai un pannello vuoto.
+        if (activity.metaType === 'borgo_citta' && activity.borgoStops?.length) {
+          return <BorgoStopsWidget stops={activity.borgoStops} />
+        }
         return (
           <PoiListWidget
             hikeId={id}

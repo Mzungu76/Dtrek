@@ -12,6 +12,7 @@ import type { WikiPage } from './wikipedia'
 import { computeDEP } from './stats'
 import { downsamplePolyline } from './downsamplePolyline'
 import type { MetaType, SiteType } from './metaTypes'
+import type { BorgoWalkStop } from './borgoWalkPolyline'
 
 const ENTITY_TYPE = 'activity'
 
@@ -86,6 +87,13 @@ export interface StoredActivity extends TcxActivity {
    *  attività salvata prima di questa colonna: DEFAULT true a livello di colonna (erano tutte reali,
    *  nessuna eccezione esisteva ancora), mai da trattare come "non verificata" per omissione. */
   verified?: boolean
+  /** Solo per un'Attività di un Borgo/Città — i veri stop dell'itinerario curato vicini alla
+   *  traccia di QUESTA uscita (lib/activitySave.ts's visitedBorgoStops, da
+   *  planned_hikes.borgo_walk_stops), non una query Overpass generica. Mostrati nel Reportage al
+   *  posto di PoiListWidget quando presenti (ResocontoHub.tsx/ReportReader.tsx). Assente per ogni
+   *  altra tipologia, per un'Attività non collegata a una Meta, o salvata prima di questo campo —
+   *  in quel caso il Reportage ricade sul vecchio elenco Overpass, mai un pannello vuoto. */
+  borgoStops?: BorgoWalkStop[]
 }
 
 export interface ActivityMeta {

@@ -57,6 +57,13 @@ CREATE INDEX IF NOT EXISTS idx_activities_meta_type ON activities (meta_type);
 -- commenti completi. DEFAULT true: ogni riga già esistente nasce da una traccia reale.
 ALTER TABLE activities ADD COLUMN IF NOT EXISTS verified BOOLEAN NOT NULL DEFAULT true;
 
+-- Reportage di un Borgo/Città con i veri luoghi visitati — vedi
+-- supabase/migrations/add_activities_borgo_stops_column.sql per i commenti completi. Solo gli stop
+-- dell'itinerario curato (planned_hikes.borgo_walk_stops) vicini alla traccia di QUESTA uscita
+-- (lib/borgoWalkPolyline.ts's visitedBorgoStops), mai una query Overpass generica. NULL per ogni
+-- attività che non è un Borgo/Città o salvata prima di questa colonna.
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS borgo_stops JSONB;
+
 -- ── Escursioni pianificate ───────────────────────────────────
 CREATE TABLE IF NOT EXISTS planned_hikes (
   id                      TEXT PRIMARY KEY,
@@ -1306,6 +1313,11 @@ ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS borgo_walk_stops_hash TEXT;
 -- punto di ogni tappa tranne l'ultima, per segnalare il confine tra tappe durante la navigazione
 -- invece di trattare un Borgo su più giornate come un cammino continuo.
 ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS borgo_walk_tappa_ends JSONB;
+
+-- Reportage con i veri luoghi visitati — vedi supabase/migrations/add_planned_hikes_borgo_walk_stops.sql
+-- per i commenti completi. Tutti gli stop dell'itinerario curato, filtrati per prossimità reale
+-- alla traccia camminata al salvataggio dell'Attività (lib/activitySave.ts's visitedBorgoStops).
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS borgo_walk_stops JSONB;
 
 -- Piano guide-eccellenza Fase 2 — vedi supabase/migrations/add_planned_hikes_borgo_itinerary_overrides.sql
 -- per i commenti completi. Personalizzazioni PER-UTENTE dell'itinerario di un Borgo/Città (slider
