@@ -113,6 +113,16 @@ async function updateWikidataId(supabase: SupabaseClient, placeId: string, qid: 
 }
 
 // ── I/O: Wikidata SPARQL ─────────────────────────────────────────────────────────────────────
+// FIX (2026-09-27, bug reale trovato in lib/museumOpere.ts — stessa query, stesso bug, segnalato
+// dal vivo dall'utente su "Galleria Doria Pamphilj" in centro a Roma): senza ORDER BY, il LIMIT 20
+// prende una fetta ARBITRARIA dei candidati nel raggio, non i più vicini — in un centro storico
+// denso (centinaia di elementi Wikidata con coordinate in 200m) il vero bersaglio può restare
+// fuori da quei 20 per puro caso, anche a poche decine di metri di distanza (verificato reale:
+// 49m, mai comparso tra i 20 risultati). `wikibase:distance` (parametro documentato del servizio
+// geospaziale) espone la distanza come variabile legabile — `ORDER BY ASC(?distance)` prima del
+// LIMIT garantisce che i 20 tenuti siano davvero i più vicini. Non ancora riverificato dal vivo
+// su un lotto reale dopo questo fix (stesso blocco di rete di questa sessione verso
+// query.wikidata.org).
 function buildQuery(lat: number, lon: number, radiusM: number): string {
   // wikibase:around — stesso servizio SPARQL federato usato per il bbox in
   // lib/pois/wikidataSource.ts, qui con un centro+raggio invece di un box, più naturale per
@@ -124,9 +134,11 @@ SELECT DISTINCT ?item ?itemLabel ?coord WHERE {
     ?item wdt:P625 ?coord .
     bd:serviceParam wikibase:center "Point(${lon} ${lat})"^^geo:wktLiteral .
     bd:serviceParam wikibase:radius "${radiusKm}" .
+    bd:serviceParam wikibase:distance ?distance .
   }
   SERVICE wikibase:label { bd:serviceParam wikibase:language "it,en" }
 }
+ORDER BY ASC(?distance)
 LIMIT 20`
 }
 

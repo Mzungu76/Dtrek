@@ -80,6 +80,15 @@ function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): num
 
 interface WikidataCandidate { qid: string; label: string; lat: number; lon: number }
 
+// FIX (2026-09-27, bug segnalato dal vivo dall'utente su "Galleria Doria Pamphilj", Roma centro
+// storico): senza ORDER BY, il LIMIT 20 prende una fetta ARBITRARIA dei candidati nel raggio —
+// non necessariamente i più vicini. In un centro storico denso (centinaia di elementi Wikidata
+// con coordinate in 300m: chiese, palazzi, statue, fontane) il vero bersaglio può restare fuori
+// da quei 20 per puro caso, anche a 49m di distanza (verificato reale: Q1203458, 49m dal punto
+// Dtrek, MAI comparso tra i 20 risultati della query senza ordinamento). `wikibase:distance`
+// (parametro documentato del servizio geospaziale di Wikidata Query Service) espone la distanza
+// come variabile legabile — `ORDER BY ASC(?distance)` PRIMA del LIMIT garantisce che i 20 tenuti
+// siano davvero i più vicini, non una fetta qualunque.
 export function buildNearbyQuery(lat: number, lon: number, radiusM = SEARCH_RADIUS_M): string {
   const radiusKm = (radiusM / 1000).toFixed(3)
   return `
@@ -88,9 +97,11 @@ SELECT DISTINCT ?item ?itemLabel ?coord WHERE {
     ?item wdt:P625 ?coord .
     bd:serviceParam wikibase:center "Point(${lon} ${lat})"^^geo:wktLiteral .
     bd:serviceParam wikibase:radius "${radiusKm}" .
+    bd:serviceParam wikibase:distance ?distance .
   }
   SERVICE wikibase:label { bd:serviceParam wikibase:language "it,en" }
 }
+ORDER BY ASC(?distance)
 LIMIT 20`
 }
 
