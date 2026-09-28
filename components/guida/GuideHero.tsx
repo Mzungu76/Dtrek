@@ -3,7 +3,7 @@ import dynamic from 'next/dynamic'
 import { useMemo, type ReactNode } from 'react'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
-import { Car, SquareParking, Milestone, MapPinned, MapPin } from 'lucide-react'
+import { Car, SquareParking, Milestone, MapPinned, MapPin, Loader2 } from 'lucide-react'
 import type { TrackPoint } from '@/lib/tcxParser'
 import type { StartPointInfo } from '@/lib/routeBuilder/startPointInfo'
 import FallbackImage from '@/components/ui/FallbackImage'
@@ -20,6 +20,28 @@ function CoverFallback({ color, icon }: { color?: string; icon?: ReactNode }) {
       style={{ background: `linear-gradient(135deg, ${color ?? '#813619'}, #2E3A26)` }}
     >
       <span className="[&>svg]:w-16 [&>svg]:h-16 text-white/25">{icon}</span>
+    </div>
+  )
+}
+
+/** Stesso sfondo di CoverFallback ma con uno spinner al posto dell'icona di categoria — mostrato
+ *  SOLO mentre una foto che sappiamo esistere (photoUrl valorizzato) sta ancora scaricando/
+ *  decodificando lato browser. Verifica utente: prima di questo, in quella finestra (breve ma
+ *  visibile) non c'era nulla a coprire lo sfondo della pagina sotto al gradiente scuro del testo,
+ *  risultando in un lampo "schermo nero" — questo sfondo resta lì (stesso gradiente di sempre)
+ *  finché <Image> non ha finito di caricare, poi la foto vi si dissolve sopra (transition-opacity
+ *  qui sotto). */
+function CoverLoadingSpinner({ color }: { color?: string }) {
+  return (
+    // z-10: senza, questo div finisce sotto il gradiente scuro di leggibilità del testo e il
+    // blocco titolo più sotto in questo file (entrambi "absolute inset-0"/"absolute bottom-0" ma
+    // senza un proprio z-index, quindi vincono comunque per ordine nel DOM) — voluto per attenuare
+    // la FOTO sotto quel gradiente, non per uno spinner che deve restare nitido e ben visibile.
+    <div
+      className="absolute inset-0 z-10 flex items-center justify-center"
+      style={{ background: `linear-gradient(135deg, ${color ?? '#813619'}, #2E3A26)` }}
+    >
+      <Loader2 className="w-8 h-8 text-white/70 animate-spin" strokeWidth={2} />
     </div>
   )
 }
@@ -99,7 +121,17 @@ export default function GuideHero({
           // a differenza dei thumbnail più sotto nello scroll che restano lazy di default.
           // FallbackImage ricade sullo stesso gradiente+icona di "nessuna foto" quando l'URL non si
           // carica per davvero (link morto, hotlink protection...) — verificato dal vivo su Viterbo.
-          <FallbackImage src={photoUrl} alt="" fill priority sizes="100vw" className="object-cover"
+          //
+          // Verifica utente: prima di questo, tra il momento in cui photoUrl arrivava e quello in
+          // cui <Image> aveva davvero finito di dipingere, non c'era nulla sotto il gradiente scuro
+          // del testo — un lampo "schermo nero", breve ma visibile. loadingIndicator (gestito da
+          // FallbackImage stesso — vedi components/ui/FallbackImage.tsx) riempie esattamente quella
+          // finestra con lo stesso sfondo già usato per "nessuna foto", spinner incluso; la foto vi
+          // si dissolve sopra invece di comparire di scatto.
+          <FallbackImage
+            src={photoUrl} alt="" fill priority sizes="100vw"
+            className="object-cover"
+            loadingIndicator={<CoverLoadingSpinner color={fallbackColor} />}
             fallback={<CoverFallback color={fallbackColor} icon={fallbackIcon} />}
           >
             {/* Attribuzione richiesta dalla licenza CC BY-SA di Wikimedia Commons — solo sopra la

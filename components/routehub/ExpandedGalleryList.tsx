@@ -6,7 +6,7 @@ import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 import MetaTypeBadge from '@/components/MetaTypeBadge'
 import FallbackImage from '@/components/ui/FallbackImage'
 import { ctsLabel } from '@/lib/trailScore'
-import { GalleryMapThumb, visibleSortOptions, type SortKey } from './BottomGallery'
+import { GalleryMapThumb, ThumbLoadingSpinner, visibleSortOptions, type SortKey } from './BottomGallery'
 import type { HubMode, RouteHubItem } from './types'
 
 interface Props {
@@ -154,6 +154,7 @@ function ListRow({ item, mode, isCurrent, onSelect }: {
         <div className={`absolute inset-0 rounded-xl overflow-hidden ${isCurrent ? 'ring-2 ring-sky-400' : ''}`}>
           {item.coverPhotoUrl ? (
             <FallbackImage src={item.coverPhotoUrl} alt={item.title} fill sizes="64px" className="object-cover" loading="lazy"
+              loadingIndicator={<ThumbLoadingSpinner />}
               fallback={<GalleryMapThumb polyline={item.polyline} metaType={item.metaType} siteType={item.siteType} />}
             >
               <div className="absolute inset-0 bg-black/20 pointer-events-none" />

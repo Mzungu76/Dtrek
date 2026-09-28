@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, ChevronUp, Star, GitCompare, CalendarClock } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ChevronUp, Star, GitCompare, CalendarClock, Loader2 } from 'lucide-react'
 import FallbackImage from '@/components/ui/FallbackImage'
 import { useRouteHubState } from './useRouteHubState'
 import RouteCarousel from './RouteCarousel'
@@ -23,6 +23,22 @@ const OPEN_TRANSLATE_PX = 28
 const COMMIT_THRESHOLD = 0.45
 // px/ms — a flick faster than this commits the gesture even if it stopped short of the threshold.
 const FLING_VELOCITY = 0.9
+
+/** loadingIndicator per la copertina "magazine cover" a schermo intero (STAGE sotto) — stesso
+ *  sfondo forest già usato dal fallback "fuori dalla finestra visibile" (riga ~360), mai un nuovo
+ *  stile inventato ad hoc. z-20: senza, uno spinner reso dentro RouteCarousel resterebbe comunque
+ *  sotto la chrome (gradiente inferiore, frecce di swipe) più sotto in questo file, che usa già
+ *  z-10 sui propri overlay — qui deve restare sopra anche quella, non solo sotto il testo. Verifica
+ *  utente: stesso lampo "schermo nero" già risolto per l'hero della Guida aperta (GuideHero.tsx),
+ *  ma qui sulla copertina "chiusa" del carosello — la card che si vede aprendo la sezione Guide
+ *  prima ancora di aprire una singola Guida. */
+function CoverLoadingSpinner() {
+  return (
+    <div className="absolute inset-0 z-20 flex items-center justify-center bg-gradient-to-br from-forest-900 via-forest-800 to-forest-700">
+      <Loader2 className="w-8 h-8 text-white/70 animate-spin" strokeWidth={2} />
+    </div>
+  )
+}
 
 export default function RouteHub({
   mode, items, initialIndex, onIndexChange, bodyMode, tabs = [], renderSection,
@@ -344,6 +360,7 @@ export default function RouteHub({
                   loading={inWindow ? 'eager' : 'lazy'}
                   className="object-cover"
                   style={{ filter: 'saturate(1.25) contrast(1.08) brightness(0.85)' }}
+                  loadingIndicator={inWindow ? <CoverLoadingSpinner /> : undefined}
                   fallback={inWindow
                     ? <CoverMap polyline={slideItem.polyline} />
                     : <div className="absolute inset-0 bg-gradient-to-br from-forest-900 via-forest-800 to-forest-700" />}

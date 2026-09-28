@@ -259,6 +259,7 @@ const borgoItineraryMemoryCache = new Map<string, BorgoItinerary>()
 // solo non più uno state di un componente ormai smontato.
 const routePhotosMemoryCache = new Map<string, RoutePhoto[]>()
 const placeDetailMemoryCache = new Map<string, PlaceDetail>()
+const coverPhotoMemoryCache = new Map<string, { imageUrl: string | null; imageCredit: string | null }>()
 
 /**
  * Magazine-style tourist guide reader. The Breve tier is generated automatically (no user
@@ -317,6 +318,15 @@ export default function GuideReader({
   // perfino cambiare FAMIGLIA di scheda (scheda_pratica vs galleria_sicurezza dipende da
   // hasVisitInfo, derivato da placeDetail — vedi sitoCardFamily più sotto).
   const [placeDetailLoading, setPlaceDetailLoading] = useState(false)
+  // Copertina veloce (imageUrl/imageCredit soli) per GuideHero — verifica utente: "le immagini
+  // delle copertine sono lentissime da caricarsi" (stesso reclamo già risolto per la galleria in
+  // app/guida/GuidaHub.tsx). placeDetail sotto resta necessario per il resto della pagina
+  // (descrizione, orari, contatti, opere, luoghi correlati...) ma porta con sé tre query Supabase
+  // in più e l'arricchimento Wikipedia della descrizione — lavoro che l'hero non deve aspettare
+  // solo per sapere il proprio photoUrl. `?fields=cover` (app/api/places/[id]/route.ts) fa la
+  // stessa cascata cache-poi-fetch (lib/placePhotoCache.ts) ma da sola, in parallelo al fetch
+  // completo sotto invece che in coda ad esso.
+  const [coverPhoto, setCoverPhoto] = useState<{ imageUrl: string | null; imageCredit: string | null } | null>(null)
   // Guide dei Siti già nate da questo Borgo/Città (piano §51.3/§51.4) — passate a
   // BorgoTappeWidget per sapere, tappa per tappa, se "Leggi tutto" deve aprire quella esistente o
   // crearla al volo (verifica utente 2026-09-28: un solo bottone, mai una lista visibile a parte
@@ -502,6 +512,30 @@ export default function GuideReader({
     }).catch(() => {})
     return () => { cancelled = true }
   }, [hike.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Copertina veloce per l'hero — vedi il commento su coverPhoto sopra. In corsa col fetch
+  // completo sotto, non in coda: quando placeDetail (che porta comunque il proprio imageUrl)
+  // arriva già lì è ignorato (GuideHero sotto preferisce sempre placeDetail?.imageUrl quando
+  // presente), qui serve solo a non far aspettare l'hero al ramo più lento. Saltato quando
+  // placeDetailMemoryCache ha già il dato completo (stesso placeId riaperto in questa sessione):
+  // in quel caso l'effect sotto lo trova subito, senza passare da qui.
+  useEffect(() => {
+    if (hike.metaType === 'sentiero' || !hike.placeId) { setCoverPhoto(null); return }
+    if (placeDetailMemoryCache.has(hike.placeId)) return
+    const memoryCached = coverPhotoMemoryCache.get(hike.placeId)
+    if (memoryCached) { setCoverPhoto(memoryCached); return }
+    let cancelled = false
+    fetch(`/api/places/${hike.placeId}?fields=cover`)
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (!data) return
+        const cover = { imageUrl: data.imageUrl ?? null, imageCredit: data.imageCredit ?? null }
+        coverPhotoMemoryCache.set(hike.placeId!, cover)
+        if (!cancelled) setCoverPhoto(cover)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [hike.metaType, hike.placeId])
 
   // Borgo/Città e Sito: stesso endpoint già usato da app/mete/[id]/page.tsx per la scheda di
   // ricerca — nessun nuovo endpoint per la Guida. Mai richiesto per un Sentiero (planned_hikes ha
@@ -1399,8 +1433,8 @@ export default function GuideReader({
         driving={driving}
         startPoint={startPointInfo}
         coverMode={usesCoverPhoto ? 'photo' : 'map'}
-        photoUrl={placeDetail?.imageUrl}
-        photoCredit={placeDetail?.imageCredit}
+        photoUrl={placeDetail?.imageUrl ?? coverPhoto?.imageUrl}
+        photoCredit={placeDetail?.imageCredit ?? coverPhoto?.imageCredit}
         fallbackIcon={<FallbackIconComponent />}
         fallbackColor={coverFallbackColor}
         badgeIcon={usesCoverPhoto ? <FallbackIconComponent /> : undefined}
