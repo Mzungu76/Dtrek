@@ -71,7 +71,12 @@ export interface FetchTrailGraphResult {
  * time", not as a reason to fail the surrounding operation — Overpass is a
  * shared public service and can be slow/unavailable, and Map
  * Matching/Escape Engine both already degrade to "just the planned route"
- * without this data (that's the current, working behavior).
+ * without this data (that's the current, working behavior). See
+ * fetchWalkNetwork (lib/routeBuilder/osmGraph.ts) for the element-count
+ * circuit breaker that also throws through this same path — a huge bbox
+ * (an entire historic city center for a multi-tappa Borgo/Città) is the
+ * same kind of "not available this time", not a reason to block navigation
+ * start.
  */
 export async function fetchAndSaveTrailGraph(hikeId: string, routePolyline: [number, number][]): Promise<FetchTrailGraphResult> {
   const bbox = computeBbox(routePolyline).split(',').map(Number) as [number, number, number, number]

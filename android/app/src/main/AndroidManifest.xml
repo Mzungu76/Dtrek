@@ -24,11 +24,13 @@
 
             <!-- Schema personalizzato usato da Dtrek (web) per rilevare/aprire Navigator se
                  installato (lib/navigatorHandoff.ts) — un tentativo di redirect a
-                 dtreknavigator://open che, se nessuna app lo gestisce, il browser lascia
+                 dtreknavigator://open?path=... che, se nessuna app lo gestisce, il browser lascia
                  semplicemente fallire in silenzio (nessuna finestra di errore su Android),
-                 permettendo il fallback al navigatore via web. Sempre riapre semplicemente la
-                 Home di Navigator (server.url in capacitor.config.ts) — non instrada verso una
-                 schermata specifica, vedi commento in lib/navigatorHandoff.ts. -->
+                 permettendo il fallback al navigatore via web. Il parametro `path` (letto lato JS
+                 da components/navigation/NavigatorDeepLinkHandler.tsx via App.addListener
+                 'appUrlOpen', non da questo intent-filter — Android consegna l'URI completo così
+                 com'è) porta la WebView di Navigator direttamente sul percorso richiesto invece
+                 della sola Home (server.url in capacitor.config.ts). -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />

@@ -225,6 +225,25 @@ out body qt;`
     console.warn('[osmGraph] risposta Overpass parziale/incompleta per bbox (nessun mirror ha risposto completo)', bbox, '-', json.remark)
   }
 
+  // Verificato dal vivo su un itinerario Borgo/Città a più tappe (Viterbo): il bbox è quello
+  // dell'INTERO itinerario (tutte le tappe, non una sola giornata), con lo stesso padding usato
+  // per un Sentiero — copre l'intero centro storico, restituendo un numero di elementi ben oltre
+  // qualunque corridoio di un Sentiero già visto dal vivo (Chieti, il caso più grande finora
+  // documentato: 8345 nodi, già una volta causa di un rallentamento di diversi secondi in
+  // bridgeDisconnectedComponents prima che quella funzione venisse limitata ai soli nodi di
+  // minoranza — vedi il suo commento). Un centro storico intero, con ogni via/vicolo pedonale
+  // tracciato, moltiplica quel numero di un ordine di grandezza: costruire la mappa nodi/archi e
+  // poi ricucire (stitchNearbyEndpoints/bridgeDisconnectedComponents sotto) su un grafo così
+  // grande blocca il thread principale abbastanza a lungo da far comparire il dialogo "la pagina
+  // non risponde" del browser. Questo grafo resta un arricchimento best-effort per Map Matching/
+  // l'Escape Engine (entrambi degradano già al solo percorso pianificato senza di esso, mai un
+  // errore bloccante per la navigazione) — sopra questa soglia si rinuncia a costruirlo invece di
+  // rischiare di bloccare l'avvio della navigazione per un centro storico intero.
+  const MAX_ELEMENTS = 20_000
+  if (elements.length > MAX_ELEMENTS) {
+    throw new Error(`Rete OSM troppo grande per il grafo pedonale (${elements.length} elementi, tetto ${MAX_ELEMENTS})`)
+  }
+
   const nodes = new Map<number, GraphNode>()
   for (const el of elements) {
     if (el.type === 'node') nodes.set(el.id, { lat: el.lat, lon: el.lon, edges: [] })
