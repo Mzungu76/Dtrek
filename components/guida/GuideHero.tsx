@@ -102,12 +102,24 @@ export default function GuideHero({
 
   const hasGps = points.length > 1
 
-  // Vero solo dopo che <Image> ha finito di caricare/decodificare la foto corrente — pilota lo
-  // spinner sotto e il fade-in della foto stessa. Resettato ad ogni cambio di photoUrl (nuova
-  // Meta, o la cache di copertina che arriva dopo un fetch più lento — vedi GuideReader.tsx),
-  // mai lasciato "true" da una foto precedente mentre la nuova sta ancora caricando.
-  const [photoLoaded, setPhotoLoaded] = useState(false)
-  useEffect(() => { setPhotoLoaded(false) }, [photoUrl])
+  // photoLoaded pilota lo spinner sotto e il fade-in della foto — vero solo quando ENTRAMBE le
+  // condizioni sono vere: <Image> ha davvero finito di caricare (imageReady, via onLoad) E sono
+  // passati almeno MIN_SPINNER_MS dall'arrivo di questo photoUrl (minDelayDone). Verifica utente:
+  // con la sola imageReady, una foto già in cache del browser (ri-testata più volte sulla stessa
+  // Guida) carica così in fretta che lo spinner non arriva a dipingere nemmeno un frame prima di
+  // sparire — invisibile non perché rotto, ma perché non ha mai avuto il tempo di comparire. Il
+  // timer sotto gli garantisce sempre quella finestra minima, MAI un ritardo aggiuntivo quando il
+  // caricamento reale è più lento del timer (minDelayDone è già vero da un pezzo a quel punto).
+  const MIN_SPINNER_MS = 350
+  const [imageReady, setImageReady] = useState(false)
+  const [minDelayDone, setMinDelayDone] = useState(false)
+  useEffect(() => {
+    setImageReady(false)
+    setMinDelayDone(false)
+    const t = setTimeout(() => setMinDelayDone(true), MIN_SPINNER_MS)
+    return () => clearTimeout(t)
+  }, [photoUrl])
+  const photoLoaded = imageReady && minDelayDone
 
   return (
     <div
@@ -136,7 +148,7 @@ export default function GuideHero({
             <FallbackImage
               src={photoUrl} alt="" fill priority sizes="100vw"
               className={`object-cover transition-opacity duration-500 ${photoLoaded ? 'opacity-100' : 'opacity-0'}`}
-              onLoad={() => setPhotoLoaded(true)}
+              onLoad={() => setImageReady(true)}
               fallback={<CoverFallback color={fallbackColor} icon={fallbackIcon} />}
             >
               {/* Attribuzione richiesta dalla licenza CC BY-SA di Wikimedia Commons — solo sopra la
