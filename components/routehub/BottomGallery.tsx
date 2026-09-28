@@ -2,7 +2,7 @@
 import type * as L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { ArrowUpDown, Upload, Star, Search, X, Rows3, CalendarClock } from 'lucide-react'
+import { ArrowUpDown, Upload, Star, Search, X, Rows3, CalendarClock, Loader2 } from 'lucide-react'
 import RouteThumb from '@/components/RouteThumb'
 import { MiniScoreRing } from '@/components/ScoreRing'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
@@ -17,6 +17,23 @@ import type { HubMode, RouteHubItem, SortValues } from './types'
 // per restare leggibili, ma comunque compatta per non dominare la miniatura. Alzata da 30 a 36 —
 // a 30 il numero al centro risultava poco leggibile anche col font-size aumentato nel componente.
 const GALLERY_GAUGE_SIZE = 36
+
+/** loadingIndicator per la miniatura di copertina (80-128px, molto più piccola dell'hero a
+ *  Guida aperta — vedi GuideHero.tsx per lo stesso concetto in grande) — uno scrim scuro discreto
+ *  con uno spinner piccolo, non il gradiente pieno usato altrove: su una miniatura così piccola
+ *  un intero sfondo colorato dominerebbe la card invece di limitarsi a segnalare "sta arrivando".
+ *  Verifica utente: stesso lampo "schermo nero" già risolto per l'hero, mancava ancora qui, sulle
+ *  Guide chiuse della galleria in fondo allo schermo. */
+export function ThumbLoadingSpinner() {
+  // z-10: senza, finisce sotto il badge/il testo in fondo alla card qui sotto (entrambi
+  // "absolute" ma senza un proprio z-index, quindi vincono per ordine nel DOM) — stesso bug già
+  // trovato e corretto in GuideHero.tsx per l'hero della Guida aperta.
+  return (
+    <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/25">
+      <Loader2 className="w-4 h-4 md:w-5 md:h-5 text-white/80 animate-spin" strokeWidth={2.5} />
+    </div>
+  )
+}
 
 export type SortKey = 'date' | 'km' | 'dplus' | 'cts' | 'rating' | 'distance' | 'count'
 
@@ -368,6 +385,7 @@ export default function BottomGallery({
             }`}>
               {item.coverPhotoUrl ? (
                 <FallbackImage src={item.coverPhotoUrl} alt={item.title} fill sizes="(min-width: 1024px) 128px, (min-width: 768px) 112px, 80px" className="object-cover" loading="lazy"
+                  loadingIndicator={<ThumbLoadingSpinner />}
                   fallback={<GalleryMapThumb polyline={item.polyline} metaType={item.metaType} siteType={item.siteType} />}
                 >
                   <div className="absolute inset-0 bg-black/20 pointer-events-none" />

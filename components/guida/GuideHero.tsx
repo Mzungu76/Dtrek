@@ -1,6 +1,6 @@
 'use client'
 import dynamic from 'next/dynamic'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { Car, SquareParking, Milestone, MapPinned, MapPin, Loader2 } from 'lucide-react'
@@ -106,25 +106,6 @@ export default function GuideHero({
 
   const hasGps = points.length > 1
 
-  // photoLoaded pilota lo spinner sotto e il fade-in della foto — vero solo quando ENTRAMBE le
-  // condizioni sono vere: <Image> ha davvero finito di caricare (imageReady, via onLoad) E sono
-  // passati almeno MIN_SPINNER_MS dall'arrivo di questo photoUrl (minDelayDone). Verifica utente:
-  // con la sola imageReady, una foto già in cache del browser (ri-testata più volte sulla stessa
-  // Guida) carica così in fretta che lo spinner non arriva a dipingere nemmeno un frame prima di
-  // sparire — invisibile non perché rotto, ma perché non ha mai avuto il tempo di comparire. Il
-  // timer sotto gli garantisce sempre quella finestra minima, MAI un ritardo aggiuntivo quando il
-  // caricamento reale è più lento del timer (minDelayDone è già vero da un pezzo a quel punto).
-  const MIN_SPINNER_MS = 350
-  const [imageReady, setImageReady] = useState(false)
-  const [minDelayDone, setMinDelayDone] = useState(false)
-  useEffect(() => {
-    setImageReady(false)
-    setMinDelayDone(false)
-    const t = setTimeout(() => setMinDelayDone(true), MIN_SPINNER_MS)
-    return () => clearTimeout(t)
-  }, [photoUrl])
-  const photoLoaded = imageReady && minDelayDone
-
   return (
     <div
       className="relative w-full overflow-hidden [--hero-h:clamp(200px,50vw,300px)] md:[--hero-h:clamp(240px,32vw,380px)] lg:[--hero-h:clamp(280px,26vw,460px)]"
@@ -143,28 +124,25 @@ export default function GuideHero({
           //
           // Verifica utente: prima di questo, tra il momento in cui photoUrl arrivava e quello in
           // cui <Image> aveva davvero finito di dipingere, non c'era nulla sotto il gradiente scuro
-          // del testo — un lampo "schermo nero", breve ma visibile. CoverLoadingSpinner sotto
-          // riempie esattamente quella finestra con lo stesso sfondo già usato per "nessuna foto",
-          // spinner incluso; la foto vi si dissolve sopra (opacity + transition) invece di comparire
-          // di scatto.
-          <>
-            {!photoLoaded && <CoverLoadingSpinner color={fallbackColor} />}
-            <FallbackImage
-              src={photoUrl} alt="" fill priority sizes="100vw"
-              className={`object-cover transition-opacity duration-500 ${photoLoaded ? 'opacity-100' : 'opacity-0'}`}
-              onLoad={() => setImageReady(true)}
-              fallback={<CoverFallback color={fallbackColor} icon={fallbackIcon} />}
-            >
-              {/* Attribuzione richiesta dalla licenza CC BY-SA di Wikimedia Commons — solo sopra la
-                  foto vera (children di FallbackImage), mai sopra il ripiego: non c'è nulla da
-                  attribuire quando la foto non si è caricata. Vedi app/fonti-e-crediti. */}
-              {photoCredit && (
-                <span className="absolute top-2.5 right-2.5 bg-black/40 text-white/80 text-[9px] px-1.5 py-0.5 rounded backdrop-blur-sm">
-                  {photoCredit}
-                </span>
-              )}
-            </FallbackImage>
-          </>
+          // del testo — un lampo "schermo nero", breve ma visibile. loadingIndicator (gestito da
+          // FallbackImage stesso — vedi components/ui/FallbackImage.tsx) riempie esattamente quella
+          // finestra con lo stesso sfondo già usato per "nessuna foto", spinner incluso; la foto vi
+          // si dissolve sopra invece di comparire di scatto.
+          <FallbackImage
+            src={photoUrl} alt="" fill priority sizes="100vw"
+            className="object-cover"
+            loadingIndicator={<CoverLoadingSpinner color={fallbackColor} />}
+            fallback={<CoverFallback color={fallbackColor} icon={fallbackIcon} />}
+          >
+            {/* Attribuzione richiesta dalla licenza CC BY-SA di Wikimedia Commons — solo sopra la
+                foto vera (children di FallbackImage), mai sopra il ripiego: non c'è nulla da
+                attribuire quando la foto non si è caricata. Vedi app/fonti-e-crediti. */}
+            {photoCredit && (
+              <span className="absolute top-2.5 right-2.5 bg-black/40 text-white/80 text-[9px] px-1.5 py-0.5 rounded backdrop-blur-sm">
+                {photoCredit}
+              </span>
+            )}
+          </FallbackImage>
         ) : (
           <CoverFallback color={fallbackColor} icon={fallbackIcon} />
         )
