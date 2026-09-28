@@ -33,8 +33,12 @@ function CoverFallback({ color, icon }: { color?: string; icon?: ReactNode }) {
  *  qui sotto). */
 function CoverLoadingSpinner({ color }: { color?: string }) {
   return (
+    // z-10: senza, questo div finisce sotto il gradiente scuro di leggibilità del testo e il
+    // blocco titolo più sotto in questo file (entrambi "absolute inset-0"/"absolute bottom-0" ma
+    // senza un proprio z-index, quindi vincono comunque per ordine nel DOM) — voluto per attenuare
+    // la FOTO sotto quel gradiente, non per uno spinner che deve restare nitido e ben visibile.
     <div
-      className="absolute inset-0 flex items-center justify-center"
+      className="absolute inset-0 z-10 flex items-center justify-center"
       style={{ background: `linear-gradient(135deg, ${color ?? '#813619'}, #2E3A26)` }}
     >
       <Loader2 className="w-8 h-8 text-white/70 animate-spin" strokeWidth={2} />
