@@ -299,6 +299,27 @@ export async function getPlannedById(id: string): Promise<PlannedHike | null> {
 }
 
 /**
+ * Come getPlannedById, ma salta sempre la copia locale e attende la rete — per l'unica lettura
+ * dove una cache-first "abbastanza buona" non basta: app/guida/[id]/naviga, subito dopo aver
+ * calcolato per la prima volta l'itinerario a piedi di un Borgo/Città (GuideReader.tsx,
+ * computeBorgoWalkFields). Quel calcolo aggiorna prima lo stato React del chiamante (bottone
+ * "Naviga" visibile subito) e SOLO DOPO persiste su IndexedDB via updatePlannedMeta — se l'utente
+ * tocca "Naviga" nella finestra tra le due cose (probabile: il bottone diventa cliccabile
+ * nell'istante stesso in cui appare), getPlannedById cache-first ritroverebbe ancora la copia
+ * locale precedente, senza borgoWalkPolyline, con lo stesso identico vicolo cieco che questa
+ * funzione esiste per evitare. Ripiega sulla copia locale solo se la rete fallisce davvero
+ * (offline/errore) — mai un buco nero silenzioso rispetto a getPlannedById in quel caso. */
+export async function refetchPlannedById(id: string): Promise<PlannedHike | null> {
+  try {
+    const data = await apiFetch<PlannedHike>(`/api/planned?id=${encodeURIComponent(id)}`)
+    await lsSet(LS_KEYS.planned(id), data)
+    return data
+  } catch {
+    return lsGet<PlannedHike>(LS_KEYS.planned(id))
+  }
+}
+
+/**
  * Creates/overwrites a planned hike. Unlike every other write in this module,
  * this one still attempts the network call synchronously — the server
  * computes a personalized `assessment` (lib/hikeAssessment.ts) that the

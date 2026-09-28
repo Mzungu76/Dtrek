@@ -1,7 +1,7 @@
 'use client'
 import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
-import { getPlannedById, type PlannedHike } from '@/lib/plannedStore'
+import { getPlannedById, refetchPlannedById, type PlannedHike } from '@/lib/plannedStore'
 import { effectiveNavPolyline } from '@/lib/borgoWalkPolyline'
 import ActiveNavigationView from '@/components/navigation/ActiveNavigationView'
 import NavigatorAppPromo from '@/components/navigation/NavigatorAppPromo'
@@ -46,11 +46,21 @@ function NavigaPageInner() {
   useEffect(() => {
     let cancelled = false
     setFailure(null)
-    getPlannedById(id).then((h) => {
+    getPlannedById(id).then(async (h) => {
       if (cancelled) return
       if (!h) { setFailure('not-found'); return }
-      const walkPolyline = effectiveNavPolyline(h)
-      if (!walkPolyline?.length) { setFailure('no-route'); return }
+      let walkPolyline = effectiveNavPolyline(h)
+      if (!walkPolyline?.length) {
+        // La copia in cache può essere quella di un attimo prima che l'itinerario a piedi di un
+        // Borgo/Città venisse calcolato per la prima volta (GuideReader.tsx aggiorna il proprio
+        // stato React — e quindi rende cliccabile "Naviga" — PRIMA di finire di persistere su
+        // IndexedDB): un secondo tentativo che salta la cache e va dritto in rete distingue "non
+        // ancora calcolato per davvero" da "calcolato un istante fa, la cache non lo sa ancora".
+        const fresh = await refetchPlannedById(id)
+        if (cancelled) return
+        walkPolyline = fresh ? effectiveNavPolyline(fresh) : undefined
+        if (fresh && walkPolyline?.length) { h = fresh } else { setFailure('no-route'); return }
+      }
       setHike(h.routePolyline?.length ? h : { ...h, routePolyline: walkPolyline })
     })
     return () => { cancelled = true }
