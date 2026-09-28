@@ -161,3 +161,32 @@ export function splitPolylineByTappaEnds(
   segments.push(polyline.slice(start))
   return segments
 }
+
+/** Come splitPolylineByTappaEnds, ma per gli stop invece della polyline — usata per far
+ *  percorrere a Navigator UNA tappa alla volta come un percorso indipendente (verifica utente:
+ *  "I borghi contengono varie tappe con percorsi indipendenti"), invece dell'unica sessione
+ *  continua di sempre. Ogni confine di tappa (BorgoWalkTappaEnd) è per costruzione l'ULTIMO stop
+ *  della tappa che chiude (computeBorgoWalkFields sopra lo prende direttamente da lì), quindi il
+ *  confronto per coordinate è un confine esatto, non una vicinanza approssimata — la tolleranza
+ *  resta comunque la stessa di nearestPolylineIndex per restare robusti a un itinerario
+ *  leggermente cambiato da quando il confine è stato salvato (stessa cautela del commento lì).
+ *
+ * Rinuncia a spezzare (un solo gruppo, tutti gli stop) se anche un solo confine non trova lo stop
+ * corrispondente — stesso principio "meglio nessuna suddivisione che una sbagliata" di
+ * splitPolylineByTappaEnds. */
+export function groupWalkStopsByTappa(
+  stops: BorgoWalkStop[],
+  tappaEnds: BorgoWalkTappaEnd[] | undefined,
+): BorgoWalkStop[][] {
+  if (!tappaEnds || tappaEnds.length === 0 || stops.length === 0) return [stops]
+  const groups: BorgoWalkStop[][] = []
+  let start = 0
+  for (const end of tappaEnds) {
+    const idx = stops.findIndex((s, i) => i >= start && haversineM(s.lat, s.lon, end.lat, end.lon) <= TAPPA_BOUNDARY_MATCH_RADIUS_M)
+    if (idx === -1 || idx < start) return [stops]
+    groups.push(stops.slice(start, idx + 1))
+    start = idx + 1
+  }
+  if (start < stops.length) groups.push(stops.slice(start))
+  return groups
+}

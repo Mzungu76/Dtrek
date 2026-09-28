@@ -44,6 +44,12 @@ export interface NavPoi {
    *  bivacco "sicuro" senza sapere se è davvero aperto (vedi docs/rifugi-progettazione.md: dati
    *  di apertura affidabili richiedono una fonte esterna dedicata, non ancora integrata). */
   openingHours?: string
+  /** Numero d'ordine di visita (1-based) — solo per gli stop curati di un itinerario Borgo/Città
+   *  (ActiveNavigationView.tsx's borgoStops), mai per un POI Overpass generico: verifica utente,
+   *  "non ho la distinzione dei singoli punti" — le icone per tipo (peak/viewpoint/...) da sole non
+   *  bastano a distinguere/ordinare le tappe di un itinerario a piedi, a differenza dei POI
+   *  escursionistici sparsi lungo un Sentiero. undefined ⇒ nessun badge numerico sul marker. */
+  order?: number
 }
 
 /** A non-POI narrative beat along the route (climb start, viewpoint, exposed section...). 'tappa_end'

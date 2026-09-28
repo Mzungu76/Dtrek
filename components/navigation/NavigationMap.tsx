@@ -5,14 +5,14 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useSta
 import type { NavState } from '@/lib/navigation/types'
 import { computeDirectionArrows } from '@/lib/geoUtils'
 import { labelNearbyTrail, formatTrailDistance } from '@/lib/navigation/nearbyTrailLabels'
-import { poiBadgeMarkup } from '@/components/poiIcons'
+import { poiMarkerMarkup } from '@/components/poiIcons'
 import { POI_META, type PoiType } from '@/lib/overpass'
 import { shortestRotation } from '@/lib/navigation/orientation'
 import type { SlopeSegment } from '@/lib/navigation/routeSlopeSegments'
 
 interface Props {
   routePolyline: [number, number][]
-  pois: { id: string | number; lat: number; lon: number; name?: string; type?: string }[]
+  pois: { id: string | number; lat: number; lon: number; name?: string; type?: string; order?: number }[]
   position: { lat: number; lon: number } | null
   bearingDeg: number | null
   state: NavState
@@ -202,7 +202,7 @@ const NavigationMap = forwardRef<NavigationMapHandle, Props>(function Navigation
         const meta = poi.type ? POI_META[poi.type as PoiType] : undefined
         const icon = L.divIcon({
           className: '',
-          html: poiBadgeMarkup((poi.type as PoiType) ?? 'peak', meta?.color ?? defaultPoiColor, 26),
+          html: poiMarkerMarkup((poi.type as PoiType) ?? 'peak', meta?.color ?? defaultPoiColor, 26, poi.order),
           iconSize: [26, 26],
           iconAnchor: [13, 13],
         })
