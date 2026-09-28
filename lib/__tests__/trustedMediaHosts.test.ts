@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isTrustedMediaUrl } from '../placePhotoCache'
+import { isTrustedMediaUrl } from '../trustedMediaHosts'
 
 describe('isTrustedMediaUrl', () => {
   it('accetta upload.wikimedia.org (Action API di Wikipedia)', () => {

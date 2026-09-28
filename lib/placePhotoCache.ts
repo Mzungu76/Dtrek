@@ -22,6 +22,7 @@
 import { supabase } from './supabase'
 import { fetchNearbyWiki, fetchPageThumbnail } from './wikipedia'
 import { namesOverlap } from './metaSearch/borgoItinerary'
+import { isTrustedMediaUrl } from './trustedMediaHosts'
 
 // Copertina a piena larghezza (GuideHero) — ben oltre i pochi px che la miniatura REST di
 // Wikipedia porta di default (vedi fetchPageThumbnail in lib/wikipedia.ts, che chiede esplicitamente
@@ -38,26 +39,6 @@ export interface PlaceCoverPhoto {
   /** Testo da mostrare accanto alla foto — richiesto dalla licenza CC BY-SA di Wikimedia Commons
    *  (fonte di tutt'e tre i livelli sopra). Vedi app/fonti-e-crediti/page.tsx. */
   credit: string | null
-}
-
-// Un file caricato su Commons vive per sempre sotto uno di questi due host, quale che sia
-// l'endpoint che lo ha restituito (Wikidata P18 → Special:FilePath su commons.wikimedia.org,
-// l'Action API di Wikipedia → upload.wikimedia.org) — vedi i commenti sui due livelli sotto.
-// Verificato dal vivo (copertina di Viterbo, 2026-09-28): la riga aveva un image_url cache su un
-// terzo host ("thumb.wikimedia.org", MAI usato da nessuno dei due livelli qui) con parametri
-// utm_source/utm_campaign/utm_content che nessuna risposta MediaWiki genera mai da sola — indizio
-// di una riscrittura da un intermediario di rete tra la richiesta e la risposta, non un URL reale
-// su cui contare. Restava comunque cache come "foto trovata" (un positivo, mai riprovato — vedi
-// fetchPlaceCoverPhoto sotto) e non si caricava mai. Un host diverso da questi due viene ora
-// trattato come "nessuna foto trovata", mai cache come copertina permanente.
-const TRUSTED_MEDIA_HOSTS = new Set(['upload.wikimedia.org', 'commons.wikimedia.org'])
-
-export function isTrustedMediaUrl(url: string): boolean {
-  try {
-    return TRUSTED_MEDIA_HOSTS.has(new URL(url).hostname)
-  } catch {
-    return false
-  }
 }
 
 interface PlaceForPhoto {
@@ -145,9 +126,9 @@ export async function fetchPlaceCoverPhoto(place: PlaceForPhoto): Promise<PlaceC
     // definitivo (nessun motivo di ricercarlo di nuovo): il costo di riprovare ad ogni chiamata
     // ricade solo sui luoghi genuinamente senza foto, il caso raro.
     //
-    // isTrustedMediaUrl in più (mai richiesto prima di isTrustedMediaUrl esistere): un image_url già
-    // in cache ma su un host non riconosciuto (vedi il commento su TRUSTED_MEDIA_HOSTS sopra) non è
-    // un positivo di cui fidarsi — trattato come se non ci fosse, così la riga si autoripara al
+    // isTrustedMediaUrl in più (mai richiesto prima di isTrustedMediaUrl esistere, vedi
+    // lib/trustedMediaHosts.ts): un image_url già in cache ma su un host non riconosciuto non è un
+    // positivo di cui fidarsi — trattato come se non ci fosse, così la riga si autoripara al
     // prossimo giro invece di restare bloccata per sempre su un dato scritto prima di questo
     // controllo (questa colonna non è mai popolata da nessun'altra pipeline — vedi il commento in
     // cima al file — quindi ogni valore qui viene sempre e solo da fetchFromWikidataP18/

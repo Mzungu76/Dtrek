@@ -4,7 +4,8 @@ import { getUserFromRequest } from '@/lib/supabaseAuth'
 import { fetchSourceCounts } from '@/lib/metaSearch/placeQuery'
 import { fetchRelatedPlaces, type RelatedPlace } from '@/lib/metaSearch/placeRelations'
 import { searchAndFetch, fetchExtendedExtract } from '@/lib/wikipedia'
-import { fetchPlaceCoverPhoto, isTrustedMediaUrl } from '@/lib/placePhotoCache'
+import { fetchPlaceCoverPhoto } from '@/lib/placePhotoCache'
+import { isTrustedMediaUrl } from '@/lib/trustedMediaHosts'
 import { getMuseumOpere, type MuseumOpera } from '@/lib/museumOpere'
 import { haversineM } from '@/lib/geoUtils'
 import { inferSiteTypeFromName, type MetaType, type SiteType } from '@/lib/metaTypes'
@@ -125,10 +126,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   // saltato del tutto — nessuna opera qui apposta, non serve per una miniatura di galleria.
   if (req.nextUrl.searchParams.get('fields') === 'cover') {
     // isTrustedMediaUrl in più rispetto al solo "manca già un image_url" — un `data.image_url` su
-    // un host non riconosciuto (verificato dal vivo su Viterbo, vedi lib/placePhotoCache.ts's
-    // TRUSTED_MEDIA_HOSTS) non è un dato di cui fidarsi qui, mai mostrato direttamente: la ricerca
-    // dal vivo sotto (fetchPlaceCoverPhoto) lo autoripara. Nessun costo aggiunto per il caso comune
-    // (un image_url già buono resta il fast path di sempre, zero query in più).
+    // un host non riconosciuto (verificato dal vivo su Viterbo, vedi lib/trustedMediaHosts.ts) non
+    // è un dato di cui fidarsi qui, mai mostrato direttamente: la ricerca dal vivo sotto
+    // (fetchPlaceCoverPhoto) lo autoripara. Nessun costo aggiunto per il caso comune (un image_url
+    // già buono resta il fast path di sempre, zero query in più).
     const trustedImageUrl = data.image_url && isTrustedMediaUrl(data.image_url) ? data.image_url : null
     const coverPhoto = trustedImageUrl ? null : await fetchPlaceCoverPhoto({
       id: data.id, name: data.name, lat: data.latitude, lon: data.longitude, wikidataId: data.wikidata_id,
