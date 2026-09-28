@@ -1,9 +1,9 @@
 'use client'
 import dynamic from 'next/dynamic'
-import { useMemo, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
-import { Car, SquareParking, Milestone, MapPinned, MapPin } from 'lucide-react'
+import { Car, SquareParking, Milestone, MapPinned, MapPin, Loader2 } from 'lucide-react'
 import type { TrackPoint } from '@/lib/tcxParser'
 import type { StartPointInfo } from '@/lib/routeBuilder/startPointInfo'
 import FallbackImage from '@/components/ui/FallbackImage'
@@ -20,6 +20,24 @@ function CoverFallback({ color, icon }: { color?: string; icon?: ReactNode }) {
       style={{ background: `linear-gradient(135deg, ${color ?? '#813619'}, #2E3A26)` }}
     >
       <span className="[&>svg]:w-16 [&>svg]:h-16 text-white/25">{icon}</span>
+    </div>
+  )
+}
+
+/** Stesso sfondo di CoverFallback ma con uno spinner al posto dell'icona di categoria — mostrato
+ *  SOLO mentre una foto che sappiamo esistere (photoUrl valorizzato) sta ancora scaricando/
+ *  decodificando lato browser. Verifica utente: prima di questo, in quella finestra (breve ma
+ *  visibile) non c'era nulla a coprire lo sfondo della pagina sotto al gradiente scuro del testo,
+ *  risultando in un lampo "schermo nero" — questo sfondo resta lì (stesso gradiente di sempre)
+ *  finché <Image> non ha finito di caricare, poi la foto vi si dissolve sopra (transition-opacity
+ *  qui sotto). */
+function CoverLoadingSpinner({ color }: { color?: string }) {
+  return (
+    <div
+      className="absolute inset-0 flex items-center justify-center"
+      style={{ background: `linear-gradient(135deg, ${color ?? '#813619'}, #2E3A26)` }}
+    >
+      <Loader2 className="w-8 h-8 text-white/70 animate-spin" strokeWidth={2} />
     </div>
   )
 }
@@ -84,6 +102,13 @@ export default function GuideHero({
 
   const hasGps = points.length > 1
 
+  // Vero solo dopo che <Image> ha finito di caricare/decodificare la foto corrente — pilota lo
+  // spinner sotto e il fade-in della foto stessa. Resettato ad ogni cambio di photoUrl (nuova
+  // Meta, o la cache di copertina che arriva dopo un fetch più lento — vedi GuideReader.tsx),
+  // mai lasciato "true" da una foto precedente mentre la nuova sta ancora caricando.
+  const [photoLoaded, setPhotoLoaded] = useState(false)
+  useEffect(() => { setPhotoLoaded(false) }, [photoUrl])
+
   return (
     <div
       className="relative w-full overflow-hidden [--hero-h:clamp(200px,50vw,300px)] md:[--hero-h:clamp(240px,32vw,380px)] lg:[--hero-h:clamp(280px,26vw,460px)]"
@@ -99,18 +124,31 @@ export default function GuideHero({
           // a differenza dei thumbnail più sotto nello scroll che restano lazy di default.
           // FallbackImage ricade sullo stesso gradiente+icona di "nessuna foto" quando l'URL non si
           // carica per davvero (link morto, hotlink protection...) — verificato dal vivo su Viterbo.
-          <FallbackImage src={photoUrl} alt="" fill priority sizes="100vw" className="object-cover"
-            fallback={<CoverFallback color={fallbackColor} icon={fallbackIcon} />}
-          >
-            {/* Attribuzione richiesta dalla licenza CC BY-SA di Wikimedia Commons — solo sopra la
-                foto vera (children di FallbackImage), mai sopra il ripiego: non c'è nulla da
-                attribuire quando la foto non si è caricata. Vedi app/fonti-e-crediti. */}
-            {photoCredit && (
-              <span className="absolute top-2.5 right-2.5 bg-black/40 text-white/80 text-[9px] px-1.5 py-0.5 rounded backdrop-blur-sm">
-                {photoCredit}
-              </span>
-            )}
-          </FallbackImage>
+          //
+          // Verifica utente: prima di questo, tra il momento in cui photoUrl arrivava e quello in
+          // cui <Image> aveva davvero finito di dipingere, non c'era nulla sotto il gradiente scuro
+          // del testo — un lampo "schermo nero", breve ma visibile. CoverLoadingSpinner sotto
+          // riempie esattamente quella finestra con lo stesso sfondo già usato per "nessuna foto",
+          // spinner incluso; la foto vi si dissolve sopra (opacity + transition) invece di comparire
+          // di scatto.
+          <>
+            {!photoLoaded && <CoverLoadingSpinner color={fallbackColor} />}
+            <FallbackImage
+              src={photoUrl} alt="" fill priority sizes="100vw"
+              className={`object-cover transition-opacity duration-500 ${photoLoaded ? 'opacity-100' : 'opacity-0'}`}
+              onLoad={() => setPhotoLoaded(true)}
+              fallback={<CoverFallback color={fallbackColor} icon={fallbackIcon} />}
+            >
+              {/* Attribuzione richiesta dalla licenza CC BY-SA di Wikimedia Commons — solo sopra la
+                  foto vera (children di FallbackImage), mai sopra il ripiego: non c'è nulla da
+                  attribuire quando la foto non si è caricata. Vedi app/fonti-e-crediti. */}
+              {photoCredit && (
+                <span className="absolute top-2.5 right-2.5 bg-black/40 text-white/80 text-[9px] px-1.5 py-0.5 rounded backdrop-blur-sm">
+                  {photoCredit}
+                </span>
+              )}
+            </FallbackImage>
+          </>
         ) : (
           <CoverFallback color={fallbackColor} icon={fallbackIcon} />
         )
