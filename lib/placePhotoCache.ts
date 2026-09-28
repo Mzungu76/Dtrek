@@ -22,6 +22,7 @@
 import { supabase } from './supabase'
 import { fetchNearbyWiki, fetchPageThumbnail } from './wikipedia'
 import { namesOverlap } from './metaSearch/borgoItinerary'
+import { isTrustedMediaUrl } from './trustedMediaHosts'
 
 // Copertina a piena larghezza (GuideHero) — ben oltre i pochi px che la miniatura REST di
 // Wikipedia porta di default (vedi fetchPageThumbnail in lib/wikipedia.ts, che chiede esplicitamente
@@ -68,6 +69,7 @@ async function fetchFromWikidataP18(wikidataId: string): Promise<PlaceCoverPhoto
     // PRIMA di salvarlo in cache, invece di allentare remotePatterns (che aprirebbe anche http per
     // qualunque altro sotto-dominio wikimedia, non solo questo).
     const httpsUrl = rawUrl.replace(/^http:/, 'https:')
+    if (!isTrustedMediaUrl(httpsUrl)) return null
     // wdt:P18 restituisce un URL Special:FilePath senza `width`, che Commons serve alla risoluzione
     // ORIGINALE del file caricato (spesso diversi MB) — MediaWiki reindirizza invece a una miniatura
     // pre-ridimensionata quando `width` è presente, stesso meccanismo (via Action API) già usato per
@@ -89,7 +91,7 @@ async function fetchFromWikipediaThumbnail(name: string, lat: number, lon: numbe
   const match = pages.find(p => p.thumbnail && namesOverlap(name, p.title))
   if (!match?.thumbnail) return null
   const url = await fetchPageThumbnail(match.title, 'it', COVER_PHOTO_WIDTH)
-  return url ? { url, credit: 'Wikipedia' } : null
+  return url && isTrustedMediaUrl(url) ? { url, credit: 'Wikipedia' } : null
 }
 
 /**
@@ -123,7 +125,15 @@ export async function fetchPlaceCoverPhoto(place: PlaceForPhoto): Promise<PlaceC
     // Wikipedia perfettamente valida, per il resto della sessione. Un positivo resta invece
     // definitivo (nessun motivo di ricercarlo di nuovo): il costo di riprovare ad ogni chiamata
     // ricade solo sui luoghi genuinamente senza foto, il caso raro.
-    if (cached?.image_url) {
+    //
+    // isTrustedMediaUrl in più (mai richiesto prima di isTrustedMediaUrl esistere, vedi
+    // lib/trustedMediaHosts.ts): un image_url già in cache ma su un host non riconosciuto non è un
+    // positivo di cui fidarsi — trattato come se non ci fosse, così la riga si autoripara al
+    // prossimo giro invece di restare bloccata per sempre su un dato scritto prima di questo
+    // controllo (questa colonna non è mai popolata da nessun'altra pipeline — vedi il commento in
+    // cima al file — quindi ogni valore qui viene sempre e solo da fetchFromWikidataP18/
+    // fetchFromWikipediaThumbnail sotto).
+    if (cached?.image_url && isTrustedMediaUrl(cached.image_url)) {
       return { url: cached.image_url as string, credit: cached.image_credit as string | null }
     }
 

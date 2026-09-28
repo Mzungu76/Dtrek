@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import Image from 'next/image'
 import { ChevronLeft, ChevronRight, ChevronUp, Star, GitCompare, CalendarClock } from 'lucide-react'
+import FallbackImage from '@/components/ui/FallbackImage'
 import { useRouteHubState } from './useRouteHubState'
 import RouteCarousel from './RouteCarousel'
 import RoutePage from './RoutePage'
@@ -338,17 +338,21 @@ export default function RouteHub({
           renderSlide={(slideItem, _i, inWindow) => (
             slideItem.coverPhotoUrl ? (
               <div className="absolute inset-0 overflow-hidden">
-                <Image
+                <FallbackImage
                   src={slideItem.coverPhotoUrl} alt={slideItem.title}
                   fill sizes="100vw" draggable={false}
                   loading={inWindow ? 'eager' : 'lazy'}
                   className="object-cover"
                   style={{ filter: 'saturate(1.25) contrast(1.08) brightness(0.85)' }}
-                />
-                <div
-                  className="absolute inset-0 pointer-events-none mix-blend-multiply"
-                  style={{ background: 'linear-gradient(160deg, rgba(129,54,25,0.35) 0%, rgba(28,71,36,0.3) 55%, rgba(7,24,36,0.45) 100%)' }}
-                />
+                  fallback={inWindow
+                    ? <CoverMap polyline={slideItem.polyline} />
+                    : <div className="absolute inset-0 bg-gradient-to-br from-forest-900 via-forest-800 to-forest-700" />}
+                >
+                  <div
+                    className="absolute inset-0 pointer-events-none mix-blend-multiply"
+                    style={{ background: 'linear-gradient(160deg, rgba(129,54,25,0.35) 0%, rgba(28,71,36,0.3) 55%, rgba(7,24,36,0.45) 100%)' }}
+                  />
+                </FallbackImage>
               </div>
             ) : inWindow ? (
               <CoverMap polyline={slideItem.polyline} />

@@ -2,12 +2,12 @@
 import type * as L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import Image from 'next/image'
 import { ArrowUpDown, Upload, Star, Search, X, Rows3, CalendarClock } from 'lucide-react'
 import RouteThumb from '@/components/RouteThumb'
 import { MiniScoreRing } from '@/components/ScoreRing'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 import MetaTypeBadge from '@/components/MetaTypeBadge'
+import FallbackImage from '@/components/ui/FallbackImage'
 import { ctsLabel } from '@/lib/trailScore'
 import { META_TYPE_CONFIG, SITE_TYPE_CONFIG, type MetaType, type SiteType } from '@/lib/metaTypes'
 import type { HubMode, RouteHubItem, SortValues } from './types'
@@ -367,10 +367,11 @@ export default function BottomGallery({
               isCurrent ? 'border-[3px] border-sky-400 shadow-[0_0_0_2px_rgba(56,189,248,0.35)]' : 'border-[1.5px] border-white/35'
             }`}>
               {item.coverPhotoUrl ? (
-                <>
-                  <Image src={item.coverPhotoUrl} alt={item.title} fill sizes="(min-width: 1024px) 128px, (min-width: 768px) 112px, 80px" className="object-cover" loading="lazy" />
+                <FallbackImage src={item.coverPhotoUrl} alt={item.title} fill sizes="(min-width: 1024px) 128px, (min-width: 768px) 112px, 80px" className="object-cover" loading="lazy"
+                  fallback={<GalleryMapThumb polyline={item.polyline} metaType={item.metaType} siteType={item.siteType} />}
+                >
                   <div className="absolute inset-0 bg-black/20 pointer-events-none" />
-                </>
+                </FallbackImage>
               ) : (
                 // Nessuna foto ⇒ mappa del percorso, non un placeholder generico — stessa priorità
                 // usata per la copertina grande a percorso aperto (vedi cover() in ResocontoHub.tsx e

@@ -1,10 +1,10 @@
 'use client'
 import { useRef, type ReactNode } from 'react'
-import Image from 'next/image'
 import { ArrowUpDown, CalendarClock, Search, Star, X } from 'lucide-react'
 import { MiniScoreRing } from '@/components/ScoreRing'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 import MetaTypeBadge from '@/components/MetaTypeBadge'
+import FallbackImage from '@/components/ui/FallbackImage'
 import { ctsLabel } from '@/lib/trailScore'
 import { GalleryMapThumb, visibleSortOptions, type SortKey } from './BottomGallery'
 import type { HubMode, RouteHubItem } from './types'
@@ -153,10 +153,11 @@ function ListRow({ item, mode, isCurrent, onSelect }: {
       <div className="shrink-0 w-16 h-16 relative">
         <div className={`absolute inset-0 rounded-xl overflow-hidden ${isCurrent ? 'ring-2 ring-sky-400' : ''}`}>
           {item.coverPhotoUrl ? (
-            <>
-              <Image src={item.coverPhotoUrl} alt={item.title} fill sizes="64px" className="object-cover" loading="lazy" />
+            <FallbackImage src={item.coverPhotoUrl} alt={item.title} fill sizes="64px" className="object-cover" loading="lazy"
+              fallback={<GalleryMapThumb polyline={item.polyline} metaType={item.metaType} siteType={item.siteType} />}
+            >
               <div className="absolute inset-0 bg-black/20 pointer-events-none" />
-            </>
+            </FallbackImage>
           ) : (
             <GalleryMapThumb polyline={item.polyline} metaType={item.metaType} siteType={item.siteType} />
           )}
