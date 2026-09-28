@@ -7,14 +7,14 @@ import { circlePolygonLonLat } from '@/lib/geoUtils'
 import type { NavState } from '@/lib/navigation/types'
 import type { Natura2000Feature } from '@/lib/natura2000/natura2000Client'
 import { labelNearbyTrail, formatTrailDistance } from '@/lib/navigation/nearbyTrailLabels'
-import { poiBadgeMarkup } from '@/components/poiIcons'
+import { poiMarkerMarkup } from '@/components/poiIcons'
 import { POI_META, type PoiType } from '@/lib/overpass'
 import { shortestRotation } from '@/lib/navigation/orientation'
 import type { SlopeSegment } from '@/lib/navigation/routeSlopeSegments'
 
 interface Props {
   routePolyline: [number, number][]
-  pois: { id: string | number; lat: number; lon: number; name?: string; type?: string }[]
+  pois: { id: string | number; lat: number; lon: number; name?: string; type?: string; order?: number }[]
   position: { lat: number; lon: number } | null
   bearingDeg: number | null
   state: NavState
@@ -559,7 +559,7 @@ const NavigationMapLibre = forwardRef<NavigationMapLibreHandle, Props>(function 
       for (const poi of pois) {
         const meta = poi.type ? POI_META[poi.type as PoiType] : undefined
         const el = document.createElement('div')
-        el.innerHTML = poiBadgeMarkup((poi.type as PoiType) ?? 'peak', meta?.color ?? defaultPoiColor, 26)
+        el.innerHTML = poiMarkerMarkup((poi.type as PoiType) ?? 'peak', meta?.color ?? defaultPoiColor, 26, poi.order)
         el.style.cursor = 'pointer'
         if (onPoiTap) el.addEventListener('click', (e) => { e.stopPropagation(); onPoiTap(poi.id) })
         const marker = new maplibregl.Marker({ element: el }).setLngLat([poi.lon, poi.lat]).addTo(map)

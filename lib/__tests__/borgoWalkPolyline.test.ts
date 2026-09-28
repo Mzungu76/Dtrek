@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeBorgoWalkFields, nearestPolylineIndex, splitPolylineByTappaEnds, visitedBorgoStops } from '../borgoWalkPolyline'
+import { computeBorgoWalkFields, nearestPolylineIndex, splitPolylineByTappaEnds, groupWalkStopsByTappa, visitedBorgoStops } from '../borgoWalkPolyline'
 import type { BorgoItinerary } from '@/app/api/borgo-itinerary/route'
 
 function itinerary(overrides: Partial<BorgoItinerary> = {}): BorgoItinerary {
@@ -121,6 +121,29 @@ describe('splitPolylineByTappaEnds', () => {
 
   it('confine non trovato entro il raggio → rinuncia a spezzare, un solo segmento', () => {
     expect(splitPolylineByTappaEnds(polyline, [{ lat: 9, lon: 9 }])).toEqual([polyline])
+  })
+})
+
+describe('groupWalkStopsByTappa', () => {
+  const stopA = { id: 'a', name: 'Chiesa', lat: 1, lon: 1 }
+  const stopB = { id: 'b', name: 'Museo', lat: 2, lon: 2 }
+  const stopC = { id: 'c', name: 'Castello', lat: 3, lon: 3 }
+  const stops = [stopA, stopB, stopC]
+
+  it('nessun confine → un solo gruppo con tutti gli stop', () => {
+    expect(groupWalkStopsByTappa(stops, undefined)).toEqual([stops])
+  })
+
+  it('un confine sull\'ultimo stop di una tappa → due gruppi, il confine chiude il primo', () => {
+    expect(groupWalkStopsByTappa(stops, [{ lat: 2, lon: 2 }])).toEqual([[stopA, stopB], [stopC]])
+  })
+
+  it('confine non trovato → rinuncia a spezzare, un solo gruppo', () => {
+    expect(groupWalkStopsByTappa(stops, [{ lat: 9, lon: 9 }])).toEqual([stops])
+  })
+
+  it('nessuno stop → un solo gruppo vuoto', () => {
+    expect(groupWalkStopsByTappa([], [{ lat: 2, lon: 2 }])).toEqual([[]])
   })
 })
 

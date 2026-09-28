@@ -2,9 +2,10 @@
 import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { getPlannedById, refetchPlannedById, type PlannedHike } from '@/lib/plannedStore'
-import { effectiveNavPolyline } from '@/lib/borgoWalkPolyline'
+import { effectiveNavPolyline, groupWalkStopsByTappa, splitPolylineByTappaEnds } from '@/lib/borgoWalkPolyline'
 import ActiveNavigationView from '@/components/navigation/ActiveNavigationView'
 import NavigatorAppPromo from '@/components/navigation/NavigatorAppPromo'
+import TappaPicker from '@/components/navigation/TappaPicker'
 import type { LocationProviderFactory } from '@/lib/native/locationSource'
 import { SimulationLocationProvider } from '@/lib/navigation/simulation/simulationLocationProvider'
 import { buildScenario, SCENARIO_NAMES, SCENARIO_LABELS, type ScenarioName } from '@/lib/navigation/simulation/presetScenarios'
@@ -36,12 +37,49 @@ function NavigaPageInner() {
   const simulateParam = searchParams.get('simulate')
   const scenarioName = isScenarioName(simulateParam) ? simulateParam : null
 
+  // Un Borgo/Città su più giornate — verifica utente ("I borghi contengono varie tappe con
+  // percorsi indipendenti... implementare questo sistema in Navigator"): prima d'ora l'unica
+  // opzione era ripartire sempre dalla tappa 1, senza poter scegliere direttamente una tappa
+  // successiva. groupWalkStopsByTappa/splitPolylineByTappaEnds (lib/borgoWalkPolyline.ts) tornano
+  // sempre un solo gruppo/segmento quando non c'è nulla da spezzare (itinerario a tappa unica, o
+  // un Sentiero/Sito senza borgoWalkTappaEnds) — safe da chiamare incondizionatamente.
+  const tappaGroups = useMemo(
+    () => hike ? groupWalkStopsByTappa(hike.borgoWalkStops ?? [], hike.borgoWalkTappaEnds) : [],
+    [hike],
+  )
+  const polylineSegments = useMemo(
+    () => hike ? splitPolylineByTappaEnds(hike.routePolyline ?? [], hike.borgoWalkTappaEnds) : [],
+    [hike],
+  )
+  const hasMultipleTappe = tappaGroups.length > 1 && tappaGroups.length === polylineSegments.length
+  const tappaParam = searchParams.get('tappa')
+  const chosenTappaIndex = tappaParam != null ? Number(tappaParam) - 1 : null
+  const needsTappaChoice = hasMultipleTappe
+    && (chosenTappaIndex == null || Number.isNaN(chosenTappaIndex) || chosenTappaIndex < 0 || chosenTappaIndex >= tappaGroups.length)
+
+  // La Meta effettivamente passata al motore di navigazione — tagliata alla sola tappa scelta
+  // quando ce n'è più di una, così ogni tappa resta un percorso indipendente (route+stop propri,
+  // rinumerati da 1 — vedi ActiveNavigationView.tsx's pois), non un'unica sessione continua.
+  // borgoWalkTappaEnds azzerato sulla copia tagliata: nessun confine di tappa RESIDUO dentro una
+  // sola tappa già isolata (buildTappaEndMoments non troverebbe comunque un match nella polyline
+  // più corta, ma è più chiaro renderlo esplicito qui).
+  const navigableHike = useMemo(() => {
+    if (!hike) return null
+    if (!hasMultipleTappe || chosenTappaIndex == null || needsTappaChoice) return hike
+    return {
+      ...hike,
+      routePolyline: polylineSegments[chosenTappaIndex],
+      borgoWalkStops: tappaGroups[chosenTappaIndex],
+      borgoWalkTappaEnds: undefined,
+    }
+  }, [hike, hasMultipleTappe, chosenTappaIndex, needsTappaChoice, polylineSegments, tappaGroups])
+
   const locationProviderFactory = useMemo<LocationProviderFactory | undefined>(() => {
-    if (!scenarioName || !hike?.routePolyline?.length) return undefined
-    const fixes = buildScenario(scenarioName, hike.routePolyline)
+    if (!scenarioName || !navigableHike?.routePolyline?.length) return undefined
+    const fixes = buildScenario(scenarioName, navigableHike.routePolyline)
     return (onFix, onError) => new SimulationLocationProvider({ fixes, speed: 8 }, onFix, onError)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scenarioName, hike?.id])
+  }, [scenarioName, navigableHike?.id])
 
   useEffect(() => {
     let cancelled = false
@@ -82,13 +120,24 @@ function NavigaPageInner() {
     )
   }
 
-  if (!hike) {
+  if (!hike || !navigableHike) {
     return <div className="fixed inset-0 flex items-center justify-center bg-slate-900 text-white">Caricamento…</div>
+  }
+
+  if (needsTappaChoice) {
+    return (
+      <TappaPicker
+        title={hike.title}
+        tappaGroups={tappaGroups}
+        onPick={(i) => router.replace(`/guida/${encodeURIComponent(id)}/naviga?tappa=${i + 1}`)}
+        onCancel={() => router.push(`/guida/${encodeURIComponent(id)}`)}
+      />
+    )
   }
 
   return (
     <ActiveNavigationView
-      hike={hike}
+      hike={navigableHike}
       locationProviderFactory={locationProviderFactory}
       simulationLabel={scenarioName ? SCENARIO_LABELS[scenarioName] : undefined}
     />

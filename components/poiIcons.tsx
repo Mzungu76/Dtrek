@@ -44,3 +44,18 @@ export function poiIconMarkup(type: PoiType, sizePx = 15, color = '#ffffff'): st
 export function poiBadgeMarkup(type: PoiType, color: string, sizePx: number, shadowBlur = 2): string {
   return `<div style="width:${sizePx}px;height:${sizePx}px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;box-shadow:0 1px ${shadowBlur}px rgba(0,0,0,0.45);border:2px solid white">${poiIconMarkup(type, Math.round(sizePx * 0.52))}</div>`
 }
+
+/** Come poiBadgeMarkup, con un numero d'ordine sovrapposto nell'angolo — verifica utente: gli stop
+ *  di un itinerario Borgo/Città curato (ActiveNavigationView.tsx's borgoStops, NavPoi.order) usano
+ *  spesso la stessa icona di ripiego (peak) quando il siteType non è risolto, indistinguibili l'uno
+ *  dall'altro senza un numero. `order` undefined ⇒ badge normale, invariato — un POI Overpass
+ *  generico (mai numerato) continua a passare di qui senza alcuna differenza visibile. Un'unica
+ *  stringa HTML invece di manipolazione DOM separata: la stessa funziona sia per L.divIcon
+ *  (Leaflet, NavigationMap.tsx) sia per un marker element.innerHTML (MapLibre GL,
+ *  NavigationMapLibre.tsx). */
+export function poiMarkerMarkup(type: PoiType, color: string, sizePx: number, order?: number): string {
+  const badge = poiBadgeMarkup(type, color, sizePx)
+  if (order == null) return badge
+  const numberBadge = `<div style="position:absolute;top:-6px;right:-6px;min-width:16px;height:16px;padding:0 3px;border-radius:9999px;background:#1c1917;color:#fff;font:700 10px/16px sans-serif;text-align:center;border:1.5px solid white;box-shadow:0 1px 2px rgba(0,0,0,0.45)">${order}</div>`
+  return `<div style="position:relative;width:${sizePx}px;height:${sizePx}px">${badge}${numberBadge}</div>`
+}

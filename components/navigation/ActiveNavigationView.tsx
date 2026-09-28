@@ -329,9 +329,14 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   const borgoStops = hike.metaType === 'borgo_citta' ? hike.borgoWalkStops : undefined
   const pois = useMemo<NavPoi[]>(() => {
     if (borgoStops?.length) {
-      return borgoStops.map((s) => ({
+      // order 1-based nell'ordine di visita reale (borgoWalkStops è già ordinato così,
+      // computeBorgoWalkFields in lib/borgoWalkPolyline.ts) — verifica utente: senza un numero, i
+      // marker di un itinerario a piedi curato sono indistinguibili l'uno dall'altro (spesso la
+      // stessa identica icona "peak" di ripiego per uno stop senza siteType risolto).
+      return borgoStops.map((s, i) => ({
         id: s.id, lat: s.lat, lon: s.lon, name: s.name,
         type: s.siteType ? siteTypeToPoiType(s.siteType) : undefined,
+        order: i + 1,
       }))
     }
     const raw = (hike.cachedPois ?? []) as PoiItem[]
