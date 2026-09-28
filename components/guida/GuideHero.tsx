@@ -1,14 +1,28 @@
 'use client'
 import dynamic from 'next/dynamic'
-import Image from 'next/image'
 import { useMemo, type ReactNode } from 'react'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { Car, SquareParking, Milestone, MapPinned, MapPin } from 'lucide-react'
 import type { TrackPoint } from '@/lib/tcxParser'
 import type { StartPointInfo } from '@/lib/routeBuilder/startPointInfo'
+import FallbackImage from '@/components/ui/FallbackImage'
 
 const MapView = dynamic(() => import('@/components/MapView'), { ssr: false })
+
+/** Ripiego per coverMode='photo' senza foto — sia quando non ce n'è mai stata una (photoUrl
+ *  assente) sia quando c'era ma il caricamento è fallito davvero (FallbackImage sotto). Estratto
+ *  per non duplicare lo stesso markup nei due punti in cui serve. */
+function CoverFallback({ color, icon }: { color?: string; icon?: ReactNode }) {
+  return (
+    <div
+      className="absolute inset-0 flex items-center justify-center"
+      style={{ background: `linear-gradient(135deg, ${color ?? '#813619'}, #2E3A26)` }}
+    >
+      <span className="[&>svg]:w-16 [&>svg]:h-16 text-white/25">{icon}</span>
+    </div>
+  )
+}
 
 const START_POINT_ICON = {
   parcheggio: SquareParking,
@@ -83,14 +97,22 @@ export default function GuideHero({
           // e conversione AVIF/WebP invece di scaricare per intero qualunque risoluzione la fonte
           // restituisca. `priority` perché è l'immagine sopra la piega della pagina (candidata LCP),
           // a differenza dei thumbnail più sotto nello scroll che restano lazy di default.
-          <Image src={photoUrl} alt="" fill priority sizes="100vw" className="object-cover" />
-        ) : (
-          <div
-            className="absolute inset-0 flex items-center justify-center"
-            style={{ background: `linear-gradient(135deg, ${fallbackColor ?? '#813619'}, #2E3A26)` }}
+          // FallbackImage ricade sullo stesso gradiente+icona di "nessuna foto" quando l'URL non si
+          // carica per davvero (link morto, hotlink protection...) — verificato dal vivo su Viterbo.
+          <FallbackImage src={photoUrl} alt="" fill priority sizes="100vw" className="object-cover"
+            fallback={<CoverFallback color={fallbackColor} icon={fallbackIcon} />}
           >
-            <span className="[&>svg]:w-16 [&>svg]:h-16 text-white/25">{fallbackIcon}</span>
-          </div>
+            {/* Attribuzione richiesta dalla licenza CC BY-SA di Wikimedia Commons — solo sopra la
+                foto vera (children di FallbackImage), mai sopra il ripiego: non c'è nulla da
+                attribuire quando la foto non si è caricata. Vedi app/fonti-e-crediti. */}
+            {photoCredit && (
+              <span className="absolute top-2.5 right-2.5 bg-black/40 text-white/80 text-[9px] px-1.5 py-0.5 rounded backdrop-blur-sm">
+                {photoCredit}
+              </span>
+            )}
+          </FallbackImage>
+        ) : (
+          <CoverFallback color={fallbackColor} icon={fallbackIcon} />
         )
       ) : hasGps ? (
         <div
@@ -119,14 +141,6 @@ export default function GuideHero({
       <div className="absolute inset-0" style={{
         background: 'linear-gradient(to top, rgba(31,22,15,0.88) 0%, rgba(31,22,15,0.4) 42%, rgba(31,22,15,0.08) 78%, transparent 100%)',
       }} />
-
-      {/* Attribuzione richiesta dalla licenza CC BY-SA di Wikimedia Commons — vedi
-          lib/placePhotoCache.ts e app/fonti-e-crediti. */}
-      {coverMode === 'photo' && photoUrl && photoCredit && (
-        <span className="absolute top-2.5 right-2.5 bg-black/40 text-white/80 text-[9px] px-1.5 py-0.5 rounded backdrop-blur-sm">
-          {photoCredit}
-        </span>
-      )}
 
       <div className="absolute bottom-0 left-0 right-0 px-5 sm:px-8 md:px-10 pb-5 md:pb-7">
         <span className="inline-flex items-center gap-1.5 bg-terra-500 text-white text-[8px] font-bold tracking-[2.5px] px-2.5 py-1 rounded-sm mb-2.5 uppercase">

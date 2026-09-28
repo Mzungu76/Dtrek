@@ -1,12 +1,12 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
-import Image from 'next/image'
 import { fetchNearbyWiki, isSpecificName } from '@/lib/wikipedia'
 import type { PoiItem, PoiType } from '@/lib/overpass'
 import type { WikiPage } from '@/lib/wikipedia'
 import type { TrackPoint } from '@/lib/tcxParser'
 import { sectionHeading } from '@/components/routehub/overlayTheme'
-import { ExternalLink, Eye } from 'lucide-react'
+import { ExternalLink, Eye, ImageOff } from 'lucide-react'
+import FallbackImage from '@/components/ui/FallbackImage'
 import { streetViewUrl } from '@/lib/overpass'
 import { NamedPoiIcon, GroupPoiBadge } from '@/components/PoiIconChip'
 import PoiMap from '../PoiMap'
@@ -73,12 +73,17 @@ function PoiCard({ entry, highlighted, dimmed, onTap, hasStreetView }: {
     >
       <a href={entry.url} target="_blank" rel="noopener noreferrer" onClick={onTap}>
         <div className="relative h-28 sm:h-32 overflow-hidden bg-stone-100">
-          <Image
+          <FallbackImage
             src={entry.thumbnail}
             alt={entry.title}
             fill
             sizes="176px"
             className="object-cover group-hover:scale-105 transition-transform duration-500"
+            fallback={
+              <div className="absolute inset-0 flex items-center justify-center bg-stone-100">
+                <ImageOff className="w-6 h-6 text-stone-300" />
+              </div>
+            }
           />
         </div>
         <div className="p-2.5 pb-1">

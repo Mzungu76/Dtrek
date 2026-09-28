@@ -4,7 +4,7 @@ import { getUserFromRequest } from '@/lib/supabaseAuth'
 import { fetchSourceCounts } from '@/lib/metaSearch/placeQuery'
 import { fetchRelatedPlaces, type RelatedPlace } from '@/lib/metaSearch/placeRelations'
 import { searchAndFetch, fetchExtendedExtract } from '@/lib/wikipedia'
-import { fetchPlaceCoverPhoto } from '@/lib/placePhotoCache'
+import { fetchPlaceCoverPhoto, isTrustedMediaUrl } from '@/lib/placePhotoCache'
 import { getMuseumOpere, type MuseumOpera } from '@/lib/museumOpere'
 import { haversineM } from '@/lib/geoUtils'
 import { inferSiteTypeFromName, type MetaType, type SiteType } from '@/lib/metaTypes'
@@ -124,14 +124,17 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   // dtrek_places.image_url — da qui in poi anche questo resta una singola SELECT), il resto
   // saltato del tutto — nessuna opera qui apposta, non serve per una miniatura di galleria.
   if (req.nextUrl.searchParams.get('fields') === 'cover') {
-    let coverPhoto: { url: string; credit: string | null } | null = null
-    if (!data.image_url) {
-      coverPhoto = await fetchPlaceCoverPhoto({
-        id: data.id, name: data.name, lat: data.latitude, lon: data.longitude, wikidataId: data.wikidata_id,
-      })
-    }
+    // isTrustedMediaUrl in più rispetto al solo "manca già un image_url" — un `data.image_url` su
+    // un host non riconosciuto (verificato dal vivo su Viterbo, vedi lib/placePhotoCache.ts's
+    // TRUSTED_MEDIA_HOSTS) non è un dato di cui fidarsi qui, mai mostrato direttamente: la ricerca
+    // dal vivo sotto (fetchPlaceCoverPhoto) lo autoripara. Nessun costo aggiunto per il caso comune
+    // (un image_url già buono resta il fast path di sempre, zero query in più).
+    const trustedImageUrl = data.image_url && isTrustedMediaUrl(data.image_url) ? data.image_url : null
+    const coverPhoto = trustedImageUrl ? null : await fetchPlaceCoverPhoto({
+      id: data.id, name: data.name, lat: data.latitude, lon: data.longitude, wikidataId: data.wikidata_id,
+    })
     return NextResponse.json({
-      imageUrl: data.image_url ?? coverPhoto?.url ?? null,
+      imageUrl: trustedImageUrl ?? coverPhoto?.url ?? null,
       openingHours: data.opening_hours,
     })
   }
@@ -214,15 +217,15 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   }
 
   // Foto di copertina con cache (lib/placePhotoCache.ts) — cascata Wikidata P18 → Wikipedia (match
-  // sul nome, più precisa del semplice searchAndFetch sopra) → geosearch Commons. Solo quando
-  // manca già un image_url proprio: mai a rimpiazzare un dato reale già buono, stesso principio
-  // già applicato sopra per la descrizione.
-  let coverPhoto: { url: string; credit: string | null } | null = null
-  if (!data.image_url) {
-    coverPhoto = await fetchPlaceCoverPhoto({
-      id: data.id, name: data.name, lat: data.latitude, lon: data.longitude, wikidataId: data.wikidata_id,
-    })
-  }
+  // sul nome, più precisa del semplice searchAndFetch sopra) → geosearch Commons. Solo quando manca
+  // già un image_url proprio E FIDATO (isTrustedMediaUrl — verificato dal vivo su Viterbo: un
+  // image_url cache su un host non riconosciuto non va mostrato direttamente, la ricerca dal vivo
+  // qui sotto lo autoripara) — mai a rimpiazzare un dato reale già buono, stesso principio già
+  // applicato sopra per la descrizione.
+  const trustedImageUrl = data.image_url && isTrustedMediaUrl(data.image_url) ? data.image_url : null
+  const coverPhoto = trustedImageUrl ? null : await fetchPlaceCoverPhoto({
+    id: data.id, name: data.name, lat: data.latitude, lon: data.longitude, wikidataId: data.wikidata_id,
+  })
 
   // dtrek_places.subtype è una colonna condivisa a significato diverso per tipologia (lib/
   // metaTypes.ts): PlaceCategory ('borgo'|'citta') per un borgo_citta, SiteType per un sito —
@@ -248,11 +251,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     province: data.province,
     municipality: data.municipality,
     address: data.address,
-    imageUrl: data.image_url ?? coverPhoto?.url ?? null,
-    // Solo dalla ricerca appena fatta (coverPhoto) — mai da data.image_credit: quella colonna non
-    // è nella select principale sopra apposta (vedi il commento lì), e un image_url già presente
-    // in questa riga oggi non può comunque venire da lì (nessuna fonte della pipeline lo popola
-    // ancora, vedi supabase/migrations/add_place_photo_cache_columns.sql).
+    imageUrl: trustedImageUrl ?? coverPhoto?.url ?? null,
     imageCredit: coverPhoto?.credit ?? null,
     officialUrl: data.official_url,
     website: data.website,
