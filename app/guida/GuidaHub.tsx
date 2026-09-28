@@ -874,6 +874,11 @@ export default function GuidaHub({ id }: { id?: string }) {
     try {
       const deletedId = hike.id
       await deletePlanned(deletedId)
+      // Guide di Sito nate da una tappa di QUESTO Borgo/Città (parentMetaId) — deletePlanned le ha
+      // già rimosse dalla cache locale ricorsivamente, ma senza toglierle anche da `items` (lo
+      // stato React di questa sessione, mai riletto da zero finché non si passa da /guida) le loro
+      // card resterebbero visibili qui sotto finché la pagina non viene rimontata.
+      const deletedIds = new Set([deletedId, ...items.filter(it => it.parentMetaId === deletedId).map(it => it.id)])
       // Verifica utente: dopo l'eliminazione restava a vedere la STESSA guida appena cancellata.
       // Causa reale: GuidaHub serve sia /guida sia /guida/[id] con la STESSA istanza React — Next
       // non la rimonta passando dall'uno all'altro (nessun key/route boundary che lo forzi), quindi
@@ -884,7 +889,7 @@ export default function GuidaHub({ id }: { id?: string }) {
       // lo schermo restava congelato sulla vista precedente indipendentemente da quanto in fretta
       // la cancellazione fosse davvero avvenuta. Aggiornati qui direttamente, mai in attesa di un
       // remount che in questo flusso non arriva.
-      setItems(prev => prev.filter(it => it.id !== deletedId))
+      setItems(prev => prev.filter(it => !deletedIds.has(it.id)))
       setCurrentId(null)
       setHike(null)
       // Il toast si accende SUBITO, prima ancora di navigare — sessionStorage resta come rete di

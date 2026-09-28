@@ -377,9 +377,19 @@ export async function updatePlannedMeta(
 
 /** Removes from the local cache immediately and queues the deletion for background sync. */
 export async function deletePlanned(id: string): Promise<void> {
-  await lsDel(LS_KEYS.planned(id))
+  // Guide di Sito nate da una tappa di QUESTO Borgo/Città (parentMetaId, piano §51.3/§51.4 —
+  // "Leggi tutto" su BorgoTappeWidget). Il server le cancella già ricorsivamente (vedi
+  // lib/deletePercorsoCascade.ts), ma senza specchiare la stessa cascata qui la cache locale non
+  // lo saprebbe: le loro card resterebbero visibili nell'elenco (e riaprirle darebbe un 404) fino
+  // al prossimo resync completo. Ricorsiva per coerenza con la cascata server, anche se oggi solo
+  // un Borgo/Città può avere figli — mai un Sito.
   const list = await lsGet<PlannedHikeMeta[]>(LS_KEYS.plannedList)
-  if (list) await lsSet(LS_KEYS.plannedList, list.filter((h) => h.id !== id))
+  const children = (list ?? []).filter((h) => h.parentMetaId === id)
+  for (const child of children) await deletePlanned(child.id)
+
+  await lsDel(LS_KEYS.planned(id))
+  const listAfterChildren = await lsGet<PlannedHikeMeta[]>(LS_KEYS.plannedList)
+  if (listAfterChildren) await lsSet(LS_KEYS.plannedList, listAfterChildren.filter((h) => h.id !== id))
   await obEnqueue(ENTITY_TYPE, id, 'delete')
   scheduleFlush()
 }
