@@ -136,6 +136,11 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     })
     return NextResponse.json({
       imageUrl: trustedImageUrl ?? coverPhoto?.url ?? null,
+      // null quando trustedImageUrl (un image_url già in dtrek_places non porta con sé una
+      // credit propria — solo fetchPlaceCoverPhoto/coverPhoto la valorizza, stesso campo
+      // imageCredit della risposta completa sotto). GuideHero.tsx mostra l'attribuzione solo
+      // quando presente, mai un'etichetta vuota.
+      imageCredit: coverPhoto?.credit ?? null,
       openingHours: data.opening_hours,
     })
   }
