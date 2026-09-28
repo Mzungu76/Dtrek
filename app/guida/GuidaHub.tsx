@@ -1287,6 +1287,19 @@ export default function GuidaHub({ id }: { id?: string }) {
         variant: 'terra',
       }
     }
+    // Stesso vicolo cieco del guard sopra, ma per le ALTRE schede della galleria (verificato dal
+    // vivo: "Naviga" restava sempre presente e apriva app/guida/[id]/naviga su un percorso senza
+    // nulla da seguire per qualunque Borgo/Città il cui itinerario non fosse ancora pronto, perché
+    // il guard sopra copre solo l'hike davvero aperto). Niente fetch in più: poiCount arriva già
+    // sincrono da borgoWalkStopsHash (vedi metaToItem/il commento sopra "poiCount ora arriva già
+    // dentro fresh"), polyline da routePolyline allo stesso modo — entrambi affidabili quanto i
+    // campi usati dal guard sopra, solo per un item diverso da quello aperto.
+    if (routeItem.id !== hike?.id) {
+      const hasRouteToFollow = routeItem.metaType === 'borgo_citta'
+        ? !!routeItem.poiCount
+        : (routeItem.polyline?.length ?? 0) > 1
+      if (!hasRouteToFollow) return null
+    }
     return {
       label: 'Naviga',
       icon: Navigation,

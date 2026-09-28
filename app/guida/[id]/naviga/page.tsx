@@ -18,7 +18,16 @@ function NavigaPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [hike, setHike] = useState<PlannedHike | null>(null)
-  const [notFound, setNotFound] = useState(false)
+  // Due esiti diversi dietro lo stesso vicolo cieco, prima indistinguibili: 'not-found' (nessuna
+  // copia locale e la rete non ha risposto — capita quando questa pagina si apre in un contesto
+  // che non ha mai visto questo percorso, es. l'app nativa Navigator con la sua cache separata da
+  // quella del browser/PWA, vedi lib/navigatorHandoff.ts) vs 'no-route' (il percorso esiste mp non
+  // ha ancora un itinerario a piedi calcolato — lo stesso caso già escluso dal bottone "Naviga" per
+  // la guida davvero aperta in app/guida/GuidaHub.tsx, ma non rilevabile in anticipo per le altre
+  // schede di una galleria). Messaggi e azioni diversi invece di un unico "non disponibile
+  // offline" sempre uguale anche quando il device è online e la causa è un'altra.
+  const [failure, setFailure] = useState<'not-found' | 'no-route' | null>(null)
+  const [retryCount, setRetryCount] = useState(0)
 
   // Dev/testing only (docs/navigation-engine-roadmap.md — Simulation layer): open
   // /guida/<id>/naviga?simulate=off_route (or any name in SCENARIO_NAMES) to drive the whole
@@ -36,21 +45,29 @@ function NavigaPageInner() {
 
   useEffect(() => {
     let cancelled = false
+    setFailure(null)
     getPlannedById(id).then((h) => {
       if (cancelled) return
-      if (!h) { setNotFound(true); return }
+      if (!h) { setFailure('not-found'); return }
       const walkPolyline = effectiveNavPolyline(h)
-      if (!walkPolyline?.length) { setNotFound(true); return }
+      if (!walkPolyline?.length) { setFailure('no-route'); return }
       setHike(h.routePolyline?.length ? h : { ...h, routePolyline: walkPolyline })
     })
     return () => { cancelled = true }
-  }, [id])
+  }, [id, retryCount])
 
-  if (notFound) {
+  if (failure) {
     return (
       <div className="fixed inset-0 flex flex-col items-center justify-center gap-3 bg-slate-900 text-white p-6 text-center">
-        <p>Impossibile avviare la navigazione: percorso non disponibile offline.</p>
-        <button onClick={() => router.push(`/guida/${id}`)} className="px-4 py-2 rounded-lg bg-sky-600">Torna al percorso</button>
+        <p>
+          {failure === 'no-route'
+            ? "L'itinerario a piedi di questo percorso non è ancora pronto — riprova tra qualche istante."
+            : 'Impossibile avviare la navigazione: percorso non disponibile offline e nessuna connessione per scaricarlo ora.'}
+        </p>
+        <div className="flex gap-2">
+          <button onClick={() => setRetryCount((n) => n + 1)} className="px-4 py-2 rounded-lg bg-sky-600">Riprova</button>
+          <button onClick={() => router.push(`/guida/${id}`)} className="px-4 py-2 rounded-lg bg-slate-700">Torna al percorso</button>
+        </div>
       </div>
     )
   }
