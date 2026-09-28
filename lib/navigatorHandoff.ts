@@ -4,12 +4,19 @@
 // app/navigatore/traccia — entrambi già funzionanti in un browser qualunque, LocationSource
 // degrada da sola a navigator.geolocation quando Capacitor.isNativePlatform() è false).
 
-// Schema registrato dall'intent-filter di MainActivity (android/app/src/main/AndroidManifest.xml)
-// — riapre sempre la Home di Navigator, non instrada verso una schermata specifica: bastava per
-// il caso "l'app c'è, aprila", che è tutto ciò che serve qui. Un deep-link verso una schermata
-// precisa (es. direttamente sulla traccia di un percorso) resta un miglioramento possibile in
-// futuro, non necessario oggi.
-const NAVIGATOR_SCHEME_URL = 'dtreknavigator://open'
+// Schema registrato dall'intent-filter di MainActivity (android/app/src/main/AndroidManifest.xml).
+// Il parametro `path` porta la WebView di Navigator direttamente sul percorso richiesto invece di
+// riaprire sempre e solo la sua Home — verificato dal vivo: passando da una Guida a "Naviga",
+// l'app nativa si apriva ma restava sulla Home, obbligando a ritrovare a mano il percorso appena
+// scelto. Letto da components/navigation/NavigatorDeepLinkHandler.tsx (App.addListener
+// 'appUrlOpen'), montato solo dentro l'app nativa — un path assente, malformato o non tra quelli
+// concessi a Navigator (lib/navigatorAllowedPaths.ts) lascia semplicemente la Home come
+// destinazione, mai un crash.
+const NAVIGATOR_SCHEME = 'dtreknavigator://open'
+
+function buildNavigatorUrl(targetPath: string): string {
+  return `${NAVIGATOR_SCHEME}?path=${encodeURIComponent(targetPath)}`
+}
 
 // Tempo entro cui, se il browser è ancora in primo piano, si assume che nessuna app abbia
 // risposto allo schema — né troppo breve (falso negativo su un device lento) né troppo lungo
@@ -46,7 +53,7 @@ export function tryOpenNavigatorApp(router: { push: (path: string) => void }, fa
   let handedOff = false
   const onVisibilityChange = () => { if (document.hidden) handedOff = true }
   document.addEventListener('visibilitychange', onVisibilityChange)
-  window.location.href = NAVIGATOR_SCHEME_URL
+  window.location.href = buildNavigatorUrl(fallbackPath)
   setTimeout(() => {
     document.removeEventListener('visibilitychange', onVisibilityChange)
     // Oltre al flag impostato dall'evento, si ricontrolla document.hidden direttamente qui: se

@@ -13,6 +13,7 @@ import GlobalBackInterceptor from '@/app/components/GlobalBackInterceptor'
 import SplashScreen from '@/components/SplashScreen'
 import NativeStatusBar from '@/components/NativeStatusBar'
 import NavigatorBackHandler from '@/components/NavigatorBackHandler'
+import NavigatorDeepLinkHandler from '@/components/navigation/NavigatorDeepLinkHandler'
 import SessionKeepAlive from '@/components/SessionKeepAlive'
 import OnboardingGate from '@/components/onboarding/OnboardingGate'
 import SyncDebugPanel from '@/components/SyncDebugPanel'
@@ -63,6 +64,7 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
     <>
       <NativeStatusBar />
       <NavigatorBackHandler />
+      <NavigatorDeepLinkHandler />
       <SplashScreen />
       <SessionKeepAlive />
       <GlobalBackInterceptor />
