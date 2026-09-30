@@ -10,6 +10,10 @@ export const DASHBOARD_WIDGET_IDS = [
   'quote', 'prossima-uscita', 'recovery', 'forma', 'volume', 'streak',
   'traguardo', 'diario-attivo', 'percorsi-per-te', 'raccolte', 'accesso-rapido',
   'record', 'heatmap', 'mensile', 'tss',
+  'obiettivo-annuale', 'sfida-mese', 'quote-massime', 'record-anno', 'anniversari',
+  'confronto-settimana', 'distanza-cumulata', 'distribuzione-distanze', 'giorni-settimana',
+  'ora-partenza', 'mese-record', 'dislivello-uscite', 'lo-sapevi', 'fase-lunare', 'alba-tramonto',
+  'meteo-uscita', 'reportage-da-scrivere', 'da-riprovare', 'foto-diario',
 ] as const
 
 export type DashboardWidgetId = typeof DASHBOARD_WIDGET_IDS[number]

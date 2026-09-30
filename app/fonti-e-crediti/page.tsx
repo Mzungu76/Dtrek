@@ -51,6 +51,18 @@ const SOURCES: CreditSource[] = [
     note: 'Cartografia escursionistica con curve di livello (dati OSM e SRTM), usata per alcune miniature.',
   },
   {
+    name: 'Open-Meteo',
+    url: 'https://open-meteo.com/',
+    license: 'CC BY 4.0',
+    note: 'Previsioni e dati meteo storici mostrati nelle uscite, nei diari e nei widget della Bacheca.',
+  },
+  {
+    name: 'Wikipedia e Wikivoyage',
+    url: 'https://www.wikipedia.org/',
+    license: 'CC BY-SA 4.0',
+    note: 'Descrizioni dei luoghi e curiosità nelle guide, nella navigazione e nei widget. Ogni testo indica la voce di provenienza.',
+  },
+  {
     name: 'MapTiler',
     url: 'https://www.maptiler.com/copyright/',
     license: '© MapTiler · © OpenStreetMap contributors',

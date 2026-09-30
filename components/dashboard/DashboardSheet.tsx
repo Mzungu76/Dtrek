@@ -6,6 +6,7 @@ import { it } from 'date-fns/locale'
 import { Pencil, Plus, X, ChevronUp, ChevronDown, Check, LayoutDashboard } from 'lucide-react'
 import { MobileNavBar, DesktopNav } from '@/components/Navbar'
 import { WIDGET_CATALOG, WIDGET_BY_ID } from '@/components/dashboard/widgets'
+import { WIDGET_CATEGORIES } from '@/components/dashboard/widgetKit'
 import {
   normalizeDashboardConfig, DEFAULT_DASHBOARD_CONFIG, DEFAULT_TAB_ID,
   type DashboardConfig, type DashboardTab, type DashboardWidgetId,
@@ -406,19 +407,31 @@ export default function DashboardSheet({ data }: { data: DashboardData }) {
           <div className="flex-1 overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+16px)]">
             {availableToAdd.length === 0 ? (
               <p className="text-center text-white/50 text-sm mt-10">Hai già tutti i widget disponibili su questa scheda.</p>
-            ) : availableToAdd.map(w => (
-              <button
-                key={w.id}
-                onClick={() => addWidget(w.id)}
-                className="w-full flex items-center gap-3.5 py-3 border-b border-white/10 text-left"
-              >
-                <div className="w-11 h-11 rounded-xl shrink-0 bg-white/5 flex items-center justify-center">
-                  <w.icon className="w-5 h-5 text-white/70" />
-                </div>
-                <span className="flex-1 text-[14px] font-medium text-white">{w.label}</span>
-                <Plus className="w-4 h-4 text-forest-400 shrink-0" />
-              </button>
-            ))}
+            ) : WIDGET_CATEGORIES.map(cat => {
+              const items = availableToAdd.filter(w => w.category === cat)
+              if (items.length === 0) return null
+              return (
+                <section key={cat} className="mt-5">
+                  <h3 className="font-barlow text-[11px] font-bold uppercase tracking-[1.5px] text-white/45 mb-1">{cat}</h3>
+                  {items.map(w => (
+                    <button
+                      key={w.id}
+                      onClick={() => addWidget(w.id)}
+                      className="w-full flex items-center gap-3.5 py-3 border-b border-white/10 text-left"
+                    >
+                      <div className="w-11 h-11 rounded-xl shrink-0 bg-white/5 flex items-center justify-center">
+                        <w.icon className="w-5 h-5 text-white/70" />
+                      </div>
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-[14px] font-medium text-white">{w.label}</span>
+                        {w.description && <span className="block text-[11.5px] leading-snug text-white/50 mt-0.5">{w.description}</span>}
+                      </span>
+                      <Plus className="w-4 h-4 text-forest-400 shrink-0" />
+                    </button>
+                  ))}
+                </section>
+              )
+            })}
           </div>
         </div>
       )}

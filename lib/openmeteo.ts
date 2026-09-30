@@ -1,5 +1,12 @@
-// Open-Meteo API — 100% gratuita, nessuna chiave richiesta
+// Open-Meteo API — nessuna chiave richiesta.
 // https://open-meteo.com/
+//
+// ATTENZIONE ai termini: l'API gratuita è riservata all'uso NON commerciale (limite indicativo
+// 10.000 chiamate al giorno) e non ha garanzie di disponibilità; l'uso commerciale richiede un
+// abbonamento (piano Standard a pagamento). I dati sono CC BY 4.0: l'attribuzione è obbligatoria
+// (vedi /fonti-e-crediti e la riga nei widget meteo). Prima di far pagare l'app va deciso se
+// passare al piano a pagamento o a una fonte con uso commerciale gratuito (per esempio MET Norway
+// Locationforecast, CC BY 4.0 / NLOD, con User-Agent identificativo obbligatorio).
 
 export interface HourlyWeather {
   time: string
