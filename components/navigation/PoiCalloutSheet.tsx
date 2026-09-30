@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { X, Volume2 } from 'lucide-react'
 import { speak, isSpeechSupported } from '@/lib/navigation/speech'
 
@@ -10,78 +10,56 @@ interface Props {
   onClose: () => void
 }
 
-// Sopra questa lunghezza il testo non ci sta comunque in 3 righe clampate — sotto, mostrare
-// "Leggi tutto" sarebbe un pulsante che non fa nulla di visibile (il clamp non taglia mai un
-// testo già così corto). Non una misura esatta del layout, solo una soglia ragionevole per non
-// mostrare l'azione a vuoto.
-const COLLAPSE_THRESHOLD_CHARS = 180
-
 /**
- * Non-blocking bottom sheet shown when the hiker enters a POI's notify
- * radius, or when a route "moment" is reached. Deliberately simple (no
- * drag-to-resize) — unlike ExploreLayout's 3-state sheet, this one must not
- * demand attention while walking, so by default it only offers collapse (X)
- * or listen.
- *
- * `extract` here is already the richest text available for this POI (the
- * curated ~200-word note from the pre-hike AI guide when one exists —
- * usePoiNotes.ts, cached for offline use — falling back to the short
- * Wikipedia incipit otherwise; see ActiveNavigationView.tsx's `note ?? wiki?.extract`).
- * Previously always clamped to 3 lines with no way to see the rest, even
- * though the fuller text was already sitting in memory/offline cache and
- * costs nothing to show — "Leggi tutto" just lifts the clamp, no new fetch.
+ * Scheda di un punto di interesse, in stile Guida: titolo in serif, foto in testa quando c'è, testo
+ * a paragrafi leggibile per intero scorrendo (niente più "Leggi tutto" che nascondeva il resto).
+ * `extract` è il testo più ricco disponibile per il luogo — nota curata della guida, altrimenti
+ * paragrafi della guida che lo citano, altrimenti l'incipit Wikipedia (vedi
+ * ActiveNavigationView.resolvePoiCallout): tutti già sul dispositivo, quindi anche offline.
+ * Non bloccante: si chiude con X o toccando la mappa fuori dalla scheda non serve, resta sopra il
+ * pannello inferiore finché non la chiudi.
  */
 export default function PoiCalloutSheet({ title, extract, imageUrl, onClose }: Props) {
-  const [expanded, setExpanded] = useState(false)
-  // Un nuovo POI/momento non deve ereditare lo stato "espanso" di quello precedente — questo
-  // componente può restare montato invariato tra un callout e il successivo (vedi
-  // ActiveNavigationView.tsx: `{callout && <PoiCalloutSheet .../>}`, non rimontato a ogni cambio).
-  useEffect(() => { setExpanded(false) }, [title])
+  const bodyRef = useRef<HTMLDivElement>(null)
+  // Un nuovo luogo riparte dall'inizio del testo, non dalla posizione di scorrimento del precedente.
+  useEffect(() => { bodyRef.current?.scrollTo({ top: 0 }) }, [title, extract])
 
   const canSpeak = isSpeechSupported() && !!extract
-  const isLong = !!extract && extract.length > COLLAPSE_THRESHOLD_CHARS
+  const paragraphs = extract ? extract.split(/\n{2,}|\n(?=[-•])/).map((p) => p.trim()).filter(Boolean) : []
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-[1200] px-3 pb-[env(safe-area-inset-bottom)]">
-      <div className="mx-auto max-w-md rounded-t-2xl bg-[#fdfcfa] shadow-2xl border border-stone-200 overflow-hidden">
-        <div className="flex items-start gap-3 p-4">
-          {imageUrl && (
-            <img src={imageUrl} alt="" className="w-16 h-16 rounded-lg object-cover flex-shrink-0" />
-          )}
-          <div className="flex-1 min-w-0">
-            <div className="font-bold font-display text-stone-900 truncate">{title}</div>
-            {extract && (
-              <p
-                className={`text-sm text-stone-600 font-body mt-1 whitespace-pre-line ${
-                  expanded ? 'max-h-[42vh] overflow-y-auto pr-1' : 'line-clamp-3'
-                }`}
-              >
-                {extract}
-              </p>
-            )}
-            {isLong && (
-              <button
-                onClick={() => setExpanded((v) => !v)}
-                className="mt-1 text-xs font-bold text-forest-700 underline decoration-forest-300 underline-offset-2"
-              >
-                {expanded ? 'Mostra meno' : 'Leggi tutto'}
-              </button>
-            )}
-          </div>
-          <div className="flex flex-col gap-2 flex-shrink-0">
-            {canSpeak && (
-              <button
-                onClick={() => speak(`${title}. ${extract}`)}
-                className="p-2 rounded-full bg-forest-50 text-forest-600 hover:bg-forest-100"
-                aria-label="Ascolta"
-              >
-                <Volume2 size={18} />
-              </button>
-            )}
-            <button onClick={onClose} className="p-2 rounded-full bg-stone-100 text-stone-500 hover:bg-stone-200" aria-label="Chiudi">
-              <X size={18} />
+    <div className="fixed inset-x-0 bottom-0 z-[1200] px-2 pb-[env(safe-area-inset-bottom)]">
+      <div className="mx-auto max-w-md max-h-[68vh] flex flex-col rounded-t-3xl bg-[#fdfcfa] shadow-2xl border border-stone-200 overflow-hidden">
+        {imageUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={imageUrl} alt="" className="w-full h-36 object-cover shrink-0" />
+        )}
+        <div className="flex items-start gap-2 px-5 pt-4 pb-2 shrink-0">
+          <h2 className="flex-1 min-w-0 font-display font-semibold text-[22px] leading-tight text-stone-900 text-balance">{title}</h2>
+          {canSpeak && (
+            <button
+              onClick={() => speak(`${title}. ${extract}`)}
+              className="w-11 h-11 rounded-full bg-forest-50 text-forest-700 flex items-center justify-center shrink-0"
+              aria-label="Ascolta"
+            >
+              <Volume2 size={20} />
             </button>
-          </div>
+          )}
+          <button onClick={onClose} className="w-11 h-11 rounded-full bg-stone-100 text-stone-600 flex items-center justify-center shrink-0" aria-label="Chiudi">
+            <X size={20} />
+          </button>
+        </div>
+        <div ref={bodyRef} className="overflow-y-auto px-5 pb-5 space-y-3">
+          {paragraphs.length > 0 ? (
+            paragraphs.map((p, i) => (
+              <p key={i} className="text-[15px] leading-relaxed text-stone-700 font-body whitespace-pre-line">{p}</p>
+            ))
+          ) : (
+            <p className="text-sm text-stone-500 font-body italic">
+              Per questo luogo non c&apos;è ancora una descrizione salvata sul telefono. Genera o aggiorna la guida del
+              percorso prima di partire: i testi vengono scaricati con il percorso e restano disponibili offline.
+            </p>
+          )}
         </div>
       </div>
     </div>

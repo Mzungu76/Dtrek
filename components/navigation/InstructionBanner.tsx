@@ -1,6 +1,5 @@
 'use client'
-import { useState } from 'react'
-import { ArrowUp, ChevronDown, ChevronUp, Flag, Volume2, VolumeX, WifiOff, X, Navigation as NavigationIcon } from 'lucide-react'
+import { ArrowUp, Flag, Volume2, VolumeX, WifiOff, Navigation as NavigationIcon } from 'lucide-react'
 import type { NavInstruction, TurnType } from '@/lib/navigation/types'
 
 interface Props {
@@ -9,7 +8,6 @@ interface Props {
   distanceToNextM: number | null
   speechEnabled: boolean
   onToggleSpeech: () => void
-  onClose: () => void
   isOnline: boolean
   compassSupported: boolean
   compassEnabled: boolean
@@ -25,80 +23,65 @@ const TURN_ROTATION: Record<TurnType, number> = {
   'slight-left': -30, left: -75, 'sharp-left': -120,
 }
 
-function formatDistance(m: number): string {
-  return m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m / 10) * 10} m`
+/** Distanza spezzata in numero + unità, così il numero può essere grande e l'unità piccola. */
+function splitDistance(m: number): { value: string; unit: string } {
+  return m >= 1000
+    ? { value: (m / 1000).toFixed(1).replace('.', ','), unit: 'km' }
+    : { value: String(Math.max(0, Math.round(m / 10) * 10)), unit: 'm' }
 }
 
-const TEXT_SHADOW = '0 1px 3px rgba(0,0,0,0.75), 0 1px 8px rgba(0,0,0,0.5)'
-// 44px, non 36px: questi sono tra i pulsanti più toccati durante il cammino (chiudi/audio/bussola)
-// — devono restare allo stesso minimo di tocco dei controlli secondari della rotaia (SosButton,
-// MapModeSwitcher, ParkingSpotControl), non più piccoli di quelli, per un uso realistico con
-// guanti o in movimento.
-const ICON_BTN = 'w-11 h-11 rounded-full bg-black/45 backdrop-blur-sm text-white flex items-center justify-center shadow-sm shrink-0'
+// 44px: sono tra i pulsanti più toccati durante il cammino (audio/bussola) — stesso minimo di tocco
+// degli altri controlli, per un uso realistico con guanti o in movimento.
+const ICON_BTN = 'w-11 h-11 rounded-full bg-white/12 text-white flex items-center justify-center shrink-0'
 
 /**
- * Soluzione B (piano di restyling Navigator): niente più scheda bianca — l'indicazione è testo
- * nudo con ombra sulla mappa, in un'unica riga con chiudi/audio/bussola. La mappa resta piena
- * anche qui, non solo ai lati; "Tra 400 m: ..." compare solo quando la riga viene toccata,
- * dentro una piccola capsula transitoria, non una seconda riga sempre presente.
+ * Card unica in alto: la PROSSIMA manovra (freccia + distanza a corpo grande + via su due righe),
+ * non più il testo dell'istruzione appena passata troncato su una riga. Nessun pulsante di uscita
+ * qui: terminare la navigazione sta in Strumenti / Dettagli (con conferma) e nel tasto indietro
+ * dell'app Android, così un tocco storto vicino all'istruzione non chiude più tutto.
  */
 export default function InstructionBanner({
   current, next, distanceToNextM, speechEnabled, onToggleSpeech,
-  onClose, isOnline, compassSupported, compassEnabled, onEnableCompass, highContrast,
+  isOnline, compassSupported, compassEnabled, onEnableCompass, highContrast,
 }: Props) {
-  const [expanded, setExpanded] = useState(false)
   const showRightButton = !isOnline || (compassSupported && !compassEnabled)
-  // DTREK-AUDIT.md P1 #20 — sfondo pieno opaco (bg-black, non bg-black/40-55) sotto sole forte
-  // per testo/pulsanti icona: la trasparenza lascia passare troppa luce su uno schermo molto
-  // luminoso perché restino leggibili/riconoscibili.
-  const textBg = highContrast ? 'bg-black' : 'bg-black/40 backdrop-blur-sm'
-  const expandedBg = highContrast ? 'bg-black' : 'bg-black/55 backdrop-blur-sm'
-  const iconBtn = highContrast ? ICON_BTN.replace('bg-black/45', 'bg-black') : ICON_BTN
+  // Con una manovra successiva nota mostriamo quella (con la distanza); altrimenti l'istruzione
+  // corrente (es. partenza/arrivo) senza distanza.
+  const primary = next ?? current
+  const dist = next && distanceToNextM != null ? splitDistance(distanceToNextM) : null
+  const bg = highContrast ? 'bg-black' : 'bg-stone-900/95 backdrop-blur-sm'
 
   return (
-    // Non si posiziona da sé: il chiamante (ActiveNavigationView.tsx) lo mette in cima a un'unica
-    // colonna insieme alle epoche/agli avvisi, così l'altezza reale di questa riga — che varia
-    // quando si espande "tra X m: ..." — sposta davvero quello che viene sotto, invece di un
-    // offset fisso scollegato da cosa c'è sopra.
-    <div>
-      <div className="flex items-center gap-2">
-        <button onClick={onClose} className={iconBtn} aria-label="Termina navigazione">
-          <X className="w-5 h-5" />
-        </button>
-
-        {current && (
-          <button
-            onClick={() => next && setExpanded((v) => !v)}
-            // Sfondo pieno semi-opaco dietro il testo, non solo l'ombra: sotto sole forte o su
-            // una mappa molto chiara (neve, satellite, roccia) la sola ombra non basta a
-            // garantire il contrasto dell'istruzione più importante della schermata.
-            className={`flex-1 min-w-0 flex items-center gap-2 text-left ${textBg} rounded-2xl pl-1.5 pr-3 py-1.5`}
-          >
-            <span className="shrink-0 w-8 h-8 rounded-full bg-terra-500 text-white flex items-center justify-center shadow-sm">
-              {current.turn === 'arrive' ? <Flag className="w-4 h-4" /> : (
-                <ArrowUp className="w-4 h-4" style={{ transform: `rotate(${TURN_ROTATION[current.turn]}deg)` }} />
-              )}
-            </span>
-            <span className="min-w-0 truncate text-white font-display font-bold text-[20px] leading-tight" style={{ textShadow: TEXT_SHADOW }}>
-              {current.text}
-            </span>
-            {next && (
-              expanded
-                ? <ChevronUp className="w-4 h-4 text-white/80 shrink-0" style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.6))' }} />
-                : <ChevronDown className="w-4 h-4 text-white/80 shrink-0" style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.6))' }} />
+    <div className={`flex items-center gap-3 rounded-2xl p-2.5 shadow-xl ${bg}`}>
+      {primary ? (
+        <>
+          <span className="shrink-0 w-[52px] h-[52px] rounded-xl bg-terra-500 text-white flex items-center justify-center">
+            {primary.turn === 'arrive' ? <Flag className="w-7 h-7" /> : (
+              <ArrowUp className="w-8 h-8" strokeWidth={2.6} style={{ transform: `rotate(${TURN_ROTATION[primary.turn]}deg)` }} />
             )}
-          </button>
-        )}
+          </span>
+          <div className="flex-1 min-w-0">
+            {dist && (
+              <p className="text-white font-mono font-bold leading-none text-[30px]">
+                {dist.value}<span className="text-[15px] font-semibold text-white/70 ml-1">{dist.unit}</span>
+              </p>
+            )}
+            <p className="text-white/90 font-body text-[14px] leading-tight mt-0.5 line-clamp-2">{primary.text}</p>
+          </div>
+        </>
+      ) : (
+        <p className="flex-1 min-w-0 text-white/80 font-body text-[14px] px-1.5">In attesa della prima indicazione…</p>
+      )}
 
-        <button onClick={onToggleSpeech} className={iconBtn} aria-label={speechEnabled ? 'Disattiva audio' : 'Attiva audio'}>
+      <div className="flex flex-col gap-1.5 shrink-0">
+        <button onClick={onToggleSpeech} className={ICON_BTN} aria-label={speechEnabled ? 'Disattiva audio' : 'Attiva audio'}>
           {speechEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
         </button>
-
         {showRightButton && (
           <button
             onClick={isOnline ? onEnableCompass : undefined}
             disabled={!isOnline}
-            className={`${iconBtn} ${isOnline ? 'text-terra-300' : 'text-white/40 cursor-default'}`}
+            className={`${ICON_BTN} ${isOnline ? 'text-terra-300' : 'text-white/40 cursor-default'}`}
             aria-label={isOnline ? 'Attiva bussola' : 'Offline'}
             title={isOnline ? 'Attiva bussola' : 'Sei offline: uso i dati scaricati'}
           >
@@ -106,12 +89,6 @@ export default function InstructionBanner({
           </button>
         )}
       </div>
-
-      {expanded && next && (
-        <div className={`mt-1.5 ml-14 mr-2 px-3 py-1.5 rounded-xl ${expandedBg} text-white/90 text-sm font-body inline-block`}>
-          Tra {formatDistance(distanceToNextM ?? 0)}: {next.text}
-        </div>
-      )}
     </div>
   )
 }

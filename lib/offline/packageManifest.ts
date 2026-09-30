@@ -72,6 +72,9 @@ export interface OfflinePackageManifest {
    */
   hasPoiNotes?: boolean
   poiNotesCount?: number
+  /** Testi estesi per POI (guida + Wikipedia) salvati per l'uso offline — lib/offline/poiTextStore.ts. */
+  hasPoiTexts?: boolean
+  poiTextsCount?: number
 }
 
 const MANIFEST_KEY = (hikeId: string) => `offline-manifest:${hikeId}`

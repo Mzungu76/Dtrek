@@ -32,6 +32,30 @@ const SOURCES: CreditSource[] = [
     license: 'CC BY 4.0',
     note: 'Elenco specie tipiche dei siti della Rete Natura 2000 (SIC/ZSC/ZPS), mostrato quando un’escursione non ha osservazioni dirette o nei dintorni — badge "specie tipiche dell’area protetta".',
   },
+  {
+    name: 'OpenStreetMap',
+    url: 'https://www.openstreetmap.org/copyright',
+    license: 'ODbL',
+    note: '© OpenStreetMap contributors — dati cartografici di base, sentieri e punti di interesse (anche tramite Overpass).',
+  },
+  {
+    name: 'CARTO Basemaps',
+    url: 'https://carto.com/attributions',
+    license: 'CARTO Basemaps · dati © OpenStreetMap contributors',
+    note: 'Tile della mappa di base (stili Voyager, Positron, Dark Matter) mostrate nell’app e salvate sul telefono per l’uso offline dei percorsi scaricati.',
+  },
+  {
+    name: 'OpenTopoMap',
+    url: 'https://opentopomap.org',
+    license: 'CC BY-SA',
+    note: 'Cartografia escursionistica con curve di livello (dati OSM e SRTM), usata per alcune miniature.',
+  },
+  {
+    name: 'MapTiler',
+    url: 'https://www.maptiler.com/copyright/',
+    license: '© MapTiler · © OpenStreetMap contributors',
+    note: 'Stili Outdoor, Satellite e Winter della mappa di navigazione online e rilievo 3D. Usati solo con connessione, non salvati offline.',
+  },
 ]
 
 export default function FontiECreditiPage() {
@@ -41,8 +65,7 @@ export default function FontiECreditiPage() {
       <div className="max-w-3xl mx-auto px-4 py-10">
         <h1 className="font-lora text-2xl text-stone-800 mb-2">Fonti e crediti</h1>
         <p className="text-sm text-stone-500 mb-8">
-          Le Gallerie Verde e Selvatica di DTrek mostrano dati di biodiversità raccolti da fonti
-          aperte. Di seguito l’attribuzione richiesta da ciascuna licenza.
+          DTrek usa dati e cartografia di fonti aperte e di fornitori terzi. Di seguito l’attribuzione richiesta da ciascuna licenza.
         </p>
         <div className="space-y-6">
           {SOURCES.map(s => (

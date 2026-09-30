@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Capacitor } from '@capacitor/core'
 import {
-  AlertTriangle, BatteryWarning, ArrowUp, Download, CheckCircle2, Radio, Locate, Signpost, HelpCircle,
+  AlertTriangle, BatteryWarning, X, ArrowUp, Download, CheckCircle2, Radio, Locate, Signpost, HelpCircle, Mic, Compass,
   Route, MapPin, Mountain, type LucideIcon,
 } from 'lucide-react'
 import Sheet from '@/components/ui/Sheet'
@@ -69,7 +69,9 @@ import { EPOCH_LABELS, type Epoch, type EpochPoi } from '@/lib/epochPois'
 import InstructionBanner from './InstructionBanner'
 import NavBottomStrip from './NavBottomStrip'
 import NavStatsSheet from './NavStatsSheet'
-import NavLayerRail from './NavLayerRail'
+import NavToolsSheet from './NavToolsSheet'
+import { findGuideTextForPoi } from '@/lib/navigation/poiGuideText'
+import { usePoiTexts } from './usePoiTexts'
 import ParkingSpotControl from './ParkingSpotControl'
 import { buildSlopeSegments } from '@/lib/navigation/routeSlopeSegments'
 import { readHighContrastPref, writeHighContrastPref } from '@/lib/navigation/highContrastPref'
@@ -100,7 +102,6 @@ interface Props {
 }
 
 const FIX_STALE_MS = 20000 // if no fix arrives for this long, "moving time" stops accruing
-const CONTROLS_HIDE_MS = 6000 // secondary icon rails fade after this long without a touch on screen
 
 // ── Pannello laterale etichettato (da lg: in su) ────────────────────────────────────────────────
 // Il cluster di icone mute (colonne sinistra/destra sopra) resta l'unica interfaccia sotto lg:,
@@ -241,6 +242,18 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   const [saveOfflineNotice, setSaveOfflineNotice] = useState(false)
   const [gpsLostPermissionDenied, setGpsLostPermissionDenied] = useState(false)
   const [offRouteBearingDeg, setOffRouteBearingDeg] = useState<number | null>(null)
+  const [offRouteDistanceM, setOffRouteDistanceM] = useState<number | null>(null)
+  // Mappa orientata come il telefono (freccia fissa verso l'alto). Preferenza ricordata sul
+  // dispositivo; disponibile solo con le mappe online (quella offline è Leaflet, senza rotazione).
+  const [headingUp, setHeadingUp] = useState(false)
+  useEffect(() => {
+    try { setHeadingUp(localStorage.getItem('dtrek:nav-heading-up') === '1') } catch { /* storage non disponibile */ }
+  }, [])
+  const toggleHeadingUp = () => setHeadingUp((v) => {
+    const next = !v
+    try { localStorage.setItem('dtrek:nav-heading-up', next ? '1' : '0') } catch { /* ignore */ }
+    return next
+  })
   const [mapMatch, setMapMatch] = useState<MapMatchResult | null>(null)
   const [lowBatteryNotice, setLowBatteryNotice] = useState(false)
   const [offlinePackageWarning, setOfflinePackageWarning] = useState(false)
@@ -257,19 +270,6 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   const lastLivePublishSuccessRef = useRef<number | null>(null)
   const [showNatura2000, setShowNatura2000] = useState(false)
   const [wildlifeAlertDismissed, setWildlifeAlertDismissed] = useState(false)
-  // Soluzione B (punto 6 del feedback utente, docs/diario-valutazione-ux-piano.md): la mappa era
-  // sempre coperta da 8+ pulsanti fissi sulle due rotaie laterali, mai nascosti. Questi si
-  // dissolvono dopo CONTROLS_HIDE_MS di inattività (nessun tocco sullo schermo), lasciando SOS,
-  // istruzione corrente e barra inferiore sempre visibili — vedi bumpControlsVisibility più sotto
-  // per come si riattivano e perché restano sempre accesi negli stati off_route/wrong_direction/
-  // gps_lost.
-  const [controlsVisible, setControlsVisible] = useState(true)
-  const controlsHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const bumpControlsVisibility = useCallback(() => {
-    setControlsVisible(true)
-    if (controlsHideTimerRef.current) clearTimeout(controlsHideTimerRef.current)
-    controlsHideTimerRef.current = setTimeout(() => setControlsVisible(false), CONTROLS_HIDE_MS)
-  }, [])
   const [weatherLookaheadDismissed, setWeatherLookaheadDismissed] = useState(false)
   const [pace, setPace] = useState<PaceUpdateResult | null>(null)
   const [turnBackDismissed, setTurnBackDismissed] = useState(false)
@@ -279,6 +279,11 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   // "+N altri avvisi" — nessun avviso è stato rimosso, solo riordinato per
   // priorità. Piano di ristrutturazione, Parte 2.8.
   const [bottomAlertsExpanded, setBottomAlertsExpanded] = useState(false)
+  // Avvisi in alto: solo il più importante è visibile, gli altri dietro "+N" (stessa logica di sopra).
+  const [topAlertsExpanded, setTopAlertsExpanded] = useState(false)
+  // Scheda Strumenti (controlli secondari) e segnale per aprire Giulia da lì.
+  const [showTools, setShowTools] = useState(false)
+  const [giuliaSignal, setGiuliaSignal] = useState(0)
   const turnBackAlertedRef = useRef(false)
   const [showFieldNote, setShowFieldNote] = useState(false)
   // Soluzione B (piano di restyling Navigator): sentieri vicini e POI accesi di default — stesso
@@ -365,6 +370,9 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   // Wikipedia già esistente), anche se lo stesso POI ha già una nota cachata da un altro sentiero.
   const hasLuoghiGuide = (hike.cachedGuide ?? '').includes('I luoghi da non perdere')
   const poiNotesById = usePoiNotes(hike.id, pois.map((p) => p.id), hasLuoghiGuide)
+  const poiTextsById = usePoiTexts(hike.id)
+  const poiTextsByIdRef = useRef(poiTextsById)
+  poiTextsByIdRef.current = poiTextsById
 
   // Confini di tappa di un Borgo/Città su più giornate (Navigator "Modalità A", sessione
   // conversazionale) — merge con i moments morfologici già esistenti (climb_start/viewpoint, vuoti
@@ -438,7 +446,14 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
     if (stop) return { title: stop.name, extract: stop.description, imageUrl: stop.thumbnail }
     const wiki = poiWikiById.get(poi.id)
     const note = poiNotesByIdRef.current.get(Number(poi.id))
-    return { title: poi.name ?? 'Punto di interesse', extract: note ?? wiki?.extract, imageUrl: wiki?.thumbnail }
+    // Ordine: nota curata dalla guida → estratto Wikipedia → paragrafi della guida che citano il
+    // luogo (testo già sul dispositivo, quindi disponibile anche offline). L'estratto Wikipedia
+    // sotto i ~250 caratteri è un semplice incipit: se la guida ha di più, lo si preferisce.
+    const wikiText = wiki?.extract
+    const bundled = poiTextsByIdRef.current.get(Number(poi.id))
+    const guideText = (!note && !bundled && (!wikiText || wikiText.length < 250)) ? findGuideTextForPoi(hike.cachedGuide ?? '', poi.name) : null
+    const extract = note ?? bundled ?? guideText ?? wikiText
+    return { title: poi.name ?? 'Punto di interesse', extract, imageUrl: wiki?.thumbnail }
   }
 
   /** Tapping a POI marker directly on the map — same info, same sheet, as walking up to it and
@@ -589,6 +604,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         setPosition({ lat: smoothed.lat, lon: smoothed.lon })
         setAccuracyM(raw.accuracyM ?? null)
         fullProgressRef.current = progress
+        setOffRouteDistanceM(Math.round(progress.distanceToRouteM / 10) * 10)
         // Map Matching (Fase 4, lib/navigation/mapMatcher.ts) only has anything to add once
         // already recognized as off the planned route — while on-route this would just scan the
         // graph to confirm what's already known, so it's skipped entirely the rest of the time,
@@ -854,12 +870,16 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
     if (!isOnline && mapMode !== 'offline') setMapMode('offline')
   }, [isOnline, mapMode])
 
+  // Ripiego estremo: mappa Leaflet (senza rotazione) se MapLibre non parte (niente WebGL).
+  const [leafletFallback, setLeafletFallback] = useState(false)
   const handleMapStyleFailed = (reason: string) => {
     // NavigationMapLibre already console.error's the detailed reason (key
     // missing/rejected, network, timeout...) — kept out of this user-facing
     // notice on purpose, but surfaced here too in case this handler is ever
     // reached without that log (e.g. future callers).
     console.error('[ActiveNavigationView] falling back to offline map:', reason)
+    // Già sulla mappa offline (MapLibre) e fallisce ancora: senza WebGL si passa a Leaflet.
+    if (mapMode === 'offline') { setLeafletFallback(true); return }
     setMapMode('offline')
     setMapFallbackNotice(true)
     setTimeout(() => setMapFallbackNotice(false), 5000)
@@ -942,20 +962,6 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       sentinel?.release().catch(() => {})
     }
   }, [state, wakeLockEnabled])
-
-  // Off-route/direzione sbagliata/GPS perso: "Vie d'uscita" deve restare raggiungibile dalla
-  // rotaia senza dover prima toccare lo schermo per farla riapparire — stessa ragione del
-  // commento sul pulsante Signpost più sotto. Qualunque altro stato riparte semplicemente il
-  // timer di dissolvimento (stesso effetto di un tocco sullo schermo).
-  useEffect(() => {
-    if (state === 'off_route' || state === 'wrong_direction' || state === 'gps_lost') {
-      if (controlsHideTimerRef.current) { clearTimeout(controlsHideTimerRef.current); controlsHideTimerRef.current = null }
-      setControlsVisible(true)
-      return
-    }
-    bumpControlsVisibility()
-    return () => { if (controlsHideTimerRef.current) clearTimeout(controlsHideTimerRef.current) }
-  }, [state, bumpControlsVisibility])
 
   const handleTogglePlayPause = () => {
     timerRunningRef.current = !timerRunningRef.current
@@ -1110,6 +1116,12 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
     etaDate ? `arrivo ${etaDate.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}` : '—'
   } · ${elevationRemainingM != null ? `+${Math.round(elevationRemainingM)} m` : '—'}`
 
+  const bottomStripMetrics = [
+    { value: (distanceRemainingM / 1000).toFixed(1).replace('.', ','), unit: 'km' },
+    { value: etaDate ? etaDate.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '—', unit: 'arrivo' },
+    { value: elevationRemainingM != null ? `+${Math.round(elevationRemainingM)}` : '—', unit: 'm salita' },
+  ]
+
   const daylightMarginMin = sunTimes?.sunset && etaDate ? daylightMarginMinutes(etaDate, sunTimes.sunset) : null
 
   // Turn-back advisory: even retracing the already-hiked portion starting right now, would
@@ -1154,8 +1166,8 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   }, [turnBackNow])
 
   return (
-    <div className="fixed inset-0 z-[2000] bg-stone-900 font-body" onPointerDown={bumpControlsVisibility}>
-      {mapMode === 'offline' ? (
+    <div className="fixed inset-0 z-[2000] bg-stone-900 font-body">
+      {mapMode === 'offline' && leafletFallback ? (
         <NavigationMap
           ref={mapHandleRef}
           routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} state={state}
@@ -1166,7 +1178,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       ) : (
         <NavigationMapLibre
           ref={mapHandleRef}
-          routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} state={state}
+          routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} headingUp={headingUp} state={state}
           styleId={mapMode} is3D={is3D} onStyleFailed={handleMapStyleFailed} accuracyM={accuracyM}
           natura2000Features={natura2000Features} showNatura2000={showNatura2000}
           parkingSpot={parkingSpot} nearbyTrails={showNearbyTrails ? nearbyTrails : []} onPoiTap={handlePoiTap}
@@ -1181,29 +1193,34 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         </div>
       )}
 
-      {/* Soluzione B: colonna sinistra centrata verticalmente — rotaia dei layer (Sentieri vicini/
-          POI/Pendenze) più il pulsante "centra sulla mia posizione", raggruppati invece di
-          lasciare quest'ultimo a fluttuare da solo a metà schermo (dove si scontrava con la
-          rotaia destra una volta centrata anche lei). */}
+      {/* Pulsanti sulla mappa, sopra il pannello inferiore: "Mappa come il telefono" (solo mappe
+          online) e Ricentra, quest'ultimo solo quando la mappa non segue più la posizione. */}
       <div
-        className={`absolute left-0 z-10 top-1/2 -translate-y-1/2 flex flex-col items-start gap-3 lg:hidden transition-opacity duration-300 ${
-          controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
-        }`}
+        className="absolute right-3 z-10 flex flex-col items-center gap-2 lg:hidden"
+        style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 12.5rem)' }}
       >
-        <NavLayerRail
-          showNearbyTrails={showNearbyTrails} onToggleNearbyTrails={() => setShowNearbyTrails((v) => !v)}
-          showPois={showPoiLayer} onTogglePois={() => setShowPoiLayer((v) => !v)}
-          showSlope={showSlopeLayer} onToggleSlope={() => setShowSlopeLayer((v) => !v)}
-        />
-        <button
-          onClick={() => mapHandleRef.current?.recenter()}
-          aria-label="Centra sulla mia posizione"
-          className={`ml-3 w-11 h-11 rounded-full shadow-lg flex items-center justify-center ${
-            mapFollowMode ? 'bg-terra-500 text-white' : 'bg-white text-stone-700'
-          }`}
-        >
-          <Locate className="w-5 h-5" />
-        </button>
+        {!(mapMode === 'offline' && leafletFallback) && (
+          <button
+            onClick={toggleHeadingUp}
+            aria-pressed={headingUp}
+            aria-label={headingUp ? 'Mappa con il nord in alto' : 'Mappa orientata come il telefono'}
+            title={headingUp ? 'Mappa con il nord in alto' : 'Mappa orientata come il telefono'}
+            className={`w-12 h-12 rounded-full shadow-lg flex items-center justify-center ${
+              headingUp ? 'bg-terra-500 text-white' : 'bg-white text-stone-700'
+            }`}
+          >
+            <Compass className="w-5 h-5" style={headingUp ? undefined : { transform: 'rotate(-45deg)' }} />
+          </button>
+        )}
+        {!mapFollowMode && (
+          <button
+            onClick={() => mapHandleRef.current?.recenter()}
+            aria-label="Centra sulla mia posizione"
+            className="w-12 h-12 rounded-full shadow-lg bg-white text-stone-700 flex items-center justify-center"
+          >
+            <Locate className="w-5 h-5" />
+          </button>
+        )}
       </div>
 
       <GiuliaLiveQa
@@ -1212,6 +1229,8 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         nearestPoiDistanceM={remainingPois[0]?.distanceM}
         distanceRemainingM={distanceRemainingM}
         isOnline={isOnline}
+        hideFab
+        openSignal={giuliaSignal}
       />
 
       {/* Soluzione B: un'unica colonna in flusso — indicazione, epoche, avvisi — invece di tre
@@ -1230,7 +1249,6 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
             distanceToNextM={instruction?.distanceToNextM ?? null}
             speechEnabled={speechEnabled}
             onToggleSpeech={handleToggleSpeech}
-            onClose={requestEnd}
             isOnline={isOnline}
             compassSupported={isOrientationSupported() && needsOrientationPermissionGesture()}
             compassEnabled={compassEnabled}
@@ -1238,6 +1256,45 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
             highContrast={highContrastEnabled}
           />
         </div>
+
+        {/* Fuori percorso / direzione sbagliata: una barra sottile agganciata sotto la card
+            istruzione (non più una scheda al centro della mappa). Dice cosa serve davvero: quanto
+            si è lontani e da che parte tornare — la freccia è relativa allo schermo, quindi con la
+            mappa orientata come il telefono punta già nella direzione in cui girarsi. */}
+        {(state === 'off_route' || state === 'wrong_direction') && (() => {
+          const wrong = state === 'wrong_direction'
+          const distM = offRouteDistanceM
+          const arrowDeg = offRouteBearingDeg != null
+            ? offRouteBearingDeg - (headingUp && bearing != null ? bearing : 0)
+            : null
+          return (
+            <div
+              role="status"
+              className={`w-full flex items-center gap-2.5 rounded-xl pl-3 pr-2 py-1.5 text-white font-body shadow-lg border-l-4 ${
+                wrong ? 'bg-orange-950/95 border-orange-400' : 'bg-stone-900/95 border-terra-400'
+              }`}
+            >
+              {!wrong && arrowDeg != null ? (
+                <ArrowUp size={22} strokeWidth={2.6} className="shrink-0 text-terra-300" style={{ transform: `rotate(${arrowDeg}deg)` }} />
+              ) : (
+                <AlertTriangle size={20} className="shrink-0 text-orange-300" />
+              )}
+              <p className="flex-1 min-w-0 text-[14px] font-semibold leading-tight">
+                {wrong
+                  ? 'Direzione sbagliata'
+                  : distM != null ? `Fuori percorso: ${distM >= 1000 ? `${(distM / 1000).toFixed(1).replace('.', ',')} km` : `${Math.max(10, Math.round(distM / 10) * 10)} m`}` : 'Fuori percorso'}
+              </p>
+              {wrong && (
+                <button onClick={handleReverseRoute} className="min-h-[40px] px-2 text-[12px] font-bold underline decoration-white/50 underline-offset-2">
+                  È voluto
+                </button>
+              )}
+              <button onClick={handleEscapeOptions} className="min-h-[40px] px-3 rounded-lg bg-white/15 text-[12px] font-bold shrink-0">
+                Vie d&apos;uscita
+              </button>
+            </div>
+          )
+        })()}
 
         {availableEpochs.length > 0 && (
           <div className="flex gap-1 bg-white/95 rounded-full shadow-lg p-1">
@@ -1255,138 +1312,117 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
           </div>
         )}
 
-        {(mapFallbackNotice || offlinePackageWarning || offlineDegradedMissing.length > 0 || (state !== 'idle' && relevantWildlifeRisks.length > 0 && !wildlifeAlertDismissed) || (weatherLookahead?.message && !weatherLookaheadDismissed)) && (
-          <div className="flex flex-col items-center gap-2 w-full max-w-sm">
-            {weatherLookahead?.message && !weatherLookaheadDismissed && (
-              <div className="px-4 py-2 rounded-full bg-stone-800 text-white text-xs font-semibold shadow-lg font-body flex items-center gap-2">
-                <span className="shrink-0">🌦️</span>
-                {weatherLookahead.message}
-                <button onClick={() => setWeatherLookaheadDismissed(true)} className="text-stone-400 hover:text-white ml-1" aria-label="Chiudi avviso">✕</button>
-              </div>
-            )}
+        {(() => {
+          // Priorità (più importante prima): fauna, meteo in arrivo, mappa offline incompleta,
+          // dati offline degradati, fallback mappa. Uno solo visibile, il resto dietro "+N avvisi".
+          const closeBtn = (onClick: () => void) => (
+            <button onClick={onClick} className="w-8 h-8 -my-1 -mr-2 flex items-center justify-center text-stone-300 hover:text-white shrink-0" aria-label="Chiudi avviso">
+              <X size={16} />
+            </button>
+          )
+          const topAlerts: { id: string; node: React.ReactNode }[] = []
 
-            {mapFallbackNotice && (
-              <div className="px-4 py-2 rounded-full bg-stone-800 text-white text-xs font-semibold shadow-lg font-body">
-                Mappa online non disponibile, uso la mappa offline
-              </div>
-            )}
-
-            {offlinePackageWarning && (
-              <div className="px-4 py-2 rounded-full bg-stone-800 text-white text-xs font-semibold shadow-lg font-body flex items-center gap-2">
-                <AlertTriangle size={14} className="text-amber-400 shrink-0" />
-                Mappa offline incompleta per questo percorso
-                <button onClick={() => setOfflinePackageWarning(false)} className="text-stone-400 hover:text-white ml-1" aria-label="Chiudi avviso">✕</button>
-              </div>
-            )}
-
-            {/* Offline Readiness Check (roadmap Fase 6) — tiles missing is the hard-blocker notice
-                above; this one is for pieces that only degrade the experience (no escape
-                suggestions, no elevation chart, no POI callouts...), never block navigation. */}
-            {offlineDegradedMissing.length > 0 && (
-              <div className="px-4 py-2 rounded-xl bg-stone-800 text-white text-xs shadow-lg font-body flex items-start gap-2 w-full">
-                <AlertTriangle size={14} className="text-amber-400 shrink-0 mt-0.5" />
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold">Dati offline incompleti per questo percorso</p>
-                  <p className="text-stone-300 leading-snug">Non disponibili: {offlineDegradedMissing.join(', ')}</p>
-                </div>
-                <button onClick={() => setOfflineDegradedMissing([])} className="text-stone-400 hover:text-white shrink-0" aria-label="Chiudi avviso">✕</button>
-              </div>
-            )}
-
-            {state !== 'idle' && relevantWildlifeRisks.length > 0 && !wildlifeAlertDismissed && (
-              <div className="w-full px-4 py-3 rounded-xl bg-stone-800 text-white text-xs shadow-lg font-body">
-                <div className="flex items-start gap-2">
-                  <span className="text-base shrink-0">🐾</span>
+          if (state !== 'idle' && relevantWildlifeRisks.length > 0 && !wildlifeAlertDismissed) {
+            const animals = Array.from(new Set(relevantWildlifeRisks.map((w) => w.animal)))
+            topAlerts.push({
+              id: 'wildlife',
+              node: (
+                <div className="w-full px-4 py-3 rounded-xl bg-stone-800 text-white text-sm shadow-lg font-body flex items-start gap-2">
+                  <span className="text-lg shrink-0">🐾</span>
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold mb-1">Fauna nella zona: {relevantWildlifeRisks.map((w) => w.animal).join(', ')}</p>
+                    <p className="font-semibold mb-1">Fauna nella zona: {animals.join(', ')}</p>
                     <p className="text-stone-300 leading-snug">{relevantWildlifeRisks[0].tip}</p>
                   </div>
-                  <button onClick={() => setWildlifeAlertDismissed(true)} className="text-stone-400 hover:text-white shrink-0" aria-label="Chiudi avviso">✕</button>
+                  {closeBtn(() => setWildlifeAlertDismissed(true))}
                 </div>
-              </div>
-            )}
-          </div>
-        )}
+              ),
+            })
+          }
+
+          if (weatherLookahead?.message && !weatherLookaheadDismissed) {
+            topAlerts.push({
+              id: 'weather',
+              node: (
+                <div className="w-full px-4 py-2.5 rounded-xl bg-stone-800 text-white text-sm font-semibold shadow-lg font-body flex items-center gap-2">
+                  <span className="shrink-0">🌦️</span>
+                  <span className="flex-1 min-w-0">{weatherLookahead.message}</span>
+                  {closeBtn(() => setWeatherLookaheadDismissed(true))}
+                </div>
+              ),
+            })
+          }
+
+          if (offlinePackageWarning) {
+            topAlerts.push({
+              id: 'offline-pkg',
+              node: (
+                <div className="w-full px-4 py-2.5 rounded-xl bg-stone-800 text-white text-sm font-semibold shadow-lg font-body flex items-center gap-2">
+                  <AlertTriangle size={16} className="text-amber-400 shrink-0" />
+                  <span className="flex-1 min-w-0">Mappa offline incompleta per questo percorso</span>
+                  {closeBtn(() => setOfflinePackageWarning(false))}
+                </div>
+              ),
+            })
+          }
+
+          // Offline Readiness Check (roadmap Fase 6) — tiles missing is the hard-blocker notice
+          // above; this one is for pieces that only degrade the experience (no escape
+          // suggestions, no elevation chart, no POI callouts...), never block navigation.
+          if (offlineDegradedMissing.length > 0) {
+            topAlerts.push({
+              id: 'offline-degraded',
+              node: (
+                <div className="w-full px-4 py-2.5 rounded-xl bg-stone-800 text-white text-sm shadow-lg font-body flex items-start gap-2">
+                  <AlertTriangle size={16} className="text-amber-400 shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold">Dati offline incompleti per questo percorso</p>
+                    <p className="text-stone-300 leading-snug">Non disponibili: {offlineDegradedMissing.join(', ')}</p>
+                  </div>
+                  {closeBtn(() => setOfflineDegradedMissing([]))}
+                </div>
+              ),
+            })
+          }
+
+          if (mapFallbackNotice) {
+            topAlerts.push({
+              id: 'map-fallback',
+              node: (
+                <div className="w-full px-4 py-2.5 rounded-xl bg-stone-800 text-white text-sm font-semibold shadow-lg font-body">
+                  Mappa online non disponibile, uso la mappa offline
+                </div>
+              ),
+            })
+          }
+
+          if (topAlerts.length === 0) return null
+          const [primary, ...rest] = topAlerts
+          return (
+            <div className="flex flex-col items-center gap-2 w-full max-w-sm">
+              {primary.node}
+              {rest.length > 0 && (
+                <button
+                  onClick={() => setTopAlertsExpanded((v) => !v)}
+                  className="min-h-[36px] px-3.5 rounded-full bg-stone-900/85 text-white text-xs font-semibold shadow-md"
+                >
+                  {topAlertsExpanded ? 'Nascondi' : `+${rest.length} altr${rest.length === 1 ? 'o avviso' : 'i avvisi'}`}
+                </button>
+              )}
+              {topAlertsExpanded && rest.map((a) => <div key={a.id} className="w-full">{a.node}</div>)}
+            </div>
+          )
+        })()}
       </div>
 
-      {/* Soluzione B: un'unica rotaia destra, centrata verticalmente — SOS, mappa/layer,
-          affidabilità, condivisione live, mappa offline, punto auto — invece di due colonne
-          separate a offset fissi che finivano per scontrarsi con altri controlli fluttuanti. */}
-      <div className="absolute right-3 z-10 top-1/2 -translate-y-1/2 flex flex-col items-end gap-2 lg:hidden">
-        {/* SOS resta sempre visibile e toccabile, fuori dal dissolvimento qui sotto — è l'unico
-            controllo di questa rotaia per cui "nascosto dopo un po' d'inattività" non è mai
-            accettabile. */}
+      {/* Sul lato resta solo SOS, sempre visibile e grande. Tutto il resto (mappa, sicurezza, offline,
+          Giulia, aiuto, termina) è nella scheda Strumenti, aperta dal pannello inferiore. */}
+      <div className="absolute right-3 z-10 top-1/2 -translate-y-1/2 lg:hidden">
         <SosButton
+          large
           fix={position ? { lat: position.lat, lon: position.lon, accuracyM } : null}
           liveShareUrl={liveShareToken ? `${typeof window !== 'undefined' ? window.location.origin : ''}/s/live/${liveShareToken}` : null}
           onTriggered={(action) => logEvent('sos_triggered', { action })}
         />
-        {/* Il resto della rotaia si dissolve dopo un po' di inattività (vedi bumpControlsVisibility
-            più sopra) invece di restare sempre sopra la mappa — riappare al primo tocco sullo
-            schermo, o subito se lo stato diventa off_route/wrong_direction/gps_lost (vie d'uscita
-            deve restare raggiungibile). opacity, non display: none, così le dimensioni della
-            colonna non cambiano e SOS non "salta" quando il resto scompare/riappare. */}
-        <div
-          className={`flex flex-col items-end gap-2 transition-opacity duration-300 ${
-            controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
-          }`}
-        >
-          <MapModeSwitcher
-            mode={mapMode} onModeChange={setMapMode} is3D={is3D} onToggle3D={() => setIs3D((v) => !v)} isOnline={isOnline}
-            showNatura2000={showNatura2000} onToggleNatura2000={() => setShowNatura2000((v) => !v)}
-          />
-          <TrailConfidenceBadge confidence={trailConfidence} />
-          {/* Raggiungibile sempre, non solo dal banner fuori-percorso: prima le "vie d'uscita"
-              comparivano solo dentro l'avviso off_route/wrong_direction, che sparisce del tutto
-              quando lo stato è gps_lost (l'avviso GPS perso lo sostituisce) — proprio nel momento
-              in cui questo strumento serve di più. Un punto di accesso proattivo permette anche di
-              consultarle "per sicurezza" mentre si è ancora regolarmente sul percorso. */}
-          <button
-            onClick={handleEscapeOptions}
-            title="Vie d'uscita"
-            className="w-11 h-11 rounded-full flex items-center justify-center shadow-lg border bg-white/95 border-stone-200"
-          >
-            <Signpost className="w-5 h-5 text-stone-700" />
-          </button>
-          <button
-            onClick={() => setShowLiveShareSheet(true)}
-            title={liveSharingEnabled ? 'Condivisione posizione live attiva' : 'Condividi la tua posizione live'}
-            className={`w-11 h-11 rounded-full flex items-center justify-center shadow-lg border ${
-              liveSharingEnabled ? 'bg-sky-600 border-sky-400/40' : 'bg-white/95 border-stone-200'
-            }`}
-          >
-            <Radio className={`w-5 h-5 ${liveSharingEnabled ? 'text-white' : 'text-stone-700'}`} />
-          </button>
-          {routePolyline.length >= 2 && (
-            <button
-              onClick={() => setShowOfflineSheet(true)}
-              title={offlineReady ? 'Mappa scaricata per offline' : 'Scarica mappa per offline'}
-              className={`w-11 h-11 rounded-full flex items-center justify-center shadow-lg border ${
-                offlineReady ? 'bg-emerald-600 border-emerald-400/40' : 'bg-white/95 border-stone-200'
-              }`}
-            >
-              {offlineReady ? <CheckCircle2 className="w-5 h-5 text-white" /> : <Download className="w-5 h-5 text-stone-700" />}
-            </button>
-          )}
-          <ParkingSpotControl
-            spot={parkingSpot}
-            position={position}
-            distanceM={parkingDistanceM}
-            bearingToSpotDeg={parkingBearingDeg}
-            onSave={handleSaveParking}
-            onClear={handleClearParking}
-          />
-          {/* DTREK-AUDIT.md P2 #26 — riapre in ogni momento il riepilogo mostrato all'avvio della
-              prima navigazione (SOS, vie d'uscita, layer, colori POI), non solo la prima volta. */}
-          <button
-            onClick={() => setShowOnboarding(true)}
-            aria-label="Come funziona la navigazione"
-            title="Come funziona la navigazione"
-            className="w-11 h-11 rounded-full flex items-center justify-center shadow-lg border bg-white/95 border-stone-200"
-          >
-            <HelpCircle className="w-5 h-5 text-stone-700" />
-          </button>
-        </div>
       </div>
 
       {/* Pannello laterale — da lg: in su, stessi controlli delle due colonne sopra ma con
@@ -1449,6 +1485,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         </NavPanelSection>
 
         <NavPanelSection label="Assistenza">
+          <NavPanelButton icon={Mic} label="Chiedi a Giulia" onClick={() => setGiuliaSignal((n) => n + 1)} />
           <NavPanelButton icon={HelpCircle} label="Come funziona la navigazione" onClick={() => setShowOnboarding(true)} />
         </NavPanelSection>
       </div>
@@ -1472,7 +1509,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         <OfflinePackageDownloader
           hikeId={hike.id}
           routePolyline={routePolyline}
-          hikeData={{ trackPoints: hike.trackPoints, cachedPois: hike.cachedPois }}
+          hikeData={{ trackPoints: hike.trackPoints, cachedPois: hike.cachedPois, cachedPoiWiki: hike.cachedPoiWiki, cachedGuide: hike.cachedGuide }}
         />
       </Sheet>
 
@@ -1582,68 +1619,6 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
             ),
           })
         }
-        if (state === 'off_route' || state === 'wrong_direction') {
-          const isWrongDirection = state === 'wrong_direction'
-          alerts.push({
-            id: 'offroute',
-            node: (
-              <div
-                className={`max-w-[85%] px-4 py-3 rounded-xl text-white text-sm font-semibold font-body shadow-lg backdrop-blur-sm border-l-4 flex flex-col gap-2 ${
-                  isWrongDirection ? 'bg-orange-950/85 border-orange-400' : 'bg-stone-900/85 border-terra-400'
-                }`}
-              >
-                {/* Sfondo scuro traslucido invece di un blocco a colore pieno — resta
-                    riconoscibile come avviso importante (bordo e icone in colore) senza dominare
-                    lo schermo come il pieno arancione/terra faceva prima. Icona + messaggio su
-                    una riga che può avvolgere normalmente (min-w-0 sullo span di testo, niente
-                    più stringa nuda incollata al bottone) — il link "Vie d'uscita" è una riga a
-                    sé sotto, non più incastrato in coda al testo dove finiva tagliato o scomodo
-                    da toccare. */}
-                <div className="flex items-start gap-2">
-                  {offRouteBearingDeg != null && (
-                    <ArrowUp size={16} className={`shrink-0 mt-0.5 ${isWrongDirection ? 'text-orange-300' : 'text-terra-300'}`} style={{ transform: `rotate(${offRouteBearingDeg}deg)` }} />
-                  )}
-                  <AlertTriangle size={16} className={`shrink-0 mt-0.5 ${isWrongDirection ? 'text-orange-300' : 'text-terra-300'}`} />
-                  <span className="min-w-0">
-                    {isWrongDirection
-                      ? 'Direzione sbagliata — segui la freccia'
-                      : `Sei fuori dal percorso${offRouteBearingDeg != null ? ' — torna verso la freccia' : ' pianificato'}`}
-                  </span>
-                </div>
-                <div className="flex items-center gap-4 pl-6">
-                  {isWrongDirection && (
-                    /* Prima l'unica risposta possibile a questo avviso era smettere di seguirlo —
-                       se il contrario è voluto (percorso ad anello preso all'inverso, ecc.) questo
-                       aggiorna il verso "avanti" del percorso invece di continuare a segnalare
-                       come errore una scelta deliberata. */
-                    <button
-                      onClick={handleReverseRoute}
-                      className="text-xs font-bold underline decoration-white/60 underline-offset-2 py-1"
-                    >
-                      Lo faccio al contrario apposta
-                    </button>
-                  )}
-                  <button
-                    onClick={handleEscapeOptions}
-                    className="text-xs font-bold underline decoration-white/60 underline-offset-2 py-1"
-                  >
-                    Vie d&apos;uscita
-                  </button>
-                </div>
-                {/* Map Matching (Fase 4, lib/navigation/mapMatcher.ts): distinguishes "off the plan
-                    but on a real, mapped trail" (likely deliberate) from being off any known trail —
-                    informational only, never changes the off-route verdict itself above. */}
-                {mapMatch?.alternativeDetected && mapMatch.distanceToMatchM != null && (
-                  <p className="text-xs font-normal text-white/85 pl-6">
-                    {mapMatch.confidence === 'high'
-                      ? `C'è un sentiero conosciuto proprio qui (${Math.round(mapMatch.distanceToMatchM)} m) — forse lo stai seguendo di proposito`
-                      : `Sentiero noto nelle vicinanze (~${Math.round(mapMatch.distanceToMatchM)} m)`}
-                  </p>
-                )}
-              </div>
-            ),
-          })
-        }
         if (lowBatteryNotice) {
           alerts.push({
             id: 'battery',
@@ -1688,7 +1663,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         const [primary, ...rest] = alerts
 
         return (
-          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-2">
+          <div className="absolute left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-2" style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 11.5rem)' }}>
             {primary.node}
             {rest.length > 0 && (
               <button
@@ -1705,12 +1680,35 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
 
       <NavBottomStrip
         summary={bottomStripSummary}
+        metrics={bottomStripMetrics}
+        onOpenTools={() => setShowTools(true)}
         timerRunning={timerRunning}
         onTogglePlayPause={handleTogglePlayPause}
-        onStop={requestEnd}
         onExpand={() => setShowStatsSheet(true)}
         onOpenFoto={handleOpenFoto}
         highContrast={highContrastEnabled}
+      />
+
+      <NavToolsSheet
+        open={showTools}
+        onClose={() => setShowTools(false)}
+        showNearbyTrails={showNearbyTrails} onToggleNearbyTrails={() => setShowNearbyTrails((v) => !v)}
+        showPois={showPoiLayer} onTogglePois={() => setShowPoiLayer((v) => !v)}
+        showSlope={showSlopeLayer} onToggleSlope={() => setShowSlopeLayer((v) => !v)}
+        mapMode={mapMode} onMapModeChange={setMapMode}
+        is3D={is3D} onToggle3D={() => setIs3D((v) => !v)}
+        isOnline={isOnline}
+        showNatura2000={showNatura2000} onToggleNatura2000={() => setShowNatura2000((v) => !v)}
+        onEscape={handleEscapeOptions}
+        liveSharingEnabled={liveSharingEnabled} onLiveShare={() => setShowLiveShareSheet(true)}
+        parkingSpot={parkingSpot} position={position}
+        parkingDistanceM={parkingDistanceM} parkingBearingDeg={parkingBearingDeg}
+        onSaveParking={handleSaveParking} onClearParking={handleClearParking}
+        trailConfidence={trailConfidence}
+        hasRoute={routePolyline.length >= 2} offlineReady={offlineReady} onOffline={() => setShowOfflineSheet(true)}
+        onGiulia={() => setGiuliaSignal((n) => n + 1)}
+        onHelp={() => setShowOnboarding(true)}
+        onEnd={requestEnd}
       />
 
       <NavStatsSheet

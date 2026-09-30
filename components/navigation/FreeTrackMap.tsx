@@ -3,6 +3,7 @@ import 'leaflet/dist/leaflet.css'
 import type * as L from 'leaflet'
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { shortestRotation } from '@/lib/navigation/orientation'
+import { CARTO_ATTRIBUTION_HTML } from '@/lib/mapAttribution'
 
 interface Props {
   /** The traveled path so far — grows as fixes arrive, unlike NavigationMap.tsx's fixed planned route. */
@@ -54,7 +55,8 @@ const FreeTrackMap = forwardRef<FreeTrackMapHandle, Props>(function FreeTrackMap
         position ? [position.lat, position.lon] : (path[0] ? [path[0][0], path[0][1]] : [41.9, 12.5]),
         16,
       )
-      L.tileLayer(TILE_URL, { maxZoom: 18 }).addTo(map)
+      L.tileLayer(TILE_URL, { maxZoom: 18, attribution: CARTO_ATTRIBUTION_HTML }).addTo(map)
+      L.control.attribution({ prefix: false, position: 'bottomleft' }).addTo(map)
       map.on('dragstart zoomstart', () => setFollowMode(false))
       mapInstance.current = map
       setTimeout(() => map.invalidateSize(), 0)

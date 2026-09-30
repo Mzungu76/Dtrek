@@ -16,6 +16,8 @@ interface Props {
   bearingToSpotDeg: number | null
   onSave: () => void
   onClear: () => void
+  /** "tile": tessera etichettata per la scheda Strumenti, invece del pulsante rotondo. */
+  variant?: 'icon' | 'tile'
 }
 
 function formatDist(m: number): string {
@@ -39,12 +41,22 @@ function formatDist(m: number): string {
  * ultimi minuti a piedi, e inventare un secondo motore di navigazione dentro quello già in corso
  * sarebbe più confuso che utile.
  */
-export default function ParkingSpotControl({ spot, position, distanceM, bearingToSpotDeg, onSave, onClear }: Props) {
+export default function ParkingSpotControl({ spot, position, distanceM, bearingToSpotDeg, onSave, onClear, variant = 'icon' }: Props) {
   const [open, setOpen] = useState(false)
   useModalBackHandler(open, () => setOpen(false))
 
   return (
     <>
+      {variant === 'tile' ? (
+        <button
+          onClick={() => setOpen(true)}
+          className={`w-full min-h-[76px] rounded-2xl flex flex-col items-center justify-center gap-1.5 px-1 text-[12px] font-semibold leading-tight text-center ${
+            spot ? 'bg-stone-800 text-white' : 'bg-stone-100 text-stone-800'
+          }`}
+        >
+          <Car className="w-6 h-6" /> {spot && distanceM != null ? `Auto: ${formatDist(distanceM)}` : 'Punto auto'}
+        </button>
+      ) : (
       <button
         onClick={() => setOpen(true)}
         title={spot ? 'Dove ho lasciato l’auto' : 'Segna dove ho lasciato l’auto'}
@@ -54,9 +66,10 @@ export default function ParkingSpotControl({ spot, position, distanceM, bearingT
       >
         <Car className="w-5 h-5" />
       </button>
+      )}
 
       {open && createPortal(
-        <div className="fixed inset-0 z-[3000] bg-black/50 flex items-center justify-center p-4" onClick={() => setOpen(false)}>
+        <div className="fixed inset-0 z-[3300] bg-black/50 flex items-center justify-center p-4" onClick={() => setOpen(false)}>
           <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl p-5 font-body" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-display text-lg font-semibold text-stone-900">Punto auto</h2>

@@ -77,6 +77,24 @@ function formatEta(d: Date): string { return d.toLocaleTimeString('it-IT', { hou
  * protagonista (strip sottile), o si guardano i dettagli (qui), mai una via di mezzo che le
  * sottrae spazio in permanenza.
  */
+/** Interruttore visivo dentro un pulsante che fa già da controllo (l'intera riga è cliccabile).
+ *  Posizione della manopola esplicita (`left-0.5` + traslazione): senza `left` la manopola
+ *  assoluta prendeva la posizione "statica" e finiva fuori dalla pista, tagliata dal bordo. */
+function SwitchTrack({ on, label }: { on: boolean; label: string }) {
+  return (
+    <span
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      className={`relative inline-block shrink-0 w-12 h-7 rounded-full transition-colors ${on ? 'bg-forest-500' : 'bg-stone-300'}`}
+    >
+      <span
+        className={`absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-white shadow transition-transform duration-150 ${on ? 'translate-x-5' : 'translate-x-0'}`}
+      />
+    </span>
+  )
+}
+
 export default function NavStatsSheet({
   open, onClose,
   distanceCoveredM, distanceRemainingM, currentSpeedMs, avgSpeedMs, movingTimeMs, etaDate,
@@ -193,14 +211,7 @@ export default function NavStatsSheet({
               <span className="flex items-center gap-2 text-sm text-stone-700 font-body">
                 <Sun className="w-4 h-4 text-stone-400" /> Mantieni lo schermo acceso
               </span>
-              <span
-                className={`relative w-10 h-6 rounded-full transition-colors ${wakeLockEnabled ? 'bg-forest-500' : 'bg-stone-300'}`}
-                role="switch"
-                aria-checked={wakeLockEnabled}
-                aria-label="Mantieni lo schermo acceso durante la navigazione"
-              >
-                <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${wakeLockEnabled ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
-              </span>
+              <SwitchTrack on={wakeLockEnabled} label="Mantieni lo schermo acceso durante la navigazione" />
             </button>
             {/* DTREK-AUDIT.md P1 #20 — nessuna modalità alto contrasto per il sole forte: gli
                sfondi semi-trasparenti dietro il testo di navigazione restano insufficienti sotto
@@ -214,14 +225,7 @@ export default function NavStatsSheet({
               <span className="flex items-center gap-2 text-sm text-stone-700 font-body">
                 <Contrast className="w-4 h-4 text-stone-400" /> Modalità alto contrasto (sole forte)
               </span>
-              <span
-                className={`relative w-10 h-6 rounded-full transition-colors ${highContrastEnabled ? 'bg-forest-500' : 'bg-stone-300'}`}
-                role="switch"
-                aria-checked={highContrastEnabled}
-                aria-label="Modalità alto contrasto per sole forte durante la navigazione"
-              >
-                <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${highContrastEnabled ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
-              </span>
+              <SwitchTrack on={highContrastEnabled} label="Modalità alto contrasto per sole forte durante la navigazione" />
             </button>
             {/* DTREK-AUDIT.md P4 #38 — separato dall'interruttore vocale generale (nella barra
                istruzioni): quello silenzia anche gli avvisi di sicurezza, questo solo la
@@ -233,14 +237,7 @@ export default function NavStatsSheet({
               <span className="flex items-center gap-2 text-sm text-stone-700 font-body">
                 <MessageCircle className="w-4 h-4 text-stone-400" /> Narrazione POI e Giulia
               </span>
-              <span
-                className={`relative w-10 h-6 rounded-full transition-colors ${narrationEnabled ? 'bg-forest-500' : 'bg-stone-300'}`}
-                role="switch"
-                aria-checked={narrationEnabled}
-                aria-label="Narrazione vocale di punti di interesse e momenti raccontati durante la navigazione"
-              >
-                <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${narrationEnabled ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
-              </span>
+              <SwitchTrack on={narrationEnabled} label="Narrazione vocale di punti di interesse e momenti raccontati durante la navigazione" />
             </button>
           </div>
         )}

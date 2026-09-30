@@ -15,6 +15,10 @@ interface Props {
    *  connessione. Dichiarato esplicitamente in UI (messaggio + icona, vedi sotto) invece di
    *  lasciare che l'utente scopra il problema solo dopo aver già parlato o scritto una domanda. */
   isOnline: boolean
+  /** Nasconde il pulsante flottante: in navigazione su percorso Giulia si apre da Strumenti. */
+  hideFab?: boolean
+  /** Ogni incremento apre il pannello (e avvia la dettatura come il tocco sul pulsante). */
+  openSignal?: number
 }
 
 /**
@@ -32,7 +36,7 @@ interface Props {
  * vicino, distanza rimanente) e non tocca in nessun modo NavigationEngine/lo stato di
  * navigazione — rispetta il vincolo "read-only rispetto alla navigazione" della Fase 10.
  */
-export default function GiuliaLiveQa({ hikeTitle, nearestPoiName, nearestPoiDistanceM, distanceRemainingM, isOnline }: Props) {
+export default function GiuliaLiveQa({ hikeTitle, nearestPoiName, nearestPoiDistanceM, distanceRemainingM, isOnline, hideFab, openSignal }: Props) {
   const [open, setOpen] = useState(false)
   const [transcript, setTranscript] = useState('')
   const [lastQuestion, setLastQuestion] = useState('')
@@ -115,6 +119,14 @@ export default function GiuliaLiveQa({ hikeTitle, nearestPoiName, nearestPoiDist
     if (isOnline && supported) toggleRecording()
   }
 
+  const lastSignalRef = useRef(openSignal ?? 0)
+  useEffect(() => {
+    if (openSignal == null || openSignal === lastSignalRef.current) return
+    lastSignalRef.current = openSignal
+    handleFabTap()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openSignal])
+
   const handleSendText = () => {
     const q = transcript.trim()
     if (!q || !isOnline || asking) return
@@ -123,7 +135,7 @@ export default function GiuliaLiveQa({ hikeTitle, nearestPoiName, nearestPoiDist
 
   return (
     <>
-      <button
+      {!hideFab && <button
         onClick={handleFabTap}
         title={isOnline ? 'Chiedi a Giulia' : 'Giulia richiede connessione a Internet'}
         className={`fixed z-30 right-3 bottom-28 w-12 h-12 rounded-full shadow-xl flex items-center justify-center border-2 border-white/70 active:scale-95 transition-transform ${
@@ -131,10 +143,10 @@ export default function GiuliaLiveQa({ hikeTitle, nearestPoiName, nearestPoiDist
         }`}
       >
         {!isOnline ? <WifiOff className="w-5 h-5 text-white" /> : recording ? <Square className="w-4 h-4 text-white" /> : <Mic className="w-5 h-5 text-white" />}
-      </button>
+      </button>}
 
       {open && (
-        <div className="fixed inset-x-3 bottom-44 z-30 max-w-sm mx-auto rounded-2xl bg-white shadow-2xl border border-stone-200 p-4">
+        <div className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+13rem)] z-30 max-w-sm mx-auto rounded-2xl bg-white shadow-2xl border border-stone-200 p-4">
           <div className="flex items-center justify-between mb-2">
             <p className="text-xs font-semibold text-forest-700 uppercase tracking-wide">Giulia in cammino</p>
             <button onClick={() => setOpen(false)} className="text-stone-400 hover:text-stone-700" aria-label="Chiudi">

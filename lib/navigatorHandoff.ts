@@ -67,18 +67,44 @@ export function tryOpenNavigatorApp(router: { push: (path: string) => void }, fa
     router.push(fallbackPath)
     return
   }
+
+  // Chromium (Chrome, Edge, Samsung Internet, le PWA installate): l'URI `intent://` risolve da solo
+  // "app se c'è, altrimenti sito" grazie a `browser_fallback_url`. Il navigatore web NON va quindi
+  // aperto anche da qui: prima un timer di 1,6 s ricadeva su router.push(fallbackPath) ogni volta
+  // che la scheda risultava ancora in primo piano a scadenza (avvio lento dell'app, richiesta di
+  // conferma di Android...), aprendo il navigatore nel browser anche con l'app già in primo piano.
+  if (supportsIntentUrls()) {
+    let handedOff = false
+    const onVisibilityChange = () => {
+      if (!document.hidden || handedOff) return
+      handedOff = true
+      cleanup()
+      // L'app nativa ha preso il controllo: la scheda Dtrek passa a Resoconti invece di restare ferma.
+      router.push(RESOCONTI_PATH)
+    }
+    const cleanup = () => document.removeEventListener('visibilitychange', onVisibilityChange)
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    // Se l'app non risponde è Chrome a navigare sul fallback (la pagina si scarica): il listener
+    // sparisce con lei. Se invece non succede nulla, lo si toglie comunque dopo un po'.
+    setTimeout(cleanup, 15000)
+    window.location.href = buildNavigatorUrl(fallbackPath)
+    return
+  }
+
+  // Browser senza supporto a `intent://` (Firefox per Android...): schema personalizzato e, solo
+  // se dopo il timeout la scheda è ancora in primo piano, navigatore via web.
   let handedOff = false
   const onVisibilityChange = () => { if (document.hidden) handedOff = true }
   document.addEventListener('visibilitychange', onVisibilityChange)
-  window.location.href = buildNavigatorUrl(fallbackPath)
+  window.location.href = `${NAVIGATOR_SCHEME}://open?path=${encodeURIComponent(fallbackPath)}`
   setTimeout(() => {
     document.removeEventListener('visibilitychange', onVisibilityChange)
-    // Oltre al flag impostato dall'evento, si ricontrolla document.hidden direttamente qui: se
-    // Android ha già portato Navigator in primo piano ma l'evento visibilitychange non ha ancora
-    // fatto in tempo a essere consegnato al listener (capita, non è garantito sia sincrono),
-    // questo secondo controllo evita comunque il doppio esito "app aperta + fallback web aperto
-    // sotto".
     if (handedOff || document.hidden) { router.push(RESOCONTI_PATH); return }
     router.push(fallbackPath)
   }, HANDOFF_TIMEOUT_MS)
+}
+
+function supportsIntentUrls(): boolean {
+  // Firefox per Android ignora `intent://`; tutti gli altri browser Android comuni sono Chromium.
+  return !/Firefox|FxiOS/i.test(navigator.userAgent)
 }

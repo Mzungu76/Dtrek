@@ -52,12 +52,18 @@ export async function GET(req: Request) {
   const key  = CARTO_STYLES.has(resolvedStyle) && CARTO_API_KEY ? `?key=${CARTO_API_KEY}` : ''
   const url  = `${base}/${zoom}/${x}/${y}${retina ? '@2x' : ''}.png${key}`
 
+  // Identità onesta verso i fornitori di tile: nome dell'app, il nostro indirizzo come Referer e un
+  // contatto (TILE_CONTACT, es. un'email) come richiedono le loro policy d'uso. Prima le richieste
+  // dichiaravano di venire da openstreetmap.org e da un "diario personale".
+  const origin = new URL(req.url).origin
+  const contact = process.env.TILE_CONTACT ? `; ${process.env.TILE_CONTACT}` : ''
+
   try {
     const res = await fetch(url, {
       headers: {
-        'User-Agent': 'DTrek/1.0 (personal trekking diary)',
+        'User-Agent': `DTrek/1.0 (+${origin}${contact})`,
         'Accept':     'image/png',
-        'Referer':    'https://www.openstreetmap.org/',
+        'Referer':    `${origin}/`,
       },
       next: { revalidate: 86400 },
     })
