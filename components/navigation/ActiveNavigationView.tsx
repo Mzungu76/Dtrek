@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Capacitor } from '@capacitor/core'
 import {
-  AlertTriangle, BatteryWarning, X, ArrowUp, Download, CheckCircle2, Radio, Locate, Signpost, HelpCircle, Mic,
+  AlertTriangle, BatteryWarning, X, ArrowUp, Download, CheckCircle2, Radio, Locate, Signpost, HelpCircle, Mic, Compass,
   Route, MapPin, Mountain, type LucideIcon,
 } from 'lucide-react'
 import Sheet from '@/components/ui/Sheet'
@@ -70,6 +70,7 @@ import InstructionBanner from './InstructionBanner'
 import NavBottomStrip from './NavBottomStrip'
 import NavStatsSheet from './NavStatsSheet'
 import NavToolsSheet from './NavToolsSheet'
+import { findGuideTextForPoi } from '@/lib/navigation/poiGuideText'
 import ParkingSpotControl from './ParkingSpotControl'
 import { buildSlopeSegments } from '@/lib/navigation/routeSlopeSegments'
 import { readHighContrastPref, writeHighContrastPref } from '@/lib/navigation/highContrastPref'
@@ -240,6 +241,18 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   const [saveOfflineNotice, setSaveOfflineNotice] = useState(false)
   const [gpsLostPermissionDenied, setGpsLostPermissionDenied] = useState(false)
   const [offRouteBearingDeg, setOffRouteBearingDeg] = useState<number | null>(null)
+  const [offRouteDistanceM, setOffRouteDistanceM] = useState<number | null>(null)
+  // Mappa orientata come il telefono (freccia fissa verso l'alto). Preferenza ricordata sul
+  // dispositivo; disponibile solo con le mappe online (quella offline è Leaflet, senza rotazione).
+  const [headingUp, setHeadingUp] = useState(false)
+  useEffect(() => {
+    try { setHeadingUp(localStorage.getItem('dtrek:nav-heading-up') === '1') } catch { /* storage non disponibile */ }
+  }, [])
+  const toggleHeadingUp = () => setHeadingUp((v) => {
+    const next = !v
+    try { localStorage.setItem('dtrek:nav-heading-up', next ? '1' : '0') } catch { /* ignore */ }
+    return next
+  })
   const [mapMatch, setMapMatch] = useState<MapMatchResult | null>(null)
   const [lowBatteryNotice, setLowBatteryNotice] = useState(false)
   const [offlinePackageWarning, setOfflinePackageWarning] = useState(false)
@@ -429,7 +442,13 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
     if (stop) return { title: stop.name, extract: stop.description, imageUrl: stop.thumbnail }
     const wiki = poiWikiById.get(poi.id)
     const note = poiNotesByIdRef.current.get(Number(poi.id))
-    return { title: poi.name ?? 'Punto di interesse', extract: note ?? wiki?.extract, imageUrl: wiki?.thumbnail }
+    // Ordine: nota curata dalla guida → estratto Wikipedia → paragrafi della guida che citano il
+    // luogo (testo già sul dispositivo, quindi disponibile anche offline). L'estratto Wikipedia
+    // sotto i ~250 caratteri è un semplice incipit: se la guida ha di più, lo si preferisce.
+    const wikiText = wiki?.extract
+    const guideText = (!note && (!wikiText || wikiText.length < 250)) ? findGuideTextForPoi(hike.cachedGuide ?? '', poi.name) : null
+    const extract = note ?? guideText ?? wikiText
+    return { title: poi.name ?? 'Punto di interesse', extract, imageUrl: wiki?.thumbnail }
   }
 
   /** Tapping a POI marker directly on the map — same info, same sheet, as walking up to it and
@@ -580,6 +599,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         setPosition({ lat: smoothed.lat, lon: smoothed.lon })
         setAccuracyM(raw.accuracyM ?? null)
         fullProgressRef.current = progress
+        setOffRouteDistanceM(Math.round(progress.distanceToRouteM / 10) * 10)
         // Map Matching (Fase 4, lib/navigation/mapMatcher.ts) only has anything to add once
         // already recognized as off the planned route — while on-route this would just scan the
         // graph to confirm what's already known, so it's skipped entirely the rest of the time,
@@ -1149,7 +1169,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       ) : (
         <NavigationMapLibre
           ref={mapHandleRef}
-          routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} state={state}
+          routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} headingUp={headingUp} state={state}
           styleId={mapMode} is3D={is3D} onStyleFailed={handleMapStyleFailed} accuracyM={accuracyM}
           natura2000Features={natura2000Features} showNatura2000={showNatura2000}
           parkingSpot={parkingSpot} nearbyTrails={showNearbyTrails ? nearbyTrails : []} onPoiTap={handlePoiTap}
@@ -1164,18 +1184,35 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         </div>
       )}
 
-      {/* Ricentra: compare solo quando la mappa non segue più la posizione (dopo un trascinamento),
-          sopra il pannello inferiore. I layer non hanno più una rotaia propria: stanno in Strumenti. */}
-      {!mapFollowMode && (
-        <button
-          onClick={() => mapHandleRef.current?.recenter()}
-          aria-label="Centra sulla mia posizione"
-          className="absolute right-3 z-10 w-12 h-12 rounded-full shadow-lg bg-white text-stone-700 flex items-center justify-center lg:hidden"
-          style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 12.5rem)' }}
-        >
-          <Locate className="w-5 h-5" />
-        </button>
-      )}
+      {/* Pulsanti sulla mappa, sopra il pannello inferiore: "Mappa come il telefono" (solo mappe
+          online) e Ricentra, quest'ultimo solo quando la mappa non segue più la posizione. */}
+      <div
+        className="absolute right-3 z-10 flex flex-col items-center gap-2 lg:hidden"
+        style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 12.5rem)' }}
+      >
+        {mapMode !== 'offline' && (
+          <button
+            onClick={toggleHeadingUp}
+            aria-pressed={headingUp}
+            aria-label={headingUp ? 'Mappa con il nord in alto' : 'Mappa orientata come il telefono'}
+            title={headingUp ? 'Mappa con il nord in alto' : 'Mappa orientata come il telefono'}
+            className={`w-12 h-12 rounded-full shadow-lg flex items-center justify-center ${
+              headingUp ? 'bg-terra-500 text-white' : 'bg-white text-stone-700'
+            }`}
+          >
+            <Compass className="w-5 h-5" style={headingUp ? undefined : { transform: 'rotate(-45deg)' }} />
+          </button>
+        )}
+        {!mapFollowMode && (
+          <button
+            onClick={() => mapHandleRef.current?.recenter()}
+            aria-label="Centra sulla mia posizione"
+            className="w-12 h-12 rounded-full shadow-lg bg-white text-stone-700 flex items-center justify-center"
+          >
+            <Locate className="w-5 h-5" />
+          </button>
+        )}
+      </div>
 
       <GiuliaLiveQa
         hikeTitle={hike.title}
@@ -1210,6 +1247,45 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
             highContrast={highContrastEnabled}
           />
         </div>
+
+        {/* Fuori percorso / direzione sbagliata: una barra sottile agganciata sotto la card
+            istruzione (non più una scheda al centro della mappa). Dice cosa serve davvero: quanto
+            si è lontani e da che parte tornare — la freccia è relativa allo schermo, quindi con la
+            mappa orientata come il telefono punta già nella direzione in cui girarsi. */}
+        {(state === 'off_route' || state === 'wrong_direction') && (() => {
+          const wrong = state === 'wrong_direction'
+          const distM = offRouteDistanceM
+          const arrowDeg = offRouteBearingDeg != null
+            ? offRouteBearingDeg - (headingUp && bearing != null ? bearing : 0)
+            : null
+          return (
+            <div
+              role="status"
+              className={`w-full flex items-center gap-2.5 rounded-xl pl-3 pr-2 py-1.5 text-white font-body shadow-lg border-l-4 ${
+                wrong ? 'bg-orange-950/95 border-orange-400' : 'bg-stone-900/95 border-terra-400'
+              }`}
+            >
+              {!wrong && arrowDeg != null ? (
+                <ArrowUp size={22} strokeWidth={2.6} className="shrink-0 text-terra-300" style={{ transform: `rotate(${arrowDeg}deg)` }} />
+              ) : (
+                <AlertTriangle size={20} className="shrink-0 text-orange-300" />
+              )}
+              <p className="flex-1 min-w-0 text-[14px] font-semibold leading-tight">
+                {wrong
+                  ? 'Direzione sbagliata'
+                  : distM != null ? `Fuori percorso: ${distM >= 1000 ? `${(distM / 1000).toFixed(1).replace('.', ',')} km` : `${Math.max(10, Math.round(distM / 10) * 10)} m`}` : 'Fuori percorso'}
+              </p>
+              {wrong && (
+                <button onClick={handleReverseRoute} className="min-h-[40px] px-2 text-[12px] font-bold underline decoration-white/50 underline-offset-2">
+                  È voluto
+                </button>
+              )}
+              <button onClick={handleEscapeOptions} className="min-h-[40px] px-3 rounded-lg bg-white/15 text-[12px] font-bold shrink-0">
+                Vie d&apos;uscita
+              </button>
+            </div>
+          )
+        })()}
 
         {availableEpochs.length > 0 && (
           <div className="flex gap-1 bg-white/95 rounded-full shadow-lg p-1">
@@ -1530,68 +1606,6 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
                   Sentiero probabilmente chiuso — segnalato da almeno {trailClosure.reporterCount} escursionisti
                   {trailClosure.reason && <span className="block text-xs font-normal mt-0.5 italic">&ldquo;{trailClosure.reason}&rdquo;</span>}
                 </span>
-              </div>
-            ),
-          })
-        }
-        if (state === 'off_route' || state === 'wrong_direction') {
-          const isWrongDirection = state === 'wrong_direction'
-          alerts.push({
-            id: 'offroute',
-            node: (
-              <div
-                className={`max-w-[85%] px-4 py-3 rounded-xl text-white text-sm font-semibold font-body shadow-lg backdrop-blur-sm border-l-4 flex flex-col gap-2 ${
-                  isWrongDirection ? 'bg-orange-950/85 border-orange-400' : 'bg-stone-900/85 border-terra-400'
-                }`}
-              >
-                {/* Sfondo scuro traslucido invece di un blocco a colore pieno — resta
-                    riconoscibile come avviso importante (bordo e icone in colore) senza dominare
-                    lo schermo come il pieno arancione/terra faceva prima. Icona + messaggio su
-                    una riga che può avvolgere normalmente (min-w-0 sullo span di testo, niente
-                    più stringa nuda incollata al bottone) — il link "Vie d'uscita" è una riga a
-                    sé sotto, non più incastrato in coda al testo dove finiva tagliato o scomodo
-                    da toccare. */}
-                <div className="flex items-start gap-2">
-                  {offRouteBearingDeg != null && (
-                    <ArrowUp size={16} className={`shrink-0 mt-0.5 ${isWrongDirection ? 'text-orange-300' : 'text-terra-300'}`} style={{ transform: `rotate(${offRouteBearingDeg}deg)` }} />
-                  )}
-                  <AlertTriangle size={16} className={`shrink-0 mt-0.5 ${isWrongDirection ? 'text-orange-300' : 'text-terra-300'}`} />
-                  <span className="min-w-0">
-                    {isWrongDirection
-                      ? 'Direzione sbagliata — segui la freccia'
-                      : `Sei fuori dal percorso${offRouteBearingDeg != null ? ' — torna verso la freccia' : ' pianificato'}`}
-                  </span>
-                </div>
-                <div className="flex items-center gap-4 pl-6">
-                  {isWrongDirection && (
-                    /* Prima l'unica risposta possibile a questo avviso era smettere di seguirlo —
-                       se il contrario è voluto (percorso ad anello preso all'inverso, ecc.) questo
-                       aggiorna il verso "avanti" del percorso invece di continuare a segnalare
-                       come errore una scelta deliberata. */
-                    <button
-                      onClick={handleReverseRoute}
-                      className="text-xs font-bold underline decoration-white/60 underline-offset-2 py-1"
-                    >
-                      Lo faccio al contrario apposta
-                    </button>
-                  )}
-                  <button
-                    onClick={handleEscapeOptions}
-                    className="text-xs font-bold underline decoration-white/60 underline-offset-2 py-1"
-                  >
-                    Vie d&apos;uscita
-                  </button>
-                </div>
-                {/* Map Matching (Fase 4, lib/navigation/mapMatcher.ts): distinguishes "off the plan
-                    but on a real, mapped trail" (likely deliberate) from being off any known trail —
-                    informational only, never changes the off-route verdict itself above. */}
-                {mapMatch?.alternativeDetected && mapMatch.distanceToMatchM != null && (
-                  <p className="text-xs font-normal text-white/85 pl-6">
-                    {mapMatch.confidence === 'high'
-                      ? `C'è un sentiero conosciuto proprio qui (${Math.round(mapMatch.distanceToMatchM)} m) — forse lo stai seguendo di proposito`
-                      : `Sentiero noto nelle vicinanze (~${Math.round(mapMatch.distanceToMatchM)} m)`}
-                  </p>
-                )}
               </div>
             ),
           })

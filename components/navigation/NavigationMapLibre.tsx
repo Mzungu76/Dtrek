@@ -17,6 +17,9 @@ interface Props {
   pois: { id: string | number; lat: number; lon: number; name?: string; type?: string; order?: number }[]
   position: { lat: number; lon: number } | null
   bearingDeg: number | null
+  /** Mappa orientata come il telefono: la freccia resta fissa verso l'alto e ruota la mappa, così
+   *  ciò che sta davanti all'escursionista è sempre in alto sullo schermo. Solo con il follow attivo. */
+  headingUp?: boolean
   state: NavState
   styleId: MapTilerStyleId
   is3D: boolean
@@ -139,7 +142,7 @@ function followZoomFor(is3D: boolean): number { return is3D ? 14.5 : 16 }
  * view while walking.
  */
 const NavigationMapLibre = forwardRef<NavigationMapLibreHandle, Props>(function NavigationMapLibre({
-  routePolyline, pois, position, bearingDeg, state, styleId, is3D, onStyleFailed, accuracyM,
+  routePolyline, pois, position, bearingDeg, headingUp = false, state, styleId, is3D, onStyleFailed, accuracyM,
   natura2000Features, showNatura2000, parkingSpot, nearbyTrails, onPoiTap,
   showRoute = true, showPois = true, slopeSegments = null, onFollowModeChange,
 }, ref) {
@@ -577,7 +580,8 @@ const NavigationMapLibre = forwardRef<NavigationMapLibreHandle, Props>(function 
       const map = mapRef.current
       if (!map) return
       const color = STATE_COLOR[state]
-      arrowRotation.current = shortestRotation(arrowRotation.current, bearingDeg ?? 0)
+      // In modalità "mappa come il telefono" è la mappa a ruotare: la freccia resta dritta.
+      arrowRotation.current = shortestRotation(arrowRotation.current, headingUp ? 0 : (bearingDeg ?? 0))
       const rotation = arrowRotation.current
 
       if (userMarker.current && userMarkerArrow.current) {
@@ -597,11 +601,24 @@ const NavigationMapLibre = forwardRef<NavigationMapLibreHandle, Props>(function 
         userMarker.current = new maplibregl.Marker({ element: el }).setLngLat([position.lon, position.lat]).addTo(map)
       }
       if (!hasCentered.current) { map.jumpTo({ center: [position.lon, position.lat], zoom: followZoomFor(is3DRef.current) }); hasCentered.current = true }
-      else if (followMode) map.easeTo({ center: [position.lon, position.lat], duration: 500 })
+      else if (followMode) {
+        map.easeTo({
+          center: [position.lon, position.lat],
+          ...(headingUp && bearingDeg != null ? { bearing: bearingDeg } : {}),
+          duration: 500,
+        })
+      }
 
       if (map.isStyleLoaded()) updateAccuracyCircle(map)
     })
-  }, [position, bearingDeg, state, followMode, accuracyM])
+  }, [position, bearingDeg, headingUp, state, followMode, accuracyM])
+
+  // Uscendo dalla modalità "come il telefono" la mappa torna con il nord in alto.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    if (!headingUp && Math.abs(map.getBearing()) > 0.5) map.easeTo({ bearing: 0, duration: 400 })
+  }, [headingUp])
 
   useEffect(() => {
     const map = mapRef.current
