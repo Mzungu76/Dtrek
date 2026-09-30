@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Capacitor } from '@capacitor/core'
 import {
-  AlertTriangle, BatteryWarning, X, ArrowUp, Download, CheckCircle2, Radio, Locate, Signpost, HelpCircle, Mic, Compass,
+  AlertTriangle, BatteryWarning, X, ArrowUp, Download, CheckCircle2, Radio, Locate, Signpost, HelpCircle, Mic, Compass, Eye, EyeOff,
   Route, MapPin, Mountain, type LucideIcon,
 } from 'lucide-react'
 import Sheet from '@/components/ui/Sheet'
@@ -101,6 +101,8 @@ interface Props {
   simulationLabel?: string
 }
 
+const AUTO_HIDE_MS = 6000 // "nascondi controlli" automatico: inattività prima di lasciare solo la mappa
+const TURN_REVEAL_DISTANCE_M = 100 // in auto-nascondi, i controlli riappaiono a questa distanza dalla svolta
 const FIX_STALE_MS = 20000 // if no fix arrives for this long, "moving time" stops accruing
 
 // ── Pannello laterale etichettato (da lg: in su) ────────────────────────────────────────────────
@@ -249,6 +251,23 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   useEffect(() => {
     try { setHeadingUp(localStorage.getItem('dtrek:nav-heading-up') === '1') } catch { /* storage non disponibile */ }
   }, [])
+  // "Solo mappa": nasconde tutto tranne SOS e il pulsante per rimostrare i controlli. Si esce con quel
+  // pulsante o con un tocco sulla mappa. Opzionalmente (Strumenti) i controlli si nascondono da soli
+  // dopo AUTO_HIDE_MS senza tocchi; restano/riappaiono comunque per fuori percorso, GPS perso,
+  // rientro per il buio e all'avvicinarsi della prossima svolta.
+  const [uiHidden, setUiHidden] = useState(false)
+  const [autoHide, setAutoHide] = useState(false)
+  const [uiTick, setUiTick] = useState(0)
+  const revealedForInstructionRef = useRef<string | null>(null)
+  useEffect(() => {
+    try { setAutoHide(localStorage.getItem('dtrek:nav-auto-hide') === '1') } catch { /* storage non disponibile */ }
+  }, [])
+  const toggleAutoHide = () => setAutoHide((v) => {
+    const next = !v
+    try { localStorage.setItem('dtrek:nav-auto-hide', next ? '1' : '0') } catch { /* ignore */ }
+    if (!next) setUiHidden(false)
+    return next
+  })
   const toggleHeadingUp = () => setHeadingUp((v) => {
     const next = !v
     try { localStorage.setItem('dtrek:nav-heading-up', next ? '1' : '0') } catch { /* ignore */ }
@@ -1165,8 +1184,33 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [turnBackNow])
 
+  // Sempre visibile, anche in "Solo mappa": situazioni in cui l'utente deve poter agire o leggere.
+  const criticalUi = state === 'off_route' || state === 'wrong_direction' || state === 'gps_lost' || (turnBackNow && !turnBackDismissed)
+  const anySheetOpen = showTools || showStatsSheet || showOfflineSheet || showLiveShareSheet || showOnboarding
+    || !!callout || !!activeEpochCallout || showFieldNote || showSpeciesIdentify || escapeSheetOpen || showConfirmEnd || !!tappaComplete
+  const hideUi = uiHidden && !criticalUi
+
+  useEffect(() => {
+    if (!autoHide || uiHidden || anySheetOpen || criticalUi) return
+    const t = setTimeout(() => setUiHidden(true), AUTO_HIDE_MS)
+    return () => clearTimeout(t)
+  }, [autoHide, uiHidden, anySheetOpen, criticalUi, uiTick])
+
+  // Prossima svolta vicina: i controlli riappaiono (una volta per svolta) e poi si rinascondono.
+  const nextTurnId = instruction?.next?.id ?? null
+  const nextTurnDistM = instruction?.distanceToNextM ?? null
+  useEffect(() => {
+    if (!autoHide || !uiHidden || nextTurnId == null || nextTurnDistM == null) return
+    if (nextTurnDistM < TURN_REVEAL_DISTANCE_M && revealedForInstructionRef.current !== nextTurnId) {
+      revealedForInstructionRef.current = nextTurnId
+      setUiHidden(false)
+    }
+  }, [autoHide, uiHidden, nextTurnId, nextTurnDistM])
+
+  const fade = (hidden: boolean) => `transition-opacity duration-300 ${hidden ? 'opacity-0 pointer-events-none' : 'opacity-100'}`
+
   return (
-    <div className="fixed inset-0 z-[2000] bg-stone-900 font-body">
+    <div className="fixed inset-0 z-[2000] bg-stone-900 font-body" onPointerDown={() => setUiTick((n) => n + 1)} onClick={() => { if (uiHidden) setUiHidden(false) }}>
       {mapMode === 'offline' && leafletFallback ? (
         <NavigationMap
           ref={mapHandleRef}
@@ -1196,7 +1240,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       {/* Pulsanti sulla mappa, sopra il pannello inferiore: "Mappa come il telefono" (solo mappe
           online) e Ricentra, quest'ultimo solo quando la mappa non segue più la posizione. */}
       <div
-        className="absolute right-3 z-10 flex flex-col items-center gap-2 lg:hidden"
+        className={`absolute right-3 z-10 flex flex-col items-center gap-2 lg:hidden ${fade(hideUi)}`}
         style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 12.5rem)' }}
       >
         {!(mapMode === 'offline' && leafletFallback) && (
@@ -1239,7 +1283,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
           (istruzione espansa, più avvisi, epoche disponibili...). Scende sotto la barra
           SIMULAZIONE quando presente invece di finirci sotto. */}
       <div
-        className="absolute left-3 right-3 z-10 flex flex-col items-center gap-2"
+        className={`absolute left-3 right-3 z-10 flex flex-col items-center gap-2 ${fade(hideUi)}`}
         style={{ top: `calc(env(safe-area-inset-top, 0px) + ${locationProviderFactory ? '44px' : '10px'})` }}
       >
         <div className="w-full">
@@ -1416,13 +1460,22 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
 
       {/* Sul lato resta solo SOS, sempre visibile e grande. Tutto il resto (mappa, sicurezza, offline,
           Giulia, aiuto, termina) è nella scheda Strumenti, aperta dal pannello inferiore. */}
-      <div className="absolute right-3 z-10 top-1/2 -translate-y-1/2 lg:hidden">
+      <div className="absolute right-3 z-10 top-1/2 -translate-y-1/2 flex flex-col items-center gap-3 lg:hidden" onClick={(e) => e.stopPropagation()}>
         <SosButton
           large
           fix={position ? { lat: position.lat, lon: position.lon, accuracyM } : null}
           liveShareUrl={liveShareToken ? `${typeof window !== 'undefined' ? window.location.origin : ''}/s/live/${liveShareToken}` : null}
           onTriggered={(action) => logEvent('sos_triggered', { action })}
         />
+        <button
+          onClick={() => setUiHidden((v) => !v)}
+          aria-pressed={uiHidden}
+          aria-label={uiHidden ? 'Mostra i controlli' : 'Solo mappa: nascondi i controlli'}
+          title={uiHidden ? 'Mostra i controlli' : 'Solo mappa'}
+          className="w-12 h-12 rounded-full shadow-lg bg-white/95 text-stone-700 flex items-center justify-center"
+        >
+          {uiHidden ? <Eye className="w-5 h-5" /> : <EyeOff className="w-5 h-5" />}
+        </button>
       </div>
 
       {/* Pannello laterale — da lg: in su, stessi controlli delle due colonne sopra ma con
@@ -1663,7 +1716,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         const [primary, ...rest] = alerts
 
         return (
-          <div className="absolute left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-2" style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 11.5rem)' }}>
+          <div className={`absolute left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-2 ${fade(hideUi)}`} style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 11.5rem)' }}>
             {primary.node}
             {rest.length > 0 && (
               <button
@@ -1678,6 +1731,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         )
       })()}
 
+      <div className={fade(hideUi)}>
       <NavBottomStrip
         summary={bottomStripSummary}
         metrics={bottomStripMetrics}
@@ -1688,6 +1742,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         onOpenFoto={handleOpenFoto}
         highContrast={highContrastEnabled}
       />
+      </div>
 
       <NavToolsSheet
         open={showTools}
@@ -1699,6 +1754,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         is3D={is3D} onToggle3D={() => setIs3D((v) => !v)}
         isOnline={isOnline}
         showNatura2000={showNatura2000} onToggleNatura2000={() => setShowNatura2000((v) => !v)}
+        autoHide={autoHide} onToggleAutoHide={toggleAutoHide}
         onEscape={handleEscapeOptions}
         liveSharingEnabled={liveSharingEnabled} onLiveShare={() => setShowLiveShareSheet(true)}
         parkingSpot={parkingSpot} position={position}
