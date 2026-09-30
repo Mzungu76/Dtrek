@@ -1,3 +1,6 @@
+import { fetchNearbyWiki, fetchWikiFullDetails } from '@/lib/wikipedia'
+import { namesOverlap } from '@/lib/metaSearch/borgoItinerary'
+
 export interface RoutePhoto {
   url: string
   credit: string
@@ -15,6 +18,50 @@ export interface RoutePhoto {
 // una scala da isolato urbano: abbastanza da coprire i dintorni immediati di un edificio, stretto
 // abbastanza da escludere la piazza o il monumento del blocco successivo.
 export const SINGLE_POINT_PHOTO_RADIUS_M = 400
+
+// Stesso valore di WIKIPEDIA_MATCH_RADIUS_M in lib/placePhotoCache.ts, duplicato invece di importato:
+// quel modulo importa supabase e finirebbe nel bundle client (questo file gira anche nel browser).
+const WIKIPEDIA_MATCH_RADIUS_M = 800
+
+// Immagini della voce Wikipedia che combacia col nome del luogo: scelte da un editor per quel
+// soggetto, quindi pertinenti — a differenza della geosearch Commons, che verifica solo la vicinanza.
+async function fetchCuratedWikiPhotos(name: string, lat: number, lon: number, limit: number): Promise<RoutePhoto[]> {
+  try {
+    const pages = await fetchNearbyWiki(lat, lon, WIKIPEDIA_MATCH_RADIUS_M, 5)
+    const match = pages.find(p => namesOverlap(name, p.title))
+    if (!match) return []
+    const { images } = await fetchWikiFullDetails(match)
+    const seen = new Set<string>()
+    const results: RoutePhoto[] = []
+    for (const url of [match.thumbnail, ...images]) {
+      if (!url || seen.has(url)) continue
+      seen.add(url)
+      results.push({ url, credit: 'Wikimedia Commons', title: match.title })
+      if (results.length >= limit) break
+    }
+    return results
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Foto per un luogo puntuale (Borgo/Sito, non un Sentiero): prima le immagini della voce Wikipedia
+ * del luogo, poi — solo per i posti rimasti — la geosearch Commons generica (fetchRoutePhotos).
+ */
+export async function fetchPlacePhotos(
+  name: string,
+  lat: number,
+  lon: number,
+  radiusM = SINGLE_POINT_PHOTO_RADIUS_M,
+  limit = 6,
+): Promise<RoutePhoto[]> {
+  const curated = await fetchCuratedWikiPhotos(name, lat, lon, limit)
+  if (curated.length >= limit) return curated
+  const filler = await fetchRoutePhotos(lat, lon, radiusM, limit - curated.length)
+  const seen = new Set(curated.map(p => p.url))
+  return [...curated, ...filler.filter(p => !seen.has(p.url))]
+}
 
 /**
  * Fetch geo-tagged landscape photos from Wikimedia Commons near a coordinate.

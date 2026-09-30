@@ -502,8 +502,10 @@ export default function GuideReader({
     if (!mid) return
     const radiusM = poly.length > 0 ? 15000 : SINGLE_POINT_PHOTO_RADIUS_M
     let cancelled = false
-    import('@/app/lib/guide/fetchRoutePhotos').then(({ fetchRoutePhotos }) =>
-      fetchRoutePhotos(mid.lat, mid.lon, radiusM, 6)
+    import('@/app/lib/guide/fetchRoutePhotos').then(({ fetchRoutePhotos, fetchPlacePhotos }) =>
+      poly.length > 0
+        ? fetchRoutePhotos(mid.lat, mid.lon, radiusM, 6)
+        : fetchPlacePhotos(hike.title, mid.lat, mid.lon, radiusM, 6)
     ).then(photos => {
       // Scritta anche se questo montaggio è già stato chiuso (vedi il commento sopra
       // routePhotosMemoryCache) — un rimontaggio successivo la trova comunque pronta.
@@ -1468,7 +1470,7 @@ export default function GuideReader({
           </>
         ) : hike.latitude != null && hike.longitude != null ? (
           <div className="px-5 sm:px-8 md:px-10 py-4 border-b border-stone-200">
-            <SitoGalleryWidget lat={hike.latitude} lon={hike.longitude} siteType={siteType} />
+            <SitoGalleryWidget name={hikeTitle} lat={hike.latitude} lon={hike.longitude} siteType={siteType} />
           </div>
         ) : null
       ) : hike.metaType === 'borgo_citta' && borgoVariant === 'cammino_urbano' ? (
