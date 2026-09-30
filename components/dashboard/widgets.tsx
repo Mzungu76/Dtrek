@@ -8,19 +8,17 @@ import {
   BookOpen, Compass, Layers, LayoutGrid, Award, Calendar, Activity, ChevronRight,
   Globe2, Mountain, type LucideIcon,
 } from 'lucide-react'
-import { wmoInfo } from '@/lib/openmeteo'
+import { wmoInfo } from '@/lib/weather'
 import { HeatmapPanel, MonthlyBarChart, TssBarChart } from '@/components/bacheca/ChartPanels'
 import type { DashboardData } from './types'
 import type { DashboardWidgetId } from '@/lib/dashboardConfig'
+import type { WidgetCatalogEntry } from './widgetKit'
+import { EXTRA_WIDGETS } from './widgetsExtra'
+
+export type { WidgetCatalogEntry } from './widgetKit'
 
 interface WidgetProps { data: DashboardData }
 
-export interface WidgetCatalogEntry {
-  id: DashboardWidgetId
-  label: string
-  icon: LucideIcon
-  Component: React.ComponentType<WidgetProps>
-}
 
 // ── Helpers di stile condivisi — stessa identità della Bacheca precedente e del resto dell'app
 //    (palette forest/terra/stone, Barlow Condensed maiuscolo per le etichette, Playfair per i
@@ -334,23 +332,25 @@ function TssWidget({ data }: WidgetProps) {
   return <DarkChartCard label="Carico giornaliero (TSS)"><TssBarChart activities={data.activities} /></DarkChartCard>
 }
 
-export const WIDGET_CATALOG: WidgetCatalogEntry[] = [
-  { id: 'quote', label: 'Lettura del giorno', icon: Sparkles, Component: QuoteWidget },
-  { id: 'prossima-uscita', label: 'Prossima uscita', icon: CalendarClock, Component: NextOutingWidget },
-  { id: 'recovery', label: 'Recovery', icon: HeartPulse, Component: RecoveryWidget },
-  { id: 'forma', label: 'Bilancio fisico', icon: TrendingUp, Component: FormaWidget },
-  { id: 'volume', label: 'Volume settimanale', icon: BarChart3, Component: VolumeWidget },
-  { id: 'streak', label: 'Streak', icon: Flame, Component: StreakWidget },
-  { id: 'traguardo', label: 'Prossimo traguardo', icon: Trophy, Component: TraguardoWidget },
-  { id: 'diario-attivo', label: 'Diario attivo', icon: BookOpen, Component: DiarioAttivoWidget },
-  { id: 'percorsi-per-te', label: 'Percorsi per te', icon: Compass, Component: PercorsiPerTeWidget },
-  { id: 'raccolte', label: 'Raccolte pubblicate', icon: Layers, Component: RaccolteWidget },
-  { id: 'accesso-rapido', label: 'Accesso rapido', icon: LayoutGrid, Component: AccessoRapidoWidget },
-  { id: 'record', label: 'I tuoi numeri', icon: Award, Component: RecordWidget },
-  { id: 'heatmap', label: 'Attività annuale', icon: Calendar, Component: HeatmapWidget },
-  { id: 'mensile', label: 'Andamento mensile', icon: BarChart3, Component: MensileWidget },
-  { id: 'tss', label: 'Carico giornaliero', icon: Activity, Component: TssWidget },
+const BASE_WIDGETS: WidgetCatalogEntry[] = [
+  { id: 'quote', label: 'Lettura del giorno', icon: Sparkles, Component: QuoteWidget, category: 'Oggi', description: 'Una frase sul tuo stato di forma di oggi.' },
+  { id: 'prossima-uscita', label: 'Prossima uscita', icon: CalendarClock, Component: NextOutingWidget, category: 'Oggi', description: 'La prossima uscita in programma, con il meteo del giorno.' },
+  { id: 'recovery', label: 'Recovery', icon: HeartPulse, Component: RecoveryWidget, category: 'Allenamento', description: 'Quanto sei recuperato, in un numero.' },
+  { id: 'forma', label: 'Bilancio fisico', icon: TrendingUp, Component: FormaWidget, category: 'Allenamento', description: 'Bilancio tra carico e riposo.' },
+  { id: 'volume', label: 'Volume settimanale', icon: BarChart3, Component: VolumeWidget, category: 'Allenamento', description: 'Chilometri della settimana rispetto alle precedenti.' },
+  { id: 'streak', label: 'Streak', icon: Flame, Component: StreakWidget, category: 'Obiettivi e gioco', description: 'Settimane e giorni di fila in cui sei uscito.' },
+  { id: 'traguardo', label: 'Prossimo traguardo', icon: Trophy, Component: TraguardoWidget, category: 'Obiettivi e gioco', description: 'Il prossimo badge da sbloccare.' },
+  { id: 'diario-attivo', label: 'Diario attivo', icon: BookOpen, Component: DiarioAttivoWidget, category: 'Diario e reportage', description: 'Il diario su cui stai lavorando.' },
+  { id: 'percorsi-per-te', label: 'Percorsi per te', icon: Compass, Component: PercorsiPerTeWidget, category: 'Pianificazione', description: 'Percorsi consigliati vicino a te.' },
+  { id: 'raccolte', label: 'Raccolte pubblicate', icon: Layers, Component: RaccolteWidget, category: 'Diario e reportage', description: 'Le raccolte che hai pubblicato.' },
+  { id: 'accesso-rapido', label: 'Accesso rapido', icon: LayoutGrid, Component: AccessoRapidoWidget, category: 'Scorciatoie', description: 'Collegamenti alle sezioni principali.' },
+  { id: 'record', label: 'I tuoi numeri', icon: Award, Component: RecordWidget, category: 'Statistiche', description: 'I tuoi totali di sempre.' },
+  { id: 'heatmap', label: 'Attività annuale', icon: Calendar, Component: HeatmapWidget, category: 'Statistiche', description: 'Le giornate attive dell’anno.' },
+  { id: 'mensile', label: 'Andamento mensile', icon: BarChart3, Component: MensileWidget, category: 'Statistiche', description: 'Chilometri mese per mese.' },
+  { id: 'tss', label: 'Carico giornaliero', icon: Activity, Component: TssWidget, category: 'Allenamento', description: 'Il carico di ogni giornata.' },
 ]
+
+export const WIDGET_CATALOG: WidgetCatalogEntry[] = [...BASE_WIDGETS, ...EXTRA_WIDGETS]
 
 export const WIDGET_BY_ID: Record<DashboardWidgetId, WidgetCatalogEntry> =
   Object.fromEntries(WIDGET_CATALOG.map(w => [w.id, w])) as Record<DashboardWidgetId, WidgetCatalogEntry>

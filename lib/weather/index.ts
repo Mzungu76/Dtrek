@@ -1,5 +1,7 @@
-// Open-Meteo API — 100% gratuita, nessuna chiave richiesta
-// https://open-meteo.com/
+// Meteo dell'app: previsioni da MET Norway (Locationforecast 2.0), servite da /api/weather.
+// Gratuito anche per uso commerciale (dati CC BY 4.0 / NLOD, attribuzione in /fonti-e-crediti).
+// Solo previsioni: non c'è più lo storico (l'API gratuita di Open-Meteo, usata prima, è riservata
+// all'uso non commerciale). Il meteo già salvato con le uscite vecchie (WeatherAtHike) resta valido.
 
 export interface HourlyWeather {
   time: string
@@ -43,45 +45,6 @@ export interface ClothingItem {
   priority: 'essential' | 'recommended' | 'optional'
 }
 
-// Shapes of the raw Open-Meteo JSON responses — only the fields this module reads.
-interface OpenMeteoHourlyRaw {
-  time: string[]
-  temperature_2m: number[]
-  windspeed_10m: number[]
-  precipitation: number[]
-  cloudcover: number[]
-  weathercode: number[]
-}
-interface OpenMeteoHistoricalResponse { hourly: OpenMeteoHourlyRaw }
-
-interface OpenMeteoDailyRaw {
-  time: string[]
-  temperature_2m_max: number[]
-  temperature_2m_min: number[]
-  precipitation_sum: number[]
-  windspeed_10m_max: number[]
-  weathercode: number[]
-}
-interface OpenMeteoForecastResponse { daily: OpenMeteoDailyRaw }
-
-// Every field optional here (unlike the two above): fetchDayHourly already reads these
-// defensively via `?.[i] ?? 0`, so the type should reflect that the caller doesn't trust
-// the endpoint to always include every variable.
-interface OpenMeteoDayHourlyRaw {
-  time?: string[]
-  temperature_2m?: number[]
-  windspeed_10m?: number[]
-  precipitation?: number[]
-  cloudcover?: number[]
-  weathercode?: number[]
-  apparent_temperature?: number[]
-  relative_humidity_2m?: number[]
-  winddirection_10m?: number[]
-  snowfall?: number[]
-  uv_index?: number[]
-}
-interface OpenMeteoDayHourlyResponse { hourly?: OpenMeteoDayHourlyRaw }
-
 // WMO 4677 codes → Italian label + emoji
 const WMO: Record<number, [string, string]> = {
   0:  ['☀️', 'Cielo sereno'],
@@ -115,134 +78,46 @@ export function wmoInfo(code: number): { emoji: string; label: string } {
   return { emoji: entry[0], label: entry[1] }
 }
 
-// Fetches and condenses the day's weather for a single GPS point + date into a
-// compact summary suitable for persisting alongside an activity.
-export async function fetchWeatherAtHike(lat: number, lon: number, date: string): Promise<WeatherAtHike | null> {
-  const hourly = await fetchHistoricalWeather(lat, lon, date, date)
-  if (!hourly.length) return null
-  const noon = hourly.find(h => h.time.slice(11, 13) === '12') ?? hourly[Math.floor(hourly.length / 2)]
-  return {
-    temperature:   noon.temperature,
-    tempMin:       Math.min(...hourly.map(h => h.temperature)),
-    tempMax:       Math.max(...hourly.map(h => h.temperature)),
-    windspeed:     noon.windspeed,
-    precipitation: hourly.reduce((s, h) => s + h.precipitation, 0),
-    weathercode:   noon.weathercode,
-  }
+interface WeatherApiPayload {
+  hourly: (HourlyWeatherFull & { stepHours?: number })[]
+  daily: DailyWeather[]
 }
 
-export async function fetchHistoricalWeather(
-  lat: number,
-  lon: number,
-  startDate: string,  // YYYY-MM-DD
-  endDate: string,
-): Promise<HourlyWeather[]> {
-  const url = 'https://archive-api.open-meteo.com/v1/archive?' + new URLSearchParams({
-    latitude:   lat.toFixed(4),
-    longitude:  lon.toFixed(4),
-    start_date: startDate,
-    end_date:   endDate,
-    hourly:     'temperature_2m,windspeed_10m,precipitation,cloudcover,weathercode',
-    timezone:   'Europe/Rome',
-  })
-  const res = await fetch(url)
-  if (!res.ok) throw new Error('Open-Meteo historical error')
-  const d = await res.json() as OpenMeteoHistoricalResponse
-  const { time, temperature_2m, windspeed_10m, precipitation, cloudcover, weathercode } = d.hourly
-  return time.map((t, i) => ({
-    time:          t,
-    temperature:   temperature_2m[i],
-    windspeed:     windspeed_10m[i],
-    precipitation: precipitation[i],
-    cloudcover:    cloudcover[i],
-    weathercode:   weathercode[i],
-  }))
-}
+// Una sola richiesta per zona basta a tutti i widget aperti insieme (Bacheca, scheda meteo, mappa):
+// la stessa promessa viene riusata per qualche minuto. Il server ha comunque la sua cache.
+const CLIENT_TTL_MS = 5 * 60 * 1000
+const inflight = new Map<string, { at: number; promise: Promise<WeatherApiPayload> }>()
 
-export async function fetchForecastWeather(
-  lat: number,
-  lon: number,
-  days = 7,
-): Promise<DailyWeather[]> {
-  const url = 'https://api.open-meteo.com/v1/forecast?' + new URLSearchParams({
-    latitude:      lat.toFixed(4),
-    longitude:     lon.toFixed(4),
-    daily:         'temperature_2m_max,temperature_2m_min,precipitation_sum,windspeed_10m_max,weathercode',
-    timezone:      'Europe/Rome',
-    forecast_days: String(Math.min(days, 16)),
-  })
-  const res = await fetch(url)
-  if (!res.ok) throw new Error('Open-Meteo forecast error')
-  const d = await res.json() as OpenMeteoForecastResponse
-  const { time, temperature_2m_max, temperature_2m_min, precipitation_sum, windspeed_10m_max, weathercode } = d.daily
-  return time.map((t, i) => ({
-    date:          t,
-    tempMax:       temperature_2m_max[i],
-    tempMin:       temperature_2m_min[i],
-    precipitation: precipitation_sum[i],
-    windspeedMax:  windspeed_10m_max[i],
-    weathercode:   weathercode[i],
-  }))
-}
-
-// Fetch detailed hourly data for a specific date (past or future, max 16 days ahead)
-export async function fetchDayHourly(
-  lat: number,
-  lon: number,
-  date: string,  // YYYY-MM-DD
-): Promise<HourlyWeatherFull[]> {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const targetDate = new Date(date + 'T00:00:00')
-  const isPast = targetDate < today
-
-  const HOURLY_VARS = [
-    'temperature_2m', 'apparent_temperature', 'relative_humidity_2m',
-    'windspeed_10m', 'winddirection_10m', 'precipitation', 'snowfall',
-    'cloudcover', 'weathercode', 'uv_index',
-  ].join(',')
-
-  let url: string
-  if (isPast) {
-    url = 'https://archive-api.open-meteo.com/v1/archive?' + new URLSearchParams({
-      latitude:   lat.toFixed(4),
-      longitude:  lon.toFixed(4),
-      start_date: date,
-      end_date:   date,
-      hourly:     HOURLY_VARS,
-      timezone:   'Europe/Rome',
+function loadForecast(lat: number, lon: number): Promise<WeatherApiPayload> {
+  const key = `${lat.toFixed(2)}:${lon.toFixed(2)}`
+  const hit = inflight.get(key)
+  if (hit && Date.now() - hit.at < CLIENT_TTL_MS) return hit.promise
+  const promise = fetch(`/api/weather?lat=${lat.toFixed(4)}&lon=${lon.toFixed(4)}`)
+    .then((res) => {
+      if (!res.ok) throw new Error(`weather API ${res.status}`)
+      return res.json() as Promise<WeatherApiPayload>
     })
-  } else {
-    url = 'https://api.open-meteo.com/v1/forecast?' + new URLSearchParams({
-      latitude:      lat.toFixed(4),
-      longitude:     lon.toFixed(4),
-      start_date:    date,
-      end_date:      date,
-      hourly:        HOURLY_VARS,
-      timezone:      'Europe/Rome',
-      forecast_days: '16',
-    })
-  }
+  inflight.set(key, { at: Date.now(), promise })
+  promise.catch(() => inflight.delete(key)) // un errore non resta in cache
+  return promise
+}
 
-  const res = await fetch(url)
-  if (!res.ok) throw new Error('Open-Meteo day-hourly error')
-  const d = await res.json() as OpenMeteoDayHourlyResponse
-  const h = d.hourly
-  if (!h?.time?.length) throw new Error('No data')
+/** Previsione giornaliera. MET Norway copre circa 9-10 giorni: oltre, i giorni semplicemente mancano. */
+export async function fetchForecastWeather(lat: number, lon: number, days = 7): Promise<DailyWeather[]> {
+  const { daily } = await loadForecast(lat, lon)
+  const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' })
+  const upcoming = daily.filter((d) => d.date >= today).slice(0, Math.min(days, 16))
+  if (upcoming.length === 0) throw new Error('No forecast data')
+  return upcoming
+}
 
-  return h.time.map((t, i) => ({
-    time:          t,
-    temperature:   h.temperature_2m?.[i] ?? 0,
-    windspeed:     h.windspeed_10m?.[i] ?? 0,
-    precipitation: h.precipitation?.[i] ?? 0,
-    cloudcover:    h.cloudcover?.[i] ?? 0,
-    weathercode:   h.weathercode?.[i] ?? 0,
-    feelsLike:     h.apparent_temperature?.[i] ?? h.temperature_2m?.[i] ?? 0,
-    humidity:      h.relative_humidity_2m?.[i] ?? 0,
-    windDirection: h.winddirection_10m?.[i] ?? 0,
-    snowfall:      h.snowfall?.[i] ?? 0,
-    uvIndex:       h.uv_index?.[i] ?? 0,
-  }))
+/** Previsione oraria di un giorno (YYYY-MM-DD, ora di Roma). Solo giorni futuri o oggi, entro l'orizzonte
+ *  della previsione: per il passato non c'è storico e per un giorno lontano non c'è dato — lancia. */
+export async function fetchDayHourly(lat: number, lon: number, date: string): Promise<HourlyWeatherFull[]> {
+  const { hourly } = await loadForecast(lat, lon)
+  const rows = hourly.filter((h) => h.time.slice(0, 10) === date)
+  if (rows.length === 0) throw new Error('No data')
+  return rows.map(({ stepHours: _step, ...h }) => h)
 }
 
 export interface GoodWeatherWindow {
@@ -528,7 +403,7 @@ const SNOW_WEATHER_CODES = [71, 73, 75, 77, 85, 86]
 
 /**
  * Stessa idea di weatherAdvice ma per un giorno del forecast a 7 giorni (DailyWeather), quando non
- * c'è alcuna data pianificata per l'escursione e quindi nessun dettaglio orario da Open-Meteo —
+ * c'è alcuna data pianificata per l'escursione e quindi nessun dettaglio orario dal servizio meteo —
  * caso comune per le guide importate senza data (mode 'forecast' di WeatherWidget). Meno preciso
  * (niente UV, niente nebbia, niente distinzione mattina/pomeriggio per i temporali — dati non
  * disponibili a questa granularità), ma copre comunque temporali/pioggia/vento/caldo/freddo/neve

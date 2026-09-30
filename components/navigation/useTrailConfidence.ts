@@ -58,7 +58,7 @@ export function useTrailConfidence(
           setConfidence(computeTrailConfidence({
             trailScore,
             safetyScore,
-            // null, non 0, quando Open-Meteo non ha risposto — un fallimento di rete non deve
+            // null, non 0, quando MET Norway non ha risposto — un fallimento di rete non deve
             // pesare come "condizioni favorevoli" nella media di Trail Confidence (vedi
             // WeatherSignal/ClimateSignal.unavailable).
             weatherPenalty: data.weather.unavailable ? null : data.weather.totalPenalty,

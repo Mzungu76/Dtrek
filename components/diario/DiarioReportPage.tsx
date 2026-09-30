@@ -9,7 +9,7 @@ import { Route, Mountain, Clock, Flame, EyeOff, SlidersHorizontal, X, Image as I
 import type { ActivityMeta } from '@/lib/blobStore'
 import type { RoutePhoto } from '@/lib/activityPhotos'
 import { formatDuration, type TrackPoint } from '@/lib/tcxParser'
-import { wmoInfo } from '@/lib/openmeteo'
+import { wmoInfo } from '@/lib/weather'
 import { parseSections } from '@/lib/reportStore'
 import { parseInlineEmphasis } from '@/lib/guideMarkup'
 import { selectSpreadPhotos } from '@/lib/photoBuckets'

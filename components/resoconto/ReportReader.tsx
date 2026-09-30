@@ -37,7 +37,6 @@ import StatCard from '@/components/StatCard'
 import HRChart from '@/components/HRChart'
 import SpeedChart from '@/components/SpeedChart'
 import RouteMapSection from '@/components/RouteMapSection'
-import WeatherWidget from '@/components/WeatherWidget'
 import PoiListWidget from '@/components/guida/widgets/PoiListWidget'
 import BorgoStopsWidget from '@/components/guida/widgets/BorgoStopsWidget'
 import NaturaWidget from '@/components/guida/widgets/NaturaWidget'
@@ -501,7 +500,6 @@ export default function ReportReader({
   const categoryBadge = (activity.tags?.[0] ?? activity.sport ?? 'Escursione').toUpperCase()
   const gpsPoints = activity.trackPoints.filter(p => p.lat !== undefined && p.lon !== undefined)
   const hasGps = gpsPoints.length > 0
-  const dateISO = activity.startTime.slice(0, 10)
   // Un Sito confermato con check-in GPS ha 1(+) trackPoint reale (hasGps vero) ma nessun percorso
   // da mostrare come profilo altimetrico o mappa-foto-lungo-cammino: quei widget presuppongono un
   // vero spostamento, non solo una posizione. metaHasHikingMetrics(undefined) = true (sentiero è il
@@ -673,8 +671,6 @@ export default function ReportReader({
                 </div>
               ))}
             </dl>
-
-            {hasGps && dateISO && <WeatherWidget mode="historical" lat={gpsPoints[Math.floor(gpsPoints.length / 2)].lat!} lon={gpsPoints[Math.floor(gpsPoints.length / 2)].lon!} date={dateISO} />}
 
             {data.similarActivities.length > 0 && (
               <div>

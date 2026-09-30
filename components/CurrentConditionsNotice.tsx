@@ -27,7 +27,7 @@ function queryFor({ osmId, polyline, plannedId }: Props): string | null {
 
 function currentRows(weather: WeatherSignal, climate: ClimateSignal): SignalRow[] {
   const rows: SignalRow[] = []
-  // Un fallimento di rete verso Open-Meteo non deve leggersi come "nessuna segnalazione" (che
+  // Un fallimento di rete verso MET Norway non deve leggersi come "nessuna segnalazione" (che
   // suggerisce condizioni verificate buone) — va detto esplicitamente che il dato manca.
   if (weather.unavailable) {
     rows.push({ icon: 'ℹ️', kind: 'weather', text: 'Condizioni meteo/suolo non disponibili al momento' })

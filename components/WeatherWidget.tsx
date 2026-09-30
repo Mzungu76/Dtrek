@@ -1,20 +1,13 @@
 'use client'
 import { useState, useEffect, useMemo } from 'react'
 import {
-  fetchHistoricalWeather, fetchForecastWeather, fetchDayHourly,
+  fetchForecastWeather, fetchDayHourly,
   clothingSuggestions, weatherAdvice, weatherAdviceFromDaily, wmoInfo, windDirLabel, findGoodWeatherWindows,
-} from '@/lib/openmeteo'
-import type { HourlyWeather, HourlyWeatherFull, DailyWeather, ClothingItem, WeatherAdviceItem } from '@/lib/openmeteo'
+} from '@/lib/weather'
+import type { HourlyWeather, HourlyWeatherFull, DailyWeather, ClothingItem, WeatherAdviceItem } from '@/lib/weather'
 
 function formatHour(iso: string): string {
   return iso.slice(11, 16)
-}
-
-interface HistoricalProps {
-  mode: 'historical'
-  lat: number
-  lon: number
-  date: string  // YYYY-MM-DD
 }
 
 interface ForecastProps {
@@ -34,7 +27,7 @@ interface PlannedProps {
   days?: number
 }
 
-type Props = HistoricalProps | ForecastProps | PlannedProps
+type Props = ForecastProps | PlannedProps
 
 function priorityStyle(p: ClothingItem['priority']) {
   return p === 'essential'   ? 'bg-red-100 text-red-700 border-red-200'
@@ -82,7 +75,7 @@ export default function WeatherWidget(props: Props) {
   const [daily,       setDaily]      = useState<DailyWeather[]>([])
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const dateKey        = (props as HistoricalProps | PlannedProps).date
+  const dateKey        = (props as PlannedProps).date
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const daysKey        = (props as ForecastProps | PlannedProps).days
   const altitudeMax    = (props as PlannedProps).altitudeMax  ?? 0
@@ -91,17 +84,6 @@ export default function WeatherWidget(props: Props) {
   useEffect(() => {
     setLoading(true)
     setError(null)
-
-    if (props.mode === 'historical') {
-      fetchHistoricalWeather(props.lat, props.lon, props.date, props.date)
-        .then(h => setHourly(h.filter(x => {
-          const hh = parseInt(x.time.slice(11, 13))
-          return hh >= 6 && hh <= 21
-        })))
-        .catch(() => setError('Dati meteo non disponibili'))
-        .finally(() => setLoading(false))
-      return
-    }
 
     if (props.mode === 'forecast') {
       fetchForecastWeather(props.lat, props.lon, props.days ?? 7)
@@ -170,42 +152,6 @@ export default function WeatherWidget(props: Props) {
   if (error && !daily.length && !hourly.length && !hourlyFull.length) return (
     <div className="rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-600">{error}</div>
   )
-
-  // ── Historical mode ──────────────────────────────────────────────────────────
-  if (props.mode === 'historical') {
-    if (!hourly.length) return null
-    const noon = hourly.find(h => h.time.slice(11, 13) === '12') ?? hourly[Math.floor(hourly.length / 2)]
-    const info  = wmoInfo(noon.weathercode)
-    const rain  = hourly.reduce((s, h) => s + h.precipitation, 0)
-    const tMin  = Math.min(...hourly.map(h => h.temperature))
-    const tMax  = Math.max(...hourly.map(h => h.temperature))
-
-    return (
-      <div className="rounded-xl border border-sky-100 bg-sky-50 p-4">
-        <p className="text-xs font-semibold text-sky-700 uppercase tracking-wide mb-2">Meteo del giorno</p>
-        <div className="flex items-center gap-4">
-          <span className="text-4xl">{info.emoji}</span>
-          <div>
-            <p className="font-semibold text-stone-800">{info.label}</p>
-            <p className="text-sm text-stone-600">{tMin.toFixed(0)}° – {tMax.toFixed(0)}°C · vento {noon.windspeed} km/h</p>
-            {rain > 0 && <p className="text-sm text-sky-700">💧 Precipitazioni: {rain.toFixed(1)} mm</p>}
-          </div>
-        </div>
-        <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
-          {hourly.filter((_, i) => i % 3 === 0).map(h => {
-            const inf = wmoInfo(h.weathercode)
-            return (
-              <div key={h.time} className="flex-shrink-0 text-center text-xs">
-                <p className="text-stone-400">{h.time.slice(11, 16)}</p>
-                <p className="text-lg">{inf.emoji}</p>
-                <p className="font-semibold text-stone-700">{h.temperature.toFixed(0)}°</p>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-    )
-  }
 
   // ── Forecast mode ────────────────────────────────────────────────────────────
   if (props.mode === 'forecast') {

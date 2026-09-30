@@ -2,8 +2,8 @@
 // all'orario di arrivo stimato (PaceAssistant.liveEtaDate), non solo quelle attuali. Funzione
 // pura: nessuna chiamata di rete qui, riceve l'array orario già scaricato da
 // components/navigation/useWeatherRefresh.ts (stesso fetchDayHourly già in uso per la
-// correzione meteo live del passo — nessuna nuova chiamata Open-Meteo introdotta da questa fase).
-import type { HourlyWeatherFull } from '@/lib/openmeteo'
+// correzione meteo live del passo — nessuna nuova chiamata MET Norway introdotta da questa fase).
+import type { HourlyWeatherFull } from '@/lib/weather'
 
 export interface WeatherLookahead {
   etaDate: Date

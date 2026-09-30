@@ -25,7 +25,7 @@ interface Props {
   /** Distanza in auto dall'indirizzo salvato nelle impostazioni fino al trailhead — mostrata
    *  sotto la data, apre le indicazioni Google Maps al tap. */
   driving?: { distanceMeters: number; mapsUrl?: string } | null
-  /** Meteo del giorno dell'escursione (vedi lib/openmeteo.ts wmoInfo) — chip discreto accanto
+  /** Meteo del giorno dell'escursione (vedi lib/weather wmoInfo) — chip discreto accanto
    *  alla data, invece di restare visibile solo nel widget "Dati e punteggi". */
   weatherIcon?: { emoji: string; label: string } | null
   /** Minuti di lettura stimati del racconto (~200 parole/min) — assente finché non esiste ancora

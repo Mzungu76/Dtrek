@@ -51,6 +51,18 @@ const SOURCES: CreditSource[] = [
     note: 'Cartografia escursionistica con curve di livello (dati OSM e SRTM), usata per alcune miniature.',
   },
   {
+    name: 'MET Norway',
+    url: 'https://api.met.no/doc/License',
+    license: 'CC BY 4.0 / NLOD',
+    note: 'Previsioni meteo (Locationforecast) mostrate nelle uscite, nella navigazione e nei widget della Bacheca. Dati dell’Istituto Meteorologico Norvegese.',
+  },
+  {
+    name: 'Wikipedia e Wikivoyage',
+    url: 'https://www.wikipedia.org/',
+    license: 'CC BY-SA 4.0',
+    note: 'Descrizioni dei luoghi e curiosità nelle guide, nella navigazione e nei widget. Ogni testo indica la voce di provenienza.',
+  },
+  {
     name: 'MapTiler',
     url: 'https://www.maptiler.com/copyright/',
     license: '© MapTiler · © OpenStreetMap contributors',

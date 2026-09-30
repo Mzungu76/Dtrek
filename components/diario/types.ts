@@ -1,5 +1,5 @@
 import type { ActivityMeta } from '@/lib/blobStore'
-import type { WeatherAtHike } from '@/lib/openmeteo'
+import type { WeatherAtHike } from '@/lib/weather'
 
 export interface DiaryReport {
   id: string
