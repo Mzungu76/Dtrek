@@ -5,7 +5,8 @@ import { Pencil, Plus, X, ChevronUp, ChevronDown, Check, LayoutDashboard } from 
 import { MobileNavBar, DesktopNav } from '@/components/Navbar'
 import { WIDGET_CATALOG, WIDGET_BY_ID } from '@/components/dashboard/widgets'
 import { WIDGET_CATEGORIES } from '@/components/dashboard/widgetKit'
-import { PEEK_SUMMARIES, isPinnable, type PeekSummary } from '@/components/dashboard/peekSummaries'
+import { PEEK_SUMMARIES, isPinnable } from '@/components/dashboard/peekSummaries'
+import { PEEK_TILES, PeekTile } from '@/components/dashboard/peekTiles'
 import {
   normalizeDashboardConfig, DEFAULT_DASHBOARD_CONFIG, DEFAULT_TAB_ID, MAX_PINNED, applyPin,
   type DashboardConfig, type DashboardTab, type DashboardWidgetId,
@@ -16,46 +17,18 @@ import type { DashboardData } from './types'
 // come tap — sotto questa soglia, anche un piccolo movimento involontario apre/chiude la scheda.
 const DRAG_COMMIT_PX = 32
 
-function GlassRing({ value, color, size = 40 }: { value: number; color: string; size?: number }) {
-  const pct = Math.max(0, Math.min(100, value))
-  return (
-    <div
-      className="rounded-full shrink-0 flex items-center justify-center"
-      style={{ width: size, height: size, background: `conic-gradient(${color} ${pct}%, rgba(255,255,255,0.18) ${pct}% 100%)` }}
-    >
-      <div className="rounded-full bg-[#0b1a24]/90 flex items-center justify-center" style={{ width: size - 9, height: size - 9 }}>
-        <span className="font-display font-bold text-white" style={{ fontSize: size * 0.3 }}>{Math.round(value)}</span>
-      </div>
-    </div>
-  )
-}
-
-/** Una tessera "vetro" del peek: etichetta, valore ed eventuale anello o link. */
-function PeekTile({ summary }: { summary: PeekSummary }) {
-  const body = (
-    <div className="flex items-center gap-2.5">
-      {summary.ring && <GlassRing value={summary.ring.value} color={summary.ring.color} />}
-      <div className="min-w-0">
-        <div className="font-barlow text-[10px] font-bold tracking-wide uppercase text-white/65 truncate">{summary.label}</div>
-        <div className="font-display font-semibold text-[13px] text-white truncate mt-0.5">{summary.value}</div>
-        {summary.caption && <div className="text-[10px] text-white/65 mt-0.5 truncate">{summary.caption}</div>}
-      </div>
-    </div>
-  )
-  return (
-    <div className="flex-1 min-w-0 rounded-2xl bg-white/14 backdrop-blur-md border border-white/20 p-3.5">
-      {summary.href ? <Link href={summary.href} className="block">{body}</Link> : body}
-    </div>
-  )
-}
-
 /** I widget sempre visibili sul peek (mobile): quelli che l'utente ha fissato (config.pinned, al
  *  massimo due), ciascuno nella sua versione compatta (peekSummaries.ts). Indipendenti dalle schede
  *  personalizzabili sotto, che si raggiungono trascinando verso l'alto. */
 function PeekWidgets({ data, ids }: { data: DashboardData; ids: DashboardWidgetId[] }) {
-  const tiles = ids.map(id => PEEK_SUMMARIES[id]?.(data)).filter((t): t is PeekSummary => !!t)
+  const tiles = ids.map(id => {
+    const Custom = PEEK_TILES[id]
+    if (Custom) return <Custom key={id} data={data} />
+    const summary = PEEK_SUMMARIES[id]?.(data)
+    return summary ? <PeekTile key={id} summary={summary} /> : null
+  }).filter(Boolean)
   if (tiles.length === 0) return null
-  return <div className="flex gap-2.5">{tiles.map((t, i) => <PeekTile key={ids[i]} summary={t} />)}</div>
+  return <div className="flex gap-2.5">{tiles}</div>
 }
 
 /** Gli stessi widget fissati, ma per lo sfondo chiaro del pannello da lg in su: lì si riusano i
@@ -195,7 +168,7 @@ export default function DashboardSheet({ data }: { data: DashboardData }) {
         </button>
         {configLoaded ? <PeekWidgets data={data} ids={config.pinned} /> : (
           <div className="flex gap-2.5">
-            {[0, 1].map(i => <div key={i} className="flex-1 h-[72px] rounded-2xl bg-white/10 animate-pulse" />)}
+            {[0, 1].map(i => <div key={i} className="flex-1 h-[84px] rounded-2xl bg-white/10 animate-pulse" />)}
           </div>
         )}
         {/* Barra di navigazione mobile, spostata qui in fondo (sotto il pannello widget e la
@@ -263,7 +236,7 @@ export default function DashboardSheet({ data }: { data: DashboardData }) {
         <div className="hidden lg:flex flex-col gap-2.5 px-4 pt-4">
           {configLoaded ? <PinnedPeekWidgets data={data} ids={config.pinned} /> : (
             <div className="flex flex-col gap-2.5">
-              {[0, 1].map(i => <div key={i} className="h-[72px] rounded-2xl bg-white/10 animate-pulse" />)}
+              {[0, 1].map(i => <div key={i} className="h-[84px] rounded-2xl bg-white/10 animate-pulse" />)}
             </div>
           )}
         </div>
