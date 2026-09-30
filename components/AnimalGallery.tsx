@@ -6,6 +6,7 @@ import BackLink from '@/app/components/BackLink'
 import { PawPrint, X, Loader2 } from 'lucide-react'
 import type { AnimalItem } from '@/app/api/animals/route'
 import type { TrackPoint } from '@/lib/tcxParser'
+import SafeImg from '@/components/ui/SafeImg'
 
 const MapView = dynamic(() => import('@/components/MapView'), { ssr: false })
 
@@ -51,7 +52,6 @@ function DangerBadge({ level }: { level: AnimalItem['dangerLevel'] }) {
 }
 
 function AnimalCard({ item, onClick }: { item: AnimalItem; onClick: () => void }) {
-  const [imgError, setImgError] = useState(false)
   const displayName = item.vernacularIta ?? item.scientificName
   return (
     <button
@@ -59,16 +59,11 @@ function AnimalCard({ item, onClick }: { item: AnimalItem; onClick: () => void }
       className="text-left bg-white rounded-xl border border-stone-200 overflow-hidden hover:shadow-md transition-shadow relative"
     >
       <div className="relative">
-        {!imgError ? (
-          <img
-            src={item.thumbUrl ?? undefined}
-            alt={displayName}
-            className="w-full aspect-square object-cover rounded-t-xl"
-            onError={() => setImgError(true)}
-          />
-        ) : (
-          <PawPlaceholder className="w-full aspect-square rounded-t-xl" />
-        )}
+        <SafeImg
+ src={item.thumbUrl} fallbackSrcs={[item.imageUrl]} alt={displayName}
+ className="w-full aspect-square object-cover rounded-t-xl"
+ fallback={<PawPlaceholder className="w-full aspect-square rounded-t-xl" />}
+ />
         <DangerBadge level={item.dangerLevel} />
       </div>
       <div className="p-2.5 space-y-0.5">
@@ -93,7 +88,6 @@ function AnimalCard({ item, onClick }: { item: AnimalItem; onClick: () => void }
 }
 
 function AnimalDetailModal({ item, month, onClose }: { item: AnimalItem; month: number; onClose: () => void }) {
-  const [imgError, setImgError] = useState(false)
   const displayName = item.vernacularIta ?? item.scientificName
   const color = dangerColor(item.dangerLevel)
   const label = dangerLabel(item.dangerLevel)
@@ -110,16 +104,11 @@ function AnimalDetailModal({ item, month, onClose }: { item: AnimalItem; month: 
           <X className="w-4 h-4" />
         </button>
         <div className="relative">
-          {!imgError ? (
-            <img
-              src={item.imageUrl ?? undefined}
-              alt={displayName}
-              className="w-full aspect-[4/3] object-cover"
-              onError={() => setImgError(true)}
-            />
-          ) : (
-            <PawPlaceholder className="w-full aspect-[4/3]" />
-          )}
+          <SafeImg
+ src={item.imageUrl} fallbackSrcs={[item.thumbUrl]} alt={displayName}
+ className="w-full aspect-[4/3] object-cover"
+ fallback={<PawPlaceholder className="w-full aspect-[4/3]" />}
+ />
           {color && label && (
             <span
               className="absolute top-3 left-3 text-xs font-semibold uppercase tracking-wide px-2.5 py-1 rounded-full text-white"

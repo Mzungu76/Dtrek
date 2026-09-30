@@ -1,5 +1,5 @@
 'use client'
-import Image from 'next/image'
+import FallbackImage, { ImageSpinner, ImagePlaceholder } from '@/components/ui/FallbackImage'
 import type { RoutePhoto } from '@/lib/activityPhotos'
 
 interface Props {
@@ -27,7 +27,7 @@ export default function PhotoShowcase({ photos, onPhotoClick }: Props) {
         onClick={() => onPhotoClick(first.id)}
         className="relative w-full h-56 sm:h-96 overflow-hidden block print:hidden group"
       >
-        <Image src={first.url} alt={first.caption ?? ''} fill sizes="100vw" className="object-cover group-hover:scale-105 transition-transform duration-300" />
+        <FallbackImage loadingIndicator={<ImageSpinner />} fallback={<ImagePlaceholder />} src={first.url} alt={first.caption ?? ''} fill sizes="100vw" className="object-cover group-hover:scale-105 transition-transform duration-300" />
       </button>
     )
   }
@@ -38,7 +38,7 @@ export default function PhotoShowcase({ photos, onPhotoClick }: Props) {
         onClick={() => onPhotoClick(first.id)}
         className="relative col-span-2 h-44 sm:h-96 overflow-hidden group"
       >
-        <Image src={first.url} alt={first.caption ?? ''} fill sizes="(max-width: 640px) 100vw, 66vw" className="object-cover group-hover:scale-105 transition-transform duration-300" />
+        <FallbackImage loadingIndicator={<ImageSpinner />} fallback={<ImagePlaceholder />} src={first.url} alt={first.caption ?? ''} fill sizes="(max-width: 640px) 100vw, 66vw" className="object-cover group-hover:scale-105 transition-transform duration-300" />
       </button>
       <div className="col-span-2 sm:col-span-1 grid grid-cols-3 sm:flex sm:flex-col gap-1.5 sm:h-96">
         {smalls.map(ph => (
@@ -47,7 +47,7 @@ export default function PhotoShowcase({ photos, onPhotoClick }: Props) {
             onClick={() => onPhotoClick(ph.id)}
             className="relative h-28 sm:h-auto sm:flex-1 overflow-hidden group"
           >
-            <Image src={ph.url} alt={ph.caption ?? ''} fill sizes="(max-width: 640px) 33vw, 22vw" className="object-cover group-hover:scale-105 transition-transform duration-300" />
+            <FallbackImage loadingIndicator={<ImageSpinner />} fallback={<ImagePlaceholder />} src={ph.url} alt={ph.caption ?? ''} fill sizes="(max-width: 640px) 33vw, 22vw" className="object-cover group-hover:scale-105 transition-transform duration-300" />
           </button>
         ))}
       </div>

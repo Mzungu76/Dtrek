@@ -1,5 +1,6 @@
 import { Palette } from 'lucide-react'
 import type { MuseumOpera } from '@/lib/museumOpere'
+import SafeImg from '@/components/ui/SafeImg'
 
 interface Props {
   opere: MuseumOpera[]
@@ -32,7 +33,7 @@ export default function OpereMuseoWidget({ opere }: Props) {
             {opera.image ? (
               // Fonte esterna (Wikimedia Commons, URL arbitrario per opera) — non ottimizzabile da next/image senza un domain allowlist dedicato.
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={opera.image} alt={opera.title} className="w-32 h-24 object-cover" loading="lazy" />
+              <SafeImg src={opera.image} alt={opera.title} className="w-32 h-24 object-cover" loading="lazy" fallback={<div className="w-32 h-24 bg-stone-100 flex items-center justify-center"><Palette className="w-5 h-5 text-stone-300" /></div>} />
             ) : (
               <div className="w-32 h-24 bg-stone-100 flex items-center justify-center">
                 <Palette className="w-5 h-5 text-stone-300" />

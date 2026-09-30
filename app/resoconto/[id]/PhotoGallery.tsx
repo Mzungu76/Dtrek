@@ -1,4 +1,5 @@
 import type { RoutePhoto } from '@/lib/activityPhotos'
+import SafeImg from '@/components/ui/SafeImg'
 
 export function PhotoGallery({ photos, onPhotoClick }: { photos: RoutePhoto[]; onPhotoClick: (photo: RoutePhoto) => void }) {
   return (
@@ -12,7 +13,7 @@ export function PhotoGallery({ photos, onPhotoClick }: { photos: RoutePhoto[]; o
             className="shrink-0 w-36 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow group">
             <div className="relative">
               {/* DTREK-AUDIT.md P3 #35 — striscia di miniature, il tap apre la lightbox in piena risoluzione (ph.url) */}
-              <img src={ph.thumbUrl ?? ph.url} alt={ph.caption}
+              <SafeImg src={ph.thumbUrl ?? ph.url} fallbackSrcs={[ph.url]} alt={ph.caption}
                 className="w-36 h-28 object-cover group-hover:scale-105 transition-transform duration-300" />
               <span className="absolute top-1.5 left-1.5 w-5 h-5 bg-amber-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center font-display">
                 {i + 1}

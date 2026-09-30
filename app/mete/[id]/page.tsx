@@ -10,6 +10,7 @@ import type { BorgoItinerary } from '@/app/api/borgo-itinerary/route'
 import { META_TYPE_CONFIG, SITE_TYPE_CONFIG, type SiteType } from '@/lib/metaTypes'
 import { ArrowLeft, Building2, Clock, Footprints, Globe, Landmark, Loader2, Mail, MapPin, Phone, Tag } from 'lucide-react'
 import Link from 'next/link'
+import SafeImg from '@/components/ui/SafeImg'
 
 // Leaflet tocca `window` al modulo — mai importato lato server (stesso pattern già usato per
 // MeteSearchMap in app/test-ricerca-mete/page.tsx).
@@ -106,7 +107,12 @@ export default function MetaDettaglioPage() {
           overlay in basso), altezza fissa invece del carosello a schermo intero di RouteHub. */}
       <div className="relative h-[42vh] min-h-[240px] max-h-[380px] overflow-hidden">
         {place.imageUrl || place.wikipedia?.thumbnail ? (
-          <img src={place.imageUrl ?? place.wikipedia?.thumbnail} alt="" className="absolute inset-0 w-full h-full object-cover" />
+          <SafeImg
+            variant="cover" src={place.imageUrl} fallbackSrcs={[place.wikipedia?.thumbnail]} alt=""
+            className="absolute inset-0 w-full h-full object-cover"
+            spinnerBackground={`linear-gradient(135deg, ${config.color}, #2E3A26)`}
+            fallback={<div className="absolute inset-0 flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${config.color}, #2E3A26)` }}><TypeIcon className="w-16 h-16 text-white/25" /></div>}
+          />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${config.color}, #2E3A26)` }}>
             <TypeIcon className="w-16 h-16 text-white/25" />

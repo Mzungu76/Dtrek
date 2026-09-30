@@ -45,7 +45,10 @@ export default function ReportHero({ trackPoints, title, categoryBadge, startTim
     [trackPoints],
   )
   const hasGps = points.length > 1
-  const photos = heroPhotos ?? []
+  // Foto che non si caricano (link/Storage rotto) escono dal carosello: se non resta nulla si ricade
+  // sulla mappa del percorso/gradiente, mai su un hero vuoto.
+  const [failedIds, setFailedIds] = useState<Set<string>>(new Set())
+  const photos = useMemo(() => (heroPhotos ?? []).filter(ph => !failedIds.has(ph.id)), [heroPhotos, failedIds])
 
   const [activePhoto, setActivePhoto] = useState(0)
   useEffect(() => {
@@ -59,7 +62,7 @@ export default function ReportHero({ trackPoints, title, categoryBadge, startTim
   return (
     <div
       className="relative w-full overflow-hidden [--hero-h:clamp(200px,50vw,300px)] md:[--hero-h:clamp(240px,32vw,380px)] lg:[--hero-h:clamp(280px,26vw,460px)]"
-      style={{ height: 'var(--hero-h)' }}
+      style={{ height: 'var(--hero-h)', background: 'linear-gradient(160deg, #193b20, #2E3A26)' }}
     >
       {photos.length > 0 ? (
         photos.map((ph, i) => (
@@ -70,6 +73,7 @@ export default function ReportHero({ trackPoints, title, categoryBadge, startTim
             alt=""
             className="absolute inset-0 w-full h-full object-cover transition-opacity duration-1000"
             style={{ filter: 'saturate(1.1) contrast(1.03)', opacity: i === activePhoto ? 1 : 0 }}
+            onError={() => setFailedIds(prev => new Set(prev).add(ph.id))}
           />
         ))
       ) : hasGps ? (

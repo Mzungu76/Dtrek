@@ -14,6 +14,7 @@ import type { DashboardData } from './types'
 import type { DashboardWidgetId } from '@/lib/dashboardConfig'
 import type { WidgetCatalogEntry } from './widgetKit'
 import { EXTRA_WIDGETS } from './widgetsExtra'
+import SafeImg from '@/components/ui/SafeImg'
 
 export type { WidgetCatalogEntry } from './widgetKit'
 
@@ -211,7 +212,7 @@ function DiarioAttivoWidget({ data }: WidgetProps) {
       <div className="w-11 h-11 rounded-xl shrink-0 overflow-hidden bg-forest-50 flex items-center justify-center">
         {d?.coverUrl
           ? // eslint-disable-next-line @next/next/no-img-element
-            <img src={d.coverUrl} alt="" className="w-full h-full object-cover" />
+            <SafeImg src={d.coverUrl} alt="" className="w-full h-full object-cover" fallback={<BookOpen className="w-5 h-5 text-forest-600" />} />
           : <BookOpen className="w-5 h-5 text-forest-600" />}
       </div>
       <div className="flex-1 min-w-0">

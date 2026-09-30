@@ -3,7 +3,7 @@ import { useEffect, useState, useMemo, useCallback, Suspense } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
-import Image from 'next/image'
+import FallbackImage, { ImageSpinner, ImagePlaceholder } from '@/components/ui/FallbackImage'
 import RouteHub from '@/components/routehub/RouteHub'
 import HubSkeleton from '@/components/routehub/HubSkeleton'
 import ReportReader from '@/components/resoconto/ReportReader'
@@ -44,6 +44,7 @@ import { useDrivingDistance } from './useDrivingDistance'
 import { useUserPrefs } from '@/lib/useUserPrefs'
 import { useCtsRecompute } from '@/lib/useCtsRecompute'
 import type { DiarySummary } from '@/app/api/diaries/route'
+import SafeImg from '@/components/ui/SafeImg'
 
 const RouteMap3D      = dynamic(() => import('@/components/RouteMap3D'),      { ssr: false })
 const StreetViewPanel = dynamic(() => import('@/components/StreetViewPanel'), { ssr: false })
@@ -829,7 +830,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
                 <button key={ph.id} onClick={() => setCover(ph.id)}
                   className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-colors ${coverPhotoId === ph.id ? 'border-forest-500' : 'border-stone-200 hover:border-forest-300'}`}>
                   {/* DTREK-AUDIT.md P3 #35 */}
-                  <Image src={ph.thumbUrl ?? ph.url} alt={ph.caption ?? ''} fill sizes="120px" className="object-cover" />
+                  <FallbackImage loadingIndicator={<ImageSpinner />} fallback={<ImagePlaceholder />} src={ph.thumbUrl ?? ph.url} alt={ph.caption ?? ''} fill sizes="120px" className="object-cover" />
                 </button>
               ))}
             </div>
@@ -951,8 +952,7 @@ function ManageReportageOverlay({
             >
               <div className={`w-14 h-14 rounded-xl shrink-0 overflow-hidden relative flex items-center justify-center bg-white/5 ${d.id === currentDiaryId ? 'ring-2 ring-sky-400' : ''}`}>
                 {d.coverUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={d.coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                  <SafeImg src={d.coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover" fallback={<BookMarked className="w-5 h-5 text-white/30" />} />
                 ) : (
                   <BookMarked className="w-5 h-5 text-white/30" />
                 )}
@@ -1020,8 +1020,7 @@ function DiaryFilterOverlay({ diaries, currentId, onSelect, onClose }: {
           >
             <div className={`w-16 h-16 rounded-xl shrink-0 overflow-hidden relative flex items-center justify-center bg-white/5 ${d.id === currentId ? 'ring-2 ring-sky-400' : ''}`}>
               {d.coverUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={d.coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                <SafeImg src={d.coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover" fallback={<BookMarked className="w-6 h-6 text-white/30" />} />
               ) : (
                 <BookMarked className="w-6 h-6 text-white/30" />
               )}

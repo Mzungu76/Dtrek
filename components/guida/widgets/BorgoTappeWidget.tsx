@@ -12,6 +12,7 @@ import type { ItineraryStop, ItineraryLeg } from '@/app/api/borgo-itinerary/rout
 import { useCreateSiteGuideFromStop } from '@/lib/useCreateSiteGuideFromStop'
 import type { PlannedHikeMeta } from '@/lib/plannedStore'
 import StopSourceSheet, { type StopSourceSheetData } from './StopSourceSheet'
+import SafeImg from '@/components/ui/SafeImg'
 
 // Leaflet tocca `window` al modulo — mai importato lato server (stesso pattern già usato in
 // app/mete/[id]/page.tsx, l'unico altro punto che monta questa mappa).
@@ -386,16 +387,14 @@ export default function BorgoTappeWidget({
               <div className={`flex-1 min-w-0 ${!isLast ? 'pb-4' : ''}`}>
                 <div className="flex gap-2.5 items-start">
                   {stop.thumbnail && (
-                    // eslint-disable-next-line @next/next/no-img-element -- provenienza esterna (Wikipedia/archivio), non un asset ottimizzabile
-                    <img
+                    <SafeImg
                       src={stop.thumbnail}
                       alt=""
                       className="w-11 h-11 rounded-lg object-cover shrink-0"
-                      // Alcune fonti d'archivio più vecchie hanno link a immagini non più raggiungibili
-                      // (server regionale lento/offline, http:// bloccato come contenuto misto su una
-                      // pagina https) — mai un'icona di immagine rotta al posto del punto: nascosta,
-                      // il resto della riga (nome/descrizione) resta comunque leggibile.
-                      onError={e => { e.currentTarget.style.display = 'none' }}
+                      // Link d'archivio non più raggiungibili (server lento/offline, http:// bloccato come
+                      // contenuto misto): mai un'icona rotta — scheletro mentre carica, poi nessun
+                      // ingombro se fallisce, il resto della riga resta leggibile.
+                      fallback={null}
                     />
                   )}
                   <div className="min-w-0 flex-1">

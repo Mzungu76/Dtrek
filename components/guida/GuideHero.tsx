@@ -71,6 +71,8 @@ interface Props {
    *  n'è una (mai una traccia GPS disegnata per una Meta che non ne ha, piano §48.9). */
   coverMode?: 'map' | 'photo'
   photoUrl?: string | null
+  /** Foto alternative da provare in ordine se `photoUrl` non si carica (es. galleria del luogo). */
+  photoFallbacks?: (string | null | undefined)[]
   /** Attribuzione Wikimedia Commons (licenza CC BY-SA) — mostrata in un angolo della copertina
    *  quando presente. Vedi app/fonti-e-crediti. */
   photoCredit?: string | null
@@ -96,7 +98,7 @@ interface Props {
  */
 export default function GuideHero({
   trackPoints, routePolyline, title, categoryBadge, plannedDate, driving, startPoint,
-  coverMode = 'map', photoUrl, photoCredit, fallbackIcon, fallbackColor, badgeIcon, locationLabel,
+  coverMode = 'map', photoUrl, photoFallbacks, photoCredit, fallbackIcon, fallbackColor, badgeIcon, locationLabel,
 }: Props) {
   const points = useMemo(() => {
     const fromTrack = (trackPoints ?? []).filter(p => p.lat !== undefined && p.lon !== undefined)
@@ -106,13 +108,40 @@ export default function GuideHero({
 
   const hasGps = points.length > 1
 
+  // Catena di copertine: la foto scelta, poi le alternative (photoFallbacks) — se una non si
+  // carica si prova la successiva e solo alla fine il gradiente+icona, mai una copertina vuota.
+  const photoCandidates = useMemo(
+    () => Array.from(new Set([photoUrl, ...(photoFallbacks ?? [])].filter((u): u is string => !!u))),
+    [photoUrl, photoFallbacks],
+  )
+  const renderPhoto = (urls: string[]): ReactNode => {
+    const [url, ...rest] = urls
+    return (
+      <FallbackImage
+        src={url} alt="" fill priority sizes="100vw"
+        className="object-cover"
+        loadingIndicator={<CoverLoadingSpinner color={fallbackColor} />}
+        fallback={rest.length > 0 ? renderPhoto(rest) : <CoverFallback color={fallbackColor} icon={fallbackIcon} />}
+      >
+        {/* Attribuzione richiesta dalla licenza CC BY-SA di Wikimedia Commons — solo sopra la
+            foto vera (children di FallbackImage), mai sopra il ripiego: non c'è nulla da
+            attribuire quando la foto non si è caricata. Vedi app/fonti-e-crediti. */}
+        {photoCredit && url === photoUrl && (
+          <span className="absolute top-2.5 right-2.5 bg-black/40 text-white/80 text-[9px] px-1.5 py-0.5 rounded backdrop-blur-sm">
+            {photoCredit}
+          </span>
+        )}
+      </FallbackImage>
+    )
+  }
+
   return (
     <div
       className="relative w-full overflow-hidden [--hero-h:clamp(200px,50vw,300px)] md:[--hero-h:clamp(240px,32vw,380px)] lg:[--hero-h:clamp(280px,26vw,460px)]"
       style={{ height: 'var(--hero-h)' }}
     >
       {coverMode === 'photo' ? (
-        photoUrl ? (
+        photoCandidates.length > 0 ? (
           // Copertina esterna (Wikidata/Wikipedia/Commons) — next/image la ottimizza comunque
           // (next.config.js's remotePatterns copre già wikimedia.org/wikipedia.org, stesso pattern
           // di components/guida/widgets/PoiListWidget.tsx): ridimensionamento su misura del device
@@ -128,21 +157,7 @@ export default function GuideHero({
           // FallbackImage stesso — vedi components/ui/FallbackImage.tsx) riempie esattamente quella
           // finestra con lo stesso sfondo già usato per "nessuna foto", spinner incluso; la foto vi
           // si dissolve sopra invece di comparire di scatto.
-          <FallbackImage
-            src={photoUrl} alt="" fill priority sizes="100vw"
-            className="object-cover"
-            loadingIndicator={<CoverLoadingSpinner color={fallbackColor} />}
-            fallback={<CoverFallback color={fallbackColor} icon={fallbackIcon} />}
-          >
-            {/* Attribuzione richiesta dalla licenza CC BY-SA di Wikimedia Commons — solo sopra la
-                foto vera (children di FallbackImage), mai sopra il ripiego: non c'è nulla da
-                attribuire quando la foto non si è caricata. Vedi app/fonti-e-crediti. */}
-            {photoCredit && (
-              <span className="absolute top-2.5 right-2.5 bg-black/40 text-white/80 text-[9px] px-1.5 py-0.5 rounded backdrop-blur-sm">
-                {photoCredit}
-              </span>
-            )}
-          </FallbackImage>
+          renderPhoto(photoCandidates)
         ) : (
           <CoverFallback color={fallbackColor} icon={fallbackIcon} />
         )

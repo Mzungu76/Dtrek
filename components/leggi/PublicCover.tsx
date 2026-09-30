@@ -1,4 +1,5 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import SafeImg from '@/components/ui/SafeImg'
 
 // Copertina a piena pagina per l'home di un Diario/Raccolta/Volume pubblicato — stessa identità
 // visiva della copertina a schermo intero di RouteHub/TopOverlay nell'app privata (Guida,
@@ -33,8 +34,7 @@ export function PublicCover({ coverUrl, eyebrow, title, subtitle, preface, owner
   return (
     <section className="relative w-full overflow-hidden" style={{ height: `calc(100vh - ${56 + bottomInset}px)`, minHeight: 480 - bottomInset }}>
       {coverUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
+        <SafeImg variant="cover" src={coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
       ) : (
         <div className="absolute inset-0" style={{ background: 'linear-gradient(158deg,#193b20 0%,#1c4724 45%,#20592b 100%)' }} />
       )}

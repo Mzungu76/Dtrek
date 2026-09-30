@@ -19,6 +19,7 @@ import { PublicCover } from '@/components/leggi/PublicCover'
 import { ReportageCard } from '@/components/leggi/ReportageCard'
 import { AllRoutesMap, AllRoutesLegend } from '@/app/leggi/d/[token]/AllRoutesMap'
 import { SiteHeader, DtrekCallout, SiteFooter } from '@/app/leggi/d/[token]/SiteChrome'
+import SafeImg from '@/components/ui/SafeImg'
 
 const LATEST_REPORTAGE_COUNT = 3
 
@@ -130,8 +131,7 @@ export default async function PublicProfilePage({ params }: { params: { slug: st
             <a href={featured.href} target="_blank" rel="noopener noreferrer"
               className="group relative block aspect-[16/10] sm:aspect-[21/9] rounded-3xl overflow-hidden shadow-md border border-stone-200">
               {featured.coverUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={featured.coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                <SafeImg variant="cover" src={featured.coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
               ) : (
                 <div className="absolute inset-0" style={{ background: 'linear-gradient(158deg,#193b20 0%,#1c4724 45%,#20592b 100%)' }} />
               )}
@@ -220,8 +220,7 @@ function GalleryCard({ href, coverUrl, title, subtitle }: { href: string; coverU
     <a href={href} target="_blank" rel="noopener noreferrer"
       className="group relative aspect-[4/5] rounded-2xl overflow-hidden shadow-sm border border-stone-200 hover:shadow-md transition">
       {coverUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+        <SafeImg variant="cover" src={coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
       ) : (
         <div className="absolute inset-0" style={{ background: 'linear-gradient(158deg,#193b20 0%,#1c4724 45%,#20592b 100%)' }} />
       )}

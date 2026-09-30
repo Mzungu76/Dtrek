@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, type ComponentProps, type ReactNode } from 'react'
 import Image from 'next/image'
+import { ImageOff, Loader2 } from 'lucide-react'
 
 interface Props extends Omit<ComponentProps<typeof Image>, 'onError'> {
   /** Mostrato al posto dell'immagine quando il caricamento fallisce — link morto, dominio con
@@ -86,5 +87,25 @@ export default function FallbackImage({
       />
       {children}
     </>
+  )
+}
+
+/** Spinner a tutta area (genitore `relative`) da passare come `loadingIndicator` quando la foto
+ *  riempie il proprio contenitore (`fill`) — stesso stile neutro dei ripieghi delle copertine. */
+export function ImageSpinner() {
+  return (
+    <div className="absolute inset-0 z-[1] flex items-center justify-center bg-stone-200/80">
+      <Loader2 className="w-6 h-6 text-stone-500/70 animate-spin" strokeWidth={2} />
+    </div>
+  )
+}
+
+/** Segnaposto a tutta area (genitore `relative`) da passare come `fallback` quando la foto non si
+ *  carica: mai un buco né l'icona "immagine rotta" del browser. */
+export function ImagePlaceholder() {
+  return (
+    <div className="absolute inset-0 flex items-center justify-center bg-stone-100">
+      <ImageOff className="w-6 h-6 text-stone-300" />
+    </div>
   )
 }

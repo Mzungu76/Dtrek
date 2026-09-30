@@ -7,6 +7,7 @@ import type { TrackPoint } from '@/lib/tcxParser'
 import { MAX_PHOTOS_PER_ACTIVITY, fetchActivityPhotos, addActivityPhoto, updateActivityPhoto, removeActivityPhoto, type RoutePhoto } from '@/lib/activityPhotos'
 import { readExifMetadata, placePhotoOnTrack, type PhotoPlacementSource } from '@/lib/exifGps'
 import { Upload, Pencil, Check, Camera, MapPin, ImageOff, Map, AlertTriangle, Trash2, Loader2 } from 'lucide-react'
+import SafeImg from '@/components/ui/SafeImg'
 
 const PhotoPlacementMap = dynamic(() => import('@/app/components/PhotoPlacementMap'), { ssr: false })
 
@@ -271,7 +272,7 @@ export default function ActivityPhotoManager({
               {/* Thumbnail — click to open placement map */}
               <div className="relative cursor-pointer" onClick={() => setShowPlacementMap(true)}>
                 {/* DTREK-AUDIT.md P3 #35 — miniatura piccola invece della foto intera per una griglia */}
-                <img src={photo.thumbUrl ?? photo.url} alt={photo.caption}
+                <SafeImg src={photo.thumbUrl ?? photo.url} fallbackSrcs={[photo.url]} alt={photo.caption}
                   className="w-full aspect-square object-cover group-hover:opacity-90 transition-opacity" />
                 {/* GPS / position badge */}
                 {photo.hasExifGps
@@ -345,7 +346,7 @@ export default function ActivityPhotoManager({
         >
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xs overflow-hidden">
             <div className="flex items-start gap-3 px-5 pt-5 pb-4">
-              <img src={pendingDelete.thumbUrl ?? pendingDelete.url} alt="" className="w-16 h-16 rounded-xl object-cover shrink-0 border border-stone-200" />
+              <SafeImg src={pendingDelete.thumbUrl ?? pendingDelete.url} fallbackSrcs={[pendingDelete.url]} alt="" className="w-16 h-16 rounded-xl object-cover shrink-0 border border-stone-200" />
               <div className="min-w-0">
                 <h3 className="font-display font-bold text-stone-800 text-[15px] leading-snug">Eliminare questa foto?</h3>
                 <p className="text-[11.5px] text-stone-500 leading-snug mt-1">

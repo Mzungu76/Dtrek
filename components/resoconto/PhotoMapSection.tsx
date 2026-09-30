@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic'
 import { Lock, LockOpen, Maximize2, Minimize2, Box, LocateFixed } from 'lucide-react'
 import type { TrackPoint } from '@/lib/tcxParser'
 import type { RoutePhoto } from '@/lib/activityPhotos'
+import SafeImg from '@/components/ui/SafeImg'
 
 const RoutePhotoMap = dynamic(() => import('@/app/components/RoutePhotoMap'), { ssr: false })
 
@@ -115,7 +116,7 @@ export default function PhotoMapSection({ trackPoints, photos, onPhotoTap, onOpe
                 className="relative shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-colors"
                 style={{ borderColor: highlightedId === ph.id ? '#f59e0b' : 'rgba(255,255,255,0.25)' }}
               >
-                <img src={ph.url} alt={ph.caption} className="w-full h-full object-cover" />
+                <SafeImg src={ph.url} alt={ph.caption} className="w-full h-full object-cover" />
                 <span className="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center">{i + 1}</span>
               </button>
             ))}

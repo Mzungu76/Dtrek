@@ -11,6 +11,7 @@ import type { RouteHubItem, SectionKind } from '@/components/routehub/types'
 import DiarioSommarioContent from '@/components/diario/DiarioSommarioContent'
 import type { DiarySummary } from '@/app/api/diaries/route'
 import type { CollectionSummary } from '@/app/api/collections/route'
+import SafeImg from '@/components/ui/SafeImg'
 
 interface DiarioHubItem extends RouteHubItem {
   diary: DiarySummary
@@ -298,8 +299,7 @@ function CollectionSwitcherOverlay({ collections, currentId, onSelect, onClose }
             <button onClick={() => onSelect(c.id)} className="flex items-center gap-3.5 flex-1 min-w-0 text-left">
               <div className={`w-16 h-16 rounded-xl shrink-0 overflow-hidden relative ${c.id === currentId ? 'ring-2 ring-sky-400' : ''}`}>
                 {c.coverUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={c.coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                  <SafeImg variant="cover" src={c.coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover" fallback={<CollectionSpineFallback />} />
                 ) : (
                   <CollectionSpineFallback />
                 )}

@@ -7,6 +7,7 @@ import { Library } from 'lucide-react'
 import type { PublicCollection } from '@/lib/sharePublicCollection'
 import { PublicCover } from '@/components/leggi/PublicCover'
 import { SiteHeader, DtrekCallout, SiteFooter } from './SiteChrome'
+import SafeImg from '@/components/ui/SafeImg'
 
 export function CollectionPublicView({ collection, token }: { collection: PublicCollection; token: string }) {
   const { siblings, siblingIndex } = collection
@@ -66,8 +67,7 @@ function VolumeCard({ href, coverUrl, title, subtitle, entryCount, km }: {
     <a href={href}
       className="group relative aspect-[4/5] rounded-2xl overflow-hidden shadow-sm border border-stone-200 hover:shadow-md transition">
       {coverUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+        <SafeImg variant="cover" src={coverUrl} alt="" className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
       ) : (
         <div className="absolute inset-0" style={{ background: 'linear-gradient(158deg,#193b20 0%,#1c4724 45%,#20592b 100%)' }} />
       )}
