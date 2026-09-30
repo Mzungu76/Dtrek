@@ -1,8 +1,9 @@
 // Riassunti compatti dei widget che si possono "fissare" sulla mappa della Home (peek). Il peek è
 // una piccola tessera in stile vetro, non una scheda intera: ogni widget fissabile dichiara qui
-// cosa mostrare in una riga d'etichetta, un valore e (se serve) un anello o un link. I widget senza
-// riassunto (grafici, elenchi, contenuti che si caricano dalla rete) restano nella dashboard ma non
-// si possono fissare.
+// cosa mostrare in una riga d'etichetta, un valore e (se serve) un anello o un link. Chi ha contenuto
+// che arriva in ritardo o interattivo (la foto dell'archivio) ha invece una tessera dedicata in
+// peekTiles.tsx. I widget senza né l'uno né l'altra (grafici, elenchi lunghi) restano nella
+// dashboard ma non si possono fissare.
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { getMoonIllumination } from 'suncalc'
@@ -10,6 +11,7 @@ import { getSunTimes } from '@/lib/daylight'
 import { wmoInfo } from '@/lib/weather'
 import { weekOverWeek, yearProgress, monthChallenge, topAltitudes, anniversaries } from '@/lib/dashboardStats'
 import { referencePoint } from './widgetsExtra'
+import { PEEK_TILES } from './peekTiles'
 import type { DashboardData } from './types'
 import type { DashboardWidgetId } from '@/lib/dashboardConfig'
 
@@ -106,5 +108,5 @@ export const PEEK_SUMMARIES: Partial<Record<DashboardWidgetId, (d: DashboardData
   }),
 }
 
-export const PINNABLE_IDS = Object.keys(PEEK_SUMMARIES) as DashboardWidgetId[]
-export function isPinnable(id: DashboardWidgetId): boolean { return id in PEEK_SUMMARIES }
+/** Fissabile = ha un riassunto calcolato al volo oppure una tessera dedicata (peekTiles.tsx). */
+export function isPinnable(id: DashboardWidgetId): boolean { return id in PEEK_SUMMARIES || id in PEEK_TILES }

@@ -519,11 +519,11 @@ function seeded(seed: number): () => number {
   }
 }
 
-interface ArchivePhoto { activity: ActivityMeta; thumb: string; full: string; caption: string }
+export interface ArchivePhoto { activity: ActivityMeta; thumb: string; full: string; caption: string }
 
 /** Foto a tutto schermo: portata in body perché il pannello della Dashboard ha una trasformazione
  *  CSS che romperebbe un elemento `fixed` al suo interno. Si chiude con Esc, con la X o toccando fuori. */
-function PhotoLightbox({ photo, onClose, onAnother }: { photo: ArchivePhoto; onClose: () => void; onAnother: () => void }) {
+export function PhotoLightbox({ photo, onClose, onAnother }: { photo: ArchivePhoto; onClose: () => void; onAnother: () => void }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
@@ -556,17 +556,19 @@ function PhotoLightbox({ photo, onClose, onAnother }: { photo: ArchivePhoto; onC
   )
 }
 
-function FotoDiarioWidget({ data }: WidgetProps) {
+/** Sceglie una foto a caso tra quelle delle uscite (stabile durante la giornata, diversa a ogni
+ *  `another()`). `found`: undefined = sto cercando, null = nessuna foto trovata. Condiviso dal widget
+ *  della dashboard e dalla tessera fissabile sulla mappa della Home. */
+export function useArchivePhoto(activities: ActivityMeta[]): { found: ArchivePhoto | null | undefined; another: () => void } {
   const [seed, setSeed] = useState(() => Math.floor(Date.now() / 86400000))
-  const [open, setOpen] = useState(false)
   const [found, setFound] = useState<ArchivePhoto | null | undefined>(undefined)
 
   const candidates = useMemo(() => {
     const rand = seeded(seed)
-    const all = [...data.activities]
+    const all = [...activities]
     for (let i = all.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [all[i], all[j]] = [all[j], all[i]] }
     return all.slice(0, PHOTO_CANDIDATES)
-  }, [data.activities, seed])
+  }, [activities, seed])
 
   useEffect(() => {
     let cancelled = false
@@ -586,7 +588,12 @@ function FotoDiarioWidget({ data }: WidgetProps) {
     return () => { cancelled = true }
   }, [candidates, seed])
 
-  const another = () => setSeed(Math.floor(Math.random() * 1e9))
+  return { found, another: () => setSeed(Math.floor(Math.random() * 1e9)) }
+}
+
+function FotoDiarioWidget({ data }: WidgetProps) {
+  const { found, another } = useArchivePhoto(data.activities)
+  const [open, setOpen] = useState(false)
 
   if (found === undefined) return <WidgetShell title="Dal tuo archivio"><WidgetEmpty text="Cerco una foto…" /></WidgetShell>
   if (found === null) return <WidgetShell title="Dal tuo archivio"><WidgetEmpty text="Aggiungi foto alle uscite e ne comparirà una qui." /></WidgetShell>

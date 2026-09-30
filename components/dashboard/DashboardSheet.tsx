@@ -6,6 +6,7 @@ import { MobileNavBar, DesktopNav } from '@/components/Navbar'
 import { WIDGET_CATALOG, WIDGET_BY_ID } from '@/components/dashboard/widgets'
 import { WIDGET_CATEGORIES } from '@/components/dashboard/widgetKit'
 import { PEEK_SUMMARIES, isPinnable, type PeekSummary } from '@/components/dashboard/peekSummaries'
+import { PEEK_TILES } from '@/components/dashboard/peekTiles'
 import {
   normalizeDashboardConfig, DEFAULT_DASHBOARD_CONFIG, DEFAULT_TAB_ID, MAX_PINNED, applyPin,
   type DashboardConfig, type DashboardTab, type DashboardWidgetId,
@@ -53,9 +54,14 @@ function PeekTile({ summary }: { summary: PeekSummary }) {
  *  massimo due), ciascuno nella sua versione compatta (peekSummaries.ts). Indipendenti dalle schede
  *  personalizzabili sotto, che si raggiungono trascinando verso l'alto. */
 function PeekWidgets({ data, ids }: { data: DashboardData; ids: DashboardWidgetId[] }) {
-  const tiles = ids.map(id => PEEK_SUMMARIES[id]?.(data)).filter((t): t is PeekSummary => !!t)
+  const tiles = ids.map(id => {
+    const Custom = PEEK_TILES[id]
+    if (Custom) return <Custom key={id} data={data} />
+    const summary = PEEK_SUMMARIES[id]?.(data)
+    return summary ? <PeekTile key={id} summary={summary} /> : null
+  }).filter(Boolean)
   if (tiles.length === 0) return null
-  return <div className="flex gap-2.5">{tiles.map((t, i) => <PeekTile key={ids[i]} summary={t} />)}</div>
+  return <div className="flex gap-2.5">{tiles}</div>
 }
 
 /** Gli stessi widget fissati, ma per lo sfondo chiaro del pannello da lg in su: lì si riusano i
