@@ -28,6 +28,8 @@ interface Props {
    *  (PoiListWidget.tsx, che la condivide con le card della Galleria) invece che qui: evita una
    *  seconda chiamata Overpass ridondante sugli stessi punti. */
   streetViewPoiIds?: Set<number>
+  /** Reportage di un Sito: il suo punto (vedi MapView `siteMarker`), con la mappa inquadrata su di lui. */
+  siteMarker?: { lat: number; lon: number; label?: string } | null
 }
 
 const chipBase = 'flex items-center justify-center w-9 h-9 rounded-full backdrop-blur-md border transition-colors shrink-0'
@@ -43,7 +45,7 @@ const chipActive = `${chipBase} bg-terra-500 border-terra-300/40 text-white`
  */
 export default function PoiMap({
   trackPoints, pois, highlightedPoiIds = null, onPoiTap, onOpenMap3D, focusPoints, focusSignal, returnMarkers,
-  streetViewPoiIds,
+  streetViewPoiIds, siteMarker,
 }: Props) {
   const [locked, setLocked] = useState(true)
   const [fullscreen, setFullscreen] = useState(false)
@@ -87,6 +89,8 @@ export default function PoiMap({
         returnMarkers={returnMarkers}
         showDirectionArrows={showArrows}
         resizeSignal={resizeTick}
+        siteMarker={siteMarker}
+        fitMaxZoom={siteMarker ? 15 : undefined}
       />
       <div
         className="absolute inset-x-3 z-[1000] flex items-center justify-end gap-2"

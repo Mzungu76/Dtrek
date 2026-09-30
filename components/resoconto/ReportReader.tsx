@@ -25,7 +25,7 @@ import { extractLeadSubtitle } from '@/lib/extractLeadSubtitle'
 import { withForcedDownload } from '@/lib/storageDownloadUrl'
 // Estratta in lib/photoBuckets.ts quando è servita anche alla pagina pubblica del Diario:
 // la stessa logica in due copie è ciò che in questo progetto ha già prodotto divergenze silenziose.
-import { bucketPhotosByChapter } from '@/lib/photoBuckets'
+import { bucketPhotosByChapter, bucketPhotosInOrder } from '@/lib/photoBuckets'
 import { computeMaterialScore } from '@/lib/materialScore'
 import SectionNav from '@/components/editorial/SectionNav'
 import SectionCard from '@/components/editorial/SectionCard'
@@ -60,6 +60,9 @@ import StickyRouteMap from './StickyRouteMap'
 import { pickBestCoverPhoto } from '@/lib/activityPhotos'
 import { metaHasHikingMetrics, META_TYPE_CONFIG, SITE_TYPE_CONFIG } from '@/lib/metaTypes'
 import { reportFacts, reportNoun } from '@/lib/reportFacts'
+import { useSiteContext } from '@/lib/useSiteContext'
+import { reportProfileFor } from '@/lib/reportProfiles'
+import PlaceDescriptionWidget from '@/components/guida/widgets/PlaceDescriptionWidget'
 import { REPORT_SECTION_STYLE, REPORT_SECTION_TITLE, narrativeStyleFor, type ReportFixedSectionKey } from './sectionStyle'
 import { reportFixedSectionsFor, reportSectionTitle } from '@/lib/reportSections'
 import {
@@ -337,6 +340,9 @@ export default function ReportReader({
 
   // ── Narrative chapters + fixed data sections ─────────────────────────────
   const sections = useMemo(() => parseSections(content), [content])
+  // Un Reportage di Sito si appoggia al Sito com'è nella sua Guida: il suo punto (mai quello in cui
+  // l'utente ha registrato la visita), la descrizione e la copertina. Null per ogni altra tipologia.
+  const siteCtx = useSiteContext(activity)
 
   // "Galleria fotografica" resta sempre presente (come le altre sezioni fisse) anche senza foto:
   // è l'unico punto da cui caricarle (vedi ActivityPhotoManager dentro il suo widget), quindi
@@ -348,8 +354,17 @@ export default function ReportReader({
     const fixed: DisplaySection[] = reportFixedSectionsFor(activity).map(k => ({
       key: k, title: reportSectionTitle(k, activity.metaType, REPORT_SECTION_TITLE[k]), ...REPORT_SECTION_STYLE[k],
     }))
-    return [...narrative, ...fixed]
-  }, [sections, activity])
+    // La descrizione del Sito, la stessa della Guida, apre il Reportage prima del racconto (scritto
+    // a mano o dall'AI) — è il punto di partenza fisso, mai qualcosa da generare.
+    const descrizione: DisplaySection[] = siteCtx?.description
+      ? [{
+          key: 'descrizione_sito',
+          title: reportProfileFor(activity.metaType, activity.siteType).sectionTitle,
+          ...REPORT_SECTION_STYLE.descrizione_sito,
+        }]
+      : []
+    return [...descrizione, ...narrative, ...fixed]
+  }, [sections, activity, siteCtx?.description])
 
   // Foto di ogni capitolo — se il racconto ha una struttura editata a mano (reportSections, in
   // sync 1:1 con i capitoli attuali) si usa la scelta esplicita dell'utente (foto principale +
@@ -364,7 +379,11 @@ export default function ReportReader({
         return ids.map(id => photos.find(p => p.id === id)).filter((p): p is RoutePhoto => !!p)
       })
     }
-    return bucketPhotosByChapter(photos, sections.length)
+    // Foto di un Borgo/Città o di un Sito non sono georeferenziate lungo un tracciato: si distribuiscono
+    // per ordine sui capitoli invece che per una progressione che per loro non esiste.
+    return metaHasHikingMetrics(activity.metaType)
+      ? bucketPhotosByChapter(photos, sections.length)
+      : bucketPhotosInOrder(photos, sections.length)
   }, [photos, sections.length, reportSections])
 
   // Posizione lungo il percorso (0..1) di ogni voce del sommario — solo i capitoli narrativi ne
@@ -421,18 +440,25 @@ export default function ReportReader({
     onScrollToSectionConsumed?.()
   }, [scrollToSectionKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const autoHeroPhoto = useMemo(() => pickBestCoverPhoto(photos), [photos])
+  // Copertina: la scelta dell'utente, altrimenti per un Sentiero la foto più descrittiva. Per un Sito
+  // (e un Borgo) la prima foto caricata; senza foto, per un Sito l'immagine del luogo stesso.
+  const autoHeroPhoto = useMemo(
+    () => metaHasHikingMetrics(activity.metaType) ? pickBestCoverPhoto(photos) : photos[0],
+    [photos, activity.metaType],
+  )
   const heroPhoto = photos.find(p => p.id === coverPhotoId) ?? autoHeroPhoto ?? null
 
   // Foto del carosello hero — la copertina (scelta o automatica) sempre per prima, poi le altre
   // più "descrittive" (didascalia più lunga), fino a 4.
   const heroCarouselPhotos = useMemo(() => {
-    if (!heroPhoto) return []
+    if (!heroPhoto) {
+      return siteCtx?.imageUrl ? [{ id: 'site-cover', url: siteCtx.imageUrl }] : []
+    }
     const rest = photos
       .filter(p => p.id !== heroPhoto.id)
       .sort((a, b) => (b.caption?.trim().length ?? 0) - (a.caption?.trim().length ?? 0))
     return [heroPhoto, ...rest].slice(0, 4).map(p => ({ id: p.id, url: p.url }))
-  }, [photos, heroPhoto])
+  }, [photos, heroPhoto, siteCtx?.imageUrl])
 
   // Mosaico "protagonista" — le foto restanti, senza ripetere quelle già nel carosello hero. Solo
   // 4 (1 grande + 3 piccole): di più affollava la colonna dei piccoli riquadri su desktop.
@@ -505,6 +531,14 @@ export default function ReportReader({
   ).toUpperCase()
   const gpsPoints = activity.trackPoints.filter(p => p.lat !== undefined && p.lon !== undefined)
   const hasGps = gpsPoints.length > 0
+  // Il punto del Sito (non quello in cui l'utente ha registrato la visita) è il centro della mappa e
+  // dei luoghi attorno: solo per un Reportage di Sito con coordinate note.
+  const sitePoint = siteCtx?.latitude != null && siteCtx?.longitude != null
+    ? { lat: siteCtx.latitude, lon: siteCtx.longitude } : null
+  const sitePointTrack = useMemo(
+    () => sitePoint ? [{ time: activity.startTime, lat: sitePoint.lat, lon: sitePoint.lon }, { time: activity.startTime, lat: sitePoint.lat, lon: sitePoint.lon }] : [],
+    [sitePoint?.lat, sitePoint?.lon, activity.startTime], // eslint-disable-line react-hooks/exhaustive-deps
+  )
   // Un Sito confermato con check-in GPS ha 1(+) trackPoint reale (hasGps vero) ma nessun percorso
   // da mostrare come profilo altimetrico o mappa-foto-lungo-cammino: quei widget presuppongono un
   // vero spostamento, non solo una posizione. metaHasHikingMetrics(undefined) = true (sentiero è il
@@ -596,6 +630,10 @@ export default function ReportReader({
   // ── Widget per le sezioni dati fisse ──────────────────────────────────────
   function renderFixedWidget(key: ReportFixedSectionKey): ReactNode {
     switch (key) {
+      case 'descrizione_sito':
+        return siteCtx?.description
+          ? <PlaceDescriptionWidget text={siteCtx.description} wikipediaUrl={siteCtx.wikipediaUrl} />
+          : null
       case 'dati_punteggi': {
         const hasHR  = (activity.avgHeartRate ?? 0) > 0
         const hasCal = (activity.calories ?? 0) > 0
@@ -742,13 +780,16 @@ export default function ReportReader({
             hikeId={id}
             pois={pois}
             poiWikiEntries={poiWikiEntries}
-            hasGps={hasGps}
-            centerLat={gpsPoints[Math.floor(gpsPoints.length / 2)]?.lat}
-            centerLon={gpsPoints[Math.floor(gpsPoints.length / 2)]?.lon}
+            hasGps={hasGps || sitePoint != null}
+            centerLat={sitePoint?.lat ?? gpsPoints[Math.floor(gpsPoints.length / 2)]?.lat}
+            centerLon={sitePoint?.lon ?? gpsPoints[Math.floor(gpsPoints.length / 2)]?.lon}
             onWikiLoaded={() => {}}
             highlightedPoiId={highlightedPoiId}
             onItemTap={poi => setHighlightedPoiId(prev => prev === poi.id ? null : poi.id)}
-            trackPoints={activity.trackPoints}
+            // Reportage di Sito: la "traccia" è il punto del sito, mai quello in cui è stata registrata
+            // la visita; il pin lo mostra esplicitamente.
+            trackPoints={sitePoint ? sitePointTrack : activity.trackPoints}
+            siteMarker={sitePoint ? { ...sitePoint, label: activity.title } : null}
             onOpenMap3D={onOpenMap3D}
           />
         )
@@ -769,6 +810,7 @@ export default function ReportReader({
               trackPoints={activity.trackPoints}
               photos={photos}
               onPhotosChange={onPhotosChange}
+              georeference={metaHasHikingMetrics(activity.metaType)}
             />
           </div>
         )

@@ -20,6 +20,7 @@ import { computeTrailScore, type TrailScoreResult } from '@/lib/trailScore'
 import { formatDuration } from '@/lib/tcxParser'
 import { metaHasHikingMetrics, SITE_TYPE_CONFIG } from '@/lib/metaTypes'
 import { reportNoun } from '@/lib/reportFacts'
+import { useSiteContext } from '@/lib/useSiteContext'
 import { exportActivityToGpx } from '@/utils/exportGpx'
 import { type PoiItem } from '@/lib/overpass'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
@@ -100,6 +101,8 @@ export default function ResocontoHub({ id }: { id?: string }) {
   const [covers,     setCovers]     = useState<Record<string, string>>({})
   const [currentId,  setCurrentId]  = useState<string | null>(id ?? null)
   const [activity,   setActivity]   = useState<StoredActivity | null>(null)
+  // Copertina del Sito quando il suo Reportage non ha foto proprie (lib/useSiteContext.ts).
+  const siteCtx = useSiteContext(activity)
   const [saving,     setSaving]     = useState(false)
   const [notesVal,   setNotesVal]   = useState('')
   const [editNotes,  setEditNotes]  = useState(false)
@@ -402,7 +405,9 @@ export default function ResocontoHub({ id }: { id?: string }) {
     // sulla copertina a percorso chiuso non appena quella cache si popolava. Nessuna foto ⇒
     // undefined, così RouteHub ricade sulla mappa (CoverMap), come per Guida.
     const cover = (id_: string) => id_ === activity?.id
-      ? photos.find(p => p.id === coverPhotoId)?.url ?? pickBestCoverPhoto(photos)?.url ?? covers[id_]
+      ? photos.find(p => p.id === coverPhotoId)?.url
+        ?? (metaHasHikingMetrics(activity?.metaType) ? pickBestCoverPhoto(photos)?.url : photos[0]?.url)
+        ?? siteCtx?.imageUrl ?? covers[id_]
       : covers[id_]
     const scorePreviewFor = (a: StoredActivity) => a.userRating != null ? { value: a.userRating, max: 10, color: ratingColor(a.userRating) } : undefined
     const mapped = items.map(it => {
@@ -428,7 +433,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
       if (!linkedPlannedId) return false
       return (plannedDiaryById.get(linkedPlannedId) ?? null) === diaryFilter
     })
-  }, [items, covers, activity, photos, coverPhotoId, driving, userOrigin, diaryFilter, rawActivityById, plannedDiaryById])
+  }, [items, covers, activity, photos, coverPhotoId, siteCtx?.imageUrl, driving, userOrigin, diaryFilter, rawActivityById, plannedDiaryById])
 
   if (!listLoaded) {
     return <HubSkeleton />

@@ -91,7 +91,8 @@ export function PublicReportPage({ entry, n, show, hideExactDates = false }: {
   const monthYear = format(new Date(entry.startTime), 'MMMM yyyy', { locale: it })
 
   const photos = show.foto ? entry.photos : []
-  const heroPhoto = photos[0] ?? null
+  // Senza foto proprie un Reportage di Sito apre con l'immagine del luogo.
+  const heroPhoto = photos[0] ?? (entry.siteCoverUrl ? { url: entry.siteCoverUrl } : null)
   const detailPhoto = photos[1] ?? null
   const galleryPhotos = photos.slice(2)
 
@@ -346,6 +347,15 @@ export function PublicReportPage({ entry, n, show, hideExactDates = false }: {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+          {/* Reportage di Sito: il punto del luogo (mai quello della registrazione) su un riquadro d'Italia. */}
+          {show.percorso && entry.extras.mappa && entry.sitePoint && !showMappa && (
+            <div className="mb-5">
+              <p className="font-display font-bold text-forest-900 text-lg mb-3">Dove si trova</p>
+              <div className="w-32">
+                <LocatorMap eager lat={entry.sitePoint.lat} lon={entry.sitePoint.lon} label={entry.title} />
+              </div>
             </div>
           )}
           {showMappa && (

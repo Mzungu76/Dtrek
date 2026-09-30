@@ -32,6 +32,8 @@ interface Props {
   onItemTap?: (poi: PoiItem) => void
   trackPoints?: TrackPoint[]
   onOpenMap3D?: () => void
+  /** Reportage di un Sito: il suo punto sulla mappa (vedi MapView `siteMarker`). */
+  siteMarker?: { lat: number; lon: number; label?: string } | null
   /** Percorso a sola andata — servizi di trasporto trovati entro 1 km dal punto di arrivo (vedi
    *  lib/routeBuilder/returnOptions.ts) — null mentre in caricamento, array vuoto se nessuno
    *  trovato, undefined quando il percorso non è a sola andata (nessuna sottosezione). */
@@ -121,7 +123,7 @@ function PoiCard({ entry, highlighted, dimmed, onTap, hasStreetView }: {
  *  Wikipedia + articoli Wikipedia nei dintorni), senza ripetizioni — prima erano tre presentazioni
  *  separate (lista testuale, galleria foto, "Wikipedia nei dintorni") con dati in parte duplicati. */
 export default function PoiListWidget({
-  hikeId, pois, poiWikiEntries, hasGps, centerLat, centerLon, onWikiLoaded, highlightedPoiId, onItemTap, trackPoints, onOpenMap3D,
+  hikeId, pois, poiWikiEntries, hasGps, centerLat, centerLon, onWikiLoaded, highlightedPoiId, onItemTap, trackPoints, onOpenMap3D, siteMarker,
   returnOptions, returnOptionsOrigin,
 }: Props) {
   const [nearbyPages, setNearbyPages] = useState<WikiPage[]>([])
@@ -286,6 +288,7 @@ export default function PoiListWidget({
         focusSignal={focusSignal}
         returnMarkers={returnMarkers}
         streetViewPoiIds={streetViewPoiIds}
+        siteMarker={siteMarker}
       />
 
       <p className={`${sectionHeading} pt-1`}>Galleria</p>

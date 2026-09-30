@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { BarChart2, Mountain, Leaf, MapPin, Compass, Route, Flag, BookOpen, Camera } from 'lucide-react'
+import { BarChart2, Mountain, Leaf, MapPin, Compass, Route, Flag, BookOpen, Camera, Landmark } from 'lucide-react'
 import { createElement } from 'react'
 import type { ReportFixedSectionKey } from '@/lib/reportSections'
 
@@ -12,6 +12,7 @@ export type { ReportFixedSectionKey }
  *  foto" + gestione foto (ex-Strumenti); inclusa in ReportReader solo se ci sono foto caricate,
  *  a differenza delle altre quattro sempre presenti. */
 export const REPORT_SECTION_STYLE: Record<ReportFixedSectionKey, { icon: ReactNode; color: string }> = {
+  descrizione_sito: { icon: createElement(Landmark, { className: 'w-4 h-4' }), color: '#6d4c41' },
   dati_punteggi: { icon: createElement(BarChart2, { className: 'w-4 h-4' }), color: '#57534e' }, // stone-700
   andamento:     { icon: createElement(Mountain,  { className: 'w-4 h-4' }), color: '#277134' }, // forest-600
   natura:        { icon: createElement(Leaf,      { className: 'w-4 h-4' }), color: '#378d44' }, // forest-500
@@ -20,6 +21,7 @@ export const REPORT_SECTION_STYLE: Record<ReportFixedSectionKey, { icon: ReactNo
 }
 
 export const REPORT_SECTION_TITLE: Record<ReportFixedSectionKey, string> = {
+  descrizione_sito: 'Il luogo',
   dati_punteggi: 'Dati e punteggi',
   andamento: 'Andamento',
   natura: 'Natura',

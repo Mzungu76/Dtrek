@@ -4,7 +4,7 @@ import { metaEligibleForHikingScores, isNaturalSiteType } from './guideCardVaria
 // Le stesse 5 chiavi di sempre (components/resoconto/sectionStyle.ts, che ne resta l'unica fonte
 // per icone/colori/titoli di default) — qui vive solo la LOGICA di quali si applicano a quale
 // tipologia, mai la presentazione.
-export type ReportFixedSectionKey = 'dati_punteggi' | 'andamento' | 'natura' | 'poi' | 'galleria_foto'
+export type ReportFixedSectionKey = 'descrizione_sito' | 'dati_punteggi' | 'andamento' | 'natura' | 'poi' | 'galleria_foto'
 
 /**
  * Quali sezioni fisse (dati non narrativi) includere nel Reportage, in ordine, per tipologia —
@@ -45,8 +45,8 @@ export function reportFixedSectionsFor(hike: {
 }
 
 /** Titolo della sezione "poi" — "Punti di interesse" per un Sentiero (lungo il tracciato), "Luoghi
- *  visitati" per Borgo/Città/Sito (non c'è un "lungo" da percorrere, solo dei luoghi toccati durante
- *  la visita). Le altre chiavi non variano per tipologia: restano quelle di default
+ *  visitati" per un Borgo/Città (i luoghi toccati durante la visita), "Nei dintorni" per un Sito (è
+ *  lui stesso il luogo visitato: qui stanno solo i punti d'interesse attorno al suo punto). Le altre chiavi non variano per tipologia: restano quelle di default
  *  (components/resoconto/sectionStyle.ts's REPORT_SECTION_TITLE), passato qui come fallback per
  *  non duplicarne l'elenco. */
 export function reportSectionTitle(
@@ -54,6 +54,7 @@ export function reportSectionTitle(
   metaType: MetaType | undefined,
   defaultTitle: string,
 ): string {
+  if (key === 'poi' && metaType === 'sito') return 'Nei dintorni'
   if (key === 'poi' && (metaType ?? 'sentiero') !== 'sentiero') return 'Luoghi visitati'
   return defaultTitle
 }

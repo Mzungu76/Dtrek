@@ -49,13 +49,22 @@ describe('reportProfileFor', () => {
     expect(reportProfileFor('sito').section3Brief).not.toMatch(/difficoltà/)
   })
 
-  it('un siteType noto sovrascrive titolo e brief della prima sezione di un sito', () => {
+  it('un siteType noto sovrascrive titoli e brief di tutte e tre le sezioni di un sito', () => {
     const museo = reportProfileFor('sito', 'museo')
     expect(museo.sectionTitle).toBe('Il museo')
-    expect(museo.sectionBrief).toMatch(/opere/)
-    // Le altre due sezioni restano quelle del profilo 'sito' generico.
-    expect(museo.section2Title).toBe('Storia e curiosità')
-    expect(museo.section3Title).toBe('In sintesi')
+    expect(museo.section2Title).toBe('Le opere e le sale')
+    expect(museo.section2Brief).toMatch(/opere/)
+    expect(museo.section3Title).toBe('Consigli per la visita')
+  })
+
+  it('ogni siteType con override ha sezioni proprie, mai quelle generiche del sito né di un percorso', () => {
+    for (const t of ['museo', 'castello', 'abbazia', 'chiesa', 'sito_archeologico', 'monumento', 'palazzo', 'teatro', 'cascata', 'grotta', 'belvedere', 'area_naturale'] as const) {
+      const p = reportProfileFor('sito', t)
+      expect(p.section2Title, t).not.toBe('Storia e curiosità')
+      expect(p.section2Title, t).not.toBe('Natura e storia')
+      expect(p.section3Title, t).not.toBe('In sintesi')
+      expect(p.section3Brief, t).not.toMatch(/difficoltà effettiva|sforzo/i)
+    }
   })
 
   it('siteType assente o "altro" (nessun override) ricade sul profilo sito generico', () => {

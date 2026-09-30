@@ -61,3 +61,17 @@ export function selectSpreadPhotos<T extends { progress?: number | null }>(photo
   }
   return picked.sort((a, b) => (a.progress ?? 1) - (b.progress ?? 1))
 }
+
+/**
+ * Come `bucketPhotosByChapter` ma per le foto senza una posizione lungo un tracciato (Borgo/Città e
+ * Sito): si distribuiscono per ordine, a fette uguali, invece che per una progressione che per loro
+ * non esiste (tutte a 0.5 finirebbero nello stesso capitolo).
+ */
+export function bucketPhotosInOrder<T>(photos: T[], chapterCount: number): T[][] {
+  if (chapterCount <= 0) return []
+  const buckets: T[][] = Array.from({ length: chapterCount }, () => [])
+  photos.forEach((p, i) => {
+    buckets[Math.min(chapterCount - 1, Math.floor((i * chapterCount) / photos.length))].push(p)
+  })
+  return buckets
+}
