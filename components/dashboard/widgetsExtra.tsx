@@ -1,11 +1,12 @@
 'use client'
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import {
   Target, Flag, Mountain, Trophy, CalendarHeart, GitCompareArrows, TrendingUp, Ruler, CalendarDays,
   Clock, CalendarRange, Activity, Lightbulb, Moon, Sunrise, CloudSun, PenLine, Repeat, Image as ImageIcon,
-  Pencil, ChevronRight, RefreshCw,
+  Pencil, ChevronRight, RefreshCw, X,
 } from 'lucide-react'
 import { getMoonIllumination } from 'suncalc'
 import { fetchNearbyWiki, isSpecificName, type WikiPage } from '@/lib/wikipedia'
@@ -504,46 +505,107 @@ function DaRiprovareWidget({ data }: WidgetProps) {
   )
 }
 
-const PHOTO_CANDIDATES = 6
+const PHOTO_CANDIDATES = 8
+
+/** Generatore pseudo-casuale con seme (mulberry32): stessa foto per tutto il giorno finché non si
+ *  chiede un'altra, ma davvero diversa ogni giorno e a ogni richiesta. */
+function seeded(seed: number): () => number {
+  let t = seed >>> 0
+  return () => {
+    t += 0x6d2b79f5
+    let r = Math.imul(t ^ (t >>> 15), 1 | t)
+    r ^= r + Math.imul(r ^ (r >>> 7), 61 | r)
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+interface ArchivePhoto { activity: ActivityMeta; thumb: string; full: string; caption: string }
+
+/** Foto a tutto schermo: portata in body perché il pannello della Dashboard ha una trasformazione
+ *  CSS che romperebbe un elemento `fixed` al suo interno. Si chiude con Esc, con la X o toccando fuori. */
+function PhotoLightbox({ photo, onClose, onAnother }: { photo: ArchivePhoto; onClose: () => void; onAnother: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+  return createPortal(
+    <div className="fixed inset-0 z-[3200] bg-black/90 flex flex-col" role="dialog" aria-modal="true" aria-label={photo.activity.title} onClick={onClose}>
+      <div className="flex justify-end p-3" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)' }}>
+        <button onClick={onClose} aria-label="Chiudi" className="w-11 h-11 rounded-full bg-white/15 text-white flex items-center justify-center">
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+      <div className="flex-1 min-h-0 flex items-center justify-center px-3">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={photo.full} alt={photo.caption || photo.activity.title} className="max-w-full max-h-full object-contain rounded-lg" />
+      </div>
+      <div className="p-4 text-white" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)' }} onClick={(e) => e.stopPropagation()}>
+        <div className="font-display font-semibold text-[16px]">{photo.activity.title}</div>
+        <div className="text-[12px] text-white/70">{fmtDate(photo.activity.startTime)}</div>
+        {photo.caption && <p className="font-lora italic text-[13px] text-white/85 mt-1.5">{photo.caption}</p>}
+        <div className="flex gap-2 mt-3">
+          <Link href={ACTIVITY_HREF(photo.activity.id)} className="flex-1 text-center py-2.5 rounded-xl bg-white text-stone-900 text-sm font-semibold">Apri il reportage</Link>
+          <button onClick={onAnother} className="px-4 py-2.5 rounded-xl bg-white/15 text-white text-sm font-semibold flex items-center gap-1.5">
+            <RefreshCw className="w-4 h-4" /> Un&apos;altra
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  )
+}
 
 function FotoDiarioWidget({ data }: WidgetProps) {
+  const [seed, setSeed] = useState(() => Math.floor(Date.now() / 86400000))
+  const [open, setOpen] = useState(false)
+  const [found, setFound] = useState<ArchivePhoto | null | undefined>(undefined)
+
   const candidates = useMemo(() => {
-    const day = Math.floor(Date.now() / 86400000)
+    const rand = seeded(seed)
     const all = [...data.activities]
-    // Rotazione stabile nella giornata: parte da un'uscita diversa ogni giorno.
-    const start = all.length > 0 ? day % all.length : 0
-    return all.slice(start).concat(all.slice(0, start)).slice(0, PHOTO_CANDIDATES)
-  }, [data.activities])
-  const [found, setFound] = useState<{ activity: ActivityMeta; url: string; caption: string } | null | undefined>(undefined)
+    for (let i = all.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [all[i], all[j]] = [all[j], all[i]] }
+    return all.slice(0, PHOTO_CANDIDATES)
+  }, [data.activities, seed])
 
   useEffect(() => {
     let cancelled = false
+    setFound(undefined)
     ;(async () => {
+      const rand = seeded(seed ^ 0x9e3779b9)
       for (const a of candidates) {
         const photos = await fetchActivityPhotos(a.id).catch(() => [])
         if (photos.length > 0) {
-          const p = photos[Math.floor(Date.now() / 86400000) % photos.length]
-          if (!cancelled) setFound({ activity: a, url: p.thumbUrl ?? p.url, caption: p.caption })
+          const p = photos[Math.floor(rand() * photos.length)]
+          if (!cancelled) setFound({ activity: a, thumb: p.thumbUrl ?? p.url, full: p.url, caption: p.caption })
           return
         }
       }
       if (!cancelled) setFound(null)
     })()
     return () => { cancelled = true }
-  }, [candidates])
+  }, [candidates, seed])
+
+  const another = () => setSeed(Math.floor(Math.random() * 1e9))
 
   if (found === undefined) return <WidgetShell title="Dal tuo archivio"><WidgetEmpty text="Cerco una foto…" /></WidgetShell>
-  if (found === null) return <WidgetShell title="Dal tuo archivio"><WidgetEmpty text="Aggiungi foto alle uscite e ne comparirà una qui ogni giorno." /></WidgetShell>
+  if (found === null) return <WidgetShell title="Dal tuo archivio"><WidgetEmpty text="Aggiungi foto alle uscite e ne comparirà una qui." /></WidgetShell>
   return (
-    <Link href={ACTIVITY_HREF(found.activity.id)} className={`${CARD} block p-0 overflow-hidden`}>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={found.url} alt={found.caption || found.activity.title} className="w-full h-40 object-cover" loading="lazy" />
-      <div className="p-3">
+    <div className={`${CARD} flex items-center gap-3`}>
+      <button onClick={() => setOpen(true)} aria-label="Ingrandisci la foto" className="shrink-0 w-[84px] h-[84px] rounded-xl overflow-hidden bg-stone-100">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={found.thumb} alt={found.caption || found.activity.title} className="w-full h-full object-cover" loading="lazy" />
+      </button>
+      <div className="flex-1 min-w-0">
         <div className={EYEBROW}>Dal tuo archivio · {fmtDate(found.activity.startTime)}</div>
-        <div className="font-display font-semibold text-[14px] text-stone-800 mt-0.5 truncate">{found.activity.title}</div>
+        <Link href={ACTIVITY_HREF(found.activity.id)} className="block font-display font-semibold text-[14px] text-stone-800 truncate mt-0.5">{found.activity.title}</Link>
         {found.caption && <p className="font-lora italic text-[11.5px] text-stone-500 mt-0.5 line-clamp-2">{found.caption}</p>}
       </div>
-    </Link>
+      <button onClick={another} aria-label="Un'altra foto" className="w-9 h-9 -mr-1.5 shrink-0 flex items-center justify-center text-stone-400">
+        <RefreshCw className="w-4 h-4" />
+      </button>
+      {open && <PhotoLightbox photo={found} onClose={() => setOpen(false)} onAnother={another} />}
+    </div>
   )
 }
 
@@ -566,5 +628,5 @@ export const EXTRA_WIDGETS: WidgetCatalogEntry[] = [
   { id: 'meteo-uscita', label: 'Meteo della prossima uscita', icon: CloudSun, Component: MeteoUscitaWidget, category: 'Natura e meteo', description: 'Temperatura, pioggia e vento ora per ora.' },
   { id: 'reportage-da-scrivere', label: 'Reportage da scrivere', icon: PenLine, Component: ReportageDaScrivereWidget, category: 'Diario e reportage', description: 'Le uscite recenti che non hai ancora raccontato.' },
   { id: 'da-riprovare', label: 'Percorsi preferiti', icon: Repeat, Component: DaRiprovareWidget, category: 'Pianificazione', description: 'I percorsi che hai segnato come preferiti.' },
-  { id: 'foto-diario', label: 'Foto dal diario', icon: ImageIcon, Component: FotoDiarioWidget, category: 'Diario e reportage', description: 'Una foto delle tue uscite, diversa ogni giorno.' },
+  { id: 'foto-diario', label: 'Foto dal diario', icon: ImageIcon, Component: FotoDiarioWidget, category: 'Diario e reportage', description: 'Una miniatura delle tue foto: si ingrandisce con un tocco e se ne può chiedere un’altra.' },
 ]
