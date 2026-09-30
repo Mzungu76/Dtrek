@@ -30,6 +30,10 @@ export interface EnrichFields {
   phone?: string
   email?: string
   website?: string
+  openingHours?: string
+  // Solo "Chiusura" su tutti e 7 i giorni e nessun nodo "Orari di apertura": non è un orario vero,
+  // vedi formatOpeningHours.
+  closedAllDays?: boolean
 }
 
 type SparqlRow = Record<string, { value: string } | undefined>
@@ -40,14 +44,90 @@ export function buildEnrichQuery(ids: string[]): string {
   return `
 PREFIX l0: <https://w3id.org/italia/onto/l0/>
 PREFIX sm: <https://w3id.org/italia/onto/SM/>
+PREFIX acc: <https://w3id.org/italia/onto/AccessCondition/>
 
-SELECT DISTINCT ?cis ?description ?phone ?email ?website WHERE {
+SELECT DISTINCT ?cis ?description ?phone ?email ?website ?openingText ?closedText WHERE {
   VALUES ?cis { ${values} }
   OPTIONAL { ?cis l0:description ?description . }
   OPTIONAL { ?cis sm:hasOnlineContactPoint/sm:hasTelephone/sm:telephoneNumber ?phone . }
   OPTIONAL { ?cis sm:hasOnlineContactPoint/sm:hasEmail/sm:emailAddress ?email . }
   OPTIONAL { ?cis sm:hasOnlineContactPoint/sm:hasWebSite/sm:URL ?website . }
+  # Orari (verificati con probe-hours su Biblioteca nazionale centrale di Roma): due nodi
+  # OpeningHoursSpecification per CIS, distinti dal nome della risorsa — "Orari_di_apertura_<id>"
+  # con l0:description "Lunedì (08:30,19:00)|…|Venerdì (08:30,14:30)", e "Chiusura_<id>" con i soli
+  # giorni di chiusura "Sabato|Domenica".
+  OPTIONAL {
+    ?cis acc:hasAccessCondition ?openingNode .
+    FILTER(CONTAINS(STR(?openingNode), "/OpeningHoursSpecification/Orari_di_apertura_"))
+    ?openingNode l0:description ?openingText .
+  }
+  OPTIONAL {
+    ?cis acc:hasAccessCondition ?closedNode .
+    FILTER(CONTAINS(STR(?closedNode), "/OpeningHoursSpecification/Chiusura_"))
+    ?closedNode l0:description ?closedText .
+  }
 }`
+}
+
+const WEEK = ['Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato', 'Domenica']
+const WEEK_SHORT = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
+
+function dayIndex(label: string): number {
+  return WEEK.findIndex(d => d.toLowerCase() === label.trim().toLowerCase())
+}
+
+function daysLabel(first: number, last: number): string {
+  return first === last ? WEEK_SHORT[first] : `${WEEK_SHORT[first]}–${WEEK_SHORT[last]}`
+}
+
+// Formati osservati (probe-hours, Biblioteca nazionale centrale di Roma):
+//   aperture  "Lunedì (08:30,19:00)|Martedì (08:30,19:00)|…|Venerdì (08:30,14:30)"
+//   chiusure  "Sabato|Domenica"
+// Un giorno può avere più fasce (non ancora osservato): ogni "(HH:MM,HH:MM)" è una fascia. Giorni
+// consecutivi con le stesse fasce sono raggruppati ("Lun–Gio 08:30–19:00; Ven 08:30–14:30").
+// "Chiusura" su tutti e 7 i giorni senza alcun orario di apertura (Tolfa, Canepina) NON è un
+// orario: per un piccolo museo comunale vuol quasi sempre dire "su prenotazione"/dato mai compilato,
+// mostrarlo come "chiuso sempre" sarebbe più fuorviante che tacere. Pura, testabile senza rete.
+export function formatOpeningHours(
+  openingText: string | undefined,
+  closedText: string | undefined,
+): { text?: string; closedAllDays: boolean } {
+  const slotsByDay = new Map<number, string>()
+  for (const part of (openingText ?? '').split('|')) {
+    const m = part.match(/^\s*([^\s(]+)\s*(.*)$/)
+    if (!m) continue
+    const day = dayIndex(m[1])
+    const slots = [...m[2].matchAll(/\((\d{1,2}:\d{2})\s*,\s*(\d{1,2}:\d{2})\)/g)].map(x => `${x[1]}–${x[2]}`)
+    if (day !== -1 && slots.length > 0) slotsByDay.set(day, slots.join(', '))
+  }
+  const closedDays = new Set(
+    (closedText ?? '').split('|').map(dayIndex).filter(i => i !== -1),
+  )
+
+  if (slotsByDay.size === 0) {
+    return { closedAllDays: closedDays.size === 7 }
+  }
+
+  const groups: string[] = []
+  for (let i = 0; i < 7; ) {
+    const slots = slotsByDay.get(i)
+    if (slots === undefined) { i++; continue }
+    let j = i
+    while (slotsByDay.get(j + 1) === slots) j++
+    groups.push(`${daysLabel(i, j)} ${slots}`)
+    i = j + 1
+  }
+  const closedLabel = [...closedDays].filter(d => !slotsByDay.has(d)).sort((a, b) => a - b)
+  if (closedLabel.length > 0) {
+    let k = 0
+    while (k < closedLabel.length) {
+      let e = k
+      while (closedLabel[e + 1] === closedLabel[e] + 1) e++
+      groups.push(`${daysLabel(closedLabel[k], closedLabel[e])} chiuso`)
+      k = e + 1
+    }
+  }
+  return { text: groups.join('; '), closedAllDays: false }
 }
 
 // Un CIS può tornare su più righe (più contatti): per ogni campo vale il primo valore non vuoto.
@@ -65,6 +145,12 @@ export function parseEnrichRows(rows: SparqlRow[]): Map<string, EnrichFields> {
     take('phone', row.phone?.value)
     take('email', row.email?.value !== undefined ? stripMailto(row.email.value) : undefined)
     take('website', row.website?.value)
+    // Più righe per lo stesso CIS (più contatti) ripetono gli stessi testi orari: si calcola una volta.
+    if (cur.openingHours === undefined && cur.closedAllDays === undefined) {
+      const hours = formatOpeningHours(row.openingText?.value, row.closedText?.value)
+      if (hours.text !== undefined) cur.openingHours = hours.text
+      else if (hours.closedAllDays) cur.closedAllDays = true
+    }
     out.set(id, cur)
   }
   return out
@@ -75,6 +161,7 @@ export interface ExistingEnrichRow {
   website: string | null
   phone: string | null
   email: string | null
+  opening_hours: unknown
   metadata: Record<string, unknown> | null
 }
 
@@ -98,7 +185,14 @@ export function buildEnrichUpdate(
   fill('website', 'website')
   fill('phone', 'phone')
   fill('email', 'email')
-  if (Object.keys(updates).length === 0) return null
+  fill('openingHours', 'opening_hours')
+  // Nessun valore da mostrare, ma la fonte ha dichiarato "chiuso tutti i giorni": lo si tiene solo
+  // nella provenienza, marcato a bassa confidenza (mai un opening_hours che dica "chiuso sempre").
+  const hoursAlreadyTracked = (existing.metadata?.fieldProvenance as Record<string, unknown> | undefined)?.openingHours !== undefined
+  if (found.closedAllDays && !existing.opening_hours && !hoursAlreadyTracked) {
+    provenance.openingHours = { value: null, source: 'mic', sourceUrl, retrievedAt, confidence: 'low', status: 'stale' }
+  }
+  if (Object.keys(updates).length === 0 && Object.keys(provenance).length === 0) return null
   updates.metadata = mergeMetadata(existing.metadata, { fieldProvenance: provenance })
   return updates
 }
@@ -173,7 +267,7 @@ async function main() {
   const links = await fetchMicLinks(supabase, sourceId, limit)
   console.log(`${links.length} Siti con fonte MiC da arricchire${dryRun ? ' (dry-run, nessuna scrittura)' : ''}…`)
 
-  const stats = { linked: links.length, batches: 0, failedBatches: 0, updated: 0, descriptionsFilled: 0, contactsFilled: 0 }
+  const stats = { linked: links.length, batches: 0, failedBatches: 0, updated: 0, descriptionsFilled: 0, contactsFilled: 0, hoursFilled: 0 }
   const retrievedAt = new Date().toISOString()
 
   for (let i = 0; i < links.length; i += SPARQL_BATCH) {
@@ -191,7 +285,7 @@ async function main() {
 
     const { data: places, error } = await supabase
       .from('dtrek_places')
-      .select('id, description, website, phone, email, metadata')
+      .select('id, description, website, phone, email, opening_hours, metadata')
       .in('id', chunk.map(l => l.place_id))
     if (error) throw error
     const byId = new Map((places ?? []).map(p => [p.id as string, p as ExistingEnrichRow & { id: string }]))
@@ -209,6 +303,7 @@ async function main() {
       stats.updated++
       if (update.description !== undefined) stats.descriptionsFilled++
       if (update.website !== undefined || update.phone !== undefined || update.email !== undefined) stats.contactsFilled++
+      if (update.opening_hours !== undefined) stats.hoursFilled++
     }
     await sleep(BATCH_DELAY_MS)
   }
