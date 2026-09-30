@@ -18,6 +18,7 @@ interface Props {
   is3D: boolean; onToggle3D: () => void
   isOnline: boolean
   showNatura2000: boolean; onToggleNatura2000: () => void
+  autoHide: boolean; onToggleAutoHide: () => void
   // Sicurezza
   onEscape: () => void
   liveSharingEnabled: boolean; onLiveShare: () => void
@@ -83,6 +84,9 @@ export default function NavToolsSheet(p: Props) {
             {modes.map((o) => (
               <Chip key={o.id} on={p.mapMode === o.id} onClick={() => p.onMapModeChange(o.id)}>{o.label}</Chip>
             ))}
+          </div>
+          <div className="flex flex-wrap gap-2 mt-2">
+            <Chip on={p.autoHide} onClick={p.onToggleAutoHide}>Nascondi i controlli dopo 6 secondi</Chip>
           </div>
           {rich && (
             <div className="flex flex-wrap gap-2 mt-2">
