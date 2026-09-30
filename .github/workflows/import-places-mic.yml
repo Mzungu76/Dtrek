@@ -20,7 +20,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "describe: dump della struttura reale di un CIS (diagnostica). probe: test isolato di ogni predicato verificato (diagnostica, vedi scripts/places/mic/probe.ts). dry-run: solo log, nessuna scrittura. write: importa davvero in Supabase. enrich / enrich-dry-run: riempie descrizione e contatti MANCANTI dei Siti MiC già presenti, interrogando ArCo per ID (scripts/places/mic/enrich.ts) — ignora regione/limit sotto."
+        description: "describe: dump della struttura reale di un CIS (diagnostica). probe: test isolato di ogni predicato verificato (diagnostica, vedi scripts/places/mic/probe.ts). dry-run: solo log, nessuna scrittura. write: importa davvero in Supabase. enrich / enrich-dry-run: riempie descrizione e contatti MANCANTI dei Siti MiC già presenti, interrogando ArCo per ID (scripts/places/mic/enrich.ts) — ignora regione/limit sotto. probe-hours: stampa compatta dei nodi orari/prenotazione/biglietti dei CIS il cui nome contiene describe_name (diagnostica, nessuna scrittura)."
         required: true
         type: choice
         options:
@@ -30,6 +30,7 @@ on:
           - write
           - enrich-dry-run
           - enrich
+          - probe-hours
         default: dry-run
       all_italy:
         description: "Tutta Italia (ignora il campo Regione sotto, nessun filtro SPARQL). Il campo di testo di GitHub Actions arriva precompilato col default — svuotarlo non basta ad affidabilità, verificato dal vivo: usare questa checkbox invece di fidarsi del campo vuoto."
@@ -183,5 +184,22 @@ jobs:
             echo "- ID singolo: ${ENRICH_SOURCE_ID:-(tutti i Siti MiC)}"
             echo '```json'
             cat /tmp/mic-enrich.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Probe orari — nodi hasAccessCondition di un CIS per nome (diagnostica, nessun Supabase)
+        if: ${{ inputs.mode == 'probe-hours' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DESCRIBE_NAME:-}" ]; then
+            echo "Serve describe_name (es. 'Biblioteca nazionale centrale di Roma')." >&2
+            exit 1
+          fi
+          npx tsx scripts/places/mic/enrich.ts --probe-hours "$DESCRIBE_NAME" | tee /tmp/mic-probe-hours.txt
+          {
+            echo "### Import Places — MiC (probe orari)"
+            echo "- Nome cercato: $DESCRIBE_NAME"
+            echo '```'
+            cat /tmp/mic-probe-hours.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"

@@ -120,7 +120,42 @@ async function fetchMicLinks(supabase: SupabaseClient, sourceId: string | null, 
   return out.slice(0, limit)
 }
 
+// Diagnostica compatta (nessun Supabase): tutte le proprietà dei nodi hasAccessCondition (orari,
+// prenotazione, biglietti) dei primi 3 CIS il cui nome contiene `name` — il dump --describe di
+// fetch.ts è troppo lungo per i log di GitHub Actions (le prime righe vengono troncate).
+export function buildProbeHoursQuery(name: string): string {
+  const escaped = name.replace(/["\\]/g, '')
+  return `
+PREFIX cis: <http://dati.beniculturali.it/cis/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX acc: <https://w3id.org/italia/onto/AccessCondition/>
+
+SELECT ?name ?ac ?p ?o WHERE {
+  { SELECT ?cis ?name WHERE {
+      ?cis a cis:CulturalInstituteOrSite ; rdfs:label ?name .
+      FILTER(CONTAINS(LCASE(?name), LCASE("${escaped}")))
+    } LIMIT 3 }
+  ?cis acc:hasAccessCondition ?ac .
+  ?ac ?p ?o .
+}`
+}
+
+async function probeHours(name: string): Promise<void> {
+  console.log(`Nodi hasAccessCondition dei CIS il cui nome contiene "${name}"…`)
+  const data = await fetchSparqlJson(buildProbeHoursQuery(name)) as { results: { bindings: SparqlRow[] } }
+  const local = (v: string | undefined) => v?.split(/[/#]/).pop() ?? ''
+  for (const row of data.results.bindings) {
+    console.log([row.name?.value, local(row.ac?.value), local(row.p?.value), row.o?.value].join(' | '))
+  }
+  console.log(`${data.results.bindings.length} triple.`)
+}
+
 async function main() {
+  const probeIdx = process.argv.indexOf('--probe-hours')
+  if (probeIdx !== -1) {
+    await probeHours(process.argv[probeIdx + 1])
+    return
+  }
   const dryRun = process.argv.includes('--dry-run')
   const sourceIdIdx = process.argv.indexOf('--source-id')
   const sourceId = sourceIdIdx !== -1 ? process.argv[sourceIdIdx + 1] : null
