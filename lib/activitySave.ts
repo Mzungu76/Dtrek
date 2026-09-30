@@ -174,6 +174,9 @@ export async function saveActivityWithEnrichment(
   // applicato in components/upload/ActivityUploader.tsx): questo è il momento in cui va agganciata
   // a un Diario, qui una volta sola per ogni flusso di salvataggio invece che in ciascuno.
   let plannedNeedsDiary = false
+  // firstCompletedAt già presente sulla Meta: serve solo a rinviarlo identico se il Diario non si
+  // risolve (vedi sotto), così il server ripara l'orfano anche alla consegna di una visita ripetuta.
+  let plannedFirstCompletedAt: string | undefined
   if (opts.linkedPlannedId) {
     try {
       const planned = await getPlannedById(opts.linkedPlannedId)
@@ -196,6 +199,7 @@ export async function saveActivityWithEnrichment(
           if (visited.length > 0) guideCarry.borgoStops = visited
         }
         plannedNeedsFirstCompletedAt = !planned.firstCompletedAt
+        plannedFirstCompletedAt = planned.firstCompletedAt
       }
     } catch {} // non-blocking — un'escursione non deve fallire il salvataggio per la sua guida
   }
@@ -231,6 +235,11 @@ export async function saveActivityWithEnrichment(
     await updatePlannedMeta(opts.linkedPlannedId, {
       ...(plannedNeedsFirstCompletedAt ? { firstCompletedAt: new Date().toISOString() } : {}),
       ...(diaryId ? { diaryId } : {}),
+      // Diario non risolvibile (offline): il server lo assegna al Diario di default quando la patch
+      // gli arriva con un firstCompletedAt (app/api/planned/route.ts, PATCH) — se la Meta l'aveva
+      // già, lo si rinvia invariato solo per attivare quella riparazione.
+      ...(plannedNeedsDiary && !diaryId && !plannedNeedsFirstCompletedAt && plannedFirstCompletedAt
+        ? { firstCompletedAt: plannedFirstCompletedAt } : {}),
     }).catch(() => {})
   }
 

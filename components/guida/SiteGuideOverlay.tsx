@@ -8,6 +8,7 @@ import { getPlannedById, type PlannedHike } from '@/lib/plannedStore'
 import { useHasAiAccess } from '@/app/guida/useHasAiAccess'
 import { canCompleteWithoutTrack } from '@/lib/visitCompletion'
 import { useSiteCheckIn } from '@/lib/useSiteCheckIn'
+import SiteDiaryPicker from './SiteDiaryPicker'
 
 interface Props {
   /** id della Guida di Sito da mostrare — nested o autonoma, indifferentemente. */
@@ -39,7 +40,7 @@ export default function SiteGuideOverlay({ siteId, onClose }: Props) {
   const { hasAiAccess, aiUnavailable, trialExpired } = useHasAiAccess()
   // Stesso check-in GPS di app/guida/GuidaHub.tsx (lib/useSiteCheckIn.ts) — qui l'unico Sito
   // possibile è sempre quello aperto, mai una scheda di galleria da risolvere al volo.
-  const { busy: checkInBusy, toast: checkInToast, confirmVisit } = useSiteCheckIn(
+  const { busy: checkInBusy, toast: checkInToast, confirmVisit, diaryPrompt, chooseDiary, cancelDiaryPrompt } = useSiteCheckIn(
     (refreshed) => setHike(prev => prev && prev.id === refreshed.id ? { ...prev, ...refreshed } : prev),
   )
 
@@ -83,15 +84,16 @@ export default function SiteGuideOverlay({ siteId, onClose }: Props) {
           }
         />
       )}
-      {hike && canCompleteWithoutTrack(hike.metaType) && !hike.firstCompletedAt && (
+      {hike && canCompleteWithoutTrack(hike.metaType) && (
         <button
-          onClick={() => confirmVisit(hike.id)}
+          onClick={() => confirmVisit(hike.id, { repeat: !!hike.firstCompletedAt })}
           disabled={checkInBusy}
-          className="fixed z-[96] bottom-[calc(env(safe-area-inset-bottom,0px)+16px)] right-4 flex items-center gap-2 pl-3.5 pr-4 py-2.5 rounded-full text-sm font-semibold shadow-lg transition-transform hover:scale-[1.03] disabled:opacity-70 bg-terra-500 text-white"
+          className={`fixed z-[96] bottom-[calc(env(safe-area-inset-bottom,0px)+16px)] right-4 flex items-center gap-2 pl-3.5 pr-4 py-2.5 rounded-full text-sm font-semibold shadow-lg transition-transform hover:scale-[1.03] disabled:opacity-70 ${hike.firstCompletedAt ? 'bg-white text-terra-600 border border-terra-300' : 'bg-terra-500 text-white'}`}
         >
-          <MapPin className="w-4 h-4" /> {checkInBusy ? 'Verifica posizione…' : 'Conferma la tua visita'}
+          <MapPin className="w-4 h-4" /> {checkInBusy ? 'Verifica posizione…' : hike.firstCompletedAt ? 'Registra un\'altra visita' : 'Conferma la tua visita'}
         </button>
       )}
+      <SiteDiaryPicker prompt={diaryPrompt} onChoose={chooseDiary} onCancel={cancelDiaryPrompt} />
       {checkInToast && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[97] flex items-center gap-2 bg-stone-900 text-white text-[13px] font-semibold px-4 py-2.5 rounded-full shadow-lg animate-in fade-in slide-in-from-top-2 max-w-[calc(100%-2rem)] text-center">
           <Check className={`w-4 h-4 shrink-0 ${checkInToast.ok ? 'text-forest-400' : 'text-amber-400'}`} /> {checkInToast.message}

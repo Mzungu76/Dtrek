@@ -98,4 +98,14 @@ describe('markMetaVisited', () => {
     await markMetaVisited({ id: '1', title: 'Test', metaType: 'sito', firstCompletedAt: '2026-01-01T00:00:00.000Z' }, null, false)
     expect(saveActivityWithEnrichment).not.toHaveBeenCalled()
   })
+
+  it('repeat: registra un\'altra visita anche se la Meta è già stata visitata', async () => {
+    await markMetaVisited({ id: '1', title: 'Test', metaType: 'sito', firstCompletedAt: '2026-01-01T00:00:00.000Z' }, null, false, { repeat: true })
+    expect(saveActivityWithEnrichment).toHaveBeenCalledTimes(1)
+  })
+
+  it('passa il Diario scelto a saveActivityWithEnrichment', async () => {
+    await markMetaVisited({ id: '1', title: 'Test', metaType: 'sito' }, null, false, { diaryId: 'd-42' })
+    expect(saveActivityWithEnrichment.mock.calls[0][1].diaryId).toBe('d-42')
+  })
 })

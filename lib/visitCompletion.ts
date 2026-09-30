@@ -72,8 +72,8 @@ export function evaluateCheckIn(
 // mai calcoli DTM/Overpass/storico escursionistico per una traccia sotto i 2 punti (vedi
 // lib/activitySave.ts) — nessuna duplicazione di logica qui.
 // Idempotente sul lato "non ricompletare": se la Meta ha già una firstCompletedAt, non crea una
-// seconda Attività — più visite alla stessa Meta restano comunque possibili più avanti tramite lo
-// stesso flusso "Aggiungi un'uscita" già usato per i sentieri, non da qui.
+// seconda Attività — salvo `opts.repeat`, la scelta esplicita dell'utente di registrare un'altra
+// visita (un Sito si può rivisitare, come un sentiero si ripercorre).
 //
 // `fix`: il fix GPS che ha originato la chiamata — un solo trackPoint se presente, altrimenti una
 // traccia vuota (mai un punto fabbricato per un check-in senza segnale). `verified`: la decisione
@@ -83,11 +83,19 @@ export async function markMetaVisited(
   hike: Pick<PlannedHike, 'id' | 'title' | 'metaType' | 'siteType' | 'firstCompletedAt'>,
   fix: GeoFix | null,
   verified: boolean,
+  opts: {
+    /** Diario scelto dall'utente — usato solo se la Meta non ne ha ancora uno (vedi
+     *  lib/activitySave.ts); assente ⇒ ripiego sul Diario di default. */
+    diaryId?: string
+    /** Nuova visita a un Sito già visitato: crea un'altra Attività (un altro Reportage) invece di
+     *  fermarsi, come "Aggiungi un'uscita" per un sentiero. Mai impostato dal flusso di prima visita. */
+    repeat?: boolean
+  } = {},
 ): Promise<void> {
   if (!canCompleteWithoutTrack(hike.metaType)) {
     throw new Error('markMetaVisited: solo un Sito si completa senza una traccia reale — Sentiero/Borgo passano sempre da un\'attività registrata o importata')
   }
-  if (hike.firstCompletedAt) return
+  if (hike.firstCompletedAt && !opts.repeat) return
 
   const now = new Date().toISOString()
   await saveActivityWithEnrichment(
@@ -117,6 +125,7 @@ export async function markMetaVisited(
       metaType: hike.metaType,
       siteType: hike.siteType,
       verified,
+      diaryId: opts.diaryId,
     },
   )
 }
