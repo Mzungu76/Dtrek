@@ -1315,6 +1315,42 @@ export default function GuideReader({
     [displaySections],
   )
 
+  // NB: dichiarato QUI, prima di sectionMeta — renderWidget() (chiamato da sectionMeta.isEmpty) legge
+  // returnOptions per un percorso lineare: dichiararlo più in basso lo lasciava in zona morta
+  // temporale ("Cannot access 'returnOptions' before initialization") e la Guida andava in crash.
+  // Punto di arrivo (ultimo punto della traccia) — da qui parte la ricerca di bus/stazioni/taxi per
+  // chi non vuole tornare a piedi sui propri passi (sottosezione "Tornare al punto di partenza" in
+  // "Luoghi da non perdere", vedi PoiListWidget.tsx/ReturnOptionsSection.tsx).
+  const endPoint = useMemo(() => {
+    const fromTrack = [...(hike.trackPoints ?? [])].reverse().find(p => p.lat != null && p.lon != null)
+    if (fromTrack) return { lat: fromTrack.lat!, lon: fromTrack.lon! }
+    const poly = hike.routePolyline
+    if (poly && poly.length > 0) return { lat: poly[poly.length - 1][0], lon: poly[poly.length - 1][1] }
+    return null
+  }, [hike.trackPoints, hike.routePolyline])
+
+  // Cache locale per hike (geoInfoCache.ts) — stesso motivo del punto di partenza sopra: senza,
+  // ogni visione della stessa guida rifarebbe la stessa chiamata Overpass.
+  const [returnOptions, setReturnOptions] = useState<ReturnOption[] | null>(null)
+  useEffect(() => {
+    setReturnOptions(null)
+    if (!isLinearRoute || !endPoint) return
+    let cancelled = false
+    const cacheKey = LS_KEYS.returnOptions(hike.id)
+    getCachedGeoInfo<ReturnOption[]>(cacheKey).then(cached => {
+      if (cached.hit) { if (!cancelled) setReturnOptions(cached.value); return }
+      fetch(`/api/route-build/return-options?lat=${endPoint.lat}&lon=${endPoint.lon}`)
+        .then(res => res.json())
+        .then(data => {
+          const options: ReturnOption[] = Array.isArray(data.options) ? data.options : []
+          if (!cancelled) setReturnOptions(options)
+          setCachedGeoInfo(cacheKey, options)
+        })
+        .catch(() => { if (!cancelled) setReturnOptions([]) })
+    })
+    return () => { cancelled = true }
+  }, [isLinearRoute, endPoint, hike.id])
+
   // Sezioni "vuote" (piano guide-eccellenza §Fase 1.1) — né testo AI né un widget con dati reali
   // (es. mappa/meteo): quelle NON sono "contenuto in attesa", sono un vero e proprio nulla, e
   // prima restavano N placeholder quasi identici sparsi nello scroll con lo stesso peso visivo
@@ -1387,39 +1423,6 @@ export default function GuideReader({
     [routePhotos],
   )
   const [routePhotoLightboxIndex, setRoutePhotoLightboxIndex] = useState<number | null>(null)
-
-  // Punto di arrivo (ultimo punto della traccia) — da qui parte la ricerca di bus/stazioni/taxi per
-  // chi non vuole tornare a piedi sui propri passi (sottosezione "Tornare al punto di partenza" in
-  // "Luoghi da non perdere", vedi PoiListWidget.tsx/ReturnOptionsSection.tsx).
-  const endPoint = useMemo(() => {
-    const fromTrack = [...(hike.trackPoints ?? [])].reverse().find(p => p.lat != null && p.lon != null)
-    if (fromTrack) return { lat: fromTrack.lat!, lon: fromTrack.lon! }
-    const poly = hike.routePolyline
-    if (poly && poly.length > 0) return { lat: poly[poly.length - 1][0], lon: poly[poly.length - 1][1] }
-    return null
-  }, [hike.trackPoints, hike.routePolyline])
-
-  // Cache locale per hike (geoInfoCache.ts) — stesso motivo del punto di partenza sopra: senza,
-  // ogni visione della stessa guida rifarebbe la stessa chiamata Overpass.
-  const [returnOptions, setReturnOptions] = useState<ReturnOption[] | null>(null)
-  useEffect(() => {
-    setReturnOptions(null)
-    if (!isLinearRoute || !endPoint) return
-    let cancelled = false
-    const cacheKey = LS_KEYS.returnOptions(hike.id)
-    getCachedGeoInfo<ReturnOption[]>(cacheKey).then(cached => {
-      if (cached.hit) { if (!cancelled) setReturnOptions(cached.value); return }
-      fetch(`/api/route-build/return-options?lat=${endPoint.lat}&lon=${endPoint.lon}`)
-        .then(res => res.json())
-        .then(data => {
-          const options: ReturnOption[] = Array.isArray(data.options) ? data.options : []
-          if (!cancelled) setReturnOptions(options)
-          setCachedGeoInfo(cacheKey, options)
-        })
-        .catch(() => { if (!cancelled) setReturnOptions([]) })
-    })
-    return () => { cancelled = true }
-  }, [isLinearRoute, endPoint, hike.id])
 
   // ── Render ────────────────────────────────────────────────────────────────
 
