@@ -1246,13 +1246,16 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         </div>
       )}
 
-      {/* Pulsanti sulla mappa, sopra il pannello inferiore: "Mappa come il telefono" (solo mappe
-          online) e Ricentra, quest'ultimo solo quando la mappa non segue più la posizione. */}
+      {/* Colonna di pulsanti ancorata in basso a destra, non a metà schermo (dove serve più mappa):
+          bussola, ricentra, "Solo mappa" (occhio) e SOS. In "Solo mappa" il pannello inferiore sparisce
+          e la colonna scende, lasciando solo occhio e SOS nell'angolo. Tutto il resto (mappa, sicurezza,
+          offline, Giulia, aiuto, termina) è nella scheda Strumenti. */}
       <div
-        className={`absolute right-3 z-10 flex flex-col items-center gap-2 lg:hidden ${fade(hideUi)}`}
-        style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 12.5rem)' }}
+        className="absolute right-3 z-10 flex flex-col items-center gap-2.5 lg:hidden transition-[bottom] duration-300"
+        style={{ bottom: `calc(env(safe-area-inset-bottom, 0px) + ${hideUi ? '4.5rem' : '12.5rem'})` }}
+        onClick={(e) => e.stopPropagation()}
       >
-        {!(mapMode === 'offline' && leafletFallback) && (
+        {!hideUi && !(mapMode === 'offline' && leafletFallback) && (
           <button
             onClick={toggleHeadingUp}
             aria-pressed={headingUp}
@@ -1265,7 +1268,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
             <Compass className="w-5 h-5" style={headingUp ? undefined : { transform: 'rotate(-45deg)' }} />
           </button>
         )}
-        {!mapFollowMode && (
+        {!hideUi && !mapFollowMode && (
           <button
             onClick={() => mapHandleRef.current?.recenter()}
             aria-label="Centra sulla mia posizione"
@@ -1274,6 +1277,21 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
             <Locate className="w-5 h-5" />
           </button>
         )}
+        <button
+          onClick={() => setUiHidden((v) => !v)}
+          aria-pressed={uiHidden}
+          aria-label={uiHidden ? 'Mostra i controlli' : 'Solo mappa: nascondi i controlli'}
+          title={uiHidden ? 'Mostra i controlli' : 'Solo mappa'}
+          className="w-12 h-12 rounded-full shadow-lg bg-white/95 text-stone-700 flex items-center justify-center"
+        >
+          {uiHidden ? <Eye className="w-5 h-5" /> : <EyeOff className="w-5 h-5" />}
+        </button>
+        <SosButton
+          large
+          fix={position ? { lat: position.lat, lon: position.lon, accuracyM } : null}
+          liveShareUrl={liveShareToken ? `${typeof window !== 'undefined' ? window.location.origin : ''}/s/live/${liveShareToken}` : null}
+          onTriggered={(action) => logEvent('sos_triggered', { action })}
+        />
       </div>
 
       <GiuliaLiveQa
@@ -1465,26 +1483,6 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
             </div>
           )
         })()}
-      </div>
-
-      {/* Sul lato resta solo SOS, sempre visibile e grande. Tutto il resto (mappa, sicurezza, offline,
-          Giulia, aiuto, termina) è nella scheda Strumenti, aperta dal pannello inferiore. */}
-      <div className="absolute right-3 z-10 top-1/2 -translate-y-1/2 flex flex-col items-center gap-3 lg:hidden" onClick={(e) => e.stopPropagation()}>
-        <SosButton
-          large
-          fix={position ? { lat: position.lat, lon: position.lon, accuracyM } : null}
-          liveShareUrl={liveShareToken ? `${typeof window !== 'undefined' ? window.location.origin : ''}/s/live/${liveShareToken}` : null}
-          onTriggered={(action) => logEvent('sos_triggered', { action })}
-        />
-        <button
-          onClick={() => setUiHidden((v) => !v)}
-          aria-pressed={uiHidden}
-          aria-label={uiHidden ? 'Mostra i controlli' : 'Solo mappa: nascondi i controlli'}
-          title={uiHidden ? 'Mostra i controlli' : 'Solo mappa'}
-          className="w-12 h-12 rounded-full shadow-lg bg-white/95 text-stone-700 flex items-center justify-center"
-        >
-          {uiHidden ? <Eye className="w-5 h-5" /> : <EyeOff className="w-5 h-5" />}
-        </button>
       </div>
 
       {/* Pannello laterale — da lg: in su, stessi controlli delle due colonne sopra ma con
