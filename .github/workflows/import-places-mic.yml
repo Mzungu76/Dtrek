@@ -20,7 +20,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "describe: dump della struttura reale di un CIS (diagnostica). probe: test isolato di ogni predicato verificato (diagnostica, vedi scripts/places/mic/probe.ts). dry-run: solo log, nessuna scrittura. write: importa davvero in Supabase."
+        description: "describe: dump della struttura reale di un CIS (diagnostica). probe: test isolato di ogni predicato verificato (diagnostica, vedi scripts/places/mic/probe.ts). dry-run: solo log, nessuna scrittura. write: importa davvero in Supabase. enrich / enrich-dry-run: riempie descrizione e contatti MANCANTI dei Siti MiC già presenti, interrogando ArCo per ID (scripts/places/mic/enrich.ts) — ignora regione/limit sotto."
         required: true
         type: choice
         options:
@@ -28,6 +28,8 @@ on:
           - probe
           - dry-run
           - write
+          - enrich-dry-run
+          - enrich
         default: dry-run
       all_italy:
         description: "Tutta Italia (ignora il campo Regione sotto, nessun filtro SPARQL). Il campo di testo di GitHub Actions arriva precompilato col default — svuotarlo non basta ad affidabilità, verificato dal vivo: usare questa checkbox invece di fidarsi del campo vuoto."
@@ -54,6 +56,11 @@ on:
         required: false
         type: string
         default: ""
+      enrich_source_id:
+        description: "Solo modalità enrich/enrich-dry-run: ID MiC di un singolo Sito (es. 101608 = Museo civico di Tolfa) per provare prima su uno solo. Vuoto = tutti i Siti con fonte MiC."
+        required: false
+        type: string
+        default: ""
 
 concurrency:
   group: import-places
@@ -72,6 +79,7 @@ jobs:
       LIMIT: ${{ inputs.limit }}
       PROBE_TIMEOUT_MS: ${{ inputs.probe_timeout_ms }}
       DESCRIBE_NAME: ${{ inputs.describe_name }}
+      ENRICH_SOURCE_ID: ${{ inputs.enrich_source_id }}
     steps:
       - uses: actions/checkout@v7
 
@@ -152,5 +160,28 @@ jobs:
             echo "- Limit: $LIMIT"
             echo '```json'
             cat /tmp/mic-write.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Enrich — descrizione e contatti mancanti dei Siti MiC già presenti (per ID, non per regione)
+        if: ${{ inputs.mode == 'enrich' || inputs.mode == 'enrich-dry-run' }}
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_SERVICE_KEY:-}" ]; then
+            echo "Secret Supabase mancanti nel repository — serve SUPABASE_URL e (SUPABASE_SERVICE_KEY o SUPABASE_SERVICE_ROLE_KEY). Vedi Settings > Secrets and variables > Actions." >&2
+            exit 1
+          fi
+          ARGS=()
+          if [ "$MODE" = "enrich-dry-run" ]; then ARGS+=(--dry-run); fi
+          if [ -n "${ENRICH_SOURCE_ID:-}" ]; then ARGS+=(--source-id "$ENRICH_SOURCE_ID"); fi
+          npx tsx scripts/places/mic/enrich.ts "${ARGS[@]}" | tee /tmp/mic-enrich.txt
+          {
+            echo "### Import Places — MiC ($MODE)"
+            echo "- ID singolo: ${ENRICH_SOURCE_ID:-(tutti i Siti MiC)}"
+            echo '```json'
+            cat /tmp/mic-enrich.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
