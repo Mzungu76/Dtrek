@@ -29,7 +29,7 @@ const MONTHS = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'l
 const ACTIVITY_HREF = (id: string) => `/resoconto/${encodeURIComponent(id)}`
 
 /** Punto di partenza più recente noto: ultima uscita registrata, altrimenti una Meta pianificata. */
-function referencePoint(activities: ActivityMeta[], planned: PlannedHikeMeta[]): { lat: number; lon: number; label: string } | null {
+export function referencePoint(activities: ActivityMeta[], planned: PlannedHikeMeta[]): { lat: number; lon: number; label: string } | null {
   const withRoute = [...activities]
     .filter((a) => a.routePolyline && a.routePolyline.length > 0)
     .sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())[0]

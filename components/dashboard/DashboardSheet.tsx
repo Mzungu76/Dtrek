@@ -1,17 +1,15 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { format } from 'date-fns'
-import { it } from 'date-fns/locale'
 import { Pencil, Plus, X, ChevronUp, ChevronDown, Check, LayoutDashboard } from 'lucide-react'
 import { MobileNavBar, DesktopNav } from '@/components/Navbar'
 import { WIDGET_CATALOG, WIDGET_BY_ID } from '@/components/dashboard/widgets'
 import { WIDGET_CATEGORIES } from '@/components/dashboard/widgetKit'
+import { PEEK_SUMMARIES, isPinnable, type PeekSummary } from '@/components/dashboard/peekSummaries'
 import {
-  normalizeDashboardConfig, DEFAULT_DASHBOARD_CONFIG, DEFAULT_TAB_ID,
+  normalizeDashboardConfig, DEFAULT_DASHBOARD_CONFIG, DEFAULT_TAB_ID, MAX_PINNED, applyPin,
   type DashboardConfig, type DashboardTab, type DashboardWidgetId,
 } from '@/lib/dashboardConfig'
-import { wmoInfo } from '@/lib/weather'
 import type { DashboardData } from './types'
 
 // Quanto (px) deve muoversi il dito prima che un tocco venga letto come trascinamento invece che
@@ -32,55 +30,44 @@ function GlassRing({ value, color, size = 40 }: { value: number; color: string; 
   )
 }
 
-/** Le 2 "chiavi" fisse mostrate nel pannello a scomparsa (peek), indipendenti dalle schede
- *  personalizzabili sotto — stesso principio del mockup (docs/mockup-dashboard-hero/
- *  DirezioneE.dc.html): Recovery e Prossima uscita restano sempre visibili sull'hero, il resto (il
- *  catalogo widget completo, con le sue schede) si raggiunge trascinando verso l'alto. */
-function PeekWidgets({ data }: { data: DashboardData }) {
-  const next = data.nextOuting
-  const weatherIcon = next?.weather ? wmoInfo(next.weather.weathercode) : null
+/** Una tessera "vetro" del peek: etichetta, valore ed eventuale anello o link. */
+function PeekTile({ summary }: { summary: PeekSummary }) {
+  const body = (
+    <div className="flex items-center gap-2.5">
+      {summary.ring && <GlassRing value={summary.ring.value} color={summary.ring.color} />}
+      <div className="min-w-0">
+        <div className="font-barlow text-[10px] font-bold tracking-wide uppercase text-white/65 truncate">{summary.label}</div>
+        <div className="font-display font-semibold text-[13px] text-white truncate mt-0.5">{summary.value}</div>
+        {summary.caption && <div className="text-[10px] text-white/65 mt-0.5 truncate">{summary.caption}</div>}
+      </div>
+    </div>
+  )
   return (
-    <div className="flex gap-2.5">
-      <div className="flex-1 rounded-2xl bg-white/14 backdrop-blur-md border border-white/20 p-3.5">
-        <div className="flex items-center gap-2.5">
-          <GlassRing value={data.recovery.score} color={data.recovery.color} />
-          <div className="min-w-0">
-            <div className="font-barlow text-[10px] font-bold tracking-wide uppercase text-white/65">Recovery</div>
-            <div className="text-[11px] text-white/85 mt-0.5 truncate">{data.recovery.label}</div>
-          </div>
-        </div>
-      </div>
-      <div className="flex-1 rounded-2xl bg-white/14 backdrop-blur-md border border-white/20 p-3.5 min-w-0">
-        <div className="font-barlow text-[10px] font-bold tracking-wide uppercase text-white/65 mb-1">Prossima uscita</div>
-        {data.nextOutingLoading ? (
-          <div className="text-[11px] text-white/60">Caricamento…</div>
-        ) : next ? (
-          <Link href={`/guida/${encodeURIComponent(next.id)}`} className="block">
-            <div className="font-display font-semibold text-[13px] text-white truncate">{next.title}</div>
-            <div className="text-[10px] text-white/65 mt-0.5">
-              {format(new Date(next.plannedDate), 'EEE d MMM', { locale: it })}
-              {next.weather && weatherIcon && ` · ${weatherIcon.emoji} ${Math.round(next.weather.tempMax)}°`}
-            </div>
-          </Link>
-        ) : (
-          <p className="font-lora italic text-[11px] text-white/55 leading-snug">Nessuna uscita in programma</p>
-        )}
-      </div>
+    <div className="flex-1 min-w-0 rounded-2xl bg-white/14 backdrop-blur-md border border-white/20 p-3.5">
+      {summary.href ? <Link href={summary.href} className="block">{body}</Link> : body}
     </div>
   )
 }
 
-/** Le stesse 2 "chiavi" del peek mobile (Recovery/Prossima uscita), ma nella versione già pronta
- *  per uno sfondo chiaro: da lg in su il pannello è un riquadro bianco fisso, non più un foglio
- *  sopra la mappa scura, quindi qui si riusano i widget del catalogo (WIDGET_BY_ID) invece dello
- *  stile "vetro" di PeekWidgets sopra, pensato apposta per stare sopra la mappa. */
-function PinnedPeekWidgets({ data }: { data: DashboardData }) {
-  const RecoveryC = WIDGET_BY_ID.recovery.Component
-  const NextOutingC = WIDGET_BY_ID['prossima-uscita'].Component
+/** I widget sempre visibili sul peek (mobile): quelli che l'utente ha fissato (config.pinned, al
+ *  massimo due), ciascuno nella sua versione compatta (peekSummaries.ts). Indipendenti dalle schede
+ *  personalizzabili sotto, che si raggiungono trascinando verso l'alto. */
+function PeekWidgets({ data, ids }: { data: DashboardData; ids: DashboardWidgetId[] }) {
+  const tiles = ids.map(id => PEEK_SUMMARIES[id]?.(data)).filter((t): t is PeekSummary => !!t)
+  if (tiles.length === 0) return null
+  return <div className="flex gap-2.5">{tiles.map((t, i) => <PeekTile key={ids[i]} summary={t} />)}</div>
+}
+
+/** Gli stessi widget fissati, ma per lo sfondo chiaro del pannello da lg in su: lì si riusano i
+ *  widget interi del catalogo (WIDGET_BY_ID) invece delle tessere "vetro" pensate per stare sopra la
+ *  mappa. */
+function PinnedPeekWidgets({ data, ids }: { data: DashboardData; ids: DashboardWidgetId[] }) {
   return (
     <>
-      <RecoveryC data={data} />
-      <NextOutingC data={data} />
+      {ids.map(id => {
+        const C = WIDGET_BY_ID[id]?.Component
+        return C ? <C key={id} data={data} /> : null
+      })}
     </>
   )
 }
@@ -100,6 +87,8 @@ export default function DashboardSheet({ data }: { data: DashboardData }) {
   const [desktopOpen, setDesktopOpen] = useState(false)
   const [editMode, setEditMode] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
+  // Se non è null il selettore serve a scegliere il widget fissato nella posizione indicata.
+  const [pinSlot, setPinSlot] = useState<number | null>(null)
   const [creatingTab, setCreatingTab] = useState(false)
   const [newTabName, setNewTabName] = useState('')
   const [renaming, setRenaming] = useState(false)
@@ -125,7 +114,7 @@ export default function DashboardSheet({ data }: { data: DashboardData }) {
   const activeTab = config.tabs.find(t => t.id === activeTabId) ?? config.tabs[0]
 
   function updateActiveTab(patch: Partial<DashboardTab>) {
-    saveConfig({ tabs: config.tabs.map(t => t.id === activeTab.id ? { ...t, ...patch } : t) })
+    saveConfig({ ...config, tabs: config.tabs.map(t => t.id === activeTab.id ? { ...t, ...patch } : t) })
   }
 
   function moveWidget(index: number, dir: -1 | 1) {
@@ -146,11 +135,16 @@ export default function DashboardSheet({ data }: { data: DashboardData }) {
     setPickerOpen(false)
   }
 
+  function setPinned(slot: number, id: DashboardWidgetId | null) {
+    saveConfig({ ...config, pinned: applyPin(config.pinned, slot, id) })
+    setPinSlot(null); setPickerOpen(false)
+  }
+
   function createTab() {
     const label = newTabName.trim()
     if (!label) return
     const tab: DashboardTab = { id: crypto.randomUUID(), label, widgetIds: [] }
-    saveConfig({ tabs: [...config.tabs, tab] })
+    saveConfig({ ...config, tabs: [...config.tabs, tab] })
     setActiveTabId(tab.id)
     setCreatingTab(false); setNewTabName('')
     setEditMode(true)
@@ -159,12 +153,14 @@ export default function DashboardSheet({ data }: { data: DashboardData }) {
   function deleteActiveTab() {
     if (config.tabs.length <= 1) return
     const remaining = config.tabs.filter(t => t.id !== activeTab.id)
-    saveConfig({ tabs: remaining })
+    saveConfig({ ...config, tabs: remaining })
     setActiveTabId(remaining[0].id)
     setEditMode(false)
   }
 
-  const availableToAdd = WIDGET_CATALOG.filter(w => !activeTab.widgetIds.includes(w.id))
+  const availableToAdd = pinSlot != null
+    ? WIDGET_CATALOG.filter(w => isPinnable(w.id))
+    : WIDGET_CATALOG.filter(w => !activeTab.widgetIds.includes(w.id))
 
   // ── Trascina/tocca la maniglia per aprire o chiudere ──────────────────────────────────────
   const dragStartY = useRef<number | null>(null)
@@ -197,7 +193,7 @@ export default function DashboardSheet({ data }: { data: DashboardData }) {
           <ChevronUp className="w-5 h-5 text-white/65 animate-bounce" strokeWidth={2.5} />
           <span className="font-barlow text-[9.5px] font-bold tracking-wide uppercase text-white/55 mt-0.5">Trascina per tutti i widget</span>
         </button>
-        {configLoaded ? <PeekWidgets data={data} /> : (
+        {configLoaded ? <PeekWidgets data={data} ids={config.pinned} /> : (
           <div className="flex gap-2.5">
             {[0, 1].map(i => <div key={i} className="flex-1 h-[72px] rounded-2xl bg-white/10 animate-pulse" />)}
           </div>
@@ -265,7 +261,7 @@ export default function DashboardSheet({ data }: { data: DashboardData }) {
         </button>
 
         <div className="hidden lg:flex flex-col gap-2.5 px-4 pt-4">
-          {configLoaded ? <PinnedPeekWidgets data={data} /> : (
+          {configLoaded ? <PinnedPeekWidgets data={data} ids={config.pinned} /> : (
             <div className="flex flex-col gap-2.5">
               {[0, 1].map(i => <div key={i} className="h-[72px] rounded-2xl bg-white/10 animate-pulse" />)}
             </div>
@@ -348,6 +344,35 @@ export default function DashboardSheet({ data }: { data: DashboardData }) {
           </div>
         )}
 
+        {editMode && (
+          <div className="shrink-0 mx-4 mb-3 p-3.5 rounded-2xl bg-white border border-stone-200 lg:bg-white/10 lg:border-white/15">
+            <div className="font-barlow text-[10px] font-bold uppercase tracking-[1.5px] text-stone-400 lg:text-white/55 mb-2">Sempre visibili sulla mappa</div>
+            <div className="flex gap-2">
+              {Array.from({ length: MAX_PINNED }, (_, slot) => {
+                const id = config.pinned[slot]
+                const entry = id ? WIDGET_BY_ID[id] : null
+                return (
+                  <div key={slot} className="flex-1 min-w-0 flex items-stretch gap-1">
+                    <button
+                      onClick={() => { setPinSlot(slot); setPickerOpen(true) }}
+                      className="flex-1 min-w-0 flex items-center gap-2 px-3 py-2.5 rounded-xl border border-dashed border-stone-300 text-left lg:border-white/30"
+                    >
+                      {entry ? <entry.icon className="w-4 h-4 shrink-0 text-forest-700 lg:text-white/80" /> : <Plus className="w-4 h-4 shrink-0 text-stone-400 lg:text-white/50" />}
+                      <span className="truncate text-[12.5px] font-semibold text-stone-700 lg:text-white">{entry ? entry.label : 'Scegli'}</span>
+                    </button>
+                    {entry && (
+                      <button onClick={() => setPinned(slot, null)} aria-label={`Togli ${entry.label} dai fissati`}
+                        className="w-9 shrink-0 rounded-xl border border-stone-200 flex items-center justify-center text-stone-400 lg:border-white/20 lg:text-white/60">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         <div className="flex-1 overflow-y-auto px-4 pb-8">
           <div className="flex flex-col gap-3">
             {activeTab.widgetIds.length === 0 && !editMode && (
@@ -399,8 +424,8 @@ export default function DashboardSheet({ data }: { data: DashboardData }) {
       {pickerOpen && (
         <div className="fixed inset-0 z-50 bg-[#0b1a24] flex flex-col">
           <div className="shrink-0 flex items-center justify-between px-4 pt-[calc(env(safe-area-inset-top,0px)+14px)] pb-3 border-b border-white/10">
-            <h2 className="font-display text-base font-bold text-white">Aggiungi widget</h2>
-            <button onClick={() => setPickerOpen(false)} aria-label="Chiudi" className="shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors">
+            <h2 className="font-display text-base font-bold text-white">{pinSlot != null ? 'Scegli il widget da tenere sempre visibile' : 'Aggiungi widget'}</h2>
+            <button onClick={() => { setPickerOpen(false); setPinSlot(null) }} aria-label="Chiudi" className="shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors">
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -416,7 +441,7 @@ export default function DashboardSheet({ data }: { data: DashboardData }) {
                   {items.map(w => (
                     <button
                       key={w.id}
-                      onClick={() => addWidget(w.id)}
+                      onClick={() => (pinSlot != null ? setPinned(pinSlot, w.id) : addWidget(w.id))}
                       className="w-full flex items-center gap-3.5 py-3 border-b border-white/10 text-left"
                     >
                       <div className="w-11 h-11 rounded-xl shrink-0 bg-white/5 flex items-center justify-center">

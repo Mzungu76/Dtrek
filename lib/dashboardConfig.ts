@@ -26,7 +26,14 @@ export interface DashboardTab {
 
 export interface DashboardConfig {
   tabs: DashboardTab[]
+  /** I widget sempre visibili sulla mappa della Home (peek): fino a MAX_PINNED, scelti dall'utente.
+   *  Solo widget con un riassunto compatto (components/dashboard/peekSummaries.ts). */
+  pinned: DashboardWidgetId[]
 }
+
+export const MAX_PINNED = 2
+/** Quelli fissi di prima, per chi non ha mai scelto. */
+export const DEFAULT_PINNED: DashboardWidgetId[] = ['recovery', 'prossima-uscita']
 
 /** La scheda con cui ogni account comincia — non eliminabile (l'utente può svuotarla, non farla
  *  sparire: la Bacheca deve sempre avere almeno una scheda). Il suo id è stabile perché non viene
@@ -34,6 +41,7 @@ export interface DashboardConfig {
 export const DEFAULT_TAB_ID = 'oggi'
 
 export const DEFAULT_DASHBOARD_CONFIG: DashboardConfig = {
+  pinned: DEFAULT_PINNED,
   tabs: [
     {
       id: DEFAULT_TAB_ID,
@@ -48,7 +56,7 @@ function isWidgetId(x: unknown): x is DashboardWidgetId {
 }
 
 export function normalizeDashboardConfig(raw: unknown): DashboardConfig {
-  const r = (raw && typeof raw === 'object') ? raw as { tabs?: unknown } : {}
+  const r = (raw && typeof raw === 'object') ? raw as { tabs?: unknown; pinned?: unknown } : {}
   const rawTabs: unknown[] = Array.isArray(r.tabs) ? r.tabs : []
 
   const seenIds = new Set<string>()
@@ -65,5 +73,26 @@ export function normalizeDashboardConfig(raw: unknown): DashboardConfig {
       }
     })
 
-  return tabs.length > 0 ? { tabs } : DEFAULT_DASHBOARD_CONFIG
+  // pinned assente (configurazioni salvate prima di questa opzione) = i due di sempre; presente ma
+  // vuoto = l'utente non ne vuole nessuno.
+  const pinned: DashboardWidgetId[] = Array.isArray(r.pinned)
+    ? Array.from(new Set(r.pinned.filter(isWidgetId))).slice(0, MAX_PINNED)
+    : DEFAULT_PINNED
+
+  return tabs.length > 0 ? { tabs, pinned } : { ...DEFAULT_DASHBOARD_CONFIG, pinned }
+}
+
+/** Fissa `id` nella posizione `slot` (o la svuota con null). Se `id` è già fissato in un'altra posizione
+ *  le due si scambiano, così non si perde mai l'altro widget scelto. */
+export function applyPin(pinned: DashboardWidgetId[], slot: number, id: DashboardWidgetId | null): DashboardWidgetId[] {
+  const next = [...pinned]
+  if (id == null) { next.splice(slot, 1); return next }
+  const existing = next.indexOf(id)
+  if (existing !== -1 && existing !== slot) {
+    if (slot < next.length) { next[existing] = next[slot]; next[slot] = id }
+    return next.slice(0, MAX_PINNED)
+  }
+  if (slot < next.length) next[slot] = id
+  else next.push(id)
+  return next.slice(0, MAX_PINNED)
 }
