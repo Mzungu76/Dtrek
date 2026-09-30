@@ -6,6 +6,7 @@ import BackLink from '@/app/components/BackLink'
 import { Leaf, X, Loader2 } from 'lucide-react'
 import type { FloraItem } from '@/app/api/flora/route'
 import type { TrackPoint } from '@/lib/tcxParser'
+import SafeImg from '@/components/ui/SafeImg'
 
 const MapView = dynamic(() => import('@/components/MapView'), { ssr: false })
 
@@ -23,23 +24,17 @@ function LeafPlaceholder({ className }: { className?: string }) {
 }
 
 function FloraCard({ item, onClick }: { item: FloraItem; onClick: () => void }) {
-  const [imgError, setImgError] = useState(false)
   const displayName = item.vernacularIta ?? item.scientificName
   return (
     <button
       onClick={onClick}
       className="text-left bg-white rounded-xl border border-stone-200 overflow-hidden hover:shadow-md transition-shadow"
     >
-      {!imgError ? (
-        <img
-          src={item.thumbUrl ?? undefined}
-          alt={displayName}
-          className="w-full aspect-square object-cover rounded-t-xl"
-          onError={() => setImgError(true)}
-        />
-      ) : (
-        <LeafPlaceholder className="w-full aspect-square rounded-t-xl" />
-      )}
+      <SafeImg
+ src={item.thumbUrl} fallbackSrcs={[item.imageUrl]} alt={displayName}
+ className="w-full aspect-square object-cover rounded-t-xl"
+ fallback={<LeafPlaceholder className="w-full aspect-square rounded-t-xl" />}
+ />
       <div className="p-2.5 space-y-0.5">
         {item.vernacularIta ? (
           <p className="font-lora text-sm font-medium text-stone-800 truncate">{item.vernacularIta}</p>
@@ -62,7 +57,6 @@ function FloraCard({ item, onClick }: { item: FloraItem; onClick: () => void }) 
 }
 
 function FloraDetailModal({ item, month, onClose }: { item: FloraItem; month: number; onClose: () => void }) {
-  const [imgError, setImgError] = useState(false)
   const displayName = item.vernacularIta ?? item.scientificName
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={onClose}>
@@ -76,16 +70,11 @@ function FloraDetailModal({ item, month, onClose }: { item: FloraItem; month: nu
         >
           <X className="w-4 h-4" />
         </button>
-        {!imgError ? (
-          <img
-            src={item.imageUrl ?? undefined}
-            alt={displayName}
-            className="w-full aspect-[4/3] object-cover"
-            onError={() => setImgError(true)}
-          />
-        ) : (
-          <LeafPlaceholder className="w-full aspect-[4/3]" />
-        )}
+        <SafeImg
+ src={item.imageUrl} fallbackSrcs={[item.thumbUrl]} alt={displayName}
+ className="w-full aspect-[4/3] object-cover"
+ fallback={<LeafPlaceholder className="w-full aspect-[4/3]" />}
+ />
         <div className="p-5 space-y-2">
           <h2 className="font-lora text-2xl text-stone-800">{displayName}</h2>
           {item.vernacularIta && (

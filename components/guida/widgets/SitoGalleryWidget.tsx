@@ -3,6 +3,7 @@ import { AlertTriangle, Image as ImageIcon } from 'lucide-react'
 import { SINGLE_POINT_PHOTO_RADIUS_M, type RoutePhoto } from '@/app/lib/guide/fetchRoutePhotos'
 import type { SiteType } from '@/lib/metaTypes'
 import GuideGalleryLightbox, { type GuideGalleryItem } from './GuideGalleryLightbox'
+import SafeImg from '@/components/ui/SafeImg'
 
 // Avviso GENERICO di categoria, non una segnalazione su QUESTA Meta specifica (quella resta a
 // "Verificato online", l'unica sezione con una ricerca AI mirata) — una proprietà tipica del tipo
@@ -59,7 +60,7 @@ export default function SitoGalleryWidget({ name, lat, lon, siteType }: Props) {
             {photos.map((p, i) => (
               <button key={p.url} type="button" onClick={() => setLightboxIndex(i)} className="shrink-0 w-24 text-left">
                 {/* eslint-disable-next-line @next/next/no-img-element -- foto esterna (Wikimedia Commons), non un asset ottimizzabile */}
-                <img src={p.url} alt={p.title} className="w-24 h-24 rounded-xl object-cover" />
+                <SafeImg src={p.url} alt={p.title} className="w-24 h-24 rounded-xl object-cover" />
                 <p className="text-[9.5px] text-stone-400 mt-1 truncate">{p.credit}</p>
               </button>
             ))}

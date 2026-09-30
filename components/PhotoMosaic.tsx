@@ -1,5 +1,5 @@
 'use client'
-import Image from 'next/image'
+import FallbackImage, { ImageSpinner, ImagePlaceholder } from '@/components/ui/FallbackImage'
 
 export interface MosaicPhoto {
   id: string
@@ -20,7 +20,7 @@ export default function PhotoMosaic({ photos, onPhotoClick, heightClass = 'h-32'
       {photos.map(ph => (
         <button key={ph.id} onClick={() => onPhotoClick?.(ph.id)}
           className="relative flex-1 overflow-hidden hover:scale-[1.02] transition-transform">
-          <Image src={ph.url} alt={ph.alt ?? ''} fill sizes="33vw"
+          <FallbackImage loadingIndicator={<ImageSpinner />} fallback={<ImagePlaceholder />} src={ph.url} alt={ph.alt ?? ''} fill sizes="33vw"
             className="object-cover" style={{ objectPosition: 'center 40%' }} />
         </button>
       ))}

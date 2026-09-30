@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { X, Images, ExternalLink, ChevronLeft, ChevronRight, MapPin } from 'lucide-react'
+import SafeImg from '@/components/ui/SafeImg'
 
 const MAPILLARY_KEY = process.env.NEXT_PUBLIC_MAPILLARY_KEY ?? ''
 
@@ -116,11 +117,14 @@ export default function StreetViewPanel({ lat, lon, title, onClose }: Props) {
           <>
             {/* Main photo */}
             <div className="relative bg-stone-900 shrink-0" style={{ aspectRatio: '16/9' }}>
-              <img
+              <SafeImg
+                variant="cover"
                 key={img.id}
-                src={img.thumb_1024_url ?? img.thumb_256_url}
+                src={img.thumb_1024_url}
+                fallbackSrcs={[img.thumb_256_url]}
                 alt="Foto zona"
                 className="w-full h-full object-cover"
+                spinnerBackground="#1c1917"
               />
 
               {selected > 0 && (
@@ -159,7 +163,7 @@ export default function StreetViewPanel({ lat, lon, title, onClose }: Props) {
                       ? 'border-sky-500 shadow-sm scale-105'
                       : 'border-transparent opacity-60 hover:opacity-100 hover:border-stone-300'
                   }`}>
-                  <img src={im.thumb_256_url} alt="" className="w-full h-full object-cover" />
+                  <SafeImg src={im.thumb_256_url} alt="" className="w-full h-full object-cover" />
                 </button>
               ))}
             </div>

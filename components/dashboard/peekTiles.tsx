@@ -13,6 +13,7 @@ import { fmtDate } from './widgetKit'
 import type { PeekSummary, PeekVisual } from './peekSummaries'
 import type { DashboardData } from './types'
 import type { DashboardWidgetId } from '@/lib/dashboardConfig'
+import SafeImg from '@/components/ui/SafeImg'
 
 const GLASS = 'flex-1 min-w-0 min-h-[84px] rounded-2xl bg-white/14 backdrop-blur-md border border-white/20'
 const LABEL = 'font-barlow text-[10px] font-bold tracking-wide uppercase text-white/65 truncate'
@@ -59,7 +60,7 @@ function LeftVisual({ v }: { v: PeekVisual }) {
       <div className="w-10 h-10 rounded-xl overflow-hidden bg-white/10 flex items-center justify-center shrink-0">
         {v.url
           // eslint-disable-next-line @next/next/no-img-element
-          ? <img src={v.url} alt="" className="w-full h-full object-cover" />
+          ? <SafeImg src={v.url} alt="" className="w-full h-full object-cover" fallback={<v.fallback className="w-5 h-5 text-white/75" />} />
           : <v.fallback className="w-5 h-5 text-white/75" />}
       </div>
     )

@@ -1,5 +1,6 @@
 import { FONT } from '@/lib/designTokens'
 import { PDF_PAGE_W, PDF_PAGE_H } from '@/lib/pdfPageGeometry'
+import SafeImg from '@/components/ui/SafeImg'
 export function DiarioCover({
   coverUrl, diaryTitle, diarySubtitle, diaryAuthor, dateRange, totalActivities, totalKm, totalElevationGain,
 }: {
@@ -23,7 +24,7 @@ export function DiarioCover({
     }}>
       {/* Full-bleed background photo, when the user has set one */}
       {coverUrl && (
-        <img src={coverUrl} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+        <SafeImg variant="cover" src={coverUrl} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
       )}
 
       {/* Topographic texture + mountain silhouette — only on the illustrated (no-photo) cover */}

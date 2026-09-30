@@ -1,6 +1,6 @@
 'use client'
 import { useMemo, type ReactNode } from 'react'
-import Image from 'next/image'
+import FallbackImage, { ImageSpinner, ImagePlaceholder } from '@/components/ui/FallbackImage'
 import { slugifyHeading } from '@/lib/guideSlug'
 import { parseMarkupBlocks } from '@/lib/guideMarkup'
 
@@ -59,7 +59,7 @@ export default function MagazineBody({ body, color, sectionPhoto, twoColumns, ph
         {sectionPhoto && (
           <div className="float-right ml-5 mb-4 w-[42%] sm:w-[38%]" style={{ columnSpan: 'none' as const }}>
             <div className="relative w-full h-40 rounded-sm shadow-sm overflow-hidden">
-              <Image src={sectionPhoto} alt="" fill sizes="(max-width: 640px) 42vw, 38vw" className="object-cover" />
+              <FallbackImage loadingIndicator={<ImageSpinner />} fallback={<ImagePlaceholder />} src={sectionPhoto} alt="" fill sizes="(max-width: 640px) 42vw, 38vw" className="object-cover" />
               {photoIndexBadge != null && (
                 <span className="absolute top-1.5 left-1.5 w-5 h-5 bg-amber-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
                   {photoIndexBadge}
@@ -137,7 +137,7 @@ export default function MagazineBody({ body, color, sectionPhoto, twoColumns, ph
                 style={{ columnSpan: 'all' as const, breakInside: 'avoid' }}
               >
                 <div className="relative w-full h-56 sm:h-72">
-                  <Image src={photo.url} alt="" fill sizes="(max-width: 1024px) 100vw, 52rem" className="object-cover" />
+                  <FallbackImage loadingIndicator={<ImageSpinner />} fallback={<ImagePlaceholder />} src={photo.url} alt="" fill sizes="(max-width: 1024px) 100vw, 52rem" className="object-cover" />
                 </div>
                 {photo.caption && (
                   <figcaption className="text-[10px] italic text-stone-400 mt-1.5 text-center px-2">{photo.caption}</figcaption>

@@ -1,4 +1,5 @@
 import type { TrackPoint } from '@/lib/tcxParser'
+import SafeImg from '@/components/ui/SafeImg'
 
 export interface RouteTimelinePhoto {
   id: string
@@ -98,7 +99,7 @@ export default function RouteTimeline({
               style={{ left: `${photo.progress * 100}%`, bottom: 0 }}>
               <div className="relative">
                 {/* DTREK-AUDIT.md P3 #35 */}
-                <img src={photo.thumbUrl ?? photo.url} alt={photo.caption}
+                <SafeImg src={photo.thumbUrl ?? photo.url} fallbackSrcs={[photo.url]} alt={photo.caption}
                   className="w-14 h-14 object-cover rounded-lg shadow border-2 border-white" />
                 <span className="absolute -top-1.5 -left-1.5 w-4 h-4 bg-amber-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center font-display">
                   {number}
@@ -169,7 +170,7 @@ export default function RouteTimeline({
               )}
               <div className="relative">
                 {/* DTREK-AUDIT.md P3 #35 */}
-                <img src={photo.thumbUrl ?? photo.url} alt={photo.caption}
+                <SafeImg src={photo.thumbUrl ?? photo.url} fallbackSrcs={[photo.url]} alt={photo.caption}
                   className="w-14 h-14 object-cover rounded-lg shadow border-2 border-white" />
                 <span className="absolute -top-1.5 -left-1.5 w-4 h-4 bg-amber-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center font-display">
                   {number}

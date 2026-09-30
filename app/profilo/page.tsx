@@ -18,6 +18,7 @@ import {
   BarChart2, Trophy, Mountain, Compass, Settings, Sparkles, ArrowDownToLine,
   Info, LogOut, ChevronRight, User as UserIcon, X, Search,
 } from 'lucide-react'
+import SafeImg from '@/components/ui/SafeImg'
 
 interface Row {
   href?: string
@@ -135,7 +136,7 @@ export default function ProfiloPage() {
         <div className="relative w-[84px] h-[84px] mx-auto mb-3.5">
           <div className="w-full h-full rounded-full overflow-hidden bg-forest-800 border-2 border-white/20 flex items-center justify-center">
             {faceUrl
-              ? <img src={faceUrl} alt="" className="w-full h-full object-cover" />
+              ? <SafeImg src={faceUrl} alt="" className="w-full h-full object-cover" fallback={<UserIcon className="w-9 h-9 text-forest-300" />} />
               : <UserIcon className="w-9 h-9 text-forest-300" />
             }
           </div>

@@ -72,6 +72,7 @@ import { computeBorgoWalkFields } from '@/lib/borgoWalkPolyline'
 import { borgoCardVariant, sitoCardFamily, metaEligibleForHikingScores } from '@/lib/guideCardVariant'
 import { META_TYPE_CONFIG, SITE_TYPE_CONFIG, inferSiteTypeFromName } from '@/lib/metaTypes'
 import { Building2, Landmark } from 'lucide-react'
+import SafeImg from '@/components/ui/SafeImg'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1439,6 +1440,7 @@ export default function GuideReader({
         startPoint={startPointInfo}
         coverMode={usesCoverPhoto ? 'photo' : 'map'}
         photoUrl={placeDetail?.imageUrl ?? coverPhoto?.imageUrl}
+        photoFallbacks={usesCoverPhoto ? [coverPhoto?.imageUrl, ...poiPhotos.map(p => p.imageUrl), ...routePhotos.map(p => p.url)] : undefined}
         photoCredit={placeDetail?.imageCredit ?? coverPhoto?.imageCredit}
         fallbackIcon={<FallbackIconComponent />}
         fallbackColor={coverFallbackColor}
@@ -1832,13 +1834,11 @@ export default function GuideReader({
                       className="shrink-0 w-52 rounded-2xl overflow-hidden border border-stone-200 group text-left"
                       style={{ scrollSnapAlign: 'start' }}
                     >
-                      {/* eslint-disable-next-line @next/next/no-img-element -- foto hotlinkata dalla fonte, mai copiata sui nostri server */}
-                      <img
+                      <SafeImg
                         src={item.imageUrl}
                         alt={item.title}
                         className="w-52 h-36 object-cover group-hover:opacity-90 transition-opacity"
                         loading="lazy"
-                        onError={e => { (e.currentTarget.closest('button') as HTMLElement | null)?.style.setProperty('display', 'none') }}
                       />
                       <p className="px-2.5 py-1.5 text-[10px] text-stone-400 bg-stone-50 truncate">
                         {item.sourceLabel}

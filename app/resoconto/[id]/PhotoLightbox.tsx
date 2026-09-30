@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { X, ChevronLeft, ChevronRight } from 'lucide-react'
 import type { RoutePhoto } from '@/lib/activityPhotos'
+import SafeImg from '@/components/ui/SafeImg'
 
 /** Lightbox con navigazione tra tutte le foto (frecce, tastiera, swipe) invece di una sola foto
  *  senza uscita — vedi components/resoconto/ReportReader.tsx, che tiene solo l'indice corrente
@@ -67,7 +68,7 @@ export function PhotoLightbox({ photos, index, onNavigate, onClose }: {
       )}
 
       <div className="max-w-3xl w-full" onClick={e => e.stopPropagation()}>
-        <img src={photo.url} alt={photo.caption} className="w-full max-h-[75vh] object-contain rounded-2xl shadow-2xl" />
+        <SafeImg key={photo.url} src={photo.url} alt={photo.caption} className="w-full max-h-[75vh] min-h-[160px] object-contain rounded-2xl shadow-2xl" />
         <div className="flex items-center justify-between gap-3 mt-3">
           {photo.caption && <p className="font-body text-sm italic text-white/70 min-w-0 truncate">{photo.caption}</p>}
           <p className="text-xs text-white/40 shrink-0 ml-auto">{index + 1} / {photos.length}</p>

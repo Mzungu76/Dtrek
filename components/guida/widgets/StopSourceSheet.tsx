@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import { X, ExternalLink } from 'lucide-react'
+import SafeImg from '@/components/ui/SafeImg'
 
 export interface StopSourceSheetData {
   name: string
@@ -39,7 +40,7 @@ export default function StopSourceSheet({ data, onClose }: { data: StopSourceShe
       >
         {data.thumbnail && (
           // eslint-disable-next-line @next/next/no-img-element -- foto hotlinkata dalla fonte, mai copiata sui nostri server
-          <img src={data.thumbnail} alt="" className="w-full h-40 object-cover shrink-0" />
+          <SafeImg src={data.thumbnail} alt="" className="w-full h-40 object-cover shrink-0" fallback={null} />
         )}
         <div className="flex items-start justify-between gap-3 px-5 pt-4">
           <h3 className="font-display text-lg font-semibold text-stone-800 leading-tight">{data.name}</h3>

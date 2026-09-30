@@ -2,6 +2,7 @@
 import { useEffect, useRef } from 'react'
 import { X, Volume2 } from 'lucide-react'
 import { speak, isSpeechSupported } from '@/lib/navigation/speech'
+import SafeImg from '@/components/ui/SafeImg'
 
 interface Props {
   title: string
@@ -32,7 +33,7 @@ export default function PoiCalloutSheet({ title, extract, imageUrl, onClose }: P
       <div className="mx-auto max-w-md max-h-[68vh] flex flex-col rounded-t-3xl bg-[#fdfcfa] shadow-2xl border border-stone-200 overflow-hidden">
         {imageUrl && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={imageUrl} alt="" className="w-full h-36 object-cover shrink-0" />
+          <SafeImg src={imageUrl} alt="" className="w-full h-36 object-cover shrink-0" fallback={null} />
         )}
         <div className="flex items-start gap-2 px-5 pt-4 pb-2 shrink-0">
           <h2 className="flex-1 min-w-0 font-display font-semibold text-[22px] leading-tight text-stone-900 text-balance">{title}</h2>

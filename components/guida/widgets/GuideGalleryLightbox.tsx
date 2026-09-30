@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { X, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
+import SafeImg from '@/components/ui/SafeImg'
 
 export interface GuideGalleryItem {
   imageUrl: string
@@ -91,7 +92,7 @@ export default function GuideGalleryLightbox({ items, index, onNavigate, onClose
 
       <div className="max-w-3xl w-full" onClick={e => e.stopPropagation()}>
         {/* eslint-disable-next-line @next/next/no-img-element -- foto hotlinkata dalla fonte, mai copiata sui nostri server */}
-        <img src={item.imageUrl} alt={item.title} className="w-full max-h-[75vh] object-contain rounded-2xl shadow-2xl" />
+        <SafeImg key={item.imageUrl} src={item.imageUrl} alt={item.title} className="w-full max-h-[75vh] min-h-[160px] object-contain rounded-2xl shadow-2xl" />
         <div className="flex items-center justify-between gap-3 mt-3">
           <p className="font-body text-sm italic text-white/70 min-w-0 truncate">{item.sourceLabel}</p>
           <div className="flex items-center gap-3 shrink-0">

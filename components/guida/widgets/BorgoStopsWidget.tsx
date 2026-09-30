@@ -4,6 +4,7 @@ import { ExternalLink } from 'lucide-react'
 import { SITE_TYPE_CONFIG } from '@/lib/metaTypes'
 import type { BorgoWalkStop } from '@/lib/borgoWalkPolyline'
 import StopSourceSheet, { type StopSourceSheetData } from './StopSourceSheet'
+import SafeImg from '@/components/ui/SafeImg'
 
 const PREVIEW_CHARS = 160
 
@@ -53,12 +54,11 @@ export default function BorgoStopsWidget({ stops }: { stops: BorgoWalkStop[] }) 
             <div className={`flex-1 min-w-0 ${!isLast ? 'pb-4' : ''}`}>
               <div className="flex gap-2.5 items-start">
                 {stop.thumbnail && (
-                  // eslint-disable-next-line @next/next/no-img-element -- provenienza esterna (Wikipedia/archivio), non un asset ottimizzabile
-                  <img
+                  <SafeImg
                     src={stop.thumbnail}
                     alt=""
                     className="w-11 h-11 rounded-lg object-cover shrink-0"
-                    onError={e => { e.currentTarget.style.display = 'none' }}
+                    fallback={null}
                   />
                 )}
                 <div className="min-w-0 flex-1">

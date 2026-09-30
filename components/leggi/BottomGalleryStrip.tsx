@@ -1,3 +1,4 @@
+import SafeImg from '@/components/ui/SafeImg'
 // Galleria di miniature fissa in fondo allo schermo — stessa collocazione e stesso linguaggio
 // visivo di BottomGallery nell'app privata (components/routehub/BottomGallery.tsx): striscia
 // orizzontale di quadrati con didascalia in basso, sempre raggiungibile mentre si scorre la
@@ -15,8 +16,7 @@ export function BottomGalleryStrip({ items }: {
           <a key={it.href} href={it.href} style={{ scrollSnapAlign: 'start' }}
             className="shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden relative border-[1.5px] border-white/25 hover:border-white/50 transition-colors">
             {it.imageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={it.imageUrl} alt="" loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />
+              <SafeImg src={it.imageUrl} alt="" loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" fallback={<div className="absolute inset-0 bg-gradient-to-br from-forest-800 to-forest-950" />} />
             ) : (
               <div className="absolute inset-0 bg-gradient-to-br from-forest-800 to-forest-950" />
             )}

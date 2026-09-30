@@ -1,6 +1,7 @@
 'use client'
 import { useRef } from 'react'
 import { Library, BookMarked, BookOpen, Pencil, Loader2 } from 'lucide-react'
+import SafeImg from '@/components/ui/SafeImg'
 
 // Copertina in miniatura per una riga dell'albero — la stessa icona di riferimento del livello
 // (Library/BookMarked/BookOpen, le stesse di components/Navbar.tsx) mostrata finché non c'è
@@ -35,8 +36,10 @@ export default function CoverThumb({ kind, coverUrl, size, editable, uploading, 
         style={{ background: coverUrl ? undefined : `linear-gradient(160deg, ${from}, ${to})` }}
       >
         {coverUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={coverUrl} alt="" className="w-full h-full object-cover" />
+          <SafeImg
+            src={coverUrl} alt="" className="w-full h-full object-cover"
+            fallback={<Icon className="text-white" style={{ width: size * 0.45, height: size * 0.45 }} strokeWidth={2.2} />}
+          />
         ) : (
           <Icon className="text-white" style={{ width: size * 0.45, height: size * 0.45 }} strokeWidth={2.2} />
         )}
