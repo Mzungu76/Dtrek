@@ -6,7 +6,7 @@ import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import {
   Target, Flag, Mountain, Trophy, CalendarHeart, GitCompareArrows, TrendingUp, Ruler, CalendarDays,
   Clock, CalendarRange, Activity, Lightbulb, Moon, Sunrise, CloudSun, PenLine, Repeat, Image as ImageIcon,
-  Pencil, ChevronRight, RefreshCw, X,
+  Pencil, ChevronRight, RefreshCw, X, Loader2,
 } from 'lucide-react'
 import { getMoonIllumination } from 'suncalc'
 import { fetchNearbyWiki, isSpecificName, type WikiPage } from '@/lib/wikipedia'
@@ -292,7 +292,13 @@ function DislivelloUsciteWidget({ data }: WidgetProps) {
 }
 
 // ── Cultura e curiosità ──────────────────────────────────────────────────────────────────────
-function LoSapeviWidget({ data }: WidgetProps) {
+export type CuriosityState =
+  | { status: 'noref' } | { status: 'loading' } | { status: 'error' } | { status: 'empty' }
+  | { status: 'ok'; page: WikiPage; label: string; another: () => void; count: number }
+
+/** Una voce di Wikipedia vicino all'ultima uscita (o a un percorso pianificato): una diversa ogni
+ *  giorno, `another()` passa alla successiva. Condiviso dal widget e dalla tessera fissabile. */
+export function useCuriosity(data: WidgetProps['data']): CuriosityState {
   const ref = useMemo(() => referencePoint(data.activities, data.plannedHikes), [data.activities, data.plannedHikes])
   const [pages, setPages] = useState<WikiPage[] | null>(null)
   const [index, setIndex] = useState(0)
@@ -306,33 +312,78 @@ function LoSapeviWidget({ data }: WidgetProps) {
         if (cancelled) return
         const good = list.filter((p) => isSpecificName(p.title) && p.extract && p.extract.length > 80)
         setPages(good)
-        // Un luogo diverso ogni giorno, ma stabile durante la giornata.
-        setIndex(good.length > 0 ? Math.floor(Date.now() / 86400000) % good.length : 0)
+        setIndex(good.length > 0 ? Math.floor(Date.now() / 86400000) % good.length : 0) // stabile nella giornata
       })
       .catch(() => { if (!cancelled) setFailed(true) })
     return () => { cancelled = true }
   }, [ref])
 
-  if (!ref) return <WidgetShell title="Lo sapevi che"><WidgetEmpty text="Registra o pianifica un'uscita: cerco cosa c'è di interessante nei dintorni." /></WidgetShell>
-  if (failed) return <WidgetShell title="Lo sapevi che"><WidgetEmpty text="Non riesco a leggere Wikipedia in questo momento." /></WidgetShell>
-  if (!pages) return <WidgetShell title="Lo sapevi che"><WidgetEmpty text="Cerco curiosità vicino a te…" /></WidgetShell>
-  if (pages.length === 0) return <WidgetShell title="Lo sapevi che"><WidgetEmpty text="Nessuna voce di Wikipedia trovata nei dintorni." /></WidgetShell>
-  const page = pages[index % pages.length]
+  if (!ref) return { status: 'noref' }
+  if (failed) return { status: 'error' }
+  if (!pages) return { status: 'loading' }
+  if (pages.length === 0) return { status: 'empty' }
+  return { status: 'ok', page: pages[index % pages.length], label: ref.label, count: pages.length, another: () => setIndex((i) => (i + 1) % pages.length) }
+}
+
+/** Testo completo di una curiosità, a schermo intero (portale in body, come PhotoLightbox). */
+export function CuriosityModal({ page, label, onClose, onAnother }: { page: WikiPage; label: string; onClose: () => void; onAnother?: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+  return createPortal(
+    <div className="fixed inset-0 z-[3200] bg-black/60 flex items-end sm:items-center justify-center" role="dialog" aria-modal="true" aria-label={page.title} onClick={onClose}>
+      <div className="w-full sm:max-w-md max-h-[80vh] overflow-y-auto bg-[#fdfcfa] rounded-t-3xl sm:rounded-3xl p-5" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 20px)' }} onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start gap-2">
+          <div className="flex-1 min-w-0">
+            <div className={EYEBROW}>Lo sapevi che · vicino a {label}</div>
+            <h3 className="font-display font-semibold text-[20px] text-stone-900 leading-tight mt-1">{page.title}</h3>
+          </div>
+          <button onClick={onClose} aria-label="Chiudi" className="w-10 h-10 -mr-2 -mt-2 rounded-full flex items-center justify-center text-stone-500"><X className="w-5 h-5" /></button>
+        </div>
+        <p className="font-lora text-[14px] text-stone-700 leading-relaxed mt-3 whitespace-pre-line">{page.extract}</p>
+        <p className="text-[11px] text-stone-400 mt-3">Fonte: <a href={page.url} target="_blank" rel="noopener noreferrer" className="underline">Wikipedia</a> (CC BY-SA)</p>
+        {onAnother && <button onClick={onAnother} className="mt-4 px-4 py-2.5 rounded-xl bg-stone-100 text-stone-700 text-sm font-semibold flex items-center gap-1.5"><RefreshCw className="w-4 h-4" /> Un&apos;altra curiosità</button>}
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
+function Spinner({ text }: { text: string }) {
+  return (
+    <p className="flex items-center gap-2 font-lora italic text-[12px] text-stone-400">
+      <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" /> {text}
+    </p>
+  )
+}
+
+function LoSapeviWidget({ data }: WidgetProps) {
+  const c = useCuriosity(data)
+  const [open, setOpen] = useState(false)
+  if (c.status === 'noref') return <WidgetShell title="Lo sapevi che"><WidgetEmpty text="Registra o pianifica un'uscita: cerco cosa c'è di interessante nei dintorni." /></WidgetShell>
+  if (c.status === 'error') return <WidgetShell title="Lo sapevi che"><WidgetEmpty text="Non riesco a leggere Wikipedia in questo momento." /></WidgetShell>
+  if (c.status === 'loading') return <WidgetShell title="Lo sapevi che"><Spinner text="Cerco curiosità vicino a te…" /></WidgetShell>
+  if (c.status === 'empty') return <WidgetShell title="Lo sapevi che"><WidgetEmpty text="Nessuna voce di Wikipedia trovata nei dintorni." /></WidgetShell>
   return (
     <div className={CARD}>
       <div className="flex items-center justify-between">
-        <div className={EYEBROW}>Lo sapevi che · vicino a {ref.label}</div>
-        {pages.length > 1 && (
-          <button onClick={() => setIndex((i) => (i + 1) % pages.length)} aria-label="Un'altra curiosità" className="w-8 h-8 -mr-2 -mt-2 flex items-center justify-center text-stone-400">
+        <div className={EYEBROW}>Lo sapevi che · vicino a {c.label}</div>
+        {c.count > 1 && (
+          <button onClick={c.another} aria-label="Un'altra curiosità" className="w-8 h-8 -mr-2 -mt-2 flex items-center justify-center text-stone-400">
             <RefreshCw className="w-3.5 h-3.5" />
           </button>
         )}
       </div>
-      <h3 className="font-display font-semibold text-[15px] text-stone-800 mt-0.5">{page.title}</h3>
-      <p className="font-lora text-[12.5px] text-stone-600 leading-relaxed mt-1 line-clamp-5">{page.extract}</p>
+      <button onClick={() => setOpen(true)} className="block w-full text-left">
+        <h3 className="font-display font-semibold text-[15px] text-stone-800 mt-0.5">{c.page.title}</h3>
+        <p className="font-lora text-[12.5px] text-stone-600 leading-relaxed mt-1 line-clamp-5">{c.page.extract}</p>
+      </button>
       <p className="text-[10px] text-stone-400 mt-2">
-        Fonte: <a href={page.url} target="_blank" rel="noopener noreferrer" className="underline">Wikipedia</a> (CC BY-SA)
+        Fonte: <a href={c.page.url} target="_blank" rel="noopener noreferrer" className="underline">Wikipedia</a> (CC BY-SA)
       </p>
+      {open && <CuriosityModal page={c.page} label={c.label} onClose={() => setOpen(false)} onAnother={c.count > 1 ? c.another : undefined} />}
     </div>
   )
 }
@@ -382,40 +433,56 @@ function AlbaTramontoWidget({ data }: WidgetProps) {
 }
 
 // ── Natura e meteo ───────────────────────────────────────────────────────────────────────────
-function MeteoUscitaWidget({ data }: WidgetProps) {
+export type NextOutingWeather =
+  | { status: 'none' } | { status: 'nopoint' } | { status: 'loading' } | { status: 'error' }
+  | { status: 'ok'; title: string; hours: HourlyWeatherFull[] }
+
+/** Previsione oraria del giorno della prossima uscita pianificata (dal suo punto di partenza).
+ *  Condiviso dal widget e dalla tessera fissabile. */
+export function useNextOutingWeather(data: WidgetProps['data']): NextOutingWeather {
   const next = data.nextOuting
   const hike = useMemo(() => data.plannedHikes.find((h) => h.id === next?.id), [data.plannedHikes, next?.id])
   const point = hike?.routePolyline?.[0]
+  const dateStr = next?.plannedDate?.slice(0, 10)
   const [hours, setHours] = useState<HourlyWeatherFull[] | null>(null)
   const [failed, setFailed] = useState(false)
-  const dateStr = next?.plannedDate?.slice(0, 10)
 
   useEffect(() => {
     if (!point || !dateStr) return
     let cancelled = false
+    setHours(null); setFailed(false)
     fetchDayHourly(point[0], point[1], dateStr)
       .then((h) => { if (!cancelled) setHours(h) })
       .catch(() => { if (!cancelled) setFailed(true) })
     return () => { cancelled = true }
   }, [point, dateStr])
 
-  if (!next) return <WidgetShell title="Meteo della prossima uscita"><WidgetEmpty text="Nessuna uscita in programma." /></WidgetShell>
-  if (!point) return <WidgetShell title="Meteo della prossima uscita"><WidgetEmpty text="Questo percorso non ha ancora un punto di partenza." /></WidgetShell>
-  if (failed) return <WidgetShell title="Meteo della prossima uscita"><WidgetEmpty text="Previsioni non disponibili per questa data (oltre circa 9 giorni o senza rete)." /></WidgetShell>
-  if (!hours) return <WidgetShell title="Meteo della prossima uscita"><WidgetEmpty text="Carico le previsioni…" /></WidgetShell>
-  const slots = hours.filter((h) => { const hh = Number(h.time.slice(11, 13)); return hh >= 6 && hh <= 20 && hh % 2 === 0 })
+  if (!next) return data.nextOutingLoading ? { status: 'loading' } : { status: 'none' }
+  if (!point) return { status: 'nopoint' }
+  if (failed) return { status: 'error' }
+  if (!hours) return { status: 'loading' }
+  return { status: 'ok', title: next.title, hours }
+}
+
+function MeteoUscitaWidget({ data }: WidgetProps) {
+  const w = useNextOutingWeather(data)
+  if (w.status === 'none') return <WidgetShell title="Meteo della prossima uscita"><WidgetEmpty text="Nessuna uscita in programma." /></WidgetShell>
+  if (w.status === 'nopoint') return <WidgetShell title="Meteo della prossima uscita"><WidgetEmpty text="Questo percorso non ha ancora un punto di partenza." /></WidgetShell>
+  if (w.status === 'error') return <WidgetShell title="Meteo della prossima uscita"><WidgetEmpty text="Previsioni non disponibili per questa data (oltre circa 9 giorni o senza rete)." /></WidgetShell>
+  if (w.status === 'loading') return <WidgetShell title="Meteo della prossima uscita"><Spinner text="Carico le previsioni…" /></WidgetShell>
+  const slots = w.hours.filter((h) => { const hh = Number(h.time.slice(11, 13)); return hh >= 6 && hh <= 20 && hh % 2 === 0 })
   return (
     <WidgetShell
-      title={`Meteo: ${next.title}`}
+      title={`Meteo: ${w.title}`}
       footer={<>Previsioni <a href="https://www.met.no/" target="_blank" rel="noopener noreferrer" className="underline">MET Norway</a> (CC BY 4.0).</>}
     >
       <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
         {slots.map((h) => {
-          const w = wmoInfo(h.weathercode)
+          const info = wmoInfo(h.weathercode)
           return (
             <div key={h.time} className="shrink-0 w-14 text-center">
               <div className="text-[10.5px] text-stone-400 tabular-nums">{h.time.slice(11, 16)}</div>
-              <div className="text-xl leading-tight" title={w.label}>{w.emoji}</div>
+              <div className="text-xl leading-tight" title={info.label}>{info.emoji}</div>
               <div className="font-display font-bold text-[14px] text-stone-800 tabular-nums">{Math.round(h.temperature)}°</div>
               <div className="text-[10px] text-sky-600 tabular-nums">{h.precipitation > 0 ? `${h.precipitation.toFixed(1)} mm` : ' '}</div>
               <div className="text-[10px] text-stone-400 tabular-nums">{Math.round(h.windspeed)} km/h</div>
