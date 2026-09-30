@@ -31,6 +31,7 @@ import { trimHomeStart, type HomePoint } from './privacy/trimHomeStart'
 import { buildMetricSeries, type MetricPoint } from './trackSeries'
 import { fetchCachedPois, type PublicPoi } from './publicPois'
 import type { TrackPoint } from './tcxParser'
+import { metaHasHikingMetrics, type MetaType, type SiteType } from './metaTypes'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -89,6 +90,15 @@ export interface PublicDiaryEntry {
    *  (fix assente o fuori raggio, lib/visitCompletion.ts) — mai un gate di visibilità, solo
    *  un'etichetta onesta: il contenuto resta pubblicato comunque, la lettura decide se fidarsene. */
   verified:          boolean
+  /** Tipologia della Meta a cui il Reportage appartiene — decide quali cifre e quali parole la
+   *  pagina pubblica mostra (lib/reportFacts.ts): un Sentiero ha km/D+, un Borgo/Città le tappe,
+   *  un Sito il tipo e la verifica. Assente su un'Attività salvata prima della colonna = 'sentiero'
+   *  (DEFAULT di colonna). */
+  metaType:          MetaType
+  siteType?:         SiteType
+  /** Luoghi visitati in un Borgo/Città (activity.borgoStops) — solo il numero: l'elenco completo
+   *  resta al Reportage privato. */
+  stopsCount:        number
 }
 
 /** Il contenuto pubblico di un Diario, senza i campi che appartengono al documento che lo
@@ -140,7 +150,7 @@ export async function buildContentFromReports(
     ? await Promise.all([
         supabase
           .from('activities')
-          .select('id, start_time, distance_meters, elevation_gain, total_time_seconds, altitude_max, calories, route_polyline, track_points, verified')
+          .select('id, start_time, distance_meters, elevation_gain, total_time_seconds, altitude_max, calories, route_polyline, track_points, verified, meta_type, site_type, borgo_stops')
           .in('id', activityIds),
         supabase
           .from('activity_photos')
@@ -198,6 +208,9 @@ export async function buildContentFromReports(
         // Assente su un'Attività salvata prima di questa colonna: DEFAULT true a livello di
         // colonna (erano tutte reali), mai "non verificata" per omissione.
         verified:         (act?.verified as boolean | undefined) ?? true,
+        metaType:         (act?.meta_type as MetaType | undefined) ?? 'sentiero',
+        siteType:         (act?.site_type as SiteType | null | undefined) ?? undefined,
+        stopsCount:       Array.isArray(act?.borgo_stops) ? (act?.borgo_stops as unknown[]).length : 0,
         content:          (r.content as string) ?? '',
         // La scelta fatta nel Diario vale anche qui: `photoIdsByActivity` dice quali foto l'autore
         // vuole pubblicare. Il PDF ne stampa comunque un sottoinsieme distribuito; il sito, che non
@@ -217,8 +230,11 @@ export async function buildContentFromReports(
     })))
     .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
 
-  const totalKm = entries.reduce((s, e) => s + e.distanceMeters, 0) / 1000
-  const totalElevationGain = entries.reduce((s, e) => s + e.elevationGain, 0)
+  // Solo i Reportage con metriche escursionistiche: la distanza/dislivello di una visita a un
+  // Borgo o a un Sito non sono chilometri di cammino da sommare a quelli dei sentieri.
+  const hikingEntries = entries.filter(e => metaHasHikingMetrics(e.metaType))
+  const totalKm = hikingEntries.reduce((s, e) => s + e.distanceMeters, 0) / 1000
+  const totalElevationGain = hikingEntries.reduce((s, e) => s + e.elevationGain, 0)
 
   let dateRangeLabel: string | undefined
   if (entries.length > 0) {

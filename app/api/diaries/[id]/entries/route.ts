@@ -36,7 +36,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
     const { data: activities, error: actErr } = await supabase
       .from('activities')
-      .select('id, title, start_time, distance_meters, total_time_seconds, elevation_gain, weather_at_hike')
+      .select('id, title, start_time, distance_meters, total_time_seconds, elevation_gain, weather_at_hike, meta_type, site_type, borgo_stops')
       .eq('user_id', user.id)
       .in('linked_planned_id', percorsoIds)
     if (actErr) throw actErr

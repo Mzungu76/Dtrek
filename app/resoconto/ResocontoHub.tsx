@@ -18,6 +18,8 @@ import {
 import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { computeTrailScore, type TrailScoreResult } from '@/lib/trailScore'
 import { formatDuration } from '@/lib/tcxParser'
+import { metaHasHikingMetrics, SITE_TYPE_CONFIG } from '@/lib/metaTypes'
+import { reportNoun } from '@/lib/reportFacts'
 import { exportActivityToGpx } from '@/utils/exportGpx'
 import { type PoiItem } from '@/lib/overpass'
 import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
@@ -29,7 +31,7 @@ import { isScoreFresh } from '@/lib/scoreFreshness'
 import { useCtsUpdated } from '@/lib/sync/useCtsUpdated'
 import {
   FileSpreadsheet, FileText, Map as MapIcon,
-  Route, TrendingUp, Clock, Flame,
+  Route, TrendingUp, Clock, Flame, MapPin,
   Pencil, Trash2, Loader2, Share2, Box, Images, Film, Camera, X,
   Star, Car, Settings, BookMarked, ChevronDown, Check,
 } from 'lucide-react'
@@ -53,16 +55,28 @@ const AnimalGallery   = dynamic(() => import('@/components/AnimalGallery'),   { 
 
 const COVER_FETCH_CAP = 40
 
-function metaToItem(a: ActivityMeta): RouteHubItem {
-  return {
-    id: a.id,
-    title: a.title ?? 'Escursione',
-    polyline: a.routePolyline,
-    statPills: [
+// Le pillole di una scheda dipendono dalla tipologia (lib/reportFacts.ts): km/D+/durata solo per un
+// Sentiero; per un Borgo/Città la durata, per un Sito il tipo — mai "0.0 km · +0 m" su una visita.
+function statPillsFor(a: Pick<ActivityMeta, 'metaType' | 'siteType' | 'distanceMeters' | 'elevationGain' | 'totalTimeSeconds'>) {
+  if (metaHasHikingMetrics(a.metaType)) {
+    return [
       { icon: Route,      label: `${(a.distanceMeters / 1000).toFixed(1)} km` },
       { icon: TrendingUp, label: `+${Math.round(a.elevationGain)} m` },
       { icon: Clock,      label: formatDuration(a.totalTimeSeconds) },
-    ],
+    ]
+  }
+  return [
+    ...(a.metaType === 'sito' && a.siteType ? [{ icon: MapPin, label: SITE_TYPE_CONFIG[a.siteType].label }] : []),
+    ...(a.totalTimeSeconds > 0 ? [{ icon: Clock, label: formatDuration(a.totalTimeSeconds) }] : []),
+  ]
+}
+
+function metaToItem(a: ActivityMeta): RouteHubItem {
+  return {
+    id: a.id,
+    title: a.title ?? reportNoun(a.metaType),
+    polyline: a.routePolyline,
+    statPills: statPillsFor(a),
     sortValues: {
       date: new Date(a.startTime).getTime(),
       km: a.distanceMeters,
@@ -373,10 +387,8 @@ export default function ResocontoHub({ id }: { id?: string }) {
       const polyline = a.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number])
       const distPill = distancePillFor(polyline, true)
       return [
-        { icon: Route,      label: `${(a.distanceMeters / 1000).toFixed(1)} km` },
-        { icon: TrendingUp, label: `+${Math.round(a.elevationGain)} m` },
-        { icon: Clock,      label: formatDuration(a.totalTimeSeconds) },
-        ...((a.calories ?? 0) > 0 ? [{ icon: Flame, label: `${a.calories} kcal` }] : []),
+        ...statPillsFor(a),
+        ...(metaHasHikingMetrics(a.metaType) && (a.calories ?? 0) > 0 ? [{ icon: Flame, label: `${a.calories} kcal` }] : []),
         ...(distPill ? [distPill] : []),
       ]
     }
@@ -405,7 +417,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
       return coverUrl ? { ...it, coverPhotoUrl: coverUrl } : it
     })
     const withOpen = activity && !mapped.some(it => it.id === activity.id)
-      ? [{ id: activity.id, title: activity.title ?? 'Escursione', polyline: activity.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number]), statPills: pillsFor(activity), coverPhotoUrl: cover(activity.id), sortValues: sortValuesFor(activity), scorePreview: scorePreviewFor(activity), favorite: activity.favorite }, ...mapped]
+      ? [{ id: activity.id, title: activity.title ?? reportNoun(activity.metaType), polyline: activity.trackPoints.filter(p => p.lat && p.lon).map(p => [p.lat!, p.lon!] as [number, number]), statPills: pillsFor(activity), coverPhotoUrl: cover(activity.id), sortValues: sortValuesFor(activity), scorePreview: scorePreviewFor(activity), favorite: activity.favorite }, ...mapped]
       : mapped
     if (diaryFilter == null) return withOpen
     // Il Diario di ogni resoconto passa dalla sua Meta (activity.linkedPlannedId →
@@ -848,7 +860,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
         const aStep = Math.max(1, Math.ceil(altPts.length / 140))
         const elevationProfile = altPts.length > 4 ? altPts.filter((_, i) => i % aStep === 0) : undefined
         const actMeta: ActivityMeta = {
-          id: activity.id, title: activity.title ?? activity.notes ?? 'Escursione',
+          id: activity.id, title: activity.title ?? activity.notes ?? reportNoun(activity.metaType),
           startTime: activity.startTime, distanceMeters: activity.distanceMeters,
           totalTimeSeconds: activity.totalTimeSeconds, calories: activity.calories,
           avgHeartRate: activity.avgHeartRate, maxHeartRate: activity.maxHeartRate,

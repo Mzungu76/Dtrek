@@ -9,6 +9,8 @@ import { Route, Mountain, Clock, Flame, EyeOff, SlidersHorizontal, X, Image as I
 import type { ActivityMeta } from '@/lib/blobStore'
 import type { RoutePhoto } from '@/lib/activityPhotos'
 import { formatDuration, type TrackPoint } from '@/lib/tcxParser'
+import { metaHasHikingMetrics } from '@/lib/metaTypes'
+import { reportFacts, reportNoun } from '@/lib/reportFacts'
 import { wmoInfo } from '@/lib/weather'
 import { parseSections } from '@/lib/reportStore'
 import { parseInlineEmphasis } from '@/lib/guideMarkup'
@@ -232,7 +234,16 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
   const weather = act?.weather_at_hike
   const weatherInfo = weather ? wmoInfo(weather.weathercode) : null
   const showMappa       = extras.mappa       && (meta?.routePolyline?.length ?? 0) > 1
-  const showStatistiche = extras.statistiche && !!meta
+  // Un Sentiero ha cifre di cammino; un Borgo/Città o un Sito no (lib/reportFacts.ts) — stessa
+  // scelta del Reportage privato e della pagina pubblica.
+  const metaType = meta?.metaType ?? act?.meta_type ?? undefined
+  const hiking = metaHasHikingMetrics(metaType)
+  const noun = reportNoun(metaType)
+  const visitFacts = reportFacts({
+    metaType, siteType: meta?.siteType ?? act?.site_type ?? undefined,
+    totalTimeSeconds: act?.total_time_seconds, stopsCount: act?.borgo_stops?.length,
+  })
+  const showStatistiche = extras.statistiche && !!meta && hiking
 
   const tp = trackPoints ?? []
   const progress = useMemo(() => tp.length > 1 ? trackPointsProgress(tp) : [], [tp])
@@ -318,30 +329,30 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
 
         <div style={{ position: 'absolute', top: 32, left: 48, right: 48 }}>
           <span style={{ fontFamily: FONT.barlow, fontSize: 11, fontWeight: 700, letterSpacing: 5, color: '#e08d3c', textTransform: 'uppercase' }}>
-            Escursione #{escLabel}{monthYear ? ` · ${monthYear}` : ''}
+            {noun} #{escLabel}{monthYear ? ` · ${monthYear}` : ''}
           </span>
         </div>
 
         <div style={{ position: 'absolute', bottom: 32, left: 48, right: 48 }}>
           <h1 style={{ fontFamily: FONT.display, fontSize: 48, fontWeight: 700, color: 'white', lineHeight: 1.02, letterSpacing: -1, margin: '0 0 18px' }}>
-            {report.title || act?.title || 'Escursione'}
+            {report.title || act?.title || noun}
           </h1>
           <div style={{ width: 56, height: 2, background: '#e08d3c' }} />
         </div>
       </div>
 
       {/* Stat strip — dark forest */}
-      {act && (
-        <div style={{ background: '#193b20', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)' }}>
-          {[
+      {act && (hiking || visitFacts.length > 0) && (
+        <div style={{ background: '#193b20', display: 'grid', gridTemplateColumns: `repeat(${hiking ? 4 : visitFacts.length}, 1fr)` }}>
+          {(hiking ? [
             { label: '▸ Distanza', value: act.distance_meters > 0 ? `${(act.distance_meters / 1000).toFixed(1)}` : '—', sub: 'km' },
             { label: '▲ Dislivello', value: act.elevation_gain > 0 ? `${Math.round(act.elevation_gain)}` : '—', sub: 'm D+' },
             { label: '◷ Durata', value: act.total_time_seconds > 0 ? formatDuration(act.total_time_seconds) : '—', sub: 'in movimento' },
             weatherInfo && weather
               ? { label: '◆ Meteo', value: `${Math.round(weather.temperature)}°C`, sub: weatherInfo.label }
               : { label: '◆ Calorie', value: meta?.calories ? `${meta.calories}` : '—', sub: 'kcal' },
-          ].map((s, i) => (
-            <div key={s.label} style={{ padding: '22px 28px', borderRight: i < 3 ? '1px solid rgba(255,255,255,0.07)' : undefined }}>
+          ] : visitFacts.map(f => ({ label: f.label, value: f.value, sub: '' }))).map((s, i, arr) => (
+            <div key={s.label} style={{ padding: '22px 28px', borderRight: i < arr.length - 1 ? '1px solid rgba(255,255,255,0.07)' : undefined }}>
               <p style={{ fontFamily: FONT.barlow, fontSize: 10, fontWeight: 700, letterSpacing: 3, color: '#e08d3c', textTransform: 'uppercase', margin: '0 0 7px' }}>{s.label}</p>
               <p style={{ fontFamily: FONT.mono, fontSize: 26, fontWeight: 500, color: 'white', margin: 0, lineHeight: 1 }}>{s.value}</p>
               <p style={{ fontFamily: FONT.body, fontSize: 10, color: 'rgba(255,255,255,0.38)', margin: '5px 0 0' }}>{s.sub}</p>
@@ -372,13 +383,18 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
               : <div style={{ width: 176, height: 128, flexShrink: 0, background: 'linear-gradient(170deg,#1b4332,#0d1f12)' }} />}
             <div style={{ padding: '16px 20px', flex: 1, minWidth: 0 }}>
               <p style={{ fontFamily: FONT.barlow, fontSize: 9, fontWeight: 700, letterSpacing: 3, color: '#e08d3c', textTransform: 'uppercase', margin: '0 0 5px' }}>
-                Escursione #{escLabel}{monthYear ? ` \u00b7 ${monthYear}` : ''}
+                {noun} #{escLabel}{monthYear ? ` \u00b7 ${monthYear}` : ''}
               </p>
               <p style={{ fontFamily: FONT.display, fontSize: 20, fontWeight: 700, color: '#193b20', margin: '0 0 4px', lineHeight: 1.15 }}>
-                {report.title || act?.title || 'Escursione'}
+                {report.title || act?.title || noun}
               </p>
               {dateStr && <p style={{ fontFamily: FONT.lora, fontSize: 11, color: '#a9a18e', margin: '0 0 10px' }}>{dateStr}</p>}
-              {act && (
+              {act && !hiking && visitFacts.length > 0 && (
+                <p style={{ fontFamily: FONT.mono, fontSize: 12, color: '#4d4740', margin: 0 }}>
+                  {visitFacts.map(f => `${f.value} ${f.label.toLowerCase()}`).join(' \u00b7 ')}
+                </p>
+              )}
+              {act && hiking && (
                 <p style={{ fontFamily: FONT.mono, fontSize: 12, color: '#4d4740', margin: 0 }}>
                   {act.distance_meters > 0 ? `${(act.distance_meters / 1000).toFixed(1)} km` : '\u2014'}
                   {act.elevation_gain > 0 ? ` \u00b7 ${Math.round(act.elevation_gain)} m D+` : ''}
@@ -392,7 +408,7 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
 
       <div style={{ padding: '48px 48px 40px' }}>
         <p style={{ fontFamily: FONT.barlow, fontSize: 9, fontWeight: 700, letterSpacing: 4, color: '#e08d3c', textTransform: 'uppercase', margin: '0 0 36px' }}>
-          Cronaca · Escursione #{escLabel}
+          Cronaca · {noun} #{escLabel}
         </p>
 
         {/* Scheda editoriale + intro.
@@ -408,9 +424,9 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
               Scheda
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
-              <SchedaField label="Escursione" value={`#${escLabel}`} />
+              <SchedaField label={noun} value={`#${escLabel}`} />
               {dateStr && <SchedaField label="Periodo" value={dateStr} />}
-              {!!meta?.altitudeMax && <SchedaField label="Quota massima" value={`${Math.round(meta.altitudeMax)} m`} />}
+              {hiking && !!meta?.altitudeMax && <SchedaField label="Quota massima" value={`${Math.round(meta.altitudeMax)} m`} />}
               {weatherInfo && weather && <SchedaField label="Meteo" value={`${weatherInfo.emoji} ${weatherInfo.label} · ${Math.round(weather.temperature)}°C`} />}
             </div>
           </div>
@@ -422,7 +438,7 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
             {(!introSection || !introSection.body.trim()) && (
               <div className="pdf-block" data-mag-block="">
                 <h2 style={{ fontFamily: FONT.display, fontSize: 32, fontWeight: 700, color: '#193b20', lineHeight: 1.12, margin: 0, letterSpacing: -0.5 }}>
-                  {report.title || act?.title || 'Escursione'}
+                  {report.title || act?.title || noun}
                 </h2>
               </div>
             )}
@@ -453,7 +469,7 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
               return j === 0 ? (
                 <div key={j} className="pdf-block" data-mag-block="">
                   <h2 style={{ fontFamily: FONT.display, fontSize: 32, fontWeight: 700, color: '#193b20', lineHeight: 1.12, margin: '0 0 24px', letterSpacing: -0.5 }}>
-                    {report.title || act?.title || 'Escursione'}
+                    {report.title || act?.title || noun}
                   </h2>
                   {paragraph}
                 </div>
@@ -621,7 +637,7 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
 
         {/* Page footer */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid #eeece5', paddingTop: 14 }}>
-          <span style={{ fontFamily: FONT.body, fontSize: 9, letterSpacing: 3, color: '#c4bead', textTransform: 'uppercase' }}>{report.title || act?.title || 'Escursione'}</span>
+          <span style={{ fontFamily: FONT.body, fontSize: 9, letterSpacing: 3, color: '#c4bead', textTransform: 'uppercase' }}>{report.title || act?.title || noun}</span>
           <span style={{ fontFamily: FONT.mono, fontSize: 9, color: '#c4bead' }}>{escLabel}</span>
         </div>
       </div>

@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
       await Promise.all([
         supabase.from('diaries').select('id, title, subtitle, author, cover_url, footer_text, is_default, labels, archived_at').eq('user_id', user.id),
         supabase.from('planned_hikes').select('id, diary_id').eq('user_id', user.id).not('diary_id', 'is', null),
-        supabase.from('activities').select('linked_planned_id, distance_meters, elevation_gain, start_time').eq('user_id', user.id).not('linked_planned_id', 'is', null),
+        supabase.from('activities').select('linked_planned_id, distance_meters, elevation_gain, start_time, meta_type').eq('user_id', user.id).not('linked_planned_id', 'is', null),
       ])
     if (diariesErr) throw diariesErr
     if (plannedErr) throw plannedErr

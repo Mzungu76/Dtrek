@@ -37,6 +37,20 @@ describe('aggregateDiaries', () => {
     expect(risultato.pubblicabile).toBe(true)
   })
 
+  it('un Borgo/Città o un Sito conta come Reportage ma non somma distanza né dislivello', () => {
+    const planned: PlannedDiaryLinkRow[] = [{ id: 'p1', diary_id: 'd1' }, { id: 'p2', diary_id: 'd1' }, { id: 'p3', diary_id: 'd1' }]
+    const activities: ActivityMetricsRow[] = [
+      { linked_planned_id: 'p1', distance_meters: 10_000, elevation_gain: 400, start_time: '2026-06-01T08:00:00Z', meta_type: 'sentiero' },
+      { linked_planned_id: 'p2', distance_meters: 4_000, elevation_gain: 60, start_time: '2026-06-02T08:00:00Z', meta_type: 'borgo_citta' },
+      { linked_planned_id: 'p3', distance_meters: 0, elevation_gain: 0, start_time: '2026-06-03T08:00:00Z', meta_type: 'sito' },
+    ]
+    const [risultato] = aggregateDiaries([diario({ id: 'd1' })], planned, activities)
+    expect(risultato.reportageCount).toBe(3)
+    expect(risultato.distanceMeters).toBe(10_000)
+    expect(risultato.elevationGain).toBe(400)
+    expect(risultato.lastActivityAt).toBe('2026-06-03T08:00:00Z')
+  })
+
   it('lastActivityAt è la più recente, non l\'ultima nell\'ordine di arrivo', () => {
     const diaries: DiaryRow[] = [diario({ id: 'd1' })]
     const planned: PlannedDiaryLinkRow[] = [{ id: 'p1', diary_id: 'd1' }]

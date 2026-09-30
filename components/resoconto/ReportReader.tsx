@@ -58,7 +58,8 @@ import PhotoShowcase from './PhotoShowcase'
 import PhotoMapSection from './PhotoMapSection'
 import StickyRouteMap from './StickyRouteMap'
 import { pickBestCoverPhoto } from '@/lib/activityPhotos'
-import { metaHasHikingMetrics } from '@/lib/metaTypes'
+import { metaHasHikingMetrics, META_TYPE_CONFIG, SITE_TYPE_CONFIG } from '@/lib/metaTypes'
+import { reportFacts, reportNoun } from '@/lib/reportFacts'
 import { REPORT_SECTION_STYLE, REPORT_SECTION_TITLE, narrativeStyleFor, type ReportFixedSectionKey } from './sectionStyle'
 import { reportFixedSectionsFor, reportSectionTitle } from '@/lib/reportSections'
 import {
@@ -302,7 +303,7 @@ export default function ReportReader({
       const generated: HikeReport = {
         id: `report-${id}`,
         activity_id: id,
-        title: activity.title ?? 'Escursione',
+        title: activity.title ?? reportNoun(activity.metaType),
         content: full,
         photos: photoMeta.map(({ caption, lat, lon, progress }) => ({ caption, lat, lon, progress })),
         authored_by: 'ai',
@@ -497,7 +498,11 @@ export default function ReportReader({
     </button>
   )
 
-  const categoryBadge = (activity.tags?.[0] ?? activity.sport ?? 'Escursione').toUpperCase()
+  // Per Borgo/Città e Sito l'etichetta è la tipologia (mai lo sport "Visita"/"Hiking" dell'attività).
+  const categoryBadge = (metaHasHikingMetrics(activity.metaType)
+    ? (activity.tags?.[0] ?? activity.sport ?? 'Escursione')
+    : (activity.siteType ? SITE_TYPE_CONFIG[activity.siteType].label : META_TYPE_CONFIG[activity.metaType ?? 'sito'].label)
+  ).toUpperCase()
   const gpsPoints = activity.trackPoints.filter(p => p.lat !== undefined && p.lon !== undefined)
   const hasGps = gpsPoints.length > 0
   // Un Sito confermato con check-in GPS ha 1(+) trackPoint reale (hasGps vero) ma nessun percorso
@@ -781,7 +786,7 @@ export default function ReportReader({
 
       <ReportHero
         trackPoints={activity.trackPoints}
-        title={activity.title ?? activity.notes ?? 'Escursione'}
+        title={activity.title ?? activity.notes ?? reportNoun(activity.metaType)}
         categoryBadge={categoryBadge}
         startTime={activity.startTime}
         heroPhotos={heroCarouselPhotos}
@@ -791,14 +796,13 @@ export default function ReportReader({
       />
 
       <ReportStatsStrip
-        distanceKm={activity.distanceMeters / 1000}
-        elevationGain={activity.elevationGain}
-        durationLabel={formatDuration(activity.totalTimeSeconds)}
-        fourth={
-          (activity.calories ?? 0) > 0 ? { value: `${activity.calories} kcal`, label: 'Calorie' }
-          : (activity.avgHeartRate ?? 0) > 0 ? { value: `${activity.avgHeartRate} bpm`, label: 'FC media' }
-          : undefined
-        }
+        facts={reportFacts({
+          metaType: activity.metaType, siteType: activity.siteType,
+          distanceMeters: activity.distanceMeters, elevationGain: activity.elevationGain,
+          totalTimeSeconds: activity.totalTimeSeconds, calories: activity.calories,
+          avgHeartRate: activity.avgHeartRate, stopsCount: activity.borgoStops?.length,
+          verified: activity.verified,
+        })}
       />
 
       <PhotoShowcase photos={showcasePhotos} onPhotoClick={openLightboxById} />

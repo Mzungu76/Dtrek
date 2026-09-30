@@ -1,5 +1,6 @@
 'use client'
 
+import { metaHasHikingMetrics } from '@/lib/metaTypes'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { MobileNavBar, DesktopNav } from '@/components/Navbar'
@@ -112,6 +113,9 @@ export default function DiarioLibroPage() {
   const { id: diaryId } = useParams<{ id: string }>()
 
   const [activities,   setActivities]   = useState<ActivityMeta[]>([])
+  // Copertina e totali contano come escursioni solo i Reportage con metriche di cammino; le visite
+  // a Borghi/Città e Siti hanno un conteggio a parte (km e dislivello non esistono per loro).
+  const hikingActivities = useMemo(() => activities.filter(a => metaHasHikingMetrics(a.metaType)), [activities])
   const [reports,      setReports]      = useState<DiaryReport[]>([])
   const [bookPages,    setBookPages]    = useState<BookPage[]>([])
   const [photosByAct,  setPhotosByAct]  = useState<Record<string, RoutePhoto[]>>({})
@@ -387,9 +391,12 @@ export default function DiarioLibroPage() {
     const prevYear = i > 0 ? new Date(visibleBookPages[i - 1].startTime).getFullYear() : null
     const showBand = year !== prevYear
     const yearPages = visibleBookPages.filter(p => new Date(p.startTime).getFullYear() === year)
-    const yearKm = yearPages.reduce((s, p) =>
+    const isHiking = (p: typeof page) =>
+      metaHasHikingMetrics(p.kind === 'stub' ? p.activity.metaType : p.report.activity?.meta_type ?? undefined)
+    const yearKm = yearPages.filter(isHiking).reduce((s, p) =>
       s + (p.kind === 'stub' ? p.activity.distanceMeters : p.report.activity?.distance_meters ?? 0), 0) / 1000
-    const yearBand = showBand ? { year: String(year), count: yearPages.length, totalKm: yearKm } : undefined
+    const hikingCount = yearPages.filter(isHiking).length
+    const yearBand = showBand ? { year: String(year), count: hikingCount, visits: yearPages.length - hikingCount, totalKm: yearKm } : undefined
     const activityId = page.kind === 'stub' ? page.activity.id : page.report.activity_id
     return { page, yearBand, activityId }
   }), [visibleBookPages])
@@ -1073,9 +1080,9 @@ export default function DiarioLibroPage() {
             >
               <DiarioCover
                 coverUrl={config.coverUrl} diaryTitle={config.title} diarySubtitle={config.subtitle} diaryAuthor={config.author}
-                dateRange={coverDateRange} totalActivities={activities.length}
-                totalKm={computeGlobalStats(activities).totalDistanceKm}
-                totalElevationGain={computeGlobalStats(activities).totalElevationGain}
+                dateRange={coverDateRange} totalActivities={hikingActivities.length} totalVisits={activities.length - hikingActivities.length}
+                totalKm={computeGlobalStats(hikingActivities).totalDistanceKm}
+                totalElevationGain={computeGlobalStats(hikingActivities).totalElevationGain}
               />
               <AnniversaryBanner activities={activities} />
               <DiarioNatura activities={activities} />

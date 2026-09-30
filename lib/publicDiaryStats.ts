@@ -6,6 +6,7 @@
 // "Record personali".
 
 import type { PublicDiaryEntry } from './sharePublicDiary'
+import { metaHasHikingMetrics } from './metaTypes'
 
 export interface PublicDiaryYearStats {
   year:     number
@@ -27,22 +28,27 @@ export interface PublicDiaryStats {
   years:              PublicDiaryYearStats[]
 }
 
-export function computePublicDiaryStats(entries: PublicDiaryEntry[]): PublicDiaryStats {
+// Cifre, record e totali contano solo i Reportage con metriche escursionistiche: un Borgo/Città o
+// un Sito ha distanza/dislivello a zero (o non sono cammino), e sommarli falserebbe "la più
+// lunga", "la più alta" e i chilometri totali. Il conteggio per anno resta su tutti i Reportage.
+export function computePublicDiaryStats(allEntries: PublicDiaryEntry[]): PublicDiaryStats {
+  const entries = allEntries.filter(e => metaHasHikingMetrics(e.metaType))
   const longest = entries.reduce<PublicDiaryEntry | null>((best, e) =>
     !best || e.distanceMeters > best.distanceMeters ? e : best, null)
   const highest = entries.reduce<PublicDiaryEntry | null>((best, e) =>
     (e.altitudeMax ?? -Infinity) > (best?.altitudeMax ?? -Infinity) ? e : best, null)
 
   const yearMap = new Map<number, PublicDiaryYearStats>()
-  entries.forEach(e => {
+  allEntries.forEach(e => {
     const year = new Date(e.startTime).getFullYear()
     const stats = yearMap.get(year) ?? { year, count: 0, km: 0, elevGain: 0 }
     stats.count++
-    stats.km += e.distanceMeters / 1000
-    stats.elevGain += e.elevationGain
+    if (metaHasHikingMetrics(e.metaType)) {
+      stats.km += e.distanceMeters / 1000
+      stats.elevGain += e.elevationGain
+    }
     yearMap.set(year, stats)
   })
-
   return {
     totalDistanceKm:    entries.reduce((s, e) => s + e.distanceMeters / 1000, 0),
     totalElevationGain: entries.reduce((s, e) => s + e.elevationGain, 0),

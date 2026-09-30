@@ -2,13 +2,14 @@ import { FONT } from '@/lib/designTokens'
 import { PDF_PAGE_W, PDF_PAGE_H } from '@/lib/pdfPageGeometry'
 import SafeImg from '@/components/ui/SafeImg'
 export function DiarioCover({
-  coverUrl, diaryTitle, diarySubtitle, diaryAuthor, dateRange, totalActivities, totalKm, totalElevationGain,
+  coverUrl, diaryTitle, diarySubtitle, diaryAuthor, dateRange, totalActivities, totalVisits, totalKm, totalElevationGain,
 }: {
   coverUrl: string | null; diaryTitle: string; diarySubtitle: string; diaryAuthor: string
-  dateRange?: string; totalActivities?: number; totalKm?: number; totalElevationGain?: number
+  dateRange?: string; totalActivities?: number; totalVisits?: number; totalKm?: number; totalElevationGain?: number
 }) {
   const stats: { value: string; label: string }[] = []
   if (totalActivities)     stats.push({ value: String(totalActivities), label: 'Escursioni' })
+  if (totalVisits)         stats.push({ value: String(totalVisits), label: 'Visite' })
   if (totalKm)              stats.push({ value: totalKm.toFixed(0), label: 'Km percorsi' })
   if (totalElevationGain)   stats.push({ value: Math.round(totalElevationGain).toLocaleString('it'), label: 'M dislivello' })
 
