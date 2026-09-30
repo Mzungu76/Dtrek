@@ -12,6 +12,8 @@ import { resolveDefaultModel, isValidClaudeModelId } from '@/lib/claudeModels'
 import { jsonSchemaFormat, parseWithRetry } from '@/lib/aiJsonOutput'
 import { readProfile, isProfileReady, formatStyleProfileBlock, updateProfileWithAnswer, type WritingStyleProfile } from '@/lib/writingStyleProfile'
 import { resolveDtrekEntitlement } from '@/lib/dtrekEntitlement'
+import { metaHasHikingMetrics, SITE_TYPE_CONFIG, type MetaType, type SiteType } from '@/lib/metaTypes'
+import { buildVisitAnchors, type VisitStop } from '@/lib/visitQuestionnaire'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,6 +21,12 @@ const SYSTEM = `Sei un'intervistatrice esperta che aiuta gli escursionisti a rac
 Il tuo compito è preparare un breve questionario mirato, basato su punti specifici di un percorso (vette, salite, punti di interesse, foto scattate, vegetazione/fenologia osservata), per raccogliere ricordi, sensazioni e dettagli personali da fondere poi in un resoconto scritto.
 Le domande devono essere concrete e ancorate a un punto preciso del percorso, mai generiche o intercambiabili tra escursioni diverse.
 Scrivi in italiano naturale e colloquiale, come faresti parlando di persona con l'escursionista.`
+
+// Per un Borgo/Città o un Sito (nessun tracciato: si intervista sulla visita, non sul percorso).
+const SYSTEM_VISIT = `Sei un'intervistatrice esperta che aiuta chi visita borghi, città e luoghi d'interesse a raccontare le proprie esperienze con parole proprie.
+Il tuo compito è preparare un breve questionario mirato, basato su momenti e luoghi specifici di una visita (l'arrivo, i luoghi visti, le foto scattate, ciò che ha colpito), per raccogliere il materiale con cui scrivere poi un reportage.
+Le domande devono essere concrete e ancorate a un luogo o momento preciso della visita, mai generiche o intercambiabili tra visite diverse. Non parlare mai di sforzo fisico, distanze, dislivelli o sentieri: qui si racconta un luogo, non un'escursione.
+Scrivi in italiano naturale e colloquiale, come faresti parlando di persona con chi ha fatto la visita.`
 
 interface QuestionnaireOutput {
   questions: RawQuestion[]
@@ -218,6 +226,7 @@ function buildUserPrompt(
   anchors: Anchor[],
   aiUseBiometricData = true,
   styleProfile: WritingStyleProfile | null = null,
+  visit: { metaType: MetaType; siteType?: SiteType } | null = null,
 ): string {
   const avgHR = aiUseBiometricData ? activity.avg_heart_rate as number | undefined : undefined
   const maxHR = aiUseBiometricData ? activity.max_heart_rate as number | undefined : undefined
@@ -229,6 +238,30 @@ function buildUserPrompt(
   ].filter(Boolean).join(', ')
 
   const styleLine = styleProfile && isProfileReady(styleProfile) ? formatStyleProfileBlock(styleProfile) : ''
+
+  if (visit) {
+    const what = visit.metaType === 'borgo_citta'
+      ? 'una visita a un borgo o a una città'
+      : `la visita a un luogo${visit.siteType ? ` (${SITE_TYPE_CONFIG[visit.siteType].label.toLowerCase()})` : ''}`
+    const visitLines = anchors.map((a, i) =>
+      `${i}. [${a.type}] ${a.label}${a.detail ? ` (${a.detail})` : ''}`,
+    ).join('\n')
+    return `Genera un questionario per intervistare chi ha fatto ${what}, per aiutarlo a raccontarla con parole sue.
+
+LUOGO: ${activity.title ?? 'Visita'}
+${activity.total_time_seconds ? `DURATA DELLA VISITA: ${formatDuration(activity.total_time_seconds as number)}` : ''}
+${styleLine}
+
+MOMENTI E LUOGHI DELLA VISITA (in ordine, usa l'indice per riferirti a ciascuno):
+${visitLines}
+
+Crea tra 4 e 7 domande, una per ciascuno dei punti più significativi (non è necessario usarli tutti), in ordine crescente di indice.
+Le domande devono essere specifiche per quel luogo o momento (cosa si è visto, cosa ha sorpreso, un dettaglio, un assaggio, un incontro), non generiche o intercambiabili.
+Scegli 1 o 2 punti tra quelli più "emotivamente densi" per invitare a scrivere liberamente con parole proprie: in quel caso usa inputType "freewrite" e la domanda deve invitarlo esplicitamente a raccontare.
+Per gli altri punti usa inputType "text" (risposta breve) oppure "choice" con 3-4 opzioni quando ha senso una scelta rapida (es. atmosfera, affollamento, se lo consiglieresti).
+Il campo "choices" va incluso solo quando inputType è "choice", con almeno 2 opzioni.
+Per le domande di tipo "text", includi anche il campo "suggestedAnswers" con 2-3 risposte brevi e plausibili, specifiche per quel preciso luogo (non generiche).`
+  }
 
   const anchorLines = anchors.map((a, i) =>
     `${i}. [${a.type}] ${a.label} — al ${Math.round(a.progress * 100)}% del percorso${a.detail ? ` (${a.detail})` : ''}`,
@@ -396,9 +429,14 @@ export async function POST(req: NextRequest) {
   }
 
   const track: TrackPoint[] = Array.isArray(activity.track_points) ? activity.track_points : []
+  // Un Borgo/Città o un Sito non ha un tracciato su cui ancorare le domande (partenza, punto più
+  // alto, salita, flora...): si intervista sulla visita — tappe reali per il borgo, il luogo per il
+  // sito (lib/visitQuestionnaire.ts). Assente = 'sentiero' (DEFAULT di colonna).
+  const metaType = ((activity.meta_type as MetaType | null) ?? 'sentiero')
+  const hiking = metaHasHikingMetrics(metaType)
 
   let pois: PoiItem[] = []
-  if (activity.linked_planned_id) {
+  if (hiking && activity.linked_planned_id) {
     const { data: hike } = await supabase
       .from('planned_hikes')
       .select('cached_pois')
@@ -408,21 +446,38 @@ export async function POST(req: NextRequest) {
     if (Array.isArray(hike?.cached_pois)) pois = hike.cached_pois
   }
 
-  const nature = await fetchNatureContext({
-    trackPoints: track,
-    altitudeMax: activity.altitude_max as number | undefined,
-    month: activity.start_time ? new Date(activity.start_time as string).getMonth() + 1 : new Date().getMonth() + 1,
-  })
-  const floraAnchor = buildFloraAnchor(nature)
+  let anchors: Anchor[]
+  if (hiking) {
+    const nature = await fetchNatureContext({
+      trackPoints: track,
+      altitudeMax: activity.altitude_max as number | undefined,
+      month: activity.start_time ? new Date(activity.start_time as string).getMonth() + 1 : new Date().getMonth() + 1,
+    })
+    const floraAnchor = buildFloraAnchor(nature)
 
-  const anchors = capAnchors(
-    [
-      ...buildAltimetryAnchors(track),
-      ...buildPoiAnchors(pois, track),
-      ...buildPhotoAnchors(photos),
-      ...(floraAnchor ? [floraAnchor] : []),
-    ].sort((a, b) => a.progress - b.progress),
-  )
+    anchors = capAnchors(
+      [
+        ...buildAltimetryAnchors(track),
+        ...buildPoiAnchors(pois, track),
+        ...buildPhotoAnchors(photos),
+        ...(floraAnchor ? [floraAnchor] : []),
+      ].sort((a, b) => a.progress - b.progress),
+    )
+  } else {
+    const stops = Array.isArray(activity.borgo_stops) ? (activity.borgo_stops as VisitStop[]) : []
+    const photoAnchors = buildPhotoAnchors(photos).map(a => ({ ...a, progress: Math.min(1, Math.max(0, a.progress)) }))
+    anchors = capAnchors(
+      [
+        ...buildVisitAnchors({
+          metaType,
+          title: (activity.title as string | null) ?? 'Visita',
+          siteType: (activity.site_type as SiteType | null) ?? undefined,
+          stops,
+        }),
+        ...photoAnchors,
+      ].sort((a, b) => a.progress - b.progress),
+    )
+  }
 
   if (anchors.length === 0) {
     return new Response(
@@ -434,14 +489,17 @@ export async function POST(req: NextRequest) {
   const styleProfile = await readProfile(user.id)
 
   const client = new Anthropic({ apiKey })
-  const prompt = buildUserPrompt(activity, anchors, aiUseBiometricData, styleProfile)
+  const prompt = buildUserPrompt(
+    activity, anchors, aiUseBiometricData, styleProfile,
+    hiking ? null : { metaType, siteType: (activity.site_type as SiteType | null) ?? undefined },
+  )
 
   let output: QuestionnaireOutput
   try {
     output = await parseWithRetry('questionnaire', () => client.messages.parse({
       model:         claudeModel,
       max_tokens:    3000,
-      system:        SYSTEM,
+      system:        hiking ? SYSTEM : SYSTEM_VISIT,
       messages:      [{ role: 'user', content: prompt }],
       output_config: { format: jsonSchemaFormat<QuestionnaireOutput>(QUESTIONNAIRE_SCHEMA) },
     }))
