@@ -1,14 +1,21 @@
 'use client'
-import { Camera, ChevronUp, Pause, Play, Square } from 'lucide-react'
+import { Camera, ChevronUp, Pause, Play, Square, LayoutGrid } from 'lucide-react'
 
 interface Props {
   /** Riga di sintesi già formattata dal chiamante (es. "4,2 km · 13:40 · +180 m" per il
    *  pianificato, "3,1 km · 48:12 · +95 m · 4,2 km/h" per la registrazione libera) — il
    *  componente resta così identico tra i due contesti, cambia solo cosa gli passa il chiamante. */
   summary: string
+  /** Se presente, al posto della pillola di testo `summary` mostra un pannello con i dati in
+   *  colonna (numero grande, unità sotto) e i pulsanti etichettati. Usato dalla navigazione su
+   *  percorso; la registrazione libera resta sulla pillola. */
+  metrics?: { value: string; unit: string }[]
+  /** Apre la scheda "Strumenti" (solo con `metrics`). */
+  onOpenTools?: () => void
   timerRunning: boolean
   onTogglePlayPause: () => void
-  onStop: () => void
+  /** Assente nella navigazione su percorso: "Termina" sta in Strumenti / Dettagli. */
+  onStop?: () => void
   /** Apre il pannello dettagli a schermo intero — il resto (tempi, altimetria, nota testuale/...)
    *  vive lì, non più in una scheda sempre montata sopra la mappa. */
   onExpand: () => void
@@ -35,12 +42,43 @@ const TEXT_SHADOW = '0 1px 3px rgba(0,0,0,0.75), 0 1px 8px rgba(0,0,0,0.5)'
  * il percorso pianificato (ActiveNavigationView.tsx) e la registrazione libera
  * (app/navigatore/traccia/page.tsx): stessa striscia, contenuto diverso.
  */
-export default function NavBottomStrip({ summary, timerRunning, onTogglePlayPause, onStop, onExpand, onOpenFoto, highContrast }: Props) {
+export default function NavBottomStrip({ summary, metrics, onOpenTools, timerRunning, onTogglePlayPause, onStop, onExpand, onOpenFoto, highContrast }: Props) {
   // DTREK-AUDIT.md P1 #20 — sfondo pieno opaco (bg-black, non bg-black/40-45) sotto sole forte per
   // testo/pulsanti icona: la trasparenza lascia passare troppa luce su uno schermo molto luminoso
   // perché restino leggibili/riconoscibili.
   const iconBtn = highContrast ? ICON_BTN.replace('bg-black/45', 'bg-black') : ICON_BTN
   const summaryBg = highContrast ? 'bg-black' : 'bg-black/40 backdrop-blur-sm'
+  if (metrics) {
+    const panel = highContrast ? 'bg-black' : 'bg-stone-900/95 backdrop-blur-sm'
+    const btn = 'pointer-events-auto h-14 rounded-2xl flex flex-col items-center justify-center gap-0.5 text-[12px] font-semibold text-white'
+    return (
+      <div className="absolute bottom-0 inset-x-0 z-10 pointer-events-none px-2 pb-[calc(env(safe-area-inset-bottom)+8px)]">
+        <div className={`pointer-events-auto rounded-3xl px-3 pt-3 pb-3 shadow-2xl ${panel}`}>
+          <button onClick={onExpand} className="w-full grid grid-cols-3 text-center mb-3" aria-label="Apri i dettagli">
+            {metrics.map((m, i) => (
+              <span key={i} className={`min-w-0 ${i > 0 ? 'border-l border-white/15' : ''}`}>
+                <span className="block font-mono font-bold text-[30px] leading-none text-white tabular-nums">{m.value}</span>
+                <span className="block text-[12px] text-white/65 mt-1">{m.unit}</span>
+              </span>
+            ))}
+          </button>
+          <div className="grid grid-cols-3 gap-2">
+            <button onClick={onTogglePlayPause} className={`${btn} bg-terra-500`}>
+              {timerRunning ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6" />}
+              {timerRunning ? 'Pausa' : 'Avvia'}
+            </button>
+            <button onClick={onOpenFoto} className={`${btn} bg-white/15`}>
+              <Camera className="w-6 h-6" /> Foto
+            </button>
+            <button onClick={onOpenTools} className={`${btn} bg-white/15 lg:hidden`}>
+              <LayoutGrid className="w-6 h-6" /> Strumenti
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="absolute bottom-0 inset-x-0 z-10 pointer-events-none">
       <div className="h-24 bg-gradient-to-t from-black/55 to-transparent" />
@@ -75,9 +113,11 @@ export default function NavBottomStrip({ summary, timerRunning, onTogglePlayPaus
             <Camera className="w-5 h-5" />
           </button>
 
-          <button onClick={onStop} className={`${iconBtn} pointer-events-auto bg-red-600/90`} aria-label="Termina">
-            <Square className="w-5 h-5" />
-          </button>
+          {onStop && (
+            <button onClick={onStop} className={`${iconBtn} pointer-events-auto bg-red-600/90`} aria-label="Termina">
+              <Square className="w-5 h-5" />
+            </button>
+          )}
         </div>
       </div>
     </div>

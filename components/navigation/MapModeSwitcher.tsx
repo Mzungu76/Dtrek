@@ -16,7 +16,7 @@ interface Props {
   onToggleNatura2000: () => void
 }
 
-const ONLINE_OPTIONS: { id: MapMode; label: string }[] = [
+export const ONLINE_OPTIONS: { id: MapMode; label: string }[] = [
   { id: 'offline', label: 'Offline (sicura)' },
   { id: 'outdoor', label: 'Outdoor' },
   { id: 'satellite', label: 'Satellite' },

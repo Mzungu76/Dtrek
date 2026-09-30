@@ -14,6 +14,8 @@ interface Props {
    *  primi tre. */
   liveShareUrl: string | null
   onTriggered?: (action: 'call' | 'sms') => void
+  /** Versione grande con etichetta, per il lato dello schermo in navigazione. */
+  large?: boolean
 }
 
 /**
@@ -29,7 +31,7 @@ const QUALITY_STYLE: Record<ConnectionQuality, { Icon: typeof SignalHigh; label:
   sconosciuta: { Icon: SignalZero, label: 'Qualità del segnale non rilevabile su questo dispositivo', className: 'text-stone-400' },
 }
 
-export default function SosButton({ fix, liveShareUrl, onTriggered }: Props) {
+export default function SosButton({ fix, liveShareUrl, onTriggered, large }: Props) {
   const [open, setOpen] = useState(false)
   const [connectionQuality, setConnectionQuality] = useState<ConnectionQuality>('sconosciuta')
 
@@ -46,9 +48,10 @@ export default function SosButton({ fix, liveShareUrl, onTriggered }: Props) {
       <button
         onClick={() => setOpen(true)}
         aria-label="Emergenza"
-        className="w-11 h-11 rounded-full bg-red-600 border-2 border-white/70 shadow-lg flex items-center justify-center active:scale-95 transition-transform shrink-0"
+        className={`rounded-full bg-red-600 border-2 border-white/80 shadow-lg flex flex-col items-center justify-center active:scale-95 transition-transform shrink-0 ${large ? 'w-14 h-14' : 'w-11 h-11'}`}
       >
-        <AlertOctagon className="w-5 h-5 text-white" />
+        <AlertOctagon className={large ? 'w-5 h-5 text-white' : 'w-5 h-5 text-white'} />
+        {large && <span className="text-[11px] font-bold text-white leading-none mt-0.5">SOS</span>}
       </button>
 
       <Sheet open={open} onClose={() => setOpen(false)} title="Emergenza">

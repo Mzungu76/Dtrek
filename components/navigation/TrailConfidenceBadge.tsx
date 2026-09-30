@@ -7,6 +7,8 @@ import { useModalBackHandler } from '@/lib/navigation/useModalBackHandler'
 
 interface Props {
   confidence: TrailConfidenceResult | null
+  /** "tile": tessera etichettata per la scheda Strumenti, invece del pulsante rotondo. */
+  variant?: 'icon' | 'tile'
 }
 
 // DTREK-AUDIT.md P1 #17 — "Affidabilità" + icone a scudo (ShieldCheck/ShieldAlert) leggevano come
@@ -39,7 +41,7 @@ const LABEL_STYLE: Record<TrailConfidenceResult['label'], { bg: string; text: st
  * popup centrato, portato in document.body, evita il problema alla radice invece di limitarsi
  * a spostarlo altrove sullo schermo.
  */
-export default function TrailConfidenceBadge({ confidence }: Props) {
+export default function TrailConfidenceBadge({ confidence, variant = 'icon' }: Props) {
   const [open, setOpen] = useState(false)
   useModalBackHandler(open, () => setOpen(false))
   if (!confidence) return null
@@ -49,6 +51,14 @@ export default function TrailConfidenceBadge({ confidence }: Props) {
 
   return (
     <>
+      {variant === 'tile' ? (
+        <button
+          onClick={() => setOpen(true)}
+          className={`w-full min-h-[76px] rounded-2xl flex flex-col items-center justify-center gap-1.5 px-1 text-[12px] font-semibold leading-tight text-center ${style.bg} ${style.text}`}
+        >
+          <Icon className="w-6 h-6" /> {style.word}
+        </button>
+      ) : (
       <button
         onClick={() => setOpen(true)}
         title={style.word}
@@ -56,9 +66,10 @@ export default function TrailConfidenceBadge({ confidence }: Props) {
       >
         <Icon className={`w-5 h-5 ${style.text}`} />
       </button>
+      )}
 
       {open && createPortal(
-        <div className="fixed inset-0 z-[3000] bg-black/50 flex items-center justify-center p-4" onClick={() => setOpen(false)}>
+        <div className="fixed inset-0 z-[3300] bg-black/50 flex items-center justify-center p-4" onClick={() => setOpen(false)}>
           <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl p-5" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-display text-lg font-semibold text-stone-900">Quanto ti si addice questo percorso</h2>

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Capacitor } from '@capacitor/core'
 import {
-  AlertTriangle, BatteryWarning, MoreHorizontal, X, ArrowUp, Download, CheckCircle2, Radio, Locate, Signpost, HelpCircle,
+  AlertTriangle, BatteryWarning, X, ArrowUp, Download, CheckCircle2, Radio, Locate, Signpost, HelpCircle, Mic,
   Route, MapPin, Mountain, type LucideIcon,
 } from 'lucide-react'
 import Sheet from '@/components/ui/Sheet'
@@ -69,7 +69,7 @@ import { EPOCH_LABELS, type Epoch, type EpochPoi } from '@/lib/epochPois'
 import InstructionBanner from './InstructionBanner'
 import NavBottomStrip from './NavBottomStrip'
 import NavStatsSheet from './NavStatsSheet'
-import NavLayerRail from './NavLayerRail'
+import NavToolsSheet from './NavToolsSheet'
 import ParkingSpotControl from './ParkingSpotControl'
 import { buildSlopeSegments } from '@/lib/navigation/routeSlopeSegments'
 import { readHighContrastPref, writeHighContrastPref } from '@/lib/navigation/highContrastPref'
@@ -100,7 +100,6 @@ interface Props {
 }
 
 const FIX_STALE_MS = 20000 // if no fix arrives for this long, "moving time" stops accruing
-const CONTROLS_HIDE_MS = 6000 // secondary icon rails fade after this long without a touch on screen
 
 // ── Pannello laterale etichettato (da lg: in su) ────────────────────────────────────────────────
 // Il cluster di icone mute (colonne sinistra/destra sopra) resta l'unica interfaccia sotto lg:,
@@ -257,19 +256,6 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   const lastLivePublishSuccessRef = useRef<number | null>(null)
   const [showNatura2000, setShowNatura2000] = useState(false)
   const [wildlifeAlertDismissed, setWildlifeAlertDismissed] = useState(false)
-  // Soluzione B (punto 6 del feedback utente, docs/diario-valutazione-ux-piano.md): la mappa era
-  // sempre coperta da 8+ pulsanti fissi sulle due rotaie laterali, mai nascosti. Questi si
-  // dissolvono dopo CONTROLS_HIDE_MS di inattività (nessun tocco sullo schermo), lasciando SOS,
-  // istruzione corrente e barra inferiore sempre visibili — vedi bumpControlsVisibility più sotto
-  // per come si riattivano e perché restano sempre accesi negli stati off_route/wrong_direction/
-  // gps_lost.
-  const [controlsVisible, setControlsVisible] = useState(true)
-  const controlsHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const bumpControlsVisibility = useCallback(() => {
-    setControlsVisible(true)
-    if (controlsHideTimerRef.current) clearTimeout(controlsHideTimerRef.current)
-    controlsHideTimerRef.current = setTimeout(() => setControlsVisible(false), CONTROLS_HIDE_MS)
-  }, [])
   const [weatherLookaheadDismissed, setWeatherLookaheadDismissed] = useState(false)
   const [pace, setPace] = useState<PaceUpdateResult | null>(null)
   const [turnBackDismissed, setTurnBackDismissed] = useState(false)
@@ -281,8 +267,9 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   const [bottomAlertsExpanded, setBottomAlertsExpanded] = useState(false)
   // Avvisi in alto: solo il più importante è visibile, gli altri dietro "+N" (stessa logica di sopra).
   const [topAlertsExpanded, setTopAlertsExpanded] = useState(false)
-  // Rotaia destra: SOS e Vie d'uscita sempre a portata, il resto dietro "Altro".
-  const [railExpanded, setRailExpanded] = useState(false)
+  // Scheda Strumenti (controlli secondari) e segnale per aprire Giulia da lì.
+  const [showTools, setShowTools] = useState(false)
+  const [giuliaSignal, setGiuliaSignal] = useState(0)
   const turnBackAlertedRef = useRef(false)
   const [showFieldNote, setShowFieldNote] = useState(false)
   // Soluzione B (piano di restyling Navigator): sentieri vicini e POI accesi di default — stesso
@@ -947,20 +934,6 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
     }
   }, [state, wakeLockEnabled])
 
-  // Off-route/direzione sbagliata/GPS perso: "Vie d'uscita" deve restare raggiungibile dalla
-  // rotaia senza dover prima toccare lo schermo per farla riapparire — stessa ragione del
-  // commento sul pulsante Signpost più sotto. Qualunque altro stato riparte semplicemente il
-  // timer di dissolvimento (stesso effetto di un tocco sullo schermo).
-  useEffect(() => {
-    if (state === 'off_route' || state === 'wrong_direction' || state === 'gps_lost') {
-      if (controlsHideTimerRef.current) { clearTimeout(controlsHideTimerRef.current); controlsHideTimerRef.current = null }
-      setControlsVisible(true)
-      return
-    }
-    bumpControlsVisibility()
-    return () => { if (controlsHideTimerRef.current) clearTimeout(controlsHideTimerRef.current) }
-  }, [state, bumpControlsVisibility])
-
   const handleTogglePlayPause = () => {
     timerRunningRef.current = !timerRunningRef.current
     setTimerRunning(timerRunningRef.current)
@@ -1114,6 +1087,12 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
     etaDate ? `arrivo ${etaDate.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}` : '—'
   } · ${elevationRemainingM != null ? `+${Math.round(elevationRemainingM)} m` : '—'}`
 
+  const bottomStripMetrics = [
+    { value: (distanceRemainingM / 1000).toFixed(1).replace('.', ','), unit: 'km' },
+    { value: etaDate ? etaDate.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '—', unit: 'arrivo' },
+    { value: elevationRemainingM != null ? `+${Math.round(elevationRemainingM)}` : '—', unit: 'm salita' },
+  ]
+
   const daylightMarginMin = sunTimes?.sunset && etaDate ? daylightMarginMinutes(etaDate, sunTimes.sunset) : null
 
   // Turn-back advisory: even retracing the already-hiked portion starting right now, would
@@ -1158,7 +1137,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   }, [turnBackNow])
 
   return (
-    <div className="fixed inset-0 z-[2000] bg-stone-900 font-body" onPointerDown={bumpControlsVisibility}>
+    <div className="fixed inset-0 z-[2000] bg-stone-900 font-body">
       {mapMode === 'offline' ? (
         <NavigationMap
           ref={mapHandleRef}
@@ -1185,30 +1164,18 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         </div>
       )}
 
-      {/* Soluzione B: colonna sinistra centrata verticalmente — rotaia dei layer (Sentieri vicini/
-          POI/Pendenze) più il pulsante "centra sulla mia posizione", raggruppati invece di
-          lasciare quest'ultimo a fluttuare da solo a metà schermo (dove si scontrava con la
-          rotaia destra una volta centrata anche lei). */}
-      <div
-        className={`absolute left-0 z-10 top-1/2 -translate-y-1/2 flex flex-col items-start gap-3 lg:hidden transition-opacity duration-300 ${
-          controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
-        }`}
-      >
-        <NavLayerRail
-          showNearbyTrails={showNearbyTrails} onToggleNearbyTrails={() => setShowNearbyTrails((v) => !v)}
-          showPois={showPoiLayer} onTogglePois={() => setShowPoiLayer((v) => !v)}
-          showSlope={showSlopeLayer} onToggleSlope={() => setShowSlopeLayer((v) => !v)}
-        />
+      {/* Ricentra: compare solo quando la mappa non segue più la posizione (dopo un trascinamento),
+          sopra il pannello inferiore. I layer non hanno più una rotaia propria: stanno in Strumenti. */}
+      {!mapFollowMode && (
         <button
           onClick={() => mapHandleRef.current?.recenter()}
           aria-label="Centra sulla mia posizione"
-          className={`ml-3 w-11 h-11 rounded-full shadow-lg flex items-center justify-center ${
-            mapFollowMode ? 'bg-terra-500 text-white' : 'bg-white text-stone-700'
-          }`}
+          className="absolute right-3 z-10 w-12 h-12 rounded-full shadow-lg bg-white text-stone-700 flex items-center justify-center lg:hidden"
+          style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 12.5rem)' }}
         >
           <Locate className="w-5 h-5" />
         </button>
-      </div>
+      )}
 
       <GiuliaLiveQa
         hikeTitle={hike.title}
@@ -1216,6 +1183,8 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         nearestPoiDistanceM={remainingPois[0]?.distanceM}
         distanceRemainingM={distanceRemainingM}
         isOnline={isOnline}
+        hideFab
+        openSignal={giuliaSignal}
       />
 
       {/* Soluzione B: un'unica colonna in flusso — indicazione, epoche, avvisi — invece di tre
@@ -1234,7 +1203,6 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
             distanceToNextM={instruction?.distanceToNextM ?? null}
             speechEnabled={speechEnabled}
             onToggleSpeech={handleToggleSpeech}
-            onClose={requestEnd}
             isOnline={isOnline}
             compassSupported={isOrientationSupported() && needsOrientationPermissionGesture()}
             compassEnabled={compassEnabled}
@@ -1361,95 +1329,15 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         })()}
       </div>
 
-      {/* Soluzione B: un'unica rotaia destra, centrata verticalmente — SOS, mappa/layer,
-          affidabilità, condivisione live, mappa offline, punto auto — invece di due colonne
-          separate a offset fissi che finivano per scontrarsi con altri controlli fluttuanti. */}
-      <div className="absolute right-3 z-10 top-1/2 -translate-y-1/2 flex flex-col items-end gap-2 lg:hidden">
-        {/* SOS resta sempre visibile e toccabile, fuori dal dissolvimento qui sotto — è l'unico
-            controllo di questa rotaia per cui "nascosto dopo un po' d'inattività" non è mai
-            accettabile. */}
+      {/* Sul lato resta solo SOS, sempre visibile e grande. Tutto il resto (mappa, sicurezza, offline,
+          Giulia, aiuto, termina) è nella scheda Strumenti, aperta dal pannello inferiore. */}
+      <div className="absolute right-3 z-10 top-1/2 -translate-y-1/2 lg:hidden">
         <SosButton
+          large
           fix={position ? { lat: position.lat, lon: position.lon, accuracyM } : null}
           liveShareUrl={liveShareToken ? `${typeof window !== 'undefined' ? window.location.origin : ''}/s/live/${liveShareToken}` : null}
           onTriggered={(action) => logEvent('sos_triggered', { action })}
         />
-        {/* Il resto della rotaia si dissolve dopo un po' di inattività (vedi bumpControlsVisibility
-            più sopra) invece di restare sempre sopra la mappa — riappare al primo tocco sullo
-            schermo, o subito se lo stato diventa off_route/wrong_direction/gps_lost (vie d'uscita
-            deve restare raggiungibile). opacity, non display: none, così le dimensioni della
-            colonna non cambiano e SOS non "salta" quando il resto scompare/riappare. */}
-        {/* Vie d'uscita resta sempre visibile insieme a SOS: se ci si perde o si è in difficoltà
-            servono subito, senza aprire nessun menu. Tutto il resto sta dietro "Altro". */}
-        <div className={`transition-opacity duration-300 ${controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
-          <button
-            onClick={handleEscapeOptions}
-            aria-label="Vie d'uscita"
-            className="min-w-[44px] h-11 px-3 rounded-full flex items-center gap-1.5 shadow-lg border bg-white/95 border-stone-200 text-stone-800 text-xs font-semibold"
-          >
-            <Signpost className="w-5 h-5" /> Vie d&apos;uscita
-          </button>
-        </div>
-        <div
-          className={`flex flex-col items-end gap-2 transition-opacity duration-300 ${
-            controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
-          }`}
-        >
-          <button
-            onClick={() => setRailExpanded((v) => !v)}
-            aria-expanded={railExpanded}
-            aria-label={railExpanded ? 'Nascondi altri controlli' : 'Altri controlli'}
-            className="min-w-[44px] h-11 px-3 rounded-full flex items-center gap-1.5 shadow-lg border bg-white/95 border-stone-200 text-stone-800 text-xs font-semibold"
-          >
-            {railExpanded ? <X className="w-5 h-5" /> : <MoreHorizontal className="w-5 h-5" />} {railExpanded ? 'Chiudi' : 'Altro'}
-          </button>
-          {railExpanded && (
-          <>
-          <MapModeSwitcher
-            mode={mapMode} onModeChange={setMapMode} is3D={is3D} onToggle3D={() => setIs3D((v) => !v)} isOnline={isOnline}
-            showNatura2000={showNatura2000} onToggleNatura2000={() => setShowNatura2000((v) => !v)}
-          />
-          <TrailConfidenceBadge confidence={trailConfidence} />
-          <button
-            onClick={() => setShowLiveShareSheet(true)}
-            title={liveSharingEnabled ? 'Condivisione posizione live attiva' : 'Condividi la tua posizione live'}
-            className={`w-11 h-11 rounded-full flex items-center justify-center shadow-lg border ${
-              liveSharingEnabled ? 'bg-sky-600 border-sky-400/40' : 'bg-white/95 border-stone-200'
-            }`}
-          >
-            <Radio className={`w-5 h-5 ${liveSharingEnabled ? 'text-white' : 'text-stone-700'}`} />
-          </button>
-          {routePolyline.length >= 2 && (
-            <button
-              onClick={() => setShowOfflineSheet(true)}
-              title={offlineReady ? 'Mappa scaricata per offline' : 'Scarica mappa per offline'}
-              className={`w-11 h-11 rounded-full flex items-center justify-center shadow-lg border ${
-                offlineReady ? 'bg-emerald-600 border-emerald-400/40' : 'bg-white/95 border-stone-200'
-              }`}
-            >
-              {offlineReady ? <CheckCircle2 className="w-5 h-5 text-white" /> : <Download className="w-5 h-5 text-stone-700" />}
-            </button>
-          )}
-          <ParkingSpotControl
-            spot={parkingSpot}
-            position={position}
-            distanceM={parkingDistanceM}
-            bearingToSpotDeg={parkingBearingDeg}
-            onSave={handleSaveParking}
-            onClear={handleClearParking}
-          />
-          {/* DTREK-AUDIT.md P2 #26 — riapre in ogni momento il riepilogo mostrato all'avvio della
-              prima navigazione (SOS, vie d'uscita, layer, colori POI), non solo la prima volta. */}
-          <button
-            onClick={() => setShowOnboarding(true)}
-            aria-label="Come funziona la navigazione"
-            title="Come funziona la navigazione"
-            className="w-11 h-11 rounded-full flex items-center justify-center shadow-lg border bg-white/95 border-stone-200"
-          >
-            <HelpCircle className="w-5 h-5 text-stone-700" />
-          </button>
-          </>
-          )}
-        </div>
       </div>
 
       {/* Pannello laterale — da lg: in su, stessi controlli delle due colonne sopra ma con
@@ -1512,6 +1400,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         </NavPanelSection>
 
         <NavPanelSection label="Assistenza">
+          <NavPanelButton icon={Mic} label="Chiedi a Giulia" onClick={() => setGiuliaSignal((n) => n + 1)} />
           <NavPanelButton icon={HelpCircle} label="Come funziona la navigazione" onClick={() => setShowOnboarding(true)} />
         </NavPanelSection>
       </div>
@@ -1751,7 +1640,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         const [primary, ...rest] = alerts
 
         return (
-          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-2">
+          <div className="absolute left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-2" style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 11.5rem)' }}>
             {primary.node}
             {rest.length > 0 && (
               <button
@@ -1768,12 +1657,35 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
 
       <NavBottomStrip
         summary={bottomStripSummary}
+        metrics={bottomStripMetrics}
+        onOpenTools={() => setShowTools(true)}
         timerRunning={timerRunning}
         onTogglePlayPause={handleTogglePlayPause}
-        onStop={requestEnd}
         onExpand={() => setShowStatsSheet(true)}
         onOpenFoto={handleOpenFoto}
         highContrast={highContrastEnabled}
+      />
+
+      <NavToolsSheet
+        open={showTools}
+        onClose={() => setShowTools(false)}
+        showNearbyTrails={showNearbyTrails} onToggleNearbyTrails={() => setShowNearbyTrails((v) => !v)}
+        showPois={showPoiLayer} onTogglePois={() => setShowPoiLayer((v) => !v)}
+        showSlope={showSlopeLayer} onToggleSlope={() => setShowSlopeLayer((v) => !v)}
+        mapMode={mapMode} onMapModeChange={setMapMode}
+        is3D={is3D} onToggle3D={() => setIs3D((v) => !v)}
+        isOnline={isOnline}
+        showNatura2000={showNatura2000} onToggleNatura2000={() => setShowNatura2000((v) => !v)}
+        onEscape={handleEscapeOptions}
+        liveSharingEnabled={liveSharingEnabled} onLiveShare={() => setShowLiveShareSheet(true)}
+        parkingSpot={parkingSpot} position={position}
+        parkingDistanceM={parkingDistanceM} parkingBearingDeg={parkingBearingDeg}
+        onSaveParking={handleSaveParking} onClearParking={handleClearParking}
+        trailConfidence={trailConfidence}
+        hasRoute={routePolyline.length >= 2} offlineReady={offlineReady} onOffline={() => setShowOfflineSheet(true)}
+        onGiulia={() => setGiuliaSignal((n) => n + 1)}
+        onHelp={() => setShowOnboarding(true)}
+        onEnd={requestEnd}
       />
 
       <NavStatsSheet
