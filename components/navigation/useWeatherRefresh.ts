@@ -1,18 +1,18 @@
 'use client'
 import { useEffect, useState } from 'react'
 import type { MutableRefObject } from 'react'
-import { fetchDayHourly } from '@/lib/openmeteo'
+import { fetchDayHourly } from '@/lib/weather'
 import type { NavigationEngine } from '@/lib/navigation/navigationEngine'
 import { projectWeatherAtEta, type WeatherLookahead } from '@/lib/navigation/weatherLookahead'
 
 // Feeds PaceAssistant's weather correction (lib/navigation/paceAssistant.ts) — the engine
-// itself makes no network calls, so this owns the periodic Open-Meteo refresh and pushes
+// itself makes no network calls, so this owns the periodic MET Norway refresh and pushes
 // the result in. Refreshed every 20min, not per GPS fix: hourly weather doesn't need
 // finer granularity, and re-fetching on every fix would hammer the API for no benefit.
 //
 // Fase 11 di docs/navigator-orizzonti-roadmap.md — lo stesso array orario già scaricato qui
 // alimenta anche la proiezione meteo all'ETA stimato (lib/navigation/weatherLookahead.ts),
-// riusando la stessa cadenza di refresh invece di introdurre una seconda chiamata Open-Meteo
+// riusando la stessa cadenza di refresh invece di introdurre una seconda chiamata MET Norway
 // indipendente. `etaDateRef` è opzionale: senza (o prima che PaceAssistant abbia una stima) la
 // proiezione resta null, nessun comportamento diverso da prima di questa fase.
 export function useWeatherRefresh(

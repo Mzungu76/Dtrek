@@ -47,7 +47,7 @@ function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v))
 }
 
-// Same cutoffs lib/openmeteo.ts's clothingSuggestions() already uses for "needs a shell"/
+// Same cutoffs lib/weather's clothingSuggestions() already uses for "needs a shell"/
 // "needs a windbreaker" — reused here so the pace estimate and the clothing advice never
 // silently disagree about what counts as bad weather.
 function weatherMultiplier(w: WeatherConditions | null): number {

@@ -1,7 +1,7 @@
 // Fase 11 di docs/navigator-orizzonti-roadmap.md
 import { describe, it, expect } from 'vitest'
 import { projectWeatherAtEta } from '../weatherLookahead'
-import type { HourlyWeatherFull } from '@/lib/openmeteo'
+import type { HourlyWeatherFull } from '@/lib/weather'
 
 function hour(iso: string, overrides: Partial<HourlyWeatherFull> = {}): HourlyWeatherFull {
   return {

@@ -10,7 +10,7 @@ import {
   Zap, Minus, Leaf, SlidersHorizontal, Lock, LockOpen, Bookmark,
 } from 'lucide-react'
 import StreetViewPanel from '@/components/StreetViewPanel'
-import { fetchDayHourly, wmoInfo } from '@/lib/openmeteo'
+import { fetchDayHourly, wmoInfo } from '@/lib/weather'
 import { getProfile } from '@/lib/userProfile'
 import { type PoiItem, type PoiType, POI_META, buildPoiPopupHtml } from '@/lib/overpass'
 import { poiBadgeMarkup } from '@/components/poiIcons'

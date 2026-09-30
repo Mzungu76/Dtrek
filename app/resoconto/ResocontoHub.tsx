@@ -9,7 +9,7 @@ import HubSkeleton from '@/components/routehub/HubSkeleton'
 import ReportReader from '@/components/resoconto/ReportReader'
 import { textPrimary, textMuted } from '@/components/routehub/overlayTheme'
 import type { RouteHubItem, SectionKind, PrimaryAction } from '@/components/routehub/types'
-import { wmoInfo } from '@/lib/openmeteo'
+import { wmoInfo } from '@/lib/weather'
 import { RatingGaugeBadge, ratingColor } from '@/components/resoconto/RatingGaugeBadge'
 import {
   getActivityById, updateActivityMeta, deleteActivity, getAllActivities,

@@ -16,7 +16,7 @@ export interface NextOuting {
   distanceMeters: number
   elevationGain: number
   /** Assente finché non risolto, null se non disponibile (niente lat/lon sulla Meta, o la
-   *  chiamata a Open-Meteo è fallita) — un widget non deve inventare un meteo che non ha. */
+   *  chiamata a MET Norway è fallita) — un widget non deve inventare un meteo che non ha. */
   weather?: { tempMax: number; tempMin: number; weathercode: number } | null
 }
 

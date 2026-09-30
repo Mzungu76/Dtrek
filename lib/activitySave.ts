@@ -9,7 +9,7 @@ import type { TrailTerrainProfile } from './terrain/trailTerrainProfile'
 import { checkProtectedArea } from './natura2000/checkProtectedArea'
 import { computeTrailScore } from './trailScore'
 import { computeBbox } from './geoUtils'
-import { fetchWeatherAtHike, type WeatherAtHike } from './openmeteo'
+import type { WeatherAtHike } from './weather'
 import { getUserSettingsCached } from './sync/userSettingsStore'
 import { getDefaultDiaryId } from './diari/syntheticPercorso'
 import { metaHasHikingMetrics, type MetaType, type SiteType } from './metaTypes'
@@ -153,15 +153,9 @@ export async function saveActivityWithEnrichment(
     }
   } catch {} // non-blocking — save proceeds regardless
 
-  // ── Historical weather (best-effort) ────────────────────────────
-  let weatherAtHike: WeatherAtHike | undefined
-  try {
-    const gpsPt = (activity.trackPoints ?? []).find((p) => p.lat !== undefined && p.lon !== undefined)
-    if (gpsPt && activity.startTime) {
-      const date = activity.startTime.slice(0, 10)
-      weatherAtHike = (await fetchWeatherAtHike(gpsPt.lat!, gpsPt.lon!, date)) ?? undefined
-    }
-  } catch {} // non-blocking — save proceeds regardless
+  // Il meteo del giorno non si salva più con l'uscita: MET Norway (l'unica fonte gratuita anche
+  // per uso commerciale) non ha lo storico. Le uscite già salvate conservano il loro.
+  const weatherAtHike: WeatherAtHike | undefined = undefined
 
   // ── Guida del percorso (best-effort) ───────────────────────────
   // Va letta PRIMA del deletePlanned più sotto: quella riga porta con sé il testo della guida

@@ -11,7 +11,7 @@ import {
   normalizeDashboardConfig, DEFAULT_DASHBOARD_CONFIG, DEFAULT_TAB_ID,
   type DashboardConfig, type DashboardTab, type DashboardWidgetId,
 } from '@/lib/dashboardConfig'
-import { wmoInfo } from '@/lib/openmeteo'
+import { wmoInfo } from '@/lib/weather'
 import type { DashboardData } from './types'
 
 // Quanto (px) deve muoversi il dito prima che un tocco venga letto come trascinamento invece che

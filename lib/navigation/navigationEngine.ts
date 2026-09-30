@@ -124,7 +124,7 @@ export class NavigationEngine {
     void this.gps.setMode(mode)
   }
 
-  /** Pushed in by the caller (e.g. from an Open-Meteo fetch), not fetched by the engine itself — keeps this class free of network calls, same "pure, mockable, replayable" property the rest of it already has. */
+  /** Pushed in by the caller (e.g. from an MET Norway fetch), not fetched by the engine itself — keeps this class free of network calls, same "pure, mockable, replayable" property the rest of it already has. */
   setWeatherConditions(w: WeatherConditions): void {
     this.pace.setWeather(w)
   }

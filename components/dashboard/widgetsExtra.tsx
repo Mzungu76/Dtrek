@@ -9,7 +9,7 @@ import {
 } from 'lucide-react'
 import { getMoonIllumination } from 'suncalc'
 import { fetchNearbyWiki, isSpecificName, type WikiPage } from '@/lib/wikipedia'
-import { fetchDayHourly, wmoInfo, type HourlyWeatherFull } from '@/lib/openmeteo'
+import { fetchDayHourly, wmoInfo, type HourlyWeatherFull } from '@/lib/weather'
 import { getSunTimes } from '@/lib/daylight'
 import { fetchActivityPhotos } from '@/lib/activityPhotos'
 import { getQuestionnaire } from '@/lib/questionnaireStore'
@@ -400,13 +400,13 @@ function MeteoUscitaWidget({ data }: WidgetProps) {
 
   if (!next) return <WidgetShell title="Meteo della prossima uscita"><WidgetEmpty text="Nessuna uscita in programma." /></WidgetShell>
   if (!point) return <WidgetShell title="Meteo della prossima uscita"><WidgetEmpty text="Questo percorso non ha ancora un punto di partenza." /></WidgetShell>
-  if (failed) return <WidgetShell title="Meteo della prossima uscita"><WidgetEmpty text="Previsioni non disponibili per questa data (oltre 16 giorni o senza rete)." /></WidgetShell>
+  if (failed) return <WidgetShell title="Meteo della prossima uscita"><WidgetEmpty text="Previsioni non disponibili per questa data (oltre circa 9 giorni o senza rete)." /></WidgetShell>
   if (!hours) return <WidgetShell title="Meteo della prossima uscita"><WidgetEmpty text="Carico le previsioni…" /></WidgetShell>
   const slots = hours.filter((h) => { const hh = Number(h.time.slice(11, 13)); return hh >= 6 && hh <= 20 && hh % 2 === 0 })
   return (
     <WidgetShell
       title={`Meteo: ${next.title}`}
-      footer={<>Previsioni <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer" className="underline">Open-Meteo.com</a> (CC BY 4.0).</>}
+      footer={<>Previsioni <a href="https://www.met.no/" target="_blank" rel="noopener noreferrer" className="underline">MET Norway</a> (CC BY 4.0).</>}
     >
       <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
         {slots.map((h) => {

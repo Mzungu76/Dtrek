@@ -8,7 +8,7 @@ import {
   BookOpen, Compass, Layers, LayoutGrid, Award, Calendar, Activity, ChevronRight,
   Globe2, Mountain, type LucideIcon,
 } from 'lucide-react'
-import { wmoInfo } from '@/lib/openmeteo'
+import { wmoInfo } from '@/lib/weather'
 import { HeatmapPanel, MonthlyBarChart, TssBarChart } from '@/components/bacheca/ChartPanels'
 import type { DashboardData } from './types'
 import type { DashboardWidgetId } from '@/lib/dashboardConfig'

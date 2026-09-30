@@ -1,68 +1,17 @@
-// Weather signal — Open-Meteo archive API, ultimi 7 giorni di precipitazioni + umidità del
-// suolo al centroide del bbox del percorso, modulato dalla superficie (dai tag OSM già risolti
-// da osmTags.ts via ctx) e dalla pendenza media stimata (dalla cache trails, già in ctx).
+// Weather signal — pioggia recente + umidità del suolo al centroide del percorso, modulate dalla
+// superficie (tag OSM già risolti da osmTags.ts via ctx) e dalla pendenza media (in ctx).
+// Al momento senza fonte dati: vedi collectWeatherSignal.
 import type { WeatherSignal, SignalContext } from './types'
-
-const TIMEOUT_MS = 5000
-
-function fmtDate(d: Date): string {
-  return d.toISOString().slice(0, 10)
-}
-
-function clamp(n: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, n))
-}
 
 export async function collectWeatherSignal(_osmRelationId: number, ctx: SignalContext): Promise<WeatherSignal> {
   const surfaceMultiplier = surfaceMultiplierFor(ctx.osmTags.surface)
   const slopeMultiplier = slopeMultiplierFor(ctx)
 
-  try {
-    const end = new Date()
-    const start = new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000)
-    const url = 'https://archive-api.open-meteo.com/v1/archive?' + new URLSearchParams({
-      latitude:   ctx.centroid.lat.toFixed(4),
-      longitude:  ctx.centroid.lon.toFixed(4),
-      start_date: fmtDate(start),
-      end_date:   fmtDate(end),
-      daily:      'precipitation_sum,soil_moisture_0_to_7cm_mean',
-      timezone:   'Europe/Rome',
-    })
-    const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) })
-    if (!res.ok) throw new Error(`Open-Meteo archive error ${res.status}`)
-    const d = await res.json()
-    const precipDaily: number[] = d.daily?.precipitation_sum ?? []
-    const soilDaily: number[] = d.daily?.soil_moisture_0_to_7cm_mean ?? []
-
-    const precipSum = precipDaily.reduce((s, v) => s + (v ?? 0), 0)
-    const soilAvg = soilDaily.length > 0
-      ? soilDaily.reduce((s, v) => s + (v ?? 0), 0) / soilDaily.length
-      : 0
-
-    const precipPenalty = precipPenaltyFor(precipSum)
-    const soilPenalty = soilPenaltyFor(soilAvg)
-    const totalPenalty = clamp((precipPenalty + soilPenalty) * surfaceMultiplier * slopeMultiplier, -35, 0)
-
-    return { precipPenalty, soilPenalty, surfaceMultiplier, slopeMultiplier, totalPenalty, unavailable: false }
-  } catch {
-    // Rete/timeout/errore Open-Meteo — totalPenalty 0 qui NON è "condizioni verificate buone",
-    // è "non lo sappiamo". unavailable:true lo dice esplicitamente ai chiamanti a valle.
-    return { precipPenalty: 0, soilPenalty: 0, surfaceMultiplier, slopeMultiplier, totalPenalty: 0, unavailable: true }
-  }
-}
-
-function precipPenaltyFor(mm: number): number {
-  if (mm < 10) return 0
-  if (mm < 30) return -8
-  if (mm < 60) return -18
-  return -30
-}
-
-function soilPenaltyFor(moisture: number): number {
-  if (moisture < 0.2) return 0
-  if (moisture < 0.35) return -5
-  if (moisture < 0.45) return -15
-  return -25
+  // Pioggia degli ultimi 7 giorni e umidità del suolo venivano dall'archivio di Open-Meteo, il cui
+  // piano gratuito è solo non commerciale; MET Norway non ha lo storico. Finché non c'è una fonte
+  // storica gratuita anche per uso commerciale il segnale è "non disponibile" (totalPenalty 0 NON
+  // significa condizioni buone: unavailable lo dice ai chiamanti a valle).
+  return { precipPenalty: 0, soilPenalty: 0, surfaceMultiplier, slopeMultiplier, totalPenalty: 0, unavailable: true }
 }
 
 function surfaceMultiplierFor(surface: string | undefined): number {

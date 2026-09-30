@@ -51,10 +51,10 @@ const SOURCES: CreditSource[] = [
     note: 'Cartografia escursionistica con curve di livello (dati OSM e SRTM), usata per alcune miniature.',
   },
   {
-    name: 'Open-Meteo',
-    url: 'https://open-meteo.com/',
-    license: 'CC BY 4.0',
-    note: 'Previsioni e dati meteo storici mostrati nelle uscite, nei diari e nei widget della Bacheca.',
+    name: 'MET Norway',
+    url: 'https://api.met.no/doc/License',
+    license: 'CC BY 4.0 / NLOD',
+    note: 'Previsioni meteo (Locationforecast) mostrate nelle uscite, nella navigazione e nei widget della Bacheca. Dati dell’Istituto Meteorologico Norvegese.',
   },
   {
     name: 'Wikipedia e Wikivoyage',
