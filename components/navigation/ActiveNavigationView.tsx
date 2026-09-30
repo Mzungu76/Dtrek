@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Capacitor } from '@capacitor/core'
 import {
-  AlertTriangle, BatteryWarning, ArrowUp, Download, CheckCircle2, Radio, Locate, Signpost, HelpCircle,
+  AlertTriangle, BatteryWarning, MoreHorizontal, X, ArrowUp, Download, CheckCircle2, Radio, Locate, Signpost, HelpCircle,
   Route, MapPin, Mountain, type LucideIcon,
 } from 'lucide-react'
 import Sheet from '@/components/ui/Sheet'
@@ -279,6 +279,10 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   // "+N altri avvisi" — nessun avviso è stato rimosso, solo riordinato per
   // priorità. Piano di ristrutturazione, Parte 2.8.
   const [bottomAlertsExpanded, setBottomAlertsExpanded] = useState(false)
+  // Avvisi in alto: solo il più importante è visibile, gli altri dietro "+N" (stessa logica di sopra).
+  const [topAlertsExpanded, setTopAlertsExpanded] = useState(false)
+  // Rotaia destra: SOS e Vie d'uscita sempre a portata, il resto dietro "Altro".
+  const [railExpanded, setRailExpanded] = useState(false)
   const turnBackAlertedRef = useRef(false)
   const [showFieldNote, setShowFieldNote] = useState(false)
   // Soluzione B (piano di restyling Navigator): sentieri vicini e POI accesi di default — stesso
@@ -1255,58 +1259,106 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
           </div>
         )}
 
-        {(mapFallbackNotice || offlinePackageWarning || offlineDegradedMissing.length > 0 || (state !== 'idle' && relevantWildlifeRisks.length > 0 && !wildlifeAlertDismissed) || (weatherLookahead?.message && !weatherLookaheadDismissed)) && (
-          <div className="flex flex-col items-center gap-2 w-full max-w-sm">
-            {weatherLookahead?.message && !weatherLookaheadDismissed && (
-              <div className="px-4 py-2 rounded-full bg-stone-800 text-white text-xs font-semibold shadow-lg font-body flex items-center gap-2">
-                <span className="shrink-0">🌦️</span>
-                {weatherLookahead.message}
-                <button onClick={() => setWeatherLookaheadDismissed(true)} className="text-stone-400 hover:text-white ml-1" aria-label="Chiudi avviso">✕</button>
-              </div>
-            )}
+        {(() => {
+          // Priorità (più importante prima): fauna, meteo in arrivo, mappa offline incompleta,
+          // dati offline degradati, fallback mappa. Uno solo visibile, il resto dietro "+N avvisi".
+          const closeBtn = (onClick: () => void) => (
+            <button onClick={onClick} className="w-8 h-8 -my-1 -mr-2 flex items-center justify-center text-stone-300 hover:text-white shrink-0" aria-label="Chiudi avviso">
+              <X size={16} />
+            </button>
+          )
+          const topAlerts: { id: string; node: React.ReactNode }[] = []
 
-            {mapFallbackNotice && (
-              <div className="px-4 py-2 rounded-full bg-stone-800 text-white text-xs font-semibold shadow-lg font-body">
-                Mappa online non disponibile, uso la mappa offline
-              </div>
-            )}
-
-            {offlinePackageWarning && (
-              <div className="px-4 py-2 rounded-full bg-stone-800 text-white text-xs font-semibold shadow-lg font-body flex items-center gap-2">
-                <AlertTriangle size={14} className="text-amber-400 shrink-0" />
-                Mappa offline incompleta per questo percorso
-                <button onClick={() => setOfflinePackageWarning(false)} className="text-stone-400 hover:text-white ml-1" aria-label="Chiudi avviso">✕</button>
-              </div>
-            )}
-
-            {/* Offline Readiness Check (roadmap Fase 6) — tiles missing is the hard-blocker notice
-                above; this one is for pieces that only degrade the experience (no escape
-                suggestions, no elevation chart, no POI callouts...), never block navigation. */}
-            {offlineDegradedMissing.length > 0 && (
-              <div className="px-4 py-2 rounded-xl bg-stone-800 text-white text-xs shadow-lg font-body flex items-start gap-2 w-full">
-                <AlertTriangle size={14} className="text-amber-400 shrink-0 mt-0.5" />
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold">Dati offline incompleti per questo percorso</p>
-                  <p className="text-stone-300 leading-snug">Non disponibili: {offlineDegradedMissing.join(', ')}</p>
-                </div>
-                <button onClick={() => setOfflineDegradedMissing([])} className="text-stone-400 hover:text-white shrink-0" aria-label="Chiudi avviso">✕</button>
-              </div>
-            )}
-
-            {state !== 'idle' && relevantWildlifeRisks.length > 0 && !wildlifeAlertDismissed && (
-              <div className="w-full px-4 py-3 rounded-xl bg-stone-800 text-white text-xs shadow-lg font-body">
-                <div className="flex items-start gap-2">
-                  <span className="text-base shrink-0">🐾</span>
+          if (state !== 'idle' && relevantWildlifeRisks.length > 0 && !wildlifeAlertDismissed) {
+            const animals = Array.from(new Set(relevantWildlifeRisks.map((w) => w.animal)))
+            topAlerts.push({
+              id: 'wildlife',
+              node: (
+                <div className="w-full px-4 py-3 rounded-xl bg-stone-800 text-white text-sm shadow-lg font-body flex items-start gap-2">
+                  <span className="text-lg shrink-0">🐾</span>
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold mb-1">Fauna nella zona: {relevantWildlifeRisks.map((w) => w.animal).join(', ')}</p>
+                    <p className="font-semibold mb-1">Fauna nella zona: {animals.join(', ')}</p>
                     <p className="text-stone-300 leading-snug">{relevantWildlifeRisks[0].tip}</p>
                   </div>
-                  <button onClick={() => setWildlifeAlertDismissed(true)} className="text-stone-400 hover:text-white shrink-0" aria-label="Chiudi avviso">✕</button>
+                  {closeBtn(() => setWildlifeAlertDismissed(true))}
                 </div>
-              </div>
-            )}
-          </div>
-        )}
+              ),
+            })
+          }
+
+          if (weatherLookahead?.message && !weatherLookaheadDismissed) {
+            topAlerts.push({
+              id: 'weather',
+              node: (
+                <div className="w-full px-4 py-2.5 rounded-xl bg-stone-800 text-white text-sm font-semibold shadow-lg font-body flex items-center gap-2">
+                  <span className="shrink-0">🌦️</span>
+                  <span className="flex-1 min-w-0">{weatherLookahead.message}</span>
+                  {closeBtn(() => setWeatherLookaheadDismissed(true))}
+                </div>
+              ),
+            })
+          }
+
+          if (offlinePackageWarning) {
+            topAlerts.push({
+              id: 'offline-pkg',
+              node: (
+                <div className="w-full px-4 py-2.5 rounded-xl bg-stone-800 text-white text-sm font-semibold shadow-lg font-body flex items-center gap-2">
+                  <AlertTriangle size={16} className="text-amber-400 shrink-0" />
+                  <span className="flex-1 min-w-0">Mappa offline incompleta per questo percorso</span>
+                  {closeBtn(() => setOfflinePackageWarning(false))}
+                </div>
+              ),
+            })
+          }
+
+          // Offline Readiness Check (roadmap Fase 6) — tiles missing is the hard-blocker notice
+          // above; this one is for pieces that only degrade the experience (no escape
+          // suggestions, no elevation chart, no POI callouts...), never block navigation.
+          if (offlineDegradedMissing.length > 0) {
+            topAlerts.push({
+              id: 'offline-degraded',
+              node: (
+                <div className="w-full px-4 py-2.5 rounded-xl bg-stone-800 text-white text-sm shadow-lg font-body flex items-start gap-2">
+                  <AlertTriangle size={16} className="text-amber-400 shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold">Dati offline incompleti per questo percorso</p>
+                    <p className="text-stone-300 leading-snug">Non disponibili: {offlineDegradedMissing.join(', ')}</p>
+                  </div>
+                  {closeBtn(() => setOfflineDegradedMissing([]))}
+                </div>
+              ),
+            })
+          }
+
+          if (mapFallbackNotice) {
+            topAlerts.push({
+              id: 'map-fallback',
+              node: (
+                <div className="w-full px-4 py-2.5 rounded-xl bg-stone-800 text-white text-sm font-semibold shadow-lg font-body">
+                  Mappa online non disponibile, uso la mappa offline
+                </div>
+              ),
+            })
+          }
+
+          if (topAlerts.length === 0) return null
+          const [primary, ...rest] = topAlerts
+          return (
+            <div className="flex flex-col items-center gap-2 w-full max-w-sm">
+              {primary.node}
+              {rest.length > 0 && (
+                <button
+                  onClick={() => setTopAlertsExpanded((v) => !v)}
+                  className="min-h-[36px] px-3.5 rounded-full bg-stone-900/85 text-white text-xs font-semibold shadow-md"
+                >
+                  {topAlertsExpanded ? 'Nascondi' : `+${rest.length} altr${rest.length === 1 ? 'o avviso' : 'i avvisi'}`}
+                </button>
+              )}
+              {topAlertsExpanded && rest.map((a) => <div key={a.id} className="w-full">{a.node}</div>)}
+            </div>
+          )
+        })()}
       </div>
 
       {/* Soluzione B: un'unica rotaia destra, centrata verticalmente — SOS, mappa/layer,
@@ -1326,28 +1378,37 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
             schermo, o subito se lo stato diventa off_route/wrong_direction/gps_lost (vie d'uscita
             deve restare raggiungibile). opacity, non display: none, così le dimensioni della
             colonna non cambiano e SOS non "salta" quando il resto scompare/riappare. */}
+        {/* Vie d'uscita resta sempre visibile insieme a SOS: se ci si perde o si è in difficoltà
+            servono subito, senza aprire nessun menu. Tutto il resto sta dietro "Altro". */}
+        <div className={`transition-opacity duration-300 ${controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+          <button
+            onClick={handleEscapeOptions}
+            aria-label="Vie d'uscita"
+            className="min-w-[44px] h-11 px-3 rounded-full flex items-center gap-1.5 shadow-lg border bg-white/95 border-stone-200 text-stone-800 text-xs font-semibold"
+          >
+            <Signpost className="w-5 h-5" /> Vie d&apos;uscita
+          </button>
+        </div>
         <div
           className={`flex flex-col items-end gap-2 transition-opacity duration-300 ${
             controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
           }`}
         >
+          <button
+            onClick={() => setRailExpanded((v) => !v)}
+            aria-expanded={railExpanded}
+            aria-label={railExpanded ? 'Nascondi altri controlli' : 'Altri controlli'}
+            className="min-w-[44px] h-11 px-3 rounded-full flex items-center gap-1.5 shadow-lg border bg-white/95 border-stone-200 text-stone-800 text-xs font-semibold"
+          >
+            {railExpanded ? <X className="w-5 h-5" /> : <MoreHorizontal className="w-5 h-5" />} {railExpanded ? 'Chiudi' : 'Altro'}
+          </button>
+          {railExpanded && (
+          <>
           <MapModeSwitcher
             mode={mapMode} onModeChange={setMapMode} is3D={is3D} onToggle3D={() => setIs3D((v) => !v)} isOnline={isOnline}
             showNatura2000={showNatura2000} onToggleNatura2000={() => setShowNatura2000((v) => !v)}
           />
           <TrailConfidenceBadge confidence={trailConfidence} />
-          {/* Raggiungibile sempre, non solo dal banner fuori-percorso: prima le "vie d'uscita"
-              comparivano solo dentro l'avviso off_route/wrong_direction, che sparisce del tutto
-              quando lo stato è gps_lost (l'avviso GPS perso lo sostituisce) — proprio nel momento
-              in cui questo strumento serve di più. Un punto di accesso proattivo permette anche di
-              consultarle "per sicurezza" mentre si è ancora regolarmente sul percorso. */}
-          <button
-            onClick={handleEscapeOptions}
-            title="Vie d'uscita"
-            className="w-11 h-11 rounded-full flex items-center justify-center shadow-lg border bg-white/95 border-stone-200"
-          >
-            <Signpost className="w-5 h-5 text-stone-700" />
-          </button>
           <button
             onClick={() => setShowLiveShareSheet(true)}
             title={liveSharingEnabled ? 'Condivisione posizione live attiva' : 'Condividi la tua posizione live'}
@@ -1386,6 +1447,8 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
           >
             <HelpCircle className="w-5 h-5 text-stone-700" />
           </button>
+          </>
+          )}
         </div>
       </div>
 
