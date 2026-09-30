@@ -109,3 +109,14 @@ export function ImagePlaceholder() {
     </div>
   )
 }
+
+/** True per un URL su un host Wikimedia (Commons/upload/Wikipedia) — sorgenti che servono già
+ *  miniature ridimensionate dal proprio CDN, quindi inutile (e lento) ripassarle dall'ottimizzatore
+ *  di immagini di Next per le foto grandi a tutta larghezza. */
+export function isWikimediaUrl(url: string | null | undefined): boolean {
+  if (!url) return false
+  try {
+    const h = new URL(url).hostname
+    return h.endsWith('.wikimedia.org') || h.endsWith('.wikipedia.org')
+  } catch { return false }
+}

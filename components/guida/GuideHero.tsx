@@ -6,7 +6,7 @@ import { it } from 'date-fns/locale'
 import { Car, SquareParking, Milestone, MapPinned, MapPin, Loader2 } from 'lucide-react'
 import type { TrackPoint } from '@/lib/tcxParser'
 import type { StartPointInfo } from '@/lib/routeBuilder/startPointInfo'
-import FallbackImage from '@/components/ui/FallbackImage'
+import FallbackImage, { isWikimediaUrl } from '@/components/ui/FallbackImage'
 
 const MapView = dynamic(() => import('@/components/MapView'), { ssr: false })
 
@@ -119,6 +119,7 @@ export default function GuideHero({
     return (
       <FallbackImage
         src={url} alt="" fill priority sizes="100vw"
+        unoptimized={isWikimediaUrl(url)}
         className="object-cover"
         loadingIndicator={<CoverLoadingSpinner color={fallbackColor} />}
         fallback={rest.length > 0 ? renderPhoto(rest) : <CoverFallback color={fallbackColor} icon={fallbackIcon} />}
