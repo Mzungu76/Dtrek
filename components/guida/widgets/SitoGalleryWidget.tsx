@@ -15,6 +15,7 @@ const CATEGORY_CAUTION: Partial<Record<SiteType, string>> = {
 }
 
 interface Props {
+  name: string
   lat: number
   lon: number
   siteType?: SiteType
@@ -25,15 +26,15 @@ interface Props {
  *  foto di un Sentiero), qui con un raggio stretto attorno alla Meta stessa invece del punto medio
  *  di una traccia. L'avviso di sicurezza è generico per tipologia (CATEGORY_CAUTION sopra), non
  *  una segnalazione verificata su questo luogo preciso — quella resta "Verificato online". */
-export default function SitoGalleryWidget({ lat, lon, siteType }: Props) {
+export default function SitoGalleryWidget({ name, lat, lon, siteType }: Props) {
   const [photos, setPhotos] = useState<RoutePhoto[]>([])
   useEffect(() => {
     let cancelled = false
-    import('@/app/lib/guide/fetchRoutePhotos').then(({ fetchRoutePhotos }) => fetchRoutePhotos(lat, lon, SINGLE_POINT_PHOTO_RADIUS_M, 6))
+    import('@/app/lib/guide/fetchRoutePhotos').then(({ fetchPlacePhotos }) => fetchPlacePhotos(name, lat, lon, SINGLE_POINT_PHOTO_RADIUS_M, 6))
       .then(found => { if (!cancelled) setPhotos(found) })
       .catch(() => {})
     return () => { cancelled = true }
-  }, [lat, lon])
+  }, [name, lat, lon])
 
   const caution = siteType ? CATEGORY_CAUTION[siteType] : undefined
   // Verifica utente: il tap qui apriva subito il file immagine su un'altra scheda invece di
