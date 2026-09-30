@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { PublicLiveSession } from '@/lib/liveSharePublic'
 import { computeLiveStatus, type LiveShareStatus } from '@/lib/navigation/liveShareStatus'
 import { triggerDeadManAlert, requestDeadManAlertPermission, deadManAlertPermissionGranted } from '@/lib/navigation/deadManAlert'
+import { CARTO_ATTRIBUTION_HTML } from '@/lib/mapAttribution'
 
 interface Props {
   token: string
@@ -86,7 +87,8 @@ export default function LiveShareViewer({ token, initial }: Props) {
       if (cancelled || !mapRef.current || mapInstance.current) return
       const map = L.map(mapRef.current, { zoomControl: true, attributionControl: false })
         .setView([initial.lat, initial.lon], 15)
-      L.tileLayer(TILE_URL, { maxZoom: 18 }).addTo(map)
+      L.tileLayer(TILE_URL, { maxZoom: 18, attribution: CARTO_ATTRIBUTION_HTML }).addTo(map)
+      L.control.attribution({ prefix: false, position: 'bottomleft' }).addTo(map)
       mapInstance.current = map
       setTimeout(() => map.invalidateSize(), 0)
       // Disegna subito il fix iniziale (già disponibile da SSR, nessun bisogno di aspettare il

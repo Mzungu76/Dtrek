@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { PublicGroup } from '@/lib/groupSharePublic'
 import { computeLiveStatus, type LiveShareStatus } from '@/lib/navigation/liveShareStatus'
 import { triggerDeadManAlert, requestDeadManAlertPermission, deadManAlertPermissionGranted } from '@/lib/navigation/deadManAlert'
+import { CARTO_ATTRIBUTION_HTML } from '@/lib/mapAttribution'
 
 interface Props {
   token: string
@@ -88,7 +89,8 @@ export default function GroupShareViewer({ token, initial }: Props) {
       const first = initial.members[0]
       const map = L.map(mapRef.current, { zoomControl: true, attributionControl: false })
         .setView(first ? [first.lat, first.lon] : [41.9, 12.5], first ? 14 : 5)
-      L.tileLayer(TILE_URL, { maxZoom: 18 }).addTo(map)
+      L.tileLayer(TILE_URL, { maxZoom: 18, attribution: CARTO_ATTRIBUTION_HTML }).addTo(map)
+      L.control.attribution({ prefix: false, position: 'bottomleft' }).addTo(map)
       mapInstance.current = map
       setTimeout(() => map.invalidateSize(), 0)
       setMapReady(true)

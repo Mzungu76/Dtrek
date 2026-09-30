@@ -9,6 +9,7 @@ import { poiMarkerMarkup } from '@/components/poiIcons'
 import { POI_META, type PoiType } from '@/lib/overpass'
 import { shortestRotation } from '@/lib/navigation/orientation'
 import type { SlopeSegment } from '@/lib/navigation/routeSlopeSegments'
+import { CARTO_ATTRIBUTION_HTML } from '@/lib/mapAttribution'
 
 interface Props {
   routePolyline: [number, number][]
@@ -115,7 +116,8 @@ const NavigationMap = forwardRef<NavigationMapHandle, Props>(function Navigation
         routePolyline[0] ? [routePolyline[0][0], routePolyline[0][1]] : [41.9, 12.5],
         16,
       )
-      L.tileLayer(TILE_URL, { maxZoom: 18 }).addTo(map)
+      L.tileLayer(TILE_URL, { maxZoom: 18, attribution: CARTO_ATTRIBUTION_HTML }).addTo(map)
+      L.control.attribution({ prefix: false, position: 'bottomleft' }).addTo(map)
 
       // A manual pan/zoom means the hiker wants to look around — stop fighting them with auto-recenter.
       map.on('dragstart zoomstart', () => setFollowMode(false))

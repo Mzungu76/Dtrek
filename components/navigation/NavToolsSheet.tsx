@@ -132,6 +132,11 @@ export default function NavToolsSheet(p: Props) {
             </button>
           </div>
         </Section>
+
+        <p className="text-[11px] leading-snug text-stone-400 pb-1">
+          Mappa © OpenStreetMap contributors · © CARTO · © MapTiler (mappe online). Nessun link qui: dentro
+          Navigator una schermata di Dtrek non è raggiungibile, il testo completo sta in Fonti e crediti su Dtrek.
+        </p>
       </div>
     </Sheet>
   )
