@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildEnrichQuery, parseEnrichRows, buildEnrichUpdate } from '../mic/enrich'
+import { buildEnrichQuery, parseEnrichRows, buildEnrichUpdate, formatOpeningHours } from '../mic/enrich'
 
 const row = (o: Record<string, string>) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, { value: v }]))
 
@@ -35,7 +35,7 @@ describe('parseEnrichRows', () => {
 })
 
 describe('buildEnrichUpdate', () => {
-  const empty = { description: null, website: null, phone: null, email: null, metadata: null }
+  const empty = { description: null, website: null, phone: null, email: null, opening_hours: null, metadata: null }
   const at = '2026-09-30T00:00:00Z'
 
   it('riempie i campi vuoti e registra la provenienza per campo', () => {
@@ -59,5 +59,64 @@ describe('buildEnrichUpdate', () => {
   it('null quando non c\'è nulla da scrivere', () => {
     expect(buildEnrichUpdate({ ...empty, description: 'x' }, { description: 'y' }, '1', at)).toBeNull()
     expect(buildEnrichUpdate(empty, {}, '1', at)).toBeNull()
+  })
+})
+
+describe('formatOpeningHours', () => {
+  it('raggruppa i giorni consecutivi con le stesse fasce (Biblioteca nazionale centrale di Roma)', () => {
+    const r = formatOpeningHours(
+      'Lunedì (08:30,19:00)|Martedì (08:30,19:00)|Mercoledì (08:30,19:00)|Giovedì (08:30,19:00)|Venerdì (08:30,14:30)',
+      'Sabato|Domenica',
+    )
+    expect(r.text).toBe('Lun–Gio 08:30–19:00; Ven 08:30–14:30; Sab–Dom chiuso')
+    expect(r.closedAllDays).toBe(false)
+  })
+
+  it('gestisce più fasce nello stesso giorno e un giorno isolato', () => {
+    const r = formatOpeningHours('Sabato (09:00,13:00) (15:00,18:00)', undefined)
+    expect(r.text).toBe('Sab 09:00–13:00, 15:00–18:00')
+  })
+
+  it('"Chiusura" su tutti e 7 i giorni senza orari → nessun testo, closedAllDays (Tolfa/Canepina)', () => {
+    const r = formatOpeningHours(undefined, 'Lunedì|Martedì|Mercoledì|Giovedì|Venerdì|Sabato|Domenica')
+    expect(r.text).toBeUndefined()
+    expect(r.closedAllDays).toBe(true)
+  })
+
+  it('solo alcuni giorni di chiusura senza orari → nessun testo, non "chiuso sempre"', () => {
+    const r = formatOpeningHours(undefined, 'Sabato|Domenica')
+    expect(r).toEqual({ closedAllDays: false })
+  })
+
+  it('testo non riconosciuto → nessun orario inventato', () => {
+    expect(formatOpeningHours('su prenotazione', undefined)).toEqual({ closedAllDays: false })
+  })
+})
+
+describe('orari in parseEnrichRows / buildEnrichUpdate', () => {
+  const at = '2026-09-30T00:00:00Z'
+  const empty = { description: null, website: null, phone: null, email: null, opening_hours: null, metadata: null }
+
+  it('parseEnrichRows calcola il testo orari una sola volta per CIS', () => {
+    const map = parseEnrichRows([
+      row({ cis: 'http://x/CulturalInstituteOrSite/9', openingText: 'Lunedì (09:00,17:00)', phone: '1' }),
+      row({ cis: 'http://x/CulturalInstituteOrSite/9', openingText: 'Lunedì (09:00,17:00)', phone: '2' }),
+    ])
+    expect(map.get('9')?.openingHours).toBe('Lun 09:00–17:00')
+  })
+
+  it('scrive opening_hours solo se vuoto', () => {
+    const u = buildEnrichUpdate(empty, { openingHours: 'Lun 09:00–17:00' }, '9', at)!
+    expect(u.opening_hours).toBe('Lun 09:00–17:00')
+    expect(buildEnrichUpdate({ ...empty, opening_hours: 'Mo-Fr 09:00-18:00' }, { openingHours: 'Lun 09:00–17:00' }, '9', at)).toBeNull()
+  })
+
+  it('closedAllDays: nessun opening_hours, solo provenienza a bassa confidenza, una volta sola', () => {
+    const u = buildEnrichUpdate(empty, { closedAllDays: true }, '101608', at)!
+    expect(u.opening_hours).toBeUndefined()
+    const prov = (u.metadata as { fieldProvenance: Record<string, { confidence: string; status: string }> }).fieldProvenance
+    expect(prov.openingHours).toMatchObject({ confidence: 'low', status: 'stale' })
+    const again = buildEnrichUpdate({ ...empty, metadata: u.metadata as Record<string, unknown> }, { closedAllDays: true }, '101608', at)
+    expect(again).toBeNull()
   })
 })
