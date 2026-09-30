@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, type ComponentProps, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ComponentProps, type ReactNode } from 'react'
 import Image from 'next/image'
 import { ImageOff, Loader2 } from 'lucide-react'
 
@@ -47,39 +47,44 @@ export default function FallbackImage({
   // zero — mai restare bloccato sul fallback di un URL precedente ormai sostituito.
   useEffect(() => { setFailed(false) }, [src])
 
-  // Stato di caricamento gestito solo quando serve (loadingIndicator fornito) — altrove niente
-  // stato/effect in più, comportamento esattamente quello di sempre. Dipende da `src` e dalla sola
-  // PRESENZA di loadingIndicator (booleano), mai dalla sua identità: è quasi sempre un elemento JSX
-  // creato inline dal chiamante (nuova identità ad ogni render del genitore), quindi includere
-  // l'elemento stesso qui avrebbe fatto ripartire il timer — e tornare "in caricamento" anche a
-  // foto già pronta — ad ogni singolo re-render del chiamante, non solo al cambio reale della foto.
-  // Il booleano invece resta stabile fra un render e l'altro tranne quando il chiamante lo passa in
-  // modo condizionale (es. RouteHub.tsx's `inWindow ? <CoverLoadingSpinner/> : undefined` sulla
-  // stessa src) — lì serve comunque reagire, o isLoading resterebbe vero per sempre da quel punto
-  // in poi (minDelayDone mai avviato finché loadingIndicator era assente).
-  const [imageReady, setImageReady] = useState(false)
+  // Stato di caricamento. `loadedSrc` registra SEMPRE quale src è già stato caricato dal browser,
+  // anche quando `loadingIndicator` non è ancora presente: un chiamante può passarlo in modo
+  // condizionale (RouteHub.tsx: `inWindow ? <CoverLoadingSpinner/> : undefined`) e una slide fuori
+  // finestra carica la foto in lazy PRIMA che lo spinner esista — se onLoad venisse ignorato in
+  // quel momento, quando la slide entra nella finestra (swipe) lo spinner resterebbe per sempre
+  // perché l'evento di caricamento non scatta una seconda volta (verifica utente: miniatura ok,
+  // copertina sullo spinner all'infinito). Dipende da `src` e dalla sola PRESENZA del booleano,
+  // mai dall'identità dell'elemento JSX (nuova ad ogni render del chiamante).
+  const [loadedSrc, setLoadedSrc] = useState<typeof src | null>(null)
   const [minDelayDone, setMinDelayDone] = useState(false)
+  const imgRef = useRef<HTMLImageElement>(null)
   const hasLoadingIndicator = !!loadingIndicator
   useEffect(() => {
     if (!hasLoadingIndicator) return
-    setImageReady(false)
     setMinDelayDone(false)
     const t = setTimeout(() => setMinDelayDone(true), minLoadingMs)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [src, hasLoadingIndicator])
+  // Foto già completa prima dell'idratazione o prima che lo spinner comparisse: onLoad è andato perso.
+  useEffect(() => {
+    const el = imgRef.current
+    if (el && el.complete && el.naturalWidth > 0) setLoadedSrc(src)
+  }, [src, hasLoadingIndicator])
 
   if (failed) return <>{fallback}</>
 
+  const imageReady = loadedSrc === src
   const isLoading = !!loadingIndicator && !(imageReady && minDelayDone)
 
   return (
     <>
       {isLoading && loadingIndicator}
       <Image
+        ref={imgRef}
         src={src}
         onError={() => setFailed(true)}
-        onLoad={e => { if (loadingIndicator) setImageReady(true); onLoad?.(e) }}
+        onLoad={e => { setLoadedSrc(src); onLoad?.(e) }}
         className={loadingIndicator
           ? [className, 'transition-opacity duration-500', isLoading ? 'opacity-0' : 'opacity-100'].filter(Boolean).join(' ')
           : className}
