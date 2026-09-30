@@ -71,6 +71,7 @@ import NavBottomStrip from './NavBottomStrip'
 import NavStatsSheet from './NavStatsSheet'
 import NavToolsSheet from './NavToolsSheet'
 import { findGuideTextForPoi } from '@/lib/navigation/poiGuideText'
+import { usePoiTexts } from './usePoiTexts'
 import ParkingSpotControl from './ParkingSpotControl'
 import { buildSlopeSegments } from '@/lib/navigation/routeSlopeSegments'
 import { readHighContrastPref, writeHighContrastPref } from '@/lib/navigation/highContrastPref'
@@ -369,6 +370,9 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   // Wikipedia già esistente), anche se lo stesso POI ha già una nota cachata da un altro sentiero.
   const hasLuoghiGuide = (hike.cachedGuide ?? '').includes('I luoghi da non perdere')
   const poiNotesById = usePoiNotes(hike.id, pois.map((p) => p.id), hasLuoghiGuide)
+  const poiTextsById = usePoiTexts(hike.id)
+  const poiTextsByIdRef = useRef(poiTextsById)
+  poiTextsByIdRef.current = poiTextsById
 
   // Confini di tappa di un Borgo/Città su più giornate (Navigator "Modalità A", sessione
   // conversazionale) — merge con i moments morfologici già esistenti (climb_start/viewpoint, vuoti
@@ -446,8 +450,9 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
     // luogo (testo già sul dispositivo, quindi disponibile anche offline). L'estratto Wikipedia
     // sotto i ~250 caratteri è un semplice incipit: se la guida ha di più, lo si preferisce.
     const wikiText = wiki?.extract
-    const guideText = (!note && (!wikiText || wikiText.length < 250)) ? findGuideTextForPoi(hike.cachedGuide ?? '', poi.name) : null
-    const extract = note ?? guideText ?? wikiText
+    const bundled = poiTextsByIdRef.current.get(Number(poi.id))
+    const guideText = (!note && !bundled && (!wikiText || wikiText.length < 250)) ? findGuideTextForPoi(hike.cachedGuide ?? '', poi.name) : null
+    const extract = note ?? bundled ?? guideText ?? wikiText
     return { title: poi.name ?? 'Punto di interesse', extract, imageUrl: wiki?.thumbnail }
   }
 
@@ -865,12 +870,16 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
     if (!isOnline && mapMode !== 'offline') setMapMode('offline')
   }, [isOnline, mapMode])
 
+  // Ripiego estremo: mappa Leaflet (senza rotazione) se MapLibre non parte (niente WebGL).
+  const [leafletFallback, setLeafletFallback] = useState(false)
   const handleMapStyleFailed = (reason: string) => {
     // NavigationMapLibre already console.error's the detailed reason (key
     // missing/rejected, network, timeout...) — kept out of this user-facing
     // notice on purpose, but surfaced here too in case this handler is ever
     // reached without that log (e.g. future callers).
     console.error('[ActiveNavigationView] falling back to offline map:', reason)
+    // Già sulla mappa offline (MapLibre) e fallisce ancora: senza WebGL si passa a Leaflet.
+    if (mapMode === 'offline') { setLeafletFallback(true); return }
     setMapMode('offline')
     setMapFallbackNotice(true)
     setTimeout(() => setMapFallbackNotice(false), 5000)
@@ -1158,7 +1167,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
 
   return (
     <div className="fixed inset-0 z-[2000] bg-stone-900 font-body">
-      {mapMode === 'offline' ? (
+      {mapMode === 'offline' && leafletFallback ? (
         <NavigationMap
           ref={mapHandleRef}
           routePolyline={routePolyline} pois={pois} position={position} bearingDeg={bearing} state={state}
@@ -1190,7 +1199,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         className="absolute right-3 z-10 flex flex-col items-center gap-2 lg:hidden"
         style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 12.5rem)' }}
       >
-        {mapMode !== 'offline' && (
+        {!(mapMode === 'offline' && leafletFallback) && (
           <button
             onClick={toggleHeadingUp}
             aria-pressed={headingUp}
@@ -1500,7 +1509,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         <OfflinePackageDownloader
           hikeId={hike.id}
           routePolyline={routePolyline}
-          hikeData={{ trackPoints: hike.trackPoints, cachedPois: hike.cachedPois }}
+          hikeData={{ trackPoints: hike.trackPoints, cachedPois: hike.cachedPois, cachedPoiWiki: hike.cachedPoiWiki, cachedGuide: hike.cachedGuide }}
         />
       </Sheet>
 

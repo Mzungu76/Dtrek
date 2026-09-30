@@ -103,7 +103,7 @@ export default function PercorsiPage() {
                       <OfflinePackageDownloader
                         hikeId={hike.id}
                         routePolyline={polyline}
-                        hikeData={{ cachedPois: hike.cachedPois }}
+                        hikeData={{ cachedPois: hike.cachedPois, cachedPoiWiki: hike.cachedPoiWiki, cachedGuide: hike.cachedGuide }}
                         compact
                       />
                     </div>

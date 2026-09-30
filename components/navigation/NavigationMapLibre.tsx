@@ -21,7 +21,9 @@ interface Props {
    *  ciò che sta davanti all'escursionista è sempre in alto sullo schermo. Solo con il follow attivo. */
   headingUp?: boolean
   state: NavState
-  styleId: MapTilerStyleId
+  /** 'offline' = tile raster proxy /api/tile (le stesse salvate dal pacchetto offline), senza
+   *  MapTiler: funziona senza rete e senza chiave, e ruota come le altre. */
+  styleId: MapTilerStyleId | 'offline'
   is3D: boolean
   /** Layer toggles (NavLayerRail) — default true/true/null when omitted, matching the always-on
    *  behavior before these toggles existed. */
@@ -131,6 +133,33 @@ const NEARBY_TRAIL_MIN_LABEL_LENGTH_M = 60
 function initialZoomFor(is3D: boolean): number { return is3D ? 13 : 15 }
 function followZoomFor(is3D: boolean): number { return is3D ? 14.5 : 16 }
 
+const OFFLINE_TILE_MAX_ZOOM_OFFLINE = 16 // il pacchetto offline scarica fino a z16 (lib/offline/packageManager.ts)
+
+/** Stile raster minimale sulle tile del proxy /api/tile — le richieste passano dal service worker,
+ *  che le serve dalla cache del pacchetto scaricato quando non c'è rete. URL assoluto: i worker di
+ *  MapLibre non risolvono quelli relativi. Senza rete la sorgente si ferma a z16 e MapLibre
+ *  ingrandisce l'ultimo livello disponibile invece di lasciare il vuoto. */
+function offlineRasterStyle() {
+  const online = typeof navigator === 'undefined' || navigator.onLine
+  return {
+    version: 8 as const,
+    sources: {
+      'dtrek-offline-base': {
+        type: 'raster' as const,
+        tiles: [`${window.location.origin}/api/tile?z={z}&x={x}&y={y}&style=voyager`],
+        tileSize: 256,
+        maxzoom: online ? 18 : OFFLINE_TILE_MAX_ZOOM_OFFLINE,
+        attribution: '© OpenStreetMap · CARTO',
+      },
+    },
+    layers: [{ id: 'dtrek-offline-base', type: 'raster' as const, source: 'dtrek-offline-base' }],
+  }
+}
+
+function resolveStyle(id: MapTilerStyleId | 'offline') {
+  return id === 'offline' ? offlineRasterStyle() : maptilerStyleUrl(id)
+}
+
 /**
  * MapLibre GL variant of the navigation map: online only (needs MapTiler
  * vector tiles/styles, not part of the offline package — see
@@ -164,6 +193,8 @@ const NavigationMapLibre = forwardRef<NavigationMapLibreHandle, Props>(function 
   // the current is3D value instead of whatever it was when first attached.
   const is3DRef = useRef(is3D)
   is3DRef.current = is3D
+  const styleIdRef = useRef(styleId)
+  styleIdRef.current = styleId
   // Same stale-closure concern as is3DRef — updateAccuracyCircle() is called
   // from the 'load'/'style.load' listeners registered once at mount.
   const accuracyMRef = useRef(accuracyM)
@@ -211,8 +242,17 @@ const NavigationMapLibre = forwardRef<NavigationMapLibreHandle, Props>(function 
    * HAR capture — to abort in-flight requests and fall back to the offline
    * map over what should have been a shrug-and-continue.
    */
-  const armStyleWatchdog = (map: any, styleUrl: string) => {
+  const armStyleWatchdog = (map: any, styleUrl: string | null) => {
     setStyleLoading(true)
+    // Stile offline (oggetto, nessun style.json da interrogare): nessun watchdog, e i tile mancanti
+    // non sono un errore dello stile — si segue solo il caricamento.
+    if (styleUrl == null) {
+      if (styleWatchdog.current) { clearTimeout(styleWatchdog.current); styleWatchdog.current = null }
+      if (errorListener.current) { map.off('error', errorListener.current); errorListener.current = null }
+      if (dataListener.current) { map.off('data', dataListener.current); dataListener.current = null }
+      map.once('style.load', () => setStyleLoading(false))
+      return
+    }
     if (styleWatchdog.current) clearTimeout(styleWatchdog.current)
     if (errorListener.current) { map.off('error', errorListener.current); errorListener.current = null }
     if (dataListener.current) { map.off('data', dataListener.current); dataListener.current = null }
@@ -382,6 +422,8 @@ const NavigationMapLibre = forwardRef<NavigationMapLibreHandle, Props>(function 
       filter: ['==', ['geometry-type'], 'LineString'],
       paint: { 'line-color': NEARBY_TRAIL_COLOR, 'line-width': 2, 'line-opacity': 0.8, 'line-dasharray': [2, 2] },
     })
+    // Le etichette di testo richiedono i glyph dello stile MapTiler: nello stile offline non ci sono.
+    if (styleIdRef.current === 'offline') return
     map.addLayer({
       id: NEARBY_TRAILS_LABEL_LAYER_ID, type: 'symbol', source: NEARBY_TRAILS_SOURCE_ID,
       filter: ['==', ['geometry-type'], 'Point'],
@@ -405,6 +447,7 @@ const NavigationMapLibre = forwardRef<NavigationMapLibreHandle, Props>(function 
   // triggered the offline fallback — this try/catch, plus keeping this
   // failure entirely out of reportFailure(), is the fix.
   const setupTerrain = (map: any) => {
+    if (styleIdRef.current === 'offline') return // il rilievo 3D richiede MapTiler (online)
     try {
       if (!map.getSource(TERRAIN_SOURCE_ID)) {
         map.addSource(TERRAIN_SOURCE_ID, {
@@ -431,14 +474,20 @@ const NavigationMapLibre = forwardRef<NavigationMapLibreHandle, Props>(function 
       if (cancelled || !containerRef.current || mapRef.current) return
       const maplibregl = mod.default ?? mod
       const start: [number, number] = routePolyline[0] ? [routePolyline[0][1], routePolyline[0][0]] : [12.5, 41.9]
-      const styleUrl = maptilerStyleUrl(styleId)
-      const map = new maplibregl.Map({
-        container: containerRef.current,
-        style: styleUrl,
-        center: start, zoom: initialZoomFor(is3D), pitch: is3D ? 55 : 0, bearing: 0,
-      })
+      let map: any
+      try {
+        map = new maplibregl.Map({
+          container: containerRef.current,
+          style: resolveStyle(styleId) as any,
+          center: start, zoom: initialZoomFor(is3D), pitch: is3D && styleId !== 'offline' ? 55 : 0, bearing: 0,
+        })
+      } catch (err) {
+        // Nessun WebGL (raro): il chiamante ripiega sulla mappa Leaflet.
+        reportFailure(`map init failed: ${err}`)
+        return
+      }
       mapRef.current = map
-      armStyleWatchdog(map, styleUrl)
+      armStyleWatchdog(map, styleId === 'offline' ? null : maptilerStyleUrl(styleId))
 
       // Unlike Leaflet, MapLibre GL sizes its WebGL canvas from the
       // container's bounding rect at construction time and never revisits
@@ -493,9 +542,8 @@ const NavigationMapLibre = forwardRef<NavigationMapLibreHandle, Props>(function 
 
   useEffect(() => {
     if (!mapRef.current) return
-    const styleUrl = maptilerStyleUrl(styleId)
-    armStyleWatchdog(mapRef.current, styleUrl)
-    mapRef.current.setStyle(styleUrl)
+    armStyleWatchdog(mapRef.current, styleId === 'offline' ? null : maptilerStyleUrl(styleId))
+    mapRef.current.setStyle(resolveStyle(styleId) as any)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [styleId])
 

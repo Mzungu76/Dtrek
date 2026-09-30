@@ -2,6 +2,8 @@ import { runWithConcurrency } from '@/lib/promisePool'
 import { lsGet, lsSet } from '@/lib/localStore'
 import { fetchAndSaveTrailGraph, deleteTrailGraph, loadTrailGraph, applyElevationsToTrailGraph } from '@/lib/navigation/trailGraphStore'
 import { fetchAndSavePoiNotes, deletePoiNotes } from '@/lib/offline/poiNotesStore'
+import { buildAndSavePoiTexts, deletePoiTexts } from '@/lib/offline/poiTextStore'
+import type { WikiPage } from '@/lib/wikipedia'
 import { buildElevationProfile } from '@/lib/navigation/elevationProfile'
 import { buildRouteInstructions } from '@/lib/navigation/routeInstructions'
 import { detectRouteMoments } from '@/lib/navigation/routeMoments'
@@ -76,6 +78,10 @@ export interface DownloadProgress {
 export interface OfflinePackageHikeData {
   trackPoints?: TrackPoint[]
   cachedPois?: unknown[]
+  /** Pagine Wikipedia già associate ai POI e testo della guida: da qui si ricavano i testi estesi
+   *  dei luoghi salvati per l'uso offline (lib/offline/poiTextStore.ts). */
+  cachedPoiWiki?: unknown[]
+  cachedGuide?: string
 }
 
 /**
@@ -197,6 +203,22 @@ export async function downloadOfflinePackage(
     }
   }
 
+  // Testi estesi dei luoghi (guida del percorso + articolo Wikipedia), così la scheda di ogni POI ha
+  // qualcosa da leggere anche senza rete. Best-effort come le note sopra: mai un motivo per far
+  // fallire un pacchetto tile altrimenti completo. Rifatto a ogni scarico (la guida può essere
+  // cambiata dopo il primo).
+  if (complete) {
+    try {
+      const pois = (hikeData?.cachedPois ?? []) as { id: number; name?: string }[]
+      manifest.poiTextsCount = await buildAndSavePoiTexts(
+        hikeId, pois, (hikeData?.cachedPoiWiki ?? []) as { poi: { id: number; name?: string }; wiki: WikiPage }[], hikeData?.cachedGuide ?? '',
+      )
+      manifest.hasPoiTexts = true
+    } catch {
+      manifest.hasPoiTexts = false
+    }
+  }
+
   // Readiness signals for the rest of the package (roadmap Fase 6) — all pure functions of data
   // already on the cached PlannedHike record, nothing to fetch, just recorded here so a hiker can
   // be warned before losing signal if the *source* data (trackPoint altitude, cachedPois) turns
@@ -263,6 +285,7 @@ export async function deleteOfflinePackage(hikeId: string): Promise<void> {
   await deleteManifest(hikeId)
   await deleteTrailGraph(hikeId)
   await deletePoiNotes(hikeId)
+  await deletePoiTexts(hikeId)
 }
 
 const PREFETCH_RADIUS_KM = 3
