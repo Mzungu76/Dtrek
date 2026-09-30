@@ -1184,11 +1184,20 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [turnBackNow])
 
-  // Sempre visibile, anche in "Solo mappa": situazioni in cui l'utente deve poter agire o leggere.
+  // Situazioni in cui l'utente deve poter agire o leggere: niente auto-nascondimento e, quando iniziano,
+  // i controlli riappaiono.
   const criticalUi = state === 'off_route' || state === 'wrong_direction' || state === 'gps_lost' || (turnBackNow && !turnBackDismissed)
   const anySheetOpen = showTools || showStatsSheet || showOfflineSheet || showLiveShareSheet || showOnboarding
     || !!callout || !!activeEpochCallout || showFieldNote || showSpeciesIdentify || escapeSheetOpen || showConfirmEnd || !!tappaComplete
-  const hideUi = uiHidden && !criticalUi
+  // "Solo mappa" è una scelta esplicita: la rispetta anche in situazioni critiche (prima li forzava
+  // sempre visibili, così dopo il primo fuori percorso l'occhio sembrava non fare più niente).
+  // Una situazione critica che INIZIA rimostra però i controlli una volta (effetto qui sotto).
+  const hideUi = uiHidden
+  const prevCriticalRef = useRef(false)
+  useEffect(() => {
+    if (criticalUi && !prevCriticalRef.current) setUiHidden(false)
+    prevCriticalRef.current = criticalUi
+  }, [criticalUi])
 
   useEffect(() => {
     if (!autoHide || uiHidden || anySheetOpen || criticalUi) return
