@@ -19,7 +19,7 @@
 -- ═══════════════════════════════════════════════════════════
 
 ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS meta_type TEXT NOT NULL DEFAULT 'sentiero'
-  CHECK (meta_type IN ('sentiero', 'borgo_citta', 'sito'));
+  CHECK (meta_type IN ('sentiero', 'borgo_citta', 'sito', 'cammino'));
 
 ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS site_type TEXT
   CHECK (site_type IS NULL OR site_type IN (

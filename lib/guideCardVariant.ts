@@ -36,7 +36,7 @@ export function metaEligibleForHikingScores(hike: {
   routePolyline?: [number, number][]
 }): boolean {
   const metaType = hike.metaType ?? 'sentiero'
-  if (metaType === 'sentiero') return true
+  if (metaType === 'sentiero' || metaType === 'cammino') return true
   if (metaType === 'borgo_citta') return borgoCardVariant(hike) === 'trekking_misto'
   return false
 }

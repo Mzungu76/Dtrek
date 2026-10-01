@@ -687,7 +687,7 @@ export default function GuidaHub({ id }: { id?: string }) {
   // stesso (che il filtro restringe): il conteggio deve sempre riflettere il totale disponibile,
   // non quanti ne restano dopo aver già filtrato.
   const typeCounts = useMemo(() => {
-    const counts: Record<MetaType, number> = { sentiero: 0, borgo_citta: 0, sito: 0 }
+    const counts: Record<MetaType, number> = { sentiero: 0, borgo_citta: 0, sito: 0, cammino: 0 }
     for (const it of items) {
       // Una Guida Sito nested (piano §51.4) non compare mai nella lista "Siti" — il conteggio sul
       // chip del filtro deve riflettere quante se ne vedranno davvero aprendolo, non il totale.

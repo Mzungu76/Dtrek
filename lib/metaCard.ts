@@ -48,6 +48,7 @@ function sitoCardStats(item: MetaSearchResultItem): CardStat[] {
 export function metaCardStats(item: MetaSearchResultItem): CardStat[] {
   switch (item.metaType) {
     case 'sentiero':    return hikeCardStats(item)
+    case 'cammino':     return hikeCardStats(item)
     case 'borgo_citta': return borgoCardStats()
     case 'sito':        return sitoCardStats(item)
   }

@@ -1,7 +1,7 @@
 import type { LucideIcon } from 'lucide-react'
 import {
   Mountain, Building2, Landmark, Palette, Castle, Church, Pyramid, Theater,
-  Waves, Gem, MountainSnow, Trees, MapPin,
+  Waves, Gem, MountainSnow, Trees, MapPin, Route,
 } from 'lucide-react'
 
 // Tipologia di Meta scelta esplicitamente dall'utente (docs/piano-mete-multitipologia.md §1) —
@@ -10,7 +10,11 @@ import {
 // supabase/migrations/add_meta_type_columns.sql), quindi il valore è sempre presente lato server;
 // resta opzionale a livello di tipo TS solo per i punti client che costruiscono un PlannedHike
 // prima del round-trip col server.
-export type MetaType = 'sentiero' | 'borgo_citta' | 'sito'
+//
+// 'cammino' (docs/piano-cammini.md): itinerario a piedi di più giorni, composto da tappe reali in
+// sequenza — una sola Guida con tappe interne. A differenza di un borgo ha sempre metriche
+// escursionistiche (calcolate per tappa).
+export type MetaType = 'sentiero' | 'borgo_citta' | 'sito' | 'cammino'
 
 // Categoria Dtrek per una Meta borgo_citta (piano §6) — mai dedotta da "Comune = Borgo": una
 // classificazione propria, separata dall'entità amministrativa ISTAT. Non ancora assegnata dalla
@@ -97,6 +101,15 @@ export const META_TYPE_CONFIG: Record<MetaType, MetaTypeConfig> = {
     hikingMetrics:     false,
     color:             '#5F7355',
   },
+  cammino: {
+    label:             'Cammino',
+    pluralLabel:       'Cammini',
+    description:       'Un itinerario a piedi di più giorni, tappa per tappa.',
+    icon:              Route,
+    searchPlaceholder: 'Cerca un cammino...',
+    hikingMetrics:     true,
+    color:             '#9A7B3F',
+  },
 }
 
 export const SITE_TYPE_CONFIG: Record<SiteType, SiteTypeConfig> = {
@@ -120,7 +133,7 @@ export const SITE_TYPE_CONFIG: Record<SiteType, SiteTypeConfig> = {
 // stimato sparirebbe dal budget della tappa come se non richiedesse nulla).
 export const DEFAULT_VISIT_MINUTES = SITE_TYPE_CONFIG.altro.visitMinutes
 
-export const META_TYPES: MetaType[] = ['sentiero', 'borgo_citta', 'sito']
+export const META_TYPES: MetaType[] = ['sentiero', 'borgo_citta', 'sito', 'cammino']
 export const SITE_TYPES: SiteType[] = Object.keys(SITE_TYPE_CONFIG) as SiteType[]
 
 export function isMetaType(value: unknown): value is MetaType {

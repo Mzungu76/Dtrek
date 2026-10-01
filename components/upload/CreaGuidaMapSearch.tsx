@@ -47,7 +47,7 @@ const PLACE_ZOOM = 13
 // storico) farebbero zoomare fino al singolo isolato.
 const PERSONALIZE_MAX_ZOOM = 15
 
-const GLYPH: Record<MetaType, string> = { borgo_citta: '🏘️', sito: '🏛️', sentiero: '🥾' }
+const GLYPH: Record<MetaType, string> = { borgo_citta: '🏘️', sito: '🏛️', sentiero: '🥾', cammino: '🧭' }
 
 type Selected =
   | { kind: 'meta'; item: MetaSearchResultItem }
