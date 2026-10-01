@@ -3,7 +3,7 @@ import { polylineLengthM, type LatLon } from '../../../lib/cammini/geometry'
 import { REGISTRY, type RegistryEntry } from '../../../lib/cammini/registry'
 import type { OverpassRelation } from '../cammini/build'
 import { assessQuality, buildFromRegistry, stageLabel, type WayGeometry } from '../cammini/buildRegistry'
-import { orientNamesByGeometry, propagateSharedEndpoints, type TappaDraft } from '../../../lib/cammini/tappe'
+import { canonicalizeEndpointNames, orientNamesByGeometry, propagateSharedEndpoints, type TappaDraft } from '../../../lib/cammini/tappe'
 import { relationsQuery, waysQuery } from '../cammini/import-registry'
 
 // Linea nord→sud lungo un meridiano: 0.001° di latitudine ≈ 111 m.
@@ -190,5 +190,33 @@ describe('capi delle tappe', () => {
     const [res] = buildFromRegistry(entry('cammino-san-benedetto'), rels, ways, [], { isItalian: italian })
     expect(res.built.tappe.map(x => x.name)).toEqual(['Tappa 01', 'Tappa 02', 'Tappa 03'])
     expect(res.built.tappe.every(x => x.fromName && x.toName)).toBe(true)
+  })
+})
+
+describe('refusi nei nomi dei capi', () => {
+  const t = (from: string, to: string): TappaDraft => ({
+    ordinal: 1, name: 'T', fromName: from, toName: to, lengthM: 20000, polyline: meridian(43.0, 42.8), source: 'official',
+  })
+  const anchors = [
+    { id: 'a', name: 'Arpino', lat: 43.0, lon: 12 },
+    { id: 'r', name: 'Roccasecca', lat: 42.8, lon: 12 },
+    { id: 'lontano', name: 'Arpinello', lat: 30.0, lon: 12 },
+  ]
+
+  it('corregge "Aripino" in Arpino usando il paese vicino, e ne prende il collegamento', () => {
+    const x = t('Aripino', 'Roccasecca')
+    canonicalizeEndpointNames([x], anchors)
+    expect(x.fromName).toBe('Arpino')
+    expect(x.fromAnchorId).toBe('a')
+    expect(x.toAnchorId).toBe('r')
+  })
+
+  it('non cambia un nome diverso da ogni paese vicino, né usa paesi lontani', () => {
+    const x = t('Montecassio', 'Roccasecca')
+    canonicalizeEndpointNames([x], anchors)
+    expect(x.fromName).toBe('Montecassio')
+    const y = t('Arpinello', 'Roccasecca') // esiste solo a 1500 km: non si usa
+    canonicalizeEndpointNames([y], anchors)
+    expect(y.fromName).toBe('Arpinello')
   })
 })

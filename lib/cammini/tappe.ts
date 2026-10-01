@@ -219,3 +219,40 @@ export function propagateSharedEndpoints(tappe: TappaDraft[]): TappaDraft[] {
   }
   return tappe
 }
+
+function editDistance(a: string, b: string): number {
+  const dp = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)] as number[])
+  for (let j = 0; j <= b.length; j++) dp[0][j] = j
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) {
+    dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1))
+  }
+  return dp[a.length][b.length]
+}
+
+/**
+ * I nomi dei capi vengono da tag OSM scritti a mano e hanno refusi ("Aripino" per Arpino). Se vicino a
+ * uno dei due estremi della tappa (entro `snapM`) c'è un paese del catalogo il cui nome differisce di
+ * pochissimo (≤2 lettere e ≤25% del nome), si usa il nome del catalogo e se ne prende il collegamento.
+ * Un nome che non assomiglia a nessun paese vicino resta com'è: mai sostituito a caso.
+ */
+export function canonicalizeEndpointNames(tappe: TappaDraft[], anchors: TappaAnchor[], snapM = 5000): TappaDraft[] {
+  const fix = (name: string | undefined, ends: LatLon[]): { name: string; id: string } | null => {
+    if (!name) return null
+    const key = norm(name)
+    let best: { a: TappaAnchor; d: number } | null = null
+    for (const a of anchors) {
+      if (!ends.some(p => haversineM(a.lat, a.lon, p[0], p[1]) <= snapM)) continue
+      const d = editDistance(key, norm(a.name))
+      if (d <= 2 && d <= Math.max(1, Math.floor(key.length * 0.25)) && (!best || d < best.d)) best = { a, d }
+    }
+    return best ? { name: best.a.name, id: best.a.id } : null
+  }
+  for (const t of tappe) {
+    if (t.polyline.length < 2) continue
+    const ends = [t.polyline[0], t.polyline[t.polyline.length - 1]]
+    const f = fix(t.fromName, ends), to = fix(t.toName, ends)
+    if (f) { t.fromName = f.name; t.fromAnchorId = f.id }
+    if (to) { t.toName = to.name; t.toAnchorId = to.id }
+  }
+  return tappe
+}

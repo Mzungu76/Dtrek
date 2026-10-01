@@ -2,7 +2,7 @@ import { anchorsNearLine, nearestVertex, orderAlongRoute, polylineLengthM, stitc
 import { familyKey } from '../../../lib/cammini/discovery'
 import type { RegistryEntry } from '../../../lib/cammini/registry'
 import {
-  fillEndpointsFromAnchors, orientNamesByGeometry, parseTappaEndpoints, parseTappaNumber, propagateSharedEndpoints, simplifyTappa, splitIntoTappe,
+  canonicalizeEndpointNames, fillEndpointsFromAnchors, orientNamesByGeometry, parseTappaEndpoints, parseTappaNumber, propagateSharedEndpoints, simplifyTappa, splitIntoTappe,
   type SplitOptions, type TappaAnchor, type TappaDraft,
 } from '../../../lib/cammini/tappe'
 import type { BuiltCammino, OverpassRelation } from './build'
@@ -162,6 +162,7 @@ export function buildFromRegistry(
   if (gaps > 0) diagnostics.push(`${gaps} collegamenti fra tappe con salto > 500 m.`)
   // "A - B" è il verso della relazione, non necessariamente quello in cui abbiamo messo in fila la
   // tappa: i capi si orientano confrontando i nomi con la posizione dei paesi, poi coi vicini.
+  canonicalizeEndpointNames(tappe, anchorsAll)
   orientNamesByGeometry(tappe, anchorsAll)
   fillEndpointsFromAnchors(tappe, anchors)
   // Un capo ancora senza nome: borghi un po' più lontani (frazioni, passi), poi il nome dell'altro lato
