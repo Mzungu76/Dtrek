@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { polylineLengthM, type LatLon } from '../../../lib/cammini/geometry'
 import { REGISTRY, type RegistryEntry } from '../../../lib/cammini/registry'
 import type { OverpassRelation } from '../cammini/build'
-import { assessQuality, buildFromRegistry, type WayGeometry } from '../cammini/buildRegistry'
+import { assessQuality, buildFromRegistry, stageLabel, type WayGeometry } from '../cammini/buildRegistry'
+import { orientNamesByGeometry, propagateSharedEndpoints, type TappaDraft } from '../../../lib/cammini/tappe'
 import { relationsQuery, waysQuery } from '../cammini/import-registry'
 
 // Linea nord→sud lungo un meridiano: 0.001° di latitudine ≈ 111 m.
@@ -135,5 +136,59 @@ describe('query di import', () => {
     expect(q).not.toMatch(/bicycle|mtb/)
     expect(q).toContain("Cammino di Sant'Antonio")
     expect(waysQuery([1, 2, 3])).toContain('way(id:1,2,3)')
+  })
+})
+
+describe('capi delle tappe', () => {
+  const t = (from: string | undefined, to: string | undefined, line: LatLon[]): TappaDraft => ({
+    ordinal: 1, name: 'T', fromName: from, toName: to, lengthM: polylineLengthM(line), polyline: line, source: 'official',
+  })
+
+  it('i nomi "A - B" si orientano sul verso in cui si cammina, usando la posizione dei paesi', () => {
+    // La relazione dice "Paese Sud - Paese Nord" ma la linea è messa in fila da nord a sud.
+    const tappa = t('Paese Sud', 'Paese Nord', meridian(43.0, 42.8))
+    const anchors = [
+      { id: 'n', name: 'Paese Nord', lat: 43.0, lon: 12 },
+      { id: 's', name: 'Paese Sud', lat: 42.8, lon: 12 },
+    ]
+    orientNamesByGeometry([tappa], anchors)
+    expect(tappa.fromName).toBe('Paese Nord')
+    expect(tappa.toName).toBe('Paese Sud')
+  })
+
+  it('non scambia se i nomi sono già nel verso giusto', () => {
+    const tappa = t('Paese Nord', 'Paese Sud', meridian(43.0, 42.8))
+    orientNamesByGeometry([tappa], [{ id: 'n', name: 'Paese Nord', lat: 43.0, lon: 12 }, { id: 's', name: 'Paese Sud', lat: 42.8, lon: 12 }])
+    expect(tappa.fromName).toBe('Paese Nord')
+  })
+
+  it('senza paesi nel catalogo usa il vicino: due tappe che finiscono nello stesso paese sono una girata', () => {
+    const a = t('A', 'B', meridian(43.0, 42.8))
+    const b = t('C', 'B', meridian(42.8, 42.6)) // dovrebbe essere B → C
+    orientNamesByGeometry([a, b], [])
+    expect(b.fromName).toBe('B')
+    expect(b.toName).toBe('C')
+  })
+
+  it('un capo senza nome prende quello dell\'altro lato della giunzione; se nessuno lo sa resta senza', () => {
+    const a = t('Collepardo', undefined, meridian(43.0, 42.8))
+    const b = t('Vico', 'Arpino', meridian(42.8, 42.6))
+    propagateSharedEndpoints([a, b])
+    expect(a.toName).toBe('Vico')
+    const c = t('X', undefined, meridian(43.0, 42.8)), d = t(undefined, 'Y', meridian(42.8, 42.6))
+    propagateSharedEndpoints([c, d])
+    expect(c.toName).toBeUndefined()
+    expect(d.fromName).toBeUndefined()
+  })
+
+  it('usa i tag from/to della relazione e toglie il nome del cammino dal nome della tappa', () => {
+    expect(stageLabel('Cammino di San Benedetto - Tappa 01')).toBe('Tappa 01')
+    expect(stageLabel('Tappa 5')).toBe('Tappa 5')
+    const { rels, ways } = stages('Cammino di San Benedetto', 43.0, 3)
+    // Tolgo i nomi "A - B" dal titolo e li metto nei tag from/to.
+    rels.forEach((r, i) => { r.tags = { route: 'hiking', name: `Cammino di San Benedetto - Tappa 0${i + 1}`, from: `Da ${i}`, to: `A ${i}` } })
+    const [res] = buildFromRegistry(entry('cammino-san-benedetto'), rels, ways, [], { isItalian: italian })
+    expect(res.built.tappe.map(x => x.name)).toEqual(['Tappa 01', 'Tappa 02', 'Tappa 03'])
+    expect(res.built.tappe.every(x => x.fromName && x.toName)).toBe(true)
   })
 })

@@ -171,3 +171,51 @@ export function fillEndpointsFromAnchors(tappe: TappaDraft[], anchors: TappaAnch
   }
   return tappe
 }
+
+const norm = (n: string | undefined) => (n ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim()
+
+function swapEndpoints(t: TappaDraft) {
+  const { fromName, toName, fromAnchorId, toAnchorId } = t
+  t.fromName = toName; t.toName = fromName
+  t.fromAnchorId = toAnchorId; t.toAnchorId = fromAnchorId
+}
+
+/**
+ * Il nome "A - B" di una tappa ufficiale dà il verso della RELAZIONE, ma la linea è stata ricomposta
+ * e messa in fila in un verso qualsiasi: i capi vanno orientati sul verso in cui si cammina.
+ * Con i paesi nel catalogo: "da" è il capo più vicino al primo punto. Senza (nessun paese col nome
+ * esatto), si usa il vicino: se il "a" coincide col "a" della tappa precedente, i capi sono scambiati.
+ * Mai un nome inventato: si decide solo fra i nomi che la fonte ha già dato.
+ */
+export function orientNamesByGeometry(tappe: TappaDraft[], anchors: TappaAnchor[]): TappaDraft[] {
+  const byName = new Map<string, TappaAnchor>()
+  for (const a of anchors) { const k = norm(a.name); if (k && !byName.has(k)) byName.set(k, a) }
+  const d = (a: TappaAnchor, p: LatLon) => haversineM(a.lat, a.lon, p[0], p[1])
+  tappe.forEach((t, i) => {
+    if (t.polyline.length < 2 || !(t.fromName && t.toName)) return
+    const start = t.polyline[0], end = t.polyline[t.polyline.length - 1]
+    const fa = byName.get(norm(t.fromName)), ta = byName.get(norm(t.toName))
+    if (fa && ta) {
+      if (d(ta, start) + d(fa, end) < d(fa, start) + d(ta, end)) swapEndpoints(t)
+      return
+    }
+    const prev = tappe[i - 1]
+    if (prev?.toName && norm(prev.toName) === norm(t.toName) && norm(prev.toName) !== norm(t.fromName)) { swapEndpoints(t); return }
+    if (prev?.fromName && norm(prev.fromName) === norm(t.fromName) && norm(prev.toName) !== norm(t.toName)) swapEndpoints(t)
+  })
+  return tappe
+}
+
+/**
+ * Due tappe consecutive condividono il punto di giunzione: se un capo non ha nome ma l'altro lato
+ * della giunzione sì (Collepardo → ? / ? → Arpino con un nome noto su un lato), il nome è lo stesso.
+ * Mai un nome inventato: se nessuno dei due lati lo conosce, resta senza.
+ */
+export function propagateSharedEndpoints(tappe: TappaDraft[]): TappaDraft[] {
+  for (let i = 0; i < tappe.length - 1; i++) {
+    const a = tappe[i], b = tappe[i + 1]
+    if (!a.toName && b.fromName) { a.toName = b.fromName; a.toAnchorId = b.fromAnchorId }
+    else if (!b.fromName && a.toName) { b.fromName = a.toName; b.fromAnchorId = a.toAnchorId }
+  }
+  return tappe
+}
