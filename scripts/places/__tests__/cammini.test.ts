@@ -228,14 +228,14 @@ describe('overpassQuery', () => {
 })
 
 import { discoveryQuery, toDiscoveryRelations, toMarkdown } from '../cammini/discover'
-import { evaluateAll } from '../../../lib/cammini/discovery'
+import { evaluateAll, groupFamilies } from '../../../lib/cammini/discovery'
 
 describe('discover (query e parsing)', () => {
   it('la query chiede solo cammini a piedi, senza geometria', () => {
     const q = discoveryQuery(41.2, 43.8)
     expect(q).toContain('hiking|foot')
     expect(q).not.toMatch(/bicycle|mtb|geom/)
-    expect(q).toContain('out body;')
+    expect(q).toContain('out body center;')
   })
 
   it('conta way e figli dai membri e deduplica per id', () => {
@@ -253,8 +253,9 @@ describe('discover (query e parsing)', () => {
     const rels = toDiscoveryRelations([
       { type: 'relation', id: 5, tags: { name: 'Via Francigena', network: 'iwn', distance: '900', wikidata: 'Q1' }, members: [{ type: 'relation', ref: 6 }, { type: 'relation', ref: 7 }, { type: 'relation', ref: 8 }] },
     ])
-    const md = toMarkdown(evaluateAll(rels))
-    expect(md).toContain('Ammessi **1**')
+    const res = evaluateAll(rels)
+    const md = toMarkdown(res, groupFamilies(res))
+    expect(md).toContain('ammessi **1**')
     expect(md).toContain('relation/5')
   })
 })

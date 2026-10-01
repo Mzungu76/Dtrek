@@ -71,3 +71,102 @@ describe('evaluateAll', () => {
     expect(res[0].id).toBe(2)
   })
 })
+
+import { applyCountryCheck, familyKey, groupFamilies } from '../cammini/discovery'
+import { buildNearestFinder } from '../cammini/geoFilter'
+
+describe('tappe con sigla (dal primo giro reale)', () => {
+  it('Via Alpina Red R103 / Blue D18 / Yellow B1 sono tappe, non cammini', () => {
+    for (const name of ['Via Alpina Red R103', 'Via Alpina Blue D18', 'Via Alpina Yellow B1', 'Via Alpina Purple A9']) {
+      const r = evaluateRelation(rel(1, { name, network: 'iwn', distance: '17' }, 40))
+      expect(r.kind).toBe('tappa_o_figlio')
+      expect(r.verdict).toBe('scartato')
+    }
+  })
+
+  it('"Alta Via n. 1 delle Dolomiti" non è scambiata per una tappa', () => {
+    const r = evaluateRelation(rel(2, { name: 'Alta via n. 1 delle Dolomiti', network: 'rwn', distance: '125' }, 393))
+    expect(r.kind).toBe('cammino')
+    expect(r.verdict).toBe('ammesso')
+  })
+
+  it('un regionale con tante tappe (Sentiero Italia - Piemonte E00) resta un cammino', () => {
+    const r = evaluateRelation(rel(3, { name: 'Sentiero Italia - Piemonte E00', network: 'nwn' }, 0, Array.from({ length: 83 }, (_, i) => 1000 + i)))
+    expect(r.kind).toBe('cammino')
+  })
+
+  it('senza tracciato né figli non c\'è niente da importare', () => {
+    const r = evaluateRelation(rel(4, { name: 'Il cammin die San Romedio', network: 'iwn', distance: '192' }, 0, []))
+    expect(r.verdict).toBe('scartato')
+  })
+})
+
+describe('familyKey', () => {
+  it('riunisce i pezzi dello stesso cammino', () => {
+    expect(familyKey('Via Francigena - 07 Lazio')).toBe('via francigena')
+    expect(familyKey("Via Francigena - 01 Valle d'Aosta")).toBe('via francigena')
+    expect(familyKey('Via Francigena - Variante Parma')).toBe('via francigena')
+    expect(familyKey('Via Francigena - parte Francia - 04 Be')).toBe('via francigena')
+    expect(familyKey('Via Romea - Tratto Emilia')).toBe('via romea')
+    expect(familyKey('Via Romea Tratto Altoatesino')).toBe('via romea')
+    expect(familyKey('Via Alpina Red R103')).toBe('via alpina')
+    expect(familyKey('Via Alpina Blue D18')).toBe('via alpina')
+    expect(familyKey('Sentiero Italia - Basilicata T00')).toBe('sentiero italia')
+    expect(familyKey('Sentiero Italia - Piemonte E00')).toBe('sentiero italia')
+    expect(familyKey('Cammino di Assisi, Genova - San Miniato')).toBe('cammino di assisi')
+    expect(familyKey("Il Cammino di Sant'Antonio: Opzione Tappa 2")).toBe("il cammino di sant'antonio")
+  })
+
+  it('non confonde cammini diversi', () => {
+    expect(familyKey('Alta via n. 1 delle Dolomiti')).not.toBe(familyKey('Alta Via n. 2 delle Dolomiti'))
+  })
+})
+
+describe('groupFamilies', () => {
+  it('Via Francigena per regione = un solo cammino; il Kugy ripetuto = un solo cammino', () => {
+    const regions = ['01 Valle d\'Aosta', '02 Piemonte', '04 Emilia Romagna', '06 Toscana', '07 Lazio']
+    const rels = [
+      ...regions.map((r, i) => rel(10 + i, { name: `Via Francigena - ${r}`, network: 'iwn', distance: '150' }, 500, i === 4 ? [1, 2, 3, 4] : [])),
+      ...[1, 2, 3].map(i => rel(100 + i, { name: 'Sentiero dei tre paesi Julius Kugy', network: 'iwn', distance: '720' }, 50)),
+    ]
+    const fams = groupFamilies(evaluateAll(rels))
+    expect(fams.filter(f => f.verdict === 'ammesso')).toHaveLength(2)
+    const fr = fams.find(f => f.key === 'via francigena')!
+    expect(fr.name).toBe('Via Francigena')
+    expect(fr.members).toBe(5)
+    expect(fr.relationIds).toHaveLength(5)
+  })
+
+  it('un cammino fatto solo di tappe a sigla (Via Alpina) finisce da rivedere, non ammesso', () => {
+    const rels = Array.from({ length: 8 }, (_, i) => rel(200 + i, { name: `Via Alpina Red R${100 + i}`, network: 'iwn' }, 30))
+    const fam = groupFamilies(evaluateAll(rels))[0]
+    expect(fam.key).toBe('via alpina')
+    expect(fam.verdict).toBe('da_rivedere')
+    expect(fam.stageRelations).toBe(8)
+  })
+})
+
+describe('controllo Italia', () => {
+  const comuni = [{ lat: 45.0, lon: 7.0 }, { lat: 42.0, lon: 12.5 }]
+  const find = buildNearestFinder(comuni)
+
+  it('trova il comune più vicino', () => {
+    expect(find(42.0, 12.5)).toBeLessThan(1)
+    expect(find(42.1, 12.5)).toBeGreaterThan(8)
+    expect(find(42.1, 12.5)).toBeLessThan(14)
+  })
+
+  it('scarta il centro lontano dall\'Italia, rivede quello al confine, tiene quello dentro', () => {
+    const mk = (id: number, lat: number, lon: number) => rel(id, { name: 'Via Francigena', network: 'iwn', distance: '900', wikidata: 'Q1' }, 100, [1, 2, 3, 4])
+    const rels = [
+      { ...mk(1, 0, 0), center: { lat: 42.0, lon: 12.5 } },
+      { ...mk(2, 0, 0), center: { lat: 42.1, lon: 12.9 } },
+      { ...mk(3, 0, 0), center: { lat: 47.0, lon: 14.0 } },
+    ]
+    const res = applyCountryCheck(evaluateAll(rels), find)
+    const by = new Map(res.map(r => [r.id, r]))
+    expect(by.get(1)?.verdict).toBe('ammesso')
+    expect(by.get(3)?.verdict).toBe('scartato')
+    expect(by.get(3)?.reasons.join(' ')).toContain('fuori Italia')
+  })
+})

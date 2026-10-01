@@ -10,6 +10,8 @@ export interface DiscoveryRelation {
   wayMembers: number
   /** Id delle sotto-relazioni (tappe o varianti) di cui questa è madre. */
   childIds: number[]
+  /** Centro della relazione (Overpass `out center`), se noto: serve a escludere i cammini esteri. */
+  center?: { lat: number; lon: number }
 }
 
 export type DiscoveryVerdict = 'ammesso' | 'da_rivedere' | 'scartato'
@@ -27,6 +29,9 @@ export interface DiscoveryResult {
   childCount: number
   /** Id della relazione madre ammessa/candidata, se questa è una tappa o una sua parte. */
   parentId?: number
+  center?: { lat: number; lon: number }
+  /** Distanza in km dal comune italiano più vicino al centro: undefined se non verificata. */
+  italyDistanceKm?: number
   score: number
   kind: DiscoveryKind
   verdict: DiscoveryVerdict
@@ -42,7 +47,11 @@ export const ADMIT_SCORE = 60
 export const REVIEW_SCORE = 35
 
 const NAME_KEYWORDS = /cammin|via francigena|francigena|sentiero italia|alta via|romea|appia|lauretana|\bvia\s+(?:degli|dei|di|della|del)\b|\bvia\s+[a-z]/i
-const STAGE_NAME = /\btappa\b|\bstage\b|\bt\d{1,2}\b|\bgiorno\s+\d+/i
+// Nomi da tappa: parola esplicita, oppure sigla lettera+numero in coda ("Via Alpina Red R103",
+// "Via Alpina Blue D18", "Sentiero Italia T00"). La sigla è maiuscola nei dati OSM: niente flag `i`
+// su quella parte, per non scambiare "Alta Via 1" o "Via 2" per una tappa.
+const STAGE_NAME = /(?:\btappa\b|\bstage\b|\betap[ep]?\b|\bgiorno\s+\d+)/i
+const STAGE_CODE = /\s[A-Z]\d{1,3}$/
 const VARIANT_NAME = /variant|variante|alternativ|deviazione|bypass/i
 
 /** "123", "123 km", "850 m" → km; null se assente o non interpretabile. */
@@ -62,7 +71,7 @@ export function evaluateRelation(rel: DiscoveryRelation, overrides: DiscoveryOve
   const name = (tags['name:it'] ?? tags.name ?? '').trim()
   const declaredKm = parseDeclaredKm(tags.distance)
   const base = {
-    id: rel.id, name, ref: tags.ref, network: tags.network, operator: tags.operator,
+    id: rel.id, name, ref: tags.ref, network: tags.network, operator: tags.operator, center: rel.center,
     wikidata: tags.wikidata, declaredKm, wayMembers: rel.wayMembers, childCount: rel.childIds.length,
   }
   const reasons: string[] = []
@@ -92,14 +101,19 @@ export function evaluateRelation(rel: DiscoveryRelation, overrides: DiscoveryOve
   }
 
   if (NAME_KEYWORDS.test(name)) { score += 15; reasons.push('nome da cammino +15') }
+  // Un percorso lungo con nome da cammino (Alta Via, Cammino…) è quasi sempre multi-giorno anche
+  // senza sotto-relazioni: dal primo giro reale le Alte Vie delle Dolomiti restavano a 55.
+  if (declaredKm != null && declaredKm >= 100 && NAME_KEYWORDS.test(name)) { score += 10; reasons.push('lungo e con nome da cammino +10') }
   if (rel.childIds.length >= 3) { score += 20; reasons.push(`${rel.childIds.length} sotto-relazioni (tappe) +20`) }
   if (tags.wikidata) { score += 10; reasons.push('ha scheda Wikidata +10') }
 
   let kind: DiscoveryKind = 'cammino'
   let verdict: DiscoveryVerdict = score >= ADMIT_SCORE ? 'ammesso' : score >= REVIEW_SCORE ? 'da_rivedere' : 'scartato'
 
-  if (STAGE_NAME.test(name) && rel.childIds.length === 0) {
-    kind = 'tappa_o_figlio'; verdict = 'scartato'; reasons.push('nome da tappa, senza figli: parte di un cammino più grande')
+  if (rel.wayMembers === 0 && rel.childIds.length === 0) {
+    kind = 'locale'; verdict = 'scartato'; reasons.push('nessun tracciato né sotto-relazioni: niente da importare')
+  } else if ((STAGE_NAME.test(name) || STAGE_CODE.test(name)) && rel.childIds.length === 0) {
+    kind = 'tappa_o_figlio'; verdict = 'scartato'; reasons.push('nome da tappa (parola o sigla), senza figli: parte di un cammino più grande')
   } else if (VARIANT_NAME.test(name)) {
     kind = 'variante'; if (verdict === 'ammesso') verdict = 'da_rivedere'
     reasons.push('variante: da collegare al cammino principale, non un cammino a sé')
@@ -140,4 +154,122 @@ export function summarize(results: DiscoveryResult[]): Record<DiscoveryVerdict, 
   const out: Record<DiscoveryVerdict, number> = { ammesso: 0, da_rivedere: 0, scartato: 0 }
   for (const r of results) out[r.verdict]++
   return out
+}
+
+// ── Cammini fuori dall'Italia ─────────────────────────────────────────────────────────────────
+// Le fasce di latitudine della query includono mezza Europa (Francia, Svizzera, Austria, Slovenia):
+// un cammino il cui centro è lontano da ogni comune italiano del catalogo non è nostro. Centri
+// vicini al confine (cammini transfrontalieri) restano "da rivedere" invece di sparire.
+export const ITALY_NEAR_KM = 12
+export const ITALY_FAR_KM = 40
+
+export function applyCountryCheck(results: DiscoveryResult[], distanceKm: (lat: number, lon: number) => number): DiscoveryResult[] {
+  for (const r of results) {
+    if (!r.center) continue
+    const d = distanceKm(r.center.lat, r.center.lon)
+    r.italyDistanceKm = Math.round(d)
+    if (d > ITALY_FAR_KM) {
+      r.verdict = 'scartato'
+      r.reasons.push(`centro a ${Math.round(d)} km dal comune italiano più vicino: fuori Italia`)
+    } else if (d > ITALY_NEAR_KM && r.verdict === 'ammesso') {
+      r.verdict = 'da_rivedere'
+      r.reasons.push(`centro a ${Math.round(d)} km dal comune italiano più vicino: forse transfrontaliero`)
+    }
+  }
+  return results
+}
+
+// ── Famiglie ──────────────────────────────────────────────────────────────────────────────────
+// Lo stesso cammino arriva spezzato in più relazioni: per regione ("Via Francigena - 07 Lazio"),
+// per tratto ("Via Romea - Tratto Emilia"), per colore e tappa ("Via Alpina Red R103"), o ripetuto
+// con lo stesso nome (Sentiero dei tre paesi Julius Kugy, ~30 volte). La famiglia è il cammino
+// vero dal punto di vista dell'utente; le relazioni sono i suoi pezzi.
+const IT_REGIONS = [
+  "valle d'aosta", 'piemonte', 'lombardia', 'liguria', 'trentino-alto adige', 'trentino', 'alto adige',
+  'veneto', 'friuli venezia giulia', 'friuli', 'emilia romagna', 'emilia-romagna', 'toscana', 'umbria',
+  'marche', 'lazio', 'abruzzo', 'molise', 'campania', 'puglia', 'basilicata', 'calabria', 'sicilia', 'sardegna',
+]
+
+export function familyKey(rawName: string): string {
+  let n = rawName.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[’`]/g, "'").trim()
+  // "Cammino di Assisi, Genova - San Miniato": il tratto "A - B" dopo la virgola non fa parte del nome.
+  n = n.replace(/,\s*[^,]+\s[-–]\s[^,]+$/, '')
+  n = n.replace(/\s*[-–:,]\s*(?:tratto|variante|alternativa|parte|tappa|etape|etappe|stage|opzione)\b.*$/, '')
+  n = n.replace(/\s+(?:tratto|variante|alternativa|opzione)\b.*$/, '')
+  n = n.replace(/\s*[-–]\s*\d{1,2}\s+[a-z' ]+$/, '')
+  n = n.replace(/\s+(?:red|blue|yellow|purple|green|rosso|blu|giallo|viola|verde)(?:\s+[a-z]\d{1,3})?$/, '')
+  n = n.replace(/\s+[a-z]\d{1,3}$/, '')
+  for (const region of IT_REGIONS) {
+    const tail = new RegExp(`\\s*[-–]\\s*${region.replace(/[-']/g, m => `\\${m}`)}$`)
+    if (tail.test(n)) { n = n.replace(tail, ''); break }
+  }
+  return n.replace(/\s+/g, ' ').trim()
+}
+
+const SMALL_WORDS = new Set(['di', 'del', 'dei', 'delle', 'della', 'degli', 'da', 'e', 'la', 'il', 'lo', 'in', 'de', 'du', 'des', 'al', 'a'])
+
+/** Nome da mostrare per una famiglia: un pezzo che si chiama esattamente come la famiglia, se c'è
+ *  (conserva maiuscole e accenti originali), altrimenti la chiave con le maiuscole ricostruite. */
+function displayName(key: string, names: string[]): string {
+  const exact = names.find(n => familyKey(n) === key && n.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim() === key)
+  if (exact) return exact.trim()
+  return key.split(' ').map((w, i) => (i > 0 && SMALL_WORDS.has(w) ? w : w.charAt(0).toUpperCase() + w.slice(1))).join(' ')
+}
+
+export interface DiscoveryFamily {
+  key: string
+  /** Nome da mostrare: il più corto tra quelli dei pezzi (di solito il generico). */
+  name: string
+  verdict: DiscoveryVerdict
+  members: number
+  networks: string[]
+  declaredKm: number | null
+  childRelations: number
+  /** Id delle relazioni che non sono tappe/figlie: i pezzi da cui ricostruire il cammino. */
+  relationIds: number[]
+  stageRelations: number
+  score: number
+  inItaly: 'si' | 'confine' | 'no' | 'non_verificato'
+}
+
+export function groupFamilies(results: DiscoveryResult[]): DiscoveryFamily[] {
+  const groups = new Map<string, DiscoveryResult[]>()
+  for (const r of results) {
+    if (r.kind === 'senza_nome') continue
+    const key = familyKey(r.name)
+    if (!key) continue
+    groups.set(key, [...(groups.get(key) ?? []), r])
+  }
+  const rank: Record<DiscoveryVerdict, number> = { ammesso: 2, da_rivedere: 1, scartato: 0 }
+  const families: DiscoveryFamily[] = []
+  for (const [key, list] of Array.from(groups.entries())) {
+    const pieces = list.filter(r => r.kind !== 'tappa_o_figlio' && r.verdict !== 'scartato')
+    const stages = list.filter(r => r.kind === 'tappa_o_figlio')
+    // Un cammino fatto solo di tappe (Via Alpina: R103, R104…) è comunque un cammino: i suoi
+    // pezzi sono le tappe stesse, e vale la loro valutazione migliore.
+    const decisive = pieces.length > 0 ? pieces : list
+    const best = decisive.reduce((a, b) => (rank[b.verdict] > rank[a.verdict] || (rank[b.verdict] === rank[a.verdict] && b.score > a.score) ? b : a))
+    let verdict = best.verdict
+    if (pieces.length === 0 && stages.length > 0) {
+      // Solo tappe: ammesso se sono tante e di rete alta, altrimenti da rivedere.
+      verdict = stages.length >= 5 && stages.some(s => s.network === 'iwn' || s.network === 'nwn') ? 'da_rivedere' : 'scartato'
+    }
+    const distances = list.map(r => r.italyDistanceKm).filter((d): d is number => d != null)
+    const minDist = distances.length ? Math.min(...distances) : null
+    const kms = list.map(r => r.declaredKm).filter((k): k is number => k != null)
+    families.push({
+      key,
+      name: displayName(key, list.map(r => r.name)),
+      verdict,
+      members: list.length,
+      networks: Array.from(new Set(list.map(r => r.network).filter((n): n is string => !!n))),
+      declaredKm: kms.length ? Math.max(...kms) : null,
+      childRelations: list.reduce((s, r) => s + r.childCount, 0),
+      relationIds: decisive.map(r => r.id),
+      stageRelations: stages.length,
+      score: best.score,
+      inItaly: minDist == null ? 'non_verificato' : minDist <= ITALY_NEAR_KM ? 'si' : minDist <= ITALY_FAR_KM ? 'confine' : 'no',
+    })
+  }
+  return families.sort((a, b) => rank[b.verdict] - rank[a.verdict] || b.score - a.score || a.name.localeCompare(b.name))
 }
