@@ -7,12 +7,13 @@ import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, Search as SearchIcon, RefreshCw, Loader2, ChevronUp, ChevronDown, X as XIcon,
   Upload, Link2, PencilLine, MapPin, History, ChevronRight, Building2, Landmark, Globe,
-  Clock, Milestone, Route as RouteIcon, Sliders, Waypoints, Layers,
+  Clock, Milestone, Route as RouteIcon, Sliders, Waypoints, Layers, Wand2,
 } from 'lucide-react'
 import type { ResultItem } from './RouteBuilder'
 import TrailPreviewMap from '@/components/TrailPreviewMap'
 import ItineraryMap from '@/components/mete/ItineraryMap'
 import CamminoSheet from '@/components/mete/CamminoSheet'
+import { MobileNavBar } from '@/components/Navbar'
 import { defaultPendingExpiresAt, type MapView } from './sharedHelpers'
 import { saveResultItemToGuide } from '@/lib/routeBuilder/importResultItem'
 import { foundRouteItemFromCachedTrail } from '@/lib/routeBuilder/foundRoute'
@@ -48,6 +49,10 @@ const PLACE_ZOOM = 13
 // zoom di fitBounds sull'anchor+tappe, altrimenti poche tappe molto vicine (es. un piccolo centro
 // storico) farebbero zoomare fino al singolo isolato.
 const PERSONALIZE_MAX_ZOOM = 15
+
+// Altezza del menu inferiore dell'app (MobileNavBar: h-14 + rientro per l'home indicator) — i fogli
+// in basso (risultati, scheda del cammino) stanno SOPRA di esso, non dietro.
+const NAV_BOTTOM = 'calc(3.5rem + env(safe-area-inset-bottom, 0px))'
 
 const GLYPH: Record<MetaType, string> = { borgo_citta: '🏘️', sito: '🏛️', sentiero: '🥾', cammino: '🧭' }
 
@@ -102,7 +107,7 @@ export type OtherWayToAdd = 'file' | 'manual' | 'url' | 'from-activity' | 'manua
  * onOtherWays). Il generatore "su misura" (RouteBuilder.tsx) non è più raggiunto da qui — restava
  * percepito come "torna alla vecchia ricerca", non un'opzione distinta.
  */
-export default function CreaGuidaMapSearch({ onBack, onOtherWays, initialView, onViewChange, initialPanel, onInitialPanelConsumed }: {
+export default function CreaGuidaMapSearch({ onOtherWays, initialView, onViewChange, initialPanel, onInitialPanelConsumed }: {
   onBack: () => void
   onOtherWays?: (mode: OtherWayToAdd) => void
   /** Centro/zoom di partenza (vedi sharedHelpers.ts's MapView) — se assente riparte da ITALY_CENTER/
@@ -416,7 +421,7 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays, initialView, o
       : selected?.kind === 'meta' && selected.item.camminoStats ? selected.item.camminoStats.overviewPolyline : null
     if (!points || points.length < 2 || camminoInset === 0) return
     map.fitBounds(L.latLngBounds(points), {
-      paddingTopLeft: [28, 132], paddingBottomRight: [28, camminoInset + 24], maxZoom: 14,
+      paddingTopLeft: [28, 140], paddingBottomRight: [28, camminoInset + 24], maxZoom: 14,
     })
   }, [selected, focusedTappa, camminoInset])
 
@@ -581,51 +586,47 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays, initialView, o
         <div ref={mapRef} className="w-full h-full" />
       </div>
 
-      {/* ── Header: indietro + ricerca + filtro per tipologia ─────────────────────────────────
-          Tutto in schede bianche con ombra morbida sopra la mappa. Il filtro è un controllo
-          compatto a icone colorate (stesso colore e icona dei pin sulla mappa): solo la voce attiva
-          mostra il nome, così le cinque tipologie entrano in una riga senza scorrere né tagliare
-          il testo, e una sesta tipologia non romperebbe il layout. ──────────────────────────── */}
+      {/* ── Header: ricerca + filtro per tipologia, centrati ─────────────────────────────────
+          Schede bianche con ombra morbida sopra la mappa. L'uscita dalla schermata è il menu
+          inferiore dell'app (niente più freccia "indietro" in alto). Il filtro è un controllo
+          compatto a icone colorate (stesso colore e icona dei pin): solo la voce attiva mostra il
+          nome, così le cinque tipologie entrano in una riga senza scorrere né tagliare il testo. ── */}
       <div className="absolute left-0 right-0 top-0 z-10 p-3 space-y-2 pointer-events-none">
-        <div className="flex items-center gap-2 pointer-events-auto">
-          <button onClick={onBack} aria-label="Indietro"
-            className="w-11 h-11 rounded-full bg-white shadow-md border border-stone-200/70 flex items-center justify-center text-stone-600 hover:text-stone-900 active:scale-95 transition shrink-0">
-            <ArrowLeft className="w-[18px] h-[18px]" />
-          </button>
-          <div className="flex-1 min-w-0 h-11 flex items-center gap-2.5 bg-white rounded-full pl-4 pr-2 shadow-md border border-stone-200/70 transition focus-within:border-forest-400 focus-within:ring-2 focus-within:ring-forest-200/70">
-            {resolving ? <Loader2 className="w-[18px] h-[18px] text-forest-600 shrink-0 animate-spin" /> : <SearchIcon className="w-[18px] h-[18px] text-forest-700 shrink-0" />}
-            <input
-              value={queryText}
-              onChange={e => { setQueryText(e.target.value); setQueryError(null) }}
-              onKeyDown={e => { if (e.key === 'Enter') handleSearchSubmit() }}
-              placeholder="Cerca un luogo o un cammino…"
-              enterKeyHint="search"
-              className="flex-1 min-w-0 bg-transparent text-[14px] text-stone-800 outline-none placeholder:text-stone-400"
-            />
-            {queryText && (
-              <button onClick={() => { setQueryText(''); setQueryError(null) }} aria-label="Cancella ricerca"
-                className="w-7 h-7 rounded-full bg-stone-100 hover:bg-stone-200 flex items-center justify-center text-stone-500 shrink-0 transition-colors">
-                <XIcon className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
+        <div className="pointer-events-auto max-w-xl mx-auto h-11 flex items-center gap-2.5 bg-white rounded-full pl-4 pr-2 shadow-md border border-stone-200/70 transition focus-within:border-forest-400 focus-within:ring-2 focus-within:ring-forest-200/70">
+          {resolving ? <Loader2 className="w-[18px] h-[18px] text-forest-600 shrink-0 animate-spin" /> : <SearchIcon className="w-[18px] h-[18px] text-forest-700 shrink-0" />}
+          <input
+            value={queryText}
+            onChange={e => { setQueryText(e.target.value); setQueryError(null) }}
+            onKeyDown={e => { if (e.key === 'Enter') handleSearchSubmit() }}
+            placeholder="Cerca un luogo o un cammino…"
+            enterKeyHint="search"
+            className="flex-1 min-w-0 bg-transparent text-[14px] text-stone-800 outline-none placeholder:text-stone-400"
+          />
+          {queryText && (
+            <button onClick={() => { setQueryText(''); setQueryError(null) }} aria-label="Cancella ricerca"
+              className="w-7 h-7 rounded-full bg-stone-100 hover:bg-stone-200 flex items-center justify-center text-stone-500 shrink-0 transition-colors">
+              <XIcon className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
-        <div role="group" aria-label="Tipologia"
-          className="pointer-events-auto inline-flex items-center gap-1 bg-white rounded-full p-1 shadow-md border border-stone-200/70 min-[360px]:ml-[52px]">
-          {TYPE_FILTERS.map(f => {
-            const active = typeFilter === f.id
-            const Icon = f.icon
-            return (
-              <button key={f.id} type="button" aria-pressed={active} aria-label={f.label} title={f.label}
-                onClick={() => { setTypeFilter(f.id); setSelected(null) }}
-                className={`h-9 rounded-full flex items-center justify-center gap-1.5 transition-all duration-200 ${active ? 'px-3.5 text-white' : 'w-9 text-stone-500 hover:bg-stone-100'}`}
-                style={active ? { background: f.color } : undefined}>
-                <Icon className="w-[17px] h-[17px] shrink-0" style={active ? undefined : { color: f.color }} />
-                {active && <span className="text-xs font-bold whitespace-nowrap">{f.label}</span>}
-              </button>
-            )
-          })}
+        <div className="flex justify-center">
+          <div role="group" aria-label="Tipologia"
+            className="pointer-events-auto inline-flex items-center gap-1 bg-white rounded-full p-1 shadow-md border border-stone-200/70">
+            {TYPE_FILTERS.map(f => {
+              const active = typeFilter === f.id
+              const Icon = f.icon
+              return (
+                <button key={f.id} type="button" aria-pressed={active} aria-label={f.label} title={f.label}
+                  onClick={() => { setTypeFilter(f.id); setSelected(null) }}
+                  className={`h-9 rounded-full flex items-center justify-center gap-1.5 transition-all duration-200 ${active ? 'px-3.5 text-white' : 'w-9 text-stone-500 hover:bg-stone-100'}`}
+                  style={active ? { background: f.color } : undefined}>
+                  <Icon className="w-[17px] h-[17px] shrink-0" style={active ? undefined : { color: f.color }} />
+                  {active && <span className="text-xs font-bold whitespace-nowrap">{f.label}</span>}
+                </button>
+              )
+            })}
+          </div>
         </div>
 
         {queryError && (
@@ -640,7 +641,7 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays, initialView, o
           personalizzazione di un itinerario Borgo/Città: lì un pan/zoom non deve riavviare la
           ricerca normale, solo la vista sull'anchor+tappe. ─────────────────────────────────────── */}
       {dirty && !personalize && !isCamminoSelected && (
-        <div className="absolute left-0 right-0 top-[112px] z-10 flex justify-center">
+        <div className="absolute left-0 right-0 top-[120px] z-10 flex justify-center">
           <button onClick={searchCurrentView} disabled={searching}
             className="flex items-center gap-2 bg-stone-800 hover:bg-stone-900 text-white text-xs font-bold px-4 py-2.5 rounded-full shadow-lg disabled:opacity-70 transition-colors">
             {searching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
@@ -650,7 +651,7 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays, initialView, o
       )}
 
       {showTrailZoomHint && !personalize && (
-        <div className="absolute left-0 right-0 z-10 flex justify-center" style={{ top: dirty ? '158px' : '112px' }}>
+        <div className="absolute left-0 right-0 z-10 flex justify-center" style={{ top: dirty ? '166px' : '120px' }}>
           <p className="bg-white/90 backdrop-blur text-stone-500 text-[11px] px-3 py-1.5 rounded-full shadow border border-stone-200">
             Avvicinati per vedere anche i Sentieri
           </p>
@@ -658,7 +659,7 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays, initialView, o
       )}
 
       {error && !personalize && (
-        <div className="absolute left-3 right-3 top-[160px] z-10 bg-red-500/95 backdrop-blur rounded-xl px-3 py-2 shadow-md text-center">
+        <div className="absolute left-3 right-3 top-[168px] z-10 bg-red-500/95 backdrop-blur rounded-xl px-3 py-2 shadow-md text-center">
           <p className="text-xs text-white">{error}</p>
         </div>
       )}
@@ -680,7 +681,7 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays, initialView, o
           <button onClick={() => { setShowOtherWays(false); setShowGenChooser(true) }}
             title="Genera un percorso" aria-label="Genera un percorso"
             className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-colors ${showGenChooser || showSentieroGen || personalize ? 'bg-terra-500 text-white' : 'text-stone-600 hover:bg-stone-100'}`}>
-            <RouteIcon className="w-[18px] h-[18px]" />
+            <Wand2 className="w-[18px] h-[18px]" />
           </button>
           {onOtherWays && (
             <button onClick={() => { setShowGenChooser(false); setShowSentieroGen(false); setPersonalize(null); setShowOtherWays(true) }}
@@ -709,7 +710,7 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays, initialView, o
         />
       )}
       {selected && !isCamminoSelected && (
-        <div className="absolute left-3 right-3 z-20" style={{ top: '112px' }}>
+        <div className="absolute left-3 right-3 z-20" style={{ top: '120px' }}>
           <div className="relative bg-white/97 backdrop-blur rounded-2xl shadow-lg max-w-sm mx-auto overflow-hidden">
             <div className="overflow-y-auto" style={{ maxHeight: 'min(66vh, 560px)' }}>
               {selected.kind === 'meta' ? (
@@ -743,7 +744,7 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays, initialView, o
           insieme si sovrapporrebbero. ──────────────────────────────────────────────────────────── */}
       {!personalize && !showSentieroGen && !isCamminoSelected && (
       <div className="absolute left-0 right-0 bottom-0 z-10 bg-white rounded-t-3xl shadow-[0_-6px_20px_rgba(0,0,0,.12)] flex flex-col"
-        style={{ maxHeight: sheetExpanded ? '58vh' : '96px' }}>
+        style={{ maxHeight: sheetExpanded ? '58vh' : '96px', bottom: NAV_BOTTOM }}>
         <button onClick={() => setSheetExpanded(v => !v)}
           className="shrink-0 flex flex-col items-center pt-2.5 pb-2.5 w-full">
           <span className="w-9 h-1 rounded-full bg-stone-200 mb-2.5" />
@@ -852,6 +853,11 @@ export default function CreaGuidaMapSearch({ onBack, onOtherWays, initialView, o
           </div>
         </>
       )}
+
+      {/* ── Menu dell'app — stessa barra delle altre pagine, per uscire da qui o andare altrove.
+          z-30: sotto i fogli modali (z-40: Personalizza, Genera, Porta i tuoi dati), sopra la mappa
+          e i fogli dei risultati, che stanno appoggiati sopra di essa (NAV_BOTTOM). ──────────── */}
+      <MobileNavBar className="fixed inset-x-0 bottom-0 z-30" showAvatar={false} safeAreaTop={false} safeAreaBottom activeHref="/guida" />
     </div>,
     document.body,
   )

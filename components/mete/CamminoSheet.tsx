@@ -34,7 +34,8 @@ export default function CamminoSheet({ item, focusedOrdinal, onFocusTappa, onClo
   focusedOrdinal: number | null
   onFocusTappa: (tappa: CamminoTappaDetail | null) => void
   onClose: () => void
-  /** Altezza attuale del foglio in pixel (0 alla chiusura) — per inquadrare la mappa sopra di esso. */
+  /** Distanza in pixel dal bordo alto del foglio al fondo dello schermo (0 alla chiusura) — per
+   *  inquadrare la mappa sopra di esso. */
   onInset: (px: number) => void
 }) {
   const [detail, setDetail] = useState<CamminoDetail | null>(null)
@@ -63,7 +64,8 @@ export default function CamminoSheet({ item, focusedOrdinal, onFocusTappa, onClo
   useEffect(() => {
     const el = sheetRef.current
     if (!el) return
-    const report = () => onInset(Math.round(el.getBoundingClientRect().height))
+    // Distanza dal bordo alto del foglio al fondo dello schermo: comprende anche il menu dell'app sotto di esso.
+    const report = () => onInset(Math.max(0, Math.round(window.innerHeight - el.getBoundingClientRect().top)))
     report()
     const ro = new ResizeObserver(report)
     ro.observe(el)
@@ -88,8 +90,9 @@ export default function CamminoSheet({ item, focusedOrdinal, onFocusTappa, onClo
 
   return (
     <div ref={sheetRef}
-      className="fixed left-0 right-0 bottom-0 z-20 bg-white rounded-t-3xl shadow-[0_-6px_24px_rgba(0,0,0,.16)] flex flex-col"
-      style={{ maxHeight: focused ? '210px' : 'min(58vh, 520px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+      className="fixed left-0 right-0 z-20 bg-white rounded-t-3xl shadow-[0_-6px_24px_rgba(0,0,0,.16)] flex flex-col"
+      // Appoggiato sopra il menu dell'app (h-14 + rientro per l'home indicator), non dietro di esso.
+      style={{ bottom: 'calc(3.5rem + env(safe-area-inset-bottom, 0px))', maxHeight: focused ? '210px' : 'min(52vh, 480px)' }}>
       <div className="shrink-0 flex justify-center pt-2.5"><span className="w-9 h-1 rounded-full bg-stone-200" /></div>
 
       {/* Testata — sempre visibile: chi è il cammino, quanto è lungo, da dove vengono le tappe. */}

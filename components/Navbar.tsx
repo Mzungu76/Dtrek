@@ -169,9 +169,12 @@ export function DesktopNav({ position = 'sticky' }: { position?: 'sticky' | 'fix
 // safeAreaBottom: simmetrico, per quando la barra sta in fondo — il rientro per l'home indicator
 // va DENTRO la barra stessa (allunga lo sfondo colorato), non lasciato come spazio vuoto dopo di
 // essa nel contenitore che la ospita, altrimenti torna il "piccolo spazio sotto la barra" segnalato.
+// activeHref: evidenzia una voce a prescindere dal percorso corrente — per le schermate a tutto
+// schermo che non vivono sotto l'URL della loro sezione (es. la ricerca su mappa di "Crea guida",
+// raggiunta da /upload ma parte delle Guide).
 export function MobileNavBar({
-  className = '', showLinks = true, showAvatar = true, safeAreaTop = true, safeAreaBottom = false,
-}: { className?: string; showLinks?: boolean; showAvatar?: boolean; safeAreaTop?: boolean; safeAreaBottom?: boolean }) {
+  className = '', showLinks = true, showAvatar = true, safeAreaTop = true, safeAreaBottom = false, activeHref,
+}: { className?: string; showLinks?: boolean; showAvatar?: boolean; safeAreaTop?: boolean; safeAreaBottom?: boolean; activeHref?: string }) {
   const path = usePathname()
   return (
     <nav
@@ -185,7 +188,7 @@ export function MobileNavBar({
         {showLinks && (
           <div className="flex-1 flex items-center justify-around">
             {NAV_LINKS.map(({ href, label, icon: Icon }) => {
-              const active = isActive(href, path)
+              const active = activeHref ? href === activeHref : isActive(href, path)
               return (
                 <Link
                   key={href}
