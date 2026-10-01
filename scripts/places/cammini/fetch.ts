@@ -1,7 +1,7 @@
 import fs from 'fs'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { TappaAnchor } from '../../../lib/cammini/tappe'
-import { buildCammino, camminoToPlaceCandidate, type OverpassRelation, type StagesMode } from './build'
+import { buildCammino, camminoToPlaceCandidate, type OverpassElement, type StagesMode } from './build'
 import { CAMMINI, type CamminoConfig } from './config'
 import { importCammino } from './import'
 
@@ -18,37 +18,51 @@ const OVERPASS_ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
   'https://overpass.private.coffee/api/interpreter',
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
 ]
+const ROUNDS = 3
 
 export function overpassQuery(config: CamminoConfig): string {
   const [s, w, n, e] = config.bbox
   const bbox = `${s},${w},${n},${e}`
-  // Relazione principale (per nome, solo a piedi) + le sue sotto-relazioni (le tappe), geometria
-  // limitata al ritaglio. Le geometrie fuori ritaglio arrivano come null e il builder le ignora.
-  return `[out:json][timeout:240];
+  // Query leggera (la prima versione chiedeva `out geom` della relazione intera, che per un cammino
+  // europeo significa risolvere migliaia di way: 504 su tutti i server). Qui: le relazioni escono
+  // solo con l'elenco dei membri (`out body`, nessuna geometria) e la geometria è emessa a parte,
+  // limitata alle way dentro il ritaglio. Il builder le ricollega per id. Solo route=hiking|foot.
+  return `[out:json][timeout:180];
 rel["route"~"^(hiking|foot)$"]["name"~"${config.nameRegex}",i](${bbox})->.main;
-(.main; rel(r.main)["route"~"^(hiking|foot)$"];);
-out geom(${bbox});`
+rel(r.main)["route"~"^(hiking|foot)$"]->.kids;
+(.main; .kids;)->.all;
+way(r.all)(${bbox})->.w;
+.all out body;
+.w out geom;`
 }
 
-async function runOverpass(query: string): Promise<OverpassRelation[]> {
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+
+async function runOverpass(query: string): Promise<OverpassElement[]> {
   let lastError: unknown
-  for (const endpoint of OVERPASS_ENDPOINTS) {
-    try {
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'dtrek-places-etl/1.0' },
-        body: `data=${encodeURIComponent(query)}`,
-      })
-      if (!res.ok) throw new Error(`${endpoint} → HTTP ${res.status}`)
-      const json = await res.json() as { elements?: OverpassRelation[] }
-      return (json.elements ?? []).filter(e => e.type === 'relation')
-    } catch (err) {
-      lastError = err
-      console.warn(`Overpass fallito su ${endpoint}: ${err instanceof Error ? err.message : err}`)
+  for (let round = 1; round <= ROUNDS; round++) {
+    for (const endpoint of OVERPASS_ENDPOINTS) {
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'dtrek-places-etl/1.0' },
+          body: `data=${encodeURIComponent(query)}`,
+        })
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const json = await res.json() as { elements?: OverpassElement[]; remark?: string }
+        // Overpass risponde 200 anche quando va in timeout/memoria: l'errore è nel campo `remark`.
+        if (json.remark && !(json.elements?.length)) throw new Error(`remark: ${json.remark}`)
+        return (json.elements ?? []).filter(e => e.type === 'relation' || e.type === 'way')
+      } catch (err) {
+        lastError = err
+        console.warn(`Overpass fallito su ${endpoint} (giro ${round}/${ROUNDS}): ${err instanceof Error ? err.message : err}`)
+      }
     }
+    if (round < ROUNDS) { console.warn(`Attendo ${round * 30}s prima di riprovare…`); await sleep(round * 30_000) }
   }
-  throw new Error(`Tutti gli endpoint Overpass hanno fallito. Ultimo errore: ${lastError instanceof Error ? lastError.message : lastError}`)
+  throw new Error(`Tutti gli endpoint Overpass hanno fallito dopo ${ROUNDS} giri. Ultimo errore: ${lastError instanceof Error ? lastError.message : lastError}`)
 }
 
 function arg(name: string): string | undefined {
@@ -83,10 +97,10 @@ async function main() {
   if (!supabase) console.warn('Nessuna credenziale Supabase: dry-run senza borghi, le tappe calcolate non si chiudono su paesi.')
 
   const fixture = arg('fixture')
-  const elements: OverpassRelation[] = fixture
-    ? (JSON.parse(fs.readFileSync(fixture, 'utf8')).elements as OverpassRelation[]).filter(e => e.type === 'relation')
+  const elements: OverpassElement[] = fixture
+    ? (JSON.parse(fs.readFileSync(fixture, 'utf8')).elements as OverpassElement[])
     : await runOverpass(overpassQuery(config))
-  console.log(`${elements.length} relazioni ricevute.`)
+  console.log(`${elements.length} elementi ricevuti.`)
   const saveFixture = arg('save-fixture')
   if (saveFixture && !fixture) fs.writeFileSync(saveFixture, JSON.stringify({ elements }))
 

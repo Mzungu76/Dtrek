@@ -17,6 +17,7 @@ Fase 2 di `docs/piano-cammini.md`. Un cammino è una riga `dtrek_places` con `me
 - **Niente dislivello.** OSM non ha quote: `elevation_*` restano NULL, si calcolano dal DTM (Fase 5)
   e un re-import non li azzera.
 - **Polilinee in `jsonb` `[lat, lon][]`**, non PostGIS: stesso formato di `route_polyline`.
+- **Query leggera.** Le relazioni escono con i soli membri (`out body`), la geometria è emessa a parte per le way dentro il ritaglio. La prima versione chiedeva la geometria dell'intera relazione europea e andava in 504 su tutti i server. Il fetch riprova 3 giri su 4 endpoint, con attesa crescente.
 - **Rete.** Overpass è irraggiungibile da alcuni ambienti di sviluppo: il fetch gira nel workflow
   `import-places-cammini.yml`. `--fixture <file>` rifà il build da una risposta già salvata.
 

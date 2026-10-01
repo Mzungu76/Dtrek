@@ -161,11 +161,31 @@ describe('buildCammino', () => {
   })
 })
 
+describe('risposta Overpass leggera (relazioni senza geometria + way a parte)', () => {
+  it('ricollega le way ai membri per id e produce lo stesso risultato', () => {
+    const line = meridian(42.5, 41.6)
+    const rel: OverpassRelation = {
+      type: 'relation', id: 5, tags: { route: 'hiking', name: 'Cammino di Prova' },
+      members: [{ type: 'way', ref: 11 }, { type: 'way', ref: 12 }, { type: 'way', ref: 13 }],
+    }
+    const mid = Math.floor(line.length / 2)
+    const ways = [
+      { type: 'way' as const, id: 11, geometry: line.slice(0, mid + 1).map(([lat, lon]) => ({ lat, lon })) },
+      { type: 'way' as const, id: 12, geometry: line.slice(mid).map(([lat, lon]) => ({ lat, lon })) },
+    ]
+    const built = buildCammino([rel, ...ways], config, [])
+    expect(built.lengthM).toBeCloseTo(polylineLengthM(line), -2)
+    expect(built.diagnostics[0]).toContain('2 way con geometria')
+  })
+})
+
 describe('overpassQuery', () => {
   it('chiede solo cammini a piedi, mai ciclabili', () => {
     const q = overpassQuery(config)
     expect(q).toContain('hiking|foot')
     expect(q).not.toMatch(/bicycle|mtb/)
     expect(q).toContain('41,11.9,43,12.1')
+    // Mai la geometria dell'intera relazione: è ciò che mandava in timeout la prima versione.
+    expect(q).not.toMatch(/\.all out geom|\.main out geom|out geom\(/)
   })
 })

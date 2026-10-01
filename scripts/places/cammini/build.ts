@@ -23,6 +23,15 @@ export interface OverpassRelation {
   members?: OverpassMember[]
 }
 
+/** Way top-level con geometria (la query leggera le emette a parte dalle relazioni). */
+export interface OverpassWay {
+  type: 'way'
+  id: number
+  geometry?: ({ lat: number; lon: number } | null)[]
+}
+
+export type OverpassElement = OverpassRelation | OverpassWay
+
 export type StagesMode = 'auto' | 'official' | 'computed'
 
 export interface BuiltCammino {
@@ -44,11 +53,14 @@ function isWalkingRoute(r: OverpassRelation): boolean {
   return ROUTE_OK.has(r.tags?.route ?? '')
 }
 
-function relationWays(r: OverpassRelation): { ref: number; points: LatLon[] }[] {
+type WayLookup = Map<number, ({ lat: number; lon: number } | null)[]>
+
+function relationWays(r: OverpassRelation, lookup: WayLookup): { ref: number; points: LatLon[] }[] {
   const out: { ref: number; points: LatLon[] }[] = []
   for (const m of r.members ?? []) {
-    if (m.type !== 'way' || !m.geometry) continue
-    const points = m.geometry.filter((p): p is { lat: number; lon: number } => !!p).map(p => [p.lat, p.lon] as LatLon)
+    const geometry = m.type === 'way' ? (m.geometry ?? lookup.get(m.ref)) : undefined
+    if (!geometry) continue
+    const points = geometry.filter((p): p is { lat: number; lon: number } => !!p).map(p => [p.lat, p.lon] as LatLon)
     if (points.length >= 2) out.push({ ref: m.ref, points })
   }
   return out
@@ -62,11 +74,11 @@ function longestChain(chains: LatLon[][]): LatLon[] {
   return chains.reduce<LatLon[]>((best, c) => (polylineLengthM(c) > polylineLengthM(best) ? c : best), [])
 }
 
-function buildOfficialTappe(stages: { number: number; rel: OverpassRelation }[], config: CamminoConfig, diagnostics: string[]): TappaDraft[] {
+function buildOfficialTappe(stages: { number: number; rel: OverpassRelation }[], config: CamminoConfig, lookup: WayLookup, diagnostics: string[]): TappaDraft[] {
   const tappe: TappaDraft[] = []
   let previousEnd: { lat: number; lon: number } = config.start
   for (const { number, rel } of stages.sort((a, b) => a.number - b.number)) {
-    const chains = chainsInBbox(relationWays(rel).map(w => w.points), config)
+    const chains = chainsInBbox(relationWays(rel, lookup).map(w => w.points), config)
     const line = longestChain(chains)
     if (line.length < 2) { diagnostics.push(`Tappa ${number} (rel ${rel.id}): nessun tratto dentro il ritaglio, scartata.`); continue }
     if (chains.length > 1) diagnostics.push(`Tappa ${number} (rel ${rel.id}): ${chains.length} tratti non connessi, tenuto il più lungo.`)
@@ -88,7 +100,7 @@ function buildOfficialTappe(stages: { number: number; rel: OverpassRelation }[],
 }
 
 export function buildCammino(
-  elements: OverpassRelation[],
+  rawElements: OverpassElement[],
   config: CamminoConfig,
   anchors: TappaAnchor[],
   options: { stages?: StagesMode; split?: Partial<SplitOptions> } = {},
@@ -98,7 +110,12 @@ export function buildCammino(
   const nameRe = new RegExp(config.nameRegex, 'i')
   const excludeRe = config.excludeNameRegex ? new RegExp(config.excludeNameRegex, 'i') : null
 
-  const walking = elements.filter(r => r.type === 'relation' && isWalkingRoute(r))
+  const elements = rawElements.filter((e): e is OverpassRelation => e.type === 'relation')
+  const lookup: WayLookup = new Map()
+  for (const e of rawElements) if (e.type === 'way' && e.geometry) lookup.set(e.id, e.geometry)
+  diagnostics.push(`Elementi: ${elements.length} relazioni, ${lookup.size} way con geometria.`)
+
+  const walking = elements.filter(r => isWalkingRoute(r))
   const byId = new Map(walking.map(r => [r.id, r]))
   const matched = walking.filter(r => r.tags?.name && nameRe.test(r.tags.name) && !(excludeRe && excludeRe.test(r.tags.name)))
   diagnostics.push(`Relazioni a piedi: ${walking.length}, con il nome del cammino: ${matched.length}.`)
@@ -107,14 +124,14 @@ export function buildCammino(
   // Sotto-relazioni (tappe) dei match, anche se il loro nome non contiene quello del cammino.
   const childIds = new Set<number>()
   for (const r of matched) for (const m of r.members ?? []) if (m.type === 'relation' && byId.has(m.ref)) childIds.add(m.ref)
-  const children = [...childIds].map(id => byId.get(id)!).filter(r => relationWays(r).length > 0)
+  const children = [...childIds].map(id => byId.get(id)!).filter(r => relationWays(r, lookup).length > 0)
 
   const numbered = new Map<number, OverpassRelation>()
   for (const r of [...matched, ...children]) {
     const n = parseTappaNumber(r.tags?.name, r.tags?.ref)
-    if (n == null || relationWays(r).length === 0) continue
+    if (n == null || relationWays(r, lookup).length === 0) continue
     const prev = numbered.get(n)
-    if (!prev || relationWays(r).length > relationWays(prev).length) numbered.set(n, r)
+    if (!prev || relationWays(r, lookup).length > relationWays(prev, lookup).length) numbered.set(n, r)
   }
   const officialStages = [...numbered.entries()].map(([number, rel]) => ({ number, rel }))
   diagnostics.push(`Tappe numerate trovate: ${officialStages.length}.`)
@@ -124,13 +141,13 @@ export function buildCammino(
   let tappeSource: 'official' | 'computed' = 'computed'
 
   if (mode !== 'computed' && officialStages.length >= 3) {
-    tappe = buildOfficialTappe(officialStages, config, diagnostics)
+    tappe = buildOfficialTappe(officialStages, config, lookup, diagnostics)
     line = tappe.flatMap((t, i) => (i === 0 ? t.polyline : t.polyline.slice(1)))
     tappeSource = 'official'
   } else {
     if (mode === 'official') throw new Error('Modalità official richiesta ma ci sono meno di 3 tappe numerate.')
     const seen = new Map<number, LatLon[]>()
-    for (const r of matched) for (const w of relationWays(r)) seen.set(w.ref, w.points)
+    for (const r of matched) for (const w of relationWays(r, lookup)) seen.set(w.ref, w.points)
     const chains = chainsInBbox([...seen.values()], config)
     diagnostics.push(`Way uniche: ${seen.size}, catene connesse: ${chains.length}.`)
     line = orientLine(longestChain(chains), config.start)
