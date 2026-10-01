@@ -77,7 +77,20 @@ async function fetchFromWikidataP18(wikidataId: string): Promise<PlaceCoverPhoto
     // il livello Wikipedia sotto (fetchPageThumbnail, COVER_PHOTO_WIDTH). Senza questo la copertina
     // più comune (Wikidata è il primo livello tentato) è anche la più pesante da caricare.
     const url = `${httpsUrl}${httpsUrl.includes('?') ? '&' : '?'}width=${COVER_PHOTO_WIDTH}`
-    return { url, credit: 'Wikimedia Commons' }
+    // Verifica che l'URL sia davvero una raster caricabile (e risolve il redirect di
+    // Special:FilePath direttamente sull'URL finale di upload.wikimedia.org): un P18 che punta a
+    // un file non servibile da next/image (SVG, TIFF…, o un 4xx/429) altrimenti veniva salvato in
+    // cache come "positivo definitivo" e la copertina restava per sempre vuota, senza mai
+    // ripiegare sul livello Wikipedia (visto su Tarquinia, mentre Milano funzionava).
+    const check = await fetch(url, {
+      method: 'GET', headers: { 'User-Agent': WD_USER_AGENT, Range: 'bytes=0-0' },
+      redirect: 'follow', signal: AbortSignal.timeout(5000),
+    })
+    const type = check.headers.get('content-type') ?? ''
+    await check.body?.cancel().catch(() => {})
+    if (!check.ok || !/^image\/(jpeg|png|webp|gif|avif)/.test(type)) return null
+    const finalUrl = isTrustedMediaUrl(check.url) ? check.url : url
+    return { url: finalUrl, credit: 'Wikimedia Commons' }
   } catch {
     return null
   }
@@ -167,7 +180,10 @@ export async function fetchPlaceCoverPhoto(place: PlaceForPhoto): Promise<PlaceC
     // controllo (questa colonna non è mai popolata da nessun'altra pipeline — vedi il commento in
     // cima al file — quindi ogni valore qui viene sempre e solo da fetchFromWikidataP18/
     // fetchFromWikipediaThumbnail sotto).
-    if (cached?.image_url && isTrustedMediaUrl(cached.image_url)) {
+    // Un URL Special:FilePath in cache è il formato scritto PRIMA della verifica/risoluzione di
+    // fetchFromWikidataP18 (mai controllato, può puntare a un file non servibile): si rifà la
+    // ricerca una volta sola, il nuovo risultato salvato è già l'URL finale verificato.
+    if (cached?.image_url && isTrustedMediaUrl(cached.image_url) && !cached.image_url.includes('Special:FilePath')) {
       return { url: cached.image_url as string, credit: cached.image_credit as string | null }
     }
 
