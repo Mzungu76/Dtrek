@@ -251,6 +251,9 @@ export interface DiscoveryFamily {
   stageRelations: number
   score: number
   inItaly: 'si' | 'confine' | 'no' | 'non_verificato'
+  /** Id della voce del registro (lib/cammini/registry.ts) se il cammino è stato approvato a mano. */
+  registryId?: string
+  structure?: 'cammino' | 'rete'
 }
 
 export function groupFamilies(results: DiscoveryResult[]): DiscoveryFamily[] {
