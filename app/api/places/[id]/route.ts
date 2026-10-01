@@ -138,6 +138,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const trustedImageUrl = data.image_url && isTrustedMediaUrl(data.image_url) ? data.image_url : null
     const coverPhoto = trustedImageUrl ? null : await fetchPlaceCoverPhoto({
       id: data.id, name: data.name, lat: data.latitude, lon: data.longitude, wikidataId: data.wikidata_id,
+      metaType: data.meta_type,
     })
     return NextResponse.json({
       imageUrl: trustedImageUrl ?? coverPhoto?.url ?? null,
@@ -236,6 +237,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const trustedImageUrl = data.image_url && isTrustedMediaUrl(data.image_url) ? data.image_url : null
   const coverPhoto = trustedImageUrl ? null : await fetchPlaceCoverPhoto({
     id: data.id, name: data.name, lat: data.latitude, lon: data.longitude, wikidataId: data.wikidata_id,
+    metaType: data.meta_type,
   })
 
   // dtrek_places.subtype è una colonna condivisa a significato diverso per tipologia (lib/

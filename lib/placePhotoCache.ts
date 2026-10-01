@@ -47,6 +47,7 @@ interface PlaceForPhoto {
   lat: number
   lon: number
   wikidataId?: string | null
+  metaType?: string | null
 }
 
 async function fetchFromWikidataP18(wikidataId: string): Promise<PlaceCoverPhoto | null> {
@@ -92,6 +93,39 @@ async function fetchFromWikipediaThumbnail(name: string, lat: number, lon: numbe
   if (!match?.thumbnail) return null
   const url = await fetchPageThumbnail(match.title, 'it', COVER_PHOTO_WIDTH)
   return url && isTrustedMediaUrl(url) ? { url, credit: 'Wikipedia' } : null
+}
+
+const TITLE_MATCH_MAX_KM = 15
+
+// Un Borgo/Città è quasi sempre l'articolo Wikipedia col suo stesso nome, ma il suo centroide
+// non cade quasi mai entro 800 m dalle coordinate dell'articolo, e la geosearch stretta qui sopra
+// restituisce solo i 5 punti più vicini (di solito altri monumenti, non la città stessa) — da qui
+// "Tarquinia"/"Milano" senza copertina. Ricerca per titolo esatto (redirect seguiti), accettata solo
+// se l'articolo ha coordinate entro TITLE_MATCH_MAX_KM: stessa cautela contro le omonimie (pagine
+// senza coordinate = disambigua/concetto, scartate) di isNearPoi in lib/wikipedia.ts.
+async function fetchFromWikipediaTitle(name: string, lat: number, lon: number): Promise<PlaceCoverPhoto | null> {
+  try {
+    const url = 'https://it.wikipedia.org/w/api.php?' + new URLSearchParams({
+      action: 'query', prop: 'pageimages|coordinates', titles: name, redirects: '1',
+      piprop: 'thumbnail', pithumbsize: String(COVER_PHOTO_WIDTH),
+      format: 'json', origin: '*',
+    })
+    const res = await fetch(url, { headers: { 'User-Agent': WD_USER_AGENT }, signal: AbortSignal.timeout(8000) })
+    if (!res.ok) return null
+    const data = await res.json() as {
+      query?: { pages?: Record<string, { thumbnail?: { source?: string }; coordinates?: Array<{ lat: number; lon: number }> }> }
+    }
+    const page = Object.values(data.query?.pages ?? {})[0]
+    const coord = page?.coordinates?.[0]
+    const src = page?.thumbnail?.source
+    if (!coord || !src || !isTrustedMediaUrl(src)) return null
+    const dLat = (coord.lat - lat) * 111
+    const dLon = (coord.lon - lon) * 111 * Math.cos(lat * Math.PI / 180)
+    if (Math.hypot(dLat, dLon) > TITLE_MATCH_MAX_KM) return null
+    return { url: src, credit: 'Wikipedia' }
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -141,6 +175,7 @@ export async function fetchPlaceCoverPhoto(place: PlaceForPhoto): Promise<PlaceC
     try {
       if (place.wikidataId) found = await fetchFromWikidataP18(place.wikidataId)
       if (!found) found = await fetchFromWikipediaThumbnail(place.name, place.lat, place.lon)
+      if (!found && place.metaType === 'borgo_citta') found = await fetchFromWikipediaTitle(place.name, place.lat, place.lon)
     } catch (e) {
       console.error('[placePhotoCache] ricerca foto fallita:', e)
     }
