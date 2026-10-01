@@ -502,7 +502,10 @@ export default function GuidaHub({ id }: { id?: string }) {
   // (stesso pattern/libreria di lib/gbifShared.ts, lib/galleryCascade.ts, lib/offline/
   // packageManager.ts — lib/promisePool.ts), mai tutte insieme senza limite.
   useEffect(() => {
-    if (metaList.length === 0 || !enrichmentReady) return
+    // Nessun gate su enrichmentReady: quello dipende dalla guida APERTA (per un sentiero resta
+    // falso finché POI/flora/Safety/CTS non si assestano, fino a 90s), ma le copertine delle
+    // altre Mete della galleria non c'entrano nulla con quel caricamento.
+    if (metaList.length === 0) return
     const pending = metaList.filter(h =>
       h.metaType && h.metaType !== 'sentiero' && h.placeId && !attemptedPlaceDetailRef.current.has(h.id),
     )
@@ -533,7 +536,7 @@ export default function GuidaHub({ id }: { id?: string }) {
       },
     )
     return () => { cancelled = true }
-  }, [metaList, enrichmentReady])
+  }, [metaList])
 
   // Ripiego per quando items cambia SENZA passare da applyList (es. handleDelete sotto, che aggiorna
   // items direttamente con setItems) — applyList sopra sceglie già currentId nella stessa passata

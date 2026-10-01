@@ -1,9 +1,11 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import TrialStatusBanner from '@/components/dtrek/TrialStatusBanner'
 import RouteThumb from '@/components/RouteThumb'
+import FallbackImage from '@/components/ui/FallbackImage'
+import { runWithConcurrency } from '@/lib/promisePool'
 import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { useCtsUpdated } from '@/lib/sync/useCtsUpdated'
 import { formatDuration } from '@/lib/tcxParser'
@@ -68,6 +70,31 @@ export default function GuidaIndexPage() {
   }, [])
 
   useCtsUpdated(() => { getAllPlanned().then(setPlanned).catch(() => {}) })
+
+  // Copertina reale (dtrek_places) per Borghi/Città e Siti, che non hanno una traccia da
+  // disegnare: stessa chiamata leggera `?fields=cover` usata dalla galleria di GuidaHub.
+  const [covers, setCovers] = useState<Record<string, string>>({})
+  const attemptedCoversRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    if (!planned) return
+    const pending = planned.filter(h =>
+      h.metaType && h.metaType !== 'sentiero' && h.placeId && !attemptedCoversRef.current.has(h.id),
+    )
+    if (pending.length === 0) return
+    for (const h of pending) attemptedCoversRef.current.add(h.id)
+    runWithConcurrency(
+      pending,
+      5,
+      async h => {
+        const res = await fetch(`/api/places/${h.placeId}?fields=cover`)
+        if (!res.ok) return null
+        return await res.json() as { imageUrl?: string | null }
+      },
+      (h, data) => {
+        if (data?.imageUrl) setCovers(prev => ({ ...prev, [h.id]: data.imageUrl as string }))
+      },
+    )
+  }, [planned])
 
   // Una Guida Sito nested (piano §51.4) resta annidata nella Guida del suo Borgo/Città — non
   // compare mai in questo elenco generale (verifica utente 2026-09-26: solo le Guide costruite
@@ -182,7 +209,13 @@ export default function GuidaIndexPage() {
                       cavallo del bordo superiore della card, non restarne tagliato a metà. */}
                   <div className="bg-white rounded-3xl overflow-hidden border border-dashed border-sky-200">
                     <div className="relative h-[160px] bg-gradient-to-b from-sky-50 to-stone-50 bg-topography">
-                      {hike.routePolyline && hike.routePolyline.length > 1 ? (
+                      {covers[hike.id] ? (
+                        <FallbackImage
+                          src={covers[hike.id]} alt={hike.title} fill
+                          sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+                          className="object-cover" loading="lazy"
+                        />
+                      ) : hike.routePolyline && hike.routePolyline.length > 1 ? (
                         <div className="absolute inset-3">
                           <RouteThumb polyline={hike.routePolyline} color="#0284c7" strokeWidth={3} />
                         </div>
