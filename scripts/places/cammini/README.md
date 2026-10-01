@@ -62,3 +62,21 @@ Workflow `discover-cammini.yml` (manuale, non scrive nulla): lista nel riepilogo
 artifact `cammini-candidates` (JSON) e `raw-discovery` (risposta grezza, per rifare la valutazione
 con `--fixture` dopo aver cambiato le regole). Le soglie sono una prima stima: vanno tarate sulla
 lista reale.
+
+## Import del registro (`import-registry.ts`)
+
+Per i cammini approvati in `lib/cammini/registry.ts` (workflow `import-cammini-registry.yml`, parte
+sempre in dry-run). Per **gruppo di relazioni**, non per nome+bbox:
+
+1. relazioni col nome del cammino + sotto-relazioni (2 livelli), a piedi, filtro Italia sul centro;
+2. geometria delle way in blocchi da 250 per id;
+3. foglie = tappe ufficiali (nome "Tappa N"/ref numerico) oppure pezzi senza tappe → tappe calcolate
+   (borghi come punti di sosta); i pezzi non-tappa già coperti ≥70% dalle tappe ufficiali sono ignorati;
+4. **ordine geometrico** (`orderAlongRoute`): i numeri di tappa ripartono da 1 in ogni regione, non
+   servono all'ordine; si parte dal capo più a nord, un tratto oltre 3 km non si aggancia (resta fuori);
+5. divisione a un punto (`splitAt`: Francigena a Roma → Canterbury–Roma / Roma–Leuca);
+6. **controllo di qualità** (`assessQuality`): collegato, ≥3 tappe, ≤10% di tappe >45 km o <2 km,
+   pochi salti. **PRONTO** o **DA_RIVEDERE**: con `--write` si scrivono solo i pronti
+   (`--min-status da_rivedere` per forzare). Lo stato finisce in `dtrek_places.metadata.quality`.
+
+Non supportati: ondata 3 (tappe in rifugio) e import di reti.

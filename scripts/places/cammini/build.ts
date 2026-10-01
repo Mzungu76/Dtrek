@@ -38,13 +38,15 @@ export interface BuiltCammino {
   config: CamminoConfig
   /** Come sono state ottenute le tappe — la UI/le guide non devono presentare come "ufficiali"
    *  tappe che abbiamo calcolato noi. */
-  tappeSource: 'official' | 'computed'
+  tappeSource: 'official' | 'computed' | 'mixed'
   line: LatLon[]
   lengthM: number
   tappe: TappaDraft[]
   relationIds: number[]
   tags: Record<string, string>
   diagnostics: string[]
+  /** Controllo di qualità (import per registro): pronto / da rivedere + motivi. */
+  quality?: Record<string, unknown>
 }
 
 const ROUTE_OK = new Set(['hiking', 'foot'])
@@ -226,7 +228,7 @@ export function camminoToPlaceCandidate(built: BuiltCammino): PlaceCandidate {
     sourceId: `cammino/${config.id}`,
     rawType: 'route=hiking',
     // Tappe ufficiali = struttura data dalla fonte; calcolate = nostra stima, meno affidabile.
-    confidence: built.tappeSource === 'official' ? 0.9 : 0.75,
+    confidence: built.tappeSource === 'official' ? 0.9 : built.tappeSource === 'mixed' ? 0.8 : 0.75,
     metadata: {
       kind: 'cammino',
       theme: config.theme,
@@ -240,6 +242,7 @@ export function camminoToPlaceCandidate(built: BuiltCammino): PlaceCandidate {
       network: tags.network ?? null,
       // Panoramica per la mappa: formato [lat, lon][] come routePolyline, già semplificata.
       overviewPolyline: simplifyPolyline(built.line, 150),
+      ...(built.quality ? { quality: built.quality } : {}),
     },
   }
 }

@@ -97,3 +97,7 @@ La scoperta è automatica (come per i sentieri) ma con soglia di ammissione: `sc
 - **Alte Vie, Via Alpina, GTA, Sentiero Italia**: tappe chiuse nei **rifugi** (non nei paesi) — vedi `docs/rifugi-progettazione.md`.
 - **Ondate**: 1 = tappe ufficiali già in OSM (Francigena, Sant'Antonio, San Benedetto, Matildica, Abati, Vandelli, Alpe Adria, San Jacopo); 2 = relazione sola, tappe calcolate; 3 = Alte Vie e reti.
 - Il workflow di scoperta riporta per ogni voce *trovato / solo da rivedere / NON TROVATO* e cerca per nome quelle mancanti.
+
+## 7. Import dei cammini del registro
+
+`scripts/places/cammini/import-registry.ts` + workflow `import-cammini-registry.yml`. Ordine geometrico delle tappe, tappe ufficiali o calcolate (mista), divisione a Roma per la Francigena, filtro Italia, controllo di qualità pronto/da rivedere (solo i pronti vengono scritti). Stato: ondata 1 e 2 implementate e testate su fixture; **da provare su dati reali** (dry-run per cammino). Ondata 3 (rifugi, reti) da fare.

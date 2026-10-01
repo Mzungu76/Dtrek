@@ -1,0 +1,90 @@
+name: Import Cammini del registro (OpenStreetMap → dtrek_places + dtrek_cammino_tappe)
+
+# Manuale. Importa un cammino di lib/cammini/registry.ts per GRUPPO di relazioni OSM (scripts/places/
+# cammini/import-registry.ts): scarica le relazioni col nome del cammino e le loro sotto-relazioni,
+# la geometria in blocchi, taglia fuori l'estero, ordina le tappe lungo il percorso e le controlla.
+# Solo a piedi (route=hiking|foot). Prerequisiti: migrazioni add_cammino_meta_type.sql e
+# add_cammino_tappe.sql, e i borghi già importati (servono come punti di sosta e per il filtro Italia).
+#
+# Parti SEMPRE da dry-run: il log mostra tappe, lunghezze, interruzioni e lo stato di qualità
+# (PRONTO / DA_RIVEDERE). In write, di default si scrivono solo i cammini PRONTI.
+# Ondata 3 (Alte Vie, Via Alpina, GTA, Sentiero Italia: tappe in rifugio) non è ancora supportata.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dry-run: calcola e stampa. write: scrive su Supabase (solo i cammini PRONTI, salvo minStatus)."
+        required: true
+        type: choice
+        options:
+          - dry-run
+          - write
+        default: dry-run
+      registryId:
+        description: "Id nel registro (es. cammino-san-benedetto, via-francigena, cammino-sant-antonio, via-matildica)."
+        required: true
+        type: string
+        default: "cammino-san-benedetto"
+      minStatus:
+        description: "Solo con write: pronto (default) oppure da_rivedere per scrivere anche i cammini con problemi di qualità."
+        required: true
+        type: choice
+        options:
+          - pronto
+          - da_rivedere
+        default: pronto
+
+concurrency:
+  group: import-places
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    env:
+      MODE: ${{ inputs.mode }}
+      REGISTRY_ID: ${{ inputs.registryId }}
+      MIN_STATUS: ${{ inputs.minStatus }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Verifica secret Supabase
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_SERVICE_KEY:-}" ]; then
+            echo "Secret Supabase mancanti — serve SUPABASE_URL e (SUPABASE_SERVICE_KEY o SUPABASE_SERVICE_ROLE_KEY): servono i comuni del catalogo anche in dry-run." >&2
+            exit 1
+          fi
+
+      - name: Import
+        run: |
+          set -euo pipefail
+          ARGS=(scripts/places/cammini/import-registry.ts --id "$REGISTRY_ID" --save-fixture /tmp/raw-registry.json)
+          if [ "$MODE" = "write" ]; then ARGS+=(--write --min-status "$MIN_STATUS"); fi
+          npx tsx "${ARGS[@]}" | tee /tmp/import-registry.txt
+          {
+            echo "### Import cammino del registro ($MODE) — $REGISTRY_ID"
+            echo '```'
+            cat /tmp/import-registry.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: raw-registry
+          path: /tmp/raw-registry.json
+          if-no-files-found: ignore
