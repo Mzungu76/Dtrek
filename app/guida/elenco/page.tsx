@@ -209,21 +209,25 @@ export default function GuidaIndexPage() {
                       cavallo del bordo superiore della card, non restarne tagliato a metà. */}
                   <div className="bg-white rounded-3xl overflow-hidden border border-dashed border-sky-200">
                     <div className="relative h-[160px] bg-gradient-to-b from-sky-50 to-stone-50 bg-topography">
-                      {covers[hike.id] ? (
-                        <FallbackImage
-                          src={covers[hike.id]} alt={hike.title} fill
-                          sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
-                          className="object-cover" loading="lazy"
-                        />
-                      ) : hike.routePolyline && hike.routePolyline.length > 1 ? (
-                        <div className="absolute inset-3">
-                          <RouteThumb polyline={hike.routePolyline} color="#0284c7" strokeWidth={3} />
-                        </div>
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <FallbackIcon className="w-10 h-10 text-sky-200" />
-                        </div>
-                      )}
+                      {(() => {
+                        const placeholder = hike.routePolyline && hike.routePolyline.length > 1 ? (
+                          <div className="absolute inset-3">
+                            <RouteThumb polyline={hike.routePolyline} color="#0284c7" strokeWidth={3} />
+                          </div>
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <FallbackIcon className="w-10 h-10 text-sky-200" />
+                          </div>
+                        )
+                        return covers[hike.id] ? (
+                          <FallbackImage
+                            src={covers[hike.id]} alt={hike.title} fill
+                            sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+                            className="object-cover" loading="lazy"
+                            fallback={placeholder}
+                          />
+                        ) : placeholder
+                      })()}
                       {badge ? (
                         <span className={`absolute top-3 right-3 text-[11px] font-bold px-2.5 py-1 rounded-full shadow-sm ${badge.className}`}>
                           {badge.label}
