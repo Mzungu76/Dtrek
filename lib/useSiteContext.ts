@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { getPlannedById } from './plannedStore'
 import type { MetaType } from './metaTypes'
+import type { DescriptionCredit } from './placeSources'
 
 /** Il Sito (o Borgo/Città) a cui un Reportage appartiene, com'è nella sua Guida: il punto del sito (mai il punto in
  *  cui l'utente ha registrato la visita), la sua descrizione e l'immagine di copertina. */
@@ -10,8 +11,8 @@ export interface SiteContext {
   longitude?: number
   /** Stessa descrizione della Guida (dtrek_places.description, altrimenti estratto Wikipedia). */
   description?: string
-  /** Presente solo quando `description` viene dall'estratto Wikipedia — per l'attribuzione. */
-  wikipediaUrl?: string
+  /** Fonte della descrizione (archivio o Wikipedia) — la stessa mostrata dalla Guida. */
+  descriptionCredit?: DescriptionCredit | null
   imageUrl?: string
   imageCredit?: string
 }
@@ -26,6 +27,7 @@ interface PlaceResponse {
   imageUrl?: string | null
   imageCredit?: string | null
   wikipedia?: { extract?: string; url?: string } | null
+  descriptionCredit?: DescriptionCredit | null
 }
 
 /** Solo per un Reportage di Sito o di Borgo/Città (un Sentiero non ne ha bisogno): legge la Meta collegata
@@ -57,7 +59,7 @@ export function useSiteContext(
         const description = p.description?.trim() || p.wikipedia?.extract?.trim() || undefined
         const detail: SiteContext = {
           description,
-          wikipediaUrl: !p.description?.trim() ? p.wikipedia?.url : undefined,
+          descriptionCredit: description ? p.descriptionCredit ?? null : null,
           imageUrl: p.imageUrl ?? undefined,
           imageCredit: p.imageCredit ?? undefined,
         }

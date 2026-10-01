@@ -24,6 +24,7 @@
 // Diario che contiene — così l'esclusione dei Reportage e la selezione delle foto di ciascun
 // Diario si applicano da sole dentro una raccolta, senza essere riscritte lì.
 
+import type { DescriptionCredit } from './placeSources'
 import { supabase } from './supabase'
 import { normalizeDiaryConfig, resolveReportExtras, type DiaryConfig, type DiaryReportExtras } from './diaryConfig'
 import { normalizeRaccoltaConfig } from './raccolteConfig'
@@ -106,6 +107,8 @@ export interface PublicDiaryEntry {
   /** Descrizione del luogo dall'archivio (dtrek_places) — la stessa della Guida, senza il ripiego
    *  Wikipedia che è una ricerca dal vivo. Solo per Sito e Borgo/Città. */
   siteDescription?:  string | null
+  /** Fonte della descrizione (archivio) — sempre mostrata con il testo. */
+  siteDescriptionCredit?: DescriptionCredit | null
   siteCoverUrl?:     string | null
 }
 
@@ -224,6 +227,7 @@ export async function buildContentFromReports(
         sitePoint:        siteByActivity.get(r.activity_id as string)?.point ?? null,
         siteCoverUrl:     siteByActivity.get(r.activity_id as string)?.cover ?? null,
         siteDescription:  siteByActivity.get(r.activity_id as string)?.description ?? null,
+        siteDescriptionCredit: siteByActivity.get(r.activity_id as string)?.descriptionCredit ?? null,
         stopsCount:       Array.isArray(act?.borgo_stops) ? (act?.borgo_stops as unknown[]).length : 0,
         content:          (r.content as string) ?? '',
         // La scelta fatta nel Diario vale anche qui: `photoIdsByActivity` dice quali foto l'autore

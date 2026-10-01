@@ -1,3 +1,4 @@
+import type { DescriptionCredit } from '@/lib/placeSources'
 import type { ActivityMeta } from '@/lib/blobStore'
 import type { WeatherAtHike } from '@/lib/weather'
 import type { MetaType, SiteType } from '@/lib/metaTypes'
@@ -16,7 +17,7 @@ export interface DiaryReport {
      *  quali cifre/parole mostra la pagina (lib/reportFacts.ts). */
     meta_type?: MetaType | null; site_type?: SiteType | null; borgo_stops?: unknown[] | null
     /** Solo Sito/Borgo: punto, immagine e descrizione del luogo (lib/siteInfoServer.ts). */
-    site?: { point: { lat: number; lon: number } | null; cover: string | null; description: string | null } | null
+    site?: { point: { lat: number; lon: number } | null; cover: string | null; description: string | null; descriptionCredit?: DescriptionCredit | null } | null
   } | null
 }
 

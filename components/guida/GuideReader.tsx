@@ -1067,7 +1067,7 @@ export default function GuideReader({
           if (body?.trim()) return null
           const description = placeDetail?.description ?? placeDetail?.wikipedia?.extract
           return description
-            ? <PlaceDescriptionWidget text={description} wikipediaUrl={!placeDetail?.description ? placeDetail?.wikipedia?.url : undefined} />
+            ? <PlaceDescriptionWidget text={description} credit={placeDetail?.descriptionCredit} />
             : null
         }
         return (

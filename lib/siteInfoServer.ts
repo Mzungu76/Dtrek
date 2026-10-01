@@ -1,3 +1,4 @@
+import { archiveDescriptionCredit, stripEmbeddedAttribution, type DescriptionCredit } from './placeSources'
 import { supabase } from './supabase'
 import { isTrustedMediaUrl } from './trustedMediaHosts'
 
@@ -13,6 +14,8 @@ export interface SiteInfo {
   cover: string | null
   /** dtrek_places.description — senza il ripiego Wikipedia della Guida, che è una ricerca dal vivo. */
   description: string | null
+  /** Fonte della descrizione (lib/placeSources.ts) — null se non c'è testo o la fonte non è nota. */
+  descriptionCredit: DescriptionCredit | null
 }
 
 /** Best-effort: se una riga o una colonna manca, quel luogo resta senza info e il resto si pubblica
@@ -32,8 +35,8 @@ export async function fetchSiteInfo(
 
     const placeIds = Array.from(new Set((hikes ?? []).map(h => h.place_id as string | null).filter((x): x is string => !!x)))
     const { data: places } = placeIds.length
-      ? await supabase.from('dtrek_places').select('id, image_url, description').in('id', placeIds)
-      : { data: [] as { id: string; image_url: string | null; description: string | null }[] }
+      ? await supabase.from('dtrek_places').select('id, image_url, description, source').in('id', placeIds)
+      : { data: [] as { id: string; image_url: string | null; description: string | null; source: string | null }[] }
     const placeById = new Map((places ?? []).map(p => [p.id as string, p]))
     const hikeById = new Map((hikes ?? []).map(h => [h.id as string, h]))
 
@@ -42,11 +45,14 @@ export async function fetchSiteInfo(
       if (!h) continue
       const place = h.place_id ? placeById.get(h.place_id as string) : undefined
       const img = (place?.image_url as string | null | undefined) ?? null
-      const description = (place?.description as string | null | undefined)?.trim() || null
+      // Senza l'attribuzione PTPR che l'importer incorpora nel testo: la fonte si mostra a parte.
+      const rawDescription = (place?.description as string | null | undefined)?.trim() || null
+      const description = rawDescription ? (stripEmbeddedAttribution(rawDescription) || null) : null
       out.set(a.id, {
         point: typeof h.latitude === 'number' && typeof h.longitude === 'number' ? { lat: h.latitude, lon: h.longitude } : null,
         cover: img && isTrustedMediaUrl(img) ? img : null,
         description,
+        descriptionCredit: description ? archiveDescriptionCredit(place?.source as string | null | undefined) : null,
       })
     }
   } catch { /* nessuna info sul luogo: il Reportage resta com'era */ }

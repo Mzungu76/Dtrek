@@ -418,6 +418,11 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
             <p style={{ fontFamily: FONT.lora, fontSize: 13.5, lineHeight: 1.85, color: '#4d4740', margin: 0 }}>
               {act.site.description}
             </p>
+            {act.site.descriptionCredit && (
+              <p style={{ fontFamily: FONT.barlow, fontSize: 9, letterSpacing: 1, color: '#a9a18e', margin: '8px 0 0' }}>
+                Fonte: {act.site.descriptionCredit.label}
+              </p>
+            )}
           </div>
         )}
         <p style={{ fontFamily: FONT.barlow, fontSize: 9, fontWeight: 700, letterSpacing: 4, color: '#e08d3c', textTransform: 'uppercase', margin: '0 0 36px' }}>

@@ -57,6 +57,24 @@ const SOURCES: CreditSource[] = [
     note: 'Previsioni meteo (Locationforecast) mostrate nelle uscite, nella navigazione e nei widget della Bacheca. Dati dell’Istituto Meteorologico Norvegese.',
   },
   {
+    name: 'Ministero della Cultura — Catalogo generale dei beni culturali',
+    url: 'https://catalogo.beniculturali.it',
+    license: 'Licenza indicata dalla fonte',
+    note: 'Descrizioni e dati di musei, castelli, chiese e altri luoghi della cultura (ICCD / dati.beniculturali.it). Ogni descrizione mostrata riporta la fonte da cui proviene.',
+  },
+  {
+    name: 'Regione Lazio — PTPR (Piano Territoriale Paesistico Regionale)',
+    url: 'https://dati.lazio.it',
+    license: 'CC BY 4.0',
+    note: 'Siti archeologici e di interesse paesaggistico della Tavola B del PTPR.',
+  },
+  {
+    name: 'Regione Lombardia — Lombardia Beni Culturali',
+    url: 'https://www.lombardiabeniculturali.it',
+    license: 'Licenza indicata dalla fonte',
+    note: 'Descrizioni di musei, archivi e luoghi della cultura lombardi (SIRBeC).',
+  },
+  {
     name: 'Wikipedia e Wikivoyage',
     url: 'https://www.wikipedia.org/',
     license: 'CC BY-SA 4.0',

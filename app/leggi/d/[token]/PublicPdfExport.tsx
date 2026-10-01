@@ -164,6 +164,11 @@ function EntryPage({ entry, n, mapDataUrl }: {
           <p className="pdf-block" style={{ fontFamily: FONT_BODY, fontSize: 12.5, lineHeight: 1.7, color: '#4d4740', margin: '0 0 10px' }}>
             {entry.siteDescription}
           </p>
+          {entry.siteDescriptionCredit && (
+            <p className="pdf-block" style={{ fontFamily: FONT_UI, fontSize: 9, color: '#9ca3af', margin: '0 0 10px' }}>
+              Fonte: {entry.siteDescriptionCredit.label}
+            </p>
+          )}
         </div>
       )}
 

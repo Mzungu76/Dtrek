@@ -200,6 +200,14 @@ export function PublicReportPage({ entry, n, show, hideExactDates = false }: {
               <p className="font-lora" style={{ fontSize: cq(13.5), lineHeight: 1.85, color: '#4d4740', margin: 0 }}>
                 {entry.siteDescription}
               </p>
+              {entry.siteDescriptionCredit && (
+                <p className="font-barlow" style={{ fontSize: cq(9), letterSpacing: cq(1), color: '#a9a18e', margin: `${cq(8)} 0 0` }}>
+                  Fonte:{' '}
+                  {entry.siteDescriptionCredit.url
+                    ? <a href={entry.siteDescriptionCredit.url} target="_blank" rel="noopener noreferrer" style={{ color: '#8a7f6e', textDecoration: 'underline' }}>{entry.siteDescriptionCredit.label}</a>
+                    : entry.siteDescriptionCredit.label}
+                </p>
+              )}
             </div>
           )}
           <p className="font-barlow" style={{ fontWeight: 700, fontSize: cq(9), letterSpacing: cq(4), color: '#e08d3c', textTransform: 'uppercase', margin: `0 0 ${cq(36)}` }}>

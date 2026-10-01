@@ -632,7 +632,7 @@ export default function ReportReader({
     switch (key) {
       case 'descrizione_sito':
         return siteCtx?.description
-          ? <PlaceDescriptionWidget text={siteCtx.description} wikipediaUrl={siteCtx.wikipediaUrl} />
+          ? <PlaceDescriptionWidget text={siteCtx.description} credit={siteCtx.descriptionCredit} />
           : null
       case 'dati_punteggi': {
         const hasHR  = (activity.avgHeartRate ?? 0) > 0

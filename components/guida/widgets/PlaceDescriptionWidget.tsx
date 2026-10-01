@@ -1,11 +1,11 @@
 import { Link2 } from 'lucide-react'
+import type { DescriptionCredit } from '@/lib/placeSources'
 
 interface Props {
   text: string
-  /** Presente SOLO quando `text` viene dall'estratto Wikipedia (app/api/places/[id]/route.ts —
-   *  wikipedia.extract, usato solo quando manca una description propria sostanziale), mai per un
-   *  testo già proprio della Meta: l'attribuzione va data solo alla fonte davvero usata. */
-  wikipediaUrl?: string
+  /** Fonte della descrizione automatica (archivio o Wikipedia — lib/placeSources.ts): mostrata sotto
+   *  il testo, con link quando c'è. Mai passata per un testo scritto dall'utente o dall'AI. */
+  credit?: DescriptionCredit | null
 }
 
 /**
@@ -19,19 +19,25 @@ interface Props {
  * avviso "non ancora generato" qui: SectionCard lo mostra già da sé nel footer sotto il widget
  * quando manca il testo, ripeterlo qui sarebbe ridondante.
  */
-export default function PlaceDescriptionWidget({ text, wikipediaUrl }: Props) {
+export default function PlaceDescriptionWidget({ text, credit }: Props) {
   return (
     <div className="flex flex-col gap-3">
       <p className="text-[15px] leading-7 text-stone-600">{text}</p>
-      {wikipediaUrl && (
-        <a
-          href={wikipediaUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 self-start px-2.5 py-1 rounded-full bg-stone-100 hover:bg-stone-200 transition-colors text-[11px] text-stone-500"
-        >
-          <Link2 className="w-3 h-3 shrink-0 text-stone-400" /> Da Wikipedia
-        </a>
+      {credit && (
+        credit.url ? (
+          <a
+            href={credit.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 self-start px-2.5 py-1 rounded-full bg-stone-100 hover:bg-stone-200 transition-colors text-[11px] text-stone-500"
+          >
+            <Link2 className="w-3 h-3 shrink-0 text-stone-400" /> Fonte: {credit.label}
+          </a>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 self-start px-2.5 py-1 rounded-full bg-stone-100 text-[11px] text-stone-500">
+            Fonte: {credit.label}
+          </span>
+        )
       )}
     </div>
   )
