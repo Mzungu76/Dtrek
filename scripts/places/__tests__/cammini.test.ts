@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { clipToBbox, polylineLengthM, simplifyPolyline, stitchWays, type LatLon } from '../../../lib/cammini/geometry'
+import { clipToBbox, polylineLengthM, simplifyPolyline, stitchWays, trimToEndpoints, type LatLon } from '../../../lib/cammini/geometry'
 import { parseTappaEndpoints, parseTappaNumber, splitIntoTappe } from '../../../lib/cammini/tappe'
 import { buildCammino, camminoToPlaceCandidate, type OverpassRelation } from '../cammini/build'
 import type { CamminoConfig } from '../cammini/config'
@@ -43,6 +43,21 @@ describe('geometria dei cammini', () => {
 
   it('simplifyPolyline riduce i punti allineati agli estremi', () => {
     expect(simplifyPolyline(meridian(42.5, 42.0), 10)).toHaveLength(2)
+  })
+})
+
+describe('trimToEndpoints', () => {
+  const line = meridian(42.8, 41.6)
+  it('taglia ciò che sta oltre gli estremi dichiarati', () => {
+    const r = trimToEndpoints(line, { lat: 42.5, lon: 12 }, { lat: 41.9, lon: 12 })
+    expect(r.line[0][0]).toBeCloseTo(42.5, 2)
+    expect(r.line[r.line.length - 1][0]).toBeCloseTo(41.9, 2)
+    expect(r.trimmedStartM).toBeCloseTo(33_300, -3)
+  })
+  it('non taglia un capo se l\'estremo è lontano dalla linea', () => {
+    const r = trimToEndpoints(line, { lat: 42.5, lon: 13 }, { lat: 41.9, lon: 12 })
+    expect(r.trimmedStartM).toBe(0)
+    expect(r.line[r.line.length - 1][0]).toBeCloseTo(41.9, 2)
   })
 })
 
@@ -129,6 +144,28 @@ describe('buildCammino', () => {
     expect(built.tappe.length).toBeGreaterThan(2)
     expect(built.tappe.every(t => t.source === 'computed')).toBe(true)
     expect(built.diagnostics.join(' ')).toContain('Scartate 1 catene minori')
+  })
+
+  it('taglia agli estremi, nomina i capi dalla config e non prende la descrizione da una variante', () => {
+    const variante: OverpassRelation = {
+      type: 'relation', id: 1, tags: { route: 'hiking', name: 'Cammino di Prova (variante)', description: 'This variant uses the Via Amerina.', website: 'https://variante.example' },
+      members: [way(1, meridian(42.5, 42.45, 12.03))],
+    }
+    const principale: OverpassRelation = {
+      type: 'relation', id: 2, tags: { route: 'hiking', name: 'Cammino di Prova', ref: 'CP', website: 'https://principale.example' },
+      members: [way(2, meridian(42.7, 41.5))],
+    }
+    const cfg = { ...config, start: { name: 'Nord', lat: 42.5, lon: 12, anchorName: 'Nord' }, end: { name: 'Sud (centro)', lat: 41.7, lon: 12, anchorName: 'Sud' } }
+    const anchors = [{ id: 'n', name: 'Nord', lat: 60, lon: 12 }, { id: 's', name: 'Sud', lat: 60, lon: 13 }]
+    const built = buildCammino([variante, principale], cfg, anchors)
+    expect(built.line[0][0]).toBeCloseTo(42.5, 2)
+    expect(built.tappe[0].fromName).toBe('Nord')
+    expect(built.tappe[0].fromAnchorId).toBe('n')
+    expect(built.tappe[built.tappe.length - 1].toName).toBe('Sud (centro)')
+    expect(built.tappe[built.tappe.length - 1].toAnchorId).toBe('s')
+    const c = camminoToPlaceCandidate(built)
+    expect(c.officialUrl).toBe('https://principale.example')
+    expect(c.description ?? '').not.toContain('Amerina')
   })
 
   it('scarta le relazioni escluse per nome e quelle non a piedi', () => {
