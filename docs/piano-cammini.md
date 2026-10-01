@@ -86,3 +86,14 @@ solo in parte o in direzione opposta; coerenza dei dati sui pernottamenti.
 ## 5. Estensione a tutti i cammini d'Italia
 
 La scoperta è automatica (come per i sentieri) ma con soglia di ammissione: `scripts/places/cammini/discover.ts` + `lib/cammini/discovery.ts`, workflow `discover-cammini.yml`. Passi successivi: (1) tarare le soglie sulla lista reale; (2) import per **id di relazione** al posto della configurazione per cammino; (3) controllo qualità con stato pronto/da rivedere/scartato; solo i pronti sono visibili agli utenti.
+
+## 6. Registro dei cammini approvati (decisioni confermate)
+
+`lib/cammini/registry.ts`: 34 voci scelte a mano dopo la scoperta nazionale. Decisioni:
+- **Struttura**: `cammino` (si percorre intero) o `rete` (Via Alpina, GTA, Romea Strata, Sentiero Italia: l'utente sceglie un tratto, niente testi AI su tutte le tappe).
+- **Via di Francesco**: un cammino solo con le varianti (Via di Roma, Via del Sud, Cammino di Francesco).
+- **Via Francigena**: due cammini, divisi a Roma (San Pietro): Canterbury–Roma e Roma–Leuca (la relazione OSM "07 Lazio" li contiene entrambi).
+- **Via Romea / Romea Strata**: sovrapposizione da verificare con la geometria prima di tenerli entrambi.
+- **Alte Vie, Via Alpina, GTA, Sentiero Italia**: tappe chiuse nei **rifugi** (non nei paesi) — vedi `docs/rifugi-progettazione.md`.
+- **Ondate**: 1 = tappe ufficiali già in OSM (Francigena, Sant'Antonio, San Benedetto, Matildica, Abati, Vandelli, Alpe Adria, San Jacopo); 2 = relazione sola, tappe calcolate; 3 = Alte Vie e reti.
+- Il workflow di scoperta riporta per ogni voce *trovato / solo da rivedere / NON TROVATO* e cerca per nome quelle mancanti.

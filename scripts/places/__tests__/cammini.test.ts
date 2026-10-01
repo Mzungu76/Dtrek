@@ -227,7 +227,8 @@ describe('overpassQuery', () => {
   })
 })
 
-import { discoveryQuery, toDiscoveryRelations, toMarkdown } from '../cammini/discover'
+import { discoveryQuery, nameSearchQuery, toDiscoveryRelations, toMarkdown } from '../cammini/discover'
+import { matchRegistry, REGISTRY } from '../../../lib/cammini/registry'
 import { evaluateAll, groupFamilies } from '../../../lib/cammini/discovery'
 
 describe('discover (query e parsing)', () => {
@@ -257,5 +258,24 @@ describe('discover (query e parsing)', () => {
     const md = toMarkdown(res, groupFamilies(res))
     expect(md).toContain('ammessi **1**')
     expect(md).toContain('relation/5')
+  })
+})
+
+describe('registro nella scoperta', () => {
+  it('la ricerca per nome è una sola query, a piedi, con i nomi escapati', () => {
+    const q = nameSearchQuery(REGISTRY.filter(e => e.id === 'cammino-sant-antonio' || e.id === 'cammino-celeste'))
+    expect(q).toContain('hiking|foot')
+    expect(q).toContain("Cammino di Sant'Antonio|Cammino Celeste")
+    expect(q).not.toMatch(/bicycle|mtb/)
+    expect(q).toContain('out body center;')
+  })
+
+  it('la tabella markdown riporta cosa è NON TROVATO', () => {
+    const rels = toDiscoveryRelations([{ type: 'relation', id: 7, tags: { name: 'Cammino Celeste', network: 'nwn', distance: '90' }, members: [{ type: 'way', ref: 1 }] }])
+    const res = evaluateAll(rels)
+    const fams = groupFamilies(res)
+    const md = toMarkdown(res, fams, matchRegistry(fams))
+    expect(md).toContain('Registro dei cammini approvati (1/')
+    expect(md).toContain('**NON TROVATO**')
   })
 })
