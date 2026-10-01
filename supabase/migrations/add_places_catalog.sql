@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS dtrek_places (
   id                      uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name                    text NOT NULL,
 
-  meta_type               text NOT NULL CHECK (meta_type IN ('sentiero', 'borgo_citta', 'sito')),
+  meta_type               text NOT NULL CHECK (meta_type IN ('sentiero', 'borgo_citta', 'sito', 'cammino')),
   -- Per meta_type='sito': uno dei SiteType di lib/metaTypes.ts (museo, castello, ...).
   -- Per meta_type='borgo_citta': 'borgo' | 'citta' (piano §6, place_category — mai dedotto da
   -- Comune=Borgo, vedi classificazione Dtrek separata da ISTAT). NULL per 'sentiero': i sentieri

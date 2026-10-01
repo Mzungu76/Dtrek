@@ -45,7 +45,7 @@ CREATE INDEX IF NOT EXISTS idx_activities_user_id     ON activities (user_id);
 -- per i commenti completi. "Travasati" dalla Meta al salvataggio (lib/activitySave.ts), come già
 -- fatto per guide_text/poi_wiki — mai una dipendenza runtime dal join a planned_hikes.
 ALTER TABLE activities ADD COLUMN IF NOT EXISTS meta_type TEXT NOT NULL DEFAULT 'sentiero'
-  CHECK (meta_type IN ('sentiero', 'borgo_citta', 'sito'));
+  CHECK (meta_type IN ('sentiero', 'borgo_citta', 'sito', 'cammino'));
 ALTER TABLE activities ADD COLUMN IF NOT EXISTS site_type TEXT
   CHECK (site_type IS NULL OR site_type IN (
     'museo', 'castello', 'abbazia', 'chiesa', 'sito_archeologico', 'monumento',
@@ -637,7 +637,7 @@ CREATE EXTENSION IF NOT EXISTS postgis;
 CREATE TABLE IF NOT EXISTS dtrek_places (
   id                      uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name                    text NOT NULL,
-  meta_type               text NOT NULL CHECK (meta_type IN ('sentiero', 'borgo_citta', 'sito')),
+  meta_type               text NOT NULL CHECK (meta_type IN ('sentiero', 'borgo_citta', 'sito', 'cammino')),
   subtype                 text,
   population              integer,
   description             text,
@@ -1271,7 +1271,7 @@ ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS gift_route_offered_at TIMESTA
 -- completi. DEFAULT 'sentiero' così ogni riga esistente resta invariata; site_type valorizzato
 -- solo quando meta_type = 'sito'. Mai dedotto da geometria/GPX — sempre scelto esplicitamente.
 ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS meta_type TEXT NOT NULL DEFAULT 'sentiero'
-  CHECK (meta_type IN ('sentiero', 'borgo_citta', 'sito'));
+  CHECK (meta_type IN ('sentiero', 'borgo_citta', 'sito', 'cammino'));
 
 ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS site_type TEXT
   CHECK (site_type IS NULL OR site_type IN (
@@ -1424,3 +1424,7 @@ NOTIFY pgrst, 'reload schema';
 -- ═══════════════════════════════════════════════════════════
 -- UPDATE activities    SET user_id = 'INCOLLA-QUI-IL-TUO-UUID' WHERE user_id IS NULL;
 -- UPDATE planned_hikes SET user_id = 'INCOLLA-QUI-IL-TUO-UUID' WHERE user_id IS NULL;
+
+-- Piano Cammini — vedi supabase/migrations/add_cammino_meta_type.sql per i commenti completi.
+ALTER TABLE planned_hikes ADD COLUMN IF NOT EXISTS cammino_plan JSONB;
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS tappa_index INTEGER;

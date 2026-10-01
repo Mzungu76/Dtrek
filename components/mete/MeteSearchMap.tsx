@@ -31,7 +31,7 @@ const ITALY_ZOOM = 6
 const PERCORSI_MIN_ZOOM = 10
 const SEARCH_LIMIT = 60
 
-const GLYPH: Record<MetaType, string> = { borgo_citta: '🏘️', sito: '🏛️', sentiero: '🥾' }
+const GLYPH: Record<MetaType, string> = { borgo_citta: '🏘️', sito: '🏛️', sentiero: '🥾', cammino: '🧭' }
 
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' } as Record<string, string>)[c])

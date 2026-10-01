@@ -79,6 +79,22 @@ parlare mai di distanza percorsa, dislivello, quota o passo — questi dati non 
 tipologia. Concentrati su storia, architettura, atmosfera del centro storico e vita quotidiana del
 luogo.`,
   },
+  cammino: {
+    metaType: 'cammino',
+    hikingMetrics: true,
+    sectionTitle: 'Il cammino',
+    sectionBrief: `Racconta il cammino percorso, tappa dopo tappa: i paesaggi attraversati, i paesi di sosta,
+il ritmo delle giornate. Usa i dati di distanza e dislivello (per tappa e totali) come ancoraggio,
+senza toni enfatici.`,
+    section2Title: 'Storia e incontri',
+    section2Brief: `Approfondisci la storia e il significato del cammino e dei luoghi attraversati,
+le persone e gli incontri lungo la strada se emergono dalle note. Includi almeno un fatto poco
+noto — mai alloggi o servizi non presenti nei dati.`,
+    section3Title: 'In sintesi',
+    section3Brief: IN_SINTESI_SENTIERO,
+    personaAddendum: `\n\nQuesta Meta è un cammino a tappe di più giorni: organizza il racconto per
+giornate di marcia e non inventare mai tappe, alloggi o servizi che non compaiono nei dati.`,
+  },
   sito: {
     metaType: 'sito',
     hikingMetrics: false,

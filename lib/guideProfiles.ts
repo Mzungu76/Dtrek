@@ -104,6 +104,38 @@ escursionistico: non parlare mai di traccia GPS, dislivello, quota o difficoltà
 concetti non esistono per questa tipologia. Concentrati su storia, architettura, atmosfera del
 centro storico e vita quotidiana del luogo.`,
   },
+  cammino: {
+    metaType: 'cammino',
+    // Come un Sentiero (metriche escursionistiche sempre valide, calcolate per tappa) con
+    // l'impianto narrativo a tappe di un Borgo/Città.
+    availableSections: availableSectionsFor([]),
+    sectionOverrides: {
+      prima_di_partire: {
+        title: 'Prima di partire',
+        brief: `## Prima di partire
+Consigli pratici per affrontare il cammino: periodo migliore, credenziale del pellegrino e timbri
+se il cammino li prevede, quanto allenarsi, cosa mettere nello zaino. Parla di alloggi e servizi
+SOLO se emergono dai dati disponibili — mai inventare ostelli, strutture o prezzi.`,
+      },
+      il_percorso: {
+        title: 'Il cammino',
+        brief: `## Il cammino
+Narrazione d'insieme dell'intero cammino: da dove a dove, la sua storia e il suo significato, il
+carattere dei paesaggi attraversati. Resta sul quadro d'insieme: il racconto tappa per tappa vive
+nella sezione dedicata più avanti, qui non anticiparlo.`,
+      },
+      luoghi: {
+        title: 'Tappa per tappa',
+        brief: `## Tappa per tappa
+Se più sotto trovi un elenco TAPPA 1, TAPPA 2, ... racconta il cammino seguendo ESATTAMENTE quell'ordine,
+con un sottotitolo ### per ciascuna tappa (da dove a dove, il carattere del tratto, i luoghi da non
+perdere lungo la strada). Non inventare tappe, distanze o servizi che non compaiono nei dati.`,
+      },
+    },
+    personaAddendum: `\n\nQuesta Meta è un cammino a tappe di più giorni: parla di tappe, giornate di
+marcia, paesi di sosta e storia del cammino. Distanza e dislivello valgono per ogni singola tappa,
+non solo per il totale. Non inventare mai alloggi, servizi, prezzi o varianti non presenti nei dati.`,
+  },
   sito: {
     metaType: 'sito',
     availableSections: NON_HIKING_SECTIONS,

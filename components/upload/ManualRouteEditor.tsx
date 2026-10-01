@@ -30,7 +30,7 @@ const TRAILS_MIN_ZOOM = 10
 // il commento sul tetto di area lato server in app/api/walk-network-segments/route.ts.
 const NETWORK_MIN_ZOOM = 14
 const SEARCH_LIMIT = 60
-const GLYPH: Record<MetaType, string> = { borgo_citta: '🏘️', sito: '🏛️', sentiero: '🥾' }
+const GLYPH: Record<MetaType, string> = { borgo_citta: '🏘️', sito: '🏛️', sentiero: '🥾', cammino: '🧭' }
 
 const ARROW_SPACING_M = 250
 const ARROW_ICON_PX = 13
