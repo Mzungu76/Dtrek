@@ -119,3 +119,8 @@ La scoperta è automatica (come per i sentieri) ma con soglia di ammissione: `sc
 - **Tappa per tappa**: `CamminoTappeWidget` nella sezione `luoghi` — giornate con le tappe dentro, tempi, dislivello per tappa.
 - **Dislivello**: `GET /api/cammini/[id]/elevation?ordinal=N` lo calcola dal DTM al primo bisogno e lo salva in `dtrek_cammino_tappe` (una volta per tutti). Valore indicativo: usa i vertici della tappa semplificata.
 - Da fare: testo AI per singola tappa su richiesta, Navigator per tappa/offline.
+
+### Fase 5b — tappe espandibili e testo su richiesta
+- Un'unica sezione AI "Tappa per tappa" su 16 tappe superava il budget di token (si troncava a metà, errore "Risposta non riconosciuta"): per i cammini `luoghi`, `dati_sicurezza` e `comfort` non si generano più in blocco (`CAMMINO_PER_TAPPA_SECTIONS`).
+- Ogni tappa è espandibile (`CamminoTappeWidget`): profilo altimetrico (DTM, passo 100 m, lisciato), salita/discesa/quota max, CTS stimato (solo dal profilo, senza POI lungo la strada) e racconto di Giulia su richiesta (`POST /api/cammini/tappa-text`, salvato in `cammino_plan.tappe[].text`).
+- Da valutare: sezioni per tappa anche per natura / sapori / consigli; CTS con i POI lungo la tappa.

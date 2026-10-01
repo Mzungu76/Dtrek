@@ -17,6 +17,8 @@ export interface CamminoPlanTappa {
   endsAtAnchor: boolean | null
   elevationGainM: number | null
   elevationLossM: number | null
+  /** Racconto di Giulia per questa tappa, generato su richiesta dell'utente (Fase 5). */
+  text?: string
 }
 
 export interface CamminoPlanDay {

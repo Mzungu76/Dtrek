@@ -420,7 +420,7 @@ export default function GuideReader({
     // "Approfondisci con Giulia" su una card che sembra disponibile finirebbe solo in un errore.
     // 'verificato' non è mai gestita dal profilo (resta sempre disponibile, vedi guide/route.ts).
     const fixed: DisplaySection[] = GUIDE_SECTIONS
-      .filter(def => def.key === 'verificato' || guideProfile.availableSections.includes(def.key))
+      .filter(def => def.key === 'verificato' || guideProfile.availableSections.includes(def.key) || (hike.metaType === 'cammino' && def.key === 'luoghi'))
       .map(def => {
         const parsed = byKey.get(def.key)
         const style = SECTION_STYLE[def.key]
@@ -1156,7 +1156,7 @@ export default function GuideReader({
         // Cammino: le giornate e le tappe del suo piano (hike.camminoPlan), mai la lista di POI
         // lungo una traccia che non ha.
         if (hike.metaType === 'cammino') {
-          return hike.camminoPlan ? <CamminoTappeWidget plan={hike.camminoPlan} color={SECTION_STYLE.luoghi.color} /> : null
+          return hike.camminoPlan ? <CamminoTappeWidget plan={hike.camminoPlan} hikeId={hike.id} color={SECTION_STYLE.luoghi.color} onPlanChange={camminoPlan => onHikeUpdate({ camminoPlan })} /> : null
         }
         return poiList
           ? (
@@ -1315,8 +1315,8 @@ export default function GuideReader({
   // Sezioni fisse ancora senza testo — pilota sia il bottone "Genera il resto della guida" (mostrato
   // solo se ce n'è almeno una) sia il calcolo di cosa chiedere quando viene premuto.
   const missingSectionKeys = useMemo(
-    () => displaySections.filter((s): s is DisplaySection & { guideKey: GuideSectionKey } => s.guideKey != null && !s.body?.trim()).map(s => s.guideKey),
-    [displaySections],
+    () => displaySections.filter((s): s is DisplaySection & { guideKey: GuideSectionKey } => s.guideKey != null && !s.body?.trim() && !(hike.metaType === 'cammino' && s.guideKey === 'luoghi')).map(s => s.guideKey),
+    [displaySections, hike.metaType],
   )
   // Titolo per chiave — per i chip di selezione sotto, dove serve un'etichetta breve per ciascuna
   // sezione ancora mancante (missingSectionKeys porta solo le chiavi, non i titoli già risolti da
@@ -1796,7 +1796,7 @@ export default function GuideReader({
                 // Ogni sezione può essere approfondita singolarmente (app/api/guide/route.ts,
                 // sections) — a differenza di "Genera il resto della guida" che le chiede tutte
                 // insieme. Solo per le sezioni fisse (s.guideKey), non per quelle "legacy".
-                const canApprofondisciSection = showApprofondisciHint && s.guideKey != null && generatingSections.length === 0
+                const canApprofondisciSection = showApprofondisciHint && s.guideKey != null && generatingSections.length === 0 && !(hike.metaType === 'cammino' && s.guideKey === 'luoghi')
                 return (
                   <SectionCard
                     key={s.key}
