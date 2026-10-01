@@ -4,6 +4,7 @@ import type { TappaAnchor } from '../../../lib/cammini/tappe'
 import { buildCammino, camminoToPlaceCandidate, type OverpassElement, type StagesMode } from './build'
 import { CAMMINI, type CamminoConfig } from './config'
 import { importCammino } from './import'
+import { runOverpass } from './overpass'
 
 // Importa un Cammino da OpenStreetMap (docs/piano-cammini.md, Fase 2). Una query Overpass per
 // cammino, eseguita offline da workflow — mai live per-ricerca-utente (piano §9/§21/§48.7). Solo
@@ -13,14 +14,6 @@ import { importCammino } from './import'
 //   npx tsx scripts/places/cammini/fetch.ts --id via-francigena-lazio --dry-run
 //   npx tsx scripts/places/cammini/fetch.ts --id via-francigena-lazio --fixture /tmp/overpass.json --dry-run
 //   (--stages auto|official|computed, --save-fixture <file> per salvare la risposta grezza)
-
-const OVERPASS_ENDPOINTS = [
-  'https://overpass-api.de/api/interpreter',
-  'https://overpass.kumi.systems/api/interpreter',
-  'https://overpass.private.coffee/api/interpreter',
-  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
-]
-const ROUNDS = 3
 
 export function overpassQuery(config: CamminoConfig): string {
   const [s, w, n, e] = config.bbox
@@ -38,31 +31,9 @@ way(r.all)(${bbox})->.w;
 .w out geom;`
 }
 
-const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
-
-async function runOverpass(query: string): Promise<OverpassElement[]> {
-  let lastError: unknown
-  for (let round = 1; round <= ROUNDS; round++) {
-    for (const endpoint of OVERPASS_ENDPOINTS) {
-      try {
-        const res = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'dtrek-places-etl/1.0' },
-          body: `data=${encodeURIComponent(query)}`,
-        })
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const json = await res.json() as { elements?: OverpassElement[]; remark?: string }
-        // Overpass risponde 200 anche quando va in timeout/memoria: l'errore è nel campo `remark`.
-        if (json.remark && !(json.elements?.length)) throw new Error(`remark: ${json.remark}`)
-        return (json.elements ?? []).filter(e => e.type === 'relation' || e.type === 'way')
-      } catch (err) {
-        lastError = err
-        console.warn(`Overpass fallito su ${endpoint} (giro ${round}/${ROUNDS}): ${err instanceof Error ? err.message : err}`)
-      }
-    }
-    if (round < ROUNDS) { console.warn(`Attendo ${round * 30}s prima di riprovare…`); await sleep(round * 30_000) }
-  }
-  throw new Error(`Tutti gli endpoint Overpass hanno fallito dopo ${ROUNDS} giri. Ultimo errore: ${lastError instanceof Error ? lastError.message : lastError}`)
+async function fetchElements(query: string): Promise<OverpassElement[]> {
+  const json = await runOverpass<{ elements?: OverpassElement[] }>(query)
+  return (json.elements ?? []).filter(e => e.type === 'relation' || e.type === 'way')
 }
 
 function arg(name: string): string | undefined {
@@ -99,7 +70,7 @@ async function main() {
   const fixture = arg('fixture')
   const elements: OverpassElement[] = fixture
     ? (JSON.parse(fs.readFileSync(fixture, 'utf8')).elements as OverpassElement[])
-    : await runOverpass(overpassQuery(config))
+    : await fetchElements(overpassQuery(config))
   console.log(`${elements.length} elementi ricevuti.`)
   const saveFixture = arg('save-fixture')
   if (saveFixture && !fixture) fs.writeFileSync(saveFixture, JSON.stringify({ elements }))

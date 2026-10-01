@@ -226,3 +226,35 @@ describe('overpassQuery', () => {
     expect(q).not.toMatch(/\.all out geom|\.main out geom|out geom\(/)
   })
 })
+
+import { discoveryQuery, toDiscoveryRelations, toMarkdown } from '../cammini/discover'
+import { evaluateAll } from '../../../lib/cammini/discovery'
+
+describe('discover (query e parsing)', () => {
+  it('la query chiede solo cammini a piedi, senza geometria', () => {
+    const q = discoveryQuery(41.2, 43.8)
+    expect(q).toContain('hiking|foot')
+    expect(q).not.toMatch(/bicycle|mtb|geom/)
+    expect(q).toContain('out body;')
+  })
+
+  it('conta way e figli dai membri e deduplica per id', () => {
+    const els = [
+      { type: 'relation', id: 1, tags: { name: 'A' }, members: [{ type: 'way', ref: 9 }, { type: 'way', ref: 8 }, { type: 'relation', ref: 2 }] },
+      { type: 'relation', id: 1, tags: { name: 'A' }, members: [] },
+    ]
+    const rels = toDiscoveryRelations(els)
+    expect(rels).toHaveLength(1)
+    expect(rels[0].wayMembers).toBe(2)
+    expect(rels[0].childIds).toEqual([2])
+  })
+
+  it('la tabella markdown riporta ammessi e conteggi', () => {
+    const rels = toDiscoveryRelations([
+      { type: 'relation', id: 5, tags: { name: 'Via Francigena', network: 'iwn', distance: '900', wikidata: 'Q1' }, members: [{ type: 'relation', ref: 6 }, { type: 'relation', ref: 7 }, { type: 'relation', ref: 8 }] },
+    ])
+    const md = toMarkdown(evaluateAll(rels))
+    expect(md).toContain('Ammessi **1**')
+    expect(md).toContain('relation/5')
+  })
+})

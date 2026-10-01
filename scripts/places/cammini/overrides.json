@@ -1,0 +1,5 @@
+{
+  "_nota": "Eccezioni alla scoperta automatica: id di relazioni OSM da forzare dentro (include) o fuori (exclude). Tenere corto: la regola è l'automatismo, qui solo i casi che sbaglia.",
+  "include": [],
+  "exclude": []
+}

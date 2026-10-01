@@ -1,0 +1,49 @@
+name: Scoperta cammini d'Italia (OpenStreetMap → lista candidati)
+
+# Manuale (workflow_dispatch). NON scrive nulla in database: interroga Overpass (4 fasce di
+# latitudine, solo tag e membri delle relazioni a piedi di rete nazionale/internazionale) e valuta
+# ogni relazione con lib/cammini/discovery.ts. Il risultato è nel riepilogo del job e negli
+# artifact: `cammini-candidates` (lista valutata, JSON + tabella) e `raw-discovery` (risposta
+# Overpass grezza, per rifare la valutazione in locale con --fixture dopo aver cambiato le regole).
+# Solo cammini a piedi: quelli ciclabili sono esclusi per decisione di prodotto.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Scoperta
+        run: |
+          set -euo pipefail
+          npx tsx scripts/places/cammini/discover.ts --save-fixture /tmp/raw-discovery.json | tee /tmp/discovery-log.txt
+          cp /tmp/cammini-candidates.md "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: cammini-candidates
+          path: |
+            /tmp/cammini-candidates.json
+            /tmp/cammini-candidates.md
+          if-no-files-found: ignore
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: raw-discovery
+          path: /tmp/raw-discovery.json
+          if-no-files-found: ignore
