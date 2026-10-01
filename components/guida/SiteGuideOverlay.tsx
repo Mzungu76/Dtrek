@@ -9,6 +9,7 @@ import { useHasAiAccess } from '@/app/guida/useHasAiAccess'
 import { canCompleteWithoutTrack } from '@/lib/visitCompletion'
 import { useSiteCheckIn } from '@/lib/useSiteCheckIn'
 import SiteDiaryPicker from './SiteDiaryPicker'
+import SiteUnverifiedPrompt from './SiteUnverifiedPrompt'
 
 interface Props {
   /** id della Guida di Sito da mostrare — nested o autonoma, indifferentemente. */
@@ -40,7 +41,7 @@ export default function SiteGuideOverlay({ siteId, onClose }: Props) {
   const { hasAiAccess, aiUnavailable, trialExpired } = useHasAiAccess()
   // Stesso check-in GPS di app/guida/GuidaHub.tsx (lib/useSiteCheckIn.ts) — qui l'unico Sito
   // possibile è sempre quello aperto, mai una scheda di galleria da risolvere al volo.
-  const { busy: checkInBusy, toast: checkInToast, confirmVisit, diaryPrompt, chooseDiary, cancelDiaryPrompt } = useSiteCheckIn(
+  const { busy: checkInBusy, toast: checkInToast, confirmVisit, diaryPrompt, chooseDiary, cancelDiaryPrompt, unverifiedPrompt, acceptUnverified, cancelUnverified } = useSiteCheckIn(
     (refreshed) => setHike(prev => prev && prev.id === refreshed.id ? { ...prev, ...refreshed } : prev),
   )
 
@@ -94,6 +95,7 @@ export default function SiteGuideOverlay({ siteId, onClose }: Props) {
         </button>
       )}
       <SiteDiaryPicker prompt={diaryPrompt} onChoose={chooseDiary} onCancel={cancelDiaryPrompt} />
+      <SiteUnverifiedPrompt prompt={unverifiedPrompt} onAccept={acceptUnverified} onCancel={cancelUnverified} />
       {checkInToast && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[97] flex items-center gap-2 bg-stone-900 text-white text-[13px] font-semibold px-4 py-2.5 rounded-full shadow-lg animate-in fade-in slide-in-from-top-2 max-w-[calc(100%-2rem)] text-center">
           <Check className={`w-4 h-4 shrink-0 ${checkInToast.ok ? 'text-forest-400' : 'text-amber-400'}`} /> {checkInToast.message}

@@ -613,7 +613,7 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
           <div className="pdf-block" data-mag-block="" data-mag-insert="" style={{ marginBottom: 18 }}>
             <p className="pdf-keep-next" style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: '#193b20', margin: '0 0 12px' }}>Dove si trova</p>
             <div style={{ width: 120 }}>
-              <LocatorMap eager lat={act.site.point.lat} lon={act.site.point.lon} label={meta?.title ?? act.title} />
+              <LocatorMap eager caption="Dove si trova" lat={act.site.point.lat} lon={act.site.point.lon} label={meta?.title ?? act.title} />
             </div>
           </div>
         )}

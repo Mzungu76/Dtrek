@@ -354,7 +354,7 @@ export function PublicReportPage({ entry, n, show, hideExactDates = false }: {
             <div className="mb-5">
               <p className="font-display font-bold text-forest-900 text-lg mb-3">Dove si trova</p>
               <div className="w-32">
-                <LocatorMap eager lat={entry.sitePoint.lat} lon={entry.sitePoint.lon} label={entry.title} />
+                <LocatorMap eager caption="Dove si trova" lat={entry.sitePoint.lat} lon={entry.sitePoint.lon} label={entry.title} />
               </div>
             </div>
           )}
