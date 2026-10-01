@@ -55,6 +55,8 @@ import RelatedPlacesWidget from './widgets/RelatedPlacesWidget'
 import OpereMuseoWidget from './widgets/OpereMuseoWidget'
 import GuideHero from './GuideHero'
 import GuideStatsStrip from './GuideStatsStrip'
+import CamminoTappeWidget from './widgets/CamminoTappeWidget'
+import GuideCamminoStatsStrip from './GuideCamminoStatsStrip'
 import GuideBorgoStatsStrip from './GuideBorgoStatsStrip'
 import SectionNav from '@/components/editorial/SectionNav'
 import VoicePlayer from '@/components/editorial/VoicePlayer'
@@ -1151,6 +1153,11 @@ export default function GuideReader({
         // mostrando "Nessun luogo trovato lungo il percorso" per una Meta senza traccia). "Cosa
         // vedere"/"I luoghi da non perdere" per un Sito resta solo testo narrativo di Giulia.
         if (hike.metaType === 'sito') return null
+        // Cammino: le giornate e le tappe del suo piano (hike.camminoPlan), mai la lista di POI
+        // lungo una traccia che non ha.
+        if (hike.metaType === 'cammino') {
+          return hike.camminoPlan ? <CamminoTappeWidget plan={hike.camminoPlan} color={SECTION_STYLE.luoghi.color} /> : null
+        }
         return poiList
           ? (
             <PoiListWidget
@@ -1488,6 +1495,8 @@ export default function GuideReader({
           walkDurationLabel={borgoItinerary ? formatDuration(borgoItinerary.estimatedTimeSeconds) : undefined}
           categoryLabel={META_TYPE_CONFIG.borgo_citta.label}
         />
+      ) : hike.metaType === 'cammino' && hike.camminoPlan ? (
+        <GuideCamminoStatsStrip plan={hike.camminoPlan} />
       ) : (
         <GuideStatsStrip
           distanceKm={effective.distanceMeters / 1000}

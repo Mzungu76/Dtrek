@@ -111,3 +111,11 @@ La scoperta è automatica (come per i sentieri) ma con soglia di ammissione: `sc
 ## 9. Fase 4 — pianificazione e creazione della guida
 
 `lib/cammini/plan.ts` (`CamminoPlan` in `planned_hikes.cammino_plan`): tappe incluse (da…a), verso (come nel catalogo / al contrario), giornate (una tappa al giorno, oppure accorpate fino a N km: le tappe non si spezzano), date consecutive dalla partenza. La Meta (`metaType: 'cammino'`) porta la polilinea della selezione, i km sommati e **nessuna quota inventata** (D+ per tappa: Fase 5, dal DTM). UI: `CamminoPlanner` dentro il foglio del cammino, con anteprima della selezione sulla mappa. La guida non chiede più "andata o andata e ritorno" per un cammino.
+
+## 10. Fase 5 — la guida del cammino
+
+- **Dati**: la guida legge `planned_hikes.cammino_plan` (il server la include nel prompt: `lib/cammini/guideBlocks.ts`, blocchi `CAMMINO`/`TAPPA n (giornata g)`); niente D+/quota a zero.
+- **Barra cifre**: `GuideCamminoStatsStrip` (distanza, tappe, giorni, ore di cammino a 4 km/h).
+- **Tappa per tappa**: `CamminoTappeWidget` nella sezione `luoghi` — giornate con le tappe dentro, tempi, dislivello per tappa.
+- **Dislivello**: `GET /api/cammini/[id]/elevation?ordinal=N` lo calcola dal DTM al primo bisogno e lo salva in `dtrek_cammino_tappe` (una volta per tutti). Valore indicativo: usa i vertici della tappa semplificata.
+- Da fare: testo AI per singola tappa su richiesta, Navigator per tappa/offline.
