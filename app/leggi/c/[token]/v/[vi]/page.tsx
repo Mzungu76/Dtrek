@@ -4,6 +4,7 @@
 // Raccolta (/leggi/c/[token]), che ora li mostra tutti direttamente — non serve più ripeterlo
 // qui con una copertina-carosello. /leggi/c/[token]/v/[vi]/libro resta raggiungibile con lo
 // stesso contenuto per chi ha già quel link salvato.
+import { entryCounts, entryCountsLabel } from '@/lib/reportFacts'
 import type { Metadata } from 'next'
 import { cache } from 'react'
 import { notFound } from 'next/navigation'
@@ -32,7 +33,7 @@ export async function generateMetadata(
 
   return {
     title: `${volume.title} · ${collection!.title} · DTrek`,
-    description: `${volume.entries.length} escursioni · ${volume.totalKm.toFixed(0)} km — dalla raccolta ${collection!.title}`,
+    description: `${entryCountsLabel(entryCounts(volume.entries))}${volume.totalKm > 0 ? ` · ${volume.totalKm.toFixed(0)} km` : ''} — dalla raccolta ${collection!.title}`,
   }
 }
 

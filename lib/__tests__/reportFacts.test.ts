@@ -46,3 +46,19 @@ describe('reportNoun / reportSummaryLine', () => {
     expect(reportSummaryLine({ metaType: 'borgo_citta', stopsCount: 3 })).toBe('3 luoghi visitati')
   })
 })
+
+import { entryCounts, entryCountsLabel } from '../reportFacts'
+
+describe('entryCounts / entryCountsLabel', () => {
+  it('separa escursioni e visite', () => {
+    const c = entryCounts([{ metaType: 'sentiero' }, {}, { metaType: 'sito' }, { metaType: 'borgo_citta' }, { metaType: 'sito' }])
+    expect(c).toEqual({ hikes: 2, visits: 3 })
+    expect(entryCountsLabel(c)).toBe('2 escursioni · 3 visite')
+  })
+
+  it('singolare e parti a zero', () => {
+    expect(entryCountsLabel({ hikes: 1, visits: 0 })).toBe('1 escursione')
+    expect(entryCountsLabel({ hikes: 0, visits: 1 })).toBe('1 visita')
+    expect(entryCountsLabel({ hikes: 0, visits: 0 })).toBe('0 escursioni')
+  })
+})

@@ -26,11 +26,24 @@ export interface AtlasRoute {
   polyline: [number, number][]
 }
 
-export function AllRoutesMap({ routes }: { routes: AtlasRoute[] }) {
-  const withTrack = routes.filter(r => r.polyline.length > 1)
-  if (withTrack.length === 0) return null
+/** Un luogo visitato senza traccia (Sito o Borgo/Città): un pin, non una linea. */
+export interface AtlasPoint {
+  id:    string
+  title: string
+  lat:   number
+  lon:   number
+}
 
-  const allPoints = withTrack.flatMap(r => r.polyline)
+/** Colore dei pin dei luoghi — lo stesso ambra dei riquadri "Dove si trova" (components/LocatorMap.tsx). */
+const POINT_COLOR = '#c05a17'
+/** Senza tracce (solo pin) un'inquadratura a zoom 15 non direbbe dove si è: tetto più largo. */
+const MAX_ZOOM_POINTS_ONLY = 10
+
+export function AllRoutesMap({ routes, points = [] }: { routes: AtlasRoute[]; points?: AtlasPoint[] }) {
+  const withTrack = routes.filter(r => r.polyline.length > 1)
+  if (withTrack.length === 0 && points.length === 0) return null
+
+  const allPoints: [number, number][] = [...withTrack.flatMap(r => r.polyline), ...points.map(p => [p.lat, p.lon] as [number, number])]
   const lats = allPoints.map(p => p[0])
   const lons = allPoints.map(p => p[1])
   const minLat = Math.min(...lats), maxLat = Math.max(...lats)
@@ -42,7 +55,7 @@ export function AllRoutesMap({ routes }: { routes: AtlasRoute[] }) {
   const VIEW_H = Math.round(Math.min(MAX_H, Math.max(MIN_H, VIEW_W / Math.max(trackAspect, 0.1))))
 
   let zoom = 1
-  for (let z = MAX_ZOOM; z >= 1; z--) {
+  for (let z = withTrack.length === 0 ? MAX_ZOOM_POINTS_ONLY : MAX_ZOOM; z >= 1; z--) {
     const wPx = (lon2tx(maxLon, z) - lon2tx(minLon, z)) * TILE
     const hPx = (lat2ty(minLat, z) - lat2ty(maxLat, z)) * TILE
     if (wPx <= VIEW_W - 2 * PAD && hPx <= VIEW_H - 2 * PAD) { zoom = z; break }
@@ -100,6 +113,15 @@ export function AllRoutesMap({ routes }: { routes: AtlasRoute[] }) {
             </g>
           )
         })}
+        {points.map(pt => {
+          const [x, y] = project(pt.lat, pt.lon)
+          return (
+            <g key={pt.id}>
+              <circle cx={x} cy={y} r={9} fill={POINT_COLOR} opacity={0.2} />
+              <circle cx={x} cy={y} r={4.5} fill={POINT_COLOR} stroke="#ffffff" strokeWidth={1.8} />
+            </g>
+          )
+        })}
       </svg>
 
       <figcaption className="absolute bottom-0 right-0 bg-white/75 text-stone-500 text-[9px] leading-none px-1.5 py-1 rounded-tl">
@@ -111,15 +133,21 @@ export function AllRoutesMap({ routes }: { routes: AtlasRoute[] }) {
 
 /** Legenda colori sotto la mappa — stesso limite di 8 voci del privato DiarioMappa: oltre
  *  diventerebbe un muro di etichette illeggibile sotto una mappa che le ha già rese come colore. */
-export function AllRoutesLegend({ routes }: { routes: AtlasRoute[] }) {
+export function AllRoutesLegend({ routes, points = [] }: { routes: AtlasRoute[]; points?: AtlasPoint[] }) {
   const withTrack = routes.filter(r => r.polyline.length > 1)
-  if (withTrack.length === 0) return null
+  if (withTrack.length === 0 && points.length === 0) return null
   return (
     <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3">
       {withTrack.slice(0, 8).map((r, i) => (
         <div key={r.id} className="flex items-center gap-1.5">
           <span className="inline-block w-4 h-[3px] rounded-full shrink-0" style={{ background: ROUTE_COLORS[i % ROUTE_COLORS.length] }} />
           <span className="text-[10px] text-stone-500 truncate max-w-[140px]">{r.title || 'Percorso'}</span>
+        </div>
+      ))}
+      {points.slice(0, Math.max(0, 8 - withTrack.length)).map(pt => (
+        <div key={pt.id} className="flex items-center gap-1.5">
+          <span className="inline-block w-2.5 h-2.5 rounded-full shrink-0" style={{ background: POINT_COLOR }} />
+          <span className="text-[10px] text-stone-500 truncate max-w-[140px]">{pt.title || 'Luogo'}</span>
         </div>
       ))}
     </div>

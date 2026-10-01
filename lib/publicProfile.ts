@@ -3,6 +3,8 @@
 // pubblicato, ma l'INDICE di ciò che l'utente ha già reso pubblico ai tre livelli esistenti
 // (Raccolta/Diario/Reportage, ciascuno con il proprio token indipendente). Niente qui decide cosa
 // è pubblico — legge solo cosa lo è già.
+import type { MetaType, SiteType } from './metaTypes'
+import { fetchSiteInfo } from './siteInfoServer'
 import { supabase } from './supabase'
 import { normalizeSlug } from './profileSlug'
 import { normalizeDiaryConfig } from './diaryConfig'
@@ -46,6 +48,18 @@ export interface PublicProfileReportage {
   date: string
   href: string
   diary: { token: string; title: string } | null
+  /** Tipologia della Meta (assente = 'sentiero'): decide etichetta e titolo di ripiego nella lista. */
+  metaType?: MetaType
+  siteType?: SiteType
+}
+
+/** Un luogo visitato (Sito o Borgo/Città) per la mappa d'insieme: un punto, non una traccia — mai
+ *  quello in cui l'utente ha registrato la visita, ma il punto del luogo. */
+export interface PublicProfilePoint {
+  id: string
+  title: string
+  lat: number
+  lon: number
 }
 
 export interface PublicProfile {
@@ -57,6 +71,8 @@ export interface PublicProfile {
   diaries: PublicProfileDiary[]
   reports: PublicProfileReport[]
   routes: PublicProfileRoute[]
+  /** Luoghi visitati senza una traccia da disegnare (Siti e Borghi/Città) — pin sulla stessa mappa. */
+  points: PublicProfilePoint[]
   /** Ordinata dalla più recente, indipendentemente dal contenitore (Diario o indipendente) — vedi
    *  PublicProfileReportage. */
   reportage: PublicProfileReportage[]
@@ -104,7 +120,7 @@ export async function fetchPublicProfile(rawSlug: string): Promise<PublicProfile
       .eq('user_id', userId).not('share_token', 'is', null).order('created_at', { ascending: false }),
   ])
 
-  const { routes, reportage } = await resolvePublishedEntries(userId, diaries ?? [], reports ?? [], home, hideHomeStarts)
+  const { routes, points, reportage } = await resolvePublishedEntries(userId, diaries ?? [], reports ?? [], home, hideHomeStarts)
 
   return {
     displayName: (settings.display_name as string) || 'Escursionista',
@@ -120,10 +136,11 @@ export async function fetchPublicProfile(rawSlug: string): Promise<PublicProfile
       updatedAt: d.updated_at as string,
     })),
     reports: (reports ?? []).map(r => ({
-      token: r.share_token as string, title: (r.title as string) || 'Escursione',
+      token: r.share_token as string, title: (r.title as string) || 'Reportage',
       createdAt: r.created_at as string,
     })),
     routes,
+    points,
     reportage,
     hideExactDates,
   }
@@ -153,7 +170,7 @@ async function resolvePublishedEntries(
   reports: ReportRow[],
   home: HomePoint | null,
   hideHomeStarts: boolean,
-): Promise<{ routes: PublicProfileRoute[]; reportage: PublicProfileReportage[] }> {
+): Promise<{ routes: PublicProfileRoute[]; points: PublicProfilePoint[]; reportage: PublicProfileReportage[] }> {
   const diaryIds = diaries.map(d => d.id)
   const diaryById = new Map(diaries.map(d => [d.id, d]))
   const excludedByDiary = new Map(
@@ -183,7 +200,7 @@ async function resolvePublishedEntries(
 
   const reportActivityIds = reports.map(r => r.activity_id).filter(Boolean)
   const allActivityIds = Array.from(new Set([...diaryActivityIds.map(a => a.activityId), ...reportActivityIds]))
-  if (allActivityIds.length === 0) return { routes: [], reportage: [] }
+  if (allActivityIds.length === 0) return { routes: [], points: [], reportage: [] }
 
   // Titoli dai Reportage — un Diario mostra solo attività con un Reportage scritto (mai la sola
   // Meta camminata senza racconto), stessa regola di fetchDiaryContent: qui basta per associare un
@@ -195,7 +212,7 @@ async function resolvePublishedEntries(
   for (const r of reports) reportByActivity.set(r.activity_id, { id: r.id, title: r.title })
   for (const r of hikeReports ?? []) {
     if (!reportByActivity.has(r.activity_id as string)) {
-      reportByActivity.set(r.activity_id as string, { id: r.id as string, title: (r.title as string) || 'Escursione' })
+      reportByActivity.set(r.activity_id as string, { id: r.id as string, title: (r.title as string) || 'Reportage' })
     }
   }
 
@@ -204,19 +221,24 @@ async function resolvePublishedEntries(
   // deve comparire nemmeno qui. Le più recenti prima del tetto di sicurezza: `start_time` serve
   // comunque per ordinare, quindi si legge prima di tagliare.
   const publishedActivityIds = allActivityIds.filter(id => reportByActivity.has(id))
-  if (publishedActivityIds.length === 0) return { routes: [], reportage: [] }
+  if (publishedActivityIds.length === 0) return { routes: [], points: [], reportage: [] }
 
   const { data: activities } = await supabase
-    .from('activities').select('id, start_time, route_polyline')
+    .from('activities').select('id, start_time, route_polyline, meta_type, site_type, linked_planned_id')
     .in('id', publishedActivityIds)
   const dateByActivity = new Map<string, string>()
   const polylineByActivity = new Map<string, [number, number][] | null>()
+  const metaByActivity = new Map<string, { metaType: MetaType; siteType?: SiteType }>()
   for (const a of activities ?? []) {
     dateByActivity.set(a.id as string, (a.start_time as string) ?? '')
+    metaByActivity.set(a.id as string, { metaType: ((a.meta_type as MetaType | null) ?? 'sentiero'), siteType: (a.site_type as SiteType | null) ?? undefined })
     const raw = a.route_polyline
     const full = Array.isArray(raw) && raw.length > 1 ? (raw as [number, number][]) : null
     polylineByActivity.set(a.id as string, full && hideHomeStarts ? trimHomeStart(full, home) : full)
   }
+
+  // Punti dei luoghi visitati (Siti e Borghi/Città) — lib/siteInfoServer.ts, best-effort.
+  const siteInfo = await fetchSiteInfo((activities ?? []) as { id: string; meta_type?: string | null; linked_planned_id?: string | null }[])
 
   // Numero di pagina dentro il Diario (per l'ancora `#p-N`): stessa numerazione di DiaryBook
   // (Sommario = pagina 1, poi le escursioni in ordine cronologico crescente a partire da 2) —
@@ -243,11 +265,15 @@ async function resolvePublishedEntries(
     .slice(0, MAX_PUBLISHED_ENTRIES)
 
   const routes: PublicProfileRoute[] = []
+  const points: PublicProfilePoint[] = []
   const reportage: PublicProfileReportage[] = []
   for (const activityId of mostRecentFirst) {
     const meta = reportByActivity.get(activityId)!
     const polyline = polylineByActivity.get(activityId) ?? null
     if (polyline && polyline.length > 1) routes.push({ id: meta.id, title: meta.title, polyline })
+    // Una visita senza traccia (Sito, o Borgo/Città non camminato con GPS) compare come pin sul suo luogo.
+    const sitePoint = siteInfo.get(activityId)?.point
+    if ((!polyline || polyline.length <= 1) && sitePoint) points.push({ id: meta.id, title: meta.title, lat: sitePoint.lat, lon: sitePoint.lon })
 
     const diaryId = diaryIdByActivity.get(activityId)
     const diaryRow = diaryId ? diaryById.get(diaryId) : undefined
@@ -263,8 +289,9 @@ async function resolvePublishedEntries(
 
     reportage.push({
       id: meta.id, title: meta.title, date: dateByActivity.get(activityId) || '', href, diary,
+      metaType: metaByActivity.get(activityId)?.metaType, siteType: metaByActivity.get(activityId)?.siteType,
     })
   }
 
-  return { routes, reportage }
+  return { routes, points, reportage }
 }

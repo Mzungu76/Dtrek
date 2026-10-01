@@ -1,3 +1,4 @@
+import { entryCounts, entryHeadlineStats } from '@/lib/reportFacts'
 import { ImageResponse } from 'next/og'
 import { fetchPublicDiary } from '@/lib/sharePublicDiary'
 
@@ -21,11 +22,9 @@ export default async function OgImage({ params }: { params: { token: string } })
     )
   }
 
-  const stats = [
-    { v: String(diary.entries.length), l: diary.entries.length === 1 ? 'ESCURSIONE' : 'ESCURSIONI' },
-    { v: `${diary.totalKm.toFixed(0)} km`, l: 'PERCORSI' },
-    { v: `${Math.round(diary.totalElevationGain).toLocaleString('it')} m`, l: 'DISLIVELLO' },
-  ]
+  // Escursioni e visite a parte, e km/dislivello solo se ci sono sentieri (lib/reportFacts.ts).
+  const stats = entryHeadlineStats(entryCounts(diary.entries), diary.totalKm, diary.totalElevationGain, { km: 'percorsi', elevation: 'dislivello' })
+    .map(s => ({ v: s.value, l: s.label.toUpperCase() }))
 
   return new ImageResponse(
     (

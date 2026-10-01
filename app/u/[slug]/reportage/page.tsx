@@ -3,6 +3,7 @@
 // del sito pubblico: il filtro per Diario non è uno stato client, è un parametro in querystring
 // (`?diario=token` o `?diario=indipendenti`) — un link vero, niente JavaScript spedito al
 // browser, coerente con ogni altra pagina di app/leggi/*.
+import { entryCounts, entryCountsLabel } from '@/lib/reportFacts'
 import type { Metadata } from 'next'
 import { cache } from 'react'
 import { notFound } from 'next/navigation'
@@ -58,7 +59,7 @@ export default async function ProfileReportagePage({ params, searchParams }: {
         <div>
           <h1 className="font-display text-2xl sm:text-3xl font-bold text-forest-900">Reportage</h1>
           <p className="text-sm text-stone-400 mt-1">
-            {profile.reportage.length} escursion{profile.reportage.length === 1 ? 'e' : 'i'} di {profile.displayName}
+            {entryCountsLabel(entryCounts(profile.reportage))} di {profile.displayName}
           </p>
         </div>
 

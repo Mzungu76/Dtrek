@@ -3,6 +3,7 @@
 // raccolta" da premere per scoprire quanti Diari ci sono e quali. Ogni card apre direttamente il
 // libro del Diario (Sommario + pagine), senza passare da una copertina-carosello intermedia.
 // Componente SERVER: nessuno stato, nessun JavaScript spedito al browser.
+import { entryCounts, entryCountsLabel, entryHeadlineStats } from '@/lib/reportFacts'
 import { Library } from 'lucide-react'
 import type { PublicCollection } from '@/lib/sharePublicCollection'
 import { PublicCover } from '@/components/leggi/PublicCover'
@@ -25,11 +26,7 @@ export function CollectionPublicView({ collection, token }: { collection: Public
         subtitle={collection.subtitle}
         preface={collection.preface}
         ownerName={collection.ownerName}
-        pills={[
-          { value: String(collection.totalEntries), label: collection.totalEntries === 1 ? 'escursione' : 'escursioni' },
-          { value: `${collection.totalKm.toFixed(0)} km`, label: 'percorsi' },
-          { value: `${Math.round(collection.totalElevationGain).toLocaleString('it')} m`, label: 'dislivello+' },
-        ]}
+        pills={entryHeadlineStats(entryCounts(collection.volumes.flatMap(v => v.entries)), collection.totalKm, collection.totalElevationGain)}
         prevHref={prevToken ? `/leggi/c/${prevToken}` : undefined}
         nextHref={nextToken ? `/leggi/c/${nextToken}` : undefined}
       />
@@ -44,7 +41,7 @@ export function CollectionPublicView({ collection, token }: { collection: Public
               {collection.volumes.map((v, i) => (
                 <VolumeCard key={v.diaryId} href={`/leggi/c/${token}/v/${i + 1}/libro`}
                   coverUrl={v.coverUrl} title={v.title} subtitle={v.subtitle}
-                  entryCount={v.entries.length} km={v.totalKm} />
+                  counts={entryCounts(v.entries)} km={v.totalKm} />
               ))}
             </div>
           </section>
@@ -60,8 +57,8 @@ export function CollectionPublicView({ collection, token }: { collection: Public
 /** Card a immagine piena, stesso linguaggio visivo della galleria del sito personale
  *  (app/u/[slug]/page.tsx GalleryCard) — nessuna copertina disponibile → sfondo verde a
  *  gradiente, mai un riquadro bianco piatto. */
-function VolumeCard({ href, coverUrl, title, subtitle, entryCount, km }: {
-  href: string; coverUrl: string | null; title: string; subtitle: string; entryCount: number; km: number
+function VolumeCard({ href, coverUrl, title, subtitle, counts, km }: {
+  href: string; coverUrl: string | null; title: string; subtitle: string; counts: { hikes: number; visits: number }; km: number
 }) {
   return (
     <a href={href}
@@ -78,7 +75,7 @@ function VolumeCard({ href, coverUrl, title, subtitle, entryCount, km }: {
         </h3>
         {subtitle && <p className="font-lora italic text-[11px] text-white/75 mt-0.5 truncate">{subtitle}</p>}
         <p className="text-[10.5px] text-white/70 mt-1">
-          {entryCount} {entryCount === 1 ? 'escursione' : 'escursioni'}{km > 0 && ` · ${km.toFixed(0)} km`}
+          {entryCountsLabel(counts)}{km > 0 && ` · ${km.toFixed(0)} km`}
         </p>
       </div>
     </a>

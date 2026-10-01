@@ -24,6 +24,8 @@ import { parseMarkupBlocks, parseInlineEmphasis } from '@/lib/guideMarkup'
 import { formatDuration } from '@/lib/tcxParser'
 import { PDF_PAGE_W, PDF_CONTENT_H } from '@/lib/pdfPageGeometry'
 import type { PublicDiaryEntry } from '@/lib/sharePublicDiary'
+import { metaHasHikingMetrics } from '@/lib/metaTypes'
+import { reportFacts, reportNoun } from '@/lib/reportFacts'
 
 const FONT_BODY = 'Georgia, "Times New Roman", serif'
 const FONT_UI = 'Arial, Helvetica, sans-serif'
@@ -96,13 +98,15 @@ function EntryPage({ entry, n, mapDataUrl }: {
 }) {
   const sections = parseSections(entry.content).filter(s => s.body.trim())
   const photos = entry.photos.slice(0, 4)
+  const hikingEntry = metaHasHikingMetrics(entry.metaType)
+  const visitFacts = reportFacts({ metaType: entry.metaType, siteType: entry.siteType, totalTimeSeconds: entry.totalTimeSeconds, stopsCount: entry.stopsCount })
 
   return (
     <div className="diario-pdf-page" style={{
       width: PDF_PAGE_W, minHeight: PDF_CONTENT_H, background: '#fff', padding: '8px 56px 24px',
     }}>
       <p className="pdf-block" style={{ fontFamily: FONT_UI, fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: '#e08d3c', margin: '0 0 6px' }}>
-        Escursione #{String(n).padStart(2, '0')}
+        {reportNoun(entry.metaType)} #{String(n).padStart(2, '0')}
       </p>
       <h2 className="pdf-block pdf-keep-next" style={{ fontFamily: FONT_UI, fontSize: 26, fontWeight: 700, color: '#193b20', margin: '0 0 4px' }}>
         {entry.title}
@@ -119,12 +123,20 @@ function EntryPage({ entry, n, mapDataUrl }: {
         )}
       </p>
 
-      <div className="pdf-block" style={{ display: 'flex', borderTop: '1px solid #f0ede7', borderBottom: '1px solid #f0ede7', margin: '0 0 16px' }}>
-        <StatCell value={`${(entry.distanceMeters / 1000).toFixed(1)} km`} label="Distanza" />
-        <StatCell value={`${Math.round(entry.elevationGain)} m`} label="Dislivello +" />
-        {entry.totalTimeSeconds > 0 && <StatCell value={formatDuration(entry.totalTimeSeconds)} label="Durata" />}
-        {entry.altitudeMax != null && <StatCell value={`${Math.round(entry.altitudeMax)} m`} label="Quota max" />}
-      </div>
+      {/* Un Sentiero ha le cifre di cammino; un Borgo/Città o un Sito solo quelle che esistono
+          (lib/reportFacts.ts) — mai una riga di zeri. */}
+      {(hikingEntry || visitFacts.length > 0) && (
+        <div className="pdf-block" style={{ display: 'flex', borderTop: '1px solid #f0ede7', borderBottom: '1px solid #f0ede7', margin: '0 0 16px' }}>
+          {hikingEntry ? (
+            <>
+              <StatCell value={`${(entry.distanceMeters / 1000).toFixed(1)} km`} label="Distanza" />
+              <StatCell value={`${Math.round(entry.elevationGain)} m`} label="Dislivello +" />
+              {entry.totalTimeSeconds > 0 && <StatCell value={formatDuration(entry.totalTimeSeconds)} label="Durata" />}
+              {entry.altitudeMax != null && <StatCell value={`${Math.round(entry.altitudeMax)} m`} label="Quota max" />}
+            </>
+          ) : visitFacts.map(f => <StatCell key={f.label} value={f.value} label={f.label} />)}
+        </div>
+      )}
 
       {mapDataUrl && (
         // eslint-disable-next-line @next/next/no-img-element
@@ -157,7 +169,7 @@ function EntryPage({ entry, n, mapDataUrl }: {
         ))
         : (
           <p className="pdf-block" style={{ fontFamily: FONT_BODY, fontStyle: 'italic', fontSize: 12.5, color: '#9ca3af', margin: '14px 0 0' }}>
-            Nessun racconto scritto per questa escursione.
+            Nessun racconto scritto per questa {metaHasHikingMetrics(entry.metaType) ? 'escursione' : 'visita'}.
           </p>
         )}
     </div>

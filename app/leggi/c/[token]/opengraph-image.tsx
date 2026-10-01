@@ -1,3 +1,4 @@
+import { entryCounts } from '@/lib/reportFacts'
 import { ImageResponse } from 'next/og'
 import { fetchPublicCollection } from '@/lib/sharePublicCollection'
 
@@ -20,10 +21,13 @@ export default async function OgImage({ params }: { params: { token: string } })
     )
   }
 
+  const hasHikes = entryCounts(collection.volumes.flatMap(v => v.entries)).hikes > 0
   const stats = [
     { v: String(collection.volumes.length), l: collection.volumes.length === 1 ? 'DIARIO' : 'DIARI' },
-    { v: `${collection.totalKm.toFixed(0)} km`, l: 'PERCORSI' },
-    { v: `${Math.round(collection.totalElevationGain).toLocaleString('it')} m`, l: 'DISLIVELLO' },
+    ...(hasHikes ? [
+      { v: `${collection.totalKm.toFixed(0)} km`, l: 'PERCORSI' },
+      { v: `${Math.round(collection.totalElevationGain).toLocaleString('it')} m`, l: 'DISLIVELLO' },
+    ] : []),
   ]
 
   return new ImageResponse(

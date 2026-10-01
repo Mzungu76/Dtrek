@@ -14,7 +14,7 @@ import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
 import { ctsLabel, type TrailScoreResult } from '@/lib/trailScore'
 import { computeDEP, depLabel, type findSimilarActivities } from '@/lib/stats'
 import {
-  parseSections, markdownToSections, sectionsToMarkdown, SCAFFOLD_SECTIONS,
+  parseSections, markdownToSections, sectionsToMarkdown, scaffoldSectionsFor, isUntouchedSentieroScaffold,
   type ReportSection, type ReportAuthoredBy, type HikeReport,
 } from '@/lib/reportStore'
 import { getReport, saveReportContent, cacheReport } from '@/lib/sync/hikeReportStore'
@@ -876,7 +876,7 @@ export default function ReportReader({
                 activity={activity}
                 photos={photos}
                 onPhotosChange={onPhotosChange}
-                initialSections={reportSections.length > 0 ? reportSections : SCAFFOLD_SECTIONS}
+                initialSections={reportSections.length > 0 && !(metaHasHikingMetrics(activity.metaType) === false && isUntouchedSentieroScaffold(reportSections)) ? reportSections : scaffoldSectionsFor(activity.metaType, activity.siteType)}
                 initialAuthoredBy={reportAuthoredBy}
                 onSave={saveSections}
                 onCancel={() => setEditorMode('view')}
@@ -922,7 +922,7 @@ export default function ReportReader({
                             Costruisci il reportage sezione per sezione, con le tue parole. Puoi richiedere aiuto all&apos;AI su singoli paragrafi e associare le tue foto.
                           </p>
                           <button
-                            onClick={() => { setReportSections(SCAFFOLD_SECTIONS); setReportAuthoredBy('manual'); setEditorMode('manual') }}
+                            onClick={() => { setReportSections(scaffoldSectionsFor(activity.metaType, activity.siteType)); setReportAuthoredBy('manual'); setEditorMode('manual') }}
                             className="mt-auto flex items-center gap-1.5 px-4 py-2 bg-forest-600 hover:bg-forest-700 text-white rounded-xl text-sm font-display font-bold uppercase tracking-wide transition-colors">
                             Inizia a scrivere
                           </button>
@@ -930,7 +930,7 @@ export default function ReportReader({
                         <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 flex flex-col items-start">
                           <BookOpen className="w-10 h-10 text-forest-400 mb-3" />
                           <p className="font-display font-bold uppercase tracking-wide text-stone-700 mb-2">Genera con AI</p>
-                          <p className="text-sm text-stone-500 italic mb-2">L&apos;AI scrive un reportage giornalistico completo basato sui tuoi dati GPS, biometrici e foto.</p>
+                          <p className="text-sm text-stone-500 italic mb-2">{metaHasHikingMetrics(activity.metaType) ? 'L&apos;AI scrive un reportage giornalistico completo basato sui tuoi dati GPS, biometrici e foto.' : 'L&apos;AI scrive un reportage giornalistico completo sul luogo, a partire dalla descrizione, dalla tua visita e dalle foto.'}</p>
                           <div className="mb-4">{materialBadge}</div>
                           <div className="flex items-center gap-2 mt-auto flex-wrap">
                             <div className="flex rounded-xl overflow-hidden border border-stone-200">

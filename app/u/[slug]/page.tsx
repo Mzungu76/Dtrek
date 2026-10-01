@@ -148,11 +148,11 @@ export default async function PublicProfilePage({ params }: { params: { slug: st
           </section>
         )}
 
-        {profile.routes.length > 0 && (
+        {(profile.routes.length > 0 || profile.points.length > 0) && (
           <section>
-            <h2 className="font-display text-xl font-bold text-forest-900 px-1 mb-3">Tutti i percorsi</h2>
-            <AllRoutesMap routes={profile.routes} />
-            <AllRoutesLegend routes={profile.routes} />
+            <h2 className="font-display text-xl font-bold text-forest-900 px-1 mb-3">{profile.points.length > 0 ? 'Percorsi e luoghi visitati' : 'Tutti i percorsi'}</h2>
+            <AllRoutesMap routes={profile.routes} points={profile.points} />
+            <AllRoutesLegend routes={profile.routes} points={profile.points} />
           </section>
         )}
 

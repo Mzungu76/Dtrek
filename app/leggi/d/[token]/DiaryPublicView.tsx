@@ -9,6 +9,7 @@
 // due volte nella stessa pagina, altrimenti.
 //
 // Resta un componente SERVER: nessuno stato, nessun JavaScript spedito al browser.
+import { entryCounts, entryHeadlineStats } from '@/lib/reportFacts'
 import { type PublicDiary } from '@/lib/sharePublicDiary'
 import { PublicCover } from '@/components/leggi/PublicCover'
 import { DiaryBook } from '@/components/leggi/DiaryBook'
@@ -27,11 +28,7 @@ export function DiaryPublicView({ diary, token }: { diary: PublicDiary; token: s
         title={diary.config.title}
         subtitle={diary.config.subtitle}
         ownerName={diary.ownerName}
-        pills={show.statistiche ? [
-          { value: String(diary.entries.length), label: diary.entries.length === 1 ? 'escursione' : 'escursioni' },
-          { value: `${diary.totalKm.toFixed(0)} km`, label: 'percorsi' },
-          { value: `${Math.round(diary.totalElevationGain).toLocaleString('it')} m`, label: 'dislivello+' },
-        ] : undefined}
+        pills={show.statistiche ? entryHeadlineStats(entryCounts(diary.entries), diary.totalKm, diary.totalElevationGain) : undefined}
       />
 
       <DiaryBook

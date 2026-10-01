@@ -70,3 +70,40 @@ export function reportSummaryLine(input: ReportFactsInput): string {
     .map(f => f.label === 'Tipo' ? f.value : `${f.value} ${f.label.toLowerCase()}`.trim())
   return parts.length > 0 ? parts.join(' · ') : (input.metaType === 'borgo_citta' ? 'Visita a un borgo' : 'Visita')
 }
+
+/** Escursioni (Reportage con metriche di cammino) e visite (Borgo/Città e Sito) di un elenco: nei
+ *  totali di un Diario/Raccolta/profilo pubblico le due cose si contano a parte — "12 escursioni ·
+ *  3 visite" — perché i chilometri e il dislivello sono solo delle prime. */
+export function entryCounts(entries: { metaType?: MetaType }[]): { hikes: number; visits: number } {
+  const hikes = entries.filter(e => metaHasHikingMetrics(e.metaType)).length
+  return { hikes, visits: entries.length - hikes }
+}
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
+
+/** "12 escursioni · 3 visite" — senza la parte a zero; "0 escursioni" se l'elenco è vuoto. */
+export function entryCountsLabel(counts: { hikes: number; visits: number }): string {
+  const parts = [
+    counts.hikes > 0 ? plural(counts.hikes, 'escursione', 'escursioni') : null,
+    counts.visits > 0 ? plural(counts.visits, 'visita', 'visite') : null,
+  ].filter(Boolean)
+  return parts.length > 0 ? parts.join(' · ') : '0 escursioni'
+}
+
+/** Le cifre di testata di un Diario/Raccolta pubblico: escursioni, visite, chilometri e dislivello —
+ *  solo quelle che esistono (un Diario di sole visite non ha chilometri da mostrare). */
+export function entryHeadlineStats(
+  counts: { hikes: number; visits: number },
+  totalKm: number,
+  totalElevationGain: number,
+  labels: { km: string; elevation: string } = { km: 'percorsi', elevation: 'dislivello+' },
+): { value: string; label: string }[] {
+  const out: { value: string; label: string }[] = []
+  if (counts.hikes > 0 || counts.visits === 0) out.push({ value: String(counts.hikes), label: counts.hikes === 1 ? 'escursione' : 'escursioni' })
+  if (counts.visits > 0) out.push({ value: String(counts.visits), label: counts.visits === 1 ? 'visita' : 'visite' })
+  if (counts.hikes > 0) {
+    out.push({ value: `${totalKm.toFixed(0)} km`, label: labels.km })
+    out.push({ value: `${Math.round(totalElevationGain).toLocaleString('it')} m`, label: labels.elevation })
+  }
+  return out
+}

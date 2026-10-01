@@ -206,7 +206,7 @@ export async function buildContentFromReports(
       const pois = extras.mappa && polyline ? await fetchCachedPois(polyline) : []
       return {
         id:               r.id as string,
-        title:            (r.title as string) || 'Escursione',
+        title:            (r.title as string) || (act?.meta_type && act.meta_type !== 'sentiero' ? 'Visita' : 'Escursione'),
         startTime:        (act?.start_time as string) ?? (r.created_at as string),
         distanceMeters:   (act?.distance_meters as number) ?? 0,
         elevationGain:    (act?.elevation_gain as number) ?? 0,

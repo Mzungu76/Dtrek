@@ -16,6 +16,10 @@ interface Props {
   onMoveDown: () => void
   onAiAssist: (sectionId: string, instruction: string) => void
   aiAssistLoading: boolean
+  /** Suggerimenti per titolo, per i Reportage di Borgo/Città e Sito (lib/reportStore.ts's sectionHintsFor) — hanno la precedenza su quelli da percorso. */
+  hints?: Record<string, string>
+  /** Falso per un Reportage di Sito o Borgo/Città: le foto non hanno una posizione lungo un tracciato, quindi niente "% del percorso" né "Riposiziona". */
+  georeference?: boolean
   /** Riordino via Pointer Events (non drag-and-drop nativo HTML5, che su touch non parte affatto):
    *  il pointerdown sulla maniglia avvia il trascinamento, il resto della logica (calcolo di dove
    *  verrebbe inserita, in base alla posizione del puntatore) vive nel genitore (ManualEditor), che
@@ -62,7 +66,7 @@ function insertAtCursor(
 
 export default function SectionEditor({
   section, sectionIndex, totalSections, photos,
-  onChange, onDelete, onMoveUp, onMoveDown, onAiAssist, aiAssistLoading,
+  onChange, onDelete, onMoveUp, onMoveDown, onAiAssist, aiAssistLoading, hints, georeference = true,
   onDragHandleDown, isDragging, isDragOver,
 }: Props) {
   const textareaRef   = useRef<HTMLTextAreaElement>(null)
@@ -196,7 +200,7 @@ export default function SectionEditor({
               onChange={e => onChange({ ...section, body: e.target.value })}
               rows={8}
               disabled={aiAssistLoading}
-              placeholder={PLACEHOLDERS[section.title] ?? 'Scrivi qui il testo della sezione…'}
+              placeholder={hints?.[section.title] ?? PLACEHOLDERS[section.title] ?? 'Scrivi qui il testo della sezione…'}
               className="w-full font-body text-sm text-stone-700 leading-relaxed border border-stone-200 rounded-xl p-3 outline-none focus:border-forest-400 resize-none disabled:opacity-50 disabled:bg-stone-50"
             />
             {aiAssistLoading && (
@@ -307,8 +311,8 @@ export default function SectionEditor({
 
           {primaryPhoto && (
             <div className="mt-2 flex items-center justify-between gap-2">
-              <span className="text-[10px] text-stone-400 truncate">📍 {progressLabel(primaryPhoto)}</span>
-              {!primaryPhoto.hasExifGps && (
+              {georeference && <span className="text-[10px] text-stone-400 truncate">📍 {progressLabel(primaryPhoto)}</span>}
+              {georeference && !primaryPhoto.hasExifGps && (
                 <button
                   onClick={() => window.dispatchEvent(new CustomEvent('dtrek:open-photo-manager'))}
                   className="text-[11px] text-forest-600 hover:underline shrink-0">Riposiziona</button>
