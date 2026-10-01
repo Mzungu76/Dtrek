@@ -16,6 +16,11 @@ permissions:
 jobs:
   discover:
     runs-on: ubuntu-latest
+    env:
+      # Solo lettura dei comuni (dtrek_places) per escludere i cammini esteri; senza questi secret il
+      # controllo "in Italia" viene saltato e dichiarato nel log.
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
     steps:
       - uses: actions/checkout@v7
 
