@@ -1,3 +1,4 @@
+import { haversineM } from '../geoUtils'
 import { cumulativeDistances, nearestVertex, polylineLengthM, simplifyPolyline, type LatLon } from './geometry'
 
 // Suddivisione in tappe di un Cammino (docs/piano-cammini.md, Fase 2). Due strade:
@@ -141,4 +142,32 @@ export function splitIntoTappe(line: LatLon[], anchors: TappaAnchor[], options: 
 /** Polilinea di una tappa ridotta per la persistenza (tolleranza in metri). */
 export function simplifyTappa(t: TappaDraft, toleranceM: number): TappaDraft {
   return { ...t, polyline: simplifyPolyline(t.polyline, toleranceM) }
+}
+
+/**
+ * Per le tappe ufficiali senza "da/a" nel nome: il borgo più vicino al primo/ultimo punto (entro
+ * `snapM`) dà il nome del capo e il collegamento al catalogo. Mai un nome inventato: nessun borgo
+ * vicino = capo senza nome.
+ */
+export function fillEndpointsFromAnchors(tappe: TappaDraft[], anchors: TappaAnchor[], snapM = 2000): TappaDraft[] {
+  const nearest = (p: LatLon): TappaAnchor | undefined => {
+    let best: TappaAnchor | undefined, bestD = snapM
+    for (const a of anchors) {
+      const d = haversineM(a.lat, a.lon, p[0], p[1])
+      if (d <= bestD) { bestD = d; best = a }
+    }
+    return best
+  }
+  for (const t of tappe) {
+    if (t.polyline.length < 2) continue
+    if (!t.fromName) {
+      const a = nearest(t.polyline[0])
+      if (a) { t.fromName = a.name; t.fromAnchorId = a.id }
+    }
+    if (!t.toName) {
+      const a = nearest(t.polyline[t.polyline.length - 1])
+      if (a) { t.toName = a.name; t.toAnchorId = a.id; t.endsAtAnchor = true }
+    }
+  }
+  return tappe
 }

@@ -26,10 +26,18 @@ export interface RegistryEntry {
   /** Una sola relazione OSM spezzata in due cammini a un punto (Francigena: Canterbury–Roma / Roma–Leuca). */
   splitAt?: { name: string; lat: number; lon: number; before: string; after: string }
   notes?: string
+  theme: 'religioso' | 'storico' | 'naturalistico'
 }
 
-const c = (e: Omit<RegistryEntry, 'structure' | 'anchors'> & Partial<Pick<RegistryEntry, 'structure' | 'anchors'>>): RegistryEntry =>
-  ({ structure: 'cammino', anchors: 'borghi', ...e })
+const RELIGIOSI = new Set([
+  'via-francigena', 'cammino-sant-antonio', 'cammino-san-benedetto', 'via-matildica', 'via-degli-abati',
+  'cammino-san-jacopo', 'via-di-francesco', 'cammino-di-assisi', 'cammino-materano', 'cammino-celeste',
+  'cammino-tuscia', 'cammino-due-santuari', 'via-romea', 'romea-strata',
+])
+const NATURALISTICI = new Set(['sentiero-della-pace', 'sentiero-degli-ulivi', 'sentiero-dei-pastori', 'sentiero-spartiacque-appenninico', 'sentiero-italia', 'cammino-della-acqua'])
+
+const c = (e: Omit<RegistryEntry, 'structure' | 'anchors' | 'theme'> & Partial<Pick<RegistryEntry, 'structure' | 'anchors' | 'theme'>>): RegistryEntry =>
+  ({ structure: 'cammino', anchors: 'borghi', theme: RELIGIOSI.has(e.id) ? 'religioso' : e.anchors === 'rifugi' || NATURALISTICI.has(e.id) ? 'naturalistico' : 'storico', ...e })
 
 export const REGISTRY: RegistryEntry[] = [
   // ── Ondata 1: tappe ufficiali già in OSM ───────────────────────────────────────────────────
