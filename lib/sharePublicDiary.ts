@@ -103,6 +103,9 @@ export interface PublicDiaryEntry {
   /** Solo per un Sito o un Borgo/Città: il suo punto (mai quello in cui è stata registrata la visita) e l'immagine
    *  del luogo, usata come copertina quando il Reportage non ha foto proprie. */
   sitePoint?:        { lat: number; lon: number } | null
+  /** Descrizione del luogo dall'archivio (dtrek_places) — la stessa della Guida, senza il ripiego
+   *  Wikipedia che è una ricerca dal vivo. Solo per Sito e Borgo/Città. */
+  siteDescription?:  string | null
   siteCoverUrl?:     string | null
 }
 
@@ -220,6 +223,7 @@ export async function buildContentFromReports(
         siteType:         (act?.site_type as SiteType | null | undefined) ?? undefined,
         sitePoint:        siteByActivity.get(r.activity_id as string)?.point ?? null,
         siteCoverUrl:     siteByActivity.get(r.activity_id as string)?.cover ?? null,
+        siteDescription:  siteByActivity.get(r.activity_id as string)?.description ?? null,
         stopsCount:       Array.isArray(act?.borgo_stops) ? (act?.borgo_stops as unknown[]).length : 0,
         content:          (r.content as string) ?? '',
         // La scelta fatta nel Diario vale anche qui: `photoIdsByActivity` dice quali foto l'autore

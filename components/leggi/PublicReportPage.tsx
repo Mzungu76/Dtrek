@@ -22,6 +22,7 @@
 //     tutte... sulla pagina pubblica" — qui compaiono tutte, non solo le sei che entrano in stampa.
 //
 // Componente SERVER: nessuno stato, nessun JavaScript spedito al browser.
+import { reportProfileFor } from '@/lib/reportProfiles'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { Route, Mountain, Clock, Flame } from 'lucide-react'
@@ -190,6 +191,17 @@ export function PublicReportPage({ entry, n, show, hideExactDates = false }: {
         </div>
 
         <div style={{ padding: `${cq(48)} ${cq(48)} ${cq(40)}` }}>
+          {/* Descrizione del luogo (la stessa della Guida) — prima del racconto, mai da generare. */}
+          {!hiking && entry.siteDescription && (
+            <div style={{ marginBottom: cq(36) }}>
+              <p className="font-barlow" style={{ fontWeight: 700, fontSize: cq(9), letterSpacing: cq(4), color: '#e08d3c', textTransform: 'uppercase', margin: `0 0 ${cq(12)}` }}>
+                {reportProfileFor(entry.metaType, entry.siteType).sectionTitle}
+              </p>
+              <p className="font-lora" style={{ fontSize: cq(13.5), lineHeight: 1.85, color: '#4d4740', margin: 0 }}>
+                {entry.siteDescription}
+              </p>
+            </div>
+          )}
           <p className="font-barlow" style={{ fontWeight: 700, fontSize: cq(9), letterSpacing: cq(4), color: '#e08d3c', textTransform: 'uppercase', margin: `0 0 ${cq(36)}` }}>
             Cronaca · {noun} #{escLabel}
           </p>

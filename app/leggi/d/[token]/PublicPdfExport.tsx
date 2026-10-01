@@ -26,6 +26,7 @@ import { PDF_PAGE_W, PDF_CONTENT_H } from '@/lib/pdfPageGeometry'
 import type { PublicDiaryEntry } from '@/lib/sharePublicDiary'
 import { metaHasHikingMetrics } from '@/lib/metaTypes'
 import { reportFacts, reportNoun } from '@/lib/reportFacts'
+import { reportProfileFor } from '@/lib/reportProfiles'
 
 const FONT_BODY = 'Georgia, "Times New Roman", serif'
 const FONT_UI = 'Arial, Helvetica, sans-serif'
@@ -151,6 +152,18 @@ function EntryPage({ entry, n, mapDataUrl }: {
             <img key={i} src={p.url} alt="" crossOrigin="anonymous"
               style={{ width: '100%', aspectRatio: '4 / 3', objectFit: 'cover', borderRadius: 8, display: 'block' }} />
           ))}
+        </div>
+      )}
+
+      {/* Descrizione del luogo (la stessa della Guida), prima del racconto. */}
+      {!hikingEntry && entry.siteDescription && (
+        <div>
+          <p className="pdf-block pdf-keep-next" style={{ fontFamily: FONT_UI, fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', color: '#e08d3c', margin: '14px 0 6px' }}>
+            {reportProfileFor(entry.metaType, entry.siteType).sectionTitle}
+          </p>
+          <p className="pdf-block" style={{ fontFamily: FONT_BODY, fontSize: 12.5, lineHeight: 1.7, color: '#4d4740', margin: '0 0 10px' }}>
+            {entry.siteDescription}
+          </p>
         </div>
       )}
 
