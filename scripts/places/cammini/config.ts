@@ -17,8 +17,10 @@ export interface CamminoConfig {
   /** Ritaglio del tratto: [sud, ovest, nord, est]. */
   bbox: Bbox
   /** Da che parte inizia il tratto (orienta la linea) e dove finisce. */
-  start: { name: string; lat: number; lon: number }
-  end: { name: string; lat: number; lon: number }
+  /** `anchorName`: nome del borgo/città in dtrek_places a cui agganciare l'estremo, quando il suo
+   *  centroide non cade vicino alla linea (es. Roma: il centroide è a ~3 km da San Pietro). */
+  start: { name: string; lat: number; lon: number; anchorName?: string }
+  end: { name: string; lat: number; lon: number; anchorName?: string }
   description?: string
   theme: 'religioso' | 'storico' | 'naturalistico'
 }
@@ -35,8 +37,8 @@ export const CAMMINI: CamminoConfig[] = [
     // (Radicofani è a 42.90N), abbastanza largo per le varianti. È un'approssimazione per bbox, non
     // il confine amministrativo: la prima esecuzione in dry-run ne mostra i limiti.
     bbox: [41.88, 11.78, 42.80, 12.62],
-    start: { name: 'Acquapendente', lat: 42.7425, lon: 11.8647 },
-    end: { name: 'Roma (San Pietro)', lat: 41.9022, lon: 12.4539 },
+    start: { name: 'Acquapendente', lat: 42.7425, lon: 11.8647, anchorName: 'Acquapendente' },
+    end: { name: 'Roma (San Pietro)', lat: 41.9022, lon: 12.4539, anchorName: 'Roma' },
     description: 'Il tratto laziale della Via Francigena, da Acquapendente a San Pietro a Roma.',
     theme: 'religioso',
   },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { clipToBbox, polylineLengthM, simplifyPolyline, stitchWays, type LatLon } from '../../../lib/cammini/geometry'
+import { clipToBbox, polylineLengthM, simplifyPolyline, stitchWays, trimToEndpoints, type LatLon } from '../../../lib/cammini/geometry'
 import { parseTappaEndpoints, parseTappaNumber, splitIntoTappe } from '../../../lib/cammini/tappe'
 import { buildCammino, camminoToPlaceCandidate, type OverpassRelation } from '../cammini/build'
 import type { CamminoConfig } from '../cammini/config'
@@ -43,6 +43,21 @@ describe('geometria dei cammini', () => {
 
   it('simplifyPolyline riduce i punti allineati agli estremi', () => {
     expect(simplifyPolyline(meridian(42.5, 42.0), 10)).toHaveLength(2)
+  })
+})
+
+describe('trimToEndpoints', () => {
+  const line = meridian(42.8, 41.6)
+  it('taglia ciò che sta oltre gli estremi dichiarati', () => {
+    const r = trimToEndpoints(line, { lat: 42.5, lon: 12 }, { lat: 41.9, lon: 12 })
+    expect(r.line[0][0]).toBeCloseTo(42.5, 2)
+    expect(r.line[r.line.length - 1][0]).toBeCloseTo(41.9, 2)
+    expect(r.trimmedStartM).toBeCloseTo(33_300, -3)
+  })
+  it('non taglia un capo se l\'estremo è lontano dalla linea', () => {
+    const r = trimToEndpoints(line, { lat: 42.5, lon: 13 }, { lat: 41.9, lon: 12 })
+    expect(r.trimmedStartM).toBe(0)
+    expect(r.line[r.line.length - 1][0]).toBeCloseTo(41.9, 2)
   })
 })
 
@@ -131,6 +146,28 @@ describe('buildCammino', () => {
     expect(built.diagnostics.join(' ')).toContain('Scartate 1 catene minori')
   })
 
+  it('taglia agli estremi, nomina i capi dalla config e non prende la descrizione da una variante', () => {
+    const variante: OverpassRelation = {
+      type: 'relation', id: 1, tags: { route: 'hiking', name: 'Cammino di Prova (variante)', description: 'This variant uses the Via Amerina.', website: 'https://variante.example' },
+      members: [way(1, meridian(42.5, 42.45, 12.03))],
+    }
+    const principale: OverpassRelation = {
+      type: 'relation', id: 2, tags: { route: 'hiking', name: 'Cammino di Prova', ref: 'CP', website: 'https://principale.example' },
+      members: [way(2, meridian(42.7, 41.5))],
+    }
+    const cfg = { ...config, start: { name: 'Nord', lat: 42.5, lon: 12, anchorName: 'Nord' }, end: { name: 'Sud (centro)', lat: 41.7, lon: 12, anchorName: 'Sud' } }
+    const anchors = [{ id: 'n', name: 'Nord', lat: 60, lon: 12 }, { id: 's', name: 'Sud', lat: 60, lon: 13 }]
+    const built = buildCammino([variante, principale], cfg, anchors)
+    expect(built.line[0][0]).toBeCloseTo(42.5, 2)
+    expect(built.tappe[0].fromName).toBe('Nord')
+    expect(built.tappe[0].fromAnchorId).toBe('n')
+    expect(built.tappe[built.tappe.length - 1].toName).toBe('Sud (centro)')
+    expect(built.tappe[built.tappe.length - 1].toAnchorId).toBe('s')
+    const c = camminoToPlaceCandidate(built)
+    expect(c.officialUrl).toBe('https://principale.example')
+    expect(c.description ?? '').not.toContain('Amerina')
+  })
+
   it('scarta le relazioni escluse per nome e quelle non a piedi', () => {
     const sud: OverpassRelation = { type: 'relation', id: 6, tags: { route: 'hiking', name: 'Cammino di Prova del Sud' }, members: [way(1, meridian(42.5, 42.0))] }
     const bici: OverpassRelation = { type: 'relation', id: 7, tags: { route: 'bicycle', name: 'Cammino di Prova' }, members: [way(2, meridian(42.5, 42.0))] }
@@ -187,5 +224,37 @@ describe('overpassQuery', () => {
     expect(q).toContain('41,11.9,43,12.1')
     // Mai la geometria dell'intera relazione: è ciò che mandava in timeout la prima versione.
     expect(q).not.toMatch(/\.all out geom|\.main out geom|out geom\(/)
+  })
+})
+
+import { discoveryQuery, toDiscoveryRelations, toMarkdown } from '../cammini/discover'
+import { evaluateAll } from '../../../lib/cammini/discovery'
+
+describe('discover (query e parsing)', () => {
+  it('la query chiede solo cammini a piedi, senza geometria', () => {
+    const q = discoveryQuery(41.2, 43.8)
+    expect(q).toContain('hiking|foot')
+    expect(q).not.toMatch(/bicycle|mtb|geom/)
+    expect(q).toContain('out body;')
+  })
+
+  it('conta way e figli dai membri e deduplica per id', () => {
+    const els = [
+      { type: 'relation', id: 1, tags: { name: 'A' }, members: [{ type: 'way', ref: 9 }, { type: 'way', ref: 8 }, { type: 'relation', ref: 2 }] },
+      { type: 'relation', id: 1, tags: { name: 'A' }, members: [] },
+    ]
+    const rels = toDiscoveryRelations(els)
+    expect(rels).toHaveLength(1)
+    expect(rels[0].wayMembers).toBe(2)
+    expect(rels[0].childIds).toEqual([2])
+  })
+
+  it('la tabella markdown riporta ammessi e conteggi', () => {
+    const rels = toDiscoveryRelations([
+      { type: 'relation', id: 5, tags: { name: 'Via Francigena', network: 'iwn', distance: '900', wikidata: 'Q1' }, members: [{ type: 'relation', ref: 6 }, { type: 'relation', ref: 7 }, { type: 'relation', ref: 8 }] },
+    ])
+    const md = toMarkdown(evaluateAll(rels))
+    expect(md).toContain('Ammessi **1**')
+    expect(md).toContain('relation/5')
   })
 })

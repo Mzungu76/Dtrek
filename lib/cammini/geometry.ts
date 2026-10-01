@@ -144,3 +144,31 @@ export function nearestVertex(line: LatLon[], p: { lat: number; lon: number }): 
   }
   return { index, distanceM: best }
 }
+
+export interface TrimResult {
+  line: LatLon[]
+  trimmedStartM: number
+  trimmedEndM: number
+}
+
+/**
+ * Taglia la linea tra due estremi dichiarati (partenza/arrivo del tratto) invece di fidarsi del solo
+ * ritaglio per bbox, che include ciò che sta oltre il confine (nel pilota: il tratto a nord di
+ * Acquapendente). Ogni estremo si applica solo se esiste un vertice entro `maxSnapM`; altrimenti
+ * quel capo resta com'è (mai un taglio a caso). Se i due estremi risultassero invertiti non taglia.
+ */
+export function trimToEndpoints(
+  line: LatLon[],
+  start: { lat: number; lon: number },
+  end: { lat: number; lon: number },
+  maxSnapM = 3000,
+): TrimResult {
+  if (line.length < 2) return { line, trimmedStartM: 0, trimmedEndM: 0 }
+  const s = nearestVertex(line, start)
+  const e = nearestVertex(line, end)
+  const from = s.distanceM <= maxSnapM ? s.index : 0
+  const to = e.distanceM <= maxSnapM ? e.index : line.length - 1
+  if (from >= to) return { line, trimmedStartM: 0, trimmedEndM: 0 }
+  const cum = cumulativeDistances(line)
+  return { line: line.slice(from, to + 1), trimmedStartM: cum[from], trimmedEndM: cum[cum.length - 1] - cum[to] }
+}

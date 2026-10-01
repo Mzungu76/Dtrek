@@ -82,3 +82,7 @@ uno per uno perché un Cammino deve comportarsi come Sentiero per le metriche e 
 
 **Rischi:** tratti condivisi tra cammini e varianti; peso delle geometrie lunghe; cammini percorsi
 solo in parte o in direzione opposta; coerenza dei dati sui pernottamenti.
+
+## 5. Estensione a tutti i cammini d'Italia
+
+La scoperta è automatica (come per i sentieri) ma con soglia di ammissione: `scripts/places/cammini/discover.ts` + `lib/cammini/discovery.ts`, workflow `discover-cammini.yml`. Passi successivi: (1) tarare le soglie sulla lista reale; (2) import per **id di relazione** al posto della configurazione per cammino; (3) controllo qualità con stato pronto/da rivedere/scartato; solo i pronti sono visibili agli utenti.

@@ -39,3 +39,26 @@ npx tsx scripts/places/cammini/fetch.ts --id via-francigena-lazio --dry-run
 npx tsx scripts/places/cammini/fetch.ts --id via-francigena-lazio --fixture /tmp/raw-overpass.json --dry-run
 ```
 Licenza dei dati: ODbL 1.0 (© OpenStreetMap contributors) — attribuzione in `/fonti-e-crediti`.
+
+## Scoperta nazionale (`discover.ts`)
+
+Per non scrivere a mano l'elenco dei cammini d'Italia: `discover.ts` interroga Overpass (4 fasce di
+latitudine, solo tag e membri, **nessuna geometria**) per le relazioni a piedi di rete `iwn`/`nwn`
+(più le `rwn` con nome da cammino) e le valuta con `lib/cammini/discovery.ts`:
+
+| Segnale | Punti |
+|---|---|
+| rete iwn / nwn / rwn | +40 / +30 / +10 |
+| lunghezza dichiarata ≥100 / ≥50 / ≥25 km; <15 km | +30 / +20 / +8; −30 |
+| nome da cammino (Cammino, Via…, Alta Via, Romea, Francigena…) | +15 |
+| ≥3 sotto-relazioni (tappe) | +20 |
+| scheda Wikidata | +10 |
+
+≥60 **ammesso**, 35–59 **da rivedere**, sotto **scartato**. Una relazione figlia di un'altra candidata
+è una tappa o una parte, non un cammino a sé; una variante va rivista. Eccezioni a mano in
+`overrides.json` (`include`/`exclude` per id di relazione).
+
+Workflow `discover-cammini.yml` (manuale, non scrive nulla): lista nel riepilogo del job e negli
+artifact `cammini-candidates` (JSON) e `raw-discovery` (risposta grezza, per rifare la valutazione
+con `--fixture` dopo aver cambiato le regole). Le soglie sono una prima stima: vanno tarate sulla
+lista reale.

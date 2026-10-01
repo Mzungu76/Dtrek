@@ -1,4 +1,4 @@
-import { clipToBbox, orientLine, polylineLengthM, simplifyPolyline, stitchWays, type LatLon } from '../../../lib/cammini/geometry'
+import { clipToBbox, orientLine, polylineLengthM, simplifyPolyline, stitchWays, trimToEndpoints, type LatLon } from '../../../lib/cammini/geometry'
 import {
   parseTappaEndpoints, parseTappaNumber, simplifyTappa, splitIntoTappe,
   type SplitOptions, type TappaAnchor, type TappaDraft,
@@ -99,6 +99,22 @@ function buildOfficialTappe(stages: { number: number; rel: OverpassRelation }[],
   return tappe
 }
 
+// Partenza e arrivo dichiarati nella config danno il nome ai capi del cammino anche quando il
+// centroide del borgo non cade vicino alla linea (Roma/San Pietro).
+function nameEndpoints(tappe: TappaDraft[], config: CamminoConfig, anchors: TappaAnchor[]) {
+  const find = (name?: string) => (name ? anchors.find(a => a.name.toLowerCase() === name.toLowerCase()) : undefined)
+  const first = tappe[0], last = tappe[tappe.length - 1]
+  if (first && !first.fromName) {
+    first.fromName = config.start.name
+    first.fromAnchorId = first.fromAnchorId ?? find(config.start.anchorName)?.id
+  }
+  if (last && !last.toName) {
+    last.toName = config.end.name
+    last.toAnchorId = last.toAnchorId ?? find(config.end.anchorName)?.id
+    last.endsAtAnchor = true
+  }
+}
+
 export function buildCammino(
   rawElements: OverpassElement[],
   config: CamminoConfig,
@@ -150,17 +166,29 @@ export function buildCammino(
     for (const r of matched) for (const w of relationWays(r, lookup)) seen.set(w.ref, w.points)
     const chains = chainsInBbox([...seen.values()], config)
     diagnostics.push(`Way uniche: ${seen.size}, catene connesse: ${chains.length}.`)
-    line = orientLine(longestChain(chains), config.start)
+    const oriented = orientLine(longestChain(chains), config.start)
+    // Il ritaglio per bbox include ciò che sta oltre gli estremi del tratto: si taglia su di essi.
+    const trimmed = trimToEndpoints(oriented, config.start, config.end)
+    line = trimmed.line
+    if (trimmed.trimmedStartM > 0 || trimmed.trimmedEndM > 0) {
+      diagnostics.push(`Taglio agli estremi dichiarati: -${(trimmed.trimmedStartM / 1000).toFixed(1)} km in partenza, -${(trimmed.trimmedEndM / 1000).toFixed(1)} km in arrivo.`)
+    }
     const dropped = chains.filter(c => c !== longestChain(chains))
     if (dropped.length > 0) {
       diagnostics.push(`Scartate ${dropped.length} catene minori (varianti o interruzioni): ${dropped.map(c => `${Math.round(polylineLengthM(c) / 1000)} km`).join(', ')}.`)
     }
     tappe = splitIntoTappe(line, anchors, options.split)
+    nameEndpoints(tappe, config, anchors)
   }
   if (line.length < 2) throw new Error('Linea del cammino vuota dopo il ritaglio.')
 
-  const tags: Record<string, string> = {}
-  for (const r of matched) for (const [k, v] of Object.entries(r.tags ?? {})) if (!(k in tags)) tags[k] = v
+  // I tag descrittivi (sito, descrizione, ref) vengono dalla relazione principale, non da una
+  // variante: nel dry-run reale la prima relazione era la variante Amerina, con una descrizione in
+  // inglese che parlava solo di quella.
+  const isVariant = (r: OverpassRelation) => /variant|variante|alternativ/i.test(`${r.tags?.name ?? ''} ${r.tags?.description ?? ''} ${r.tags?.['name:it'] ?? ''}`)
+  const main = [...matched].sort((a, b) => Number(isVariant(a)) - Number(isVariant(b)) || Number(!!b.tags?.website) - Number(!!a.tags?.website))[0]
+  const tags: Record<string, string> = { ...(main.tags ?? {}) }
+  for (const r of matched) if (!isVariant(r)) for (const [k, v] of Object.entries(r.tags ?? {})) if (!(k in tags)) tags[k] = v
 
   return {
     config, tappeSource, line, lengthM: polylineLengthM(line),
@@ -188,7 +216,8 @@ export function camminoToPlaceCandidate(built: BuiltCammino): PlaceCandidate {
   return {
     name: config.name,
     metaType: 'cammino',
-    description: tags['description:it'] ?? tags.description ?? config.description,
+    // Solo `description:it`: `description` di OSM è spesso in inglese o riferita a una variante.
+    description: tags['description:it'] ?? config.description,
     latitude: lat,
     longitude: lon,
     region: config.region,
