@@ -2,7 +2,7 @@ import { anchorsNearLine, nearestVertex, orderAlongRoute, polylineLengthM, stitc
 import { familyKey } from '../../../lib/cammini/discovery'
 import type { RegistryEntry } from '../../../lib/cammini/registry'
 import {
-  fillEndpointsFromAnchors, parseTappaEndpoints, parseTappaNumber, simplifyTappa, splitIntoTappe,
+  fillEndpointsFromAnchors, orientNamesByGeometry, parseTappaEndpoints, parseTappaNumber, propagateSharedEndpoints, simplifyTappa, splitIntoTappe,
   type SplitOptions, type TappaAnchor, type TappaDraft,
 } from '../../../lib/cammini/tappe'
 import type { BuiltCammino, OverpassRelation } from './build'
@@ -55,6 +55,12 @@ function relationWayRefs(r: OverpassRelation): number[] {
 
 function longestChain(chains: LatLon[][]): LatLon[] {
   return chains.reduce<LatLon[]>((best, c) => (polylineLengthM(c) > polylineLengthM(best) ? c : best), [])
+}
+
+/** "Cammino di San Benedetto - Tappa 01" → "Tappa 01": il nome del cammino sta già nel cammino. */
+export function stageLabel(name: string): string {
+  const m = /[-–:]\s*((?:tappa|stage|etap[ep]?)\b.*)$/i.exec(name)
+  return (m ? m[1] : name).trim()
 }
 
 function midpoint(line: LatLon[]): LatLon {
@@ -129,11 +135,14 @@ export function buildFromRegistry(
   const items: { line: LatLon[]; tappe: TappaDraft[] }[] = []
   if (useOfficial) {
     for (const p of officialPieces) {
+      // Capi: dal nome ("Tappa 3: A - B") o dai tag from/to della relazione (molte tappe li hanno).
       const ep = parseTappaEndpoints(p.rel.tags?.name)
+      const fromName = ep?.from ?? (p.rel.tags?.from?.trim() || undefined)
+      const toName = ep?.to ?? (p.rel.tags?.to?.trim() || undefined)
       items.push({
         line: p.line,
         tappe: [{
-          ordinal: 0, name: p.name, fromName: ep?.from, toName: ep?.to, lengthM: polylineLengthM(p.line),
+          ordinal: 0, name: stageLabel(p.name), fromName, toName, lengthM: polylineLengthM(p.line),
           polyline: p.line, source: 'official', officialRelationId: p.id,
         }],
       })
@@ -151,7 +160,14 @@ export function buildFromRegistry(
   const tappe: TappaDraft[] = ordered.map((o, i) => ({ ...o.item.tappa, polyline: o.line, ordinal: i + 1 }))
   const gaps = ordered.filter(o => o.gapBeforeM > 500).length
   if (gaps > 0) diagnostics.push(`${gaps} collegamenti fra tappe con salto > 500 m.`)
+  // "A - B" è il verso della relazione, non necessariamente quello in cui abbiamo messo in fila la
+  // tappa: i capi si orientano confrontando i nomi con la posizione dei paesi, poi coi vicini.
+  orientNamesByGeometry(tappe, anchorsAll)
   fillEndpointsFromAnchors(tappe, anchors)
+  // Un capo ancora senza nome: borghi un po' più lontani (frazioni, passi), poi il nome dell'altro lato
+  // della giunzione. Se nessuno lo sa, resta senza nome.
+  fillEndpointsFromAnchors(tappe, anchors, 5000)
+  propagateSharedEndpoints(tappe)
 
   // Divisione a un punto (Francigena: Canterbury–Roma / Roma–Leuca).
   const groups: { id: string; name: string; tappe: TappaDraft[] }[] = []
