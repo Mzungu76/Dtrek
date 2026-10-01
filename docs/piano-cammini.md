@@ -107,3 +107,7 @@ La scoperta è automatica (come per i sentieri) ma con soglia di ammissione: `sc
 - `lib/metaSearch/searchCammini.ts` (+ `meta-search` accetta `metaType: 'cammino'`): solo cammini con qualità **pronto**; con un'origine conta il **tracciato** entro il raggio, non il pin.
 - `GET /api/cammini/[id]`: scheda con le tappe (da → a, km, origine ufficiale/calcolata, dislivello solo se calcolato).
 - Mappa di ricerca (`CreaGuidaMapSearch`): filtro **Cammini**, tracciato come linea, tappa evidenziata, scheda `CamminoDetailCard`. "Crea guida" è volutamente disattivato: arriva con la Fase 4 (scelta tappe/date → `cammino_plan`).
+
+## 9. Fase 4 — pianificazione e creazione della guida
+
+`lib/cammini/plan.ts` (`CamminoPlan` in `planned_hikes.cammino_plan`): tappe incluse (da…a), verso (come nel catalogo / al contrario), giornate (una tappa al giorno, oppure accorpate fino a N km: le tappe non si spezzano), date consecutive dalla partenza. La Meta (`metaType: 'cammino'`) porta la polilinea della selezione, i km sommati e **nessuna quota inventata** (D+ per tappa: Fase 5, dal DTM). UI: `CamminoPlanner` dentro il foglio del cammino, con anteprima della selezione sulla mappa. La guida non chiede più "andata o andata e ritorno" per un cammino.

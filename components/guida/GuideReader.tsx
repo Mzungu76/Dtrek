@@ -358,8 +358,11 @@ export default function GuideReader({
   // popup "Come percorri questo percorso" — che ha senso solo per un vero cammino a piedi
   // (Sentiero, o Borgo/Città "trekking misto" con una traccia reale) — anche per chi visita
   // semplicemente un borgo o un museo.
+  // Un Cammino a tappe si percorre sempre in un solo verso, scelto nel suo piano (camminoPlan): la
+  // domanda "solo andata o andata e ritorno" non ha senso, e il raddoppio dei km sarebbe un dato falso.
   const isLinearRoute = useMemo(
-    () => metaEligibleForHikingScores({ metaType: hike.metaType, trackPoints: hike.trackPoints, routePolyline: hike.routePolyline })
+    () => hike.metaType !== 'cammino'
+      && metaEligibleForHikingScores({ metaType: hike.metaType, trackPoints: hike.trackPoints, routePolyline: hike.routePolyline })
       && classifyTrackShape(hike.routePolyline ?? []) === 'linear',
     [hike.metaType, hike.trackPoints, hike.routePolyline],
   )

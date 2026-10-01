@@ -162,6 +162,8 @@ export default function CreaGuidaMapSearch({ onOtherWays, initialView, onViewCha
   const [focusedTappa, setFocusedTappa] = useState<CamminoTappaDetail | null>(null)
   // Altezza del foglio del cammino (CamminoSheet): il tracciato si inquadra nella parte di mappa libera.
   const [camminoInset, setCamminoInset] = useState(0)
+  // Selezione del pianificatore del cammino (CamminoPlanner), evidenziata sulla mappa mentre si sceglie.
+  const [planPreview, setPlanPreview] = useState<[number, number][] | null>(null)
   const [sheetExpanded, setSheetExpanded] = useState(false)
 
   const [queryText, setQueryText] = useState('')
@@ -354,6 +356,10 @@ export default function CreaGuidaMapSearch({ onOtherWays, initialView, onViewCha
         line.on('click', () => { setSelected({ kind: 'meta', item }); setSheetExpanded(false) })
         line.addTo(layer)
       }
+      if (planPreview && planPreview.length > 1) {
+        L.polyline(planPreview, { color: '#1c1917', weight: 7, opacity: 0.3 }).addTo(layer)
+        L.polyline(planPreview, { color: '#F59E0B', weight: 4.5, opacity: 1 }).addTo(layer)
+      }
       if (focusedTappa && focusedTappa.polyline.length > 1) {
         L.polyline(focusedTappa.polyline, { color: '#1c1917', weight: 7, opacity: 0.35 }).addTo(layer)
         L.polyline(focusedTappa.polyline, { color: '#F59E0B', weight: 4.5, opacity: 1 }).addTo(layer)
@@ -407,7 +413,7 @@ export default function CreaGuidaMapSearch({ onOtherWays, initialView, onViewCha
         marker.addTo(layer)
       }
     }
-  }, [metaResults, trailResults, selected, personalize, focusedTappa])
+  }, [metaResults, trailResults, selected, personalize, focusedTappa, planPreview])
 
   // Selezionare un cammino lo inquadra; evidenziare una tappa inquadra quella. Il tracciato va nella
   // parte di mappa libera: sotto la testata di ricerca, sopra il foglio del cammino (altezza
@@ -418,12 +424,14 @@ export default function CreaGuidaMapSearch({ onOtherWays, initialView, onViewCha
     if (!map || !L) return
     const points = focusedTappa && focusedTappa.polyline.length > 1
       ? focusedTappa.polyline
-      : selected?.kind === 'meta' && selected.item.camminoStats ? selected.item.camminoStats.overviewPolyline : null
+      : planPreview && planPreview.length > 1
+        ? planPreview
+        : selected?.kind === 'meta' && selected.item.camminoStats ? selected.item.camminoStats.overviewPolyline : null
     if (!points || points.length < 2 || camminoInset === 0) return
     map.fitBounds(L.latLngBounds(points), {
       paddingTopLeft: [28, 140], paddingBottomRight: [28, camminoInset + 24], maxZoom: 14,
     })
-  }, [selected, focusedTappa, camminoInset])
+  }, [selected, focusedTappa, camminoInset, planPreview])
 
   // Cambiare cammino (o chiuderne la scheda) azzera la tappa evidenziata.
   useEffect(() => { setFocusedTappa(null) }, [selected])
@@ -707,6 +715,7 @@ export default function CreaGuidaMapSearch({ onOtherWays, initialView, onViewCha
           onFocusTappa={setFocusedTappa}
           onClose={() => setSelected(null)}
           onInset={setCamminoInset}
+          onPreview={setPlanPreview}
         />
       )}
       {selected && !isCamminoSelected && (

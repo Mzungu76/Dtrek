@@ -1,9 +1,13 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Loader2, Globe, ChevronRight, ChevronLeft, List, X as XIcon } from 'lucide-react'
 import type { MetaSearchResultItem } from '@/lib/metaSearch/types'
 import type { CamminoDetail, CamminoTappaDetail } from '@/app/api/cammini/[id]/route'
 import { META_TYPE_CONFIG } from '@/lib/metaTypes'
+import CamminoPlanner from './CamminoPlanner'
+import { savePlanned } from '@/lib/plannedStore'
+import { camminoPlanToPlannedHike, type CamminoPlan } from '@/lib/cammini/plan'
 
 const cfg = META_TYPE_CONFIG.cammino
 const CamminoIcon = cfg.icon
@@ -29,7 +33,7 @@ function km(m: number): string {
  * parte di mappa rimasta libera. Una tappa calcolata da noi lo dice; il dislivello compare solo
  * quando è stato calcolato dal DTM — mai uno zero al suo posto.
  */
-export default function CamminoSheet({ item, focusedOrdinal, onFocusTappa, onClose, onInset }: {
+export default function CamminoSheet({ item, focusedOrdinal, onFocusTappa, onClose, onInset, onPreview }: {
   item: MetaSearchResultItem
   focusedOrdinal: number | null
   onFocusTappa: (tappa: CamminoTappaDetail | null) => void
@@ -37,10 +41,16 @@ export default function CamminoSheet({ item, focusedOrdinal, onFocusTappa, onClo
   /** Distanza in pixel dal bordo alto del foglio al fondo dello schermo (0 alla chiusura) — per
    *  inquadrare la mappa sopra di esso. */
   onInset: (px: number) => void
+  /** Selezione del pianificatore come polilinea da evidenziare sulla mappa (null = nessuna). */
+  onPreview: (polyline: [number, number][] | null) => void
 }) {
+  const router = useRouter()
   const [detail, setDetail] = useState<CamminoDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [planning, setPlanning] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
   const sheetRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLOListElement>(null)
   const stats = item.camminoStats
@@ -80,6 +90,20 @@ export default function CamminoSheet({ item, focusedOrdinal, onFocusTappa, onClo
     if (active) (active as HTMLElement).scrollIntoView({ block: 'nearest' })
   }, [focusedOrdinal])
 
+  async function createGuide(plan: CamminoPlan) {
+    if (!detail || creating) return
+    setCreating(true)
+    setCreateError(null)
+    try {
+      const hike = camminoPlanToPlannedHike(detail, plan)
+      await savePlanned(hike)
+      router.push(`/guida/${encodeURIComponent(hike.id)}`)
+    } catch (e) {
+      setCreateError(e instanceof Error ? e.message : 'Impossibile creare la guida — riprova.')
+      setCreating(false)
+    }
+  }
+
   const tappe = detail?.tappe ?? []
   const focusedIdx = focusedOrdinal != null ? tappe.findIndex(t => t.ordinal === focusedOrdinal) : -1
   const focused = focusedIdx >= 0 ? tappe[focusedIdx] : null
@@ -92,7 +116,7 @@ export default function CamminoSheet({ item, focusedOrdinal, onFocusTappa, onClo
     <div ref={sheetRef}
       className="fixed left-0 right-0 z-20 bg-white rounded-t-3xl shadow-[0_-6px_24px_rgba(0,0,0,.16)] flex flex-col"
       // Appoggiato sopra il menu dell'app (h-14 + rientro per l'home indicator), non dietro di esso.
-      style={{ bottom: 'calc(3.5rem + env(safe-area-inset-bottom, 0px))', maxHeight: focused ? '210px' : 'min(52vh, 480px)' }}>
+      style={{ bottom: 'calc(3.5rem + env(safe-area-inset-bottom, 0px))', maxHeight: planning ? 'min(68vh, 600px)' : focused ? '210px' : 'min(52vh, 480px)' }}>
       <div className="shrink-0 flex justify-center pt-2.5"><span className="w-9 h-1 rounded-full bg-stone-200" /></div>
 
       {/* Testata — sempre visibile: chi è il cammino, quanto è lungo, da dove vengono le tappe. */}
@@ -118,7 +142,12 @@ export default function CamminoSheet({ item, focusedOrdinal, onFocusTappa, onClo
       {error && <p className="px-4 pb-4 text-xs text-red-600">{error}</p>}
 
       {/* Stato "tappa": barra compatta con le frecce, la mappa fa il resto. */}
-      {focused && (
+      {planning && detail && (
+        <CamminoPlanner detail={detail} creating={creating} error={createError}
+          onBack={() => setPlanning(false)} onPreview={onPreview} onCreate={createGuide} />
+      )}
+
+      {!planning && focused && (
         <div className="shrink-0 px-4 pb-4">
           <div className="flex items-center gap-2 bg-stone-50 border border-stone-100 rounded-2xl p-2">
             <button onClick={() => step(-1)} disabled={focusedIdx <= 0} aria-label="Tappa precedente"
@@ -150,7 +179,7 @@ export default function CamminoSheet({ item, focusedOrdinal, onFocusTappa, onClo
       )}
 
       {/* Stato "elenco" */}
-      {!focused && detail && (
+      {!planning && !focused && detail && (
         <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-4">
           {item.description && <p className="text-xs text-stone-600 leading-relaxed mb-2.5">{item.description}</p>}
           {detail.officialUrl && (
@@ -185,11 +214,10 @@ export default function CamminoSheet({ item, focusedOrdinal, onFocusTappa, onClo
               </li>
             ))}
           </ol>
-          <button type="button" disabled
-            className="w-full text-center text-xs font-bold text-white bg-stone-300 rounded-full py-2.5 cursor-not-allowed">
-            Crea guida — in arrivo
+          <button type="button" onClick={() => { onFocusTappa(null); setPlanning(true) }}
+            className="w-full text-center text-sm font-bold text-white bg-forest-600 hover:bg-forest-700 rounded-full py-3 transition-colors">
+            Pianifica e crea guida
           </button>
-          <p className="text-[10.5px] text-stone-400 text-center mt-1.5">Presto potrai scegliere le tappe, le date e creare la guida.</p>
         </div>
       )}
     </div>
