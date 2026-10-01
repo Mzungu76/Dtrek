@@ -1,0 +1,96 @@
+name: Import Places — Cammini (OpenStreetMap → dtrek_places + dtrek_cammino_tappe)
+
+# Manuale (workflow_dispatch), stesso schema di import-places-wikidata.yml. Una query Overpass per
+# cammino (scripts/places/cammini/fetch.ts), mai live per-utente. Solo cammini a piedi: quelli
+# ciclabili sono esclusi dalla query. Prerequisiti: migrazioni add_cammino_meta_type.sql e
+# add_cammino_tappe.sql eseguite. I borghi (meta_type = 'borgo_citta') devono già essere importati
+# (import-places-istat.yml): servono come punti di sosta per le tappe calcolate.
+#
+# Prima esecuzione: lancia SEMPRE dry-run. Il riepilogo mostra relazioni trovate, tappe ufficiali
+# vs calcolate, catene scartate e lunghezza — la struttura reale delle relazioni OSM di un cammino
+# non è verificabile da un ambiente senza rete, quindi la prima corsa serve a confermarla. La
+# risposta Overpass grezza viene allegata come artifact (raw-overpass) per riprodurre il build in
+# locale con --fixture.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dry-run: calcola e stampa, nessuna scrittura. write: scrive su Supabase."
+        required: true
+        type: choice
+        options:
+          - dry-run
+          - write
+        default: dry-run
+      camminoId:
+        description: "Id del cammino in scripts/places/cammini/config.ts"
+        required: true
+        type: string
+        default: "via-francigena-lazio"
+      stages:
+        description: "auto: tappe ufficiali se ≥3 numerate, altrimenti calcolate. official/computed forzano una delle due."
+        required: true
+        type: choice
+        options:
+          - auto
+          - official
+          - computed
+        default: auto
+
+concurrency:
+  group: import-places
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    env:
+      MODE: ${{ inputs.mode }}
+      CAMMINO_ID: ${{ inputs.camminoId }}
+      STAGES: ${{ inputs.stages }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Verifica secret Supabase (solo write)
+        if: ${{ inputs.mode == 'write' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_SERVICE_KEY:-}" ]; then
+            echo "Secret Supabase mancanti — serve SUPABASE_URL e (SUPABASE_SERVICE_KEY o SUPABASE_SERVICE_ROLE_KEY)." >&2
+            exit 1
+          fi
+
+      - name: Import cammino
+        run: |
+          set -euo pipefail
+          ARGS=(scripts/places/cammini/fetch.ts --id "$CAMMINO_ID" --stages "$STAGES" --save-fixture /tmp/raw-overpass.json)
+          if [ "$MODE" = "dry-run" ]; then ARGS+=(--dry-run); fi
+          npx tsx "${ARGS[@]}" | tee /tmp/cammini-import.txt
+          {
+            echo "### Import Places — Cammini ($MODE)"
+            echo "- Cammino: $CAMMINO_ID"
+            echo "- Tappe: $STAGES"
+            echo '```'
+            cat /tmp/cammini-import.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: raw-overpass
+          path: /tmp/raw-overpass.json
+          if-no-files-found: ignore

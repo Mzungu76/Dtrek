@@ -41,8 +41,8 @@ pianifica i propri giorni sopra le tappe ufficiali (due tappe corte in un giorno
 | # | Fase | Stato |
 |---|---|---|
 | 0 | Audit (sotto) | fatta |
-| 1 | Fondamenta: tipo, config, migrazioni, profili | in corso |
-| 2 | ETL dati: OSM relation → linea ordinata → tappe; Via Francigena Lazio | da fare |
+| 1 | Fondamenta: tipo, config, migrazioni, profili | fatta |
+| 2 | ETL dati: OSM relation → linea ordinata → tappe; Via Francigena Lazio | codice e test fatti; **dry-run su dati reali da eseguire** (workflow `import-places-cammini`) |
 | 3 | Ricerca: `searchCammini`, chip, mappa con linee, filtri | da fare |
 | 4 | Creazione Guida: personalizzazione tappe/giorni/direzione/date | da fare |
 | 5 | Guida e Navigator: profilo, sezioni, widget tappe, AI per tappa su richiesta, offline | da fare |
