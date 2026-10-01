@@ -1446,6 +1446,8 @@ CREATE TABLE IF NOT EXISTS dtrek_cammino_tappe (
   source           text NOT NULL CHECK (source IN ('official', 'computed')),
   ends_at_anchor   boolean,
   osm_relation_id  bigint,
+  pois             jsonb,        -- luoghi lungo la tappa (Overpass), cache al primo bisogno
+  pois_at          timestamptz,
   created_at       timestamptz NOT NULL DEFAULT now(),
   updated_at       timestamptz NOT NULL DEFAULT now(),
   UNIQUE (cammino_id, ordinal)

@@ -124,3 +124,11 @@ La scoperta è automatica (come per i sentieri) ma con soglia di ammissione: `sc
 - Un'unica sezione AI "Tappa per tappa" su 16 tappe superava il budget di token (si troncava a metà, errore "Risposta non riconosciuta"): per i cammini `luoghi`, `dati_sicurezza` e `comfort` non si generano più in blocco (`CAMMINO_PER_TAPPA_SECTIONS`).
 - Ogni tappa è espandibile (`CamminoTappeWidget`): profilo altimetrico (DTM, passo 100 m, lisciato), salita/discesa/quota max, CTS stimato (solo dal profilo, senza POI lungo la strada) e racconto di Giulia su richiesta (`POST /api/cammini/tappa-text`, salvato in `cammino_plan.tappe[].text`).
 - Da valutare: sezioni per tappa anche per natura / sapori / consigli; CTS con i POI lungo la tappa.
+
+### Fase 5c — la guida durante il cammino
+Struttura: la guida generale resta snella (Prima di partire, Il cammino con la **mappa d'insieme**, Verificato, Consigli); tutto il resto vive **per tappa** (`CamminoTappeWidget`), nell'ordine in cui serve a chi cammina.
+- Giornate con la tappa di **oggi** aperta da sola (se c'è una data di partenza) e badge "Oggi".
+- Tappa aperta: racconto di Giulia + 4 schede — **Percorso** (mappa della tappa con i luoghi, salita/discesa/quota max, **CTS** con profilo e luoghi OSM, grafico altimetrico), **Luoghi** (POI OpenStreetMap lungo la tappa, in cache nel catalogo: `dtrek_cammino_tappe.pois`), **Natura** e **Sapori** (testi su richiesta; la natura usa i dati reali flora/GBIF della tappa).
+- `POST /api/cammini/tappa-text` con `kind: racconto|natura|sapori`; testi in `cammino_plan.tappe[].text|natura|sapori`.
+- `CAMMINO_PER_TAPPA_SECTIONS` ora comprende anche natura e sapori.
+- Da fare: CTS personalizzato con lo storico dell'utente, Navigator per tappa/offline, sicurezza per tappa.

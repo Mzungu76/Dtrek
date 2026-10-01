@@ -8,6 +8,7 @@ import { densifyPolyline, smooth, gainLoss, downsample } from '@/lib/cammini/ele
 import { computeProvisionalScore } from '@/lib/routeBuilder/provisionalScore'
 import { ctsLabel } from '@/lib/trailScore'
 import { estimateTimeMinutes } from '@/lib/trailStats'
+import { fetchPoisNearTrack, type PoiItem } from '@/lib/overpass'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -23,6 +24,8 @@ export interface TappaElevation {
   cts?: { ts: number; label: string; color: string }
   /** Solo con ?profile=1: punti [lat, lon, quota] (stessa sequenza del profilo) per i grafici che vogliono una traccia. */
   points?: [number, number, number][]
+  /** Solo con ?profile=1: luoghi lungo la tappa (OSM), in cache nel catalogo. */
+  pois?: PoiItem[]
 }
 
 // Dislivello di UNA tappa, calcolato dal DTM al primo bisogno e salvato in dtrek_cammino_tappe
@@ -40,7 +43,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   const { data: row, error } = await supabase
     .from('dtrek_cammino_tappe')
-    .select('elevation_gain_m, elevation_loss_m, polyline')
+    .select('elevation_gain_m, elevation_loss_m, polyline, pois')
     .eq('cammino_id', params.id)
     .eq('ordinal', ordinal)
     .maybeSingle()
@@ -84,12 +87,35 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     out.minM = minM
     const distanceMeters = dense[dense.length - 1][2]
     const now = new Date().toISOString()
+    // Luoghi lungo la tappa: dalla cache del catalogo, altrimenti Overpass (con un tempo massimo)
+    // e poi salvati per tutti. Un fallimento non blocca il resto: la tappa resta senza luoghi.
+    let pois: PoiItem[] | null = Array.isArray(row.pois) ? (row.pois as PoiItem[]) : null
+    if (!pois) {
+      try {
+        const fetched = await Promise.race([
+          fetchPoisNearTrack(polyline, 300),
+          new Promise<null>(resolve => setTimeout(() => resolve(null), 14000)),
+        ])
+        if (fetched) {
+          pois = fetched
+          const { error: poiErr } = await supabase
+            .from('dtrek_cammino_tappe')
+            .update({ pois: fetched, pois_at: new Date().toISOString() })
+            .eq('cammino_id', params.id)
+            .eq('ordinal', ordinal)
+          if (poiErr) console.error('[cammini/:id/elevation] pois', poiErr)
+        }
+      } catch (e) {
+        console.error('[cammini/:id/elevation] pois fetch', e)
+      }
+    }
+    out.pois = pois ?? []
     const { ts } = computeProvisionalScore({
       routePolyline: polyline,
       trackPoints: dense.map(([lat, lon], i) => ({ time: now, lat, lon, altitudeMeters: alts[i] })),
       distanceMeters, elevationGain: gainM, elevationLoss: lossM, altitudeMax: maxM, altitudeMin: minM,
       estimatedTimeSeconds: estimateTimeMinutes(distanceMeters / 1000, gainM) * 60,
-      pois: [],
+      pois: pois ?? [],
     })
     out.cts = { ts: Math.round(ts), ...ctsLabel(ts) }
   }

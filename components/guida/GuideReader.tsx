@@ -56,6 +56,7 @@ import OpereMuseoWidget from './widgets/OpereMuseoWidget'
 import GuideHero from './GuideHero'
 import GuideStatsStrip from './GuideStatsStrip'
 import CamminoTappeWidget from './widgets/CamminoTappeWidget'
+import CamminoOverviewMap from './widgets/CamminoOverviewMap'
 import GuideCamminoStatsStrip from './GuideCamminoStatsStrip'
 import GuideBorgoStatsStrip from './GuideBorgoStatsStrip'
 import SectionNav from '@/components/editorial/SectionNav'
@@ -1059,6 +1060,10 @@ export default function GuideReader({
         // Un Borgo/Città "cammino urbano" o un Sito non hanno una traccia GPS da mostrare — mai un
         // RouteMapSection vuoto/rotto al posto del nulla (piano §48.9). "Trekking misto" ha una
         // traccia reale: resta invariato.
+        // Cammino: la mappa d'insieme delle tappe scelte (nessuna traccia GPS unica da mostrare).
+        if (hike.metaType === 'cammino') {
+          return hike.camminoPlan ? <CamminoOverviewMap plan={hike.camminoPlan} /> : null
+        }
         if (hike.metaType !== 'sentiero' && !usesRealTrack) {
           // Verifica post-piano guide-eccellenza: "quando vengono create le schede di Borghi/Siti,
           // la scheda dovrebbe essere già popolata con le info descrittive" — prima, senza una
