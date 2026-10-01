@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Eye, EyeOff, X, Plus, Check, Loader2 } from 'lucide-react'
 import type { StoredActivity } from '@/lib/blobStore'
 import type { RoutePhoto } from '@/lib/activityPhotos'
-import { type ReportSection, type ReportAuthoredBy } from '@/lib/reportStore'
+import { type ReportSection, type ReportAuthoredBy, sectionHintsFor } from '@/lib/reportStore'
+import { metaHasHikingMetrics } from '@/lib/metaTypes'
 import SectionEditor from '@/app/components/SectionEditor'
 import ActivityPhotoManager from '@/app/components/ActivityPhotoManager'
 import SectionNav from '@/components/editorial/SectionNav'
@@ -38,6 +39,10 @@ export default function ManualEditor({
   initialSections, initialAuthoredBy, onSave, onCancel,
 }: Props) {
   const [sections,   setSections]   = useState<ReportSection[]>(initialSections)
+  // Un Borgo/Città o un Sito non ha un tracciato: suggerimenti di sezione propri e nessun
+  // posizionamento delle foto lungo un percorso.
+  const georeference = metaHasHikingMetrics(activity.metaType)
+  const hints = useMemo(() => sectionHintsFor(activity.metaType, activity.siteType), [activity.metaType, activity.siteType])
   const [authoredBy, setAuthoredBy] = useState<ReportAuthoredBy>(initialAuthoredBy)
   const [aiAssistLoadingId, setAiAssistLoadingId] = useState<string | null>(null)
   const [aiAssistError, setAiAssistError] = useState<string | null>(null)
@@ -327,6 +332,8 @@ export default function ManualEditor({
                 onMoveDown={() => moveSection(section.id, 1)}
                 onAiAssist={handleAiAssist}
                 aiAssistLoading={aiAssistLoadingId === section.id}
+                hints={hints}
+                georeference={georeference}
                 onDragHandleDown={() => setDragIndex(i)}
                 isDragging={dragIndex === i}
                 isDragOver={dragOverIndex === i}
@@ -382,6 +389,7 @@ export default function ManualEditor({
               trackPoints={activity.trackPoints}
               photos={photos}
               onPhotosChange={onPhotosChange}
+              georeference={georeference}
             />
           </div>
         </div>

@@ -17,6 +17,7 @@ export default function QuestionnaireWizard({
   onSkip,
   onBack,
   onSkipAll,
+  visit = false,
 }: {
   questions: QuestionnaireQuestion[]
   answers: Record<string, QuestionnaireAnswer>
@@ -27,6 +28,9 @@ export default function QuestionnaireWizard({
   onSkip: (questionId: string) => void
   onBack: () => void
   onSkipAll: () => void
+  /** Borgo/Città o Sito: niente tracciato da evidenziare né "% del percorso" — le domande sono
+   *  ancorate a luoghi e momenti della visita (lib/visitQuestionnaire.ts). */
+  visit?: boolean
 }) {
   const question = questions[currentIndex]
   const existing = question ? answers[question.id] : undefined
@@ -64,13 +68,15 @@ export default function QuestionnaireWizard({
         Domanda {currentIndex + 1} di {questions.length}
       </p>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-stone-100 p-5 mb-5">
-        <RouteTimeline trackPoints={trackPoints} photos={photos} highlightProgress={question.progress} />
-      </div>
+      {!visit && (
+        <div className="bg-white rounded-2xl shadow-sm border border-stone-100 p-5 mb-5">
+          <RouteTimeline trackPoints={trackPoints} photos={photos} highlightProgress={question.progress} />
+        </div>
+      )}
 
       <div className="bg-white rounded-2xl shadow-sm border border-stone-100 p-6 mb-5">
         <span className="inline-block text-[11px] font-display font-bold uppercase tracking-wide text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full mb-3">
-          {question.label} · {Math.round(question.progress * 100)}% del percorso
+          {visit ? question.label : `${question.label} · ${Math.round(question.progress * 100)}% del percorso`}
         </span>
 
         {photoAnchor && (

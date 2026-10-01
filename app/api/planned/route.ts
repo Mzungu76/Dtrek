@@ -540,6 +540,32 @@ export async function PATCH(req: NextRequest) {
     if (patch.borgoItineraryOverrides      !== undefined) dbPatch.borgo_itinerary_overrides      = patch.borgoItineraryOverrides
     if (patch.borgoDayBudgetMinutes        !== undefined) dbPatch.borgo_day_budget_minutes       = patch.borgoDayBudgetMinutes
 
+    // Una Meta camminata/visitata senza Diario renderebbe INVISIBILE il suo Reportage (l'appartenenza
+    // passa solo da planned_hikes.diary_id — vedi app/api/diaries/[id]/route.ts). Il client (lib/
+    // activitySave.ts) assegna il Diario al salvataggio, ma offline non può leggere l'elenco dei
+    // Diari e la patch parte comunque, in coda, con il solo firstCompletedAt: qui, alla consegna,
+    // si ripara l'orfano col Diario di default. Mai sovrascritto un diaryId esplicito (patch o riga).
+    if (patch.firstCompletedAt !== undefined && patch.diaryId === undefined) {
+      const { data: row } = await supabase
+        .from('planned_hikes')
+        .select('diary_id')
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .maybeSingle()
+      if (row && !row.diary_id) {
+        const { data: def } = await supabase
+          .from('diaries')
+          .select('id')
+          .eq('user_id', user.id)
+          .is('archived_at', null)
+          .order('is_default', { ascending: false })
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle()
+        if (def?.id) dbPatch.diary_id = def.id
+      }
+    }
+
     const { error } = await supabase
       .from('planned_hikes')
       .update(dbPatch)

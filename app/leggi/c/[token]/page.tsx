@@ -1,3 +1,4 @@
+import { entryCounts, entryCountsLabel } from '@/lib/reportFacts'
 import type { Metadata } from 'next'
 import { cache } from 'react'
 import { notFound } from 'next/navigation'
@@ -21,7 +22,7 @@ export async function generateMetadata({ params }: { params: { token: string } }
 
   const title = `${collection.title} · DTrek`
   const desc = collection.totalEntries > 0
-    ? `${collection.volumes.length} Diari · ${collection.totalEntries} escursioni · ${collection.totalKm.toFixed(0)} km · di ${collection.ownerName}`
+    ? `${collection.volumes.length} Diari · ${entryCountsLabel(entryCounts(collection.volumes.flatMap(v => v.entries)))}${collection.totalKm > 0 ? ` · ${collection.totalKm.toFixed(0)} km` : ''} · di ${collection.ownerName}`
     : `Una raccolta di Diari di ${collection.ownerName}`
 
   return {

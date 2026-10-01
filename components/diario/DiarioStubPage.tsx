@@ -5,6 +5,8 @@ import { it } from 'date-fns/locale'
 import { EyeOff } from 'lucide-react'
 import type { ActivityMeta } from '@/lib/blobStore'
 import { formatDuration } from '@/lib/tcxParser'
+import { metaHasHikingMetrics } from '@/lib/metaTypes'
+import { reportFacts, reportNoun } from '@/lib/reportFacts'
 import RouteThumb from '@/components/RouteThumb'
 import { DiarioYearBand, type DiarioYearBandInfo } from './DiarioYearDivider'
 
@@ -14,6 +16,19 @@ export function DiarioStubPage({ activity, yearBand, onExclude }: {
   onExclude?: () => void
 }) {
   const dateStr = format(new Date(activity.startTime), 'd MMMM yyyy', { locale: it })
+  // Un Sentiero ha le cifre di cammino; un Borgo/Città o un Sito solo quelle che esistono davvero
+  // (lib/reportFacts.ts) — mai una griglia di zeri.
+  const hiking = metaHasHikingMetrics(activity.metaType)
+  const noun = reportNoun(activity.metaType)
+  const cells: { label: string; value: string }[] = hiking
+    ? [
+        { label: 'Distanza', value: `${(activity.distanceMeters / 1000).toFixed(2)} km` },
+        { label: 'Dislivello', value: `${Math.round(activity.elevationGain)} m` },
+        { label: 'Durata', value: formatDuration(activity.totalTimeSeconds) },
+        { label: 'Calorie', value: activity.calories ? `${activity.calories} kcal` : '—' },
+      ]
+    : reportFacts({ metaType: activity.metaType, siteType: activity.siteType, totalTimeSeconds: activity.totalTimeSeconds, verified: activity.verified })
+        .map(f => ({ label: f.label, value: f.value }))
   return (
     <div className="diario-page diario-stub-page" style={{
       width: PDF_PAGE_W, minHeight: PDF_CONTENT_H, background: '#fafaf9', margin: '24px auto',
@@ -47,27 +62,17 @@ export function DiarioStubPage({ activity, yearBand, onExclude }: {
           {dateStr}
         </p>
         <h2 style={{ fontFamily: FONT.display, fontSize: 26, fontWeight: 700, color: '#4d4740', margin: '0 0 20px' }}>
-          {activity.title ?? 'Escursione'}
+          {activity.title ?? noun}
         </h2>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 20 }}>
-          <div style={{ background: 'white', border: '1px solid #dcd8cc', borderRadius: 8, padding: '10px 14px' }}>
-            <div style={{ fontSize: 9, color: '#a9a18e', fontFamily: FONT.barlow, textTransform: 'uppercase', letterSpacing: 1 }}>Distanza</div>
-            <div style={{ fontSize: 18, fontFamily: FONT.mono, color: '#4d4740' }}>{(activity.distanceMeters / 1000).toFixed(2)} km</div>
-          </div>
-          <div style={{ background: 'white', border: '1px solid #dcd8cc', borderRadius: 8, padding: '10px 14px' }}>
-            <div style={{ fontSize: 9, color: '#a9a18e', fontFamily: FONT.barlow, textTransform: 'uppercase', letterSpacing: 1 }}>Dislivello</div>
-            <div style={{ fontSize: 18, fontFamily: FONT.mono, color: '#4d4740' }}>{Math.round(activity.elevationGain)} m</div>
-          </div>
-          <div style={{ background: 'white', border: '1px solid #dcd8cc', borderRadius: 8, padding: '10px 14px' }}>
-            <div style={{ fontSize: 9, color: '#a9a18e', fontFamily: FONT.barlow, textTransform: 'uppercase', letterSpacing: 1 }}>Durata</div>
-            <div style={{ fontSize: 18, fontFamily: FONT.mono, color: '#4d4740' }}>{formatDuration(activity.totalTimeSeconds)}</div>
-          </div>
-          <div style={{ background: 'white', border: '1px solid #dcd8cc', borderRadius: 8, padding: '10px 14px' }}>
-            <div style={{ fontSize: 9, color: '#a9a18e', fontFamily: FONT.barlow, textTransform: 'uppercase', letterSpacing: 1 }}>Calorie</div>
-            <div style={{ fontSize: 18, fontFamily: FONT.mono, color: '#4d4740' }}>{activity.calories ? `${activity.calories} kcal` : '—'}</div>
-          </div>
-        </div>
+        {cells.length > 0 && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 20 }}>
+          {cells.map(c => (
+            <div key={c.label} style={{ background: 'white', border: '1px solid #dcd8cc', borderRadius: 8, padding: '10px 14px' }}>
+              <div style={{ fontSize: 9, color: '#a9a18e', fontFamily: FONT.barlow, textTransform: 'uppercase', letterSpacing: 1 }}>{c.label}</div>
+              <div style={{ fontSize: 18, fontFamily: FONT.mono, color: '#4d4740' }}>{c.value}</div>
+            </div>
+          ))}
+        </div>}
 
         {activity.routePolyline && activity.routePolyline.length > 1 && (
           <div style={{ height: 220, borderRadius: 10, overflow: 'hidden', border: '1px solid #dcd8cc', background: 'white', marginBottom: 20 }}>
@@ -83,7 +88,7 @@ export function DiarioStubPage({ activity, yearBand, onExclude }: {
             padding: '10px 20px', borderRadius: 10, fontFamily: FONT.barlow, fontSize: 12, fontWeight: 700,
             textDecoration: 'none', textTransform: 'uppercase', letterSpacing: 0.5,
           }}>
-          Racconta questa escursione →
+          Racconta {hiking ? 'questa escursione' : 'questa visita'} →
         </a>
       </div>
     </div>

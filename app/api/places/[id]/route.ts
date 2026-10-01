@@ -8,6 +8,7 @@ import { fetchPlaceCoverPhoto } from '@/lib/placePhotoCache'
 import { isTrustedMediaUrl } from '@/lib/trustedMediaHosts'
 import { getMuseumOpere, type MuseumOpera } from '@/lib/museumOpere'
 import { haversineM } from '@/lib/geoUtils'
+import { archiveDescriptionCredit, wikipediaDescriptionCredit, stripEmbeddedAttribution, type DescriptionCredit } from '@/lib/placeSources'
 import { inferSiteTypeFromName, type MetaType, type SiteType } from '@/lib/metaTypes'
 
 // L'importer PTPR (scripts/import-ptpr.ts) compone `description` da campi tipologici del
@@ -36,6 +37,10 @@ export interface PlaceDetail {
   siteType: SiteType | null
   name: string
   description: string | null
+  /** Fonte della descrizione automatica da mostrare sotto di essa: l'archivio (MiC, PTPR, Lombardia
+   *  Beni Culturali) per `description`, Wikipedia quando il testo mostrato è l'estratto di ripiego
+   *  (`wikipedia.extract`). Null se non c'è testo o la fonte dell'archivio non è nota. */
+  descriptionCredit: DescriptionCredit | null
   latitude: number
   longitude: number
   region: string | null
@@ -250,7 +255,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     // (solo un codice tipologico + attribuzione, mai vuoto) non è una descrizione da mostrare come
     // tale: l'attribuzione resta comunque rintracciabile da `source`/`sourceCount` e da
     // /fonti-e-crediti, non persa, solo non spacciata per prosa descrittiva.
-    description: hasRealDescription ? data.description : null,
+    description: hasRealDescription ? stripEmbeddedAttribution(data.description as string) : null,
+    descriptionCredit: hasRealDescription
+      ? archiveDescriptionCredit(data.source as string)
+      : wikipedia ? wikipediaDescriptionCredit(wikipedia.url) : null,
     latitude: data.latitude,
     longitude: data.longitude,
     region: data.region,

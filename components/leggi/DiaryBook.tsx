@@ -16,6 +16,7 @@ import { MonthBarChart } from '@/components/diario/MonthBarChart'
 import { AllRoutesMap, AllRoutesLegend } from '@/app/leggi/d/[token]/AllRoutesMap'
 import { PublicPdfExport } from '@/app/leggi/d/[token]/PublicPdfExport'
 import { PublicReportPage } from './PublicReportPage'
+import { entryCounts, entryHeadlineStats } from '@/lib/reportFacts'
 
 // Stesso foglio "di disegno" a 794px e stessa tecnica delle CSS Container Queries di
 // PublicReportPage.tsx — il Sommario è la prima pagina dello stesso libro, deve avere la stessa
@@ -85,6 +86,13 @@ export function DiaryBook({ entries, show, title, subtitle, ownerName, dateRange
 }) {
   const totalPages = entries.length + 1
   const stats = show.statistiche ? computePublicDiaryStats(entries) : null
+  // Mappa d'insieme: una traccia per ogni Reportage che ne ha una; per una visita senza traccia (Sito
+  // o Borgo/Città) un pin sul punto del luogo.
+  const atlasRoutes = entries.map(e => ({ id: e.id, title: e.title, polyline: e.polyline ?? [] }))
+  const atlasPoints = entries
+    .filter(e => (e.polyline?.length ?? 0) <= 1 && e.sitePoint)
+    .map(e => ({ id: e.id, title: e.title, lat: e.sitePoint!.lat, lon: e.sitePoint!.lon }))
+  const headline = entryHeadlineStats(entryCounts(entries), totalKm, totalElevationGain, { km: 'Percorsi', elevation: 'Dislivello +' })
 
   return (
     <div className="bg-stone-100">
@@ -122,12 +130,8 @@ export function DiaryBook({ entries, show, title, subtitle, ownerName, dateRange
               {stats && (
                 <>
                   {!compactSummary && (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: cq(10), marginTop: cq(28) }}>
-                      {[
-                        { value: String(entries.length), label: entries.length === 1 ? 'Escursione' : 'Escursioni' },
-                        { value: `${totalKm.toFixed(0)} km`, label: 'Percorsi' },
-                        { value: `${Math.round(totalElevationGain).toLocaleString('it')} m`, label: 'Dislivello +' },
-                      ].map(s => (
+                    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${headline.length}, 1fr)`, gap: cq(10), marginTop: cq(28) }}>
+                      {headline.map(s => (
                         <div key={s.label} style={{ background: '#f8f7f4', border: '1px solid #eeece5', borderRadius: cq(12), padding: `${cq(14)} ${cq(10)}`, textAlign: 'center' }}>
                           <div className="font-mono" style={{ fontWeight: 700, color: '#1c4724', lineHeight: 1.15, fontSize: cq(19) }}>{s.value}</div>
                           <div className="font-barlow" style={{ fontWeight: 700, color: '#a9a18e', textTransform: 'uppercase', letterSpacing: cq(1), marginTop: cq(4), fontSize: cq(9) }}>{s.label}</div>
@@ -147,8 +151,8 @@ export function DiaryBook({ entries, show, title, subtitle, ownerName, dateRange
               {show.percorso && entries.length > 0 && (
                 <div style={{ background: '#fff', border: '1px solid #eeece5', borderRadius: cq(16), padding: `${cq(16)} ${cq(20)}`, marginTop: cq(12), boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
                   <p className="font-barlow" style={{ fontWeight: 700, letterSpacing: cq(3), color: '#a9a18e', textTransform: 'uppercase', marginBottom: cq(10), fontSize: cq(9) }}>Tutti i percorsi</p>
-                  <AllRoutesMap routes={entries.map(e => ({ id: e.id, title: e.title, polyline: e.polyline ?? [] }))} />
-                  <AllRoutesLegend routes={entries.map(e => ({ id: e.id, title: e.title, polyline: e.polyline ?? [] }))} />
+                  <AllRoutesMap routes={atlasRoutes} points={atlasPoints} />
+                  <AllRoutesLegend routes={atlasRoutes} points={atlasPoints} />
                 </div>
               )}
 

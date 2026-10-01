@@ -24,13 +24,16 @@
 // Diario che contiene — così l'esclusione dei Reportage e la selezione delle foto di ciascun
 // Diario si applicano da sole dentro una raccolta, senza essere riscritte lì.
 
+import type { DescriptionCredit } from './placeSources'
 import { supabase } from './supabase'
 import { normalizeDiaryConfig, resolveReportExtras, type DiaryConfig, type DiaryReportExtras } from './diaryConfig'
 import { normalizeRaccoltaConfig } from './raccolteConfig'
 import { trimHomeStart, type HomePoint } from './privacy/trimHomeStart'
 import { buildMetricSeries, type MetricPoint } from './trackSeries'
 import { fetchCachedPois, type PublicPoi } from './publicPois'
+import { fetchSiteInfo } from './siteInfoServer'
 import type { TrackPoint } from './tcxParser'
+import { metaHasHikingMetrics, type MetaType, type SiteType } from './metaTypes'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -89,6 +92,24 @@ export interface PublicDiaryEntry {
    *  (fix assente o fuori raggio, lib/visitCompletion.ts) — mai un gate di visibilità, solo
    *  un'etichetta onesta: il contenuto resta pubblicato comunque, la lettura decide se fidarsene. */
   verified:          boolean
+  /** Tipologia della Meta a cui il Reportage appartiene — decide quali cifre e quali parole la
+   *  pagina pubblica mostra (lib/reportFacts.ts): un Sentiero ha km/D+, un Borgo/Città le tappe,
+   *  un Sito il tipo e la verifica. Assente su un'Attività salvata prima della colonna = 'sentiero'
+   *  (DEFAULT di colonna). */
+  metaType:          MetaType
+  siteType?:         SiteType
+  /** Luoghi visitati in un Borgo/Città (activity.borgoStops) — solo il numero: l'elenco completo
+   *  resta al Reportage privato. */
+  stopsCount:        number
+  /** Solo per un Sito o un Borgo/Città: il suo punto (mai quello in cui è stata registrata la visita) e l'immagine
+   *  del luogo, usata come copertina quando il Reportage non ha foto proprie. */
+  sitePoint?:        { lat: number; lon: number } | null
+  /** Descrizione del luogo dall'archivio (dtrek_places) — la stessa della Guida, senza il ripiego
+   *  Wikipedia che è una ricerca dal vivo. Solo per Sito e Borgo/Città. */
+  siteDescription?:  string | null
+  /** Fonte della descrizione (archivio) — sempre mostrata con il testo. */
+  siteDescriptionCredit?: DescriptionCredit | null
+  siteCoverUrl?:     string | null
 }
 
 /** Il contenuto pubblico di un Diario, senza i campi che appartengono al documento che lo
@@ -140,7 +161,7 @@ export async function buildContentFromReports(
     ? await Promise.all([
         supabase
           .from('activities')
-          .select('id, start_time, distance_meters, elevation_gain, total_time_seconds, altitude_max, calories, route_polyline, track_points, verified')
+          .select('id, start_time, distance_meters, elevation_gain, total_time_seconds, altitude_max, calories, route_polyline, track_points, verified, meta_type, site_type, borgo_stops, linked_planned_id')
           .in('id', activityIds),
         supabase
           .from('activity_photos')
@@ -150,6 +171,9 @@ export async function buildContentFromReports(
     : [{ data: [] }, { data: [] }]
 
   const actMap = new Map((activities ?? []).map((a: Record<string, unknown>) => [a.id as string, a]))
+
+  // Siti e Borghi: punto e immagine del luogo (lib/siteInfoServer.ts, best-effort).
+  const siteByActivity = await fetchSiteInfo((activities ?? []) as { id: string; meta_type?: string | null; linked_planned_id?: string | null }[])
 
   const photosByActivity = new Map<string, PublicDiaryPhoto[]>()
   for (const p of photos ?? []) {
@@ -188,7 +212,7 @@ export async function buildContentFromReports(
       const pois = extras.mappa && polyline ? await fetchCachedPois(polyline) : []
       return {
         id:               r.id as string,
-        title:            (r.title as string) || 'Escursione',
+        title:            (r.title as string) || (act?.meta_type && act.meta_type !== 'sentiero' ? 'Visita' : 'Escursione'),
         startTime:        (act?.start_time as string) ?? (r.created_at as string),
         distanceMeters:   (act?.distance_meters as number) ?? 0,
         elevationGain:    (act?.elevation_gain as number) ?? 0,
@@ -198,6 +222,13 @@ export async function buildContentFromReports(
         // Assente su un'Attività salvata prima di questa colonna: DEFAULT true a livello di
         // colonna (erano tutte reali), mai "non verificata" per omissione.
         verified:         (act?.verified as boolean | undefined) ?? true,
+        metaType:         (act?.meta_type as MetaType | undefined) ?? 'sentiero',
+        siteType:         (act?.site_type as SiteType | null | undefined) ?? undefined,
+        sitePoint:        siteByActivity.get(r.activity_id as string)?.point ?? null,
+        siteCoverUrl:     siteByActivity.get(r.activity_id as string)?.cover ?? null,
+        siteDescription:  siteByActivity.get(r.activity_id as string)?.description ?? null,
+        siteDescriptionCredit: siteByActivity.get(r.activity_id as string)?.descriptionCredit ?? null,
+        stopsCount:       Array.isArray(act?.borgo_stops) ? (act?.borgo_stops as unknown[]).length : 0,
         content:          (r.content as string) ?? '',
         // La scelta fatta nel Diario vale anche qui: `photoIdsByActivity` dice quali foto l'autore
         // vuole pubblicare. Il PDF ne stampa comunque un sottoinsieme distribuito; il sito, che non
@@ -217,8 +248,11 @@ export async function buildContentFromReports(
     })))
     .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
 
-  const totalKm = entries.reduce((s, e) => s + e.distanceMeters, 0) / 1000
-  const totalElevationGain = entries.reduce((s, e) => s + e.elevationGain, 0)
+  // Solo i Reportage con metriche escursionistiche: la distanza/dislivello di una visita a un
+  // Borgo o a un Sito non sono chilometri di cammino da sommare a quelli dei sentieri.
+  const hikingEntries = entries.filter(e => metaHasHikingMetrics(e.metaType))
+  const totalKm = hikingEntries.reduce((s, e) => s + e.distanceMeters, 0) / 1000
+  const totalElevationGain = hikingEntries.reduce((s, e) => s + e.elevationGain, 0)
 
   let dateRangeLabel: string | undefined
   if (entries.length > 0) {

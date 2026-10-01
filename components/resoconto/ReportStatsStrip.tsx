@@ -1,26 +1,19 @@
 'use client'
 import StatFigure from '@/components/ui/StatFigure'
 
-interface Stat { value: string; label: string }
+import type { ReportFact } from '@/lib/reportFacts'
 
 interface Props {
-  distanceKm: number
-  elevationGain: number
-  durationLabel: string
-  /** Quarta cifra: calorie se note, altrimenti FC media se nota — altrimenti la striscia mostra
-   *  solo le prime tre (mai un dato mancante). */
-  fourth?: { value: string; label: string }
+  /** Cifre già scelte per la tipologia (lib/reportFacts.ts): km/D+/durata per un Sentiero, tappe e
+   *  durata per un Borgo/Città, tipo e verifica per un Sito. Vuoto ⇒ la striscia non compare. */
+  facts: ReportFact[]
 }
 
 /** Cifre editoriali (StatFigure) per il resoconto — stessa impaginazione della striscia di Guida
  *  (components/guida/GuideStatsStrip.tsx), condivisa via components/ui/StatFigure.tsx. */
-export default function ReportStatsStrip({ distanceKm, elevationGain, durationLabel, fourth }: Props) {
-  const stats: Stat[] = [
-    { value: `${distanceKm.toFixed(1)} km`, label: 'Distanza' },
-    { value: `+${Math.round(elevationGain)} m`, label: 'Dislivello' },
-    { value: durationLabel, label: 'Durata' },
-    ...(fourth ? [fourth] : []),
-  ]
+export default function ReportStatsStrip({ facts }: Props) {
+  const stats = facts
+  if (stats.length === 0) return null
 
   return (
     <div

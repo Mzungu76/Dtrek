@@ -1,5 +1,7 @@
+import type { DescriptionCredit } from '@/lib/placeSources'
 import type { ActivityMeta } from '@/lib/blobStore'
 import type { WeatherAtHike } from '@/lib/weather'
+import type { MetaType, SiteType } from '@/lib/metaTypes'
 
 export interface DiaryReport {
   id: string
@@ -11,6 +13,11 @@ export interface DiaryReport {
     id: string; title: string; start_time: string
     distance_meters: number; total_time_seconds: number; elevation_gain: number
     weather_at_hike?: WeatherAtHike | null
+    /** Tipologia della Meta (assente = 'sentiero') e luoghi visitati di un Borgo/Città — decidono
+     *  quali cifre/parole mostra la pagina (lib/reportFacts.ts). */
+    meta_type?: MetaType | null; site_type?: SiteType | null; borgo_stops?: unknown[] | null
+    /** Solo Sito/Borgo: punto, immagine e descrizione del luogo (lib/siteInfoServer.ts). */
+    site?: { point: { lat: number; lon: number } | null; cover: string | null; description: string | null; descriptionCredit?: DescriptionCredit | null } | null
   } | null
 }
 

@@ -1,4 +1,6 @@
 import { FONT } from '@/lib/designTokens'
+import { metaHasHikingMetrics } from '@/lib/metaTypes'
+import { reportNoun } from '@/lib/reportFacts'
 import { PDF_PAGE_W, PDF_CONTENT_H } from '@/lib/pdfPageGeometry'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
@@ -15,7 +17,10 @@ export function DiarioIndice({ pages }: { pages: BookPage[] }) {
       <div style={{ borderTop: '1px solid #eeece5' }}>
         {pages.map((page, i) => {
           const isStub = page.kind === 'stub'
-          const title = isStub ? (page.activity.title ?? 'Escursione') : (page.report.title || page.report.activity?.title || 'Escursione')
+          const pageMetaType = isStub ? page.activity.metaType : page.report.activity?.meta_type ?? undefined
+          const hiking = metaHasHikingMetrics(pageMetaType)
+          const noun = reportNoun(pageMetaType)
+          const title = isStub ? (page.activity.title ?? noun) : (page.report.title || page.report.activity?.title || noun)
           const distanceM = isStub ? page.activity.distanceMeters : page.report.activity?.distance_meters ?? 0
           const elevGain  = isStub ? page.activity.elevationGain  : page.report.activity?.elevation_gain ?? 0
           const dateStr = format(new Date(page.startTime), 'd MMMM yyyy', { locale: it })
@@ -50,8 +55,8 @@ export function DiarioIndice({ pages }: { pages: BookPage[] }) {
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 12, fontSize: 10, color: '#73695c', fontFamily: FONT.body, flexShrink: 0, marginLeft: 16 }}>
-                  {distanceM > 0 && <span>{(distanceM / 1000).toFixed(1)} km</span>}
-                  {elevGain > 0 && <span>{Math.round(elevGain)} m D+</span>}
+                  {hiking && distanceM > 0 && <span>{(distanceM / 1000).toFixed(1)} km</span>}
+                  {hiking && elevGain > 0 && <span>{Math.round(elevGain)} m D+</span>}
                 </div>
               </a>
             </div>

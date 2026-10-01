@@ -43,9 +43,9 @@ describe('reportSectionTitle', () => {
     expect(reportSectionTitle('poi', undefined, 'Punti di interesse')).toBe('Punti di interesse')
   })
 
-  it('"poi" diventa "Luoghi visitati" per borgo_citta e sito', () => {
+  it('"poi" diventa "Luoghi visitati" per borgo_citta e "Nei dintorni" per sito', () => {
     expect(reportSectionTitle('poi', 'borgo_citta', 'Punti di interesse')).toBe('Luoghi visitati')
-    expect(reportSectionTitle('poi', 'sito', 'Punti di interesse')).toBe('Luoghi visitati')
+    expect(reportSectionTitle('poi', 'sito', 'Punti di interesse')).toBe('Nei dintorni')
   })
 
   it('le altre chiavi non variano per tipologia', () => {

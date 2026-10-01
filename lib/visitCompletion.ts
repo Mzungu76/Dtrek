@@ -20,6 +20,11 @@ export function canCompleteWithoutTrack(metaType: PlannedHike['metaType']): bool
 // pensato per verificare la posizione esatta all'interno del luogo.
 export const SITE_CHECKIN_RADIUS_M = 300
 
+/** Oltre questa incertezza il fix non prova nulla: un fix da cella telefonica o IP (centinaia di
+ *  metri o chilometri di incertezza) cadrebbe "in zona" per caso. Pari al raggio: un fix incerto
+ *  quanto l'intera zona non può dire se si è dentro o fuori. */
+export const SITE_CHECKIN_MAX_ACCURACY_M = 300
+
 export interface GeoFix {
   lat: number
   lon: number
@@ -43,7 +48,7 @@ export function getCurrentGeoFix(timeoutMs = 15000): Promise<GeoFix | null> {
   })
 }
 
-export type CheckInOutcome = 'verified' | 'out_of_range' | 'no_gps'
+export type CheckInOutcome = 'verified' | 'out_of_range' | 'no_gps' | 'low_accuracy' | 'approximate'
 
 export interface CheckInResult {
   outcome: CheckInOutcome
@@ -54,10 +59,16 @@ export interface CheckInResult {
  *  salvataggio, in markMetaVisited sotto) — testabile senza un browser né un mock di navigator. */
 export function evaluateCheckIn(
   fix: GeoFix | null,
-  site: { latitude?: number; longitude?: number },
+  site: { latitude?: number; longitude?: number; coordinatesApproximate?: boolean },
 ): CheckInResult {
   if (!fix || site.latitude == null || site.longitude == null) return { outcome: 'no_gps' }
   const distanceM = haversineM(fix.lat, fix.lon, site.latitude, site.longitude)
+  // Le coordinate del Sito sono quelle del centro del Comune (dtrek_places, coordinatesApproximate),
+  // non il luogo vero: la distanza da lì non dice se si è davvero nel Sito — mai "verificata".
+  if (site.coordinatesApproximate) return { outcome: 'approximate', distanceM }
+  // Fix troppo incerto per dire dove si è (cella telefonica/IP): non si può né confermare né
+  // smentire, quindi mai "verificata" solo perché il punto stimato cade vicino.
+  if (fix.accuracyM != null && fix.accuracyM > SITE_CHECKIN_MAX_ACCURACY_M) return { outcome: 'low_accuracy', distanceM }
   return distanceM <= SITE_CHECKIN_RADIUS_M
     ? { outcome: 'verified', distanceM }
     : { outcome: 'out_of_range', distanceM }
@@ -72,8 +83,8 @@ export function evaluateCheckIn(
 // mai calcoli DTM/Overpass/storico escursionistico per una traccia sotto i 2 punti (vedi
 // lib/activitySave.ts) — nessuna duplicazione di logica qui.
 // Idempotente sul lato "non ricompletare": se la Meta ha già una firstCompletedAt, non crea una
-// seconda Attività — più visite alla stessa Meta restano comunque possibili più avanti tramite lo
-// stesso flusso "Aggiungi un'uscita" già usato per i sentieri, non da qui.
+// seconda Attività — salvo `opts.repeat`, la scelta esplicita dell'utente di registrare un'altra
+// visita (un Sito si può rivisitare, come un sentiero si ripercorre).
 //
 // `fix`: il fix GPS che ha originato la chiamata — un solo trackPoint se presente, altrimenti una
 // traccia vuota (mai un punto fabbricato per un check-in senza segnale). `verified`: la decisione
@@ -83,11 +94,19 @@ export async function markMetaVisited(
   hike: Pick<PlannedHike, 'id' | 'title' | 'metaType' | 'siteType' | 'firstCompletedAt'>,
   fix: GeoFix | null,
   verified: boolean,
+  opts: {
+    /** Diario scelto dall'utente — usato solo se la Meta non ne ha ancora uno (vedi
+     *  lib/activitySave.ts); assente ⇒ ripiego sul Diario di default. */
+    diaryId?: string
+    /** Nuova visita a un Sito già visitato: crea un'altra Attività (un altro Reportage) invece di
+     *  fermarsi, come "Aggiungi un'uscita" per un sentiero. Mai impostato dal flusso di prima visita. */
+    repeat?: boolean
+  } = {},
 ): Promise<void> {
   if (!canCompleteWithoutTrack(hike.metaType)) {
     throw new Error('markMetaVisited: solo un Sito si completa senza una traccia reale — Sentiero/Borgo passano sempre da un\'attività registrata o importata')
   }
-  if (hike.firstCompletedAt) return
+  if (hike.firstCompletedAt && !opts.repeat) return
 
   const now = new Date().toISOString()
   await saveActivityWithEnrichment(
@@ -117,6 +136,7 @@ export async function markMetaVisited(
       metaType: hike.metaType,
       siteType: hike.siteType,
       verified,
+      diaryId: opts.diaryId,
     },
   )
 }

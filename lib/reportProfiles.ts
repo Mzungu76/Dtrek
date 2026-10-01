@@ -103,78 +103,159 @@ si è visto durante la visita.`,
 //
 // Stesso principio di lib/guideProfiles.ts's SITE_TYPE_OVERRIDES, ma in chiave di reportage: la
 // Guida racconta cosa ASPETTARSI prima di partire, il Reportage cosa si è VISTO durante la visita
-// — stesso argomento per ciascun siteType, tono retrospettivo invece che introduttivo. Le altre
-// due sezioni (Storia e curiosità / In sintesi) restano quelle del profilo 'sito' generico sopra:
+// — stesso argomento per ciascun siteType, tono retrospettivo invece che introduttivo. Anche la
+// seconda e la terza sezione sono proprie del tipo (non più "Storia e curiosità"/"In sintesi"
+// identiche per ogni sito). Il profilo 'sito' generico sopra resta per 'altro':
 // già scritte in modo abbastanza aperto da restare pertinenti per qualunque sottotipo. 'altro' non
 // ha un override proprio: resta "Il sito" generico, corretto per un luogo che non rientra in
 // nessuna delle categorie note.
 interface SiteTypeReportOverride {
   sectionTitle: string
   sectionBrief: string
+  /** Seconda e terza sezione proprie del tipo (prima erano "Storia e curiosità"/"In sintesi" per
+   *  ogni sito, cioè la stessa ossatura di un percorso con altri titoli): un museo racconta le
+   *  opere e le sale, una cascata l'ambiente e la stagione, una chiesa l'arte e i simboli. */
+  section2Title: string
+  section2Brief: string
+  section3Title: string
+  section3Brief: string
 }
 
 const SITE_TYPE_REPORT_OVERRIDES: Partial<Record<SiteType, SiteTypeReportOverride>> = {
   museo: {
     sectionTitle: 'Il museo',
-    sectionBrief: `Racconta la visita: le opere e le sale che hanno colpito di più, gli artisti
-rappresentati, cosa si è visto seguendo il percorso di visita, eventuali sorprese rispetto alle
-aspettative.`,
+    sectionBrief: `Racconta la visita: le sale percorse, l'allestimento, l'atmosfera, eventuali sorprese
+rispetto alle aspettative.`,
+    section2Title: 'Le opere e le sale',
+    section2Brief: `Racconta le opere e gli ambienti che hanno colpito di più: artisti e periodi rappresentati,
+un pezzo da non perdere, un dettaglio notato da vicino. Includi almeno un fatto poco noto sulla collezione
+o sul museo — niente geologia, flora o fauna, e nessun riferimento a un percorso da camminare.`,
+    section3Title: 'Consigli per la visita',
+    section3Brief: `Indicazioni pratiche per chi ci andrà dopo: tempo da dedicarci, orari o momenti meno
+affollati, biglietti e prenotazioni se emergono, cosa non perdere se si ha poco tempo. Chiudi con una o
+due frasi che catturino l'essenza della visita.`,
   },
   castello: {
     sectionTitle: 'Il castello',
-    sectionBrief: `Racconta la visita: storia del castello, gli ambienti visitati, i dettagli
+    sectionBrief: `Racconta la visita: l'arrivo e la sagoma del castello, gli ambienti visitati, i dettagli
 architettonici notati di persona, il panorama goduto dall'alto se presente.`,
+    section2Title: 'Storia e architettura',
+    section2Brief: `Approfondisci le vicende del castello: chi lo costruì e perché, assedi e trasformazioni, i
+personaggi legati alle sue mura, le fasi costruttive riconoscibili. Includi almeno un aneddoto poco noto.`,
+    section3Title: 'Consigli per la visita',
+    section3Brief: `Indicazioni pratiche per chi ci andrà dopo: tempo da dedicarci, scale e accessibilità,
+punti panoramici migliori, stagione e ora ideali. Chiudi con una o due frasi sull'essenza del luogo.`,
   },
   abbazia: {
     sectionTitle: "L'abbazia",
-    sectionBrief: `Racconta la visita: gli ambienti visitati (chiostro, chiesa, biblioteca), l'atmosfera
-di raccoglimento percepita, le opere d'arte custodite, l'eventuale vita monastica osservata.`,
+    sectionBrief: `Racconta la visita: gli ambienti visitati (chiostro, chiesa, biblioteca), l'atmosfera di
+raccoglimento percepita, l'eventuale vita monastica osservata.`,
+    section2Title: 'Storia e vita monastica',
+    section2Brief: `Approfondisci la storia dell'abbazia: fondazione, ordine religioso, periodi di splendore e
+declino, le opere d'arte e i manoscritti custoditi. Includi almeno un fatto poco noto.`,
+    section3Title: 'Consigli per la visita',
+    section3Brief: `Indicazioni pratiche: orari delle visite e delle funzioni, rispetto degli spazi di culto,
+tempo da dedicarci. Chiudi con una o due frasi sull'atmosfera del luogo.`,
   },
   chiesa: {
     sectionTitle: 'La chiesa',
-    sectionBrief: `Racconta la visita: lo stile architettonico, le opere d'arte e gli affreschi visti
-di persona, i dettagli che hanno colpito di più (facciata, campanile, cripta, altari).`,
+    sectionBrief: `Racconta la visita: l'esterno, l'ingresso, la prima impressione dell'interno, gli spazi
+visti con calma.`,
+    section2Title: 'Arte e simboli',
+    section2Brief: `Racconta lo stile architettonico, le opere d'arte e gli affreschi visti di persona, i
+simboli e i dettagli iconografici che hanno colpito (facciata, campanile, cripta, altari). Includi almeno
+un fatto poco noto sulla storia della chiesa.`,
+    section3Title: 'Consigli per la visita',
+    section3Brief: `Indicazioni pratiche: orari di apertura, luce migliore per vedere gli affreschi,
+rispetto durante le funzioni. Chiudi con una o due frasi sull'essenza del luogo.`,
   },
   sito_archeologico: {
     sectionTitle: 'Il sito archeologico',
-    sectionBrief: `Racconta la visita: cosa resta visibile oggi, come si presentava al momento della
-visita, l'impressione suscitata dal camminare tra i resti, eventuali pannelli o guide che hanno
-aiutato la lettura del luogo.`,
+    sectionBrief: `Racconta la visita: cosa resta visibile oggi, come si presentava al momento della visita,
+l'impressione suscitata dal camminare tra i resti.`,
+    section2Title: 'Cosa racconta il luogo',
+    section2Brief: `Ricostruisci la storia del sito: chi lo abitò, in quale epoca, a cosa servivano gli
+ambienti visibili, scavi e scoperte. Distingui ciò che è documentato da ciò che si ipotizza. Includi almeno
+un fatto poco noto.`,
+    section3Title: 'Consigli per la visita',
+    section3Brief: `Indicazioni pratiche: percorso di visita, pannelli e guide disponibili, ombra e acqua,
+stagione e ora ideali, eventuale museo annesso. Chiudi con una o due frasi sull'essenza del luogo.`,
   },
   monumento: {
     sectionTitle: 'Il monumento',
-    sectionBrief: `Racconta la visita: cosa commemora o rappresenta, i dettagli scultorei o
-architettonici notati da vicino, il contesto urbano in cui si trova.`,
+    sectionBrief: `Racconta la visita: cosa commemora o rappresenta, i dettagli scultorei o architettonici
+notati da vicino, il contesto urbano in cui si trova.`,
+    section2Title: 'Storia e significato',
+    section2Brief: `Approfondisci perché fu eretto, da chi, in quale occasione e cosa rappresenta oggi per la
+comunità. Includi almeno un aneddoto poco noto.`,
+    section3Title: 'Consigli per la visita',
+    section3Brief: `Indicazioni pratiche: momento e luce migliori, cosa vedere lì attorno, tempo necessario.
+Chiudi con una o due frasi sull'essenza del luogo.`,
   },
   palazzo: {
     sectionTitle: 'Il palazzo',
-    sectionBrief: `Racconta la visita: i saloni e le stanze visitate, le opere e gli arredi custoditi,
-l'impressione suscitata dallo stile e dalla facciata.`,
+    sectionBrief: `Racconta la visita: la facciata, i saloni e le stanze visitate, l'impressione suscitata
+dallo stile e dagli arredi.`,
+    section2Title: 'Storia e collezioni',
+    section2Brief: `Approfondisci le famiglie e le vicende legate al palazzo, le opere e gli arredi custoditi,
+le trasformazioni nel tempo. Includi almeno un fatto poco noto.`,
+    section3Title: 'Consigli per la visita',
+    section3Brief: `Indicazioni pratiche: visite guidate o libere, tempo da dedicarci, cosa non perdere.
+Chiudi con una o due frasi sull'essenza del luogo.`,
   },
   teatro: {
     sectionTitle: 'Il teatro',
-    sectionBrief: `Racconta la visita: la sala e il palcoscenico visti di persona, lo stile
-architettonico e l'acustica se sperimentata, un eventuale spettacolo assistito.`,
+    sectionBrief: `Racconta la visita: la sala e il palcoscenico visti di persona, lo stile architettonico,
+l'acustica se sperimentata, un eventuale spettacolo assistito.`,
+    section2Title: 'Storia e stagioni',
+    section2Brief: `Approfondisci la storia del teatro: inaugurazione, grandi nomi e spettacoli, restauri, la
+vita culturale che lo anima oggi. Includi almeno un aneddoto poco noto.`,
+    section3Title: 'Consigli per la visita',
+    section3Brief: `Indicazioni pratiche: visite guidate o biglietti per gli spettacoli, posti migliori,
+come vestirsi. Chiudi con una o due frasi sull'essenza del luogo.`,
   },
   cascata: {
     sectionTitle: 'La cascata',
-    sectionBrief: `Racconta la visita: come si presentava (portata d'acqua, stagione), l'ambiente
-naturale che la circonda, i punti da cui è stata ammirata, l'impressione suscitata dal salto d'acqua.`,
+    sectionBrief: `Racconta la visita: come si presentava (portata d'acqua, stagione), i punti da cui è stata
+ammirata, l'impressione suscitata dal salto d'acqua.`,
+    section2Title: "L'ambiente e la stagione",
+    section2Brief: `Descrivi l'ambiente naturale che circonda la cascata: roccia, vegetazione, fauna, il
+corso d'acqua che la alimenta e come cambia con le stagioni. Includi almeno un fatto poco noto.`,
+    section3Title: 'Consigli per la visita',
+    section3Brief: `Indicazioni pratiche: periodo con più acqua, sentiero d'accesso e calzature, sicurezza
+vicino all'acqua, eventuali divieti. Chiudi con una o due frasi sull'essenza del luogo.`,
   },
   grotta: {
     sectionTitle: 'La grotta',
-    sectionBrief: `Racconta la visita: le formazioni geologiche viste (stalattiti, stalagmiti),
-l'ambiente e il microclima interno percepito, i punti di maggior suggestione del percorso.`,
+    sectionBrief: `Racconta la visita: l'ingresso, le formazioni viste (stalattiti, stalagmiti), il microclima
+percepito, i punti di maggior suggestione.`,
+    section2Title: 'Formazione e scoperta',
+    section2Brief: `Spiega come si è formata la grotta, quando e da chi fu scoperta o esplorata, cosa vi vive
+o vi è stato trovato. Includi almeno un fatto poco noto.`,
+    section3Title: 'Consigli per la visita',
+    section3Brief: `Indicazioni pratiche: visite guidate, temperatura interna e abbigliamento, prenotazione,
+accessibilità. Chiudi con una o due frasi sull'essenza del luogo.`,
   },
   belvedere: {
     sectionTitle: 'Il belvedere',
-    sectionBrief: `Racconta la visita: cosa si vedeva dal punto panoramico (vette, valli, coste
-riconoscibili), le condizioni di visibilità del momento, l'impressione suscitata dal panorama.`,
+    sectionBrief: `Racconta la visita: come si arriva al punto, cosa si vedeva (vette, valli, coste
+riconoscibili), le condizioni di visibilità del momento.`,
+    section2Title: 'Cosa si vede',
+    section2Brief: `Racconta il panorama: i luoghi e le cime riconoscibili, il rapporto tra paesaggio e storia
+del territorio, la luce a quell'ora. Includi almeno un fatto poco noto sul posto o su ciò che si scorge.`,
+    section3Title: 'Consigli per la visita',
+    section3Brief: `Indicazioni pratiche: ora e stagione migliori per la luce, tempo necessario, servizi
+vicini, vento e sicurezza. Chiudi con una o due frasi sull'essenza del luogo.`,
   },
   area_naturale: {
     sectionTitle: "L'area naturale",
-    sectionBrief: `Racconta la visita: l'ambiente e l'ecosistema osservati, l'itinerario interno
-seguito, cosa rende questo luogo un ambiente da proteggere.`,
+    sectionBrief: `Racconta la visita: l'ambiente e l'ecosistema osservati, l'itinerario interno seguito.`,
+    section2Title: 'Natura e tutela',
+    section2Brief: `Approfondisci ciò che rende speciale l'area: habitat, specie osservate o attese, la storia
+della sua tutela. Includi almeno un fatto poco noto.`,
+    section3Title: 'Consigli per la visita',
+    section3Brief: `Indicazioni pratiche: stagione migliore, regole dell'area protetta, sentieri e servizi,
+tempo necessario. Chiudi con una o due frasi sull'essenza del luogo.`,
   },
 }
 
@@ -187,5 +268,5 @@ export function reportProfileFor(metaType: MetaType | undefined, siteType?: Site
   if (base.metaType !== 'sito' || !siteType) return base
   const override = SITE_TYPE_REPORT_OVERRIDES[siteType]
   if (!override) return base
-  return { ...base, sectionTitle: override.sectionTitle, sectionBrief: override.sectionBrief }
+  return { ...base, ...override }
 }

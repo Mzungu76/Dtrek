@@ -1,6 +1,13 @@
 import { FONT } from '@/lib/designTokens'
 
-export interface DiarioYearBandInfo { year: string; count: number; totalKm: number }
+export interface DiarioYearBandInfo {
+  year: string
+  /** Escursioni (Reportage con metriche di cammino). */
+  count: number
+  /** Visite a Borghi/Città e Siti, contate a parte: i loro km non esistono e non vanno sommati. */
+  visits?: number
+  totalKm: number
+}
 
 /**
  * Fascia di transizione tra un anno e il successivo, incorporata in cima alla prima pagina
@@ -13,7 +20,7 @@ export interface DiarioYearBandInfo { year: string; count: number; totalKm: numb
  * ciascuna costava comunque una pagina fisica intera, dato che ogni elemento di primo livello ne
  * apre sempre una nuova: uno spreco di carta (e di scroll) sproporzionato al contenuto.
  */
-export function DiarioYearBand({ year, count, totalKm }: DiarioYearBandInfo) {
+export function DiarioYearBand({ year, count, visits = 0, totalKm }: DiarioYearBandInfo) {
   return (
     <div className="pdf-block" style={{
       background: 'linear-gradient(100deg,#193b20 0%,#1c4724 55%,#20592b 100%)',
@@ -30,7 +37,10 @@ export function DiarioYearBand({ year, count, totalKm }: DiarioYearBandInfo) {
       </div>
       <div style={{ display: 'flex', gap: 16 }}>
         <span style={{ fontFamily: FONT.body, fontSize: 11, color: 'rgba(255,255,255,0.75)' }}>
-          {count} {count === 1 ? 'escursione' : 'escursioni'}
+          {[
+            count > 0 ? `${count} ${count === 1 ? 'escursione' : 'escursioni'}` : null,
+            visits > 0 ? `${visits} ${visits === 1 ? 'visita' : 'visite'}` : null,
+          ].filter(Boolean).join(' · ')}
         </span>
         {totalKm > 0 && (
           <span style={{ fontFamily: FONT.body, fontSize: 11, color: 'rgba(255,255,255,0.75)' }}>

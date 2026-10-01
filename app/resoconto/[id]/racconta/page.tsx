@@ -1,5 +1,6 @@
 'use client'
 
+import { metaHasHikingMetrics } from '@/lib/metaTypes'
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
@@ -134,7 +135,7 @@ export default function RacconaPage() {
         <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
           <BackLink className="flex items-center gap-1.5 text-stone-500 hover:text-stone-800 text-sm transition-colors" />
           <span className="font-display font-bold text-stone-700 uppercase tracking-wide text-sm truncate">
-            Racconta il tuo percorso
+            {activity && !metaHasHikingMetrics(activity.metaType) ? 'Racconta la tua visita' : 'Racconta il tuo percorso'}
           </span>
           <span className="w-20" />
         </div>
@@ -196,6 +197,7 @@ export default function RacconaPage() {
               answers={questionnaire.answers}
               currentIndex={questionnaire.currentIndex}
               trackPoints={activity.trackPoints}
+              visit={!metaHasHikingMetrics(activity.metaType)}
               photos={photos}
               onAdvance={handleAdvance}
               onSkip={handleSkip}

@@ -58,6 +58,8 @@ import { useCtsRecompute } from '@/lib/useCtsRecompute'
 import { tryOpenNavigatorApp } from '@/lib/navigatorHandoff'
 import { canCompleteWithoutTrack } from '@/lib/visitCompletion'
 import { useSiteCheckIn } from '@/lib/useSiteCheckIn'
+import SiteDiaryPicker from '@/components/guida/SiteDiaryPicker'
+import SiteUnverifiedPrompt from '@/components/guida/SiteUnverifiedPrompt'
 
 const StreetViewPanel = dynamic(() => import('@/components/StreetViewPanel'), { ssr: false })
 const RouteMap3D       = dynamic(() => import('@/components/RouteMap3D'),      { ssr: false })
@@ -238,7 +240,7 @@ export default function GuidaHub({ id }: { id?: string }) {
   // tipologia che si completa senza una traccia registrata/importata, vedi lib/visitCompletion.ts).
   // Aggiorna `hike` SOLO se la Meta appena confermata è quella davvero aperta ora (una scheda della
   // galleria non ancora aperta non deve toccare lo stato di un'altra Guida in memoria).
-  const { busy: checkInBusy, toast: checkInToast, confirmVisit } = useSiteCheckIn(
+  const { busy: checkInBusy, toast: checkInToast, confirmVisit, diaryPrompt, chooseDiary, cancelDiaryPrompt, unverifiedPrompt, acceptUnverified, cancelUnverified } = useSiteCheckIn(
     (refreshed) => setHike(prev => prev && prev.id === refreshed.id ? { ...prev, ...refreshed } : prev),
   )
   const [ctsSettled, setCtsSettled] = useState(false)
@@ -1265,11 +1267,12 @@ export default function GuidaHub({ id }: { id?: string }) {
     // navigazione: percorso non disponibile offline", app/guida/[id]/naviga/page.tsx). Un Sito non
     // ha mai nulla da seguire: gestito subito sotto con un'azione diversa, mai "Naviga".
     if (routeItem.id === hike?.id && !hike.routePolyline?.length && !hike.borgoWalkPolyline?.length) {
-      if (canCompleteWithoutTrack(hike.metaType) && !hike.firstCompletedAt) {
+      if (canCompleteWithoutTrack(hike.metaType)) {
+        const visited = !!hike.firstCompletedAt
         return {
-          label: checkInBusy ? 'Verifica posizione…' : 'Conferma la tua visita',
+          label: checkInBusy ? 'Verifica posizione…' : visited ? 'Registra un\'altra visita' : 'Conferma la tua visita',
           icon: MapPin,
-          onClick: () => confirmVisit(hike.id),
+          onClick: () => confirmVisit(hike.id, { repeat: visited }),
           variant: 'terra',
         }
       }
@@ -1335,6 +1338,8 @@ export default function GuidaHub({ id }: { id?: string }) {
     <>
       {deletedToastNode}
       {checkInToastNode}
+      <SiteDiaryPicker prompt={diaryPrompt} onChoose={chooseDiary} onCancel={cancelDiaryPrompt} />
+      <SiteUnverifiedPrompt prompt={unverifiedPrompt} onAccept={acceptUnverified} onCancel={cancelUnverified} />
       <RouteHub
         mode="guida"
         items={displayItems}

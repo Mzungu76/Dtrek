@@ -36,6 +36,13 @@ interface Props {
    *  ben fuori dal percorso stesso — è normale che restino fuori vista finché non si effettua
    *  pan/zoom manualmente. */
   returnMarkers?: { lat: number; lon: number; kind: 'bus' | 'treno' | 'taxi'; label: string; mapsUrl?: string }[]
+  /** Il punto di un Sito (Reportage di un luogo senza percorso): un pin ben visibile al suo posto,
+   *  mai la posizione in cui l'utente ha registrato la visita. Con `trackPoints` ridotti a questo
+   *  stesso punto la mappa si inquadra su di lui (vedi `fitMaxZoom`). */
+  siteMarker?: { lat: number; lon: number; label?: string } | null
+  /** Zoom massimo dell'inquadratura iniziale — serve quando la "traccia" è un solo punto (Sito):
+   *  senza un tetto Leaflet zoomerebbe al massimo su un'area di dimensione zero. */
+  fitMaxZoom?: number
   planned?: boolean
   activeIndex?: number | null
   /** When false, disables all native pan/zoom gestures (used by the fullscreen route hub's "locked" mode). Default true. */
@@ -145,6 +152,8 @@ export default function MapView({
   difficultyMarkers = [],
   floraMarkers = [],
   returnMarkers = [],
+  siteMarker = null,
+  fitMaxZoom,
   planned = false,
   activeIndex = null,
   interactive = true,
@@ -180,6 +189,7 @@ export default function MapView({
   const difficultyLayer = useRef<L.Marker[]>([])
   const floraLayer      = useRef<L.Marker[]>([])
   const returnLayer     = useRef<L.Marker[]>([])
+  const siteLayer       = useRef<L.Marker[]>([])
   const activeMarker    = useRef<L.Marker | null>(null)
   const boundsRef       = useRef<L.LatLngBounds | null>(null)
   const transientGradientLayer = useRef<L.Polyline[]>([])
@@ -316,7 +326,7 @@ export default function MapView({
           opacity: routeOpacity,
           smoothFactor: 1.5,
         }).addTo(map)
-        map.fitBounds(polyline.getBounds(), { padding: [20, 20], animate: false })
+        map.fitBounds(polyline.getBounds(), { padding: [20, 20], animate: false, ...(fitMaxZoom ? { maxZoom: fitMaxZoom } : {}) })
       }
 
       // Always fit bounds (for gradient/aspect mode, fit after drawing segments) — never
@@ -710,6 +720,26 @@ export default function MapView({
       }
     })
   }, [returnMarkers, mapReady])
+
+  // Pin del Sito (vedi `siteMarker` nei Props).
+  useEffect(() => {
+    if (!mapReady || !mapInstance.current) return
+
+    import('leaflet').then(L => {
+      siteLayer.current.forEach((m: any) => m.remove())
+      siteLayer.current = []
+      if (!siteMarker) return
+      const icon = L.divIcon({
+        html: `<div style="width:30px;height:30px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:#b45309;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.45)"><div style="width:10px;height:10px;border-radius:50%;background:white;margin:8px"></div></div>`,
+        iconSize: [30, 30],
+        iconAnchor: [4, 30],
+        className: '',
+      })
+      const m = L.marker([siteMarker.lat, siteMarker.lon], { icon, zIndexOffset: 500 }).addTo(mapInstance.current!)
+      if (siteMarker.label) m.bindPopup(`<div style="font-size:12px;font-weight:600">${siteMarker.label.replace(/</g, '&lt;')}</div>`)
+      siteLayer.current.push(m)
+    })
+  }, [siteMarker, mapReady])
 
   const hasGps = trackPoints.some(p => p.lat !== undefined)
 

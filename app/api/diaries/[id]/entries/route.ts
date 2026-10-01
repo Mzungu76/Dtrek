@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { getUserFromRequest } from '@/lib/supabaseAuth'
+import { fetchSiteInfo } from '@/lib/siteInfoServer'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,7 +37,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
     const { data: activities, error: actErr } = await supabase
       .from('activities')
-      .select('id, title, start_time, distance_meters, total_time_seconds, elevation_gain, weather_at_hike')
+      .select('id, title, start_time, distance_meters, total_time_seconds, elevation_gain, weather_at_hike, meta_type, site_type, borgo_stops, linked_planned_id')
       .eq('user_id', user.id)
       .in('linked_planned_id', percorsoIds)
     if (actErr) throw actErr
@@ -51,7 +52,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       .order('created_at', { ascending: false })
     if (reportsErr) throw reportsErr
 
-    const actMap = new Map((activities ?? []).map(a => [a.id as string, a]))
+    // Punto, immagine e descrizione del luogo per i Reportage di Sito/Borgo (il libro li usa per
+    // copertina, mappa e il blocco "Il luogo") — lib/siteInfoServer.ts, best-effort.
+    const siteInfo = await fetchSiteInfo((activities ?? []) as { id: string; meta_type?: string | null; linked_planned_id?: string | null }[])
+    const actMap = new Map((activities ?? []).map(a => [a.id as string, { ...a, site: siteInfo.get(a.id as string) ?? null }]))
     const enriched = (reports ?? []).map(r => ({
       ...r,
       activity: actMap.get(r.activity_id as string) ?? null,

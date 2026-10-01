@@ -44,10 +44,14 @@ interface Props {
    *  interno separato, altrimenti le due copie andrebbero fuori sincrono. */
   photos: RoutePhoto[]
   onPhotosChange: (photos: RoutePhoto[]) => void
+  /** Falso per un Reportage di Sito (o Borgo): le foto non si posizionano lungo un tracciato — niente
+   *  pulsante "Posiziona", niente mappa di posizionamento, niente ordine per progressione (restano
+   *  nell'ordine di caricamento). Default true: il comportamento di sempre per un Sentiero. */
+  georeference?: boolean
 }
 
 export default function ActivityPhotoManager({
-  activityId, trackPoints, photos, onPhotosChange,
+  activityId, trackPoints, photos, onPhotosChange, georeference = true,
 }: Props) {
   const [uploading,  setUploading]  = useState(false)
   const [editingId,  setEditingId]  = useState<string | null>(null)
@@ -144,8 +148,8 @@ export default function ActivityPhotoManager({
         added.push(saved)
       }
 
-      onPhotosChange([...photos, ...added].sort((a, b) => a.progress - b.progress))
-      setPlacementNotice(describePlacements(placements))
+      onPhotosChange(georeference ? [...photos, ...added].sort((a, b) => a.progress - b.progress) : [...photos, ...added])
+      if (georeference) setPlacementNotice(describePlacements(placements))
       if (rejected > 0) {
         setError(`Caricate ${accepted.length} foto: le altre ${rejected} superano il limite di ${MAX_PHOTOS_PER_ACTIVITY} per escursione.`)
       }
@@ -211,8 +215,9 @@ export default function ActivityPhotoManager({
         )}
       </div>
       <p className="text-xs text-stone-400 italic mb-3 leading-snug">
-        Le foto vengono usate nel resoconto e nella mappa. Con GPS automatico vengono posizionate sul percorso;
-        altrimenti clicca su una foto per posizionarla manualmente.
+        {georeference
+          ? 'Le foto vengono usate nel resoconto e nella mappa. Con GPS automatico vengono posizionate sul percorso; altrimenti clicca su una foto per posizionarla manualmente.'
+          : 'Le foto vengono usate nel resoconto. Non serve posizionarle: la prima diventa la copertina, e puoi cambiarla quando vuoi.'}
       </p>
 
       {error && (
@@ -246,7 +251,7 @@ export default function ActivityPhotoManager({
           : <>
               <Upload className="w-5 h-5 text-stone-400" />
               <span className="text-sm text-stone-500">Trascina le foto qui o <span className="text-forest-600 font-medium">clicca per scegliere</span></span>
-              <span className="text-xs text-stone-400">GPS automatico se presente nell&apos;EXIF · più file supportati</span>
+              <span className="text-xs text-stone-400">{georeference ? 'GPS automatico se presente nell&apos;EXIF · più file supportati' : 'Più file supportati'}</span>
             </>
         }
         <input
@@ -270,12 +275,12 @@ export default function ActivityPhotoManager({
           {photos.map(photo => (
             <div key={photo.id} className="group rounded-xl overflow-hidden border border-stone-100 shadow-sm bg-white">
               {/* Thumbnail — click to open placement map */}
-              <div className="relative cursor-pointer" onClick={() => setShowPlacementMap(true)}>
+              <div className={georeference ? 'relative cursor-pointer' : 'relative'} onClick={georeference ? () => setShowPlacementMap(true) : undefined}>
                 {/* DTREK-AUDIT.md P3 #35 — miniatura piccola invece della foto intera per una griglia */}
                 <SafeImg src={photo.thumbUrl ?? photo.url} fallbackSrcs={[photo.url]} alt={photo.caption}
                   className="w-full aspect-square object-cover group-hover:opacity-90 transition-opacity" />
                 {/* GPS / position badge */}
-                {photo.hasExifGps
+                {!georeference ? null : photo.hasExifGps
                   ? <div className="absolute bottom-1 left-1 flex items-center gap-0.5 bg-forest-600/85 text-white text-[9px] font-mono rounded-full px-1.5 py-0.5">
                       <MapPin className="w-2.5 h-2.5" /> GPS
                     </div>
@@ -376,7 +381,7 @@ export default function ActivityPhotoManager({
         </div>
       )}
 
-      {showPlacementMap && (
+      {georeference && showPlacementMap && (
         <PhotoPlacementMap
           activityId={activityId}
           trackPoints={trackPoints}

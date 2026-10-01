@@ -1,3 +1,4 @@
+import { entryCounts, entryCountsLabel } from '@/lib/reportFacts'
 import type { Metadata } from 'next'
 import { cache } from 'react'
 import { notFound } from 'next/navigation'
@@ -21,7 +22,7 @@ export async function generateMetadata({ params }: { params: { token: string } }
 
   const title = `${diary.config.title} · DTrek`
   const desc = diary.entries.length > 0
-    ? `${diary.entries.length} escursioni · ${diary.totalKm.toFixed(0)} km · di ${diary.ownerName}`
+    ? `${entryCountsLabel(entryCounts(diary.entries))}${diary.totalKm > 0 ? ` · ${diary.totalKm.toFixed(0)} km` : ''} · di ${diary.ownerName}`
     : `Diario di viaggio di ${diary.ownerName}`
 
   return {

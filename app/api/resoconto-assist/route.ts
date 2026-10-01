@@ -7,6 +7,7 @@ import { format }            from 'date-fns'
 import { it }                from 'date-fns/locale'
 import { resolveApiKeyAndSettings } from '@/app/lib/guide/resolveApiKeyAndSettings'
 import { tryAcquireCooldown } from '@/lib/aiCooldown'
+import { metaHasHikingMetrics, type MetaType } from '@/lib/metaTypes'
 
 export const maxDuration = 60
 export const dynamic = 'force-dynamic'
@@ -18,7 +19,7 @@ const PRESET_INSTRUCTIONS: Record<string, string> = {
   __personale:   'Riscrivi il testo in prima persona singolare, come se fosse l\'escursionista a raccontare direttamente.',
 }
 
-const SYSTEM = `Sei un editor letterario collaborativo specializzato in reportage escursionistici.
+const SYSTEM = `Sei un editor letterario collaborativo specializzato in reportage di escursioni e di visite (borghi, città, luoghi d'interesse).
 Non scrivi un testo ex-novo: lavori su un testo già esistente scritto dall'autore, applicando con precisione l'istruzione richiesta.
 Mantieni la voce e lo stile dell'autore a meno che l'istruzione non chieda esplicitamente di cambiarli.
 Restituisci SOLO il nuovo testo del corpo della sezione: nessun titolo, nessuna intestazione, nessun commento, nessuna nota tra parentesi su cosa hai fatto.
@@ -113,12 +114,23 @@ export async function POST(req: NextRequest) {
       }\n`
     : ''
 
-  const prompt = `Contesto dell'escursione:
+  // Per un Borgo/Città o un Sito distanza e dislivello non esistono (o non sono cammino): darli
+  // all'editor li inviterebbe a citare "0.0 km" o a trattare la visita come un'escursione.
+  const hiking = metaHasHikingMetrics((activity.meta_type as MetaType | null) ?? undefined)
+  const totalSeconds = (activity.total_time_seconds as number) ?? 0
+  const contextBlock = hiking
+    ? `Contesto dell'escursione:
 TITOLO: ${activity.title ?? 'Escursione'}
 ${dateStr ? `DATA: ${dateStr}` : ''}
 DISTANZA: ${((activity.distance_meters as number) / 1000).toFixed(1)} km
 DISLIVELLO POSITIVO: ${Math.round(activity.elevation_gain as number)} m
-DURATA EFFETTIVA: ${formatDuration(activity.total_time_seconds as number)}
+DURATA EFFETTIVA: ${formatDuration(totalSeconds)}`
+    : `Contesto della visita (non è un'escursione: niente distanze o dislivelli):
+TITOLO: ${activity.title ?? 'Visita'}
+${dateStr ? `DATA: ${dateStr}` : ''}
+${totalSeconds > 0 ? `DURATA DELLA VISITA: ${formatDuration(totalSeconds)}` : ''}`
+
+  const prompt = `${contextBlock}
 ${otherSectionsBlock}
 SEZIONE DA MODIFICARE: "${sectionTitle}"
 

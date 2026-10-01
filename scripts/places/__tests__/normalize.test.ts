@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isPlausibleItalianCoordinate, normalizeForComparison, nameTokenSimilarity, sameMunicipality } from '../normalize'
+import { isPlausibleItalianCoordinate, normalizeForComparison, nameTokenSimilarity, sameMunicipality, repairMojibake } from '../normalize'
 
 describe('isPlausibleItalianCoordinate', () => {
   it('accetta un punto reale in Italia', () => {
@@ -56,5 +56,22 @@ describe('sameMunicipality', () => {
   it('assente su un lato → false, non un errore', () => {
     expect(sameMunicipality(undefined, 'Viterbo')).toBe(false)
     expect(sameMunicipality('Viterbo', null)).toBe(false)
+  })
+})
+
+describe('repairMojibake', () => {
+  it('ripara UTF-8 letto come latin1', () => {
+    expect(repairMojibake('su tav. nÂ°102')).toBe('su tav. n°102')
+    expect(repairMojibake('Santhi\u00c3\u00a0')).toBe('Santhià')
+    expect(repairMojibake('Pi\u00c3\u00a8 di Castello \u00c3\u00a0 Roma')).toBe('Pi\u00e8 di Castello à Roma')
+  })
+
+  it('testo già corretto resta identico, anche con trattino lungo', () => {
+    expect(repairMojibake('Santhià — Tavola B')).toBe('Santhià — Tavola B')
+    expect(repairMojibake('Così')).toBe('Così')
+  })
+
+  it('un Ã senza continuazione valida non viene toccato', () => {
+    expect(repairMojibake('CASTELLÃ')).toBe('CASTELLÃ')
   })
 })

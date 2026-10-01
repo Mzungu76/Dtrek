@@ -54,6 +54,24 @@ describe('evaluateCheckIn', () => {
   })
 })
 
+describe('evaluateCheckIn — casi che non devono mai risultare verificati', () => {
+  const roma = { latitude: 41.9028, longitude: 12.4964 }
+
+  it('fix troppo incerto (cella/IP) anche se il punto stimato cade vicino → low_accuracy, non verified', () => {
+    const r = evaluateCheckIn({ lat: 41.9029, lon: 12.4965, accuracyM: 4000 }, roma)
+    expect(r.outcome).toBe('low_accuracy')
+  })
+
+  it('fix preciso entro il raggio resta verified', () => {
+    expect(evaluateCheckIn({ lat: 41.9029, lon: 12.4965, accuracyM: 15 }, roma).outcome).toBe('verified')
+  })
+
+  it('coordinate del Sito approssimate (centro del Comune) → approximate, mai verified', () => {
+    const r = evaluateCheckIn({ lat: 41.9029, lon: 12.4965, accuracyM: 10 }, { ...roma, coordinatesApproximate: true })
+    expect(r.outcome).toBe('approximate')
+  })
+})
+
 describe('markMetaVisited', () => {
   it('rifiuta un sentiero — nessuno shortcut rispetto a un\'attività reale', async () => {
     await expect(markMetaVisited({ id: '1', title: 'Test', metaType: 'sentiero' }, null, false)).rejects.toThrow()
@@ -97,5 +115,15 @@ describe('markMetaVisited', () => {
   it('idempotente: non crea una seconda Attività se firstCompletedAt è già presente', async () => {
     await markMetaVisited({ id: '1', title: 'Test', metaType: 'sito', firstCompletedAt: '2026-01-01T00:00:00.000Z' }, null, false)
     expect(saveActivityWithEnrichment).not.toHaveBeenCalled()
+  })
+
+  it('repeat: registra un\'altra visita anche se la Meta è già stata visitata', async () => {
+    await markMetaVisited({ id: '1', title: 'Test', metaType: 'sito', firstCompletedAt: '2026-01-01T00:00:00.000Z' }, null, false, { repeat: true })
+    expect(saveActivityWithEnrichment).toHaveBeenCalledTimes(1)
+  })
+
+  it('passa il Diario scelto a saveActivityWithEnrichment', async () => {
+    await markMetaVisited({ id: '1', title: 'Test', metaType: 'sito' }, null, false, { diaryId: 'd-42' })
+    expect(saveActivityWithEnrichment.mock.calls[0][1].diaryId).toBe('d-42')
   })
 })

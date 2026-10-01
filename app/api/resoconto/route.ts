@@ -166,7 +166,8 @@ function buildPrompt(
   // corpo), resta sempre incluso; FC e calorie invece rispettano il consenso dell'utente.
   const avgHR  = aiUseBiometricData ? activity.avg_heart_rate as number | undefined : undefined
   const maxHR  = aiUseBiometricData ? activity.max_heart_rate as number | undefined : undefined
-  const avgSpd = activity.avg_speed_ms    as number | undefined
+  // Passo/velocità solo per un Sentiero: per una visita a un Borgo/Città o a un Sito non si parla di ritmo.
+  const avgSpd = profile.hikingMetrics ? activity.avg_speed_ms as number | undefined : undefined
   const cal    = aiUseBiometricData ? activity.calories as number | undefined : undefined
   const biometricBlock = [
     avgHR  && avgHR  > 0 ? `FC MEDIA: ${Math.round(avgHR)} bpm` : '',
@@ -189,6 +190,14 @@ function buildPrompt(
   // Photos sorted start→end (progress 0.0 → 1.0)
   const sortedPhotos = [...photos].sort((a, b) => a.progress - b.progress)
   function progressLabel(p: number): string {
+    // Borgo/Città o Sito: nessun tracciato, si dice "a che punto della visita", non del percorso.
+    if (!profile.hikingMetrics) {
+      if (p < 0.15) return 'all\'inizio della visita'
+      if (p < 0.4)  return 'nella prima parte della visita'
+      if (p < 0.65) return 'a metà visita'
+      if (p < 0.85) return 'verso la fine della visita'
+      return 'alla fine della visita'
+    }
     if (p < 0.15) return 'alla partenza'
     if (p < 0.4)  return 'nel primo tratto del percorso'
     if (p < 0.65) return 'a metà percorso'
@@ -260,7 +269,18 @@ function buildPrompt(
   const SECTION_COUNT_WORDS: Record<number, string> = { 3: 'tre', 4: 'quattro', 5: 'cinque' }
   const sectionCountWord = SECTION_COUNT_WORDS[sectionCount] ?? String(sectionCount)
   const styleLine = styleProfile && isProfileReady(styleProfile) ? formatStyleProfileBlock(styleProfile) : ''
-  const cronacaBlock = hasQa
+  const cronacaBlock = hasQa && !profile.hikingMetrics
+    ? `
+## Cronaca
+Racconta in PRIMA PERSONA la visita dall'inizio alla fine in ordine cronologico, come se fosse
+l'autore stesso a raccontare: i luoghi visti, i dettagli che hanno colpito, le atmosfere. Integra le
+fotografie scattate come elementi della narrazione: cosa mostrano e in quale momento della visita.
+Integra le risposte al questionario guidato, seguendo l'ordine dei luoghi e dei momenti a cui si
+riferiscono, fondendole nella narrazione senza mai citarle alla lettera. Niente ritmo, sforzo o
+progressione lungo un tracciato: qui si racconta un luogo.
+${styleLine ? `${styleLine}\nCalibra la lunghezza e il ritmo delle frasi di questa sezione su questo registro reale, non su un tono "medio" generico.` : ''}
+`
+    : hasQa
     ? `
 ## Cronaca
 Racconta in PRIMA PERSONA la progressione dell'escursione dall'inizio alla fine in ordine cronologico,

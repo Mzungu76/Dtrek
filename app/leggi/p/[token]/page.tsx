@@ -20,6 +20,7 @@ import { DtrekCallout, SiteFooter } from '@/app/leggi/d/[token]/SiteChrome'
 import { PublicReportPage } from '@/components/leggi/PublicReportPage'
 import { PublicPdfExport } from '@/app/leggi/d/[token]/PublicPdfExport'
 import { DTREK_URL } from '@/lib/publicSite'
+import { reportSummaryLine } from '@/lib/reportFacts'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -31,7 +32,7 @@ export async function generateMetadata({ params }: { params: { token: string } }
   if (!report) return { title: 'Reportage non trovato · DTrek' }
 
   const { entry } = report
-  const desc = `${(entry.distanceMeters / 1000).toFixed(1)} km · ${Math.round(entry.elevationGain)} m di dislivello · di ${report.ownerName}`
+  const desc = `${reportSummaryLine(entry)} · di ${report.ownerName}`
   return {
     title: `${entry.title} · DTrek`,
     description: desc,

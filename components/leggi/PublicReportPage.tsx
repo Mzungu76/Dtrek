@@ -22,6 +22,7 @@
 //     tutte... sulla pagina pubblica" — qui compaiono tutte, non solo le sei che entrano in stampa.
 //
 // Componente SERVER: nessuno stato, nessun JavaScript spedito al browser.
+import { reportProfileFor } from '@/lib/reportProfiles'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { Route, Mountain, Clock, Flame } from 'lucide-react'
@@ -35,6 +36,8 @@ import { StatCard } from '@/components/diario/StatCard'
 import { GREEN, BLUE } from '@/components/diario/types'
 import { LocatorMap } from '@/components/LocatorMap'
 import type { PublicDiaryEntry } from '@/lib/sharePublicDiary'
+import { metaHasHikingMetrics } from '@/lib/metaTypes'
+import { reportFacts, reportNoun } from '@/lib/reportFacts'
 import type { DiaryPublicSections } from '@/lib/diaryConfig'
 import { RouteMap, PoiCaption } from '@/app/leggi/d/[token]/RouteMap'
 import { PhotoRouteMap } from '@/app/leggi/d/[token]/PhotoRouteMap'
@@ -77,11 +80,20 @@ export function PublicReportPage({ entry, n, show, hideExactDates = false }: {
   const storyBoxes = allQuotes.slice(1)
 
   const escLabel = String(n).padStart(2, '0')
+  // Un Sentiero ha cifre di cammino (km/D+/quota); un Borgo/Città o un Sito no — stessa scelta del
+  // Reportage privato (lib/reportFacts.ts), mai una riga di trattini o "0.0 km".
+  const hiking = metaHasHikingMetrics(entry.metaType)
+  const noun = reportNoun(entry.metaType)
+  const facts = reportFacts({
+    metaType: entry.metaType, siteType: entry.siteType, totalTimeSeconds: entry.totalTimeSeconds,
+    stopsCount: entry.stopsCount,
+  })
   const dateStr = formatPublicDate(entry.startTime, hideExactDates)
   const monthYear = format(new Date(entry.startTime), 'MMMM yyyy', { locale: it })
 
   const photos = show.foto ? entry.photos : []
-  const heroPhoto = photos[0] ?? null
+  // Senza foto proprie un Reportage di Sito apre con l'immagine del luogo.
+  const heroPhoto = photos[0] ?? (entry.siteCoverUrl ? { url: entry.siteCoverUrl } : null)
   const detailPhoto = photos[1] ?? null
   const galleryPhotos = photos.slice(2)
 
@@ -134,7 +146,7 @@ export function PublicReportPage({ entry, n, show, hideExactDates = false }: {
 
           <div className="absolute" style={{ top: cq(32), left: cq(48), right: cq(48) }}>
             <span className="font-barlow" style={{ fontWeight: 700, fontSize: cq(11), letterSpacing: cq(5), color: '#e08d3c', textTransform: 'uppercase' }}>
-              Escursione #{escLabel} · {monthYear}
+              {noun} #{escLabel} · {monthYear}
             </span>
           </div>
 
@@ -148,25 +160,25 @@ export function PublicReportPage({ entry, n, show, hideExactDates = false }: {
 
         {/* Striscia statistiche — sempre 4 colonne, come sul foglio stampato: si rimpicciolisce
             insieme al resto, non si reimpagina mai in 2. */}
-        <div style={{ background: '#193b20', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)' }}>
-          {[
+        {(hiking || facts.length > 0) && <div style={{ background: '#193b20', display: 'grid', gridTemplateColumns: `repeat(${hiking ? 4 : facts.length}, 1fr)` }}>
+          {(hiking ? [
             { label: 'Distanza', value: entry.distanceMeters > 0 ? `${(entry.distanceMeters / 1000).toFixed(1)}` : '—', sub: 'km' },
             { label: 'Dislivello', value: entry.elevationGain > 0 ? `${Math.round(entry.elevationGain)}` : '—', sub: 'm D+' },
             { label: 'Durata', value: entry.totalTimeSeconds > 0 ? formatDuration(entry.totalTimeSeconds) : '—', sub: 'in movimento' },
             { label: 'Calorie', value: entry.calories ? `${entry.calories}` : '—', sub: 'kcal' },
-          ].map((s, i) => (
-            <div key={s.label} style={{ padding: `${cq(22)} ${cq(28)}`, borderRight: i < 3 ? '1px solid rgba(255,255,255,0.07)' : undefined }}>
+          ] : facts.map(f => ({ label: f.label, value: f.value, sub: '' }))).map((s, i, arr) => (
+            <div key={s.label} style={{ padding: `${cq(22)} ${cq(28)}`, borderRight: i < arr.length - 1 ? '1px solid rgba(255,255,255,0.07)' : undefined }}>
               <p className="font-barlow" style={{ fontWeight: 700, fontSize: cq(10), letterSpacing: cq(3), color: '#e08d3c', textTransform: 'uppercase', margin: `0 0 ${cq(7)}` }}>{s.label}</p>
               <p className="font-mono" style={{ fontWeight: 500, color: '#fff', margin: 0, lineHeight: 1, fontSize: cq(26) }}>{s.value}</p>
               <p style={{ fontSize: cq(10), color: 'rgba(255,255,255,0.4)', margin: `${cq(5)} 0 0` }}>{s.sub}</p>
             </div>
           ))}
-        </div>
+        </div>}
 
         {/* Data */}
         <div style={{ background: '#f8f7f4', padding: `${cq(12)} ${cq(48)}`, borderTop: '1px solid #dcd8cc', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: cq(12) }}>
           <p className="font-barlow" style={{ fontWeight: 700, fontSize: cq(10), letterSpacing: cq(3), color: '#8a7f6e', textTransform: 'uppercase', margin: 0 }}>
-            {dateStr}{!!entry.altitudeMax && ` · Quota max ${Math.round(entry.altitudeMax)} m`}
+            {dateStr}{hiking && !!entry.altitudeMax && ` · Quota max ${Math.round(entry.altitudeMax)} m`}
           </p>
           {/* Solo per un'Attività nata dal ripiego "registra comunque" del check-in GPS di un Sito
               (lib/visitCompletion.ts) — mai un giudizio sul racconto, solo un'etichetta onesta sulla
@@ -179,8 +191,27 @@ export function PublicReportPage({ entry, n, show, hideExactDates = false }: {
         </div>
 
         <div style={{ padding: `${cq(48)} ${cq(48)} ${cq(40)}` }}>
+          {/* Descrizione del luogo (la stessa della Guida) — prima del racconto, mai da generare. */}
+          {!hiking && entry.siteDescription && (
+            <div style={{ marginBottom: cq(36) }}>
+              <p className="font-barlow" style={{ fontWeight: 700, fontSize: cq(9), letterSpacing: cq(4), color: '#e08d3c', textTransform: 'uppercase', margin: `0 0 ${cq(12)}` }}>
+                {reportProfileFor(entry.metaType, entry.siteType).sectionTitle}
+              </p>
+              <p className="font-lora" style={{ fontSize: cq(13.5), lineHeight: 1.85, color: '#4d4740', margin: 0 }}>
+                {entry.siteDescription}
+              </p>
+              {entry.siteDescriptionCredit && (
+                <p className="font-barlow" style={{ fontSize: cq(9), letterSpacing: cq(1), color: '#a9a18e', margin: `${cq(8)} 0 0` }}>
+                  Fonte:{' '}
+                  {entry.siteDescriptionCredit.url
+                    ? <a href={entry.siteDescriptionCredit.url} target="_blank" rel="noopener noreferrer" style={{ color: '#8a7f6e', textDecoration: 'underline' }}>{entry.siteDescriptionCredit.label}</a>
+                    : entry.siteDescriptionCredit.label}
+                </p>
+              )}
+            </div>
+          )}
           <p className="font-barlow" style={{ fontWeight: 700, fontSize: cq(9), letterSpacing: cq(4), color: '#e08d3c', textTransform: 'uppercase', margin: `0 0 ${cq(36)}` }}>
-            Cronaca · Escursione #{escLabel}
+            Cronaca · {noun} #{escLabel}
           </p>
 
           {/* Scheda editoriale + intro — griglia fissa 170px+1fr, la stessa del libro privato */}
@@ -190,9 +221,9 @@ export function PublicReportPage({ entry, n, show, hideExactDates = false }: {
                 Scheda
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: cq(13) }}>
-                <SchedaField label="Escursione" value={`#${escLabel}`} />
+                <SchedaField label={noun} value={`#${escLabel}`} />
                 {dateStr && <SchedaField label="Periodo" value={dateStr} />}
-                {!!entry.altitudeMax && <SchedaField label="Quota massima" value={`${Math.round(entry.altitudeMax)} m`} />}
+                {hiking && !!entry.altitudeMax && <SchedaField label="Quota massima" value={`${Math.round(entry.altitudeMax)} m`} />}
               </div>
             </div>
 
@@ -296,7 +327,7 @@ export function PublicReportPage({ entry, n, show, hideExactDates = false }: {
 
           {/* Dati e percorso — StatCard/ProgressChart restano alla loro dimensione abituale
               (componenti condivisi con altre schermate, non riscalati qui). */}
-          {showStatistiche && (
+          {showStatistiche && hiking && (
             <div className="grid grid-cols-2 gap-2 mb-4">
               <StatCard value={`${(entry.distanceMeters / 1000).toFixed(1)} km`} label="Distanza" icon={<Route style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
               <StatCard value={`${Math.round(entry.elevationGain)} m`} label="Dislivello D+" icon={<Mountain style={{ color: GREEN.iconColor, width: 12, height: 12 }} />} accent={GREEN} />
@@ -338,11 +369,21 @@ export function PublicReportPage({ entry, n, show, hideExactDates = false }: {
               )}
             </div>
           )}
+          {/* Reportage di Sito: il punto del luogo (mai quello della registrazione) su un riquadro d'Italia. */}
+          {show.percorso && entry.extras.mappa && entry.sitePoint && !showMappa && (
+            <div className="mb-5">
+              <p className="font-display font-bold text-forest-900 text-lg mb-3">Dove si trova</p>
+              <div className="w-56">
+                <LocatorMap eager detail caption="Dove si trova" lat={entry.sitePoint.lat} lon={entry.sitePoint.lon} label={entry.title} />
+              </div>
+            </div>
+          )}
           {showMappa && (
             <div className="mb-5">
               <p className="font-display font-bold text-forest-900 text-lg mb-3">Il percorso</p>
-              <div className="float-right w-20 ml-2.5 mb-1.5">
-                <LocatorMap eager lat={entry.polyline![0][0]} lon={entry.polyline![0][1]} label={entry.title} />
+              <div className="float-right w-48 ml-2.5 mb-1.5">
+                {/* Un Borgo/Città con una traccia: il punto del luogo, non l'inizio della camminata. */}
+                <LocatorMap eager detail lat={entry.sitePoint?.lat ?? entry.polyline![0][0]} lon={entry.sitePoint?.lon ?? entry.polyline![0][1]} label={entry.title} />
               </div>
               <RouteMap polyline={entry.polyline!} pois={entry.pois} />
               <div className="clear-both" />

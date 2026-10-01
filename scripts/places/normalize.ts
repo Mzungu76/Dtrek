@@ -52,3 +52,21 @@ export function sameMunicipality(a?: string | null, b?: string | null): boolean 
   if (!a || !b) return false
   return normalizeForComparison(a) === normalizeForComparison(b)
 }
+
+// ── Riparazione di testo con codifica sbagliata ("mojibake") ─────────────────────────────────
+//
+// Alcune sorgenti mescolano codifiche: un campo UTF-8 letto come latin1 (un .dbf PTPR con 'n°',
+// una pagina MiC con 'Santhià') arriva come "nÂ°" / "SanthiÃ " — una sequenza di byte UTF-8 vista
+// come caratteri latin1. Si ripara solo ciò che ha la forma esatta di quell'errore (un byte di
+// testa U+00C2–U+00F4 seguito da byte di continuazione U+0080–U+00BF che formano UTF-8 valido):
+// un "Ã" legittimo, senza continuazione, resta com'è.
+const MOJIBAKE_SEQUENCE_RE = /[\u00c2-\u00f4][\u0080-\u00bf]+/g
+
+export function repairMojibake(text: string): string {
+  if (!MOJIBAKE_SEQUENCE_RE.test(text)) return text
+  MOJIBAKE_SEQUENCE_RE.lastIndex = 0
+  const decoder = new TextDecoder('utf-8', { fatal: true })
+  return text.replace(MOJIBAKE_SEQUENCE_RE, seq => {
+    try { return decoder.decode(Uint8Array.from(seq, ch => ch.charCodeAt(0))) } catch { return seq }
+  })
+}

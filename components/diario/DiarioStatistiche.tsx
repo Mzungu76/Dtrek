@@ -3,12 +3,16 @@ import { PDF_PAGE_W, PDF_CONTENT_H } from '@/lib/pdfPageGeometry'
 import { Route, Mountain, Clock, Flame, Trophy, TrendingUp } from 'lucide-react'
 import { computeGlobalStats, type ActivityMeta } from '@/lib/blobStore'
 import { formatDuration } from '@/lib/tcxParser'
+import { metaHasHikingMetrics } from '@/lib/metaTypes'
 import { PageHeader, PillHeader } from './PageHeader'
 import { StatCard } from './StatCard'
 import { MonthBarChart } from './MonthBarChart'
 import { GREEN, AMBER, BLUE, VIOLET, type StatsToggles } from './types'
 
-export function DiarioStatistiche({ activities, toggles }: { activities: ActivityMeta[]; toggles: StatsToggles }) {
+// Solo i Reportage con metriche di cammino: km, dislivello, record e "mese più attivo" di una
+// visita a un Borgo/Città o a un Sito sarebbero zeri (o chilometri che non sono cammino).
+export function DiarioStatistiche({ activities: allActivities, toggles }: { activities: ActivityMeta[]; toggles: StatsToggles }) {
+  const activities = allActivities.filter(a => metaHasHikingMetrics(a.metaType))
   const gs = computeGlobalStats(activities)
 
   const longestAct = activities.reduce<ActivityMeta | null>((best, a) =>

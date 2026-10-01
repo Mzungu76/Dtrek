@@ -1,7 +1,27 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { getPlannedById, type PlannedHike } from './plannedStore'
-import { getCurrentGeoFix, evaluateCheckIn, markMetaVisited } from './visitCompletion'
+import { getCurrentGeoFix, evaluateCheckIn, markMetaVisited, type GeoFix, type CheckInOutcome } from './visitCompletion'
+import { listSelectableDiaries, type DiaryChoice } from './diari/syntheticPercorso'
+
+/** Scelta del Diario in sospeso: la Meta non ne ha ancora uno e l'utente ne ha più d'uno. */
+export interface DiaryPrompt {
+  id: string
+  repeat: boolean
+  choices: DiaryChoice[]
+}
+
+/** Check-in che NON prova la presenza (fuori zona, fix troppo incerto, coordinate del Sito
+ *  approssimate, nessun GPS): prima di registrare la visita come "non verificata" si chiede
+ *  conferma, invece di salvarla in silenzio come se fosse andata bene. */
+export interface UnverifiedPrompt {
+  id: string
+  repeat: boolean
+  diaryId?: string
+  fix: GeoFix | null
+  outcome: Exclude<CheckInOutcome, 'verified'>
+  distanceM?: number
+}
 
 export interface CheckInToast {
   message: string
@@ -22,6 +42,8 @@ export interface CheckInToast {
 export function useSiteCheckIn(onVisited?: (hike: PlannedHike) => void) {
   const [busy, setBusy] = useState(false)
   const [toast, setToast] = useState<CheckInToast | null>(null)
+  const [diaryPrompt, setDiaryPrompt] = useState<DiaryPrompt | null>(null)
+  const [unverifiedPrompt, setUnverifiedPrompt] = useState<UnverifiedPrompt | null>(null)
 
   useEffect(() => {
     if (!toast) return
@@ -29,24 +51,56 @@ export function useSiteCheckIn(onVisited?: (hike: PlannedHike) => void) {
     return () => clearTimeout(t)
   }, [toast])
 
-  const confirmVisit = async (id: string) => {
+  /** `repeat`: registra un'altra visita a un Sito già visitato (nuovo Reportage). `diaryId`: il
+   *  Diario scelto dal picker — solo se la Meta non ne ha ancora uno. */
+  const confirmVisit = async (
+    id: string,
+    opts: { repeat?: boolean; diaryId?: string; accepted?: { fix: GeoFix | null; outcome: CheckInOutcome } } = {},
+  ) => {
     if (busy) return
     setBusy(true)
     try {
       const target = await getPlannedById(id)
       if (!target) { setToast({ message: 'Impossibile trovare questa Meta.', ok: false }); return }
-      if (target.firstCompletedAt) { setToast({ message: 'Visita già registrata per questo Sito.', ok: true }); return }
-      const fix = await getCurrentGeoFix()
-      const result = evaluateCheckIn(fix, { latitude: target.latitude, longitude: target.longitude })
-      const verified = result.outcome === 'verified'
-      await markMetaVisited(target, fix, verified)
+      if (target.firstCompletedAt && !opts.repeat) { setToast({ message: 'Visita già registrata per questo Sito.', ok: true }); return }
+      // Una Meta senza Diario prende quello scelto qui: con più Diari si chiede, con uno solo (o
+      // nessuno leggibile, offline) si prosegue — il ripiego sul default resta in activitySave e,
+      // offline, nel server (PATCH /api/planned).
+      if (!target.diaryId && !opts.diaryId) {
+        const choices = await listSelectableDiaries()
+        if (choices.length > 1) { setDiaryPrompt({ id, repeat: !!opts.repeat, choices }); return }
+      }
+      // Dopo "Registra comunque" si riusa il fix già preso: niente seconda attesa del GPS.
+      const fix = opts.accepted ? opts.accepted.fix : await getCurrentGeoFix()
+      let outcome: CheckInOutcome
+      let distanceM: number | undefined
+      if (opts.accepted) {
+        outcome = opts.accepted.outcome
+      } else {
+        // Le coordinate del Sito possono essere quelle del centro del Comune (dtrek_places): da lì la
+        // distanza non dice se si è nel Sito. Letto solo se c'è un fix da valutare, e mai bloccante.
+        let coordinatesApproximate = false
+        if (fix && target.placeId) {
+          try {
+            const res = await fetch(`/api/places/${target.placeId}`)
+            if (res.ok) coordinatesApproximate = ((await res.json()) as { coordinatesApproximate?: boolean }).coordinatesApproximate === true
+          } catch { /* si valuta con le coordinate che ci sono */ }
+        }
+        const result = evaluateCheckIn(fix, { latitude: target.latitude, longitude: target.longitude, coordinatesApproximate })
+        outcome = result.outcome
+        distanceM = result.distanceM
+      }
+      const verified = outcome === 'verified'
+      if (!verified && !opts.accepted) {
+        setUnverifiedPrompt({ id, repeat: !!opts.repeat, diaryId: opts.diaryId, fix, outcome: outcome as UnverifiedPrompt['outcome'], distanceM })
+        return
+      }
+      await markMetaVisited(target, fix, verified, { diaryId: opts.diaryId, repeat: opts.repeat })
       setToast(
         verified
           ? { message: 'Visita confermata', ok: true }
           : {
-              message: result.outcome === 'no_gps'
-                ? 'Visita registrata — posizione non disponibile, resterà non verificata se pubblicata.'
-                : 'Visita registrata — sembri fuori zona, resterà non verificata se pubblicata.',
+              message: 'Visita registrata come non verificata — lo resterà se pubblicata.',
               ok: false,
             },
       )
@@ -59,5 +113,21 @@ export function useSiteCheckIn(onVisited?: (hike: PlannedHike) => void) {
     }
   }
 
-  return { busy, toast, confirmVisit }
+  const chooseDiary = (diaryId: string) => {
+    const p = diaryPrompt
+    if (!p) return
+    setDiaryPrompt(null)
+    void confirmVisit(p.id, { repeat: p.repeat, diaryId })
+  }
+  const cancelDiaryPrompt = () => setDiaryPrompt(null)
+
+  const acceptUnverified = () => {
+    const p = unverifiedPrompt
+    if (!p) return
+    setUnverifiedPrompt(null)
+    void confirmVisit(p.id, { repeat: p.repeat, diaryId: p.diaryId, accepted: { fix: p.fix, outcome: p.outcome } })
+  }
+  const cancelUnverified = () => setUnverifiedPrompt(null)
+
+  return { busy, toast, confirmVisit, diaryPrompt, chooseDiary, cancelDiaryPrompt, unverifiedPrompt, acceptUnverified, cancelUnverified }
 }
