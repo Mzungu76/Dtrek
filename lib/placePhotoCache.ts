@@ -119,23 +119,31 @@ const TITLE_MATCH_MAX_KM = 15
 async function fetchFromWikipediaTitle(name: string, lat: number, lon: number): Promise<PlaceCoverPhoto | null> {
   try {
     const url = 'https://it.wikipedia.org/w/api.php?' + new URLSearchParams({
-      action: 'query', prop: 'pageimages|coordinates', titles: name, redirects: '1',
-      piprop: 'thumbnail', pithumbsize: String(COVER_PHOTO_WIDTH),
+      action: 'query', prop: 'pageimages|coordinates|pageprops', titles: name, redirects: '1',
+      piprop: 'thumbnail', pithumbsize: String(COVER_PHOTO_WIDTH), ppprop: 'wikibase_item',
       format: 'json', origin: '*',
     })
     const res = await fetch(url, { headers: { 'User-Agent': WD_USER_AGENT }, signal: AbortSignal.timeout(8000) })
     if (!res.ok) return null
     const data = await res.json() as {
-      query?: { pages?: Record<string, { thumbnail?: { source?: string }; coordinates?: Array<{ lat: number; lon: number }> }> }
+      query?: { pages?: Record<string, {
+        thumbnail?: { source?: string }
+        coordinates?: Array<{ lat: number; lon: number }>
+        pageprops?: { wikibase_item?: string }
+      }> }
     }
     const page = Object.values(data.query?.pages ?? {})[0]
     const coord = page?.coordinates?.[0]
-    const src = page?.thumbnail?.source
-    if (!coord || !src || !isTrustedMediaUrl(src)) return null
+    if (!coord) return null
     const dLat = (coord.lat - lat) * 111
     const dLon = (coord.lon - lon) * 111 * Math.cos(lat * Math.PI / 180)
     if (Math.hypot(dLat, dLon) > TITLE_MATCH_MAX_KM) return null
-    return { url: src, credit: 'Wikipedia' }
+    const src = page?.thumbnail?.source
+    if (src && isTrustedMediaUrl(src)) return { url: src, credit: 'Wikipedia' }
+    // Articolo giusto ma senza "immagine principale" (pageimages vuoto): la foto dichiarata sulla
+    // sua voce Wikidata (P18) è comunque quella dell'entità verificata qui sopra.
+    const qid = page?.pageprops?.wikibase_item
+    return qid ? await fetchFromWikidataP18(qid) : null
   } catch {
     return null
   }
