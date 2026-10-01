@@ -52,6 +52,9 @@ const NAME_KEYWORDS = /cammin|via francigena|francigena|sentiero italia|alta via
 // su quella parte, per non scambiare "Alta Via 1" o "Via 2" per una tappa.
 const STAGE_NAME = /(?:\btappa\b|\bstage\b|\betap[ep]?\b|\bgiorno\s+\d+)/i
 const STAGE_CODE = /\s[A-Z]\d{1,3}$/
+// "part Slovenia", "Österreich", "Suisse"…: la parte estera di un cammino europeo non è nostra.
+const FOREIGN_PART = /\b(?:part|parte|teil)\s+(?:of\s+)?(?:slovenia|slovenija|france|francia|switzerland|svizzera|schweiz|suisse|austria|osterreich|österreich|croatia|croazia)\b/i
+const FOREIGN_WORD = /österreich|osterreich|schweiz|suisse|slovenij|hrvatska|szent|jakobova/i
 const VARIANT_NAME = /variant|variante|alternativ|deviazione|bypass/i
 
 /** "123", "123 km", "850 m" → km; null se assente o non interpretabile. */
@@ -107,6 +110,9 @@ export function evaluateRelation(rel: DiscoveryRelation, overrides: DiscoveryOve
   if (rel.childIds.length >= 3) { score += 20; reasons.push(`${rel.childIds.length} sotto-relazioni (tappe) +20`) }
   if (tags.wikidata) { score += 10; reasons.push('ha scheda Wikidata +10') }
 
+  if (FOREIGN_PART.test(name)) {
+    return { ...base, score, kind: 'locale', verdict: 'scartato', reasons: [...reasons, 'è la parte estera di un cammino europeo'] }
+  }
   let kind: DiscoveryKind = 'cammino'
   let verdict: DiscoveryVerdict = score >= ADMIT_SCORE ? 'ammesso' : score >= REVIEW_SCORE ? 'da_rivedere' : 'scartato'
 
@@ -119,6 +125,9 @@ export function evaluateRelation(rel: DiscoveryRelation, overrides: DiscoveryOve
     reasons.push('variante: da collegare al cammino principale, non un cammino a sé')
   } else if (verdict === 'scartato') {
     kind = 'locale'
+  }
+  if (verdict === 'ammesso' && FOREIGN_WORD.test(name)) {
+    verdict = 'da_rivedere'; reasons.push('nome in lingua straniera: probabile cammino estero')
   }
   return { ...base, score, kind, verdict, reasons }
 }
@@ -192,17 +201,26 @@ const IT_REGIONS = [
 
 export function familyKey(rawName: string): string {
   let n = rawName.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[’`]/g, "'").trim()
+  // "GTA: Balme - Usseglio": prefisso prima dei due punti, tratto "A - B" dopo.
+  const prefixed = /^([^:]{2,30}):\s*[^:]+\s[-–]\s[^:]+$/.exec(n)
+  if (prefixed) n = prefixed[1].trim()
   // "Cammino di Assisi, Genova - San Miniato": il tratto "A - B" dopo la virgola non fa parte del nome.
   n = n.replace(/,\s*[^,]+\s[-–]\s[^,]+$/, '')
   n = n.replace(/\s*[-–:,]\s*(?:tratto|variante|alternativa|parte|tappa|etape|etappe|stage|opzione)\b.*$/, '')
   n = n.replace(/\s+(?:tratto|variante|alternativa|opzione)\b.*$/, '')
   n = n.replace(/\s*[-–]\s*\d{1,2}\s+[a-z' ]+$/, '')
   n = n.replace(/\s+(?:red|blue|yellow|purple|green|rosso|blu|giallo|viola|verde)(?:\s+[a-z]\d{1,3})?$/, '')
-  n = n.replace(/\s+[a-z]\d{1,3}$/, '')
+  // Sigla di tappa generica solo con 2-3 cifre (E00, T00, R103): "E1" ed "E5" sono cammini diversi.
+  n = n.replace(/\s+[a-z]\d{2,3}$/, '')
+  for (const region of IT_REGIONS) {
+    const numbered = new RegExp(`(\\s${region.replace(/[-']/g, m => `\\${m}`)})\\s+\\d{1,2}(?:\\.\\d+)?(?:\\s.*)?$`)
+    if (numbered.test(n)) { n = n.replace(numbered, '$1'); break }
+  }
   for (const region of IT_REGIONS) {
     const tail = new RegExp(`\\s*[-–]\\s*${region.replace(/[-']/g, m => `\\${m}`)}$`)
     if (tail.test(n)) { n = n.replace(tail, ''); break }
   }
+  n = n.replace(/\bd'(?=[a-z])/g, 'di ')
   return n.replace(/\s+/g, ' ').trim()
 }
 
@@ -213,7 +231,10 @@ const SMALL_WORDS = new Set(['di', 'del', 'dei', 'delle', 'della', 'degli', 'da'
 function displayName(key: string, names: string[]): string {
   const exact = names.find(n => familyKey(n) === key && n.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim() === key)
   if (exact) return exact.trim()
-  return key.split(' ').map((w, i) => (i > 0 && SMALL_WORDS.has(w) ? w : w.charAt(0).toUpperCase() + w.slice(1))).join(' ')
+  return key.split(' ')
+    .map((w, i) => (i > 0 && SMALL_WORDS.has(w) ? w : w.charAt(0).toUpperCase() + w.slice(1)))
+    .map(w => w.replace(/'([a-z])/g, (_, c: string) => `'${c.toUpperCase()}`))
+    .join(' ')
 }
 
 export interface DiscoveryFamily {
@@ -252,7 +273,12 @@ export function groupFamilies(results: DiscoveryResult[]): DiscoveryFamily[] {
     let verdict = best.verdict
     if (pieces.length === 0 && stages.length > 0) {
       // Solo tappe: ammesso se sono tante e di rete alta, altrimenti da rivedere.
-      verdict = stages.length >= 5 && stages.some(s => s.network === 'iwn' || s.network === 'nwn') ? 'da_rivedere' : 'scartato'
+      const highNetwork = stages.some(s => s.network === 'iwn' || s.network === 'nwn')
+      // 16 tappe numerate di rete nazionale con nome da cammino (Cammino di San Benedetto) sono
+      // esattamente ciò che cerchiamo: tappe ufficiali già pronte.
+      verdict = stages.length >= 5 && highNetwork && (NAME_KEYWORDS.test(displayName(key, list.map(r => r.name))) || stages.length >= 10)
+        ? 'ammesso'
+        : stages.length >= 5 && highNetwork ? 'da_rivedere' : 'scartato'
     }
     const distances = list.map(r => r.italyDistanceKm).filter((d): d is number => d != null)
     const minDist = distances.length ? Math.min(...distances) : null

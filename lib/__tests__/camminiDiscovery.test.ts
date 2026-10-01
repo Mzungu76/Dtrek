@@ -137,12 +137,19 @@ describe('groupFamilies', () => {
     expect(fr.relationIds).toHaveLength(5)
   })
 
-  it('un cammino fatto solo di tappe a sigla (Via Alpina) finisce da rivedere, non ammesso', () => {
+  it('un cammino fatto di molte tappe a sigla di rete alta e nome da cammino (Via Alpina) è ammesso', () => {
     const rels = Array.from({ length: 8 }, (_, i) => rel(200 + i, { name: `Via Alpina Red R${100 + i}`, network: 'iwn' }, 30))
     const fam = groupFamilies(evaluateAll(rels))[0]
     expect(fam.key).toBe('via alpina')
-    expect(fam.verdict).toBe('da_rivedere')
+    expect(fam.verdict).toBe('ammesso')
     expect(fam.stageRelations).toBe(8)
+  })
+
+  it('poche tappe sono da rivedere o scartate, non un cammino', () => {
+    const rels = Array.from({ length: 3 }, (_, i) => rel(300 + i, { name: `Via Alpina Red R${100 + i}`, network: 'iwn' }, 30))
+    expect(groupFamilies(evaluateAll(rels))[0].verdict).toBe('scartato')
+    const weak = Array.from({ length: 8 }, (_, i) => rel(400 + i, { name: `Sentiero Verde Tappa ${i + 1}`, network: 'rwn' }, 30))
+    expect(groupFamilies(evaluateAll(weak))[0].verdict).toBe('scartato')
   })
 })
 
@@ -168,5 +175,36 @@ describe('controllo Italia', () => {
     expect(by.get(1)?.verdict).toBe('ammesso')
     expect(by.get(3)?.verdict).toBe('scartato')
     expect(by.get(3)?.reasons.join(' ')).toContain('fuori Italia')
+  })
+})
+
+describe('correzioni dal secondo giro (2634 relazioni reali)', () => {
+  it('raggruppa le tappe "GTA: A - B" e "E1 Toscana NN …" ma non E1 con E5', () => {
+    expect(familyKey('GTA: Balme - Usseglio')).toBe('gta')
+    expect(familyKey("GTA: Sant'Antonio di Valvogna - Rifugio Rivetti")).toBe('gta')
+    expect(familyKey('E1 Toscana 16 Passo della Colla di Casaglia - Passo del Muraglione')).toBe('e1 toscana')
+    expect(familyKey('E1 Toscana 15.1')).toBe('e1 toscana')
+    expect(familyKey('Sentiero europeo E1')).not.toBe(familyKey('Sentiero europeo E5'))
+  })
+
+  it("unisce Cammino d'Assisi e Cammino di Assisi", () => {
+    expect(familyKey("Cammino d'Assisi, San Miniato - Assisi")).toBe(familyKey('Cammino di Assisi'))
+  })
+
+  it('scarta la parte estera di un cammino europeo e rivede i nomi stranieri', () => {
+    expect(evaluateRelation(rel(1, { name: 'European long distance path E12 - part Slovenia', network: 'iwn', distance: '50' }, 80)).verdict).toBe('scartato')
+    expect(evaluateRelation(rel(2, { name: 'Jakobova pot', network: 'iwn', distance: '300', wikidata: 'Q9' }, 80, [1, 2, 3])).verdict).toBe('da_rivedere')
+  })
+
+  it('un cammino fatto di 16 tappe numerate di rete nazionale è ammesso (Cammino di San Benedetto)', () => {
+    const rels = Array.from({ length: 16 }, (_, i) => rel(500 + i, { name: `Cammino di San Benedetto - Tappa ${i + 1}`, network: 'nwn' }, 40))
+    const fam = groupFamilies(evaluateAll(rels))[0]
+    expect(fam.key).toBe('cammino di san benedetto')
+    expect(fam.verdict).toBe('ammesso')
+  })
+
+  it('nome in maiuscolo corretto dopo l\'apostrofo', () => {
+    const fam = groupFamilies(evaluateAll([rel(1, { name: "Il Cammino di Sant'Antonio - Tappa 1", network: 'nwn' }, 20), rel(2, { name: "Il Cammino di Sant'Antonio - Tappa 2", network: 'nwn' }, 20)]))[0]
+    expect(fam.name).toBe("Il Cammino di Sant'Antonio")
   })
 })
