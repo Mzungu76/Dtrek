@@ -353,16 +353,17 @@ export function PublicReportPage({ entry, n, show, hideExactDates = false }: {
           {show.percorso && entry.extras.mappa && entry.sitePoint && !showMappa && (
             <div className="mb-5">
               <p className="font-display font-bold text-forest-900 text-lg mb-3">Dove si trova</p>
-              <div className="w-32">
-                <LocatorMap eager caption="Dove si trova" lat={entry.sitePoint.lat} lon={entry.sitePoint.lon} label={entry.title} />
+              <div className="w-56">
+                <LocatorMap eager detail caption="Dove si trova" lat={entry.sitePoint.lat} lon={entry.sitePoint.lon} label={entry.title} />
               </div>
             </div>
           )}
           {showMappa && (
             <div className="mb-5">
               <p className="font-display font-bold text-forest-900 text-lg mb-3">Il percorso</p>
-              <div className="float-right w-20 ml-2.5 mb-1.5">
-                <LocatorMap eager lat={entry.polyline![0][0]} lon={entry.polyline![0][1]} label={entry.title} />
+              <div className="float-right w-48 ml-2.5 mb-1.5">
+                {/* Un Borgo/Città con una traccia: il punto del luogo, non l'inizio della camminata. */}
+                <LocatorMap eager detail lat={entry.sitePoint?.lat ?? entry.polyline![0][0]} lon={entry.sitePoint?.lon ?? entry.polyline![0][1]} label={entry.title} />
               </div>
               <RouteMap polyline={entry.polyline!} pois={entry.pois} />
               <div className="clear-both" />

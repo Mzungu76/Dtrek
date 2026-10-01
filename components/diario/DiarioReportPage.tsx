@@ -612,8 +612,8 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
         {extras.mappa && !hiking && !showMappa && act?.site?.point && (
           <div className="pdf-block" data-mag-block="" data-mag-insert="" style={{ marginBottom: 18 }}>
             <p className="pdf-keep-next" style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: '#193b20', margin: '0 0 12px' }}>Dove si trova</p>
-            <div style={{ width: 120 }}>
-              <LocatorMap eager caption="Dove si trova" lat={act.site.point.lat} lon={act.site.point.lon} label={meta?.title ?? act.title} />
+            <div style={{ width: 210 }}>
+              <LocatorMap eager detail caption="Dove si trova" lat={act.site.point.lat} lon={act.site.point.lon} label={meta?.title ?? act.title} />
             </div>
           </div>
         )}
@@ -623,8 +623,9 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
             {/* Inquadramento: la mappa del percorso dice com'è fatto il giro, questa dice dove sta.
                 Senza, una traccia fra due boschi non dice a chi legge se è in Piemonte o in Puglia. */}
             {meta!.routePolyline!.length > 0 && (
-              <div style={{ float: 'right', width: 84, marginLeft: 10, marginBottom: 6 }}>
-                <LocatorMap eager lat={meta!.routePolyline![0][0]} lon={meta!.routePolyline![0][1]} label={meta!.title ?? undefined} />
+              <div style={{ float: 'right', width: 190, marginLeft: 10, marginBottom: 6 }}>
+                {/* Un Borgo/Città con una traccia: il punto del luogo, non l'inizio della camminata. */}
+                <LocatorMap eager detail lat={act?.site?.point?.lat ?? meta!.routePolyline![0][0]} lon={act?.site?.point?.lon ?? meta!.routePolyline![0][1]} label={meta!.title ?? undefined} />
               </div>
             )}
             <div className="print:hidden diario-report-map" data-activity-id={meta!.id} style={{ height: 260, borderRadius: 10, overflow: 'hidden', border: '1px solid #dcd8cc' }}>
