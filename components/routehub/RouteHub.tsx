@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, ChevronUp, Star, GitCompare, CalendarClock, Loader2 } from 'lucide-react'
-import FallbackImage, { isWikimediaUrl } from '@/components/ui/FallbackImage'
+import FallbackImage from '@/components/ui/FallbackImage'
 import { useRouteHubState } from './useRouteHubState'
 import RouteCarousel from './RouteCarousel'
 import RoutePage from './RoutePage'
@@ -357,12 +357,10 @@ export default function RouteHub({
                 <FallbackImage
                   src={slideItem.coverPhotoUrl} alt={slideItem.title}
                   fill sizes="100vw" draggable={false}
-                  // Le copertine Wikimedia sono già miniature dimensionate dalla fonte (?width=1200):
-                  // passarle dall'ottimizzatore di Next aggiunge un giro server freddo (fetch +
-                  // ricodifica) per ogni variante di larghezza mai vista — lenta, a volte minuti, mentre
-                  // la miniatura della galleria (già in cache) compare subito. Il browser le scarica
-                  // diretto dal CDN Wikimedia.
-                  unoptimized={isWikimediaUrl(slideItem.coverPhotoUrl)}
+                  // Passa dall'ottimizzatore di Next (stesso percorso della miniatura di galleria,
+                  // che si carica): il download diretto dal CDN Wikimedia (unoptimized) falliva sul
+                  // dispositivo — verifica utente: miniatura con foto, copertina nera (fallback
+                  // CoverMap senza traccia).
                   loading={inWindow ? 'eager' : 'lazy'}
                   className="object-cover"
                   style={{ filter: 'saturate(1.25) contrast(1.08) brightness(0.85)' }}

@@ -135,9 +135,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     // è un dato di cui fidarsi qui, mai mostrato direttamente: la ricerca dal vivo sotto
     // (fetchPlaceCoverPhoto) lo autoripara. Nessun costo aggiunto per il caso comune (un image_url
     // già buono resta il fast path di sempre, zero query in più).
-    const trustedImageUrl = data.image_url && isTrustedMediaUrl(data.image_url) ? data.image_url : null
+    const trustedImageUrl = data.image_url && isTrustedMediaUrl(data.image_url) && !data.image_url.includes('Special:FilePath') ? data.image_url : null
     const coverPhoto = trustedImageUrl ? null : await fetchPlaceCoverPhoto({
       id: data.id, name: data.name, lat: data.latitude, lon: data.longitude, wikidataId: data.wikidata_id,
+      metaType: data.meta_type,
     })
     return NextResponse.json({
       imageUrl: trustedImageUrl ?? coverPhoto?.url ?? null,
@@ -233,9 +234,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   // image_url cache su un host non riconosciuto non va mostrato direttamente, la ricerca dal vivo
   // qui sotto lo autoripara) — mai a rimpiazzare un dato reale già buono, stesso principio già
   // applicato sopra per la descrizione.
-  const trustedImageUrl = data.image_url && isTrustedMediaUrl(data.image_url) ? data.image_url : null
+  const trustedImageUrl = data.image_url && isTrustedMediaUrl(data.image_url) && !data.image_url.includes('Special:FilePath') ? data.image_url : null
   const coverPhoto = trustedImageUrl ? null : await fetchPlaceCoverPhoto({
     id: data.id, name: data.name, lat: data.latitude, lon: data.longitude, wikidataId: data.wikidata_id,
+    metaType: data.meta_type,
   })
 
   // dtrek_places.subtype è una colonna condivisa a significato diverso per tipologia (lib/

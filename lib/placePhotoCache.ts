@@ -47,6 +47,7 @@ interface PlaceForPhoto {
   lat: number
   lon: number
   wikidataId?: string | null
+  metaType?: string | null
 }
 
 async function fetchFromWikidataP18(wikidataId: string): Promise<PlaceCoverPhoto | null> {
@@ -76,7 +77,20 @@ async function fetchFromWikidataP18(wikidataId: string): Promise<PlaceCoverPhoto
     // il livello Wikipedia sotto (fetchPageThumbnail, COVER_PHOTO_WIDTH). Senza questo la copertina
     // più comune (Wikidata è il primo livello tentato) è anche la più pesante da caricare.
     const url = `${httpsUrl}${httpsUrl.includes('?') ? '&' : '?'}width=${COVER_PHOTO_WIDTH}`
-    return { url, credit: 'Wikimedia Commons' }
+    // Verifica che l'URL sia davvero una raster caricabile (e risolve il redirect di
+    // Special:FilePath direttamente sull'URL finale di upload.wikimedia.org): un P18 che punta a
+    // un file non servibile da next/image (SVG, TIFF…, o un 4xx/429) altrimenti veniva salvato in
+    // cache come "positivo definitivo" e la copertina restava per sempre vuota, senza mai
+    // ripiegare sul livello Wikipedia (visto su Tarquinia, mentre Milano funzionava).
+    const check = await fetch(url, {
+      method: 'GET', headers: { 'User-Agent': WD_USER_AGENT, Range: 'bytes=0-0' },
+      redirect: 'follow', signal: AbortSignal.timeout(5000),
+    })
+    const type = check.headers.get('content-type') ?? ''
+    await check.body?.cancel().catch(() => {})
+    if (!check.ok || !/^image\/(jpeg|png|webp|gif|avif)/.test(type)) return null
+    const finalUrl = isTrustedMediaUrl(check.url) ? check.url : url
+    return { url: finalUrl, credit: 'Wikimedia Commons' }
   } catch {
     return null
   }
@@ -92,6 +106,47 @@ async function fetchFromWikipediaThumbnail(name: string, lat: number, lon: numbe
   if (!match?.thumbnail) return null
   const url = await fetchPageThumbnail(match.title, 'it', COVER_PHOTO_WIDTH)
   return url && isTrustedMediaUrl(url) ? { url, credit: 'Wikipedia' } : null
+}
+
+const TITLE_MATCH_MAX_KM = 15
+
+// Un Borgo/Città è quasi sempre l'articolo Wikipedia col suo stesso nome, ma il suo centroide
+// non cade quasi mai entro 800 m dalle coordinate dell'articolo, e la geosearch stretta qui sopra
+// restituisce solo i 5 punti più vicini (di solito altri monumenti, non la città stessa) — da qui
+// "Tarquinia"/"Milano" senza copertina. Ricerca per titolo esatto (redirect seguiti), accettata solo
+// se l'articolo ha coordinate entro TITLE_MATCH_MAX_KM: stessa cautela contro le omonimie (pagine
+// senza coordinate = disambigua/concetto, scartate) di isNearPoi in lib/wikipedia.ts.
+async function fetchFromWikipediaTitle(name: string, lat: number, lon: number): Promise<PlaceCoverPhoto | null> {
+  try {
+    const url = 'https://it.wikipedia.org/w/api.php?' + new URLSearchParams({
+      action: 'query', prop: 'pageimages|coordinates|pageprops', titles: name, redirects: '1',
+      piprop: 'thumbnail', pithumbsize: String(COVER_PHOTO_WIDTH), ppprop: 'wikibase_item',
+      format: 'json', origin: '*',
+    })
+    const res = await fetch(url, { headers: { 'User-Agent': WD_USER_AGENT }, signal: AbortSignal.timeout(8000) })
+    if (!res.ok) return null
+    const data = await res.json() as {
+      query?: { pages?: Record<string, {
+        thumbnail?: { source?: string }
+        coordinates?: Array<{ lat: number; lon: number }>
+        pageprops?: { wikibase_item?: string }
+      }> }
+    }
+    const page = Object.values(data.query?.pages ?? {})[0]
+    const coord = page?.coordinates?.[0]
+    if (!coord) return null
+    const dLat = (coord.lat - lat) * 111
+    const dLon = (coord.lon - lon) * 111 * Math.cos(lat * Math.PI / 180)
+    if (Math.hypot(dLat, dLon) > TITLE_MATCH_MAX_KM) return null
+    const src = page?.thumbnail?.source
+    if (src && isTrustedMediaUrl(src)) return { url: src, credit: 'Wikipedia' }
+    // Articolo giusto ma senza "immagine principale" (pageimages vuoto): la foto dichiarata sulla
+    // sua voce Wikidata (P18) è comunque quella dell'entità verificata qui sopra.
+    const qid = page?.pageprops?.wikibase_item
+    return qid ? await fetchFromWikidataP18(qid) : null
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -133,7 +188,10 @@ export async function fetchPlaceCoverPhoto(place: PlaceForPhoto): Promise<PlaceC
     // controllo (questa colonna non è mai popolata da nessun'altra pipeline — vedi il commento in
     // cima al file — quindi ogni valore qui viene sempre e solo da fetchFromWikidataP18/
     // fetchFromWikipediaThumbnail sotto).
-    if (cached?.image_url && isTrustedMediaUrl(cached.image_url)) {
+    // Un URL Special:FilePath in cache è il formato scritto PRIMA della verifica/risoluzione di
+    // fetchFromWikidataP18 (mai controllato, può puntare a un file non servibile): si rifà la
+    // ricerca una volta sola, il nuovo risultato salvato è già l'URL finale verificato.
+    if (cached?.image_url && isTrustedMediaUrl(cached.image_url) && !cached.image_url.includes('Special:FilePath')) {
       return { url: cached.image_url as string, credit: cached.image_credit as string | null }
     }
 
@@ -141,6 +199,7 @@ export async function fetchPlaceCoverPhoto(place: PlaceForPhoto): Promise<PlaceC
     try {
       if (place.wikidataId) found = await fetchFromWikidataP18(place.wikidataId)
       if (!found) found = await fetchFromWikipediaThumbnail(place.name, place.lat, place.lon)
+      if (!found && place.metaType === 'borgo_citta') found = await fetchFromWikipediaTitle(place.name, place.lat, place.lon)
     } catch (e) {
       console.error('[placePhotoCache] ricerca foto fallita:', e)
     }
