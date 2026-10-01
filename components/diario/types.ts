@@ -15,6 +15,8 @@ export interface DiaryReport {
     /** Tipologia della Meta (assente = 'sentiero') e luoghi visitati di un Borgo/Città — decidono
      *  quali cifre/parole mostra la pagina (lib/reportFacts.ts). */
     meta_type?: MetaType | null; site_type?: SiteType | null; borgo_stops?: unknown[] | null
+    /** Solo Sito/Borgo: punto, immagine e descrizione del luogo (lib/siteInfoServer.ts). */
+    site?: { point: { lat: number; lon: number } | null; cover: string | null; description: string | null } | null
   } | null
 }
 

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { getPlannedById } from './plannedStore'
 import type { MetaType } from './metaTypes'
 
-/** Il Sito a cui un Reportage appartiene, com'è nella sua Guida: il punto del sito (mai il punto in
+/** Il Sito (o Borgo/Città) a cui un Reportage appartiene, com'è nella sua Guida: il punto del sito (mai il punto in
  *  cui l'utente ha registrato la visita), la sua descrizione e l'immagine di copertina. */
 export interface SiteContext {
   latitude?: number
@@ -28,14 +28,14 @@ interface PlaceResponse {
   wikipedia?: { extract?: string; url?: string } | null
 }
 
-/** Solo per un Reportage di Sito (un Sentiero o un Borgo non ne ha bisogno): legge la Meta collegata
+/** Solo per un Reportage di Sito o di Borgo/Città (un Sentiero non ne ha bisogno): legge la Meta collegata
  *  per le coordinate e `/api/places/[placeId]` — lo stesso endpoint della Guida — per descrizione e
  *  copertina. Mai un errore mostrato: se qualcosa manca il Reportage resta com'era. */
 export function useSiteContext(
   activity: { metaType?: MetaType; linkedPlannedId?: string } | null | undefined,
 ): SiteContext | null {
   const [ctx, setCtx] = useState<SiteContext | null>(null)
-  const plannedId = activity?.metaType === 'sito' ? activity.linkedPlannedId : undefined
+  const plannedId = activity?.metaType && activity.metaType !== 'sentiero' ? activity.linkedPlannedId : undefined
 
   useEffect(() => {
     setCtx(null)

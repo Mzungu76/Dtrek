@@ -30,7 +30,7 @@ import { normalizeRaccoltaConfig } from './raccolteConfig'
 import { trimHomeStart, type HomePoint } from './privacy/trimHomeStart'
 import { buildMetricSeries, type MetricPoint } from './trackSeries'
 import { fetchCachedPois, type PublicPoi } from './publicPois'
-import { isTrustedMediaUrl } from './trustedMediaHosts'
+import { fetchSiteInfo } from './siteInfoServer'
 import type { TrackPoint } from './tcxParser'
 import { metaHasHikingMetrics, type MetaType, type SiteType } from './metaTypes'
 
@@ -100,7 +100,7 @@ export interface PublicDiaryEntry {
   /** Luoghi visitati in un Borgo/Città (activity.borgoStops) — solo il numero: l'elenco completo
    *  resta al Reportage privato. */
   stopsCount:        number
-  /** Solo per un Sito: il suo punto (mai quello in cui è stata registrata la visita) e l'immagine
+  /** Solo per un Sito o un Borgo/Città: il suo punto (mai quello in cui è stata registrata la visita) e l'immagine
    *  del luogo, usata come copertina quando il Reportage non ha foto proprie. */
   sitePoint?:        { lat: number; lon: number } | null
   siteCoverUrl?:     string | null
@@ -166,33 +166,8 @@ export async function buildContentFromReports(
 
   const actMap = new Map((activities ?? []).map((a: Record<string, unknown>) => [a.id as string, a]))
 
-  // Siti: punto e immagine del luogo dalla Meta collegata e dall'archivio (best-effort — se una
-  // colonna o una riga manca, il Reportage si pubblica comunque, come prima).
-  const siteByActivity = new Map<string, { point: { lat: number; lon: number } | null; cover: string | null }>()
-  try {
-    const siteActs = (activities ?? []).filter((a: Record<string, unknown>) => a.meta_type === 'sito' && a.linked_planned_id)
-    if (siteActs.length > 0) {
-      const { data: hikes } = await supabase
-        .from('planned_hikes')
-        .select('id, latitude, longitude, place_id')
-        .in('id', siteActs.map((a: Record<string, unknown>) => a.linked_planned_id as string))
-      const placeIds = Array.from(new Set((hikes ?? []).map(h => h.place_id as string | null).filter((x): x is string => !!x)))
-      const { data: places } = placeIds.length
-        ? await supabase.from('dtrek_places').select('id, image_url').in('id', placeIds)
-        : { data: [] as { id: string; image_url: string | null }[] }
-      const imageByPlace = new Map((places ?? []).map(pl => [pl.id as string, pl.image_url as string | null]))
-      const hikeById = new Map((hikes ?? []).map(h => [h.id as string, h]))
-      for (const a of siteActs as Record<string, unknown>[]) {
-        const h = hikeById.get(a.linked_planned_id as string)
-        if (!h) continue
-        const img = h.place_id ? imageByPlace.get(h.place_id as string) ?? null : null
-        siteByActivity.set(a.id as string, {
-          point: typeof h.latitude === 'number' && typeof h.longitude === 'number' ? { lat: h.latitude, lon: h.longitude } : null,
-          cover: img && isTrustedMediaUrl(img) ? img : null,
-        })
-      }
-    }
-  } catch { /* pubblicazione invariata */ }
+  // Siti e Borghi: punto e immagine del luogo (lib/siteInfoServer.ts, best-effort).
+  const siteByActivity = await fetchSiteInfo((activities ?? []) as { id: string; meta_type?: string | null; linked_planned_id?: string | null }[])
 
   const photosByActivity = new Map<string, PublicDiaryPhoto[]>()
   for (const p of photos ?? []) {

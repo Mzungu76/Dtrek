@@ -11,6 +11,7 @@ import type { RoutePhoto } from '@/lib/activityPhotos'
 import { formatDuration, type TrackPoint } from '@/lib/tcxParser'
 import { metaHasHikingMetrics } from '@/lib/metaTypes'
 import { reportFacts, reportNoun } from '@/lib/reportFacts'
+import { reportProfileFor } from '@/lib/reportProfiles'
 import { wmoInfo } from '@/lib/weather'
 import { parseSections } from '@/lib/reportStore'
 import { parseInlineEmphasis } from '@/lib/guideMarkup'
@@ -229,7 +230,8 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
     // documento impaginato, non una galleria.
     return selectSpreadPhotos(manual ?? photos, maxPhotos)
   }, [photos, maxPhotos, selectedPhotoIds])
-  const heroPhoto = photos[0] ?? null
+  // Senza foto proprie un Reportage di Sito/Borgo apre con l'immagine del luogo.
+  const heroPhoto = photos[0] ?? (act?.site?.cover ? { url: act.site.cover } : null)
   const detailPhoto = photos[1] ?? null
   const weather = act?.weather_at_hike
   const weatherInfo = weather ? wmoInfo(weather.weathercode) : null
@@ -407,6 +409,17 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
       )}
 
       <div style={{ padding: '48px 48px 40px' }}>
+        {/* Descrizione del luogo (la stessa della Guida) — prima del racconto, mai da generare. */}
+        {!hiking && act?.site?.description && (
+          <div className="pdf-block" data-mag-block="" style={{ marginBottom: 32 }}>
+            <p style={{ fontFamily: FONT.barlow, fontSize: 9, fontWeight: 700, letterSpacing: 4, color: '#e08d3c', textTransform: 'uppercase', margin: '0 0 12px' }}>
+              {reportProfileFor(metaType, meta?.siteType ?? act?.site_type ?? undefined).sectionTitle}
+            </p>
+            <p style={{ fontFamily: FONT.lora, fontSize: 13.5, lineHeight: 1.85, color: '#4d4740', margin: 0 }}>
+              {act.site.description}
+            </p>
+          </div>
+        )}
         <p style={{ fontFamily: FONT.barlow, fontSize: 9, fontWeight: 700, letterSpacing: 4, color: '#e08d3c', textTransform: 'uppercase', margin: '0 0 36px' }}>
           Cronaca · {noun} #{escLabel}
         </p>
@@ -593,6 +606,15 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
                 </div>
               </div>
             )}
+          </div>
+        )}
+        {/* Sito/Borgo: il punto del luogo (mai quello della registrazione) su un riquadro d'Italia. */}
+        {extras.mappa && !hiking && !showMappa && act?.site?.point && (
+          <div className="pdf-block" data-mag-block="" data-mag-insert="" style={{ marginBottom: 18 }}>
+            <p className="pdf-keep-next" style={{ fontFamily: FONT.display, fontSize: 18, fontWeight: 700, color: '#193b20', margin: '0 0 12px' }}>Dove si trova</p>
+            <div style={{ width: 120 }}>
+              <LocatorMap eager lat={act.site.point.lat} lon={act.site.point.lon} label={meta?.title ?? act.title} />
+            </div>
           </div>
         )}
         {showMappa && (
