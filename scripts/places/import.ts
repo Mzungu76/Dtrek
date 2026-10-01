@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ExistingPlace, PlaceCandidate } from './types'
 import { findBestMatch, AUTO_MERGE_THRESHOLD, REVIEW_THRESHOLD } from './deduplicate'
-import { isPlausibleItalianCoordinate } from './normalize'
+import { isPlausibleItalianCoordinate, repairMojibake } from './normalize'
 
 // Importer generico (piano §41, scripts/places/import.ts) — prende candidati già normalizzati nel
 // modello comune (types.ts) da QUALUNQUE fetcher di sorgente e li scrive in dtrek_places/
@@ -262,11 +262,19 @@ async function insertNewPlace(supabase: SupabaseClient, candidate: PlaceCandidat
 // con una fonte DIVERSA da quella già collegata (es. `mic` che incrocia una riga nata da `istat`)
 // resta invece un semplice ri-collegamento senza scrittura — mai sovrascrivere il dato di una fonte
 // con quello di un'altra solo perché sono state giudicate "lo stesso posto".
+function repairCandidateText(c: PlaceCandidate): PlaceCandidate {
+  const fix = (v: string | undefined) => (v === undefined ? v : repairMojibake(v))
+  return { ...c, name: repairMojibake(c.name), description: fix(c.description), address: fix(c.address), municipality: fix(c.municipality), province: fix(c.province), region: fix(c.region) }
+}
+
 export async function importPlaceCandidates(supabase: SupabaseClient, candidates: PlaceCandidate[]): Promise<ImportStats> {
   const stats = emptyStats()
 
-  for (const candidate of candidates) {
+  for (const raw of candidates) {
     stats.processed++
+    // Testo con codifica sbagliata (un campo UTF-8 letto come latin1 — "nÂ°", "SanthiÃ ") riparato
+    // qui, un solo punto per tutte le sorgenti, prima di ogni confronto e scrittura.
+    const candidate = repairCandidateText(raw)
 
     if (!isPlausibleItalianCoordinate(candidate.latitude, candidate.longitude)) {
       stats.skippedInvalidCoordinates++
