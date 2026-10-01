@@ -116,6 +116,10 @@ function parseMetaSearchParams(body: unknown): MetaSearchParams | null {
     }
   }
 
+  if (b.metaType === 'cammino') {
+    return { metaType: 'cammino', query, region, origin, maxDistanceKm, limit }
+  }
+
   // 'sentiero': validato solo a livello di forma qui, il payload effettivo passa senza
   // interpretazione (piano §18 — non è compito di questo modulo capire cosa contiene).
   return {

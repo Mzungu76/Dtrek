@@ -101,3 +101,9 @@ La scoperta è automatica (come per i sentieri) ma con soglia di ammissione: `sc
 ## 7. Import dei cammini del registro
 
 `scripts/places/cammini/import-registry.ts` + workflow `import-cammini-registry.yml`. Ordine geometrico delle tappe, tappe ufficiali o calcolate (mista), divisione a Roma per la Francigena, filtro Italia, controllo di qualità pronto/da rivedere (solo i pronti vengono scritti). Stato: ondata 1 e 2 implementate e testate su fixture; **da provare su dati reali** (dry-run per cammino). Ondata 3 (rifugi, reti) da fare.
+
+## 8. Fase 3 — ricerca e scheda (in app)
+
+- `lib/metaSearch/searchCammini.ts` (+ `meta-search` accetta `metaType: 'cammino'`): solo cammini con qualità **pronto**; con un'origine conta il **tracciato** entro il raggio, non il pin.
+- `GET /api/cammini/[id]`: scheda con le tappe (da → a, km, origine ufficiale/calcolata, dislivello solo se calcolato).
+- Mappa di ricerca (`CreaGuidaMapSearch`): filtro **Cammini**, tracciato come linea, tappa evidenziata, scheda `CamminoDetailCard`. "Crea guida" è volutamente disattivato: arriva con la Fase 4 (scelta tappe/date → `cammino_plan`).

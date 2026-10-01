@@ -207,7 +207,7 @@ export function buildFromRegistry(
     const built: BuiltCammino = {
       config, line, lengthM: polylineLengthM(line), tappe: list,
       tappeSource: official === list.length ? 'official' : official === 0 ? 'computed' : 'mixed',
-      relationIds: members.map(r => r.id), tags: mainTags, diagnostics, quality: { ...quality },
+      relationIds: members.map(r => r.id), tags: mainTags, diagnostics, quality: { ...quality }, structure: entry.structure,
     }
     return { built, quality }
   })

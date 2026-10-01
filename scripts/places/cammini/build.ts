@@ -47,6 +47,8 @@ export interface BuiltCammino {
   diagnostics: string[]
   /** Controllo di qualità (import per registro): pronto / da rivedere + motivi. */
   quality?: Record<string, unknown>
+  /** 'rete' = centinaia di tappe, l'utente ne sceglie un tratto. */
+  structure?: 'cammino' | 'rete'
 }
 
 const ROUTE_OK = new Set(['hiking', 'foot'])
@@ -243,6 +245,7 @@ export function camminoToPlaceCandidate(built: BuiltCammino): PlaceCandidate {
       // Panoramica per la mappa: formato [lat, lon][] come routePolyline, già semplificata.
       overviewPolyline: simplifyPolyline(built.line, 150),
       ...(built.quality ? { quality: built.quality } : {}),
+      ...(built.structure ? { structure: built.structure } : {}),
     },
   }
 }
