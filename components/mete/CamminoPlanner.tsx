@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, ArrowRight, ArrowLeftRight, Loader2, Calendar } from 'lucide-react'
+import { ArrowLeft, ArrowRight, ArrowLeftRight, Loader2, Calendar, Check } from 'lucide-react'
 import type { CamminoDetail } from '@/app/api/cammini/[id]/route'
 import {
   buildCamminoPlan, selectionPolyline, selectTappe, orderForDirection,
@@ -44,6 +44,8 @@ export default function CamminoPlanner({ detail, creating, error, onBack, onPrev
   const [perDay, setPerDay] = useState(false)
   const [maxKm, setMaxKm] = useState(DEFAULT_DAY_KM)
   const [startDate, setStartDate] = useState('')
+  // Selezione a due tocchi: prima tappa, poi ultima. `anchor` è la prima in attesa della seconda.
+  const [anchor, setAnchor] = useState<number | null>(null)
 
   const grouping: DayGrouping = perDay ? { mode: 'max_km', maxKm } : { mode: 'one_per_day' }
   const today = new Date().toISOString().slice(0, 10)
@@ -72,7 +74,16 @@ export default function CamminoPlanner({ detail, creating, error, onBack, onPrev
   const forwardStart = selected[0]?.fromName ?? 'Inizio'
   const forwardEnd = selected[selected.length - 1]?.toName ?? 'Fine'
 
-  const optionLabel = (t: (typeof tappe)[number]) => `${t.ordinal}. ${t.fromName ?? 'Partenza'} → ${t.toName ?? 'Arrivo'} (${fmtKm(t.lengthM)})`
+  const pickTappa = (ord: number) => {
+    if (anchor == null) { setFromOrd(ord); setToOrd(ord); setAnchor(ord) }
+    else { setFromOrd(Math.min(anchor, ord)); setToOrd(Math.max(anchor, ord)); setAnchor(null) }
+  }
+  const selectAll = () => { setFromOrd(first); setToOrd(last); setAnchor(null) }
+
+  const sectionLabel = 'text-[10.5px] font-bold uppercase tracking-wide text-stone-400'
+  const segBase = 'rounded-xl px-2.5 py-2.5 text-[12px] transition-colors border'
+  const segOn = 'bg-forest-50 border-forest-300 text-forest-900 font-semibold'
+  const segOff = 'bg-white border-stone-200 text-stone-600 hover:border-stone-300'
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-4">
@@ -87,31 +98,45 @@ export default function CamminoPlanner({ detail, creating, error, onBack, onPrev
         </p>
       )}
 
-      {/* Quali tappe */}
-      <div className="grid grid-cols-1 gap-2 mb-3">
-        <label className="block">
-          <span className="block text-[10.5px] font-bold uppercase tracking-wide text-stone-400 mb-1">Dalla tappa</span>
-          <select value={fromOrd}
-            onChange={e => { const v = Number(e.target.value); setFromOrd(v); if (toOrd < v) setToOrd(v) }}
-            className="w-full text-[12.5px] bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-stone-800 outline-none focus:border-forest-400">
-            {tappe.map(t => <option key={t.ordinal} value={t.ordinal}>{optionLabel(t)}</option>)}
-          </select>
-        </label>
-        <label className="block">
-          <span className="block text-[10.5px] font-bold uppercase tracking-wide text-stone-400 mb-1">Alla tappa</span>
-          <select value={toOrd} onChange={e => setToOrd(Number(e.target.value))}
-            className="w-full text-[12.5px] bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-stone-800 outline-none focus:border-forest-400">
-            {tappe.filter(t => t.ordinal >= fromOrd).map(t => <option key={t.ordinal} value={t.ordinal}>{optionLabel(t)}</option>)}
-          </select>
-        </label>
+      {/* Quali tappe: elenco a due tocchi (prima e ultima), con il tratto scelto evidenziato. */}
+      <div className="flex items-end justify-between mb-1.5">
+        <p className={sectionLabel}>Quali tappe</p>
+        {!(fromOrd === first && toOrd === last) && (
+          <button type="button" onClick={selectAll} className="text-[11px] font-semibold text-forest-700 hover:text-forest-800">Tutto il cammino</button>
+        )}
       </div>
+      <p className="text-[11px] text-stone-500 mb-1.5">
+        {anchor != null ? 'Ora tocca l\u2019ultima tappa del tratto.' : 'Tocca la prima tappa, poi l\u2019ultima.'}
+      </p>
+      <ul className="relative max-h-[232px] overflow-y-auto overscroll-contain rounded-2xl border border-stone-100 bg-white divide-y divide-stone-100 mb-3">
+        {tappe.map(t => {
+          const inRange = t.ordinal >= fromOrd && t.ordinal <= toOrd
+          const edge = t.ordinal === fromOrd || t.ordinal === toOrd
+          return (
+            <li key={t.ordinal}>
+              <button type="button" onClick={() => pickTappa(t.ordinal)} aria-pressed={inRange}
+                className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors ${inRange ? 'bg-forest-50/70' : 'hover:bg-stone-50'}`}>
+                <span className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold ${edge ? 'bg-forest-600 text-white' : inRange ? 'bg-forest-100 text-forest-800' : 'bg-stone-100 text-stone-500'}`}>
+                  {t.ordinal}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className={`block truncate text-[12.5px] leading-tight ${inRange ? 'text-forest-900 font-semibold' : 'text-stone-700'}`}>{t.fromName ?? 'Partenza'}</span>
+                  <span className="block truncate text-[11px] leading-tight text-stone-400">→ {t.toName ?? 'Arrivo'}</span>
+                </span>
+                <span className="shrink-0 text-[11.5px] font-semibold text-stone-500 tabular-nums">{fmtKm(t.lengthM)}</span>
+                {inRange && <Check className="shrink-0 w-3.5 h-3.5 text-forest-600" />}
+              </button>
+            </li>
+          )
+        })}
+      </ul>
 
       {/* In che verso */}
-      <p className="text-[10.5px] font-bold uppercase tracking-wide text-stone-400 mb-1">In che verso</p>
+      <p className={`${sectionLabel} mb-1.5`}>In che verso</p>
       <div className="grid grid-cols-2 gap-1.5 mb-3">
         {([['forward', forwardStart, forwardEnd], ['reverse', forwardEnd, forwardStart]] as const).map(([d, from, to]) => (
           <button key={d} type="button" onClick={() => setDirection(d)} aria-pressed={direction === d}
-            className={`rounded-xl px-2.5 py-2 text-left text-[11.5px] leading-tight transition-colors border ${direction === d ? 'bg-forest-50 border-forest-300 text-forest-900 font-semibold' : 'bg-stone-50 border-stone-200 text-stone-600'}`}>
+            className={`${segBase} text-left leading-tight ${direction === d ? segOn : segOff}`}>
             <span className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-stone-400 mb-0.5">
               {d === 'forward' ? <ArrowRight className="w-3 h-3" /> : <ArrowLeftRight className="w-3 h-3" />}{d === 'forward' ? 'Come nel catalogo' : 'Al contrario'}
             </span>
@@ -122,11 +147,11 @@ export default function CamminoPlanner({ detail, creating, error, onBack, onPrev
       </div>
 
       {/* Quanto al giorno */}
-      <p className="text-[10.5px] font-bold uppercase tracking-wide text-stone-400 mb-1">Giornate</p>
+      <p className={`${sectionLabel} mb-1.5`}>Giornate</p>
       <div className="grid grid-cols-2 gap-1.5 mb-1.5">
         {([[false, 'Una tappa al giorno'], [true, 'Più tappe al giorno']] as const).map(([v, label]) => (
           <button key={String(v)} type="button" onClick={() => setPerDay(v)} aria-pressed={perDay === v}
-            className={`rounded-xl px-2.5 py-2 text-[11.5px] transition-colors border ${perDay === v ? 'bg-forest-50 border-forest-300 text-forest-900 font-semibold' : 'bg-stone-50 border-stone-200 text-stone-600'}`}>
+            className={`${segBase} ${perDay === v ? segOn : segOff}`}>
             {label}
           </button>
         ))}
@@ -143,14 +168,14 @@ export default function CamminoPlanner({ detail, creating, error, onBack, onPrev
 
       {/* Quando */}
       <label className="block mb-3">
-        <span className="flex items-center gap-1 text-[10.5px] font-bold uppercase tracking-wide text-stone-400 mb-1"><Calendar className="w-3 h-3" /> Quando parti (facoltativo)</span>
+        <span className={`flex items-center gap-1 ${sectionLabel} mb-1.5`}><Calendar className="w-3 h-3" /> Quando parti (facoltativo)</span>
         <input type="date" value={startDate} min={today} onChange={e => setStartDate(e.target.value)}
-          className="w-full text-[12.5px] bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-stone-800 outline-none focus:border-forest-400" />
+          className="w-full text-[13px] bg-white border border-stone-200 rounded-xl px-3 py-2.5 text-stone-800 outline-none focus:border-forest-400" />
       </label>
 
       {/* Riepilogo */}
       {plan && (
-        <div className="bg-stone-50 border border-stone-100 rounded-2xl p-3 mb-3">
+        <div className="bg-forest-50/50 border border-forest-100 rounded-2xl p-3.5 mb-3">
           <p className="text-[12px] font-semibold text-stone-800">
             {plan.tappe.length} {plan.tappe.length === 1 ? 'tappa' : 'tappe'} · {fmtKm(totalM)} · {plan.days.length} {plan.days.length === 1 ? 'giorno' : 'giorni'}
           </p>
@@ -173,7 +198,7 @@ export default function CamminoPlanner({ detail, creating, error, onBack, onPrev
       )}
 
       {/* Sempre raggiungibile: il pulsante resta fisso in fondo al foglio mentre si scorrono le scelte. */}
-      <div className="sticky bottom-0 -mx-4 px-4 pt-2 pb-1 bg-white/95 backdrop-blur border-t border-stone-100">
+      <div className="sticky bottom-0 -mx-4 px-4 pt-2.5 pb-1.5 bg-white border-t border-stone-100">
         {error && <p className="text-xs text-red-600 mb-2">{error}</p>}
         <button type="button" disabled={!plan || creating} onClick={() => plan && onCreate(plan)}
           className="w-full flex items-center justify-center gap-2 text-sm font-bold text-white bg-forest-600 hover:bg-forest-700 disabled:opacity-60 rounded-full py-3 transition-colors">
