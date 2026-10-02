@@ -1,8 +1,8 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { useParams } from 'next/navigation'
-import { Loader2, Pencil, ChevronRight, Route, Flag, BookOpen } from 'lucide-react'
+import { useParams, useRouter } from 'next/navigation'
+import { Loader2, Pencil, ChevronRight, ChevronDown, Route, Flag, BookOpen } from 'lucide-react'
 import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import ReportHero from '@/components/resoconto/ReportHero'
 import ReportStatsStrip from '@/components/resoconto/ReportStatsStrip'
@@ -15,7 +15,8 @@ import { formatDuration } from '@/lib/tcxParser'
 import type { CamminoPlan, CamminoReport } from '@/lib/cammini/plan'
 import { chapterFor, reportProgress } from '@/lib/cammini/report'
 import { useCamminoDetail } from '@/lib/cammini/useCamminoDetail'
-import RouteMapSection from '@/components/RouteMapSection'
+import CamminoOverviewMap from '@/components/guida/widgets/CamminoOverviewMap'
+import type { TappaDone } from '@/components/guida/widgets/CamminoTappaDetail'
 import type { TrackPoint } from '@/lib/tcxParser'
 
 // Reportage unico del cammino (docs/piano-cammini.md, Fase 6): introduzione, un capitolo per ogni
@@ -28,6 +29,7 @@ function fmtDate(iso: string): string {
 
 export default function CamminoReportagePage() {
   const params = useParams()
+  const router = useRouter()
   const id = decodeURIComponent(params.id as string)
   const [hike, setHike] = useState<PlannedHike | null>(null)
   const [activities, setActivities] = useState<ActivityMeta[]>([])
@@ -64,6 +66,11 @@ export default function CamminoReportagePage() {
     return plan.days.flatMap((d, di) => d.tappe.map(o => ({ ordinal: o, dayIdx: di, tappa: by.get(o)! })).filter(x => x.tappa))
   }, [plan])
 
+  const doneMap: Record<number, TappaDone> = useMemo(() => {
+    const m: Record<number, TappaDone> = {}
+    byOrdinal.forEach((a, o) => { m[o] = { activityId: a.id, distanceMeters: a.distanceMeters, totalTimeSeconds: a.totalTimeSeconds, elevationGain: a.elevationGain ?? 0, startTime: a.startTime } })
+    return m
+  }, [byOrdinal])
   const done = sequence.filter(x => byOrdinal.has(x.ordinal))
   const totals = done.reduce((s, x) => {
     const a = byOrdinal.get(x.ordinal)!
@@ -151,15 +158,24 @@ export default function CamminoReportagePage() {
   const cardBody = (key: string, text?: string) => (editing?.key === key ? undefined : text)
 
   return (
-    <div className={`min-h-screen ${MOBILE_TOPBAR_SPACER}`} style={{ background: '#fdfcfa' }}>
+    <div className={`relative min-h-screen ${MOBILE_TOPBAR_SPACER}`} style={{ background: '#fdfcfa' }}>
       <Navbar />
+      <button type="button" onClick={() => router.push('/resoconto')} aria-label="Torna all'elenco dei reportage"
+        className="absolute left-4 top-[calc(env(safe-area-inset-top,0px)+84px)] z-20 flex h-9 w-9 items-center justify-center rounded-full bg-stone-100/90 text-stone-600 shadow-sm backdrop-blur md:top-20">
+        <ChevronDown className="h-4 w-4" />
+      </button>
       <ReportHero trackPoints={walkedPoints} title={plan.camminoName} categoryBadge={META_TYPE_CONFIG.cammino.label.toUpperCase()} startTime={firstStart} />
       <ReportStatsStrip facts={facts} />
 
       <main className="mx-auto max-w-3xl px-4 py-5 sm:py-8">
         {error && <p className="mb-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
 
-        {walkedPoints.length > 1 && <div className="mb-4"><RouteMapSection trackPoints={walkedPoints} showPois={false} showProfile={false} /></div>}
+        <div className="mb-4">
+          <CamminoOverviewMap
+            plan={plan} mode="reportage" done={doneMap}
+            onOpen={(o, activityId) => router.push(activityId ? `/resoconto/cammino/${encodeURIComponent(id)}/tappa/${encodeURIComponent(activityId)}` : `/guida/${encodeURIComponent(id)}/tappa/${o}`)}
+          />
+        </div>
 
         {/* introduzione */}
         <SectionCard

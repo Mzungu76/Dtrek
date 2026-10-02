@@ -1097,7 +1097,7 @@ export default function GuideReader({
         // traccia reale: resta invariato.
         // Cammino: la mappa d'insieme delle tappe scelte (nessuna traccia GPS unica da mostrare).
         if (hike.metaType === 'cammino') {
-          return hike.camminoPlan ? <CamminoOverviewMap plan={hike.camminoPlan} /> : null
+          return hike.camminoPlan ? <CamminoOverviewMap plan={hike.camminoPlan} done={camminoDone} onOpen={o => router.push(`/guida/${encodeURIComponent(hike.id)}/tappa/${o}`)} /> : null
         }
         if (hike.metaType !== 'sentiero' && !usesRealTrack) {
           // Verifica post-piano guide-eccellenza: "quando vengono create le schede di Borghi/Siti,
