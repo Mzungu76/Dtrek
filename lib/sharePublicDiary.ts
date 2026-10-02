@@ -112,6 +112,8 @@ export interface PublicDiaryEntry {
   /** Fonte della descrizione (archivio) — sempre mostrata con il testo. */
   siteDescriptionCredit?: DescriptionCredit | null
   siteCoverUrl?:     string | null
+  /** Solo la voce unica di un cammino: le tappe percorse (nell'ordine di marcia) e quante ne ha il piano. */
+  cammino?: { total: number; tappe: { seq: number; from: string; to: string; startTime: string; distanceMeters: number; totalTimeSeconds: number; elevationGain: number }[] }
 }
 
 /** Il contenuto pubblico di un Diario, senza i campi che appartengono al documento che lo
@@ -273,6 +275,7 @@ export async function buildContentFromReports(
     return {
       ...e,
       title: g.name, metaType: 'cammino' as MetaType,
+      cammino: { total: g.totalTappe, tappe: g.tappe.map(t => ({ seq: t.seq, from: t.from, to: t.to, startTime: t.startTime, distanceMeters: t.distanceMeters, totalTimeSeconds: t.totalTimeSeconds, elevationGain: t.elevationGain })) },
       distanceMeters: sum('distance_meters'), elevationGain: sum('elevation_gain'), totalTimeSeconds: sum('total_time_seconds'),
       altitudeMax: acts.reduce<number | null>((m, a) => { const v = (a.altitude_max as number | null) ?? null; return v == null ? m : m == null ? v : Math.max(m, v) }, null),
       calories: null,

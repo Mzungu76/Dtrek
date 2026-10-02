@@ -211,7 +211,7 @@ export function PublicReportPage({ entry, n, show, hideExactDates = false }: {
             </div>
           )}
           <p className="font-barlow" style={{ fontWeight: 700, fontSize: cq(9), letterSpacing: cq(4), color: '#e08d3c', textTransform: 'uppercase', margin: `0 0 ${cq(36)}` }}>
-            Cronaca · {noun} #{escLabel}
+            {entry.cammino ? 'Cammino · reportage a tappe' : `Cronaca · ${noun} #${escLabel}`}
           </p>
 
           {/* Scheda editoriale + intro — griglia fissa 170px+1fr, la stessa del libro privato */}
@@ -221,8 +221,18 @@ export function PublicReportPage({ entry, n, show, hideExactDates = false }: {
                 Scheda
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: cq(13) }}>
-                <SchedaField label={noun} value={`#${escLabel}`} />
-                {dateStr && <SchedaField label="Periodo" value={dateStr} />}
+                {entry.cammino ? (
+                  <>
+                    <SchedaField label="Cammino" value={`${entry.cammino.tappe.length} tappe${entry.cammino.total ? ` di ${entry.cammino.total}` : ''}`} />
+                    {dateStr && <SchedaField label="Inizio" value={dateStr} />}
+                    {entry.distanceMeters > 0 && <SchedaField label="Distanza" value={`${(entry.distanceMeters / 1000).toFixed(1).replace('.', ',')} km`} />}
+                  </>
+                ) : (
+                  <>
+                    <SchedaField label={noun} value={`#${escLabel}`} />
+                    {dateStr && <SchedaField label="Periodo" value={dateStr} />}
+                  </>
+                )}
                 {hiking && !!entry.altitudeMax && <SchedaField label="Quota massima" value={`${Math.round(entry.altitudeMax)} m`} />}
               </div>
             </div>
@@ -266,6 +276,26 @@ export function PublicReportPage({ entry, n, show, hideExactDates = false }: {
           </div>
 
           {/* Citazione centrale */}
+          {entry.cammino && entry.cammino.tappe.length > 0 && (
+            <div style={{ marginBottom: cq(36) }}>
+              <p className="font-barlow" style={{ fontWeight: 700, fontSize: cq(9), letterSpacing: cq(4), color: '#e08d3c', textTransform: 'uppercase', margin: `0 0 ${cq(12)}` }}>Le tappe</p>
+              <div style={{ border: '1px solid #dcd8cc', borderRadius: cq(8), overflow: 'hidden' }}>
+                {entry.cammino.tappe.map((t, i) => (
+                  <div key={t.seq} style={{ display: 'grid', gridTemplateColumns: `${cq(28)} 1fr auto`, gap: cq(12), alignItems: 'center', padding: `${cq(9)} ${cq(12)}`, borderTop: i === 0 ? 'none' : '1px solid #ece9e0', background: i % 2 ? '#faf9f5' : '#fff' }}>
+                    <span style={{ width: cq(22), height: cq(22), borderRadius: cq(5), background: '#193b20', color: '#fff', textAlign: 'center', lineHeight: cq(22), fontSize: cq(11), fontWeight: 700 }}>{t.seq}</span>
+                    <span className="font-lora" style={{ fontSize: cq(13), color: '#2d2a24' }}>
+                      {t.from} → {t.to}
+                      <span style={{ display: 'block', fontSize: cq(9.5), letterSpacing: cq(1), color: '#a9a18e', textTransform: 'uppercase' }}>{formatPublicDate(t.startTime, hideExactDates)}</span>
+                    </span>
+                    <span style={{ fontSize: cq(11.5), color: '#4d4740', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      {(t.distanceMeters / 1000).toFixed(1)} km{t.elevationGain > 0 ? ` · +${Math.round(t.elevationGain)} m` : ''}{t.totalTimeSeconds > 0 ? ` · ${formatDuration(t.totalTimeSeconds)}` : ''}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {pullQuote && (
             <div style={{ margin: `0 ${cq(-8)} ${cq(40)}`, padding: `${cq(32)} ${cq(40)}`, borderTop: `${cq(2)} solid #193b20`, borderBottom: `${cq(2)} solid #193b20`, position: 'relative' }}>
               <span className="font-display" style={{ position: 'absolute', top: cq(-26), left: cq(36), fontSize: cq(70), lineHeight: 1, color: '#193b20', opacity: 0.12, userSelect: 'none' }}>&ldquo;</span>

@@ -71,6 +71,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       return {
         id: `cammino:${g.hikeId}`, activity_id: g.repActivityId, title: g.name, content: g.content,
         created_at: g.startTime, updated_at: g.startTime, share_token: null, authored_by: null,
+        cammino: { tappe: g.tappe, total: g.totalTappe },
         activity: rep ? { ...rep, title: g.name, meta_type: 'cammino', distance_meters: sum('distance_meters'), elevation_gain: sum('elevation_gain'), total_time_seconds: sum('total_time_seconds') } : null,
       }
     })

@@ -396,6 +396,13 @@ export default function DiarioLibroPage() {
     }
   }
 
+  // Un tratto per tappa sulla mappa della voce unica del cammino.
+  const camminoRoutesFor = (report: DiaryReport) => report.id.startsWith('cammino:')
+    ? activities
+        .filter(a => a.linkedPlannedId === report.id.slice('cammino:'.length) && a.tappaIndex != null && (a.routePolyline?.length ?? 0) > 1)
+        .map(a => ({ id: a.id, title: a.title, startTime: a.startTime, polyline: a.routePolyline! }))
+    : undefined
+
   const reportNumbers = useMemo(() => {
     const m = new Map<string, number>()
     let n = 0
@@ -1123,6 +1130,7 @@ export default function DiarioLibroPage() {
                       report={page.report}
                       photos={photosByAct[page.report.activity_id] ?? []}
                       meta={metaForReport(page.report)}
+                      camminoRoutes={camminoRoutesFor(page.report)}
                       extras={resolveReportExtras(config, page.report.activity_id)}
                       trackPoints={trackPointsByAct[page.report.activity_id]}
                       mapsInteractive={mapsInteractive}
