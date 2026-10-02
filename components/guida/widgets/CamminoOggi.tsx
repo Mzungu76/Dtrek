@@ -5,6 +5,7 @@ import { POI_META } from '@/lib/overpass'
 import { POI_ICON } from '@/components/poiIcons'
 import CamminoCtsBadge from './CamminoCtsBadge'
 import CamminoOfflineButton from './CamminoOfflineButton'
+import CamminoOfflineBulk from './CamminoOfflineBulk'
 import { MiniScoreRing, tsColor } from '@/components/ScoreRing'
 import { useTappaData } from '@/lib/cammini/useTappaData'
 import { poisAlongTappa } from '@/lib/cammini/tappaPois'
@@ -106,7 +107,7 @@ export function CamminoOggiCard({ plan, hikeId, done, onPlanChange, onOpenTappa,
   )
 }
 
-export function CamminoDiario({ plan, done, onOpenTappa, onOpenReportage }: CommonProps) {
+export function CamminoDiario({ plan, hikeId, done, onOpenTappa, onOpenReportage }: CommonProps) {
   const seq = useMemo(() => buildSequence(plan), [plan])
   const [showDone, setShowDone] = useState(false)
   const [showFuture, setShowFuture] = useState(false)
@@ -171,6 +172,8 @@ export function CamminoDiario({ plan, done, onOpenTappa, onOpenReportage }: Comm
           </button>
         )}
       </div>
+
+      <CamminoOfflineBulk plan={plan} hikeId={hikeId} done={new Set(Object.keys(done).map(Number))} />
 
       {doneItems.length > 0 && (
         <button type="button" onClick={onOpenReportage} className="mt-4 flex w-full items-center justify-center gap-2 rounded-full border border-forest-200 bg-forest-50 py-2.5 text-[13px] font-bold text-forest-800">

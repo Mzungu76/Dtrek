@@ -188,3 +188,11 @@ Scelta dopo i mockup (concept B), con queste regole:
   `/leggi/p/<token>` lo legge (`lib/sharePublicReport.ts`). Si crea e si ritira dalla pagina del reportage.
 - **Conteggi**: le tappe contano un solo reportage nelle card dei Diari (`lib/diari/aggregateDiaries.ts`) e i loro km si sommano.
 - **Libro**: la voce del cammino usa foto e traccia di tutte le tappe; il testo scritto nel reportage di ogni tappa va sotto il suo capitolo e le foto di ogni tappa sotto il capitolo della tappa.
+
+## 12. Offline e Navigator per tappa
+
+- **Dati locali per tappa** (`lib/navigation/navKey.ts`): le tappe di un cammino condividono l'id del piano, quindi pacchetto offline, grafo sentieri, sessione, traccia registrata e parcheggio usano `<id>#t<ordinale>`. Attività collegata, note di campo e sessione sul server restano sull'id del piano.
+- **Copia locale della tappa** (`lib/cammini/offlineTappa.ts`): tracciato nel verso del piano, nome, lunghezza e luoghi, con il verso nella chiave. Il Navigator parte da qui e, se manca, dal catalogo (poi la salva). I luoghi arrivano al Navigator via `cachedPois`.
+- **Scarico**: `CamminoOfflineButton` (una tappa, nella card Oggi e nel dettaglio) e `CamminoOfflineBulk` (prossime 3 o tutte le restanti, dal diario di marcia; `lib/cammini/offlineBulk.ts`).
+- **Contesto nel Navigator** (`lib/cammini/navContext.ts`): "Tappa N di M · giorno g di G" in alto; salvata una tappa, se ce n'è una dopo, `CamminoNextTappaDialog` propone di navigarla (con lo stato della mappa offline) o di andare al reportage. Cambiando `?tappa=` la pagina ricarica da zero.
+- Da fare: racconti AI e CTS nel pacchetto, aggiornamento della copia locale se il catalogo cambia, "Davanti a te" in tempo reale con ETA (Fase D), acqua/alloggi/servizi (Fase E).

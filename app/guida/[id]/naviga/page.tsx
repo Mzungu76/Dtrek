@@ -9,6 +9,7 @@ import TappaPicker from '@/components/navigation/TappaPicker'
 import type { LocationProviderFactory } from '@/lib/native/locationSource'
 import { SimulationLocationProvider } from '@/lib/navigation/simulation/simulationLocationProvider'
 import { loadOfflineTappa, saveOfflineTappa, orientedTappa } from '@/lib/cammini/offlineTappa'
+import { camminoNavContext } from '@/lib/cammini/navContext'
 import type { PoiItem } from '@/lib/overpass'
 import type { CamminoDetail } from '@/app/api/cammini/[id]/route'
 import { buildScenario, SCENARIO_NAMES, SCENARIO_LABELS, type ScenarioName } from '@/lib/navigation/simulation/presetScenarios'
@@ -99,6 +100,9 @@ function NavigaPageInner() {
   useEffect(() => {
     let cancelled = false
     setFailure(null)
+    // Cambiando tappa (?tappa=) si riparte da zero: la vista precedente non deve restare con i dati della tappa vecchia.
+    setCamminoTappa(null)
+    setHike(null)
     getPlannedById(id).then(async (h) => {
       if (cancelled) return
       if (!h) { setFailure('not-found'); return }
@@ -137,7 +141,7 @@ function NavigaPageInner() {
       setHike(h.routePolyline?.length ? h : { ...h, routePolyline: walkPolyline })
     })
     return () => { cancelled = true }
-  }, [id, retryCount])
+  }, [id, retryCount, searchParams.get('tappa')])
 
   if (failure) {
     return (
@@ -173,7 +177,9 @@ function NavigaPageInner() {
   return (
     <ActiveNavigationView
       hike={navigableHike}
+      key={camminoTappa?.ordinal ?? 'hike'}
       tappaOrdinal={hike.metaType === 'cammino' ? camminoTappa?.ordinal : undefined}
+      camminoContext={hike.metaType === 'cammino' && hike.camminoPlan && camminoTappa ? camminoNavContext(hike.camminoPlan, camminoTappa.ordinal) : null}
       locationProviderFactory={locationProviderFactory}
       simulationLabel={scenarioName ? SCENARIO_LABELS[scenarioName] : undefined}
     />

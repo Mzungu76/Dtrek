@@ -82,6 +82,8 @@ import { useAutoDismiss } from '@/lib/hooks/useAutoDismiss'
 import NavOnboardingSheet from './NavOnboardingSheet'
 import ConfirmEndDialog from './ConfirmEndDialog'
 import TappaCompleteDialog from './TappaCompleteDialog'
+import CamminoNextTappaDialog from './CamminoNextTappaDialog'
+import type { CamminoNavContext } from '@/lib/cammini/navContext'
 import EndHikeReviewDialog from './EndHikeReviewDialog'
 import { speak } from '@/lib/navigation/speech'
 import { useNearbyTrails } from './useNearbyTrails'
@@ -102,6 +104,8 @@ interface Props {
   simulationLabel?: string
   /** Cammino: ordinale della tappa che si sta registrando (dtrek_cammino_tappe.ordinal). L'attività salvata la porta con sé: è così che la tappa risulta percorsa. */
   tappaOrdinal?: number
+  /** Cammino: posizione della tappa nel piano e tappa successiva (lib/cammini/navContext.ts). */
+  camminoContext?: CamminoNavContext | null
 }
 
 const AUTO_HIDE_MS = 6000 // "nascondi controlli" automatico: inattività prima di lasciare solo la mappa
@@ -150,7 +154,7 @@ function NavPanelCompoundRow({ label, children }: { label: string; children: Rea
   )
 }
 
-export default function ActiveNavigationView({ hike, locationProviderFactory, simulationLabel, tappaOrdinal }: Props) {
+export default function ActiveNavigationView({ hike, locationProviderFactory, simulationLabel, tappaOrdinal, camminoContext }: Props) {
   const router = useRouter()
   // Dati locali per tappa: in un cammino le tappe condividono hike.id (vedi lib/navigation/navKey.ts). Il resto
   // (attività collegata, note di campo, sessione sul server) resta sull'id del piano.
@@ -213,6 +217,8 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   const [showConfirmEnd, setShowConfirmEnd] = useState(false)
   // Fine tappa di un Borgo/Città su più giornate (Navigator "Modalità A") — un modale con una
   // vera decisione, non un callout passivo come per un climb_start/viewpoint qualunque.
+  // Cammino: dopo il salvataggio, la proposta della tappa dopo (al posto del salto diretto al reportage).
+  const [nextTappaPrompt, setNextTappaPrompt] = useState(false)
   const [tappaComplete, setTappaComplete] = useState<{ tappaIndex: number; tappaCount: number } | null>(null)
   const [mapFallbackNotice, setMapFallbackNotice] = useState(false)
   const [instruction, setInstruction] = useState<{ current: NavInstruction; next: NavInstruction | null; distanceToNextM: number | null } | null>(null)
@@ -1115,7 +1121,9 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       setSaveOfflineNotice(true)
       await new Promise((r) => setTimeout(r, 1800))
     }
-    // Una tappa di cammino porta al reportage unico del cammino, dove la tappa è già un capitolo da scrivere.
+    // Una tappa di cammino porta al reportage unico del cammino, dove la tappa è già un capitolo da scrivere;
+    // se ce n'è una dopo, prima la si propone (nell'app nativa Navigator si torna all'elenco come sempre).
+    if (tappaOrdinal != null && camminoContext?.next && !isNativeApp) { setNextTappaPrompt(true); return }
     router.push(isNativeApp ? '/navigatore' : tappaOrdinal != null ? `/resoconto/cammino/${encodeURIComponent(hike.id)}` : `/resoconto/${encodeURIComponent(saved.id)}`)
   }
 
@@ -1321,6 +1329,11 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         className={`absolute left-3 right-3 z-10 flex flex-col items-center gap-2 ${fade(hideUi)}`}
         style={{ top: `calc(env(safe-area-inset-top, 0px) + ${locationProviderFactory ? '44px' : '10px'})` }}
       >
+        {camminoContext && (
+          <div className="rounded-full bg-black/55 px-3 py-1 text-[11.5px] font-bold text-white backdrop-blur-sm">
+            Tappa {camminoContext.seq} di {camminoContext.total}{camminoContext.dayCount > 1 ? ` · giorno ${camminoContext.dayIdx + 1} di ${camminoContext.dayCount}` : ''}
+          </div>
+        )}
         <div className="w-full">
           <InstructionBanner
             current={instruction?.current ?? null}
@@ -1829,6 +1842,15 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       )}
 
       {showConfirmEnd && <ConfirmEndDialog onConfirm={confirmEnd} onCancel={cancelEnd} />}
+      {nextTappaPrompt && camminoContext?.next && (
+        <CamminoNextTappaDialog
+          hikeId={hike.id}
+          next={camminoContext.next}
+          onNavigate={() => router.push(`/guida/${encodeURIComponent(hike.id)}/naviga?tappa=${camminoContext.next!.ordinal}`)}
+          onReport={() => router.push(`/resoconto/cammino/${encodeURIComponent(hike.id)}`)}
+        />
+      )}
+
       {tappaComplete && (
         <TappaCompleteDialog
           tappaIndex={tappaComplete.tappaIndex}
