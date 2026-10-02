@@ -189,8 +189,10 @@ function CustomizeExtras({ extras, onChange }: { extras: ReportExtras; onChange:
   )
 }
 
-export function DiarioReportPage({ report, photos, meta, extras, trackPoints, mapsInteractive, escNumber, maxPhotos = DIARY_MAX_PHOTOS_DEFAULT, selectedPhotoIds, onSelectedPhotosChange, yearBand, onExclude, onExtrasChange }: {
+export function DiarioReportPage({ report, photos, meta, camminoRoutes, extras, trackPoints, mapsInteractive, escNumber, maxPhotos = DIARY_MAX_PHOTOS_DEFAULT, selectedPhotoIds, onSelectedPhotosChange, yearBand, onExclude, onExtrasChange }: {
   report: DiaryReport; photos: RoutePhoto[]; meta?: ActivityMeta; extras: ReportExtras
+  /** Voce unica di un cammino: un tratto per tappa, per la mappa. */
+  camminoRoutes?: { id: string; title: string; startTime: string; polyline: [number, number][] }[]
   trackPoints?: TrackPoint[]; mapsInteractive: boolean; escNumber: number
   /** Tetto alle foto stampate nel Diario. Vedi DIARY_MAX_PHOTOS_DEFAULT. */
   maxPhotos?: number
@@ -215,6 +217,21 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
   const storyBoxes = allQuotes.slice(1)
 
   const escLabel = String(escNumber).padStart(2, '0')
+  const cammino = report.cammino
+  const camminoTot = cammino ? {
+    km: cammino.tappe.reduce((s, t) => s + t.distanceMeters, 0) / 1000,
+    up: cammino.tappe.reduce((s, t) => s + t.elevationGain, 0),
+    sec: cammino.tappe.reduce((s, t) => s + t.totalTimeSeconds, 0),
+  } : null
+  const camminoPeriod = cammino && cammino.tappe.length > 0
+    ? (() => {
+        const t = [...cammino.tappe].map(x => new Date(x.startTime).getTime())
+        const lo = new Date(Math.min(...t)), hi = new Date(Math.max(...t))
+        return lo.toDateString() === hi.toDateString()
+          ? format(lo, 'd MMMM yyyy', { locale: it })
+          : `${format(lo, 'd MMMM', { locale: it })} – ${format(hi, 'd MMMM yyyy', { locale: it })}`
+      })()
+    : null
   const dateStr  = act?.start_time
     ? format(new Date(act.start_time), 'd MMMM yyyy', { locale: it })
     : report.created_at ? format(new Date(report.created_at), 'd MMMM yyyy', { locale: it }) : ''
@@ -228,8 +245,9 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
     // La selezione manuale dice *quali foto pubblicare* — vale per il sito, che le mostra tutte.
     // Il PDF ne prende comunque al massimo `maxPhotos`, distribuite lungo il percorso: è un
     // documento impaginato, non una galleria.
-    return selectSpreadPhotos(manual ?? photos, maxPhotos)
-  }, [photos, maxPhotos, selectedPhotoIds])
+    // Voce del cammino: le foto stanno sotto il capitolo della loro tappa, non sparse nel racconto.
+    return report.cammino ? [] : selectSpreadPhotos(manual ?? photos, maxPhotos)
+  }, [photos, maxPhotos, selectedPhotoIds, report.cammino])
   // Senza foto proprie un Reportage di Sito/Borgo apre con l'immagine del luogo.
   const heroPhoto = photos[0] ?? (act?.site?.cover ? { url: act.site.cover } : null)
   const detailPhoto = photos[1] ?? null
@@ -277,6 +295,30 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
   // stampata: restava a schermo come un titolo isolato seguito da uno spazio bianco vuoto — nel
   // caso peggiore osservato, tre intestazioni consecutive senza una sola riga di testo sotto.
   const restSections = sections.slice(1).filter(s => s.body.trim())
+  // Foto del cammino per tappa (esclusa quella di copertina e quella di dettaglio, già usate sopra).
+  const tappaPhotoGroups = useMemo(() => {
+    if (!report.cammino) return new Map<number, RoutePhoto[]>()
+    const chosen = selectedPhotoIds && selectedPhotoIds.length > 0 ? photos.filter(p => selectedPhotoIds.includes(p.id)) : photos
+    const used = new Set([photos[0]?.id, photos[1]?.id])
+    const m = new Map<number, RoutePhoto[]>()
+    for (const p of chosen) {
+      if (used.has(p.id) || p.tappa == null) continue
+      m.set(p.tappa, [...(m.get(p.tappa) ?? []), p])
+    }
+    return m
+  }, [report.cammino, photos, selectedPhotoIds])
+  const sectionTappa = (title: string): number | null => { const m = /^Tappa (\d+)\b/.exec(title); return m ? Number(m[1]) : null }
+  const renderTappaPhotos = (n: number) => {
+    const list = tappaPhotoGroups.get(n)
+    if (!list || list.length === 0) return null
+    return (
+      <div className="pdf-block" data-mag-block="" style={{ display: 'grid', gridTemplateColumns: list.length === 1 ? '1fr' : '1fr 1fr', gap: 10, margin: '4px 0 18px' }}>
+        {list.slice(0, 6).map(ph => (
+          <img key={ph.id} src={ph.thumbUrl ?? ph.url} alt={ph.caption} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 8, boxShadow: '0 4px 14px rgba(0,0,0,0.12)' }} />
+        ))}
+      </div>
+    )
+  }
   const STORY_ACCENTS = [
     { bg: '#fdf6ee', border: '#e08d3c', label: '#c05a17', text: '#6a2e18' },
     { bg: '#f1f8f2', border: '#378d44', label: '#277134', text: '#193b20' },
@@ -426,7 +468,7 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
           </div>
         )}
         <p style={{ fontFamily: FONT.barlow, fontSize: 9, fontWeight: 700, letterSpacing: 4, color: '#e08d3c', textTransform: 'uppercase', margin: '0 0 36px' }}>
-          Cronaca · {noun} #{escLabel}
+          {cammino ? 'Cammino · reportage a tappe' : `Cronaca · ${noun} #${escLabel}`}
         </p>
 
         {/* Scheda editoriale + intro.
@@ -442,10 +484,22 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
               Scheda
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
-              <SchedaField label={noun} value={`#${escLabel}`} />
-              {dateStr && <SchedaField label="Periodo" value={dateStr} />}
+              {cammino && camminoTot ? (
+                <>
+                  <SchedaField label="Cammino" value={`${cammino.tappe.length} tappe${cammino.total ? ` di ${cammino.total}` : ''}`} />
+                  {camminoPeriod && <SchedaField label="Periodo" value={camminoPeriod} />}
+                  <SchedaField label="Distanza" value={`${camminoTot.km.toFixed(1).replace('.', ',')} km`} />
+                  {camminoTot.up > 0 && <SchedaField label="Dislivello" value={`+${Math.round(camminoTot.up)} m`} />}
+                  {camminoTot.sec > 0 && <SchedaField label="In cammino" value={formatDuration(camminoTot.sec)} />}
+                </>
+              ) : (
+                <>
+                  <SchedaField label={noun} value={`#${escLabel}`} />
+                  {dateStr && <SchedaField label="Periodo" value={dateStr} />}
+                </>
+              )}
               {hiking && !!meta?.altitudeMax && <SchedaField label="Quota massima" value={`${Math.round(meta.altitudeMax)} m`} />}
-              {weatherInfo && weather && <SchedaField label="Meteo" value={`${weatherInfo.emoji} ${weatherInfo.label} · ${Math.round(weather.temperature)}°C`} />}
+              {!cammino && weatherInfo && weather && <SchedaField label="Meteo" value={`${weatherInfo.emoji} ${weatherInfo.label} · ${Math.round(weather.temperature)}°C`} />}
             </div>
           </div>
 
@@ -497,6 +551,27 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
         </div>
 
         {/* Pull quote */}
+        {/* Le tappe percorse, una riga ciascuna: numero, da → a, giorno, km, tempo, salita. */}
+        {cammino && cammino.tappe.length > 0 && (
+          <div className="pdf-block" data-mag-block="" style={{ marginBottom: 36 }}>
+            <p style={{ fontFamily: FONT.barlow, fontSize: 9, fontWeight: 700, letterSpacing: 4, color: '#e08d3c', textTransform: 'uppercase', margin: '0 0 12px' }}>Le tappe</p>
+            <div style={{ border: '1px solid #dcd8cc', borderRadius: 8, overflow: 'hidden' }}>
+              {cammino.tappe.map((t, i) => (
+                <div key={t.activityId} style={{ display: 'grid', gridTemplateColumns: '28px 1fr auto', gap: 12, alignItems: 'center', padding: '9px 12px', borderTop: i === 0 ? 'none' : '1px solid #ece9e0', background: i % 2 ? '#faf9f5' : '#fff' }}>
+                  <span style={{ width: 22, height: 22, borderRadius: 5, background: '#193b20', color: '#fff', textAlign: 'center', lineHeight: '22px', fontSize: 11, fontWeight: 700, fontFamily: FONT.body }}>{t.seq}</span>
+                  <span style={{ fontFamily: FONT.lora, fontSize: 13, color: '#2d2a24' }}>
+                    {t.from} → {t.to}
+                    <span style={{ display: 'block', fontFamily: FONT.barlow, fontSize: 9.5, letterSpacing: 1, color: '#a9a18e', textTransform: 'uppercase' }}>{format(new Date(t.startTime), 'EEEE d MMMM', { locale: it })}</span>
+                  </span>
+                  <span style={{ fontFamily: FONT.mono, fontSize: 11.5, color: '#4d4740', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    {(t.distanceMeters / 1000).toFixed(1)} km{t.elevationGain > 0 ? ` · +${Math.round(t.elevationGain)} m` : ''}{t.totalTimeSeconds > 0 ? ` · ${formatDuration(t.totalTimeSeconds)}` : ''}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {pullQuote && (
           <div className="pdf-block" data-mag-block="" style={{ margin: '0 -8px 40px', padding: '32px 40px', borderTop: '2px solid #193b20', borderBottom: '2px solid #193b20', position: 'relative' }}>
             <span style={{ position: 'absolute', top: -26, left: 36, fontFamily: FONT.display, fontSize: 70, lineHeight: 1, color: '#193b20', opacity: 0.12, userSelect: 'none' }}>&ldquo;</span>
@@ -525,6 +600,13 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
                     </div>
                   ) : <div key={j} className="pdf-block" data-mag-block="">{paragraph}</div>
                 })}
+                {(() => { const n = sectionTappa(section.title); return n != null ? renderTappaPhotos(n) : null })()}
+              </div>
+            ))}
+            {Array.from(tappaPhotoGroups.keys()).filter(n => !restSections.some(sec => sectionTappa(sec.title) === n)).sort((a, b) => a - b).map(n => (
+              <div key={`ph-${n}`}>
+                <p style={{ fontFamily: FONT.barlow, fontSize: 10, fontWeight: 900, letterSpacing: 3, color: '#e08d3c', textTransform: 'uppercase', margin: '0 0 8px' }}>Tappa {n} · foto</p>
+                {renderTappaPhotos(n)}
               </div>
             ))}
           </div>
@@ -636,7 +718,7 @@ export function DiarioReportPage({ report, photos, meta, extras, trackPoints, ma
             <div className="print:hidden diario-report-map" data-activity-id={meta!.id} style={{ height: 260, borderRadius: 10, overflow: 'hidden', border: '1px solid #dcd8cc' }}>
               <LazyMount height={260} placeholder={<div style={{ height: '100%', background: '#f3f4f2' }} />}>
                 <AllRoutesMap
-                  routes={[{ id: meta!.id, title: meta!.title ?? 'Percorso', startTime: meta!.startTime, polyline: meta!.routePolyline! }]}
+                  routes={camminoRoutes && camminoRoutes.length > 0 ? camminoRoutes : [{ id: meta!.id, title: meta!.title ?? 'Percorso', startTime: meta!.startTime, polyline: meta!.routePolyline! }]}
                   height="260px"
                   interactive={mapsInteractive}
                 />

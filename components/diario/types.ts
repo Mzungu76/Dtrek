@@ -4,6 +4,8 @@ import type { WeatherAtHike } from '@/lib/weather'
 import type { MetaType, SiteType } from '@/lib/metaTypes'
 
 export interface DiaryReport {
+  /** Solo la voce unica di un cammino: le sue tappe percorse (nell'ordine di marcia) e quante ne ha il piano. */
+  cammino?: { tappe: import('@/lib/cammini/diaryEntries').CamminoDiaryTappa[]; total: number }
   id: string
   activity_id: string
   title: string

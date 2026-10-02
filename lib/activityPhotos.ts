@@ -24,6 +24,8 @@ export interface RoutePhoto {
    *  che oggi scaricavano l'intera foto da MAX_PHOTO_SIDE solo per ritagliarla a poche decine di
    *  px. Assente sulle foto caricate prima di questa fix — i chiamanti devono ricadere su `url`. */
   thumbUrl?: string
+  /** Voce unica di un cammino: numero della tappa (nell'ordine di marcia) a cui appartiene la foto. */
+  tappa?: number
 }
 
 /** Copertina "intelligente" quando l'utente non ne ha scelta una a mano (vedi

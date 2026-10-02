@@ -801,6 +801,7 @@ export default function ResocontoHub({ id, parentCammino }: { id?: string; paren
       <RouteHub
         mode="resoconto"
         startOpen={!!parentCammino}
+        onBeforeOpen={item => { if (item.id.startsWith(CAMMINO_PREFIX)) { openCammino(item.id.slice(CAMMINO_PREFIX.length)); return false } return true }}
         onBack={parentCammino ? () => router.push(`/resoconto/cammino/${encodeURIComponent(parentCammino)}`) : undefined}
         items={displayItems}
         initialIndex={initialIndex}
@@ -808,9 +809,10 @@ export default function ResocontoHub({ id, parentCammino }: { id?: string; paren
         onToggleFavoritesFilter={() => setFavoritesFilter(v => !v)}
         onToggleFavorite={handleToggleFavorite}
         onIndexChange={(item) => {
-          // Il reportage del cammino si apre direttamente: nessuna pagina intermedia.
-          if (item.id.startsWith(CAMMINO_PREFIX)) { openCammino(item.id.slice(CAMMINO_PREFIX.length)); return }
+          // La miniatura del cammino si comporta come le altre (copertina in galleria); il reportage si apre solo
+          // quando lo si apre davvero (onBeforeOpen), e lascia l'indirizzo com'è.
           setCurrentId(item.id)
+          if (item.id.startsWith(CAMMINO_PREFIX)) return
           // Plain History API, not router.replace: `/resoconto` and `/resoconto/[id]` are
           // different page components, so a Next.js navigation between them unmounts/remounts
           // this whole hub (re-running every data-loading effect) and produces a visible
@@ -972,7 +974,7 @@ export default function ResocontoHub({ id, parentCammino }: { id?: string; paren
 // /diario, che apre l'analogo "Gestisci questo Diario"): titolo e Diario di appartenenza in un
 // unico posto invece di due azioni separate (prima solo lo spostamento, dietro un'icona a doppia
 // freccia). Stessa identità visiva scura delle altre liste a schermo intero di questa pagina.
-function ManageReportageOverlay({
+export function ManageReportageOverlay({
   titleVal, onTitleChange, onTitleBlur, titleSaving,
   diaries, currentDiaryId, moveBusy, moveError, onSelectDiary, onClose,
 }: {

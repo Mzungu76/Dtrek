@@ -334,7 +334,7 @@ export default function ResocontoIndexPage() {
               let km = 0
               doneOrdinals.forEach(o => { km += mine.find(a => a.tappaIndex === o)?.distanceMeters ?? 0 })
               return (
-                <Link key={h.id} href={`/resoconto/cammino/${encodeURIComponent(h.id)}`}
+                <Link key={h.id} href={`/resoconto/${encodeURIComponent(`cammino:${h.id}`)}`}
                   className="flex items-center gap-3 rounded-2xl border border-forest-200 bg-forest-50 px-4 py-3.5 transition-colors hover:bg-forest-100">
                   <Mountain className="w-6 h-6 shrink-0 text-forest-700" />
                   <div className="min-w-0 flex-1">

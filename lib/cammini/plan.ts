@@ -69,6 +69,8 @@ export interface CamminoReport {
   intro?: string
   chapters: CamminoReportChapter[]
   epilogue?: string
+  /** Link pubblico del reportage del cammino (`/leggi/p/<token>`): presente solo finché è condiviso. */
+  shareToken?: string
   updatedAt: string
 }
 

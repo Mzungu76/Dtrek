@@ -175,3 +175,16 @@ Scelta dopo i mockup (concept B), con queste regole:
 - Pagina del reportage del cammino = stesso impianto degli altri reportage (`ReportHero`, `ReportStatsStrip`, `SectionCard`: stessi colori e caratteri); introduzione, capitoli per tappa (con badge Trail Score + Sicurezza), conclusione.
 - Il reportage di una tappa si apre **sotto il padre** (`/resoconto/cammino/[id]/tappa/[activityId]`): galleria con le sole tappe di quel cammino, ogni uscita riporta al reportage del cammino, mai all'elenco generale.
 - **Sicurezza nel CTS di tappa**: `computeSafetyCore` (fauna GBIF, cani da guardia, scala SAC, quota, tempo) + Trail Score v2 (`computeTrailScoreV2`); badge `TrailScoreGaugeBadge` (anello Trail Score + anello Sicurezza), salvati in `cammino_plan.tappe[].cts`.
+
+## 5h. Il cammino nei Diari e nel sito pubblico
+
+- **Una sola voce per cammino.** Le attività delle tappe non sono mai voci a sé nei Diari, nel libro, nelle Raccolte e nel sito
+  pubblico: il cammino è una voce (la sua prima tappa percorsa la "regge", ma con i numeri, il tracciato e le foto di tutte le
+  tappe) e il testo è il reportage del cammino, con le tappe come sezioni `## Tappa N · da → a` (`lib/cammini/diaryEntries.ts`).
+- **Dove vale.** Sommario del Diario (`/api/diaries/[id]`, riga che apre il reportage del cammino), libro del Diario
+  (`/api/diaries/[id]/entries`), Diario pubblico e Raccolte (`lib/sharePublicDiary.ts`), sito dell'utente (`lib/publicProfile.ts`).
+- **Rotella** nel reportage del cammino: titolo e Diario passano dalla Meta (`planned_hikes.diary_id`), come per ogni reportage.
+- **Link pubblico del reportage del cammino**: `POST /api/cammini/reportage/share` salva il token in `cammino_plan.report.shareToken`;
+  `/leggi/p/<token>` lo legge (`lib/sharePublicReport.ts`). Si crea e si ritira dalla pagina del reportage.
+- **Conteggi**: le tappe contano un solo reportage nelle card dei Diari (`lib/diari/aggregateDiaries.ts`) e i loro km si sommano.
+- **Libro**: la voce del cammino usa foto e traccia di tutte le tappe; il testo scritto nel reportage di ogni tappa va sotto il suo capitolo e le foto di ogni tappa sotto il capitolo della tappa.

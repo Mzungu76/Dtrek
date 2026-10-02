@@ -3,6 +3,8 @@
 // pubblicato, ma l'INDICE di ciò che l'utente ha già reso pubblico ai tre livelli esistenti
 // (Raccolta/Diario/Reportage, ciascuno con il proprio token indipendente). Niente qui decide cosa
 // è pubblico — legge solo cosa lo è già.
+import { loadCamminoGroups } from './cammini/diaryEntriesServer'
+import { hiddenTappaActivityIds, type CamminoGroup } from './cammini/diaryEntries'
 import type { MetaType, SiteType } from './metaTypes'
 import { fetchSiteInfo } from './siteInfoServer'
 import { supabase } from './supabase'
@@ -196,9 +198,17 @@ async function resolvePublishedEntries(
         .filter(a => !excludedByDiary.get(a.diaryId)?.has(a.activityId))
     }
   }
+  // Cammini: una sola voce per cammino, mai una per tappa (stessa regola del Diario pubblico).
+  let cammini: CamminoGroup[] = []
+  if (diaryIds.length > 0 && diaryActivityIds.length > 0) {
+    const { data: percorsiDiari } = await supabase.from('planned_hikes').select('id').eq('user_id', userId).in('diary_id', diaryIds)
+    cammini = await loadCamminoGroups(userId, (percorsiDiari ?? []).map(p => p.id as string))
+  }
+  const hiddenTappe = hiddenTappaActivityIds(cammini)
+  diaryActivityIds = diaryActivityIds.filter(a => !hiddenTappe.has(a.activityId))
   const diaryIdByActivity = new Map(diaryActivityIds.map(a => [a.activityId, a.diaryId]))
 
-  const reportActivityIds = reports.map(r => r.activity_id).filter(Boolean)
+  const reportActivityIds = reports.map(r => r.activity_id).filter(Boolean).filter(id => !hiddenTappe.has(id))
   const allActivityIds = Array.from(new Set([...diaryActivityIds.map(a => a.activityId), ...reportActivityIds]))
   if (allActivityIds.length === 0) return { routes: [], points: [], reportage: [] }
 
@@ -215,6 +225,7 @@ async function resolvePublishedEntries(
       reportByActivity.set(r.activity_id as string, { id: r.id as string, title: (r.title as string) || 'Reportage' })
     }
   }
+  for (const g of cammini) if (g.content.trim() && diaryIdByActivity.has(g.repActivityId)) reportByActivity.set(g.repActivityId, { id: `cammino:${g.hikeId}`, title: g.name })
 
   // Solo le attività che hanno davvero un Reportage (diario o standalone) contano come "escursione
   // pubblicata" — una Meta camminata ma mai raccontata non compare in nessun Diario, quindi non
@@ -235,6 +246,17 @@ async function resolvePublishedEntries(
     const raw = a.route_polyline
     const full = Array.isArray(raw) && raw.length > 1 ? (raw as [number, number][]) : null
     polylineByActivity.set(a.id as string, full && hideHomeStarts ? trimHomeStart(full, home) : full)
+  }
+
+  // Il tracciato di un cammino è quello di tutte le sue tappe, non solo della prima.
+  const published = new Set(publishedActivityIds)
+  for (const g of cammini.filter(c => published.has(c.repActivityId))) {
+    const { data: tappe } = await supabase.from('activities').select('id, start_time, route_polyline').in('id', g.tappaActivityIds)
+    const full = (tappe ?? [])
+      .sort((x, y) => new Date(x.start_time as string).getTime() - new Date(y.start_time as string).getTime())
+      .flatMap(t => (Array.isArray(t.route_polyline) ? (t.route_polyline as [number, number][]) : []))
+    if (full.length > 1) polylineByActivity.set(g.repActivityId, hideHomeStarts ? trimHomeStart(full, home) : full)
+    metaByActivity.set(g.repActivityId, { metaType: 'cammino' })
   }
 
   // Punti dei luoghi visitati (Siti e Borghi/Città) — lib/siteInfoServer.ts, best-effort.

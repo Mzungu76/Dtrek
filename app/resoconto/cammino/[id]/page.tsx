@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import { Loader2, Pencil, ChevronRight, ChevronDown, Route, Flag, BookOpen } from 'lucide-react'
+import { Loader2, Pencil, ChevronRight, ChevronDown, Settings, Route, Flag, BookOpen, Link2, Copy, Check } from 'lucide-react'
 import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import ReportHero from '@/components/resoconto/ReportHero'
 import ReportStatsStrip from '@/components/resoconto/ReportStatsStrip'
@@ -16,6 +16,8 @@ import type { CamminoPlan, CamminoReport } from '@/lib/cammini/plan'
 import { chapterFor, reportProgress } from '@/lib/cammini/report'
 import { useCamminoDetail } from '@/lib/cammini/useCamminoDetail'
 import CamminoOverviewMap from '@/components/guida/widgets/CamminoOverviewMap'
+import { ManageReportageOverlay } from '@/app/resoconto/ResocontoHub'
+import type { DiarySummary } from '@/app/api/diaries/route'
 import type { TappaDone } from '@/components/guida/widgets/CamminoTappaDetail'
 import type { TrackPoint } from '@/lib/tcxParser'
 
@@ -36,6 +38,14 @@ export default function CamminoReportagePage() {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [shareBusy, setShareBusy] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [manageOpen, setManageOpen] = useState(false)
+  const [manageTitle, setManageTitle] = useState('')
+  const [titleSaving, setTitleSaving] = useState(false)
+  const [diaries, setDiaries] = useState<DiarySummary[]>([])
+  const [moveBusy, setMoveBusy] = useState(false)
+  const [moveError, setMoveError] = useState<string | null>(null)
   const [editing, setEditing] = useState<{ key: string; text: string } | null>(null)
 
   useEffect(() => {
@@ -45,6 +55,46 @@ export default function CamminoReportagePage() {
     getAllActivities(apply).then(apply).catch(() => {})
     return () => { cancelled = true }
   }, [id])
+
+  // Gestione del reportage del cammino (rotella): titolo e Diario passano dalla Meta, come per ogni reportage.
+  useEffect(() => { fetch('/api/diaries').then(r => (r.ok ? r.json() : [])).then(setDiaries).catch(() => {}) }, [])
+  async function patchPlanned(body: Record<string, unknown>) {
+    const res = await fetch('/api/planned', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, ...body }) })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error ?? data.message ?? `HTTP ${res.status}`)
+  }
+  // Link pubblico del reportage del cammino: il token sta nel piano, come i testi.
+  async function setShared(enabled: boolean) {
+    if (!hike?.camminoPlan) return
+    setShareBusy(true); setError(null)
+    try {
+      const res = await fetch('/api/cammini/reportage/share', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hikeId: id, enabled }) })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error ?? 'Non sono riuscita a aggiornare il link, riprova.')
+      const p = hike.camminoPlan
+      const { shareToken: _t, ...rest } = p.report ?? { chapters: [], updatedAt: new Date().toISOString() }
+      void _t
+      setHike({ ...hike, camminoPlan: { ...p, report: { ...rest, ...(data.token ? { shareToken: data.token as string } : {}) } } })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Non sono riuscita a aggiornare il link, riprova.')
+    } finally { setShareBusy(false) }
+  }
+  async function copyLink(token: string) {
+    const url = `${window.location.origin}/leggi/p/${token}`
+    try { await navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 2000) } catch { window.prompt('Copia il link', url) }
+  }
+
+  async function saveManageTitle() {
+    const t = manageTitle.trim()
+    if (!t || !hike || t === hike.title) return
+    setTitleSaving(true)
+    try { await patchPlanned({ title: t }); setHike({ ...hike, title: t }) } catch (e) { setMoveError(e instanceof Error ? e.message : String(e)) } finally { setTitleSaving(false) }
+  }
+  async function moveToDiary(diaryId: string) {
+    if (!hike) return
+    setMoveBusy(true); setMoveError(null)
+    try { await patchPlanned({ diaryId }); setHike({ ...hike, diaryId }); setManageOpen(false) } catch (e) { setMoveError(e instanceof Error ? e.message : String(e)) } finally { setMoveBusy(false) }
+  }
 
   const plan: CamminoPlan | undefined = hike?.camminoPlan
   const detail = useCamminoDetail(plan?.camminoId ?? '')
@@ -163,11 +213,39 @@ export default function CamminoReportagePage() {
         className="absolute left-4 top-[calc(env(safe-area-inset-top,0px)+12px)] z-20 flex h-9 w-9 items-center justify-center rounded-full bg-stone-100/90 text-stone-600 shadow-sm backdrop-blur">
         <ChevronDown className="h-4 w-4" />
       </button>
+      <button type="button" onClick={() => { setManageTitle(hike.title ?? ''); setMoveError(null); setManageOpen(true) }} aria-label="Gestisci questo reportage" title="Gestisci questo reportage"
+        className="absolute right-4 top-[calc(env(safe-area-inset-top,0px)+12px)] z-20 flex h-9 w-9 items-center justify-center rounded-full bg-black/35 text-white shadow-sm backdrop-blur">
+        <Settings className="h-5 w-5" />
+      </button>
+      {manageOpen && (
+        <ManageReportageOverlay
+          titleVal={manageTitle} onTitleChange={setManageTitle} onTitleBlur={saveManageTitle} titleSaving={titleSaving}
+          diaries={diaries} currentDiaryId={hike.diaryId ?? null} moveBusy={moveBusy} moveError={moveError}
+          onSelectDiary={moveToDiary} onClose={() => setManageOpen(false)}
+        />
+      )}
       <ReportHero trackPoints={walkedPoints} title={plan.camminoName} categoryBadge={META_TYPE_CONFIG.cammino.label.toUpperCase()} startTime={firstStart} />
       <ReportStatsStrip facts={facts} />
 
       <main className="mx-auto max-w-3xl px-4 py-5 sm:py-8">
         {error && <p className="mb-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
+
+        {/* link pubblico */}
+        <div className="mb-4 flex items-center gap-2.5 rounded-2xl border border-stone-200 bg-white px-3.5 py-3">
+          <Link2 className="h-5 w-5 shrink-0 text-forest-700" />
+          {plan.report?.shareToken ? (
+            <>
+              <p className="min-w-0 flex-1 text-[13px] text-stone-600">Il reportage è condiviso con un link pubblico.</p>
+              <button type="button" onClick={() => copyLink(plan.report!.shareToken!)} className="flex items-center gap-1 rounded-full bg-forest-600 px-3 py-1.5 text-[12.5px] font-semibold text-white">{copied ? <><Check className="h-3.5 w-3.5" /> Copiato</> : <><Copy className="h-3.5 w-3.5" /> Copia link</>}</button>
+              <button type="button" disabled={shareBusy} onClick={() => setShared(false)} className="text-[12px] font-semibold text-stone-400 hover:text-stone-600 disabled:opacity-50">Ritira</button>
+            </>
+          ) : (
+            <>
+              <p className="min-w-0 flex-1 text-[13px] text-stone-600">Condividi il reportage con un link pubblico.</p>
+              <button type="button" disabled={shareBusy || !plan.report || (plan.report.chapters.length === 0 && !plan.report.intro)} onClick={() => setShared(true)} className="rounded-full bg-forest-600 px-3.5 py-1.5 text-[12.5px] font-semibold text-white disabled:opacity-50">{shareBusy ? 'Creo…' : 'Crea il link'}</button>
+            </>
+          )}
+        </div>
 
         <div className="mb-4">
           <CamminoOverviewMap

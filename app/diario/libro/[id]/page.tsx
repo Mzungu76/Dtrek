@@ -196,7 +196,8 @@ export default function DiarioLibroPage() {
       setReports(sortedReps)
 
       const reportedIds = new Set(sortedReps.map((r: DiaryReport) => r.activity_id))
-      const unreportedActivities = sortedActs.filter(a => !reportedIds.has(a.id))
+      // Le tappe di un cammino non sono pagine a sé: stanno dentro la voce unica del cammino (capitoli del suo reportage).
+      const unreportedActivities = sortedActs.filter(a => !reportedIds.has(a.id) && a.tappaIndex == null)
       const pages: BookPage[] = [
         ...sortedReps.map((rep: DiaryReport): BookPage => ({
           kind: 'report', startTime: rep.activity?.start_time ?? rep.created_at, report: rep,
@@ -234,8 +235,19 @@ export default function DiarioLibroPage() {
       // Load photos + full trackpoints per reported activity, together — chartsAndPhotosReady
       // diventa true solo quando ENTRAMBE le liste sono arrivate, ed è quello che sblocca la
       // pubblicazione (vedi guardia su generateAndUploadPdf).
+      // Voce unica di un cammino (id `cammino:<meta>`): foto e traccia sono quelle di tutte le sue tappe, nell'ordine di marcia.
+      const camminoActIds = (rep: DiaryReport): string[] => rep.id.startsWith('cammino:')
+        ? sortedActs.filter(x => x.linkedPlannedId === rep.id.slice('cammino:'.length) && x.tappaIndex != null).map(x => x.id)
+        : [rep.activity_id]
       const photosPromise = Promise.all(sortedReps.map(async (rep: DiaryReport): Promise<readonly [string, RoutePhoto[]]> => {
-        try { return [rep.activity_id, await fetchActivityPhotos(rep.activity_id)] }
+        try {
+          const ids = camminoActIds(rep)
+          const lists = await Promise.all(ids.map(id => fetchActivityPhotos(id)))
+          if (!rep.id.startsWith('cammino:')) return [rep.activity_id, lists.flat()]
+          // Voce del cammino: ogni foto porta il numero della sua tappa, per metterla sotto il capitolo giusto.
+          const seqOf = (actId: string) => rep.cammino?.tappe.find(t => t.activityId === actId)?.seq
+          return [rep.activity_id, lists.flatMap((l, i) => l.map(p => ({ ...p, tappa: seqOf(ids[i]) })))]
+        }
         catch { return [rep.activity_id, []] }
       })).then(photoEntries => {
         const byAct: Record<string, RoutePhoto[]> = {}
@@ -245,8 +257,8 @@ export default function DiarioLibroPage() {
 
       const trackPointsPromise = Promise.all(sortedReps.map(async (rep: DiaryReport): Promise<readonly [string, TrackPoint[]]> => {
         try {
-          const full = await getActivityById(rep.activity_id)
-          return [rep.activity_id, full?.trackPoints ?? []]
+          const fulls = await Promise.all(camminoActIds(rep).map(id => getActivityById(id)))
+          return [rep.activity_id, fulls.flatMap(f => f?.trackPoints ?? [])]
         } catch { return [rep.activity_id, []] }
       })).then(trackPointEntries => {
         const tpByAct: Record<string, TrackPoint[]> = {}
@@ -375,6 +387,28 @@ export default function DiarioLibroPage() {
       .filter(p => excluded.has(p.kind === 'stub' ? p.activity.id : p.report.activity_id))
       .sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
   }, [bookPages, config.excludedActivityIds])
+
+  // Voce unica di un cammino: i numeri, il titolo e la traccia sono quelli di tutte le sue tappe, non della prima.
+  const metaForReport = (report: DiaryReport): ActivityMeta | undefined => {
+    const rep = activities.find(a => a.id === report.activity_id)
+    if (!rep || !report.id.startsWith('cammino:')) return rep
+    const tappe = activities.filter(a => a.linkedPlannedId === report.id.slice('cammino:'.length) && a.tappaIndex != null)
+    return {
+      ...rep, title: report.title, metaType: 'cammino',
+      distanceMeters: tappe.reduce((s, a) => s + a.distanceMeters, 0),
+      elevationGain: tappe.reduce((s, a) => s + (a.elevationGain ?? 0), 0),
+      totalTimeSeconds: tappe.reduce((s, a) => s + a.totalTimeSeconds, 0),
+      altitudeMax: tappe.reduce((m, a) => Math.max(m, a.altitudeMax ?? 0), 0),
+      routePolyline: tappe.flatMap(a => a.routePolyline ?? []),
+    }
+  }
+
+  // Un tratto per tappa sulla mappa della voce unica del cammino.
+  const camminoRoutesFor = (report: DiaryReport) => report.id.startsWith('cammino:')
+    ? activities
+        .filter(a => a.linkedPlannedId === report.id.slice('cammino:'.length) && a.tappaIndex != null && (a.routePolyline?.length ?? 0) > 1)
+        .map(a => ({ id: a.id, title: a.title, startTime: a.startTime, polyline: a.routePolyline! }))
+    : undefined
 
   const reportNumbers = useMemo(() => {
     const m = new Map<string, number>()
@@ -1102,7 +1136,8 @@ export default function DiarioLibroPage() {
                     <DiarioReportPage
                       report={page.report}
                       photos={photosByAct[page.report.activity_id] ?? []}
-                      meta={activities.find(a => a.id === page.report.activity_id)}
+                      meta={metaForReport(page.report)}
+                      camminoRoutes={camminoRoutesFor(page.report)}
                       extras={resolveReportExtras(config, page.report.activity_id)}
                       trackPoints={trackPointsByAct[page.report.activity_id]}
                       mapsInteractive={mapsInteractive}
