@@ -103,3 +103,14 @@ describe('radici per id', () => {
     expect(q).not.toContain('name')
   })
 })
+
+describe('parametri delle query', () => {
+  it('niente maxsize e timeout contenuti (Overpass rifiuta le query che chiedono molto)', async () => {
+    const { rootsQuery, relationsByIdQuery, italyQuery, waysQuery } = await import('../cammini/overpassQueries')
+    const e = REGISTRY.find(x => x.id === 'via-francigena')!
+    for (const q of [rootsQuery(e), relationsByIdQuery([1]), italyQuery([1]), waysQuery([1])]) {
+      expect(q).not.toContain('maxsize')
+      expect(Number(/timeout:(\d+)/.exec(q)![1])).toBeLessThanOrEqual(180)
+    }
+  })
+})
