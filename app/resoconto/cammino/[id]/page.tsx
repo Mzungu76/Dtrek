@@ -172,10 +172,15 @@ export default function CamminoReportagePage() {
           const ch = chapterFor(plan, x.ordinal)
           const place = `${x.tappa.fromName ?? 'Partenza'} → ${x.tappa.toName ?? 'Arrivo'}`
           if (!a) {
+            // Le tappe ancora da percorrere non diventano un segnaposto ciascuna: solo la prossima, e il conto delle altre.
+            const firstTodo = sequence.findIndex(y => !byOrdinal.has(y.ordinal))
+            if (i !== firstTodo) return null
+            const remaining = sequence.filter(y => !byOrdinal.has(y.ordinal)).length - 1
             return (
-              <section key={x.ordinal} className="rounded-2xl border border-dashed border-stone-300 px-4 py-4 text-stone-400">
-                <p className="text-xs font-semibold uppercase tracking-wide">Tappa {i + 1} · da percorrere</p>
-                <p className="mt-0.5 text-sm">{place}</p>
+              <section key={x.ordinal} className="rounded-2xl border border-dashed border-stone-300 px-4 py-4 text-stone-500">
+                <p className="text-xs font-semibold uppercase tracking-wide">Prossima tappa · {i + 1} di {sequence.length}</p>
+                <p className="mt-0.5 text-sm font-semibold text-stone-700">{place}</p>
+                {remaining > 0 && <p className="mt-1 text-xs text-stone-400">e altre {remaining} {remaining === 1 ? 'tappa' : 'tappe'} da percorrere</p>}
               </section>
             )
           }
