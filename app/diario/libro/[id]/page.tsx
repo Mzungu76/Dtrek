@@ -196,7 +196,8 @@ export default function DiarioLibroPage() {
       setReports(sortedReps)
 
       const reportedIds = new Set(sortedReps.map((r: DiaryReport) => r.activity_id))
-      const unreportedActivities = sortedActs.filter(a => !reportedIds.has(a.id))
+      // Le tappe di un cammino non sono pagine a sé: stanno dentro la voce unica del cammino (capitoli del suo reportage).
+      const unreportedActivities = sortedActs.filter(a => !reportedIds.has(a.id) && a.tappaIndex == null)
       const pages: BookPage[] = [
         ...sortedReps.map((rep: DiaryReport): BookPage => ({
           kind: 'report', startTime: rep.activity?.start_time ?? rep.created_at, report: rep,

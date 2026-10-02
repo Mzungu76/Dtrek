@@ -1,3 +1,5 @@
+import { loadCamminoGroups } from '@/lib/cammini/diaryEntriesServer'
+import { hiddenTappaActivityIds } from '@/lib/cammini/diaryEntries'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { getUserFromRequest } from '@/lib/supabaseAuth'
@@ -31,6 +33,8 @@ export interface DiarioReportageRow {
   /** "Travasato" dalla Meta al salvataggio (piano Blocco F §32) — determina se il Sommario mostra
    *  le metriche escursionistiche di questa riga o le omette (piano §48.9). */
   metaType: MetaType
+  /** Dove apre la riga, se non è il resoconto dell'attività (la voce unica di un cammino apre il suo reportage). */
+  href?: string
 }
 
 /** Una Meta di questo Diario senza ancora un Reportage — "in programma", la prima delle tre parti
@@ -146,6 +150,29 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         favorite:         (a.favorite as boolean | null) ?? false,
         metaType:         (a.meta_type as MetaType) ?? 'sentiero',
       }))
+      // Cammini: una sola riga per cammino (le tappe sono i capitoli del suo reportage), non una per tappa.
+      const groups = await loadCamminoGroups(user.id, plannedIds)
+      if (groups.length > 0) {
+        const hidden = hiddenTappaActivityIds(groups)
+        const byGroup = new Map(groups.map(g => [g.repActivityId, g]))
+        reportage = reportage.flatMap(row => {
+          if (hidden.has(row.id)) return []
+          const g = byGroup.get(row.id)
+          if (!g) return [row]
+          const rows = (activities ?? []).filter(a => g.tappaActivityIds.includes(a.id as string))
+            .sort((a, b) => new Date(a.start_time as string).getTime() - new Date(b.start_time as string).getTime())
+          const sum = (k: 'distance_meters' | 'elevation_gain' | 'total_time_seconds') => rows.reduce((s, a) => s + ((a[k] as number) ?? 0), 0)
+          const poly = rows.flatMap(a => (a.route_polyline as [number, number][] | null) ?? [])
+          return [{
+            ...row, id: `cammino:${g.hikeId}`, title: g.name, startTime: g.startTime,
+            distanceMeters: sum('distance_meters'), elevationGain: sum('elevation_gain'), totalTimeSeconds: sum('total_time_seconds'),
+            altitudeMax: Math.max(...rows.map(a => (a.altitude_max as number) ?? 0)),
+            routePolyline: poly.length > 1 ? poly : undefined, trailScore: null, userRating: null,
+            hasWrittenReport: !!g.content.trim(), percorsoId: g.hikeId, metaType: 'cammino' as MetaType,
+            href: `/resoconto/cammino/${encodeURIComponent(g.hikeId)}`,
+          }]
+        })
+      }
       for (const a of activities ?? []) {
         if (a.linked_planned_id) walkedPlannedIds.add(a.linked_planned_id as string)
       }

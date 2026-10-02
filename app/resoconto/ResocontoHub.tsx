@@ -974,7 +974,7 @@ export default function ResocontoHub({ id, parentCammino }: { id?: string; paren
 // /diario, che apre l'analogo "Gestisci questo Diario"): titolo e Diario di appartenenza in un
 // unico posto invece di due azioni separate (prima solo lo spostamento, dietro un'icona a doppia
 // freccia). Stessa identità visiva scura delle altre liste a schermo intero di questa pagina.
-function ManageReportageOverlay({
+export function ManageReportageOverlay({
   titleVal, onTitleChange, onTitleBlur, titleSaving,
   diaries, currentDiaryId, moveBusy, moveError, onSelectDiary, onClose,
 }: {

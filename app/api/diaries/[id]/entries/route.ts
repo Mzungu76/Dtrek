@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { getUserFromRequest } from '@/lib/supabaseAuth'
 import { fetchSiteInfo } from '@/lib/siteInfoServer'
+import { loadCamminoGroups } from '@/lib/cammini/diaryEntriesServer'
+import { hiddenTappaActivityIds } from '@/lib/cammini/diaryEntries'
 
 export const dynamic = 'force-dynamic'
 
@@ -56,10 +58,26 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     // copertina, mappa e il blocco "Il luogo") — lib/siteInfoServer.ts, best-effort.
     const siteInfo = await fetchSiteInfo((activities ?? []) as { id: string; meta_type?: string | null; linked_planned_id?: string | null }[])
     const actMap = new Map((activities ?? []).map(a => [a.id as string, { ...a, site: siteInfo.get(a.id as string) ?? null }]))
-    const enriched = (reports ?? []).map(r => ({
-      ...r,
-      activity: actMap.get(r.activity_id as string) ?? null,
-    }))
+    // Cammini: una sola voce per cammino (reportage padre, con le tappe come capitoli) al posto di una per tappa.
+    // La voce poggia sull'attività della prima tappa percorsa, ma con i numeri di tutto il cammino.
+    const groups = await loadCamminoGroups(user.id, percorsoIds)
+    const hidden = hiddenTappaActivityIds(groups)
+    const withContent = new Map(groups.filter(g => g.content.trim()).map(g => [g.repActivityId, g]))
+    const base = (reports ?? []).filter(r => !hidden.has(r.activity_id as string) && !withContent.has(r.activity_id as string))
+    const virtual = Array.from(withContent.values()).map(g => {
+      const rows = (activities ?? []).filter(a => g.tappaActivityIds.includes(a.id as string))
+      const sum = (k: 'distance_meters' | 'elevation_gain' | 'total_time_seconds') => rows.reduce((s, a) => s + ((a[k] as number) ?? 0), 0)
+      const rep = actMap.get(g.repActivityId)
+      return {
+        id: `cammino:${g.hikeId}`, activity_id: g.repActivityId, title: g.name, content: g.content,
+        created_at: g.startTime, updated_at: g.startTime, share_token: null, authored_by: null,
+        activity: rep ? { ...rep, title: g.name, meta_type: 'cammino', distance_meters: sum('distance_meters'), elevation_gain: sum('elevation_gain'), total_time_seconds: sum('total_time_seconds') } : null,
+      }
+    })
+    const enriched = [
+      ...base.map(r => ({ ...r, activity: actMap.get(r.activity_id as string) ?? null })),
+      ...virtual,
+    ]
 
     return NextResponse.json({ reports: enriched, activityIds })
   } catch (e) {

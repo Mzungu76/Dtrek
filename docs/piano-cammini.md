@@ -175,3 +175,14 @@ Scelta dopo i mockup (concept B), con queste regole:
 - Pagina del reportage del cammino = stesso impianto degli altri reportage (`ReportHero`, `ReportStatsStrip`, `SectionCard`: stessi colori e caratteri); introduzione, capitoli per tappa (con badge Trail Score + Sicurezza), conclusione.
 - Il reportage di una tappa si apre **sotto il padre** (`/resoconto/cammino/[id]/tappa/[activityId]`): galleria con le sole tappe di quel cammino, ogni uscita riporta al reportage del cammino, mai all'elenco generale.
 - **Sicurezza nel CTS di tappa**: `computeSafetyCore` (fauna GBIF, cani da guardia, scala SAC, quota, tempo) + Trail Score v2 (`computeTrailScoreV2`); badge `TrailScoreGaugeBadge` (anello Trail Score + anello Sicurezza), salvati in `cammino_plan.tappe[].cts`.
+
+## 5h. Il cammino nei Diari e nel sito pubblico
+
+- **Una sola voce per cammino.** Le attività delle tappe non sono mai voci a sé nei Diari, nel libro, nelle Raccolte e nel sito
+  pubblico: il cammino è una voce (la sua prima tappa percorsa la "regge", ma con i numeri, il tracciato e le foto di tutte le
+  tappe) e il testo è il reportage del cammino, con le tappe come sezioni `## Tappa N · da → a` (`lib/cammini/diaryEntries.ts`).
+- **Dove vale.** Sommario del Diario (`/api/diaries/[id]`, riga che apre il reportage del cammino), libro del Diario
+  (`/api/diaries/[id]/entries`), Diario pubblico e Raccolte (`lib/sharePublicDiary.ts`), sito dell'utente (`lib/publicProfile.ts`).
+- **Rotella** nel reportage del cammino: titolo e Diario passano dalla Meta (`planned_hikes.diary_id`), come per ogni reportage.
+- **Non ancora:** link di condivisione del singolo reportage del cammino (`/leggi/p/<token>`), conteggio "N reportage" dei Diari
+  (conta ancora le tappe), esclusione delle tappe dal libro PDF.

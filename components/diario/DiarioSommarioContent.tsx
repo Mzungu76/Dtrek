@@ -366,7 +366,7 @@ export default function DiarioSommarioContent({ diaryId, onDeleted, onChanged }:
               const scoreLabel = r.trailScore != null ? ctsLabel(r.trailScore).label : null
               return (
                 <div key={r.id} className="relative flex items-center gap-3.5 py-3 border-b border-white/10">
-                  <Link href={`/resoconto/${encodeURIComponent(r.id)}`} className="flex items-center gap-3.5 flex-1 min-w-0">
+                  <Link href={r.href ?? `/resoconto/${encodeURIComponent(r.id)}`} className="flex items-center gap-3.5 flex-1 min-w-0">
                     <div className="w-14 h-14 rounded-xl shrink-0 overflow-hidden bg-white/5 flex items-center justify-center">
                       {r.routePolyline && r.routePolyline.length > 1
                         ? <RouteThumb polyline={r.routePolyline} color={THUMB_TRACK_COLOR} strokeWidth={2.5} />

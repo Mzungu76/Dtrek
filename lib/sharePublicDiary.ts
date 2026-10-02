@@ -33,6 +33,8 @@ import { buildMetricSeries, type MetricPoint } from './trackSeries'
 import { fetchCachedPois, type PublicPoi } from './publicPois'
 import { fetchSiteInfo } from './siteInfoServer'
 import type { TrackPoint } from './tcxParser'
+import { loadCamminoGroups } from './cammini/diaryEntriesServer'
+import { hiddenTappaActivityIds, type CamminoGroup } from './cammini/diaryEntries'
 import { metaHasHikingMetrics, type MetaType, type SiteType } from './metaTypes'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -152,9 +154,16 @@ export async function buildContentFromReports(
   photoIdsByActivity: Record<string, string[]>,
   privacy: PublicPrivacyPrefs,
   config: DiaryConfig,
+  /** Cammini del Diario: ogni cammino è UNA voce (quella della sua attività rappresentante), con i numeri, il tracciato
+   *  e le foto di tutte le sue tappe. I `reports` passati devono già avere la voce virtuale al posto di quelle delle tappe. */
+  cammini: CamminoGroup[] = [],
 ): Promise<DiaryContent> {
   const visibleReports = reports.filter(r => !excluded.has(r.activity_id))
-  const activityIds = visibleReports.map(r => r.activity_id as string).filter(Boolean)
+  const visibleCammini = cammini.filter(g => visibleReports.some(r => r.activity_id === g.repActivityId))
+  const activityIds = Array.from(new Set([
+    ...visibleReports.map(r => r.activity_id as string).filter(Boolean),
+    ...visibleCammini.flatMap(g => g.tappaActivityIds),
+  ]))
 
   // Le due letture dipendono entrambe solo da `activityIds`: si fanno insieme, non in fila.
   const [{ data: activities }, { data: photos }] = activityIds.length
@@ -193,7 +202,7 @@ export async function buildContentFromReports(
     list.sort((a, b) => (a.progress ?? 1) - (b.progress ?? 1))
   })
 
-  const entries: PublicDiaryEntry[] = (await Promise.all(visibleReports
+  const builtEntries: PublicDiaryEntry[] = (await Promise.all(visibleReports
     .map(async r => {
       const act = actMap.get(r.activity_id as string)
       const raw = act?.route_polyline
@@ -247,6 +256,32 @@ export async function buildContentFromReports(
       }
     })))
     .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
+
+  // Cammini: la voce rappresentante prende i numeri, il tracciato e le foto di tutte le tappe.
+  const entries = builtEntries.map(e => {
+    const g = visibleCammini.find(c => c.hikeId && e.id === `cammino:${c.hikeId}`)
+    if (!g) return e
+    const acts = g.tappaActivityIds.map(id => actMap.get(id)).filter(Boolean) as Record<string, unknown>[]
+    const sum = (k: string) => acts.reduce((s, a) => s + ((a[k] as number) ?? 0), 0)
+    const full = acts.flatMap(a => (Array.isArray(a.route_polyline) ? (a.route_polyline as [number, number][]) : []))
+    const poly = full.length > 1 ? (privacy.hideHomeStarts ? trimHomeStart(full, privacy.home) : full) : null
+    const chosen = (id: string) => {
+      const all = photosByActivity.get(id) ?? []
+      const ids = photoIdsByActivity[id]
+      return ids && ids.length > 0 ? all.filter(p => ids.includes(p.id)) : all
+    }
+    return {
+      ...e,
+      title: g.name, metaType: 'cammino' as MetaType,
+      distanceMeters: sum('distance_meters'), elevationGain: sum('elevation_gain'), totalTimeSeconds: sum('total_time_seconds'),
+      altitudeMax: acts.reduce<number | null>((m, a) => { const v = (a.altitude_max as number | null) ?? null; return v == null ? m : m == null ? v : Math.max(m, v) }, null),
+      calories: null,
+      polyline: poly,
+      photos: g.tappaActivityIds.flatMap(chosen),
+      // I grafici e i luoghi di una singola tappa non rappresentano il cammino intero.
+      altitudeSeries: [], hrSeries: [], speedSeriesKmh: [], pois: [],
+    }
+  }).sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
 
   // Solo i Reportage con metriche escursionistiche: la distanza/dislivello di una visita a un
   // Borgo o a un Sito non sono chilometri di cammino da sommare a quelli dei sentieri.
@@ -305,7 +340,22 @@ export async function fetchDiaryContent(
     }
   }
 
-  return buildContentFromReports(reports, excluded, photoIdsByActivity, privacy, config)
+  // Cammini: una voce sola per cammino (le sue tappe sono i capitoli), mai una per tappa.
+  const cammini = await loadCamminoGroups(userId, percorsoIds)
+  if (cammini.length > 0) reports = withCamminoReports(reports, cammini)
+
+  return buildContentFromReports(reports, excluded, photoIdsByActivity, privacy, config, cammini)
+}
+
+/** Toglie i reportage delle singole tappe e mette al loro posto la voce unica del cammino (se ha del testo). */
+export function withCamminoReports(reports: RawHikeReport[], cammini: CamminoGroup[]): RawHikeReport[] {
+  const hidden = hiddenTappaActivityIds(cammini)
+  const withText = cammini.filter(g => g.content.trim())
+  const reps = new Set(withText.map(g => g.repActivityId))
+  return [
+    ...reports.filter(r => !hidden.has(r.activity_id) && !reps.has(r.activity_id)),
+    ...withText.map(g => ({ id: `cammino:${g.hikeId}`, activity_id: g.repActivityId, title: g.name, content: g.content, created_at: g.startTime })),
+  ]
 }
 
 export async function fetchPublicDiary(token: string): Promise<PublicDiary | null> {
