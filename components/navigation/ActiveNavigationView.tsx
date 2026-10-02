@@ -39,6 +39,7 @@ import { retryFieldNotePhotos } from '@/lib/offline/retryFieldNotePhotos'
 import { retryFieldNotePhotoIfOnline } from '@/lib/offline/retryFieldNotePhotoIfOnline'
 import { checkOfflineReadiness } from '@/lib/offline/offlineReadiness'
 import { verifyOfflinePackageChecksum } from '@/lib/offline/packageManager'
+import { navStorageKey } from '@/lib/navigation/navKey'
 import { ensureTrailGraph, loadTrailGraph } from '@/lib/navigation/trailGraphStore'
 import type { WalkNetwork } from '@/lib/routeBuilder/osmGraph'
 import { computeEscapeOptions, type EscapeOption } from '@/lib/navigation/escapeEngine'
@@ -151,6 +152,9 @@ function NavPanelCompoundRow({ label, children }: { label: string; children: Rea
 
 export default function ActiveNavigationView({ hike, locationProviderFactory, simulationLabel, tappaOrdinal }: Props) {
   const router = useRouter()
+  // Dati locali per tappa: in un cammino le tappe condividono hike.id (vedi lib/navigation/navKey.ts). Il resto
+  // (attività collegata, note di campo, sessione sul server) resta sull'id del piano.
+  const navKey = navStorageKey(hike.id, tappaOrdinal)
   // Questo componente serve sia Dtrek (web) sia la navigazione GPS nativa di Navigator, stessa
   // route condivisa /guida/[id]/naviga (lib/navigatorAllowedPaths.ts). A fine escursione, senza
   // questo controllo, andrebbe sempre verso /guida/{id} o /resoconto/{id} — schermate Dtrek che
@@ -390,8 +394,8 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   // che non ha mai generato quella sezione non vede/sente nulla di diverso da oggi (solo l'estratto
   // Wikipedia già esistente), anche se lo stesso POI ha già una nota cachata da un altro sentiero.
   const hasLuoghiGuide = (hike.cachedGuide ?? '').includes('I luoghi da non perdere')
-  const poiNotesById = usePoiNotes(hike.id, pois.map((p) => p.id), hasLuoghiGuide)
-  const poiTextsById = usePoiTexts(hike.id)
+  const poiNotesById = usePoiNotes(navKey, pois.map((p) => p.id), hasLuoghiGuide)
+  const poiTextsById = usePoiTexts(navKey)
   const poiTextsByIdRef = useRef(poiTextsById)
   poiTextsByIdRef.current = poiTextsById
 
@@ -432,27 +436,27 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   const [activeEpochCallout, setActiveEpochCallout] = useState<EpochPoi | null>(null)
   const guideExcerpts = useMemo(() => extractCuriosita(hike.cachedGuide ?? ''), [hike.cachedGuide])
 
-  const nearbyTrails = useNearbyTrails(hike.id, routePolyline)
-  const natura2000Features = useNatura2000Overlay(hike.id, routePolyline)
+  const nearbyTrails = useNearbyTrails(navKey, routePolyline)
+  const natura2000Features = useNatura2000Overlay(navKey, routePolyline)
 
   useEffect(() => {
     let cancelled = false
-    loadParkingSpot(hike.id).then(spot => { if (!cancelled) setParkingSpot(spot) }).catch(() => {})
+    loadParkingSpot(navKey).then(spot => { if (!cancelled) setParkingSpot(spot) }).catch(() => {})
     return () => { cancelled = true }
-  }, [hike.id])
+  }, [navKey])
 
   const handleSaveParking = () => {
     if (!position) return
     const spot: ParkingSpot = { lat: position.lat, lon: position.lon, savedAt: Date.now() }
     setParkingSpot(spot)
-    saveParkingSpot(hike.id, spot).catch(() => {})
+    saveParkingSpot(navKey, spot).catch(() => {})
     logEvent('parking_saved', { lat: spot.lat, lon: spot.lon })
     haptics.success()
   }
 
   const handleClearParking = () => {
     setParkingSpot(null)
-    clearParkingSpot(hike.id).catch(() => {})
+    clearParkingSpot(navKey).catch(() => {})
   }
 
   /** Contenuto del callout per un POI — lo stop curato dell'itinerario (descrizione/foto vere,
@@ -517,12 +521,12 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   const paceEtaRef = useRef<Date | null>(null)
   paceEtaRef.current = pace?.liveEtaDate ?? null
 
-  const weatherLookahead = useWeatherRefresh(hike.id, routePolyline, positionRef, engineRef, paceEtaRef)
+  const weatherLookahead = useWeatherRefresh(navKey, routePolyline, positionRef, engineRef, paceEtaRef)
   // DTREK-AUDIT.md P1 #17 — cachedTrailScore (Comfort TrailScore personale, non gated) invece di
   // cachedTsTotal (già gated dalla Sicurezza): il gate viene applicato di nuovo, separatamente,
   // dentro computeTrailConfidence via safetyScore — così il fattore mostrato all'utente sa
   // distinguere "non ti si addice" da "non è sicuro" invece di un unico numero già mescolato.
-  const { confidence: trailConfidence, closure: trailClosure } = useTrailConfidence(hike.id, routePolyline, hike.cachedTrailScore ?? null, hike.cachedSafetyScore?.overall ?? null)
+  const { confidence: trailConfidence, closure: trailClosure } = useTrailConfidence(navKey, routePolyline, hike.cachedTrailScore ?? null, hike.cachedSafetyScore?.overall ?? null)
   // Un nuovo avviso (testo diverso, es. l'ETA si sposta e ora indica pioggia invece di vento)
   // non deve restare nascosto solo perché un avviso precedente era stato chiuso.
   useEffect(() => { setWeatherLookaheadDismissed(false) }, [weatherLookahead?.message])
@@ -534,7 +538,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
   useAutoDismiss(offlinePackageWarning, () => setOfflinePackageWarning(false))
   useAutoDismiss(offlineDegradedMissing.length > 0, () => setOfflineDegradedMissing([]))
   useAutoDismiss(state !== 'idle' && relevantWildlifeRisks.length > 0 && !wildlifeAlertDismissed, () => setWildlifeAlertDismissed(true))
-  const sunTimes = useSunTimes(hike.id, routePolyline, positionRef)
+  const sunTimes = useSunTimes(navKey, routePolyline, positionRef)
 
   const remainingPois = useMemo(() => {
     if (!position) return pois.map((p) => ({ id: p.id, name: p.name, distanceM: 0 }))
@@ -583,8 +587,8 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
     let cancelled = false
 
     ;(async () => {
-      const restored = await loadNavigationSession(hike.id)
-      const snapshot = restored ?? newSessionSnapshot(hike.id, crypto.randomUUID())
+      const restored = await loadNavigationSession(navKey)
+      const snapshot = restored ?? newSessionSnapshot(navKey, crypto.randomUUID())
       sessionRef.current = snapshot
 
       // Restore any recorded points from a previous run that crashed/was
@@ -592,7 +596,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       // before the end-of-hike review step silently loses the chance to
       // save the completed activity, even though the raw fixes made it into
       // the offline sync queue.
-      recordedTrackRef.current = await loadRecordedTrack(hike.id)
+      recordedTrackRef.current = await loadRecordedTrack(navKey)
 
       fetch('/api/navigation/session', {
         method: 'POST',
@@ -608,7 +612,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       // previous navigation start or from that offline download; failure (Overpass slow/down) is
       // silently ignored — today's navigation already works with just the planned route.
       if (routePolyline.length > 1) {
-        ensureTrailGraph(hike.id, routePolyline)
+        ensureTrailGraph(navKey, routePolyline)
           .then((result) => { if (!cancelled && result) trailNetworkRef.current = result.network })
           .catch(() => {})
       }
@@ -657,7 +661,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
             speedMs: raw.speedMs ?? undefined,
           }
           recordedTrackRef.current.push(point)
-          appendRecordedTrackPoint(hike.id, point).catch(() => {})
+          appendRecordedTrackPoint(navKey, point).catch(() => {})
         }
         queueTrackFix(snapshot.sessionId, { ts: raw.ts, lat: raw.lat, lon: raw.lon, altitudeM: raw.altitudeM, speedMs: raw.speedMs, accuracyM: raw.accuracyM })
 
@@ -810,7 +814,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
     // (the one hard requirement, see lib/offline/offlineReadiness.ts) — worth a one-time heads-up
     // instead of the hiker discovering blank map tiles mid-trail. Pieces that only degrade the
     // experience (trail graph, elevation, POIs, nav instructions) get their own, separate notice.
-    loadManifest(hike.id).then((manifest) => {
+    loadManifest(navKey).then((manifest) => {
       if (cancelled) return
       const readiness = checkOfflineReadiness(manifest)
       if (!navigator.onLine) {
@@ -825,7 +829,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       // a mismatch (a false positive here must never strand a hiker who has a perfectly good
       // package) — surfaced as one more entry in the same non-blocking "degraded" notice.
       if (readiness.tilesReady) {
-        verifyOfflinePackageChecksum(hike.id, manifest).then((ok) => {
+        verifyOfflinePackageChecksum(navKey, manifest).then((ok) => {
           if (!cancelled && !ok) {
             setOfflineDegradedMissing((prev) => prev.includes('Integrità mappa offline non verificata')
               ? prev
@@ -884,7 +888,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       flushToServer()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hike.id])
+  }, [navKey])
 
   // The MapTiler-backed 3D styles need connectivity — fall back to the offline-safe map the moment the network drops.
   useEffect(() => {
@@ -1017,7 +1021,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         // fall through to the original close behavior if the track can't be turned into an activity
       }
     }
-    clearRecordedTrack(hike.id).catch(() => {})
+    clearRecordedTrack(navKey).catch(() => {})
     goToPlannedHike()
   }
 
@@ -1058,7 +1062,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
     setEscapeSheetOpen(true)
     setEscapeLoading(true)
     try {
-      const network = await loadTrailGraph(hike.id)
+      const network = await loadTrailGraph(navKey)
       const progressSnapshot = fullProgressRef.current
       if (!position || !progressSnapshot) {
         setEscapeOptions([])
@@ -1092,7 +1096,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       // una cancellazione.
       onSyncResult: (ok) => { offline = !ok },
     })
-    clearRecordedTrack(hike.id).catch(() => {})
+    clearRecordedTrack(navKey).catch(() => {})
 
     // Fase 4 di docs/navigator-orizzonti-roadmap.md — opt-in esplicito (checkbox deselezionata
     // di default in EndHikeReviewDialog.tsx), best-effort e fire-and-forget: non deve mai
@@ -1117,7 +1121,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
 
   const handleDiscardRecordedActivity = () => {
     setPendingActivity(null)
-    clearRecordedTrack(hike.id).catch(() => {})
+    clearRecordedTrack(navKey).catch(() => {})
     goToPlannedHike()
   }
 
@@ -1563,7 +1567,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         open={showOfflineSheet}
         onClose={() => {
           setShowOfflineSheet(false)
-          loadManifest(hike.id).then((m) => {
+          loadManifest(navKey).then((m) => {
             setOfflineReady(isManifestValid(m))
             setOfflineDegradedMissing(checkOfflineReadiness(m).degradedMissing)
           }).catch(() => {})
@@ -1571,7 +1575,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         title="Mappa offline"
       >
         <OfflinePackageDownloader
-          hikeId={hike.id}
+          hikeId={navKey}
           routePolyline={routePolyline}
           hikeData={{ trackPoints: hike.trackPoints, cachedPois: hike.cachedPois, cachedPoiWiki: hike.cachedPoiWiki, cachedGuide: hike.cachedGuide }}
         />
