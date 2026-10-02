@@ -114,6 +114,33 @@ Workflow `Import Cammini del registro`, campo `registryId`: un id (`via-francige
 
 **Se un cammino cade**: rilancia lo stesso workflow (stesso `registryId`, o solo l'id del cammino): riparte dalla cache, non da zero. Se Overpass è giù per ore, riprova più tardi; per un cammino enorme usa direttamente il suo id. I cammini «da rivedere» non sono errori: leggi i motivi nel riepilogo.
 
+### 7.2 Se Overpass pubblico resta sovraccarico: import offline
+
+I server pubblici di Overpass a volte rispondono "the server is probably too busy" per ore di fila
+(non è un errore della query: anche una lettura per id va in timeout). In quel caso si può evitare del
+tutto Overpass, scaricando una volta i dati OSM dell'Italia ed estraendo i cammini in locale:
+
+1. **Scarica una volta** l'estratto Italia (circa 1,5 GB), es. da Geofabrik:
+   ```
+   curl -LO https://download.geofabrik.de/europe/italy-latest.osm.pbf
+   ```
+2. **Installa `osmium-tool`** (una volta): `apt install osmium-tool` (Linux) o `brew install osmium-tool` (macOS).
+3. **Estrai** tutte le relazioni a piedi d'Italia in un unico file (qualche minuto, una sola chiamata a
+   `osmium tags-filter` che risolve da sola sotto-relazioni e geometria delle way):
+   ```
+   npx tsx scripts/places/cammini/offlineExtract.ts --pbf italy-latest.osm.pbf --out /tmp/italy-routes.json
+   ```
+4. **Importa** usando quel file al posto del download live, per un cammino o per tutti:
+   ```
+   npx tsx scripts/places/cammini/import-registry.ts --id tutti --shared-fixture /tmp/italy-routes.json
+   npx tsx scripts/places/cammini/import-registry.ts --id tutti --shared-fixture /tmp/italy-routes.json --write
+   ```
+
+Il file `.pbf` si scarica una volta e si riusa; l'estrazione (passo 3) va ripetuta solo se serve un dato
+più recente. Il resto della pipeline (ordine delle tappe, filtro Italia, qualità, scrittura) è identico
+al percorso con Overpass: non cambia nulla per come i cammini vengono costruiti o scritti, cambia solo
+da dove arrivano relazioni e way.
+
 ## 8. Fase 3 — ricerca e scheda (in app)
 
 - `lib/metaSearch/searchCammini.ts` (+ `meta-search` accetta `metaType: 'cammino'`): solo cammini con qualità **pronto**; con un'origine conta il **tracciato** entro il raggio, non il pin.
