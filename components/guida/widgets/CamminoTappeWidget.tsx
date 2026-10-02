@@ -3,6 +3,7 @@ import dynamic from 'next/dynamic'
 import { Mountain, Loader2, ChevronDown, Sparkles } from 'lucide-react'
 import { POI_META } from '@/lib/overpass'
 import { useCamminoDetail, dayColor } from '@/lib/cammini/useCamminoDetail'
+import { computeTappaCts, type TappaCts } from '@/lib/cammini/tappaCts'
 import type { CamminoPlan, CamminoPlanTappa } from '@/lib/cammini/plan'
 import type { TappaElevation } from '@/app/api/cammini/[id]/elevation/route'
 import type { TrackPoint } from '@/lib/tcxParser'
@@ -57,6 +58,7 @@ export default function CamminoTappeWidget({ plan, hikeId, color, onPlanChange }
   const [tab, setTab] = useState<Tab>('percorso')
   const openedToday = useRef(false)
   const [detail, setDetail] = useState<Record<number, TappaElevation | 'loading' | 'na'>>({})
+  const [cts, setCts] = useState<Record<number, TappaCts | 'loading' | 'na'>>({})
   const [writing, setWriting] = useState<string | null>(null)
   const [writeError, setWriteError] = useState<string | null>(null)
   const planRef = useRef(plan)
@@ -103,6 +105,20 @@ export default function CamminoTappeWidget({ plan, hikeId, color, onPlanChange }
       setDetail(prev => ({ ...prev, [ordinal]: 'na' }))
     }
   }
+
+  // CTS di ogni tappa aperta, appena profilo e luoghi sono arrivati (nel browser: usa preferenze e storico).
+  useEffect(() => {
+    for (const [k, d] of Object.entries(detail)) {
+      const ordinal = Number(k)
+      if (!d || d === 'loading' || d === 'na' || !d.points || cts[ordinal]) continue
+      const tappa = plan.tappe.find(x => x.ordinal === ordinal)
+      if (!tappa) continue
+      setCts(prev => ({ ...prev, [ordinal]: 'loading' }))
+      computeTappaCts({ points: d.points, distanceMeters: tappa.lengthM, gainM: d.gainM, lossM: d.lossM, maxM: d.maxM ?? 0, pois: d.pois ?? [] })
+        .then(r => setCts(prev => ({ ...prev, [ordinal]: r ?? 'na' })))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detail])
 
   // La tappa di oggi parte già aperta: ne carica subito il profilo.
   useEffect(() => {
@@ -167,12 +183,13 @@ export default function CamminoTappeWidget({ plan, hikeId, color, onPlanChange }
   function renderDetail(t: CamminoPlanTappa, dayIdx: number, seq: number) {
     const d = detail[t.ordinal]
     const loaded = d && d !== 'loading' && d !== 'na' ? d : null
+    const ctsV = cts[t.ordinal]
     const trackPoints: TrackPoint[] | null = loaded?.points
       ? loaded.points.map(([lat, lon, alt]) => ({ time: '', lat, lon, altitudeMeters: alt }))
       : null
     const catalogTappa = detailCatalog?.tappe.find(x => x.ordinal === t.ordinal)
     const pois = loaded?.pois ?? []
-    const namedPois = pois.filter(p => p.name)
+    const namedPois = pois.slice(0, 40)
     const tabs: Tab[] = ['percorso', 'luoghi', 'natura', 'sapori']
 
     return (
@@ -209,7 +226,7 @@ export default function CamminoTappeWidget({ plan, hikeId, color, onPlanChange }
                     { v: `+${loaded.gainM}`, l: 'Salita m' },
                     { v: `−${loaded.lossM}`, l: 'Discesa m' },
                     { v: loaded.maxM != null ? String(loaded.maxM) : '–', l: 'Quota max' },
-                    { v: loaded.cts ? String(loaded.cts.ts) : '–', l: 'CTS', color: loaded.cts?.color },
+                    { v: ctsV && ctsV !== 'loading' && ctsV !== 'na' ? String(ctsV.ts) : ctsV === 'loading' ? '…' : '–', l: 'CTS', color: ctsV && ctsV !== 'loading' && ctsV !== 'na' ? ctsV.color : undefined },
                   ].map(x => (
                     <div key={x.l} className="rounded-xl bg-stone-50 py-2">
                       <p className="text-[14px] font-semibold tabular-nums text-stone-800" style={x.color ? { color: x.color } : undefined}>{x.v}</p>
@@ -217,7 +234,10 @@ export default function CamminoTappeWidget({ plan, hikeId, color, onPlanChange }
                     </div>
                   ))}
                 </div>
-                {loaded.cts && <p className="text-[10.5px] text-stone-400 -mt-1.5">CTS {loaded.cts.label.toLowerCase()} · stimato da profilo e luoghi lungo la tappa, senza il tuo storico.</p>}
+                {ctsV && ctsV !== 'loading' && ctsV !== 'na' && (
+                  <p className="text-[10.5px] text-stone-400 -mt-1.5">CTS {ctsV.label.toLowerCase()} · calcolato su profilo, terreno e {ctsV.poisCount} luoghi lungo la tappa, con le tue preferenze e il tuo storico.</p>
+                )}
+                {ctsV === 'na' && <p className="text-[10.5px] text-stone-400 -mt-1.5">Non sono riuscita a calcolare il CTS di questa tappa.</p>}
                 {trackPoints && trackPoints.length > 1 && (
                   <div className="rounded-xl border border-stone-100 overflow-hidden"><ElevationProfileChart trackPoints={trackPoints} /></div>
                 )}
@@ -237,7 +257,7 @@ export default function CamminoTappeWidget({ plan, hikeId, color, onPlanChange }
                 <li key={p.id} className="flex items-center gap-3 px-3 py-2">
                   <span className="w-7 h-7 shrink-0 rounded-full bg-stone-50 flex items-center justify-center text-[14px]">{POI_META[p.type]?.emoji ?? '•'}</span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-[13px] font-semibold text-stone-800 truncate">{p.name}</p>
+                    <p className="text-[13px] font-semibold text-stone-800 truncate">{p.name ?? POI_META[p.type]?.label ?? 'Luogo'}</p>
                     <p className="text-[11px] text-stone-400">{POI_META[p.type]?.label ?? p.type}</p>
                   </div>
                   <span className="shrink-0 text-[11px] text-stone-400 tabular-nums">{Math.round(p.distFromTrack)} m</span>

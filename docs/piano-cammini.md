@@ -132,3 +132,17 @@ Struttura: la guida generale resta snella (Prima di partire, Il cammino con la *
 - `POST /api/cammini/tappa-text` con `kind: racconto|natura|sapori`; testi in `cammino_plan.tappe[].text|natura|sapori`.
 - `CAMMINO_PER_TAPPA_SECTIONS` ora comprende anche natura e sapori.
 - Da fare: CTS personalizzato con lo storico dell'utente, Navigator per tappa/offline, sicurezza per tappa.
+
+## 11. Riorganizzazione della guida del cammino (Fase 5d–7)
+
+Problema: la guida a elenco di tappe espandibili è lunga e poco usabile durante il cammino. Soluzione: **la guida diventa un percorso a schede orizzontali**, agganciate al tracciato generale.
+
+- **Scheda 0 — Il cammino**: mappa d'insieme, prima di partire, il cammino, consigli, verificato.
+- **Schede 1…N — una per tappa** (scorri a destra/sinistra, scroll-snap). Ogni scheda: intestazione (da → a, km, ore, D+, CTS), mappa della tappa con i luoghi, profilo, **luoghi in ordine di cammino** (con distanza progressiva), racconto/natura/sapori, azione "Segna come fatta" / "Registra la tappa".
+- **Binario del cammino** fisso in alto: profilo altimetrico d'insieme con un punto per tappa, tappa corrente evidenziata, tocco per saltare; lo swipe delle schede lo sincronizza. Fatte = piene, oggi = anello, mancanti = vuote.
+- **Avanzamento** in `cammino_plan.progress[ordinal]`: `todo|doing|done|skipped`, data, nota, voto, `activityId` se registrata.
+- **Attività**: `activities.tappa_index` + `linked_planned_id` (già nel DB). La tappa si chiude a mano o registrando col Navigator.
+- **Reportage del cammino**: uno solo, vivo. Capitolo introduttivo + un capitolo per ogni tappa conclusa, che si aggiunge man mano (Giulia scrive solo il capitolo nuovo, usando nota, foto, voto e dati reali della tappa); epilogo quando il cammino è finito. Nel Reportage hub come gli altri.
+- **Durante il cammino**: scheda di oggi aperta all'avvio, "prossimi luoghi" davanti a te, dati scaricabili per l'offline.
+
+Ordine: 5d schede + binario + stato avanzamento → 6 attività e diario per tappa → 6b reportage incrementale → 7 offline e Navigator per tappa.

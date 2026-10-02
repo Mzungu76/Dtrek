@@ -42,6 +42,9 @@ export interface CtsCoreInput {
    *  Assente ⇒ nessun raddoppio (comportamento storico, e l'unico corretto per anelli e attività
    *  già concluse, dove la traccia registrata contiene già tutto il camminato). */
   routeMode?: RouteMode | null
+  /** Tiene conto dello storico dell'utente (personalDelta appreso dalle sue uscite con cardio, e
+   *  quante ne ha) oltre alle preferenze. Opt-in: i punteggi dei percorsi esistenti restano com'erano. */
+  personalize?: boolean
 }
 
 export interface CtsCoreResult {
@@ -139,6 +142,7 @@ export async function computeCtsCore(hike: CtsCoreInput, prefetched?: CtsPrefetc
     hrRest:         prefs.hrRest ?? undefined,
     hrMax:          prefs.hrMax ?? undefined,
     avgSlopeDeg:    dtmProfile?.avgSlopeDeg ?? undefined,
+    ...(hike.personalize ? { personalDelta: settings.personalDelta ?? undefined, hrHikeCount: settings.hrHikeCount } : {}),
   })
   // Era -10%: penalizzava sistematicamente i sentieri lontani da siti catalogati (dove <3 POI
   // culturali sono la norma, non l'eccezione) più che segnalare davvero un'incertezza di stima.
