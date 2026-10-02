@@ -153,6 +153,8 @@ export default function ResocontoHub({ id, parentCammino }: { id?: string; paren
   // appartenenza modificabili nello stesso posto, invece di due azioni separate.
   const [manageOpen,      setManageOpen]      = useState(false)
   const [manageTitleVal,  setManageTitleVal]  = useState('')
+  // Rotella sulla copertina del reportage di un cammino: id della Meta (planned_hikes) in gestione.
+  const [camminoManage,  setCamminoManage]  = useState<string | null>(null)
   const [manageTitleSaving, setManageTitleSaving] = useState(false)
   const [moveBusy,        setMoveBusy]        = useState(false)
   const [moveError,       setMoveError]       = useState<string | null>(null)
@@ -530,6 +532,32 @@ export default function ResocontoHub({ id, parentCammino }: { id?: string; paren
       setManageTitleSaving(false)
     }
   }
+  // Gestione del reportage di un cammino (titolo e Diario passano dalla Meta, come per ogni reportage).
+  const patchCammino = async (hikeId: string, body: Record<string, unknown>) => {
+    const res = await fetch('/api/planned', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: hikeId, ...body }) })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error ?? data.message ?? `HTTP ${res.status}`)
+  }
+  const saveCamminoTitle = async () => {
+    const hikeId = camminoManage
+    const trimmed = manageTitleVal.trim()
+    if (!hikeId || !trimmed || trimmed === camminoNames.get(hikeId)) return
+    setManageTitleSaving(true)
+    try {
+      await patchCammino(hikeId, { title: trimmed })
+      setCamminoNames(prev => new Map(prev).set(hikeId, trimmed))
+    } catch (e) { setMoveError(e instanceof Error ? e.message : String(e)) } finally { setManageTitleSaving(false) }
+  }
+  const moveCamminoToDiary = async (diaryId: string) => {
+    const hikeId = camminoManage
+    if (!hikeId) return
+    setMoveBusy(true); setMoveError(null)
+    try {
+      await patchCammino(hikeId, { diaryId })
+      setPlannedDiaryById(prev => new Map(prev).set(hikeId, diaryId))
+      setCamminoManage(null)
+    } catch (e) { setMoveError(e instanceof Error ? e.message : String(e)) } finally { setMoveBusy(false) }
+  }
   const saveRating = async () => {
     if (!activity || !ratingVal) return
     setSavingRating(true)
@@ -622,6 +650,18 @@ export default function ResocontoHub({ id, parentCammino }: { id?: string; paren
   // confusione: qui apre un pannello che modifica titolo e Diario di appartenenza insieme, non solo
   // lo spostamento). Sempre visibile anche quando il Diario non è ancora noto.
   const titleAction = (routeItem: RouteHubItem) => {
+    if (routeItem.id.startsWith(CAMMINO_PREFIX)) {
+      const hikeId = routeItem.id.slice(CAMMINO_PREFIX.length)
+      return (
+        <button
+          onClick={() => { setManageTitleVal(camminoNames.get(hikeId) ?? routeItem.title ?? ''); setMoveError(null); setCamminoManage(hikeId) }}
+          title="Gestisci questo Reportage"
+          className="pointer-events-auto p-1"
+        >
+          <Settings className="w-5 h-5 text-white" style={{ filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.5))' }} />
+        </button>
+      )
+    }
     if (!activity || routeItem.id !== activity.id) return null
     return (
       <button
@@ -845,6 +885,21 @@ export default function ResocontoHub({ id, parentCammino }: { id?: string; paren
           moveError={moveError}
           onSelectDiary={moveToDiary}
           onClose={() => setManageOpen(false)}
+        />
+      )}
+
+      {camminoManage && (
+        <ManageReportageOverlay
+          titleVal={manageTitleVal}
+          onTitleChange={setManageTitleVal}
+          onTitleBlur={saveCamminoTitle}
+          titleSaving={manageTitleSaving}
+          diaries={diaries.filter(d => !d.archivedAt)}
+          currentDiaryId={plannedDiaryById.get(camminoManage) ?? null}
+          moveBusy={moveBusy}
+          moveError={moveError}
+          onSelectDiary={moveCamminoToDiary}
+          onClose={() => setCamminoManage(null)}
         />
       )}
 
