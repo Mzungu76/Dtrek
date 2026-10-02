@@ -21,6 +21,8 @@ export interface RegistryEntry {
   anchors: 'borghi' | 'rifugi'
   /** Per la ricerca per nome quando la scoperta automatica non lo trova (stringa per Overpass). */
   searchName?: string
+  /** Relazioni radice OSM note: il download parte da questi id (leggero) invece che dalla ricerca per nome. */
+  osmRelationIds?: number[]
   /** Stesso cammino sotto un altro id del registro: da verificare con la geometria prima di tenerli entrambi. */
   overlapsWith?: string
   /** Una sola relazione OSM spezzata in due cammini a un punto (Francigena: Canterbury–Roma / Roma–Leuca). */
@@ -43,6 +45,8 @@ export const REGISTRY: RegistryEntry[] = [
   // ── Ondata 1: tappe ufficiali già in OSM ───────────────────────────────────────────────────
   c({
     id: 'via-francigena', name: 'Via Francigena', wave: 1, match: /^via francigena( del sud)?$/, searchName: 'Via Francigena',
+    // Superroute italiana (Gran San Bernardo – Leuca): contiene le relazioni regionali (wiki OSM Via_Romea_Francigena).
+    osmRelationIds: [955907],
     // In OSM la relazione "07 Lazio" copre sia il tratto verso Roma sia la Francigena del Sud: per
     // l'utente sono due cammini (decisione confermata), si dividono a San Pietro.
     splitAt: { name: 'Roma (San Pietro)', lat: 41.9022, lon: 12.4539, before: 'via-francigena', after: 'via-francigena-sud' },

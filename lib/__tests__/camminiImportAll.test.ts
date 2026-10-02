@@ -94,3 +94,12 @@ describe('query di download', () => {
     }
   })
 })
+
+describe('radici per id', () => {
+  it('la Francigena parte dalla superroute italiana per id, senza ricerca per nome', async () => {
+    const { rootsQuery } = await import('../cammini/overpassQueries')
+    const q = rootsQuery(REGISTRY.find(x => x.id === 'via-francigena')!)
+    expect(q).toContain('rel(id:955907)')
+    expect(q).not.toContain('name')
+  })
+})

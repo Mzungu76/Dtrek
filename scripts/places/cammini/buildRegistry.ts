@@ -82,7 +82,7 @@ export function buildFromRegistry(
   const inSet = (id: number) => byId.has(id)
 
   // Pezzi del cammino: relazioni col nome giusto + le loro sotto-relazioni (tappe, anche con altro nome).
-  const named = rels.filter(r => r.tags?.name && entry.match.test(familyKey(r.tags.name)))
+  const named = rels.filter(r => entry.osmRelationIds?.includes(r.id) || (r.tags?.name && entry.match.test(familyKey(r.tags.name))))
   const ids = new Set<number>(named.map(r => r.id))
   const queue = [...named]
   while (queue.length > 0) {
