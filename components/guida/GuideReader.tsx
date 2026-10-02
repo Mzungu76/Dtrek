@@ -1,5 +1,7 @@
 'use client'
 import { useEffect, useState, useRef, useCallback, useMemo, type ReactNode } from 'react'
+import { useRouter } from 'next/navigation'
+import { getAllActivities, type ActivityMeta } from '@/lib/blobStore'
 import { updatePlannedMeta, type PlannedHike, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { getUserSettingsCached } from '@/lib/sync/userSettingsStore'
 import { formatDuration } from '@/lib/tcxParser'
@@ -340,6 +342,24 @@ export default function GuideReader({
   // Guida di Sito aperta nell'overlay (piano §51.4, opzione B — verifica utente 2026-09-27): mai
   // una navigazione, questa stessa Guida di Borgo resta montata sotto per tutto il tempo.
   const [openSiteGuideId, setOpenSiteGuideId] = useState<string | null>(null)
+  const router = useRouter()
+  // Cammino: le tappe già percorse sono quelle con un'attività collegata (registrata col Navigator o
+  // importata da file) — mai dichiarate a mano. ordinale → id dell'attività.
+  const [camminoDone, setCamminoDone] = useState<Record<number, { activityId: string }>>({})
+  useEffect(() => {
+    if (hike.metaType !== 'cammino') return
+    let cancelled = false
+    const apply = (list: ActivityMeta[]) => {
+      if (cancelled) return
+      const done: Record<number, { activityId: string }> = {}
+      for (const a of list) {
+        if (a.linkedPlannedId === hike.id && a.tappaIndex != null && !done[a.tappaIndex]) done[a.tappaIndex] = { activityId: a.id }
+      }
+      setCamminoDone(done)
+    }
+    getAllActivities(apply).then(apply).catch(() => {})
+    return () => { cancelled = true }
+  }, [hike.id, hike.metaType])
   const [borgoItinerary, setBorgoItinerary] = useState<BorgoItinerary | null>(null)
   // Verifica utente: "non vengono più generati gli itinerari" — in realtà venivano generati, solo
   // che il calcolo (geosearch Wikipedia + rete pedonale OSM + Dijkstra, vedi /api/borgo-itinerary)
@@ -1161,7 +1181,12 @@ export default function GuideReader({
         // Cammino: le giornate e le tappe del suo piano (hike.camminoPlan), mai la lista di POI
         // lungo una traccia che non ha.
         if (hike.metaType === 'cammino') {
-          return hike.camminoPlan ? <CamminoTappeWidget plan={hike.camminoPlan} hikeId={hike.id} color={SECTION_STYLE.luoghi.color} onPlanChange={camminoPlan => onHikeUpdate({ camminoPlan })} /> : null
+          return hike.camminoPlan ? <CamminoTappeWidget plan={hike.camminoPlan} hikeId={hike.id} color={SECTION_STYLE.luoghi.color} onPlanChange={camminoPlan => onHikeUpdate({ camminoPlan })}
+            completed={camminoDone}
+            onRecord={ordinal => router.push(`/guida/${encodeURIComponent(hike.id)}/naviga?tappa=${ordinal}`)}
+            onImport={ordinal => router.push(`/upload?tab=activity&planned=${encodeURIComponent(hike.id)}&tappa=${ordinal}`)}
+            onOpenActivity={id => router.push(`/resoconto/${encodeURIComponent(id)}`)}
+          /> : null
         }
         return poiList
           ? (

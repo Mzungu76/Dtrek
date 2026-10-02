@@ -46,6 +46,7 @@ function rowToActivity(row: Record<string, unknown>): StoredActivity {
     userRating:      row.user_rating as number | undefined,
     userRatingNote:  row.user_rating_note as string | undefined,
     linkedPlannedId: row.linked_planned_id as string | undefined,
+    tappaIndex:      (row.tappa_index as number | null | undefined) ?? undefined,
     linkedPlannedTrackPoints: row.linked_planned_track_points as TrackPoint[] | undefined,
     soddisfazione: row.soddisfazione as number | undefined,
     linkedBeautyScore:    row.linked_beauty_score    as StoredActivity['linkedBeautyScore'] | undefined,
@@ -99,6 +100,8 @@ function activityToRow(a: StoredActivity) {
     user_rating:          a.userRating ?? null,
     user_rating_note:     a.userRatingNote ?? null,
     linked_planned_id:            a.linkedPlannedId ?? null,
+    // Solo per le attività di una tappa di cammino: scrivere la colonna sempre romperebbe un ambiente non ancora migrato.
+    ...(a.tappaIndex != null ? { tappa_index: a.tappaIndex } : {}),
     linked_planned_track_points:  a.linkedPlannedTrackPoints ?? null,
     soddisfazione:                a.soddisfazione ?? null,
     linked_beauty_score:          a.linkedBeautyScore ?? null,

@@ -8,6 +8,8 @@ import NavigatorAppPromo from '@/components/navigation/NavigatorAppPromo'
 import TappaPicker from '@/components/navigation/TappaPicker'
 import type { LocationProviderFactory } from '@/lib/native/locationSource'
 import { SimulationLocationProvider } from '@/lib/navigation/simulation/simulationLocationProvider'
+import { orderForDirection } from '@/lib/cammini/plan'
+import type { CamminoDetail } from '@/app/api/cammini/[id]/route'
 import { buildScenario, SCENARIO_NAMES, SCENARIO_LABELS, type ScenarioName } from '@/lib/navigation/simulation/presetScenarios'
 
 function isScenarioName(v: string | null): v is ScenarioName {
@@ -29,6 +31,9 @@ function NavigaPageInner() {
   // offline" sempre uguale anche quando il device è online e la causa è un'altra.
   const [failure, setFailure] = useState<'not-found' | 'no-route' | null>(null)
   const [retryCount, setRetryCount] = useState(0)
+  // Cammino: la tappa da registrare (?tappa=<ordinale>) con il suo tracciato di catalogo, già nel verso
+  // scelto nel piano. Ogni tappa è una sessione a sé e porta il proprio ordinale nell'attività salvata.
+  const [camminoTappa, setCamminoTappa] = useState<{ ordinal: number; polyline: [number, number][]; lengthM: number; name: string } | null>(null)
 
   // Dev/testing only (docs/navigation-engine-roadmap.md — Simulation layer): open
   // /guida/<id>/naviga?simulate=off_route (or any name in SCENARIO_NAMES) to drive the whole
@@ -65,6 +70,14 @@ function NavigaPageInner() {
   // più corta, ma è più chiaro renderlo esplicito qui).
   const navigableHike = useMemo(() => {
     if (!hike) return null
+    if (hike.metaType === 'cammino' && camminoTappa) {
+      return {
+        ...hike,
+        title: `${hike.title} · ${camminoTappa.name}`,
+        routePolyline: camminoTappa.polyline,
+        distanceMeters: camminoTappa.lengthM,
+      }
+    }
     if (!hasMultipleTappe || chosenTappaIndex == null || needsTappaChoice) return hike
     return {
       ...hike,
@@ -72,7 +85,7 @@ function NavigaPageInner() {
       borgoWalkStops: tappaGroups[chosenTappaIndex],
       borgoWalkTappaEnds: undefined,
     }
-  }, [hike, hasMultipleTappe, chosenTappaIndex, needsTappaChoice, polylineSegments, tappaGroups])
+  }, [hike, hasMultipleTappe, chosenTappaIndex, needsTappaChoice, polylineSegments, tappaGroups, camminoTappa])
 
   const locationProviderFactory = useMemo<LocationProviderFactory | undefined>(() => {
     if (!scenarioName || !navigableHike?.routePolyline?.length) return undefined
@@ -98,6 +111,24 @@ function NavigaPageInner() {
         if (cancelled) return
         walkPolyline = fresh ? effectiveNavPolyline(fresh) : undefined
         if (fresh && walkPolyline?.length) { h = fresh } else { setFailure('no-route'); return }
+      }
+      if (h.metaType === 'cammino' && h.camminoPlan) {
+        const plan = h.camminoPlan
+        const wanted = Number(searchParams.get('tappa'))
+        const ordinal = plan.tappe.some(t => t.ordinal === wanted) ? wanted : (plan.tappe[0]?.ordinal ?? 1)
+        try {
+          const res = await fetch(`/api/cammini/${encodeURIComponent(plan.camminoId)}`)
+          if (!res.ok) throw new Error(String(res.status))
+          const detail = (await res.json()) as CamminoDetail
+          const found = detail.tappe.find(t => t.ordinal === ordinal)
+          if (!found) throw new Error('tappa')
+          const oriented = orderForDirection([found], plan.direction)[0]
+          if (cancelled) return
+          setCamminoTappa({ ordinal, polyline: oriented.polyline, lengthM: oriented.lengthM, name: `${oriented.fromName ?? 'Partenza'} → ${oriented.toName ?? 'Arrivo'}` })
+        } catch {
+          if (!cancelled) setFailure('no-route')
+          return
+        }
       }
       setHike(h.routePolyline?.length ? h : { ...h, routePolyline: walkPolyline })
     })
@@ -138,6 +169,7 @@ function NavigaPageInner() {
   return (
     <ActiveNavigationView
       hike={navigableHike}
+      tappaOrdinal={hike.metaType === 'cammino' ? camminoTappa?.ordinal : undefined}
       locationProviderFactory={locationProviderFactory}
       simulationLabel={scenarioName ? SCENARIO_LABELS[scenarioName] : undefined}
     />

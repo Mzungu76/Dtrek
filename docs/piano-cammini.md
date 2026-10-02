@@ -146,3 +146,8 @@ Problema: la guida a elenco di tappe espandibili è lunga e poco usabile durante
 - **Durante il cammino**: scheda di oggi aperta all'avvio, "prossimi luoghi" davanti a te, dati scaricabili per l'offline.
 
 Ordine: 5d schede + binario + stato avanzamento → 6 attività e diario per tappa → 6b reportage incrementale → 7 offline e Navigator per tappa.
+
+### Fase 5d — schede orizzontali, binario, avanzamento (fatto)
+- `CamminoTappeWidget`: avanzamento (tappe/km percorsi), **binario** con un punto per tappa (piena = percorsa, anello = oggi/corrente) agganciato al **carosello a schede** (scroll-snap, `data-hscroll`); parte dalla tappa di oggi o dalla prima non percorsa.
+- Una tappa è **percorsa** solo se esiste un'attività collegata (`activities.linked_planned_id` + `tappa_index`): registrata col Navigator (`/guida/[id]/naviga?tappa=<ordinale>`, tracciato di catalogo nel verso del piano, `ActiveNavigationView.tappaOrdinal`) o importata da file (`/upload?planned=<id>&tappa=<n>`; scelta della tappa se si collega a mano). Mai dichiarata a mano.
+- Da fare: reportage unico del cammino (capitolo per tappa percorsa), offline/Navigator per tappa con dati scaricati, binario fisso (sticky) sotto l'intestazione della guida.
