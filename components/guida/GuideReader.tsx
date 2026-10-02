@@ -1186,6 +1186,7 @@ export default function GuideReader({
             onRecord={ordinal => router.push(`/guida/${encodeURIComponent(hike.id)}/naviga?tappa=${ordinal}`)}
             onImport={ordinal => router.push(`/upload?tab=activity&planned=${encodeURIComponent(hike.id)}&tappa=${ordinal}`)}
             onOpenActivity={id => router.push(`/resoconto/${encodeURIComponent(id)}`)}
+            onOpenReportage={() => router.push(`/resoconto/cammino/${encodeURIComponent(hike.id)}`)}
           /> : null
         }
         return poiList

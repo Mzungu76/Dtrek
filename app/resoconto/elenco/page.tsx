@@ -6,6 +6,7 @@ import TrialStatusBanner from '@/components/dtrek/TrialStatusBanner'
 import RouteThumb from '@/components/RouteThumb'
 import Sheet from '@/components/ui/Sheet'
 import { getAllActivities, type ActivityMeta } from '@/lib/blobStore'
+import { getAllPlanned, type PlannedHikeMeta } from '@/lib/plannedStore'
 import { formatDuration } from '@/lib/tcxParser'
 import { findAnniversaries } from '@/lib/stats'
 import type { ResocontoStatus } from '@/app/api/resoconto-status/route'
@@ -171,10 +172,14 @@ export default function ResocontoIndexPage() {
   const [query, setQuery] = useState('')
   const [reportStatus, setReportStatus] = useState<Record<string, ResocontoStatus>>({})
   const monthBarRef = useRef<HTMLDivElement>(null)
+  // Cammini con un reportage in corso: uno per cammino, che cresce tappa dopo tappa.
+  const [camminiReportage, setCamminiReportage] = useState<PlannedHikeMeta[]>([])
 
   useEffect(() => {
     getAllActivities(setActivities).then(setActivities).finally(() => setLoading(false))
     fetch('/api/resoconto-status').then(r => r.ok ? r.json() : {}).then(setReportStatus).catch(() => {})
+    const applyPlanned = (l: PlannedHikeMeta[]) => setCamminiReportage(l.filter(h => h.metaType === 'cammino' && (h.camminoPlan?.report?.chapters.length ?? 0) > 0))
+    getAllPlanned(applyPlanned).then(applyPlanned).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -311,6 +316,25 @@ export default function ResocontoIndexPage() {
 
       {/* ── Main ── */}
       <main className="max-w-[1400px] mx-auto px-4 py-5 sm:py-8">
+        {!loading && camminiReportage.length > 0 && (
+          <div className="mb-5 sm:mb-6 flex flex-col gap-2">
+            {camminiReportage.map(h => {
+              const plan = h.camminoPlan!
+              const written = plan.report?.chapters.length ?? 0
+              return (
+                <Link key={h.id} href={`/resoconto/cammino/${encodeURIComponent(h.id)}`}
+                  className="flex items-center gap-3 rounded-xl border border-forest-200 bg-forest-50 px-4 py-3 transition-colors hover:bg-forest-100">
+                  <Mountain className="w-5 h-5 shrink-0 text-forest-700" />
+                  <p className="text-sm text-forest-900">
+                    <span className="font-semibold">{plan.camminoName}</span>
+                    {' '}· reportage del cammino, {written} di {plan.tappe.length} capitoli
+                  </p>
+                </Link>
+              )
+            })}
+          </div>
+        )}
+
         {!loading && anniversaries.length > 0 && (
           <div className="mb-5 sm:mb-6 flex flex-col gap-2">
             {anniversaries.map(({ activity, yearsAgo }) => (

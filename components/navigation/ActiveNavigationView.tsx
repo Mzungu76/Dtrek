@@ -1111,7 +1111,8 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
       setSaveOfflineNotice(true)
       await new Promise((r) => setTimeout(r, 1800))
     }
-    router.push(isNativeApp ? '/navigatore' : `/resoconto/${encodeURIComponent(saved.id)}`)
+    // Una tappa di cammino porta al reportage unico del cammino, dove la tappa è già un capitolo da scrivere.
+    router.push(isNativeApp ? '/navigatore' : tappaOrdinal != null ? `/resoconto/cammino/${encodeURIComponent(hike.id)}` : `/resoconto/${encodeURIComponent(saved.id)}`)
   }
 
   const handleDiscardRecordedActivity = () => {

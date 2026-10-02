@@ -47,9 +47,27 @@ export interface CamminoPlan {
   startDate?: string
   grouping: DayGrouping
   days: CamminoPlanDay[]
+  report?: CamminoReport
   /** Copia delle tappe incluse, già nell'ordine di marcia: la guida resta leggibile offline e non
    *  cambia se il catalogo viene reimportato. Senza le polilinee (stanno in routePolyline). */
   tappe: CamminoPlanTappa[]
+}
+
+/** Capitolo del reportage per una tappa percorsa: il testo di Giulia (o dell'utente) e l'attività da cui nasce. */
+export interface CamminoReportChapter {
+  ordinal: number
+  activityId: string
+  body: string
+  generatedAt: string
+}
+
+/** Reportage unico del cammino (docs/piano-cammini.md, Fase 6): vive nel piano e cresce una tappa percorsa
+ *  alla volta — introduzione, un capitolo per tappa, conclusione a cammino finito. */
+export interface CamminoReport {
+  intro?: string
+  chapters: CamminoReportChapter[]
+  epilogue?: string
+  updatedAt: string
 }
 
 export const MIN_DAY_KM = 10

@@ -130,7 +130,8 @@ export default function ActivityUploader() {
         ...(selectedPlanned?.metaType === 'cammino' && tappaOrdinal != null ? { tappaIndex: tappaOrdinal, metaType: 'cammino' as const } : {}),
       })
       setStatus('success')
-      setTimeout(() => router.push(`/resoconto/${encodeURIComponent(saved.id)}`), 1200)
+      const toCammino = selectedPlanned?.metaType === 'cammino' && tappaOrdinal != null && linkedPlannedId
+      setTimeout(() => router.push(toCammino ? `/resoconto/cammino/${encodeURIComponent(linkedPlannedId!)}` : `/resoconto/${encodeURIComponent(saved.id)}`), 1200)
     } catch (e) {
       console.error(e); setStatus('error')
       setErrorMsg(`Errore nel salvataggio: ${e instanceof Error ? e.message : String(e)}`)

@@ -193,7 +193,7 @@ const META_COLS = [
   'pending_expires_at', 'archived_at', 'favorite', 'first_completed_at', 'diary_id', 'route_mode', 'updated_at',
   'source_url', 'comfort_verdict', 'comfort_note', 'zone', 'difficulty', 'source_app',
   'is_sample', 'sample_region', 'meta_type', 'site_type', 'place_id', 'latitude', 'longitude',
-  'parent_meta_id', 'borgo_walk_stops_hash',
+  'parent_meta_id', 'borgo_walk_stops_hash', 'cammino_plan',
 ].join(', ')
 
 // Guaranteed-to-exist columns (base schema, no ALTER TABLE additions — updated_at

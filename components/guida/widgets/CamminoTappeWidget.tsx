@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
-import { Mountain, Loader2, Sparkles, Check, Navigation, Upload } from 'lucide-react'
+import { Mountain, Loader2, Sparkles, Check, Navigation, Upload, BookOpen } from 'lucide-react'
 import { POI_META } from '@/lib/overpass'
 import { useCamminoDetail, dayColor } from '@/lib/cammini/useCamminoDetail'
 import { computeTappaCts, type TappaCts } from '@/lib/cammini/tappaCts'
@@ -48,9 +48,11 @@ interface Props {
   onImport?: (ordinal: number) => void
   /** Apre il Reportage dell'attività della tappa già percorsa. */
   onOpenActivity?: (activityId: string) => void
+  /** Apre il reportage unico del cammino. */
+  onOpenReportage?: () => void
 }
 
-export default function CamminoTappeWidget({ plan, hikeId, color, onPlanChange, completed = {}, onRecord, onImport, onOpenActivity }: Props) {
+export default function CamminoTappeWidget({ plan, hikeId, color, onPlanChange, completed = {}, onRecord, onImport, onOpenActivity, onOpenReportage }: Props) {
   const [elev, setElev] = useState<Record<number, TappaElevation | 'na'>>(() => {
     const init: Record<number, TappaElevation> = {}
     for (const t of plan.tappe) {
@@ -336,6 +338,11 @@ export default function CamminoTappeWidget({ plan, hikeId, color, onPlanChange, 
           <p className="font-semibold text-stone-800">{doneCount} di {sequence.length} tappe percorse</p>
           <p className="text-stone-500 tabular-nums">{(doneKm / 1000).toFixed(0)} / {(totalKm / 1000).toFixed(0)} km</p>
         </div>
+        {doneCount > 0 && (
+          <button type="button" onClick={() => onOpenReportage?.()} className="mt-1 flex items-center gap-1.5 text-[12px] font-semibold text-forest-700 hover:text-forest-800">
+            <BookOpen className="w-3.5 h-3.5" /> Reportage del cammino{plan.report?.chapters.length ? ` · ${plan.report.chapters.length} ${plan.report.chapters.length === 1 ? 'capitolo' : 'capitoli'}` : ''}
+          </button>
+        )}
         <div className="mt-1.5 h-1.5 rounded-full bg-stone-100 overflow-hidden">
           <div className="h-full rounded-full" style={{ width: `${totalKm > 0 ? (doneKm / totalKm) * 100 : 0}%`, background: color }} />
         </div>
@@ -405,10 +412,16 @@ export default function CamminoTappeWidget({ plan, hikeId, color, onPlanChange, 
 
               <footer className="px-3.5 py-3 border-t border-stone-100 bg-stone-50/60">
                 {isDone ? (
-                  <button type="button" onClick={() => onOpenActivity?.(isDone.activityId)}
-                    className="w-full flex items-center justify-center gap-2 rounded-full border border-forest-200 bg-forest-50 text-forest-800 text-[13px] font-semibold py-2.5">
-                    <Check className="w-4 h-4" /> Apri il reportage della tappa
-                  </button>
+                  <div className="space-y-2">
+                    <button type="button" onClick={() => onOpenReportage?.()}
+                      className="w-full flex items-center justify-center gap-2 rounded-full bg-forest-600 hover:bg-forest-700 text-white text-[13px] font-semibold py-2.5 transition-colors">
+                      <BookOpen className="w-4 h-4" /> {plan.report?.chapters.some(c => c.ordinal === t.ordinal) ? 'Leggi il capitolo nel reportage' : 'Scrivi il capitolo nel reportage'}
+                    </button>
+                    <button type="button" onClick={() => onOpenActivity?.(isDone.activityId)}
+                      className="w-full text-center text-[12px] font-semibold text-stone-500 hover:text-stone-700">
+                      Foto e dettagli della tappa
+                    </button>
+                  </div>
                 ) : (
                   <div className="grid grid-cols-[1fr_auto] gap-2">
                     <button type="button" onClick={() => onRecord?.(t.ordinal)} disabled={!onRecord}
