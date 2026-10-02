@@ -210,5 +210,9 @@ export interface RouteHubProps {
    *  per ogni Diario: "aprirlo" è sempre il proprio libro impaginato (/diario/libro/[id], scoped ai
    *  suoi Resoconti), mai il Sommario di Screen 2 — che resta comunque raggiungibile dall'icona
    *  dedicata di gestione. Assente ⇒ apre sempre (comportamento invariato per Guida/Resoconto). */
+  /** Apre subito Screen 2 (senza copertina/galleria) — per le pagine che sono già "dentro" un contenitore. */
+  startOpen?: boolean
+  /** Se presente, la freccia in alto a sinistra di Screen 2 chiama questa invece di tornare alla copertina. */
+  onBack?: () => void
   onBeforeOpen?: (item: RouteHubItem) => boolean
 }

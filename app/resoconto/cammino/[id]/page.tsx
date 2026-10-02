@@ -7,7 +7,7 @@ import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import ReportHero from '@/components/resoconto/ReportHero'
 import ReportStatsStrip from '@/components/resoconto/ReportStatsStrip'
 import SectionCard from '@/components/editorial/SectionCard'
-import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
+import CamminoCtsBadge from '@/components/guida/widgets/CamminoCtsBadge'
 import { META_TYPE_CONFIG } from '@/lib/metaTypes'
 import { getPlannedById, refetchPlannedById, type PlannedHike } from '@/lib/plannedStore'
 import { getAllActivities, type ActivityMeta } from '@/lib/blobStore'
@@ -200,7 +200,7 @@ export default function CamminoReportagePage() {
                 <div className="space-y-3">
                   {editor(key)}
                   <div className="flex items-center gap-3">
-                    {tsValue != null && <TrailScoreGaugeBadge total={tsValue} safety={cts?.safety ?? null} size={48} showLabel={false} />}
+                    {tsValue != null && <CamminoCtsBadge total={tsValue} safety={cts?.safety ?? null} size={56} />}
                     <Link href={`/resoconto/cammino/${encodeURIComponent(id)}/tappa/${encodeURIComponent(a.id)}`} className="inline-flex items-center gap-1 text-sm font-semibold text-forest-700 hover:text-forest-800">
                       <BookOpen className="h-4 w-4" /> Apri il reportage della tappa <ChevronRight className="h-4 w-4" />
                     </Link>

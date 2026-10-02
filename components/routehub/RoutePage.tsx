@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type Ref, type ReactNode } from 'react'
-import { ChevronDown, Menu, X } from 'lucide-react'
+import { ArrowLeft, ChevronDown, Menu, X } from 'lucide-react'
 import type { RouteHubItem, SectionKind, TabDef, PrimaryAction } from './types'
 
 // Symmetric to RouteCarousel's OPEN_DRAG_DISTANCE_PX — how far the header handle must be dragged
@@ -30,6 +30,8 @@ const CTA_VARIANTS = {
 interface Props {
   item: RouteHubItem
   onRequestClose: () => void
+  /** Freccia indietro verso la pagina padre (al posto della chiusura verso la copertina). */
+  onBack?: () => void
   /** Live progress while dragging the header handle down — 1 (fully open) → 0 (fully closed),
    *  mirroring RouteCarousel's onOpenDragMove so both gestures share one continuous scale. */
   onCloseDragMove: (progress: number) => void
@@ -56,7 +58,7 @@ interface Props {
  * drag-up-to-open one on the closed card (RouteCarousel).
  */
 export default function RoutePage({
-  item, onRequestClose, onCloseDragMove, onCloseDragEnd, bodyMode, tabs = [], activeTab, onTabChange,
+  item, onRequestClose, onBack, onCloseDragMove, onCloseDragEnd, bodyMode, tabs = [], activeTab, onTabChange,
   renderSection, tabScrollRef, primaryAction, headerActions, heroPhotos, showToolsMenu = true,
 }: Props) {
   const [toolsOpen, setToolsOpen] = useState(false)
@@ -169,6 +171,15 @@ export default function RoutePage({
           own sticky elements (e.g. GuideReader's section pin-nav) stick right under it instead
           of being hidden behind it. */}
       <div className="shrink-0 flex items-center justify-between gap-2 px-4 pt-[calc(env(safe-area-inset-top,0px)+12px)] pb-3 z-20 relative">
+        {onBack ? (
+          <button
+            onClick={onBack}
+            aria-label="Torna al reportage del cammino"
+            className="shrink-0 w-9 h-9 rounded-full bg-stone-100 flex items-center justify-center text-stone-600"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+        ) : (
         <button
           onPointerDown={handleClosePointerDown}
           onPointerMove={handleClosePointerMove}
@@ -179,6 +190,7 @@ export default function RoutePage({
         >
           <ChevronDown className="w-4 h-4" />
         </button>
+        )}
         <p className="flex-1 min-w-0 truncate font-display text-base font-bold text-stone-900">{item.title}</p>
         <div className="flex items-center gap-2 shrink-0">
           {headerActions}

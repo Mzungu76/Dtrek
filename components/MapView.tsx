@@ -104,6 +104,8 @@ interface Props {
    *  the observer, so the map never gets stuck rendering tiles for its pre-fullscreen size while
    *  the container is already the new one (leaflet's classic "partial gray map" symptom). */
   resizeSignal?: number
+  /** Tratti colorati sovrapposti al tracciato (es. le tappe di un cammino), ognuno con etichetta numerica sul punto d'arrivo. */
+  overlayTracks?: { id: string | number; label: string; color: string; points: [number, number][] }[]
 }
 
 // Distanza (metri) tra una freccia di direzione e la successiva — discreta: un tocco che indica
@@ -175,6 +177,7 @@ export default function MapView({
   focusSignal,
   showDirectionArrows = false,
   resizeSignal,
+  overlayTracks,
 }: Props) {
   const mapRef          = useRef<HTMLDivElement>(null)
   const mapInstance     = useRef<L.Map | null>(null)
@@ -190,6 +193,7 @@ export default function MapView({
   const floraLayer      = useRef<L.Marker[]>([])
   const returnLayer     = useRef<L.Marker[]>([])
   const siteLayer       = useRef<L.Marker[]>([])
+  const overlayLayer    = useRef<any[]>([])
   const activeMarker    = useRef<L.Marker | null>(null)
   const boundsRef       = useRef<L.LatLngBounds | null>(null)
   const transientGradientLayer = useRef<L.Polyline[]>([])
@@ -720,6 +724,26 @@ export default function MapView({
       }
     })
   }, [returnMarkers, mapReady])
+
+  // Tratti colorati (vedi `overlayTracks` nei Props).
+  useEffect(() => {
+    if (!mapReady || !mapInstance.current) return
+    import('leaflet').then(L => {
+      overlayLayer.current.forEach((l: any) => l.remove())
+      overlayLayer.current = []
+      for (const t of overlayTracks ?? []) {
+        if (t.points.length < 2) continue
+        const line = L.polyline(t.points, { color: t.color, weight: 5, opacity: 0.95 }).addTo(mapInstance.current!)
+        overlayLayer.current.push(line)
+        const end = t.points[t.points.length - 1]
+        const icon = L.divIcon({
+          html: `<div style="width:20px;height:20px;border-radius:50%;background:${t.color};border:2px solid white;color:white;font:700 10px/16px sans-serif;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.4)">${t.label}</div>`,
+          iconSize: [20, 20], iconAnchor: [10, 10], className: '',
+        })
+        overlayLayer.current.push(L.marker(end, { icon, interactive: false }).addTo(mapInstance.current!))
+      }
+    })
+  }, [overlayTracks, mapReady])
 
   // Pin del Sito (vedi `siteMarker` nei Props).
   useEffect(() => {

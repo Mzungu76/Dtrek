@@ -1,9 +1,10 @@
 'use client'
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
-import { Loader2, Sparkles, Check, Navigation, Upload, BookOpen, MapPin } from 'lucide-react'
-import { POI_META } from '@/lib/overpass'
-import { POI_ICON } from '@/components/poiIcons'
+import { Loader2, Sparkles, Check, Navigation, Upload, BookOpen } from 'lucide-react'
+import type { PoiItem } from '@/lib/overpass'
+import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
+import PoiListWidget from './PoiListWidget'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 import RouteMapSection from '@/components/RouteMapSection'
 import { useTappaData } from '@/lib/cammini/useTappaData'
@@ -59,7 +60,6 @@ export default function CamminoTappaDetail({ plan, hikeId, tappa: t, seq, dayIdx
   const [open, setOpen] = useState<'natura' | 'sapori' | null>(null)
   const [writing, setWriting] = useState<Kind | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [showAllPois, setShowAllPois] = useState(false)
 
   const day = plan.days[dayIdx]
   const reverse = plan.direction === 'reverse'
@@ -76,7 +76,15 @@ export default function CamminoTappaDetail({ plan, hikeId, tappa: t, seq, dayIdx
     () => (ready?.data.points && ready.data.profile ? poisAlongTappa(ready.data.pois ?? [], ready.data.points, ready.data.profile, reverse) : []),
     [ready, reverse],
   )
-  const poisShown = showAllPois ? along : along.slice(0, 8)
+  const alongPois = useMemo(() => along.map(a => a.poi), [along])
+  const centerPt = trackPoints ? trackPoints[Math.floor(trackPoints.length / 2)] : null
+  const [wikiEntries, setWikiEntries] = useState<{ poi: PoiItem; wiki: WikiPage }[]>([])
+  useEffect(() => {
+    if (alongPois.length === 0) { setWikiEntries([]); return }
+    let cancelled = false
+    fetchWikiForNamedPois(alongPois).then(e => { if (!cancelled) setWikiEntries(e) }).catch(() => {})
+    return () => { cancelled = true }
+  }, [alongPois])
   const chapter = chapterFor(plan, t.ordinal)
 
   const km = done ? done.distanceMeters : t.lengthM
@@ -127,20 +135,27 @@ export default function CamminoTappaDetail({ plan, hikeId, tappa: t, seq, dayIdx
         </div>
         <h2 className="mt-1.5 font-display text-[23px] font-bold leading-tight text-stone-800">{t.fromName ?? 'Partenza'} → {t.toName ?? 'Arrivo'}</h2>
         {t.endsAtAnchor === false && <p className="mt-1 text-[12px] text-amber-600">Si chiude in aperta campagna: verifica dove dormire.</p>}
-        <div className="mt-3 grid grid-cols-4 gap-1.5 text-center">
+        <div className="mt-3 grid grid-cols-3 gap-1.5 text-center">
           <div className="rounded-xl bg-stone-100 py-2"><p className="text-[15px] font-bold tabular-nums">{(km / 1000).toFixed(1).replace('.', ',')}</p><p className="text-[10px] uppercase tracking-wider text-stone-500">km</p></div>
           <div className="rounded-xl bg-stone-100 py-2"><p className="text-[15px] font-bold tabular-nums">{timeLabel}</p><p className="text-[10px] uppercase tracking-wider text-stone-500">{done ? 'tempo' : 'stima'}</p></div>
           <div className="rounded-xl bg-stone-100 py-2"><p className="text-[15px] font-bold tabular-nums">{up != null ? `+${Math.round(up)}` : '–'}</p><p className="text-[10px] uppercase tracking-wider text-stone-500">salita m</p></div>
-          <div className="flex flex-col items-center justify-center rounded-xl bg-stone-100 py-1">
-            {shownTotal != null ? <TrailScoreGaugeBadge total={shownTotal} safety={shownSafety} size={44} showLabel={false} /> : <TrailScoreGaugeBadge total={null} safety={null} size={44} showLabel={false} loading={ctsV !== 'na'} />}
-            <p className="text-[10px] uppercase tracking-wider text-stone-500">CTS</p>
+        </div>
+        {/* CTS: pannello scuro come in "Dati e sicurezza" — anello interno Trail Score, esterno Sicurezza */}
+        <div className="mt-2.5 flex items-center gap-4 rounded-2xl bg-gradient-to-br from-stone-800 to-stone-900 px-4 py-3.5">
+          <TrailScoreGaugeBadge total={shownTotal} safety={shownSafety} size={92} showLabel={false} loading={shownTotal == null && ctsV !== 'na'} />
+          <div className="min-w-0 flex-1 text-white">
+            <p className="font-barlow text-[10px] font-bold uppercase tracking-[0.14em] text-white/60">CTS · Sicurezza</p>
+            {shownCts ? (
+              <>
+                <p className="mt-1 text-[13.5px] font-semibold leading-snug">Trail Score <b className="text-[17px]">{shownTotal}</b> <span className="text-white/70">· {shownCts.label.toLowerCase()}</span></p>
+                {shownSafety && <p className="text-[13.5px] font-semibold leading-snug">Sicurezza <b className="text-[17px]">{shownSafety.overall}</b> <span className="text-white/70">· {shownSafety.label.toLowerCase()}</span></p>}
+                <p className="mt-1.5 text-[11px] leading-snug text-white/55">Profilo, terreno, luoghi, fauna e quota della tappa, con le tue preferenze e il tuo storico.</p>
+              </>
+            ) : (
+              <p className="mt-1 text-[12.5px] text-white/70">{ctsV === 'na' ? 'Il CTS di questa tappa non è disponibile.' : 'Calcolo CTS e Sicurezza della tappa…'}</p>
+            )}
           </div>
         </div>
-        <p className="mt-1.5 text-[11px] text-stone-500">
-          {shownCts
-            ? `Trail Score ${shownTotal} · CTS ${shownCts.ts} (${shownCts.label.toLowerCase()})${shownSafety ? ` · Sicurezza ${shownSafety.overall} (${shownSafety.label.toLowerCase()})` : ''} — profilo, terreno, luoghi, fauna e quota della tappa, con le tue preferenze e il tuo storico.`
-            : ctsV === 'na' ? 'Il CTS di questa tappa non è disponibile.' : 'Calcolo CTS e Sicurezza della tappa…'}
-        </p>
       </div>
 
       <div className="space-y-3 px-3.5 pt-3">
@@ -155,30 +170,27 @@ export default function CamminoTappaDetail({ plan, hikeId, tappa: t, seq, dayIdx
 
         {/* mappa e profilo: la mappa del percorso dell'app (schermo intero, 3D, lucchetto, luoghi con le loro icone) */}
         {trackPoints && trackPoints.length > 1 ? (
-          <RouteMapSection trackPoints={trackPoints} pois={along.slice(0, 40).map(a => a.poi)} planned={!done} onOpenMap3D={() => setShow3D(true)} />
+          <RouteMapSection trackPoints={trackPoints} showPois={false} planned={!done} onOpenMap3D={() => setShow3D(true)} />
         ) : <div className="flex h-[260px] items-center justify-center rounded-2xl border border-stone-200 bg-stone-100 text-[12px] text-stone-400"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {state.status === 'na' ? 'Mappa non disponibile.' : 'Carico la mappa…'}</div>}
-        {/* luoghi in ordine di cammino */}
-        <div className="rounded-2xl border border-stone-200 bg-white px-3.5 pb-1 pt-2.5">
-          <div className="flex items-baseline justify-between"><p className="font-barlow text-[11px] font-bold uppercase tracking-[0.12em] text-stone-500">Luoghi lungo la tappa</p><p className="text-[12px] text-stone-500">in ordine di cammino</p></div>
-          {state.status === 'loading' ? <p className="py-4 text-[12px] text-stone-400">Cerco i luoghi…</p>
-            : along.length === 0 ? <p className="py-4 text-[12px] text-stone-400">Nessun luogo segnalato lungo questa tappa nei dati disponibili.</p>
-            : (
-              <ul className="divide-y divide-stone-100">
-                {poisShown.map(({ poi, km: pk }) => {
-                  const meta = POI_META[poi.type]
-                  const Icon = POI_ICON[poi.type] ?? MapPin
-                  return (
-                    <li key={poi.id} className="flex items-center gap-2.5 py-2.5">
-                      <span className="w-12 shrink-0 text-[12px] font-bold tabular-nums text-stone-600">km {pk.toFixed(1).replace('.', ',')}</span>
-                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full" style={{ background: meta?.color ?? '#6b7280' }}><Icon className="h-3.5 w-3.5 text-white" /></span>
-                      <span className="min-w-0 flex-1"><span className="block truncate text-[13px] font-semibold text-stone-800">{poi.name ?? meta?.label ?? 'Luogo'}</span><span className="block text-[11px] text-stone-500">{meta?.label ?? poi.type} · a {Math.round(poi.distFromTrack)} m</span></span>
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
-          {along.length > 8 && <button type="button" onClick={() => setShowAllPois(v => !v)} className="w-full py-2 text-center text-[12.5px] font-bold text-forest-700">{showAllPois ? 'Mostra meno' : `Mostra tutti i ${along.length} luoghi`}</button>}
+        {/* luoghi della tappa: stessa Galleria dei POI dei sentieri (mappa dei luoghi, icone, card) */}
+        <div className="px-0.5 pt-1">
+          <p className="font-barlow text-[11px] font-bold uppercase tracking-[0.12em] text-stone-500">I luoghi da non perdere</p>
         </div>
+        {state.status === 'loading' ? <p className="py-3 text-[12px] text-stone-400">Cerco i luoghi…</p>
+          : along.length === 0 ? <p className="py-3 text-[12px] text-stone-400">Nessun luogo segnalato lungo questa tappa nei dati disponibili.</p>
+          : (
+            <PoiListWidget
+              hikeId={`${hikeId}-t${t.ordinal}`}
+              pois={alongPois}
+              poiWikiEntries={wikiEntries}
+              hasGps
+              centerLat={centerPt?.lat}
+              centerLon={centerPt?.lon}
+              onWikiLoaded={() => {}}
+              trackPoints={trackPoints ?? undefined}
+              onOpenMap3D={() => setShow3D(true)}
+            />
+          )}
 
         {/* racconto, natura e sapori su richiesta */}
         <div className="rounded-2xl border border-stone-200 bg-white px-3.5 py-3">{textBlock('racconto', 'Racconta questa tappa con Giulia')}</div>

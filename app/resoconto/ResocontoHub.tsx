@@ -661,12 +661,6 @@ export default function ResocontoHub({ id, parentCammino }: { id?: string; paren
         // ?generate=1) — Next.js richiede un confine Suspense attorno a chi lo chiama, altrimenti
         // il build fallisce ("should be wrapped in a suspense boundary").
         <>
-        {activity.tappaIndex != null && activity.linkedPlannedId && (
-          <a href={`/resoconto/cammino/${encodeURIComponent(activity.linkedPlannedId)}`}
-            className="mx-4 mb-3 mt-2 flex items-center gap-2 rounded-xl border border-forest-200 bg-forest-50 px-3.5 py-2.5 text-sm font-semibold text-forest-800">
-            <Mountain className="w-4 h-4 shrink-0" /> Capitolo del reportage del cammino · torna al reportage
-          </a>
-        )}
         <Suspense fallback={null}>
         <ReportReader
           activity={activity}
@@ -806,6 +800,8 @@ export default function ResocontoHub({ id, parentCammino }: { id?: string; paren
     <>
       <RouteHub
         mode="resoconto"
+        startOpen={!!parentCammino}
+        onBack={parentCammino ? () => router.push(`/resoconto/cammino/${encodeURIComponent(parentCammino)}`) : undefined}
         items={displayItems}
         initialIndex={initialIndex}
         favoritesFilter={favoritesFilter}

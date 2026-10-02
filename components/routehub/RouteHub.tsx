@@ -46,9 +46,9 @@ export default function RouteHub({
   scoreBadges, scoreGaugeBadge, scoreBadgesTargetSection, heroPhotos, headerActions, importLabel, onImport,
   subtitle, topOverlayVariant, favoritesFilter, onToggleFavoritesFilter, onToggleFavorite, onCompare,
   nextOutingFilter, onToggleNextOutingFilter, emptyNoun = 'percorso', emptyAction, contextBadge, titleAction, showToolsMenu,
-  onBeforeOpen,
+  onBeforeOpen, startOpen, onBack,
 }: RouteHubProps) {
-  const [state, dispatch] = useRouteHubState(initialIndex)
+  const [state, dispatch] = useRouteHubState(initialIndex, startOpen ? (bodyMode === 'continuous' ? 'featured' : (tabs[0]?.key ?? 'dati')) : null)
   const [sortBy, setSortBy] = useState<SortKey>('date')
   const [searchQuery, setSearchQuery] = useState('')
   // Vista alternativa alla striscia orizzontale (ExpandedGalleryList.tsx, punto 2 Sezione 3) — un
@@ -64,7 +64,7 @@ export default function RouteHub({
   // drag is in progress (open-drag on the closed card, close-drag on the open page's header) and
   // settled by CSS transition otherwise — this is what makes the open/close dissolve smoothly
   // instead of cutting or sliding abruptly.
-  const [openProgress, setOpenProgress] = useState(0)
+  const [openProgress, setOpenProgress] = useState(startOpen ? 1 : 0)
   const [dragLive, setDragLive] = useState(false)
 
   // Keeps openProgress in sync whenever openSection flips through a path that doesn't go through
@@ -114,7 +114,7 @@ export default function RouteHub({
 
   // Keeps RoutePage mounted while any part of the open animation is live (including the tail end
   // of a close fade-out) instead of vanishing the instant openSection goes null.
-  const [pageMounted, setPageMounted] = useState(false)
+  const [pageMounted, setPageMounted] = useState(!!startOpen)
   useEffect(() => {
     if (isOpen || openProgress > 0) { setPageMounted(true); return }
     const t = setTimeout(() => setPageMounted(false), SHEET_TRANSITION_MS)
@@ -509,6 +509,7 @@ export default function RouteHub({
           <RoutePage
             item={item}
             onRequestClose={handleRequestClose}
+            onBack={onBack}
             onCloseDragMove={handleCloseDragMove}
             onCloseDragEnd={handleCloseDragEnd}
             bodyMode={bodyMode}
