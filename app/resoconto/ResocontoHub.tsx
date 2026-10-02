@@ -56,6 +56,7 @@ const FloraGallery    = dynamic(() => import('@/components/FloraGallery'),    { 
 const AnimalGallery   = dynamic(() => import('@/components/AnimalGallery'),   { ssr: false })
 
 const COVER_FETCH_CAP = 40
+const CAMMINO_PREFIX = 'cammino:'
 
 // Le pillole di una scheda dipendono dalla tipologia (lib/reportFacts.ts): km/D+/durata solo per un
 // Sentiero; per un Borgo/Città la durata, per un Sito il tipo — mai "0.0 km · +0 m" su una visita.
@@ -142,6 +143,10 @@ export default function ResocontoHub({ id }: { id?: string }) {
   // del Diario visibilmente in ritardo rispetto al resto della copertina.
   const [diaries,         setDiaries]         = useState<DiarySummary[]>([])
   const [plannedDiaryById, setPlannedDiaryById] = useState<Map<string, string | null>>(new Map())
+  // Cammini: le attività delle tappe non sono voci della galleria, ma ne alimentano UNA per cammino (il
+  // reportage contenitore). Servono il loro elenco e il nome/piano di ogni cammino.
+  const [tappaActs, setTappaActs] = useState<ActivityMeta[]>([])
+  const [camminoNames, setCamminoNames] = useState<Map<string, string>>(new Map())
   // Pannello "Gestisci questo Reportage" (icona a ingranaggio sul titolo, uniformata con quella di
   // /diario — prima erano due frecce che aprivano solo lo spostamento) — titolo e Diario di
   // appartenenza modificabili nello stesso posto, invece di due azioni separate.
@@ -198,6 +203,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
   const applyList = useCallback((list: ActivityMeta[]) => {
     // Le tappe di un cammino sono capitoli del reportage del cammino, non voci della galleria: resta
     // solo quella aperta (si arriva da "Foto e dettagli della tappa").
+    setTappaActs(list.filter(a => a.tappaIndex != null))
     const sorted = list.filter(a => a.tappaIndex == null || a.id === id).sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
     setRawActivities(sorted)
     setItems(sorted.map(metaToItem))
@@ -233,13 +239,11 @@ export default function ResocontoHub({ id }: { id?: string }) {
     return () => { cancelled = true }
   }, [rawActivities])
 
-  useEffect(() => {
-    if (currentId || items.length === 0) return
-    setCurrentId(items[0].id)
-  }, [items, currentId])
 
   useEffect(() => {
     if (!currentId) return
+    // Il reportage contenitore di un cammino non è un'attività: niente da caricare qui.
+    if (currentId.startsWith(CAMMINO_PREFIX)) { setActivity(null); return }
     const loadPoisFor = (a: StoredActivity) => {
       // Un Borgo/Città con i veri stop dell'itinerario curato (lib/activitySave.ts's
       // visitedBorgoStops) mostra quelli in ReportReader's BorgoStopsWidget — mai la query Overpass
@@ -288,6 +292,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
   // stale), non una fetch per ogni resoconto aperto.
   const applyPlannedDiaryMap = useCallback((list: PlannedHikeMeta[]) => {
     setPlannedDiaryById(new Map(list.map(h => [h.id, h.diaryId ?? null])))
+    setCamminoNames(new Map(list.filter(h => h.metaType === 'cammino' && h.camminoPlan).map(h => [h.id, h.camminoPlan!.camminoName])))
   }, [])
   useEffect(() => {
     getAllPlanned(applyPlannedDiaryMap).then(applyPlannedDiaryMap).catch(() => {})
@@ -374,7 +379,43 @@ export default function ResocontoHub({ id }: { id?: string }) {
     return { emoji: info.emoji, label: info.label }
   }, [activity])
 
-  const rawActivityById = useMemo(() => new Map(rawActivities.map(a => [a.id, a])), [rawActivities])
+  // Un'unica voce per cammino, sintetizzata dalle sue tappe percorse: cifre sommate, tracciato unito, data
+  // dell'ultima tappa. Si apre sul reportage del cammino (/resoconto/cammino/[id]).
+  const containerMetas = useMemo(() => {
+    const byHike = new Map<string, ActivityMeta[]>()
+    for (const a of tappaActs) {
+      if (!a.linkedPlannedId) continue
+      byHike.set(a.linkedPlannedId, [...(byHike.get(a.linkedPlannedId) ?? []), a])
+    }
+    const out: ActivityMeta[] = []
+    byHike.forEach((acts, hikeId) => {
+      const sorted = acts.slice().sort((x, y) => new Date(x.startTime).getTime() - new Date(y.startTime).getTime())
+      const latest = sorted[sorted.length - 1]
+      out.push({
+        ...latest,
+        id: `${CAMMINO_PREFIX}${hikeId}`,
+        title: camminoNames.get(hikeId) ?? 'Cammino',
+        distanceMeters: sorted.reduce((s, a) => s + a.distanceMeters, 0),
+        totalTimeSeconds: sorted.reduce((s, a) => s + a.totalTimeSeconds, 0),
+        elevationGain: sorted.reduce((s, a) => s + (a.elevationGain ?? 0), 0),
+        elevationLoss: sorted.reduce((s, a) => s + (a.elevationLoss ?? 0), 0),
+        routePolyline: sorted.flatMap(a => a.routePolyline ?? []),
+        tappaIndex: undefined, userRating: undefined, favorite: false, trailScore: undefined,
+        linkedPlannedId: hikeId, metaType: 'cammino',
+      })
+    })
+    return out
+  }, [tappaActs, camminoNames])
+  const itemsAll = useMemo(
+    () => [...items, ...containerMetas.map(metaToItem)].sort((a, b) => (b.sortValues?.date ?? 0) - (a.sortValues?.date ?? 0)),
+    [items, containerMetas],
+  )
+  const rawActivityById = useMemo(() => new Map([...rawActivities, ...containerMetas].map(a => [a.id, a])), [rawActivities, containerMetas])
+
+  useEffect(() => {
+    if (currentId || itemsAll.length === 0) return
+    setCurrentId((itemsAll.find(i => !i.id.startsWith(CAMMINO_PREFIX)) ?? itemsAll[0]).id)
+  }, [itemsAll, currentId])
 
   const displayItems = useMemo(() => {
     // Distanza in auto REALE (OSRM, via useDrivingDistance) — non in linea d'aria. A differenza
@@ -413,7 +454,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
         ?? siteCtx?.imageUrl ?? covers[id_]
       : covers[id_]
     const scorePreviewFor = (a: StoredActivity) => a.userRating != null ? { value: a.userRating, max: 10, color: ratingColor(a.userRating) } : undefined
-    const mapped = items.map(it => {
+    const mapped = itemsAll.map(it => {
       if (it.id === activity?.id) {
         // Il percorso aperto ha già il tracciato completo (activity.trackPoints): ricalcolare la
         // polyline da qui invece di tenere quella (a volte assente/obsoleta) della lista leggera
@@ -436,13 +477,13 @@ export default function ResocontoHub({ id }: { id?: string }) {
       if (!linkedPlannedId) return false
       return (plannedDiaryById.get(linkedPlannedId) ?? null) === diaryFilter
     })
-  }, [items, covers, activity, photos, coverPhotoId, siteCtx?.imageUrl, driving, userOrigin, diaryFilter, rawActivityById, plannedDiaryById])
+  }, [itemsAll, covers, activity, photos, coverPhotoId, siteCtx?.imageUrl, driving, userOrigin, diaryFilter, rawActivityById, plannedDiaryById])
 
   if (!listLoaded) {
     return <HubSkeleton />
   }
   if (!currentId) {
-    if (items.length > 0) return <HubSkeleton />
+    if (itemsAll.length > 0) return <HubSkeleton />
     return (
       <div className="fixed inset-0 bg-forest-950 flex flex-col items-center justify-center gap-4 text-center px-6">
         <p className="text-stone-300 text-sm">Nessuna escursione conclusa.</p>
@@ -605,6 +646,18 @@ export default function ResocontoHub({ id }: { id?: string }) {
   }
 
   const renderSection = (section: SectionKind, item: RouteHubItem, onClose: () => void) => {
+    if (item.id.startsWith(CAMMINO_PREFIX)) {
+      const hikeId = item.id.slice(CAMMINO_PREFIX.length)
+      const acts = tappaActs.filter(a => a.linkedPlannedId === hikeId)
+      return (
+        <div className="space-y-3 py-4">
+          <p className={`text-sm leading-relaxed ${textPrimary}`}>
+            Il reportage unico del cammino: {new Set(acts.map(a => a.tappaIndex)).size} tappe percorse, ognuna con il suo capitolo e il suo reportage dentro.
+          </p>
+          <button onClick={() => openCammino(hikeId)} className="w-full rounded-xl bg-terra-500 px-4 py-3 text-sm font-semibold text-white hover:bg-terra-600">Apri il reportage del cammino</button>
+        </div>
+      )
+    }
     if (!activity || item.id !== activity.id) {
       return <div className={`py-10 text-center text-sm ${textMuted}`}>Caricamento…</div>
     }
@@ -744,7 +797,12 @@ export default function ResocontoHub({ id }: { id?: string }) {
     )
   }
 
-  const primaryAction = (routeItem: RouteHubItem): PrimaryAction => ({
+  const primaryAction = (routeItem: RouteHubItem): PrimaryAction => routeItem.id.startsWith(CAMMINO_PREFIX) ? ({
+    label: 'Apri il reportage del cammino',
+    icon: BookMarked,
+    onClick: () => openCammino(routeItem.id.slice(CAMMINO_PREFIX.length)),
+    variant: 'terra',
+  }) : ({
     label: rated ? `Voto ${activity?.userRating}/10` : 'Vota bellezza',
     icon: Star,
     onClick: () => setShowRatingPanel(true),
@@ -752,6 +810,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
     badge: ratingBadge(routeItem),
   })
 
+  const openCammino = (hikeId: string) => router.push(`/resoconto/cammino/${encodeURIComponent(hikeId)}`)
   const currentItem = displayItems.find(i => i.id === currentId) ?? displayItems[0]
   const initialIndex = Math.max(0, displayItems.findIndex(i => i.id === currentItem.id))
 

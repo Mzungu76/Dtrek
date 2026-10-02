@@ -1,20 +1,19 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import dynamic from 'next/dynamic'
 import { useParams } from 'next/navigation'
 import { Loader2, Sparkles, Check, Pencil, ChevronRight, Route } from 'lucide-react'
 import Navbar, { MOBILE_TOPBAR_SPACER } from '@/components/Navbar'
 import StatFigure from '@/components/ui/StatFigure'
+import { MiniScoreRing, tsColor } from '@/components/ScoreRing'
 import { getPlannedById, refetchPlannedById, type PlannedHike } from '@/lib/plannedStore'
 import { getAllActivities, type ActivityMeta } from '@/lib/blobStore'
 import { formatDuration } from '@/lib/tcxParser'
 import type { CamminoPlan, CamminoReport } from '@/lib/cammini/plan'
 import { chapterFor, reportProgress } from '@/lib/cammini/report'
 import { useCamminoDetail, dayColor } from '@/lib/cammini/useCamminoDetail'
-import type { RouteMapLine } from '@/components/guida/widgets/CamminoRouteMap'
-
-const CamminoRouteMap = dynamic(() => import('@/components/guida/widgets/CamminoRouteMap'), { ssr: false })
+import RouteMapSection from '@/components/RouteMapSection'
+import type { TrackPoint } from '@/lib/tcxParser'
 
 // Reportage unico del cammino (docs/piano-cammini.md, Fase 6): introduzione, un capitolo per ogni
 // tappa percorsa — che si aggiungono man mano — e la conclusione a cammino finito. I testi stanno
@@ -68,14 +67,19 @@ export default function CamminoReportagePage() {
     return { m: s.m + a.distanceMeters, sec: s.sec + a.totalTimeSeconds, up: s.up + (a.elevationGain ?? 0) }
   }, { m: 0, sec: 0, up: 0 })
 
-  const lines: RouteMapLine[] = useMemo(() => {
+  // Il tracciato percorso: le tappe con un'attività, nell'ordine di marcia.
+  const walkedPoints: TrackPoint[] = useMemo(() => {
     if (!detail || !plan) return []
     const by = new Map(detail.tappe.map(t => [t.ordinal, t]))
-    return sequence.flatMap((x, i) => {
-      const t = by.get(x.ordinal)
-      if (!t) return []
-      return [{ id: x.ordinal, points: t.polyline, color: byOrdinal.has(x.ordinal) ? dayColor(x.dayIdx) : '#d6d3d1', label: byOrdinal.has(x.ordinal) ? String(i + 1) : undefined }]
-    })
+    const reverse = plan.direction === 'reverse'
+    const pts: TrackPoint[] = []
+    for (const x of sequence) {
+      if (!byOrdinal.has(x.ordinal)) continue
+      const poly = by.get(x.ordinal)?.polyline
+      if (!poly) continue
+      for (const [lat, lon] of reverse ? [...poly].reverse() : poly) pts.push({ time: '', lat, lon })
+    }
+    return pts
   }, [detail, plan, sequence, byOrdinal])
 
   async function generate(kind: 'tappa' | 'epilogue', ordinal?: number) {
@@ -161,11 +165,20 @@ export default function CamminoReportagePage() {
           <StatFigure size="sm" className="items-center" value={formatDuration(totals.sec)} label="In cammino" />
         </div>
 
-        {lines.length > 0 && <CamminoRouteMap lines={lines} height={260} />}
+        {walkedPoints.length > 1 && <RouteMapSection trackPoints={walkedPoints} showPois={false} />}
 
         {error && <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
 
-        {plan.report?.intro && <section>{textBlock('intro', plan.report.intro)}</section>}
+        <p className="rounded-xl bg-forest-50 px-4 py-3 text-[13px] leading-relaxed text-forest-900">
+          Questo è un <b>reportage contenitore</b>: raccoglie in un unico racconto le tappe del cammino. Ogni tappa percorsa è un capitolo, con i suoi dati e un collegamento al reportage completo della tappa (foto, note, mappa). Cresce man mano che cammini.
+        </p>
+
+        <section className="space-y-3">
+          <p className="font-barlow text-[11px] font-bold uppercase tracking-[0.14em] text-stone-500">Introduzione</p>
+          {plan.report?.intro ? textBlock('intro', plan.report.intro) : <p className="text-sm text-stone-400">Si scrive insieme al primo capitolo.</p>}
+        </section>
+
+        <p className="font-barlow text-[11px] font-bold uppercase tracking-[0.14em] text-stone-500">Le tappe · {done.length} di {sequence.length}</p>
 
         {sequence.map((x, i) => {
           const a = byOrdinal.get(x.ordinal)
@@ -177,28 +190,34 @@ export default function CamminoReportagePage() {
             if (i !== firstTodo) return null
             const remaining = sequence.filter(y => !byOrdinal.has(y.ordinal)).length - 1
             return (
-              <section key={x.ordinal} className="rounded-2xl border border-dashed border-stone-300 px-4 py-4 text-stone-500">
+              <Link key={x.ordinal} href={`/guida/${encodeURIComponent(id)}/tappa/${x.ordinal}`} className="block rounded-2xl border border-dashed border-stone-300 px-4 py-4 text-stone-500">
                 <p className="text-xs font-semibold uppercase tracking-wide">Prossima tappa · {i + 1} di {sequence.length}</p>
                 <p className="mt-0.5 text-sm font-semibold text-stone-700">{place}</p>
                 {remaining > 0 && <p className="mt-1 text-xs text-stone-400">e altre {remaining} {remaining === 1 ? 'tappa' : 'tappe'} da percorrere</p>}
-              </section>
+              </Link>
             )
           }
           return (
-            <section key={x.ordinal} className="space-y-3">
-              <header>
-                <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide" style={{ color: dayColor(x.dayIdx) }}><Check className="w-3.5 h-3.5" /> Tappa {i + 1} · {fmtDate(a.startTime)}</p>
-                <h2 className="font-display text-2xl font-semibold leading-tight text-stone-800">{place}</h2>
-                <p className="mt-1 text-sm tabular-nums text-stone-500">{(a.distanceMeters / 1000).toFixed(1)} km · {formatDuration(a.totalTimeSeconds)} · +{Math.round(a.elevationGain ?? 0)} m{a.trailScore ? ` · CTS ${Math.round(a.trailScore)}` : ''}</p>
+            <article key={x.ordinal} className="space-y-3 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
+              <header className="flex items-start gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-forest-700"><Check className="h-3.5 w-3.5" /> Tappa {i + 1} · {fmtDate(a.startTime)}</p>
+                  <h2 className="font-display text-[22px] font-semibold leading-tight text-stone-800">{place}</h2>
+                  <p className="mt-1 text-sm tabular-nums text-stone-500">{(a.distanceMeters / 1000).toFixed(1)} km · {formatDuration(a.totalTimeSeconds)} · +{Math.round(a.elevationGain ?? 0)} m</p>
+                </div>
+                {(a.trailScore ?? x.tappa.cts?.ts) != null && (
+                  <div className="flex shrink-0 flex-col items-center"><MiniScoreRing value={Math.round((a.trailScore ?? x.tappa.cts!.ts))} size={44} color={tsColor(Math.round(a.trailScore ?? x.tappa.cts!.ts))} /><span className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-stone-500">CTS</span></div>
+                )}
               </header>
               {ch ? textBlock(`t${x.ordinal}`, ch.body) : writeBtn(`t${x.ordinal}`, 'Scrivi il capitolo di questa tappa con Giulia', () => generate('tappa', x.ordinal))}
               <Link href={`/resoconto/${encodeURIComponent(a.id)}`} className="inline-flex items-center gap-1 text-sm font-semibold text-forest-700 hover:text-forest-800">
-                Apri il reportage della tappa <ChevronRight className="w-4 h-4" />
+                Apri il reportage della tappa <ChevronRight className="h-4 w-4" />
               </Link>
-            </section>
+            </article>
           )
         })}
 
+        <p className="font-barlow text-[11px] font-bold uppercase tracking-[0.14em] text-stone-500">Conclusione</p>
         <section className="space-y-3">
           {plan.report?.epilogue
             ? textBlock('epilogue', plan.report.epilogue)

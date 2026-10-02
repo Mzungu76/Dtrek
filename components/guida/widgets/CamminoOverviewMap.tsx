@@ -1,31 +1,29 @@
-import dynamic from 'next/dynamic'
+import { useMemo } from 'react'
 import { Loader2 } from 'lucide-react'
+import RouteMapSection from '@/components/RouteMapSection'
+import type { TrackPoint } from '@/lib/tcxParser'
 import type { CamminoPlan } from '@/lib/cammini/plan'
-import { useCamminoDetail, dayColor } from '@/lib/cammini/useCamminoDetail'
-import type { RouteMapLine } from './CamminoRouteMap'
+import { useCamminoDetail } from '@/lib/cammini/useCamminoDetail'
+import { buildSequence } from '@/lib/cammini/progress'
 
-const CamminoRouteMap = dynamic(() => import('./CamminoRouteMap'), { ssr: false })
-
-/** Mappa d'insieme del tratto scelto: una linea per tappa, colorata per giornata, numerata nell'ordine di marcia. */
+/** Mappa d'insieme del tratto scelto, nello stile della mappa del percorso dell'app (schermo intero, lucchetto). */
 export default function CamminoOverviewMap({ plan }: { plan: CamminoPlan }) {
   const detail = useCamminoDetail(plan.camminoId)
-  if (!detail) {
-    return <div className="h-[260px] rounded-xl bg-stone-50 flex items-center justify-center text-[12px] text-stone-400"><Loader2 className="w-4 h-4 animate-spin mr-2" /> Carico la mappa…</div>
-  }
-  const byOrdinal = new Map(detail.tappe.map(t => [t.ordinal, t]))
-  const lines: RouteMapLine[] = []
-  let n = 0
-  plan.days.forEach((day, di) => {
-    for (const o of day.tappe) {
-      n += 1
-      const t = byOrdinal.get(o)
-      if (t) lines.push({ id: o, points: t.polyline, color: dayColor(di), label: String(n) })
+  const trackPoints: TrackPoint[] = useMemo(() => {
+    if (!detail) return []
+    const by = new Map(detail.tappe.map(t => [t.ordinal, t]))
+    const reverse = plan.direction === 'reverse'
+    const pts: TrackPoint[] = []
+    for (const x of buildSequence(plan)) {
+      const poly = by.get(x.ordinal)?.polyline
+      if (!poly) continue
+      for (const [lat, lon] of reverse ? [...poly].reverse() : poly) pts.push({ time: '', lat, lon })
     }
-  })
-  return (
-    <div className="space-y-1.5">
-      <CamminoRouteMap lines={lines} height={260} />
-      <p className="text-[10.5px] text-stone-400">Un colore per giornata, numeri nell&apos;ordine di marcia. Sblocca la mappa con il lucchetto per muoverla.</p>
-    </div>
-  )
+    return pts
+  }, [detail, plan])
+
+  if (trackPoints.length < 2) {
+    return <div className="flex h-[260px] items-center justify-center rounded-2xl border border-stone-200 bg-stone-100 text-[12px] text-stone-400"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Carico la mappa…</div>
+  }
+  return <RouteMapSection trackPoints={trackPoints} showPois={false} planned />
 }

@@ -1,9 +1,11 @@
 'use client'
 import { useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
-import { Loader2, Sparkles, Check, Navigation, Upload, BookOpen, Droplet, Landmark, Mountain, MapPin } from 'lucide-react'
+import { Loader2, Sparkles, Check, Navigation, Upload, BookOpen, MapPin } from 'lucide-react'
 import { POI_META } from '@/lib/overpass'
-import { useCamminoDetail, dayColor } from '@/lib/cammini/useCamminoDetail'
+import { POI_ICON } from '@/components/poiIcons'
+import { MiniScoreRing, tsColor } from '@/components/ScoreRing'
+import RouteMapSection from '@/components/RouteMapSection'
 import { useTappaData } from '@/lib/cammini/useTappaData'
 import { poisAlongTappa } from '@/lib/cammini/tappaPois'
 import { chapterFor } from '@/lib/cammini/report'
@@ -11,7 +13,7 @@ import type { CamminoPlan, CamminoPlanTappa } from '@/lib/cammini/plan'
 import type { TrackPoint } from '@/lib/tcxParser'
 import ElevationProfileChart from '@/components/ElevationProfileChart'
 
-const CamminoRouteMap = dynamic(() => import('./CamminoRouteMap'), { ssr: false })
+const RouteMap3D = dynamic(() => import('@/components/RouteMap3D'), { ssr: false })
 
 // Dettaglio di una tappa (docs/piano-cammini.md, Fase 5): lo stesso per una tappa già percorsa e per una
 // ancora da fare, così chi cammina vede cosa lo aspetta. Il CTS è in evidenza; i luoghi sono in ordine di
@@ -53,7 +55,7 @@ export default function CamminoTappaDetail({ plan, hikeId, tappa: t, seq, dayIdx
   })
   const planRef = useRef(plan)
   planRef.current = plan
-  const catalog = useCamminoDetail(plan.camminoId)
+  const [show3D, setShow3D] = useState(false)
   const [open, setOpen] = useState<'natura' | 'sapori' | null>(null)
   const [writing, setWriting] = useState<Kind | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -73,7 +75,6 @@ export default function CamminoTappaDetail({ plan, hikeId, tappa: t, seq, dayIdx
     [ready, reverse],
   )
   const poisShown = showAllPois ? along : along.slice(0, 8)
-  const polyline = catalog?.tappe.find(x => x.ordinal === t.ordinal)?.polyline
   const chapter = chapterFor(plan, t.ordinal)
 
   const km = done ? done.distanceMeters : t.lengthM
@@ -128,9 +129,9 @@ export default function CamminoTappaDetail({ plan, hikeId, tappa: t, seq, dayIdx
           <div className="rounded-xl bg-stone-100 py-2"><p className="text-[15px] font-bold tabular-nums">{(km / 1000).toFixed(1).replace('.', ',')}</p><p className="text-[10px] uppercase tracking-wider text-stone-500">km</p></div>
           <div className="rounded-xl bg-stone-100 py-2"><p className="text-[15px] font-bold tabular-nums">{timeLabel}</p><p className="text-[10px] uppercase tracking-wider text-stone-500">{done ? 'tempo' : 'stima'}</p></div>
           <div className="rounded-xl bg-stone-100 py-2"><p className="text-[15px] font-bold tabular-nums">{up != null ? `+${Math.round(up)}` : '–'}</p><p className="text-[10px] uppercase tracking-wider text-stone-500">salita m</p></div>
-          <div className="rounded-xl py-2 text-white" style={{ background: shownCts?.color ?? '#a8a29e' }}>
-            <p className="text-[15px] font-bold tabular-nums">{shownCts ? shownCts.ts : ctsV === 'na' ? '–' : '…'}</p>
-            <p className="text-[10px] uppercase tracking-wider text-white/80">CTS</p>
+          <div className="flex flex-col items-center justify-center rounded-xl bg-stone-100 py-1.5">
+            {shownCts ? <MiniScoreRing value={shownCts.ts} size={34} color={tsColor(shownCts.ts)} /> : <MiniScoreRing value={0} size={34} loading={ctsV !== 'na'} />}
+            <p className="mt-0.5 text-[10px] uppercase tracking-wider text-stone-500">CTS</p>
           </div>
         </div>
         <p className="mt-1.5 text-[11px] text-stone-500">
@@ -148,10 +149,10 @@ export default function CamminoTappaDetail({ plan, hikeId, tappa: t, seq, dayIdx
           </button>
         )}
 
-        {/* mappa e profilo */}
-        {polyline ? (
-          <CamminoRouteMap lines={[{ id: t.ordinal, points: polyline, color: dayColor(dayIdx), label: String(seq) }]} activeId={t.ordinal} pois={along.slice(0, 40).map(a => a.poi)} height={210} />
-        ) : <div className="flex h-[210px] items-center justify-center rounded-xl bg-stone-100 text-[12px] text-stone-400"><Loader2 className="mr-2 w-4 h-4 animate-spin" /> Carico la mappa…</div>}
+        {/* mappa e profilo: la mappa del percorso dell'app (schermo intero, 3D, lucchetto, luoghi con le loro icone) */}
+        {trackPoints && trackPoints.length > 1 ? (
+          <RouteMapSection trackPoints={trackPoints} pois={along.slice(0, 40).map(a => a.poi)} planned={!done} onOpenMap3D={() => setShow3D(true)} />
+        ) : <div className="flex h-[260px] items-center justify-center rounded-2xl border border-stone-200 bg-stone-100 text-[12px] text-stone-400"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {state.status === 'na' ? 'Mappa non disponibile.' : 'Carico la mappa…'}</div>}
         <div className="rounded-2xl border border-stone-200 bg-white px-3 pb-2 pt-2.5">
           <div className="flex justify-between text-[11px] text-stone-500"><span>Profilo della tappa</span>{ready?.data.maxM != null && <span>quota max {ready.data.maxM} m</span>}</div>
           {state.status === 'loading' ? <div className="flex h-[90px] items-center justify-center text-[12px] text-stone-400"><Loader2 className="mr-2 w-3.5 h-3.5 animate-spin" /> Calcolo il profilo…</div>
@@ -168,11 +169,11 @@ export default function CamminoTappaDetail({ plan, hikeId, tappa: t, seq, dayIdx
               <ul className="divide-y divide-stone-100">
                 {poisShown.map(({ poi, km: pk }) => {
                   const meta = POI_META[poi.type]
-                  const Icon = poi.type === 'spring' || poi.type === 'fountain' ? Droplet : poi.type === 'peak' || poi.type === 'viewpoint' || poi.type === 'pass' ? Mountain : poi.type === 'chapel' || poi.type === 'castle' || poi.type === 'ruins' || poi.type === 'archaeological' || poi.type === 'monument' ? Landmark : MapPin
+                  const Icon = POI_ICON[poi.type] ?? MapPin
                   return (
                     <li key={poi.id} className="flex items-center gap-2.5 py-2.5">
                       <span className="w-12 shrink-0 text-[12px] font-bold tabular-nums text-stone-600">km {pk.toFixed(1).replace('.', ',')}</span>
-                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-stone-100"><Icon className="w-3.5 h-3.5 text-stone-600" /></span>
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full" style={{ background: meta?.color ?? '#6b7280' }}><Icon className="h-3.5 w-3.5 text-white" /></span>
                       <span className="min-w-0 flex-1"><span className="block truncate text-[13px] font-semibold text-stone-800">{poi.name ?? meta?.label ?? 'Luogo'}</span><span className="block text-[11px] text-stone-500">{meta?.label ?? poi.type} · a {Math.round(poi.distFromTrack)} m</span></span>
                     </li>
                   )
@@ -196,6 +197,10 @@ export default function CamminoTappaDetail({ plan, hikeId, tappa: t, seq, dayIdx
         {open && <div className="rounded-2xl border border-stone-200 bg-white px-3.5 py-3">{textBlock(open, open === 'natura' ? 'Scopri la natura di questa tappa' : 'Scopri i sapori di questa tappa')}</div>}
         {error && <p className="text-[12px] text-red-600">{error}</p>}
       </div>
+
+      {show3D && trackPoints && (
+        <RouteMap3D trackPoints={trackPoints} title={`${t.fromName ?? 'Partenza'} → ${t.toName ?? 'Arrivo'}`} onClose={() => setShow3D(false)} distanceMeters={t.lengthM} elevationGain={ready?.data.gainM} pois={along.slice(0, 40).map(a => a.poi)} />
+      )}
 
       {/* azioni: sempre in vista */}
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-stone-200 bg-white/95 px-3.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2.5 backdrop-blur">

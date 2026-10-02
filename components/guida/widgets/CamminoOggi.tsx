@@ -2,6 +2,8 @@
 import { useMemo, useRef, useState } from 'react'
 import { Navigation, Upload, Check, ChevronRight, BookOpen } from 'lucide-react'
 import { POI_META } from '@/lib/overpass'
+import { POI_ICON } from '@/components/poiIcons'
+import { MiniScoreRing, tsColor } from '@/components/ScoreRing'
 import { useTappaData } from '@/lib/cammini/useTappaData'
 import { poisAlongTappa } from '@/lib/cammini/tappaPois'
 import { buildSequence, currentTappa } from '@/lib/cammini/progress'
@@ -68,7 +70,7 @@ export function CamminoOggiCard({ plan, hikeId, done, onPlanChange, onOpenTappa,
           <span><b className="text-[15px] text-white">{kmL(t.lengthM)}</b> km</span>
           <span><b className="text-[15px] text-white">{fmtHours(t.lengthM)}</b></span>
           <span><b className="text-[15px] text-white">{(ready?.data.gainM ?? t.elevationGainM) != null ? `+${Math.round((ready?.data.gainM ?? t.elevationGainM) as number)}` : '–'}</b> m</span>
-          <span className="rounded-full px-2.5 py-0.5 text-[13px] font-bold text-white" style={{ background: cts?.color ?? 'rgba(255,255,255,.22)' }}>CTS {cts ? cts.ts : ctsV === 'na' ? '–' : '…'}</span>
+          <span className="flex items-center gap-1.5"><MiniScoreRing value={cts?.ts ?? 0} size={34} color={cts ? tsColor(cts.ts) : undefined} loading={!cts && ctsV !== 'na'} /><span className="text-[11px] font-bold uppercase tracking-wider text-white/80">CTS</span></span>
         </div>
         <div className="mt-3.5 grid grid-cols-[1fr_auto] gap-2">
           {finished ? (
@@ -89,8 +91,8 @@ export function CamminoOggiCard({ plan, hikeId, done, onPlanChange, onOpenTappa,
           <ul className="divide-y divide-stone-100">
             {along.slice(0, 3).map(({ poi, km }) => (
               <li key={poi.id} className="flex items-center gap-2.5 py-2">
+                {(() => { const Icon = POI_ICON[poi.type]; return <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full" style={{ background: POI_META[poi.type]?.color ?? '#6b7280' }}>{Icon && <Icon className="h-3.5 w-3.5 text-white" />}</span> })()}
                 <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-stone-800">{poi.name}</span>
-                <span className="shrink-0 text-[11px] text-stone-500">{POI_META[poi.type]?.label ?? ''}</span>
                 <span className="w-12 shrink-0 text-right text-[12px] font-bold tabular-nums text-stone-600">km {km.toFixed(1).replace('.', ',')}</span>
               </li>
             ))}
@@ -142,7 +144,7 @@ export function CamminoDiario({ plan, done, onOpenTappa, onOpenReportage }: Comm
             <button key={x.ordinal} type="button" onClick={() => onOpenTappa(x.ordinal)} className="relative mb-2.5 block w-full text-left">
               {dot('done')}
               <span className="flex items-baseline justify-between gap-2"><span className="text-[13px] font-bold text-stone-800">{x.tappa.fromName} → {x.tappa.toName}</span><span className="shrink-0 text-[11px] text-stone-500">{new Date(d.startTime).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })}</span></span>
-              <span className="flex items-center gap-2 text-[12px] text-stone-500">{kmL(d.distanceMeters)} km · {fmtDur(d.totalTimeSeconds)} · +{Math.round(d.elevationGain)} m{x.tappa.cts && <span className="rounded-full px-1.5 py-px text-[10.5px] font-bold text-white" style={{ background: x.tappa.cts.color }}>CTS {x.tappa.cts.ts}</span>}</span>
+              <span className="flex items-center gap-2 text-[12px] text-stone-500">{kmL(d.distanceMeters)} km · {fmtDur(d.totalTimeSeconds)} · +{Math.round(d.elevationGain)} m{x.tappa.cts && <span className="flex items-center gap-1"><MiniScoreRing value={x.tappa.cts.ts} size={22} color={tsColor(x.tappa.cts.ts)} /><span className="text-[10.5px] font-bold uppercase text-stone-500">CTS</span></span>}</span>
             </button>
           )
         })}
@@ -155,7 +157,7 @@ export function CamminoDiario({ plan, done, onOpenTappa, onOpenReportage }: Comm
                 <span className={`text-[13px] ${isNow ? 'font-bold text-[#7a5f28]' : 'font-semibold text-stone-700'}`}>{isNow ? 'Oggi · ' : ''}{x.tappa.fromName} → {x.tappa.toName}</span>
                 <ChevronRight className="h-4 w-4 shrink-0 text-stone-400" />
               </span>
-              <span className="flex items-center gap-2 text-[12px] text-stone-500">{kmL(x.tappa.lengthM)} km · {fmtHours(x.tappa.lengthM)}{x.tappa.elevationGainM != null && ` · +${Math.round(x.tappa.elevationGainM)} m`}{x.tappa.cts && <span className="rounded-full px-1.5 py-px text-[10.5px] font-bold text-white" style={{ background: x.tappa.cts.color }}>CTS {x.tappa.cts.ts}</span>}</span>
+              <span className="flex items-center gap-2 text-[12px] text-stone-500">{kmL(x.tappa.lengthM)} km · {fmtHours(x.tappa.lengthM)}{x.tappa.elevationGainM != null && ` · +${Math.round(x.tappa.elevationGainM)} m`}{x.tappa.cts && <span className="flex items-center gap-1"><MiniScoreRing value={x.tappa.cts.ts} size={22} color={tsColor(x.tappa.cts.ts)} /><span className="text-[10.5px] font-bold uppercase text-stone-500">CTS</span></span>}</span>
             </button>
           )
         })}

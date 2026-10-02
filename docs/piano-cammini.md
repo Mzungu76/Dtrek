@@ -164,3 +164,8 @@ Scelta dopo i mockup (concept B), con queste regole:
 - **Guida**: sotto le cifre, `CamminoOggiCard` (tappa di oggi o prossima: CTS, luoghi sulla strada con km progressivi, **Naviga** / **Importa**); nella sezione "Tappa per tappa", `CamminoDiario` (diario di marcia con tutte le tappe, percorse e da percorrere, CTS dove noto).
 - **Dettaglio tappa** `/guida/[id]/tappa/[ordinal]` — uguale per tappe percorse e non, per sapere cosa si affronta: titolo, dati, **CTS in evidenza** (calcolato nel browser, salvato nel piano via `PUT /api/cammini/tappa-cts`), capitolo del reportage, mappa, profilo, luoghi in ordine di cammino (`tappaPois.ts`), racconto/natura/sapori su richiesta; precedente/successiva.
 - Etichette allineate all'app: "Naviga", "Importa" (non GPX: l'import accetta più formati). Per i cammini non c'è più il pulsante "Naviga" generale in basso: si naviga una tappa alla volta.
+
+### Fase 5f — allineamento allo stile dell'app e reportage in galleria
+- Mappe dei cammini = `RouteMapSection` dell'app (schermo intero, lucchetto, frecce, inquadra, 3D, luoghi con le icone `POI_ICON` e i colori `POI_META`); rimosso il Leaflet dedicato.
+- Badge CTS = `MiniScoreRing`/`tsColor` (come nelle gallerie); stesso anello in tappa di oggi, diario, dettaglio e reportage.
+- Il reportage contenitore è una voce della **galleria Reportage** (`/resoconto`): sintetizzata dalle attività delle tappe (cifre sommate, tracciato unito, data dell'ultima), apre `/resoconto/cammino/[id]`; la pagina spiega la struttura (introduzione, schede-tappa con CTS e link al reportage della tappa, conclusione).
