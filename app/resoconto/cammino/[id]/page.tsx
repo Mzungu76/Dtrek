@@ -158,10 +158,9 @@ export default function CamminoReportagePage() {
   const cardBody = (key: string, text?: string) => (editing?.key === key ? undefined : text)
 
   return (
-    <div className={`relative min-h-screen ${MOBILE_TOPBAR_SPACER}`} style={{ background: '#fdfcfa' }}>
-      <Navbar />
+    <div className="fixed inset-0 z-40 overflow-y-auto" style={{ background: '#fdfcfa' }}>
       <button type="button" onClick={() => router.push('/resoconto')} aria-label="Torna all'elenco dei reportage"
-        className="absolute left-4 top-[calc(env(safe-area-inset-top,0px)+84px)] z-20 flex h-9 w-9 items-center justify-center rounded-full bg-stone-100/90 text-stone-600 shadow-sm backdrop-blur md:top-20">
+        className="absolute left-4 top-[calc(env(safe-area-inset-top,0px)+12px)] z-20 flex h-9 w-9 items-center justify-center rounded-full bg-stone-100/90 text-stone-600 shadow-sm backdrop-blur">
         <ChevronDown className="h-4 w-4" />
       </button>
       <ReportHero trackPoints={walkedPoints} title={plan.camminoName} categoryBadge={META_TYPE_CONFIG.cammino.label.toUpperCase()} startTime={firstStart} />
