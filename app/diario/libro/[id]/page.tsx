@@ -240,7 +240,14 @@ export default function DiarioLibroPage() {
         ? sortedActs.filter(x => x.linkedPlannedId === rep.id.slice('cammino:'.length) && x.tappaIndex != null).map(x => x.id)
         : [rep.activity_id]
       const photosPromise = Promise.all(sortedReps.map(async (rep: DiaryReport): Promise<readonly [string, RoutePhoto[]]> => {
-        try { return [rep.activity_id, (await Promise.all(camminoActIds(rep).map(id => fetchActivityPhotos(id)))).flat()] }
+        try {
+          const ids = camminoActIds(rep)
+          const lists = await Promise.all(ids.map(id => fetchActivityPhotos(id)))
+          if (!rep.id.startsWith('cammino:')) return [rep.activity_id, lists.flat()]
+          // Voce del cammino: ogni foto porta il numero della sua tappa, per metterla sotto il capitolo giusto.
+          const seqOf = (actId: string) => rep.cammino?.tappe.find(t => t.activityId === actId)?.seq
+          return [rep.activity_id, lists.flatMap((l, i) => l.map(p => ({ ...p, tappa: seqOf(ids[i]) })))]
+        }
         catch { return [rep.activity_id, []] }
       })).then(photoEntries => {
         const byAct: Record<string, RoutePhoto[]> = {}

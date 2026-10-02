@@ -245,8 +245,9 @@ export function DiarioReportPage({ report, photos, meta, camminoRoutes, extras, 
     // La selezione manuale dice *quali foto pubblicare* — vale per il sito, che le mostra tutte.
     // Il PDF ne prende comunque al massimo `maxPhotos`, distribuite lungo il percorso: è un
     // documento impaginato, non una galleria.
-    return selectSpreadPhotos(manual ?? photos, maxPhotos)
-  }, [photos, maxPhotos, selectedPhotoIds])
+    // Voce del cammino: le foto stanno sotto il capitolo della loro tappa, non sparse nel racconto.
+    return report.cammino ? [] : selectSpreadPhotos(manual ?? photos, maxPhotos)
+  }, [photos, maxPhotos, selectedPhotoIds, report.cammino])
   // Senza foto proprie un Reportage di Sito/Borgo apre con l'immagine del luogo.
   const heroPhoto = photos[0] ?? (act?.site?.cover ? { url: act.site.cover } : null)
   const detailPhoto = photos[1] ?? null
@@ -294,6 +295,30 @@ export function DiarioReportPage({ report, photos, meta, camminoRoutes, extras, 
   // stampata: restava a schermo come un titolo isolato seguito da uno spazio bianco vuoto — nel
   // caso peggiore osservato, tre intestazioni consecutive senza una sola riga di testo sotto.
   const restSections = sections.slice(1).filter(s => s.body.trim())
+  // Foto del cammino per tappa (esclusa quella di copertina e quella di dettaglio, già usate sopra).
+  const tappaPhotoGroups = useMemo(() => {
+    if (!report.cammino) return new Map<number, RoutePhoto[]>()
+    const chosen = selectedPhotoIds && selectedPhotoIds.length > 0 ? photos.filter(p => selectedPhotoIds.includes(p.id)) : photos
+    const used = new Set([photos[0]?.id, photos[1]?.id])
+    const m = new Map<number, RoutePhoto[]>()
+    for (const p of chosen) {
+      if (used.has(p.id) || p.tappa == null) continue
+      m.set(p.tappa, [...(m.get(p.tappa) ?? []), p])
+    }
+    return m
+  }, [report.cammino, photos, selectedPhotoIds])
+  const sectionTappa = (title: string): number | null => { const m = /^Tappa (\d+)\b/.exec(title); return m ? Number(m[1]) : null }
+  const renderTappaPhotos = (n: number) => {
+    const list = tappaPhotoGroups.get(n)
+    if (!list || list.length === 0) return null
+    return (
+      <div className="pdf-block" data-mag-block="" style={{ display: 'grid', gridTemplateColumns: list.length === 1 ? '1fr' : '1fr 1fr', gap: 10, margin: '4px 0 18px' }}>
+        {list.slice(0, 6).map(ph => (
+          <img key={ph.id} src={ph.thumbUrl ?? ph.url} alt={ph.caption} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 8, boxShadow: '0 4px 14px rgba(0,0,0,0.12)' }} />
+        ))}
+      </div>
+    )
+  }
   const STORY_ACCENTS = [
     { bg: '#fdf6ee', border: '#e08d3c', label: '#c05a17', text: '#6a2e18' },
     { bg: '#f1f8f2', border: '#378d44', label: '#277134', text: '#193b20' },
@@ -575,6 +600,13 @@ export function DiarioReportPage({ report, photos, meta, camminoRoutes, extras, 
                     </div>
                   ) : <div key={j} className="pdf-block" data-mag-block="">{paragraph}</div>
                 })}
+                {(() => { const n = sectionTappa(section.title); return n != null ? renderTappaPhotos(n) : null })()}
+              </div>
+            ))}
+            {Array.from(tappaPhotoGroups.keys()).filter(n => !restSections.some(sec => sectionTappa(sec.title) === n)).sort((a, b) => a - b).map(n => (
+              <div key={`ph-${n}`}>
+                <p style={{ fontFamily: FONT.barlow, fontSize: 10, fontWeight: 900, letterSpacing: 3, color: '#e08d3c', textTransform: 'uppercase', margin: '0 0 8px' }}>Tappa {n} · foto</p>
+                {renderTappaPhotos(n)}
               </div>
             ))}
           </div>

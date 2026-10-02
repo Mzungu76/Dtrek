@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { composeCamminoMarkdown, groupCamminoActivities, hiddenTappaActivityIds } from '../cammini/diaryEntries'
+import { cleanTappaReport, composeCamminoMarkdown, groupCamminoActivities, hiddenTappaActivityIds } from '../cammini/diaryEntries'
 import type { CamminoPlan } from '../cammini/plan'
 
 const plan = {
@@ -29,5 +29,11 @@ describe('diaryEntries', () => {
     expect(groups[0].repActivityId).toBe('x1')
     expect(groups[0].tappaActivityIds).toEqual(['x1', 'x2'])
     expect(Array.from(hiddenTappaActivityIds(groups))).toEqual(['x2'])
+  })
+  it('toglie le sezioni vuote dal testo di una tappa e lo mette sotto il suo capitolo', () => {
+    expect(cleanTappaReport('## Il cammino\n\nTest\n\n## Cronaca\n\n\n\n## In sintesi\n\n')).toBe('Test')
+    const md = composeCamminoMarkdown(plan, { 1: 'Mio testo' })
+    expect(md.indexOf('Uno')).toBeLessThan(md.indexOf('Mio testo'))
+    expect(md.indexOf('Mio testo')).toBeLessThan(md.indexOf('## Tappa 2'))
   })
 })

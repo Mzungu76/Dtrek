@@ -187,4 +187,4 @@ Scelta dopo i mockup (concept B), con queste regole:
 - **Link pubblico del reportage del cammino**: `POST /api/cammini/reportage/share` salva il token in `cammino_plan.report.shareToken`;
   `/leggi/p/<token>` lo legge (`lib/sharePublicReport.ts`). Si crea e si ritira dalla pagina del reportage.
 - **Conteggi**: le tappe contano un solo reportage nelle card dei Diari (`lib/diari/aggregateDiaries.ts`) e i loro km si sommano.
-- **Libro**: la voce del cammino usa foto e traccia di tutte le tappe.
+- **Libro**: la voce del cammino usa foto e traccia di tutte le tappe; il testo scritto nel reportage di ogni tappa va sotto il suo capitolo e le foto di ogni tappa sotto il capitolo della tappa.

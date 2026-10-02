@@ -55,6 +55,8 @@ export interface PublicDiaryPhoto {
   caption:  string | null
   /** Posizione lungo il percorso (0–1), per collocare il pin sullo schizzo della traccia. */
   progress: number | null
+  /** Voce unica di un cammino: numero della tappa (nell'ordine di marcia) a cui appartiene la foto. */
+  tappa?: number
 }
 
 export interface PublicDiaryEntry {
@@ -280,7 +282,7 @@ export async function buildContentFromReports(
       altitudeMax: acts.reduce<number | null>((m, a) => { const v = (a.altitude_max as number | null) ?? null; return v == null ? m : m == null ? v : Math.max(m, v) }, null),
       calories: null,
       polyline: poly,
-      photos: g.tappaActivityIds.flatMap(chosen),
+      photos: g.tappaActivityIds.flatMap(id => chosen(id).map(p => ({ ...p, tappa: g.tappe.find(t => t.activityId === id)?.seq }))),
       // I grafici e i luoghi di una singola tappa non rappresentano il cammino intero.
       altitudeSeries: [], hrSeries: [], speedSeriesKmh: [], pois: [],
     }

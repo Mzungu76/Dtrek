@@ -95,7 +95,26 @@ export function PublicReportPage({ entry, n, show, hideExactDates = false }: {
   // Senza foto proprie un Reportage di Sito apre con l'immagine del luogo.
   const heroPhoto = photos[0] ?? (entry.siteCoverUrl ? { url: entry.siteCoverUrl } : null)
   const detailPhoto = photos[1] ?? null
-  const galleryPhotos = photos.slice(2)
+  // Voce del cammino: le foto stanno sotto il capitolo della loro tappa, non in una galleria unica.
+  const galleryPhotos = entry.cammino ? [] : photos.slice(2)
+  const tappaPhotos = new Map<number, typeof photos>()
+  if (entry.cammino) {
+    const used = new Set([photos[0]?.id, photos[1]?.id])
+    for (const p of photos) { if (!used.has(p.id) && p.tappa != null) tappaPhotos.set(p.tappa, [...(tappaPhotos.get(p.tappa) ?? []), p]) }
+  }
+  const sectionTappa = (title: string): number | null => { const m = /^Tappa (\d+)\b/.exec(title); return m ? Number(m[1]) : null }
+  const renderTappaPhotos = (n: number) => {
+    const list = tappaPhotos.get(n)
+    if (!list || list.length === 0) return null
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: list.length === 1 ? '1fr' : '1fr 1fr', gap: cq(10), margin: `${cq(4)} 0 ${cq(18)}` }}>
+        {list.map(ph => (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img key={ph.id} src={ph.url} alt={ph.caption ?? ''} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: cq(8), boxShadow: '0 4px 14px rgba(0,0,0,0.12)' }} />
+        ))}
+      </div>
+    )
+  }
 
   const introSection = sections[0]
   const restSections = sections.slice(1).filter(s => s.body.trim())
@@ -324,6 +343,13 @@ export function PublicReportPage({ entry, n, show, hideExactDates = false }: {
                       </div>
                     ) : <div key={j}>{paragraph}</div>
                   })}
+                  {(() => { const n = sectionTappa(section.title); return n != null ? renderTappaPhotos(n) : null })()}
+                </div>
+              ))}
+              {Array.from(tappaPhotos.keys()).filter(n => !restSections.some(sec => sectionTappa(sec.title) === n)).sort((a, b) => a - b).map(n => (
+                <div key={`ph-${n}`}>
+                  <p className="font-barlow" style={{ fontWeight: 900, fontSize: cq(10), letterSpacing: cq(3), color: '#e08d3c', textTransform: 'uppercase', margin: `0 0 ${cq(8)}` }}>Tappa {n} · foto</p>
+                  {renderTappaPhotos(n)}
                 </div>
               ))}
             </div>

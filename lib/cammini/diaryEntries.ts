@@ -31,24 +31,38 @@ export interface CamminoGroup {
   content: string
 }
 
-/** Il reportage del cammino come un unico testo: i capitoli diventano sezioni `## Tappa N · da → a`. */
-export function composeCamminoMarkdown(plan: CamminoPlan): string {
+/** Il testo scritto nel reportage di una tappa, senza le intestazioni di sezione (che nel reportage del cammino sono
+ *  quelle della tappa) e senza le sezioni rimaste vuote. */
+export function cleanTappaReport(content: string | null | undefined): string {
+  if (!content) return ''
+  return content.split(/^##.*$/m).map(p => p.trim()).filter(Boolean).join('\n\n')
+}
+
+/** Il reportage del cammino come un unico testo: introduzione, una sezione `## Tappa N · da → a` per ogni tappa che ha un
+ *  capitolo e/o un testo scritto nel reportage della tappa (`tappaTexts`, per ordinale), conclusione. */
+export function composeCamminoMarkdown(plan: CamminoPlan, tappaTexts: Record<number, string> = {}): string {
   const byOrdinal = new Map(plan.tappe.map(t => [t.ordinal, t]))
+  const chapters = new Map(orderedChapters(plan).map(c => [c.ordinal, c]))
   const seq = plan.days.flatMap(d => d.tappe)
   const parts: string[] = []
-  if (plan.report?.intro?.trim()) parts.push(plan.report.intro.trim())
-  for (const c of orderedChapters(plan)) {
-    if (!c.body?.trim()) continue
-    const t = byOrdinal.get(c.ordinal)
-    const n = seq.indexOf(c.ordinal) + 1
-    parts.push(`## Tappa ${n > 0 ? n : c.ordinal} · ${t?.fromName ?? 'Partenza'} → ${t?.toName ?? 'Arrivo'}\n\n${c.body.trim()}`)
+  // Il primo blocco è sempre un'apertura senza titolo (le pagine la trattano come introduzione): senza un'introduzione scritta
+  // ne basta il nome del cammino, così la prima tappa non la sostituisce perdendo il proprio titolo.
+  parts.push(plan.report?.intro?.trim() || `${plan.camminoName}: le tappe percorse.`)
+  // Prima le tappe nell'ordine di marcia; un capitolo di una tappa fuori dal piano (non dovrebbe capitare) va in coda.
+  const ordinals = [...seq, ...Array.from(chapters.keys()).filter(o => !seq.includes(o))]
+  for (const o of ordinals) {
+    const body = [chapters.get(o)?.body?.trim(), tappaTexts[o]?.trim()].filter((x, i, a): x is string => !!x && a.indexOf(x) === i).join('\n\n')
+    if (!body) continue
+    const t = byOrdinal.get(o)
+    const n = seq.indexOf(o) + 1
+    parts.push(`## Tappa ${n > 0 ? n : o} · ${t?.fromName ?? 'Partenza'} → ${t?.toName ?? 'Arrivo'}\n\n${body}`)
   }
   if (plan.report?.epilogue?.trim()) parts.push(`## Conclusione\n\n${plan.report.epilogue.trim()}`)
   return parts.join('\n\n')
 }
 
 /** Raggruppa le attività-tappa per cammino. Le attività senza tappa, o di una Meta senza piano, restano fuori. */
-export function groupCamminoActivities(planned: CamminoPlannedRow[], activities: CamminoActivityRow[]): CamminoGroup[] {
+export function groupCamminoActivities(planned: CamminoPlannedRow[], activities: CamminoActivityRow[], reportTextByActivity: Record<string, string> = {}): CamminoGroup[] {
   const plans = new Map(planned.filter(p => p.cammino_plan).map(p => [p.id, p]))
   const byHike = new Map<string, CamminoActivityRow[]>()
   for (const a of activities) {
@@ -77,7 +91,7 @@ export function groupCamminoActivities(planned: CamminoPlannedRow[], activities:
       repActivityId: sorted[0].id,
       tappaActivityIds: sorted.map(a => a.id),
       startTime: sorted[0].start_time,
-      content: composeCamminoMarkdown(p.cammino_plan!),
+      content: composeCamminoMarkdown(plan, Object.fromEntries(sorted.map(a => [a.tappa_index!, cleanTappaReport(reportTextByActivity[a.id])]))),
     })
   })
   return out
