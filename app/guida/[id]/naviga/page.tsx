@@ -8,7 +8,8 @@ import NavigatorAppPromo from '@/components/navigation/NavigatorAppPromo'
 import TappaPicker from '@/components/navigation/TappaPicker'
 import type { LocationProviderFactory } from '@/lib/native/locationSource'
 import { SimulationLocationProvider } from '@/lib/navigation/simulation/simulationLocationProvider'
-import { orderForDirection } from '@/lib/cammini/plan'
+import { loadOfflineTappa, saveOfflineTappa, orientedTappa } from '@/lib/cammini/offlineTappa'
+import type { PoiItem } from '@/lib/overpass'
 import type { CamminoDetail } from '@/app/api/cammini/[id]/route'
 import { buildScenario, SCENARIO_NAMES, SCENARIO_LABELS, type ScenarioName } from '@/lib/navigation/simulation/presetScenarios'
 
@@ -33,7 +34,7 @@ function NavigaPageInner() {
   const [retryCount, setRetryCount] = useState(0)
   // Cammino: la tappa da registrare (?tappa=<ordinale>) con il suo tracciato di catalogo, già nel verso
   // scelto nel piano. Ogni tappa è una sessione a sé e porta il proprio ordinale nell'attività salvata.
-  const [camminoTappa, setCamminoTappa] = useState<{ ordinal: number; polyline: [number, number][]; lengthM: number; name: string } | null>(null)
+  const [camminoTappa, setCamminoTappa] = useState<{ ordinal: number; polyline: [number, number][]; lengthM: number; name: string; pois: PoiItem[] } | null>(null)
 
   // Dev/testing only (docs/navigation-engine-roadmap.md — Simulation layer): open
   // /guida/<id>/naviga?simulate=off_route (or any name in SCENARIO_NAMES) to drive the whole
@@ -76,6 +77,7 @@ function NavigaPageInner() {
         title: `${hike.title} · ${camminoTappa.name}`,
         routePolyline: camminoTappa.polyline,
         distanceMeters: camminoTappa.lengthM,
+        cachedPois: camminoTappa.pois,
       }
     }
     if (!hasMultipleTappe || chosenTappaIndex == null || needsTappaChoice) return hike
@@ -116,19 +118,21 @@ function NavigaPageInner() {
         const plan = h.camminoPlan
         const wanted = Number(searchParams.get('tappa'))
         const ordinal = plan.tappe.some(t => t.ordinal === wanted) ? wanted : (plan.tappe[0]?.ordinal ?? 1)
-        try {
-          const res = await fetch(`/api/cammini/${encodeURIComponent(plan.camminoId)}`)
-          if (!res.ok) throw new Error(String(res.status))
-          const detail = (await res.json()) as CamminoDetail
-          const found = detail.tappe.find(t => t.ordinal === ordinal)
-          if (!found) throw new Error('tappa')
-          const oriented = orderForDirection([found], plan.direction)[0]
-          if (cancelled) return
-          setCamminoTappa({ ordinal, polyline: oriented.polyline, lengthM: oriented.lengthM, name: `${oriented.fromName ?? 'Partenza'} → ${oriented.toName ?? 'Arrivo'}` })
-        } catch {
-          if (!cancelled) setFailure('no-route')
-          return
+        // Prima la copia locale (salvata con "Scarica per l'offline" o da un'apertura precedente): la tappa
+        // parte anche senza rete.
+        let local = await loadOfflineTappa(plan.camminoId, ordinal, plan.direction)
+        if (!local) {
+          try {
+            const res = await fetch(`/api/cammini/${encodeURIComponent(plan.camminoId)}`)
+            if (!res.ok) throw new Error(String(res.status))
+            const detail = (await res.json()) as CamminoDetail
+            local = orientedTappa(detail, ordinal, plan.direction)
+            if (local) saveOfflineTappa(local)
+          } catch { local = null }
         }
+        if (!local) { if (!cancelled) setFailure('no-route'); return }
+        if (cancelled) return
+        setCamminoTappa({ ordinal, polyline: local.polyline, lengthM: local.lengthM, name: local.name, pois: local.pois })
       }
       setHike(h.routePolyline?.length ? h : { ...h, routePolyline: walkPolyline })
     })

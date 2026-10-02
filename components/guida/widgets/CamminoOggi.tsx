@@ -4,6 +4,7 @@ import { Navigation, Upload, Check, ChevronRight, BookOpen } from 'lucide-react'
 import { POI_META } from '@/lib/overpass'
 import { POI_ICON } from '@/components/poiIcons'
 import CamminoCtsBadge from './CamminoCtsBadge'
+import CamminoOfflineButton from './CamminoOfflineButton'
 import { MiniScoreRing, tsColor } from '@/components/ScoreRing'
 import { useTappaData } from '@/lib/cammini/useTappaData'
 import { poisAlongTappa } from '@/lib/cammini/tappaPois'
@@ -81,6 +82,7 @@ export function CamminoOggiCard({ plan, hikeId, done, onPlanChange, onOpenTappa,
           )}
           {!finished && <button type="button" onClick={() => onImporta(item.ordinal)} className="flex items-center gap-1.5 rounded-full border-[1.5px] border-white/55 px-4 text-[13px] font-bold"><Upload className="w-4 h-4" /> Importa</button>}
         </div>
+        {!finished && <div className="mt-3 flex justify-center rounded-xl bg-white/90 p-1"><CamminoOfflineButton plan={plan} hikeId={hikeId} ordinal={item.ordinal} /></div>}
       </div>
 
       {along.length > 0 && (

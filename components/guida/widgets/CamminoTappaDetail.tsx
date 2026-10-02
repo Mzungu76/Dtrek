@@ -7,6 +7,7 @@ import { fetchWikiForNamedPois, type WikiPage } from '@/lib/wikipedia'
 import PoiListWidget from './PoiListWidget'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 import RouteMapSection from '@/components/RouteMapSection'
+import CamminoOfflineButton from './CamminoOfflineButton'
 import { useTappaData } from '@/lib/cammini/useTappaData'
 import { poisAlongTappa } from '@/lib/cammini/tappaPois'
 import { chapterFor } from '@/lib/cammini/report'
@@ -219,6 +220,7 @@ export default function CamminoTappaDetail({ plan, hikeId, tappa: t, seq, dayIdx
           </button>
         ) : (
           <div className="grid grid-cols-[1fr_auto] gap-2">
+            <div className="col-span-2 flex justify-center"><CamminoOfflineButton plan={plan} hikeId={hikeId} ordinal={t.ordinal} /></div>
             <button type="button" onClick={onNaviga} className="flex items-center justify-center gap-2 rounded-full bg-forest-600 py-3 text-[14px] font-bold text-white"><Navigation className="w-4 h-4" /> Naviga</button>
             <button type="button" onClick={onImporta} className="flex items-center gap-1.5 rounded-full border border-stone-300 bg-white px-5 text-[13px] font-bold text-stone-700"><Upload className="w-4 h-4" /> Importa</button>
           </div>

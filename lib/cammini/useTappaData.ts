@@ -18,7 +18,7 @@ const dataCache = new Map<string, TappaElevation>()
 const ctsCache = new Map<string, TappaCts>()
 const inflight = new Map<string, Promise<TappaElevation | null>>()
 
-function load(camminoId: string, ordinal: number): Promise<TappaElevation | null> {
+export function loadTappaElevation(camminoId: string, ordinal: number): Promise<TappaElevation | null> {
   const key = `${camminoId}:${ordinal}`
   const hit = dataCache.get(key)
   if (hit) return Promise.resolve(hit)
@@ -46,7 +46,7 @@ export function useTappaData(plan: CamminoPlan, hikeId: string, ordinal: number 
     const stored = tappa?.cts
     const initialCts: TappaCts | 'loading' =
       ctsCache.get(ckey) ?? (stored?.safety ? { ts: stored.ts, label: stored.label, color: stored.color, confidence: 'high', poisCount: 0, safety: stored.safety, total: stored.total } : 'loading')
-    load(plan.camminoId, ordinal).then(data => {
+    loadTappaElevation(plan.camminoId, ordinal).then(data => {
       if (cancelled) return
       if (!data) { setState({ status: 'na' }); return }
       setState({ status: 'ready', data, cts: initialCts })
