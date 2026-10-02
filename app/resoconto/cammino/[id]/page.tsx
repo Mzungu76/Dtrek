@@ -193,7 +193,7 @@ export default function CamminoReportagePage() {
               </header>
               {ch ? textBlock(`t${x.ordinal}`, ch.body) : writeBtn(`t${x.ordinal}`, 'Scrivi il capitolo di questa tappa con Giulia', () => generate('tappa', x.ordinal))}
               <Link href={`/resoconto/${encodeURIComponent(a.id)}`} className="inline-flex items-center gap-1 text-sm font-semibold text-forest-700 hover:text-forest-800">
-                Foto e dettagli della tappa <ChevronRight className="w-4 h-4" />
+                Apri il reportage della tappa <ChevronRight className="w-4 h-4" />
               </Link>
             </section>
           )

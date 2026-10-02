@@ -22,6 +22,8 @@ export interface CamminoPlanTappa {
   /** Natura e sapori della tappa, generati su richiesta come il racconto. */
   natura?: string
   sapori?: string
+  /** CTS della tappa per questo camminatore (profilo, luoghi, preferenze e storico), calcolato nel browser e salvato qui. */
+  cts?: { ts: number; label: string; color: string; computedAt: string }
 }
 
 export interface CamminoPlanDay {

@@ -57,7 +57,8 @@ import RelatedPlacesWidget from './widgets/RelatedPlacesWidget'
 import OpereMuseoWidget from './widgets/OpereMuseoWidget'
 import GuideHero from './GuideHero'
 import GuideStatsStrip from './GuideStatsStrip'
-import CamminoTappeWidget from './widgets/CamminoTappeWidget'
+import { CamminoOggiCard, CamminoDiario } from './widgets/CamminoOggi'
+import type { TappaDone } from './widgets/CamminoTappaDetail'
 import CamminoOverviewMap from './widgets/CamminoOverviewMap'
 import GuideCamminoStatsStrip from './GuideCamminoStatsStrip'
 import GuideBorgoStatsStrip from './GuideBorgoStatsStrip'
@@ -345,21 +346,35 @@ export default function GuideReader({
   const router = useRouter()
   // Cammino: le tappe già percorse sono quelle con un'attività collegata (registrata col Navigator o
   // importata da file) — mai dichiarate a mano. ordinale → id dell'attività.
-  const [camminoDone, setCamminoDone] = useState<Record<number, { activityId: string }>>({})
+  const [camminoDone, setCamminoDone] = useState<Record<number, TappaDone>>({})
   useEffect(() => {
     if (hike.metaType !== 'cammino') return
     let cancelled = false
     const apply = (list: ActivityMeta[]) => {
       if (cancelled) return
-      const done: Record<number, { activityId: string }> = {}
+      const done: Record<number, TappaDone> = {}
       for (const a of list) {
-        if (a.linkedPlannedId === hike.id && a.tappaIndex != null && !done[a.tappaIndex]) done[a.tappaIndex] = { activityId: a.id }
+        if (a.linkedPlannedId === hike.id && a.tappaIndex != null && !done[a.tappaIndex]) {
+          done[a.tappaIndex] = { activityId: a.id, distanceMeters: a.distanceMeters, totalTimeSeconds: a.totalTimeSeconds, elevationGain: a.elevationGain, startTime: a.startTime }
+        }
       }
       setCamminoDone(done)
     }
     getAllActivities(apply).then(apply).catch(() => {})
     return () => { cancelled = true }
   }, [hike.id, hike.metaType])
+
+  // Azioni comuni delle schermate del cammino: aprire una tappa, navigarla, importarla, aprire il reportage.
+  const camminoNav = (plan: NonNullable<typeof hike.camminoPlan>) => ({
+    plan,
+    hikeId: hike.id,
+    done: camminoDone,
+    onPlanChange: (camminoPlan: NonNullable<typeof hike.camminoPlan>) => onHikeUpdate({ camminoPlan }),
+    onOpenTappa: (ordinal: number) => router.push(`/guida/${encodeURIComponent(hike.id)}/tappa/${ordinal}`),
+    onNaviga: (ordinal: number) => router.push(`/guida/${encodeURIComponent(hike.id)}/naviga?tappa=${ordinal}`),
+    onImporta: (ordinal: number) => router.push(`/upload?tab=activity&planned=${encodeURIComponent(hike.id)}&tappa=${ordinal}`),
+    onOpenReportage: () => router.push(`/resoconto/cammino/${encodeURIComponent(hike.id)}`),
+  })
   const [borgoItinerary, setBorgoItinerary] = useState<BorgoItinerary | null>(null)
   // Verifica utente: "non vengono più generati gli itinerari" — in realtà venivano generati, solo
   // che il calcolo (geosearch Wikipedia + rete pedonale OSM + Dijkstra, vedi /api/borgo-itinerary)
@@ -1181,13 +1196,7 @@ export default function GuideReader({
         // Cammino: le giornate e le tappe del suo piano (hike.camminoPlan), mai la lista di POI
         // lungo una traccia che non ha.
         if (hike.metaType === 'cammino') {
-          return hike.camminoPlan ? <CamminoTappeWidget plan={hike.camminoPlan} hikeId={hike.id} color={SECTION_STYLE.luoghi.color} onPlanChange={camminoPlan => onHikeUpdate({ camminoPlan })}
-            completed={camminoDone}
-            onRecord={ordinal => router.push(`/guida/${encodeURIComponent(hike.id)}/naviga?tappa=${ordinal}`)}
-            onImport={ordinal => router.push(`/upload?tab=activity&planned=${encodeURIComponent(hike.id)}&tappa=${ordinal}`)}
-            onOpenActivity={id => router.push(`/resoconto/${encodeURIComponent(id)}`)}
-            onOpenReportage={() => router.push(`/resoconto/cammino/${encodeURIComponent(hike.id)}`)}
-          /> : null
+          return hike.camminoPlan ? <CamminoDiario {...camminoNav(hike.camminoPlan)} /> : null
         }
         return poiList
           ? (
@@ -1541,6 +1550,9 @@ export default function GuideReader({
           } : undefined}
         />
       )}
+
+      {/* Cammino: la tappa di oggi (o la prossima) subito sotto le cifre, con CTS, luoghi e Naviga. */}
+      {hike.metaType === 'cammino' && hike.camminoPlan && <CamminoOggiCard {...camminoNav(hike.camminoPlan)} />}
 
       {/* "Vicino a te" (piano §51.6) — solo per una Guida Sito AUTONOMA (una nested ha già il
           richiamo al Borgo sopra, non le serve anche questo); silenzioso da sé se relatedPlaces

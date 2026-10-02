@@ -35,6 +35,7 @@ import {
   Route, TrendingUp, Clock, Flame, MapPin,
   Pencil, Trash2, Loader2, Share2, Box, Images, Film, Camera, X,
   Star, Car, Settings, BookMarked, ChevronDown, Check,
+  Mountain,
 } from 'lucide-react'
 import ShareModal from '@/components/ShareModal'
 import HikeNotesRecorder from '@/app/components/HikeNotesRecorder'
@@ -195,10 +196,12 @@ export default function ResocontoHub({ id }: { id?: string }) {
   // fresh fetch (with up-to-date trailScore/userRating) is saved to the local cache for next
   // time but never reaches this session's `items` — so the gallery stays a visit behind.
   const applyList = useCallback((list: ActivityMeta[]) => {
-    const sorted = list.slice().sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
+    // Le tappe di un cammino sono capitoli del reportage del cammino, non voci della galleria: resta
+    // solo quella aperta (si arriva da "Foto e dettagli della tappa").
+    const sorted = list.filter(a => a.tappaIndex == null || a.id === id).sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
     setRawActivities(sorted)
     setItems(sorted.map(metaToItem))
-  }, [])
+  }, [id])
 
   useEffect(() => {
     getAllActivities(applyList).then(applyList).catch(() => setItems([])).finally(() => setListLoaded(true))
@@ -611,6 +614,13 @@ export default function ResocontoHub({ id }: { id?: string }) {
         // ReportReader usa useSearchParams() (per rilevare il ritorno dal racconto guidato con
         // ?generate=1) — Next.js richiede un confine Suspense attorno a chi lo chiama, altrimenti
         // il build fallisce ("should be wrapped in a suspense boundary").
+        <>
+        {activity.tappaIndex != null && activity.linkedPlannedId && (
+          <a href={`/resoconto/cammino/${encodeURIComponent(activity.linkedPlannedId)}`}
+            className="mx-4 mb-3 mt-2 flex items-center gap-2 rounded-xl border border-forest-200 bg-forest-50 px-3.5 py-2.5 text-sm font-semibold text-forest-800">
+            <Mountain className="w-4 h-4 shrink-0" /> Capitolo del reportage del cammino · torna al reportage
+          </a>
+        )}
         <Suspense fallback={null}>
         <ReportReader
           activity={activity}
@@ -641,6 +651,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
           onScrollToSectionConsumed={() => setPendingScrollSection(null)}
         />
         </Suspense>
+        </>
       )
     }
 
