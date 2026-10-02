@@ -14,6 +14,7 @@ const escapeRe = (n: string) => n.replace(/[\\"^$.*+?()[\]{}|]/g, m => `\\${m}`)
  * si recuperano a parte risalendo dai figli trovati (`br`), sempre filtrando per nome.
  */
 export function rootsQuery(entry: RegistryEntry): string {
+  if (entry.osmRelationIds?.length) return `${TUNING};\nrel(id:${entry.osmRelationIds.join(',')});\nout body;`
   const name = `["name"~"${escapeRe(entry.searchName ?? entry.name)}",i]`
   return `${TUNING};
 (
