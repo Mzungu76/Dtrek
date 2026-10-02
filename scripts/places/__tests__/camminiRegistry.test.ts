@@ -132,7 +132,8 @@ describe('assessQuality', () => {
 describe('query di import', () => {
   it('solo a piedi, mai ciclabili; le way si chiedono per id', () => {
     const q = relationsQuery(entry('cammino-sant-antonio'))
-    expect(q).toContain('hiking|foot')
+    expect(q).toContain('"route"="hiking"')
+    expect(q).toContain('"route"="foot"')
     expect(q).not.toMatch(/bicycle|mtb/)
     expect(q).toContain("Cammino di Sant'Antonio")
     expect(waysQuery([1, 2, 3])).toContain('way(id:1,2,3)')
