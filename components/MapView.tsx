@@ -15,6 +15,16 @@ import { computeDirectionArrows } from '@/lib/geoUtils'
 import { useRouteTour, SPEEDS } from './mapview/useRouteTour'
 import TourControls from './mapview/TourControls'
 
+/** Marcatore generico con icona propria (es. servizi di un cammino), distinto dai POI: html è il contenuto del marker. */
+export interface MapExtraMarker {
+  id: string
+  lat: number
+  lon: number
+  html: string
+  size: number
+  popupHtml?: string
+}
+
 interface Props {
   trackPoints: TrackPoint[]
   height?: string
@@ -22,6 +32,8 @@ interface Props {
   showAspect?: boolean
   dtmProfile?: TrailDtmProfile
   pois?: PoiItem[]
+  /** Marcatori aggiuntivi con icona propria, in uno strato separato dai POI. */
+  extraMarkers?: MapExtraMarker[]
   /** Id dei `pois` con copertura Street View plausibile (vedi
    *  lib/routeBuilder/streetViewCoverage.ts) — assente ⇒ il popup di ogni POI mostra comunque il
    *  link (comportamento invariato per i chiamanti che non hanno ancora questo dato). */
@@ -154,6 +166,7 @@ export default function MapView({
   showAspect = false,
   dtmProfile,
   pois = [],
+  extraMarkers,
   streetViewPoiIds,
   wikiPages = [],
   difficultyMarkers = [],
@@ -191,6 +204,7 @@ export default function MapView({
   obscuredBottomPxRef.current = obscuredBottomPx
   const focusLatLngRef  = useRef<L.LatLng | null>(null)
   const poiLayer        = useRef<L.Marker[]>([])
+  const extraLayer      = useRef<L.Marker[]>([])
   const poiMarkersRef   = useRef<Map<number, L.Marker>>(new Map())
   const wikiLayer       = useRef<L.Marker[]>([])
   const dtmProfileRef   = useRef(dtmProfile)
@@ -585,6 +599,21 @@ export default function MapView({
       }
     })
   }, [pois, mapReady, highlightedPoiIndices, showPoiLayer, poiMarkerScale, streetViewPoiIds]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Marcatori aggiuntivi (servizi): strato a parte, ricostruito quando cambiano.
+  useEffect(() => {
+    if (!mapReady || !mapInstance.current) return
+    import('leaflet').then(L => {
+      extraLayer.current.forEach(m => m.remove())
+      extraLayer.current = []
+      for (const em of extraMarkers ?? []) {
+        const icon = L.divIcon({ html: em.html, iconSize: [em.size, em.size], iconAnchor: [em.size / 2, em.size / 2], className: '' })
+        const m = L.marker([em.lat, em.lon], { icon, zIndexOffset: 500 }).addTo(mapInstance.current!)
+        if (em.popupHtml) m.bindPopup(em.popupHtml, { maxWidth: 260 })
+        extraLayer.current.push(m)
+      }
+    })
+  }, [extraMarkers, mapReady])
 
   // Active point marker — driven by hover on the synced charts
   useEffect(() => {

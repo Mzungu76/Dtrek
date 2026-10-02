@@ -8,7 +8,11 @@ import PoiListWidget from './PoiListWidget'
 import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 import RouteMapSection from '@/components/RouteMapSection'
 import CamminoOfflineButton from './CamminoOfflineButton'
-import CamminoServicesStrip from './CamminoServicesStrip'
+import CamminoServicesStrip, { SERVICE_ORDER } from './CamminoServicesStrip'
+import { loadTappaServices } from '@/lib/cammini/tappaServices'
+import { serviceBadgeMarkup, servicePopupHtml } from '../serviceIcons'
+import type { ServiceCategory, ServiceItem } from '@/lib/cammini/services'
+import type { MapExtraMarker } from '@/components/MapView'
 import { useTappaData } from '@/lib/cammini/useTappaData'
 import { poisAlongTappa } from '@/lib/cammini/tappaPois'
 import { chapterFor } from '@/lib/cammini/report'
@@ -125,6 +129,23 @@ export default function CamminoTappaDetail({ plan, hikeId, tappa: t, seq, dayIdx
     )
   }
 
+  // Servizi della tappa (acqua, cibo, alloggi, trasporti) e categorie accese sulla mappa.
+  const [services, setServices] = useState<ServiceItem[] | null | undefined>(undefined)
+  const [visibleServices, setVisibleServices] = useState<ReadonlySet<ServiceCategory>>(() => new Set(SERVICE_ORDER))
+  useEffect(() => {
+    let cancelled = false
+    setServices(undefined)
+    loadTappaServices(plan.camminoId, t.ordinal).then(sv => { if (!cancelled) setServices(sv) })
+    return () => { cancelled = true }
+  }, [plan.camminoId, t.ordinal])
+  const toggleService = (c: ServiceCategory) => setVisibleServices(prev => { const n = new Set(prev); if (n.has(c)) n.delete(c); else n.add(c); return n })
+  const serviceMarkers = useMemo<MapExtraMarker[]>(
+    () => (services ?? []).filter(sv => visibleServices.has(sv.category)).map(sv => ({
+      id: sv.id, lat: sv.lat, lon: sv.lon, size: 30, html: serviceBadgeMarkup(sv, 30), popupHtml: servicePopupHtml(sv),
+    })),
+    [services, visibleServices],
+  )
+
   return (
     <div className="pb-28">
       {/* titolo, dati e CTS */}
@@ -171,13 +192,12 @@ export default function CamminoTappaDetail({ plan, hikeId, tappa: t, seq, dayIdx
         )}
 
         {/* mappa e profilo: la mappa del percorso dell'app (schermo intero, 3D, lucchetto, luoghi con le loro icone) */}
-        {trackPoints && trackPoints.length > 1 ? (
-          <RouteMapSection trackPoints={trackPoints} showPois={false} planned={!done} onOpenMap3D={() => setShow3D(true)} />
-        ) : <div className="flex h-[260px] items-center justify-center rounded-2xl border border-stone-200 bg-stone-100 text-[12px] text-stone-400"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {state.status === 'na' ? 'Mappa non disponibile.' : 'Carico la mappa…'}</div>}
-        {ready?.data.points && (
-          <CamminoServicesStrip camminoId={plan.camminoId} ordinal={t.ordinal} polyline={ready.data.points.map(([la, lo]) => [la, lo] as [number, number])} lengthM={t.lengthM} />
+        {trackPoints && trackPoints.length > 1 && (
+          <CamminoServicesStrip services={services} polyline={trackPoints.map(p => [p.lat, p.lon] as [number, number])} lengthM={t.lengthM} visible={visibleServices} onToggle={toggleService} />
         )}
-
+        {trackPoints && trackPoints.length > 1 ? (
+          <RouteMapSection trackPoints={trackPoints} showPois={false} extraMarkers={serviceMarkers} planned={!done} onOpenMap3D={() => setShow3D(true)} />
+        ) : <div className="flex h-[260px] items-center justify-center rounded-2xl border border-stone-200 bg-stone-100 text-[12px] text-stone-400"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {state.status === 'na' ? 'Mappa non disponibile.' : 'Carico la mappa…'}</div>}
         {/* luoghi della tappa: stessa Galleria dei POI dei sentieri (mappa dei luoghi, icone, card) */}
         <div className="px-0.5 pt-1">
           <p className="font-barlow text-[11px] font-bold uppercase tracking-[0.12em] text-stone-500">I luoghi da non perdere</p>
