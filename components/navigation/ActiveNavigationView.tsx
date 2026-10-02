@@ -85,6 +85,8 @@ import TappaCompleteDialog from './TappaCompleteDialog'
 import CamminoNextTappaDialog from './CamminoNextTappaDialog'
 import CamminoAheadCard from './CamminoAheadCard'
 import type { CamminoNavContext } from '@/lib/cammini/navContext'
+import type { ServiceItem } from '@/lib/cammini/services'
+import { computeCamminoEscapeOptions } from '@/lib/cammini/escapeServices'
 import EndHikeReviewDialog from './EndHikeReviewDialog'
 import { speak } from '@/lib/navigation/speech'
 import { useNearbyTrails } from './useNearbyTrails'
@@ -107,6 +109,8 @@ interface Props {
   tappaOrdinal?: number
   /** Cammino: posizione della tappa nel piano e tappa successiva (lib/cammini/navContext.ts). */
   camminoContext?: CamminoNavContext | null
+  /** Cammino: servizi lungo la tappa (acqua, cibo, alloggi, trasporti), per "Davanti a te" e le vie d'uscita. */
+  camminoServices?: ServiceItem[]
 }
 
 const AUTO_HIDE_MS = 6000 // "nascondi controlli" automatico: inattività prima di lasciare solo la mappa
@@ -155,7 +159,7 @@ function NavPanelCompoundRow({ label, children }: { label: string; children: Rea
   )
 }
 
-export default function ActiveNavigationView({ hike, locationProviderFactory, simulationLabel, tappaOrdinal, camminoContext }: Props) {
+export default function ActiveNavigationView({ hike, locationProviderFactory, simulationLabel, tappaOrdinal, camminoContext, camminoServices }: Props) {
   const router = useRouter()
   // Dati locali per tappa: in un cammino le tappe condividono hike.id (vedi lib/navigation/navKey.ts). Il resto
   // (attività collegata, note di campo, sessione sul server) resta sull'id del piano.
@@ -1075,14 +1079,22 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
         setEscapeOptions([])
         return
       }
-      setEscapeOptions(computeEscapeOptions({
+      const base = computeEscapeOptions({
         network,
         routePolyline,
         currentLat: position.lat,
         currentLon: position.lon,
         progress: progressSnapshot,
         pois,
-      }))
+      })
+      // Cammino: oltre a tornare sul sentiero, dove dormire, come andarsene e dove accorciare la tappa.
+      const extra = camminoServices?.length
+        ? computeCamminoEscapeOptions({
+            services: camminoServices, routePolyline, currentLat: position.lat, currentLon: position.lon,
+            alongM: progressSnapshot.distanceAlongRouteM, totalM: progressSnapshot.totalRouteM,
+          })
+        : []
+      setEscapeOptions([...base, ...extra])
     } finally {
       setEscapeLoading(false)
     }
@@ -1335,9 +1347,9 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
             Tappa {camminoContext.seq} di {camminoContext.total}{camminoContext.dayCount > 1 ? ` · giorno ${camminoContext.dayIdx + 1} di ${camminoContext.dayCount}` : ''}
           </div>
         )}
-        {camminoContext && progress && (hike.cachedPois?.length ?? 0) > 0 && (
+        {camminoContext && progress && ((hike.cachedPois?.length ?? 0) > 0 || (camminoServices?.length ?? 0) > 0) && (
           <CamminoAheadCard
-            pois={hike.cachedPois as PoiItem[]}
+            pois={(hike.cachedPois ?? []) as PoiItem[]}
             routePolyline={routePolyline}
             alongM={progress.distanceAlongRouteM}
             totalM={progress.totalRouteM}
@@ -1345,6 +1357,7 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
             remainingTimeSec={pace?.remainingTimeSec ?? (etaDate ? Math.max(0, (etaDate.getTime() - Date.now()) / 1000) : null)}
             movingTimeSec={movingTimeMs / 1000}
             plannedPaceMs={pace?.plannedPaceMs ?? null}
+            services={camminoServices}
             highContrast={highContrastEnabled}
           />
         )}

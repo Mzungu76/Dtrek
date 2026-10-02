@@ -23,7 +23,7 @@ export interface AheadOptions {
 const M_PER_DEG = 111_320
 
 /** Proiezione di un punto sulla traccia: distanza lungo la traccia e distanza dalla traccia (metri). */
-function project(line: [number, number][], cum: number[], lat: number, lon: number): { alongM: number; offM: number } {
+export function project(line: [number, number][], cum: number[], lat: number, lon: number): { alongM: number; offM: number } {
   const kx = Math.cos((lat * Math.PI) / 180)
   let best = { alongM: 0, offM: Infinity }
   for (let i = 0; i < line.length - 1; i++) {

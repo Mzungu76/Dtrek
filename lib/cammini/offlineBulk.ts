@@ -1,5 +1,6 @@
 import { buildSequence } from './progress'
 import { loadTappaElevation } from './useTappaData'
+import { loadTappaServices } from './tappaServices'
 import { orientedTappa, saveOfflineTappa } from './offlineTappa'
 import { navStorageKey } from '@/lib/navigation/navKey'
 import { downloadOfflinePackage } from '@/lib/offline/packageManager'
@@ -45,7 +46,8 @@ export async function downloadTappePackages(
     report(0)
     try {
       const pois = (await loadTappaElevation(plan.camminoId, ordinal))?.pois ?? []
-      const tappa = orientedTappa(detail, ordinal, plan.direction, pois)
+      const services = (await loadTappaServices(plan.camminoId, ordinal)) ?? undefined
+      const tappa = orientedTappa(detail, ordinal, plan.direction, pois, Date.now(), services)
       if (!tappa) throw new Error('tappa')
       await saveOfflineTappa(tappa)
       const key = navStorageKey(hikeId, ordinal)

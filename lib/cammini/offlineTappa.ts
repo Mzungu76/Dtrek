@@ -1,5 +1,6 @@
 import { lsGet, lsSet } from '@/lib/localStore'
 import type { PoiItem } from '@/lib/overpass'
+import type { ServiceItem } from './services'
 import type { CamminoDetail } from '@/app/api/cammini/[id]/route'
 import { orderForDirection } from './plan'
 
@@ -14,6 +15,8 @@ export interface OfflineTappa {
   polyline: [number, number][]
   lengthM: number
   pois: PoiItem[]
+  /** Acqua, cibo, alloggi, trasporti lungo la tappa. Assente nelle copie salvate prima della Fase E (diverso da "nessuno": []). */
+  services?: ServiceItem[]
   savedAt: number
 }
 
@@ -29,12 +32,12 @@ export async function saveOfflineTappa(t: OfflineTappa): Promise<void> {
 }
 
 /** La tappa del catalogo nel verso scelto dal piano (polilinea girata e capi scambiati se inverso). Null se non esiste. */
-export function orientedTappa(detail: CamminoDetail, ordinal: number, direction: 'forward' | 'reverse', pois: PoiItem[] = [], now = Date.now()): OfflineTappa | null {
+export function orientedTappa(detail: CamminoDetail, ordinal: number, direction: 'forward' | 'reverse', pois: PoiItem[] = [], now = Date.now(), services?: ServiceItem[]): OfflineTappa | null {
   const found = detail.tappe.find(t => t.ordinal === ordinal)
   if (!found) return null
   const t = orderForDirection([found], direction)[0]
   return {
-    camminoId: detail.id, ordinal, direction, polyline: t.polyline, lengthM: t.lengthM, pois, savedAt: now,
+    camminoId: detail.id, ordinal, direction, polyline: t.polyline, lengthM: t.lengthM, pois, ...(services ? { services } : {}), savedAt: now,
     name: `${t.fromName ?? 'Partenza'} → ${t.toName ?? 'Arrivo'}`,
   }
 }

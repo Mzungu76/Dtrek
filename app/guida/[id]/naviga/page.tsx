@@ -9,6 +9,8 @@ import TappaPicker from '@/components/navigation/TappaPicker'
 import type { LocationProviderFactory } from '@/lib/native/locationSource'
 import { SimulationLocationProvider } from '@/lib/navigation/simulation/simulationLocationProvider'
 import { loadOfflineTappa, saveOfflineTappa, orientedTappa } from '@/lib/cammini/offlineTappa'
+import { loadTappaServices } from '@/lib/cammini/tappaServices'
+import type { ServiceItem } from '@/lib/cammini/services'
 import { camminoNavContext } from '@/lib/cammini/navContext'
 import type { PoiItem } from '@/lib/overpass'
 import type { CamminoDetail } from '@/app/api/cammini/[id]/route'
@@ -35,7 +37,7 @@ function NavigaPageInner() {
   const [retryCount, setRetryCount] = useState(0)
   // Cammino: la tappa da registrare (?tappa=<ordinale>) con il suo tracciato di catalogo, già nel verso
   // scelto nel piano. Ogni tappa è una sessione a sé e porta il proprio ordinale nell'attività salvata.
-  const [camminoTappa, setCamminoTappa] = useState<{ ordinal: number; polyline: [number, number][]; lengthM: number; name: string; pois: PoiItem[] } | null>(null)
+  const [camminoTappa, setCamminoTappa] = useState<{ ordinal: number; polyline: [number, number][]; lengthM: number; name: string; pois: PoiItem[]; services: ServiceItem[] } | null>(null)
 
   // Dev/testing only (docs/navigation-engine-roadmap.md — Simulation layer): open
   // /guida/<id>/naviga?simulate=off_route (or any name in SCENARIO_NAMES) to drive the whole
@@ -136,7 +138,16 @@ function NavigaPageInner() {
         }
         if (!local) { if (!cancelled) setFailure('no-route'); return }
         if (cancelled) return
-        setCamminoTappa({ ordinal, polyline: local.polyline, lengthM: local.lengthM, name: local.name, pois: local.pois })
+        setCamminoTappa({ ordinal, polyline: local.polyline, lengthM: local.lengthM, name: local.name, pois: local.pois, services: local.services ?? [] })
+        // Copia senza servizi (salvata prima, o non scaricata): si leggono in sottofondo, la navigazione non aspetta.
+        if (!local.services) {
+          const base = local
+          loadTappaServices(plan.camminoId, ordinal).then(sv => {
+            if (!sv || cancelled) return
+            saveOfflineTappa({ ...base, services: sv, savedAt: Date.now() })
+            setCamminoTappa(prev => (prev && prev.ordinal === ordinal ? { ...prev, services: sv } : prev))
+          })
+        }
       }
       setHike(h.routePolyline?.length ? h : { ...h, routePolyline: walkPolyline })
     })
@@ -179,6 +190,7 @@ function NavigaPageInner() {
       hike={navigableHike}
       key={camminoTappa?.ordinal ?? 'hike'}
       tappaOrdinal={hike.metaType === 'cammino' ? camminoTappa?.ordinal : undefined}
+      camminoServices={camminoTappa?.services}
       camminoContext={hike.metaType === 'cammino' && hike.camminoPlan && camminoTappa ? camminoNavContext(hike.camminoPlan, camminoTappa.ordinal) : null}
       locationProviderFactory={locationProviderFactory}
       simulationLabel={scenarioName ? SCENARIO_LABELS[scenarioName] : undefined}
