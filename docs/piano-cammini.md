@@ -102,6 +102,18 @@ La scoperta è automatica (come per i sentieri) ma con soglia di ammissione: `sc
 
 `scripts/places/cammini/import-registry.ts` + workflow `import-cammini-registry.yml`. Ordine geometrico delle tappe, tappe ufficiali o calcolate (mista), divisione a Roma per la Francigena, filtro Italia, controllo di qualità pronto/da rivedere (solo i pronti vengono scritti). Stato: ondata 1 e 2 implementate e testate su fixture; **da provare su dati reali** (dry-run per cammino). Ondata 3 (rifugi, reti) da fare.
 
+### 7.1 Importare tutti i cammini con un solo run
+
+Workflow `Import Cammini del registro`, campo `registryId`: un id (`via-francigena`), il **nome** (`Via Francigena`: senza maiuscole/accenti, `-` e spazi equivalenti; se non c'è corrispondenza l'errore elenca gli id validi), oppure `tutti` / `ondata-1|2|3`.
+
+- `tutti` esclude le voci con tappe in rifugio (Alte Vie, Via Alpina, GTA, Sentiero Italia) e, tra due voci sovrapposte (`overlapsWith`), tiene la prima del registro (Via Romea sì, Romea Strata no). Un job per ondata, uno alla volta (`max-parallel: 1`), nel gruppo `import-places`.
+- Per cammino: un errore non ferma gli altri, i falliti si riprovano una volta in coda, pausa di 20 s tra un cammino e l'altro; il job si ferma per tempo a 330 min (i cammini non raggiunti risultano «rimandato»).
+- `mode=write` scrive solo i cammini **PRONTI** (`minStatus=pronto`); i `DA_RIVEDERE` non si scrivono e sono elencati con i motivi. Re-import idempotente (upsert su `(source, source_id)` e `(cammino_id, ordinal)`; dislivelli e POI già calcolati restano).
+- Il **riepilogo** (Summary del run) ha una riga per cammino: scritto / pronto (dry-run) / da rivedere / saltato / errore / rimandato, con km, tappe, durata ed errore. Exit ≠ 0 solo per errori o «rimandato», non per i «da rivedere».
+- Download Overpass a stadi, leggero: radici per nome (`out tags members`) → sotto-relazioni per id a blocchi → filtro Italia (bbox, solo id) → geometria delle way a blocchi, con `[timeout:300]`, endpoint a rotazione e attese crescenti con jitter. Ogni blocco finisce nella **cache** `.cache/cammini/<id>.json`, salvata anche tra un run e l'altro con `actions/cache`.
+
+**Se un cammino cade**: rilancia lo stesso workflow (stesso `registryId`, o solo l'id del cammino): riparte dalla cache, non da zero. Se Overpass è giù per ore, riprova più tardi; per un cammino enorme usa direttamente il suo id. I cammini «da rivedere» non sono errori: leggi i motivi nel riepilogo.
+
 ## 8. Fase 3 — ricerca e scheda (in app)
 
 - `lib/metaSearch/searchCammini.ts` (+ `meta-search` accetta `metaType: 'cammino'`): solo cammini con qualità **pronto**; con un'origine conta il **tracciato** entro il raggio, non il pin.
