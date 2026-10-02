@@ -83,6 +83,7 @@ import NavOnboardingSheet from './NavOnboardingSheet'
 import ConfirmEndDialog from './ConfirmEndDialog'
 import TappaCompleteDialog from './TappaCompleteDialog'
 import CamminoNextTappaDialog from './CamminoNextTappaDialog'
+import CamminoAheadCard from './CamminoAheadCard'
 import type { CamminoNavContext } from '@/lib/cammini/navContext'
 import EndHikeReviewDialog from './EndHikeReviewDialog'
 import { speak } from '@/lib/navigation/speech'
@@ -1333,6 +1334,19 @@ export default function ActiveNavigationView({ hike, locationProviderFactory, si
           <div className="rounded-full bg-black/55 px-3 py-1 text-[11.5px] font-bold text-white backdrop-blur-sm">
             Tappa {camminoContext.seq} di {camminoContext.total}{camminoContext.dayCount > 1 ? ` · giorno ${camminoContext.dayIdx + 1} di ${camminoContext.dayCount}` : ''}
           </div>
+        )}
+        {camminoContext && progress && (hike.cachedPois?.length ?? 0) > 0 && (
+          <CamminoAheadCard
+            pois={hike.cachedPois as PoiItem[]}
+            routePolyline={routePolyline}
+            alongM={progress.distanceAlongRouteM}
+            totalM={progress.totalRouteM}
+            remainingM={distanceRemainingM}
+            remainingTimeSec={pace?.remainingTimeSec ?? (etaDate ? Math.max(0, (etaDate.getTime() - Date.now()) / 1000) : null)}
+            movingTimeSec={movingTimeMs / 1000}
+            plannedPaceMs={pace?.plannedPaceMs ?? null}
+            highContrast={highContrastEnabled}
+          />
         )}
         <div className="w-full">
           <InstructionBanner
