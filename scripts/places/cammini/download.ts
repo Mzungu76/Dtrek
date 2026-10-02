@@ -25,9 +25,9 @@ const escapeRe = (n: string) => n.replace(/[\\"^$.*+?()[\]{}|]/g, m => `\\${m}`)
 export function rootsQuery(entry: RegistryEntry): string {
   return `${TUNING};
 rel["type"="route"]${ROUTE}["name"~"${escapeRe(entry.searchName ?? entry.name)}",i];
-out tags members;`
+out body;`
 }
-export const relationsByIdQuery = (ids: number[]) => `${TUNING};\nrel(id:${ids.join(',')});\nout tags members;`
+export const relationsByIdQuery = (ids: number[]) => `${TUNING};\nrel(id:${ids.join(',')});\nout body;`
 export const italyQuery = (ids: number[]) => `${TUNING};\nrel(id:${ids.join(',')})(${ITALY_BBOX});\nout ids;`
 export const waysQuery = (ids: number[]) => `${TUNING};\nway(id:${ids.join(',')});\nout geom;`
 
