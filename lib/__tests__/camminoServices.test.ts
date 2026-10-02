@@ -77,3 +77,18 @@ describe('serviceGaps / countByCategory', () => {
     expect(countByCategory(placed)).toEqual([{ category: 'shop', count: 1 }, { category: 'food', count: 1 }])
   })
 })
+
+describe('servicesAlongTrack', () => {
+  it('tiene i servizi entro il raggio con la distanza, dal più vicino', async () => {
+    const { servicesAlongTrack } = await import('../cammini/services')
+    const track: [number, number][] = [[0, 0], [0, 0.02]]
+    const els = [
+      { type: 'node', id: 1, lat: 0.003, lon: 0.01, tags: { amenity: 'drinking_water' } }, // ~330 m
+      { type: 'node', id: 2, lat: 0.0005, lon: 0.005, tags: { amenity: 'pharmacy' } },     // ~55 m
+      { type: 'node', id: 3, lat: 0.02, lon: 0.01, tags: { amenity: 'cafe' } },            // ~2,2 km: fuori
+    ]
+    const r = servicesAlongTrack(els, track, 600)
+    expect(r.map(s => s.id)).toEqual(['node/2', 'node/1'])
+    expect(r[0].distFromTrack).toBeLessThan(100)
+  })
+})

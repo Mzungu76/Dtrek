@@ -77,7 +77,12 @@ export default function CamminoTappaDetail({ plan, hikeId, tappa: t, seq, dayIdx
   const shownSafety = shownCts?.safety ?? null
   const shownTotal = shownCts?.total ?? shownCts?.ts ?? null
 
-  const trackPoints: TrackPoint[] | null = ready?.data.points ? ready.data.points.map(([lat, lon, alt]) => ({ time: '', lat, lon, altitudeMeters: alt })) : null
+  // Stabile tra un render e l'altro: MapView ricostruisce la mappa quando cambia l'identità di trackPoints, e con essa perde zoom e marcatori.
+  const readyPoints = ready?.data.points
+  const trackPoints: TrackPoint[] | null = useMemo(
+    () => (readyPoints ? readyPoints.map(([lat, lon, alt]) => ({ time: '', lat, lon, altitudeMeters: alt })) : null),
+    [readyPoints],
+  )
   const along = useMemo(
     () => (ready?.data.points && ready.data.profile ? poisAlongTappa(ready.data.pois ?? [], ready.data.points, ready.data.profile, reverse) : []),
     [ready, reverse],

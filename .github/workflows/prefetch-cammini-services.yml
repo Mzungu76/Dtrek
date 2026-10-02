@@ -1,0 +1,86 @@
+name: Precarica servizi dei cammini (OpenStreetMap → dtrek_cammino_tappe.services)
+
+# Manuale. Legge da OpenStreetMap acqua, cibo, negozi, alloggi, trasporti e farmacie lungo ogni tappa dei cammini
+# (scripts/places/cammini/prefetch-services.ts) e li salva nel catalogo, come i luoghi: la guida li mostra subito,
+# senza attendere la prima lettura. Prerequisito: migrazione add_cammino_tappe_services.sql.
+# Parti da dry-run con un solo cammino; in write si saltano le tappe già lette da meno di 90 giorni (salvo refresh).
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dry-run: legge e stampa. write: salva su Supabase."
+        required: true
+        type: choice
+        options:
+          - dry-run
+          - write
+        default: dry-run
+      camminoId:
+        description: "Id (uuid) di un cammino di dtrek_places; vuoto = tutti."
+        required: false
+        type: string
+        default: ""
+      refresh:
+        description: "Rilegge anche le tappe già lette di recente."
+        required: true
+        type: boolean
+        default: false
+      limit:
+        description: "Massimo di tappe da leggere (vuoto = tutte)."
+        required: false
+        type: string
+        default: ""
+
+concurrency:
+  group: import-places
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  prefetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Verifica secret Supabase
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_SERVICE_KEY:-}" ]; then
+            echo "Secret Supabase mancanti — serve SUPABASE_URL e (SUPABASE_SERVICE_KEY o SUPABASE_SERVICE_ROLE_KEY)." >&2
+            exit 1
+          fi
+
+      - name: Precarica servizi
+        env:
+          MODE: ${{ inputs.mode }}
+          CAMMINO_ID: ${{ inputs.camminoId }}
+          REFRESH: ${{ inputs.refresh }}
+          LIMIT: ${{ inputs.limit }}
+        run: |
+          set -euo pipefail
+          ARGS=(scripts/places/cammini/prefetch-services.ts)
+          if [ -n "$CAMMINO_ID" ]; then ARGS+=(--cammino "$CAMMINO_ID"); fi
+          if [ -n "$LIMIT" ]; then ARGS+=(--limit "$LIMIT"); fi
+          if [ "$REFRESH" = "true" ]; then ARGS+=(--refresh); fi
+          if [ "$MODE" = "write" ]; then ARGS+=(--write); fi
+          npx tsx "${ARGS[@]}" | tee /tmp/prefetch-services.txt
+          {
+            echo "### Servizi dei cammini ($MODE)"
+            echo '```'
+            tail -n 60 /tmp/prefetch-services.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

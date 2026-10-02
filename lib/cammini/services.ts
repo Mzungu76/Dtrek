@@ -2,6 +2,8 @@
 // farmacie. Sono i luoghi che chi cammina cerca per necessità, distinti dai luoghi di interesse (lib/overpass.ts).
 // Fonte OpenStreetMap: dice DOVE sta qualcosa, non SE è aperto adesso — l'affidabilità che si dichiara qui lo riflette.
 // Parte pura: classificazione dei tag, query e lettura della risposta. Il fetch lato server sta in servicesServer.ts.
+import { minDistToTrack } from '../geoUtils'
+import { bboxBufferMeters } from '../geo/bufferUtils'
 
 export type ServiceCategory = 'water' | 'food' | 'shop' | 'lodging' | 'transport' | 'pharmacy'
 
@@ -114,4 +116,18 @@ export function buildServicesQuery(bbox: string): string {
   node["highway"="bus_stop"]["name"]${b};
 );
 out body center;`
+}
+
+/** Riquadro "s,w,n,e" attorno alla traccia, per la query. */
+export function servicesBbox(track: [number, number][], radiusM: number): string {
+  return bboxBufferMeters(track, radiusM)
+}
+
+/** Risposta Overpass → servizi entro `radiusM` dalla traccia, con la distanza, dal più vicino. Usata dal server e dallo script di precaricamento. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function servicesAlongTrack(elements: any[], track: [number, number][], radiusM: number): ServiceItem[] {
+  return parseServices(elements)
+    .map(s => ({ ...s, distFromTrack: Math.round(minDistToTrack(s.lat, s.lon, track)) }))
+    .filter(s => (s.distFromTrack ?? 0) <= radiusM)
+    .sort((a, b) => (a.distFromTrack ?? 0) - (b.distFromTrack ?? 0))
 }
