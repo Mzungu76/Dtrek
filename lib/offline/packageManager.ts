@@ -69,6 +69,11 @@ export function estimatePackageSizeBytes(tileCount: number): number {
   return tileCount * 20_000 // ~20KB/tile average for the CartoDB/OSM raster proxy
 }
 
+/** Quante tile servono per un percorso (stima prima dello scarico, senza scaricare nulla). */
+export function countPackageTiles(routePolyline: [number, number][]): number {
+  return routePolyline.length < 2 ? 0 : enumerateTiles(computeBboxFromTrack(routePolyline)).length
+}
+
 export interface DownloadProgress {
   status: OfflinePackageStatus
   downloadedCount: number

@@ -3,7 +3,7 @@ import { useState, type ReactNode } from 'react'
 import dynamic from 'next/dynamic'
 import { Lock, LockOpen, Maximize2, Minimize2, Box, LocateFixed, Compass, Navigation } from 'lucide-react'
 import ElevationProfileChart from '@/components/ElevationProfileChart'
-import type { OverlayTrack } from '@/components/MapView'
+import type { OverlayTrack, MapExtraMarker } from '@/components/MapView'
 import type { TrackPoint } from '@/lib/tcxParser'
 import type { PoiItem } from '@/lib/overpass'
 import type { TrailDtmProfile } from '@/lib/dtm/trailDtmProfile'
@@ -29,6 +29,8 @@ interface Props {
   /** Mostra i pin dei POI sulla mappa — disattivato nella sezione "Il percorso" della guida (i
    *  POI hanno una mappa dedicata in "I luoghi da non perdere"), attivo per default altrove. */
   showPois?: boolean
+  /** Marcatori con icona propria (servizi di un cammino) sopra la mappa, separati dai POI. */
+  extraMarkers?: MapExtraMarker[]
   /** Mostra il profilo altimetrico sotto la mappa (default sì) — spento quando la traccia non ha quote (es. mappa d'insieme di un cammino). */
   showProfile?: boolean
   /** Tratti colorati (tappe) disegnati sopra la traccia, che resta sullo sfondo più tenue. */
@@ -50,7 +52,7 @@ const chipActive = `${chipBase} bg-terra-500 border-terra-300/40 text-white`
  */
 export default function RouteMapSection({
   trackPoints, pois = [], highlightedPoiIndices = null, onPoiTap, onOpenMap3D,
-  showGradient, showAspect, showAspectToggle, onToggleAspect, dtmProfile, planned, showPois = true, showProfile = true, overlayTracks, overlayCard,
+  showGradient, showAspect, showAspectToggle, onToggleAspect, dtmProfile, planned, showPois = true, extraMarkers, showProfile = true, overlayTracks, overlayCard,
 }: Props) {
   const [selectedOverlay, setSelectedOverlay] = useState<string | number | null>(null)
   const [locked, setLocked] = useState(true)
@@ -90,7 +92,7 @@ export default function RouteMapSection({
       >
         <MapView
           trackPoints={trackPoints ?? []} height="100%" interactive={!locked}
-          pois={pois} planned={planned} showPoiLayer={showPois}
+          pois={pois} extraMarkers={extraMarkers} planned={planned} showPoiLayer={showPois}
           highlightedPoiIndices={highlightedPoiIndices}
           onPoiTap={poi => onPoiTap?.(poi)}
           activeIndex={activeIndex}

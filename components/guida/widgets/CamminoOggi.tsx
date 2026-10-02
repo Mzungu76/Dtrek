@@ -1,18 +1,17 @@
 'use client'
 import { useMemo, useRef, useState } from 'react'
 import { Navigation, Upload, Check, ChevronRight, BookOpen } from 'lucide-react'
-import { POI_META } from '@/lib/overpass'
-import { POI_ICON } from '@/components/poiIcons'
 import CamminoCtsBadge from './CamminoCtsBadge'
+import CamminoOfflineButton from './CamminoOfflineButton'
+import CamminoOfflineBulk from './CamminoOfflineBulk'
 import { MiniScoreRing, tsColor } from '@/components/ScoreRing'
 import { useTappaData } from '@/lib/cammini/useTappaData'
-import { poisAlongTappa } from '@/lib/cammini/tappaPois'
 import { buildSequence, currentTappa } from '@/lib/cammini/progress'
 import type { CamminoPlan } from '@/lib/cammini/plan'
 import { fmtDay, type TappaDone } from './CamminoTappaDetail'
 
 // Guida di un cammino, schermata B (docs/piano-cammini.md, Fase 5): in alto la tappa di oggi (o la prossima),
-// con CTS, luoghi davanti a te e Naviga; sotto il diario di marcia con tutte le tappe — percorse e da
+// con CTS e Naviga; sotto il diario di marcia con tutte le tappe — percorse e da
 // percorrere — ognuna apribile per vedere cosa aspetta.
 
 const WALK_KMH = 4
@@ -51,7 +50,6 @@ export function CamminoOggiCard({ plan, hikeId, done, onPlanChange, onOpenTappa,
   const ready = state.status === 'ready' ? state : null
   const ctsV = ready?.cts
   const cts = ctsV && ctsV !== 'loading' && ctsV !== 'na' ? ctsV : t.cts ?? null
-  const along = ready?.data.points && ready.data.profile ? poisAlongTappa((ready.data.pois ?? []).filter(p => p.name), ready.data.points, ready.data.profile, plan.direction === 'reverse') : []
   const finished = !!done[item.ordinal]
   const day = plan.days[item.dayIdx]
 
@@ -81,30 +79,13 @@ export function CamminoOggiCard({ plan, hikeId, done, onPlanChange, onOpenTappa,
           )}
           {!finished && <button type="button" onClick={() => onImporta(item.ordinal)} className="flex items-center gap-1.5 rounded-full border-[1.5px] border-white/55 px-4 text-[13px] font-bold"><Upload className="w-4 h-4" /> Importa</button>}
         </div>
+        {!finished && <div className="mt-3 flex justify-center rounded-xl bg-white/90 p-1"><CamminoOfflineButton plan={plan} hikeId={hikeId} ordinal={item.ordinal} /></div>}
       </div>
-
-      {along.length > 0 && (
-        <div className="mt-3 rounded-2xl border border-stone-200 bg-white px-3.5 pb-1 pt-2.5">
-          <div className="flex items-baseline justify-between">
-            <p className="font-barlow text-[11px] font-bold uppercase tracking-[0.12em] text-stone-500">Luoghi sulla strada</p>
-            <button type="button" onClick={() => onOpenTappa(item.ordinal)} className="text-[12px] font-bold text-forest-700">Tutti ›</button>
-          </div>
-          <ul className="divide-y divide-stone-100">
-            {along.slice(0, 3).map(({ poi, km }) => (
-              <li key={poi.id} className="flex items-center gap-2.5 py-2">
-                {(() => { const Icon = POI_ICON[poi.type]; return <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full" style={{ background: POI_META[poi.type]?.color ?? '#6b7280' }}>{Icon && <Icon className="h-3.5 w-3.5 text-white" />}</span> })()}
-                <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-stone-800">{poi.name}</span>
-                <span className="w-12 shrink-0 text-right text-[12px] font-bold tabular-nums text-stone-600">km {km.toFixed(1).replace('.', ',')}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
     </div>
   )
 }
 
-export function CamminoDiario({ plan, done, onOpenTappa, onOpenReportage }: CommonProps) {
+export function CamminoDiario({ plan, hikeId, done, onOpenTappa, onOpenReportage }: CommonProps) {
   const seq = useMemo(() => buildSequence(plan), [plan])
   const [showDone, setShowDone] = useState(false)
   const [showFuture, setShowFuture] = useState(false)
@@ -169,6 +150,8 @@ export function CamminoDiario({ plan, done, onOpenTappa, onOpenReportage }: Comm
           </button>
         )}
       </div>
+
+      <CamminoOfflineBulk plan={plan} hikeId={hikeId} done={new Set(Object.keys(done).map(Number))} />
 
       {doneItems.length > 0 && (
         <button type="button" onClick={onOpenReportage} className="mt-4 flex w-full items-center justify-center gap-2 rounded-full border border-forest-200 bg-forest-50 py-2.5 text-[13px] font-bold text-forest-800">

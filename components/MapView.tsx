@@ -15,6 +15,16 @@ import { computeDirectionArrows } from '@/lib/geoUtils'
 import { useRouteTour, SPEEDS } from './mapview/useRouteTour'
 import TourControls from './mapview/TourControls'
 
+/** Marcatore generico con icona propria (es. servizi di un cammino), distinto dai POI: html è il contenuto del marker. */
+export interface MapExtraMarker {
+  id: string
+  lat: number
+  lon: number
+  html: string
+  size: number
+  popupHtml?: string
+}
+
 interface Props {
   trackPoints: TrackPoint[]
   height?: string
@@ -22,6 +32,8 @@ interface Props {
   showAspect?: boolean
   dtmProfile?: TrailDtmProfile
   pois?: PoiItem[]
+  /** Marcatori aggiuntivi con icona propria, in uno strato separato dai POI. */
+  extraMarkers?: MapExtraMarker[]
   /** Id dei `pois` con copertura Street View plausibile (vedi
    *  lib/routeBuilder/streetViewCoverage.ts) — assente ⇒ il popup di ogni POI mostra comunque il
    *  link (comportamento invariato per i chiamanti che non hanno ancora questo dato). */
@@ -154,6 +166,7 @@ export default function MapView({
   showAspect = false,
   dtmProfile,
   pois = [],
+  extraMarkers,
   streetViewPoiIds,
   wikiPages = [],
   difficultyMarkers = [],
@@ -191,6 +204,7 @@ export default function MapView({
   obscuredBottomPxRef.current = obscuredBottomPx
   const focusLatLngRef  = useRef<L.LatLng | null>(null)
   const poiLayer        = useRef<L.Marker[]>([])
+  const extraLayer      = useRef<L.Marker[]>([])
   const poiMarkersRef   = useRef<Map<number, L.Marker>>(new Map())
   const wikiLayer       = useRef<L.Marker[]>([])
   const dtmProfileRef   = useRef(dtmProfile)
@@ -584,7 +598,22 @@ export default function MapView({
         mapInstance.current!.panTo([pois[highlightedPoiIndices[0]].lat, pois[highlightedPoiIndices[0]].lon])
       }
     })
-  }, [pois, mapReady, highlightedPoiIndices, showPoiLayer, poiMarkerScale, streetViewPoiIds]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pois, mapReady, mapGen, highlightedPoiIndices, showPoiLayer, poiMarkerScale, streetViewPoiIds]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Marcatori aggiuntivi (servizi): strato a parte, ricostruito quando cambiano.
+  useEffect(() => {
+    if (!mapReady || !mapInstance.current) return
+    import('leaflet').then(L => {
+      extraLayer.current.forEach(m => m.remove())
+      extraLayer.current = []
+      for (const em of extraMarkers ?? []) {
+        const icon = L.divIcon({ html: em.html, iconSize: [em.size, em.size], iconAnchor: [em.size / 2, em.size / 2], className: '' })
+        const m = L.marker([em.lat, em.lon], { icon, zIndexOffset: 500 }).addTo(mapInstance.current!)
+        if (em.popupHtml) m.bindPopup(em.popupHtml, { maxWidth: 260 })
+        extraLayer.current.push(m)
+      }
+    })
+  }, [extraMarkers, mapReady, mapGen])
 
   // Active point marker — driven by hover on the synced charts
   useEffect(() => {
@@ -648,7 +677,7 @@ export default function MapView({
         wikiLayer.current.push(m)
       }
     })
-  }, [wikiPages, mapReady])
+  }, [wikiPages, mapReady, mapGen])
 
   // Difficulty-marker layer — tratti difficili dal GPX importato (Komoot/
   // AllTrails waypoint & track comments classificati da lib/difficultyMarkers.ts)
@@ -683,7 +712,7 @@ export default function MapView({
         mapInstance.current!.panTo([difficultyMarkers[highlightedDifficultyIndex].lat, difficultyMarkers[highlightedDifficultyIndex].lon])
       }
     })
-  }, [difficultyMarkers, mapReady, highlightedDifficultyIndex])
+  }, [difficultyMarkers, mapReady, mapGen, highlightedDifficultyIndex])
 
   // Flora-marker layer — GBIF observation positions (Galleria Verde map)
   useEffect(() => {
@@ -706,7 +735,7 @@ export default function MapView({
         floraLayer.current.push(m)
       }
     })
-  }, [floraMarkers, mapReady])
+  }, [floraMarkers, mapReady, mapGen])
 
   // Layer servizi di trasporto per il ritorno (vedi il commento su `returnMarkers` nei Props) —
   // MAI incluso in boundsRef/fitBounds: questi pin possono cadere ben fuori dal percorso, il
@@ -734,7 +763,7 @@ export default function MapView({
         returnLayer.current.push(m)
       }
     })
-  }, [returnMarkers, mapReady])
+  }, [returnMarkers, mapReady, mapGen])
 
   // Tratti colorati (vedi `overlayTracks` nei Props).
   useEffect(() => {
@@ -784,7 +813,7 @@ export default function MapView({
       if (siteMarker.label) m.bindPopup(`<div style="font-size:12px;font-weight:600">${siteMarker.label.replace(/</g, '&lt;')}</div>`)
       siteLayer.current.push(m)
     })
-  }, [siteMarker, mapReady])
+  }, [siteMarker, mapReady, mapGen])
 
   const hasGps = trackPoints.some(p => p.lat !== undefined)
 

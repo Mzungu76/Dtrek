@@ -1448,6 +1448,8 @@ CREATE TABLE IF NOT EXISTS dtrek_cammino_tappe (
   osm_relation_id  bigint,
   pois             jsonb,        -- luoghi lungo la tappa (Overpass), cache al primo bisogno
   pois_at          timestamptz,
+  services         jsonb,        -- servizi lungo la tappa (acqua, cibo, alloggi, trasporti), cache al primo bisogno
+  services_at      timestamptz,
   created_at       timestamptz NOT NULL DEFAULT now(),
   updated_at       timestamptz NOT NULL DEFAULT now(),
   UNIQUE (cammino_id, ordinal)
