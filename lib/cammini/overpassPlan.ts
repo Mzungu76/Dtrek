@@ -18,7 +18,7 @@ export function endpointOrder<T>(endpoints: T[], round: number, startOffset = 0)
   return [...endpoints.slice(shift), ...endpoints.slice(0, shift)]
 }
 
-/** Attesa prima del giro successivo: cresce col giro (60 s, 120 s, …) con ±25% di jitter (rand in [0,1)). */
-export function backoffMs(round: number, rand: number, baseMs = 60_000): number {
-  return Math.round(baseMs * round * (0.75 + rand * 0.5))
+/** Attesa prima del giro successivo: cresce col giro (60 s, 120 s, …) fino a un tetto, con ±25% di jitter (rand in [0,1)). */
+export function backoffMs(round: number, rand: number, baseMs = 60_000, capMs = 300_000): number {
+  return Math.round(Math.min(baseMs * round, capMs) * (0.75 + rand * 0.5))
 }

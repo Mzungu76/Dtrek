@@ -81,6 +81,7 @@ describe('piano Overpass', () => {
     expect(backoffMs(2, 0.5)).toBe(120_000)
     expect(backoffMs(1, 0)).toBe(45_000)
     expect(backoffMs(1, 0.999)).toBeLessThan(75_000)
+    expect(backoffMs(20, 0.5)).toBe(300_000) // tetto a 5 minuti
   })
 })
 
