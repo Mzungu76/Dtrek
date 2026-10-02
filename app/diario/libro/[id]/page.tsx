@@ -381,6 +381,21 @@ export default function DiarioLibroPage() {
       .sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
   }, [bookPages, config.excludedActivityIds])
 
+  // Voce unica di un cammino: i numeri, il titolo e la traccia sono quelli di tutte le sue tappe, non della prima.
+  const metaForReport = (report: DiaryReport): ActivityMeta | undefined => {
+    const rep = activities.find(a => a.id === report.activity_id)
+    if (!rep || !report.id.startsWith('cammino:')) return rep
+    const tappe = activities.filter(a => a.linkedPlannedId === report.id.slice('cammino:'.length) && a.tappaIndex != null)
+    return {
+      ...rep, title: report.title, metaType: 'cammino',
+      distanceMeters: tappe.reduce((s, a) => s + a.distanceMeters, 0),
+      elevationGain: tappe.reduce((s, a) => s + (a.elevationGain ?? 0), 0),
+      totalTimeSeconds: tappe.reduce((s, a) => s + a.totalTimeSeconds, 0),
+      altitudeMax: tappe.reduce((m, a) => Math.max(m, a.altitudeMax ?? 0), 0),
+      routePolyline: tappe.flatMap(a => a.routePolyline ?? []),
+    }
+  }
+
   const reportNumbers = useMemo(() => {
     const m = new Map<string, number>()
     let n = 0
@@ -1107,7 +1122,7 @@ export default function DiarioLibroPage() {
                     <DiarioReportPage
                       report={page.report}
                       photos={photosByAct[page.report.activity_id] ?? []}
-                      meta={activities.find(a => a.id === page.report.activity_id)}
+                      meta={metaForReport(page.report)}
                       extras={resolveReportExtras(config, page.report.activity_id)}
                       trackPoints={trackPointsByAct[page.report.activity_id]}
                       mapsInteractive={mapsInteractive}
