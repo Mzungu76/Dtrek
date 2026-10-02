@@ -1,6 +1,6 @@
 name: Import Cammini del registro (OpenStreetMap → dtrek_places + dtrek_cammino_tappe)
 
-# Manuale. Importa un cammino di lib/cammini/registry.ts per GRUPPO di relazioni OSM (scripts/places/
+# Manuale. Importa un cammino (o tutti) di lib/cammini/registry.ts per GRUPPO di relazioni OSM (scripts/places/
 # cammini/import-registry.ts): scarica le relazioni col nome del cammino e le loro sotto-relazioni,
 # la geometria in blocchi, taglia fuori l'estero, ordina le tappe lungo il percorso e le controlla.
 # Solo a piedi (route=hiking|foot). Prerequisiti: migrazioni add_cammino_meta_type.sql e
@@ -8,6 +8,9 @@ name: Import Cammini del registro (OpenStreetMap → dtrek_places + dtrek_cammin
 #
 # Parti SEMPRE da dry-run: il log mostra tappe, lunghezze, interruzioni e lo stato di qualità
 # (PRONTO / DA_RIVEDERE). In write, di default si scrivono solo i cammini PRONTI.
+# Con `tutti` un job per ondata, uno alla volta (max-parallel 1: Overpass non va stressato; ogni job ha il
+# suo limite di 6 h): un cammino che cade non ferma gli altri, i falliti si riprovano in coda, il download
+# riparte dalla cache (actions/cache) e il riepilogo è in "Summary". Exit ≠ 0 solo per errori veri.
 # Ondata 3 (Alte Vie, Via Alpina, GTA, Sentiero Italia: tappe in rifugio) non è ancora supportata.
 
 on:
@@ -22,7 +25,7 @@ on:
           - write
         default: dry-run
       registryId:
-        description: "Id nel registro (es. cammino-san-benedetto, via-francigena, cammino-sant-antonio, via-matildica)."
+        description: "Id o nome (es. via-francigena, \"Via Francigena\", cammino-san-benedetto) oppure: tutti | ondata-1 | ondata-2 | ondata-3. 'tutti' esclude le Alte Vie/reti in rifugio e i doppioni (Romea Strata)."
         required: true
         type: string
         default: "cammino-san-benedetto"
@@ -43,14 +46,39 @@ permissions:
   contents: read
 
 jobs:
-  import:
+  plan:
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.m.outputs.matrix }}
+    steps:
+      - id: m
+        env:
+          REGISTRY_ID: ${{ inputs.registryId }}
+        run: |
+          set -euo pipefail
+          norm=$(printf '%s' "$REGISTRY_ID" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g')
+          if [ "$norm" = "tutti" ]; then
+            echo 'matrix={"sel":["ondata-1","ondata-2","ondata-3"]}' >> "$GITHUB_OUTPUT"
+          else
+            # un solo cammino (o una sola ondata): il valore passa per JSON per non rompere con apostrofi/virgolette
+            printf 'matrix=%s\n' "$(jq -cn --arg s "$REGISTRY_ID" '{sel:[$s]}')" >> "$GITHUB_OUTPUT"
+          fi
+
+  import:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     env:
       MODE: ${{ inputs.mode }}
-      REGISTRY_ID: ${{ inputs.registryId }}
+      SEL: ${{ matrix.sel }}
       MIN_STATUS: ${{ inputs.minStatus }}
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      CAMMINI_CACHE_DIR: ${{ github.workspace }}/.cache/cammini
     steps:
       - uses: actions/checkout@v7
 
@@ -69,22 +97,43 @@ jobs:
             exit 1
           fi
 
+      - id: slug
+        run: echo "v=$(printf '%s' "$SEL" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g')" >> "$GITHUB_OUTPUT"
+
+      # Cache OSM scaricata (relazioni e way per cammino): un rilancio riparte da dove era caduto.
+      - id: cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache/cammini
+          key: cammini-osm-${{ steps.slug.outputs.v }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            cammini-osm-${{ steps.slug.outputs.v }}-
+            cammini-osm-
+
       - name: Import
         run: |
           set -euo pipefail
-          ARGS=(scripts/places/cammini/import-registry.ts --id "$REGISTRY_ID" --save-fixture /tmp/raw-registry.json)
+          ARGS=(scripts/places/cammini/import-registry.ts --id "$SEL" --deadline-min 330)
+          case "$SEL" in tutti|ondata-*) ;; *) ARGS+=(--save-fixture /tmp/raw-registry.json) ;; esac
           if [ "$MODE" = "write" ]; then ARGS+=(--write --min-status "$MIN_STATUS"); fi
-          npx tsx "${ARGS[@]}" | tee /tmp/import-registry.txt
-          {
-            echo "### Import cammino del registro ($MODE) — $REGISTRY_ID"
-            echo '```'
-            cat /tmp/import-registry.txt
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          # Il riepilogo in $GITHUB_STEP_SUMMARY lo scrive lo script; qui si conserva anche il log intero.
+          set +e
+          npx tsx "${ARGS[@]}" 2>&1 | tee /tmp/import-registry.txt
+          code=${PIPESTATUS[0]}
+          exit "$code"
+
+      - name: Salva la cache OSM
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .cache/cammini
+          key: cammini-osm-${{ steps.slug.outputs.v }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: raw-registry
-          path: /tmp/raw-registry.json
+          name: import-log-${{ strategy.job-index }}
+          path: |
+            /tmp/raw-registry.json
+            /tmp/import-registry.txt
           if-no-files-found: ignore

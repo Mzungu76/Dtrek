@@ -1,13 +1,14 @@
 import fs from 'fs'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import { familyKey } from '../../../lib/cammini/discovery'
 import { buildNearestFinder } from '../../../lib/cammini/geoFilter'
-import { REGISTRY, type RegistryEntry } from '../../../lib/cammini/registry'
+import type { RegistryEntry } from '../../../lib/cammini/registry'
+import { isMultiSelector, resolveRegistryEntry, selectEntries } from '../../../lib/cammini/registrySelect'
+import { exitCodeFor, summaryMarkdown, type RunRow } from '../../../lib/cammini/runSummary'
 import type { TappaAnchor } from '../../../lib/cammini/tappe'
-import type { OverpassRelation } from './build'
 import { buildFromRegistry, type RegistryBuilt, type WayGeometry } from './buildRegistry'
+import type { OverpassRelation } from './build'
+import { downloadCammino } from './download'
 import { importCammino } from './import'
-import { runOverpass } from './overpass'
 
 // Importa un cammino del registro (lib/cammini/registry.ts) da OpenStreetMap, per gruppo di
 // relazioni: scarica le relazioni col nome del cammino e le loro sotto-relazioni, poi la geometria
@@ -19,31 +20,19 @@ import { runOverpass } from './overpass'
 //   npx tsx scripts/places/cammini/import-registry.ts --id cammino-san-benedetto --write
 //   --save-fixture <file> / --fixture <file>: salva/rilegge la risposta grezza (build offline)
 //   --min-status pronto|da_rivedere (con --write: scrive solo i cammini almeno a quel livello; default pronto)
+//
+// --id accetta un id, il nome ("Via Francigena"), `tutti` oppure `ondata-1|2|3`. Con più cammini: continua dopo gli
+// errori, riprova i falliti in coda, pausa tra un cammino e l'altro (--pause-s, default 20), si ferma per tempo
+// (--deadline-min) e scrive il riepilogo in $GITHUB_STEP_SUMMARY. Il download riprende dalla cache (CAMMINI_CACHE_DIR).
 
 const NEAR_ITALY_KM = 25
-const WAY_CHUNK = 250
 
 function arg(name: string): string | undefined {
   const i = process.argv.indexOf(`--${name}`)
   return i >= 0 ? process.argv[i + 1] : undefined
 }
 
-const escapeRe = (n: string) => n.replace(/[\\"^$.*+?()[\]{}|]/g, m => `\\${m}`)
-
-export function relationsQuery(entry: RegistryEntry): string {
-  return `[out:json][timeout:180];
-rel["type"="route"]["route"~"^(hiking|foot)$"]["name"~"${escapeRe(entry.searchName ?? entry.name)}",i]->.named;
-rel(r.named)["route"~"^(hiking|foot)$"]->.kids;
-rel(r.kids)["route"~"^(hiking|foot)$"]->.grandkids;
-(.named; .kids; .grandkids;);
-out body center;`
-}
-
-export function waysQuery(ids: number[]): string {
-  return `[out:json][timeout:180];
-way(id:${ids.join(',')});
-out geom;`
-}
+export { rootsQuery as relationsQuery, waysQuery } from './download'
 
 async function loadPoints(supabase: SupabaseClient, metaType: string): Promise<{ id: string; name: string; lat: number; lon: number; population: number | null }[]> {
   const out: { id: string; name: string; lat: number; lon: number; population: number | null }[] = []
@@ -68,12 +57,73 @@ function printReport(res: RegistryBuilt[]) {
   }
 }
 
+interface Ctx {
+  supabase: SupabaseClient
+  anchors: TappaAnchor[]
+  isItalian: (lat: number, lon: number) => boolean
+  write: boolean
+  minStatus: string
+  fixture?: string
+  saveFixture?: string
+}
+
+/** Scarica (o rilegge), costruisce, controlla e — con write — scrive un cammino. Una riga per cammino costruito (la Francigena ne dà due). */
+async function processEntry(entry: RegistryEntry, ctx: Ctx): Promise<RunRow[]> {
+  const t0 = Date.now()
+  let relations: OverpassRelation[]
+  let ways = new Map<number, WayGeometry>()
+  if (ctx.fixture) {
+    const raw = JSON.parse(fs.readFileSync(ctx.fixture, 'utf8')) as { relations: OverpassRelation[]; ways: [number, WayGeometry][] }
+    relations = raw.relations
+    raw.ways.forEach(([wid, g]) => ways.set(wid, g))
+  } else {
+    ({ relations, ways } = await downloadCammino(entry))
+    if (ctx.saveFixture) fs.writeFileSync(ctx.saveFixture, JSON.stringify({ relations, ways: Array.from(ways.entries()) }))
+  }
+
+  const res = buildFromRegistry(entry, relations, ways, ctx.anchors, { isItalian: ctx.isItalian })
+  res[0].built.diagnostics.forEach(d => console.log(`  · ${d}`))
+  printReport(res)
+
+  const rows: RunRow[] = []
+  for (const r of res) {
+    const base = { id: r.built.config.id, name: r.built.config.name, km: r.built.lengthM / 1000, tappe: r.built.tappe.length }
+    const reasons = r.quality.reasons.join('; ')
+    if (!ctx.write) { rows.push({ ...base, outcome: r.quality.status === 'pronto' ? 'pronto' : 'da_rivedere', detail: reasons, durationS: (Date.now() - t0) / 1000 }); continue }
+    if (ctx.minStatus === 'pronto' && r.quality.status !== 'pronto') {
+      console.log(`\nSALTATO ${base.id}: stato ${r.quality.status} (${reasons}). Usa --min-status da_rivedere per scriverlo comunque.`)
+      rows.push({ ...base, outcome: 'da_rivedere', detail: reasons, durationS: (Date.now() - t0) / 1000 })
+      continue
+    }
+    const stats = await importCammino(ctx.supabase, r.built)
+    console.log(`\nSCRITTO ${base.id}: ${JSON.stringify(stats)}`)
+    rows.push({ ...base, outcome: 'scritto', detail: `${stats.tappeWritten} tappe scritte, ${stats.tappeRemoved} rimosse`, durationS: (Date.now() - t0) / 1000 })
+  }
+  return rows
+}
+
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+
 async function main() {
-  const id = arg('id')
-  const entry = REGISTRY.find(e => e.id === id)
-  if (!entry) { console.error(`Cammino sconosciuto: ${id}. Disponibili: ${REGISTRY.map(e => e.id).join(', ')}`); process.exit(1) }
-  if (entry.anchors === 'rifugi') { console.error(`${entry.name}: le tappe in rifugio (ondata 3) non sono ancora supportate.`); process.exit(1) }
-  const WRITE = process.argv.includes('--write')
+  const idArg = arg('id')
+  if (!idArg) { console.error('Manca --id (id, nome, "tutti" o "ondata-N").'); process.exit(1) }
+  const multi = isMultiSelector(idArg)
+  let queue: RegistryEntry[]
+  const rows: RunRow[] = []
+  if (multi) {
+    const sel = selectEntries(idArg)
+    if ('error' in sel) { console.error(sel.error); process.exit(1) }
+    queue = sel.selected
+    for (const s of sel.skipped) rows.push({ id: s.entry.id, name: s.entry.name, outcome: 'saltato', detail: s.reason })
+  } else {
+    const r = resolveRegistryEntry(idArg)
+    if (!r.ok) { console.error(r.error); process.exit(1) }
+    if (r.entry.anchors === 'rifugi') { console.error(`${r.entry.name}: le tappe in rifugio (ondata 3) non sono ancora supportate.`); process.exit(1) }
+    queue = [r.entry]
+  }
+  const write = process.argv.includes('--write')
+  const pauseMs = Number(arg('pause-s') ?? 20) * 1000
+  const deadline = Date.now() + Number(arg('deadline-min') ?? 330) * 60_000
 
   const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.SUPABASE_SERVICE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -82,48 +132,53 @@ async function main() {
   const borghi = await loadPoints(supabase, 'borgo_citta')
   console.log(`${borghi.length} borghi/città nel catalogo.`)
   const nearestKm = buildNearestFinder(borghi)
-  const isItalian = (lat: number, lon: number) => nearestKm(lat, lon) <= NEAR_ITALY_KM
-
-  let relations: OverpassRelation[]
-  const ways = new Map<number, WayGeometry>()
-  const fixture = arg('fixture')
-  if (fixture) {
-    const raw = JSON.parse(fs.readFileSync(fixture, 'utf8')) as { relations: OverpassRelation[]; ways: [number, WayGeometry][] }
-    relations = raw.relations
-    raw.ways.forEach(([wid, g]) => ways.set(wid, g))
-  } else {
-    const json = await runOverpass<{ elements?: (OverpassRelation & { center?: { lat: number; lon: number } })[] }>(relationsQuery(entry))
-    const all = (json.elements ?? []).filter(e => e.type === 'relation')
-    // Taglia subito i pezzi esteri col centro (le tappe senza centro restano: le giudica la geometria).
-    relations = all.filter(r => !r.center || isItalian(r.center.lat, r.center.lon) || !r.tags?.name || !entry.match.test(familyKey(r.tags.name)))
-    console.log(`${all.length} relazioni scaricate, ${relations.length} dopo il filtro Italia sul centro.`)
-    const wayIds = Array.from(new Set(relations.flatMap(r => (r.members ?? []).filter(m => m.type === 'way').map(m => m.ref))))
-    console.log(`${wayIds.length} way da scaricare in blocchi da ${WAY_CHUNK}…`)
-    for (let i = 0; i < wayIds.length; i += WAY_CHUNK) {
-      const chunk = wayIds.slice(i, i + WAY_CHUNK)
-      const wj = await runOverpass<{ elements?: { type: string; id: number; geometry?: WayGeometry }[] }>(waysQuery(chunk))
-      for (const e of wj.elements ?? []) if (e.type === 'way' && e.geometry) ways.set(e.id, e.geometry)
-      console.log(`  way ${Math.min(i + WAY_CHUNK, wayIds.length)}/${wayIds.length}`)
-    }
-    const saveFixture = arg('save-fixture')
-    if (saveFixture) fs.writeFileSync(saveFixture, JSON.stringify({ relations, ways: Array.from(ways.entries()) }))
+  const ctx: Ctx = {
+    supabase, write, minStatus: arg('min-status') ?? 'pronto',
+    anchors: borghi.map(b => ({ id: b.id, name: b.name, lat: b.lat, lon: b.lon, population: b.population })),
+    isItalian: (lat, lon) => nearestKm(lat, lon) <= NEAR_ITALY_KM,
+    fixture: arg('fixture'), saveFixture: arg('save-fixture'),
   }
 
-  const anchors: TappaAnchor[] = borghi.map(b => ({ id: b.id, name: b.name, lat: b.lat, lon: b.lon, population: b.population }))
-  const res = buildFromRegistry(entry, relations, ways, anchors, { isItalian })
-  res[0].built.diagnostics.forEach(d => console.log(`  · ${d}`))
-  printReport(res)
-
-  if (!WRITE) { console.log('\n[DRY RUN] Nessuna scrittura.'); return }
-  const minStatus = arg('min-status') ?? 'pronto'
-  for (const r of res) {
-    if (minStatus === 'pronto' && r.quality.status !== 'pronto') {
-      console.log(`\nSALTATO ${r.built.config.id}: stato ${r.quality.status} (${r.quality.reasons.join('; ')}). Usa --min-status da_rivedere per scriverlo comunque.`)
-      continue
+  // Un cammino che cade non ferma gli altri; i falliti si riprovano una volta in coda (la cache su disco
+  // fa ripartire il download da dove era arrivato).
+  const failed: RegistryEntry[] = []
+  const run = async (entry: RegistryEntry, label: string): Promise<boolean> => {
+    console.log(`\n━━━ ${label}: ${entry.name} [${entry.id}] ━━━`)
+    const t0 = Date.now()
+    try { rows.push(...await processEntry(entry, ctx)); return true }
+    catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`ERRORE ${entry.id}: ${msg}`)
+      rows.push({ id: entry.id, name: entry.name, outcome: 'errore', detail: msg, durationS: (Date.now() - t0) / 1000 })
+      return false
     }
-    const stats = await importCammino(supabase, r.built)
-    console.log(`\nSCRITTO ${r.built.config.id}: ${JSON.stringify(stats)}`)
   }
+  const outOfTime = (entry: RegistryEntry) => {
+    if (Date.now() < deadline) return false
+    rows.push({ id: entry.id, name: entry.name, outcome: 'rimandato', detail: 'tempo del job esaurito: rilancia, la cache riparte da qui' })
+    return true
+  }
+  for (const [i, entry] of queue.entries()) {
+    if (outOfTime(entry)) continue
+    if (!(await run(entry, `${i + 1}/${queue.length}`))) failed.push(entry)
+    if (i < queue.length - 1) await sleep(pauseMs)
+  }
+  for (const entry of failed) {
+    if (Date.now() >= deadline) break
+    await sleep(pauseMs)
+    // Il riuso della riga d'errore: la rimpiazza solo se il secondo tentativo riesce.
+    const errIdx = rows.findIndex(r => r.id === entry.id && r.outcome === 'errore')
+    const before = rows.length
+    if (await run(entry, 'secondo tentativo')) rows.splice(errIdx, 1)
+    else rows.splice(before, 1) // tiene l'errore del primo tentativo; il secondo è già nel log
+  }
+
+  if (!write) console.log('\n[DRY RUN] Nessuna scrittura.')
+  const title = `Import cammini del registro (${write ? 'write' : 'dry-run'}) — ${idArg}`
+  const md = summaryMarkdown(rows, title)
+  console.log(`\n${md}`)
+  if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${md}\n`)
+  process.exit(exitCodeFor(rows))
 }
 
 const isDirectRun = process.argv[1]?.endsWith('import-registry.ts') && process.argv[1]?.includes('cammini')
