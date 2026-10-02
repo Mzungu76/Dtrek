@@ -4,7 +4,10 @@ import { chunk, missingIds } from '../../../lib/cammini/overpassPlan'
 import type { RegistryEntry } from '../../../lib/cammini/registry'
 import type { OverpassRelation } from './build'
 import type { WayGeometry } from './buildRegistry'
+import { relationsByIdQuery, italyQuery, rootsQuery, waysQuery } from '../../../lib/cammini/overpassQueries'
 import { runOverpass } from './overpass'
+
+export { rootsQuery, relationsByIdQuery, italyQuery, waysQuery }
 
 // Download a stadi di un cammino da Overpass, con cache su disco per cammino ripresa all'avvio:
 //   A. relazioni radice col nome (solo tag e membri, niente geometria) in tutto il mondo
@@ -13,23 +16,9 @@ import { runOverpass } from './overpass'
 //   D. geometria delle way, a blocchi
 // Dopo ogni blocco la cache viene riscritta: un 504 o un run interrotto riparte da lì.
 
-const ITALY_BBOX = '35.2,6.6,47.1,18.8'
 const REL_CHUNK = 400
 const WAY_CHUNK = 250
 const MAX_DEPTH = 4
-const TUNING = '[out:json][timeout:300][maxsize:1073741824]'
-const ROUTE = '["route"~"^(hiking|foot)$"]'
-
-const escapeRe = (n: string) => n.replace(/[\\"^$.*+?()[\]{}|]/g, m => `\\${m}`)
-
-export function rootsQuery(entry: RegistryEntry): string {
-  return `${TUNING};
-rel["type"="route"]${ROUTE}["name"~"${escapeRe(entry.searchName ?? entry.name)}",i];
-out body;`
-}
-export const relationsByIdQuery = (ids: number[]) => `${TUNING};\nrel(id:${ids.join(',')});\nout body;`
-export const italyQuery = (ids: number[]) => `${TUNING};\nrel(id:${ids.join(',')})(${ITALY_BBOX});\nout ids;`
-export const waysQuery = (ids: number[]) => `${TUNING};\nway(id:${ids.join(',')});\nout geom;`
 
 interface Cache {
   version: 1
@@ -74,7 +63,8 @@ export async function downloadCammino(entry: RegistryEntry): Promise<Downloaded>
   async function fetchRelations(ids: number[]) {
     const todo = missingIds(ids, id => rels.has(id) || gone.has(id))
     const blocks = chunk(todo, REL_CHUNK)
-    for (const [i, block] of blocks.entries()) {
+    for (let i = 0; i < blocks.length; i++) {
+      const block = blocks[i]
       const json = await runOverpass<{ elements?: OverpassRelation[] }>(relationsByIdQuery(block))
       const seen = new Set<number>()
       for (const e of json.elements ?? []) if (e.type === 'relation') { rels.set(e.id, e); cache.relations[e.id] = e; seen.add(e.id) }
@@ -121,7 +111,8 @@ export async function downloadCammino(entry: RegistryEntry): Promise<Downloaded>
   const todoWays = missingIds(wayIds, id => String(id) in cache.ways)
   console.log(`${wayIds.length} way (${todoWays.length} da scaricare, blocchi da ${WAY_CHUNK})…`)
   const blocks = chunk(todoWays, WAY_CHUNK)
-  for (const [i, block] of blocks.entries()) {
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i]
     const wj = await runOverpass<{ elements?: { type: string; id: number; geometry?: WayGeometry }[] }>(waysQuery(block))
     for (const e of wj.elements ?? []) if (e.type === 'way' && e.geometry) cache.ways[e.id] = e.geometry
     // Way senza geometria (cancellate): segnate vuote per non richiederle a ogni giro.
