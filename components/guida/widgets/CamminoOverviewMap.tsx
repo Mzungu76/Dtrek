@@ -25,5 +25,5 @@ export default function CamminoOverviewMap({ plan }: { plan: CamminoPlan }) {
   if (trackPoints.length < 2) {
     return <div className="flex h-[260px] items-center justify-center rounded-2xl border border-stone-200 bg-stone-100 text-[12px] text-stone-400"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Carico la mappa…</div>
   }
-  return <RouteMapSection trackPoints={trackPoints} showPois={false} planned />
+  return <RouteMapSection trackPoints={trackPoints} showPois={false} showProfile={false} planned />
 }

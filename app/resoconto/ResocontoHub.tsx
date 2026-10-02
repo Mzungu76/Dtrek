@@ -94,7 +94,8 @@ function metaToItem(a: ActivityMeta): RouteHubItem {
   }
 }
 
-export default function ResocontoHub({ id }: { id?: string }) {
+/** `parentCammino`: l'hub mostra solo i reportage delle tappe di quel cammino (galleria compresa) e resta sotto il suo reportage. */
+export default function ResocontoHub({ id, parentCammino }: { id?: string; parentCammino?: string }) {
   const router = useRouter()
 
   const [rawActivities, setRawActivities] = useState<ActivityMeta[]>([])
@@ -204,10 +205,13 @@ export default function ResocontoHub({ id }: { id?: string }) {
     // Le tappe di un cammino sono capitoli del reportage del cammino, non voci della galleria: resta
     // solo quella aperta (si arriva da "Foto e dettagli della tappa").
     setTappaActs(list.filter(a => a.tappaIndex != null))
-    const sorted = list.filter(a => a.tappaIndex == null || a.id === id).sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
+    // Sotto un reportage-cammino: solo le sue tappe, nell'ordine del cammino.
+    const sorted = parentCammino
+      ? list.filter(a => a.linkedPlannedId === parentCammino && a.tappaIndex != null).sort((a, b) => (a.tappaIndex ?? 0) - (b.tappaIndex ?? 0))
+      : list.filter(a => a.tappaIndex == null || a.id === id).sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
     setRawActivities(sorted)
     setItems(sorted.map(metaToItem))
-  }, [id])
+  }, [id, parentCammino])
 
   useEffect(() => {
     getAllActivities(applyList).then(applyList).catch(() => setItems([])).finally(() => setListLoaded(true))
@@ -242,7 +246,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
 
   useEffect(() => {
     if (!currentId) return
-    // Il reportage contenitore di un cammino non è un'attività: niente da caricare qui.
+    // Il reportage contenitore di un cammino non è un'attività: niente da caricare qui (si apre dalla galleria).
     if (currentId.startsWith(CAMMINO_PREFIX)) { setActivity(null); return }
     const loadPoisFor = (a: StoredActivity) => {
       // Un Borgo/Città con i veri stop dell'itinerario curato (lib/activitySave.ts's
@@ -271,7 +275,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
     // full activity (new object/array references) a second time once the network round-trip
     // completes — a visible re-render "blink" ~1s after the card already opened correctly.
     getActivityById(currentId).then(a => {
-      if (!a) { router.push('/resoconto'); return }
+      if (!a) { router.push(parentCammino ? `/resoconto/cammino/${encodeURIComponent(parentCammino)}` : '/resoconto'); return }
       setActivity(a)
       setNotesVal(a.userNotes ?? '')
       setRatingVal(a.userRating ?? 0)
@@ -281,7 +285,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
     fetchActivityPhotos(currentId).then(setPhotos).catch(() => setPhotosError(true))
     const savedCover = localStorage.getItem(`dtrek_cover_${currentId}`)
     if (savedCover) setCoverPhotoId(savedCover)
-  }, [currentId, router])
+  }, [currentId, router, parentCammino])
 
   useEffect(() => {
     fetch('/api/diaries').then(r => r.ok ? r.json() : []).then(setDiaries).catch(() => {})
@@ -382,6 +386,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
   // Un'unica voce per cammino, sintetizzata dalle sue tappe percorse: cifre sommate, tracciato unito, data
   // dell'ultima tappa. Si apre sul reportage del cammino (/resoconto/cammino/[id]).
   const containerMetas = useMemo(() => {
+    if (parentCammino) return []
     const byHike = new Map<string, ActivityMeta[]>()
     for (const a of tappaActs) {
       if (!a.linkedPlannedId) continue
@@ -405,7 +410,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
       })
     })
     return out
-  }, [tappaActs, camminoNames])
+  }, [tappaActs, camminoNames, parentCammino])
   const itemsAll = useMemo(
     () => [...items, ...containerMetas.map(metaToItem)].sort((a, b) => (b.sortValues?.date ?? 0) - (a.sortValues?.date ?? 0)),
     [items, containerMetas],
@@ -646,18 +651,6 @@ export default function ResocontoHub({ id }: { id?: string }) {
   }
 
   const renderSection = (section: SectionKind, item: RouteHubItem, onClose: () => void) => {
-    if (item.id.startsWith(CAMMINO_PREFIX)) {
-      const hikeId = item.id.slice(CAMMINO_PREFIX.length)
-      const acts = tappaActs.filter(a => a.linkedPlannedId === hikeId)
-      return (
-        <div className="space-y-3 py-4">
-          <p className={`text-sm leading-relaxed ${textPrimary}`}>
-            Il reportage unico del cammino: {new Set(acts.map(a => a.tappaIndex)).size} tappe percorse, ognuna con il suo capitolo e il suo reportage dentro.
-          </p>
-          <button onClick={() => openCammino(hikeId)} className="w-full rounded-xl bg-terra-500 px-4 py-3 text-sm font-semibold text-white hover:bg-terra-600">Apri il reportage del cammino</button>
-        </div>
-      )
-    }
     if (!activity || item.id !== activity.id) {
       return <div className={`py-10 text-center text-sm ${textMuted}`}>Caricamento…</div>
     }
@@ -797,12 +790,7 @@ export default function ResocontoHub({ id }: { id?: string }) {
     )
   }
 
-  const primaryAction = (routeItem: RouteHubItem): PrimaryAction => routeItem.id.startsWith(CAMMINO_PREFIX) ? ({
-    label: 'Apri il reportage del cammino',
-    icon: BookMarked,
-    onClick: () => openCammino(routeItem.id.slice(CAMMINO_PREFIX.length)),
-    variant: 'terra',
-  }) : ({
+  const primaryAction = (routeItem: RouteHubItem): PrimaryAction => ({
     label: rated ? `Voto ${activity?.userRating}/10` : 'Vota bellezza',
     icon: Star,
     onClick: () => setShowRatingPanel(true),
@@ -824,12 +812,14 @@ export default function ResocontoHub({ id }: { id?: string }) {
         onToggleFavoritesFilter={() => setFavoritesFilter(v => !v)}
         onToggleFavorite={handleToggleFavorite}
         onIndexChange={(item) => {
+          // Il reportage del cammino si apre direttamente: nessuna pagina intermedia.
+          if (item.id.startsWith(CAMMINO_PREFIX)) { openCammino(item.id.slice(CAMMINO_PREFIX.length)); return }
           setCurrentId(item.id)
           // Plain History API, not router.replace: `/resoconto` and `/resoconto/[id]` are
           // different page components, so a Next.js navigation between them unmounts/remounts
           // this whole hub (re-running every data-loading effect) and produces a visible
           // double-render — this is a purely cosmetic address-bar sync, not a real navigation.
-          window.history.replaceState(null, '', `/resoconto/${encodeURIComponent(item.id)}`)
+          window.history.replaceState(null, '', parentCammino ? `/resoconto/cammino/${encodeURIComponent(parentCammino)}/tappa/${encodeURIComponent(item.id)}` : `/resoconto/${encodeURIComponent(item.id)}`)
         }}
         bodyMode="continuous"
         renderSection={renderSection}

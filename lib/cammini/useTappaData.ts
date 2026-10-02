@@ -45,13 +45,13 @@ export function useTappaData(plan: CamminoPlan, hikeId: string, ordinal: number 
     const ckey = `${plan.camminoId}:${ordinal}`
     const stored = tappa?.cts
     const initialCts: TappaCts | 'loading' =
-      ctsCache.get(ckey) ?? (stored ? { ts: stored.ts, label: stored.label, color: stored.color, confidence: 'high', poisCount: 0 } : 'loading')
+      ctsCache.get(ckey) ?? (stored?.safety ? { ts: stored.ts, label: stored.label, color: stored.color, confidence: 'high', poisCount: 0, safety: stored.safety, total: stored.total } : 'loading')
     load(plan.camminoId, ordinal).then(data => {
       if (cancelled) return
       if (!data) { setState({ status: 'na' }); return }
       setState({ status: 'ready', data, cts: initialCts })
       if (initialCts !== 'loading' || !tappa || !data.points) return
-      computeTappaCts({ points: data.points, distanceMeters: tappa.lengthM, gainM: data.gainM, lossM: data.lossM, maxM: data.maxM ?? 0, pois: data.pois ?? [] })
+      computeTappaCts({ points: data.points, distanceMeters: tappa.lengthM, gainM: data.gainM, lossM: data.lossM, maxM: data.maxM ?? 0, minM: data.minM, pois: data.pois ?? [], polyline: data.points.map(([la, lo]) => [la, lo] as [number, number]), plannedDate: plan.days.find(d => d.tappe.includes(ordinal))?.date })
         .then(cts => {
           if (cancelled) return
           if (!cts) { setState({ status: 'ready', data, cts: 'na' }); return }
@@ -60,7 +60,7 @@ export function useTappaData(plan: CamminoPlan, hikeId: string, ordinal: number 
           onCts?.(ordinal, cts)
           fetch('/api/cammini/tappa-cts', {
             method: 'PUT', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ hikeId, ordinal, ts: cts.ts, label: cts.label, color: cts.color }),
+            body: JSON.stringify({ hikeId, ordinal, ts: cts.ts, label: cts.label, color: cts.color, safety: cts.safety, total: cts.total }),
           }).catch(() => {})
         })
     })

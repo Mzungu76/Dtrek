@@ -4,7 +4,7 @@ import dynamic from 'next/dynamic'
 import { Loader2, Sparkles, Check, Navigation, Upload, BookOpen, MapPin } from 'lucide-react'
 import { POI_META } from '@/lib/overpass'
 import { POI_ICON } from '@/components/poiIcons'
-import { MiniScoreRing, tsColor } from '@/components/ScoreRing'
+import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 import RouteMapSection from '@/components/RouteMapSection'
 import { useTappaData } from '@/lib/cammini/useTappaData'
 import { poisAlongTappa } from '@/lib/cammini/tappaPois'
@@ -67,7 +67,9 @@ export default function CamminoTappaDetail({ plan, hikeId, tappa: t, seq, dayIdx
   const ctsV = ready?.cts
   const cts = ctsV && ctsV !== 'loading' && ctsV !== 'na' ? ctsV : null
   const ctsStored = t.cts && !cts ? t.cts : null
-  const shownCts = cts ?? (ctsStored ? { ts: ctsStored.ts, label: ctsStored.label, color: ctsStored.color } : null)
+  const shownCts = cts ?? (ctsStored ? { ts: ctsStored.ts, label: ctsStored.label, color: ctsStored.color, safety: ctsStored.safety, total: ctsStored.total } : null)
+  const shownSafety = shownCts?.safety ?? null
+  const shownTotal = shownCts?.total ?? shownCts?.ts ?? null
 
   const trackPoints: TrackPoint[] | null = ready?.data.points ? ready.data.points.map(([lat, lon, alt]) => ({ time: '', lat, lon, altitudeMeters: alt })) : null
   const along = useMemo(
@@ -129,13 +131,15 @@ export default function CamminoTappaDetail({ plan, hikeId, tappa: t, seq, dayIdx
           <div className="rounded-xl bg-stone-100 py-2"><p className="text-[15px] font-bold tabular-nums">{(km / 1000).toFixed(1).replace('.', ',')}</p><p className="text-[10px] uppercase tracking-wider text-stone-500">km</p></div>
           <div className="rounded-xl bg-stone-100 py-2"><p className="text-[15px] font-bold tabular-nums">{timeLabel}</p><p className="text-[10px] uppercase tracking-wider text-stone-500">{done ? 'tempo' : 'stima'}</p></div>
           <div className="rounded-xl bg-stone-100 py-2"><p className="text-[15px] font-bold tabular-nums">{up != null ? `+${Math.round(up)}` : '–'}</p><p className="text-[10px] uppercase tracking-wider text-stone-500">salita m</p></div>
-          <div className="flex flex-col items-center justify-center rounded-xl bg-stone-100 py-1.5">
-            {shownCts ? <MiniScoreRing value={shownCts.ts} size={34} color={tsColor(shownCts.ts)} /> : <MiniScoreRing value={0} size={34} loading={ctsV !== 'na'} />}
-            <p className="mt-0.5 text-[10px] uppercase tracking-wider text-stone-500">CTS</p>
+          <div className="flex flex-col items-center justify-center rounded-xl bg-stone-100 py-1">
+            {shownTotal != null ? <TrailScoreGaugeBadge total={shownTotal} safety={shownSafety} size={44} showLabel={false} /> : <TrailScoreGaugeBadge total={null} safety={null} size={44} showLabel={false} loading={ctsV !== 'na'} />}
+            <p className="text-[10px] uppercase tracking-wider text-stone-500">CTS</p>
           </div>
         </div>
         <p className="mt-1.5 text-[11px] text-stone-500">
-          {shownCts ? `CTS ${shownCts.label.toLowerCase()} — profilo, terreno e luoghi della tappa, con le tue preferenze e il tuo storico.` : ctsV === 'na' ? 'Il CTS di questa tappa non è disponibile.' : 'Calcolo il CTS della tappa…'}
+          {shownCts
+            ? `Trail Score ${shownTotal} · CTS ${shownCts.ts} (${shownCts.label.toLowerCase()})${shownSafety ? ` · Sicurezza ${shownSafety.overall} (${shownSafety.label.toLowerCase()})` : ''} — profilo, terreno, luoghi, fauna e quota della tappa, con le tue preferenze e il tuo storico.`
+            : ctsV === 'na' ? 'Il CTS di questa tappa non è disponibile.' : 'Calcolo CTS e Sicurezza della tappa…'}
         </p>
       </div>
 
@@ -153,13 +157,6 @@ export default function CamminoTappaDetail({ plan, hikeId, tappa: t, seq, dayIdx
         {trackPoints && trackPoints.length > 1 ? (
           <RouteMapSection trackPoints={trackPoints} pois={along.slice(0, 40).map(a => a.poi)} planned={!done} onOpenMap3D={() => setShow3D(true)} />
         ) : <div className="flex h-[260px] items-center justify-center rounded-2xl border border-stone-200 bg-stone-100 text-[12px] text-stone-400"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {state.status === 'na' ? 'Mappa non disponibile.' : 'Carico la mappa…'}</div>}
-        <div className="rounded-2xl border border-stone-200 bg-white px-3 pb-2 pt-2.5">
-          <div className="flex justify-between text-[11px] text-stone-500"><span>Profilo della tappa</span>{ready?.data.maxM != null && <span>quota max {ready.data.maxM} m</span>}</div>
-          {state.status === 'loading' ? <div className="flex h-[90px] items-center justify-center text-[12px] text-stone-400"><Loader2 className="mr-2 w-3.5 h-3.5 animate-spin" /> Calcolo il profilo…</div>
-            : trackPoints && trackPoints.length > 1 ? <ElevationProfileChart trackPoints={trackPoints} />
-            : <p className="py-4 text-center text-[12px] text-stone-400">Profilo non disponibile.</p>}
-        </div>
-
         {/* luoghi in ordine di cammino */}
         <div className="rounded-2xl border border-stone-200 bg-white px-3.5 pb-1 pt-2.5">
           <div className="flex items-baseline justify-between"><p className="font-barlow text-[11px] font-bold uppercase tracking-[0.12em] text-stone-500">Luoghi lungo la tappa</p><p className="text-[12px] text-stone-500">in ordine di cammino</p></div>

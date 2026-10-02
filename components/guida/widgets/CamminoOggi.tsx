@@ -3,6 +3,7 @@ import { useMemo, useRef, useState } from 'react'
 import { Navigation, Upload, Check, ChevronRight, BookOpen } from 'lucide-react'
 import { POI_META } from '@/lib/overpass'
 import { POI_ICON } from '@/components/poiIcons'
+import { TrailScoreGaugeBadge } from '@/components/TrailScoreGaugeBadge'
 import { MiniScoreRing, tsColor } from '@/components/ScoreRing'
 import { useTappaData } from '@/lib/cammini/useTappaData'
 import { poisAlongTappa } from '@/lib/cammini/tappaPois'
@@ -70,7 +71,7 @@ export function CamminoOggiCard({ plan, hikeId, done, onPlanChange, onOpenTappa,
           <span><b className="text-[15px] text-white">{kmL(t.lengthM)}</b> km</span>
           <span><b className="text-[15px] text-white">{fmtHours(t.lengthM)}</b></span>
           <span><b className="text-[15px] text-white">{(ready?.data.gainM ?? t.elevationGainM) != null ? `+${Math.round((ready?.data.gainM ?? t.elevationGainM) as number)}` : '–'}</b> m</span>
-          <span className="flex items-center gap-1.5"><MiniScoreRing value={cts?.ts ?? 0} size={34} color={cts ? tsColor(cts.ts) : undefined} loading={!cts && ctsV !== 'na'} /><span className="text-[11px] font-bold uppercase tracking-wider text-white/80">CTS</span></span>
+          <span className="flex items-center gap-1.5"><TrailScoreGaugeBadge total={cts ? (cts.total ?? cts.ts) : null} safety={cts?.safety ?? null} size={38} showLabel={false} loading={!cts && ctsV !== 'na'} /><span className="text-[11px] font-bold uppercase tracking-wider text-white/80">CTS</span></span>
         </div>
         <div className="mt-3.5 grid grid-cols-[1fr_auto] gap-2">
           {finished ? (
@@ -144,7 +145,7 @@ export function CamminoDiario({ plan, done, onOpenTappa, onOpenReportage }: Comm
             <button key={x.ordinal} type="button" onClick={() => onOpenTappa(x.ordinal)} className="relative mb-2.5 block w-full text-left">
               {dot('done')}
               <span className="flex items-baseline justify-between gap-2"><span className="text-[13px] font-bold text-stone-800">{x.tappa.fromName} → {x.tappa.toName}</span><span className="shrink-0 text-[11px] text-stone-500">{new Date(d.startTime).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })}</span></span>
-              <span className="flex items-center gap-2 text-[12px] text-stone-500">{kmL(d.distanceMeters)} km · {fmtDur(d.totalTimeSeconds)} · +{Math.round(d.elevationGain)} m{x.tappa.cts && <span className="flex items-center gap-1"><MiniScoreRing value={x.tappa.cts.ts} size={22} color={tsColor(x.tappa.cts.ts)} /><span className="text-[10.5px] font-bold uppercase text-stone-500">CTS</span></span>}</span>
+              <span className="flex items-center gap-2 text-[12px] text-stone-500">{kmL(d.distanceMeters)} km · {fmtDur(d.totalTimeSeconds)} · +{Math.round(d.elevationGain)} m{x.tappa.cts && <span className="flex items-center gap-1"><TrailScoreGaugeBadge total={x.tappa.cts.total ?? x.tappa.cts.ts} safety={x.tappa.cts.safety ?? null} size={26} showLabel={false} /><span className="text-[10.5px] font-bold uppercase text-stone-500">CTS</span></span>}</span>
             </button>
           )
         })}
@@ -157,7 +158,7 @@ export function CamminoDiario({ plan, done, onOpenTappa, onOpenReportage }: Comm
                 <span className={`text-[13px] ${isNow ? 'font-bold text-[#7a5f28]' : 'font-semibold text-stone-700'}`}>{isNow ? 'Oggi · ' : ''}{x.tappa.fromName} → {x.tappa.toName}</span>
                 <ChevronRight className="h-4 w-4 shrink-0 text-stone-400" />
               </span>
-              <span className="flex items-center gap-2 text-[12px] text-stone-500">{kmL(x.tappa.lengthM)} km · {fmtHours(x.tappa.lengthM)}{x.tappa.elevationGainM != null && ` · +${Math.round(x.tappa.elevationGainM)} m`}{x.tappa.cts && <span className="flex items-center gap-1"><MiniScoreRing value={x.tappa.cts.ts} size={22} color={tsColor(x.tappa.cts.ts)} /><span className="text-[10.5px] font-bold uppercase text-stone-500">CTS</span></span>}</span>
+              <span className="flex items-center gap-2 text-[12px] text-stone-500">{kmL(x.tappa.lengthM)} km · {fmtHours(x.tappa.lengthM)}{x.tappa.elevationGainM != null && ` · +${Math.round(x.tappa.elevationGainM)} m`}{x.tappa.cts && <span className="flex items-center gap-1"><TrailScoreGaugeBadge total={x.tappa.cts.total ?? x.tappa.cts.ts} safety={x.tappa.cts.safety ?? null} size={26} showLabel={false} /><span className="text-[10.5px] font-bold uppercase text-stone-500">CTS</span></span>}</span>
             </button>
           )
         })}

@@ -28,6 +28,8 @@ interface Props {
   /** Mostra i pin dei POI sulla mappa — disattivato nella sezione "Il percorso" della guida (i
    *  POI hanno una mappa dedicata in "I luoghi da non perdere"), attivo per default altrove. */
   showPois?: boolean
+  /** Mostra il profilo altimetrico sotto la mappa (default sì) — spento quando la traccia non ha quote (es. mappa d'insieme di un cammino). */
+  showProfile?: boolean
 }
 
 const chipBase = 'flex items-center justify-center w-9 h-9 rounded-full backdrop-blur-md border transition-colors shrink-0'
@@ -43,7 +45,7 @@ const chipActive = `${chipBase} bg-terra-500 border-terra-300/40 text-white`
  */
 export default function RouteMapSection({
   trackPoints, pois = [], highlightedPoiIndices = null, onPoiTap, onOpenMap3D,
-  showGradient, showAspect, showAspectToggle, onToggleAspect, dtmProfile, planned, showPois = true,
+  showGradient, showAspect, showAspectToggle, onToggleAspect, dtmProfile, planned, showPois = true, showProfile = true,
 }: Props) {
   const [locked, setLocked] = useState(true)
   const [fullscreen, setFullscreen] = useState(false)
@@ -136,7 +138,7 @@ export default function RouteMapSection({
           </button>
         </div>
       </div>
-      <ElevationProfileChart trackPoints={trackPoints ?? []} onHover={setActiveIndex} />
+      {showProfile && <ElevationProfileChart trackPoints={trackPoints ?? []} onHover={setActiveIndex} />}
     </div>
   )
 }

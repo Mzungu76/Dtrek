@@ -169,3 +169,9 @@ Scelta dopo i mockup (concept B), con queste regole:
 - Mappe dei cammini = `RouteMapSection` dell'app (schermo intero, lucchetto, frecce, inquadra, 3D, luoghi con le icone `POI_ICON` e i colori `POI_META`); rimosso il Leaflet dedicato.
 - Badge CTS = `MiniScoreRing`/`tsColor` (come nelle gallerie); stesso anello in tappa di oggi, diario, dettaglio e reportage.
 - Il reportage contenitore è una voce della **galleria Reportage** (`/resoconto`): sintetizzata dalle attività delle tappe (cifre sommate, tracciato unito, data dell'ultima), apre `/resoconto/cammino/[id]`; la pagina spiega la struttura (introduzione, schede-tappa con CTS e link al reportage della tappa, conclusione).
+
+### Fase 5g — reportage coerente col resto e dentro il padre
+- Nessuna pagina intermedia: scegliendo il cammino nella galleria Reportage si apre direttamente il suo reportage.
+- Pagina del reportage del cammino = stesso impianto degli altri reportage (`ReportHero`, `ReportStatsStrip`, `SectionCard`: stessi colori e caratteri); introduzione, capitoli per tappa (con badge Trail Score + Sicurezza), conclusione.
+- Il reportage di una tappa si apre **sotto il padre** (`/resoconto/cammino/[id]/tappa/[activityId]`): galleria con le sole tappe di quel cammino, ogni uscita riporta al reportage del cammino, mai all'elenco generale.
+- **Sicurezza nel CTS di tappa**: `computeSafetyCore` (fauna GBIF, cani da guardia, scala SAC, quota, tempo) + Trail Score v2 (`computeTrailScoreV2`); badge `TrailScoreGaugeBadge` (anello Trail Score + anello Sicurezza), salvati in `cammino_plan.tappe[].cts`.
